@@ -346,7 +346,9 @@ def get_const_func_output_type(func, arg_types, typing_context):
 
         f_ir = numba.core.ir_utils.get_ir_of_code(_globals, code)
     elif isinstance(func, bodo.utils.typing.FunctionLiteral):
-        f_ir = numba.core.compiler.run_frontend(func.literal_value, inline_closures=True)
+        f_ir = numba.core.compiler.run_frontend(
+            func.literal_value, inline_closures=True
+        )
     else:
         assert isinstance(func, types.Dispatcher)
         py_func = func.dispatcher.py_func
@@ -488,7 +490,11 @@ numba.core.compiler.run_frontend = run_frontend
 # https://github.com/numba/numba/blob/cc7e7c7cfa6389b54d3b5c2c95751c97eb531a96/numba/ir_utils.py#L725
 # This case happens for Bodo dataframes since init_dataframe takes a tuple of arrays as
 # input, and output dataframe is aliased with all of these arrays. see test_df_alias.
-from numba.core.ir_utils import _add_alias, alias_analysis_extensions, alias_func_extensions
+from numba.core.ir_utils import (
+    _add_alias,
+    alias_analysis_extensions,
+    alias_func_extensions,
+)
 import copy
 
 
@@ -663,9 +669,11 @@ def overload(func, jit_options={}, strict=True, inline="never", no_unliteral=Fal
 lines = inspect.getsource(numba.core.extending.overload)
 if (
     hashlib.sha256(lines.encode()).hexdigest()
-    != "1ca4b9c5b2f7e5eb119cea6035fc00746be6b7643cd1b7c8343c18c5dc3b78ac"
+    != "dbcb7029c1538d6ee6324ae6a6d787527cf840997a4464d3053f46af0cd696b2"
 ):  # pragma: no cover
-    warnings.warn(bodo.utils.typing.BodoWarning("numba.core.extending.overload has changed"))
+    warnings.warn(
+        bodo.utils.typing.BodoWarning("numba.core.extending.overload has changed")
+    )
 
 
 numba.core.extending.overload = overload
@@ -695,10 +703,12 @@ def overload_method(typ, attr, **kwargs):
 lines = inspect.getsource(numba.core.extending.overload_method)
 if (
     hashlib.sha256(lines.encode()).hexdigest()
-    != "8bf5f1ba0ba72ac8d4e836a5f6037156b5feb8f2bb27d306dcfe365e6bcf8117"
+    != "628441a93db4b93feae28e78a027a7682933a95936ff3afdc2d64b98388d7d95"
 ):  # pragma: no cover
     warnings.warn(
-        bodo.utils.typing.BodoWarning("numba.core.extending.overload_method has changed")
+        bodo.utils.typing.BodoWarning(
+            "numba.core.extending.overload_method has changed"
+        )
     )
 
 
@@ -879,7 +889,9 @@ if (
     )
 
 
-numba.core.typing.templates.make_overload_method_template = make_overload_method_template
+numba.core.typing.templates.make_overload_method_template = (
+    make_overload_method_template
+)
 
 
 from numba.core.types.functions import _ResolutionFailures
@@ -985,6 +997,7 @@ numba.parfors.array_analysis.ArrayAnalysis.copy = lambda self: self
 # TODO: remove when Numba is fixed
 def string_from_string_and_size(self, string, size):
     from llvmlite.llvmpy.core import Type
+
     fnty = Type.function(self.pyobj, [self.cstring, self.py_ssize_t])
     # replace PyString_FromStringAndSize with PyUnicode_FromStringAndSize of Python 3
     # fname = "PyString_FromStringAndSize"
