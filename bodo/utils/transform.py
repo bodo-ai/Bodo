@@ -1016,12 +1016,6 @@ numba.core.types.functions.BoundFunction.get_call_type = get_call_type2
 # ----------------------- unliteral monkey patch done ------------------------- #
 
 
-# replace ArrayAnalysis.copy() method to no-op due to issue introduced in 0.49
-# see https://github.com/numba/numba/issues/5515
-# TODO: remove when Numba is fixed
-numba.parfors.array_analysis.ArrayAnalysis.copy = lambda self: self
-
-
 # replace string_from_string_and_size since Numba 0.49 removes python 2.7 symbol support
 # leading to a bug in this function
 # https://github.com/numba/numba/blob/1ea770564cb3c0c6cb9d8ab92e7faf23cd4c4c19/numba/core/pythonapi.py#L1102
