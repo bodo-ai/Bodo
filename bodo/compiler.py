@@ -17,7 +17,7 @@ from numba.core.compiler import DefaultPassBuilder
 from numba.core.compiler_machinery import (
     FunctionPass, AnalysisPass, register_pass, PassManager
 )
-from numba.core.untyped_passes import WithLifting
+from numba.core.untyped_passes import WithLifting, ReconstructSSA
 
 from numba.core.typed_passes import (
     NopythonTypeInference,
@@ -84,8 +84,10 @@ class BodoCompiler(numba.core.compiler.CompilerBase):
         # simplify_CFG() is called (block number is used in EnterWith nodes)
         if inline_all_calls:  # pragma: no cover
             pm.add_pass_after(InlinePass, WithLifting)
-        # run untyped pass right before type inference
-        add_pass_before(pm, BodoUntypedPass, NopythonTypeInference)
+        # run untyped pass right before SSA construction and type inference
+        # NOTE: SSA includes phi nodes (which have block numbers) that we don't handle.
+        # therefore, uptyped pass cannot use SSA since it changes CFG
+        add_pass_before(pm, BodoUntypedPass, ReconstructSSA)
         # replace Numba's type inference pass with Bodo's version, which incorporates
         # constant inference using partial type inference
         replace_pass(pm, BodoTypeInference, NopythonTypeInference)
