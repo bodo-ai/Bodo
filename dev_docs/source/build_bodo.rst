@@ -80,7 +80,7 @@ If you run into gethostbyname failed error, try
 Running unit tests::
 
     conda install pytest
-    pytest -x -s -v -m "not slow" -W ignore
+    pytest -x -s -v -m "not slow"
 
 To run s3 related unit tests, in addition::
     
