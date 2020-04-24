@@ -528,7 +528,7 @@ def list_item_arr_getitem_array(arr, ind):
 
         def impl_slice(arr, ind):  # pragma: no cover
             n = len(arr)
-            slice_idx = numba.unicode._normalize_slice(ind, n)
+            slice_idx = numba.cpython.unicode._normalize_slice(ind, n)
             # reusing integer array slicing above
             arr_ind = np.arange(slice_idx.start, slice_idx.stop, slice_idx.step)
             return arr[arr_ind]

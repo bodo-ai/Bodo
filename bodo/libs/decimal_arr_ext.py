@@ -504,7 +504,7 @@ def decimal_arr_setitem(A, idx, val):
                 # XXX: conservative copy of bitmap in case there is overlap
                 # TODO: check for overlap and copy only if necessary
                 src_bitmap = val._null_bitmap.copy()
-                slice_idx = numba.unicode._normalize_slice(idx, n)
+                slice_idx = numba.cpython.unicode._normalize_slice(idx, n)
                 val_ind = 0
                 for i in range(slice_idx.start, slice_idx.stop, slice_idx.step):
                     bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(src_bitmap, val_ind)
@@ -517,7 +517,7 @@ def decimal_arr_setitem(A, idx, val):
         def impl_slice(A, idx, val):  # pragma: no cover
             n = len(A._data)
             A._data[idx] = val
-            slice_idx = numba.unicode._normalize_slice(idx, n)
+            slice_idx = numba.cpython.unicode._normalize_slice(idx, n)
             val_ind = 0
             for i in range(slice_idx.start, slice_idx.stop, slice_idx.step):
                 bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, i, 1)
@@ -551,7 +551,7 @@ def decimal_arr_getitem(A, ind):
             n_bytes = (n + 7) >> 3
             new_mask = np.empty(n_bytes, np.uint8)
             curr_bit = 0
-            for i in numba.parfor.internal_prange(len(ind)):
+            for i in numba.parfors.parfor.internal_prange(len(ind)):
                 if ind[i]:
                     bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(old_mask, i)
                     bodo.libs.int_arr_ext.set_bit_to_arr(new_mask, curr_bit, bit)
@@ -590,8 +590,8 @@ def decimal_arr_getitem(A, ind):
             n = len(A._data)
             old_mask = A._null_bitmap
             new_data = np.ascontiguousarray(A._data[ind])
-            slice_idx = numba.unicode._normalize_slice(ind, n)
-            span = numba.unicode._slice_span(slice_idx)
+            slice_idx = numba.cpython.unicode._normalize_slice(ind, n)
+            span = numba.cpython.unicode._slice_span(slice_idx)
             n_bytes = (span + 7) >> 3
             new_mask = np.empty(n_bytes, np.uint8)
             curr_bit = 0
