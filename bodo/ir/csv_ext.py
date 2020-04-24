@@ -147,7 +147,7 @@ def csv_distributed_run(
     return nodes
 
 
-numba.array_analysis.array_analysis_extensions[
+numba.parfors.array_analysis.array_analysis_extensions[
     CsvReader
 ] = bodo.ir.connector.connector_array_analysis
 distributed_analysis.distributed_analysis_extensions[
@@ -156,7 +156,7 @@ distributed_analysis.distributed_analysis_extensions[
 typeinfer.typeinfer_extensions[CsvReader] = bodo.ir.connector.connector_typeinfer
 ir_utils.visit_vars_extensions[CsvReader] = bodo.ir.connector.visit_vars_connector
 ir_utils.remove_dead_extensions[CsvReader] = remove_dead_csv
-numba.analysis.ir_extension_usedefs[CsvReader] = bodo.ir.connector.connector_usedefs
+numba.core.analysis.ir_extension_usedefs[CsvReader] = bodo.ir.connector.connector_usedefs
 ir_utils.copy_propagate_extensions[CsvReader] = bodo.ir.connector.get_copies_connector
 ir_utils.apply_copy_propagate_extensions[
     CsvReader

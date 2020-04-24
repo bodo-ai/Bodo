@@ -640,7 +640,7 @@ _overload_default_jit_options = {"no_cpython_wrapper": True}
 
 # change: added no_unliteral argument
 def overload(func, jit_options={}, strict=True, inline="never", no_unliteral=False):
-    from numba.typing.templates import make_overload_template, infer_global, infer
+    from numba.core.typing.templates import make_overload_template, infer_global, infer
 
     # set default options
     opts = _overload_default_jit_options.copy()
@@ -660,19 +660,20 @@ def overload(func, jit_options={}, strict=True, inline="never", no_unliteral=Fal
 
 
 # make sure overload hasn't changed before replacing it
-lines = inspect.getsource(numba.extending.overload)
+lines = inspect.getsource(numba.core.extending.overload)
 if (
     hashlib.sha256(lines.encode()).hexdigest()
     != "1ca4b9c5b2f7e5eb119cea6035fc00746be6b7643cd1b7c8343c18c5dc3b78ac"
 ):  # pragma: no cover
-    warnings.warn(bodo.utils.typing.BodoWarning("numba.extending.overload has changed"))
+    warnings.warn(bodo.utils.typing.BodoWarning("numba.core.extending.overload has changed"))
 
 
+numba.core.extending.overload = overload
 numba.extending.overload = overload
 
 
 def overload_method(typ, attr, **kwargs):
-    from numba.typing.templates import make_overload_method_template, infer_getattr
+    from numba.core.typing.templates import make_overload_method_template, infer_getattr
 
     def decorate(overload_func):
         template = make_overload_method_template(
@@ -691,20 +692,21 @@ def overload_method(typ, attr, **kwargs):
 
 
 # make sure overload_method hasn't changed before replacing it
-lines = inspect.getsource(numba.extending.overload_method)
+lines = inspect.getsource(numba.core.extending.overload_method)
 if (
     hashlib.sha256(lines.encode()).hexdigest()
     != "8bf5f1ba0ba72ac8d4e836a5f6037156b5feb8f2bb27d306dcfe365e6bcf8117"
 ):  # pragma: no cover
     warnings.warn(
-        bodo.utils.typing.BodoWarning("numba.extending.overload_method has changed")
+        bodo.utils.typing.BodoWarning("numba.core.extending.overload_method has changed")
     )
 
 
+numba.core.extending.overload_method = overload_method
 numba.extending.overload_method = overload_method
 
 
-from numba.targets.cpu_options import InlineOptions
+from numba.core.cpu_options import InlineOptions
 
 
 # change: added no_unliteral argument
@@ -717,7 +719,7 @@ def make_overload_template(
     """
     func_name = getattr(func, "__name__", str(func))
     name = "OverloadTemplate_%s" % (func_name,)
-    base = numba.typing.templates._OverloadFunctionTemplate
+    base = numba.core.typing.templates._OverloadFunctionTemplate
     dct = dict(
         key=func,
         _overload_func=staticmethod(overload_func),
@@ -734,23 +736,23 @@ def make_overload_template(
 
 
 # make sure make_overload_template hasn't changed before replacing it
-lines = inspect.getsource(numba.typing.templates.make_overload_template)
+lines = inspect.getsource(numba.core.typing.templates.make_overload_template)
 if (
     hashlib.sha256(lines.encode()).hexdigest()
     != "b62d5f58dbfeb9753e8c6c94bdf6ffb9ffa39eb5c34bd2c2bea2be2a89c8d7ec"
 ):  # pragma: no cover
     warnings.warn(
         bodo.utils.typing.BodoWarning(
-            "numba.typing.templates.make_overload_template has changed"
+            "numba.core.typing.templates.make_overload_template has changed"
         )
     )
 
 
-numba.typing.templates.make_overload_template = make_overload_template
+numba.core.typing.templates.make_overload_template = make_overload_template
 
 
-from numba.types.misc import unliteral
-from numba.typing.templates import (
+from numba.core.types.misc import unliteral
+from numba.core.typing.templates import (
     AbstractTemplate,
     _OverloadAttributeTemplate,
     _OverloadMethodTemplate,
@@ -785,19 +787,19 @@ def _resolve(self, typ, attr):
 
 
 # make sure _resolve hasn't changed before replacing it
-lines = inspect.getsource(numba.typing.templates._OverloadMethodTemplate._resolve)
+lines = inspect.getsource(numba.core.typing.templates._OverloadMethodTemplate._resolve)
 if (
     hashlib.sha256(lines.encode()).hexdigest()
     != "40645505764f3f6fc52c8b479cbb4dc6203025fa409d95177f9dad89569c118e"
 ):  # pragma: no cover
     warnings.warn(
         bodo.utils.typing.BodoWarning(
-            "numba.typing.templates._OverloadMethodTemplate._resolve has changed"
+            "numba.core.typing.templates._OverloadMethodTemplate._resolve has changed"
         )
     )
 
 
-numba.typing.templates._OverloadMethodTemplate._resolve = _resolve
+numba.core.typing.templates._OverloadMethodTemplate._resolve = _resolve
 
 
 # change: added no_unliteral argument
@@ -830,19 +832,19 @@ def make_overload_attribute_template(
 
 
 # make sure make_overload_attribute_template hasn't changed before replacing it
-lines = inspect.getsource(numba.typing.templates.make_overload_attribute_template)
+lines = inspect.getsource(numba.core.typing.templates.make_overload_attribute_template)
 if (
     hashlib.sha256(lines.encode()).hexdigest()
     != "e85ed81e6a6bceb09ee2cee43b5a2d4c11a2805e29e2f60f37fe49b2b9996f55"
 ):  # pragma: no cover
     warnings.warn(
         bodo.utils.typing.BodoWarning(
-            "numba.typing.templates.make_overload_attribute_template has changed"
+            "numba.core.typing.templates.make_overload_attribute_template has changed"
         )
     )
 
 
-numba.typing.templates.make_overload_attribute_template = (
+numba.core.typing.templates.make_overload_attribute_template = (
     make_overload_attribute_template
 )
 
@@ -865,22 +867,22 @@ def make_overload_method_template(typ, attr, overload_func, inline, no_unliteral
 
 
 # make sure make_overload_method_template hasn't changed before replacing it
-lines = inspect.getsource(numba.typing.templates.make_overload_method_template)
+lines = inspect.getsource(numba.core.typing.templates.make_overload_method_template)
 if (
     hashlib.sha256(lines.encode()).hexdigest()
     != "899327427f7db757cfdd6d5d916f81912831e8e41f8dc07436790254502ffc27"
 ):  # pragma: no cover
     warnings.warn(
         bodo.utils.typing.BodoWarning(
-            "numba.typing.templates.make_overload_method_template has changed"
+            "numba.core.typing.templates.make_overload_method_template has changed"
         )
     )
 
 
-numba.typing.templates.make_overload_method_template = make_overload_method_template
+numba.core.typing.templates.make_overload_method_template = make_overload_method_template
 
 
-from numba.types.functions import _ResolutionFailures
+from numba.core.types.functions import _ResolutionFailures
 
 
 def get_call_type(self, context, args, kws):
@@ -918,19 +920,19 @@ def get_call_type(self, context, args, kws):
 
 
 # make sure get_call_type hasn't changed before replacing it
-lines = inspect.getsource(numba.types.functions.BaseFunction.get_call_type)
+lines = inspect.getsource(numba.core.types.functions.BaseFunction.get_call_type)
 if (
     hashlib.sha256(lines.encode()).hexdigest()
     != "bcb57ef2f0557836bf15c69eb09ffb16955633eb86781c73bcde0e4910fb0d06"
 ):  # pragma: no cover
     warnings.warn(
         bodo.utils.typing.BodoWarning(
-            "numba.types.functions.BaseFunction.get_call_type has changed"
+            "numba.core.types.functions.BaseFunction.get_call_type has changed"
         )
     )
 
 
-numba.types.functions.BaseFunction.get_call_type = get_call_type
+numba.core.types.functions.BaseFunction.get_call_type = get_call_type
 
 
 def get_call_type2(self, context, args, kws):
@@ -953,19 +955,19 @@ def get_call_type2(self, context, args, kws):
 
 
 # make sure get_call_type hasn't changed before replacing it
-lines = inspect.getsource(numba.types.functions.BoundFunction.get_call_type)
+lines = inspect.getsource(numba.core.types.functions.BoundFunction.get_call_type)
 if (
     hashlib.sha256(lines.encode()).hexdigest()
     != "9c665cf809ee7310608ce667e0173a53fbfc2e804b85ba02a98b88062c9e77e0"
 ):  # pragma: no cover
     warnings.warn(
         bodo.utils.typing.BodoWarning(
-            "numba.types.functions.BoundFunction.get_call_type has changed"
+            "numba.core.types.functions.BoundFunction.get_call_type has changed"
         )
     )
 
 
-numba.types.functions.BoundFunction.get_call_type = get_call_type2
+numba.core.types.functions.BoundFunction.get_call_type = get_call_type2
 
 
 # ----------------------- unliteral monkey patch done ------------------------- #

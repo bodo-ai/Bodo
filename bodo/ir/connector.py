@@ -4,9 +4,9 @@ Common IR extension functions for connectors such as CSV, Parquet and JSON reade
 """
 from collections import defaultdict
 import numba
-from numba import ir, ir_utils, typeinfer, types
+from numba.core import ir, ir_utils, typeinfer, types
 from numba.extending import box, models, register_model
-from numba.ir_utils import (
+from numba.core.ir_utils import (
     visit_vars_inner,
     replace_vars_inner,
     compile_to_numba_ir,
@@ -99,7 +99,7 @@ def connector_usedefs(node, use_set=None, def_set=None):
     if node.connector_typ in ("csv", "parquet", "json"):
         use_set.add(node.file_name.name)
 
-    return numba.analysis._use_defs_result(usemap=use_set, defmap=def_set)
+    return numba.core.analysis._use_defs_result(usemap=use_set, defmap=def_set)
 
 
 def get_copies_connector(node, typemap):
