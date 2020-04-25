@@ -15,12 +15,12 @@ such as Numba on Ubuntu Linux::
     chmod +x miniconda.sh
     ./miniconda.sh -b
     export PATH=$HOME/miniconda3/bin:$PATH
-    conda create -n DEV python=3.7 numpy scipy pandas>=1.0.0 boost-cpp cmake h5py mpich mpi -c conda-forge
+    conda create -n DEV python=3.8 numpy scipy pandas boost-cpp cmake h5py mpich mpi -c conda-forge
     source activate DEV
     # Linux: conda install gcc_linux-64 gxx_linux-64 gfortran_linux-64 -c conda-forge
     # Mac: conda install clang_osx-64 clangxx_osx-64 gfortran_osx-64 -c conda-forge
     conda install numba=0.49.0 -c conda-forge
-    conda install -c bodo.ai -c conda-forge hdf5=*=*mpich*
+    conda install -c conda-forge hdf5=*=*mpich*
     conda install -c conda-forge pyarrow=0.16.0
     conda install -c conda-forge pymysql sqlalchemy
     # The following 2 commands are required for s3 related development and tests
@@ -47,7 +47,7 @@ On Windows
 * Start 'Anaconda (Miniconda3) prompt'
 * Setup the Conda environment in Anaconda Prompt::
 
-    conda create -n DEV python=3.7 numpy scipy pandas>=1.0.0 boost-cpp cmake h5py -c conda-forge
+    conda create -n DEV python=3.8 numpy scipy pandas boost-cpp cmake h5py -c conda-forge
     source activate DEV
     conda install numba=0.49.0 -c conda-forge
     conda install vc vs2015_runtime vs2015_win-64
