@@ -1142,7 +1142,7 @@ def setitem_arr_tup_overload(arr_tup, ind, val_tup):
 
     func_text = "def f(arr_tup, ind, val_tup):\n"
     for i in range(count):
-        if isinstance(val_tup, numba.types.BaseTuple):
+        if isinstance(val_tup, numba.core.types.BaseTuple):
             func_text += "  arr_tup[{}][ind] = val_tup[{}]\n".format(i, i)
         else:
             assert arr_tup.count == 1

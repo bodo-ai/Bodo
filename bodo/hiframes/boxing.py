@@ -18,8 +18,9 @@ from numba.extending import (
     box,
     intrinsic,
 )
-from numba import numpy_support, types, cgutils
-from numba.typing import signature
+from numba.core import types, cgutils
+from numba.np import numpy_support
+from numba.core.typing import signature
 
 import bodo
 from bodo.hiframes.pd_dataframe_ext import (
@@ -27,17 +28,20 @@ from bodo.hiframes.pd_dataframe_ext import (
     construct_dataframe,
     DataFramePayloadType,
 )
-from bodo.hiframes.datetime_date_ext import datetime_date_type
+from bodo.hiframes.datetime_date_ext import datetime_date_type, datetime_date_array_type
 from bodo.libs.str_ext import string_type
+from bodo.libs.str_arr_ext import string_array_type
+from bodo.libs.list_str_arr_ext import list_string_array_type
+from bodo.libs.list_item_arr_ext import ListItemArrayType
 from bodo.libs.int_arr_ext import typeof_pd_int_dtype
-from bodo.libs.decimal_arr_ext import Decimal128Type
+from bodo.libs.decimal_arr_ext import Decimal128Type, DecimalArrayType
 from bodo.hiframes.pd_categorical_ext import PDCategoricalDtype
 from bodo.hiframes.pd_series_ext import SeriesType, _get_series_array_type
 from bodo.hiframes.split_impl import (
     string_array_split_view_type,
     box_str_arr_split_view,
 )
-from bodo.utils.typing import BodoWarning
+from bodo.utils.typing import BodoWarning, BodoError
 
 from bodo.libs import hstr_ext
 from llvmlite import ir as lir
@@ -307,7 +311,7 @@ def box_dataframe(typ, val, c):
 def unbox_dataframe_column(typingctx, df, i=None):
     def codegen(context, builder, sig, args):
         pyapi = context.get_python_api(builder)
-        c = numba.pythonapi._UnboxContext(context, builder, pyapi)
+        c = numba.core.pythonapi._UnboxContext(context, builder, pyapi)
         gil_state = pyapi.gil_ensure()  # acquire GIL
 
         df_typ = sig.args[0]
@@ -460,7 +464,7 @@ def _box_series_data(dtype, data_typ, val, c):
 
     if isinstance(dtype, types.BaseTuple):
         np_dtype = np.dtype(",".join(str(t) for t in dtype.types), align=True)
-        dtype = numba.numpy_support.from_dtype(np_dtype)
+        dtype = numpy_support.from_dtype(np_dtype)
 
     arr = c.pyapi.from_native_value(data_typ, val, c.env_manager)
 
@@ -470,3 +474,83 @@ def _box_series_data(dtype, data_typ, val, c):
         arr = c.pyapi.call_method(arr, "astype", (o_str,))
 
     return arr
+
+
+# --------------- typeof support for object arrays --------------------
+
+
+# XXX: this is overwriting Numba's array type registration, make sure it is
+# robust
+# TODO: support other array types like datetime.date
+@typeof_impl.register(np.ndarray)
+def _typeof_ndarray(val, c):
+    try:
+        dtype = numba.np.numpy_support.from_dtype(val.dtype)
+    except NotImplementedError:
+        dtype = types.pyobject
+
+    if dtype == types.pyobject:
+        dtype = _infer_ndarray_obj_dtype(val)
+        if dtype == string_type:
+            return string_array_type
+        if dtype == types.bool_:
+            return bodo.libs.bool_arr_ext.boolean_array
+        if dtype == types.List(string_type):
+            return list_string_array_type
+        if isinstance(dtype, types.List):
+            return ListItemArrayType(dtype.dtype)
+        if dtype == datetime_date_type:
+            return datetime_date_array_type  # TODO: test array of datetime.date
+        if isinstance(dtype, Decimal128Type):
+            return DecimalArrayType(dtype.precision, dtype.scale)
+        raise BodoError("Unsupported array dtype: {}".format(val.dtype))  # pragma: no cover
+
+    layout = numba.np.numpy_support.map_layout(val)
+    readonly = not val.flags.writeable
+    return types.Array(dtype, val.ndim, layout, readonly=readonly)
+
+
+def _infer_ndarray_obj_dtype(val):
+    # strings only have object dtype, TODO: support fixed size np strings
+    if not val.dtype == np.dtype("O"):  # pragma: no cover
+        raise BodoError("Unsupported array dtype: {}".format(val.dtype))
+
+    # XXX assuming the whole array is strings if 1st val is string
+    i = 0
+    # is_scalar call necessary since pd.isna() treats list of string as array
+    while i < len(val) and pd.api.types.is_scalar(val[i]) and pd.isna(val[i]):
+        i += 1
+    if i == len(val):
+        # empty or all NA object arrays are assumed to be strings
+        warnings.warn(
+            BodoWarning(
+                "Empty object array passed to Bodo, which causes ambiguity in typing. "
+                "This can cause errors in parallel execution."
+            )
+        )
+        return string_type
+
+    first_val = val[i]
+    if isinstance(first_val, str):
+        return string_type
+    elif isinstance(first_val, bool):
+        return types.bool_
+    if isinstance(first_val, list):
+        return bodo.hiframes.boxing._infer_series_list_dtype(val, "array")
+    if isinstance(first_val, datetime.date):
+        return datetime_date_type
+    if isinstance(first_val, decimal.Decimal):
+        # NOTE: converting decimal.Decimal objects to 38/18, same as Spark
+        return Decimal128Type(38, 18)
+
+    raise BodoError("Unsupported object array with first value: {}".format(first_val))  # pragma: no cover
+
+
+# TODO: support array of strings
+# @typeof_impl.register(np.ndarray)
+# def typeof_np_string(val, c):
+#     arr_typ = numba.core.typing.typeof._typeof_ndarray(val, c)
+#     # match string dtype
+#     if isinstance(arr_typ.dtype, (types.UnicodeCharSeq, types.CharSeq)):
+#         return string_array_type
+#     return arr_typ

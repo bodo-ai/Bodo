@@ -6,7 +6,7 @@ import operator
 import numpy as np
 import pandas as pd
 import numba
-from numba import types
+from numba.core import types
 from numba.extending import overload, overload_attribute, overload_method
 import bodo
 from bodo.libs.str_ext import string_type
@@ -30,7 +30,7 @@ from bodo.utils.typing import (
     get_literal_value,
     get_overload_const_str,
 )
-from numba.typing.templates import infer_global, AbstractTemplate
+from numba.core.typing.templates import infer_global, AbstractTemplate
 from bodo.libs.bool_arr_ext import BooleanArrayType, boolean_array
 from bodo.libs.int_arr_ext import IntegerArrayType
 
@@ -206,10 +206,10 @@ def overload_series_isna(S):
         arr = bodo.hiframes.pd_series_ext.get_series_data(S)
         index = bodo.hiframes.pd_series_ext.get_series_index(S)
         name = bodo.hiframes.pd_series_ext.get_series_name(S)
-        numba.parfor.init_prange()
+        numba.parfors.parfor.init_prange()
         n = len(arr)
         out_arr = np.empty(n, np.bool_)
-        for i in numba.parfor.internal_prange(n):
+        for i in numba.parfors.parfor.internal_prange(n):
             out_arr[i] = bodo.libs.array_kernels.isna(arr, i)
 
         return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
@@ -223,10 +223,10 @@ def overload_series_round(S, decimals=0):
         arr = bodo.hiframes.pd_series_ext.get_series_data(S)
         index = bodo.hiframes.pd_series_ext.get_series_index(S)
         name = bodo.hiframes.pd_series_ext.get_series_name(S)
-        numba.parfor.init_prange()
+        numba.parfors.parfor.init_prange()
         n = len(arr)
         out_arr = np.empty(n, arr.dtype)
-        for i in numba.parfor.internal_prange(n):
+        for i in numba.parfors.parfor.internal_prange(n):
             out_arr[i] = np.round(arr[i], decimals)
 
         return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
@@ -248,9 +248,9 @@ def overload_series_sum(S):
 
     def impl(S):  # pragma: no cover
         A = bodo.hiframes.pd_series_ext.get_series_data(S)
-        numba.parfor.init_prange()
+        numba.parfors.parfor.init_prange()
         s = zero
-        for i in numba.parfor.internal_prange(len(A)):
+        for i in numba.parfors.parfor.internal_prange(len(A)):
             val = zero
             if not bodo.libs.array_kernels.isna(A, i):
                 val = A[i]
@@ -266,9 +266,9 @@ def overload_series_prod(S):
 
     def impl(S):  # pragma: no cover
         A = bodo.hiframes.pd_series_ext.get_series_data(S)
-        numba.parfor.init_prange()
+        numba.parfors.parfor.init_prange()
         s = init
-        for i in numba.parfor.internal_prange(len(A)):
+        for i in numba.parfors.parfor.internal_prange(len(A)):
             val = init
             if not bodo.libs.array_kernels.isna(A, i):
                 val = A[i]
@@ -282,9 +282,9 @@ def overload_series_prod(S):
 def overload_series_any(S):
     def impl(S):  # pragma: no cover
         A = bodo.hiframes.pd_series_ext.get_series_data(S)
-        numba.parfor.init_prange()
+        numba.parfors.parfor.init_prange()
         count = 0
-        for i in numba.parfor.internal_prange(len(A)):
+        for i in numba.parfors.parfor.internal_prange(len(A)):
             val = 0
             if not bodo.libs.array_kernels.isna(A, i):
                 val = int(A[i])
@@ -298,9 +298,9 @@ def overload_series_any(S):
 def overload_series_all(S):
     def impl(S):  # pragma: no cover
         A = bodo.hiframes.pd_series_ext.get_series_data(S)
-        numba.parfor.init_prange()
+        numba.parfors.parfor.init_prange()
         count = 0
-        for i in numba.parfor.internal_prange(len(A)):
+        for i in numba.parfors.parfor.internal_prange(len(A)):
             val = 0
             if not bodo.libs.array_kernels.isna(A, i):
                 val = int(not A[i])
@@ -326,10 +326,10 @@ def overload_series_mean(S):
 
     def impl(S):  # pragma: no cover
         A = bodo.hiframes.pd_series_ext.get_series_data(S)
-        numba.parfor.init_prange()
+        numba.parfors.parfor.init_prange()
         s = val_0
         count = count_0
-        for i in numba.parfor.internal_prange(len(A)):
+        for i in numba.parfors.parfor.internal_prange(len(A)):
             val = val_0
             count_val = count_0
             if not bodo.libs.array_kernels.isna(A, i):
@@ -348,11 +348,11 @@ def overload_series_mean(S):
 def overload_series_var(S):
     def impl(S):  # pragma: no cover
         A = bodo.hiframes.pd_series_ext.get_series_data(S)
-        numba.parfor.init_prange()
+        numba.parfors.parfor.init_prange()
         first_moment = 0
         second_moment = 0
         count = 0
-        for i in numba.parfor.internal_prange(len(A)):
+        for i in numba.parfors.parfor.internal_prange(len(A)):
             val = 0
             count_val = 0
             if not bodo.libs.array_kernels.isna(A, i):
@@ -456,9 +456,9 @@ def overload_series_count(S):
     # TODO: check 'level' argument
     def impl(S):  # pragma: no cover
         A = bodo.hiframes.pd_series_ext.get_series_data(S)
-        numba.parfor.init_prange()
+        numba.parfors.parfor.init_prange()
         count = 0
-        for i in numba.parfor.internal_prange(len(A)):
+        for i in numba.parfors.parfor.internal_prange(len(A)):
             count_val = 0
             if not bodo.libs.array_kernels.isna(A, i):
                 count_val = 1
@@ -523,10 +523,10 @@ def overload_series_min(S, axis=None, skipna=None, level=None, numeric_only=None
             S, axis=None, skipna=None, level=None, numeric_only=None
         ):  # pragma: no cover
             in_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
-            numba.parfor.init_prange()
-            s = numba.targets.builtins.get_type_max_value(np.int64)
+            numba.parfors.parfor.init_prange()
+            s = numba.cpython.builtins.get_type_max_value(np.int64)
             count = 0
-            for i in numba.parfor.internal_prange(len(in_arr)):
+            for i in numba.parfors.parfor.internal_prange(len(in_arr)):
                 val = s
                 count_val = 0
                 if not bodo.libs.array_kernels.isna(in_arr, i):
@@ -542,10 +542,10 @@ def overload_series_min(S, axis=None, skipna=None, level=None, numeric_only=None
         S, axis=None, skipna=None, level=None, numeric_only=None
     ):  # pragma: no cover
         in_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
-        numba.parfor.init_prange()
+        numba.parfors.parfor.init_prange()
         s = bodo.hiframes.series_kernels._get_type_max_value(in_arr.dtype)
         count = 0
-        for i in numba.parfor.internal_prange(len(in_arr)):
+        for i in numba.parfors.parfor.internal_prange(len(in_arr)):
             val = s
             count_val = 0
             if not bodo.libs.array_kernels.isna(in_arr, i):
@@ -570,10 +570,10 @@ def overload_series_max(S, axis=None, skipna=None, level=None, numeric_only=None
             S, axis=None, skipna=None, level=None, numeric_only=None
         ):  # pragma: no cover
             in_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
-            numba.parfor.init_prange()
-            s = numba.targets.builtins.get_type_min_value(np.int64)
+            numba.parfors.parfor.init_prange()
+            s = numba.cpython.builtins.get_type_min_value(np.int64)
             count = 0
-            for i in numba.parfor.internal_prange(len(in_arr)):
+            for i in numba.parfors.parfor.internal_prange(len(in_arr)):
                 val = s
                 count_val = 0
                 if not bodo.libs.array_kernels.isna(in_arr, i):
@@ -589,10 +589,10 @@ def overload_series_max(S, axis=None, skipna=None, level=None, numeric_only=None
         S, axis=None, skipna=None, level=None, numeric_only=None
     ):  # pragma: no cover
         in_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
-        numba.parfor.init_prange()
+        numba.parfors.parfor.init_prange()
         s = bodo.hiframes.series_kernels._get_type_min_value(in_arr.dtype)
         count = 0
-        for i in numba.parfor.internal_prange(len(in_arr)):
+        for i in numba.parfors.parfor.internal_prange(len(in_arr)):
             val = s
             count_val = 0
             if not bodo.libs.array_kernels.isna(in_arr, i):
@@ -731,11 +731,11 @@ def overload_series_astype(S, dtype, copy=True, errors="raise"):
             name = bodo.hiframes.pd_series_ext.get_series_name(S)
             # XXX: init_prange() after get data calls to have array available
             # for length calculation before 1D_Var parfor
-            numba.parfor.init_prange()
+            numba.parfors.parfor.init_prange()
             n = len(arr)
             num_chars = 0
             # get total chars in new array
-            for i in numba.parfor.internal_prange(n):
+            for i in numba.parfors.parfor.internal_prange(n):
                 if bodo.libs.array_kernels.isna(arr, i):
                     l = 3  # Pandas assigns 'nan' to nulls
                 else:
@@ -743,7 +743,7 @@ def overload_series_astype(S, dtype, copy=True, errors="raise"):
                     l = bodo.libs.str_arr_ext.get_utf8_size(str(s))
                 num_chars += l
             A = bodo.libs.str_arr_ext.pre_alloc_string_array(n, num_chars)
-            for j in numba.parfor.internal_prange(n):
+            for j in numba.parfors.parfor.internal_prange(n):
                 val = "nan"
                 if not bodo.libs.array_kernels.isna(arr, j):
                     s = arr[j]
@@ -915,7 +915,7 @@ def overload_series_isin(S, values):
             A = bodo.hiframes.pd_series_ext.get_series_data(S)
             index = bodo.hiframes.pd_series_ext.get_series_index(S)
             name = bodo.hiframes.pd_series_ext.get_series_name(S)
-            numba.parfor.init_prange()
+            numba.parfors.parfor.init_prange()
             n = len(A)
             out_arr = np.empty(n, np.bool_)
             bodo.libs.array.array_isin(out_arr, A, values_arr, False)
@@ -932,10 +932,10 @@ def overload_series_isin(S, values):
         A = bodo.hiframes.pd_series_ext.get_series_data(S)
         index = bodo.hiframes.pd_series_ext.get_series_index(S)
         name = bodo.hiframes.pd_series_ext.get_series_name(S)
-        numba.parfor.init_prange()
+        numba.parfors.parfor.init_prange()
         n = len(A)
         out_arr = np.empty(n, np.bool_)
-        for i in numba.parfor.internal_prange(n):
+        for i in numba.parfors.parfor.internal_prange(n):
             # TODO: avoid Timestamp conversion for date comparisons if possible
             out_arr[i] = bodo.utils.conversion.box_if_dt64(A[i]) in values
 
@@ -1027,7 +1027,7 @@ def overload_series_fillna(
                     n = len(in_arr)
                     num_chars = 0
                     # get total chars in new array
-                    for i in numba.parfor.internal_prange(n):
+                    for i in numba.parfors.parfor.internal_prange(n):
                         s_len = get_str_arr_item_length(in_arr, i)
                         if bodo.libs.array_kernels.isna(
                             in_arr, i
@@ -1037,7 +1037,7 @@ def overload_series_fillna(
                             l = s_len
                         num_chars += l
                     out_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(n, num_chars)
-                    for j in numba.parfor.internal_prange(n):
+                    for j in numba.parfors.parfor.internal_prange(n):
                         s = in_arr[j]
                         if bodo.libs.array_kernels.isna(
                             in_arr, j
@@ -1067,7 +1067,7 @@ def overload_series_fillna(
                 n = len(in_arr)
                 num_chars = 0
                 # get total chars in new array
-                for i in numba.parfor.internal_prange(n):
+                for i in numba.parfors.parfor.internal_prange(n):
                     s_len = get_str_arr_item_length(in_arr, i)
                     if bodo.libs.array_kernels.isna(in_arr, i):
                         l = val_len
@@ -1075,7 +1075,7 @@ def overload_series_fillna(
                         l = s_len
                     num_chars += l
                 out_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(n, num_chars)
-                for j in numba.parfor.internal_prange(n):
+                for j in numba.parfors.parfor.internal_prange(n):
                     s = in_arr[j]
                     if bodo.libs.array_kernels.isna(in_arr, j):
                         s = value
@@ -1099,7 +1099,7 @@ def overload_series_fillna(
                 ):  # pragma: no cover
                     in_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
                     fill_arr = bodo.hiframes.pd_series_ext.get_series_data(value)
-                    for i in numba.parfor.internal_prange(len(in_arr)):
+                    for i in numba.parfors.parfor.internal_prange(len(in_arr)):
                         s = in_arr[i]
                         if bodo.libs.array_kernels.isna(
                             in_arr, i
@@ -1119,7 +1119,7 @@ def overload_series_fillna(
                 downcast=None,
             ):  # pragma: no cover
                 in_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
-                for i in numba.parfor.internal_prange(len(in_arr)):
+                for i in numba.parfors.parfor.internal_prange(len(in_arr)):
                     s = in_arr[i]
                     if bodo.libs.array_kernels.isna(in_arr, i):
                         s = value
@@ -1147,7 +1147,7 @@ def overload_series_fillna(
                     n = len(in_arr)
                     num_chars = 0
                     # get total chars in new array
-                    for i in numba.parfor.internal_prange(n):
+                    for i in numba.parfors.parfor.internal_prange(n):
                         s_len = get_str_arr_item_length(in_arr, i)
                         if bodo.libs.array_kernels.isna(
                             in_arr, i
@@ -1158,7 +1158,7 @@ def overload_series_fillna(
                         num_chars += l
                     out_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(n, num_chars)
                     # TODO: fix SSA for loop variables
-                    for j in numba.parfor.internal_prange(n):
+                    for j in numba.parfors.parfor.internal_prange(n):
                         s = in_arr[j]
                         if bodo.libs.array_kernels.isna(
                             in_arr, j
@@ -1189,7 +1189,7 @@ def overload_series_fillna(
                 n = len(in_arr)
                 num_chars = 0
                 # get total chars in new array
-                for i in numba.parfor.internal_prange(n):
+                for i in numba.parfors.parfor.internal_prange(n):
                     s_len = get_str_arr_item_length(in_arr, i)
                     # TODO: fix dist reduce when "num_chars += ..." is in
                     # both branches
@@ -1200,7 +1200,7 @@ def overload_series_fillna(
                     num_chars += l
                 out_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(n, num_chars)
                 # TODO: fix SSA for loop variables
-                for j in numba.parfor.internal_prange(n):
+                for j in numba.parfors.parfor.internal_prange(n):
                     s = in_arr[j]
                     if bodo.libs.array_kernels.isna(in_arr, j):
                         s = value
@@ -1227,7 +1227,7 @@ def overload_series_fillna(
                     fill_arr = bodo.hiframes.pd_series_ext.get_series_data(value)
                     n = len(in_arr)
                     out_arr = np.empty(n, in_arr.dtype)
-                    for i in numba.parfor.internal_prange(n):
+                    for i in numba.parfors.parfor.internal_prange(n):
                         s = in_arr[i]
                         if bodo.libs.array_kernels.isna(
                             in_arr, i
@@ -1252,7 +1252,7 @@ def overload_series_fillna(
                 name = bodo.hiframes.pd_series_ext.get_series_name(S)
                 n = len(in_arr)
                 out_arr = np.empty(n, in_arr.dtype)
-                for i in numba.parfor.internal_prange(n):
+                for i in numba.parfors.parfor.internal_prange(n):
                     s = in_arr[i]
                     if bodo.libs.array_kernels.isna(in_arr, i):
                         s = value
@@ -1342,7 +1342,7 @@ def create_explicit_binary_op_overload(op):
         if not isinstance(S.dtype, types.Number):
             raise TypeError("only numeric values supported")
 
-        typing_context = numba.targets.registry.cpu_target.typing_context
+        typing_context = numba.core.registry.cpu_target.typing_context
         # scalar case
         if isinstance(other, types.Number):
             args = (S.data, other)
@@ -1359,11 +1359,11 @@ def create_explicit_binary_op_overload(op):
                 arr = bodo.hiframes.pd_series_ext.get_series_data(S)
                 index = bodo.hiframes.pd_series_ext.get_series_index(S)
                 name = bodo.hiframes.pd_series_ext.get_series_name(S)
-                numba.parfor.init_prange()
+                numba.parfors.parfor.init_prange()
                 # other could be tuple, list, array, Index, or Series
                 n = len(arr)
                 out_arr = bodo.utils.utils.alloc_type(n, ret_dtype)
-                for i in numba.parfor.internal_prange(n):
+                for i in numba.parfors.parfor.internal_prange(n):
                     left_nan = bodo.libs.array_kernels.isna(arr, i)
                     if left_nan:
                         if fill_value is None:
@@ -1391,10 +1391,10 @@ def create_explicit_binary_op_overload(op):
             name = bodo.hiframes.pd_series_ext.get_series_name(S)
             # other could be tuple, list, array, Index, or Series
             other_arr = bodo.utils.conversion.coerce_to_array(other)
-            numba.parfor.init_prange()
+            numba.parfors.parfor.init_prange()
             n = len(arr)
             out_arr = bodo.utils.utils.alloc_type(n, ret_dtype)
-            for i in numba.parfor.internal_prange(n):
+            for i in numba.parfors.parfor.internal_prange(n):
                 left_nan = bodo.libs.array_kernels.isna(arr, i)
                 right_nan = bodo.libs.array_kernels.isna(other_arr, i)
                 if left_nan and right_nan:
@@ -1523,10 +1523,10 @@ def overload_dt64_arr_sub(arg1, arg2):
     td64_dtype = np.dtype("timedelta64[ns]")
 
     def impl(arg1, arg2):  # pragma: no cover
-        numba.parfor.init_prange()
+        numba.parfors.parfor.init_prange()
         n = len(arg1)
         S = np.empty(n, td64_dtype)
-        for i in numba.parfor.internal_prange(n):
+        for i in numba.parfors.parfor.internal_prange(n):
             S[i] = bodo.hiframes.pd_timestamp_ext.integer_to_timedelta64(
                 bodo.hiframes.pd_timestamp_ext.dt64_to_integer(arg1[i])
                 - bodo.hiframes.pd_timestamp_ext.dt64_to_integer(arg2[i])
@@ -1646,9 +1646,9 @@ def create_ufunc_overload(ufunc):
 
 
 def _install_np_ufuncs():
-    import numba.targets.ufunc_db
+    import numba.np.ufunc_db
 
-    for ufunc in numba.targets.ufunc_db.get_ufuncs():
+    for ufunc in numba.np.ufunc_db.get_ufuncs():
         overload_impl = create_ufunc_overload(ufunc)
         overload(ufunc)(overload_impl)
 
@@ -1753,10 +1753,10 @@ def overload_to_numeric(arg_a, errors="raise", downcast=None):
         def to_numeric_float_impl(
             arg_a, errors="raise", downcast=None
         ):  # pragma: no cover
-            numba.parfor.init_prange()
+            numba.parfors.parfor.init_prange()
             n = len(arg_a)
             B = np.empty(n, np.float64)
-            for i in numba.parfor.internal_prange(n):
+            for i in numba.parfors.parfor.internal_prange(n):
                 if bodo.libs.array_kernels.isna(arg_a, i):
                     bodo.ir.join.setitem_arr_nan(B, i)
                 else:
@@ -1770,10 +1770,10 @@ def overload_to_numeric(arg_a, errors="raise", downcast=None):
         def to_numeric_int_impl(
             arg_a, errors="raise", downcast=None
         ):  # pragma: no cover
-            numba.parfor.init_prange()
+            numba.parfors.parfor.init_prange()
             n = len(arg_a)
             B = bodo.libs.int_arr_ext.alloc_int_array(n, np.int64)
-            for i in numba.parfor.internal_prange(n):
+            for i in numba.parfors.parfor.internal_prange(n):
                 if bodo.libs.array_kernels.isna(arg_a, i):
                     bodo.ir.join.setitem_arr_nan(B, i)
                 else:
@@ -1854,7 +1854,7 @@ def overload_np_where(condition, x, y):
     ):
 
         func_text += "  n_chars = 0\n"
-        func_text += "  for i in numba.parfor.internal_prange(n):\n"
+        func_text += "  for i in numba.parfors.parfor.internal_prange(n):\n"
         func_text += "    if condition[i]:\n"
         func_text += "      l = get_utf8_size({})\n".format("x[i]" if is_x_arr else "x")
         func_text += "    else:\n"
@@ -1865,13 +1865,13 @@ def overload_np_where(condition, x, y):
         # similar to np.where typer of Numba
         out_dtype = numba.from_dtype(
             np.promote_types(
-                numba.numpy_support.as_dtype(getattr(x, "dtype", x)),
-                numba.numpy_support.as_dtype(getattr(y, "dtype", y)),
+                numba.np.numpy_support.as_dtype(getattr(x, "dtype", x)),
+                numba.np.numpy_support.as_dtype(getattr(y, "dtype", y)),
             )
         )
         func_text += "  out_arr = np.empty(n, out_dtype)\n"
 
-    func_text += "  for j in numba.parfor.internal_prange(n):\n"
+    func_text += "  for j in numba.parfors.parfor.internal_prange(n):\n"
     func_text += "    if condition[j]:\n"
     func_text += "      out_arr[j] = {}\n".format("x[j]" if is_x_arr else "x")
     if is_x_arr:

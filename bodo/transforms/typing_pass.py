@@ -3,10 +3,10 @@ Bodo type inference pass that performs transformations that enable typing of the
 according to Bodo requirements (using partial typing).
 """
 import operator
-from numba import types, ir, ir_utils
-from numba.compiler_machinery import register_pass
-from numba.typed_passes import NopythonTypeInference, PartialTypeInference
-from numba.ir_utils import (
+from numba.core import types, ir, ir_utils
+from numba.core.compiler_machinery import register_pass
+from numba.core.typed_passes import NopythonTypeInference, PartialTypeInference
+from numba.core.ir_utils import (
     find_topo_order,
     build_definitions,
     mk_unique_var,

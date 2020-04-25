@@ -3,7 +3,7 @@ import operator
 import numpy as np
 import pandas as pd
 import numba
-from numba import types
+from numba.core import types
 from numba.extending import (
     typeof_impl,
     type_callable,
@@ -23,9 +23,9 @@ from numba.extending import (
     overload_attribute,
     register_jitable,
 )
-from numba.targets.imputils import lower_constant
-from numba import cgutils
-from numba.typing.templates import (
+from numba.core.imputils import lower_constant
+from numba.core import cgutils
+from numba.core.typing.templates import (
     infer_getattr,
     AttributeTemplate,
     bound_function,
@@ -799,7 +799,7 @@ def overload_to_datetime(arg_a):
         def impl_date_arr(arg_a):  # pragma: no cover
             n = len(arg_a)
             B = np.empty(n, dt64_dtype)
-            for i in numba.parfor.internal_prange(n):
+            for i in numba.parfors.parfor.internal_prange(n):
                 val = iNaT
                 if not bodo.libs.array_kernels.isna(arg_a, i):
                     data = arg_a[i]
@@ -851,7 +851,7 @@ def overload_to_timedelta(arg_a, unit="ns", errors="raise"):
         def impl_float(arg_a, unit="ns", errors="raise"):  # pragma: no cover
             n = len(arg_a)
             B = np.empty(n, td64_dtype)
-            for i in numba.parfor.internal_prange(n):
+            for i in numba.parfors.parfor.internal_prange(n):
                 val = iNaT
                 if not bodo.libs.array_kernels.isna(arg_a, i):
                     data = arg_a[i]

@@ -20,7 +20,7 @@ import pytest
     "op", (operator.eq, operator.ne, operator.ge, operator.gt, operator.le, operator.lt)
 )
 def test_cmp_binary_op(op):
-    op_str = numba.utils.OPERATORS_TO_BUILTINS[op]
+    op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
     func_text = "def test_impl(A, other):\n"
     func_text += "  return A {} other\n".format(op_str)
     loc_vars = {}

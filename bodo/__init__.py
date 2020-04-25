@@ -15,9 +15,9 @@ from numba import (
     objmode,
     typed,
 )
-from numba.types import *
+from numba.core.types import *
 
-datetime64ns = numba.types.NPDatetime("ns")
+datetime64ns = numba.core.types.NPDatetime("ns")
 
 import bodo.libs
 import bodo.libs.dict_ext
@@ -35,7 +35,7 @@ from bodo.libs.distributed_api import (
 
 from bodo.libs.str_ext import string_type
 from bodo.libs.str_arr_ext import string_array_type
-from numba.types import List
+from numba.core.types import List
 from bodo.utils.utils import cprint, distribution_report
 import bodo.compiler
 import bodo.io

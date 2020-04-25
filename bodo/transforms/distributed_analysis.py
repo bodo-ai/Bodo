@@ -10,8 +10,8 @@ import inspect
 from enum import Enum
 
 import numba
-from numba import ir, ir_utils, types
-from numba.ir_utils import (
+from numba.core import ir, ir_utils, types
+from numba.core.ir_utils import (
     find_topo_order,
     guard,
     get_definition,
@@ -24,8 +24,8 @@ from numba.ir_utils import (
     find_build_sequence,
     find_const,
 )
-from numba.parfor import Parfor
-from numba.parfor import wrap_parfor_blocks, unwrap_parfor_blocks
+from numba.parfors.parfor import Parfor
+from numba.parfors.parfor import wrap_parfor_blocks, unwrap_parfor_blocks
 
 import bodo
 import bodo.io
@@ -536,7 +536,7 @@ class DistributedAnalysis:
             # blocks of data are passed in, TODO: document
             func_def = guard(get_definition, self.func_ir, rhs.func)
             if isinstance(func_def, ir.Const) and isinstance(
-                func_def.value, numba.dispatcher.ObjModeLiftedWith
+                func_def.value, numba.core.dispatcher.ObjModeLiftedWith
             ):
                 return
             warnings.warn("function call couldn't be found for distributed analysis")
@@ -943,7 +943,7 @@ class DistributedAnalysis:
 
         # TODO: make sure assert_equiv is not generated unnecessarily
         # TODO: fix assert_equiv for np.stack from df.value
-        if fdef == ("assert_equiv", "numba.array_analysis"):
+        if fdef == ("assert_equiv", "numba.parfors.array_analysis"):
             return
 
         # handle calling other Bodo functions that have distributed flags
@@ -1193,7 +1193,7 @@ class DistributedAnalysis:
             return types.StarArgTuple(val_types)
 
         pysig = dispatcher._compiler.pysig
-        arg_types = numba.typing.templates.fold_arguments(
+        arg_types = numba.core.typing.templates.fold_arguments(
             pysig,
             rhs.args,
             dict(rhs.kws),
@@ -1631,7 +1631,7 @@ class DistributedAnalysis:
         # arrays or is in a loop
 
         # find sequential loop bodies
-        cfg = numba.analysis.compute_cfg_from_blocks(self.func_ir.blocks)
+        cfg = numba.core.analysis.compute_cfg_from_blocks(self.func_ir.blocks)
         loop_bodies = set()
         for loop in cfg.loops().values():
             loop_bodies |= loop.body

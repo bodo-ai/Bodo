@@ -5,7 +5,7 @@ refactored.
 import numpy as np
 
 import numba
-from numba import types
+from numba.core import types
 from numba.extending import overload
 
 import bodo
@@ -17,7 +17,7 @@ from bodo.libs.int_arr_ext import IntDtype
 def _column_filter_impl(B, ind):  # pragma: no cover
     dtype = bodo.hiframes.rolling.shift_dtype(B.dtype)
     A = np.empty(len(B), dtype)
-    for i in numba.parfor.internal_prange(len(A)):
+    for i in numba.parfors.parfor.internal_prange(len(A)):
         if ind[i]:
             A[i] = B[i]
         else:
@@ -26,9 +26,9 @@ def _column_filter_impl(B, ind):  # pragma: no cover
 
 
 def _column_count_impl(A):  # pragma: no cover
-    numba.parfor.init_prange()
+    numba.parfors.parfor.init_prange()
     count = 0
-    for i in numba.parfor.internal_prange(len(A)):
+    for i in numba.parfors.parfor.internal_prange(len(A)):
         if not bodo.libs.array_kernels.isna(A, i):
             count += 1
 
@@ -37,7 +37,7 @@ def _column_count_impl(A):  # pragma: no cover
 
 
 def _column_fillna_impl(A, B, fill):  # pragma: no cover
-    for i in numba.parfor.internal_prange(len(A)):
+    for i in numba.parfors.parfor.internal_prange(len(A)):
         s = B[i]
         if bodo.libs.array_kernels.isna(B, i):
             s = fill
@@ -86,18 +86,18 @@ def _get_type_max_value_overload(dtype):
     # pd.Int64Dtype(), etc.
     if isinstance(dtype, IntDtype):
         _dtype = dtype.dtype
-        return lambda dtype: numba.targets.builtins.get_type_max_value(_dtype)
+        return lambda dtype: numba.cpython.builtins.get_type_max_value(_dtype)
 
     # dt64/td64
     if isinstance(dtype.dtype, (types.NPDatetime, types.NPTimedelta)):
         return lambda dtype: bodo.hiframes.pd_timestamp_ext.integer_to_dt64(
-            numba.targets.builtins.get_type_max_value(numba.types.int64)
+            numba.cpython.builtins.get_type_max_value(numba.core.types.int64)
         )
 
     if dtype.dtype == types.bool_:
         return lambda dtype: True
 
-    return lambda dtype: numba.targets.builtins.get_type_max_value(dtype)
+    return lambda dtype: numba.cpython.builtins.get_type_max_value(dtype)
 
 
 def _get_type_min_value(dtype):  # pragma: no cover
@@ -109,18 +109,18 @@ def _get_type_min_value_overload(dtype):
     # pd.Int64Dtype(), etc.
     if isinstance(dtype, IntDtype):
         _dtype = dtype.dtype
-        return lambda dtype: numba.targets.builtins.get_type_min_value(_dtype)
+        return lambda dtype: numba.cpython.builtins.get_type_min_value(_dtype)
 
     # dt64/td64
     if isinstance(dtype.dtype, (types.NPDatetime, types.NPTimedelta)):
         return lambda dtype: bodo.hiframes.pd_timestamp_ext.integer_to_dt64(
-            numba.targets.builtins.get_type_min_value(numba.types.int64)
+            numba.cpython.builtins.get_type_min_value(numba.core.types.int64)
         )
 
     if dtype.dtype == types.bool_:
         return lambda dtype: False
 
-    return lambda dtype: numba.targets.builtins.get_type_min_value(dtype)
+    return lambda dtype: numba.cpython.builtins.get_type_min_value(dtype)
 
 
 @overload(min)
@@ -155,10 +155,10 @@ def _sum_handle_nan(s, count):  # pragma: no cover
 
 
 def _column_sum_impl_count(A):  # pragma: no cover
-    numba.parfor.init_prange()
+    numba.parfors.parfor.init_prange()
     count = 0
     s = 0
-    for i in numba.parfor.internal_prange(len(A)):
+    for i in numba.parfors.parfor.internal_prange(len(A)):
         val = A[i]
         if not np.isnan(val):
             s += val

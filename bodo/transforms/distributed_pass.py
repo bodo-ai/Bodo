@@ -3,16 +3,16 @@
 Parallelizes the IR for distributed execution and inserts MPI calls.
 """
 import operator
-import types as pytypes  # avoid confusion with numba.types
+import types as pytypes  # avoid confusion with numba.core.types
 import copy
 import warnings
 from collections import defaultdict
 import math
 import numpy as np
 import numba
-from numba import ir, ir_utils, postproc, types
+from numba.core import ir, ir_utils, postproc, types
 from bodo.utils.typing import list_cumulative
-from numba.ir_utils import (
+from numba.core.ir_utils import (
     mk_unique_var,
     replace_vars_inner,
     find_topo_order,
@@ -39,14 +39,16 @@ from numba.ir_utils import (
     remove_dead_extensions,
     has_no_side_effect,
     analysis,
+    rename_labels,
+    simplify,
 )
-from numba.parfor import (
+from numba.parfors.parfor import (
     get_parfor_reductions,
     get_parfor_params,
     wrap_parfor_blocks,
     unwrap_parfor_blocks,
 )
-from numba.parfor import Parfor, lower_parfor_sequential
+from numba.parfors.parfor import Parfor, _lower_parfor_sequential_block
 import numpy as np
 
 import bodo
@@ -116,7 +118,7 @@ class DistributedPass:
         self.curr_loc = self.func_ir.loc
         self.metadata = metadata
         self.flags = flags
-        self.arr_analysis = numba.array_analysis.ArrayAnalysis(
+        self.arr_analysis = numba.parfors.array_analysis.ArrayAnalysis(
             self.typingctx, self.func_ir, self.typemap, self.calltypes
         )
 
@@ -184,8 +186,6 @@ class DistributedPass:
             _parfor_ids = get_parfor_params(
                 self.func_ir.blocks, True, defaultdict(list)
             )
-        post_proc = postproc.PostProcessor(self.func_ir)
-        post_proc.run()
 
         # save data for debug and test
         global dist_analysis, fir_text
@@ -764,17 +764,17 @@ class DistributedPass:
 
         # replace get_type_max_value(arr.dtype) since parfors
         # arr.dtype transformation produces invalid code for dt64
-        if fdef == ("get_type_max_value", "numba.targets.builtins"):
+        if fdef == ("get_type_max_value", "numba.cpython.builtins"):
             if self.typemap[rhs.args[0].name] == types.DType(types.NPDatetime("ns")):
                 # XXX: not using replace since init block of parfor can't be
                 # processed. test_series_idxmin
                 # return self._replace_func(
                 #     lambda: bodo.hiframes.pd_timestamp_ext.integer_to_dt64(
-                #         numba.targets.builtins.get_type_max_value(
-                #             numba.types.int64)), [])
+                #         numba.cpython.builtins.get_type_max_value(
+                #             numba.core.types.int64)), [])
                 f_block = compile_to_numba_ir(
                     lambda: bodo.hiframes.pd_timestamp_ext.integer_to_dt64(
-                        numba.targets.builtins.get_type_max_value(numba.types.uint64)
+                        numba.cpython.builtins.get_type_max_value(numba.core.types.uint64)
                     ),
                     {"bodo": bodo, "numba": numba},
                     self.typingctx,
@@ -785,11 +785,11 @@ class DistributedPass:
                 out = f_block.body[:-2]
                 out[-1].target = assign.target
 
-        if fdef == ("get_type_min_value", "numba.targets.builtins"):
+        if fdef == ("get_type_min_value", "numba.cpython.builtins"):
             if self.typemap[rhs.args[0].name] == types.DType(types.NPDatetime("ns")):
                 f_block = compile_to_numba_ir(
                     lambda: bodo.hiframes.pd_timestamp_ext.integer_to_dt64(
-                        numba.targets.builtins.get_type_min_value(numba.types.uint64)
+                        numba.cpython.builtins.get_type_min_value(numba.core.types.uint64)
                     ),
                     {"bodo": bodo, "numba": numba},
                     self.typingctx,
@@ -984,7 +984,7 @@ class DistributedPass:
             arg_typs = tuple(arg_typs)
             # self.calltypes[rhs] = self.typemap[rhs.func.name].get_call_type(
             #      self.typingctx, arg_typs, {})
-            self.calltypes[rhs] = numba.typing.Signature(
+            self.calltypes[rhs] = numba.core.typing.Signature(
                 string_type, arg_typs, df_typ, call_type.pysig
             )
 
@@ -1066,7 +1066,7 @@ class DistributedPass:
 
     # Returns an IR node that defines a variable holding the size of |dtype|.
     def dtype_size_assign_ir(self, dtype, scope, loc):
-        context = numba.targets.cpu.CPUContext(self.typingctx)
+        context = numba.core.cpu.CPUContext(self.typingctx)
         dtype_size = context.get_abi_sizeof(context.get_data_type(dtype))
         dtype_size_var = ir.Var(scope, mk_unique_var("dtype_size"), loc)
         self.typemap[dtype_size_var.name] = types.intp
@@ -2346,13 +2346,13 @@ class DistributedPass:
             func = find_callname(self.func_ir, rhs, self.typemap)
             if func == ("min", "builtins"):
                 if isinstance(
-                    self.typemap[rhs.args[0].name], numba.typing.builtins.IndexValueType
+                    self.typemap[rhs.args[0].name], numba.core.typing.builtins.IndexValueType
                 ):
                     return Reduce_Type.Argmin
                 return Reduce_Type.Min
             if func == ("max", "builtins"):
                 if isinstance(
-                    self.typemap[rhs.args[0].name], numba.typing.builtins.IndexValueType
+                    self.typemap[rhs.args[0].name], numba.core.typing.builtins.IndexValueType
                 ):
                     return Reduce_Type.Argmax
                 return Reduce_Type.Max
@@ -2378,14 +2378,14 @@ class DistributedPass:
             if el_typ == types.bool_:
                 init_val = "True"
             else:
-                init_val = "numba.targets.builtins.get_type_max_value(np.ones(1,dtype=np.{}).dtype)".format(
+                init_val = "numba.cpython.builtins.get_type_max_value(np.ones(1,dtype=np.{}).dtype)".format(
                     el_typ
                 )
         if reduce_op == Reduce_Type.Max:
             if el_typ == types.bool_:
                 init_val = "False"
             else:
-                init_val = "numba.targets.builtins.get_type_min_value(np.ones(1,dtype=np.{}).dtype)".format(
+                init_val = "numba.cpython.builtins.get_type_min_value(np.ones(1,dtype=np.{}).dtype)".format(
                     el_typ
                 )
         if reduce_op in [Reduce_Type.Argmin, Reduce_Type.Argmax]:
@@ -2459,8 +2459,8 @@ class DistributedPass:
 
     def _update_avail_vars(self, avail_vars, nodes):
         for stmt in nodes:
-            if type(stmt) in numba.analysis.ir_extension_usedefs:
-                def_func = numba.analysis.ir_extension_usedefs[type(stmt)]
+            if type(stmt) in numba.core.analysis.ir_extension_usedefs:
+                def_func = numba.core.analysis.ir_extension_usedefs[type(stmt)]
                 _uses, defs = def_func(stmt)
                 avail_vars |= defs
             if is_assign(stmt):
@@ -2629,7 +2629,7 @@ def find_available_vars(blocks, cfg, init_avail=None):
     """
     # TODO: unittest
     in_avail_vars = defaultdict(set)
-    var_def_map = numba.analysis.compute_use_defs(blocks).defmap
+    var_def_map = numba.core.analysis.compute_use_defs(blocks).defmap
 
     if init_avail:
         assert 0 in blocks
@@ -2642,6 +2642,33 @@ def find_available_vars(blocks, cfg, init_avail=None):
             in_avail_vars[label] |= var_def_map[d]
 
     return in_avail_vars
+
+
+# copied from Numba and modified to avoid ir.Del generation, which is invalid in 0.49
+# https://github.com/numba/numba/blob/1ea770564cb3c0c6cb9d8ab92e7faf23cd4c4c19/numba/parfors/parfor.py#L3050
+def lower_parfor_sequential(typingctx, func_ir, typemap, calltypes):
+    ir_utils._max_label = max(
+        ir_utils._max_label, ir_utils.find_max_label(func_ir.blocks)
+    )
+    parfor_found = False
+    new_blocks = {}
+    for (block_label, block) in func_ir.blocks.items():
+        block_label, parfor_found = _lower_parfor_sequential_block(
+            block_label, block, new_blocks, typemap, calltypes, parfor_found
+        )
+        # old block stays either way
+        new_blocks[block_label] = block
+    func_ir.blocks = new_blocks
+    # rename only if parfor found and replaced (avoid test_flow_control error)
+    if parfor_found:
+        func_ir.blocks = rename_labels(func_ir.blocks)
+    dprint_func_ir(func_ir, "after parfor sequential lowering")
+    simplify(func_ir, typemap, calltypes)
+    dprint_func_ir(func_ir, "after parfor sequential simplify")
+    # changed from Numba code: comment out id.Del generation that causes errors in 0.49
+    # # add dels since simplify removes dels
+    # post_proc = postproc.PostProcessor(func_ir)
+    # post_proc.run(True)
 
 
 # replaces remove_dead_block of Numba to add Bodo optimization (e.g. replace dead array

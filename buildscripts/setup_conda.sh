@@ -36,7 +36,7 @@ fi
 
 $CONDA_INSTALL -c conda-forge pyarrow=0.16.0
 $CONDA_INSTALL pandas>=1.0.0 -c conda-forge
-$CONDA_INSTALL numba=0.48.* -c conda-forge
+$CONDA_INSTALL numba=0.49.* -c numba -c conda-forge
 $CONDA_INSTALL mpi4py -c conda-forge
 $CONDA_INSTALL -c conda-forge hdf5=*=*mpich*
 $CONDA_INSTALL -c conda-forge xlrd xlsxwriter

@@ -11,9 +11,9 @@ from decimal import Decimal
 import datetime
 
 import numba
-from numba import types, cgutils, ir_utils
-from numba.typing.templates import AbstractTemplate, infer_global
-from numba.typing import signature
+from numba.core import types, cgutils, ir_utils
+from numba.core.typing.templates import AbstractTemplate, infer_global
+from numba.core.typing import signature
 from numba.extending import models, register_model, intrinsic, overload
 
 import bodo
@@ -50,7 +50,7 @@ from bodo.utils.utils import (
     unliteral_all,
 )
 from bodo.utils.typing import BodoError
-from numba.typing.builtins import IndexValueType
+from numba.core.typing.builtins import IndexValueType
 from llvmlite import ir as lir
 from bodo.libs import hdist
 
@@ -1008,7 +1008,7 @@ def get_value_for_type(dtype):  # pragma: no cover
 
     # numpy arrays
     if isinstance(dtype, types.Array):
-        return np.zeros((1,) * dtype.ndim, numba.numpy_support.as_dtype(dtype.dtype))
+        return np.zeros((1,) * dtype.ndim, numba.np.numpy_support.as_dtype(dtype.dtype))
 
     # string array
     if dtype == string_array_type:
@@ -1666,7 +1666,7 @@ def bcast_scalar_overload(val):
         "  return send[0]\n"
     ).format(typ_val)
 
-    dtype = numba.numpy_support.as_dtype(val)
+    dtype = numba.np.numpy_support.as_dtype(val)
     loc_vars = {}
     exec(
         func_text,
@@ -1732,7 +1732,7 @@ def slice_getitem(arr, slice_index, arr_start, total_len, is_1D):  # pragma: no 
 def slice_getitem_overload(arr, slice_index, arr_start, total_len, is_1D):
     def getitem_impl(arr, slice_index, arr_start, total_len, is_1D):  # pragma: no cover
         # normalize slice
-        slice_index = numba.unicode._normalize_slice(slice_index, total_len)
+        slice_index = numba.cpython.unicode._normalize_slice(slice_index, total_len)
         start = slice_index.start
         step = slice_index.step
 
@@ -1809,7 +1809,7 @@ def int_getitem(arr, ind, arr_start, total_len, is_1D):  # pragma: no cover
 def int_getitem_overload(arr, ind, arr_start, total_len, is_1D):
     if arr == string_array_type:
         # TODO: other kinds, unicode
-        kind = numba.unicode.PY_UNICODE_1BYTE_KIND
+        kind = numba.cpython.unicode.PY_UNICODE_1BYTE_KIND
         char_typ_enum = np.int32(numba_to_c_type(types.uint8))
 
         def str_getitem_impl(arr, ind, arr_start, total_len, is_1D):  # pragma: no cover
@@ -1838,14 +1838,14 @@ def int_getitem_overload(arr, ind, arr_start, total_len, is_1D):
             l = 0
             if rank == root:
                 l = recv(np.int64, ANY_SOURCE, size_tag)
-                val = numba.unicode._empty_string(kind, l, 1)
+                val = numba.cpython.unicode._empty_string(kind, l, 1)
                 _recv(val._data, np.int32(l), char_typ_enum, ANY_SOURCE, tag)
 
             dummy_use(send_size)
             dummy_use(send_val)
             l = bcast_scalar(l)
             if rank != root:
-                val = numba.unicode._empty_string(kind, l, 1)
+                val = numba.cpython.unicode._empty_string(kind, l, 1)
             # TODO: unicode fix?
             c_bcast(val._data, np.int32(l), char_typ_enum)
             return val
@@ -2211,7 +2211,7 @@ def get_tuple_prod(t):  # pragma: no cover
 @overload(get_tuple_prod)
 def get_tuple_prod_overload(t):
     # handle empty tuple seperately since empty getiter doesn't work
-    if t == numba.types.containers.Tuple(()):
+    if t == numba.core.types.containers.Tuple(()):
         return lambda t: 1
 
     def get_tuple_prod_impl(t):  # pragma: no cover

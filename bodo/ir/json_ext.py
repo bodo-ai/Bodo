@@ -2,8 +2,8 @@
 import bodo
 from bodo import objmode
 import numba
-from numba import ir, ir_utils, typeinfer, types
-from numba.ir_utils import (
+from numba.core import ir, ir_utils, typeinfer, types
+from numba.core.ir_utils import (
     visit_vars_inner,
     replace_vars_inner,
     compile_to_numba_ir,
@@ -132,7 +132,7 @@ def json_distributed_run(
     return nodes
 
 
-numba.array_analysis.array_analysis_extensions[
+numba.parfors.array_analysis.array_analysis_extensions[
     JsonReader
 ] = bodo.ir.connector.connector_array_analysis
 distributed_analysis.distributed_analysis_extensions[
@@ -142,7 +142,7 @@ typeinfer.typeinfer_extensions[JsonReader] = bodo.ir.connector.connector_typeinf
 # add call to visit json variable
 ir_utils.visit_vars_extensions[JsonReader] = bodo.ir.connector.visit_vars_connector
 ir_utils.remove_dead_extensions[JsonReader] = remove_dead_json
-numba.analysis.ir_extension_usedefs[JsonReader] = bodo.ir.connector.connector_usedefs
+numba.core.analysis.ir_extension_usedefs[JsonReader] = bodo.ir.connector.connector_usedefs
 ir_utils.copy_propagate_extensions[JsonReader] = bodo.ir.connector.get_copies_connector
 ir_utils.apply_copy_propagate_extensions[
     JsonReader

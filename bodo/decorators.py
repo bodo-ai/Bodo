@@ -8,26 +8,26 @@ from bodo import master_mode
 
 
 # Add Bodo's options to Numba's allowed options/flags
-numba.targets.cpu.CPUTargetOptions.OPTIONS["all_args_distributed_block"] = bool
-numba.targets.cpu.CPUTargetOptions.OPTIONS["all_args_distributed_varlength"] = bool
-numba.targets.cpu.CPUTargetOptions.OPTIONS["all_returns_distributed"] = bool
-numba.targets.cpu.CPUTargetOptions.OPTIONS["distributed"] = set
-numba.targets.cpu.CPUTargetOptions.OPTIONS["distributed_block"] = set
-numba.targets.cpu.CPUTargetOptions.OPTIONS["threaded"] = set
-numba.targets.cpu.CPUTargetOptions.OPTIONS["pivots"] = dict
-numba.targets.cpu.CPUTargetOptions.OPTIONS["h5_types"] = dict
-numba.compiler.Flags.OPTIONS["all_args_distributed_block"] = False
-numba.compiler.Flags.OPTIONS["all_args_distributed_varlength"] = False
-numba.compiler.Flags.OPTIONS["all_returns_distributed"] = False
-numba.compiler.Flags.OPTIONS["distributed"] = set()
-numba.compiler.Flags.OPTIONS["distributed_block"] = set()
-numba.compiler.Flags.OPTIONS["threaded"] = set()
-numba.compiler.Flags.OPTIONS["pivots"] = dict()
-numba.compiler.Flags.OPTIONS["h5_types"] = dict()
+numba.core.cpu.CPUTargetOptions.OPTIONS["all_args_distributed_block"] = bool
+numba.core.cpu.CPUTargetOptions.OPTIONS["all_args_distributed_varlength"] = bool
+numba.core.cpu.CPUTargetOptions.OPTIONS["all_returns_distributed"] = bool
+numba.core.cpu.CPUTargetOptions.OPTIONS["distributed"] = set
+numba.core.cpu.CPUTargetOptions.OPTIONS["distributed_block"] = set
+numba.core.cpu.CPUTargetOptions.OPTIONS["threaded"] = set
+numba.core.cpu.CPUTargetOptions.OPTIONS["pivots"] = dict
+numba.core.cpu.CPUTargetOptions.OPTIONS["h5_types"] = dict
+numba.core.compiler.Flags.OPTIONS["all_args_distributed_block"] = False
+numba.core.compiler.Flags.OPTIONS["all_args_distributed_varlength"] = False
+numba.core.compiler.Flags.OPTIONS["all_returns_distributed"] = False
+numba.core.compiler.Flags.OPTIONS["distributed"] = set()
+numba.core.compiler.Flags.OPTIONS["distributed_block"] = set()
+numba.core.compiler.Flags.OPTIONS["threaded"] = set()
+numba.core.compiler.Flags.OPTIONS["pivots"] = dict()
+numba.core.compiler.Flags.OPTIONS["h5_types"] = dict()
 
 
 def bodo_set_flags(self, flags):
-    """Add Bodo's options to 'set_flags' function of numba.targets.options.TargetOptions
+    """Add Bodo's options to 'set_flags' function of numba.core.options.TargetOptions
     Handles Bodo flags, then calls Numba for handling regular Numba flags
     """
     # remove Bodo options from 'values', call 'numba_set_flags', restore Bodo options
@@ -62,8 +62,8 @@ def bodo_set_flags(self, flags):
     self.values = orig_values
 
 
-numba.targets.options.TargetOptions.numba_set_flags = numba.targets.options.TargetOptions.set_flags
-numba.targets.options.TargetOptions.set_flags = bodo_set_flags
+numba.core.options.TargetOptions.numba_set_flags = numba.core.options.TargetOptions.set_flags
+numba.core.options.TargetOptions.set_flags = bodo_set_flags
 
 
 # adapted from parallel_diagnostics()
@@ -97,7 +97,7 @@ def distributed_diagnostics(self, signature=None, level=1):
         [dump(sig) for sig in self.signatures]
 
 
-numba.dispatcher.Dispatcher.distributed_diagnostics = distributed_diagnostics
+numba.core.dispatcher.Dispatcher.distributed_diagnostics = distributed_diagnostics
 
 
 def master_mode_wrapper(numba_jit_wrapper):  # pragma: no cover

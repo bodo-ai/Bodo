@@ -3,7 +3,7 @@
 """
 import pandas as pd
 import numba
-from numba import types, cgutils
+from numba.core import types, cgutils
 from numba.extending import (
     models,
     register_model,

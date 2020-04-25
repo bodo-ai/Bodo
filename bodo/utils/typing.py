@@ -8,7 +8,7 @@ import types as pytypes
 import numpy as np
 import pandas as pd
 import numba
-from numba import types, cgutils
+from numba.core import types, cgutils
 from numba.extending import (
     register_model,
     models,
@@ -19,9 +19,9 @@ from numba.extending import (
     unbox,
     NativeValue,
 )
-from numba.typing.templates import infer_global, AbstractTemplate, CallableTemplate
-from numba.typing import signature
-from numba.targets.imputils import lower_builtin, impl_ret_borrowed, impl_ret_new_ref
+from numba.core.typing.templates import infer_global, AbstractTemplate, CallableTemplate
+from numba.core.typing import signature
+from numba.core.imputils import lower_builtin, impl_ret_borrowed, impl_ret_new_ref
 import bodo
 
 list_cumulative = {"cumsum", "cumprod", "cummin", "cummax"}
@@ -144,7 +144,7 @@ def is_overload_constant_int(val):
 
 
 def is_overload_bool_list(val):
-    return isinstance(val, numba.types.List) and isinstance(val.dtype, types.Boolean)
+    return isinstance(val, numba.core.types.List) and isinstance(val.dtype, types.Boolean)
 
 
 def is_overload_true(val):
@@ -327,7 +327,7 @@ def parse_dtype(dtype):
             return bodo.libs.int_arr_ext.typeof_pd_int_dtype(
                 pd.api.types.pandas_dtype(d_str), None
             )
-        return numba.numpy_support.from_dtype(np.dtype(d_str))
+        return numba.np.numpy_support.from_dtype(np.dtype(d_str))
     except:
         pass
     raise BodoError("invalid dtype {}".format(dtype))
@@ -463,7 +463,7 @@ class FunctionLiteral(types.Literal, types.Opaque):
 def typeof_function(val, c):
     """Assign literal type to constant functions that are not overloaded in numba.
     """
-    if not numba.targets.registry.cpu_target.typing_context._get_global_type(val):
+    if not numba.core.registry.cpu_target.typing_context._get_global_type(val):
         return FunctionLiteral(val)
 
 
@@ -647,7 +647,7 @@ class ConstDictType(types.DictType):
 
 
 @register_model(ConstDictType)
-class ConstDictModel(numba.dictobject.DictModel):
+class ConstDictModel(numba.typed.dictobject.DictModel):
     def __init__(self, dmm, fe_type):
         l_type = types.DictType(fe_type.key_type, fe_type.value_type)
         super(ConstDictModel, self).__init__(dmm, l_type)
@@ -772,7 +772,7 @@ class ConvertTupRecType(AbstractTemplate):
 
         if isinstance(in_dtype, types.BaseTuple):
             np_dtype = np.dtype(",".join(str(t) for t in in_dtype.types), align=True)
-            out_dtype = numba.numpy_support.from_dtype(np_dtype)
+            out_dtype = numba.np.numpy_support.from_dtype(np_dtype)
 
         return signature(out_dtype, in_dtype)
 
@@ -879,5 +879,5 @@ types.Set.__init__ = Set__init__
 # XXX: adding lowerer for eq of strings due to limitation of Set
 @lower_builtin(operator.eq, types.UnicodeType, types.UnicodeType)
 def eq_str(context, builder, sig, args):
-    func = numba.unicode.unicode_eq(*sig.args)
+    func = numba.cpython.unicode.unicode_eq(*sig.args)
     return context.compile_internal(builder, func, sig, args)

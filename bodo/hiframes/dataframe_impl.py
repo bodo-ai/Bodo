@@ -6,18 +6,18 @@ from collections import namedtuple
 import numpy as np
 import pandas as pd
 import numba
-from numba import types, cgutils
+from numba.core import types, cgutils
 from numba.extending import overload, overload_attribute, overload_method
-from numba.typing.templates import infer_global, AbstractTemplate
-from numba.typing import signature
-from numba.targets.imputils import (
+from numba.core.typing.templates import infer_global, AbstractTemplate
+from numba.core.typing import signature
+from numba.core.imputils import (
     impl_ret_new_ref,
     impl_ret_borrowed,
     iternext_impl,
     RefType,
 )
-from numba import ir
-from numba.ir_utils import mk_unique_var, next_label
+from numba.core import ir
+from numba.core.ir_utils import mk_unique_var, next_label
 import bodo
 from bodo.hiframes.pd_dataframe_ext import DataFrameType, handle_inplace_df_type_change
 from bodo.hiframes.pd_series_ext import SeriesType
@@ -37,7 +37,7 @@ from bodo.utils.typing import (
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.bool_arr_ext import boolean_array
 from bodo.hiframes.pd_timestamp_ext import pandas_timestamp_type
-from numba.targets.imputils import lower_builtin
+from numba.core.imputils import lower_builtin
 from bodo.hiframes.pd_series_ext import if_series_to_array_type
 from numba.extending import register_model, models
 import llvmlite.llvmpy.core as lc
@@ -289,19 +289,19 @@ def overload_dataframe_isin(df, values):
     out_data = ["out{}".format(i) for i in range(len(df.columns))]
 
     isin_func = """
-  numba.parfor.init_prange()
+  numba.parfors.parfor.init_prange()
   n = len({0})
   m = len({1})
   {2} = np.empty(n, np.bool_)
-  for i in numba.parfor.internal_prange(n):
+  for i in numba.parfors.parfor.internal_prange(n):
     {2}[i] = {0}[i] == {1}[i] if i < m else False
 """
 
     isin_vals_func = """
-  numba.parfor.init_prange()
+  numba.parfors.parfor.init_prange()
   n = len({0})
   {2} = np.empty(n, np.bool_)
-  for i in numba.parfor.internal_prange(n):
+  for i in numba.parfors.parfor.internal_prange(n):
     {2}[i] = {0}[i] in {1}
 """
     bool_arr_func = "  {} = np.zeros(len(df), np.bool_)\n"
@@ -328,8 +328,8 @@ def overload_dataframe_abs(df):
     extra = ""
     first_col_dtype = df.data[0] if len(df.data) > 0 else None
     if not all(c == first_col_dtype for c in df.data):
-        dtypes = [numba.numpy_support.as_dtype(d.dtype) for d in df.data]
-        out_dtype = numba.numpy_support.from_dtype(np.find_common_type(dtypes, []))
+        dtypes = [numba.np.numpy_support.as_dtype(d.dtype) for d in df.data]
+        out_dtype = numba.np.numpy_support.from_dtype(np.find_common_type(dtypes, []))
         extra = ".astype(np.{})".format(out_dtype)
 
     n_cols = len(df.columns)
@@ -547,10 +547,10 @@ def _gen_reduce_impl(df, func_name, args=None):
     assert len(out_colnames) != 0
 
     dtypes = [
-        numba.numpy_support.as_dtype(df.data[df.columns.index(c)].dtype)
+        numba.np.numpy_support.as_dtype(df.data[df.columns.index(c)].dtype)
         for c in out_colnames
     ]
-    comm_dtype = numba.numpy_support.from_dtype(np.find_common_type(dtypes, []))
+    comm_dtype = numba.np.numpy_support.from_dtype(np.find_common_type(dtypes, []))
 
     # XXX: use common type for min/max to avoid float for ints due to NaN
     # TODO: handle NaN for ints better
@@ -816,7 +816,7 @@ def _is_numeric_dtype(dtype):
 
 def create_binary_op_overload(op):
     def overload_dataframe_binary_op(left, right):
-        op_str = numba.utils.OPERATORS_TO_BUILTINS[op]
+        op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
         if isinstance(left, DataFrameType):
             # df/df case
             if isinstance(right, DataFrameType):
@@ -880,7 +880,7 @@ _install_binary_ops()
 def create_inplace_binary_op_overload(op):
     def overload_dataframe_inplace_binary_op(left, right):
         if isinstance(left, DataFrameType):
-            op_str = numba.utils.OPERATORS_TO_BUILTINS[op]
+            op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
             if isinstance(right, DataFrameType):
                 if left != right:
                     raise TypeError(
@@ -936,7 +936,7 @@ _install_inplace_binary_ops()
 def create_unary_op_overload(op):
     def overload_dataframe_unary_op(df):
         if isinstance(df, DataFrameType):
-            op_str = numba.utils.OPERATORS_TO_BUILTINS[op]
+            op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
             data_args = ", ".join(
                 "{1} bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {0})".format(
                     i, op_str
@@ -981,10 +981,10 @@ def overload_isna(obj):
     if obj == bodo.string_array_type:
 
         def impl(obj):  # pragma: no cover
-            numba.parfor.init_prange()
+            numba.parfors.parfor.init_prange()
             n = len(obj)
             out_arr = np.empty(n, np.bool_)
-            for i in numba.parfor.internal_prange(n):
+            for i in numba.parfors.parfor.internal_prange(n):
                 out_arr[i] = bodo.libs.array_kernels.isna(obj, i)
             return out_arr
 
@@ -1354,7 +1354,7 @@ def iternext_itertuples(context, builder, sig, args, result):
 
 #     return None
 
-# numba.array_analysis.ArrayAnalysis._analyze_op_static_getitem = _analyze_op_static_getitem
+# numba.parfors.array_analysis.ArrayAnalysis._analyze_op_static_getitem = _analyze_op_static_getitem
 
 # FIXME: fix array analysis for tuples in general
 def _analyze_op_pair_first(self, scope, equiv_set, expr):
@@ -1385,4 +1385,4 @@ def _analyze_op_pair_first(self, scope, equiv_set, expr):
     return shape, [lhs_assign] + out
 
 
-numba.array_analysis.ArrayAnalysis._analyze_op_pair_first = _analyze_op_pair_first
+numba.parfors.array_analysis.ArrayAnalysis._analyze_op_pair_first = _analyze_op_pair_first

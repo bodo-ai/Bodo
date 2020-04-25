@@ -57,7 +57,7 @@ def test_unary_ufunc():
 def test_cmp(op):
     """Test comparison of two boolean arrays
     """
-    op_str = numba.utils.OPERATORS_TO_BUILTINS[op]
+    op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
     func_text = "def test_impl(A1, A2):\n"
     func_text += "  return A1.values {} A2.values\n".format(op_str)
     loc_vars = {}

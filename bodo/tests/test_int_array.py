@@ -220,7 +220,8 @@ def test_shape():
 
 @pytest.mark.slow
 @pytest.mark.parametrize(
-    "ufunc", [f for f in numba.targets.ufunc_db.get_ufuncs() if f.nin == 1]
+    # avoiding isnat since only supported for datetime/timedelta
+    "ufunc", [f for f in numba.np.ufunc_db.get_ufuncs() if f.nin == 1 and f != np.isnat]
 )
 def test_unary_ufunc(ufunc):
     def test_impl(A):
@@ -246,7 +247,7 @@ def test_unary_ufunc_explicit_np():
 
 @pytest.mark.slow
 @pytest.mark.parametrize(
-    "ufunc", [f for f in numba.targets.ufunc_db.get_ufuncs() if f.nin == 2]
+    "ufunc", [f for f in numba.np.ufunc_db.get_ufuncs() if f.nin == 2]
 )
 def test_binary_ufunc(ufunc):
     def test_impl(A1, A2):
@@ -282,7 +283,7 @@ def test_add():
 
 @pytest.mark.slow
 @pytest.mark.parametrize(
-    "op", numba.typing.npydecl.NumpyRulesArrayOperator._op_map.keys()
+    "op", numba.core.typing.npydecl.NumpyRulesArrayOperator._op_map.keys()
 )
 def test_binary_op(op):
     # Pandas doesn't support these operators yet, but Bodo does to be able to
@@ -295,7 +296,7 @@ def test_binary_op(op):
         operator.xor,
     ):
         return
-    op_str = numba.utils.OPERATORS_TO_BUILTINS[op]
+    op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
     func_text = "def test_impl(A, other):\n"
     func_text += "  return A {} other\n".format(op_str)
     loc_vars = {}
@@ -331,7 +332,7 @@ def test_inplace_iadd():
 
 @pytest.mark.slow
 @pytest.mark.parametrize(
-    "op", numba.typing.npydecl.NumpyRulesInplaceArrayOperator._op_map.keys()
+    "op", numba.core.typing.npydecl.NumpyRulesInplaceArrayOperator._op_map.keys()
 )
 def test_inplace_binary_op(op):
     # Numba can't handle itruediv
@@ -345,7 +346,7 @@ def test_inplace_binary_op(op):
         operator.itruediv,
     ):
         return
-    op_str = numba.utils.OPERATORS_TO_BUILTINS[op]
+    op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
     func_text = "def test_impl(A, other):\n"
     func_text += "  A {} other\n".format(op_str)
     func_text += "  return A\n"
@@ -373,7 +374,7 @@ def test_unary_op(op):
     if op == operator.pos:
         return
 
-    op_str = numba.utils.OPERATORS_TO_BUILTINS[op]
+    op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
     func_text = "def test_impl(A):\n"
     func_text += "  return {} A\n".format(op_str)
     loc_vars = {}

@@ -984,7 +984,7 @@ def test_dataframe_binary_add():
 @pytest.mark.parametrize("op", bodo.hiframes.pd_series_ext.series_binary_ops)
 def test_dataframe_binary_op(op):
     # TODO: test parallelism
-    op_str = numba.utils.OPERATORS_TO_BUILTINS[op]
+    op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
     func_text = "def test_impl(df, other):\n"
     func_text += "  return df {} other\n".format(op_str)
     loc_vars = {}
@@ -1012,7 +1012,7 @@ def test_dataframe_binary_iadd():
 @pytest.mark.slow
 @pytest.mark.parametrize("op", bodo.hiframes.pd_series_ext.series_inplace_binary_ops)
 def test_dataframe_inplace_binary_op(op):
-    op_str = numba.utils.OPERATORS_TO_BUILTINS[op]
+    op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
     func_text = "def test_impl(df, other):\n"
     func_text += "  df {} other\n".format(op_str)
     func_text += "  return df\n"
@@ -1033,7 +1033,7 @@ def test_dataframe_unary_op(op):
     if op == operator.pos:
         return
 
-    op_str = numba.utils.OPERATORS_TO_BUILTINS[op]
+    op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
     func_text = "def test_impl(df):\n"
     func_text += "  return {} df\n".format(op_str)
     loc_vars = {}
@@ -1311,7 +1311,7 @@ def test_concat_nulls():
     check_func(test_impl_concat, (df, df2), sort_output=True)
 
 
-from numba.compiler_machinery import FunctionPass, register_pass
+from numba.core.compiler_machinery import FunctionPass, register_pass
 
 
 @register_pass(analysis_only=False, mutates_CFG=True)
@@ -1322,14 +1322,14 @@ class ArrayAnalysisPass(FunctionPass):
         FunctionPass.__init__(self)
 
     def run_pass(self, state):
-        array_analysis = numba.array_analysis.ArrayAnalysis(
+        array_analysis = numba.parfors.array_analysis.ArrayAnalysis(
             state.typingctx,
             state.func_ir,
             state.type_annotation.typemap,
             state.type_annotation.calltypes,
         )
         array_analysis.run(state.func_ir.blocks)
-        state.func_ir._definitions = numba.ir_utils.build_definitions(
+        state.func_ir._definitions = numba.core.ir_utils.build_definitions(
             state.func_ir.blocks
         )
         state.metadata["preserved_array_analysis"] = array_analysis

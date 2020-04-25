@@ -3,7 +3,7 @@
 Indexing support for pd.DataFrame type.
 """
 import operator
-from numba import types, cgutils
+from numba.core import types, cgutils
 from numba.extending import (
     models,
     register_model,
@@ -18,7 +18,7 @@ from numba.extending import (
     overload_method,
     overload_attribute,
 )
-from numba.typing.templates import (
+from numba.core.typing.templates import (
     infer_global,
     AbstractTemplate,
     signature,

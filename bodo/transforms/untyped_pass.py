@@ -11,9 +11,9 @@ import pandas as pd
 import numpy as np
 
 import numba
-from numba import ir, ir_utils, types
+from numba.core import ir, ir_utils, types
 
-from numba.ir_utils import (
+from numba.core.ir_utils import (
     mk_unique_var,
     find_topo_order,
     dprint_func_ir,
@@ -233,7 +233,7 @@ class UntypedPass:
                     nodes = [tmp_assign]
                     nodes += gen_add_consts_to_type(vals, tmp_target, assign.target)
                     return nodes
-                except numba.ir_utils.GuardException:
+                except numba.core.ir_utils.GuardException:
                     pass
 
             # replace datetime.date.today with an internal function since class methods
@@ -353,7 +353,7 @@ class UntypedPass:
                 func_name = func_def.attr
             # ignore objmode block calls
             elif isinstance(func_def, ir.Const) and isinstance(
-                func_def.value, numba.dispatcher.ObjModeLiftedWith
+                func_def.value, numba.core.dispatcher.ObjModeLiftedWith
             ):
                 return [assign]
             else:
@@ -460,7 +460,7 @@ class UntypedPass:
             tmp_target = ir.Var(var.scope, mk_unique_var(var.name + "_const"), var.loc)
             nodes.extend(gen_add_consts_to_type(vals, var, tmp_target))
             return tmp_target
-        except numba.ir_utils.GuardException:
+        except numba.core.ir_utils.GuardException:
             return var
 
     def _handle_np_where(self, assign, lhs, rhs):
@@ -1778,7 +1778,7 @@ def _check_type(val, typ):
 
 
 # replace Numba's dictionary item checking to allow constant list/dict
-numba_sentry_forbidden_types = numba.types.containers._sentry_forbidden_types
+numba_sentry_forbidden_types = numba.core.types.containers._sentry_forbidden_types
 
 
 def bodo_sentry_forbidden_types(key, value):
@@ -1792,4 +1792,4 @@ def bodo_sentry_forbidden_types(key, value):
     numba_sentry_forbidden_types(key, value)
 
 
-numba.types.containers._sentry_forbidden_types = bodo_sentry_forbidden_types
+numba.core.types.containers._sentry_forbidden_types = bodo_sentry_forbidden_types

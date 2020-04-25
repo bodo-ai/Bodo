@@ -3,7 +3,7 @@
 import operator
 import re
 import numba
-from numba import types, cgutils
+from numba.core import types, cgutils
 from numba.extending import (
     box,
     unbox,
@@ -20,7 +20,7 @@ from numba.extending import (
 )
 from bodo.libs.str_ext import string_type
 from bodo.utils.typing import is_overload_constant_str, get_overload_const_str
-from numba.targets.imputils import impl_ret_borrowed
+from numba.core.imputils import impl_ret_borrowed
 
 
 # re.Pattern and re.Match classes are exposed starting Python 3.7, so we get the type
@@ -310,8 +310,8 @@ def overload_pat_findall(p, string, pos=0, endpos=9223372036854775807):
         typ = types.List(string_type)
         if n_groups > 1:
             typ = types.List(types.Tuple([string_type] * n_groups))
-        # HACK add type string to numba.types for objmode
-        typ_name = "list_tup_str_{}".format(numba.ir_utils.next_label())
+        # HACK add type string to numba.core.types for objmode
+        typ_name = "list_tup_str_{}".format(numba.core.ir_utils.next_label())
         setattr(types, typ_name, typ)
         func_text = """
 def _pat_findall_const_impl(
@@ -393,7 +393,7 @@ def overload_pattern_groupindex(p):
         with numba.objmode(d="dict_string_int"):
             groupindex = dict(p.groupindex)
             d = numba.typed.Dict.empty(
-                key_type=numba.types.unicode_type, value_type=numba.int64
+                key_type=numba.core.types.unicode_type, value_type=numba.int64
             )
             d.update(groupindex)
         return d
@@ -509,7 +509,7 @@ def overload_match_groupdict(m, default=None):
         with numba.objmode(d="dict_string_string"):
             out = m.groupdict(default)
             d = numba.typed.Dict.empty(
-                key_type=numba.types.unicode_type, value_type=numba.types.unicode_type
+                key_type=numba.core.types.unicode_type, value_type=numba.core.types.unicode_type
             )
             d.update(out)
         return d

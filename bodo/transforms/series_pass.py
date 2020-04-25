@@ -9,8 +9,8 @@ import pandas as pd
 import warnings
 
 import numba
-from numba import ir, ir_utils, types
-from numba.ir_utils import (
+from numba.core import ir, ir_utils, types
+from numba.core.ir_utils import (
     replace_arg_nodes,
     compile_to_numba_ir,
     find_topo_order,
@@ -27,8 +27,8 @@ from numba.ir_utils import (
     build_definitions,
     find_build_sequence,
 )
-from numba.inline_closurecall import inline_closure_call
-from numba.typing.templates import Signature
+from numba.core.inline_closurecall import inline_closure_call
+from numba.core.typing.templates import Signature
 import bodo
 from bodo.utils.utils import (
     debug_prints,
@@ -96,7 +96,7 @@ from bodo.utils.transform import (
 from bodo.utils.typing import get_overload_const_func
 
 
-ufunc_names = set(f.__name__ for f in numba.typing.npydecl.supported_ufuncs)
+ufunc_names = set(f.__name__ for f in numba.core.typing.npydecl.supported_ufuncs)
 
 
 _dt_index_binops = (
@@ -166,7 +166,7 @@ class SeriesPass:
         self.typingctx = typingctx
         self.typemap = typemap
         self.calltypes = calltypes
-        self.array_analysis = numba.array_analysis.ArrayAnalysis(
+        self.array_analysis = numba.parfors.array_analysis.ArrayAnalysis(
             typingctx, func_ir, typemap, calltypes
         )
         # Loc object of current location being translated
@@ -546,7 +546,7 @@ class SeriesPass:
                 arr2 = bodo.hiframes.pd_series_ext.get_series_data(S2)
                 l = len(arr1)
                 S = bodo.libs.bool_arr_ext.alloc_bool_array(l)
-                for i in numba.parfor.internal_prange(l):
+                for i in numba.parfors.parfor.internal_prange(l):
                     S[i] = func(arr1[i], arr2[i])
                 return bodo.hiframes.pd_series_ext.init_series(S, index)
 
@@ -706,28 +706,28 @@ class SeriesPass:
                 )
                 return self._replace_func(impl, [arg1, arg2])
 
-        if rhs.fn in numba.typing.npydecl.NumpyRulesArrayOperator._op_map.keys() and any(
+        if rhs.fn in numba.core.typing.npydecl.NumpyRulesArrayOperator._op_map.keys() and any(
             isinstance(t, IntegerArrayType) for t in (typ1, typ2)
         ):
             overload_func = bodo.libs.int_arr_ext.create_op_overload(rhs.fn, 2)
             impl = overload_func(typ1, typ2)
             return self._replace_func(impl, [arg1, arg2])
 
-        if rhs.fn in numba.typing.npydecl.NumpyRulesInplaceArrayOperator._op_map.keys() and any(
+        if rhs.fn in numba.core.typing.npydecl.NumpyRulesInplaceArrayOperator._op_map.keys() and any(
             isinstance(t, IntegerArrayType) for t in (typ1, typ2)
         ):
             overload_func = bodo.libs.int_arr_ext.create_op_overload(rhs.fn, 2)
             impl = overload_func(typ1, typ2)
             return self._replace_func(impl, [arg1, arg2])
 
-        if rhs.fn in numba.typing.npydecl.NumpyRulesArrayOperator._op_map.keys() and any(
+        if rhs.fn in numba.core.typing.npydecl.NumpyRulesArrayOperator._op_map.keys() and any(
             t == boolean_array for t in (typ1, typ2)
         ):
             overload_func = bodo.libs.bool_arr_ext.create_op_overload(rhs.fn, 2)
             impl = overload_func(typ1, typ2)
             return self._replace_func(impl, [arg1, arg2])
 
-        if rhs.fn in numba.typing.npydecl.NumpyRulesInplaceArrayOperator._op_map.keys() and any(
+        if rhs.fn in numba.core.typing.npydecl.NumpyRulesInplaceArrayOperator._op_map.keys() and any(
             t == boolean_array for t in (typ1, typ2)
         ):
             overload_func = bodo.libs.bool_arr_ext.create_op_overload(rhs.fn, 2)
@@ -778,7 +778,7 @@ class SeriesPass:
     def _run_call(self, assign, lhs, rhs):
         fdef = guard(find_callname, self.func_ir, rhs, self.typemap)
         if fdef is None:
-            from numba.stencil import StencilFunc
+            from numba.stencils.stencil import StencilFunc
 
             # could be make_function from list comprehension which is ok
             func_def = guard(get_definition, self.func_ir, rhs.func)
@@ -873,7 +873,7 @@ class SeriesPass:
                 *arg_typs, **kw_typs
             )
             return self._replace_func(
-                impl, rhs.args, pysig=numba.utils.pysignature(impl), kws=dict(rhs.kws)
+                impl, rhs.args, pysig=numba.core.utils.pysignature(impl), kws=dict(rhs.kws)
             )
 
         # inline BooleanArray.copy()
@@ -890,7 +890,7 @@ class SeriesPass:
                 *arg_typs, **kw_typs
             )
             return self._replace_func(
-                impl, rhs.args, pysig=numba.utils.pysignature(impl), kws=dict(rhs.kws)
+                impl, rhs.args, pysig=numba.core.utils.pysignature(impl), kws=dict(rhs.kws)
             )
 
         # inlining SeriesStrMethod methods is necessary since they may be used in
@@ -916,7 +916,7 @@ class SeriesPass:
                 )(*arg_typs, **kw_typs)
 
             return self._replace_func(
-                impl, rhs.args, pysig=numba.utils.pysignature(impl), kws=dict(rhs.kws)
+                impl, rhs.args, pysig=numba.core.utils.pysignature(impl), kws=dict(rhs.kws)
             )
 
         # replace _get_type_max_value(arr.dtype) since parfors
@@ -926,12 +926,12 @@ class SeriesPass:
             if self.typemap[rhs.args[0].name] == types.DType(types.NPDatetime("ns")):
                 return self._replace_func(
                     lambda: bodo.hiframes.pd_timestamp_ext.integer_to_dt64(
-                        numba.targets.builtins.get_type_max_value(numba.types.uint64)
+                        numba.cpython.builtins.get_type_max_value(numba.core.types.uint64)
                     ),
                     [],
                 )
             return self._replace_func(
-                lambda d: numba.targets.builtins.get_type_max_value(d), rhs.args
+                lambda d: numba.cpython.builtins.get_type_max_value(d), rhs.args
             )
 
         if fdef == ("h5_read_dummy", "bodo.io.h5_api"):
@@ -975,14 +975,14 @@ class SeriesPass:
                     )
                     if i < len(index_types):
                         if isinstance(index_types[i], types.SliceType):
-                            func_text += "  slice_idx_{0} = numba.unicode._normalize_slice(index{1}, size_{0})\n".format(
+                            func_text += "  slice_idx_{0} = numba.cpython.unicode._normalize_slice(index{1}, size_{0})\n".format(
                                 i,
                                 "[{}]".format(i)
                                 if isinstance(index_tp, types.BaseTuple)
                                 else "",
                             )
                             func_text += "  start_{0} = slice_idx_{0}.start\n".format(i)
-                            func_text += "  size_{0} = numba.unicode._slice_span(slice_idx_{0})\n".format(
+                            func_text += "  size_{0} = numba.cpython.unicode._slice_span(slice_idx_{0})\n".format(
                                 i
                             )
                         else:
@@ -1142,7 +1142,7 @@ class SeriesPass:
             kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
             impl = bodo.libs.array_kernels.overload_gen_na_array(*arg_typs, **kw_typs)
             return self._replace_func(
-                impl, rhs.args, pysig=numba.utils.pysignature(impl), kws=dict(rhs.kws)
+                impl, rhs.args, pysig=numba.core.utils.pysignature(impl), kws=dict(rhs.kws)
             )
 
         if fdef == ("argsort", "bodo.hiframes.series_impl"):
@@ -1240,7 +1240,7 @@ class SeriesPass:
 
             impl = bodo.libs.str_arr_ext.overload_str_arr_astype(*arg_typs, **kw_typs)
             return self._replace_func(
-                impl, rhs.args, pysig=numba.utils.pysignature(impl), kws=dict(rhs.kws)
+                impl, rhs.args, pysig=numba.core.utils.pysignature(impl), kws=dict(rhs.kws)
             )
 
         if fdef == ("series_filter_bool", "bodo.hiframes.series_impl"):
@@ -1399,7 +1399,7 @@ class SeriesPass:
                 )
             stub = lambda dti, axis=None, skipna=True: None
             return self._replace_func(
-                impl, rhs.args, pysig=numba.utils.pysignature(stub), kws=dict(rhs.kws)
+                impl, rhs.args, pysig=numba.core.utils.pysignature(stub), kws=dict(rhs.kws)
             )
 
         if isinstance(func_mod, ir.Var) and bodo.hiframes.pd_index_ext.is_pd_index_type(
@@ -1481,10 +1481,10 @@ class SeriesPass:
             def impl(S, vals):  # pragma: no cover
                 arr = bodo.hiframes.pd_series_ext.get_series_data(S)
                 index = bodo.hiframes.pd_series_ext.get_series_index(S)
-                numba.parfor.init_prange()
+                numba.parfors.parfor.init_prange()
                 n = len(arr)
                 out = np.empty(n, np.bool_)
-                for i in numba.parfor.internal_prange(n):
+                for i in numba.parfors.parfor.internal_prange(n):
                     out[i] = arr[i] in vals
                 return bodo.hiframes.pd_series_ext.init_series(out, index)
 
@@ -1495,10 +1495,10 @@ class SeriesPass:
             def impl(S, vals):  # pragma: no cover
                 arr = bodo.hiframes.pd_series_ext.get_series_data(S)
                 index = bodo.hiframes.pd_series_ext.get_series_index(S)
-                numba.parfor.init_prange()
+                numba.parfors.parfor.init_prange()
                 n = len(arr)
                 out = np.empty(n, np.bool_)
-                for i in numba.parfor.internal_prange(n):
+                for i in numba.parfors.parfor.internal_prange(n):
                     # TODO: why don't these work?
                     # out[i] = (arr[i] not in vals)
                     # out[i] = not (arr[i] in vals)
@@ -1525,7 +1525,7 @@ class SeriesPass:
 
             def impl_agg_c(A):  # pragma: no cover
                 c = 0
-                for _ in numba.parfor.internal_prange(len(A)):
+                for _ in numba.parfors.parfor.internal_prange(len(A)):
                     c += 1
                 return c
 
@@ -1688,7 +1688,7 @@ class SeriesPass:
             )
             impl = overload_func(*arg_typs, **kw_typs)
             return self._replace_func(
-                impl, rhs.args, pysig=numba.utils.pysignature(impl), kws=dict(rhs.kws)
+                impl, rhs.args, pysig=numba.core.utils.pysignature(impl), kws=dict(rhs.kws)
             )
 
         if func_name in bodo.hiframes.series_impl.explicit_binop_funcs.values():
@@ -1701,7 +1701,7 @@ class SeriesPass:
             )
             impl = overload_func(*arg_typs, **kw_typs)
             return self._replace_func(
-                impl, rhs.args, pysig=numba.utils.pysignature(impl), kws=dict(rhs.kws)
+                impl, rhs.args, pysig=numba.core.utils.pysignature(impl), kws=dict(rhs.kws)
             )
 
         if func_name == "rolling":
@@ -1786,7 +1786,7 @@ class SeriesPass:
             impl = overload_func(*arg_typs, **kw_typs)
             stub = lambda S, dtype, copy=True, errors="raise": None
             return self._replace_func(
-                impl, rhs.args, pysig=numba.utils.pysignature(stub), kws=dict(rhs.kws)
+                impl, rhs.args, pysig=numba.core.utils.pysignature(stub), kws=dict(rhs.kws)
             )
 
         return [assign]
@@ -1811,10 +1811,10 @@ class SeriesPass:
         if out_typ == string_type:
             # prange func to inline
             func_text = "def f(A, index, name{}):\n".format(extra_arg_names)
-            func_text += "  numba.parfor.init_prange()\n"
+            func_text += "  numba.parfors.parfor.init_prange()\n"
             func_text += "  n = len(A)\n"
             func_text += "  n_chars = 0\n"
-            func_text += "  for i in numba.parfor.internal_prange(n):\n"
+            func_text += "  for i in numba.parfors.parfor.internal_prange(n):\n"
             if dtype == types.NPDatetime("ns"):
                 func_text += "    t = bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(np.int64(A[i]))\n"
             elif isinstance(dtype, types.BaseTuple):
@@ -1825,7 +1825,7 @@ class SeriesPass:
                 extra_arg_names
             )
             func_text += "  S = pre_alloc_string_array(n, n_chars)\n"
-            func_text += "  for i in numba.parfor.internal_prange(n):\n"
+            func_text += "  for i in numba.parfors.parfor.internal_prange(n):\n"
             if dtype == types.NPDatetime("ns"):
                 func_text += "    t = bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(np.int64(A[i]))\n"
             elif isinstance(dtype, types.BaseTuple):
@@ -1839,10 +1839,10 @@ class SeriesPass:
             )
         else:
             func_text = "def f(A, index, name{}):\n".format(extra_arg_names)
-            func_text += "  numba.parfor.init_prange()\n"
+            func_text += "  numba.parfors.parfor.init_prange()\n"
             func_text += "  n = len(A)\n"
             func_text += "  S = np.empty(n, out_dtype)\n"
-            func_text += "  for i in numba.parfor.internal_prange(n):\n"
+            func_text += "  for i in numba.parfors.parfor.internal_prange(n):\n"
             if dtype == types.NPDatetime("ns"):
                 func_text += "    t = bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(np.int64(A[i]))\n"
             elif isinstance(dtype, types.BaseTuple):
@@ -1895,7 +1895,7 @@ class SeriesPass:
             )
             impl = overload_func(*arg_typs, **kw_typs)
             return self._replace_func(
-                impl, rhs.args, pysig=numba.utils.pysignature(impl), kws=dict(rhs.kws)
+                impl, rhs.args, pysig=numba.core.utils.pysignature(impl), kws=dict(rhs.kws)
             )
 
     def _run_call_rolling(self, assign, lhs, rhs, func_name):
@@ -2018,9 +2018,9 @@ class SeriesPass:
             func_text += "  assert n1 == n, 'can not use NAN for non-float series, with different length'\n"
         if not isinstance(self.typemap[other_var.name].dtype, types.Float) and use_nan:
             func_text += "  assert n2 == n, 'can not use NAN for non-float series, with different length'\n"
-        func_text += "  numba.parfor.init_prange()\n"
+        func_text += "  numba.parfors.parfor.init_prange()\n"
         func_text += "  S = np.empty(n, out_dtype)\n"
-        func_text += "  for i in numba.parfor.internal_prange(n):\n"
+        func_text += "  for i in numba.parfors.parfor.internal_prange(n):\n"
         if use_nan and isinstance(self.typemap[series_var.name].dtype, types.Float):
             func_text += "    t1 = np.nan\n"
             func_text += "    if i < n1:\n"
@@ -2134,7 +2134,7 @@ class SeriesPass:
         self, func_node, dtype, out_dtype
     ):  # pragma: no cover
         if isinstance(func_node, ir.Global) and isinstance(
-            func_node.value, numba.targets.registry.CPUDispatcher
+            func_node.value, numba.core.registry.CPUDispatcher
         ):
             return func_node.value
         # other UDF cases are not currently possible currently due to Numba's
@@ -2160,14 +2160,14 @@ class SeriesPass:
         kernel_func.__name__ = func_node.code.co_name
         # use bodo's sequential pipeline to enable pandas operations
         # XXX seq pipeline used since dist pass causes a hang
-        m = numba.ir_utils._max_label
+        m = numba.core.ir_utils._max_label
         impl_disp = numba.njit(
             kernel_func, pipeline_class=bodo.compiler.BodoCompilerSeq
         )
         # precompile to avoid REP counting conflict in testing
         sig = out_dtype(types.Array(dtype, 1, "C"))
         impl_disp.compile(sig)
-        numba.ir_utils._max_label += m
+        numba.core.ir_utils._max_label += m
         return impl_disp
 
     def _run_pd_DatetimeIndex(self, assign, lhs, rhs):
@@ -2230,7 +2230,7 @@ class SeriesPass:
             func_text = "def f(A, B, index):\n"
             func_text += "  l = {}\n".format(len_call)
             func_text += "  S = bodo.libs.bool_arr_ext.alloc_bool_array(l)\n"
-            func_text += "  for i in numba.parfor.internal_prange(l):\n"
+            func_text += "  for i in numba.parfors.parfor.internal_prange(l):\n"
             func_text += "    S[i] = {} {} {}\n".format(
                 arg1_access, op_str, arg2_access
             )
@@ -2314,7 +2314,7 @@ class SeriesPass:
         """generate a sort function with the given key lambda
         """
         # TODO: handle reverse
-        from numba.targets import quicksort
+        from numba.misc import quicksort
 
         # get key lambda
         key_lambda_var = dict(rhs.kws)["key"]
@@ -2475,7 +2475,7 @@ class SeriesPass:
                 return d_var
 
             # TODO: stararg needs special handling?
-            args = numba.typing.fold_arguments(
+            args = numba.core.typing.fold_arguments(
                 pysig, args, kws, normal_handler, default_handler, normal_handler
             )
 
@@ -2501,7 +2501,7 @@ class SeriesPass:
         # XXX using replace() since it copies, otherwise cached overload
         # functions fail
         new_sig = sig.replace(return_type=if_series_to_array_type(sig.return_type))
-        new_sig.args = tuple(map(if_series_to_array_type, sig.args))
+        new_sig = new_sig.replace(args=tuple(map(if_series_to_array_type, sig.args)))
 
         # XXX: side effect: force update of call signatures
         if isinstance(call, ir.Expr) and call.op == "call":

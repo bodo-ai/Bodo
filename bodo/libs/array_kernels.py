@@ -9,12 +9,12 @@ from math import sqrt
 
 import numba
 from numba.extending import overload
-from numba import types, cgutils
-from numba.typing import signature
-from numba.typing.templates import infer_global, AbstractTemplate
-from numba.targets.imputils import lower_builtin
-from numba.targets.arrayobj import make_array
-from numba.numpy_support import as_dtype
+from numba.core import types, cgutils
+from numba.core.typing import signature
+from numba.core.typing.templates import infer_global, AbstractTemplate
+from numba.core.imputils import lower_builtin
+from numba.np.arrayobj import make_array
+from numba.np.numpy_support import as_dtype
 
 import bodo
 from bodo.utils.utils import numba_to_c_type, unliteral_all
@@ -656,9 +656,9 @@ def overload_gen_na_array(n, arr):
         dtype = arr.dtype if isinstance(arr.dtype, types.Float) else types.float64
 
         def impl_float(n, arr):  # pragma: no cover
-            numba.parfor.init_prange()
+            numba.parfors.parfor.init_prange()
             out_arr = np.empty(n, dtype)
-            for i in numba.parfor.internal_prange(n):
+            for i in numba.parfors.parfor.internal_prange(n):
                 out_arr[i] = np.nan
             return out_arr
 
@@ -670,9 +670,9 @@ def overload_gen_na_array(n, arr):
         nat = arr.dtype("NaT")
 
         def impl_dt64(n, arr):  # pragma: no cover
-            numba.parfor.init_prange()
+            numba.parfors.parfor.init_prange()
             out_arr = np.empty(n, arr.dtype)
-            for i in numba.parfor.internal_prange(n):
+            for i in numba.parfors.parfor.internal_prange(n):
                 out_arr[i] = nat
             return out_arr
 
@@ -682,7 +682,7 @@ def overload_gen_na_array(n, arr):
 
         def impl_str(n, arr):  # pragma: no cover
             out_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(n, 0)
-            for j in numba.parfor.internal_prange(n):
+            for j in numba.parfors.parfor.internal_prange(n):
                 out_arr[j] = ""
                 bodo.ir.join.setitem_arr_nan(out_arr, j)
             return out_arr
@@ -722,23 +722,23 @@ def arange_parallel_impl(return_type, *args):
     if any(isinstance(a, types.Complex) for a in args):
 
         def arange_4(start, stop, step, dtype):  # pragma: no cover
-            numba.parfor.init_prange()
+            numba.parfors.parfor.init_prange()
             nitems_c = (stop - start) / step
             nitems_r = math.ceil(nitems_c.real)
             nitems_i = math.ceil(nitems_c.imag)
             nitems = int(max(min(nitems_i, nitems_r), 0))
             arr = np.empty(nitems, dtype)
-            for i in numba.parfor.internal_prange(nitems):
+            for i in numba.parfors.parfor.internal_prange(nitems):
                 arr[i] = start + i * step
             return arr
 
     else:
 
         def arange_4(start, stop, step, dtype):  # pragma: no cover
-            numba.parfor.init_prange()
+            numba.parfors.parfor.init_prange()
             nitems = bodo.libs.array_kernels.calc_nitems(start, stop, step)
             arr = np.empty(nitems, dtype)
-            for i in numba.parfor.internal_prange(nitems):
+            for i in numba.parfors.parfor.internal_prange(nitems):
                 arr[i] = start + i * step
             return arr
 
@@ -754,4 +754,4 @@ def arange_parallel_impl(return_type, *args):
         raise ValueError("parallel arange with types {}".format(args))
 
 
-numba.parfor.replace_functions_map[("arange", "numpy")] = arange_parallel_impl
+numba.parfors.parfor.replace_functions_map[("arange", "numpy")] = arange_parallel_impl

@@ -9,14 +9,14 @@ We use :code:`pytest` for testing. The tests are designed for up to
 3 processors. Run the test suite on different
 number of processors (should run in Bodo repo's main directory)::
 
-    pytest -s -v -m "not slow" -W ignore
-    mpiexec -n 2 pytest -s -v -m "not slow" -W ignore
-    mpiexec -n 3 pytest -s -v -m "not slow" -W ignore
+    pytest -s -v -m "not slow"
+    mpiexec -n 2 pytest -s -v -m "not slow"
+    mpiexec -n 3 pytest -s -v -m "not slow"
 
 
 Example of running a specific test in bodo/test/test_file.py::
 
-    pytest -s -v -m "not slow" -W ignore bodo/tests/test_date.py::test_datetime_operations
+    pytest -s -v -m "not slow" bodo/tests/test_date.py::test_datetime_operations
 
 
 
@@ -26,8 +26,8 @@ We have three customized `pytest markers <http://doc.pytest.org/en/latest/exampl
 
 1. :code:`slow` defined in `pytest.ini <https://github.com/Bodo-inc/Bodo/blob/master/pytest.ini>`_::
     
-      pytest -s -v -m "slow" -W ignore
-      pytest -s -v -m "not slow" -W ignore
+      pytest -s -v -m "slow"
+      pytest -s -v -m "not slow"
 
    The :code:`not slow` flag skips some less necessary tests,
    which allows for faster testing. So it is used in the PR/merge pipeline.
@@ -37,14 +37,14 @@ We have three customized `pytest markers <http://doc.pytest.org/en/latest/exampl
       
 2. :code:`firsthalf` dynamically defined in `bodo/tests/conftest.py <https://github.com/Bodo-inc/Bodo/blob/master/bodo/tests/conftest.py>`_::
 
-      pytest -s -v -m "firsthalf" -W ignore
-      pytest -s -v -m "not firsthalf" -W ignore
+      pytest -s -v -m "firsthalf"
+      pytest -s -v -m "not firsthalf"
 
    We use this marker in the nightly CI build&test pipeline due to limited memory available on azure.
 
 3. :code:`s3` defined in `pytest.ini <https://github.com/Bodo-inc/Bodo/blob/master/pytest.ini>`_::
 
-      pytest -s -v -m "s3" -W ignore
+      pytest -s -v -m "s3"
 
    This marker marks the tests that test for s3 file system. These tests will be skipped, if `boto3
    <https://boto3.amazonaws.com/v1/documentation/api/latest/index.html>`_ or `botocore
@@ -52,14 +52,14 @@ We have three customized `pytest markers <http://doc.pytest.org/en/latest/exampl
 
 4. :code:`hdfs` defined in `pytest.ini <https://github.com/Bodo-inc/Bodo/blob/master/pytest.ini>`_::
 
-      pytest -s -v -m "hdfs" -W ignore
+      pytest -s -v -m "hdfs"
 
   This marker marks the tests that test for hdfs file system.
   These tests will be skipped, if `hdfs3 <https://hdfs3.readthedocs.io/en/latest/>`_ is not installed.
 
 More than one markers can be used together::
     
-   pytest -s -v -m "not slow and firsthalf" -W ignore
+   pytest -s -v -m "not slow and firsthalf"
 
 
 

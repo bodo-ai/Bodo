@@ -5,8 +5,8 @@ Collection of utility functions. Needs to be refactored in separate files.
 from collections import namedtuple
 import keyword
 import numba
-from numba import ir_utils, ir, types, cgutils
-from numba.ir_utils import (
+from numba.core import ir_utils, ir, types, cgutils
+from numba.core.ir_utils import (
     guard,
     get_definition,
     find_callname,
@@ -16,11 +16,11 @@ from numba.ir_utils import (
     find_const,
     mk_unique_var,
 )
-from numba.typing import signature
-from numba.typing.templates import infer_global, AbstractTemplate
-from numba.targets.imputils import lower_builtin
+from numba.core.typing import signature
+from numba.core.typing.templates import infer_global, AbstractTemplate
+from numba.core.imputils import lower_builtin
 from numba.extending import overload, intrinsic
-from numba.targets.arrayobj import populate_array, get_itemsize, make_array
+from numba.np.arrayobj import populate_array, get_itemsize, make_array
 from llvmlite import ir as lir
 import numpy as np
 import bodo
@@ -86,7 +86,7 @@ _numba_to_c_type_map = {
 
 # silence Numba error messages for now
 # TODO: customize through @bodo.jit
-numba.errors.error_extras = {
+numba.core.errors.error_extras = {
     "unsupported_error": "",
     "typing": "",
     "reportable": "",
@@ -136,7 +136,7 @@ def is_alloc_callname(func_name, mod_name):
         (mod_name == "numpy" and func_name in np_alloc_callnames)
         or (
             func_name == "empty_inferred"
-            and mod_name in ("numba.extending", "numba.unsafe.ndarray")
+            and mod_name in ("numba.extending", "numba.np.unsafe.ndarray")
         )
         or (
             func_name == "pre_alloc_string_array"
@@ -544,7 +544,7 @@ def empty_like_type_overload(n, arr):
     return empty_like_type_str_arr
 
 
-# copied from numba.targets.arrayobj (0.47), except the raising exception code is
+# copied from numba.np.arrayobj (0.47), except the raising exception code is
 # changed to just a print since unboxing call convention throws an error for exceptions
 def _empty_nd_impl(context, builder, arrtype, shapes):  # pragma: no cover
     """Utility function used for allocating a new array during LLVM code
@@ -678,7 +678,7 @@ def overload_alloc_type(n, t):
             n
         )  # pragma: no cover
 
-    dtype = numba.numpy_support.as_dtype(typ.dtype)
+    dtype = numba.np.numpy_support.as_dtype(typ.dtype)
 
     # nullable int array
     if isinstance(typ, IntegerArrayType):
@@ -706,7 +706,7 @@ def full_type(n, val, t):  # pragma: no cover
 @overload(full_type)
 def overload_full_type(n, val, t):
     typ = t.instance_type if isinstance(t, types.TypeRef) else t
-    dtype = numba.numpy_support.as_dtype(typ.dtype)
+    dtype = numba.np.numpy_support.as_dtype(typ.dtype)
 
     # nullable int array
     if isinstance(typ, IntegerArrayType):
@@ -751,7 +751,7 @@ def _analyze_broadcast(self, scope, equiv_set, loc, args):
     return self._broadcast_assert_shapes(scope, equiv_set, loc, shapes, names)
 
 
-numba.array_analysis.ArrayAnalysis._analyze_broadcast = _analyze_broadcast
+numba.parfors.array_analysis.ArrayAnalysis._analyze_broadcast = _analyze_broadcast
 
 
 @intrinsic
@@ -881,4 +881,4 @@ def dump_node_list(node_list):  # pragma: no cover
 
 
 def debug_prints():
-    return numba.config.DEBUG_ARRAY_OPT == 1
+    return numba.core.config.DEBUG_ARRAY_OPT == 1

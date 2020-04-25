@@ -1,5 +1,5 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
-from numba import types
+from numba.core import types
 from numba.extending import (
     models,
     register_model,
@@ -13,7 +13,7 @@ from numba.extending import (
     lower_builtin,
     overload_method,
 )
-from numba.typing.templates import (
+from numba.core.typing.templates import (
     infer_global,
     AbstractTemplate,
     signature,

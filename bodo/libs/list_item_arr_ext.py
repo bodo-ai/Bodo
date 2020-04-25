@@ -14,7 +14,7 @@ import numpy as np
 import numba
 import bodo
 
-from numba import types
+from numba.core import types, cgutils
 from numba.extending import (
     typeof_impl,
     type_callable,
@@ -31,9 +31,8 @@ from numba.extending import (
     overload,
     overload_attribute,
 )
-from numba import cgutils
-from numba.array_analysis import ArrayAnalysis
-from numba.targets.imputils import impl_ret_borrowed
+from numba.parfors.array_analysis import ArrayAnalysis
+from numba.core.imputils import impl_ret_borrowed
 
 from bodo.utils.typing import is_list_like_index_type
 from llvmlite import ir as lir
@@ -529,7 +528,7 @@ def list_item_arr_getitem_array(arr, ind):
 
         def impl_slice(arr, ind):  # pragma: no cover
             n = len(arr)
-            slice_idx = numba.unicode._normalize_slice(ind, n)
+            slice_idx = numba.cpython.unicode._normalize_slice(ind, n)
             # reusing integer array slicing above
             arr_ind = np.arange(slice_idx.start, slice_idx.stop, slice_idx.step)
             return arr[arr_ind]

@@ -8,8 +8,8 @@ import numpy as np
 import pandas as pd
 import numba
 from bodo.utils.typing import BodoError
-from numba import compiler, ir, ir_utils, types
-from numba.ir_utils import (
+from numba.core import compiler, ir, ir_utils, types
+from numba.core.ir_utils import (
     visit_vars_inner,
     replace_vars_inner,
     remove_dead,
@@ -30,10 +30,10 @@ from numba.ir_utils import (
     get_name_var_table,
     replace_var_names,
 )
-from numba.parfor import wrap_parfor_blocks, unwrap_parfor_blocks, Parfor
-from numba.analysis import compute_use_defs
-from numba.typing import signature
-from numba.typing.templates import infer_global, AbstractTemplate
+from numba.parfors.parfor import wrap_parfor_blocks, unwrap_parfor_blocks, Parfor
+from numba.core.analysis import compute_use_defs
+from numba.core.typing import signature
+from numba.core.typing.templates import infer_global, AbstractTemplate
 from numba.extending import overload, lower_builtin
 import bodo
 from bodo.utils.utils import (
@@ -237,7 +237,7 @@ def get_agg_func(func_ir, func_name, rhs, series_type=None, typemap=None):
                 )
             else:
                 assert is_expr(f_val, "make_function") or isinstance(
-                    f_val, numba.targets.registry.CPUDispatcher
+                    f_val, numba.core.registry.CPUDispatcher
                 )
                 assert typemap is not None, "typemap is required for agg UDF handling"
                 func = _get_const_agg_func(typemap[v[1].name])
@@ -320,7 +320,7 @@ def _column_var_impl_linear(S):  # pragma: no cover
     mean_x = 0.0
     ssqdm_x = 0.0
     N = len(A)
-    for i in numba.parfor.internal_prange(N):
+    for i in numba.parfors.parfor.internal_prange(N):
         bodo.ir.aggregate.__special_combine(
             ssqdm_x, mean_x, nobs, bodo.ir.aggregate._var_combine
         )
@@ -343,7 +343,7 @@ def _column_std_impl_linear(S):  # pragma: no cover
     mean_x = 0.0
     ssqdm_x = 0.0
     N = len(A)
-    for i in numba.parfor.internal_prange(N):
+    for i in numba.parfors.parfor.internal_prange(N):
         bodo.ir.aggregate.__special_combine(
             ssqdm_x, mean_x, nobs, bodo.ir.aggregate._var_combine
         )
@@ -440,10 +440,10 @@ def aggregate_usedefs(aggregate_node, use_set=None, def_set=None):
     if aggregate_node.out_key_vars is not None:
         def_set.update({v.name for v in aggregate_node.out_key_vars})
 
-    return numba.analysis._use_defs_result(usemap=use_set, defmap=def_set)
+    return numba.core.analysis._use_defs_result(usemap=use_set, defmap=def_set)
 
 
-numba.analysis.ir_extension_usedefs[Aggregate] = aggregate_usedefs
+numba.core.analysis.ir_extension_usedefs[Aggregate] = aggregate_usedefs
 
 
 def remove_dead_aggregate(
@@ -611,7 +611,7 @@ def aggregate_array_analysis(aggregate_node, equiv_set, typemap, array_analysis)
     return [], post
 
 
-numba.array_analysis.array_analysis_extensions[Aggregate] = aggregate_array_analysis
+numba.parfors.array_analysis.array_analysis_extensions[Aggregate] = aggregate_array_analysis
 
 
 def aggregate_distributed_analysis(aggregate_node, array_dists):
@@ -1150,7 +1150,7 @@ class GetNumbaSetTyper(AbstractTemplate):
 
 @lower_builtin(get_numba_set, types.Any)
 def lower_get_numba_set(context, builder, sig, args):
-    return numba.targets.setobj.set_empty_constructor(context, builder, sig, args)
+    return numba.cpython.setobj.set_empty_constructor(context, builder, sig, args)
 
 
 def get_key_set(arr):  # pragma: no cover
@@ -2033,21 +2033,21 @@ def compile_to_optimized_ir(func, arg_typs, typingctx):
     f_ir._definitions = build_definitions(f_ir.blocks)
 
     assert f_ir.arg_count == 1, "agg function should have one input"
-    # construct default flags similar to numba.compiler
-    flags = numba.compiler.Flags()
+    # construct default flags similar to numba.core.compiler
+    flags = numba.core.compiler.Flags()
     flags.set("nrt")
     untyped_pass = bodo.transforms.untyped_pass.UntypedPass(
         f_ir, typingctx, arg_typs, {}, {}, flags
     )
     untyped_pass.run()
     f_ir._definitions = build_definitions(f_ir.blocks)
-    typemap, return_type, calltypes = numba.typed_passes.type_inference_stage(
+    typemap, return_type, calltypes = numba.core.typed_passes.type_inference_stage(
         typingctx, f_ir, arg_typs, None
     )
 
-    options = numba.targets.cpu.ParallelOptions(True)
+    options = numba.core.cpu.ParallelOptions(True)
     flags = compiler.Flags()
-    targetctx = numba.targets.cpu.CPUContext(typingctx)
+    targetctx = numba.core.cpu.CPUContext(typingctx)
 
     DummyPipeline = namedtuple(
         "DummyPipeline",
@@ -2068,7 +2068,7 @@ def compile_to_optimized_ir(func, arg_typs, typingctx):
         typingctx, targetctx, None, f_ir, typemap, return_type, calltypes, ta
     )
     # run overload inliner to inline Series implementations such as Series.max()
-    inline_overload_pass = numba.typed_passes.InlineOverloads()
+    inline_overload_pass = numba.core.typed_passes.InlineOverloads()
     inline_overload_pass.run_pass(pm)
 
     series_pass = bodo.transforms.series_pass.SeriesPass(
@@ -2100,27 +2100,27 @@ def compile_to_optimized_ir(func, arg_typs, typingctx):
             ):
                 stmt.value = ir.Const(False, stmt.loc)
 
-    preparfor_pass = numba.parfor.PreParforPass(
+    preparfor_pass = numba.parfors.parfor.PreParforPass(
         f_ir, typemap, calltypes, typingctx, options
     )
     preparfor_pass.run()
     f_ir._definitions = build_definitions(f_ir.blocks)
-    state = numba.compiler.StateDict()
+    state = numba.core.compiler.StateDict()
     state.func_ir = f_ir
     state.typemap = typemap
     state.calltypes = calltypes
     state.typingctx = typingctx
     state.targetctx = targetctx
     state.return_type = return_type
-    numba.rewrites.rewrite_registry.apply("after-inference", state)
-    parfor_pass = numba.parfor.ParforPass(
+    numba.core.rewrites.rewrite_registry.apply("after-inference", state)
+    parfor_pass = numba.parfors.parfor.ParforPass(
         f_ir, typemap, calltypes, return_type, typingctx, options, flags
     )
     parfor_pass.run()
     remove_dels(f_ir.blocks)
     # make sure eval nodes are after the parfor for easier extraction
     # TODO: extract an eval func more robustly
-    numba.parfor.maximize_fusion(f_ir, f_ir.blocks, typemap, False)
+    numba.parfors.parfor.maximize_fusion(f_ir, f_ir.blocks, typemap, False)
     return f_ir, pm
 
 
@@ -2138,7 +2138,7 @@ def replace_closures(f_ir, closure, code):
             assert isinstance(closure, ir.Expr) and closure.op == "build_tuple"
             items = closure.items
         assert len(code.co_freevars) == len(items)
-        numba.inline_closurecall._replace_freevars(f_ir.blocks, items)
+        numba.core.inline_closurecall._replace_freevars(f_ir.blocks, items)
 
 
 def get_udf_func_struct(
@@ -2212,7 +2212,7 @@ def get_udf_func_struct(
 
         parfor_ind = -1
         for i, stmt in enumerate(block_body):
-            if isinstance(stmt, numba.parfor.Parfor):
+            if isinstance(stmt, numba.parfors.parfor.Parfor):
                 assert parfor_ind == -1, "only one parfor for aggregation function"
                 parfor_ind = i
 
@@ -2399,10 +2399,10 @@ def gen_init_func(init_nodes, reduce_vars, var_types, typingctx, targetctx):
     # parallelaccelerator adds functions that check the size of input array
     # these calls need to be removed
     _checker_calls = (
-        numba.parfor.max_checker,
-        numba.parfor.min_checker,
-        numba.parfor.argmax_checker,
-        numba.parfor.argmin_checker,
+        numba.parfors.parfor.max_checker,
+        numba.parfors.parfor.min_checker,
+        numba.parfors.parfor.argmax_checker,
+        numba.parfors.parfor.argmin_checker,
     )
     checker_vars = set()
     cleaned_init_nodes = []
@@ -2440,7 +2440,7 @@ def gen_init_func(init_nodes, reduce_vars, var_types, typingctx, targetctx):
         typingctx, targetctx, f_ir, (), return_typ, compiler.DEFAULT_FLAGS, {}
     )
 
-    imp_dis = numba.targets.registry.dispatcher_registry["cpu"](dummy_f)
+    imp_dis = numba.core.registry.dispatcher_registry["cpu"](dummy_f)
     imp_dis.add_overload(init_all_func)
     return imp_dis
 
@@ -2597,7 +2597,7 @@ def gen_all_combine_func(
         typingctx, targetctx, f_ir, arg_typs, types.none, compiler.DEFAULT_FLAGS, {}
     )
 
-    imp_dis = numba.targets.registry.dispatcher_registry["cpu"](combine_all_f)
+    imp_dis = numba.core.registry.dispatcher_registry["cpu"](combine_all_f)
     imp_dis.add_overload(combine_all_func)
     return imp_dis
 
@@ -2702,7 +2702,7 @@ def gen_eval_func(f_ir, eval_nodes, reduce_vars, var_types, pm, typingctx, targe
         typingctx, targetctx, f_ir, arg_typs, return_typ, compiler.DEFAULT_FLAGS, {}
     )
 
-    imp_dis = numba.targets.registry.dispatcher_registry["cpu"](agg_eval)
+    imp_dis = numba.core.registry.dispatcher_registry["cpu"](agg_eval)
     imp_dis.add_overload(eval_func)
     return imp_dis
 
@@ -2798,7 +2798,7 @@ def gen_combine_func(
         typingctx, targetctx, f_ir, arg_typs, return_typ, compiler.DEFAULT_FLAGS, {}
     )
 
-    imp_dis = numba.targets.registry.dispatcher_registry["cpu"](agg_combine)
+    imp_dis = numba.core.registry.dispatcher_registry["cpu"](agg_combine)
     imp_dis.add_overload(combine_func)
     return imp_dis
 
@@ -2962,7 +2962,7 @@ def gen_update_func(
         typingctx, targetctx, f_ir, arg_typs, return_typ, compiler.DEFAULT_FLAGS, {}
     )
 
-    imp_dis = numba.targets.registry.dispatcher_registry["cpu"](agg_update)
+    imp_dis = numba.core.registry.dispatcher_registry["cpu"](agg_update)
     imp_dis.add_overload(agg_impl_func)
     return imp_dis
 

@@ -6,11 +6,11 @@ version for this task.
 """
 from collections import defaultdict
 import numba
-from numba import typeinfer, ir, ir_utils, config, types, cgutils
+from numba.core import typeinfer, ir, ir_utils, config, types, cgutils
 from bodo.hiframes.datetime_date_ext import datetime_date_array_type
-from numba.typing.templates import signature
+from numba.core.typing.templates import signature
 from numba.extending import overload, intrinsic, register_model, models, box
-from numba.ir_utils import (
+from numba.core.ir_utils import (
     visit_vars_inner,
     replace_vars_inner,
     compile_to_numba_ir,
@@ -131,7 +131,7 @@ def sql_distributed_run(
     return nodes
 
 
-numba.array_analysis.array_analysis_extensions[
+numba.parfors.array_analysis.array_analysis_extensions[
     SqlReader
 ] = bodo.ir.connector.connector_array_analysis
 distributed_analysis.distributed_analysis_extensions[
@@ -140,7 +140,7 @@ distributed_analysis.distributed_analysis_extensions[
 typeinfer.typeinfer_extensions[SqlReader] = bodo.ir.connector.connector_typeinfer
 ir_utils.visit_vars_extensions[SqlReader] = bodo.ir.connector.visit_vars_connector
 ir_utils.remove_dead_extensions[SqlReader] = remove_dead_sql
-numba.analysis.ir_extension_usedefs[SqlReader] = bodo.ir.connector.connector_usedefs
+numba.core.analysis.ir_extension_usedefs[SqlReader] = bodo.ir.connector.connector_usedefs
 ir_utils.copy_propagate_extensions[SqlReader] = bodo.ir.connector.get_copies_connector
 ir_utils.apply_copy_propagate_extensions[
     SqlReader

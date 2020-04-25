@@ -13,21 +13,23 @@ from bodo.transforms.series_pass import SeriesPass
 from bodo.transforms.dataframe_pass import DataFramePass
 from bodo.transforms.typing_pass import BodoTypeInference
 import numba
-from numba.compiler import DefaultPassBuilder
-from numba.compiler_machinery import FunctionPass, register_pass, PassManager
-from numba.untyped_passes import WithLifting
+from numba.core.compiler import DefaultPassBuilder
+from numba.core.compiler_machinery import (
+    FunctionPass, AnalysisPass, register_pass, PassManager
+)
+from numba.core.untyped_passes import WithLifting, ReconstructSSA
 
-from numba.typed_passes import (
+from numba.core.typed_passes import (
     NopythonTypeInference,
     PreParforPass,
     ParforPass,
     DumpParforDiagnostics,
 )
 
-from numba import ir_utils, ir, postproc
-from numba.targets.registry import CPUDispatcher
-from numba.ir_utils import guard, get_definition
-from numba.inline_closurecall import inline_closure_call, InlineClosureCallPass
+from numba.core import ir_utils, ir, postproc
+from numba.core.registry import CPUDispatcher
+from numba.core.ir_utils import guard, get_definition
+from numba.core.inline_closurecall import inline_closure_call, InlineClosureCallPass
 from bodo import config
 import bodo.libs
 import bodo.libs.array_kernels  # side effect: install Numba functions
@@ -41,9 +43,9 @@ import bodo.utils.typing
 import bodo.io
 # required for _compile_for_args defined below (can be removed once the
 # function is fixed in numba)
-from numba import types, errors
-from numba.six import reraise
-from numba.typing.typeof import Purpose, typeof
+from numba.core import types, errors
+from numba.core.utils import reraise
+from numba.core.typing.typeof import Purpose, typeof
 
 if config._has_h5py:
     from bodo.io import h5
@@ -54,7 +56,7 @@ from llvmlite import binding
 binding.set_option("tmp", "-non-global-value-max-name-size=2048")
 
 
-from numba.errors import NumbaPerformanceWarning
+from numba.core.errors import NumbaPerformanceWarning
 
 warnings.simplefilter("ignore", category=NumbaPerformanceWarning)
 
@@ -63,7 +65,7 @@ warnings.simplefilter("ignore", category=NumbaPerformanceWarning)
 inline_all_calls = False
 
 
-class BodoCompiler(numba.compiler.CompilerBase):
+class BodoCompiler(numba.core.compiler.CompilerBase):
     """Bodo compiler pipeline which adds the following passes to Numba's pipeline:
     InlinePass, BodoUntypedPass, BodoTypeInference, BodoDataFramePass, BodoSeriesPass,
     LowerParforSeq, BodoDumpDiagnosticsPass.
@@ -82,8 +84,10 @@ class BodoCompiler(numba.compiler.CompilerBase):
         # simplify_CFG() is called (block number is used in EnterWith nodes)
         if inline_all_calls:  # pragma: no cover
             pm.add_pass_after(InlinePass, WithLifting)
-        # run untyped pass right before type inference
-        add_pass_before(pm, BodoUntypedPass, NopythonTypeInference)
+        # run untyped pass right before SSA construction and type inference
+        # NOTE: SSA includes phi nodes (which have block numbers) that we don't handle.
+        # therefore, uptyped pass cannot use SSA since it changes CFG
+        add_pass_before(pm, BodoUntypedPass, ReconstructSSA)
         # replace Numba's type inference pass with Bodo's version, which incorporates
         # constant inference using partial type inference
         replace_pass(pm, BodoTypeInference, NopythonTypeInference)
@@ -288,14 +292,14 @@ class BodoDataFramePass(FunctionPass):
 
 
 @register_pass(mutates_CFG=False, analysis_only=True)
-class BodoDumpDiagnosticsPass(FunctionPass):
+class BodoDumpDiagnosticsPass(AnalysisPass):
     """Print Bodo's distributed diagnostics info if needed
     """
 
     _name = "bodo_dump_diagnostics_pass"
 
     def __init__(self):
-        FunctionPass.__init__(self)
+        AnalysisPass.__init__(self)
 
     def run_pass(self, state):
         """
@@ -333,7 +337,7 @@ class LowerParforSeq(FunctionPass):
         FunctionPass.__init__(self)
 
     def run_pass(self, state):
-        numba.parfor.lower_parfor_sequential(
+        numba.parfors.parfor.lower_parfor_sequential(
             state.typingctx, state.func_ir, state.typemap, state.calltypes
         )
         return True
@@ -383,7 +387,7 @@ def inline_calls(func_ir, _locals):
     func_ir.blocks = ir_utils.simplify_CFG(func_ir.blocks)
 
 
-# This replaces Numba's numba.dispatcher._DispatcherBase._compile_for_args
+# This replaces Numba's numba.core.dispatcher._DispatcherBase._compile_for_args
 # method to delete args before returning the dispatcher object. Otherwise
 # the code is the same
 def _compile_for_args(self, *args, **kws):  # pragma: no cover
@@ -398,17 +402,17 @@ def _compile_for_args(self, *args, **kws):  # pragma: no cover
         Rewrite and raise Exception `e` with help supplied based on the
         specified issue_type.
         """
-        if numba.config.SHOW_HELP:
+        if numba.core.config.SHOW_HELP:
             help_msg = errors.error_extras[issue_type]
             e.patch_message('\n'.join((str(e).rstrip(), help_msg)))
-        if numba.config.FULL_TRACEBACKS:
+        if numba.core.config.FULL_TRACEBACKS:
             raise e
         else:
             reraise(type(e), e, None)
 
     argtypes = []
     for a in args:
-        if isinstance(a, numba.dispatcher.OmittedArg):
+        if isinstance(a, numba.core.dispatcher.OmittedArg):
             argtypes.append(types.Omitted(a.value))
         else:
             argtypes.append(self.typeof_pyval(a))
@@ -443,7 +447,7 @@ def _compile_for_args(self, *args, **kws):  # pragma: no cover
         # that failed inferencing as a Numba type
         failed_args = []
         for i, arg in enumerate(args):
-            val = arg.value if isinstance(arg, numba.dispatcher.OmittedArg) else arg
+            val = arg.value if isinstance(arg, numba.core.dispatcher.OmittedArg) else arg
             try:
                 tp = typeof(val, Purpose.argument)
             except ValueError as typeof_exc:
@@ -475,7 +479,7 @@ def _compile_for_args(self, *args, **kws):  # pragma: no cover
         # or isn't supported as a constant
         error_rewrite(e, 'constant_inference')
     except Exception as e:
-        if numba.config.SHOW_HELP:
+        if numba.core.config.SHOW_HELP:
             if hasattr(e, 'patch_message'):
                 help_msg = errors.error_extras['reportable']
                 e.patch_message('\n'.join((str(e).rstrip(), help_msg)))
@@ -493,15 +497,15 @@ def _compile_for_args(self, *args, **kws):  # pragma: no cover
 import inspect
 import hashlib
 
-lines = inspect.getsource(numba.dispatcher._DispatcherBase._compile_for_args)
+lines = inspect.getsource(numba.core.dispatcher._DispatcherBase._compile_for_args)
 if (
     hashlib.sha256(lines.encode()).hexdigest()
     != "1e12bb18f3ed09e608ba6c56a7fcd4cf2fe342b71af9d2e9767aee817d92f4b8"
 ):  # pragma: no cover
     warnings.warn(
         bodo.utils.typing.BodoWarning(
-            "numba.dispatcher._DispatcherBase._compile_for_args has changed"
+            "numba.core.dispatcher._DispatcherBase._compile_for_args has changed"
         )
     )
 # now replace the function with our own
-numba.dispatcher._DispatcherBase._compile_for_args = _compile_for_args
+numba.core.dispatcher._DispatcherBase._compile_for_args = _compile_for_args
