@@ -136,6 +136,16 @@ def test_datetime_operations():
     check_func(test_max, (t2, t1))
 
 
+def test_timestamp_constant_lowering():
+    t = pd.Timestamp("2012-06-18")
+
+    def f():
+        return t
+
+    bodo_f = bodo.jit(f)
+    val_ret = bodo_f()
+
+
 def test_datetime_comparisons():
     """
     Test comparison operators of datetime module objects in Bodo

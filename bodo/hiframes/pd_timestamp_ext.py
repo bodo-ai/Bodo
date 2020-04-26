@@ -23,7 +23,7 @@ from numba.extending import (
     overload_attribute,
     register_jitable,
 )
-from numba.core.imputils import lower_constant
+from numba.core.imputils import lower_constant, impl_ret_borrowed
 from numba.core import cgutils
 from numba.core.typing.templates import (
     infer_getattr,
@@ -283,6 +283,32 @@ def _typ_no_input(val, c):
 @lower_constant(NoInputType)
 def constant_no_input(context, builder, ty, pyval):
     return context.get_dummy_value()
+
+
+@lower_constant(PandasTimestampType)
+def constant_timestamp(context, builder, ty, pyval):
+    # Extracting constants. Inspired from @lower_constant(types.Complex)
+    # in numba/numba/targets/numbers.py
+    year = context.get_constant(types.int64, pyval.year)
+    month = context.get_constant(types.int64, pyval.month)
+    day = context.get_constant(types.int64, pyval.day)
+    hour = context.get_constant(types.int64, pyval.hour)
+    minute = context.get_constant(types.int64, pyval.minute)
+    second = context.get_constant(types.int64, pyval.second)
+    microsecond = context.get_constant(types.int64, pyval.microsecond)
+    nanosecond = context.get_constant(types.int64, pyval.nanosecond)
+    value = context.get_constant(types.int64, pyval.value)
+    pd_timestamp = cgutils.create_struct_proxy(ty)(context, builder)
+    pd_timestamp.year = year
+    pd_timestamp.month = month
+    pd_timestamp.day = day
+    pd_timestamp.hour = hour
+    pd_timestamp.minute = minute
+    pd_timestamp.second = second
+    pd_timestamp.microsecond = microsecond
+    pd_timestamp.nanosecond = nanosecond
+    pd_timestamp.value = value
+    return pd_timestamp._getvalue()
 
 
 # -------------------------------------------------------------------------------
