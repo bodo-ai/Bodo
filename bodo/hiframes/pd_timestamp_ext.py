@@ -23,7 +23,7 @@ from numba.extending import (
     overload_attribute,
     register_jitable,
 )
-from numba.core.imputils import lower_constant, impl_ret_borrowed
+from numba.core.imputils import lower_constant
 from numba.core import cgutils
 from numba.core.typing.templates import (
     infer_getattr,
@@ -42,7 +42,8 @@ from bodo.utils.typing import (
     is_list_like_index_type,
     BodoError,
 )
-
+from bodo.hiframes.datetime_timedelta_ext import datetime_timedelta_type
+from bodo.hiframes.datetime_date_ext import _ord2ymd, _ymd2ord
 from llvmlite import ir as lir
 
 
@@ -946,6 +947,100 @@ def _install_timestamp_cmp_ops():
 
 
 _install_timestamp_cmp_ops()
+
+
+@overload_method(PandasTimestampType, "toordinal")
+def toordinal(date):
+    """Return proleptic Gregorian ordinal for the year, month and day.
+    January 1 of year 1 is day 1.  Only the year, month and day values
+    contribute to the result.
+    """
+
+    def impl(date):  # pragma: no cover
+        return _ymd2ord(date.year, date.month, date.day)
+
+    return impl
+
+
+# @intrinsic
+@register_jitable
+def compute_pd_timestamp(totmicrosec, nanosecond):  # pragma: no cover
+    # number of microsecond
+    microsecond = totmicrosec % 1000000
+    totsecond = totmicrosec // 1000000
+    # number of second
+    second = totsecond % 60
+    totminute = totsecond // 60
+    # number of minute
+    minute = totminute % 60
+    tothour = totminute // 60
+    # number of hour
+    hour = tothour % 24
+    totday = tothour // 24
+    # computing year, month, day
+    year, month, day = _ord2ymd(totday)
+    #
+    value = npy_datetimestruct_to_datetime(
+        year, month, day, hour, minute, second, microsecond,
+    )
+    value += zero_if_none(nanosecond)
+    return init_timestamp(
+        year, month, day, hour, minute, second, microsecond, nanosecond, value,
+    )
+
+
+@overload(operator.sub)
+def timestamp_sub(lhs, rhs):
+    if lhs == pandas_timestamp_type and rhs == datetime_timedelta_type:
+
+        def impl(lhs, rhs):  # pragma: no cover
+            # The time itself
+            days1 = lhs.toordinal()
+            secs1 = lhs.second + lhs.minute * 60 + lhs.hour * 3600
+            msec1 = lhs.microsecond
+            nanosecond = (
+                lhs.nanosecond
+            )  # That entries remain unchanged because timestamp has no nanosecond
+            # The timedelta
+            days2 = rhs.days
+            secs2 = rhs.seconds
+            msec2 = rhs.microseconds
+            # Computing the difference
+            daysF = days1 - days2
+            secsF = secs1 - secs2
+            msecF = msec1 - msec2
+            # Getting total microsecond
+            totmicrosec = 1000000 * (daysF * 86400 + secsF) + msecF
+            return compute_pd_timestamp(totmicrosec, nanosecond)
+
+        return impl
+
+
+@overload(operator.add)
+def timestamp_add(lhs, rhs):
+    if lhs == pandas_timestamp_type and rhs == datetime_timedelta_type:
+
+        def impl(lhs, rhs):  # pragma: no cover
+            # The time itself
+            days1 = lhs.toordinal()
+            secs1 = lhs.second + lhs.minute * 60 + lhs.hour * 3600
+            msec1 = lhs.microsecond
+            nanosecond = (
+                lhs.nanosecond
+            )  # That entries remain unchanged because timestamp has no nanosecond
+            # The timedelta
+            days2 = rhs.days
+            secs2 = rhs.seconds
+            msec2 = rhs.microseconds
+            # Computing the difference
+            daysF = days1 + days2
+            secsF = secs1 + secs2
+            msecF = msec1 + msec2
+            # Getting total microsecond
+            totmicrosec = 1000000 * (daysF * 86400 + secsF) + msecF
+            return compute_pd_timestamp(totmicrosec, nanosecond)
+
+        return impl
 
 
 @overload(min)

@@ -146,6 +146,19 @@ def test_timestamp_constant_lowering():
     val_ret = bodo_f()
 
 
+def test_sub_add_timestamp_timedelta():
+    def f_sub(date, timedelta):
+        return date - timedelta
+
+    def f_add(date, timedelta):
+        return date + timedelta
+
+    date = pd.Timestamp("2017-10-14")
+    timedelta = datetime.timedelta(3, 3, 3)
+    check_func(f_sub, (date, timedelta))
+    check_func(f_add, (date, timedelta))
+
+
 def test_datetime_comparisons():
     """
     Test comparison operators of datetime module objects in Bodo
