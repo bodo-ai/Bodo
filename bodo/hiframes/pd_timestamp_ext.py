@@ -811,7 +811,7 @@ def overload_to_datetime(arg_a):
             arr = bodo.hiframes.pd_series_ext.get_series_data(arg_a)
             index = bodo.hiframes.pd_series_ext.get_series_index(arg_a)
             name = bodo.hiframes.pd_series_ext.get_series_name(arg_a)
-            A = pd.to_datetime(arr)
+            A = bodo.utils.conversion.coerce_to_ndarray(pd.to_datetime(arr))
             return bodo.hiframes.pd_series_ext.init_series(A, index, name)
 
         return impl_series
@@ -834,9 +834,13 @@ def overload_to_datetime(arg_a):
                         data.year, data.month, data.day, 0, 0, 0, 0
                     )
                 B[i] = bodo.hiframes.pd_timestamp_ext.integer_to_dt64(val)
-            return B
+            return bodo.hiframes.pd_index_ext.init_datetime_index(B, None)
 
         return impl_date_arr
+
+    # return DatetimeIndex if input is array(dt64)
+    if arg_a == types.Array(types.NPDatetime("ns"), 1, "C"):
+        return lambda arg_a: bodo.hiframes.pd_index_ext.init_datetime_index(arg_a, None)  # pragma: no cover
 
     # TODO: input Type of a dataframe or series
     # TODO: input type of an array
