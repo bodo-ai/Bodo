@@ -70,11 +70,19 @@ def _get_nan(val):  # pragma: no cover
 
 @overload(_get_nan)
 def _get_nan_overload(val):
+    """get NA value with same type as val
+    """
     if isinstance(val, (types.NPDatetime, types.NPTimedelta)):
         nat = val("NaT")
-        return lambda val: nat
-    # TODO: other types
-    return lambda val: np.nan
+        return lambda val: nat  # pragma: no cover
+
+    if isinstance(val, types.Float):
+        return lambda val: np.nan  # pragma: no cover
+
+    # Just return same value for other types that don't have NA sentinel
+    # This makes sure output type of Series.min/max with integer values don't get
+    # converted to float unnecessarily
+    return lambda val: val  # pragma: no cover
 
 
 def _get_type_max_value(dtype):  # pragma: no cover
@@ -152,20 +160,6 @@ def _sum_handle_nan(s, count):  # pragma: no cover
     if not count:
         s = bodo.hiframes.series_kernels._get_nan(s)
     return s
-
-
-def _column_sum_impl_count(A):  # pragma: no cover
-    numba.parfors.parfor.init_prange()
-    count = 0
-    s = 0
-    for i in numba.parfors.parfor.internal_prange(len(A)):
-        val = A[i]
-        if not np.isnan(val):
-            s += val
-            count += 1
-
-    res = bodo.hiframes.series_kernels._sum_handle_nan(s, count)
-    return res
 
 
 @numba.generated_jit

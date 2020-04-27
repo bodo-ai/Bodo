@@ -1340,6 +1340,21 @@ def test_series_max(series_val):
     check_func(test_impl, (series_val,))
 
 
+def test_series_min_max_int_output_type():
+    """make sure output type of min/max for integer input is not converted to float
+    """
+
+    def impl1(S):
+        return S.max()
+
+    def impl2(S):
+        return S.max()
+
+    S = pd.Series([1, 3, 4, 2])
+    assert isinstance(bodo.jit(impl1)(S), int)
+    assert isinstance(bodo.jit(impl2)(S), int)
+
+
 def test_series_idxmin(series_val):
     # not supported for Decimal yet, TODO: support and test
     if isinstance(series_val.values[0], Decimal):
