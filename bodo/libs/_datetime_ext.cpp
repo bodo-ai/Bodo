@@ -194,9 +194,10 @@ void* box_datetime_date_array(int64_t n, const int64_t* data,
                                                 "LLL", year, month, day);
             err = PyArray_SETITEM((PyArrayObject*)ret, (char*)p, d);
             Py_DECREF(d);
-        } else
+        } else {
             // TODO: replace None with pd.NA when Pandas switch to pd.NA
             err = PyArray_SETITEM((PyArrayObject*)ret, (char*)p, Py_None);
+        }
         CHECK(err == 0, "setting item in numpy array failed");
     }
 
@@ -248,15 +249,14 @@ void unbox_datetime_date_array(PyObject* obj, int64_t n, int64_t* data,
         PyObject* s = PySequence_GetItem(obj, i);
         CHECK(s, "getting element failed");
         // Pandas stores NA as either None, nan, or pd.NA
+        bool value_bitmap;
+        int64_t value_data;
         if (s == Py_None ||
             (PyFloat_Check(s) && std::isnan(PyFloat_AsDouble(s))) ||
             s == C_NA) {
-            // null bit
-            ::arrow::BitUtil::ClearBit(null_bitmap, i);
-            data[i] = 0;
+            value_bitmap = false;
+            value_data = 0;
         } else {
-            // set not null
-            ::arrow::BitUtil::SetBit(null_bitmap, i);
             PyObject* year_obj = PyObject_GetAttrString(s, "year");
             PyObject* month_obj = PyObject_GetAttrString(s, "month");
             PyObject* day_obj = PyObject_GetAttrString(s, "day");
@@ -264,11 +264,21 @@ void unbox_datetime_date_array(PyObject* obj, int64_t n, int64_t* data,
             int64_t year = PyLong_AsLongLong(year_obj);
             int64_t month = PyLong_AsLongLong(month_obj);
             int64_t day = PyLong_AsLongLong(day_obj);
-            data[i] = (year << 32) + (month << 16) + day;
-
+            value_data = (year << 32) + (month << 16) + day;
             Py_DECREF(year_obj);
             Py_DECREF(month_obj);
             Py_DECREF(day_obj);
+            if (year == -1 && month == -1 && day == -1)
+              value_bitmap = false;
+            else
+              value_bitmap = true;
+        }
+        data[i] = value_data;
+        if (value_bitmap) {
+          ::arrow::BitUtil::SetBit(null_bitmap, i);
+        }
+        else {
+          ::arrow::BitUtil::ClearBit(null_bitmap, i);
         }
         Py_DECREF(s);
     }

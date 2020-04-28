@@ -99,8 +99,30 @@ def test_datetime_operations():
     check_func(test_sub, (dt, dt2))
 
     # Test series(dt64)
-    S = pd.Series(pd.date_range(start="2018-04-24", end="2018-04-29", periods=5))
-    S2 = pd.Series(pd.date_range(start="2018-04-20", end="2018-04-25", periods=5))
+    Srange = pd.DatetimeIndex(
+        [
+            "2018-04-24 00:00:00",
+            None,
+            "2018-04-26 12:00:00",
+            "2018-04-27 18:00:00",
+            "2018-04-29 00:00:00",
+        ],
+        dtype="datetime64[ns]",
+        freq=None,
+    )
+    Srange2 = pd.DatetimeIndex(
+        [
+            "2018-04-20 00:00:00",
+            "2018-04-21 06:00:00",
+            "2018-04-22 12:00:00",
+            None,
+            "2018-04-25 00:00:00",
+        ],
+        dtype="datetime64[ns]",
+        freq=None,
+    )
+    S = pd.Series(Srange)
+    S2 = pd.Series(Srange2)
     timestamp = pd.to_datetime("2018-04-24")
     dt_dt = datetime.datetime(2001, 1, 1)
     dt_td = datetime.timedelta(1, 1, 1)
@@ -119,7 +141,7 @@ def test_datetime_operations():
             datetime.timedelta(6, 6, 6),
             datetime.timedelta(5, 5, 5),
             datetime.timedelta(4, 4, 4),
-            datetime.timedelta(3, 3, 3),
+            None,
             datetime.timedelta(2, 2, 2),
         )
     )
@@ -222,19 +244,129 @@ def test_datetime_comparisons():
 
     # test series(dt64) scalar cmp
     t = np.datetime64("2018-04-27").astype("datetime64[ns]")
-    S = pd.Series(pd.date_range(start="2018-04-24", end="2018-04-29", periods=5))
+    Srange = pd.DatetimeIndex(
+        [
+            "2018-04-24 00:00:00",
+            None,
+            "2018-04-26 12:00:00",
+            "2018-04-27 18:00:00",
+            None,
+        ],
+        dtype="datetime64[ns]",
+        freq=None,
+    )
+    S = pd.Series(Srange)
     check_func(test_ge, (S, t))
     check_func(test_ge, (t, S))
+    check_func(test_gt, (t, S))
+    check_func(test_gt, (S, t))
+    check_func(test_le, (t, S))
+    check_func(test_le, (S, t))
+    check_func(test_lt, (t, S))
+    check_func(test_lt, (S, t))
+    check_func(test_ne, (t, S))
+    check_func(test_ne, (S, t))
+    check_func(test_eq, (t, S))
+    check_func(test_eq, (S, t))
+
+    # Test with dates encoded as string
+    t_str = "2018-04-27"
+    check_func(test_ge, (t_str, S))
+    check_func(test_ge, (S, t_str))
+    check_func(test_gt, (t_str, S))
+    check_func(test_gt, (S, t_str))
+    check_func(test_le, (t_str, S))
+    check_func(test_le, (S, t_str))
+    check_func(test_lt, (t_str, S))
+    check_func(test_lt, (S, t_str))
+    check_func(test_ne, (t_str, S))
+    check_func(test_ne, (S, t_str))
+    check_func(test_eq, (t_str, S))
+    check_func(test_eq, (S, t_str))
+
+    # Test with TimeDelta
+    TimeDeltas = pd.Series(
+        [
+            datetime.timedelta(1, 0, 0),
+            datetime.timedelta(0, 7200, 0),
+            datetime.timedelta(2, 0, 0),
+            datetime.timedelta(-1, 3600, 0),
+            None,
+        ],
+        dtype="timedelta64[ns]",
+    )
+    t_timedelta = datetime.timedelta(0, 7200, 0)
+    check_func(test_ge, (t_str, S))
+    check_func(test_ge, (S, t_str))
+    check_func(test_gt, (t_str, S))
+    check_func(test_gt, (S, t_str))
+    check_func(test_le, (t_str, S))
+    check_func(test_le, (S, t_str))
+    check_func(test_lt, (t_str, S))
+    check_func(test_lt, (S, t_str))
+    check_func(test_ne, (t_str, S))
+    check_func(test_ne, (S, t_str))
+    check_func(test_eq, (t_str, S))
+    check_func(test_eq, (S, t_str))
 
     # test series(dt64) cmp
-    S1 = pd.Series(pd.date_range(start="2018-04-24", end="2018-04-29", periods=5))
-    S2 = pd.Series(pd.date_range(start="2018-04-24", end="2018-04-29", periods=5))
+    Srange1 = pd.DatetimeIndex(
+        [
+            "2018-04-24 00:00:00",
+            None,
+            "2018-04-26 12:00:00",
+            "2018-04-27 18:00:00",
+            "2018-04-29 00:00:00",
+        ],
+        dtype="datetime64[ns]",
+        freq=None,
+    )
+    Srange2 = pd.DatetimeIndex(
+        [
+            "2018-04-24 00:00:00",
+            "2018-04-25 06:00:00",
+            "2018-04-26 12:00:00",
+            None,
+            "2018-04-29 00:00:00",
+        ],
+        dtype="datetime64[ns]",
+        freq=None,
+    )
+    S1 = pd.Series(Srange1)
+    S2 = pd.Series(Srange2)
     check_func(test_ge, (S1, S2))
+    check_func(test_gt, (S1, S2))
+    check_func(test_le, (S1, S2))
+    check_func(test_lt, (S1, S2))
+    check_func(test_ne, (S1, S2))
+    check_func(test_eq, (S1, S2))
 
     # test series(datetime.date)
-    S = pd.Series(pd.date_range("2017-01-03", "2017-01-07").date)
-    t = datetime.date(2017, 1, 4)
+    Srange = pd.DatetimeIndex(
+        [
+            "2018-04-24 00:00:00",
+            None,
+            "2018-04-26 12:00:00",
+            "2018-04-27 18:00:00",
+            "2018-04-28 00:00:00",
+        ],
+        dtype="datetime64[ns]",
+        freq=None,
+    )
+    S = pd.Series(Srange.date)
+    t = datetime.date(2018, 4, 27)
     check_func(test_ge, (S, t))
+    check_func(test_ge, (t, S))
+    check_func(test_gt, (t, S))
+    check_func(test_gt, (S, t))
+    check_func(test_le, (t, S))
+    check_func(test_le, (S, t))
+    check_func(test_lt, (t, S))
+    check_func(test_lt, (S, t))
+    check_func(test_ne, (t, S))
+    check_func(test_ne, (S, t))
+    check_func(test_eq, (t, S))
+    check_func(test_eq, (S, t))
 
 
 def test_date_isin():

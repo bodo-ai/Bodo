@@ -574,6 +574,13 @@ class SeriesPass:
                 )
                 return self._replace_func(impl, [arg1, arg2])
 
+            # Series(dt64) - Series(dt64)
+            if is_dt64_series_typ(typ1) and is_dt64_series_typ(typ2):
+                impl = bodo.hiframes.series_dt_impl.create_bin_op_overload(rhs.fn)(
+                    typ1, typ2
+                )
+                return self._replace_func(impl, [arg1, arg2])
+
             # series(dt64) - (timestamp/datetime.timedelta/datetime.datetime/series(timedelta64))
             # or (timestamp or datetime.datetime) - series(dt64)
             if (
@@ -873,7 +880,10 @@ class SeriesPass:
                 *arg_typs, **kw_typs
             )
             return self._replace_func(
-                impl, rhs.args, pysig=numba.core.utils.pysignature(impl), kws=dict(rhs.kws)
+                impl,
+                rhs.args,
+                pysig=numba.core.utils.pysignature(impl),
+                kws=dict(rhs.kws),
             )
 
         # inline BooleanArray.copy()
@@ -890,7 +900,10 @@ class SeriesPass:
                 *arg_typs, **kw_typs
             )
             return self._replace_func(
-                impl, rhs.args, pysig=numba.core.utils.pysignature(impl), kws=dict(rhs.kws)
+                impl,
+                rhs.args,
+                pysig=numba.core.utils.pysignature(impl),
+                kws=dict(rhs.kws),
             )
 
         # inlining SeriesStrMethod methods is necessary since they may be used in
@@ -916,7 +929,10 @@ class SeriesPass:
                 )(*arg_typs, **kw_typs)
 
             return self._replace_func(
-                impl, rhs.args, pysig=numba.core.utils.pysignature(impl), kws=dict(rhs.kws)
+                impl,
+                rhs.args,
+                pysig=numba.core.utils.pysignature(impl),
+                kws=dict(rhs.kws),
             )
 
         # replace _get_type_max_value(arr.dtype) since parfors
@@ -926,7 +942,9 @@ class SeriesPass:
             if self.typemap[rhs.args[0].name] == types.DType(types.NPDatetime("ns")):
                 return self._replace_func(
                     lambda: bodo.hiframes.pd_timestamp_ext.integer_to_dt64(
-                        numba.cpython.builtins.get_type_max_value(numba.core.types.uint64)
+                        numba.cpython.builtins.get_type_max_value(
+                            numba.core.types.uint64
+                        )
                     ),
                     [],
                 )
@@ -1142,7 +1160,10 @@ class SeriesPass:
             kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
             impl = bodo.libs.array_kernels.overload_gen_na_array(*arg_typs, **kw_typs)
             return self._replace_func(
-                impl, rhs.args, pysig=numba.core.utils.pysignature(impl), kws=dict(rhs.kws)
+                impl,
+                rhs.args,
+                pysig=numba.core.utils.pysignature(impl),
+                kws=dict(rhs.kws),
             )
 
         if fdef == ("argsort", "bodo.hiframes.series_impl"):
@@ -1240,7 +1261,10 @@ class SeriesPass:
 
             impl = bodo.libs.str_arr_ext.overload_str_arr_astype(*arg_typs, **kw_typs)
             return self._replace_func(
-                impl, rhs.args, pysig=numba.core.utils.pysignature(impl), kws=dict(rhs.kws)
+                impl,
+                rhs.args,
+                pysig=numba.core.utils.pysignature(impl),
+                kws=dict(rhs.kws),
             )
 
         if fdef == ("series_filter_bool", "bodo.hiframes.series_impl"):
@@ -1399,7 +1423,10 @@ class SeriesPass:
                 )
             stub = lambda dti, axis=None, skipna=True: None
             return self._replace_func(
-                impl, rhs.args, pysig=numba.core.utils.pysignature(stub), kws=dict(rhs.kws)
+                impl,
+                rhs.args,
+                pysig=numba.core.utils.pysignature(stub),
+                kws=dict(rhs.kws),
             )
 
         if isinstance(func_mod, ir.Var) and bodo.hiframes.pd_index_ext.is_pd_index_type(
@@ -1688,7 +1715,10 @@ class SeriesPass:
             )
             impl = overload_func(*arg_typs, **kw_typs)
             return self._replace_func(
-                impl, rhs.args, pysig=numba.core.utils.pysignature(impl), kws=dict(rhs.kws)
+                impl,
+                rhs.args,
+                pysig=numba.core.utils.pysignature(impl),
+                kws=dict(rhs.kws),
             )
 
         if func_name in bodo.hiframes.series_impl.explicit_binop_funcs.values():
@@ -1701,7 +1731,10 @@ class SeriesPass:
             )
             impl = overload_func(*arg_typs, **kw_typs)
             return self._replace_func(
-                impl, rhs.args, pysig=numba.core.utils.pysignature(impl), kws=dict(rhs.kws)
+                impl,
+                rhs.args,
+                pysig=numba.core.utils.pysignature(impl),
+                kws=dict(rhs.kws),
             )
 
         if func_name == "rolling":
@@ -1786,7 +1819,10 @@ class SeriesPass:
             impl = overload_func(*arg_typs, **kw_typs)
             stub = lambda S, dtype, copy=True, errors="raise": None
             return self._replace_func(
-                impl, rhs.args, pysig=numba.core.utils.pysignature(stub), kws=dict(rhs.kws)
+                impl,
+                rhs.args,
+                pysig=numba.core.utils.pysignature(stub),
+                kws=dict(rhs.kws),
             )
 
         return [assign]
@@ -1895,7 +1931,10 @@ class SeriesPass:
             )
             impl = overload_func(*arg_typs, **kw_typs)
             return self._replace_func(
-                impl, rhs.args, pysig=numba.core.utils.pysignature(impl), kws=dict(rhs.kws)
+                impl,
+                rhs.args,
+                pysig=numba.core.utils.pysignature(impl),
+                kws=dict(rhs.kws),
             )
 
     def _run_call_rolling(self, assign, lhs, rhs, func_name):
@@ -1993,7 +2032,9 @@ class SeriesPass:
         kws = dict(rhs.kws)
         other_var = get_call_expr_arg("combine", rhs.args, kws, 0, "other")
         func_var = get_call_expr_arg("combine", rhs.args, kws, 1, "func")
-        fill_var = get_call_expr_arg("combine", rhs.args, kws, 2, "fill_value", default="")
+        fill_var = get_call_expr_arg(
+            "combine", rhs.args, kws, 2, "fill_value", default=""
+        )
 
         func = get_overload_const_func(self.typemap[func_var.name])
 

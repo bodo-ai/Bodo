@@ -402,6 +402,7 @@ def date_add(lhs, rhs):
 
 @overload(operator.sub)
 def date_sub(lhs, rhs):
+
     if lhs == datetime_date_type and rhs == datetime_timedelta_type:
 
         def impl(lhs, rhs):  # pragma: no cover
@@ -749,7 +750,7 @@ def dt_date_arr_setitem(A, ind, val):
 
     if isinstance(ind, types.Integer):
 
-        def impl(A, ind, val):
+        def impl(A, ind, val):  # pragma: no cover
             A._data[ind] = cast_datetime_date_to_int(val)
 
         return impl
@@ -791,38 +792,58 @@ def create_cmp_op_overload(op):
 
     def overload_date_arr_cmp(A1, A2):
         # both datetime_date_array_type
+        if op == operator.ne:
+            default_value = True
+        else:
+            default_value = False
         if A1 == datetime_date_array_type and A2 == datetime_date_array_type:
 
-            def impl(A1, A2):
+            def impl(A1, A2):  # pragma: no cover
                 numba.parfors.parfor.init_prange()
                 n = len(A1)
                 out_arr = bodo.libs.bool_arr_ext.alloc_bool_array(n)
                 for i in numba.parfors.parfor.internal_prange(n):
-                    out_arr[i] = op(A1[i], A2[i])
+                    bit1 = bodo.libs.array_kernels.isna(A1, i)
+                    bit2 = bodo.libs.array_kernels.isna(A2, i)
+                    if bit1 or bit2:
+                        ret_val = default_value
+                    else:
+                        ret_val = op(A1[i], A2[i])
+                    out_arr[i] = ret_val
                 return out_arr
 
             return impl
         # 1st arg is array
         elif A1 == datetime_date_array_type:
 
-            def impl(A1, A2):
+            def impl(A1, A2):  # pragma: no cover
                 numba.parfors.parfor.init_prange()
                 n = len(A1)
                 out_arr = bodo.libs.bool_arr_ext.alloc_bool_array(n)
                 for i in numba.parfors.parfor.internal_prange(n):
-                    out_arr[i] = op(A1[i], A2)
+                    bit = bodo.libs.array_kernels.isna(A1, i)
+                    if bit:
+                        ret_val = default_value
+                    else:
+                        ret_val = op(A1[i], A2)
+                    out_arr[i] = ret_val
                 return out_arr
 
             return impl
         # 2nd arg is array
         elif A2 == datetime_date_array_type:
 
-            def impl(A1, A2):
+            def impl(A1, A2):  # pragma: no cover
                 numba.parfors.parfor.init_prange()
                 n = len(A2)
                 out_arr = bodo.libs.bool_arr_ext.alloc_bool_array(n)
                 for i in numba.parfors.parfor.internal_prange(n):
-                    out_arr[i] = op(A1, A2[i])
+                    bit = bodo.libs.array_kernels.isna(A2, i)
+                    if bit:
+                        ret_val = default_value
+                    else:
+                        ret_val = op(A1, A2[i])
+                    out_arr[i] = ret_val
                 return out_arr
 
             return impl
