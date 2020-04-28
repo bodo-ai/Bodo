@@ -555,6 +555,15 @@ make_attribute_wrapper(DatetimeDateArrayType, "data", "_data")
 make_attribute_wrapper(DatetimeDateArrayType, "null_bitmap", "_null_bitmap")
 
 
+@overload_method(DatetimeDateArrayType, "copy")
+def overload_datetime_date_arr_copy(A):
+    return lambda A: bodo.hiframes.datetime_date_ext.init_datetime_date_array(
+        A._data.copy(), A._null_bitmap.copy(),
+    )  # pragma: no cover
+
+
+
+
 @unbox(DatetimeDateArrayType)
 def unbox_datetime_date_array(typ, val, c):
     n = bodo.utils.utils.object_length(c, val)

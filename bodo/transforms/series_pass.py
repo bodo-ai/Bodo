@@ -1408,7 +1408,7 @@ class SeriesPass:
 
         if isinstance(func_mod, ir.Var) and isinstance(
             self.typemap[func_mod.name], DatetimeIndexType
-        ):
+        ) and func_name in {"min", "max"}:
             rhs.args.insert(0, func_mod)
             arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
             kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
@@ -1417,7 +1417,6 @@ class SeriesPass:
                     *arg_typs, **kw_typs
                 )
             else:
-                assert func_name == "max"
                 impl = bodo.hiframes.pd_index_ext.overload_datetime_index_max(
                     *arg_typs, **kw_typs
                 )
@@ -1936,6 +1935,8 @@ class SeriesPass:
                 pysig=numba.core.utils.pysignature(impl),
                 kws=dict(rhs.kws),
             )
+
+        return [assign]
 
     def _run_call_rolling(self, assign, lhs, rhs, func_name):
         # replace input arguments with data arrays from Series

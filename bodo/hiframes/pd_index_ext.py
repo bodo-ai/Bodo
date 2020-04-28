@@ -116,6 +116,11 @@ make_attribute_wrapper(DatetimeIndexType, "data", "_data")
 make_attribute_wrapper(DatetimeIndexType, "name", "_name")
 
 
+@overload_method(DatetimeIndexType, "copy")
+def overload_datetime_index_copy(A):
+    return lambda A: bodo.hiframes.pd_index_ext.init_datetime_index(A._data.copy(), A._name)  # pragma: no cover
+
+
 @overload_attribute(DatetimeIndexType, "name")
 def DatetimeIndex_get_name(di):
     def impl(di):  # pragma: no cover
@@ -801,6 +806,11 @@ make_attribute_wrapper(TimedeltaIndexType, "data", "_data")
 make_attribute_wrapper(TimedeltaIndexType, "name", "_name")
 
 
+@overload_method(TimedeltaIndexType, "copy")
+def overload_timedelta_index_copy(A):
+    return lambda A: bodo.hiframes.pd_index_ext.init_timedelta_index(A._data.copy(), A._name)  # pragma: no cover
+
+
 @overload_attribute(TimedeltaIndexType, "name")
 def TimeDeltaIndex_get_name(tdi):
     def impl(tdi):  # pragma: no cover
@@ -950,6 +960,11 @@ make_attribute_wrapper(RangeIndexType, "start", "_start")
 make_attribute_wrapper(RangeIndexType, "stop", "_stop")
 make_attribute_wrapper(RangeIndexType, "step", "_step")
 make_attribute_wrapper(RangeIndexType, "name", "_name")
+
+
+@overload_method(RangeIndexType, "copy")
+def overload_range_index_copy(A):
+    return lambda A: bodo.hiframes.pd_index_ext.init_range_index(A._start, A._stop, A._step, A._name)  # pragma: no cover
 
 
 @box(RangeIndexType)
@@ -1318,6 +1333,11 @@ make_attribute_wrapper(NumericIndexType, "data", "_data")
 make_attribute_wrapper(NumericIndexType, "name", "_name")
 
 
+@overload_method(NumericIndexType, "copy")
+def overload_numeric_index_copy(A):
+    return lambda A: bodo.hiframes.pd_index_ext.init_numeric_index(A._data.copy(), A._name)  # pragma: no cover
+
+
 @overload_attribute(NumericIndexType, "name")
 def NumericIndex_get_name(ni):
     def impl(ni):  # pragma: no cover
@@ -1491,6 +1511,11 @@ class StringIndexModel(models.StructModel):
 
 make_attribute_wrapper(StringIndexType, "data", "_data")
 make_attribute_wrapper(StringIndexType, "name", "_name")
+
+
+@overload_method(StringIndexType, "copy")
+def overload_string_index_copy(A):
+    return lambda A: bodo.hiframes.pd_index_ext.init_string_index(A._data.copy(), A._name)  # pragma: no cover
 
 
 @box(StringIndexType)

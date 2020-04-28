@@ -135,6 +135,19 @@ def test_series_constructor_int_arr():
     check_func(impl, (np.array([1, 4, 1, np.nan, 0], dtype=np.float32),))
 
 
+def test_series_copy_datetime_date():
+    """This test should go into the main series_val after the merging of setitem operations
+    """
+    def test_impl_deep(S):
+        return S.copy()
+    def test_impl_shallow(S):
+        return S.copy(deep=False)
+
+    series_val = pd.Series(pd.date_range(start="2018-04-24", end="2018-04-29", periods=5).date)
+    check_func(test_impl_deep, (series_val,))
+    check_func(test_impl_shallow, (series_val,))
+
+
 # using length of 5 arrays to enable testing on 3 ranks (2, 2, 1 distribution)
 # zero length chunks on any rank can cause issues, TODO: fix
 # TODO: other possible Series types like Categorical, dt64, td64, ...

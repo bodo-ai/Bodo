@@ -135,6 +135,29 @@ def test_index_values(index):
     check_func(impl, (index,))
 
 
+# Need to add the code and the check for the PeriodIndex
+# pd.PeriodIndex(year=[2015, 2016, 2018], month=[1, 2, 3], freq="M"),
+@pytest.mark.parametrize(
+    "index",
+    [
+        pd.Int64Index([10, 12]),
+        pd.Float64Index([10.1, 12.1]),
+        pd.UInt64Index([10, 12]),
+        pd.Index(["A", "B"]),
+        pd.RangeIndex(10),
+        # pd.RangeIndex(3, 10, 2), # TODO: support
+        pd.date_range(start="2018-04-24", end="2018-04-27", periods=3, name="A"),
+        pd.timedelta_range(start="1D", end="3D", name="A"),
+    ],
+)
+def test_index_copy(index):
+    def test_impl_copy(S):
+        return S.copy()
+
+    check_func(test_impl_copy, (index,))
+
+
+
 @pytest.fixture(
     params=[
         pd.date_range(start="2018-04-24", end="2018-04-27", periods=3),
