@@ -1345,7 +1345,7 @@ def test_series_min_max_int_output_type():
     """
 
     def impl1(S):
-        return S.max()
+        return S.min()
 
     def impl2(S):
         return S.max()
