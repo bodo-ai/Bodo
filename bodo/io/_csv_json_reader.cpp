@@ -524,13 +524,19 @@ static PyObject *chunk_reader(FileReader *f, size_t fsz, bool is_parallel,
         size_t n_lines_to_read = nrows != -1 ? nrows : tot_no_lines - skiprows;
         // TODO skiprows and nrows need testing
         // send start offset of rank 0
+        std::vector<size_t> list_off(2 + nranks);
+        size_t* list_off_ptr = list_off.data();
+        size_t idx_off=0;
         if (size_t(skiprows) > byte_first_line &&
             size_t(skiprows) <= byte_last_line) {
             size_t i_off = byte_offset +
                            line_offset[skiprows - byte_first_line - 1] +
                            1;  // +1 to skip/include leading/trailing newline
-            mpi_reqs.push_back(dist_isend(&i_off, 1, Bodo_CTypes::UINT64, 0,
+            list_off[idx_off] = i_off;
+            size_t* i_ptr = list_off_ptr + idx_off;
+            mpi_reqs.push_back(dist_isend(i_ptr, 1, Bodo_CTypes::UINT64, 0,
                                           START_OFFSET, true));
+            idx_off++;
         }
 
         // send end offset of rank n-1
@@ -539,8 +545,11 @@ static PyObject *chunk_reader(FileReader *f, size_t fsz, bool is_parallel,
             size_t i_off = byte_offset +
                            line_offset[nrows - byte_first_line - 1] +
                            1;  // +1 to skip/include leading/trailing newline
-            mpi_reqs.push_back(dist_isend(&i_off, 1, Bodo_CTypes::UINT64,
+            list_off[idx_off] = i_off;
+            size_t* i_ptr = list_off_ptr + idx_off;
+            mpi_reqs.push_back(dist_isend(i_ptr, 1, Bodo_CTypes::UINT64,
                                           nranks - 1, END_OFFSET, true));
+            idx_off++;
         }
 
         // We iterate through chunk boundaries (defined by line-numbers)
@@ -555,12 +564,15 @@ static PyObject *chunk_reader(FileReader *f, size_t fsz, bool is_parallel,
                 size_t i_off =
                     byte_offset + line_offset[i_bndry - byte_first_line - 1] +
                     1;  // +1 to skip/include leading/trailing newline
+                list_off[idx_off] = i_off;
+                size_t* i_ptr = list_off_ptr + idx_off;
                 // send to rank that starts at this boundary: i
-                mpi_reqs.push_back(dist_isend(&i_off, 1, Bodo_CTypes::UINT64, i,
+                mpi_reqs.push_back(dist_isend(i_ptr, 1, Bodo_CTypes::UINT64, i,
                                               START_OFFSET, true));
                 // send to rank that ends at this boundary: i-1
-                mpi_reqs.push_back(dist_isend(&i_off, 1, Bodo_CTypes::UINT64,
+                mpi_reqs.push_back(dist_isend(i_ptr, 1, Bodo_CTypes::UINT64,
                                               i - 1, END_OFFSET, true));
+                idx_off++;
             } else {
                 // if not and we past our chunk -> we stop
                 if (i_bndry > byte_last_line) break;
