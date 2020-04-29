@@ -166,7 +166,6 @@ def create_timedelta_field_overload(field):
         if not S_dt.stype.dtype == types.NPTimedelta("ns"):  # pragma: no cover
             return
         # TODO: refactor with TimedeltaIndex?
-        # TODO: NAs
         func_text = "def impl(S_dt):\n"
         func_text += "    S = S_dt._obj\n"
         func_text += "    A = bodo.hiframes.pd_series_ext.get_series_data(S)\n"
@@ -175,8 +174,11 @@ def create_timedelta_field_overload(field):
         func_text += "    numba.parfors.parfor.init_prange()\n"
         func_text += "    n = len(A)\n"
         # all timedelta fields return int64
-        func_text += "    B = np.empty(n, np.int64)\n"
+        func_text += "    B = bodo.libs.int_arr_ext.alloc_int_array(n, np.int64)\n"
         func_text += "    for i in numba.parfors.parfor.internal_prange(n):\n"
+        func_text += "        if bodo.libs.array_kernels.isna(A, i):\n"
+        func_text += "            bodo.ir.join.setitem_arr_nan(B, i)\n"
+        func_text += "            continue\n"
         func_text += "        td64 = bodo.hiframes.pd_timestamp_ext.timedelta64_to_integer(A[i])\n"
         if field == "nanoseconds":
             func_text += "        B[i] = td64 % 1000\n"
