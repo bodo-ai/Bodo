@@ -102,7 +102,9 @@ def create_date_field_overload(field):
         func_text += "    name = bodo.hiframes.pd_series_ext.get_series_name(S)\n"
         func_text += "    numba.parfors.parfor.init_prange()\n"
         func_text += "    n = len(arr)\n"
-        func_text += "    out_arr = bodo.libs.int_arr_ext.alloc_int_array(n, np.int64)\n"
+        func_text += (
+            "    out_arr = bodo.libs.int_arr_ext.alloc_int_array(n, np.int64)\n"
+        )
         func_text += "    for i in numba.parfors.parfor.internal_prange(n):\n"
         func_text += "        if bodo.libs.array_kernels.isna(arr, i):\n"
         func_text += "            bodo.ir.join.setitem_arr_nan(out_arr, i)\n"
@@ -243,7 +245,9 @@ def create_bin_op_overload(op):
                         ret_val = nat_int
                     else:
                         ret_val = op(int_time1, int_time2)
-                    S[i] = bodo.hiframes.pd_timestamp_ext.integer_to_dt64(ret_val)
+                    S[i] = bodo.hiframes.pd_timestamp_ext.integer_to_timedelta64(
+                        ret_val
+                    )
                 return bodo.hiframes.pd_series_ext.init_series(S, index, name)
 
             return impl

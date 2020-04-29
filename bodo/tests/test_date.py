@@ -158,6 +158,39 @@ def test_datetime_operations():
     check_func(test_max, (t2, t1))
 
 
+def test_dt64_sub_output():
+    """make sure output of Series(dt64) subtraction is Series(timedelta64) and supports
+    dt.days properly (from forecast code issue)
+    """
+
+    def impl(S1, S2):
+        return (S2 - S1).dt.days
+
+    S1 = pd.to_datetime(
+        pd.Series(
+            [
+                "2018-04-24 00:00:00",
+                None,
+                "2018-04-26 12:00:00",
+                "2018-04-27 18:00:00",
+                "2018-04-29 00:00:00",
+            ]
+        )
+    )
+    S2 = pd.to_datetime(
+        pd.Series(
+            [
+                "2018-04-20 00:00:00",
+                "2018-04-21 06:00:00",
+                "2018-04-22 12:00:00",
+                None,
+                "2018-04-25 00:00:00",
+            ]
+        )
+    )
+    check_func(impl, (S1, S2), check_dtype=False)
+
+
 def test_timestamp_constant_lowering():
     t = pd.Timestamp("2012-06-18")
 
