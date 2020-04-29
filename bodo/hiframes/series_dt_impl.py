@@ -102,8 +102,11 @@ def create_date_field_overload(field):
         func_text += "    name = bodo.hiframes.pd_series_ext.get_series_name(S)\n"
         func_text += "    numba.parfors.parfor.init_prange()\n"
         func_text += "    n = len(arr)\n"
-        func_text += "    out_arr = np.empty(n, np.int64)\n"
+        func_text += "    out_arr = bodo.libs.int_arr_ext.alloc_int_array(n, np.int64)\n"
         func_text += "    for i in numba.parfors.parfor.internal_prange(n):\n"
+        func_text += "        if bodo.libs.array_kernels.isna(arr, i):\n"
+        func_text += "            bodo.ir.join.setitem_arr_nan(out_arr, i)\n"
+        func_text += "            continue\n"
         func_text += (
             "        dt64 = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(arr[i])\n"
         )
