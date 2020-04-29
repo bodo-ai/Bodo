@@ -222,7 +222,7 @@ def create_bin_op_overload(op):
             nat = A1.dtype("NaT")
 
             def impl(A1, A2):  # pragma: no cover
-                numba.parfor.init_prange()
+                numba.parfors.parfor.init_prange()
                 arr1 = bodo.hiframes.pd_series_ext.get_series_data(A1)
                 index = bodo.hiframes.pd_series_ext.get_series_index(A1)
                 name = bodo.hiframes.pd_series_ext.get_series_name(A1)
@@ -231,7 +231,7 @@ def create_bin_op_overload(op):
                 S = numba.np.unsafe.ndarray.empty_inferred((n,))
                 nat_int = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(nat)
 
-                for i in numba.parfor.internal_prange(n):
+                for i in numba.parfors.parfor.internal_prange(n):
                     int_time1 = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(arr1[i])
                     int_time2 = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(arr2[i])
                     if int_time1 == nat_int or int_time2 == nat_int:
