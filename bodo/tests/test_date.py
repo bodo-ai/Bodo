@@ -672,7 +672,7 @@ def test_dt_extract(series_value, date_fields):
     exec(func_text, {}, loc_vars)
     impl = loc_vars["impl"]
 
-    check_func(impl, (series_value, date_fields))
+    check_func(impl, (series_value, date_fields), check_dtype=False)
 
 
 def test_dt_extract_date(series_value):
@@ -698,7 +698,7 @@ def test_dt_timedelta_fileds(timedelta_fields):
     impl = loc_vars["impl"]
 
     S = pd.timedelta_range("1s", "1d", freq="s").to_series()
-    check_func(impl, (S, timedelta_fields))
+    check_func(impl, (S, timedelta_fields), check_dtype=False)
 
 
 def test_series_dt64_timestamp_cmp():
