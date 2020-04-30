@@ -211,7 +211,12 @@ def gen_dti_field_impl(field):
     func_text += "    n = len(A)\n"
     # all datetimeindex fields return int64 same as Timestamp fields
     func_text += "    S = np.empty(n, np.int64)\n"
+    # TODO: use nullable int when supported by NumericIndex?
+    # func_text += "    S = bodo.libs.int_arr_ext.alloc_int_array(n, np.int64)\n"
     func_text += "    for i in numba.parfors.parfor.internal_prange(n):\n"
+    # func_text += "        if bodo.libs.array_kernels.isna(A, i):\n"
+    # func_text += "            bodo.ir.join.setitem_arr_nan(S, i)\n"
+    # func_text += "            continue\n"
     func_text += "        dt64 = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(A[i])\n"
     func_text += "        ts = bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(dt64)\n"
     func_text += "        S[i] = ts." + field + "\n"
@@ -829,7 +834,12 @@ def gen_tdi_field_impl(field):
     func_text += "    n = len(A)\n"
     # all timedeltaindex fields return int64 same as Timestamp fields
     func_text += "    S = np.empty(n, np.int64)\n"
+    # TODO: use nullable int when supported by NumericIndex?
+    # func_text += "    S = bodo.libs.int_arr_ext.alloc_int_array(n, np.int64)\n"
     func_text += "    for i in numba.parfors.parfor.internal_prange(n):\n"
+    # func_text += "        if bodo.libs.array_kernels.isna(A, i):\n"
+    # func_text += "            bodo.ir.join.setitem_arr_nan(S, i)\n"
+    # func_text += "            continue\n"
     func_text += (
         "        td64 = bodo.hiframes.pd_timestamp_ext.timedelta64_to_integer(A[i])\n"
     )

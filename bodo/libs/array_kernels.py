@@ -79,7 +79,7 @@ def isna(arr, i):  # pragma: no cover
 
 
 @overload(isna)
-def isna_overload(arr, i):
+def overload_isna(arr, i):
     # String array
     if arr in (string_array_type, list_string_array_type):
         return lambda arr, i: bodo.libs.str_arr_ext.str_arr_is_na(arr, i)  # pragma: no cover
@@ -108,9 +108,7 @@ def isna_overload(arr, i):
 
     # NaT for dt64
     if isinstance(dtype, (types.NPDatetime, types.NPTimedelta)):
-        nat = dtype("NaT")
-        # TODO: replace with np.isnat
-        return lambda arr, i: arr[i] == nat  # pragma: no cover
+        return lambda arr, i: np.isnat(arr[i])  # pragma: no cover
 
     # XXX integers don't have nans, extend to boolean
     return lambda arr, i: False

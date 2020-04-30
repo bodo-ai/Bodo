@@ -110,6 +110,7 @@ no_side_effect_call_tuples = {
     ("full", np),
     ("round", np),
     ("isnan", np),
+    ("isnat", np),
     # Numba
     ("internal_prange", "parfor", numba),
     ("internal_prange", "parfor", "parfors", numba),

@@ -1144,15 +1144,9 @@ class SeriesPass:
             ind = rhs.args[1]
             arr_typ = self.typemap[arr.name]
             if isinstance(arr_typ, types.Array):
-                if isinstance(arr_typ.dtype, types.Float):
-                    func = lambda arr, i: np.isnan(arr[i])
-                    return self._replace_func(func, [arr, ind])
-                elif isinstance(arr_typ.dtype, (types.NPDatetime, types.NPTimedelta)):
-                    nat = arr_typ.dtype("NaT")
-                    # TODO: replace with np.isnat
-                    return self._replace_func(lambda arr, i: arr[i] == nat, [arr, ind])
-                elif isinstance(arr_typ.dtype, (types.Integer, types.Boolean)):
-                    return self._replace_func(lambda arr, i: False, [arr, ind])
+                arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
+                impl = bodo.libs.array_kernels.overload_isna(*arg_typs)
+                return self._replace_func(impl, rhs.args)
             return [assign]
 
         if fdef == ("gen_na_array", "bodo.libs.array_kernels"):
@@ -1406,9 +1400,11 @@ class SeriesPass:
                 assign, assign.target, rhs, func_mod, func_name
             )
 
-        if isinstance(func_mod, ir.Var) and isinstance(
-            self.typemap[func_mod.name], DatetimeIndexType
-        ) and func_name in {"min", "max"}:
+        if (
+            isinstance(func_mod, ir.Var)
+            and isinstance(self.typemap[func_mod.name], DatetimeIndexType)
+            and func_name in {"min", "max"}
+        ):
             rhs.args.insert(0, func_mod)
             arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
             kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
