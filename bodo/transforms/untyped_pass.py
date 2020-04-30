@@ -564,12 +564,20 @@ class UntypedPass:
         # coerce_float=True, params=None, parse_dates=None,
         # columns=None, chunksize=None
         kws = dict(rhs.kws)
-        sql = self._get_const_arg(
-            "read_sql", rhs.args, kws, 0, "sql"
-        )  # The sql request has to be constant
-        con = self._get_const_arg(
-            "read_sql", rhs.args, kws, 1, "con", ""
-        )  # the connection.
+        sql_var = get_call_expr_arg("read_sql", rhs.args, kws, 0, "sql")
+        # The sql request has to be constant
+        msg = (
+            "pd.read_sql() requires 'sql' argument to be a constant string or an "
+            "argument to the JIT function currently"
+        )
+        sql_const = get_str_const_value(sql_var, self.func_ir, msg, arg_types=self.args)
+        con_var = get_call_expr_arg("read_sql", rhs.args, kws, 1, "con", "")
+        msg = (
+            "pd.read_sql() requires 'con' argument to be a constant string or an "
+            "argument to the JIT function currently"
+        )
+        # the connection string has to be constant
+        con_const = get_str_const_value(con_var, self.func_ir, msg, arg_types=self.args)
         index_col = self._get_const_arg(
             "read_sql", rhs.args, kws, 2, "index_col", default=-1
         )
@@ -608,8 +616,8 @@ class UntypedPass:
         # Ideally, we would like to access from just one processor during
         # the compilation stage.
         rows_to_read = 100  # TODO: tune this
-        sql_call = "(" + sql + ") LIMIT 100"
-        df = pd.read_sql(sql_call, con,)
+        sql_call = f"({sql_const}) LIMIT {rows_to_read}"
+        df = pd.read_sql(sql_call, con_const)
         dtypes = numba.typeof(df).data
 
         dtype_map = {c: dtypes[i] for i, c in enumerate(df.columns)}
@@ -625,7 +633,7 @@ class UntypedPass:
 
         nodes = [
             sql_ext.SqlReader(
-                sql, con, lhs.name, columns, data_arrs, out_types, lhs.loc,
+                sql_const, con_const, lhs.name, columns, data_arrs, out_types, lhs.loc,
             )
         ]
 
@@ -664,7 +672,6 @@ class UntypedPass:
         )
         loc_vars = {}
         exec(func_text, {}, loc_vars)
-        # print(func_text)
         _init_df = loc_vars["_init_df"]
 
         nodes += compile_func_single_block(_init_df, data_arrs, lhs)
