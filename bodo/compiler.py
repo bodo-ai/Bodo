@@ -15,7 +15,10 @@ from bodo.transforms.typing_pass import BodoTypeInference
 import numba
 from numba.core.compiler import DefaultPassBuilder
 from numba.core.compiler_machinery import (
-    FunctionPass, AnalysisPass, register_pass, PassManager
+    FunctionPass,
+    AnalysisPass,
+    register_pass,
+    PassManager,
 )
 from numba.core.untyped_passes import WithLifting, ReconstructSSA
 
@@ -41,6 +44,7 @@ import bodo.hiframes.dataframe_indexing  # side effect: initialize Numba extensi
 import bodo.utils
 import bodo.utils.typing
 import bodo.io
+
 # required for _compile_for_args defined below (can be removed once the
 # function is fixed in numba)
 from numba.core import types, errors
@@ -50,15 +54,8 @@ from numba.core.typing.typeof import Purpose, typeof
 if config._has_h5py:
     from bodo.io import h5
 
-# workaround for Numba #3876 issue with large labels in mortgage benchmark
-from llvmlite import binding
 
-binding.set_option("tmp", "-non-global-value-max-name-size=2048")
-
-
-from numba.core.errors import NumbaPerformanceWarning
-
-warnings.simplefilter("ignore", category=NumbaPerformanceWarning)
+numba.core.config.DISABLE_PERFORMANCE_WARNINGS = 1
 
 
 # global flag for whether all Bodo functions should be inlined
@@ -404,7 +401,7 @@ def _compile_for_args(self, *args, **kws):  # pragma: no cover
         """
         if numba.core.config.SHOW_HELP:
             help_msg = errors.error_extras[issue_type]
-            e.patch_message('\n'.join((str(e).rstrip(), help_msg)))
+            e.patch_message("\n".join((str(e).rstrip(), help_msg)))
         if numba.core.config.FULL_TRACEBACKS:
             raise e
         else:
@@ -422,23 +419,27 @@ def _compile_for_args(self, *args, **kws):  # pragma: no cover
         # Received request for compiler re-entry with the list of arguments
         # indicated by e.requested_args.
         # First, check if any of these args are already Literal-ized
-        already_lit_pos = [i for i in e.requested_args
-                           if isinstance(args[i], types.Literal)]
+        already_lit_pos = [
+            i for i in e.requested_args if isinstance(args[i], types.Literal)
+        ]
         if already_lit_pos:
             # Abort compilation if any argument is already a Literal.
             # Letting this continue will cause infinite compilation loop.
-            m = ("Repeated literal typing request.\n"
-                 "{}.\n"
-                 "This is likely caused by an error in typing. "
-                 "Please see nested and suppressed exceptions.")
-            info = ', '.join('Arg #{} is {}'.format(i, args[i])
-                             for i in  sorted(already_lit_pos))
+            m = (
+                "Repeated literal typing request.\n"
+                "{}.\n"
+                "This is likely caused by an error in typing. "
+                "Please see nested and suppressed exceptions."
+            )
+            info = ", ".join(
+                "Arg #{} is {}".format(i, args[i]) for i in sorted(already_lit_pos)
+            )
             raise errors.CompilerError(m.format(info))
         # Convert requested arguments into a Literal.
-        args = [(types.literal
-                 if i in e.requested_args
-                 else lambda x: x)(args[i])
-                for i, v in enumerate(args)]
+        args = [
+            (types.literal if i in e.requested_args else lambda x: x)(args[i])
+            for i, v in enumerate(args)
+        ]
         # Re-enter compilation with the Literal-ized arguments
         return self._compile_for_args(*args)
 
@@ -447,7 +448,9 @@ def _compile_for_args(self, *args, **kws):  # pragma: no cover
         # that failed inferencing as a Numba type
         failed_args = []
         for i, arg in enumerate(args):
-            val = arg.value if isinstance(arg, numba.core.dispatcher.OmittedArg) else arg
+            val = (
+                arg.value if isinstance(arg, numba.core.dispatcher.OmittedArg) else arg
+            )
             try:
                 tp = typeof(val, Purpose.argument)
             except ValueError as typeof_exc:
@@ -455,34 +458,37 @@ def _compile_for_args(self, *args, **kws):  # pragma: no cover
             else:
                 if tp is None:
                     failed_args.append(
-                        (i,
-                         "cannot determine Numba type of value %r" % (val,)))
+                        (i, "cannot determine Numba type of value %r" % (val,))
+                    )
         if failed_args:
             # Patch error message to ease debugging
             msg = str(e).rstrip() + (
                 "\n\nThis error may have been caused by the following argument(s):\n%s\n"
-                % "\n".join("- argument %d: %s" % (i, err)
-                            for i, err in failed_args))
+                % "\n".join("- argument %d: %s" % (i, err) for i, err in failed_args)
+            )
             e.patch_message(msg)
 
-        error_rewrite(e, 'typing')
+        error_rewrite(e, "typing")
     except errors.UnsupportedError as e:
         # Something unsupported is present in the user code, add help info
-        error_rewrite(e, 'unsupported_error')
-    except (errors.NotDefinedError, errors.RedefinedError,
-            errors.VerificationError) as e:
+        error_rewrite(e, "unsupported_error")
+    except (
+        errors.NotDefinedError,
+        errors.RedefinedError,
+        errors.VerificationError,
+    ) as e:
         # These errors are probably from an issue with either the code supplied
         # being syntactically or otherwise invalid
-        error_rewrite(e, 'interpreter')
+        error_rewrite(e, "interpreter")
     except errors.ConstantInferenceError as e:
         # this is from trying to infer something as constant when it isn't
         # or isn't supported as a constant
-        error_rewrite(e, 'constant_inference')
+        error_rewrite(e, "constant_inference")
     except Exception as e:
         if numba.core.config.SHOW_HELP:
-            if hasattr(e, 'patch_message'):
-                help_msg = errors.error_extras['reportable']
-                e.patch_message('\n'.join((str(e).rstrip(), help_msg)))
+            if hasattr(e, "patch_message"):
+                help_msg = errors.error_extras["reportable"]
+                e.patch_message("\n".join((str(e).rstrip(), help_msg)))
         # ignore the FULL_TRACEBACKS config, this needs reporting!
         raise e
     finally:
