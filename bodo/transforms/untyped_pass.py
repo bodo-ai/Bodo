@@ -616,7 +616,7 @@ class UntypedPass:
         # Ideally, we would like to access from just one processor during
         # the compilation stage.
         rows_to_read = 100  # TODO: tune this
-        sql_call = f"({sql_const}) LIMIT {rows_to_read}"
+        sql_call = f"select * from ({sql_const}) x LIMIT {rows_to_read}"
         df = pd.read_sql(sql_call, con_const)
         dtypes = numba.typeof(df).data
 
