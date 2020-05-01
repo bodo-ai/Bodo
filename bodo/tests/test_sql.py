@@ -49,3 +49,16 @@ def test_sql_hardcoded_twocol_aws():
 
     bodo_impl = bodo.jit(test_impl)
     frame = bodo_impl()
+
+
+def test_sql_argument_passing():
+    """Test passing SQL query and connection as arguments
+    """
+
+    def test_impl(sql_request, conn):
+        df = pd.read_sql(sql_request, conn)
+        return df
+
+    sql_request = "select * from employees"
+    conn = "mysql+pymysql://admin:Bodosql2#@bodosqldb.cutkvh6do3qv.us-east-1.rds.amazonaws.com/employees"
+    check_func(test_impl, (sql_request, conn))
