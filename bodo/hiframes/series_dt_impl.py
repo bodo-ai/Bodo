@@ -240,7 +240,7 @@ def create_bin_op_overload(op):
                 name = bodo.hiframes.pd_series_ext.get_series_name(A1)
                 arr2 = bodo.hiframes.pd_series_ext.get_series_data(A2)
                 n = len(arr1)
-                S = np.empty(n, dt64_dtype)
+                S = np.empty(n, timedelta64_dtype)
                 nat_int = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(nat)
 
                 for i in numba.parfors.parfor.internal_prange(n):
