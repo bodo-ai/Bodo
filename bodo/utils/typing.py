@@ -144,7 +144,9 @@ def is_overload_constant_int(val):
 
 
 def is_overload_bool_list(val):
-    return isinstance(val, numba.core.types.List) and isinstance(val.dtype, types.Boolean)
+    return isinstance(val, numba.core.types.List) and isinstance(
+        val.dtype, types.Boolean
+    )
 
 
 def is_overload_true(val):
@@ -881,3 +883,13 @@ types.Set.__init__ = Set__init__
 def eq_str(context, builder, sig, args):
     func = numba.cpython.unicode.unicode_eq(*sig.args)
     return context.compile_internal(builder, func, sig, args)
+
+
+def create_unsupported_overload(fname):
+    """Create an overload for unsupported function 'fname' that raises BodoError
+    """
+
+    def overload_f(*a, **kws):
+        raise BodoError("{} not supported yet".format(fname))
+
+    return overload_f

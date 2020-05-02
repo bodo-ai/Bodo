@@ -66,6 +66,7 @@ from bodo.utils.typing import (
     check_unsupported_args,
     ensure_constant_arg,
     ensure_constant_values,
+    create_unsupported_overload,
 )
 from bodo.utils.transform import get_const_func_output_type
 from bodo.utils.conversion import index_to_array
@@ -2898,3 +2899,60 @@ def handle_inplace_df_type_change(inplace, _bodo_transformed, func_name):
         raise Exception(
             "DataFrame.{}(): transform necessary for inplace".format(func_name)
         )
+
+
+# Throw BodoError for top-level unsupported functions in Pandas
+pd_unsupported = (
+    # Input/output
+    pd.read_pickle,
+    pd.read_table,
+    pd.read_fwf,
+    pd.read_clipboard,
+    pd.ExcelWriter,
+    pd.json_normalize,
+    pd.read_html,
+    pd.read_hdf,
+    pd.read_feather,
+    pd.read_orc,  # TODO: support
+    pd.read_sas,
+    pd.read_spss,
+    pd.read_sql_table,
+    pd.read_sql_query,
+    pd.read_gbq,
+    pd.read_stata,
+    # General functions
+    ## Data manipulations
+    pd.melt,
+    pd.pivot,
+    pd.cut,
+    pd.qcut,
+    pd.merge_ordered,
+    pd.get_dummies,
+    pd.factorize,
+    pd.wide_to_long,
+    ## Top-level dealing with datetimelike
+    pd.bdate_range,
+    pd.period_range,
+    pd.timedelta_range,
+    pd.infer_freq,
+    ## Top-level dealing with intervals
+    pd.interval_range,
+    ## Top-level evaluation
+    pd.eval,
+    ## Hashing
+    pd.util.hash_array,
+    pd.util.hash_pandas_object,
+    # Testing
+    pd.test,
+)
+
+
+def _install_pd_unsupported():
+    """install an overload that raises BodoError for unsupported functions
+    """
+    for f in pd_unsupported:
+        fname = "pd." + f.__name__
+        overload(f)(create_unsupported_overload(fname))
+
+
+_install_pd_unsupported()
