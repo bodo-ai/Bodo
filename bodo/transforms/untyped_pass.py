@@ -610,21 +610,13 @@ class UntypedPass:
                 "read_sql() arguments {} not supported yet".format(unsupported_args)
             )
 
-        # Computation of the dtypes
+        # find df type
+        df_type = _get_sql_df_type_from_db(sql_const, con_const)
+        dtypes = df_type.data
+        dtype_map = {c: dtypes[i] for i, c in enumerate(df_type.columns)}
+        col_names = [c for c in df_type.columns]
 
-        # During compilation step, all processor access to the database
-        # Ideally, we would like to access from just one processor during
-        # the compilation stage.
-        rows_to_read = 100  # TODO: tune this
-        sql_call = f"select * from ({sql_const}) x LIMIT {rows_to_read}"
-        df = pd.read_sql(sql_call, con_const)
-        dtypes = numba.typeof(df).data
-
-        dtype_map = {c: dtypes[i] for i, c in enumerate(df.columns)}
-        col_names = [c for c in df.columns]
-
-        # The dates.
-
+        # date columns
         date_cols = []
 
         columns, data_arrs, out_types = self._get_read_file_col_info(
@@ -1764,6 +1756,24 @@ def remove_dead_branches(func_ir):
     cfg = compute_cfg_from_blocks(func_ir.blocks)
     for dead in cfg.dead_nodes():
         del func_ir.blocks[dead]
+
+
+def _get_sql_df_type_from_db(sql_const, con_const):
+    """access the database to find df type for read_sql() output.
+    Only rank zero accesses the database, then broadcasts.
+    """
+    from mpi4py import MPI
+    comm = MPI.COMM_WORLD
+
+    df_type = None
+    if bodo.get_rank() == 0:
+        rows_to_read = 100  # TODO: tune this
+        sql_call = f"select * from ({sql_const}) x LIMIT {rows_to_read}"
+        df = pd.read_sql(sql_call, con_const)
+        df_type = numba.typeof(df)
+
+    df_type = comm.bcast(df_type)
+    return df_type
 
 
 def _get_csv_df_type_from_file(fname_const, sep, skiprows, header):
