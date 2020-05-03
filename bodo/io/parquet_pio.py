@@ -524,7 +524,23 @@ def get_parquet_dataset(file_name):
 
 
 def parquet_file_schema(file_name, selected_columns):
+    """get parquet schema info from file, only on rank 0.
+    """
+    from mpi4py import MPI
 
+    comm = MPI.COMM_WORLD
+
+    info = None
+    if bodo.get_rank() == 0:
+        info = _parquet_file_schema_inner(file_name, selected_columns)
+
+    info = comm.bcast(info)
+    return info
+
+
+def _parquet_file_schema_inner(file_name, selected_columns):
+    """get parquet schema from file using Parquet dataset and Arrow APIs
+    """
     col_names = []
     col_types = []
 
