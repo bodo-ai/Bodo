@@ -1119,22 +1119,13 @@ class UntypedPass:
                 )
             # TODO: more error checking needed
 
-            json_reader = pd.read_json(
-                fname_const,
-                orient=orient,
-                convert_dates=convert_dates,
-                precise_float=precise_float,
-                lines=lines,
-                chunksize=10,  # only reading the first 10 rows
+            df_type = _get_json_df_type_from_file(
+                fname_const, orient, convert_dates, precise_float, lines
             )
 
-            df = json_reader.__next__()
-
-            # TODO: categorical, etc.
-            # TODO: Integer NA case: sample data might not include NA
-            dtypes = numba.typeof(df).data
+            dtypes = df_type.data
             # convert Pandas generated integer names if any
-            col_names = [str(df.columns[i]) for i in range(len(dtypes))]
+            col_names = [str(df_type.columns[i]) for i in range(len(dtypes))]
             dtype_map = {c: dtypes[i] for i, c in enumerate(col_names)}
         else:  # handle dtype arg if provided
             dtype_map = guard(get_definition, self.func_ir, dtype_var)
@@ -1748,6 +1739,38 @@ def remove_dead_branches(func_ir):
     cfg = compute_cfg_from_blocks(func_ir.blocks)
     for dead in cfg.dead_nodes():
         del func_ir.blocks[dead]
+
+
+def _get_json_df_type_from_file(
+    fname_const, orient, convert_dates, precise_float, lines
+):
+    """get dataframe type for read_json() using file path constant.
+    Only rank 0 looks at the file to infer df type, then broadcasts.
+    """
+    from mpi4py import MPI
+
+    comm = MPI.COMM_WORLD
+
+    df_type = None
+    if bodo.get_rank() == 0:
+        rows_to_read = 100  # TODO: tune this
+        json_reader = pd.read_json(
+            fname_const,
+            orient=orient,
+            convert_dates=convert_dates,
+            precise_float=precise_float,
+            lines=lines,
+            chunksize=rows_to_read,
+        )
+
+        df = next(json_reader)
+
+        # TODO: categorical, etc.
+        # TODO: Integer NA case: sample data might not include NA
+        df_type = numba.typeof(df)
+
+    df_type = comm.bcast(df_type)
+    return df_type
 
 
 def _get_excel_df_type_from_file(
