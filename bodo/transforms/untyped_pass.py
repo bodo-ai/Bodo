@@ -771,18 +771,10 @@ class UntypedPass:
             fname_const = get_str_const_value(
                 fname_var, self.func_ir, msg, arg_types=self.args
             )
-            rows_to_read = 100  # TODO: tune this
-            df = pd.read_excel(
-                fname_const,
-                sheet_name=sheet_name,
-                nrows=rows_to_read,
-                skiprows=skiprows,
-                header=header,
-                # index_col=index_col,
-                comment=comment,
-                parse_dates=date_cols,
+
+            df_type = _get_excel_df_type_from_file(
+                fname_const, sheet_name, skiprows, header, comment, date_cols
             )
-            df_type = numba.typeof(df)
 
         else:
             dtype_map = guard(get_definition, self.func_ir, dtype_var)
@@ -1758,11 +1750,41 @@ def remove_dead_branches(func_ir):
         del func_ir.blocks[dead]
 
 
+def _get_excel_df_type_from_file(
+    fname_const, sheet_name, skiprows, header, comment, date_cols
+):
+    """get dataframe type for read_excel() using file path constant.
+    Only rank 0 looks at the file to infer df type, then broadcasts.
+    """
+    from mpi4py import MPI
+
+    comm = MPI.COMM_WORLD
+
+    df_type = None
+    if bodo.get_rank() == 0:
+        rows_to_read = 100  # TODO: tune this
+        df = pd.read_excel(
+            fname_const,
+            sheet_name=sheet_name,
+            nrows=rows_to_read,
+            skiprows=skiprows,
+            header=header,
+            # index_col=index_col,
+            comment=comment,
+            parse_dates=date_cols,
+        )
+        df_type = numba.typeof(df)
+
+    df_type = comm.bcast(df_type)
+    return df_type
+
+
 def _get_sql_df_type_from_db(sql_const, con_const):
     """access the database to find df type for read_sql() output.
     Only rank zero accesses the database, then broadcasts.
     """
     from mpi4py import MPI
+
     comm = MPI.COMM_WORLD
 
     df_type = None
@@ -1781,17 +1803,14 @@ def _get_csv_df_type_from_file(fname_const, sep, skiprows, header):
     Only rank 0 looks at the file to infer df type, then broadcasts.
     """
     from mpi4py import MPI
+
     comm = MPI.COMM_WORLD
 
     df_type = None
     if bodo.get_rank() == 0:
         rows_to_read = 100  # TODO: tune this
         df = pd.read_csv(
-            fname_const,
-            sep=sep,
-            nrows=rows_to_read,
-            skiprows=skiprows,
-            header=header,
+            fname_const, sep=sep, nrows=rows_to_read, skiprows=skiprows, header=header,
         )
         # TODO: categorical, etc.
         # TODO: Integer NA case: sample data might not include NA
