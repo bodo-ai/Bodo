@@ -327,26 +327,14 @@ extern "C" void PyInit_csv(PyObject *m) {
     //                        PyLong_FromVoidPtr((void*)(&csv_string_chunk_reader)));
 }
 
-PyMODINIT_FUNC PyInit_json_cpp(void) {
-    PyObject *m;
-    static struct PyModuleDef moduledef = {
-        PyModuleDef_HEAD_INIT, "json_cpp", "No docs", -1, NULL,
-    };
-    m = PyModule_Create(&moduledef);
-    if (m == NULL) return NULL;
-
-    if (!(PyType_Ready(&stream_reader_type) < 0)) {
-        Py_INCREF(&stream_reader_type);
-        PyModule_AddObject(m, "StreamReader", (PyObject *)&stream_reader_type);
-    }
+extern "C" void PyInit_json(PyObject *m) {
+    if (PyType_Ready(&stream_reader_type) < 0) return;
+    Py_INCREF(&stream_reader_type);
+    PyModule_AddObject(m, "StreamReader", (PyObject *)&stream_reader_type);
     PyObject_SetAttrString(
         m, "json_file_chunk_reader",
         PyLong_FromVoidPtr((void *)(&json_file_chunk_reader)));
-
-    return m;
 }
-
-extern "C" void PyInit_json(PyObject *m) {}
 
 // ***********************************************************************************
 // C interface for getting the file-like chunk reader

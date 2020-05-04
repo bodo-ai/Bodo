@@ -1,4 +1,9 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
+"""Top-level init file for bodo package
+"""
+# NOTE: 'numba_compat' has to be imported first in bodo package to make sure all Numba
+# patches are applied before Bodo's Numba use (e.g. 'overload' is replaced properly)
+import bodo.numba_compat
 import numba
 
 # re-export from Numba
@@ -36,7 +41,7 @@ from bodo.libs.distributed_api import (
 from bodo.libs.str_ext import string_type
 from bodo.libs.str_arr_ext import string_array_type
 from numba.core.types import List
-from bodo.utils.utils import cprint, distribution_report
+from bodo.utils.utils import cprint
 import bodo.compiler
 import bodo.io
 import bodo.io.np_io

@@ -8,6 +8,9 @@
 // CSV exports some stuff to the io module
 extern "C" void PyInit_csv(PyObject *);
 
+// JSON exports some stuff to the io module
+extern "C" void PyInit_json(PyObject *);
+
 /**
  * Split file into chunks and return a file-like object per rank. The returned
  *object

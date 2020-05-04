@@ -1782,21 +1782,3 @@ def _check_type(val, typ):
     if isinstance(typ, list):
         return any(isinstance(val, t) for t in typ)
     return isinstance(val, typ)
-
-
-# replace Numba's dictionary item checking to allow constant list/dict
-numba_sentry_forbidden_types = numba.core.types.containers._sentry_forbidden_types
-
-
-def bodo_sentry_forbidden_types(key, value):
-    from bodo.utils.typing import ConstDictType, ConstList
-
-    if isinstance(key, (ConstDictType, ConstList)) or isinstance(
-        value, (ConstDictType, ConstList)
-    ):
-        return
-
-    numba_sentry_forbidden_types(key, value)
-
-
-numba.core.types.containers._sentry_forbidden_types = bodo_sentry_forbidden_types

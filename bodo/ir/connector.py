@@ -18,7 +18,6 @@ from bodo.hiframes.datetime_date_ext import DatetimeDateType
 from bodo.transforms import distributed_pass, distributed_analysis
 from bodo.utils.utils import debug_prints
 from bodo.transforms.distributed_analysis import Distribution
-from bodo.libs.str_ext import string_type
 from bodo.libs.str_arr_ext import string_array_type
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.bool_arr_ext import boolean_array

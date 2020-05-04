@@ -17,11 +17,11 @@ In addition:
 * Filtering data frames using boolean arrays is supported
   (e.g. ``df[df.A > .5]``).
 
-
+.. _pandas-f-in:
 Input/Output
 ~~~~~~~~~~~~
 
-Also see :ref:`S3` and :ref:`HDFS` configuration requirements.
+Also see :ref:`S3` and :ref:`HDFS` configuration requirements and more on :ref:`file_io`.
 
 * :func:`pandas.read_csv`
 
@@ -56,7 +56,6 @@ Also see :ref:`S3` and :ref:`HDFS` configuration requirements.
   * Argument ``index_col`` is supported.
   * Arguments ``chunksize``, ``column``, ``coerce_float``, ``params`` are not supported.
 
-
 * :func:`pandas.read_parquet`
 
   * :ref:`example usage and more system specific instructions <parquet-section>`
@@ -71,6 +70,15 @@ Also see :ref:`S3` and :ref:`HDFS` configuration requirements.
         df = pd.read_parquet(f)
         return df
 
+* :func:`pandas.read_json`
+
+  * :ref:`Example usage and more system specific instructions <json-section>`
+  * Only supports reading `JSON Lines text file format <http://jsonlines.org/>`_ (``pd.read_json(filepath_or_buffer, orient='records', lines=True)``) and regular multi-line JSON file(``pd.read_json(filepath_or_buffer, orient='records', lines=False)``).
+  * Argument ``filepath_or_buffer`` is supported: it can point to a single JSON file, or a directory containing multiple partitioned JSON files. When reading a directory, the JSON files inside the directory must be `JSON Lines text file format <http://jsonlines.org/>`_.
+  * Argument ``orient = 'records'`` is used as default, instead of Pandas' default ``'columns'`` for dataframes. ``'records'`` is the only supported value for ``orient``.
+  * Argument ``typ`` is supported. ``'frame'`` is the only supported value for ``typ``.
+  * ``dtype`` argument should be provided to enable type inference, or ``filepath_or_buffer`` should be a constant string for Bodo to infer types by looking at the file at compile time (only supported when reading a single JSON file from POSIX, and ``lines=True``).
+  * Arguments ``convert_dates``, ``precise_float``, ``lines`` are supported.
 
 General functions
 ~~~~~~~~~~~~~~~~~
@@ -86,7 +94,7 @@ Data manipulations:
 * :func:`pandas.merge`
 
   * Arguments ``left``, ``right`` should be dataframes.
-  * `how`, `on`, `left_on`, `right_on`, `left_index`,
+  * ``how``, ``on``, ``left_on``, ``right_on``, ``left_index``,
     and `right_index` are supported but should be constant values.
   * The output dataframe is not sorted by default for better parallel performance (Pandas may preserve key order depending on `how`). 
     One can use explicit sort if needed.
@@ -212,6 +220,8 @@ Statistical functions below are supported without optional arguments
 unless support is explicitly mentioned.
 
 * :meth:`pandas.Series.abs`
+* :meth:`pandas.Series.all` only default arguments supported
+* :meth:`pandas.Series.any` only default arguments supported
 * :meth:`pandas.Series.corr`
 * :meth:`pandas.Series.count`
 * :meth:`pandas.Series.cov`
@@ -244,7 +254,11 @@ Reindexing / Selection / Label manipulation:
 * :meth:`pandas.Series.head` (`n` argument is supported)
 * :meth:`pandas.Series.idxmax`
 * :meth:`pandas.Series.idxmin`
+* :meth:`pandas.Series.isin`
+  `values` argument supports both distributed array/Series and replicated list/array/Series
 * :meth:`pandas.Series.rename` (only set a new name using a string value)
+* :meth:`pandas.Series.reset_index` only default arguments supported.
+  Also, requires Index name to be known at compilation time.
 * :meth:`pandas.Series.tail` (`n` argument is supported)
 * :meth:`pandas.Series.take`
 
@@ -452,6 +466,14 @@ Time series-related:
 * :meth:`pandas.DataFrame.shift` (supports numeric types and
   only the `periods` argument supported)
 
+.. _pandas-f-out:
+Serialization / IO / conversion:
+
+Also see :ref:`S3` and :ref:`HDFS` configuration requirements and more on :ref:`file_io`.
+
+* :meth:`pandas.DataFrame.to_parquet`
+* :meth:`pandas.DataFrame.to_csv`
+* :meth:`pandas.DataFrame.to_json`
 
 Numeric Index
 ~~~~~~~~~~~~~
