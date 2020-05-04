@@ -284,7 +284,7 @@ ext_csv = Extension(
         "bodo/io/_io.cpp",
         "bodo/io/_fs_io.cpp",
         "bodo/io/_csv_json_reader.cpp",
-        "bodo/io/_csv_writer.cpp",
+        "bodo/io/_csv_json_writer.cpp",
     ],
     depends=[
         "bodo/libs/_bodo_common.h",
@@ -306,7 +306,12 @@ ext_csv = Extension(
 
 ext_json = Extension(
     name="bodo.io.json_cpp",
-    sources=["bodo/io/_fs_io.cpp", "bodo/io/_csv_json_reader.cpp",],
+    sources=[
+        "bodo/io/_io.cpp",
+        "bodo/io/_fs_io.cpp",
+        "bodo/io/_csv_json_reader.cpp",
+        "bodo/io/_csv_json_writer.cpp",
+    ],
     depends=[
         "bodo/libs/_bodo_common.h",
         "bodo/libs/_bodo_common.cpp",

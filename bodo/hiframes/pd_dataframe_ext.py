@@ -77,7 +77,7 @@ from bodo.libs.str_arr_ext import string_array_type, str_arr_from_sequence
 from bodo.libs.bool_arr_ext import boolean_array
 from bodo.hiframes.pd_index_ext import is_pd_index_type
 from bodo.hiframes.pd_multi_index_ext import MultiIndexType
-from bodo.io import csv_cpp
+from bodo.io import csv_cpp, json_cpp
 import llvmlite.binding as ll
 
 
@@ -86,6 +86,14 @@ _csv_write = types.ExternalFunction(
     types.void(types.voidptr, types.voidptr, types.int64, types.int64, types.bool_),
 )
 ll.add_symbol("csv_write", csv_cpp.csv_write)
+
+_json_write = types.ExternalFunction(
+    "json_write",
+    types.void(
+        types.voidptr, types.voidptr, types.int64, types.int64, types.bool_, types.bool_
+    ),
+)
+ll.add_symbol("json_write", json_cpp.json_write)
 
 
 class DataFrameType(types.ArrayCompatible):  # TODO: IterableType over column names
@@ -2879,6 +2887,95 @@ def to_csv_overload(
                 decimal,
             )
         _csv_write(path_or_buf._data, D._data, 0, len(D), False)
+
+    return _impl
+
+
+@overload_method(DataFrameType, "to_json")
+def to_json_overload(
+    df,
+    path_or_buf=None,
+    orient="columns",
+    date_format=None,
+    double_precision=10,
+    force_ascii=True,
+    date_unit="ms",
+    default_handler=None,
+    lines=False,
+    compression="infer",
+    index=True,
+    indent=None,
+):
+    # TODO: refactor when objmode() can understand global string constant
+    # String output case
+    if path_or_buf is None or path_or_buf == types.none:
+
+        def _impl(
+            df,
+            path_or_buf=None,
+            orient="columns",
+            date_format=None,
+            double_precision=10,
+            force_ascii=True,
+            date_unit="ms",
+            default_handler=None,
+            lines=False,
+            compression="infer",
+            index=True,
+            indent=None,
+        ):  # pragma: no cover
+            with numba.objmode(D="unicode_type"):
+                D = df.to_json(
+                    path_or_buf,
+                    orient,
+                    date_format,
+                    double_precision,
+                    force_ascii,
+                    date_unit,
+                    default_handler,
+                    lines,
+                    compression,
+                    index,
+                    indent,
+                )
+            return D
+
+        return _impl
+
+    def _impl(
+        df,
+        path_or_buf=None,
+        orient="columns",
+        date_format=None,
+        double_precision=10,
+        force_ascii=True,
+        date_unit="ms",
+        default_handler=None,
+        lines=False,
+        compression="infer",
+        index=True,
+        indent=None,
+    ):  # pragma: no cover
+        # passing None for the first argument returns a string
+        # containing contents to write to json
+        with numba.objmode(D="unicode_type"):
+            D = df.to_json(
+                None,
+                orient,
+                date_format,
+                double_precision,
+                force_ascii,
+                date_unit,
+                default_handler,
+                lines,
+                compression,
+                index,
+                indent,
+            )
+        if lines and orient == "records":
+            _json_write(path_or_buf._data, D._data, 0, len(D), False, True)
+        else:
+            _json_write(path_or_buf._data, D._data, 0, len(D), False, False)
 
     return _impl
 

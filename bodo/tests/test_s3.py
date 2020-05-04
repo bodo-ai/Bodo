@@ -4,6 +4,7 @@ import pandas as pd
 import numpy as np
 import bodo
 from bodo.tests.utils import check_func, _get_dist_arg, _test_equal_guard, reduce_sum
+from bodo.utils.testing import ensure_clean
 
 pytestmark = pytest.mark.s3
 
@@ -78,6 +79,34 @@ def test_s3_pq_groupby3(minio_server, s3_bucket, datapath):
     fname = datapath("groupby3.pq")
     py_output = pd.read_parquet(fname)
     check_func(test_impl, (), py_output=py_output)
+
+
+def test_s3_read_json(minio_server, s3_bucket, datapath):
+    """
+    test read_json from s3
+    """
+    fname_file = "s3://bodo-test/example.json"
+    fname_dir_single = "s3://bodo-test/example_single.json"
+    fname_dir_multi = "s3://bodo-test/example_multi.json"
+
+    def test_impl(fname):
+        return pd.read_json(
+            fname,
+            orient="records",
+            lines=True,
+            dtype={
+                "one": np.float32,
+                "two": str,
+                "three": "bool",
+                "four": np.float32,
+                "five": str,
+            },
+        )
+
+    py_out = test_impl(datapath("example.json"))
+    check_func(test_impl, (fname_file,), py_output=py_out)
+    check_func(test_impl, (fname_dir_single,), py_output=py_out)
+    check_func(test_impl, (fname_dir_multi,), py_output=py_out)
 
 
 @pytest.fixture(
@@ -163,6 +192,48 @@ def test_s3_csv_write_1D_var(minio_server, s3_bucket, test_df):
     def test_write(test_df):
         test_df.to_csv(
             "s3://bodo-test/test_df_bodo_1D_var.csv", index=False, header=False
+        )
+
+    bodo_write = bodo.jit(all_args_distributed_varlength=True)(test_write)
+    bodo_write(_get_dist_arg(test_df, False, True))
+
+
+def test_s3_json_write_records_lines_seq(minio_server, s3_bucket, test_df):
+    """
+    test s3 to_json(orient="records", lines=True) sequentially
+    """
+
+    def test_write(test_df):
+        test_df.to_json(
+            "s3://bodo-test/df_records_lines_seq.json", orient="records", lines=True
+        )
+
+    bodo_write = bodo.jit(test_write)
+    bodo_write(test_df)
+
+
+def test_s3_json_write_records_lines_1D(minio_server, s3_bucket, test_df):
+    """
+    test s3 to_json(orient="records", lines=True) in 1D distributed
+    """
+
+    def test_write(test_df):
+        test_df.to_json(
+            "s3://bodo-test/df_records_lines_1D.json", orient="records", lines=True
+        )
+
+    bodo_write = bodo.jit(all_args_distributed_block=True)(test_write)
+    bodo_write(_get_dist_arg(test_df, False))
+
+
+def test_s3_json_write_records_lines_1D_var(minio_server, s3_bucket, test_df):
+    """
+    test s3 to_json(orient="records", lines=True) in 1D var
+    """
+
+    def test_write(test_df):
+        test_df.to_json(
+            "s3://bodo-test/df_records_lines_1D_var.json", orient="records", lines=True
         )
 
     bodo_write = bodo.jit(all_args_distributed_varlength=True)(test_write)
@@ -333,29 +404,52 @@ def test_s3_np_fromfile_1D_var(minio_server, s3_bucket, test_np_arr):
     check_func(test_read, (), py_output=test_np_arr)
 
 
-def test_s3_read_json(minio_server, s3_bucket, datapath):
+def test_s3_json_read_records_lines_seq(minio_server, s3_bucket, test_df):
     """
-    test read_json from s3
+    read_json(orient="records", lines=True)
+    test the json file we just wrote sequentially
     """
-    fname_file = "s3://bodo-test/example.json"
-    fname_dir_single = "s3://bodo-test/example_single.json"
-    fname_dir_multi = "s3://bodo-test/example_multi.json"
 
-    def test_impl(fname):
+    def test_read():
         return pd.read_json(
-            fname,
+            "s3://bodo-test/df_records_lines_seq.json",
             orient="records",
             lines=True,
-            dtype={
-                "one": np.float32,
-                "two": str,
-                "three": "bool",
-                "four": np.float32,
-                "five": str,
-            },
+            dtype={"A": np.float, "B": "bool", "C": np.int},
         )
 
-    py_out = test_impl(datapath("example.json"))
-    check_func(test_impl, (fname_file,), py_output=py_out)
-    check_func(test_impl, (fname_dir_single,), py_output=py_out)
-    check_func(test_impl, (fname_dir_multi,), py_output=py_out)
+    check_func(test_read, (), py_output=test_df)
+
+
+def test_s3_json_read_records_lines_1D(minio_server, s3_bucket, test_df):
+    """
+    read_json(orient="records", lines=True) 
+    test the json file we just wrote in 1D
+    """
+
+    def test_read():
+        return pd.read_json(
+            "s3://bodo-test/df_records_lines_1D.json",
+            orient="records",
+            lines=True,
+            dtype={"A": np.float, "B": "bool", "C": np.int},
+        )
+
+    check_func(test_read, (), py_output=test_df)
+
+
+def test_s3_json_read_recoreds_lines_1D_var(minio_server, s3_bucket, test_df):
+    """
+    read_json(orient="records", lines=True) 
+    test the json file we just wrote in 1D Var
+    """
+
+    def test_read():
+        return pd.read_json(
+            "s3://bodo-test/df_records_lines_1D_var.json",
+            orient="records",
+            lines=True,
+            dtype={"A": np.float, "B": "bool", "C": np.int},
+        )
+
+    check_func(test_read, (), py_output=test_df)

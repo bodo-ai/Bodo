@@ -23,7 +23,7 @@ typedef void (*hdfs_get_fs_t)(const std::string &,
  * specified by 'path_name', and suffix is specified by suffix
  * @param myrank: current MPI rank
  * @param num_ranks: total MPI ranks
- * @param suffix: suffix of file(s), '.csv' or '.parquet'
+ * @param suffix: suffix of file(s), '.csv', '.json' or '.parquet'
  */
 std::string gen_pieces_file_name(int myrank, int num_ranks,
                                  const std::string &suffix);
@@ -32,7 +32,7 @@ std::string gen_pieces_file_name(int myrank, int num_ranks,
  * Extract file system, and path information
  * @param _path_name: path of output file or directory
  * @param is_parallel: true if the table is part of a distributed table
- * @param suffix: suffix of file(s), '.csv' or '.parquet'
+ * @param suffix: suffix of file(s), '.csv', '.json', or '.parquet'
  * @param myrank: current MPI rank
  * @param num_ranks: total MPI ranks
  * @param fs_option: file system to write to
@@ -51,7 +51,7 @@ void extract_fs_dir_path(const char *_path_name, bool is_parallel,
 /*
  * Import file system python module: bodo.io.s3_reader, or bodo.io.hdfs_reader
  * @param fs_option: file system to write to
- * @param file_type: type of file, 'csv', 'parquet', or '' all others
+ * @param file_type: type of file, 'csv', 'json', 'parquet', or '' all others
  * @param f_mod: reference to the python module
  */
 void import_fs_module(Bodo_Fs::FsEnum fs_option, const std::string &file_type,
@@ -60,7 +60,7 @@ void import_fs_module(Bodo_Fs::FsEnum fs_option, const std::string &file_type,
 /*
  * Get python attributes: init_s3_reader, or init_hdfs_reader
  * @param fs_option: file system to write to
- * @param file_type: type of file, 'csv', 'parquet', or '' all others
+ * @param file_type: type of file, 'csv', 'json', 'parquet', or '' all others
  * @param f_mod: reference to the python module
  * @param func_obj: reference to the python attribute
  */
@@ -71,7 +71,7 @@ void get_fs_reader_pyobject(Bodo_Fs::FsEnum fs_option,
 /*
  * Get python attributes: s3_get_fs, or hdfs_get_fs
  * @param fs_option: file system to write to
- * @param file_type: type of file, 'csv', 'parquet', or '' all others
+ * @param file_type: type of file, 'csv', 'json', 'parquet', or '' all others
  * @param f_mod: reference to the python module
  * @param func_obj: reference to the python attribute
  */
@@ -82,7 +82,7 @@ void get_get_fs_pyobject(Bodo_Fs::FsEnum fs_option,
 /*
  * Open file output stream for posix & s3 & hdfs
  * @param fs_option: file system to write to
- * @param file_type: type of file, 'csv', 'parquet', or '' all others
+ * @param file_type: type of file, 'csv', 'json', 'parquet', or '' all others
  * @param fname: name of the file to open (exclude prefix, include path)
  * @param s3_fs: s3 file system, used when fs_option==Bodo_Fs::s3
  * @param hdfs_fs: hdfs file system, used when fs_option==Bodo_Fs::hdfs
@@ -96,7 +96,7 @@ void open_file_outstream(
 
 /*
  * Open file append output stream for hdfs
- * @param file_type: type of file, 'csv', 'parquet', or '' all others
+ * @param file_type: type of file, 'csv', 'json', 'parquet', or '' all others
  * @param fname: name of the file to open (exclude prefix, include path)
  * @param hdfs_fs: hdfs file system
  * @param out_stream: the OutputStream to open
@@ -107,15 +107,15 @@ void open_file_appendstream(
     std::shared_ptr<::arrow::io::OutputStream> *out_stream);
 
 /*
- * Open arrow::io::OutputStream for parquet write and csv write
- * writing csv to posix:
+ * Open arrow::io::OutputStream for csv/json/parquet write
+ * writing csv/json to posix:
  *  does not need to open outstream as we use MPI for writing
  * writing parquet to posix:
  *  use boost to create directory if necessary
  * @param fs_option: file system to write to
  * @param is_parallel: true if the table is part of a distributed table
  * @param myrank: current MPI rank
- * @param file_type: type of file, 'csv' or 'parquet'
+ * @param file_type: type of file, 'csv', "json', or 'parquet'
  * @param dirname: directory name to store the files
  * @param fname: name of file to open (exclude prefix, excludes path)
  * @param orig_path: name of file to open (include prefix & path)

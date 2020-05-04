@@ -93,6 +93,13 @@ _csv_write = types.ExternalFunction(
     types.void(types.voidptr, types.voidptr, types.int64, types.int64, types.bool_),
 )
 
+_json_write = types.ExternalFunction(
+    "json_write",
+    types.void(
+        types.voidptr, types.voidptr, types.int64, types.int64, types.bool_, types.bool_
+    ),
+)
+
 
 class DistributedPass:
     """
@@ -771,7 +778,9 @@ class DistributedPass:
                 #             numba.core.types.int64)), [])
                 f_block = compile_to_numba_ir(
                     lambda: bodo.hiframes.pd_timestamp_ext.integer_to_dt64(
-                        numba.cpython.builtins.get_type_max_value(numba.core.types.uint64)
+                        numba.cpython.builtins.get_type_max_value(
+                            numba.core.types.uint64
+                        )
                     ),
                     {"bodo": bodo, "numba": numba},
                     self.typingctx,
@@ -786,7 +795,9 @@ class DistributedPass:
             if self.typemap[rhs.args[0].name] == types.DType(types.NPDatetime("ns")):
                 f_block = compile_to_numba_ir(
                     lambda: bodo.hiframes.pd_timestamp_ext.integer_to_dt64(
-                        numba.cpython.builtins.get_type_min_value(numba.core.types.uint64)
+                        numba.cpython.builtins.get_type_min_value(
+                            numba.core.types.uint64
+                        )
                     ),
                     {"bodo": bodo, "numba": numba},
                     self.typingctx,
@@ -1021,6 +1032,100 @@ class DistributedPass:
                     "unicode_to_utf8_and_len": unicode_to_utf8_and_len,
                     "_op": np.int32(Reduce_Type.Sum.value),
                     "_csv_write": _csv_write,
+                },
+            )
+
+        elif func_name == "to_json" and (
+            self._is_1D_arr(df.name) or self._is_1D_Var_arr(df.name)
+        ):
+            # write to string then parallel file write
+            # df.to_json(fname) ->
+            # str_out = df.to_json(None, header=header)
+            # bodo.io.json_cpp(fname, str_out)
+
+            df_typ = self.typemap[df.name]
+            rhs = assign.value
+            fname = args[0]
+            # convert StringLiteral to Unicode to make ._data available
+            self.typemap.pop(fname.name)
+            self.typemap[fname.name] = string_type
+            nodes = []
+
+            kws = dict(rhs.kws)
+
+            is_records = False
+            if "orient" in kws:
+                orient_var = get_call_expr_arg(
+                    "to_json", rhs.args, kws, 1, "orient", None
+                )
+                orient_val = self.typemap[orient_var.name]
+                is_records = True if orient_val.literal_value == "records" else False
+
+            is_lines = False
+            if "lines" in kws:
+                lines_var = get_call_expr_arg(
+                    "to_json", rhs.args, kws, 7, "lines", None
+                )
+                is_lines = self.typemap[lines_var.name].literal_value
+
+            is_records_lines = ir.Var(
+                assign.target.scope, mk_unique_var("is_records_lines"), rhs.loc
+            )
+            self.typemap[is_records_lines.name] = types.bool_
+            nodes.append(
+                ir.Assign(
+                    ir.Const(is_records and is_lines, df.loc), is_records_lines, df.loc
+                )
+            )
+
+            # fix to_json() type to have None as 1st arg
+            call_type = self.calltypes.pop(rhs)
+            arg_typs = list((types.none,) + call_type.args[1:])
+            arg_typs = tuple(arg_typs)
+            # self.calltypes[rhs] = self.typemap[rhs.func.name].get_call_type(
+            #      self.typingctx, arg_typs, {})
+            self.calltypes[rhs] = numba.core.typing.Signature(
+                string_type, arg_typs, df_typ, call_type.pysig
+            )
+
+            # None as 1st arg
+            none_var = ir.Var(assign.target.scope, mk_unique_var("none"), rhs.loc)
+            self.typemap[none_var.name] = types.none
+            none_assign = ir.Assign(ir.Const(None, rhs.loc), none_var, rhs.loc)
+            nodes.append(none_assign)
+            rhs.args[0] = none_var
+
+            # str_out = df.to_json(None)
+            str_out = ir.Var(assign.target.scope, mk_unique_var("write_json"), rhs.loc)
+            self.typemap[str_out.name] = string_type
+            new_assign = ir.Assign(rhs, str_out, rhs.loc)
+            nodes.append(new_assign)
+
+            # print_node = ir.Print([str_out], None, rhs.loc)
+            # self.calltypes[print_node] = signature(types.none, string_type)
+            # nodes.append(print_node)
+
+            # TODO: fix lazy IO load
+            from bodo.io import json_cpp
+            import llvmlite.binding as ll
+
+            def f(fname, str_out, is_records_lines):  # pragma: no cover
+                utf8_str, utf8_len = unicode_to_utf8_and_len(str_out)
+                start = bodo.libs.distributed_api.dist_exscan(utf8_len, _op)
+                # TODO: unicode file name
+                _json_write(
+                    fname._data, utf8_str, start, utf8_len, True, is_records_lines
+                )
+
+            return nodes + compile_func_single_block(
+                f,
+                [fname, str_out, is_records_lines],
+                assign.target,
+                self,
+                extra_globals={
+                    "unicode_to_utf8_and_len": unicode_to_utf8_and_len,
+                    "_op": np.int32(Reduce_Type.Sum.value),
+                    "_json_write": _json_write,
                 },
             )
 
@@ -2343,13 +2448,15 @@ class DistributedPass:
             func = find_callname(self.func_ir, rhs, self.typemap)
             if func == ("min", "builtins"):
                 if isinstance(
-                    self.typemap[rhs.args[0].name], numba.core.typing.builtins.IndexValueType
+                    self.typemap[rhs.args[0].name],
+                    numba.core.typing.builtins.IndexValueType,
                 ):
                     return Reduce_Type.Argmin
                 return Reduce_Type.Min
             if func == ("max", "builtins"):
                 if isinstance(
-                    self.typemap[rhs.args[0].name], numba.core.typing.builtins.IndexValueType
+                    self.typemap[rhs.args[0].name],
+                    numba.core.typing.builtins.IndexValueType,
                 ):
                     return Reduce_Type.Argmax
                 return Reduce_Type.Max
