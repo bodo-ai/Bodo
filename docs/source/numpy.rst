@@ -50,6 +50,9 @@ and parallelize.
 
     A = np.array([i**2 for i in range(N)])
 
+6. Numpy I/O: ``tofile`` and ``fromfile``, 
+:ref:`example usage and more system specific instructions <numpy-binary-section>`
+
 Optional arguments are not supported unless if explicitly mentioned here.
 For operations on multi-dimensional arrays, automatic broadcast of
 dimensions of size 1 is not supported.

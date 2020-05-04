@@ -16,6 +16,7 @@ Bodo documentation
    source/getting_started
    source/decorator
    source/user_guide
+   source/file_io
    source/pandas
    source/numpy
    source/not_supported
