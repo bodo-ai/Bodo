@@ -524,28 +524,24 @@ def get_parquet_dataset(file_name):
 
 
 def parquet_file_schema(file_name, selected_columns):
-    """get parquet schema info from file, only on rank 0.
+    """get parquet schema from file using Parquet dataset and Arrow APIs
     """
     from mpi4py import MPI
 
     comm = MPI.COMM_WORLD
 
-    info = None
-    if bodo.get_rank() == 0:
-        info = _parquet_file_schema_inner(file_name, selected_columns)
-
-    info = comm.bcast(info)
-    return info
-
-
-def _parquet_file_schema_inner(file_name, selected_columns):
-    """get parquet schema from file using Parquet dataset and Arrow APIs
-    """
     col_names = []
     col_types = []
 
-    pq_dataset = get_parquet_dataset(file_name)
-    pa_schema = pq_dataset.schema.to_arrow_schema()
+    num_pieces = None
+    pa_schema = None
+    if bodo.get_rank() == 0:
+        pq_dataset = get_parquet_dataset(file_name)
+        pa_schema = pq_dataset.schema.to_arrow_schema()
+        num_pieces = len(pq_dataset.pieces)
+
+    pa_schema, num_pieces = comm.bcast((pa_schema, num_pieces))
+
     # NOTE: use arrow schema instead of the dataset schema to avoid issues with names of
     # list types columns (arrow 0.16.0)
     # col_names is an array that contains all the column's name and
@@ -571,7 +567,7 @@ def _parquet_file_schema_inner(file_name, selected_columns):
         # ignore RangeIndex metadata for multi-part datasets
         # TODO: check what pandas/pyarrow does
         if not isinstance(index_col, str) and (
-            not isinstance(index_col, dict) or len(pq_dataset.pieces) != 1
+            not isinstance(index_col, dict) or num_pieces != 1
         ):
             index_col = None
 
@@ -601,7 +597,9 @@ def _parquet_file_schema_inner(file_name, selected_columns):
         col_names = selected_columns
 
     col_types = [
-        _get_numba_typ_from_pa_typ(pa_schema.field(c), c == index_col, nullable_from_metadata[c])
+        _get_numba_typ_from_pa_typ(
+            pa_schema.field(c), c == index_col, nullable_from_metadata[c]
+        )
         for c in col_names
     ]
     # TODO: close file?
