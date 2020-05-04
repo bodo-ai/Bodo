@@ -3,7 +3,8 @@
 Jupyter Notebook Setup
 ######################
 
-To use Bodo with Jupyter Notebook, install ``jupyter`` and ``ipyparallel``::
+To use Bodo with Jupyter Notebook, install ``jupyter`` and ``ipyparallel``
+in your Bodo Conda environment::
 
     conda install jupyter ipyparallel -c conda-forge
 
@@ -16,10 +17,14 @@ and add the following line::
 
     c.IPClusterEngines.engine_launcher_class = 'MPIEngineSetLauncher'
 
-Start the Jupyter notebook and go to `IPython Clusters` tab. Select the
+Start the Jupyter notebook in your Bodo Conda environment::
+
+    jupyter notebook
+
+Go to `IPython Clusters` tab and select the
 number of engines (i.e., cores) you'd like to use and click `Start` next to the
 `mpi` profile. Alternatively, you can use ``ipcluster start -n 4 --profile=mpi``
-in a terminal to start the engines (this can take several seconds).
+in a terminal to start the engines. Initialization of the engines can take several seconds.
 
 Now start a new notebook and run this code in a cell to setup the environment::
 
@@ -28,6 +33,9 @@ Now start a new notebook and run this code in a cell to setup the environment::
     view = c[:]
     view.activate()
 
+This should complete without any errors. An error may appear if the cluster
+is not initialized yet (usually `NoEnginesRegistered`).
+In this case, just wait a few seconds and try again.
 
 You can now run Bodo functions on the execution engines
 using `ipyparallel` hooks such as ``%%px`` magic
@@ -46,7 +54,6 @@ across the engines. For example, run this code in a cell::
         y = 2 * np.random.ranf(n) - 1
         pi = 4 * np.sum(x**2 + y**2 < 1) / n
         print("Execution time:", time.time()-t1, "\nresult:", pi)
-        return pi
 
     calc_pi(2 * 10**8)
 
