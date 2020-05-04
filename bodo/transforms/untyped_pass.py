@@ -610,21 +610,13 @@ class UntypedPass:
                 "read_sql() arguments {} not supported yet".format(unsupported_args)
             )
 
-        # Computation of the dtypes
+        # find df type
+        df_type = _get_sql_df_type_from_db(sql_const, con_const)
+        dtypes = df_type.data
+        dtype_map = {c: dtypes[i] for i, c in enumerate(df_type.columns)}
+        col_names = [c for c in df_type.columns]
 
-        # During compilation step, all processor access to the database
-        # Ideally, we would like to access from just one processor during
-        # the compilation stage.
-        rows_to_read = 100  # TODO: tune this
-        sql_call = f"select * from ({sql_const}) x LIMIT {rows_to_read}"
-        df = pd.read_sql(sql_call, con_const)
-        dtypes = numba.typeof(df).data
-
-        dtype_map = {c: dtypes[i] for i, c in enumerate(df.columns)}
-        col_names = [c for c in df.columns]
-
-        # The dates.
-
+        # date columns
         date_cols = []
 
         columns, data_arrs, out_types = self._get_read_file_col_info(
@@ -779,18 +771,10 @@ class UntypedPass:
             fname_const = get_str_const_value(
                 fname_var, self.func_ir, msg, arg_types=self.args
             )
-            rows_to_read = 100  # TODO: tune this
-            df = pd.read_excel(
-                fname_const,
-                sheet_name=sheet_name,
-                nrows=rows_to_read,
-                skiprows=skiprows,
-                header=header,
-                # index_col=index_col,
-                comment=comment,
-                parse_dates=date_cols,
+
+            df_type = _get_excel_df_type_from_file(
+                fname_const, sheet_name, skiprows, header, comment, date_cols
             )
-            df_type = numba.typeof(df)
 
         else:
             dtype_map = guard(get_definition, self.func_ir, dtype_var)
@@ -910,21 +894,11 @@ class UntypedPass:
             fname_const = get_str_const_value(
                 fname, self.func_ir, msg, arg_types=self.args
             )
-            rows_to_read = 100  # TODO: tune this
-            df = pd.read_csv(
-                fname_const,
-                sep=sep,
-                nrows=rows_to_read,
-                skiprows=skiprows,
-                header=header,
-            )
-            # TODO: categorical, etc.
-            # TODO: Integer NA case: sample data might not include NA
-            dtypes = numba.typeof(df).data
-
+            df_type = _get_csv_df_type_from_file(fname_const, sep, skiprows, header)
+            dtypes = df_type.data
             usecols = list(range(len(dtypes))) if usecols is None else usecols
             # convert Pandas generated integer names if any
-            cols = [str(df.columns[i]) for i in usecols]
+            cols = [str(df_type.columns[i]) for i in usecols]
             # overwrite column names like Pandas if explicitly provided
             if col_names != 0:
                 cols[-len(col_names) :] = col_names
@@ -1145,22 +1119,13 @@ class UntypedPass:
                 )
             # TODO: more error checking needed
 
-            json_reader = pd.read_json(
-                fname_const,
-                orient=orient,
-                convert_dates=convert_dates,
-                precise_float=precise_float,
-                lines=lines,
-                chunksize=10,  # only reading the first 10 rows
+            df_type = _get_json_df_type_from_file(
+                fname_const, orient, convert_dates, precise_float, lines
             )
 
-            df = json_reader.__next__()
-
-            # TODO: categorical, etc.
-            # TODO: Integer NA case: sample data might not include NA
-            dtypes = numba.typeof(df).data
+            dtypes = df_type.data
             # convert Pandas generated integer names if any
-            col_names = [str(df.columns[i]) for i in range(len(dtypes))]
+            col_names = [str(df_type.columns[i]) for i in range(len(dtypes))]
             dtype_map = {c: dtypes[i] for i, c in enumerate(col_names)}
         else:  # handle dtype arg if provided
             dtype_map = guard(get_definition, self.func_ir, dtype_var)
@@ -1774,6 +1739,108 @@ def remove_dead_branches(func_ir):
     cfg = compute_cfg_from_blocks(func_ir.blocks)
     for dead in cfg.dead_nodes():
         del func_ir.blocks[dead]
+
+
+def _get_json_df_type_from_file(
+    fname_const, orient, convert_dates, precise_float, lines
+):
+    """get dataframe type for read_json() using file path constant.
+    Only rank 0 looks at the file to infer df type, then broadcasts.
+    """
+    from mpi4py import MPI
+
+    comm = MPI.COMM_WORLD
+
+    df_type = None
+    if bodo.get_rank() == 0:
+        rows_to_read = 100  # TODO: tune this
+        json_reader = pd.read_json(
+            fname_const,
+            orient=orient,
+            convert_dates=convert_dates,
+            precise_float=precise_float,
+            lines=lines,
+            chunksize=rows_to_read,
+        )
+
+        df = next(json_reader)
+
+        # TODO: categorical, etc.
+        # TODO: Integer NA case: sample data might not include NA
+        df_type = numba.typeof(df)
+
+    df_type = comm.bcast(df_type)
+    return df_type
+
+
+def _get_excel_df_type_from_file(
+    fname_const, sheet_name, skiprows, header, comment, date_cols
+):
+    """get dataframe type for read_excel() using file path constant.
+    Only rank 0 looks at the file to infer df type, then broadcasts.
+    """
+    from mpi4py import MPI
+
+    comm = MPI.COMM_WORLD
+
+    df_type = None
+    if bodo.get_rank() == 0:
+        rows_to_read = 100  # TODO: tune this
+        df = pd.read_excel(
+            fname_const,
+            sheet_name=sheet_name,
+            nrows=rows_to_read,
+            skiprows=skiprows,
+            header=header,
+            # index_col=index_col,
+            comment=comment,
+            parse_dates=date_cols,
+        )
+        df_type = numba.typeof(df)
+
+    df_type = comm.bcast(df_type)
+    return df_type
+
+
+def _get_sql_df_type_from_db(sql_const, con_const):
+    """access the database to find df type for read_sql() output.
+    Only rank zero accesses the database, then broadcasts.
+    """
+    from mpi4py import MPI
+
+    comm = MPI.COMM_WORLD
+
+    df_type = None
+    if bodo.get_rank() == 0:
+        rows_to_read = 100  # TODO: tune this
+        sql_call = f"select * from ({sql_const}) x LIMIT {rows_to_read}"
+        df = pd.read_sql(sql_call, con_const)
+        df_type = numba.typeof(df)
+
+    df_type = comm.bcast(df_type)
+    return df_type
+
+
+def _get_csv_df_type_from_file(fname_const, sep, skiprows, header):
+    """get dataframe type for read_csv() using file path constant.
+    Only rank 0 looks at the file to infer df type, then broadcasts.
+    """
+    from mpi4py import MPI
+
+    comm = MPI.COMM_WORLD
+
+    df_type = None
+    if bodo.get_rank() == 0:
+        rows_to_read = 100  # TODO: tune this
+        df = pd.read_csv(
+            fname_const, sep=sep, nrows=rows_to_read, skiprows=skiprows, header=header,
+        )
+        # TODO: categorical, etc.
+        # TODO: Integer NA case: sample data might not include NA
+        df_type = numba.typeof(df)
+
+    df_type = comm.bcast(df_type)
+    return df_type
 
 
 def _check_type(val, typ):
