@@ -70,19 +70,29 @@ demonstrates two cases::
         return z.sum()
 
     example_dot(1024, 10)
-    bodo.distribution_report()
+    example_dot.distributed_diagnostics()
 
-Here is the output of `bodo.distribution_report()`::
+Here is the output of `distributed_diagnostics()`::
 
-    Array distributions:
-       $X.43                1D_Block
-       $Y.45                1D_Block
-       $w.44                REP
+    Data distributions:
+      $X.130               1D_Block
+      $Y.131               1D_Block
+      $b.2.158             REP
 
     Parfor distributions:
-       0                    1D_Block
-       1                    1D_Block
-       2                    1D_Block
+      0                    1D_Block
+      1                    1D_Block
+      3                    1D_Block
+
+    Distributed listing for function example_dot, ../tmp/dist_rep.py (4)
+    ----------------------------------| parfor_id/variable: distribution
+    @bodo.jit                         |
+    def example_dot(N, D):            |
+        X = np.random.ranf((N, D))----| #0: 1D_Block, $X.130: 1D_Block
+        Y = np.random.ranf(N)---------| #1: 1D_Block, $Y.131: 1D_Block
+        w = np.dot(Y, X)--------------| $b.2.158: REP
+        z = np.dot(X, w)--------------| #3: 1D_Block
+        return z.sum()                |
 
 The first `dot` has a 1D array with `1D_Block` distribution as first input
 (`Y`), while the second input is a 2D array with `1D_Block` distribution (`X`).

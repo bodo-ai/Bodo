@@ -41,7 +41,7 @@ from bodo.libs.distributed_api import (
 from bodo.libs.str_ext import string_type
 from bodo.libs.str_arr_ext import string_array_type
 from numba.core.types import List
-from bodo.utils.utils import cprint, distribution_report
+from bodo.utils.utils import cprint
 import bodo.compiler
 import bodo.io
 import bodo.io.np_io

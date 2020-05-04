@@ -216,34 +216,6 @@ def cprint_lower(context, builder, sig, args):  # pragma: no cover
     return context.get_dummy_value()
 
 
-def print_dist(d):
-    from bodo.transforms.distributed_analysis import Distribution
-
-    if d == Distribution.REP:
-        return "REP"
-    if d == Distribution.OneD:
-        return "1D_Block"
-    if d == Distribution.OneD_Var:
-        return "1D_Block_Var"
-    if d == Distribution.Thread:
-        return "Multi-thread"
-    if d == Distribution.TwoD:
-        return "2D_Block"
-
-
-def distribution_report():
-    import bodo.transforms.distributed_pass
-
-    if bodo.transforms.distributed_pass.dist_analysis is None:
-        return
-    print("Array distributions:")
-    for arr, dist in bodo.transforms.distributed_pass.dist_analysis.array_dists.items():
-        print("   {0:20} {1}".format(arr, print_dist(dist)))
-    print("\nParfor distributions:")
-    for p, dist in bodo.transforms.distributed_pass.dist_analysis.parfor_dists.items():
-        print("   {0:<20} {1}".format(p, print_dist(dist)))
-
-
 def is_whole_slice(typemap, func_ir, var, accept_stride=False):
     """ return True if var can be determined to be a whole slice """
     require(
