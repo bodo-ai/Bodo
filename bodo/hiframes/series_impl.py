@@ -168,7 +168,7 @@ def overload_series_reset_index(S):
         (e.g. groupby("A")["B"].sum().reset_index()) """
 
     def get_name_literal(name_typ):
-        """ return literal value or throw errow in non-literal type """
+        """ return literal value or throw error in non-literal type """
         if is_literal_type(name_typ):
             return get_literal_value(name_typ)
         else:

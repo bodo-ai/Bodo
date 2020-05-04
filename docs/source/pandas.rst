@@ -220,6 +220,8 @@ Statistical functions below are supported without optional arguments
 unless support is explicitly mentioned.
 
 * :meth:`pandas.Series.abs`
+* :meth:`pandas.Series.all` only default arguments supported
+* :meth:`pandas.Series.any` only default arguments supported
 * :meth:`pandas.Series.corr`
 * :meth:`pandas.Series.count`
 * :meth:`pandas.Series.cov`
@@ -252,7 +254,11 @@ Reindexing / Selection / Label manipulation:
 * :meth:`pandas.Series.head` (`n` argument is supported)
 * :meth:`pandas.Series.idxmax`
 * :meth:`pandas.Series.idxmin`
+* :meth:`pandas.Series.isin`
+  `values` argument supports both distributed array/Series and replicated list/array/Series
 * :meth:`pandas.Series.rename` (only set a new name using a string value)
+* :meth:`pandas.Series.reset_index` only default arguments supported.
+  Also, requires Index name to be known at compilation time.
 * :meth:`pandas.Series.tail` (`n` argument is supported)
 * :meth:`pandas.Series.take`
 
