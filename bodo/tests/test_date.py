@@ -214,9 +214,9 @@ def test_sub_add_timestamp_timedelta():
     check_func(f_add, (date, timedelta))
 
 
-def test_datetime_comparisons():
+def test_datetime_comparisons_scalar():
     """
-    Test comparison operators of datetime module objects in Bodo
+    Test comparison operators of datetime module objects in Bodo for single values
     """
 
     def test_eq(a, b):
@@ -275,6 +275,32 @@ def test_datetime_comparisons():
     check_func(test_ge, (dt, dt2))
     check_func(test_gt, (dt, dt2))
 
+
+def test_datetime_comparisons_datetime_datetime():
+    """
+    Test comparison operators of datetime module objects in Bodo.
+    Comparison between array of datetime and datetime
+    """
+
+    def test_eq(a, b):
+        return a == b
+
+    def test_ne(a, b):
+        return a != b
+
+    def test_le(a, b):
+        return a <= b
+
+    def test_lt(a, b):
+        return a < b
+
+    def test_ge(a, b):
+        return a >= b
+
+    def test_gt(a, b):
+        return a > b
+
+
     # test series(dt64) scalar cmp
     t = np.datetime64("2018-04-27").astype("datetime64[ns]")
     Srange = pd.DatetimeIndex(
@@ -302,7 +328,44 @@ def test_datetime_comparisons():
     check_func(test_eq, (t, S))
     check_func(test_eq, (S, t))
 
-    # Test with dates encoded as string
+
+def test_datetime_comparisons_datetime_string():
+    """
+    Test comparison operators of datetime module objects in Bodo.
+    Comparison between datetime and string
+    """
+
+    def test_eq(a, b):
+        return a == b
+
+    def test_ne(a, b):
+        return a != b
+
+    def test_le(a, b):
+        return a <= b
+
+    def test_lt(a, b):
+        return a < b
+
+    def test_ge(a, b):
+        return a >= b
+
+    def test_gt(a, b):
+        return a > b
+
+
+    Srange = pd.DatetimeIndex(
+        [
+            "2018-04-24 00:00:00",
+            None,
+            "2018-04-26 12:00:00",
+            "2018-04-27 18:00:00",
+            None,
+        ],
+        dtype="datetime64[ns]",
+        freq=None,
+    )
+    S = pd.Series(Srange)
     t_str = "2018-04-27"
     check_func(test_ge, (t_str, S))
     check_func(test_ge, (S, t_str))
@@ -317,30 +380,30 @@ def test_datetime_comparisons():
     check_func(test_eq, (t_str, S))
     check_func(test_eq, (S, t_str))
 
-    # Test with TimeDelta
-    TimeDeltas = pd.Series(
-        [
-            datetime.timedelta(1, 0, 0),
-            datetime.timedelta(0, 7200, 0),
-            datetime.timedelta(2, 0, 0),
-            datetime.timedelta(-1, 3600, 0),
-            None,
-        ],
-        dtype="timedelta64[ns]",
-    )
-    t_timedelta = datetime.timedelta(0, 7200, 0)
-    check_func(test_ge, (t_str, S))
-    check_func(test_ge, (S, t_str))
-    check_func(test_gt, (t_str, S))
-    check_func(test_gt, (S, t_str))
-    check_func(test_le, (t_str, S))
-    check_func(test_le, (S, t_str))
-    check_func(test_lt, (t_str, S))
-    check_func(test_lt, (S, t_str))
-    check_func(test_ne, (t_str, S))
-    check_func(test_ne, (S, t_str))
-    check_func(test_eq, (t_str, S))
-    check_func(test_eq, (S, t_str))
+
+def test_datetime_comparisons_datetime_list():
+    """
+    Test comparison operators of datetime module objects in Bodo.
+    Comparison between lists of datetime
+    """
+
+    def test_eq(a, b):
+        return a == b
+
+    def test_ne(a, b):
+        return a != b
+
+    def test_le(a, b):
+        return a <= b
+
+    def test_lt(a, b):
+        return a < b
+
+    def test_ge(a, b):
+        return a >= b
+
+    def test_gt(a, b):
+        return a > b
 
     # test series(dt64) cmp
     Srange1 = pd.DatetimeIndex(
@@ -374,7 +437,34 @@ def test_datetime_comparisons():
     check_func(test_ne, (S1, S2))
     check_func(test_eq, (S1, S2))
 
+
+
+def test_datetime_comparisons_date():
+    """
+    Test comparison operators of datetime module objects in Bodo.
+    Comparison between list of dates and a scalar of date
+    """
+
+    def test_eq(a, b):
+        return a == b
+
+    def test_ne(a, b):
+        return a != b
+
+    def test_le(a, b):
+        return a <= b
+
+    def test_lt(a, b):
+        return a < b
+
+    def test_ge(a, b):
+        return a >= b
+
+    def test_gt(a, b):
+        return a > b
+
     # test series(datetime.date)
+
     Srange = pd.DatetimeIndex(
         [
             "2018-04-24 00:00:00",

@@ -242,6 +242,9 @@ void unbox_datetime_date_array(PyObject* obj, int64_t n, int64_t* data,
     CHECK(pd_mod, "importing pandas module failed");
     PyObject* C_NA = PyObject_GetAttrString(pd_mod, "NA");
     CHECK(C_NA, "getting pd.NA failed");
+    // Pandas usually stores NaT for date arrays
+    PyObject* C_NAT = PyObject_GetAttrString(pd_mod, "NaT");
+    CHECK(C_NAT, "getting pd.NaT failed");
 
     arrow::Status status;
 
@@ -253,7 +256,7 @@ void unbox_datetime_date_array(PyObject* obj, int64_t n, int64_t* data,
         int64_t value_data;
         if (s == Py_None ||
             (PyFloat_Check(s) && std::isnan(PyFloat_AsDouble(s))) ||
-            s == C_NA) {
+            s == C_NA || s == C_NAT) {
             value_bitmap = false;
             value_data = 0;
         } else {
@@ -269,21 +272,21 @@ void unbox_datetime_date_array(PyObject* obj, int64_t n, int64_t* data,
             Py_DECREF(month_obj);
             Py_DECREF(day_obj);
             if (year == -1 && month == -1 && day == -1)
-              value_bitmap = false;
+                value_bitmap = false;
             else
-              value_bitmap = true;
+                value_bitmap = true;
         }
         data[i] = value_data;
         if (value_bitmap) {
-          ::arrow::BitUtil::SetBit(null_bitmap, i);
-        }
-        else {
-          ::arrow::BitUtil::ClearBit(null_bitmap, i);
+            ::arrow::BitUtil::SetBit(null_bitmap, i);
+        } else {
+            ::arrow::BitUtil::ClearBit(null_bitmap, i);
         }
         Py_DECREF(s);
     }
 
     Py_DECREF(C_NA);
+    Py_DECREF(C_NAT);
     Py_DECREF(pd_mod);
 
     PyGILState_Release(gilstate);
