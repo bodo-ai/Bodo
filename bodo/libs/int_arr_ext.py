@@ -496,7 +496,13 @@ def int_arr_setitem(A, idx, val):
 
     # scalar case
     if isinstance(idx, types.Integer):
-        assert isinstance(val, types.Integer)
+        # NOTE: string.find/rfind used in Series.str returns Optional type
+        # TODO: handle Optional type properly (i.e. set NA)
+        assert (
+            isinstance(val, types.Integer)
+            or isinstance(val, types.Optional)
+            and isinstance(val.type, types.Integer)
+        )
 
         def impl_scalar(A, idx, val):  # pragma: no cover
             A._data[idx] = val

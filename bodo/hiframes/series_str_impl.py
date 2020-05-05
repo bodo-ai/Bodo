@@ -185,21 +185,15 @@ def overload_str_method_len(S_str):
         name = bodo.hiframes.pd_series_ext.get_series_name(S)
         numba.parfors.parfor.init_prange()
         n = len(arr)
-        n_bytes = (n + 7) >> 3
-        out_arr = np.empty(n, np.int64)
-        bitmap = np.empty(n_bytes, np.uint8)
+        out_arr = bodo.libs.int_arr_ext.alloc_int_array(n, np.int64)
         for i in numba.parfors.parfor.internal_prange(n):
             if bodo.libs.array_kernels.isna(arr, i):
-                out_arr[i] = 1
-                bodo.libs.int_arr_ext.set_bit_to_arr(bitmap, i, 0)
+                bodo.ir.join.setitem_arr_nan(out_arr, i)
             else:
-                # TODO: optimize str len on string array
+                # TODO: optimize str len on string array (count unicode chars inplace)
                 out_arr[i] = len(arr[i])
-                bodo.libs.int_arr_ext.set_bit_to_arr(bitmap, i, 1)
 
-        return bodo.hiframes.pd_series_ext.init_series(
-            bodo.libs.int_arr_ext.init_integer_array(out_arr, bitmap), index, name
-        )
+        return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
     return impl
 
@@ -520,18 +514,13 @@ def overload_str_method_count(S_str, pat, flags=0):
         e = re.compile(pat, flags)
         numba.parfors.parfor.init_prange()
         l = len(str_arr)
-        out_arr = np.empty(l, dtype=np.int64)
-        bitmap = np.empty((l + 7) >> 3, np.uint8)
+        out_arr = bodo.libs.int_arr_ext.alloc_int_array(l, np.int64)
         for i in numba.parfors.parfor.internal_prange(l):
             if bodo.libs.array_kernels.isna(str_arr, i):
-                out_arr[i] = 1
-                bodo.libs.int_arr_ext.set_bit_to_arr(bitmap, i, 0)
+                bodo.ir.join.setitem_arr_nan(out_arr, i)
             else:
                 out_arr[i] = str_findall_count(e, str_arr[i])
-                bodo.libs.int_arr_ext.set_bit_to_arr(bitmap, i, 1)
-        return bodo.hiframes.pd_series_ext.init_series(
-            bodo.libs.int_arr_ext.init_integer_array(out_arr, bitmap), index, name
-        )
+        return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
     return impl
 
@@ -548,18 +537,13 @@ def overload_str_method_find(S_str, sub):
         index = bodo.hiframes.pd_series_ext.get_series_index(S)
         numba.parfors.parfor.init_prange()
         l = len(str_arr)
-        out_arr = np.empty(l, dtype=np.int64)
-        bitmap = np.empty((l + 7) >> 3, np.uint8)
+        out_arr = bodo.libs.int_arr_ext.alloc_int_array(l, np.int64)
         for i in numba.parfors.parfor.internal_prange(l):
             if bodo.libs.array_kernels.isna(str_arr, i):
-                out_arr[i] = 1
-                bodo.libs.int_arr_ext.set_bit_to_arr(bitmap, i, 0)
+                bodo.ir.join.setitem_arr_nan(out_arr, i)
             else:
                 out_arr[i] = str_arr[i].find(sub)
-                bodo.libs.int_arr_ext.set_bit_to_arr(bitmap, i, 1)
-        return bodo.hiframes.pd_series_ext.init_series(
-            bodo.libs.int_arr_ext.init_integer_array(out_arr, bitmap), index, name
-        )
+        return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
     return impl
 
@@ -579,18 +563,13 @@ def overload_str_method_rfind(S_str, sub, start=0, end=None):
         index = bodo.hiframes.pd_series_ext.get_series_index(S)
         numba.parfors.parfor.init_prange()
         l = len(str_arr)
-        out_arr = np.empty(l, dtype=np.int64)
-        bitmap = np.empty((l + 7) >> 3, np.uint8)
+        out_arr = bodo.libs.int_arr_ext.alloc_int_array(l, np.int64)
         for i in numba.parfors.parfor.internal_prange(l):
             if bodo.libs.array_kernels.isna(str_arr, i):
-                out_arr[i] = 1
-                bodo.libs.int_arr_ext.set_bit_to_arr(bitmap, i, 0)
+                bodo.ir.join.setitem_arr_nan(out_arr, i)
             else:
                 out_arr[i] = str_arr[i].rfind(sub, start, end)
-                bodo.libs.int_arr_ext.set_bit_to_arr(bitmap, i, 1)
-        return bodo.hiframes.pd_series_ext.init_series(
-            bodo.libs.int_arr_ext.init_integer_array(out_arr, bitmap), index, name
-        )
+        return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
     return impl
 
