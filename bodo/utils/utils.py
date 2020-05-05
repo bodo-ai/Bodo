@@ -470,10 +470,7 @@ def empty_like_type_overload(n, arr):
         _dtype = arr.dtype
 
         def empty_like_type_int_arr(n, arr):
-            n_bytes = (n + 7) >> 3
-            return bodo.libs.int_arr_ext.init_integer_array(
-                np.empty(n, _dtype), np.empty(n_bytes, np.uint8)
-            )
+            return bodo.libs.int_arr_ext.alloc_int_array(n, _dtype)
 
         return empty_like_type_int_arr
 

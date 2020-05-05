@@ -289,7 +289,7 @@ def gen_column_read(func_text, cname, c_ind, c_type, is_parallel):
 
 def _gen_alloc(c_type, cname, alloc_size, el_type):
     if isinstance(c_type, IntegerArrayType):
-        return "  {0} = bodo.libs.int_arr_ext.init_integer_array(np.empty({1}, {2}), np.empty(({1} + 7) >> 3, np.uint8))\n".format(
+        return "  {0} = bodo.libs.int_arr_ext.alloc_int_array({1}, {2})\n".format(
             cname, alloc_size, el_type
         )
     if c_type == boolean_array:
