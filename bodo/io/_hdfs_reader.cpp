@@ -97,7 +97,7 @@ bool sort_by_name(const std::pair<std::string, int64_t> &a,
     return (a.first < b.first);
 }
 
-// read hdfs files using Arrow 0.16
+// read hdfs files using Arrow 0.17
 class HdfsFileReader : public SingleFileReader {
    public:
     std::shared_ptr<arrow::io::HadoopFileSystem> fs;

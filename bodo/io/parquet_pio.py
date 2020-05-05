@@ -543,7 +543,7 @@ def parquet_file_schema(file_name, selected_columns):
     pa_schema, num_pieces = comm.bcast((pa_schema, num_pieces))
 
     # NOTE: use arrow schema instead of the dataset schema to avoid issues with names of
-    # list types columns (arrow 0.16.0)
+    # list types columns (arrow 0.17.0)
     # col_names is an array that contains all the column's name and
     # index's name if there is one, otherwise "__index__level_0"
     # If there is no index at all, col_names will not include anything.

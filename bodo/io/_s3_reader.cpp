@@ -69,7 +69,7 @@ static int finalize_s3() {
 }
 
 std::pair<std::string, int64_t> extract_file_name_size(
-    const arrow::fs::FileStats &file_stat) {
+    const arrow::fs::FileInfo &file_stat) {
     return make_pair(file_stat.path(), file_stat.size());
 }
 
@@ -102,14 +102,15 @@ class S3FileReader : public SingleFileReader {
         if (size == 0) {  // hack for minio, read_csv size 0
             return 1;
         }
-        int64_t bytes_read;
-        status = s3_file->Read(size, &bytes_read, s);
+        int64_t bytes_read = 0;
+        arrow::Result<int64_t> res = s3_file->Read(size, s);
+        CHECK_ARROW_AND_ASSIGN(res, "S3 file GetSize() ", bytes_read);
         return status.ok() && (bytes_read == size);
     }
     uint64_t getSize() {
         int64_t size = -1;
-        status = s3_file->GetSize(&size);
-        CHECK_ARROW(status, "S3 file GetSize() ");
+        arrow::Result<int64_t> res = s3_file->GetSize();
+        CHECK_ARROW_AND_ASSIGN(res, "S3 file GetSize() ", size);
         return (uint64_t)size;
     }
 };
@@ -121,8 +122,8 @@ class S3DirectoryFileReader : public DirectoryFileReader {
     name_size_vec file_names_sizes;
     // FileSelector used to get Directory information
     arrow::fs::FileSelector dir_selector;
-    // FileStats used to determine types, names, sizes
-    std::vector<arrow::fs::FileStats> file_stats;
+    // FileInfo used to determine types, names, sizes
+    std::vector<arrow::fs::FileInfo> file_stats;
     arrow::Status status;
 
     S3DirectoryFileReader(const char *_dirname, const char *f_type)
@@ -133,9 +134,9 @@ class S3DirectoryFileReader : public DirectoryFileReader {
 
         fs = get_s3_fs();
 
-        arrow::Result<std::vector<arrow::fs::FileStats>> result =
-            fs->GetTargetStats(dir_selector);
-        CHECK_ARROW_AND_ASSIGN(result, "fs->GetTargetStats", file_stats)
+        arrow::Result<std::vector<arrow::fs::FileInfo>> result =
+            fs->GetFileInfo(dir_selector);
+        CHECK_ARROW_AND_ASSIGN(result, "fs->GetFileInfo", file_stats)
 
         // extract file names and file sizes from file_stats
         // then sort by file names
@@ -163,11 +164,11 @@ void s3_get_fs(std::shared_ptr<arrow::fs::S3FileSystem> *fs) {
 }
 
 FileReader *init_s3_reader(const char *fname, const char *suffix) {
-    arrow::fs::FileStats file_stat;
+    arrow::fs::FileInfo file_stat;
     std::shared_ptr<arrow::fs::S3FileSystem> fs = get_s3_fs();
-    arrow::Result<arrow::fs::FileStats> result =
-        fs->GetTargetStats(std::string(fname));
-    CHECK_ARROW_AND_ASSIGN(result, "fs->GetTargetStats", file_stat)
+    arrow::Result<arrow::fs::FileInfo> result =
+        fs->GetFileInfo(std::string(fname));
+    CHECK_ARROW_AND_ASSIGN(result, "fs->GetFileInfo", file_stat)
     if (file_stat.IsDirectory()) {
         return new S3DirectoryFileReader(fname, suffix);
     } else if (file_stat.IsFile()) {

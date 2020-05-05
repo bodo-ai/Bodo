@@ -56,6 +56,23 @@ void pq_write(const char *filename, const table_info *table,
               bool write_rangeindex_to_metadata, const int start,
               const int stop, const int step, const char *name);
 
+#define CHECK(expr, msg)                                           \
+    if (!(expr)) {                                                 \
+        std::cerr << "Error in parquet I/O: " << msg << std::endl; \
+        return;                                                    \
+    }
+
+#define CHECK_ARROW(expr, msg)                                            \
+    if (!(expr.ok())) {                                                   \
+        std::cerr << "Error in arrow parquet I/O: " << msg << " " << expr \
+                  << std::endl;                                           \
+        return;                                                           \
+    }
+
+#define CHECK_ARROW_AND_ASSIGN(res, msg, lhs) \
+    CHECK_ARROW(res.status(), msg)            \
+    lhs = std::move(res).ValueOrDie();
+
 static PyMethodDef parquet_cpp_methods[] = {
     {"str_list_to_vec", str_list_to_vec, METH_O,  // METH_STATIC
      "convert Python string list to C++ std vector of strings"},
@@ -124,7 +141,7 @@ PyObject *str_list_to_vec(PyObject *self, PyObject *str_list) {
 }
 
 std::vector<std::string> get_pq_pieces(char *file_name) {
-#define CHECK(expr, msg)                   \
+#define PYERR_CHECK(expr, msg)             \
     if (!(expr)) {                         \
         std::cerr << msg << std::endl;     \
         PyGILState_Release(gilstate);      \
@@ -141,7 +158,8 @@ std::vector<std::string> get_pq_pieces(char *file_name) {
     // ds = bodo.io.parquet_pio.get_parquet_dataset(file_name)
     PyObject *ds =
         PyObject_CallMethod(pq_mod, "get_parquet_dataset", "s", file_name);
-    CHECK(!PyErr_Occurred(), "Python error during Parquet dataset metadata")
+    PYERR_CHECK(!PyErr_Occurred(),
+                "Python error during Parquet dataset metadata")
     Py_DECREF(pq_mod);
 
     // all_peices = ds.pieces
@@ -168,10 +186,11 @@ std::vector<std::string> get_pq_pieces(char *file_name) {
 
     Py_DECREF(iterator);
 
-    CHECK(!PyErr_Occurred(), "Python error during Parquet dataset metadata")
+    PYERR_CHECK(!PyErr_Occurred(),
+                "Python error during Parquet dataset metadata")
     PyGILState_Release(gilstate);
     return paths;
-#undef CHECK
+#undef PYERR_CHECK
 }
 
 FileReaderVec *get_arrow_readers(char *file_name) {
@@ -597,7 +616,9 @@ void bodo_array_to_arrow(
     // allocate null bitmap
     std::shared_ptr<arrow::ResizableBuffer> null_bitmap;
     int64_t null_bytes = arrow::BitUtil::BytesForBits(array->length);
-    AllocateResizableBuffer(pool, null_bytes, &null_bitmap);
+    arrow::Result<std::unique_ptr<arrow::ResizableBuffer>> res =
+        AllocateResizableBuffer(null_bytes, pool);
+    CHECK_ARROW_AND_ASSIGN(res, "AllocateResizableBuffer", null_bitmap);
     // Padding zeroed by AllocateResizableBuffer
     memset(null_bitmap->mutable_data(), 0, static_cast<size_t>(null_bytes));
 
@@ -617,7 +638,9 @@ void bodo_array_to_arrow(
             schema_vector.push_back(arrow::field(col_name, arrow::boolean()));
             int64_t nbytes = ::arrow::BitUtil::BytesForBits(array->length);
             std::shared_ptr<::arrow::Buffer> buffer;
-            AllocateBuffer(pool, nbytes, &buffer);
+            arrow::Result<std::unique_ptr<arrow::Buffer>> res =
+                AllocateBuffer(nbytes, pool);
+            CHECK_ARROW_AND_ASSIGN(res, "AllocateBuffer", buffer);
 
             int64_t i = 0;
             uint8_t *in_data = (uint8_t *)array->data1;
@@ -640,6 +663,7 @@ void bodo_array_to_arrow(
          array->dtype != Bodo_CTypes::_BOOL)) {
         int64_t in_num_bytes;
         std::shared_ptr<arrow::DataType> type;
+        arrow::Result<std::shared_ptr<arrow::DataType>> type_res;
         switch (array->dtype) {
             case Bodo_CTypes::INT8:
                 in_num_bytes = sizeof(int8_t) * array->length;
@@ -683,8 +707,10 @@ void bodo_array_to_arrow(
                 break;
             case Bodo_CTypes::DECIMAL:
                 in_num_bytes = BYTES_PER_DECIMAL * array->length;
-                arrow::Decimal128Type::Make(array->precision, array->scale,
-                                            &type);
+                type_res =
+                    arrow::Decimal128Type::Make(array->precision, array->scale);
+                CHECK_ARROW_AND_ASSIGN(type_res, "arrow::Decimal128Type::Make",
+                                       type);
                 break;
             case Bodo_CTypes::DATE:
                 // input from Bodo uses int64 for dates
@@ -706,7 +732,9 @@ void bodo_array_to_arrow(
         std::shared_ptr<arrow::Buffer> out_buffer;
         if (array->dtype == Bodo_CTypes::DATE) {
             // allocate buffer to store date32 values in Arrow format
-            AllocateBuffer(pool, sizeof(int32_t) * array->length, &out_buffer);
+            arrow::Result<std::unique_ptr<arrow::Buffer>> res =
+                AllocateBuffer(sizeof(int32_t) * array->length, pool);
+            CHECK_ARROW_AND_ASSIGN(res, "AllocateBuffer", out_buffer);
             CastBodoDateToArrowDate32((int64_t *)array->data1, array->length,
                                       (int32_t *)out_buffer->mutable_data());
         } else {
@@ -720,6 +748,7 @@ void bodo_array_to_arrow(
         *out =
             std::make_shared<arrow::ChunkedArray>(arrow::MakeArray(arr_data));
     } else if (array->arr_type == bodo_array_type::STRING) {
+        arrow::Status status;
         schema_vector.push_back(arrow::field(col_name, arrow::utf8()));
         // Create 16MB chunks for binary data
         constexpr int32_t kBinaryChunksize = 1 << 24;
@@ -728,36 +757,22 @@ void bodo_array_to_arrow(
         uint32_t *offsets = (uint32_t *)array->data2;
         for (int64_t i = 0; i < array->length; i++) {
             if (!GetBit((uint8_t *)array->null_bitmask, i)) {
-                builder.AppendNull();
+                status = builder.AppendNull();
+                CHECK_ARROW(status, "builder.AppendNull")
             } else {
                 size_t len = offsets[i + 1] - offsets[i];
-                builder.Append((uint8_t *)cur_str, len);
+                status = builder.Append((uint8_t *)cur_str, len);
+                CHECK_ARROW(status, "builder.Append")
                 cur_str += len;
             }
         }
 
         ::arrow::ArrayVector result;
-        builder.Finish(&result);
+        status = builder.Finish(&result);
+        CHECK_ARROW(status, "builder.Finish")
         *out = std::make_shared<arrow::ChunkedArray>(result);
     }
 }
-
-#define CHECK(expr, msg)                                             \
-    if (!(expr)) {                                                   \
-        std::cerr << "Error in parquet write: " << msg << std::endl; \
-        return;                                                      \
-    }
-
-#define CHECK_ARROW(expr, msg)                                              \
-    if (!(expr.ok())) {                                                     \
-        std::cerr << "Error in arrow parquet write: " << msg << " " << expr \
-                  << std::endl;                                             \
-        return;                                                             \
-    }
-
-#define CHECK_ARROW_AND_ASSIGN(res, msg, lhs) \
-    CHECK_ARROW(res.status(), msg)            \
-    lhs = std::move(res).ValueOrDie();
 
 /*
  * Write the Bodo table (the chunk in this process) to a parquet file.
@@ -881,11 +896,19 @@ void pq_write(const char *_path_name, const table_info *table,
         prop_builder.build();
 
     // open file and write table
-    parquet::arrow::WriteTable(
+    arrow::Status status = parquet::arrow::WriteTable(
         *arrow_table, pool, out_stream, row_group_size, writer_properties,
         // store_schema() = true is needed to write the schema metadata to file
-        ::parquet::ArrowWriterProperties::Builder().store_schema()->build());
+        // .coerce_timestamps(::arrow::TimeUnit::MICRO)->allow_truncated_timestamps()
+        // not needed when moving to parquet 2.0
+        ::parquet::ArrowWriterProperties::Builder()
+            .coerce_timestamps(::arrow::TimeUnit::MICRO)
+            ->allow_truncated_timestamps()
+            ->store_schema()
+            ->build());
+    CHECK_ARROW(status, "parquet::arrow::WriteTable");
 }
 
 #undef CHECK
 #undef CHECK_ARROW
+#undef CHECK_ARROW_AND_ASSIGN

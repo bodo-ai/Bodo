@@ -44,9 +44,18 @@ inline void convertArrowToDT64(const uint8_t* buff, uint8_t* out_data,
 void append_bits_to_vec(std::vector<bool>* null_vec, const uint8_t* null_buff,
                         int64_t null_size, int64_t offset, int64_t num_values);
 
+void set_null_buff(uint8_t** out_nulls, const uint8_t* null_buff,
+                   int64_t null_size);
+
 #define CHECK(expr, msg)                                              \
     if (!(expr)) {                                                    \
         std::cerr << "Error in parquet reader: " << msg << std::endl; \
+    }
+
+#define CHECK_ARROW(expr, msg)                                               \
+    if (!(expr.ok())) {                                                      \
+        std::cerr << "Error in arrow parquet reader: " << msg << " " << expr \
+                  << std::endl;                                              \
     }
 
 typedef void (*s3_opener_t)(const char*,
@@ -86,7 +95,8 @@ int64_t pq_read_single_file(
     int64_t column_idx, uint8_t* out_data, int out_dtype, uint8_t* out_nulls,
     int64_t null_offset) {
     std::shared_ptr<::arrow::ChunkedArray> chunked_array;
-    arrow_reader->ReadColumn(column_idx, &chunked_array);
+    arrow::Status stat = arrow_reader->ReadColumn(column_idx, &chunked_array);
+    CHECK_ARROW(stat, "arrow_reader->ReadColumn");
     if (chunked_array == NULL) return 0;
     auto arr = chunked_array->chunk(0);
     int64_t num_values = arr->length();
@@ -146,7 +156,9 @@ int pq_read_parallel_single_file(
     while (read_rows < count) {
         /* -------- read row group ---------- */
         std::shared_ptr<::arrow::Table> table;
-        arrow_reader->ReadRowGroup(row_group_index, column_indices, &table);
+        arrow::Status status =
+            arrow_reader->ReadRowGroup(row_group_index, column_indices, &table);
+        CHECK_ARROW(status, "arrow_reader->ReadRowGroup");
         std::shared_ptr<::arrow::ChunkedArray> chunked_arr = table->column(0);
         if (chunked_arr->num_chunks() != 1) {
             std::cerr << "invalid parquet number of array chunks" << std::endl;
@@ -347,7 +359,8 @@ int64_t pq_read_string_single_file(
     uint8_t** out_nulls, std::vector<uint32_t>* offset_vec,
     std::vector<uint8_t>* data_vec, std::vector<bool>* null_vec) {
     std::shared_ptr<::arrow::ChunkedArray> chunked_arr;
-    arrow_reader->ReadColumn(column_idx, &chunked_arr);
+    arrow::Status status = arrow_reader->ReadColumn(column_idx, &chunked_arr);
+    CHECK_ARROW(status, "arrow_reader->ReadColumn");
     if (chunked_arr == NULL) return -1;
     auto arr = chunked_arr->chunk(0);
     int64_t num_values = arr->length();
@@ -362,7 +375,11 @@ int64_t pq_read_string_single_file(
                   << std::endl;
     }
 
-    int64_t null_size = buffers[0]->size();
+    int64_t null_size;
+    if (buffers[0])
+        null_size = buffers[0]->size();
+    else
+        null_size = (num_values + 7) >> 3;
     int64_t offsets_size = buffers[1]->size();
     int64_t data_size = buffers[2]->size();
 
@@ -376,13 +393,9 @@ int64_t pq_read_string_single_file(
 
         *out_offsets = new uint32_t[offsets_size / sizeof(uint32_t)];
         *out_data = new uint8_t[data_size];
+        *out_nulls = new uint8_t[null_size];
 
-        if (null_buff != nullptr && null_size > 0) {
-            *out_nulls = new uint8_t[null_size];
-            memcpy(*out_nulls, null_buff, null_size);
-        } else
-            *out_nulls = nullptr;
-
+        set_null_buff(out_nulls, null_buff, null_size);
         memcpy(*out_offsets, offsets_buff, offsets_size);
         memcpy(*out_data, data_buff, data_size);
     } else {
@@ -431,8 +444,7 @@ int pq_read_string_parallel_single_file(
 
     auto rg_metadata =
         arrow_reader->parquet_reader()->metadata()->RowGroup(row_group_index);
-    int64_t nrows_in_group = rg_metadata->ColumnChunk(column_idx)->num_values();
-
+    int64_t nrows_in_group = rg_metadata->ColumnChunk(column_idx)->num_values();    
     // skip whole row groups if no need to read any rows
     while (start - skipped_rows >= nrows_in_group) {
         skipped_rows += nrows_in_group;
@@ -448,7 +460,9 @@ int pq_read_string_parallel_single_file(
     while (read_rows < count) {
         /* -------- read row group ---------- */
         std::shared_ptr<::arrow::Table> table;
-        arrow_reader->ReadRowGroup(row_group_index, column_indices, &table);
+        arrow::Status status =
+            arrow_reader->ReadRowGroup(row_group_index, column_indices, &table);
+        CHECK_ARROW(status, "arrow_reader->ReadRowGroup");
         std::shared_ptr<::arrow::ChunkedArray> chunked_arr = table->column(0);
         if (chunked_arr->num_chunks() != 1) {
             std::cerr << "invalid parquet number of array chunks" << std::endl;
@@ -460,7 +474,8 @@ int pq_read_string_parallel_single_file(
                       << std::endl;
         }
 
-        int64_t null_size = buffers[0]->size();
+        int64_t null_size = -1;
+        if (buffers[0]) null_size = buffers[0]->size();
         const uint32_t* offsets_buff = (const uint32_t*)buffers[1]->data();
         const uint8_t* data_buff = buffers[2]->data();
         const uint8_t* null_buff = arr->null_bitmap_data();
@@ -487,8 +502,9 @@ int pq_read_string_parallel_single_file(
         data_vec->insert(data_vec->end(),
                          data_buff + offsets_buff[rows_to_skip],
                          data_buff + offsets_buff[rows_to_skip] + data_size);
+
         append_bits_to_vec(null_vec, null_buff, null_size, rows_to_skip,
-                           rows_to_read);
+                     rows_to_read);
 
         skipped_rows += rows_to_skip;
         read_rows += rows_to_read;
@@ -524,7 +540,9 @@ std::pair<int64_t, int64_t> pq_read_list_string_single_file(
     std::vector<uint32_t>* index_offset_vec, std::vector<uint8_t>* data_vec,
     std::vector<bool>* null_vec) {
     std::shared_ptr<::arrow::ChunkedArray> chunked_arr;
-    arrow_reader->ReadColumn(column_idx, &chunked_arr);
+    arrow::Status status;
+    status = arrow_reader->ReadColumn(column_idx, &chunked_arr);
+    CHECK_ARROW(status, "arrow_reader->ReadColumn");
     if (chunked_arr == NULL) return {-1, -1};
     auto arr = chunked_arr->chunk(0);
     int64_t num_values = arr->length();
@@ -548,8 +566,13 @@ std::pair<int64_t, int64_t> pq_read_list_string_single_file(
             << parent_buffers.size() << std::endl;
         return {-1, -1};
     }
-    int64_t parent_null_size = parent_buffers[0]->size();
     int64_t parent_offsets_size = parent_buffers[1]->size();
+    int64_t parent_null_size;
+    if (parent_buffers[0]) {
+        parent_null_size = parent_buffers[0]->size();
+    } else {
+        parent_null_size = (num_values+ 7) >> 3;
+    }
 
     auto child_buffers = child_data[0]->buffers;
     if (child_buffers.size() != 3) {
@@ -573,13 +596,9 @@ std::pair<int64_t, int64_t> pq_read_list_string_single_file(
         *out_offsets = new uint32_t[offsets_size / sizeof(uint32_t)];
         *index_offsets = new uint32_t[parent_offsets_size / sizeof(uint32_t)];
         *out_data = new uint8_t[data_size];
+        *out_nulls = new uint8_t[parent_null_size];
 
-        if (null_buff != nullptr && parent_null_size > 0) {
-            *out_nulls = new uint8_t[parent_null_size];
-            memcpy(*out_nulls, null_buff, parent_null_size);
-        } else
-            *out_nulls = nullptr;
-
+        set_null_buff(out_nulls, null_buff, parent_null_size);
         memcpy(*out_offsets, offsets_buff, offsets_size);
         memcpy(*index_offsets, index_offsets_buff, parent_offsets_size);
         memcpy(*out_data, data_buff, data_size);
@@ -664,7 +683,9 @@ int64_t pq_read_list_string_parallel_single_file(
     while (read_rows < count) {
         /* -------- read row group ---------- */
         std::shared_ptr<::arrow::Table> table;
-        arrow_reader->ReadRowGroup(row_group_index, column_indices, &table);
+        arrow::Status status =
+            arrow_reader->ReadRowGroup(row_group_index, column_indices, &table);
+        CHECK_ARROW(status, "arrow_reader->ReadRowGroup");
         std::shared_ptr<::arrow::ChunkedArray> chunked_arr = table->column(0);
         if (chunked_arr->num_chunks() != 1) {
             std::cerr << "invalid parquet number of array chunks" << std::endl;
@@ -690,7 +711,7 @@ int64_t pq_read_list_string_parallel_single_file(
             std::cerr << "invalid parquet string number of array buffers "
                       << child_buffers.size() << std::endl;
         }
-        int64_t parent_null_size = parent_buffers[0]->size();
+
         const uint32_t* parent_offsets_buf =
             (const uint32_t*)parent_buffers[1]->data();
         const uint32_t* offsets_buff =
@@ -703,6 +724,13 @@ int64_t pq_read_list_string_parallel_single_file(
         int64_t rows_to_skip = start - skipped_rows;
         int64_t rows_to_read =
             std::min(count - read_rows, nrows_in_group - rows_to_skip);
+
+        int64_t parent_null_size;
+        if (parent_buffers[0]) {
+            parent_null_size = parent_buffers[0]->size();
+        } else {
+            parent_null_size = (rows_to_read + 7) >> 3;
+        }
 
         int data_size = 0;
         for (int64_t i = 0; i < rows_to_read; i++) {
@@ -768,9 +796,9 @@ int64_t pq_read_list_string_parallel_single_file(
 void pq_init_reader(const char* file_name,
                     std::shared_ptr<parquet::arrow::FileReader>* a_reader) {
     PyObject* f_mod;
-    PyObject* func_obj;
     std::string f_name(file_name);
     auto pool = ::arrow::default_memory_pool();
+    arrow::Status status;
 
     // HDFS if starts with hdfs://
     if (f_name.find("hdfs://") == 0) {
@@ -785,8 +813,9 @@ void pq_init_reader(const char* file_name,
         // open Parquet file
         hdfs_open_file(file_name, &file);
         // create Arrow reader
-        parquet::arrow::FileReader::Make(pool, ParquetFileReader::Open(file),
-                                         &arrow_reader);
+        status = parquet::arrow::FileReader::Make(
+            pool, ParquetFileReader::Open(file), &arrow_reader);
+        CHECK_ARROW(status, "parquet::arrow::FileReader::Make");
         *a_reader = std::move(arrow_reader);
         Py_DECREF(f_mod);
         Py_DECREF(func_obj);
@@ -804,16 +833,18 @@ void pq_init_reader(const char* file_name,
         // open Parquet file
         s3_open_file(f_name.c_str(), &file);
         // create Arrow reader
-        parquet::arrow::FileReader::Make(pool, ParquetFileReader::Open(file),
-                                         &arrow_reader);
+        status = parquet::arrow::FileReader::Make(
+            pool, ParquetFileReader::Open(file), &arrow_reader);
+        CHECK_ARROW(status, "parquet::arrow::FileReader::Make");
         *a_reader = std::move(arrow_reader);
         Py_DECREF(f_mod);
         Py_DECREF(func_obj);
     } else  // regular file system
     {
         std::unique_ptr<parquet::arrow::FileReader> arrow_reader;
-        parquet::arrow::FileReader::Make(
+        status = parquet::arrow::FileReader::Make(
             pool, ParquetFileReader::OpenFile(f_name, false), &arrow_reader);
+        CHECK_ARROW(status, "parquet::arrow::FileReader::Make");
         *a_reader = std::move(arrow_reader);
     }
     return;
@@ -827,7 +858,8 @@ std::shared_ptr<arrow::DataType> get_arrow_type(
     // TODO: error checking
     // GetSchema supported as of arrow version=0.15.1
     std::shared_ptr<::arrow::Schema> col_schema;
-    arrow_reader->GetSchema(&col_schema);
+    arrow::Status status = arrow_reader->GetSchema(&col_schema);
+    CHECK_ARROW(status, "arrow_reader->GetSchema");
     return col_schema->field(column_idx)->type();
 }
 
@@ -887,21 +919,32 @@ void append_bits_to_vec(std::vector<bool>* null_vec, const uint8_t* null_buff,
             null_vec->push_back(val);
         }
         // null_vec->insert(null_vec->end(), null_buff, null_buff+null_size);
+    } else {
+        // arrow returns nullptr if noen of the data is null
+        for (int64_t i = 0; i < num_values; i++) {
+            null_vec->push_back(1);
+        }
     }
 }
 
 void pack_null_bitmap(uint8_t** out_nulls, std::vector<bool>& null_vec,
                       int64_t n_all_vals) {
-    if (null_vec.size() > 0) {
-        int64_t n_bytes =
-            (null_vec.size() + sizeof(uint8_t) - 1) / sizeof(uint8_t);
-        *out_nulls = new uint8_t[n_bytes];
-        memset(*out_nulls, 0, n_bytes);
-        for (int64_t i = 0; i < n_all_vals; i++) {
-            if (null_vec[i]) ::arrow::BitUtil::SetBit(*out_nulls, i);
-        }
-    } else
-        *out_nulls = nullptr;
+    assert(null_vec.size() > 0);
+    int64_t n_bytes = (null_vec.size() + sizeof(uint8_t) - 1) / sizeof(uint8_t);
+    *out_nulls = new uint8_t[n_bytes];
+    memset(*out_nulls, 0, n_bytes);
+    for (int64_t i = 0; i < n_all_vals; i++) {
+        if (null_vec[i]) ::arrow::BitUtil::SetBit(*out_nulls, i);
+    }
+}
+
+void set_null_buff(uint8_t** out_nulls, const uint8_t* null_buff,
+                   int64_t null_size) {
+    if (null_buff != nullptr && null_size > 0) {
+        memcpy(*out_nulls, null_buff, null_size);
+    } else {
+        memset(*out_nulls, 0xFF, null_size);
+    }
 }
 
 #undef CHECK
