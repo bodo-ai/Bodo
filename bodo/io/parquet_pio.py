@@ -213,7 +213,6 @@ def _gen_pq_reader_py(
         ", ".join("{0}, {0}_size".format(sanitize_varname(c)) for c in col_names)
     )
 
-    # print(func_text)
     loc_vars = {}
     glbs = {
         "get_arrow_readers": _get_arrow_readers,
@@ -234,9 +233,7 @@ def _gen_pq_reader_py(
     exec(func_text, glbs, loc_vars)
     pq_reader_py = loc_vars["pq_reader_py"]
 
-    # TODO: no_cpython_wrapper=True crashes for some reason
-    jit_func = numba.njit(pq_reader_py)
-    bodo.ir.csv_ext.compiled_funcs.append(jit_func)
+    jit_func = numba.njit(pq_reader_py, no_cpython_wrapper=True)
     return jit_func
 
 
