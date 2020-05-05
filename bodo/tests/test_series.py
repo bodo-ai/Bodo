@@ -138,12 +138,16 @@ def test_series_constructor_int_arr():
 def test_series_copy_datetime_date():
     """This test should go into the main series_val after the merging of setitem operations
     """
+
     def test_impl_deep(S):
         return S.copy()
+
     def test_impl_shallow(S):
         return S.copy(deep=False)
 
-    series_val = pd.Series(pd.date_range(start="2018-04-24", end="2018-04-29", periods=5).date)
+    series_val = pd.Series(
+        pd.date_range(start="2018-04-24", end="2018-04-29", periods=5).date
+    )
     check_func(test_impl_deep, (series_val,))
     check_func(test_impl_shallow, (series_val,))
 
@@ -154,13 +158,7 @@ def test_series_copy_datetime_date():
 @pytest.fixture(
     params=[
         pd.Series(
-            [
-                Decimal("1.6"),
-                Decimal("-0.2"),
-                Decimal("44.2"),
-                np.nan,
-                Decimal("0"),
-            ]
+            [Decimal("1.6"), Decimal("-0.2"), Decimal("44.2"), np.nan, Decimal("0"),]
         ),
         pytest.param(pd.Series([1, 8, 4, 11, -3]), marks=pytest.mark.slow),
         pytest.param(
@@ -894,7 +892,8 @@ def test_series_ufunc():
 @pytest.mark.slow
 @pytest.mark.parametrize(
     # avoiding isnat since only supported for datetime/timedelta
-    "ufunc", [f for f in numba.np.ufunc_db.get_ufuncs() if f.nin == 1 and f != np.isnat]
+    "ufunc",
+    [f for f in numba.np.ufunc_db.get_ufuncs() if f.nin == 1 and f != np.isnat],
 )
 def test_series_unary_ufunc(ufunc):
     def test_impl(S):
@@ -2058,6 +2057,24 @@ def test_series_round(S, d):
         return S.round(d)
 
     check_func(test_impl, (S, d))
+
+
+def test_series_unsupported_error_checking():
+    """make sure BodoError is raised for unsupported Series attributes and methods
+    """
+    # test an example attribute
+    def test_attr(S):
+        return S.nbytes
+
+    with pytest.raises(BodoError, match="not supported yet"):
+        bodo.jit(test_attr)(pd.Series([1, 2]))
+
+    #  test an example method
+    def test_method(S):
+        return S.to_hdf("data.dat")
+
+    with pytest.raises(BodoError, match="not supported yet"):
+        bodo.jit(test_attr)(pd.Series([1, 2]))
 
 
 class TestSeries(unittest.TestCase):

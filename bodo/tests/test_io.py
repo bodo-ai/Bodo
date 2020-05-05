@@ -705,7 +705,7 @@ def test_csv_bool1(datapath):
 
     # passing file name as argument to exercise value-based dispatch
     fname = datapath("csv_data_bool1.csv")
-    check_func(test_impl, (fname, ))
+    check_func(test_impl, (fname,))
 
 
 def test_csv_int_na1(datapath):
@@ -1230,6 +1230,17 @@ def test_excel1(datapath):
         bodo.jit(test_impl4)(fname, "Sheet1")
     with pytest.raises(BodoError, match="both 'dtype' and 'names' should be provided"):
         bodo.jit(test_impl5)(fname)
+
+
+def test_unsupported_error_checking():
+    """make sure BodoError is raised for unsupported call
+    """
+    # test an example I/O call
+    def test_impl():
+        return pd.read_spss("data.dat")
+
+    with pytest.raises(BodoError, match="not supported yet"):
+        bodo.jit(test_impl)()
 
 
 class TestIO(unittest.TestCase):

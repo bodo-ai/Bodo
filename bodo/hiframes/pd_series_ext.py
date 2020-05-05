@@ -17,6 +17,8 @@ from numba.extending import (
     overload,
     make_attribute_wrapper,
     intrinsic,
+    overload_method,
+    overload_attribute,
 )
 from numba.core.typing.templates import (
     infer_global,
@@ -51,7 +53,11 @@ from bodo.hiframes.pd_timestamp_ext import pandas_timestamp_type
 from bodo.hiframes.datetime_date_ext import datetime_date_type
 from bodo.hiframes.pd_categorical_ext import PDCategoricalDtype, CategoricalArray
 from bodo.hiframes.rolling import supported_rolling_funcs
-from bodo.utils.typing import is_overload_false, is_overload_none
+from bodo.utils.typing import (
+    is_overload_false,
+    is_overload_none,
+    create_unsupported_overload,
+)
 from bodo.utils.transform import get_const_func_output_type
 
 
@@ -877,3 +883,153 @@ def overload_get_series_data_tup(series_tup):
     exec(func_text, {"bodo": bodo}, loc_vars)
     impl = loc_vars["f"]
     return impl
+
+
+# Raise Bodo Error for unsupported attributes and methods of Series
+series_unsupported_attrs = (
+    "array",  # TODO: support
+    "nbytes",
+    "is_unique",
+    "is_monotonic_increasing",
+    "is_monotonic_decreasing",
+    "cat",
+    "sparse",
+)
+
+
+series_unsupported_methods = (
+    "memory_usage",
+    # Conversion
+    "convert_dtypes",
+    "infer_objects",
+    "bool",
+    "to_period",
+    "to_timestamp",
+    "__array__",
+    # Indexing, iteration
+    "get",
+    "at",
+    "__iter__",
+    "items",
+    "iteritems",
+    "keys",
+    "pop",
+    "item",
+    "xs",
+    # Binary operator functions
+    "radd",
+    "rsub",
+    "rmul",
+    "rdiv",
+    "rtruediv",
+    "rfloordiv",
+    "rmod",
+    "rpow",
+    "combine_first",
+    "product",
+    "dot",
+    # Function application, groupby & window
+    "agg",
+    "aggregate",
+    "transform",
+    "groupby",
+    "expanding",
+    "ewm",
+    "pipe",
+    # Computations / descriptive stats
+    "autocorr",
+    "between",
+    "clip",
+    "diff",
+    "factorize",
+    "kurt",
+    "mad",
+    "mode",
+    "rank",
+    "sem",
+    "skew",
+    "kurtosis",
+    # Reindexing / selection / label manipulation
+    "align",
+    "drop",
+    "droplevel",
+    "drop_duplicates",
+    "duplicated",
+    "equals",
+    "first",
+    "last",
+    "reindex",
+    "reindex_like",
+    "rename_axis",
+    "sample",
+    "set_axis",
+    "truncate",
+    "where",
+    "mask",
+    "add_prefix",
+    "add_suffix",
+    "filter",
+    # Missing data handling
+    "interpolate",
+    # Reshaping, sorting
+    "argmin",
+    "argmax",
+    "reorder_levels",
+    "sort_index",
+    "swaplevel",
+    "unstack",
+    "explode",
+    "searchsorted",
+    "ravel",
+    "repeat",
+    "squeeze",
+    "view",
+    # Combining / joining / merging
+    "replace",
+    "update",
+    # Time series-related
+    "asfreq",
+    "asof",
+    "first_valid_index",
+    "last_valid_index",
+    "resample",
+    "tz_convert",
+    "tz_localize",
+    "at_time",
+    "between_time",
+    "tshift",
+    "slice_shift",
+    # Plotting
+    "plot",
+    "hist",
+    # Serialization / IO / conversion
+    "to_pickle",
+    "to_dict",
+    "to_excel",
+    "to_frame",
+    "to_xarray",
+    "to_hdf",
+    "to_string",
+    "to_clipboard",
+    "to_latex",
+    "to_markdown",
+)
+
+
+def _install_series_unsupported():
+    """install an overload that raises BodoError for unsupported attributes and methods
+    of Series
+    """
+
+    for attr_name in series_unsupported_attrs:
+        full_name = "Series." + attr_name
+        overload_attribute(SeriesType, attr_name)(
+            create_unsupported_overload(full_name)
+        )
+
+    for fname in series_unsupported_methods:
+        full_name = "Series." + fname
+        overload_method(SeriesType, fname)(create_unsupported_overload(full_name))
+
+
+_install_series_unsupported()

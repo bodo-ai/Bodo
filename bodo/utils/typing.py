@@ -144,7 +144,9 @@ def is_overload_constant_int(val):
 
 
 def is_overload_bool_list(val):
-    return isinstance(val, numba.core.types.List) and isinstance(val.dtype, types.Boolean)
+    return isinstance(val, numba.core.types.List) and isinstance(
+        val.dtype, types.Boolean
+    )
 
 
 def is_overload_true(val):
@@ -840,3 +842,13 @@ def lower_convert_rec_tup_impl(context, builder, sig, args):
 
     res = context.compile_internal(builder, _rec_to_tup, tup_typ(rec_typ), [val])
     return impl_ret_borrowed(context, builder, sig.return_type, res)
+
+
+def create_unsupported_overload(fname):
+    """Create an overload for unsupported function 'fname' that raises BodoError
+    """
+
+    def overload_f(*a, **kws):
+        raise BodoError("{} not supported yet".format(fname))
+
+    return overload_f
