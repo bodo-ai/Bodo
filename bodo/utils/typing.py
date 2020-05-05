@@ -733,7 +733,7 @@ class ConstUniTupleModel(models.UniTupleModel):
 
 # dummy empty itertools implementation to avoid typing errors for series str
 # flatten case
-@overload(itertools.chain)
+@overload(itertools.chain, no_unliteral=True)
 def chain_overload():
     return lambda: [0]
 

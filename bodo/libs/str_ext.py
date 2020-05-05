@@ -181,7 +181,7 @@ del_str = types.ExternalFunction("del_str", types.void(std_str_type))
 get_c_str = types.ExternalFunction("get_c_str", types.voidptr(std_str_type))
 
 
-@overload(int)
+@overload(int, no_unliteral=True)
 def int_str_overload(in_str):
     if in_str == string_type:
 
@@ -231,7 +231,7 @@ class StrConstInfer(AbstractTemplate):
         return signature(string_type, *args)
 
 
-@overload(str)
+@overload(str, no_unliteral=True)
 def overload_str(val):
     if val in (
         types.int8,
@@ -311,7 +311,7 @@ def unicode_to_char_ptr(in_str):  # pragma: no cover
     return in_str
 
 
-@overload(unicode_to_char_ptr)
+@overload(unicode_to_char_ptr, no_unliteral=True)
 def unicode_to_char_ptr_overload(a):
     # str._data is not safe since str might be literal
     # overload resolves str literal to unicode_type
@@ -387,7 +387,7 @@ def alloc_random_access_string_array(typingctx, n_t=None):
     return random_access_string_array(types.intp), codegen
 
 
-@overload(operator.getitem)
+@overload(operator.getitem, no_unliteral=True)
 def random_access_str_arr_getitem(A, ind):
     if A != random_access_string_array:
         return
@@ -396,7 +396,7 @@ def random_access_str_arr_getitem(A, ind):
         return lambda A, ind: A._data[ind]
 
 
-@overload(operator.setitem)
+@overload(operator.setitem, no_unliteral=True)
 def random_access_str_arr_setitem(A, idx, val):
     if A != random_access_string_array:
         return
@@ -410,7 +410,7 @@ def random_access_str_arr_setitem(A, idx, val):
         return impl_scalar
 
 
-@overload(len)
+@overload(len, no_unliteral=True)
 def overload_str_arr_len(A):
     if A == random_access_string_array:
         return lambda A: len(A._data)

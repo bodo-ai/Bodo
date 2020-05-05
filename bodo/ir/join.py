@@ -1051,7 +1051,7 @@ def write_send_buff(shuffle_meta, node_id, i, key_arrs, data):  # pragma: no cov
     return i
 
 
-@overload(write_send_buff)
+@overload(write_send_buff, no_unliteral=True)
 def write_data_buff_overload(meta, node_id, i, key_arrs, data):
     func_text = "def f(meta, node_id, i, key_arrs, data):\n"
     func_text += "  w_ind = meta.send_disp[node_id] + meta.tmp_offset[node_id]\n"
@@ -1132,7 +1132,7 @@ def ensure_capacity(arr, new_size):  # pragma: no cover
     return new_arr
 
 
-@overload(ensure_capacity)
+@overload(ensure_capacity, no_unliteral=True)
 def ensure_capacity_overload(arr, new_size):
     if isinstance(arr, types.Array) or arr == boolean_array:
         return ensure_capacity
@@ -1180,7 +1180,7 @@ def trim_arr_tup(data, new_size):  # pragma: no cover
     return data
 
 
-@overload(trim_arr_tup)
+@overload(trim_arr_tup, no_unliteral=True)
 def trim_arr_tup_overload(data, new_size):
     assert isinstance(data, types.BaseTuple)
     count = data.count
@@ -1216,7 +1216,7 @@ def copy_elem_buff(arr, ind, val):  # pragma: no cover
     return new_arr
 
 
-@overload(copy_elem_buff)
+@overload(copy_elem_buff, no_unliteral=True)
 def copy_elem_buff_overload(arr, ind, val):
     if isinstance(arr, types.Array) or arr == boolean_array:
         return copy_elem_buff
@@ -1235,7 +1235,7 @@ def copy_elem_buff_tup(arr, ind, val):  # pragma: no cover
     return arr
 
 
-@overload(copy_elem_buff_tup)
+@overload(copy_elem_buff_tup, no_unliteral=True)
 def copy_elem_buff_tup_overload(data, ind, val):
     assert isinstance(data, types.BaseTuple)
     count = data.count
@@ -1259,7 +1259,7 @@ def trim_arr(arr, size):  # pragma: no cover
     return arr[:size]
 
 
-@overload(trim_arr)
+@overload(trim_arr, no_unliteral=True)
 def trim_arr_overload(arr, size):
     if isinstance(arr, types.Array) or arr == boolean_array:
         return trim_arr
@@ -1281,7 +1281,7 @@ def setnan_elem_buff(arr, ind):  # pragma: no cover
     return new_arr
 
 
-@overload(setnan_elem_buff)
+@overload(setnan_elem_buff, no_unliteral=True)
 def setnan_elem_buff_overload(arr, ind):
     if isinstance(arr, types.Array) or arr == boolean_array:
         return setnan_elem_buff
@@ -1304,7 +1304,7 @@ def setnan_elem_buff_tup(arr, ind):  # pragma: no cover
     return arr
 
 
-@overload(setnan_elem_buff_tup)
+@overload(setnan_elem_buff_tup, no_unliteral=True)
 def setnan_elem_buff_tup_overload(data, ind):
     assert isinstance(data, types.BaseTuple)
     count = data.count
@@ -1385,7 +1385,7 @@ def setitem_arr_nan(arr, ind, int_nan_const=0):  # pragma: no cover
     arr[ind] = np.nan
 
 
-@overload(setitem_arr_nan)
+@overload(setitem_arr_nan, no_unliteral=True)
 def setitem_arr_nan_overload(arr, ind, int_nan_const=0):
     if isinstance(arr.dtype, types.Float):
         return setitem_arr_nan
@@ -1443,7 +1443,7 @@ def setitem_arr_tup_nan(arr_tup, ind, int_nan_const=0):  # pragma: no cover
         arr[ind] = np.nan
 
 
-@overload(setitem_arr_tup_nan)
+@overload(setitem_arr_tup_nan, no_unliteral=True)
 def setitem_arr_tup_nan_overload(arr_tup, ind, int_nan_const=0):
     count = arr_tup.count
 
@@ -1462,7 +1462,7 @@ def copy_arr_tup(arrs):  # pragma: no cover
     return tuple(a.copy() for a in arrs)
 
 
-@overload(copy_arr_tup)
+@overload(copy_arr_tup, no_unliteral=True)
 def copy_arr_tup_overload(arrs):
     count = arrs.count
     func_text = "def f(arrs):\n"
@@ -1480,7 +1480,7 @@ def get_nan_bits(arr, ind):  # pragma: no cover
     return 0
 
 
-@overload(get_nan_bits)
+@overload(get_nan_bits, no_unliteral=True)
 def overload_get_nan_bits(arr, ind):
     """Get nan bit for types that have null bitmap
     """
@@ -1506,7 +1506,7 @@ def get_nan_bits_tup(arr_tup, ind):  # pragma: no cover
     return tuple(get_nan_bits(arr, ind) for arr in arr_tup)
 
 
-@overload(get_nan_bits_tup)
+@overload(get_nan_bits_tup, no_unliteral=True)
 def overload_get_nan_bits_tup(arr_tup, ind):
     count = arr_tup.count
 
@@ -1526,7 +1526,7 @@ def set_nan_bits(arr, ind, na_val):  # pragma: no cover
     return 0
 
 
-@overload(set_nan_bits)
+@overload(set_nan_bits, no_unliteral=True)
 def overload_set_nan_bits(arr, ind, na_val):
     """Set nan bit for types that have null bitmap, currently just string array
     """
@@ -1551,7 +1551,7 @@ def set_nan_bits_tup(arr_tup, ind, na_val):  # pragma: no cover
     return tuple(set_nan_bits(arr, ind, na_val) for arr in arr_tup)
 
 
-@overload(set_nan_bits_tup)
+@overload(set_nan_bits_tup, no_unliteral=True)
 def overload_set_nan_bits_tup(arr_tup, ind, na_val):
     count = arr_tup.count
 

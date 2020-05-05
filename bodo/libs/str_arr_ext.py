@@ -251,7 +251,7 @@ def _install_binary_ops():
 _install_binary_ops()
 
 
-@overload(operator.add)
+@overload(operator.add, no_unliteral=True)
 def overload_string_array_add(A, B):
     # both string array
     if A == string_array_type and B == string_array_type:
@@ -707,7 +707,7 @@ def to_string_list(arr, str_null_bools=None):  # pragma: no cover
     return arr
 
 
-@overload(to_string_list)
+@overload(to_string_list, no_unliteral=True)
 def to_string_list_overload(data, str_null_bools=None):
     """if str_null_bools is True and data is tuple, output tuple contains
     an array of bools as null mask for each string array
@@ -760,7 +760,7 @@ def cp_str_list_to_array(str_arr, str_list, str_null_bools=None):  # pragma: no 
     return
 
 
-@overload(cp_str_list_to_array)
+@overload(cp_str_list_to_array, no_unliteral=True)
 def cp_str_list_to_array_overload(str_arr, list_data, str_null_bools=None):
     """when str_arr is tuple, str_null_bools is a flag indicating whether
     list_data includes an extra bool array for each string array's null masks.
@@ -824,7 +824,7 @@ def str_list_to_array(str_list):
     return str_list
 
 
-@overload(str_list_to_array)
+@overload(str_list_to_array, no_unliteral=True)
 def str_list_to_array_overload(str_list):
     """same as cp_str_list_to_array, except this call allocates output
     """
@@ -853,7 +853,7 @@ def is_str_arr_typ(typ):
     return typ == string_array_type or is_str_series_typ(typ)
 
 
-@overload_method(StringArrayType, "copy")
+@overload_method(StringArrayType, "copy", no_unliteral=True)
 def str_arr_copy_overload(arr):
     def copy_impl(arr):  # pragma: no cover
         n = len(arr)
@@ -865,7 +865,7 @@ def str_arr_copy_overload(arr):
     return copy_impl
 
 
-@overload(len)
+@overload(len, no_unliteral=True)
 def str_arr_len_overload(str_arr):
     if is_str_arr_typ(str_arr):
 
@@ -1420,7 +1420,7 @@ def print_str_arr(arr):  # pragma: no cover
     )
 
 
-@overload(operator.getitem)
+@overload(operator.getitem, no_unliteral=True)
 def str_arr_getitem_int(A, ind):
     if A != string_array_type:
         return
@@ -1529,7 +1529,7 @@ def str_arr_getitem_int(A, ind):
 dummy_use = numba.njit(lambda a: None)
 
 
-@overload(operator.setitem)
+@overload(operator.setitem, no_unliteral=True)
 def str_arr_setitem(A, idx, val):
     if A != string_array_type:
         return
@@ -1570,7 +1570,7 @@ def overload_str_arr_ndim(A):
     return lambda A: 1
 
 
-@overload_method(StringArrayType, "astype")
+@overload_method(StringArrayType, "astype", no_unliteral=True)
 def overload_str_arr_astype(A, dtype, copy=True):
 
     # same dtype case
@@ -1637,7 +1637,7 @@ def get_arr_data_ptr(arr, ind):  # pragma: no cover
     return arr
 
 
-@overload(get_arr_data_ptr)
+@overload(get_arr_data_ptr, no_unliteral=True)
 def overload_get_arr_data_ptr(arr, ind):
     """return data pointer for array 'arr' at index 'ind'
     currently only used in 'str_arr_item_to_numeric' for nullable int and numpy arrays

@@ -143,7 +143,7 @@ h5_open = types.ExternalFunction(
 
 if bodo.config._has_h5py:
 
-    @overload(h5py.File)
+    @overload(h5py.File, no_unliteral=True)
     def overload_h5py_file(
         name,
         mode=None,
@@ -180,7 +180,7 @@ if bodo.config._has_h5py:
 h5_close = types.ExternalFunction("h5_close", types.int32(h5file_type))
 
 
-@overload_method(H5FileType, "close")
+@overload_method(H5FileType, "close", no_unliteral=True)
 def overload_h5_file(f):
     def impl(f):
         h5_close(f)
@@ -188,8 +188,8 @@ def overload_h5_file(f):
     return impl
 
 
-@overload_method(H5FileType, "keys")
-@overload_method(H5DatasetOrGroupType, "keys")
+@overload_method(H5FileType, "keys", no_unliteral=True)
+@overload_method(H5DatasetOrGroupType, "keys", no_unliteral=True)
 def overload_h5_file_keys(obj_id):
     def h5f_keys_impl(obj_id):  # pragma: no cover
         obj_name_list = []
@@ -208,8 +208,8 @@ h5_create_dset = types.ExternalFunction(
 )
 
 
-@overload_method(H5FileType, "create_dataset")
-@overload_method(H5GroupType, "create_dataset")
+@overload_method(H5FileType, "create_dataset", no_unliteral=True)
+@overload_method(H5GroupType, "create_dataset", no_unliteral=True)
 def overload_h5_file_create_dataset(obj_id, name, shape=None, dtype=None, data=None):
     assert is_overload_none(data)  # TODO: support passing data directly
     # TODO: support non-constant dtype string value
@@ -231,8 +231,8 @@ h5_create_group = types.ExternalFunction(
 )
 
 
-@overload_method(H5FileType, "create_group")
-@overload_method(H5GroupType, "create_group")
+@overload_method(H5FileType, "create_group", no_unliteral=True)
+@overload_method(H5GroupType, "create_group", no_unliteral=True)
 def overload_h5_file_create_group(obj_id, name, track_order=None):
     assert is_overload_none(track_order)  # TODO: support?
 
@@ -247,7 +247,7 @@ h5_open_dset_or_group_obj = types.ExternalFunction(
 )
 
 
-@overload(operator.getitem)
+@overload(operator.getitem, no_unliteral=True)
 def overload_getitem_file(in_f, in_idx):
     if in_f in (h5file_type, h5dataset_or_group_type) and in_idx == string_type:
 

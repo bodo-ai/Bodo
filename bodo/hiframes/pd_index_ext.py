@@ -116,7 +116,7 @@ make_attribute_wrapper(DatetimeIndexType, "data", "_data")
 make_attribute_wrapper(DatetimeIndexType, "name", "_name")
 
 
-@overload_method(DatetimeIndexType, "copy")
+@overload_method(DatetimeIndexType, "copy", no_unliteral=True)
 def overload_datetime_index_copy(A):
     return lambda A: bodo.hiframes.pd_index_ext.init_datetime_index(A._data.copy(), A._name)  # pragma: no cover
 
@@ -262,7 +262,7 @@ def _dti_val_finalize(s, count):  # pragma: no cover
     return bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(s)
 
 
-@overload_method(DatetimeIndexType, "min")
+@overload_method(DatetimeIndexType, "min", no_unliteral=True)
 def overload_datetime_index_min(dti, axis=None, skipna=True):
     # TODO skipna = False
     if not is_overload_none(axis) or not is_overload_true(skipna):
@@ -284,7 +284,7 @@ def overload_datetime_index_min(dti, axis=None, skipna=True):
 
 
 # TODO: refactor min/max
-@overload_method(DatetimeIndexType, "max")
+@overload_method(DatetimeIndexType, "max", no_unliteral=True)
 def overload_datetime_index_max(dti, axis=None, skipna=True):
     # TODO skipna = False
     if not is_overload_none(axis) or not is_overload_true(skipna):
@@ -313,7 +313,7 @@ class DatetimeIndexAttribute(AttributeTemplate):
         return _dt_index_data_typ
 
 
-@overload(pd.DatetimeIndex)
+@overload(pd.DatetimeIndex, no_unliteral=True)
 def pd_datetimeindex_overload(
     data=None,
     freq=None,
@@ -363,7 +363,7 @@ def pd_datetimeindex_overload(
     return f
 
 
-@overload(operator.sub)
+@overload(operator.sub, no_unliteral=True)
 def overload_datetime_index_sub(arg1, arg2):
     # DatetimeIndex - Timestamp
     if (
@@ -460,7 +460,7 @@ def _install_dti_str_comp_ops():
 _install_dti_str_comp_ops()
 
 
-@overload(operator.getitem)
+@overload(operator.getitem, no_unliteral=True)
 def overload_datetime_index_getitem(dti, ind):
     # TODO: other getitem cases
     if isinstance(dti, DatetimeIndexType):
@@ -549,7 +549,7 @@ def _dummy_convert_none_to_int(val):
     return lambda val: val
 
 
-@overload(pd.date_range)
+@overload(pd.date_range, no_unliteral=True)
 def pd_date_range_overload(
     start=None,
     end=None,
@@ -813,7 +813,7 @@ make_attribute_wrapper(TimedeltaIndexType, "data", "_data")
 make_attribute_wrapper(TimedeltaIndexType, "name", "_name")
 
 
-@overload_method(TimedeltaIndexType, "copy")
+@overload_method(TimedeltaIndexType, "copy", no_unliteral=True)
 def overload_timedelta_index_copy(A):
     return lambda A: bodo.hiframes.pd_index_ext.init_timedelta_index(A._data.copy(), A._name)  # pragma: no cover
 
@@ -872,7 +872,7 @@ def _install_tdi_time_fields():
 _install_tdi_time_fields()
 
 
-@overload(pd.TimedeltaIndex)
+@overload(pd.TimedeltaIndex, no_unliteral=True)
 def pd_timedelta_index_overload(
     data=None,
     unit=None,
@@ -974,7 +974,7 @@ make_attribute_wrapper(RangeIndexType, "step", "_step")
 make_attribute_wrapper(RangeIndexType, "name", "_name")
 
 
-@overload_method(RangeIndexType, "copy")
+@overload_method(RangeIndexType, "copy", no_unliteral=True)
 def overload_range_index_copy(A):
     return lambda A: bodo.hiframes.pd_index_ext.init_range_index(A._start, A._stop, A._step, A._name)  # pragma: no cover
 
@@ -1050,7 +1050,7 @@ def unbox_range_index(typ, val, c):
     return NativeValue(range_val._getvalue())
 
 
-@overload(pd.RangeIndex)
+@overload(pd.RangeIndex, no_unliteral=True)
 def range_index_overload(
     start=None, stop=None, step=None, dtype=None, copy=False, name=None, fastpath=None
 ):
@@ -1133,7 +1133,7 @@ def rangeIndex_get_step(ri):
     return impl
 
 
-@overload(operator.getitem)
+@overload(operator.getitem, no_unliteral=True)
 def overload_range_index_getitem(I, idx):
     if isinstance(I, RangeIndexType):
         if isinstance(idx, types.Integer):
@@ -1160,7 +1160,7 @@ def overload_range_index_getitem(I, idx):
         )
 
 
-@overload(len)
+@overload(len, no_unliteral=True)
 def overload_range_len(r):
     if isinstance(r, RangeIndexType):
         # TODO: test
@@ -1345,7 +1345,7 @@ make_attribute_wrapper(NumericIndexType, "data", "_data")
 make_attribute_wrapper(NumericIndexType, "name", "_name")
 
 
-@overload_method(NumericIndexType, "copy")
+@overload_method(NumericIndexType, "copy", no_unliteral=True)
 def overload_numeric_index_copy(A):
     return lambda A: bodo.hiframes.pd_index_ext.init_numeric_index(A._data.copy(), A._name)  # pragma: no cover
 
@@ -1525,7 +1525,7 @@ make_attribute_wrapper(StringIndexType, "data", "_data")
 make_attribute_wrapper(StringIndexType, "name", "_name")
 
 
-@overload_method(StringIndexType, "copy")
+@overload_method(StringIndexType, "copy", no_unliteral=True)
 def overload_string_index_copy(A):
     return lambda A: bodo.hiframes.pd_index_ext.init_string_index(A._data.copy(), A._name)  # pragma: no cover
 
@@ -1604,7 +1604,7 @@ def stringIndex_get_name(si):
     return impl
 
 
-@overload(operator.getitem)
+@overload(operator.getitem, no_unliteral=True)
 def overload_index_getitem(I, ind):
     # output of integer indexing is scalar value
     if isinstance(I, (NumericIndexType, StringIndexType)) and isinstance(
@@ -1663,28 +1663,28 @@ def is_pd_index_type(t):
 
 
 # TODO: test
-@overload_method(RangeIndexType, "take")
-@overload_method(NumericIndexType, "take")
-@overload_method(StringIndexType, "take")
-@overload_method(PeriodIndexType, "take")
-@overload_method(DatetimeIndexType, "take")
-@overload_method(TimedeltaIndexType, "take")
+@overload_method(RangeIndexType, "take", no_unliteral=True)
+@overload_method(NumericIndexType, "take", no_unliteral=True)
+@overload_method(StringIndexType, "take", no_unliteral=True)
+@overload_method(PeriodIndexType, "take", no_unliteral=True)
+@overload_method(DatetimeIndexType, "take", no_unliteral=True)
+@overload_method(TimedeltaIndexType, "take", no_unliteral=True)
 def overload_index_take(I, indices):
     return lambda I, indices: I[indices]
 
 
-@overload_method(RangeIndexType, "isna")
-@overload_method(NumericIndexType, "isna")
-@overload_method(StringIndexType, "isna")
-@overload_method(PeriodIndexType, "isna")
-@overload_method(DatetimeIndexType, "isna")
-@overload_method(TimedeltaIndexType, "isna")
-@overload_method(RangeIndexType, "isnull")
-@overload_method(NumericIndexType, "isnull")
-@overload_method(StringIndexType, "isnull")
-@overload_method(PeriodIndexType, "isnull")
-@overload_method(DatetimeIndexType, "isnull")
-@overload_method(TimedeltaIndexType, "isnull")
+@overload_method(RangeIndexType, "isna", no_unliteral=True)
+@overload_method(NumericIndexType, "isna", no_unliteral=True)
+@overload_method(StringIndexType, "isna", no_unliteral=True)
+@overload_method(PeriodIndexType, "isna", no_unliteral=True)
+@overload_method(DatetimeIndexType, "isna", no_unliteral=True)
+@overload_method(TimedeltaIndexType, "isna", no_unliteral=True)
+@overload_method(RangeIndexType, "isnull", no_unliteral=True)
+@overload_method(NumericIndexType, "isnull", no_unliteral=True)
+@overload_method(StringIndexType, "isnull", no_unliteral=True)
+@overload_method(PeriodIndexType, "isnull", no_unliteral=True)
+@overload_method(DatetimeIndexType, "isnull", no_unliteral=True)
+@overload_method(TimedeltaIndexType, "isnull", no_unliteral=True)
 def overload_index_isna(I):
     if isinstance(I, RangeIndexType):
         # TODO: parallelize np.full in PA
@@ -1721,7 +1721,7 @@ def overload_values(I):
     return lambda I: bodo.utils.conversion.coerce_to_array(I)
 
 
-@overload(len)
+@overload(len, no_unliteral=True)
 def overload_index_len(I):
     if isinstance(
         I,

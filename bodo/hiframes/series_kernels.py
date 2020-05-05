@@ -68,7 +68,7 @@ def _get_nan(val):  # pragma: no cover
     return np.nan
 
 
-@overload(_get_nan)
+@overload(_get_nan, no_unliteral=True)
 def _get_nan_overload(val):
     """get NA value with same type as val
     """
@@ -89,7 +89,7 @@ def _get_type_max_value(dtype):  # pragma: no cover
     return 0
 
 
-@overload(_get_type_max_value)
+@overload(_get_type_max_value, no_unliteral=True)
 def _get_type_max_value_overload(dtype):
     # pd.Int64Dtype(), etc.
     if isinstance(dtype, IntDtype):
@@ -112,7 +112,7 @@ def _get_type_min_value(dtype):  # pragma: no cover
     return 0
 
 
-@overload(_get_type_min_value)
+@overload(_get_type_min_value, no_unliteral=True)
 def _get_type_min_value_overload(dtype):
     # pd.Int64Dtype(), etc.
     if isinstance(dtype, IntDtype):
@@ -131,7 +131,7 @@ def _get_type_min_value_overload(dtype):
     return lambda dtype: numba.cpython.builtins.get_type_min_value(dtype)
 
 
-@overload(min)
+@overload(min, no_unliteral=True)
 def indval_min(a1, a2):
     if a1 == types.bool_ and a2 == types.bool_:
 
@@ -143,7 +143,7 @@ def indval_min(a1, a2):
         return min_impl
 
 
-@overload(max)
+@overload(max, no_unliteral=True)
 def indval_max(a1, a2):
     if a1 == types.bool_ and a2 == types.bool_:
 

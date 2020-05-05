@@ -390,7 +390,7 @@ def to_array(A):  # pragma: no cover
     return np.array(A)
 
 
-@overload(to_array)
+@overload(to_array, no_unliteral=True)
 def to_array_overload(A):
     # handle dict for set replacement workaround
     if isinstance(A, types.DictType):
@@ -445,7 +445,7 @@ def empty_like_type(n, arr):  # pragma: no cover
     return np.empty(n, arr.dtype)
 
 
-@overload(empty_like_type)
+@overload(empty_like_type, no_unliteral=True)
 def empty_like_type_overload(n, arr):
     # categorical
     if isinstance(arr, bodo.hiframes.pd_categorical_ext.CategoricalArray):
@@ -597,7 +597,7 @@ def alloc_arr_tup(n, arr_tup, init_vals=()):  # pragma: no cover
     return tuple(arrs)
 
 
-@overload(alloc_arr_tup)
+@overload(alloc_arr_tup, no_unliteral=True)
 def alloc_arr_tup_overload(n, data, init_vals=()):
     count = data.count
 
@@ -634,7 +634,7 @@ def alloc_type(n, t):  # pragma: no cover
     return np.empty(n, t.dtype)
 
 
-@overload(alloc_type)
+@overload(alloc_type, no_unliteral=True)
 def overload_alloc_type(n, t):
     typ = t.instance_type if isinstance(t, types.TypeRef) else t
 
@@ -675,7 +675,7 @@ def full_type(n, val, t):  # pragma: no cover
     return np.full(n, val, t.dtype)
 
 
-@overload(full_type)
+@overload(full_type, no_unliteral=True)
 def overload_full_type(n, val, t):
     typ = t.instance_type if isinstance(t, types.TypeRef) else t
     dtype = numba.np.numpy_support.as_dtype(typ.dtype)

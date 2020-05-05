@@ -130,7 +130,7 @@ def box_categorical_array(typ, val, c):
 
 
 # TODO: handle all ops
-@overload(operator.eq)
+@overload(operator.eq, no_unliteral=True)
 def overload_cat_arr_eq_str(A, other):
     if isinstance(A, CategoricalArray) and isinstance(other, types.StringLiteral):
         other_idx = list(A.dtype.categories).index(other.literal_value)
@@ -159,7 +159,7 @@ def _get_cat_obj_items(categories, c):
 
 # HACK: dummy overload for CategoricalDtype to avoid type inference errors
 # TODO: implement dtype properly
-@overload(pd.api.types.CategoricalDtype)
+@overload(pd.api.types.CategoricalDtype, no_unliteral=True)
 def cat_overload_dummy(val_list):
     return lambda val_list: 1
 
@@ -187,12 +187,12 @@ def init_categorical_array(typingctx, codes, cat_dtype=None):
     return sig, codegen
 
 
-@overload_method(CategoricalArray, "copy")
+@overload_method(CategoricalArray, "copy", no_unliteral=True)
 def cat_arr_copy_overload(arr):
     return lambda arr: init_categorical_array(arr._codes.copy(), arr.dtype)
 
 
-@overload(len)
+@overload(len, no_unliteral=True)
 def overload_cat_arr_len(A):
     if isinstance(A, CategoricalArray):
         return lambda A: len(A._codes)

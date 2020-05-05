@@ -440,7 +440,7 @@ ArrayAnalysis._analyze_op_call_bodo_libs_bool_arr_ext_alloc_bool_array = (
 )
 
 
-@overload(operator.getitem)
+@overload(operator.getitem, no_unliteral=True)
 def bool_arr_getitem(A, ind):
     if A != boolean_array:
         return
@@ -511,7 +511,7 @@ def bool_arr_getitem(A, ind):
         return impl_slice
 
 
-@overload(operator.setitem)
+@overload(operator.setitem, no_unliteral=True)
 def bool_arr_setitem(A, idx, val):
     if A != boolean_array:
         return
@@ -613,7 +613,7 @@ def bool_arr_setitem(A, idx, val):
         return impl_slice
 
 
-@overload(len)
+@overload(len, no_unliteral=True)
 def overload_bool_arr_len(A):
     if A == boolean_array:
         return lambda A: len(A._data)
@@ -634,7 +634,7 @@ def overload_bool_arr_ndim(A):
     return lambda A: 1
 
 
-@overload_method(BooleanArrayType, "copy")
+@overload_method(BooleanArrayType, "copy", no_unliteral=True)
 def overload_bool_arr_copy(A):
     return lambda A: bodo.libs.bool_arr_ext.init_bool_array(
         bodo.libs.bool_arr_ext.get_bool_arr_data(A).copy(),
@@ -642,7 +642,7 @@ def overload_bool_arr_copy(A):
     )
 
 
-@overload_method(BooleanArrayType, "astype")
+@overload_method(BooleanArrayType, "astype", no_unliteral=True)
 def overload_bool_arr_astype(A, dtype, copy=True):
     # same dtype case
     if dtype == types.bool_:
@@ -686,7 +686,7 @@ def overload_bool_arr_astype(A, dtype, copy=True):
     ).astype(nb_dtype)
 
 
-@overload(str)
+@overload(str, no_unliteral=True)
 def overload_str_bool(val):
     if val == types.bool_:
 
@@ -860,7 +860,7 @@ def _install_unary_ops():
 _install_unary_ops()
 
 
-@overload_method(BooleanArrayType, "unique")
+@overload_method(BooleanArrayType, "unique", no_unliteral=True)
 def overload_unique(A):
     def impl_bool_arr(A):  # pragma: no cover
         # preserve order
@@ -899,7 +899,7 @@ def overload_unique(A):
     return impl_bool_arr
 
 
-@overload(operator.getitem)
+@overload(operator.getitem, no_unliteral=True)
 def bool_arr_ind_getitem(A, ind):
     # getitem for array indexed by BooleanArray
     # TODO: other array types for A?

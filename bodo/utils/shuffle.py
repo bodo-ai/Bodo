@@ -91,7 +91,7 @@ def alloc_pre_shuffle_metadata(arr, data, n_pes, is_contig):  # pragma: no cover
     return PreShuffleMeta(np.zeros(n_pes, np.int32), ())
 
 
-@overload(alloc_pre_shuffle_metadata)
+@overload(alloc_pre_shuffle_metadata, no_unliteral=True)
 def alloc_pre_shuffle_metadata_overload(key_arrs, data, n_pes, is_contig):
 
     func_text = "def f(key_arrs, data, n_pes, is_contig):\n"
@@ -156,7 +156,7 @@ def update_shuffle_meta(
     pre_shuffle_meta.send_counts[node_id] += 1
 
 
-@overload(update_shuffle_meta)
+@overload(update_shuffle_meta, no_unliteral=True)
 def update_shuffle_meta_overload(
     pre_shuffle_meta, node_id, ind, key_arrs, data, is_contig=True, padded_bits=0
 ):
@@ -243,7 +243,7 @@ def finalize_shuffle_meta(
     return ShuffleMeta()
 
 
-@overload(finalize_shuffle_meta)
+@overload(finalize_shuffle_meta, no_unliteral=True)
 def finalize_shuffle_meta_overload(
     key_arrs, data, pre_shuffle_meta, n_pes, is_contig, init_vals=()
 ):
@@ -426,7 +426,7 @@ def alltoallv_tup(arrs, shuffle_meta, key_arrs):  # pragma: no cover
     return arrs
 
 
-@overload(alltoallv_tup)
+@overload(alltoallv_tup, no_unliteral=True)
 def alltoallv_tup_overload(arrs, meta, key_arrs):
     n_keys = len(key_arrs.types)
     func_text = "def f(arrs, meta, key_arrs):\n"
@@ -598,7 +598,7 @@ def _get_keys_tup(recvs, key_arrs):  # pragma: no cover
     return recvs[: len(key_arrs)]
 
 
-@overload(_get_keys_tup)
+@overload(_get_keys_tup, no_unliteral=True)
 def _get_keys_tup_overload(recvs, key_arrs):
     n_keys = len(key_arrs.types)
     func_text = "def f(recvs, key_arrs):\n"
@@ -614,7 +614,7 @@ def _get_data_tup(recvs, key_arrs):  # pragma: no cover
     return recvs[len(key_arrs) :]
 
 
-@overload(_get_data_tup)
+@overload(_get_data_tup, no_unliteral=True)
 def _get_data_tup_overload(recvs, key_arrs):
     n_keys = len(key_arrs.types)
     n_all = len(recvs.types)
@@ -633,7 +633,7 @@ def getitem_arr_tup_single(arrs, i):  # pragma: no cover
     return arrs[0][i]
 
 
-@overload(getitem_arr_tup_single)
+@overload(getitem_arr_tup_single, no_unliteral=True)
 def getitem_arr_tup_single_overload(arrs, i):
     if len(arrs.types) == 1:
         return lambda arrs, i: arrs[0][i]
@@ -644,7 +644,7 @@ def val_to_tup(val):  # pragma: no cover
     return (val,)
 
 
-@overload(val_to_tup)
+@overload(val_to_tup, no_unliteral=True)
 def val_to_tup_overload(val):
     if isinstance(val, types.BaseTuple):
         return lambda val: val

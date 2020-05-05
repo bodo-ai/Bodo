@@ -352,8 +352,8 @@ def fromordinal_impl(n):  # pragma: no cover
     return datetime.date(y, m, d)
 
 
-@overload_method(DatetimeDatetimeType, "toordinal")
-@overload_method(DatetimeDateType, "toordinal")
+@overload_method(DatetimeDatetimeType, "toordinal", no_unliteral=True)
+@overload_method(DatetimeDateType, "toordinal", no_unliteral=True)
 def toordinal(date):
     """Return proleptic Gregorian ordinal for the year, month and day.
     January 1 of year 1 is day 1.  Only the year, month and day values
@@ -366,8 +366,8 @@ def toordinal(date):
     return impl
 
 
-@overload_method(DatetimeDatetimeType, "weekday")
-@overload_method(DatetimeDateType, "weekday")
+@overload_method(DatetimeDatetimeType, "weekday", no_unliteral=True)
+@overload_method(DatetimeDateType, "weekday", no_unliteral=True)
 def weekday(date):
     "Return day of the week, where Monday == 0 ... Sunday == 6."
 
@@ -377,7 +377,7 @@ def weekday(date):
     return impl
 
 
-@overload(operator.add)
+@overload(operator.add, no_unliteral=True)
 def date_add(lhs, rhs):
     if lhs == datetime_date_type and rhs == datetime_timedelta_type:
 
@@ -400,7 +400,7 @@ def date_add(lhs, rhs):
         return impl
 
 
-@overload(operator.sub)
+@overload(operator.sub, no_unliteral=True)
 def date_sub(lhs, rhs):
 
     if lhs == datetime_date_type and rhs == datetime_timedelta_type:
@@ -420,7 +420,7 @@ def date_sub(lhs, rhs):
         return impl
 
 
-@overload(operator.eq)
+@overload(operator.eq, no_unliteral=True)
 def date_eq(lhs, rhs):
     if lhs == datetime_date_type and rhs == datetime_date_type:
 
@@ -433,7 +433,7 @@ def date_eq(lhs, rhs):
         return impl
 
 
-@overload(operator.ne)
+@overload(operator.ne, no_unliteral=True)
 def date_ne(lhs, rhs):
     if lhs == datetime_date_type and rhs == datetime_date_type:
 
@@ -446,7 +446,7 @@ def date_ne(lhs, rhs):
         return impl
 
 
-@overload(operator.le)
+@overload(operator.le, no_unliteral=True)
 def date_le(lhs, rhs):
     if lhs == datetime_date_type and rhs == datetime_date_type:
 
@@ -459,7 +459,7 @@ def date_le(lhs, rhs):
         return impl
 
 
-@overload(operator.lt)
+@overload(operator.lt, no_unliteral=True)
 def date_lt(lhs, rhs):
     if lhs == datetime_date_type and rhs == datetime_date_type:
 
@@ -472,7 +472,7 @@ def date_lt(lhs, rhs):
         return impl
 
 
-@overload(operator.ge)
+@overload(operator.ge, no_unliteral=True)
 def date_ge(lhs, rhs):
     if lhs == datetime_date_type and rhs == datetime_date_type:
 
@@ -485,7 +485,7 @@ def date_ge(lhs, rhs):
         return impl
 
 
-@overload(operator.gt)
+@overload(operator.gt, no_unliteral=True)
 def date_gt(lhs, rhs):
     if lhs == datetime_date_type and rhs == datetime_date_type:
 
@@ -498,7 +498,7 @@ def date_gt(lhs, rhs):
         return impl
 
 
-@overload(min)
+@overload(min, no_unliteral=True)
 def date_min(lhs, rhs):
     if lhs == datetime_date_type and rhs == datetime_date_type:
 
@@ -508,7 +508,7 @@ def date_min(lhs, rhs):
         return impl
 
 
-@overload(max)
+@overload(max, no_unliteral=True)
 def date_max(lhs, rhs):
     if lhs == datetime_date_type and rhs == datetime_date_type:
 
@@ -555,7 +555,7 @@ make_attribute_wrapper(DatetimeDateArrayType, "data", "_data")
 make_attribute_wrapper(DatetimeDateArrayType, "null_bitmap", "_null_bitmap")
 
 
-@overload_method(DatetimeDateArrayType, "copy")
+@overload_method(DatetimeDateArrayType, "copy", no_unliteral=True)
 def overload_datetime_date_arr_copy(A):
     return lambda A: bodo.hiframes.datetime_date_ext.init_datetime_date_array(
         A._data.copy(), A._null_bitmap.copy(),
@@ -684,7 +684,7 @@ ArrayAnalysis._analyze_op_call_bodo_hiframes_datetime_date_ext_alloc_datetime_da
 )
 
 
-@overload(operator.getitem)
+@overload(operator.getitem, no_unliteral=True)
 def dt_date_arr_getitem(A, ind):
     if A != datetime_date_array_type:
         return
@@ -752,7 +752,7 @@ def dt_date_arr_getitem(A, ind):
         return impl_slice
 
 
-@overload(operator.setitem)
+@overload(operator.setitem, no_unliteral=True)
 def dt_date_arr_setitem(A, ind, val):
     if A != datetime_date_array_type:
         return
@@ -765,7 +765,7 @@ def dt_date_arr_setitem(A, ind, val):
         return impl
 
 
-@overload(len)
+@overload(len, no_unliteral=True)
 def overload_len_datetime_date_arr(A):
     if A == datetime_date_array_type:
         return lambda A: len(A._data)
@@ -776,7 +776,7 @@ def overload_datetime_date_arr_shape(A):
     return lambda A: (len(A._data),)
 
 
-@overload(operator.sub)
+@overload(operator.sub, no_unliteral=True)
 def overload_datetime_date_arr_sub(arg1, arg2):
     from bodo.hiframes.datetime_timedelta_ext import datetime_timedelta_type
 

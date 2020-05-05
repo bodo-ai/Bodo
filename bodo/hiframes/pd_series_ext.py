@@ -820,7 +820,7 @@ class CmpOpLTSeries(SeriesCompEqual):
     key = "<"
 
 
-@overload(pd.Series)
+@overload(pd.Series, no_unliteral=True)
 def pd_series_overload(
     data=None, index=None, dtype=None, name=None, copy=False, fastpath=False
 ):
@@ -870,7 +870,7 @@ def get_series_data_tup(series_tup):  # pragma: no cover
     return tuple(get_series_data(s) for s in series_tup)
 
 
-@overload(get_series_data_tup)
+@overload(get_series_data_tup, no_unliteral=True)
 def overload_get_series_data_tup(series_tup):
     n_series = len(series_tup.types)
     func_text = "def f(series_tup):\n"

@@ -88,7 +88,7 @@ def overload_series_iat(s):
     return lambda s: bodo.hiframes.series_indexing.init_series_iat(s)
 
 
-@overload(operator.getitem)
+@overload(operator.getitem, no_unliteral=True)
 def overload_series_iat_getitem(I, idx):
     if isinstance(I, SeriesIatType):
         if not isinstance(idx, types.Integer):
@@ -104,7 +104,7 @@ def overload_series_iat_getitem(I, idx):
         return lambda I, idx: bodo.hiframes.pd_series_ext.get_series_data(I._obj)[idx]
 
 
-@overload(operator.setitem)
+@overload(operator.setitem, no_unliteral=True)
 def overload_series_iat_setitem(I, idx, val):
     if isinstance(I, SeriesIatType):
         if not isinstance(idx, types.Integer):
@@ -172,7 +172,7 @@ def overload_series_iloc(s):
     return lambda s: bodo.hiframes.series_indexing.init_series_iloc(s)
 
 
-@overload(operator.getitem)
+@overload(operator.getitem, no_unliteral=True)
 def overload_series_iloc_getitem(I, idx):
     if isinstance(I, SeriesIlocType):
         # Integer case returns scalar
@@ -220,7 +220,7 @@ def overload_series_iloc_getitem(I, idx):
         )  # pragma: no cover
 
 
-@overload(operator.setitem)
+@overload(operator.setitem, no_unliteral=True)
 def overload_series_iloc_setitem(I, idx, val):
     if isinstance(I, SeriesIlocType):
         # check string setitem
@@ -321,7 +321,7 @@ def overload_series_loc(s):
     return lambda s: bodo.hiframes.series_indexing.init_series_loc(s)
 
 
-@overload(operator.getitem)
+@overload(operator.getitem, no_unliteral=True)
 def overload_series_loc_getitem(I, idx):
     if not isinstance(I, SeriesLocType):
         return
@@ -350,7 +350,7 @@ def overload_series_loc_getitem(I, idx):
 ######################## __getitem__/__setitem__ ########################
 
 
-@overload(operator.getitem)
+@overload(operator.getitem, no_unliteral=True)
 def overload_series_getitem(S, idx):
     # XXX: Series getitem performs both label-based and location-based indexing
     if isinstance(S, SeriesType):
@@ -424,7 +424,7 @@ def overload_series_getitem(S, idx):
         return lambda S, idx: S[bodo.hiframes.pd_series_ext.get_series_data(idx)]
 
 
-@overload(operator.setitem)
+@overload(operator.setitem, no_unliteral=True)
 def overload_series_setitem(S, idx, val):
     if isinstance(S, SeriesType):
         # check string setitem

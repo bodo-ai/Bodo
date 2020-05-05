@@ -1062,7 +1062,7 @@ def get_shuffle_data_send_buffs(sh, karrs, data):  # pragma: no cover
     return ()
 
 
-@overload(get_shuffle_data_send_buffs)
+@overload(get_shuffle_data_send_buffs, no_unliteral=True)
 def get_shuffle_data_send_buffs_overload(meta, key_arrs, data):
     n_keys = len(key_arrs.types)
     count = len(data.types)
@@ -1085,7 +1085,7 @@ def get_key_dict(arr):  # pragma: no cover
     return dict()
 
 
-@overload(get_key_dict)
+@overload(get_key_dict, no_unliteral=True)
 def get_key_dict_overload(arr):
     """returns dictionary and possibly a byte_vec for multi-key case
     """
@@ -1107,7 +1107,7 @@ def _set_out_keys(out_arrs, w_ind, key_arrs, i, k):  # pragma: no cover
     setitem_array_with_str(out_arrs[-1], w_ind, k)
 
 
-@overload(_set_out_keys)
+@overload(_set_out_keys, no_unliteral=True)
 def _set_out_keys_overload(out_arrs, w_ind, key_arrs, i, k):
     if isinstance(key_arrs, types.BaseTuple):
         n_keys = len(key_arrs.types)
@@ -1158,7 +1158,7 @@ def get_key_set(arr):  # pragma: no cover
     return dict()
 
 
-@overload(get_key_set)
+@overload(get_key_set, no_unliteral=True)
 def get_key_set_overload(arr):
 
     # XXX using dict instead of set due to refcount issue
@@ -1199,7 +1199,7 @@ def alloc_agg_output(
     return out_dummy_tup
 
 
-@overload(alloc_agg_output)
+@overload(alloc_agg_output, no_unliteral=True)
 def alloc_agg_output_overload(n_uniq_keys, out_dummy_tup, key_set, return_key):
 
     # return key is either True or None
@@ -1262,7 +1262,7 @@ def alloc_agg_output_overload(n_uniq_keys, out_dummy_tup, key_set, return_key):
 
 
 # TODO: fix BaseContext.get_function() used in is_true()
-# @overload(bool)
+# @overload(bool, no_unliteral=True)
 # def bool_none_overload(v_t):
 #     if v_t == types.none:
 #         return lambda a: False
@@ -1288,7 +1288,7 @@ def setitem_array_with_str(arr, i, v):  # pragma: no cover
     return
 
 
-@overload(setitem_array_with_str)
+@overload(setitem_array_with_str, no_unliteral=True)
 def setitem_array_with_str_overload(arr, i, val):
     if arr == string_array_type:
 
@@ -3071,7 +3071,7 @@ def _build_set_tup(arr_tup):  # pragma: no cover
     return build_set(arr_tup[0])
 
 
-@overload(_build_set_tup, jit_options={"cache": True})
+@overload(_build_set_tup, jit_options={"cache": True}, no_unliteral=True)
 def _build_set_tup_overload(arr_tup):
     # TODO: support string in tuple set
     if isinstance(arr_tup, types.BaseTuple) and len(arr_tup.types) != 1:
@@ -3092,7 +3092,7 @@ def num_total_chars_set(s):  # pragma: no cover
     return (0,)
 
 
-@overload(num_total_chars_set)
+@overload(num_total_chars_set, no_unliteral=True)
 def num_total_chars_set_overload(s):
     # XXX assuming dict for set workaround
     dtype = s.key_type
@@ -3166,7 +3166,7 @@ def get_zero_tup(arr_tup):  # pragma: no cover
     return tuple(zeros)
 
 
-@overload(get_zero_tup)
+@overload(get_zero_tup, no_unliteral=True)
 def get_zero_tup_overload(data):
     """get a tuple of zeros matching the data types of data (tuple of arrays)
     tuple of single array returns a single value
@@ -3196,7 +3196,7 @@ def add_tup(val1_tup, val2_tup):
     return tuple(out)
 
 
-@overload(add_tup)
+@overload(add_tup, no_unliteral=True)
 def add_tup_overload(val1_tup, val2_tup):
     """add two tuples element-wise
     """
@@ -3222,7 +3222,7 @@ def isna_tup(arr_tup, ind):  # pragma: no cover
     return False
 
 
-@overload(isna_tup)
+@overload(isna_tup, no_unliteral=True)
 def isna_tup_overload(arr_tup, ind):
     """return True if any array value is NA
     """
@@ -3248,7 +3248,7 @@ def set_nan_zero_tup(arr_tup, ind, val):  # pragma: no cover
     return tuple((0.0 if np.isnan(arr[ind]) else val[ind]) for arr in arr_tup)
 
 
-@overload(set_nan_zero_tup)
+@overload(set_nan_zero_tup, no_unliteral=True)
 def set_nan_zero_tup_overload(arr_tup, ind, val):
     """replace NAs with zero in val and return new val
     """
@@ -3281,7 +3281,7 @@ def setitem_arr_tup_na_match(arr_tup1, arr_tup2, ind):  # pragma: no cover
     pass
 
 
-@overload(setitem_arr_tup_na_match)
+@overload(setitem_arr_tup_na_match, no_unliteral=True)
 def setitem_arr_tup_na_match_overload(arr_tup1, arr_tup2, ind):
     """set NA in arr_tup1[ind] if arr_tup2[2] is NA
     """
