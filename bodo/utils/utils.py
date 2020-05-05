@@ -477,10 +477,7 @@ def empty_like_type_overload(n, arr):
     if arr == boolean_array:
 
         def empty_like_type_bool_arr(n, arr):  # pragma: no cover
-            n_bytes = (n + 7) >> 3
-            return bodo.libs.bool_arr_ext.init_bool_array(
-                np.empty(n, np.bool_), np.empty(n_bytes, np.uint8)
-            )
+            return bodo.libs.bool_arr_ext.alloc_bool_array(n)
 
         return empty_like_type_bool_arr
 

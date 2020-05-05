@@ -1377,9 +1377,7 @@ class SeriesPass:
             elif isinstance(typ, IntegerArrayType):
                 impl = lambda n, t: bodo.libs.int_arr_ext.alloc_int_array(n, _dtype)
             elif typ == boolean_array:
-                impl = lambda n, t: bodo.libs.bool_arr_ext.init_bool_array(
-                    np.empty(n, _dtype), np.empty((n + 7) >> 3, np.uint8)
-                )
+                impl = lambda n, t: bodo.libs.bool_arr_ext.alloc_bool_array(n)
             else:
                 impl = lambda n, t: np.empty(n, _dtype)
             return compile_func_single_block(

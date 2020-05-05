@@ -293,8 +293,8 @@ def _gen_alloc(c_type, cname, alloc_size, el_type):
             cname, alloc_size, el_type
         )
     if c_type == boolean_array:
-        return "  {0} = bodo.libs.bool_arr_ext.init_bool_array(np.empty({1}, {2}), np.empty(({1} + 7) >> 3, np.uint8))\n".format(
-            cname, alloc_size, el_type
+        return "  {0} = bodo.libs.bool_arr_ext.alloc_bool_array({1})\n".format(
+            cname, alloc_size
         )
     if isinstance(c_type, DecimalArrayType):
         return "  {0} = bodo.libs.decimal_arr_ext.alloc_decimal_array({1}, {2}, {3})\n".format(
