@@ -260,7 +260,10 @@ class DataFrameAttribute(AttributeTemplate):
             dtypes.append(el_typ)
 
         row_typ = types.NamedTuple(dtypes, Row)
-        f_return_type = get_const_func_output_type(func, (row_typ,), self.context)
+        try:
+            f_return_type = get_const_func_output_type(func, (row_typ,), self.context)
+        except:
+            raise BodoError("DataFrame.apply(): user-defined function not supported")
 
         return signature(SeriesType(f_return_type, index=df.index), *args)
 
@@ -283,6 +286,9 @@ class DataFrameAttribute(AttributeTemplate):
                 new_names.append(v[1] if len(v) == 2 else v[1:])
                 new_data.append(df.data[i])
             return DataFrameType(tuple(new_data), df.index, tuple(new_names))
+
+
+DataFrameAttribute._no_unliteral = True
 
 
 def decref_df_data(context, builder, payload, df_type):

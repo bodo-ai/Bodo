@@ -1252,6 +1252,21 @@ def test_df_apply_func_case1():
     check_func(test_impl, (df,))
 
 
+def test_df_apply_error_check():
+    """make sure a proper error is raised when UDF is not supported (not compilable)
+    """
+
+    def test_impl(df):
+        # some UDF that cannot be supported, lambda calling a non-jit function
+        return df.apply(lambda r: g(r), axis=1)
+
+    df = pd.DataFrame({"A": np.arange(11)})
+    with pytest.raises(
+        BodoError, match="DataFrame.apply.*: user-defined function not supported"
+    ):
+        bodo.jit(test_impl)(df)
+
+
 def test_df_drop_inplace_branch():
     def test_impl(cond):
         if cond:

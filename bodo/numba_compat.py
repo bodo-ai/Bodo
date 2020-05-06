@@ -3,6 +3,7 @@ Numba monkey patches to fix issues related to Bodo. Should be imported before an
 other module in bodo package.
 """
 import operator
+import functools
 import hashlib
 import inspect
 import warnings
@@ -500,6 +501,56 @@ if (
 numba.core.typing.templates.make_overload_method_template = (
     make_overload_method_template
 )
+
+
+def bound_function(template_key, no_unliteral=False):
+    """
+    Wrap an AttributeTemplate resolve_* method to allow it to
+    resolve an instance method's signature rather than a instance attribute.
+    The wrapped method must return the resolved method's signature
+    according to the given self type, args, and keywords.
+
+    It is used thusly:
+
+        class ComplexAttributes(AttributeTemplate):
+            @bound_function("complex.conjugate")
+            def resolve_conjugate(self, ty, args, kwds):
+                return ty
+
+    *template_key* (e.g. "complex.conjugate" above) will be used by the
+    target to look up the method's implementation, as a regular function.
+    """
+    def wrapper(method_resolver):
+        @functools.wraps(method_resolver)
+        def attribute_resolver(self, ty):
+            class MethodTemplate(AbstractTemplate):
+                key = template_key
+
+                def generic(_, args, kws):
+                    sig = method_resolver(self, ty, args, kws)
+                    if sig is not None and sig.recvr is None:
+                        sig = sig.replace(recvr=ty)
+                    return sig
+
+            # only change: adding no_unliteral flag
+            MethodTemplate._no_unliteral = no_unliteral
+            return types.BoundFunction(MethodTemplate, ty)
+        return attribute_resolver
+    return wrapper
+
+
+# make sure bound_function hasn't changed before replacing it
+lines = inspect.getsource(numba.core.typing.templates.bound_function)
+if (
+    hashlib.sha256(lines.encode()).hexdigest()
+    != "a2feefe64eae6a15c56affc47bf0c1d04461f9566913442d539452b397103322"
+):  # pragma: no cover
+    warnings.warn(
+        "numba.core.typing.templates.bound_function has changed"
+    )
+
+
+numba.core.typing.templates.bound_function = bound_function
 
 
 def get_call_type(self, context, args, kws):
