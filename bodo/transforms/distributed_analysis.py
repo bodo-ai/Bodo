@@ -386,6 +386,7 @@ class DistributedAnalysis:
         elif isinstance(rhs_typ, DataFrameType) and rhs.attr in (
             "to_csv",
             "to_parquet",
+            "to_sql",
         ):
             return
         # list methods
@@ -1101,7 +1102,7 @@ class DistributedAnalysis:
 
     def _analyze_call_df(self, lhs, arr, func_name, args, array_dists):
         # to_csv() and to_parquet() can be parallelized
-        if func_name in {"to_csv", "to_parquet"}:
+        if func_name in {"to_csv", "to_parquet", "to_sql"}:
             return
 
         # set REP if not found

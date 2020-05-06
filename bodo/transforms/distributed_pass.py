@@ -915,6 +915,26 @@ class DistributedPass:
 
         return out
 
+    def _get_variable_const_ll(
+        self, assign, nodes, fct_name, rhs, kws, pos_arg, var_name, default_value
+    ):
+        """This is for assignment having a default value.
+        Type is set according to the default value and nodes is updated accordingly.
+        """
+        ll_var = ir.Var(
+            assign.target.scope, mk_unique_var(fct_name + "_" + var_name), rhs.loc
+        )
+        nodes.append(ir.Assign(ir.Const(default_value, rhs.loc), ll_var, rhs.loc))
+        if default_value == None:
+            self.typemap[ll_var.name] = types.none
+        elif isinstance(default_value, str):
+            self.typemap[ll_var.name] = types.StringLiteral(default_value)
+        elif isinstance(default_value, bool):
+            self.typemap[ll_var.name] = bodo.utils.typing.BooleanLiteral(default_value)
+        else:
+            raise BodoError("Missing type support. Insert your code here")
+        return get_call_expr_arg(fct_name, rhs.args, kws, pos_arg, var_name, ll_var)
+
     def _run_call_df(self, lhs, df, func_name, assign, args):
         if func_name == "to_parquet" and (
             self._is_1D_arr(df.name) or self._is_1D_Var_arr(df.name)
@@ -950,6 +970,69 @@ class DistributedPass:
             )
             return nodes + compile_func_single_block(
                 f, [df, fname, compression, index], assign.target, self
+            )
+        elif func_name == "to_sql" and (
+            self._is_1D_arr(df.name) or self._is_1D_Var_arr(df.name)
+        ):
+            # Calling in parallel case
+            rhs = assign.value
+            kws = dict(rhs.kws)
+            nodes = []
+
+            name = get_call_expr_arg("to_sql", rhs.args, kws, 0, "name")
+            con = get_call_expr_arg("to_sql", rhs.args, kws, 1, "con")
+            schema = self._get_variable_const_ll(
+                assign, nodes, "to_sql", rhs, kws, 2, "schema", None
+            )
+            if_exists = self._get_variable_const_ll(
+                assign, nodes, "to_sql", rhs, kws, 3, "if_exists", "fail"
+            )
+            # For variable index, we choose to use "True" since we did not find a type BooleanLiteral.
+            #
+            index = self._get_variable_const_ll(
+                assign, nodes, "to_sql", rhs, kws, 4, "index", True
+            )
+            index_label = self._get_variable_const_ll(
+                assign, nodes, "to_sql", rhs, kws, 5, "index_label", None
+            )
+            chunksize = self._get_variable_const_ll(
+                assign, nodes, "to_sql", rhs, kws, 6, "chunksize", None
+            )
+            dtype = self._get_variable_const_ll(
+                assign, nodes, "to_sql", rhs, kws, 7, "dtype", None
+            )
+            method = self._get_variable_const_ll(
+                assign, nodes, "to_sql", rhs, kws, 8, "dtype", None
+            )
+
+            f = lambda df, name, con, schema, if_exists, index, index_label, chunksize, dtype, method: df.to_sql(
+                name,
+                con,
+                schema=schema,
+                if_exists=if_exists,
+                index=index,
+                index_label=index_label,
+                chunksize=chunksize,
+                dtype=dtype,
+                method=method,
+                _is_parallel=True,
+            )
+            return nodes + compile_func_single_block(
+                f,
+                [
+                    df,
+                    name,
+                    con,
+                    schema,
+                    if_exists,
+                    index,
+                    index_label,
+                    chunksize,
+                    dtype,
+                    method,
+                ],
+                assign.target,
+                self,
             )
         elif func_name == "to_csv" and (
             self._is_1D_arr(df.name) or self._is_1D_Var_arr(df.name)
@@ -1014,9 +1097,6 @@ class DistributedPass:
             # nodes.append(print_node)
 
             # TODO: fix lazy IO load
-            from bodo.io import csv_cpp
-            import llvmlite.binding as ll
-
             def f(fname, str_out):  # pragma: no cover
                 utf8_str, utf8_len = unicode_to_utf8_and_len(str_out)
                 start = bodo.libs.distributed_api.dist_exscan(utf8_len, _op)
