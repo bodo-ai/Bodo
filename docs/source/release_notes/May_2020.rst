@@ -1,0 +1,42 @@
+.. _May_2020:
+
+Bodo 2020.05 Release (Date: 05/06/2020)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+New Features and Improvements
+------------------------------------------
+- Bodo is updated to use the latest versions of Numba and Apache Arrow packages:
+    - numba 0.49.0
+    - Apache Arrow 0.17.0
+- Various improvements to clarity and conciseness of error messages
+- Initial support for ``pandas.DataFrame.to_sql()``
+- ``pandas.read_sql()`` support ``sql`` and ``con`` passed to Bodo-decorated functions
+- Added support for ``pandas.read_json()`` and ``pandas.DataFrame.to_json()`` from & to POSIX, S3, and Hadoop File Systems.
+- Initial support for ``pandas.read_excel()``
+- ``numpy.fromfile()`` and ``numpy.tofile()`` from and to S3, and Hadoop File Systems.
+- Reduction in number of requests in I/O read calls
+- Initial support for array of lists of fixed sized values
+- List of strings data type support for ``pandas.DataFrame.join()``, ``pandas.DataFrame.drop_duplicates()``, and ``pandas.DataFrame.groupby()``
+- ``pandas.Timestamp`` subtraction, min and max
+- Improved support for null values in datetime and timedelta operations
+- Support ``copy()`` function for Series of ``decimal.Decimal`` and ``datetime.date`` data types and most Index types
+- Improved support for Series ``decimal.Decimal`` dtype
+- String Series and Dataframe Column are now mutable and support inplace ``fillna()``
+- ``pandas.Series.round()``
+- ``pandas.Dataframe.assign()``
+- Support ``groupby(...).first()`` operation
+- ``pandas.Dataframe.iloc`` support for extracting a subset of columns
+- ``numpy.array.sum(axis=0)`` 
+- ``numpy.reshape()`` multi-dimensional distributed arrays
+- Initial implementation of experimental legacy mode
+- Proper error when using unsupported ``pandas.(...)`` & ``pandas.Series.(...)`` functions
+- Improved robustness of ``pandas.DataFrame`` inplace operations
+- Memory usage improvements
+- Type safety improvements
+- Compilation time improvements
+
+
+Bug Fixes
+--------------
+- Fixed an issue in ``pandas.read_csv()`` reading a large CSV file in specific distributed cases
+- ``numpy.dot()`` with empty vector/matrix input

@@ -453,6 +453,7 @@ Combining / joining / merging:
 
 * :meth:`pandas.DataFrame.append` appending a dataframe or list of dataframes
   supported. `ignore_index=True` is necessary and set by default.
+* :meth:`pandas.DataFrame.assign` function arguments not supported yet.
 * :meth:`pandas.DataFrame.join` only dataframes. The output dataframe is not sorted by default for better parallel performance (Pandas may preserve key order depending on `how`).
   One can use explicit sort if needed.
 * :meth:`pandas.DataFrame.merge` only dataframes. `how`, `on`, `left_on`,
@@ -618,6 +619,8 @@ The operations are documented on `pandas.DataFrame.groupby <https://pandas.pydat
 * :meth:`pandas.core.groupby.GroupBy.aggregate` same as `agg`
 * :meth:`pandas.core.groupby.GroupBy.count`
 * :meth:`pandas.core.groupby.GroupBy.cumsum`
+* :meth:`pandas.core.groupby.GroupBy.first`
+* :meth:`pandas.core.groupby.GroupBy.last`
 * :meth:`pandas.core.groupby.GroupBy.max`
 * :meth:`pandas.core.groupby.GroupBy.mean`
 * :meth:`pandas.core.groupby.GroupBy.min`
