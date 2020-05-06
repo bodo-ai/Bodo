@@ -211,7 +211,7 @@ def overload_iloc_getitem(I, idx):
 
     # Integer case returns Series(object) which is not supported
     # TODO: error checking test
-    if isinstance(idx, types.Integer):  # pragma: no cover
+    if isinstance(types.unliteral(idx), types.Integer):  # pragma: no cover
         # TODO: support cases that can be typed, e.g. all float64
         # TODO: return namedtuple instead of Series?
         raise BodoError(

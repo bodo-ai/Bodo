@@ -247,7 +247,7 @@ h5_open_dset_or_group_obj = types.ExternalFunction(
 )
 
 
-@overload(operator.getitem, no_unliteral=True)
+@overload(operator.getitem)
 def overload_getitem_file(in_f, in_idx):
     if in_f in (h5file_type, h5dataset_or_group_type) and in_idx == string_type:
 

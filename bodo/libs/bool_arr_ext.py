@@ -447,7 +447,7 @@ def bool_arr_getitem(A, ind):
 
     # TODO: refactor with int arr since almost same code
 
-    if isinstance(ind, types.Integer):
+    if isinstance(types.unliteral(ind), types.Integer):
         # XXX: cannot handle NA for scalar getitem since not type stable
         return lambda A, ind: A._data[ind]
 
@@ -519,7 +519,7 @@ def bool_arr_setitem(A, idx, val):
     # TODO: refactor with int arr since almost same code
 
     # scalar case
-    if isinstance(idx, types.Integer):
+    if isinstance(types.unliteral(idx), types.Integer):
         assert val == types.bool_
 
         def impl_scalar(A, idx, val):  # pragma: no cover

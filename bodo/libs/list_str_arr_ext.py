@@ -346,7 +346,7 @@ def list_str_arr_getitem_array(arr, ind):
     if arr != list_string_array_type:
         return
 
-    if isinstance(ind, types.Integer):
+    if isinstance(types.unliteral(ind), types.Integer):
         # In the case of the entry being indicated as NA, we return a []
         # We are forced to do that since [] and np.nan are not of the same type.
         # Note that this behavior is different from pandas which returns a NaN

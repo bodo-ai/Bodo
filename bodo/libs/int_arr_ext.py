@@ -425,7 +425,7 @@ def int_arr_getitem(A, ind):
     if not isinstance(A, IntegerArrayType):
         return
 
-    if isinstance(ind, types.Integer):
+    if isinstance(types.unliteral(ind), types.Integer):
         # XXX: cannot handle NA for scalar getitem since not type stable
         return lambda A, ind: A._data[ind]
 
@@ -495,7 +495,7 @@ def int_arr_setitem(A, idx, val):
         return
 
     # scalar case
-    if isinstance(idx, types.Integer):
+    if isinstance(types.unliteral(idx), types.Integer):
         assert isinstance(val, types.Integer)
 
         def impl_scalar(A, idx, val):  # pragma: no cover

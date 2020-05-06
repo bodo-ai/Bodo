@@ -427,7 +427,7 @@ def decimal_arr_setitem(A, idx, val):
         return
 
     # scalar case
-    if isinstance(idx, types.Integer):
+    if isinstance(types.unliteral(idx), types.Integer):
         assert isinstance(val, Decimal128Type)
 
         def impl_scalar(A, idx, val):  # pragma: no cover
@@ -532,7 +532,7 @@ def decimal_arr_getitem(A, ind):
         return
 
     # covered by test_series_iat_getitem , test_series_iloc_getitem_int
-    if isinstance(ind, types.Integer):
+    if isinstance(types.unliteral(ind), types.Integer):
         precision = A.precision
         scale = A.scale
         # XXX: cannot handle NA for scalar getitem since not type stable

@@ -464,7 +464,7 @@ _install_dti_str_comp_ops()
 def overload_datetime_index_getitem(dti, ind):
     # TODO: other getitem cases
     if isinstance(dti, DatetimeIndexType):
-        if isinstance(ind, types.Integer):
+        if isinstance(types.unliteral(ind), types.Integer):
 
             def impl(dti, ind):  # pragma: no cover
                 dti_arr = bodo.hiframes.pd_index_ext.get_index_data(dti)
@@ -1136,7 +1136,7 @@ def rangeIndex_get_step(ri):
 @overload(operator.getitem, no_unliteral=True)
 def overload_range_index_getitem(I, idx):
     if isinstance(I, RangeIndexType):
-        if isinstance(idx, types.Integer):
+        if isinstance(types.unliteral(idx), types.Integer):
             # TODO: test
             # TODO: check valid
             return lambda I, idx: (idx * I._step) + I._start

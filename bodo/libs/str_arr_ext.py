@@ -1425,7 +1425,7 @@ def str_arr_getitem_int(A, ind):
     if A != string_array_type:
         return
 
-    if isinstance(ind, types.Integer):
+    if isinstance(types.unliteral(ind), types.Integer):
         # kind = numba.cpython.unicode.PY_UNICODE_1BYTE_KIND
         def str_arr_getitem_impl(A, ind):  # pragma: no cover
             start_offset = getitem_str_offset(A, ind)
@@ -1529,13 +1529,15 @@ def str_arr_getitem_int(A, ind):
 dummy_use = numba.njit(lambda a: None)
 
 
-@overload(operator.setitem, no_unliteral=True)
+# TODO: support literals directly and turn on `no_unliteral=True`
+#@overload(operator.setitem, no_unliteral=True)
+@overload(operator.setitem)
 def str_arr_setitem(A, idx, val):
     if A != string_array_type:
         return
 
     # scalar case
-    if isinstance(idx, types.Integer):
+    if isinstance(types.unliteral(idx), types.Integer):
         assert val == string_type
 
         # XXX: setitem works only if value is same size as the previous value
@@ -1642,7 +1644,7 @@ def overload_get_arr_data_ptr(arr, ind):
     """return data pointer for array 'arr' at index 'ind'
     currently only used in 'str_arr_item_to_numeric' for nullable int and numpy arrays
     """
-    assert isinstance(ind, types.Integer)
+    assert isinstance(types.unliteral(ind), types.Integer)
 
     # nullable int array
     if isinstance(arr, bodo.libs.int_arr_ext.IntegerArrayType):

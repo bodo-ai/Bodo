@@ -387,7 +387,7 @@ def overload_pd_timestamp(
     # User passed positional arguments:
     # Timestamp(year, month, day[, hour[, minute[, second[,
     # microsecond[, nanosecond[, tzinfo]]]]]])
-    if isinstance(freq, types.Integer):
+    if isinstance(types.unliteral(freq), types.Integer):
 
         def impl_pos(
             ts_input=_no_input,

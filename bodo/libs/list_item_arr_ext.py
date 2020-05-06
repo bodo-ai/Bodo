@@ -412,7 +412,7 @@ def list_item_arr_getitem_array(arr, ind):
     if not isinstance(arr, ListItemArrayType):
         return
 
-    if isinstance(ind, types.Integer):
+    if isinstance(types.unliteral(ind), types.Integer):
         # returning [] if NA due to type stability issues
         # TODO: warning if value is NA?
         def list_item_arr_getitem_impl(arr, ind):  # pragma: no cover

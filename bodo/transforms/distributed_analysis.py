@@ -1016,7 +1016,7 @@ class DistributedAnalysis:
         if func_name == "reshape":
             # shape argument can be int or tuple of ints
             shape_typ = self.typemap[args[1].name]
-            if isinstance(shape_typ, types.Integer):
+            if isinstance(types.unliteral(shape_typ), types.Integer):
                 shape_vars = [args[1]]
             else:
                 isinstance(shape_typ, types.BaseTuple)
@@ -1445,7 +1445,7 @@ class DistributedAnalysis:
             return
 
         # int index of dist array
-        if isinstance(index_typ, types.Integer):
+        if isinstance(types.unliteral(index_typ), types.Integer):
             # multi-dim not supported yet, TODO: support
             if is_np_array_typ(in_typ) and in_typ.ndim > 1:
                 self._set_REP(inst.list_vars(), array_dists)

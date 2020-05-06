@@ -1625,6 +1625,7 @@ def bcast_scalar(val):  # pragma: no cover
 def bcast_scalar_overload(val):
     """broadcast for a scalar value
     """
+    val = types.unliteral(val)
     # NOTE: scatterv() can call this with string on rank 0 and None on others, or an
     # Optional type
     assert (

@@ -181,7 +181,7 @@ del_str = types.ExternalFunction("del_str", types.void(std_str_type))
 get_c_str = types.ExternalFunction("get_c_str", types.voidptr(std_str_type))
 
 
-@overload(int, no_unliteral=True)
+@overload(int)
 def int_str_overload(in_str):
     if in_str == string_type:
 
@@ -311,7 +311,7 @@ def unicode_to_char_ptr(in_str):  # pragma: no cover
     return in_str
 
 
-@overload(unicode_to_char_ptr, no_unliteral=True)
+@overload(unicode_to_char_ptr)
 def unicode_to_char_ptr_overload(a):
     # str._data is not safe since str might be literal
     # overload resolves str literal to unicode_type
@@ -392,16 +392,16 @@ def random_access_str_arr_getitem(A, ind):
     if A != random_access_string_array:
         return
 
-    if isinstance(ind, types.Integer):
+    if isinstance(types.unliteral(ind), types.Integer):
         return lambda A, ind: A._data[ind]
 
 
-@overload(operator.setitem, no_unliteral=True)
+@overload(operator.setitem)
 def random_access_str_arr_setitem(A, idx, val):
     if A != random_access_string_array:
         return
 
-    if isinstance(idx, types.Integer):
+    if isinstance(types.unliteral(idx), types.Integer):
         assert val == string_type
 
         def impl_scalar(A, idx, val):  # pragma: no cover

@@ -1288,7 +1288,7 @@ def setitem_array_with_str(arr, i, v):  # pragma: no cover
     return
 
 
-@overload(setitem_array_with_str, no_unliteral=True)
+@overload(setitem_array_with_str)
 def setitem_array_with_str_overload(arr, i, val):
     if arr == string_array_type:
 

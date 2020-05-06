@@ -995,6 +995,7 @@ def overload_isna(obj):
         return lambda obj: pd.isna(bodo.utils.conversion.coerce_to_array(obj))
 
     # scalars
+    obj = types.unliteral(obj)
     if obj == bodo.string_type:
         return lambda obj: False
     if isinstance(obj, types.Integer):

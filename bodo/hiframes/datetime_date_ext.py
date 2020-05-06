@@ -689,7 +689,7 @@ def dt_date_arr_getitem(A, ind):
     if A != datetime_date_array_type:
         return
 
-    if isinstance(ind, types.Integer):
+    if isinstance(types.unliteral(ind), types.Integer):
         return lambda A, ind: cast_int_to_datetime_date(A._data[ind])
 
     # bool arr indexing
@@ -757,7 +757,7 @@ def dt_date_arr_setitem(A, ind, val):
     if A != datetime_date_array_type:
         return
 
-    if isinstance(ind, types.Integer):
+    if isinstance(types.unliteral(ind), types.Integer):
 
         def impl(A, ind, val):  # pragma: no cover
             A._data[ind] = cast_datetime_date_to_int(val)

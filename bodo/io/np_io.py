@@ -98,7 +98,7 @@ def get_dtype_size(typingctx, dtype=None):
     return types.intp(dtype), codegen
 
 
-@overload_method(types.Array, "tofile", no_unliteral=True)
+@overload_method(types.Array, "tofile")
 def tofile_overload(arr, fname):
     # FIXME: import here since hio has hdf5 which might not be available
     from bodo.libs import hio
@@ -135,7 +135,7 @@ def file_write_parallel(fname, arr, start, count):  # pragma: no cover
 
 
 # TODO: fix A.ctype inlined case
-@overload(file_write_parallel, no_unliteral=True)
+@overload(file_write_parallel)
 def file_write_parallel_overload(fname, arr, start, count):
     if fname == string_type:  # avoid str literal
 
@@ -156,7 +156,7 @@ def file_read_parallel(fname, arr, start, count):  # pragma: no cover
     return
 
 
-@overload(file_read_parallel, no_unliteral=True)
+@overload(file_read_parallel)
 def file_read_parallel_overload(fname, arr, start, count):
     if fname == string_type:
 
@@ -173,7 +173,7 @@ def file_read(fname, arr, size):  # pragma: no cover
     return
 
 
-@overload(file_read, no_unliteral=True)
+@overload(file_read)
 def file_read_overload(fname, arr, size):
     if fname == string_type:
         # TODO: unicode name
@@ -184,7 +184,7 @@ def get_file_size(fname):  # pragma: no cover
     return 0
 
 
-@overload(get_file_size, no_unliteral=True)
+@overload(get_file_size)
 def get_file_size_overload(fname):
     if fname == string_type:
         # TODO: unicode name
