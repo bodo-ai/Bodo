@@ -189,11 +189,14 @@ class SeriesPass:
                 out_nodes = [inst]
                 self.curr_loc = inst.loc
 
-                if isinstance(inst, ir.Assign):
-                    self.func_ir._definitions[inst.target.name].remove(inst.value)
-                    out_nodes = self._run_assign(inst)
-                elif isinstance(inst, (ir.SetItem, ir.StaticSetItem)):
-                    out_nodes = self._run_setitem(inst)
+                try:
+                    if isinstance(inst, ir.Assign):
+                        self.func_ir._definitions[inst.target.name].remove(inst.value)
+                        out_nodes = self._run_assign(inst)
+                    elif isinstance(inst, (ir.SetItem, ir.StaticSetItem)):
+                        out_nodes = self._run_setitem(inst)
+                except BodoError as e:
+                    raise BodoError(self.curr_loc.strformat() + "\n" + str(e))
 
                 if isinstance(out_nodes, list):
                     new_body.extend(out_nodes)

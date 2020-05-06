@@ -37,8 +37,9 @@ class BodoError(BaseException):
     numba's error catching, which enables raising simpler error directly to the user.
     TODO: change to Exception when possible.
     """
-
-    pass
+    def __init__(self, msg, is_new=True):
+        self.is_new = is_new
+        super(BodoError, self).__init__(msg)
 
 
 class BodoException(Exception):

@@ -608,6 +608,7 @@ def _compile_for_args(self, *args, **kws):  # pragma: no cover
     for the given *args* and *kws*, and return the resulting callable.
     """
     assert not kws
+    import bodo
 
     def error_rewrite(e, issue_type):
         """
@@ -629,6 +630,7 @@ def _compile_for_args(self, *args, **kws):  # pragma: no cover
         else:
             argtypes.append(self.typeof_pyval(a))
     try:
+        error = None
         return self.compile(tuple(argtypes))
     except errors.ForceLiteralArg as e:
         # Received request for compiler re-entry with the list of arguments
@@ -706,17 +708,21 @@ def _compile_for_args(self, *args, **kws):  # pragma: no cover
                 e.patch_message("\n".join((str(e).rstrip(), help_msg)))
         # ignore the FULL_TRACEBACKS config, this needs reporting!
         raise e
+    except bodo.utils.typing.BodoError as e:
+        # create a new error so that the stacktrace only reaches
+        # the point where the new error is raised
+        error = bodo.utils.typing.BodoError(str(e))
     finally:
         # avoid issue of reference leak of arguments to jitted function:
         # https://github.com/numba/numba/issues/5419
         del args
+        if error:
+            raise error
 
 
 # workaround for Numba #5419 issue (https://github.com/numba/numba/issues/5419)
 # first we check that the hash of the Numba function that we are replacing
 # matches the one of the function that we copied from Numba
-import inspect
-import hashlib
 
 lines = inspect.getsource(numba.core.dispatcher._DispatcherBase._compile_for_args)
 if (
@@ -726,6 +732,63 @@ if (
     warnings.warn("numba.core.dispatcher._DispatcherBase._compile_for_args has changed")
 # now replace the function with our own
 numba.core.dispatcher._DispatcherBase._compile_for_args = _compile_for_args
+
+
+def propagate(self, typeinfer):
+    """
+    Execute all constraints.  Errors are caught and returned as a list.
+    This allows progressing even though some constraints may fail
+    due to lack of information
+    (e.g. imprecise types such as List(undefined)).
+    """
+    import bodo
+    errors = []
+    for constraint in self.constraints:
+        loc = constraint.loc
+        with typeinfer.warnings.catch_warnings(filename=loc.filename,
+                                               lineno=loc.line):
+            try:
+                constraint(typeinfer)
+            except numba.core.errors.ForceLiteralArg as e:
+                errors.append(e)
+            except numba.core.errors.TypingError as e:
+                numba.core.typeinfer._logger.debug("captured error", exc_info=e)
+                new_exc = numba.core.errors.TypingError(
+                    str(e), loc=constraint.loc,
+                    highlighting=False,
+                )
+                errors.append(numba.core.utils.chain_exception(new_exc, e))
+            except Exception as e:
+                numba.core.typeinfer._logger.debug("captured error", exc_info=e)
+                msg = ("Internal error at {con}.\n"
+                       "{err}\nEnable logging at debug level for details.")
+                new_exc = numba.core.errors.TypingError(
+                    msg.format(con=constraint, err=str(e)),
+                    loc=constraint.loc,
+                    highlighting=False,
+                )
+                errors.append(numba.core.utils.chain_exception(new_exc, e))
+            except bodo.utils.typing.BodoError as e:
+                if e.is_new:
+                    # the first time we see BodoError during type inference, we
+                    # put the code location in the error message, and re-raise
+                    loc = constraint.loc
+                    raise bodo.utils.typing.BodoError(loc.strformat() + "\n" + str(e), is_new=False)
+                else:
+                    # keep raising and propagating the error through numba until
+                    # it reaches the user
+                    raise e
+    return errors
+
+
+lines = inspect.getsource(numba.core.typeinfer.ConstraintNetwork.propagate)
+if (
+    hashlib.sha256(lines.encode()).hexdigest()
+    != "2c204df4d8c58da7c86e0abbab48a7a7863ee3cbe8d2ba89f617d4f580b622e9"
+):  # pragma: no cover
+    warnings.warn("numba.core.typeinfer.ConstraintNetwork.propagate has changed")
+numba.core.typeinfer.ConstraintNetwork.propagate = propagate
+
 
 # replaces remove_dead_block of Numba to add Bodo optimization (e.g. replace dead array
 # in array.shape)
