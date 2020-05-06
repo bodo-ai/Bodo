@@ -1373,13 +1373,13 @@ class SeriesPass:
             if typ.dtype == bodo.hiframes.datetime_date_ext.datetime_date_type:
                 impl = lambda n, t: bodo.hiframes.datetime_date_ext.alloc_datetime_date_array(
                     n
-                )
+                )  # pragma: no cover
             elif isinstance(typ, IntegerArrayType):
-                impl = lambda n, t: bodo.libs.int_arr_ext.alloc_int_array(n, _dtype)
+                impl = lambda n, t: bodo.libs.int_arr_ext.alloc_int_array(n, _dtype)  # pragma: no cover
             elif typ == boolean_array:
-                impl = lambda n, t: bodo.libs.bool_arr_ext.alloc_bool_array(n)
+                impl = lambda n, t: bodo.libs.bool_arr_ext.alloc_bool_array(n)  # pragma: no cover
             else:
-                impl = lambda n, t: np.empty(n, _dtype)
+                impl = lambda n, t: np.empty(n, _dtype)  # pragma: no cover
             return compile_func_single_block(
                 impl, rhs.args, assign.target, self, extra_globals={"_dtype": typ.dtype}
             )
@@ -1412,7 +1412,7 @@ class SeriesPass:
                 impl = bodo.hiframes.pd_index_ext.overload_datetime_index_max(
                     *arg_typs, **kw_typs
                 )
-            stub = lambda dti, axis=None, skipna=True: None
+            stub = lambda dti, axis=None, skipna=True: None  # pragma: no cover
             return self._replace_func(
                 impl,
                 rhs.args,

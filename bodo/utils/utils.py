@@ -469,7 +469,7 @@ def empty_like_type_overload(n, arr):
     if isinstance(arr, IntegerArrayType):
         _dtype = arr.dtype
 
-        def empty_like_type_int_arr(n, arr):
+        def empty_like_type_int_arr(n, arr):  # pragma: no cover
             return bodo.libs.int_arr_ext.alloc_int_array(n, _dtype)
 
         return empty_like_type_int_arr
