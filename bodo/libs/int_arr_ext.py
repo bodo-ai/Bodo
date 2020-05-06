@@ -496,7 +496,6 @@ def int_arr_setitem(A, idx, val):
 
     # scalar case
     if isinstance(idx, types.Integer):
-        assert isinstance(val, types.Integer)
 
         def impl_scalar(A, idx, val):  # pragma: no cover
             A._data[idx] = val
