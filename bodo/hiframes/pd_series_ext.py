@@ -57,6 +57,7 @@ from bodo.utils.typing import (
     is_overload_false,
     is_overload_none,
     create_unsupported_overload,
+    BodoError,
 )
 from bodo.utils.transform import get_const_func_output_type
 
@@ -544,7 +545,7 @@ class SeriesAttribute(AttributeTemplate):
         pysig = numba.core.utils.pysignature(rolling_stub)
         return signature(SeriesRollingType(ary), *args).replace(pysig=pysig)
 
-    def _resolve_map_func(self, ary, func, pysig, f_args=None):
+    def _resolve_map_func(self, ary, func, pysig, fname, f_args=None):
 
         dtype = ary.dtype
         # getitem returns Timestamp for dt_index and series(dt64)
@@ -554,7 +555,11 @@ class SeriesAttribute(AttributeTemplate):
         in_types = (dtype,)
         if f_args is not None:
             in_types += tuple(f_args.types)
-        f_return_type = get_const_func_output_type(func, in_types, self.context)
+
+        try:
+            f_return_type = get_const_func_output_type(func, in_types, self.context)
+        except:
+            raise BodoError(f"Series.{fname}(): user-defined function not supported")
 
         data_arr = _get_series_array_type(f_return_type)
         # Series.map codegen returns np bool array instead of boolean_array currently
@@ -574,7 +579,7 @@ class SeriesAttribute(AttributeTemplate):
             pass
 
         pysig = numba.core.utils.pysignature(map_stub)
-        return self._resolve_map_func(ary, func, pysig)
+        return self._resolve_map_func(ary, func, pysig, "map")
 
     @bound_function("series.apply")
     def resolve_apply(self, ary, args, kws):
@@ -587,7 +592,7 @@ class SeriesAttribute(AttributeTemplate):
 
         pysig = numba.core.utils.pysignature(apply_stub)
         # TODO: handle apply differences: extra args, np ufuncs etc.
-        return self._resolve_map_func(ary, func, pysig, f_args)
+        return self._resolve_map_func(ary, func, pysig, "apply", f_args)
 
     def _resolve_combine_func(self, ary, args, kws):
         # handle kwargs
@@ -713,7 +718,7 @@ class SeriesRollingAttribute(AttributeTemplate):
             SeriesType(
                 types.float64, index=ary.stype.index, name_typ=ary.stype.name_typ
             ),
-            *args
+            *args,
         )
 
     @bound_function("rolling.cov")
@@ -722,7 +727,7 @@ class SeriesRollingAttribute(AttributeTemplate):
             SeriesType(
                 types.float64, index=ary.stype.index, name_typ=ary.stype.name_typ
             ),
-            *args
+            *args,
         )
 
     @bound_function("rolling.corr")
@@ -731,7 +736,7 @@ class SeriesRollingAttribute(AttributeTemplate):
             SeriesType(
                 types.float64, index=ary.stype.index, name_typ=ary.stype.name_typ
             ),
-            *args
+            *args,
         )
 
 
@@ -744,7 +749,7 @@ def install_rolling_method(name):
                 SeriesType(
                     types.float64, index=ary.stype.index, name_typ=ary.stype.name_typ
                 ),
-                *args
+                *args,
             )
 
         my_attr = {"key": "rolling." + name, "generic": rolling_generic}

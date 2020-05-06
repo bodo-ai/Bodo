@@ -1248,6 +1248,21 @@ def test_series_map_dt_str():
     check_func(test_impl, (S,))
 
 
+def test_series_map_error_check():
+    """make sure proper error is raised when UDF is not supported
+    """
+
+    def test_impl(S):
+        # lambda calling a non-jit function that we don't support
+        return S.map(lambda a: g1(a))
+
+    S = pd.Series([2, 1, 3])
+    with pytest.raises(
+        BodoError, match="Series.map.*: user-defined function not supported"
+    ):
+        bodo.jit(test_impl)(S)
+
+
 @pytest.mark.parametrize(
     "S",
     [
