@@ -143,7 +143,7 @@ h5_open = types.ExternalFunction(
 
 if bodo.config._has_h5py:
 
-    @overload(h5py.File, no_unliteral=True)
+    @overload(h5py.File)
     def overload_h5py_file(
         name,
         mode=None,

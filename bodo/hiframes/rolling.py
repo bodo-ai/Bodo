@@ -940,7 +940,7 @@ def shift():  # pragma: no cover
 
 
 # using overload since njit bakes in Literal[bool](False) for parallel
-@overload(shift, jit_options={"cache": True}, no_unliteral=True)
+@overload(shift, jit_options={"cache": True})
 def shift_overload(in_arr, shift, parallel):
     if not isinstance(parallel, types.Literal):
         return shift_impl
@@ -1025,7 +1025,7 @@ def pct_change():  # pragma: no cover
 
 
 # using overload since njit bakes in Literal[bool](False) for parallel
-@overload(pct_change, jit_options={"cache": True}, no_unliteral=True)
+@overload(pct_change, jit_options={"cache": True})
 def pct_change_overload(in_arr, shift, parallel):
     if not isinstance(parallel, types.Literal):
         return pct_change_impl
@@ -1498,8 +1498,8 @@ def alloc_shift(A):  # pragma: no cover
 @overload(alloc_shift, no_unliteral=True)
 def alloc_shift_overload(A):
     if isinstance(A.dtype, types.Integer):
-        return lambda A: np.empty(len(A), np.float64)
-    return lambda A: np.empty(len(A), A.dtype)
+        return lambda A: np.empty(len(A), np.float64)  # pragma: no cover
+    return lambda A: np.empty(len(A), A.dtype)  # pragma: no cover
 
 
 def shift_dtype(d):  # pragma: no cover
@@ -1509,6 +1509,6 @@ def shift_dtype(d):  # pragma: no cover
 @overload(shift_dtype, no_unliteral=True)
 def shift_dtype_overload(a):
     if isinstance(a.dtype, types.Integer):
-        return lambda a: np.float64
+        return lambda a: np.float64  # pragma: no cover
     else:
-        return lambda a: a
+        return lambda a: a  # pragma: no cover

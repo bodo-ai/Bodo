@@ -2237,6 +2237,8 @@ class FillnaDummyTyper(AbstractTemplate):
 
 @lower_builtin(fillna_dummy, types.VarArg(types.Any))
 def lower_fillna_dummy(context, builder, sig, args):
+    if sig.return_type == types.none:
+        return
     out_obj = cgutils.create_struct_proxy(sig.return_type)(context, builder)
     return out_obj._getvalue()
 
