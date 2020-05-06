@@ -462,7 +462,7 @@ def get_split_view_data_ptr(arr, data_start):  # pragma: no cover
     return get_array_ctypes_ptr(arr._data, data_start)
 
 
-@overload(len)
+@overload(len, no_unliteral=True)
 def str_arr_split_view_len_overload(arr):
     if arr == string_array_split_view_type:
         return lambda arr: np.int64(arr._num_items)
@@ -473,9 +473,9 @@ def overload_split_view_arr_shape(A):
     return lambda A: (np.int64(A._num_items),)
 
 
-@overload(operator.getitem)
+@overload(operator.getitem, no_unliteral=True)
 def str_arr_split_view_getitem_overload(A, ind):
-    if A == string_array_split_view_type and isinstance(ind, types.Integer):
+    if A == string_array_split_view_type and isinstance(types.unliteral(ind), types.Integer):
         kind = numba.cpython.unicode.PY_UNICODE_1BYTE_KIND
 
         def _impl(A, ind):  # pragma: no cover

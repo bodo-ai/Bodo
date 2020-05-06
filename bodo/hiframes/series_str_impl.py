@@ -176,7 +176,7 @@ def overload_series_str(s):
     return lambda s: bodo.hiframes.series_str_impl.init_series_str_method(s)
 
 
-@overload_method(SeriesStrMethodType, "len", inline="always")
+@overload_method(SeriesStrMethodType, "len", inline="always", no_unliteral=True)
 def overload_str_method_len(S_str):
     def impl(S_str):  # pragma: no cover
         S = S_str._obj
@@ -198,7 +198,7 @@ def overload_str_method_len(S_str):
     return impl
 
 
-@overload_method(SeriesStrMethodType, "split", inline="always")
+@overload_method(SeriesStrMethodType, "split", inline="always", no_unliteral=True)
 def overload_str_method_split(S_str, pat=None, n=-1, expand=False):
     # TODO: support or just check n and expand arguments
     if not is_overload_none(pat):
@@ -237,7 +237,7 @@ def overload_str_method_split(S_str, pat=None, n=-1, expand=False):
     return _str_split_impl
 
 
-@overload_method(SeriesStrMethodType, "get")
+@overload_method(SeriesStrMethodType, "get", no_unliteral=True)
 def overload_str_method_get(S_str, i):
     arr_typ = S_str.stype.data
     if (
@@ -318,7 +318,7 @@ def overload_str_method_get(S_str, i):
     return _str_get_impl
 
 
-@overload_method(SeriesStrMethodType, "join", inline="always")
+@overload_method(SeriesStrMethodType, "join", inline="always", no_unliteral=True)
 def overload_str_method_join(S_str, sep):
     arr_typ = S_str.stype.data
     if (
@@ -361,7 +361,7 @@ def overload_str_method_join(S_str, sep):
     return impl
 
 
-@overload_method(SeriesStrMethodType, "replace", inline="always")
+@overload_method(SeriesStrMethodType, "replace", inline="always", no_unliteral=True)
 def overload_str_method_replace(S_str, pat, repl, n=-1, case=None, flags=0, regex=True):
     not_supported_arg_check("replace", "n", n, -1)
     not_supported_arg_check("replace", "case", case, None)
@@ -437,7 +437,7 @@ def overload_str_method_replace(S_str, pat, repl, n=-1, case=None, flags=0, rege
     return _str_replace_noregex_impl
 
 
-@overload_method(SeriesStrMethodType, "contains")
+@overload_method(SeriesStrMethodType, "contains", no_unliteral=True)
 def overload_str_method_contains(S_str, pat, case=True, flags=0, na=np.nan, regex=True):
     not_supported_arg_check("contains", "case", case, True)
     not_supported_arg_check("contains", "na", na, np.nan)
@@ -490,7 +490,7 @@ def overload_str_method_contains(S_str, pat, case=True, flags=0, na=np.nan, rege
     return _str_contains_noregex_impl
 
 
-@overload_method(SeriesStrMethodType, "count", inline="always")
+@overload_method(SeriesStrMethodType, "count", inline="always", no_unliteral=True)
 def overload_str_method_count(S_str, pat, flags=0):
     # python str.count() and pandas str.count() are different
     str_arg_check("count", "pat", pat)
@@ -515,7 +515,7 @@ def overload_str_method_count(S_str, pat, flags=0):
     return impl
 
 
-@overload_method(SeriesStrMethodType, "find", inline="always")
+@overload_method(SeriesStrMethodType, "find", inline="always", no_unliteral=True)
 def overload_str_method_find(S_str, sub):
     # not supporting start,end as arguments
     str_arg_check("find", "sub", sub)
@@ -538,7 +538,7 @@ def overload_str_method_find(S_str, sub):
     return impl
 
 
-@overload_method(SeriesStrMethodType, "rfind", inline="always")
+@overload_method(SeriesStrMethodType, "rfind", inline="always", no_unliteral=True)
 def overload_str_method_rfind(S_str, sub, start=0, end=None):
     str_arg_check("rfind", "sub", sub)
     if start != 0:
@@ -564,7 +564,7 @@ def overload_str_method_rfind(S_str, sub, start=0, end=None):
     return impl
 
 
-@overload_method(SeriesStrMethodType, "center", inline="always")
+@overload_method(SeriesStrMethodType, "center", inline="always", no_unliteral=True)
 def overload_str_method_center(S_str, width, fillchar=" "):
     common_validate_padding("center", width, fillchar)
 
@@ -596,7 +596,7 @@ def overload_str_method_center(S_str, width, fillchar=" "):
     return impl
 
 
-@overload_method(SeriesStrMethodType, "ljust", inline="always")
+@overload_method(SeriesStrMethodType, "ljust", inline="always", no_unliteral=True)
 def overload_str_method_ljust(S_str, width, fillchar=" "):
     common_validate_padding("ljust", width, fillchar)
 
@@ -628,7 +628,7 @@ def overload_str_method_ljust(S_str, width, fillchar=" "):
     return impl
 
 
-@overload_method(SeriesStrMethodType, "rjust", inline="always")
+@overload_method(SeriesStrMethodType, "rjust", inline="always", no_unliteral=True)
 def overload_str_method_rjust(S_str, width, fillchar=" "):
     common_validate_padding("rjust", width, fillchar)
 
@@ -660,7 +660,7 @@ def overload_str_method_rjust(S_str, width, fillchar=" "):
     return impl
 
 
-@overload_method(SeriesStrMethodType, "pad")
+@overload_method(SeriesStrMethodType, "pad", no_unliteral=True)
 def overload_str_method_pad(S_str, width, side="left", fillchar=" "):
     common_validate_padding("pad", width, fillchar)
     if is_overload_constant_str(side):
@@ -715,7 +715,7 @@ def overload_str_method_pad(S_str, width, side="left", fillchar=" "):
     return impl
 
 
-@overload_method(SeriesStrMethodType, "zfill", inline="always")
+@overload_method(SeriesStrMethodType, "zfill", inline="always", no_unliteral=True)
 def overload_str_method_zfill(S_str, width):
     int_arg_check("zfill", "width", width)
 
@@ -745,7 +745,7 @@ def overload_str_method_zfill(S_str, width):
     return impl
 
 
-@overload_method(SeriesStrMethodType, "slice")
+@overload_method(SeriesStrMethodType, "slice", no_unliteral=True)
 def overload_str_method_slice(S_str, start=None, stop=None, step=None):
     if not is_overload_none(start):
         int_arg_check("slice", "start", start)
@@ -780,7 +780,7 @@ def overload_str_method_slice(S_str, start=None, stop=None, step=None):
     return impl
 
 
-@overload_method(SeriesStrMethodType, "startswith", inline="always")
+@overload_method(SeriesStrMethodType, "startswith", inline="always", no_unliteral=True)
 def overload_str_method_startswith(S_str, pat, na=np.nan):
     not_supported_arg_check("startswith", "na", na, np.nan)
     str_arg_check("startswith", "pat", pat)
@@ -803,7 +803,7 @@ def overload_str_method_startswith(S_str, pat, na=np.nan):
     return impl
 
 
-@overload_method(SeriesStrMethodType, "endswith", inline="always")
+@overload_method(SeriesStrMethodType, "endswith", inline="always", no_unliteral=True)
 def overload_str_method_endswith(S_str, pat, na=np.nan):
     not_supported_arg_check("endswith", "na", na, np.nan)
     str_arg_check("endswith", "pat", pat)
@@ -826,22 +826,22 @@ def overload_str_method_endswith(S_str, pat, na=np.nan):
     return impl
 
 
-@overload(operator.getitem)
+@overload(operator.getitem, no_unliteral=True)
 def overload_str_method_getitem(S_str, ind):
     if not isinstance(S_str, SeriesStrMethodType):
         return
 
-    if not isinstance(ind, (types.SliceType, types.Integer)):
+    if not isinstance(types.unliteral(ind), (types.SliceType, types.Integer)):
         raise BodoError("index input to Series.str[] should be a slice or an integer")
 
     if isinstance(ind, types.SliceType):
         return lambda S_str, ind: S_str.slice(ind.start, ind.stop, ind.step)
 
-    if isinstance(ind, types.Integer):
+    if isinstance(types.unliteral(ind), types.Integer):
         return lambda S_str, ind: S_str.get(ind)
 
 
-@overload_method(SeriesStrMethodType, "extract", inline="always")
+@overload_method(SeriesStrMethodType, "extract", inline="always", no_unliteral=True)
 def overload_str_method_extract(S_str, pat, flags=0, expand=True):
 
     if not is_overload_constant_bool(expand):
@@ -931,7 +931,7 @@ def overload_str_method_extract(S_str, pat, flags=0, expand=True):
     return impl
 
 
-@overload_method(SeriesStrMethodType, "extractall", inline="always")
+@overload_method(SeriesStrMethodType, "extractall", inline="always", no_unliteral=True)
 def overload_str_method_extractall(S_str, pat, flags=0, expand=True):
 
     columns, _ = _get_column_names_from_regex(pat, flags, "extractall")

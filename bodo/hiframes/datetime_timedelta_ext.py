@@ -99,7 +99,7 @@ def unbox_datetime_timedelta(typ, val, c):
 
 
 # 6. Implement the constructor
-@overload(datetime.timedelta)
+@overload(datetime.timedelta, no_unliteral=True)
 def datetime_timedelta(
     days=0, seconds=0, microseconds=0, milliseconds=0, minutes=0, hours=0, weeks=0
 ):
@@ -174,7 +174,7 @@ def timedelta_get_microseconds(td):
     return impl
 
 
-@overload_method(DatetimeTimeDeltaType, "total_seconds")
+@overload_method(DatetimeTimeDeltaType, "total_seconds", no_unliteral=True)
 def total_seconds(td):
     """Total seconds in the duration."""
 
@@ -220,7 +220,7 @@ def _divide_and_round(a, b):  # pragma: no cover
 _MAXORDINAL = 3652059
 
 
-@overload(operator.add)
+@overload(operator.add, no_unliteral=True)
 def timedelta_add(lhs, rhs):
     if lhs == datetime_timedelta_type and rhs == datetime_timedelta_type:
 
@@ -277,7 +277,7 @@ def timedelta_add(lhs, rhs):
         return impl
 
 
-@overload(operator.sub)
+@overload(operator.sub, no_unliteral=True)
 def timedelta_sub(lhs, rhs):
     if lhs == datetime_timedelta_type and rhs == datetime_timedelta_type:
 
@@ -297,7 +297,7 @@ def timedelta_sub(lhs, rhs):
         return impl
 
 
-@overload(operator.mul)
+@overload(operator.mul, no_unliteral=True)
 def timedelta_mul(lhs, rhs):
     if lhs == datetime_timedelta_type and rhs == types.int64:
 
@@ -320,7 +320,7 @@ def timedelta_mul(lhs, rhs):
         return impl
 
 
-@overload(operator.floordiv)
+@overload(operator.floordiv, no_unliteral=True)
 def timedelta_floordiv(lhs, rhs):
     if lhs == datetime_timedelta_type and rhs == datetime_timedelta_type:
 
@@ -339,7 +339,7 @@ def timedelta_floordiv(lhs, rhs):
         return impl
 
 
-@overload(operator.truediv)
+@overload(operator.truediv, no_unliteral=True)
 def timedelta_truediv(lhs, rhs):
     if lhs == datetime_timedelta_type and rhs == datetime_timedelta_type:
 
@@ -360,7 +360,7 @@ def timedelta_truediv(lhs, rhs):
         return impl
 
 
-@overload(operator.mod)
+@overload(operator.mod, no_unliteral=True)
 def timedelta_mod(lhs, rhs):
     if lhs == datetime_timedelta_type and rhs == datetime_timedelta_type:
 
@@ -371,7 +371,7 @@ def timedelta_mod(lhs, rhs):
         return impl
 
 
-@overload(operator.eq)
+@overload(operator.eq, no_unliteral=True)
 def timedelta_eq(lhs, rhs):
     if lhs == datetime_timedelta_type and rhs == datetime_timedelta_type:
 
@@ -382,7 +382,7 @@ def timedelta_eq(lhs, rhs):
         return impl
 
 
-@overload(operator.ne)
+@overload(operator.ne, no_unliteral=True)
 def timedelta_ne(lhs, rhs):
     if lhs == datetime_timedelta_type and rhs == datetime_timedelta_type:
 
@@ -393,7 +393,7 @@ def timedelta_ne(lhs, rhs):
         return impl
 
 
-@overload(operator.le)
+@overload(operator.le, no_unliteral=True)
 def timedelta_le(lhs, rhs):
     if lhs == datetime_timedelta_type and rhs == datetime_timedelta_type:
 
@@ -404,7 +404,7 @@ def timedelta_le(lhs, rhs):
         return impl
 
 
-@overload(operator.lt)
+@overload(operator.lt, no_unliteral=True)
 def timedelta_lt(lhs, rhs):
     if lhs == datetime_timedelta_type and rhs == datetime_timedelta_type:
 
@@ -415,7 +415,7 @@ def timedelta_lt(lhs, rhs):
         return impl
 
 
-@overload(operator.ge)
+@overload(operator.ge, no_unliteral=True)
 def timedelta_ge(lhs, rhs):
     if lhs == datetime_timedelta_type and rhs == datetime_timedelta_type:
 
@@ -426,7 +426,7 @@ def timedelta_ge(lhs, rhs):
         return impl
 
 
-@overload(operator.gt)
+@overload(operator.gt, no_unliteral=True)
 def timedelta_gt(lhs, rhs):
     if lhs == datetime_timedelta_type and rhs == datetime_timedelta_type:
 
@@ -437,7 +437,7 @@ def timedelta_gt(lhs, rhs):
         return impl
 
 
-@overload(operator.neg)
+@overload(operator.neg, no_unliteral=True)
 def timedelta_neg(lhs):
     if lhs == datetime_timedelta_type:
 
@@ -447,7 +447,7 @@ def timedelta_neg(lhs):
         return impl
 
 
-@overload(operator.pos)
+@overload(operator.pos, no_unliteral=True)
 def timedelta_pos(lhs):
     if lhs == datetime_timedelta_type:
 
@@ -457,7 +457,7 @@ def timedelta_pos(lhs):
         return impl
 
 
-@overload(divmod)
+@overload(divmod, no_unliteral=True)
 def timedelta_divmod(lhs, rhs):
     if lhs == datetime_timedelta_type and rhs == datetime_timedelta_type:
 
@@ -468,7 +468,7 @@ def timedelta_divmod(lhs, rhs):
         return impl
 
 
-@overload(abs)
+@overload(abs, no_unliteral=True)
 def timedelta_abs(lhs):
     if lhs == datetime_timedelta_type:
 

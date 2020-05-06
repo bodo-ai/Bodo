@@ -81,7 +81,7 @@ class DataFrameGroupByType(types.Type):  # TODO: IterableType over groups
 register_model(DataFrameGroupByType)(models.OpaqueModel)
 
 
-@overload_method(DataFrameType, "groupby")
+@overload_method(DataFrameType, "groupby", no_unliteral=True)
 def df_groupby_overload(
     df,
     by=None,

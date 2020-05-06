@@ -391,7 +391,7 @@ def get_n_lists(typingctx, arr_typ=None):
     return types.int64(arr_typ), codegen
 
 
-@overload(len)
+@overload(len, no_unliteral=True)
 def overload_list_item_arr_len(A):
     if isinstance(A, ListItemArrayType):
         return lambda A: get_n_lists(A)
@@ -407,12 +407,12 @@ def overload_list_item_arr_ndim(A):
     return lambda A: 1
 
 
-@overload(operator.getitem)
+@overload(operator.getitem, no_unliteral=True)
 def list_item_arr_getitem_array(arr, ind):
     if not isinstance(arr, ListItemArrayType):
         return
 
-    if isinstance(ind, types.Integer):
+    if isinstance(types.unliteral(ind), types.Integer):
         # returning [] if NA due to type stability issues
         # TODO: warning if value is NA?
         def list_item_arr_getitem_impl(arr, ind):  # pragma: no cover
@@ -536,7 +536,7 @@ def list_item_arr_getitem_array(arr, ind):
         return impl_slice
 
 
-@overload_method(ListItemArrayType, "copy")
+@overload_method(ListItemArrayType, "copy", no_unliteral=True)
 def overload_list_item_arr_copy(A):
     def copy_impl(A):  # pragma: no cover
         offsets = get_offsets(A)

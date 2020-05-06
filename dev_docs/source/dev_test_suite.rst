@@ -165,7 +165,7 @@ Implementing ``BodoError`` from ``BaseExecption`` class instead of ``Exception``
 just terminating the program. BodoError will terminate the program and provide simple error message for the users. 
 Following is an example of our error checking for unsupported input::
 
-    @overload_method(SeriesStrMethodType, "get")
+    @overload_method(SeriesStrMethodType, "get", no_unliteral=True)
     def overload_str_method_get(S_str, i):
         arr_typ = S_str.stype.data
         if (

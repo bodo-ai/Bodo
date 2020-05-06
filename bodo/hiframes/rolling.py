@@ -1495,20 +1495,20 @@ def alloc_shift(A):  # pragma: no cover
     return np.empty_like(A)
 
 
-@overload(alloc_shift)
+@overload(alloc_shift, no_unliteral=True)
 def alloc_shift_overload(A):
     if isinstance(A.dtype, types.Integer):
-        return lambda A: np.empty(len(A), np.float64)
-    return lambda A: np.empty(len(A), A.dtype)
+        return lambda A: np.empty(len(A), np.float64)  # pragma: no cover
+    return lambda A: np.empty(len(A), A.dtype)  # pragma: no cover
 
 
 def shift_dtype(d):  # pragma: no cover
     return d
 
 
-@overload(shift_dtype)
+@overload(shift_dtype, no_unliteral=True)
 def shift_dtype_overload(a):
     if isinstance(a.dtype, types.Integer):
-        return lambda a: np.float64
+        return lambda a: np.float64  # pragma: no cover
     else:
-        return lambda a: a
+        return lambda a: a  # pragma: no cover

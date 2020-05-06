@@ -167,7 +167,7 @@ def decimal_to_str(typingctx, val_t=None):
 # If you write Decimal("4.0"), Decimal("4.00"), or Decimal("4")
 # their python output is "4.0", "4.00", and "4"
 # but for Bodo thei output is always "4"
-@overload(str)
+@overload(str, no_unliteral=True)
 def overload_str_decimal(val):
     if isinstance(val, Decimal128Type):
 
@@ -215,7 +215,7 @@ def box_decimal(typ, val, c):
     return res
 
 
-@overload_method(Decimal128Type, "__hash__")
+@overload_method(Decimal128Type, "__hash__", no_unliteral=True)
 def decimal_hash(val):  # pragma: no cover
     def impl(val):
         return hash(decimal_to_str(val))
@@ -396,7 +396,7 @@ def unbox_decimal_arr(typ, val, c):
     return NativeValue(decimal_arr._getvalue(), is_error=is_error)
 
 
-@overload_method(DecimalArrayType, "copy")
+@overload_method(DecimalArrayType, "copy", no_unliteral=True)
 def overload_decimal_arr_copy(A):
     precision = A.precision
     scale = A.scale
@@ -405,7 +405,7 @@ def overload_decimal_arr_copy(A):
     )
 
 
-@overload(len)
+@overload(len, no_unliteral=True)
 def overload_decimal_arr_len(A):
     if isinstance(A, DecimalArrayType):
         return lambda A: len(A._data)
@@ -421,13 +421,13 @@ def overload_decimal_arr_ndim(A):
     return lambda A: 1
 
 
-@overload(operator.setitem)
+@overload(operator.setitem, no_unliteral=True)
 def decimal_arr_setitem(A, idx, val):
     if not isinstance(A, DecimalArrayType):
         return
 
     # scalar case
-    if isinstance(idx, types.Integer):
+    if isinstance(types.unliteral(idx), types.Integer):
         assert isinstance(val, Decimal128Type)
 
         def impl_scalar(A, idx, val):  # pragma: no cover
@@ -526,13 +526,13 @@ def decimal_arr_setitem(A, idx, val):
         return impl_slice
 
 
-@overload(operator.getitem)
+@overload(operator.getitem, no_unliteral=True)
 def decimal_arr_getitem(A, ind):
     if not isinstance(A, DecimalArrayType):
         return
 
     # covered by test_series_iat_getitem , test_series_iloc_getitem_int
-    if isinstance(ind, types.Integer):
+    if isinstance(types.unliteral(ind), types.Integer):
         precision = A.precision
         scale = A.scale
         # XXX: cannot handle NA for scalar getitem since not type stable

@@ -78,7 +78,7 @@ def isna(arr, i):  # pragma: no cover
     return False
 
 
-@overload(isna)
+@overload(isna, no_unliteral=True)
 def overload_isna(arr, i):
     # String array
     if arr in (string_array_type, list_string_array_type):
@@ -281,7 +281,7 @@ def select_k_nonan(A, index_arr, m, k):  # pragma: no cover
     return A[:k]
 
 
-@overload(select_k_nonan)
+@overload(select_k_nonan, no_unliteral=True)
 def select_k_nonan_overload(A, index_arr, m, k):
     dtype = A.dtype
     # TODO: other types like strings and categoricals
@@ -465,7 +465,7 @@ def drop_duplicates(data, ind_arr, parallel=False):  # pragma: no cover
     return data, ind_arr
 
 
-@overload(drop_duplicates)
+@overload(drop_duplicates, no_unliteral=True)
 def overload_drop_duplicates(data, ind_arr, parallel=False):
 
     # TODO: inline for optimization?
@@ -523,7 +523,7 @@ def concat(arr_list):  # pragma: no cover
     return pd.concat(arr_list)
 
 
-@overload(concat)
+@overload(concat, no_unliteral=True)
 def concat_overload(arr_list):
     # all string input case
     # TODO: handle numerics to string casting case
@@ -583,7 +583,7 @@ def nunique_parallel(A):  # pragma: no cover
     return len(set(A))
 
 
-@overload(nunique)
+@overload(nunique, no_unliteral=True)
 def nunique_overload(A):
     if A == boolean_array:
         return lambda A: len(A.unique())
@@ -594,7 +594,7 @@ def nunique_overload(A):
     return nunique_seq
 
 
-@overload(nunique_parallel)
+@overload(nunique_parallel, no_unliteral=True)
 def nunique_overload_parallel(A):
     sum_op = bodo.libs.distributed_api.Reduce_Type.Sum.value
 
@@ -614,7 +614,7 @@ def unique_parallel(A):  # pragma: no cover
     return np.array([a for a in set(A)]).astype(A.dtype)
 
 
-@overload(unique)
+@overload(unique, no_unliteral=True)
 def unique_overload(A):
     # TODO: extend to other types like datetime?
     def unique_seq(A):
@@ -623,7 +623,7 @@ def unique_overload(A):
     return unique_seq
 
 
-@overload(unique_parallel)
+@overload(unique_parallel, no_unliteral=True)
 def unique_overload_parallel(A):
     def unique_par(A):  # pragma: no cover
         input_table = arr_info_list_to_table([array_to_info(A)])
@@ -642,7 +642,7 @@ def gen_na_array(n, arr):  # pragma: no cover
     return np.full(n, np.nan)
 
 
-@overload(gen_na_array)
+@overload(gen_na_array, no_unliteral=True)
 def overload_gen_na_array(n, arr):
     """
     generate an array full of NA values with the same type as 'arr'

@@ -88,10 +88,10 @@ def overload_series_iat(s):
     return lambda s: bodo.hiframes.series_indexing.init_series_iat(s)
 
 
-@overload(operator.getitem)
+@overload(operator.getitem, no_unliteral=True)
 def overload_series_iat_getitem(I, idx):
     if isinstance(I, SeriesIatType):
-        if not isinstance(idx, types.Integer):
+        if not isinstance(types.unliteral(idx), types.Integer):
             raise ValueError("iAt based indexing can only have integer indexers")
 
         # box dt64 to timestamp
@@ -104,10 +104,10 @@ def overload_series_iat_getitem(I, idx):
         return lambda I, idx: bodo.hiframes.pd_series_ext.get_series_data(I._obj)[idx]
 
 
-@overload(operator.setitem)
+@overload(operator.setitem, no_unliteral=True)
 def overload_series_iat_setitem(I, idx, val):
     if isinstance(I, SeriesIatType):
-        if not isinstance(idx, types.Integer):
+        if not isinstance(types.unliteral(idx), types.Integer):
             raise ValueError("iAt based indexing can only have integer indexers")
         # check string setitem
         if I.stype.dtype == bodo.string_type:
@@ -172,11 +172,11 @@ def overload_series_iloc(s):
     return lambda s: bodo.hiframes.series_indexing.init_series_iloc(s)
 
 
-@overload(operator.getitem)
+@overload(operator.getitem, no_unliteral=True)
 def overload_series_iloc_getitem(I, idx):
     if isinstance(I, SeriesIlocType):
         # Integer case returns scalar
-        if isinstance(idx, types.Integer):
+        if isinstance(types.unliteral(idx), types.Integer):
             # box dt64 to timestamp
             # TODO: box timedelta64, datetime.datetime/timedelta
             return lambda I, idx: bodo.utils.conversion.box_if_dt64(
@@ -220,7 +220,7 @@ def overload_series_iloc_getitem(I, idx):
         )  # pragma: no cover
 
 
-@overload(operator.setitem)
+@overload(operator.setitem, no_unliteral=True)
 def overload_series_iloc_setitem(I, idx, val):
     if isinstance(I, SeriesIlocType):
         # check string setitem
@@ -231,7 +231,7 @@ def overload_series_iloc_setitem(I, idx, val):
             )  # pragma: no cover
 
         # integer case same as iat
-        if isinstance(idx, types.Integer):
+        if isinstance(types.unliteral(idx), types.Integer):
             # unbox dt64 from Timestamp (TODO: timedelta and other datetimelike)
             if I.stype.dtype == types.NPDatetime("ns") and val == pandas_timestamp_type:
 
@@ -321,7 +321,7 @@ def overload_series_loc(s):
     return lambda s: bodo.hiframes.series_indexing.init_series_loc(s)
 
 
-@overload(operator.getitem)
+@overload(operator.getitem, no_unliteral=True)
 def overload_series_loc_getitem(I, idx):
     if not isinstance(I, SeriesLocType):
         return
@@ -350,12 +350,12 @@ def overload_series_loc_getitem(I, idx):
 ######################## __getitem__/__setitem__ ########################
 
 
-@overload(operator.getitem)
+@overload(operator.getitem, no_unliteral=True)
 def overload_series_getitem(S, idx):
     # XXX: Series getitem performs both label-based and location-based indexing
     if isinstance(S, SeriesType):
         # Integer index is location unless if Index is integer
-        if isinstance(idx, types.Integer):
+        if isinstance(types.unliteral(idx), types.Integer):
             # integer Index not supported yet
             if isinstance(S.index, NumericIndexType) and isinstance(
                 S.index.dtype, types.Integer
@@ -424,7 +424,7 @@ def overload_series_getitem(S, idx):
         return lambda S, idx: S[bodo.hiframes.pd_series_ext.get_series_data(idx)]
 
 
-@overload(operator.setitem)
+@overload(operator.setitem, no_unliteral=True)
 def overload_series_setitem(S, idx, val):
     if isinstance(S, SeriesType):
         # check string setitem
@@ -432,7 +432,7 @@ def overload_series_setitem(S, idx, val):
             raise ValueError("Series string setitem not supported yet")
 
         # integer case same as iat
-        if isinstance(idx, types.Integer):
+        if isinstance(types.unliteral(idx), types.Integer):
             if isinstance(S.index, NumericIndexType) and isinstance(
                 S.index.dtype, types.Integer
             ):

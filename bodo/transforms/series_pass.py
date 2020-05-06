@@ -1004,7 +1004,7 @@ class SeriesPass:
                                 i
                             )
                         else:
-                            assert isinstance(index_types[i], types.Integer)
+                            assert isinstance(types.unliteral(index_types[i]), types.Integer)
                             func_text += "  start_{0} = index{1}\n".format(
                                 i,
                                 "[{}]".format(i)
@@ -1021,7 +1021,7 @@ class SeriesPass:
                         for i in range(ndim)
                         if not (
                             i < len(index_types)
-                            and isinstance(index_types[i], types.Integer)
+                            and isinstance(types.unliteral(index_types[i]), types.Integer)
                         )
                     ]
                 )

@@ -420,12 +420,12 @@ def get_bit_bitmap_arr(bits, i):  # pragma: no cover
     return (bits[i >> 3] >> (i & 0x07)) & 1
 
 
-@overload(operator.getitem)
+@overload(operator.getitem, no_unliteral=True)
 def int_arr_getitem(A, ind):
     if not isinstance(A, IntegerArrayType):
         return
 
-    if isinstance(ind, types.Integer):
+    if isinstance(types.unliteral(ind), types.Integer):
         # XXX: cannot handle NA for scalar getitem since not type stable
         return lambda A, ind: A._data[ind]
 
@@ -489,13 +489,13 @@ def int_arr_getitem(A, ind):
         return impl_slice
 
 
-@overload(operator.setitem)
+@overload(operator.setitem, no_unliteral=True)
 def int_arr_setitem(A, idx, val):
     if not isinstance(A, IntegerArrayType):
         return
 
     # scalar case
-    if isinstance(idx, types.Integer):
+    if isinstance(types.unliteral(idx), types.Integer):
 
         def impl_scalar(A, idx, val):  # pragma: no cover
             A._data[idx] = val
@@ -588,7 +588,7 @@ def int_arr_setitem(A, idx, val):
         return impl_slice
 
 
-@overload(len)
+@overload(len, no_unliteral=True)
 def overload_int_arr_len(A):
     if isinstance(A, IntegerArrayType):
         return lambda A: len(A._data)
@@ -612,7 +612,7 @@ def overload_int_arr_ndim(A):
     return lambda A: 1
 
 
-@overload_method(IntegerArrayType, "copy")
+@overload_method(IntegerArrayType, "copy", no_unliteral=True)
 def overload_int_arr_copy(A):
     return lambda A: bodo.libs.int_arr_ext.init_integer_array(
         bodo.libs.int_arr_ext.get_int_arr_data(A).copy(),
@@ -620,7 +620,7 @@ def overload_int_arr_copy(A):
     )
 
 
-@overload_method(IntegerArrayType, "astype")
+@overload_method(IntegerArrayType, "astype", no_unliteral=True)
 def overload_int_arr_astype(A, dtype, copy=True):
     # same dtype case
     if isinstance(dtype, IntDtype) and A.dtype == dtype.dtype:
@@ -941,7 +941,7 @@ def concat_bitmap_tup(arrs):
     return impl
 
 
-@overload_method(IntegerArrayType, "unique")
+@overload_method(IntegerArrayType, "unique", no_unliteral=True)
 def overload_unique(A):
     dtype = A.dtype
 

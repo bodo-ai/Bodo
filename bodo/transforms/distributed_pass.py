@@ -828,7 +828,7 @@ class DistributedPass:
         if func_name == "reshape" and self._is_1D_or_1D_Var_arr(args[0].name):
             # shape argument can be int or tuple of ints
             shape_typ = self.typemap[args[1].name]
-            if isinstance(shape_typ, types.Integer):
+            if isinstance(types.unliteral(shape_typ), types.Integer):
                 shape_vars = [args[1]]
             else:
                 isinstance(shape_typ, types.BaseTuple)
@@ -1477,7 +1477,7 @@ class DistributedPass:
         is_tuple = False
 
         # size is either integer or tuple
-        if not isinstance(self.typemap[size_var.name], types.Integer):
+        if not isinstance(types.unliteral(self.typemap[size_var.name]), types.Integer):
             assert isinstance(self.typemap[size_var.name], types.BaseTuple)
             is_tuple = True
 
@@ -1778,7 +1778,7 @@ class DistributedPass:
                 arr, equiv_set, avail_vars
             )
 
-            if isinstance(self.typemap[index_var.name], types.Integer):
+            if isinstance(types.unliteral(self.typemap[index_var.name]), types.Integer):
 
                 def f(A, val, index, chunk_start, chunk_count):  # pragma: no cover
                     bodo.libs.distributed_api._set_if_in_range(

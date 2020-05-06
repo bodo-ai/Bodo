@@ -263,7 +263,7 @@ def box_list_str_arr(typ, val, c):
     return arr
 
 
-@overload(len)
+@overload(len, no_unliteral=True)
 def overload_len_list_str_arr(A):
     if A == list_string_array_type:
         return lambda A: A._num_items
@@ -341,12 +341,12 @@ def pre_alloc_list_string_array(
     return list_string_array_type(types.intp, types.intp, types.intp), codegen
 
 
-@overload(operator.getitem)
+@overload(operator.getitem, no_unliteral=True)
 def list_str_arr_getitem_array(arr, ind):
     if arr != list_string_array_type:
         return
 
-    if isinstance(ind, types.Integer):
+    if isinstance(types.unliteral(ind), types.Integer):
         # In the case of the entry being indicated as NA, we return a []
         # We are forced to do that since [] and np.nan are not of the same type.
         # Note that this behavior is different from pandas which returns a NaN
@@ -489,7 +489,7 @@ def list_str_arr_getitem_array(arr, ind):
         return impl_slice
 
 
-@overload_method(ListStringArrayType, "copy")
+@overload_method(ListStringArrayType, "copy", no_unliteral=True)
 def overload_list_str_arr_copy(A):
     from bodo.libs.distributed_api import cptr_to_voidptr
 

@@ -25,7 +25,7 @@ _file_write_parallel = types.ExternalFunction(
     types.void(types.voidptr, types.voidptr, types.intp, types.intp, types.intp),
 )
 
-# @overload(np.fromfile)
+# @overload(np.fromfile, no_unliteral=True)
 # def fromfile_overload(fname, dtype):
 #     if fname != string_type:
 #         raise("np.fromfile() invalid filename type")

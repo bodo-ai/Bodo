@@ -68,7 +68,7 @@ def _get_nan(val):  # pragma: no cover
     return np.nan
 
 
-@overload(_get_nan)
+@overload(_get_nan, no_unliteral=True)
 def _get_nan_overload(val):
     """get NA value with same type as val
     """
@@ -89,7 +89,7 @@ def _get_type_max_value(dtype):  # pragma: no cover
     return 0
 
 
-@overload(_get_type_max_value)
+@overload(_get_type_max_value, no_unliteral=True)
 def _get_type_max_value_overload(dtype):
     # pd.Int64Dtype(), etc.
     if isinstance(dtype, IntDtype):
@@ -112,23 +112,23 @@ def _get_type_min_value(dtype):  # pragma: no cover
     return 0
 
 
-@overload(_get_type_min_value)
+@overload(_get_type_min_value, no_unliteral=True)
 def _get_type_min_value_overload(dtype):
     # pd.Int64Dtype(), etc.
     if isinstance(dtype, IntDtype):
         _dtype = dtype.dtype
-        return lambda dtype: numba.cpython.builtins.get_type_min_value(_dtype)
+        return lambda dtype: numba.cpython.builtins.get_type_min_value(_dtype)  # pragma: no cover
 
     # dt64/td64
     if isinstance(dtype.dtype, (types.NPDatetime, types.NPTimedelta)):
         return lambda dtype: bodo.hiframes.pd_timestamp_ext.integer_to_dt64(
             numba.cpython.builtins.get_type_min_value(numba.core.types.int64)
-        )
+        )  # pragma: no cover
 
     if dtype.dtype == types.bool_:
-        return lambda dtype: False
+        return lambda dtype: False  # pragma: no cover
 
-    return lambda dtype: numba.cpython.builtins.get_type_min_value(dtype)
+    return lambda dtype: numba.cpython.builtins.get_type_min_value(dtype)  # pragma: no cover
 
 
 @overload(min)

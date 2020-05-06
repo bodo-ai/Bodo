@@ -54,7 +54,7 @@ from bodo.hiframes.pd_dataframe_ext import DataFrameType
 
 
 # DataFrame getitem
-@overload(operator.getitem)
+@overload(operator.getitem, no_unliteral=True)
 def df_getitem_overload(df, ind):
     if not isinstance(df, DataFrameType):
         return
@@ -145,7 +145,7 @@ def df_getitem_overload(df, ind):
 
 
 # DataFrame setitem
-@overload(operator.setitem)
+@overload(operator.setitem, no_unliteral=True)
 def df_setitem_overload(df, idx, val):
     if not isinstance(df, DataFrameType):
         return
@@ -202,7 +202,7 @@ def overload_series_iloc(s):
 
 
 # df.iloc[] getitem
-@overload(operator.getitem)
+@overload(operator.getitem, no_unliteral=True)
 def overload_iloc_getitem(I, idx):
     if not isinstance(I, DataFrameILocType):
         return
@@ -211,7 +211,7 @@ def overload_iloc_getitem(I, idx):
 
     # Integer case returns Series(object) which is not supported
     # TODO: error checking test
-    if isinstance(idx, types.Integer):  # pragma: no cover
+    if isinstance(types.unliteral(idx), types.Integer):  # pragma: no cover
         # TODO: support cases that can be typed, e.g. all float64
         # TODO: return namedtuple instead of Series?
         raise BodoError(
@@ -322,7 +322,7 @@ def overload_series_loc(s):
 
 
 # df.loc[] getitem
-@overload(operator.getitem)
+@overload(operator.getitem, no_unliteral=True)
 def overload_loc_getitem(I, idx):
     if not isinstance(I, DataFrameLocType):
         return
@@ -421,7 +421,7 @@ def overload_series_iat(s):
 
 
 # df.iat[] getitem
-@overload(operator.getitem)
+@overload(operator.getitem, no_unliteral=True)
 def overload_iat_getitem(I, idx):
     if not isinstance(I, DataFrameIatType):
         return
@@ -450,7 +450,7 @@ def overload_iat_getitem(I, idx):
 
 
 # df.iat[] setitem
-@overload(operator.setitem)
+@overload(operator.setitem, no_unliteral=True)
 def overload_iat_setitem(I, idx, val):
     if not isinstance(I, DataFrameIatType):
         return

@@ -123,7 +123,7 @@ def unbox_datetime_datetime(typ, val, c):
     return NativeValue(datetime_struct._getvalue(), is_error=is_error)
 
 
-@overload(datetime.datetime)
+@overload(datetime.datetime, no_unliteral=True)
 def datetime_datetime(year, month, day, hour=0, minute=0, second=0, microsecond=0):
     # TODO: tzinfo is currently not supported
     def impl_datetime(
@@ -221,7 +221,7 @@ def datetime_get_microsecond(dt):
     return impl
 
 
-@overload_method(DatetimeDatetimeType, "date")
+@overload_method(DatetimeDatetimeType, "date", no_unliteral=True)
 def date(dt):
     """Return the date part."""
     # TODO: support datetime.datetime.time() method once datetime.time is implemented
@@ -258,7 +258,7 @@ def _cmp(x, y):  # pragma: no cover
     return 0 if x == y else 1 if x > y else -1
 
 
-@overload(operator.eq)
+@overload(operator.eq, no_unliteral=True)
 def datetime_eq(lhs, rhs):
     if lhs == datetime_datetime_type and rhs == datetime_datetime_type:
 
@@ -275,7 +275,7 @@ def datetime_eq(lhs, rhs):
         return impl
 
 
-@overload(operator.ne)
+@overload(operator.ne, no_unliteral=True)
 def datetime_ne(lhs, rhs):
     if lhs == datetime_datetime_type and rhs == datetime_datetime_type:
 
@@ -292,7 +292,7 @@ def datetime_ne(lhs, rhs):
         return impl
 
 
-@overload(operator.le)
+@overload(operator.le, no_unliteral=True)
 def datetime_le(lhs, rhs):
     if lhs == datetime_datetime_type and rhs == datetime_datetime_type:
 
@@ -309,7 +309,7 @@ def datetime_le(lhs, rhs):
         return impl
 
 
-@overload(operator.lt)
+@overload(operator.lt, no_unliteral=True)
 def datetime_lt(lhs, rhs):
     if lhs == datetime_datetime_type and rhs == datetime_datetime_type:
 
@@ -326,7 +326,7 @@ def datetime_lt(lhs, rhs):
         return impl
 
 
-@overload(operator.ge)
+@overload(operator.ge, no_unliteral=True)
 def datetime_ge(lhs, rhs):
     if lhs == datetime_datetime_type and rhs == datetime_datetime_type:
 
@@ -343,7 +343,7 @@ def datetime_ge(lhs, rhs):
         return impl
 
 
-@overload(operator.gt)
+@overload(operator.gt, no_unliteral=True)
 def datetime_gt(lhs, rhs):
     if lhs == datetime_datetime_type and rhs == datetime_datetime_type:
 
@@ -360,7 +360,7 @@ def datetime_gt(lhs, rhs):
         return impl
 
 
-@overload(operator.sub)
+@overload(operator.sub, no_unliteral=True)
 def date_sub(lhs, rhs):
 
     if lhs == datetime_datetime_type and rhs == datetime_datetime_type:

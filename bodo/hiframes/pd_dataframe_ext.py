@@ -807,7 +807,7 @@ def set_df_column_with_reflect(typingctx, df, cname, arr, inplace=None):
     return sig, codegen
 
 
-@overload(pd.DataFrame, inline="always")
+@overload(pd.DataFrame, inline="always", no_unliteral=True)
 def pd_dataframe_overload(data=None, index=None, columns=None, dtype=None, copy=False):
     # TODO: support other input combinations
     if not isinstance(copy, (bool, bodo.utils.typing.BooleanLiteral, types.Omitted)):
@@ -944,7 +944,7 @@ def _fill_null_arrays(data_dict, col_names, df_len):
     return
 
 
-@overload(len)  # TODO: avoid lowering?
+@overload(len, no_unliteral=True)  # TODO: avoid lowering?
 def df_len_overload(df):
     if not isinstance(df, DataFrameType):
         return
@@ -1469,7 +1469,7 @@ def validate_keys(keys, columns):
         )
 
 
-@overload_method(DataFrameType, "join", inline="always")
+@overload_method(DataFrameType, "join", inline="always", no_unliteral=True)
 def join_overload(left, other, on=None, how="left", lsuffix="", rsuffix="", sort=False):
     validate_join_spec(left, other, on, how, lsuffix, rsuffix, sort)
 
@@ -1648,7 +1648,7 @@ def lower_join_dummy(context, builder, sig, args):
     return dataframe._getvalue()
 
 
-@overload(pd.merge_asof, inline="always")
+@overload(pd.merge_asof, inline="always", no_unliteral=True)
 def merge_asof_overload(
     left,
     right,
@@ -1757,7 +1757,7 @@ def merge_asof_overload(
     return _impl
 
 
-@overload_method(DataFrameType, "pivot_table")
+@overload_method(DataFrameType, "pivot_table", no_unliteral=True)
 def pivot_table_overload(
     df,
     values=None,
@@ -1811,7 +1811,7 @@ def pivot_table_overload(
     return _impl
 
 
-@overload(pd.crosstab, inline="always")
+@overload(pd.crosstab, inline="always", no_unliteral=True)
 def crosstab_overload(
     index,
     columns,
@@ -1847,7 +1847,7 @@ def crosstab_overload(
     return _impl
 
 
-@overload(pd.concat, inline="always")
+@overload(pd.concat, inline="always", no_unliteral=True)
 def concat_overload(
     objs,
     axis=0,
@@ -1979,7 +1979,7 @@ def lower_concat_dummy(context, builder, sig, args):
     return out_obj._getvalue()
 
 
-@overload_method(DataFrameType, "sort_values", inline="always")
+@overload_method(DataFrameType, "sort_values", inline="always", no_unliteral=True)
 def sort_values_overload(
     df,
     by,
@@ -2110,7 +2110,7 @@ def lower_sort_values_dummy(context, builder, sig, args):
     return out_obj._getvalue()
 
 
-@overload_method(DataFrameType, "sort_index", inline="always")
+@overload_method(DataFrameType, "sort_index", inline="always", no_unliteral=True)
 def sort_index_overload(
     df,
     axis=0,
@@ -2163,7 +2163,7 @@ def lower_set_parent_dummy(context, builder, sig, args):
 
 # TODO: jitoptions for overload_method and infer_global
 # (no_cpython_wrapper to avoid error for iterator object)
-@overload_method(DataFrameType, "itertuples", inline="always")
+@overload_method(DataFrameType, "itertuples", inline="always", no_unliteral=True)
 def itertuples_overload(df, index=True, name="Pandas"):
     def _impl(df, index=True, name="Pandas"):  # pragma: no cover
         return bodo.hiframes.pd_dataframe_ext.itertuples_dummy(df)
@@ -2196,7 +2196,7 @@ def lower_itertuples_dummy(context, builder, sig, args):
     return out_obj._getvalue()
 
 
-@overload_method(DataFrameType, "fillna", inline="always")
+@overload_method(DataFrameType, "fillna", inline="always", no_unliteral=True)
 def fillna_overload(
     df, value=None, method=None, axis=None, inplace=False, limit=None, downcast=None
 ):
@@ -2238,11 +2238,13 @@ class FillnaDummyTyper(AbstractTemplate):
 
 @lower_builtin(fillna_dummy, types.VarArg(types.Any))
 def lower_fillna_dummy(context, builder, sig, args):
+    if sig.return_type == types.none:
+        return
     out_obj = cgutils.create_struct_proxy(sig.return_type)(context, builder)
     return out_obj._getvalue()
 
 
-@overload_method(DataFrameType, "reset_index", inline="always")
+@overload_method(DataFrameType, "reset_index", inline="always", no_unliteral=True)
 def reset_index_overload(
     df,
     level=None,
@@ -2322,7 +2324,7 @@ def lower_reset_index_dummy(context, builder, sig, args):
     return out_obj._getvalue()
 
 
-@overload_method(DataFrameType, "dropna", inline="always")
+@overload_method(DataFrameType, "dropna", inline="always", no_unliteral=True)
 def dropna_overload(df, axis=0, how="any", thresh=None, subset=None, inplace=False):
 
     # error-checking for inplace=True
@@ -2361,7 +2363,7 @@ def lower_dropna_dummy(context, builder, sig, args):
     return out_obj._getvalue()
 
 
-@overload_method(DataFrameType, "drop", inline="always")
+@overload_method(DataFrameType, "drop", inline="always", no_unliteral=True)
 def drop_overload(
     df,
     labels=None,
@@ -2529,7 +2531,7 @@ def lower_val_isin_dummy(context, builder, sig, args):
     return out_obj._getvalue()
 
 
-@overload_method(DataFrameType, "append", inline="always")
+@overload_method(DataFrameType, "append", inline="always", no_unliteral=True)
 def append_overload(df, other, ignore_index=False, verify_integrity=False, sort=None):
     if isinstance(other, DataFrameType):
         return lambda df, other, ignore_index=False, verify_integrity=False, sort=None: pd.concat(
@@ -2634,7 +2636,7 @@ def gen_pandas_parquet_metadata(
     return pandas_metadata
 
 
-@overload_method(DataFrameType, "to_parquet")
+@overload_method(DataFrameType, "to_parquet", no_unliteral=True)
 def to_parquet_overload(
     df,
     fname,
@@ -2883,7 +2885,7 @@ def to_sql_overload(
 
 
 # TODO: other Pandas versions (0.24 defaults are different than 0.23)
-@overload_method(DataFrameType, "to_csv")
+@overload_method(DataFrameType, "to_csv", no_unliteral=True)
 def to_csv_overload(
     df,
     path_or_buf=None,
@@ -3009,7 +3011,7 @@ def to_csv_overload(
     return _impl
 
 
-@overload_method(DataFrameType, "to_json")
+@overload_method(DataFrameType, "to_json", no_unliteral=True)
 def to_json_overload(
     df,
     path_or_buf=None,

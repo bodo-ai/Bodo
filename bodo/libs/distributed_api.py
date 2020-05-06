@@ -132,7 +132,7 @@ _get_time = types.ExternalFunction("get_time", types.float64())
 dist_time = types.ExternalFunction("dist_get_time", types.float64())
 
 
-@overload(time.time)
+@overload(time.time, no_unliteral=True)
 def overload_time_time():
     return lambda: _get_time()
 
@@ -1550,7 +1550,7 @@ def bcast(data):  # pragma: no cover
     return
 
 
-@overload(bcast)
+@overload(bcast, no_unliteral=True)
 def bcast_overload(data):
     if isinstance(data, types.Array):
 
@@ -1621,10 +1621,11 @@ def bcast_scalar(val):  # pragma: no cover
 
 
 # TODO: test
-@overload(bcast_scalar)
+@overload(bcast_scalar, no_unliteral=True)
 def bcast_scalar_overload(val):
     """broadcast for a scalar value
     """
+    val = types.unliteral(val)
     # NOTE: scatterv() can call this with string on rank 0 and None on others, or an
     # Optional type
     assert (
@@ -1681,7 +1682,7 @@ def bcast_tuple(val):  # pragma: no cover
     return val
 
 
-@overload(bcast_tuple)
+@overload(bcast_tuple, no_unliteral=True)
 def overload_bcast_tuple(val):
     """broadcast a tuple value (root == 0)
     calls bcast_scalar() on individual elements
@@ -1707,7 +1708,7 @@ def prealloc_str_for_bcast(arr):  # pragma: no cover
     return arr
 
 
-@overload(prealloc_str_for_bcast)
+@overload(prealloc_str_for_bcast, no_unliteral=True)
 def prealloc_str_for_bcast_overload(arr):
     if arr == string_array_type:
 
@@ -1728,7 +1729,7 @@ def slice_getitem(arr, slice_index, arr_start, total_len, is_1D):  # pragma: no 
     return arr[slice_index]
 
 
-@overload(slice_getitem)
+@overload(slice_getitem, no_unliteral=True)
 def slice_getitem_overload(arr, slice_index, arr_start, total_len, is_1D):
     def getitem_impl(arr, slice_index, arr_start, total_len, is_1D):  # pragma: no cover
         # normalize slice
@@ -1762,7 +1763,7 @@ def slice_getitem_from_start(arr, slice_index):  # pragma: no cover
     return arr[slice_index]
 
 
-@overload(slice_getitem_from_start)
+@overload(slice_getitem_from_start, no_unliteral=True)
 def slice_getitem_from_start_overload(arr, slice_index):
     if arr == string_array_type:
 
@@ -1805,7 +1806,7 @@ def int_getitem(arr, ind, arr_start, total_len, is_1D):  # pragma: no cover
     return arr[ind]
 
 
-@overload(int_getitem)
+@overload(int_getitem, no_unliteral=True)
 def int_getitem_overload(arr, ind, arr_start, total_len, is_1D):
     if arr == string_array_type:
         # TODO: other kinds, unicode
@@ -1939,7 +1940,7 @@ def alltoallv_tup(
     return
 
 
-@overload(alltoallv_tup)
+@overload(alltoallv_tup, no_unliteral=True)
 def alltoallv_tup_overload(
     send_data, out_data, send_counts, recv_counts, send_disp, recv_disp
 ):
@@ -2112,7 +2113,7 @@ def local_alloc_size(n, in_arr):
     return n
 
 
-@overload(rebalance_array)
+@overload(rebalance_array, no_unliteral=True)
 def dist_return_overload(A):
     return dist_return
 
@@ -2168,7 +2169,7 @@ req_array_setitem = types.ExternalFunction(
 )
 
 
-@overload(operator.setitem)
+@overload(operator.setitem, no_unliteral=True)
 def overload_req_arr_setitem(A, idx, val):
     if A == req_array_type:
         assert val == mpi_req_numba_type
@@ -2208,7 +2209,7 @@ def get_tuple_prod(t):  # pragma: no cover
     return np.prod(t)
 
 
-@overload(get_tuple_prod)
+@overload(get_tuple_prod, no_unliteral=True)
 def get_tuple_prod_overload(t):
     # handle empty tuple seperately since empty getiter doesn't work
     if t == numba.core.types.containers.Tuple(()):

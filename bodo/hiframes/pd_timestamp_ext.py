@@ -315,7 +315,7 @@ def constant_timestamp(context, builder, ty, pyval):
 # -------------------------------------------------------------------------------
 
 
-@overload(pd.Timestamp)
+@overload(pd.Timestamp, no_unliteral=True)
 def overload_pd_timestamp(
     ts_input=_no_input,
     freq=None,
@@ -387,7 +387,7 @@ def overload_pd_timestamp(
     # User passed positional arguments:
     # Timestamp(year, month, day[, hour[, minute[, second[,
     # microsecond[, nanosecond[, tzinfo]]]]]])
-    if isinstance(freq, types.Integer):
+    if isinstance(types.unliteral(freq), types.Integer):
 
         def impl_pos(
             ts_input=_no_input,
@@ -558,7 +558,7 @@ def overload_pd_timestamp(
         return impl_date
 
 
-@overload_method(PandasTimestampType, "date")
+@overload_method(PandasTimestampType, "date", no_unliteral=True)
 def overload_pd_timestamp_date(ptt):
     def pd_timestamp_date_impl(ptt):  # pragma: no cover
         return datetime.date(ptt.year, ptt.month, ptt.day)
@@ -566,7 +566,7 @@ def overload_pd_timestamp_date(ptt):
     return pd_timestamp_date_impl
 
 
-@overload_method(PandasTimestampType, "isoformat")
+@overload_method(PandasTimestampType, "isoformat", no_unliteral=True)
 def overload_pd_timestamp_isoformat(ts_typ, sep=None):
     if sep is None:
 
@@ -612,7 +612,7 @@ def str_2d(a):  # pragma: no cover
     return res
 
 
-@overload(str)
+@overload(str, no_unliteral=True)
 def ts_str_overload(a):
     if a == pandas_timestamp_type:
         return lambda a: a.isoformat(" ")
@@ -732,7 +732,7 @@ def cast_dt64_to_integer(context, builder, fromty, toty, val):
 
 
 # TODO: fix in Numba
-@overload_method(types.NPDatetime, "__hash__")
+@overload_method(types.NPDatetime, "__hash__", no_unliteral=True)
 def dt64_hash(val):
     return lambda val: hash(dt64_to_integer(val))
 
@@ -791,7 +791,7 @@ def to_datetime_scalar(a):  # pragma: no cover
     return t
 
 
-@overload(pd.to_datetime, inline="always")
+@overload(pd.to_datetime, inline="always", no_unliteral=True)
 def overload_to_datetime(arg_a):
     """implementation for pd.to_datetime
     """
@@ -846,7 +846,7 @@ def overload_to_datetime(arg_a):
     # TODO: input type of an array
 
 
-@overload(pd.to_timedelta, inline="always")
+@overload(pd.to_timedelta, inline="always", no_unliteral=True)
 def overload_to_timedelta(arg_a, unit="ns", errors="raise"):
     # changed 'arg' to 'arg_a' since inliner uses vname.startswith("arg.") to find
     # argument variables which causes conflict
@@ -953,7 +953,7 @@ def _install_timestamp_cmp_ops():
 _install_timestamp_cmp_ops()
 
 
-@overload_method(PandasTimestampType, "toordinal")
+@overload_method(PandasTimestampType, "toordinal", no_unliteral=True)
 def toordinal(date):
     """Return proleptic Gregorian ordinal for the year, month and day.
     January 1 of year 1 is day 1.  Only the year, month and day values
@@ -993,7 +993,7 @@ def compute_pd_timestamp(totmicrosec, nanosecond):  # pragma: no cover
     )
 
 
-@overload(operator.sub)
+@overload(operator.sub, no_unliteral=True)
 def timestamp_sub(lhs, rhs):
     if lhs == pandas_timestamp_type and rhs == datetime_timedelta_type:
 
@@ -1020,7 +1020,7 @@ def timestamp_sub(lhs, rhs):
         return impl
 
 
-@overload(operator.add)
+@overload(operator.add, no_unliteral=True)
 def timestamp_add(lhs, rhs):
     if lhs == pandas_timestamp_type and rhs == datetime_timedelta_type:
 
@@ -1047,7 +1047,7 @@ def timestamp_add(lhs, rhs):
         return impl
 
 
-@overload(min)
+@overload(min, no_unliteral=True)
 def timestamp_min(lhs, rhs):
     if lhs == pandas_timestamp_type and rhs == pandas_timestamp_type:
 
@@ -1057,7 +1057,7 @@ def timestamp_min(lhs, rhs):
         return impl
 
 
-@overload(max)
+@overload(max, no_unliteral=True)
 def timestamp_max(lhs, rhs):
     if lhs == pandas_timestamp_type and rhs == pandas_timestamp_type:
 

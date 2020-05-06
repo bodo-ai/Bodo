@@ -131,7 +131,7 @@ def lower_match_is_none(context, builder, sig, args):
     )
 
 
-@overload(re.search)
+@overload(re.search, no_unliteral=True)
 def overload_re_search(pattern, string, flags=0):
     def _re_search_impl(pattern, string, flags=0):  # pragma: no cover
         with numba.objmode(m="re_match_type"):
@@ -141,7 +141,7 @@ def overload_re_search(pattern, string, flags=0):
     return _re_search_impl
 
 
-@overload(re.match)
+@overload(re.match, no_unliteral=True)
 def overload_re_match(pattern, string, flags=0):
     def _re_match_impl(pattern, string, flags=0):  # pragma: no cover
         with numba.objmode(m="re_match_type"):
@@ -151,7 +151,7 @@ def overload_re_match(pattern, string, flags=0):
     return _re_match_impl
 
 
-@overload(re.fullmatch)
+@overload(re.fullmatch, no_unliteral=True)
 def overload_re_fullmatch(pattern, string, flags=0):
     def _re_fullmatch_impl(pattern, string, flags=0):  # pragma: no cover
         with numba.objmode(m="re_match_type"):
@@ -161,7 +161,7 @@ def overload_re_fullmatch(pattern, string, flags=0):
     return _re_fullmatch_impl
 
 
-@overload(re.split)
+@overload(re.split, no_unliteral=True)
 def overload_re_split(pattern, string, maxsplit=0, flags=0):
     def _re_split_impl(pattern, string, maxsplit=0, flags=0):  # pragma: no cover
         with numba.objmode(m="list_str_type"):
@@ -171,7 +171,7 @@ def overload_re_split(pattern, string, maxsplit=0, flags=0):
     return _re_split_impl
 
 
-@overload(re.findall)
+@overload(re.findall, no_unliteral=True)
 def overload_re_findall(pattern, string, flags=0):
     def _re_findall_impl(pattern, string, flags=0):  # pragma: no cover
         # TODO: check for multiple group case which can fail
@@ -182,7 +182,7 @@ def overload_re_findall(pattern, string, flags=0):
     return _re_findall_impl
 
 
-@overload(re.sub)
+@overload(re.sub, no_unliteral=True)
 def overload_re_sub(pattern, repl, string, count=0, flags=0):
     def _re_sub_impl(pattern, repl, string, count=0, flags=0):  # pragma: no cover
         with numba.objmode(m="unicode_type"):
@@ -192,7 +192,7 @@ def overload_re_sub(pattern, repl, string, count=0, flags=0):
     return _re_sub_impl
 
 
-@overload(re.subn)
+@overload(re.subn, no_unliteral=True)
 def overload_re_subn(pattern, repl, string, count=0, flags=0):
     def _re_subn_impl(pattern, repl, string, count=0, flags=0):  # pragma: no cover
         with numba.objmode(m="unicode_type", s="int64"):
@@ -202,7 +202,7 @@ def overload_re_subn(pattern, repl, string, count=0, flags=0):
     return _re_subn_impl
 
 
-@overload(re.escape)
+@overload(re.escape, no_unliteral=True)
 def overload_re_escape(pattern):
     def _re_escape_impl(pattern):  # pragma: no cover
         with numba.objmode(m="unicode_type"):
@@ -212,7 +212,7 @@ def overload_re_escape(pattern):
     return _re_escape_impl
 
 
-@overload(re.purge)
+@overload(re.purge, no_unliteral=True)
 def overload_re_purge():
     def _re_purge_impl():  # pragma: no cover
         with numba.objmode():
@@ -234,7 +234,7 @@ def init_const_pattern(typingctx, pat, pat_const=None):
     return RePatternType(pat_const_str)(pat, pat_const), codegen
 
 
-@overload(re.compile)
+@overload(re.compile, no_unliteral=True)
 def re_compile_overload(pattern, flags=0):
     # if pattern string is constant, add it to data type to enable findall()
     if is_overload_constant_str(pattern):
@@ -255,7 +255,7 @@ def re_compile_overload(pattern, flags=0):
     return _re_compile_impl
 
 
-@overload_method(RePatternType, "search")
+@overload_method(RePatternType, "search", no_unliteral=True)
 def overload_pat_search(p, string, pos=0, endpos=9223372036854775807):
     def _pat_search_impl(
         p, string, pos=0, endpos=9223372036854775807
@@ -267,7 +267,7 @@ def overload_pat_search(p, string, pos=0, endpos=9223372036854775807):
     return _pat_search_impl
 
 
-@overload_method(RePatternType, "match")
+@overload_method(RePatternType, "match", no_unliteral=True)
 def overload_pat_match(p, string, pos=0, endpos=9223372036854775807):
     def _pat_match_impl(
         p, string, pos=0, endpos=9223372036854775807
@@ -279,7 +279,7 @@ def overload_pat_match(p, string, pos=0, endpos=9223372036854775807):
     return _pat_match_impl
 
 
-@overload_method(RePatternType, "fullmatch")
+@overload_method(RePatternType, "fullmatch", no_unliteral=True)
 def overload_pat_fullmatch(p, string, pos=0, endpos=9223372036854775807):
     def _pat_fullmatch_impl(
         p, string, pos=0, endpos=9223372036854775807
@@ -291,7 +291,7 @@ def overload_pat_fullmatch(p, string, pos=0, endpos=9223372036854775807):
     return _pat_fullmatch_impl
 
 
-@overload_method(RePatternType, "split")
+@overload_method(RePatternType, "split", no_unliteral=True)
 def overload_pat_split(pattern, string, maxsplit=0):
     def _pat_split_impl(pattern, string, maxsplit=0):  # pragma: no cover
         with numba.objmode(m="list_str_type"):
@@ -301,7 +301,7 @@ def overload_pat_split(pattern, string, maxsplit=0):
     return _pat_split_impl
 
 
-@overload_method(RePatternType, "findall")
+@overload_method(RePatternType, "findall", no_unliteral=True)
 def overload_pat_findall(p, string, pos=0, endpos=9223372036854775807):
     # if pattern string is constant, we can handle multi-group case since we know the
     # number of groups here
@@ -342,7 +342,7 @@ def _pat_findall_const_impl(
     return _pat_findall_impl
 
 
-@overload_method(RePatternType, "sub")
+@overload_method(RePatternType, "sub", no_unliteral=True)
 def re_sub_overload(p, repl, string, count=0):
     def _re_sub_impl(p, repl, string, count=0):  # pragma: no cover
         with numba.objmode(out="unicode_type"):
@@ -352,7 +352,7 @@ def re_sub_overload(p, repl, string, count=0):
     return _re_sub_impl
 
 
-@overload_method(RePatternType, "subn")
+@overload_method(RePatternType, "subn", no_unliteral=True)
 def re_subn_overload(p, repl, string, count=0):
     def _re_subn_impl(p, repl, string, count=0):  # pragma: no cover
         with numba.objmode(out="unicode_type", s="int64"):
@@ -411,7 +411,7 @@ def overload_pattern_pattern(p):
     return _pat_pattern_impl
 
 
-@overload_method(ReMatchType, "expand")
+@overload_method(ReMatchType, "expand", no_unliteral=True)
 def overload_match_expand(m, template):
     def _match_expand_impl(m, template):  # pragma: no cover
         with numba.objmode(out="unicode_type"):
@@ -421,7 +421,7 @@ def overload_match_expand(m, template):
     return _match_expand_impl
 
 
-@overload_method(ReMatchType, "group")
+@overload_method(ReMatchType, "group", no_unliteral=True)
 def overload_match_group(m, *args):
     # TODO: support cases where a group is not matched and None should be returned
     # for example: re.match(r"(\w+)? (\w+) (\w+)", " words word")
@@ -477,13 +477,13 @@ def overload_match_group(m, *args):
     return impl
 
 
-@overload(operator.getitem)
+@overload(operator.getitem, no_unliteral=True)
 def overload_match_getitem(m, ind):
     if m == re_match_type:
         return lambda m, ind: m.group(ind)
 
 
-@overload_method(ReMatchType, "groups")
+@overload_method(ReMatchType, "groups", no_unliteral=True)
 def overload_match_groups(m, default=None):
     # TODO: support cases where a group is not matched and None should be returned
     # for example: re.match(r"(\w+)? (\w+) (\w+)", " words word")
@@ -498,7 +498,7 @@ def overload_match_groups(m, default=None):
     return _match_groups_impl
 
 
-@overload_method(ReMatchType, "groupdict")
+@overload_method(ReMatchType, "groupdict", no_unliteral=True)
 def overload_match_groupdict(m, default=None):
     # TODO: support cases where a group is not matched and None should be returned
     # for example: re.match(r"(?P<AA>\w+)? (\w+) (\w+)", " words word")
@@ -517,7 +517,7 @@ def overload_match_groupdict(m, default=None):
     return _match_groupdict_impl
 
 
-@overload_method(ReMatchType, "start")
+@overload_method(ReMatchType, "start", no_unliteral=True)
 def overload_match_start(m, group=0):
     def _match_start_impl(m, group=0):  # pragma: no cover
         with numba.objmode(out="int64"):
@@ -527,7 +527,7 @@ def overload_match_start(m, group=0):
     return _match_start_impl
 
 
-@overload_method(ReMatchType, "end")
+@overload_method(ReMatchType, "end", no_unliteral=True)
 def overload_match_end(m, group=0):
     def _match_end_impl(m, group=0):  # pragma: no cover
         with numba.objmode(out="int64"):
@@ -537,7 +537,7 @@ def overload_match_end(m, group=0):
     return _match_end_impl
 
 
-@overload_method(ReMatchType, "span")
+@overload_method(ReMatchType, "span", no_unliteral=True)
 def overload_match_span(m, group=0):
 
     # span() returns a tuple of int

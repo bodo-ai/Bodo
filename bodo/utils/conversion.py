@@ -23,7 +23,7 @@ def coerce_to_ndarray(
     return data
 
 
-@overload(coerce_to_ndarray)
+@overload(coerce_to_ndarray, no_unliteral=True)
 def overload_coerce_to_ndarray(
     data, error_on_nonarray=True, bool_arr_convert=None, scalar_to_arr_len=None
 ):
@@ -160,7 +160,7 @@ def coerce_to_array(
     return data
 
 
-@overload(coerce_to_array)
+@overload(coerce_to_array, no_unliteral=True)
 def overload_coerce_to_array(
     data, error_on_nonarray=True, bool_arr_convert=None, scalar_to_arr_len=None
 ):
@@ -241,7 +241,7 @@ def fix_arr_dtype(data, new_dtype, copy=None):  # pragma: no cover
     return data
 
 
-@overload(fix_arr_dtype)
+@overload(fix_arr_dtype, no_unliteral=True)
 def overload_fix_arr_dtype(data, new_dtype, copy=None):
     """convert data to new_dtype, copy if copy parameter is not None
     """
@@ -320,7 +320,7 @@ def parse_datetimes_from_strings(data):  # pragma: no cover
     return data
 
 
-@overload(parse_datetimes_from_strings)
+@overload(parse_datetimes_from_strings, no_unliteral=True)
 def overload_parse_datetimes_from_strings(data):
     assert data == bodo.string_array_type
 
@@ -340,7 +340,7 @@ def convert_to_dt64ns(data):  # pragma: no cover
     return data
 
 
-@overload(convert_to_dt64ns)
+@overload(convert_to_dt64ns, no_unliteral=True)
 def overload_convert_to_dt64ns(data):
     """Converts data formats like int64 and arrays of strings to dt64ns
     """
@@ -364,7 +364,7 @@ def convert_to_td64ns(data):  # pragma: no cover
     return data
 
 
-@overload(convert_to_td64ns)
+@overload(convert_to_td64ns, no_unliteral=True)
 def overload_convert_to_td64ns(data):
     """Converts data formats like int64 to timedelta64ns
     """
@@ -388,7 +388,7 @@ def convert_to_index(data, name=None):  # pragma: no cover
     return data
 
 
-@overload(convert_to_index)
+@overload(convert_to_index, no_unliteral=True)
 def overload_convert_to_index(data, name=None):
     """
     convert data to Index object if necessary.
@@ -426,7 +426,7 @@ def force_convert_index(I1, I2):  # pragma: no cover
     return I2
 
 
-@overload(force_convert_index)
+@overload(force_convert_index, no_unliteral=True)
 def overload_force_convert_index(I1, I2):
     """
     Convert I1 to type of I2, with possible loss of data. TODO: remove this
@@ -443,7 +443,7 @@ def index_from_array(data, name=None):  # pragma: no cover
     return data
 
 
-@overload(index_from_array)
+@overload(index_from_array, no_unliteral=True)
 def overload_index_from_array(data, name=None):
     """
     convert data array to Index object.
@@ -478,7 +478,7 @@ def index_to_array(data):  # pragma: no cover
     return data
 
 
-@overload(index_to_array)
+@overload(index_to_array, no_unliteral=True)
 def overload_index_to_array(I):
     """
     convert Index object to data array.
@@ -496,7 +496,7 @@ def extract_name_if_none(data, name):  # pragma: no cover
     return name
 
 
-@overload(extract_name_if_none)
+@overload(extract_name_if_none, no_unliteral=True)
 def overload_extract_name_if_none(data, name):
     """Extract name if `data` is has name (Series/Index) and `name` is None
     """
@@ -528,7 +528,7 @@ def extract_index_if_none(data, index):  # pragma: no cover
     return index
 
 
-@overload(extract_index_if_none)
+@overload(extract_index_if_none, no_unliteral=True)
 def overload_extract_index_if_none(data, index):
     """Extract index if `data` is Series and `index` is None
     """
@@ -549,7 +549,7 @@ def box_if_dt64(val):  # pragma: no cover
     return val
 
 
-@overload(box_if_dt64)
+@overload(box_if_dt64, no_unliteral=True)
 def overload_box_if_dt64(val):
     """If 'val' is dt64, box it to Timestamp otherwise just return 'val'
     """
@@ -565,7 +565,7 @@ def get_array_if_series_or_index(data):  # pragma: no cover
     return data
 
 
-@overload(get_array_if_series_or_index)
+@overload(get_array_if_series_or_index, no_unliteral=True)
 def overload_get_array_if_series_or_index(data):
     from bodo.hiframes.pd_series_ext import SeriesType
 
@@ -582,7 +582,7 @@ def extract_index_array(A):  # pragma: no cover
     return np.arange(len(A))
 
 
-@overload(extract_index_array)
+@overload(extract_index_array, no_unliteral=True)
 def overload_extract_index_array(A):
     """Returns an index array for Series or array.
     if Series, return it's index array. Otherwise, create an index array.
@@ -605,7 +605,7 @@ def extract_index_array_tup(series_tup):  # pragma: no cover
     return tuple(extract_index_array(s) for s in series_tup)
 
 
-@overload(extract_index_array_tup)
+@overload(extract_index_array_tup, no_unliteral=True)
 def overload_extract_index_array_tup(series_tup):
     n_series = len(series_tup.types)
     func_text = "def f(series_tup):\n"
@@ -626,7 +626,7 @@ def get_NA_val_for_arr(arr):  # pragma: no cover
     return np.nan
 
 
-@overload(get_NA_val_for_arr)
+@overload(get_NA_val_for_arr, no_unliteral=True)
 def overload_get_NA_val_for_arr(arr):
     if isinstance(arr.dtype, (types.NPDatetime, types.NPTimedelta)):
         nat = arr.dtype("NaT")
@@ -643,7 +643,7 @@ def overload_get_NA_val_for_arr(arr):
 #     return A
 
 
-# @overload(to_bool_array_if_np_bool)
+# @overload(to_bool_array_if_np_bool, no_unliteral=True)
 # def overload_to_bool_array_if_np_bool(A):
 #     """Returns a nullable BooleanArray if input is bool ndarray. Otherwise,
 #     just returns the input.

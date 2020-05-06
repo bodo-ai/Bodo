@@ -1037,7 +1037,7 @@ def swap_arrs(data, lo, hi):  # pragma: no cover
         arr[hi] = tmp_v
 
 
-@overload(swap_arrs)
+@overload(swap_arrs, no_unliteral=True)
 def swap_arrs_overload(arr_tup, lo, hi):
     count = arr_tup.count
 
@@ -1064,7 +1064,7 @@ def copyRange_tup(src_arr_tup, src_pos, dst_arr_tup, dst_pos, n):  # pragma: no 
         dst_arr[dst_pos : dst_pos + n] = src_arr[src_pos : src_pos + n]
 
 
-@overload(copyRange_tup)
+@overload(copyRange_tup, no_unliteral=True)
 def copyRange_tup_overload(src_arr_tup, src_pos, dst_arr_tup, dst_pos, n):
     count = src_arr_tup.count
     assert count == dst_arr_tup.count
@@ -1092,7 +1092,7 @@ def copyElement_tup(src_arr_tup, src_pos, dst_arr_tup, dst_pos):  # pragma: no c
         dst_arr[dst_pos] = src_arr[src_pos]
 
 
-@overload(copyElement_tup)
+@overload(copyElement_tup, no_unliteral=True)
 def copyElement_tup_overload(src_arr_tup, src_pos, dst_arr_tup, dst_pos):
     count = src_arr_tup.count
     assert count == dst_arr_tup.count
@@ -1115,7 +1115,7 @@ def getitem_arr_tup(arr_tup, ind):  # pragma: no cover
     return tuple(l)
 
 
-@overload(getitem_arr_tup)
+@overload(getitem_arr_tup, no_unliteral=True)
 def getitem_arr_tup_overload(arr_tup, ind):
     count = arr_tup.count
 
@@ -1136,7 +1136,7 @@ def setitem_arr_tup(arr_tup, ind, val_tup):  # pragma: no cover
         arr[ind] = val
 
 
-@overload(setitem_arr_tup)
+@overload(setitem_arr_tup, no_unliteral=True)
 def setitem_arr_tup_overload(arr_tup, ind, val_tup):
     count = arr_tup.count
 

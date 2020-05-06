@@ -85,7 +85,7 @@ def overload_dataframe_values(df):
     return f
 
 
-@overload_method(DataFrameType, "to_numpy", inline="always")
+@overload_method(DataFrameType, "to_numpy", inline="always", no_unliteral=True)
 def overload_dataframe_to_numpy(df, dtype=None, copy=False):
     # The copy argument can be ignored here since we always copy the data
     # (our underlying structures are fully columnar which should be copied to get a
@@ -125,14 +125,14 @@ def overload_dataframe_empty(df):
     return lambda df: len(df) == 0
 
 
-@overload_method(DataFrameType, "assign")
+@overload_method(DataFrameType, "assign", no_unliteral=True)
 def overload_dataframe_assign(df, **kwargs):
     # raise error to let typing pass handle it, since **kwargs is not supported in
     # overload
     raise_bodo_error("Invalid df.assign() call")
 
 
-@overload_method(DataFrameType, "astype", inline="always")
+@overload_method(DataFrameType, "astype", inline="always", no_unliteral=True)
 def overload_dataframe_astype(df, dtype, copy=True, errors="raise"):
     # just call astype() on all column Series
     # TODO: support categorical, dt64, etc.
@@ -142,7 +142,7 @@ def overload_dataframe_astype(df, dtype, copy=True, errors="raise"):
     return _gen_init_df(header, df.columns, data_args)
 
 
-@overload_method(DataFrameType, "copy", inline="always")
+@overload_method(DataFrameType, "copy", inline="always", no_unliteral=True)
 def overload_dataframe_copy(df, deep=True):
     # just call copy() on all arrays
     data_outs = []
@@ -159,7 +159,7 @@ def overload_dataframe_copy(df, deep=True):
     return _gen_init_df(header, df.columns, ", ".join(data_outs))
 
 
-@overload_method(DataFrameType, "rename", inline="always")
+@overload_method(DataFrameType, "rename", inline="always", no_unliteral=True)
 def overload_dataframe_rename(
     df,
     mapper=None,
@@ -218,8 +218,8 @@ def overload_dataframe_rename(
     return _gen_init_df(header, new_cols, ", ".join(data_outs))
 
 
-@overload_method(DataFrameType, "isna", inline="always")
-@overload_method(DataFrameType, "isnull", inline="always")
+@overload_method(DataFrameType, "isna", inline="always", no_unliteral=True)
+@overload_method(DataFrameType, "isnull", inline="always", no_unliteral=True)
 def overload_dataframe_isna(df):
     # call isna() on column Series
     data_args = ", ".join("df['{}'].isna().values".format(c) for c in df.columns)
@@ -227,7 +227,7 @@ def overload_dataframe_isna(df):
     return _gen_init_df(header, df.columns, data_args)
 
 
-@overload_method(DataFrameType, "notna", inline="always")
+@overload_method(DataFrameType, "notna", inline="always", no_unliteral=True)
 def overload_dataframe_notna(df):
     # call notna() on column Series
     data_args = ", ".join("df['{}'].notna().values".format(c) for c in df.columns)
@@ -235,7 +235,7 @@ def overload_dataframe_notna(df):
     return _gen_init_df(header, df.columns, data_args)
 
 
-@overload_method(DataFrameType, "head", inline="always")
+@overload_method(DataFrameType, "head", inline="always", no_unliteral=True)
 def overload_dataframe_head(df, n=5):
     # call head() on column Series
     data_args = ", ".join("df['{}'].head(n).values".format(c) for c in df.columns)
@@ -244,7 +244,7 @@ def overload_dataframe_head(df, n=5):
     return _gen_init_df(header, df.columns, data_args, index)
 
 
-@overload_method(DataFrameType, "tail", inline="always")
+@overload_method(DataFrameType, "tail", inline="always", no_unliteral=True)
 def overload_dataframe_tail(df, n=5):
     # call tail() on column Series
     data_args = ", ".join("df['{}'].tail(n).values".format(c) for c in df.columns)
@@ -253,7 +253,7 @@ def overload_dataframe_tail(df, n=5):
     return _gen_init_df(header, df.columns, data_args, index)
 
 
-@overload_method(DataFrameType, "isin", inline="always")
+@overload_method(DataFrameType, "isin", inline="always", no_unliteral=True)
 def overload_dataframe_isin(df, values):
     # TODO: call isin on Series
     # TODO: make sure df indices match?
@@ -318,7 +318,7 @@ def overload_dataframe_isin(df, values):
     return _gen_init_df(func_text, df.columns, ",".join(out_data))
 
 
-@overload_method(DataFrameType, "abs", inline="always")
+@overload_method(DataFrameType, "abs", inline="always", no_unliteral=True)
 def overload_dataframe_abs(df):
     # only works for numerical data and Timedelta
     # TODO: handle timedelta
@@ -343,7 +343,7 @@ def overload_dataframe_abs(df):
     return _gen_init_df(header, df.columns, data_args)
 
 
-@overload_method(DataFrameType, "corr", inline="always")
+@overload_method(DataFrameType, "corr", inline="always", no_unliteral=True)
 def overload_dataframe_corr(df, method="pearson", min_periods=1):
 
     numeric_cols = [
@@ -382,7 +382,7 @@ def overload_dataframe_corr(df, method="pearson", min_periods=1):
     return _gen_init_df(header, numeric_cols, data_args, index)
 
 
-@overload_method(DataFrameType, "cov", inline="always")
+@overload_method(DataFrameType, "cov", inline="always", no_unliteral=True)
 def overload_dataframe_cov(df, min_periods=None):
     # TODO: support calling np.cov() when there is no NA
     minpv = "1" if is_overload_none(min_periods) else "min_periods"
@@ -423,7 +423,7 @@ def overload_dataframe_cov(df, min_periods=None):
     return _gen_init_df(header, numeric_cols, data_args, index)
 
 
-@overload_method(DataFrameType, "count")
+@overload_method(DataFrameType, "count", no_unliteral=True)
 def overload_dataframe_count(df, axis=0, level=None, numeric_only=False):
     # TODO: numeric_only flag
     data_args = ", ".join("df['{}'].count()".format(c) for c in df.columns)
@@ -443,7 +443,7 @@ def overload_dataframe_count(df, axis=0, level=None, numeric_only=False):
     return impl
 
 
-@overload_method(DataFrameType, "nunique", inline="always")
+@overload_method(DataFrameType, "nunique", inline="always", no_unliteral=True)
 def overload_dataframe_nunique(df, axis=0, dropna=True):
     data_args = ", ".join("df['{}'].nunique()".format(c) for c in df.columns)
 
@@ -462,58 +462,58 @@ def overload_dataframe_nunique(df, axis=0, dropna=True):
     return impl
 
 
-@overload_method(DataFrameType, "prod", inline="always")
-@overload_method(DataFrameType, "product", inline="always")
+@overload_method(DataFrameType, "prod", inline="always", no_unliteral=True)
+@overload_method(DataFrameType, "product", inline="always", no_unliteral=True)
 def overload_dataframe_prod(
     df, axis=None, skipna=None, level=None, numeric_only=None, min_count=0
 ):
     return _gen_reduce_impl(df, "prod")
 
 
-@overload_method(DataFrameType, "sum", inline="always")
+@overload_method(DataFrameType, "sum", inline="always", no_unliteral=True)
 def overload_dataframe_sum(
     df, axis=None, skipna=None, level=None, numeric_only=None, min_count=0
 ):
     return _gen_reduce_impl(df, "sum")
 
 
-@overload_method(DataFrameType, "max", inline="always")
+@overload_method(DataFrameType, "max", inline="always", no_unliteral=True)
 def overload_dataframe_max(df, axis=None, skipna=None, level=None, numeric_only=None):
     return _gen_reduce_impl(df, "max")
 
 
-@overload_method(DataFrameType, "min", inline="always")
+@overload_method(DataFrameType, "min", inline="always", no_unliteral=True)
 def overload_dataframe_min(df, axis=None, skipna=None, level=None, numeric_only=None):
     return _gen_reduce_impl(df, "min")
 
 
-@overload_method(DataFrameType, "mean", inline="always")
+@overload_method(DataFrameType, "mean", inline="always", no_unliteral=True)
 def overload_dataframe_mean(df, axis=None, skipna=None, level=None, numeric_only=None):
     return _gen_reduce_impl(df, "mean")
 
 
-@overload_method(DataFrameType, "var", inline="always")
+@overload_method(DataFrameType, "var", inline="always", no_unliteral=True)
 def overload_dataframe_var(
     df, axis=None, skipna=None, level=None, ddof=1, numeric_only=None
 ):
     return _gen_reduce_impl(df, "var")
 
 
-@overload_method(DataFrameType, "std", inline="always")
+@overload_method(DataFrameType, "std", inline="always", no_unliteral=True)
 def overload_dataframe_std(
     df, axis=None, skipna=None, level=None, ddof=1, numeric_only=None
 ):
     return _gen_reduce_impl(df, "std")
 
 
-@overload_method(DataFrameType, "median", inline="always")
+@overload_method(DataFrameType, "median", inline="always", no_unliteral=True)
 def overload_dataframe_median(
     df, axis=None, skipna=None, level=None, numeric_only=None
 ):
     return _gen_reduce_impl(df, "median")
 
 
-@overload_method(DataFrameType, "quantile", inline="always")
+@overload_method(DataFrameType, "quantile", inline="always", no_unliteral=True)
 def overload_dataframe_quantile(
     df, q=0.5, axis=0, numeric_only=True, interpolation="linear"
 ):
@@ -521,12 +521,12 @@ def overload_dataframe_quantile(
     return _gen_reduce_impl(df, "quantile", "q")
 
 
-@overload_method(DataFrameType, "idxmax", inline="always")
+@overload_method(DataFrameType, "idxmax", inline="always", no_unliteral=True)
 def overload_dataframe_idxmax(df, axis=0, skipna=True):
     return _gen_reduce_impl(df, "idxmax")
 
 
-@overload_method(DataFrameType, "idxmin", inline="always")
+@overload_method(DataFrameType, "idxmin", inline="always", no_unliteral=True)
 def overload_dataframe_idxmin(df, axis=0, skipna=True):
     return _gen_reduce_impl(df, "idxmin")
 
@@ -616,7 +616,7 @@ def _gen_reduce_impl(df, func_name, args=None):
     return impl
 
 
-@overload_method(DataFrameType, "pct_change", inline="always")
+@overload_method(DataFrameType, "pct_change", inline="always", no_unliteral=True)
 def overload_dataframe_pct_change(
     df, periods=1, fill_method="pad", limit=None, freq=None
 ):
@@ -627,21 +627,21 @@ def overload_dataframe_pct_change(
     return _gen_init_df(header, df.columns, data_args)
 
 
-@overload_method(DataFrameType, "cumprod", inline="always")
+@overload_method(DataFrameType, "cumprod", inline="always", no_unliteral=True)
 def overload_dataframe_cumprod(df, axis=None, skipna=True):
     data_args = ", ".join("df['{}'].values.cumprod()".format(c) for c in df.columns)
     header = "def impl(df, axis=None, skipna=True):\n"
     return _gen_init_df(header, df.columns, data_args)
 
 
-@overload_method(DataFrameType, "cumsum", inline="always")
+@overload_method(DataFrameType, "cumsum", inline="always", no_unliteral=True)
 def overload_dataframe_cumsum(df, axis=None, skipna=True):
     data_args = ", ".join("df['{}'].values.cumsum()".format(c) for c in df.columns)
     header = "def impl(df, axis=None, skipna=True):\n"
     return _gen_init_df(header, df.columns, data_args)
 
 
-@overload_method(DataFrameType, "describe", inline="always")
+@overload_method(DataFrameType, "describe", inline="always", no_unliteral=True)
 def overload_dataframe_describe(df, percentiles=None, include=None, exclude=None):
     data_args = ", ".join("df['{}'].describe().values".format(c) for c in df.columns)
     header = "def impl(df, percentiles=None, include=None, exclude=None):\n"
@@ -652,7 +652,7 @@ def overload_dataframe_describe(df, percentiles=None, include=None, exclude=None
     return _gen_init_df(header, df.columns, data_args, index)
 
 
-@overload_method(DataFrameType, "take", inline="always")
+@overload_method(DataFrameType, "take", inline="always", no_unliteral=True)
 def overload_dataframe_take(df, indices, axis=0, convert=None, is_copy=True):
     data_args = ", ".join(
         "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {})[indices_t]".format(i)
@@ -664,7 +664,7 @@ def overload_dataframe_take(df, indices, axis=0, convert=None, is_copy=True):
     return _gen_init_df(header, df.columns, data_args, index)
 
 
-@overload_method(DataFrameType, "shift", inline="always")
+@overload_method(DataFrameType, "shift", inline="always", no_unliteral=True)
 def overload_dataframe_shift(df, periods=1, freq=None, axis=0, fill_value=None):
     # TODO: handle fill_value, freq, int NA
     data_args = ", ".join(
@@ -677,7 +677,7 @@ def overload_dataframe_shift(df, periods=1, freq=None, axis=0, fill_value=None):
     return _gen_init_df(header, df.columns, data_args)
 
 
-@overload_method(DataFrameType, "set_index", inline="always")
+@overload_method(DataFrameType, "set_index", inline="always", no_unliteral=True)
 def overload_dataframe_set_index(
     df, keys, drop=True, append=False, inplace=False, verify_integrity=False
 ):
@@ -701,7 +701,7 @@ def overload_dataframe_set_index(
     return _gen_init_df(header, columns, data_args, index)
 
 
-@overload_method(DataFrameType, "query")
+@overload_method(DataFrameType, "query", no_unliteral=True)
 def overload_dataframe_query(df, expr, inplace=False):
     """Support query only for the case where expr is a constant string and expr output
     is a 1D boolean array. 
@@ -725,7 +725,7 @@ def overload_dataframe_query(df, expr, inplace=False):
     return impl
 
 
-@overload_method(DataFrameType, "duplicated", inline="always")
+@overload_method(DataFrameType, "duplicated", inline="always", no_unliteral=True)
 def overload_dataframe_duplicated(df, subset=None, keep="first"):
     # TODO: support subset and first
     if not is_overload_none(subset):
@@ -751,7 +751,7 @@ def overload_dataframe_duplicated(df, subset=None, keep="first"):
     return impl
 
 
-@overload_method(DataFrameType, "drop_duplicates", inline="always")
+@overload_method(DataFrameType, "drop_duplicates", inline="always", no_unliteral=True)
 def overload_dataframe_drop_duplicates(df, subset=None, keep="first", inplace=False):
     # TODO: support inplace
     if not is_overload_none(subset):
@@ -963,8 +963,8 @@ _install_unary_ops()
 ########### top level functions ###############
 
 
-@overload(pd.isna, inline="always")
-@overload(pd.isnull, inline="always")
+@overload(pd.isna, inline="always", no_unliteral=True)
+@overload(pd.isnull, inline="always", no_unliteral=True)
 def overload_isna(obj):
     # DataFrame, Series, Index
     if isinstance(
@@ -995,6 +995,7 @@ def overload_isna(obj):
         return lambda obj: pd.isna(bodo.utils.conversion.coerce_to_array(obj))
 
     # scalars
+    obj = types.unliteral(obj)
     if obj == bodo.string_type:
         return lambda obj: False
     if isinstance(obj, types.Integer):
@@ -1007,8 +1008,8 @@ def overload_isna(obj):
     return lambda obj: False
 
 
-@overload(pd.notna, inline="always")
-@overload(pd.notnull, inline="always")
+@overload(pd.notna, inline="always", no_unliteral=True)
+@overload(pd.notnull, inline="always", no_unliteral=True)
 def overload_notna(obj):
     # non-scalars
     # TODO: ~pd.isna(obj) implementation fails for some reason in
@@ -1037,7 +1038,7 @@ def _get_pd_dtype_str(t):
     return bodo.ir.csv_ext._get_pd_dtype_str(t)
 
 
-@overload(pd.read_excel)
+@overload(pd.read_excel, no_unliteral=True)
 def overload_read_excel(
     io,
     sheet_name=0,
