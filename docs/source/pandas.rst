@@ -56,6 +56,13 @@ Also see :ref:`S3` and :ref:`HDFS` configuration requirements and more on :ref:`
   * Argument ``index_col`` is supported.
   * Arguments ``chunksize``, ``column``, ``coerce_float``, ``params`` are not supported.
 
+* :func:`pandas.to_sql`
+
+  * :ref:`example usage and more system specific instructions <sql-section>`
+  * Argument ``con`` is supported but only as a string form. SQLalchemy `connectable` is not supported.
+  * Argument ``name``, ``schema``, ``if_exists``, ``index``, ``index_label``, ``dtype``, ``method`` are supported.
+  * Argument ``chunksize`` is not supported.
+
 * :func:`pandas.read_parquet`
 
   * :ref:`example usage and more system specific instructions <parquet-section>`
