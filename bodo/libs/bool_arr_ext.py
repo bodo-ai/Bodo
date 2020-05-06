@@ -520,7 +520,6 @@ def bool_arr_setitem(A, idx, val):
 
     # scalar case
     if isinstance(idx, types.Integer):
-        assert val == types.bool_
 
         def impl_scalar(A, idx, val):  # pragma: no cover
             A._data[idx] = val
