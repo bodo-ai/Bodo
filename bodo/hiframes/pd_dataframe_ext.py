@@ -242,12 +242,8 @@ class DataFrameAttribute(AttributeTemplate):
 
         # check axis
         axis = args[1] if len(args) > 1 else kws.get("axis", None)
-        if (
-            axis is None
-            or not isinstance(axis, types.IntegerLiteral)
-            or axis.literal_value != 1
-        ):
-            raise ValueError("only apply() with axis=1 supported")
+        if not (is_overload_constant_int(axis) and get_overload_const_int(axis) == 1):
+            raise BodoError("only apply() with axis=1 supported")
 
         # using NamedTuple instead of Series, TODO: pass Series
         Row = namedtuple("R", df.columns)
