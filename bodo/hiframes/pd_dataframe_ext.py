@@ -76,6 +76,7 @@ from bodo.libs.decimal_arr_ext import DecimalArrayType
 from bodo.hiframes.datetime_date_ext import datetime_date_array_type
 from bodo.libs.str_arr_ext import string_array_type, str_arr_from_sequence
 from bodo.libs.bool_arr_ext import boolean_array
+from bodo.libs.distributed_api import bcast_scalar, bcast
 from bodo.hiframes.pd_index_ext import is_pd_index_type
 from bodo.hiframes.pd_multi_index_ext import MultiIndexType
 from bodo.io import csv_cpp, json_cpp
@@ -2765,6 +2766,122 @@ def to_parquet_overload(
     )
     df_to_parquet = loc_vars["df_to_parquet"]
     return df_to_parquet
+
+
+def to_sql_exception_guard(
+    df,
+    name,
+    con,
+    schema=None,
+    if_exists="fail",
+    index=True,
+    index_label=None,
+    chunksize=None,
+    dtype=None,
+    method=None,
+):  # pragma: no cover
+    """Call of to_sql and guard the exception and return it as string if error happens"""
+    err_msg = "all_ok"
+    try:
+        df.to_sql(
+            name, con, schema, if_exists, index, index_label, chunksize, dtype, method,
+        )
+    except ValueError as e:
+        err_msg = e.args[0]
+    return err_msg
+
+
+@numba.njit
+def to_sql_exception_guard_encaps(
+    df,
+    name,
+    con,
+    schema=None,
+    if_exists="fail",
+    index=True,
+    index_label=None,
+    chunksize=None,
+    dtype=None,
+    method=None,
+):  # pragma: no cover
+    with numba.objmode(out="unicode_type"):
+        out = to_sql_exception_guard(
+            df,
+            name,
+            con,
+            schema,
+            if_exists,
+            index,
+            index_label,
+            chunksize,
+            dtype,
+            method,
+        )
+    return out
+
+
+@overload_method(DataFrameType, "to_sql")
+def to_sql_overload(
+    df,
+    name,
+    con,
+    schema=None,
+    if_exists="fail",
+    index=True,
+    index_label=None,
+    chunksize=None,
+    dtype=None,
+    method=None,
+    # Additional entry
+    _is_parallel=False,
+):
+    if not is_overload_none(chunksize):
+        raise BodoError("to_sql(): chunksize option is not supported")
+
+    def _impl(
+        df,
+        name,
+        con,
+        schema=None,
+        if_exists="fail",
+        index=True,
+        index_label=None,
+        chunksize=None,
+        dtype=None,
+        method=None,
+        _is_parallel=False,
+    ):  # pragma: no cover
+        """Nodes number 0 does the first initial insertion into the database.
+        Following nodes do the insertion of the rest if no error happened.
+        The bcast_scalar is used to synchronize the process between 0 and the rest.
+        """
+        rank = bodo.libs.distributed_api.get_rank()
+        err_msg = "unset"
+        if rank != 0:
+            if_exists = "append"  # For other nodes, we append to the existing data set.
+            err_msg = bcast_scalar(err_msg)
+        # The writing of the data.
+        if rank == 0 or (_is_parallel and err_msg == "all_ok"):
+            err_msg = to_sql_exception_guard_encaps(
+                df,
+                name,
+                con,
+                schema,
+                if_exists,
+                index,
+                index_label,
+                chunksize,
+                dtype,
+                method,
+            )
+        if rank == 0:
+            err_msg = bcast_scalar(err_msg)
+        if err_msg != "all_ok":
+            # TODO: We cannot do a simple raise ValueError(err_msg).
+            print("err_msg=", err_msg)
+            raise ValueError("error in to_sql() operation")
+
+    return _impl
 
 
 # TODO: other Pandas versions (0.24 defaults are different than 0.23)

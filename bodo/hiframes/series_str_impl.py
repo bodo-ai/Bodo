@@ -185,21 +185,15 @@ def overload_str_method_len(S_str):
         name = bodo.hiframes.pd_series_ext.get_series_name(S)
         numba.parfors.parfor.init_prange()
         n = len(arr)
-        n_bytes = (n + 7) >> 3
-        out_arr = np.empty(n, np.int64)
-        bitmap = np.empty(n_bytes, np.uint8)
+        out_arr = bodo.libs.int_arr_ext.alloc_int_array(n, np.int64)
         for i in numba.parfors.parfor.internal_prange(n):
             if bodo.libs.array_kernels.isna(arr, i):
-                out_arr[i] = 1
-                bodo.libs.int_arr_ext.set_bit_to_arr(bitmap, i, 0)
+                bodo.ir.join.setitem_arr_nan(out_arr, i)
             else:
-                # TODO: optimize str len on string array
+                # TODO: optimize str len on string array (count unicode chars inplace)
                 out_arr[i] = len(arr[i])
-                bodo.libs.int_arr_ext.set_bit_to_arr(bitmap, i, 1)
 
-        return bodo.hiframes.pd_series_ext.init_series(
-            bodo.libs.int_arr_ext.init_integer_array(out_arr, bitmap), index, name
-        )
+        return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
     return impl
 
@@ -463,18 +457,13 @@ def overload_str_method_contains(S_str, pat, case=True, flags=0, na=np.nan, rege
             numba.parfors.parfor.init_prange()
             e = re.compile(pat, flags)
             l = len(arr)
-            out_arr = np.empty(l, dtype=np.bool_)
-            nulls = np.empty((l + 7) >> 3, dtype=np.uint8)
+            out_arr = bodo.libs.bool_arr_ext.alloc_bool_array(l)
             for i in numba.parfors.parfor.internal_prange(l):
                 if bodo.libs.array_kernels.isna(arr, i):
-                    out_arr[i] = False
-                    bodo.libs.int_arr_ext.set_bit_to_arr(nulls, i, 0)
+                    bodo.ir.join.setitem_arr_nan(out_arr, i)
                 else:
                     out_arr[i] = bodo.libs.str_ext.contains_regex(e, arr[i])
-                    bodo.libs.int_arr_ext.set_bit_to_arr(nulls, i, 1)
-            return bodo.hiframes.pd_series_ext.init_series(
-                bodo.libs.bool_arr_ext.init_bool_array(out_arr, nulls), index, name
-            )
+            return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
         return _str_contains_regex_impl
 
@@ -490,18 +479,13 @@ def overload_str_method_contains(S_str, pat, case=True, flags=0, na=np.nan, rege
         name = bodo.hiframes.pd_series_ext.get_series_name(S)
         numba.parfors.parfor.init_prange()
         l = len(arr)
-        out_arr = np.empty(l, dtype=np.bool_)
-        nulls = np.empty((l + 7) >> 3, dtype=np.uint8)
+        out_arr = bodo.libs.bool_arr_ext.alloc_bool_array(l)
         for i in numba.parfors.parfor.internal_prange(l):
             if bodo.libs.array_kernels.isna(arr, i):
-                out_arr[i] = False
-                bodo.libs.int_arr_ext.set_bit_to_arr(nulls, i, 0)
+                bodo.ir.join.setitem_arr_nan(out_arr, i)
             else:
                 out_arr[i] = pat in arr[i]
-                bodo.libs.int_arr_ext.set_bit_to_arr(nulls, i, 1)
-        return bodo.hiframes.pd_series_ext.init_series(
-            bodo.libs.bool_arr_ext.init_bool_array(out_arr, nulls), index, name
-        )
+        return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
     return _str_contains_noregex_impl
 
@@ -520,18 +504,13 @@ def overload_str_method_count(S_str, pat, flags=0):
         e = re.compile(pat, flags)
         numba.parfors.parfor.init_prange()
         l = len(str_arr)
-        out_arr = np.empty(l, dtype=np.int64)
-        bitmap = np.empty((l + 7) >> 3, np.uint8)
+        out_arr = bodo.libs.int_arr_ext.alloc_int_array(l, np.int64)
         for i in numba.parfors.parfor.internal_prange(l):
             if bodo.libs.array_kernels.isna(str_arr, i):
-                out_arr[i] = 1
-                bodo.libs.int_arr_ext.set_bit_to_arr(bitmap, i, 0)
+                bodo.ir.join.setitem_arr_nan(out_arr, i)
             else:
                 out_arr[i] = str_findall_count(e, str_arr[i])
-                bodo.libs.int_arr_ext.set_bit_to_arr(bitmap, i, 1)
-        return bodo.hiframes.pd_series_ext.init_series(
-            bodo.libs.int_arr_ext.init_integer_array(out_arr, bitmap), index, name
-        )
+        return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
     return impl
 
@@ -548,18 +527,13 @@ def overload_str_method_find(S_str, sub):
         index = bodo.hiframes.pd_series_ext.get_series_index(S)
         numba.parfors.parfor.init_prange()
         l = len(str_arr)
-        out_arr = np.empty(l, dtype=np.int64)
-        bitmap = np.empty((l + 7) >> 3, np.uint8)
+        out_arr = bodo.libs.int_arr_ext.alloc_int_array(l, np.int64)
         for i in numba.parfors.parfor.internal_prange(l):
             if bodo.libs.array_kernels.isna(str_arr, i):
-                out_arr[i] = 1
-                bodo.libs.int_arr_ext.set_bit_to_arr(bitmap, i, 0)
+                bodo.ir.join.setitem_arr_nan(out_arr, i)
             else:
                 out_arr[i] = str_arr[i].find(sub)
-                bodo.libs.int_arr_ext.set_bit_to_arr(bitmap, i, 1)
-        return bodo.hiframes.pd_series_ext.init_series(
-            bodo.libs.int_arr_ext.init_integer_array(out_arr, bitmap), index, name
-        )
+        return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
     return impl
 
@@ -579,18 +553,13 @@ def overload_str_method_rfind(S_str, sub, start=0, end=None):
         index = bodo.hiframes.pd_series_ext.get_series_index(S)
         numba.parfors.parfor.init_prange()
         l = len(str_arr)
-        out_arr = np.empty(l, dtype=np.int64)
-        bitmap = np.empty((l + 7) >> 3, np.uint8)
+        out_arr = bodo.libs.int_arr_ext.alloc_int_array(l, np.int64)
         for i in numba.parfors.parfor.internal_prange(l):
             if bodo.libs.array_kernels.isna(str_arr, i):
-                out_arr[i] = 1
-                bodo.libs.int_arr_ext.set_bit_to_arr(bitmap, i, 0)
+                bodo.ir.join.setitem_arr_nan(out_arr, i)
             else:
                 out_arr[i] = str_arr[i].rfind(sub, start, end)
-                bodo.libs.int_arr_ext.set_bit_to_arr(bitmap, i, 1)
-        return bodo.hiframes.pd_series_ext.init_series(
-            bodo.libs.int_arr_ext.init_integer_array(out_arr, bitmap), index, name
-        )
+        return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
     return impl
 
@@ -823,18 +792,13 @@ def overload_str_method_startswith(S_str, pat, na=np.nan):
         index = bodo.hiframes.pd_series_ext.get_series_index(S)
         numba.parfors.parfor.init_prange()
         l = len(str_arr)
-        nulls = np.empty((l + 7) >> 3, dtype=np.uint8)
-        out_arr = np.empty(l, dtype=np.bool_)
+        out_arr = bodo.libs.bool_arr_ext.alloc_bool_array(l)
         for i in numba.parfors.parfor.internal_prange(l):
             if bodo.libs.array_kernels.isna(str_arr, i):
-                out_arr[i] = False
-                bodo.libs.int_arr_ext.set_bit_to_arr(nulls, i, 0)
+                bodo.ir.join.setitem_arr_nan(out_arr, i)
             else:
                 out_arr[i] = str_arr[i].startswith(pat)
-                bodo.libs.int_arr_ext.set_bit_to_arr(nulls, i, 1)
-        return bodo.hiframes.pd_series_ext.init_series(
-            bodo.libs.bool_arr_ext.init_bool_array(out_arr, nulls), index, name
-        )
+        return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
     return impl
 
@@ -851,18 +815,13 @@ def overload_str_method_endswith(S_str, pat, na=np.nan):
         index = bodo.hiframes.pd_series_ext.get_series_index(S)
         numba.parfors.parfor.init_prange()
         l = len(str_arr)
-        nulls = np.empty((l + 7) >> 3, dtype=np.uint8)
-        out_arr = np.empty(l, dtype=np.bool_)
+        out_arr = bodo.libs.bool_arr_ext.alloc_bool_array(l)
         for i in numba.parfors.parfor.internal_prange(l):
             if bodo.libs.array_kernels.isna(str_arr, i):
-                out_arr[i] = False
-                bodo.libs.int_arr_ext.set_bit_to_arr(nulls, i, 0)
+                bodo.ir.join.setitem_arr_nan(out_arr, i)
             else:
                 out_arr[i] = str_arr[i].endswith(pat)
-                bodo.libs.int_arr_ext.set_bit_to_arr(nulls, i, 1)
-        return bodo.hiframes.pd_series_ext.init_series(
-            bodo.libs.bool_arr_ext.init_bool_array(out_arr, nulls), index, name
-        )
+        return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
     return impl
 
@@ -1157,17 +1116,14 @@ def create_str2bool_methods_overload(func_name):
         func_text += "    name = bodo.hiframes.pd_series_ext.get_series_name(S)\n"
         func_text += "    numba.parfors.parfor.init_prange()\n"
         func_text += "    l = len(str_arr)\n"
-        func_text += "    nulls = np.empty((l + 7) >> 3, dtype=np.uint8)\n"
-        func_text += "    out_arr = np.empty(l, dtype=np.bool_)\n"
+        func_text += "    out_arr = bodo.libs.bool_arr_ext.alloc_bool_array(l)\n"
         func_text += "    for i in numba.parfors.parfor.internal_prange(l):\n"
         func_text += "        if bodo.libs.array_kernels.isna(str_arr, i):\n"
-        func_text += "            out_arr[i] = False\n"
-        func_text += "            set_bit_to_arr(nulls, i, 0)\n"
+        func_text += "            bodo.ir.join.setitem_arr_nan(out_arr, i)\n"
         func_text += "        else:\n"
         func_text += "            out_arr[i] = str_arr[i].{}()\n".format(func_name)
-        func_text += "            set_bit_to_arr(nulls, i, 1)\n"
         func_text += "    return bodo.hiframes.pd_series_ext.init_series(\n"
-        func_text += "      init_bool_array(out_arr, nulls),index, name)\n"
+        func_text += "      out_arr,index, name)\n"
         loc_vars = {}
         # print(func_text)
         exec(
@@ -1176,8 +1132,6 @@ def create_str2bool_methods_overload(func_name):
                 "bodo": bodo,
                 "numba": numba,
                 "np": np,
-                "set_bit_to_arr": bodo.libs.int_arr_ext.set_bit_to_arr,
-                "init_bool_array": bodo.libs.bool_arr_ext.init_bool_array,
             },
             loc_vars,
         )
