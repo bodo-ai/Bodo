@@ -1252,6 +1252,23 @@ def test_df_apply_func_case1():
     check_func(test_impl, (df,))
 
 
+@bodo.jit
+def g2(r):
+    return 2 * r[0]
+
+
+def test_df_apply_func_case2():
+    """make sure a UDF calling another function doesn't fail (#964)
+    """
+
+    def test_impl(df):
+        return df.apply(lambda x: g2(x), axis=1)
+
+    n = 121
+    df = pd.DataFrame({"A": np.arange(n)})
+    check_func(test_impl, (df,))
+
+
 def test_df_apply_error_check():
     """make sure a proper error is raised when UDF is not supported (not compilable)
     """
