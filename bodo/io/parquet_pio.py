@@ -470,7 +470,7 @@ def get_parquet_dataset(file_name):
             return ParquetDataset
     elif file_name.startswith("hdfs://"):
         # this HadoopFileSystem is the new file system of pyarrow
-        from pyarrow.fs import HadoopFileSystem, FileSelector, FileType, HdfsOptions
+        from pyarrow.fs import HadoopFileSystem, FileSelector, FileType
 
         # this HadoopFileSystem is the deprecated file system of pyarrow
         # need this for pq.ParquetDataset
@@ -480,11 +480,11 @@ def get_parquet_dataset(file_name):
 
         # creates a new Hadoop file system from uri
         try:
-            hdfs, path = HadoopFileSystem.from_uri(file_name)
-            hdfs_options = HdfsOptions.from_uri(file_name)
-            (host, port) = hdfs_options.endpoint
-            host = host[7:]  # remove hdfs:// prefix
-            fs = HdFS(host=host, port=port, user=hdfs_options.user)
+            hdfs = HadoopFileSystem.from_uri(file_name)
+            from urllib.parse import urlparse
+            options = urlparse(file_name)
+            path = options.path
+            fs = HdFS(host=options.hostname, port=options.port, user=options.username)
         except Exception as e:
             raise BodoError(
                 "read_parquet(): Hadoop file system cannot be created: {}".format(e)
@@ -494,21 +494,21 @@ def get_parquet_dataset(file_name):
         prefix = file_name[: len(file_name) - len(path)]
         file_names = None
         # target stat of the path: file or just the directory itself
-        target_stat = hdfs.get_target_stats([path])
+        target_stat = hdfs.get_file_info([file_name])
 
-        if target_stat[0].type == FileType.NonExistent:
+        if target_stat[0].type in (FileType.NotFound, FileType.Unknown):
             raise BodoError(
                 "read_parquet(): {} is a "
                 "non-existing or unreachable file".format(file_name)
             )
 
         if (not target_stat[0].size) and target_stat[0].type == FileType.Directory:
-            file_selector = FileSelector(path, allow_non_existent=False, recursive=True)
+            file_selector = FileSelector(path, recursive=True)
             try:
-                file_stats = hdfs.get_target_stats(file_selector)
+                file_stats = hdfs.get_file_info(file_selector)
             except Exception as e:
                 raise BodoError(
-                    "read_parquet(): Exception on getting target stats "
+                    "read_parquet(): Exception on getting directory info "
                     "of {}: {}".format(path, e)
                 )
             for file_stat in file_stats:
