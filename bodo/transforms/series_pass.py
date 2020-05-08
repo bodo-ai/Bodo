@@ -662,6 +662,19 @@ class SeriesPass:
                 )
                 return self._replace_func(impl, [arg1, arg2])
 
+            # series(timedelta) and timedelta
+            if (
+                is_timedelta64_series_typ(typ1)
+                and typ2 == bodo.hiframes.datetime_timedelta_ext.datetime_timedelta_type
+            ) or (
+                is_timedelta64_series_typ(typ2)
+                and typ1 == bodo.hiframes.datetime_timedelta_ext.datetime_timedelta_type
+            ):
+                impl = bodo.hiframes.series_dt_impl.create_cmp_op_overload(rhs.fn)(
+                    typ1, typ2
+                )
+                return self._replace_func(impl, [arg1, arg2])
+
             # series(dt64) comp ops with pandas.Timestamp type
             if (
                 is_dt64_series_typ(typ1)

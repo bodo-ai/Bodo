@@ -300,7 +300,6 @@ def test_datetime_comparisons_datetime_datetime():
     def test_gt(a, b):
         return a > b
 
-
     # test series(dt64) scalar cmp
     t = np.datetime64("2018-04-27").astype("datetime64[ns]")
     Srange = pd.DatetimeIndex(
@@ -353,7 +352,6 @@ def test_datetime_comparisons_datetime_string():
     def test_gt(a, b):
         return a > b
 
-
     Srange = pd.DatetimeIndex(
         [
             "2018-04-24 00:00:00",
@@ -379,6 +377,56 @@ def test_datetime_comparisons_datetime_string():
     check_func(test_ne, (S, t_str))
     check_func(test_eq, (t_str, S))
     check_func(test_eq, (S, t_str))
+
+
+def test_datetime_comparisons_timedelta():
+    """
+    Test comparison operators of datetime module objects in Bodo.
+    Comparison between Series(timedelta64) and timedelta scalar
+    """
+
+    def test_eq(a, b):
+        return a == b
+
+    def test_ne(a, b):
+        return a != b
+
+    def test_le(a, b):
+        return a <= b
+
+    def test_lt(a, b):
+        return a < b
+
+    def test_ge(a, b):
+        return a >= b
+
+    def test_gt(a, b):
+        return a > b
+
+    # Test with TimeDelta
+    TimeDeltas = pd.Series(
+        [
+            datetime.timedelta(1, 0, 0),
+            datetime.timedelta(0, 7200, 0),
+            datetime.timedelta(2, 0, 0),
+            datetime.timedelta(-1, 3600, 0),
+            None,
+        ],
+        dtype="timedelta64[ns]",
+    )
+    t_timedelta = datetime.timedelta(0, 7200, 0)
+    check_func(test_ge, (t_timedelta, TimeDeltas))
+    check_func(test_ge, (TimeDeltas, t_timedelta))
+    check_func(test_gt, (t_timedelta, TimeDeltas))
+    check_func(test_gt, (TimeDeltas, t_timedelta))
+    check_func(test_le, (t_timedelta, TimeDeltas))
+    check_func(test_le, (TimeDeltas, t_timedelta))
+    check_func(test_lt, (t_timedelta, TimeDeltas))
+    check_func(test_lt, (TimeDeltas, t_timedelta))
+    check_func(test_ne, (t_timedelta, TimeDeltas))
+    check_func(test_ne, (TimeDeltas, t_timedelta))
+    check_func(test_eq, (t_timedelta, TimeDeltas))
+    check_func(test_eq, (TimeDeltas, t_timedelta))
 
 
 def test_datetime_comparisons_datetime_list():
@@ -436,7 +484,6 @@ def test_datetime_comparisons_datetime_list():
     check_func(test_lt, (S1, S2))
     check_func(test_ne, (S1, S2))
     check_func(test_eq, (S1, S2))
-
 
 
 def test_datetime_comparisons_date():
