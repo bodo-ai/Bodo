@@ -90,7 +90,8 @@ class UntypedPass:
         self.locals = _locals
         self.metadata = metadata
         self.flags = flags
-        ir_utils._max_label = max(func_ir.blocks.keys())
+        # TODO: remove this? update _max_label just in case?
+        ir_utils._max_label = max(ir_utils._max_label, max(func_ir.blocks.keys()))
 
         self.arrow_tables = {}
         self.reverse_copies = {}
