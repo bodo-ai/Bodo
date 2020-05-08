@@ -854,12 +854,10 @@ class DistributedAnalysis:
             if lhs in array_dists:
                 new_dist_val = min(new_dist_val, array_dists[lhs].value)
             # handle index
-            if self.typemap[ind_varname] != types.none:
-                new_dist_val = min(new_dist_val, array_dists[ind_varname].value)
+            new_dist_val = min(new_dist_val, array_dists[ind_varname].value)
             new_dist = Distribution(new_dist_val)
             self._set_var_dist(data_varname, array_dists, new_dist)
-            if self.typemap[ind_varname] != types.none:
-                self._set_var_dist(ind_varname, array_dists, new_dist)
+            self._set_var_dist(ind_varname, array_dists, new_dist)
             self._set_var_dist(lhs, array_dists, new_dist)
             return
 
