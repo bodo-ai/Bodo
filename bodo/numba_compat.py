@@ -30,9 +30,7 @@ from numba.core.ir_utils import (
 from numba.extending import lower_builtin
 import numba.np.linalg
 from numba.core.imputils import impl_ret_new_ref
-from numba.core.typing.templates import (
-    infer_global,
-    signature)
+from numba.core.typing.templates import infer_global, signature
 from numba.core.types.misc import unliteral
 from numba.core.typing.templates import (
     AbstractTemplate,
@@ -520,6 +518,7 @@ def bound_function(template_key, no_unliteral=False):
     *template_key* (e.g. "complex.conjugate" above) will be used by the
     target to look up the method's implementation, as a regular function.
     """
+
     def wrapper(method_resolver):
         @functools.wraps(method_resolver)
         def attribute_resolver(self, ty):
@@ -535,7 +534,9 @@ def bound_function(template_key, no_unliteral=False):
             # only change: adding no_unliteral flag
             MethodTemplate._no_unliteral = no_unliteral
             return types.BoundFunction(MethodTemplate, ty)
+
         return attribute_resolver
+
     return wrapper
 
 
@@ -545,9 +546,7 @@ if (
     hashlib.sha256(lines.encode()).hexdigest()
     != "a2feefe64eae6a15c56affc47bf0c1d04461f9566913442d539452b397103322"
 ):  # pragma: no cover
-    warnings.warn(
-        "numba.core.typing.templates.bound_function has changed"
-    )
+    warnings.warn("numba.core.typing.templates.bound_function has changed")
 
 
 numba.core.typing.templates.bound_function = bound_function
@@ -793,11 +792,11 @@ def propagate(self, typeinfer):
     (e.g. imprecise types such as List(undefined)).
     """
     import bodo
+
     errors = []
     for constraint in self.constraints:
         loc = constraint.loc
-        with typeinfer.warnings.catch_warnings(filename=loc.filename,
-                                               lineno=loc.line):
+        with typeinfer.warnings.catch_warnings(filename=loc.filename, lineno=loc.line):
             try:
                 constraint(typeinfer)
             except numba.core.errors.ForceLiteralArg as e:
@@ -805,14 +804,15 @@ def propagate(self, typeinfer):
             except numba.core.errors.TypingError as e:
                 numba.core.typeinfer._logger.debug("captured error", exc_info=e)
                 new_exc = numba.core.errors.TypingError(
-                    str(e), loc=constraint.loc,
-                    highlighting=False,
+                    str(e), loc=constraint.loc, highlighting=False,
                 )
                 errors.append(numba.core.utils.chain_exception(new_exc, e))
             except Exception as e:
                 numba.core.typeinfer._logger.debug("captured error", exc_info=e)
-                msg = ("Internal error at {con}.\n"
-                       "{err}\nEnable logging at debug level for details.")
+                msg = (
+                    "Internal error at {con}.\n"
+                    "{err}\nEnable logging at debug level for details."
+                )
                 new_exc = numba.core.errors.TypingError(
                     msg.format(con=constraint, err=str(e)),
                     loc=constraint.loc,
@@ -824,7 +824,9 @@ def propagate(self, typeinfer):
                     # the first time we see BodoError during type inference, we
                     # put the code location in the error message, and re-raise
                     loc = constraint.loc
-                    raise bodo.utils.typing.BodoError(loc.strformat() + "\n" + str(e), is_new=False)
+                    raise bodo.utils.typing.BodoError(
+                        loc.strformat() + "\n" + str(e), is_new=False
+                    )
                 else:
                     # keep raising and propagating the error through numba until
                     # it reaches the user
@@ -853,6 +855,7 @@ def bodo_remove_dead_block(
     import bodo
     from bodo.utils.utils import is_array_typ, is_expr
     from bodo.transforms.distributed_pass import saved_array_analysis
+
     # TODO: find mutable args that are not definitely assigned instead of
     # assuming all args are live after return
     removed = False
@@ -976,7 +979,10 @@ class SetBuiltin(AbstractTemplate):
             (iterable,) = args
             if isinstance(iterable, types.IterableType):
                 dtype = iterable.iterator_type.yield_type
-                if isinstance(dtype, types.Hashable) or dtype == numba.core.types.unicode_type:
+                if (
+                    isinstance(dtype, types.Hashable)
+                    or dtype == numba.core.types.unicode_type
+                ):
                     return signature(types.Set(dtype), iterable)
         else:
             # set()
@@ -1004,3 +1010,45 @@ types.Set.__init__ = Set__init__
 def eq_str(context, builder, sig, args):
     func = numba.cpython.unicode.unicode_eq(*sig.args)
     return context.compile_internal(builder, func, sig, args)
+
+
+# fix Numba's max label global bug
+def ParforPassStates__init__(
+    self,
+    func_ir,
+    typemap,
+    calltypes,
+    return_type,
+    typingctx,
+    options,
+    flags,
+    diagnostics=numba.parfors.parfor.ParforDiagnostics(),
+):
+    self.func_ir = func_ir
+    self.typemap = typemap
+    self.calltypes = calltypes
+    self.typingctx = typingctx
+    self.return_type = return_type
+    self.options = options
+    self.diagnostics = diagnostics
+    self.swapped_fns = diagnostics.replaced_fns
+    self.fusion_info = diagnostics.fusion_info
+    self.nested_fusion_info = diagnostics.nested_fusion_info
+
+    self.array_analysis = numba.parfors.array_analysis.ArrayAnalysis(
+        self.typingctx, self.func_ir, self.typemap, self.calltypes,
+    )
+
+    # changed line to fix bug
+    ir_utils._max_label = max(ir_utils._max_label, max(func_ir.blocks.keys()))
+    self.flags = flags
+
+
+lines = inspect.getsource(numba.parfors.parfor.ParforPassStates.__init__)
+if (
+    hashlib.sha256(lines.encode()).hexdigest()
+    != "0b939cec777ef428a224056d8ab92db860a2b1457fd228127b695d02df933c26"
+):  # pragma: no cover
+    warnings.warn("numba.parfors.parfor.ParforPassStates.__init__ has changed")
+
+numba.parfors.parfor.ParforPassStates.__init__ = ParforPassStates__init__
