@@ -67,6 +67,7 @@ from bodo.utils.typing import (
     ensure_constant_arg,
     ensure_constant_values,
     create_unsupported_overload,
+    get_overload_const,
 )
 from bodo.utils.transform import get_const_func_output_type
 from bodo.utils.conversion import index_to_array
@@ -810,13 +811,11 @@ def set_df_column_with_reflect(typingctx, df, cname, arr, inplace=None):
 @overload(pd.DataFrame, inline="always", no_unliteral=True)
 def pd_dataframe_overload(data=None, index=None, columns=None, dtype=None, copy=False):
     # TODO: support other input combinations
-    if not isinstance(copy, (bool, bodo.utils.typing.BooleanLiteral, types.Omitted)):
-        raise ValueError("pd.DataFrame(): copy argument should be constant")
+    # TODO: error checking
+    if not is_overload_constant_bool(copy):  # pragma: no cover
+        raise BodoError("pd.DataFrame(): copy argument should be constant")
 
-    # get value of copy
-    copy = getattr(copy, "literal_value", copy)  # literal type
-    copy = getattr(copy, "value", copy)  # ommited type
-    assert isinstance(copy, bool)
+    copy = get_overload_const(copy)
 
     col_args, data_args, index_arg = _get_df_args(data, index, columns, dtype, copy)
     col_var = "bodo.utils.typing.add_consts_to_type([{}], {})".format(
@@ -876,12 +875,13 @@ def _get_df_args(data, index, columns, dtype, copy):
     else:
         # ndarray case
         # checks for 2d and column args
-        if not (isinstance(data, types.Array) and data.ndim == 2):
-            raise ValueError(
-                "pd.DataFrame() supports constant dictionary and" "ndarray input"
+        # TODO: error checking
+        if not (isinstance(data, types.Array) and data.ndim == 2):  # pragma: no cover
+            raise BodoError(
+                "pd.DataFrame() supports constant dictionary and ndarray input"
             )
-        if is_overload_none(columns):
-            raise ValueError(
+        if is_overload_none(columns):  # pragma: no cover
+            raise BodoError(
                 "pd.DataFrame() column argument is required when"
                 "ndarray is passed as data"
             )
