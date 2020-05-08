@@ -271,6 +271,16 @@ def test_empty_df_unbox():
     check_func(impl, (df,))
 
 
+def test_empty_df_create():
+    """test creation of an empty df
+    """
+
+    def impl1():
+        return pd.DataFrame()
+
+    check_func(impl1, ())
+
+
 def test_df_from_np_array_int():
     """
     Create a dataframe from numpy 2D-array of type int

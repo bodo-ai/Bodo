@@ -484,7 +484,7 @@ class UntypedPass:
         """
         nodes = [assign]
         kws = dict(rhs.kws)
-        data_arg = get_call_expr_arg("pd.DataFrame", rhs.args, kws, 0, "data")
+        data_arg = get_call_expr_arg("pd.DataFrame", rhs.args, kws, 0, "data", "")
         index_arg = get_call_expr_arg("pd.DataFrame", rhs.args, kws, 1, "index", "")
 
         arg_def = guard(get_definition, self.func_ir, data_arg)

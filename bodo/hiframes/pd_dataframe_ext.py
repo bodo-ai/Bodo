@@ -825,11 +825,14 @@ def pd_dataframe_overload(data=None, index=None, columns=None, dtype=None, copy=
     col_var = "bodo.utils.typing.add_consts_to_type([{}], {})".format(
         col_args, col_args
     )
+    # empty df case
+    if len(col_args) == 0:
+        col_var = "()"
 
     func_text = (
         "def _init_df(data=None, index=None, columns=None, dtype=None, copy=False):\n"
     )
-    func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), {}, {})\n".format(
+    func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe({}, {}, {})\n".format(
         data_args, index_arg, col_var
     )
     loc_vars = {}
@@ -876,6 +879,9 @@ def _get_df_args(data, index, columns, dtype, copy):
                     )
                     index_is_none = False
                     break
+    # empty dataframe
+    elif is_overload_none(data):
+        data_dict = {}
     else:
         # ndarray case
         # checks for 2d and column args
@@ -905,11 +911,18 @@ def _get_df_args(data, index, columns, dtype, copy):
 
     # set default RangeIndex if index argument is None and data argument isn't Series
     if index_is_none:
-        index_arg = "bodo.hiframes.pd_index_ext.init_range_index(0, {}, 1, None)".format(
-            df_len
-        )
+        # empty df has object Index in Pandas which correponds to our StringIndex
+        if is_overload_none(data):
+            index_arg = "bodo.hiframes.pd_index_ext.init_string_index(bodo.libs.str_arr_ext.pre_alloc_string_array(0, 0))"
+        else:
+            index_arg = "bodo.hiframes.pd_index_ext.init_range_index(0, {}, 1, None)".format(
+                df_len
+            )
 
-    data_args = ", ".join(data_dict[c] for c in col_names)
+    data_args = "({},)".format(", ".join(data_dict[c] for c in col_names))
+    if len(col_names) == 0:
+        data_args = "()"
+
     col_args = ", ".join("'{}'".format(c) for c in col_names)
     return col_args, data_args, index_arg
 
@@ -918,7 +931,7 @@ def _get_df_len_from_info(data_dict, col_names, index_is_none, index_arg):
     """return generated text for length of dataframe, given the input info in the
     pd.DataFrame() call
     """
-    df_len = None
+    df_len = "0"
     for c in col_names:
         if c in data_dict:
             df_len = "len({})".format(data_dict[c])
@@ -927,7 +940,6 @@ def _get_df_len_from_info(data_dict, col_names, index_is_none, index_arg):
     if df_len is None and not index_is_none:
         df_len = "len({})".format(index_arg)  # TODO: test
 
-    assert df_len is not None, "empty dataframe with null arrays"  # TODO
     return df_len
 
 
