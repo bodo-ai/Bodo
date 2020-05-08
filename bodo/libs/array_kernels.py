@@ -647,11 +647,18 @@ def overload_gen_na_array(n, arr):
     """
     generate an array full of NA values with the same type as 'arr'
     """
+    # TODO: support all array types
+
+    if isinstance(arr, types.TypeRef):
+        dtype = arr.instance_type
+    else:
+        dtype = arr.dtype
+
     # array of np.nan values if 'arr' is float or int Numpy array
-    if isinstance(arr, types.Array) and isinstance(
-        arr.dtype, (types.Integer, types.Float)
+    if isinstance(
+        dtype, (types.Integer, types.Float)
     ):
-        dtype = arr.dtype if isinstance(arr.dtype, types.Float) else types.float64
+        dtype = dtype if isinstance(dtype, types.Float) else types.float64
 
         def impl_float(n, arr):  # pragma: no cover
             numba.parfors.parfor.init_prange()
@@ -662,21 +669,21 @@ def overload_gen_na_array(n, arr):
 
         return impl_float
 
-    if isinstance(arr, types.Array) and isinstance(
-        arr.dtype, (types.NPDatetime, types.NPTimedelta)
+    if isinstance(
+        dtype, (types.NPDatetime, types.NPTimedelta)
     ):
-        nat = arr.dtype("NaT")
+        nat = dtype("NaT")
 
         def impl_dt64(n, arr):  # pragma: no cover
             numba.parfors.parfor.init_prange()
-            out_arr = np.empty(n, arr.dtype)
+            out_arr = np.empty(n, dtype)
             for i in numba.parfors.parfor.internal_prange(n):
                 out_arr[i] = nat
             return out_arr
 
         return impl_dt64
 
-    if arr == string_array_type:
+    if dtype == bodo.string_type:
 
         def impl_str(n, arr):  # pragma: no cover
             out_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(n, 0)

@@ -907,7 +907,7 @@ def _get_df_args(data, index, columns, dtype, copy):
         col_names = columns.consts
 
     df_len = _get_df_len_from_info(data_dict, col_names, index_is_none, index_arg)
-    _fill_null_arrays(data_dict, col_names, df_len)
+    _fill_null_arrays(data_dict, col_names, df_len, dtype)
 
     # set default RangeIndex if index argument is None and data argument isn't Series
     if index_is_none:
@@ -943,7 +943,7 @@ def _get_df_len_from_info(data_dict, col_names, index_is_none, index_arg):
     return df_len
 
 
-def _fill_null_arrays(data_dict, col_names, df_len):
+def _fill_null_arrays(data_dict, col_names, df_len, dtype):
     """Fills data_dict with Null arrays if there are columns that are not
     available in data_dict.
     """
@@ -951,13 +951,17 @@ def _fill_null_arrays(data_dict, col_names, df_len):
     if all(c in data_dict for c in col_names):
         return
 
-    # TODO: object array with NaN (use StringArray?)
-    null_arr = "np.full({}, np.nan)".format(df_len)
+    # object array of NaNs if dtype not specified
+    if is_overload_none(dtype):
+        dtype = "bodo.string_type"
+    else:
+        dtype = "dtype"
+
+    # array with NaNs
+    null_arr = "bodo.libs.array_kernels.gen_na_array({}, {})".format(df_len, dtype)
     for c in col_names:
         if c not in data_dict:
             data_dict[c] = null_arr
-
-    return
 
 
 @overload(len, no_unliteral=True)  # TODO: avoid lowering?

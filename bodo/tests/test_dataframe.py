@@ -278,7 +278,15 @@ def test_empty_df_create():
     def impl1():
         return pd.DataFrame()
 
+    def impl2():
+        return pd.DataFrame(columns=["A"])
+
+    def impl3():
+        return pd.DataFrame(columns=["A"], dtype=np.float32)
+
     check_func(impl1, ())
+    check_func(impl2, ())
+    check_func(impl3, ())
 
 
 def test_df_from_np_array_int():
