@@ -1896,6 +1896,21 @@ class SeriesPass:
         if isinstance(out_dtype, types.BaseTuple):
             out_dtype = np.dtype(",".join(str(t) for t in out_dtype.types), align=True)
 
+        # using Bodo's sequential/inline pipeline for the UDF to make sure nested calls
+        # are inlined and not distributed. Otherwise, generated barriers cause hangs
+        # see: test_df_apply_func_case2
+        parallel = {
+            "comprehension": True,
+            "setitem": False,
+            "reduction": True,
+            "numpy": True,
+            "stencil": True,
+            "fusion": True,
+        }
+        map_func = numba.njit(
+            func, parallel=parallel, pipeline_class=bodo.compiler.BodoCompilerSeqInline
+        )
+
         args = [data, index, name] + extra_args
         return self._replace_func(
             f,
@@ -1908,7 +1923,7 @@ class SeriesPass:
                 "out_dtype": out_dtype,
                 "get_utf8_size": get_utf8_size,
                 "pre_alloc_string_array": pre_alloc_string_array,
-                "map_func": numba.njit(func),
+                "map_func": map_func,
             },
             pre_nodes=nodes,
         )
