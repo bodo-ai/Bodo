@@ -260,6 +260,17 @@ def test_unbox_df_multi():
     check_func(impl, (df,))
 
 
+def test_empty_df_unbox():
+    """test boxing/unboxing of an empty df
+    """
+
+    def impl(df):
+        return df
+
+    df = pd.DataFrame()
+    check_func(impl, (df,))
+
+
 def test_df_from_np_array_int():
     """
     Create a dataframe from numpy 2D-array of type int
