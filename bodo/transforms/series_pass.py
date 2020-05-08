@@ -93,7 +93,7 @@ from bodo.utils.transform import (
     update_locs,
     get_call_expr_arg,
 )
-from bodo.utils.typing import get_overload_const_func, is_const_func_type
+from bodo.utils.typing import get_overload_const_func, is_const_func_type, BodoError
 
 
 ufunc_names = set(f.__name__ for f in numba.core.typing.npydecl.supported_ufuncs)
