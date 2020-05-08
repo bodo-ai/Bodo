@@ -93,7 +93,7 @@ from bodo.utils.transform import (
     update_locs,
     get_call_expr_arg,
 )
-from bodo.utils.typing import get_overload_const_func
+from bodo.utils.typing import get_overload_const_func, is_const_func_type
 
 
 ufunc_names = set(f.__name__ for f in numba.core.typing.npydecl.supported_ufuncs)
@@ -1007,7 +1007,9 @@ class SeriesPass:
                                 i
                             )
                         else:
-                            assert isinstance(types.unliteral(index_types[i]), types.Integer)
+                            assert isinstance(
+                                types.unliteral(index_types[i]), types.Integer
+                            )
                             func_text += "  start_{0} = index{1}\n".format(
                                 i,
                                 "[{}]".format(i)
@@ -1024,7 +1026,9 @@ class SeriesPass:
                         for i in range(ndim)
                         if not (
                             i < len(index_types)
-                            and isinstance(types.unliteral(index_types[i]), types.Integer)
+                            and isinstance(
+                                types.unliteral(index_types[i]), types.Integer
+                            )
                         )
                     ]
                 )
@@ -1378,9 +1382,13 @@ class SeriesPass:
                     n
                 )  # pragma: no cover
             elif isinstance(typ, IntegerArrayType):
-                impl = lambda n, t: bodo.libs.int_arr_ext.alloc_int_array(n, _dtype)  # pragma: no cover
+                impl = lambda n, t: bodo.libs.int_arr_ext.alloc_int_array(
+                    n, _dtype
+                )  # pragma: no cover
             elif typ == boolean_array:
-                impl = lambda n, t: bodo.libs.bool_arr_ext.alloc_bool_array(n)  # pragma: no cover
+                impl = lambda n, t: bodo.libs.bool_arr_ext.alloc_bool_array(
+                    n
+                )  # pragma: no cover
             else:
                 impl = lambda n, t: np.empty(n, _dtype)  # pragma: no cover
             return compile_func_single_block(
@@ -1999,8 +2007,8 @@ class SeriesPass:
 
             return self._replace_func(rolling_cov_impl, rhs.args, pre_nodes=nodes)
         # replace apply function with dispatcher obj, now the type is known
-        if func_name == "rolling_fixed" and isinstance(
-            self.typemap[rhs.args[4].name], types.MakeFunctionLiteral
+        if func_name == "rolling_fixed" and is_const_func_type(
+            self.typemap[rhs.args[4].name]
         ):
             # for apply case, create a dispatcher for the kernel and pass it
             # TODO: automatically handle lambdas in Numba
@@ -2015,8 +2023,8 @@ class SeriesPass:
             return nodes + compile_func_single_block(
                 f, rhs.args[:-2], lhs, self, extra_globals={"_func": imp_dis}
             )
-        elif func_name == "rolling_variable" and isinstance(
-            self.typemap[rhs.args[5].name], types.MakeFunctionLiteral
+        elif func_name == "rolling_variable" and is_const_func_type(
+            self.typemap[rhs.args[5].name]
         ):
             # for apply case, create a dispatcher for the kernel and pass it
             # TODO: automatically handle lambdas in Numba
@@ -2185,10 +2193,26 @@ class SeriesPass:
     def _handle_rolling_apply_func(
         self, func_node, dtype, out_dtype
     ):  # pragma: no cover
+        # using Bodo's sequential/inline pipeline for the UDF to make sure nested calls
+        # are inlined and not distributed. Otherwise, generated barriers cause hangs
+        # see: test_df_apply_func_case2
+        # also handles Pandas calls inside UDF
+        parallel = {
+            "comprehension": True,
+            "setitem": False,
+            "reduction": True,
+            "numpy": True,
+            "stencil": True,
+            "fusion": True,
+        }
         if isinstance(func_node, ir.Global) and isinstance(
             func_node.value, numba.core.registry.CPUDispatcher
         ):
-            return func_node.value
+            return numba.njit(
+                func_node.value.py_func,
+                parallel=parallel,
+                pipeline_class=bodo.compiler.BodoCompilerSeqInline,
+            )
         # other UDF cases are not currently possible currently due to Numba's
         # MakeFunctionToJitFunction pass but may be possible later
         if func_node is None:
@@ -2210,11 +2234,12 @@ class SeriesPass:
         kernel_func = lcs["f"]
         kernel_func.__code__ = func_node.code
         kernel_func.__name__ = func_node.code.co_name
-        # use bodo's sequential pipeline to enable pandas operations
-        # XXX seq pipeline used since dist pass causes a hang
+
         m = numba.core.ir_utils._max_label
         impl_disp = numba.njit(
-            kernel_func, pipeline_class=bodo.compiler.BodoCompilerSeq
+            kernel_func,
+            parallel=parallel,
+            pipeline_class=bodo.compiler.BodoCompilerSeqInline,
         )
         # precompile to avoid REP counting conflict in testing
         sig = out_dtype(types.Array(dtype, 1, "C"))
