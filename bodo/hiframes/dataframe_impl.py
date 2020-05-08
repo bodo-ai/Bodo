@@ -1170,8 +1170,15 @@ class SetDfColInfer(AbstractTemplate):
         ret = target
 
         if isinstance(target, DataFrameType):
+            index = target.index
+            # empty df index is updated based on new column
+            if len(target.columns) == 0:
+                index = bodo.hiframes.pd_index_ext.RangeIndexType(types.none)
             if isinstance(val, SeriesType):
+                if len(target.columns) == 0:
+                    index = val.index
                 val = val.data
+
             if isinstance(val, types.List):
                 val = scalar_to_array_type(val.dtype)
             if not bodo.utils.utils.is_array_typ(val):
@@ -1187,7 +1194,7 @@ class SetDfColInfer(AbstractTemplate):
                 # set a new column
                 new_cols = target.columns + (ind,)
                 new_typs = target.data + (val,)
-            ret = DataFrameType(new_typs, target.index, new_cols, target.has_parent)
+            ret = DataFrameType(new_typs, index, new_cols, target.has_parent)
 
         return ret(*args)
 
@@ -1386,4 +1393,6 @@ def _analyze_op_pair_first(self, scope, equiv_set, expr):
     return shape, [lhs_assign] + out
 
 
-numba.parfors.array_analysis.ArrayAnalysis._analyze_op_pair_first = _analyze_op_pair_first
+numba.parfors.array_analysis.ArrayAnalysis._analyze_op_pair_first = (
+    _analyze_op_pair_first
+)

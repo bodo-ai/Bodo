@@ -289,6 +289,24 @@ def test_empty_df_create():
     check_func(impl3, ())
 
 
+def test_empty_df_set_column():
+    """test column setitem of an empty df
+    """
+
+    def impl1(n):
+        df = pd.DataFrame()
+        df["A"] = np.arange(n) * 2
+        return df
+
+    def impl2(n):
+        df = pd.DataFrame()
+        df["A"] = pd.Series(np.arange(n) * 2, index=np.ones(n))
+        return df
+
+    check_func(impl1, (11,))
+    check_func(impl2, (11,))
+
+
 def test_df_from_np_array_int():
     """
     Create a dataframe from numpy 2D-array of type int
