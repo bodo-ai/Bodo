@@ -1383,7 +1383,7 @@ class AnalysisTestPipeline(bodo.compiler.BodoCompiler):
     """
 
     def define_pipelines(self):
-        [pipeline] = self._create_bodo_pipeline(True)
+        [pipeline] = self._create_bodo_pipeline(True, False)
         pipeline._finalized = False
         pipeline.add_pass_after(ArrayAnalysisPass, bodo.compiler.BodoSeriesPass)
         pipeline.finalize()

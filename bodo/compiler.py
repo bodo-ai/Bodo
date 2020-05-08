@@ -67,7 +67,7 @@ class BodoCompiler(numba.core.compiler.CompilerBase):
     def define_pipelines(self):
         return self._create_bodo_pipeline(True, inline_all_calls)
 
-    def _create_bodo_pipeline(self, distributed, inline_calls_pass):
+    def _create_bodo_pipeline(self, distributed=True, inline_calls_pass=False):
         """create compiler pipeline for Bodo using Numba's nopython pipeline
         """
         name = "bodo" if distributed else "bodo_seq"
