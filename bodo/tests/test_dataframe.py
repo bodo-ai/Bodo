@@ -307,6 +307,18 @@ def test_empty_df_set_column():
     check_func(impl2, (11,))
 
 
+def test_empty_df_drop_column():
+    """test dropping the only column of a dataframe so it becomes empty
+    """
+
+    def impl1(n):
+        df = pd.DataFrame({"A": np.arange(n) * 2})
+        df.drop(columns=["A"])
+        return df
+
+    check_func(impl1, (11,))
+
+
 def test_df_from_np_array_int():
     """
     Create a dataframe from numpy 2D-array of type int

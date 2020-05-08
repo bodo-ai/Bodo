@@ -793,11 +793,15 @@ def _gen_init_df(header, columns, data_args, index=None, extra_globals=None):
         "'{}'".format(c) if isinstance(c, str) else "{}".format(c) for c in columns
     )
     col_var = "bodo.utils.typing.add_consts_to_type([{}], {})".format(col_seq, col_seq)
+    data_args = "({},)".format(data_args)
+    # empty dataframe case
+    if len(columns) == 0:
+        data_args = "()"
+        col_var = "()"
 
-    func_text = "{}  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), {}, {})\n".format(
+    func_text = "{}  return bodo.hiframes.pd_dataframe_ext.init_dataframe({}, {}, {})\n".format(
         header, data_args, index, col_var
     )
-    # print(func_text)
     loc_vars = {}
     _global = {"bodo": bodo, "np": np, "numba": numba}
     _global.update(extra_globals)
