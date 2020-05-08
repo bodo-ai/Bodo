@@ -39,7 +39,8 @@ class BodoError(BaseException):
     """
     def __init__(self, msg, is_new=True):
         self.is_new = is_new
-        super(BodoError, self).__init__(msg)
+        highlight = numba.core.errors.termcolor().errmsg
+        super(BodoError, self).__init__(highlight(msg))
 
 
 class BodoException(Exception):
