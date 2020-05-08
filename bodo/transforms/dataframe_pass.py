@@ -489,9 +489,6 @@ class DataFramePass:
         if fdef == ("query_dummy", "bodo.hiframes.pd_dataframe_ext"):
             return self._run_call_query(assign, lhs, rhs)
 
-        if fdef == ("drop_dummy", "bodo.hiframes.pd_dataframe_ext"):
-            return self._run_call_drop(assign, lhs, rhs)
-
         return [assign]
 
     def _run_call_dataframe(self, assign, lhs, rhs, df_var, func_name):
@@ -1388,25 +1385,6 @@ class DataFramePass:
             {c: clean_name(c) for c in columns if clean_name(c) in parsed_expr.names}
         )
         return parsed_expr, parsed_expr_str, used_cols
-
-    def _run_call_drop(self, assign, lhs, rhs):
-        df_var, labels_var, axis_var, columns_var, inplace_var = rhs.args
-        inplace = guard(find_const, self.func_ir, inplace_var)
-        df_typ = self.typemap[df_var.name]
-        out_typ = self.typemap[lhs.name]
-        # TODO: reflection for drop inplace
-
-        nodes = []
-        data = [self._get_dataframe_data(df_var, c, nodes) for c in out_typ.columns]
-        # data is copied if not inplace
-        if not inplace:
-            data = [self._gen_arr_copy(v, nodes) for v in data]
-        _init_df = _gen_init_df(out_typ.columns, "index")
-        df_index = self._get_dataframe_index(df_var, nodes)
-        data.append(df_index)
-        # return new df even for inplace case, since typing pass replaces input variable
-        # using output of the call
-        return nodes + compile_func_single_block(_init_df, data, lhs, self)
 
     def _run_call_set_df_column(self, assign, lhs, rhs):
 

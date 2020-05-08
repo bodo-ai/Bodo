@@ -2439,74 +2439,27 @@ def drop_overload(
                 )
             )
 
-    # TODO: avoid dummy and generate func here when inlining is possible
+    inplace = is_overload_true(inplace)
     # TODO: inplace of df with parent (reflection)
-    def _impl(
-        df,
-        labels=None,
-        axis=0,
-        index=None,
-        columns=None,
-        level=None,
-        inplace=False,
-        errors="raise",
-        _bodo_transformed=False,
-    ):  # pragma: no cover
-        return bodo.hiframes.pd_dataframe_ext.drop_dummy(
-            df, labels, axis, columns, inplace
+
+    new_cols = tuple(c for c in df.columns if c not in drop_cols)
+    data_args = ", ".join(
+        "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {}){}".format(
+            df.columns.index(c), ".copy()" if not inplace else ""
         )
+        for c in new_cols
+    )
 
-    return _impl
-
-
-def drop_dummy(df, labels, axis, columns, inplace):  # pragma: no cover
-    return df
-
-
-@infer_global(drop_dummy)
-class DropDummyTyper(AbstractTemplate):
-    def generic(self, args, kws):
-        df, labels, axis, columns, inplace = args
-
-        if labels != types.none:
-            # get 'labels' column list
-            if is_overload_constant_str(labels):
-                drop_cols = (get_overload_const_str(labels),)
-            elif is_overload_constant_str_list(labels):  # pragma: no cover
-                drop_cols = get_const_str_list(labels)
-        else:
-            assert columns != types.none
-            # TODO: error checking
-            if is_overload_constant_str(columns):  # pragma: no cover
-                drop_cols = (get_overload_const_str(columns),)
-            elif is_overload_constant_str_list(columns):
-                drop_cols = get_const_str_list(columns)
-
-        new_cols = tuple(c for c in df.columns if c not in drop_cols)
-        new_data = tuple(df.data[df.columns.index(c)] for c in new_cols)
-
-        # inplace value
-        if isinstance(inplace, bodo.utils.typing.BooleanLiteral):
-            inplace = inplace.literal_value
-        else:
-            # XXX inplace type is just bool when value not passed. Therefore,
-            # we assume the default False value.
-            # TODO: more robust fix or just check
-            inplace = False
-
-        # TODO: reflection
-        has_parent = False  # df.has_parent
-        # if not inplace:
-        #     has_parent = False  # data is copied
-
-        out_df = DataFrameType(new_data, df.index, new_cols, has_parent)
-        return signature(out_df, *args)
-
-
-@lower_builtin(drop_dummy, types.VarArg(types.Any))
-def lower_drop_dummy(context, builder, sig, args):
-    out_obj = cgutils.create_struct_proxy(sig.return_type)(context, builder)
-    return out_obj._getvalue()
+    func_text = "def impl(df, labels=None, axis=0, index=None, columns=None,\n"
+    func_text += (
+        "     level=None, inplace=False, errors='raise', _bodo_transformed=False):\n"
+    )
+    index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)"
+    # return new df even for inplace case, since typing pass replaces input variable
+    # using output of the call
+    return bodo.hiframes.dataframe_impl._gen_init_df(
+        func_text, new_cols, data_args, index
+    )
 
 
 def query_dummy(df, expr):  # pragma: no cover
