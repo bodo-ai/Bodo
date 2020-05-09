@@ -655,6 +655,7 @@ def overload_gen_na_array(n, arr):
         dtype = arr.dtype
 
     # array of np.nan values if 'arr' is float or int Numpy array
+    # TODO: use nullable int array
     if isinstance(
         dtype, (types.Integer, types.Float)
     ):
@@ -673,6 +674,10 @@ def overload_gen_na_array(n, arr):
         dtype, (types.NPDatetime, types.NPTimedelta)
     ):
         nat = dtype("NaT")
+        if dtype == types.NPDatetime("ns"):
+            dtype = np.dtype("datetime64[ns]")
+        elif dtype == types.NPTimedelta("ns"):
+            dtype = np.dtype("timedelta64[ns]")
 
         def impl_dt64(n, arr):  # pragma: no cover
             numba.parfors.parfor.init_prange()

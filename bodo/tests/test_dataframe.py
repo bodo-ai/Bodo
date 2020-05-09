@@ -1851,10 +1851,8 @@ class TestDataFrame(unittest.TestCase):
 
         bodo_func = bodo.jit(test_impl)
         n = 11
-        # bodo uses np.nan for empty columns currently but Pandas uses objects
         df1 = bodo_func(n)
         df2 = test_impl(n)
-        df2["C"] = df2.C.astype(np.float64)
         pd.testing.assert_frame_equal(df1, df2)
 
     def test_create_cond1(self):
