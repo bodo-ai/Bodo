@@ -424,44 +424,7 @@ class UntypedPass:
         if fdef == ("where", "numpy") and len(rhs.args) == 3:
             return self._handle_np_where(assign, lhs, rhs)
 
-        # replace constant tuple argument with ConstUniTuple to provide constant values
-        # to typers. Safe to be applied to all calls, but only done for these calls
-        # to avoid making the IR messy for cases that don't need it
-        if func_name in ("merge", "join", "merge_asof", "groupby"):
-            return self._handle_const_tup_call_args(assign, lhs, rhs)
-
         return [assign]
-
-    def _handle_const_tup_call_args(self, assign, lhs, rhs):
-        """replace call argument variables that are constant tuples with ConstUniTuple
-        types that include the constant values. This is a workaround since Numba needs
-        to support something like TupleLiteral properly.
-        This transformation is done only for call arguments since changing constant
-        tuples for things like getitem can cause issues in Numba's rewrite and type
-        inference passes.
-        """
-        nodes = []
-        rhs.args = [self._replace_const_tup(arg, nodes) for arg in rhs.args]
-        rhs.kws = [(key, self._replace_const_tup(arg, nodes)) for key, arg in rhs.kws]
-        return nodes + [assign]
-
-    def _replace_const_tup(self, var, nodes):
-        """generate code for creating ConstUniTuple variable if var is a constant tuple
-        with same value types.
-        """
-        try:
-            var_def = get_definition(self.func_ir, var)
-            require(isinstance(var_def, ir.Const))
-            vals = var_def.value
-            require(isinstance(vals, tuple))
-            require(len(vals) > 0)
-            val_typ = type(vals[0])
-            require(all(isinstance(v, val_typ) for v in vals))
-            tmp_target = ir.Var(var.scope, mk_unique_var(var.name + "_const"), var.loc)
-            nodes.extend(gen_add_consts_to_type(vals, var, tmp_target))
-            return tmp_target
-        except numba.core.ir_utils.GuardException:
-            return var
 
     def _handle_np_where(self, assign, lhs, rhs):
         """replace np.where() calls with Bodo's version since Numba's typer assumes
