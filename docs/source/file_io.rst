@@ -307,7 +307,7 @@ For writing::
 
     @bodo.jit
     def example_write_sql(df):
-        df.to_sql('table_name', 'select * from employees', 'mysql+pymysql://admin:server')
+        df.to_sql('table_name', 'mysql+pymysql://admin:server')
 
 See :ref:`to_sql() <pandas-f-in>` for supported arguments.
 
