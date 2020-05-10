@@ -9,6 +9,7 @@ import numba
 import numba.np.ufunc_db
 import bodo
 from decimal import Decimal
+import datetime
 from bodo.utils.typing import BodoError
 from bodo.tests.utils import (
     count_array_REPs,
@@ -180,6 +181,7 @@ def test_series_copy_datetime_date():
         ),  # TODO: string with Null (np.testing fails)
         pd.Series(["A", "B", "CG", "ACDE", "C"], [4, 7, 0, 1, -2]),
         pd.Series(pd.date_range(start="2018-04-24", end="2018-04-29", periods=5)),
+        pd.Series(pd.date_range(start="2018-04-24", end="2018-04-29", periods=5).date),
         pytest.param(
             pd.Series(
                 [3, 5, 1, -1, 2],
@@ -327,6 +329,10 @@ def test_series_astype_numeric(numeric_series_val):
 
 
 def test_series_astype_str(series_val):
+    # not supported for Datetime.date yet, TODO: support and test
+    if isinstance(series_val.values[0], datetime.date):
+        return
+
     # XXX str(float) not consistent with Python yet
     if series_val.dtype == np.float64:
         return
@@ -417,6 +423,10 @@ def test_series_cat_comp(S):
 
 
 def test_series_copy_deep(series_val):
+    # not supported for Datetime.date yet, TODO: support and test
+    if isinstance(series_val.values[0], datetime.date):
+        return
+
     # TODO: test deep/shallow cases properly
     def test_impl(S):
         return S.copy()
@@ -700,6 +710,10 @@ def test_series_setitem_slice(series_val):
 @pytest.mark.parametrize("idx", [[1, 4], np.array([1, 4]), pd.Series([1, 4])])
 @pytest.mark.parametrize("list_val_arg", [True, False])
 def test_series_setitem_list_int(series_val, idx, list_val_arg):
+    # not supported for Datetime.date yet, TODO: support and test
+    if isinstance(series_val.values[0], datetime.date):
+        return
+
     # not supported for Decimal yet, TODO: support and test
     if isinstance(series_val.values[0], Decimal):
         return
@@ -1323,6 +1337,10 @@ def test_series_abs():
 
 
 def test_series_min(series_val):
+    # not supported for Datetime.date yet, TODO: support and test
+    if isinstance(series_val.values[0], datetime.date):
+        return
+
     # not supported for Decimal yet, TODO: support and test
     if isinstance(series_val.values[0], Decimal):
         return
@@ -1338,6 +1356,10 @@ def test_series_min(series_val):
 
 
 def test_series_max(series_val):
+    # not supported for Datetime.date yet, TODO: support and test
+    if isinstance(series_val.values[0], datetime.date):
+        return
+
     # not supported for Decimal yet, TODO: support and test
     if isinstance(series_val.values[0], Decimal):
         return
@@ -1368,6 +1390,10 @@ def test_series_min_max_int_output_type():
 
 
 def test_series_idxmin(series_val):
+    # not supported for Datetime.date yet, TODO: support and test
+    if isinstance(series_val.values[0], datetime.date):
+        return
+
     # not supported for Decimal yet, TODO: support and test
     if isinstance(series_val.values[0], Decimal):
         return
@@ -1393,6 +1419,10 @@ def test_series_idxmin(series_val):
 
 
 def test_series_idxmax(series_val):
+    # not supported for Datetime.date yet, TODO: support and test
+    if isinstance(series_val.values[0], datetime.date):
+        return
+
     # not supported for Decimal yet, TODO: support and test
     if isinstance(series_val.values[0], Decimal):
         return
@@ -1437,6 +1467,10 @@ def test_series_median(numeric_series_val):
 
 
 def test_series_head(series_val):
+    # not supported for Datetime.date yet, TODO: support and test
+    if isinstance(series_val.values[0], datetime.date):
+        return
+
     # not supported for Decimal yet, TODO: support and test
     if isinstance(series_val.values[0], Decimal):
         return
@@ -1448,6 +1482,10 @@ def test_series_head(series_val):
 
 
 def test_series_tail(series_val):
+    # not supported for Datetime.date yet, TODO: support and test
+    if isinstance(series_val.values[0], datetime.date):
+        return
+
     # not supported for Decimal yet, TODO: support and test
     if isinstance(series_val.values[0], Decimal):
         return
@@ -1568,6 +1606,10 @@ def test_series_argsort_fast():
 
 @pytest.mark.slow
 def test_series_argsort(series_val):
+    # not supported for Datetime.date yet, TODO: support and test
+    if isinstance(series_val.values[0], datetime.date):
+        return
+
     # not supported for Decimal yet, TODO: support and test
     if isinstance(series_val.values[0], Decimal):
         return
@@ -1582,6 +1624,10 @@ def test_series_argsort(series_val):
 
 
 def test_series_sort_values(series_val):
+    # not supported for Datetime.date yet, TODO: support and test
+    if isinstance(series_val.values[0], datetime.date):
+        return
+
     # not supported for Decimal yet, TODO: support and test
     if isinstance(series_val.values[0], Decimal):
         return
@@ -1602,6 +1648,10 @@ def test_series_sort_values(series_val):
 
 @pytest.mark.parametrize("ignore_index", [True, False])
 def test_series_append_single(series_val, ignore_index):
+    # not supported for Datetime.date yet, TODO: support and test
+    if isinstance(series_val.values[0], datetime.date):
+        return
+
     # not supported for Decimal yet, TODO: support and test
     if isinstance(series_val.values[0], Decimal):
         return
@@ -1623,6 +1673,10 @@ def test_series_append_single(series_val, ignore_index):
 
 @pytest.mark.parametrize("ignore_index", [True, False])
 def test_series_append_multi(series_val, ignore_index):
+    # not supported for Datetime.date yet, TODO: support and test
+    if isinstance(series_val.values[0], datetime.date):
+        return
+
     # not supported for Decimal yet, TODO: support and test
     if isinstance(series_val.values[0], Decimal):
         return
@@ -1655,6 +1709,10 @@ def test_series_quantile(numeric_series_val):
 
 
 def test_series_nunique(series_val):
+    # not supported for Datetime.date yet, TODO: support and test
+    if isinstance(series_val.values[0], datetime.date):
+        return
+
     # not supported for Decimal yet, TODO: support and test
     if isinstance(series_val.values[0], Decimal):
         return
@@ -1678,6 +1736,10 @@ def test_series_nunique(series_val):
 
 
 def test_series_unique(series_val):
+    # not supported for Datetime.date yet, TODO: support and test
+    if isinstance(series_val.values[0], datetime.date):
+        return
+
     # not supported for Decimal yet, TODO: support and test
     if isinstance(series_val.values[0], Decimal):
         return

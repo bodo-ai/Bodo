@@ -562,8 +562,6 @@ def overload_datetime_date_arr_copy(A):
     )  # pragma: no cover
 
 
-
-
 @unbox(DatetimeDateArrayType)
 def unbox_datetime_date_array(typ, val, c):
     n = bodo.utils.utils.object_length(c, val)
@@ -757,12 +755,105 @@ def dt_date_arr_setitem(A, ind, val):
     if A != datetime_date_array_type:
         return
 
+    # scalar case
     if isinstance(types.unliteral(ind), types.Integer):
 
         def impl(A, ind, val):  # pragma: no cover
             A._data[ind] = cast_datetime_date_to_int(val)
 
+        # Covered by test_series_iat_setitem , test_series_iloc_setitem_int , test_series_setitem_int
         return impl
+
+    # array
+    if is_list_like_index_type(ind) and isinstance(ind.dtype, types.Integer):
+        # value is DatetimeDateArray
+        if isinstance(val, DatetimeDateArrayType):
+
+            def impl_arr_ind_mask(A, ind, val):  # pragma: no cover
+                n = len(val._data)
+                for i in range(n):
+                    bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(val._null_bitmap, i)
+                    bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, ind[i], bit)
+                    A._data[ind[i]] = val._data[i]
+
+            # covered by test_series_iloc_setitem_list_int (OK)
+            return impl_arr_ind_mask
+
+        # value is Array/List
+        def impl_arr_ind(A, ind, val):  # pragma: no cover
+            for i in range(len(val)):
+                bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, ind[i], 1)
+                A._data[ind[i]] = cast_datetime_date_to_int(val[i])
+
+        # Corresponding test is missing ...
+        return impl_arr_ind  # pragma: no cover
+
+    # bool array
+    if is_list_like_index_type(ind) and ind.dtype == types.bool_:
+        # value is DatetimeDateArray
+        # Corresponding test is missing ...
+        if isinstance(val, DatetimeDateArrayType):  # pragma: no cover
+
+            def impl_bool_ind_mask(A, ind, val):  # pragma: no cover
+                n = len(ind)
+                val_ind = 0
+                for i in range(n):
+                    if ind[i]:
+                        bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(val, val_ind)
+                        bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, i, bit)
+                        A._data[i] = val._data[val_ind]
+                        val_ind += 1
+
+            # The following test is missing ...
+            return impl_bool_ind_mask  # pragma: no cover
+
+        # value is Array/List
+        def impl_bool_ind(A, ind, val):  # pragma: no cover
+            n = len(ind)
+            val_ind = 0
+            for i in range(n):
+                if ind[i]:
+                    bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, i, 1)
+                    A._data[i] = cast_datetime_date_to_int(val[val_ind])
+                    val_ind += 1
+
+        # The following test is missing ...
+        return impl_bool_ind  # pragma: no cover
+
+    # slice case
+    if isinstance(ind, types.SliceType):
+        # value is DatetimeDateArray
+        if isinstance(val, DatetimeDateArrayType):
+
+            def impl_slice_mask(A, ind, val):  # pragma: no cover
+                n = len(A._data)
+                # using setitem directly instead of copying in loop since
+                # Array setitem checks for memory overlap and copies source
+                A._data[ind] = val._data
+                # XXX: conservative copy of bitmap in case there is overlap
+                # TODO: check for overlap and copy only if necessary
+                src_bitmap = val._null_bitmap.copy()
+                slice_ind = numba.cpython.unicode._normalize_slice(ind, n)
+                val_ind = 0
+                for i in range(slice_ind.start, slice_ind.stop, slice_ind.step):
+                    bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(src_bitmap, val_ind)
+                    bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, i, bit)
+                    val_ind += 1
+
+            # Apparently covered by test_series_setitem_slice
+            return impl_slice_mask
+
+        def impl_slice(A, ind, val):  # pragma: no cover
+            n = len(A._data)
+            A._data[ind] = val
+            slice_ind = numba.cpython.unicode._normalize_slice(ind, n)
+            val_ind = 0
+            for i in range(slice_ind.start, slice_ind.stop, slice_ind.step):
+                bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, i, 1)
+                val_ind += 1
+
+        # The following test is missing ...
+        return impl_slice  # pragma: no cover
 
 
 @overload(len, no_unliteral=True)
