@@ -489,9 +489,6 @@ class DataFramePass:
         if fdef == ("query_dummy", "bodo.hiframes.pd_dataframe_ext"):
             return self._run_call_query(assign, lhs, rhs)
 
-        if fdef == ("drop_dummy", "bodo.hiframes.pd_dataframe_ext"):
-            return self._run_call_drop(assign, lhs, rhs)
-
         return [assign]
 
     def _run_call_dataframe(self, assign, lhs, rhs, df_var, func_name):
@@ -504,7 +501,10 @@ class DataFramePass:
                 bodo.hiframes.dataframe_impl, "overload_dataframe_" + func_name
             )(*arg_typs, **kw_typs)
             return self._replace_func(
-                impl, rhs.args, pysig=numba.core.utils.pysignature(impl), kws=dict(rhs.kws)
+                impl,
+                rhs.args,
+                pysig=numba.core.utils.pysignature(impl),
+                kws=dict(rhs.kws),
             )
 
         if func_name == "pivot_table":
@@ -518,7 +518,10 @@ class DataFramePass:
                 lambda df, values=None, index=None, columns=None, aggfunc="mean", fill_value=None, margins=False, dropna=True, margins_name="All", _pivot_values=None: None
             )
             return self._replace_func(
-                impl, rhs.args, pysig=numba.core.utils.pysignature(stub), kws=dict(rhs.kws)
+                impl,
+                rhs.args,
+                pysig=numba.core.utils.pysignature(stub),
+                kws=dict(rhs.kws),
             )
         # df.apply(lambda a:..., axis=1)
         if func_name == "apply":
@@ -1383,35 +1386,7 @@ class DataFramePass:
         )
         return parsed_expr, parsed_expr_str, used_cols
 
-    def _run_call_drop(self, assign, lhs, rhs):
-        df_var, labels_var, axis_var, columns_var, inplace_var = rhs.args
-        inplace = guard(find_const, self.func_ir, inplace_var)
-        df_typ = self.typemap[df_var.name]
-        out_typ = self.typemap[lhs.name]
-        # TODO: reflection for drop inplace
-
-        nodes = []
-        data = [self._get_dataframe_data(df_var, c, nodes) for c in out_typ.columns]
-        # data is copied if not inplace
-        if not inplace:
-            data = [self._gen_arr_copy(v, nodes) for v in data]
-        _init_df = _gen_init_df(out_typ.columns, "index")
-        df_index = self._get_dataframe_index(df_var, nodes)
-        data.append(df_index)
-        # return new df even for inplace case, since typing pass replaces input variable
-        # using output of the call
-        return nodes + compile_func_single_block(_init_df, data, lhs, self)
-
     def _run_call_set_df_column(self, assign, lhs, rhs):
-        # replace with regular setitem if target is not dataframe
-        # TODO: test non-df case
-        if not self._is_df_var(rhs.args[0]):
-
-            def _impl(target, index, val, _inplace):  # pragma: no cover
-                target[index] = val
-                return target
-
-            return self._replace_func(_impl, rhs.args)
 
         df_var = rhs.args[0]
         cname = guard(find_const, self.func_ir, rhs.args[1])
@@ -1476,15 +1451,15 @@ class DataFramePass:
         n_cols = len(df_typ.columns)
         df_index_var = self._get_dataframe_index(df_var, nodes)
         in_arrs = [self._get_dataframe_data(df_var, c, nodes) for c in df_typ.columns]
-        data_args = ", ".join("data{}".format(i) for i in range(n_cols))
-        col_args = ", ".join("'{}'".format(c) for c in df_typ.columns)
+        data_args = ["data{}".format(i) for i in range(n_cols)]
+        col_args = [
+            "'{}'".format(c) if isinstance(c, str) else c for c in df_typ.columns
+        ]
 
         # if column is being added
         if cname not in df_typ.columns:
-            data_args += ", new_arr"
-            col_args += ", {}".format(
-                "'{}'".format(cname) if isinstance(cname, str) else cname
-            )
+            data_args.append("new_arr")
+            col_args.append("'{}'".format(cname) if isinstance(cname, str) else cname)
             in_arrs.append(new_arr)
             new_arr_arg = "new_arr"
         else:  # updating existing column
@@ -1492,24 +1467,29 @@ class DataFramePass:
             in_arrs[col_ind] = new_arr
             new_arr_arg = "data{}".format(col_ind)
 
+        data_args = ", ".join(data_args)
+
         # TODO: fix list, Series data
-        col_var = "bodo.utils.typing.add_consts_to_type([{}], {})".format(
-            col_args, col_args
+        col_var = "bodo.utils.typing.add_consts_to_type([{0}], {0})".format(
+            ", ".join(col_args)
         )
-        func_text = "def _init_df({}, df_index, df):\n".format(data_args)
+        df_index = "df_index"
+        if n_cols == 0:
+            df_index = "bodo.utils.conversion.extract_index_if_none(new_val, None)\n"
+        func_text = "def _init_df({}, df_index, df, new_val):\n".format(data_args)
         # using len(df) instead of len(df_index) since len optimization works better for
         # dataframes
         func_text += "  {} = bodo.utils.conversion.coerce_to_array({}, scalar_to_arr_len=len(df))\n".format(
             new_arr_arg, new_arr_arg
         )
-        func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), df_index, {})\n".format(
-            data_args, col_var
+        func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), {}, {})\n".format(
+            data_args, df_index, col_var
         )
         loc_vars = {}
         exec(func_text, {}, loc_vars)
         _init_df = loc_vars["_init_df"]
         return self._replace_func(
-            _init_df, in_arrs + [df_index_var, df_var], pre_nodes=nodes
+            _init_df, in_arrs + [df_index_var, df_var, new_arr], pre_nodes=nodes
         )
 
     def _run_call_len(self, lhs, df_var):

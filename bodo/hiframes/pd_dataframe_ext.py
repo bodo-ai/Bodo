@@ -67,6 +67,7 @@ from bodo.utils.typing import (
     ensure_constant_arg,
     ensure_constant_values,
     create_unsupported_overload,
+    get_overload_const,
 )
 from bodo.utils.transform import get_const_func_output_type
 from bodo.utils.conversion import index_to_array
@@ -404,8 +405,12 @@ def init_dataframe(typingctx, data_tup_typ, index_typ, col_names_typ=None):
     assert is_pd_index_type(index_typ) or isinstance(index_typ, MultiIndexType)
 
     n_cols = len(data_tup_typ.types)
-    # assert all(isinstance(t, types.StringLiteral) for t in col_names_typ.types)
-    column_names = col_names_typ.consts
+    if n_cols == 0:
+        column_names = ()
+    else:
+        # assert all(isinstance(t, types.StringLiteral) for t in col_names_typ.types)
+        column_names = col_names_typ.consts
+
     assert len(column_names) == n_cols
 
     def codegen(context, builder, signature, args):
@@ -810,23 +815,24 @@ def set_df_column_with_reflect(typingctx, df, cname, arr, inplace=None):
 @overload(pd.DataFrame, inline="always", no_unliteral=True)
 def pd_dataframe_overload(data=None, index=None, columns=None, dtype=None, copy=False):
     # TODO: support other input combinations
-    if not isinstance(copy, (bool, bodo.utils.typing.BooleanLiteral, types.Omitted)):
-        raise ValueError("pd.DataFrame(): copy argument should be constant")
+    # TODO: error checking
+    if not is_overload_constant_bool(copy):  # pragma: no cover
+        raise BodoError("pd.DataFrame(): copy argument should be constant")
 
-    # get value of copy
-    copy = getattr(copy, "literal_value", copy)  # literal type
-    copy = getattr(copy, "value", copy)  # ommited type
-    assert isinstance(copy, bool)
+    copy = get_overload_const(copy)
 
     col_args, data_args, index_arg = _get_df_args(data, index, columns, dtype, copy)
     col_var = "bodo.utils.typing.add_consts_to_type([{}], {})".format(
         col_args, col_args
     )
+    # empty df case
+    if len(col_args) == 0:
+        col_var = "()"
 
     func_text = (
         "def _init_df(data=None, index=None, columns=None, dtype=None, copy=False):\n"
     )
-    func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), {}, {})\n".format(
+    func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe({}, {}, {})\n".format(
         data_args, index_arg, col_var
     )
     loc_vars = {}
@@ -873,15 +879,19 @@ def _get_df_args(data, index, columns, dtype, copy):
                     )
                     index_is_none = False
                     break
+    # empty dataframe
+    elif is_overload_none(data):
+        data_dict = {}
     else:
         # ndarray case
         # checks for 2d and column args
-        if not (isinstance(data, types.Array) and data.ndim == 2):
-            raise ValueError(
-                "pd.DataFrame() supports constant dictionary and" "ndarray input"
+        # TODO: error checking
+        if not (isinstance(data, types.Array) and data.ndim == 2):  # pragma: no cover
+            raise BodoError(
+                "pd.DataFrame() supports constant dictionary and ndarray input"
             )
-        if is_overload_none(columns):
-            raise ValueError(
+        if is_overload_none(columns):  # pragma: no cover
+            raise BodoError(
                 "pd.DataFrame() column argument is required when"
                 "ndarray is passed as data"
             )
@@ -897,15 +907,22 @@ def _get_df_args(data, index, columns, dtype, copy):
         col_names = columns.consts
 
     df_len = _get_df_len_from_info(data_dict, col_names, index_is_none, index_arg)
-    _fill_null_arrays(data_dict, col_names, df_len)
+    _fill_null_arrays(data_dict, col_names, df_len, dtype)
 
     # set default RangeIndex if index argument is None and data argument isn't Series
     if index_is_none:
-        index_arg = "bodo.hiframes.pd_index_ext.init_range_index(0, {}, 1, None)".format(
-            df_len
-        )
+        # empty df has object Index in Pandas which correponds to our StringIndex
+        if is_overload_none(data):
+            index_arg = "bodo.hiframes.pd_index_ext.init_string_index(bodo.libs.str_arr_ext.pre_alloc_string_array(0, 0))"
+        else:
+            index_arg = "bodo.hiframes.pd_index_ext.init_range_index(0, {}, 1, None)".format(
+                df_len
+            )
 
-    data_args = ", ".join(data_dict[c] for c in col_names)
+    data_args = "({},)".format(", ".join(data_dict[c] for c in col_names))
+    if len(col_names) == 0:
+        data_args = "()"
+
     col_args = ", ".join("'{}'".format(c) for c in col_names)
     return col_args, data_args, index_arg
 
@@ -914,7 +931,7 @@ def _get_df_len_from_info(data_dict, col_names, index_is_none, index_arg):
     """return generated text for length of dataframe, given the input info in the
     pd.DataFrame() call
     """
-    df_len = None
+    df_len = "0"
     for c in col_names:
         if c in data_dict:
             df_len = "len({})".format(data_dict[c])
@@ -923,11 +940,10 @@ def _get_df_len_from_info(data_dict, col_names, index_is_none, index_arg):
     if df_len is None and not index_is_none:
         df_len = "len({})".format(index_arg)  # TODO: test
 
-    assert df_len is not None, "empty dataframe with null arrays"  # TODO
     return df_len
 
 
-def _fill_null_arrays(data_dict, col_names, df_len):
+def _fill_null_arrays(data_dict, col_names, df_len, dtype):
     """Fills data_dict with Null arrays if there are columns that are not
     available in data_dict.
     """
@@ -935,13 +951,17 @@ def _fill_null_arrays(data_dict, col_names, df_len):
     if all(c in data_dict for c in col_names):
         return
 
-    # TODO: object array with NaN (use StringArray?)
-    null_arr = "np.full({}, np.nan)".format(df_len)
+    # object array of NaNs if dtype not specified
+    if is_overload_none(dtype):
+        dtype = "bodo.string_type"
+    else:
+        dtype = "dtype"
+
+    # array with NaNs
+    null_arr = "bodo.libs.array_kernels.gen_na_array({}, {})".format(df_len, dtype)
     for c in col_names:
         if c not in data_dict:
             data_dict[c] = null_arr
-
-    return
 
 
 @overload(len, no_unliteral=True)  # TODO: avoid lowering?
@@ -2419,74 +2439,27 @@ def drop_overload(
                 )
             )
 
-    # TODO: avoid dummy and generate func here when inlining is possible
+    inplace = is_overload_true(inplace)
     # TODO: inplace of df with parent (reflection)
-    def _impl(
-        df,
-        labels=None,
-        axis=0,
-        index=None,
-        columns=None,
-        level=None,
-        inplace=False,
-        errors="raise",
-        _bodo_transformed=False,
-    ):  # pragma: no cover
-        return bodo.hiframes.pd_dataframe_ext.drop_dummy(
-            df, labels, axis, columns, inplace
+
+    new_cols = tuple(c for c in df.columns if c not in drop_cols)
+    data_args = ", ".join(
+        "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {}){}".format(
+            df.columns.index(c), ".copy()" if not inplace else ""
         )
+        for c in new_cols
+    )
 
-    return _impl
-
-
-def drop_dummy(df, labels, axis, columns, inplace):  # pragma: no cover
-    return df
-
-
-@infer_global(drop_dummy)
-class DropDummyTyper(AbstractTemplate):
-    def generic(self, args, kws):
-        df, labels, axis, columns, inplace = args
-
-        if labels != types.none:
-            # get 'labels' column list
-            if is_overload_constant_str(labels):
-                drop_cols = (get_overload_const_str(labels),)
-            elif is_overload_constant_str_list(labels):  # pragma: no cover
-                drop_cols = get_const_str_list(labels)
-        else:
-            assert columns != types.none
-            # TODO: error checking
-            if is_overload_constant_str(columns):  # pragma: no cover
-                drop_cols = (get_overload_const_str(columns),)
-            elif is_overload_constant_str_list(columns):
-                drop_cols = get_const_str_list(columns)
-
-        new_cols = tuple(c for c in df.columns if c not in drop_cols)
-        new_data = tuple(df.data[df.columns.index(c)] for c in new_cols)
-
-        # inplace value
-        if isinstance(inplace, bodo.utils.typing.BooleanLiteral):
-            inplace = inplace.literal_value
-        else:
-            # XXX inplace type is just bool when value not passed. Therefore,
-            # we assume the default False value.
-            # TODO: more robust fix or just check
-            inplace = False
-
-        # TODO: reflection
-        has_parent = False  # df.has_parent
-        # if not inplace:
-        #     has_parent = False  # data is copied
-
-        out_df = DataFrameType(new_data, df.index, new_cols, has_parent)
-        return signature(out_df, *args)
-
-
-@lower_builtin(drop_dummy, types.VarArg(types.Any))
-def lower_drop_dummy(context, builder, sig, args):
-    out_obj = cgutils.create_struct_proxy(sig.return_type)(context, builder)
-    return out_obj._getvalue()
+    func_text = "def impl(df, labels=None, axis=0, index=None, columns=None,\n"
+    func_text += (
+        "     level=None, inplace=False, errors='raise', _bodo_transformed=False):\n"
+    )
+    index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)"
+    # return new df even for inplace case, since typing pass replaces input variable
+    # using output of the call
+    return bodo.hiframes.dataframe_impl._gen_init_df(
+        func_text, new_cols, data_args, index
+    )
 
 
 def query_dummy(df, expr):  # pragma: no cover

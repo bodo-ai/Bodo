@@ -260,6 +260,65 @@ def test_unbox_df_multi():
     check_func(impl, (df,))
 
 
+def test_empty_df_unbox():
+    """test boxing/unboxing of an empty df
+    """
+
+    def impl(df):
+        return df
+
+    df = pd.DataFrame()
+    check_func(impl, (df,))
+
+
+def test_empty_df_create():
+    """test creation of an empty df
+    """
+
+    def impl1():
+        return pd.DataFrame()
+
+    def impl2():
+        return pd.DataFrame(columns=["A"])
+
+    def impl3():
+        return pd.DataFrame(columns=["A"], dtype=np.float32)
+
+    check_func(impl1, ())
+    check_func(impl2, ())
+    check_func(impl3, ())
+
+
+def test_empty_df_set_column():
+    """test column setitem of an empty df
+    """
+
+    def impl1(n):
+        df = pd.DataFrame()
+        df["A"] = np.arange(n) * 2
+        return df
+
+    def impl2(n):
+        df = pd.DataFrame()
+        df["A"] = pd.Series(np.arange(n) * 2, index=np.ones(n))
+        return df
+
+    check_func(impl1, (11,))
+    check_func(impl2, (11,))
+
+
+def test_empty_df_drop_column():
+    """test dropping the only column of a dataframe so it becomes empty
+    """
+
+    def impl1(n):
+        df = pd.DataFrame({"A": np.arange(n) * 2})
+        df.drop(columns=["A"])
+        return df
+
+    check_func(impl1, (11,))
+
+
 def test_df_from_np_array_int():
     """
     Create a dataframe from numpy 2D-array of type int
@@ -1792,10 +1851,8 @@ class TestDataFrame(unittest.TestCase):
 
         bodo_func = bodo.jit(test_impl)
         n = 11
-        # bodo uses np.nan for empty columns currently but Pandas uses objects
         df1 = bodo_func(n)
         df2 = test_impl(n)
-        df2["C"] = df2.C.astype(np.float64)
         pd.testing.assert_frame_equal(df1, df2)
 
     def test_create_cond1(self):

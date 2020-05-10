@@ -99,11 +99,7 @@ class SeriesType(types.IterableType, types.ArrayCompatible):
     def copy(self, dtype=None, index=None):
         # XXX is copy necessary?
         if index is None:
-            index = (
-                RangeIndexType(types.none)
-                if self.index == types.none
-                else self.index.copy()
-            )
+            index = self.index.copy()
         dtype = dtype if dtype is not None else self.dtype
         data = _get_series_array_type(dtype)
         return SeriesType(dtype, data, index, self.name_typ)
@@ -115,13 +111,7 @@ class SeriesType(types.IterableType, types.ArrayCompatible):
 
     def unify(self, typingctx, other):
         if isinstance(other, SeriesType):
-            new_index = types.none
-            if self.index != types.none and other.index != types.none:
-                new_index = self.index.unify(typingctx, other.index)
-            elif other.index != types.none:
-                new_index = other.index
-            elif self.index != types.none:
-                new_index = self.index
+            new_index = self.index.unify(typingctx, other.index)
 
             # If dtype matches or other.dtype is undefined (inferred)
             if other.dtype == self.dtype or not other.dtype.is_precise():

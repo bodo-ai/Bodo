@@ -631,6 +631,12 @@ def gatherv(data, allgather=False):
 
     if isinstance(data, bodo.hiframes.pd_dataframe_ext.DataFrameType):
         n_cols = len(data.columns)
+        # empty dataframe case
+        if n_cols == 0:
+            return lambda data, allgather=False: bodo.hiframes.pd_dataframe_ext.init_dataframe(
+                (), bodo.hiframes.pd_dataframe_ext.get_dataframe_index(data), ()
+            )
+
         data_args = ", ".join("g_data_{}".format(i) for i in range(n_cols))
         col_var = "bodo.utils.typing.add_consts_to_type([{0}], {0})".format(
             ", ".join(

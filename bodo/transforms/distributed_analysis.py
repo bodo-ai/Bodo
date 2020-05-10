@@ -850,16 +850,20 @@ class DistributedAnalysis:
             # data arrays
             data_varname = rhs.args[0].name
             ind_varname = rhs.args[1].name
+
+            # empty dataframe case, Index and df have same distribution
+            if len(self.typemap[data_varname].types) == 0:
+                self._meet_array_dists(lhs, ind_varname, array_dists)
+                return
+
             new_dist_val = min(a.value for a in array_dists[data_varname])
             if lhs in array_dists:
                 new_dist_val = min(new_dist_val, array_dists[lhs].value)
             # handle index
-            if self.typemap[ind_varname] != types.none:
-                new_dist_val = min(new_dist_val, array_dists[ind_varname].value)
+            new_dist_val = min(new_dist_val, array_dists[ind_varname].value)
             new_dist = Distribution(new_dist_val)
             self._set_var_dist(data_varname, array_dists, new_dist)
-            if self.typemap[ind_varname] != types.none:
-                self._set_var_dist(ind_varname, array_dists, new_dist)
+            self._set_var_dist(ind_varname, array_dists, new_dist)
             self._set_var_dist(lhs, array_dists, new_dist)
             return
 
