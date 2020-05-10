@@ -364,9 +364,6 @@ def get_index_names(t, func_name, default_name):
     from bodo.hiframes.pd_multi_index_ext import MultiIndexType
 
     err_msg = "{}: index name should be a constant string".format(func_name)
-    # TODO: remove when none index is gone
-    if t == types.none:
-        t = bodo.hiframes.pd_index_ext.RangeIndexType(types.none)
 
     # MultIndex has multiple names
     if isinstance(t, MultiIndexType):
@@ -398,10 +395,6 @@ def get_index_data_arr_types(t):
         PeriodIndexType,
     )
     from bodo.hiframes.pd_multi_index_ext import MultiIndexType
-
-    # TODO: remove when none index is gone
-    if t == types.none:
-        t = RangeIndexType(types.none)
 
     if isinstance(t, MultiIndexType):
         return tuple(t.array_types)
@@ -606,7 +599,7 @@ def scalar_to_array_type(t):
 
 
 # add constant metadata to list or tuple type, see untyped_pass.py
-def add_consts_to_type(a, *args):
+def add_consts_to_type(a, *args):  # pragma: no cover
     return a
 
 
@@ -749,19 +742,6 @@ def from_iterable_impl(A):  # pragma: no cover
     return bodo.utils.conversion.flatten_array(bodo.utils.conversion.coerce_to_array(A))
 
 
-# taken from numba/typing/listdecl.py
-@infer_global(sorted)
-class SortedBuiltinLambda(CallableTemplate):
-    def generic(self):
-        # TODO: reverse=None
-        def typer(iterable, key=None):
-            if not isinstance(iterable, types.IterableType):
-                return
-            return types.List(iterable.iterator_type.yield_type)
-
-        return typer
-
-
 def convert_tup_to_rec(val):  # pragma: no cover
     return val
 
@@ -804,7 +784,7 @@ def lower_convert_impl(context, builder, sig, args):
     return impl_ret_new_ref(context, builder, sig.return_type, res)
 
 
-def convert_rec_to_tup(val):
+def convert_rec_to_tup(val):  # pragma: no cover
     return val
 
 
