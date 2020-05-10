@@ -1446,10 +1446,6 @@ class SeriesPass:
         ):
             return self._run_call_concat(assign, lhs, rhs)
 
-        # handle sorted() with key lambda input
-        if fdef == ("sorted", "builtins") and "key" in dict(rhs.kws):
-            return self._handle_sorted_by_key(rhs)
-
         if fdef == ("init_dataframe", "bodo.hiframes.pd_dataframe_ext"):
             return [assign]
 
@@ -2359,39 +2355,6 @@ class SeriesPass:
         exec(func_text, {}, loc_vars)
         _h5_write_impl = loc_vars["_h5_write_impl"]
         return compile_func_single_block(_h5_write_impl, (dset, arr), None, self)
-
-    def _handle_sorted_by_key(self, rhs):
-        """generate a sort function with the given key lambda
-        """
-        # TODO: handle reverse
-        from numba.misc import quicksort
-
-        # get key lambda
-        key_lambda_var = dict(rhs.kws)["key"]
-        key_lambda = guard(get_definition, self.func_ir, key_lambda_var)
-        if key_lambda is None or not (
-            isinstance(key_lambda, ir.Expr) and key_lambda.op == "make_function"
-        ):
-            raise ValueError("sorted(): lambda for key not found")
-
-        # wrap lambda in function
-        def key_lambda_wrapper(A):
-            return A
-
-        key_lambda_wrapper.__code__ = key_lambda.code
-        key_func = numba.njit(key_lambda_wrapper)
-
-        # make quicksort with new lt
-        def lt(a, b):
-            return key_func(a) < key_func(b)
-
-        sort_func = quicksort.make_jit_quicksort(lt=lt).run_quicksort
-
-        return self._replace_func(
-            lambda a: _sort_func(a),
-            rhs.args,
-            extra_globals={"_sort_func": numba.njit(sort_func)},
-        )
 
     def _simplify_IR(self):
         """Simplify IR after Series pass transforms.

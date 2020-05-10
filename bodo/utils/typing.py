@@ -742,19 +742,6 @@ def from_iterable_impl(A):  # pragma: no cover
     return bodo.utils.conversion.flatten_array(bodo.utils.conversion.coerce_to_array(A))
 
 
-# taken from numba/typing/listdecl.py
-@infer_global(sorted)
-class SortedBuiltinLambda(CallableTemplate):
-    def generic(self):
-        # TODO: reverse=None
-        def typer(iterable, key=None):
-            if not isinstance(iterable, types.IterableType):
-                return
-            return types.List(iterable.iterator_type.yield_type)
-
-        return typer
-
-
 def convert_tup_to_rec(val):  # pragma: no cover
     return val
 
