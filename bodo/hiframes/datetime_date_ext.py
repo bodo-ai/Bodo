@@ -6,7 +6,7 @@ import numpy as np
 import datetime
 import numba
 from numba.core import types
-from numba.core.imputils import lower_builtin
+from numba.core.imputils import lower_builtin, lower_constant
 from numba.core.typing import signature
 from numba.extending import (
     typeof_impl,
@@ -128,6 +128,23 @@ def unbox_datetime_date(typ, val, c):
 
     is_error = cgutils.is_not_null(c.builder, c.pyapi.err_occurred())
     return NativeValue(nopython_date, is_error=is_error)
+
+
+@lower_constant(DatetimeDateType)
+def lower_constant_datetime_date(context, builder, ty, pyval):
+    year = context.get_constant(types.int64, pyval.year)
+    month = context.get_constant(types.int64, pyval.month)
+    day = context.get_constant(types.int64, pyval.day)
+
+    nopython_date = builder.add(
+        day,
+        builder.add(
+            builder.shl(year, lir.Constant(lir.IntType(64), 32)),
+            builder.shl(month, lir.Constant(lir.IntType(64), 16)),
+        ),
+    )
+
+    return nopython_date
 
 
 @box(DatetimeDateType)

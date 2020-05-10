@@ -191,6 +191,39 @@ def test_dt64_sub_output():
     check_func(impl, (S1, S2), check_dtype=False)
 
 
+def test_datetime_date_constant_lowering():
+    date = datetime.date(2004, 1, 1)
+
+    def f():
+        return date
+
+    bodo_f = bodo.jit(f)
+    val_ret = bodo_f()
+    assert val_ret == date
+
+
+def test_timedelta_constant_lowering():
+    timedelta = datetime.timedelta(3, 3, 3)
+
+    def f():
+        return timedelta
+
+    bodo_f = bodo.jit(f)
+    val_ret = bodo_f()
+    assert val_ret == timedelta
+
+
+def test_datetime_datetime_constant_lowering():
+    ts = datetime.datetime.now()
+
+    def f():
+        return ts
+
+    bodo_f = bodo.jit(f)
+    val_ret = bodo_f()
+    assert val_ret == ts
+
+
 def test_timestamp_constant_lowering():
     t = pd.Timestamp("2012-06-18")
 
@@ -199,6 +232,7 @@ def test_timestamp_constant_lowering():
 
     bodo_f = bodo.jit(f)
     val_ret = bodo_f()
+    assert val_ret == t
 
 
 def test_sub_add_timestamp_timedelta():
