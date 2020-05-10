@@ -207,10 +207,10 @@ class GroupbyTyper(AbstractTemplate):
         assert not kws
         df, by, as_index = args
 
-        if isinstance(by, types.StringLiteral):
-            keys = (by.literal_value,)
-        elif hasattr(by, "consts"):
-            keys = by.consts
+        if is_overload_constant_str(by):
+            keys = (get_overload_const_str(by),)
+        elif is_overload_constant_str_list(by):
+            keys = tuple(get_const_str_list(by))
 
         selection = list(df.columns)
         for k in keys:
