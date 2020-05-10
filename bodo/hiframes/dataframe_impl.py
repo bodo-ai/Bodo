@@ -33,6 +33,7 @@ from bodo.utils.typing import (
     ConstDictType,
     scalar_to_array_type,
     raise_bodo_error,
+    get_registry_consts,
 )
 from bodo.utils.transform import gen_const_tup
 from bodo.libs.int_arr_ext import IntegerArrayType
@@ -194,9 +195,11 @@ def overload_dataframe_rename(
             "'columns' argument to df.rename() should be a constant dictionary"
         )
 
+    columns_consts = get_registry_consts(columns.const_no)
+
     col_map = {
-        columns.consts[2 * i]: columns.consts[2 * i + 1]
-        for i in range(len(columns.consts) // 2)
+        columns_consts[2 * i]: columns_consts[2 * i + 1]
+        for i in range(len(columns_consts) // 2)
     }
     new_cols = [
         col_map.get(df.columns[i], df.columns[i]) for i in range(len(df.columns))
@@ -1073,7 +1076,7 @@ def overload_read_excel(
     # objmode doesn't allow lists, embed 'parse_dates' as a constant inside objmode
     parse_dates_const = False
     if isinstance(parse_dates, bodo.utils.typing.ConstList):
-        parse_dates_const = list(parse_dates.consts)
+        parse_dates_const = list(get_registry_consts(parse_dates.const_no))
 
     # embed dtype since objmode doesn't allow list/dict
     pd_dtype_strs = ", ".join(

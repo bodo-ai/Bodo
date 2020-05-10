@@ -45,6 +45,7 @@ from bodo.utils.typing import (
     ConstDictType,
     get_overload_const_func,
     get_overload_const_str,
+    get_registry_consts,
 )
 from bodo.utils.transform import get_const_func_output_type
 from bodo.utils.utils import is_expr
@@ -449,9 +450,10 @@ class DataframeGroupByAttribute(AttributeTemplate):
             # get mapping of column names to functions:
             # string -> string or tuple of strings (tuple when multiple
             # functions are applied to a column)
+            func_consts = get_registry_consts(func.const_no)
             col_map = {
-                func.consts[2 * i]: func.consts[2 * i + 1]
-                for i in range(len(func.consts) // 2)
+                func_consts[2 * i]: func_consts[2 * i + 1]
+                for i in range(len(func_consts) // 2)
             }
 
             # make sure selected columns exist in dataframe
