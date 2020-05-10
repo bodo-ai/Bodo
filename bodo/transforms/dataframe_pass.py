@@ -59,6 +59,7 @@ from bodo.utils.transform import (
     update_locs,
     get_str_const_value,
     get_call_expr_arg,
+    gen_const_tup,
 )
 from bodo.utils.utils import gen_getitem
 from bodo.libs.str_arr_ext import (
@@ -819,10 +820,7 @@ class DataFramePass:
         n_cols = len(df_typ.columns)
         data_args = tuple("data{}".format(i) for i in range(n_cols))
 
-        col_args = ", ".join("'{}'".format(c) for c in df_typ.columns)
-        col_var = "bodo.utils.typing.add_consts_to_type([{}], {})".format(
-            col_args, col_args
-        )
+        col_var = gen_const_tup(df_typ.columns)
         func_text = "def _fillna_impl({}, df_index, val):\n".format(
             ", ".join(data_args)
         )
@@ -986,10 +984,7 @@ class DataFramePass:
                 c
             )
 
-        col_seq = ", ".join("'{}'".format(c) for c in df_typ.columns)
-        col_var = "bodo.utils.typing.add_consts_to_type([{}], {})".format(
-            col_seq, col_seq
-        )
+        col_var = gen_const_tup(df_typ.columns)
         # TODO: support MultiIndex
         func_text += "  index = bodo.utils.conversion.index_from_array({})\n".format(
             out_names[-1]
@@ -1023,10 +1018,7 @@ class DataFramePass:
         n_cols = len(out_df_typ.columns)
         data_args = ["data{}".format(i) for i in range(n_cols)]
 
-        col_args = ", ".join("'{}'".format(c) for c in out_df_typ.columns)
-        col_var = "bodo.utils.typing.add_consts_to_type([{}], {})".format(
-            col_args, col_args
-        )
+        col_var = gen_const_tup(out_df_typ.columns)
         func_text = "def _reset_index_impl({}):\n".format(", ".join(data_args))
         for i, d in enumerate(data_args):
             if not inplace and i >= n_ind:
@@ -1452,14 +1444,12 @@ class DataFramePass:
         df_index_var = self._get_dataframe_index(df_var, nodes)
         in_arrs = [self._get_dataframe_data(df_var, c, nodes) for c in df_typ.columns]
         data_args = ["data{}".format(i) for i in range(n_cols)]
-        col_args = [
-            "'{}'".format(c) if isinstance(c, str) else c for c in df_typ.columns
-        ]
+        out_columns = list(df_typ.columns)
 
         # if column is being added
         if cname not in df_typ.columns:
             data_args.append("new_arr")
-            col_args.append("'{}'".format(cname) if isinstance(cname, str) else cname)
+            out_columns.append(cname)
             in_arrs.append(new_arr)
             new_arr_arg = "new_arr"
         else:  # updating existing column
@@ -1470,9 +1460,7 @@ class DataFramePass:
         data_args = ", ".join(data_args)
 
         # TODO: fix list, Series data
-        col_var = "bodo.utils.typing.add_consts_to_type([{0}], {0})".format(
-            ", ".join(col_args)
-        )
+        col_var = gen_const_tup(out_columns)
         df_index = "df_index"
         if n_cols == 0:
             df_index = "bodo.utils.conversion.extract_index_if_none(new_val, None)\n"
@@ -2419,12 +2407,7 @@ def _gen_init_df(columns, index=None):
     else:
         args += ", " + index
 
-    # using add_consts_to_type with list to avoid const tuple problems
-    # TODO: fix type inference for const str
-    # a column name can be a string or tuple of strings (multi-level)
-    col_var = "bodo.utils.typing.add_consts_to_type([{0}], {0})".format(
-        ", ".join("'{}'".format(c) if isinstance(c, str) else str(c) for c in columns)
-    )
+    col_var = gen_const_tup(columns)
     func_text = "def _init_df({}):\n".format(args)
     func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), {}, {})\n".format(
         data_args, index, col_var

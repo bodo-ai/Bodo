@@ -69,7 +69,7 @@ from bodo.utils.typing import (
     create_unsupported_overload,
     get_overload_const,
 )
-from bodo.utils.transform import get_const_func_output_type
+from bodo.utils.transform import get_const_func_output_type, gen_const_tup
 from bodo.utils.conversion import index_to_array
 from bodo.libs.array import array_to_info, arr_info_list_to_table
 from bodo.libs.int_arr_ext import IntegerArrayType
@@ -408,8 +408,7 @@ def init_dataframe(typingctx, data_tup_typ, index_typ, col_names_typ=None):
     if n_cols == 0:
         column_names = ()
     else:
-        # assert all(isinstance(t, types.StringLiteral) for t in col_names_typ.types)
-        column_names = col_names_typ.consts
+        column_names = tuple(get_const_str_list(col_names_typ))
 
     assert len(column_names) == n_cols
 
@@ -822,12 +821,7 @@ def pd_dataframe_overload(data=None, index=None, columns=None, dtype=None, copy=
     copy = get_overload_const(copy)
 
     col_args, data_args, index_arg = _get_df_args(data, index, columns, dtype, copy)
-    col_var = "bodo.utils.typing.add_consts_to_type([{}], {})".format(
-        col_args, col_args
-    )
-    # empty df case
-    if len(col_args) == 0:
-        col_var = "()"
+    col_var = gen_const_tup(col_args)
 
     func_text = (
         "def _init_df(data=None, index=None, columns=None, dtype=None, copy=False):\n"
@@ -897,14 +891,15 @@ def _get_df_args(data, index, columns, dtype, copy):
             )
         if copy:
             astype_str += ".copy()"
-        n_cols = len(columns.consts)
+        columns_consts = get_const_str_list(columns)
+        n_cols = len(columns_consts)
         data_arrs = ["data[:,{}]{}".format(i, astype_str) for i in range(n_cols)]
-        data_dict = dict(zip(columns.consts, data_arrs))
+        data_dict = dict(zip(columns_consts, data_arrs))
 
     if is_overload_none(columns):
         col_names = data_dict.keys()
     else:
-        col_names = columns.consts
+        col_names = get_const_str_list(columns)
 
     df_len = _get_df_len_from_info(data_dict, col_names, index_is_none, index_arg)
     _fill_null_arrays(data_dict, col_names, df_len, dtype)
@@ -923,8 +918,7 @@ def _get_df_args(data, index, columns, dtype, copy):
     if len(col_names) == 0:
         data_args = "()"
 
-    col_args = ", ".join("'{}'".format(c) for c in col_names)
-    return col_args, data_args, index_arg
+    return col_names, data_args, index_arg
 
 
 def _get_df_len_from_info(data_dict, col_names, index_is_none, index_arg):
@@ -1143,12 +1137,8 @@ def merge_overload(
         suffix_x, suffix_y, left_keys, right_keys, left.columns, right.columns
     )
 
-    left_keys = "bodo.utils.typing.add_consts_to_type([{0}], {0})".format(
-        ", ".join("'{}'".format(c) for c in left_keys)
-    )
-    right_keys = "bodo.utils.typing.add_consts_to_type([{0}], {0})".format(
-        ", ".join("'{}'".format(c) for c in right_keys)
-    )
+    left_keys = gen_const_tup(left_keys)
+    right_keys = gen_const_tup(right_keys)
 
     # generating code since typers can't find constants easily
     func_text = "def _impl(left, right, how='inner', on=None, left_on=None,\n"
@@ -1502,12 +1492,8 @@ def join_overload(left, other, on=None, how="left", lsuffix="", rsuffix="", sort
 
     right_keys = ["$_bodo_index_"]
 
-    left_keys = "bodo.utils.typing.add_consts_to_type([{0}], {0})".format(
-        ", ".join("'{}'".format(c) for c in left_keys)
-    )
-    right_keys = "bodo.utils.typing.add_consts_to_type([{0}], {0})".format(
-        ", ".join("'{}'".format(c) for c in right_keys)
-    )
+    left_keys = gen_const_tup(left_keys)
+    right_keys = gen_const_tup(right_keys)
 
     # generating code since typers can't find constants easily
     func_text = "def _impl(left, other, on=None, how='left',\n"
@@ -1583,13 +1569,16 @@ class JoinTyper(AbstractTemplate):
             is_join,
         ) = args
 
+        left_on = get_const_str_list(left_on)
+        right_on = get_const_str_list(right_on)
+
         # columns with common name that are not common keys will get a suffix
-        comm_keys = set(left_on.consts) & set(right_on.consts)
+        comm_keys = set(left_on) & set(right_on)
         comm_data = set(left_df.columns) & set(right_df.columns)
         add_suffix = comm_data - comm_keys
 
-        left_index = "$_bodo_index_" in left_on.consts
-        right_index = "$_bodo_index_" in right_on.consts
+        left_index = "$_bodo_index_" in left_on
+        right_index = "$_bodo_index_" in right_on
 
         how = get_overload_const_str(how_var)
         is_left = how in {"left", "outer"}
@@ -1599,11 +1588,11 @@ class JoinTyper(AbstractTemplate):
         # In the case of merging on one index and a column we have to add another
         # column to the output. And that requires additional work.
         if left_index and not right_index and not is_join.literal_value:
-            c_col = right_on.consts[0]
+            c_col = right_on[0]
             columns.append(c_col)
             data.append(right_df.data[right_df.columns.index(c_col)])
         if right_index and not left_index and not is_join.literal_value:
-            c_col = left_on.consts[0]
+            c_col = left_on[0]
             columns.append(c_col)
             data.append(left_df.data[left_df.columns.index(c_col)])
 
@@ -1743,12 +1732,8 @@ def merge_asof_overload(
     validate_keys_dtypes(
         left, right, left_on, right_on, left_index, right_index, left_keys, right_keys
     )
-    left_keys = "bodo.utils.typing.add_consts_to_type([{0}], {0})".format(
-        ", ".join("'{}'".format(c) for c in left_keys)
-    )
-    right_keys = "bodo.utils.typing.add_consts_to_type([{0}], {0})".format(
-        ", ".join("'{}'".format(c) for c in right_keys)
-    )
+    left_keys = gen_const_tup(left_keys)
+    right_keys = gen_const_tup(right_keys)
     # The suffixes
     if isinstance(suffixes, tuple):
         suffixes_val = suffixes

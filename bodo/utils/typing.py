@@ -316,7 +316,7 @@ def get_const_str_list(val):
     if isinstance(val, types.BaseTuple) and all(
         isinstance(t, types.StringLiteral) for t in val.types
     ):
-        return [t.literal_value for t in val.types]
+        return tuple(t.literal_value for t in val.types)
 
 
 def get_overload_const_str(val):

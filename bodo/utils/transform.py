@@ -368,6 +368,15 @@ def update_node_list_definitions(node_list, func_ir):
     return
 
 
+def gen_const_tup(vals):
+    """generate a constant tuple value as text
+    """
+    return "({}{})".format(
+        ", ".join("'{}'".format(c) if isinstance(c, str) else str(c) for c in vals),
+        "," if len(vals) == 1 else ""
+    )
+
+
 def gen_add_consts_to_type_call(vals, var_name):
     """generate add_consts_to_type() call as text. Also returns the const object being
     preserved in the registry to enable the caller to keep a reference around.

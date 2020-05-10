@@ -64,6 +64,7 @@ from bodo.utils.transform import (
     gen_add_consts_to_type,
     compile_func_single_block,
     get_call_expr_arg,
+    gen_const_tup,
 )
 from bodo.utils.typing import BodoError
 
@@ -616,11 +617,7 @@ class UntypedPass:
             )
 
         # Below we assume that the columns are strings
-        col_args = ", ".join("'{}'".format(c) for c in columns)
-
-        col_var = "bodo.utils.typing.add_consts_to_type([{}], {})".format(
-            col_args, col_args
-        )
+        col_var = gen_const_tup(columns)
         func_text = "def _init_df({}):\n".format(", ".join(args))
         func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), {}, {})\n".format(
             ", ".join(data_args), index_arg, col_var
@@ -958,11 +955,7 @@ class UntypedPass:
             )
 
         # Below we assume that the columns are strings
-        col_args = ", ".join("'{}'".format(c) for c in columns)
-
-        col_var = "bodo.utils.typing.add_consts_to_type([{}], {})".format(
-            col_args, col_args
-        )
+        col_var = gen_const_tup(columns)
         func_text = "def _init_df({}):\n".format(", ".join(args))
         func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), {}, {})\n".format(
             ", ".join(data_args), index_arg, col_var
@@ -1149,11 +1142,7 @@ class UntypedPass:
         )
 
         # Below we assume that the columns are strings
-        col_args = ", ".join("'{}'".format(c) for c in columns)
-
-        col_var = "bodo.utils.typing.add_consts_to_type([{}], {})".format(
-            col_args, col_args
-        )
+        col_var = gen_const_tup(columns)
         func_text = "def _init_df({}):\n".format(", ".join(args))
         func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), {}, {})\n".format(
             ", ".join(data_args), index_arg, col_var
@@ -1370,14 +1359,12 @@ class UntypedPass:
                     columns.index(index_col), index_col
                 )
 
-        col_args = ", ".join(
-            "'{}'".format(c)
+        col_args = (
+            c
             for c in columns
             if (isinstance(index_col, dict) or index_col is None or c != index_col)
         )
-        col_var = "bodo.utils.typing.add_consts_to_type([{}], {})".format(
-            col_args, col_args
-        )
+        col_var = gen_const_tup(col_args)
         func_text = "def _init_df({}):\n".format(args)
         func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), {}, {})\n".format(
             data_args, index_arg, col_var

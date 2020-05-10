@@ -34,6 +34,7 @@ from bodo.utils.typing import (
     scalar_to_array_type,
     raise_bodo_error,
 )
+from bodo.utils.transform import gen_const_tup
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.bool_arr_ext import boolean_array
 from bodo.hiframes.pd_timestamp_ext import pandas_timestamp_type
@@ -787,17 +788,8 @@ def _gen_init_df(header, columns, data_args, index=None, extra_globals=None):
     if extra_globals is None:
         extra_globals = {}
 
-    # using add_consts_to_type with list to avoid const tuple problems
-    # TODO: fix type inference for const str
-    col_seq = ", ".join(
-        "'{}'".format(c) if isinstance(c, str) else "{}".format(c) for c in columns
-    )
-    col_var = "bodo.utils.typing.add_consts_to_type([{}], {})".format(col_seq, col_seq)
+    col_var = gen_const_tup(columns)
     data_args = "({},)".format(data_args)
-    # empty dataframe case
-    if len(columns) == 0:
-        data_args = "()"
-        col_var = "()"
 
     func_text = "{}  return bodo.hiframes.pd_dataframe_ext.init_dataframe({}, {}, {})\n".format(
         header, data_args, index, col_var

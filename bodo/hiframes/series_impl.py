@@ -30,6 +30,7 @@ from bodo.utils.typing import (
     get_literal_value,
     get_overload_const_str,
 )
+from bodo.utils.transform import gen_const_tup
 from numba.core.typing.templates import infer_global, AbstractTemplate
 from bodo.libs.bool_arr_ext import BooleanArrayType, boolean_array
 from bodo.libs.int_arr_ext import IntegerArrayType
@@ -177,17 +178,12 @@ def overload_series_reset_index(S):
             )
 
     columns = [get_name_literal(S.index.name_typ), get_name_literal(S.name_typ)]
-    col_seq = ", ".join(
-        "'{}'".format(c) if isinstance(c, str) else "{}".format(c) for c in columns
-    )
 
     func_text = "def _impl(S):\n"
     func_text += "    arr = bodo.hiframes.pd_series_ext.get_series_data(S)\n"
     func_text += "    index = bodo.hiframes.pd_series_ext.get_series_index(S)\n"
     func_text += "    df_index = bodo.hiframes.pd_index_ext.init_range_index(0, len(S), 1, None)\n"
-    func_text += "    col_var = bodo.utils.typing.add_consts_to_type([{}], {})\n".format(
-        col_seq, col_seq
-    )
+    func_text += "    col_var = {}\n".format(gen_const_tup(columns))
     func_text += "    return bodo.hiframes.pd_dataframe_ext.init_dataframe((index, arr), df_index, col_var)\n"
     loc_vars = {}
     exec(
