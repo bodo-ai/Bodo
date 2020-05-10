@@ -27,7 +27,10 @@ from numba.core.ir_utils import (
 import bodo
 from bodo.utils.utils import is_assign, is_expr
 from bodo.libs.str_ext import string_type
-from bodo.utils.typing import BodoError
+from bodo.utils.typing import (
+    BodoError,
+    add_consts_to_registry,
+)
 from bodo.utils.utils import is_call
 
 
@@ -365,51 +368,33 @@ def update_node_list_definitions(node_list, func_ir):
     return
 
 
+def gen_add_consts_to_type_call(vals, var_name):
+    """generate add_consts_to_type() call as text. Also returns the const object being
+    preserved in the registry to enable the caller to keep a reference around.
+    """
+    const_obj, const_no = add_consts_to_registry(vals)
+    func_call = "bodo.utils.typing.add_consts_to_type({}, {})".format(
+        var_name, const_no
+    )
+    return const_obj, func_call
+
+
 def gen_add_consts_to_type(vals, var, ret_var, typing_info=None):
     """generate add_consts_to_type() call that makes constant values of dict/list
     available during typing
     """
-    # convert constants to string representation
-    const_funcs = {}
-    val_reps = []
-    for c in vals:
-        v_rep = "{}".format(c)
-        # if c is a python class (like str, float, int, list),
-        # v_rep should be the class name
-        if isinstance(c, type):
-            v_rep = c.__name__
-        elif isinstance(c, str):
-            v_rep = "'{}'".format(c)
-        # store a name for make_function exprs to replace later
-        elif is_expr(c, "make_function") or isinstance(
-            c, numba.core.registry.CPUDispatcher
-        ):
-            v_rep = "func{}".format(ir_utils.next_label())
-            const_funcs[v_rep] = c
-        val_reps.append(v_rep)
 
-    vals_expr = ", ".join(val_reps)
+    const_obj, const_to_type_call = gen_add_consts_to_type_call(vals, "a")
     func_text = "def _build_f(a):\n"
-    func_text += "  return bodo.utils.typing.add_consts_to_type(a, {})\n".format(
-        vals_expr
-    )
+    func_text += "  return {}\n".format(const_to_type_call)
     loc_vars = {}
     exec(func_text, {"bodo": bodo}, loc_vars)
     _build_f = loc_vars["_build_f"]
     nodes = compile_func_single_block(_build_f, (var,), ret_var, typing_info)
-    # replace make_function exprs with actual node
-    for stmt in nodes:
-        if (
-            is_assign(stmt)
-            and isinstance(stmt.value, ir.Global)
-            and stmt.value.name in const_funcs
-        ):
-            v = const_funcs[stmt.value.name]
-            if is_expr(v, "make_function"):
-                stmt.value = const_funcs[stmt.value.name]
-            # CPUDispatcher case
-            else:
-                stmt.value.value = const_funcs[stmt.value.name]
+
+    # HACK keep const values object around as long as the function is being compiled by
+    # adding it as an attribute to some compilation object
+    nodes[-1].const_obj = const_obj
     return nodes
 
 

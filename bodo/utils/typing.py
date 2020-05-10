@@ -5,10 +5,11 @@ Helper functions to enable typing.
 import operator
 import itertools
 import types as pytypes
+import weakref
 import numpy as np
 import pandas as pd
 import numba
-from numba.core import types, cgutils
+from numba.core import types, cgutils, ir_utils
 from numba.extending import (
     register_model,
     models,
@@ -24,6 +25,41 @@ from numba.core.typing import signature
 from numba.core.imputils import lower_builtin, impl_ret_borrowed, impl_ret_new_ref
 import bodo
 
+
+# registry of constant values such as lists, sets, and dictionaries which is used during
+# typing and transformations.
+# Only keeps weak references so that large values are not kept around indefinitely if
+# not needed.
+const_registry = weakref.WeakValueDictionary()
+
+
+class ConstListValues(list):
+    """wrapper class for list objects to enable weak references since regular lists
+    cannot have weak references. see https://docs.python.org/3/library/weakref.html
+    """
+
+    pass
+
+
+def get_registry_consts(const_no):
+    """get constant object in registry with key 'const_no'
+    """
+    return const_registry[const_no]
+
+
+def add_consts_to_registry(consts):
+    """add 'consts' object to the constant registry with a new key. Returns the actual
+    object preserved so that the caller can keep a reference around if necessary.
+    """
+    const_no = ir_utils.next_label()
+    const_obj = consts
+    if isinstance(consts, list):
+        const_obj = ConstListValues(consts)
+    const_obj = ConstListValues(consts)
+    const_registry[const_no] = const_obj
+    return const_obj, const_no
+
+
 list_cumulative = {"cumsum", "cumprod", "cummin", "cummax"}
 
 
@@ -37,6 +73,7 @@ class BodoError(BaseException):
     numba's error catching, which enables raising simpler error directly to the user.
     TODO: change to Exception when possible.
     """
+
     def __init__(self, msg, is_new=True):
         self.is_new = is_new
         highlight = numba.core.errors.termcolor().errmsg
@@ -121,8 +158,8 @@ def is_overload_constant_str(val):
 def is_overload_constant_str_list(val):
     return (
         isinstance(val, bodo.utils.typing.ConstList)
-        and isinstance(val.consts, tuple)
-        and isinstance(val.consts[0], str)
+        # and isinstance(val.const_no, tuple)
+        and isinstance(get_registry_consts(val.const_no)[0], str)
     ) or (
         isinstance(val, types.BaseTuple)
         and all(isinstance(t, types.StringLiteral) for t in val.types)
@@ -274,8 +311,8 @@ def get_const_str_list(val):
     # literal case
     if hasattr(val, "literal_value"):
         return [val.literal_value]
-    if hasattr(val, "consts"):
-        return val.consts
+    if hasattr(val, "const_no"):
+        return get_registry_consts(val.const_no)
     if isinstance(val, types.BaseTuple) and all(
         isinstance(t, types.StringLiteral) for t in val.types
     ):
@@ -526,19 +563,19 @@ def lower_to_const_tuple(context, builder, sig, args):
 
 # Type used to add constant values to constant lists to enable typing
 class ConstList(types.List):
-    def __init__(self, dtype, consts):
+    def __init__(self, dtype, const_no):
         dtype = types.unliteral(dtype)
         self.dtype = dtype
         self.reflected = False
-        self.consts = consts
-        cls_name = "list[{}]".format(consts)
+        self.const_no = const_no
+        cls_name = "list[{}]".format(const_no)
         name = "%s(%s)" % (cls_name, self.dtype)
         super(types.List, self).__init__(name=name)
 
     def copy(self, dtype=None, reflected=None):
         if dtype is None:
             dtype = self.dtype
-        return ConstList(dtype, self.consts)
+        return ConstList(dtype, self.const_no)
 
     def unify(self, typingctx, other):
         if isinstance(other, types.List):
@@ -547,14 +584,16 @@ class ConstList(types.List):
             if dtype is not None:
                 # output type is ConstList if both unifying types are ConstList and
                 # have the same constant values
-                if isinstance(other, ConstList) and self.consts == other.consts:
-                    return ConstList(dtype, self.consts)
+                if isinstance(other, ConstList) and get_registry_consts(
+                    self.const_no
+                ) == get_registry_consts(other.const_no):
+                    return ConstList(dtype, self.const_no)
                 else:
                     return types.List(dtype, reflected)
 
     @property
     def key(self):
-        return self.dtype, self.reflected, self.consts
+        return self.dtype, self.reflected, self.const_no
 
 
 @register_model(ConstList)
@@ -608,15 +647,13 @@ class AddConstsTyper(AbstractTemplate):
     def generic(self, args, kws):
         assert not kws
         ret_typ = args[0]
-        # TODO: FloatLiteral e.g. test_fillna
-        if all(is_literal_type(v) for v in args[1:]):
-            consts = tuple(get_literal_value(v) for v in args[1:])
-            if isinstance(ret_typ, types.DictType):
-                ret_typ = ConstDictType(ret_typ.key_type, ret_typ.value_type, consts)
-            elif isinstance(ret_typ, types.Set):
-                ret_typ = ConstSet(ret_typ.dtype, consts)
-            else:
-                ret_typ = ConstList(ret_typ.dtype, consts)
+        const_no = get_overload_const_int(args[1])
+        if isinstance(ret_typ, types.DictType):
+            ret_typ = ConstDictType(ret_typ.key_type, ret_typ.value_type, const_no)
+        elif isinstance(ret_typ, types.Set):
+            ret_typ = ConstSet(ret_typ.dtype, const_no)
+        else:
+            ret_typ = ConstList(ret_typ.dtype, const_no)
         return signature(ret_typ, *args)
 
 
@@ -629,14 +666,14 @@ class ConstDictType(types.DictType):
     """Dictionary type with constant keys and values
     """
 
-    def __init__(self, keyty, valty, consts):
+    def __init__(self, keyty, valty, const_no):
         keyty = types.unliteral(keyty)
         valty = types.unliteral(valty)
         self.key_type = keyty
         self.value_type = valty
         self.keyvalue_type = types.Tuple([keyty, valty])
-        self.consts = consts
-        name = "{}[{},{}][{}]".format(self.__class__.__name__, keyty, valty, consts)
+        self.const_no = const_no
+        name = "{}[{},{}][{}]".format(self.__class__.__name__, keyty, valty, const_no)
         super(types.DictType, self).__init__(name)
 
 
@@ -654,21 +691,21 @@ class ConstSet(types.Set):
 
     mutable = True
 
-    def __init__(self, dtype, consts=None):
+    def __init__(self, dtype, const_no=None):
         self.dtype = dtype
         self.reflected = False
-        self.consts = consts
-        name = "set(%s)[%s]" % (self.dtype, consts)
+        self.const_no = const_no
+        name = "set(%s)[%s]" % (self.dtype, const_no)
         super(types.Set, self).__init__(name=name)
 
     @property
     def key(self):
-        return self.dtype, self.reflected, self.consts
+        return self.dtype, self.reflected, self.const_no
 
     def copy(self, dtype=None, reflected=None):
         if dtype is None:
             dtype = self.dtype
-        return ConstSet(dtype, self.consts)
+        return ConstSet(dtype, self.const_no)
 
     def unify(self, typingctx, other):  # pragma: no cover
         # TODO: test coverage
@@ -676,8 +713,10 @@ class ConstSet(types.Set):
             dtype = typingctx.unify_pairs(self.dtype, other.dtype)
             reflected = self.reflected or other.reflected
             if dtype is not None:
-                if isinstance(other, ConstSet) and self.consts == other.consts:
-                    return ConstSet(dtype, self.consts)
+                if isinstance(other, ConstSet) and get_registry_consts(
+                    self.const_no
+                ) == get_registry_consts(other.const_no):
+                    return ConstSet(dtype, self.const_no)
                 else:
                     return types.Set(dtype, reflected)
 
