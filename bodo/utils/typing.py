@@ -61,7 +61,7 @@ def add_consts_to_registry(consts):
     """
     const_no = ir_utils.next_label()
 
-    if isinstance(consts, list):
+    if isinstance(consts, (list, tuple)):
         const_obj = ConstListValues(consts)
     elif isinstance(consts, dict):
         const_obj = ConstDictValues(consts)

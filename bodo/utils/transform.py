@@ -374,8 +374,9 @@ def gen_const_tup(vals):
     val_seq = ", ".join(
         "'{}'".format(c) if isinstance(c, str) else str(c) for c in vals
     )
-    # nested constant tuples are not supported in Numba yet, so need special handling
-    if any(isinstance(c, tuple) for c in vals):
+    # const int tuples and nested constant tuples are not supported in Numba yet, so
+    # need special handling
+    if any(isinstance(c, (tuple, int)) for c in vals):
         # using add_consts_to_type with list to avoid const tuple problems
         # TODO: fix Numba type inference for nested constant tuples
         const_obj, const_no = add_consts_to_registry(vals)

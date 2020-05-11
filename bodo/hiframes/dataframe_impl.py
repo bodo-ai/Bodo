@@ -792,7 +792,7 @@ def _gen_init_df(header, columns, data_args, index=None, extra_globals=None):
         extra_globals = {}
 
     col_var = gen_const_tup(columns)
-    data_args = "({},)".format(data_args)
+    data_args = "({}{})".format(data_args, "," if len(columns) == 1 else "")
 
     func_text = "{}  return bodo.hiframes.pd_dataframe_ext.init_dataframe({}, {}, {})\n".format(
         header, data_args, index, col_var
