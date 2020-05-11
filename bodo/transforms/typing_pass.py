@@ -567,9 +567,9 @@ class TypingTransforms:
         self.typemap[target.name] = self.typemap[nodes[-1].value.name]
         self.changed = True
 
-        # HACK keep const values object around as long as the function is being compiled by
-        # adding it as an attribute to some compilation object
-        nodes[-1].const_obj = const_obj
+        # HACK keep const values object around as long as the function is being compiled
+        # by adding it as an attribute to some compilation object
+        setattr(self.func_ir, "const_obj{}".format(const_no), const_obj)
         return nodes
 
     def _gen_const_string_index(self, target, rhs, vals):
@@ -588,9 +588,9 @@ class TypingTransforms:
         _gen_str_ind = loc_vars["_gen_str_ind"]
         nodes = compile_func_single_block(_gen_str_ind, (), target, self)
 
-        # HACK keep const values object around as long as the function is being compiled by
-        # adding it as an attribute to some compilation object
-        nodes[-1].const_obj = const_obj
+        # HACK keep const values object around as long as the function is being compiled
+        # by adding it as an attribute to some compilation object
+        setattr(self.func_ir, "const_obj{}".format(const_no), const_obj)
         return nodes
 
     def _get_const_seq(self, var):

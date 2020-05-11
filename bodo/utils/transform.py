@@ -373,7 +373,7 @@ def gen_const_tup(vals):
     """
     return "({}{})".format(
         ", ".join("'{}'".format(c) if isinstance(c, str) else str(c) for c in vals),
-        "," if len(vals) == 1 else ""
+        "," if len(vals) == 1 else "",
     )
 
 
@@ -385,7 +385,7 @@ def gen_add_consts_to_type_call(vals, var_name):
     func_call = "bodo.utils.typing.add_consts_to_type({}, {})".format(
         var_name, const_no
     )
-    return const_obj, func_call
+    return const_obj, const_no, func_call
 
 
 def gen_add_consts_to_type(vals, var, ret_var, typing_info=None):
@@ -393,7 +393,7 @@ def gen_add_consts_to_type(vals, var, ret_var, typing_info=None):
     available during typing
     """
 
-    const_obj, const_to_type_call = gen_add_consts_to_type_call(vals, "a")
+    const_obj, const_no, const_to_type_call = gen_add_consts_to_type_call(vals, "a")
     func_text = "def _build_f(a):\n"
     func_text += "  return {}\n".format(const_to_type_call)
     loc_vars = {}
@@ -401,10 +401,7 @@ def gen_add_consts_to_type(vals, var, ret_var, typing_info=None):
     _build_f = loc_vars["_build_f"]
     nodes = compile_func_single_block(_build_f, (var,), ret_var, typing_info)
 
-    # HACK keep const values object around as long as the function is being compiled by
-    # adding it as an attribute to some compilation object
-    nodes[-1].const_obj = const_obj
-    return nodes
+    return nodes, const_obj, const_no
 
 
 def get_call_expr_arg(f_name, args, kws, arg_no, arg_name, default=None, err_msg=None):

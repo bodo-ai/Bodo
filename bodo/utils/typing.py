@@ -593,7 +593,14 @@ class ConstList(types.List):
 
     @property
     def key(self):
-        return self.dtype, self.reflected, tuple(get_registry_consts(self.const_no))
+        # NOTE: key is used by Numba's interning mechanism to reuse types if possible.
+        # if the constant is not in the registry anymore, return a unique value to avoid
+        # matching
+        if self.const_no in const_registry:
+            consts = tuple(get_registry_consts(self.const_no))
+        else:
+            consts = "UNKNOWN{}".format(ir_utils.next_label())
+        return self.dtype, self.reflected, consts
 
 
 @register_model(ConstList)
@@ -657,6 +664,9 @@ class AddConstsTyper(AbstractTemplate):
         return signature(ret_typ, *args)
 
 
+AddConstsTyper._no_unliteral = True
+
+
 @lower_builtin(add_consts_to_type, types.VarArg(types.Any))
 def lower_add_consts_to_type(context, builder, sig, args):
     return impl_ret_borrowed(context, builder, sig.return_type, args[0])
@@ -702,7 +712,14 @@ class ConstSet(types.Set):
 
     @property
     def key(self):
-        return self.dtype, self.reflected, tuple(get_registry_consts(self.const_no))
+        # NOTE: key is used by Numba's interning mechanism to reuse types if possible.
+        # if the constant is not in the registry anymore, return a unique value to avoid
+        # matching
+        if self.const_no in const_registry:
+            consts = tuple(get_registry_consts(self.const_no))
+        else:
+            consts = "UNKNOWN{}".format(ir_utils.next_label())
+        return self.dtype, self.reflected, consts
 
     def copy(self, dtype=None, reflected=None):
         if dtype is None:

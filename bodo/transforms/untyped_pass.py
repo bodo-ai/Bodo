@@ -91,7 +91,8 @@ class UntypedPass:
         self.locals = _locals
         self.metadata = metadata
         self.flags = flags
-        ir_utils._max_label = max(func_ir.blocks.keys())
+        # TODO: remove this? update _max_label just in case?
+        ir_utils._max_label = max(ir_utils._max_label, max(func_ir.blocks.keys()))
 
         self.arrow_tables = {}
         self.reverse_copies = {}
@@ -232,8 +233,14 @@ class UntypedPass:
                     )
                     tmp_assign = ir.Assign(rhs, tmp_target, rhs.loc)
                     nodes = [tmp_assign]
-                    nodes += gen_add_consts_to_type(vals, tmp_target, assign.target)
-                    return nodes
+                    c_nodes, const_obj, const_no = gen_add_consts_to_type(
+                        vals, tmp_target, assign.target
+                    )
+                    # HACK keep const values object around as long as the function is
+                    # being compiled by adding it as an attribute to some compilation
+                    # object
+                    setattr(self.func_ir, "const_obj{}".format(const_no), const_obj)
+                    return nodes + c_nodes
                 except numba.core.ir_utils.GuardException:
                     pass
 
@@ -419,8 +426,13 @@ class UntypedPass:
                 tmp_target = ir.Var(target.scope, mk_unique_var(target.name), rhs.loc)
                 tmp_assign = ir.Assign(rhs, tmp_target, rhs.loc)
                 nodes = [tmp_assign]
-                nodes += gen_add_consts_to_type(list(arg_val), tmp_target, lhs)
-                return nodes
+                c_nodes, const_obj, const_no = gen_add_consts_to_type(
+                    list(arg_val), tmp_target, lhs
+                )
+                # HACK keep const values object around as long as the function is being
+                # compiled by adding it as an attribute to some compilation object
+                setattr(self.func_ir, "const_obj{}".format(const_no), const_obj)
+                return nodes + c_nodes
 
         if fdef == ("where", "numpy") and len(rhs.args) == 3:
             return self._handle_np_where(assign, lhs, rhs)
@@ -1359,7 +1371,7 @@ class UntypedPass:
                     columns.index(index_col), index_col
                 )
 
-        col_args = (
+        col_args = tuple(
             c
             for c in columns
             if (isinstance(index_col, dict) or index_col is None or c != index_col)
