@@ -101,6 +101,9 @@ _json_write = types.ExternalFunction(
 )
 
 
+dummy_use = numba.njit(lambda a: None)
+
+
 class DistributedPass:
     """
     This pass analyzes the IR to decide parallelism of arrays and parfors for
@@ -1102,6 +1105,7 @@ class DistributedPass:
                 start = bodo.libs.distributed_api.dist_exscan(utf8_len, _op)
                 # TODO: unicode file name
                 _csv_write(fname._data, utf8_str, start, utf8_len, True)
+                dummy_use(fname)
 
             return nodes + compile_func_single_block(
                 f,
@@ -1112,6 +1116,7 @@ class DistributedPass:
                     "unicode_to_utf8_and_len": unicode_to_utf8_and_len,
                     "_op": np.int32(Reduce_Type.Sum.value),
                     "_csv_write": _csv_write,
+                    "dummy_use": dummy_use,
                 },
             )
 
@@ -1196,6 +1201,7 @@ class DistributedPass:
                 _json_write(
                     fname._data, utf8_str, start, utf8_len, True, is_records_lines
                 )
+                dummy_use(fname)
 
             return nodes + compile_func_single_block(
                 f,
@@ -1206,6 +1212,7 @@ class DistributedPass:
                     "unicode_to_utf8_and_len": unicode_to_utf8_and_len,
                     "_op": np.int32(Reduce_Type.Sum.value),
                     "_json_write": _json_write,
+                    "dummy_use": dummy_use,
                 },
             )
 

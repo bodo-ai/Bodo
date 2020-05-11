@@ -234,6 +234,9 @@ def _get_pd_dtype_str(t):
 compiled_funcs = []
 
 
+dummy_use = numba.njit(lambda a: None)
+
+
 def _gen_csv_reader_py(
     col_names, col_typs, usecols, sep, typingctx, targetctx, parallel, skiprows
 ):
@@ -260,6 +263,7 @@ def _gen_csv_reader_py(
     # TODO: unicode name
     func_text += "  f_reader = csv_file_chunk_reader(fname._data, "
     func_text += "    {}, skiprows, -1)\n".format(parallel)
+    func_text += "  dummy_use(fname)\n"
     func_text += "  with objmode({}):\n".format(typ_strs)
     func_text += "    df = pd.read_csv(f_reader, names={},\n".format(col_names)
     func_text += "       parse_dates=[{}],\n".format(date_inds)

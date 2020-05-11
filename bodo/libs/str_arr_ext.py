@@ -1334,6 +1334,9 @@ def move_str_arr_payload(typingctx, to_str_arr_typ, from_str_arr_typ=None):
     return types.none(string_array_type, string_array_type), codegen
 
 
+dummy_use = numba.njit(lambda a: None)
+
+
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
 def get_utf8_size(s):
     if isinstance(s, types.StringLiteral):
@@ -1343,7 +1346,9 @@ def get_utf8_size(s):
     def impl(s):  # pragma: no cover
         if s._is_ascii == 1:
             return len(s)
-        return _get_utf8_size(s._data, s._length, s._kind)
+        n = _get_utf8_size(s._data, s._length, s._kind)
+        dummy_use(s)
+        return n
 
     return impl
 

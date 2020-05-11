@@ -3079,6 +3079,9 @@ def to_json_overload(
             _json_write(path_or_buf._data, D._data, 0, len(D), False, True)
         else:
             _json_write(path_or_buf._data, D._data, 0, len(D), False, False)
+        # ensure path_or_buf and D are not deleted before call to _json_write completes
+        dummy_use(path_or_buf)
+        dummy_use(D)
 
     return _impl
 

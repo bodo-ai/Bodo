@@ -1,6 +1,7 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 import numpy as np
 import bodo
+import numba
 from numba.core import types
 from numba.extending import overload, intrinsic, overload_method
 from bodo.libs.str_ext import string_type
@@ -24,6 +25,10 @@ _file_write_parallel = types.ExternalFunction(
     "file_write_parallel",
     types.void(types.voidptr, types.voidptr, types.intp, types.intp, types.intp),
 )
+
+
+dummy_use = numba.njit(lambda a: None)
+
 
 # @overload(np.fromfile, no_unliteral=True)
 # def fromfile_overload(fname, dtype):
@@ -114,6 +119,7 @@ def tofile_overload(arr, fname):
             dtype_size = get_dtype_size(A.dtype)
             # TODO: unicode name
             file_write(fname._data, A.ctypes, dtype_size * A.size)
+            dummy_use(fname)
 
         return tofile_impl
 
@@ -148,6 +154,7 @@ def file_write_parallel_overload(fname, arr, start, count):
             # bodo.cprint(start, count, elem_size)
             # TODO: unicode name
             _file_write_parallel(fname._data, A.ctypes, start, count, elem_size)
+            dummy_use(fname)
 
         return _impl
 
@@ -165,6 +172,7 @@ def file_read_parallel_overload(fname, arr, start, count):
             _file_read_parallel(
                 fname._data, arr.ctypes, start * dtype_size, count * dtype_size
             )
+            dummy_use(fname)
 
         return _impl
 
@@ -177,7 +185,11 @@ def file_read(fname, arr, size):  # pragma: no cover
 def file_read_overload(fname, arr, size):
     if fname == string_type:
         # TODO: unicode name
-        return lambda fname, arr, size: _file_read(fname._data, arr.ctypes, size)
+        def impl(fname, arr, size):  # pragma: no cover
+            _file_read(fname._data, arr.ctypes, size)
+            dummy_use(fname)
+
+        return impl
 
 
 def get_file_size(fname):  # pragma: no cover
@@ -188,4 +200,9 @@ def get_file_size(fname):  # pragma: no cover
 def get_file_size_overload(fname):
     if fname == string_type:
         # TODO: unicode name
-        return lambda fname: _get_file_size(fname._data)
+        def impl(fname):  # pragma: no cover
+            s = _get_file_size(fname._data)
+            dummy_use(fname)
+            return s
+
+        return impl

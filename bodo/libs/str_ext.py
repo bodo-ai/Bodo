@@ -181,12 +181,17 @@ del_str = types.ExternalFunction("del_str", types.void(std_str_type))
 get_c_str = types.ExternalFunction("get_c_str", types.voidptr(std_str_type))
 
 
+dummy_use = numba.njit(lambda a: None)
+
+
 @overload(int)
 def int_str_overload(in_str):
     if in_str == string_type:
 
         def _str_to_int_impl(in_str):  # pragma: no cover
-            return _str_to_int64(in_str._data, in_str._length)
+            val = _str_to_int64(in_str._data, in_str._length)
+            dummy_use(in_str)
+            return val
 
         return _str_to_int_impl
 

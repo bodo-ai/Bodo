@@ -141,6 +141,9 @@ h5_open = types.ExternalFunction(
 )
 
 
+dummy_use = numba.njit(lambda a: None)
+
+
 if bodo.config._has_h5py:
 
     @overload(h5py.File)
@@ -172,7 +175,10 @@ if bodo.config._has_h5py:
         ):  # pragma: no cover
             if mode is None:
                 mode = "a"  # TODO: support and test
-            return h5_open(name._data, mode._data, _is_parallel)
+            f = h5_open(name._data, mode._data, _is_parallel)
+            dummy_use(name)
+            dummy_use(mode)
+            return f
 
         return impl
 
@@ -252,7 +258,9 @@ def overload_getitem_file(in_f, in_idx):
     if in_f in (h5file_type, h5dataset_or_group_type) and in_idx == string_type:
 
         def impl(in_f, in_idx):  # pragma: no cover
-            return h5_open_dset_or_group_obj(unify_h5_id(in_f), in_idx._data)
+            d = h5_open_dset_or_group_obj(unify_h5_id(in_f), in_idx._data)
+            dummy_use(in_idx)
+            return d
 
         return impl
 
