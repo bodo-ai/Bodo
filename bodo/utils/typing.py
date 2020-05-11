@@ -41,6 +41,14 @@ class ConstListValues(list):
     pass
 
 
+class ConstDictValues(dict):
+    """wrapper class for dict objects to enable weak references since regular dicts
+    cannot have weak references. see https://docs.python.org/3/library/weakref.html
+    """
+
+    pass
+
+
 def get_registry_consts(const_no):
     """get constant object in registry with key 'const_no'
     """
@@ -52,10 +60,13 @@ def add_consts_to_registry(consts):
     object preserved so that the caller can keep a reference around if necessary.
     """
     const_no = ir_utils.next_label()
-    const_obj = consts
+
     if isinstance(consts, list):
         const_obj = ConstListValues(consts)
-    const_obj = ConstListValues(consts)
+    elif isinstance(consts, dict):
+        const_obj = ConstDictValues(consts)
+    else:
+        const_obj = consts
     const_registry[const_no] = const_obj
     return const_obj, const_no
 

@@ -455,6 +455,7 @@ def test_sum_max_min_list_string_random():
 
     n = 10
     df1 = pd.DataFrame({"A": rand_col_l_str(n), "B": rand_col_l_str(n)})
+
     def check_fct(the_fct, df1, select_col_comparison):
         bodo_fct = bodo.jit(the_fct)
         # Computing images via pandas and pandas but applying the merging of columns
@@ -465,9 +466,15 @@ def test_sum_max_min_list_string_random():
         df2_merge_B = df2_merge_preB[select_col_comparison]
         # Now comparing the results.
         list_col_names = df2_merge_A.columns.to_list()
-        df2_merge_A_sort = df2_merge_A.sort_values(by=list_col_names).reset_index(drop=True)
-        df2_merge_B_sort = df2_merge_B.sort_values(by=list_col_names).reset_index(drop=True)
-        pd.testing.assert_frame_equal(df2_merge_A_sort, df2_merge_B_sort, check_dtype=False)
+        df2_merge_A_sort = df2_merge_A.sort_values(by=list_col_names).reset_index(
+            drop=True
+        )
+        df2_merge_B_sort = df2_merge_B.sort_values(by=list_col_names).reset_index(
+            drop=True
+        )
+        pd.testing.assert_frame_equal(
+            df2_merge_A_sort, df2_merge_B_sort, check_dtype=False
+        )
         # Now doing the parallel check
         check_parallel_coherency(the_fct, (df1,), sort_output=True, reset_index=True)
 
@@ -2264,6 +2271,38 @@ def test_const_list_inference():
     check_func(impl1, (df,), sort_output=True)
     check_func(impl2, (df,), sort_output=True)
     check_func(impl3, (11,), sort_output=True)
+
+
+# global key list for groupby() testing
+g_keys = ["A", "B"]
+
+
+def test_global_list():
+    """
+    Test passing a global list to groupby()
+    """
+
+    # freevar key list for groupby() testing
+    f_keys = ["A", "B"]
+
+    # global case
+    def impl1(df):
+        return df.groupby(g_keys).sum()
+
+    # freevar case
+    def impl2(df):
+        return df.groupby(f_keys).sum()
+
+    df = pd.DataFrame(
+        {
+            "A": [2, 1, 1, 1, 2, 2, 1],
+            "B": ["a", "b", "c", "c", "b", "c", "a"],
+            "C": [1, 3, 1, 2, -4, 0, 5],
+        }
+    )
+
+    check_func(impl1, (df,), sort_output=True)
+    check_func(impl2, (df,), sort_output=True)
 
 
 def test_schema_change():

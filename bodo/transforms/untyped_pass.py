@@ -152,6 +152,23 @@ class UntypedPass:
         lhs = assign.target.name
         rhs = assign.value
 
+        # make global list/set/dict values available as constants during typing
+        if isinstance(rhs, (ir.Global, ir.FreeVar)) and isinstance(
+            rhs.value, (list, set, dict)
+        ):
+            target = assign.target
+            tmp_target = ir.Var(target.scope, mk_unique_var(target.name), rhs.loc)
+            tmp_assign = ir.Assign(rhs, tmp_target, rhs.loc)
+            nodes = [tmp_assign]
+            c_nodes, const_obj, const_no = gen_add_consts_to_type(
+                rhs.value, tmp_target, target
+            )
+            # HACK keep const values object around as long as the function is
+            # being compiled by adding it as an attribute to some compilation
+            # object
+            setattr(self.func_ir, "const_obj{}".format(const_no), const_obj)
+            return nodes + c_nodes
+
         if isinstance(rhs, ir.Expr):
             if rhs.op == "call":
                 return self._run_call(assign, label)
