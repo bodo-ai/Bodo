@@ -52,9 +52,9 @@ void pack_null_bitmap(uint8_t **out_nulls, std::vector<bool> &null_vec,
                       int64_t n_all_vals);
 void pq_write(const char *filename, const table_info *table,
               const array_info *col_names, const array_info *index,
-              const char *metadata, const char *compression, bool parallel,
-              bool write_rangeindex_to_metadata, const int start,
-              const int stop, const int step, const char *name);
+              bool write_index, const char *metadata, const char *compression,
+              bool parallel, bool write_rangeindex_to_metadata,
+              const int start, const int stop, const int step, const char *name);
 
 #define CHECK(expr, msg)                                           \
     if (!(expr)) {                                                 \
@@ -780,21 +780,24 @@ void bodo_array_to_arrow(
  * @param table table to write to parquet file
  * @param col_names_arr array containing the table's column names (index not
  * included)
- * @param index array containing the table index (can be an empty array if no
- * index)
+ * @param index array containing the table index
+ * @param write_index true if we need to write index passed in 'index', false
+ * otherwise
  * @param metadata string containing table metadata
  * @param is_parallel true if the table is part of a distributed table (in this
- * case, this process writes a file named "part-000X.parquet" where X is my rank
- *        into the directory specified by 'path_name'
+ *        case, this process writes a file named "part-000X.parquet" where X is
+ *        my rank into the directory specified by 'path_name'
+ * @param write_rangeindex_to_metadata : true if writing a RangeIndex to metadata
  * @param ri_start,ri_stop,ri_step start,stop,step parameters of given
  * RangeIndex
  * @param idx_name name of the given index
  */
 void pq_write(const char *_path_name, const table_info *table,
               const array_info *col_names_arr, const array_info *index,
-              const char *metadata, const char *compression, bool is_parallel,
-              bool write_rangeindex_to_metadata, const int ri_start,
-              const int ri_stop, const int ri_step, const char *idx_name) {
+              bool write_index, const char *metadata, const char *compression,
+              bool is_parallel, bool write_rangeindex_to_metadata,
+              const int ri_start, const int ri_stop, const int ri_step,
+              const char *idx_name) {
     // Write actual values of start, stop, step to the metadata which is a
     // string that contains %d
     int check;
@@ -856,7 +859,7 @@ void pq_write(const char *_path_name, const table_info *table,
 
     // make Arrow Schema object
     std::shared_ptr<arrow::Schema> schema;
-    if (index->length > 0) {
+    if (write_index) {
         // if there is an index, construct ChunkedArray index column and add
         // metadata to the schema
         std::shared_ptr<arrow::ChunkedArray> chunked_arr;

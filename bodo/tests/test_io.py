@@ -622,6 +622,27 @@ def test_read_write_parquet():
         bodo.jit(error_check3)(df)
 
 
+def test_write_parquet_empty_chunks():
+    """ Here we check that our to_parquet output in distributed mode
+        (directory of parquet files) can be read by pandas even when some
+        processes have empty chunks """
+
+    def f(n, write_filename):
+        df = pd.DataFrame({"A": np.arange(n)})
+        df.to_parquet(write_filename)
+
+    write_filename = "test__empty_chunks.pq"
+    n = 1  # make dataframe of length 1 so that rest of processes have empty chunk
+    try:
+        bodo.jit(f)(n, write_filename)
+        bodo.barrier()
+        if bodo.get_rank() == 0:
+            df = pd.read_parquet(write_filename)
+    finally:
+        if bodo.get_rank() == 0:
+            shutil.rmtree(write_filename)
+
+
 def test_write_parquet_decimal(datapath):
     """ Here we check that we can write the data read from decimal1.pq directory
         (has columns that use a precision and scale different from our default).

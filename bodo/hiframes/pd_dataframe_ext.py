@@ -2697,8 +2697,10 @@ def to_parquet_overload(
     )
     if is_overload_true(index) or (is_overload_none(index) and write_non_rangeindex):
         func_text += "    index_col = array_to_info(index_to_array(bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)))\n"
+        write_index = True
     else:
         func_text += "    index_col = array_to_info(np.empty(0))\n"
+        write_index = False
     func_text += '    metadata = """' + pandas_metadata_str + '"""\n'
     func_text += "    if compression is None:\n"
     func_text += "        compression = 'none'\n"
@@ -2709,6 +2711,7 @@ def to_parquet_overload(
     if write_rangeindex_to_metadata:
         func_text += "    parquet_write_table_cpp(unicode_to_char_ptr(fname),\n"
         func_text += "                            table, col_names, index_col,\n"
+        func_text += "                            " + str(write_index) + ",\n"
         func_text += "                            unicode_to_char_ptr(metadata),\n"
         func_text += "                            unicode_to_char_ptr(compression),\n"
         func_text += "                            _is_parallel, 1, df.index.start,\n"
@@ -2717,6 +2720,7 @@ def to_parquet_overload(
     else:
         func_text += "    parquet_write_table_cpp(unicode_to_char_ptr(fname),\n"
         func_text += "                            table, col_names, index_col,\n"
+        func_text += "                            " + str(write_index) + ",\n"
         func_text += "                            unicode_to_char_ptr(metadata),\n"
         func_text += "                            unicode_to_char_ptr(compression),\n"
         func_text += "                            _is_parallel, 0, 0, 0, 0,\n"
