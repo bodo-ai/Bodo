@@ -159,6 +159,9 @@ distributed_pass.distributed_run_extensions[JsonReader] = json_distributed_run
 compiled_funcs = []
 
 
+dummy_use = numba.njit(lambda a: None)
+
+
 def _gen_json_reader_py(
     col_names,
     col_typs,
@@ -191,6 +194,7 @@ def _gen_json_reader_py(
     # TODO: unicode name
     func_text += "  f_reader = json_file_chunk_reader(fname._data, "
     func_text += "    {}, {}, -1)\n".format(lines, parallel)
+    func_text += "  dummy_use(fname)\n"
     func_text += "  with objmode({}):\n".format(typ_strs)
     func_text += "    df = pd.read_json(f_reader, orient='{}',\n".format(orient)
     func_text += "       convert_dates = {}, \n".format(convert_dates)
