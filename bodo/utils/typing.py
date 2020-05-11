@@ -23,6 +23,7 @@ from numba.extending import (
 from numba.core.typing.templates import infer_global, AbstractTemplate, CallableTemplate
 from numba.core.typing import signature
 from numba.core.imputils import lower_builtin, impl_ret_borrowed, impl_ret_new_ref
+from numba.core.registry import CPUDispatcher
 import bodo
 
 
@@ -365,6 +366,8 @@ def get_overload_const_func(val):
         return val.literal_value
     if isinstance(val, types.Dispatcher):
         return val.dispatcher.py_func
+    if isinstance(val, CPUDispatcher):
+        return val.py_func
     raise BodoError("'{}' not a constant function type".format(val))
 
 

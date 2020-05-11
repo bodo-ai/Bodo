@@ -21,6 +21,7 @@ from numba.core.typing.templates import (
     AttributeTemplate,
     bound_function,
 )
+from numba.core.registry import CPUDispatcher
 from bodo.libs.int_arr_ext import IntegerArrayType, IntDtype
 import bodo
 from bodo.hiframes.pd_series_ext import SeriesType, _get_series_array_type
@@ -190,6 +191,7 @@ def validate_udf(func_name, func):
             types.functions.MakeFunctionLiteral,
             bodo.utils.typing.FunctionLiteral,
             types.Dispatcher,
+            CPUDispatcher,
         ),
     ):
         raise BodoError(
@@ -284,9 +286,20 @@ def get_groupby_output_dtype(arr_type, func_name):
         and not isinstance(in_dtype, types.Float)
         and not isinstance(in_dtype, types.Boolean)
     ):
-        is_list_string = isinstance(in_dtype, numba.core.types.containers.List) and in_dtype.dtype == types.unicode_type
+        is_list_string = (
+            isinstance(in_dtype, numba.core.types.containers.List)
+            and in_dtype.dtype == types.unicode_type
+        )
         if is_list_string or in_dtype == types.unicode_type:
-            if func_name not in {"count", "nunique", "min", "max", "sum", "first", "last"}:
+            if func_name not in {
+                "count",
+                "nunique",
+                "min",
+                "max",
+                "sum",
+                "first",
+                "last",
+            }:
                 raise BodoError(
                     "column type of strings or list of strings is not supported in groupby built-in function {}".format(
                         func_name
@@ -415,7 +428,9 @@ class DataframeGroupByAttribute(AttributeTemplate):
             if is_expr(f_val, "make_function"):
                 f = types.functions.MakeFunctionLiteral(f_val)
             else:
-                assert isinstance(f_val, (types.MakeFunctionLiteral, types.Dispatcher))
+                assert isinstance(
+                    f_val, (types.MakeFunctionLiteral, types.Dispatcher, CPUDispatcher)
+                )
                 f = f_val
             validate_udf("agg", f)
             func = get_overload_const_func(f)

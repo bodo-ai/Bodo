@@ -23,6 +23,7 @@ from numba.core.ir_utils import (
     find_callname,
     build_definitions,
 )
+from numba.core.registry import CPUDispatcher
 
 import bodo
 from bodo.utils.utils import is_assign, is_expr
@@ -349,6 +350,9 @@ def get_const_func_output_type(func, arg_types, typing_context):
         f_ir = numba.core.compiler.run_frontend(
             func.literal_value, inline_closures=True
         )
+    elif isinstance(func, CPUDispatcher):
+        py_func = func.py_func
+        f_ir = numba.core.compiler.run_frontend(py_func, inline_closures=True)
     else:
         assert isinstance(func, types.Dispatcher)
         py_func = func.dispatcher.py_func
