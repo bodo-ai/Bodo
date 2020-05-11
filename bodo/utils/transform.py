@@ -371,10 +371,25 @@ def update_node_list_definitions(node_list, func_ir):
 def gen_const_tup(vals):
     """generate a constant tuple value as text
     """
-    return "({}{})".format(
-        ", ".join("'{}'".format(c) if isinstance(c, str) else str(c) for c in vals),
-        "," if len(vals) == 1 else "",
+    val_seq = ", ".join(
+        "'{}'".format(c) if isinstance(c, str) else str(c) for c in vals
     )
+    # nested constant tuples are not supported in Numba yet, so need special handling
+    if any(isinstance(c, tuple) for c in vals):
+        # using add_consts_to_type with list to avoid const tuple problems
+        # TODO: fix Numba type inference for nested constant tuples
+        const_obj, const_no = add_consts_to_registry(vals)
+        # HACK add the constant to typing_context object to keep it around during
+        # compilation
+        setattr(
+            numba.core.registry.cpu_target.typing_context,
+            "const_obj{}".format(const_no),
+            const_obj,
+        )
+        return "bodo.utils.typing.add_consts_to_type([{}], {})".format(
+            val_seq, const_no
+        )
+    return "({}{})".format(val_seq, "," if len(vals) == 1 else "",)
 
 
 def gen_add_consts_to_type_call(vals, var_name):
