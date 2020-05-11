@@ -2861,6 +2861,9 @@ def to_sql_overload(
     return _impl
 
 
+dummy_use = numba.njit(lambda a: None)
+
+
 # TODO: other Pandas versions (0.24 defaults are different than 0.23)
 @overload_method(DataFrameType, "to_csv", no_unliteral=True)
 def to_csv_overload(
@@ -2984,6 +2987,9 @@ def to_csv_overload(
                 decimal,
             )
         _csv_write(path_or_buf._data, D._data, 0, len(D), False)
+        # ensure path_or_buf and D are not deleted before call to _csv_write completes
+        dummy_use(path_or_buf)
+        dummy_use(D)
 
     return _impl
 
