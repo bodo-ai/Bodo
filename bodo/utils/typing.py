@@ -688,6 +688,17 @@ class ConstDictType(types.DictType):
         )
         super(types.DictType, self).__init__(name)
 
+    @property
+    def key(self):
+        # NOTE: key is used by Numba's interning mechanism to reuse types if possible.
+        # if the constant is not in the registry anymore, return a unique value to avoid
+        # matching
+        if self.const_no in const_registry:
+            consts = tuple(get_registry_consts(self.const_no))
+        else:
+            consts = "UNKNOWN{}".format(ir_utils.next_label())
+        return self.key_type, self.value_type, consts
+
 
 @register_model(ConstDictType)
 class ConstDictModel(numba.typed.dictobject.DictModel):
