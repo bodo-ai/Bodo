@@ -21,6 +21,7 @@ RUN conda install -n BODODEV python numba=0.49.0 -c conda-forge
 RUN conda install -n BODODEV hdf5=*=*mpich* -c conda-forge
 RUN conda install -n BODODEV python pyarrow=0.17.0 -c conda-forge
 RUN conda install -n BODODEV pytest ipython
+RUN conda install -n BODODEV sqlalchemy pymysql xlrd mpi4py
 RUN conda install -n BODODEV openjdk=8
 RUN conda install -n BODODEV hdfs3 -c conda-forge
 

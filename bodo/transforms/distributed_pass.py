@@ -101,6 +101,9 @@ _json_write = types.ExternalFunction(
 )
 
 
+dummy_use = numba.njit(lambda a: None)
+
+
 class DistributedPass:
     """
     This pass analyzes the IR to decide parallelism of arrays and parfors for
@@ -1102,6 +1105,7 @@ class DistributedPass:
                 start = bodo.libs.distributed_api.dist_exscan(utf8_len, _op)
                 # TODO: unicode file name
                 _csv_write(fname._data, utf8_str, start, utf8_len, True)
+                dummy_use(fname)
 
             return nodes + compile_func_single_block(
                 f,
@@ -1112,6 +1116,7 @@ class DistributedPass:
                     "unicode_to_utf8_and_len": unicode_to_utf8_and_len,
                     "_op": np.int32(Reduce_Type.Sum.value),
                     "_csv_write": _csv_write,
+                    "dummy_use": dummy_use,
                 },
             )
 
@@ -1196,6 +1201,7 @@ class DistributedPass:
                 _json_write(
                     fname._data, utf8_str, start, utf8_len, True, is_records_lines
                 )
+                dummy_use(fname)
 
             return nodes + compile_func_single_block(
                 f,
@@ -1206,6 +1212,7 @@ class DistributedPass:
                     "unicode_to_utf8_and_len": unicode_to_utf8_and_len,
                     "_op": np.int32(Reduce_Type.Sum.value),
                     "_json_write": _json_write,
+                    "dummy_use": dummy_use,
                 },
             )
 
@@ -2354,7 +2361,7 @@ class DistributedPass:
         ):
             return self._start_vars[size_var.name]
         nodes += compile_func_single_block(
-            lambda n, rank, n_pes: min(n, rank * math.ceil(n / n_pes)),
+            lambda n, rank, n_pes: rank * (n // n_pes) + min(rank, n % n_pes),
             (size_var, self.rank_var, self.n_pes_var),
             None,
             self,
@@ -2371,8 +2378,10 @@ class DistributedPass:
         """
 
         def impl(n, rank, n_pes):  # pragma: no cover
-            chunk = math.ceil(n / n_pes)
-            return min(n, (rank + 1) * chunk) - min(n, rank * chunk)
+            res = n % n_pes
+            # The formula we would like is if (rank < res): blk_size +=1 but this does not compile
+            blk_size = n // n_pes + min(rank+1, res) - min(rank, res)
+            return blk_size
 
         nodes += compile_func_single_block(
             impl, (size_var, self.rank_var, self.n_pes_var), None, self
@@ -2387,7 +2396,7 @@ class DistributedPass:
         """get end index of size_var in 1D_Block distribution
         """
         nodes += compile_func_single_block(
-            lambda n, rank, n_pes: min(n, (rank + 1) * math.ceil(n / n_pes)),
+            lambda n, rank, n_pes: (rank+1) * (n // n_pes) + min(rank+1, n % n_pes),
             (size_var, self.rank_var, self.n_pes_var),
             None,
             self,

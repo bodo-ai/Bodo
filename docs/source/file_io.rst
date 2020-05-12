@@ -10,7 +10,7 @@ Supported formats
 -----------------
 
 Currently, Bodo supports I/O for `Parquet <http://parquet.apache.org/>`_,
-CSV, JSON, `HDF5 <http://www.h5py.org/>`_ , and Numpy binaries formats. Also see :ref:`Supported Pandas Operations <pandas>` for supported arguments.
+CSV, SQL, JSON, `HDF5 <http://www.h5py.org/>`_ , and Numpy binaries formats. Also see :ref:`Supported Pandas Operations <pandas>` for supported arguments.
 
 .. _parquet-section:
 
@@ -295,13 +295,21 @@ See :ref:`read_json() <pandas-f-in>` :ref:`to_json() <pandas-f-out>` for support
 SQL
 ~~~
 
-For SQL, the syntax is also the same as Pandas::
+For SQL, the syntax is also the same as Pandas. For reading::
 
     @bodo.jit
-    def example_sql():
+    def example_read_sql():
         df = pd.read_sql('select * from employees', 'mysql+pymysql://admin:server')
 
 See :ref:`read_sql() <pandas-f-in>` for supported arguments.
+
+For writing::
+
+    @bodo.jit
+    def example_write_sql(df):
+        df.to_sql('table_name', 'mysql+pymysql://admin:server')
+
+See :ref:`to_sql() <pandas-f-in>` for supported arguments.
 
 .. _numpy-binary-section:
 

@@ -1,7 +1,7 @@
 import operator
 import datetime
 import numba
-from numba.core import types
+from numba.core import types, cgutils
 from numba.extending import (
     typeof_impl,
     models,
@@ -16,8 +16,7 @@ from numba.extending import (
     overload_method,
     register_jitable,
 )
-from numba.core import cgutils
-
+from numba.core.imputils import lower_constant
 
 """
 Implementation is based on
@@ -121,6 +120,28 @@ def unbox_datetime_datetime(typ, val, c):
 
     # _getvalue(): Load and return the value of the underlying LLVM structure.
     return NativeValue(datetime_struct._getvalue(), is_error=is_error)
+
+
+@lower_constant(DatetimeDatetimeType)
+def constant_datetime(context, builder, ty, pyval):
+    # Extracting constants. Inspired from @lower_constant(types.Complex)
+    # in numba/numba/targets/numbers.py
+    year = context.get_constant(types.int64, pyval.year)
+    month = context.get_constant(types.int64, pyval.month)
+    day = context.get_constant(types.int64, pyval.day)
+    hour = context.get_constant(types.int64, pyval.hour)
+    minute = context.get_constant(types.int64, pyval.minute)
+    second = context.get_constant(types.int64, pyval.second)
+    microsecond = context.get_constant(types.int64, pyval.microsecond)
+    py_datetime = cgutils.create_struct_proxy(ty)(context, builder)
+    py_datetime.year = year
+    py_datetime.month = month
+    py_datetime.day = day
+    py_datetime.hour = hour
+    py_datetime.minute = minute
+    py_datetime.second = second
+    py_datetime.microsecond = microsecond
+    return py_datetime._getvalue()
 
 
 @overload(datetime.datetime, no_unliteral=True)
@@ -376,4 +397,3 @@ def date_sub(lhs, rhs):
             return base
 
         return impl
-

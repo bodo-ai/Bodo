@@ -20,6 +20,8 @@ from numba.extending import (
     register_jitable,
 )
 from numba.core import cgutils
+from numba.core.imputils import lower_constant
+
 import bodo
 from bodo.hiframes.datetime_datetime_ext import datetime_datetime_type
 
@@ -96,6 +98,18 @@ def unbox_datetime_timedelta(typ, val, c):
 
     # _getvalue(): Load and return the value of the underlying LLVM structure.
     return NativeValue(time_delta._getvalue(), is_error=is_error)
+
+
+@lower_constant(DatetimeTimeDeltaType)
+def lower_constant_datetime_timedelta(context, builder, ty, pyval):
+    days = context.get_constant(types.int64, pyval.days)
+    seconds = context.get_constant(types.int64, pyval.seconds)
+    microseconds = context.get_constant(types.int64, pyval.microseconds)
+    datetime_timedelta = cgutils.create_struct_proxy(ty)(context, builder)
+    datetime_timedelta.days = days
+    datetime_timedelta.seconds = seconds
+    datetime_timedelta.microseconds = microseconds
+    return datetime_timedelta._getvalue()
 
 
 # 6. Implement the constructor
@@ -479,4 +493,3 @@ def timedelta_abs(lhs):
                 return lhs
 
         return impl
-

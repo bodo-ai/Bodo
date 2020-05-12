@@ -824,9 +824,7 @@ def propagate(self, typeinfer):
                     # the first time we see BodoError during type inference, we
                     # put the code location in the error message, and re-raise
                     loc = constraint.loc
-                    raise bodo.utils.typing.BodoError(
-                        loc.strformat() + "\n" + str(e), is_new=False
-                    )
+                    raise bodo.utils.typing.BodoError(str(e) + "\n" + loc.strformat() + "\n", is_new=False)
                 else:
                     # keep raising and propagating the error through numba until
                     # it reaches the user

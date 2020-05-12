@@ -135,17 +135,13 @@ static int dist_get_size() {
 }
 
 static int64_t dist_get_start(int64_t total, int num_pes, int node_id) {
-    int64_t div_chunk = (int64_t)ceil(total / ((double)num_pes));
-    int64_t start = std::min(total, node_id * div_chunk);
-    // printf("rank %d start:%lld\n", node_id, start);
-    return start;
+    int64_t res = total % num_pes;
+    int64_t blk_size = (total - res) / num_pes;
+    return node_id * blk_size + std::min(int64_t(node_id), res);
 }
 
 static int64_t dist_get_end(int64_t total, int num_pes, int node_id) {
-    int64_t div_chunk = (int64_t)ceil(total / ((double)num_pes));
-    int64_t end = std::min(total, (node_id + 1) * div_chunk);
-    // printf("rank %d end:%lld\n", node_id, end);
-    return end;
+    return dist_get_start(total, num_pes, node_id+1);
 }
 
 static int64_t dist_get_node_portion(int64_t total, int num_pes, int node_id) {
@@ -154,8 +150,17 @@ static int64_t dist_get_node_portion(int64_t total, int num_pes, int node_id) {
 }
 
 static int64_t index_rank(int64_t total, int num_pes, int index) {
-    int64_t div_chunk = (int64_t)ceil(total / ((double)num_pes));
-    return index / div_chunk;
+    int64_t res = total % num_pes;
+    int64_t blk_size = (total - res) / num_pes;
+    // In the part 0:crit_index the size of the blocks is blk_size+1.
+    // In the range crit_index:total the size of the blocks is blk_size.
+    int64_t crit_index = (blk_size + 1) * res;
+    if (index < crit_index) {
+      return index / (blk_size+1);
+    }
+    else {
+      return res + (index - crit_index) / blk_size;
+    }
 }
 
 static double dist_get_time() {
