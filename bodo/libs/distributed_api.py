@@ -1981,22 +1981,28 @@ def get_start_count(n):  # pragma: no cover
 @numba.njit
 def get_start(total_size, pes, rank):  # pragma: no cover
     """get start index in 1D distribution"""
-    chunk = math.ceil(total_size / pes)
-    return min(total_size, rank * chunk)
+    res = total_size % pes
+    blk_size = (total_size - res) // pes
+    return rank * blk_size + min(rank, res)
 
 
 @numba.njit
 def get_end(total_size, pes, rank):  # pragma: no cover
     """get end point of range for parfor division"""
-    chunk = math.ceil(total_size / pes)
-    return min(total_size, (rank + 1) * chunk)
+    res = total_size % pes
+    blk_size = (total_size - res) // pes
+    return (rank+1) * blk_size + min(rank+1, res)
 
 
 @numba.njit
 def get_node_portion(total_size, pes, rank):  # pragma: no cover
     """get portion of size for alloc division"""
-    chunk = math.ceil(total_size / pes)
-    return min(total_size, (rank + 1) * chunk) - min(total_size, rank * chunk)
+    res = total_size % pes
+    blk_size = (total_size - res) // pes
+    if (rank < res):
+        return blk_size + 1
+    else:
+        return blk_size
 
 
 @numba.generated_jit(nopython=True)

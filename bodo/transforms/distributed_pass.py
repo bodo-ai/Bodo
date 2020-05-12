@@ -2361,7 +2361,7 @@ class DistributedPass:
         ):
             return self._start_vars[size_var.name]
         nodes += compile_func_single_block(
-            lambda n, rank, n_pes: min(n, rank * math.ceil(n / n_pes)),
+            lambda n, rank, n_pes: rank * (n // n_pes) + min(rank, n % n_pes),
             (size_var, self.rank_var, self.n_pes_var),
             None,
             self,
@@ -2378,8 +2378,10 @@ class DistributedPass:
         """
 
         def impl(n, rank, n_pes):  # pragma: no cover
-            chunk = math.ceil(n / n_pes)
-            return min(n, (rank + 1) * chunk) - min(n, rank * chunk)
+            res = n % n_pes
+            # The formula we would like is if (rank < res): blk_size +=1 but this does not compile
+            blk_size = n // n_pes + min(rank+1, res) - min(rank, res)
+            return blk_size
 
         nodes += compile_func_single_block(
             impl, (size_var, self.rank_var, self.n_pes_var), None, self
@@ -2394,7 +2396,7 @@ class DistributedPass:
         """get end index of size_var in 1D_Block distribution
         """
         nodes += compile_func_single_block(
-            lambda n, rank, n_pes: min(n, (rank + 1) * math.ceil(n / n_pes)),
+            lambda n, rank, n_pes: (rank+1) * (n // n_pes) + min(rank+1, n % n_pes),
             (size_var, self.rank_var, self.n_pes_var),
             None,
             self,
