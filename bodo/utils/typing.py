@@ -170,7 +170,6 @@ def is_overload_constant_str(val):
 def is_overload_constant_str_list(val):
     return (
         isinstance(val, bodo.utils.typing.ConstList)
-        # and isinstance(val.const_no, tuple)
         and isinstance(get_registry_consts(val.const_no)[0], str)
     ) or (
         isinstance(val, types.BaseTuple)
