@@ -289,6 +289,7 @@ class DataFrameAttribute(AttributeTemplate):
             return DataFrameType(tuple(new_data), df.index, tuple(new_names))
 
 
+# don't convert literal types to non-literal and rerun the typing template
 DataFrameAttribute._no_unliteral = True
 
 

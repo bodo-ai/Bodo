@@ -1437,12 +1437,14 @@ class ArrayAnalysisPass(FunctionPass):
 
 class AnalysisTestPipeline(bodo.compiler.BodoCompiler):
     """
-    pipeleine used in test_dataframe_array_analysis()
-    additional ArrayAnalysis pass that preseves analysis object
+    pipeline used in test_dataframe_array_analysis()
+    additional ArrayAnalysis pass that preserves analysis object
     """
 
     def define_pipelines(self):
-        [pipeline] = self._create_bodo_pipeline(True, False)
+        [pipeline] = self._create_bodo_pipeline(
+            distributed=True, inline_calls_pass=False
+        )
         pipeline._finalized = False
         pipeline.add_pass_after(ArrayAnalysisPass, bodo.compiler.BodoSeriesPass)
         pipeline.finalize()

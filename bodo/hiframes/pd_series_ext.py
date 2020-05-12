@@ -536,6 +536,13 @@ class SeriesAttribute(AttributeTemplate):
         return signature(SeriesRollingType(ary), *args).replace(pysig=pysig)
 
     def _resolve_map_func(self, ary, func, pysig, fname, f_args=None):
+        """Find type signature of Series.map/apply method.
+        ary: Series type (TODO: rename)
+        func: user-defined function
+        pysig: python signature of the map/apply method
+        fname: method name ("map" or "apply")
+        f_args: arguments to UDF (only "apply" supports it)
+        """
 
         dtype = ary.dtype
         # getitem returns Timestamp for dt_index and series(dt64)

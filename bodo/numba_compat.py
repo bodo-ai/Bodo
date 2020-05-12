@@ -531,7 +531,7 @@ def bound_function(template_key, no_unliteral=False):
                         sig = sig.replace(recvr=ty)
                     return sig
 
-            # only change: adding no_unliteral flag
+            # bodo change: adding no_unliteral flag
             MethodTemplate._no_unliteral = no_unliteral
             return types.BoundFunction(MethodTemplate, ty)
 
@@ -824,7 +824,9 @@ def propagate(self, typeinfer):
                     # the first time we see BodoError during type inference, we
                     # put the code location in the error message, and re-raise
                     loc = constraint.loc
-                    raise bodo.utils.typing.BodoError(str(e) + "\n" + loc.strformat() + "\n", is_new=False)
+                    raise bodo.utils.typing.BodoError(
+                        str(e) + "\n" + loc.strformat() + "\n", is_new=False
+                    )
                 else:
                     # keep raising and propagating the error through numba until
                     # it reaches the user
@@ -1037,7 +1039,7 @@ def ParforPassStates__init__(
         self.typingctx, self.func_ir, self.typemap, self.calltypes,
     )
 
-    # changed line to fix bug
+    # bodo change: make sure _max_label is always maximum
     ir_utils._max_label = max(ir_utils._max_label, max(func_ir.blocks.keys()))
     self.flags = flags
 

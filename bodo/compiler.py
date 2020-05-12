@@ -65,7 +65,9 @@ class BodoCompiler(numba.core.compiler.CompilerBase):
     """
 
     def define_pipelines(self):
-        return self._create_bodo_pipeline(True, inline_all_calls)
+        return self._create_bodo_pipeline(
+            distributed=True, inline_calls_pass=inline_all_calls
+        )
 
     def _create_bodo_pipeline(self, distributed=True, inline_calls_pass=False):
         """create compiler pipeline for Bodo using Numba's nopython pipeline
@@ -318,7 +320,9 @@ class BodoCompilerSeq(BodoCompiler):
     """
 
     def define_pipelines(self):
-        return self._create_bodo_pipeline(False, inline_all_calls)
+        return self._create_bodo_pipeline(
+            distributed=False, inline_calls_pass=inline_all_calls
+        )
 
 
 class BodoCompilerSeqInline(BodoCompiler):
@@ -326,7 +330,7 @@ class BodoCompilerSeqInline(BodoCompiler):
     """
 
     def define_pipelines(self):
-        return self._create_bodo_pipeline(False, True)
+        return self._create_bodo_pipeline(distributed=False, inline_calls_pass=True)
 
 
 @register_pass(mutates_CFG=False, analysis_only=True)
