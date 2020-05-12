@@ -581,7 +581,7 @@ class ConstList(types.List):
         self.dtype = dtype
         self.reflected = False
         self.const_no = const_no
-        cls_name = "list[{}]".format(get_registry_consts(const_no))
+        cls_name = "list[{}]".format(const_no)
         name = "%s(%s)" % (cls_name, self.dtype)
         super(types.List, self).__init__(name=name)
 
@@ -697,7 +697,7 @@ class ConstDictType(types.DictType):
         self.keyvalue_type = types.Tuple([keyty, valty])
         self.const_no = const_no
         name = "{}[{},{}][{}]".format(
-            self.__class__.__name__, keyty, valty, get_registry_consts(const_no)
+            self.__class__.__name__, keyty, valty, const_no
         )
         super(types.DictType, self).__init__(name)
 
@@ -731,7 +731,7 @@ class ConstSet(types.Set):
         self.dtype = dtype
         self.reflected = False
         self.const_no = const_no
-        name = "set(%s)[%s]" % (self.dtype, get_registry_consts(const_no))
+        name = "set(%s)[%s]" % (self.dtype, const_no)
         super(types.Set, self).__init__(name=name)
 
     @property
