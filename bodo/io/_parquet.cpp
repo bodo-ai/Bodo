@@ -21,32 +21,37 @@
 #include <arrow/io/api.h>
 #include "parquet/arrow/writer.h"
 
-typedef std::vector<std::shared_ptr<parquet::arrow::FileReader>> FileReaderVec;
+/**
+ * This holds the file readers and other information that this process needs
+ * to read its chunk of a Parquet dataset.
+ */
+struct DatasetReader {
+    /// FileReaders, only for the files that this process has to read
+    std::vector<std::shared_ptr<parquet::arrow::FileReader>> readers;
+    /// Starting row for first file (readers[0])
+    int start_row_first_file = 0;
+    /// Total number of rows this process has to read (across readers)
+    int count = 0;
+};
 
-FileReaderVec *get_arrow_readers(char *file_name);
-void del_arrow_readers(FileReaderVec *readers);
+/**
+ * Get DatasetReader which contains only the file readers that this process
+ * needs.
+ * @param file_name : file or directory of parquet files
+ * @param is_parallel : true if processes will read chunks of the dataset
+ */
+DatasetReader *get_dataset_reader(char *file_name, bool is_parallel);
+void del_dataset_reader(DatasetReader *reader);
 
-PyObject *str_list_to_vec(PyObject *self, PyObject *str_list);
-int64_t pq_get_size(FileReaderVec *readers, int64_t column_idx);
-int64_t pq_read(FileReaderVec *readers, int64_t column_idx, uint8_t *out_data,
+int64_t pq_get_size(DatasetReader *reader, int64_t column_idx);
+int64_t pq_read(DatasetReader *reader, int64_t column_idx, uint8_t *out_data,
                 int out_dtype, uint8_t *out_nulls = nullptr);
-int pq_read_parallel(FileReaderVec *readers, int64_t column_idx,
-                     uint8_t *out_data, int out_dtype, int64_t start,
-                     int64_t count, uint8_t *out_nulls = nullptr);
-int pq_read_string(FileReaderVec *readers, int64_t column_idx,
+int pq_read_string(DatasetReader *reader, int64_t column_idx,
                    uint32_t **out_offsets, uint8_t **out_data,
                    uint8_t **out_nulls);
-int pq_read_string_parallel(FileReaderVec *readers, int64_t column_idx,
-                            uint32_t **out_offsets, uint8_t **out_data,
-                            uint8_t **out_nulls, int64_t start, int64_t count);
-int pq_read_list_string(FileReaderVec *readers, int64_t column_idx,
+int pq_read_list_string(DatasetReader *reader, int64_t column_idx,
                         uint32_t **out_offsets, uint32_t **index_offsets,
                         uint8_t **out_data, uint8_t **out_nulls);
-int pq_read_list_string_parallel(FileReaderVec *readers, int64_t column_idx,
-                                 uint32_t **out_offsets,
-                                 uint32_t **index_offsets, uint8_t **out_data,
-                                 uint8_t **out_nulls, int64_t start,
-                                 int64_t count);
 
 void pack_null_bitmap(uint8_t **out_nulls, std::vector<bool> &null_vec,
                       int64_t n_all_vals);
@@ -73,115 +78,153 @@ void pq_write(const char *filename, const table_info *table,
     CHECK_ARROW(res.status(), msg)            \
     lhs = std::move(res).ValueOrDie();
 
-static PyMethodDef parquet_cpp_methods[] = {
-    {"str_list_to_vec", str_list_to_vec, METH_O,  // METH_STATIC
-     "convert Python string list to C++ std vector of strings"},
-    {NULL, NULL, 0, NULL}};
-
 PyMODINIT_FUNC PyInit_parquet_cpp(void) {
     PyObject *m;
     static struct PyModuleDef moduledef = {
-        PyModuleDef_HEAD_INIT, "parquet_cpp", "No docs", -1,
-        parquet_cpp_methods,
+        PyModuleDef_HEAD_INIT, "parquet_cpp", "No docs", -1, NULL,
     };
     m = PyModule_Create(&moduledef);
     if (m == NULL) return NULL;
 
     bodo_common_init();
 
-    PyObject_SetAttrString(m, "get_arrow_readers",
-                           PyLong_FromVoidPtr((void *)(&get_arrow_readers)));
-    PyObject_SetAttrString(m, "del_arrow_readers",
-                           PyLong_FromVoidPtr((void *)(&del_arrow_readers)));
+    PyObject_SetAttrString(m, "get_dataset_reader",
+                           PyLong_FromVoidPtr((void *)(&get_dataset_reader)));
+    PyObject_SetAttrString(m, "del_dataset_reader",
+                           PyLong_FromVoidPtr((void *)(&del_dataset_reader)));
     PyObject_SetAttrString(m, "read", PyLong_FromVoidPtr((void *)(&pq_read)));
-    PyObject_SetAttrString(m, "read_parallel",
-                           PyLong_FromVoidPtr((void *)(&pq_read_parallel)));
     PyObject_SetAttrString(m, "get_size",
                            PyLong_FromVoidPtr((void *)(&pq_get_size)));
     PyObject_SetAttrString(m, "read_string",
                            PyLong_FromVoidPtr((void *)(&pq_read_string)));
-    PyObject_SetAttrString(
-        m, "read_string_parallel",
-        PyLong_FromVoidPtr((void *)(&pq_read_string_parallel)));
     PyObject_SetAttrString(m, "read_list_string",
                            PyLong_FromVoidPtr((void *)(&pq_read_list_string)));
-    PyObject_SetAttrString(
-        m, "read_list_string_parallel",
-        PyLong_FromVoidPtr((void *)(&pq_read_list_string_parallel)));
     PyObject_SetAttrString(m, "pq_write",
                            PyLong_FromVoidPtr((void *)(&pq_write)));
 
     return m;
 }
 
-PyObject *str_list_to_vec(PyObject *self, PyObject *str_list) {
-    Py_INCREF(str_list);  // needed?
-    // TODO: need to acquire GIL?
-    std::vector<std::string> *strs_vec = new std::vector<std::string>();
-
-    PyObject *iterator = PyObject_GetIter(str_list);
-    Py_DECREF(str_list);
-    PyObject *l_str;
-
-    if (iterator == NULL) {
-        return PyLong_FromVoidPtr((void *)strs_vec);
+DatasetReader *get_dataset_reader(char *file_name, bool parallel) {
+#define PYERR_CHECK(expr, msg)         \
+    if (!(expr)) {                     \
+        std::cerr << msg << std::endl; \
+        PyGILState_Release(gilstate);  \
+        return ds_reader;              \
     }
-
-    while ((l_str = PyIter_Next(iterator))) {
-        const char *c_path = PyUnicode_AsUTF8(l_str);
-        // printf("str %s\n", c_path);
-        strs_vec->push_back(std::string(c_path));
-        Py_DECREF(l_str);
-    }
-
-    Py_DECREF(iterator);
-
-    // CHECK(!PyErr_Occurred(), "Python error during Parquet dataset metadata")
-    return PyLong_FromVoidPtr((void *)strs_vec);
-}
-
-std::vector<std::string> get_pq_pieces(char *file_name) {
-#define PYERR_CHECK(expr, msg)             \
-    if (!(expr)) {                         \
-        std::cerr << msg << std::endl;     \
-        PyGILState_Release(gilstate);      \
-        return std::vector<std::string>(); \
-    }
-
-    std::vector<std::string> paths;
 
     auto gilstate = PyGILState_Ensure();
+
+    DatasetReader *ds_reader = new DatasetReader();
 
     // import bodo.io.parquet_pio
     PyObject *pq_mod = PyImport_ImportModule("bodo.io.parquet_pio");
 
-    // ds = bodo.io.parquet_pio.get_parquet_dataset(file_name)
+    // ds = bodo.io.parquet_pio.get_parquet_dataset(file_name, parallel)
     PyObject *ds =
-        PyObject_CallMethod(pq_mod, "get_parquet_dataset", "s", file_name);
+        PyObject_CallMethod(pq_mod, "get_parquet_dataset", "si", file_name, int(parallel));
     PYERR_CHECK(!PyErr_Occurred(),
                 "Python error during Parquet dataset metadata")
     Py_DECREF(pq_mod);
 
-    // all_peices = ds.pieces
-    PyObject *all_peices = PyObject_GetAttrString(ds, "pieces");
+    // total_rows = ds._bodo_total_rows
+    PyObject *total_rows_py = PyObject_GetAttrString(ds, "_bodo_total_rows");
+    int64_t total_rows = PyLong_AsLongLong(total_rows_py);
+    Py_DECREF(total_rows_py);
+
+    // all_pieces = ds.pieces
+    PyObject *all_pieces = PyObject_GetAttrString(ds, "pieces");
     Py_DECREF(ds);
 
-    // paths.append(piece.path) for piece in all peices
-    PyObject *iterator = PyObject_GetIter(all_peices);
-    Py_DECREF(all_peices);
+    // iterate through pieces next
+    PyObject *iterator = PyObject_GetIter(all_pieces);
+    Py_DECREF(all_pieces);
     PyObject *piece;
 
     if (iterator == NULL) {
         PyGILState_Release(gilstate);
-        return paths;
+        return ds_reader;
     }
 
-    while ((piece = PyIter_Next(iterator))) {
-        PyObject *p = PyObject_GetAttrString(piece, "path");
-        const char *c_path = PyUnicode_AsUTF8(p);
-        paths.push_back(std::string(c_path));
-        Py_DECREF(piece);
-        Py_DECREF(p);
+    if (!parallel) {
+        // the process will read the whole dataset
+        ds_reader->count = total_rows;
+
+        if (total_rows > 0) {
+            // open readers for every piece
+            while ((piece = PyIter_Next(iterator))) {
+                // p = piece.path
+                PyObject *p = PyObject_GetAttrString(piece, "path");
+                const char *c_path = PyUnicode_AsUTF8(p);
+                std::shared_ptr<parquet::arrow::FileReader> arrow_reader;
+                // open and store file reader for this piece
+                pq_init_reader(c_path, &arrow_reader);
+                ds_reader->readers.push_back(arrow_reader);
+                Py_DECREF(p);
+                Py_DECREF(piece);
+            }
+        }
+
+        Py_DECREF(iterator);
+
+        PYERR_CHECK(!PyErr_Occurred(),
+                    "Python error during Parquet dataset metadata")
+        PyGILState_Release(gilstate);
+        return ds_reader;
+    }
+
+    // is parallel (this process will read a chunk of dataset)
+
+    // calculate the portion of rows that this process needs to read
+    size_t rank = dist_get_rank();
+    size_t nranks = dist_get_size();
+    int64_t start_row_global = dist_get_start(total_rows, nranks, rank);
+    ds_reader->count = dist_get_node_portion(total_rows, nranks, rank);
+
+    // open file readers only for the pieces that correspond to my chunk
+    if (ds_reader->count > 0) {
+        int64_t count_rows =
+            0;  // total number of rows of all the pieces we iterate through
+        int64_t num_rows_my_files =
+            0;  // number of rows in opened files (excluding any rows in the
+                // first file that will be skipped if the process starts
+                // reading in the middle of the file)
+        while ((piece = PyIter_Next(iterator))) {
+            PyObject *num_rows_piece_py =
+                PyObject_GetAttrString(piece, "_bodo_num_rows");
+            int64_t num_rows_piece = PyLong_AsLongLong(num_rows_piece_py);
+            Py_DECREF(num_rows_piece_py);
+
+            // we skip all initial pieces whose total row count is less than
+            // start_row_global (first row of my chunk). after that, we open
+            // file readers for all subsequent pieces until the number of rows
+            // in opened pieces is greater or equal to number of rows in my
+            // chunk
+            if (start_row_global < count_rows + num_rows_piece) {
+                if (ds_reader->readers.size() == 0) {
+                    ds_reader->start_row_first_file =
+                        start_row_global - count_rows;
+                    num_rows_my_files +=
+                        num_rows_piece - ds_reader->start_row_first_file;
+                } else {
+                    num_rows_my_files += num_rows_piece;
+                }
+
+                // open and store file reader for this piece
+                PyObject *p = PyObject_GetAttrString(piece, "path");
+                const char *c_path = PyUnicode_AsUTF8(p);
+                std::shared_ptr<parquet::arrow::FileReader> arrow_reader;
+                pq_init_reader(c_path, &arrow_reader);
+                ds_reader->readers.push_back(arrow_reader);
+                Py_DECREF(p);
+            }
+
+            Py_DECREF(piece);
+
+            count_rows += num_rows_piece;
+            // finish when number of rows of opened files covers my chunk
+            if (num_rows_my_files >= ds_reader->count) break;
+        }
     }
 
     Py_DECREF(iterator);
@@ -189,405 +232,137 @@ std::vector<std::string> get_pq_pieces(char *file_name) {
     PYERR_CHECK(!PyErr_Occurred(),
                 "Python error during Parquet dataset metadata")
     PyGILState_Release(gilstate);
-    return paths;
+    return ds_reader;
 #undef PYERR_CHECK
 }
 
-FileReaderVec *get_arrow_readers(char *file_name) {
-    FileReaderVec *readers = new FileReaderVec();
+void del_dataset_reader(DatasetReader *reader) { delete reader; }
 
-    std::vector<std::string> all_files = get_pq_pieces(file_name);
-    for (const auto &inner_file : all_files) {
-        std::shared_ptr<parquet::arrow::FileReader> arrow_reader;
-        pq_init_reader(inner_file.c_str(), &arrow_reader);
-        readers->push_back(arrow_reader);
-    }
-
-    return readers;
+int64_t pq_get_size(DatasetReader *reader, int64_t column_idx) {
+    return reader->count;
 }
 
-void del_arrow_readers(FileReaderVec *readers) {
-    delete readers;
-    return;
-}
-
-int64_t pq_get_size(FileReaderVec *readers, int64_t column_idx) {
-    if (readers->size() == 0) {
-        printf("empty parquet dataset\n");
-        return 0;
-    }
-
-    if (readers->size() > 1) {
-        // std::cout << "pq path is dir" << '\n';
-        int64_t ret = 0;
-        for (size_t i = 0; i < readers->size(); i++) {
-            ret += pq_get_size_single_file(readers->at(i), column_idx);
-        }
-
-        // std::cout << "total pq dir size: " << ret << '\n';
-        return ret;
-    } else {
-        return pq_get_size_single_file(readers->at(0), column_idx);
-    }
-    return 0;
-}
-
-int64_t pq_read(FileReaderVec *readers, int64_t column_idx, uint8_t *out_data,
+int64_t pq_read(DatasetReader *ds_reader, int64_t column_idx, uint8_t *out_data,
                 int out_dtype, uint8_t *out_nulls) {
-    if (readers->size() == 0) {
-        printf("empty parquet dataset\n");
-        return 0;
-    }
+    if (ds_reader->count == 0) return 0;
 
-    if (readers->size() > 1) {
-        // std::cout << "pq path is dir" << '\n';
-        int dtype_size = numpy_item_size[out_dtype];
+    int64_t start = ds_reader->start_row_first_file;
 
-        int64_t num_vals = 0;  // number of values read so for
-        for (size_t i = 0; i < readers->size(); i++) {
-            num_vals += pq_read_single_file(readers->at(i), column_idx,
-                                            out_data + num_vals * dtype_size,
-                                            out_dtype, out_nulls, num_vals);
-        }
+    int64_t read_rows = 0;  // rows read so far
+    int dtype_size = numpy_item_size[out_dtype];
+    for (auto file_reader : ds_reader->readers) {
+        int64_t file_size = pq_get_size_single_file(file_reader, column_idx);
+        int64_t rows_to_read =
+            std::min(ds_reader->count - read_rows, file_size - start);
 
-        // std::cout << "total pq dir size: " << num_vals << '\n';
-        return num_vals;
-    } else {
-        return pq_read_single_file(readers->at(0), column_idx, out_data,
-                                   out_dtype, out_nulls, 0);
+        pq_read_single_file(
+            file_reader, column_idx, out_data + read_rows * dtype_size,
+            out_dtype, start, rows_to_read, out_nulls, read_rows);
+        read_rows += rows_to_read;
+        start = 0;  // start becomes 0 after reading non-empty first chunk
     }
     return 0;
 }
 
-int pq_read_parallel(FileReaderVec *readers, int64_t column_idx,
-                     uint8_t *out_data, int out_dtype, int64_t start,
-                     int64_t count, uint8_t *out_nulls) {
-    // printf("read parquet parallel column: %lld start: %lld count: %lld\n",
-    //                                                 column_idx, start,
-    //                                                 count);
-
-    if (count == 0) {
-        return 0;
-    }
-
-    if (readers->size() == 0) {
-        printf("empty parquet dataset\n");
-        return 0;
-    }
-
-    if (readers->size() > 1) {
-        // std::cout << "pq path is dir" << '\n';
-        // TODO: get file sizes on root rank only
-
-        // skip whole files if no need to read any rows
-        int file_ind = 0;
-        int64_t file_size = pq_get_size_single_file(readers->at(0), column_idx);
-        while (start >= file_size) {
-            start -= file_size;
-            file_ind++;
-            file_size =
-                pq_get_size_single_file(readers->at(file_ind), column_idx);
-        }
-
-        int dtype_size = numpy_item_size[out_dtype];
-        // std::cout << "dtype_size: " << dtype_size << '\n';
-
-        // read data
-        int64_t read_rows = 0;  // rows read so far
-        while (read_rows < count) {
-            int64_t rows_to_read =
-                std::min(count - read_rows, file_size - start);
-            pq_read_parallel_single_file(readers->at(file_ind), column_idx,
-                                         out_data + read_rows * dtype_size,
-                                         out_dtype, start, rows_to_read,
-                                         out_nulls, read_rows);
-            read_rows += rows_to_read;
-            start = 0;  // start becomes 0 after reading non-empty first chunk
-            file_ind++;
-            // std::cout << "next file: " << all_files[file_ind] << '\n';
-            if (read_rows < count)
-                file_size =
-                    pq_get_size_single_file(readers->at(file_ind), column_idx);
-        }
-        return 0;
-    } else {
-        return pq_read_parallel_single_file(readers->at(0), column_idx,
-                                            out_data, out_dtype, start, count,
-                                            out_nulls, 0);
-    }
-    return 0;
-}
-
-int pq_read_string(FileReaderVec *readers, int64_t column_idx,
+int pq_read_string(DatasetReader *ds_reader, int64_t column_idx,
                    uint32_t **out_offsets, uint8_t **out_data,
                    uint8_t **out_nulls) {
-    if (readers->size() == 0) {
-        printf("empty parquet dataset\n");
-        return 0;
+    if (ds_reader->count == 0) return 0;
+
+    int64_t start = ds_reader->start_row_first_file;
+
+    int64_t n_all_vals = 0;
+    std::vector<uint32_t> offset_vec;
+    std::vector<uint8_t> data_vec;
+    std::vector<bool> null_vec;
+    int64_t last_offset = 0;
+    int64_t read_rows = 0;  // rows read so far
+    for (auto file_reader : ds_reader->readers) {
+        int64_t file_size = pq_get_size_single_file(file_reader, column_idx);
+        int64_t rows_to_read =
+            std::min(ds_reader->count - read_rows, file_size - start);
+
+        pq_read_string_single_file(file_reader, column_idx, NULL, NULL,
+                                            NULL, start, rows_to_read,
+                                            &offset_vec, &data_vec, &null_vec);
+
+        size_t size = offset_vec.size();
+        for (int64_t i = 1; i <= rows_to_read + 1; i++)
+            offset_vec[size - i] += last_offset;
+        last_offset = offset_vec[size - 1];
+        offset_vec.pop_back();
+        n_all_vals += rows_to_read;
+
+        read_rows += rows_to_read;
+        start = 0;  // start becomes 0 after reading non-empty first chunk
     }
+    offset_vec.push_back(last_offset);
 
-    if (readers->size() > 1) {
-        // std::cout << "pq path is dir" << '\n';
+    *out_offsets = new uint32_t[offset_vec.size()];
+    *out_data = new uint8_t[data_vec.size()];
 
-        std::vector<uint32_t> offset_vec;
-        std::vector<uint8_t> data_vec;
-        std::vector<bool> null_vec;
-        int32_t last_offset = 0;
-        int64_t n_all_vals = 0;
-        for (size_t i = 0; i < readers->size(); i++) {
-            int64_t n_vals = pq_read_string_single_file(
-                readers->at(i), column_idx, NULL, NULL, NULL, &offset_vec,
-                &data_vec, &null_vec);
-            if (n_vals == -1) continue;
-
-            int size = offset_vec.size();
-            for (int64_t i = 1; i <= n_vals + 1; i++)
-                offset_vec[size - i] += last_offset;
-            last_offset = offset_vec[size - 1];
-            offset_vec.pop_back();
-            n_all_vals += n_vals;
-        }
-        offset_vec.push_back(last_offset);
-
-        *out_offsets = new uint32_t[offset_vec.size()];
-        *out_data = new uint8_t[data_vec.size()];
-
-        memcpy(*out_offsets, offset_vec.data(),
-               offset_vec.size() * sizeof(uint32_t));
-        memcpy(*out_data, data_vec.data(), data_vec.size());
-        pack_null_bitmap(out_nulls, null_vec, n_all_vals);
-
-        // for(int i=0; i<offset_vec.size(); i++)
-        //     std::cout << (*out_offsets)[i] << ' ';
-        // std::cout << '\n';
-        // std::cout << "string dir read done" << '\n';
-        return n_all_vals;
-    } else {
-        return pq_read_string_single_file(readers->at(0), column_idx,
-                                          out_offsets, out_data, out_nulls);
-    }
-    return 0;
+    memcpy(*out_offsets, offset_vec.data(),
+           offset_vec.size() * sizeof(uint32_t));
+    memcpy(*out_data, data_vec.data(), data_vec.size());
+    pack_null_bitmap(out_nulls, null_vec, n_all_vals);
+    return n_all_vals;
 }
 
-int pq_read_string_parallel(FileReaderVec *readers, int64_t column_idx,
-                            uint32_t **out_offsets, uint8_t **out_data,
-                            uint8_t **out_nulls, int64_t start, int64_t count) {
-    // printf("read parquet parallel str file: %s column: %lld start: %lld
-    // count: %lld\n",
-    //                                 file_name->c_str(), column_idx, start,
-    //                                 count);
-
-    if (readers->size() == 0) {
-        printf("empty parquet dataset\n");
-        return 0;
-    }
-
-    if (readers->size() > 1) {
-        // std::cout << "pq path is dir" << '\n';
-
-        // skip whole files if no need to read any rows
-        int file_ind = 0;
-        int64_t file_size = pq_get_size_single_file(readers->at(0), column_idx);
-        while (start >= file_size) {
-            start -= file_size;
-            file_ind++;
-            file_size =
-                pq_get_size_single_file(readers->at(file_ind), column_idx);
-        }
-
-        int64_t n_all_vals = 0;
-        std::vector<uint32_t> offset_vec;
-        std::vector<uint8_t> data_vec;
-        std::vector<bool> null_vec;
-
-        // read data
-        int64_t last_offset = 0;
-        int64_t read_rows = 0;
-        while (read_rows < count) {
-            int64_t rows_to_read =
-                std::min(count - read_rows, file_size - start);
-            if (rows_to_read > 0) {
-                pq_read_string_parallel_single_file(
-                    readers->at(file_ind), column_idx, NULL, NULL, NULL, start,
-                    rows_to_read, &offset_vec, &data_vec, &null_vec);
-
-                int size = offset_vec.size();
-                for (int64_t i = 1; i <= rows_to_read + 1; i++)
-                    offset_vec[size - i] += last_offset;
-                last_offset = offset_vec[size - 1];
-                offset_vec.pop_back();
-                n_all_vals += rows_to_read;
-            }
-
-            read_rows += rows_to_read;
-            start = 0;  // start becomes 0 after reading non-empty first chunk
-            file_ind++;
-            if (read_rows < count)
-                file_size =
-                    pq_get_size_single_file(readers->at(file_ind), column_idx);
-        }
-        offset_vec.push_back(last_offset);
-
-        *out_offsets = new uint32_t[offset_vec.size()];
-        *out_data = new uint8_t[data_vec.size()];
-
-        memcpy(*out_offsets, offset_vec.data(),
-               offset_vec.size() * sizeof(uint32_t));
-        memcpy(*out_data, data_vec.data(), data_vec.size());
-        pack_null_bitmap(out_nulls, null_vec, n_all_vals);
-        return n_all_vals;
-    } else {
-        return pq_read_string_parallel_single_file(readers->at(0), column_idx,
-                                                   out_offsets, out_data,
-                                                   out_nulls, start, count);
-    }
-    return 0;
-}
-
-int pq_read_list_string(FileReaderVec *readers, int64_t column_idx,
+int pq_read_list_string(DatasetReader *ds_reader, int64_t column_idx,
                         uint32_t **out_offsets, uint32_t **index_offsets,
                         uint8_t **out_data, uint8_t **out_nulls) {
-    if (readers->size() == 0) {
-        printf("empty parquet dataset\n");
-        return 0;
+    if (ds_reader->count == 0) return 0;
+
+    int64_t start = ds_reader->start_row_first_file;
+
+    int64_t n_all_vals = 0;
+    std::vector<uint32_t> index_offset_vec;
+    std::vector<uint32_t> offset_vec;
+    std::vector<uint8_t> data_vec;
+    std::vector<bool> null_vec;
+    int64_t last_str_offset = 0;
+    int64_t last_index_offset = 0;
+    int64_t read_rows = 0;  // rows read so far
+    for (auto file_reader : ds_reader->readers) {
+        int64_t file_size = pq_get_size_single_file(file_reader, column_idx);
+        int64_t rows_to_read =
+            std::min(ds_reader->count - read_rows, file_size - start);
+
+        int64_t n_strings = pq_read_list_string_single_file(
+            file_reader, column_idx, NULL, NULL, NULL, NULL, start,
+            rows_to_read, &offset_vec, &index_offset_vec, &data_vec, &null_vec);
+
+        size_t size = offset_vec.size();
+        for (int64_t i = 1; i <= n_strings + 1; i++)
+            offset_vec[size - i] += last_str_offset;
+        last_str_offset = offset_vec.back();
+        offset_vec.pop_back();
+
+        size = index_offset_vec.size();
+        for (int64_t i = 1; i <= rows_to_read + 1; i++)
+            index_offset_vec[size - i] += last_index_offset;
+        last_index_offset = index_offset_vec[size - 1];
+        index_offset_vec.pop_back();
+
+        n_all_vals += rows_to_read;
+
+        read_rows += rows_to_read;
+        start = 0;  // start becomes 0 after reading non-empty first chunk
     }
+    offset_vec.push_back(last_str_offset);
+    index_offset_vec.push_back(last_index_offset);
 
-    if (readers->size() > 1) {
-        std::vector<uint32_t> offset_vec;
-        std::vector<uint32_t> index_offset_vec;
-        std::vector<uint8_t> data_vec;
-        std::vector<bool> null_vec;
-        int32_t last_index_offset = 0;
-        int32_t last_str_offset = 0;
-        int64_t n_all_vals = 0;
-        for (size_t i = 0; i < readers->size(); i++) {
-            std::pair<int64_t, int64_t> n_vals =
-                pq_read_list_string_single_file(
-                    readers->at(i), column_idx, NULL, NULL, NULL, NULL,
-                    &offset_vec, &index_offset_vec, &data_vec, &null_vec);
-            int64_t n_lists = n_vals.first;
-            int64_t n_strings = n_vals.second;
-            if (n_lists == -1) continue;
+    *out_offsets = new uint32_t[offset_vec.size()];
+    *index_offsets = new uint32_t[index_offset_vec.size()];
+    *out_data = new uint8_t[data_vec.size()];
 
-            size_t size = offset_vec.size();
-            for (int64_t i = 1; i <= n_strings + 1; i++)
-                offset_vec[size - i] += last_str_offset;
-            last_str_offset = offset_vec.back();
-            offset_vec.pop_back();
-
-            size = index_offset_vec.size();
-            for (int64_t i = 1; i <= n_lists + 1; i++)
-                index_offset_vec[size - i] += last_index_offset;
-            last_index_offset = index_offset_vec[size - 1];
-            index_offset_vec.pop_back();
-
-            n_all_vals += n_lists;
-        }
-        offset_vec.push_back(last_str_offset);
-        index_offset_vec.push_back(last_index_offset);
-
-        *out_offsets = new uint32_t[offset_vec.size()];
-        *index_offsets = new uint32_t[index_offset_vec.size()];
-        *out_data = new uint8_t[data_vec.size()];
-
-        memcpy(*out_offsets, offset_vec.data(),
-               offset_vec.size() * sizeof(uint32_t));
-        memcpy(*index_offsets, index_offset_vec.data(),
-               index_offset_vec.size() * sizeof(uint32_t));
-        memcpy(*out_data, data_vec.data(), data_vec.size());
-        pack_null_bitmap(out_nulls, null_vec, n_all_vals);
-
-        return n_all_vals;
-    } else {
-        std::pair<int64_t, int64_t> n_vals = pq_read_list_string_single_file(
-            readers->at(0), column_idx, out_offsets, index_offsets, out_data,
-            out_nulls);
-        return n_vals.first;
-    }
-}
-
-int pq_read_list_string_parallel(FileReaderVec *readers, int64_t column_idx,
-                                 uint32_t **out_offsets,
-                                 uint32_t **index_offsets, uint8_t **out_data,
-                                 uint8_t **out_nulls, int64_t start,
-                                 int64_t count) {
-    if (readers->size() == 0) {
-        printf("empty parquet dataset\n");
-        return 0;
-    }
-
-    if (readers->size() > 1) {
-        // skip whole files if no need to read any rows
-        int file_ind = 0;
-        int64_t file_size = pq_get_size_single_file(readers->at(0), column_idx);
-        while (start >= file_size) {
-            start -= file_size;
-            file_ind++;
-            file_size =
-                pq_get_size_single_file(readers->at(file_ind), column_idx);
-        }
-
-        int64_t n_all_vals = 0;
-        std::vector<uint32_t> index_offset_vec;
-        std::vector<uint32_t> offset_vec;
-        std::vector<uint8_t> data_vec;
-        std::vector<bool> null_vec;
-
-        // read data
-        int64_t last_str_offset = 0;
-        int64_t last_index_offset = 0;
-        int64_t read_rows = 0;
-        while (read_rows < count) {
-            int64_t rows_to_read =
-                std::min(count - read_rows, file_size - start);
-            if (rows_to_read > 0) {
-                int64_t n_strings = pq_read_list_string_parallel_single_file(
-                    readers->at(file_ind), column_idx, NULL, NULL, NULL, NULL,
-                    start, rows_to_read, &offset_vec, &index_offset_vec,
-                    &data_vec, &null_vec);
-
-                int size = offset_vec.size();
-                for (int64_t i = 1; i <= n_strings + 1; i++)
-                    offset_vec[size - i] += last_str_offset;
-                last_str_offset = offset_vec.back();
-                offset_vec.pop_back();
-
-                size = index_offset_vec.size();
-                for (int64_t i = 1; i <= rows_to_read + 1; i++)
-                    index_offset_vec[size - i] += last_index_offset;
-                last_index_offset = index_offset_vec[size - 1];
-                index_offset_vec.pop_back();
-
-                n_all_vals += rows_to_read;
-            }
-
-            read_rows += rows_to_read;
-            start = 0;  // start becomes 0 after reading non-empty first chunk
-            file_ind++;
-            if (read_rows < count)
-                file_size =
-                    pq_get_size_single_file(readers->at(file_ind), column_idx);
-        }
-        offset_vec.push_back(last_str_offset);
-        index_offset_vec.push_back(last_index_offset);
-
-        *out_offsets = new uint32_t[offset_vec.size()];
-        *index_offsets = new uint32_t[index_offset_vec.size()];
-        *out_data = new uint8_t[data_vec.size()];
-
-        memcpy(*out_offsets, offset_vec.data(),
-               offset_vec.size() * sizeof(uint32_t));
-        memcpy(*index_offsets, index_offset_vec.data(),
-               index_offset_vec.size() * sizeof(uint32_t));
-        memcpy(*out_data, data_vec.data(), data_vec.size());
-        pack_null_bitmap(out_nulls, null_vec, n_all_vals);
-        return n_all_vals;
-    } else {
-        pq_read_list_string_parallel_single_file(
-            readers->at(0), column_idx, out_offsets, index_offsets, out_data,
-            out_nulls, start, count);
-    }
-    return 0;
+    memcpy(*out_offsets, offset_vec.data(),
+           offset_vec.size() * sizeof(uint32_t));
+    memcpy(*index_offsets, index_offset_vec.data(),
+           index_offset_vec.size() * sizeof(uint32_t));
+    memcpy(*out_data, data_vec.data(), data_vec.size());
+    pack_null_bitmap(out_nulls, null_vec, n_all_vals);
+    return n_all_vals;
 }
 
 /// Convert Bodo date (year, month, day) from int64 to Arrow date32

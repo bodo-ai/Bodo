@@ -90,35 +90,7 @@ int64_t pq_get_size_single_file(
     return nrows;
 }
 
-int64_t pq_read_single_file(
-    std::shared_ptr<parquet::arrow::FileReader> arrow_reader,
-    int64_t column_idx, uint8_t* out_data, int out_dtype, uint8_t* out_nulls,
-    int64_t null_offset) {
-    std::shared_ptr<::arrow::ChunkedArray> chunked_array;
-    arrow::Status stat = arrow_reader->ReadColumn(column_idx, &chunked_array);
-    CHECK_ARROW(stat, "arrow_reader->ReadColumn");
-    if (chunked_array == NULL) return 0;
-    auto arr = chunked_array->chunk(0);
-    int64_t num_values = arr->length();
-    std::shared_ptr<arrow::DataType> arrow_type =
-        get_arrow_type(arrow_reader, column_idx);
-
-    auto buffers = arr->data()->buffers;
-    if (buffers.size() != 2) {
-        std::cerr << "invalid parquet number of array buffers" << std::endl;
-    }
-    const uint8_t* buff = buffers[1]->data();
-    const uint8_t* null_bitmap_buff =
-        arr->null_count() == 0 ? nullptr : arr->null_bitmap_data();
-
-    copy_data(out_data, buff, 0, num_values, arrow_type, null_bitmap_buff,
-              out_dtype);
-    copy_nulls(out_nulls, null_bitmap_buff, 0, num_values, null_offset);
-
-    return num_values;
-}
-
-int pq_read_parallel_single_file(
+int pq_read_single_file(
     std::shared_ptr<parquet::arrow::FileReader> arrow_reader,
     int64_t column_idx, uint8_t* out_data, int out_dtype, int64_t start,
     int64_t count, uint8_t* out_nulls, int64_t null_offset) {
@@ -353,62 +325,7 @@ inline void copy_data(uint8_t* out_data, const uint8_t* buff,
     return;
 }
 
-int64_t pq_read_string_single_file(
-    std::shared_ptr<parquet::arrow::FileReader> arrow_reader,
-    int64_t column_idx, uint32_t** out_offsets, uint8_t** out_data,
-    uint8_t** out_nulls, std::vector<uint32_t>* offset_vec,
-    std::vector<uint8_t>* data_vec, std::vector<bool>* null_vec) {
-    std::shared_ptr<::arrow::ChunkedArray> chunked_arr;
-    arrow::Status status = arrow_reader->ReadColumn(column_idx, &chunked_arr);
-    CHECK_ARROW(status, "arrow_reader->ReadColumn");
-    if (chunked_arr == NULL) return -1;
-    auto arr = chunked_arr->chunk(0);
-    int64_t num_values = arr->length();
-    std::shared_ptr<arrow::DataType> arrow_type =
-        get_arrow_type(arrow_reader, column_idx);
-    if (arrow_type->id() != Type::STRING)
-        std::cerr << "Invalid Parquet string data type" << '\n';
-
-    auto buffers = arr->data()->buffers;
-    if (buffers.size() != 3) {
-        std::cerr << "invalid parquet string number of array buffers"
-                  << std::endl;
-    }
-
-    int64_t null_size;
-    if (buffers[0])
-        null_size = buffers[0]->size();
-    else
-        null_size = (num_values + 7) >> 3;
-    int64_t offsets_size = buffers[1]->size();
-    int64_t data_size = buffers[2]->size();
-
-    const uint32_t* offsets_buff = (const uint32_t*)buffers[1]->data();
-    const uint8_t* data_buff = buffers[2]->data();
-    const uint8_t* null_buff = arr->null_bitmap_data();
-
-    if (offset_vec == NULL) {
-        if (data_vec != NULL)
-            std::cerr << "parquet read string input error" << '\n';
-
-        *out_offsets = new uint32_t[offsets_size / sizeof(uint32_t)];
-        *out_data = new uint8_t[data_size];
-        *out_nulls = new uint8_t[null_size];
-
-        set_null_buff(out_nulls, null_buff, null_size);
-        memcpy(*out_offsets, offsets_buff, offsets_size);
-        memcpy(*out_data, data_buff, data_size);
-    } else {
-        offset_vec->insert(offset_vec->end(), offsets_buff,
-                           offsets_buff + offsets_size / sizeof(uint32_t));
-        data_vec->insert(data_vec->end(), data_buff, data_buff + data_size);
-        append_bits_to_vec(null_vec, null_buff, null_size, 0, num_values);
-    }
-
-    return num_values;
-}
-
-int pq_read_string_parallel_single_file(
+int pq_read_string_single_file(
     std::shared_ptr<parquet::arrow::FileReader> arrow_reader,
     int64_t column_idx, uint32_t** out_offsets, uint8_t** out_data,
     uint8_t** out_nulls, int64_t start, int64_t count,
@@ -533,96 +450,7 @@ int pq_read_string_parallel_single_file(
     return 0;
 }
 
-std::pair<int64_t, int64_t> pq_read_list_string_single_file(
-    std::shared_ptr<parquet::arrow::FileReader> arrow_reader,
-    int64_t column_idx, uint32_t** out_offsets, uint32_t** index_offsets,
-    uint8_t** out_data, uint8_t** out_nulls, std::vector<uint32_t>* offset_vec,
-    std::vector<uint32_t>* index_offset_vec, std::vector<uint8_t>* data_vec,
-    std::vector<bool>* null_vec) {
-    std::shared_ptr<::arrow::ChunkedArray> chunked_arr;
-    arrow::Status status;
-    status = arrow_reader->ReadColumn(column_idx, &chunked_arr);
-    CHECK_ARROW(status, "arrow_reader->ReadColumn");
-    if (chunked_arr == NULL) return {-1, -1};
-    auto arr = chunked_arr->chunk(0);
-    int64_t num_values = arr->length();
-    std::shared_ptr<arrow::DataType> arrow_type =
-        get_arrow_type(arrow_reader, column_idx);
-    if (arrow_type->id() != Type::LIST)
-        std::cerr << "Invalid Parquet list data type" << '\n';
-
-    std::vector<std::shared_ptr<arrow::ArrayData>>& child_data =
-        arr->data()->child_data;
-    if (child_data.size() != 1) {
-        std::cerr << "arrow list array of strings must contain a child array"
-                  << std::endl;
-        return {-1, -1};
-    }
-
-    auto parent_buffers = arr->data()->buffers;
-    if (parent_buffers.size() != 2) {
-        std::cerr
-            << "invalid parquet list string number of parent array buffers "
-            << parent_buffers.size() << std::endl;
-        return {-1, -1};
-    }
-    int64_t parent_offsets_size = parent_buffers[1]->size();
-    int64_t parent_null_size;
-    if (parent_buffers[0]) {
-        parent_null_size = parent_buffers[0]->size();
-    } else {
-        parent_null_size = (num_values+ 7) >> 3;
-    }
-
-    auto child_buffers = child_data[0]->buffers;
-    if (child_buffers.size() != 3) {
-        std::cerr << "invalid parquet string number of array buffers "
-                  << child_buffers.size() << std::endl;
-        return {-1, -1};
-    }
-    int64_t num_strings = child_data[0]->length;
-    int64_t offsets_size = child_buffers[1]->size();
-    int64_t data_size = child_buffers[2]->size();
-    const uint32_t* index_offsets_buff =
-        (const uint32_t*)parent_buffers[1]->data();
-    const uint32_t* offsets_buff = (const uint32_t*)child_buffers[1]->data();
-    const uint8_t* data_buff = child_buffers[2]->data();
-    const uint8_t* null_buff = arr->null_bitmap_data();
-
-    if (offset_vec == NULL) {
-        if (data_vec != NULL)
-            std::cerr << "parquet read string input error" << '\n';
-
-        *out_offsets = new uint32_t[offsets_size / sizeof(uint32_t)];
-        *index_offsets = new uint32_t[parent_offsets_size / sizeof(uint32_t)];
-        *out_data = new uint8_t[data_size];
-        *out_nulls = new uint8_t[parent_null_size];
-
-        set_null_buff(out_nulls, null_buff, parent_null_size);
-        memcpy(*out_offsets, offsets_buff, offsets_size);
-        memcpy(*index_offsets, index_offsets_buff, parent_offsets_size);
-        memcpy(*out_data, data_buff, data_size);
-    } else {
-        offset_vec->insert(offset_vec->end(), offsets_buff,
-                           offsets_buff + offsets_size / sizeof(uint32_t));
-        index_offset_vec->insert(
-            index_offset_vec->end(), index_offsets_buff,
-            index_offsets_buff + parent_offsets_size / sizeof(uint32_t));
-        // we are reading a dataset split into multiple parquet files. some
-        // files might not have any string data at all (because all strings are
-        // empty or there are nan lists). In that case, we don't want to insert
-        // nulls in the middle of the data buffer
-        if ((offsets_size / sizeof(uint32_t) > 0) &&
-            (offsets_buff[offsets_size / sizeof(uint32_t) - 1] > 0))
-            data_vec->insert(data_vec->end(), data_buff, data_buff + data_size);
-        append_bits_to_vec(null_vec, null_buff, parent_null_size, 0,
-                           num_values);
-    }
-
-    return {num_values, num_strings};
-}
-
-int64_t pq_read_list_string_parallel_single_file(
+int64_t pq_read_list_string_single_file(
     std::shared_ptr<parquet::arrow::FileReader> arrow_reader,
     int64_t column_idx, uint32_t** out_offsets, uint32_t** out_index_offsets,
     uint8_t** out_data, uint8_t** out_nulls, int64_t start, int64_t count,

@@ -55,19 +55,7 @@ def read_parquet_str():  # pragma: no cover
     return 0
 
 
-def read_parquet_str_parallel():  # pragma: no cover
-    return 0
-
-
 def read_parquet_list_str():  # pragma: no cover
-    return 0
-
-
-def read_parquet_list_str_parallel():  # pragma: no cover
-    return 0
-
-
-def read_parquet_parallel():  # pragma: no cover
     return 0
 
 
@@ -155,7 +143,6 @@ def pq_distributed_run(
     arg_names = ", ".join("out" + str(i) for i in range(2 * n_cols))
     func_text = "def pq_impl(fname):\n"
     func_text += "    ({},) = _pq_reader_py(fname)\n".format(arg_names)
-    # print(func_text)
 
     loc_vars = {}
     exec(func_text, {}, loc_vars)
@@ -203,33 +190,38 @@ distributed_pass.distributed_run_extensions[
 def _gen_pq_reader_py(
     col_names, col_indices, out_types, typingctx, targetctx, parallel
 ):
-
+    if len(parallel) > 0:
+        # in parallel read, we assume all columns are parallel
+        assert col_names == parallel
+    is_parallel = len(parallel) > 0
     func_text = "def pq_reader_py(fname):\n"
-    func_text += "  arrow_readers = get_arrow_readers(unicode_to_char_ptr(fname))\n"
+    # open a DatasetReader, which is a C++ object defined in _parquet.cpp that
+    # contains file readers for the files from which this process needs to read,
+    # and other information to read this process' chunk
+    func_text += "  ds_reader = get_dataset_reader(unicode_to_char_ptr(fname), {})\n".format(
+        is_parallel
+    )
     for c, ind, t in zip(col_names, col_indices, out_types):
         func_text = gen_column_read(func_text, c, ind, t, c in parallel)
-    func_text += "  del_arrow_readers(arrow_readers)\n"
+    func_text += "  del_dataset_reader(ds_reader)\n"
     func_text += "  return ({},)\n".format(
         ", ".join("{0}, {0}_size".format(sanitize_varname(c)) for c in col_names)
     )
 
     loc_vars = {}
     glbs = {
-        "get_arrow_readers": _get_arrow_readers,
-        "del_arrow_readers": _del_arrow_readers,
+        "get_dataset_reader": _get_dataset_reader,
+        "del_dataset_reader": _del_dataset_reader,
         "get_column_size_parquet": get_column_size_parquet,
         "read_parquet": read_parquet,
-        "read_parquet_parallel": read_parquet_parallel,
         "read_parquet_str": read_parquet_str,
-        "read_parquet_str_parallel": read_parquet_str_parallel,
         "read_parquet_list_str": read_parquet_list_str,
-        "read_parquet_list_str_parallel": read_parquet_list_str_parallel,
-        "get_start_count": bodo.libs.distributed_api.get_start_count,
         "unicode_to_char_ptr": unicode_to_char_ptr,
         "NS_DTYPE": np.dtype("M8[ns]"),
         "np": np,
         "bodo": bodo,
     }
+
     exec(func_text, glbs, loc_vars)
     pq_reader_py = loc_vars["pq_reader_py"]
 
@@ -240,49 +232,29 @@ def _gen_pq_reader_py(
 def gen_column_read(func_text, cname, c_ind, c_type, is_parallel):
     cname = sanitize_varname(cname)
     # handle size variables
-    func_text += "  {}_size = get_column_size_parquet(arrow_readers, {})\n".format(
+    # get_column_size_parquet returns local size of column (number of rows
+    # that this process is going to read)
+    func_text += "  {}_size = get_column_size_parquet(ds_reader, {})\n".format(
         cname, c_ind
     )
-    if is_parallel:
-        func_text += "  {0}_start, {0}_count = get_start_count({0}_size)\n".format(
-            cname
-        )
-        alloc_size = "{}_count".format(cname)
-    else:
-        alloc_size = "{}_size".format(cname)
+    alloc_size = "{}_size".format(cname)
 
-    # generate strings differently
     if c_type == string_array_type:
-        if is_parallel:
-            func_text += "  {0} = read_parquet_str_parallel(arrow_readers, {1}, {0}_start, {0}_count)\n".format(
-                cname, c_ind
-            )
-        else:
-            # pass size for easier allocation and distributed analysis
-            func_text += "  {} = read_parquet_str(arrow_readers, {}, {}_size)\n".format(
-                cname, c_ind, cname
-            )
+        # pass size for easier allocation and distributed analysis
+        func_text += "  {} = read_parquet_str(ds_reader, {}, {}_size)\n".format(
+            cname, c_ind, cname
+        )
     elif c_type == list_string_array_type:
-        if is_parallel:
-            func_text += "  {0} = read_parquet_list_str_parallel(arrow_readers, {1}, {0}_start, {0}_count)\n".format(
-                cname, c_ind
-            )
-        else:
-            # pass size for easier allocation and distributed analysis
-            func_text += "  {} = read_parquet_list_str(arrow_readers, {}, {}_size)\n".format(
-                cname, c_ind, cname
-            )
+        # pass size for easier allocation and distributed analysis
+        func_text += "  {} = read_parquet_list_str(ds_reader, {}, {}_size)\n".format(
+            cname, c_ind, cname
+        )
     else:
         el_type = get_element_type(c_type.dtype)
         func_text += _gen_alloc(c_type, cname, alloc_size, el_type)
-        if is_parallel:
-            func_text += "  status = read_parquet_parallel(arrow_readers, {0}, {1}, np.int32({2}), {1}_start, {1}_count)\n".format(
-                c_ind, cname, bodo.utils.utils.numba_to_c_type(c_type.dtype)
-            )
-        else:
-            func_text += "  status = read_parquet(arrow_readers, {}, {}, np.int32({}))\n".format(
-                c_ind, cname, bodo.utils.utils.numba_to_c_type(c_type.dtype)
-            )
+        func_text += "  status = read_parquet(ds_reader, {}, {}, np.int32({}))\n".format(
+            c_ind, cname, bodo.utils.utils.numba_to_c_type(c_type.dtype)
+        )
 
     return func_text
 
@@ -398,12 +370,24 @@ def _get_numba_typ_from_pa_typ(pa_typ, is_index, nullable_from_metadata):
     return arr_typ
 
 
-def get_parquet_dataset(file_name):
-    """create ParquetDataset instance from Parquet file name
+def get_parquet_dataset(file_name, parallel, get_row_counts=True):
+    """ Create ParquetDataset instance from Parquet file name
+        parallel: if true only rank 0 reads dataset and broadcasts to others
+        get_row_counts : get row counts of pieces from metadata and store
+                         as attributes in ParquetDataset object
     """
     import pyarrow.parquet as pq
+    from mpi4py import MPI
+
+    comm = MPI.COMM_WORLD
+
+    # we read the dataset info only on rank 0 and broadcast it to the rest
+    if parallel and bodo.get_rank() != 0:  # pragma: no cover
+        dataset = comm.bcast(None)
+        return dataset
 
     fs = None
+    dataset = None
     if file_name.startswith("s3://"):
         try:
             import s3fs
@@ -462,13 +446,12 @@ def get_parquet_dataset(file_name):
             pass
         if file_names is not None:  # pragma: no cover
             try:
-                ParquetDataset = pq.ParquetDataset(file_names, filesystem=fs)
+                dataset = pq.ParquetDataset(file_names, filesystem=fs)
             except Exception as e:
                 raise BodoError(
                     "read_parquet(): S3 file system cannot be created: {}".format(e)
                 )
-            return ParquetDataset
-    elif file_name.startswith("hdfs://"):
+    elif file_name.startswith("hdfs://"):  # pragma: no cover
         # this HadoopFileSystem is the new file system of pyarrow
         from pyarrow.fs import HadoopFileSystem, FileSelector, FileType
 
@@ -482,6 +465,7 @@ def get_parquet_dataset(file_name):
         try:
             hdfs = HadoopFileSystem.from_uri(file_name)
             from urllib.parse import urlparse
+
             options = urlparse(file_name)
             path = options.path
             fs = HdFS(host=options.hostname, port=options.port, user=options.username)
@@ -515,32 +499,42 @@ def get_parquet_dataset(file_name):
                 file_names = [prefix + file_stat.path for file_stat in file_stats]
 
         if file_names is not None:
-            return pq.ParquetDataset(file_names, filesystem=fs)
+            dataset = pq.ParquetDataset(file_names, filesystem=fs)
 
-    return pq.ParquetDataset(file_name, filesystem=fs)
+    if dataset is None:
+        dataset = pq.ParquetDataset(file_name, filesystem=fs)
+
+    # store the total number of rows and rows of each piece in the ParquetDataset
+    # object, then broadcast to every process
+    # NOTE: the information that other processes need to only open file
+    # readers for their chunk are the total number of rows and number of rows
+    # of each piece, as well as the path of each piece
+    if get_row_counts:
+        dataset._bodo_total_rows = 0
+        for piece in dataset.pieces:
+            piece._bodo_num_rows = piece.get_metadata().num_rows
+            dataset._bodo_total_rows += piece._bodo_num_rows
+    if parallel:
+        assert bodo.get_rank() == 0
+        comm.bcast(dataset)
+    return dataset
 
 
 def parquet_file_schema(file_name, selected_columns):
     """get parquet schema from file using Parquet dataset and Arrow APIs
     """
-    from mpi4py import MPI
-
-    comm = MPI.COMM_WORLD
-
     col_names = []
     col_types = []
 
-    num_pieces = None
-    pa_schema = None
-    if bodo.get_rank() == 0:
-        pq_dataset = get_parquet_dataset(file_name)
-        pa_schema = pq_dataset.schema.to_arrow_schema()
-        num_pieces = len(pq_dataset.pieces)
+    # during compilation we only need the schema and it has to be the same for
+    # all processes, so we can set parallel=True to just have rank 0 read
+    # the dataset information and broadcast to others
+    pq_dataset = get_parquet_dataset(file_name, parallel=True, get_row_counts=False)
+    pa_schema = pq_dataset.schema.to_arrow_schema()
+    num_pieces = len(pq_dataset.pieces)
 
-    pa_schema, num_pieces = comm.bcast((pa_schema, num_pieces))
-
-    # NOTE: use arrow schema instead of the dataset schema to avoid issues with names of
-    # list types columns (arrow 0.17.0)
+    # NOTE: use arrow schema instead of the dataset schema to avoid issues with
+    # names of list types columns (arrow 0.17.0)
     # col_names is an array that contains all the column's name and
     # index's name if there is one, otherwise "__index__level_0"
     # If there is no index at all, col_names will not include anything.
@@ -603,11 +597,11 @@ def parquet_file_schema(file_name, selected_columns):
     return col_names, col_types, index_col, col_indices
 
 
-_get_arrow_readers = types.ExternalFunction(
-    "get_arrow_readers", types.Opaque("arrow_reader")(types.voidptr)
+_get_dataset_reader = types.ExternalFunction(
+    "get_dataset_reader", types.Opaque("arrow_reader")(types.voidptr, types.boolean)
 )
-_del_arrow_readers = types.ExternalFunction(
-    "del_arrow_readers", types.void(types.Opaque("arrow_reader"))
+_del_dataset_reader = types.ExternalFunction(
+    "del_dataset_reader", types.void(types.Opaque("arrow_reader"))
 )
 
 
@@ -637,36 +631,12 @@ class ReadParquetStrInfer(AbstractTemplate):
         return signature(string_array_type, *unliteral_all(args))
 
 
-@infer_global(read_parquet_str_parallel)
-class ReadParquetStrParallelInfer(AbstractTemplate):
-    def generic(self, args, kws):
-        assert not kws
-        assert len(args) == 4
-        return signature(string_array_type, *unliteral_all(args))
-
-
 @infer_global(read_parquet_list_str)
 class ReadParquetListStrInfer(AbstractTemplate):
     def generic(self, args, kws):
         assert not kws
         assert len(args) == 3
         return signature(list_string_array_type, *unliteral_all(args))
-
-
-@infer_global(read_parquet_list_str_parallel)
-class ReadParquetListStrParallelInfer(AbstractTemplate):
-    def generic(self, args, kws):
-        assert not kws
-        assert len(args) == 4
-        return signature(list_string_array_type, *unliteral_all(args))
-
-
-@infer_global(read_parquet_parallel)
-class ReadParallelParquetInfer(AbstractTemplate):
-    def generic(self, args, kws):
-        assert not kws
-        assert len(args) == 6
-        return signature(types.int32, *unliteral_all(args))
 
 
 from numba.core import cgutils
@@ -680,15 +650,12 @@ from bodo.config import _has_pyarrow
 if _has_pyarrow:
     from bodo.io import parquet_cpp
 
-    ll.add_symbol("get_arrow_readers", parquet_cpp.get_arrow_readers)
-    ll.add_symbol("del_arrow_readers", parquet_cpp.del_arrow_readers)
-    ll.add_symbol("pq_read", parquet_cpp.read)
-    ll.add_symbol("pq_read_parallel", parquet_cpp.read_parallel)
+    ll.add_symbol("get_dataset_reader", parquet_cpp.get_dataset_reader)
+    ll.add_symbol("del_dataset_reader", parquet_cpp.del_dataset_reader)
     ll.add_symbol("pq_get_size", parquet_cpp.get_size)
+    ll.add_symbol("pq_read", parquet_cpp.read)
     ll.add_symbol("pq_read_string", parquet_cpp.read_string)
-    ll.add_symbol("pq_read_string_parallel", parquet_cpp.read_string_parallel)
     ll.add_symbol("pq_read_list_string", parquet_cpp.read_list_string)
-    ll.add_symbol("pq_read_list_string_parallel", parquet_cpp.read_list_string_parallel)
     ll.add_symbol("pq_write", parquet_cpp.pq_write)
 
 
@@ -726,46 +693,6 @@ def pq_read_lower(context, builder, sig, args):
             args[1],
             builder.bitcast(out_array.data, lir.IntType(8).as_pointer()),
             args[3],
-            zero_ptr,
-        ],
-    )
-
-
-@lower_builtin(
-    read_parquet_parallel,
-    types.Opaque("arrow_reader"),
-    types.intp,
-    types.Array,
-    types.int32,
-    types.intp,
-    types.intp,
-)
-def pq_read_parallel_lower(context, builder, sig, args):
-    fnty = lir.FunctionType(
-        lir.IntType(32),
-        [
-            lir.IntType(8).as_pointer(),
-            lir.IntType(64),
-            lir.IntType(8).as_pointer(),
-            lir.IntType(32),
-            lir.IntType(64),
-            lir.IntType(64),
-            lir.IntType(8).as_pointer(),
-        ],
-    )
-    out_array = make_array(sig.args[2])(context, builder, args[2])
-    zero_ptr = context.get_constant_null(types.voidptr)
-
-    fn = builder.module.get_or_insert_function(fnty, name="pq_read_parallel")
-    return builder.call(
-        fn,
-        [
-            args[0],
-            args[1],
-            builder.bitcast(out_array.data, lir.IntType(8).as_pointer()),
-            args[3],
-            args[4],
-            args[5],
             zero_ptr,
         ],
     )
@@ -838,82 +765,6 @@ def pq_read_int_arr_lower(context, builder, sig, args):
     )
 
 
-@lower_builtin(
-    read_parquet_parallel,
-    types.Opaque("arrow_reader"),
-    types.intp,
-    IntegerArrayType,
-    types.int32,
-    types.intp,
-    types.intp,
-)
-@lower_builtin(
-    read_parquet_parallel,
-    types.Opaque("arrow_reader"),
-    types.intp,
-    BooleanArrayType,
-    types.int32,
-    types.intp,
-    types.intp,
-)
-@lower_builtin(
-    read_parquet_parallel,
-    types.Opaque("arrow_reader"),
-    types.intp,
-    DecimalArrayType,
-    types.int32,
-    types.intp,
-    types.intp,
-)
-@lower_builtin(
-    read_parquet_parallel,
-    types.Opaque("arrow_reader"),
-    types.intp,
-    datetime_date_array_type,
-    types.int32,
-    types.intp,
-    types.intp,
-)
-def pq_read_parallel_int_arr_lower(context, builder, sig, args):
-    fnty = lir.FunctionType(
-        lir.IntType(32),
-        [
-            lir.IntType(8).as_pointer(),
-            lir.IntType(64),
-            lir.IntType(8).as_pointer(),
-            lir.IntType(32),
-            lir.IntType(64),
-            lir.IntType(64),
-            lir.IntType(8).as_pointer(),
-        ],
-    )
-    int_arr_typ = sig.args[2]
-    int_arr = cgutils.create_struct_proxy(int_arr_typ)(context, builder, args[2])
-    dtype = int_arr_typ.dtype
-    if isinstance(int_arr_typ, DecimalArrayType):
-        dtype = bodo.libs.decimal_arr_ext.int128_type
-    if int_arr_typ == datetime_date_array_type:
-        dtype = types.int64
-    data_typ = types.Array(dtype, 1, "C")
-    data_array = make_array(data_typ)(context, builder, int_arr.data)
-    null_arr_typ = types.Array(types.uint8, 1, "C")
-    bitmap = make_array(null_arr_typ)(context, builder, int_arr.null_bitmap)
-
-    fn = builder.module.get_or_insert_function(fnty, name="pq_read_parallel")
-    return builder.call(
-        fn,
-        [
-            args[0],
-            args[1],
-            builder.bitcast(data_array.data, lir.IntType(8).as_pointer()),
-            args[3],
-            args[4],
-            args[5],
-            builder.bitcast(bitmap.data, lir.IntType(8).as_pointer()),
-        ],
-    )
-
-
 ############################## read strings ###############################
 
 
@@ -950,55 +801,6 @@ def pq_read_string_lower(context, builder, sig, args):
             str_arr_payload._get_ptr_by_name("null_bitmap"),
         ],
     )
-    builder.store(str_arr_payload._getvalue(), meminfo_data_ptr)
-
-    string_array.meminfo = meminfo
-    ret = string_array._getvalue()
-    return impl_ret_new_ref(context, builder, typ, ret)
-
-
-@lower_builtin(
-    read_parquet_str_parallel,
-    types.Opaque("arrow_reader"),
-    types.intp,
-    types.intp,
-    types.intp,
-)
-def pq_read_string_parallel_lower(context, builder, sig, args):
-    typ = sig.return_type
-    dtype = StringArrayPayloadType()
-    meminfo, meminfo_data_ptr = construct_string_array(context, builder)
-    str_arr_payload = cgutils.create_struct_proxy(dtype)(context, builder)
-    string_array = context.make_helper(builder, typ)
-    str_arr_payload.num_strings = args[3]
-
-    fnty = lir.FunctionType(
-        lir.IntType(32),
-        [
-            lir.IntType(8).as_pointer(),
-            lir.IntType(64),
-            lir.IntType(32).as_pointer().as_pointer(),
-            lir.IntType(8).as_pointer().as_pointer(),
-            lir.IntType(8).as_pointer().as_pointer(),
-            lir.IntType(64),
-            lir.IntType(64),
-        ],
-    )
-
-    fn = builder.module.get_or_insert_function(fnty, name="pq_read_string_parallel")
-    res = builder.call(
-        fn,
-        [
-            args[0],
-            args[1],
-            str_arr_payload._get_ptr_by_name("offsets"),
-            str_arr_payload._get_ptr_by_name("data"),
-            str_arr_payload._get_ptr_by_name("null_bitmap"),
-            args[2],
-            args[3],
-        ],
-    )
-
     builder.store(str_arr_payload._getvalue(), meminfo_data_ptr)
 
     string_array.meminfo = meminfo
@@ -1046,75 +848,6 @@ def pq_read_list_string_lower(context, builder, sig, args):
             list_str_arr_payload._get_ptr_by_name("index_offsets"),
             list_str_arr_payload._get_ptr_by_name("data"),
             list_str_arr_payload._get_ptr_by_name("null_bitmap"),
-        ],
-    )
-
-    # set array values
-    builder.store(list_str_arr_payload._getvalue(), meminfo_data_ptr)
-    list_str_array.meminfo = meminfo
-    list_str_array.data_offsets = list_str_arr_payload.data_offsets
-    list_str_array.index_offsets = list_str_arr_payload.index_offsets
-    list_str_array.data = list_str_arr_payload.data
-    list_str_array.null_bitmap = list_str_arr_payload.null_bitmap
-    list_str_array.num_total_strings = builder.zext(
-        builder.load(
-            builder.gep(list_str_array.index_offsets, [list_str_array.num_items])
-        ),
-        lir.IntType(64),
-    )
-    list_str_array.num_total_chars = builder.zext(
-        builder.load(
-            builder.gep(list_str_array.data_offsets, [list_str_array.num_total_strings])
-        ),
-        lir.IntType(64),
-    )
-    ret = list_str_array._getvalue()
-    return impl_ret_new_ref(context, builder, typ, ret)
-
-
-@lower_builtin(
-    read_parquet_list_str_parallel,
-    types.Opaque("arrow_reader"),
-    types.intp,
-    types.intp,
-    types.intp,
-)
-def pq_read_list_string_parallel_lower(context, builder, sig, args):
-    typ = sig.return_type
-    dtype = ListStringArrayPayloadType()
-    meminfo, meminfo_data_ptr = construct_list_string_array(context, builder)
-    list_str_arr_payload = cgutils.create_struct_proxy(dtype)(context, builder)
-    list_str_array = context.make_helper(builder, typ)
-    list_str_array.num_items = args[3]
-
-    fnty = lir.FunctionType(
-        lir.IntType(32),
-        [
-            lir.IntType(8).as_pointer(),
-            lir.IntType(64),
-            lir.IntType(32).as_pointer().as_pointer(),
-            lir.IntType(32).as_pointer().as_pointer(),
-            lir.IntType(8).as_pointer().as_pointer(),
-            lir.IntType(8).as_pointer().as_pointer(),
-            lir.IntType(64),
-            lir.IntType(64),
-        ],
-    )
-
-    fn = builder.module.get_or_insert_function(
-        fnty, name="pq_read_list_string_parallel"
-    )
-    _res = builder.call(
-        fn,
-        [
-            args[0],
-            args[1],
-            list_str_arr_payload._get_ptr_by_name("data_offsets"),
-            list_str_arr_payload._get_ptr_by_name("index_offsets"),
-            list_str_arr_payload._get_ptr_by_name("data"),
-            list_str_arr_payload._get_ptr_by_name("null_bitmap"),
-            args[2],
-            args[3],
         ],
     )
 
