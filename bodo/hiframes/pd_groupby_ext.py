@@ -21,6 +21,7 @@ from numba.core.typing.templates import (
     AttributeTemplate,
     bound_function,
 )
+from numba.core.registry import CPUDispatcher
 from bodo.libs.int_arr_ext import IntegerArrayType, IntDtype
 import bodo
 from bodo.hiframes.pd_series_ext import SeriesType, _get_series_array_type
@@ -45,6 +46,7 @@ from bodo.utils.typing import (
     ConstDictType,
     get_overload_const_func,
     get_overload_const_str,
+    get_registry_consts,
 )
 from bodo.utils.transform import get_const_func_output_type
 from bodo.utils.utils import is_expr
@@ -189,6 +191,7 @@ def validate_udf(func_name, func):
             types.functions.MakeFunctionLiteral,
             bodo.utils.typing.FunctionLiteral,
             types.Dispatcher,
+            CPUDispatcher,
         ),
     ):
         raise BodoError(
@@ -207,10 +210,10 @@ class GroupbyTyper(AbstractTemplate):
         assert not kws
         df, by, as_index = args
 
-        if isinstance(by, types.StringLiteral):
-            keys = (by.literal_value,)
-        elif hasattr(by, "consts"):
-            keys = by.consts
+        if is_overload_constant_str(by):
+            keys = (get_overload_const_str(by),)
+        elif is_overload_constant_str_list(by):
+            keys = tuple(get_const_str_list(by))
 
         selection = list(df.columns)
         for k in keys:
@@ -283,9 +286,20 @@ def get_groupby_output_dtype(arr_type, func_name):
         and not isinstance(in_dtype, types.Float)
         and not isinstance(in_dtype, types.Boolean)
     ):
-        is_list_string = isinstance(in_dtype, numba.core.types.containers.List) and in_dtype.dtype == types.unicode_type
+        is_list_string = (
+            isinstance(in_dtype, numba.core.types.containers.List)
+            and in_dtype.dtype == types.unicode_type
+        )
         if is_list_string or in_dtype == types.unicode_type:
-            if func_name not in {"count", "nunique", "min", "max", "sum", "first", "last"}:
+            if func_name not in {
+                "count",
+                "nunique",
+                "min",
+                "max",
+                "sum",
+                "first",
+                "last",
+            }:
                 raise BodoError(
                     "column type of strings or list of strings is not supported in groupby built-in function {}".format(
                         func_name
@@ -414,7 +428,9 @@ class DataframeGroupByAttribute(AttributeTemplate):
             if is_expr(f_val, "make_function"):
                 f = types.functions.MakeFunctionLiteral(f_val)
             else:
-                assert isinstance(f_val, (types.MakeFunctionLiteral, types.Dispatcher))
+                assert isinstance(
+                    f_val, (types.MakeFunctionLiteral, types.Dispatcher, CPUDispatcher)
+                )
                 f = f_val
             validate_udf("agg", f)
             func = get_overload_const_func(f)
@@ -449,9 +465,10 @@ class DataframeGroupByAttribute(AttributeTemplate):
             # get mapping of column names to functions:
             # string -> string or tuple of strings (tuple when multiple
             # functions are applied to a column)
+            func_consts = get_registry_consts(func.const_no)
             col_map = {
-                func.consts[2 * i]: func.consts[2 * i + 1]
-                for i in range(len(func.consts) // 2)
+                func_consts[2 * i]: func_consts[2 * i + 1]
+                for i in range(len(func_consts) // 2)
             }
 
             # make sure selected columns exist in dataframe

@@ -33,7 +33,9 @@ from bodo.utils.typing import (
     ConstDictType,
     scalar_to_array_type,
     raise_bodo_error,
+    get_registry_consts,
 )
+from bodo.utils.transform import gen_const_tup
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.bool_arr_ext import boolean_array
 from bodo.hiframes.pd_timestamp_ext import pandas_timestamp_type
@@ -193,9 +195,11 @@ def overload_dataframe_rename(
             "'columns' argument to df.rename() should be a constant dictionary"
         )
 
+    columns_consts = get_registry_consts(columns.const_no)
+
     col_map = {
-        columns.consts[2 * i]: columns.consts[2 * i + 1]
-        for i in range(len(columns.consts) // 2)
+        columns_consts[2 * i]: columns_consts[2 * i + 1]
+        for i in range(len(columns_consts) // 2)
     }
     new_cols = [
         col_map.get(df.columns[i], df.columns[i]) for i in range(len(df.columns))
@@ -787,17 +791,8 @@ def _gen_init_df(header, columns, data_args, index=None, extra_globals=None):
     if extra_globals is None:
         extra_globals = {}
 
-    # using add_consts_to_type with list to avoid const tuple problems
-    # TODO: fix type inference for const str
-    col_seq = ", ".join(
-        "'{}'".format(c) if isinstance(c, str) else "{}".format(c) for c in columns
-    )
-    col_var = "bodo.utils.typing.add_consts_to_type([{}], {})".format(col_seq, col_seq)
-    data_args = "({},)".format(data_args)
-    # empty dataframe case
-    if len(columns) == 0:
-        data_args = "()"
-        col_var = "()"
+    col_var = gen_const_tup(columns)
+    data_args = "({}{})".format(data_args, "," if len(columns) == 1 else "")
 
     func_text = "{}  return bodo.hiframes.pd_dataframe_ext.init_dataframe({}, {}, {})\n".format(
         header, data_args, index, col_var
@@ -1081,7 +1076,7 @@ def overload_read_excel(
     # objmode doesn't allow lists, embed 'parse_dates' as a constant inside objmode
     parse_dates_const = False
     if isinstance(parse_dates, bodo.utils.typing.ConstList):
-        parse_dates_const = list(parse_dates.consts)
+        parse_dates_const = list(get_registry_consts(parse_dates.const_no))
 
     # embed dtype since objmode doesn't allow list/dict
     pd_dtype_strs = ", ".join(

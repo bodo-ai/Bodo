@@ -23,11 +23,15 @@ from numba.core.ir_utils import (
     find_callname,
     build_definitions,
 )
+from numba.core.registry import CPUDispatcher
 
 import bodo
 from bodo.utils.utils import is_assign, is_expr
 from bodo.libs.str_ext import string_type
-from bodo.utils.typing import BodoError
+from bodo.utils.typing import (
+    BodoError,
+    add_consts_to_registry,
+)
 from bodo.utils.utils import is_call
 
 
@@ -346,6 +350,9 @@ def get_const_func_output_type(func, arg_types, typing_context):
         f_ir = numba.core.compiler.run_frontend(
             func.literal_value, inline_closures=True
         )
+    elif isinstance(func, CPUDispatcher):
+        py_func = func.py_func
+        f_ir = numba.core.compiler.run_frontend(py_func, inline_closures=True)
     else:
         assert isinstance(func, types.Dispatcher)
         py_func = func.dispatcher.py_func
@@ -365,52 +372,56 @@ def update_node_list_definitions(node_list, func_ir):
     return
 
 
+def gen_const_tup(vals):
+    """generate a constant tuple value as text
+    """
+    val_seq = ", ".join(
+        "'{}'".format(c) if isinstance(c, str) else str(c) for c in vals
+    )
+    # const int tuples and nested constant tuples are not supported in Numba yet, so
+    # need special handling
+    if any(isinstance(c, (tuple, int)) for c in vals):
+        # using add_consts_to_type with list to avoid const tuple problems
+        # TODO: fix Numba type inference for nested constant tuples
+        const_obj, const_no = add_consts_to_registry(vals)
+        # HACK add the constant to typing_context object to keep it around during
+        # compilation
+        setattr(
+            numba.core.registry.cpu_target.typing_context,
+            "const_obj{}".format(const_no),
+            const_obj,
+        )
+        return "bodo.utils.typing.add_consts_to_type([{}], {})".format(
+            val_seq, const_no
+        )
+    return "({}{})".format(val_seq, "," if len(vals) == 1 else "",)
+
+
+def gen_add_consts_to_type_call(vals, var_name):
+    """generate add_consts_to_type() call as text. Also returns the const object being
+    preserved in the registry to enable the caller to keep a reference around.
+    """
+    const_obj, const_no = add_consts_to_registry(vals)
+    func_call = "bodo.utils.typing.add_consts_to_type({}, {})".format(
+        var_name, const_no
+    )
+    return const_obj, const_no, func_call
+
+
 def gen_add_consts_to_type(vals, var, ret_var, typing_info=None):
     """generate add_consts_to_type() call that makes constant values of dict/list
     available during typing
     """
-    # convert constants to string representation
-    const_funcs = {}
-    val_reps = []
-    for c in vals:
-        v_rep = "{}".format(c)
-        # if c is a python class (like str, float, int, list),
-        # v_rep should be the class name
-        if isinstance(c, type):
-            v_rep = c.__name__
-        elif isinstance(c, str):
-            v_rep = "'{}'".format(c)
-        # store a name for make_function exprs to replace later
-        elif is_expr(c, "make_function") or isinstance(
-            c, numba.core.registry.CPUDispatcher
-        ):
-            v_rep = "func{}".format(ir_utils.next_label())
-            const_funcs[v_rep] = c
-        val_reps.append(v_rep)
 
-    vals_expr = ", ".join(val_reps)
+    const_obj, const_no, const_to_type_call = gen_add_consts_to_type_call(vals, "a")
     func_text = "def _build_f(a):\n"
-    func_text += "  return bodo.utils.typing.add_consts_to_type(a, {})\n".format(
-        vals_expr
-    )
+    func_text += "  return {}\n".format(const_to_type_call)
     loc_vars = {}
     exec(func_text, {"bodo": bodo}, loc_vars)
     _build_f = loc_vars["_build_f"]
     nodes = compile_func_single_block(_build_f, (var,), ret_var, typing_info)
-    # replace make_function exprs with actual node
-    for stmt in nodes:
-        if (
-            is_assign(stmt)
-            and isinstance(stmt.value, ir.Global)
-            and stmt.value.name in const_funcs
-        ):
-            v = const_funcs[stmt.value.name]
-            if is_expr(v, "make_function"):
-                stmt.value = const_funcs[stmt.value.name]
-            # CPUDispatcher case
-            else:
-                stmt.value.value = const_funcs[stmt.value.name]
-    return nodes
+
+    return nodes, const_obj, const_no
 
 
 def get_call_expr_arg(f_name, args, kws, arg_no, arg_name, default=None, err_msg=None):

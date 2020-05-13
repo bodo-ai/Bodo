@@ -21,7 +21,13 @@ from numba.core.ir_utils import (
     require,
 )
 import bodo
-from bodo.utils.typing import ConstList, ConstSet, BodoError
+from bodo.utils.typing import (
+    ConstList,
+    ConstSet,
+    BodoError,
+    get_registry_consts,
+    add_consts_to_registry,
+)
 from bodo.utils.utils import (
     is_assign,
     is_call,
@@ -309,7 +315,9 @@ class TypingTransforms:
             and isinstance(arg2_typ, ConstList)
             and rhs.fn == operator.add
         ):
-            vals = arg1_typ.consts + arg2_typ.consts
+            vals = get_registry_consts(arg1_typ.const_no) + get_registry_consts(
+                arg2_typ.const_no
+            )
             return self._gen_consts_call(assign.target, vals)
 
         # sub of constant sets, e.g. {"A", "B"} - {"B"}
@@ -320,7 +328,10 @@ class TypingTransforms:
         ):
             # sort output of set diff op to be consistent across processors since const
             # values can be keys to groupby/sort/join which require consistent order
-            vals = sorted(set(arg1_typ.consts) - set(arg2_typ.consts))
+            vals = sorted(
+                set(get_registry_consts(arg1_typ.const_no))
+                - set(get_registry_consts(arg2_typ.const_no))
+            )
             return self._gen_consts_call(assign.target, vals, False)
 
         # replace ConstSet with Set if there a set op we don't support here
@@ -554,12 +565,13 @@ class TypingTransforms:
         return nodes
 
     def _gen_consts_call(self, target, vals, is_list=True):
+        const_obj, const_no = add_consts_to_registry(vals)
         val_reps = ", ".join(["'{}'".format(c) for c in vals])
         in_brac = "[" if is_list else "set(["
         out_brac = "]" if is_list else "])"
         func_text = "def _build_f():\n"
-        func_text += "  return bodo.utils.typing.add_consts_to_type({0}{1}{2}, {1})\n".format(
-            in_brac, val_reps, out_brac
+        func_text += "  return bodo.utils.typing.add_consts_to_type({}{}{}, {})\n".format(
+            in_brac, val_reps, out_brac, const_no
         )
         loc_vars = {}
         exec(func_text, {"bodo": bodo}, loc_vars)
@@ -568,11 +580,18 @@ class TypingTransforms:
         self.typemap.pop(target.name)
         self.typemap[target.name] = self.typemap[nodes[-1].value.name]
         self.changed = True
+
+        # HACK keep const values object around as long as the function is being compiled
+        # by adding it as an attribute to some compilation object
+        setattr(self.func_ir, "const_obj{}".format(const_no), const_obj)
         return nodes
 
     def _gen_const_string_index(self, target, rhs, vals):
+        const_obj, const_no = add_consts_to_registry(vals)
         val_reps = ", ".join(["'{}'".format(c) for c in vals])
-        const_call = "bodo.utils.typing.add_consts_to_type([{0}], {0})".format(val_reps)
+        const_call = "bodo.utils.typing.add_consts_to_type([{}], {})".format(
+            val_reps, const_no
+        )
         str_arr = "bodo.libs.str_arr_ext.str_arr_from_sequence({})".format(const_call)
         func_text = "def _gen_str_ind():\n"
         func_text += "  return bodo.hiframes.pd_index_ext.init_string_index({})\n".format(
@@ -581,7 +600,12 @@ class TypingTransforms:
         loc_vars = {}
         exec(func_text, {"bodo": bodo}, loc_vars)
         _gen_str_ind = loc_vars["_gen_str_ind"]
-        return compile_func_single_block(_gen_str_ind, (), target, self)
+        nodes = compile_func_single_block(_gen_str_ind, (), target, self)
+
+        # HACK keep const values object around as long as the function is being compiled
+        # by adding it as an attribute to some compilation object
+        setattr(self.func_ir, "const_obj{}".format(const_no), const_obj)
+        return nodes
 
     def _get_const_seq(self, var):
         """returns constant values if 'var' represents a constant list/set. Otherwise,
@@ -591,7 +615,7 @@ class TypingTransforms:
         if var.name in self.typemap and isinstance(
             self.typemap[var.name], (ConstList, ConstSet)
         ):
-            return self.typemap[var.name].consts
+            return get_registry_consts(self.typemap[var.name].const_no)
 
         # constant StringIndex case coming from df.columns
         # pattern match init_string_index(str_arr_from_sequence(["A", "B"]))
@@ -608,7 +632,9 @@ class TypingTransforms:
                 if arg_def.args[0].name in self.typemap and isinstance(
                     self.typemap[arg_def.args[0].name], ConstList
                 ):
-                    return self.typemap[arg_def.args[0].name].consts
+                    return get_registry_consts(
+                        self.typemap[arg_def.args[0].name].const_no
+                    )
 
     def _replace_vars(self, inst):
         # variable replacement can affect definitions so handling assignment
