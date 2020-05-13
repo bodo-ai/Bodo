@@ -169,11 +169,18 @@ def is_overload_constant_str(val):
 
 def is_overload_constant_str_list(val):
     return (
-        isinstance(val, bodo.utils.typing.ConstList)
-        and isinstance(get_registry_consts(val.const_no)[0], str)
-    ) or (
-        isinstance(val, types.BaseTuple)
-        and all(isinstance(t, types.StringLiteral) for t in val.types)
+        (
+            isinstance(val, bodo.utils.typing.ConstList)
+            and isinstance(get_registry_consts(val.const_no)[0], str)
+        )
+        or (
+            isinstance(val, types.BaseTuple)
+            and all(isinstance(t, types.StringLiteral) for t in val.types)
+        )
+        or (
+            isinstance(val, bodo.utils.typing.ListLiteral)
+            and isinstance(val.literal_value[0], str)
+        )
     )
 
 
@@ -316,6 +323,8 @@ def get_overload_const_str_len(val):
 
 
 def get_const_str_list(val):
+    if isinstance(val, bodo.utils.typing.ListLiteral):
+        return val.literal_value
     # 'ommited' case
     if getattr(val, "value", None) is not None:
         return [val.value]
@@ -509,6 +518,22 @@ def literal_bool_cast(context, builder, fromty, toty, val):
         builder, fromty.literal_type, fromty.literal_value
     )
     return context.cast(builder, lit, fromty.literal_type, toty)
+
+
+class ListLiteral(types.Literal):
+    """class for literal lists, only used when Bodo forces an argument to be a literal
+    list (e.g. in typing pass for groupby/join/sort_values).
+    """
+
+
+types.Literal.ctor_map[list] = ListLiteral
+register_model(ListLiteral)(models.OpaqueModel)
+
+
+@unbox(ListLiteral)
+def unbox_list_literal(typ, obj, c):
+    # A list literal is a dummy value
+    return NativeValue(c.context.get_dummy_value())
 
 
 # literal type for functions (to handle function arguments to map/apply methods)

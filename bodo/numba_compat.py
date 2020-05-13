@@ -38,6 +38,8 @@ from numba.core.typing.templates import (
     _OverloadMethodTemplate,
 )
 from numba.core.types.functions import _ResolutionFailures
+from numba.core.errors import LiteralTypingError
+from numba.core.types import literal
 
 
 # `run_frontend` function of Numba is used in inline_closure_call to get the IR of the
@@ -1052,3 +1054,28 @@ if (
     warnings.warn("numba.parfors.parfor.ParforPassStates.__init__ has changed")
 
 numba.parfors.parfor.ParforPassStates.__init__ = ParforPassStates__init__
+
+
+# replace Numba's maybe_literal to avoid using our ListLiteral in type inference
+def maybe_literal(value):
+    """Get a Literal type for the value or None.
+    """
+    # bodo change: don't use our ListLiteral for regular constant or global lists.
+    # ListLiteral is only used when Bodo forces an argument to be a literal
+    if isinstance(value, list):
+        return
+    try:
+        return literal(value)
+    except LiteralTypingError:
+        return
+
+
+lines = inspect.getsource(types.maybe_literal)
+if (
+    hashlib.sha256(lines.encode()).hexdigest()
+    != "8fb2fd93acf214b28e33e37d19dc2f7290a42792ec59b650553ac278854b5081"
+):  # pragma: no cover
+    warnings.warn("types.maybe_literal has changed")
+
+types.maybe_literal = maybe_literal
+types.misc.maybe_literal = maybe_literal
