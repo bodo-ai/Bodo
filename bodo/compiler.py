@@ -65,16 +65,21 @@ class BodoCompiler(numba.core.compiler.CompilerBase):
     """
 
     def define_pipelines(self):
-        return self._create_bodo_pipeline(True)
+        return self._create_bodo_pipeline(
+            distributed=True, inline_calls_pass=inline_all_calls
+        )
 
-    def _create_bodo_pipeline(self, distributed):
+    def _create_bodo_pipeline(self, distributed=True, inline_calls_pass=False):
+        """create compiler pipeline for Bodo using Numba's nopython pipeline
+        """
         name = "bodo" if distributed else "bodo_seq"
+        name = name + "_inline" if inline_calls_pass else name
         pm = DefaultPassBuilder.define_nopython_pipeline(self.state, name)
 
         # inline other jit functions right after IR is available
         # NOTE: calling after WithLifting since With blocks should be handled before
         # simplify_CFG() is called (block number is used in EnterWith nodes)
-        if inline_all_calls:  # pragma: no cover
+        if inline_calls_pass:
             pm.add_pass_after(InlinePass, WithLifting)
         # run untyped pass right before SSA construction and type inference
         # NOTE: SSA includes phi nodes (which have block numbers) that we don't handle.
@@ -315,7 +320,17 @@ class BodoCompilerSeq(BodoCompiler):
     """
 
     def define_pipelines(self):
-        return self._create_bodo_pipeline(False)
+        return self._create_bodo_pipeline(
+            distributed=False, inline_calls_pass=inline_all_calls
+        )
+
+
+class BodoCompilerSeqInline(BodoCompiler):
+    """Bodo pipeline with inlining and without the distributed pass (used in df.apply)
+    """
+
+    def define_pipelines(self):
+        return self._create_bodo_pipeline(distributed=False, inline_calls_pass=True)
 
 
 @register_pass(mutates_CFG=False, analysis_only=True)
@@ -329,7 +344,7 @@ class LowerParforSeq(FunctionPass):
         FunctionPass.__init__(self)
 
     def run_pass(self, state):
-        numba.parfors.parfor.lower_parfor_sequential(
+        bodo.transforms.distributed_pass.lower_parfor_sequential(
             state.typingctx, state.func_ir, state.typemap, state.calltypes
         )
         return True

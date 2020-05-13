@@ -243,12 +243,8 @@ class DataFrameAttribute(AttributeTemplate):
 
         # check axis
         axis = args[1] if len(args) > 1 else kws.get("axis", None)
-        if (
-            axis is None
-            or not isinstance(axis, types.IntegerLiteral)
-            or axis.literal_value != 1
-        ):
-            raise ValueError("only apply() with axis=1 supported")
+        if not (is_overload_constant_int(axis) and get_overload_const_int(axis) == 1):
+            raise BodoError("only apply() with axis=1 supported")
 
         # using NamedTuple instead of Series, TODO: pass Series
         Row = namedtuple("R", df.columns)
@@ -265,7 +261,10 @@ class DataFrameAttribute(AttributeTemplate):
             dtypes.append(el_typ)
 
         row_typ = types.NamedTuple(dtypes, Row)
-        f_return_type = get_const_func_output_type(func, (row_typ,), self.context)
+        try:
+            f_return_type = get_const_func_output_type(func, (row_typ,), self.context)
+        except:
+            raise BodoError("DataFrame.apply(): user-defined function not supported")
 
         return signature(SeriesType(f_return_type, index=df.index), *args)
 
@@ -288,6 +287,10 @@ class DataFrameAttribute(AttributeTemplate):
                 new_names.append(v[1] if len(v) == 2 else v[1:])
                 new_data.append(df.data[i])
             return DataFrameType(tuple(new_data), df.index, tuple(new_names))
+
+
+# don't convert literal types to non-literal and rerun the typing template
+DataFrameAttribute._no_unliteral = True
 
 
 def decref_df_data(context, builder, payload, df_type):

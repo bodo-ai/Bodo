@@ -52,6 +52,20 @@ class BodoTypeInference(PartialTypeInference):
     _name = "bodo_type_inference"
 
     def run_pass(self, state):
+        """run Bodo type inference pass
+        """
+        # _raise_errors is a global class attribute, which can be set/unset in recursive
+        # calls. It is dangerous since the output type of the function is set only if
+        # _raise_errors = True for some reason (see #964 and test_df_apply_func_case2):
+        # https://github.com/numba/numba/blob/1ea770564cb3c0c6cb9d8ab92e7faf23cd4c4c19/numba/core/typed_passes.py#L100
+        old_raise_errors = self._raise_errors
+        try:
+            self._raise_errors = False
+            return self.run_pass_inner(state)
+        finally:
+            self._raise_errors = old_raise_errors
+
+    def run_pass_inner(self, state):
         global in_partial_typing, typing_transform_required
         saved_in_partial_typing = in_partial_typing
         saved_typing_transform_required = typing_transform_required

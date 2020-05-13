@@ -37,6 +37,7 @@ class BodoError(BaseException):
     numba's error catching, which enables raising simpler error directly to the user.
     TODO: change to Exception when possible.
     """
+
     def __init__(self, msg, is_new=True):
         self.is_new = is_new
         highlight = numba.core.errors.termcolor().errmsg
@@ -308,6 +309,19 @@ def get_overload_const_int(val):
         assert isinstance(val.literal_value, int)
         return val.literal_value
     raise BodoError("{} not constant integer".format(val))
+
+
+def is_const_func_type(t):
+    """check if 't' is a constant function type
+    """
+    return isinstance(
+        t,
+        (
+            types.MakeFunctionLiteral,
+            bodo.utils.typing.FunctionLiteral,
+            types.Dispatcher,
+        ),
+    )
 
 
 def get_overload_const_func(val):

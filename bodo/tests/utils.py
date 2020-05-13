@@ -392,7 +392,9 @@ class DeadcodeTestPipeline(bodo.compiler.BodoCompiler):
     """
 
     def define_pipelines(self):
-        [pipeline] = self._create_bodo_pipeline(True)
+        [pipeline] = self._create_bodo_pipeline(
+            distributed=True, inline_calls_pass=False
+        )
         pipeline._finalized = False
         pipeline.add_pass_after(PreserveIR, NopythonRewrites)
         pipeline.finalize()
@@ -516,7 +518,6 @@ def check_parallel_coherency(
     assert n_passed == n_pes
 
 
-
 # This function allows to check the coherency of functions using a list of strings
 # in input and output. The idea is to map the list of strings into strings.
 #
@@ -536,7 +537,9 @@ def check_func_list_string(
         result_mapped_A.reset_index(drop=True, inplace=True)
         result_mapped_B.reset_index(drop=True, inplace=True)
     pd.testing.assert_frame_equal(result_mapped_A, result_mapped_B)
-    check_parallel_coherency(test_func, args, sort_output=sort_output, reset_index=reset_index)
+    check_parallel_coherency(
+        test_func, args, sort_output=sort_output, reset_index=reset_index
+    )
 
 
 def gen_random_string_array(n, max_str_len=10):
