@@ -1,0 +1,8 @@
+one,two,three,four,five
+-1.0,foo,True,-1.0,foo
+,bar,False,5.1,bar
+2.5,baz,True,2.5,baz
+3.0,foo,True,3.0,
+4.0,bar,True,4.0,bar
+6.0,baz,False,6.0,baz
+10.0,foo,False,11.0,foo

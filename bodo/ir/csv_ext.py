@@ -38,6 +38,7 @@ class CsvReader(ir.Stmt):
         out_types,
         usecols,
         loc,
+        header,
         skiprows=0,
     ):
         self.connector_typ = "csv"
@@ -50,6 +51,7 @@ class CsvReader(ir.Stmt):
         self.usecols = usecols
         self.loc = loc
         self.skiprows = skiprows
+        self.header = header
 
     def __repr__(self):  # pragma: no cover
         return "{} = ReadCsv(file={}, col_names={}, types={}, vars={})".format(
@@ -65,7 +67,7 @@ ll.add_symbol("csv_file_chunk_reader", csv_cpp.csv_file_chunk_reader)
 csv_file_chunk_reader = types.ExternalFunction(
     "csv_file_chunk_reader",
     bodo.ir.connector.stream_reader_type(
-        types.voidptr, types.bool_, types.int64, types.int64
+        types.voidptr, types.bool_, types.int64, types.int64, types.bool_
     ),
 )
 
@@ -129,6 +131,7 @@ def csv_distributed_run(
         targetctx,
         parallel,
         csv_node.skiprows,
+        csv_node.header,
     )
 
     f_block = compile_to_numba_ir(
@@ -156,7 +159,9 @@ distributed_analysis.distributed_analysis_extensions[
 typeinfer.typeinfer_extensions[CsvReader] = bodo.ir.connector.connector_typeinfer
 ir_utils.visit_vars_extensions[CsvReader] = bodo.ir.connector.visit_vars_connector
 ir_utils.remove_dead_extensions[CsvReader] = remove_dead_csv
-numba.core.analysis.ir_extension_usedefs[CsvReader] = bodo.ir.connector.connector_usedefs
+numba.core.analysis.ir_extension_usedefs[
+    CsvReader
+] = bodo.ir.connector.connector_usedefs
 ir_utils.copy_propagate_extensions[CsvReader] = bodo.ir.connector.get_copies_connector
 ir_utils.apply_copy_propagate_extensions[
     CsvReader
@@ -238,7 +243,7 @@ dummy_use = numba.njit(lambda a: None)
 
 
 def _gen_csv_reader_py(
-    col_names, col_typs, usecols, sep, typingctx, targetctx, parallel, skiprows
+    col_names, col_typs, usecols, sep, typingctx, targetctx, parallel, skiprows, header
 ):
     # TODO: support non-numpy types like strings
     sanitized_cnames = [sanitize_varname(c) for c in col_names]
@@ -257,15 +262,23 @@ def _gen_csv_reader_py(
             for cname, t in zip(col_names, col_typs)
         ]
     )
+    # here, header can either be:
+    #  0 meaning the first row of the file(s) is the header row
+    #  None meaning the file(s) does not contain header
+    has_header = header == 0
 
     func_text = "def csv_reader_py(fname):\n"
     func_text += "  skiprows = {}\n".format(skiprows)
     # TODO: unicode name
     func_text += "  f_reader = csv_file_chunk_reader(fname._data, "
-    func_text += "    {}, skiprows, -1)\n".format(parallel)
+    func_text += "    {}, skiprows, -1, {})\n".format(parallel, has_header)
     func_text += "  dummy_use(fname)\n"
     func_text += "  with objmode({}):\n".format(typ_strs)
     func_text += "    df = pd.read_csv(f_reader, names={},\n".format(col_names)
+    # header is always None here because header information was found in untyped pass.
+    # this pd.read_csv() happens at runtime and is passing a file reader(f_reader) 
+    # to pandas. f_reader skips the header, so we have to tell pandas header=None.
+    func_text += "       header=None,\n"
     func_text += "       parse_dates=[{}],\n".format(date_inds)
     func_text += "       dtype={{{}}},\n".format(pd_dtype_strs)
     func_text += "       usecols={}, sep='{}', low_memory=False)\n".format(usecols, sep)

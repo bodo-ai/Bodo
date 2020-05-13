@@ -35,8 +35,8 @@ extern "C" {
  * @param count: number of bytes to write
  * @param is_parallel: true if df, from pandas to_csv(df), is distributed
  * @param suffix: ".csv"/".json"
- * @param is_records_lines: true if df.to_json(orient="records", lines=True), or df.to_csv()
- *                          false for all other "orient" and "lines" combinations
+ * @param is_records_lines: true if df.to_json(orient="records", lines=True), or
+ * df.to_csv() false for all other "orient" and "lines" combinations
  */
 void write_buff(char *_path_name, char *buff, int64_t start, int64_t count,
                 bool is_parallel, const std::string &suffix,
@@ -125,6 +125,24 @@ void json_write(char *_path_name, char *buff, int64_t start, int64_t count,
                is_records_lines);
 }
 
+/*
+ * Check if the df.to_csv() output is a directory: output is a directory
+ * if writing to s3/hdfs with more than 1 rank
+ * @param _path_name: file/directory name to write to
+ * @return if the output is a directory
+ */
+int8_t csv_output_is_dir(char *_path_name) {
+    int num_ranks;
+    MPI_Comm_size(MPI_COMM_WORLD, &num_ranks);
+    if (num_ranks > 1) {
+        if (strncmp("s3://", _path_name, 5) == 0 ||
+            strncmp("hdfs://", _path_name, 7) == 0) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
 PyMODINIT_FUNC PyInit_csv_cpp(void) {
     PyObject *m;
     static struct PyModuleDef moduledef = {
@@ -135,6 +153,9 @@ PyMODINIT_FUNC PyInit_csv_cpp(void) {
 
     PyObject_SetAttrString(m, "csv_write",
                            PyLong_FromVoidPtr((void *)(&csv_write)));
+
+    PyObject_SetAttrString(m, "csv_output_is_dir",
+                           PyLong_FromVoidPtr((void *)(&csv_output_is_dir)));
 
     PyInit_csv(m);
     return m;

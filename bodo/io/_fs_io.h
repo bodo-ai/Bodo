@@ -11,8 +11,9 @@ struct Bodo_Fs {
     enum FsEnum { posix = 0, s3 = 1, hdfs = 2 };
 };
 
-typedef FileReader *(*s3_reader_init_t)(const char *, const char *);
-typedef FileReader *(*hdfs_reader_init_t)(const char *, const char *);
+typedef FileReader *(*s3_reader_init_t)(const char *, const char *, bool, bool);
+typedef FileReader *(*hdfs_reader_init_t)(const char *, const char *, bool,
+                                          bool);
 typedef void (*s3_get_fs_t)(std::shared_ptr<::arrow::fs::S3FileSystem> *);
 typedef void (*hdfs_get_fs_t)(const std::string &,
                               std::shared_ptr<::arrow::io::HadoopFileSystem> *);

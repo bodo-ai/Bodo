@@ -85,8 +85,9 @@ class S3FileReader : public SingleFileReader {
     std::shared_ptr<arrow::fs::S3FileSystem> fs;
     arrow::Status status;
     arrow::Result<std::shared_ptr<arrow::io::RandomAccessFile>> result;
-    S3FileReader(const char *_fname, const char *f_type)
-        : SingleFileReader(_fname, f_type) {
+    S3FileReader(const char *_fname, const char *f_type, bool csv_header,
+                 bool json_lines)
+        : SingleFileReader(_fname, f_type, csv_header, json_lines) {
         fs = get_s3_fs();
         // open file
         result = fs->OpenInputFile(std::string(_fname));
@@ -94,7 +95,7 @@ class S3FileReader : public SingleFileReader {
         this->assign_f_type(_fname);
     }
     bool seek(int64_t pos) {
-        status = s3_file->Seek(pos);
+        status = s3_file->Seek(pos + this->csv_header_bytes);
         return status.ok();
     }
     bool ok() { return status.ok(); }
@@ -126,8 +127,9 @@ class S3DirectoryFileReader : public DirectoryFileReader {
     std::vector<arrow::fs::FileInfo> file_stats;
     arrow::Status status;
 
-    S3DirectoryFileReader(const char *_dirname, const char *f_type)
-        : DirectoryFileReader(_dirname, f_type) {
+    S3DirectoryFileReader(const char *_dirname, const char *f_type,
+                          bool csv_header, bool json_lines)
+        : DirectoryFileReader(_dirname, f_type, csv_header, json_lines) {
         // dirname is in format of s3://host:port/path/dir]
         // initialize dir_selector
         dir_selector.base_dir = this->dirname;
@@ -147,13 +149,13 @@ class S3DirectoryFileReader : public DirectoryFileReader {
         std::sort(this->file_names_sizes.begin(), this->file_names_sizes.end(),
                   sort_by_name);
 
-        this->file_names =
-            this->findDirSizeFileSizesFileNames(_dirname, file_names_sizes);
+        this->findDirSizeFileSizesFileNames(_dirname, file_names_sizes);
     };
 
     void initFileReader(const char *fname) {
-        this->f_reader = new S3FileReader(fname, this->f_type_to_stirng());
-        this->f_reader->json_lines = this->json_lines;
+        this->f_reader = new S3FileReader(fname, this->f_type_to_string(),
+                                          this->csv_header, this->json_lines);
+        this->f_reader->csv_header_bytes = this->csv_header_bytes;
     };
 };
 
@@ -163,16 +165,17 @@ void s3_get_fs(std::shared_ptr<arrow::fs::S3FileSystem> *fs) {
     *fs = get_s3_fs();
 }
 
-FileReader *init_s3_reader(const char *fname, const char *suffix) {
+FileReader *init_s3_reader(const char *fname, const char *suffix,
+                           bool csv_header, bool json_lines) {
     arrow::fs::FileInfo file_stat;
     std::shared_ptr<arrow::fs::S3FileSystem> fs = get_s3_fs();
     arrow::Result<arrow::fs::FileInfo> result =
         fs->GetFileInfo(std::string(fname));
     CHECK_ARROW_AND_ASSIGN(result, "fs->GetFileInfo", file_stat)
     if (file_stat.IsDirectory()) {
-        return new S3DirectoryFileReader(fname, suffix);
+        return new S3DirectoryFileReader(fname, suffix, csv_header, json_lines);
     } else if (file_stat.IsFile()) {
-        return new S3FileReader(fname, suffix);
+        return new S3FileReader(fname, suffix, csv_header, json_lines);
     } else {
         Bodo_PyErr_SetString(PyExc_RuntimeError,
                              "Error in arrow s3: invalid path");

@@ -7,6 +7,7 @@
 #include "../libs/_bodo_common.h"
 #include "../libs/_distributed.h"
 #include "arrow/filesystem/filesystem.h"
+#include "mpi.h"
 
 typedef std::vector<int64_t> size_vec;
 typedef std::vector<std::string> name_vec;
@@ -17,23 +18,34 @@ struct File_Type {
     enum FTypeEnum { csv = 0, json = 1, numpy = 2 };
 };
 
-#define CHECK(expr, msg)                                    \
-    if (!(expr)) {                                          \
-        std::cerr << "Error in read: " << msg << std::endl; \
-    }
-
 // File reader abstraction to enable plugging multiple data sources
 // and file formats
 class FileReader {
    public:
     File_Type::FTypeEnum f_type = File_Type::csv;
-    bool json_lines = true;  // used by read_json
-    FileReader(const char *f_type) { this->assign_f_type(std::string(f_type)); }
+    // csv_header=true when pd.read_csv(header=0): if we are reading
+    // from a single file, we skip the header(first) row of the file;
+    // if we are reading from a directory, we skip the header(first) row of
+    // each file;
+    bool csv_header = true;
+    // json_lines = true when pd.read_json(lines=True)
+    bool json_lines = true;
+    // used by read_csv reading a directory with header. csv_header_bytes is
+    // found during DirectoryFileReader initialization. And when the
+    // DirectoryFileReader initialize SingleFileReaders, csv_header_bytes is
+    // then set for SingleFileReaders, and later being used in
+    // SingleFileReader -> seek().
+    int64_t csv_header_bytes = 0;
+    FileReader(const char *f_type, bool _csv_header, bool _json_lines)
+        : csv_header(_csv_header), json_lines(_json_lines) {
+        this->assign_f_type(std::string(f_type));
+    }
     virtual ~FileReader(){};
     virtual uint64_t getSize() = 0;
     virtual bool seek(int64_t pos) = 0;
     virtual bool ok() = 0;
     virtual bool read(char *s, int64_t size) = 0;
+    virtual bool skipHeaderRows() = 0;
     /**
      * assign f_type based on file_type
      *
@@ -50,7 +62,7 @@ class FileReader {
     /**
      * f_type to string
      */
-    const char *f_type_to_stirng() {
+    const char *f_type_to_string() {
         if (this->f_type == File_Type::csv) return "csv";
         if (this->f_type == File_Type::json) return "json";
         return "";
@@ -62,8 +74,9 @@ class FileReader {
 class SingleFileReader : public FileReader {
    public:
     const char *fname;
-    SingleFileReader(const char *_fname, const char *f_type)
-        : FileReader(f_type), fname(_fname){};
+    SingleFileReader(const char *_fname, const char *f_type, bool csv_header,
+                     bool json_lines)
+        : FileReader(f_type, csv_header, json_lines), fname(_fname){};
     virtual ~SingleFileReader(){};
     virtual uint64_t getSize() = 0;
     virtual bool seek(int64_t pos) = 0;
@@ -76,6 +89,11 @@ class SingleFileReader : public FileReader {
         }
         return true;
     };
+    /**
+     * SingleFileReader always use skiprows to skip header row
+     * if pd.read_csv(header=0)
+     */
+    bool skipHeaderRows() { return this->csv_header; };
 
    protected:
     /**
@@ -102,6 +120,7 @@ class SingleFileReader : public FileReader {
                                       ": '{' should be followed by '\n' at the "
                                       "beginning of the record.")
                                          .c_str());
+                return;
             }
         }
         // change the end from '},\n' to '}]\n'
@@ -115,6 +134,7 @@ class SingleFileReader : public FileReader {
                                       ": '},' should be followed by '\n' at "
                                       "the end of the record.")
                                          .c_str());
+                return;
             }
         }
     }
@@ -134,11 +154,12 @@ class DirectoryFileReader : public FileReader {
                              // files in file_names[0,i)
     // |file_sizes| = |files| + 1
     size_vec file_sizes;
-    name_vec
-        file_names;  // sorted names of each csv/json file inside the directory
+    name_vec file_names;  // sorted names of each non-empty csv/json file inside
+                          // the directory
 
-    DirectoryFileReader(const char *_dirname, const char *f_type)
-        : FileReader(f_type), dirname(_dirname){};
+    DirectoryFileReader(const char *_dirname, const char *f_type,
+                        bool csv_header, bool json_lines)
+        : FileReader(f_type, csv_header, json_lines), dirname(_dirname){};
     ~DirectoryFileReader() {
         if (this->f_reader) delete this->f_reader;
     };
@@ -146,10 +167,15 @@ class DirectoryFileReader : public FileReader {
     bool seek(int64_t pos) {
         // find which file to seek at
         this->file_index = this->findFileIndexFromPos(pos);
-        // initialize S3FileReader
+        // initialize SingleFileReader
         initFileReader((this->file_names[this->file_index]).c_str());
-        CHECK(this->ok(),
-              "could not open file: " + this->file_names[this->file_index]);
+        if (!this->ok()) {
+            Bodo_PyErr_SetString(
+                PyExc_RuntimeError,
+                ("could not open file: " + this->file_names[this->file_index])
+                    .c_str());
+            return false;
+        }
         // find seeking position relative to the file, and seek into file
         this->curr_pos = this->seekIntoFileReader(pos);
         return this->ok();
@@ -163,9 +189,13 @@ class DirectoryFileReader : public FileReader {
             readable_size = this->findReadableSize();
             read_size = this->findReadSize(size - seen_size, readable_size);
 
-            this->f_reader->read(s + seen_size, read_size);
-            CHECK(this->ok(),
-                  "could not read file:" + std::string(this->f_reader->fname));
+            if (!this->f_reader->read(s + seen_size, read_size)) {
+                Bodo_PyErr_SetString(PyExc_RuntimeError,
+                                     ("could not read file:" +
+                                      std::string(this->f_reader->fname))
+                                         .c_str());
+                return false;
+            }
 
             // handle curr_pos and file_index
             if (read_size < readable_size) {
@@ -173,13 +203,28 @@ class DirectoryFileReader : public FileReader {
             } else {
                 this->curr_pos = 0;
                 this->file_index += 1;
-                // delete the current FileReader, and initialize the next one
+                // delete the current FileReader, and initialize the next one,
+                // and seek into the beginning of the file
                 if (this->file_index < (int64_t)this->file_names.size()) {
                     delete this->f_reader;
                     initFileReader(
                         (this->file_names[this->file_index]).c_str());
-                    CHECK(this->ok(), "could not open file: " +
-                                          this->file_names[this->file_index]);
+                    if (!this->ok()) {
+                        Bodo_PyErr_SetString(
+                            PyExc_RuntimeError,
+                            ("could not open file: " +
+                             this->file_names[this->file_index])
+                                .c_str());
+                        return false;
+                    }
+                    if (!this->f_reader->seek(0)) {
+                        Bodo_PyErr_SetString(
+                            PyExc_RuntimeError,
+                            ("could not seek file: " +
+                             this->file_names[this->file_index])
+                                .c_str());
+                        return false;
+                    }
                 }
             }
             seen_size += read_size;
@@ -193,6 +238,11 @@ class DirectoryFileReader : public FileReader {
         }
         return this->f_reader->ok();
     };
+    /**
+     * DirectoryFileReader never skip header row with skiprows
+     * header row is being omitted by not reading them
+     */
+    bool skipHeaderRows() { return 0; }
 
    protected:
     /**
@@ -219,19 +269,17 @@ class DirectoryFileReader : public FileReader {
         return pos_in_file;
     };
     /**
-     * compute dir_size, file_names, file_sizes
+     * compute and set dir_size, file_names, file_sizes
      *
      * dir_size, and file_sizes are set within the function
      *
      * @param dname directory name
      * @param file_names_sizes Pair(file name, size of file)
-     * @return file names extracted from file_names_sizes
      */
-    name_vec findDirSizeFileSizesFileNames(
-        const char *dname, const name_size_vec &file_names_sizes) {
+    void findDirSizeFileSizesFileNames(const char *dname,
+                                       const name_size_vec &file_names_sizes) {
         std::string dirname(dname);
         const char *suffix;
-        name_vec file_names;
         this->dir_size = 0;
         // TODO: consider the possibility of non-standard extensions
         if (this->f_type == File_Type::csv) {
@@ -241,16 +289,28 @@ class DirectoryFileReader : public FileReader {
             suffix = ".json";
         }
 
+        // find & set all file name
         for (auto it = file_names_sizes.begin(); it != file_names_sizes.end();
              ++it) {
-            if ((boost::ends_with(((*it).first.c_str()), suffix))) {
-                file_names.push_back((*it).first);
+            if ((boost::ends_with(((*it).first.c_str()), suffix)) &&
+                (*it).second > 0) {
+                this->file_names.push_back((*it).first);
+            }
+        }
+
+        // find and set header row size in bytes
+        this->findHeaderRowSize();
+
+        // find and set file_sizes & dir_size
+        for (auto it = file_names_sizes.begin(); it != file_names_sizes.end();
+             ++it) {
+            if ((boost::ends_with(((*it).first.c_str()), suffix)) &&
+                (*it).second > 0) {
                 (this->file_sizes).push_back(this->dir_size);
-                this->dir_size += (*it).second;
+                this->dir_size += (*it).second - this->csv_header_bytes;
             }
         }
         this->file_sizes.push_back(this->dir_size);
-        return file_names;
     };
     /**
      * find size of readable contents of the file
@@ -281,7 +341,77 @@ class DirectoryFileReader : public FileReader {
         // read until the end of the file
         return readable_size;
     }
+    /**
+     * find and set csv_header_bytes
+     * rank 0 reads one file in the directory, find the size of the header row,
+     * broadcast it to all other ranks
+     *
+     */
+    void findHeaderRowSize() {
+        if (!this->csv_header) {
+            return;
+        }
+        int rank = 0;
+        MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
+        int64_t header_size = 0;
+        // rank 0 finds the size of header row
+        if (rank == 0) {
+            size_t tmp_buffer_size = 100;  // TODO: tune this
+            char *tmp_buffer = new char[tmp_buffer_size];
+
+            std::string &first_file = this->file_names.front();
+
+            this->initFileReader(first_file.c_str());
+            if (!this->f_reader->seek(0)) {
+                Bodo_PyErr_SetString(PyExc_RuntimeError,
+                                     ("could not seek into file:" +
+                                      std::string(this->f_reader->fname))
+                                         .c_str());
+                return;
+            }
+
+            size_t file_size = this->f_reader->getSize();
+            size_t seen_size = 0;
+            bool end_of_header = false;
+
+            // keep reading until '\n' found
+            while (seen_size < file_size && !end_of_header) {
+                size_t read_size =
+                    std::min(tmp_buffer_size, file_size - seen_size);
+                if (!this->f_reader->read(tmp_buffer, read_size)) {
+                    Bodo_PyErr_SetString(PyExc_RuntimeError,
+                                         ("could not read file:" +
+                                          std::string(this->f_reader->fname))
+                                             .c_str());
+                    return;
+                }
+                for (size_t i = 0; i < read_size; i++) {
+                    header_size += 1;
+                    if (tmp_buffer[i] == '\n') {
+                        end_of_header = true;
+                        break;
+                    }
+                }
+                seen_size += read_size;
+            }
+
+            if (!end_of_header) {
+                Bodo_PyErr_SetString(
+                    PyExc_RuntimeError,
+                    "pd.read_csv(header=0): header is expected,"
+                    " but not found. Potentially malformed "
+                    " csv files in directory.\n");
+                return;
+            }
+            delete[] tmp_buffer;
+            delete this->f_reader;
+            this->f_reader = nullptr;
+        }
+
+        MPI_Bcast(&header_size, 1, MPI_UINT64_T, 0, MPI_COMM_WORLD);
+        this->csv_header_bytes = header_size;
+    }
 };
 
-#undef CHECK
 #endif  // _BODO_FILE_READER_H_INCLUDED

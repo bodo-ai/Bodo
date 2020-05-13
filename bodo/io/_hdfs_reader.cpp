@@ -103,8 +103,9 @@ class HdfsFileReader : public SingleFileReader {
     std::shared_ptr<arrow::io::HadoopFileSystem> fs;
     std::shared_ptr<::arrow::io::HdfsReadableFile> hdfs_file;
     arrow::Status status;
-    HdfsFileReader(const char *_fname, const char *f_type)
-        : SingleFileReader(_fname, f_type) {
+    HdfsFileReader(const char *_fname, const char *f_type, bool csv_header,
+                   bool json_lines)
+        : SingleFileReader(_fname, f_type, csv_header, json_lines) {
         // fname is in format of hdfs://host:port/dir/file]
         std::string fname(_fname);
         // path is in format of dir/file
@@ -118,7 +119,7 @@ class HdfsFileReader : public SingleFileReader {
         CHECK_ARROW(status, "fs->OpenInputFile");
     }
     bool seek(int64_t pos) {
-        status = hdfs_file->Seek(pos);
+        status = hdfs_file->Seek(pos + this->csv_header_bytes);
         return status.ok();
     }
     bool ok() { return status.ok(); }
@@ -147,8 +148,9 @@ class HdfsDirectoryFileReader : public DirectoryFileReader {
     std::vector<arrow::io::HdfsPathInfo> path_infos;
     arrow::Status status;
 
-    HdfsDirectoryFileReader(const char *_dirname, const char *f_type)
-        : DirectoryFileReader(_dirname, f_type) {
+    HdfsDirectoryFileReader(const char *_dirname, const char *f_type,
+                            bool csv_header, bool json_lines)
+        : DirectoryFileReader(_dirname, f_type, csv_header, json_lines) {
         // path is in format of path/dirname
         std::string path;
 
@@ -168,13 +170,13 @@ class HdfsDirectoryFileReader : public DirectoryFileReader {
         std::sort(this->file_names_sizes.begin(), this->file_names_sizes.end(),
                   sort_by_name);
 
-        this->file_names =
-            this->findDirSizeFileSizesFileNames(_dirname, file_names_sizes);
+        this->findDirSizeFileSizesFileNames(_dirname, file_names_sizes);
     };
 
     void initFileReader(const char *fname) {
-        this->f_reader = new HdfsFileReader(fname, this->f_type_to_stirng());
-        this->f_reader->json_lines = this->json_lines;
+        this->f_reader = new HdfsFileReader(fname, this->f_type_to_string(),
+                                            this->csv_header, this->json_lines);
+        this->f_reader->csv_header_bytes = this->csv_header_bytes;
     };
 };
 
@@ -185,7 +187,8 @@ void hdfs_get_fs(const std::string &uri_string,
     *fs = get_hdfs_fs(uri_string);
 }
 
-FileReader *init_hdfs_reader(const char *fname, const char *suffix) {
+FileReader *init_hdfs_reader(const char *fname, const char *suffix,
+                             bool csv_header, bool json_lines) {
     std::string path;
     arrow::io::HdfsPathInfo path_info;
     std::string f_name(fname);
@@ -195,10 +198,11 @@ FileReader *init_hdfs_reader(const char *fname, const char *suffix) {
     arrow::Status status = fs->GetPathInfo(path, &path_info);
     CHECK_ARROW(status, "fs->GetPathInfo");
     if (path_info.kind == arrow::io::ObjectType::DIRECTORY) {
-        return new HdfsDirectoryFileReader(fname, suffix);
+        return new HdfsDirectoryFileReader(fname, suffix, csv_header,
+                                           json_lines);
     }
 
-    return new HdfsFileReader(fname, suffix);
+    return new HdfsFileReader(fname, suffix, csv_header, json_lines);
 }
 
 void hdfs_open_file(const char *fname,

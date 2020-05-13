@@ -198,6 +198,42 @@ def test_s3_csv_write_1D_var(minio_server, s3_bucket, test_df):
     bodo_write(_get_dist_arg(test_df, False, True))
 
 
+def test_s3_csv_write_header_seq(minio_server, s3_bucket, test_df):
+    """
+    test s3 to_csv with header sequentially
+    """
+
+    def test_write(test_df):
+        test_df.to_csv("s3://bodo-test/test_df_bodo_header_seq.csv", index=False)
+
+    bodo_write = bodo.jit(test_write)
+    bodo_write(test_df)
+
+
+def test_s3_csv_write_header_1D(minio_server, s3_bucket, test_df):
+    """
+    test s3 to_csv with header in 1D distributed
+    """
+
+    def test_write(test_df):
+        test_df.to_csv("s3://bodo-test/test_df_bodo_header_1D.csv", index=False)
+
+    bodo_write = bodo.jit(all_args_distributed_block=True)(test_write)
+    bodo_write(_get_dist_arg(test_df, False))
+
+
+def test_s3_csv_write_header_1D_var(minio_server, s3_bucket, test_df):
+    """
+    test s3 to_csv with header in 1D var
+    """
+
+    def test_write(test_df):
+        test_df.to_csv("s3://bodo-test/test_df_bodo_header_1D_var.csv", index=False)
+
+    bodo_write = bodo.jit(all_args_distributed_varlength=True)(test_write)
+    bodo_write(_get_dist_arg(test_df, False, True))
+
+
 def test_s3_json_write_records_lines_seq(minio_server, s3_bucket, test_df):
     """
     test s3 to_json(orient="records", lines=True) sequentially
@@ -320,6 +356,42 @@ def test_s3_csv_read_1D_var(minio_server, s3_bucket, test_df):
             names=["A", "B", "C"],
             dtype={"A": np.float, "B": "bool", "C": np.int},
         )
+
+    check_func(test_read, (), py_output=test_df)
+
+
+def test_s3_csv_read_header_seq(minio_server, s3_bucket, test_df):
+    """
+    read_csv with header and infer dtypes
+    test the csv file we just wrote sequentially
+    """
+
+    def test_read():
+        return pd.read_csv("s3://bodo-test/test_df_bodo_header_seq.csv",)
+
+    check_func(test_read, (), py_output=test_df)
+
+
+def test_s3_csv_read_header_1D(minio_server, s3_bucket, test_df):
+    """
+    read_csv with header and infer dtypes
+    test the csv file we just wrote in 1D
+    """
+
+    def test_read():
+        return pd.read_csv("s3://bodo-test/test_df_bodo_header_1D.csv",)
+
+    check_func(test_read, (), py_output=test_df)
+
+
+def test_s3_csv_read_1D_header_var(minio_server, s3_bucket, test_df):
+    """
+    read_csv with header and infer dtypes
+    test the csv file we just wrote in 1D Var
+    """
+
+    def test_read():
+        return pd.read_csv("s3://bodo-test/test_df_bodo_header_1D_var.csv",)
 
     check_func(test_read, (), py_output=test_df)
 

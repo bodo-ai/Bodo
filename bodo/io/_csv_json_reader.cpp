@@ -50,15 +50,16 @@
 class LocalFileReader : public SingleFileReader {
    public:
     std::ifstream *fstream;
-    LocalFileReader(const char *_fname, const char *f_type)
-        : SingleFileReader(_fname, f_type) {
+    LocalFileReader(const char *_fname, const char *f_type, bool csv_header,
+                    bool json_lines)
+        : SingleFileReader(_fname, f_type, csv_header, json_lines) {
         this->fstream = new std::ifstream(fname);
         CHECK(fstream->good() && !fstream->eof() && fstream->is_open(),
               "could not open file.");
     }
     uint64_t getSize() { return boost::filesystem::file_size(fname); }
     bool seek(int64_t pos) {
-        this->fstream->seekg(pos, std::ios_base::beg);
+        this->fstream->seekg(pos + this->csv_header_bytes, std::ios_base::beg);
         return this->ok();
     }
     bool ok() { return (this->fstream->good() and !this->fstream->eof()); }
@@ -75,21 +76,24 @@ class LocalDirectoryFileReader : public DirectoryFileReader {
    public:
     path_vec
         file_paths;  // sorted paths of each csv/json file inside the directory
-    LocalDirectoryFileReader(const char *_dirname, const char *f_type)
-        : DirectoryFileReader(_dirname, f_type) {
+    LocalDirectoryFileReader(const char *_dirname, const char *f_type,
+                             bool csv_header, bool json_lines)
+        : DirectoryFileReader(_dirname, f_type, csv_header, json_lines) {
         // only keep the files that are csv/json files
         std::string dirname(_dirname);
-        const char *suffix = this->f_type_to_stirng();
+        const char *suffix = this->f_type_to_string();
 
-        auto endsWithSuffix =
+        auto nonEmptyEndsWithSuffix =
             [suffix](const boost::filesystem::path &path) -> bool {
             return (boost::filesystem::is_regular_file(path) &&
-                    boost::ends_with(path.string(), suffix));
+                    boost::ends_with(path.string(), suffix) &&
+                    boost::filesystem::file_size(path) > 0);
         };
 
         std::copy_if(boost::filesystem::directory_iterator(_dirname),
                      boost::filesystem::directory_iterator(),
-                     std::back_inserter(this->file_paths), endsWithSuffix);
+                     std::back_inserter(this->file_paths),
+                     nonEmptyEndsWithSuffix);
 
         if ((this->file_paths).size() == 0) {
             Bodo_PyErr_SetString(
@@ -99,21 +103,32 @@ class LocalDirectoryFileReader : public DirectoryFileReader {
         // sort all files in directory
         std::sort(this->file_paths.begin(), this->file_paths.end());
 
+        // find & set all file name
+        for (auto it = this->file_paths.begin(); it != this->file_paths.end();
+             ++it) {
+            (this->file_names).push_back((*it).string());
+        }
+
+        // find and set header row size in bytes
+        this->findHeaderRowSize();
+
         // find dir_size and construct file_sizes
         // assuming the directory contains files only, i.e. no subdirectory
         this->dir_size = 0;
         for (auto it = this->file_paths.begin(); it != this->file_paths.end();
              ++it) {
             (this->file_sizes).push_back(this->dir_size);
-            (this->file_names).push_back((*it).string());
             this->dir_size += boost::filesystem::file_size(*it);
+            this->dir_size -= this->csv_header_bytes;
         }
         this->file_sizes.push_back(this->dir_size);
     };
 
     void initFileReader(const char *fname) {
-        this->f_reader = new LocalFileReader(fname, this->f_type_to_stirng());
-        this->f_reader->json_lines = this->json_lines;
+        this->f_reader =
+            new LocalFileReader(fname, this->f_type_to_string(),
+                                this->csv_header, this->json_lines);
+        this->f_reader->csv_header_bytes = this->csv_header_bytes;
     };
 };
 #undef CHECK
@@ -359,7 +374,7 @@ static std::vector<size_t> count_entries(FileReader *f, size_t n) {
     char separator;
     size_t i = 0;
     char *buffer = new char[BUFF_SIZE];
-    size_t rank = dist_get_rank();
+    int rank = dist_get_rank();
     bool quot = false;
     bool linebreak = false;
     // set separator based on file type
@@ -393,7 +408,7 @@ static std::vector<size_t> count_entries(FileReader *f, size_t n) {
                             "followed by a ',' or a ']'");
                     }
                     j++;  // for ',' or ']'
-                    if (buffer[j + 1] < n_read && buffer[j + 1] == '\n') {
+                    if (j + 1 < n_read && buffer[j + 1] == '\n') {
                         j++;
                     }
                 }
@@ -401,7 +416,7 @@ static std::vector<size_t> count_entries(FileReader *f, size_t n) {
             }
             // case where json output does not end with a new line
             // i.e. pandas.to_json output
-            if (rank == dist_get_size() - 1 && (i + j == n - 1) &&
+            if ((rank == (dist_get_size() - 1)) && (i + j == n - 1) &&
                 buffer[j] != separator && separator == '\n') {
                 pos.push_back(i + j);
             }
@@ -513,15 +528,15 @@ static PyObject *chunk_reader(FileReader *f, size_t fsz, bool is_parallel,
         // TODO skiprows and nrows need testing
         // send start offset of rank 0
         std::vector<size_t> list_off(2 + nranks);
-        size_t* list_off_ptr = list_off.data();
-        size_t idx_off=0;
+        size_t *list_off_ptr = list_off.data();
+        size_t idx_off = 0;
         if (size_t(skiprows) > byte_first_line &&
             size_t(skiprows) <= byte_last_line) {
             size_t i_off = byte_offset +
                            line_offset[skiprows - byte_first_line - 1] +
                            1;  // +1 to skip/include leading/trailing newline
             list_off[idx_off] = i_off;
-            size_t* i_ptr = list_off_ptr + idx_off;
+            size_t *i_ptr = list_off_ptr + idx_off;
             mpi_reqs.push_back(dist_isend(i_ptr, 1, Bodo_CTypes::UINT64, 0,
                                           START_OFFSET, true));
             idx_off++;
@@ -534,7 +549,7 @@ static PyObject *chunk_reader(FileReader *f, size_t fsz, bool is_parallel,
                            line_offset[nrows - byte_first_line - 1] +
                            1;  // +1 to skip/include leading/trailing newline
             list_off[idx_off] = i_off;
-            size_t* i_ptr = list_off_ptr + idx_off;
+            size_t *i_ptr = list_off_ptr + idx_off;
             mpi_reqs.push_back(dist_isend(i_ptr, 1, Bodo_CTypes::UINT64,
                                           nranks - 1, END_OFFSET, true));
             idx_off++;
@@ -553,7 +568,7 @@ static PyObject *chunk_reader(FileReader *f, size_t fsz, bool is_parallel,
                     byte_offset + line_offset[i_bndry - byte_first_line - 1] +
                     1;  // +1 to skip/include leading/trailing newline
                 list_off[idx_off] = i_off;
-                size_t* i_ptr = list_off_ptr + idx_off;
+                size_t *i_ptr = list_off_ptr + idx_off;
                 // send to rank that starts at this boundary: i
                 mpi_reqs.push_back(dist_isend(i_ptr, 1, Bodo_CTypes::UINT64, i,
                                               START_OFFSET, true));
@@ -598,18 +613,21 @@ static PyObject *chunk_reader(FileReader *f, size_t fsz, bool is_parallel,
     return reader;
 }
 
-typedef FileReader *(*s3_reader_init_t)(const char *, const char *);
-typedef FileReader *(*hdfs_reader_init_t)(const char *, const char *);
+typedef FileReader *(*s3_reader_init_t)(const char *, const char *, bool, bool);
+typedef FileReader *(*hdfs_reader_init_t)(const char *, const char *, bool,
+                                          bool);
 
 // taking a file to create a istream and calling chunk_reader
 extern "C" PyObject *file_chunk_reader(const char *fname, const char *suffix,
                                        bool is_parallel, int64_t skiprows,
-                                       int64_t nrows, bool json_lines) {
+                                       int64_t nrows, bool json_lines,
+                                       bool csv_header) {
     CHECK(fname != NULL, "NULL filename provided.");
     FileReader *f_reader;
     PyObject *f_mod;
     PyObject *func_obj;
     uint64_t fsz = -1;
+    bool skipHeaderRows;
 
     if (strncmp("s3://", fname, 5) == 0) {
         // load s3_reader module if path starts with s3://
@@ -618,7 +636,7 @@ extern "C" PyObject *file_chunk_reader(const char *fname, const char *suffix,
 
         s3_reader_init_t func =
             (s3_reader_init_t)PyNumber_AsSsize_t(func_obj, NULL);
-        f_reader = func(fname + 5, suffix);
+        f_reader = func(fname + 5, suffix, csv_header, json_lines);
 
         Py_DECREF(f_mod);
         Py_DECREF(func_obj);
@@ -629,31 +647,38 @@ extern "C" PyObject *file_chunk_reader(const char *fname, const char *suffix,
 
         hdfs_reader_init_t func =
             (hdfs_reader_init_t)PyNumber_AsSsize_t(func_obj, NULL);
-        f_reader = func(fname, suffix);
+        f_reader = func(fname, suffix, csv_header, json_lines);
 
         Py_DECREF(f_mod);
         Py_DECREF(func_obj);
     } else {
         if (boost::filesystem::is_directory(fname)) {
-            f_reader = new LocalDirectoryFileReader(fname, suffix);
+            f_reader = new LocalDirectoryFileReader(fname, suffix, csv_header,
+                                                    json_lines);
         } else {
-            f_reader = new LocalFileReader(fname, suffix);
+            f_reader =
+                new LocalFileReader(fname, suffix, csv_header, json_lines);
         }
+
         CHECK(f_reader->ok(), "could not open file.");
     }
     fsz = f_reader->getSize();
-    f_reader->json_lines = json_lines;
-    return chunk_reader(f_reader, fsz, is_parallel, skiprows, nrows);
+    skipHeaderRows = f_reader->skipHeaderRows();
+    return chunk_reader(f_reader, fsz, is_parallel, skiprows + skipHeaderRows,
+                        nrows);
 }
 
 extern "C" PyObject *csv_file_chunk_reader(const char *fname, bool is_parallel,
-                                           int64_t skiprows, int64_t nrows) {
-    return file_chunk_reader(fname, "csv", is_parallel, skiprows, nrows, true);
+                                           int64_t skiprows, int64_t nrows,
+                                           bool header) {
+    return file_chunk_reader(fname, "csv", is_parallel, skiprows, nrows, true,
+                             header);
 }
 
 extern "C" PyObject *json_file_chunk_reader(const char *fname, bool lines,
                                             bool is_parallel, int64_t nrows) {
-    return file_chunk_reader(fname, "json", is_parallel, 0, nrows, lines);
+    return file_chunk_reader(fname, "json", is_parallel, 0, nrows, lines,
+                             false);
 }
 
 // NOTE: some old testing code that is commented out due to

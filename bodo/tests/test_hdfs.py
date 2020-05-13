@@ -233,6 +233,48 @@ def test_hdfs_csv_write_1D_var(hdfs_datapath, test_df):
     bodo_write(_get_dist_arg(test_df, False, True), hdfs_fname)
 
 
+def test_hdfs_csv_write_header_seq(hdfs_datapath, test_df):
+    """
+    test hdfs to_csv with header sequentially
+    """
+
+    hdfs_fname = hdfs_datapath("test_df_bodo_header_seq.csv")
+
+    def test_write(test_df):
+        test_df.to_csv(hdfs_fname, index=False)
+
+    bodo_write = bodo.jit(test_write)
+    bodo_write(test_df)
+
+
+def test_hdfs_csv_write_header_1D(hdfs_datapath, test_df):
+    """
+    test hdfs to_csv with header in 1D distributed
+    """
+
+    hdfs_fname = hdfs_datapath("test_df_bodo_header_1D.csv")
+
+    def test_write(test_df):
+        test_df.to_csv(hdfs_fname, index=False)
+
+    bodo_write = bodo.jit(all_args_distributed_block=True)(test_write)
+    bodo_write(_get_dist_arg(test_df, False))
+
+
+def test_hdfs_csv_write_header_1D_var(hdfs_datapath, test_df):
+    """
+    test hdfs to_csv with header in 1D var
+    """
+
+    hdfs_fname = hdfs_datapath("test_df_bodo_header_1D_var.csv")
+
+    def test_write(test_df):
+        test_df.to_csv(hdfs_fname, index=False)
+
+    bodo_write = bodo.jit(all_args_distributed_varlength=True)(test_write)
+    bodo_write(_get_dist_arg(test_df, False, True))
+
+
 def test_hdfs_json_write_records_lines_seq(hdfs_datapath, test_df):
     """
     test hdfs to_json(orient="records", lines=True) sequentially
@@ -353,7 +395,7 @@ def test_hdfs_csv_read_1D(hdfs_datapath, test_df):
     check_func(test_read, (hdfs_fname,), py_output=test_df)
 
 
-def test_hdfs_csv_read_1D_var(datapath, hdfs_datapath, test_df):
+def test_hdfs_csv_read_1D_var(hdfs_datapath, test_df):
     """
     read_csv 
     test the csv file we just wrote in 1D Var
@@ -369,6 +411,48 @@ def test_hdfs_csv_read_1D_var(datapath, hdfs_datapath, test_df):
         )
 
     check_func(test_read, (hdfs_fname,), py_output=test_df)
+
+
+def test_hdfs_csv_read_header_seq(hdfs_datapath, test_df):
+    """
+    read_csv with header and infer dtypes
+    test the csv file we just wrote sequentially
+    """
+
+    hdfs_fname = hdfs_datapath("test_df_bodo_header_seq.csv")
+
+    def test_read():
+        return pd.read_csv(hdfs_fname)
+
+    check_func(test_read, (), py_output=test_df)
+
+
+def test_hdfs_csv_read_header_1D(hdfs_datapath, test_df):
+    """
+    read_csv with header and infer dtypes
+    test the csv file we just wrote in 1D
+    """
+
+    hdfs_fname = hdfs_datapath("test_df_bodo_header_1D.csv")
+
+    def test_read():
+        return pd.read_csv(hdfs_fname)
+
+    check_func(test_read, (), py_output=test_df)
+
+
+def test_hdfs_csv_read_1D_header_var(hdfs_datapath, test_df):
+    """
+    read_csv with header and infer dtypes
+    test the csv file we just wrote in 1D Var
+    """
+
+    hdfs_fname = hdfs_datapath("test_df_bodo_header_1D_var.csv")
+
+    def test_read():
+        return pd.read_csv(hdfs_fname)
+
+    check_func(test_read, (), py_output=test_df)
 
 
 @pytest.fixture(params=[np.arange(5)])

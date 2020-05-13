@@ -39,6 +39,12 @@ from bodo.utils.typing import BodoError, BodoWarning
 import bodo.ir.parquet_ext
 from bodo.transforms import distributed_pass
 from bodo.utils.transform import get_str_const_value
+from bodo.io.fs_io import (
+    get_s3_fs,
+    s3_list_dir_fnames,
+    get_hdfs_fs,
+    hdfs_list_dir_fnames,
+)
 from numba.extending import intrinsic
 from collections import defaultdict
 
@@ -389,61 +395,9 @@ def get_parquet_dataset(file_name, parallel, get_row_counts=True):
     fs = None
     dataset = None
     if file_name.startswith("s3://"):
-        try:
-            import s3fs
-        except:
-            raise BodoError("Reading from s3 requires s3fs currently.")
+        fs = get_s3_fs()
+        file_names = s3_list_dir_fnames(fs, file_name)
 
-        import os
-
-        custom_endpoint = os.environ.get("AWS_S3_ENDPOINT", None)
-        aws_access_key_id = os.environ.get("AWS_ACCESS_KEY_ID", None)
-        aws_secret_access_key = os.environ.get("AWS_SECRET_ACCESS_KEY", None)
-
-        # always use s3fs.S3FileSystem.clear_instance_cache()
-        # before initializing S3FileSystem due to inconsistent file system
-        # between to_parquet to read_parquet
-        if custom_endpoint is not None and (
-            aws_access_key_id is None or aws_secret_access_key is None
-        ):
-            warnings.warn(
-                BodoWarning(
-                    "Reading from s3 with custom_endpoint, "
-                    "but environment variables AWS_ACCESS_KEY_ID or "
-                    "AWS_SECRET_ACCESS_KEY is not set."
-                )
-            )
-        s3fs.S3FileSystem.clear_instance_cache()
-        fs = s3fs.S3FileSystem(
-            key=aws_access_key_id,
-            secret=aws_secret_access_key,
-            client_kwargs={"endpoint_url": custom_endpoint},
-        )
-
-        file_names = None
-        try:
-            # check if file_name is a directory, and if there is a zero-size object
-            # with the name of the directory. If there is, we have to omit it
-            # because pq.ParquetDataset will throw Invalid Parquet file size is 0
-            # bytes
-            path_info = fs.info(file_name)
-            if (
-                path_info["Size"] == 0 and path_info["type"] == "directory"
-            ):  # pragma: no cover
-                # excluded from coverage because haven't found a reliable way
-                # to create 0 size object that is a directory. For example:
-                # fs.mkdir(path)  sometimes doesn't do anything at all
-                path = file_name  # this is "s3://bucket/path-to-dir"
-                files = fs.ls(path)
-                if (
-                    files
-                    and (files[0] == path[5:] or files[0] == path[5:] + "/")
-                    and fs.info("s3://" + files[0])["Size"] == 0
-                ):
-                    # get actual names of objects inside the dir
-                    file_names = ["s3://" + fname for fname in files[1:]]
-        except:  # pragma: no cover
-            pass
         if file_names is not None:  # pragma: no cover
             try:
                 dataset = pq.ParquetDataset(file_names, filesystem=fs)
@@ -451,55 +405,17 @@ def get_parquet_dataset(file_name, parallel, get_row_counts=True):
                 raise BodoError(
                     "read_parquet(): S3 file system cannot be created: {}".format(e)
                 )
-    elif file_name.startswith("hdfs://"):  # pragma: no cover
-        # this HadoopFileSystem is the new file system of pyarrow
-        from pyarrow.fs import HadoopFileSystem, FileSelector, FileType
-
-        # this HadoopFileSystem is the deprecated file system of pyarrow
-        # need this for pq.ParquetDataset
-        # because the new HadoopFileSystem is not a subclass of
-        # pyarrow.filesystem.FileSystem which causes an error
-        from pyarrow.hdfs import HadoopFileSystem as HdFS
-
-        # creates a new Hadoop file system from uri
-        try:
-            hdfs = HadoopFileSystem.from_uri(file_name)
-            from urllib.parse import urlparse
-
-            options = urlparse(file_name)
-            path = options.path
-            fs = HdFS(host=options.hostname, port=options.port, user=options.username)
-        except Exception as e:
-            raise BodoError(
-                "read_parquet(): Hadoop file system cannot be created: {}".format(e)
-            )
-
-        # prefix in form of hdfs://host:port
-        prefix = file_name[: len(file_name) - len(path)]
-        file_names = None
-        # target stat of the path: file or just the directory itself
-        target_stat = hdfs.get_file_info([file_name])
-
-        if target_stat[0].type in (FileType.NotFound, FileType.Unknown):
-            raise BodoError(
-                "read_parquet(): {} is a "
-                "non-existing or unreachable file".format(file_name)
-            )
-
-        if (not target_stat[0].size) and target_stat[0].type == FileType.Directory:
-            file_selector = FileSelector(path, recursive=True)
-            try:
-                file_stats = hdfs.get_file_info(file_selector)
-            except Exception as e:
-                raise BodoError(
-                    "read_parquet(): Exception on getting directory info "
-                    "of {}: {}".format(path, e)
-                )
-            for file_stat in file_stats:
-                file_names = [prefix + file_stat.path for file_stat in file_stats]
+    elif file_name.startswith("hdfs://"): # pragma: no cover
+        fs = get_hdfs_fs(file_name)
+        (_, file_names) = hdfs_list_dir_fnames(file_name)
 
         if file_names is not None:
-            dataset = pq.ParquetDataset(file_names, filesystem=fs)
+            try:
+                dataset = pq.ParquetDataset(file_names, filesystem=fs)
+            except Exception as e:
+                raise BodoError(
+                    "read_parquet(): Hadoop file system cannot be created: {}".format(e)
+                )
 
     if dataset is None:
         dataset = pq.ParquetDataset(file_name, filesystem=fs)
@@ -518,6 +434,7 @@ def get_parquet_dataset(file_name, parallel, get_row_counts=True):
         assert bodo.get_rank() == 0
         comm.bcast(dataset)
     return dataset
+
 
 
 def parquet_file_schema(file_name, selected_columns):

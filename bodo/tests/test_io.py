@@ -773,7 +773,7 @@ def test_csv_fname_comp(datapath):
     @bodo.jit
     def load_func(data_folder):
         fname = data_folder + "/csv_data1.csv"
-        return pd.read_csv(fname)
+        return pd.read_csv(fname, header=None)
 
     data_folder = os.path.join("bodo", "tests", "data")
     # should not raise exception
@@ -1047,7 +1047,7 @@ def test_csv_double_box(datapath):
     fname = datapath("csv_data1.csv")
 
     def test_impl():
-        df = pd.read_csv(fname)
+        df = pd.read_csv(fname, header=None)
         print(df)
         return df
 
@@ -1070,6 +1070,60 @@ def test_csv_header_none(datapath):
     # convert column names from integer to string since Bodo only supports string names
     p_df.columns = [str(c) for c in p_df.columns]
     pd.testing.assert_frame_equal(b_df, p_df)
+
+
+def test_csv_spark_header(datapath):
+    """Test reading Spark csv outputs containing header & infer dtypes
+    """
+    fname1 = datapath("example_single.csv")
+    fname2 = datapath("example_multi.csv")
+
+    def test_impl(fname):
+        return pd.read_csv(fname)
+
+    py_output = pd.read_csv(datapath("example.csv"))
+    check_func(test_impl, (fname1,), py_output=py_output)
+    check_func(test_impl, (fname2,), py_output=py_output)
+
+
+def test_csv_header_write_read(datapath):
+    """Test writing and reading csv outputs containing headers
+    """
+
+    df = pd.read_csv(datapath("example.csv"))
+    pd_fname = "pd_csv_header_test.csv"
+
+    def write_impl(df, fname):
+        df.to_csv(fname)
+
+    def read_impl(fname):
+        return pd.read_csv(fname)
+
+    if bodo.get_rank() == 0:
+        write_impl(df, pd_fname)
+
+    bodo.barrier()
+    pd_res = read_impl(pd_fname)
+
+    bodo_seq_write = bodo.jit(write_impl)
+    bodo_1D_write = bodo.jit(all_args_distributed_block=True)(write_impl)
+    bodo_1D_var_write = bodo.jit(all_args_distributed_varlength=True)(write_impl)
+    arg_seq = (bodo_seq_write, df, "bodo_csv_header_test_seq.csv")
+    arg_1D = (bodo_1D_write, _get_dist_arg(df, False), "bodo_csv_header_test_1D.csv")
+    arg_1D_var = (
+        bodo_1D_var_write,
+        _get_dist_arg(df, False, True),
+        "bodo_csv_header_test_1D_var.csv",
+    )
+    args = [arg_seq, arg_1D, arg_1D_var]
+    for (func, df_arg, fname_arg) in args:
+        with ensure_clean(fname_arg):
+            func(df_arg, fname_arg)
+            check_func(read_impl, (fname_arg,), py_output=pd_res)
+
+    bodo.barrier()
+    if bodo.get_rank() == 0:
+        os.remove(pd_fname)
 
 
 def test_csv_cat1(datapath):
@@ -1134,11 +1188,28 @@ def test_csv_dir_int_nulls_single(datapath):
     fname = datapath("int_nulls_single.csv")
 
     def test_impl():
-        return pd.read_csv(fname, names=["A"], dtype={"A": "Int32"},)
+        return pd.read_csv(fname, names=["A"], dtype={"A": "Int32"}, header=None)
 
     py_output = pd.read_csv(
-        datapath("int_nulls.csv"), names=["A"], dtype={"A": "Int32"},
+        datapath("int_nulls.csv"), names=["A"], dtype={"A": "Int32"}, header=None
     )
+
+    check_func(test_impl, (), py_output=py_output)
+
+
+def test_csv_dir_int_nulls_header_single(datapath):
+    """
+    Test read_csv reading dataframe containing int column with nulls
+    from a directory(Spark output) containing single csv file with header.
+    """
+    fname = datapath("int_nulls_header_single.csv")
+
+    def test_impl():
+        return pd.read_csv(fname)
+
+    # index_col = 0 because int_nulls.csv has index written
+    # names=["A"] because int_nulls.csv does not have header
+    py_output = pd.read_csv(datapath("int_nulls.csv"), index_col=0, names=["A"])
 
     check_func(test_impl, (), py_output=py_output)
 
@@ -1156,6 +1227,24 @@ def test_csv_dir_int_nulls_multi(datapath):
     py_output = pd.read_csv(
         datapath("int_nulls.csv"), names=["A"], dtype={"A": "Int32"},
     )
+
+    check_func(test_impl, (), py_output=py_output)
+
+
+def test_csv_dir_int_nulls_header_multi(datapath):
+    """
+    Test read_csv reading dataframe containing int column with nulls
+    from a directory(Spark output) containing multiple csv files with header,
+    wtih infer dtypes.
+    """
+    fname = datapath("int_nulls_header_multi.csv")
+
+    def test_impl():
+        return pd.read_csv(fname)
+
+    # index_col = 0 because int_nulls.csv has index written
+    # names=["A"] because int_nulls.csv does not have header
+    py_output = pd.read_csv(datapath("int_nulls.csv"), index_col=0, names=["A"])
 
     check_func(test_impl, (), py_output=py_output)
 

@@ -866,6 +866,12 @@ class UntypedPass:
         # ``header=None``
         if header == "infer":
             header = 0 if col_names == 0 else None
+        elif header != 0 and header != None:
+            raise ValueError(
+                "pd.read_csv() header should be 'infer', 0, or None, not {}.".format(
+                    header
+                )
+            )
 
         # TODO: support string usecols
         usecols = None
@@ -895,10 +901,6 @@ class UntypedPass:
             dtype_map = {c: dtypes[usecols[i]] for i, c in enumerate(col_names)}
 
         usecols = list(range(len(col_names))) if usecols is None else usecols
-
-        if header is not None:
-            # data starts after header
-            skiprows += header + 1
 
         # handle dtype arg if provided
         if dtype_var != "":
@@ -956,6 +958,7 @@ class UntypedPass:
                 out_types,
                 usecols,
                 lhs.loc,
+                header,
                 skiprows,
             )
         ]
@@ -1802,6 +1805,10 @@ def _get_sql_df_type_from_db(sql_const, con_const):
 
 def _get_csv_df_type_from_file(fname_const, sep, skiprows, header):
     """get dataframe type for read_csv() using file path constant.
+    If fname_const points to a directory, find a non empty csv file from 
+    the directory. 
+    For posix, pass the file name directly to pandas. For s3 & hdfs, open the 
+    file reader, and pass it to pandas.
     Only rank 0 looks at the file to infer df type, then broadcasts.
     """
     from mpi4py import MPI
@@ -1810,10 +1817,76 @@ def _get_csv_df_type_from_file(fname_const, sep, skiprows, header):
 
     df_type = None
     if bodo.get_rank() == 0:
+        from urllib.parse import urlparse
+
         rows_to_read = 100  # TODO: tune this
-        df = pd.read_csv(
-            fname_const, sep=sep, nrows=rows_to_read, skiprows=skiprows, header=header,
-        )
+        parsed_url = urlparse(fname_const)
+        pd_fname = fname_const
+
+        if parsed_url.scheme == "s3":
+            from bodo.io.fs_io import get_s3_fs, s3_list_dir_fnames
+
+            fs = get_s3_fs()
+            all_files = s3_list_dir_fnames(fs, fname_const)
+
+            if all_files:
+                all_csv_files = [f for f in sorted(all_files) if fs.info(f)["size"] > 0]
+                if len(all_csv_files) == 0:
+                    raise BodoError(
+                        "pd.read_csv(): there is no .csv file in directory: " + pd_fname
+                    )
+                pd_fname = all_csv_files[0]
+                pd_fname = pd_fname[5:]  # strip off s3://
+            with fs.open(pd_fname, "rb") as reader:
+                df = pd.read_csv(
+                    reader,
+                    sep=sep,
+                    nrows=rows_to_read,
+                    skiprows=skiprows,
+                    header=header,
+                )
+        elif parsed_url.scheme == "hdfs":  # pragma: no cover
+            from bodo.io.fs_io import hdfs_list_dir_fnames
+
+            (fs, all_files) = hdfs_list_dir_fnames(fname_const)
+            if all_files:
+                all_csv_files = [
+                    f for f in sorted(all_files) if fs.get_file_info([f])[0].size > 0
+                ]
+                if len(all_csv_files) == 0:
+                    raise BodoError(
+                        "pd.read_csv(): there is no .csv file in directory: " + pd_fname
+                    )
+                pd_fname = all_csv_files[0]
+                pd_fname = urlparse(pd_fname).path  # strip off hdfs://port:host/
+            with fs.open_input_file(pd_fname) as reader:
+                df = pd.read_csv(
+                    reader,
+                    sep=sep,
+                    nrows=rows_to_read,
+                    skiprows=skiprows,
+                    header=header,
+                )
+        else:
+            assert parsed_url.scheme == ""
+            import glob
+            import os
+
+            if os.path.isdir(pd_fname):
+                all_csv_files = [
+                    f
+                    for f in sorted(glob.glob(os.path.join(pd_fname, "*.csv")))
+                    if os.path.getsize(f) > 0
+                ]
+                if len(all_csv_files) == 0:
+                    raise BodoError(
+                        "pd.read_csv(): there is no .csv file in directory: " + pd_fname
+                    )
+                pd_fname = all_csv_files[0]
+            df = pd.read_csv(
+                pd_fname, sep=sep, nrows=rows_to_read, skiprows=skiprows, header=header,
+            )
+
         # TODO: categorical, etc.
         # TODO: Integer NA case: sample data might not include NA
         df_type = numba.typeof(df)

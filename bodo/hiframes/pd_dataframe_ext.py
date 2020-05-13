@@ -2974,7 +2974,7 @@ def to_csv_overload(
                 escapechar,
                 decimal,
             )
-        _csv_write(path_or_buf._data, D._data, 0, len(D), False)
+        _csv_write(unicode_to_char_ptr(path_or_buf), D._data, 0, len(D), False)
         # ensure path_or_buf and D are not deleted before call to _csv_write completes
         dummy_use(path_or_buf)
         dummy_use(D)
@@ -3064,9 +3064,13 @@ def to_json_overload(
                 indent,
             )
         if lines and orient == "records":
-            _json_write(path_or_buf._data, D._data, 0, len(D), False, True)
+            _json_write(
+                unicode_to_char_ptr(path_or_buf), D._data, 0, len(D), False, True
+            )
         else:
-            _json_write(path_or_buf._data, D._data, 0, len(D), False, False)
+            _json_write(
+                unicode_to_char_ptr(path_or_buf), D._data, 0, len(D), False, False
+            )
         # ensure path_or_buf and D are not deleted before call to _json_write completes
         dummy_use(path_or_buf)
         dummy_use(D)

@@ -74,7 +74,7 @@ uint64_t get_file_size(char* file_name) {
         s3_reader_init_t func =
             (s3_reader_init_t)PyNumber_AsSsize_t(func_obj, NULL);
 
-        f_reader = func(file_name + 5, "");
+        f_reader = func(file_name + 5, "", false, true);
         f_size = f_reader->getSize();
 
         Py_DECREF(func_obj);
@@ -86,7 +86,7 @@ uint64_t get_file_size(char* file_name) {
         hdfs_reader_init_t func =
             (hdfs_reader_init_t)PyNumber_AsSsize_t(func_obj, NULL);
 
-        f_reader = func(file_name, "");
+        f_reader = func(file_name, "", false, true);
         f_size = f_reader->getSize();
 
         Py_DECREF(func_obj);

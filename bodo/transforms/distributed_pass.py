@@ -80,6 +80,7 @@ from bodo.utils.utils import (
 )
 from bodo.libs.distributed_api import Reduce_Type
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
+import llvmlite.binding as ll
 
 distributed_run_extensions = {}
 
@@ -91,6 +92,10 @@ saved_array_analysis = None
 _csv_write = types.ExternalFunction(
     "csv_write",
     types.void(types.voidptr, types.voidptr, types.int64, types.int64, types.bool_),
+)
+
+_csv_output_is_dir = types.ExternalFunction(
+    "csv_output_is_dir", types.int8(types.voidptr),
 )
 
 _json_write = types.ExternalFunction(
@@ -1049,21 +1054,20 @@ class DistributedPass:
 
             df_typ = self.typemap[df.name]
             rhs = assign.value
+            kws = dict(rhs.kws)
             fname = args[0]
             # convert StringLiteral to Unicode to make ._data available
             self.typemap.pop(fname.name)
             self.typemap[fname.name] = string_type
             nodes = []
 
-            # header = header and is_root
-            kws = dict(rhs.kws)
             true_var = ir.Var(assign.target.scope, mk_unique_var("true"), rhs.loc)
             self.typemap[true_var.name] = types.bool_
             nodes.append(ir.Assign(ir.Const(True, df.loc), true_var, df.loc))
             header_var = get_call_expr_arg(
                 "to_csv", rhs.args, kws, 5, "header", true_var
             )
-            nodes += self._gen_is_root_and_cond(header_var)
+            nodes += self._gen_csv_header_node(header_var, fname)
             header_var = nodes[-1].target
             if len(rhs.args) > 5:
                 rhs.args[5] = header_var
@@ -1191,8 +1195,6 @@ class DistributedPass:
             # nodes.append(print_node)
 
             # TODO: fix lazy IO load
-            from bodo.io import json_cpp
-            import llvmlite.binding as ll
 
             def f(fname, str_out, is_records_lines):  # pragma: no cover
                 utf8_str, utf8_len = unicode_to_utf8_and_len(str_out)
@@ -1215,22 +1217,39 @@ class DistributedPass:
                     "dummy_use": dummy_use,
                 },
             )
-
         return [assign]
 
-    def _gen_is_root_and_cond(self, cond_var):
-        def f(cond):  # pragma: no cover
-            return cond & (bodo.libs.distributed_api.get_rank() == 0)
+    def _gen_csv_header_node(self, cond_var, fname_var):
+        """
+        cond_var is the original header node. 
+        If the original header node was true, there are two cases:
+            a) output is a directory: every rank needs to write the header, 
+               so file in the directory has header, and thus all ranks have 
+               the new header node to be true
+            b) output is a single file: only rank 0 writes the header, and thus
+               only rank 0 have the new header node to be true, others are 
+               false
+        If the original header node was false, the new header node is always false.
+        """
+        def f(cond, fname):  # pragma: no cover
+            return cond & (
+                (bodo.libs.distributed_api.get_rank() == 0)
+                | _csv_output_is_dir(fname._data)
+            )
+
+        from bodo.io import csv_cpp
+
+        ll.add_symbol("csv_output_is_dir", csv_cpp.csv_output_is_dir)
 
         f_block = compile_to_numba_ir(
             f,
-            {"bodo": bodo},
+            {"bodo": bodo, "_csv_output_is_dir": _csv_output_is_dir,},
             self.typingctx,
-            (self.typemap[cond_var.name],),
+            (self.typemap[cond_var.name], self.typemap[fname_var.name]),
             self.typemap,
             self.calltypes,
         ).blocks.popitem()[1]
-        replace_arg_nodes(f_block, [cond_var])
+        replace_arg_nodes(f_block, [cond_var, fname_var])
         nodes = f_block.body[:-2]
         return nodes
 

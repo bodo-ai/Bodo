@@ -139,6 +139,7 @@ sdf = spark.createDataFrame(data, schema)
 sdf.write.parquet("int_nulls_multi.pq", "overwrite")
 
 sdf.write.mode("overwrite").csv("int_nulls_multi.csv")
+sdf.write.mode("overwrite").option("header", "true").csv("int_nulls_header_multi.csv")
 sdf.write.mode("overwrite").json("int_nulls_multi.json")
 sdf = sdf.repartition(1)
 sdf.write.parquet("int_nulls_single.pq", "overwrite")
@@ -331,8 +332,12 @@ df = pd.DataFrame(
 )
 sdf = spark.createDataFrame(df)
 df.to_json("example.json",orient = 'records', lines = True)
+df.to_csv("example.csv",index=False)
 sdf.write.mode('overwrite').json('example_multi.json')
-sdf.repartition(1).write.mode('overwrite').json('example_single.json')
+sdf.write.mode('overwrite').option("header", "true").csv('example_multi.csv')
+sdf = sdf.repartition(1)
+sdf.write.mode('overwrite').json('example_single.json')
+sdf.write.mode('overwrite').option("header", "true").csv('example_single.csv')
 spark.stop()
 
 # data for testing read of parquet files with unsupported column types in unselected

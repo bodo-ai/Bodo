@@ -59,10 +59,10 @@ jobs:
       source activate $CONDA_ENV
       pip install pytest pytest-azurepipelines pytest-cov codecov
       if [[ "$NP" -eq 1 ]]; then
-        pytest -s -v -m "$(PYTEST_MARKER) and s3" bodo/tests/
         if [[ "${{ parameters.name }}" == "Linux" ]]; then
-          pytest -s -v -m "$(PYTEST_MARKER) and not s3" --cov-report=xml --cov=./ bodo/tests/
+          pytest -s -v -m "$(PYTEST_MARKER)" --cov-report=xml --cov=./ bodo/tests/
         else
+          pytest -s -v -m "$(PYTEST_MARKER) and s3" bodo/tests/
           pytest -s -v -m "$(PYTEST_MARKER) and not s3" bodo/tests/
         fi
       else
