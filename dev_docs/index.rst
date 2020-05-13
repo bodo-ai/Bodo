@@ -11,13 +11,15 @@ Welcome to Bodo Development's documentation!
    :caption: Contents:
 
    source/build_bodo
-   source/development
-   source/numba
+   source/bodo_dev
+   source/github_practices
+   source/numba_info
    source/documentation
-   source/docker_dev
+   source/dev_with_docker
    source/conda_build
    source/testing_poc_SQL
    source/resources
+   source/release_checklist
 
 
 Indices and tables
