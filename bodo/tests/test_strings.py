@@ -914,13 +914,18 @@ class TestString(unittest.TestCase):
         A = np.array(["AA", "B"])
         self.assertEqual(bodo_func(A), test_impl(A))
 
-    @unittest.skip("TODO: support glob")
     def test_glob(self):
-        def test_impl():
-            glob.glob("*py")
+        def test_impl1():
+            return glob.glob("*py")
 
-        bodo_func = bodo.jit(test_impl)
-        self.assertEqual(bodo_func(), test_impl())
+        def test_impl2():
+            return glob.glob("**/*py", recursive=True)
+
+        bodo_func = bodo.jit(test_impl1)
+        self.assertEqual(bodo_func(), test_impl1())
+
+        bodo_func = bodo.jit(test_impl2)
+        self.assertEqual(bodo_func(), test_impl2())
 
 
 if __name__ == "__main__":

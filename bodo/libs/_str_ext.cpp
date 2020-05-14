@@ -13,10 +13,6 @@
 
 #include <boost/lexical_cast.hpp>
 
-#ifndef _WIN32
-#include <glob.h>
-#endif
-
 extern "C" {
 
 // taken from Arrow bin-util.h
@@ -90,8 +86,6 @@ void* str_from_float32(float in);
 void* str_from_float64(double in);
 void del_str(std::string* in_str);
 int64_t hash_str(std::string* in_str);
-void c_glob(uint32_t** offsets, char** data, uint8_t** null_bitmap,
-            int64_t* num_strings, char* path);
 npy_intp array_size(PyArrayObject* arr);
 void* array_getptr1(PyArrayObject* arr, npy_intp ind);
 void array_setitem(PyArrayObject* arr, char* p, PyObject* s);
@@ -196,7 +190,6 @@ PyMODINIT_FUNC PyInit_hstr_ext(void) {
     PyObject_SetAttrString(m, "del_str", PyLong_FromVoidPtr((void*)(&del_str)));
     PyObject_SetAttrString(m, "hash_str",
                            PyLong_FromVoidPtr((void*)(&hash_str)));
-    PyObject_SetAttrString(m, "c_glob", PyLong_FromVoidPtr((void*)(&c_glob)));
     PyObject_SetAttrString(m, "array_size",
                            PyLong_FromVoidPtr((void*)(&array_size)));
     PyObject_SetAttrString(m, "unicode_to_utf8",
@@ -1039,60 +1032,6 @@ void print_list_str_arr(uint64_t n, const char* data,
         }
         std::cout << "\n";
     }
-}
-
-// glob support
-void c_glob(uint32_t** offsets, char** data, uint8_t** null_bitmap,
-            int64_t* num_strings, char* path) {
-    // std::cout << "glob: " << std::string(path) << std::endl;
-    *num_strings = 0;
-#ifndef _WIN32
-    glob_t globBuf;
-    int ret = glob(path, 0, 0, &globBuf);
-
-    if (ret != 0) {
-        if (ret == GLOB_NOMATCH) {
-            globfree(&globBuf);
-            return;
-        }
-        // TODO: match errors, e.g. GLOB_ABORTED GLOB_NOMATCH GLOB_NOSPACE
-        std::cerr << "glob error" << '\n';
-        globfree(&globBuf);
-        return;
-    }
-
-    // std::cout << "num glob: " << globBuf.gl_pathc << std::endl;
-
-    *num_strings = globBuf.gl_pathc;
-    *offsets = new uint32_t[globBuf.gl_pathc + 1];
-    size_t total_size = 0;
-
-    for (unsigned int i = 0; i < globBuf.gl_pathc; i++) {
-        (*offsets)[i] = (uint32_t)total_size;
-        size_t curr_size = strlen(globBuf.gl_pathv[i]);
-        total_size += curr_size;
-    }
-    (*offsets)[globBuf.gl_pathc] = (uint32_t)total_size;
-
-    *data = new char[total_size];
-    for (unsigned int i = 0; i < globBuf.gl_pathc; i++) {
-        strcpy(*data + (*offsets)[i], globBuf.gl_pathv[i]);
-    }
-
-    // allocate null bitmap
-    int64_t n_bytes = (*num_strings + sizeof(uint8_t) - 1) / sizeof(uint8_t);
-    *null_bitmap = new uint8_t[n_bytes];
-    memset(*null_bitmap, -1, n_bytes);  // set all bits to one for non-null
-
-    // std::cout << "glob done" << std::endl;
-    globfree(&globBuf);
-
-#else
-    // TODO: support glob on Windows
-    std::cerr << "no glob support on windows yet" << '\n';
-#endif
-
-    return;
 }
 
 }  // extern "C"

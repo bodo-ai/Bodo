@@ -58,7 +58,7 @@ from numba.core.imputils import (
     RefType,
 )
 import llvmlite.llvmpy.core as lc
-from glob import glob
+import glob
 
 
 # flag for creating pd.arrays.StringArray when boxing Bodo's native string array
@@ -903,7 +903,6 @@ ll.add_symbol("set_string_array_range", hstr_ext.set_string_array_range)
 ll.add_symbol("str_arr_to_int64", hstr_ext.str_arr_to_int64)
 ll.add_symbol("str_arr_to_float64", hstr_ext.str_arr_to_float64)
 ll.add_symbol("dtor_string_array", hstr_ext.dtor_string_array)
-ll.add_symbol("c_glob", hstr_ext.c_glob)
 ll.add_symbol("get_utf8_size", hstr_ext.get_utf8_size)
 ll.add_symbol("print_str_arr", hstr_ext.print_str_arr)
 
@@ -1774,50 +1773,11 @@ ArrayAnalysis._analyze_op_call_bodo_libs_str_arr_ext_pre_alloc_string_array = (
 #### glob support #####
 
 
-@infer_global(glob)
-class GlobInfer(AbstractTemplate):
-    def generic(self, args, kws):
-        if not kws and len(args) == 1 and args[0] == string_type:
-            return signature(string_array_type, *args)
+@overload(glob.glob, no_unliteral=True)
+def overload_glob_glob(pathname, recursive=False):
+    def _glob_glob_impl(pathname, recursive=False):  # pragma: no cover
+        with numba.objmode(l="list_str_type"):
+            l = glob.glob(pathname, recursive=recursive)
+        return l
 
-
-@lower_builtin(glob, string_type)
-def lower_glob(context, builder, sig, args):
-    path = args[0]
-    uni_str = cgutils.create_struct_proxy(string_type)(context, builder, value=path)
-    path = uni_str.data
-    typ = sig.return_type
-    meminfo, meminfo_data_ptr = construct_string_array(context, builder)
-    string_array = context.make_helper(builder, typ)
-    str_arr_payload = cgutils.create_struct_proxy(str_arr_payload_type)(
-        context, builder
-    )
-
-    # call glob in C
-    fnty = lir.FunctionType(
-        lir.VoidType(),
-        [
-            lir.IntType(32).as_pointer().as_pointer(),
-            lir.IntType(8).as_pointer().as_pointer(),
-            lir.IntType(8).as_pointer().as_pointer(),
-            lir.IntType(64).as_pointer(),
-            lir.IntType(8).as_pointer(),
-        ],
-    )
-    fn = builder.module.get_or_insert_function(fnty, name="c_glob")
-    builder.call(
-        fn,
-        [
-            str_arr_payload._get_ptr_by_name("offsets"),
-            str_arr_payload._get_ptr_by_name("data"),
-            str_arr_payload._get_ptr_by_name("null_bitmap"),
-            str_arr_payload._get_ptr_by_name("num_strings"),
-            path,
-        ],
-    )
-
-    builder.store(str_arr_payload._getvalue(), meminfo_data_ptr)
-
-    string_array.meminfo = meminfo
-    ret = string_array._getvalue()
-    return impl_ret_new_ref(context, builder, typ, ret)
+    return _glob_glob_impl
