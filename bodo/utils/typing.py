@@ -662,6 +662,14 @@ def scalar_to_array_type(t):
     if isinstance(t, (types.UnicodeType, types.StringLiteral)):
         return bodo.string_array_type
 
+    # datetime.date values are stored as date arrays
+    if t == bodo.hiframes.datetime_date_ext.datetime_date_type:
+        return bodo.hiframes.datetime_date_ext.datetime_date_array_type
+
+    # datetime.datetime values are stored as dt64 arrays
+    if t == bodo.hiframes.datetime_datetime_ext.datetime_datetime_type:
+        return types.Array(types.NPDatetime("ns"), 1, "C")
+
     # Timestamp values are stored as dt64 arrays
     if t == bodo.hiframes.pd_timestamp_ext.pandas_timestamp_type:
         return types.Array(types.NPDatetime("ns"), 1, "C")
@@ -709,9 +717,7 @@ class ConstDictType(types.DictType):
         self.value_type = valty
         self.keyvalue_type = types.Tuple([keyty, valty])
         self.const_no = const_no
-        name = "{}[{},{}][{}]".format(
-            self.__class__.__name__, keyty, valty, const_no
-        )
+        name = "{}[{},{}][{}]".format(self.__class__.__name__, keyty, valty, const_no)
         super(types.DictType, self).__init__(name)
 
     @property

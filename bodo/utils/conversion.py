@@ -52,17 +52,18 @@ def overload_coerce_to_ndarray(
 
     if isinstance(data, types.Array):
         if not is_overload_none(bool_arr_convert) and data.dtype == types.bool_:
-            if data.layout != 'C':
+            if data.layout != "C":
                 return lambda data, error_on_nonarray=True, bool_arr_convert=None, scalar_to_arr_len=None: bodo.libs.bool_arr_ext.init_bool_array(
-                    np.ascontiguousarray(data), np.full((len(data) + 7) >> 3, 255, np.uint8)
+                    np.ascontiguousarray(data),
+                    np.full((len(data) + 7) >> 3, 255, np.uint8),
                 )  # pragma: no cover
             else:
                 return lambda data, error_on_nonarray=True, bool_arr_convert=None, scalar_to_arr_len=None: bodo.libs.bool_arr_ext.init_bool_array(
                     data, np.full((len(data) + 7) >> 3, 255, np.uint8)
                 )  # pragma: no cover
-        if data.layout != 'C':
-            return (
-                lambda data, error_on_nonarray=True, bool_arr_convert=None, scalar_to_arr_len=None: np.ascontiguousarray(data)
+        if data.layout != "C":
+            return lambda data, error_on_nonarray=True, bool_arr_convert=None, scalar_to_arr_len=None: np.ascontiguousarray(
+                data
             )  # pragma: no cover
         return (
             lambda data, error_on_nonarray=True, bool_arr_convert=None, scalar_to_arr_len=None: data
@@ -112,6 +113,41 @@ def overload_coerce_to_ndarray(
     # TODO: make sure scalar is a Numpy dtype
     if not is_overload_none(scalar_to_arr_len):
 
+        if data == bodo.hiframes.datetime_datetime_ext.datetime_datetime_type:
+            dt64_dtype = np.dtype("datetime64[ns]")
+
+            def impl_ts(
+                data,
+                error_on_nonarray=True,
+                bool_arr_convert=None,
+                scalar_to_arr_len=None,
+            ):  # pragma: no cover
+                n = scalar_to_arr_len
+                A = np.empty(n, dt64_dtype)
+                v = bodo.hiframes.pd_timestamp_ext.datetime_datetime_to_dt64(data)
+                v_ret = bodo.hiframes.pd_timestamp_ext.integer_to_dt64(v)
+                for i in numba.parfors.parfor.internal_prange(n):
+                    A[i] = v_ret
+                return A
+
+            return impl_ts
+
+        if data == bodo.hiframes.datetime_date_ext.datetime_date_type:
+
+            def impl_ts(
+                data,
+                error_on_nonarray=True,
+                bool_arr_convert=None,
+                scalar_to_arr_len=None,
+            ):  # pragma: no cover
+                n = scalar_to_arr_len
+                A = bodo.hiframes.datetime_date_ext.alloc_datetime_date_array(n)
+                for i in numba.parfors.parfor.internal_prange(n):
+                    A[i] = data
+                return A
+
+            return impl_ts
+
         # Timestamp values are stored as dt64 arrays
         if data == bodo.hiframes.pd_timestamp_ext.pandas_timestamp_type:
             dt64_dtype = np.dtype("datetime64[ns]")
@@ -131,6 +167,7 @@ def overload_coerce_to_ndarray(
             return impl_ts
 
         dtype = types.unliteral(data)
+
         def impl_num(
             data, error_on_nonarray=True, bool_arr_convert=None, scalar_to_arr_len=None
         ):  # pragma: no cover
@@ -620,7 +657,6 @@ def overload_extract_index_array_tup(series_tup):
     return impl
 
 
-
 # return the NA value for array type (dtypes that support sentinel NA)
 def get_NA_val_for_arr(arr):  # pragma: no cover
     return np.nan
@@ -636,7 +672,9 @@ def overload_get_NA_val_for_arr(arr):
         return lambda arr: np.nan  # pragma: no cover
 
     # TODO: other types?
-    raise BodoError("Array {} does not support sentinel NA".format(arr))  # pragma: no cover
+    raise BodoError(
+        "Array {} does not support sentinel NA".format(arr)
+    )  # pragma: no cover
 
 
 # def to_bool_array_if_np_bool(A):
