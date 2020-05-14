@@ -159,16 +159,24 @@ def test_list_string_array_type_specific():
     """Test with the column type of type  list_string_array"""
 
     def test_impl(df1, df2):
-        df3 = df1.merge(df2, on="A", how='outer')
+        df3 = df1.merge(df2, on="A", how="outer")
         return df3
 
     df1 = pd.DataFrame({"A": [["AB"], np.nan, ["A", "B", "C"]], "C": [1, 2, 3]})
-    df2 = pd.DataFrame({"A": [["A", "B", "C"], ["AB", "EF"], np.nan], "D": [4, 5,6]})
+    df2 = pd.DataFrame({"A": [["A", "B", "C"], ["AB", "EF"], np.nan], "D": [4, 5, 6]})
     bodo_impl = bodo.jit(test_impl)
     df3_bodo = bodo_impl(df1, df2)
-    df3_target = pd.DataFrame({"A": [['AB'], np.nan, ["A", "B", "C"], ['AB','EF']], "C": [1,2,3,np.nan], "D": [np.nan, 6,4,5]})
+    df3_target = pd.DataFrame(
+        {
+            "A": [["AB"], np.nan, ["A", "B", "C"], ["AB", "EF"]],
+            "C": [1, 2, 3, np.nan],
+            "D": [np.nan, 6, 4, 5],
+        }
+    )
     pd.testing.assert_frame_equal(
-        df3_bodo.reset_index(drop=True), df3_target.reset_index(drop=True), check_dtype=False
+        df3_bodo.reset_index(drop=True),
+        df3_target.reset_index(drop=True),
+        check_dtype=False,
     )
 
 
@@ -204,7 +212,7 @@ def test_list_string_array_type_random():
     n = 500
     df1 = pd.DataFrame({"A": rand_col_l_str(n), "C": rand_col_l_str(n)})
     df2 = pd.DataFrame({"A": rand_col_l_str(n), "D": rand_col_l_str(n)})
-    check_func_list_string(test_impl, (df1,df2), sort_output=True, reset_index=True)
+    check_func_list_string(test_impl, (df1, df2), sort_output=True, reset_index=True)
 
 
 def test_merge_left_right_nontrivial_index():
@@ -501,6 +509,35 @@ def test_merge_multi_int_key():
     check_func(test_impl1, (df1, df2), sort_output=True)
     check_func(test_impl2, (df1, df2), sort_output=True)
     check_func(test_impl3, (df1, df2), sort_output=True)
+
+
+def test_merge_literal_arg():
+    """
+    Test forcing merge() args to be literals if jit arguments
+    """
+
+    # 'on' and 'suffixes'
+    def test_impl1(df1, df2, on, suffixes):
+        return df1.merge(df2, on=on, suffixes=suffixes)
+
+    def test_impl2(df1, df2, left_on, right_index, how):
+        return df1.merge(df2, how, left_on=left_on, right_index=right_index)
+
+    df1 = pd.DataFrame(
+        {"A": [3, 1, 1, 3, 4], "B": [1, 2, 3, 2, 3], "C": [7, 8, 9, 4, 5]}
+    )
+
+    df2 = pd.DataFrame(
+        {"A": [2, 1, 4, 4, 3], "B": [1, 3, 2, 3, 2], "D": [1, 2, 3, 4, 8]}
+    )
+
+    check_func(
+        test_impl1,
+        (df1, df2.rename({"D": "C"}, axis=1), ["A", "B"], ["", "_"]),
+        sort_output=True,
+    )
+    # TODO: enable test when #1013 is resolved
+    # check_func(test_impl2, (df1, df2.set_index("A"), "A", True, "inner"), sort_output=True)
 
 
 def test_merge_key_type_change():

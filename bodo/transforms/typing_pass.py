@@ -408,6 +408,15 @@ class TypingTransforms:
         # mapping of df functions to their arguments that require constant values:
         df_call_const_args = {
             "groupby": [(0, "by"), (3, "as_index")],
+            "merge": [
+                (1, "how"),
+                (2, "on"),
+                (3, "left_on"),
+                (4, "right_on"),
+                (5, "left_index"),
+                (6, "right_index"),
+                (8, "suffixes"),
+            ],
         }
 
         if func_name in df_call_const_args:

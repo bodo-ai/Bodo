@@ -664,6 +664,7 @@ class ConstListModel(models.ListModel):
 def is_literal_type(t):
     return (
         isinstance(t, (types.Literal, types.Omitted))
+        or t == types.none  # None type is always literal since single value
         or isinstance(t, types.Dispatcher)
         or (isinstance(t, types.BaseTuple) and all(is_literal_type(v) for v in t.types))
     )
