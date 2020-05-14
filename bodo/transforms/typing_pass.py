@@ -377,6 +377,31 @@ class TypingTransforms:
         """
         lhs = assign.target
 
+        # force jit function arguments to be literal if required by df functions.
+        # mapping of df functions to their arguments that require constant values:
+        df_call_const_args = {
+            "groupby": [(0, "by"), (3, "as_index")],
+            "merge": [
+                (1, "how"),
+                (2, "on"),
+                (3, "left_on"),
+                (4, "right_on"),
+                (5, "left_index"),
+                (6, "right_index"),
+                (8, "suffixes"),
+            ],
+            "sort_values": [
+                (0, "by"),
+                (2, "ascending"),
+                (3, "inplace"),
+                (5, "na_position"),
+            ],
+        }
+
+        if func_name in df_call_const_args:
+            func_args = df_call_const_args[func_name]
+            self._force_arg_literals(func_name, rhs, func_args)
+
         # transform df.assign() here since (**kwargs) is not supported in overload
         if func_name == "assign":
             return self._handle_df_assign(assign.target, rhs, df_var)
@@ -403,25 +428,6 @@ class TypingTransforms:
             return self._handle_df_inplace_func(
                 assign, lhs, rhs, df_var, inplace_var, label, func_name
             )
-
-        # force jit function arguments to be literal if required by df functions.
-        # mapping of df functions to their arguments that require constant values:
-        df_call_const_args = {
-            "groupby": [(0, "by"), (3, "as_index")],
-            "merge": [
-                (1, "how"),
-                (2, "on"),
-                (3, "left_on"),
-                (4, "right_on"),
-                (5, "left_index"),
-                (6, "right_index"),
-                (8, "suffixes"),
-            ],
-        }
-
-        if func_name in df_call_const_args:
-            func_args = df_call_const_args[func_name]
-            self._force_arg_literals(func_name, rhs, func_args)
 
         return [assign]
 

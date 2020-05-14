@@ -1998,7 +1998,6 @@ def sort_values_overload(
     na_position="last",
     _bodo_transformed=False,
 ):
-
     # df type can change if inplace is set (e.g. RangeIndex to Int64Index)
     handle_inplace_df_type_change(inplace, _bodo_transformed, "sort_values")
 
@@ -2099,9 +2098,7 @@ class SortDummyTyper(AbstractTemplate):
         df, by, ascending, inplace, na_position = args
 
         index = df.index
-        if index is types.none or isinstance(
-            index, bodo.hiframes.pd_index_ext.RangeIndexType
-        ):
+        if isinstance(index, bodo.hiframes.pd_index_ext.RangeIndexType):
             index = bodo.hiframes.pd_index_ext.NumericIndexType(types.int64)
         ret_typ = df.copy(index=index, has_parent=False)
         return signature(ret_typ, *args)
