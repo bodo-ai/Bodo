@@ -2305,6 +2305,32 @@ def test_global_list():
     check_func(impl2, (df,), sort_output=True)
 
 
+def test_literal_args():
+    """
+    Test forcing groupby() key list and as_index to be literals if jit arguments
+    """
+
+    # 'by' arg
+    def impl1(df, keys):
+        return df.groupby(keys).sum()
+
+    # both 'by' and 'as_index'
+    def impl2(df, keys, as_index):
+        return df.groupby(by=keys, as_index=as_index).sum()
+
+    df = pd.DataFrame(
+        {
+            "A": [2, 1, 1, 1, 2, 2, 1],
+            "B": [1, 3, 3, 1, 3, 1, 3],
+            "C": [1, 3, 1, 2, -4, 0, 5],
+        }
+    )
+
+    check_func(impl1, (df, ["A", "B"]), sort_output=True)
+    check_func(impl2, (df, "A", False), sort_output=True)
+    check_func(impl2, (df, ["A", "B"], True), sort_output=True)
+
+
 def test_schema_change():
     """
     Test df schema change for groupby() to make sure errors are not thrown
