@@ -14,6 +14,7 @@ Welcome to Bodo Development's documentation!
    source/bodo_dev
    source/github_practices
    source/numba_info
+   source/connectors
    source/documentation
    source/dev_with_docker
    source/conda_build
