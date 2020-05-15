@@ -35,7 +35,7 @@ from bodo.utils.typing import (
     BodoError,
     raise_const_error,
     is_overload_none,
-    get_const_str_list,
+    get_overload_const_str_list,
     is_overload_true,
     is_overload_false,
     is_overload_zero,
@@ -147,10 +147,10 @@ def validate_groupby_spec(
         )
 
     # make sure by has valid label(s)
-    if len(set(get_const_str_list(by)).difference(set(df.columns))) > 0:
+    if len(set(get_overload_const_str_list(by)).difference(set(df.columns))) > 0:
         raise_const_error(
             "groupby(): invalid key {} for 'by' (not available in columns {}).".format(
-                get_const_str_list(by), df.columns
+                get_overload_const_str_list(by), df.columns
             )
         )
 
@@ -213,7 +213,7 @@ class GroupbyTyper(AbstractTemplate):
         if is_overload_constant_str(by):
             keys = (get_overload_const_str(by),)
         elif is_overload_constant_str_list(by):
-            keys = tuple(get_const_str_list(by))
+            keys = tuple(get_overload_const_str_list(by))
 
         selection = list(df.columns)
         for k in keys:

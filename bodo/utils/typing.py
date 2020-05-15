@@ -321,7 +321,10 @@ def get_overload_const_str_len(val):
         return len(val.value)
 
 
-def get_const_str_list(val):
+def get_overload_const_str_list(val):
+    """returns a constant string list from type 'val', which could be a single string
+    literal, a constant list or a constant tuple.
+    """
     if isinstance(val, bodo.utils.typing.ListLiteral):
         return val.literal_value
     if isinstance(val, types.Omitted):

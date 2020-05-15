@@ -53,7 +53,7 @@ from bodo.utils.typing import (
     is_overload_zero,
     is_dtype_nullable,
     get_overload_const_str,
-    get_const_str_list,
+    get_overload_const_str_list,
     is_overload_bool_list,
     get_index_names,
     get_index_data_arr_types,
@@ -411,7 +411,7 @@ def init_dataframe(typingctx, data_tup_typ, index_typ, col_names_typ=None):
     if n_cols == 0:
         column_names = ()
     else:
-        column_names = tuple(get_const_str_list(col_names_typ))
+        column_names = tuple(get_overload_const_str_list(col_names_typ))
 
     assert len(column_names) == n_cols
 
@@ -894,7 +894,7 @@ def _get_df_args(data, index, columns, dtype, copy):
             )
         if copy:
             astype_str += ".copy()"
-        columns_consts = get_const_str_list(columns)
+        columns_consts = get_overload_const_str_list(columns)
         n_cols = len(columns_consts)
         data_arrs = ["data[:,{}]{}".format(i, astype_str) for i in range(n_cols)]
         data_dict = dict(zip(columns_consts, data_arrs))
@@ -902,7 +902,7 @@ def _get_df_args(data, index, columns, dtype, copy):
     if is_overload_none(columns):
         col_names = data_dict.keys()
     else:
-        col_names = get_const_str_list(columns)
+        col_names = get_overload_const_str_list(columns)
 
     df_len = _get_df_len_from_info(data_dict, col_names, index_is_none, index_arg)
     _fill_null_arrays(data_dict, col_names, df_len, dtype)
@@ -1111,13 +1111,13 @@ def merge_overload(
         if is_overload_true(left_index):
             left_keys = ["$_bodo_index_"]
         else:
-            left_keys = get_const_str_list(left_on)
+            left_keys = get_overload_const_str_list(left_on)
             # make sure all left_keys is a valid column in left
             validate_keys(left_keys, left.columns)
         if is_overload_true(right_index):
             right_keys = ["$_bodo_index_"]
         else:
-            right_keys = get_const_str_list(right_on)
+            right_keys = get_overload_const_str_list(right_on)
             # make sure all right_keys is a valid column in right
             validate_keys(right_keys, right.columns)
 
@@ -1132,7 +1132,7 @@ def merge_overload(
     if is_overload_constant_tuple(suffixes):
         suffixes_val = get_overload_const_tuple(suffixes)
     if is_overload_constant_str_list(suffixes):
-        suffixes_val = list(get_const_str_list(suffixes))
+        suffixes_val = list(get_overload_const_str_list(suffixes))
 
     suffix_x = suffixes_val[0]
     suffix_y = suffixes_val[1]
@@ -1232,7 +1232,7 @@ def common_validate_merge_merge_asof_spec(
     if is_overload_constant_tuple(suffixes):
         suffixes_val = get_overload_const_tuple(suffixes)
     if is_overload_constant_str_list(suffixes):
-        suffixes_val = list(get_const_str_list(suffixes))
+        suffixes_val = list(get_overload_const_str_list(suffixes))
 
     if len(suffixes_val) != 2:
         raise BodoError(name_func + "(): The number of suffixes should be exactly 2")
@@ -1489,7 +1489,7 @@ def join_overload(left, other, on=None, how="left", lsuffix="", rsuffix="", sort
     how = get_overload_const_str(how)
 
     if not is_overload_none(on):
-        left_keys = get_const_str_list(on)
+        left_keys = get_overload_const_str_list(on)
     else:
         left_keys = ["$_bodo_index_"]
 
@@ -1527,11 +1527,11 @@ def validate_join_spec(left, other, on, how, lsuffix, rsuffix, sort):
     ):
         raise_const_error("join(): 'on' must be of type str or str list")
     # make sure 'on' has length 1 since we don't support Multiindex
-    if not is_overload_none(on) and len(get_const_str_list(on)) != 1:
+    if not is_overload_none(on) and len(get_overload_const_str_list(on)) != 1:
         raise BodoError("join(): len(on) must equals to 1 when specified.")
     # make sure 'on' is a valid column in other
     if not is_overload_none(on):
-        on_keys = get_const_str_list(on)
+        on_keys = get_overload_const_str_list(on)
         validate_keys(on_keys, left.columns)
     # make sure sort is the default value, sort=True not supported
     if not is_overload_false(sort):
@@ -1572,8 +1572,8 @@ class JoinTyper(AbstractTemplate):
             is_join,
         ) = args
 
-        left_on = get_const_str_list(left_on)
-        right_on = get_const_str_list(right_on)
+        left_on = get_overload_const_str_list(left_on)
+        right_on = get_overload_const_str_list(right_on)
 
         # columns with common name that are not common keys will get a suffix
         comm_keys = set(left_on) & set(right_on)
@@ -1721,12 +1721,12 @@ def merge_asof_overload(
         if is_overload_true(left_index):
             left_keys = ["$_bodo_index_"]
         else:
-            left_keys = get_const_str_list(left_on)
+            left_keys = get_overload_const_str_list(left_on)
             validate_keys(left_keys, left.columns)
         if is_overload_true(right_index):
             right_keys = ["$_bodo_index_"]
         else:
-            right_keys = get_const_str_list(right_on)
+            right_keys = get_overload_const_str_list(right_on)
             validate_keys(right_keys, right.columns)
 
     validate_merge_asof_keys_length(
@@ -1741,7 +1741,7 @@ def merge_asof_overload(
     if isinstance(suffixes, tuple):
         suffixes_val = suffixes
     if is_overload_constant_str_list(suffixes):
-        suffixes_val = list(get_const_str_list(suffixes))
+        suffixes_val = list(get_overload_const_str_list(suffixes))
     if isinstance(suffixes, types.Omitted):
         suffixes_val = suffixes.value
 
@@ -2037,10 +2037,10 @@ def validate_sort_values_spec(df, by, axis, ascending, inplace, kind, na_positio
     set_possible_keys = set(df.columns)
     if is_overload_constant_str(df.index.name_typ):
         set_possible_keys.add(get_overload_const_str(df.index.name_typ))
-    if len(set(get_const_str_list(by)).difference(set_possible_keys)) > 0:
+    if len(set(get_overload_const_str_list(by)).difference(set_possible_keys)) > 0:
         raise_bodo_error(
             "sort_values(): invalid key {} for by.".format(
-                set_possible_keys.difference(set(get_const_str_list(by)))
+                set_possible_keys.difference(set(get_overload_const_str_list(by)))
             )
         )
 
@@ -2398,7 +2398,7 @@ def drop_overload(
         if is_overload_constant_str(labels):
             drop_cols = (get_overload_const_str(labels),)
         elif is_overload_constant_str_list(labels):  # pragma: no cover
-            drop_cols = get_const_str_list(labels)
+            drop_cols = get_overload_const_str_list(labels)
         else:  # pragma: no cover
             raise_bodo_error(
                 "constant list of columns expected for labels in df.drop()"
@@ -2409,7 +2409,7 @@ def drop_overload(
         if is_overload_constant_str(columns):  # pragma: no cover
             drop_cols = (get_overload_const_str(columns),)
         elif is_overload_constant_str_list(columns):
-            drop_cols = get_const_str_list(columns)
+            drop_cols = get_overload_const_str_list(columns)
         else:  # pragma: no cover
             raise_bodo_error(
                 "constant list of columns expected for labels in df.drop()"

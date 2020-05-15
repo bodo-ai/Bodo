@@ -50,7 +50,7 @@ from bodo.libs.list_str_arr_ext import list_string_array_type
 from bodo.utils.typing import (
     BodoError,
     is_overload_none,
-    get_const_str_list,
+    get_overload_const_str_list,
     is_overload_true,
     is_overload_false,
     is_overload_zero,
