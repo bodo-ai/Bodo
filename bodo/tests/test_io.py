@@ -1072,6 +1072,17 @@ def test_csv_header_none(datapath):
     pd.testing.assert_frame_equal(b_df, p_df)
 
 
+def test_csv_sep_arg(datapath):
+    """Test passing 'sep' argument as JIT argument in read_csv()
+    """
+    fname = datapath("csv_data2.csv")
+
+    def test_impl(sep):
+        return pd.read_csv(fname, sep=sep)
+
+    check_func(test_impl, ("|",))
+
+
 def test_csv_spark_header(datapath):
     """Test reading Spark csv outputs containing header & infer dtypes
     """

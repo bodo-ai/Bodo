@@ -60,6 +60,7 @@ from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.utils.transform import (
     update_locs,
     get_const_value,
+    get_const_value_inner,
     update_node_list_definitions,
     gen_add_consts_to_type,
     compile_func_single_block,
@@ -1448,17 +1449,17 @@ class UntypedPass:
         """Get constant value for a function call argument. Raise error if the value is
         not constant.
         """
-        typ = str if typ is None else typ
+        typ = "str" if typ is None else typ
         arg = CONST_NOT_FOUND
         if err_msg is None:
             err_msg = ("{} requires '{}' argument as a constant {}").format(
                 f_name, arg_name, typ
             )
+
+        arg_var = get_call_expr_arg(f_name, args, kws, arg_no, arg_name, "")
+
         try:
-            if len(args) > arg_no:
-                arg = find_const(self.func_ir, args[arg_no])
-            elif arg_name in kws:
-                arg = find_const(self.func_ir, kws[arg_name])
+            arg = get_const_value_inner(self.func_ir, arg_var, arg_types=self.args)
         except GuardException:
             if error_on_non_const:
                 raise BodoError(err_msg)
