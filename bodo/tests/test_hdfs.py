@@ -115,6 +115,9 @@ def test_hdfs_read_json(datapath, hdfs_datapath):
     fname_dir_multi = hdfs_datapath("example_multi.json")
 
     def test_impl(fname):
+        return pd.read_json(fname, orient="records", lines=True)
+
+    def test_impl_with_dtype(fname):
         return pd.read_json(
             fname,
             orient="records",
@@ -131,7 +134,10 @@ def test_hdfs_read_json(datapath, hdfs_datapath):
     py_out = test_impl(datapath("example.json"))
     check_func(test_impl, (fname_file,), py_output=py_out)
     check_func(test_impl, (fname_dir_single,), py_output=py_out)
-    check_func(test_impl, (fname_dir_multi,), py_output=py_out)
+    # specify dtype here because small partition of dataframe causes only
+    # int values(x.0) in float columns, and causes type mismatch becasue
+    # pandas infer them as int columns
+    check_func(test_impl_with_dtype, (fname_dir_multi,), py_output=py_out)
 
 
 @pytest.fixture(
@@ -545,6 +551,9 @@ def test_hdfs_json_read_records_lines_seq(hdfs_datapath, test_df):
     """
 
     def test_read(hdfs_fname):
+        return pd.read_json(hdfs_fname, orient="records", lines=True,)
+
+    def test_read_infer_dtype(hdfs_fname):
         return pd.read_json(
             hdfs_fname,
             orient="records",
@@ -554,6 +563,7 @@ def test_hdfs_json_read_records_lines_seq(hdfs_datapath, test_df):
 
     hdfs_fname = hdfs_datapath("df_records_lines_seq.json")
     check_func(test_read, (hdfs_fname,), py_output=test_df)
+    check_func(test_read_infer_dtype, (hdfs_fname,), py_output=test_df)
 
 
 def test_hdfs_json_read_records_lines_1D(hdfs_datapath, test_df):
@@ -563,6 +573,9 @@ def test_hdfs_json_read_records_lines_1D(hdfs_datapath, test_df):
     """
 
     def test_read(hdfs_fname):
+        return pd.read_json(hdfs_fname, orient="records", lines=True,)
+
+    def test_read_infer_dtype(hdfs_fname):
         return pd.read_json(
             hdfs_fname,
             orient="records",
@@ -572,6 +585,7 @@ def test_hdfs_json_read_records_lines_1D(hdfs_datapath, test_df):
 
     hdfs_fname = hdfs_datapath("df_records_lines_1D.json")
     check_func(test_read, (hdfs_fname,), py_output=test_df)
+    check_func(test_read_infer_dtype, (hdfs_fname,), py_output=test_df)
 
 
 def test_hdfs_json_read_records_lines_1D_var(hdfs_datapath, test_df):
@@ -581,6 +595,9 @@ def test_hdfs_json_read_records_lines_1D_var(hdfs_datapath, test_df):
     """
 
     def test_read(hdfs_fname):
+        return pd.read_json(hdfs_fname, orient="records", lines=True,)
+
+    def test_read_infer_dtype(hdfs_fname):
         return pd.read_json(
             hdfs_fname,
             orient="records",
@@ -590,3 +607,4 @@ def test_hdfs_json_read_records_lines_1D_var(hdfs_datapath, test_df):
 
     hdfs_fname = hdfs_datapath("df_records_lines_1D_var.json")
     check_func(test_read, (hdfs_fname,), py_output=test_df)
+    check_func(test_read_infer_dtype, (hdfs_fname,), py_output=test_df)

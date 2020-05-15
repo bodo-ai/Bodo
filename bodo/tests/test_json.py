@@ -18,10 +18,10 @@ def test_json_read_df(datapath):
     fname_dir_single = datapath("example_single.json")
     fname_dir_multi = datapath("example_multi.json")
 
-    def test_impl_file(fname):
+    def test_impl(fname):
         return pd.read_json(fname, orient="records", lines=True)
 
-    def test_impl_dir(fname):
+    def test_impl_with_dtype(fname):
         return pd.read_json(
             fname,
             orient="records",
@@ -35,10 +35,13 @@ def test_json_read_df(datapath):
             },
         )
 
-    py_out = test_impl_file(fname_file)
-    check_func(test_impl_file, (fname_file,), py_output=py_out)
-    check_func(test_impl_dir, (fname_dir_single,), py_output=py_out)
-    check_func(test_impl_dir, (fname_dir_multi,), py_output=py_out)
+    py_out = test_impl(fname_file)
+    check_func(test_impl, (fname_file,), py_output=py_out)
+    check_func(test_impl, (fname_dir_single,), py_output=py_out)
+    # specify dtype here because small partition of dataframe causes only
+    # int values(x.0) in float columns, and causes type mismatch becasue
+    # pandas infer them as int columns
+    check_func(test_impl_with_dtype, (fname_dir_multi,), py_output=py_out)
 
 
 def test_json_read_int_nulls(datapath):
@@ -52,12 +55,7 @@ def test_json_read_int_nulls(datapath):
     fname_dir_multi = datapath("int_nulls_multi.json")
 
     def test_impl(fname):
-        # dtype specified here & using float instad of int
-        # because of pandas bug
-        # return pd.read_json(fname, orient='records', lines=True)
-        return pd.read_json(
-            fname, orient="records", lines=True, dtype={"A": np.float32}
-        )
+        return pd.read_json(fname, orient="records", lines=True)
 
     py_out = test_impl(fname_file)
     check_func(test_impl, (fname_file,), py_output=py_out)
@@ -81,21 +79,19 @@ def test_json_read_str_arr(datapath):
     fname_dir_single = datapath("str_arr_single.json")
     fname_dir_multi = datapath("str_arr_parts.json")
 
-    def test_impl_file(fname):
+    def test_impl(fname):
         return pd.read_json(
-            fname, orient="records", lines=True, dtype={"A": str, "B": str}
+            # dtype required here, because pandas read string array as object type
+            fname,
+            orient="records",
+            lines=True,
+            dtype={"A": str, "B": str},
         )
 
-    def test_impl_dir(fname):
-        return pd.read_json(
-            fname, orient="records", lines=True, dtype={"A": str, "B": str}
-        )
-
-    py_out = test_impl_file(fname_file)
-    check_func(test_impl_file, (fname_file,), py_output=py_out)
-    py_out = test_impl_file(fname_dir_file)
-    check_func(test_impl_dir, (fname_dir_single,), py_output=py_out)
-    check_func(test_impl_dir, (fname_dir_multi,), py_output=py_out)
+    check_func(test_impl, (fname_file,))
+    py_out = test_impl(fname_dir_file)
+    check_func(test_impl, (fname_dir_single,), py_output=py_out)
+    check_func(test_impl, (fname_dir_multi,), py_output=py_out)
 
 
 def test_json_read_multiline_object(datapath):

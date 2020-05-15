@@ -1010,7 +1010,6 @@ class UntypedPass:
         date_unit=None, encoding=None, lines=False, chunksize=None,
         compression='infer')
         """
-        # dtype required for non posix & directory
         # convert_dates required for date cols
         kws = dict(rhs.kws)
         fname = get_call_expr_arg("read_json", rhs.args, kws, 0, "path_or_buf")
@@ -1086,18 +1085,6 @@ class UntypedPass:
         import os
 
         if dtype_var == "":
-            if fname_const.startswith("s3://") or fname_const.startswith("hdfs://"):
-                raise ValueError(
-                    "pd.read_json() requires explicit type annotation using 'dtype',"
-                    " when reading from s3 or hdfs"
-                )
-
-            if not os.path.isfile(fname_const):
-                raise ValueError(
-                    "pd.read_json() requires explicit type annotation using 'dtype',"
-                    " when reading a directory"
-                )
-
             # can only read partial of the json file
             # when orient == 'records' && lines == True
             if not lines:
@@ -1735,17 +1722,49 @@ def _get_json_df_type_from_file(
 
     df_type = None
     if bodo.get_rank() == 0:
-        rows_to_read = 100  # TODO: tune this
-        json_reader = pd.read_json(
-            fname_const,
-            orient=orient,
-            convert_dates=convert_dates,
-            precise_float=precise_float,
-            lines=lines,
-            chunksize=rows_to_read,
-        )
+        from bodo.io.fs_io import find_file_name_or_handler
 
-        df = next(json_reader)
+        rows_to_read = 20  # TODO: tune this
+        is_handler, file_name_or_handler, f_size, _ = find_file_name_or_handler(
+            fname_const, "json"
+        )
+        try:
+            # Ideally, we should use chunksize to read the number of rows desired
+            # instead of manually reading the number of rows into a buffer.
+            # There is a issue for it in pandas:
+            # https://github.com/pandas-dev/pandas/issues/27135
+            # read() is used instead of readline() because
+            # Pyarrow's hdfs open() returns stream (NativeFile) that does not
+            # readline() implemented, but seems like they are working on it:
+            # https://issues.apache.org/jira/browse/ARROW-7584
+
+            file_name_or_buff = file_name_or_handler
+
+            if is_handler:
+                read_chunk_size = 500  # max number of bytes read at a time
+                rows_read = 0  # rows seen
+                size_read = 0  # number of bytes seen
+                buff = ""  # bytes read
+                # keep reading until we read at least rows_to_read number of rows
+                while size_read < f_size and rows_read < rows_to_read:
+                    read_size = min(read_chunk_size, f_size - size_read)
+                    tmp_buff = file_name_or_handler.read(read_size).decode("utf-8")
+                    rows_read += tmp_buff.count("\n")
+                    buff += tmp_buff
+                    size_read += read_size
+                file_name_or_buff = buff
+
+            df = pd.read_json(
+                file_name_or_buff,
+                orient=orient,
+                convert_dates=convert_dates,
+                precise_float=precise_float,
+                lines=lines,
+                # chunksize=rows_to_read,
+            )
+        finally:
+            if is_handler:
+                file_name_or_handler.close()
 
         # TODO: categorical, etc.
         # TODO: Integer NA case: sample data might not include NA
@@ -1817,75 +1836,24 @@ def _get_csv_df_type_from_file(fname_const, sep, skiprows, header):
 
     df_type = None
     if bodo.get_rank() == 0:
-        from urllib.parse import urlparse
+        from bodo.io.fs_io import find_file_name_or_handler
 
         rows_to_read = 100  # TODO: tune this
-        parsed_url = urlparse(fname_const)
-        pd_fname = fname_const
+        is_handler, file_name_or_handler, _, _ = find_file_name_or_handler(
+            fname_const, "csv"
+        )
 
-        if parsed_url.scheme == "s3":
-            from bodo.io.fs_io import get_s3_fs, s3_list_dir_fnames
-
-            fs = get_s3_fs()
-            all_files = s3_list_dir_fnames(fs, fname_const)
-
-            if all_files:
-                all_csv_files = [f for f in sorted(all_files) if fs.info(f)["size"] > 0]
-                if len(all_csv_files) == 0:
-                    raise BodoError(
-                        "pd.read_csv(): there is no .csv file in directory: " + pd_fname
-                    )
-                pd_fname = all_csv_files[0]
-                pd_fname = pd_fname[5:]  # strip off s3://
-            with fs.open(pd_fname, "rb") as reader:
-                df = pd.read_csv(
-                    reader,
-                    sep=sep,
-                    nrows=rows_to_read,
-                    skiprows=skiprows,
-                    header=header,
-                )
-        elif parsed_url.scheme == "hdfs":  # pragma: no cover
-            from bodo.io.fs_io import hdfs_list_dir_fnames
-
-            (fs, all_files) = hdfs_list_dir_fnames(fname_const)
-            if all_files:
-                all_csv_files = [
-                    f for f in sorted(all_files) if fs.get_file_info([f])[0].size > 0
-                ]
-                if len(all_csv_files) == 0:
-                    raise BodoError(
-                        "pd.read_csv(): there is no .csv file in directory: " + pd_fname
-                    )
-                pd_fname = all_csv_files[0]
-                pd_fname = urlparse(pd_fname).path  # strip off hdfs://port:host/
-            with fs.open_input_file(pd_fname) as reader:
-                df = pd.read_csv(
-                    reader,
-                    sep=sep,
-                    nrows=rows_to_read,
-                    skiprows=skiprows,
-                    header=header,
-                )
-        else:
-            assert parsed_url.scheme == ""
-            import glob
-            import os
-
-            if os.path.isdir(pd_fname):
-                all_csv_files = [
-                    f
-                    for f in sorted(glob.glob(os.path.join(pd_fname, "*.csv")))
-                    if os.path.getsize(f) > 0
-                ]
-                if len(all_csv_files) == 0:
-                    raise BodoError(
-                        "pd.read_csv(): there is no .csv file in directory: " + pd_fname
-                    )
-                pd_fname = all_csv_files[0]
+        try:
             df = pd.read_csv(
-                pd_fname, sep=sep, nrows=rows_to_read, skiprows=skiprows, header=header,
+                file_name_or_handler,
+                sep=sep,
+                nrows=rows_to_read,
+                skiprows=skiprows,
+                header=header,
             )
+        finally:
+            if is_handler:
+                file_name_or_handler.close()
 
         # TODO: categorical, etc.
         # TODO: Integer NA case: sample data might not include NA

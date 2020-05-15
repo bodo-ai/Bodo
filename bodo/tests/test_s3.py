@@ -90,6 +90,9 @@ def test_s3_read_json(minio_server, s3_bucket, datapath):
     fname_dir_multi = "s3://bodo-test/example_multi.json"
 
     def test_impl(fname):
+        return pd.read_json(fname, orient="records", lines=True)
+
+    def test_impl_with_dtype(fname):
         return pd.read_json(
             fname,
             orient="records",
@@ -106,7 +109,10 @@ def test_s3_read_json(minio_server, s3_bucket, datapath):
     py_out = test_impl(datapath("example.json"))
     check_func(test_impl, (fname_file,), py_output=py_out)
     check_func(test_impl, (fname_dir_single,), py_output=py_out)
-    check_func(test_impl, (fname_dir_multi,), py_output=py_out)
+    # specify dtype here because small partition of dataframe causes only
+    # int values(x.0) in float columns, and causes type mismatch becasue
+    # pandas infer them as int columns
+    check_func(test_impl_with_dtype, (fname_dir_multi,), py_output=py_out)
 
 
 @pytest.fixture(
@@ -484,6 +490,11 @@ def test_s3_json_read_records_lines_seq(minio_server, s3_bucket, test_df):
 
     def test_read():
         return pd.read_json(
+            "s3://bodo-test/df_records_lines_seq.json", orient="records", lines=True,
+        )
+
+    def test_read_infer_dtype():
+        return pd.read_json(
             "s3://bodo-test/df_records_lines_seq.json",
             orient="records",
             lines=True,
@@ -491,6 +502,7 @@ def test_s3_json_read_records_lines_seq(minio_server, s3_bucket, test_df):
         )
 
     check_func(test_read, (), py_output=test_df)
+    check_func(test_read_infer_dtype, (), py_output=test_df)
 
 
 def test_s3_json_read_records_lines_1D(minio_server, s3_bucket, test_df):
@@ -501,13 +513,16 @@ def test_s3_json_read_records_lines_1D(minio_server, s3_bucket, test_df):
 
     def test_read():
         return pd.read_json(
-            "s3://bodo-test/df_records_lines_1D.json",
-            orient="records",
-            lines=True,
-            dtype={"A": np.float, "B": "bool", "C": np.int},
+            "s3://bodo-test/df_records_lines_1D.json", orient="records", lines=True,
+        )
+
+    def test_read_infer_dtype():
+        return pd.read_json(
+            "s3://bodo-test/df_records_lines_1D.json", orient="records", lines=True,
         )
 
     check_func(test_read, (), py_output=test_df)
+    check_func(test_read_infer_dtype, (), py_output=test_df)
 
 
 def test_s3_json_read_recoreds_lines_1D_var(minio_server, s3_bucket, test_df):
@@ -518,6 +533,11 @@ def test_s3_json_read_recoreds_lines_1D_var(minio_server, s3_bucket, test_df):
 
     def test_read():
         return pd.read_json(
+            "s3://bodo-test/df_records_lines_1D_var.json", orient="records", lines=True,
+        )
+
+    def test_read_infer_dtype():
+        return pd.read_json(
             "s3://bodo-test/df_records_lines_1D_var.json",
             orient="records",
             lines=True,
@@ -525,3 +545,4 @@ def test_s3_json_read_recoreds_lines_1D_var(minio_server, s3_bucket, test_df):
         )
 
     check_func(test_read, (), py_output=test_df)
+    check_func(test_read_infer_dtype, (), py_output=test_df)

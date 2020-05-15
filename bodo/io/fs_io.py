@@ -1,8 +1,10 @@
 # Copyright (C) 2020 Bodo Inc. All rights reserved.
 """
-S3 & Hadoop file system supports
+S3 & Hadoop file system supports, and file system dependent calls
 """
 from urllib.parse import urlparse
+import glob
+import os
 
 
 def get_s3_fs():
@@ -13,8 +15,6 @@ def get_s3_fs():
         import s3fs
     except: # pragma: no cover
         raise BodoError("Reading from s3 requires s3fs currently.")
-
-    import os
 
     custom_endpoint = os.environ.get("AWS_S3_ENDPOINT", None)
     aws_access_key_id = os.environ.get("AWS_ACCESS_KEY_ID", None)
@@ -146,3 +146,100 @@ def hdfs_list_dir_fnames(path):  # pragma: no cover
             file_names = [prefix + file_stat.path for file_stat in file_stats]
 
     return (hdfs, file_names)
+
+
+def find_file_name_or_handler(path, ftype):
+    """
+    Find path_or_buf argument for pd.read_csv()/pd.read_json()
+
+    If the path points to a single file:
+        POSIX: file_name_or_handler = file name
+        S3 & HDFS: file_name_or_handler = handler to the file
+    If the path points to a directory:
+        sort all non-empty files with the corresponding suffix
+        POSIX: file_name_or_handler = file name of the first file in sorted files
+        S3 & HDFS: file_name_or_handler = handler to the first file in sorted files
+
+    Parameters: 
+        path: path to the object we are reading, this can be a file or a directory
+        ftype: 'csv' or 'json'
+    Returns: 
+        (is_handler, file_name_or_handler, f_size, fs)
+        is_handler: True if file_name_or_handler is a handler,
+                    False otherwise(file_name_or_handler is a file_name)
+        file_name_or_handler: file_name or handler to pass to pd.read_csv()/pd.read_json()
+        f_size: size of file_name_or_handler
+        fs: file system for s3/hdfs
+    """
+    from urllib.parse import urlparse
+
+    parsed_url = urlparse(path)
+    fname = path
+    fs = None
+
+    if parsed_url.scheme == "s3":
+        is_handler = True
+        fs = get_s3_fs()
+        all_files = s3_list_dir_fnames(fs, path)
+        f_size = fs.info(fname)["size"]
+
+        if all_files:
+            all_csv_files = [f for f in sorted(all_files) if fs.info(f)["size"] > 0]
+            if len(all_csv_files) == 0:
+                raise BodoError(
+                    "pd.read_csv(): there is no ."
+                    + ftype
+                    + " file in directory: "
+                    + pd_fname
+                )
+            fname = all_csv_files[0]
+            f_size = fs.info(fname)["size"]
+            fname = fname[5:]  # strip off s3://
+
+        file_name_or_handler = fs.open(fname, "rb")
+    elif parsed_url.scheme == "hdfs":  # pragma: no cover
+        is_handler = True
+        (fs, all_files) = hdfs_list_dir_fnames(path)
+        f_size = fs.get_file_info([fname])[0].size
+
+        if all_files:
+            all_csv_files = [
+                f for f in sorted(all_files) if fs.get_file_info([f])[0].size > 0
+            ]
+            if len(all_csv_files) == 0:
+                raise BodoError(
+                    "pd.read_csv(): there is no ."
+                    + ftype
+                    + " file in directory: "
+                    + pd_fname
+                )
+            fname = all_csv_files[0]
+            f_size = fs.get_file_info([fname])[0].size
+            fname = urlparse(fname).path  # strip off hdfs://port:host/
+
+        file_name_or_handler = fs.open_input_file(fname)
+    else:
+        assert parsed_url.scheme == ""
+        is_handler = False
+
+        if os.path.isdir(path):
+            all_csv_files = [
+                f
+                for f in sorted(glob.glob(os.path.join(path, "*.{}".format(ftype))))
+                if os.path.getsize(f) > 0
+            ]
+            if len(all_csv_files) == 0:
+                raise BodoError(
+                    "pd.read_csv(): there is no ."
+                    + ftype
+                    + " file in directory: "
+                    + pd_fname
+                )
+            fname = all_csv_files[0]
+
+        f_size = os.path.getsize(fname)
+        file_name_or_handler = fname
+
+    # although fs is never used, we need to return it so that s3/hdfs
+    # connections are not closed
+    return is_handler, file_name_or_handler, f_size, fs
