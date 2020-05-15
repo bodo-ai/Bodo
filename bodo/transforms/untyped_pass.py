@@ -574,17 +574,17 @@ class UntypedPass:
         index_col = self._get_const_arg(
             "read_sql", rhs.args, kws, 2, "index_col", default=-1
         )
-        coerce_float = self._get_const_arg(
-            "read_sql", rhs.args, kws, 3, "coerce_float", default=True
-        )
-        params = self._get_const_arg("read_sql", rhs.args, kws, 4, "params", default=-1)
-        parse_dates = self._get_const_arg(
-            "read_sql", rhs.args, kws, 5, "parse_dates", default=-1
-        )
+        # coerce_float = self._get_const_arg(
+        #     "read_sql", rhs.args, kws, 3, "coerce_float", default=True
+        # )
+        # params = self._get_const_arg("read_sql", rhs.args, kws, 4, "params", default=-1)
+        # parse_dates = self._get_const_arg(
+        #     "read_sql", rhs.args, kws, 5, "parse_dates", default=-1
+        # )
         columns = self._get_const_arg(
             "read_sql", rhs.args, kws, 6, "columns", default=""
         )
-        chunksize = get_call_expr_arg("read_sql", rhs.args, kws, 7, "chunksize", -1)
+        # chunksize = get_call_expr_arg("read_sql", rhs.args, kws, 7, "chunksize", -1)
 
         # SUPPORTED:
         # sql is supported since it is fundamental
