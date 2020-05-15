@@ -50,7 +50,7 @@ Each process writes one file into the folder, but if the data is not distributed
 
 Run the code above with 4 processors::
 
-    $ mpiexec -n 4 python ../example_pq.py
+    $ mpiexec -n 4 python example_pq.py
 
 ``example1_pq(df)`` writes 1 single file, and ``example2_pq(df)`` writes a folder containing 4 parquet files::
 
@@ -62,7 +62,7 @@ Run the code above with 4 processors::
     │   ├── part-02.parquet
     │   └── part-03.parquet
 
-See :ref:`read_parquet() <pandas-f-in>` :ref:`to_parquet() <pandas-f-out>` for supported arguments.
+See :ref:`read_parquet() <pandas-f-in>`, :ref:`to_parquet() <pandas-f-out>` for supported arguments.
 
 .. _csv-section:
 
@@ -80,22 +80,7 @@ For CSV, the syntax is also the same as Pandas::
         df = pd.read_csv('example.csv')
         return df
 
-Unlike Pandas' :func:`read_csv`, Bodo can read a directory that contains multiple partitioned CSV files as well. Limitations when reading a directory of partitioned CSV files:
-  1. CSV files cannot contain headers. 
-  2. ``names`` and ``dtype`` arguments should be provided to enable type inference.
-  3. ``skiprows`` is not supported
-
-An example of reading a directory containing CSV files::
-
-    @bodo.jit
-    def example_dir_csv():
-        return pd.read_csv(
-            "example_dir.csv", # example_dir.csv contains a dataframe with three columns
-            names=["price", "availability", "count"], 
-            dtype={"A": np.float, "B": "bool", "C": np.int},
-        )
-
-When reading from `HDFS`_, ``names`` and ``dtype`` are always required.
+Unlike Pandas' ``read_csv``, Bodo can read a directory that contains multiple partitioned CSV files as well.
 
 ``to_csv(name)`` has different behaviors for different file systems:
 
@@ -118,7 +103,7 @@ When reading from `HDFS`_, ``names`` and ``dtype`` are always required.
 
     Run the code above with 4 processors::
 
-            $ mpiexec -n 4 python ../example_csv.py
+            $ mpiexec -n 4 python example_csv.py
 
     each ``example1_csv(df)`` and ``example2_csv(df)`` writes to a single file::
 
@@ -147,7 +132,7 @@ When reading from `HDFS`_, ``names`` and ``dtype`` are always required.
 
     Run the code above with 4 processors::
 
-            $ mpiexec -n 4 python ../example_csv.py
+            $ mpiexec -n 4 python example_csv.py
 
     ``example1_csv(df)`` writes 1 single file, and ``example2_csv(df)`` writes a folder containing 4 csv files::
 
@@ -159,37 +144,7 @@ When reading from `HDFS`_, ``names`` and ``dtype`` are always required.
             │   ├── part-02.csv
             │   └── part-03.csv
 
-    An example of writing and reading a directory containing CSV files to and from ``S3``/``HDFS``::
-
-            @bodo.jit(distributed={'df'})
-            def example_csv_write_directory(path, df):
-                df.to_csv(path, index=False, header=False)
-
-            @bodo.jit(distributed={'df'})
-            def example_csv_read_directory(path):
-                df = pd.read_csv(path,
-                    names=["A", "B", "C"], 
-                    dtype={"A": np.float, "B": "bool", "C": np.int},
-                )
-                return df
-
-            s3_path = "s3://bucket-name/example_dir.csv"
-            hdfs_path = "hdfs://host:port/dir/example_dir.csv"
-            df = pd.DataFrame(
-                    {
-                        "A": [10.3, np.nan, 2.2, 50.4, -1.3],
-                        "B": [True, False, False, True, True],
-                        "C": [1, 4, -5, -11, 6],
-                    }
-                )
-
-            example_csv_write_directory(s3_path, df)
-            s3_res = example_csv_read_directory(s3_path)
-            example_csv_write_directory(hdfs_path, df)
-            hdfs_res = example_csv_read_directory(hdfs_path)
-
-
-See :ref:`read_csv() <pandas-f-in>` :ref:`to_csv() <pandas-f-out>` for supported arguments.
+See :ref:`read_csv() <pandas-f-in>`, :ref:`to_csv() <pandas-f-out>` for supported arguments.
 
 .. _json-section:
 
@@ -203,20 +158,13 @@ For JSON, the syntax is also the same as Pandas::
         df.to_json(fname)
 
     @bodo.jit
-    def example_read_json_lines_format_file():
-        # dtype argument can be omitted when reading from a single JSON file
-        # dtype still required for reading from s3 & hdfs
-        df = pd.read_json('example_file.json', orient = 'records', lines = True)
+    def example_read_json_lines_format():
+        df = pd.read_json('example.json', orient = 'records', lines = True)
 
     @bodo.jit
-    def example_read_json_lines_format_directory():
-        # dtype argument required when reading from a directory
-        df = pd.read_json('example_dir.json', orient = 'records', lines = True,
-            dtype={"A": np.float, "B": "bool", "C": np.int})
-
-    @bodo.jit
-    def example_read_json_mutli_lines_file():
+    def example_read_json_multi_lines():
         # dtype argument required when reading a regular multi-line JSON file
+        # cannot read a directory containing multiple multi-line JSON files
         df = pd.read_json('example_file.json', orient = 'records', lines = False,
             dtype={"A": np.float, "B": "bool", "C": np.int})
 
@@ -245,7 +193,7 @@ For JSON, the syntax is also the same as Pandas::
 
         Run the code above with 4 processors::
 
-                $ mpiexec -n 4 python ../example_json.py
+                $ mpiexec -n 4 python example_json.py
 
         each ``example1_json(df)`` and ``example2_json(df)`` writes to a single file::
 
@@ -276,7 +224,7 @@ For JSON, the syntax is also the same as Pandas::
 
     Run the code above with 4 processors::
 
-            $ mpiexec -n 4 python ../example_json.py
+            $ mpiexec -n 4 python example_json.py
 
     ``example1_json(df)`` writes 1 single file, and ``example2_json(df)`` writes a folder containing 4 json files::
 
@@ -288,7 +236,7 @@ For JSON, the syntax is also the same as Pandas::
             │   ├── part-02.json
             │   └── part-03.json
 
-See :ref:`read_json() <pandas-f-in>` :ref:`to_json() <pandas-f-out>` for supported arguments.
+See :ref:`read_json() <pandas-f-in>`, :ref:`to_json() <pandas-f-out>` for supported arguments.
 
 .. _sql-section:
 

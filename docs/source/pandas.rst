@@ -26,12 +26,11 @@ Also see :ref:`S3` and :ref:`HDFS` configuration requirements and more on :ref:`
 * :func:`pandas.read_csv`
 
   * :ref:`example usage and more system specific instructions <csv-section>`
-  * Argument ``filepath_or_buffer`` is supported. file_path could be pointing to a single csv file, or a directory containing multiple partitioned csv files. ``header`` is not supported when reading a directory.
+  * ``filepath_or_buffer`` should be a string and is required. It could be pointing to a single CSV file, or a directory containing multiple partitioned CSV files (must have ``csv`` file extension inside directory).  
   * Arguments ``sep``, ``delimiter``, ``header``, ``names``,
-    ``index_col``, ``usecols``, ``dtype``, ``skiprows`` and ``parse_dates`` are supported.
-  * ``filepath_or_buffer`` should be a string and is required.
+    ``index_col``, ``usecols``, ``dtype``, ``skiprows``, and ``parse_dates`` are supported.
   * Either ``names`` and ``dtype`` arguments should be provided to enable type inference,
-    or ``filepath_or_buffer`` should be a constant string for Bodo to infer types by looking at the file at compile time (only supported when reading a single csv file from Posix or S3).
+    or ``filepath_or_buffer`` should be a constant string for Bodo to infer types by looking at the file at compile time.
   * ``names``, ``usecols``, ``parse_dates`` should be constant lists.
   * ``dtype`` should be a constant dictionary of strings and types.
   * When a CSV file is read in parallel (distributed mode) and each process reads only a portion of the file, reading columns that contain line breaks is not supported.
@@ -56,13 +55,6 @@ Also see :ref:`S3` and :ref:`HDFS` configuration requirements and more on :ref:`
   * Argument ``index_col`` is supported.
   * Arguments ``chunksize``, ``column``, ``coerce_float``, ``params`` are not supported.
 
-* :func:`pandas.to_sql`
-
-  * :ref:`example usage and more system specific instructions <sql-section>`
-  * Argument ``con`` is supported but only as a string form. SQLalchemy `connectable` is not supported.
-  * Argument ``name``, ``schema``, ``if_exists``, ``index``, ``index_label``, ``dtype``, ``method`` are supported.
-  * Argument ``chunksize`` is not supported.
-
 * :func:`pandas.read_parquet`
 
   * :ref:`example usage and more system specific instructions <parquet-section>`
@@ -81,11 +73,18 @@ Also see :ref:`S3` and :ref:`HDFS` configuration requirements and more on :ref:`
 
   * :ref:`Example usage and more system specific instructions <json-section>`
   * Only supports reading `JSON Lines text file format <http://jsonlines.org/>`_ (``pd.read_json(filepath_or_buffer, orient='records', lines=True)``) and regular multi-line JSON file(``pd.read_json(filepath_or_buffer, orient='records', lines=False)``).
-  * Argument ``filepath_or_buffer`` is supported: it can point to a single JSON file, or a directory containing multiple partitioned JSON files. When reading a directory, the JSON files inside the directory must be `JSON Lines text file format <http://jsonlines.org/>`_.
+  * Argument ``filepath_or_buffer`` is supported: it can point to a single JSON file, or a directory containing multiple partitioned JSON files. When reading a directory, the JSON files inside the directory must be `JSON Lines text file format <http://jsonlines.org/>`_ with ``json`` file extension.
   * Argument ``orient = 'records'`` is used as default, instead of Pandas' default ``'columns'`` for dataframes. ``'records'`` is the only supported value for ``orient``.
   * Argument ``typ`` is supported. ``'frame'`` is the only supported value for ``typ``.
-  * ``dtype`` argument should be provided to enable type inference, or ``filepath_or_buffer`` should be a constant string for Bodo to infer types by looking at the file at compile time (only supported when reading a single JSON file from POSIX, and ``lines=True``).
+  * ``dtype`` argument should be provided to enable type inference, or ``filepath_or_buffer`` should be a constant string for Bodo to infer types by looking at the file at compile time (not supported for multi-line JSON files)
   * Arguments ``convert_dates``, ``precise_float``, ``lines`` are supported.
+
+* :func:`pandas.to_sql`
+
+  * :ref:`example usage and more system specific instructions <sql-section>`
+  * Argument ``con`` is supported but only as a string form. SQLalchemy `connectable` is not supported.
+  * Argument ``name``, ``schema``, ``if_exists``, ``index``, ``index_label``, ``dtype``, ``method`` are supported.
+  * Argument ``chunksize`` is not supported.
 
 General functions
 ~~~~~~~~~~~~~~~~~
