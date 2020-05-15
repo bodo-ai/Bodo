@@ -307,8 +307,7 @@ def check_unsupported_args(fname, args_dict, arg_defaults_dict):
 def get_overload_const_tuple(val):
     if isinstance(val, tuple):
         return val
-    # 'ommited' case
-    if getattr(val, "value", None) is not None:
+    if isinstance(val, types.Omitted):
         assert isinstance(val.value, tuple)
         return val.value
 
@@ -325,8 +324,7 @@ def get_overload_const_str_len(val):
 def get_const_str_list(val):
     if isinstance(val, bodo.utils.typing.ListLiteral):
         return val.literal_value
-    # 'ommited' case
-    if getattr(val, "value", None) is not None:
+    if isinstance(val, types.Omitted):
         return [val.value]
     # literal case
     if hasattr(val, "literal_value"):
@@ -342,8 +340,7 @@ def get_const_str_list(val):
 def get_overload_const_str(val):
     if isinstance(val, str):
         return val
-    # 'ommited' case
-    if getattr(val, "value", None) is not None:
+    if isinstance(val, types.Omitted):
         assert isinstance(val.value, str)
         return val.value
     # literal case
@@ -356,8 +353,7 @@ def get_overload_const_str(val):
 def get_overload_const_int(val):
     if isinstance(val, int):
         return val
-    # 'ommited' case
-    if getattr(val, "value", None) is not None:
+    if isinstance(val, types.Omitted):
         assert isinstance(val.value, int)
         return val.value
     # literal case
