@@ -2365,6 +2365,8 @@ class DataFramePass:
             var_typ = var_typ.type
         if hasattr(var_typ, "const_no"):
             return get_registry_consts(var_typ.const_no)
+        if isinstance(var_typ, bodo.utils.typing.ListLiteral):
+            return var_typ.literal_value
 
         typ = str if typ is None else typ
         by_arg_def = guard(find_build_sequence, self.func_ir, by_arg)

@@ -3,6 +3,7 @@ Bodo type inference pass that performs transformations that enable typing of the
 according to Bodo requirements (using partial typing).
 """
 import operator
+import numba
 from numba.core import types, ir, ir_utils
 from numba.core.compiler_machinery import register_pass
 from numba.core.typed_passes import NopythonTypeInference, PartialTypeInference
@@ -27,6 +28,7 @@ from bodo.utils.typing import (
     BodoError,
     get_registry_consts,
     add_consts_to_registry,
+    is_literal_type,
 )
 from bodo.utils.utils import (
     is_assign,
@@ -94,7 +96,11 @@ class BodoTypeInference(PartialTypeInference):
             ):
                 break
             typing_transforms_pass = TypingTransforms(
-                state.func_ir, state.typingctx, state.typemap, state.calltypes,
+                state.func_ir,
+                state.typingctx,
+                state.typemap,
+                state.calltypes,
+                state.args,
             )
             changed = typing_transforms_pass.run()
             # can't be typed if IR not changed
@@ -122,12 +128,13 @@ class TypingTransforms:
     them to constants so that functions like groupby() can be typed properly.
     """
 
-    def __init__(self, func_ir, typingctx, typemap, calltypes):
+    def __init__(self, func_ir, typingctx, typemap, calltypes, arg_types):
         self.func_ir = func_ir
         self.typingctx = typingctx
         self.typemap = typemap
         # calltypes may be None (example in forecast code, hard to reproduce in test)
         self.calltypes = {} if calltypes is None else calltypes  # pragma: no cover
+        self.arg_types = arg_types
         # replace inst variables as determined previously during the pass
         # currently use to keep lhs of Arg nodes intact
         self.replace_var_dict = {}
@@ -369,6 +376,31 @@ class TypingTransforms:
         """Handle dataframe calls that need transformation to meet Bodo requirements
         """
         lhs = assign.target
+
+        # force jit function arguments to be literal if required by df functions.
+        # mapping of df functions to their arguments that require constant values:
+        df_call_const_args = {
+            "groupby": [(0, "by"), (3, "as_index")],
+            "merge": [
+                (1, "how"),
+                (2, "on"),
+                (3, "left_on"),
+                (4, "right_on"),
+                (5, "left_index"),
+                (6, "right_index"),
+                (8, "suffixes"),
+            ],
+            "sort_values": [
+                (0, "by"),
+                (2, "ascending"),
+                (3, "inplace"),
+                (5, "na_position"),
+            ],
+        }
+
+        if func_name in df_call_const_args:
+            func_args = df_call_const_args[func_name]
+            self._force_arg_literals(func_name, rhs, func_args)
 
         # transform df.assign() here since (**kwargs) is not supported in overload
         if func_name == "assign":
@@ -663,6 +695,26 @@ class TypingTransforms:
             return self.typemap[obj_var.name]
         if func_var.name in self.typemap:
             return self.typemap[func_var.name].this
+
+    def _force_arg_literals(self, func_name, rhs, func_args):
+        """force JIT arguments to be literals if needed to satify constant requirements
+        of function call 'rhs' as specified by `func_args`
+        """
+        kws = dict(rhs.kws)
+        marked_args = set()
+        for (arg_no, arg_name) in func_args:
+            var = get_call_expr_arg(func_name, rhs.args, kws, arg_no, arg_name, "")
+            var_def = guard(get_definition, self.func_ir, var)
+            # ignore if var definition is not arg or literal already
+            if not isinstance(var_def, ir.Arg) or is_literal_type(
+                self.arg_types[var_def.index]
+            ):
+                continue
+            marked_args.add(var_def.index)
+
+        # force arguments to be literal if required
+        if marked_args:
+            raise numba.core.errors.ForceLiteralArg(marked_args, loc=rhs.loc)
 
 
 def _get_const_slice(func_ir, var):

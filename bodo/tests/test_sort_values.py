@@ -19,6 +19,7 @@ import os
 random.seed(5)
 np.random.seed(3)
 
+
 @pytest.fixture(
     params=[
         # int series, float, and bool columns
@@ -657,8 +658,27 @@ def test_sort_values_list_inference():
     check_func(impl, (df,))
 
 
+def test_sort_values_force_literal():
+    """
+    Test forcing JIT args to be literal if required by sort_values()
+    """
+
+    def impl(df, by, na_position):
+        return df.sort_values(by=by, kind="mergesort", na_position=na_position)
+
+    df = pd.DataFrame(
+        {
+            "A": [1, 3, 2, 0, -1, 4],
+            "B": [1.2, 3.4, np.nan, 2.2, 3.1, -1.2],
+            "C": np.arange(6),
+        }
+    )
+    check_func(impl, (df, ["B"], "first"))
+
+
 def test_list_string():
     """Sorting values by list of strings"""
+
     def test_impl(df1):
         df2 = df1.sort_values(by="A")
         return df2
@@ -677,10 +697,9 @@ def test_list_string():
             e_list.append(e_ent)
         return e_list
 
-    n=100
-    df1 = pd.DataFrame({"A":rand_col_l_str(n)})
+    n = 100
+    df1 = pd.DataFrame({"A": rand_col_l_str(n)})
     check_parallel_coherency(test_impl, (df1,), sort_output=True, reset_index=True)
-
 
 
 # ------------------------------ error checking ------------------------------ #
