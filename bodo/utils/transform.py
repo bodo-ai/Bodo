@@ -31,6 +31,9 @@ from bodo.libs.str_ext import string_type
 from bodo.utils.typing import (
     BodoError,
     add_consts_to_registry,
+    can_literalize_type,
+    is_literal_type,
+    get_literal_value,
 )
 from bodo.utils.utils import is_call
 
@@ -258,20 +261,20 @@ def get_stmt_defs(stmt):
     return set()
 
 
-def get_str_const_value(var, func_ir, err_msg, typemap=None, arg_types=None):
+def get_const_value(var, func_ir, err_msg, typemap=None, arg_types=None):
     """Get constant value of a variable if possible, otherwise raise error.
     If the variable is argument to the function, force recompilation with literal
     typing of the argument.
     """
-    val = guard(find_str_const, func_ir, var, arg_types, typemap)
+    val = guard(get_const_value_inner, func_ir, var, arg_types, typemap)
     if val is None:
         raise BodoError(err_msg)
     return val
 
 
-def find_str_const(func_ir, var, arg_types=None, typemap=None):
-    """Check if a variable can be inferred as a string constant, and return
-    the constant value, or raise GuardException otherwise.
+def get_const_value_inner(func_ir, var, arg_types=None, typemap=None):
+    """Check if a variable can be inferred as a constant and return the constant value.
+    Otherwise, raise GuardException.
     """
     require(isinstance(var, ir.Var))
     var_def = get_definition(func_ir, var)
@@ -283,28 +286,24 @@ def find_str_const(func_ir, var, arg_types=None, typemap=None):
     if isinstance(var_def, ir.Arg) and arg_types is not None:
         typ = arg_types[var_def.index]
 
-    # literal type
-    if isinstance(typ, types.StringLiteral):
-        return typ.literal_value
+    # literal type case
+    if is_literal_type(typ):
+        return get_literal_value(typ)
 
     # constant value
     if isinstance(var_def, (ir.Const, ir.Global, ir.FreeVar)):
         val = var_def.value
-        require(isinstance(val, str))
         return val
-    # argument dispatch, force literal only if argument is string
-    elif isinstance(var_def, ir.Arg) and typ == string_type:
+
+    # argument dispatch, force literal only if argument can be literal
+    elif isinstance(var_def, ir.Arg) and can_literalize_type(typ):
         raise numba.core.errors.ForceLiteralArg({var_def.index}, loc=var.loc)
 
-    # only add supported (s1+s2), TODO: extend to other expressions
-    require(
-        isinstance(var_def, ir.Expr)
-        and var_def.op == "binop"
-        and var_def.fn == operator.add
-    )
-    arg1 = find_str_const(func_ir, var_def.lhs, arg_types, typemap)
-    arg2 = find_str_const(func_ir, var_def.rhs, arg_types, typemap)
-    return arg1 + arg2
+    # only binary op supported (s1 op s2), TODO: extend to other expressions
+    require(isinstance(var_def, ir.Expr) and var_def.op == "binop")
+    arg1 = get_const_value_inner(func_ir, var_def.lhs, arg_types, typemap)
+    arg2 = get_const_value_inner(func_ir, var_def.rhs, arg_types, typemap)
+    return var_def.fn(arg1, arg2)
 
 
 def get_const_nested(func_ir, v):

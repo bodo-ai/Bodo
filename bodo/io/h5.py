@@ -23,7 +23,7 @@ from numba.core.ir_utils import (
 
 import bodo
 import bodo.io
-from bodo.utils.transform import find_str_const
+from bodo.utils.transform import get_const_value_inner
 
 
 class H5_IO:
@@ -92,7 +92,7 @@ class H5_IO:
             val_index_var = (
                 val_def.index if val_def.op == "getitem" else val_def.index_var
             )
-            obj_name = find_str_const(
+            obj_name = get_const_value_inner(
                 self.func_ir, val_index_var, arg_types=self.arg_types
             )
             obj_name_list.append(obj_name)
@@ -101,7 +101,9 @@ class H5_IO:
         require(len(obj_name_list) > 0)
         require(find_callname(self.func_ir, val_def) == ("File", "h5py"))
         require(len(val_def.args) > 0)
-        f_name = find_str_const(self.func_ir, val_def.args[0], arg_types=self.arg_types)
+        f_name = get_const_value_inner(
+            self.func_ir, val_def.args[0], arg_types=self.arg_types
+        )
         obj_name_list.reverse()
 
         import h5py

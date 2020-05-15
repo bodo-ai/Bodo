@@ -681,6 +681,14 @@ def get_literal_value(t):
         return t
 
 
+def can_literalize_type(t):
+    """return True if type 't' can have literal values
+    """
+    return t in (bodo.string_type, types.bool_) or isinstance(
+        t, (types.Integer, types.List, types.SliceType)
+    )
+
+
 def scalar_to_array_type(t):
     """convert scalar type "t" to array of "t" values
     """

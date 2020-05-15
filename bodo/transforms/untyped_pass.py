@@ -59,7 +59,7 @@ import bodo.hiframes.pd_dataframe_ext
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.utils.transform import (
     update_locs,
-    get_str_const_value,
+    get_const_value,
     update_node_list_definitions,
     gen_add_consts_to_type,
     compile_func_single_block,
@@ -563,14 +563,14 @@ class UntypedPass:
             "pd.read_sql() requires 'sql' argument to be a constant string or an "
             "argument to the JIT function currently"
         )
-        sql_const = get_str_const_value(sql_var, self.func_ir, msg, arg_types=self.args)
+        sql_const = get_const_value(sql_var, self.func_ir, msg, arg_types=self.args)
         con_var = get_call_expr_arg("read_sql", rhs.args, kws, 1, "con", "")
         msg = (
             "pd.read_sql() requires 'con' argument to be a constant string or an "
             "argument to the JIT function currently"
         )
         # the connection string has to be constant
-        con_const = get_str_const_value(con_var, self.func_ir, msg, arg_types=self.args)
+        con_const = get_const_value(con_var, self.func_ir, msg, arg_types=self.args)
         index_col = self._get_const_arg(
             "read_sql", rhs.args, kws, 2, "index_col", default=-1
         )
@@ -757,7 +757,7 @@ class UntypedPass:
                 "pd.read_excel() requires explicit type "
                 "annotation using 'dtype' if filename is not constant"
             )
-            fname_const = get_str_const_value(
+            fname_const = get_const_value(
                 fname_var, self.func_ir, msg, arg_types=self.args
             )
 
@@ -886,7 +886,7 @@ class UntypedPass:
                 "pd.read_csv() requires explicit type "
                 "annotation using 'dtype' if filename is not constant"
             )
-            fname_const = get_str_const_value(
+            fname_const = get_const_value(
                 fname, self.func_ir, msg, arg_types=self.args
             )
             df_type = _get_csv_df_type_from_file(fname_const, sep, skiprows, header)
@@ -1081,7 +1081,7 @@ class UntypedPass:
             "pd.read_json() requires explicit type "
             "annotation using 'dtype' if filename is not constant"
         )
-        fname_const = get_str_const_value(fname, self.func_ir, msg, arg_types=self.args)
+        fname_const = get_const_value(fname, self.func_ir, msg, arg_types=self.args)
         import os
 
         if dtype_var == "":

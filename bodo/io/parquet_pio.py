@@ -38,7 +38,7 @@ from bodo.utils.utils import unliteral_all, sanitize_varname
 from bodo.utils.typing import BodoError, BodoWarning
 import bodo.ir.parquet_ext
 from bodo.transforms import distributed_pass
-from bodo.utils.transform import get_str_const_value
+from bodo.utils.transform import get_const_value
 from bodo.io.fs_io import (
     get_s3_fs,
     s3_list_dir_fnames,
@@ -108,7 +108,7 @@ class ParquetHandler:
                 "argument should be constant for Bodo to look at the file "
                 "at compile time or schema should be provided."
             )
-            file_name_str = get_str_const_value(
+            file_name_str = get_const_value(
                 file_name, self.func_ir, msg, arg_types=self.args
             )
             col_names, col_types, index_col, col_indices = parquet_file_schema(

@@ -57,7 +57,7 @@ from bodo.ir.aggregate import get_agg_func
 from bodo.utils.transform import (
     compile_func_single_block,
     update_locs,
-    get_str_const_value,
+    get_const_value,
     get_call_expr_arg,
     gen_const_tup,
 )
@@ -1088,7 +1088,7 @@ class DataFramePass:
         err_msg = (
             "df.query() expr arg should be constant string or argument to jit function"
         )
-        expr = get_str_const_value(expr_var, self.func_ir, err_msg, self.typemap)
+        expr = get_const_value(expr_var, self.func_ir, err_msg, self.typemap)
 
         # check expr is a non-empty string
         if len(expr) == 0:
