@@ -266,8 +266,9 @@ def get_const_value(var, func_ir, err_msg, typemap=None, arg_types=None):
     If the variable is argument to the function, force recompilation with literal
     typing of the argument.
     """
-    val = guard(get_const_value_inner, func_ir, var, arg_types, typemap)
-    if val is None:
+    try:
+        val = get_const_value_inner(func_ir, var, arg_types, typemap)
+    except GuardException:
         raise BodoError(err_msg)
     return val
 
@@ -299,11 +300,64 @@ def get_const_value_inner(func_ir, var, arg_types=None, typemap=None):
     elif isinstance(var_def, ir.Arg) and can_literalize_type(typ):
         raise numba.core.errors.ForceLiteralArg({var_def.index}, loc=var.loc)
 
-    # only binary op supported (s1 op s2), TODO: extend to other expressions
-    require(isinstance(var_def, ir.Expr) and var_def.op == "binop")
-    arg1 = get_const_value_inner(func_ir, var_def.lhs, arg_types, typemap)
-    arg2 = get_const_value_inner(func_ir, var_def.rhs, arg_types, typemap)
-    return var_def.fn(arg1, arg2)
+    # binary op (s1 op s2)
+    if is_expr(var_def, "binop"):
+        arg1 = get_const_value_inner(func_ir, var_def.lhs, arg_types, typemap)
+        arg2 = get_const_value_inner(func_ir, var_def.rhs, arg_types, typemap)
+        return var_def.fn(arg1, arg2)
+
+    # list/set/dict cases
+    # try add_consts_to_type
+    call_name = guard(find_callname, func_ir, var_def)
+    if call_name == ("add_consts_to_type", "bodo.utils.typing",):
+        return get_const_value_inner(func_ir, var_def.args[0], arg_types, typemap)
+
+    # try dict.keys()
+    if (
+        call_name is not None
+        and len(call_name) == 2
+        and call_name[0] == "keys"
+        and isinstance(call_name[1], ir.Var)
+    ):
+        call_func = var_def.func
+        var_def = get_definition(func_ir, call_name[1])
+        # handle converted constant dictionaries
+        if is_call(var_def) and (
+            guard(find_callname, func_ir, var_def)
+            == ("add_consts_to_type", "bodo.utils.typing")
+        ):
+            var_def = guard(get_definition, func_ir, var_def.args[0])
+
+        require(is_expr(var_def, "build_map"))
+        vals = [v[0] for v in var_def.items]
+        # HACK replace dict.keys getattr to avoid typing errors
+        keys_getattr = guard(get_definition, func_ir, call_func)
+        assert isinstance(keys_getattr, ir.Expr) and keys_getattr.attr == "keys"
+        keys_getattr.attr = "copy"
+        return [get_const_value_inner(func_ir, v, arg_types, typemap) for v in vals]
+
+    # dict case
+    if is_expr(var_def, "build_map"):
+        return {
+            get_const_value_inner(
+                func_ir, v[0], arg_types, typemap
+            ): get_const_value_inner(func_ir, v[1], arg_types, typemap)
+            for v in var_def.items
+        }
+
+    # tuple case
+    if is_expr(var_def, "build_tuple"):
+        return tuple(
+            get_const_value_inner(func_ir, v, arg_types, typemap) for v in var_def.items
+        )
+
+    # list
+    if is_expr(var_def, "build_list"):
+        return [
+            get_const_value_inner(func_ir, v, arg_types, typemap) for v in var_def.items
+        ]
+
+    raise GuardException("Constant value not found")
 
 
 def get_const_nested(func_ir, v):

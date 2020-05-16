@@ -1345,10 +1345,8 @@ def test_excel1(datapath):
     check_func(test_impl2, (fname,), is_out_distributed=False)
     fname = datapath("data_comment.xlsx")
     check_func(test_impl3, (fname,), is_out_distributed=False)
-    with pytest.raises(
-        BodoError, match="read_excel requires 'sheet_name' argument as a constant"
-    ):
-        bodo.jit(test_impl4)(fname, "Sheet1")
+    fname = datapath("data.xlsx")
+    check_func(test_impl4, (fname, "Sheet1"), is_out_distributed=False)
     with pytest.raises(BodoError, match="both 'dtype' and 'names' should be provided"):
         bodo.jit(test_impl5)(fname)
 
