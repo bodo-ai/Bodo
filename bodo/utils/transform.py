@@ -283,7 +283,7 @@ def get_const_value_inner(func_ir, var, arg_types=None, typemap=None):
     # get type of variable if possible
     typ = None
     if typemap is not None:
-        typ = typemap[var.name]
+        typ = typemap.get(var.name, None)
     if isinstance(var_def, ir.Arg) and arg_types is not None:
         typ = arg_types[var_def.index]
 
@@ -297,7 +297,7 @@ def get_const_value_inner(func_ir, var, arg_types=None, typemap=None):
         return val
 
     # argument dispatch, force literal only if argument can be literal
-    elif isinstance(var_def, ir.Arg) and can_literalize_type(typ):
+    if isinstance(var_def, ir.Arg) and can_literalize_type(typ):
         raise numba.core.errors.ForceLiteralArg({var_def.index}, loc=var.loc)
 
     # binary op (s1 op s2)
@@ -495,3 +495,17 @@ def get_call_expr_arg(f_name, args, kws, arg_no, arg_name, default=None, err_msg
             err_msg = "{} requires '{}' argument".format(f_name, arg_name)
         raise BodoError(err_msg)
     return arg
+
+
+def set_call_expr_arg(var, args, kws, arg_no, arg_name):
+    """replaces call argument with a new variable.
+    Raises an error if argument was not specified.
+    """
+    if len(args) > arg_no:
+        args[arg_no] = var
+    elif arg_name in kws:
+        kws[arg_name] = var
+    else:
+        raise BodoError(
+            "cannot set call argument since does not exist"
+        )  # pragma: no cover

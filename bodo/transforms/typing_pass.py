@@ -20,6 +20,7 @@ from numba.core.ir_utils import (
     replace_arg_nodes,
     dprint_func_ir,
     require,
+    GuardException,
 )
 import bodo
 from bodo.utils.typing import (
@@ -41,6 +42,8 @@ from bodo.utils.transform import (
     update_node_list_definitions,
     compile_func_single_block,
     get_call_expr_arg,
+    get_const_value_inner,
+    set_call_expr_arg,
 )
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.hiframes.dataframe_indexing import DataFrameILocType
@@ -376,8 +379,12 @@ class TypingTransforms:
         """Handle dataframe calls that need transformation to meet Bodo requirements
         """
         lhs = assign.target
+        nodes = []
 
-        # force jit function arguments to be literal if required by df functions.
+        # find constant values for function arguments that require constants, and
+        # replace the argument variable with a new variable with literal type
+        # that holds the constants to enable constant access in overloads. This may
+        # force some jit function arguments to be literal if required.
         # mapping of df functions to their arguments that require constant values:
         df_call_const_args = {
             "groupby": [(0, "by"), (3, "as_index")],
@@ -400,7 +407,7 @@ class TypingTransforms:
 
         if func_name in df_call_const_args:
             func_args = df_call_const_args[func_name]
-            self._force_arg_literals(func_name, rhs, func_args)
+            nodes += self._replace_arg_with_literal(func_name, rhs, func_args)
 
         # transform df.assign() here since (**kwargs) is not supported in overload
         if func_name == "assign":
@@ -429,7 +436,7 @@ class TypingTransforms:
                 assign, lhs, rhs, df_var, inplace_var, label, func_name
             )
 
-        return [assign]
+        return nodes + [assign]
 
     def _handle_df_assign(self, lhs, rhs, df_var):
         """replace df.assign() with its implementation to avoid overload errors with
@@ -696,25 +703,33 @@ class TypingTransforms:
         if func_var.name in self.typemap:
             return self.typemap[func_var.name].this
 
-    def _force_arg_literals(self, func_name, rhs, func_args):
-        """force JIT arguments to be literals if needed to satify constant requirements
-        of function call 'rhs' as specified by `func_args`
+    def _replace_arg_with_literal(self, func_name, rhs, func_args):
+        """replace a function argument that needs to be constant with a literal to
+        enable constant access in overload. This may force JIT arguments to be literals
+        if needed to satify constant requirements.
         """
         kws = dict(rhs.kws)
-        marked_args = set()
+        nodes = []
         for (arg_no, arg_name) in func_args:
             var = get_call_expr_arg(func_name, rhs.args, kws, arg_no, arg_name, "")
-            var_def = guard(get_definition, self.func_ir, var)
-            # ignore if var definition is not arg or literal already
-            if not isinstance(var_def, ir.Arg) or is_literal_type(
-                self.arg_types[var_def.index]
-            ):
+            # skip if argument not specified or literal already
+            if var == "" or is_literal_type(self.typemap.get(var.name, None)):
                 continue
-            marked_args.add(var_def.index)
+            # get constant value for variable if possible.
+            # Otherwise, just skip, assuming that the issue may be fixed later or
+            # overload will raise an error if necessary.
+            try:
+                val = get_const_value_inner(
+                    self.func_ir, var, self.arg_types, self.typemap
+                )
+            except GuardException:
+                continue
+            # replace argument variable with a new variable holding constant
+            new_var = _create_const_var(val, var.name, var.scope, rhs.loc, nodes)
+            set_call_expr_arg(new_var, rhs.args, kws, arg_no, arg_name)
 
-        # force arguments to be literal if required
-        if marked_args:
-            raise numba.core.errors.ForceLiteralArg(marked_args, loc=rhs.loc)
+        rhs.kws = tuple(kws.items())
+        return nodes
 
 
 def _get_const_slice(func_ir, var):
@@ -729,3 +744,21 @@ def _get_const_slice(func_ir, var):
     stop = find_const(func_ir, var_def.args[1])
     step = find_const(func_ir, var_def.args[2]) if len(var_def.args) == 3 else None
     return slice(start, stop, step)
+
+
+def _create_const_var(val, name, scope, loc, nodes):
+    """create a new variable that holds constant value 'val'. Generates constant
+    creation IR nodes and adds them to 'nodes'.
+    """
+    new_var = ir.Var(scope, mk_unique_var(name), loc)
+    # NOTE: create a tuple for both list/tuple, assuming that all functions accept both
+    # equally (e.g. passing a tuple instead of a list is not an error).
+    if isinstance(val, (tuple, list)):
+        const_node = ir.Expr.build_tuple(
+            [_create_const_var(v, name, scope, loc, nodes) for v in val], loc
+        )
+    else:
+        const_node = ir.Const(val, loc)
+    new_assign = ir.Assign(const_node, new_var, loc)
+    nodes.append(new_assign)
+    return new_var

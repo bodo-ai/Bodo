@@ -2318,6 +2318,10 @@ def test_literal_args():
     def impl2(df, keys, as_index):
         return df.groupby(by=keys, as_index=as_index).sum()
 
+    # computation on literal arg
+    def impl3(df, keys, as_index):
+        return df.groupby(by=keys + ["B"], as_index=as_index).sum()
+
     df = pd.DataFrame(
         {
             "A": [2, 1, 1, 1, 2, 2, 1],
@@ -2329,6 +2333,7 @@ def test_literal_args():
     check_func(impl1, (df, ["A", "B"]), sort_output=True)
     check_func(impl2, (df, "A", False), sort_output=True)
     check_func(impl2, (df, ["A", "B"], True), sort_output=True)
+    check_func(impl3, (df, ["A"], True), sort_output=True)
 
 
 def test_schema_change():
