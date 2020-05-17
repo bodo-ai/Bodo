@@ -79,9 +79,10 @@ from bodo.utils.typing import (
     get_overload_const_func,
     get_overload_const_str,
     BodoError,
-    get_registry_consts,
     is_overload_constant_dict,
     get_overload_constant_dict,
+    is_overload_constant_str_list,
+    get_overload_const_str_list,
 )
 
 binary_op_names = [f.__name__ for f in bodo.hiframes.pd_series_ext.series_binary_ops]
@@ -2365,8 +2366,6 @@ class DataFramePass:
         var_typ = self.typemap[by_arg.name]
         if isinstance(var_typ, types.Optional):
             var_typ = var_typ.type
-        if hasattr(var_typ, "const_no"):
-            return get_registry_consts(var_typ.const_no)
         if isinstance(var_typ, bodo.utils.typing.ListLiteral):
             return var_typ.literal_value
 
@@ -2403,12 +2402,8 @@ class DataFramePass:
         If by_arg is just a single value, then return the list of length n_key of this value.
         """
         var_typ = self.typemap[by_arg.name]
-        if hasattr(var_typ, "const_no"):
-            vals = get_registry_consts(var_typ.const_no)
-            n_arg = len(vals)
-            if n_key != n_arg:
-                raise ValueError(err_msg)
-            return vals
+        if is_overload_constant_str_list(var_typ):
+            return get_overload_const_str_list(var_typ)
         # try single key column
         by_arg_def = guard(find_const, self.func_ir, by_arg)
         if by_arg_def is None:

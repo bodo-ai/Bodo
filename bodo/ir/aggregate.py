@@ -67,7 +67,7 @@ from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.hiframes import series_impl
 from bodo.ir.join import write_send_buff, setitem_arr_tup_nan, setitem_arr_nan
 from bodo.libs.timsort import getitem_arr_tup, setitem_arr_tup
-from bodo.utils.transform import get_const_nested, get_call_expr_arg
+from bodo.utils.transform import get_call_expr_arg
 from bodo.utils.shuffle import (
     getitem_arr_tup_single,
     val_to_tup,

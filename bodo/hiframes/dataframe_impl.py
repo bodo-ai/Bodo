@@ -30,12 +30,12 @@ from bodo.utils.typing import (
     is_overload_constant_str,
     is_overload_constant_bool,
     BodoError,
-    ConstDictType,
     scalar_to_array_type,
     raise_bodo_error,
-    get_registry_consts,
     is_overload_constant_dict,
     get_overload_constant_dict,
+    is_overload_constant_str_list,
+    get_overload_const_str_list,
 )
 from bodo.utils.transform import gen_const_tup
 from bodo.libs.int_arr_ext import IntegerArrayType
@@ -1072,8 +1072,8 @@ def overload_read_excel(
 
     # objmode doesn't allow lists, embed 'parse_dates' as a constant inside objmode
     parse_dates_const = False
-    if isinstance(parse_dates, bodo.utils.typing.ConstList):
-        parse_dates_const = list(get_registry_consts(parse_dates.const_no))
+    if is_overload_constant_str_list(parse_dates):
+        parse_dates_const = get_overload_const_str_list(parse_dates)
 
     # embed dtype since objmode doesn't allow list/dict
     pd_dtype_strs = ", ".join(

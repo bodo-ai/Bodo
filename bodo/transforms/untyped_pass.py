@@ -40,7 +40,6 @@ from bodo import config
 import bodo.io
 from bodo.io import h5
 from bodo.utils.utils import is_call, is_expr
-from bodo.utils.transform import get_const_nested
 from bodo.libs.str_arr_ext import string_array_type
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.bool_arr_ext import boolean_array
@@ -62,7 +61,6 @@ from bodo.utils.transform import (
     get_const_value,
     get_const_value_inner,
     update_node_list_definitions,
-    gen_add_consts_to_type,
     compile_func_single_block,
     get_call_expr_arg,
     gen_const_tup,
@@ -153,23 +151,6 @@ class UntypedPass:
         lhs = assign.target.name
         rhs = assign.value
 
-        # make global list/set/dict values available as constants during typing
-        if isinstance(rhs, (ir.Global, ir.FreeVar)) and isinstance(
-            rhs.value, (list, set, dict)
-        ):
-            target = assign.target
-            tmp_target = ir.Var(target.scope, mk_unique_var(target.name), rhs.loc)
-            tmp_assign = ir.Assign(rhs, tmp_target, rhs.loc)
-            nodes = [tmp_assign]
-            c_nodes, const_obj, const_no = gen_add_consts_to_type(
-                rhs.value, tmp_target, target
-            )
-            # HACK keep const values object around as long as the function is
-            # being compiled by adding it as an attribute to some compilation
-            # object
-            setattr(self.func_ir, "const_obj{}".format(const_no), const_obj)
-            return nodes + c_nodes
-
         if isinstance(rhs, ir.Expr):
             if rhs.op == "call":
                 return self._run_call(assign, label)
@@ -225,42 +206,6 @@ class UntypedPass:
                 # put back the definition removed earlier but remove node
                 self.func_ir._definitions[lhs].append(rhs)
                 return []
-
-            # if rhs.op in ('build_list', 'build_tuple'): TODO: test tuple
-            if rhs.op in ("build_list", "build_map", "build_set"):
-                # if build_list items are constant, add the constant values
-                # to the returned list type as metadata. This enables type
-                # inference for calls like pd.merge() where the values
-                # determine output dataframe type
-                # build_map is similarly handled (useful in df.rename)
-                # TODO: add proper metadata to Numba types
-                # XXX: when constants are used, all the uses of the list object
-                # have to be checked since lists are mutable
-                try:
-                    if rhs.op == "build_map":
-                        items = itertools.chain(*rhs.items)
-                    else:
-                        items = rhs.items
-                    vals = tuple(get_const_nested(self.func_ir, v) for v in items)
-                    # a = ['A', 'B'] ->
-                    # tmp = ['A', 'B']
-                    # a = add_consts_to_type(tmp, 'A', 'B')
-                    target = assign.target
-                    tmp_target = ir.Var(
-                        target.scope, mk_unique_var(target.name), rhs.loc
-                    )
-                    tmp_assign = ir.Assign(rhs, tmp_target, rhs.loc)
-                    nodes = [tmp_assign]
-                    c_nodes, const_obj, const_no = gen_add_consts_to_type(
-                        vals, tmp_target, assign.target
-                    )
-                    # HACK keep const values object around as long as the function is
-                    # being compiled by adding it as an attribute to some compilation
-                    # object
-                    setattr(self.func_ir, "const_obj{}".format(const_no), const_obj)
-                    return nodes + c_nodes
-                except numba.core.ir_utils.GuardException:
-                    pass
 
             # replace datetime.date.today with an internal function since class methods
             # are not supported in Numba's typing
@@ -433,24 +378,6 @@ class UntypedPass:
 
         if fdef == ("fromfile", "numpy"):
             return bodo.io.np_io._handle_np_fromfile(assign, lhs, rhs)
-
-        if fdef == ("list", "builtins") and len(rhs.args) == 1:
-            arg_val = guard(find_const, self.func_ir, rhs.args[0])
-            if isinstance(arg_val, str):
-                # a = list('AB') ->
-                # tmp = ['A', 'B']
-                # a = add_consts_to_type(tmp, 'A', 'B')
-                target = assign.target
-                tmp_target = ir.Var(target.scope, mk_unique_var(target.name), rhs.loc)
-                tmp_assign = ir.Assign(rhs, tmp_target, rhs.loc)
-                nodes = [tmp_assign]
-                c_nodes, const_obj, const_no = gen_add_consts_to_type(
-                    list(arg_val), tmp_target, lhs
-                )
-                # HACK keep const values object around as long as the function is being
-                # compiled by adding it as an attribute to some compilation object
-                setattr(self.func_ir, "const_obj{}".format(const_no), const_obj)
-                return nodes + c_nodes
 
         if fdef == ("where", "numpy") and len(rhs.args) == 3:
             return self._handle_np_where(assign, lhs, rhs)

@@ -43,10 +43,8 @@ from bodo.utils.typing import (
     is_overload_constant_str,
     is_overload_constant_str_list,
     is_dtype_nullable,
-    ConstDictType,
     get_overload_const_func,
     get_overload_const_str,
-    get_registry_consts,
     is_overload_constant_dict,
     get_overload_constant_dict,
 )

@@ -5,7 +5,6 @@ Helper functions to enable typing.
 import operator
 import itertools
 import types as pytypes
-import weakref
 import numpy as np
 import pandas as pd
 import numba
@@ -30,51 +29,6 @@ import bodo
 # sentinel string used in typing pass that specifies a const tuple as a const dict.
 # const tuple is used since there is no literal type for dict
 CONST_DICT_SENTINEL = "$_bodo_const_dict_$"
-
-
-# registry of constant values such as lists, sets, and dictionaries which is used during
-# typing and transformations.
-# Only keeps weak references so that large values are not kept around indefinitely if
-# not needed.
-const_registry = weakref.WeakValueDictionary()
-
-
-class ConstListValues(list):
-    """wrapper class for list objects to enable weak references since regular lists
-    cannot have weak references. see https://docs.python.org/3/library/weakref.html
-    """
-
-    pass
-
-
-class ConstDictValues(dict):
-    """wrapper class for dict objects to enable weak references since regular dicts
-    cannot have weak references. see https://docs.python.org/3/library/weakref.html
-    """
-
-    pass
-
-
-def get_registry_consts(const_no):
-    """get constant object in registry with key 'const_no'
-    """
-    return const_registry[const_no]
-
-
-def add_consts_to_registry(consts):
-    """add 'consts' object to the constant registry with a new key. Returns the actual
-    object preserved so that the caller can keep a reference around if necessary.
-    """
-    const_no = ir_utils.next_label()
-
-    if isinstance(consts, (list, tuple)):
-        const_obj = ConstListValues(consts)
-    elif isinstance(consts, dict):
-        const_obj = ConstDictValues(consts)
-    else:
-        const_obj = consts
-    const_registry[const_no] = const_obj
-    return const_obj, const_no
 
 
 list_cumulative = {"cumsum", "cumprod", "cummin", "cummax"}
@@ -174,23 +128,13 @@ def is_overload_constant_str(val):
 
 def is_overload_constant_str_list(val):
     return (
-        (
-            isinstance(val, bodo.utils.typing.ConstList)
-            and isinstance(get_registry_consts(val.const_no)[0], str)
-        )
-        or (
-            isinstance(val, types.BaseTuple)
-            and all(isinstance(t, types.StringLiteral) for t in val.types)
-            # avoid const dict values stored as const tuple
-            and (
-                not val.types
-                or val.types[0] != types.StringLiteral(CONST_DICT_SENTINEL)
-            )
-        )
-        or (
-            isinstance(val, bodo.utils.typing.ListLiteral)
-            and isinstance(val.literal_value[0], str)
-        )
+        isinstance(val, types.BaseTuple)
+        and all(isinstance(t, types.StringLiteral) for t in val.types)
+        # avoid const dict values stored as const tuple
+        and (not val.types or val.types[0] != types.StringLiteral(CONST_DICT_SENTINEL))
+    ) or (
+        isinstance(val, bodo.utils.typing.ListLiteral)
+        and isinstance(val.literal_value[0], str)
     )
 
 
@@ -373,8 +317,6 @@ def get_overload_const_str_list(val):
     # literal case
     if hasattr(val, "literal_value"):
         return [val.literal_value]
-    if hasattr(val, "const_no"):
-        return get_registry_consts(val.const_no)
     if isinstance(val, types.BaseTuple) and all(
         isinstance(t, types.StringLiteral) for t in val.types
     ):
@@ -652,55 +594,6 @@ def lower_to_const_tuple(context, builder, sig, args):
     return context.get_constant_null(sig.return_type)
 
 
-# Type used to add constant values to constant lists to enable typing
-class ConstList(types.List):
-    def __init__(self, dtype, const_no):
-        dtype = types.unliteral(dtype)
-        self.dtype = dtype
-        self.reflected = False
-        self.const_no = const_no
-        cls_name = "list[{}]".format(const_no)
-        name = "%s(%s)" % (cls_name, self.dtype)
-        super(types.List, self).__init__(name=name)
-
-    def copy(self, dtype=None, reflected=None):
-        if dtype is None:
-            dtype = self.dtype
-        return ConstList(dtype, self.const_no)
-
-    def unify(self, typingctx, other):
-        if isinstance(other, types.List):
-            dtype = typingctx.unify_pairs(self.dtype, other.dtype)
-            reflected = self.reflected or other.reflected
-            if dtype is not None:
-                # output type is ConstList if both unifying types are ConstList and
-                # have the same constant values
-                if isinstance(other, ConstList) and get_registry_consts(
-                    self.const_no
-                ) == get_registry_consts(other.const_no):
-                    return ConstList(dtype, self.const_no)
-                else:
-                    return types.List(dtype, reflected)
-
-    @property
-    def key(self):
-        # NOTE: key is used by Numba's interning mechanism to reuse types if possible.
-        # if the constant is not in the registry anymore, return a unique value to avoid
-        # matching
-        if self.const_no in const_registry:
-            consts = tuple(get_registry_consts(self.const_no))
-        else:
-            consts = "UNKNOWN{}".format(ir_utils.next_label())
-        return self.dtype, self.reflected, consts
-
-
-@register_model(ConstList)
-class ConstListModel(models.ListModel):
-    def __init__(self, dmm, fe_type):
-        l_type = types.List(fe_type.dtype)
-        super(ConstListModel, self).__init__(dmm, l_type)
-
-
 def is_literal_type(t):
     return (
         isinstance(t, (types.Literal, types.Omitted))
@@ -750,119 +643,6 @@ def scalar_to_array_type(t):
 
     # TODO: make sure t is a Numpy dtype
     return types.Array(t, 1, "C")
-
-
-# add constant metadata to list or tuple type, see untyped_pass.py
-def add_consts_to_type(a, *args):  # pragma: no cover
-    return a
-
-
-@infer_global(add_consts_to_type)
-class AddConstsTyper(AbstractTemplate):
-    def generic(self, args, kws):
-        assert not kws
-        ret_typ = args[0]
-        const_no = get_overload_const_int(args[1])
-        if isinstance(ret_typ, types.DictType):
-            ret_typ = ConstDictType(ret_typ.key_type, ret_typ.value_type, const_no)
-        elif isinstance(ret_typ, types.Set):
-            ret_typ = ConstSet(ret_typ.dtype, const_no)
-        else:
-            ret_typ = ConstList(ret_typ.dtype, const_no)
-        return signature(ret_typ, *args)
-
-
-AddConstsTyper._no_unliteral = True
-
-
-@lower_builtin(add_consts_to_type, types.VarArg(types.Any))
-def lower_add_consts_to_type(context, builder, sig, args):
-    return impl_ret_borrowed(context, builder, sig.return_type, args[0])
-
-
-class ConstDictType(types.DictType):
-    """Dictionary type with constant keys and values
-    """
-
-    def __init__(self, keyty, valty, const_no):
-        keyty = types.unliteral(keyty)
-        valty = types.unliteral(valty)
-        self.key_type = keyty
-        self.value_type = valty
-        self.keyvalue_type = types.Tuple([keyty, valty])
-        self.const_no = const_no
-        name = "{}[{},{}][{}]".format(self.__class__.__name__, keyty, valty, const_no)
-        super(types.DictType, self).__init__(name)
-
-    @property
-    def key(self):
-        # NOTE: key is used by Numba's interning mechanism to reuse types if possible.
-        # if the constant is not in the registry anymore, return a unique value to avoid
-        # matching
-        if self.const_no in const_registry:
-            consts = tuple(get_registry_consts(self.const_no))
-        else:
-            consts = "UNKNOWN{}".format(ir_utils.next_label())
-        return self.key_type, self.value_type, consts
-
-
-@register_model(ConstDictType)
-class ConstDictModel(numba.typed.dictobject.DictModel):
-    def __init__(self, dmm, fe_type):
-        l_type = types.DictType(fe_type.key_type, fe_type.value_type)
-        super(ConstDictModel, self).__init__(dmm, l_type)
-
-
-class ConstSet(types.Set):
-    """
-    Type class for homogeneous sets with constant values.
-    """
-
-    mutable = True
-
-    def __init__(self, dtype, const_no=None):
-        self.dtype = dtype
-        self.reflected = False
-        self.const_no = const_no
-        name = "set(%s)[%s]" % (self.dtype, const_no)
-        super(types.Set, self).__init__(name=name)
-
-    @property
-    def key(self):
-        # NOTE: key is used by Numba's interning mechanism to reuse types if possible.
-        # if the constant is not in the registry anymore, return a unique value to avoid
-        # matching
-        if self.const_no in const_registry:
-            consts = tuple(get_registry_consts(self.const_no))
-        else:
-            consts = "UNKNOWN{}".format(ir_utils.next_label())
-        return self.dtype, self.reflected, consts
-
-    def copy(self, dtype=None, reflected=None):
-        if dtype is None:
-            dtype = self.dtype
-        return ConstSet(dtype, self.const_no)
-
-    def unify(self, typingctx, other):  # pragma: no cover
-        # TODO: test coverage
-        if isinstance(other, types.Set):
-            dtype = typingctx.unify_pairs(self.dtype, other.dtype)
-            reflected = self.reflected or other.reflected
-            if dtype is not None:
-                if isinstance(other, ConstSet) and get_registry_consts(
-                    self.const_no
-                ) == get_registry_consts(other.const_no):
-                    return ConstSet(dtype, self.const_no)
-                else:
-                    return types.Set(dtype, reflected)
-
-
-@register_model(ConstSet)
-class ConstSetModel(models.SetModel):
-    def __init__(self, dmm, fe_type):  # pragma: no cover
-        # TODO: test coverage
-        l_type = types.Set(fe_type.dtype)
-        super(ConstSetModel, self).__init__(dmm, l_type)
 
 
 # dummy empty itertools implementation to avoid typing errors for series str

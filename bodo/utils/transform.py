@@ -30,7 +30,6 @@ from bodo.utils.utils import is_assign, is_expr
 from bodo.libs.str_ext import string_type
 from bodo.utils.typing import (
     BodoError,
-    add_consts_to_registry,
     can_literalize_type,
     is_literal_type,
     get_literal_value,
@@ -375,28 +374,6 @@ def get_const_value_inner(func_ir, var, arg_types=None, typemap=None):
     raise GuardException("Constant value not found")
 
 
-def get_const_nested(func_ir, v):
-    """get constant value for v, even if v is a constant list or set.
-    Does not capture GuardException.
-    """
-    v_def = get_definition(func_ir, v)
-    if is_call(v_def) and find_callname(func_ir, v_def) == (
-        "add_consts_to_type",
-        "bodo.utils.typing",
-    ):
-        v_def = get_definition(func_ir, v_def.args[0])
-    if isinstance(v_def, ir.Expr) and v_def.op in (
-        "build_list",
-        "build_set",
-        "build_tuple",
-    ):
-        return tuple(get_const_nested(func_ir, a) for a in v_def.items)
-    # treat make_function exprs as constant
-    if is_expr(v_def, "make_function"):  # pragma: no cover
-        return v_def
-    return find_const(func_ir, v)
-
-
 def get_const_func_output_type(func, arg_types, typing_context):
     """Get output type of constant function 'func' when compiled with 'arg_types' as
     argument types.
@@ -448,48 +425,21 @@ def gen_const_tup(vals):
     )
     # const int tuples and nested constant tuples are not supported in Numba yet, so
     # need special handling
-    if any(isinstance(c, (tuple, int)) for c in vals):
-        # using add_consts_to_type with list to avoid const tuple problems
-        # TODO: fix Numba type inference for nested constant tuples
-        const_obj, const_no = add_consts_to_registry(vals)
-        # HACK add the constant to typing_context object to keep it around during
-        # compilation
-        setattr(
-            numba.core.registry.cpu_target.typing_context,
-            "const_obj{}".format(const_no),
-            const_obj,
-        )
-        return "bodo.utils.typing.add_consts_to_type([{}], {})".format(
-            val_seq, const_no
-        )
+    # if any(isinstance(c, (tuple, int)) for c in vals):
+    #     # using add_consts_to_type with list to avoid const tuple problems
+    #     # TODO: fix Numba type inference for nested constant tuples
+    #     const_obj, const_no = add_consts_to_registry(vals)
+    #     # HACK add the constant to typing_context object to keep it around during
+    #     # compilation
+    #     setattr(
+    #         numba.core.registry.cpu_target.typing_context,
+    #         "const_obj{}".format(const_no),
+    #         const_obj,
+    #     )
+    #     return "bodo.utils.typing.add_consts_to_type([{}], {})".format(
+    #         val_seq, const_no
+    #     )
     return "({}{})".format(val_seq, "," if len(vals) == 1 else "",)
-
-
-def gen_add_consts_to_type_call(vals, var_name):
-    """generate add_consts_to_type() call as text. Also returns the const object being
-    preserved in the registry to enable the caller to keep a reference around.
-    """
-    const_obj, const_no = add_consts_to_registry(vals)
-    func_call = "bodo.utils.typing.add_consts_to_type({}, {})".format(
-        var_name, const_no
-    )
-    return const_obj, const_no, func_call
-
-
-def gen_add_consts_to_type(vals, var, ret_var, typing_info=None):
-    """generate add_consts_to_type() call that makes constant values of dict/list
-    available during typing
-    """
-
-    const_obj, const_no, const_to_type_call = gen_add_consts_to_type_call(vals, "a")
-    func_text = "def _build_f(a):\n"
-    func_text += "  return {}\n".format(const_to_type_call)
-    loc_vars = {}
-    exec(func_text, {"bodo": bodo}, loc_vars)
-    _build_f = loc_vars["_build_f"]
-    nodes = compile_func_single_block(_build_f, (var,), ret_var, typing_info)
-
-    return nodes, const_obj, const_no
 
 
 def get_call_expr_arg(f_name, args, kws, arg_no, arg_name, default=None, err_msg=None):
