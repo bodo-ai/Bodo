@@ -126,15 +126,14 @@ def is_overload_constant_str(val):
     )
 
 
-def is_overload_constant_str_list(val):
+def is_overload_constant_list(val):
     return (
         isinstance(val, types.BaseTuple)
-        and all(isinstance(t, types.StringLiteral) for t in val.types)
+        and all(isinstance(t, types.Literal) for t in val.types)
         # avoid const dict values stored as const tuple
         and (not val.types or val.types[0] != types.StringLiteral(CONST_DICT_SENTINEL))
     ) or (
         isinstance(val, bodo.utils.typing.ListLiteral)
-        and isinstance(val.literal_value[0], str)
     )
 
 
@@ -306,8 +305,8 @@ def get_overload_const_str_len(val):
         return len(val.value)
 
 
-def get_overload_const_str_list(val):
-    """returns a constant string list from type 'val', which could be a single string
+def get_overload_const_list(val):
+    """returns a constant list from type 'val', which could be a single value
     literal, a constant list or a constant tuple.
     """
     if isinstance(val, bodo.utils.typing.ListLiteral):
@@ -315,10 +314,10 @@ def get_overload_const_str_list(val):
     if isinstance(val, types.Omitted):
         return [val.value]
     # literal case
-    if hasattr(val, "literal_value"):
+    if isinstance(val, types.Literal):
         return [val.literal_value]
     if isinstance(val, types.BaseTuple) and all(
-        isinstance(t, types.StringLiteral) for t in val.types
+        isinstance(t, types.Literal) for t in val.types
     ):
         return tuple(t.literal_value for t in val.types)
 

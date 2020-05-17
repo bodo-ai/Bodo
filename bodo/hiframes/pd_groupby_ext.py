@@ -35,13 +35,13 @@ from bodo.utils.typing import (
     BodoError,
     raise_const_error,
     is_overload_none,
-    get_overload_const_str_list,
+    get_overload_const_list,
     is_overload_true,
     is_overload_false,
     is_overload_zero,
     is_overload_constant_bool,
     is_overload_constant_str,
-    is_overload_constant_str_list,
+    is_overload_constant_list,
     is_dtype_nullable,
     get_overload_const_func,
     get_overload_const_str,
@@ -141,16 +141,16 @@ def validate_groupby_spec(
         )
 
     # make sure by is a const str list
-    if not is_overload_constant_str(by) and not is_overload_constant_str_list(by):
+    if not is_overload_constant_str(by) and not is_overload_constant_list(by):
         raise_const_error(
             "groupby(): 'by' parameter only supports a constant column label or column labels."
         )
 
     # make sure by has valid label(s)
-    if len(set(get_overload_const_str_list(by)).difference(set(df.columns))) > 0:
+    if len(set(get_overload_const_list(by)).difference(set(df.columns))) > 0:
         raise_const_error(
             "groupby(): invalid key {} for 'by' (not available in columns {}).".format(
-                get_overload_const_str_list(by), df.columns
+                get_overload_const_list(by), df.columns
             )
         )
 
@@ -213,8 +213,8 @@ class GroupbyTyper(AbstractTemplate):
 
         if is_overload_constant_str(by):
             keys = (get_overload_const_str(by),)
-        elif is_overload_constant_str_list(by):
-            keys = tuple(get_overload_const_str_list(by))
+        elif is_overload_constant_list(by):
+            keys = tuple(get_overload_const_list(by))
 
         selection = list(df.columns)
         for k in keys:

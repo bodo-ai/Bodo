@@ -81,8 +81,7 @@ from bodo.utils.shuffle import (
 from bodo.utils.typing import (
     is_overload_true,
     get_overload_const_func,
-    is_overload_constant_str_list,
-    get_overload_const_str_list,
+    get_overload_const_list,
     is_overload_constant_dict,
     get_overload_constant_dict,
     is_overload_constant_str,
