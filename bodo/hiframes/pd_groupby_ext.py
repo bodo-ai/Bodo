@@ -47,8 +47,10 @@ from bodo.utils.typing import (
     get_overload_const_func,
     get_overload_const_str,
     get_registry_consts,
+    is_overload_constant_dict,
+    get_overload_constant_dict,
 )
-from bodo.utils.transform import get_const_func_output_type
+from bodo.utils.transform import get_const_func_output_type, get_call_expr_arg
 from bodo.utils.utils import is_expr
 
 
@@ -195,7 +197,7 @@ def validate_udf(func_name, func):
             CPUDispatcher,
         ),
     ):
-        raise BodoError(
+        raise_const_error(
             "Groupby.{}: 'func' must be user defined function".format(func_name)
         )
 
@@ -445,10 +447,8 @@ class DataframeGroupByAttribute(AttributeTemplate):
         return f_name, out_tp
 
     def _resolve_agg(self, grp, args, kws):
-        if len(args) == 0:
-            raise BodoError("Groupby.agg()/aggregate(): Must provide 'func'")
-
-        func = args[0]
+        err_msg = "Groupby.agg()/aggregate(): Must provide 'func'"
+        func = get_call_expr_arg("agg", args, dict(kws), 0, "func", err_msg=err_msg)
         has_cumulative_ops = False
 
         def _append_out_type(grp, out_data, out_tp):
@@ -462,15 +462,11 @@ class DataframeGroupByAttribute(AttributeTemplate):
                 out_data.append(out_tp.data)
 
         # multi-function constant dictionary case
-        if isinstance(func, ConstDictType):
+        if is_overload_constant_dict(func):
             # get mapping of column names to functions:
             # string -> string or tuple of strings (tuple when multiple
             # functions are applied to a column)
-            func_consts = get_registry_consts(func.const_no)
-            col_map = {
-                func_consts[2 * i]: func_consts[2 * i + 1]
-                for i in range(len(func_consts) // 2)
-            }
+            col_map = get_overload_constant_dict(func)
 
             # make sure selected columns exist in dataframe
             if any(c not in grp.selection for c in col_map.keys()):

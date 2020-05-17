@@ -260,6 +260,9 @@ def get_overload_const(val):
     (in case of non-constant).
     Supports None, bool, int, str, and tuple values.
     """
+    # sometimes Dispatcher objects become TypeRef, see test_groupby_agg_const_dict
+    if isinstance(val, types.TypeRef):
+        val = val.instance_type
     # actual value
     if val is None or isinstance(val, (bool, int, str, tuple)):
         return val
@@ -269,6 +272,10 @@ def get_overload_const(val):
     # Literal value
     if isinstance(val, types.Literal):
         return val.literal_value
+    if isinstance(val, types.Dispatcher):
+        return val
+    if isinstance(val, types.BaseTuple):
+        return [get_overload_const(v) for v in val.types]
     return NOT_CONSTANT
 
 

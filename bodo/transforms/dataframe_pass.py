@@ -80,6 +80,8 @@ from bodo.utils.typing import (
     get_overload_const_str,
     BodoError,
     get_registry_consts,
+    is_overload_constant_dict,
+    get_overload_constant_dict,
 )
 
 binary_op_names = [f.__name__ for f in bodo.hiframes.pd_series_ext.series_binary_ops]
@@ -1621,13 +1623,13 @@ class DataFramePass:
         nodes = []
         in_cols = grp_typ.selection
         if func_name in ("agg", "aggregate"):
-            agg_func = guard(get_definition, self.func_ir, rhs.args[0])
-            if isinstance(agg_func, ir.Expr) and agg_func.op == "build_map":
+            func_var = get_call_expr_arg(func_name, rhs.args, dict(rhs.kws), 0, "func")
+            agg_func_typ = self.typemap[func_var.name]
+            if is_overload_constant_dict(agg_func_typ):
+                func_dict = get_overload_constant_dict(agg_func_typ)
                 # multi-function const dict case:
                 # in this case, the input columns are the ones in the dict
-                in_cols = [
-                    guard(find_const, self.func_ir, v[0]) for v in agg_func.items
-                ]
+                in_cols = [name for name in func_dict.keys()]
         agg_func = get_agg_func(self.func_ir, func_name, rhs, typemap=self.typemap)
         same_index = False
         return_key = True

@@ -49,7 +49,7 @@ from bodo.utils.transform import (
 )
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.hiframes.dataframe_indexing import DataFrameILocType
-
+from bodo.hiframes.pd_groupby_ext import DataFrameGroupByType
 
 # global flag indicating that we are in partial type inference, so that error checking
 # code can raise regular Exceptions that can potentially be handled here
@@ -149,6 +149,8 @@ class TypingTransforms:
         self.rhs_labels = {}
         # Loc object of current location being translated
         self.curr_loc = self.func_ir.loc
+        # variables that are transformed away at some point and are potentially dead
+        self._transformed_vars = set()
         self.changed = False
 
     def run(self):
@@ -181,6 +183,37 @@ class TypingTransforms:
                         self.rhs_labels[inst.value] = label
 
             blocks[label].body = new_body
+
+        # find transformed variables that are not used anymore so they can be removed
+        # removing cases like agg dicts may be necessary since not type stable
+        remove_vars = self._transformed_vars.copy()
+        for block in self.func_ir.blocks.values():
+            for stmt in block.body:
+                # ignore dead definitions of variables
+                if (
+                    isinstance(stmt, ir.Assign)
+                    and stmt.target.name in self._transformed_vars
+                ):
+                    continue
+                # remove variables that are used somewhere else
+                remove_vars -= set(v.name for v in stmt.list_vars())
+
+        # add dummy variable with constant zero in first block after arg nodes to use
+        # below
+        first_block = self.func_ir.blocks[min(self.func_ir.blocks.keys())]
+        zero_var = ir.Var(first_block.scope, mk_unique_var("zero"), first_block.loc)
+        const_assign = ir.Assign(
+            ir.Const(0, first_block.loc), zero_var, first_block.loc
+        )
+        first_block.body.insert(len(self.arg_types), const_assign)
+
+        # change transformed variable to a trivial case to enable type inference
+        for v in remove_vars:
+            rhs = get_definition(self.func_ir, v)
+            if rhs.op == "build_map":
+                rhs.items = [(zero_var, zero_var)]
+            if rhs.op == "build_list":
+                rhs.items = [zero_var]
 
         return self.changed
 
@@ -295,6 +328,12 @@ class TypingTransforms:
             self._get_method_obj_type(func_mod, rhs.func), DataFrameType
         ):
             return self._run_call_dataframe(assign, rhs, func_mod, func_name, label)
+
+        # handle df.groupby().method() calls
+        if isinstance(func_mod, ir.Var) and isinstance(
+            self._get_method_obj_type(func_mod, rhs.func), DataFrameGroupByType
+        ):
+            return self._run_call_df_groupby(assign, rhs, func_mod, func_name)
 
         # set() with constant list arg
         if (
@@ -471,6 +510,24 @@ class TypingTransforms:
             header, tuple(name_col_total), data_args
         )
         return compile_func_single_block(impl, [df_var] + list(kws.values()), lhs, self)
+
+    def _run_call_df_groupby(self, assign, rhs, groupby_var, func_name):
+        """Handle dataframe groupby calls that need transformation to meet Bodo
+        requirements
+        """
+        nodes = []
+
+        # mapping of groupby functions to their arguments that require constant values
+        groupby_call_const_args = {
+            "agg": [(0, "func")],
+            "aggregate": [(0, "func")],
+        }
+
+        if func_name in groupby_call_const_args:
+            func_args = groupby_call_const_args[func_name]
+            nodes += self._replace_arg_with_literal(func_name, rhs, func_args)
+
+        return nodes + [assign]
 
     def _is_df_call_transformed(self, rhs):
         """check for _bodo_transformed=True in call arguments to know if df call has
@@ -730,6 +787,11 @@ class TypingTransforms:
             # replace argument variable with a new variable holding constant
             new_var = _create_const_var(val, var.name, var.scope, rhs.loc, nodes)
             set_call_expr_arg(new_var, rhs.args, kws, arg_no, arg_name)
+            # var is not used here anymore, add to _transformed_vars so it can
+            # potentially be removed since some dictionaries (e.g. in agg) may not be
+            # type stable
+            self._transformed_vars.add(var.name)
+            self.changed = True
 
         rhs.kws = list(kws.items())
         return nodes
