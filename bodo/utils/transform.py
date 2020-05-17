@@ -357,6 +357,21 @@ def get_const_value_inner(func_ir, var, arg_types=None, typemap=None):
             get_const_value_inner(func_ir, v, arg_types, typemap) for v in var_def.items
         ]
 
+    # list() call
+    if call_name == ("list", "builtins"):
+        return list(get_const_value_inner(func_ir, var_def.args[0], arg_types, typemap))
+
+    # set() call
+    if call_name == ("set", "builtins"):
+        return set(get_const_value_inner(func_ir, var_def.args[0], arg_types, typemap))
+
+
+    # df.columns case
+    if is_expr(var_def, "getattr") and typemap:
+        obj_typ = typemap.get(var_def.value.name, None)
+        if isinstance(obj_typ, bodo.hiframes.pd_dataframe_ext.DataFrameType):
+            return obj_typ.columns
+
     raise GuardException("Constant value not found")
 
 
