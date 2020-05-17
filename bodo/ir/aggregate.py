@@ -207,11 +207,8 @@ def get_agg_func(func_ir, func_name, rhs, series_type=None, typemap=None):
         func.skipdropna = skipdropna
         return func
 
-    assert func_name in ["agg", "aggregate"]
     # agg case
-    # error checking: make sure there is function input only
-    if len(rhs.args) != 1:
-        raise ValueError("agg expects 1 argument")
+    assert func_name in ["agg", "aggregate"]
 
     # NOTE: assuming typemap is provided here
     # TODO: refactor old pivot code that doesn't provide typemap
@@ -223,23 +220,12 @@ def get_agg_func(func_ir, func_name, rhs, series_type=None, typemap=None):
     if is_overload_constant_dict(agg_func_typ):
         funcs = []
         items = get_overload_constant_dict(agg_func_typ)
-        for f_val in items.values():
-            if isinstance(f_val, str):
-                funcs.append(get_agg_func(func_ir, f_val, rhs, series_type, typemap))
-            elif isinstance(f_val, (tuple, list)):
-                funcs.append(
-                    [get_agg_func(func_ir, f, rhs, series_type, typemap) for f in f_val]
-                )
-            else:
-                assert is_expr(f_val, "make_function") or isinstance(
-                    f_val, (numba.core.registry.CPUDispatcher, types.Dispatcher)
-                )
-                assert typemap is not None, "typemap is required for agg UDF handling"
-                func = _get_const_agg_func(f_val)
-                func.ftype = "udf"
-                funcs.append(func)
         # return a list, element i is function or list of functions to apply
         # to column i
+        funcs = [
+            get_agg_func_udf(func_ir, f_val, rhs, series_type, typemap)
+            for f_val in items.values()
+        ]
         return funcs
 
     # multi-function tuple case
@@ -265,6 +251,23 @@ def get_agg_func(func_ir, func_name, rhs, series_type=None, typemap=None):
     func = _get_const_agg_func(typemap[rhs.args[0].name])
     func.ftype = "udf"
     return func
+
+
+def get_agg_func_udf(func_ir, f_val, rhs, series_type, typemap):
+    """get udf value for agg call
+    """
+    if isinstance(f_val, str):
+        return get_agg_func(func_ir, f_val, rhs, series_type, typemap)
+    if isinstance(f_val, (tuple, list)):
+        return [get_agg_func_udf(func_ir, f, rhs, series_type, typemap) for f in f_val]
+    else:
+        assert is_expr(f_val, "make_function") or isinstance(
+            f_val, (numba.core.registry.CPUDispatcher, types.Dispatcher)
+        )
+        assert typemap is not None, "typemap is required for agg UDF handling"
+        func = _get_const_agg_func(f_val)
+        func.ftype = "udf"
+        return func
 
 
 def _get_const_agg_func(func_typ):

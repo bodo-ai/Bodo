@@ -205,6 +205,7 @@ class TypingTransforms:
         const_assign = ir.Assign(
             ir.Const(0, first_block.loc), zero_var, first_block.loc
         )
+        self.func_ir._definitions[zero_var.name] = [const_assign.value]
         first_block.body.insert(len(self.arg_types), const_assign)
 
         # change transformed variable to a trivial case to enable type inference
