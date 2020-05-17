@@ -324,6 +324,9 @@ class TypingTransforms:
 
         func_name, func_mod = fdef
 
+        if func_mod == "pandas":
+            return self._run_call_pd_top_level(assign, rhs, func_name)
+
         # handle df.method() calls
         if isinstance(func_mod, ir.Var) and isinstance(
             self._get_method_obj_type(func_mod, rhs.func), DataFrameType
@@ -445,7 +448,19 @@ class TypingTransforms:
                 (3, "inplace"),
                 (5, "na_position"),
             ],
+            "join": [
+                (1, "on"),
+                (2, "how"),
+                (3, "lsuffix"),
+                (4, "rsuffix"),
+            ],
             "rename": [(2, "columns")],
+            "drop": [
+                (0, "labels"),
+                (1, "axis"),
+                (3, "columns"),
+                (5, "inplace"),
+            ],
         }
 
         if func_name in df_call_const_args:
@@ -528,6 +543,37 @@ class TypingTransforms:
             func_args = groupby_call_const_args[func_name]
             nodes += self._replace_arg_with_literal(func_name, rhs, func_args)
 
+        return nodes + [assign]
+
+    def _run_call_pd_top_level(self, assign, rhs, func_name):
+        """transform top-level pandas functions
+        """
+        nodes = []
+
+        # mapping of pandas functions to their arguments that require constant values
+        top_level_call_const_args = {
+            "merge": [
+                (2, "how"),
+                (3, "on"),
+                (4, "left_on"),
+                (5, "right_on"),
+                (6, "left_index"),
+                (7, "right_index"),
+                (9, "suffixes"),
+            ],
+            "merge_asof": [
+                (2, "on"),
+                (3, "left_on"),
+                (4, "right_on"),
+                (5, "left_index"),
+                (6, "right_index"),
+                (10, "suffixes"),
+            ],
+        }
+
+        if func_name in top_level_call_const_args:
+            func_args = top_level_call_const_args[func_name]
+            nodes += self._replace_arg_with_literal(func_name, rhs, func_args)
         return nodes + [assign]
 
     def _is_df_call_transformed(self, rhs):
