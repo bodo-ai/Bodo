@@ -110,14 +110,14 @@ def test_groupby_supply_level():
 
 def test_groupby_as_index_bool():
     """
-    Test groupby(): 'as_index' must be of type bool
+    Test groupby(): 'as_index' must be a constant bool
     """
 
     def impl(df):
         return df.groupby(by=["A", "C"], as_index=2)
 
     df = pd.DataFrame({"A": [1, 2, 2], "C": ["aa", "b", "c"], "E": ["aa", "bb", "cc"]})
-    with pytest.raises(BodoError, match="'as_index' parameter must be of type bool"):
+    with pytest.raises(BodoError, match="'as_index' parameter must be a constant bool"):
         bodo.jit(impl)(df)
 
 
