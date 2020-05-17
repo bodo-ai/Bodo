@@ -34,6 +34,8 @@ from bodo.utils.typing import (
     scalar_to_array_type,
     raise_bodo_error,
     get_registry_consts,
+    is_overload_constant_dict,
+    get_overload_constant_dict,
 )
 from bodo.utils.transform import gen_const_tup
 from bodo.libs.int_arr_ext import IntegerArrayType
@@ -190,17 +192,12 @@ def overload_dataframe_rename(
         raise BodoError("Only 'columns' and copy arguments of df.rename() supported")
 
     # columns should be constant dictionary
-    if not isinstance(columns, ConstDictType):
-        raise BodoError(
+    if not is_overload_constant_dict(columns):
+        raise_bodo_error(
             "'columns' argument to df.rename() should be a constant dictionary"
         )
 
-    columns_consts = get_registry_consts(columns.const_no)
-
-    col_map = {
-        columns_consts[2 * i]: columns_consts[2 * i + 1]
-        for i in range(len(columns_consts) // 2)
-    }
+    col_map = get_overload_constant_dict(columns)
     new_cols = [
         col_map.get(df.columns[i], df.columns[i]) for i in range(len(df.columns))
     ]

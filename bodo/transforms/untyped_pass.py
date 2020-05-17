@@ -1267,7 +1267,7 @@ class UntypedPass:
             else:  # kw case
                 # TODO: test
                 kws["data"] = new_arr
-                rhs.kws = tuple(kws.items())
+                rhs.kws = list(kws.items())
             nodes.append(assign)
             return nodes
 

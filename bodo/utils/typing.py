@@ -27,6 +27,11 @@ from numba.core.registry import CPUDispatcher
 import bodo
 
 
+# sentinel string used in typing pass that specifies a const tuple as a const dict.
+# const tuple is used since there is no literal type for dict
+CONST_DICT_SENTINEL = "$_bodo_const_dict_$"
+
+
 # registry of constant values such as lists, sets, and dictionaries which is used during
 # typing and transformations.
 # Only keeps weak references so that large values are not kept around indefinitely if
@@ -176,6 +181,11 @@ def is_overload_constant_str_list(val):
         or (
             isinstance(val, types.BaseTuple)
             and all(isinstance(t, types.StringLiteral) for t in val.types)
+            # avoid const dict values stored as const tuple
+            and (
+                not val.types
+                or val.types[0] != types.StringLiteral(CONST_DICT_SENTINEL)
+            )
         )
         or (
             isinstance(val, bodo.utils.typing.ListLiteral)
@@ -187,6 +197,16 @@ def is_overload_constant_str_list(val):
 def is_overload_constant_tuple(val):
     return isinstance(val, tuple) or (
         isinstance(val, types.Omitted) and isinstance(val.value, tuple)
+    )
+
+
+def is_overload_constant_dict(val):
+    """const dict values are stored as a const tuple with a sentinel
+    """
+    return (
+        isinstance(val, types.BaseTuple)
+        and val.types
+        and val.types[0] == types.StringLiteral(CONST_DICT_SENTINEL)
     )
 
 
@@ -310,6 +330,20 @@ def get_overload_const_tuple(val):
     if isinstance(val, types.Omitted):
         assert isinstance(val.value, tuple)
         return val.value
+
+
+def get_overload_constant_dict(val):
+    """get constant dict values from literal type (stored as const tuple)
+    """
+    assert (
+        isinstance(val, types.BaseTuple)
+        and val.types
+        and val.types[0] == types.StringLiteral(CONST_DICT_SENTINEL)
+    )
+    # get values excluding sentinel
+    items = [get_overload_const(v) for v in val.types[1:]]
+    # create dict and return
+    return {items[2 * i]: items[2 * i + 1] for i in range(len(items) // 2)}
 
 
 def get_overload_const_str_len(val):

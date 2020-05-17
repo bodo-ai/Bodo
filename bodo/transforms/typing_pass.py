@@ -3,6 +3,7 @@ Bodo type inference pass that performs transformations that enable typing of the
 according to Bodo requirements (using partial typing).
 """
 import operator
+import itertools
 import numba
 from numba.core import types, ir, ir_utils
 from numba.core.compiler_machinery import register_pass
@@ -30,6 +31,7 @@ from bodo.utils.typing import (
     get_registry_consts,
     add_consts_to_registry,
     is_literal_type,
+    CONST_DICT_SENTINEL,
 )
 from bodo.utils.utils import (
     is_assign,
@@ -403,6 +405,7 @@ class TypingTransforms:
                 (3, "inplace"),
                 (5, "na_position"),
             ],
+            "rename": [(2, "columns")],
         }
 
         if func_name in df_call_const_args:
@@ -411,7 +414,7 @@ class TypingTransforms:
 
         # transform df.assign() here since (**kwargs) is not supported in overload
         if func_name == "assign":
-            return self._handle_df_assign(assign.target, rhs, df_var)
+            return nodes + self._handle_df_assign(assign.target, rhs, df_var)
 
         # handle calls that have inplace=True that changes the schema, by replacing the
         # dataframe variable instead of inplace change if possible
@@ -432,7 +435,7 @@ class TypingTransforms:
             inplace_var = get_call_expr_arg(
                 func_name, rhs.args, kws, inplace_arg_no, "inplace", ""
             )
-            return self._handle_df_inplace_func(
+            return nodes + self._handle_df_inplace_func(
                 assign, lhs, rhs, df_var, inplace_var, label, func_name
             )
 
@@ -728,7 +731,7 @@ class TypingTransforms:
             new_var = _create_const_var(val, var.name, var.scope, rhs.loc, nodes)
             set_call_expr_arg(new_var, rhs.args, kws, arg_no, arg_name)
 
-        rhs.kws = tuple(kws.items())
+        rhs.kws = list(kws.items())
         return nodes
 
 
@@ -757,6 +760,20 @@ def _create_const_var(val, name, scope, loc, nodes):
         const_node = ir.Expr.build_tuple(
             [_create_const_var(v, name, scope, loc, nodes) for v in val], loc
         )
+    # create a tuple with sentinel for dict case since there is no dict literal
+    elif isinstance(val, dict):
+        # first tuple element is a sentinel specifying that this tuple is a const dict
+        const_dict_sentinel_var = ir.Var(
+            scope, mk_unique_var("const_dict_sentinel"), loc
+        )
+        nodes.append(
+            ir.Assign(ir.Const(CONST_DICT_SENTINEL, loc), const_dict_sentinel_var, loc)
+        )
+        items = [
+            _create_const_var(v, name, scope, loc, nodes)
+            for v in itertools.chain(*val.items())
+        ]
+        const_node = ir.Expr.build_tuple([const_dict_sentinel_var] + items, loc)
     else:
         const_node = ir.Const(val, loc)
     new_assign = ir.Assign(const_node, new_var, loc)
