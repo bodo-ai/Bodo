@@ -72,6 +72,7 @@ def raise_const_error(msg):
     Raises BodoNotConstError during partial type inference, and BodoError otherwise.
     """
     if bodo.transforms.typing_pass.in_partial_typing:
+        bodo.transforms.typing_pass.typing_transform_required = True
         raise BodoNotConstError(msg)
     else:
         raise BodoError(msg)
@@ -82,6 +83,7 @@ def raise_bodo_error(msg):
     the issue. Otherwise, raises BodoError.
     """
     if bodo.transforms.typing_pass.in_partial_typing:
+        bodo.transforms.typing_pass.typing_transform_required = True
         raise BodoException(msg)
     else:
         raise BodoError(msg)
