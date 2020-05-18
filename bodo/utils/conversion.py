@@ -7,6 +7,7 @@ import pandas as pd
 import numpy as np
 import numba
 from numba.core import types
+from bodo.libs.decimal_arr_ext import Decimal128Type, DecimalArrayType
 from numba.extending import overload
 import bodo
 from bodo.utils.typing import is_overload_none, is_overload_true, BodoError
@@ -70,6 +71,7 @@ def overload_coerce_to_ndarray(
         )  # pragma: no cover
 
     if isinstance(data, (types.List, types.UniTuple)):
+
         # convert Timestamp() back to dt64
         if data.dtype == bodo.hiframes.pd_timestamp_ext.pandas_timestamp_type:
 
@@ -85,6 +87,43 @@ def overload_coerce_to_ndarray(
                 return np.asarray(vals)
 
             return impl
+
+        if isinstance(data.dtype, Decimal128Type):
+            precision = data.dtype.precision
+            scale = data.dtype.scale
+
+            def impl(
+                data,
+                error_on_nonarray=True,
+                bool_arr_convert=None,
+                scalar_to_arr_len=None,
+            ):  # pragma: no cover
+                n = len(data)
+                A = bodo.libs.decimal_arr_ext.alloc_decimal_array(n, precision, scale)
+                for i, d in enumerate(data):
+                    A._data[i] = bodo.libs.decimal_arr_ext.decimal128type_to_int128(d)
+                    bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, i, 1)
+
+                return A
+
+            return impl
+
+        if data.dtype == bodo.hiframes.datetime_date_ext.datetime_date_type:
+
+            def impl(
+                data,
+                error_on_nonarray=True,
+                bool_arr_convert=None,
+                scalar_to_arr_len=None,
+            ):  # pragma: no cover
+                n = len(data)
+                A = bodo.hiframes.datetime_date_ext.alloc_datetime_date_array(n)
+                for i, d in enumerate(data):
+                    A[i] = d
+                return A
+
+            return impl
+
         if not is_overload_none(bool_arr_convert) and data.dtype == types.bool_:
             return lambda data, error_on_nonarray=True, bool_arr_convert=None, scalar_to_arr_len=None: bodo.libs.bool_arr_ext.init_bool_array(
                 np.asarray(data), np.full((len(data) + 7) >> 3, 255, np.uint8)
@@ -112,6 +151,26 @@ def overload_coerce_to_ndarray(
     # convert scalar to ndarray
     # TODO: make sure scalar is a Numpy dtype
     if not is_overload_none(scalar_to_arr_len):
+
+        if data == bodo.hiframes.datetime_timedelta_ext.datetime_timedelta_type:
+            timedelta64_dtype = np.dtype("timedelta64[ns]")
+
+            def impl_ts(
+                data,
+                error_on_nonarray=True,
+                bool_arr_convert=None,
+                scalar_to_arr_len=None,
+            ):  # pragma: no cover
+                n = scalar_to_arr_len
+                A = np.empty(n, timedelta64_dtype)
+                td64 = bodo.hiframes.pd_timestamp_ext.datetime_timedelta_to_timedelta64(
+                    data
+                )
+                for i in numba.parfors.parfor.internal_prange(n):
+                    A[i] = td64
+                return A
+
+            return impl_ts
 
         if data == bodo.hiframes.datetime_datetime_ext.datetime_datetime_type:
             dt64_dtype = np.dtype("datetime64[ns]")

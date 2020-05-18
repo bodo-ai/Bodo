@@ -183,6 +183,15 @@ def test_series_copy_datetime_date():
         pd.Series(["A", "B", "CG", "ACDE", "C"], [4, 7, 0, 1, -2]),
         pd.Series(pd.date_range(start="2018-04-24", end="2018-04-29", periods=5)),
         pd.Series(pd.date_range(start="2018-04-24", end="2018-04-29", periods=5).date),
+        pd.Series(
+            [
+                datetime.timedelta(1, 1, 1),
+                datetime.timedelta(2, 2, 2),
+                datetime.timedelta(3, 3, 3),
+                np.nan,
+                datetime.timedelta(5, 5, 5),
+            ]
+        ),
         pytest.param(
             pd.Series(
                 [3, 5, 1, -1, 2],
@@ -341,6 +350,9 @@ def test_series_astype_str(series_val):
     if series_val.dtype == np.dtype("datetime64[ns]"):
         return
 
+    if series_val.dtype == np.dtype("timedelta64[ns]"):
+        return
+
     def test_impl(S):
         return S.astype(str)
 
@@ -464,6 +476,10 @@ def test_series_to_numpy(numeric_series_val):
 
 
 def test_series_iat_getitem(series_val):
+
+    if series_val.dtype == np.dtype("timedelta64[ns]"):
+        return
+
     def test_impl(S):
         return S.iat[2]
 
@@ -474,6 +490,9 @@ def test_series_iat_getitem(series_val):
 
 
 def test_series_iat_setitem(series_val):
+    # timedelta setitem not supported yet
+    if series_val.dtype == np.dtype("timedelta64[ns]"):
+        return
 
     # string setitem not supported yet
     if isinstance(series_val.iat[0], str):
@@ -494,6 +513,10 @@ def test_series_iat_setitem(series_val):
 
 
 def test_series_iloc_getitem_int(series_val):
+    # timedelta setitem not supported yet
+    if series_val.dtype == np.dtype("timedelta64[ns]"):
+        return
+
     def test_impl(S):
         return S.iloc[2]
 
@@ -536,6 +559,9 @@ def test_series_iloc_getitem_array_bool(series_val):
 
 
 def test_series_iloc_setitem_int(series_val):
+    # timedelta setitem not supported yet
+    if series_val.dtype == np.dtype("timedelta64[ns]"):
+        return
 
     # string setitem not supported yet
     if isinstance(series_val.iat[0], str):
@@ -557,6 +583,10 @@ def test_series_iloc_setitem_int(series_val):
 
 
 def test_series_iloc_setitem_slice(series_val):
+    # timedelta setitem not supported yet
+    if series_val.dtype == np.dtype("timedelta64[ns]"):
+        return
+
     # string setitem not supported yet
     if isinstance(series_val.iat[0], str):
         return
@@ -579,6 +609,10 @@ def test_series_iloc_setitem_slice(series_val):
 
 @pytest.mark.parametrize("idx", [[1, 3], np.array([1, 3]), pd.Series([1, 3])])
 def test_series_iloc_setitem_list_int(series_val, idx):
+    # timedelta setitem not supported yet
+    if series_val.dtype == np.dtype("timedelta64[ns]"):
+        return
+
     # string setitem not supported yet
     if isinstance(series_val.iat[0], str):
         return
@@ -603,6 +637,10 @@ def test_series_iloc_setitem_list_int(series_val, idx):
 
 
 def test_series_getitem_int(series_val):
+    # timedelta setitem not supported yet
+    if series_val.dtype == np.dtype("timedelta64[ns]"):
+        return
+
     def test_impl(S):
         return S[2]
 
@@ -664,6 +702,9 @@ def test_series_getitem_array_bool(series_val):
 
 
 def test_series_setitem_int(series_val):
+    # timedelta setitem not supported yet
+    if series_val.dtype == np.dtype("timedelta64[ns]"):
+        return
 
     # string setitem not supported yet
     if isinstance(series_val.iat[0], str):
@@ -688,6 +729,10 @@ def test_series_setitem_int(series_val):
 
 
 def test_series_setitem_slice(series_val):
+    # timedelta setitem not supported yet
+    if series_val.dtype == np.dtype("timedelta64[ns]"):
+        return
+
     # string setitem not supported yet
     if isinstance(series_val.iat[0], str):
         return
@@ -711,14 +756,6 @@ def test_series_setitem_slice(series_val):
 @pytest.mark.parametrize("idx", [[1, 4], np.array([1, 4]), pd.Series([1, 4])])
 @pytest.mark.parametrize("list_val_arg", [True, False])
 def test_series_setitem_list_int(series_val, idx, list_val_arg):
-    # not supported for Datetime.date yet, TODO: support and test
-    if isinstance(series_val.values[0], datetime.date):
-        return
-
-    # not supported for Decimal yet, TODO: support and test
-    if isinstance(series_val.values[0], Decimal):
-        return
-
     # string setitem not supported yet
     if isinstance(series_val.iat[0], str):
         return
@@ -1276,7 +1313,7 @@ def test_series_map_nested_func():
         test_impl, all_args_distributed_block=True, all_returns_distributed=True
     )(_get_dist_arg(S, False))
     res = bodo.allgatherv(res)
-    py_res = S.apply(lambda a:  2 * a + 3)
+    py_res = S.apply(lambda a: 2 * a + 3)
     pd.testing.assert_series_equal(res, py_res)
 
 
@@ -1370,6 +1407,10 @@ def test_series_abs():
 
 
 def test_series_min(series_val):
+    # timedelta setitem not supported yet
+    if series_val.dtype == np.dtype("timedelta64[ns]"):
+        return
+
     # not supported for Datetime.date yet, TODO: support and test
     if isinstance(series_val.values[0], datetime.date):
         return
@@ -1389,6 +1430,10 @@ def test_series_min(series_val):
 
 
 def test_series_max(series_val):
+    # timedelta setitem not supported yet
+    if series_val.dtype == np.dtype("timedelta64[ns]"):
+        return
+
     # not supported for Datetime.date yet, TODO: support and test
     if isinstance(series_val.values[0], datetime.date):
         return
@@ -1423,6 +1468,10 @@ def test_series_min_max_int_output_type():
 
 
 def test_series_idxmin(series_val):
+    # timedelta setitem not supported yet
+    if series_val.dtype == np.dtype("timedelta64[ns]"):
+        return
+
     # not supported for Datetime.date yet, TODO: support and test
     if isinstance(series_val.values[0], datetime.date):
         return
@@ -1452,6 +1501,10 @@ def test_series_idxmin(series_val):
 
 
 def test_series_idxmax(series_val):
+    # timedelta setitem not supported yet
+    if series_val.dtype == np.dtype("timedelta64[ns]"):
+        return
+
     # not supported for Datetime.date yet, TODO: support and test
     if isinstance(series_val.values[0], datetime.date):
         return
@@ -1500,14 +1553,6 @@ def test_series_median(numeric_series_val):
 
 
 def test_series_head(series_val):
-    # not supported for Datetime.date yet, TODO: support and test
-    if isinstance(series_val.values[0], datetime.date):
-        return
-
-    # not supported for Decimal yet, TODO: support and test
-    if isinstance(series_val.values[0], Decimal):
-        return
-
     def test_impl(S):
         return S.head(3)
 
@@ -1515,14 +1560,6 @@ def test_series_head(series_val):
 
 
 def test_series_tail(series_val):
-    # not supported for Datetime.date yet, TODO: support and test
-    if isinstance(series_val.values[0], datetime.date):
-        return
-
-    # not supported for Decimal yet, TODO: support and test
-    if isinstance(series_val.values[0], Decimal):
-        return
-
     def test_impl(S):
         return S.tail(3)
 
@@ -1769,6 +1806,10 @@ def test_series_nunique(series_val):
 
 
 def test_series_unique(series_val):
+    # timedelta setitem not supported yet
+    if series_val.dtype == np.dtype("timedelta64[ns]"):
+        return
+
     # not supported for Datetime.date yet, TODO: support and test
     if isinstance(series_val.values[0], datetime.date):
         return

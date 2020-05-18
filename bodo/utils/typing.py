@@ -692,6 +692,10 @@ def scalar_to_array_type(t):
     if t == bodo.hiframes.datetime_date_ext.datetime_date_type:
         return bodo.hiframes.datetime_date_ext.datetime_date_array_type
 
+    # datetime.timedelta values are stored as td64 arrays
+    if t == bodo.hiframes.datetime_timedelta_ext.datetime_timedelta_type:
+        return types.Array(types.NPTimedelta("ns"), 1, "C")
+
     # datetime.datetime values are stored as dt64 arrays
     if t == bodo.hiframes.datetime_datetime_ext.datetime_datetime_type:
         return types.Array(types.NPDatetime("ns"), 1, "C")

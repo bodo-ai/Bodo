@@ -9,6 +9,7 @@ import sys
 import atexit
 from decimal import Decimal
 import datetime
+from bodo.libs.decimal_arr_ext import Decimal128Type, DecimalArrayType, int128_type
 
 import numba
 from numba.core import types, cgutils, ir_utils
@@ -48,6 +49,7 @@ from bodo.utils.utils import (
     empty_like_type,
     numba_to_c_type,
     unliteral_all,
+    CTypeEnum,
 )
 from bodo.utils.typing import BodoError
 from numba.core.typing.builtins import IndexValueType
@@ -1561,7 +1563,18 @@ def bcast_overload(data):
 
         return bcast_impl
 
-    if isinstance(data, (IntegerArrayType, DecimalArrayType)) or data in (
+    if isinstance(data, DecimalArrayType):
+
+        def bcast_decimal_arr(data):  # pragma: no cover
+            count = data._data.size
+            assert count < INT_MAX
+            c_bcast(data._data.ctypes, np.int32(count), CTypeEnum.Int128.value)
+            bcast(data._null_bitmap)
+            return
+
+        return bcast_decimal_arr
+
+    if isinstance(data, IntegerArrayType) or data in (
         boolean_array,
         datetime_date_array_type,
     ):
@@ -1763,6 +1776,38 @@ def slice_getitem_from_start(arr, slice_index):  # pragma: no cover
 
 @overload(slice_getitem_from_start, no_unliteral=True)
 def slice_getitem_from_start_overload(arr, slice_index):
+
+    if arr == bodo.hiframes.datetime_date_ext.datetime_date_array_type:
+
+        def getitem_datetime_date_impl(arr, slice_index):  # pragma: no cover
+            rank = bodo.libs.distributed_api.get_rank()
+            k = slice_index.stop
+            A = bodo.hiframes.datetime_date_ext.alloc_datetime_date_array(k)
+            if rank == 0:
+                A = arr[:k]
+            bodo.libs.distributed_api.bcast(A)
+            return A
+
+        return getitem_datetime_date_impl
+
+    if isinstance(arr.dtype, Decimal128Type):
+        precision = arr.dtype.precision
+        scale = arr.dtype.scale
+
+        def getitem_decimal_impl(arr, slice_index):  # pragma: no cover
+            rank = bodo.libs.distributed_api.get_rank()
+            k = slice_index.stop
+            A = bodo.libs.decimal_arr_ext.alloc_decimal_array(k, precision, scale)
+            if rank == 0:
+                for i in range(k):
+                    A._data[i] = arr._data[i]
+                    bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(arr._null_bitmap, i)
+                    bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, i, bit)
+            bodo.libs.distributed_api.bcast(A)
+            return A
+
+        return getitem_decimal_impl
+
     if arr == string_array_type:
 
         def getitem_str_impl(arr, slice_index):  # pragma: no cover
@@ -1983,7 +2028,7 @@ def get_end(total_size, pes, rank):  # pragma: no cover
     """get end point of range for parfor division"""
     res = total_size % pes
     blk_size = (total_size - res) // pes
-    return (rank+1) * blk_size + min(rank+1, res)
+    return (rank + 1) * blk_size + min(rank + 1, res)
 
 
 @numba.njit
@@ -1991,7 +2036,7 @@ def get_node_portion(total_size, pes, rank):  # pragma: no cover
     """get portion of size for alloc division"""
     res = total_size % pes
     blk_size = (total_size - res) // pes
-    if (rank < res):
+    if rank < res:
         return blk_size + 1
     else:
         return blk_size

@@ -191,6 +191,17 @@ def test_dt64_sub_output():
     check_func(impl, (S1, S2), check_dtype=False)
 
 
+def test_datetime_timedelta_coerce():
+    ts = datetime.timedelta(7, 7, 7)
+
+    def f(df):
+        df["ts"] = ts
+        return df
+
+    df1 = pd.DataFrame({"a": [1, 2, 3]})
+    check_func(f, (df1,))
+
+
 def test_datetime_datetime_coerce():
     ts = datetime.datetime(2020, 1, 20, 10, 20, 30, 40)
 
