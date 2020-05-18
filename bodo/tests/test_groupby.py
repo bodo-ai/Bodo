@@ -928,7 +928,7 @@ def test_groupby_agg_const_dict():
     # check_func(impl16, (df,), sort_output=True)
     bodo.jit(impl16)(df)  # just check for compilation errors
     # TODO: enable is_out_distributed after fixing gatherv issue for tuple output
-    check_func(impl17, (df,), sort_output=True, is_out_distributed=False)
+    check_func(impl17, (df,), sort_output=True, dist_test=False)
 
 
 def g(x):
