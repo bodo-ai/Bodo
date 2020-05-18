@@ -2403,11 +2403,14 @@ class DataFramePass:
         """
         var_typ = self.typemap[by_arg.name]
         if is_overload_constant_list(var_typ):
-            return get_overload_const_list(var_typ)
+            vals = get_overload_const_list(var_typ)
+            if len(vals) != n_key:
+                raise BodoError(err_msg)
+            return vals
         # try single key column
         by_arg_def = guard(find_const, self.func_ir, by_arg)
         if by_arg_def is None:
-            raise ValueError(err_msg)
+            raise BodoError(err_msg)
         key_colnames = (by_arg_def,) * n_key
         return key_colnames
 
