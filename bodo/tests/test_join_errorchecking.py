@@ -116,7 +116,7 @@ def test_merge_on_str_strlist2():
     def impl(df1, df2):
         return df1.merge(df2, on=(1, "A"))
 
-    with pytest.raises(BodoError, match="'on' must be of type str or str list"):
+    with pytest.raises(BodoError, match="invalid key .* for on/left_on/right_on"):
         bodo.jit(impl)(df1, df2)
 
 
@@ -236,7 +236,7 @@ def test_merge_lefton_str_strlist2():
     def impl(df1, df2):
         return df1.merge(df2, left_on=(1, "A"), right_on=["A", "B"])
 
-    with pytest.raises(BodoError, match="left_on must be of type str or str list"):
+    with pytest.raises(BodoError, match="invalid key .* for on/left_on/right_on"):
         bodo.jit(impl)(df1, df2)
 
 
@@ -254,7 +254,7 @@ def test_merge_righton_str_strlist2():
     def impl(df1, df2):
         return df1.merge(df2, right_on=(1, "A"), left_on=["A", "C"])
 
-    with pytest.raises(BodoError, match="right_on must be of type str or str list"):
+    with pytest.raises(BodoError, match="invalid key .* for on/left_on/right_on"):
         bodo.jit(impl)(df1, df2)
 
 
