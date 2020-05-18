@@ -69,7 +69,11 @@ from bodo.utils.typing import (
     create_unsupported_overload,
     get_overload_const,
 )
-from bodo.utils.transform import get_const_func_output_type, gen_const_tup
+from bodo.utils.transform import (
+    get_const_func_output_type,
+    gen_const_tup,
+    get_const_tup_vals,
+)
 from bodo.utils.conversion import index_to_array
 from bodo.libs.array import array_to_info, arr_info_list_to_table
 from bodo.libs.int_arr_ext import IntegerArrayType
@@ -411,7 +415,9 @@ def init_dataframe(typingctx, data_tup_typ, index_typ, col_names_typ=None):
     if n_cols == 0:
         column_names = ()
     else:
-        column_names = tuple(get_overload_const_list(col_names_typ))
+        # using 'get_const_tup_vals' since column names are generated using
+        # 'gen_const_tup' which requires special handling for nested tuples
+        column_names = get_const_tup_vals(col_names_typ)
 
     assert len(column_names) == n_cols
 

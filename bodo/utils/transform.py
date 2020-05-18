@@ -33,6 +33,7 @@ from bodo.utils.typing import (
     can_literalize_type,
     is_literal_type,
     get_literal_value,
+    get_overload_const_list,
 )
 from bodo.utils.utils import is_call
 
@@ -364,7 +365,6 @@ def get_const_value_inner(func_ir, var, arg_types=None, typemap=None):
     if call_name == ("set", "builtins"):
         return set(get_const_value_inner(func_ir, var_def.args[0], arg_types, typemap))
 
-
     # df.columns case
     if is_expr(var_def, "getattr") and typemap:
         obj_typ = typemap.get(var_def.value.name, None)
@@ -417,29 +417,49 @@ def update_node_list_definitions(node_list, func_ir):
     return
 
 
+# sentinel for nested const tuple gen used below
+NESTED_TUP_SENTINEL = "$BODO_NESTED_TUP"
+
+
+def gen_const_val_str(c):
+    """convert value 'c' to string constant
+    """
+    # const nested constant tuples are not supported in Numba yet, need special handling
+    # HACK: flatten tuple values but add a sentinel value that specifies how many
+    # elements are from the nested tuple. Supports only one level nesting
+    # TODO: fix nested const tuple handling in Numba
+    if isinstance(c, tuple):
+        return "'{}{}', ".format(NESTED_TUP_SENTINEL, len(c)) + ", ".join(
+            gen_const_val_str(v) for v in c
+        )
+    return "'{}'".format(c) if isinstance(c, str) else str(c)
+
+
 def gen_const_tup(vals):
     """generate a constant tuple value as text
     """
-    val_seq = ", ".join(
-        "'{}'".format(c) if isinstance(c, str) else str(c) for c in vals
-    )
-    # const int tuples and nested constant tuples are not supported in Numba yet, so
-    # need special handling
-    # if any(isinstance(c, (tuple, int)) for c in vals):
-    #     # using add_consts_to_type with list to avoid const tuple problems
-    #     # TODO: fix Numba type inference for nested constant tuples
-    #     const_obj, const_no = add_consts_to_registry(vals)
-    #     # HACK add the constant to typing_context object to keep it around during
-    #     # compilation
-    #     setattr(
-    #         numba.core.registry.cpu_target.typing_context,
-    #         "const_obj{}".format(const_no),
-    #         const_obj,
-    #     )
-    #     return "bodo.utils.typing.add_consts_to_type([{}], {})".format(
-    #         val_seq, const_no
-    #     )
+    val_seq = ", ".join(gen_const_val_str(c) for c in vals)
     return "({}{})".format(val_seq, "," if len(vals) == 1 else "",)
+
+
+def get_const_tup_vals(c_typ):
+    """get constant values from a tuple type generated using 'gen_const_tup'
+    reverses the hack in 'gen_const_val_str'
+    """
+    vals = get_overload_const_list(c_typ)
+    out = []
+    i = 0
+    while i < len(vals):
+        v = vals[i]
+        # reverse nested tuple flattening in gen_const_val_str
+        if v.startswith(NESTED_TUP_SENTINEL):
+            n_elem = int(v[len(NESTED_TUP_SENTINEL) :])
+            out.append(tuple(vals[i + 1 : i + n_elem + 1]))
+            i += n_elem + 1
+        else:
+            out.append(vals[i])
+            i += 1
+    return tuple(out)
 
 
 def get_call_expr_arg(f_name, args, kws, arg_no, arg_name, default=None, err_msg=None):
