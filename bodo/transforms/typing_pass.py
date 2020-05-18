@@ -207,9 +207,9 @@ class TypingTransforms:
         # change transformed variable to a trivial case to enable type inference
         for v in remove_vars:
             rhs = get_definition(self.func_ir, v)
-            if rhs.op == "build_map":
+            if is_expr(rhs, "build_map"):
                 rhs.items = [(zero_var, zero_var)]
-            if rhs.op == "build_list":
+            if is_expr(rhs, "build_list"):
                 rhs.items = [zero_var]
 
         return self.changed
