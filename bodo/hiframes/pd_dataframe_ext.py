@@ -2081,7 +2081,7 @@ def validate_sort_values_spec(df, by, axis, ascending, inplace, kind, na_positio
 
     # make sure 'na_position' is correctly specified
     if not is_overload_constant_str(na_position):
-        raise BodoError(
+        raise_const_error(
             "sort_values(): na_position parameter must be a literal constant of type str, not "
             "{na_position}".format(na_position=na_position)
         )

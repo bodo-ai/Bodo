@@ -134,9 +134,7 @@ def is_overload_constant_list(val):
         and all(isinstance(t, types.Literal) for t in val.types)
         # avoid const dict values stored as const tuple
         and (not val.types or val.types[0] != types.StringLiteral(CONST_DICT_SENTINEL))
-    ) or (
-        isinstance(val, bodo.utils.typing.ListLiteral)
-    )
+    ) or (isinstance(val, bodo.utils.typing.ListLiteral))
 
 
 def is_overload_constant_tuple(val):
@@ -166,8 +164,13 @@ def is_overload_constant_int(val):
 
 
 def is_overload_bool_list(val):
-    return isinstance(val, numba.core.types.List) and isinstance(
-        val.dtype, types.Boolean
+    return (
+        isinstance(val, numba.core.types.List)
+        and isinstance(val.dtype, types.Boolean)
+        or (
+            isinstance(val, types.BaseTuple)
+            and all(isinstance(v, bodo.utils.typing.BooleanLiteral) for v in val.types)
+        )
     )
 
 

@@ -452,7 +452,7 @@ def get_const_tup_vals(c_typ):
     while i < len(vals):
         v = vals[i]
         # reverse nested tuple flattening in gen_const_val_str
-        if v.startswith(NESTED_TUP_SENTINEL):
+        if isinstance(v, str) and v.startswith(NESTED_TUP_SENTINEL):
             n_elem = int(v[len(NESTED_TUP_SENTINEL) :])
             out.append(tuple(vals[i + 1 : i + n_elem + 1]))
             i += n_elem + 1
