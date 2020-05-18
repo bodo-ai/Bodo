@@ -235,6 +235,36 @@ class TypingTransforms:
         idx = get_getsetitem_index_var(rhs, self.typemap, nodes)
         idx_typ = self.typemap.get(idx.name, None)
 
+        # find constant index for df["A"] or df[["A", "B"]] cases
+        if isinstance(target_typ, DataFrameType) and idx_typ in (
+            bodo.string_type,
+            types.List(bodo.string_type),
+        ):
+            # static_getitem has the values embedded
+            if rhs.op == "static_getitem":
+                val = rhs.index
+            else:
+                # try to find index values
+                try:
+                    val = get_const_value_inner(
+                        self.func_ir, idx, self.arg_types, self.typemap
+                    )
+                except GuardException:
+                    # couldn't find values, just return to be handled later
+                    nodes.append(assign)
+                    return nodes
+            # replace index variable with a new variable holding constant
+            new_var = _create_const_var(val, idx.name, idx.scope, idx.loc, nodes)
+            if rhs.op == "static_getitem":
+                rhs.index_var = new_var
+            else:
+                rhs.index = new_var
+            # old index var is not used anymore
+            self._transformed_vars.add(idx.name)
+            self.changed = True
+            nodes.append(assign)
+            return nodes
+
         # transform df.iloc[:,1:] case here since slice info not available in overload
         if (
             isinstance(target_typ, DataFrameILocType)
@@ -350,19 +380,9 @@ class TypingTransforms:
                 (3, "inplace"),
                 (5, "na_position"),
             ],
-            "join": [
-                (1, "on"),
-                (2, "how"),
-                (3, "lsuffix"),
-                (4, "rsuffix"),
-            ],
+            "join": [(1, "on"), (2, "how"), (3, "lsuffix"), (4, "rsuffix"),],
             "rename": [(2, "columns")],
-            "drop": [
-                (0, "labels"),
-                (1, "axis"),
-                (3, "columns"),
-                (5, "inplace"),
-            ],
+            "drop": [(0, "labels"), (1, "axis"), (3, "columns"), (5, "inplace"),],
         }
 
         if func_name in df_call_const_args:
