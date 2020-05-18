@@ -29,7 +29,7 @@ source activate $CONDA_ENV
 if [[ "$unamestr" == 'Linux' ]]; then
     $CONDA_INSTALL -c conda-forge gcc_linux-64 gxx_linux-64 gfortran_linux-64
 elif [[ "$unamestr" == 'Darwin' ]]; then
-    $CONDA_INSTALL -c conda-forge clang_osx-64 clangxx_osx-64 gfortran_osx-64
+    $CONDA_INSTALL -c conda-forge clang_osx-64=9.0.1 clangxx_osx-64=9.0.1
 else
     echo "Error in compiler install"
 fi
