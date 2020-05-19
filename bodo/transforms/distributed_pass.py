@@ -81,6 +81,10 @@ from bodo.utils.utils import (
 from bodo.libs.distributed_api import Reduce_Type
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 import llvmlite.binding as ll
+from bodo.io import csv_cpp
+
+ll.add_symbol("csv_output_is_dir", csv_cpp.csv_output_is_dir)
+
 
 distributed_run_extensions = {}
 
@@ -1231,15 +1235,12 @@ class DistributedPass:
                false
         If the original header node was false, the new header node is always false.
         """
+
         def f(cond, fname):  # pragma: no cover
             return cond & (
                 (bodo.libs.distributed_api.get_rank() == 0)
                 | _csv_output_is_dir(fname._data)
             )
-
-        from bodo.io import csv_cpp
-
-        ll.add_symbol("csv_output_is_dir", csv_cpp.csv_output_is_dir)
 
         f_block = compile_to_numba_ir(
             f,
@@ -2399,7 +2400,7 @@ class DistributedPass:
         def impl(n, rank, n_pes):  # pragma: no cover
             res = n % n_pes
             # The formula we would like is if (rank < res): blk_size +=1 but this does not compile
-            blk_size = n // n_pes + min(rank+1, res) - min(rank, res)
+            blk_size = n // n_pes + min(rank + 1, res) - min(rank, res)
             return blk_size
 
         nodes += compile_func_single_block(
@@ -2415,7 +2416,7 @@ class DistributedPass:
         """get end index of size_var in 1D_Block distribution
         """
         nodes += compile_func_single_block(
-            lambda n, rank, n_pes: (rank+1) * (n // n_pes) + min(rank+1, n % n_pes),
+            lambda n, rank, n_pes: (rank + 1) * (n // n_pes) + min(rank + 1, n % n_pes),
             (size_var, self.rank_var, self.n_pes_var),
             None,
             self,
