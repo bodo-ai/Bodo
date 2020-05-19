@@ -1072,6 +1072,17 @@ def test_csv_header_none(datapath):
     pd.testing.assert_frame_equal(b_df, p_df)
 
 
+def test_csv_sep_arg(datapath):
+    """Test passing 'sep' argument as JIT argument in read_csv()
+    """
+    fname = datapath("csv_data2.csv")
+
+    def test_impl(sep):
+        return pd.read_csv(fname, sep=sep)
+
+    check_func(test_impl, ("|",))
+
+
 def test_csv_spark_header(datapath):
     """Test reading Spark csv outputs containing header & infer dtypes
     """
@@ -1334,10 +1345,8 @@ def test_excel1(datapath):
     check_func(test_impl2, (fname,), is_out_distributed=False)
     fname = datapath("data_comment.xlsx")
     check_func(test_impl3, (fname,), is_out_distributed=False)
-    with pytest.raises(
-        BodoError, match="read_excel requires 'sheet_name' argument as a constant"
-    ):
-        bodo.jit(test_impl4)(fname, "Sheet1")
+    fname = datapath("data.xlsx")
+    check_func(test_impl4, (fname, "Sheet1"), is_out_distributed=False)
     with pytest.raises(BodoError, match="both 'dtype' and 'names' should be provided"):
         bodo.jit(test_impl5)(fname)
 

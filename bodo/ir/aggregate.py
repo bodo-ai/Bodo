@@ -67,7 +67,7 @@ from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.hiframes import series_impl
 from bodo.ir.join import write_send_buff, setitem_arr_tup_nan, setitem_arr_nan
 from bodo.libs.timsort import getitem_arr_tup, setitem_arr_tup
-from bodo.utils.transform import get_const_nested
+from bodo.utils.transform import get_call_expr_arg
 from bodo.utils.shuffle import (
     getitem_arr_tup_single,
     val_to_tup,
@@ -78,7 +78,15 @@ from bodo.utils.shuffle import (
     _get_keys_tup,
     _get_data_tup,
 )
-from bodo.utils.typing import is_overload_true, get_overload_const_func
+from bodo.utils.typing import (
+    is_overload_true,
+    get_overload_const_func,
+    get_overload_const_list,
+    is_overload_constant_dict,
+    get_overload_constant_dict,
+    is_overload_constant_str,
+    get_overload_const_str,
+)
 from bodo.libs.array import (
     array_to_info,
     arr_info_list_to_table,
@@ -198,60 +206,67 @@ def get_agg_func(func_ir, func_name, rhs, series_type=None, typemap=None):
         func.skipdropna = skipdropna
         return func
 
-    assert func_name in ["agg", "aggregate"]
     # agg case
-    # error checking: make sure there is function input only
-    if len(rhs.args) != 1:
-        raise ValueError("agg expects 1 argument")
+    assert func_name in ["agg", "aggregate"]
 
-    agg_func_def = guard(get_definition, func_ir, rhs.args[0])
+    # NOTE: assuming typemap is provided here
+    # TODO: refactor old pivot code that doesn't provide typemap
+    assert typemap is not None
+    func_var = get_call_expr_arg(func_name, rhs.args, dict(rhs.kws), 0, "func")
+    agg_func_typ = typemap[func_var.name]
+
+    # multi-function const dict case
+    if is_overload_constant_dict(agg_func_typ):
+        funcs = []
+        items = get_overload_constant_dict(agg_func_typ)
+        # return a list, element i is function or list of functions to apply
+        # to column i
+        funcs = [
+            get_agg_func_udf(func_ir, f_val, rhs, series_type, typemap)
+            for f_val in items.values()
+        ]
+        return funcs
 
     # multi-function tuple case
-    if isinstance(agg_func_def, ir.Expr) and agg_func_def.op == "build_tuple":
+    if isinstance(agg_func_typ, types.BaseTuple):
         funcs = []
-        for v in agg_func_def.items:
-            func_name = guard(find_const, func_ir, v)
-            if isinstance(func_name, str):
+        for t in agg_func_typ.types:
+            if is_overload_constant_str(t):
+                func_name = get_overload_const_str(t)
                 funcs.append(
                     get_agg_func(func_ir, func_name, rhs, series_type, typemap)
                 )
             else:
                 assert typemap is not None, "typemap is required for agg UDF handling"
-                func = _get_const_agg_func(typemap[v.name])
+                func = _get_const_agg_func(t)
                 func.ftype = "udf"
                 funcs.append(func)
         # return a list containing one list of functions (applied to single
         # input column)
         return [funcs]
 
-    # multi-function const dict case
-    if isinstance(agg_func_def, ir.Expr) and agg_func_def.op == "build_map":
-        funcs = []
-        for v in agg_func_def.items:
-            f_val = guard(get_const_nested, func_ir, v[1])
-            if isinstance(f_val, str):
-                funcs.append(get_agg_func(func_ir, f_val, rhs, series_type, typemap))
-            elif isinstance(f_val, (tuple, list)):
-                funcs.append(
-                    [get_agg_func(func_ir, f, rhs, series_type, typemap) for f in f_val]
-                )
-            else:
-                assert is_expr(f_val, "make_function") or isinstance(
-                    f_val, numba.core.registry.CPUDispatcher
-                )
-                assert typemap is not None, "typemap is required for agg UDF handling"
-                func = _get_const_agg_func(typemap[v[1].name])
-                func.ftype = "udf"
-                funcs.append(func)
-        # return a list, element i is function or list of functions to apply
-        # to column i
-        return funcs
-
     # typemap should be available for UDF case
     assert typemap is not None, "typemap is required for agg UDF handling"
     func = _get_const_agg_func(typemap[rhs.args[0].name])
     func.ftype = "udf"
     return func
+
+
+def get_agg_func_udf(func_ir, f_val, rhs, series_type, typemap):
+    """get udf value for agg call
+    """
+    if isinstance(f_val, str):
+        return get_agg_func(func_ir, f_val, rhs, series_type, typemap)
+    if isinstance(f_val, (tuple, list)):
+        return [get_agg_func_udf(func_ir, f, rhs, series_type, typemap) for f in f_val]
+    else:
+        assert is_expr(f_val, "make_function") or isinstance(
+            f_val, (numba.core.registry.CPUDispatcher, types.Dispatcher)
+        )
+        assert typemap is not None, "typemap is required for agg UDF handling"
+        func = _get_const_agg_func(f_val)
+        func.ftype = "udf"
+        return func
 
 
 def _get_const_agg_func(func_typ):
@@ -611,7 +626,9 @@ def aggregate_array_analysis(aggregate_node, equiv_set, typemap, array_analysis)
     return [], post
 
 
-numba.parfors.array_analysis.array_analysis_extensions[Aggregate] = aggregate_array_analysis
+numba.parfors.array_analysis.array_analysis_extensions[
+    Aggregate
+] = aggregate_array_analysis
 
 
 def aggregate_distributed_analysis(aggregate_node, array_dists):

@@ -35,20 +35,20 @@ from bodo.utils.typing import (
     BodoError,
     raise_const_error,
     is_overload_none,
-    get_const_str_list,
+    get_overload_const_list,
     is_overload_true,
     is_overload_false,
     is_overload_zero,
     is_overload_constant_bool,
     is_overload_constant_str,
-    is_overload_constant_str_list,
+    is_overload_constant_list,
     is_dtype_nullable,
-    ConstDictType,
     get_overload_const_func,
     get_overload_const_str,
-    get_registry_consts,
+    is_overload_constant_dict,
+    get_overload_constant_dict,
 )
-from bodo.utils.transform import get_const_func_output_type
+from bodo.utils.transform import get_const_func_output_type, get_call_expr_arg
 from bodo.utils.utils import is_expr
 
 
@@ -141,24 +141,25 @@ def validate_groupby_spec(
         )
 
     # make sure by is a const str list
-    if not is_overload_constant_str(by) and not is_overload_constant_str_list(by):
+    if not is_overload_constant_str(by) and not is_overload_constant_list(by):
         raise_const_error(
             "groupby(): 'by' parameter only supports a constant column label or column labels."
         )
 
     # make sure by has valid label(s)
-    if len(set(get_const_str_list(by)).difference(set(df.columns))) > 0:
+    if len(set(get_overload_const_list(by)).difference(set(df.columns))) > 0:
         raise_const_error(
             "groupby(): invalid key {} for 'by' (not available in columns {}).".format(
-                get_const_str_list(by), df.columns
+                get_overload_const_list(by), df.columns
             )
         )
 
     # make sure as_index is of type bool
     if not is_overload_constant_bool(as_index):
-        raise BodoError(
-            "groupby(): 'as_index' parameter must be of type bool, ",
-            "not {}.".format(as_index),
+        raise_const_error(
+            "groupby(): 'as_index' parameter must be a constant bool, not {}.".format(
+                as_index
+            ),
         )
 
     # make sure sort is the default value, sort=True not supported
@@ -194,7 +195,7 @@ def validate_udf(func_name, func):
             CPUDispatcher,
         ),
     ):
-        raise BodoError(
+        raise_const_error(
             "Groupby.{}: 'func' must be user defined function".format(func_name)
         )
 
@@ -212,8 +213,8 @@ class GroupbyTyper(AbstractTemplate):
 
         if is_overload_constant_str(by):
             keys = (get_overload_const_str(by),)
-        elif is_overload_constant_str_list(by):
-            keys = tuple(get_const_str_list(by))
+        elif is_overload_constant_list(by):
+            keys = tuple(get_overload_const_list(by))
 
         selection = list(df.columns)
         for k in keys:
@@ -444,10 +445,8 @@ class DataframeGroupByAttribute(AttributeTemplate):
         return f_name, out_tp
 
     def _resolve_agg(self, grp, args, kws):
-        if len(args) == 0:
-            raise BodoError("Groupby.agg()/aggregate(): Must provide 'func'")
-
-        func = args[0]
+        err_msg = "Groupby.agg()/aggregate(): Must provide 'func'"
+        func = get_call_expr_arg("agg", args, dict(kws), 0, "func", err_msg=err_msg)
         has_cumulative_ops = False
 
         def _append_out_type(grp, out_data, out_tp):
@@ -461,15 +460,11 @@ class DataframeGroupByAttribute(AttributeTemplate):
                 out_data.append(out_tp.data)
 
         # multi-function constant dictionary case
-        if isinstance(func, ConstDictType):
+        if is_overload_constant_dict(func):
             # get mapping of column names to functions:
             # string -> string or tuple of strings (tuple when multiple
             # functions are applied to a column)
-            func_consts = get_registry_consts(func.const_no)
-            col_map = {
-                func_consts[2 * i]: func_consts[2 * i + 1]
-                for i in range(len(func_consts) // 2)
-            }
+            col_map = get_overload_constant_dict(func)
 
             # make sure selected columns exist in dataframe
             if any(c not in grp.selection for c in col_map.keys()):

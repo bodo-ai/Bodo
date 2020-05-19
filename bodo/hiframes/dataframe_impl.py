@@ -30,10 +30,12 @@ from bodo.utils.typing import (
     is_overload_constant_str,
     is_overload_constant_bool,
     BodoError,
-    ConstDictType,
     scalar_to_array_type,
     raise_bodo_error,
-    get_registry_consts,
+    is_overload_constant_dict,
+    get_overload_constant_dict,
+    is_overload_constant_list,
+    get_overload_const_list,
 )
 from bodo.utils.transform import gen_const_tup
 from bodo.libs.int_arr_ext import IntegerArrayType
@@ -190,17 +192,12 @@ def overload_dataframe_rename(
         raise BodoError("Only 'columns' and copy arguments of df.rename() supported")
 
     # columns should be constant dictionary
-    if not isinstance(columns, ConstDictType):
-        raise BodoError(
+    if not is_overload_constant_dict(columns):
+        raise_bodo_error(
             "'columns' argument to df.rename() should be a constant dictionary"
         )
 
-    columns_consts = get_registry_consts(columns.const_no)
-
-    col_map = {
-        columns_consts[2 * i]: columns_consts[2 * i + 1]
-        for i in range(len(columns_consts) // 2)
-    }
+    col_map = get_overload_constant_dict(columns)
     new_cols = [
         col_map.get(df.columns[i], df.columns[i]) for i in range(len(df.columns))
     ]
@@ -1075,8 +1072,8 @@ def overload_read_excel(
 
     # objmode doesn't allow lists, embed 'parse_dates' as a constant inside objmode
     parse_dates_const = False
-    if isinstance(parse_dates, bodo.utils.typing.ConstList):
-        parse_dates_const = list(get_registry_consts(parse_dates.const_no))
+    if is_overload_constant_list(parse_dates):
+        parse_dates_const = get_overload_const_list(parse_dates)
 
     # embed dtype since objmode doesn't allow list/dict
     pd_dtype_strs = ", ".join(

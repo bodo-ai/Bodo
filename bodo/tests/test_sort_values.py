@@ -796,9 +796,6 @@ def test_sort_values_ascending_bool():
     def impl5(df):
         return df.sort_values(by=["A", "B"], ascending=[True, False, True])
 
-    def impl6(df):
-        return df.sort_values(by=["A", "B"], ascending=(True, False))
-
     with pytest.raises(
         BodoError, match="'ascending' parameter must be of type bool or list of bool"
     ):
@@ -808,24 +805,20 @@ def test_sort_values_ascending_bool():
     ):
         bodo.jit(impl2)(df)
     with pytest.raises(
-        ValueError,
+        BodoError,
         match="ascending should be bool or a list of bool of the number of keys",
     ):
         bodo.jit(impl3)(df, True)
     with pytest.raises(
-        ValueError,
+        BodoError,
         match="ascending should be bool or a list of bool of the number of keys",
     ):
         bodo.jit(impl4)(df)
     with pytest.raises(
-        ValueError,
+        BodoError,
         match="ascending should be bool or a list of bool of the number of keys",
     ):
         bodo.jit(impl5)(df)
-    with pytest.raises(
-        BodoError, match="parameter must be of type bool or list of bool"
-    ):
-        bodo.jit(impl6)(df)
 
 
 def test_sort_values_inplace_bool():

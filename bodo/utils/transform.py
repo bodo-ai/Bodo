@@ -30,7 +30,10 @@ from bodo.utils.utils import is_assign, is_expr
 from bodo.libs.str_ext import string_type
 from bodo.utils.typing import (
     BodoError,
-    add_consts_to_registry,
+    can_literalize_type,
+    is_literal_type,
+    get_literal_value,
+    get_overload_const_list,
 )
 from bodo.utils.utils import is_call
 
@@ -258,20 +261,21 @@ def get_stmt_defs(stmt):
     return set()
 
 
-def get_str_const_value(var, func_ir, err_msg, typemap=None, arg_types=None):
+def get_const_value(var, func_ir, err_msg, typemap=None, arg_types=None):
     """Get constant value of a variable if possible, otherwise raise error.
     If the variable is argument to the function, force recompilation with literal
     typing of the argument.
     """
-    val = guard(find_str_const, func_ir, var, arg_types, typemap)
-    if val is None:
+    try:
+        val = get_const_value_inner(func_ir, var, arg_types, typemap)
+    except GuardException:
         raise BodoError(err_msg)
     return val
 
 
-def find_str_const(func_ir, var, arg_types=None, typemap=None):
-    """Check if a variable can be inferred as a string constant, and return
-    the constant value, or raise GuardException otherwise.
+def get_const_value_inner(func_ir, var, arg_types=None, typemap=None):
+    """Check if a variable can be inferred as a constant and return the constant value.
+    Otherwise, raise GuardException.
     """
     require(isinstance(var, ir.Var))
     var_def = get_definition(func_ir, var)
@@ -279,54 +283,100 @@ def find_str_const(func_ir, var, arg_types=None, typemap=None):
     # get type of variable if possible
     typ = None
     if typemap is not None:
-        typ = typemap[var.name]
+        typ = typemap.get(var.name, None)
     if isinstance(var_def, ir.Arg) and arg_types is not None:
         typ = arg_types[var_def.index]
 
-    # literal type
-    if isinstance(typ, types.StringLiteral):
-        return typ.literal_value
+    # literal type case
+    if is_literal_type(typ):
+        return get_literal_value(typ)
 
     # constant value
     if isinstance(var_def, (ir.Const, ir.Global, ir.FreeVar)):
         val = var_def.value
-        require(isinstance(val, str))
         return val
-    # argument dispatch, force literal only if argument is string
-    elif isinstance(var_def, ir.Arg) and typ == string_type:
+
+    # argument dispatch, force literal only if argument can be literal
+    if isinstance(var_def, ir.Arg) and can_literalize_type(typ):
         raise numba.core.errors.ForceLiteralArg({var_def.index}, loc=var.loc)
 
-    # only add supported (s1+s2), TODO: extend to other expressions
-    require(
-        isinstance(var_def, ir.Expr)
-        and var_def.op == "binop"
-        and var_def.fn == operator.add
-    )
-    arg1 = find_str_const(func_ir, var_def.lhs, arg_types, typemap)
-    arg2 = find_str_const(func_ir, var_def.rhs, arg_types, typemap)
-    return arg1 + arg2
+    # binary op (s1 op s2)
+    if is_expr(var_def, "binop"):
+        arg1 = get_const_value_inner(func_ir, var_def.lhs, arg_types, typemap)
+        arg2 = get_const_value_inner(func_ir, var_def.rhs, arg_types, typemap)
+        return var_def.fn(arg1, arg2)
 
+    # list/set/dict cases
+    # try add_consts_to_type
+    call_name = guard(find_callname, func_ir, var_def)
+    if call_name == ("add_consts_to_type", "bodo.utils.typing",):
+        return get_const_value_inner(func_ir, var_def.args[0], arg_types, typemap)
 
-def get_const_nested(func_ir, v):
-    """get constant value for v, even if v is a constant list or set.
-    Does not capture GuardException.
-    """
-    v_def = get_definition(func_ir, v)
-    if is_call(v_def) and find_callname(func_ir, v_def) == (
-        "add_consts_to_type",
-        "bodo.utils.typing",
+    # try dict.keys()
+    if (
+        call_name is not None
+        and len(call_name) == 2
+        and call_name[0] == "keys"
+        and isinstance(call_name[1], ir.Var)
     ):
-        v_def = get_definition(func_ir, v_def.args[0])
-    if isinstance(v_def, ir.Expr) and v_def.op in (
-        "build_list",
-        "build_set",
-        "build_tuple",
-    ):
-        return tuple(get_const_nested(func_ir, a) for a in v_def.items)
-    # treat make_function exprs as constant
-    if is_expr(v_def, "make_function"):  # pragma: no cover
-        return v_def
-    return find_const(func_ir, v)
+        call_func = var_def.func
+        var_def = get_definition(func_ir, call_name[1])
+        # handle converted constant dictionaries
+        if is_call(var_def) and (
+            guard(find_callname, func_ir, var_def)
+            == ("add_consts_to_type", "bodo.utils.typing")
+        ):
+            var_def = guard(get_definition, func_ir, var_def.args[0])
+
+        require(is_expr(var_def, "build_map"))
+        vals = [v[0] for v in var_def.items]
+        # HACK replace dict.keys getattr to avoid typing errors
+        keys_getattr = guard(get_definition, func_ir, call_func)
+        assert isinstance(keys_getattr, ir.Expr) and keys_getattr.attr == "keys"
+        keys_getattr.attr = "copy"
+        return [get_const_value_inner(func_ir, v, arg_types, typemap) for v in vals]
+
+    # dict case
+    if is_expr(var_def, "build_map"):
+        return {
+            get_const_value_inner(
+                func_ir, v[0], arg_types, typemap
+            ): get_const_value_inner(func_ir, v[1], arg_types, typemap)
+            for v in var_def.items
+        }
+
+    # tuple case
+    if is_expr(var_def, "build_tuple"):
+        return tuple(
+            get_const_value_inner(func_ir, v, arg_types, typemap) for v in var_def.items
+        )
+
+    # list
+    if is_expr(var_def, "build_list"):
+        return [
+            get_const_value_inner(func_ir, v, arg_types, typemap) for v in var_def.items
+        ]
+
+    # list() call
+    if call_name == ("list", "builtins"):
+        values = get_const_value_inner(func_ir, var_def.args[0], arg_types, typemap)
+        # sort set values when converting to list to have consistent order across
+        # processors (e.g. important for join keys, see test_merge_multi_int_key)
+        if isinstance(values, set):
+            values = sorted(values)
+        return list(values)
+
+    # set() call
+    if call_name == ("set", "builtins"):
+        return set(get_const_value_inner(func_ir, var_def.args[0], arg_types, typemap))
+
+    # df.columns case
+    if is_expr(var_def, "getattr") and typemap:
+        obj_typ = typemap.get(var_def.value.name, None)
+        if isinstance(obj_typ, bodo.hiframes.pd_dataframe_ext.DataFrameType):
+            return obj_typ.columns
+
+    raise GuardException("Constant value not found")
 
 
 def get_const_func_output_type(func, arg_types, typing_context):
@@ -372,56 +422,49 @@ def update_node_list_definitions(node_list, func_ir):
     return
 
 
+# sentinel for nested const tuple gen used below
+NESTED_TUP_SENTINEL = "$BODO_NESTED_TUP"
+
+
+def gen_const_val_str(c):
+    """convert value 'c' to string constant
+    """
+    # const nested constant tuples are not supported in Numba yet, need special handling
+    # HACK: flatten tuple values but add a sentinel value that specifies how many
+    # elements are from the nested tuple. Supports only one level nesting
+    # TODO: fix nested const tuple handling in Numba
+    if isinstance(c, tuple):
+        return "'{}{}', ".format(NESTED_TUP_SENTINEL, len(c)) + ", ".join(
+            gen_const_val_str(v) for v in c
+        )
+    return "'{}'".format(c) if isinstance(c, str) else str(c)
+
+
 def gen_const_tup(vals):
     """generate a constant tuple value as text
     """
-    val_seq = ", ".join(
-        "'{}'".format(c) if isinstance(c, str) else str(c) for c in vals
-    )
-    # const int tuples and nested constant tuples are not supported in Numba yet, so
-    # need special handling
-    if any(isinstance(c, (tuple, int)) for c in vals):
-        # using add_consts_to_type with list to avoid const tuple problems
-        # TODO: fix Numba type inference for nested constant tuples
-        const_obj, const_no = add_consts_to_registry(vals)
-        # HACK add the constant to typing_context object to keep it around during
-        # compilation
-        setattr(
-            numba.core.registry.cpu_target.typing_context,
-            "const_obj{}".format(const_no),
-            const_obj,
-        )
-        return "bodo.utils.typing.add_consts_to_type([{}], {})".format(
-            val_seq, const_no
-        )
+    val_seq = ", ".join(gen_const_val_str(c) for c in vals)
     return "({}{})".format(val_seq, "," if len(vals) == 1 else "",)
 
 
-def gen_add_consts_to_type_call(vals, var_name):
-    """generate add_consts_to_type() call as text. Also returns the const object being
-    preserved in the registry to enable the caller to keep a reference around.
+def get_const_tup_vals(c_typ):
+    """get constant values from a tuple type generated using 'gen_const_tup'
+    reverses the hack in 'gen_const_val_str'
     """
-    const_obj, const_no = add_consts_to_registry(vals)
-    func_call = "bodo.utils.typing.add_consts_to_type({}, {})".format(
-        var_name, const_no
-    )
-    return const_obj, const_no, func_call
-
-
-def gen_add_consts_to_type(vals, var, ret_var, typing_info=None):
-    """generate add_consts_to_type() call that makes constant values of dict/list
-    available during typing
-    """
-
-    const_obj, const_no, const_to_type_call = gen_add_consts_to_type_call(vals, "a")
-    func_text = "def _build_f(a):\n"
-    func_text += "  return {}\n".format(const_to_type_call)
-    loc_vars = {}
-    exec(func_text, {"bodo": bodo}, loc_vars)
-    _build_f = loc_vars["_build_f"]
-    nodes = compile_func_single_block(_build_f, (var,), ret_var, typing_info)
-
-    return nodes, const_obj, const_no
+    vals = get_overload_const_list(c_typ)
+    out = []
+    i = 0
+    while i < len(vals):
+        v = vals[i]
+        # reverse nested tuple flattening in gen_const_val_str
+        if isinstance(v, str) and v.startswith(NESTED_TUP_SENTINEL):
+            n_elem = int(v[len(NESTED_TUP_SENTINEL) :])
+            out.append(tuple(vals[i + 1 : i + n_elem + 1]))
+            i += n_elem + 1
+        else:
+            out.append(vals[i])
+            i += 1
+    return tuple(out)
 
 
 def get_call_expr_arg(f_name, args, kws, arg_no, arg_name, default=None, err_msg=None):
@@ -442,3 +485,17 @@ def get_call_expr_arg(f_name, args, kws, arg_no, arg_name, default=None, err_msg
             err_msg = "{} requires '{}' argument".format(f_name, arg_name)
         raise BodoError(err_msg)
     return arg
+
+
+def set_call_expr_arg(var, args, kws, arg_no, arg_name):
+    """replaces call argument with a new variable.
+    Raises an error if argument was not specified.
+    """
+    if len(args) > arg_no:
+        args[arg_no] = var
+    elif arg_name in kws:
+        kws[arg_name] = var
+    else:
+        raise BodoError(
+            "cannot set call argument since does not exist"
+        )  # pragma: no cover

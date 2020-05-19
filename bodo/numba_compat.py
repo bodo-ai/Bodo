@@ -952,24 +952,6 @@ def bodo_remove_dead_block(
 ir_utils.remove_dead_block = bodo_remove_dead_block
 
 
-# replace Numba's dictionary item checking to allow constant list/dict
-numba_sentry_forbidden_types = numba.core.types.containers._sentry_forbidden_types
-
-
-def bodo_sentry_forbidden_types(key, value):
-    from bodo.utils.typing import ConstDictType, ConstList
-
-    if isinstance(key, (ConstDictType, ConstList)) or isinstance(
-        value, (ConstDictType, ConstList)
-    ):
-        return
-
-    numba_sentry_forbidden_types(key, value)
-
-
-numba.core.types.containers._sentry_forbidden_types = bodo_sentry_forbidden_types
-
-
 # replacing 'set' constructor typing of Numba to support string type
 # TODO: declare string_type (unicode_type) hashable in Numba and remove this code
 @infer_global(set)

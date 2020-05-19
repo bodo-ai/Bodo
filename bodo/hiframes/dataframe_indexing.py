@@ -34,13 +34,13 @@ from bodo.utils.typing import (
     is_overload_constant_bool,
     is_overload_bool,
     is_overload_constant_str,
-    is_overload_constant_str_list,
+    is_overload_constant_list,
     is_overload_true,
     is_overload_false,
     is_overload_zero,
     is_overload_constant_int,
     get_overload_const_str,
-    get_const_str_list,
+    get_overload_const_list,
     get_overload_const_int,
     is_overload_bool_list,
     get_index_names,
@@ -101,8 +101,8 @@ def df_getitem_overload(df, ind):
 
     # A = df[["C1", "C2"]]
     # TODO: support int names
-    if is_overload_constant_str_list(ind):
-        ind_columns = get_const_str_list(ind)
+    if is_overload_constant_list(ind):
+        ind_columns = get_overload_const_list(ind)
         # error checking, TODO: test
         for c in ind_columns:
             if c not in df.columns:

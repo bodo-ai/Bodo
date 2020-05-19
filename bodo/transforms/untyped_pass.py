@@ -40,7 +40,6 @@ from bodo import config
 import bodo.io
 from bodo.io import h5
 from bodo.utils.utils import is_call, is_expr
-from bodo.utils.transform import get_const_nested
 from bodo.libs.str_arr_ext import string_array_type
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.bool_arr_ext import boolean_array
@@ -59,9 +58,9 @@ import bodo.hiframes.pd_dataframe_ext
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.utils.transform import (
     update_locs,
-    get_str_const_value,
+    get_const_value,
+    get_const_value_inner,
     update_node_list_definitions,
-    gen_add_consts_to_type,
     compile_func_single_block,
     get_call_expr_arg,
     gen_const_tup,
@@ -152,23 +151,6 @@ class UntypedPass:
         lhs = assign.target.name
         rhs = assign.value
 
-        # make global list/set/dict values available as constants during typing
-        if isinstance(rhs, (ir.Global, ir.FreeVar)) and isinstance(
-            rhs.value, (list, set, dict)
-        ):
-            target = assign.target
-            tmp_target = ir.Var(target.scope, mk_unique_var(target.name), rhs.loc)
-            tmp_assign = ir.Assign(rhs, tmp_target, rhs.loc)
-            nodes = [tmp_assign]
-            c_nodes, const_obj, const_no = gen_add_consts_to_type(
-                rhs.value, tmp_target, target
-            )
-            # HACK keep const values object around as long as the function is
-            # being compiled by adding it as an attribute to some compilation
-            # object
-            setattr(self.func_ir, "const_obj{}".format(const_no), const_obj)
-            return nodes + c_nodes
-
         if isinstance(rhs, ir.Expr):
             if rhs.op == "call":
                 return self._run_call(assign, label)
@@ -224,42 +206,6 @@ class UntypedPass:
                 # put back the definition removed earlier but remove node
                 self.func_ir._definitions[lhs].append(rhs)
                 return []
-
-            # if rhs.op in ('build_list', 'build_tuple'): TODO: test tuple
-            if rhs.op in ("build_list", "build_map", "build_set"):
-                # if build_list items are constant, add the constant values
-                # to the returned list type as metadata. This enables type
-                # inference for calls like pd.merge() where the values
-                # determine output dataframe type
-                # build_map is similarly handled (useful in df.rename)
-                # TODO: add proper metadata to Numba types
-                # XXX: when constants are used, all the uses of the list object
-                # have to be checked since lists are mutable
-                try:
-                    if rhs.op == "build_map":
-                        items = itertools.chain(*rhs.items)
-                    else:
-                        items = rhs.items
-                    vals = tuple(get_const_nested(self.func_ir, v) for v in items)
-                    # a = ['A', 'B'] ->
-                    # tmp = ['A', 'B']
-                    # a = add_consts_to_type(tmp, 'A', 'B')
-                    target = assign.target
-                    tmp_target = ir.Var(
-                        target.scope, mk_unique_var(target.name), rhs.loc
-                    )
-                    tmp_assign = ir.Assign(rhs, tmp_target, rhs.loc)
-                    nodes = [tmp_assign]
-                    c_nodes, const_obj, const_no = gen_add_consts_to_type(
-                        vals, tmp_target, assign.target
-                    )
-                    # HACK keep const values object around as long as the function is
-                    # being compiled by adding it as an attribute to some compilation
-                    # object
-                    setattr(self.func_ir, "const_obj{}".format(const_no), const_obj)
-                    return nodes + c_nodes
-                except numba.core.ir_utils.GuardException:
-                    pass
 
             # replace datetime.date.today with an internal function since class methods
             # are not supported in Numba's typing
@@ -433,24 +379,6 @@ class UntypedPass:
         if fdef == ("fromfile", "numpy"):
             return bodo.io.np_io._handle_np_fromfile(assign, lhs, rhs)
 
-        if fdef == ("list", "builtins") and len(rhs.args) == 1:
-            arg_val = guard(find_const, self.func_ir, rhs.args[0])
-            if isinstance(arg_val, str):
-                # a = list('AB') ->
-                # tmp = ['A', 'B']
-                # a = add_consts_to_type(tmp, 'A', 'B')
-                target = assign.target
-                tmp_target = ir.Var(target.scope, mk_unique_var(target.name), rhs.loc)
-                tmp_assign = ir.Assign(rhs, tmp_target, rhs.loc)
-                nodes = [tmp_assign]
-                c_nodes, const_obj, const_no = gen_add_consts_to_type(
-                    list(arg_val), tmp_target, lhs
-                )
-                # HACK keep const values object around as long as the function is being
-                # compiled by adding it as an attribute to some compilation object
-                setattr(self.func_ir, "const_obj{}".format(const_no), const_obj)
-                return nodes + c_nodes
-
         if fdef == ("where", "numpy") and len(rhs.args) == 3:
             return self._handle_np_where(assign, lhs, rhs)
 
@@ -563,28 +491,28 @@ class UntypedPass:
             "pd.read_sql() requires 'sql' argument to be a constant string or an "
             "argument to the JIT function currently"
         )
-        sql_const = get_str_const_value(sql_var, self.func_ir, msg, arg_types=self.args)
+        sql_const = get_const_value(sql_var, self.func_ir, msg, arg_types=self.args)
         con_var = get_call_expr_arg("read_sql", rhs.args, kws, 1, "con", "")
         msg = (
             "pd.read_sql() requires 'con' argument to be a constant string or an "
             "argument to the JIT function currently"
         )
         # the connection string has to be constant
-        con_const = get_str_const_value(con_var, self.func_ir, msg, arg_types=self.args)
+        con_const = get_const_value(con_var, self.func_ir, msg, arg_types=self.args)
         index_col = self._get_const_arg(
             "read_sql", rhs.args, kws, 2, "index_col", default=-1
         )
-        coerce_float = self._get_const_arg(
-            "read_sql", rhs.args, kws, 3, "coerce_float", default=True
-        )
-        params = self._get_const_arg("read_sql", rhs.args, kws, 4, "params", default=-1)
-        parse_dates = self._get_const_arg(
-            "read_sql", rhs.args, kws, 5, "parse_dates", default=-1
-        )
+        # coerce_float = self._get_const_arg(
+        #     "read_sql", rhs.args, kws, 3, "coerce_float", default=True
+        # )
+        # params = self._get_const_arg("read_sql", rhs.args, kws, 4, "params", default=-1)
+        # parse_dates = self._get_const_arg(
+        #     "read_sql", rhs.args, kws, 5, "parse_dates", default=-1
+        # )
         columns = self._get_const_arg(
             "read_sql", rhs.args, kws, 6, "columns", default=""
         )
-        chunksize = get_call_expr_arg("read_sql", rhs.args, kws, 7, "chunksize", -1)
+        # chunksize = get_call_expr_arg("read_sql", rhs.args, kws, 7, "chunksize", -1)
 
         # SUPPORTED:
         # sql is supported since it is fundamental
@@ -671,41 +599,20 @@ class UntypedPass:
         kws = dict(rhs.kws)
         fname_var = get_call_expr_arg("read_excel", rhs.args, kws, 0, "io")
         sheet_name = self._get_const_arg(
-            "read_excel",
-            rhs.args,
-            kws,
-            1,
-            "sheet_name",
-            0,
-            typ="str or int",
-            error_on_non_const=True,
+            "read_excel", rhs.args, kws, 1, "sheet_name", 0, typ="str or int",
         )
         header = self._get_const_arg(
-            "read_excel",
-            rhs.args,
-            kws,
-            2,
-            "header",
-            0,
-            typ="int",
-            error_on_non_const=True,
+            "read_excel", rhs.args, kws, 2, "header", 0, typ="int",
         )
-        names_var = get_call_expr_arg("read_excel", rhs.args, kws, 3, "names", "")
+        col_names = self._get_const_arg("read_excel", rhs.args, kws, 3, "names", 0)
         # index_col = self._get_const_arg("read_excel", rhs.args, kws, 4, "index_col", -1)
         comment = self._get_const_arg("read_excel", rhs.args, kws, 20, "comment", "")
-        parse_dates_var = get_call_expr_arg(
-            "read_excel", rhs.args, kws, 17, "parse_dates", ""
+        date_cols = self._get_const_arg(
+            "pd.read_excel", rhs.args, kws, 17, "parse_dates", [], typ="int or str"
         )
         dtype_var = get_call_expr_arg("read_excel", rhs.args, kws, 7, "dtype", "")
         skiprows = self._get_const_arg(
-            "read_excel",
-            rhs.args,
-            kws,
-            12,
-            "skiprows",
-            0,
-            typ="int",
-            error_on_non_const=True,
+            "read_excel", rhs.args, kws, 12, "skiprows", 0, typ="int",
         )
 
         # replace "" placeholder with default None (can't use None in _get_const_arg)
@@ -715,14 +622,6 @@ class UntypedPass:
         # TODO: support index_col
         # if index_col == -1:
         #     index_col = None
-
-        # get date columns from 'parse_dates'
-        date_cols = []
-        if parse_dates_var != "":
-            err_msg = "pd.read_excel() parse_dates should be constant list"
-            date_cols = self._get_const_val_or_list(
-                kws["parse_dates"], err_msg=err_msg, typ=[int, str]
-            )
 
         # check unsupported arguments
         supported_args = (
@@ -742,8 +641,6 @@ class UntypedPass:
                 "read_excel() arguments {} not supported yet".format(unsupported_args)
             )
 
-        col_names = self._get_const_val_or_list(names_var, default=0)
-
         if dtype_var != "" and col_names == 0 or dtype_var == "" and col_names != 0:
             raise BodoError(
                 "pd.read_excel(): both 'dtype' and 'names' should be provided if either is provided"
@@ -757,7 +654,7 @@ class UntypedPass:
                 "pd.read_excel() requires explicit type "
                 "annotation using 'dtype' if filename is not constant"
             )
-            fname_const = get_str_const_value(
+            fname_const = get_const_value(
                 fname_var, self.func_ir, msg, arg_types=self.args
             )
 
@@ -832,11 +729,14 @@ class UntypedPass:
         sep = self._get_const_arg("read_csv", rhs.args, kws, 1, "sep", ",")
         sep = self._get_const_arg("read_csv", rhs.args, kws, 2, "delimiter", sep)
         header = self._get_const_arg("read_csv", rhs.args, kws, 3, "header", "infer")
-        names_var = get_call_expr_arg("read_csv", rhs.args, kws, 4, "names", "")
+        col_names = self._get_const_arg("read_csv", rhs.args, kws, 4, "names", 0)
         index_col = self._get_const_arg("read_csv", rhs.args, kws, 5, "index_col", -1)
-        usecols_var = get_call_expr_arg("read_csv", rhs.args, kws, 6, "usecols", "")
+        usecols = self._get_const_arg("read_csv", rhs.args, kws, 6, "usecols", "")
         dtype_var = get_call_expr_arg("read_csv", rhs.args, kws, 10, "dtype", "")
         skiprows = self._get_const_arg("read_csv", rhs.args, kws, 16, "skiprows", 0)
+        date_cols = self._get_const_arg(
+            "read_csv", rhs.args, kws, 23, "parse_dates", [], typ="int or str"
+        )
 
         # check unsupported arguments
         supported_args = (
@@ -857,8 +757,6 @@ class UntypedPass:
                 "read_csv() arguments {} not supported yet".format(unsupported_args)
             )
 
-        col_names = self._get_const_val_or_list(names_var, default=0)
-
         # infer the column names: if no names
         # are passed the behavior is identical to ``header=0`` and column
         # names are inferred from the first line of the file, if column
@@ -873,12 +771,6 @@ class UntypedPass:
                 )
             )
 
-        # TODO: support string usecols
-        usecols = None
-        if usecols_var != "":
-            err_msg = "pd.read_csv() usecols should be constant list of ints"
-            usecols = self._get_const_val_or_list(usecols_var, err_msg=err_msg, typ=int)
-
         # if inference is required
         if dtype_var == "" or col_names == 0:
             # infer column names and types from constant filename
@@ -886,12 +778,10 @@ class UntypedPass:
                 "pd.read_csv() requires explicit type "
                 "annotation using 'dtype' if filename is not constant"
             )
-            fname_const = get_str_const_value(
-                fname, self.func_ir, msg, arg_types=self.args
-            )
+            fname_const = get_const_value(fname, self.func_ir, msg, arg_types=self.args)
             df_type = _get_csv_df_type_from_file(fname_const, sep, skiprows, header)
             dtypes = df_type.data
-            usecols = list(range(len(dtypes))) if usecols is None else usecols
+            usecols = list(range(len(dtypes))) if usecols == "" else usecols
             # convert Pandas generated integer names if any
             cols = [str(df_type.columns[i]) for i in usecols]
             # overwrite column names like Pandas if explicitly provided
@@ -900,7 +790,7 @@ class UntypedPass:
             col_names = cols
             dtype_map = {c: dtypes[usecols[i]] for i, c in enumerate(col_names)}
 
-        usecols = list(range(len(col_names))) if usecols is None else usecols
+        usecols = list(range(len(col_names))) if usecols == "" else usecols
 
         # handle dtype arg if provided
         if dtype_var != "":
@@ -936,13 +826,6 @@ class UntypedPass:
             raise ValueError("pd.read_csv() names should be constant list")
 
         # TODO: support other args
-
-        date_cols = []
-        if "parse_dates" in kws:
-            err_msg = "pd.read_csv() parse_dates should be constant list"
-            date_cols = self._get_const_val_or_list(
-                kws["parse_dates"], err_msg=err_msg, typ=[int, str]
-            )
 
         columns, data_arrs, out_types = self._get_read_file_col_info(
             dtype_map, date_cols, col_names, lhs
@@ -1018,6 +901,11 @@ class UntypedPass:
             "read_json", rhs.args, kws, 3, "typ", "frame"
         )
         dtype_var = get_call_expr_arg("read_json", rhs.args, kws, 10, "dtype", "")
+        # default value is True
+        convert_dates = self._get_const_arg(
+            "read_json", rhs.args, kws, 5, "convert_dates", True, typ="int or str"
+        )
+        date_cols = [] if convert_dates is True else convert_dates
         precise_float = self._get_const_arg(
             "read_json", rhs.args, kws, 8, "precise_float", False
         )
@@ -1032,17 +920,6 @@ class UntypedPass:
             "chunksize",
             "compression",
         }
-
-        if "convert_dates" in kws:
-            err_msg = "pd.read_json() parse_dates should be constant list"
-            convert_dates = self._get_const_val_or_list(
-                kws["convert_dates"], err_msg=err_msg, typ=[int, str]
-            )
-            date_cols = convert_dates
-        else:
-            # default value is True
-            convert_dates = True
-            date_cols = []
 
         passsed_unsupported = unsupported_args.intersection(kws.keys())
         if len(passsed_unsupported) > 0:
@@ -1081,7 +958,7 @@ class UntypedPass:
             "pd.read_json() requires explicit type "
             "annotation using 'dtype' if filename is not constant"
         )
-        fname_const = get_str_const_value(fname, self.func_ir, msg, arg_types=self.args)
+        fname_const = get_const_value(fname, self.func_ir, msg, arg_types=self.args)
         import os
 
         if dtype_var == "":
@@ -1253,12 +1130,14 @@ class UntypedPass:
                     "pd.read_csv() invalid dtype "
                     "(built using a call but not Int or Categorical)"
                 )
-            cats_var = get_call_expr_arg(
-                "CategoricalDtype", dtype_def.args, dict(dtype_def.kws), 0, "categories"
-            )
             err_msg = "categories should be constant list"
-            cats = self._get_const_val_or_list(
-                cats_var, list_only=True, err_msg=err_msg
+            cats = self._get_const_arg(
+                "CategoricalDtype",
+                dtype_def.args,
+                dict(dtype_def.kws),
+                0,
+                "categories",
+                err_msg=err_msg,
             )
             typ = PDCategoricalDtype(cats)
             return CategoricalArray(typ)
@@ -1315,7 +1194,7 @@ class UntypedPass:
             else:  # kw case
                 # TODO: test
                 kws["data"] = new_arr
-                rhs.kws = tuple(kws.items())
+                rhs.kws = list(kws.items())
             nodes.append(assign)
             return nodes
 
@@ -1402,11 +1281,9 @@ class UntypedPass:
         if engine not in ("auto", "pyarrow"):
             raise ValueError("read_parquet: only pyarrow engine supported")
 
-        columns = get_call_expr_arg("read_parquet", rhs.args, kws, 2, "columns", -1)
+        columns = self._get_const_arg("read_parquet", rhs.args, kws, 2, "columns", -1)
         if columns == -1:
             columns = None
-        elif columns is not None:
-            columns = self._get_const_val_or_list(columns)
 
         return self._gen_parquet_read(fname, lhs, columns)
 
@@ -1434,33 +1311,25 @@ class UntypedPass:
         return [assign]
 
     def _get_const_arg(
-        self,
-        f_name,
-        args,
-        kws,
-        arg_no,
-        arg_name,
-        default=None,
-        err_msg=None,
-        typ=None,
-        error_on_non_const=False,
+        self, f_name, args, kws, arg_no, arg_name, default=None, err_msg=None, typ=None,
     ):
         """Get constant value for a function call argument. Raise error if the value is
         not constant.
         """
-        typ = str if typ is None else typ
+        typ = "str" if typ is None else typ
         arg = CONST_NOT_FOUND
         if err_msg is None:
             err_msg = ("{} requires '{}' argument as a constant {}").format(
                 f_name, arg_name, typ
             )
+
+        arg_var = get_call_expr_arg(f_name, args, kws, arg_no, arg_name, "")
+
         try:
-            if len(args) > arg_no:
-                arg = find_const(self.func_ir, args[arg_no])
-            elif arg_name in kws:
-                arg = find_const(self.func_ir, kws[arg_name])
+            arg = get_const_value_inner(self.func_ir, arg_var, arg_types=self.args)
         except GuardException:
-            if error_on_non_const:
+            # raise error if argument specified but not constant
+            if arg_var != "":
                 raise BodoError(err_msg)
 
         if arg is CONST_NOT_FOUND:
@@ -1468,72 +1337,6 @@ class UntypedPass:
                 return default
             raise BodoError(err_msg)
         return arg
-
-    def _get_const_val_or_list(
-        self, var, list_only=False, default=None, err_msg=None, typ=None
-    ):
-        """get constant value or list of constant values from variable "var"
-        """
-        # TODO: test error cases and remove "pragma no cover" annotations
-        typ = str if typ is None else typ
-        var_def = guard(find_build_sequence, self.func_ir, var)
-
-        if var_def is None:
-            # try add_consts_to_type
-            var_call = guard(get_definition, self.func_ir, var)
-            if guard(find_callname, self.func_ir, var_call) == (
-                "add_consts_to_type",
-                "bodo.utils.typing",
-            ):
-                var_def = guard(find_build_sequence, self.func_ir, var_call.args[0])
-
-        if var_def is None:
-            # try dict.keys()
-            var_call = guard(get_definition, self.func_ir, var)
-            call_name = guard(find_callname, self.func_ir, var_call)
-            if (
-                call_name is not None
-                and len(call_name) == 2
-                and call_name[0] == "keys"
-                and isinstance(call_name[1], ir.Var)
-            ):
-                var_def = guard(get_definition, self.func_ir, call_name[1])
-                # handle converted constant dictionaries
-                if is_call(var_def) and (
-                    guard(find_callname, self.func_ir, var_def)
-                    == ("add_consts_to_type", "bodo.utils.typing")
-                ):
-                    var_def = guard(get_definition, self.func_ir, var_def.args[0])
-
-                if isinstance(var_def, ir.Expr) and var_def.op == "build_map":
-                    var_def = [v[0] for v in var_def.items], "build_map"
-                    # HACK replace dict.keys getattr to avoid typing errors
-                    keys_getattr = guard(get_definition, self.func_ir, var_call.func)
-                    assert (
-                        isinstance(keys_getattr, ir.Expr)
-                        and keys_getattr.attr == "keys"
-                    )
-                    keys_getattr.attr = "copy"
-
-        if var_def is None:  # pragma: no cover
-            # try single key column
-            var_def = guard(find_const, self.func_ir, var)
-            if var_def is None:
-                if default is not None:
-                    return default
-                raise BodoError(err_msg)
-            key_colnames = [var_def]
-        else:  # pragma: no cover
-            if list_only and var_def[1] != "build_list":
-                if default is not None:
-                    return default
-                raise BodoError(err_msg)
-            key_colnames = [guard(find_const, self.func_ir, v) for v in var_def[0]]
-            if any(not _check_type(v, typ) for v in key_colnames):
-                if default is not None:
-                    return default
-                raise BodoError(err_msg)
-        return key_colnames
 
     def _handle_metadata(self):
         """remove distributed input annotation from locals and add to metadata

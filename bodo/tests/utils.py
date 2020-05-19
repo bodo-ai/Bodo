@@ -90,6 +90,7 @@ def check_func(
     copy_input=False,
     check_dtype=True,
     py_output=None,
+    dist_test=True,
 ):
     """test bodo compilation of function 'func' on arguments using REP, 1D, and 1D_Var
     inputs/outputs
@@ -108,6 +109,10 @@ def check_func(
     w = check_func_seq(
         func, args, py_output, copy_input, sort_output, check_names, check_dtype, n_pes
     )
+
+    # distributed test is not needed
+    if not dist_test:
+        return
 
     if is_out_distributed is None:
         # assume all distributable output is distributed if not specified
@@ -346,7 +351,7 @@ def _test_equal(
     elif isinstance(py_out, tuple):
         assert len(py_out) == len(bodo_out)
         for p, b in zip(py_out, bodo_out):
-            _test_equal(b, p)
+            _test_equal(b, p, sort_output, check_names, check_dtype)
     else:
         assert bodo_out == py_out
 

@@ -57,7 +57,7 @@ from bodo.ir.aggregate import get_agg_func
 from bodo.utils.transform import (
     compile_func_single_block,
     update_locs,
-    get_str_const_value,
+    get_const_value,
     get_call_expr_arg,
     gen_const_tup,
 )
@@ -79,7 +79,10 @@ from bodo.utils.typing import (
     get_overload_const_func,
     get_overload_const_str,
     BodoError,
-    get_registry_consts,
+    is_overload_constant_dict,
+    get_overload_constant_dict,
+    is_overload_constant_list,
+    get_overload_const_list,
 )
 
 binary_op_names = [f.__name__ for f in bodo.hiframes.pd_series_ext.series_binary_ops]
@@ -1088,7 +1091,7 @@ class DataFramePass:
         err_msg = (
             "df.query() expr arg should be constant string or argument to jit function"
         )
-        expr = get_str_const_value(expr_var, self.func_ir, err_msg, self.typemap)
+        expr = get_const_value(expr_var, self.func_ir, err_msg, self.typemap)
 
         # check expr is a non-empty string
         if len(expr) == 0:
@@ -1621,13 +1624,13 @@ class DataFramePass:
         nodes = []
         in_cols = grp_typ.selection
         if func_name in ("agg", "aggregate"):
-            agg_func = guard(get_definition, self.func_ir, rhs.args[0])
-            if isinstance(agg_func, ir.Expr) and agg_func.op == "build_map":
+            func_var = get_call_expr_arg(func_name, rhs.args, dict(rhs.kws), 0, "func")
+            agg_func_typ = self.typemap[func_var.name]
+            if is_overload_constant_dict(agg_func_typ):
+                func_dict = get_overload_constant_dict(agg_func_typ)
                 # multi-function const dict case:
                 # in this case, the input columns are the ones in the dict
-                in_cols = [
-                    guard(find_const, self.func_ir, v[0]) for v in agg_func.items
-                ]
+                in_cols = [name for name in func_dict.keys()]
         agg_func = get_agg_func(self.func_ir, func_name, rhs, typemap=self.typemap)
         same_index = False
         return_key = True
@@ -2363,8 +2366,6 @@ class DataFramePass:
         var_typ = self.typemap[by_arg.name]
         if isinstance(var_typ, types.Optional):
             var_typ = var_typ.type
-        if hasattr(var_typ, "const_no"):
-            return get_registry_consts(var_typ.const_no)
         if isinstance(var_typ, bodo.utils.typing.ListLiteral):
             return var_typ.literal_value
 
@@ -2401,16 +2402,15 @@ class DataFramePass:
         If by_arg is just a single value, then return the list of length n_key of this value.
         """
         var_typ = self.typemap[by_arg.name]
-        if hasattr(var_typ, "const_no"):
-            vals = get_registry_consts(var_typ.const_no)
-            n_arg = len(vals)
-            if n_key != n_arg:
-                raise ValueError(err_msg)
+        if is_overload_constant_list(var_typ):
+            vals = get_overload_const_list(var_typ)
+            if len(vals) != n_key:
+                raise BodoError(err_msg)
             return vals
         # try single key column
         by_arg_def = guard(find_const, self.func_ir, by_arg)
         if by_arg_def is None:
-            raise ValueError(err_msg)
+            raise BodoError(err_msg)
         key_colnames = (by_arg_def,) * n_key
         return key_colnames
 

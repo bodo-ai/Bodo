@@ -3,6 +3,7 @@ Bodo type inference pass that performs transformations that enable typing of the
 according to Bodo requirements (using partial typing).
 """
 import operator
+import itertools
 import numba
 from numba.core import types, ir, ir_utils
 from numba.core.compiler_machinery import register_pass
@@ -20,15 +21,13 @@ from numba.core.ir_utils import (
     replace_arg_nodes,
     dprint_func_ir,
     require,
+    GuardException,
 )
 import bodo
 from bodo.utils.typing import (
-    ConstList,
-    ConstSet,
     BodoError,
-    get_registry_consts,
-    add_consts_to_registry,
     is_literal_type,
+    CONST_DICT_SENTINEL,
 )
 from bodo.utils.utils import (
     is_assign,
@@ -41,10 +40,12 @@ from bodo.utils.transform import (
     update_node_list_definitions,
     compile_func_single_block,
     get_call_expr_arg,
+    get_const_value_inner,
+    set_call_expr_arg,
 )
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.hiframes.dataframe_indexing import DataFrameILocType
-
+from bodo.hiframes.pd_groupby_ext import DataFrameGroupByType
 
 # global flag indicating that we are in partial type inference, so that error checking
 # code can raise regular Exceptions that can potentially be handled here
@@ -144,6 +145,8 @@ class TypingTransforms:
         self.rhs_labels = {}
         # Loc object of current location being translated
         self.curr_loc = self.func_ir.loc
+        # variables that are transformed away at some point and are potentially dead
+        self._transformed_vars = set()
         self.changed = False
 
     def run(self):
@@ -177,6 +180,38 @@ class TypingTransforms:
 
             blocks[label].body = new_body
 
+        # find transformed variables that are not used anymore so they can be removed
+        # removing cases like agg dicts may be necessary since not type stable
+        remove_vars = self._transformed_vars.copy()
+        for block in self.func_ir.blocks.values():
+            for stmt in block.body:
+                # ignore dead definitions of variables
+                if (
+                    isinstance(stmt, ir.Assign)
+                    and stmt.target.name in self._transformed_vars
+                ):
+                    continue
+                # remove variables that are used somewhere else
+                remove_vars -= set(v.name for v in stmt.list_vars())
+
+        # add dummy variable with constant zero in first block after arg nodes to use
+        # below
+        first_block = self.func_ir.blocks[min(self.func_ir.blocks.keys())]
+        zero_var = ir.Var(first_block.scope, mk_unique_var("zero"), first_block.loc)
+        const_assign = ir.Assign(
+            ir.Const(0, first_block.loc), zero_var, first_block.loc
+        )
+        self.func_ir._definitions[zero_var.name] = [const_assign.value]
+        first_block.body.insert(len(self.arg_types), const_assign)
+
+        # change transformed variable to a trivial case to enable type inference
+        for v in remove_vars:
+            rhs = get_definition(self.func_ir, v)
+            if is_expr(rhs, "build_map"):
+                rhs.items = [(zero_var, zero_var)]
+            if is_expr(rhs, "build_list"):
+                rhs.items = [zero_var]
+
         return self.changed
 
     def _run_assign(self, assign, label):
@@ -191,28 +226,6 @@ class TypingTransforms:
         if isinstance(rhs, ir.Expr) and rhs.op in ("getitem", "static_getitem"):
             return self._run_getitem(assign, rhs)
 
-        # replace df.columns with constant StringIndex
-        if (
-            is_expr(rhs, "getattr")
-            and rhs.value.name in self.typemap
-            and isinstance(self.typemap[rhs.value.name], DataFrameType)
-            and rhs.attr == "columns"
-        ):
-            vals = self.typemap[rhs.value.name].columns
-            return self._gen_const_string_index(assign.target, rhs, vals)
-
-        # replace ConstSet with Set since we don't support 'set' methods yet
-        # e.g. s.add()
-        if (
-            is_expr(rhs, "getattr")
-            and rhs.value.name in self.typemap
-            and isinstance(self.typemap[rhs.value.name], ConstSet)
-        ):  # pragma: no cover
-            # TODO: test coverage
-            val_typ = self.typemap[rhs.value.name]
-            self.typemap.pop(rhs.value.name)
-            self.typemap[rhs.value.name] = types.Set(val_typ.dtype)
-
         return [assign]
 
     def _run_getitem(self, assign, rhs):
@@ -221,6 +234,36 @@ class TypingTransforms:
         nodes = []
         idx = get_getsetitem_index_var(rhs, self.typemap, nodes)
         idx_typ = self.typemap.get(idx.name, None)
+
+        # find constant index for df["A"] or df[["A", "B"]] cases
+        if isinstance(target_typ, DataFrameType) and idx_typ in (
+            bodo.string_type,
+            types.List(bodo.string_type),
+        ):
+            # static_getitem has the values embedded
+            if rhs.op == "static_getitem":
+                val = rhs.index
+            else:
+                # try to find index values
+                try:
+                    val = get_const_value_inner(
+                        self.func_ir, idx, self.arg_types, self.typemap
+                    )
+                except GuardException:
+                    # couldn't find values, just return to be handled later
+                    nodes.append(assign)
+                    return nodes
+            # replace index variable with a new variable holding constant
+            new_var = _create_const_var(val, idx.name, idx.scope, idx.loc, nodes)
+            if rhs.op == "static_getitem":
+                rhs.index_var = new_var
+            else:
+                rhs.index = new_var
+            # old index var is not used anymore
+            self._transformed_vars.add(idx.name)
+            self.changed = True
+            nodes.append(assign)
+            return nodes
 
         # transform df.iloc[:,1:] case here since slice info not available in overload
         if (
@@ -285,29 +328,20 @@ class TypingTransforms:
 
         func_name, func_mod = fdef
 
+        if func_mod == "pandas":
+            return self._run_call_pd_top_level(assign, rhs, func_name)
+
         # handle df.method() calls
         if isinstance(func_mod, ir.Var) and isinstance(
             self._get_method_obj_type(func_mod, rhs.func), DataFrameType
         ):
             return self._run_call_dataframe(assign, rhs, func_mod, func_name, label)
 
-        # set() with constant list arg
-        if (
-            fdef == ("set", "builtins")
-            and len(rhs.args) == 1
-            and self._get_const_seq(rhs.args[0]) is not None
+        # handle df.groupby().method() calls
+        if isinstance(func_mod, ir.Var) and isinstance(
+            self._get_method_obj_type(func_mod, rhs.func), DataFrameGroupByType
         ):
-            vals = self._get_const_seq(rhs.args[0])
-            return self._gen_consts_call(assign.target, vals, False)
-
-        # list() with constant list/set arg
-        if (
-            fdef == ("list", "builtins")
-            and len(rhs.args) == 1
-            and self._get_const_seq(rhs.args[0]) is not None
-        ):
-            vals = self._get_const_seq(rhs.args[0])
-            return self._gen_consts_call(assign.target, vals)
+            return self._run_call_df_groupby(assign, rhs, func_mod, func_name)
 
         return [assign]
 
@@ -316,68 +350,18 @@ class TypingTransforms:
         arg2_typ = self.typemap.get(rhs.rhs.name, None)
         target_typ = self.typemap.get(assign.target.name, None)
 
-        # add of constant lists, e.g. ["A"] + ["B"]
-        if (
-            isinstance(arg1_typ, ConstList)
-            and isinstance(arg2_typ, ConstList)
-            and rhs.fn == operator.add
-        ):
-            vals = get_registry_consts(arg1_typ.const_no) + get_registry_consts(
-                arg2_typ.const_no
-            )
-            return self._gen_consts_call(assign.target, vals)
-
-        # sub of constant sets, e.g. {"A", "B"} - {"B"}
-        if (
-            isinstance(arg1_typ, ConstSet)
-            and isinstance(arg2_typ, ConstSet)
-            and rhs.fn == operator.sub
-        ):
-            # sort output of set diff op to be consistent across processors since const
-            # values can be keys to groupby/sort/join which require consistent order
-            vals = sorted(
-                set(get_registry_consts(arg1_typ.const_no))
-                - set(get_registry_consts(arg2_typ.const_no))
-            )
-            return self._gen_consts_call(assign.target, vals, False)
-
-        # replace ConstSet with Set if there a set op we don't support here
-        # e.g. s1 | s2
-        # target type may be unknown
-        if isinstance(arg1_typ, ConstSet) and isinstance(
-            target_typ, ConstSet
-        ):  # pragma: no cover
-            # TODO: test coverage
-            arg_def = guard(get_definition, self.func_ir, rhs.lhs)
-            assert is_call(arg_def) and guard(find_callname, self.func_ir, arg_def) == (
-                "add_consts_to_type",
-                "bodo.utils.typing",
-            )
-            rhs.lhs = arg_def.args[0]
-            self.typemap.pop(assign.target.name)
-            self.typemap[assign.target.name] = types.Set(target_typ.dtype)
-
-        if isinstance(arg2_typ, ConstSet) and isinstance(
-            target_typ, ConstSet
-        ):  # pragma: no cover
-            # TODO: test coverage
-            arg_def = guard(get_definition, self.func_ir, rhs.rhs)
-            assert is_call(arg_def) and guard(find_callname, self.func_ir, arg_def) == (
-                "add_consts_to_type",
-                "bodo.utils.typing",
-            )
-            rhs.rhs = arg_def.args[0]
-            self.typemap.pop(assign.target.name)
-            self.typemap[assign.target.name] = types.Set(target_typ.dtype)
-
         return [assign]
 
     def _run_call_dataframe(self, assign, rhs, df_var, func_name, label):
         """Handle dataframe calls that need transformation to meet Bodo requirements
         """
         lhs = assign.target
+        nodes = []
 
-        # force jit function arguments to be literal if required by df functions.
+        # find constant values for function arguments that require constants, and
+        # replace the argument variable with a new variable with literal type
+        # that holds the constants to enable constant access in overloads. This may
+        # force some jit function arguments to be literal if required.
         # mapping of df functions to their arguments that require constant values:
         df_call_const_args = {
             "groupby": [(0, "by"), (3, "as_index")],
@@ -396,15 +380,18 @@ class TypingTransforms:
                 (3, "inplace"),
                 (5, "na_position"),
             ],
+            "join": [(1, "on"), (2, "how"), (3, "lsuffix"), (4, "rsuffix"),],
+            "rename": [(2, "columns")],
+            "drop": [(0, "labels"), (1, "axis"), (3, "columns"), (5, "inplace"),],
         }
 
         if func_name in df_call_const_args:
             func_args = df_call_const_args[func_name]
-            self._force_arg_literals(func_name, rhs, func_args)
+            nodes += self._replace_arg_with_literal(func_name, rhs, func_args)
 
         # transform df.assign() here since (**kwargs) is not supported in overload
         if func_name == "assign":
-            return self._handle_df_assign(assign.target, rhs, df_var)
+            return nodes + self._handle_df_assign(assign.target, rhs, df_var)
 
         # handle calls that have inplace=True that changes the schema, by replacing the
         # dataframe variable instead of inplace change if possible
@@ -425,11 +412,11 @@ class TypingTransforms:
             inplace_var = get_call_expr_arg(
                 func_name, rhs.args, kws, inplace_arg_no, "inplace", ""
             )
-            return self._handle_df_inplace_func(
+            return nodes + self._handle_df_inplace_func(
                 assign, lhs, rhs, df_var, inplace_var, label, func_name
             )
 
-        return [assign]
+        return nodes + [assign]
 
     def _handle_df_assign(self, lhs, rhs, df_var):
         """replace df.assign() with its implementation to avoid overload errors with
@@ -461,6 +448,56 @@ class TypingTransforms:
             header, tuple(name_col_total), data_args
         )
         return compile_func_single_block(impl, [df_var] + list(kws.values()), lhs, self)
+
+    def _run_call_df_groupby(self, assign, rhs, groupby_var, func_name):
+        """Handle dataframe groupby calls that need transformation to meet Bodo
+        requirements
+        """
+        nodes = []
+
+        # mapping of groupby functions to their arguments that require constant values
+        groupby_call_const_args = {
+            "agg": [(0, "func")],
+            "aggregate": [(0, "func")],
+        }
+
+        if func_name in groupby_call_const_args:
+            func_args = groupby_call_const_args[func_name]
+            nodes += self._replace_arg_with_literal(func_name, rhs, func_args)
+
+        return nodes + [assign]
+
+    def _run_call_pd_top_level(self, assign, rhs, func_name):
+        """transform top-level pandas functions
+        """
+        nodes = []
+
+        # mapping of pandas functions to their arguments that require constant values
+        top_level_call_const_args = {
+            "DataFrame": [(2, "columns")],
+            "merge": [
+                (2, "how"),
+                (3, "on"),
+                (4, "left_on"),
+                (5, "right_on"),
+                (6, "left_index"),
+                (7, "right_index"),
+                (9, "suffixes"),
+            ],
+            "merge_asof": [
+                (2, "on"),
+                (3, "left_on"),
+                (4, "right_on"),
+                (5, "left_index"),
+                (6, "right_index"),
+                (10, "suffixes"),
+            ],
+        }
+
+        if func_name in top_level_call_const_args:
+            func_args = top_level_call_const_args[func_name]
+            nodes += self._replace_arg_with_literal(func_name, rhs, func_args)
+        return nodes + [assign]
 
     def _is_df_call_transformed(self, rhs):
         """check for _bodo_transformed=True in call arguments to know if df call has
@@ -596,78 +633,6 @@ class TypingTransforms:
 
         return nodes
 
-    def _gen_consts_call(self, target, vals, is_list=True):
-        const_obj, const_no = add_consts_to_registry(vals)
-        val_reps = ", ".join(["'{}'".format(c) for c in vals])
-        in_brac = "[" if is_list else "set(["
-        out_brac = "]" if is_list else "])"
-        func_text = "def _build_f():\n"
-        func_text += "  return bodo.utils.typing.add_consts_to_type({}{}{}, {})\n".format(
-            in_brac, val_reps, out_brac, const_no
-        )
-        loc_vars = {}
-        exec(func_text, {"bodo": bodo}, loc_vars)
-        _build_f = loc_vars["_build_f"]
-        nodes = compile_func_single_block(_build_f, (), target, self)
-        self.typemap.pop(target.name)
-        self.typemap[target.name] = self.typemap[nodes[-1].value.name]
-        self.changed = True
-
-        # HACK keep const values object around as long as the function is being compiled
-        # by adding it as an attribute to some compilation object
-        setattr(self.func_ir, "const_obj{}".format(const_no), const_obj)
-        return nodes
-
-    def _gen_const_string_index(self, target, rhs, vals):
-        const_obj, const_no = add_consts_to_registry(vals)
-        val_reps = ", ".join(["'{}'".format(c) for c in vals])
-        const_call = "bodo.utils.typing.add_consts_to_type([{}], {})".format(
-            val_reps, const_no
-        )
-        str_arr = "bodo.libs.str_arr_ext.str_arr_from_sequence({})".format(const_call)
-        func_text = "def _gen_str_ind():\n"
-        func_text += "  return bodo.hiframes.pd_index_ext.init_string_index({})\n".format(
-            str_arr
-        )
-        loc_vars = {}
-        exec(func_text, {"bodo": bodo}, loc_vars)
-        _gen_str_ind = loc_vars["_gen_str_ind"]
-        nodes = compile_func_single_block(_gen_str_ind, (), target, self)
-
-        # HACK keep const values object around as long as the function is being compiled
-        # by adding it as an attribute to some compilation object
-        setattr(self.func_ir, "const_obj{}".format(const_no), const_obj)
-        return nodes
-
-    def _get_const_seq(self, var):
-        """returns constant values if 'var' represents a constant list/set. Otherwise,
-        returns None
-        """
-        # constant list/set type
-        if var.name in self.typemap and isinstance(
-            self.typemap[var.name], (ConstList, ConstSet)
-        ):
-            return get_registry_consts(self.typemap[var.name].const_no)
-
-        # constant StringIndex case coming from df.columns
-        # pattern match init_string_index(str_arr_from_sequence(["A", "B"]))
-        var_def = guard(get_definition, self.func_ir, var)
-        if is_call(var_def) and guard(find_callname, self.func_ir, var_def) == (
-            "init_string_index",
-            "bodo.hiframes.pd_index_ext",
-        ):
-            arg_def = guard(get_definition, self.func_ir, var_def.args[0])
-            if is_call(arg_def) and guard(find_callname, self.func_ir, arg_def) == (
-                "str_arr_from_sequence",
-                "bodo.libs.str_arr_ext",
-            ):
-                if arg_def.args[0].name in self.typemap and isinstance(
-                    self.typemap[arg_def.args[0].name], ConstList
-                ):
-                    return get_registry_consts(
-                        self.typemap[arg_def.args[0].name].const_no
-                    )
-
     def _replace_vars(self, inst):
         # variable replacement can affect definitions so handling assignment
         # values specifically
@@ -696,25 +661,38 @@ class TypingTransforms:
         if func_var.name in self.typemap:
             return self.typemap[func_var.name].this
 
-    def _force_arg_literals(self, func_name, rhs, func_args):
-        """force JIT arguments to be literals if needed to satify constant requirements
-        of function call 'rhs' as specified by `func_args`
+    def _replace_arg_with_literal(self, func_name, rhs, func_args):
+        """replace a function argument that needs to be constant with a literal to
+        enable constant access in overload. This may force JIT arguments to be literals
+        if needed to satify constant requirements.
         """
         kws = dict(rhs.kws)
-        marked_args = set()
+        nodes = []
         for (arg_no, arg_name) in func_args:
             var = get_call_expr_arg(func_name, rhs.args, kws, arg_no, arg_name, "")
-            var_def = guard(get_definition, self.func_ir, var)
-            # ignore if var definition is not arg or literal already
-            if not isinstance(var_def, ir.Arg) or is_literal_type(
-                self.arg_types[var_def.index]
-            ):
+            # skip if argument not specified or literal already
+            if var == "" or is_literal_type(self.typemap.get(var.name, None)):
                 continue
-            marked_args.add(var_def.index)
+            # get constant value for variable if possible.
+            # Otherwise, just skip, assuming that the issue may be fixed later or
+            # overload will raise an error if necessary.
+            try:
+                val = get_const_value_inner(
+                    self.func_ir, var, self.arg_types, self.typemap
+                )
+            except GuardException:
+                continue
+            # replace argument variable with a new variable holding constant
+            new_var = _create_const_var(val, var.name, var.scope, rhs.loc, nodes)
+            set_call_expr_arg(new_var, rhs.args, kws, arg_no, arg_name)
+            # var is not used here anymore, add to _transformed_vars so it can
+            # potentially be removed since some dictionaries (e.g. in agg) may not be
+            # type stable
+            self._transformed_vars.add(var.name)
+            self.changed = True
 
-        # force arguments to be literal if required
-        if marked_args:
-            raise numba.core.errors.ForceLiteralArg(marked_args, loc=rhs.loc)
+        rhs.kws = list(kws.items())
+        return nodes
 
 
 def _get_const_slice(func_ir, var):
@@ -729,3 +707,35 @@ def _get_const_slice(func_ir, var):
     stop = find_const(func_ir, var_def.args[1])
     step = find_const(func_ir, var_def.args[2]) if len(var_def.args) == 3 else None
     return slice(start, stop, step)
+
+
+def _create_const_var(val, name, scope, loc, nodes):
+    """create a new variable that holds constant value 'val'. Generates constant
+    creation IR nodes and adds them to 'nodes'.
+    """
+    new_var = ir.Var(scope, mk_unique_var(name), loc)
+    # NOTE: create a tuple for both list/tuple, assuming that all functions accept both
+    # equally (e.g. passing a tuple instead of a list is not an error).
+    if isinstance(val, (tuple, list)):
+        const_node = ir.Expr.build_tuple(
+            [_create_const_var(v, name, scope, loc, nodes) for v in val], loc
+        )
+    # create a tuple with sentinel for dict case since there is no dict literal
+    elif isinstance(val, dict):
+        # first tuple element is a sentinel specifying that this tuple is a const dict
+        const_dict_sentinel_var = ir.Var(
+            scope, mk_unique_var("const_dict_sentinel"), loc
+        )
+        nodes.append(
+            ir.Assign(ir.Const(CONST_DICT_SENTINEL, loc), const_dict_sentinel_var, loc)
+        )
+        items = [
+            _create_const_var(v, name, scope, loc, nodes)
+            for v in itertools.chain(*val.items())
+        ]
+        const_node = ir.Expr.build_tuple([const_dict_sentinel_var] + items, loc)
+    else:
+        const_node = ir.Const(val, loc)
+    new_assign = ir.Assign(const_node, new_var, loc)
+    nodes.append(new_assign)
+    return new_var

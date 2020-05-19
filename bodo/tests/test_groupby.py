@@ -886,6 +886,20 @@ def test_groupby_agg_const_dict():
         df2 = df.groupby("A").agg({"B": "cumsum", "C": "cumprod"})
         return df2
 
+    # reuse a complex dict to test typing transform for const dict removal
+    def impl16(df):
+        d = {"B": [lambda a: a.sum(), "mean"]}
+        df1 = df.groupby("A").agg(d)
+        df2 = df.groupby("C").agg(d)
+        return df1, df2
+
+    # reuse and return a const dict to test typing transform
+    def impl17(df):
+        d = {"B": "sum"}
+        df1 = df.groupby("A").agg(d)
+        df2 = df.groupby("C").agg(d)
+        return df1, df2, d
+
     df = pd.DataFrame(
         {
             "A": [2, 1, 1, 1, 2, 2, 1],
@@ -909,6 +923,12 @@ def test_groupby_agg_const_dict():
     check_func(impl13, (df,), sort_output=True)
     check_func(impl14, (df,), sort_output=True)
     check_func(impl15, (df,), sort_output=True)
+    # can't use check_func since lambda name in MultiIndex doesn't match Pandas
+    # TODO: fix lambda name
+    # check_func(impl16, (df,), sort_output=True)
+    bodo.jit(impl16)(df)  # just check for compilation errors
+    # TODO: enable is_out_distributed after fixing gatherv issue for tuple output
+    check_func(impl17, (df,), sort_output=True, dist_test=False)
 
 
 def g(x):
@@ -2318,6 +2338,10 @@ def test_literal_args():
     def impl2(df, keys, as_index):
         return df.groupby(by=keys, as_index=as_index).sum()
 
+    # computation on literal arg
+    def impl3(df, keys, as_index):
+        return df.groupby(by=keys + ["B"], as_index=as_index).sum()
+
     df = pd.DataFrame(
         {
             "A": [2, 1, 1, 1, 2, 2, 1],
@@ -2329,6 +2353,7 @@ def test_literal_args():
     check_func(impl1, (df, ["A", "B"]), sort_output=True)
     check_func(impl2, (df, "A", False), sort_output=True)
     check_func(impl2, (df, ["A", "B"], True), sort_output=True)
+    check_func(impl3, (df, ["A"], True), sort_output=True)
 
 
 def test_schema_change():

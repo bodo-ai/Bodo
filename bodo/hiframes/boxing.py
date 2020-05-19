@@ -170,7 +170,7 @@ def _infer_series_dtype(S):
             # NOTE: converting decimal.Decimal objects to 38/18, same as Spark
             return Decimal128Type(38, 18)
         else:
-            raise ValueError(
+            raise BodoError(
                 "object dtype infer: data type for column {} not supported".format(
                     S.name
                 )
