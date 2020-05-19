@@ -35,7 +35,6 @@ from bodo.utils.typing import list_cumulative
 from bodo import hiframes
 from bodo.utils.utils import (
     debug_prints,
-    ReplaceFunc,
     is_array_typ,
     is_assign,
     sanitize_varname,
@@ -60,6 +59,8 @@ from bodo.utils.transform import (
     get_const_value,
     get_call_expr_arg,
     gen_const_tup,
+    ReplaceFunc,
+    replace_func,
 )
 from bodo.utils.utils import gen_getitem
 from bodo.libs.str_arr_ext import (
@@ -248,28 +249,28 @@ class DataFramePass:
             impl = bodo.hiframes.dataframe_indexing.df_getitem_overload(
                 target_typ, index_typ
             )
-            return self._replace_func(impl, [target, index_var], pre_nodes=nodes)
+            return replace_func(self, impl, [target, index_var], pre_nodes=nodes)
 
         # inline DataFrame.iloc[] getitem
         if isinstance(target_typ, DataFrameILocType):
             impl = bodo.hiframes.dataframe_indexing.overload_iloc_getitem(
                 target_typ, index_typ
             )
-            return self._replace_func(impl, [target, index_var], pre_nodes=nodes)
+            return replace_func(self, impl, [target, index_var], pre_nodes=nodes)
 
         # inline DataFrame.loc[] getitem
         if isinstance(target_typ, DataFrameLocType):
             impl = bodo.hiframes.dataframe_indexing.overload_loc_getitem(
                 target_typ, index_typ
             )
-            return self._replace_func(impl, [target, index_var], pre_nodes=nodes)
+            return replace_func(self, impl, [target, index_var], pre_nodes=nodes)
 
         # inline DataFrame.iat[] getitem
         if isinstance(target_typ, DataFrameIatType):
             impl = bodo.hiframes.dataframe_indexing.overload_iat_getitem(
                 target_typ, index_typ
             )
-            return self._replace_func(impl, [target, index_var], pre_nodes=nodes)
+            return replace_func(self, impl, [target, index_var], pre_nodes=nodes)
 
         nodes.append(assign)
         return nodes
@@ -285,8 +286,8 @@ class DataFramePass:
             impl = bodo.hiframes.dataframe_indexing.overload_iat_setitem(
                 target_typ, index_typ, self.typemap[inst.value.name]
             )
-            return self._replace_func(
-                impl, [inst.target, index_var, inst.value], pre_nodes=nodes
+            return replace_func(
+                self, impl, [inst.target, index_var, inst.value], pre_nodes=nodes
             )
 
         return nodes + [inst]
@@ -304,7 +305,7 @@ class DataFramePass:
             overload_name = "overload_dataframe_" + rhs.attr
             overload_func = getattr(bodo.hiframes.dataframe_impl, overload_name)
             impl = overload_func(rhs_type)
-            return self._replace_func(impl, [rhs.value])
+            return replace_func(self, impl, [rhs.value])
 
         # S = df.A (get dataframe column)
         # TODO: check invalid df.Attr?
@@ -316,7 +317,8 @@ class DataFramePass:
             name = ir.Var(arr.scope, mk_unique_var("df_col_name"), arr.loc)
             self.typemap[name.name] = types.StringLiteral(col_name)
             nodes.append(ir.Assign(ir.Const(col_name, arr.loc), name, arr.loc))
-            return self._replace_func(
+            return replace_func(
+                self,
                 lambda arr, index, name: bodo.hiframes.pd_series_ext.init_series(
                     arr, index, name
                 ),
@@ -370,14 +372,14 @@ class DataFramePass:
                 rhs.fn
             )
             impl = overload_func(typ1, typ2)
-            return self._replace_func(impl, [arg1, arg2])
+            return replace_func(self, impl, [arg1, arg2])
 
         if rhs.fn in bodo.hiframes.pd_series_ext.series_inplace_binary_ops:
             overload_func = bodo.hiframes.dataframe_impl.create_inplace_binary_op_overload(
                 rhs.fn
             )
             impl = overload_func(typ1, typ2)
-            return self._replace_func(impl, [arg1, arg2])
+            return replace_func(self, impl, [arg1, arg2])
 
         return [assign]  # XXX should reach here, check it properly
 
@@ -391,7 +393,7 @@ class DataFramePass:
                 rhs.fn
             )
             impl = overload_func(typ)
-            return self._replace_func(impl, (arg,))
+            return replace_func(self, impl, (arg,))
 
         return [assign]
 
@@ -505,7 +507,8 @@ class DataFramePass:
             impl = getattr(
                 bodo.hiframes.dataframe_impl, "overload_dataframe_" + func_name
             )(*arg_typs, **kw_typs)
-            return self._replace_func(
+            return replace_func(
+                self,
                 impl,
                 rhs.args,
                 pysig=numba.core.utils.pysignature(impl),
@@ -522,7 +525,8 @@ class DataFramePass:
             stub = (
                 lambda df, values=None, index=None, columns=None, aggfunc="mean", fill_value=None, margins=False, dropna=True, margins_name="All", _pivot_values=None: None
             )
-            return self._replace_func(
+            return replace_func(
+                self,
                 impl,
                 rhs.args,
                 pysig=numba.core.utils.pysignature(stub),
@@ -634,7 +638,8 @@ class DataFramePass:
             func, parallel=parallel, pipeline_class=bodo.compiler.BodoCompilerSeqInline
         )
 
-        return self._replace_func(
+        return replace_func(
+            self,
             f,
             col_vars + [df_index_var],
             extra_globals={
@@ -789,7 +794,7 @@ class DataFramePass:
 
         nodes = []
         col_vars = [self._get_dataframe_data(df_var, c, nodes) for c in df_typ.columns]
-        return self._replace_func(f, col_vars, pre_nodes=nodes)
+        return replace_func(self, f, col_vars, pre_nodes=nodes)
 
     def _run_call_col_reduce(self, assign, lhs, rhs, func_name):
         """support functions that reduce columns to single output and create
@@ -825,7 +830,7 @@ class DataFramePass:
 
         nodes = []
         col_vars = [self._get_dataframe_data(df_var, c, nodes) for c in df_typ.columns]
-        return self._replace_func(_mean_impl, col_vars, pre_nodes=nodes)
+        return replace_func(self, _mean_impl, col_vars, pre_nodes=nodes)
 
     def _run_call_df_fillna(self, assign, lhs, rhs):
         df_var = rhs.args[0]
@@ -1021,7 +1026,7 @@ class DataFramePass:
         in_index_var = self._gen_array_from_index(df_var, nodes)
         args = col_vars + [in_index_var]
 
-        return self._replace_func(_dropna_imp, args, pre_nodes=nodes)
+        return replace_func(self, _dropna_imp, args, pre_nodes=nodes)
 
     def _run_call_reset_index(self, assign, lhs, rhs):
         # TODO: reflection
@@ -1432,7 +1437,8 @@ class DataFramePass:
 
         # set unboxed df column with reflection
         if df_typ.has_parent:
-            return self._replace_func(
+            return replace_func(
+                self,
                 lambda df, cname, arr, inplace: bodo.hiframes.pd_dataframe_ext.set_df_column_with_reflect(
                     df,
                     cname,
@@ -1446,7 +1452,8 @@ class DataFramePass:
             )
 
         if inplace:
-            return self._replace_func(
+            return replace_func(
+                self,
                 lambda df, arr: bodo.hiframes.pd_dataframe_ext.set_dataframe_data(
                     df,
                     c_ind,
@@ -1495,8 +1502,8 @@ class DataFramePass:
         loc_vars = {}
         exec(func_text, {}, loc_vars)
         _init_df = loc_vars["_init_df"]
-        return self._replace_func(
-            _init_df, in_arrs + [df_index_var, df_var, new_arr], pre_nodes=nodes
+        return replace_func(
+            self, _init_df, in_arrs + [df_index_var, df_var, new_arr], pre_nodes=nodes
         )
 
     def _run_call_len(self, lhs, df_var):
@@ -1515,7 +1522,7 @@ class DataFramePass:
         def f(df_arr):  # pragma: no cover
             return len(df_arr)
 
-        return self._replace_func(f, [arr], pre_nodes=nodes)
+        return replace_func(self, f, [arr], pre_nodes=nodes)
 
     def _run_call_join(self, assign, lhs, rhs):
         (
@@ -1760,7 +1767,8 @@ class DataFramePass:
             name_var = ir.Var(lhs.scope, mk_unique_var("S_name"), lhs.loc)
             self.typemap[name_var.name] = types.StringLiteral(name_str)
             nodes.append(ir.Assign(ir.Const(name_str, lhs.loc), name_var, lhs.loc))
-            return self._replace_func(
+            return replace_func(
+                self,
                 lambda A, I, name: bodo.hiframes.pd_series_ext.init_series(A, I, name),
                 list(df_out_vars.values()) + [index_var, name_var],
                 pre_nodes=nodes,
@@ -2006,7 +2014,8 @@ class DataFramePass:
                 and rolling_typ.explicit_select
                 and rolling_typ.as_index
             )
-            return self._replace_func(
+            return replace_func(
+                self,
                 lambda A, I: bodo.hiframes.pd_series_ext.init_series(A, I, _name),
                 list(df_col_map.values()) + [out_index_var],
                 pre_nodes=nodes,
@@ -2278,56 +2287,6 @@ class DataFramePass:
 
         nodes += compile_func_single_block(f, (dt_var,), None, self)
         return nodes[-1].target
-
-    def _replace_func(
-        self,
-        func,
-        args,
-        const=False,
-        pre_nodes=None,
-        extra_globals=None,
-        pysig=None,
-        kws=None,
-    ):
-        glbls = {"numba": numba, "np": np, "bodo": bodo, "pd": pd}
-        if extra_globals is not None:
-            glbls.update(extra_globals)
-        func.__globals__.update(glbls)
-
-        # create explicit arg variables for defaults if func has any
-        # XXX: inine_closure_call() can't handle defaults properly
-        if pysig is not None:
-            pre_nodes = [] if pre_nodes is None else pre_nodes
-            scope = next(iter(self.func_ir.blocks.values())).scope
-            loc = scope.loc
-
-            def normal_handler(index, param, default):
-                return default
-
-            def default_handler(index, param, default):
-                d_var = ir.Var(scope, mk_unique_var("defaults"), loc)
-                self.typemap[d_var.name] = numba.typeof(default)
-                node = ir.Assign(ir.Const(default, loc), d_var, loc)
-                pre_nodes.append(node)
-                return d_var
-
-            # TODO: stararg needs special handling?
-            args = numba.core.typing.fold_arguments(
-                pysig, args, kws, normal_handler, default_handler, normal_handler
-            )
-
-        arg_typs = tuple(self.typemap[v.name] for v in args)
-
-        if const:
-            new_args = []
-            for i, arg in enumerate(args):
-                val = guard(find_const, self.func_ir, arg)
-                if val:
-                    new_args.append(types.literal(val))
-                else:
-                    new_args.append(arg_typs[i])
-            arg_typs = tuple(new_args)
-        return ReplaceFunc(func, arg_typs, args, glbls, pre_nodes)
 
     def _is_df_var(self, var):
         return isinstance(self.typemap[var.name], DataFrameType)

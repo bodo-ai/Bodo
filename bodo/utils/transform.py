@@ -3,6 +3,7 @@
 Helper functions for transformations.
 """
 import operator
+from collections import namedtuple
 import math
 import itertools
 import pandas as pd
@@ -22,6 +23,7 @@ from numba.core.ir_utils import (
     require,
     find_callname,
     build_definitions,
+    mk_unique_var,
 )
 from numba.core.registry import CPUDispatcher
 
@@ -36,6 +38,11 @@ from bodo.utils.typing import (
     get_overload_const_list,
 )
 from bodo.utils.utils import is_call
+
+
+ReplaceFunc = namedtuple(
+    "ReplaceFunc", ["func", "arg_types", "args", "glbls", "pre_nodes"]
+)
 
 
 no_side_effect_call_tuples = {
@@ -499,3 +506,56 @@ def set_call_expr_arg(var, args, kws, arg_no, arg_name):
         raise BodoError(
             "cannot set call argument since does not exist"
         )  # pragma: no cover
+
+
+def replace_func(
+    pass_info,
+    func,
+    args,
+    const=False,
+    pre_nodes=None,
+    extra_globals=None,
+    pysig=None,
+    kws=None,
+):
+    """
+    """
+    glbls = {"numba": numba, "np": np, "bodo": bodo, "pd": pd}
+    if extra_globals is not None:
+        glbls.update(extra_globals)
+    func.__globals__.update(glbls)
+
+    # create explicit arg variables for defaults if func has any
+    # XXX: inine_closure_call() can't handle defaults properly
+    if pysig is not None:
+        pre_nodes = [] if pre_nodes is None else pre_nodes
+        scope = next(iter(pass_info.func_ir.blocks.values())).scope
+        loc = scope.loc
+
+        def normal_handler(index, param, default):
+            return default
+
+        def default_handler(index, param, default):
+            d_var = ir.Var(scope, mk_unique_var("defaults"), loc)
+            pass_info.typemap[d_var.name] = numba.typeof(default)
+            node = ir.Assign(ir.Const(default, loc), d_var, loc)
+            pre_nodes.append(node)
+            return d_var
+
+        # TODO: stararg needs special handling?
+        args = numba.core.typing.fold_arguments(
+            pysig, args, kws, normal_handler, default_handler, normal_handler
+        )
+
+    arg_typs = tuple(pass_info.typemap[v.name] for v in args)
+
+    if const:
+        new_args = []
+        for i, arg in enumerate(args):
+            val = guard(find_const, pass_info.func_ir, arg)
+            if val:
+                new_args.append(types.literal(val))
+            else:
+                new_args.append(arg_typs[i])
+        arg_typs = tuple(new_args)
+    return ReplaceFunc(func, arg_typs, args, glbls, pre_nodes)

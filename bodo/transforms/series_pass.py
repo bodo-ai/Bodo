@@ -32,7 +32,6 @@ from numba.core.typing.templates import Signature
 import bodo
 from bodo.utils.utils import (
     debug_prints,
-    ReplaceFunc,
     is_whole_slice,
     get_getsetitem_index_var,
     is_expr,
@@ -92,6 +91,8 @@ from bodo.utils.transform import (
     compile_func_single_block,
     update_locs,
     get_call_expr_arg,
+    ReplaceFunc,
+    replace_func,
 )
 from bodo.utils.typing import get_overload_const_func, is_const_func_type, BodoError
 
@@ -304,21 +305,21 @@ class SeriesPass:
             impl = bodo.hiframes.series_indexing.overload_series_getitem(
                 self.typemap[target.name], self.typemap[idx.name]
             )
-            return self._replace_func(impl, (target, idx), pre_nodes=nodes)
+            return replace_func(self, impl, (target, idx), pre_nodes=nodes)
 
         # Series.iloc[]
         if isinstance(target_typ, SeriesIlocType):
             impl = bodo.hiframes.series_indexing.overload_series_iloc_getitem(
                 self.typemap[target.name], self.typemap[idx.name]
             )
-            return self._replace_func(impl, (target, idx), pre_nodes=nodes)
+            return replace_func(self, impl, (target, idx), pre_nodes=nodes)
 
         # Series.loc[]
         if isinstance(target_typ, SeriesLocType):
             impl = bodo.hiframes.series_indexing.overload_series_loc_getitem(
                 self.typemap[target.name], self.typemap[idx.name]
             )
-            return self._replace_func(impl, (target, idx), pre_nodes=nodes)
+            return replace_func(self, impl, (target, idx), pre_nodes=nodes)
 
         # inline index getitem, TODO: test
         if bodo.hiframes.pd_index_ext.is_pd_index_type(target_typ):
@@ -334,7 +335,7 @@ class SeriesPass:
             else:
                 # TODO: test timedelta
                 impl = bodo.hiframes.pd_index_ext.overload_index_getitem(typ1, typ2)
-            return self._replace_func(impl, (target, idx), pre_nodes=nodes)
+            return replace_func(self, impl, (target, idx), pre_nodes=nodes)
 
         # TODO: reimplement Iat optimization
         # if isinstance(self.typemap[rhs.value.name], SeriesIatType):
@@ -348,7 +349,7 @@ class SeriesPass:
             impl = bodo.hiframes.series_str_impl.overload_str_method_getitem(
                 target_typ, idx_typ
             )
-            return self._replace_func(impl, (target, idx), pre_nodes=nodes)
+            return replace_func(self, impl, (target, idx), pre_nodes=nodes)
 
         nodes.append(assign)
         return nodes
@@ -411,13 +412,13 @@ class SeriesPass:
                     impl = bodo.hiframes.series_dt_impl.create_date_field_overload(
                         rhs.attr
                     )(rhs_type)
-                return self._replace_func(impl, [rhs.value])
+                return replace_func(self, impl, [rhs.value])
             else:
                 assert rhs_type.stype.dtype == types.NPTimedelta("ns")
                 impl = bodo.hiframes.series_dt_impl.create_timedelta_field_overload(
                     rhs.attr
                 )(rhs_type)
-                return self._replace_func(impl, [rhs.value])
+                return replace_func(self, impl, [rhs.value])
 
         # replace arr.dtype for dt64 since PA replaces with
         # np.datetime64[ns] which invalid, TODO: fix PA
@@ -451,7 +452,7 @@ class SeriesPass:
             overload_name = "overload_series_" + rhs.attr
             overload_func = getattr(bodo.hiframes.series_impl, overload_name)
             impl = overload_func(rhs_type)
-            return self._replace_func(impl, [rhs.value])
+            return replace_func(self, impl, [rhs.value])
 
         if (
             isinstance(
@@ -474,24 +475,24 @@ class SeriesPass:
             return nodes
 
         if isinstance(rhs_type, RangeIndexType) and rhs.attr == "values":
-            return self._replace_func(
-                lambda A: bodo.utils.conversion.coerce_to_ndarray(A), [rhs.value]
+            return replace_func(
+                self, lambda A: bodo.utils.conversion.coerce_to_ndarray(A), [rhs.value]
             )
 
         if isinstance(rhs_type, DatetimeIndexType):
             # TODO: test this inlining
             if rhs.attr in bodo.hiframes.pd_timestamp_ext.date_fields:
                 impl = bodo.hiframes.pd_index_ext.gen_dti_field_impl(rhs.attr)
-                return self._replace_func(impl, [rhs.value])
+                return replace_func(self, impl, [rhs.value])
             if rhs.attr == "date":
                 impl = bodo.hiframes.pd_index_ext.overload_datetime_index_date(rhs_type)
-                return self._replace_func(impl, [rhs.value])
+                return replace_func(self, impl, [rhs.value])
 
         if isinstance(rhs_type, TimedeltaIndexType):
             # TODO: test this inlining
             if rhs.attr in bodo.hiframes.pd_timestamp_ext.timedelta_fields:
                 impl = bodo.hiframes.pd_index_ext.gen_tdi_field_impl(rhs.attr)
-                return self._replace_func(impl, [rhs.value])
+                return replace_func(self, impl, [rhs.value])
 
         if (
             isinstance(rhs_type, (SeriesIlocType, SeriesLocType, SeriesIatType))
@@ -533,7 +534,7 @@ class SeriesPass:
 
         if isinstance(typ1, CategoricalArray) and isinstance(typ2, types.StringLiteral):
             impl = bodo.hiframes.pd_categorical_ext.overload_cat_arr_eq_str(typ1, typ2)
-            return self._replace_func(impl, [arg1, arg2])
+            return replace_func(self, impl, [arg1, arg2])
 
         # both dt64
         if (
@@ -553,7 +554,7 @@ class SeriesPass:
                     S[i] = func(arr1[i], arr2[i])
                 return bodo.hiframes.pd_series_ext.init_series(S, index)
 
-            return self._replace_func(impl, [arg1, arg2])
+            return replace_func(self, impl, [arg1, arg2])
 
         # inline overloaded
         # TODO: use overload inlining when available
@@ -569,20 +570,20 @@ class SeriesPass:
                 impl = bodo.hiframes.pd_index_ext.overload_datetime_index_sub(
                     typ1, typ2
                 )
-                return self._replace_func(impl, [arg1, arg2])
+                return replace_func(self, impl, [arg1, arg2])
 
             if typ1 == datetime_date_array_type and typ2 == datetime_timedelta_type:
                 impl = bodo.hiframes.datetime_date_ext.overload_datetime_date_arr_sub(
                     typ1, typ2
                 )
-                return self._replace_func(impl, [arg1, arg2])
+                return replace_func(self, impl, [arg1, arg2])
 
             # Series(dt64) - Series(dt64)
             if is_dt64_series_typ(typ1) and is_dt64_series_typ(typ2):
                 impl = bodo.hiframes.series_dt_impl.create_bin_op_overload(rhs.fn)(
                     typ1, typ2
                 )
-                return self._replace_func(impl, [arg1, arg2])
+                return replace_func(self, impl, [arg1, arg2])
 
             # series(dt64) - (timestamp/datetime.timedelta/datetime.datetime/series(timedelta64))
             # or (timestamp or datetime.datetime) - series(dt64)
@@ -604,7 +605,7 @@ class SeriesPass:
                 impl = bodo.hiframes.series_dt_impl.create_bin_op_overload(rhs.fn)(
                     typ1, typ2
                 )
-                return self._replace_func(impl, [arg1, arg2])
+                return replace_func(self, impl, [arg1, arg2])
 
             # series(timedelta64) - datetime.timedelta
             # or datetime.timedelta - series(timedelta64)
@@ -614,7 +615,7 @@ class SeriesPass:
                 impl = bodo.hiframes.series_dt_impl.create_bin_op_overload(rhs.fn)(
                     typ1, typ2
                 )
-                return self._replace_func(impl, [arg1, arg2])
+                return replace_func(self, impl, [arg1, arg2])
 
         if rhs.fn == operator.add:
             # series(dt64) + (datetime.timedelta/series(timedelta64))
@@ -630,7 +631,7 @@ class SeriesPass:
                 impl = bodo.hiframes.series_dt_impl.create_bin_op_overload(rhs.fn)(
                     typ1, typ2
                 )
-                return self._replace_func(impl, [arg1, arg2])
+                return replace_func(self, impl, [arg1, arg2])
 
             # series(timedelta64) + datetime.timedelta
             # or datetime.timedelta + series(timedelta64)
@@ -640,11 +641,11 @@ class SeriesPass:
                 impl = bodo.hiframes.series_dt_impl.create_bin_op_overload(rhs.fn)(
                     typ1, typ2
                 )
-                return self._replace_func(impl, [arg1, arg2])
+                return replace_func(self, impl, [arg1, arg2])
 
             if typ1 == string_array_type or typ2 == string_array_type:
                 impl = bodo.libs.str_arr_ext.overload_string_array_add(typ1, typ2)
-                return self._replace_func(impl, [arg1, arg2])
+                return replace_func(self, impl, [arg1, arg2])
 
         # inline overload for comparisons
         if rhs.fn in (
@@ -660,7 +661,7 @@ class SeriesPass:
                 impl = bodo.hiframes.datetime_date_ext.create_cmp_op_overload(rhs.fn)(
                     typ1, typ2
                 )
-                return self._replace_func(impl, [arg1, arg2])
+                return replace_func(self, impl, [arg1, arg2])
 
             # series(timedelta) and timedelta
             if (
@@ -673,7 +674,7 @@ class SeriesPass:
                 impl = bodo.hiframes.series_dt_impl.create_cmp_op_overload(rhs.fn)(
                     typ1, typ2
                 )
-                return self._replace_func(impl, [arg1, arg2])
+                return replace_func(self, impl, [arg1, arg2])
 
             # series(dt64) comp ops with pandas.Timestamp type
             if (
@@ -686,7 +687,7 @@ class SeriesPass:
                 impl = bodo.hiframes.series_dt_impl.create_cmp_op_overload(rhs.fn)(
                     typ1, typ2
                 )
-                return self._replace_func(impl, [arg1, arg2])
+                return replace_func(self, impl, [arg1, arg2])
 
             # series(dt64) comp ops with string type
             if (
@@ -705,7 +706,7 @@ class SeriesPass:
                 impl = bodo.hiframes.series_dt_impl.create_cmp_op_overload(rhs.fn)(
                     typ1, typ2
                 )
-                return self._replace_func(impl, [arg1, arg2])
+                return replace_func(self, impl, [arg1, arg2])
 
             # series(dt64) comp ops with dt64 type
             if (is_dt64_series_typ(typ1) and typ2 == types.NPDatetime("ns")) or (
@@ -714,7 +715,7 @@ class SeriesPass:
                 impl = bodo.hiframes.series_dt_impl.create_cmp_op_overload(rhs.fn)(
                     typ1, typ2
                 )
-                return self._replace_func(impl, [arg1, arg2])
+                return replace_func(self, impl, [arg1, arg2])
 
             # string comparison with DatetimeIndex
             if (
@@ -727,35 +728,35 @@ class SeriesPass:
                 impl = bodo.hiframes.pd_index_ext.overload_binop_dti_str(rhs.fn)(
                     typ1, typ2
                 )
-                return self._replace_func(impl, [arg1, arg2])
+                return replace_func(self, impl, [arg1, arg2])
 
         if rhs.fn in numba.core.typing.npydecl.NumpyRulesArrayOperator._op_map.keys() and any(
             isinstance(t, IntegerArrayType) for t in (typ1, typ2)
         ):
             overload_func = bodo.libs.int_arr_ext.create_op_overload(rhs.fn, 2)
             impl = overload_func(typ1, typ2)
-            return self._replace_func(impl, [arg1, arg2])
+            return replace_func(self, impl, [arg1, arg2])
 
         if rhs.fn in numba.core.typing.npydecl.NumpyRulesInplaceArrayOperator._op_map.keys() and any(
             isinstance(t, IntegerArrayType) for t in (typ1, typ2)
         ):
             overload_func = bodo.libs.int_arr_ext.create_op_overload(rhs.fn, 2)
             impl = overload_func(typ1, typ2)
-            return self._replace_func(impl, [arg1, arg2])
+            return replace_func(self, impl, [arg1, arg2])
 
         if rhs.fn in numba.core.typing.npydecl.NumpyRulesArrayOperator._op_map.keys() and any(
             t == boolean_array for t in (typ1, typ2)
         ):
             overload_func = bodo.libs.bool_arr_ext.create_op_overload(rhs.fn, 2)
             impl = overload_func(typ1, typ2)
-            return self._replace_func(impl, [arg1, arg2])
+            return replace_func(self, impl, [arg1, arg2])
 
         if rhs.fn in numba.core.typing.npydecl.NumpyRulesInplaceArrayOperator._op_map.keys() and any(
             t == boolean_array for t in (typ1, typ2)
         ):
             overload_func = bodo.libs.bool_arr_ext.create_op_overload(rhs.fn, 2)
             impl = overload_func(typ1, typ2)
-            return self._replace_func(impl, [arg1, arg2])
+            return replace_func(self, impl, [arg1, arg2])
 
         if not (isinstance(typ1, SeriesType) or isinstance(typ2, SeriesType)):
             return [assign]
@@ -763,14 +764,14 @@ class SeriesPass:
         if rhs.fn in bodo.hiframes.pd_series_ext.series_binary_ops:
             overload_func = bodo.hiframes.series_impl.create_binary_op_overload(rhs.fn)
             impl = overload_func(typ1, typ2)
-            return self._replace_func(impl, [arg1, arg2])
+            return replace_func(self, impl, [arg1, arg2])
 
         if rhs.fn in bodo.hiframes.pd_series_ext.series_inplace_binary_ops:
             overload_func = bodo.hiframes.series_impl.create_inplace_binary_op_overload(
                 rhs.fn
             )
             impl = overload_func(typ1, typ2)
-            return self._replace_func(impl, [arg1, arg2])
+            return replace_func(self, impl, [arg1, arg2])
 
         return [assign]
 
@@ -782,19 +783,19 @@ class SeriesPass:
             assert rhs.fn in bodo.hiframes.pd_series_ext.series_unary_ops
             overload_func = bodo.hiframes.series_impl.create_unary_op_overload(rhs.fn)
             impl = overload_func(typ)
-            return self._replace_func(impl, [arg])
+            return replace_func(self, impl, [arg])
 
         if isinstance(typ, IntegerArrayType):
             assert rhs.fn in (operator.neg, operator.invert, operator.pos)
             overload_func = bodo.libs.int_arr_ext.create_op_overload(rhs.fn, 1)
             impl = overload_func(typ)
-            return self._replace_func(impl, [arg])
+            return replace_func(self, impl, [arg])
 
         if typ == boolean_array:
             assert rhs.fn in (operator.neg, operator.invert, operator.pos)
             overload_func = bodo.libs.bool_arr_ext.create_op_overload(rhs.fn, 1)
             impl = overload_func(typ)
-            return self._replace_func(impl, [arg])
+            return replace_func(self, impl, [arg])
 
         return [assign]
 
@@ -847,12 +848,12 @@ class SeriesPass:
         if fdef == ("apply_null_mask", "bodo.libs.int_arr_ext"):
             in_typs = tuple(self.typemap[a.name] for a in rhs.args)
             impl = bodo.libs.int_arr_ext.apply_null_mask.py_func(*in_typs)
-            return self._replace_func(impl, rhs.args)
+            return replace_func(self, impl, rhs.args)
 
         if fdef == ("merge_bitmaps", "bodo.libs.int_arr_ext"):
             in_typs = tuple(self.typemap[a.name] for a in rhs.args)
             impl = bodo.libs.int_arr_ext.merge_bitmaps.py_func(*in_typs)
-            return self._replace_func(impl, rhs.args)
+            return replace_func(self, impl, rhs.args)
 
         if fdef == ("get_int_arr_data", "bodo.libs.int_arr_ext"):
             var_def = guard(get_definition, self.func_ir, rhs.args[0])
@@ -895,7 +896,8 @@ class SeriesPass:
             impl = getattr(bodo.libs.int_arr_ext, "overload_int_arr_" + func_name)(
                 *arg_typs, **kw_typs
             )
-            return self._replace_func(
+            return replace_func(
+                self,
                 impl,
                 rhs.args,
                 pysig=numba.core.utils.pysignature(impl),
@@ -915,7 +917,8 @@ class SeriesPass:
             impl = getattr(bodo.libs.bool_arr_ext, "overload_bool_arr_" + func_name)(
                 *arg_typs, **kw_typs
             )
-            return self._replace_func(
+            return replace_func(
+                self,
                 impl,
                 rhs.args,
                 pysig=numba.core.utils.pysignature(impl),
@@ -944,7 +947,8 @@ class SeriesPass:
                     bodo.hiframes.series_str_impl, "overload_str_method_" + func_name
                 )(*arg_typs, **kw_typs)
 
-            return self._replace_func(
+            return replace_func(
+                self,
                 impl,
                 rhs.args,
                 pysig=numba.core.utils.pysignature(impl),
@@ -956,7 +960,8 @@ class SeriesPass:
         # TODO: min
         if fdef == ("_get_type_max_value", "bodo.transforms.series_pass"):
             if self.typemap[rhs.args[0].name] == types.DType(types.NPDatetime("ns")):
-                return self._replace_func(
+                return replace_func(
+                    self,
                     lambda: bodo.hiframes.pd_timestamp_ext.integer_to_dt64(
                         numba.cpython.builtins.get_type_max_value(
                             numba.core.types.uint64
@@ -964,8 +969,8 @@ class SeriesPass:
                     ),
                     [],
                 )
-            return self._replace_func(
-                lambda d: numba.cpython.builtins.get_type_max_value(d), rhs.args
+            return replace_func(
+                self, lambda d: numba.cpython.builtins.get_type_max_value(d), rhs.args
             )
 
         if fdef == ("h5_read_dummy", "bodo.io.h5_api"):
@@ -1069,7 +1074,7 @@ class SeriesPass:
             loc_vars = {}
             exec(func_text, {}, loc_vars)
             _h5_read_impl = loc_vars["_h5_read_impl"]
-            return self._replace_func(_h5_read_impl, rhs.args)
+            return replace_func(self, _h5_read_impl, rhs.args)
 
         if fdef == ("DatetimeIndex", "pandas"):
             return self._run_pd_DatetimeIndex(assign, assign.target, rhs)
@@ -1080,8 +1085,8 @@ class SeriesPass:
             impl = bodo.hiframes.pd_index_ext.pd_timedelta_index_overload(
                 *arg_typs, **kw_typs
             )
-            return self._replace_func(
-                impl, rhs.args, pysig=self.calltypes[rhs].pysig, kws=dict(rhs.kws)
+            return replace_func(
+                self, impl, rhs.args, pysig=self.calltypes[rhs].pysig, kws=dict(rhs.kws)
             )
 
         if fdef == ("Int64Index", "pandas"):
@@ -1090,8 +1095,8 @@ class SeriesPass:
             impl = bodo.hiframes.pd_index_ext.create_numeric_constructor(
                 pd.Int64Index, np.int64
             )(*arg_typs, **kw_typs)
-            return self._replace_func(
-                impl, rhs.args, pysig=self.calltypes[rhs].pysig, kws=dict(rhs.kws)
+            return replace_func(
+                self, impl, rhs.args, pysig=self.calltypes[rhs].pysig, kws=dict(rhs.kws)
             )
 
         if fdef == ("UInt64Index", "pandas"):
@@ -1100,8 +1105,8 @@ class SeriesPass:
             impl = bodo.hiframes.pd_index_ext.create_numeric_constructor(
                 pd.UInt64Index, np.uint64
             )(*arg_typs, **kw_typs)
-            return self._replace_func(
-                impl, rhs.args, pysig=self.calltypes[rhs].pysig, kws=dict(rhs.kws)
+            return replace_func(
+                self, impl, rhs.args, pysig=self.calltypes[rhs].pysig, kws=dict(rhs.kws)
             )
 
         if fdef == ("Float64Index", "pandas"):
@@ -1110,8 +1115,8 @@ class SeriesPass:
             impl = bodo.hiframes.pd_index_ext.create_numeric_constructor(
                 pd.Float64Index, np.float64
             )(*arg_typs, **kw_typs)
-            return self._replace_func(
-                impl, rhs.args, pysig=self.calltypes[rhs].pysig, kws=dict(rhs.kws)
+            return replace_func(
+                self, impl, rhs.args, pysig=self.calltypes[rhs].pysig, kws=dict(rhs.kws)
             )
 
         if fdef == ("Series", "pandas"):
@@ -1119,8 +1124,8 @@ class SeriesPass:
             kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
 
             impl = bodo.hiframes.pd_series_ext.pd_series_overload(*arg_typs, **kw_typs)
-            return self._replace_func(
-                impl, rhs.args, pysig=self.calltypes[rhs].pysig, kws=dict(rhs.kws)
+            return replace_func(
+                self, impl, rhs.args, pysig=self.calltypes[rhs].pysig, kws=dict(rhs.kws)
             )
 
         if fdef == ("concat", "bodo.libs.array_kernels"):
@@ -1166,14 +1171,15 @@ class SeriesPass:
             if isinstance(arr_typ, types.Array):
                 arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
                 impl = bodo.libs.array_kernels.overload_isna(*arg_typs)
-                return self._replace_func(impl, rhs.args)
+                return replace_func(self, impl, rhs.args)
             return [assign]
 
         if fdef == ("gen_na_array", "bodo.libs.array_kernels"):
             arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
             kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
             impl = bodo.libs.array_kernels.overload_gen_na_array(*arg_typs, **kw_typs)
-            return self._replace_func(
+            return replace_func(
+                self,
                 impl,
                 rhs.args,
                 pysig=numba.core.utils.pysignature(impl),
@@ -1274,7 +1280,8 @@ class SeriesPass:
             kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
 
             impl = bodo.libs.str_arr_ext.overload_str_arr_astype(*arg_typs, **kw_typs)
-            return self._replace_func(
+            return replace_func(
+                self,
                 impl,
                 rhs.args,
                 pysig=numba.core.utils.pysignature(impl),
@@ -1290,8 +1297,11 @@ class SeriesPass:
             if is_series_type(self.typemap[bool_arr.name]):
                 bool_arr = self._get_series_data(bool_arr, nodes)
 
-            return self._replace_func(
-                series_kernels._column_filter_impl, [in_arr, bool_arr], pre_nodes=nodes
+            return replace_func(
+                self,
+                series_kernels._column_filter_impl,
+                [in_arr, bool_arr],
+                pre_nodes=nodes,
             )
 
         if fdef == ("get_itertuples", "bodo.hiframes.dataframe_impl"):
@@ -1437,7 +1447,8 @@ class SeriesPass:
                     *arg_typs, **kw_typs
                 )
             stub = lambda dti, axis=None, skipna=True: None  # pragma: no cover
-            return self._replace_func(
+            return replace_func(
+                self,
                 impl,
                 rhs.args,
                 pysig=numba.core.utils.pysignature(stub),
@@ -1460,8 +1471,10 @@ class SeriesPass:
         if fdef == ("len", "builtins") and is_series_type(
             self.typemap[rhs.args[0].name]
         ):
-            return self._replace_func(
-                lambda S: len(bodo.hiframes.pd_series_ext.get_series_data(S)), rhs.args
+            return replace_func(
+                self,
+                lambda S: len(bodo.hiframes.pd_series_ext.get_series_data(S)),
+                rhs.args,
             )
 
         # XXX sometimes init_dataframe() can't be resolved in dataframe_pass
@@ -1504,8 +1517,8 @@ class SeriesPass:
             kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
             overload_func = getattr(bodo.utils.conversion, "overload_" + func_name)
             impl = overload_func(*arg_typs, **kw_typs)
-            return self._replace_func(
-                impl, rhs.args, pysig=self.calltypes[rhs].pysig, kws=dict(rhs.kws)
+            return replace_func(
+                self, impl, rhs.args, pysig=self.calltypes[rhs].pysig, kws=dict(rhs.kws)
             )
 
         if func_mod == "bodo.libs.distributed_api" and func_name in (
@@ -1526,7 +1539,7 @@ class SeriesPass:
                     out[i] = arr[i] in vals
                 return bodo.hiframes.pd_series_ext.init_series(out, index)
 
-            return self._replace_func(impl, rhs.args)
+            return replace_func(self, impl, rhs.args)
 
         if fdef == ("val_notin_dummy", "bodo.hiframes.pd_dataframe_ext"):
 
@@ -1544,7 +1557,7 @@ class SeriesPass:
                     out[i] = not _in
                 return bodo.hiframes.pd_series_ext.init_series(out, index)
 
-            return self._replace_func(impl, rhs.args)
+            return replace_func(self, impl, rhs.args)
 
         # inline np.where() for 3 arg case with 1D input
         if (
@@ -1554,8 +1567,8 @@ class SeriesPass:
             arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
             kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
             impl = bodo.hiframes.series_impl.overload_np_where(*arg_typs, **kw_typs)
-            return self._replace_func(
-                impl, rhs.args, pysig=self.calltypes[rhs].pysig, kws=dict(rhs.kws)
+            return replace_func(
+                self, impl, rhs.args, pysig=self.calltypes[rhs].pysig, kws=dict(rhs.kws)
             )
 
         # dummy count loop to support len of group in agg UDFs
@@ -1567,16 +1580,20 @@ class SeriesPass:
                     c += 1
                 return c
 
-            return self._replace_func(
-                impl_agg_c, rhs.args, pysig=self.calltypes[rhs].pysig, kws=dict(rhs.kws)
+            return replace_func(
+                self,
+                impl_agg_c,
+                rhs.args,
+                pysig=self.calltypes[rhs].pysig,
+                kws=dict(rhs.kws),
             )
 
         if fdef == ("dt64_arr_sub", "bodo.hiframes.series_impl"):
             arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
             kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
             impl = bodo.hiframes.series_impl.overload_dt64_arr_sub(*arg_typs, **kw_typs)
-            return self._replace_func(
-                impl, rhs.args, pysig=self.calltypes[rhs].pysig, kws=dict(rhs.kws)
+            return replace_func(
+                self, impl, rhs.args, pysig=self.calltypes[rhs].pysig, kws=dict(rhs.kws)
             )
 
         # convert Series to Array for unhandled calls
@@ -1608,7 +1625,8 @@ class SeriesPass:
             nodes.append(ir.Assign(rhs, new_lhs, rhs.loc))
             index = self._get_series_index(series_arg, nodes)
             name = self._get_series_name(series_arg, nodes)
-            return self._replace_func(
+            return replace_func(
+                self,
                 lambda A, index, name: bodo.hiframes.pd_series_ext.init_series(
                     A, index, name
                 ),
@@ -1628,7 +1646,7 @@ class SeriesPass:
             n_args = len(rhs.args)
             overload_func = bodo.libs.bool_arr_ext.create_op_overload(func, n_args)
             impl = overload_func(*tuple(self.typemap[a.name] for a in rhs.args))
-            return self._replace_func(impl, rhs.args)
+            return replace_func(self, impl, rhs.args)
 
         if func in bodo.hiframes.pd_series_ext.series_binary_ops:
             expr = ir.Expr.binop(func, rhs.args[0], rhs.args[1], rhs.loc)
@@ -1668,7 +1686,7 @@ class SeriesPass:
                 return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
             # impl.__globals__['_ufunc'] = np_ufunc
-            return self._replace_func(impl, args, extra_globals={"_ufunc": np_ufunc})
+            return replace_func(self, impl, args, extra_globals={"_ufunc": np_ufunc})
         elif np_ufunc.nin == 2:
             if isinstance(self.typemap[args[0].name], SeriesType):
 
@@ -1680,8 +1698,8 @@ class SeriesPass:
                     out_arr = _ufunc(arr, other_arr)
                     return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
-                return self._replace_func(
-                    impl, args, extra_globals={"_ufunc": np_ufunc}
+                return replace_func(
+                    self, impl, args, extra_globals={"_ufunc": np_ufunc}
                 )
             else:
                 assert isinstance(self.typemap[args[1].name], SeriesType)
@@ -1694,8 +1712,8 @@ class SeriesPass:
                     out_arr = _ufunc(arr, other_arr)
                     return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
-                return self._replace_func(
-                    impl, args, extra_globals={"_ufunc": np_ufunc}
+                return replace_func(
+                    self, impl, args, extra_globals={"_ufunc": np_ufunc}
                 )
         else:
             raise ValueError("Unsupported numpy ufunc {}".format(ufunc_name))
@@ -1705,7 +1723,7 @@ class SeriesPass:
         overload_func = bodo.libs.int_arr_ext.create_op_overload(np_ufunc, np_ufunc.nin)
         in_typs = tuple(self.typemap[a.name] for a in args)
         impl = overload_func(*in_typs)
-        return self._replace_func(impl, args)
+        return replace_func(self, impl, args)
 
     def _handle_ufuncs_bool_arr(self, ufunc_name, args):
         np_ufunc = getattr(np, ufunc_name)
@@ -1714,7 +1732,7 @@ class SeriesPass:
         )
         in_typs = tuple(self.typemap[a.name] for a in args)
         impl = overload_func(*in_typs)
-        return self._replace_func(impl, args)
+        return replace_func(self, impl, args)
 
     def _run_call_series(self, assign, lhs, rhs, series_var, func_name):
         if func_name in ("count", "fillna", "sort_values"):
@@ -1725,7 +1743,8 @@ class SeriesPass:
                 bodo.hiframes.series_impl, "overload_series_" + func_name
             )
             impl = overload_func(*arg_typs, **kw_typs)
-            return self._replace_func(
+            return replace_func(
+                self,
                 impl,
                 rhs.args,
                 pysig=numba.core.utils.pysignature(impl),
@@ -1741,7 +1760,8 @@ class SeriesPass:
                 op
             )
             impl = overload_func(*arg_typs, **kw_typs)
-            return self._replace_func(
+            return replace_func(
+                self,
                 impl,
                 rhs.args,
                 pysig=numba.core.utils.pysignature(impl),
@@ -1807,8 +1827,8 @@ class SeriesPass:
             func = lambda A, B, name: bodo.hiframes.pd_series_ext.init_series(
                 A, bodo.utils.conversion.convert_to_index(B), name
             ).sort_values(ascending=False)
-            return self._replace_func(
-                func, [out_data_var, out_key_var, name], pre_nodes=nodes
+            return replace_func(
+                self, func, [out_data_var, out_key_var, name], pre_nodes=nodes
             )
 
         # astype with string output
@@ -1819,7 +1839,7 @@ class SeriesPass:
             if is_str_series_typ(self.typemap[lhs.name]) and is_str_series_typ(
                 self.typemap[series_var.name]
             ):
-                return self._replace_func(lambda a: a, [series_var])
+                return replace_func(self, lambda a: a, [series_var])
 
             rhs.args.insert(0, series_var)
             arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
@@ -1829,7 +1849,8 @@ class SeriesPass:
             )
             impl = overload_func(*arg_typs, **kw_typs)
             stub = lambda S, dtype, copy=True, errors="raise": None
-            return self._replace_func(
+            return replace_func(
+                self,
                 impl,
                 rhs.args,
                 pysig=numba.core.utils.pysignature(stub),
@@ -1929,7 +1950,8 @@ class SeriesPass:
         )
 
         args = [data, index, name] + extra_args
-        return self._replace_func(
+        return replace_func(
+            self,
             f,
             args,
             extra_globals={
@@ -1956,7 +1978,8 @@ class SeriesPass:
                 bodo.hiframes.pd_index_ext, "overload_index_" + func_name
             )
             impl = overload_func(*arg_typs, **kw_typs)
-            return self._replace_func(
+            return replace_func(
+                self,
                 impl,
                 rhs.args,
                 pysig=numba.core.utils.pysignature(impl),
@@ -1990,7 +2013,7 @@ class SeriesPass:
                 )
                 return cov / (a_std * b_std)
 
-            return self._replace_func(rolling_corr_impl, rhs.args, pre_nodes=nodes)
+            return replace_func(self, rolling_corr_impl, rhs.args, pre_nodes=nodes)
         if func_name == "rolling_cov":
 
             def rolling_cov_impl(arr, other, w, center):  # pragma: no cover
@@ -2014,7 +2037,7 @@ class SeriesPass:
                 bias_adj = count / (count - ddof)
                 return (mean_XtY - mean_X * mean_Y) * bias_adj
 
-            return self._replace_func(rolling_cov_impl, rhs.args, pre_nodes=nodes)
+            return replace_func(self, rolling_cov_impl, rhs.args, pre_nodes=nodes)
         # replace apply function with dispatcher obj, now the type is known
         if func_name == "rolling_fixed" and is_const_func_type(
             self.typemap[rhs.args[4].name]
@@ -2126,7 +2149,8 @@ class SeriesPass:
         if not use_nan:
             func_args.append(fill_var)
         func_args += [index, name]
-        return self._replace_func(
+        return replace_func(
+            self,
             f,
             func_args,
             extra_globals={
@@ -2176,8 +2200,8 @@ class SeriesPass:
                 f = lambda a, b, w, c, i, n: bodo.hiframes.pd_series_ext.init_series(
                     bodo.hiframes.rolling.rolling_corr(a, b, w, c), i, n
                 )
-            return self._replace_func(
-                f, [data, other, window, center, index, name], pre_nodes=nodes
+            return replace_func(
+                self, f, [data, other, window, center, index, name], pre_nodes=nodes
             )
         elif func_name == "apply":
             func_node = guard(get_definition, self.func_ir, rhs.args[0])
@@ -2195,8 +2219,8 @@ class SeriesPass:
             )
 
         args = [data, window, center, index, name]
-        return self._replace_func(
-            f, args, pre_nodes=nodes, extra_globals={"_func": func_global}
+        return replace_func(
+            self, f, args, pre_nodes=nodes, extra_globals={"_func": func_global}
         )
 
     def _handle_rolling_apply_func(
@@ -2264,8 +2288,8 @@ class SeriesPass:
         impl = bodo.hiframes.pd_index_ext.pd_datetimeindex_overload(
             *arg_typs, **kw_typs
         )
-        return self._replace_func(
-            impl, rhs.args, pysig=self.calltypes[rhs].pysig, kws=dict(rhs.kws)
+        return replace_func(
+            self, impl, rhs.args, pysig=self.calltypes[rhs].pysig, kws=dict(rhs.kws)
         )
 
     def _handle_string_array_expr(self, assign, rhs):  # pragma: no cover
@@ -2294,7 +2318,7 @@ class SeriesPass:
                 f = bodo.libs.str_arr_ext.create_binary_op_overload(rhs.fn)(
                     self.typemap[rhs.lhs.name], self.typemap[rhs.rhs.name]
                 )
-                return self._replace_func(f, [arg1, arg2], pre_nodes=nodes)
+                return replace_func(self, f, [arg1, arg2], pre_nodes=nodes)
 
             arg1_access = "A"
             arg2_access = "B"
@@ -2326,7 +2350,7 @@ class SeriesPass:
             exec(func_text, {}, loc_vars)
             f = loc_vars["f"]
             args = [arg1, arg2, index_var]
-            return self._replace_func(f, args, pre_nodes=nodes)
+            return replace_func(self, f, args, pre_nodes=nodes)
 
         return None
 
@@ -2373,7 +2397,7 @@ class SeriesPass:
             index = bodo.hiframes.pd_index_ext.init_range_index(0, len(arr), 1, None)
             return bodo.hiframes.pd_series_ext.init_series(arr, index)
 
-        return self._replace_func(impl, [arr_tup], pre_nodes=nodes)
+        return replace_func(self, impl, [arr_tup], pre_nodes=nodes)
 
     def _handle_h5_write(self, dset, index, arr):
         if index != slice(None):
@@ -2494,56 +2518,6 @@ class SeriesPass:
             self,
         )
         return nodes[-1].target
-
-    def _replace_func(
-        self,
-        func,
-        args,
-        const=False,
-        pre_nodes=None,
-        extra_globals=None,
-        pysig=None,
-        kws=None,
-    ):
-        glbls = {"numba": numba, "np": np, "bodo": bodo, "pd": pd}
-        if extra_globals is not None:
-            glbls.update(extra_globals)
-        func.__globals__.update(glbls)
-
-        # create explicit arg variables for defaults if func has any
-        # XXX: inine_closure_call() can't handle defaults properly
-        if pysig is not None:
-            pre_nodes = [] if pre_nodes is None else pre_nodes
-            scope = next(iter(self.func_ir.blocks.values())).scope
-            loc = scope.loc
-
-            def normal_handler(index, param, default):
-                return default
-
-            def default_handler(index, param, default):
-                d_var = ir.Var(scope, mk_unique_var("defaults"), loc)
-                self.typemap[d_var.name] = numba.typeof(default)
-                node = ir.Assign(ir.Const(default, loc), d_var, loc)
-                pre_nodes.append(node)
-                return d_var
-
-            # TODO: stararg needs special handling?
-            args = numba.core.typing.fold_arguments(
-                pysig, args, kws, normal_handler, default_handler, normal_handler
-            )
-
-        arg_typs = tuple(self.typemap[v.name] for v in args)
-
-        if const:
-            new_args = []
-            for i, arg in enumerate(args):
-                val = guard(find_const, self.func_ir, arg)
-                if val:
-                    new_args.append(types.literal(val))
-                else:
-                    new_args.append(arg_typs[i])
-            arg_typs = tuple(new_args)
-        return ReplaceFunc(func, arg_typs, args, glbls, pre_nodes)
 
     def _convert_series_calltype(self, call):
         sig = self.calltypes[call]

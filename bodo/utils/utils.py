@@ -95,10 +95,6 @@ numba.core.errors.error_extras = {
 }
 
 
-ReplaceFunc = namedtuple(
-    "ReplaceFunc", ["func", "arg_types", "args", "glbls", "pre_nodes"]
-)
-
 np_alloc_callnames = ("empty", "zeros", "ones", "full")
 
 

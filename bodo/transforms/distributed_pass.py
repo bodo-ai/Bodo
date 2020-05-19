@@ -69,7 +69,6 @@ from bodo.utils.utils import (
     is_np_array_typ,
     find_build_tuple,
     debug_prints,
-    ReplaceFunc,
     gen_getitem,
     is_call,
     is_assign,
@@ -780,7 +779,7 @@ class DistributedPass:
             if self.typemap[rhs.args[0].name] == types.DType(types.NPDatetime("ns")):
                 # XXX: not using replace since init block of parfor can't be
                 # processed. test_series_idxmin
-                # return self._replace_func(
+                # return replace_func(self,
                 #     lambda: bodo.hiframes.pd_timestamp_ext.integer_to_dt64(
                 #         numba.cpython.builtins.get_type_max_value(
                 #             numba.core.types.int64)), [])
