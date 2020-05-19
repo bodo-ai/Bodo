@@ -228,6 +228,12 @@ class BodoDistributedPass(FunctionPass):
             state.flags,
         )
         dist_pass.run()
+        # Update the type annotation object for this function since the IR has changed
+        # in our passes. Numba initializes the object after type inference so the
+        # 'blocks' attribute is outdated. This can cause problems for caching during
+        # serialization of type annotation object.
+        # TODO: fix Numba to avoid this issue
+        state.type_annotation.blocks = state.func_ir.blocks
         return True
 
 
