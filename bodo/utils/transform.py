@@ -359,7 +359,12 @@ def get_const_value_inner(func_ir, var, arg_types=None, typemap=None):
 
     # list() call
     if call_name == ("list", "builtins"):
-        return list(get_const_value_inner(func_ir, var_def.args[0], arg_types, typemap))
+        values = get_const_value_inner(func_ir, var_def.args[0], arg_types, typemap)
+        # sort set values when converting to list to have consistent order across
+        # processors (e.g. important for join keys, see test_merge_multi_int_key)
+        if isinstance(values, set):
+            values = sorted(values)
+        return list(values)
 
     # set() call
     if call_name == ("set", "builtins"):
