@@ -26,6 +26,8 @@ from numba.core.ir_utils import (
     remove_dead_extensions,
     has_no_side_effect,
     analysis,
+    visit_vars_extensions,
+    visit_vars_inner,
 )
 from numba.extending import lower_builtin
 import numba.np.linalg
@@ -99,6 +101,72 @@ if (
 
 
 numba.core.compiler.run_frontend = run_frontend
+
+
+# replace visit_vars_stmt of Numba to handle vararg attribute of Print nodes
+def visit_vars_stmt(stmt, callback, cbdata):
+    # let external calls handle stmt if type matches
+    for t, f in visit_vars_extensions.items():
+        if isinstance(stmt, t):
+            f(stmt, callback, cbdata)
+            return
+    if isinstance(stmt, ir.Assign):
+        stmt.target = visit_vars_inner(stmt.target, callback, cbdata)
+        stmt.value = visit_vars_inner(stmt.value, callback, cbdata)
+    elif isinstance(stmt, ir.Arg):
+        stmt.name = visit_vars_inner(stmt.name, callback, cbdata)
+    elif isinstance(stmt, ir.Return):
+        stmt.value = visit_vars_inner(stmt.value, callback, cbdata)
+    elif isinstance(stmt, ir.Raise):
+        stmt.exception = visit_vars_inner(stmt.exception, callback, cbdata)
+    elif isinstance(stmt, ir.Branch):
+        stmt.cond = visit_vars_inner(stmt.cond, callback, cbdata)
+    elif isinstance(stmt, ir.Jump):
+        stmt.target = visit_vars_inner(stmt.target, callback, cbdata)
+    elif isinstance(stmt, ir.Del):
+        # Because Del takes only a var name, we make up by
+        # constructing a temporary variable.
+        var = ir.Var(None, stmt.value, stmt.loc)
+        var = visit_vars_inner(var, callback, cbdata)
+        stmt.value = var.name
+    elif isinstance(stmt, ir.DelAttr):
+        stmt.target = visit_vars_inner(stmt.target, callback, cbdata)
+        stmt.attr = visit_vars_inner(stmt.attr, callback, cbdata)
+    elif isinstance(stmt, ir.SetAttr):
+        stmt.target = visit_vars_inner(stmt.target, callback, cbdata)
+        stmt.attr = visit_vars_inner(stmt.attr, callback, cbdata)
+        stmt.value = visit_vars_inner(stmt.value, callback, cbdata)
+    elif isinstance(stmt, ir.DelItem):
+        stmt.target = visit_vars_inner(stmt.target, callback, cbdata)
+        stmt.index = visit_vars_inner(stmt.index, callback, cbdata)
+    elif isinstance(stmt, ir.StaticSetItem):
+        stmt.target = visit_vars_inner(stmt.target, callback, cbdata)
+        stmt.index_var = visit_vars_inner(stmt.index_var, callback, cbdata)
+        stmt.value = visit_vars_inner(stmt.value, callback, cbdata)
+    elif isinstance(stmt, ir.SetItem):
+        stmt.target = visit_vars_inner(stmt.target, callback, cbdata)
+        stmt.index = visit_vars_inner(stmt.index, callback, cbdata)
+        stmt.value = visit_vars_inner(stmt.value, callback, cbdata)
+    elif isinstance(stmt, ir.Print):
+        stmt.args = [visit_vars_inner(x, callback, cbdata) for x in stmt.args]
+        # Bodo change: support vararg for Print nodes
+        stmt.vararg = visit_vars_inner(stmt.vararg, callback, cbdata)
+    else:
+        # TODO: raise NotImplementedError("no replacement for IR node: ", stmt)
+        pass
+    return
+
+
+# make sure visit_vars_stmt hasn't changed before replacing it
+lines = inspect.getsource(numba.core.ir_utils.visit_vars_stmt)
+if (
+    hashlib.sha256(lines.encode()).hexdigest()
+    != "52b7b645ba65c35f3cf564f936e113261db16a2dff1e80fbee2459af58844117"
+):  # pragma: no cover
+    warnings.warn("numba.core.ir_utils.visit_vars_stmt has changed")
+
+
+numba.core.ir_utils.visit_vars_stmt = visit_vars_stmt
 
 
 # The code below is copied from Numba and modified to handle aliases with tuple values.
