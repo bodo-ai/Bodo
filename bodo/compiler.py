@@ -50,7 +50,19 @@ if config._has_h5py:
     from bodo.io import h5
 
 
+# avoid Numba warning when there is no Parfor in the IR
 numba.core.config.DISABLE_PERFORMANCE_WARNINGS = 1
+
+
+# avoid Numba warning for UDFs: "First-class function type feature is experimental"
+from numba.core.errors import (
+    NumbaExperimentalFeatureWarning,
+    NumbaPendingDeprecationWarning,
+)
+
+warnings.simplefilter("ignore", category=NumbaExperimentalFeatureWarning)
+# avoid Numba warning when there is a list argument to JIT function
+warnings.simplefilter("ignore", category=NumbaPendingDeprecationWarning)
 
 
 # global flag for whether all Bodo functions should be inlined
