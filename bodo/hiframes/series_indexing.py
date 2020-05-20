@@ -39,8 +39,10 @@ from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.hiframes.pd_timestamp_ext import (
     pandas_timestamp_type,
     convert_datetime64_to_timestamp,
+    convert_numpy_timedelta64_to_datetime_timedelta,
     integer_to_dt64,
 )
+from bodo.hiframes.datetime_timedelta_ext import datetime_timedelta_type
 from bodo.hiframes.pd_index_ext import NumericIndexType, RangeIndexType
 from bodo.utils.typing import is_list_like_index_type, BodoError
 
@@ -100,6 +102,12 @@ def overload_series_iat_getitem(I, idx):
                 np.int64(bodo.hiframes.pd_series_ext.get_series_data(I._obj)[idx])
             )
 
+        # box dt64 to datetime.timedelta
+        if I.stype.dtype == types.NPTimedelta("ns"):
+            return lambda I, idx: convert_numpy_timedelta64_to_datetime_timedelta(
+                bodo.hiframes.pd_series_ext.get_series_data(I._obj)[idx]
+            )
+
         # TODO: box timedelta64, datetime.datetime/timedelta
         return lambda I, idx: bodo.hiframes.pd_series_ext.get_series_data(I._obj)[idx]
 
@@ -119,6 +127,15 @@ def overload_series_iat_setitem(I, idx, val):
 
             def impl_dt(I, idx, val):  # pragma: no cover
                 s = integer_to_dt64(val.value)
+                bodo.hiframes.pd_series_ext.get_series_data(I._obj)[idx] = s
+
+            return impl_dt
+
+        if I.stype.dtype == types.NPTimedelta("ns") and val == datetime_timedelta_type:
+
+            def impl_dt(I, idx, val):  # pragma: no cover
+                val_b = bodo.hiframes.datetime_timedelta_ext._to_nanoseconds(val)
+                s = bodo.hiframes.pd_timestamp_ext.integer_to_timedelta64(val_b)
                 bodo.hiframes.pd_series_ext.get_series_data(I._obj)[idx] = s
 
             return impl_dt
@@ -175,6 +192,13 @@ def overload_series_iloc(s):
 @overload(operator.getitem, no_unliteral=True)
 def overload_series_iloc_getitem(I, idx):
     if isinstance(I, SeriesIlocType):
+
+        # convert dt64 to datetime.timedelta
+        if I.stype.dtype == types.NPTimedelta("ns") and isinstance(idx, types.Integer):
+            return lambda I, idx: convert_numpy_timedelta64_to_datetime_timedelta(
+                bodo.hiframes.pd_series_ext.get_series_data(I._obj)[idx]
+            )
+
         # Integer case returns scalar
         if isinstance(types.unliteral(idx), types.Integer):
             # box dt64 to timestamp
@@ -237,6 +261,18 @@ def overload_series_iloc_setitem(I, idx, val):
 
                 def impl_dt(I, idx, val):  # pragma: no cover
                     s = integer_to_dt64(val.value)
+                    bodo.hiframes.pd_series_ext.get_series_data(I._obj)[idx] = s
+
+                return impl_dt
+
+            if (
+                I.stype.dtype == types.NPTimedelta("ns")
+                and val == datetime_timedelta_type
+            ):
+
+                def impl_dt(I, idx, val):  # pragma: no cover
+                    val_b = bodo.hiframes.datetime_timedelta_ext._to_nanoseconds(val)
+                    s = bodo.hiframes.pd_timestamp_ext.integer_to_timedelta64(val_b)
                     bodo.hiframes.pd_series_ext.get_series_data(I._obj)[idx] = s
 
                 return impl_dt
@@ -445,6 +481,15 @@ def overload_series_setitem(S, idx, val):
 
                 def impl_dt(S, idx, val):  # pragma: no cover
                     s = integer_to_dt64(val.value)
+                    bodo.hiframes.pd_series_ext.get_series_data(S)[idx] = s
+
+                return impl_dt
+
+            if S.dtype == types.NPTimedelta("ns") and val == datetime_timedelta_type:
+
+                def impl_dt(S, idx, val):  # pragma: no cover
+                    val_b = bodo.hiframes.datetime_timedelta_ext._to_nanoseconds(val)
+                    s = bodo.hiframes.pd_timestamp_ext.integer_to_timedelta64(val_b)
                     bodo.hiframes.pd_series_ext.get_series_data(S)[idx] = s
 
                 return impl_dt

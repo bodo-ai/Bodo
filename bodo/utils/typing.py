@@ -633,6 +633,12 @@ def scalar_to_array_type(t):
     if isinstance(t, (types.UnicodeType, types.StringLiteral)):
         return bodo.string_array_type
 
+    # decimal arrays are a little different
+    if isinstance(t, bodo.libs.decimal_arr_ext.Decimal128Type):
+        precision = t.precision
+        scale = t.scale
+        return bodo.libs.decimal_arr_ext.DecimalArrayType(precision, scale)
+
     # datetime.date values are stored as date arrays
     if t == bodo.hiframes.datetime_date_ext.datetime_date_type:
         return bodo.hiframes.datetime_date_ext.datetime_date_array_type

@@ -185,9 +185,9 @@ def test_series_copy_datetime_date():
         pd.Series(pd.date_range(start="2018-04-24", end="2018-04-29", periods=5).date),
         pd.Series(
             [
-                datetime.timedelta(1, 1, 1),
-                datetime.timedelta(2, 2, 2),
                 datetime.timedelta(3, 3, 3),
+                datetime.timedelta(2, 2, 2),
+                datetime.timedelta(1, 1, 1),
                 np.nan,
                 datetime.timedelta(5, 5, 5),
             ]
@@ -199,6 +199,8 @@ def test_series_copy_datetime_date():
             ),
             marks=pytest.mark.slow,
         ),
+        pd.Series([["a", "bc"], ["a"], ["aaa", "b", "cc"], None, ["xx", "yy"]]),
+        pd.Series([[1, 2], [3], [5, 4, 6], None, [-1, 3, 4]]),
         # TODO: timedelta
     ]
 )
@@ -339,6 +341,10 @@ def test_series_astype_numeric(numeric_series_val):
 
 
 def test_series_astype_str(series_val):
+    # not supported for list(string) and list(item)
+    if isinstance(series_val.values[0], list):
+        return
+
     # not supported for Datetime.date yet, TODO: support and test
     if isinstance(series_val.values[0], datetime.date):
         return
@@ -490,8 +496,8 @@ def test_series_iat_getitem(series_val):
 
 
 def test_series_iat_setitem(series_val):
-    # timedelta setitem not supported yet
-    if series_val.dtype == np.dtype("timedelta64[ns]"):
+    # not supported for list(string) and list(item)
+    if isinstance(series_val.values[0], list):
         return
 
     # string setitem not supported yet
@@ -559,8 +565,8 @@ def test_series_iloc_getitem_array_bool(series_val):
 
 
 def test_series_iloc_setitem_int(series_val):
-    # timedelta setitem not supported yet
-    if series_val.dtype == np.dtype("timedelta64[ns]"):
+    # not supported for list(string) and list(item)
+    if isinstance(series_val.values[0], list):
         return
 
     # string setitem not supported yet
@@ -583,8 +589,8 @@ def test_series_iloc_setitem_int(series_val):
 
 
 def test_series_iloc_setitem_slice(series_val):
-    # timedelta setitem not supported yet
-    if series_val.dtype == np.dtype("timedelta64[ns]"):
+    # not supported for list(string) and list(item)
+    if isinstance(series_val.values[0], list):
         return
 
     # string setitem not supported yet
@@ -593,7 +599,8 @@ def test_series_iloc_setitem_slice(series_val):
 
     val = series_val.iloc[0:3].values.copy()  # values to avoid alignment
     if series_val.hasnans:
-        val[0] = np.nan  # extra NA to keep dtype nullable like bool arr
+        # extra NA to keep dtype nullable like bool arr
+        val[0] = None
 
     def test_impl(S, val):
         S.iloc[1:4] = val
@@ -609,8 +616,8 @@ def test_series_iloc_setitem_slice(series_val):
 
 @pytest.mark.parametrize("idx", [[1, 3], np.array([1, 3]), pd.Series([1, 3])])
 def test_series_iloc_setitem_list_int(series_val, idx):
-    # timedelta setitem not supported yet
-    if series_val.dtype == np.dtype("timedelta64[ns]"):
+    # not supported for list(string) and list(item)
+    if isinstance(series_val.values[0], list):
         return
 
     # string setitem not supported yet
@@ -619,7 +626,8 @@ def test_series_iloc_setitem_list_int(series_val, idx):
 
     val = series_val.iloc[0:2].values.copy()  # values to avoid alignment
     if series_val.hasnans:
-        val[0] = np.nan  # extra NA to keep dtype nullable like bool arr
+        # extra NA to keep dtype nullable like bool arr
+        val[0] = None
 
     def test_impl(S, val, idx):
         S.iloc[idx] = val
@@ -702,8 +710,8 @@ def test_series_getitem_array_bool(series_val):
 
 
 def test_series_setitem_int(series_val):
-    # timedelta setitem not supported yet
-    if series_val.dtype == np.dtype("timedelta64[ns]"):
+    # not supported for list(string) and list(item)
+    if isinstance(series_val.values[0], list):
         return
 
     # string setitem not supported yet
@@ -729,8 +737,8 @@ def test_series_setitem_int(series_val):
 
 
 def test_series_setitem_slice(series_val):
-    # timedelta setitem not supported yet
-    if series_val.dtype == np.dtype("timedelta64[ns]"):
+    # not supported for list(string) and list(item)
+    if isinstance(series_val.values[0], list):
         return
 
     # string setitem not supported yet
@@ -739,7 +747,8 @@ def test_series_setitem_slice(series_val):
 
     val = series_val.iloc[0:3].values.copy()  # values to avoid alignment
     if series_val.hasnans:
-        val[0] = np.nan  # extra NA to keep dtype nullable like bool arr
+        # extra NA to keep dtype nullable like bool arr
+        val[0] = None
 
     def test_impl(S, val):
         S[1:4] = val
@@ -756,6 +765,10 @@ def test_series_setitem_slice(series_val):
 @pytest.mark.parametrize("idx", [[1, 4], np.array([1, 4]), pd.Series([1, 4])])
 @pytest.mark.parametrize("list_val_arg", [True, False])
 def test_series_setitem_list_int(series_val, idx, list_val_arg):
+    # not supported for list(string) and list(item)
+    if isinstance(series_val.values[0], list):
+        return
+
     # string setitem not supported yet
     if isinstance(series_val.iat[0], str):
         return
@@ -1411,6 +1424,10 @@ def test_series_min(series_val):
     if series_val.dtype == np.dtype("timedelta64[ns]"):
         return
 
+    # not supported for list(string) and list(item)
+    if isinstance(series_val.values[0], list):
+        return
+
     # not supported for Datetime.date yet, TODO: support and test
     if isinstance(series_val.values[0], datetime.date):
         return
@@ -1432,6 +1449,10 @@ def test_series_min(series_val):
 def test_series_max(series_val):
     # timedelta setitem not supported yet
     if series_val.dtype == np.dtype("timedelta64[ns]"):
+        return
+
+    # not supported for list(string) and list(item)
+    if isinstance(series_val.values[0], list):
         return
 
     # not supported for Datetime.date yet, TODO: support and test
@@ -1472,6 +1493,10 @@ def test_series_idxmin(series_val):
     if series_val.dtype == np.dtype("timedelta64[ns]"):
         return
 
+    # not supported for list(string) and list(item)
+    if isinstance(series_val.values[0], list):
+        return
+
     # not supported for Datetime.date yet, TODO: support and test
     if isinstance(series_val.values[0], datetime.date):
         return
@@ -1503,6 +1528,10 @@ def test_series_idxmin(series_val):
 def test_series_idxmax(series_val):
     # timedelta setitem not supported yet
     if series_val.dtype == np.dtype("timedelta64[ns]"):
+        return
+
+    # not supported for list(string) and list(item)
+    if isinstance(series_val.values[0], list):
         return
 
     # not supported for Datetime.date yet, TODO: support and test
@@ -1553,6 +1582,10 @@ def test_series_median(numeric_series_val):
 
 
 def test_series_head(series_val):
+    # not supported for list(string) and list(item)
+    if isinstance(series_val.values[0], list):
+        return
+
     def test_impl(S):
         return S.head(3)
 
@@ -1560,6 +1593,10 @@ def test_series_head(series_val):
 
 
 def test_series_tail(series_val):
+    # not supported for list(string) and list(item)
+    if isinstance(series_val.values[0], list):
+        return
+
     def test_impl(S):
         return S.tail(3)
 
@@ -1676,6 +1713,10 @@ def test_series_argsort_fast():
 
 @pytest.mark.slow
 def test_series_argsort(series_val):
+    # not supported for list(string) and list(item)
+    if isinstance(series_val.values[0], list):
+        return
+
     # not supported for Datetime.date yet, TODO: support and test
     if isinstance(series_val.values[0], datetime.date):
         return
@@ -1718,6 +1759,10 @@ def test_series_sort_values(series_val):
 
 @pytest.mark.parametrize("ignore_index", [True, False])
 def test_series_append_single(series_val, ignore_index):
+    # not supported for list(string) and list(item)
+    if isinstance(series_val.values[0], list):
+        return
+
     # not supported for Datetime.date yet, TODO: support and test
     if isinstance(series_val.values[0], datetime.date):
         return
@@ -1743,6 +1788,10 @@ def test_series_append_single(series_val, ignore_index):
 
 @pytest.mark.parametrize("ignore_index", [True, False])
 def test_series_append_multi(series_val, ignore_index):
+    # not supported for list(string) and list(item)
+    if isinstance(series_val.values[0], list):
+        return
+
     # not supported for Datetime.date yet, TODO: support and test
     if isinstance(series_val.values[0], datetime.date):
         return

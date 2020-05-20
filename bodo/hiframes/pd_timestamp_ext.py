@@ -692,6 +692,18 @@ def convert_datetime64_to_timestamp(dt64):  # pragma: no cover
     )  # nanosecond
 
 
+@numba.njit
+def convert_numpy_timedelta64_to_datetime_timedelta(dt64):  # pragma: no cover
+    """Convertes numpy.timedelta64 to datetime.timedelta"""
+    n_int64 = bodo.hiframes.datetime_timedelta_ext.cast_numpy_timedelta_to_int(dt64)
+    n_day = n_int64 // (86400 * 1000000000)
+    res1 = n_int64 - n_day * 86400 * 1000000000
+    n_sec = res1 // 1000000000
+    res2 = res1 - n_sec * 1000000000
+    n_microsec = res2 // 1000
+    return datetime.timedelta(n_day, n_sec, n_microsec)
+
+
 @intrinsic
 def integer_to_timedelta64(typingctx, val=None):
     """Cast an int value to timedelta64
@@ -840,7 +852,9 @@ def overload_to_datetime(arg_a):
 
     # return DatetimeIndex if input is array(dt64)
     if arg_a == types.Array(types.NPDatetime("ns"), 1, "C"):
-        return lambda arg_a: bodo.hiframes.pd_index_ext.init_datetime_index(arg_a, None)  # pragma: no cover
+        return lambda arg_a: bodo.hiframes.pd_index_ext.init_datetime_index(
+            arg_a, None
+        )  # pragma: no cover
 
     # TODO: input Type of a dataframe or series
     # TODO: input type of an array

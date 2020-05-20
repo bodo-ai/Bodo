@@ -79,6 +79,17 @@ def test_ndim(decimal_arr_value):
     check_func(test_impl, (decimal_arr_value,))
 
 
+def test_decimal_coerce():
+    ts = Decimal("4.5")
+
+    def f(df, ts):
+        df["ts"] = ts
+        return df
+
+    df1 = pd.DataFrame({"a": 1 + np.arange(6)})
+    check_func(f, (df1, ts))
+
+
 def test_series_astype_str(decimal_arr_value):
     """test decimal conversion to string.
     Using a checksum for checking output since Bodo's output can have extra 0 digits

@@ -308,7 +308,7 @@ def alloc_decimal_array_equiv(self, scope, equiv_set, loc, args, kws):
     analysis extension. Assigns output array's size as equivalent to the input size
     variable.
     """
-    assert len(args) == 1 and not kws
+    assert len(args) == 3 and not kws
     return args[0], []
 
 

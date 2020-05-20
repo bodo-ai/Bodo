@@ -19,6 +19,7 @@ from numba.extending import (
     overload_method,
     register_jitable,
 )
+import numpy as np
 from numba.core import cgutils
 from numba.core.imputils import lower_constant
 
@@ -196,6 +197,13 @@ def total_seconds(td):
         return ((td._days * 86400 + td._seconds) * 10 ** 6 + td._microseconds) / 10 ** 6
 
     return impl
+
+
+@register_jitable
+def _to_nanoseconds(td):  # pragma: no cover
+    return np.int64(
+        ((td._days * 86400 + td._seconds) * 1000000 + td._microseconds) * 1000
+    )
 
 
 @register_jitable
@@ -493,3 +501,15 @@ def timedelta_abs(lhs):
                 return lhs
 
         return impl
+
+
+@intrinsic
+def cast_numpy_timedelta_to_int(typingctx, val=None):
+    """Cast timedelta64 value to int
+    """
+    assert val == types.NPTimedelta("ns")
+
+    def codegen(context, builder, signature, args):
+        return args[0]
+
+    return types.int64(types.NPTimedelta("ns")), codegen

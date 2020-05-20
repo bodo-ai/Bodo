@@ -9,6 +9,7 @@ import numba
 from numba.core import types
 from bodo.libs.decimal_arr_ext import Decimal128Type, DecimalArrayType
 from numba.extending import overload
+from bodo.libs.decimal_arr_ext import Decimal128Type
 import bodo
 from bodo.utils.typing import is_overload_none, is_overload_true, BodoError
 
@@ -152,6 +153,24 @@ def overload_coerce_to_ndarray(
     # TODO: make sure scalar is a Numpy dtype
     if not is_overload_none(scalar_to_arr_len):
 
+        if isinstance(data, Decimal128Type):
+            precision = data.precision
+            scale = data.scale
+
+            def impl_ts(
+                data,
+                error_on_nonarray=True,
+                bool_arr_convert=None,
+                scalar_to_arr_len=None,
+            ):  # pragma: no cover
+                n = scalar_to_arr_len
+                A = bodo.libs.decimal_arr_ext.alloc_decimal_array(n, precision, scale)
+                for i in numba.parfors.parfor.internal_prange(n):
+                    A[i] = data
+                return A
+
+            return impl_ts
+
         if data == bodo.hiframes.datetime_timedelta_ext.datetime_timedelta_type:
             timedelta64_dtype = np.dtype("timedelta64[ns]")
 
@@ -217,9 +236,10 @@ def overload_coerce_to_ndarray(
                 bool_arr_convert=None,
                 scalar_to_arr_len=None,
             ):  # pragma: no cover
+                n = scalar_to_arr_len
                 A = np.empty(scalar_to_arr_len, dt64_dtype)
                 v = bodo.hiframes.pd_timestamp_ext.integer_to_dt64(data.value)
-                for i in numba.parfors.parfor.internal_prange(scalar_to_arr_len):
+                for i in numba.parfors.parfor.internal_prange(n):
                     A[i] = v
                 return A
 
@@ -652,6 +672,11 @@ def overload_box_if_dt64(val):
     if val == types.NPDatetime("ns"):
         return lambda val: bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(
             np.int64(val)
+        )
+
+    if val == types.NPTimedelta("ns"):
+        return lambda val: bodo.hiframes.pd_timestamp_ext.convert_numpy_timedelta64_to_datetime_timedelta(
+            val
         )
 
     return lambda val: val
