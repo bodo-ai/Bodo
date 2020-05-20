@@ -1,0 +1,196 @@
+/* This file intentionally left blank. */
+
+@import url('https://fonts.googleapis.com/css2?family=Jost:wght@400;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Lato:ital,wght@0,300;0,400;0,700;1,300;1,400;1,700&display=swap');
+
+body {
+    background-color: #f3f3f3;
+    position: relative;
+    padding-top: 80px;
+    font-family: 'Lato', sans-serif;
+}
+*, *:after, *:before {
+    box-sizing: border-box;
+}
+h1, h2, h3, h4, h5, h6 {
+    font-family: 'Jost', sans-serif;
+}
+body:before {
+    background-color: #0B1327;
+    content: "";
+    height: 250px;
+    left: 0;
+    position: absolute;
+    right: 0;
+    top: 0;
+    z-index: -1;
+}
+div.document {
+    margin-top: 0;
+}
+.documentwrapper {
+    background-color: #fff;
+    border-radius: 4px;
+    overflow: hidden;
+    border-bottom-right-radius: 0;
+    border-bottom-left-radius: 0;
+
+}
+.bodywrapper {
+    padding: 0 40px 40px 40px;
+    box-shadow: 0 0 13px 0 rgba(221,231,237,.8);
+    height: calc(100vh - 145px);
+    overflow: hidden;
+    box-sizing: border-box;
+}
+.bodywrapper .body {
+    background-color: #fff;
+}
+div.sphinxsidebarwrapper {
+    padding: 0 30px 40px;
+    height: calc(100vh - 145px);
+    overflow: auto;
+
+}
+div.sphinxsidebar {
+    height: calc(100vh - 185px);
+    overflow: auto;
+    position: relative;
+    top: 40px;
+    color: #25273f;
+    -ms-overflow-style: none;  /* Internet Explorer 10+ */
+    scrollbar-width: none;  /* Firefox */
+}
+div.sphinxsidebar::-webkit-scrollbar {
+    display: none;  /* Safari and Chrome */
+}
+div.sphinxsidebar li {
+    padding: 5px 0;
+}
+div.sphinxsidebar a {
+    padding-bottom: 5px;
+    display: block;
+    border-bottom: 1px solid #efefef;
+}
+div.body {
+    height: calc(100vh - 185px);
+    overflow: auto;
+    position: relative;
+    top: 40px;
+    color: #25273f;
+}
+div.body p {
+    line-height: 1.6em;
+}
+div.body pre {
+    border-radius: 4px;
+}
+
+.top-bar {
+    margin-bottom: 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 40px 0 10px;
+    height: 45px;
+}
+.top-bar ul {
+    padding: 0;
+    margin: 0;
+    list-style: none;
+}
+.top-bar * {
+    color: #fff;
+}
+.top-bar__logo img {
+    width: 120px;
+    height: auto;
+}
+
+.top-bar li {
+    display: inline;
+}
+
+nav#rellinks {
+    float: right;
+}
+
+nav#rellinks li+li:before {
+    content: "|";
+}
+
+nav#breadcrumbs li+li:before {
+    content: "\00BB";
+}
+.home-link {
+    background-color: rgb(3, 11, 35);
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    padding: 10px;
+    font-size: .9em;
+}
+.home-link div {
+    max-width: 1300px;
+    margin: 0 auto;
+    padding: 0 10px;
+}
+.home-link a {
+    color: #fff;
+    text-decoration: none;
+    display: inline-block;
+}
+.home-link a:before {
+    content: '';
+    display: inline-block;
+    height: 5px;
+    width: 5px;
+    border-top: 2px solid #fff;
+    border-left: 2px solid #fff;
+    transform: rotate(-45deg);
+    position: relative;
+    left: -3px;
+    top: -2px;
+}
+ a.headerlink {
+     color: transparent;
+     position: relative;
+}
+a.headerlink:hover {
+    color: transparent;
+    background: transparent;
+}
+a.headerlink:after {
+    content: '#';
+    color: rgba(0,0,0,.3);
+    position: absolute;
+    left: 10px;
+    top: 3px;
+    transition: .3s;
+}
+a.headerlink:hover:after {
+    color: #1FB100;
+}
+div.footer {
+    width: 100%;
+    padding-top: 12px;
+    border-top: 1px solid rgba(0,0,0,0.1);
+}
+h3#searchlabel {
+    display: none;
+}
+#searchbox {
+    margin-bottom: 30px;
+}
+#searchbox input {
+    font-family: 'Jost', sans-serif;
+}
+#searchbox input[type="text"] {
+    border-top-left-radius: 4px;
+    border-bottom-left-radius: 4px;
+}
+#searchbox input[type="submit"] {
+    border-top-right-radius: 4px;
+    border-bottom-right-radius: 4px;
+}

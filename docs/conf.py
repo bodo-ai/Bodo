@@ -58,7 +58,7 @@ master_doc = "index"
 
 # General information about the project.
 project = "Bodo"
-copyright = "2019, Bodo, Inc."
+copyright = "2020, Bodo, Inc."
 author = "Bodo"
 
 # The version info for the project you're documenting, acts as replacement for
@@ -95,7 +95,9 @@ todo_include_todos = True
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 #
-html_theme = "alabaster"
+html_theme = "bodo-theme"
+html_theme_path = ["."]
+html_favicon = 'source/favicon.png'
 
 # Theme options are theme-specific and customize the look and feel of a theme
 # further.  For a list of options available for each theme, see the
@@ -103,20 +105,19 @@ html_theme = "alabaster"
 #
 # html_theme_options = {}
 html_theme_options = {
-    "logo": "img/bodo_logo.jpg",
+    "logo": "img/logo.png",
     "fixed_sidebar": "false",
     "page_width": "1300px",
     "body_max_width": "auto",
     "sidebar_header": "#48A037",
     "sidebar_link_underscore": "#cccccc",
-    "sidebar_width": "300px",
+    "sidebar_width": "350px",
     "sidebar_list": "#ffffff",
     "base_bg": "#f7fff7",
     "pre_bg": "#f2f2f2",
     "body_text": "#282c30",
     "link": "#003399",
     "link_hover": "#48A037",
-    "head_font_family": "'Bitstream Vera Sans Mono'",
     "show_powered_by": "false",
     "show_relbar_top": "true",
 }
@@ -127,7 +128,12 @@ html_show_sphinx = False
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
 html_static_path = ["_static"]
-html_theme_path = [alabaster.get_path()]
+html_sidebars = {
+    '**': [
+        'searchbox.html',
+        'navigation.html',
+    ]
+}
 
 # -- Options for HTMLHelp output ------------------------------------------
 
