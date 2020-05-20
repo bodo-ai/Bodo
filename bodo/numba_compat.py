@@ -5,6 +5,9 @@ other module in bodo package.
 import operator
 import functools
 import hashlib
+import sys
+import os
+import re
 import inspect
 import warnings
 import numpy as np
@@ -1061,3 +1064,53 @@ if (
 
 types.maybe_literal = maybe_literal
 types.misc.maybe_literal = maybe_literal
+
+
+def CacheImpl__init__(self, py_func):
+    self._is_closure = bool(py_func.__closure__)
+    self._lineno = py_func.__code__.co_firstlineno
+    # Get qualname
+    try:
+        qualname = py_func.__qualname__
+    except AttributeError:  # pragma: no cover
+        qualname = py_func.__name__
+    # Find a locator
+    source_path = inspect.getfile(py_func)
+    for cls in self._locator_classes:
+        locator = cls.from_function(py_func, source_path)
+        if locator is not None:
+            break
+    else:  # pragma: no cover
+        raise RuntimeError("cannot cache function %r: no locator available "
+                           "for file %r" % (qualname, source_path))
+    self._locator = locator
+    # Use filename base name as module name to avoid conflict between
+    # foo/__init__.py and foo/foo.py
+    filename = inspect.getfile(py_func)
+    modname = os.path.splitext(os.path.basename(filename))[0]
+
+    # bodo change: correct the ipython module name by removing the cell number,
+    # to guarantee that the cache file is found for the same function
+    if source_path.startswith("<ipython-"):  # pragma: no cover
+        new_modname = re.sub(
+            r"(ipython-input)(-\d+)(-[0-9a-fA-F]+)", r"\1\3", modname, count=1
+        )
+        if new_modname == modname:
+            warnings.warn(
+                "Did not recognize ipython module name syntax. Caching might not work"
+            )
+        modname = new_modname
+
+    fullname = "%s.%s" % (modname, qualname)
+    abiflags = getattr(sys, 'abiflags', '')
+    self._filename_base = self.get_filename_base(fullname, abiflags)
+
+
+lines = inspect.getsource(numba.core.caching._CacheImpl.__init__)
+if (
+    hashlib.sha256(lines.encode()).hexdigest()
+    != "f84d6f319647b4eb905b1b59b576772a4caf7655a5bd094405f4f40ccb7a9c95"
+):  # pragma: no cover
+    warnings.warn("numba.core.caching._CacheImpl.__init__ has changed")
+
+numba.core.caching._CacheImpl.__init__ = CacheImpl__init__
