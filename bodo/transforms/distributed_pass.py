@@ -86,6 +86,10 @@ from bodo.utils.utils import (
 from bodo.libs.distributed_api import Reduce_Type
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 import llvmlite.binding as ll
+from bodo.io import csv_cpp
+
+ll.add_symbol("csv_output_is_dir", csv_cpp.csv_output_is_dir)
+
 
 distributed_run_extensions = {}
 
@@ -1293,10 +1297,6 @@ class DistributedPass:
                 (bodo.libs.distributed_api.get_rank() == 0)
                 | _csv_output_is_dir(fname._data)
             )
-
-        from bodo.io import csv_cpp
-
-        ll.add_symbol("csv_output_is_dir", csv_cpp.csv_output_is_dir)
 
         f_block = compile_to_numba_ir(
             f,

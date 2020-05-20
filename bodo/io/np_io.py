@@ -8,6 +8,16 @@ from bodo.libs.str_ext import string_type
 
 from numba.core.ir_utils import compile_to_numba_ir, replace_arg_nodes
 
+from bodo.libs import hio
+import llvmlite.binding as ll
+
+ll.add_symbol("get_file_size", hio.get_file_size)
+ll.add_symbol("file_read", hio.file_read)
+ll.add_symbol("file_read_parallel", hio.file_read_parallel)
+ll.add_symbol("file_write", hio.file_write)
+ll.add_symbol("file_write_parallel", hio.file_write_parallel)
+
+
 _get_file_size = types.ExternalFunction("get_file_size", types.int64(types.voidptr))
 _file_read = types.ExternalFunction(
     "file_read", types.void(types.voidptr, types.voidptr, types.intp)
@@ -60,13 +70,6 @@ def _handle_np_fromfile(assign, lhs, rhs):
     if len(rhs.args) != 2:  # pragma: no cover
         raise ValueError("np.fromfile(): file name and dtype expected")
 
-    # FIXME: import here since hio has hdf5 which might not be available
-    from bodo.libs import hio
-    import llvmlite.binding as ll
-
-    ll.add_symbol("get_file_size", hio.get_file_size)
-    ll.add_symbol("file_read", hio.file_read)
-    ll.add_symbol("file_read_parallel", hio.file_read_parallel)
     _fname = rhs.args[0]
     _dtype = rhs.args[1]
 
@@ -105,12 +108,7 @@ def get_dtype_size(typingctx, dtype=None):
 
 @overload_method(types.Array, "tofile")
 def tofile_overload(arr, fname):
-    # FIXME: import here since hio has hdf5 which might not be available
-    from bodo.libs import hio
-    import llvmlite.binding as ll
 
-    ll.add_symbol("file_write", hio.file_write)
-    ll.add_symbol("file_write_parallel", hio.file_write_parallel)
     # TODO: fix Numba to convert literal
     if fname == string_type or isinstance(fname, types.StringLiteral):
 

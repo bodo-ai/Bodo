@@ -38,6 +38,15 @@ from bodo.utils.typing import is_list_like_index_type
 from llvmlite import ir as lir
 import llvmlite.binding as ll
 
+# NOTE: importing hdist is necessary for MPI initialization before array_ext
+from bodo.libs import hdist
+from bodo.libs import array_ext
+
+
+ll.add_symbol("count_total_elems_list_array", array_ext.count_total_elems_list_array)
+ll.add_symbol("list_item_array_from_sequence", array_ext.list_item_array_from_sequence)
+ll.add_symbol("np_array_from_list_item_array", array_ext.np_array_from_list_item_array)
+
 
 # offset index types
 offset_typ = types.uint32
@@ -185,14 +194,7 @@ def unbox_list_item_array(typ, val, c):
     """
     Unbox a numpy array with list of data values.
     """
-    from bodo.libs import array_ext
 
-    ll.add_symbol(
-        "count_total_elems_list_array", array_ext.count_total_elems_list_array
-    )
-    ll.add_symbol(
-        "list_item_array_from_sequence", array_ext.list_item_array_from_sequence
-    )
     n_lists = bodo.utils.utils.object_length(c, val)
     fnty = lir.FunctionType(lir.IntType(64), [lir.IntType(8).as_pointer()],)
     fn_tp = c.builder.module.get_or_insert_function(
@@ -256,11 +258,6 @@ def _get_list_item_arr_payload(context, builder, arr_typ, arr):
 def box_list_item_arr(typ, val, c):
     """box packed native representation of list of item array into python objects
     """
-    from bodo.libs import array_ext
-
-    ll.add_symbol(
-        "np_array_from_list_item_array", array_ext.np_array_from_list_item_array
-    )
 
     payload = _get_list_item_arr_payload(c.context, c.builder, typ, val)
 
