@@ -22,7 +22,8 @@ In other words:
     1. Don't use Bodo for scripts that set up infrastucture or do initializations. 
     2. Only use Bodo for data processing and analytics code.
 
-To do so, simply factor out the code that needs to be compiled by Bodo and pass data into  :ref:`Bodo compiled <decorator>` functions.
+To do so, simply factor out the code that needs to be compiled by Bodo and pass data into
+`Bodo compiled functions <user_guide.html#jit-just-in-time-compilation-workflow>`__.
 
 Compilation Error
 -----------------------

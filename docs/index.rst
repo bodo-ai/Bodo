@@ -14,7 +14,6 @@ Bodo
    source/overview
    source/install
    source/getting_started
-   source/decorator
    source/user_guide
    source/file_io
    source/pandas

@@ -10,7 +10,8 @@ This user manual covers the basics of using Bodo, provides a reference
 of supported Python features/APIs, and explains how Bodo works under the hoods.
 
 In a nutshell, Bodo provides a just-in-time (JIT) compilation workflow
-using the :ref:`@bodo.jit decorator <decorator>`.
+using the `@bodo.jit decorator <user_guide.html#jit-just-in-time-compilation-workflow>`__.
+
 It replaces the decorated Python functions
 with an optimized and parallelized binary version automatically,
 using advanced compilation methods.
@@ -35,7 +36,7 @@ or use :ref:`Jupyter Notebook <jupyter>`.
 Bodo enables scaling and deployment of sequential analytics programs on all
 environments including laptops, desktops, clusters, cloud platforms,
 and edge devices.
-:ref:`Automatic parallelization <supported>` is performed by taking advantage
+Automatic parallelization is performed by taking advantage
 of Python APIs (Pandas, Numpy, ...) that have data-parallel semantics.
 For example, output elements of `x**2` operation in the example above can be
 computed independently on different processor nodes and cores.

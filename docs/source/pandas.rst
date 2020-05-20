@@ -18,6 +18,7 @@ In addition:
   (e.g. ``df[df.A > .5]``).
 
 .. _pandas-f-in:
+
 Input/Output
 ~~~~~~~~~~~~
 
@@ -474,6 +475,7 @@ Time series-related:
   only the `periods` argument supported)
 
 .. _pandas-f-out:
+
 Serialization / IO / conversion:
 
 Also see :ref:`S3` and :ref:`HDFS` configuration requirements and more on :ref:`file_io`.
