@@ -1789,7 +1789,6 @@ def gen_top_level_agg_func(
                     out_name, _get_np_dtype(out_typs[i])
                 )
 
-        parallel = parallel and bodo.libs.distributed_api.get_size() > 1
         # do_combine indicates whether GroupbyPipeline in C++ will need to do
         # `void combine()` operation or not
         do_combine = parallel
