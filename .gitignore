@@ -26,6 +26,11 @@ bodo/utils/__pycache__
 build/
 docs/_build/
 docs/gh-pages/
+docs/Bodo-tutorial/
+docs/source/bodo_tutorial_files/
+docs/source/getting_started.rst
+docs/source/img/
+docs/source/user_guide.rst
 dev_docs/_build/
 dev_docs/gh-pages/
 *.DS_Store
