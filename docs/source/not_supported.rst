@@ -70,15 +70,31 @@ in order to determine the output dataframe schema. For example, the program belo
 since Bodo may not be able to infer `column_list` during compilation::
 
     @bodo.jit
-    def f(a):
-        column_list = a[0]  # some computation that cannot be inferred statically
+    def f(a, i):
+        column_list = a[:i]  # some computation that cannot be inferred statically
         df = pd.DataFrame({"A": [1, 2, 1], "B": [4, 5, 6]})
         return df.groupby(column_list).sum()
 
-    f(["A"])
+    a = ["A", "B"]
+    i = 1
+    f(a, i)
     # BodoError: groupby(): 'by' parameter only supports a constant column label or column labels.
 
+This code can be refactored so that the computation for `column_list` is performed
+in regular Python context, and the result is passed as a function argument::
 
+    @bodo.jit
+    def f(column_list):
+        df = pd.DataFrame({"A": [1, 2, 1], "B": [4, 5, 6]})
+        return df.groupby(column_list).sum()
+
+    a = ["A", "B"]
+    i = 1
+    column_list = a[:i]
+    f(column_list)
+
+In general, Bodo can infer constants from function arguments, global variables, and
+constant values in the program. Furthermore,
 Bodo supports implicitly inferring constant lists automatically for list addition
 and set difference operations such as::
 
