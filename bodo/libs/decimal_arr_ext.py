@@ -30,6 +30,7 @@ from numba.extending import (
     overload_attribute,
 )
 from numba.parfors.array_analysis import ArrayAnalysis
+from numba.core.imputils import lower_constant
 from decimal import Decimal
 
 from llvmlite import ir as lir
@@ -175,6 +176,38 @@ def overload_str_decimal(val):
             return decimal_to_str(val)
 
         return impl
+
+
+@intrinsic
+def decimal128type_to_int64_tuple(typingctx, val):
+    """convert decimal128type to a 2-tuple of int64 values
+    """
+    assert isinstance(val, Decimal128Type)
+
+    def codegen(context, builder, signature, args):
+        # allocate a lir.ArrayType and store value using pointer bitcast
+        res = cgutils.alloca_once(builder, lir.ArrayType(lir.IntType(64), 2))
+        builder.store(args[0], builder.bitcast(res, lir.IntType(128).as_pointer()))
+        return builder.load(res)
+
+    return types.UniTuple(types.int64, 2)(val), codegen
+
+
+@lower_constant(Decimal128Type)
+def lower_constant_decimal(context, builder, ty, pyval):
+    # call a Numba function to unbox and convert to a constant 2-tuple of int64 values
+    int64_tuple = numba.njit(lambda v: decimal128type_to_int64_tuple(v))(pyval)
+    # pack int64 tuple in LLVM constant
+    consts = [
+        context.get_constant_generic(builder, types.int64, v) for v in int64_tuple
+    ]
+    t = cgutils.pack_array(builder, consts)
+    # convert int64 tuple to int128 using pointer bitcast
+    res = cgutils.alloca_once(builder, lir.IntType(128))
+    builder.store(
+        t, builder.bitcast(res, lir.ArrayType(lir.IntType(64), 2).as_pointer())
+    )
+    return builder.load(res)
 
 
 @unbox(Decimal128Type)

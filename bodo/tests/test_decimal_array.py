@@ -111,6 +111,24 @@ def test_series_astype_str(decimal_arr_value):
     check_func(test_impl, (S,))
 
 
+@pytest.mark.parametrize(
+    "decimal_value",
+    [
+        # long value to exercise both 64-bit slots
+        Decimal("422222222.511133333444411"),
+        # short value to test an empty 64-bit slot
+        Decimal("4.5"),
+    ],
+)
+def test_decimal_constant_lowering(decimal_value):
+    def f():
+        return decimal_value
+
+    bodo_f = bodo.jit(f)
+    val_ret = bodo_f()
+    assert val_ret == decimal_value
+
+
 def test_join(decimal_arr_value):
     """test joining dataframes with decimal data columns
     TODO: add decimal array to regular df tests and remove this
