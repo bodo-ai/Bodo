@@ -1629,7 +1629,10 @@ class DataFramePass:
         df_type = self.typemap[df_var.name]
         out_typ = self.typemap[lhs.name]
         nodes = []
-        in_cols = grp_typ.selection
+        if isinstance(out_typ, SeriesType) or func_name in ("agg", "aggregate"):
+            in_cols = grp_typ.selection
+        else:
+            in_cols = [c for c in grp_typ.selection if c in out_typ.columns]
         if func_name in ("agg", "aggregate"):
             func_var = get_call_expr_arg(func_name, rhs.args, dict(rhs.kws), 0, "func")
             agg_func_typ = self.typemap[func_var.name]

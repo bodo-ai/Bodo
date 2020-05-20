@@ -23,6 +23,7 @@ from numba.core.typing.templates import (
 )
 from numba.core.registry import CPUDispatcher
 from bodo.libs.int_arr_ext import IntegerArrayType, IntDtype
+from enum import Enum
 import bodo
 from bodo.hiframes.pd_series_ext import SeriesType, _get_series_array_type
 from bodo.libs.str_ext import string_type
@@ -275,18 +276,17 @@ def get_groupby_output_dtype(arr_type, func_name):
     """
     Return output dtype for groupby aggregation function based on the
     function and the input array type and dtype.
+    If the operation is not feasible (e.g. summing dates) then an error message
+    is passed upward to be decided according to the context.
     """
     in_dtype = arr_type.dtype
     if func_name == "median" and not isinstance(
         in_dtype, (Decimal128Type, types.Float, types.Integer)
     ):
-        raise BodoError(
-            "For median, only column of integer, float or Decimal type are allowed"
-        )
+        return None, "For median, only column of integer, float or Decimal type are allowed"
     if (func_name in {"median", "mean", "var", "std"}) and isinstance(
-        in_dtype, (Decimal128Type, types.Integer, types.Float)
-    ):
-        return types.float64
+        in_dtype, (Decimal128Type, types.Integer, types.Float)):
+        return types.float64, "ok"
     if not isinstance(in_dtype, (types.Integer, types.Float, types.Boolean)):
         is_list_string = (
             isinstance(in_dtype, numba.core.types.containers.List)
@@ -302,29 +302,35 @@ def get_groupby_output_dtype(arr_type, func_name):
                 "first",
                 "last",
             }:
-                raise BodoError(
-                    "column type of strings or list of strings is not supported in groupby built-in function {}".format(
-                        func_name
-                    )
-                )
+                return None, "column type of strings or list of strings is not supported in groupby built-in function {}".format(func_name)
         else:
             if func_name not in {"count", "nunique", "min", "max", "first", "last"}:
-                raise BodoError(
+                return (
+                    None,
                     "column type of {} is not supported in groupby built-in function {}".format(
                         in_dtype, func_name
-                    )
+                    ),
                 )
+
     if isinstance(in_dtype, types.Boolean) and func_name in {"cumsum", "sum"}:
-        raise BodoError(
-            "groupby built-in functions {}"
-            " does not support boolean column".format(func_name)
+        return (
+            None,
+            "groupby built-in functions {} does not support boolean column".format(
+                func_name
+            ),
         )
     if func_name in {"count", "nunique"}:
-        return types.int64
+        return types.int64, "ok"
     else:
         if isinstance(arr_type, IntegerArrayType):
-            return IntDtype(in_dtype)
-        return in_dtype  # default: return same dtype as input
+            return IntDtype(in_dtype), "ok"
+        return in_dtype, "ok"  # default: return same dtype as input
+
+
+class ColumnType(Enum):
+    KeyColumn = 0
+    NumericalColumn = 1
+    NonNumericalColumn = 2
 
 
 @infer_getattr
@@ -332,25 +338,28 @@ class DataframeGroupByAttribute(AttributeTemplate):
     key = DataFrameGroupByType
 
     def _get_keys_not_as_index(
-        self, grp, out_columns, out_data, multi_level_names=False
+            self, grp, out_columns, out_data, out_column_type, multi_level_names=False
     ):
         """ Add groupby keys to output columns (to be used when
             as_index=False) """
         for k in grp.keys:
             if multi_level_names:
-                out_columns.append((k, ""))
+                e_col = (k, "")
             else:
-                out_columns.append(k)
+                e_col = k
             ind = grp.df_type.columns.index(k)
-            out_data.append(grp.df_type.data[ind])
+            data = grp.df_type.data[ind]
+            out_columns.append(e_col)
+            out_data.append(data)
+            out_column_type.append(ColumnType.KeyColumn.value)
 
     def _get_agg_typ(self, grp, args, func_name, func=None):
         index = RangeIndexType(types.none)
         out_data = []
         out_columns = []
-        # add key columns of not as_index
+        out_column_type = []
         if not grp.as_index:
-            self._get_keys_not_as_index(grp, out_columns, out_data)
+            self._get_keys_not_as_index(grp, out_columns, out_data, out_column_type)
         else:
             if len(grp.keys) > 1:
                 key_col_inds = tuple(
@@ -367,10 +376,13 @@ class DataframeGroupByAttribute(AttributeTemplate):
                 )
 
         # get output type for each selected column
+        list_err_msg = []
         for c in grp.selection:
-            out_columns.append(c)
             ind = grp.df_type.columns.index(c)
             data = grp.df_type.data[ind]
+            e_column_type = ColumnType.NonNumericalColumn.value
+            if isinstance(data, (types.Array, IntegerArrayType)) and isinstance(data.dtype, (types.Integer, types.Float)):
+                e_column_type = ColumnType.NumericalColumn.value
 
             if func_name == "agg":
                 try:
@@ -379,6 +391,7 @@ class DataframeGroupByAttribute(AttributeTemplate):
                     out_dtype = get_const_func_output_type(
                         func, (in_series_typ,), self.context
                     )
+                    err_msg = "ok"
                 except:
                     raise BodoError(
                         "Groupy.agg()/Groupy.aggregate(): column {col} of type {type} "
@@ -387,10 +400,32 @@ class DataframeGroupByAttribute(AttributeTemplate):
                         )
                     )
             else:
-                out_dtype = get_groupby_output_dtype(data, func_name)
+                out_dtype, err_msg = get_groupby_output_dtype(data, func_name)
 
-            out_arr = _get_series_array_type(out_dtype)
-            out_data.append(out_arr)
+            if err_msg == "ok":
+                out_arr = _get_series_array_type(out_dtype)
+                out_data.append(out_arr)
+                out_columns.append(c)
+                out_column_type.append(e_column_type)
+            else:
+                list_err_msg.append(err_msg)
+
+        if func_name == 'sum':
+            has_numeric = any([x == ColumnType.NumericalColumn.value for x in out_column_type])
+            if has_numeric:
+                out_data = [x for x, y in zip(out_data, out_column_type) if y != ColumnType.NonNumericalColumn.value]
+                out_columns = [x for x, y in zip(out_columns, out_column_type) if y != ColumnType.NonNumericalColumn.value]
+
+        nb_drop = len(list_err_msg)
+        if len(out_data) == 0:
+            if nb_drop == 0:
+                raise BodoError("No columns in output.")
+            else:
+                raise BodoError(
+                    "No columns in output. {} column{} dropped for following reasons: {}".format(
+                        nb_drop, " was" if nb_drop == 1 else "s were", ",".join(list_err_msg)
+                    )
+                )
 
         out_res = DataFrameType(tuple(out_data), index, tuple(out_columns))
         # XXX output becomes series if single output and explicitly selected
@@ -482,9 +517,10 @@ class DataframeGroupByAttribute(AttributeTemplate):
             # get output names and output types
             out_columns = []
             out_data = []
+            out_column_type = []
             if not grp.as_index:
                 self._get_keys_not_as_index(
-                    grp, out_columns, out_data, multi_level_names=multi_level_names
+                    grp, out_columns, out_data, out_column_type, multi_level_names=multi_level_names
                 )
             for col_name, f_val in col_map.items():
                 if isinstance(f_val, (tuple, list)):
@@ -529,9 +565,10 @@ class DataframeGroupByAttribute(AttributeTemplate):
             assert len(func) > 0
             out_data = []
             out_columns = []
+            out_column_type = []
             lambda_count = 0
             if not grp.as_index:
-                self._get_keys_not_as_index(grp, out_columns, out_data)
+                self._get_keys_not_as_index(grp, out_columns, out_data, out_column_type)
             for f_val in func.types:
                 f_name, out_tp = self._get_agg_funcname_and_outtyp(
                     grp, args, grp.selection[0], f_val

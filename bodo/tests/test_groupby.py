@@ -349,6 +349,34 @@ def test_random_string_sum_min_max_first_last():
     check_func(impl5, (df1,), sort_output=True)
 
 
+def test_groupby_missing_entry():
+    """The columns which cannot be processed cause special problems as they are
+    sometimes dropped instead of failing
+    """
+
+    def test_drop_sum(df):
+        return df.groupby("A").sum()
+
+    def test_drop_count(df):
+        return df.groupby("A").count()
+
+    df1 = pd.DataFrame(
+        {"A": [3, 2, 3], "B": pd.date_range("2017-01-03", periods=3), "C": [3, 1, 2]}
+    )
+    df2 = pd.DataFrame(
+        {"A": [3, 2, 3], "B": ["aa", "bb", "cc"], "C": [3, 1, 2]}
+    )
+    df3 = pd.DataFrame(
+        {"A": [3, 2, 3], "B": ["aa", "bb", "cc"]}
+    )
+    check_func(test_drop_sum, (df1,), sort_output=True)
+    check_func(test_drop_sum, (df2,), sort_output=True)
+    check_func(test_drop_sum, (df3,), sort_output=True)
+    check_func(test_drop_count, (df1,), sort_output=True)
+    check_func(test_drop_count, (df2,), sort_output=True)
+    check_func(test_drop_count, (df3,), sort_output=True)
+
+
 def test_agg_str_key():
     """
     Test Groupby.agg() with string keys
