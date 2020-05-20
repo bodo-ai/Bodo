@@ -9,6 +9,7 @@ import random
 import string
 import numba
 import bodo
+from decimal import Decimal
 from bodo.tests.utils import (
     count_array_REPs,
     count_parfor_REPs,
@@ -17,8 +18,7 @@ from bodo.tests.utils import (
     count_array_OneDs,
     dist_IR_contains,
     get_start_end,
-    convert_list_string_columns,
-    check_func_list_string,
+    check_func_type_extent,
     DeadcodeTestPipeline,
 )
 import pytest
@@ -140,6 +140,26 @@ def test_merge_join_datetime():
     check_func(test_impl, (df1_date, df2), sort_output=True)
 
 
+def test_merge_decimal():
+    def f(df1, df2):
+        df3 = df1.merge(df2, on="A")
+        return df3
+
+    def compute_random_decimal(n):
+        e_list = []
+        for _ in range(n):
+            e_str1 = str(1 + random.randint(1, 8))
+            e_str2 = str(1 + random.randint(1, 8))
+            e_str = e_str1 + "." + e_str2
+            e_list.append(Decimal(e_str))
+        return pd.Series(e_list)
+
+    n = 50
+    df1 = pd.DataFrame({"A": compute_random_decimal(n), "B": compute_random_decimal(n)})
+    df2 = pd.DataFrame({"A": compute_random_decimal(n), "D": compute_random_decimal(n)})
+    check_func(f, (df1, df2), sort_output=True)
+
+
 def test_merge_left_right_index():
     """
     Test merge(): merging on index and use of suffices on output.
@@ -212,7 +232,7 @@ def test_list_string_array_type_random():
     n = 500
     df1 = pd.DataFrame({"A": rand_col_l_str(n), "C": rand_col_l_str(n)})
     df2 = pd.DataFrame({"A": rand_col_l_str(n), "D": rand_col_l_str(n)})
-    check_func_list_string(test_impl, (df1, df2), sort_output=True, reset_index=True)
+    check_func_type_extent(test_impl, (df1, df2), sort_output=True, reset_index=True)
 
 
 def test_merge_left_right_nontrivial_index():

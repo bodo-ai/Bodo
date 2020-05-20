@@ -391,7 +391,7 @@ def test_groupby_built_in_col_type():
     df = pd.DataFrame({"A": [1, 2, 2], "B": ["aba", "aba", "aba"]})
     with pytest.raises(
         BodoError,
-            match="column type of strings or list of strings is not supported in groupby built-in function prod",
+        match="column type of strings or list of strings is not supported in groupby built-in function prod",
     ):
         bodo.jit(impl)(df)
 
@@ -439,11 +439,13 @@ def test_groupby_median_type_check():
     df1 = pd.DataFrame({"A": [1, 1, 1, 1], "B": ["a", "b", "c", "d"]})
     df2 = pd.DataFrame({"A": [1, 1, 1, 1], "B": [True, False, True, False]})
     with pytest.raises(
-        BodoError, match="For median, only column of integer or float type are allowed"
+        BodoError,
+        match="For median, only column of integer, float or Decimal type are allowed",
     ):
         bodo.jit(impl)(df1)
     with pytest.raises(
-        BodoError, match="For median, only column of integer or float type are allowed"
+        BodoError,
+        match="For median, only column of integer, float or Decimal type are allowed",
     ):
         bodo.jit(impl)(df2)
 

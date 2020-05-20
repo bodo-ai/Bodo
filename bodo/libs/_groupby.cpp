@@ -6,6 +6,7 @@
 #include "_array_utils.h"
 #include "_murmurhash3.h"
 #include "_shuffle.h"
+#include "_decimal_ext.h"
 
 #undef DEBUG_GROUPBY
 
@@ -386,6 +387,19 @@ struct aggliststring<Bodo_FTypes::last> {
     }
 };
 
+
+// common template function
+
+template <typename T, int dtype>
+inline typename std::enable_if<!is_decimal<dtype>::value, double>::type to_double(T const& val) {
+  return (double)val;
+}
+
+template <typename T, int dtype>
+inline typename std::enable_if<is_decimal<dtype>::value, double>::type to_double(T const& val) {
+  return decimal_to_double(val);
+}
+
 // count
 
 template <typename T, int dtype, typename Enable = void>
@@ -459,14 +473,15 @@ struct mean_agg<
     typename std::enable_if<!std::is_floating_point<T>::value &&
                             !is_datetime_timedelta<dtype>::value>::type> {
     static void apply(double& v1, T& v2, uint64_t& count) {
-        v1 += (double)v2;
+        v1 += to_double<T,dtype>(v2);
         count += 1;
     }
 };
 
 template <typename T, int dtype>
 struct mean_agg<
-    T, dtype, typename std::enable_if<std::is_floating_point<T>::value>::type> {
+    T, dtype, typename std::enable_if<std::is_floating_point<T>::value &&
+                                      !is_decimal<dtype>::value>::type> {
     static void apply(double& v1, T& v2, uint64_t& count) {
         if (!isnan(v2)) {
             v1 += (double)v2;
@@ -474,6 +489,7 @@ struct mean_agg<
         }
     }
 };
+
 
 /**
  * Final evaluation step for mean, which calculates the mean based on the
@@ -527,17 +543,19 @@ struct var_agg<
                             !is_datetime_timedelta<dtype>::value>::type> {
     inline static void apply(T& v2, uint64_t& count, double& mean_x,
                              double& m2) {
+        double v2_double = to_double<T,dtype>(v2);
         count += 1;
-        double delta = (double)v2 - mean_x;
+        double delta = v2_double - mean_x;
         mean_x += delta / count;
-        double delta2 = (double)v2 - mean_x;
+        double delta2 = v2_double - mean_x;
         m2 += delta * delta2;
     }
 };
 
 template <typename T, int dtype>
 struct var_agg<
-    T, dtype, typename std::enable_if<std::is_floating_point<T>::value>::type> {
+    T, dtype, typename std::enable_if<std::is_floating_point<T>::value &&
+                                      !is_decimal<dtype>::value>::type> {
     inline static void apply(T& v2, uint64_t& count, double& mean_x,
                              double& m2) {
         if (!isnan(v2)) {
@@ -2279,6 +2297,46 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                                            Bodo_CTypes::FLOAT64>(
                         in_col, out_col, aux_cols, grp_info);
             }
+        case Bodo_CTypes::DECIMAL:
+            switch (ftype) {
+                case Bodo_FTypes::first:
+                    return apply_to_column<decimal_value_cpp, Bodo_FTypes::first,
+                                           Bodo_CTypes::DECIMAL>(
+                        in_col, out_col, aux_cols, grp_info);
+                case Bodo_FTypes::last:
+                    return apply_to_column<decimal_value_cpp, Bodo_FTypes::last,
+                                           Bodo_CTypes::DECIMAL>(
+                        in_col, out_col, aux_cols, grp_info);
+                case Bodo_FTypes::min:
+                    return apply_to_column<decimal_value_cpp, Bodo_FTypes::min,
+                                           Bodo_CTypes::DECIMAL>(
+                        in_col, out_col, aux_cols, grp_info);
+                case Bodo_FTypes::max:
+                    return apply_to_column<decimal_value_cpp, Bodo_FTypes::max,
+                                           Bodo_CTypes::DECIMAL>(
+                        in_col, out_col, aux_cols, grp_info);
+                case Bodo_FTypes::mean:
+                    return apply_to_column<decimal_value_cpp, Bodo_FTypes::mean,
+                                           Bodo_CTypes::DECIMAL>(
+                        in_col, out_col, aux_cols, grp_info);
+                case Bodo_FTypes::mean_eval:
+                    return apply_to_column<decimal_value_cpp, Bodo_FTypes::mean_eval,
+                                           Bodo_CTypes::DECIMAL>(
+                        in_col, out_col, aux_cols, grp_info);
+                case Bodo_FTypes::var:
+                case Bodo_FTypes::std:
+                    return apply_to_column<decimal_value_cpp, Bodo_FTypes::var,
+                                           Bodo_CTypes::DECIMAL>(
+                        in_col, out_col, aux_cols, grp_info);
+                case Bodo_FTypes::var_eval:
+                    return apply_to_column<decimal_value_cpp, Bodo_FTypes::var_eval,
+                                           Bodo_CTypes::DECIMAL>(
+                        in_col, out_col, aux_cols, grp_info);
+                case Bodo_FTypes::std_eval:
+                    return apply_to_column<decimal_value_cpp, Bodo_FTypes::std_eval,
+                                           Bodo_CTypes::DECIMAL>(
+                        in_col, out_col, aux_cols, grp_info);
+            }
         default:
             std::cerr << "do_apply_to_column: invalid array dtype" << std::endl;
             return;
@@ -2435,6 +2493,11 @@ void aggfunc_output_initialize(array_info* out_col, int ftype) {
                               (double*)out_col->data1 + out_col->length,
                               std::numeric_limits<double>::quiet_NaN());
                     return;
+                case Bodo_CTypes::DECIMAL:
+                    std::fill((int64_t*)out_col->data1,
+                              (int64_t*)out_col->data1 + 2*out_col->length,
+                              std::numeric_limits<int64_t>::max());
+                    return;
                 case Bodo_CTypes::STRING:
                     // Nothing to initilize with in the case of strings.
                     return;
@@ -2512,6 +2575,11 @@ void aggfunc_output_initialize(array_info* out_col, int ftype) {
                     std::fill((double*)out_col->data1,
                               (double*)out_col->data1 + out_col->length,
                               std::numeric_limits<double>::quiet_NaN());
+                    return;
+                case Bodo_CTypes::DECIMAL:
+                    std::fill((int64_t*)out_col->data1,
+                              (int64_t*)out_col->data1 + 2*out_col->length,
+                              std::numeric_limits<int64_t>::min());
                     return;
                 case Bodo_CTypes::STRING:
                     // nothing to initialize in the case of strings
@@ -3252,6 +3320,14 @@ class GroupbyPipeline {
                            key_col->data1 +
                                grp_info.group_to_first_row[j] * dtype_size,
                            dtype_size);
+                if (key_col->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
+                    uint8_t* in_null_bitmask = (uint8_t*)key_col->null_bitmask;
+                    uint8_t* out_null_bitmask = (uint8_t*)new_key_col->null_bitmask;
+                    for (size_t j = 0; j < num_groups; j++) {
+                        size_t in_row = grp_info.group_to_first_row[j];
+                        SetBitTo(out_null_bitmask, j,GetBit(in_null_bitmask, in_row));
+                    }
+                }
             }
             if (key_col->arr_type == bodo_array_type::STRING) {
                 // new key col will have num_groups rows containing the

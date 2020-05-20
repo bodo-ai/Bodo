@@ -30,6 +30,7 @@ from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.hiframes.pd_index_ext import RangeIndexType
 from bodo.hiframes.pd_multi_index_ext import MultiIndexType
 from bodo.ir.aggregate import get_agg_func
+from bodo.libs.decimal_arr_ext import DecimalArrayType, Decimal128Type
 from bodo.utils.typing import (
     list_cumulative,
     BodoError,
@@ -276,17 +277,17 @@ def get_groupby_output_dtype(arr_type, func_name):
     function and the input array type and dtype.
     """
     in_dtype = arr_type.dtype
-    if (
-        func_name == "median"
-        and not isinstance(in_dtype, types.Float)
-        and not isinstance(in_dtype, types.Integer)
+    if func_name == "median" and not isinstance(
+        in_dtype, (Decimal128Type, types.Float, types.Integer)
     ):
-        raise BodoError("For median, only column of integer or float type are allowed")
-    if (
-        not isinstance(in_dtype, types.Integer)
-        and not isinstance(in_dtype, types.Float)
-        and not isinstance(in_dtype, types.Boolean)
+        raise BodoError(
+            "For median, only column of integer, float or Decimal type are allowed"
+        )
+    if (func_name in {"median", "mean", "var", "std"}) and isinstance(
+        in_dtype, (Decimal128Type, types.Integer, types.Float)
     ):
+        return types.float64
+    if not isinstance(in_dtype, (types.Integer, types.Float, types.Boolean)):
         is_list_string = (
             isinstance(in_dtype, numba.core.types.containers.List)
             and in_dtype.dtype == types.unicode_type
@@ -320,8 +321,6 @@ def get_groupby_output_dtype(arr_type, func_name):
         )
     if func_name in {"count", "nunique"}:
         return types.int64
-    elif func_name in {"median", "mean", "var", "std"}:
-        return types.float64
     else:
         if isinstance(arr_type, IntegerArrayType):
             return IntDtype(in_dtype)

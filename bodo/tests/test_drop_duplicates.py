@@ -8,8 +8,7 @@ import pytest
 import bodo
 from bodo.tests.utils import (
     check_func,
-    convert_list_string_columns,
-    check_func_list_string,
+    check_func_type_extent,
 )
 
 
@@ -122,7 +121,9 @@ def test_list_string_array_type_specific():
     df1.A = df1.A.str.split(",")
     bodo_impl = bodo.jit(test_impl)
     df2_bodo = bodo_impl(df1)
-    df2_target = pd.DataFrame({"A": [["AB"], ["A", "B", "C"], ["D", "E"], ["AB", "CD"], ["D", "F"]]})
+    df2_target = pd.DataFrame(
+        {"A": [["AB"], ["A", "B", "C"], ["D", "E"], ["AB", "CD"], ["D", "F"]]}
+    )
     check_func(test_impl, (df1,), sort_output=True, py_output=df2_target)
 
 
@@ -148,7 +149,7 @@ def test_list_string_array_type_random():
 
     n = 50
     df1 = pd.DataFrame({"A": rand_col_l_str(n)})
-    check_func_list_string(test_impl, (df1,), sort_output=True, reset_index=True)
+    check_func_type_extent(test_impl, (df1,), sort_output=True, reset_index=True)
 
 
 def test_drop_duplicates_2col_int_numpynan_bool():

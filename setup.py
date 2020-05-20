@@ -219,6 +219,7 @@ ext_arr = Extension(
     sources=[
         "bodo/libs/_array.cpp",
         "bodo/libs/_bodo_common.cpp",
+        "bodo/libs/_decimal_ext.cpp",
         "bodo/libs/_array_utils.cpp",
         "bodo/libs/_array_hash.cpp",
         "bodo/libs/_shuffle.cpp",
@@ -228,12 +229,14 @@ ext_arr = Extension(
         "bodo/libs/_murmurhash3.cpp",
     ],
     depends=[
+        "bodo/libs/_decimal_ext.h",
+        "bodo/libs/_decimal_ext.cpp",
         "bodo/libs/_bodo_common.h",
         "bodo/libs/_bodo_common.cpp",
         "bodo/libs/_murmurhash3.h",
         "bodo/libs/_distributed.h",
     ],
-    libraries=MPI_LIBS,
+    libraries=MPI_LIBS + np_compile_args["libraries"] + ["arrow"],
     extra_compile_args=eca,
     extra_link_args=ela,
     define_macros=np_compile_args["define_macros"],

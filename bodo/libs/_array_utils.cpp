@@ -1,5 +1,6 @@
 // Copyright (C) 2019 Bodo Inc. All rights reserved.
 #include "_array_utils.h"
+#include "_decimal_ext.h"
 #include <iostream>
 #include <string>
 
@@ -502,7 +503,7 @@ bool KeyComparisonAsPython(size_t const& n_key, int64_t* vect_ascending,
  * @return The string on output.
  */
 std::string GetStringExpression(Bodo_CTypes::CTypeEnum const& dtype,
-                                char* ptrdata) {
+                                char* ptrdata, int scale) {
     if (dtype == Bodo_CTypes::_BOOL) {
         bool* ptr = (bool*)ptrdata;
         return std::to_string(*ptr);
@@ -549,6 +550,10 @@ std::string GetStringExpression(Bodo_CTypes::CTypeEnum const& dtype,
         float* ptr = (float*)ptrdata;
         return std::to_string(*ptr);
     }
+    if (dtype == Bodo_CTypes::DECIMAL) {
+        decimal_value_cpp* val = (decimal_value_cpp*)ptrdata;
+        return decimal_value_cpp_to_std_string(*val, scale);
+    }
     if (dtype == Bodo_CTypes::FLOAT64) {
         double* ptr = (double*)ptrdata;
         return std::to_string(*ptr);
@@ -567,7 +572,7 @@ std::vector<std::string> DEBUG_PrintColumn(array_info* arr) {
             bool bit = GetBit(null_bitmask, iRow);
             if (bit) {
                 char* ptrdata1 = &(arr->data1[siztype * iRow]);
-                strOut = GetStringExpression(arr->dtype, ptrdata1);
+                strOut = GetStringExpression(arr->dtype, ptrdata1, arr->scale);
             } else {
                 strOut = "false";
             }
@@ -578,7 +583,7 @@ std::vector<std::string> DEBUG_PrintColumn(array_info* arr) {
         uint64_t siztype = numpy_item_size[arr->dtype];
         for (size_t iRow = 0; iRow < nRow; iRow++) {
             char* ptrdata1 = &(arr->data1[siztype * iRow]);
-            strOut = GetStringExpression(arr->dtype, ptrdata1);
+            strOut = GetStringExpression(arr->dtype, ptrdata1, arr->scale);
             ListStr[iRow] = strOut;
         }
     }

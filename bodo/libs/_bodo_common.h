@@ -38,6 +38,11 @@ struct Bodo_CTypes {
 
 #define BYTES_PER_DECIMAL 16
 
+struct decimal_value_cpp {
+  int64_t low;
+  int64_t high;
+};
+
 // for numpy arrays, this maps dtype to sizeof(dtype)
 extern std::vector<size_t> numpy_item_size;
 

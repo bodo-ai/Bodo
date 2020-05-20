@@ -5,6 +5,7 @@ import datetime
 import pandas as pd
 import numpy as np
 import bodo
+from decimal import Decimal
 from bodo.tests.utils import (
     count_array_REPs,
     count_parfor_REPs,
@@ -12,8 +13,8 @@ from bodo.tests.utils import (
     count_array_OneDs,
     dist_IR_contains,
     check_parallel_coherency,
-    check_func_list_string,
-    convert_list_string_columns,
+    check_func_type_extent,
+    convert_list_string_decimal_columns,
     get_start_end,
     check_func,
 )
@@ -215,6 +216,96 @@ def test_sum_string():
 
     df1 = pd.DataFrame({"A": [1, 1, 1, 2], "B": ["a", "b", "c", "d"]})
     check_func(impl, (df1,), sort_output=True)
+
+
+def test_random_decimal_sum_min_max_last():
+    """We do not have decimal as index. Therefore we have to use as_index=False
+    """
+
+    def impl1(df):
+        df_ret = df.groupby("A", as_index=False).nunique()
+        return df_ret["B"].copy()
+
+    def impl2(df):
+        A = df.groupby("A", as_index=False).last()
+        return A
+
+    def impl3(df):
+        A = df.groupby("A", as_index=False)["B"].first()
+        return A
+
+    def impl4(df):
+        A = df.groupby("A", as_index=False)["B"].count()
+        return A
+
+    def impl5(df):
+        A = df.groupby("A", as_index=False).max()
+        return A
+
+    def impl6(df):
+        A = df.groupby("A", as_index=False).min()
+        return A
+
+    def impl7(df):
+        A = df.groupby("A", as_index=False)["B"].mean()
+        return A
+
+    def impl8(df):
+        A = df.groupby("A", as_index=False)["B"].median()
+        return A
+
+    def impl9(df):
+        A = df.groupby("A", as_index=False)["B"].var()
+        return A
+
+    # We need to drop column A because the column A is replaced by std(A)
+    # in pandas due to a pandas bug.
+    def impl10(df):
+        A = df.groupby("A", as_index=False)["B"].std()
+        return A.drop(columns="A")
+
+    def compute_random_decimal(opt, n):
+        e_list = []
+
+        def random_str1():
+            e_str1 = str(1 + random.randint(1, 8))
+            e_str2 = str(1 + random.randint(1, 8))
+            return e_str1 + "." + e_str2
+
+        def random_str2():
+            klen1 = random.randint(1, 7)
+            klen2 = random.randint(1, 7)
+            e_str1 = "".join([str(1 + random.randint(1, 8)) for _ in range(klen1)])
+            e_str2 = "".join([str(1 + random.randint(1, 8)) for _ in range(klen2)])
+            esign = "" if random.randint(1, 2) == 1 else "-"
+            return esign + e_str1 + "." + e_str2
+
+        for _ in range(n):
+            if opt == 1:
+                e_str = random_str1()
+            if opt == 2:
+                e_str = random_str2()
+            e_list.append(Decimal(e_str))
+        return pd.Series(e_list)
+
+    n = 10
+    df1 = pd.DataFrame(
+        {"A": compute_random_decimal(1, n), "B": compute_random_decimal(2, n)}
+    )
+
+    # Direct checks for which pandas has equivalent functions.
+    check_func(impl1, (df1,), sort_output=True)
+    check_func(impl2, (df1,), sort_output=True)
+    check_func(impl3, (df1,), sort_output=True)
+    check_func(impl4, (df1,), sort_output=True)
+    check_func(impl5, (df1,), sort_output=True)
+    check_func(impl6, (df1,), sort_output=True)
+
+    # For mean/median/var/std we need to map the types.
+    check_func_type_extent(impl7, (df1,), sort_output=True, reset_index=True)
+    check_func_type_extent(impl8, (df1,), sort_output=True, reset_index=True)
+    check_func_type_extent(impl9, (df1,), sort_output=True, reset_index=True)
+    check_func_type_extent(impl10, (df1,), sort_output=True, reset_index=True)
 
 
 def test_random_string_sum_min_max_first_last():
@@ -459,10 +550,10 @@ def test_sum_max_min_list_string_random():
     def check_fct(the_fct, df1, select_col_comparison):
         bodo_fct = bodo.jit(the_fct)
         # Computing images via pandas and pandas but applying the merging of columns
-        df1_merge = convert_list_string_columns(df1)
+        df1_merge = convert_list_string_decimal_columns(df1)
         df2_merge_preA = the_fct(df1_merge)
         df2_merge_A = df2_merge_preA[select_col_comparison]
-        df2_merge_preB = convert_list_string_columns(bodo_fct(df1))
+        df2_merge_preB = convert_list_string_decimal_columns(bodo_fct(df1))
         df2_merge_B = df2_merge_preB[select_col_comparison]
         # Now comparing the results.
         list_col_names = df2_merge_A.columns.to_list()
@@ -480,12 +571,12 @@ def test_sum_max_min_list_string_random():
 
     # For nunique, we face the problem of difference of formatting between nunique
     # in Bodo and in Pandas.
-    check_func_list_string(test_impl1, (df1,), sort_output=True, reset_index=True)
-    check_func_list_string(test_impl2, (df1,), sort_output=True, reset_index=True)
-    check_func_list_string(test_impl3, (df1,), sort_output=True, reset_index=True)
-    check_func_list_string(test_impl4, (df1,), sort_output=True, reset_index=True)
-    check_func_list_string(test_impl5, (df1,), sort_output=True, reset_index=True)
-    check_func_list_string(test_impl6, (df1,), sort_output=True, reset_index=True)
+    check_func_type_extent(test_impl1, (df1,), sort_output=True, reset_index=True)
+    check_func_type_extent(test_impl2, (df1,), sort_output=True, reset_index=True)
+    check_func_type_extent(test_impl3, (df1,), sort_output=True, reset_index=True)
+    check_func_type_extent(test_impl4, (df1,), sort_output=True, reset_index=True)
+    check_func_type_extent(test_impl5, (df1,), sort_output=True, reset_index=True)
+    check_func_type_extent(test_impl6, (df1,), sort_output=True, reset_index=True)
 
     # For test_impl7, we have an error in as_index=False function, that is:
     # df1.groupby("A", as_index=False)["B"].agg(("sum", "min", "max"))

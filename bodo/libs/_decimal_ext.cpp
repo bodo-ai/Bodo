@@ -11,6 +11,44 @@
 // using scale 18 when converting from Python Decimal objects (same as Spark)
 #define PY_DECIMAL_SCALE 18
 
+std::string decimal_to_std_string(arrow::Decimal128 const& arrow_decimal, int const& scale) {
+    std::string str = arrow_decimal.ToString(scale);
+    // str may be of the form 0.45000000000 or 4.000000000
+    size_t last_char = str.length();
+    while(true) {
+        if (str[last_char-1] != '0')
+            break;
+        last_char--;
+    }
+    // position reduce str to 0.45  or 4.
+    if (str[last_char-1] == '.')
+        last_char--;
+    // position reduce str to 0.45 or 4
+    str = str.substr(0,last_char);
+    if (str == "0.E-18")
+        return "0";
+    return str;
+}
+
+std::string decimal_value_cpp_to_std_string(decimal_value_cpp const & val, int const& scale) {
+    arrow::Decimal128 arrow_decimal(val.high, val.low);
+    return decimal_to_std_string(arrow_decimal, scale);
+}
+
+bool operator<(decimal_value_cpp const& left, decimal_value_cpp const& right)
+{
+    arrow::Decimal128 arrow_decimal_left(left.high, left.low);
+    arrow::Decimal128 arrow_decimal_right(right.high, right.low);
+    return arrow_decimal_left < arrow_decimal_right;
+}
+
+double decimal_to_double(decimal_value_cpp const& val)
+{
+    int scale = 18;
+    std::string str = decimal_value_cpp_to_std_string(val, scale);
+    return std::stod(str);
+}
+
 extern "C" {
 
 void* box_decimal_array(int64_t n, const uint8_t* data,
@@ -89,7 +127,7 @@ void* box_decimal_array(int64_t n, const uint8_t* data,
             *(uint64_t*)(data + i * BYTES_PER_DECIMAL + sizeof(uint64_t));
         uint64_t low_bytes = *(uint64_t*)(data + i * BYTES_PER_DECIMAL);
         arrow::Decimal128 arrow_decimal(high_bytes, low_bytes);
-        std::string str = arrow_decimal.ToString(scale);
+        std::string str = decimal_to_std_string(arrow_decimal, scale);
         PyObject* d =
             PyObject_CallFunction(decimal_constructor, "s", str.c_str());
 
@@ -116,7 +154,7 @@ void* box_decimal_array(int64_t n, const uint8_t* data,
 /**
  * @brief unbox a single Decimal object into a native Decimal128Type
  *
- * @param obj ndarray object of Decimal objects
+ * @param obj single decimal object
  * @param data pointer to 128-bit data
  */
 void unbox_decimal(PyObject* obj, uint8_t* data_ptr)
@@ -247,26 +285,10 @@ void unbox_decimal_array(PyObject* obj, int64_t n, uint8_t* data,
  */
 void decimal_to_str(decimal_value val, NRT_MemInfo** meminfo_ptr,
                     int64_t* len_ptr, int scale) {
-    std::string str = "0";
-    // normalize string representation to remove extra zeros (e.g. 0.45000 -> 0.45, 4.0000 -> 4)
-    if (val.high != 0 || val.low != 0) {
-      // only this case for a non-zero value
-      arrow::Decimal128 arrow_decimal(val.high, val.low);
-      str = arrow_decimal.ToString(scale);
-      // str may be of the form 0.45000000000 or 4.000000000
-      size_t last_char = str.length();
-      while(true) {
-        if (str[last_char-1] != '0')
-          break;
-        last_char--;
-      }
-      // position reduce str to 0.45  or 4.
-      if (str[last_char-1] == '.')
-        last_char--;
-      // position reduce str to 0.45 or 4
-      str = str.substr(0,last_char);
-      // the reduction is done. str is 0.45 or 4
-    }
+    // Creating the arrow_decimal value
+    arrow::Decimal128 arrow_decimal(val.high, val.low);
+    // Getting the string
+    std::string str = decimal_to_std_string(arrow_decimal, scale);
     // Now doing the boxing.
     int64_t l = (int64_t)str.length();
     NRT_MemInfo* meminfo = NRT_MemInfo_alloc_safe(l + 1);

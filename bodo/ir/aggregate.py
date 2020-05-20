@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 import numba
 from bodo.utils.typing import BodoError
+from bodo.libs.decimal_arr_ext import DecimalArrayType, alloc_decimal_array
 from numba.core import compiler, ir, ir_utils, types
 from numba.core.ir_utils import (
     visit_vars_inner,
@@ -823,6 +824,7 @@ def agg_distributed_run(
             "pd": pd,
             "pre_alloc_string_array": pre_alloc_string_array,
             "pre_alloc_list_string_array": pre_alloc_list_string_array,
+            "alloc_decimal_array": alloc_decimal_array,
             "agg_seq_iter": agg_seq_iter,
             "parallel_agg": parallel_agg,
             "array_to_info": array_to_info,
@@ -1783,6 +1785,12 @@ def gen_top_level_agg_func(
             elif isinstance(out_col_typs[i], ListStringArrayType):
                 func_text += "    {} = pre_alloc_list_string_array(1,1,1)\n".format(
                     out_name
+                )
+            elif isinstance(out_col_typs[i], DecimalArrayType):
+                scale = out_col_typs[i].scale
+                precision = out_col_typs[i].precision
+                func_text += "    {} = alloc_decimal_array(1, {}, {})\n".format(
+                    out_name, precision, scale
                 )
             else:
                 func_text += "    {} = np.empty(1, {})\n".format(

@@ -6,6 +6,7 @@ import numpy as np
 import random
 import string
 import numba
+from decimal import Decimal
 from numba.core.untyped_passes import PreserveIR
 from numba.core.typed_passes import NopythonRewrites
 import bodo
@@ -420,32 +421,47 @@ def check_timing_func(func, args):
 
 
 # The functionality below exist because in the case of column having
-# a list-string as data type, several functionalities are missing from pandas:
+# a list-string or Decimal as data type, several functionalities are missing from pandas:
+# For pandas and list of strings:
 # ---sort_values
 # ---groupby/join/drop_duplicates
 # ---hashing
+# For pandas and list of decimals:
+# ---mean
+# ---median
+# ---var/std
 #
-# The solution is to transform a column of list string into a column
-# of strings and therefore amenable to sort_values.
+# The solution:
+# ---to transform columns of list string into columns of strings and therefore
+#    amenable to sort_values.
+# ---to transform columns of decimals into columns of floats
 #
 # Note: We cannot use df_copy["e_col_name"].str.join(',') because of unahashable list.
-def convert_list_string_columns(df):
+def convert_list_string_decimal_columns(df):
     df_copy = df.copy()
     list_col = df.columns.to_list()
     n_rows = df_copy[list_col[0]].size
-    col_names = []
+    # Determine which columns have list of strings in them
+    # Determine which columns have Decimals in them.
+    col_names_list_string = []
+    col_names_decimal = []
     for e_col_name in list_col:
         e_col = df[e_col_name]
         nb_list_string = 0
+        nb_decimal = 0
         for i_row in range(n_rows):
             e_ent = e_col.iat[i_row]
             if isinstance(e_ent, list):
                 if len(e_ent) > 0:
                     if isinstance(e_ent[0], str):
                         nb_list_string += 1
+            if isinstance(e_ent, Decimal):
+                nb_decimal += 1
         if nb_list_string > 0:
-            col_names.append(e_col_name)
-    for e_col_name in col_names:
+            col_names_list_string.append(e_col_name)
+        if nb_decimal > 0:
+            col_names_decimal.append(e_col_name)
+    for e_col_name in col_names_list_string:
         e_list_str = []
         e_col = df[e_col_name]
         for i_row in range(n_rows):
@@ -456,6 +472,16 @@ def convert_list_string_columns(df):
             else:
                 e_list_str.append(np.nan)
         df_copy[e_col_name] = e_list_str
+    for e_col_name in col_names_decimal:
+        e_list_float = []
+        e_col = df[e_col_name]
+        for i_row in range(n_rows):
+            e_ent = e_col.iat[i_row]
+            if isinstance(e_ent, Decimal):
+                e_list_float.append(float(e_ent))
+            else:
+                e_list_float.append(np.nan)
+        df_copy[e_col_name] = e_list_float
     return df_copy
 
 
@@ -480,7 +506,7 @@ def check_parallel_coherency(
         all_args_distributed_block=False, all_returns_distributed=False
     )(func)
     serial_output_raw = bodo_func_serial(*call_args_serial)
-    serial_output_final = convert_list_string_columns(serial_output_raw)
+    serial_output_final = convert_list_string_decimal_columns(serial_output_raw)
 
     # If running on just one processor, nothing more is needed.
     if n_pes == 1:
@@ -495,7 +521,7 @@ def check_parallel_coherency(
     )
 
     parall_output_raw = bodo_func_parall(*call_args_parall)
-    parall_output_proc = convert_list_string_columns(parall_output_raw)
+    parall_output_proc = convert_list_string_decimal_columns(parall_output_raw)
     # Collating the parallel output on just one processor.
     parall_output_final = bodo.gatherv(parall_output_proc)
 
@@ -524,16 +550,22 @@ def check_parallel_coherency(
 
 
 # This function allows to check the coherency of functions using a list of strings
-# in input and output. The idea is to map the list of strings into strings.
+# or Decimals in input and output.
+#
+# The idea is:
+# ---map the list of strings into strings.
+# ---map the Decimals to floats
 #
 # The input is a sequence of dataframes. The output is a single dataframe.
-def check_func_list_string(
-    test_func, args, sort_output=False, reset_index=False,
+def check_func_type_extent(
+    test_func, tuple_args, sort_output=False, reset_index=False,
 ):
-    args_mapped = tuple(convert_list_string_columns(a) for a in args)
+    tuple_args_mapped = tuple(
+        convert_list_string_decimal_columns(a) for a in tuple_args
+    )
     bodo_func = bodo.jit(test_func)
-    result_mapped_A = test_func(*args_mapped)
-    result_mapped_B = convert_list_string_columns(bodo_func(*args))
+    result_mapped_A = test_func(*tuple_args_mapped)
+    result_mapped_B = convert_list_string_decimal_columns(bodo_func(*tuple_args))
     if sort_output:
         list_col_names = result_mapped_A.columns.to_list()
         result_mapped_A.sort_values(by=list_col_names, inplace=True)
@@ -543,7 +575,7 @@ def check_func_list_string(
         result_mapped_B.reset_index(drop=True, inplace=True)
     pd.testing.assert_frame_equal(result_mapped_A, result_mapped_B)
     check_parallel_coherency(
-        test_func, args, sort_output=sort_output, reset_index=reset_index
+        test_func, tuple_args, sort_output=sort_output, reset_index=reset_index
     )
 
 

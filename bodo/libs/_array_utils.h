@@ -1,5 +1,6 @@
 // Copyright (C) 2019 Bodo Inc. All rights reserved.
 #include "_bodo_common.h"
+#include "_decimal_ext.h"
 
 // ------------------------------------------------
 // Choose implementation for unordered map and set
@@ -99,6 +100,7 @@ inline double GetDoubleEntry(Bodo_CTypes::CTypeEnum dtype, char* ptr) {
     if (dtype == Bodo_CTypes::DATE) return double(GetTentry<int64_t>(ptr));
     if (dtype == Bodo_CTypes::DATETIME) return double(GetTentry<int64_t>(ptr));
     if (dtype == Bodo_CTypes::TIMEDELTA) return double(GetTentry<int64_t>(ptr));
+    if (dtype == Bodo_CTypes::DECIMAL) return decimal_to_double(GetTentry<decimal_value_cpp>(ptr));
     Bodo_PyErr_SetString(PyExc_RuntimeError, "Unsupported case in GetDoubleEntry");
     return 0;
 }
@@ -241,6 +243,19 @@ template <>
 struct is_datetime_timedelta<Bodo_CTypes::TIMEDELTA> {
     static const bool value = true;
 };
+
+template <int dtype>
+struct is_decimal {
+    static const bool value = false;
+};
+
+template <>
+struct is_decimal<Bodo_CTypes::DECIMAL> {
+    static const bool value = true;
+};
+
+
+
 
 template <typename T, int dtype>
 inline typename std::enable_if<std::is_floating_point<T>::value, bool>::type
