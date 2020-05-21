@@ -2151,6 +2151,8 @@ def test_series_np_where_num():
         (pd.Series(["1.4", "2.3333", None, "1.22", "555.1"]), "float"),
         (pd.Series([1, 2, 9, 11, 3]), "integer"),
         (pd.Series(["1", "3", None, "12", "-555"]), "integer"),
+        # string array with invalid element
+        (pd.Series(["1", "3", None, "12", "-55ss"]), "integer"),
         (pd.Series(["1", "3", None, "12", "555"]), "unsigned"),
     ],
 )
