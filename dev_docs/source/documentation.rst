@@ -8,13 +8,13 @@ Building Documentation
 
 The `user (or dev) documentation <https://docs.bodo.ai>`_ is under the `docs (or dev_docs)` directory of the repository and uses
 the reStructuredText format.
-It is built with `Sphinx <http://www.sphinx-doc.org>`_ and the alabaster theme::
+It is built with `Sphinx <http://www.sphinx-doc.org>`_ and a custom Bodo theme based on alabaster::
 
     conda install sphinx
     conda install alabaster
 
 After updating documentation, run :code:`make html` in the `docs` folder to build.  
-Open `index.html` to view the documentation.  
+Open `_build/html/index.html` to view the documentation.  
 For the user documentation only, to update, use the :code:`gh-pages.py`
 script under :code:`docs`::
 
