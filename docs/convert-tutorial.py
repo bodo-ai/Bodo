@@ -45,9 +45,7 @@ def process_html_block(l, infile, outfile):
             if "alert-warning" in l:  # yellow/orange in notebook
                 block = [".. warning::\n", "\n"]
             elif "alert-danger" in l:  # red in notebook
-                # our use of alert-danger in the notebook is for the red color
-                # but to express warning (not danger), so substitute for warning
-                block = [".. warning::\n", "\n"]
+                block = [".. danger::\n", "\n"]
             elif "alert-info" in l:  # blue in notebook
                 block = [".. note::\n", "\n"]
             l = infile.readline()
