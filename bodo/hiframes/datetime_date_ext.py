@@ -46,6 +46,7 @@ from bodo.utils.typing import is_list_like_index_type
 from bodo.utils.indexing import (
     get_new_null_mask_bool_index,
     get_new_null_mask_int_index,
+    get_new_null_mask_slice_index,
 )
 from bodo.libs import hdatetime_ext
 import llvmlite.binding as ll
@@ -744,15 +745,7 @@ def dt_date_arr_getitem(A, ind):
             n = len(A._data)
             old_mask = A._null_bitmap
             new_data = np.ascontiguousarray(A._data[ind])
-            slice_idx = numba.cpython.unicode._normalize_slice(ind, n)
-            span = numba.cpython.unicode._slice_span(slice_idx)
-            n_bytes = (span + 7) >> 3
-            new_mask = np.empty(n_bytes, np.uint8)
-            curr_bit = 0
-            for i in range(slice_idx.start, slice_idx.stop, slice_idx.step):
-                bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(old_mask, i)
-                bodo.libs.int_arr_ext.set_bit_to_arr(new_mask, curr_bit, bit)
-                curr_bit += 1
+            new_mask = get_new_null_mask_slice_index(old_mask, ind, n)
             return init_datetime_date_array(new_data, new_mask)
 
         return impl_slice
