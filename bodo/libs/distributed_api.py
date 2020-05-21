@@ -127,7 +127,7 @@ def get_size():  # pragma: no cover
 @numba.njit
 def barrier():  # pragma: no cover
     """wrapper for barrier (MPI barrier currently)"""
-    return _barrier()
+    _barrier()
 
 
 _get_time = types.ExternalFunction("get_time", types.float64())
