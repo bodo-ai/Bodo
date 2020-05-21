@@ -37,6 +37,6 @@ source/user_guide.rst:
 	cp -r Bodo-tutorial/bodo_tutorial_files Bodo-tutorial/img source
 
 clean:
-	rm -rf Bodo-tutorial source/bodo_tutorial_files
+	rm -rf Bodo-tutorial source/bodo_tutorial_files source/img
 	rm -f source/getting_started.rst source/user_guide.rst
 	@$(SPHINXBUILD) -M clean "$(SOURCEDIR)" "$(BUILDDIR)" $(SPHINXOPTS) $(O)
