@@ -194,3 +194,94 @@ h3#searchlabel {
     border-top-right-radius: 4px;
     border-bottom-right-radius: 4px;
 }
+
+div.admonition {
+    margin: 20px 0px;
+    padding: 25px 25px 10px;
+    background-color: #eee;
+    border: none;
+    border-left: 5px solid red;
+    width: calc(100% + 30px);
+    position: relative;
+    left: -30px;
+}
+div.admonition p {
+    margin-top: 10px;
+}
+
+div.admonition tt.xref, div.admonition code.xref, div.admonition a tt {
+    background-color: red;
+    border-bottom: 1px solid red;
+}
+
+div.admonition p.admonition-title {
+    font-family: "Lato", sans-serif;
+    font-weight: normal;
+    font-size: 24px;
+    margin: 0 0 10px 0;
+    padding: 0;
+    line-height: 1;
+}
+
+div.admonition p.last {
+    margin-bottom: 0;
+}
+div.admonition p.admonition-title {
+    margin-bottom: 0;
+    font-family: "Jost", sans-serif;
+}
+
+div.danger {
+    background-color: #FFEBEE;
+    border-color: #E53935;
+    box-shadow: none;
+}
+
+div.error {
+    background-color: #FFEBEE;
+    border-color: #E53935;
+    box-shadow: none;
+}
+
+div.warning {
+    background-color: #FFF3E0;
+    border-color: #FB8C00;
+}
+
+div.caution {
+    background-color: #FFF3E0;
+    border-color: #FB8C00;
+}
+
+div.attention {
+    background-color: #FFF3E0;
+    border-color: #FB8C00;
+}
+
+div.important {
+    background-color: #E0F2F1;
+    border-color: #00897B;
+}
+
+div.note {
+    background-color: #E0F2F1;
+    border-color: #00897B;
+}
+
+div.tip {
+    background-color: #E1F5FE;
+    border-color: #039BE5;
+}
+
+div.hint {
+    background-color: #E1F5FE;
+    border-color: #039BE5;
+}
+
+div.seealso {
+    background-color: #E1F5FE;
+    border-color: #039BE5;
+}
+
+
+
