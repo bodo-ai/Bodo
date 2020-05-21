@@ -74,7 +74,6 @@ div.sphinxsidebar a {
 }
 div.body {
     height: calc(100vh - 185px);
-    overflow: auto;
     position: relative;
     top: 40px;
     color: #25273f;
