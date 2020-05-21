@@ -48,7 +48,10 @@ from bodo.utils.typing import (
     is_list_like_index_type,
     parse_dtype,
 )
-from bodo.utils.indexing import get_new_null_mask_bool_index
+from bodo.utils.indexing import (
+    get_new_null_mask_bool_index,
+    get_new_null_mask_int_index,
+)
 
 
 int128_type = types.Integer("int128", 128)
@@ -597,13 +600,7 @@ def decimal_arr_getitem(A, ind):
             old_mask = A._null_bitmap
             new_data = A._data[ind_t]
             n = len(new_data)
-            n_bytes = (n + 7) >> 3
-            new_mask = np.empty(n_bytes, np.uint8)
-            curr_bit = 0
-            for i in range(len(ind)):
-                bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(old_mask, ind_t[i])
-                bodo.libs.int_arr_ext.set_bit_to_arr(new_mask, curr_bit, bit)
-                curr_bit += 1
+            new_mask = get_new_null_mask_int_index(old_mask, ind_t, n)
             return init_decimal_array(new_data, new_mask, precision, scale)
 
         return impl
