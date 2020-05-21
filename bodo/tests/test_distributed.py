@@ -265,6 +265,29 @@ def test_bodo_func_dist_call_star_arg():
     assert count_array_REPs() == 0
 
 
+def test_dist_flag_warn1():
+    """raise a warning when distributed flag is used for variables other than arguments
+    and return values.
+    """
+
+    @bodo.jit(distributed=["A", "C", "B", "D"])
+    def impl1(A, flag):
+        B = 2 * A
+        if flag:
+            C = B + 1
+            return C
+        else:
+            D = B + 2
+            return D
+
+    if bodo.get_rank() == 0:  # warning is thrown only on rank 0
+        with pytest.warns(BodoWarning, match="Only function arguments and return"):
+            impl1(np.arange(11), True)
+    else:
+        impl1(np.arange(11), True)
+    assert count_array_REPs() == 0
+
+
 def test_bodo_func_rep():
     """test calling other bodo functions without distributed flag
     """
