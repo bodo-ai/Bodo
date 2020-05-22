@@ -9,6 +9,19 @@ body {
     padding-top: 80px;
     font-family: 'Lato', sans-serif;
 }
+@media screen and  (max-height: 880px) {
+    body {
+        padding-top: 40px;
+        font-size: 16px;
+    }
+    div.body h1 { font-size: 200%; }
+    div.body h2 { font-size: 150%; }
+    div.body h3 { font-size: 130%; }
+    div.body h4 { font-size: 110%; }
+    div.body h5 { font-size: 100%; }
+    div.body h6 { font-size: 100%; }
+
+}
 *, *:after, *:before {
     box-sizing: border-box;
 }
@@ -43,6 +56,12 @@ div.document {
     overflow: hidden;
     box-sizing: border-box;
 }
+@media screen and  (max-height: 880px) {
+    .bodywrapper {
+        height: calc(100vh - 85px);
+        padding: 0 20px 40px 10px;
+    }
+}
 .bodywrapper .body {
     background-color: #fff;
 }
@@ -50,7 +69,11 @@ div.sphinxsidebarwrapper {
     padding: 0 30px 40px;
     height: calc(100vh - 145px);
     overflow: auto;
-
+}
+@media screen and  (max-height: 880px) {
+    div.sphinxsidebarwrapper {
+        height: calc(100vh - 85px);
+    }
 }
 div.sphinxsidebar {
     height: calc(100vh - 185px);
@@ -60,6 +83,12 @@ div.sphinxsidebar {
     color: #25273f;
     -ms-overflow-style: none;  /* Internet Explorer 10+ */
     scrollbar-width: none;  /* Firefox */
+}
+@media screen and  (max-height: 880px) {
+    div.sphinxsidebar {
+        height: calc(100vh - 105px);
+        top: 20px;
+    }
 }
 div.sphinxsidebar::-webkit-scrollbar {
     display: none;  /* Safari and Chrome */
@@ -77,6 +106,12 @@ div.body {
     position: relative;
     top: 40px;
     color: #25273f;
+}
+@media screen and  (max-height: 880px) {
+    div.body {
+        height: calc(100vh - 105px);
+        top: 20px;
+    }
 }
 div.body p {
     line-height: 1.6em;
@@ -110,6 +145,17 @@ div.body pre {
     display: inline;
 }
 
+@media screen and  (max-height: 880px) {
+    .top-bar {
+        margin-bottom: 0;
+        position: relative;
+        top: -8px;
+    }
+    .top-bar__logo img {
+        width: 100px;
+        height: auto;
+    }
+}
 nav#rellinks {
     float: right;
 }
@@ -129,6 +175,11 @@ nav#breadcrumbs li+li:before {
     width: 100%;
     padding: 10px;
     font-size: .9em;
+}
+@media screen and  (max-height: 880px) {
+    .home-link {
+        padding: 5px 10px;
+    }
 }
 .home-link div {
     max-width: 1300px;
