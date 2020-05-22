@@ -47,6 +47,8 @@ from bodo.utils.indexing import (
     array_getitem_bool_index,
     array_getitem_int_index,
     array_getitem_slice_index,
+    array_setitem_int_index_array,
+    array_setitem_int_index_list,
 )
 from bodo.libs import hdatetime_ext
 import llvmlite.binding as ll
@@ -760,20 +762,14 @@ def dt_date_arr_setitem(A, ind, val):
         if isinstance(val, DatetimeDateArrayType):
 
             def impl_arr_ind_mask(A, ind, val):  # pragma: no cover
-                n = len(val._data)
-                for i in range(n):
-                    bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(val._null_bitmap, i)
-                    bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, ind[i], bit)
-                    A._data[ind[i]] = val._data[i]
+                array_setitem_int_index_array(A, ind, val)
 
             # covered by test_series_iloc_setitem_list_int (OK)
             return impl_arr_ind_mask
 
         # value is Array/List
         def impl_arr_ind(A, ind, val):  # pragma: no cover
-            for i in range(len(val)):
-                bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, ind[i], 1)
-                A._data[ind[i]] = cast_datetime_date_to_int(val[i])
+            array_setitem_int_index_list(A, ind, val)
 
         # Corresponding test is missing ...
         return impl_arr_ind  # pragma: no cover
