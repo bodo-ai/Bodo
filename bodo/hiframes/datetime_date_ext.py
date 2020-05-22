@@ -51,6 +51,8 @@ from bodo.utils.indexing import (
     array_setitem_int_index_list,
     array_setitem_bool_index_array,
     array_setitem_bool_index_list,
+    array_setitem_slice_index_array,
+    array_setitem_slice_index_list,
 )
 from bodo.libs import hdatetime_ext
 import llvmlite.binding as ll
@@ -790,7 +792,7 @@ def dt_date_arr_setitem(A, ind, val):
 
         # value is Array/List
         def impl_bool_ind(A, ind, val):  # pragma: no cover
-            array_setitem_bool_index_list(A, idx, val)
+            array_setitem_bool_index_list(A, ind, val)
 
         # The following test is missing ...
         return impl_bool_ind  # pragma: no cover
@@ -801,31 +803,13 @@ def dt_date_arr_setitem(A, ind, val):
         if isinstance(val, DatetimeDateArrayType):
 
             def impl_slice_mask(A, ind, val):  # pragma: no cover
-                n = len(A._data)
-                # using setitem directly instead of copying in loop since
-                # Array setitem checks for memory overlap and copies source
-                A._data[ind] = val._data
-                # XXX: conservative copy of bitmap in case there is overlap
-                # TODO: check for overlap and copy only if necessary
-                src_bitmap = val._null_bitmap.copy()
-                slice_ind = numba.cpython.unicode._normalize_slice(ind, n)
-                val_ind = 0
-                for i in range(slice_ind.start, slice_ind.stop, slice_ind.step):
-                    bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(src_bitmap, val_ind)
-                    bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, i, bit)
-                    val_ind += 1
+                array_setitem_slice_index_array(A, ind, val)
 
             # Apparently covered by test_series_setitem_slice
             return impl_slice_mask
 
         def impl_slice(A, ind, val):  # pragma: no cover
-            n = len(A._data)
-            A._data[ind] = val
-            slice_ind = numba.cpython.unicode._normalize_slice(ind, n)
-            val_ind = 0
-            for i in range(slice_ind.start, slice_ind.stop, slice_ind.step):
-                bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, i, 1)
-                val_ind += 1
+            array_setitem_slice_index_list(A, ind, val)
 
         # The following test is missing ...
         return impl_slice  # pragma: no cover
