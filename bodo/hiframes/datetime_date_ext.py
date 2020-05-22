@@ -44,9 +44,9 @@ from bodo.hiframes.datetime_datetime_ext import DatetimeDatetimeType
 import bodo
 from bodo.utils.typing import is_list_like_index_type
 from bodo.utils.indexing import (
-    get_new_null_mask_bool_index,
-    get_new_null_mask_int_index,
-    get_new_null_mask_slice_index,
+    array_getitem_bool_index,
+    array_getitem_int_index,
+    array_getitem_slice_index,
 )
 from bodo.libs import hdatetime_ext
 import llvmlite.binding as ll
@@ -716,11 +716,7 @@ def dt_date_arr_getitem(A, ind):
     if is_list_like_index_type(ind) and ind.dtype == types.bool_:
 
         def impl_bool(A, ind):  # pragma: no cover
-            ind = bodo.utils.conversion.coerce_to_ndarray(ind)
-            old_mask = A._null_bitmap
-            new_data = A._data[ind]
-            n = len(new_data)
-            new_mask = get_new_null_mask_bool_index(old_mask, ind, n)
+            new_data, new_mask = array_getitem_bool_index(A, ind)
             return init_datetime_date_array(new_data, new_mask)
 
         return impl_bool
@@ -729,11 +725,7 @@ def dt_date_arr_getitem(A, ind):
     if is_list_like_index_type(ind) and isinstance(ind.dtype, types.Integer):
 
         def impl(A, ind):  # pragma: no cover
-            ind_t = bodo.utils.conversion.coerce_to_ndarray(ind)
-            old_mask = A._null_bitmap
-            new_data = A._data[ind_t]
-            n = len(new_data)
-            new_mask = get_new_null_mask_int_index(old_mask, ind_t, n)
+            new_data, new_mask = array_getitem_int_index(A, ind)
             return init_datetime_date_array(new_data, new_mask)
 
         return impl
@@ -742,10 +734,7 @@ def dt_date_arr_getitem(A, ind):
     if isinstance(ind, types.SliceType):
 
         def impl_slice(A, ind):  # pragma: no cover
-            n = len(A._data)
-            old_mask = A._null_bitmap
-            new_data = np.ascontiguousarray(A._data[ind])
-            new_mask = get_new_null_mask_slice_index(old_mask, ind, n)
+            new_data, new_mask = array_getitem_slice_index(A, ind)
             return init_datetime_date_array(new_data, new_mask)
 
         return impl_slice

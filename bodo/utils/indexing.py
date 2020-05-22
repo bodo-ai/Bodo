@@ -26,6 +26,19 @@ def get_new_null_mask_bool_index(old_mask, ind, n):
 
 
 @register_jitable
+def array_getitem_bool_index(A, ind):
+    """implements getitem with bool index for arrays that have a '_data' attribute and
+    '_null_bitmap' attribute (e.g. int/bool/decimal/date).
+    """
+    ind = bodo.utils.conversion.coerce_to_ndarray(ind)
+    old_mask = A._null_bitmap
+    new_data = A._data[ind]
+    n = len(new_data)
+    new_mask = get_new_null_mask_bool_index(old_mask, ind, n)
+    return new_data, new_mask
+
+
+@register_jitable
 def get_new_null_mask_int_index(old_mask, ind, n):
     """create a new null bitmask for output of indexing using integer index 'ind'.
     'n' is the total number of elements in original array (not bytes).
@@ -38,6 +51,19 @@ def get_new_null_mask_int_index(old_mask, ind, n):
         bodo.libs.int_arr_ext.set_bit_to_arr(new_mask, curr_bit, bit)
         curr_bit += 1
     return new_mask
+
+
+@register_jitable
+def array_getitem_int_index(A, ind):
+    """implements getitem with int index for arrays that have a '_data' attribute and
+    '_null_bitmap' attribute (e.g. int/bool/decimal/date).
+    """
+    ind_t = bodo.utils.conversion.coerce_to_ndarray(ind)
+    old_mask = A._null_bitmap
+    new_data = A._data[ind_t]
+    n = len(new_data)
+    new_mask = get_new_null_mask_int_index(old_mask, ind_t, n)
+    return new_data, new_mask
 
 
 @register_jitable
@@ -55,3 +81,15 @@ def get_new_null_mask_slice_index(old_mask, ind, n):
         bodo.libs.int_arr_ext.set_bit_to_arr(new_mask, curr_bit, bit)
         curr_bit += 1
     return new_mask
+
+
+@register_jitable
+def array_getitem_slice_index(A, ind):
+    """implements getitem with slice index for arrays that have a '_data' attribute and
+    '_null_bitmap' attribute (e.g. int/bool/decimal/date).
+    """
+    n = len(A._data)
+    old_mask = A._null_bitmap
+    new_data = np.ascontiguousarray(A._data[ind])
+    new_mask = get_new_null_mask_slice_index(old_mask, ind, n)
+    return new_data, new_mask
