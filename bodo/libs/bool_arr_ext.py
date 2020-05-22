@@ -51,6 +51,8 @@ from bodo.utils.indexing import (
     array_getitem_slice_index,
     array_setitem_int_index_array,
     array_setitem_int_index_list,
+    array_setitem_bool_index_array,
+    array_setitem_bool_index_list,
 )
 
 
@@ -524,27 +526,12 @@ def bool_arr_setitem(A, idx, val):
         if val == boolean_array:
 
             def impl_bool_ind_mask(A, idx, val):  # pragma: no cover
-                n = len(idx)
-                val_ind = 0
-                for i in range(n):
-                    if idx[i]:
-                        A._data[i] = val[val_ind]
-                        bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(
-                            val._null_bitmap, val_ind
-                        )
-                        bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, i, bit)
-                        val_ind += 1
+                array_setitem_bool_index_array(A, idx, val)
 
             return impl_bool_ind_mask
         # value is Array/List
         def impl_bool_ind(A, idx, val):  # pragma: no cover
-            n = len(idx)
-            val_ind = 0
-            for i in range(n):
-                if idx[i]:
-                    A._data[i] = val[val_ind]
-                    bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, i, 1)
-                    val_ind += 1
+            array_setitem_bool_index_list(A, idx, val)
 
         return impl_bool_ind
 

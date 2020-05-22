@@ -117,3 +117,34 @@ def array_setitem_int_index_list(A, idx, val):
     for i in range(len(val)):
         A._data[idx[i]] = val[i]
         bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, idx[i], 1)
+
+
+@register_jitable
+def array_setitem_bool_index_array(A, idx, val):
+    """implements setitem with bool index for arrays that have a '_data' attribute and
+    '_null_bitmap' attribute (e.g. int/bool/decimal/date). The value is assumed to be
+    another array of same type.
+    """
+    n = len(idx)
+    val_ind = 0
+    for i in range(n):
+        if idx[i]:
+            A._data[i] = val[val_ind]
+            bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(val._null_bitmap, val_ind)
+            bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, i, bit)
+            val_ind += 1
+
+
+@register_jitable
+def array_setitem_bool_index_list(A, idx, val):
+    """implements setitem with bool index for arrays that have a '_data' attribute and
+    '_null_bitmap' attribute (e.g. int/bool/decimal/date). The value is assumed to be
+    a iterable (e.g. list) of values with compatible type.
+    """
+    n = len(idx)
+    val_ind = 0
+    for i in range(n):
+        if idx[i]:
+            A._data[i] = val[val_ind]
+            bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, i, 1)
+            val_ind += 1
