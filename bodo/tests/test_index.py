@@ -97,6 +97,24 @@ def test_numeric_index_constructor(memory_leak_check):
     pd.testing.assert_index_equal(bodo.jit(impl8)(), impl8())
 
 
+def test_init_numeric_index_array_analysis():
+    """make sure shape equivalence for init_numeric_index() is applied correctly
+    """
+    import numba.tests.test_array_analysis
+
+    def impl(d):
+        I = pd.Int64Index(d)
+        return I
+
+    test_func = numba.njit(pipeline_class=AnalysisTestPipeline, parallel=True)(impl)
+    test_func(np.arange(10))
+    array_analysis = test_func.overloads[test_func.signatures[0]].metadata[
+        "preserved_array_analysis"
+    ]
+    eq_set = array_analysis.equiv_sets[0]
+    assert eq_set._get_ind("I#0") == eq_set._get_ind("d#0")
+
+
 @pytest.mark.parametrize(
     "index",
     [

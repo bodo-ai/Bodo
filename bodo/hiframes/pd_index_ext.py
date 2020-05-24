@@ -1316,7 +1316,7 @@ def unbox_period_index(typ, val, c):
 
 # represents numeric indices (excluding RangeIndex):
 #   Int64Index, UInt64Index, Float64Index
-class NumericIndexType(types.IterableType):
+class NumericIndexType(types.IterableType, types.ArrayCompatible):
     """type class for pd.Int64Index/UInt64Index/Float64Index objects.
     """
 
@@ -1329,6 +1329,11 @@ class NumericIndexType(types.IterableType):
         )
 
     ndim = 1
+
+    @property
+    def as_array(self):
+        # using types.undefined to avoid Array templates for binary ops
+        return types.Array(types.undefined, 1, "C")
 
     def copy(self):
         return NumericIndexType(self.dtype, self.name_typ)
@@ -1451,6 +1456,11 @@ def init_numeric_index(typingctx, data, name=None):
         return index_val._getvalue()
 
     return NumericIndexType(data.dtype, name)(data, name), codegen
+
+
+ArrayAnalysis._analyze_op_call_bodo_hiframes_pd_index_ext_init_numeric_index = (
+    init_index_equiv
+)
 
 
 @unbox(NumericIndexType)
