@@ -956,7 +956,7 @@ def pd_timedelta_index_overload(
 
 
 # pd.RangeIndex(): simply keep start/stop/step/name
-class RangeIndexType(types.IterableType):
+class RangeIndexType(types.IterableType, types.ArrayCompatible):
     """type class for pd.RangeIndex() objects.
     """
 
@@ -965,6 +965,11 @@ class RangeIndexType(types.IterableType):
         super(RangeIndexType, self).__init__(name="RangeIndexType({})".format(name_typ))
 
     ndim = 1
+
+    @property
+    def as_array(self):
+        # using types.undefined to avoid Array templates for binary ops
+        return types.Array(types.undefined, 1, "C")
 
     def copy(self):
         return RangeIndexType(self.name_typ)
@@ -1060,6 +1065,27 @@ def init_range_index(typingctx, start, stop, step, name=None):
         return range_val._getvalue()
 
     return RangeIndexType(name)(start, stop, step, name), codegen
+
+
+def init_range_index_equiv(self, scope, equiv_set, loc, args, kws):
+    """array analysis for RangeIndex. We can infer equivalence only when start=0 and
+    step=1.
+    """
+    assert len(args) == 4 and not kws
+    start, stop, step, _ = args
+    # RangeIndex is equivalent to 'stop' input when start=0 and step=1
+    if (
+        self.typemap[start.name] == types.IntegerLiteral(0)
+        and self.typemap[step.name] == types.IntegerLiteral(1)
+        and equiv_set.has_shape(stop)
+    ):
+        return stop, []
+    return None
+
+
+ArrayAnalysis._analyze_op_call_bodo_hiframes_pd_index_ext_init_range_index = (
+    init_range_index_equiv
+)
 
 
 @unbox(RangeIndexType)

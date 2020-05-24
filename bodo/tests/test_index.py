@@ -485,3 +485,21 @@ def test_init_string_index_array_analysis():
     ]
     eq_set = array_analysis.equiv_sets[0]
     assert eq_set._get_ind("I#0") == eq_set._get_ind("d#0")
+
+
+def test_init_range_index_array_analysis():
+    """make sure shape equivalence for init_range_index() is applied correctly
+    """
+    import numba.tests.test_array_analysis
+
+    def impl(n):
+        I = bodo.hiframes.pd_index_ext.init_range_index(0, n, 1, None)
+        return I
+
+    test_func = numba.njit(pipeline_class=AnalysisTestPipeline, parallel=True)(impl)
+    test_func(11)
+    array_analysis = test_func.overloads[test_func.signatures[0]].metadata[
+        "preserved_array_analysis"
+    ]
+    eq_set = array_analysis.equiv_sets[0]
+    assert eq_set._get_ind("I#0") == eq_set._get_ind("n")
