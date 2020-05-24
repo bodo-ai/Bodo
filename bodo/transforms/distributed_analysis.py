@@ -946,6 +946,12 @@ class DistributedAnalysis:
         if fdef == ("file_read", "bodo.io.np_io"):
             return
 
+        # str_arr_from_sequence() applies to lists/tuples so output is REP
+        # e.g. column names in df.mean()
+        if fdef == ("str_arr_from_sequence", "bodo.libs.str_arr_ext"):
+            self._set_var_dist(lhs, array_dists, Distribution.REP)
+            return
+
         # TODO: make sure assert_equiv is not generated unnecessarily
         # TODO: fix assert_equiv for np.stack from df.value
         if fdef == ("assert_equiv", "numba.parfors.array_analysis"):
