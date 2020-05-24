@@ -1531,7 +1531,7 @@ _install_numeric_constructors()
 
 # represents string index, which doesn't have direct Pandas type
 # pd.Index() infers string
-class StringIndexType(types.IterableType):
+class StringIndexType(types.IterableType, types.ArrayCompatible):
     """type class for pd.Index() objects with 'string' as inferred_dtype.
     """
 
@@ -1543,6 +1543,11 @@ class StringIndexType(types.IterableType):
         )
 
     ndim = 1
+
+    @property
+    def as_array(self):
+        # using types.undefined to avoid Array templates for binary ops
+        return types.Array(types.undefined, 1, "C")
 
     def copy(self):
         return StringIndexType(self.name_typ)
@@ -1627,6 +1632,11 @@ def init_string_index(typingctx, data, name=None):
         return index_val._getvalue()
 
     return StringIndexType(name)(data, name), codegen
+
+
+ArrayAnalysis._analyze_op_call_bodo_hiframes_pd_index_ext_init_string_index = (
+    init_index_equiv
+)
 
 
 @unbox(StringIndexType)

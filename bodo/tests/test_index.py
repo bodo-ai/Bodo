@@ -467,3 +467,21 @@ def test_multi_index_unbox(m_ind, memory_leak_check):
 
     bodo_func = bodo.jit(test_impl)
     pd.testing.assert_index_equal(bodo_func(m_ind), test_impl(m_ind))
+
+
+def test_init_string_index_array_analysis():
+    """make sure shape equivalence for init_string_index() is applied correctly
+    """
+    import numba.tests.test_array_analysis
+
+    def impl(d):
+        I = bodo.hiframes.pd_index_ext.init_string_index(d, "AA")
+        return I
+
+    test_func = numba.njit(pipeline_class=AnalysisTestPipeline, parallel=True)(impl)
+    test_func(pd.array(["AA", "BB", "C"]))
+    array_analysis = test_func.overloads[test_func.signatures[0]].metadata[
+        "preserved_array_analysis"
+    ]
+    eq_set = array_analysis.equiv_sets[0]
+    assert eq_set._get_ind("I#0") == eq_set._get_ind("d#0")
