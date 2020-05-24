@@ -1539,7 +1539,7 @@ class DistributedAnalysis:
             typ = self.typemap[lhs]
             if is_distributable_typ(typ) or is_distributable_tuple_typ(typ):
                 info = (
-                    "Distributed analysis replicated input {0} (variable "
+                    "Distributed analysis replicated argument {0} (variable "
                     "{1}). Set distributed flag for {0} if distributed partitions "
                     "are passed (e.g. @bodo.jit(distributed=['{0}']))."
                 ).format(rhs.name, lhs)
@@ -1553,7 +1553,7 @@ class DistributedAnalysis:
 
         if is_distributable_typ(self.typemap[var.name]):
             info = (
-                "Distributed analysis replicated output variable "
+                "Distributed analysis replicated return variable "
                 "{}. Set distributed flag for the original variable if distributed "
                 "partitions should be returned."
             ).format(var.name)
