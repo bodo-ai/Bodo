@@ -982,8 +982,23 @@ class DistributedAnalysis:
             self._analyze_call_np_concatenate(lhs, args, array_dists)
             return
 
-        if func_name == "array" and is_array_typ(self.typemap[args[0].name]):
-            self._meet_array_dists(lhs, args[0].name, array_dists)
+        if func_name == "array":
+            arg = get_call_expr_arg("array", args, kws, 0, "object")
+            # np.array of another array can be distributed, but not list/tuple
+            # NOTE: not supported by Numba yet
+            if is_array_typ(self.typemap[arg.name]):  # pragma: no cover
+                self._meet_array_dists(lhs, arg.name, array_dists)
+            else:
+                self._set_var_dist(lhs, array_dists, Distribution.REP)
+            return
+
+        if func_name == "asarray":
+            arg = get_call_expr_arg("asarray", args, kws, 0, "a")
+            # np.asarray of another array can be distributed, but not list/tuple
+            if is_array_typ(self.typemap[args[0].name]):
+                self._meet_array_dists(lhs, args[0].name, array_dists)
+            else:
+                self._set_var_dist(lhs, array_dists, Distribution.REP)
             return
 
         # handle array.sum() with axis
