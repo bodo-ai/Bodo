@@ -29,6 +29,7 @@ from numba.core.typing.templates import (
     AttributeTemplate,
     bound_function,
 )
+from numba.parfors.array_analysis import ArrayAnalysis
 
 import bodo
 from bodo.libs.str_ext import string_type
@@ -69,7 +70,7 @@ def typeof_pd_index(val, c):
 # -------------------------  DatetimeIndex -----------------------------
 
 
-class DatetimeIndexType(types.IterableType):
+class DatetimeIndexType(types.IterableType, types.ArrayCompatible):
     """type class for DatetimeIndex objects.
     """
 
@@ -82,6 +83,11 @@ class DatetimeIndexType(types.IterableType):
         )
 
     ndim = 1
+
+    @property
+    def as_array(self):
+        # using types.undefined to avoid Array templates for binary ops
+        return types.Array(types.undefined, 1, "C")
 
     def copy(self):
         return DatetimeIndexType(self.name_typ)
@@ -118,7 +124,9 @@ make_attribute_wrapper(DatetimeIndexType, "name", "_name")
 
 @overload_method(DatetimeIndexType, "copy", no_unliteral=True)
 def overload_datetime_index_copy(A):
-    return lambda A: bodo.hiframes.pd_index_ext.init_datetime_index(A._data.copy(), A._name)  # pragma: no cover
+    return lambda A: bodo.hiframes.pd_index_ext.init_datetime_index(
+        A._data.copy(), A._name
+    )  # pragma: no cover
 
 
 @overload_attribute(DatetimeIndexType, "name")
@@ -199,6 +207,19 @@ def init_datetime_index(typingctx, data, name=None):
     ret_typ = DatetimeIndexType(name)
     sig = signature(ret_typ, data, name)
     return sig, codegen
+
+
+def init_index_equiv(self, scope, equiv_set, loc, args, kws):
+    assert len(args) >= 1 and not kws
+    var = args[0]
+    if equiv_set.has_shape(var):
+        return var, []
+    return None
+
+
+ArrayAnalysis._analyze_op_call_bodo_hiframes_pd_index_ext_init_datetime_index = (
+    init_index_equiv
+)
 
 
 # support DatetimeIndex date fields such as I.year
@@ -721,7 +742,9 @@ def box_timedelta_index(typ, val, c):
     mod_name = c.context.insert_const_string(c.builder.module, "pandas")
     pd_class_obj = c.pyapi.import_module_noblock(mod_name)
 
-    timedelta_index = numba.core.cgutils.create_struct_proxy(typ)(c.context, c.builder, val)
+    timedelta_index = numba.core.cgutils.create_struct_proxy(typ)(
+        c.context, c.builder, val
+    )
 
     arr_obj = c.pyapi.from_native_value(
         _timedelta_index_data_typ, timedelta_index.data, c.env_manager
@@ -815,7 +838,9 @@ make_attribute_wrapper(TimedeltaIndexType, "name", "_name")
 
 @overload_method(TimedeltaIndexType, "copy", no_unliteral=True)
 def overload_timedelta_index_copy(A):
-    return lambda A: bodo.hiframes.pd_index_ext.init_timedelta_index(A._data.copy(), A._name)  # pragma: no cover
+    return lambda A: bodo.hiframes.pd_index_ext.init_timedelta_index(
+        A._data.copy(), A._name
+    )  # pragma: no cover
 
 
 @overload_attribute(TimedeltaIndexType, "name")
@@ -976,7 +1001,9 @@ make_attribute_wrapper(RangeIndexType, "name", "_name")
 
 @overload_method(RangeIndexType, "copy", no_unliteral=True)
 def overload_range_index_copy(A):
-    return lambda A: bodo.hiframes.pd_index_ext.init_range_index(A._start, A._stop, A._step, A._name)  # pragma: no cover
+    return lambda A: bodo.hiframes.pd_index_ext.init_range_index(
+        A._start, A._stop, A._step, A._name
+    )  # pragma: no cover
 
 
 @box(RangeIndexType)
@@ -1347,7 +1374,9 @@ make_attribute_wrapper(NumericIndexType, "name", "_name")
 
 @overload_method(NumericIndexType, "copy", no_unliteral=True)
 def overload_numeric_index_copy(A):
-    return lambda A: bodo.hiframes.pd_index_ext.init_numeric_index(A._data.copy(), A._name)  # pragma: no cover
+    return lambda A: bodo.hiframes.pd_index_ext.init_numeric_index(
+        A._data.copy(), A._name
+    )  # pragma: no cover
 
 
 @overload_attribute(NumericIndexType, "name")
@@ -1527,7 +1556,9 @@ make_attribute_wrapper(StringIndexType, "name", "_name")
 
 @overload_method(StringIndexType, "copy", no_unliteral=True)
 def overload_string_index_copy(A):
-    return lambda A: bodo.hiframes.pd_index_ext.init_string_index(A._data.copy(), A._name)  # pragma: no cover
+    return lambda A: bodo.hiframes.pd_index_ext.init_string_index(
+        A._data.copy(), A._name
+    )  # pragma: no cover
 
 
 @box(StringIndexType)
@@ -1737,6 +1768,16 @@ def overload_index_len(I):
         return lambda I: len(bodo.hiframes.pd_index_ext.get_index_data(I))
 
 
+@overload_attribute(DatetimeIndexType, "shape")
+@overload_attribute(NumericIndexType, "shape")
+@overload_attribute(StringIndexType, "shape")
+@overload_attribute(PeriodIndexType, "shape")
+@overload_attribute(TimedeltaIndexType, "shape")
+@overload_attribute(RangeIndexType, "shape")
+def overload_index_shape(s):
+    return lambda s: (len(bodo.hiframes.pd_index_ext.get_index_data(s)),)
+
+
 @numba.generated_jit(nopython=True)
 def get_index_data(S):
     return lambda S: S._data
@@ -1767,3 +1808,17 @@ numba.core.ir_utils.alias_func_extensions[
 numba.core.ir_utils.alias_func_extensions[
     ("init_string_index", "bodo.hiframes.pd_index_ext")
 ] = alias_ext_dummy_func
+
+
+# array analysis extension
+def get_index_data_equiv(self, scope, equiv_set, loc, args, kws):
+    assert len(args) == 1 and not kws
+    var = args[0]
+    if equiv_set.has_shape(var):
+        return var, []
+    return None
+
+
+ArrayAnalysis._analyze_op_call_bodo_hiframes_pd_index_ext_get_index_data = (
+    get_index_data_equiv
+)

@@ -6,7 +6,7 @@ import pandas as pd
 import numpy as np
 import bodo
 import pytest
-from bodo.tests.utils import check_func
+from bodo.tests.utils import check_func, AnalysisTestPipeline
 
 
 def test_range_index_constructor(memory_leak_check):
@@ -157,7 +157,6 @@ def test_index_copy(index):
     check_func(test_impl_copy, (index,))
 
 
-
 @pytest.fixture(
     params=[
         pd.date_range(start="2018-04-24", end="2018-04-27", periods=3),
@@ -305,6 +304,25 @@ def test_datetime_index_constructor(data):
 
     bodo_func = bodo.jit(test_impl)
     pd.testing.assert_index_equal(bodo_func(data), test_impl(data))
+
+
+def test_init_datetime_index_array_analysis():
+    """make sure shape equivalence for init_datetime_index() is applied correctly
+    """
+    import numba.tests.test_array_analysis
+
+    def impl(n):
+        d = pd.date_range("2017-01-03", periods=n)
+        I = pd.DatetimeIndex(d)
+        return I
+
+    test_func = numba.njit(pipeline_class=AnalysisTestPipeline, parallel=True)(impl)
+    test_func(10)
+    array_analysis = test_func.overloads[test_func.signatures[0]].metadata[
+        "preserved_array_analysis"
+    ]
+    eq_set = array_analysis.equiv_sets[0]
+    assert eq_set._get_ind("I#0") == eq_set._get_ind("d#0")
 
 
 def test_pd_date_range():
