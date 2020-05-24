@@ -693,7 +693,7 @@ def pd_date_range_overload(
 
 
 # similar to DatetimeIndex
-class TimedeltaIndexType(types.IterableType):
+class TimedeltaIndexType(types.IterableType, types.ArrayCompatible):
     """Temporary type class for TimedeltaIndex objects.
     """
 
@@ -709,6 +709,11 @@ class TimedeltaIndexType(types.IterableType):
 
     def copy(self):
         return TimedeltaIndexType(self.name_typ)
+
+    @property
+    def as_array(self):
+        # using types.undefined to avoid Array templates for binary ops
+        return types.Array(types.undefined, 1, "C")
 
     @property
     def key(self):
@@ -811,6 +816,11 @@ def init_timedelta_index(typingctx, data, name=None):
     ret_typ = TimedeltaIndexType(name)
     sig = signature(ret_typ, data, name)
     return sig, codegen
+
+
+ArrayAnalysis._analyze_op_call_bodo_hiframes_pd_index_ext_init_timedelta_index = (
+    init_index_equiv
+)
 
 
 @infer_getattr

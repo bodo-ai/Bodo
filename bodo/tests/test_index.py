@@ -384,6 +384,24 @@ def test_timedelta_index_constructor(data):
     pd.testing.assert_index_equal(bodo_func(data), test_impl(data))
 
 
+def test_init_timedelta_index_array_analysis():
+    """make sure shape equivalence for init_timedelta_index() is applied correctly
+    """
+    import numba.tests.test_array_analysis
+
+    def impl(d):
+        I = pd.TimedeltaIndex(d)
+        return I
+
+    test_func = numba.njit(pipeline_class=AnalysisTestPipeline, parallel=True)(impl)
+    test_func(pd.TimedeltaIndex(np.arange(10)))
+    array_analysis = test_func.overloads[test_func.signatures[0]].metadata[
+        "preserved_array_analysis"
+    ]
+    eq_set = array_analysis.equiv_sets[0]
+    assert eq_set._get_ind("I#0") == eq_set._get_ind("d#0")
+
+
 @pytest.mark.parametrize("field", bodo.hiframes.pd_timestamp_ext.timedelta_fields)
 def test_timedelta_field(timedelta_index_val, field):
     func_text = "def impl(A):\n"
