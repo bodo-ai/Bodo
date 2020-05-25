@@ -1829,9 +1829,13 @@ def overload_index_len(I):
 @overload_attribute(StringIndexType, "shape")
 @overload_attribute(PeriodIndexType, "shape")
 @overload_attribute(TimedeltaIndexType, "shape")
-@overload_attribute(RangeIndexType, "shape")
 def overload_index_shape(s):
     return lambda s: (len(bodo.hiframes.pd_index_ext.get_index_data(s)),)
+
+
+@overload_attribute(RangeIndexType, "shape")
+def overload_index_shape(s):
+    return lambda s: (len(s),)
 
 
 @numba.generated_jit(nopython=True)
