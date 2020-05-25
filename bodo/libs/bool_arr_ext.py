@@ -49,12 +49,9 @@ from bodo.utils.indexing import (
     array_getitem_bool_index,
     array_getitem_int_index,
     array_getitem_slice_index,
-    array_setitem_int_index_array,
-    array_setitem_int_index_list,
-    array_setitem_bool_index_array,
-    array_setitem_bool_index_list,
-    array_setitem_slice_index_array,
-    array_setitem_slice_index_list,
+    array_setitem_int_index,
+    array_setitem_bool_index,
+    array_setitem_slice_index,
 )
 
 
@@ -508,49 +505,27 @@ def bool_arr_setitem(A, idx, val):
 
     # array of int indices
     if is_list_like_index_type(idx) and isinstance(idx.dtype, types.Integer):
-        # value is BooleanArray
-        if val == boolean_array:
 
-            def impl_arr_ind_mask(A, idx, val):  # pragma: no cover
-                array_setitem_int_index_array(A, idx, val)
+        def impl_arr_ind_mask(A, idx, val):  # pragma: no cover
+            array_setitem_int_index(A, idx, val)
 
-            return impl_arr_ind_mask
-
-        # value is Array/List
-        def impl_arr_ind(A, idx, val):  # pragma: no cover
-            array_setitem_int_index_list(A, idx, val)
-
-        return impl_arr_ind
+        return impl_arr_ind_mask
 
     # bool array
     if is_list_like_index_type(idx) and idx.dtype == types.bool_:
-        # value is BooleanArray
-        if val == boolean_array:
 
-            def impl_bool_ind_mask(A, idx, val):  # pragma: no cover
-                array_setitem_bool_index_array(A, idx, val)
+        def impl_bool_ind_mask(A, idx, val):  # pragma: no cover
+            array_setitem_bool_index(A, idx, val)
 
-            return impl_bool_ind_mask
-        # value is Array/List
-        def impl_bool_ind(A, idx, val):  # pragma: no cover
-            array_setitem_bool_index_list(A, idx, val)
-
-        return impl_bool_ind
+        return impl_bool_ind_mask
 
     # slice case
     if isinstance(idx, types.SliceType):
-        # value is BooleanArray
-        if val == boolean_array:
 
-            def impl_slice_mask(A, idx, val):  # pragma: no cover
-                array_setitem_slice_index_array(A, idx, val)
+        def impl_slice_mask(A, idx, val):  # pragma: no cover
+            array_setitem_slice_index(A, idx, val)
 
-            return impl_slice_mask
-
-        def impl_slice(A, idx, val):  # pragma: no cover
-            array_setitem_slice_index_list(A, idx, val)
-
-        return impl_slice
+        return impl_slice_mask
 
 
 @overload(len, no_unliteral=True)

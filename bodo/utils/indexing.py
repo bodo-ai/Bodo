@@ -96,11 +96,12 @@ def array_getitem_slice_index(A, ind):
 
 
 @register_jitable
-def array_setitem_int_index_array(A, idx, val):
+def array_setitem_int_index(A, idx, val):
     """implements setitem with int index for arrays that have a '_data' attribute and
     '_null_bitmap' attribute (e.g. int/bool/decimal/date). The value is assumed to be
     another array of same type.
     """
+    val = bodo.utils.conversion.coerce_to_array(val, use_nullable_array=True)
     n = len(val._data)
     for i in range(n):
         A._data[idx[i]] = val._data[i]
@@ -109,22 +110,12 @@ def array_setitem_int_index_array(A, idx, val):
 
 
 @register_jitable
-def array_setitem_int_index_list(A, idx, val):
-    """implements setitem with int index for arrays that have a '_data' attribute and
-    '_null_bitmap' attribute (e.g. int/bool/decimal/date). The value is assumed to be
-    a iterable (e.g. list) of values with compatible type.
-    """
-    for i in range(len(val)):
-        A._data[idx[i]] = val[i]
-        bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, idx[i], 1)
-
-
-@register_jitable
-def array_setitem_bool_index_array(A, idx, val):
+def array_setitem_bool_index(A, idx, val):
     """implements setitem with bool index for arrays that have a '_data' attribute and
     '_null_bitmap' attribute (e.g. int/bool/decimal/date). The value is assumed to be
     another array of same type.
     """
+    val = bodo.utils.conversion.coerce_to_array(val, use_nullable_array=True)
     n = len(idx)
     val_ind = 0
     for i in range(n):
@@ -136,26 +127,12 @@ def array_setitem_bool_index_array(A, idx, val):
 
 
 @register_jitable
-def array_setitem_bool_index_list(A, idx, val):
-    """implements setitem with bool index for arrays that have a '_data' attribute and
-    '_null_bitmap' attribute (e.g. int/bool/decimal/date). The value is assumed to be
-    a iterable (e.g. list) of values with compatible type.
-    """
-    n = len(idx)
-    val_ind = 0
-    for i in range(n):
-        if idx[i]:
-            A._data[i] = val[val_ind]
-            bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, i, 1)
-            val_ind += 1
-
-
-@register_jitable
-def array_setitem_slice_index_array(A, idx, val):
+def array_setitem_slice_index(A, idx, val):
     """implements setitem with slice index for arrays that have a '_data' attribute and
     '_null_bitmap' attribute (e.g. int/bool/decimal/date). The value is assumed to be
     another array of same type.
     """
+    val = bodo.utils.conversion.coerce_to_array(val, use_nullable_array=True)
     n = len(A._data)
     # using setitem directly instead of copying in loop since
     # Array setitem checks for memory overlap and copies source
@@ -168,19 +145,4 @@ def array_setitem_slice_index_array(A, idx, val):
     for i in range(slice_idx.start, slice_idx.stop, slice_idx.step):
         bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(src_bitmap, val_ind)
         bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, i, bit)
-        val_ind += 1
-
-
-@register_jitable
-def array_setitem_slice_index_list(A, idx, val):
-    """implements setitem with slice index for arrays that have a '_data' attribute and
-    '_null_bitmap' attribute (e.g. int/bool/decimal/date). The value is assumed to be
-    a iterable (e.g. list) of values with compatible type.
-    """
-    n = len(A._data)
-    A._data[idx] = val
-    slice_idx = numba.cpython.unicode._normalize_slice(idx, n)
-    val_ind = 0
-    for i in range(slice_idx.start, slice_idx.stop, slice_idx.step):
-        bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, i, 1)
         val_ind += 1

@@ -47,12 +47,9 @@ from bodo.utils.indexing import (
     array_getitem_bool_index,
     array_getitem_int_index,
     array_getitem_slice_index,
-    array_setitem_int_index_array,
-    array_setitem_int_index_list,
-    array_setitem_bool_index_array,
-    array_setitem_bool_index_list,
-    array_setitem_slice_index_array,
-    array_setitem_slice_index_list,
+    array_setitem_int_index,
+    array_setitem_bool_index,
+    array_setitem_slice_index,
 )
 from bodo.libs import hdatetime_ext
 import llvmlite.binding as ll
@@ -760,61 +757,31 @@ def dt_date_arr_setitem(A, ind, val):
         # Covered by test_series_iat_setitem , test_series_iloc_setitem_int , test_series_setitem_int
         return impl
 
-    # array
+    # array of integers
     if is_list_like_index_type(ind) and isinstance(ind.dtype, types.Integer):
-        # value is DatetimeDateArray
-        if isinstance(val, DatetimeDateArrayType):
 
-            def impl_arr_ind_mask(A, ind, val):  # pragma: no cover
-                array_setitem_int_index_array(A, ind, val)
-
-            # covered by test_series_iloc_setitem_list_int (OK)
-            return impl_arr_ind_mask
-
-        # value is a list of date objects
         def impl_arr_ind(A, ind, val):  # pragma: no cover
-            for i in range(len(val)):
-                A._data[ind[i]] = cast_datetime_date_to_int(val[i])
-                bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, ind[i], 1)
+            array_setitem_int_index(A, ind, val)
 
         # covered by test_series_iloc_setitem_list_int
         return impl_arr_ind
 
     # bool array
     if is_list_like_index_type(ind) and ind.dtype == types.bool_:
-        # value is DatetimeDateArray
-        # Corresponding test is missing ...
-        if isinstance(val, DatetimeDateArrayType):  # pragma: no cover
 
-            def impl_bool_ind_mask(A, ind, val):  # pragma: no cover
-                array_setitem_bool_index_array(A, ind, val)
+        def impl_bool_ind_mask(A, ind, val):  # pragma: no cover
+            array_setitem_bool_index(A, ind, val)
 
-            # The following test is missing ...
-            return impl_bool_ind_mask  # pragma: no cover
-
-        # value is Array/List
-        def impl_bool_ind(A, ind, val):  # pragma: no cover
-            array_setitem_bool_index_list(A, ind, val)
-
-        # The following test is missing ...
-        return impl_bool_ind  # pragma: no cover
+        return impl_bool_ind_mask
 
     # slice case
     if isinstance(ind, types.SliceType):
-        # value is DatetimeDateArray
-        if isinstance(val, DatetimeDateArrayType):
 
-            def impl_slice_mask(A, ind, val):  # pragma: no cover
-                array_setitem_slice_index_array(A, ind, val)
+        def impl_slice_mask(A, ind, val):  # pragma: no cover
+            array_setitem_slice_index(A, ind, val)
 
-            # Apparently covered by test_series_setitem_slice
-            return impl_slice_mask
-
-        def impl_slice(A, ind, val):  # pragma: no cover
-            array_setitem_slice_index_list(A, ind, val)
-
-        # The following test is missing ...
-        return impl_slice  # pragma: no cover
+        # covered by test_series_setitem_slice
+        return impl_slice_mask
 
 
 @overload(len, no_unliteral=True)

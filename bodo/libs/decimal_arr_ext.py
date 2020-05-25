@@ -52,12 +52,9 @@ from bodo.utils.indexing import (
     array_getitem_bool_index,
     array_getitem_int_index,
     array_getitem_slice_index,
-    array_setitem_int_index_array,
-    array_setitem_int_index_list,
-    array_setitem_bool_index_array,
-    array_setitem_bool_index_list,
-    array_setitem_slice_index_array,
-    array_setitem_slice_index_list,
+    array_setitem_int_index,
+    array_setitem_bool_index,
+    array_setitem_slice_index,
 )
 
 
@@ -485,8 +482,7 @@ def decimal_arr_setitem(A, idx, val):
     if is_list_like_index_type(idx) and isinstance(idx.dtype, types.Integer):
 
         def impl_arr_ind_mask(A, idx, val):  # pragma: no cover
-            val_t = bodo.utils.conversion.coerce_to_array(val)
-            array_setitem_int_index_array(A, idx, val_t)
+            array_setitem_int_index(A, idx, val)
 
         # covered by test_series_iloc_setitem_list_int
         return impl_arr_ind_mask
@@ -495,8 +491,7 @@ def decimal_arr_setitem(A, idx, val):
     if is_list_like_index_type(idx) and idx.dtype == types.bool_:
 
         def impl_bool_ind_mask(A, idx, val):  # pragma: no cover
-            val_t = bodo.utils.conversion.coerce_to_array(val)
-            array_setitem_bool_index_array(A, idx, val_t)
+            array_setitem_bool_index(A, idx, val)
 
         return impl_bool_ind_mask
 
@@ -504,8 +499,7 @@ def decimal_arr_setitem(A, idx, val):
     if isinstance(idx, types.SliceType):
 
         def impl_slice_mask(A, idx, val):  # pragma: no cover
-            val_t = bodo.utils.conversion.coerce_to_array(val)
-            array_setitem_slice_index_array(A, idx, val_t)
+            array_setitem_slice_index(A, idx, val)
 
         # covered by test_series_setitem_slice
         return impl_slice_mask
