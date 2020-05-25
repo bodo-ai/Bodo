@@ -349,9 +349,8 @@ def init_bool_array(typingctx, data, null_bitmap=None):
         bool_arr.null_bitmap = bitmap_val
 
         # increase refcount of stored values
-        if context.enable_nrt:
-            context.nrt.incref(builder, signature.args[0], data_val)
-            context.nrt.incref(builder, signature.args[1], bitmap_val)
+        context.nrt.incref(builder, signature.args[0], data_val)
+        context.nrt.incref(builder, signature.args[1], bitmap_val)
 
         return bool_arr._getvalue()
 

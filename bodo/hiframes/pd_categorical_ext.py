@@ -177,8 +177,7 @@ def init_categorical_array(typingctx, codes, cat_dtype=None):
         cat_arr.codes = data_val
 
         # increase refcount of stored array
-        if context.enable_nrt:
-            context.nrt.incref(builder, signature.args[0], data_val)
+        context.nrt.incref(builder, signature.args[0], data_val)
 
         return cat_arr._getvalue()
 

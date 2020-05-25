@@ -441,10 +441,9 @@ def init_dataframe(typingctx, data_tup_typ, index_typ, col_names_typ=None):
         )
 
         # increase refcount of stored values
-        if context.enable_nrt:
-            context.nrt.incref(builder, data_tup_typ, data_tup)
-            context.nrt.incref(builder, index_typ, index_val)
-            context.nrt.incref(builder, columns_type, columns_tup)
+        context.nrt.incref(builder, data_tup_typ, data_tup)
+        context.nrt.incref(builder, index_typ, index_val)
+        context.nrt.incref(builder, columns_type, columns_tup)
 
         return dataframe_val
 
@@ -617,8 +616,7 @@ def set_dataframe_data(typingctx, df_typ, c_ind_typ, arr_typ=None):
             dataframe_payload.unboxed, context.get_constant(types.int8, 1), col_ind
         )
 
-        if context.enable_nrt:
-            context.nrt.incref(builder, arr_typ, arr_arg)
+        context.nrt.incref(builder, arr_typ, arr_arg)
 
         # store payload
         dataframe = cgutils.create_struct_proxy(df_typ)(context, builder, value=df_arg)
@@ -659,13 +657,12 @@ def set_df_index(typingctx, df_t, index_t=None):
         )
 
         # increase refcount of stored values
-        if context.enable_nrt:
-            context.nrt.incref(builder, index_t, index_val)
-            # TODO: refcount
-            context.nrt.incref(builder, types.Tuple(df_t.data), in_df_payload.data)
-            context.nrt.incref(
-                builder, types.UniTuple(string_type, len(df_t.columns)), in_df.columns
-            )
+        context.nrt.incref(builder, index_t, index_val)
+        # TODO: refcount
+        context.nrt.incref(builder, types.Tuple(df_t.data), in_df_payload.data)
+        context.nrt.incref(
+            builder, types.UniTuple(string_type, len(df_t.columns)), in_df.columns
+        )
 
         return dataframe
 
@@ -751,11 +748,10 @@ def set_df_column_with_reflect(typingctx, df, cname, arr, inplace=None):
         )
 
         # increase refcount of stored values
-        if context.enable_nrt:
-            context.nrt.incref(builder, index_typ, index_val)
-            for var, typ in zip(data_arrs, data_typs):
-                context.nrt.incref(builder, typ, var)
-            context.nrt.incref(builder, columns_type, columns_tup)
+        context.nrt.incref(builder, index_typ, index_val)
+        for var, typ in zip(data_arrs, data_typs):
+            context.nrt.incref(builder, typ, var)
+        context.nrt.incref(builder, columns_type, columns_tup)
 
         # TODO: test this
         # test_set_column_cond3 doesn't test it for some reason
@@ -775,11 +771,10 @@ def set_df_column_with_reflect(typingctx, df, cname, arr, inplace=None):
 
             # incref data again since there will be too references updated
             # TODO: incref only unboxed arrays to be safe?
-            if context.enable_nrt:
-                context.nrt.incref(builder, index_typ, index_val)
-                for var, typ in zip(data_arrs, data_typs):
-                    context.nrt.incref(builder, typ, var)
-                context.nrt.incref(builder, columns_type, columns_tup)
+            context.nrt.incref(builder, index_typ, index_val)
+            for var, typ in zip(data_arrs, data_typs):
+                context.nrt.incref(builder, typ, var)
+            context.nrt.incref(builder, columns_type, columns_tup)
 
         # set column of parent
         # get boxed array
@@ -787,8 +782,7 @@ def set_df_column_with_reflect(typingctx, df, cname, arr, inplace=None):
         gil_state = pyapi.gil_ensure()  # acquire GIL
         env_manager = context.get_env_manager(builder)
 
-        if context.enable_nrt:
-            context.nrt.incref(builder, arr, arr_arg)
+        context.nrt.incref(builder, arr, arr_arg)
 
         # call boxing for array data
         # TODO: check complex data types possible for Series for dataframes set column here

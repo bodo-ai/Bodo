@@ -365,8 +365,7 @@ def pre_alloc_str_arr_view(typingctx, num_items_t, num_offsets_t, data_t=None):
         # TODO: incref?
         out_view.data = data_ptr
         out_view.null_bitmap = view_payload.null_bitmap
-        if context.enable_nrt:
-            context.nrt.incref(builder, data_t, data_ptr)
+        context.nrt.incref(builder, data_t, data_ptr)
         out_view.meminfo = meminfo
         ret = out_view._getvalue()
 

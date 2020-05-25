@@ -315,9 +315,8 @@ def init_decimal_array(typingctx, data, null_bitmap, precision_tp, scale_tp=None
         decimal_arr.null_bitmap = bitmap_val
 
         # increase refcount of stored values
-        if context.enable_nrt:
-            context.nrt.incref(builder, signature.args[0], data_val)
-            context.nrt.incref(builder, signature.args[1], bitmap_val)
+        context.nrt.incref(builder, signature.args[0], data_val)
+        context.nrt.incref(builder, signature.args[1], bitmap_val)
 
         return decimal_arr._getvalue()
 

@@ -190,9 +190,8 @@ def init_datetime_index(typingctx, data, name=None):
         dt_index.name = name_val
 
         # increase refcount of stored values
-        if context.enable_nrt:
-            context.nrt.incref(builder, signature.args[0], data_val)
-            context.nrt.incref(builder, signature.args[1], name_val)
+        context.nrt.incref(builder, signature.args[0], data_val)
+        context.nrt.incref(builder, signature.args[1], name_val)
 
         return dt_index._getvalue()
 
@@ -779,9 +778,8 @@ def init_timedelta_index(typingctx, data, name=None):
         timedelta_index.name = name_val
 
         # increase refcount of stored values
-        if context.enable_nrt:
-            context.nrt.incref(builder, signature.args[0], data_val)
-            context.nrt.incref(builder, signature.args[1], name_val)
+        context.nrt.incref(builder, signature.args[0], data_val)
+        context.nrt.incref(builder, signature.args[1], name_val)
 
         return timedelta_index._getvalue()
 
@@ -1405,10 +1403,9 @@ def init_numeric_index(typingctx, data, name=None):
         index_val.data = args[0]
         index_val.name = args[1]
         # increase refcount of stored values
-        if context.enable_nrt:
-            arr_typ = types.Array(index_typ.dtype, 1, "C")
-            context.nrt.incref(builder, arr_typ, args[0])
-            context.nrt.incref(builder, index_typ.name_typ, args[1])
+        arr_typ = types.Array(index_typ.dtype, 1, "C")
+        context.nrt.incref(builder, arr_typ, args[0])
+        context.nrt.incref(builder, index_typ.name_typ, args[1])
         return index_val._getvalue()
 
     return NumericIndexType(data.dtype, name)(data, name), codegen
@@ -1570,9 +1567,8 @@ def init_string_index(typingctx, data, name=None):
         index_val.data = args[0]
         index_val.name = args[1]
         # increase refcount of stored values
-        if context.enable_nrt:
-            context.nrt.incref(builder, string_array_type, args[0])
-            context.nrt.incref(builder, index_typ.name_typ, args[1])
+        context.nrt.incref(builder, string_array_type, args[0])
+        context.nrt.incref(builder, index_typ.name_typ, args[1])
         return index_val._getvalue()
 
     return StringIndexType(name)(data, name), codegen
