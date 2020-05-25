@@ -426,6 +426,23 @@ def test_np_dot():
     check_func(test_impl, (n, k))
 
 
+def test_np_array():
+    """test distribution of np.array() and np.asarray().
+    array input can be distributed but not list input.
+    """
+    def test_impl1(A):
+        return np.array(A)
+
+    def test_impl2(A):
+        return np.asarray(A)
+
+    # TODO: enable when supported by Numba
+    # check_func(test_impl1, (np.ones(11),))
+    check_func(test_impl1, ([1, 2, 5, 1, 2, 3],), is_out_distributed=False)
+    check_func(test_impl2, (np.ones(11),))
+    check_func(test_impl2, ([1, 2, 5, 1, 2, 3],), is_out_distributed=False)
+
+
 def test_np_dot_empty_vm():
     """test for np.dot() called on empty vector and matrix (for Numba #5539)
     """
