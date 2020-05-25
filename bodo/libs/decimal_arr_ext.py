@@ -483,55 +483,32 @@ def decimal_arr_setitem(A, idx, val):
 
     # index is integer array/list
     if is_list_like_index_type(idx) and isinstance(idx.dtype, types.Integer):
-        # value is DecimalArray
-        if isinstance(val, DecimalArrayType):
 
-            def impl_arr_ind_mask(A, idx, val):  # pragma: no cover
-                array_setitem_int_index_array(A, idx, val)
-
-            # covered by test_series_iloc_setitem_list_int
-            return impl_arr_ind_mask
-
-        # value is list of decimal values
-        def impl_arr_ind(A, idx, val):
-            for i in range(len(val)):
-                A._data[idx[i]] = decimal128type_to_int128(val[i])
-                bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, idx[i], 1)
+        def impl_arr_ind_mask(A, idx, val):  # pragma: no cover
+            val_t = bodo.utils.conversion.coerce_to_array(val)
+            array_setitem_int_index_array(A, idx, val_t)
 
         # covered by test_series_iloc_setitem_list_int
-        return impl_arr_ind
+        return impl_arr_ind_mask
 
     # bool array
     if is_list_like_index_type(idx) and idx.dtype == types.bool_:
-        # value is DecimalArray
-        if isinstance(val, DecimalArrayType):
 
-            def impl_bool_ind_mask(A, idx, val):  # pragma: no cover
-                array_setitem_bool_index_array(A, idx, val)
+        def impl_bool_ind_mask(A, idx, val):  # pragma: no cover
+            val_t = bodo.utils.conversion.coerce_to_array(val)
+            array_setitem_bool_index_array(A, idx, val_t)
 
-            return impl_bool_ind_mask
-
-        # value is Array/List
-        def impl_bool_ind(A, idx, val):  # pragma: no cover
-            array_setitem_bool_index_list(A, idx, val)
-
-        return impl_bool_ind
+        return impl_bool_ind_mask
 
     # slice case
     if isinstance(idx, types.SliceType):
-        # value is DecimalArray
-        if isinstance(val, DecimalArrayType):
 
-            def impl_slice_mask(A, idx, val):  # pragma: no cover
-                array_setitem_slice_index_array(A, idx, val)
+        def impl_slice_mask(A, idx, val):  # pragma: no cover
+            val_t = bodo.utils.conversion.coerce_to_array(val)
+            array_setitem_slice_index_array(A, idx, val_t)
 
-            # Apparently covered by test_series_setitem_slice
-            return impl_slice_mask
-
-        def impl_slice(A, idx, val):  # pragma: no cover
-            array_setitem_slice_index_list(A, idx, val)
-
-        return impl_slice
+        # covered by test_series_setitem_slice
+        return impl_slice_mask
 
 
 @overload(operator.getitem, no_unliteral=True)
