@@ -29,6 +29,7 @@ def get_new_null_mask_bool_index(old_mask, ind, n):
 def array_getitem_bool_index(A, ind):
     """implements getitem with bool index for arrays that have a '_data' attribute and
     '_null_bitmap' attribute (e.g. int/bool/decimal/date).
+    Covered by test_series_iloc_getitem_array_bool.
     """
     ind = bodo.utils.conversion.coerce_to_ndarray(ind)
     old_mask = A._null_bitmap
@@ -57,6 +58,7 @@ def get_new_null_mask_int_index(old_mask, ind, n):
 def array_getitem_int_index(A, ind):
     """implements getitem with int index for arrays that have a '_data' attribute and
     '_null_bitmap' attribute (e.g. int/bool/decimal/date).
+    Covered by test_series_iloc_getitem_array_int.
     """
     ind_t = bodo.utils.conversion.coerce_to_ndarray(ind)
     old_mask = A._null_bitmap
@@ -87,6 +89,7 @@ def get_new_null_mask_slice_index(old_mask, ind, n):
 def array_getitem_slice_index(A, ind):
     """implements getitem with slice index for arrays that have a '_data' attribute and
     '_null_bitmap' attribute (e.g. int/bool/decimal/date).
+    Covered by test_series_iloc_getitem_slice.
     """
     n = len(A._data)
     old_mask = A._null_bitmap
@@ -100,6 +103,7 @@ def array_setitem_int_index(A, idx, val):
     """implements setitem with int index for arrays that have a '_data' attribute and
     '_null_bitmap' attribute (e.g. int/bool/decimal/date). The value is assumed to be
     another array of same type.
+    Covered by test_series_iloc_setitem_list_int.
     """
     val = bodo.utils.conversion.coerce_to_array(val, use_nullable_array=True)
     n = len(val._data)
@@ -114,6 +118,7 @@ def array_setitem_bool_index(A, idx, val):
     """implements setitem with bool index for arrays that have a '_data' attribute and
     '_null_bitmap' attribute (e.g. int/bool/decimal/date). The value is assumed to be
     another array of same type.
+    Covered by test_series_iloc_setitem_list_bool.
     """
     val = bodo.utils.conversion.coerce_to_array(val, use_nullable_array=True)
     n = len(idx)
@@ -131,6 +136,7 @@ def array_setitem_slice_index(A, idx, val):
     """implements setitem with slice index for arrays that have a '_data' attribute and
     '_null_bitmap' attribute (e.g. int/bool/decimal/date). The value is assumed to be
     another array of same type.
+    Covered by test_series_iloc_setitem_slice.
     """
     val = bodo.utils.conversion.coerce_to_array(val, use_nullable_array=True)
     n = len(A._data)
