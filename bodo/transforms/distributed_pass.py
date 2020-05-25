@@ -322,7 +322,8 @@ class DistributedPass:
                         self.calltypes,
                         dummy_work_list,
                     )
-                    work_list.append(dummy_work_list.pop())
+                    # inline_closure_call() adds the last block to worklist first
+                    work_list.append(dummy_work_list[0])
                     replaced = True
                     break
                 else:
