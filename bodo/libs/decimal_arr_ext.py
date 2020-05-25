@@ -481,7 +481,7 @@ def decimal_arr_setitem(A, idx, val):
         # Covered by test_series_iat_setitem , test_series_iloc_setitem_int , test_series_setitem_int
         return impl_scalar
 
-    # array
+    # index is integer array/list
     if is_list_like_index_type(idx) and isinstance(idx.dtype, types.Integer):
         # value is DecimalArray
         if isinstance(val, DecimalArrayType):
@@ -492,10 +492,13 @@ def decimal_arr_setitem(A, idx, val):
             # covered by test_series_iloc_setitem_list_int
             return impl_arr_ind_mask
 
-        # value is Array/List
+        # value is list of decimal values
         def impl_arr_ind(A, idx, val):
-            array_setitem_int_index_list(A, idx, val)
+            for i in range(len(val)):
+                A._data[idx[i]] = decimal128type_to_int128(val[i])
+                bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, idx[i], 1)
 
+        # covered by test_series_iloc_setitem_list_int
         return impl_arr_ind
 
     # bool array

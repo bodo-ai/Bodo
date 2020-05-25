@@ -771,12 +771,14 @@ def dt_date_arr_setitem(A, ind, val):
             # covered by test_series_iloc_setitem_list_int (OK)
             return impl_arr_ind_mask
 
-        # value is Array/List
+        # value is a list of date objects
         def impl_arr_ind(A, ind, val):  # pragma: no cover
-            array_setitem_int_index_list(A, ind, val)
+            for i in range(len(val)):
+                A._data[ind[i]] = cast_datetime_date_to_int(val[i])
+                bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, ind[i], 1)
 
-        # Corresponding test is missing ...
-        return impl_arr_ind  # pragma: no cover
+        # covered by test_series_iloc_setitem_list_int
+        return impl_arr_ind
 
     # bool array
     if is_list_like_index_type(ind) and ind.dtype == types.bool_:
