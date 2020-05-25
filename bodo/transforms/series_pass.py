@@ -36,6 +36,7 @@ from bodo.utils.utils import (
     get_getsetitem_index_var,
     is_expr,
     is_array_typ,
+    gen_getitem,
 )
 from bodo.libs.str_ext import string_type
 from bodo.libs.str_arr_ext import (
@@ -1398,6 +1399,9 @@ class SeriesPass:
         if fdef == ("empty_like", "numpy"):
             return self._handle_empty_like(assign, lhs, rhs)
 
+        if fdef == ("full", "numpy"):
+            return self._handle_np_full(assign, lhs, rhs)
+
         if fdef == ("alloc_type", "bodo.utils.utils"):
             typ = self.typemap[rhs.args[1].name].instance_type
             if typ.dtype == bodo.hiframes.datetime_date_ext.datetime_date_type:
@@ -2382,6 +2386,43 @@ class SeriesPass:
         nodes = f_block.body[:-3]  # remove none return
         nodes[-1].target = assign.target
         return nodes
+
+    def _handle_np_full(self, assign, lhs, rhs):
+        """parallelize np.full() since Numba doesn't support it
+        """
+        kws = dict(rhs.kws)
+        shape_var = get_call_expr_arg("full", rhs.args, kws, 0, "shape")
+        fill_value_var = get_call_expr_arg("full", rhs.args, kws, 1, "fill_value")
+        return_type = self.typemap[lhs]
+        dtype = return_type.dtype
+        nodes = []
+        if return_type.ndim == 1:
+            # convert (n,) to n for internal_prange()
+            if isinstance(self.typemap[shape_var.name], types.BaseTuple):
+                new_shape_var = ir.Var(shape_var.scope, mk_unique_var("shape"), rhs.loc)
+                self.typemap[new_shape_var.name] = types.int64
+                gen_getitem(new_shape_var, shape_var, 0, self.calltypes, nodes)
+                shape_var = new_shape_var
+
+            def full_impl(shape, fill_value):
+                numba.parfors.parfor.init_prange()
+                arr = np.empty(shape, dtype)
+                for i in numba.parfors.parfor.internal_prange(shape):
+                    arr[i] = fill_value
+                return arr
+
+        else:
+
+            def full_impl(shape, fill_value):
+                numba.parfors.parfor.init_prange()
+                arr = np.empty(shape, dtype)
+                for i in numba.pndindex(shape):
+                    arr[i] = fill_value
+                return arr
+
+        return replace_func(
+            self, full_impl, [shape_var, fill_value_var], pre_nodes=nodes
+        )
 
     def _run_call_concat(self, assign, lhs, rhs):
         nodes = []
