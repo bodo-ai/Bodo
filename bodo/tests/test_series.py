@@ -588,6 +588,58 @@ def test_series_iloc_setitem_int(series_val):
     )
 
 
+def test_series_iloc_setitem_list_bool(series_val):
+    # not supported for list(string) and list(item)
+    if isinstance(series_val.values[0], list):
+        return
+
+    # string setitem not supported yet
+    if isinstance(series_val.iat[0], str):
+        return
+
+    def test_impl(S, idx, val):
+        S.iloc[idx] = val
+        return S
+
+    # test Series.values since it is used instead of iloc sometimes
+    def test_impl2(S, indx, val):
+        S.values[idx] = val
+        return S
+
+    idx = np.array([True, True, False, True, False])
+    # value is array
+    val = series_val.iloc[0:3].values.copy()  # values to avoid alignment
+    if series_val.hasnans:
+        # extra NA to keep dtype nullable like bool arr
+        val[0] = None
+    pd.testing.assert_series_equal(
+        bodo.jit(test_impl)(series_val.copy(), idx, val),
+        test_impl(series_val.copy(), idx, val),
+        check_dtype=False,
+    )
+    pd.testing.assert_series_equal(
+        bodo.jit(test_impl2)(series_val.copy(), idx, val),
+        test_impl2(series_val.copy(), idx, val),
+        check_dtype=False,
+    )
+    # value is a list
+    # setitem of list of Timestamp/Timedelta is not supported yet (TODO: support)
+    if series_val.dtype in (np.dtype("datetime64[ns]"), np.dtype("timedelta64[ns]")):
+        return
+
+    val = series_val.dropna().iloc[0:3].to_list()
+    pd.testing.assert_series_equal(
+        bodo.jit(test_impl)(series_val.copy(), idx, val),
+        test_impl(series_val.copy(), idx, val),
+        check_dtype=False,
+    )
+    pd.testing.assert_series_equal(
+        bodo.jit(test_impl2)(series_val.copy(), idx, val),
+        test_impl2(series_val.copy(), idx, val),
+        check_dtype=False,
+    )
+
+
 def test_series_iloc_setitem_slice(series_val):
     # not supported for list(string) and list(item)
     if isinstance(series_val.values[0], list):

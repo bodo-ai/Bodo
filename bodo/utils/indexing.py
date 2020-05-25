@@ -120,7 +120,7 @@ def array_setitem_bool_index(A, idx, val):
     val_ind = 0
     for i in range(n):
         if idx[i]:
-            A._data[i] = val[val_ind]
+            A._data[i] = val._data[val_ind]
             bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(val._null_bitmap, val_ind)
             bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, i, bit)
             val_ind += 1
