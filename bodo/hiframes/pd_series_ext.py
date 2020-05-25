@@ -844,7 +844,7 @@ def pd_series_overload(
         # extract name if data is has name (Series/Index) and name is None
         name_t = bodo.utils.conversion.extract_name_if_none(data, name)
         index_t = bodo.utils.conversion.extract_index_if_none(data, index)
-        data_t1 = bodo.utils.conversion.coerce_to_array(data, True, True)
+        data_t1 = bodo.utils.conversion.coerce_to_array(data, True)
 
         # TODO: support sanitize_array() of Pandas
         # TODO: add branch pruning to inline_closure_call
