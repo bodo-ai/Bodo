@@ -10,7 +10,7 @@ import bodo
 
 
 @register_jitable
-def get_new_null_mask_bool_index(old_mask, ind, n):
+def get_new_null_mask_bool_index(old_mask, ind, n):  # pragma: no cover
     """create a new null bitmask for output of indexing using bool index 'ind'.
     'n' is the total number of elements in original array (not bytes).
     """
@@ -26,7 +26,7 @@ def get_new_null_mask_bool_index(old_mask, ind, n):
 
 
 @register_jitable
-def array_getitem_bool_index(A, ind):
+def array_getitem_bool_index(A, ind):  # pragma: no cover
     """implements getitem with bool index for arrays that have a '_data' attribute and
     '_null_bitmap' attribute (e.g. int/bool/decimal/date).
     Covered by test_series_iloc_getitem_array_bool.
@@ -40,7 +40,7 @@ def array_getitem_bool_index(A, ind):
 
 
 @register_jitable
-def get_new_null_mask_int_index(old_mask, ind, n):
+def get_new_null_mask_int_index(old_mask, ind, n):  # pragma: no cover
     """create a new null bitmask for output of indexing using integer index 'ind'.
     'n' is the total number of elements in original array (not bytes).
     """
@@ -55,7 +55,7 @@ def get_new_null_mask_int_index(old_mask, ind, n):
 
 
 @register_jitable
-def array_getitem_int_index(A, ind):
+def array_getitem_int_index(A, ind):  # pragma: no cover
     """implements getitem with int index for arrays that have a '_data' attribute and
     '_null_bitmap' attribute (e.g. int/bool/decimal/date).
     Covered by test_series_iloc_getitem_array_int.
@@ -69,7 +69,7 @@ def array_getitem_int_index(A, ind):
 
 
 @register_jitable
-def get_new_null_mask_slice_index(old_mask, ind, n):
+def get_new_null_mask_slice_index(old_mask, ind, n):  # pragma: no cover
     """create a new null bitmask for output of indexing using slice index 'ind'.
     'n' is the total number of elements in original array (not bytes).
     """
@@ -86,7 +86,7 @@ def get_new_null_mask_slice_index(old_mask, ind, n):
 
 
 @register_jitable
-def array_getitem_slice_index(A, ind):
+def array_getitem_slice_index(A, ind):  # pragma: no cover
     """implements getitem with slice index for arrays that have a '_data' attribute and
     '_null_bitmap' attribute (e.g. int/bool/decimal/date).
     Covered by test_series_iloc_getitem_slice.
@@ -99,7 +99,7 @@ def array_getitem_slice_index(A, ind):
 
 
 @register_jitable
-def array_setitem_int_index(A, idx, val):
+def array_setitem_int_index(A, idx, val):  # pragma: no cover
     """implements setitem with int index for arrays that have a '_data' attribute and
     '_null_bitmap' attribute (e.g. int/bool/decimal/date). The value is assumed to be
     another array of same type.
@@ -114,7 +114,7 @@ def array_setitem_int_index(A, idx, val):
 
 
 @register_jitable
-def array_setitem_bool_index(A, idx, val):
+def array_setitem_bool_index(A, idx, val):  # pragma: no cover
     """implements setitem with bool index for arrays that have a '_data' attribute and
     '_null_bitmap' attribute (e.g. int/bool/decimal/date). The value is assumed to be
     another array of same type.
@@ -132,7 +132,7 @@ def array_setitem_bool_index(A, idx, val):
 
 
 @register_jitable
-def array_setitem_slice_index(A, idx, val):
+def array_setitem_slice_index(A, idx, val):  # pragma: no cover
     """implements setitem with slice index for arrays that have a '_data' attribute and
     '_null_bitmap' attribute (e.g. int/bool/decimal/date). The value is assumed to be
     another array of same type.

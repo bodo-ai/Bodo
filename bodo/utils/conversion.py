@@ -53,7 +53,6 @@ def overload_coerce_to_ndarray(
         )  # pragma: no cover
 
     if isinstance(data, types.Array):
-        # import pdb; pdb.set_trace()
         if not is_overload_none(use_nullable_array) and isinstance(
             data.dtype, (types.Boolean, types.Integer)
         ):
@@ -294,7 +293,7 @@ def overload_coerce_to_ndarray(
 
     return (
         lambda data, error_on_nonarray=True, use_nullable_array=None, scalar_to_arr_len=None: data
-    )
+    )  # pragma: no cover
 
 
 # TODO: use generated_jit with IR inlining

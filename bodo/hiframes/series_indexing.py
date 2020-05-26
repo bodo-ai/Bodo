@@ -543,7 +543,7 @@ def overload_array_list_setitem(A, idx, val):
     """
     if isinstance(A, types.Array) and isinstance(idx, (types.List, SeriesType)):
 
-        def impl(A, idx, val):
+        def impl(A, idx, val):  # pragma: no cover
             A[bodo.utils.conversion.coerce_to_array(idx)] = val
 
         return impl
