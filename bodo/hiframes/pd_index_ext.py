@@ -29,6 +29,7 @@ from numba.core.typing.templates import (
     AttributeTemplate,
     bound_function,
 )
+from numba.core.imputils import lower_constant
 
 import bodo
 from bodo.libs.str_ext import string_type
@@ -118,7 +119,9 @@ make_attribute_wrapper(DatetimeIndexType, "name", "_name")
 
 @overload_method(DatetimeIndexType, "copy", no_unliteral=True)
 def overload_datetime_index_copy(A):
-    return lambda A: bodo.hiframes.pd_index_ext.init_datetime_index(A._data.copy(), A._name)  # pragma: no cover
+    return lambda A: bodo.hiframes.pd_index_ext.init_datetime_index(
+        A._data.copy(), A._name
+    )  # pragma: no cover
 
 
 @overload_attribute(DatetimeIndexType, "name")
@@ -720,7 +723,9 @@ def box_timedelta_index(typ, val, c):
     mod_name = c.context.insert_const_string(c.builder.module, "pandas")
     pd_class_obj = c.pyapi.import_module_noblock(mod_name)
 
-    timedelta_index = numba.core.cgutils.create_struct_proxy(typ)(c.context, c.builder, val)
+    timedelta_index = numba.core.cgutils.create_struct_proxy(typ)(
+        c.context, c.builder, val
+    )
 
     arr_obj = c.pyapi.from_native_value(
         _timedelta_index_data_typ, timedelta_index.data, c.env_manager
@@ -813,7 +818,9 @@ make_attribute_wrapper(TimedeltaIndexType, "name", "_name")
 
 @overload_method(TimedeltaIndexType, "copy", no_unliteral=True)
 def overload_timedelta_index_copy(A):
-    return lambda A: bodo.hiframes.pd_index_ext.init_timedelta_index(A._data.copy(), A._name)  # pragma: no cover
+    return lambda A: bodo.hiframes.pd_index_ext.init_timedelta_index(
+        A._data.copy(), A._name
+    )  # pragma: no cover
 
 
 @overload_attribute(TimedeltaIndexType, "name")
@@ -974,7 +981,9 @@ make_attribute_wrapper(RangeIndexType, "name", "_name")
 
 @overload_method(RangeIndexType, "copy", no_unliteral=True)
 def overload_range_index_copy(A):
-    return lambda A: bodo.hiframes.pd_index_ext.init_range_index(A._start, A._stop, A._step, A._name)  # pragma: no cover
+    return lambda A: bodo.hiframes.pd_index_ext.init_range_index(
+        A._start, A._stop, A._step, A._name
+    )  # pragma: no cover
 
 
 @box(RangeIndexType)
@@ -1046,6 +1055,24 @@ def unbox_range_index(typ, val, c):
     range_val.step = step
     range_val.name = name
     return NativeValue(range_val._getvalue())
+
+
+@lower_constant(RangeIndexType)
+def lower_constant_range_index(context, builder, ty, pyval):
+    """embed constant RangeIndex by simply creating the data struct and assigning values
+    """
+    start = context.get_constant(types.int64, pyval.start)
+    stop = context.get_constant(types.int64, pyval.stop)
+    step = context.get_constant(types.int64, pyval.step)
+    name = context.get_constant_generic(builder, ty.name_typ, pyval.name)
+
+    # create range struct
+    range_val = cgutils.create_struct_proxy(ty)(context, builder)
+    range_val.start = start
+    range_val.stop = stop
+    range_val.step = step
+    range_val.name = name
+    return range_val._getvalue()
 
 
 @overload(pd.RangeIndex, no_unliteral=True)
@@ -1345,7 +1372,9 @@ make_attribute_wrapper(NumericIndexType, "name", "_name")
 
 @overload_method(NumericIndexType, "copy", no_unliteral=True)
 def overload_numeric_index_copy(A):
-    return lambda A: bodo.hiframes.pd_index_ext.init_numeric_index(A._data.copy(), A._name)  # pragma: no cover
+    return lambda A: bodo.hiframes.pd_index_ext.init_numeric_index(
+        A._data.copy(), A._name
+    )  # pragma: no cover
 
 
 @overload_attribute(NumericIndexType, "name")
@@ -1524,7 +1553,9 @@ make_attribute_wrapper(StringIndexType, "name", "_name")
 
 @overload_method(StringIndexType, "copy", no_unliteral=True)
 def overload_string_index_copy(A):
-    return lambda A: bodo.hiframes.pd_index_ext.init_string_index(A._data.copy(), A._name)  # pragma: no cover
+    return lambda A: bodo.hiframes.pd_index_ext.init_string_index(
+        A._data.copy(), A._name
+    )  # pragma: no cover
 
 
 @box(StringIndexType)
