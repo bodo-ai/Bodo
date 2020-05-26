@@ -32,7 +32,7 @@ from numba.core.typing.templates import (
     bound_function,
 )
 from numba.parfors.array_analysis import ArrayAnalysis
-from numba.core.imputils import impl_ret_borrowed
+from numba.core.imputils import impl_ret_borrowed, lower_constant
 from llvmlite import ir as lir
 
 import bodo
@@ -812,6 +812,35 @@ def set_df_column_with_reflect(typingctx, df, cname, arr, inplace=None):
     ret_typ = DataFrameType(data_typs, index_typ, column_names, True)
     sig = signature(ret_typ, df, cname, arr, inplace)
     return sig, codegen
+
+
+@lower_constant(DataFrameType)
+def lower_constant_dataframe(context, builder, df_type, pyval):
+    """embed constant DataFrame value but getting constant values for data arrays and
+    Index.
+    """
+    n_cols = len(pyval.columns)
+    data_tup = context.get_constant_generic(
+        builder,
+        types.Tuple(df_type.data),
+        tuple(pyval.iloc[:, i].values for i in range(n_cols)),
+    )
+    index_val = context.get_constant_generic(builder, df_type.index, pyval.index)
+    columns_tup = context.get_constant_generic(
+        builder, numba.typeof(df_type.columns), df_type.columns
+    )
+
+    # set unboxed flags to 1 for all arrays
+    one = context.get_constant(types.int8, 1)
+    unboxed_tup = context.make_tuple(
+        builder, types.UniTuple(types.int8, n_cols + 1), [one] * (n_cols + 1)
+    )
+
+    dataframe_val = construct_dataframe(
+        context, builder, df_type, data_tup, index_val, columns_tup, unboxed_tup
+    )
+
+    return dataframe_val
 
 
 @overload(pd.DataFrame, inline="always", no_unliteral=True)
