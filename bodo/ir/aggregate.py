@@ -1779,7 +1779,9 @@ def gen_top_level_agg_func(
                     out_name, int_typ_name
                 )
             elif isinstance(out_col_typs[i], BooleanArrayType):
-                func_text += "    {} = pd.Series([True]).values\n".format(out_name)
+                func_text += "    {} = bodo.libs.bool_arr_ext.init_bool_array(np.empty(0, np.bool_), np.empty(0, np.uint8))\n".format(
+                    out_name
+                )
             elif isinstance(out_col_typs[i], StringArrayType):
                 func_text += "    {} = pre_alloc_string_array(1,1)\n".format(out_name)
             elif isinstance(out_col_typs[i], ListStringArrayType):
