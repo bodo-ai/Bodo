@@ -1271,9 +1271,8 @@ def get_itertuples_impl(context, builder, sig, args):
         setattr(iterobj, "array{}".format(i), arr)
 
     # Incref arrays
-    if context.enable_nrt:
-        for arr, arr_typ in zip(arrays, array_types):
-            context.nrt.incref(builder, arr_typ, arr)
+    for arr, arr_typ in zip(arrays, array_types):
+        context.nrt.incref(builder, arr_typ, arr)
 
     res = iterobj._getvalue()
 

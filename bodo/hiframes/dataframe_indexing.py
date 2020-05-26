@@ -188,8 +188,7 @@ def init_dataframe_iloc(typingctx, obj=None):
         iloc_val.obj = obj_val
 
         # increase refcount of stored values
-        if context.enable_nrt:
-            context.nrt.incref(builder, signature.args[0], obj_val)
+        context.nrt.incref(builder, signature.args[0], obj_val)
 
         return iloc_val._getvalue()
 
@@ -308,8 +307,7 @@ def init_dataframe_loc(typingctx, obj=None):
         loc_val.obj = obj_val
 
         # increase refcount of stored values
-        if context.enable_nrt:
-            context.nrt.incref(builder, signature.args[0], obj_val)
+        context.nrt.incref(builder, signature.args[0], obj_val)
 
         return loc_val._getvalue()
 
@@ -407,8 +405,7 @@ def init_dataframe_iat(typingctx, obj=None):
         iat_val.obj = obj_val
 
         # increase refcount of stored values
-        if context.enable_nrt:
-            context.nrt.incref(builder, signature.args[0], obj_val)
+        context.nrt.incref(builder, signature.args[0], obj_val)
 
         return iat_val._getvalue()
 

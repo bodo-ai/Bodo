@@ -78,8 +78,7 @@ def init_series_dt_properties(typingctx, obj=None):
         dt_properties_val.obj = obj_val
 
         # increase refcount of stored values
-        if context.enable_nrt:
-            context.nrt.incref(builder, signature.args[0], obj_val)
+        context.nrt.incref(builder, signature.args[0], obj_val)
 
         return dt_properties_val._getvalue()
 
