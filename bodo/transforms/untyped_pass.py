@@ -65,7 +65,7 @@ from bodo.utils.transform import (
     get_call_expr_arg,
     gen_const_tup,
 )
-from bodo.utils.typing import BodoError
+from bodo.utils.typing import BodoError, BodoWarning
 
 
 # dummy sentinel singleton to designate constant value not found for variable
@@ -101,6 +101,9 @@ class UntypedPass:
         self.h5_handler = h5.H5_IO(
             self.func_ir, _locals, flags, args, self.reverse_copies
         )
+        # save names of arguments and return values to catch invalid dist annotation
+        self._arg_names = set()
+        self._return_varnames = set()
 
     def run(self):
         # FIXME: see why this breaks test_kmeans
@@ -145,11 +148,30 @@ class UntypedPass:
         #     pass
         self.func_ir._definitions = build_definitions(blocks)
         dprint_func_ir(self.func_ir, "after untyped pass")
+
+        # raise a warning if a variable that is not an argument or return value has a
+        # "distributed" annotation
+        extra_vars = (
+            self.metadata["distributed"] - self._return_varnames - self._arg_names
+        )
+        if extra_vars and bodo.get_rank() == 0:
+            warnings.warn(
+                BodoWarning(
+                    "Only function arguments and return values can be specified as"
+                    "distributed. Ignoring the flag for variables: {}.".format(
+                        extra_vars
+                    )
+                )
+            )
         return
 
     def _run_assign(self, assign, label):
         lhs = assign.target.name
         rhs = assign.value
+
+        # save arg name to catch invalid dist annotations
+        if isinstance(rhs, ir.Arg):
+            self._arg_names.add(rhs.name)
 
         if isinstance(rhs, ir.Expr):
             if rhs.op == "call":
@@ -1414,6 +1436,8 @@ class UntypedPass:
         loc = cast.loc
         # XXX: using split('.') since the variable might be renamed (e.g. A.2)
         ret_name = cast.value.name.split(".")[0]
+        # save return name to catch invalid dist annotations
+        self._return_varnames.add(ret_name)
 
         if ret_name in flagged_vars or all_returns_distributed:
             flag = (
@@ -1448,6 +1472,7 @@ class UntypedPass:
             new_var_list = []
             for v in cast_def.items:
                 vname = v.name.split(".")[0]
+                self._return_varnames.add(vname)
                 if vname in flagged_vars or all_returns_distributed:
                     flag = (
                         "distributed"
