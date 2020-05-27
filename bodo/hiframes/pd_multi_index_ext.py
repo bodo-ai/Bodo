@@ -190,10 +190,9 @@ def init_multi_index(typingctx, data, names, name=None):
         multi_index.name = name_val
 
         # increase refcount of stored values
-        if context.enable_nrt:
-            context.nrt.incref(builder, signature.args[0], data_val)
-            context.nrt.incref(builder, signature.args[1], names_val)
-            context.nrt.incref(builder, signature.args[2], name_val)
+        context.nrt.incref(builder, signature.args[0], data_val)
+        context.nrt.incref(builder, signature.args[1], names_val)
+        context.nrt.incref(builder, signature.args[2], name_val)
 
         return multi_index._getvalue()
 

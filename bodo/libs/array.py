@@ -81,8 +81,7 @@ def array_to_info(typingctx, arr_type_t):
         (in_arr,) = args
         arr_type = arr_type_t
         # arr_info struct keeps a reference
-        if context.enable_nrt:
-            context.nrt.incref(builder, arr_type, in_arr)
+        context.nrt.incref(builder, arr_type, in_arr)
 
         # ListStringArray
         if arr_type == list_string_array_type:

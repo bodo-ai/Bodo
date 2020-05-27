@@ -30,6 +30,7 @@ from numba.core.typing.templates import (
     bound_function,
 )
 from numba.parfors.array_analysis import ArrayAnalysis
+from numba.core.imputils import lower_constant
 
 import bodo
 from bodo.libs.str_ext import string_type
@@ -198,9 +199,8 @@ def init_datetime_index(typingctx, data, name=None):
         dt_index.name = name_val
 
         # increase refcount of stored values
-        if context.enable_nrt:
-            context.nrt.incref(builder, signature.args[0], data_val)
-            context.nrt.incref(builder, signature.args[1], name_val)
+        context.nrt.incref(builder, signature.args[0], data_val)
+        context.nrt.incref(builder, signature.args[1], name_val)
 
         return dt_index._getvalue()
 
@@ -807,9 +807,8 @@ def init_timedelta_index(typingctx, data, name=None):
         timedelta_index.name = name_val
 
         # increase refcount of stored values
-        if context.enable_nrt:
-            context.nrt.incref(builder, signature.args[0], data_val)
-            context.nrt.incref(builder, signature.args[1], name_val)
+        context.nrt.incref(builder, signature.args[0], data_val)
+        context.nrt.incref(builder, signature.args[1], name_val)
 
         return timedelta_index._getvalue()
 
@@ -1111,6 +1110,24 @@ def unbox_range_index(typ, val, c):
     range_val.step = step
     range_val.name = name
     return NativeValue(range_val._getvalue())
+
+
+@lower_constant(RangeIndexType)
+def lower_constant_range_index(context, builder, ty, pyval):
+    """embed constant RangeIndex by simply creating the data struct and assigning values
+    """
+    start = context.get_constant(types.int64, pyval.start)
+    stop = context.get_constant(types.int64, pyval.stop)
+    step = context.get_constant(types.int64, pyval.step)
+    name = context.get_constant_generic(builder, ty.name_typ, pyval.name)
+
+    # create range struct
+    range_val = cgutils.create_struct_proxy(ty)(context, builder)
+    range_val.start = start
+    range_val.stop = stop
+    range_val.step = step
+    range_val.name = name
+    return range_val._getvalue()
 
 
 @overload(pd.RangeIndex, no_unliteral=True)
@@ -1475,10 +1492,9 @@ def init_numeric_index(typingctx, data, name=None):
         index_val.data = args[0]
         index_val.name = args[1]
         # increase refcount of stored values
-        if context.enable_nrt:
-            arr_typ = types.Array(index_typ.dtype, 1, "C")
-            context.nrt.incref(builder, arr_typ, args[0])
-            context.nrt.incref(builder, index_typ.name_typ, args[1])
+        arr_typ = types.Array(index_typ.dtype, 1, "C")
+        context.nrt.incref(builder, arr_typ, args[0])
+        context.nrt.incref(builder, index_typ.name_typ, args[1])
         return index_val._getvalue()
 
     return NumericIndexType(data.dtype, name)(data, name), codegen
@@ -1652,9 +1668,8 @@ def init_string_index(typingctx, data, name=None):
         index_val.data = args[0]
         index_val.name = args[1]
         # increase refcount of stored values
-        if context.enable_nrt:
-            context.nrt.incref(builder, string_array_type, args[0])
-            context.nrt.incref(builder, index_typ.name_typ, args[1])
+        context.nrt.incref(builder, string_array_type, args[0])
+        context.nrt.incref(builder, index_typ.name_typ, args[1])
         return index_val._getvalue()
 
     return StringIndexType(name)(data, name), codegen

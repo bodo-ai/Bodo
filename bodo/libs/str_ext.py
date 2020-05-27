@@ -116,8 +116,7 @@ def unicode_to_utf8_and_len(typingctx, str_typ=None):
             # ascii case
             with then:
                 # TODO: check refcount
-                if context.enable_nrt:
-                    context.nrt.incref(builder, string_type, str_in)
+                context.nrt.incref(builder, string_type, str_in)
                 utf8_str.data = uni_str.data
                 utf8_str.meminfo = uni_str.meminfo
                 out_tup.f1 = uni_str.length

@@ -323,10 +323,9 @@ def init_series(typingctx, data, index, name=None):
         )
 
         # increase refcount of stored values
-        if context.enable_nrt:
-            context.nrt.incref(builder, signature.args[0], data_val)
-            context.nrt.incref(builder, signature.args[1], index_val)
-            context.nrt.incref(builder, signature.args[2], name_val)
+        context.nrt.incref(builder, signature.args[0], data_val)
+        context.nrt.incref(builder, signature.args[1], index_val)
+        context.nrt.incref(builder, signature.args[2], name_val)
 
         return series_val
 
@@ -844,7 +843,7 @@ def pd_series_overload(
         # extract name if data is has name (Series/Index) and name is None
         name_t = bodo.utils.conversion.extract_name_if_none(data, name)
         index_t = bodo.utils.conversion.extract_index_if_none(data, index)
-        data_t1 = bodo.utils.conversion.coerce_to_array(data, True, True)
+        data_t1 = bodo.utils.conversion.coerce_to_array(data, True)
 
         # TODO: support sanitize_array() of Pandas
         # TODO: add branch pruning to inline_closure_call

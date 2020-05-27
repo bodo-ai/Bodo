@@ -91,8 +91,7 @@ def init_series_str_method(typingctx, obj=None):
         str_method_val.obj = obj_val
 
         # increase refcount of stored values
-        if context.enable_nrt:
-            context.nrt.incref(builder, signature.args[0], obj_val)
+        context.nrt.incref(builder, signature.args[0], obj_val)
 
         return str_method_val._getvalue()
 

@@ -756,8 +756,7 @@ def incref(typingctx, data=None):
     def codegen(context, builder, signature, args):
         (data_val,) = args
 
-        if context.enable_nrt:
-            context.nrt.incref(builder, signature.args[0], data_val)
+        context.nrt.incref(builder, signature.args[0], data_val)
 
     return types.void(data), codegen
 

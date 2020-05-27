@@ -1746,6 +1746,15 @@ def test_df_type_unify_error():
         bodo.jit(test_impl)([3, 4])
 
 
+def test_dataframe_constant_lowering():
+    df = pd.DataFrame({"A": [2, 1], "B": [1.2, 3.3]})
+
+    def impl():
+        return df
+
+    pd.testing.assert_frame_equal(bodo.jit(impl)(), df)
+
+
 ############################# old tests ###############################
 
 

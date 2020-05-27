@@ -40,6 +40,14 @@ from bodo.utils.typing import (
     is_overload_false,
     parse_dtype,
 )
+from bodo.utils.indexing import (
+    array_getitem_bool_index,
+    array_getitem_int_index,
+    array_getitem_slice_index,
+    array_setitem_int_index,
+    array_setitem_bool_index,
+    array_setitem_slice_index,
+)
 
 
 class IntegerArrayType(types.ArrayCompatible):
@@ -318,9 +326,8 @@ def init_integer_array(typingctx, data, null_bitmap=None):
         int_arr.null_bitmap = bitmap_val
 
         # increase refcount of stored values
-        if context.enable_nrt:
-            context.nrt.incref(builder, signature.args[0], data_val)
-            context.nrt.incref(builder, signature.args[1], bitmap_val)
+        context.nrt.incref(builder, signature.args[0], data_val)
+        context.nrt.incref(builder, signature.args[1], bitmap_val)
 
         return int_arr._getvalue()
 
@@ -433,18 +440,7 @@ def int_arr_getitem(A, ind):
     if is_list_like_index_type(ind) and ind.dtype == types.bool_:
 
         def impl_bool(A, ind):  # pragma: no cover
-            ind = bodo.utils.conversion.coerce_to_ndarray(ind)
-            old_mask = A._null_bitmap
-            new_data = A._data[ind]
-            n = len(new_data)
-            n_bytes = (n + 7) >> 3
-            new_mask = np.empty(n_bytes, np.uint8)
-            curr_bit = 0
-            for i in numba.parfors.parfor.internal_prange(len(ind)):
-                if ind[i]:
-                    bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(old_mask, i)
-                    bodo.libs.int_arr_ext.set_bit_to_arr(new_mask, curr_bit, bit)
-                    curr_bit += 1
+            new_data, new_mask = array_getitem_bool_index(A, ind)
             return init_integer_array(new_data, new_mask)
 
         return impl_bool
@@ -453,17 +449,7 @@ def int_arr_getitem(A, ind):
     if is_list_like_index_type(ind) and isinstance(ind.dtype, types.Integer):
 
         def impl(A, ind):  # pragma: no cover
-            ind_t = bodo.utils.conversion.coerce_to_ndarray(ind)
-            old_mask = A._null_bitmap
-            new_data = A._data[ind_t]
-            n = len(new_data)
-            n_bytes = (n + 7) >> 3
-            new_mask = np.empty(n_bytes, np.uint8)
-            curr_bit = 0
-            for i in range(len(ind)):
-                bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(old_mask, ind_t[i])
-                bodo.libs.int_arr_ext.set_bit_to_arr(new_mask, curr_bit, bit)
-                curr_bit += 1
+            new_data, new_mask = array_getitem_int_index(A, ind)
             return init_integer_array(new_data, new_mask)
 
         return impl
@@ -472,18 +458,7 @@ def int_arr_getitem(A, ind):
     if isinstance(ind, types.SliceType):
 
         def impl_slice(A, ind):  # pragma: no cover
-            n = len(A._data)
-            old_mask = A._null_bitmap
-            new_data = np.ascontiguousarray(A._data[ind])
-            slice_idx = numba.cpython.unicode._normalize_slice(ind, n)
-            span = numba.cpython.unicode._slice_span(slice_idx)
-            n_bytes = (span + 7) >> 3
-            new_mask = np.empty(n_bytes, np.uint8)
-            curr_bit = 0
-            for i in range(slice_idx.start, slice_idx.stop, slice_idx.step):
-                bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(old_mask, i)
-                bodo.libs.int_arr_ext.set_bit_to_arr(new_mask, curr_bit, bit)
-                curr_bit += 1
+            new_data, new_mask = array_getitem_slice_index(A, ind)
             return init_integer_array(new_data, new_mask)
 
         return impl_slice
@@ -505,87 +480,27 @@ def int_arr_setitem(A, idx, val):
 
     # array of int indices
     if is_list_like_index_type(idx) and isinstance(idx.dtype, types.Integer):
-        # value is IntegerArray
-        if isinstance(val, IntegerArrayType):
 
-            def impl_arr_ind_mask(A, idx, val):  # pragma: no cover
-                n = len(val._data)
-                for i in range(n):
-                    A._data[idx[i]] = val._data[i]
-                    bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(val._null_bitmap, i)
-                    bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, idx[i], bit)
+        def impl_arr_ind_mask(A, idx, val):  # pragma: no cover
+            array_setitem_int_index(A, idx, val)
 
-            return impl_arr_ind_mask
-        # value is Array/List
-        def impl_arr_ind(A, idx, val):  # pragma: no cover
-            for i in range(len(val)):
-                A._data[idx[i]] = val[i]
-                bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, idx[i], 1)
-
-        return impl_arr_ind
+        return impl_arr_ind_mask
 
     # bool array
     if is_list_like_index_type(idx) and idx.dtype == types.bool_:
-        # value is IntegerArray
-        if isinstance(val, IntegerArrayType):
 
-            def impl_bool_ind_mask(A, idx, val):  # pragma: no cover
-                n = len(idx)
-                val_ind = 0
-                for i in range(n):
-                    if idx[i]:
-                        A._data[i] = val[val_ind]
-                        bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(
-                            val._null_bitmap, val_ind
-                        )
-                        bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, i, bit)
-                        val_ind += 1
+        def impl_bool_ind_mask(A, idx, val):  # pragma: no cover
+            array_setitem_bool_index(A, idx, val)
 
-            return impl_bool_ind_mask
-        # value is Array/List
-        def impl_bool_ind(A, idx, val):  # pragma: no cover
-            n = len(idx)
-            val_ind = 0
-            for i in range(n):
-                if idx[i]:
-                    A._data[i] = val[val_ind]
-                    bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, i, 1)
-                    val_ind += 1
-
-        return impl_bool_ind
+        return impl_bool_ind_mask
 
     # slice case
     if isinstance(idx, types.SliceType):
-        # value is IntegerArray
-        if isinstance(val, IntegerArrayType):
 
-            def impl_slice_mask(A, idx, val):  # pragma: no cover
-                n = len(A._data)
-                # using setitem directly instead of copying in loop since
-                # Array setitem checks for memory overlap and copies source
-                A._data[idx] = val._data
-                # XXX: conservative copy of bitmap in case there is overlap
-                # TODO: check for overlap and copy only if necessary
-                src_bitmap = val._null_bitmap.copy()
-                slice_idx = numba.cpython.unicode._normalize_slice(idx, n)
-                val_ind = 0
-                for i in range(slice_idx.start, slice_idx.stop, slice_idx.step):
-                    bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(src_bitmap, val_ind)
-                    bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, i, bit)
-                    val_ind += 1
+        def impl_slice_mask(A, idx, val):  # pragma: no cover
+            array_setitem_slice_index(A, idx, val)
 
-            return impl_slice_mask
-
-        def impl_slice(A, idx, val):  # pragma: no cover
-            n = len(A._data)
-            A._data[idx] = val
-            slice_idx = numba.cpython.unicode._normalize_slice(idx, n)
-            val_ind = 0
-            for i in range(slice_idx.start, slice_idx.stop, slice_idx.step):
-                bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, i, 1)
-                val_ind += 1
-
-        return impl_slice
+        return impl_slice_mask
 
 
 @overload(len, no_unliteral=True)

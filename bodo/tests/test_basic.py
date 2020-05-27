@@ -127,6 +127,7 @@ def test_strided_getitem():
 def test_array_sum_axis():
     """test array.sum() with axis argument
     """
+
     def test_impl1(A):
         return A.sum(0)
 
@@ -342,7 +343,6 @@ def test_dead_branch_remove():
             return 3
         return 2
 
-
     _check_IR_single_label(test_impl1, ())
     _check_IR_single_label(test_impl2, ())
 
@@ -426,6 +426,23 @@ def test_np_dot():
     check_func(test_impl, (n, k))
 
 
+def test_np_array():
+    """test distribution of np.array() and np.asarray().
+    array input can be distributed but not list input.
+    """
+    def test_impl1(A):
+        return np.array(A)
+
+    def test_impl2(A):
+        return np.asarray(A)
+
+    # TODO: enable when supported by Numba
+    # check_func(test_impl1, (np.ones(11),))
+    check_func(test_impl1, ([1, 2, 5, 1, 2, 3],), is_out_distributed=False)
+    check_func(test_impl2, (np.ones(11),))
+    check_func(test_impl2, ([1, 2, 5, 1, 2, 3],), is_out_distributed=False)
+
+
 def test_np_dot_empty_vm():
     """test for np.dot() called on empty vector and matrix (for Numba #5539)
     """
@@ -434,6 +451,27 @@ def test_np_dot_empty_vm():
     nb_res = numba.njit(lambda X, Y: np.dot(Y, X))(X, Y)
     py_res = np.dot(Y, X)
     np.testing.assert_array_equal(py_res, nb_res)
+
+
+def test_np_full():
+    """Test np.full() support (currently in Series pass)
+    """
+
+    def impl1(shape, fill_value, dtype):
+        return np.full(shape, fill_value, dtype)
+
+    def impl2(shape, fill_value, dtype):
+        return np.full(shape=shape, fill_value=fill_value, dtype=dtype)
+
+    def impl3(n, m, fill_value, dtype):
+        return np.full(shape=(n, m), fill_value=fill_value, dtype=dtype)
+
+    check_func(impl1, (11, 1.0, np.float64))
+    check_func(impl1, ((111,), 1, np.float32))
+    check_func(impl2, (11, 1.3, np.float32))
+    # FIXME: using a separate function for multi-dim case since passing tuple shape to
+    # pndindex() fails in Numba
+    check_func(impl3, (111, 4, 1, np.float32))
 
 
 @pytest.mark.skip(reason="Numba's perfmute generation needs to use np seed properly")

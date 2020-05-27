@@ -32,7 +32,7 @@ from numba.core.typing.templates import (
     bound_function,
 )
 from numba.parfors.array_analysis import ArrayAnalysis
-from numba.core.imputils import impl_ret_borrowed
+from numba.core.imputils import impl_ret_borrowed, lower_constant
 from llvmlite import ir as lir
 
 import bodo
@@ -441,10 +441,9 @@ def init_dataframe(typingctx, data_tup_typ, index_typ, col_names_typ=None):
         )
 
         # increase refcount of stored values
-        if context.enable_nrt:
-            context.nrt.incref(builder, data_tup_typ, data_tup)
-            context.nrt.incref(builder, index_typ, index_val)
-            context.nrt.incref(builder, columns_type, columns_tup)
+        context.nrt.incref(builder, data_tup_typ, data_tup)
+        context.nrt.incref(builder, index_typ, index_val)
+        context.nrt.incref(builder, columns_type, columns_tup)
 
         return dataframe_val
 
@@ -617,8 +616,7 @@ def set_dataframe_data(typingctx, df_typ, c_ind_typ, arr_typ=None):
             dataframe_payload.unboxed, context.get_constant(types.int8, 1), col_ind
         )
 
-        if context.enable_nrt:
-            context.nrt.incref(builder, arr_typ, arr_arg)
+        context.nrt.incref(builder, arr_typ, arr_arg)
 
         # store payload
         dataframe = cgutils.create_struct_proxy(df_typ)(context, builder, value=df_arg)
@@ -659,13 +657,12 @@ def set_df_index(typingctx, df_t, index_t=None):
         )
 
         # increase refcount of stored values
-        if context.enable_nrt:
-            context.nrt.incref(builder, index_t, index_val)
-            # TODO: refcount
-            context.nrt.incref(builder, types.Tuple(df_t.data), in_df_payload.data)
-            context.nrt.incref(
-                builder, types.UniTuple(string_type, len(df_t.columns)), in_df.columns
-            )
+        context.nrt.incref(builder, index_t, index_val)
+        # TODO: refcount
+        context.nrt.incref(builder, types.Tuple(df_t.data), in_df_payload.data)
+        context.nrt.incref(
+            builder, types.UniTuple(string_type, len(df_t.columns)), in_df.columns
+        )
 
         return dataframe
 
@@ -751,11 +748,10 @@ def set_df_column_with_reflect(typingctx, df, cname, arr, inplace=None):
         )
 
         # increase refcount of stored values
-        if context.enable_nrt:
-            context.nrt.incref(builder, index_typ, index_val)
-            for var, typ in zip(data_arrs, data_typs):
-                context.nrt.incref(builder, typ, var)
-            context.nrt.incref(builder, columns_type, columns_tup)
+        context.nrt.incref(builder, index_typ, index_val)
+        for var, typ in zip(data_arrs, data_typs):
+            context.nrt.incref(builder, typ, var)
+        context.nrt.incref(builder, columns_type, columns_tup)
 
         # TODO: test this
         # test_set_column_cond3 doesn't test it for some reason
@@ -775,11 +771,10 @@ def set_df_column_with_reflect(typingctx, df, cname, arr, inplace=None):
 
             # incref data again since there will be too references updated
             # TODO: incref only unboxed arrays to be safe?
-            if context.enable_nrt:
-                context.nrt.incref(builder, index_typ, index_val)
-                for var, typ in zip(data_arrs, data_typs):
-                    context.nrt.incref(builder, typ, var)
-                context.nrt.incref(builder, columns_type, columns_tup)
+            context.nrt.incref(builder, index_typ, index_val)
+            for var, typ in zip(data_arrs, data_typs):
+                context.nrt.incref(builder, typ, var)
+            context.nrt.incref(builder, columns_type, columns_tup)
 
         # set column of parent
         # get boxed array
@@ -787,8 +782,7 @@ def set_df_column_with_reflect(typingctx, df, cname, arr, inplace=None):
         gil_state = pyapi.gil_ensure()  # acquire GIL
         env_manager = context.get_env_manager(builder)
 
-        if context.enable_nrt:
-            context.nrt.incref(builder, arr, arr_arg)
+        context.nrt.incref(builder, arr, arr_arg)
 
         # call boxing for array data
         # TODO: check complex data types possible for Series for dataframes set column here
@@ -818,6 +812,35 @@ def set_df_column_with_reflect(typingctx, df, cname, arr, inplace=None):
     ret_typ = DataFrameType(data_typs, index_typ, column_names, True)
     sig = signature(ret_typ, df, cname, arr, inplace)
     return sig, codegen
+
+
+@lower_constant(DataFrameType)
+def lower_constant_dataframe(context, builder, df_type, pyval):
+    """embed constant DataFrame value but getting constant values for data arrays and
+    Index.
+    """
+    n_cols = len(pyval.columns)
+    data_tup = context.get_constant_generic(
+        builder,
+        types.Tuple(df_type.data),
+        tuple(pyval.iloc[:, i].values for i in range(n_cols)),
+    )
+    index_val = context.get_constant_generic(builder, df_type.index, pyval.index)
+    columns_tup = context.get_constant_generic(
+        builder, numba.typeof(df_type.columns), df_type.columns
+    )
+
+    # set unboxed flags to 1 for all arrays
+    one = context.get_constant(types.int8, 1)
+    unboxed_tup = context.make_tuple(
+        builder, types.UniTuple(types.int8, n_cols + 1), [one] * (n_cols + 1)
+    )
+
+    dataframe_val = construct_dataframe(
+        context, builder, df_type, data_tup, index_val, columns_tup, unboxed_tup
+    )
+
+    return dataframe_val
 
 
 @overload(pd.DataFrame, inline="always", no_unliteral=True)
@@ -866,7 +889,7 @@ def _get_df_args(data, index, columns, dtype, copy):
         n_cols = (len(data.types) - 1) // 2
         data_keys = [t.literal_value for t in data.types[1 : n_cols + 1]]
         data_arrs = [
-            "bodo.utils.conversion.coerce_to_array(data[{}], True, True){}".format(
+            "bodo.utils.conversion.coerce_to_array(data[{}], True){}".format(
                 i, astype_str
             )
             for i in range(n_cols + 1, 2 * n_cols + 1)

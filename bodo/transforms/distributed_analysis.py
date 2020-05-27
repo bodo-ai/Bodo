@@ -946,6 +946,12 @@ class DistributedAnalysis:
         if fdef == ("file_read", "bodo.io.np_io"):
             return
 
+        # str_arr_from_sequence() applies to lists/tuples so output is REP
+        # e.g. column names in df.mean()
+        if fdef == ("str_arr_from_sequence", "bodo.libs.str_arr_ext"):
+            self._set_var_dist(lhs, array_dists, Distribution.REP)
+            return
+
         # TODO: make sure assert_equiv is not generated unnecessarily
         # TODO: fix assert_equiv for np.stack from df.value
         if fdef == ("assert_equiv", "numba.parfors.array_analysis"):
@@ -976,8 +982,23 @@ class DistributedAnalysis:
             self._analyze_call_np_concatenate(lhs, args, array_dists)
             return
 
-        if func_name == "array" and is_array_typ(self.typemap[args[0].name]):
-            self._meet_array_dists(lhs, args[0].name, array_dists)
+        if func_name == "array":
+            arg = get_call_expr_arg("array", args, kws, 0, "object")
+            # np.array of another array can be distributed, but not list/tuple
+            # NOTE: not supported by Numba yet
+            if is_array_typ(self.typemap[arg.name]):  # pragma: no cover
+                self._meet_array_dists(lhs, arg.name, array_dists)
+            else:
+                self._set_var_dist(lhs, array_dists, Distribution.REP)
+            return
+
+        if func_name == "asarray":
+            arg = get_call_expr_arg("asarray", args, kws, 0, "a")
+            # np.asarray of another array can be distributed, but not list/tuple
+            if is_array_typ(self.typemap[args[0].name]):
+                self._meet_array_dists(lhs, args[0].name, array_dists)
+            else:
+                self._set_var_dist(lhs, array_dists, Distribution.REP)
             return
 
         # handle array.sum() with axis
@@ -1518,7 +1539,7 @@ class DistributedAnalysis:
             typ = self.typemap[lhs]
             if is_distributable_typ(typ) or is_distributable_tuple_typ(typ):
                 info = (
-                    "Distributed analysis replicated input {0} (variable "
+                    "Distributed analysis replicated argument {0} (variable "
                     "{1}). Set distributed flag for {0} if distributed partitions "
                     "are passed (e.g. @bodo.jit(distributed=['{0}']))."
                 ).format(rhs.name, lhs)
@@ -1532,7 +1553,7 @@ class DistributedAnalysis:
 
         if is_distributable_typ(self.typemap[var.name]):
             info = (
-                "Distributed analysis replicated output variable "
+                "Distributed analysis replicated return variable "
                 "{}. Set distributed flag for the original variable if distributed "
                 "partitions should be returned."
             ).format(var.name)
