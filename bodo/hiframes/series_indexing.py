@@ -532,3 +532,15 @@ def overload_series_setitem(S, idx, val):
             return impl_arr
 
         raise ValueError("Series [] setitem using {} not supported".format(idx))
+
+
+@overload(operator.setitem, no_unliteral=True)
+def overload_array_list_setitem(A, idx, val):
+    """Support setitem of Arrays with list/Series index (since not supported by Numba)
+    """
+    if isinstance(A, types.Array) and isinstance(idx, (types.List, SeriesType)):
+
+        def impl(A, idx, val):  # pragma: no cover
+            A[bodo.utils.conversion.coerce_to_array(idx)] = val
+
+        return impl

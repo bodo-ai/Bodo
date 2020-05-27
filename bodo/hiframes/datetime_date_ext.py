@@ -43,6 +43,14 @@ from bodo.hiframes.datetime_timedelta_ext import datetime_timedelta_type
 from bodo.hiframes.datetime_datetime_ext import DatetimeDatetimeType
 import bodo
 from bodo.utils.typing import is_list_like_index_type
+from bodo.utils.indexing import (
+    array_getitem_bool_index,
+    array_getitem_int_index,
+    array_getitem_slice_index,
+    array_setitem_int_index,
+    array_setitem_bool_index,
+    array_setitem_slice_index,
+)
 from bodo.libs import hdatetime_ext
 import llvmlite.binding as ll
 
@@ -710,18 +718,7 @@ def dt_date_arr_getitem(A, ind):
     if is_list_like_index_type(ind) and ind.dtype == types.bool_:
 
         def impl_bool(A, ind):  # pragma: no cover
-            ind = bodo.utils.conversion.coerce_to_ndarray(ind)
-            old_mask = A._null_bitmap
-            new_data = A._data[ind]
-            n = len(new_data)
-            n_bytes = (n + 7) >> 3
-            new_mask = np.empty(n_bytes, np.uint8)
-            curr_bit = 0
-            for i in numba.parfors.parfor.internal_prange(len(ind)):
-                if ind[i]:
-                    bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(old_mask, i)
-                    bodo.libs.int_arr_ext.set_bit_to_arr(new_mask, curr_bit, bit)
-                    curr_bit += 1
+            new_data, new_mask = array_getitem_bool_index(A, ind)
             return init_datetime_date_array(new_data, new_mask)
 
         return impl_bool
@@ -730,17 +727,7 @@ def dt_date_arr_getitem(A, ind):
     if is_list_like_index_type(ind) and isinstance(ind.dtype, types.Integer):
 
         def impl(A, ind):  # pragma: no cover
-            ind_t = bodo.utils.conversion.coerce_to_ndarray(ind)
-            old_mask = A._null_bitmap
-            new_data = A._data[ind_t]
-            n = len(new_data)
-            n_bytes = (n + 7) >> 3
-            new_mask = np.empty(n_bytes, np.uint8)
-            curr_bit = 0
-            for i in range(len(ind)):
-                bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(old_mask, ind_t[i])
-                bodo.libs.int_arr_ext.set_bit_to_arr(new_mask, curr_bit, bit)
-                curr_bit += 1
+            new_data, new_mask = array_getitem_int_index(A, ind)
             return init_datetime_date_array(new_data, new_mask)
 
         return impl
@@ -749,18 +736,7 @@ def dt_date_arr_getitem(A, ind):
     if isinstance(ind, types.SliceType):
 
         def impl_slice(A, ind):  # pragma: no cover
-            n = len(A._data)
-            old_mask = A._null_bitmap
-            new_data = np.ascontiguousarray(A._data[ind])
-            slice_idx = numba.cpython.unicode._normalize_slice(ind, n)
-            span = numba.cpython.unicode._slice_span(slice_idx)
-            n_bytes = (span + 7) >> 3
-            new_mask = np.empty(n_bytes, np.uint8)
-            curr_bit = 0
-            for i in range(slice_idx.start, slice_idx.stop, slice_idx.step):
-                bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(old_mask, i)
-                bodo.libs.int_arr_ext.set_bit_to_arr(new_mask, curr_bit, bit)
-                curr_bit += 1
+            new_data, new_mask = array_getitem_slice_index(A, ind)
             return init_datetime_date_array(new_data, new_mask)
 
         return impl_slice
@@ -780,96 +756,31 @@ def dt_date_arr_setitem(A, ind, val):
         # Covered by test_series_iat_setitem , test_series_iloc_setitem_int , test_series_setitem_int
         return impl
 
-    # array
+    # array of integers
     if is_list_like_index_type(ind) and isinstance(ind.dtype, types.Integer):
-        # value is DatetimeDateArray
-        if isinstance(val, DatetimeDateArrayType):
 
-            def impl_arr_ind_mask(A, ind, val):  # pragma: no cover
-                n = len(val._data)
-                for i in range(n):
-                    bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(val._null_bitmap, i)
-                    bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, ind[i], bit)
-                    A._data[ind[i]] = val._data[i]
-
-            # covered by test_series_iloc_setitem_list_int (OK)
-            return impl_arr_ind_mask
-
-        # value is Array/List
         def impl_arr_ind(A, ind, val):  # pragma: no cover
-            for i in range(len(val)):
-                bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, ind[i], 1)
-                A._data[ind[i]] = cast_datetime_date_to_int(val[i])
+            array_setitem_int_index(A, ind, val)
 
-        # Corresponding test is missing ...
-        return impl_arr_ind  # pragma: no cover
+        # covered by test_series_iloc_setitem_list_int
+        return impl_arr_ind
 
     # bool array
     if is_list_like_index_type(ind) and ind.dtype == types.bool_:
-        # value is DatetimeDateArray
-        # Corresponding test is missing ...
-        if isinstance(val, DatetimeDateArrayType):  # pragma: no cover
 
-            def impl_bool_ind_mask(A, ind, val):  # pragma: no cover
-                n = len(ind)
-                val_ind = 0
-                for i in range(n):
-                    if ind[i]:
-                        bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(val, val_ind)
-                        bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, i, bit)
-                        A._data[i] = val._data[val_ind]
-                        val_ind += 1
+        def impl_bool_ind_mask(A, ind, val):  # pragma: no cover
+            array_setitem_bool_index(A, ind, val)
 
-            # The following test is missing ...
-            return impl_bool_ind_mask  # pragma: no cover
-
-        # value is Array/List
-        def impl_bool_ind(A, ind, val):  # pragma: no cover
-            n = len(ind)
-            val_ind = 0
-            for i in range(n):
-                if ind[i]:
-                    bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, i, 1)
-                    A._data[i] = cast_datetime_date_to_int(val[val_ind])
-                    val_ind += 1
-
-        # The following test is missing ...
-        return impl_bool_ind  # pragma: no cover
+        return impl_bool_ind_mask
 
     # slice case
     if isinstance(ind, types.SliceType):
-        # value is DatetimeDateArray
-        if isinstance(val, DatetimeDateArrayType):
 
-            def impl_slice_mask(A, ind, val):  # pragma: no cover
-                n = len(A._data)
-                # using setitem directly instead of copying in loop since
-                # Array setitem checks for memory overlap and copies source
-                A._data[ind] = val._data
-                # XXX: conservative copy of bitmap in case there is overlap
-                # TODO: check for overlap and copy only if necessary
-                src_bitmap = val._null_bitmap.copy()
-                slice_ind = numba.cpython.unicode._normalize_slice(ind, n)
-                val_ind = 0
-                for i in range(slice_ind.start, slice_ind.stop, slice_ind.step):
-                    bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(src_bitmap, val_ind)
-                    bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, i, bit)
-                    val_ind += 1
+        def impl_slice_mask(A, ind, val):  # pragma: no cover
+            array_setitem_slice_index(A, ind, val)
 
-            # Apparently covered by test_series_setitem_slice
-            return impl_slice_mask
-
-        def impl_slice(A, ind, val):  # pragma: no cover
-            n = len(A._data)
-            A._data[ind] = val
-            slice_ind = numba.cpython.unicode._normalize_slice(ind, n)
-            val_ind = 0
-            for i in range(slice_ind.start, slice_ind.stop, slice_ind.step):
-                bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, i, 1)
-                val_ind += 1
-
-        # The following test is missing ...
-        return impl_slice  # pragma: no cover
+        # covered by test_series_setitem_slice
+        return impl_slice_mask
 
 
 @overload(len, no_unliteral=True)
