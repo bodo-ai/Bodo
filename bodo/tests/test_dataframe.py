@@ -18,6 +18,7 @@ from bodo.tests.utils import (
     check_func,
     is_bool_object_series,
     _get_dist_arg,
+    AnalysisTestPipeline,
 )
 
 
@@ -1408,47 +1409,6 @@ def test_concat_nulls():
     )
     check_func(test_impl, (df, df2), sort_output=True)
     check_func(test_impl_concat, (df, df2), sort_output=True)
-
-
-from numba.core.compiler_machinery import FunctionPass, register_pass
-
-
-@register_pass(analysis_only=False, mutates_CFG=True)
-class ArrayAnalysisPass(FunctionPass):
-    _name = "array_analysis_pass"
-
-    def __init__(self):
-        FunctionPass.__init__(self)
-
-    def run_pass(self, state):
-        array_analysis = numba.parfors.array_analysis.ArrayAnalysis(
-            state.typingctx,
-            state.func_ir,
-            state.type_annotation.typemap,
-            state.type_annotation.calltypes,
-        )
-        array_analysis.run(state.func_ir.blocks)
-        state.func_ir._definitions = numba.core.ir_utils.build_definitions(
-            state.func_ir.blocks
-        )
-        state.metadata["preserved_array_analysis"] = array_analysis
-        return False
-
-
-class AnalysisTestPipeline(bodo.compiler.BodoCompiler):
-    """
-    pipeline used in test_dataframe_array_analysis()
-    additional ArrayAnalysis pass that preserves analysis object
-    """
-
-    def define_pipelines(self):
-        [pipeline] = self._create_bodo_pipeline(
-            distributed=True, inline_calls_pass=False
-        )
-        pipeline._finalized = False
-        pipeline.add_pass_after(ArrayAnalysisPass, bodo.compiler.BodoSeriesPass)
-        pipeline.finalize()
-        return [pipeline]
 
 
 def test_init_dataframe_array_analysis():

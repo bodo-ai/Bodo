@@ -6,7 +6,7 @@ import pandas as pd
 import numpy as np
 import bodo
 import pytest
-from bodo.tests.utils import check_func
+from bodo.tests.utils import check_func, AnalysisTestPipeline
 
 
 def test_range_index_constructor(memory_leak_check):
@@ -97,6 +97,24 @@ def test_numeric_index_constructor(memory_leak_check):
     pd.testing.assert_index_equal(bodo.jit(impl8)(), impl8())
 
 
+def test_init_numeric_index_array_analysis():
+    """make sure shape equivalence for init_numeric_index() is applied correctly
+    """
+    import numba.tests.test_array_analysis
+
+    def impl(d):
+        I = pd.Int64Index(d)
+        return I
+
+    test_func = numba.njit(pipeline_class=AnalysisTestPipeline, parallel=True)(impl)
+    test_func(np.arange(10))
+    array_analysis = test_func.overloads[test_func.signatures[0]].metadata[
+        "preserved_array_analysis"
+    ]
+    eq_set = array_analysis.equiv_sets[0]
+    assert eq_set._get_ind("I#0") == eq_set._get_ind("d#0")
+
+
 @pytest.mark.parametrize(
     "index",
     [
@@ -155,7 +173,6 @@ def test_index_copy(index):
         return S.copy()
 
     check_func(test_impl_copy, (index,))
-
 
 
 @pytest.fixture(
@@ -307,6 +324,25 @@ def test_datetime_index_constructor(data):
     pd.testing.assert_index_equal(bodo_func(data), test_impl(data))
 
 
+def test_init_datetime_index_array_analysis():
+    """make sure shape equivalence for init_datetime_index() is applied correctly
+    """
+    import numba.tests.test_array_analysis
+
+    def impl(n):
+        d = pd.date_range("2017-01-03", periods=n)
+        I = pd.DatetimeIndex(d)
+        return I
+
+    test_func = numba.njit(pipeline_class=AnalysisTestPipeline, parallel=True)(impl)
+    test_func(10)
+    array_analysis = test_func.overloads[test_func.signatures[0]].metadata[
+        "preserved_array_analysis"
+    ]
+    eq_set = array_analysis.equiv_sets[0]
+    assert eq_set._get_ind("I#0") == eq_set._get_ind("d#0")
+
+
 def test_pd_date_range():
     def impl():
         return pd.date_range(start="2018-01-01", end="2018-01-08")
@@ -366,6 +402,24 @@ def test_timedelta_index_constructor(data):
     pd.testing.assert_index_equal(bodo_func(data), test_impl(data))
 
 
+def test_init_timedelta_index_array_analysis():
+    """make sure shape equivalence for init_timedelta_index() is applied correctly
+    """
+    import numba.tests.test_array_analysis
+
+    def impl(d):
+        I = pd.TimedeltaIndex(d)
+        return I
+
+    test_func = numba.njit(pipeline_class=AnalysisTestPipeline, parallel=True)(impl)
+    test_func(pd.TimedeltaIndex(np.arange(10)))
+    array_analysis = test_func.overloads[test_func.signatures[0]].metadata[
+        "preserved_array_analysis"
+    ]
+    eq_set = array_analysis.equiv_sets[0]
+    assert eq_set._get_ind("I#0") == eq_set._get_ind("d#0")
+
+
 @pytest.mark.parametrize("field", bodo.hiframes.pd_timestamp_ext.timedelta_fields)
 def test_timedelta_field(timedelta_index_val, field):
     func_text = "def impl(A):\n"
@@ -413,3 +467,39 @@ def test_multi_index_unbox(m_ind, memory_leak_check):
 
     bodo_func = bodo.jit(test_impl)
     pd.testing.assert_index_equal(bodo_func(m_ind), test_impl(m_ind))
+
+
+def test_init_string_index_array_analysis():
+    """make sure shape equivalence for init_string_index() is applied correctly
+    """
+    import numba.tests.test_array_analysis
+
+    def impl(d):
+        I = bodo.hiframes.pd_index_ext.init_string_index(d, "AA")
+        return I
+
+    test_func = numba.njit(pipeline_class=AnalysisTestPipeline, parallel=True)(impl)
+    test_func(pd.array(["AA", "BB", "C"]))
+    array_analysis = test_func.overloads[test_func.signatures[0]].metadata[
+        "preserved_array_analysis"
+    ]
+    eq_set = array_analysis.equiv_sets[0]
+    assert eq_set._get_ind("I#0") == eq_set._get_ind("d#0")
+
+
+def test_init_range_index_array_analysis():
+    """make sure shape equivalence for init_range_index() is applied correctly
+    """
+    import numba.tests.test_array_analysis
+
+    def impl(n):
+        I = bodo.hiframes.pd_index_ext.init_range_index(0, n, 1, None)
+        return I
+
+    test_func = numba.njit(pipeline_class=AnalysisTestPipeline, parallel=True)(impl)
+    test_func(11)
+    array_analysis = test_func.overloads[test_func.signatures[0]].metadata[
+        "preserved_array_analysis"
+    ]
+    eq_set = array_analysis.equiv_sets[0]
+    assert eq_set._get_ind("I#0") == eq_set._get_ind("n")

@@ -29,6 +29,7 @@ from numba.core.typing.templates import (
     AttributeTemplate,
     bound_function,
 )
+from numba.parfors.array_analysis import ArrayAnalysis
 from numba.core.imputils import lower_constant
 
 import bodo
@@ -70,7 +71,7 @@ def typeof_pd_index(val, c):
 # -------------------------  DatetimeIndex -----------------------------
 
 
-class DatetimeIndexType(types.IterableType):
+class DatetimeIndexType(types.IterableType, types.ArrayCompatible):
     """type class for DatetimeIndex objects.
     """
 
@@ -83,6 +84,11 @@ class DatetimeIndexType(types.IterableType):
         )
 
     ndim = 1
+
+    @property
+    def as_array(self):
+        # using types.undefined to avoid Array templates for binary ops
+        return types.Array(types.undefined, 1, "C")
 
     def copy(self):
         return DatetimeIndexType(self.name_typ)
@@ -201,6 +207,19 @@ def init_datetime_index(typingctx, data, name=None):
     ret_typ = DatetimeIndexType(name)
     sig = signature(ret_typ, data, name)
     return sig, codegen
+
+
+def init_index_equiv(self, scope, equiv_set, loc, args, kws):
+    assert len(args) >= 1 and not kws
+    var = args[0]
+    if equiv_set.has_shape(var):
+        return var, []
+    return None
+
+
+ArrayAnalysis._analyze_op_call_bodo_hiframes_pd_index_ext_init_datetime_index = (
+    init_index_equiv
+)
 
 
 # support DatetimeIndex date fields such as I.year
@@ -674,7 +693,7 @@ def pd_date_range_overload(
 
 
 # similar to DatetimeIndex
-class TimedeltaIndexType(types.IterableType):
+class TimedeltaIndexType(types.IterableType, types.ArrayCompatible):
     """Temporary type class for TimedeltaIndex objects.
     """
 
@@ -690,6 +709,11 @@ class TimedeltaIndexType(types.IterableType):
 
     def copy(self):
         return TimedeltaIndexType(self.name_typ)
+
+    @property
+    def as_array(self):
+        # using types.undefined to avoid Array templates for binary ops
+        return types.Array(types.undefined, 1, "C")
 
     @property
     def key(self):
@@ -791,6 +815,11 @@ def init_timedelta_index(typingctx, data, name=None):
     ret_typ = TimedeltaIndexType(name)
     sig = signature(ret_typ, data, name)
     return sig, codegen
+
+
+ArrayAnalysis._analyze_op_call_bodo_hiframes_pd_index_ext_init_timedelta_index = (
+    init_index_equiv
+)
 
 
 @infer_getattr
@@ -926,7 +955,7 @@ def pd_timedelta_index_overload(
 
 
 # pd.RangeIndex(): simply keep start/stop/step/name
-class RangeIndexType(types.IterableType):
+class RangeIndexType(types.IterableType, types.ArrayCompatible):
     """type class for pd.RangeIndex() objects.
     """
 
@@ -935,6 +964,11 @@ class RangeIndexType(types.IterableType):
         super(RangeIndexType, self).__init__(name="RangeIndexType({})".format(name_typ))
 
     ndim = 1
+
+    @property
+    def as_array(self):
+        # using types.undefined to avoid Array templates for binary ops
+        return types.Array(types.undefined, 1, "C")
 
     def copy(self):
         return RangeIndexType(self.name_typ)
@@ -1030,6 +1064,27 @@ def init_range_index(typingctx, start, stop, step, name=None):
         return range_val._getvalue()
 
     return RangeIndexType(name)(start, stop, step, name), codegen
+
+
+def init_range_index_equiv(self, scope, equiv_set, loc, args, kws):
+    """array analysis for RangeIndex. We can infer equivalence only when start=0 and
+    step=1.
+    """
+    assert len(args) == 4 and not kws
+    start, stop, step, _ = args
+    # RangeIndex is equivalent to 'stop' input when start=0 and step=1
+    if (
+        self.typemap[start.name] == types.IntegerLiteral(0)
+        and self.typemap[step.name] == types.IntegerLiteral(1)
+        and equiv_set.has_shape(stop)
+    ):
+        return stop, []
+    return None
+
+
+ArrayAnalysis._analyze_op_call_bodo_hiframes_pd_index_ext_init_range_index = (
+    init_range_index_equiv
+)
 
 
 @unbox(RangeIndexType)
@@ -1304,7 +1359,7 @@ def unbox_period_index(typ, val, c):
 
 # represents numeric indices (excluding RangeIndex):
 #   Int64Index, UInt64Index, Float64Index
-class NumericIndexType(types.IterableType):
+class NumericIndexType(types.IterableType, types.ArrayCompatible):
     """type class for pd.Int64Index/UInt64Index/Float64Index objects.
     """
 
@@ -1317,6 +1372,11 @@ class NumericIndexType(types.IterableType):
         )
 
     ndim = 1
+
+    @property
+    def as_array(self):
+        # using types.undefined to avoid Array templates for binary ops
+        return types.Array(types.undefined, 1, "C")
 
     def copy(self):
         return NumericIndexType(self.dtype, self.name_typ)
@@ -1440,6 +1500,11 @@ def init_numeric_index(typingctx, data, name=None):
     return NumericIndexType(data.dtype, name)(data, name), codegen
 
 
+ArrayAnalysis._analyze_op_call_bodo_hiframes_pd_index_ext_init_numeric_index = (
+    init_index_equiv
+)
+
+
 @unbox(NumericIndexType)
 def unbox_numeric_index(typ, val, c):
     # get data and name attributes
@@ -1508,7 +1573,7 @@ _install_numeric_constructors()
 
 # represents string index, which doesn't have direct Pandas type
 # pd.Index() infers string
-class StringIndexType(types.IterableType):
+class StringIndexType(types.IterableType, types.ArrayCompatible):
     """type class for pd.Index() objects with 'string' as inferred_dtype.
     """
 
@@ -1520,6 +1585,11 @@ class StringIndexType(types.IterableType):
         )
 
     ndim = 1
+
+    @property
+    def as_array(self):
+        # using types.undefined to avoid Array templates for binary ops
+        return types.Array(types.undefined, 1, "C")
 
     def copy(self):
         return StringIndexType(self.name_typ)
@@ -1603,6 +1673,11 @@ def init_string_index(typingctx, data, name=None):
         return index_val._getvalue()
 
     return StringIndexType(name)(data, name), codegen
+
+
+ArrayAnalysis._analyze_op_call_bodo_hiframes_pd_index_ext_init_string_index = (
+    init_index_equiv
+)
 
 
 @unbox(StringIndexType)
@@ -1764,6 +1839,20 @@ def overload_index_len(I):
         return lambda I: len(bodo.hiframes.pd_index_ext.get_index_data(I))
 
 
+@overload_attribute(DatetimeIndexType, "shape")
+@overload_attribute(NumericIndexType, "shape")
+@overload_attribute(StringIndexType, "shape")
+@overload_attribute(PeriodIndexType, "shape")
+@overload_attribute(TimedeltaIndexType, "shape")
+def overload_index_shape(s):
+    return lambda s: (len(bodo.hiframes.pd_index_ext.get_index_data(s)),)
+
+
+@overload_attribute(RangeIndexType, "shape")
+def overload_index_shape(s):
+    return lambda s: (len(s),)
+
+
 @numba.generated_jit(nopython=True)
 def get_index_data(S):
     return lambda S: S._data
@@ -1794,3 +1883,17 @@ numba.core.ir_utils.alias_func_extensions[
 numba.core.ir_utils.alias_func_extensions[
     ("init_string_index", "bodo.hiframes.pd_index_ext")
 ] = alias_ext_dummy_func
+
+
+# array analysis extension
+def get_index_data_equiv(self, scope, equiv_set, loc, args, kws):
+    assert len(args) == 1 and not kws
+    var = args[0]
+    if equiv_set.has_shape(var):
+        return var, []
+    return None
+
+
+ArrayAnalysis._analyze_op_call_bodo_hiframes_pd_index_ext_get_index_data = (
+    get_index_data_equiv
+)
