@@ -1010,6 +1010,36 @@ n_col = 3
         # unboxing crashes for case below (issue #812)
         # pd.Series(gen_random_string_array(n)).map(lambda a: None if pd.isna(a) else [a, "A"]).values
         pd.Series(["A"] * n).map(lambda a: None if pd.isna(a) else [a, "A"]).values,
+        np.array(
+            [
+                [1, 3],
+                [2],
+                np.nan,
+                [4, 5, 6],
+                [],
+                [1, 1753],
+                [],
+                [-10],
+                [4, 10],
+                np.nan,
+                [42],
+            ]
+        ),
+        np.array(
+            [
+                [2.0, -3.2],
+                [2.2, 1.3],
+                np.nan,
+                [4.1, 5.2, 6.3],
+                [],
+                [1.1, 1.2],
+                [],
+                [-42.0],
+                [3.14],
+                [2.0, 3.0],
+                np.nan,
+            ]
+        ),
     ],
 )
 def test_scatterv(data):

@@ -1077,6 +1077,15 @@ def get_value_for_type(dtype):  # pragma: no cover
     if isinstance(dtype, types.BaseTuple):
         return tuple(get_value_for_type(t) for t in dtype.types)
 
+    if isinstance(dtype, ListItemArrayType):
+        if isinstance(dtype.dtype.dtype, types.Integer):
+            return pd.Series([[1, 2], []]).values
+        if isinstance(dtype.dtype.dtype, types.Float):
+            return pd.Series([[1.0, 2.0], []]).values
+
+    # TODO: Add missing data types
+    raise BodoError("get_value_for_type(dtype): Missing data type")
+
 
 def scatterv(data):
     """scatterv() distributes data from rank 0 to all ranks.
@@ -1203,6 +1212,114 @@ def scatterv_impl(data):
             return recv_arr
 
         return scatterv_str_arr_impl
+
+    if isinstance(data, ListItemArrayType):
+        # Code adapted from the string code. Both the string and list(item) codes should be
+        # refactored.
+        int32_typ_enum = np.int32(numba_to_c_type(types.int32))
+        data_typ_enum = np.int32(numba_to_c_type(data.elem_type))
+        char_typ_enum = np.int32(numba_to_c_type(types.uint8))
+
+        def scatterv_list_item_impl(data):
+            in_offsets_arr = bodo.libs.list_item_arr_ext.get_offsets(data)
+            in_data_arr = bodo.libs.list_item_arr_ext.get_data(data)
+            in_null_bitmap_arr = bodo.libs.list_item_arr_ext.get_null_bitmap(data)
+            #
+            rank = bodo.libs.distributed_api.get_rank()
+            n_pes = bodo.libs.distributed_api.get_size()
+            n_all = bcast_scalar(len(data))
+
+            # convert offsets to lengths of lists
+            send_arr_lens = np.empty(len(data), np.uint32)  # XXX offset type is uint32
+            for i in range(len(data)):
+                send_arr_lens[i] = in_offsets_arr[i + 1] - in_offsets_arr[i]
+
+            # ------- calculate buffer counts -------
+
+            # compute send counts
+            sendcounts = np.empty(n_pes, np.int32)
+            for i in range(n_pes):
+                sendcounts[i] = get_node_portion(n_all, n_pes, i)
+
+            # displacements
+            displs = bodo.ir.join.calc_disp(sendcounts)
+
+            # compute send counts for items
+            sendcounts_item = np.empty(n_pes, np.int32)
+            if rank == 0:
+                curr_str = 0
+                for i in range(n_pes):
+                    c = 0
+                    for _ in range(sendcounts[i]):
+                        c += send_arr_lens[curr_str]
+                        curr_str += 1
+                    sendcounts_item[i] = c
+
+            bcast(sendcounts_item)
+
+            # displacements for items
+            displs_item = bodo.ir.join.calc_disp(sendcounts_item)
+
+            # compute send counts for nulls
+            sendcounts_nulls = np.empty(n_pes, np.int32)
+            for i in range(n_pes):
+                sendcounts_nulls[i] = (sendcounts[i] + 7) >> 3
+
+            # displacements for nulls
+            displs_nulls = bodo.ir.join.calc_disp(sendcounts_nulls)
+
+            # alloc output array
+            n_loc = sendcounts[rank]  # total number of elements on this PE
+            n_loc_item = sendcounts_item[rank]
+            recv_arr = pre_alloc_list_item_array(n_loc, n_loc_item, in_data_arr.dtype)
+            recv_offsets_arr = bodo.libs.list_item_arr_ext.get_offsets(recv_arr)
+            recv_data_arr = bodo.libs.list_item_arr_ext.get_data(recv_arr)
+            recv_null_bitmap_arr = bodo.libs.list_item_arr_ext.get_null_bitmap(recv_arr)
+
+            # ----- list of item lengths -----------
+
+            c_scatterv(
+                send_arr_lens.ctypes,
+                sendcounts.ctypes,
+                displs.ctypes,
+                recv_offsets_arr.ctypes,
+                np.int32(n_loc),
+                int32_typ_enum,
+            )
+
+            convert_len_arr_to_offset(recv_offsets_arr.ctypes, n_loc)
+
+            # ----- items -----------
+
+            c_scatterv(
+                in_data_arr.ctypes,
+                sendcounts_item.ctypes,
+                displs_item.ctypes,
+                recv_data_arr.ctypes,
+                np.int32(n_loc_item),
+                data_typ_enum,
+            )
+
+            # ----------- null bitmap -------------
+
+            n_recv_bytes = (n_loc + 7) >> 3
+
+            send_null_bitmap = get_scatter_null_bytes_buff(
+                in_null_bitmap_arr.ctypes, sendcounts, sendcounts_nulls
+            )
+
+            c_scatterv(
+                send_null_bitmap.ctypes,
+                sendcounts_nulls.ctypes,
+                displs_nulls.ctypes,
+                recv_null_bitmap_arr.ctypes,
+                np.int32(n_recv_bytes),
+                char_typ_enum,
+            )
+
+            return recv_arr
+
+        return scatterv_list_item_impl
 
     if isinstance(data, (IntegerArrayType, DecimalArrayType)) or data in (
         boolean_array,
