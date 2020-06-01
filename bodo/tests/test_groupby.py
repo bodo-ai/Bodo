@@ -5,6 +5,7 @@ import datetime
 import pandas as pd
 import numpy as np
 import bodo
+from bodo.utils.typing import BodoError
 from decimal import Decimal
 from bodo.tests.utils import (
     count_array_REPs,
@@ -363,12 +364,8 @@ def test_groupby_missing_entry():
     df1 = pd.DataFrame(
         {"A": [3, 2, 3], "B": pd.date_range("2017-01-03", periods=3), "C": [3, 1, 2]}
     )
-    df2 = pd.DataFrame(
-        {"A": [3, 2, 3], "B": ["aa", "bb", "cc"], "C": [3, 1, 2]}
-    )
-    df3 = pd.DataFrame(
-        {"A": [3, 2, 3], "B": ["aa", "bb", "cc"]}
-    )
+    df2 = pd.DataFrame({"A": [3, 2, 3], "B": ["aa", "bb", "cc"], "C": [3, 1, 2]})
+    df3 = pd.DataFrame({"A": [3, 2, 3], "B": ["aa", "bb", "cc"]})
     check_func(test_drop_sum, (df1,), sort_output=True)
     check_func(test_drop_sum, (df2,), sort_output=True)
     check_func(test_drop_sum, (df3,), sort_output=True)
@@ -2399,6 +2396,12 @@ def test_const_list_inference():
         df["D"] = 4
         return df.groupby("D").sum()
 
+    # make sure const list is not updated inplace
+    def impl4(df):
+        l = ["A"]
+        l.append("B")
+        return df.groupby(l).sum()
+
     df = pd.DataFrame(
         {
             "A": [2, 1, 1, 1, 2, 2, 1],
@@ -2410,6 +2413,11 @@ def test_const_list_inference():
     check_func(impl1, (df,), sort_output=True)
     check_func(impl2, (df,), sort_output=True)
     check_func(impl3, (11,), sort_output=True)
+    with pytest.raises(
+        BodoError,
+        match="argument 'by' requires a constant value but variable 'l' is updated inplace using 'append'",
+    ):
+        bodo.jit(impl4)(df)
 
 
 # global key list for groupby() testing

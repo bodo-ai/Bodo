@@ -512,6 +512,12 @@ def test_df_rename():
         df.rename(columns={"B": "bb", "C": "cc"}, inplace=True)
         return df
 
+    # raise error if const dict value is updated inplace
+    def impl3(df):
+        d = {"B": "bb", "C": "cc"}
+        d.pop("C")
+        return df.rename(columns=d)
+
     df = pd.DataFrame(
         {
             "A": [1, 8, 4, 11, -3],
@@ -521,6 +527,11 @@ def test_df_rename():
     )
     check_func(impl, (df,))
     check_func(impl2, (df,))
+    with pytest.raises(
+        BodoError,
+        match="argument 'columns' requires a constant value but variable 'd' is updated inplace using 'pop'",
+    ):
+        bodo.jit(impl3)(df)
 
 
 def test_df_isna(df_value):
