@@ -96,7 +96,6 @@ no_side_effect_call_tuples = {
     ("unique", "array_kernels", "libs", bodo),
     ("nunique", "array_kernels", "libs", bodo),
     ("quantile", "array_kernels", "libs", bodo),
-    ("add_consts_to_type", "typing", "utils", bodo),
     ("str_arr_from_sequence", "str_arr_ext", "libs", bodo),
     ("parse_datetime_str", "pd_timestamp_ext", "hiframes", bodo),
     ("integer_to_dt64", "pd_timestamp_ext", "hiframes", bodo),
@@ -314,12 +313,9 @@ def get_const_value_inner(func_ir, var, arg_types=None, typemap=None):
         return var_def.fn(arg1, arg2)
 
     # list/set/dict cases
-    # try add_consts_to_type
-    call_name = guard(find_callname, func_ir, var_def)
-    if call_name == ("add_consts_to_type", "bodo.utils.typing",):
-        return get_const_value_inner(func_ir, var_def.args[0], arg_types, typemap)
 
     # try dict.keys()
+    call_name = guard(find_callname, func_ir, var_def)
     if (
         call_name is not None
         and len(call_name) == 2
@@ -328,12 +324,6 @@ def get_const_value_inner(func_ir, var, arg_types=None, typemap=None):
     ):
         call_func = var_def.func
         var_def = get_definition(func_ir, call_name[1])
-        # handle converted constant dictionaries
-        if is_call(var_def) and (
-            guard(find_callname, func_ir, var_def)
-            == ("add_consts_to_type", "bodo.utils.typing")
-        ):
-            var_def = guard(get_definition, func_ir, var_def.args[0])
 
         require(is_expr(var_def, "build_map"))
         vals = [v[0] for v in var_def.items]
