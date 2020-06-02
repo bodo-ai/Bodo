@@ -2,9 +2,12 @@
 """
 S3 & Hadoop file system supports, and file system dependent calls
 """
+import warnings
 from urllib.parse import urlparse
 import glob
 import os
+
+from bodo.utils.typing import BodoWarning, BodoError
 
 
 def get_s3_fs():
@@ -13,7 +16,7 @@ def get_s3_fs():
     """
     try:
         import s3fs
-    except: # pragma: no cover
+    except:  # pragma: no cover
         raise BodoError("Reading from s3 requires s3fs currently.")
 
     custom_endpoint = os.environ.get("AWS_S3_ENDPOINT", None)
@@ -25,7 +28,7 @@ def get_s3_fs():
     # between to_parquet to read_parquet
     if custom_endpoint is not None and (
         aws_access_key_id is None or aws_secret_access_key is None
-    ): # pragma: no cover
+    ):  # pragma: no cover
         warnings.warn(
             BodoWarning(
                 "Reading from s3 with custom_endpoint, "
@@ -43,9 +46,9 @@ def get_s3_fs():
     return fs
 
 
-# hdfs related functions(hdfs_list_dir_fnames) should be included in 
+# hdfs related functions(hdfs_list_dir_fnames) should be included in
 # coverage once hdfs tests are included in CI
-def get_hdfs_fs(path): # pragma: no cover
+def get_hdfs_fs(path):  # pragma: no cover
     """
     initialize pyarrow.hdfs.HadoopFileSystem from path
     This function can be removed once arrow's new HadoopFileSystem is a subclass
@@ -124,7 +127,7 @@ def hdfs_list_dir_fnames(path):  # pragma: no cover
 
     try:
         hdfs = HadoopFileSystem.from_uri(path)
-    except:
+    except Exception as e:
         raise BodoError(" Hadoop file system cannot be created: {}".format(e))
     # prefix in form of hdfs://host:port
     prefix = path[: len(path) - len(hdfs_path)]
@@ -142,8 +145,7 @@ def hdfs_list_dir_fnames(path):  # pragma: no cover
             raise BodoError(
                 "Exception on getting directory info " "of {}: {}".format(hdfs_path, e)
             )
-        for file_stat in file_stats:
-            file_names = [prefix + file_stat.path for file_stat in file_stats]
+        file_names = [prefix + file_stat.path for file_stat in file_stats]
 
     return (hdfs, file_names)
 
@@ -176,6 +178,8 @@ def find_file_name_or_handler(path, ftype):
     parsed_url = urlparse(path)
     fname = path
     fs = None
+    func_name = "read_json" if ftype == "json" else "read_csv"
+    err_msg = f"pd.{func_name}(): there is no {ftype} file in directory: {fname}"
 
     if parsed_url.scheme == "s3":
         is_handler = True
@@ -185,13 +189,9 @@ def find_file_name_or_handler(path, ftype):
 
         if all_files:
             all_csv_files = [f for f in sorted(all_files) if fs.info(f)["size"] > 0]
-            if len(all_csv_files) == 0:
-                raise BodoError(
-                    "pd.read_csv(): there is no ."
-                    + ftype
-                    + " file in directory: "
-                    + pd_fname
-                )
+            if len(all_csv_files) == 0:  # pragma: no cover
+                # TODO: test
+                raise BodoError(err_msg)
             fname = all_csv_files[0]
             f_size = fs.info(fname)["size"]
             fname = fname[5:]  # strip off s3://
@@ -206,13 +206,9 @@ def find_file_name_or_handler(path, ftype):
             all_csv_files = [
                 f for f in sorted(all_files) if fs.get_file_info([f])[0].size > 0
             ]
-            if len(all_csv_files) == 0:
-                raise BodoError(
-                    "pd.read_csv(): there is no ."
-                    + ftype
-                    + " file in directory: "
-                    + pd_fname
-                )
+            if len(all_csv_files) == 0:  # pragma: no cover
+                # TODO: test
+                raise BodoError(err_msg)
             fname = all_csv_files[0]
             f_size = fs.get_file_info([fname])[0].size
             fname = urlparse(fname).path  # strip off hdfs://port:host/
@@ -228,13 +224,9 @@ def find_file_name_or_handler(path, ftype):
                 for f in sorted(glob.glob(os.path.join(path, "*.{}".format(ftype))))
                 if os.path.getsize(f) > 0
             ]
-            if len(all_csv_files) == 0:
-                raise BodoError(
-                    "pd.read_csv(): there is no ."
-                    + ftype
-                    + " file in directory: "
-                    + pd_fname
-                )
+            if len(all_csv_files) == 0:  # pragma: no cover
+                # TODO: test
+                raise BodoError(err_msg)
             fname = all_csv_files[0]
 
         f_size = os.path.getsize(fname)
