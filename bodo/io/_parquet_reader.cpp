@@ -758,7 +758,7 @@ void append_bits_to_vec(std::vector<bool>* null_vec, const uint8_t* null_buff,
 void pack_null_bitmap(uint8_t** out_nulls, std::vector<bool>& null_vec,
                       int64_t n_all_vals) {
     assert(null_vec.size() > 0);
-    int64_t n_bytes = (null_vec.size() + sizeof(uint8_t) - 1) / sizeof(uint8_t);
+    int64_t n_bytes = (null_vec.size() + 7) >> 3;
     *out_nulls = new uint8_t[n_bytes];
     memset(*out_nulls, 0, n_bytes);
     for (int64_t i = 0; i < n_all_vals; i++) {
