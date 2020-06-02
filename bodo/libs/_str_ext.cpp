@@ -288,7 +288,7 @@ void str_arr_split_view_impl(str_arr_split_view_payload* out_view,
 
     // copying the null_bitmap. Maybe we can avoid that
     // in some cases.
-    int64_t n_bytes = (n_strs + sizeof(uint8_t) - 1) / sizeof(uint8_t);
+    int64_t n_bytes = (n_strs + 7) >> 3;
     out_view->null_bitmap = new uint8_t[n_bytes];
     memcpy(out_view->null_bitmap, null_bitmap, n_bytes);
 

@@ -583,7 +583,7 @@ def copy_str_arr_slice(typingctx, out_str_arr_typ, in_str_arr_typ, ind_t=None):
             in_payload.data,
             builder.load(builder.gep(in_offsets, [ind])),
         )
-        # n_bytes = (num_strings+sizeof(uint8_t)-1)/sizeof(uint8_t)
+        # n_bytes = (num_strings + 7) / 8
         ind_p7 = builder.add(ind, lir.Constant(lir.IntType(64), 7))
         n_bytes = builder.lshr(ind_p7, lir.Constant(lir.IntType(64), 3))
         # assuming rest of last byte is set to all ones (e.g. from prealloc)
@@ -1260,7 +1260,7 @@ def set_null_bits(typingctx, str_arr_typ=None):
         (in_str_arr,) = args
         payload = _get_string_arr_payload(context, builder, in_str_arr)
 
-        # n_bytes = (num_strings+sizeof(uint8_t)-1)/sizeof(uint8_t);
+        # n_bytes = (num_strings + 7) / 8;
         n_bytes = builder.udiv(
             builder.add(payload.num_strings, lir.Constant(lir.IntType(64), 7)),
             lir.Constant(lir.IntType(64), 8),
