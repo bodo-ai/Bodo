@@ -1260,7 +1260,7 @@ def set_null_bits(typingctx, str_arr_typ=None):
         (in_str_arr,) = args
         payload = _get_string_arr_payload(context, builder, in_str_arr)
 
-        # n_bytes = (num_strings + 7) / 8;
+        # n_bytes = (num_strings + 7) // 8;
         n_bytes = builder.udiv(
             builder.add(payload.num_strings, lir.Constant(lir.IntType(64), 7)),
             lir.Constant(lir.IntType(64), 8),
