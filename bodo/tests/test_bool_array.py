@@ -49,7 +49,7 @@ def test_unary_ufunc():
     def test_impl(A):
         return ufunc(A.values)
 
-    A = pd.Series([False, True, True, False, False])
+    A = pd.Series([False, True, True, False, False], dtype="boolean")
     check_func(test_impl, (A,))
 
 
@@ -64,8 +64,8 @@ def test_cmp(op):
     exec(func_text, {}, loc_vars)
     test_impl = loc_vars["test_impl"]
 
-    A1 = pd.Series([False, True, True, None, True, True, False])
-    A2 = pd.Series([True, True, None, False, False, False, True])
+    A1 = pd.Series([False, True, True, None, True, True, False], dtype="boolean")
+    A2 = pd.Series([True, True, None, False, False, False, True], dtype="boolean")
     check_func(test_impl, (A1, A2))
 
 
@@ -79,6 +79,6 @@ def test_cmp_scalar():
     def test_impl2(A):
         return True != A.values
 
-    A = pd.Series([False, True, True, None, True, True, False])
+    A = pd.Series([False, True, True, None, True, True, False], dtype="boolean")
     check_func(test_impl1, (A,))
     check_func(test_impl2, (A,))

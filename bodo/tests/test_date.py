@@ -220,7 +220,7 @@ def test_datetime_date_coerce():
         df["ts"] = ts
         return df
 
-    df1 = pd.DataFrame({"a": [1, 2, 3]})
+    df1 = pd.DataFrame({"a": [1, 2, 3, 0, 1, 2, 5, 9]})
     check_func(f, (df1,))
 
 
