@@ -19,7 +19,7 @@ such as Numba on Ubuntu Linux::
     source activate DEV
     # Linux: conda install gcc_linux-64 gxx_linux-64 gfortran_linux-64 -c conda-forge
     # Mac: conda install clang_osx-64 clangxx_osx-64 gfortran_osx-64 -c conda-forge
-    conda install numba=0.49.0 -c conda-forge
+    conda install numba=0.49.1 -c conda-forge
     conda install -c conda-forge hdf5=*=*mpich*
     conda install -c conda-forge pyarrow=0.17.0
     conda install -c conda-forge pymysql sqlalchemy
@@ -49,7 +49,7 @@ On Windows
 
     conda create -n DEV python=3.8 numpy scipy pandas boost-cpp cmake h5py -c conda-forge
     source activate DEV
-    conda install numba=0.49.0 -c conda-forge
+    conda install numba=0.49.1 -c conda-forge
     conda install vc vs2015_runtime vs2015_win-64
     conda install -c defaults -c intel impi_rt impi-devel
     conda install -c conda-forge pyarrow=0.17.0
