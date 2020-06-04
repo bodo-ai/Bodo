@@ -1163,6 +1163,20 @@ class SeriesPass:
             self.calltypes[rhs] = new_sig
             return nodes
 
+        # pattern match pd.isna(A[i]) and replace it with array_kernels.isna(A, i)
+        if fdef in (("isna", "pandas"), ("isnull", "pandas")):
+            obj = get_call_expr_arg(fdef[0], rhs.args, dict(rhs.kws), 0, "obj")
+            obj_def = guard(get_definition, self.func_ir, obj)
+            if is_expr(obj_def, "getitem") and is_array_typ(
+                self.typemap[obj_def.value.name], False
+            ):
+                return compile_func_single_block(
+                    lambda A, i: bodo.libs.array_kernels.isna(A, i),
+                    (obj_def.value, obj_def.index),
+                    assign.target,
+                    self,
+                )
+
         # replace isna early to enable more optimization in PA
         # TODO: handle more types
         if fdef == ("isna", "bodo.libs.array_kernels"):

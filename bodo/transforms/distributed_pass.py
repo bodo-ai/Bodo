@@ -81,7 +81,6 @@ from bodo.utils.utils import (
     is_expr,
     is_call_assign,
     get_getsetitem_index_var,
-    is_array_typ,
 )
 from bodo.libs.distributed_api import Reduce_Type
 from bodo.hiframes.pd_dataframe_ext import DataFrameType

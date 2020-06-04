@@ -18,6 +18,7 @@ from numba.extending import (
     typeof_impl,
     unbox,
     NativeValue,
+    intrinsic,
 )
 from numba.core.typing.templates import infer_global, AbstractTemplate, CallableTemplate
 from numba.core.typing import signature
@@ -757,6 +758,17 @@ def lower_convert_rec_tup_impl(context, builder, sig, args):
 
     res = context.compile_internal(builder, _rec_to_tup, tup_typ(rec_typ), [val])
     return impl_ret_borrowed(context, builder, sig.return_type, res)
+
+
+@intrinsic
+def unliteral_val(typingctx, val=None):
+    """converts the type of value 'val' to nonliteral
+    """
+
+    def codegen(context, builder, signature, args):
+        return args[0]
+
+    return types.unliteral(val)(val), codegen
 
 
 def create_unsupported_overload(fname):

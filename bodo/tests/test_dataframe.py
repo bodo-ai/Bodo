@@ -1109,10 +1109,13 @@ def test_dataframe_unary_op(op):
     params=[
         # array-like
         [2, 3, 5],
-        [2.1, 3.2, 5.4],
+        [2.1, 3.2, np.nan, 5.4],
         ["A", "C", "AB"],
-        np.array([2, 3, 5, -1, -4]),
-        pd.Series([2.1, 5.3, 6.1, -1.0, -3.7], [3, 5, 6, -2, 4], name="C"),
+        # int array, no NA sentinel value
+        np.array([2, 3, 5, -1, -4, 9]),
+        # float array with np.nan
+        np.array([2.9, np.nan, 1.4, -1.1, -4.2]),
+        pd.Series([2.1, 5.3, np.nan, -1.0, -3.7], [3, 5, 6, -2, 4], name="C"),
         pd.Int64Index([10, 12, 14, 17, 19], name="A"),
         pd.RangeIndex(5),
         # dataframe
@@ -1125,6 +1128,9 @@ def test_dataframe_unary_op(op):
         1.3,
         np.nan,
         "ABC",
+        None,
+        np.datetime64("NaT"),
+        np.timedelta64("NaT"),
     ]
 )
 def na_test_obj(request):
@@ -1149,6 +1155,41 @@ def test_pd_notna(na_test_obj):
 
     is_out_distributed = bodo.utils.utils.is_distributable_typ(bodo.typeof(obj))
     check_func(impl, (obj,), is_out_distributed)
+
+
+def test_pd_isna_getitem():
+    """test support for NA check for array values, e.g. pd.isna(A[i]) pattern matching
+    in SeriesPass
+    """
+
+    def impl1(df):
+        s = 0
+        for i in bodo.prange(len(df)):
+            l = 0
+            if pd.isna(df.iloc[i, 0]):
+                l = 10
+            else:
+                l = len(df.iloc[i, 0])
+            s += l
+        return s
+
+    def impl2(S, i):
+        return pd.notna(S.iloc[i])
+
+    def impl3(A, i):
+        return pd.isnull(A[i])
+
+    df = pd.DataFrame(
+        {"A": ["AA", np.nan, "", "D", "GG"], "B": [1, 8, 4, -1, 2]},
+        [1.1, -2.1, 7.1, 0.1, 3.1],
+    )
+    check_func(impl1, (df,))
+    S = pd.Series([2.1, 5.3, np.nan, -1.0, -3.7], [3, 5, 6, -2, 4], name="C")
+    check_func(impl2, (S, 0))
+    check_func(impl2, (S, 2))
+    A = np.array([1.3, 2.2, np.nan, 3.1, np.nan, -1.1])
+    check_func(impl3, (A, 0))
+    check_func(impl3, (A, 2))
 
 
 def test_set_column_scalar_str():

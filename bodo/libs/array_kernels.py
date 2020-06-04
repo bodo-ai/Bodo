@@ -80,9 +80,12 @@ def isna(arr, i):  # pragma: no cover
 
 @overload(isna, no_unliteral=True)
 def overload_isna(arr, i):
+    i = types.unliteral(i)
     # String array
     if arr in (string_array_type, list_string_array_type):
-        return lambda arr, i: bodo.libs.str_arr_ext.str_arr_is_na(arr, i)  # pragma: no cover
+        return lambda arr, i: bodo.libs.str_arr_ext.str_arr_is_na(
+            arr, i
+        )  # pragma: no cover
 
     # masked Integer array, boolean array
     if isinstance(arr, (IntegerArrayType, DecimalArrayType)) or arr in (
@@ -656,9 +659,7 @@ def overload_gen_na_array(n, arr):
 
     # array of np.nan values if 'arr' is float or int Numpy array
     # TODO: use nullable int array
-    if isinstance(
-        dtype, (types.Integer, types.Float)
-    ):
+    if isinstance(dtype, (types.Integer, types.Float)):
         dtype = dtype if isinstance(dtype, types.Float) else types.float64
 
         def impl_float(n, arr):  # pragma: no cover
@@ -670,9 +671,7 @@ def overload_gen_na_array(n, arr):
 
         return impl_float
 
-    if isinstance(
-        dtype, (types.NPDatetime, types.NPTimedelta)
-    ):
+    if isinstance(dtype, (types.NPDatetime, types.NPTimedelta)):
         nat = dtype("NaT")
         if dtype == types.NPDatetime("ns"):
             dtype = np.dtype("datetime64[ns]")
