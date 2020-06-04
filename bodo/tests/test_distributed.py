@@ -832,6 +832,22 @@ def test_dist_warning3():
         bodo.jit(impl)(10)
 
 
+def test_getitem_bool_REP():
+    """make sure output of array getitem with bool index can make its inputs REP
+    """
+    def test_impl(n):
+        df = pd.DataFrame({"A": np.arange(n), "B": np.arange(n) + 3})
+        df = df[df.A != 0]
+        return df
+
+    n = 11
+    if bodo.get_rank() == 0:  # warning is thrown only on rank 0
+        with pytest.warns(BodoWarning, match="No parallelism found for function"):
+            bodo.jit(test_impl)(n)
+    else:
+        bodo.jit(test_impl)(n)
+
+
 def test_df_filter_branch():
     """branches can cause array analysis to remove size equivalences for some array
     definitions since the array analysis pass is not proper data flow yet. However,

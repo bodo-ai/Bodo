@@ -1432,7 +1432,10 @@ class DistributedAnalysis:
             new_dist = self._meet_array_dists(
                 index_var.name, rhs.value.name, array_dists
             )
-            out_dist = Distribution(min(Distribution.OneD_Var.value, new_dist.value))
+            out_dist = Distribution.OneD_Var
+            if lhs in array_dists:
+                out_dist = Distribution(min(out_dist.value, array_dists[lhs].value))
+            out_dist = Distribution(min(out_dist.value, new_dist.value))
             array_dists[lhs] = out_dist
             # output can cause input REP
             if out_dist != Distribution.OneD_Var:
