@@ -46,6 +46,7 @@ This means that if a variable is renamed in one scope, it is renamed to the same
 name in all other scopes in which it occurs. Also, if a variable cannot be changed
 to another name in one scope, then in all scopes it will be fixed.
 
+
 TODO:
 * obfuscate strings and numbers.
 * obfuscate variable name differently on each function which require a notion of scope
@@ -54,6 +55,13 @@ to be implemented.
 * improve coverage on all the possibilities of Python.
 * obfuscate function arguments when it is determined that we can do it. (we can for default
 functions most of the time. Emphasis on most)
+
+REFERENCE
+
+The description of the AST is available on:
+https://greentreesnakes.readthedocs.io/en/latest/nodes.html
+For each type of the AST, we need to have a corresponding entry in the function.
+
 
 """
 
@@ -100,6 +108,77 @@ list_reserved_keywords = {
     "self",
     "args",
     "kwargs",
+    # builtin functions/classes (could be used like variables, e.g. typ == str)
+    # https://docs.python.org/3/library/functions.html
+    "abs",
+    "delattr",
+    "hash",
+    "memoryview",
+    "set",
+    "all",
+    "dict",
+    "help",
+    "min",
+    "setattr",
+    "any",
+    "dir",
+    "hex",
+    "next",
+    "slice",
+    "ascii",
+    "divmod",
+    "id",
+    "object",
+    "sorted",
+    "bin",
+    "enumerate",
+    "input",
+    "oct",
+    "staticmethod",
+    "bool",
+    "eval",
+    "int",
+    "open",
+    "str",
+    "breakpoint",
+    "exec",
+    "isinstance",
+    "ord",
+    "sum",
+    "bytearray",
+    "filter",
+    "issubclass",
+    "pow",
+    "super",
+    "bytes",
+    "float",
+    "iter",
+    "print",
+    "tuple",
+    "callable",
+    "format",
+    "len",
+    "property",
+    "type",
+    "chr",
+    "frozenset",
+    "list",
+    "range",
+    "vars",
+    "classmethod",
+    "getattr",
+    "locals",
+    "repr",
+    "zip",
+    "compile",
+    "globals",
+    "map",
+    "reversed",
+    "__import__",
+    "complex",
+    "hasattr",
+    "max",
+    "round",
 }
 
 
@@ -146,11 +225,13 @@ class VariableRetriever(ast.NodeTransformer):
         return node
 
     def visit_Tuple(self, node):
+        # All entries are covered.
         for erec in node.elts:
             self.visit(erec)
         return node
 
     def visit_Attribute(self, node):
+        # We should not visit the node.attribute since we want only the attribute name
         self.visit(node.value)
         return node
 
@@ -233,41 +314,47 @@ class Obfuscator(ast.NodeTransformer):
 
     # The visitor functions
 
-    def visit_If(self, node):
-        node.test = self.visit(node.test)
-        node.body = [self.visit(x) for x in node.body]
-        node.orelse = [self.visit(x) for x in node.orelse]
-        return node
+    #
+    # visitor functions that could be further obfucasted in the future.
+    #
 
     def visit_Str(self, node):
+        # String entry. Could be obfuscated in the future.
         return node
 
     def visit_Num(self, node):
+        # Numerical entry. Could be obfuscated in the future.
+        return node
+
+    #
+    # Obfuscation related to the names.
+    #
+
+    def visit_Call(self, node):
+        # Call case. We have to handle separately the instance that we want to be careful about.
+        # The attribute starargs and kwargs have been removed since version 3.5
+        if isinstance(node.func, ast.Name):
+            if node.func.id=="isinstance":
+                if len(node.args)!=2:
+                    print("The number of entries in args of isinstance must be 2")
+                    exit(0)
+                if isinstance(node.args[1], ast.Name):
+                    self.insert_fixed_names(node.args[1].id)
+        self.visit(node.func)
+        for earg in node.args:
+            self.visit(earg)
+        for erec in node.keywords:
+            self.visit(erec.value)
         return node
 
     def visit_ExceptHandler(self, node):
+        # Miss the node.type = self.visit(node.type). Is it needed
         node.name = self.mapping_var(True, node.name)
         node.body = [self.visit(x) for x in node.body]
         return node
 
-    def generic_visitor(self, node):
-        ast.NodeVisitor.generic_visit(self, node)
-
-    def visit_Slice(self, node):
-        if node.lower != None:
-            self.visit(node.lower)
-        if node.upper != None:
-            self.visit(node.upper)
-        if node.step != None:
-            self.visit(node.step)
-        return node
-
-    def visit_Tuple(self, node):
-        for erec in node.elts:
-            self.visit(erec)
-        return node
-
     def visit_Attribute(self, node):
+        # Here we intentionally do not visit the "attr" array, because we do not want to rename it.
         self.visit(node.value)
         return node
 
@@ -321,6 +408,7 @@ class Obfuscator(ast.NodeTransformer):
 
         return node
 
+    # The global entries are indicated as fixed.
     def visit_ImportFrom(self, node):
         for x in node.names:
             if isinstance(x, ast.alias):
@@ -341,7 +429,9 @@ class Obfuscator(ast.NodeTransformer):
             self.visit(x)
         return node
 
+    # The class entries are fixed by default for obvious reasons.
     def visit_ClassDef(self, node):
+        # Need to consider supporting: name, bases, keywords, decorator_list
         for x in node.body:
             if isinstance(x, ast.Assign):
                 for target in x.targets:
@@ -350,15 +440,18 @@ class Obfuscator(ast.NodeTransformer):
             self.visit(x)
         return node
 
-    def visit_Subscript(self, node):
-        self.visit(node.slice)
-        self.visit(node.value)
-        return node
-
+    # The key function here. This is the one that changes the names.
     def visit_Name(self, node):
+        # Only the id attribute matters here.
         node.id = self.mapping_var(isinstance(node.ctx, ast.Store), node.id)
         return node
 
+    # The classes for which the entries are treated uniformly
+
+    def visit_Expr(self, node):
+        # Only one attribute in this case.
+        self.visit(node.value)
+        return node
 
 #
 # The processing of individual files
@@ -368,6 +461,7 @@ class Obfuscator(ast.NodeTransformer):
 def process_file(efile, stdoutput):
     root = ast.parse(open(efile, "rb").read())
     sys.stderr.write("  Initial source code has been read\n")
+#    print("ROOT = ", ast.dump(root))
 
     obf = Obfuscator()
     root = obf.visit(root)
@@ -379,7 +473,7 @@ def process_file(efile, stdoutput):
 
     if stdoutput:
         sys.stderr.write("------------------------------------------------\n")
-        sys.stderr.write("The abstract Syntax Tree : ", ast.dump(root), "\n")
+        sys.stderr.write("The abstract Syntax Tree : " +  ast.dump(root) + "\n")
         sys.stderr.write("------------------------------------------------\n")
         sys.stdout.write(astor.to_source(root))
     else:

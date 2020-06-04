@@ -12,7 +12,7 @@ Use:
 
 The output shows the result of the operations."""
 
-list_dir=['ir', 'hiframes', 'transforms']
+list_dir=['ir', 'io', 'utils', 'hiframes', 'transforms', 'libs']
 
 list_files=[]
 for e_dir in list_dir:

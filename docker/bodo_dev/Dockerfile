@@ -22,8 +22,6 @@ RUN conda install -n BODODEV hdf5=*=*mpich* -c conda-forge
 RUN conda install -n BODODEV python pyarrow=0.17.0 -c conda-forge
 RUN conda install -n BODODEV pytest sqlalchemy pymysql xlrd mpi4py
 RUN conda run -n BODODEV pip install astor
-
-
 #
 # Creation of the initial .bashrc to be right up
 #
