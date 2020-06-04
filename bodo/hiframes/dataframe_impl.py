@@ -3,6 +3,7 @@
 Implementation of DataFrame attributes and methods using overload.
 """
 from collections import namedtuple
+import operator
 import numpy as np
 import pandas as pd
 import numba
@@ -1026,6 +1027,14 @@ def overload_isna_scalar(obj):
 
     # TODO: catch other cases
     return lambda obj: unliteral_val(False)
+
+
+# support A[i] = None array setitem using our array NA setting function
+# TODO: inline when supported in Numba
+@overload(operator.setitem, no_unliteral=True)
+def overload_setitem_arr_none(A, idx, val):
+    if is_array_typ(A, False) and isinstance(idx, types.Integer) and val == types.none:
+        return lambda A, idx, val: bodo.ir.join.setitem_arr_nan(A, idx)
 
 
 @overload(pd.notna, inline="always", no_unliteral=True)

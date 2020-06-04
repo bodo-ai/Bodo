@@ -117,7 +117,7 @@ def overload_series_iat_setitem(I, idx, val):
         if not isinstance(types.unliteral(idx), types.Integer):
             raise ValueError("iAt based indexing can only have integer indexers")
         # check string setitem
-        if I.stype.dtype == bodo.string_type:
+        if I.stype.dtype == bodo.string_type and val is not types.none:
             raise ValueError("Series string setitem not supported yet")
         # unbox dt64 from Timestamp (TODO: timedelta and other datetimelike)
         # see unboxing pandas/core/arrays/datetimes.py:
@@ -246,7 +246,7 @@ def overload_series_iloc_getitem(I, idx):
 def overload_series_iloc_setitem(I, idx, val):
     if isinstance(I, SeriesIlocType):
         # check string setitem
-        if I.stype.dtype == bodo.string_type:
+        if I.stype.dtype == bodo.string_type and val is not types.none:
             # TODO: error-checking test
             raise BodoError(
                 "Series string setitem not supported yet"
@@ -461,7 +461,7 @@ def overload_series_getitem(S, idx):
 def overload_series_setitem(S, idx, val):
     if isinstance(S, SeriesType):
         # check string setitem
-        if S.dtype == bodo.string_type:
+        if S.dtype == bodo.string_type and val is not types.none:
             raise ValueError("Series string setitem not supported yet")
 
         # integer case same as iat

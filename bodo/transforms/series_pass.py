@@ -360,6 +360,21 @@ class SeriesPass:
         # Series as index
         # TODO: handle all possible cases
         nodes = []
+        index_var = get_getsetitem_index_var(inst, self.typemap, nodes)
+        index_typ = self.typemap[index_var.name]
+
+        # support A[i] = None array setitem using our array NA setting function
+        if (
+            is_array_typ(target_typ, False)
+            and isinstance(index_typ, types.Integer)
+            and self.typemap[inst.value.name] == types.none
+        ):
+            return nodes + compile_func_single_block(
+                lambda A, idx: bodo.ir.join.setitem_arr_nan(A, idx),
+                [inst.target, index_var],
+                None,
+                self,
+            )
 
         if target_typ == h5dataset_type:
             return self._handle_h5_write(inst.target, inst.index, inst.value)

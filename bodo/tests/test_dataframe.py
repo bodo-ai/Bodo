@@ -1192,6 +1192,20 @@ def test_pd_isna_getitem():
     check_func(impl3, (A, 2))
 
 
+def test_setitem_NA():
+    """test support for setting NA value to array location, e.g. A[i] = None
+    """
+
+    def impl2(S, i):
+        S.iloc[i] = None
+        return S
+
+    S = pd.Series(["AA", np.nan, "", "D", "GG"], name="C")
+    check_func(impl2, (S, 0))
+    check_func(impl2, (S, 1))
+    check_func(impl2, (S, 2))
+
+
 def test_set_column_scalar_str():
     """set df column with a string scalar
     """
