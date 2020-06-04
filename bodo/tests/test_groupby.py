@@ -288,6 +288,7 @@ def test_random_decimal_sum_min_max_last():
             e_list.append(Decimal(e_str))
         return pd.Series(e_list)
 
+    random.seed(5)
     n = 10
     df1 = pd.DataFrame(
         {"A": compute_random_decimal(1, n), "B": compute_random_decimal(2, n)}
@@ -472,7 +473,6 @@ def test_cumsum_random_index():
         return df2
 
     def get_random_dataframe_A(n):
-        random.seed(5)
         eListA = []
         eListB = []
         for i in range(n):
@@ -483,7 +483,6 @@ def test_cumsum_random_index():
         return pd.DataFrame({"A": eListA, "B": eListB})
 
     def get_random_dataframe_B(n):
-        random.seed(5)
         eListA = []
         eListB = []
         eListC = []
@@ -497,7 +496,6 @@ def test_cumsum_random_index():
         return pd.DataFrame({"A": eListA, "B": eListB}, index=eListC)
 
     def get_random_dataframe_C(n):
-        random.seed(5)
         eListA = []
         eListB = []
         eListC = []
@@ -510,6 +508,7 @@ def test_cumsum_random_index():
             eListC.append(eValC)
         return pd.DataFrame({"A": eListA, "B": eListB}, index=eListC)
 
+    random.seed(5)
     df1 = get_random_dataframe_A(100)
     df2 = get_random_dataframe_B(100)
     df3 = get_random_dataframe_C(100)

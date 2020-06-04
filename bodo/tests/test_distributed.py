@@ -964,27 +964,38 @@ n = 11
 n_col = 3
 
 
+def get_random_integerarray(n):
+    np.random.seed(5)
+    return pd.arrays.IntegerArray(np.random.randint(0, 10, n, np.int32), np.random.ranf(n) < 0.30)
+
+def get_random_booleanarray(n):
+    np.random.seed(5)
+    return pd.arrays.BooleanArray(np.random.ranf(n) < 0.50, np.random.ranf(n) < 0.30)
+
+def get_random_decimalarray(n):
+    np.random.seed(5)
+    return np.array([None if a < 0.3 else Decimal(str(a)) for a in np.random.ranf(n)])
+
+def get_random_int64index(n):
+    np.random.seed(5)
+    return pd.Int64Index(np.random.randint(0, 10, n))
+
+
 @pytest.mark.parametrize(
     "data",
     [
         np.arange(n, dtype=np.float32),  # 1D np array
         np.arange(n * n_col).reshape(n, n_col),  # 2D np array
         gen_random_string_array(n),  # string array
-        pd.arrays.IntegerArray(
-            np.random.randint(0, 10, n, np.int32), np.random.ranf(n) < 0.30
-        ),  # Integer array
-        pd.arrays.BooleanArray(
-            np.random.ranf(n) < 0.50, np.random.ranf(n) < 0.30
-        ),  # Boolean array
-        np.array(
-            [None if a < 0.3 else Decimal(str(a)) for a in np.random.ranf(n)]
-        ),  # Decimal array
+        get_random_integerarray(n),
+        get_random_booleanarray(n),
+        get_random_decimalarray(n),
         pd.date_range("2017-01-13", periods=n).date,  # date array
         pd.RangeIndex(
             n
         ),  # RangeIndex, TODO: test non-trivial start/step when gatherv() supports them
         pd.RangeIndex(n, name="A"),  # RangeIndex with name
-        pd.Int64Index(np.random.randint(0, 10, n)),  # Int64Index
+        get_random_int64index(n),
         pd.Index(gen_random_string_array(n), name="A"),  # String Index
         pd.DatetimeIndex(pd.date_range("1983-10-15", periods=n)),  # DatetimeIndex
         pd.timedelta_range(start="1D", periods=n, name="A"),  # TimedeltaIndex

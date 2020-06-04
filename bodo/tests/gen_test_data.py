@@ -41,6 +41,8 @@ def gen_pq_test(file_name):
     pq.write_table(table, "example2.parquet", row_group_size=2)
 
 
+random.seed(5)
+np.random.seed(5)
 N = 101
 D = 10
 gen_lr("lr.hdf5", N, D)

@@ -2489,6 +2489,7 @@ class TestSeries(unittest.TestCase):
             return A.argsort()
 
         n = 11
+        np.random.seed(0)
         A = pd.Series(np.random.ranf(n))
         bodo_func = bodo.jit(test_impl)
         pd.testing.assert_series_equal(bodo_func(A), test_impl(A))

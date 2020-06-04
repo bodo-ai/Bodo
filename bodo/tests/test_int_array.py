@@ -16,7 +16,10 @@ from bodo.tests.utils import (
     check_func,
 )
 
-np.random.seed(0)
+
+def get_random_integerarray(tot_size):
+    np.random.seed(0)
+    return pd.arrays.IntegerArray(np.random.randint(0, 100, tot_size), np.random.ranf(tot_size) < 0.3)
 
 
 @pytest.fixture(
@@ -61,9 +64,7 @@ np.random.seed(0)
             marks=pytest.mark.slow,
         ),
         # large array
-        pd.arrays.IntegerArray(
-            np.random.randint(0, 100, 1211), np.random.ranf(1211) < 0.3
-        ),
+        get_random_integerarray(1211),
     ]
 )
 def int_arr_value(request):

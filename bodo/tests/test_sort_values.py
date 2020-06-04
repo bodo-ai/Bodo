@@ -16,10 +16,6 @@ from bodo.tests.utils import check_func, is_bool_object_series, check_parallel_c
 from bodo.utils.typing import BodoWarning, BodoError
 import os
 
-random.seed(5)
-np.random.seed(3)
-
-
 @pytest.fixture(
     params=[
         # int series, float, and bool columns
@@ -265,6 +261,8 @@ def test_sort_values_str():
         df = pd.DataFrame({"A": A, "B": str_vals}).drop_duplicates("A")
         return df
 
+    random.seed(5)
+    np.random.seed(3)
     # seeds should be the same on different processors for consistent input
     n = 17  # 1211
     df = _gen_df_str(n)
@@ -417,6 +415,7 @@ def test_sort_values_strings_constant_length(n, len_str):
         df = pd.DataFrame({"A": str_vals})
         return df
 
+    random.seed(5)
     check_func(
         test_impl, (get_random_strings_array(n, len_str),),
     )
@@ -443,6 +442,7 @@ def test_sort_values_strings_variable_length(n, len_str):
         df = pd.DataFrame({"A": str_vals})
         return df
 
+    random.seed(5)
     df1 = get_random_var_length_strings_array(n, len_str)
     check_func(test_impl, (df1,))
 
@@ -474,6 +474,7 @@ def test_sort_values_strings(n, len_str):
         df = pd.DataFrame({"A": str_vals})
         return df
 
+    random.seed(5)
     df1 = get_random_strings_array(n, len_str)
     check_func(test_impl, (df1,))
 
@@ -525,6 +526,7 @@ def test_sort_values_two_columns_nan(n, len_siz):
         )
         return df
 
+    random.seed(5)
     df1 = get_random_dataframe_two_columns(n, len_siz)
     check_func(
         test_impl1, (df1,),
@@ -697,6 +699,7 @@ def test_list_string():
             e_list.append(e_ent)
         return e_list
 
+    random.seed(5)
     n = 100
     df1 = pd.DataFrame({"A": rand_col_l_str(n)})
     check_parallel_coherency(test_impl, (df1,), sort_output=True, reset_index=True)

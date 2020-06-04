@@ -23,6 +23,7 @@ class TestHiFrames(unittest.TestCase):
             df2["A"] += 10
             return df2.A, df.A
 
+        np.random.seed(5)
         bodo_func = bodo.jit(test_impl)
         n = 11
         df = pd.DataFrame({"A": np.arange(n), "B": np.ones(n), "C": np.random.ranf(n)})
@@ -35,6 +36,7 @@ class TestHiFrames(unittest.TestCase):
             df = pd.DataFrame({"A": S1, "B": S2})
             return df.A.sum()
 
+        np.random.seed(5)
         bodo_func = bodo.jit(test_impl)
         n = 11
         self.assertEqual(bodo_func(n), test_impl(n))
@@ -134,6 +136,7 @@ class TestHiFrames(unittest.TestCase):
             Ac = df.A.cumsum()
             return Ac.sum()
 
+        np.random.seed(5)
         bodo_func = bodo.jit(test_impl)
         n = 11
         self.assertEqual(bodo_func(n), test_impl(n))
@@ -156,6 +159,7 @@ class TestHiFrames(unittest.TestCase):
             Ac = df.A.cumsum()
             return Ac.sum() + s + m + v + t
 
+        np.random.seed(5)
         bodo_func = bodo.jit(test_impl)
         n = 11
         self.assertEqual(bodo_func(n), test_impl(n))
@@ -502,6 +506,7 @@ class TestHiFrames(unittest.TestCase):
             Ac = df.A.rolling(3).sum()
             return Ac.sum()
 
+        np.random.seed(5)
         bodo_func = bodo.jit(test_impl)
         n = 121
         self.assertEqual(bodo_func(n), test_impl(n))
@@ -525,6 +530,7 @@ class TestHiFrames(unittest.TestCase):
             df["moving average"] = df.A.rolling(window=5, center=True).mean()
             return df["moving average"].sum()
 
+        np.random.seed(5)
         bodo_func = bodo.jit(test_impl)
         n = 121
         self.assertEqual(bodo_func(n), test_impl(n))
@@ -539,6 +545,7 @@ class TestHiFrames(unittest.TestCase):
             )
             return Ac.sum()
 
+        np.random.seed(5)
         bodo_func = bodo.jit(test_impl)
         n = 121
         self.assertEqual(bodo_func(n), test_impl(n))
@@ -551,6 +558,7 @@ class TestHiFrames(unittest.TestCase):
             Ac = df.A.shift(1)
             return Ac.sum()
 
+        np.random.seed(5)
         bodo_func = bodo.jit(test_impl)
         n = 11
         self.assertEqual(bodo_func(n), test_impl(n))
@@ -563,6 +571,7 @@ class TestHiFrames(unittest.TestCase):
             Ac = df.A.pct_change(1)
             return Ac.sum()
 
+        np.random.seed(5)
         bodo_func = bodo.jit(test_impl)
         n = 11
         np.testing.assert_almost_equal(bodo_func(n), test_impl(n))
@@ -573,6 +582,7 @@ class TestHiFrames(unittest.TestCase):
         def test_impl(df):
             return df.B.sum()
 
+        np.random.seed(5)
         n = 121
         df = pd.DataFrame({"A": np.ones(n), "B": np.random.ranf(n)})
         bodo_func = bodo.jit(test_impl)
@@ -583,6 +593,7 @@ class TestHiFrames(unittest.TestCase):
             C = df.B == "two"
             return C.sum()
 
+        np.random.seed(5)
         n = 11
         df = pd.DataFrame(
             {"A": np.random.ranf(3 * n), "B": ["one", "two", "three"] * n}

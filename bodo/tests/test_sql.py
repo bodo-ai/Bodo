@@ -13,9 +13,6 @@ import numba
 import bodo
 from bodo.tests.utils import check_func, get_start_end
 
-np.random.seed(5)
-random.seed(5)
-
 
 def test_write_sql_aws():
     """This test for a write down on a SQL database"""
@@ -41,6 +38,9 @@ def test_write_sql_aws():
             df_load_sort = df_load[l_cols].sort_values(l_cols).reset_index(drop=True)
             pd.testing.assert_frame_equal(df_load_sort, df_in_sort)
 
+
+    np.random.seed(5)
+    random.seed(5)
     len_list = 20
     list_int = list(np.random.randint(1, 10, len_list))
     list_double = [
@@ -60,6 +60,8 @@ def test_sql_if_exists_fail_errorchecking():
     def test_impl(df, table_name, conn):
         df.to_sql(table_name, conn)
 
+    np.random.seed(5)
+    random.seed(5)
     n_pes = bodo.libs.distributed_api.get_size()
     len_list = 20
     list_int = list(np.random.randint(1, 10, len_list))

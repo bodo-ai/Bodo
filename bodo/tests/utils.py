@@ -624,6 +624,7 @@ def gen_random_string_array(n, max_str_len=10):
     """
     helper function that generates a random string array
     """
+    random.seed(0)
     str_vals = []
     for _ in range(n):
         # store NA with 30% chance

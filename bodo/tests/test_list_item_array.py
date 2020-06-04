@@ -10,8 +10,6 @@ import numba
 import bodo
 from bodo.tests.utils import check_func
 
-np.random.seed(0)
-
 
 @pytest.fixture(
     params=[

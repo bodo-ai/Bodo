@@ -1774,6 +1774,7 @@ class TestDataFrame(unittest.TestCase):
             df = pd.DataFrame({"A": np.ones(n), "B": np.random.ranf(n)})
             return df.A
 
+        np.random.seed(5)
         bodo_func = bodo.jit(test_impl)
         n = 11
         pd.testing.assert_series_equal(bodo_func(n), test_impl(n))
@@ -1783,6 +1784,7 @@ class TestDataFrame(unittest.TestCase):
             df = pd.DataFrame(data={"A": np.ones(n), "B": np.random.ranf(n)})
             return df.A
 
+        np.random.seed(5)
         bodo_func = bodo.jit(test_impl)
         n = 11
         pd.testing.assert_series_equal(bodo_func(n), test_impl(n))
@@ -1794,6 +1796,7 @@ class TestDataFrame(unittest.TestCase):
             )
             return df.A
 
+        np.random.seed(5)
         bodo_func = bodo.jit(test_impl)
         n = 11
         pd.testing.assert_series_equal(bodo_func(n), test_impl(n))
@@ -1887,6 +1890,7 @@ class TestDataFrame(unittest.TestCase):
         def test_impl(df):
             return df.A
 
+        np.random.seed(5)
         bodo_func = bodo.jit(test_impl)
         n = 11
         df = pd.DataFrame({"A": np.arange(n), "B": np.random.ranf(n)})
@@ -1899,6 +1903,7 @@ class TestDataFrame(unittest.TestCase):
                 df["A"] = np.arange(n) + 2.0
             return df.A
 
+        np.random.seed(5)
         bodo_func = bodo.jit(test_impl)
         n = 11
         df = pd.DataFrame({"A": np.ones(n), "B": np.random.ranf(n)})
@@ -1959,6 +1964,7 @@ class TestDataFrame(unittest.TestCase):
             df = pd.DataFrame({"A": np.ones(n, np.int64), "B": np.random.ranf(n)})
             return len(df)
 
+        np.random.seed(5)
         bodo_func = bodo.jit(test_impl)
         n = 11
         self.assertEqual(bodo_func(n), test_impl(n))
@@ -1970,6 +1976,7 @@ class TestDataFrame(unittest.TestCase):
             df = pd.DataFrame({"A": np.ones(n, np.int64), "B": np.random.ranf(n)})
             return df.shape
 
+        np.random.seed(5)
         bodo_func = bodo.jit(test_impl)
         n = 11
         self.assertEqual(bodo_func(n), test_impl(n))
@@ -1982,6 +1989,7 @@ class TestDataFrame(unittest.TestCase):
             Ac = df["A"].values
             return Ac.sum()
 
+        np.random.seed(5)
         bodo_func = bodo.jit(test_impl)
         n = 11
         self.assertEqual(bodo_func(n), test_impl(n))
@@ -2187,6 +2195,7 @@ class TestDataFrame(unittest.TestCase):
             df["C"] = arr
             return df.C.sum()
 
+        np.random.seed(5)
         bodo_func = bodo.jit(test_impl)
         n = 11
         arr = np.random.ranf(n)
@@ -2201,6 +2210,7 @@ class TestDataFrame(unittest.TestCase):
             df[2] = arr
             return df[2].sum()
 
+        np.random.seed(5)
         bodo_func = bodo.jit(test_impl)
         n = 11
         arr = np.random.ranf(n)
@@ -2214,6 +2224,7 @@ class TestDataFrame(unittest.TestCase):
             df["C"] = arr
             return df.C.sum()
 
+        np.random.seed(5)
         bodo_func = bodo.jit(test_impl)
         n = 11
         arr = np.random.ranf(n)

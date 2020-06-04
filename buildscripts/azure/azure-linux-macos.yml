@@ -12,7 +12,7 @@ jobs:
     maxParallel: 11
     matrix:
       ${{ insert }}: ${{ parameters.matrix }}
-      
+
   steps:
   - task: UsePythonVersion@0
     inputs:
@@ -46,7 +46,7 @@ jobs:
       source activate $CONDA_ENV
       HDF5_DIR=$CONDA_PREFIX python setup.py develop
     displayName: 'Build'
-    
+
   - script: |
       export PATH=$HOME/miniconda3/bin:$PATH
       source activate $CONDA_ENV
@@ -60,17 +60,17 @@ jobs:
       pip install pytest pytest-azurepipelines pytest-cov codecov
       if [[ "$NP" -eq 1 ]]; then
         if [[ "${{ parameters.name }}" == "Linux" ]]; then
-          pytest -s -v -m "$(PYTEST_MARKER)" --cov-report=xml --cov=./ bodo/tests/
+          python run_tests.py "$NP" -s -v -m "$(PYTEST_MARKER)" --cov-report= --cov=./ bodo/tests/
         else
-          pytest -s -v -m "$(PYTEST_MARKER) and s3" bodo/tests/
-          pytest -s -v -m "$(PYTEST_MARKER) and not s3" bodo/tests/
+          python run_tests.py "$NP" -s -v -m "$(PYTEST_MARKER) and s3" bodo/tests/
+          python run_tests.py "$NP" -s -v -m "$(PYTEST_MARKER) and not s3" bodo/tests/
         fi
       else
-        mpiexec -n $NP pytest -s -v -m "$(PYTEST_MARKER) and s3" bodo/tests/
-        mpiexec -n $NP pytest -s -v -m "$(PYTEST_MARKER) and not s3" bodo/tests/
+        python run_tests.py "$NP" -s -v -m "$(PYTEST_MARKER) and s3" bodo/tests/
+        python run_tests.py "$NP" -s -v -m "$(PYTEST_MARKER) and not s3" bodo/tests/
       fi
     displayName: 'Test'
-    
+
   - script: |
       export PATH=$HOME/miniconda3/bin:$PATH
       source activate $CONDA_ENV
@@ -78,4 +78,3 @@ jobs:
         codecov --required -t $(CODECOV_TOKEN) || (sleep 5 && codecov --required -t $(CODECOV_TOKEN)) || (sleep 5 && codecov --required -t $(CODECOV_TOKEN)) || (sleep 5 && codecov --required -t $(CODECOV_TOKEN)) || (sleep 5 && codecov --required -t $(CODECOV_TOKEN))
       fi
     displayName: 'codecov report upload'
-    

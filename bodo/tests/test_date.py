@@ -1073,6 +1073,7 @@ def test_timestamp_date():
 def _gen_str_date_df():
     rows = 10
     data = []
+    random.seed(5)
     for row in range(rows):
         data.append(
             datetime.datetime(

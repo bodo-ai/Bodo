@@ -154,6 +154,7 @@ def test_merge_decimal():
             e_list.append(Decimal(e_str))
         return pd.Series(e_list)
 
+    random.seed(5)
     n = 50
     df1 = pd.DataFrame({"A": compute_random_decimal(n), "B": compute_random_decimal(n)})
     df2 = pd.DataFrame({"A": compute_random_decimal(n), "D": compute_random_decimal(n)})
@@ -205,8 +206,6 @@ def test_list_string_array_type_random():
         df3 = df1.merge(df2, on="A")
         return df3
 
-    random.seed(5)
-
     def rand_col_l_str(n):
         e_list_list = []
         for _ in range(n):
@@ -229,6 +228,7 @@ def test_list_string_array_type_random():
             e_list.append(val)
         return e_list
 
+    random.seed(5)
     n = 500
     df1 = pd.DataFrame({"A": rand_col_l_str(n), "C": rand_col_l_str(n)})
     df2 = pd.DataFrame({"A": rand_col_l_str(n), "D": rand_col_l_str(n)})

@@ -1017,6 +1017,7 @@ def test_np_io3():
 
     bodo_func = bodo.jit(test_impl)
     n = 111
+    np.random.seed(0)
     A = np.random.ranf(n)
     with ensure_clean("np_file_3.dat"):
         bodo_func(A)
