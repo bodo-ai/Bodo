@@ -41,6 +41,7 @@ from bodo.utils.typing import (
     is_overload_none,
     is_overload_true,
     is_overload_false,
+    get_overload_const_str,
     get_val_type_maybe_str_literal,
 )
 from bodo.libs.int_arr_ext import IntegerArrayType
@@ -1295,6 +1296,41 @@ class PeriodIndexModel(models.StructModel):
 
 make_attribute_wrapper(PeriodIndexType, "data", "_data")
 make_attribute_wrapper(PeriodIndexType, "name", "_name")
+
+
+@overload_method(PeriodIndexType, "copy", no_unliteral=True)
+def overload_period_index_copy(A):
+    freq = A.freq
+    return lambda A: bodo.hiframes.pd_index_ext.init_period_index(
+        A._data.copy(), A._name, freq
+    )  # pragma: no cover
+
+
+@intrinsic
+def init_period_index(typingctx, data, name, freq):
+    """Create a PeriodIndex with provided data, name and freq values.
+    """
+    name = types.none if name is None else name
+
+    def codegen(context, builder, signature, args):
+        data_val, name_val, _ = args
+        index_typ = signature.return_type
+        period_index = cgutils.create_struct_proxy(index_typ)(
+            context, builder
+        )
+        period_index.data = data_val
+        period_index.name = name_val
+
+        # increase refcount of stored values
+        context.nrt.incref(builder, signature.args[0], args[0])
+        context.nrt.incref(builder, signature.args[1], args[1])
+
+        return period_index._getvalue()
+
+    freq_val = get_overload_const_str(freq)
+    ret_typ = PeriodIndexType(freq_val, name)
+    sig = signature(ret_typ, data, name, freq)
+    return sig, codegen
 
 
 @overload_attribute(PeriodIndexType, "name")

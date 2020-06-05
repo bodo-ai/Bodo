@@ -612,10 +612,22 @@ def gatherv(data, allgather=False):
         return impl_range_index
 
     if bodo.hiframes.pd_index_ext.is_pd_index_type(data):
+        from bodo.hiframes.pd_index_ext import PeriodIndexType
 
-        def impl_pd_index(data, allgather=False):  # pragma: no cover
-            arr = bodo.libs.distributed_api.gatherv(data._data, allgather)
-            return bodo.utils.conversion.index_from_array(arr, data._name)
+        if isinstance(data, PeriodIndexType):
+            freq = data.freq
+
+            def impl_pd_index(data, allgather=False):  # pragma: no cover
+                arr = bodo.libs.distributed_api.gatherv(data._data, allgather)
+                return bodo.hiframes.pd_index_ext.init_period_index(
+                    arr, data._name, freq
+                )
+
+        else:
+
+            def impl_pd_index(data, allgather=False):  # pragma: no cover
+                arr = bodo.libs.distributed_api.gatherv(data._data, allgather)
+                return bodo.utils.conversion.index_from_array(arr, data._name)
 
         return impl_pd_index
 

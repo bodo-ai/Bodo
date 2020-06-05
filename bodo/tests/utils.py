@@ -232,6 +232,7 @@ def check_func_1D(
         passed = _test_equal_guard(
             bodo_output, py_output, sort_output, check_names, check_dtype, reset_index
         )
+
     n_passed = reduce_sum(passed)
     assert n_passed == n_pes
 
