@@ -16,6 +16,7 @@ from bodo.tests.utils import check_func, is_bool_object_series, check_parallel_c
 from bodo.utils.typing import BodoWarning, BodoError
 import os
 
+
 @pytest.fixture(
     params=[
         # int series, float, and bool columns

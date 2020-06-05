@@ -17,7 +17,7 @@ from bodo.tests.utils import check_func, get_start_end
 def test_write_sql_aws():
     """This test for a write down on a SQL database"""
 
-    def test_impl(df, table_name, conn):
+    def test_impl_write_sql(df, table_name, conn):
         df.to_sql(table_name, conn, if_exists="replace")
 
     def test_specific_dataframe(test_impl, is_distributed, df_in):
@@ -38,7 +38,6 @@ def test_write_sql_aws():
             df_load_sort = df_load[l_cols].sort_values(l_cols).reset_index(drop=True)
             pd.testing.assert_frame_equal(df_load_sort, df_in_sort)
 
-
     np.random.seed(5)
     random.seed(5)
     len_list = 20
@@ -48,8 +47,8 @@ def test_write_sql_aws():
     ]
     list_datetime = pd.date_range("2001-01-01", periods=len_list)
     df1 = pd.DataFrame({"A": list_int, "B": list_double, "C": list_datetime})
-    test_specific_dataframe(test_impl, False, df1)
-    test_specific_dataframe(test_impl, True, df1)
+    test_specific_dataframe(test_impl_write_sql, False, df1)
+    test_specific_dataframe(test_impl_write_sql, True, df1)
 
 
 def test_sql_if_exists_fail_errorchecking():
@@ -57,7 +56,7 @@ def test_sql_if_exists_fail_errorchecking():
     The database must alredy exist (which should be ok if above test is done)
     It will fail because the database is already present."""
 
-    def test_impl(df, table_name, conn):
+    def test_impl_fails(df, table_name, conn):
         df.to_sql(table_name, conn)
 
     np.random.seed(5)
@@ -72,7 +71,7 @@ def test_sql_if_exists_fail_errorchecking():
     df1 = pd.DataFrame({"A": list_int, "B": list_double, "C": list_datetime})
     table_name = "test_table_ABCD"
     conn = "mysql+pymysql://admin:Bodosql2#@bodosqldb.cutkvh6do3qv.us-east-1.rds.amazonaws.com/employees"
-    bodo_impl = bodo.jit(all_args_distributed_block=True)(test_impl)
+    bodo_impl = bodo.jit(all_args_distributed_block=True)(test_impl_fails)
     #    with pytest.raises(ValueError, match="Table .* already exists"):
     with pytest.raises(ValueError, match="error in to_sql.* operation"):
         bodo_impl(df1, table_name, conn)
@@ -81,48 +80,51 @@ def test_sql_if_exists_fail_errorchecking():
 def test_sql_hardcoded_aws():
     """This test for an hardcoded request and connection"""
 
-    def test_impl():
+    def test_impl_hardcoded():
         sql_request = "select * from employees"
         conn = "mysql+pymysql://admin:Bodosql2#@bodosqldb.cutkvh6do3qv.us-east-1.rds.amazonaws.com/employees"
         frame = pd.read_sql(sql_request, conn)
         return frame
 
-    check_func(test_impl, ())
+    check_func(test_impl_hardcoded, ())
 
 
 def test_read_sql_hardcoded_time_offset_aws():
     """This test does not pass because the type of dates is not supported"""
 
-    def test_impl():
+    def test_impl_offset():
         sql_request = "select * from employees limit 1000 offset 4000"
         conn = "mysql+pymysql://admin:Bodosql2#@bodosqldb.cutkvh6do3qv.us-east-1.rds.amazonaws.com/employees"
         frame = pd.read_sql(sql_request, conn)
         return frame
 
-    check_func(test_impl, ())
+    check_func(test_impl_offset, ())
 
 
 def test_read_sql_hardcoded_twocol_aws():
     """Selecting two columns without dates"""
 
-    def test_impl():
+    def test_impl_hardcoded_twocol():
         sql_request = "select first_name,last_name from employees"
         conn = "mysql+pymysql://admin:Bodosql2#@bodosqldb.cutkvh6do3qv.us-east-1.rds.amazonaws.com/employees"
         frame = pd.read_sql(sql_request, conn)
         return frame
 
-    bodo_impl = bodo.jit(test_impl)
-    frame = bodo_impl()
+    check_func(test_impl_hardcoded_twocol, ())
+
+
+#    bodo_impl = bodo.jit(test_impl_hardcoded)
+#    frame = bodo_impl()
 
 
 def test_sql_argument_passing():
     """Test passing SQL query and connection as arguments
     """
 
-    def test_impl(sql_request, conn):
+    def test_impl_arg_passing(sql_request, conn):
         df = pd.read_sql(sql_request, conn)
         return df
 
     sql_request = "select * from employees"
     conn = "mysql+pymysql://admin:Bodosql2#@bodosqldb.cutkvh6do3qv.us-east-1.rds.amazonaws.com/employees"
-    check_func(test_impl, (sql_request, conn))
+    check_func(test_impl_arg_passing, (sql_request, conn))

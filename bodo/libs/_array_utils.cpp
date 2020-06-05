@@ -650,16 +650,19 @@ void DEBUG_PrintSetOfColumn(std::ostream& os,
                             std::vector<array_info*> const& ListArr) {
     int nCol = ListArr.size();
     if (nCol == 0) {
-        os << "Nothing to print really\n";
+        os << "number of columns nCol=" << nCol << " Nothing to print\n";
         return;
     }
     std::vector<int> ListLen(nCol);
     int nRowMax = 0;
+    os << "List of number of rows:";
     for (int iCol = 0; iCol < nCol; iCol++) {
         int nRow = ListArr[iCol]->length;
+        os << " " << nRow;
         if (nRow > nRowMax) nRowMax = nRow;
         ListLen[iCol] = nRow;
     }
+    os << "\n";
     std::vector<std::vector<std::string>> ListListStr;
     for (int iCol = 0; iCol < nCol; iCol++) {
         std::vector<std::string> LStr = DEBUG_PrintColumn(ListArr[iCol]);

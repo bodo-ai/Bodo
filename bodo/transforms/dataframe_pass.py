@@ -1536,8 +1536,8 @@ class DataFramePass:
             is_join_var,
         ) = rhs.args
 
-        left_on = self._get_const_or_list(left_on_var)
-        right_on = self._get_const_or_list(right_on_var)
+        left_keys = self._get_const_or_list(left_on_var)
+        right_keys = self._get_const_or_list(right_on_var)
         how = guard(find_const, self.func_ir, how_var)
         suffix_x = guard(find_const, self.func_ir, suffix_x_var)
         suffix_y = guard(find_const, self.func_ir, suffix_y_var)
@@ -1554,11 +1554,11 @@ class DataFramePass:
         for v, t in zip(out_data_vars.values(), out_typ.data):
             self.typemap[v.name] = t
 
-        left_arrs = {
+        left_vars = {
             c: self._get_dataframe_data(left_df, c, nodes)
             for c in self.typemap[left_df.name].columns
         }
-        right_arrs = {
+        right_vars = {
             c: self._get_dataframe_data(right_df, c, nodes)
             for c in self.typemap[right_df.name].columns
         }
@@ -1572,34 +1572,41 @@ class DataFramePass:
         in_index_var = None
         out_index_var = None
         in_df_index_name = None
-        right_index = "$_bodo_index_" in right_on
-        left_index = "$_bodo_index_" in left_on
-        if right_index:
-            in_df_index = self._get_dataframe_index(right_df, nodes)
-            in_df_index_name = self._get_index_name(in_df_index, nodes)
-            in_index_var = self._gen_array_from_index(right_df, nodes)
-            right_arrs["$_bodo_index_"] = in_index_var
-        if left_index or is_join:
-            in_df_index = self._get_dataframe_index(left_df, nodes)
-            in_df_index_name = self._get_index_name(in_df_index, nodes)
-            in_index_var = self._gen_array_from_index(left_df, nodes)
-            left_arrs["$_bodo_index_"] = in_index_var
+        right_index = "$_bodo_index_" in right_keys
+        left_index = "$_bodo_index_" in left_keys
+        # The index variables
+        right_df_index = self._get_dataframe_index(right_df, nodes)
+        right_df_index_name = self._get_index_name(right_df_index, nodes)
+        right_index_var = self._gen_array_from_index(right_df, nodes)
+        left_df_index = self._get_dataframe_index(left_df, nodes)
+        left_df_index_name = self._get_index_name(left_df_index, nodes)
+        left_index_var = self._gen_array_from_index(left_df, nodes)
 
-        if in_index_var is not None:
+        if left_index and not right_index:
             out_index_var = ir.Var(lhs.scope, mk_unique_var("out_index"), lhs.loc)
-            self.typemap[out_index_var.name] = self.typemap[in_index_var.name]
+            self.typemap[out_index_var.name] = self.typemap[right_index_var.name]
             out_data_vars["$_bodo_index_"] = out_index_var
+            left_vars["$_bodo_index_"] = left_index_var
+            right_vars["$_bodo_index_"] = right_index_var
+            in_df_index_name = right_df_index_name
+        if right_index:
+            out_index_var = ir.Var(lhs.scope, mk_unique_var("out_index"), lhs.loc)
+            self.typemap[out_index_var.name] = self.typemap[left_index_var.name]
+            out_data_vars["$_bodo_index_"] = out_index_var
+            left_vars["$_bodo_index_"] = left_index_var
+            right_vars["$_bodo_index_"] = right_index_var
+            in_df_index_name = left_df_index_name
 
         nodes.append(
             bodo.ir.join.Join(
                 lhs.name,
                 left_df.name,
                 right_df.name,
-                left_on,
-                right_on,
+                left_keys,
+                right_keys,
                 out_data_vars,
-                left_arrs,
-                right_arrs,
+                left_vars,
+                right_vars,
                 how,
                 suffix_x,
                 suffix_y,
@@ -1607,6 +1614,8 @@ class DataFramePass:
                 is_left,
                 is_right,
                 is_join,
+                left_index,
+                right_index,
             )
         )
 

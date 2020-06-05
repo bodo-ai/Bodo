@@ -90,6 +90,7 @@ def check_func(
     check_names=True,
     copy_input=False,
     check_dtype=True,
+    reset_index=False,
     py_output=None,
     dist_test=True,
 ):
@@ -108,7 +109,15 @@ def check_func(
 
     # sequential
     w = check_func_seq(
-        func, args, py_output, copy_input, sort_output, check_names, check_dtype, n_pes
+        func,
+        args,
+        py_output,
+        copy_input,
+        sort_output,
+        check_names,
+        check_dtype,
+        reset_index,
+        n_pes,
     )
 
     # distributed test is not needed
@@ -143,6 +152,7 @@ def check_func(
         sort_output,
         check_names,
         check_dtype,
+        reset_index,
         n_pes,
     )
 
@@ -155,12 +165,21 @@ def check_func(
         sort_output,
         check_names,
         check_dtype,
+        reset_index,
         n_pes,
     )
 
 
 def check_func_seq(
-    func, args, py_output, copy_input, sort_output, check_names, check_dtype, n_pes
+    func,
+    args,
+    py_output,
+    copy_input,
+    sort_output,
+    check_names,
+    check_dtype,
+    reset_index,
+    n_pes,
 ):
     """check function output against Python without manually setting inputs/outputs
     distributions (keep the function sequential)
@@ -175,7 +194,7 @@ def check_func_seq(
         bodo_out = bodo_func(*call_args)
 
     passed = _test_equal_guard(
-        bodo_out, py_output, sort_output, check_names, check_dtype
+        bodo_out, py_output, sort_output, check_names, check_dtype, reset_index
     )
     # count how many pes passed the test, since throwing exceptions directly
     # can lead to inconsistency across pes and hangs
@@ -193,6 +212,7 @@ def check_func_1D(
     sort_output,
     check_names,
     check_dtype,
+    reset_index,
     n_pes,
 ):
     """Check function output against Python while setting the inputs/outputs as
@@ -210,7 +230,7 @@ def check_func_1D(
     passed = 1
     if not is_out_distributed or bodo.get_rank() == 0:
         passed = _test_equal_guard(
-            bodo_output, py_output, sort_output, check_names, check_dtype
+            bodo_output, py_output, sort_output, check_names, check_dtype, reset_index
         )
     n_passed = reduce_sum(passed)
     assert n_passed == n_pes
@@ -225,6 +245,7 @@ def check_func_1D_var(
     sort_output,
     check_names,
     check_dtype,
+    reset_index,
     n_pes,
 ):
     """Check function output against Python while setting the inputs/outputs as
@@ -240,7 +261,7 @@ def check_func_1D_var(
     passed = 1
     if not is_out_distributed or bodo.get_rank() == 0:
         passed = _test_equal_guard(
-            bodo_output, py_output, sort_output, check_names, check_dtype
+            bodo_output, py_output, sort_output, check_names, check_dtype, reset_index
         )
     n_passed = reduce_sum(passed)
     assert n_passed == n_pes
@@ -275,11 +296,18 @@ def _get_dist_arg(a, copy=False, var_length=False):
 
 
 def _test_equal_guard(
-    bodo_out, py_out, sort_output=False, check_names=True, check_dtype=True
+    bodo_out,
+    py_out,
+    sort_output=False,
+    check_names=True,
+    check_dtype=True,
+    reset_index=False,
 ):
     passed = 1
     try:
-        _test_equal(bodo_out, py_out, sort_output, check_names, check_dtype)
+        _test_equal(
+            bodo_out, py_out, sort_output, check_names, check_dtype, reset_index
+        )
     except Exception as e:
         print(e)
         passed = 0
@@ -287,7 +315,12 @@ def _test_equal_guard(
 
 
 def _test_equal(
-    bodo_out, py_out, sort_output=False, check_names=True, check_dtype=True
+    bodo_out,
+    py_out,
+    sort_output=False,
+    check_names=True,
+    check_dtype=True,
+    reset_index=False,
 ):
 
     if isinstance(py_out, pd.Series):
@@ -296,6 +329,7 @@ def _test_equal(
             if not py_out.isnull().all():
                 py_out.sort_values(inplace=True)
                 bodo_out.sort_values(inplace=True)
+        if reset_index:
             py_out.reset_index(inplace=True, drop=True)
             bodo_out.reset_index(inplace=True, drop=True)
         # we return typed extension arrays like StringArray for all APIs but Pandas
@@ -313,8 +347,9 @@ def _test_equal(
     elif isinstance(py_out, pd.DataFrame):
         if sort_output:
             py_out.sort_values(py_out.columns.to_list(), inplace=True)
-            py_out.reset_index(inplace=True, drop=True)
             bodo_out.sort_values(bodo_out.columns.to_list(), inplace=True)
+        if reset_index:
+            py_out.reset_index(inplace=True, drop=True)
             bodo_out.reset_index(inplace=True, drop=True)
         # we return typed extension arrays like StringArray for all APIs but Pandas
         # doesn't return them by default in all APIs yet.

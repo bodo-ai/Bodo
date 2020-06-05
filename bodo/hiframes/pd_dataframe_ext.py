@@ -1187,35 +1187,6 @@ def merge_overload(
     _impl = loc_vars["_impl"]
     return _impl
 
-    # TODO: use regular implementation when constants work in typers
-    # # merge on common columns if no key is provided
-    # # TODO: use generic impl below when branch pruning is fixed
-    # if (is_overload_none(on) and is_overload_none(left_on)
-    #         and is_overload_none(right_on) and is_overload_false(left_index)
-    #         and is_overload_false(right_index)):
-    #     def _impl(left, right, how='inner', on=None, left_on=None,
-    #             right_on=None, left_index=False, right_index=False, sort=False,
-    #             suffixes=('_x', '_y'), copy=True, indicator=False, validate=None):
-
-    #         return bodo.hiframes.pd_dataframe_ext.join_dummy(
-    #             left, right, comm_cols, comm_cols, how)
-
-    #     return _impl
-
-    # def _impl(left, right, how='inner', on=None, left_on=None,
-    #         right_on=None, left_index=False, right_index=False, sort=False,
-    #         suffixes=('_x', '_y'), copy=True, indicator=False, validate=None):
-    #     if on is not None:
-    #         left_on = right_on = on
-
-    #     # if left_on is None and right_on is None and left_index == False and right_index == False:
-    #     #     left_on = right_on = comm_cols
-
-    #     return bodo.hiframes.pd_dataframe_ext.join_dummy(
-    #         left, right, left_on, right_on, how)
-
-    # return _impl
-
 
 def common_validate_merge_merge_asof_spec(
     name_func, left, right, on, left_on, right_on, left_index, right_index, suffixes
@@ -1609,6 +1580,8 @@ class JoinTyper(AbstractTemplate):
         comm_data = set(left_df.columns) & set(right_df.columns)
         add_suffix = comm_data - comm_keys
 
+        # Those two variables have the same values as the "left_index" in argument
+        # to "merge" even if the index has a name.
         left_index = "$_bodo_index_" in left_on
         right_index = "$_bodo_index_" in right_on
 
@@ -1618,15 +1591,18 @@ class JoinTyper(AbstractTemplate):
         columns = []
         data = []
         # In the case of merging on one index and a column we have to add another
-        # column to the output. And that requires additional work.
+        # column to the output. This is in the case of a column showing up also
+        # on the other side.
         if left_index and not right_index and not is_join.literal_value:
-            c_col = right_on[0]
-            columns.append(c_col)
-            data.append(right_df.data[right_df.columns.index(c_col)])
+            right_key = right_on[0]
+            if right_key in left_df.columns:
+                columns.append(right_key)
+                data.append(right_df.data[right_df.columns.index(right_key)])
         if right_index and not left_index and not is_join.literal_value:
-            c_col = left_on[0]
-            columns.append(c_col)
-            data.append(left_df.data[left_df.columns.index(c_col)])
+            left_key = left_on[0]
+            if left_key in right_df.columns:
+                columns.append(left_key)
+                data.append(left_df.data[left_df.columns.index(left_key)])
 
         def map_data_type(in_type, need_nullable):
             if (
@@ -1639,11 +1615,8 @@ class JoinTyper(AbstractTemplate):
                 return in_type
 
         # The left side. All of it got included.
-        columns += [
-            (c + suffix_x.literal_value if c in add_suffix else c)
-            for c in left_df.columns
-        ]
         for in_type, col in zip(left_df.data, left_df.columns):
+            columns.append(col + suffix_x.literal_value if col in add_suffix else col)
             if col in comm_keys:
                 # For a common key we take either from left or right, so no additional NaN occurs.
                 data.append(in_type)
@@ -1652,28 +1625,27 @@ class JoinTyper(AbstractTemplate):
                 data.append(map_data_type(in_type, is_right))
         # The right side
         # common keys are added only once so avoid adding them
-        columns += [
-            (c + suffix_y.literal_value if c in add_suffix else c)
-            for c in right_df.columns
-            if c not in comm_keys
-        ]
         for in_type, col in zip(right_df.data, right_df.columns):
             if col not in comm_keys:
                 # a key column that is not common needs to plan for NaN.
                 # Same for a data column of course.
+                columns.append(
+                    col + suffix_y.literal_value if col in add_suffix else col
+                )
                 data.append(map_data_type(in_type, is_left))
-        # TODO: unify left/right indices if necessary (e.g. RangeIndex/Int64)
+        # In the case of merging with left_index=True or right_index=True then
+        # the index is coming from the other index. And so we need to set it adequately.
         index_typ = RangeIndexType(types.none)
         if left_index and right_index and not is_overload_str(how, "asof"):
             index_typ = left_df.index
             if isinstance(index_typ, bodo.hiframes.pd_index_ext.RangeIndexType):
                 index_typ = bodo.hiframes.pd_index_ext.NumericIndexType(types.int64)
         elif left_index and not right_index:
-            index_typ = left_df.index
+            index_typ = right_df.index
             if isinstance(index_typ, bodo.hiframes.pd_index_ext.RangeIndexType):
                 index_typ = bodo.hiframes.pd_index_ext.NumericIndexType(types.int64)
         elif right_index and not left_index:
-            index_typ = right_df.index
+            index_typ = left_df.index
             if isinstance(index_typ, bodo.hiframes.pd_index_ext.RangeIndexType):
                 index_typ = bodo.hiframes.pd_index_ext.NumericIndexType(types.int64)
 

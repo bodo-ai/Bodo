@@ -995,8 +995,8 @@ def test_df_reset_index3():
             "C": [3, 5, 6, 5, 4, 4, 3],
         }
     )
-    check_func(impl1, (df,), sort_output=True)
-    check_func(impl2, (df,), sort_output=True)
+    check_func(impl1, (df,), sort_output=True, reset_index=True)
+    check_func(impl2, (df,), sort_output=True, reset_index=True)
 
 
 def test_df_reset_index4():
@@ -1407,8 +1407,8 @@ def test_concat_nulls():
             "E": pd.timedelta_range(start=3, periods=n),
         }
     )
-    check_func(test_impl, (df, df2), sort_output=True)
-    check_func(test_impl_concat, (df, df2), sort_output=True)
+    check_func(test_impl, (df, df2), sort_output=True, reset_index=True)
+    check_func(test_impl_concat, (df, df2), sort_output=True, reset_index=True)
 
 
 def test_init_dataframe_array_analysis():

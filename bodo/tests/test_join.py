@@ -95,10 +95,16 @@ def test_merge_suffixes_bracket():
 
     df1 = pd.DataFrame({"key": [0, 1, 2, 0], "value": [1, 2, 3, 4]})
     df2 = pd.DataFrame({"key": [0, 1, 2, 0], "value": [5, 6, 7, 8]})
-    check_func(test_impl1, (df1, df2), sort_output=True)
-    check_func(test_impl2, (df1, df2), sort_output=True, check_dtype=False)
-    check_func(test_impl3, (df1, df2), sort_output=True, check_dtype=False)
-    check_func(test_impl4, (df1, df2), sort_output=True, check_dtype=False)
+    check_func(test_impl1, (df1, df2), sort_output=True, reset_index=True)
+    check_func(
+        test_impl2, (df1, df2), sort_output=True, check_dtype=False, reset_index=True
+    )
+    check_func(
+        test_impl3, (df1, df2), sort_output=True, check_dtype=False, reset_index=True
+    )
+    check_func(
+        test_impl4, (df1, df2), sort_output=True, check_dtype=False, reset_index=True
+    )
 
 
 def test_merge_suffixes_parenthesis():
@@ -112,7 +118,7 @@ def test_merge_suffixes_parenthesis():
 
     df1 = pd.DataFrame({"key": [0, 1, 2, 0], "value": [1, 2, 3, 5]})
     df2 = pd.DataFrame({"key": [0, 1, 2, 0], "value": [5, 6, 7, 8]})
-    check_func(test_impl, (df1, df2), sort_output=True)
+    check_func(test_impl, (df1, df2), sort_output=True, reset_index=True)
 
 
 def test_merge_join_datetime():
@@ -158,7 +164,7 @@ def test_merge_decimal():
     n = 50
     df1 = pd.DataFrame({"A": compute_random_decimal(n), "B": compute_random_decimal(n)})
     df2 = pd.DataFrame({"A": compute_random_decimal(n), "D": compute_random_decimal(n)})
-    check_func(f, (df1, df2), sort_output=True)
+    check_func(f, (df1, df2), sort_output=True, reset_index=True)
 
 
 def test_merge_left_right_index():
@@ -261,7 +267,7 @@ def test_merge_empty_suffix_underscore():
 
     df1 = pd.DataFrame({"key": [0, 1, 2, 0], "value": [1, 2, 3, 5]})
     df2 = pd.DataFrame({"key": [0, 1, 2, 0], "value": [5, 6, 7, 8]})
-    check_func(test_impl, (df1, df2), sort_output=True)
+    check_func(test_impl, (df1, df2), sort_output=True, reset_index=True)
 
 
 @pytest.mark.parametrize(
@@ -308,7 +314,7 @@ def test_merge_disjoint_keys1():
 
     df1 = pd.DataFrame({"a": [0.0, 1.0], "b": [1.0, 4.0]})
     df2 = pd.DataFrame({"a": [1.0, 2.0], "d": [2.0, 3.0]})
-    check_func(test_impl, (df1, df2), sort_output=True)
+    check_func(test_impl, (df1, df2), sort_output=True, reset_index=True)
 
 
 def test_merge_disjoint_keys2():
@@ -322,7 +328,7 @@ def test_merge_disjoint_keys2():
 
     df1 = pd.DataFrame({"a": [0.0, 1.0], "b": [1.0, 4.0]})
     df2 = pd.DataFrame({"c": [1.0, 2.0], "d": [2.0, 3.0]})
-    check_func(test_impl, (df1, df2), sort_output=True)
+    check_func(test_impl, (df1, df2), sort_output=True, reset_index=True)
 
 
 def test_merge_inner():
@@ -340,7 +346,7 @@ def test_merge_inner():
     df2 = pd.DataFrame(
         {"key": [1, 2, 9, 3, 2], "B": np.array([1, 7, 2, 6, 5], np.float)}
     )
-    check_func(test_impl, (df1, df2), sort_output=True)
+    check_func(test_impl, (df1, df2), sort_output=True, reset_index=True)
 
 
 def test_merge_left1():
@@ -358,7 +364,7 @@ def test_merge_left1():
     df2 = pd.DataFrame(
         {"key": [1, 2, 9, 3, 2], "B": np.array([1, 7, 2, 6, 5], np.float)}
     )
-    check_func(test_impl, (df1, df2), sort_output=True)
+    check_func(test_impl, (df1, df2), sort_output=True, reset_index=True)
 
 
 def test_merge_left2():
@@ -377,7 +383,7 @@ def test_merge_left2():
     df2 = pd.DataFrame(
         {"key": [1, 2, 9, 3, 10], "B": np.array([1, 7, 2, 6, 5], np.float)}
     )
-    check_func(test_impl, (df1, df2), sort_output=True)
+    check_func(test_impl, (df1, df2), sort_output=True, reset_index=True)
 
 
 def test_merge_right():
@@ -395,7 +401,7 @@ def test_merge_right():
     df2 = pd.DataFrame(
         {"key": [1, 2, 9, 3, 2], "B": np.array([1, 7, 2, 6, 5], np.float)}
     )
-    check_func(test_impl, (df1, df2), sort_output=True)
+    check_func(test_impl, (df1, df2), sort_output=True, reset_index=True)
 
 
 def test_merge_outer():
@@ -413,7 +419,7 @@ def test_merge_outer():
     df2 = pd.DataFrame(
         {"key": [1, 2, 9, 3, 2], "B": np.array([1, 7, 2, 6, 5], np.float)}
     )
-    check_func(test_impl, (df1, df2), sort_output=True)
+    check_func(test_impl, (df1, df2), sort_output=True, reset_index=True)
 
 
 def test_merge_overlap():
@@ -426,7 +432,7 @@ def test_merge_overlap():
         return df3
 
     df1 = pd.DataFrame({"A": [3, 1, 1, 4], "B": [1, 2, 3, 2], "C": [7, 8, 9, 4]})
-    check_func(test_impl, (df1,), sort_output=True)
+    check_func(test_impl, (df1,), sort_output=True, reset_index=True)
 
 
 @pytest.mark.parametrize("n", [11, 11111])
@@ -441,7 +447,7 @@ def test_merge_int_key(n):
 
     df1 = pd.DataFrame({"key1": np.arange(n) + 3, "A": np.arange(n) + 1.0})
     df2 = pd.DataFrame({"key2": 2 * np.arange(n) + 1, "B": n + np.arange(n) + 1.0})
-    check_func(test_impl, (df1, df2), sort_output=True)
+    check_func(test_impl, (df1, df2), sort_output=True, reset_index=True)
 
 
 @pytest.mark.parametrize(
@@ -493,10 +499,10 @@ def test_merge_nullable_int_bool(n1, n2, len_siz):
     random.seed(5)
     df1 = get_random_dataframe(n1, len_siz)
     df2 = get_random_dataframe(n2, len_siz)
-    check_func(test_impl1, (df1, df2), sort_output=True)
-    check_func(test_impl2, (df1, df2), sort_output=True)
-    check_func(test_impl3, (df1, df2), sort_output=True)
-    check_func(test_impl4, (df1, df2), sort_output=True)
+    check_func(test_impl1, (df1, df2), sort_output=True, reset_index=True)
+    check_func(test_impl2, (df1, df2), sort_output=True, reset_index=True)
+    check_func(test_impl3, (df1, df2), sort_output=True, reset_index=True)
+    check_func(test_impl4, (df1, df2), sort_output=True, reset_index=True)
 
 
 def test_merge_multi_int_key():
@@ -526,9 +532,9 @@ def test_merge_multi_int_key():
         {"A": [2, 1, 4, 4, 3], "B": [1, 3, 2, 3, 2], "D": [1, 2, 3, 4, 8]}
     )
 
-    check_func(test_impl1, (df1, df2), sort_output=True)
-    check_func(test_impl2, (df1, df2), sort_output=True)
-    check_func(test_impl3, (df1, df2), sort_output=True)
+    check_func(test_impl1, (df1, df2), sort_output=True, reset_index=True)
+    check_func(test_impl2, (df1, df2), sort_output=True, reset_index=True)
+    check_func(test_impl3, (df1, df2), sort_output=True, reset_index=True)
 
 
 def test_merge_literal_arg():
@@ -555,6 +561,7 @@ def test_merge_literal_arg():
         test_impl1,
         (df1, df2.rename({"D": "C"}, axis=1), ["A", "B"], ["", "_"]),
         sort_output=True,
+        reset_index=True,
     )
     # TODO: enable test when #1013 is resolved
     # check_func(test_impl2, (df1, df2.set_index("A"), "A", True, "inner"), sort_output=True)
@@ -577,7 +584,9 @@ def test_merge_key_type_change():
         df3 = df1.merge(df2, on="A")
         return df3
 
-    check_func(test_impl, (), sort_output=True, is_out_distributed=False)
+    check_func(
+        test_impl, (), sort_output=True, is_out_distributed=False, reset_index=True
+    )
 
 
 def test_merge_schema_change():
@@ -595,7 +604,9 @@ def test_merge_schema_change():
         df3 = df1.merge(df2, on="A")
         return df3
 
-    check_func(test_impl, (), sort_output=True, is_out_distributed=False)
+    check_func(
+        test_impl, (), sort_output=True, is_out_distributed=False, reset_index=True
+    )
 
 
 def test_merge_str_key():
@@ -629,7 +640,7 @@ def test_merge_str_nan1():
         {"key2": ["baz", "bar", "baz", "foo"], "B": ["b", np.nan, "", "AA"]}
     )
 
-    check_func(test_impl, (df1, df2), sort_output=True)
+    check_func(test_impl, (df1, df2), sort_output=True, reset_index=True)
 
 
 def test_merge_str_nan2():
@@ -647,7 +658,7 @@ def test_merge_str_nan2():
     n = 1211
     df1 = _gen_df_str(n)
     df2 = _gen_df_str(n)
-    check_func(test_impl, (df1, df2), sort_output=True)
+    check_func(test_impl, (df1, df2), sort_output=True, reset_index=True)
 
 
 def test_merge_bool_nan():
@@ -674,7 +685,9 @@ def test_merge_bool_nan():
             "C": [False, True, np.nan, False, False, True, False, True],
         }
     )
-    check_func(test_impl, (df1, df2), sort_output=True, check_dtype=False)
+    check_func(
+        test_impl, (df1, df2), sort_output=True, check_dtype=False, reset_index=True
+    )
 
 
 def test_merge_nontrivial_index():
@@ -689,7 +702,7 @@ def test_merge_nontrivial_index():
     df1 = pd.DataFrame({"key1": ["foo", "bar", "baz"]}, index=[0.0, 3.0, 5.0])
     df2 = pd.DataFrame({"key2": ["baz", "bar", "baz"]}, index=["a", "bb", "ccc"])
 
-    check_func(test_impl, (df1, df2), sort_output=True)
+    check_func(test_impl, (df1, df2), sort_output=True, reset_index=True)
 
 
 def test_merge_out_str_na():
@@ -741,7 +754,7 @@ def test_merge_datetime():
             "A": [7, 8, 9],
         }
     )
-    check_func(test_impl, (df1, df2), sort_output=True)
+    check_func(test_impl, (df1, df2), sort_output=True, reset_index=True)
 
 
 def test_merge_datetime_parallel():
@@ -804,8 +817,8 @@ def test_merge_suffix(df1, df2):
         df3 = df1.merge(df2, on=["B", "A"])
         return df3
 
-    check_func(impl1, (df1, df2), sort_output=True)
-    check_func(impl2, (df1, df2), sort_output=True)
+    check_func(impl1, (df1, df2), sort_output=True, reset_index=True)
+    check_func(impl2, (df1, df2), sort_output=True, reset_index=True)
 
 
 @pytest.mark.parametrize(
@@ -947,7 +960,7 @@ def test_merge_all_nan_cols():
     df1 = pd.DataFrame({"A": [np.nan, np.nan, np.nan], "B": [0, 1, 2]})
     df2 = pd.DataFrame({"A": [np.nan, np.nan, np.nan], "B": [0, 1, 2]})
 
-    check_func(impl, (df1, df2), sort_output=True)
+    check_func(impl, (df1, df2), sort_output=True, reset_index=True)
 
 
 @pytest.mark.slow
@@ -971,10 +984,10 @@ def test_merge_match_key_types():
         {"A": [2, 1, 4, 4, 3], "B": [1, 3, 2, 3, 2], "D": [1, 3, 2, 3, 2]}
     )
     df2["A"] = df2.A.astype(np.float64)
-    check_func(test_impl1, (df1, df2), sort_output=True)
-    check_func(test_impl1, (df2, df1), sort_output=True)
-    check_func(test_impl2, (df1, df2), sort_output=True)
-    check_func(test_impl2, (df2, df1), sort_output=True)
+    check_func(test_impl1, (df1, df2), sort_output=True, reset_index=True)
+    check_func(test_impl1, (df2, df1), sort_output=True, reset_index=True)
+    check_func(test_impl2, (df1, df2), sort_output=True, reset_index=True)
+    check_func(test_impl2, (df2, df1), sort_output=True, reset_index=True)
 
 
 def test_merge_cat_identical():
@@ -990,7 +1003,7 @@ def test_merge_cat_identical():
     ct_dtype = pd.CategoricalDtype(["A", "B", "C"])
     dtypes = {"C1": np.int, "C2": ct_dtype}
     df1 = pd.read_csv(fname, names=["C1", "C2"], dtype=dtypes, usecols=[0, 1])
-    check_func(test_impl, (df1,), sort_output=True)
+    check_func(test_impl, (df1,), sort_output=True, reset_index=True)
 
 
 def test_merge_cat_multi_cols():
@@ -1008,7 +1021,7 @@ def test_merge_cat_multi_cols():
     dtypes = {"C1": ct_dtype1, "C2": ct_dtype2, "C3": str}
     df1 = pd.read_csv(fname, names=["C1", "C2", "C3"], dtype=dtypes, skiprows=[0])
     df2 = pd.read_csv(fname, names=["C1", "C2", "C3"], dtype=dtypes, skiprows=[1])
-    check_func(test_impl, (df1, df2), sort_output=True)
+    check_func(test_impl, (df1, df2), sort_output=True, reset_index=True)
 
 
 def test_merge_cat1_inner():
@@ -1026,7 +1039,7 @@ def test_merge_cat1_inner():
         df3 = df1.merge(df2, on="C1")
         return df3
 
-    check_func(test_impl, (), sort_output=True)
+    check_func(test_impl, (), sort_output=True, reset_index=True)
 
 
 def test_merge_cat1_right_2cols1():
@@ -1045,7 +1058,7 @@ def test_merge_cat1_right_2cols1():
         df3 = df1.merge(df2, on="C1", how="right")
         return df3
 
-    check_func(test_impl, (), sort_output=True)
+    check_func(test_impl, (), sort_output=True, reset_index=True)
 
 
 def test_merge_cat1_right_2cols2():
@@ -1064,7 +1077,7 @@ def test_merge_cat1_right_2cols2():
         df3 = df1.merge(df2, on="C1", how="right")
         return df3
 
-    check_func(test_impl, (), sort_output=True)
+    check_func(test_impl, (), sort_output=True, reset_index=True)
 
 
 def test_merge_cat1_right():
@@ -1082,7 +1095,7 @@ def test_merge_cat1_right():
         df3 = df1.merge(df2, on="C1", how="right")
         return df3
 
-    check_func(test_impl, (), sort_output=True)
+    check_func(test_impl, (), sort_output=True, reset_index=True)
 
 
 @pytest.mark.parametrize("n", [11, 11111])
@@ -1151,7 +1164,7 @@ def test_join_rm_dead_data_name_overlap2():
 
     df1 = pd.DataFrame({"id": [3, 4, 1]})
     df2 = pd.DataFrame({"id": [3, 4, 2], "user_id": [3, 5, 6]})
-    check_func(test_impl, (df1, df2), sort_output=True)
+    check_func(test_impl, (df1, df2), sort_output=True, reset_index=True)
 
 
 def test_join_deadcode_cleanup():
@@ -1284,6 +1297,61 @@ def test_join_how(df1, df2):
 # ------------------------------ merge on the index and column ------------------------------ #
 
 
+def test_merge_index_column_second():
+    """
+    Test merge(): test the merging with one key on the index and the other on the column
+    This is another pattern.
+    """
+
+    def f(df1, df2):
+        df3 = df1.merge(df2, left_index=True, right_on=["A"])
+        return df3
+
+    bodo_f = bodo.jit(f)
+
+    # left dataframes
+    df1A = pd.DataFrame(
+        {"A": [3, 1, 1, 3, 4], "B": [1, 2, 3, 2, 3], "C": [7, 8, 9, 4, 5]}
+    ).set_index("A")
+    df1B = pd.DataFrame(
+        {"B": [1, 2, 3, 2, 3], "C": [7, 8, 9, 4, 5]}, index=[3, 1, 1, 3, 4]
+    )
+    df1C = pd.DataFrame(
+        {"X": [1, 2, 3, 2, 3], "C": [7, 8, 9, 4, 5]}, index=[3, 1, 1, 3, 4]
+    )
+    df1D = pd.DataFrame(
+        {"A": [1, 2, 3, 2, 3], "C": [7, 8, 9, 4, 5]}, index=[3, 1, 1, 3, 4]
+    )
+    df1E = pd.DataFrame(
+        {"A": [1, 2, 3, 2, 3], "C": [7, 8, 9, 4, 5], "Z": [3, 1, 1, 3, 4]}
+    ).set_index("Z")
+    # right dataframes
+    df2A = pd.DataFrame(
+        {"A": [2, 1, 4, 4, 3], "B": [1, 3, 2, 3, 2], "D": [1, 2, 3, 4, 8]}
+    )
+    df2B = pd.DataFrame(
+        {
+            "A": [2, 1, 4, 4, 3],
+            "B": [1, 3, 2, 3, 2],
+            "D": [1, 2, 3, 4, 8],
+            "Y": [10, 11, 12, 13, 14],
+        }
+    ).set_index("Y")
+    df2C = pd.DataFrame(
+        {
+            "A": [2, 1, 4, 4, 3],
+            "B": [1, 3, 2, 3, 2],
+            "D": [1, 2, 3, 4, 8],
+            "Y": ["a", "b", "c", "d", "e"],
+        }
+    ).set_index("Y")
+
+
+    for df1 in [df1A, df1B, df1C, df1D, df1E]:
+        for df2 in [df2A, df2B, df2C]:
+            check_func(f, (df1, df2), sort_output=True)
+
+
 def test_merge_index_column():
     """
     Test merge(): test the merging with one key on the index and the other on the column
@@ -1316,7 +1384,8 @@ def test_merge_index_column_returning_empty():
     df1 = pd.DataFrame({"A": [1, 2], "C": ["a", "b"]})
     df2 = pd.DataFrame({"A": [4, 5], "B": ["c", "d"]})
 
-    check_func(f1, (df1, df2), sort_output=True)
+    # We need reset_index=True because the dataframe is empty.
+    check_func(f1, (df1, df2), sort_output=True, reset_index=True)
 
 
 def test_merge_index_column_nontrivial_index():
@@ -1469,7 +1538,8 @@ def test_merge_common_col_ordering():
     df1 = _gen_df_rand_col_names()
     df2 = df1.copy()
     df2["C"] = 3
-    check_func(impl, (df1, df2), sort_output=True)
+    # We need reset_index=True because the dataframe is empty.
+    check_func(impl, (df1, df2), sort_output=True, reset_index=True)
 
 
 # ------------------------------ merge_asof() ------------------------------ #

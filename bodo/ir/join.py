@@ -81,7 +81,7 @@ class Join(ir.Stmt):
         right_df,
         left_keys,
         right_keys,
-        out_vars,
+        out_data_vars,
         left_vars,
         right_vars,
         how,
@@ -91,13 +91,15 @@ class Join(ir.Stmt):
         is_left,
         is_right,
         is_join,
+        left_index,
+        right_index,
     ):
         self.df_out = df_out
         self.left_df = left_df
         self.right_df = right_df
         self.left_keys = left_keys
         self.right_keys = right_keys
-        self.df_out_vars = out_vars
+        self.out_data_vars = out_data_vars
         self.left_vars = left_vars
         self.right_vars = right_vars
         self.how = how
@@ -107,12 +109,27 @@ class Join(ir.Stmt):
         self.is_left = is_left
         self.is_right = is_right
         self.is_join = is_join
+        self.left_index = left_index
+        self.right_index = right_index
         # keep the origin of output columns to enable proper dead code elimination
         # columns with common name that are not common keys will get a suffix
         comm_keys = set(left_keys) & set(right_keys)
         comm_data = set(left_vars.keys()) & set(right_vars.keys())
         add_suffix = comm_data - comm_keys
-
+        # vect_same_key is a vector of boolean containing whether the key have the same
+        # name on the left and right. This has impact how they show up in the output:
+        # ---If they have the same name then they show up just once (and have no additional
+        #   missing entry)
+        # ---If they have different name then they show up two times (and can have additional
+        #   missing entry)
+        vect_same_key = []
+        n_keys = len(left_keys)
+        for iKey in range(n_keys):
+            name_left = left_keys[iKey]
+            name_right = right_keys[iKey]
+            vect_same_key.append(name_left == name_right)
+        self.vect_same_key = vect_same_key
+        #
         self.column_origins = {
             (c + suffix_x if c in add_suffix else c): ("left", c)
             for c in left_vars.keys()
@@ -126,7 +143,7 @@ class Join(ir.Stmt):
 
     def __repr__(self):  # pragma: no cover
         out_cols = ""
-        for (c, v) in self.df_out_vars.items():
+        for (c, v) in self.out_data_vars.items():
             out_cols += "'{}':{}, ".format(c, v.name)
         df_out_str = "{}{{{}}}".format(self.df_out, out_cols)
 
@@ -147,7 +164,7 @@ class Join(ir.Stmt):
 def join_array_analysis(join_node, equiv_set, typemap, array_analysis):
     post = []
     # empty join nodes should be deleted in remove dead
-    assert len(join_node.df_out_vars) > 0, "empty join in array analysis"
+    assert len(join_node.out_data_vars) > 0, "empty join in array analysis"
 
     # arrays of left_df and right_df have same size in first dimension
     all_shapes = []
@@ -174,7 +191,7 @@ def join_array_analysis(join_node, equiv_set, typemap, array_analysis):
     # arrays of output df have same size in first dimension
     # gen size variable for an output column
     all_shapes = []
-    for col_var in join_node.df_out_vars.values():
+    for col_var in join_node.out_data_vars.values():
         typ = typemap[col_var.name]
         (shape, c_post) = array_analysis._gen_shape_call(
             equiv_set, col_var, typ.ndim, None
@@ -210,7 +227,7 @@ def join_distributed_analysis(join_node, array_dists):
 
     # output columns have same distribution
     out_dist = Distribution.OneD_Var
-    for col_var in join_node.df_out_vars.values():
+    for col_var in join_node.out_data_vars.values():
         # output dist might not be assigned yet
         if col_var.name in array_dists:
             out_dist = Distribution(
@@ -222,7 +239,7 @@ def join_distributed_analysis(join_node, array_dists):
     out_dist1 = Distribution(min(out_dist.value, left_dist.value))
     out_dist2 = Distribution(min(out_dist.value, right_dist.value))
     out_dist = Distribution(max(out_dist1.value, out_dist2.value))
-    for col_var in join_node.df_out_vars.values():
+    for col_var in join_node.out_data_vars.values():
         array_dists[col_var.name] = out_dist
 
     # output can cause input REP
@@ -247,7 +264,7 @@ def join_typeinfer(join_node, typeinferer):
     comm_keys = set(join_node.left_keys) & set(join_node.right_keys)
     comm_data = set(join_node.left_vars.keys()) & set(join_node.right_vars.keys())
     add_suffix = comm_data - comm_keys
-    for out_col_name, out_col_var in join_node.df_out_vars.items():
+    for out_col_name, out_col_var in join_node.out_data_vars.items():
         # left suffix
         if not out_col_name in join_node.column_origins:
             raise BodoError(
@@ -285,9 +302,9 @@ def visit_vars_join(join_node, callback, cbdata):
             join_node.right_vars[col_name], callback, cbdata
         )
     # output
-    for col_name in list(join_node.df_out_vars.keys()):
-        join_node.df_out_vars[col_name] = visit_vars_inner(
-            join_node.df_out_vars[col_name], callback, cbdata
+    for col_name in list(join_node.out_data_vars.keys()):
+        join_node.out_data_vars[col_name] = visit_vars_inner(
+            join_node.out_data_vars[col_name], callback, cbdata
         )
 
 
@@ -304,7 +321,7 @@ def remove_dead_join(
     # TODO: remove output of dead keys
     all_cols_dead = True
 
-    for col_name, col_var in join_node.df_out_vars.items():
+    for col_name, col_var in join_node.out_data_vars.items():
         if col_var.name in lives:
             all_cols_dead = False
             continue
@@ -317,7 +334,7 @@ def remove_dead_join(
             dead_cols.append(col_name)
 
     for cname in dead_cols:
-        join_node.df_out_vars.pop(cname)
+        join_node.out_data_vars.pop(cname)
 
     # remove empty join node
     if all_cols_dead:
@@ -340,7 +357,7 @@ def join_usedefs(join_node, use_set=None, def_set=None):
     use_set.update({v.name for v in join_node.right_vars.values()})
 
     # output columns are defined
-    def_set.update({v.name for v in join_node.df_out_vars.values()})
+    def_set.update({v.name for v in join_node.out_data_vars.values()})
 
     return numba.core.analysis._use_defs_result(usemap=use_set, defmap=def_set)
 
@@ -350,7 +367,7 @@ numba.core.analysis.ir_extension_usedefs[Join] = join_usedefs
 
 def get_copies_join(join_node, typemap):
     # join doesn't generate copies, it just kills the output columns
-    kill_set = set(v.name for v in join_node.df_out_vars.values())
+    kill_set = set(v.name for v in join_node.out_data_vars.values())
     return set(), kill_set
 
 
@@ -373,9 +390,9 @@ def apply_copies_join(
             join_node.right_vars[col_name], var_dict
         )
     # output
-    for col_name in list(join_node.df_out_vars.keys()):
-        join_node.df_out_vars[col_name] = replace_vars_inner(
-            join_node.df_out_vars[col_name], var_dict
+    for col_name in list(join_node.out_data_vars.keys()):
+        join_node.out_data_vars[col_name] = replace_vars_inner(
+            join_node.out_data_vars[col_name], var_dict
         )
 
     return
@@ -388,7 +405,7 @@ def build_join_definitions(join_node, definitions=None):
     if definitions is None:
         definitions = defaultdict(list)
 
-    for col_var in join_node.df_out_vars.values():
+    for col_var in join_node.out_data_vars.values():
         definitions[col_var.name].append(join_node)
 
     return definitions
@@ -404,37 +421,28 @@ def join_distributed_run(
     # TODO: rebalance if output distributions are 1D instead of 1D_Var
     loc = join_node.loc
     n_keys = len(join_node.left_keys)
-    # vect_same_key is a vector of boolean containing whether the key have the same
-    # name on the left and right. This has impact how they show up in the output:
-    # ---If they have the same name then they show up just once (and have no additional
-    #   missing entry)
-    # ---If they have different name then they show up two times (and can have additional
-    #   missing entry)
-    vect_same_key = []
-    for iKey in range(n_keys):
-        name_left = join_node.left_keys[iKey]
-        name_right = join_node.right_keys[iKey]
-        vect_same_key.append(name_left == name_right)
     # get column variables
     left_key_vars = tuple(join_node.left_vars[c] for c in join_node.left_keys)
     right_key_vars = tuple(join_node.right_vars[c] for c in join_node.right_keys)
 
-    left_index = "$_bodo_index_" in join_node.left_keys
-    right_index = "$_bodo_index_" in join_node.right_keys
+    left_columns = tuple(join_node.left_vars.keys())
+    right_columns = tuple(join_node.right_vars.keys())
     optional_col_var = ()
     optional_key_tuple = ()
     optional_column = False
-    if left_index and not right_index and not join_node.is_join:
+    if join_node.left_index and not join_node.right_index and not join_node.is_join:
         optional_key = join_node.right_keys[0]
-        optional_key_tuple = (optional_key,)
-        optional_col_var = (join_node.right_vars[optional_key],)
-        optional_column = True
+        if optional_key in left_columns:
+            optional_key_tuple = (optional_key,)
+            optional_col_var = (join_node.right_vars[optional_key],)
+            optional_column = True
 
-    if right_index and not left_index and not join_node.is_join:
+    if join_node.right_index and not join_node.left_index and not join_node.is_join:
         optional_key = join_node.left_keys[0]
-        optional_key_tuple = (optional_key,)
-        optional_col_var = (join_node.left_vars[optional_key],)
-        optional_column = True
+        if optional_key in right_columns:
+            optional_key_tuple = (optional_key,)
+            optional_col_var = (join_node.left_vars[optional_key],)
+            optional_column = True
 
     # It is a fairly complex construction
     # ---keys can have same name on left and right.
@@ -451,7 +459,7 @@ def join_distributed_run(
     #  and so the name will never have additional NaNs
 
     out_optional_key_vars = tuple(
-        join_node.df_out_vars[cname] for cname in optional_key_tuple
+        join_node.out_data_vars[cname] for cname in optional_key_tuple
     )
     left_other_col_vars = tuple(
         v
@@ -472,7 +480,6 @@ def join_distributed_run(
         + right_other_col_vars
     )
     arg_typs = tuple(typemap[v.name] for v in arg_vars)
-    scope = arg_vars[0].scope
 
     # arg names of non-key columns
     optional_names = tuple("opti_c" + str(i) for i in range(len(optional_col_var)))
@@ -544,30 +551,29 @@ def join_distributed_run(
                 right_key_types,
                 left_key_types,
             )
-        # func_text += "    print(t2_key, data_right)\n"
 
     out_keys = []
     for cname in join_node.left_keys:
-        if cname + join_node.suffix_x in join_node.df_out_vars:
+        if cname + join_node.suffix_x in join_node.out_data_vars:
             cname_work = cname + join_node.suffix_x
         else:
             cname_work = cname
-        out_keys.append(join_node.df_out_vars[cname_work])
+        out_keys.append(join_node.out_data_vars[cname_work])
     for i, cname in enumerate(join_node.right_keys):
-        if not vect_same_key[i] and not join_node.is_join:
+        if not join_node.vect_same_key[i] and not join_node.is_join:
             cname_work = cname + join_node.suffix_y
-            if not cname_work in join_node.df_out_vars:
+            if not cname_work in join_node.out_data_vars:
                 cname_work = cname
-            assert cname_work in join_node.df_out_vars
-            out_keys.append(join_node.df_out_vars[cname_work])
+            assert cname_work in join_node.out_data_vars
+            out_keys.append(join_node.out_data_vars[cname_work])
 
     def _get_out_col_var(cname, is_left):
-        if is_left and cname + join_node.suffix_x in join_node.df_out_vars:
-            return join_node.df_out_vars[cname + join_node.suffix_x]
-        if not is_left and cname + join_node.suffix_y in join_node.df_out_vars:
-            return join_node.df_out_vars[cname + join_node.suffix_y]
+        if is_left and cname + join_node.suffix_x in join_node.out_data_vars:
+            return join_node.out_data_vars[cname + join_node.suffix_x]
+        if not is_left and cname + join_node.suffix_y in join_node.out_data_vars:
+            return join_node.out_data_vars[cname + join_node.suffix_y]
 
-        return join_node.df_out_vars[cname]
+        return join_node.out_data_vars[cname]
 
     merge_out = out_optional_key_vars + tuple(out_keys)
     merge_out += tuple(
@@ -598,7 +604,7 @@ def join_distributed_run(
             right_other_names,
             left_other_types,
             right_other_types,
-            vect_same_key,
+            join_node.vect_same_key,
             join_node.is_left,
             join_node.is_right,
             join_node.is_join,
@@ -625,7 +631,7 @@ def join_distributed_run(
         func_text += "    {} = t1_keys_{}\n".format(out_names[idx], i)
         idx += 1
     for i in range(n_keys):
-        if not vect_same_key[i] and not join_node.is_join:
+        if not join_node.vect_same_key[i] and not join_node.is_join:
             func_text += "    {} = t2_keys_{}\n".format(out_names[idx], i)
             idx += 1
     for i in range(len(left_other_names)):
@@ -721,7 +727,7 @@ def _get_table_parallel_flags(join_node, array_dists):
 
     if left_parallel or right_parallel:
         assert all(
-            array_dists[v.name] in par_dists for v in join_node.df_out_vars.values()
+            array_dists[v.name] in par_dists for v in join_node.out_data_vars.values()
         )
 
     return left_parallel, right_parallel
@@ -923,8 +929,6 @@ def _gen_par_shuffle(
     func_text += "    {} = ({}{})\n".format(
         data_tup_out, ", ".join(out_data), "," if n_data != 0 else ""
     )
-    # func_text += "    print(bodo.get_rank(), {})\n".format(key_tup_out)
-    # func_text += "    print(bodo.get_rank(), {})\n".format(data_tup_out)
 
     # clean up
     func_text += "    delete_table(table)\n"

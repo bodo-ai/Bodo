@@ -3,12 +3,13 @@
 #include "_array_utils.h"
 #include "_bodo_common.h"
 
+#undef DEBUG_JOIN
+
 table_info* hash_join_table(table_info* in_table, int64_t n_key_t,
                             int64_t n_data_left_t, int64_t n_data_right_t,
                             int64_t* vect_same_key, int64_t* vect_need_typechange,
                             bool is_left, bool is_right,
                             bool is_join, bool optional_col) {
-#undef DEBUG_JOIN
 #ifdef DEBUG_JOIN
     std::cout << "IN_TABLE (hash_join_table):\n";
     DEBUG_PrintSetOfColumn(std::cout, in_table->columns);
