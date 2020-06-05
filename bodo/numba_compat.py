@@ -10,6 +10,8 @@ import os
 import re
 import inspect
 import warnings
+import textwrap
+import traceback
 import numpy as np
 
 import numba
@@ -42,7 +44,7 @@ from numba.core.typing.templates import (
     _OverloadAttributeTemplate,
     _OverloadMethodTemplate,
 )
-from numba.core.types.functions import _ResolutionFailures
+from numba.core.types.functions import _ResolutionFailures, _termcolor
 from numba.core.errors import LiteralTypingError
 from numba.core.types import literal
 
@@ -681,20 +683,66 @@ numba.core.types.functions.BaseFunction.get_call_type = get_call_type
 
 def get_call_type2(self, context, args, kws):
     template = self.template(context)
-    e = None
+    literal_e = None
+    nonliteral_e = None
+
     # Try with Literal
     try:
         out = template.apply(args, kws)
-    except Exception:
+    except Exception as exc:
+        if isinstance(exc, errors.ForceLiteralArg):
+            raise exc
+        literal_e = exc
         out = None
-    # If that doesn't work, remove literals
-    # change: check _no_unliteral attribute if present
-    if out is None and not getattr(template, "_no_unliteral", False):
-        args = [unliteral(a) for a in args]
-        kws = {k: unliteral(v) for k, v in kws.items()}
-        out = template.apply(args, kws)
-    if out is None and e is not None:
-        raise e
+
+    # if the unliteral_args and unliteral_kws are the same as the literal
+    # ones, set up to not bother retrying
+    unliteral_args = tuple([unliteral(a) for a in args])
+    unliteral_kws = {k: unliteral(v) for k, v in kws.items()}
+    skip = unliteral_args == args and kws == unliteral_kws
+
+    # If the above template application failed and the non-literal args are
+    # different to the literal ones, try again with literals rewritten as
+    # non-literals
+    # Bodo change: check _no_unliteral attribute if present
+    if not skip and out is None and not getattr(template, "_no_unliteral", False):
+        try:
+            out = template.apply(unliteral_args, unliteral_kws)
+        except Exception as exc:
+            if isinstance(exc, errors.ForceLiteralArg):
+                raise exc
+            nonliteral_e = exc
+
+    if out is None and (nonliteral_e is not None or literal_e is not None):
+        header = "- Resolution failure for {} arguments:\n{}\n"
+        tmplt = _termcolor.highlight(header)
+        if numba.core.config.DEVELOPER_MODE:
+            indent = " " * 4
+
+            def add_bt(error):
+                if isinstance(error, BaseException):
+                    # if the error is an actual exception instance, trace it
+                    bt = traceback.format_exception(
+                        type(error), error, error.__traceback__
+                    )
+                else:
+                    bt = [""]
+                nd2indent = "\n{}".format(2 * indent)
+                errstr += _termcolor.reset(nd2indent + nd2indent.join(bt_as_lines))
+                return _termcolor.reset(errstr)
+
+        else:
+            add_bt = lambda X: ""
+
+        def nested_msg(literalness, e):
+            estr = str(e)
+            estr = estr if estr else (str(repr(e)) + add_bt(e))
+            new_e = errors.TypingError(textwrap.dedent(estr))
+            return tmplt.format(literalness, str(new_e))
+
+        raise errors.TypingError(
+            nested_msg("literal", literal_e) + nested_msg("non-literal", nonliteral_e)
+        )
     return out
 
 
@@ -702,7 +750,7 @@ def get_call_type2(self, context, args, kws):
 lines = inspect.getsource(numba.core.types.functions.BoundFunction.get_call_type)
 if (
     hashlib.sha256(lines.encode()).hexdigest()
-    != "9c665cf809ee7310608ce667e0173a53fbfc2e804b85ba02a98b88062c9e77e0"
+    != "bea523c496de56822d0b94facc3a237b4c65608fd7f4ab1fe33dd06c8fb21fc9"
 ):  # pragma: no cover
     warnings.warn("numba.core.types.functions.BoundFunction.get_call_type has changed")
 
