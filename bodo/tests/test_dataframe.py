@@ -1185,25 +1185,27 @@ def test_pd_isna_getitem():
     )
     check_func(impl1, (df,))
     S = pd.Series([2.1, 5.3, np.nan, -1.0, -3.7], [3, 5, 6, -2, 4], name="C")
-    check_func(impl2, (S, 0))
-    check_func(impl2, (S, 2))
+    assert bodo.jit(impl2)(S, 0) == impl2(S, 0)
+    assert bodo.jit(impl2)(S, 2) == impl2(S, 2)
     A = np.array([1.3, 2.2, np.nan, 3.1, np.nan, -1.1])
-    check_func(impl3, (A, 0))
-    check_func(impl3, (A, 2))
+    assert bodo.jit(impl3)(A, 0) == impl3(A, 0)
+    assert bodo.jit(impl3)(A, 2) == impl3(A, 2)
 
 
-def test_setitem_NA():
+def test_setitem_na():
     """test support for setting NA value to array location, e.g. A[i] = None
     """
 
-    def impl2(S, i):
+    def impl(S, i):
         S.iloc[i] = None
         return S
 
     S = pd.Series(["AA", np.nan, "", "D", "GG"], name="C")
-    check_func(impl2, (S, 0))
-    check_func(impl2, (S, 1))
-    check_func(impl2, (S, 2))
+    # TODO: support distributed setitem with scalar
+    bodo_func = bodo.jit(impl)
+    pd.testing.assert_series_equal(bodo_func(S.copy(), 0), impl(S.copy(), 0))
+    pd.testing.assert_series_equal(bodo_func(S.copy(), 1), impl(S.copy(), 1))
+    pd.testing.assert_series_equal(bodo_func(S.copy(), 2), impl(S.copy(), 2))
 
 
 def test_set_column_scalar_str():
