@@ -626,29 +626,37 @@ numba.core.typing.templates.bound_function = bound_function
 
 
 def get_call_type(self, context, args, kws):
-    failures = _ResolutionFailures(context, self, args, kws)
+    failures = _ResolutionFailures(context, self, args, kws, depth=self._depth)
+    self._depth += 1
     for temp_cls in self.templates:
         temp = temp_cls(context)
         for uselit in [True, False]:
             try:
                 if uselit:
                     sig = temp.apply(args, kws)
-                # change: check _no_unliteral attribute if present
+                # Bodo change: check _no_unliteral attribute if present
                 elif not getattr(temp, "_no_unliteral", False):
                     nolitargs = tuple([unliteral(a) for a in args])
                     nolitkws = {k: unliteral(v) for k, v in kws.items()}
                     sig = temp.apply(nolitargs, nolitkws)
             except Exception as e:
                 sig = None
-                failures.add_error(temp_cls, e)
+                failures.add_error(temp, False, e, uselit)
             else:
                 if sig is not None:
                     self._impl_keys[sig.args] = temp.get_impl_key(sig)
+                    self._depth -= 1
                     return sig
                 else:
-                    haslit = "" if uselit else "out"
-                    msg = "All templates rejected with%s literals." % haslit
-                    failures.add_error(temp_cls, msg)
+                    registered_sigs = getattr(temp, "cases", None)
+                    if registered_sigs is not None:
+                        msg = "No match for registered cases:\n%s"
+                        msg = msg % "\n".join(
+                            " * {}".format(x) for x in registered_sigs
+                        )
+                    else:
+                        msg = "No match."
+                    failures.add_error(temp, True, msg, uselit)
 
     if len(failures) == 0:
         raise AssertionError(
@@ -663,7 +671,7 @@ def get_call_type(self, context, args, kws):
 lines = inspect.getsource(numba.core.types.functions.BaseFunction.get_call_type)
 if (
     hashlib.sha256(lines.encode()).hexdigest()
-    != "bcb57ef2f0557836bf15c69eb09ffb16955633eb86781c73bcde0e4910fb0d06"
+    != "1dbcaa9fdbfd835681192e51347708c0906cdd42c6218e0c1d92cef4738893a6"
 ):  # pragma: no cover
     warnings.warn("numba.core.types.functions.BaseFunction.get_call_type has changed")
 
@@ -1149,8 +1157,10 @@ def CacheImpl__init__(self, py_func):
         if locator is not None:
             break
     else:  # pragma: no cover
-        raise RuntimeError("cannot cache function %r: no locator available "
-                           "for file %r" % (qualname, source_path))
+        raise RuntimeError(
+            "cannot cache function %r: no locator available "
+            "for file %r" % (qualname, source_path)
+        )
     self._locator = locator
     # Use filename base name as module name to avoid conflict between
     # foo/__init__.py and foo/foo.py
@@ -1170,7 +1180,7 @@ def CacheImpl__init__(self, py_func):
         modname = new_modname
 
     fullname = "%s.%s" % (modname, qualname)
-    abiflags = getattr(sys, 'abiflags', '')
+    abiflags = getattr(sys, "abiflags", "")
     self._filename_base = self.get_filename_base(fullname, abiflags)
 
 
