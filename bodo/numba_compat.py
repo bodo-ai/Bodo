@@ -779,14 +779,17 @@ def string_from_string_and_size(self, string, size):
 numba.core.pythonapi.PythonAPI.string_from_string_and_size = string_from_string_and_size
 
 # This replaces Numba's numba.core.dispatcher._DispatcherBase._compile_for_args
-# method to delete args before returning the dispatcher object. Otherwise
-# the code is the same
+# method to delete args before returning the dispatcher object and handle BodoError.
+# Otherwise, the code is the same.
 def _compile_for_args(self, *args, **kws):  # pragma: no cover
     """
     For internal use.  Compile a specialized version of the function
     for the given *args* and *kws*, and return the resulting callable.
     """
     assert not kws
+    # call any initialisation required for the compilation chain (e.g.
+    # extension point registration).
+    self._compilation_chain_init_hook()
     import bodo
 
     def error_rewrite(e, issue_type):
@@ -887,10 +890,12 @@ def _compile_for_args(self, *args, **kws):  # pragma: no cover
                 e.patch_message("\n".join((str(e).rstrip(), help_msg)))
         # ignore the FULL_TRACEBACKS config, this needs reporting!
         raise e
+    # Bodo change: handle BodoError
     except bodo.utils.typing.BodoError as e:
         # create a new error so that the stacktrace only reaches
         # the point where the new error is raised
         error = bodo.utils.typing.BodoError(str(e))
+    # Bodo change: avoid arg leak
     finally:
         # avoid issue of reference leak of arguments to jitted function:
         # https://github.com/numba/numba/issues/5419
@@ -906,7 +911,7 @@ def _compile_for_args(self, *args, **kws):  # pragma: no cover
 lines = inspect.getsource(numba.core.dispatcher._DispatcherBase._compile_for_args)
 if (
     hashlib.sha256(lines.encode()).hexdigest()
-    != "1e12bb18f3ed09e608ba6c56a7fcd4cf2fe342b71af9d2e9767aee817d92f4b8"
+    != "f9e54236529e4e9655d2372ceae81ad90913173f7b178a533f353b882c9b3cdf"
 ):  # pragma: no cover
     warnings.warn("numba.core.dispatcher._DispatcherBase._compile_for_args has changed")
 # now replace the function with our own
