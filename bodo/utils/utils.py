@@ -278,7 +278,7 @@ def get_slice_step(typemap, func_ir, var):
     return call_expr.args[2]
 
 
-def is_array_typ(var_typ):
+def is_array_typ(var_typ, include_index_series=True):
     # TODO: make sure all Bodo arrays are here
     return (
         is_np_array_typ(var_typ)
@@ -289,15 +289,24 @@ def is_array_typ(var_typ):
             bodo.hiframes.split_impl.string_array_split_view_type,
             bodo.hiframes.datetime_date_ext.datetime_date_array_type,
         )
-        or isinstance(var_typ, bodo.hiframes.pd_series_ext.SeriesType)
-        or bodo.hiframes.pd_index_ext.is_pd_index_type(var_typ)
-        or isinstance(var_typ, bodo.hiframes.pd_multi_index_ext.MultiIndexType)
         or isinstance(var_typ, IntegerArrayType)
         or isinstance(var_typ, bodo.libs.decimal_arr_ext.DecimalArrayType)
         or var_typ == boolean_array
         or isinstance(var_typ, bodo.hiframes.pd_categorical_ext.CategoricalArray)
         or var_typ == bodo.libs.str_ext.random_access_string_array
         or isinstance(var_typ, bodo.libs.list_item_arr_ext.ListItemArrayType)
+        or (
+            include_index_series
+            and isinstance(var_typ, bodo.hiframes.pd_series_ext.SeriesType)
+        )
+        or (
+            include_index_series
+            and bodo.hiframes.pd_index_ext.is_pd_index_type(var_typ)
+        )
+        or (
+            include_index_series
+            and isinstance(var_typ, bodo.hiframes.pd_multi_index_ext.MultiIndexType)
+        )
     )
 
 

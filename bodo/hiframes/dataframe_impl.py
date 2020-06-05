@@ -3,6 +3,7 @@
 Implementation of DataFrame attributes and methods using overload.
 """
 from collections import namedtuple
+import operator
 import numpy as np
 import pandas as pd
 import numba
@@ -36,8 +37,10 @@ from bodo.utils.typing import (
     get_overload_constant_dict,
     is_overload_constant_list,
     get_overload_const_list,
+    unliteral_val,
 )
 from bodo.utils.transform import gen_const_tup
+from bodo.utils.utils import is_array_typ
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.bool_arr_ext import boolean_array
 from bodo.hiframes.pd_timestamp_ext import pandas_timestamp_type
@@ -959,6 +962,8 @@ _install_unary_ops()
 ########### top level functions ###############
 
 
+# inline IR for parallelizable data structures, but don't inline for scalars since we
+# pattern match pd.isna(A[i]) in SeriesPass to handle it properly
 @overload(pd.isna, inline="always", no_unliteral=True)
 @overload(pd.isnull, inline="always", no_unliteral=True)
 def overload_isna(obj):
@@ -968,13 +973,8 @@ def overload_isna(obj):
     ) or bodo.hiframes.pd_index_ext.is_pd_index_type(obj):
         return lambda obj: obj.isna()
 
-    # arrays
-    if isinstance(obj, types.Array):
-        return lambda obj: np.isnan(obj)
-
-    # array of strings
-    # TODO: other string array data structures
-    if obj == bodo.string_array_type:
+    # Bodo arrays, use array_kernels.isna()
+    if is_array_typ(obj):
 
         def impl(obj):  # pragma: no cover
             numba.parfors.parfor.init_prange()
@@ -986,22 +986,55 @@ def overload_isna(obj):
 
         return impl
 
+
+@overload(pd.isna, no_unliteral=True)
+@overload(pd.isnull, no_unliteral=True)
+def overload_isna_scalar(obj):
+    # ignore cases handled above
+    if (
+        isinstance(obj, (DataFrameType, SeriesType))
+        or bodo.hiframes.pd_index_ext.is_pd_index_type(obj)
+        or is_array_typ(obj)
+    ):
+        return
+
     # array-like: list, tuple
     if isinstance(obj, (types.List, types.UniTuple)):
-        return lambda obj: pd.isna(bodo.utils.conversion.coerce_to_array(obj))
+        # no reuse of array implementation to avoid prange (unexpected threading etc.)
+        def impl(obj):
+            n = len(obj)
+            out_arr = np.empty(n, np.bool_)
+            for i in range(n):
+                out_arr[i] = pd.isna(obj[i])
+            return out_arr
+
+        return impl
 
     # scalars
+    # using unliteral_val() to avoid literal type in output type since we may replace
+    # this call in Series pass with array_kernels.isna()
     obj = types.unliteral(obj)
     if obj == bodo.string_type:
-        return lambda obj: False
+        return lambda obj: unliteral_val(False)
     if isinstance(obj, types.Integer):
-        return lambda obj: False
+        return lambda obj: unliteral_val(False)
     if isinstance(obj, types.Float):
         return lambda obj: np.isnan(obj)
-    # TODO: NaT
+    if isinstance(obj, (types.NPDatetime, types.NPTimedelta)):
+        return lambda obj: np.isnat(obj)
+    if obj == types.none:
+        return lambda obj: unliteral_val(True)
 
     # TODO: catch other cases
-    return lambda obj: False
+    return lambda obj: unliteral_val(False)
+
+
+# support A[i] = None array setitem using our array NA setting function
+# TODO: inline when supported in Numba
+@overload(operator.setitem, no_unliteral=True)
+def overload_setitem_arr_none(A, idx, val):
+    if is_array_typ(A, False) and isinstance(idx, types.Integer) and val == types.none:
+        return lambda A, idx, val: bodo.ir.join.setitem_arr_nan(A, idx)
 
 
 @overload(pd.notna, inline="always", no_unliteral=True)
@@ -1177,7 +1210,7 @@ class SetDfColInfer(AbstractTemplate):
 
             if isinstance(val, types.List):
                 val = scalar_to_array_type(val.dtype)
-            if not bodo.utils.utils.is_array_typ(val):
+            if not is_array_typ(val):
                 val = scalar_to_array_type(val)
             if ind in target.columns:
                 # set existing column, with possibly a new array type

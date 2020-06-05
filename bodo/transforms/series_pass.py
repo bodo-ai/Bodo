@@ -360,6 +360,21 @@ class SeriesPass:
         # Series as index
         # TODO: handle all possible cases
         nodes = []
+        index_var = get_getsetitem_index_var(inst, self.typemap, nodes)
+        index_typ = self.typemap[index_var.name]
+
+        # support A[i] = None array setitem using our array NA setting function
+        if (
+            is_array_typ(target_typ, False)
+            and isinstance(index_typ, types.Integer)
+            and self.typemap[inst.value.name] == types.none
+        ):
+            return nodes + compile_func_single_block(
+                lambda A, idx: bodo.ir.join.setitem_arr_nan(A, idx),
+                [inst.target, index_var],
+                None,
+                self,
+            )
 
         if target_typ == h5dataset_type:
             return self._handle_h5_write(inst.target, inst.index, inst.value)
@@ -1162,6 +1177,20 @@ class SeriesPass:
             )
             self.calltypes[rhs] = new_sig
             return nodes
+
+        # pattern match pd.isna(A[i]) and replace it with array_kernels.isna(A, i)
+        if fdef in (("isna", "pandas"), ("isnull", "pandas")):
+            obj = get_call_expr_arg(fdef[0], rhs.args, dict(rhs.kws), 0, "obj")
+            obj_def = guard(get_definition, self.func_ir, obj)
+            if is_expr(obj_def, "getitem") and is_array_typ(
+                self.typemap[obj_def.value.name], False
+            ):
+                return compile_func_single_block(
+                    lambda A, i: bodo.libs.array_kernels.isna(A, i),
+                    (obj_def.value, obj_def.index),
+                    assign.target,
+                    self,
+                )
 
         # replace isna early to enable more optimization in PA
         # TODO: handle more types

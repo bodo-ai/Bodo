@@ -150,12 +150,24 @@ Accessing individual values of nullable data
 
 The type of null (NA) value for most nullable data arrays is different than
 regular values (except float data which stores `np.nan`). Therefore, accessing
-individual values (i.e. using `[]` with an integer index) may not be type stable::
+individual values (i.e. using `[]` with an integer index) may not be type stable.
+In these cases, Bodo assumes the value is not NA and returns an "neutral" value::
 
     @bodo.jit
     def f(S, i):
         return S.iloc[i]  # not type stable
     S = pd.Series(["A", None, "CC"])
+    f(S, 1)  # returns ""
+
+The solution is to check for NA values using `pd.isna` to handle NA values appropriately::
+
+    @bodo.jit
+    def f(S, i):
+        if pd.isna(S.iloc[i]):
+            return "NA"
+        return S.iloc[i]
+    S = pd.Series(["A", None, "CC"])
+    f(S, 1)  # returns "NA"
 
 We are working on making it possible to avoid stability issues automatically
 in most practical cases.
