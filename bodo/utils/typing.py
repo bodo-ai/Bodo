@@ -507,6 +507,14 @@ def literal_bool_cast(context, builder, fromty, toty, val):
     return context.cast(builder, lit, fromty.literal_type, toty)
 
 
+@lower_builtin(bool, BooleanLiteral)
+def bool_literal_as_bool(context, builder, sig, args):
+    (in_typ,) = sig.args
+    return context.get_constant_generic(
+        builder, in_typ.literal_type, in_typ.literal_value
+    )
+
+
 class ListLiteral(types.Literal):
     """class for literal lists, only used when Bodo forces an argument to be a literal
     list (e.g. in typing pass for groupby/join/sort_values).
