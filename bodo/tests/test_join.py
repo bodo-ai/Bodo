@@ -141,9 +141,9 @@ def test_merge_join_datetime():
     df1_date = pd.DataFrame({"A": 1 + np.arange(siz), "B": datearr_1.date})
     df2 = pd.DataFrame({"A": siz - 5 + np.arange(siz)})
 
-    check_func(test_impl, (df1_timedelta, df2), sort_output=True)
-    check_func(test_impl, (df1_datetime, df2), sort_output=True)
-    check_func(test_impl, (df1_date, df2), sort_output=True)
+    check_func(test_impl, (df1_timedelta, df2), sort_output=True, reset_index=True)
+    check_func(test_impl, (df1_datetime, df2), sort_output=True, reset_index=True)
+    check_func(test_impl, (df1_date, df2), sort_output=True, reset_index=True)
 
 
 def test_merge_decimal():
