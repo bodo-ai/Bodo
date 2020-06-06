@@ -976,21 +976,26 @@ def _check_scatterv(data, n):
     assert n_passed == n_pes
 
 
-n = 11
+n = 22
 n_col = 3
 
 
 def get_random_integerarray(n):
     np.random.seed(5)
-    return pd.arrays.IntegerArray(np.random.randint(0, 10, n, np.int32), np.random.ranf(n) < 0.30)
+    return pd.arrays.IntegerArray(
+        np.random.randint(0, 10, n, np.int32), np.random.ranf(n) < 0.30
+    )
+
 
 def get_random_booleanarray(n):
     np.random.seed(5)
     return pd.arrays.BooleanArray(np.random.ranf(n) < 0.50, np.random.ranf(n) < 0.30)
 
+
 def get_random_decimalarray(n):
     np.random.seed(5)
     return np.array([None if a < 0.3 else Decimal(str(a)) for a in np.random.ranf(n)])
+
 
 def get_random_int64index(n):
     np.random.seed(5)
@@ -1051,6 +1056,7 @@ def get_random_int64index(n):
                 np.nan,
                 [42],
             ]
+            * 2
         ),
         np.array(
             [
@@ -1066,6 +1072,7 @@ def get_random_int64index(n):
                 [2.0, 3.0],
                 np.nan,
             ]
+            * 2
         ),
     ],
 )
