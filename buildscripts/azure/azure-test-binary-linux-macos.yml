@@ -85,9 +85,9 @@ jobs:
       pip install pytest pytest-azurepipelines
       cd $HOME/bodo-inc
       if [[ "$NP" -eq 3 ]] && [[ "${{ parameters.name }}" == "Linux" ]]; then
-        mpiexec -n $NP pytest --pyargs bodo -s -v -m "$(PYTEST_MARKER)"
+        python run_tests.py "$NP" --pyargs bodo -s -v -m "$(PYTEST_MARKER)"
       else
-        mpiexec -n $NP pytest --pyargs bodo -s -v -m "$(PYTEST_MARKER) and firsthalf"
-        mpiexec -n $NP pytest --pyargs bodo -s -v -m "$(PYTEST_MARKER) and not firsthalf"
+        python run_tests.py "$NP" --pyargs bodo -s -v -m "$(PYTEST_MARKER) and firsthalf"
+        python run_tests.py "$NP" --pyargs bodo -s -v -m "$(PYTEST_MARKER) and not firsthalf"
       fi
     displayName: 'Test Bodo'
