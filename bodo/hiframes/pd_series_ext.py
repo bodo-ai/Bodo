@@ -518,7 +518,7 @@ def cast_series(context, builder, fromty, toty, val):
 class SeriesAttribute(AttributeTemplate):
     key = SeriesType
 
-    @bound_function("series.rolling")
+    @bound_function("series.rolling", no_unliteral=True)
     def resolve_rolling(self, ary, args, kws):
         def rolling_stub(
             window,
@@ -566,7 +566,7 @@ class SeriesAttribute(AttributeTemplate):
             SeriesType(f_return_type, data_arr, ary.index, ary.name_typ), (func,)
         ).replace(pysig=pysig)
 
-    @bound_function("series.map")
+    @bound_function("series.map", no_unliteral=True)
     def resolve_map(self, ary, args, kws):
         kwargs = dict(kws)
         func = args[0] if len(args) > 0 else kwargs["arg"]
@@ -577,7 +577,7 @@ class SeriesAttribute(AttributeTemplate):
         pysig = numba.core.utils.pysignature(map_stub)
         return self._resolve_map_func(ary, func, pysig, "map")
 
-    @bound_function("series.apply")
+    @bound_function("series.apply", no_unliteral=True)
     def resolve_apply(self, ary, args, kws):
         kwargs = dict(kws)
         func = args[0] if len(args) > 0 else kwargs["func"]
@@ -624,12 +624,12 @@ class SeriesAttribute(AttributeTemplate):
         )
         return sig.replace(pysig=pysig)
 
-    @bound_function("series.combine")
+    @bound_function("series.combine", no_unliteral=True)
     def resolve_combine(self, ary, args, kws):
         return self._resolve_combine_func(ary, args, kws)
 
     # TODO: use overload when Series.aggregate is supported
-    @bound_function("series.value_counts")
+    @bound_function("series.value_counts", no_unliteral=True)
     def resolve_value_counts(self, ary, args, kws):
         # output is int series with original data as index
         index_typ = bodo.hiframes.pd_index_ext.array_typ_to_index(ary.data)
@@ -707,7 +707,7 @@ class SeriesRollingType(types.Type):
 class SeriesRollingAttribute(AttributeTemplate):
     key = SeriesRollingType
 
-    @bound_function("rolling.apply")
+    @bound_function("rolling.apply", no_unliteral=True)
     def resolve_apply(self, ary, args, kws):
         # result is always float64 (see Pandas window.pyx:roll_generic)
         return signature(
@@ -717,7 +717,7 @@ class SeriesRollingAttribute(AttributeTemplate):
             *args,
         )
 
-    @bound_function("rolling.cov")
+    @bound_function("rolling.cov", no_unliteral=True)
     def resolve_cov(self, ary, args, kws):
         return signature(
             SeriesType(
@@ -726,7 +726,7 @@ class SeriesRollingAttribute(AttributeTemplate):
             *args,
         )
 
-    @bound_function("rolling.corr")
+    @bound_function("rolling.corr", no_unliteral=True)
     def resolve_corr(self, ary, args, kws):
         return signature(
             SeriesType(

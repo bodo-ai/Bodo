@@ -831,12 +831,12 @@ class TimedeltaIndexAttribute(AttributeTemplate):
         return _timedelta_index_data_typ
 
     # TODO: support pd.Timedelta
-    # @bound_function("timedelta_index.max")
+    # @bound_function("timedelta_index.max", no_unliteral=True)
     # def resolve_max(self, ary, args, kws):
     #     assert not kws
     #     return signature(pandas_timestamp_type, *args)
 
-    # @bound_function("timedelta_index.min")
+    # @bound_function("timedelta_index.min", no_unliteral=True)
     # def resolve_min(self, ary, args, kws):
     #     assert not kws
     #     return signature(pandas_timestamp_type, *args)

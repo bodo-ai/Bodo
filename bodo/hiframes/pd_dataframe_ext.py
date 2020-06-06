@@ -240,7 +240,7 @@ class DataFrameAttribute(AttributeTemplate):
     def resolve_shape(self, ary):
         return types.UniTuple(types.intp, 2)
 
-    @bound_function("df.apply")
+    @bound_function("df.apply", no_unliteral=True)
     def resolve_apply(self, df, args, kws):
         kws = dict(kws)
         func = args[0] if len(args) > 0 else kws.get("func", None)
