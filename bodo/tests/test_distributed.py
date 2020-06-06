@@ -924,7 +924,7 @@ def test_dist_objmode():
             s += y
         return s
 
-    assert bodo.jit(objmode_test)(10) == objmode_test(10)
+    np.testing.assert_allclose(bodo.jit(objmode_test)(10), objmode_test(10))
 
 
 def test_diagnostics_not_compiled_error():

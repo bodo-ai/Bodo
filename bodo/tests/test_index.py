@@ -158,16 +158,19 @@ def test_index_values(index):
 @pytest.mark.parametrize(
     "index",
     [
-        pd.Int64Index([10, 12]),
-        pd.Float64Index([10.1, 12.1]),
-        pd.UInt64Index([10, 12]),
-        pd.Index(["A", "B"]),
-        pd.RangeIndex(10),
+        pd.Int64Index([10, 12, 0, 2, 1, 3, -4]),
+        pd.Float64Index([10.1, 12.1, 1.2, 3.1, -1.2, -3.1, 0.0]),
+        pd.UInt64Index([10, 12, 0, 1, 11, 12, 5, 3]),
+        pd.Index(["A", "B", "AB", "", "CDEF", "CC", "l"]),
+        pd.RangeIndex(11),
         # pd.RangeIndex(3, 10, 2), # TODO: support
         pd.date_range(start="2018-04-24", end="2018-04-27", periods=3, name="A"),
-        pd.date_range(start="2018-04-24", end="2018-04-27", periods=3, name="A").date,
-        pd.PeriodIndex(year=[2015, 2016, 2018], month=[1, 2, 3], freq="M"),
-        pd.timedelta_range(start="1D", end="3D", name="A"),
+        pd.PeriodIndex(
+            year=[2015, 2015, 2016, 1026, 2018, 2018, 2019],
+            month=[1, 2, 3, 1, 2, 3, 4],
+            freq="M",
+        ),
+        pd.timedelta_range(start="1D", end="15D", name="A"),
     ],
 )
 def test_index_copy(index):

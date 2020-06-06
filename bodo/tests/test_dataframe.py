@@ -1019,11 +1019,11 @@ def test_df_duplicated():
         return df.duplicated()
 
     df = pd.DataFrame({"A": ["A", "B", "A", "B", "C"], "B": ["F", "E", "F", "S", "C"]})
-    check_func(impl, (df,), sort_output=True)
+    check_func(impl, (df,), sort_output=True, reset_index=True)
     df = pd.DataFrame(
         {"A": [1, 3, 1, 2, 3], "B": ["F", "E", "F", "S", "C"]}, index=[3, 1, 2, 4, 6]
     )
-    check_func(impl, (df,), sort_output=True)
+    check_func(impl, (df,), sort_output=True, reset_index=True)
 
 
 ##################### binary ops ###############################
