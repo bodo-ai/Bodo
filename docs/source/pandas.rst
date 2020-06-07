@@ -3,19 +3,48 @@
 Supported Pandas Operations
 ---------------------------
 
-Below is the list of the Pandas operators that Bodo supports.
+Below is the list of the Pandas data types and operations that Bodo supports.
 Optional arguments are not supported unless if specified.
-Since Numba doesn't support Pandas, only these operations
-can be used for both large and small datasets.
 
-In addition:
 
-* Accessing columns using both getitem (e.g. ``df['A']``) and attribute
-  (e.g. ``df.A``) is supported.
-* Using columns similar to Numpy arrays and performing data-parallel operations
-  listed previously is supported.
-* Filtering data frames using boolean arrays is supported
-  (e.g. ``df[df.A > .5]``).
+.. _pandas-dtype:
+
+Data Types
+~~~~~~~~~~
+
+Bodo supports the following
+data types as values in Pandas Dataframe and Series data structures.
+This represents all `Pandas data types <https://pandas.pydata.org/pandas-docs/stable/reference/arrays.html>`_
+except `TZ-aware datetime`, `Period`, `Interval`, and `Sparse` (will be supported in the future).
+Also, all `Spark data types <https://spark.apache.org/docs/latest/sql-reference.html#data-types>`_
+are supported except `MapType` and `StructType` (will be supported in the future).
+
+
+* Numpy booleans: `np.bool_`.
+* Numpy integer data types: `np.int8`, `np.int16`, `np.int32`, `np.int64`,
+  `np.uint8`, `np.uint16`, `np.uint32`, `np.uint64`.
+* Numpy floating point data types: `np.float32`, `np.float64`.
+* Numpy datetime data types: `np.dtype("datetime64[ns]")` and `np.dtype("timedelta[ns]")`.
+  The resolution has to be `ns` currently, which covers most practical use cases.
+* Numpy complex data types: `np.complex64` and `np.complex128`.
+* Strings (including nulls).
+* `datetime.date` values (including nulls).
+* Pandas `nullable integers <https://pandas.pydata.org/pandas-docs/stable/user_guide/integer_na.html>`_.
+* Pandas `nullable booleans <https://pandas.pydata.org/pandas-docs/stable/user_guide/boolean.html>`_.
+* Pandas `Categoricals <https://pandas.pydata.org/pandas-docs/stable/user_guide/categorical.html>`_
+  (limited support currently, category values have to be known at compilation).
+* Lists of integer, float, and string values.
+* `decimal.Decimal` values (including nulls). The decimal
+  values are stored as fixed-precision
+  `Apache Arrow Decimal128 <https://arrow.apache.org/docs/cpp/api/utilities.html#classarrow_1_1_decimal128>`_
+  format, which is also similar to
+  `PySpark decimals <https://spark.apache.org/docs/latest/api/python/pyspark.sql.html>`_.
+  The decimal type has a `precision` (the maximum total number of digits)
+  and a `scale` (the number of digits on the right of dot) attribute, specifying how
+  the stored data is interpreted. For example, the (4, 2) case can store from -999.99 to 999.99.
+  The precision can be up to 38, and the scale must be less or equal to precision.
+  Arbitrary-precision Python `decimal.Decimal` values are converted with precision of 38 and scale of 18.
+
 
 .. _pandas-f-in:
 
