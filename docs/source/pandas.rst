@@ -3,9 +3,15 @@
 Supported Pandas Operations
 ---------------------------
 
-Below is the list of the Pandas data types and operations that Bodo supports.
+Below is the reference list of the Pandas data types and operations that Bodo supports.
 Optional arguments are not supported unless if specified.
 
+
+Comparing to `PySpark DataFrames <https://spark.apache.org/docs/latest/api/python/pyspark.sql.html#pyspark.sql.DataFrame>`_
+(as of version 2.4.5), equivalent of 47 of 53 applicable methods
+are supported (`colRegex`, `cube`, `freqItems`, `rollup` and `sampleBy` not supported yet).
+Comparing to `PySpark SQL functions <https://spark.apache.org/docs/latest/api/python/pyspark.sql#module-pyspark.sql.functions>`_,
+equivalent of 128 of 205 applicable methods are supported (others will be supported in the future).
 
 .. _pandas-dtype:
 
@@ -16,7 +22,8 @@ Bodo supports the following
 data types as values in Pandas Dataframe and Series data structures.
 This represents all `Pandas data types <https://pandas.pydata.org/pandas-docs/stable/reference/arrays.html>`_
 except `TZ-aware datetime`, `Period`, `Interval`, and `Sparse` (will be supported in the future).
-Also, all `Spark data types <https://spark.apache.org/docs/latest/sql-reference.html#data-types>`_
+Comparing to Spark (as of version 2.4.5), equivalent of all
+`Spark data types <https://spark.apache.org/docs/latest/sql-reference.html#data-types>`_
 are supported except `MapType` and `StructType` (will be supported in the future).
 
 
