@@ -343,6 +343,66 @@ def test_datetime_comparisons_scalar():
     check_func(test_gt, (dt, dt2))
 
 
+def test_function_to_datetime_string_array():
+    """Test pd.to_datetime for an array of strings
+    """
+
+    def f(S, formating):
+        return pd.to_datetime(S, format=formating)
+
+    S = pd.Series(["2019-01-01", "2019-01-02"]).values
+    formating = "%Y-%d-%m"
+    check_func(f, (S, formating))
+
+
+def test_function_to_datetime_scalar():
+    def f(str1, formating):
+        return pd.to_datetime(str1, format=formating)
+
+    str1 = "2016-01-06"
+    formating = "%Y-%d-%m"
+    check_func(f, (str1, formating))
+
+
+def test_function_to_datetime_array_int():
+    """Test pd.to_datetime for an array of int
+    """
+
+    def f(S):
+        return pd.to_datetime(S, unit="D", origin=pd.Timestamp("1960-01-01"))
+
+    S = pd.Series([1, 2, 3]).values
+    check_func(f, (S,))
+
+
+def test_function_to_datetime_infer_datetime_format():
+    """Test unix to_datetime"""
+
+    def f(S):
+        return pd.to_datetime(S, infer_datetime_format=True)
+
+    S = pd.Series(["3/11/2000", "3/12/2000", "3/13/2000"] * 1000)
+    check_func(f, (S,))
+
+
+def test_function_to_datetime_unix_epoch():
+    """Test unix to_datetime"""
+
+    def f1():
+        return pd.to_datetime(1490195805, unit="s")
+
+    def f2(timein):
+        return pd.to_datetime(timein, unit="s")
+
+    def f3():
+        return pd.to_datetime(1490195805433502912, unit="ns")
+
+    timein = 1490195805
+    check_func(f1, ())
+    check_func(f2, (timein,))
+    check_func(f3, ())
+
+
 def test_datetime_comparisons_datetime_datetime():
     """
     Test comparison operators of datetime module objects in Bodo.

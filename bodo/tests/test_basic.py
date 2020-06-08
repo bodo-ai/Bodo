@@ -430,6 +430,7 @@ def test_np_array():
     """test distribution of np.array() and np.asarray().
     array input can be distributed but not list input.
     """
+
     def test_impl1(A):
         return np.array(A)
 
