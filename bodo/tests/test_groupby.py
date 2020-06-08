@@ -134,16 +134,16 @@ def test_nullable_int():
         }
     )
 
-    check_func(impl, (df,), sort_output=True, reset_index=True)
+    check_func(impl, (df,), sort_output=True)
     # pandas 1.0 has a regression here: output is int64 instead of Int8
     # so we disable check_dtype
     check_func(
-        impl_select_colB, (df,), sort_output=True, reset_index=True, check_dtype=False
+        impl_select_colB, (df,), sort_output=True, check_dtype=False
     )
-    check_func(impl_select_colE, (df,), sort_output=True, reset_index=True)
+    check_func(impl_select_colE, (df,), sort_output=True)
     # pandas 1.0 has a regression here: output is int64 instead of UInt32
     check_func(
-        impl_select_colH, (df,), sort_output=True, reset_index=True, check_dtype=False
+        impl_select_colH, (df,), sort_output=True, check_dtype=False
     )
 
 
@@ -151,9 +151,10 @@ def test_nullable_int():
     "df_null",
     [
         pd.DataFrame(
-            {"A": [2, 1, 1, 1], "B": pd.Series(np.full(4, np.nan), dtype="Int64")}
+            {"A": [2, 1, 1, 1], "B": pd.Series(np.full(4, np.nan), dtype="Int64")},
+            index=[32, 45, 56, 76],
         ),
-        pd.DataFrame({"A": [1, 1, 1, 1], "B": pd.Series([1, 2, 3, 4], dtype="Int64")}),
+        pd.DataFrame({"A": [1, 1, 1, 1], "B": pd.Series([1, 2, 3, 4], dtype="Int64")}, index=[3, 4, 5, 6]),
     ],
 )
 def test_return_type_nullable_cumsum_cumprod(df_null):
@@ -171,13 +172,14 @@ def test_return_type_nullable_cumsum_cumprod(df_null):
         df2 = df.groupby("A")["B"].cumsum()
         return df2
 
-    check_func(impl1, (df_null,), sort_output=True, reset_index=True, check_dtype=False)
-    check_func(impl2, (df_null,), sort_output=True, reset_index=True, check_dtype=False)
+    check_func(impl1, (df_null,), sort_output=True, check_dtype=False)
+    check_func(impl2, (df_null,), sort_output=True, check_dtype=False)
 
 
 def test_all_null_keys():
     """
     Test Groupby when all rows have null keys (returns empty dataframe)
+    We use reset_index=True since the index is empty and so we have a type problem otherwise
     """
 
     def impl(df):
@@ -211,7 +213,7 @@ def test_agg():
 
     # check_dtype=False since Bodo returns float for Series.min/max. TODO: fix min/max
     check_func(
-        impl, (udf_in_df,), sort_output=True, reset_index=True, check_dtype=False
+        impl, (udf_in_df,), sort_output=True, check_dtype=False
     )
 
 
@@ -221,7 +223,7 @@ def test_sum_string():
         return A
 
     df1 = pd.DataFrame({"A": [1, 1, 1, 2], "B": ["a", "b", "c", "d"]})
-    check_func(impl, (df1,), sort_output=True, reset_index=True)
+    check_func(impl, (df1,), sort_output=True)
 
 
 def test_random_decimal_sum_min_max_last():
@@ -349,11 +351,11 @@ def test_random_string_sum_min_max_first_last():
         return pd.DataFrame({"A": eList_A, "B": eList_B})
 
     df1 = random_dataframe(100)
-    check_func(impl1, (df1,), sort_output=True, reset_index=True)
-    check_func(impl2, (df1,), sort_output=True, reset_index=True)
-    check_func(impl3, (df1,), sort_output=True, reset_index=True)
-    check_func(impl4, (df1,), sort_output=True, reset_index=True)
-    check_func(impl5, (df1,), sort_output=True, reset_index=True)
+    check_func(impl1, (df1,), sort_output=True)
+    check_func(impl2, (df1,), sort_output=True)
+    check_func(impl3, (df1,), sort_output=True)
+    check_func(impl4, (df1,), sort_output=True)
+    check_func(impl5, (df1,), sort_output=True)
 
 
 def test_groupby_missing_entry():
@@ -392,7 +394,7 @@ def test_agg_str_key():
     df = pd.DataFrame(
         {"A": ["AA", "B", "B", "B", "AA", "AA", "B"], "B": [-8, 2, 3, 1, 5, 6, 7],}
     )
-    check_func(impl, (df,), sort_output=True, reset_index=True)
+    check_func(impl, (df,), sort_output=True)
 
 
 def test_agg_series_input():
@@ -407,7 +409,7 @@ def test_agg_series_input():
 
     # check_dtype=False since Pandas returns float64 for count sometimes for some reason
     check_func(
-        impl, (udf_in_df,), sort_output=True, reset_index=True, check_dtype=False
+        impl, (udf_in_df,), sort_output=True, check_dtype=False
     )
 
 
@@ -420,7 +422,7 @@ def test_agg_bool_expr():
         return df.groupby("A")["B"].agg(lambda x: ((x == "A") | (x == "B")).sum())
 
     df = pd.DataFrame({"A": [1, 2, 1, 2] * 2, "B": ["A", "B", "C", "D"] * 2})
-    check_func(impl, (df,), sort_output=True, reset_index=True)
+    check_func(impl, (df,), sort_output=True)
 
 
 @pytest.mark.parametrize(
@@ -447,7 +449,8 @@ def test_agg_bool_expr():
                 "A": [np.nan, 1.0, np.nan, 1.0, 2.0, 2.0, 2.0],
                 "B": [1, 2, 3, 2, 1, 1, 1],
                 "C": [3, 5, 6, 5, 4, 4, 3],
-            }
+            },
+            index=["e", "r", "x", "u", "v", "w", "z"],
         ),
     ],
 )
@@ -470,21 +473,18 @@ def test_cumsum_index_preservation(df_index):
         test_impl_basic,
         (df_index,),
         sort_output=True,
-        reset_index=True,
         check_dtype=False,
     )
     check_func(
         test_impl_both,
         (df_index,),
         sort_output=True,
-        reset_index=True,
         check_dtype=False,
     )
     check_func(
         test_impl_all,
         (df_index,),
         sort_output=True,
-        reset_index=True,
         check_dtype=False,
     )
 
@@ -531,13 +531,15 @@ def test_cumsum_random_index():
         return pd.DataFrame({"A": eListA, "B": eListB}, index=eListC)
 
     random.seed(5)
-    df1 = get_random_dataframe_A(100)
-    df2 = get_random_dataframe_B(100)
-    df3 = get_random_dataframe_C(100)
+    n = 100
+    df1 = get_random_dataframe_A(n)
+    df2 = get_random_dataframe_B(n)
+    df3 = get_random_dataframe_C(n)
 
-    check_func(test_impl, (df1,), sort_output=True, reset_index=True, check_dtype=False)
-    check_func(test_impl, (df2,), sort_output=True, reset_index=True, check_dtype=False)
-    check_func(test_impl, (df3,), sort_output=True, reset_index=True, check_dtype=False)
+    # We have to reset the index for df1 since its index is trivial.
+    check_func(test_impl, (df1,), sort_output=True, check_dtype=False, reset_index=True)
+    check_func(test_impl, (df2,), sort_output=True, check_dtype=False)
+    check_func(test_impl, (df3,), sort_output=True, check_dtype=False)
 
 
 def test_sum_max_min_list_string_random():
@@ -693,8 +695,8 @@ def test_groupby_datetime_miss():
         test_impl2, (df1,), sort_output=True, check_dtype=False, reset_index=True
     )
     # TODO: solve the bug below. We should not need to have a reset_index=True
-    check_func(test_impl3, (df1,), sort_output=True, reset_index=True)
-    check_func(test_impl4, (df1,), sort_output=True, reset_index=True)
+    check_func(test_impl3, (df1,), sort_output=True)
+    check_func(test_impl4, (df1,), sort_output=True)
 
 
 def test_agg_as_index_fast():
@@ -783,7 +785,7 @@ def test_agg_select_col_fast():
         {"A": [2, 1, 1, 1, 2, 2, 1], "B": ["a", "b", "c", "c", "b", "c", "a"]}
     )
 
-    check_func(impl_str, (df_str,), sort_output=True, reset_index=True)
+    check_func(impl_str, (df_str,), sort_output=True)
 
 
 @pytest.mark.slow
@@ -809,12 +811,12 @@ def test_agg_select_col():
         {"A": [2, 1, 1, 1, 2, 2, 1], "B": ["a", "b", "c", "c", "b", "c", "a"]}
     )
     check_func(
-        impl_num, (df_int,), sort_output=True, reset_index=True, check_dtype=False
+        impl_num, (df_int,), sort_output=True, check_dtype=False
     )
     check_func(
-        impl_num, (df_float,), sort_output=True, reset_index=True, check_dtype=False
+        impl_num, (df_float,), sort_output=True, check_dtype=False
     )
-    check_func(test_impl, (11,), sort_output=True, reset_index=True, check_dtype=False)
+    check_func(test_impl, (11,), sort_output=True, check_dtype=False)
 
 
 def test_agg_no_parfor():
@@ -831,10 +833,10 @@ def test_agg_no_parfor():
         return A
 
     check_func(
-        impl1, (udf_in_df,), sort_output=True, reset_index=True, check_dtype=False
+        impl1, (udf_in_df,), sort_output=True, check_dtype=False
     )
     check_func(
-        impl2, (udf_in_df,), sort_output=True, reset_index=True, check_dtype=False
+        impl2, (udf_in_df,), sort_output=True, check_dtype=False
     )
 
 
@@ -848,7 +850,7 @@ def test_agg_len_mix():
         return A
 
     check_func(
-        impl, (udf_in_df,), sort_output=True, reset_index=True, check_dtype=False
+        impl, (udf_in_df,), sort_output=True, check_dtype=False
     )
 
 
@@ -883,12 +885,13 @@ def test_agg_multi_udf():
     def impl4(df):
         return df.groupby("A")["B"].agg(("cumprod", "cumsum"))
 
-    df = pd.DataFrame({"A": [2, 1, 1, 1, 2, 2, 1], "B": [1, 2, 3, 4, 5, 6, 7]})
-    check_func(impl, (df,), sort_output=True, reset_index=True)
-    check_func(impl2, (df,), sort_output=True, reset_index=True)
+    df = pd.DataFrame({"A": [2, 1, 1, 1, 2, 2, 1], "B": [1, 2, 3, 4, 5, 6, 7]}, index=[7, 8, 9, 2, 3, 4, 5])
+
+    check_func(impl, (df,), sort_output=True)
+    check_func(impl2, (df,), sort_output=True)
     # check_dtype=False since Bodo returns float for Series.min/max. TODO: fix min/max
-    check_func(impl3, (df,), sort_output=True, reset_index=True, check_dtype=False)
-    check_func(impl4, (df,), sort_output=True, reset_index=True)
+    check_func(impl3, (df,), sort_output=True, check_dtype=False)
+    check_func(impl4, (df,), sort_output=True)
 
 
 def test_aggregate():
@@ -908,7 +911,7 @@ def test_aggregate():
         }
     )
 
-    check_func(impl, (df,), sort_output=True, reset_index=True, check_dtype=False)
+    check_func(impl, (df,), sort_output=True, check_dtype=False)
 
 
 def test_aggregate_as_index():
@@ -958,15 +961,15 @@ def test_aggregate_select_col():
         {"A": [2, 1, 1, 1, 2, 2, 1], "B": ["a", "b", "c", "c", "b", "c", "a"]}
     )
     check_func(
-        impl_num, (df_int,), sort_output=True, reset_index=True, check_dtype=False
+        impl_num, (df_int,), sort_output=True, check_dtype=False
     )
     check_func(
-        impl_num, (df_float,), sort_output=True, reset_index=True, check_dtype=False
+        impl_num, (df_float,), sort_output=True, check_dtype=False
     )
     check_func(
-        impl_str, (df_str,), sort_output=True, reset_index=True, check_dtype=False
+        impl_str, (df_str,), sort_output=True, check_dtype=False
     )
-    check_func(test_impl, (11,), sort_output=True, reset_index=True, check_dtype=False)
+    check_func(test_impl, (11,), sort_output=True, check_dtype=False)
 
 
 def test_groupby_agg_const_dict():
@@ -1067,29 +1070,30 @@ def test_groupby_agg_const_dict():
             "D": ["AA", "B", "BB", "B", "AA", "AA", "B"],
             "B": [-8.1, 2.1, 3.1, 1.1, 5.1, 6.1, 7.1],
             "C": [3, 5, 6, 5, 4, 4, 3],
-        }
+        },
+        index = np.arange(10,17)
     )
-    check_func(impl, (df,), sort_output=True, reset_index=True)
-    check_func(impl2, (df,), sort_output=True, reset_index=True)
-    check_func(impl3, (df,), sort_output=True, reset_index=True)
-    check_func(impl4, (df,), sort_output=True, reset_index=True)
-    check_func(impl5, (df,), sort_output=True, reset_index=True)
-    check_func(impl6, (df,), sort_output=True, reset_index=True)
-    check_func(impl7, (df,), sort_output=True, reset_index=True)
+    check_func(impl, (df,), sort_output=True)
+    check_func(impl2, (df,), sort_output=True)
+    check_func(impl3, (df,), sort_output=True)
+    check_func(impl4, (df,), sort_output=True)
+    check_func(impl5, (df,), sort_output=True)
+    check_func(impl6, (df,), sort_output=True)
+    check_func(impl7, (df,), sort_output=True)
     check_func(impl8, (df,), sort_output=True, reset_index=True)
-    check_func(impl9, (df,), sort_output=True, reset_index=True)
-    check_func(impl10, (df,), sort_output=True, reset_index=True)
-    check_func(impl11, (df,), sort_output=True, reset_index=True)
-    check_func(impl12, (df,), sort_output=True, reset_index=True)
-    check_func(impl13, (df,), sort_output=True, reset_index=True)
-    check_func(impl14, (df,), sort_output=True, reset_index=True)
-    check_func(impl15, (df,), sort_output=True, reset_index=True)
+    check_func(impl9, (df,), sort_output=True)
+    check_func(impl10, (df,), sort_output=True)
+    check_func(impl11, (df,), sort_output=True)
+    check_func(impl12, (df,), sort_output=True)
+    check_func(impl13, (df,), sort_output=True)
+    check_func(impl14, (df,), sort_output=True)
+    check_func(impl15, (df,), sort_output=True)
     # can't use check_func since lambda name in MultiIndex doesn't match Pandas
     # TODO: fix lambda name
     # check_func(impl16, (df,), sort_output=True, reset_index=True)
     bodo.jit(impl16)(df)  # just check for compilation errors
     # TODO: enable is_out_distributed after fixing gatherv issue for tuple output
-    check_func(impl17, (df,), sort_output=True, reset_index=True, dist_test=False)
+    check_func(impl17, (df,), sort_output=True, dist_test=False)
 
 
 def g(x):
@@ -1110,7 +1114,7 @@ def test_agg_global_func():
         {"A": [2, 1, 1, 1, 2, 2, 1], "B": ["a", "b", "c", "c", "b", "c", "a"]}
     )
 
-    check_func(impl_str, (df_str,), sort_output=True, reset_index=True)
+    check_func(impl_str, (df_str,), sort_output=True)
 
 
 def test_count():
@@ -1151,11 +1155,11 @@ def test_count():
     df_dt = pd.DataFrame(
         {"A": [2, 1, 1, 1, 2, 2, 1], "B": pd.date_range("2019-1-3", "2019-1-9")}
     )
-    check_func(impl1, (df_int,), sort_output=True, reset_index=True)
-    check_func(impl1, (df_str,), sort_output=True, reset_index=True)
-    check_func(impl1, (df_bool,), sort_output=True, reset_index=True)
-    check_func(impl1, (df_dt,), sort_output=True, reset_index=True)
-    check_func(impl2, (11,), sort_output=True, reset_index=True)
+    check_func(impl1, (df_int,), sort_output=True)
+    check_func(impl1, (df_str,), sort_output=True)
+    check_func(impl1, (df_bool,), sort_output=True)
+    check_func(impl1, (df_dt,), sort_output=True)
+    check_func(impl2, (11,), sort_output=True)
 
 
 def test_count_select_col():
@@ -1197,11 +1201,11 @@ def test_count_select_col():
     df_dt = pd.DataFrame(
         {"A": [2, 1, 1, 1, 2, 2, 1], "B": pd.date_range("2019-1-3", "2019-1-9")}
     )
-    check_func(impl1, (df_int,), sort_output=True, reset_index=True)
-    check_func(impl1, (df_str,), sort_output=True, reset_index=True)
-    check_func(impl1, (df_bool,), sort_output=True, reset_index=True)
-    check_func(impl1, (df_dt,), sort_output=True, reset_index=True)
-    check_func(impl2, (11,), sort_output=True, reset_index=True)
+    check_func(impl1, (df_int,), sort_output=True)
+    check_func(impl1, (df_str,), sort_output=True)
+    check_func(impl1, (df_bool,), sort_output=True)
+    check_func(impl1, (df_dt,), sort_output=True)
+    check_func(impl2, (11,), sort_output=True)
 
 
 @pytest.mark.parametrize(
@@ -1221,7 +1225,7 @@ def test_median_simple(df_med):
         A = df.groupby("A")["B"].median()
         return A
 
-    check_func(impl1, (df_med,), sort_output=True, reset_index=True)
+    check_func(impl1, (df_med,), sort_output=True)
 
 
 def test_median_large_random_numpy():
@@ -1245,7 +1249,7 @@ def test_median_large_random_numpy():
     random.seed(5)
     nb = 100
     df1 = pd.DataFrame({"A": get_random_array(nb, 10), "B": get_random_array(nb, 100)})
-    check_func(impl1, (df1,), sort_output=True, reset_index=True)
+    check_func(impl1, (df1,), sort_output=True)
 
 
 def test_median_nullable_int_bool():
@@ -1259,7 +1263,7 @@ def test_median_nullable_int_bool():
 
     nullarr = pd.Series([1, 2, 3, 4, None, 1, 2], dtype="UInt16")
     df1 = pd.DataFrame({"A": [1, 1, 1, 1, 1, 2, 2], "B": nullarr})
-    check_func(impl1, (df1,), sort_output=True, reset_index=True)
+    check_func(impl1, (df1,), sort_output=True)
 
 
 @pytest.mark.parametrize(
@@ -1295,9 +1299,9 @@ def test_nunique_select_col(df_uniq):
         A = df.groupby("A")["B"].nunique(dropna=False)
         return A
 
-    check_func(impl1, (df_uniq,), sort_output=True, reset_index=True)
-    check_func(impl2, (df_uniq,), sort_output=True, reset_index=True)
-    check_func(impl3, (df_uniq,), sort_output=True, reset_index=True)
+    check_func(impl1, (df_uniq,), sort_output=True)
+    check_func(impl2, (df_uniq,), sort_output=True)
+    check_func(impl3, (df_uniq,), sort_output=True)
 
 
 def test_nunique_select_col_missing_keys():
@@ -1319,8 +1323,8 @@ def test_nunique_select_col_missing_keys():
             "B": ["ccc", np.nan, "bb", "aa", np.nan, "ggg", "rr"],
         }
     )
-    check_func(impl1, (df_int,), sort_output=True, reset_index=True)
-    check_func(impl1, (df_str,), sort_output=True, reset_index=True)
+    check_func(impl1, (df_int,), sort_output=True)
+    check_func(impl1, (df_str,), sort_output=True)
 
 
 def test_filtered_count():
@@ -1374,6 +1378,8 @@ def test_as_index_count():
 
 
 def test_single_col_reset_index(test_df):
+    """We need the reset_index=True because otherwise the order is scrambled
+    """
     def impl1(df):
         A = df.groupby("A")["B"].sum().reset_index()
         return A
@@ -1397,7 +1403,7 @@ def test_nonvar_column_names():
             "C: C": [2, 3, -1, 1, 2, 3, -1],
         }
     )
-    check_func(impl1, (df,), sort_output=True, reset_index=True)
+    check_func(impl1, (df,), sort_output=True)
 
 
 def test_cumsum_large_random_numpy():
@@ -1424,10 +1430,10 @@ def test_cumsum_large_random_numpy():
 
     random.seed(5)
     nb = 100
-    df1 = pd.DataFrame({"A": get_random_array(nb, 10), "B": get_random_array(nb, 100)})
-    check_func(impl1, (df1,), sort_output=True, reset_index=True)
-    check_func(impl2, (df1,), sort_output=True, reset_index=True)
-    check_func(impl3, (df1,), sort_output=True, reset_index=True)
+    df1 = pd.DataFrame({"A": get_random_array(nb, 10), "B": get_random_array(nb, 100)}, index = get_random_array(nb,100))
+    check_func(impl1, (df1,), sort_output=True)
+    check_func(impl2, (df1,), sort_output=True)
+    check_func(impl3, (df1,), sort_output=True)
 
 
 def test_cummin_cummax_large_random_numpy():
@@ -1477,6 +1483,7 @@ def test_cummin_cummax_large_random_numpy():
     random.seed(5)
     nb = 100
     df1 = pd.DataFrame({"A": get_random_array(nb, 10), "B": get_random_array(nb, 100)})
+    # Need reset_index as none is set on input.
     check_func(impl1, (df1,), sort_output=True, reset_index=True)
     check_func(impl2, (df1,), sort_output=True, reset_index=True)
     check_func(impl3, (df1,), sort_output=True, reset_index=True)
@@ -1496,8 +1503,8 @@ def test_groupby_cumsum_simple():
         df2 = df.groupby("A")["B"].cumsum()
         return df2
 
-    df1 = pd.DataFrame({"A": [1, 1, 1, 1, 1], "B": [1, 2, 3, 4, 5]})
-    check_func(impl, (df1,), sort_output=True, reset_index=True)
+    df1 = pd.DataFrame({"A": [1, 1, 1, 1, 1], "B": [1, 2, 3, 4, 5]}, index=np.arange(42,47))
+    check_func(impl, (df1,), sort_output=True)
 
 
 def test_groupby_cumprod_simple():
@@ -1509,8 +1516,8 @@ def test_groupby_cumprod_simple():
         df2 = df.groupby("A")["B"].cumprod()
         return df2
 
-    df1 = pd.DataFrame({"A": [1, 1, 1, 1, 1], "B": [1, 2, 3, 4, 5]})
-    check_func(impl, (df1,), sort_output=True, reset_index=True)
+    df1 = pd.DataFrame({"A": [1, 1, 1, 1, 1], "B": [1, 2, 3, 4, 5]}, index=np.arange(15,20))
+    check_func(impl, (df1,), sort_output=True)
 
 
 def test_groupby_cumsum():
@@ -1531,28 +1538,28 @@ def test_groupby_cumsum():
             "A": [0, 1, 3, 2, 1, 0, 4, 0, 2, 0],
             "B": [-8, np.nan, 3, 1, np.nan, 6, 7, 3, 1, 2],
             "C": [-8, 2, 3, 1, 5, 6, 7, 3, 1, 2],
-        }
+        }, index = np.arange(32,42)
     )
     df2 = pd.DataFrame(
         {
             "A": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
             "B": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
             "C": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
-        }
+        }, index = np.arange(42,52)
     )
     df3 = pd.DataFrame(
         {
             "A": [0.3, np.nan, 3.5, 0.2, np.nan, 3.3, 0.2, 0.3, 0.2, 0.2],
             "B": [-1.1, 1.1, 3.2, 1.1, 5.2, 6.8, 7.3, 3.4, 1.2, 2.4],
             "C": [-8.1, 2.3, 5.3, 1.1, 0.5, 4.6, 1.7, 4.3, -8.1, 5.3],
-        }
+        }, index = np.arange(52,62)
     )
-    check_func(impl1, (df1,), sort_output=True, reset_index=True)
-    check_func(impl1, (df2,), sort_output=True, reset_index=True)
-    check_func(impl1, (df3,), sort_output=True, reset_index=True)
-    check_func(impl2, (df1,), sort_output=True, reset_index=True)
-    check_func(impl2, (df2,), sort_output=True, reset_index=True)
-    check_func(impl2, (df3,), sort_output=True, reset_index=True)
+    check_func(impl1, (df1,), sort_output=True)
+    check_func(impl1, (df2,), sort_output=True)
+    check_func(impl1, (df3,), sort_output=True)
+    check_func(impl2, (df1,), sort_output=True)
+    check_func(impl2, (df2,), sort_output=True)
+    check_func(impl2, (df3,), sort_output=True)
 
 
 def test_groupby_multi_intlabels_cumsum_int():
@@ -1570,14 +1577,14 @@ def test_groupby_multi_intlabels_cumsum_int():
             "A": [2, 1, 1, 1, 2, 2, 1],
             "B": [-8, 1, -8, 1, 5, 1, 7],
             "C": [3, np.nan, 6, 5, 4, 4, 3],
-        }
+        }, index = np.arange(10,17)
     )
-    check_func(impl, (df,), sort_output=True, reset_index=True)
+    check_func(impl, (df,), sort_output=True)
 
 
 def test_groupby_multi_labels_cumsum_multi_cols():
     """
-    Test Groupby.cumsum() 
+    Test Groupby.cumsum()
     multiple labels for 'by', multiple cols to cumsum
     """
 
@@ -1591,9 +1598,9 @@ def test_groupby_multi_labels_cumsum_multi_cols():
             "B": [1, 2, 3, 2, 1, 1, 1],
             "C": [3, 5, 6, 5, 4, 4, 3],
             "D": [3.1, 1.1, 6.0, np.nan, 4.0, np.nan, 3],
-        }
+        }, index = np.arange(10,17)
     )
-    check_func(impl, (df,), sort_output=True, reset_index=True)
+    check_func(impl, (df,), sort_output=True)
 
 
 def test_groupby_as_index_cumsum():
@@ -1618,10 +1625,10 @@ def test_groupby_as_index_cumsum():
             "B": [1, 2, 3, 2, 1, 1, 1],
             "C": [3, np.nan, 6, 5, 4, 4, 3],
             "D": [3.1, 1.1, 6.0, np.nan, 4.0, np.nan, 3],
-        }
+        }, index=np.arange(10,17)
     )
-    check_func(impl1, (df,), sort_output=True, reset_index=True)
-    check_func(impl2, (df,), sort_output=True, reset_index=True)
+    check_func(impl1, (df,), sort_output=True)
+    check_func(impl2, (df,), sort_output=True)
 
 
 def test_cumsum_all_nulls_col():
@@ -1641,9 +1648,9 @@ def test_cumsum_all_nulls_col():
             "B": [1, 2, 3, 2, 1, 1, 1],
             "C": [3, 5, 6, 5, 4, 4, 3],
             "D": [np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan],
-        }
+        }, index=np.arange(10,17)
     )
-    check_func(impl, (df,), sort_output=True, reset_index=True)
+    check_func(impl, (df,), sort_output=True)
 
 
 def test_max(test_df):
@@ -1668,8 +1675,8 @@ def test_max(test_df):
         }
     )
 
-    check_func(impl1, (test_df,), sort_output=True, reset_index=True)
-    check_func(impl1, (df_bool,), sort_output=True, reset_index=True)
+    check_func(impl1, (test_df,), sort_output=True)
+    check_func(impl1, (df_bool,), sort_output=True)
     check_func(impl2, (11,))
 
 
@@ -1700,10 +1707,10 @@ def test_max_one_col(test_df):
     if pd.Int64Dtype() in test_df.dtypes.to_list():
         check_dtype = False
     check_func(
-        impl1, (test_df,), sort_output=True, reset_index=True, check_dtype=check_dtype
+        impl1, (test_df,), sort_output=True, check_dtype=check_dtype
     )
-    check_func(impl1, (df_bool,), sort_output=True, reset_index=True)
-    check_func(impl2, (11,))
+#    check_func(impl1, (df_bool,), sort_output=True)
+#    check_func(impl2, (11,))
 
 
 def test_groupby_as_index_max():
@@ -1761,8 +1768,8 @@ def test_mean(test_df):
         A = df.groupby("A").mean()
         return A
 
-    check_func(impl1, (test_df,), sort_output=True, reset_index=True, check_dtype=False)
-    check_func(impl2, (11,), sort_output=True, reset_index=True, check_dtype=False)
+    check_func(impl1, (test_df,), sort_output=True, check_dtype=False)
+    check_func(impl2, (11,), sort_output=True, check_dtype=False)
 
 
 def test_mean_one_col(test_df):
@@ -1779,8 +1786,8 @@ def test_mean_one_col(test_df):
         A = df.groupby("A")["B"].mean()
         return A
 
-    check_func(impl1, (test_df,), sort_output=True, reset_index=True, check_dtype=False)
-    check_func(impl2, (11,), sort_output=True, reset_index=True, check_dtype=False)
+    check_func(impl1, (test_df,), sort_output=True, check_dtype=False)
+    check_func(impl2, (11,), sort_output=True, check_dtype=False)
 
 
 def test_groupby_as_index_mean():
@@ -1825,9 +1832,9 @@ def test_min(test_df):
         }
     )
 
-    check_func(impl1, (test_df,), sort_output=True, reset_index=True)
-    check_func(impl1, (df_bool,), sort_output=True, reset_index=True)
-    check_func(impl2, (11,), sort_output=True, reset_index=True)
+    check_func(impl1, (test_df,), sort_output=True)
+    check_func(impl1, (df_bool,), sort_output=True)
+    check_func(impl2, (11,), sort_output=True)
 
 
 def test_min_one_col(test_df):
@@ -1857,10 +1864,10 @@ def test_min_one_col(test_df):
     if pd.Int64Dtype() in test_df.dtypes.to_list():
         check_dtype = False
     check_func(
-        impl1, (test_df,), sort_output=True, reset_index=True, check_dtype=check_dtype
+        impl1, (test_df,), sort_output=True, check_dtype=check_dtype
     )
-    check_func(impl1, (df_bool,), sort_output=True, reset_index=True)
-    check_func(impl2, (11,), sort_output=True, reset_index=True)
+    check_func(impl1, (df_bool,), sort_output=True)
+    check_func(impl2, (11,), sort_output=True)
 
 
 def test_groupby_as_index_min():
@@ -1929,9 +1936,9 @@ def test_prod(test_df):
         }
     )
 
-    check_func(impl1, (test_df,), sort_output=True, reset_index=True)
-    check_func(impl1, (df_bool,), sort_output=True, reset_index=True)
-    check_func(impl2, (11,), sort_output=True, reset_index=True)
+    check_func(impl1, (test_df,), sort_output=True)
+    check_func(impl1, (df_bool,), sort_output=True)
+    check_func(impl2, (11,), sort_output=True)
 
 
 def test_prod_one_col(test_df):
@@ -1961,10 +1968,10 @@ def test_prod_one_col(test_df):
     if pd.Int64Dtype() in test_df.dtypes.to_list():
         check_dtype = False
     check_func(
-        impl1, (test_df,), sort_output=True, reset_index=True, check_dtype=check_dtype
+        impl1, (test_df,), sort_output=True, check_dtype=check_dtype
     )
-    check_func(impl1, (df_bool,), sort_output=True, reset_index=True)
-    check_func(impl2, (11,), sort_output=True, reset_index=True)
+    check_func(impl1, (df_bool,), sort_output=True)
+    check_func(impl2, (11,), sort_output=True)
 
 
 def test_groupby_as_index_prod():
@@ -2027,16 +2034,16 @@ def test_first_last(test_df):
     df_dt = pd.DataFrame(
         {"A": [2, 1, 1, 1, 2, 2, 1], "B": pd.date_range("2019-1-3", "2019-1-9")}
     )
-    check_func(impl1, (test_df,), sort_output=True, reset_index=True)
-    check_func(impl1, (df_str,), sort_output=True, reset_index=True)
-    check_func(impl1, (df_bool,), sort_output=True, reset_index=True)
-    check_func(impl1, (df_dt,), sort_output=True, reset_index=True)
-    check_func(impl2, (11,), sort_output=True, reset_index=True)
-    check_func(impl3, (test_df,), sort_output=True, reset_index=True)
-    check_func(impl3, (df_str,), sort_output=True, reset_index=True)
-    check_func(impl3, (df_bool,), sort_output=True, reset_index=True)
-    check_func(impl3, (df_dt,), sort_output=True, reset_index=True)
-    check_func(impl4, (11,), sort_output=True, reset_index=True)
+    check_func(impl1, (test_df,), sort_output=True)
+    check_func(impl1, (df_str,), sort_output=True)
+    check_func(impl1, (df_bool,), sort_output=True)
+    check_func(impl1, (df_dt,), sort_output=True)
+    check_func(impl2, (11,), sort_output=True)
+    check_func(impl3, (test_df,), sort_output=True)
+    check_func(impl3, (df_str,), sort_output=True)
+    check_func(impl3, (df_bool,), sort_output=True)
+    check_func(impl3, (df_dt,), sort_output=True)
+    check_func(impl4, (11,), sort_output=True)
 
 
 def test_first_last_one_col(test_df):
@@ -2085,19 +2092,19 @@ def test_first_last_one_col(test_df):
     if pd.Int64Dtype() in test_df.dtypes.to_list():
         check_dtype = False
     check_func(
-        impl1, (test_df,), sort_output=True, reset_index=True, check_dtype=check_dtype
+        impl1, (test_df,), sort_output=True, check_dtype=check_dtype
     )
-    check_func(impl1, (df_str,), sort_output=True, reset_index=True)
-    check_func(impl1, (df_bool,), sort_output=True, reset_index=True)
-    check_func(impl1, (df_dt,), sort_output=True, reset_index=True)
-    check_func(impl2, (11,), sort_output=True, reset_index=True)
+    check_func(impl1, (df_str,), sort_output=True)
+    check_func(impl1, (df_bool,), sort_output=True)
+    check_func(impl1, (df_dt,), sort_output=True)
+    check_func(impl2, (11,), sort_output=True)
     check_func(
-        impl3, (test_df,), sort_output=True, reset_index=True, check_dtype=check_dtype
+        impl3, (test_df,), sort_output=True, check_dtype=check_dtype
     )
-    check_func(impl3, (df_str,), sort_output=True, reset_index=True)
-    check_func(impl3, (df_bool,), sort_output=True, reset_index=True)
-    check_func(impl3, (df_dt,), sort_output=True, reset_index=True)
-    check_func(impl4, (11,), sort_output=True, reset_index=True)
+    check_func(impl3, (df_str,), sort_output=True)
+    check_func(impl3, (df_bool,), sort_output=True)
+    check_func(impl3, (df_dt,), sort_output=True)
+    check_func(impl4, (11,), sort_output=True)
 
 
 def test_groupby_as_index_first_last():
@@ -2155,7 +2162,7 @@ def test_std(test_df_int_no_null):
         reset_index=True,
         check_dtype=False,
     )
-    check_func(impl2, (11,), sort_output=True, reset_index=True, check_dtype=False)
+    check_func(impl2, (11,), sort_output=True, check_dtype=False)
 
 
 def test_std_one_col(test_df):
@@ -2172,8 +2179,8 @@ def test_std_one_col(test_df):
         A = df.groupby("A")["B"].std()
         return A
 
-    check_func(impl1, (test_df,), sort_output=True, reset_index=True, check_dtype=False)
-    check_func(impl2, (11,), sort_output=True, reset_index=True, check_dtype=False)
+    check_func(impl1, (test_df,), sort_output=True, check_dtype=False)
+    check_func(impl2, (11,), sort_output=True, check_dtype=False)
 
 
 def test_groupby_as_index_std():
@@ -2210,8 +2217,8 @@ def test_sum(test_df):
         A = df.groupby("A").sum()
         return A
 
-    check_func(impl1, (test_df,), sort_output=True, reset_index=True)
-    check_func(impl2, (11,), sort_output=True, reset_index=True)
+    check_func(impl1, (test_df,), sort_output=True)
+    check_func(impl2, (11,), sort_output=True)
 
 
 def test_sum_one_col(test_df):
@@ -2228,8 +2235,8 @@ def test_sum_one_col(test_df):
         A = df.groupby("A")["B"].sum()
         return A
 
-    check_func(impl1, (test_df,), sort_output=True, reset_index=True)
-    check_func(impl2, (11,), sort_output=True, reset_index=True)
+    check_func(impl1, (test_df,), sort_output=True)
+    check_func(impl2, (11,), sort_output=True)
 
 
 def test_select_col_attr():
@@ -2248,7 +2255,7 @@ def test_select_col_attr():
             "C": [3, 5, 6, 5, 4, 4, 3],
         }
     )
-    check_func(impl, (df,), sort_output=True, reset_index=True)
+    check_func(impl, (df,), sort_output=True)
 
 
 def test_groupby_as_index_sum():
@@ -2288,7 +2295,7 @@ def test_groupby_multi_intlabels_sum():
             "C": [3, 5, 6, 5, 4, 4, 3],
         }
     )
-    check_func(impl, (df,), sort_output=True, reset_index=True)
+    check_func(impl, (df,), sort_output=True)
 
 
 def test_groupby_multi_key_to_index():
@@ -2357,8 +2364,8 @@ def test_groupby_multiselect_sum():
             "C": [3, 5, 6, 5, 4, 4, 3],
         }
     )
-    check_func(impl1, (df,), sort_output=True, reset_index=True)
-    check_func(impl2, (df,), sort_output=True, reset_index=True)
+    check_func(impl1, (df,), sort_output=True)
+    check_func(impl2, (df,), sort_output=True)
 
 
 def test_agg_multikey_parallel():
@@ -2398,8 +2405,8 @@ def test_var(test_df):
         A = df.groupby("A").var()
         return A
 
-    check_func(impl1, (test_df,), sort_output=True, reset_index=True, check_dtype=False)
-    check_func(impl2, (11,), sort_output=True, reset_index=True, check_dtype=False)
+    check_func(impl1, (test_df,), sort_output=True, check_dtype=False)
+    check_func(impl2, (11,), sort_output=True, check_dtype=False)
 
 
 def test_var_one_col(test_df):
@@ -2416,8 +2423,8 @@ def test_var_one_col(test_df):
         A = df.groupby("A")["B"].var()
         return A
 
-    check_func(impl1, (test_df,), sort_output=True, reset_index=True, check_dtype=False)
-    check_func(impl2, (11,), sort_output=True, reset_index=True, check_dtype=False)
+    check_func(impl1, (test_df,), sort_output=True, check_dtype=False)
+    check_func(impl2, (11,), sort_output=True, check_dtype=False)
 
 
 def test_groupby_as_index_var():
@@ -2465,9 +2472,10 @@ def test_const_list_inference():
         }
     )
 
-    check_func(impl1, (df,), sort_output=True, reset_index=True)
-    check_func(impl2, (df,), sort_output=True, reset_index=True)
-    check_func(impl3, (11,), sort_output=True, reset_index=True)
+    # Maybe we can avoid those reset_index=True
+    check_func(impl1, (df,), sort_output=True)
+    check_func(impl2, (df,), sort_output=True)
+    check_func(impl3, (11,), sort_output=True)
 
 
 # global key list for groupby() testing
@@ -2498,8 +2506,8 @@ def test_global_list():
         }
     )
 
-    check_func(impl1, (df,), sort_output=True, reset_index=True)
-    check_func(impl2, (df,), sort_output=True, reset_index=True)
+    check_func(impl1, (df,), sort_output=True)
+    check_func(impl2, (df,), sort_output=True)
 
 
 def test_literal_args():
@@ -2527,10 +2535,10 @@ def test_literal_args():
         }
     )
 
-    check_func(impl1, (df, ["A", "B"]), sort_output=True, reset_index=True)
+    check_func(impl1, (df, ["A", "B"]), sort_output=True)
     check_func(impl2, (df, "A", False), sort_output=True, reset_index=True)
-    check_func(impl2, (df, ["A", "B"], True), sort_output=True, reset_index=True)
-    check_func(impl3, (df, ["A"], True), sort_output=True, reset_index=True)
+    check_func(impl2, (df, ["A", "B"], True), sort_output=True)
+    check_func(impl3, (df, ["A"], True), sort_output=True)
 
 
 def test_schema_change():
@@ -2556,8 +2564,8 @@ def test_schema_change():
         }
     )
 
-    check_func(impl1, (df,), sort_output=True, reset_index=True)
-    check_func(impl2, (df,), sort_output=True, reset_index=True)
+    check_func(impl1, (df,), sort_output=True)
+    check_func(impl2, (df,), sort_output=True)
 
 
 # ------------------------------ pivot, crosstab ------------------------------ #

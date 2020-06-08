@@ -316,6 +316,23 @@ def _test_equal_guard(
     return passed
 
 
+# We need to sort the index and values for effective comparison
+def sort_series_values_index(S):
+    S1 = S.sort_index()
+    # pandas fails if all null integer column is sorted
+    if S1.isnull().all():
+        return S1
+    return S1.sort_values(kind='mergesort')
+
+def sort_dataframe_values_index(df):
+    if isinstance(df.index, pd.MultiIndex):
+        list_col_names = df.columns.to_list() + [x for x in df.index.names]
+        return df.sort_values(list_col_names, kind="mergesort")
+    eName = "index123"
+    list_col_names = df.columns.to_list() + [eName]
+    return df.rename_axis(eName).sort_values(list_col_names, kind="mergesort")
+
+
 def _test_equal(
     bodo_out,
     py_out,
@@ -327,10 +344,8 @@ def _test_equal(
 
     if isinstance(py_out, pd.Series):
         if sort_output:
-            # pandas fails if all null integer column is sorted
-            if not py_out.isnull().all():
-                py_out.sort_values(inplace=True)
-                bodo_out.sort_values(inplace=True)
+            py_out = sort_series_values_index(py_out)
+            bodo_out = sort_series_values_index(bodo_out)
         if reset_index:
             py_out.reset_index(inplace=True, drop=True)
             bodo_out.reset_index(inplace=True, drop=True)
@@ -348,8 +363,8 @@ def _test_equal(
         pd.testing.assert_index_equal(bodo_out, py_out, check_names=check_names)
     elif isinstance(py_out, pd.DataFrame):
         if sort_output:
-            py_out.sort_values(py_out.columns.to_list(), inplace=True)
-            bodo_out.sort_values(bodo_out.columns.to_list(), inplace=True)
+            py_out = sort_dataframe_values_index(py_out)
+            bodo_out = sort_dataframe_values_index(bodo_out)
         if reset_index:
             py_out.reset_index(inplace=True, drop=True)
             bodo_out.reset_index(inplace=True, drop=True)
@@ -621,10 +636,9 @@ def check_parallel_coherency(
     parall_output_final = bodo.gatherv(parall_output_proc)
 
     # Doing the sorting. Mandatory here
-    list_col = serial_output_final.columns.to_list()
     if sort_output:
-        serial_output_final.sort_values(list_col, inplace=True)
-        parall_output_final.sort_values(list_col, inplace=True)
+        serial_output_final = sort_dataframe_values_index(serial_output_final)
+        parall_output_final = sort_dataframe_values_index(parall_output_final)
 
     # reset_index if asked.
     if reset_index:
@@ -662,9 +676,8 @@ def check_func_type_extent(
     result_mapped_A = test_func(*tuple_args_mapped)
     result_mapped_B = convert_list_string_decimal_columns(bodo_func(*tuple_args))
     if sort_output:
-        list_col_names = result_mapped_A.columns.to_list()
-        result_mapped_A.sort_values(by=list_col_names, inplace=True)
-        result_mapped_B.sort_values(by=list_col_names, inplace=True)
+        result_mapped_A = sort_dataframe_values_index(result_mapped_A)
+        result_mapped_B = sort_dataframe_values_index(result_mapped_B)
     if reset_index:
         result_mapped_A.reset_index(drop=True, inplace=True)
         result_mapped_B.reset_index(drop=True, inplace=True)

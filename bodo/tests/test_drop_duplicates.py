@@ -38,7 +38,7 @@ def test_df_drop_duplicates(test_df):
     def impl(df):
         return df.drop_duplicates()
 
-    check_func(impl, (test_df,), sort_output=True, reset_index=True)
+    check_func(impl, (test_df,), sort_output=True)
 
 
 def test_drop_duplicates_1col():
@@ -51,7 +51,7 @@ def test_drop_duplicates_1col():
         return df2
 
     df1 = pd.DataFrame({"A": [3, 3, 3, 1, 4]})
-    check_func(test_impl, (df1,), sort_output=True, reset_index=True)
+    check_func(test_impl, (df1,), sort_output=True)
 
 
 def test_drop_duplicates_2col():
@@ -64,7 +64,7 @@ def test_drop_duplicates_2col():
         return df2
 
     df1 = pd.DataFrame({"A": [3, 3, 3, 1, 4], "B": [1, 2, 2, 5, 5]})
-    check_func(test_impl, (df1,), sort_output=True, reset_index=True)
+    check_func(test_impl, (df1,), sort_output=True)
 
 
 def test_drop_duplicates_2col_int_string():
@@ -77,7 +77,7 @@ def test_drop_duplicates_2col_int_string():
         return df2
 
     df1 = pd.DataFrame({"A": [3, 3, 3, 3, 4], "B": ["bar", "baz", "bar", "baz", "bar"]})
-    check_func(test_impl, (df1,), sort_output=True, reset_index=True)
+    check_func(test_impl, (df1,), sort_output=True)
 
 
 @pytest.mark.parametrize("n, len_siz", [(100, 10), (30, 3)])
@@ -107,7 +107,7 @@ def test_drop_duplicates_2col_random_nullable_int(n, len_siz):
 
     random.seed(5)
     df1 = get_random_dataframe(n, len_siz)
-    check_func(test_impl, (df1,), sort_output=True, reset_index=True)
+    check_func(test_impl, (df1,), sort_output=True)
 
 
 def test_list_string_array_type_specific():
@@ -124,9 +124,7 @@ def test_list_string_array_type_specific():
     df2_target = pd.DataFrame(
         {"A": [["AB"], ["A", "B", "C"], ["D", "E"], ["AB", "CD"], ["D", "F"]]}
     )
-    check_func(
-        test_impl, (df1,), sort_output=True, reset_index=True, py_output=df2_target
-    )
+    check_func_type_extent(test_impl, (df1,), sort_output=True)
 
 
 def test_list_string_array_type_random():
@@ -151,7 +149,7 @@ def test_list_string_array_type_random():
 
     n = 50
     df1 = pd.DataFrame({"A": rand_col_l_str(n)})
-    check_func_type_extent(test_impl, (df1,), sort_output=True, reset_index=True)
+    check_func_type_extent(test_impl, (df1,), sort_output=True)
 
 
 def test_drop_duplicates_2col_int_numpynan_bool():
@@ -173,7 +171,7 @@ def test_drop_duplicates_2col_int_numpynan_bool():
         df1 = pd.DataFrame({"A": e_list_a, "B": e_list_b})
         return df1
 
-    check_func(test_impl, (get_array(150),), sort_output=True, reset_index=True)
+    check_func(test_impl, (get_array(150),), sort_output=True)
 
 
 def test_drop_duplicates_1col_nullable_int():
@@ -195,7 +193,7 @@ def test_drop_duplicates_1col_nullable_int():
         df1 = pd.DataFrame({"A": e_list})
         return df1
 
-    check_func(test_impl, (get_array(150),), sort_output=True, reset_index=True)
+    check_func(test_impl, (get_array(150),), sort_output=True)
 
 
 def test_drop_duplicates_2col_int_np_float():
@@ -210,7 +208,7 @@ def test_drop_duplicates_2col_int_np_float():
     df1 = pd.DataFrame(
         {"A": [3, 3, 3, 3, 4], "B": np.array([1, 2, 1, 2, 17], np.float)}
     )
-    check_func(test_impl, (df1,), sort_output=True, reset_index=True)
+    check_func(test_impl, (df1,), sort_output=True)
 
 
 def test_drop_duplicates_2col_int_np_int():
@@ -223,7 +221,7 @@ def test_drop_duplicates_2col_int_np_int():
         return df2
 
     df1 = pd.DataFrame({"A": [3, 3, 3, 3, 4], "B": np.array([1, 2, 1, 2, 17], np.int)})
-    check_func(test_impl, (df1,), sort_output=True, reset_index=True)
+    check_func(test_impl, (df1,), sort_output=True)
 
 
 def test_drop_duplicates_2col_int_np_int_index():
@@ -239,7 +237,7 @@ def test_drop_duplicates_2col_int_np_int_index():
         {"A": [3, 3, 3, 3, 4], "B": np.array([1, 2, 1, 2, 17], np.int)},
         index=[0, 1, 2, 3, 4],
     )
-    check_func(test_impl, (df1,), sort_output=True, reset_index=True)
+    check_func(test_impl, (df1,), sort_output=True)
 
 
 def test_drop_duplicatee_large_size():
@@ -263,8 +261,8 @@ def test_drop_duplicatee_large_size():
         df1 = pd.DataFrame({"A": e_list_a, "B": e_list_b})
         return df1
 
-    check_func(test_impl, (get_df(396),), sort_output=True, reset_index=True)
-    check_func(test_impl, (get_df(11111),), sort_output=True, reset_index=True)
+    check_func(test_impl, (get_df(396),), sort_output=True)
+    check_func(test_impl, (get_df(11111),), sort_output=True)
 
 
 #
