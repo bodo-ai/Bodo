@@ -60,14 +60,14 @@ jobs:
       pip install pytest pytest-azurepipelines pytest-cov codecov
       if [[ "$NP" -eq 1 ]]; then
         if [[ "${{ parameters.name }}" == "Linux" ]]; then
-          python run_tests.py "$NP" -s -v -m "$(PYTEST_MARKER)" --cov-report= --cov=./ bodo/tests/
+          python bodo/runtests.py "$NP" -s -v -m "$(PYTEST_MARKER)" --cov-report= --cov=./ bodo/tests/
         else
-          python run_tests.py "$NP" -s -v -m "$(PYTEST_MARKER) and s3" bodo/tests/
-          python run_tests.py "$NP" -s -v -m "$(PYTEST_MARKER) and not s3" bodo/tests/
+          python bodo/runtests.py "$NP" -s -v -m "$(PYTEST_MARKER) and s3" bodo/tests/
+          python bodo/runtests.py "$NP" -s -v -m "$(PYTEST_MARKER) and not s3" bodo/tests/
         fi
       else
-        python run_tests.py "$NP" -s -v -m "$(PYTEST_MARKER) and s3" bodo/tests/
-        python run_tests.py "$NP" -s -v -m "$(PYTEST_MARKER) and not s3" bodo/tests/
+        python bodo/runtests.py "$NP" -s -v -m "$(PYTEST_MARKER) and s3" bodo/tests/
+        python bodo/runtests.py "$NP" -s -v -m "$(PYTEST_MARKER) and not s3" bodo/tests/
       fi
     displayName: 'Test'
 

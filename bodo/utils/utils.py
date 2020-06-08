@@ -160,6 +160,7 @@ def is_alloc_callname(func_name, mod_name):
             func_name == "alloc_decimal_array"
             and mod_name == "bodo.libs.decimal_arr_ext"
         )
+        or (func_name == "gen_na_array" and mod_name == "bodo.libs.array_kernels")
     )
 
 

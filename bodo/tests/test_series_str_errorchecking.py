@@ -235,7 +235,7 @@ def test_get_input(input):
     def impl(input):
         return input.str.get(1)
 
-    with pytest.raises(BodoError, match="only supports input type of"):
+    with pytest.raises(BodoError, match="input should be a series of string or list string or string view"):
         bodo.jit(impl)(input)
 
 
@@ -511,7 +511,7 @@ def test_join_input(input):
     def impl(input):
         return input.str.join("-")
 
-    with pytest.raises(BodoError, match="only supports input type of"):
+    with pytest.raises(BodoError, match="input should be a series of string or list string or string view"):
         bodo.jit(impl)(input)
 
 
@@ -529,3 +529,11 @@ def test_join_sep(input):
     with pytest.raises(BodoError, match="expected a string object"):
         bodo.jit(impl)(input)
 
+
+def test_center_errorcheck():
+    def f(S):
+        return S.str.center(3)
+
+    S = pd.Series(pd.date_range(start="1/1/2018", periods=5, freq="3ms"))
+    with pytest.raises(BodoError, match="input should be a series of string"):
+        bodo.jit(f)(S)

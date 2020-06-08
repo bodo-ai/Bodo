@@ -324,7 +324,7 @@ def pre_alloc_list_item_array(typingctx, num_lists_typ, num_values_typ, dtype_ty
 
 
 def pre_alloc_list_item_array_equiv(
-    self, scope, equiv_set, args, kws
+    self, scope, equiv_set, loc, args, kws
 ):  # pragma: no cover
     """Array analysis function for pre_alloc_list_item_array() passed to Numba's array
     analysis extension. Assigns output array's size as equivalent to the input size

@@ -67,7 +67,7 @@ def pytest_collection_modifyitems(items):
     # BODO_TEST_PYTEST_MOD environment variable indicates that we only want
     # to run the tests from the given test file. In this case, we add the
     # "single_mod" mark to the tests belonging to that module. This envvar is
-    # set in run_tests.py, which also adds the "-m single_mod" to the pytest
+    # set in runtests.py, which also adds the "-m single_mod" to the pytest
     # command (thus ensuring that only those tests run)
     module_to_run = os.environ.get("BODO_TEST_PYTEST_MOD", None)
     if module_to_run is not None:

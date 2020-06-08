@@ -84,10 +84,11 @@ jobs:
       source activate $CONDA_ENV
       pip install pytest pytest-azurepipelines
       cd $HOME/bodo-inc
+      cp `python -c "import bodo; print(bodo.__file__[:-11])"`pytest.ini .
       if [[ "$NP" -eq 3 ]] && [[ "${{ parameters.name }}" == "Linux" ]]; then
-        python run_tests.py "$NP" --pyargs bodo -s -v -m "$(PYTEST_MARKER)"
+        python -m bodo.runtests "$NP" --pyargs bodo -s -v -m "$(PYTEST_MARKER)"
       else
-        python run_tests.py "$NP" --pyargs bodo -s -v -m "$(PYTEST_MARKER) and firsthalf"
-        python run_tests.py "$NP" --pyargs bodo -s -v -m "$(PYTEST_MARKER) and not firsthalf"
+        python -m bodo.runtests "$NP" --pyargs bodo -s -v -m "$(PYTEST_MARKER) and firsthalf"
+        python -m bodo.runtests "$NP" --pyargs bodo -s -v -m "$(PYTEST_MARKER) and not firsthalf"
       fi
     displayName: 'Test Bodo'

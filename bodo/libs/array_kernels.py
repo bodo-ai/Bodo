@@ -15,6 +15,7 @@ from numba.core.typing.templates import infer_global, AbstractTemplate
 from numba.core.imputils import lower_builtin
 from numba.np.arrayobj import make_array
 from numba.np.numpy_support import as_dtype
+from numba.parfors.array_analysis import ArrayAnalysis
 
 import bodo
 from bodo.utils.utils import numba_to_c_type, unliteral_all
@@ -530,6 +531,165 @@ def concat(arr_list):  # pragma: no cover
 def concat_overload(arr_list):
     # all string input case
     # TODO: handle numerics to string casting case
+
+    if isinstance(arr_list, types.UniTuple) and isinstance(
+        arr_list.dtype, ListItemArrayType
+    ):
+
+        def list_item_concat_impl(arr_list):  # pragma: no cover
+            # preallocate the output
+            num_lists = 0
+            num_items = 0
+            for A in arr_list:
+                n_lists = len(A)
+                in_offsets = bodo.libs.list_item_arr_ext.get_offsets(A)
+                n_items = in_offsets[n_lists]
+                num_lists += n_lists
+                num_items += n_items
+            dtype = bodo.libs.list_item_arr_ext.get_data(arr_list[0]).dtype
+            out_arr = bodo.libs.list_item_arr_ext.pre_alloc_list_item_array(
+                num_lists, num_items, dtype
+            )
+            out_offsets = bodo.libs.list_item_arr_ext.get_offsets(out_arr)
+            out_data = bodo.libs.list_item_arr_ext.get_data(out_arr)
+            out_null_bitmap = bodo.libs.list_item_arr_ext.get_null_bitmap(out_arr)
+            # copy data to output
+            curr_list = 0
+            curr_item = 0
+            for A in arr_list:
+                in_offsets = bodo.libs.list_item_arr_ext.get_offsets(A)
+                in_data = bodo.libs.list_item_arr_ext.get_data(A)
+                in_null_bitmap = bodo.libs.list_item_arr_ext.get_null_bitmap(A)
+                n_lists = len(A)
+                n_items = in_offsets[n_lists]
+                # copying of index
+                for i in range(n_lists):
+                    out_offsets[i + curr_list] = in_offsets[i] + curr_item
+                    bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(in_null_bitmap, i)
+                    bodo.libs.int_arr_ext.set_bit_to_arr(
+                        out_null_bitmap, i + curr_list, bit
+                    )
+                for i in range(n_items):
+                    out_data[i + curr_item] = in_data[i]
+                # shifting indexes
+                curr_list += n_lists
+                curr_item += n_items
+            out_offsets[curr_list] = curr_item
+            return out_arr
+
+        return list_item_concat_impl
+
+    if (
+        isinstance(arr_list, types.UniTuple)
+        and arr_list.dtype == datetime_date_array_type
+    ):
+
+        def datetime_date_array_concat_impl(arr_list):  # pragma: no cover
+            tot_len = 0
+            for A in arr_list:
+                tot_len += len(A)
+            Aret = bodo.hiframes.datetime_date_ext.alloc_datetime_date_array(tot_len)
+            curr_pos = 0
+            for A in arr_list:
+                for i in range(len(A)):
+                    Aret._data[i + curr_pos] = A._data[i]
+                    bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(A._null_bitmap, i)
+                    bodo.libs.int_arr_ext.set_bit_to_arr(
+                        Aret._null_bitmap, i + curr_pos, bit
+                    )
+                curr_pos += len(A)
+
+            return Aret
+
+        return datetime_date_array_concat_impl
+
+    if isinstance(arr_list, types.UniTuple) and isinstance(
+        arr_list.dtype, DecimalArrayType
+    ):
+        precision = arr_list.dtype.precision
+        scale = arr_list.dtype.scale
+
+        def decimal_array_concat_impl(arr_list):  # pragma: no cover
+            tot_len = 0
+            for A in arr_list:
+                tot_len += len(A)
+            Aret = bodo.libs.decimal_arr_ext.alloc_decimal_array(
+                tot_len, precision, scale
+            )
+            curr_pos = 0
+            for A in arr_list:
+                for i in range(len(A)):
+                    Aret._data[i + curr_pos] = A._data[i]
+                    bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(A._null_bitmap, i)
+                    bodo.libs.int_arr_ext.set_bit_to_arr(
+                        Aret._null_bitmap, i + curr_pos, bit
+                    )
+                curr_pos += len(A)
+
+            return Aret
+
+        return decimal_array_concat_impl
+
+    if (
+        isinstance(arr_list, types.UniTuple)
+        and arr_list.dtype == list_string_array_type
+    ):
+
+        def list_string_array_concat_impl(arr_list):  # pragma: no cover
+            # preallocate the output
+            num_lists = 0
+            num_strs = 0
+            num_chars = 0
+            for A in arr_list:
+                arr = A
+                n_list = len(arr)
+                n_str = arr._index_offsets[
+                    n_list
+                ]  # We use here that the first index is 0
+                n_char = arr._data_offsets[n_str]
+                num_lists += n_list
+                num_strs += n_str
+                num_chars += n_char
+            out_arr = bodo.libs.list_str_arr_ext.pre_alloc_list_string_array(
+                num_lists, num_strs, num_chars
+            )
+            curr_lists = 0
+            curr_strs = 0
+            curr_chars = 0
+            for A in arr_list:
+                n_list = len(A)
+                n_str = A._index_offsets[n_list]
+                n_char = A._data_offsets[n_str]
+                # adjusting the indexes
+                for i in range(n_list):
+                    out_arr._index_offsets[curr_lists + i] = (
+                        A._index_offsets[i] + curr_strs
+                    )
+                    bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(A._null_bitmap, i)
+                    bodo.libs.int_arr_ext.set_bit_to_arr(
+                        out_arr._null_bitmap, i + curr_lists, bit
+                    )
+                for i in range(n_str):
+                    out_arr._data_offsets[curr_strs + i] = (
+                        A._data_offsets[i] + curr_chars
+                    )
+                # Copying the characters
+                in_ptr = bodo.hiframes.split_impl.get_c_arr_ptr(A._data, 0)
+                out_ptr = bodo.hiframes.split_impl.get_c_arr_ptr(
+                    out_arr._data, curr_chars
+                )
+                bodo.libs.str_arr_ext._memcpy(out_ptr, in_ptr, n_char, 1)
+                # Updating the shifts
+                curr_lists += n_list
+                curr_strs += n_str
+                curr_chars += n_char
+
+            out_arr._index_offsets[num_lists] = num_strs
+            out_arr. _data_offsets[num_strs] = num_chars
+            return out_arr
+
+        return list_string_array_concat_impl
+
     if isinstance(arr_list, types.UniTuple) and arr_list.dtype == string_array_type:
 
         def string_concat_impl(arr_list):  # pragma: no cover
@@ -571,11 +731,49 @@ def concat_overload(arr_list):
             bodo.libs.int_arr_ext.concat_bitmap_tup(arr_list),
         )
 
+    # arrays of int/float mix need conversion to all-float before concat
+    if (
+        isinstance(arr_list, types.BaseTuple)
+        and any(
+            isinstance(t, (types.Array, IntegerArrayType))
+            and isinstance(t.dtype, types.Integer)
+            for t in arr_list.types
+        )
+        and any(
+            isinstance(t, types.Array) and isinstance(t.dtype, types.Float)
+            for t in arr_list.types
+        )
+    ):
+        return lambda arr_list: np.concatenate(astype_float_tup(arr_list))
+
     for typ in arr_list:
         if not isinstance(typ, types.Array):
-            raise ValueError("concat supports only numerical and string arrays")
+            raise BodoError("concat supports only numerical and string arrays")
     # numerical input
     return lambda arr_list: np.concatenate(arr_list)
+
+
+def astype_float_tup(arr_tup):
+    return tuple(t.astype(np.float64) for t in arr_tup)
+
+
+@overload(astype_float_tup, no_unliteral=True)
+def overload_astype_float_tup(arr_tup):
+    """converts a tuple of arrays to float arrays using array.astype(np.float64)
+    """
+    assert isinstance(arr_tup, types.BaseTuple)
+    count = len(arr_tup.types)
+
+    func_text = "def f(arr_tup):\n"
+    func_text += "  return ({}{})\n".format(
+        ",".join("arr_tup[{}].astype(np.float64)".format(i) for i in range(count)),
+        "," if count == 1 else "",
+    )  # single value needs comma to become tuple
+
+    loc_vars = {}
+    exec(func_text, {"np": np}, loc_vars)
+    astype_impl = loc_vars["f"]
+    return astype_impl
 
 
 def nunique(A):  # pragma: no cover
@@ -657,6 +855,80 @@ def overload_gen_na_array(n, arr):
     else:
         dtype = arr.dtype
 
+    if isinstance(arr, ListItemArrayType):
+
+        def list_item_impl(n, arr):  # pragma: no cover
+            # preallocate the output
+            num_lists = n
+            num_items = 0
+            in_data = bodo.libs.list_item_arr_ext.get_data(arr)
+            dtype = in_data.dtype
+            out_arr = bodo.libs.list_item_arr_ext.pre_alloc_list_item_array(
+                num_lists, num_items, dtype
+            )
+            out_offsets = bodo.libs.list_item_arr_ext.get_offsets(out_arr)
+            out_data = bodo.libs.list_item_arr_ext.get_data(out_arr)
+            out_null_bitmap = bodo.libs.list_item_arr_ext.get_null_bitmap(out_arr)
+            for i in range(n + 1):
+                out_offsets[i] = 0
+            for i in range(n):
+                bodo.libs.int_arr_ext.set_bit_to_arr(out_null_bitmap, i, 0)
+            return out_arr
+
+        return list_item_impl
+
+    if arr == datetime_date_array_type:
+
+        def impl_datetime_date(n, arr):  # pragma: no cover
+            A = bodo.hiframes.datetime_date_ext.alloc_datetime_date_array(n)
+            for i in range(n):
+                bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, i, 0)
+            return A
+
+        return impl_datetime_date
+
+    if arr == boolean_array:
+
+        def impl_boolean(n, arr):  # pragma: no cover
+            A = bodo.libs.bool_arr_ext.alloc_bool_array(n)
+            for i in range(n):
+                bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, i, 0)
+            return A
+
+        return impl_boolean
+
+    if isinstance(arr, DecimalArrayType):
+        precision = arr.dtype.precision
+        scale = arr.dtype.scale
+
+        def impl_decimal(n, arr):  # pragma: no cover
+            A = bodo.libs.decimal_arr_ext.alloc_decimal_array(n, precision, scale)
+            for i in range(n):
+                bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, i, 0)
+            return A
+
+        return impl_decimal
+
+    if arr == list_string_array_type:
+
+        def impl_list_string(n, arr):  # pragma: no cover
+            # preallocate the output
+            num_lists = n
+            num_strs = 0
+            num_chars = 0
+            out_arr = bodo.libs.list_str_arr_ext.pre_alloc_list_string_array(
+                num_lists, num_strs, num_chars
+            )
+
+            for i in numba.parfors.parfor.internal_prange(n):
+                out_arr._index_offsets[i] = 0
+                bit = 0
+                bodo.libs.int_arr_ext.set_bit_to_arr(out_arr._null_bitmap, i, bit)
+
+            return out_arr
+
+        return impl_list_string
+
     # array of np.nan values if 'arr' is float or int Numpy array
     # TODO: use nullable int array
     if isinstance(dtype, (types.Integer, types.Float)):
@@ -704,6 +976,18 @@ def overload_gen_na_array(n, arr):
             arr
         )
     )  # pragma: no cover
+
+
+def gen_na_array_equiv(self, scope, equiv_set, loc, args, kws):  # pragma: no cover
+    """Array analysis function for gen_na_array() passed to Numba's array
+    analysis extension. Assigns output array's size as equivalent to the input size
+    variable.
+    """
+    assert not kws
+    return args[0], []
+
+
+ArrayAnalysis._analyze_op_call_bodo_libs_array_kernels_gen_na_array = gen_na_array_equiv
 
 
 # np.arange implementation is copied from parfor.py and range length
