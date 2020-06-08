@@ -170,8 +170,10 @@ def common_validate_padding(func_name, width, fillchar):
 
 
 @overload_attribute(SeriesType, "str")
-def overload_series_str(s):
-    return lambda s: bodo.hiframes.series_str_impl.init_series_str_method(s)
+def overload_series_str(S):
+    if not isinstance(S, SeriesType) or not S.data in (string_array_type, string_array_split_view_type, list_string_array_type):
+        raise BodoError("Series.str(): input should be a series of string or list string or string view")
+    return lambda S: bodo.hiframes.series_str_impl.init_series_str_method(S)
 
 
 @overload_method(SeriesStrMethodType, "len", inline="always", no_unliteral=True)
@@ -1125,13 +1127,7 @@ def create_str2bool_methods_overload(func_name):
         loc_vars = {}
         # print(func_text)
         exec(
-            func_text,
-            {
-                "bodo": bodo,
-                "numba": numba,
-                "np": np,
-            },
-            loc_vars,
+            func_text, {"bodo": bodo, "numba": numba, "np": np,}, loc_vars,
         )
         f = loc_vars["f"]
         return f
