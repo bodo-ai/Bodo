@@ -237,9 +237,6 @@ make_attribute_wrapper(DataFrameType, "parent", "_parent")
 class DataFrameAttribute(AttributeTemplate):
     key = DataFrameType
 
-    def resolve_shape(self, ary):
-        return types.UniTuple(types.intp, 2)
-
     @bound_function("df.apply")
     def resolve_apply(self, df, args, kws):
         kws = dict(kws)
@@ -280,17 +277,21 @@ class DataFrameAttribute(AttributeTemplate):
             return SeriesType(arr_typ.dtype, arr_typ, df.index, string_type)
 
         # level selection in multi-level df
-        if isinstance(df.columns[0], tuple):
+        if len(df.columns) > 0 and isinstance(df.columns[0], tuple):
             new_names = []
             new_data = []
+            # make sure attr is actually in the levels, not something like df.shape
+            level_found = False
             for i, v in enumerate(df.columns):
                 if v[0] != attr:
                     continue
+                level_found = True
                 # output names are str in 2 level case, not tuple
                 # TODO: test more than 2 levels
                 new_names.append(v[1] if len(v) == 2 else v[1:])
                 new_data.append(df.data[i])
-            return DataFrameType(tuple(new_data), df.index, tuple(new_names))
+            if level_found:
+                return DataFrameType(tuple(new_data), df.index, tuple(new_names))
 
 
 # don't convert literal types to non-literal and rerun the typing template

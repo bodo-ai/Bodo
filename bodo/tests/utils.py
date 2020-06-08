@@ -10,6 +10,7 @@ from decimal import Decimal
 from numba.core.untyped_passes import PreserveIR
 from numba.core.typed_passes import NopythonRewrites
 import bodo
+from numba.core import types
 from bodo.utils.typing import BodoWarning
 import warnings
 import time
@@ -521,10 +522,12 @@ def convert_list_string_decimal_columns(df):
     # Determine which columns have list of strings in them
     # Determine which columns have Decimals in them.
     col_names_list_string = []
+    col_names_list_item = []
     col_names_decimal = []
     for e_col_name in list_col:
         e_col = df[e_col_name]
         nb_list_string = 0
+        nb_list_item = 0
         nb_decimal = 0
         for i_row in range(n_rows):
             e_ent = e_col.iat[i_row]
@@ -532,10 +535,14 @@ def convert_list_string_decimal_columns(df):
                 if len(e_ent) > 0:
                     if isinstance(e_ent[0], str):
                         nb_list_string += 1
+                    if isinstance(e_ent[0], (int, float)):
+                        nb_list_item += 1
             if isinstance(e_ent, Decimal):
                 nb_decimal += 1
         if nb_list_string > 0:
             col_names_list_string.append(e_col_name)
+        if nb_list_item > 0:
+            col_names_list_item.append(e_col_name)
         if nb_decimal > 0:
             col_names_decimal.append(e_col_name)
     for e_col_name in col_names_list_string:
@@ -545,6 +552,17 @@ def convert_list_string_decimal_columns(df):
             e_ent = e_col.iat[i_row]
             if isinstance(e_ent, list):
                 e_str = ",".join(e_ent) + ","
+                e_list_str.append(e_str)
+            else:
+                e_list_str.append(np.nan)
+        df_copy[e_col_name] = e_list_str
+    for e_col_name in col_names_list_item:
+        e_list_str = []
+        e_col = df[e_col_name]
+        for i_row in range(n_rows):
+            e_ent = e_col.iat[i_row]
+            if isinstance(e_ent, list):
+                e_str = ",".join([str(x) for x in e_ent]) + ","
                 e_list_str.append(e_str)
             else:
                 e_list_str.append(np.nan)

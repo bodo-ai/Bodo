@@ -19,6 +19,7 @@ from bodo.tests.utils import (
     dist_IR_contains,
     get_start_end,
     check_func,
+    check_func_type_extent,
     is_bool_object_series,
     _get_dist_arg,
 )
@@ -184,11 +185,57 @@ def test_series_constructor_int_arr():
         ),
         pd.Series([["a", "bc"], ["a"], ["aaa", "b", "cc"], None, ["xx", "yy"]]),
         pd.Series([[1, 2], [3], [5, 4, 6], None, [-1, 3, 4]]),
-        # TODO: timedelta
     ]
 )
 def series_val(request):
     return request.param
+
+
+def test_series_concat(series_val):
+    """test of concatenation of series.
+    We convert to dataframe in order to reset the index.
+    """
+    def f(S1, S2):
+        return pd.concat([S1, S2])
+
+    S1 = series_val.copy()
+    S2 = series_val.copy()
+    df1 = pd.DataFrame({"A": S1.values})
+    df2 = pd.DataFrame({"A": S2.values})
+    if isinstance(series_val.values[0], list):
+        check_func_type_extent(f, (df1, df2), sort_output=True, reset_index=True)
+    else:
+        check_func(f, (df1, df2), sort_output=True, reset_index=True)
+
+#   The code that we want to have.
+#    bodo_f = bodo.jit(f)
+#    pd.testing.assert_series_equal(
+#        bodo_f(S1, S2), f(S1, S2), check_dtype=False, check_index_type=False
+#    )
+#    check_func(f, (S1, S2), reset_index=True)
+
+
+def test_dataframe_concat(series_val):
+    """This is actually a dataframe test that adds empty
+    column when missing
+    """
+    # Pandas converts Integer arrays to int object arrays when adding an all NaN
+    # chunk, which we cannot handle in our parallel testing.
+    if isinstance(series_val.dtype, pd.core.arrays.integer._IntegerDtype):
+        return
+
+    def f(S1, S2):
+        return pd.concat([S1, S2])
+
+    S1 = series_val.copy()
+    S2 = series_val.copy()
+    df1 = pd.DataFrame({"A": S1.values})
+    df2 = pd.DataFrame({"B": S2.values})
+    if isinstance(series_val.values[0], list):
+        check_func_type_extent(f, (df1, df2), sort_output=True, reset_index=True)
+    else:
+        check_func(f, (df1, df2), sort_output=True, reset_index=True)
+
 
 
 # TODO: timedelta, period, tuple, etc.
