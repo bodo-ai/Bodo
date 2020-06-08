@@ -592,59 +592,59 @@ class DataframeGroupByAttribute(AttributeTemplate):
         validate_udf("agg", func)
         return self._get_agg_typ(grp, args, "agg", func)
 
-    @bound_function("groupby.agg")
+    @bound_function("groupby.agg", no_unliteral=True)
     def resolve_agg(self, grp, args, kws):
         return self._resolve_agg(grp, args, kws)
 
-    @bound_function("groupby.aggregate")
+    @bound_function("groupby.aggregate", no_unliteral=True)
     def resolve_aggregate(self, grp, args, kws):
         return self._resolve_agg(grp, args, kws)
 
-    @bound_function("groupby.sum")
+    @bound_function("groupby.sum", no_unliteral=True)
     def resolve_sum(self, grp, args, kws):
         return self._get_agg_typ(grp, args, "sum")
 
-    @bound_function("groupby.count")
+    @bound_function("groupby.count", no_unliteral=True)
     def resolve_count(self, grp, args, kws):
         return self._get_agg_typ(grp, args, "count")
 
-    @bound_function("groupby.nunique")
+    @bound_function("groupby.nunique", no_unliteral=True)
     def resolve_nunique(self, grp, args, kws):
         return self._get_agg_typ(grp, args, "nunique")
 
-    @bound_function("groupby.median")
+    @bound_function("groupby.median", no_unliteral=True)
     def resolve_median(self, grp, args, kws):
         return self._get_agg_typ(grp, args, "median")
 
-    @bound_function("groupby.mean")
+    @bound_function("groupby.mean", no_unliteral=True)
     def resolve_mean(self, grp, args, kws):
         return self._get_agg_typ(grp, args, "mean")
 
-    @bound_function("groupby.min")
+    @bound_function("groupby.min", no_unliteral=True)
     def resolve_min(self, grp, args, kws):
         return self._get_agg_typ(grp, args, "min")
 
-    @bound_function("groupby.max")
+    @bound_function("groupby.max", no_unliteral=True)
     def resolve_max(self, grp, args, kws):
         return self._get_agg_typ(grp, args, "max")
 
-    @bound_function("groupby.prod")
+    @bound_function("groupby.prod", no_unliteral=True)
     def resolve_prod(self, grp, args, kws):
         return self._get_agg_typ(grp, args, "prod")
 
-    @bound_function("groupby.var")
+    @bound_function("groupby.var", no_unliteral=True)
     def resolve_var(self, grp, args, kws):
         return self._get_agg_typ(grp, args, "var")
 
-    @bound_function("groupby.std")
+    @bound_function("groupby.std", no_unliteral=True)
     def resolve_std(self, grp, args, kws):
         return self._get_agg_typ(grp, args, "std")
 
-    @bound_function("groupby.first")
+    @bound_function("groupby.first", no_unliteral=True)
     def resolve_first(self, grp, args, kws):
         return self._get_agg_typ(grp, args, "first")
 
-    @bound_function("groupby.last")
+    @bound_function("groupby.last", no_unliteral=True)
     def resolve_last(self, grp, args, kws):
         return self._get_agg_typ(grp, args, "last")
 
@@ -678,22 +678,22 @@ class DataframeGroupByAttribute(AttributeTemplate):
             )
         return signature(out_res, *args)
 
-    @bound_function("groupby.cumsum")
+    @bound_function("groupby.cumsum", no_unliteral=True)
     def resolve_cumsum(self, grp, args, kws):
         msg = "Groupby.cumsum() only supports columns of types integer, float, string or liststring"
         return self.resolve_cumulative(grp, args, kws, msg, False)
 
-    @bound_function("groupby.cumprod")
+    @bound_function("groupby.cumprod", no_unliteral=True)
     def resolve_cumprod(self, grp, args, kws):
         msg = "Groupby.cumprod() only supports columns of types integer and float"
         return self.resolve_cumulative(grp, args, kws, msg, False)
 
-    @bound_function("groupby.cummin")
+    @bound_function("groupby.cummin", no_unliteral=True)
     def resolve_cummin(self, grp, args, kws):
         msg = "Groupby.cummin() only supports columns of types integer, float, string, liststring, date, datetime or timedelta"
         return self.resolve_cumulative(grp, args, kws, msg, True)
 
-    @bound_function("groupby.cummax")
+    @bound_function("groupby.cummax", no_unliteral=True)
     def resolve_cummax(self, grp, args, kws):
         msg = "Groupby.cummax() only supports columns of types integer, float, string, liststring, date, datetime or timedelta"
         return self.resolve_cumulative(grp, args, kws, msg, True)

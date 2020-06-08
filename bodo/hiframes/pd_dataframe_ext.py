@@ -237,7 +237,7 @@ make_attribute_wrapper(DataFrameType, "parent", "_parent")
 class DataFrameAttribute(AttributeTemplate):
     key = DataFrameType
 
-    @bound_function("df.apply")
+    @bound_function("df.apply", no_unliteral=True)
     def resolve_apply(self, df, args, kws):
         kws = dict(kws)
         func = args[0] if len(args) > 0 else kws.get("func", None)
