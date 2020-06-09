@@ -539,51 +539,18 @@ class DataFramePass:
         return [assign]
 
     def _run_call_dataframe_apply(self, assign, lhs, rhs, df_var):
+        """generate IR nodes for df.apply() with UDFs
+        """
         df_typ = self.typemap[df_var.name]
         # get apply function
         kws = dict(rhs.kws)
         func_var = get_call_expr_arg("apply", rhs.args, kws, 0, "func")
         func = get_overload_const_func(self.typemap[func_var.name])
-        # TODO: get globals directly from passed lambda if possible?
-        _globals = self.func_ir.func_id.func.__globals__
-        lambda_ir = compile_to_numba_ir(func, _globals)
 
-        # find columns that are actually used if possible
-        used_cols = []
-        l_topo_order = find_topo_order(lambda_ir.blocks)
-        first_stmt = lambda_ir.blocks[l_topo_order[0]].body[0]
-        assert isinstance(first_stmt, ir.Assign) and isinstance(
-            first_stmt.value, ir.Arg
-        )
-        arg_var = first_stmt.target
-        use_all_cols = False
-        for bl in lambda_ir.blocks.values():
-            for stmt in bl.body:
-                vnames = [v.name for v in stmt.list_vars()]
-                if arg_var.name in vnames:
-                    if isinstance(stmt, ir.Assign) and isinstance(stmt.value, ir.Arg):
-                        continue
-                    if (
-                        isinstance(stmt, ir.Assign)
-                        and isinstance(stmt.value, ir.Expr)
-                        and stmt.value.op == "getattr"
-                    ):
-                        assert stmt.value.attr in df_typ.columns
-                        used_cols.append(stmt.value.attr)
-                    else:
-                        # argument is used in some other form
-                        # be conservative and use all cols
-                        use_all_cols = True
-                        used_cols = df_typ.columns
-                        break
+        # find which columns are actually used if possible
+        used_cols = _get_df_apply_used_cols(func, df_typ.columns)
 
-            if use_all_cols:
-                break
-
-        # remove duplicates with set() since a column can be used multiple times
-        used_cols = sorted(set(used_cols))
         Row = namedtuple(sanitize_varname(df_var.name), used_cols)
-        # TODO: handle non numpy alloc types
         # prange func to inline
         col_name_args = ", ".join(["c" + str(i) for i in range(len(used_cols))])
         row_args = ", ".join(
@@ -2407,6 +2374,49 @@ def _gen_init_df(columns, index=None):
     _init_df = loc_vars["_init_df"]
 
     return _init_df
+
+
+def _get_df_apply_used_cols(func, columns):
+    """find which df columns are actually used in UDF 'func' inside df.apply(func) if
+    possible (has to be conservative and assume all columns are used when it cannot
+    analyze the IR properly)
+    """
+    lambda_ir = numba.core.compiler.run_frontend(func)
+
+    used_cols = []
+    l_topo_order = find_topo_order(lambda_ir.blocks)
+    first_stmt = lambda_ir.blocks[l_topo_order[0]].body[0]
+    assert isinstance(first_stmt, ir.Assign) and isinstance(
+        first_stmt.value, ir.Arg
+    )
+    arg_var = first_stmt.target
+    use_all_cols = False
+    for bl in lambda_ir.blocks.values():
+        for stmt in bl.body:
+            vnames = [v.name for v in stmt.list_vars()]
+            if arg_var.name in vnames:
+                if isinstance(stmt, ir.Assign) and isinstance(stmt.value, ir.Arg):
+                    continue
+                if (
+                    isinstance(stmt, ir.Assign)
+                    and isinstance(stmt.value, ir.Expr)
+                    and stmt.value.op == "getattr"
+                ):
+                    assert stmt.value.attr in columns
+                    used_cols.append(stmt.value.attr)
+                else:
+                    # argument is used in some other form
+                    # be conservative and use all cols
+                    use_all_cols = True
+                    used_cols = columns
+                    break
+
+        if use_all_cols:
+            break
+
+    # remove duplicates with set() since a column can be used multiple times
+    used_cols = sorted(set(used_cols))
+    return used_cols
 
 
 def _eval_const_var(func_ir, var):
