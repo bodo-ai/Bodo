@@ -81,6 +81,7 @@ from bodo.hiframes import series_kernels
 from bodo.hiframes.datetime_date_ext import datetime_date_array_type
 from bodo.hiframes.datetime_timedelta_ext import datetime_timedelta_type
 from bodo.hiframes.datetime_datetime_ext import datetime_datetime_type
+from bodo.libs.list_item_arr_ext import ListItemArrayType
 from bodo.hiframes.split_impl import (
     string_array_split_view_type,
     StringArraySplitViewType,
@@ -1420,23 +1421,31 @@ class SeriesPass:
             return self._handle_np_full(assign, lhs, rhs)
 
         if fdef == ("alloc_type", "bodo.utils.utils"):
+            impl = bodo.utils.utils.overload_alloc_type(
+                *tuple(self.typemap[v.name] for v in rhs.args)
+            )
+            # create new functions for cases that need dtype since 'dtype' becomes a
+            # freevar in overload and doesn't work properly currently.
+            # TODO: fix freevar support
             typ = self.typemap[rhs.args[1].name].instance_type
-            if typ.dtype == bodo.hiframes.datetime_date_ext.datetime_date_type:
-                impl = lambda n, t: bodo.hiframes.datetime_date_ext.alloc_datetime_date_array(
-                    n
-                )  # pragma: no cover
-            elif isinstance(typ, IntegerArrayType):
-                impl = lambda n, t: bodo.libs.int_arr_ext.alloc_int_array(
+            dtype = None
+            # nullable int array
+            if isinstance(typ, IntegerArrayType):
+                dtype = typ.dtype
+                impl = lambda n, t, s=None: bodo.libs.int_arr_ext.alloc_int_array(
                     n, _dtype
                 )  # pragma: no cover
-            elif typ == boolean_array:
-                impl = lambda n, t: bodo.libs.bool_arr_ext.alloc_bool_array(
-                    n
+            elif isinstance(typ, types.Array):
+                dtype = typ.dtype
+                impl = lambda n, t, s=None: np.empty(n, _dtype)  # pragma: no cover
+            elif isinstance(typ, ListItemArrayType):
+                dtype = typ.elem_type
+                impl = lambda n, t, s=None: bodo.libs.list_item_arr_ext.pre_alloc_list_item_array(
+                    n, s[0], _dtype
                 )  # pragma: no cover
-            else:
-                impl = lambda n, t: np.empty(n, _dtype)  # pragma: no cover
+
             return compile_func_single_block(
-                impl, rhs.args, assign.target, self, extra_globals={"_dtype": typ.dtype}
+                impl, rhs.args, assign.target, self, extra_globals={"_dtype": dtype}
             )
 
         if isinstance(func_mod, ir.Var) and is_series_type(self.typemap[func_mod.name]):

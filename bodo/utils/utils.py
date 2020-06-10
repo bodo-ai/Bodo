@@ -34,7 +34,7 @@ from bodo.libs.str_arr_ext import (
 )
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.bool_arr_ext import boolean_array
-from bodo.utils.typing import NOT_CONSTANT
+from bodo.utils.typing import NOT_CONSTANT, is_overload_none
 from enum import Enum
 
 
@@ -630,23 +630,44 @@ def tuple_to_scalar(n):
     return lambda n: n  # pragma: no cover
 
 
-def alloc_type(n, t):  # pragma: no cover
+def alloc_type(n, t, s=None):  # pragma: no cover
     return np.empty(n, t.dtype)
 
 
 @overload(alloc_type, no_unliteral=True)
-def overload_alloc_type(n, t):
+def overload_alloc_type(n, t, s=None):
+    """Allocate an array with type 't'. 'n' is length of the array. 's' is a tuple for
+    arrays with variable size elements (e.g. strings), providing the number of elements
+    needed for allocation.
+    """
     typ = t.instance_type if isinstance(t, types.TypeRef) else t
+    assert bodo.utils.transform.is_var_size_item_array_type(typ) or is_overload_none(s)
+    # TODO: decimal arrays
+
+    if typ == string_array_type:
+        return lambda n, t, s=None: bodo.libs.str_arr_ext.pre_alloc_string_array(
+            n, s[0]
+        )  # pragma: no cover
+
+    if typ == list_string_array_type:
+        return lambda n, t, s=None: bodo.libs.list_str_arr_ext.pre_alloc_list_string_array(
+            n, s[0], s[1]
+        )  # pragma: no cover
+
+    if isinstance(typ, bodo.libs.list_item_arr_ext.ListItemArrayType):
+        dtype = typ.elem_type
+        return lambda n, t, s=None: bodo.libs.list_item_arr_ext.pre_alloc_list_item_array(
+            n, s[0], dtype
+        )  # pragma: no cover
 
     if isinstance(typ, bodo.hiframes.pd_categorical_ext.CategoricalArray):
-        from bodo.hiframes.pd_categorical_ext import init_categorical_array
 
-        return lambda n, t: init_categorical_array(
+        return lambda n, t, s=None: bodo.hiframes.pd_categorical_ext.init_categorical_array(
             np.empty(n, t._codes.dtype), t.dtype
         )  # pragma: no cover
 
     if typ.dtype == bodo.hiframes.datetime_date_ext.datetime_date_type:
-        return lambda n, t: bodo.hiframes.datetime_date_ext.alloc_datetime_date_array(
+        return lambda n, t, s=None: bodo.hiframes.datetime_date_ext.alloc_datetime_date_array(
             n
         )  # pragma: no cover
 
@@ -654,21 +675,17 @@ def overload_alloc_type(n, t):
 
     # nullable int array
     if isinstance(typ, IntegerArrayType):
-        return lambda n, t: bodo.libs.int_arr_ext.init_integer_array(
-            np.empty(n, dtype),
-            # XXX using full since nulls are not supported in shuffle keys
-            np.full((tuple_to_scalar(n) + 7) >> 3, 255, np.uint8),
+        return lambda n, t, s=None: bodo.libs.int_arr_ext.alloc_int_array(
+            n, dtype
         )  # pragma: no cover
 
     # nullable bool array
     if typ == boolean_array:
-        return lambda n, t: bodo.libs.bool_arr_ext.init_bool_array(
-            np.empty(n, np.bool_),
-            # XXX using full since nulls are not supported in shuffle keys
-            np.full((tuple_to_scalar(n) + 7) >> 3, 255, np.uint8),
+        return lambda n, t, s=None: bodo.libs.bool_arr_ext.alloc_bool_array(
+            n
         )  # pragma: no cover
 
-    return lambda n, t: np.empty(n, dtype)  # pragma: no cover
+    return lambda n, t, s=None: np.empty(n, dtype)  # pragma: no cover
 
 
 def full_type(n, val, t):  # pragma: no cover
