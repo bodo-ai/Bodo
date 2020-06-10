@@ -1225,11 +1225,15 @@ def str_arr_set_na(typingctx, str_arr_typ, ind_typ=None):
 @intrinsic
 def str_arr_set_not_na(typingctx, str_arr_typ, ind_typ=None):
     # None default to make IntelliSense happy
-    assert is_str_arr_typ(str_arr_typ)
+    assert str_arr_typ in (string_array_type, list_string_array_type)
 
     def codegen(context, builder, sig, args):
         in_str_arr, ind = args
-        payload = _get_string_arr_payload(context, builder, in_str_arr)
+        if str_arr_typ == string_array_type:
+            payload = _get_string_arr_payload(context, builder, in_str_arr)
+        else:
+            # TODO: refactor list_string_array_type case
+            payload = context.make_helper(builder, str_arr_typ, in_str_arr)
 
         # bits[i / 8] |= kBitmask[i % 8];
         byte_ind = builder.lshr(ind, lir.Constant(lir.IntType(64), 3))
@@ -1249,7 +1253,7 @@ def str_arr_set_not_na(typingctx, str_arr_typ, ind_typ=None):
         builder.store(builder.or_(byte, mask), byte_ptr)
         return context.get_dummy_value()
 
-    return types.void(string_array_type, types.intp), codegen
+    return types.void(str_arr_typ, types.intp), codegen
 
 
 @intrinsic
