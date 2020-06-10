@@ -33,6 +33,7 @@ from bodo.libs.str_arr_ext import (
     get_utf8_size,
 )
 from bodo.libs.int_arr_ext import IntegerArrayType
+from bodo.libs.decimal_arr_ext import DecimalArrayType
 from bodo.libs.bool_arr_ext import boolean_array
 from bodo.utils.typing import NOT_CONSTANT, is_overload_none
 from enum import Enum
@@ -669,6 +670,13 @@ def overload_alloc_type(n, t, s=None):
     if typ.dtype == bodo.hiframes.datetime_date_ext.datetime_date_type:
         return lambda n, t, s=None: bodo.hiframes.datetime_date_ext.alloc_datetime_date_array(
             n
+        )  # pragma: no cover
+
+    if isinstance(typ, DecimalArrayType):
+        precision = typ.dtype.precision
+        scale = typ.dtype.scale
+        return lambda n, t, s=None: bodo.libs.decimal_arr_ext.alloc_decimal_array(
+            n, precision, scale
         )  # pragma: no cover
 
     dtype = numba.np.numpy_support.as_dtype(typ.dtype)

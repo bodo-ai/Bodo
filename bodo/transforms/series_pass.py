@@ -81,6 +81,7 @@ from bodo.hiframes import series_kernels
 from bodo.hiframes.datetime_date_ext import datetime_date_array_type
 from bodo.hiframes.datetime_timedelta_ext import datetime_timedelta_type
 from bodo.hiframes.datetime_datetime_ext import datetime_datetime_type
+from bodo.libs.decimal_arr_ext import DecimalArrayType
 from bodo.libs.list_item_arr_ext import ListItemArrayType
 from bodo.hiframes.split_impl import (
     string_array_split_view_type,
@@ -1446,6 +1447,18 @@ class SeriesPass:
                 impl = lambda n, t, s=None: bodo.libs.list_item_arr_ext.pre_alloc_list_item_array(
                     n, s[0], _dtype
                 )  # pragma: no cover
+            elif isinstance(typ, DecimalArrayType):
+                precision = typ.dtype.precision
+                scale = typ.dtype.scale
+                return compile_func_single_block(
+                    lambda n, t, s=None: bodo.libs.decimal_arr_ext.alloc_decimal_array(
+                        n, _precision, _scale
+                    ),
+                    rhs.args,
+                    assign.target,
+                    self,
+                    extra_globals={"_precision": precision, "_scale": scale},
+                )
 
             return compile_func_single_block(
                 impl, rhs.args, assign.target, self, extra_globals={"_dtype": dtype}

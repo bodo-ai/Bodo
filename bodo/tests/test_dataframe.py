@@ -4,6 +4,7 @@ import sys
 import pandas as pd
 import numpy as np
 import datetime
+from decimal import Decimal
 import pytest
 
 import numba
@@ -1400,6 +1401,31 @@ def test_df_apply_timestamp():
 
     df = pd.DataFrame(
         {"A": pd.date_range(start="2018-04-24", end="2019-04-29", periods=5)}
+    )
+    check_func(test_impl, (df,))
+
+
+def test_df_apply_decimal():
+    """make sure Decimal output can be handled in apply() properly
+    """
+    # just returning input value since we don't support any Decimal creation yet
+    # TODO: support Decimal(str) constructor
+    # TODO: fix using freevar constants in UDFs
+    def test_impl(df):
+        return df.apply(lambda r: r.A, axis=1)
+
+    df = pd.DataFrame(
+        {
+            "A": [
+                Decimal("1.6"),
+                Decimal("-0.222"),
+                Decimal("1111.316"),
+                Decimal("1234.00046"),
+                Decimal("5.1"),
+                Decimal("-11131.0056"),
+                Decimal("0.0"),
+            ]
+        }
     )
     check_func(test_impl, (df,))
 
