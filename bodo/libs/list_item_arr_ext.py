@@ -34,7 +34,7 @@ from numba.extending import (
 from numba.parfors.array_analysis import ArrayAnalysis
 from numba.core.imputils import impl_ret_borrowed
 
-from bodo.utils.typing import is_list_like_index_type
+from bodo.utils.typing import is_list_like_index_type, BodoError
 from llvmlite import ir as lir
 import llvmlite.binding as ll
 
@@ -307,7 +307,7 @@ def pre_alloc_list_item_array(typingctx, num_lists_typ, num_values_typ, dtype_ty
     assert (
         isinstance(num_lists_typ, types.Integer)
         and isinstance(num_values_typ, types.Integer)
-        and isinstance(dtype_typ, types.DType)
+        and isinstance(dtype_typ, (types.DType, types.NumberClass))
     )
     list_item_type = ListItemArrayType(dtype_typ.dtype)
 
@@ -531,6 +531,36 @@ def list_item_arr_getitem_array(arr, ind):
             return arr[arr_ind]
 
         return impl_slice
+
+
+@overload(operator.setitem)
+def list_item_arr_setitem(A, idx, val):
+    if not isinstance(A, ListItemArrayType):
+        return
+
+    # scalar case
+    # NOTE: assuming that the array is being built and all previous elements are set
+    # TODO: make sure array is being build
+    if isinstance(types.unliteral(idx), types.Integer):
+        assert isinstance(val, types.List)  # TODO: raise proper error
+
+        def impl_scalar(A, idx, val):  # pragma: no cover
+            offsets = get_offsets(A)
+            data = get_data(A)
+            null_bitmap = get_null_bitmap(A)
+            if idx == 0:
+                offsets[0] = 0
+
+            n_items = len(val)
+            offsets[idx + 1] = offsets[idx] + n_items
+            data[offsets[idx] : offsets[idx + 1]] = val
+            bodo.libs.int_arr_ext.set_bit_to_arr(null_bitmap, idx, 1)
+
+        return impl_scalar
+
+    raise BodoError(
+        "only setitem with scalar index is currently supported for list arrays"
+    )  # pragma: no cover
 
 
 @overload_method(ListItemArrayType, "copy", no_unliteral=True)
