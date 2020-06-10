@@ -1437,6 +1437,9 @@ class SeriesPass:
                 )  # pragma: no cover
             elif isinstance(typ, types.Array):
                 dtype = typ.dtype
+                # avoid dt64 errors in np.empty, TODO: fix Numba
+                if dtype == types.NPDatetime("ns"):
+                    dtype = np.dtype("datetime64[ns]")
                 impl = lambda n, t, s=None: np.empty(n, _dtype)  # pragma: no cover
             elif isinstance(typ, ListItemArrayType):
                 dtype = typ.elem_type

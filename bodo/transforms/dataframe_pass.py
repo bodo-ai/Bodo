@@ -591,7 +591,9 @@ class DataFramePass:
         func_text += "  for i in numba.parfors.parfor.internal_prange(n):\n"
         # TODO: unbox to array value if necessary (e.g. Timestamp to dt64)
         func_text += "     row = Row({})\n".format(row_args)
-        func_text += "     S[i] = map_func(row)\n"
+        func_text += (
+            "     S[i] = bodo.utils.conversion.unbox_if_timestamp(map_func(row))\n"
+        )
         func_text += (
             "  return bodo.hiframes.pd_series_ext.init_series(S, df_index, None)\n"
         )

@@ -3,6 +3,7 @@ import unittest
 import sys
 import pandas as pd
 import numpy as np
+import datetime
 import pytest
 
 import numba
@@ -1382,6 +1383,20 @@ def test_df_apply_date():
 
     def test_impl(df):
         return df.apply(lambda r: r.A.date(), axis=1)
+
+    df = pd.DataFrame(
+        {"A": pd.date_range(start="2018-04-24", end="2019-04-29", periods=5)}
+    )
+    check_func(test_impl, (df,))
+
+
+def test_df_apply_timestamp():
+    """make sure Timestamp (converted to datetime64) output can be handled in apply()
+    properly
+    """
+
+    def test_impl(df):
+        return df.apply(lambda r: r.A + datetime.timedelta(days=1), axis=1)
 
     df = pd.DataFrame(
         {"A": pd.date_range(start="2018-04-24", end="2019-04-29", periods=5)}
