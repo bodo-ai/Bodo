@@ -61,6 +61,9 @@ from bodo.utils.transform import (
     gen_const_tup,
     ReplaceFunc,
     replace_func,
+    is_var_size_item_array_type,
+    gen_init_varsize_alloc_sizes,
+    gen_varsize_item_sizes,
 )
 from bodo.utils.utils import gen_getitem
 from bodo.libs.str_arr_ext import (
@@ -546,6 +549,8 @@ class DataFramePass:
         kws = dict(rhs.kws)
         func_var = get_call_expr_arg("apply", rhs.args, kws, 0, "func")
         func = get_overload_const_func(self.typemap[func_var.name])
+        out_typ = self.typemap[lhs.name]
+        out_arr_type = out_typ.data
 
         # find which columns are actually used if possible
         used_cols = _get_df_apply_used_cols(func, df_typ.columns)
@@ -561,20 +566,30 @@ class DataFramePass:
         )
 
         func_text = "def f({}, df_index):\n".format(col_name_args)
+        func_text += "  numba.parfors.parfor.init_prange()\n"
+        func_text += "  n = len(c0)\n"
 
-        if self.typemap[lhs.name].data == string_array_type:
+        # an extra loop is currently necessary to get alloc sizes for arrays with
+        # variable size items, e.g. strings
+        # TODO: avoid extra loop (e.g. builder pattern?)
+        if is_var_size_item_array_type(out_arr_type):
+            init_size_code, size_varnames = gen_init_varsize_alloc_sizes(out_arr_type)
+            func_text += init_size_code
+            func_text += "  for i in numba.parfors.parfor.internal_prange(len(c0)):\n"
+            func_text += "    row = Row({})\n".format(row_args)
+            func_text += "    item = map_func(row)\n"
+            func_text += gen_varsize_item_sizes(out_arr_type, "item", size_varnames)
             func_text += "  numba.parfors.parfor.init_prange()\n"
-            func_text += "  n = len(c0)\n"
-            func_text += "  n_chars = 0\n"
-            func_text += "  for i in numba.parfors.parfor.internal_prange(n):\n"
-            func_text += "     row = Row({})\n".format(row_args)
-            func_text += "     n_chars += get_utf8_size(map_func(row))\n"
-            func_text += "  S = pre_alloc_string_array(n, n_chars)\n"
+            func_text += "  varsize_alloc_sizes = ({},)\n".format(
+                ", ".join(size_varnames)
+            )
         else:
-            func_text += "  numba.parfors.parfor.init_prange()\n"
-            func_text += "  n = len(c0)\n"
-            func_text += "  S = bodo.utils.utils.alloc_type(n, _arr_typ)\n"
+            func_text += "  varsize_alloc_sizes = None\n"
+        func_text += (
+            "  S = bodo.utils.utils.alloc_type(n, _arr_typ, varsize_alloc_sizes)\n"
+        )
         func_text += "  for i in numba.parfors.parfor.internal_prange(n):\n"
+        # TODO: unbox to array value if necessary (e.g. Timestamp to dt64)
         func_text += "     row = Row({})\n".format(row_args)
         func_text += "     S[i] = map_func(row)\n"
         func_text += (
@@ -2386,9 +2401,7 @@ def _get_df_apply_used_cols(func, columns):
     used_cols = []
     l_topo_order = find_topo_order(lambda_ir.blocks)
     first_stmt = lambda_ir.blocks[l_topo_order[0]].body[0]
-    assert isinstance(first_stmt, ir.Assign) and isinstance(
-        first_stmt.value, ir.Arg
-    )
+    assert isinstance(first_stmt, ir.Assign) and isinstance(first_stmt.value, ir.Arg)
     arg_var = first_stmt.target
     use_all_cols = False
     for bl in lambda_ir.blocks.values():

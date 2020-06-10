@@ -1354,6 +1354,28 @@ def test_df_apply_str():
     check_func(test_impl, (df,))
 
 
+def test_df_apply_list_str():
+    """make sure list(str) output can be handled in apply() properly
+    """
+
+    def test_impl(df):
+        return df.apply(lambda r: [r.A] if r.A == "AA" else ["BB", r.A], axis=1)
+
+    df = pd.DataFrame({"A": ["AA", "B", "CC", "C", "AA"]}, index=[3, 1, 4, 6, 0])
+    check_func(test_impl, (df,))
+
+
+def test_df_apply_list_item():
+    """make sure list(item) output can be handled in apply() properly
+    """
+
+    def test_impl(df):
+        return df.apply(lambda r: [len(r.A)] if r.A == "AA" else [3, len(r.A)], axis=1)
+
+    df = pd.DataFrame({"A": ["AA", "B", "CC", "C", "AA"]}, index=[3, 1, 4, 6, 0])
+    check_func(test_impl, (df,))
+
+
 def g(r):
     return 2 * r.A
 
