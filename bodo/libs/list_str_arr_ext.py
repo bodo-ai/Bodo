@@ -47,7 +47,7 @@ from numba.core.imputils import (
     iternext_impl,
     RefType,
 )
-from bodo.utils.typing import is_list_like_index_type
+from bodo.utils.typing import is_list_like_index_type, BodoError
 from llvmlite import ir as lir
 import llvmlite.binding as ll
 from bodo.libs import hstr_ext
@@ -520,7 +520,13 @@ def list_str_arr_setitem(A, idx, val):
                 bodo.libs.str_arr_ext._memcpy(out_ptr, utf8_str, n_char, 1)
                 curr_d_offset += n_char
 
+            bodo.libs.str_arr_ext.str_arr_set_not_na(A, idx)
+
         return impl_scalar
+
+    raise BodoError(
+        "only setitem with scalar index is currently supported for list arrays"
+    )  # pragma: no cover
 
 
 @overload_method(ListStringArrayType, "copy", no_unliteral=True)
