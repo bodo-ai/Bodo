@@ -687,6 +687,31 @@ def check_func_type_extent(
     )
 
 
+def compute_random_decimal_array(option, n):
+    """Compute a random decimal series for tests
+    option=1 will give random arrays with collision happening (guaranteed for n>100)
+    option=2 will give random arrays with collision unlikely to happen
+    """
+    def random_str1():
+        e_str1 = str(1 + random.randint(1, 8))
+        e_str2 = str(1 + random.randint(1, 8))
+        return Decimal(e_str1 + "." + e_str2)
+
+    def random_str2():
+        klen1 = random.randint(1, 7)
+        klen2 = random.randint(1, 7)
+        e_str1 = "".join([str(1 + random.randint(1, 8)) for _ in range(klen1)])
+        e_str2 = "".join([str(1 + random.randint(1, 8)) for _ in range(klen2)])
+        esign = "" if random.randint(1, 2) == 1 else "-"
+        return Decimal(esign + e_str1 + "." + e_str2)
+
+    if option == 1:
+        e_list = [random_str1() for _ in range(n)]
+    if option == 2:
+        e_list = [random_str2() for _ in range(n)]
+    return pd.Series(e_list)
+
+
 def gen_random_string_array(n, max_str_len=10):
     """
     helper function that generates a random string array

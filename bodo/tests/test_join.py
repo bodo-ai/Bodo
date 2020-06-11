@@ -14,6 +14,7 @@ from bodo.tests.utils import (
     count_array_REPs,
     count_parfor_REPs,
     check_func,
+    compute_random_decimal_array,
     count_parfor_OneDs,
     count_array_OneDs,
     dist_IR_contains,
@@ -151,19 +152,20 @@ def test_merge_decimal():
         df3 = df1.merge(df2, on="A")
         return df3
 
-    def compute_random_decimal(n):
-        e_list = []
-        for _ in range(n):
-            e_str1 = str(1 + random.randint(1, 8))
-            e_str2 = str(1 + random.randint(1, 8))
-            e_str = e_str1 + "." + e_str2
-            e_list.append(Decimal(e_str))
-        return pd.Series(e_list)
-
     random.seed(5)
     n = 50
-    df1 = pd.DataFrame({"A": compute_random_decimal(n), "B": compute_random_decimal(n)})
-    df2 = pd.DataFrame({"A": compute_random_decimal(n), "D": compute_random_decimal(n)})
+    df1 = pd.DataFrame(
+        {
+            "A": compute_random_decimal_array(1, n),
+            "B": compute_random_decimal_array(1, n),
+        }
+    )
+    df2 = pd.DataFrame(
+        {
+            "A": compute_random_decimal_array(1, n),
+            "D": compute_random_decimal_array(1, n),
+        }
+    )
     check_func(f, (df1, df2), sort_output=True, reset_index=True)
 
 

@@ -14,6 +14,7 @@ from bodo.tests.utils import (
     dist_IR_contains,
     check_parallel_coherency,
     check_func_type_extent,
+    compute_random_decimal_array,
     convert_list_string_decimal_columns,
     get_start_end,
     check_func,
@@ -272,34 +273,13 @@ def test_random_decimal_sum_min_max_last():
         A = df.groupby("A", as_index=False)["B"].std()
         return A.drop(columns="A")
 
-    def compute_random_decimal(opt, n):
-        e_list = []
-
-        def random_str1():
-            e_str1 = str(1 + random.randint(1, 8))
-            e_str2 = str(1 + random.randint(1, 8))
-            return e_str1 + "." + e_str2
-
-        def random_str2():
-            klen1 = random.randint(1, 7)
-            klen2 = random.randint(1, 7)
-            e_str1 = "".join([str(1 + random.randint(1, 8)) for _ in range(klen1)])
-            e_str2 = "".join([str(1 + random.randint(1, 8)) for _ in range(klen2)])
-            esign = "" if random.randint(1, 2) == 1 else "-"
-            return esign + e_str1 + "." + e_str2
-
-        for _ in range(n):
-            if opt == 1:
-                e_str = random_str1()
-            if opt == 2:
-                e_str = random_str2()
-            e_list.append(Decimal(e_str))
-        return pd.Series(e_list)
-
     random.seed(5)
     n = 10
     df1 = pd.DataFrame(
-        {"A": compute_random_decimal(1, n), "B": compute_random_decimal(2, n)}
+        {
+            "A": compute_random_decimal_array(1, n),
+            "B": compute_random_decimal_array(2, n),
+        }
     )
 
     # Direct checks for which pandas has equivalent functions.

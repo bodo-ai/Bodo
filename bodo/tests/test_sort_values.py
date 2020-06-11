@@ -12,7 +12,14 @@ import bodo
 import random
 import string
 import pytest
-from bodo.tests.utils import check_func, is_bool_object_series, check_parallel_coherency
+from decimal import Decimal
+from bodo.tests.utils import (
+    check_func,
+    is_bool_object_series,
+    check_parallel_coherency,
+    check_func_type_extent,
+    compute_random_decimal_array,
+)
 from bodo.utils.typing import BodoWarning, BodoError
 import os
 
@@ -908,3 +915,16 @@ def test_inplace_sort_values_series():
 
     with pytest.raises(BodoError, match="'inplace' is not supported yet"):
         bodo.jit(impl1)(s)
+
+
+def test_random_decimal():
+    """Sorting a random decimal
+    """
+
+    def f(df):
+        return df.sort_values(by=["A"])
+
+    random.seed(5)
+    n = 50
+    df1 = pd.DataFrame({"A": compute_random_decimal_array(2, n)})
+    check_func_type_extent(f, (df1,))

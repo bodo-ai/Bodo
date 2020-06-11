@@ -289,12 +289,30 @@ isnan_alltype(T const& val) {
  * @return 1 if *ptr1 < *ptr2
  */
 template <typename T>
-inline typename std::enable_if<!std::is_floating_point<T>::value, int>::type
-NumericComparison_int(char* ptr1, char* ptr2, bool const& na_position) {
+int NumericComparison_int(char* ptr1, char* ptr2, bool const& na_position) {
     T* ptr1_T = (T*)ptr1;
     T* ptr2_T = (T*)ptr2;
     if (*ptr1_T > *ptr2_T) return -1;
     if (*ptr1_T < *ptr2_T) return 1;
+    return 0;
+}
+
+/**
+ * The comparison function for decimal types.
+ *
+ * @param ptr1: char* pointer to the first value
+ * @param ptr2: char* pointer to the second value
+ * @param na_position: true for NaN being last, false for NaN being first (not
+ * used)
+ * @return 1 if *ptr1 < *ptr2
+ */
+inline int NumericComparison_decimal(char* ptr1, char* ptr2, bool const& na_position) {
+    decimal_value_cpp* ptr1_dec = (decimal_value_cpp*)ptr1;
+    decimal_value_cpp* ptr2_dec = (decimal_value_cpp*)ptr2;
+    double value1 = decimal_to_double(*ptr1_dec);
+    double value2 = decimal_to_double(*ptr2_dec);
+    if (value1 > value2) return -1;
+    if (value1 < value2) return 1;
     return 0;
 }
 
@@ -308,8 +326,7 @@ NumericComparison_int(char* ptr1, char* ptr2, bool const& na_position) {
  * @return 1 if *ptr1 < *ptr2
  */
 template <typename T>
-inline typename std::enable_if<std::is_floating_point<T>::value, int>::type
-NumericComparison_float(char* ptr1, char* ptr2, bool const& na_position) {
+int NumericComparison_float(char* ptr1, char* ptr2, bool const& na_position) {
     T* ptr1_T = (T*)ptr1;
     T* ptr2_T = (T*)ptr2;
     T val1 = *ptr1_T;
@@ -339,8 +356,7 @@ NumericComparison_float(char* ptr1, char* ptr2, bool const& na_position) {
  * @return 1 if *ptr1 < *ptr2
  */
 template <typename T>
-inline typename std::enable_if<!std::is_floating_point<T>::value, int>::type
-NumericComparison_date(char* ptr1, char* ptr2, bool const& na_position) {
+int NumericComparison_date(char* ptr1, char* ptr2, bool const& na_position) {
     T* ptr1_T = (T*)ptr1;
     T* ptr2_T = (T*)ptr2;
     T val1 = *ptr1_T;
@@ -399,6 +415,8 @@ inline int NumericComparison(Bodo_CTypes::CTypeEnum const& dtype, char* ptr1,
         return NumericComparison_float<float>(ptr1, ptr2, na_position);
     if (dtype == Bodo_CTypes::FLOAT64)
         return NumericComparison_float<double>(ptr1, ptr2, na_position);
+    if (dtype == Bodo_CTypes::DECIMAL)
+        return NumericComparison_decimal(ptr1, ptr2, na_position);
     Bodo_PyErr_SetString(PyExc_RuntimeError,
                          "Invalid dtype put on input to NumericComparison");
     return 0;
