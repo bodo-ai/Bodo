@@ -6,7 +6,6 @@ import platform, os, time
 # build dependencies
 import numpy.distutils.misc_util as np_misc
 
-# import copy
 import versioneer
 
 # Inject required options for extensions compiled against the Numpy
@@ -20,17 +19,6 @@ def readme():
     with open("README.md") as f:
         return f.read()
 
-
-_has_h5py = False
-HDF5_DIR = ""
-
-if "HDF5_DIR" in os.environ:
-    _has_h5py = True
-    HDF5_DIR = os.environ["HDF5_DIR"]
-
-# PANDAS_DIR = ""
-# if 'PANDAS_DIR' in os.environ:
-#    PANDAS_DIR = os.environ['PANDAS_DIR']
 
 # package environment variable is PREFIX during build time
 if "CONDA_BUILD" in os.environ:
@@ -48,6 +36,14 @@ except ImportError:
     _has_pyarrow = False
 else:
     _has_pyarrow = True
+
+
+try:
+    import h5py
+except ImportError:
+    _has_h5py = False
+else:
+    _has_h5py = True
 
 
 ind = [PREFIX_DIR + "/include"]
@@ -114,7 +110,7 @@ ext_s3 = Extension(
     name="bodo.io.s3_reader",
     sources=["bodo/io/_s3_reader.cpp"],
     depends=["bodo/io/_bodo_file_reader.h"],
-    libraries=MPI_LIBS+["arrow"],
+    libraries=MPI_LIBS + ["arrow"],
     include_dirs=ind + np_compile_args["include_dirs"],
     library_dirs=lid,
     define_macros=[],
@@ -127,7 +123,7 @@ ext_hdfs = Extension(
     name="bodo.io.hdfs_reader",
     sources=["bodo/io/_hdfs_reader.cpp"],
     depends=["bodo/io/_bodo_file_reader.h"],
-    libraries=MPI_LIBS+["arrow"],
+    libraries=MPI_LIBS + ["arrow"],
     include_dirs=ind + np_compile_args["include_dirs"],
     library_dirs=lid,
     define_macros=[],
@@ -141,8 +137,8 @@ ext_hdf5 = Extension(
     sources=["bodo/io/_hdf5.cpp"],
     depends=[],
     libraries=hdf5_libs,
-    include_dirs=[HDF5_DIR + "/include"] + ind,
-    library_dirs=[HDF5_DIR + "/lib"] + lid,
+    include_dirs=ind,
+    library_dirs=lid,
     define_macros=H5_CPP_FLAGS,
     extra_compile_args=eca,
     extra_link_args=ela,

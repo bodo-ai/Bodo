@@ -23,6 +23,6 @@ source activate $CONDA_ENV
 # popd
 
 # build Bodo
-HDF5_DIR=$CONDA_PREFIX python setup.py develop
+python setup.py develop
 # TODO: fix regular install
-# HDF5_DIR=$CONDA_PREFIX python setup.py build install
+# python setup.py build install
