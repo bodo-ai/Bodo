@@ -32,6 +32,7 @@ from bodo.utils.utils import is_assign, is_expr
 from bodo.libs.str_ext import string_type
 from bodo.utils.typing import (
     BodoError,
+    BodoConstUpdatedError,
     can_literalize_type,
     is_literal_type,
     get_literal_value,
@@ -96,7 +97,6 @@ no_side_effect_call_tuples = {
     ("unique", "array_kernels", "libs", bodo),
     ("nunique", "array_kernels", "libs", bodo),
     ("quantile", "array_kernels", "libs", bodo),
-    ("add_consts_to_type", "typing", "utils", bodo),
     ("str_arr_from_sequence", "str_arr_ext", "libs", bodo),
     ("parse_datetime_str", "pd_timestamp_ext", "hiframes", bodo),
     ("integer_to_dt64", "pd_timestamp_ext", "hiframes", bodo),
@@ -280,7 +280,9 @@ def get_const_value(var, func_ir, err_msg, typemap=None, arg_types=None):
     return val
 
 
-def get_const_value_inner(func_ir, var, arg_types=None, typemap=None):
+def get_const_value_inner(
+    func_ir, var, arg_types=None, typemap=None, updated_containers=None
+):
     """Check if a variable can be inferred as a constant and return the constant value.
     Otherwise, raise GuardException.
     """
@@ -313,13 +315,16 @@ def get_const_value_inner(func_ir, var, arg_types=None, typemap=None):
         arg2 = get_const_value_inner(func_ir, var_def.rhs, arg_types, typemap)
         return var_def.fn(arg1, arg2)
 
+    # df.columns case
+    if is_expr(var_def, "getattr") and typemap:
+        obj_typ = typemap.get(var_def.value.name, None)
+        if isinstance(obj_typ, bodo.hiframes.pd_dataframe_ext.DataFrameType):
+            return obj_typ.columns
+
     # list/set/dict cases
-    # try add_consts_to_type
-    call_name = guard(find_callname, func_ir, var_def)
-    if call_name == ("add_consts_to_type", "bodo.utils.typing",):
-        return get_const_value_inner(func_ir, var_def.args[0], arg_types, typemap)
 
     # try dict.keys()
+    call_name = guard(find_callname, func_ir, var_def)
     if (
         call_name is not None
         and len(call_name) == 2
@@ -328,12 +333,13 @@ def get_const_value_inner(func_ir, var, arg_types=None, typemap=None):
     ):
         call_func = var_def.func
         var_def = get_definition(func_ir, call_name[1])
-        # handle converted constant dictionaries
-        if is_call(var_def) and (
-            guard(find_callname, func_ir, var_def)
-            == ("add_consts_to_type", "bodo.utils.typing")
-        ):
-            var_def = guard(get_definition, func_ir, var_def.args[0])
+        dict_varname = call_name[1].name
+        if updated_containers and dict_varname in updated_containers:
+            raise BodoConstUpdatedError(
+                "variable '{}' is updated inplace using '{}'".format(
+                    dict_varname, updated_containers[dict_varname]
+                )
+            )
 
         require(is_expr(var_def, "build_map"))
         vals = [v[0] for v in var_def.items]
@@ -342,6 +348,13 @@ def get_const_value_inner(func_ir, var, arg_types=None, typemap=None):
         assert isinstance(keys_getattr, ir.Expr) and keys_getattr.attr == "keys"
         keys_getattr.attr = "copy"
         return [get_const_value_inner(func_ir, v, arg_types, typemap) for v in vals]
+
+    if updated_containers and var.name in updated_containers:
+        raise BodoConstUpdatedError(
+            "variable '{}' is updated inplace using '{}'".format(
+                var.name, updated_containers[var.name]
+            )
+        )
 
     # dict case
     if is_expr(var_def, "build_map"):
@@ -376,12 +389,6 @@ def get_const_value_inner(func_ir, var, arg_types=None, typemap=None):
     # set() call
     if call_name == ("set", "builtins"):
         return set(get_const_value_inner(func_ir, var_def.args[0], arg_types, typemap))
-
-    # df.columns case
-    if is_expr(var_def, "getattr") and typemap:
-        obj_typ = typemap.get(var_def.value.name, None)
-        if isinstance(obj_typ, bodo.hiframes.pd_dataframe_ext.DataFrameType):
-            return obj_typ.columns
 
     raise GuardException("Constant value not found")
 

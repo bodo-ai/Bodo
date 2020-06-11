@@ -431,12 +431,6 @@ class UntypedPass:
         index_arg = get_call_expr_arg("pd.DataFrame", rhs.args, kws, 1, "index", "")
 
         arg_def = guard(get_definition, self.func_ir, data_arg)
-        # handle converted constant dictionaries
-        if is_call(arg_def) and (
-            guard(find_callname, self.func_ir, arg_def)
-            == ("add_consts_to_type", "bodo.utils.typing")
-        ):
-            arg_def = guard(get_definition, self.func_ir, arg_def.args[0])
 
         if isinstance(arg_def, ir.Expr) and arg_def.op == "build_map":
             # check column names to be string
@@ -687,13 +681,6 @@ class UntypedPass:
         else:
             dtype_map = guard(get_definition, self.func_ir, dtype_var)
 
-            # handle converted constant dictionaries
-            if is_call(dtype_map) and (
-                guard(find_callname, self.func_ir, dtype_map)
-                == ("add_consts_to_type", "bodo.utils.typing")
-            ):
-                dtype_map = guard(get_definition, self.func_ir, dtype_map.args[0])
-
             if (
                 not isinstance(dtype_map, ir.Expr) or dtype_map.op != "build_map"
             ):  # pragma: no cover
@@ -817,13 +804,6 @@ class UntypedPass:
         # handle dtype arg if provided
         if dtype_var != "":
             dtype_map = guard(get_definition, self.func_ir, dtype_var)
-
-            # handle converted constant dictionaries
-            if is_call(dtype_map) and (
-                guard(find_callname, self.func_ir, dtype_map)
-                == ("add_consts_to_type", "bodo.utils.typing")
-            ):
-                dtype_map = guard(get_definition, self.func_ir, dtype_map.args[0])
 
             if (
                 not isinstance(dtype_map, ir.Expr) or dtype_map.op != "build_map"
@@ -1003,12 +983,6 @@ class UntypedPass:
             dtype_map = {c: dtypes[i] for i, c in enumerate(col_names)}
         else:  # handle dtype arg if provided
             dtype_map = guard(get_definition, self.func_ir, dtype_var)
-            # handle converted constant dictionaries
-            if is_call(dtype_map) and (
-                guard(find_callname, self.func_ir, dtype_map)
-                == ("add_consts_to_type", "bodo.utils.typing")
-            ):
-                dtype_map = guard(get_definition, self.func_ir, dtype_map.args[0])
 
             if (
                 not isinstance(dtype_map, ir.Expr) or dtype_map.op != "build_map"

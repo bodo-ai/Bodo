@@ -67,6 +67,12 @@ class BodoNotConstError(Exception):
     """
 
 
+class BodoConstUpdatedError(Exception):
+    """Indicates that a constant value is expected but the input list/dict/set is
+    updated in place. Only used in partial typing pass to enable error checking.
+    """
+
+
 def raise_const_error(msg):
     """raises an error indicating that a constant value is expected with the given
     message 'msg'.

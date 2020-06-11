@@ -22,12 +22,14 @@ from numba.core.ir_utils import (
     dprint_func_ir,
     require,
     GuardException,
+    is_setitem,
 )
 import bodo
 from bodo.utils.typing import (
     BodoError,
     is_literal_type,
     CONST_DICT_SENTINEL,
+    BodoConstUpdatedError,
 )
 from bodo.utils.utils import (
     is_assign,
@@ -147,6 +149,8 @@ class TypingTransforms:
         self.curr_loc = self.func_ir.loc
         # variables that are transformed away at some point and are potentially dead
         self._transformed_vars = set()
+        # variables that are potentially list/set/dict and updated inplace
+        self._updated_containers = {}
         self.changed = False
 
     def run(self):
@@ -154,6 +158,7 @@ class TypingTransforms:
         # are used in analysis (e.g. df creation points in rhs_labels)
         blocks = self.func_ir.blocks
         topo_order = find_topo_order(blocks)
+        self._updated_containers = _find_updated_containers(blocks)
         work_list = list((l, blocks[l]) for l in reversed(topo_order))
         while work_list:
             label, block = work_list.pop()
@@ -678,7 +683,17 @@ class TypingTransforms:
             # overload will raise an error if necessary.
             try:
                 val = get_const_value_inner(
-                    self.func_ir, var, self.arg_types, self.typemap
+                    self.func_ir,
+                    var,
+                    self.arg_types,
+                    self.typemap,
+                    self._updated_containers,
+                )
+            except BodoConstUpdatedError as e:
+                raise BodoError(
+                    "{}(): argument '{}' requires a constant value but {}\n{}\n".format(
+                        func_name, arg_name, e, rhs.loc.strformat()
+                    )
                 )
             except GuardException:
                 continue
@@ -739,3 +754,44 @@ def _create_const_var(val, name, scope, loc, nodes):
     new_assign = ir.Assign(const_node, new_var, loc)
     nodes.append(new_assign)
     return new_var
+
+
+def _find_updated_containers(blocks):
+    """find variables that are potentially list/set/dict containers that are updated
+    inplace.
+    Just looks for getattr nodes with inplace update methods of list/set/dict like 'pop'
+    and setitem nodes.
+    Returns a dictionary of variable names and the offending method names.
+    """
+    updated_containers = {}
+    for b in blocks.values():
+        for stmt in b.body:
+            if (
+                is_assign(stmt)
+                and is_expr(stmt.value, "getattr")
+                and stmt.value.attr
+                in (
+                    # dict
+                    "clear",
+                    "pop",
+                    "popitem",
+                    "update",
+                    # set
+                    "add",
+                    "difference_update",
+                    "discard",
+                    "intersection_update",
+                    "remove",
+                    "symmetric_difference_update",
+                    # list
+                    "append",
+                    "extend",
+                    "insert",
+                    "reverse",
+                    "sort",
+                )
+            ):
+                updated_containers[stmt.value.value.name] = stmt.value.attr
+            elif is_setitem(stmt):
+                updated_containers[stmt.target.name] = "setitem"
+    return updated_containers

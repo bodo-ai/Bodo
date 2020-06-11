@@ -449,10 +449,6 @@ class DataFramePass:
                 assign, assign.target, rhs, func_mod, func_name
             )
 
-        if fdef == ("add_consts_to_type", "bodo.utils.typing"):
-            assign.value = rhs.args[0]
-            return [assign]
-
         if isinstance(func_mod, ir.Var) and isinstance(
             self.typemap[func_mod.name], DataFrameGroupByType
         ):
