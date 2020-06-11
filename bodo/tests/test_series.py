@@ -195,6 +195,7 @@ def test_series_concat(series_val):
     """test of concatenation of series.
     We convert to dataframe in order to reset the index.
     """
+
     def f(S1, S2):
         return pd.concat([S1, S2])
 
@@ -206,6 +207,7 @@ def test_series_concat(series_val):
         check_func_type_extent(f, (df1, df2), sort_output=True, reset_index=True)
     else:
         check_func(f, (df1, df2), sort_output=True, reset_index=True)
+
 
 #   The code that we want to have.
 #    bodo_f = bodo.jit(f)
@@ -235,7 +237,6 @@ def test_dataframe_concat(series_val):
         check_func_type_extent(f, (df1, df2), sort_output=True, reset_index=True)
     else:
         check_func(f, (df1, df2), sort_output=True, reset_index=True)
-
 
 
 # TODO: timedelta, period, tuple, etc.
@@ -1427,6 +1428,72 @@ def test_series_map_str():
         return S.map(lambda a: str(a))
 
     S = pd.Series([1, 211, 333, 43, 51])
+    check_func(test_impl, (S,))
+
+
+def test_series_map_list_str():
+    """test list(str) output in map"""
+
+    def test_impl(S):
+        return S.map(lambda a: [str(a), "AA"] if a > 200 else ["A"])
+
+    S = pd.Series([1, 211, 333, 43, 51, 12, 15])
+    check_func(test_impl, (S,))
+
+
+def test_series_map_list_item():
+    """test list(item) output in map"""
+
+    def test_impl(S):
+        return S.map(lambda a: [a, 3] if a > 200 else [2 * a])
+
+    S = pd.Series([1, 211, 333, 43, 51, 12, 15])
+    check_func(test_impl, (S,))
+
+
+def test_series_map_date():
+    """make sure datetime.date output can be handled in map() properly
+    """
+
+    def test_impl(S):
+        return S.map(lambda a: a.date())
+
+    S = pd.Series(pd.date_range(start="2018-04-24", end="2019-04-29", periods=5))
+    check_func(test_impl, (S,))
+
+
+def test_series_map_timestamp():
+    """make sure Timestamp (converted to datetime64) output can be handled in map()
+    properly
+    """
+
+    def test_impl(S):
+        return S.map(lambda a: a + datetime.timedelta(days=1))
+
+    S = pd.Series(pd.date_range(start="2018-04-24", end="2019-04-29", periods=5))
+    check_func(test_impl, (S,))
+
+
+def test_series_map_decimal():
+    """make sure Decimal output can be handled in map() properly
+    """
+    # just returning input value since we don't support any Decimal creation yet
+    # TODO: support Decimal(str) constructor
+    # TODO: fix using freevar constants in UDFs
+    def test_impl(S):
+        return S.map(lambda a: a)
+
+    S = pd.Series(
+        [
+            Decimal("1.6"),
+            Decimal("-0.222"),
+            Decimal("1111.316"),
+            Decimal("1234.00046"),
+            Decimal("5.1"),
+            Decimal("-11131.0056"),
+            Decimal("0.0"),
+        ]
+    )
     check_func(test_impl, (S,))
 
 

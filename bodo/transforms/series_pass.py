@@ -96,6 +96,9 @@ from bodo.utils.transform import (
     get_call_expr_arg,
     ReplaceFunc,
     replace_func,
+    is_var_size_item_array_type,
+    gen_init_varsize_alloc_sizes,
+    gen_varsize_item_sizes,
 )
 from bodo.utils.typing import get_overload_const_func, is_const_func_type, BodoError
 
@@ -1441,6 +1444,8 @@ class SeriesPass:
                 # avoid dt64 errors in np.empty, TODO: fix Numba
                 if dtype == types.NPDatetime("ns"):
                     dtype = np.dtype("datetime64[ns]")
+                if isinstance(dtype, types.Record):
+                    dtype = numba.np.numpy_support.as_dtype(dtype)
                 impl = lambda n, t, s=None: np.empty(n, _dtype)  # pragma: no cover
             elif isinstance(typ, ListItemArrayType):
                 dtype = typ.elem_type
@@ -1917,60 +1922,50 @@ class SeriesPass:
         index = self._get_series_index(series_var, nodes)
         name = self._get_series_name(series_var, nodes)
         out_typ = self.typemap[lhs.name].dtype
+        out_arr_type = self.typemap[lhs.name].data
         extra_arg_names = (", " if extra_args else "") + ", ".join(
             "e{}".format(i) for i in range(len(extra_args))
         )
 
-        # TODO: handle all array types like list(str)
-        if out_typ == string_type:
-            # prange func to inline
-            func_text = "def f(A, index, name{}):\n".format(extra_arg_names)
+        func_text = "def f(A, index, name{}):\n".format(extra_arg_names)
+        func_text += "  numba.parfors.parfor.init_prange()\n"
+        func_text += "  n = len(A)\n"
+
+        # an extra loop is currently necessary to get alloc sizes for arrays with
+        # variable size items, e.g. strings
+        # TODO: avoid extra loop (e.g. builder pattern?)
+        if is_var_size_item_array_type(out_arr_type):
+            init_size_code, size_varnames = gen_init_varsize_alloc_sizes(out_arr_type)
+            func_text += init_size_code
+            func_text += "  for i in numba.parfors.parfor.internal_prange(n):\n"
+            if isinstance(dtype, types.BaseTuple):
+                func_text += "    t = bodo.utils.typing.convert_rec_to_tup(A[i])\n"
+            else:
+                func_text += "    t = bodo.utils.conversion.box_if_dt64(A[i])\n"
+            func_text += "    item = map_func(t{})\n".format(extra_arg_names)
+            func_text += gen_varsize_item_sizes(out_arr_type, "item", size_varnames)
             func_text += "  numba.parfors.parfor.init_prange()\n"
-            func_text += "  n = len(A)\n"
-            func_text += "  n_chars = 0\n"
-            func_text += "  for i in numba.parfors.parfor.internal_prange(n):\n"
-            if dtype == types.NPDatetime("ns"):
-                func_text += "    t = bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(np.int64(A[i]))\n"
-            elif isinstance(dtype, types.BaseTuple):
-                func_text += "    t = bodo.utils.typing.convert_rec_to_tup(A[i])\n"
-            else:
-                func_text += "    t = A[i]\n"
-            func_text += "    n_chars += get_utf8_size(map_func(t{}))\n".format(
-                extra_arg_names
-            )
-            func_text += "  S = pre_alloc_string_array(n, n_chars)\n"
-            func_text += "  for i in numba.parfors.parfor.internal_prange(n):\n"
-            if dtype == types.NPDatetime("ns"):
-                func_text += "    t = bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(np.int64(A[i]))\n"
-            elif isinstance(dtype, types.BaseTuple):
-                func_text += "    t = bodo.utils.typing.convert_rec_to_tup(A[i])\n"
-            else:
-                func_text += "    t = A[i]\n"
-            func_text += "    v = map_func(t{})\n".format(extra_arg_names)
-            func_text += "    S[i] = v\n"
-            func_text += (
-                "  return bodo.hiframes.pd_series_ext.init_series(S, index, name)\n"
+            func_text += "  varsize_alloc_sizes = ({},)\n".format(
+                ", ".join(size_varnames)
             )
         else:
-            func_text = "def f(A, index, name{}):\n".format(extra_arg_names)
-            func_text += "  numba.parfors.parfor.init_prange()\n"
-            func_text += "  n = len(A)\n"
-            func_text += "  S = np.empty(n, out_dtype)\n"
-            func_text += "  for i in numba.parfors.parfor.internal_prange(n):\n"
-            if dtype == types.NPDatetime("ns"):
-                func_text += "    t = bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(np.int64(A[i]))\n"
-            elif isinstance(dtype, types.BaseTuple):
-                func_text += "    t = bodo.utils.typing.convert_rec_to_tup(A[i])\n"
-            else:
-                func_text += "    t = A[i]\n"
-            func_text += "    v = map_func(t{})\n".format(extra_arg_names)
-            if isinstance(out_typ, types.BaseTuple):
-                func_text += "    S[i] = bodo.utils.typing.convert_tup_to_rec(v)\n"
-            else:
-                func_text += "    S[i] = v\n"
-            func_text += (
-                "  return bodo.hiframes.pd_series_ext.init_series(S, index, name)\n"
-            )
+            func_text += "  varsize_alloc_sizes = None\n"
+        func_text += (
+            "  S = bodo.utils.utils.alloc_type(n, _arr_typ, varsize_alloc_sizes)\n"
+        )
+        func_text += "  for i in numba.parfors.parfor.internal_prange(n):\n"
+        if isinstance(dtype, types.BaseTuple):
+            func_text += "    t = bodo.utils.typing.convert_rec_to_tup(A[i])\n"
+        else:
+            func_text += "    t = bodo.utils.conversion.box_if_dt64(A[i])\n"
+        func_text += "    v = map_func(t{})\n".format(extra_arg_names)
+        if isinstance(out_typ, types.BaseTuple):
+            func_text += "    S[i] = bodo.utils.typing.convert_tup_to_rec(v)\n"
+        else:
+            func_text += "    S[i] = bodo.utils.conversion.unbox_if_timestamp(v)\n"
+        func_text += (
+            "  return bodo.hiframes.pd_series_ext.init_series(S, index, name)\n"
+        )
 
         loc_vars = {}
         exec(func_text, {}, loc_vars)
@@ -2009,6 +2004,7 @@ class SeriesPass:
                 "get_utf8_size": get_utf8_size,
                 "pre_alloc_string_array": pre_alloc_string_array,
                 "map_func": map_func,
+                "_arr_typ": out_arr_type,
             },
             pre_nodes=nodes,
         )
