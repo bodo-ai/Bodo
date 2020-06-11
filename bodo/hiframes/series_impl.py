@@ -1358,7 +1358,7 @@ def create_explicit_binary_op_overload(op):
                 numba.parfors.parfor.init_prange()
                 # other could be tuple, list, array, Index, or Series
                 n = len(arr)
-                out_arr = bodo.utils.utils.alloc_type(n, ret_dtype)
+                out_arr = bodo.utils.utils.alloc_type(n, ret_dtype, None)
                 for i in numba.parfors.parfor.internal_prange(n):
                     left_nan = bodo.libs.array_kernels.isna(arr, i)
                     if left_nan:
@@ -1389,7 +1389,7 @@ def create_explicit_binary_op_overload(op):
             other_arr = bodo.utils.conversion.coerce_to_array(other)
             numba.parfors.parfor.init_prange()
             n = len(arr)
-            out_arr = bodo.utils.utils.alloc_type(n, ret_dtype)
+            out_arr = bodo.utils.utils.alloc_type(n, ret_dtype, None)
             for i in numba.parfors.parfor.internal_prange(n):
                 left_nan = bodo.libs.array_kernels.isna(arr, i)
                 right_nan = bodo.libs.array_kernels.isna(other_arr, i)

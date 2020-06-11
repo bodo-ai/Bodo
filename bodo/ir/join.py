@@ -1227,7 +1227,7 @@ def copy_elem_buff_overload(arr, ind, val):
 
     assert arr == string_array_type
 
-    def copy_elem_buff_str(arr, ind, val):
+    def copy_elem_buff_str(arr, ind, val):  # pragma: no cover
         new_arr = ensure_capacity_str(arr, ind + 1, get_utf8_size(val))
         new_arr[ind] = val
         return new_arr
@@ -1270,7 +1270,7 @@ def trim_arr_overload(arr, size):
 
     assert arr == string_array_type
 
-    def trim_arr_str(arr, size):
+    def trim_arr_str(arr, size):  # pragma: no cover
         # print("trim size", size, arr[size-1], getitem_str_offset(arr, size))
         new_arr = pre_alloc_string_array(size, np.int64(getitem_str_offset(arr, size)))
         copy_str_arr_slice(new_arr, arr, size)
@@ -1292,7 +1292,7 @@ def setnan_elem_buff_overload(arr, ind):
 
     assert arr == string_array_type
 
-    def setnan_elem_buff_str(arr, ind):
+    def setnan_elem_buff_str(arr, ind):  # pragma: no cover
         new_arr = ensure_capacity_str(arr, ind + 1, 0)
         # TODO: why doesn't setitem_str_offset work
         # setitem_str_offset(arr, ind+1, getitem_str_offset(arr, ind))
