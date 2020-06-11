@@ -518,6 +518,11 @@ def test_df_rename():
         d.pop("C")
         return df.rename(columns=d)
 
+    def impl4(df):
+        d = {"B": "bb", "C": "cc"}
+        d["C"] = "dd"
+        return df.rename(columns=d)
+
     df = pd.DataFrame(
         {
             "A": [1, 8, 4, 11, -3],
@@ -532,6 +537,11 @@ def test_df_rename():
         match="argument 'columns' requires a constant value but variable 'd' is updated inplace using 'pop'",
     ):
         bodo.jit(impl3)(df)
+    with pytest.raises(
+        BodoError,
+        match="argument 'columns' requires a constant value but variable 'd' is updated inplace using 'setitem'",
+    ):
+        bodo.jit(impl4)(df)
 
 
 def test_df_isna(df_value):

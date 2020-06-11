@@ -22,6 +22,7 @@ from numba.core.ir_utils import (
     dprint_func_ir,
     require,
     GuardException,
+    is_setitem,
 )
 import bodo
 from bodo.utils.typing import (
@@ -759,6 +760,7 @@ def _find_updated_containers(blocks):
     """find variables that are potentially list/set/dict containers that are updated
     inplace.
     Just looks for getattr nodes with inplace update methods of list/set/dict like 'pop'
+    and setitem nodes.
     Returns a dictionary of variable names and the offending method names.
     """
     updated_containers = {}
@@ -790,4 +792,6 @@ def _find_updated_containers(blocks):
                 )
             ):
                 updated_containers[stmt.value.value.name] = stmt.value.attr
+            elif is_setitem(stmt):
+                updated_containers[stmt.target.name] = "setitem"
     return updated_containers
