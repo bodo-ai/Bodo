@@ -23,7 +23,7 @@ Data Types
 Bodo supports the following
 data types as values in Pandas Dataframe and Series data structures.
 This represents all `Pandas data types <https://pandas.pydata.org/pandas-docs/stable/reference/arrays.html>`_
-except `TZ-aware datetime`, `Period`, `Interval`, and `Sparse` (will be supported in the future).
+except `TZ-aware datetime`, `Period`, `Interval`, and `Sparse` (which will be supported in the future).
 Comparing to Spark (as of version 2.4.5), equivalent of all
 `Spark data types <https://spark.apache.org/docs/latest/sql-reference.html#data-types>`_
 are supported except `MapType` and `StructType` (will be supported in the future).
