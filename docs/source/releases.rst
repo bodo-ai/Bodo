@@ -1,7 +1,9 @@
 .. _releases:
 
 Release Notes
-===========================
+=============
+
+- :ref:`Bodo.ai 2020.6 Release <June_2020>`
 
 - :ref:`Bodo.ai 2020.5 Release <May_2020>`
 

@@ -1,0 +1,80 @@
+.. _June_2020:
+
+Bodo 2020.06 Release (Date: 06/12/2020)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+New Features and Improvements
+-----------------------------
+
+- Bodo is updated to use the latest minor releases of Numba and Apache Arrow packages:
+
+    - numba 0.49.1
+    - Apache Arrow 0.17.1
+
+- Significant optimizations in read CSV/JSON/Parquet to reduce number of
+  requests, files opened and overall load on the filesystem
+  (for local filesystems, S3 and HDFS).
+
+- Improvements in ``pandas.read_csv()`` and ``pandas.read_json()``:
+
+    - Support reading compressed JSON and CSV files (gzip and bz2)
+    - Can read directories containing files with any extension
+    - Correctly handle CSV files with headers when reading a directory of CSV files
+    - Support automatic data type inference of JSON files when ``orient='records'`` and ``lines=True``
+
+- Bodo can now automatically infer the required constant values
+  (e.g. list of key names for groupby) from the program in many cases. In addition, Bodo
+  raises informative errors for cases that are not possible to infer automatically.
+
+- Various improvements to support caching of Bodo functions, including
+  adding support for caching inside Jupyter Notebook
+  (see `here <https://docs.bodo.ai/latest/source/user_guide.html#bodo-caching>`_
+  for more information)
+
+- Support NA value check with ``pandas.isna(A[i])``
+
+- Support creating empty dataframes and setting columns on empty dataframes
+
+- More balanced workload distribution across processor cores
+
+- Support for user-defined functions calling other JIT functions, and improved
+  error messages for invalid cases
+
+- ``pandas.read_parquet()``: support reading columns of list of integers/floats
+
+- Support ``bodo.scatterv()`` for arrays of list of strings/integers/floats.
+
+- Improved support for ``pd.to_datetime()`` to handle optional arguments and
+  cases such as string and integer array/Series inputs
+
+- Improved `pd.concat` support to handle arrays of list, ``Decimal`` and ``datetime.date`` values
+
+- Improved array indexing (getitem/setitem) support for various data types such as date/time cases and Decimals
+
+- Support sorting of Decimal series
+
+- Support Dataframe ``merge`` and ``groupby`` with Decimal columns
+
+- Groupby: ignore non-numeric columns for numeric-only operations like sum (same behavior as pandas).
+
+- Support for comparison of Timedelta data types (``datetime.timedelta`` and ``timedelta64``)
+
+- Parallelization of ``numpy.full()``
+
+- Support ``glob.glob(...)`` inside Bodo functions
+
+- Error messages and warnings:
+
+    - Improvements to clarity and conciseness of error messages
+    - Can use numba syntax highlighting for Bodo errors (enable with
+      `NUMBA_COLOR_SCHEME <https://numba.pydata.org/numba-doc/dev/reference/envvars.html#envvar-NUMBA_COLOR_SCHEME>`_
+      environment variable)
+
+- Documentation:
+
+    - New theme and style
+    - Revamped introductory material and guide
+    - Improved documentation for ``pd.read_csv()`` and ``pd.read_json()``
+    - Documented Bodo's coverage of data types
+
+Overall, 82 code patches are merged since the last release.
