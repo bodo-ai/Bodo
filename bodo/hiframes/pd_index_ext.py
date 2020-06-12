@@ -36,13 +36,23 @@ import bodo
 from bodo.libs.str_ext import string_type
 import bodo.hiframes
 from bodo.hiframes.pd_series_ext import string_array_type
+from bodo.hiframes.pd_timestamp_ext import pandas_timestamp_type
 import bodo.utils.conversion
 from bodo.utils.typing import (
     is_overload_none,
     is_overload_true,
     is_overload_false,
+    is_const_func_type,
     get_overload_const_str,
     get_val_type_maybe_str_literal,
+    get_overload_const_func,
+    BodoError,
+)
+from bodo.utils.transform import (
+    get_const_func_output_type,
+    is_var_size_item_array_type,
+    gen_init_varsize_alloc_sizes,
+    gen_varsize_item_sizes,
 )
 from bodo.libs.int_arr_ext import IntegerArrayType
 
@@ -90,6 +100,10 @@ class DatetimeIndexType(types.IterableType, types.ArrayCompatible):
     def as_array(self):
         # using types.undefined to avoid Array templates for binary ops
         return types.Array(types.undefined, 1, "C")
+
+    @property
+    def dtype(self):
+        return types.NPDatetime("ns")
 
     def copy(self):
         return DatetimeIndexType(self.name_typ)
@@ -712,6 +726,10 @@ class TimedeltaIndexType(types.IterableType, types.ArrayCompatible):
         return TimedeltaIndexType(self.name_typ)
 
     @property
+    def dtype(self):
+        return types.NPTimedelta("ns")
+
+    @property
     def as_array(self):
         # using types.undefined to avoid Array templates for binary ops
         return types.Array(types.undefined, 1, "C")
@@ -1315,9 +1333,7 @@ def init_period_index(typingctx, data, name, freq):
     def codegen(context, builder, signature, args):
         data_val, name_val, _ = args
         index_typ = signature.return_type
-        period_index = cgutils.create_struct_proxy(index_typ)(
-            context, builder
-        )
+        period_index = cgutils.create_struct_proxy(index_typ)(context, builder)
         period_index.data = data_val
         period_index.name = name_val
 
@@ -1631,6 +1647,10 @@ class StringIndexType(types.IterableType, types.ArrayCompatible):
         return StringIndexType(self.name_typ)
 
     @property
+    def dtype(self):
+        return string_type
+
+    @property
     def pandas_type_name(self):
         return "unicode"
 
@@ -1885,7 +1905,7 @@ def overload_index_shape(s):
 
 
 @overload_attribute(RangeIndexType, "shape")
-def overload_index_shape(s):
+def overload_range_index_shape(s):
     return lambda s: (len(s),)
 
 
@@ -1933,3 +1953,90 @@ def get_index_data_equiv(self, scope, equiv_set, loc, args, kws):
 ArrayAnalysis._analyze_op_call_bodo_hiframes_pd_index_ext_get_index_data = (
     get_index_data_equiv
 )
+
+
+@overload_method(RangeIndexType, "map", inline="always", no_unliteral=True)
+@overload_method(NumericIndexType, "map", inline="always", no_unliteral=True)
+@overload_method(StringIndexType, "map", inline="always", no_unliteral=True)
+@overload_method(PeriodIndexType, "map", inline="always", no_unliteral=True)
+@overload_method(DatetimeIndexType, "map", inline="always", no_unliteral=True)
+@overload_method(TimedeltaIndexType, "map", inline="always", no_unliteral=True)
+def overload_index_map(I, mapper, na_action=None):
+    if not is_const_func_type(mapper):
+        raise BodoError("Index.map(): 'mapper' should be a function")
+
+    # get output element type
+    dtype = I.dtype
+    # getitem returns Timestamp for dt_index (TODO: pd.Timedelta when available)
+    if dtype == types.NPDatetime("ns"):
+        dtype = pandas_timestamp_type
+    typing_context = numba.core.registry.cpu_target.typing_context
+    try:
+        f_return_type = get_const_func_output_type(mapper, (dtype,), typing_context)
+    except:
+        raise BodoError("Index.map(): user-defined function not supported")
+
+    # unbox Timestamp to dt64 in Series (TODO: timedelta64)
+    if f_return_type == pandas_timestamp_type:
+        f_return_type = types.NPDatetime("ns")
+
+    out_arr_type = bodo.hiframes.pd_series_ext._get_series_array_type(f_return_type)
+
+    func = get_overload_const_func(mapper)
+    func_text = "def f(I, mapper, na_action=None):\n"
+    func_text += "  name = bodo.hiframes.pd_index_ext.get_index_name(I)\n"
+    func_text += "  A = bodo.utils.conversion.coerce_to_array(I)\n"
+    func_text += "  numba.parfors.parfor.init_prange()\n"
+    func_text += "  n = len(A)\n"
+
+    # an extra loop is currently necessary to get alloc sizes for arrays with
+    # variable size items, e.g. strings
+    # TODO: avoid extra loop (e.g. builder pattern?)
+    if is_var_size_item_array_type(out_arr_type):
+        init_size_code, size_varnames = gen_init_varsize_alloc_sizes(out_arr_type)
+        func_text += init_size_code
+        func_text += "  for i in numba.parfors.parfor.internal_prange(n):\n"
+        func_text += "    t = bodo.utils.conversion.box_if_dt64(A[i])\n"
+        func_text += "    item = map_func(t)\n"
+        func_text += gen_varsize_item_sizes(out_arr_type, "item", size_varnames)
+        func_text += "  numba.parfors.parfor.init_prange()\n"
+        func_text += "  varsize_alloc_sizes = ({},)\n".format(", ".join(size_varnames))
+    else:
+        func_text += "  varsize_alloc_sizes = None\n"
+    func_text += "  S = bodo.utils.utils.alloc_type(n, _arr_typ, varsize_alloc_sizes)\n"
+    func_text += "  for i in numba.parfors.parfor.internal_prange(n):\n"
+    func_text += "    t = bodo.utils.conversion.box_if_dt64(A[i])\n"
+    func_text += "    v = map_func(t)\n"
+    func_text += "    S[i] = bodo.utils.conversion.unbox_if_timestamp(v)\n"
+    func_text += "  return bodo.utils.conversion.index_from_array(S, name)\n"
+
+    # using Bodo's sequential/inline pipeline for the UDF to make sure nested calls
+    # are inlined and not distributed. Otherwise, generated barriers cause hangs
+    # see: test_df_apply_func_case2
+    parallel = {
+        "comprehension": True,
+        "setitem": False,
+        "reduction": True,
+        "numpy": True,
+        "stencil": True,
+        "fusion": True,
+    }
+    map_func = numba.njit(
+        func, parallel=parallel, pipeline_class=bodo.compiler.BodoCompilerSeqInline
+    )
+
+    loc_vars = {}
+    exec(
+        func_text,
+        {
+            "numba": numba,
+            "np": np,
+            "pd": pd,
+            "bodo": bodo,
+            "map_func": map_func,
+            "_arr_typ": out_arr_type,
+        },
+        loc_vars,
+    )
+    f = loc_vars["f"]
+    return f

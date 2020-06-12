@@ -508,3 +508,35 @@ def test_init_range_index_array_analysis(memory_leak_check):
     ]
     eq_set = array_analysis.equiv_sets[0]
     assert eq_set._get_ind("I#0") == eq_set._get_ind("n")
+
+
+def test_map_str(memory_leak_check):
+    """test string output in map"""
+
+    def test_impl(I):
+        return I.map(lambda a: str(a))
+
+    I = pd.Int64Index([1, 211, 333, 43, 51])
+    check_func(test_impl, (I,))
+
+
+@pytest.mark.parametrize(
+    "index",
+    [
+        pd.RangeIndex(11),
+        pd.Int64Index([10, 12, 1, 3, 2, 4, 5, -1]),
+        pd.Float64Index([10.1, 12.1, 1.1, 2.2, -1.2, 4.1, -2.1]),
+        pd.Index(["A", "BB", "ABC", "", "KG", "FF", "ABCDF"]),
+        pd.date_range("2019-01-14", periods=11),
+        # TODO: enable when pd.Timedelta is supported (including box_if_dt64)
+        # pd.timedelta_range("3D", periods=11),
+    ],
+)
+def test_map(index, memory_leak_check):
+    """test Index.map for all Index types
+    """
+
+    def test_impl(I):
+        return I.map(lambda a: a)
+
+    check_func(test_impl, (index,))
