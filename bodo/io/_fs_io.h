@@ -6,6 +6,7 @@
 #include <string>
 #include "_bodo_file_reader.h"
 #include "arrow/filesystem/s3fs.h"
+#include "arrow/filesystem/hdfs.h"
 
 struct Bodo_Fs {
     enum FsEnum { posix = 0, s3 = 1, hdfs = 2 };
@@ -16,7 +17,7 @@ typedef FileReader *(*hdfs_reader_init_t)(const char *, const char *, bool,
                                           bool);
 typedef void (*s3_get_fs_t)(std::shared_ptr<::arrow::fs::S3FileSystem> *);
 typedef void (*hdfs_get_fs_t)(const std::string &,
-                              std::shared_ptr<::arrow::io::HadoopFileSystem> *);
+                              std::shared_ptr<::arrow::fs::HadoopFileSystem> *);
 
 /*
  * Generate file names for files in directory: this process writes a file
@@ -92,7 +93,7 @@ void get_get_fs_pyobject(Bodo_Fs::FsEnum fs_option,
 void open_file_outstream(
     Bodo_Fs::FsEnum fs_option, const std::string &file_type,
     const std::string &fname, std::shared_ptr<arrow::fs::S3FileSystem> s3_fs,
-    std::shared_ptr<::arrow::io::HadoopFileSystem> hdfs_fs,
+    std::shared_ptr<::arrow::fs::HadoopFileSystem> hdfs_fs,
     std::shared_ptr<::arrow::io::OutputStream> *out_stream);
 
 /*
@@ -104,7 +105,7 @@ void open_file_outstream(
  */
 void open_file_appendstream(
     const std::string &file_type, const std::string &fname,
-    std::shared_ptr<::arrow::io::HadoopFileSystem> hdfs_fs,
+    std::shared_ptr<::arrow::fs::HadoopFileSystem> hdfs_fs,
     std::shared_ptr<::arrow::io::OutputStream> *out_stream);
 
 /*
@@ -155,6 +156,6 @@ void parallel_in_order_write(
     Bodo_Fs::FsEnum fs_option, const std::string &file_type,
     const std::string &fname, char *buff, int64_t count, int64_t elem_size,
     std::shared_ptr<arrow::fs::S3FileSystem> s3_fs,
-    std::shared_ptr<::arrow::io::HadoopFileSystem> hdfs_fs);
+    std::shared_ptr<::arrow::fs::HadoopFileSystem> hdfs_fs);
 
 #endif  // _FS_IO_H_INCLUDED

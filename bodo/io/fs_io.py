@@ -181,13 +181,17 @@ def find_file_name_or_handler(path, ftype):
     func_name = "read_json" if ftype == "json" else "read_csv"
     err_msg = f"pd.{func_name}(): there is no {ftype} file in directory: {fname}"
 
+    def filter_files(file_names):
+        return [f for f in file_names if f.lower() != "_success" and not f.lower().endswith(".crc")]
+
     if parsed_url.scheme == "s3":
         is_handler = True
         fs = get_s3_fs()
-        all_files = s3_list_dir_fnames(fs, path)
+        all_files = s3_list_dir_fnames(fs, path)  # can return None if not dir
         f_size = fs.info(fname)["size"]
 
         if all_files:
+            all_files = filter_files(all_files)
             all_csv_files = [f for f in sorted(all_files) if fs.info(f)["size"] > 0]
             if len(all_csv_files) == 0:  # pragma: no cover
                 # TODO: test
@@ -203,6 +207,7 @@ def find_file_name_or_handler(path, ftype):
         f_size = fs.get_file_info([fname])[0].size
 
         if all_files:
+            all_files = filter_files(all_files)
             all_csv_files = [
                 f for f in sorted(all_files) if fs.get_file_info([f])[0].size > 0
             ]
@@ -219,9 +224,10 @@ def find_file_name_or_handler(path, ftype):
         is_handler = False
 
         if os.path.isdir(path):
+            files = filter_files(glob.glob(os.path.join(path, "*")))
             all_csv_files = [
                 f
-                for f in sorted(glob.glob(os.path.join(path, "*.{}".format(ftype))))
+                for f in sorted(files)
                 if os.path.getsize(f) > 0
             ]
             if len(all_csv_files) == 0:  # pragma: no cover

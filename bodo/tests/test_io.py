@@ -2,6 +2,7 @@
 import unittest
 import pytest
 import os
+import subprocess
 import shutil
 import pandas as pd
 import numpy as np
@@ -30,6 +31,39 @@ from decimal import Decimal
 
 
 kde_file = os.path.join("bodo", "tests", "data", "kde.parquet")
+
+
+def compress_file(fname, dummy_extension=""):
+    assert not os.path.isdir(fname)
+    if bodo.get_rank() == 0:
+        subprocess.run(["gzip", "-k", fname])
+        subprocess.run(["bzip2", "-k", fname])
+        if dummy_extension != "":
+            os.rename(fname + ".gz", fname + ".gz" + dummy_extension)
+            os.rename(fname + ".bz2", fname + ".bz2" + dummy_extension)
+    bodo.barrier()
+    return [fname + ".gz" + dummy_extension, fname + ".bz2" + dummy_extension]
+
+
+def remove_files(file_names):
+    if bodo.get_rank() == 0:
+        for fname in file_names:
+            os.remove(fname)
+    bodo.barrier()
+
+
+def compress_dir(dir_name):
+    if bodo.get_rank() == 0:
+        for fname in [f for f in os.listdir(dir_name) if f.endswith(".csv") and os.path.getsize(dir_name + "/" + f) > 0]:
+            subprocess.run(["gzip", fname], cwd=dir_name)
+    bodo.barrier()
+
+
+def uncompress_dir(dir_name):
+    if bodo.get_rank() == 0:
+        for fname in [f for f in os.listdir(dir_name) if f.endswith(".gz")]:
+            subprocess.run(["gunzip", fname], cwd=dir_name)
+    bodo.barrier()
 
 
 @pytest.fixture(
@@ -387,9 +421,14 @@ def test_csv_remove_col0_used_for_len(datapath):
     properly.
     """
     fname = datapath("csv_data1.csv")
+    fname_gzipped = fname + ".gz"
 
     def impl():
-        df = pd.read_csv(fname, names=["A", "B", "C", "D"])
+        df = pd.read_csv(fname, names=["A", "B", "C", "D"], compression=None)
+        return df.C
+
+    def impl2():
+        df = pd.read_csv(fname_gzipped, names=["A", "B", "C", "D"], compression="gzip")
         return df.C
 
     bodo_func = numba.njit(pipeline_class=DeadcodeTestPipeline, parallel=True)(impl)
@@ -403,6 +442,12 @@ def test_csv_remove_col0_used_for_len(datapath):
             assert len(stmt.df_colnames) == 1
             break
     assert read_csv_found
+
+    if bodo.get_rank() == 0:
+        subprocess.run(["gzip", "-k", fname])
+    bodo.barrier()
+    with ensure_clean(fname_gzipped):
+        check_func(impl2, ())
 
 
 def test_h5_remove_dead(datapath):
@@ -756,38 +801,77 @@ def test_csv_bool1(datapath):
     fname = datapath("csv_data_bool1.csv")
     check_func(test_impl, (fname,))
 
+    compressed_names = compress_file(fname)
+    try:
+        for fname in compressed_names:
+            check_func(test_impl, (fname,))
+    finally:
+        remove_files(compressed_names)
+
 
 def test_csv_int_na1(datapath):
     fname = datapath("csv_data_int_na1.csv")
 
-    def test_impl():
+    def test_impl(fname):
         dtype = {"A": "int", "B": "Int32"}
-        return pd.read_csv(fname, names=dtype.keys(), dtype=dtype)
+        return pd.read_csv(fname, names=dtype.keys(), dtype=dtype, compression="infer")
 
-    check_func(test_impl, ())
+    check_func(test_impl, (fname,))
+
+    compressed_names = compress_file(fname)
+    try:
+        for f in compressed_names:
+            check_func(test_impl, (f,))
+    finally:
+        remove_files(compressed_names)
+
+    # test reading csv file with non ".csv" extension
+    new_fname = fname[:-4] + ".custom"  # change .csv to .custom
+    if bodo.get_rank() == 0:
+        os.rename(fname, new_fname)
+    bodo.barrier()
+    try:
+        check_func(test_impl, (new_fname,))
+    finally:
+        if bodo.get_rank() == 0 and os.path.exists(new_fname):
+            os.rename(new_fname, fname)
 
 
 def test_csv_int_na2(datapath):
     fname = datapath("csv_data_int_na1.csv")
 
-    def test_impl():
+    def test_impl(fname, compression):
         dtype = {"A": "int", "B": pd.Int32Dtype()}
-        return pd.read_csv(fname, names=dtype.keys(), dtype=dtype)
+        return pd.read_csv(fname, names=dtype.keys(), dtype=dtype, compression=compression)
 
-    check_func(test_impl, ())
+    check_func(test_impl, (fname, "infer"))
+
+    compressed_names = compress_file(fname, dummy_extension=".dummy")
+    try:
+        check_func(test_impl, (compressed_names[0], "gzip"))
+        check_func(test_impl, (compressed_names[1], "bz2"))
+    finally:
+        remove_files(compressed_names)
 
 
 def test_csv_bool_na(datapath):
     fname = datapath("bool_nulls.csv")
 
-    def test_impl():
+    def test_impl(fname):
         # TODO: support column 1 which is bool with NAs when possible with
         # Pandas dtypes
         # see Pandas GH20591
         dtype = {"ind": "int32", "B": "bool"}
         return pd.read_csv(fname, names=dtype.keys(), dtype=dtype, usecols=[0, 2])
 
-    check_func(test_impl, ())
+    check_func(test_impl, (fname,))
+
+    compressed_names = compress_file(fname)
+    try:
+        for fname in compressed_names:
+            check_func(test_impl, (fname,))
+    finally:
+        remove_files(compressed_names)
 
 
 def test_csv_fname_comp(datapath):
@@ -1106,10 +1190,17 @@ def test_csv_sep_arg(datapath):
     """
     fname = datapath("csv_data2.csv")
 
-    def test_impl(sep):
+    def test_impl(fname, sep):
         return pd.read_csv(fname, sep=sep)
 
-    check_func(test_impl, ("|",))
+    check_func(test_impl, (fname, "|",))
+
+    compressed_names = compress_file(fname)
+    try:
+        for fname in compressed_names:
+            check_func(test_impl, (fname, "|",))
+    finally:
+        remove_files(compressed_names)
 
 
 def test_csv_spark_header(datapath):
@@ -1124,6 +1215,32 @@ def test_csv_spark_header(datapath):
     py_output = pd.read_csv(datapath("example.csv"))
     check_func(test_impl, (fname1,), py_output=py_output)
     check_func(test_impl, (fname2,), py_output=py_output)
+
+    for fname in (fname1, fname2):
+        compress_dir(fname)
+        try:
+            check_func(test_impl, (fname,), py_output=py_output)
+        finally:
+            uncompress_dir(fname)
+
+    # test reading a directory of csv files not ending in ".csv" extension
+    dirname = fname2
+    if bodo.get_rank() == 0:
+        # rename all .csv files in directory to .custom
+        for f in os.listdir(dirname):
+            if f.endswith(".csv"):
+                newfname = f[:-4] + ".custom"
+                os.rename(os.path.join(dirname, f), os.path.join(dirname, newfname))
+    bodo.barrier()
+    try:
+        check_func(test_impl, (fname2,), py_output=py_output)
+    finally:
+        if bodo.get_rank() == 0:
+            for f in os.listdir(fname2):
+                if f.endswith(".custom"):
+                    newfname = f[:-7] + ".csv"
+                    os.rename(os.path.join(dirname, f), os.path.join(dirname, newfname))
+        bodo.barrier()
 
 
 def test_csv_header_write_read(datapath):
@@ -1169,13 +1286,20 @@ def test_csv_header_write_read(datapath):
 def test_csv_cat1(datapath):
     fname = datapath("csv_data_cat1.csv")
 
-    def test_impl():
+    def test_impl(fname):
         ct_dtype = pd.CategoricalDtype(["A", "B", "C"])
         dtypes = {"C1": np.int, "C2": ct_dtype, "C3": str}
         df = pd.read_csv(fname, names=["C1", "C2", "C3"], dtype=dtypes)
         return df
 
-    check_func(test_impl, ())
+    check_func(test_impl, (fname,))
+
+    compressed_names = compress_file(fname)
+    try:
+        for fname in compressed_names:
+            check_func(test_impl, (fname,))
+    finally:
+        remove_files(compressed_names)
 
 
 def test_csv_date_col_name(datapath):
@@ -1183,7 +1307,7 @@ def test_csv_date_col_name(datapath):
     """
     fname = datapath("csv_data_date1.csv")
 
-    def test_impl():
+    def test_impl(fname):
         return pd.read_csv(
             fname,
             names=["A", "B", "C", "D"],
@@ -1191,7 +1315,14 @@ def test_csv_date_col_name(datapath):
             parse_dates=["C"],
         )
 
-    check_func(test_impl, ())
+    check_func(test_impl, (fname,))
+
+    compressed_names = compress_file(fname)
+    try:
+        for fname in compressed_names:
+            check_func(test_impl, (fname,))
+    finally:
+        remove_files(compressed_names)
 
 
 def test_csv_read_only_datetime1(datapath):
@@ -1200,10 +1331,17 @@ def test_csv_read_only_datetime1(datapath):
     """
     fname = datapath("csv_data_only_date1.csv")
 
-    def test_impl():
+    def test_impl(fname):
         return pd.read_csv(fname, names=["A"], dtype={"A": str}, parse_dates=["A"],)
 
-    check_func(test_impl, ())
+    check_func(test_impl, (fname,))
+
+    compressed_names = compress_file(fname)
+    try:
+        for fname in compressed_names:
+            check_func(test_impl, (fname,))
+    finally:
+        remove_files(compressed_names)
 
 
 def test_csv_read_only_datetime2(datapath):
@@ -1212,12 +1350,19 @@ def test_csv_read_only_datetime2(datapath):
     """
     fname = datapath("csv_data_only_date2.csv")
 
-    def test_impl():
+    def test_impl(fname):
         return pd.read_csv(
             fname, names=["A", "B"], dtype={"A": str, "B": str}, parse_dates=[0, 1],
         )
 
-    check_func(test_impl, ())
+    check_func(test_impl, (fname,))
+
+    compressed_names = compress_file(fname)
+    try:
+        for fname in compressed_names:
+            check_func(test_impl, (fname,))
+    finally:
+        remove_files(compressed_names)
 
 
 def test_csv_dir_int_nulls_single(datapath):
@@ -1227,14 +1372,20 @@ def test_csv_dir_int_nulls_single(datapath):
     """
     fname = datapath("int_nulls_single.csv")
 
-    def test_impl():
+    def test_impl(fname):
         return pd.read_csv(fname, names=["A"], dtype={"A": "Int32"}, header=None)
 
     py_output = pd.read_csv(
         datapath("int_nulls.csv"), names=["A"], dtype={"A": "Int32"}, header=None
     )
 
-    check_func(test_impl, (), py_output=py_output)
+    check_func(test_impl, (fname,), py_output=py_output)
+
+    compress_dir(fname)
+    try:
+        check_func(test_impl, (fname,), py_output=py_output)
+    finally:
+        uncompress_dir(fname)
 
 
 def test_csv_dir_int_nulls_header_single(datapath):
@@ -1244,14 +1395,20 @@ def test_csv_dir_int_nulls_header_single(datapath):
     """
     fname = datapath("int_nulls_header_single.csv")
 
-    def test_impl():
+    def test_impl(fname):
         return pd.read_csv(fname)
 
     # index_col = 0 because int_nulls.csv has index written
     # names=["A"] because int_nulls.csv does not have header
     py_output = pd.read_csv(datapath("int_nulls.csv"), index_col=0, names=["A"])
 
-    check_func(test_impl, (), py_output=py_output)
+    check_func(test_impl, (fname,), py_output=py_output)
+
+    compress_dir(fname)
+    try:
+        check_func(test_impl, (fname,), py_output=py_output)
+    finally:
+        uncompress_dir(fname)
 
 
 def test_csv_dir_int_nulls_multi(datapath):
@@ -1261,14 +1418,20 @@ def test_csv_dir_int_nulls_multi(datapath):
     """
     fname = datapath("int_nulls_multi.csv")
 
-    def test_impl():
+    def test_impl(fname):
         return pd.read_csv(fname, names=["A"], dtype={"A": "Int32"},)
 
     py_output = pd.read_csv(
         datapath("int_nulls.csv"), names=["A"], dtype={"A": "Int32"},
     )
 
-    check_func(test_impl, (), py_output=py_output)
+    check_func(test_impl, (fname,), py_output=py_output)
+
+    compress_dir(fname)
+    try:
+        check_func(test_impl, (fname,), py_output=py_output)
+    finally:
+        uncompress_dir(fname)
 
 
 def test_csv_dir_int_nulls_header_multi(datapath):
@@ -1279,14 +1442,20 @@ def test_csv_dir_int_nulls_header_multi(datapath):
     """
     fname = datapath("int_nulls_header_multi.csv")
 
-    def test_impl():
+    def test_impl(fname):
         return pd.read_csv(fname)
 
     # index_col = 0 because int_nulls.csv has index written
     # names=["A"] because int_nulls.csv does not have header
     py_output = pd.read_csv(datapath("int_nulls.csv"), index_col=0, names=["A"])
 
-    check_func(test_impl, (), py_output=py_output)
+    check_func(test_impl, (fname,), py_output=py_output)
+
+    compress_dir(fname)
+    try:
+        check_func(test_impl, (fname,), py_output=py_output)
+    finally:
+        uncompress_dir(fname)
 
 
 def test_csv_dir_str_arr_single(datapath):
@@ -1296,7 +1465,7 @@ def test_csv_dir_str_arr_single(datapath):
     """
     fname = datapath("str_arr_single.csv")
 
-    def test_impl():
+    def test_impl(fname):
         return pd.read_csv(fname, names=["A", "B"], dtype={"A": str, "B": str},).fillna(
             ""
         )
@@ -1305,7 +1474,13 @@ def test_csv_dir_str_arr_single(datapath):
         datapath("str_arr.csv"), names=["A", "B"], dtype={"A": str, "B": str},
     ).fillna("")
 
-    check_func(test_impl, (), py_output=py_output)
+    check_func(test_impl, (fname,), py_output=py_output)
+
+    compress_dir(fname)
+    try:
+        check_func(test_impl, (fname,), py_output=py_output)
+    finally:
+        uncompress_dir(fname)
 
 
 def test_csv_dir_str_arr_multi(datapath):
@@ -1315,7 +1490,7 @@ def test_csv_dir_str_arr_multi(datapath):
     """
     fname = datapath("str_arr_parts.csv")
 
-    def test_impl():
+    def test_impl(fname):
         return pd.read_csv(fname, names=["A", "B"], dtype={"A": str, "B": str},).fillna(
             ""
         )
@@ -1324,7 +1499,13 @@ def test_csv_dir_str_arr_multi(datapath):
         datapath("str_arr.csv"), names=["A", "B"], dtype={"A": str, "B": str},
     ).fillna("")
 
-    check_func(test_impl, (), py_output=py_output)
+    check_func(test_impl, (fname,), py_output=py_output)
+
+    compress_dir(fname)
+    try:
+        check_func(test_impl, (fname,), py_output=py_output)
+    finally:
+        uncompress_dir(fname)
 
 
 def test_excel1(datapath):

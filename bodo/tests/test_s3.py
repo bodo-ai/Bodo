@@ -28,8 +28,29 @@ def test_s3_csv_data1(minio_server, s3_bucket, datapath):
         dtype={"A": np.int, "B": np.float, "C": np.float, "D": np.int},
     )
 
-    bodo_output = bodo.jit(test_impl)()
     check_func(test_impl, (), py_output=py_output)
+
+
+def test_s3_csv_data1_compressed(minio_server, s3_bucket, datapath):
+    """
+    test s3 read_csv
+    """
+
+    def test_impl_gzip():
+        return pd.read_csv("s3://bodo-test/csv_data1.csv.gz",
+                           names=["A", "B", "C", "D"],
+                           header=None)
+
+    def test_impl_bz2():
+        return pd.read_csv("s3://bodo-test/csv_data1.csv.bz2",
+                           names=["A", "B", "C", "D"],
+                           header=None)
+
+    fname = datapath("csv_data1.csv")
+    py_output = pd.read_csv(fname, names=["A", "B", "C", "D"], header=None)
+
+    check_func(test_impl_gzip, (), py_output=py_output)
+    check_func(test_impl_bz2, (), py_output=py_output)
 
 
 def test_s3_csv_data_date1(minio_server, s3_bucket, datapath):

@@ -39,6 +39,7 @@ class CsvReader(ir.Stmt):
         usecols,
         loc,
         header,
+        compression,
         skiprows=0,
     ):
         self.connector_typ = "csv"
@@ -52,6 +53,7 @@ class CsvReader(ir.Stmt):
         self.loc = loc
         self.skiprows = skiprows
         self.header = header
+        self.compression = compression
 
     def __repr__(self):  # pragma: no cover
         return "{} = ReadCsv(file={}, col_names={}, types={}, vars={})".format(
@@ -67,7 +69,7 @@ ll.add_symbol("csv_file_chunk_reader", csv_cpp.csv_file_chunk_reader)
 csv_file_chunk_reader = types.ExternalFunction(
     "csv_file_chunk_reader",
     bodo.ir.connector.stream_reader_type(
-        types.voidptr, types.bool_, types.int64, types.int64, types.bool_
+        types.voidptr, types.bool_, types.int64, types.int64, types.bool_, types.voidptr
     ),
 )
 
@@ -132,6 +134,7 @@ def csv_distributed_run(
         parallel,
         csv_node.skiprows,
         csv_node.header,
+        csv_node.compression,
     )
 
     f_block = compile_to_numba_ir(
@@ -243,7 +246,8 @@ dummy_use = numba.njit(lambda a: None)
 
 
 def _gen_csv_reader_py(
-    col_names, col_typs, usecols, sep, typingctx, targetctx, parallel, skiprows, header
+    col_names, col_typs, usecols, sep, typingctx, targetctx, parallel, skiprows,
+    header, compression
 ):
     # TODO: support non-numpy types like strings
     sanitized_cnames = [sanitize_varname(c) for c in col_names]
@@ -267,11 +271,18 @@ def _gen_csv_reader_py(
     #  None meaning the file(s) does not contain header
     has_header = header == 0
 
+    if compression in {"gzip", "bz2"}:
+        compression = compression.upper()  # Arrow's representation
+    elif compression is None:
+        compression = "UNCOMPRESSED"  # Arrow's representation
+    else:
+        compression = compression
+
     func_text = "def csv_reader_py(fname):\n"
     func_text += "  skiprows = {}\n".format(skiprows)
     # TODO: unicode name
     func_text += "  f_reader = csv_file_chunk_reader(fname._data, "
-    func_text += "    {}, skiprows, -1, {})\n".format(parallel, has_header)
+    func_text += "    {}, skiprows, -1, {}, bodo.libs.str_ext.string_to_char_ptr('{}'))\n".format(parallel, has_header, compression)
     func_text += "  dummy_use(fname)\n"
     func_text += "  with objmode({}):\n".format(typ_strs)
     func_text += "    df = pd.read_csv(f_reader, names={},\n".format(col_names)

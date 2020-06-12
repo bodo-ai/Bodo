@@ -5,6 +5,7 @@ import pytest
 import bodo
 from numba.core.runtime import rtsys
 import glob
+import subprocess
 
 
 # similar to Pandas
@@ -84,8 +85,6 @@ def minio_server():
     """
     spins up minio server
     """
-    import subprocess
-
     host, port = "127.0.0.1", "9000"
     access_key = os.environ["AWS_ACCESS_KEY_ID"]
     secret_key = os.environ["AWS_SECRET_ACCESS_KEY"]
@@ -153,6 +152,14 @@ def s3_bucket(minio_server, datapath):
         ]
         for s3_key, file_name in test_s3_files:
             s3.meta.client.upload_file(file_name, "bodo-test", s3_key)
+            if file_name.endswith("csv_data1.csv"):
+                # upload compressed versions of this file too for testing
+                subprocess.run(["gzip", "-k", file_name])
+                subprocess.run(["bzip2", "-k", file_name])
+                s3.meta.client.upload_file(file_name + ".gz", "bodo-test", "csv_data1.csv.gz")
+                s3.meta.client.upload_file(file_name + ".bz2", "bodo-test", "csv_data1.csv.bz2")
+                os.remove(file_name + ".gz")
+                os.remove(file_name + ".bz2")
 
         prefix = datapath("example_single.json")
         pat = prefix + "/*.json"

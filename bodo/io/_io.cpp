@@ -158,7 +158,7 @@ void file_write(char* file_name, void* buff, int64_t size) {
         Py_DECREF(f_mod);
         Py_DECREF(func_obj);
     } else if (strncmp("hdfs://", file_name, 7) == 0) {
-        std::shared_ptr<::arrow::io::HadoopFileSystem> hdfs_fs;
+        std::shared_ptr<::arrow::fs::HadoopFileSystem> hdfs_fs;
         std::string orig_path(file_name);
         std::string fname;  // excluding hdfs:// prefix
         arrow::Status status;
@@ -288,7 +288,7 @@ void file_write_parallel(char* file_name, char* buff, int64_t start,
         Py_DECREF(f_mod);
         Py_DECREF(func_obj);
     } else if (strncmp("hdfs://", file_name, 7) == 0) {
-        std::shared_ptr<::arrow::io::HadoopFileSystem> hdfs_fs;
+        std::shared_ptr<::arrow::fs::HadoopFileSystem> hdfs_fs;
         std::string orig_path(file_name);
         std::string fname;  // excluding hdfs:// prefix
         arrow::Status status;

@@ -29,14 +29,14 @@
 // a global singleton instance of HadoopFileSystem that is
 // initialized the first time it is needed and reused afterwards
 // if the config does not change
-std::shared_ptr<::arrow::io::HadoopFileSystem> hdfs_fs;
+std::shared_ptr<::arrow::fs::HadoopFileSystem> hdfs_fs;
 // a global singleton instance of HdfsConnectionConfig
 // used to check if a different HadoopFileSystem
 // needs to be initialized
 arrow::io::HdfsConnectionConfig hdfs_config;
 bool is_fs_initialized = false;
 
-std::shared_ptr<::arrow::io::HadoopFileSystem> get_hdfs_fs(
+std::shared_ptr<::arrow::fs::HadoopFileSystem> get_hdfs_fs(
     const std::string &uri_string) {
     arrow::fs::HdfsOptions options;
     arrow::Result<arrow::fs::HdfsOptions> result;
@@ -64,16 +64,17 @@ std::shared_ptr<::arrow::io::HadoopFileSystem> get_hdfs_fs(
         if ((hdfs_config.host != options.connection_config.host) ||
             (hdfs_config.port != options.connection_config.port) ||
             (hdfs_config.user != options.connection_config.user)) {
-            status = hdfs_fs->Disconnect();
-            CHECK_ARROW(status, "Hdfs:Disconnect ");
+            hdfs_fs = nullptr;  // destructor calls Close, which calls Disconnect
             hdfs_config = options.connection_config;
         } else {
             return hdfs_fs;
         }
     }
     // connect to hdfs
-    status = ::arrow::io::HadoopFileSystem::Connect(&hdfs_config, &hdfs_fs);
-    CHECK_ARROW(status, "hdfs::Connect");
+    options.ConfigureReplication(0);
+    options.ConfigureBufferSize(0);
+    options.ConfigureBlockSize(0);
+    hdfs_fs = arrow::fs::HadoopFileSystem::Make(options).ValueOrDie();
 
     is_fs_initialized = true;
     return hdfs_fs;
@@ -81,15 +82,15 @@ std::shared_ptr<::arrow::io::HadoopFileSystem> get_hdfs_fs(
 
 static int disconnect_hdfs() {
     if (is_fs_initialized) {
-        CHECK_ARROW(hdfs_fs->Disconnect(), "Disconnect hdfs");
+        hdfs_fs = nullptr;  // destructor calls Close, which calls Disconnect
         is_fs_initialized = false;
     }
     return 0;
 }
 
 std::pair<std::string, int64_t> extract_file_name_size(
-    const arrow::io::HdfsPathInfo &path_info) {
-    return make_pair(path_info.name, path_info.size);
+    const arrow::fs::FileInfo &file_stat) {
+    return make_pair(file_stat.path(), file_stat.size());
 }
 
 bool sort_by_name(const std::pair<std::string, int64_t> &a,
@@ -100,9 +101,11 @@ bool sort_by_name(const std::pair<std::string, int64_t> &a,
 // read hdfs files using Arrow 0.17
 class HdfsFileReader : public SingleFileReader {
    public:
-    std::shared_ptr<arrow::io::HadoopFileSystem> fs;
-    std::shared_ptr<::arrow::io::HdfsReadableFile> hdfs_file;
+    std::shared_ptr<arrow::fs::HadoopFileSystem> fs;
+    std::shared_ptr<arrow::io::RandomAccessFile> hdfs_file;
     arrow::Status status;
+    arrow::Result<std::shared_ptr<arrow::io::RandomAccessFile>> result;
+
     HdfsFileReader(const char *_fname, const char *f_type, bool csv_header,
                    bool json_lines)
         : SingleFileReader(_fname, f_type, csv_header, json_lines) {
@@ -115,8 +118,8 @@ class HdfsFileReader : public SingleFileReader {
         arrow::Result<std::shared_ptr<arrow::fs::FileSystem>> tempfs =
             ::arrow::fs::FileSystemFromUri(fname, &path);
         // open file
-        status = fs->OpenReadable(path, &hdfs_file);
-        CHECK_ARROW(status, "fs->OpenInputFile");
+        result = fs->OpenInputFile(path);
+        CHECK_ARROW_AND_ASSIGN(result, "HdfsFileSystem::OpenInputFile", hdfs_file)
     }
     bool seek(int64_t pos) {
         status = hdfs_file->Seek(pos + this->csv_header_bytes);
@@ -141,11 +144,13 @@ class HdfsFileReader : public SingleFileReader {
 
 class HdfsDirectoryFileReader : public DirectoryFileReader {
    public:
-    std::shared_ptr<arrow::io::HadoopFileSystem> fs;
+    std::shared_ptr<arrow::fs::HadoopFileSystem> fs;
     // sorted names of each csv file inside the directory
     name_size_vec file_names_sizes;
-    // PathInfo used to determine types, names, sizes
-    std::vector<arrow::io::HdfsPathInfo> path_infos;
+    // FileSelector used to get Directory information
+    arrow::fs::FileSelector dir_selector;
+    // FileInfo used to determine types, names, sizes
+    std::vector<arrow::fs::FileInfo> file_stats;
     arrow::Status status;
 
     HdfsDirectoryFileReader(const char *_dirname, const char *f_type,
@@ -156,15 +161,17 @@ class HdfsDirectoryFileReader : public DirectoryFileReader {
 
         fs = get_hdfs_fs(this->dirname);
 
-        arrow::Result<std::shared_ptr<arrow::fs::FileSystem>> tempfs =
-            ::arrow::fs::FileSystemFromUri(this->dirname, &path);
-        status = fs->ListDirectory(path, &this->path_infos);
-        CHECK_ARROW(status, "fs->ListDirectory");
+        // initialize dir_selector
+        dir_selector.base_dir = this->dirname;
 
-        // extract file names and file sizes from path_infos
+        arrow::Result<std::vector<arrow::fs::FileInfo>> result =
+            fs->GetFileInfo(dir_selector);
+        CHECK_ARROW_AND_ASSIGN(result, "fs->GetFileInfo", file_stats)
+
+        // extract file names and file sizes from file_stats
         // then sort by file names
         // assuming the directory contains files only, i.e. no subdirectory
-        std::transform(this->path_infos.begin(), this->path_infos.end(),
+        std::transform(this->file_stats.begin(), this->file_stats.end(),
                        std::back_inserter(this->file_names_sizes),
                        extract_file_name_size);
         std::sort(this->file_names_sizes.begin(), this->file_names_sizes.end(),
@@ -183,7 +190,7 @@ class HdfsDirectoryFileReader : public DirectoryFileReader {
 extern "C" {
 
 void hdfs_get_fs(const std::string &uri_string,
-                 std::shared_ptr<::arrow::io::HadoopFileSystem> *fs) {
+                 std::shared_ptr<::arrow::fs::HadoopFileSystem> *fs) {
     *fs = get_hdfs_fs(uri_string);
 }
 
@@ -192,28 +199,34 @@ FileReader *init_hdfs_reader(const char *fname, const char *suffix,
     std::string path;
     arrow::io::HdfsPathInfo path_info;
     std::string f_name(fname);
-    std::shared_ptr<::arrow::io::HadoopFileSystem> fs = get_hdfs_fs(f_name);
+    std::shared_ptr<::arrow::fs::HadoopFileSystem> fs = get_hdfs_fs(f_name);
     arrow::Result<std::shared_ptr<arrow::fs::FileSystem>> tempfs =
         ::arrow::fs::FileSystemFromUri(fname, &path);
-    arrow::Status status = fs->GetPathInfo(path, &path_info);
-    CHECK_ARROW(status, "fs->GetPathInfo");
-    if (path_info.kind == arrow::io::ObjectType::DIRECTORY) {
-        return new HdfsDirectoryFileReader(fname, suffix, csv_header,
-                                           json_lines);
+    arrow::fs::FileInfo file_stat;
+    arrow::Result<arrow::fs::FileInfo> result =
+        fs->GetFileInfo(fname);
+    CHECK_ARROW_AND_ASSIGN(result, "fs->GetFileInfo", file_stat)
+    if (file_stat.IsDirectory()) {
+        return new HdfsDirectoryFileReader(fname, suffix, csv_header, json_lines);
+    } else if (file_stat.IsFile()) {
+        return new HdfsFileReader(fname, suffix, csv_header, json_lines);
+    } else {
+        Bodo_PyErr_SetString(PyExc_RuntimeError,
+                             "Error in arrow hdfs: invalid path");
+        return NULL;
     }
-
-    return new HdfsFileReader(fname, suffix, csv_header, json_lines);
 }
 
 void hdfs_open_file(const char *fname,
-                    std::shared_ptr<::arrow::io::HdfsReadableFile> *file) {
+                    std::shared_ptr<::arrow::io::RandomAccessFile> *file) {
     std::string path;
     std::string f_name(fname);
-    std::shared_ptr<::arrow::io::HadoopFileSystem> fs = get_hdfs_fs(f_name);
+    std::shared_ptr<::arrow::fs::HadoopFileSystem> fs = get_hdfs_fs(f_name);
     arrow::Result<std::shared_ptr<arrow::fs::FileSystem>> tempfs =
         ::arrow::fs::FileSystemFromUri(f_name, &path);
-    arrow::Status status = fs->OpenReadable(path, file);
-    CHECK_ARROW(status, "fs->OpenInputFile")
+    arrow::Result<std::shared_ptr<::arrow::io::RandomAccessFile>> result;
+    result = fs->OpenInputFile(path);
+    CHECK_ARROW_AND_ASSIGN(result, "fs->OpenInputFile", *file)
 }
 
 // #undef CHECK

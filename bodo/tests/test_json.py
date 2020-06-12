@@ -1,5 +1,6 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 import os
+import subprocess
 import pytest
 import pandas as pd
 import numpy as np
@@ -8,9 +9,39 @@ from bodo.tests.utils import check_func, _get_dist_arg, _test_equal_guard, reduc
 from bodo.utils.testing import ensure_clean, ensure_clean_dir
 
 
+def compress_file(fname):
+    assert not os.path.isdir(fname)
+    if bodo.get_rank() == 0:
+        subprocess.run(["gzip", "-k", fname])
+        subprocess.run(["bzip2", "-k", fname])
+    bodo.barrier()
+    return [fname + ".gz", fname + ".bz2"]
+
+
+def remove_files(file_names):
+    if bodo.get_rank() == 0:
+        for fname in file_names:
+            os.remove(fname)
+    bodo.barrier()
+
+
+def compress_dir(dir_name):
+    if bodo.get_rank() == 0:
+        for fname in [f for f in os.listdir(dir_name) if f.endswith(".json") and os.path.getsize(dir_name + "/" + f) > 0]:
+            subprocess.run(["gzip", fname], cwd=dir_name)
+    bodo.barrier()
+
+
+def uncompress_dir(dir_name):
+    if bodo.get_rank() == 0:
+        for fname in [f for f in os.listdir(dir_name) if f.endswith(".gz")]:
+            subprocess.run(["gunzip", fname], cwd=dir_name)
+    bodo.barrier()
+
+
 def test_json_read_df(datapath):
     """
-    test read_json reads a dataframe containing mutliple columns
+    test read_json reads a dataframe containing multiple columns
     from a single file, a directory containg a single json file,
     and a directory containg multiple json files
     """
@@ -39,9 +70,28 @@ def test_json_read_df(datapath):
     check_func(test_impl, (fname_file,), py_output=py_out)
     check_func(test_impl, (fname_dir_single,), py_output=py_out)
     # specify dtype here because small partition of dataframe causes only
-    # int values(x.0) in float columns, and causes type mismatch becasue
-    # pandas infer them as int columns
+    # int values(x.0) in float columns, and causes type mismatch because
+    # pandas infers them as int columns
     check_func(test_impl_with_dtype, (fname_dir_multi,), py_output=py_out)
+
+    compressed_names = compress_file(fname_file)
+    try:
+        for fname in compressed_names:
+            check_func(test_impl, (fname,), py_output=py_out)
+    finally:
+        remove_files(compressed_names)
+
+    compress_dir(fname_dir_single)
+    try:
+        check_func(test_impl, (fname_dir_single,), py_output=py_out)
+    finally:
+        uncompress_dir(fname_dir_single)
+
+    compress_dir(fname_dir_multi)
+    try:
+        check_func(test_impl_with_dtype, (fname_dir_multi,), py_output=py_out)
+    finally:
+        uncompress_dir(fname_dir_multi)
 
 
 def test_json_read_int_nulls(datapath):
@@ -94,7 +144,6 @@ def test_json_read_str_arr(datapath):
     check_func(test_impl, (fname_dir_multi,), py_output=py_out)
 
 
-@pytest.mark.skip(reason="TODO: fails with 3 processes hanging CI")
 def test_json_read_multiline_object(datapath):
     """
     test read_json where json object is multi-lined

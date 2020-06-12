@@ -48,7 +48,7 @@ MPI_Datatype decimal_mpi_type = MPI_DATATYPE_NULL;
     lhs = std::move(res).ValueOrDie();
 
 std::shared_ptr<arrow::fs::S3FileSystem> s3_fs;
-std::shared_ptr<::arrow::io::HadoopFileSystem> hdfs_fs;
+std::shared_ptr<::arrow::fs::HadoopFileSystem> hdfs_fs;
 
 std::string gen_pieces_file_name(int myrank, int num_ranks,
                                  const std::string &suffix) {
@@ -134,7 +134,7 @@ void get_get_fs_pyobject(Bodo_Fs::FsEnum fs_option,
 void open_file_outstream(
     Bodo_Fs::FsEnum fs_option, const std::string &file_type,
     const std::string &fname, std::shared_ptr<arrow::fs::S3FileSystem> s3_fs,
-    std::shared_ptr<::arrow::io::HadoopFileSystem> hdfs_fs,
+    std::shared_ptr<::arrow::fs::HadoopFileSystem> hdfs_fs,
     std::shared_ptr<::arrow::io::OutputStream> *out_stream) {
     if (fs_option == Bodo_Fs::posix) {
         arrow::Result<std::shared_ptr<arrow::io::OutputStream>> result =
@@ -147,23 +147,18 @@ void open_file_outstream(
         CHECK_ARROW_AND_ASSIGN(result, "S3FileSystem::OpenOutputStream",
                                *out_stream, file_type)
     } else if (fs_option == Bodo_Fs::hdfs) {
-        std::shared_ptr<::arrow::io::HdfsOutputStream> hdfs_out_stream;
-        CHECK_ARROW(hdfs_fs->OpenWritable(fname, false, &hdfs_out_stream),
-                    "Hdfs::OpenWritable", file_type);
-        *out_stream = hdfs_out_stream;
-        ;
+        arrow::Result<std::shared_ptr<arrow::io::OutputStream>> result =
+            hdfs_fs->OpenOutputStream(fname);
+        CHECK_ARROW_AND_ASSIGN(result, "HdfsFileSystem::OpenOutputStream",
+                               *out_stream, file_type)
     }
 }
 
 void open_file_appendstream(
     const std::string &file_type, const std::string &fname,
-    std::shared_ptr<::arrow::io::HadoopFileSystem> hdfs_fs,
+    std::shared_ptr<::arrow::fs::HadoopFileSystem> hdfs_fs,
     std::shared_ptr<::arrow::io::OutputStream> *out_stream) {
-    std::shared_ptr<::arrow::io::HdfsOutputStream> hdfs_out_stream;
-    CHECK_ARROW(hdfs_fs->OpenWritable(fname, true, &hdfs_out_stream),
-                "Hdfs::OpenWritable", file_type);
-    *out_stream = hdfs_out_stream;
-    ;
+    *out_stream = hdfs_fs->OpenAppendStream(fname).ValueOrDie();
 }
 
 void open_outstream(Bodo_Fs::FsEnum fs_option, bool is_parallel, int myrank,
@@ -242,7 +237,7 @@ void open_outstream(Bodo_Fs::FsEnum fs_option, bool is_parallel, int myrank,
         hdfs_get_fs(orig_path, &hdfs_fs);
         if (is_parallel) {
             if (myrank == 0) {
-                status = hdfs_fs->MakeDirectory(dirname);
+                status = hdfs_fs->CreateDir(dirname);
                 CHECK_ARROW(status, "Hdfs::MakeDirectory", file_type);
             }
             MPI_Barrier(MPI_COMM_WORLD);
@@ -263,7 +258,7 @@ void parallel_in_order_write(
     Bodo_Fs::FsEnum fs_option, const std::string &file_type,
     const std::string &fname, char *buff, int64_t count, int64_t elem_size,
     std::shared_ptr<arrow::fs::S3FileSystem> s3_fs,
-    std::shared_ptr<::arrow::io::HadoopFileSystem> hdfs_fs) {
+    std::shared_ptr<::arrow::fs::HadoopFileSystem> hdfs_fs) {
     int myrank, num_ranks, ierr, err_len, err_class;
     std::shared_ptr<::arrow::io::OutputStream> out_stream;
 

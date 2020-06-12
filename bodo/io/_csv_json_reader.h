@@ -21,12 +21,13 @@ extern "C" void PyInit_json(PyObject *);
  * @param[in]  skiprows   number of rows to skip at the beginnning
  * @param[in]  nrows   numebr of rows to read
  * @param[in]  header   whether csv file(s) contain header(s)
+ * @param[in]  compression   compression scheme of file(s)
  * @return     HPATIO file-like object to read the owned chunk through
  *pandas.read_csv
  **/
 extern "C" PyObject *csv_file_chunk_reader(const char *fname, bool is_parallel,
                                            int64_t skiprows, int64_t nrows,
-                                           bool header);
+                                           bool header, const char *compression);
 
 /**
  * Split file into chunks and return a file-like object per rank. The returned
@@ -39,11 +40,13 @@ extern "C" PyObject *csv_file_chunk_reader(const char *fname, bool is_parallel,
  per line.
  * @param[in]  is_parallel   if parallel read of different chunks required
  * @param[in]  nrows   number of rows to read
+ * @param[in]  compression   compression scheme of file(s)
  * @return     HPATIO file-like object to read the owned chunk through
  *pandas.read_json
  **/
 extern "C" PyObject *json_file_chunk_reader(const char *fname, bool lines,
-                                            bool is_parallel, int64_t nrows);
+                                            bool is_parallel, int64_t nrows,
+                                            const char *compression);
 
 /**
  * Split string into chunks and return a file-like object per rank. The returned

@@ -746,6 +746,7 @@ class UntypedPass:
         date_cols = self._get_const_arg(
             "read_csv", rhs.args, kws, 23, "parse_dates", [], typ="int or str"
         )
+        compression = self._get_const_arg("read_csv", rhs.args, kws, 32, "compression", "infer")
 
         # check unsupported arguments
         supported_args = (
@@ -759,11 +760,24 @@ class UntypedPass:
             "dtype",
             "skiprows",
             "parse_dates",
+            "compression",
         )
         unsupported_args = set(kws.keys()) - set(supported_args)
         if unsupported_args:
             raise ValueError(
                 "read_csv() arguments {} not supported yet".format(unsupported_args)
+            )
+
+        supported_compression_options = {
+            "infer",
+            "gzip",
+            "bz2",
+            None
+        }
+        if compression not in supported_compression_options:
+            raise ValueError(
+                "pd.read_json() compression = {} is not supported."
+                " Supported options are {}".format(compression, supported_compression_options)
             )
 
         # infer the column names: if no names
@@ -788,7 +802,7 @@ class UntypedPass:
                 "annotation using 'dtype' if filename is not constant"
             )
             fname_const = get_const_value(fname, self.func_ir, msg, arg_types=self.args)
-            df_type = _get_csv_df_type_from_file(fname_const, sep, skiprows, header)
+            df_type = _get_csv_df_type_from_file(fname_const, sep, skiprows, header, compression)
             dtypes = df_type.data
             usecols = list(range(len(dtypes))) if usecols == "" else usecols
             # convert Pandas generated integer names if any
@@ -844,6 +858,7 @@ class UntypedPass:
                 usecols,
                 lhs.loc,
                 header,
+                compression,
                 skiprows,
             )
         ]
@@ -912,6 +927,8 @@ class UntypedPass:
             "read_json", rhs.args, kws, 8, "precise_float", False
         )
         lines = self._get_const_arg("read_json", rhs.args, kws, 11, "lines", True)
+        compression = self._get_const_arg("read_json", rhs.args, kws, 13, "compression", "infer")
+
         # check unsupported arguments
         unsupported_args = {
             "convert_axes",
@@ -920,17 +937,28 @@ class UntypedPass:
             "date_unit",
             "encoding",
             "chunksize",
-            "compression",
         }
 
-        passsed_unsupported = unsupported_args.intersection(kws.keys())
-        if len(passsed_unsupported) > 0:
+        passed_unsupported = unsupported_args.intersection(kws.keys())
+        if len(passed_unsupported) > 0:
             if unsupported_args:
                 raise ValueError(
                     "read_json() arguments {} not supported yet".format(
-                        passsed_unsupported
+                        passed_unsupported
                     )
                 )
+
+        supported_compression_options = {
+            "infer",
+            "gzip",
+            "bz2",
+            None
+        }
+        if compression not in supported_compression_options:
+            raise ValueError(
+                "pd.read_json() compression = {} is not supported."
+                " Supported options are {}".format(compression, supported_compression_options)
+            )
 
         if frame_or_series != "frame":
             raise ValueError(
@@ -974,7 +1002,7 @@ class UntypedPass:
             # TODO: more error checking needed
 
             df_type = _get_json_df_type_from_file(
-                fname_const, orient, convert_dates, precise_float, lines
+                fname_const, orient, convert_dates, precise_float, lines, compression
             )
 
             dtypes = df_type.data
@@ -1019,6 +1047,7 @@ class UntypedPass:
                 convert_dates,
                 precise_float,
                 lines,
+                compression,
             )
         ]
 
@@ -1513,7 +1542,7 @@ def remove_dead_branches(func_ir):
 
 
 def _get_json_df_type_from_file(
-    fname_const, orient, convert_dates, precise_float, lines
+    fname_const, orient, convert_dates, precise_float, lines, compression
 ):
     """get dataframe type for read_json() using file path constant.
     Only rank 0 looks at the file to infer df type, then broadcasts.
@@ -1530,6 +1559,14 @@ def _get_json_df_type_from_file(
         is_handler, file_name_or_handler, f_size, _ = find_file_name_or_handler(
             fname_const, "json"
         )
+        if is_handler and compression == "infer":
+            # pandas can't infer compression without filename, we need to do it
+            if fname_const.endswith(".gz"):
+                compression = "gzip"
+            elif fname_const.endswith(".bz2"):
+                compression = "bz2"
+            else:
+                compression = None
         try:
             # Ideally, we should use chunksize to read the number of rows desired
             # instead of manually reading the number of rows into a buffer.
@@ -1542,7 +1579,8 @@ def _get_json_df_type_from_file(
 
             file_name_or_buff = file_name_or_handler
 
-            if is_handler:
+            # TODO read only `rows_to_read` of compressed files
+            if is_handler and compression is None:
                 read_chunk_size = 500  # max number of bytes read at a time
                 rows_read = 0  # rows seen
                 size_read = 0  # number of bytes seen
@@ -1562,6 +1600,7 @@ def _get_json_df_type_from_file(
                 convert_dates=convert_dates,
                 precise_float=precise_float,
                 lines=lines,
+                compression=compression,
                 # chunksize=rows_to_read,
             )
         finally:
@@ -1624,7 +1663,7 @@ def _get_sql_df_type_from_db(sql_const, con_const):
     return df_type
 
 
-def _get_csv_df_type_from_file(fname_const, sep, skiprows, header):
+def _get_csv_df_type_from_file(fname_const, sep, skiprows, header, compression):
     """get dataframe type for read_csv() using file path constant.
     If fname_const points to a directory, find a non empty csv file from 
     the directory. 
@@ -1645,6 +1684,14 @@ def _get_csv_df_type_from_file(fname_const, sep, skiprows, header):
             fname_const, "csv"
         )
 
+        if is_handler and compression == "infer":
+            # pandas can't infer compression without filename, we need to do it
+            if fname_const.endswith(".gz"):
+                compression = "gzip"
+            elif fname_const.endswith(".bz2"):
+                compression = "bz2"
+            else:
+                compression = None
         try:
             df = pd.read_csv(
                 file_name_or_handler,
@@ -1652,6 +1699,7 @@ def _get_csv_df_type_from_file(fname_const, sep, skiprows, header):
                 nrows=rows_to_read,
                 skiprows=skiprows,
                 header=header,
+                compression=compression,
             )
         finally:
             if is_handler:

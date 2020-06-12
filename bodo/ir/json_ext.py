@@ -30,6 +30,7 @@ class JsonReader(ir.Stmt):
         convert_dates,
         precise_float,
         lines,
+        compression,
     ):
         self.connector_typ = "json"
         self.df_out = df_out  # used only for printing
@@ -42,6 +43,7 @@ class JsonReader(ir.Stmt):
         self.convert_dates = convert_dates
         self.precise_float = precise_float
         self.lines = lines
+        self.compression = compression
 
     def __repr__(self):  # pragma: no cover
         return "{} = ReadJson(file={}, col_names={}, types={}, vars={})".format(
@@ -57,7 +59,7 @@ ll.add_symbol("json_file_chunk_reader", json_cpp.json_file_chunk_reader)
 json_file_chunk_reader = types.ExternalFunction(
     "json_file_chunk_reader",
     bodo.ir.connector.stream_reader_type(
-        types.voidptr, types.bool_, types.bool_, types.int64
+        types.voidptr, types.bool_, types.bool_, types.int64, types.voidptr
     ),
 )
 
@@ -116,6 +118,7 @@ def json_distributed_run(
         json_node.convert_dates,
         json_node.precise_float,
         json_node.lines,
+        json_node.compression,
     )
     f_block = compile_to_numba_ir(
         json_impl,
@@ -172,6 +175,7 @@ def _gen_json_reader_py(
     convert_dates,
     precise_float,
     lines,
+    compression,
 ):
     # TODO: support non-numpy types like strings
     sanitized_cnames = [sanitize_varname(c) for c in col_names]
@@ -190,10 +194,18 @@ def _gen_json_reader_py(
             for cname, t in zip(col_names, col_typs)
         ]
     )
+
+    if compression in {"gzip", "bz2"}:
+        compression = compression.upper()  # Arrow's representation
+    elif compression is None:
+        compression = "UNCOMPRESSED"  # Arrow's representation
+    else:
+        compression = compression
+
     func_text = "def json_reader_py(fname):\n"
     # TODO: unicode name
     func_text += "  f_reader = json_file_chunk_reader(fname._data, "
-    func_text += "    {}, {}, -1)\n".format(lines, parallel)
+    func_text += "    {}, {}, -1, bodo.libs.str_ext.string_to_char_ptr('{}'))\n".format(lines, parallel, compression)
     func_text += "  dummy_use(fname)\n"
     func_text += "  with objmode({}):\n".format(typ_strs)
     func_text += "    df = pd.read_json(f_reader, orient='{}',\n".format(orient)
@@ -203,7 +215,10 @@ def _gen_json_reader_py(
     func_text += "       dtype={{{}}},\n".format(pd_dtype_strs)
     func_text += "       )\n"
     for s_cname, cname in zip(sanitized_cnames, col_names):
-        func_text += "    {} = df['{}'].values\n".format(s_cname, cname)
+        func_text += "    if len(df) > 0:\n"
+        func_text += "        {} = df['{}'].values\n".format(s_cname, cname)
+        func_text += "    else:\n"
+        func_text += "        {} = np.array([])\n".format(s_cname)
     func_text += "  return ({},)\n".format(", ".join(sc for sc in sanitized_cnames))
 
     glbls = globals()  # TODO: fix globals after Numba's #3355 is resolved
