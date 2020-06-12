@@ -173,6 +173,7 @@ def remove_hiframes(rhs, lives, call_list):
         (bodo.io.parquet_pio.get_column_size_parquet,),
         (bodo.io.parquet_pio.read_parquet_str,),
         (bodo.io.parquet_pio.read_parquet_list_str,),
+        (bodo.io.parquet_pio.read_parquet_list_item,),
     ):  # pragma: no cover
         return True
 

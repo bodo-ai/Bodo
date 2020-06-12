@@ -314,6 +314,34 @@ def test_pq_list_str(datapath):
     check_func(test_impl, (datapath("list_str_parts.pq"),))
 
 
+def test_pq_list_item(datapath):
+    def test_impl(fname):
+        return pd.read_parquet(fname)
+
+    check_func(test_impl, (datapath("list_int.pq"),))
+
+    a = np.array([[2.0, -3.2], [2.2, 1.3], None, [4.1, 5.2, 6.3], [], [1.1, 1.2]])
+    b = np.array([[1, 3], [2], None, [4, 5, 6], [], [1, 1]])
+    # for list of bools there are some things missing like (un)boxing
+    # c = np.array([[True, False], None, None, [True, True, True], [False, False], []])
+    df = pd.DataFrame({"A": a, "B": b})
+    with ensure_clean("test_pq_list_item.pq"):
+        if bodo.get_rank() == 0:
+            df.to_parquet("test_pq_list_item.pq")
+        bodo.barrier()
+        check_func(test_impl, ("test_pq_list_item.pq",))
+
+    a = np.array([[[2.0], [-3.2]], [[2.2, 1.3]], None, [[4.1, 5.2], [6.3]], [], [[1.1, 1.2]]])
+    b = np.array([[[1], [3]], [[2]], None, [[4, 5, 6]], [], [[1, 1]]])
+    df = pd.DataFrame({"A": a, "B": b})
+    with ensure_clean("test_pq_list_item.pq"):
+        if bodo.get_rank() == 0:
+            df.to_parquet("test_pq_list_item.pq")
+        bodo.barrier()
+        with pytest.raises(BodoError, match="Arrow data type .* not supported yet"):
+            bodo.jit(test_impl)("test_pq_list_item.pq")
+
+
 def test_pq_unsupported_types(datapath):
     """test unsupported data types in unselected columns
     """

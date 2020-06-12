@@ -205,13 +205,14 @@ def _infer_series_list_dtype(A, name):
         if len(first_val) > 0:
             # TODO: support more types
             # TODO: can nulls be inside the list?
-            if isinstance(first_val[0], str):
-                return types.List(string_type)
-            elif isinstance(first_val[0], int):
-                return types.List(types.int64)
-            elif isinstance(first_val[0], float):
-                return types.List(types.float64)
-            else:
+            list_val = first_val[0]
+            try:
+                dtype = numba.typeof(list_val)
+                assert isinstance(
+                    dtype, (types.Integer, types.Float, types.UnicodeType)
+                )
+                return types.List(dtype)
+            except:
                 raise ValueError("data type for column {} not supported".format(name))
     # assuming array of all empty lists is string by default
     return types.List(string_type)
@@ -503,7 +504,9 @@ def _typeof_ndarray(val, c):
             return datetime_date_array_type  # TODO: test array of datetime.date
         if isinstance(dtype, Decimal128Type):
             return DecimalArrayType(dtype.precision, dtype.scale)
-        raise BodoError("Unsupported array dtype: {}".format(val.dtype))  # pragma: no cover
+        raise BodoError(
+            "Unsupported array dtype: {}".format(val.dtype)
+        )  # pragma: no cover
 
     layout = numba.np.numpy_support.map_layout(val)
     readonly = not val.flags.writeable
@@ -543,7 +546,9 @@ def _infer_ndarray_obj_dtype(val):
         # NOTE: converting decimal.Decimal objects to 38/18, same as Spark
         return Decimal128Type(38, 18)
 
-    raise BodoError("Unsupported object array with first value: {}".format(first_val))  # pragma: no cover
+    raise BodoError(
+        "Unsupported object array with first value: {}".format(first_val)
+    )  # pragma: no cover
 
 
 # TODO: support array of strings

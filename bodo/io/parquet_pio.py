@@ -17,14 +17,20 @@ import numpy as np
 import bodo
 from bodo.libs.str_ext import string_type, unicode_to_char_ptr
 from bodo.libs.str_arr_ext import (
+    string_array_type,
     StringArrayPayloadType,
     construct_string_array,
-    string_array_type,
 )
 from bodo.libs.list_str_arr_ext import (
     list_string_array_type,
     ListStringArrayPayloadType,
     construct_list_string_array,
+)
+from bodo.libs.list_item_arr_ext import (
+    ListItemArrayType,
+    ListItemArrayPayloadType,
+    construct_list_item_array,
+    define_list_item_dtor,
 )
 from bodo.hiframes.datetime_date_ext import (
     datetime_date_type,
@@ -34,6 +40,7 @@ from bodo.hiframes.datetime_date_ext import (
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.decimal_arr_ext import DecimalArrayType, Decimal128Type
 from bodo.libs.bool_arr_ext import boolean_array, BooleanArrayType
+from bodo.libs.array import array_info_type, _lower_info_to_array_numpy
 from bodo.utils.utils import unliteral_all, sanitize_varname
 from bodo.utils.typing import BodoError, BodoWarning
 import bodo.ir.parquet_ext
@@ -62,6 +69,10 @@ def read_parquet_str():  # pragma: no cover
 
 
 def read_parquet_list_str():  # pragma: no cover
+    return 0
+
+
+def read_parquet_list_item():  # pragma: no cover
     return 0
 
 
@@ -222,6 +233,7 @@ def _gen_pq_reader_py(
         "read_parquet": read_parquet,
         "read_parquet_str": read_parquet_str,
         "read_parquet_list_str": read_parquet_list_str,
+        "read_parquet_list_item": read_parquet_list_item,
         "unicode_to_char_ptr": unicode_to_char_ptr,
         "NS_DTYPE": np.dtype("M8[ns]"),
         "np": np,
@@ -254,6 +266,10 @@ def gen_column_read(func_text, cname, c_ind, c_type, is_parallel):
         # pass size for easier allocation and distributed analysis
         func_text += "  {} = read_parquet_list_str(ds_reader, {}, {}_size)\n".format(
             cname, c_ind, cname
+        )
+    elif isinstance(c_type, ListItemArrayType):
+        func_text += "  {} = read_parquet_list_item(ds_reader, {}, {}_size, np.int32({}), {})\n".format(
+            cname, c_ind, cname, bodo.utils.utils.numba_to_c_type(c_type.elem_type), get_element_type(c_type.elem_type)
         )
     else:
         el_type = get_element_type(c_type.dtype)
@@ -346,6 +362,13 @@ def _get_numba_typ_from_pa_typ(pa_typ, is_index, nullable_from_metadata):
         pa.timestamp("ms"): types.NPDatetime("ns"),
         pa.timestamp("s"): types.NPDatetime("ns"),
     }
+
+    if isinstance(pa_typ.type, pa.ListType):
+        # TODO this should check for the list of types that we support
+        if pa_typ.type.value_type not in _typ_map:
+            raise BodoError("Arrow data type {} not supported yet".format(pa_typ.type))
+        return ListItemArrayType(_typ_map[pa_typ.type.value_type])
+
     if pa_typ.type not in _typ_map:
         raise BodoError("Arrow data type {} not supported yet".format(pa_typ.type))
     dtype = _typ_map[pa_typ.type]
@@ -405,7 +428,7 @@ def get_parquet_dataset(file_name, parallel, get_row_counts=True):
                 raise BodoError(
                     "read_parquet(): S3 file system cannot be created: {}".format(e)
                 )
-    elif file_name.startswith("hdfs://"): # pragma: no cover
+    elif file_name.startswith("hdfs://"):  # pragma: no cover
         fs = get_hdfs_fs(file_name)
         (_, file_names) = hdfs_list_dir_fnames(file_name)
 
@@ -434,7 +457,6 @@ def get_parquet_dataset(file_name, parallel, get_row_counts=True):
         assert bodo.get_rank() == 0
         comm.bcast(dataset)
     return dataset
-
 
 
 def parquet_file_schema(file_name, selected_columns):
@@ -556,6 +578,15 @@ class ReadParquetListStrInfer(AbstractTemplate):
         return signature(list_string_array_type, *unliteral_all(args))
 
 
+@infer_global(read_parquet_list_item)
+class ReadParquetListItemInfer(AbstractTemplate):
+    def generic(self, args, kws):
+        assert not kws
+        assert len(args) == 5
+        elem_type = args[4].dtype
+        return signature(ListItemArrayType(elem_type), *unliteral_all(args))
+
+
 from numba.core import cgutils
 from numba.core.imputils import lower_builtin
 from numba.np.arrayobj import make_array
@@ -569,10 +600,11 @@ if _has_pyarrow:
 
     ll.add_symbol("get_dataset_reader", parquet_cpp.get_dataset_reader)
     ll.add_symbol("del_dataset_reader", parquet_cpp.del_dataset_reader)
-    ll.add_symbol("pq_get_size", parquet_cpp.get_size)
-    ll.add_symbol("pq_read", parquet_cpp.read)
-    ll.add_symbol("pq_read_string", parquet_cpp.read_string)
-    ll.add_symbol("pq_read_list_string", parquet_cpp.read_list_string)
+    ll.add_symbol("pq_get_size", parquet_cpp.pq_get_size)
+    ll.add_symbol("pq_read", parquet_cpp.pq_read)
+    ll.add_symbol("pq_read_string", parquet_cpp.pq_read_string)
+    ll.add_symbol("pq_read_list_string", parquet_cpp.pq_read_list_string)
+    ll.add_symbol("pq_read_list_item", parquet_cpp.pq_read_list_item)
     ll.add_symbol("pq_write", parquet_cpp.pq_write)
 
 
@@ -789,6 +821,99 @@ def pq_read_list_string_lower(context, builder, sig, args):
     )
     ret = list_str_array._getvalue()
     return impl_ret_new_ref(context, builder, typ, ret)
+
+
+############################## read list of items ###############################
+
+
+@lower_builtin(
+    read_parquet_list_item,
+    types.Opaque("arrow_reader"),
+    types.intp,
+    types.intp,
+    types.int32,
+    types.Any,  # item data type which is ignored in lowering
+)
+def pq_read_list_item_lower(context, builder, sig, args):
+
+    list_item_type = sig.return_type
+
+    # TODO: refactor list(item) payload handling copied from construct_list_item_array
+    # create payload type
+    payload_type = ListItemArrayPayloadType(list_item_type)
+    alloc_type = context.get_data_type(payload_type)
+    alloc_size = context.get_abi_sizeof(alloc_type)
+
+    # define dtor
+    dtor_fn = define_list_item_dtor(context, builder, list_item_type, payload_type)
+
+    # create meminfo
+    meminfo = context.nrt.meminfo_alloc_dtor(
+        builder, context.get_constant(types.uintp, alloc_size), dtor_fn
+    )
+    meminfo_void_ptr = context.nrt.meminfo_data(builder, meminfo)
+    meminfo_data_ptr = builder.bitcast(meminfo_void_ptr, alloc_type.as_pointer())
+
+    # alloc values in payload
+    payload = cgutils.create_struct_proxy(payload_type)(context, builder)
+    payload.n_lists = args[2]  # set size
+
+    # allocate array_info pointers (to be allocated in pq_read_list_item C++ code)
+    ll_array_info_type = context.get_data_type(array_info_type)
+    data_info_ptr = cgutils.alloca_once(builder, ll_array_info_type)
+    offsets_info_ptr = cgutils.alloca_once(builder, ll_array_info_type)
+    nulls_info_ptr = cgutils.alloca_once(builder, ll_array_info_type)
+
+    # read payload data
+    fnty = lir.FunctionType(
+        lir.IntType(32),
+        [
+            lir.IntType(8).as_pointer(),
+            lir.IntType(64),
+            lir.IntType(32),
+            ll_array_info_type.as_pointer(),
+            ll_array_info_type.as_pointer(),
+            ll_array_info_type.as_pointer(),
+        ],
+    )
+
+    fn = builder.module.get_or_insert_function(fnty, name="pq_read_list_item")
+    builder.call(
+        fn,
+        [
+            args[0],  # dataset reader
+            args[1],  # column index
+            args[3],  # out_dtype (int32 format, see bodo_common.h)
+            offsets_info_ptr,  # offsets array info pointer
+            data_info_ptr,  # data array info pointer
+            nulls_info_ptr,  # null array info pointer
+        ],
+    )
+
+    # convert array_info to numpy arrays and set payload attributes
+    payload.data = _lower_info_to_array_numpy(
+        types.Array(list_item_type.elem_type, 1, "C"),
+        context,
+        builder,
+        builder.load(data_info_ptr),
+    )
+    payload.offsets = _lower_info_to_array_numpy(
+        types.Array(types.uint32, 1, "C"),
+        context,
+        builder,
+        builder.load(offsets_info_ptr),
+    )
+    payload.null_bitmap = _lower_info_to_array_numpy(
+        types.Array(types.uint8, 1, "C"), context, builder, builder.load(nulls_info_ptr)
+    )
+
+    builder.store(payload._getvalue(), meminfo_data_ptr)
+
+    list_item_array = context.make_helper(builder, list_item_type)
+
+    list_item_array.meminfo = meminfo
+    ret = list_item_array._getvalue()
+    return impl_ret_new_ref(context, builder, list_item_type, ret)
 
 
 ############################ parquet write table #############################

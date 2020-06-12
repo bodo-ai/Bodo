@@ -90,6 +90,19 @@ int64_t pq_get_size_single_file(
     return nrows;
 }
 
+/**
+ * Read a set of rows from column of basic type and return the associated
+ * vector of data and nullbits that are needed to describe the data.
+ * @param arrow_reader : Arrow reader for a specific parquet file (already
+ * opened).
+ * @param column_idx : index of column to read
+ * @param[out] out_data : vector of data (elements of type out_dtype)
+ * @param[out] out_dtype : dtype of elements
+ * @param start : starting row in column to read
+ * @param count : num rows from start to read
+ * @param[out] out_nulls : vector specifying if rows contain nulls or not
+ * @param null_offset : offset to start writing into out_nulls
+ */
 int pq_read_single_file(
     std::shared_ptr<parquet::arrow::FileReader> arrow_reader,
     int64_t column_idx, uint8_t* out_data, int out_dtype, int64_t start,
@@ -325,30 +338,27 @@ inline void copy_data(uint8_t* out_data, const uint8_t* buff,
     return;
 }
 
+/**
+ * Read a set of rows from column of strings and return the associated
+ * vector of offsets, data and nullbits that are needed to describe string data.
+ * @param arrow_reader : Arrow reader for a specific parquet file (already
+ * opened).
+ * @param column_idx : index of column to read
+ * @param start : starting row in column to read
+ * @param count : num rows from start to read
+ * @param[out] offset_vec : vector of offsets (where each string starts in data)
+ * @param[out] data_vec : vector of data (elements of type out_dtype)
+ * @param[out] null_vec : vector specifying if rows contain nulls or not
+ */
 int pq_read_string_single_file(
     std::shared_ptr<parquet::arrow::FileReader> arrow_reader,
-    int64_t column_idx, uint32_t** out_offsets, uint8_t** out_data,
-    uint8_t** out_nulls, int64_t start, int64_t count,
+    int64_t column_idx, int64_t start, int64_t count,
     std::vector<uint32_t>* offset_vec, std::vector<uint8_t>* data_vec,
     std::vector<bool>* null_vec) {
-    if (count == 0) {
-        if (offset_vec == NULL) {
-            *out_offsets = NULL;
-            *out_data = NULL;
-        }
-        return 0;
-    }
-
     std::shared_ptr<arrow::DataType> arrow_type =
         get_arrow_type(arrow_reader, column_idx);
     if (arrow_type->id() != Type::STRING)
         std::cerr << "Invalid Parquet string data type" << '\n';
-
-    if (offset_vec == NULL) {
-        *out_offsets = new uint32_t[count + 1];
-        data_vec = new std::vector<uint8_t>();
-        null_vec = new std::vector<bool>();
-    }
 
     int64_t n_row_groups =
         arrow_reader->parquet_reader()->metadata()->num_row_groups();
@@ -361,7 +371,7 @@ int pq_read_string_single_file(
 
     auto rg_metadata =
         arrow_reader->parquet_reader()->metadata()->RowGroup(row_group_index);
-    int64_t nrows_in_group = rg_metadata->ColumnChunk(column_idx)->num_values();    
+    int64_t nrows_in_group = rg_metadata->ColumnChunk(column_idx)->num_values();
     // skip whole row groups if no need to read any rows
     while (start - skipped_rows >= nrows_in_group) {
         skipped_rows += nrows_in_group;
@@ -406,10 +416,7 @@ int pq_read_string_single_file(
         for (int64_t i = 0; i < rows_to_read; i++) {
             uint32_t str_size = offsets_buff[rows_to_skip + i + 1] -
                                 offsets_buff[rows_to_skip + i];
-            if (offset_vec == NULL)
-                (*out_offsets)[read_rows + i] = curr_offset;
-            else
-                offset_vec->push_back(curr_offset);
+            offset_vec->push_back(curr_offset);
             curr_offset += str_size;
         }
 
@@ -421,7 +428,7 @@ int pq_read_string_single_file(
                          data_buff + offsets_buff[rows_to_skip] + data_size);
 
         append_bits_to_vec(null_vec, null_buff, null_size, rows_to_skip,
-                     rows_to_read);
+                           rows_to_read);
 
         skipped_rows += rows_to_skip;
         read_rows += rows_to_read;
@@ -437,54 +444,38 @@ int pq_read_string_single_file(
     }
     if (read_rows != count) std::cerr << "parquet read incomplete" << '\n';
 
-    if (offset_vec == NULL) {
-        (*out_offsets)[count] = curr_offset;
-        *out_data = new uint8_t[curr_offset];
-        memcpy(*out_data, data_vec->data(), curr_offset);
-        pack_null_bitmap(out_nulls, *null_vec, count);
-        delete data_vec;
-        delete null_vec;
-    } else
-        offset_vec->push_back(curr_offset);
-
+    offset_vec->push_back(curr_offset);
     return 0;
 }
 
+/**
+ * Read a set of rows from column of list of string and return the associated
+ * vector of offsets, index offsets, data and nullbits that are needed to
+ * describe list of string data.
+ * @param arrow_reader : Arrow reader for a specific parquet file (already
+ * opened).
+ * @param column_idx : index of column to read
+ * @param start : starting row in column to read
+ * @param count : num rows from start to read
+ * @param[out] offset_vec : vector of offsets (where each string starts in data)
+ * @param[out] index_offset_vec : vector of offsets (where each list starts in data)
+ * @param[out] data_vec : vector of data (elements of type out_dtype)
+ * @param[out] null_vec : vector specifying if rows contain nulls or not
+ */
 int64_t pq_read_list_string_single_file(
     std::shared_ptr<parquet::arrow::FileReader> arrow_reader,
-    int64_t column_idx, uint32_t** out_offsets, uint32_t** out_index_offsets,
-    uint8_t** out_data, uint8_t** out_nulls, int64_t start, int64_t count,
+    int64_t column_idx, int64_t start, int64_t count,
     std::vector<uint32_t>* offset_vec, std::vector<uint32_t>* index_offset_vec,
     std::vector<uint8_t>* data_vec, std::vector<bool>* null_vec) {
-    if (count == 0) {
-        if (offset_vec == NULL) {
-            *out_offsets = NULL;
-            *out_index_offsets = NULL;
-            *out_data = NULL;
-        }
-        return 0;
-    }
-
     std::shared_ptr<arrow::DataType> arrow_type =
         get_arrow_type(arrow_reader, column_idx);
     if (arrow_type->id() != Type::LIST)
-        std::cerr << "Invalid Parquet string data type" << '\n';
+        std::cerr << "Invalid Parquet list data type" << '\n';
     // TODO check that list of string
-
-    bool output_vectors = true;
-    if (offset_vec == NULL) {
-        output_vectors = false;
-        *out_index_offsets = new uint32_t[count + 1];
-        // don't know how many strings there are
-        offset_vec = new std::vector<uint32_t>();
-        data_vec = new std::vector<uint8_t>();
-        null_vec = new std::vector<bool>();
-    }
 
     int64_t n_row_groups =
         arrow_reader->parquet_reader()->metadata()->num_row_groups();
-    std::vector<int> column_indices;
-    column_indices.push_back(column_idx);
+    std::vector<int> column_indices = {static_cast<int>(column_idx)};
 
     int row_group_index = 0;
     int64_t skipped_rows = 0;
@@ -572,11 +563,7 @@ int64_t pq_read_list_string_single_file(
                 curr_offset += str_size;
                 num_strings++;
             }
-            if (!output_vectors) {
-                (*out_index_offsets)[read_rows + i] = curr_index_offset;
-            } else {
-                index_offset_vec->push_back(curr_index_offset);
-            }
+            index_offset_vec->push_back(curr_index_offset);
             curr_index_offset += str_offset_end - str_offset_start;
         }
 
@@ -600,25 +587,144 @@ int64_t pq_read_list_string_single_file(
     }
     if (read_rows != count) std::cerr << "parquet read incomplete" << '\n';
 
-    if (!output_vectors) {
-        offset_vec->push_back(curr_offset);
-        *out_offsets = new uint32_t[offset_vec->size()];
-        memcpy(*out_offsets, offset_vec->data(),
-               offset_vec->size() * sizeof(uint32_t));
+    offset_vec->push_back(curr_offset);
+    index_offset_vec->push_back(curr_index_offset);
+    return num_strings;
+}
 
-        (*out_index_offsets)[count] = curr_index_offset;
-        *out_data = new uint8_t[curr_offset];
-        memcpy(*out_data, data_vec->data(), curr_offset);
-        pack_null_bitmap(out_nulls, *null_vec, count);
-        delete offset_vec;
-        delete data_vec;
-        delete null_vec;
-    } else {
-        offset_vec->push_back(curr_offset);
-        index_offset_vec->push_back(curr_index_offset);
+/**
+ * Read a set of rows from column of list of item and return the associated
+ * vector of offsets, data and nullbits that are needed to describe list of
+ * item data.
+ * @param arrow_reader : Arrow reader for a specific parquet file (already
+ * opened).
+ * @param column_idx : index of column to read
+ * @param out_dtype : dtype of item (for list of item)
+ * @param start : starting row in column to read
+ * @param count : num rows from start to read
+ * @param[out] offset_vec : vector of offsets (where each list starts in data)
+ * @param[out] data_vec : vector of data (elements of type out_dtype)
+ * @param[out] null_vec : vector specifying if rows contain nulls or not
+ */
+int64_t pq_read_list_item_single_file(
+    std::shared_ptr<parquet::arrow::FileReader> arrow_reader,
+    int64_t column_idx, int out_dtype, int64_t start, int64_t count,
+    std::vector<uint32_t>* offset_vec, std::vector<uint8_t>* data_vec,
+    std::vector<bool>* null_vec) {
+    std::shared_ptr<arrow::DataType> arrow_type =
+        get_arrow_type(arrow_reader, column_idx);
+    if (arrow_type->id() != Type::LIST)
+        std::cerr << "Invalid Parquet list data type" << '\n';
+
+    int64_t n_row_groups =
+        arrow_reader->parquet_reader()->metadata()->num_row_groups();
+    std::vector<int> column_indices = {static_cast<int>(column_idx)};
+
+    int row_group_index = 0;
+    int64_t skipped_rows = 0;
+    int64_t read_rows = 0;
+    int dtype_size = numpy_item_size[out_dtype];
+
+    auto rg_metadata =
+        arrow_reader->parquet_reader()->metadata()->RowGroup(row_group_index);
+    int64_t nrows_in_group = rg_metadata->ColumnChunk(column_idx)->num_values();
+
+    // skip whole row groups if no need to read any rows
+    while (start - skipped_rows >= nrows_in_group) {
+        skipped_rows += nrows_in_group;
+        row_group_index++;
+        auto rg_metadata = arrow_reader->parquet_reader()->metadata()->RowGroup(
+            row_group_index);
+        nrows_in_group = rg_metadata->ColumnChunk(column_idx)->num_values();
     }
 
-    return num_strings;
+    uint32_t curr_offset = 0;
+    uint32_t curr_index_offset = 0;
+    int64_t num_items = 0;
+
+    /* ------- read offsets and data ------ */
+    while (read_rows < count) {
+        /* -------- read row group ---------- */
+        std::shared_ptr<::arrow::Table> table;
+        arrow::Status status =
+            arrow_reader->ReadRowGroup(row_group_index, column_indices, &table);
+        CHECK_ARROW(status, "arrow_reader->ReadRowGroup");
+        std::shared_ptr<::arrow::ChunkedArray> chunked_arr = table->column(0);
+        if (chunked_arr->num_chunks() != 1) {
+            std::cerr << "invalid parquet number of array chunks" << std::endl;
+        }
+        std::shared_ptr<::arrow::Array> arr = chunked_arr->chunk(0);
+        auto parent_buffers = arr->data()->buffers;
+        if (parent_buffers.size() != 2) {
+            std::cerr
+                << "invalid parquet list item number of parent array buffers "
+                << parent_buffers.size() << std::endl;
+        }
+
+        std::vector<std::shared_ptr<arrow::ArrayData>>& child_data =
+            arr->data()->child_data;
+        if (child_data.size() != 1) {
+            std::cerr << "arrow list array of item must contain a child array"
+                      << std::endl;
+        }
+
+        auto child_buffers = child_data[0]->buffers;
+        if (child_buffers.size() != 2) {
+            std::cerr << "invalid parquet item number of array buffers "
+                      << child_buffers.size() << std::endl;
+        }
+
+        const uint32_t* offsets_buff =
+            (const uint32_t*)parent_buffers[1]->data();
+        const uint8_t* data_buff = child_buffers[1]->data();
+        const uint8_t* null_buff = arr->null_bitmap_data();
+
+        /* ----------- read row group ------- */
+
+        int64_t rows_to_skip = start - skipped_rows;
+        int64_t rows_to_read =
+            std::min(count - read_rows, nrows_in_group - rows_to_skip);
+
+        int64_t parent_null_size;
+        if (parent_buffers[0]) {
+            parent_null_size = parent_buffers[0]->size();
+        } else {
+            parent_null_size = (rows_to_read + 7) >> 3;
+        }
+
+        for (int64_t i = 0; i < rows_to_read; i++) {
+            uint32_t list_size = offsets_buff[rows_to_skip + i + 1] -
+                                 offsets_buff[rows_to_skip + i];
+            offset_vec->push_back(curr_offset);
+            curr_offset += list_size;
+        }
+
+        int data_size = offsets_buff[rows_to_skip + rows_to_read] -
+                        offsets_buff[rows_to_skip];
+        data_vec->insert(
+            data_vec->end(),
+            data_buff + offsets_buff[rows_to_skip] * dtype_size,
+            data_buff + (offsets_buff[rows_to_skip] + data_size) * dtype_size);
+
+        append_bits_to_vec(null_vec, null_buff, parent_null_size, rows_to_skip,
+                           rows_to_read);
+
+        skipped_rows += rows_to_skip;
+        read_rows += rows_to_read;
+
+        row_group_index++;
+        if (row_group_index < n_row_groups) {
+            auto rg_metadata =
+                arrow_reader->parquet_reader()->metadata()->RowGroup(
+                    row_group_index);
+            nrows_in_group = rg_metadata->ColumnChunk(column_idx)->num_values();
+        } else
+            break;
+    }
+    if (read_rows != count) std::cerr << "parquet read incomplete" << '\n';
+
+    offset_vec->push_back(curr_offset);
+    return num_items;
 }
 
 void pq_init_reader(const char* file_name,

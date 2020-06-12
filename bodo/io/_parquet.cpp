@@ -52,14 +52,17 @@ int pq_read_string(DatasetReader *reader, int64_t column_idx,
 int pq_read_list_string(DatasetReader *reader, int64_t column_idx,
                         uint32_t **out_offsets, uint32_t **index_offsets,
                         uint8_t **out_data, uint8_t **out_nulls);
+int pq_read_list_item(DatasetReader *reader, int64_t column_idx, int out_dtype,
+                      array_info **out_offsets, array_info **out_data,
+                      array_info **out_nulls);
 
 void pack_null_bitmap(uint8_t **out_nulls, std::vector<bool> &null_vec,
                       int64_t n_all_vals);
 void pq_write(const char *filename, const table_info *table,
               const array_info *col_names, const array_info *index,
               bool write_index, const char *metadata, const char *compression,
-              bool parallel, bool write_rangeindex_to_metadata,
-              const int start, const int stop, const int step, const char *name);
+              bool parallel, bool write_rangeindex_to_metadata, const int start,
+              const int stop, const int step, const char *name);
 
 #define CHECK(expr, msg)                                           \
     if (!(expr)) {                                                 \
@@ -92,13 +95,15 @@ PyMODINIT_FUNC PyInit_parquet_cpp(void) {
                            PyLong_FromVoidPtr((void *)(&get_dataset_reader)));
     PyObject_SetAttrString(m, "del_dataset_reader",
                            PyLong_FromVoidPtr((void *)(&del_dataset_reader)));
-    PyObject_SetAttrString(m, "read", PyLong_FromVoidPtr((void *)(&pq_read)));
-    PyObject_SetAttrString(m, "get_size",
+    PyObject_SetAttrString(m, "pq_read", PyLong_FromVoidPtr((void *)(&pq_read)));
+    PyObject_SetAttrString(m, "pq_get_size",
                            PyLong_FromVoidPtr((void *)(&pq_get_size)));
-    PyObject_SetAttrString(m, "read_string",
+    PyObject_SetAttrString(m, "pq_read_string",
                            PyLong_FromVoidPtr((void *)(&pq_read_string)));
-    PyObject_SetAttrString(m, "read_list_string",
+    PyObject_SetAttrString(m, "pq_read_list_string",
                            PyLong_FromVoidPtr((void *)(&pq_read_list_string)));
+    PyObject_SetAttrString(m, "pq_read_list_item",
+                           PyLong_FromVoidPtr((void *)(&pq_read_list_item)));
     PyObject_SetAttrString(m, "pq_write",
                            PyLong_FromVoidPtr((void *)(&pq_write)));
 
@@ -121,8 +126,8 @@ DatasetReader *get_dataset_reader(char *file_name, bool parallel) {
     PyObject *pq_mod = PyImport_ImportModule("bodo.io.parquet_pio");
 
     // ds = bodo.io.parquet_pio.get_parquet_dataset(file_name, parallel)
-    PyObject *ds =
-        PyObject_CallMethod(pq_mod, "get_parquet_dataset", "si", file_name, int(parallel));
+    PyObject *ds = PyObject_CallMethod(pq_mod, "get_parquet_dataset", "si",
+                                       file_name, int(parallel));
     PYERR_CHECK(!PyErr_Occurred(),
                 "Python error during Parquet dataset metadata")
     Py_DECREF(pq_mod);
@@ -153,14 +158,20 @@ DatasetReader *get_dataset_reader(char *file_name, bool parallel) {
         if (total_rows > 0) {
             // open readers for every piece
             while ((piece = PyIter_Next(iterator))) {
-                // p = piece.path
-                PyObject *p = PyObject_GetAttrString(piece, "path");
-                const char *c_path = PyUnicode_AsUTF8(p);
-                std::shared_ptr<parquet::arrow::FileReader> arrow_reader;
-                // open and store file reader for this piece
-                pq_init_reader(c_path, &arrow_reader);
-                ds_reader->readers.push_back(arrow_reader);
-                Py_DECREF(p);
+                PyObject *num_rows_piece_py =
+                    PyObject_GetAttrString(piece, "_bodo_num_rows");
+                int64_t num_rows_piece = PyLong_AsLongLong(num_rows_piece_py);
+                Py_DECREF(num_rows_piece_py);
+                if (num_rows_piece > 0) {
+                    // p = piece.path
+                    PyObject *p = PyObject_GetAttrString(piece, "path");
+                    const char *c_path = PyUnicode_AsUTF8(p);
+                    std::shared_ptr<parquet::arrow::FileReader> arrow_reader;
+                    // open and store file reader for this piece
+                    pq_init_reader(c_path, &arrow_reader);
+                    ds_reader->readers.push_back(arrow_reader);
+                    Py_DECREF(p);
+                }
                 Py_DECREF(piece);
             }
         }
@@ -200,7 +211,8 @@ DatasetReader *get_dataset_reader(char *file_name, bool parallel) {
             // file readers for all subsequent pieces until the number of rows
             // in opened pieces is greater or equal to number of rows in my
             // chunk
-            if (start_row_global < count_rows + num_rows_piece) {
+            if ((num_rows_piece > 0) &&
+                (start_row_global < count_rows + num_rows_piece)) {
                 if (ds_reader->readers.size() == 0) {
                     ds_reader->start_row_first_file =
                         start_row_global - count_rows;
@@ -255,9 +267,9 @@ int64_t pq_read(DatasetReader *ds_reader, int64_t column_idx, uint8_t *out_data,
         int64_t rows_to_read =
             std::min(ds_reader->count - read_rows, file_size - start);
 
-        pq_read_single_file(
-            file_reader, column_idx, out_data + read_rows * dtype_size,
-            out_dtype, start, rows_to_read, out_nulls, read_rows);
+        pq_read_single_file(file_reader, column_idx,
+                            out_data + read_rows * dtype_size, out_dtype, start,
+                            rows_to_read, out_nulls, read_rows);
         read_rows += rows_to_read;
         start = 0;  // start becomes 0 after reading non-empty first chunk
     }
@@ -282,9 +294,8 @@ int pq_read_string(DatasetReader *ds_reader, int64_t column_idx,
         int64_t rows_to_read =
             std::min(ds_reader->count - read_rows, file_size - start);
 
-        pq_read_string_single_file(file_reader, column_idx, NULL, NULL,
-                                            NULL, start, rows_to_read,
-                                            &offset_vec, &data_vec, &null_vec);
+        pq_read_string_single_file(file_reader, column_idx, start, rows_to_read,
+                                   &offset_vec, &data_vec, &null_vec);
 
         size_t size = offset_vec.size();
         for (int64_t i = 1; i <= rows_to_read + 1; i++)
@@ -329,8 +340,8 @@ int pq_read_list_string(DatasetReader *ds_reader, int64_t column_idx,
             std::min(ds_reader->count - read_rows, file_size - start);
 
         int64_t n_strings = pq_read_list_string_single_file(
-            file_reader, column_idx, NULL, NULL, NULL, NULL, start,
-            rows_to_read, &offset_vec, &index_offset_vec, &data_vec, &null_vec);
+            file_reader, column_idx, start, rows_to_read, &offset_vec,
+            &index_offset_vec, &data_vec, &null_vec);
 
         size_t size = offset_vec.size();
         for (int64_t i = 1; i <= n_strings + 1; i++)
@@ -362,6 +373,65 @@ int pq_read_list_string(DatasetReader *ds_reader, int64_t column_idx,
            index_offset_vec.size() * sizeof(uint32_t));
     memcpy(*out_data, data_vec.data(), data_vec.size());
     pack_null_bitmap(out_nulls, null_vec, n_all_vals);
+    return n_all_vals;
+}
+
+int pq_read_list_item(DatasetReader *ds_reader, int64_t column_idx,
+                      int out_dtype, array_info **out_offsets,
+                      array_info **out_data, array_info **out_nulls) {
+    if (ds_reader->count == 0) return 0;
+
+    int64_t start = ds_reader->start_row_first_file;
+
+    int64_t n_all_vals = 0;
+    std::vector<uint32_t> offset_vec;
+    std::vector<uint8_t> data_vec;
+    std::vector<bool> null_vec;
+    int64_t last_offset = 0;
+    int64_t read_rows = 0;  // rows read so far
+    for (auto file_reader : ds_reader->readers) {
+        int64_t file_size = pq_get_size_single_file(file_reader, column_idx);
+        int64_t rows_to_read =
+            std::min(ds_reader->count - read_rows, file_size - start);
+
+        pq_read_list_item_single_file(file_reader, column_idx, out_dtype, start,
+                                      rows_to_read, &offset_vec, &data_vec,
+                                      &null_vec);
+
+        size_t size = offset_vec.size();
+        for (int64_t i = 1; i <= rows_to_read + 1; i++)
+            offset_vec[size - i] += last_offset;
+        last_offset = offset_vec[size - 1];
+        offset_vec.pop_back();
+        n_all_vals += rows_to_read;
+
+        read_rows += rows_to_read;
+        start = 0;  // start becomes 0 after reading non-empty first chunk
+    }
+    offset_vec.push_back(last_offset);
+
+    // allocate output arrays and copy data
+    *out_offsets = alloc_array(offset_vec.size(), 1, 1,
+                               bodo_array_type::arr_type_enum::NUMPY,
+                               Bodo_CTypes::UINT32, 0);
+    *out_data = alloc_array(data_vec.size(), 1, 1,
+                            bodo_array_type::arr_type_enum::NUMPY,
+                            (Bodo_CTypes::CTypeEnum)out_dtype, 0);
+    int64_t n_null_bytes = (n_all_vals + 7) >> 3;
+    *out_nulls =
+        alloc_array(n_null_bytes, 1, 1, bodo_array_type::arr_type_enum::NUMPY,
+                    Bodo_CTypes::UINT8, 0);
+
+    memcpy((*out_offsets)->data1, offset_vec.data(),
+           offset_vec.size() * sizeof(uint32_t));
+    memcpy((*out_data)->data1, data_vec.data(), data_vec.size());
+
+    memset((*out_nulls)->data1, 0, n_null_bytes);
+    for (int64_t i = 0; i < n_all_vals; i++) {
+        if (null_vec[i])
+            SetBitTo((uint8_t *)((*out_nulls)->data1), i, true);
+    }
+
     return n_all_vals;
 }
 
@@ -403,9 +473,9 @@ void bodo_array_to_arrow(
         for (int64_t i = 0; i < array->length; i++) {
             if (!GetBit((uint8_t *)array->null_bitmask, i)) {
                 null_count_++;
-                ::arrow::BitUtil::ClearBit(null_bitmap->mutable_data(), i);
+                SetBitTo(null_bitmap->mutable_data(), i, false);
             } else {
-                ::arrow::BitUtil::SetBit(null_bitmap->mutable_data(), i);
+                SetBitTo(null_bitmap->mutable_data(), i, true);
             }
         }
         if (array->dtype == Bodo_CTypes::_BOOL) {
@@ -562,7 +632,8 @@ void bodo_array_to_arrow(
  * @param is_parallel true if the table is part of a distributed table (in this
  *        case, this process writes a file named "part-000X.parquet" where X is
  *        my rank into the directory specified by 'path_name'
- * @param write_rangeindex_to_metadata : true if writing a RangeIndex to metadata
+ * @param write_rangeindex_to_metadata : true if writing a RangeIndex to
+ * metadata
  * @param ri_start,ri_stop,ri_step start,stop,step parameters of given
  * RangeIndex
  * @param idx_name name of the given index
