@@ -189,7 +189,12 @@ Generally, these Python features are not supported:
 * async features
 * class definition: `class`
 * string formatting, e.g. `"A: {}".format(a)`
-
+* jit functions cannot have `**kwargs`
+* functions can be passed as arguments but not returned
+* lists of lists cannot be passed as arguments unless if
+  `typed-list of Numba <http://numba.pydata.org/numba-doc/latest/reference/pysupported.html#typed-list>`_ is used.
+* `typed-dict of Numba <http://numba.pydata.org/numba-doc/latest/reference/pysupported.html#typed-dict>`_
+  is currently required for passing dictionaries as argument to jit functions.
 
 .. _heterogeneousdtype:
 
