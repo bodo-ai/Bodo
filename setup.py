@@ -43,7 +43,9 @@ try:
 except ImportError:
     _has_h5py = False
 else:
-    _has_h5py = True
+    # NOTE: conda-forge does not have MPI-enabled hdf5 for Windows yet
+    # TODO: make sure the available hdf5 library is MPI-enabled automatically
+    _has_h5py = not is_win
 
 
 ind = [PREFIX_DIR + "/include"]
