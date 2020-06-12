@@ -2031,6 +2031,7 @@ def gen_top_level_transform_func(key_names, in_col_names, out_col_names, paralle
 
 
 def compile_to_optimized_ir(func, arg_typs, typingctx):
+    # TODO: reuse Numba's compiler pipelines
     # XXX are outside function's globals needed?
     code = func.code if hasattr(func, "code") else func.__code__
     closure = func.closure if hasattr(func, "closure") else func.__closure__
@@ -2072,7 +2073,6 @@ def compile_to_optimized_ir(func, arg_typs, typingctx):
     )
 
     options = numba.core.cpu.ParallelOptions(True)
-    flags = compiler.Flags()
     targetctx = numba.core.cpu.CPUContext(typingctx)
 
     DummyPipeline = namedtuple(
@@ -2086,12 +2086,41 @@ def compile_to_optimized_ir(func, arg_typs, typingctx):
             "return_type",
             "calltypes",
             "type_annotation",
+            "locals",
+            "flags",
+            "pipeline",
         ],
     )
     TypeAnnotation = namedtuple("TypeAnnotation", ["typemap", "calltypes"])
     ta = TypeAnnotation(typemap, calltypes)
     pm = DummyPipeline(
-        typingctx, targetctx, None, f_ir, typemap, return_type, calltypes, ta
+        typingctx,
+        targetctx,
+        None,
+        f_ir,
+        typemap,
+        return_type,
+        calltypes,
+        ta,
+        {},
+        flags,
+        None,
+    )
+    untyped_pipeline = numba.core.compiler.DefaultPassBuilder.define_untyped_pipeline(
+        pm
+    )
+    pm = DummyPipeline(
+        typingctx,
+        targetctx,
+        None,
+        f_ir,
+        typemap,
+        return_type,
+        calltypes,
+        ta,
+        {},
+        flags,
+        untyped_pipeline,
     )
     # run overload inliner to inline Series implementations such as Series.max()
     inline_overload_pass = numba.core.typed_passes.InlineOverloads()
