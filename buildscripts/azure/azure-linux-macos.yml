@@ -44,7 +44,7 @@ jobs:
   - script: |
       export PATH=$HOME/miniconda3/bin:$PATH
       source activate $CONDA_ENV
-      HDF5_DIR=$CONDA_PREFIX python setup.py develop
+      python setup.py develop
     displayName: 'Build'
 
   - script: |

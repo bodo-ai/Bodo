@@ -29,7 +29,7 @@ such as Numba on Ubuntu Linux::
     git clone https://github.com/Bodo-inc/Bodo.git
     cd Bodo
     # build Bodo
-    HDF5_DIR=$CONDA_PREFIX python setup.py develop
+    python setup.py develop
 
 For hdfs related development, use the :ref:`docker image <docker-images>`.
 
@@ -56,7 +56,6 @@ On Windows
     git clone https://github.com/Bodo-inc/Bodo.git
     cd Bodo
     # build Bodo
-    # For later HDF5 support: set HDF5_DIR=%CONDA_PREFIX%\Library
     python setup.py develop
 
 

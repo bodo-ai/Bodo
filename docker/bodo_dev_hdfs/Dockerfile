@@ -60,7 +60,7 @@ RUN echo "export JAVA_HOME=/root/miniconda3/envs/BODODEV" >> ${HADOOP_HOME}/etc/
 
 # build bodo
 RUN echo "cd /Bodo" >> ~/.bashrc
-RUN echo "HDF5_DIR=$CONDA_PREFIX python setup.py develop" >> ~/.bashrc
+RUN echo "python setup.py develop" >> ~/.bashrc
 
 # environment variables for arrow
 RUN echo "export hdfs=3.2.1" >> ~/.bashrc

@@ -79,7 +79,7 @@ Setup:
 3. Build Bodo in container, not necessary for ``bodo_dev_hdfs``::
 
        cd ../Bodo
-       HDF5_DIR=$CONDA_PREFIX python setup.py develop
+       python setup.py develop
 
 4. Use valgrind in Bodo development with valgrind::
 
