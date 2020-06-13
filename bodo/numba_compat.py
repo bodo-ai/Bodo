@@ -1149,8 +1149,10 @@ def CacheImpl__init__(self, py_func):
         if locator is not None:
             break
     else:  # pragma: no cover
-        raise RuntimeError("cannot cache function %r: no locator available "
-                           "for file %r" % (qualname, source_path))
+        raise RuntimeError(
+            "cannot cache function %r: no locator available "
+            "for file %r" % (qualname, source_path)
+        )
     self._locator = locator
     # Use filename base name as module name to avoid conflict between
     # foo/__init__.py and foo/foo.py
@@ -1170,7 +1172,7 @@ def CacheImpl__init__(self, py_func):
         modname = new_modname
 
     fullname = "%s.%s" % (modname, qualname)
-    abiflags = getattr(sys, 'abiflags', '')
+    abiflags = getattr(sys, "abiflags", "")
     self._filename_base = self.get_filename_base(fullname, abiflags)
 
 
@@ -1182,3 +1184,41 @@ if (
     warnings.warn("numba.core.caching._CacheImpl.__init__ has changed")
 
 numba.core.caching._CacheImpl.__init__ = CacheImpl__init__
+
+
+# replacing _analyze_broadcast in array analysis to fix a bug. It's assuming that
+# get_shape throws GuardException which is wrong.
+# Numba 0.48 exposed this error with test_linear_regression since array analysis is
+# more restrictive and assumes more variables as redefined
+def _analyze_broadcast(self, scope, equiv_set, loc, args):
+    """Infer shape equivalence of arguments based on Numpy broadcast rules
+    and return shape of output
+    https://docs.scipy.org/doc/numpy/user/basics.broadcasting.html
+    """
+    arrs = list(filter(lambda a: self._isarray(a.name), args))
+    require(len(arrs) > 0)
+    names = [x.name for x in arrs]
+    dims = [self.typemap[x.name].ndim for x in arrs]
+    max_dim = max(dims)
+    require(max_dim > 0)
+    # Bodo change:
+    # try:
+    #     shapes = [equiv_set.get_shape(x) for x in arrs]
+    # except GuardException:
+    #     return arrs[0], self._call_assert_equiv(scope, loc, equiv_set, arrs)
+    shapes = [equiv_set.get_shape(x) for x in arrs]
+    if any(a is None for a in shapes):
+        return arrs[0], self._call_assert_equiv(scope, loc, equiv_set, arrs)
+    return self._broadcast_assert_shapes(scope, equiv_set, loc, shapes, names)
+
+
+lines = inspect.getsource(numba.parfors.array_analysis.ArrayAnalysis._analyze_broadcast)
+if (
+    hashlib.sha256(lines.encode()).hexdigest()
+    != "7dd54560e6af49661182672532f711e3eb643b99a12ed847b0ed580ffe60f702"
+):  # pragma: no cover
+    warnings.warn(
+        "numba.parfors.array_analysis.ArrayAnalysis._analyze_broadcast has changed"
+    )
+
+numba.parfors.array_analysis.ArrayAnalysis._analyze_broadcast = _analyze_broadcast
