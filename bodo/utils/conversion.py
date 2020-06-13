@@ -9,7 +9,6 @@ import numba
 from numba.core import types
 from bodo.libs.decimal_arr_ext import Decimal128Type, DecimalArrayType
 from numba.extending import overload
-from bodo.libs.decimal_arr_ext import Decimal128Type
 import bodo
 from bodo.utils.typing import is_overload_none, is_overload_true, BodoError
 
@@ -350,9 +349,10 @@ def overload_coerce_to_array(
             list(data)
         )  # pragma: no cover
 
-    if data == bodo.libs.bool_arr_ext.boolean_array or isinstance(
-        data, bodo.libs.int_arr_ext.IntegerArrayType
-    ):
+    if data in (
+        bodo.libs.bool_arr_ext.boolean_array,
+        bodo.hiframes.datetime_date_ext.datetime_date_array_type,
+    ) or isinstance(data, (bodo.libs.int_arr_ext.IntegerArrayType, DecimalArrayType)):
         return (
             lambda data, error_on_nonarray=True, use_nullable_array=None, scalar_to_arr_len=None: data
         )  # pragma: no cover
