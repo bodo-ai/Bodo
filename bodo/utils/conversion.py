@@ -352,6 +352,7 @@ def overload_coerce_to_array(
     if data in (
         bodo.libs.bool_arr_ext.boolean_array,
         bodo.hiframes.datetime_date_ext.datetime_date_array_type,
+        bodo.hiframes.split_impl.string_array_split_view_type,
     ) or isinstance(data, (bodo.libs.int_arr_ext.IntegerArrayType, DecimalArrayType)):
         return (
             lambda data, error_on_nonarray=True, use_nullable_array=None, scalar_to_arr_len=None: data
