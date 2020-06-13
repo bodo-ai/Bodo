@@ -568,7 +568,7 @@ def replace_func(
 
 
 def is_var_size_item_array_type(t):
-    """returns True if array type 't' has variabe size items (e.g. strings)
+    """returns True if array type 't' has variable size items (e.g. strings)
     """
     assert is_array_typ(t, False)
     return t in (string_array_type, list_string_array_type) or isinstance(
