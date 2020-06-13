@@ -557,6 +557,10 @@ class SeriesAttribute(AttributeTemplate):
         except:
             raise BodoError(f"Series.{fname}(): user-defined function not supported")
 
+        # unbox Timestamp to dt64 in Series (TODO: timedelta64)
+        if f_return_type == pandas_timestamp_type:
+            f_return_type = types.NPDatetime("ns")
+
         data_arr = _get_series_array_type(f_return_type)
         # Series.map codegen returns np bool array instead of boolean_array currently
         # TODO: return nullable boolean_array

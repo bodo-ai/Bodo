@@ -47,7 +47,7 @@ from numba.core.imputils import (
     iternext_impl,
     RefType,
 )
-from bodo.utils.typing import is_list_like_index_type
+from bodo.utils.typing import is_list_like_index_type, BodoError
 from llvmlite import ir as lir
 import llvmlite.binding as ll
 from bodo.libs import hstr_ext
@@ -489,6 +489,46 @@ def list_str_arr_getitem_array(arr, ind):
         return impl_slice
 
 
+@overload(operator.setitem)
+def list_str_arr_setitem(A, idx, val):
+    if A != list_string_array_type:
+        return
+
+    # scalar case
+    # NOTE: assuming that the array is being built and all previous elements are set
+    # TODO: make sure array is being build
+    if isinstance(types.unliteral(idx), types.Integer):
+        assert val == types.List(string_type)
+
+        def impl_scalar(A, idx, val):  # pragma: no cover
+            index_offsets = A._index_offsets
+            data_offsets = A._data_offsets
+            if idx == 0:
+                index_offsets[0] = 0
+                data_offsets[0] = 0
+
+            n_str = len(val)
+            index_offsets[idx + 1] = index_offsets[idx] + n_str
+            curr_s_offset = index_offsets[idx]
+            curr_d_offset = data_offsets[curr_s_offset]
+
+            for k in range(n_str):
+                s = val[k]
+                utf8_str, n_char = bodo.libs.str_ext.unicode_to_utf8_and_len(s)
+                data_offsets[curr_s_offset + k + 1] = curr_d_offset + n_char
+                out_ptr = bodo.hiframes.split_impl.get_c_arr_ptr(A._data, curr_d_offset)
+                bodo.libs.str_arr_ext._memcpy(out_ptr, utf8_str, n_char, 1)
+                curr_d_offset += n_char
+
+            bodo.libs.str_arr_ext.str_arr_set_not_na(A, idx)
+
+        return impl_scalar
+
+    raise BodoError(
+        "only setitem with scalar index is currently supported for list arrays"
+    )  # pragma: no cover
+
+
 @overload_method(ListStringArrayType, "copy", no_unliteral=True)
 def overload_list_str_arr_copy(A):
     from bodo.libs.distributed_api import cptr_to_voidptr
@@ -561,6 +601,16 @@ numba.core.ir_utils.alias_func_extensions[
 numba.core.ir_utils.alias_func_extensions[
     ("get_data_offset_ptr", "bodo.libs.list_str_arr_ext")
 ] = alias_ext_ptr
+
+
+@numba.njit
+def get_list_str_utf8_size(l):
+    """get total number of utf8 characters
+    """
+    num_chars = 0
+    for s in l:
+        num_chars += bodo.libs.str_arr_ext.get_utf8_size(s)
+    return num_chars
 
 
 @numba.njit

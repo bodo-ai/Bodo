@@ -713,6 +713,20 @@ def overload_box_if_dt64(val):
     return lambda val: val
 
 
+def unbox_if_timestamp(val):  # pragma: no cover
+    return val
+
+
+@overload(unbox_if_timestamp, no_unliteral=True)
+def overload_unbox_if_timestamp(val):
+    """If 'val' is Timestamp, "unbox" it to dt64 otherwise just return 'val'
+    """
+    if val == bodo.hiframes.pd_timestamp_ext.pandas_timestamp_type:
+        return lambda val: bodo.hiframes.pd_timestamp_ext.integer_to_dt64(val.value)
+
+    return lambda val: val
+
+
 def get_array_if_series_or_index(data):  # pragma: no cover
     return data
 

@@ -50,6 +50,7 @@ from bodo.utils.utils import (
     numba_to_c_type,
     unliteral_all,
     CTypeEnum,
+    tuple_to_scalar,
 )
 from bodo.utils.typing import BodoError
 from numba.core.typing.builtins import IndexValueType
@@ -1962,7 +1963,9 @@ def slice_getitem_from_start_overload(arr, slice_index):
     def getitem_impl(arr, slice_index):  # pragma: no cover
         rank = bodo.libs.distributed_api.get_rank()
         k = slice_index.stop
-        out_arr = bodo.utils.utils.alloc_type((k,) + arr.shape[1:], arr_type)
+        out_arr = bodo.utils.utils.alloc_type(
+            tuple_to_scalar((k,) + arr.shape[1:]), arr_type
+        )
         if rank == 0:
             out_arr = arr[:k]
         bodo.libs.distributed_api.bcast(out_arr)

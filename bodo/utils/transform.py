@@ -38,7 +38,10 @@ from bodo.utils.typing import (
     get_literal_value,
     get_overload_const_list,
 )
-from bodo.utils.utils import is_call
+from bodo.utils.utils import is_call, is_array_typ
+from bodo.libs.str_arr_ext import string_array_type
+from bodo.libs.list_str_arr_ext import list_string_array_type
+from bodo.libs.list_item_arr_ext import ListItemArrayType
 
 
 ReplaceFunc = namedtuple(
@@ -567,3 +570,50 @@ def replace_func(
                 new_args.append(arg_typs[i])
         arg_typs = tuple(new_args)
     return ReplaceFunc(func, arg_typs, args, glbls, pre_nodes)
+
+
+############################# UDF utils ############################
+
+
+def is_var_size_item_array_type(t):
+    """returns True if array type 't' has variable size items (e.g. strings)
+    """
+    assert is_array_typ(t, False)
+    return t in (string_array_type, list_string_array_type) or isinstance(
+        t, ListItemArrayType
+    )
+
+
+def gen_init_varsize_alloc_sizes(t):
+    """generate initialization code as text for allocation sizes for arrays with
+    variable items, e.g. total number of characters in string arrays
+    """
+    assert is_var_size_item_array_type(t)
+    if t == string_array_type:
+        vname = "num_chars_{}".format(ir_utils.next_label())
+        return f"  {vname} = 0\n", (vname,)
+    if t == list_string_array_type:
+        vname1 = "num_lists_{}".format(ir_utils.next_label())
+        vname2 = "num_chars_{}".format(ir_utils.next_label())
+        return (f"  {vname1} = 0\n" f"  {vname2} = 0\n"), (vname1, vname2)
+    if isinstance(t, ListItemArrayType):
+        vname = "num_items_{}".format(ir_utils.next_label())
+        return f"  {vname} = 0\n", (vname,)
+
+
+def gen_varsize_item_sizes(t, item, var_names):
+    """generate aggregation code as text for allocation sizes for arrays with
+    variable items, e.g. total number of characters in string arrays
+    """
+    assert is_var_size_item_array_type(t)
+    if t == string_array_type:
+        return "    {} += bodo.libs.str_arr_ext.get_utf8_size({})\n".format(
+            var_names[0], item
+        )
+    if t == list_string_array_type:
+        return (
+            "    {0} += len({2})\n"
+            "    {1} += bodo.libs.list_str_arr_ext.get_list_str_utf8_size({2})\n"
+        ).format(var_names[0], var_names[1], item)
+    if isinstance(t, ListItemArrayType):
+        return "    {} += len({})\n".format(var_names[0], item)
