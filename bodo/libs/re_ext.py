@@ -104,7 +104,6 @@ def unbox_re_match(typ, obj, c):
 
 # implement casting to boolean to support conditions like "if match:" which are
 # commonly used to see if there are matches.
-# NOTE: numba may need operator.truth and bool() at some point
 @lower_cast(ReMatchType, types.Boolean)
 def cast_match_obj_bool(context, builder, fromty, toty, val):
     """cast match object (which could be None also) to boolean.
@@ -117,6 +116,24 @@ def cast_match_obj_bool(context, builder, fromty, toty, val):
     with builder.if_then(is_none):
         builder.store(context.get_constant(types.bool_, False), out)
     return builder.load(out)
+
+
+@intrinsic
+def match_obj_is_none(typingctx, match_typ=None):
+    assert match_typ == re_match_type
+
+    def codegen(context, builder, sig, args):
+        return cast_match_obj_bool(
+            context, builder, re_match_type, types.bool_, args[0]
+        )
+
+    return types.bool_(match_typ), codegen
+
+
+@overload(bool)
+def overload_bool_re_match(val):
+    if val == re_match_type:
+        return lambda val: match_obj_is_none(val)  # pragma: no cover
 
 
 @lower_builtin(operator.is_, ReMatchType, types.NoneType)
@@ -509,7 +526,8 @@ def overload_match_groupdict(m, default=None):
         with numba.objmode(d="dict_string_string"):
             out = m.groupdict(default)
             d = numba.typed.Dict.empty(
-                key_type=numba.core.types.unicode_type, value_type=numba.core.types.unicode_type
+                key_type=numba.core.types.unicode_type,
+                value_type=numba.core.types.unicode_type,
             )
             d.update(out)
         return d
