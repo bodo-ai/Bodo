@@ -311,10 +311,23 @@ void file_write_parallel(char* file_name, char* buff, int64_t start,
         int err_len, err_class;
         MPI_Errhandler_set(MPI_COMM_WORLD, MPI_ERRORS_RETURN);
 
+        int ierr;
+        if (dist_get_rank() == 0) {
+            ierr = MPI_File_delete((const char*)file_name, MPI_INFO_NULL);
+            if (ierr != 0) {
+                MPI_Error_class(ierr, &err_class);
+                if (err_class != MPI_ERR_NO_SUCH_FILE)
+                    Bodo_PyErr_SetString(
+                        PyExc_RuntimeError,
+                        ("File delete error: " + std::string(file_name)).c_str());
+            }
+        }
+        MPI_Barrier(MPI_COMM_WORLD);
+
         MPI_File fh;
-        int ierr = MPI_File_open(MPI_COMM_WORLD, (const char*)file_name,
-                                 MPI_MODE_CREATE | MPI_MODE_WRONLY,
-                                 MPI_INFO_NULL, &fh);
+        ierr = MPI_File_open(MPI_COMM_WORLD, (const char*)file_name,
+                             MPI_MODE_CREATE | MPI_MODE_WRONLY,
+                             MPI_INFO_NULL, &fh);
         if (ierr != 0)
             Bodo_PyErr_SetString(
                 PyExc_RuntimeError,

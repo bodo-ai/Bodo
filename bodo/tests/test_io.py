@@ -1145,12 +1145,18 @@ def test_np_io4():
         A.tofile("np_file_3.dat")
 
     bodo_func = bodo.jit(test_impl)
-    n = 111
-    A = np.arange(n)
+    n1 = 111000
+    n2 = 111
+    A1 = np.arange(n1)
+    A2 = np.arange(n2)
     with ensure_clean("np_file_3.dat"):
-        bodo_func(n)
-        B = np.fromfile("np_file_3.dat", np.int64)
-        np.testing.assert_almost_equal(A, B)
+        bodo_func(n1)
+        B1 = np.fromfile("np_file_3.dat", np.int64)
+        np.testing.assert_almost_equal(A1, B1)
+
+        bodo_func(n2)
+        B2 = np.fromfile("np_file_3.dat", np.int64)
+        np.testing.assert_almost_equal(A2, B2)
 
 
 def test_csv_double_box(datapath):
