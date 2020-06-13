@@ -4,6 +4,7 @@ Collection of utility functions. Needs to be refactored in separate files.
 """
 from collections import namedtuple
 import keyword
+import inspect, hashlib, warnings
 import numba
 from numba.core import ir_utils, ir, types, cgutils
 from numba.core.ir_utils import (
@@ -588,6 +589,14 @@ def _empty_nd_impl(context, builder, arrtype, shapes):  # pragma: no cover
     )
 
     return ary
+
+
+lines = inspect.getsource(numba.np.arrayobj._empty_nd_impl)
+if (
+    hashlib.sha256(lines.encode()).hexdigest()
+    != "7735d099b608cdae6d3fcd41aac30078428c75f7714227b1af576ac010d70c1f"
+):  # pragma: no cover
+    warnings.warn("numba.np.arrayobj._empty_nd_impl has changed")
 
 
 def alloc_arr_tup(n, arr_tup, init_vals=()):  # pragma: no cover
