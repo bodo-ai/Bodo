@@ -626,7 +626,7 @@ def alloc_arr_tup_overload(n, data, init_vals=()):
 
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
 def tuple_to_scalar(n):
-    """Convert to scalar if, otherwise return original value
+    """Convert to scalar if 1-tuple, otherwise return original value
     """
     if isinstance(n, types.BaseTuple) and len(n.types) == 1:
         return lambda n: n[0]  # pragma: no cover
