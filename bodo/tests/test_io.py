@@ -36,8 +36,8 @@ kde_file = os.path.join("bodo", "tests", "data", "kde.parquet")
 def compress_file(fname, dummy_extension=""):
     assert not os.path.isdir(fname)
     if bodo.get_rank() == 0:
-        subprocess.run(["gzip", "-k", fname])
-        subprocess.run(["bzip2", "-k", fname])
+        subprocess.run(["gzip", "-k", "-f", fname])
+        subprocess.run(["bzip2", "-k", "-f", fname])
         if dummy_extension != "":
             os.rename(fname + ".gz", fname + ".gz" + dummy_extension)
             os.rename(fname + ".bz2", fname + ".bz2" + dummy_extension)
@@ -55,7 +55,7 @@ def remove_files(file_names):
 def compress_dir(dir_name):
     if bodo.get_rank() == 0:
         for fname in [f for f in os.listdir(dir_name) if f.endswith(".csv") and os.path.getsize(dir_name + "/" + f) > 0]:
-            subprocess.run(["gzip", fname], cwd=dir_name)
+            subprocess.run(["gzip", "-f", fname], cwd=dir_name)
     bodo.barrier()
 
 
@@ -444,7 +444,7 @@ def test_csv_remove_col0_used_for_len(datapath):
     assert read_csv_found
 
     if bodo.get_rank() == 0:
-        subprocess.run(["gzip", "-k", fname])
+        subprocess.run(["gzip", "-k", "-f", fname])
     bodo.barrier()
     with ensure_clean(fname_gzipped):
         check_func(impl2, ())

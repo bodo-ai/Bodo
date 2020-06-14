@@ -12,8 +12,8 @@ from bodo.utils.testing import ensure_clean, ensure_clean_dir
 def compress_file(fname):
     assert not os.path.isdir(fname)
     if bodo.get_rank() == 0:
-        subprocess.run(["gzip", "-k", fname])
-        subprocess.run(["bzip2", "-k", fname])
+        subprocess.run(["gzip", "-k", "-f", fname])
+        subprocess.run(["bzip2", "-k", "-f", fname])
     bodo.barrier()
     return [fname + ".gz", fname + ".bz2"]
 
@@ -28,7 +28,7 @@ def remove_files(file_names):
 def compress_dir(dir_name):
     if bodo.get_rank() == 0:
         for fname in [f for f in os.listdir(dir_name) if f.endswith(".json") and os.path.getsize(dir_name + "/" + f) > 0]:
-            subprocess.run(["gzip", fname], cwd=dir_name)
+            subprocess.run(["gzip", "-f", fname], cwd=dir_name)
     bodo.barrier()
 
 
