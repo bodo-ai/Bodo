@@ -4,6 +4,9 @@
    The C++ implementation uses the timsort which is a stable sort algorithm.
    Therefore, in the test we use mergesort, which guarantees that the equality
    tests can be made sensibly.
+   ---
+   The alternative is to use reset_index=True so that possible difference in sorting
+   would be eliminated.
 """
 
 import pandas as pd
@@ -13,13 +16,7 @@ import random
 import string
 import pytest
 from decimal import Decimal
-from bodo.tests.utils import (
-    check_func,
-    is_bool_object_series,
-    check_parallel_coherency,
-    check_func_type_extent,
-    compute_random_decimal_array,
-)
+from bodo.tests.utils import check_func, is_bool_object_series, compute_random_decimal_array
 from bodo.utils.typing import BodoWarning, BodoError
 import os
 
@@ -687,10 +684,11 @@ def test_sort_values_force_literal():
 
 
 def test_list_string():
-    """Sorting values by list of strings"""
+    """Sorting values by list of strings
+    """
 
     def test_impl(df1):
-        df2 = df1.sort_values(by="A")
+        df2 = df1.sort_values(by="A", kind="mergesort")
         return df2
 
     def rand_col_l_str(n):
@@ -710,7 +708,7 @@ def test_list_string():
     random.seed(5)
     n = 100
     df1 = pd.DataFrame({"A": rand_col_l_str(n)})
-    check_parallel_coherency(test_impl, (df1,), sort_output=True, reset_index=True)
+    check_func(test_impl, (df1,))
 
 
 # ------------------------------ error checking ------------------------------ #
@@ -927,4 +925,4 @@ def test_random_decimal():
     random.seed(5)
     n = 50
     df1 = pd.DataFrame({"A": compute_random_decimal_array(2, n)})
-    check_func_type_extent(f, (df1,))
+    check_func(f, (df1,), convert_columns_to_pandas=True)

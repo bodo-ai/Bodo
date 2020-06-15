@@ -19,7 +19,6 @@ from bodo.tests.utils import (
     count_array_OneDs,
     dist_IR_contains,
     get_start_end,
-    check_func_type_extent,
     DeadcodeTestPipeline,
 )
 import pytest
@@ -240,7 +239,7 @@ def test_list_string_array_type_random():
     n = 500
     df1 = pd.DataFrame({"A": rand_col_l_str(n), "C": rand_col_l_str(n)})
     df2 = pd.DataFrame({"A": rand_col_l_str(n), "D": rand_col_l_str(n)})
-    check_func_type_extent(test_impl, (df1, df2), sort_output=True, reset_index=True)
+    check_func(test_impl, (df1, df2), sort_output=True, reset_index=True, convert_columns_to_pandas=True)
 
 
 def test_merge_left_right_nontrivial_index():

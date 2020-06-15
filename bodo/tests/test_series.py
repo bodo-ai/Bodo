@@ -19,7 +19,6 @@ from bodo.tests.utils import (
     dist_IR_contains,
     get_start_end,
     check_func,
-    check_func_type_extent,
     is_bool_object_series,
     _get_dist_arg,
 )
@@ -204,7 +203,7 @@ def test_series_concat(series_val):
     df1 = pd.DataFrame({"A": S1.values})
     df2 = pd.DataFrame({"A": S2.values})
     if isinstance(series_val.values[0], list):
-        check_func_type_extent(f, (df1, df2), sort_output=True, reset_index=True)
+        check_func(f, (df1, df2), sort_output=True, reset_index=True, convert_columns_to_pandas=True)
     else:
         check_func(f, (df1, df2), sort_output=True, reset_index=True)
 
@@ -234,7 +233,7 @@ def test_dataframe_concat(series_val):
     df1 = pd.DataFrame({"A": S1.values})
     df2 = pd.DataFrame({"B": S2.values})
     if isinstance(series_val.values[0], list):
-        check_func_type_extent(f, (df1, df2), sort_output=True, reset_index=True)
+        check_func(f, (df1, df2), sort_output=True, reset_index=True, convert_columns_to_pandas=True)
     else:
         check_func(f, (df1, df2), sort_output=True, reset_index=True)
 

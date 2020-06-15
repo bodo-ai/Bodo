@@ -14,7 +14,6 @@ from bodo.tests.utils import (
     count_array_OneDs,
     dist_IR_contains,
     check_parallel_coherency,
-    check_func_type_extent,
     compute_random_decimal_array,
     convert_list_string_decimal_columns,
     get_start_end,
@@ -292,10 +291,10 @@ def test_random_decimal_sum_min_max_last():
     check_func(impl6, (df1,), sort_output=True, reset_index=True)
 
     # For mean/median/var/std we need to map the types.
-    check_func_type_extent(impl7, (df1,), sort_output=True, reset_index=True)
-    check_func_type_extent(impl8, (df1,), sort_output=True, reset_index=True)
-    check_func_type_extent(impl9, (df1,), sort_output=True, reset_index=True)
-    check_func_type_extent(impl10, (df1,), sort_output=True, reset_index=True)
+    check_func(impl7, (df1,), sort_output=True, reset_index=True, convert_columns_to_pandas=True)
+    check_func(impl8, (df1,), sort_output=True, reset_index=True, convert_columns_to_pandas=True)
+    check_func(impl9, (df1,), sort_output=True, reset_index=True, convert_columns_to_pandas=True)
+    check_func(impl10, (df1,), sort_output=True, reset_index=True, convert_columns_to_pandas=True)
 
 
 def test_random_string_sum_min_max_first_last():
@@ -603,12 +602,12 @@ def test_sum_max_min_list_string_random():
 
     # For nunique, we face the problem of difference of formatting between nunique
     # in Bodo and in Pandas.
-    check_func_type_extent(test_impl1, (df1,), sort_output=True, reset_index=True)
-    check_func_type_extent(test_impl2, (df1,), sort_output=True, reset_index=True)
-    check_func_type_extent(test_impl3, (df1,), sort_output=True, reset_index=True)
-    check_func_type_extent(test_impl4, (df1,), sort_output=True, reset_index=True)
-    check_func_type_extent(test_impl5, (df1,), sort_output=True, reset_index=True)
-    check_func_type_extent(test_impl6, (df1,), sort_output=True, reset_index=True)
+    check_func(test_impl1, (df1,), sort_output=True, reset_index=True, convert_columns_to_pandas=True)
+    check_func(test_impl2, (df1,), sort_output=True, reset_index=True, convert_columns_to_pandas=True)
+    check_func(test_impl3, (df1,), sort_output=True, reset_index=True, convert_columns_to_pandas=True)
+    check_func(test_impl4, (df1,), sort_output=True, reset_index=True, convert_columns_to_pandas=True)
+    check_func(test_impl5, (df1,), sort_output=True, reset_index=True, convert_columns_to_pandas=True)
+    check_func(test_impl6, (df1,), sort_output=True, reset_index=True, convert_columns_to_pandas=True)
 
     # For test_impl7, we have an error in as_index=False function, that is:
     # df1.groupby("A", as_index=False)["B"].agg(("sum", "min", "max"))

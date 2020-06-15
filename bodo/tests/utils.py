@@ -92,6 +92,7 @@ def check_func(
     copy_input=False,
     check_dtype=True,
     reset_index=False,
+    convert_columns_to_pandas=False,
     py_output=None,
     dist_test=True,
 ):
@@ -106,7 +107,11 @@ def check_func(
     # gives the option of passing desired output to check_func
     # in situations where pandas is buggy/lacks support
     if py_output is None:
-        py_output = func(*call_args)
+        if convert_columns_to_pandas:
+            call_args_mapped = tuple(convert_list_string_decimal_columns(a) for a in call_args)
+            py_output = func(*call_args_mapped)
+        else:
+            py_output = func(*call_args)
 
     # sequential
     w = check_func_seq(
@@ -118,6 +123,7 @@ def check_func(
         check_names,
         check_dtype,
         reset_index,
+        convert_columns_to_pandas,
         n_pes,
     )
 
@@ -154,6 +160,7 @@ def check_func(
         check_names,
         check_dtype,
         reset_index,
+        convert_columns_to_pandas,
         n_pes,
     )
 
@@ -167,6 +174,7 @@ def check_func(
         check_names,
         check_dtype,
         reset_index,
+        convert_columns_to_pandas,
         n_pes,
     )
 
@@ -180,6 +188,7 @@ def check_func_seq(
     check_names,
     check_dtype,
     reset_index,
+    convert_columns_to_pandas,
     n_pes,
 ):
     """check function output against Python without manually setting inputs/outputs
@@ -193,6 +202,8 @@ def check_func_seq(
             "always", message="No parallelism found for function", category=BodoWarning
         )
         bodo_out = bodo_func(*call_args)
+        if convert_columns_to_pandas:
+            bodo_out = convert_list_string_decimal_columns(bodo_out)
 
     passed = _test_equal_guard(
         bodo_out, py_output, sort_output, check_names, check_dtype, reset_index
@@ -214,6 +225,7 @@ def check_func_1D(
     check_names,
     check_dtype,
     reset_index,
+    convert_columns_to_pandas,
     n_pes,
 ):
     """Check function output against Python while setting the inputs/outputs as
@@ -225,6 +237,8 @@ def check_func_1D(
     )(func)
     dist_args = tuple(_get_dist_arg(a, copy_input) for a in args)
     bodo_output = bodo_func(*dist_args)
+    if convert_columns_to_pandas:
+        bodo_output = convert_list_string_decimal_columns(bodo_output)
     if is_out_distributed:
         bodo_output = bodo.gatherv(bodo_output)
     # only rank 0 should check if gatherv() called on output
@@ -248,6 +262,7 @@ def check_func_1D_var(
     check_names,
     check_dtype,
     reset_index,
+    convert_columns_to_pandas,
     n_pes,
 ):
     """Check function output against Python while setting the inputs/outputs as
@@ -258,6 +273,8 @@ def check_func_1D_var(
     )(func)
     dist_args = tuple(_get_dist_arg(a, copy_input, True) for a in args)
     bodo_output = bodo_func(*dist_args)
+    if convert_columns_to_pandas:
+        bodo_output = convert_list_string_decimal_columns(bodo_output)
     if is_out_distributed:
         bodo_output = bodo.gatherv(bodo_output)
     passed = 1
@@ -531,6 +548,9 @@ def check_timing_func(func, args):
 #
 # Note: We cannot use df_copy["e_col_name"].str.join(',') because of unahashable list.
 def convert_list_string_decimal_columns(df):
+    if not isinstance(df, pd.DataFrame):
+        return df
+
     df_copy = df.copy()
     list_col = df.columns.to_list()
     n_rows = df_copy[list_col[0]].size
@@ -656,35 +676,6 @@ def check_parallel_coherency(
             passed = 0
     n_passed = reduce_sum(passed)
     assert n_passed == n_pes
-
-
-# This function allows to check the coherency of functions using a list of strings
-# or Decimals in input and output.
-#
-# The idea is:
-# ---map the list of strings into strings.
-# ---map the Decimals to floats
-#
-# The input is a sequence of dataframes. The output is a single dataframe.
-def check_func_type_extent(
-    test_func, tuple_args, sort_output=False, reset_index=False,
-):
-    tuple_args_mapped = tuple(
-        convert_list_string_decimal_columns(a) for a in tuple_args
-    )
-    bodo_func = bodo.jit(test_func)
-    result_mapped_A = test_func(*tuple_args_mapped)
-    result_mapped_B = convert_list_string_decimal_columns(bodo_func(*tuple_args))
-    if sort_output:
-        result_mapped_A = sort_dataframe_values_index(result_mapped_A)
-        result_mapped_B = sort_dataframe_values_index(result_mapped_B)
-    if reset_index:
-        result_mapped_A.reset_index(drop=True, inplace=True)
-        result_mapped_B.reset_index(drop=True, inplace=True)
-    pd.testing.assert_frame_equal(result_mapped_A, result_mapped_B)
-    check_parallel_coherency(
-        test_func, tuple_args, sort_output=sort_output, reset_index=reset_index
-    )
 
 
 def compute_random_decimal_array(option, n):

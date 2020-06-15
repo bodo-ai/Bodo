@@ -6,10 +6,7 @@ import numpy as np
 import random
 import pytest
 import bodo
-from bodo.tests.utils import (
-    check_func,
-    check_func_type_extent,
-)
+from bodo.tests.utils import check_func
 
 
 @pytest.mark.parametrize(
@@ -124,7 +121,7 @@ def test_list_string_array_type_specific():
     df2_target = pd.DataFrame(
         {"A": [["AB"], ["A", "B", "C"], ["D", "E"], ["AB", "CD"], ["D", "F"]]}
     )
-    check_func_type_extent(test_impl, (df1,), sort_output=True)
+    check_func(test_impl, (df1,), sort_output=True, convert_columns_to_pandas=True)
 
 
 def test_list_string_array_type_random():
@@ -149,7 +146,7 @@ def test_list_string_array_type_random():
 
     n = 50
     df1 = pd.DataFrame({"A": rand_col_l_str(n)})
-    check_func_type_extent(test_impl, (df1,), sort_output=True)
+    check_func(test_impl, (df1,), sort_output=True, convert_columns_to_pandas=True)
 
 
 def test_drop_duplicates_2col_int_numpynan_bool():
