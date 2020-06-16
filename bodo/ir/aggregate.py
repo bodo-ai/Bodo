@@ -2093,6 +2093,9 @@ def compile_to_optimized_ir(func, arg_typs, typingctx):
     )
     TypeAnnotation = namedtuple("TypeAnnotation", ["typemap", "calltypes"])
     ta = TypeAnnotation(typemap, calltypes)
+    # The new Numba 0.50 inliner requires the pipline state itselft to be a member of
+    # the pipeline state. To emulate it using a namedtuple (which is immutable), we
+    # create a pipline first with the required data and add it to another one.
     pm = DummyPipeline(
         typingctx,
         targetctx,
