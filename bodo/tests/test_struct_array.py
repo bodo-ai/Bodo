@@ -42,3 +42,11 @@ def test_unbox(struct_arr_value, memory_leak_check):
 
     check_func(impl, (struct_arr_value,))
     check_func(impl2, (struct_arr_value,))
+
+
+def test_getitem_int(struct_arr_value, memory_leak_check):
+    def test_impl(A, i):
+        return A[i]
+
+    i = 1
+    assert bodo.jit(test_impl)(struct_arr_value, i) == test_impl(struct_arr_value, i)

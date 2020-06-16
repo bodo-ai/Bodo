@@ -359,3 +359,217 @@ def box_struct_arr(typ, val, c):
 
     c.context.nrt.decref(c.builder, typ, val)
     return arr
+
+
+class StructRecordType(types.Type):
+    """Data type for struct records taken as scalars from struct arrays. A regular
+    dictionary doesn't work in the general case since values can have different types.
+    Very similar structure to StructArrayType, except that it holds scalar values and
+    supports getitem/setitem of fields.
+    """
+
+    def __init__(self, data, names):
+        # data is tuple of scalar types
+        # names is a tuple of field names
+        assert (
+            isinstance(data, tuple)
+            and len(data) > 0
+            and all(not bodo.utils.utils.is_array_typ(a, False) for a in data)
+        )
+        assert (
+            isinstance(names, tuple)
+            and all(isinstance(a, str) for a in names)
+            and len(names) == len(data)
+        )
+
+        self.data = data
+        self.names = names
+        super(StructRecordType, self).__init__(
+            name="StructRecordType({}, {})".format(data, names)
+        )
+
+
+class StructRecordPayloadType(types.Type):
+    def __init__(self, data):
+        assert isinstance(data, tuple) and all(
+            not bodo.utils.utils.is_array_typ(a, False) for a in data
+        )
+        self.data = data
+        super(StructRecordPayloadType, self).__init__(
+            name="StructRecordPayloadType({})".format(data)
+        )
+
+
+@register_model(StructRecordPayloadType)
+class StructRecordPayloadModel(models.StructModel):
+    def __init__(self, dmm, fe_type):
+        members = [
+            ("data", types.BaseTuple.from_types(fe_type.data)),
+            ("null_bitmap", types.UniTuple(types.int8, len(fe_type.data))),
+        ]
+        models.StructModel.__init__(self, dmm, fe_type, members)
+
+
+@register_model(StructRecordType)
+class StructRecordModel(models.StructModel):
+    def __init__(self, dmm, fe_type):
+        payload_type = StructRecordPayloadType(fe_type.data)
+        members = [
+            ("meminfo", types.MemInfoPointer(payload_type)),
+        ]
+        models.StructModel.__init__(self, dmm, fe_type, members)
+
+
+def define_struct_rec_dtor(context, builder, struct_rec_type, payload_type):
+    """
+    Define destructor for struct record type if not already defined
+    """
+    mod = builder.module
+    # Declare dtor
+    fnty = lir.FunctionType(lir.VoidType(), [cgutils.voidptr_t])
+    fn = mod.get_or_insert_function(
+        fnty,
+        name=".dtor.struct_rec.{}.{}.".format(
+            struct_rec_type.data, struct_rec_type.names
+        ),
+    )
+
+    # End early if the dtor is already defined
+    if not fn.is_declaration:
+        return fn
+
+    fn.linkage = "linkonce_odr"
+    # Populate the dtor
+    builder = lir.IRBuilder(fn.append_basic_block())
+    base_ptr = fn.args[0]  # void*
+
+    # get payload struct
+    ptrty = context.get_data_type(payload_type).as_pointer()
+    payload_ptr = builder.bitcast(base_ptr, ptrty)
+    payload = context.make_data_helper(builder, payload_type, ref=payload_ptr)
+
+    context.nrt.decref(
+        builder, types.BaseTuple.from_types(struct_rec_type.data), payload.data
+    )
+    # no need for null_bitmap since it is using primitive types
+
+    builder.ret_void()
+    return fn
+
+
+def _get_struct_rec_payload(context, builder, typ, rec):
+    """get payload struct proxy for a struct record value
+    """
+    struct_rec = context.make_helper(builder, typ, rec)
+    payload_type = StructRecordPayloadType(typ.data)
+    meminfo_void_ptr = context.nrt.meminfo_data(builder, struct_rec.meminfo)
+    meminfo_data_ptr = builder.bitcast(
+        meminfo_void_ptr, context.get_data_type(payload_type).as_pointer()
+    )
+    payload = cgutils.create_struct_proxy(payload_type)(
+        context, builder, builder.load(meminfo_data_ptr)
+    )
+    return payload
+
+
+@box(StructRecordType)
+def box_struct_rec(typ, val, c):
+    """box struct records into python dictionary objects
+    """
+    out_dict = c.pyapi.dict_new(len(typ.data))
+    payload = _get_struct_rec_payload(c.context, c.builder, typ, val)
+
+    assert len(typ.data) > 0
+    for i, val_typ in enumerate(typ.data):
+        value = c.builder.extract_value(payload.data, i)
+        val_obj = c.pyapi.from_native_value(val_typ, value, c.env_manager)
+        c.pyapi.dict_setitem_string(out_dict, typ.names[i], val_obj)
+        c.pyapi.decref(val_obj)
+
+    c.context.nrt.decref(c.builder, typ, val)
+    return out_dict
+
+
+def construct_struct_record(context, builder, struct_rec_type, values, nulls):
+    """Creates meminfo and sets dtor and data for struct record
+    """
+    # create payload type
+    payload_type = StructRecordPayloadType(struct_rec_type.data)
+    alloc_type = context.get_data_type(payload_type)
+    alloc_size = context.get_abi_sizeof(alloc_type)
+
+    # define dtor
+    dtor_fn = define_struct_rec_dtor(context, builder, struct_rec_type, payload_type)
+
+    # create meminfo
+    meminfo = context.nrt.meminfo_alloc_dtor(
+        builder, context.get_constant(types.uintp, alloc_size), dtor_fn
+    )
+    meminfo_void_ptr = context.nrt.meminfo_data(builder, meminfo)
+    meminfo_data_ptr = builder.bitcast(meminfo_void_ptr, alloc_type.as_pointer())
+
+    # alloc values in payload
+    payload = cgutils.create_struct_proxy(payload_type)(context, builder)
+
+    payload.data = (
+        cgutils.pack_array(builder, values)
+        if types.is_homogeneous(*struct_rec_type.data)
+        else cgutils.pack_struct(builder, values)
+    )
+
+    payload.null_bitmap = cgutils.pack_array(builder, nulls)
+
+    builder.store(payload._getvalue(), meminfo_data_ptr)
+    return meminfo
+
+
+@intrinsic
+def struct_array_get_record(typingctx, struct_arr_typ, ind_typ=None):
+    """get struct record from struct array, e.g. A[i]
+    """
+    assert isinstance(struct_arr_typ, StructArrayType) and isinstance(
+        ind_typ, types.Integer
+    )
+    out_typ = StructRecordType(
+        tuple(d.dtype for d in struct_arr_typ.data), struct_arr_typ.names
+    )
+
+    def codegen(context, builder, sig, args):
+        struct_arr, ind = args
+
+        payload = _get_struct_arr_payload(context, builder, struct_arr_typ, struct_arr)
+        data_vals = []
+        # TODO: set nulls from data arrays
+        nulls = [
+            context.get_constant(types.uint8, 1)
+            for _ in range(len(struct_arr_typ.data))
+        ]
+        # TODO: support non-Numpy arrays
+        for i, arr_typ in enumerate(struct_arr_typ.data):
+            arr_ptr = builder.extract_value(payload.data, i)
+            arr = context.make_array(arr_typ)(context, builder, value=arr_ptr)
+            data_vals.append(
+                numba.np.arrayobj._getitem_array_single_int(
+                    context, builder, arr_typ.dtype, arr_typ, arr, ind
+                )
+            )
+
+        meminfo = construct_struct_record(context, builder, out_typ, data_vals, nulls)
+        struct_record = context.make_helper(builder, out_typ)
+        struct_record.meminfo = meminfo
+        return struct_record._getvalue()
+
+    return out_typ(struct_arr_typ, ind_typ), codegen
+
+
+@overload(operator.getitem, no_unliteral=True)
+def struct_arr_getitem(arr, ind):
+    if not isinstance(arr, StructArrayType):
+        return
+
+    if isinstance(ind, types.Integer):
+        # TODO: warning if value is NA?
+        def struct_arr_getitem_impl(arr, ind):  # pragma: no cover
+            return struct_array_get_record(arr, ind)
+
+        return struct_arr_getitem_impl
