@@ -18,13 +18,15 @@
 
 MPI_Datatype decimal_mpi_type = MPI_DATATYPE_NULL;
 
-array_info* list_string_array_to_info(uint64_t n_items, uint64_t n_strings, uint64_t n_chars,
-                                      char* data, char* data_offsets, char* index_offsets,
+array_info* list_string_array_to_info(uint64_t n_items, uint64_t n_strings,
+                                      uint64_t n_chars, char* data,
+                                      char* data_offsets, char* index_offsets,
                                       char* null_bitmap, NRT_MemInfo* meminfo) {
     // TODO: better memory management of struct, meminfo refcount?
-    return new array_info(bodo_array_type::LIST_STRING, Bodo_CTypes::LIST_STRING, n_items,
-                          n_strings, n_chars, data, data_offsets, index_offsets, null_bitmap, meminfo,
-                          NULL);
+    return new array_info(bodo_array_type::LIST_STRING,
+                          Bodo_CTypes::LIST_STRING, n_items, n_strings, n_chars,
+                          data, data_offsets, index_offsets, null_bitmap,
+                          meminfo, NULL);
 }
 
 array_info* string_array_to_info(uint64_t n_items, uint64_t n_chars, char* data,
@@ -32,16 +34,16 @@ array_info* string_array_to_info(uint64_t n_items, uint64_t n_chars, char* data,
                                  NRT_MemInfo* meminfo) {
     // TODO: better memory management of struct, meminfo refcount?
     return new array_info(bodo_array_type::STRING, Bodo_CTypes::STRING, n_items,
-                          n_chars, -1, data, offsets, NULL, null_bitmap, meminfo,
-                          NULL);
+                          n_chars, -1, data, offsets, NULL, null_bitmap,
+                          meminfo, NULL);
 }
 
 array_info* numpy_array_to_info(uint64_t n_items, char* data, int typ_enum,
                                 NRT_MemInfo* meminfo) {
     // TODO: better memory management of struct, meminfo refcount?
     return new array_info(bodo_array_type::NUMPY,
-                          (Bodo_CTypes::CTypeEnum)typ_enum, n_items, -1, -1, data,
-                          NULL, NULL, NULL, meminfo, NULL);
+                          (Bodo_CTypes::CTypeEnum)typ_enum, n_items, -1, -1,
+                          data, NULL, NULL, NULL, meminfo, NULL);
 }
 
 array_info* nullable_array_to_info(uint64_t n_items, char* data, int typ_enum,
@@ -49,8 +51,9 @@ array_info* nullable_array_to_info(uint64_t n_items, char* data, int typ_enum,
                                    NRT_MemInfo* meminfo_bitmask) {
     // TODO: better memory management of struct, meminfo refcount?
     return new array_info(bodo_array_type::NULLABLE_INT_BOOL,
-                          (Bodo_CTypes::CTypeEnum)typ_enum, n_items, -1, -1, data,
-                          NULL, NULL, null_bitmap, meminfo, meminfo_bitmask);
+                          (Bodo_CTypes::CTypeEnum)typ_enum, n_items, -1, -1,
+                          data, NULL, NULL, null_bitmap, meminfo,
+                          meminfo_bitmask);
 }
 
 array_info* decimal_array_to_info(uint64_t n_items, char* data, int typ_enum,
@@ -59,19 +62,20 @@ array_info* decimal_array_to_info(uint64_t n_items, char* data, int typ_enum,
                                   int32_t precision, int32_t scale) {
     // TODO: better memory management of struct, meminfo refcount?
     return new array_info(bodo_array_type::NULLABLE_INT_BOOL,
-                          (Bodo_CTypes::CTypeEnum)typ_enum, n_items, -1, -1, data,
-                          NULL, NULL, null_bitmap, meminfo, meminfo_bitmask,
-                          precision, scale);
+                          (Bodo_CTypes::CTypeEnum)typ_enum, n_items, -1, -1,
+                          data, NULL, NULL, null_bitmap, meminfo,
+                          meminfo_bitmask, precision, scale);
 }
 
-
-void info_to_list_string_array(array_info* info,
-                               uint64_t* n_items, uint64_t* n_strings, uint64_t* n_chars,
-                               char** data, char** data_offsets, char** index_offsets,
-                               char** null_bitmap, NRT_MemInfo** meminfo) {
+void info_to_list_string_array(array_info* info, uint64_t* n_items,
+                               uint64_t* n_strings, uint64_t* n_chars,
+                               char** data, char** data_offsets,
+                               char** index_offsets, char** null_bitmap,
+                               NRT_MemInfo** meminfo) {
     if (info->arr_type != bodo_array_type::LIST_STRING) {
-        Bodo_PyErr_SetString(PyExc_RuntimeError,
-                             "info_to_list_string_array requires list string input");
+        Bodo_PyErr_SetString(
+            PyExc_RuntimeError,
+            "info_to_list_string_array requires list string input");
         return;
     }
     *n_items = info->length;
@@ -83,8 +87,6 @@ void info_to_list_string_array(array_info* info,
     *null_bitmap = info->null_bitmask;
     *meminfo = info->meminfo;
 }
-
-
 
 void info_to_string_array(array_info* info, NRT_MemInfo** meminfo) {
     if (info->arr_type != bodo_array_type::STRING) {
@@ -342,6 +344,132 @@ void* np_array_from_list_item_array(int64_t num_lists, const char* buffer,
 #undef CHECK
 }
 
+/**
+ * @brief extract data and null_bitmap values for struct array
+ * from an array of dict of values. The dicts inside array should have
+ * the same key names.
+ *
+ * @param struct_arr_obj Python Sequence object, intended to be an array of
+ * dicts.
+ * @param n_fields number of fields in struct array
+ * @param data data buffers to be filled with all values (one buffer per field)
+ * @param null_bitmap nulls buffer to be filled
+ * @param dtype data types of field values, currently only float64 and int64
+ * supported.
+ * @param field_names names of struct fields.
+ */
+void struct_array_from_sequence(PyObject* struct_arr_obj, int n_fields,
+                                char** data, uint8_t* null_bitmap,
+                                int32_t* dtypes, char** field_names) {
+#define CHECK(expr, msg)               \
+    if (!(expr)) {                     \
+        std::cerr << msg << std::endl; \
+        return;                        \
+    }
+
+    CHECK(PySequence_Check(struct_arr_obj), "expecting a PySequence");
+    CHECK(data && null_bitmap, "buffer arguments must not be NULL");
+
+    // get pd.NA object to check for new NA kind
+    PyObject* pd_mod = PyImport_ImportModule("pandas");
+    CHECK(pd_mod, "importing pandas module failed");
+    PyObject* C_NA = PyObject_GetAttrString(pd_mod, "NA");
+    CHECK(C_NA, "getting pd.NA failed");
+
+    Py_ssize_t n = PyObject_Size(struct_arr_obj);
+
+    for (Py_ssize_t i = 0; i < n; ++i) {
+        PyObject* s = PySequence_GetItem(struct_arr_obj, i);
+        CHECK(s, "getting struct array element failed");
+        // Pandas stores NA as either None or nan
+        if (s == Py_None ||
+            (PyFloat_Check(s) && std::isnan(PyFloat_AsDouble(s))) ||
+            s == C_NA) {
+            // set null bit to 0
+            SetBitTo(null_bitmap, i, 0);
+        } else {
+            // set null bit to 1
+            null_bitmap[i / 8] |= kBitmask[i % 8];
+            CHECK(PyDict_Check(s), "invalid non-dict element in struct array");
+            // set field data values
+            for (Py_ssize_t j = 0; j < n_fields; j++) {
+                PyObject* v = PyDict_GetItemString(
+                    s, field_names[j]);  // returns borrowed reference
+                copy_item_to_buffer(data[j], i, v,
+                                    (Bodo_CTypes::CTypeEnum)dtypes[j]);
+            }
+        }
+        Py_DECREF(s);
+    }
+
+    Py_DECREF(pd_mod);
+    Py_DECREF(C_NA);
+#undef CHECK
+}
+
+/**
+ * @brief create a numpy array of dict objects from a StructArray
+ *
+ * @param num_structs number of structs in input array (length of array)
+ * @param n_fields number of fields in structs
+ * @param data data values (one array per field)
+ * @param null_bitmap null bitmask
+ * @param dtypes data types of field values (currently, only int/float)
+ * @param field_names names of struct fields
+ * @return numpy array of dict objects
+ */
+void* np_array_from_struct_array(int64_t num_structs, int n_fields, char** data,
+                                 uint8_t* null_bitmap, int32_t* dtypes,
+                                 char** field_names) {
+#define CHECK(expr, msg)               \
+    if (!(expr)) {                     \
+        std::cerr << msg << std::endl; \
+        return NULL;                   \
+    }
+
+    // allocate array and get nan object
+    npy_intp dims[] = {num_structs};
+    PyObject* ret = PyArray_SimpleNew(1, dims, NPY_OBJECT);
+    CHECK(ret, "allocating numpy array failed");
+    int err;
+    PyObject* np_mod = PyImport_ImportModule("numpy");
+    CHECK(np_mod, "importing numpy module failed");
+    PyObject* nan_obj = PyObject_GetAttrString(np_mod, "nan");
+    CHECK(nan_obj, "getting np.nan failed");
+
+    // for each struct value
+    for (int64_t i = 0; i < num_structs; ++i) {
+        // set nan if value is NA
+        auto p = PyArray_GETPTR1((PyArrayObject*)ret, i);
+        CHECK(p, "getting offset in numpy array failed");
+        if (is_na(null_bitmap, i)) {
+            err = PyArray_SETITEM((PyArrayObject*)ret, (char*)p, nan_obj);
+            CHECK(err == 0, "setting item in numpy array failed");
+            continue;
+        }
+
+        // alloc dictionary
+        PyObject* d = PyDict_New();
+
+        for (Py_ssize_t j = 0; j < n_fields; j++) {
+            PyObject* s = value_to_pyobject(data[j], i,
+                                            (Bodo_CTypes::CTypeEnum)dtypes[j]);
+            CHECK(s, "creating Python int/float object failed");
+            PyDict_SetItemString(d, field_names[j], s);
+            Py_DECREF(s);
+        }
+
+        err = PyArray_SETITEM((PyArrayObject*)ret, (char*)p, d);
+        CHECK(err == 0, "setting item in numpy array failed");
+        Py_DECREF(d);
+    }
+
+    Py_DECREF(np_mod);
+    Py_DECREF(nan_obj);
+    return ret;
+#undef CHECK
+}
+
 PyMODINIT_FUNC PyInit_array_ext(void) {
     PyObject* m;
     static struct PyModuleDef moduledef = {
@@ -365,8 +493,9 @@ PyMODINIT_FUNC PyInit_array_ext(void) {
     groupby_init();
 
     // DEC_MOD_METHOD(string_array_to_info);
-    PyObject_SetAttrString(m, "list_string_array_to_info",
-                           PyLong_FromVoidPtr((void*)(&list_string_array_to_info)));
+    PyObject_SetAttrString(
+        m, "list_string_array_to_info",
+        PyLong_FromVoidPtr((void*)(&list_string_array_to_info)));
     PyObject_SetAttrString(m, "string_array_to_info",
                            PyLong_FromVoidPtr((void*)(&string_array_to_info)));
     PyObject_SetAttrString(m, "numpy_array_to_info",
@@ -378,8 +507,9 @@ PyMODINIT_FUNC PyInit_array_ext(void) {
                            PyLong_FromVoidPtr((void*)(&decimal_array_to_info)));
     PyObject_SetAttrString(m, "info_to_string_array",
                            PyLong_FromVoidPtr((void*)(&info_to_string_array)));
-    PyObject_SetAttrString(m, "info_to_list_string_array",
-                           PyLong_FromVoidPtr((void*)(&info_to_list_string_array)));
+    PyObject_SetAttrString(
+        m, "info_to_list_string_array",
+        PyLong_FromVoidPtr((void*)(&info_to_list_string_array)));
     PyObject_SetAttrString(m, "info_to_numpy_array",
                            PyLong_FromVoidPtr((void*)(&info_to_numpy_array)));
     PyObject_SetAttrString(
@@ -420,5 +550,11 @@ PyMODINIT_FUNC PyInit_array_ext(void) {
     PyObject_SetAttrString(
         m, "np_array_from_list_item_array",
         PyLong_FromVoidPtr((void*)(&np_array_from_list_item_array)));
+    PyObject_SetAttrString(
+        m, "struct_array_from_sequence",
+        PyLong_FromVoidPtr((void*)(&struct_array_from_sequence)));
+    PyObject_SetAttrString(
+        m, "np_array_from_struct_array",
+        PyLong_FromVoidPtr((void*)(&np_array_from_struct_array)));
     return m;
 }

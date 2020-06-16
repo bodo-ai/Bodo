@@ -33,6 +33,7 @@ from bodo.libs.str_ext import string_type
 from bodo.libs.str_arr_ext import string_array_type
 from bodo.libs.list_str_arr_ext import list_string_array_type
 from bodo.libs.list_item_arr_ext import ListItemArrayType
+from bodo.libs.struct_arr_ext import StructArrayType
 from bodo.libs.int_arr_ext import typeof_pd_int_dtype
 from bodo.libs.decimal_arr_ext import Decimal128Type, DecimalArrayType
 from bodo.hiframes.pd_categorical_ext import PDCategoricalDtype
@@ -504,6 +505,8 @@ def _typeof_ndarray(val, c):
             return datetime_date_array_type  # TODO: test array of datetime.date
         if isinstance(dtype, Decimal128Type):
             return DecimalArrayType(dtype.precision, dtype.scale)
+        if isinstance(dtype, dict):
+            return StructArrayType.from_dict(dtype)
         raise BodoError(
             "Unsupported array dtype: {}".format(val.dtype)
         )  # pragma: no cover
@@ -538,6 +541,8 @@ def _infer_ndarray_obj_dtype(val):
         return string_type
     elif isinstance(first_val, bool):
         return types.bool_
+    elif isinstance(first_val, dict):
+        return {str(k): numba.typeof(v) for k, v in first_val.items()}
     if isinstance(first_val, list):
         return bodo.hiframes.boxing._infer_series_list_dtype(val, "array")
     if isinstance(first_val, datetime.date):

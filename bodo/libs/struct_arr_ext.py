@@ -1,0 +1,361 @@
+# Copyright (C) 2020 Bodo Inc. All rights reserved.
+"""Array implementation for structs of values.
+Corresponds to Spark's StructType: https://spark.apache.org/docs/latest/sql-reference.html
+Corresponds to Arrow's Struct arrays: https://arrow.apache.org/docs/format/Columnar.html
+
+The values are stored in contingous data arrays; one array per field. For example:
+A:             ["AA", "B", "C"]
+B:             [1, 2, 4]
+"""
+import operator
+import numpy as np
+from collections import namedtuple
+import numba
+import bodo
+
+from numba.core import types, cgutils
+from numba.extending import (
+    typeof_impl,
+    type_callable,
+    models,
+    register_model,
+    NativeValue,
+    make_attribute_wrapper,
+    lower_builtin,
+    box,
+    unbox,
+    lower_getattr,
+    intrinsic,
+    overload_method,
+    overload,
+    overload_attribute,
+)
+from numba.parfors.array_analysis import ArrayAnalysis
+from numba.core.imputils import impl_ret_borrowed
+
+from bodo.utils.typing import is_list_like_index_type, BodoError
+from llvmlite import ir as lir
+import llvmlite.binding as ll
+
+# NOTE: importing hdist is necessary for MPI initialization before array_ext
+from bodo.libs import hdist
+from bodo.libs import array_ext
+
+ll.add_symbol("struct_array_from_sequence", array_ext.struct_array_from_sequence)
+ll.add_symbol("np_array_from_struct_array", array_ext.np_array_from_struct_array)
+
+
+class StructArrayType(types.ArrayCompatible):
+    """Data type for arrays of structs
+    """
+
+    def __init__(self, data, names=None):
+        # data is tuple of Array types
+        # names is a tuple of field names
+        assert (
+            isinstance(data, tuple)
+            and len(data) > 0
+            and all(bodo.utils.utils.is_array_typ(a, False) for a in data)
+        )
+        if names is not None:
+            assert (
+                isinstance(names, tuple)
+                and all(isinstance(a, str) for a in names)
+                and len(names) == len(data)
+            )
+        else:
+            names = tuple("f{}".format(i) for i in range(len(data)))
+
+        self.data = data
+        self.names = names
+        super(StructArrayType, self).__init__(
+            name="StructArrayType({}, {})".format(data, names)
+        )
+
+    @property
+    def as_array(self):
+        return types.Array(types.undefined, 1, "C")
+
+    # TODO: we need a dict-like type that allows heterogenous values
+    # @property
+    # def dtype(self):
+    #     return types.DictType(self.data)
+
+    @classmethod
+    def from_dict(cls, d):
+        """create a StructArrayType from dict where keys are names and values are dtypes
+        """
+        assert isinstance(d, dict)
+        names = tuple(str(a) for a in d.keys())
+        data = tuple(
+            bodo.hiframes.pd_series_ext._get_series_array_type(t) for t in d.values()
+        )
+        return StructArrayType(data, names)
+
+
+class StructArrayPayloadType(types.Type):
+    def __init__(self, data):
+        assert isinstance(data, tuple) and all(
+            bodo.utils.utils.is_array_typ(a, False) for a in data
+        )
+        self.data = data
+        super(StructArrayPayloadType, self).__init__(
+            name="StructArrayPayloadType({})".format(data)
+        )
+
+
+@register_model(StructArrayPayloadType)
+class StructArrayPayloadModel(models.StructModel):
+    def __init__(self, dmm, fe_type):
+        members = [
+            ("data", types.BaseTuple.from_types(fe_type.data)),
+            ("null_bitmap", types.Array(types.uint8, 1, "C")),
+        ]
+        models.StructModel.__init__(self, dmm, fe_type, members)
+
+
+@register_model(StructArrayType)
+class StructArrayModel(models.StructModel):
+    def __init__(self, dmm, fe_type):
+        payload_type = StructArrayPayloadType(fe_type.data)
+        members = [
+            ("meminfo", types.MemInfoPointer(payload_type)),
+        ]
+        models.StructModel.__init__(self, dmm, fe_type, members)
+
+
+def define_struct_arr_dtor(context, builder, struct_arr_type, payload_type):
+    """
+    Define destructor for struct array type if not already defined
+    """
+    mod = builder.module
+    # Declare dtor
+    fnty = lir.FunctionType(lir.VoidType(), [cgutils.voidptr_t])
+    fn = mod.get_or_insert_function(
+        fnty,
+        name=".dtor.struct_arr.{}.{}.".format(
+            struct_arr_type.data, struct_arr_type.names
+        ),
+    )
+
+    # End early if the dtor is already defined
+    if not fn.is_declaration:
+        return fn
+
+    fn.linkage = "linkonce_odr"
+    # Populate the dtor
+    builder = lir.IRBuilder(fn.append_basic_block())
+    base_ptr = fn.args[0]  # void*
+
+    # get payload struct
+    ptrty = context.get_data_type(payload_type).as_pointer()
+    payload_ptr = builder.bitcast(base_ptr, ptrty)
+    payload = context.make_data_helper(builder, payload_type, ref=payload_ptr)
+
+    context.nrt.decref(
+        builder, types.BaseTuple.from_types(struct_arr_type.data), payload.data
+    )
+    context.nrt.decref(builder, types.Array(types.uint8, 1, "C"), payload.null_bitmap)
+
+    builder.ret_void()
+    return fn
+
+
+def construct_struct_array(context, builder, struct_arr_type, n_structs):
+    """Creates meminfo and sets dtor, and allocates buffers for struct array
+    """
+    # create payload type
+    payload_type = StructArrayPayloadType(struct_arr_type.data)
+    alloc_type = context.get_data_type(payload_type)
+    alloc_size = context.get_abi_sizeof(alloc_type)
+
+    # define dtor
+    dtor_fn = define_struct_arr_dtor(context, builder, struct_arr_type, payload_type)
+
+    # create meminfo
+    meminfo = context.nrt.meminfo_alloc_dtor(
+        builder, context.get_constant(types.uintp, alloc_size), dtor_fn
+    )
+    meminfo_void_ptr = context.nrt.meminfo_data(builder, meminfo)
+    meminfo_data_ptr = builder.bitcast(meminfo_void_ptr, alloc_type.as_pointer())
+
+    # alloc values in payload
+    payload = cgutils.create_struct_proxy(payload_type)(context, builder)
+
+    # alloc data
+    # TODO: general alloc, not just Numpy
+    arrs = []
+    arr_ptrs = []
+    for arr_typ in struct_arr_type.data:
+        arr = bodo.utils.utils._empty_nd_impl(context, builder, arr_typ, [n_structs])
+        arr_ptrs.append(arr.data)
+        arrs.append(arr._getvalue())
+
+    payload.data = (
+        cgutils.pack_array(builder, arrs)
+        if types.is_homogeneous(*struct_arr_type.data)
+        else cgutils.pack_struct(builder, arrs)
+    )
+
+    # alloc null bitmap
+    n_bitmask_bytes = builder.udiv(
+        builder.add(n_structs, lir.Constant(lir.IntType(64), 7)),
+        lir.Constant(lir.IntType(64), 8),
+    )
+    null_bitmap = bodo.utils.utils._empty_nd_impl(
+        context, builder, types.Array(types.uint8, 1, "C"), [n_bitmask_bytes]
+    )
+    null_bitmap_ptr = null_bitmap.data
+    payload.null_bitmap = null_bitmap._getvalue()
+
+    builder.store(payload._getvalue(), meminfo_data_ptr)
+
+    return meminfo, arr_ptrs, null_bitmap_ptr
+
+
+def _get_C_API_ptrs(c, arr_ptrs, data, names):
+    """convert struct array info into pointers to pass to C API
+    """
+
+    # get pointer to a tuple of data pointers to pass to C
+    data_ptr_tup = (
+        cgutils.pack_array(c.builder, arr_ptrs)
+        if types.is_homogeneous(*data)
+        else cgutils.pack_struct(c.builder, arr_ptrs)
+    )
+    data_ptr_tup_ptr = cgutils.alloca_once_value(c.builder, data_ptr_tup)
+    # get pointer to a tuple of c type enums to pass to C
+    c_types = [
+        c.context.get_constant(types.int32, bodo.utils.utils.numba_to_c_type(a.dtype))
+        for a in data
+    ]
+    c_types_ptr = cgutils.alloca_once_value(
+        c.builder, cgutils.pack_array(c.builder, c_types)
+    )
+    # get pointer to a tuple of field names to pass to C
+    field_names = cgutils.pack_array(
+        c.builder, [c.context.insert_const_string(c.builder.module, a) for a in names]
+    )
+    field_names_ptr = cgutils.alloca_once_value(c.builder, field_names)
+    return data_ptr_tup_ptr, c_types_ptr, field_names_ptr
+
+
+@unbox(StructArrayType)
+def unbox_struct_array(typ, val, c):
+    """
+    Unbox a numpy array with list of data values.
+    """
+    # get length
+    n_structs = bodo.utils.utils.object_length(c, val)
+    # create struct array
+    meminfo, arr_ptrs, null_bitmap_ptr = construct_struct_array(
+        c.context, c.builder, typ, n_structs
+    )
+
+    data_ptr_tup_ptr, c_types_ptr, field_names_ptr = _get_C_API_ptrs(
+        c, arr_ptrs, typ.data, typ.names
+    )
+
+    # function signature of struct_array_from_sequence
+    fnty = lir.FunctionType(
+        lir.VoidType(),
+        [
+            lir.IntType(8).as_pointer(),  # obj
+            lir.IntType(32),  # number of arrays
+            lir.IntType(8).as_pointer(),  # data
+            lir.IntType(8).as_pointer(),  # null_bitmap
+            lir.IntType(8).as_pointer(),  # c types
+            lir.IntType(8).as_pointer(),  # field names
+        ],
+    )
+    fn = c.builder.module.get_or_insert_function(
+        fnty, name="struct_array_from_sequence"
+    )
+
+    c.builder.call(
+        fn,
+        [
+            val,
+            c.context.get_constant(types.int32, len(typ.data)),
+            c.builder.bitcast(data_ptr_tup_ptr, lir.IntType(8).as_pointer()),
+            null_bitmap_ptr,
+            c.builder.bitcast(c_types_ptr, lir.IntType(8).as_pointer()),
+            c.builder.bitcast(field_names_ptr, lir.IntType(8).as_pointer()),
+        ],
+    )
+
+    struct_array = c.context.make_helper(c.builder, typ)
+    struct_array.meminfo = meminfo
+
+    is_error = cgutils.is_not_null(c.builder, c.pyapi.err_occurred())
+    return NativeValue(struct_array._getvalue(), is_error=is_error)
+
+
+def _get_struct_arr_payload(context, builder, arr_typ, arr):
+    """get payload struct proxy for a struct array value
+    """
+    struct_array = context.make_helper(builder, arr_typ, arr)
+    payload_type = StructArrayPayloadType(arr_typ.data)
+    meminfo_void_ptr = context.nrt.meminfo_data(builder, struct_array.meminfo)
+    meminfo_data_ptr = builder.bitcast(
+        meminfo_void_ptr, context.get_data_type(payload_type).as_pointer()
+    )
+    payload = cgutils.create_struct_proxy(payload_type)(
+        context, builder, builder.load(meminfo_data_ptr)
+    )
+    return payload
+
+
+@box(StructArrayType)
+def box_struct_arr(typ, val, c):
+    """box packed native representation of list of item array into python objects
+    """
+
+    payload = _get_struct_arr_payload(c.context, c.builder, typ, val)
+    data_ptrs = []
+    assert len(typ.data) > 0
+    # TODO: support non-Numpy arrays
+    for i, arr_typ in enumerate(typ.data):
+        arr_ptr = c.builder.extract_value(payload.data, i)
+        arr = c.context.make_array(arr_typ)(c.context, c.builder, value=arr_ptr)
+        data_ptrs.append(arr.data)
+        # get length from first array
+        if i == 0:
+            length = c.builder.extract_value(arr.shape, 0)
+    data_ptr_tup_ptr, c_types_ptr, field_names_ptr = _get_C_API_ptrs(
+        c, data_ptrs, typ.data, typ.names
+    )
+
+    fnty = lir.FunctionType(
+        c.context.get_argument_type(types.pyobject),
+        [
+            lir.IntType(64),  # length
+            lir.IntType(32),  # number of arrays
+            lir.IntType(8).as_pointer(),  # data
+            lir.IntType(8).as_pointer(),  # null_bitmap
+            lir.IntType(8).as_pointer(),  # c types
+            lir.IntType(8).as_pointer(),  # field names
+        ],
+    )
+    fn_get = c.builder.module.get_or_insert_function(
+        fnty, name="np_array_from_struct_array"
+    )
+
+    null_bitmap_ptr = c.context.make_helper(
+        c.builder, types.Array(types.uint8, 1, "C"), payload.null_bitmap
+    ).data
+
+    arr = c.builder.call(
+        fn_get,
+        [
+            length,
+            c.context.get_constant(types.int32, len(typ.data)),
+            c.builder.bitcast(data_ptr_tup_ptr, lir.IntType(8).as_pointer()),
+            null_bitmap_ptr,
+            c.builder.bitcast(c_types_ptr, lir.IntType(8).as_pointer()),
+            c.builder.bitcast(field_names_ptr, lir.IntType(8).as_pointer()),
+        ],
+    )
+
+    c.context.nrt.decref(c.builder, typ, val)
+    return arr
