@@ -25,6 +25,17 @@ from bodo.tests.utils import check_func
                 {"X": 5, "Y": 9.0},
             ]
         ),
+        np.array(
+            [
+                {"X": 1, "Y": 3},
+                {"X": 2, "Y": 1},
+                None,
+                {"X": -1, "Y": -1},
+                {"X": 3, "Y": 4},
+                {"X": -3, "Y": -1},
+                {"X": 5, "Y": 9},
+            ]
+        ),
     ]
 )
 def struct_arr_value(request):

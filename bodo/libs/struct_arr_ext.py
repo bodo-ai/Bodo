@@ -526,13 +526,18 @@ def construct_struct_record(context, builder, struct_rec_type, values, nulls):
 @intrinsic
 def struct_array_get_record(typingctx, struct_arr_typ, ind_typ=None):
     """get struct record from struct array, e.g. A[i]
+    Returns a dictionary of value types are the same, otherwise a StructRecordType
     """
     assert isinstance(struct_arr_typ, StructArrayType) and isinstance(
         ind_typ, types.Integer
     )
-    out_typ = StructRecordType(
-        tuple(d.dtype for d in struct_arr_typ.data), struct_arr_typ.names
-    )
+    n_fields = len(struct_arr_typ.data)
+    data_types = tuple(d.dtype for d in struct_arr_typ.data)
+    # return a regular dictionary if values have the same type, otherwise record
+    if types.is_homogeneous(*struct_arr_typ.data):
+        out_typ = types.DictType(bodo.string_type, data_types[0])
+    else:
+        out_typ = StructRecordType(data_types, struct_arr_typ.names)
 
     def codegen(context, builder, sig, args):
         struct_arr, ind = args
@@ -540,10 +545,7 @@ def struct_array_get_record(typingctx, struct_arr_typ, ind_typ=None):
         payload = _get_struct_arr_payload(context, builder, struct_arr_typ, struct_arr)
         data_vals = []
         # TODO: set nulls from data arrays
-        nulls = [
-            context.get_constant(types.uint8, 1)
-            for _ in range(len(struct_arr_typ.data))
-        ]
+        nulls = [context.get_constant(types.uint8, 1) for _ in range(n_fields)]
         # TODO: support non-Numpy arrays
         for i, arr_typ in enumerate(struct_arr_typ.data):
             arr_ptr = builder.extract_value(payload.data, i)
@@ -552,6 +554,34 @@ def struct_array_get_record(typingctx, struct_arr_typ, ind_typ=None):
                 numba.np.arrayobj._getitem_array_single_int(
                     context, builder, arr_typ.dtype, arr_typ, arr, ind
                 )
+            )
+
+        if isinstance(out_typ, types.DictType):
+            names_consts = [
+                context.insert_const_string(builder.module, name)
+                for name in struct_arr_typ.names
+            ]
+            val_tup = cgutils.pack_array(builder, data_vals)
+            names_tup = cgutils.pack_array(builder, names_consts)
+            # TODO: support NA values as optional type?
+            def impl(names, vals):
+                d = {}
+                for i, name in enumerate(names):
+                    d[name] = vals[i]
+                return d
+
+            return context.compile_internal(
+                builder,
+                impl,
+                out_typ(
+                    types.Tuple(
+                        tuple(
+                            types.StringLiteral(name) for name in struct_arr_typ.names
+                        )
+                    ),
+                    types.Tuple(data_types),
+                ),
+                [names_tup, val_tup],
             )
 
         meminfo = construct_struct_record(context, builder, out_typ, data_vals, nulls)
