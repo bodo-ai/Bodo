@@ -10,6 +10,8 @@ import os
 import re
 import inspect
 import warnings
+import textwrap
+import traceback
 import numpy as np
 
 import numba
@@ -42,7 +44,7 @@ from numba.core.typing.templates import (
     _OverloadAttributeTemplate,
     _OverloadMethodTemplate,
 )
-from numba.core.types.functions import _ResolutionFailures
+from numba.core.types.functions import _ResolutionFailures, _termcolor
 from numba.core.errors import LiteralTypingError
 from numba.core.types import literal
 
@@ -626,29 +628,37 @@ numba.core.typing.templates.bound_function = bound_function
 
 
 def get_call_type(self, context, args, kws):
-    failures = _ResolutionFailures(context, self, args, kws)
+    failures = _ResolutionFailures(context, self, args, kws, depth=self._depth)
+    self._depth += 1
     for temp_cls in self.templates:
         temp = temp_cls(context)
         for uselit in [True, False]:
             try:
                 if uselit:
                     sig = temp.apply(args, kws)
-                # change: check _no_unliteral attribute if present
+                # Bodo change: check _no_unliteral attribute if present
                 elif not getattr(temp, "_no_unliteral", False):
                     nolitargs = tuple([unliteral(a) for a in args])
                     nolitkws = {k: unliteral(v) for k, v in kws.items()}
                     sig = temp.apply(nolitargs, nolitkws)
             except Exception as e:
                 sig = None
-                failures.add_error(temp_cls, e)
+                failures.add_error(temp, False, e, uselit)
             else:
                 if sig is not None:
                     self._impl_keys[sig.args] = temp.get_impl_key(sig)
+                    self._depth -= 1
                     return sig
                 else:
-                    haslit = "" if uselit else "out"
-                    msg = "All templates rejected with%s literals." % haslit
-                    failures.add_error(temp_cls, msg)
+                    registered_sigs = getattr(temp, "cases", None)
+                    if registered_sigs is not None:
+                        msg = "No match for registered cases:\n%s"
+                        msg = msg % "\n".join(
+                            " * {}".format(x) for x in registered_sigs
+                        )
+                    else:
+                        msg = "No match."
+                    failures.add_error(temp, True, msg, uselit)
 
     if len(failures) == 0:
         raise AssertionError(
@@ -663,7 +673,7 @@ def get_call_type(self, context, args, kws):
 lines = inspect.getsource(numba.core.types.functions.BaseFunction.get_call_type)
 if (
     hashlib.sha256(lines.encode()).hexdigest()
-    != "bcb57ef2f0557836bf15c69eb09ffb16955633eb86781c73bcde0e4910fb0d06"
+    != "1dbcaa9fdbfd835681192e51347708c0906cdd42c6218e0c1d92cef4738893a6"
 ):  # pragma: no cover
     warnings.warn("numba.core.types.functions.BaseFunction.get_call_type has changed")
 
@@ -673,20 +683,66 @@ numba.core.types.functions.BaseFunction.get_call_type = get_call_type
 
 def get_call_type2(self, context, args, kws):
     template = self.template(context)
-    e = None
+    literal_e = None
+    nonliteral_e = None
+
     # Try with Literal
     try:
         out = template.apply(args, kws)
-    except Exception:
+    except Exception as exc:
+        if isinstance(exc, errors.ForceLiteralArg):
+            raise exc
+        literal_e = exc
         out = None
-    # If that doesn't work, remove literals
-    # change: check _no_unliteral attribute if present
-    if out is None and not getattr(template, "_no_unliteral", False):
-        args = [unliteral(a) for a in args]
-        kws = {k: unliteral(v) for k, v in kws.items()}
-        out = template.apply(args, kws)
-    if out is None and e is not None:
-        raise e
+
+    # if the unliteral_args and unliteral_kws are the same as the literal
+    # ones, set up to not bother retrying
+    unliteral_args = tuple([unliteral(a) for a in args])
+    unliteral_kws = {k: unliteral(v) for k, v in kws.items()}
+    skip = unliteral_args == args and kws == unliteral_kws
+
+    # If the above template application failed and the non-literal args are
+    # different to the literal ones, try again with literals rewritten as
+    # non-literals
+    # Bodo change: check _no_unliteral attribute if present
+    if not skip and out is None and not getattr(template, "_no_unliteral", False):
+        try:
+            out = template.apply(unliteral_args, unliteral_kws)
+        except Exception as exc:
+            if isinstance(exc, errors.ForceLiteralArg):
+                raise exc
+            nonliteral_e = exc
+
+    if out is None and (nonliteral_e is not None or literal_e is not None):
+        header = "- Resolution failure for {} arguments:\n{}\n"
+        tmplt = _termcolor.highlight(header)
+        if numba.core.config.DEVELOPER_MODE:
+            indent = " " * 4
+
+            def add_bt(error):
+                if isinstance(error, BaseException):
+                    # if the error is an actual exception instance, trace it
+                    bt = traceback.format_exception(
+                        type(error), error, error.__traceback__
+                    )
+                else:
+                    bt = [""]
+                nd2indent = "\n{}".format(2 * indent)
+                errstr += _termcolor.reset(nd2indent + nd2indent.join(bt_as_lines))
+                return _termcolor.reset(errstr)
+
+        else:
+            add_bt = lambda X: ""
+
+        def nested_msg(literalness, e):
+            estr = str(e)
+            estr = estr if estr else (str(repr(e)) + add_bt(e))
+            new_e = errors.TypingError(textwrap.dedent(estr))
+            return tmplt.format(literalness, str(new_e))
+
+        raise errors.TypingError(
+            nested_msg("literal", literal_e) + nested_msg("non-literal", nonliteral_e)
+        )
     return out
 
 
@@ -694,7 +750,7 @@ def get_call_type2(self, context, args, kws):
 lines = inspect.getsource(numba.core.types.functions.BoundFunction.get_call_type)
 if (
     hashlib.sha256(lines.encode()).hexdigest()
-    != "9c665cf809ee7310608ce667e0173a53fbfc2e804b85ba02a98b88062c9e77e0"
+    != "bea523c496de56822d0b94facc3a237b4c65608fd7f4ab1fe33dd06c8fb21fc9"
 ):  # pragma: no cover
     warnings.warn("numba.core.types.functions.BoundFunction.get_call_type has changed")
 
@@ -723,14 +779,17 @@ def string_from_string_and_size(self, string, size):
 numba.core.pythonapi.PythonAPI.string_from_string_and_size = string_from_string_and_size
 
 # This replaces Numba's numba.core.dispatcher._DispatcherBase._compile_for_args
-# method to delete args before returning the dispatcher object. Otherwise
-# the code is the same
+# method to delete args before returning the dispatcher object and handle BodoError.
+# Otherwise, the code is the same.
 def _compile_for_args(self, *args, **kws):  # pragma: no cover
     """
     For internal use.  Compile a specialized version of the function
     for the given *args* and *kws*, and return the resulting callable.
     """
     assert not kws
+    # call any initialisation required for the compilation chain (e.g.
+    # extension point registration).
+    self._compilation_chain_init_hook()
     import bodo
 
     def error_rewrite(e, issue_type):
@@ -831,10 +890,12 @@ def _compile_for_args(self, *args, **kws):  # pragma: no cover
                 e.patch_message("\n".join((str(e).rstrip(), help_msg)))
         # ignore the FULL_TRACEBACKS config, this needs reporting!
         raise e
+    # Bodo change: handle BodoError
     except bodo.utils.typing.BodoError as e:
         # create a new error so that the stacktrace only reaches
         # the point where the new error is raised
         error = bodo.utils.typing.BodoError(str(e))
+    # Bodo change: avoid arg leak
     finally:
         # avoid issue of reference leak of arguments to jitted function:
         # https://github.com/numba/numba/issues/5419
@@ -850,7 +911,7 @@ def _compile_for_args(self, *args, **kws):  # pragma: no cover
 lines = inspect.getsource(numba.core.dispatcher._DispatcherBase._compile_for_args)
 if (
     hashlib.sha256(lines.encode()).hexdigest()
-    != "1e12bb18f3ed09e608ba6c56a7fcd4cf2fe342b71af9d2e9767aee817d92f4b8"
+    != "f9e54236529e4e9655d2372ceae81ad90913173f7b178a533f353b882c9b3cdf"
 ):  # pragma: no cover
     warnings.warn("numba.core.dispatcher._DispatcherBase._compile_for_args has changed")
 # now replace the function with our own
