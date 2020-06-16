@@ -21,7 +21,7 @@ import pytest
 from bodo.tests.utils import check_func
 
 
-def test_membership():
+def test_membership(memory_leak_check):
     d = numba.typed.Dict.empty(
         key_type=numba.core.types.unicode_type, value_type=numba.core.types.int64
     )
@@ -35,7 +35,7 @@ def test_membership():
     check_func(test_impl, (d,))
 
 
-def test_getitem():
+def test_getitem(memory_leak_check):
     def test_impl(N):
         A = np.ones(N)
         B = np.ones(N) > 0.5
@@ -46,7 +46,7 @@ def test_getitem():
     check_func(test_impl, (n,))
 
 
-def test_setitem1():
+def test_setitem1(memory_leak_check):
     def test_impl(N):
         A = np.arange(10) + 1.0
         A[0] = 30
@@ -56,7 +56,7 @@ def test_setitem1():
     check_func(test_impl, (n,))
 
 
-def test_setitem2():
+def test_setitem2(memory_leak_check):
     def test_impl(N):
         A = np.arange(10) + 1.0
         A[0:4] = 30
@@ -66,7 +66,7 @@ def test_setitem2():
     check_func(test_impl, (n,))
 
 
-def test_astype():
+def test_astype(memory_leak_check):
     def test_impl(N):
         return np.ones(N).astype(np.int32).sum()
 
@@ -74,7 +74,7 @@ def test_astype():
     check_func(test_impl, (n,))
 
 
-def test_shape():
+def test_shape(memory_leak_check):
     def test_impl(N):
         return np.ones(N).shape[0]
 
@@ -82,7 +82,7 @@ def test_shape():
     check_func(test_impl, (n,))
 
 
-def test_inplace_binop():
+def test_inplace_binop(memory_leak_check):
     def test_impl(N):
         A = np.ones(N)
         B = np.ones(N)
@@ -93,7 +93,7 @@ def test_inplace_binop():
     check_func(test_impl, (n,))
 
 
-def test_getitem_multidim():
+def test_getitem_multidim(memory_leak_check):
     def test_impl(N):
         A = np.ones((N, 3))
         B = np.ones(N) > 0.5
@@ -104,7 +104,7 @@ def test_getitem_multidim():
     check_func(test_impl, (n,))
 
 
-def test_whole_slice():
+def test_whole_slice(memory_leak_check):
     def test_impl(N):
         X = np.ones((N, 4))
         X[:, 3] = (X[:, 3]) / (np.max(X[:, 3]) - np.min(X[:, 3]))
@@ -114,7 +114,7 @@ def test_whole_slice():
     check_func(test_impl, (n,))
 
 
-def test_strided_getitem():
+def test_strided_getitem(memory_leak_check):
     def test_impl(N):
         A = np.ones(N)
         B = A[::7]
@@ -124,7 +124,7 @@ def test_strided_getitem():
     check_func(test_impl, (n,))
 
 
-def test_array_sum_axis():
+def test_array_sum_axis(memory_leak_check):
     """test array.sum() with axis argument
     """
 
@@ -144,7 +144,7 @@ def test_array_sum_axis():
 
 
 @pytest.mark.skip(reason="TODO: replace since to_numeric() doesn't need locals anymore")
-def test_inline_locals():
+def test_inline_locals(memory_leak_check):
     # make sure locals in inlined function works
     @bodo.jit(locals={"B": bodo.float64[:]})
     def g(S):
@@ -158,16 +158,16 @@ def test_inline_locals():
 
 
 @pytest.fixture(params=["float32", "float64", "int32", "int64"])
-def test_dtypes_input(request):
+def test_dtypes_input(request, memory_leak_check):
     return request.param
 
 
 @pytest.fixture(params=["sum", "prod", "min", "max", "argmin", "argmax"])
-def test_funcs_input(request):
+def test_funcs_input(request, memory_leak_check):
     return request.param
 
 
-def test_reduce(test_dtypes_input, test_funcs_input):
+def test_reduce(test_dtypes_input, test_funcs_input, memory_leak_check):
     import sys
 
     # loc allreduce doesn't support int64 on windows
@@ -192,7 +192,7 @@ def test_reduce(test_dtypes_input, test_funcs_input):
         check_func(test_impl, (n,))
 
 
-def test_reduce2(test_dtypes_input, test_funcs_input):
+def test_reduce2(test_dtypes_input, test_funcs_input, memory_leak_check):
     import sys
 
     dtype = test_dtypes_input
@@ -220,7 +220,7 @@ def test_reduce2(test_dtypes_input, test_funcs_input):
         check_func(test_impl, (A,))
 
 
-def test_reduce_filter1(test_dtypes_input, test_funcs_input):
+def test_reduce_filter1(test_dtypes_input, test_funcs_input, memory_leak_check):
     import sys
 
     dtype = test_dtypes_input
@@ -247,7 +247,7 @@ def test_reduce_filter1(test_dtypes_input, test_funcs_input):
         check_func(test_impl, (A,))
 
 
-def test_array_reduce():
+def test_array_reduce(memory_leak_check):
     binops = ["+=", "*=", "+=", "*=", "|=", "|="]
     dtypes = [
         "np.float32",
@@ -298,7 +298,7 @@ def _check_IR_no_getitem(test_impl, args):
         )
 
 
-def test_trivial_slice_getitem_opt():
+def test_trivial_slice_getitem_opt(memory_leak_check):
     """Make sure trivial slice getitem is optimized out, e.g. B = A[:]
     """
 
@@ -328,7 +328,7 @@ def _check_IR_single_label(test_impl, args):
 g_flag = True
 
 
-def test_dead_branch_remove():
+def test_dead_branch_remove(memory_leak_check):
     """Make sure dead branches are removed
     """
 
@@ -347,7 +347,7 @@ def test_dead_branch_remove():
     _check_IR_single_label(test_impl2, ())
 
 
-def test_return():
+def test_return(memory_leak_check):
     def test_impl(N):
         A = np.arange(N)
         return A
@@ -356,7 +356,7 @@ def test_return():
     check_func(test_impl, (n,))
 
 
-def test_return_tuple():
+def test_return_tuple(memory_leak_check):
     def test_impl(N):
         A = np.arange(N)
         B = np.arange(N) + 1.5
@@ -366,7 +366,7 @@ def test_return_tuple():
     check_func(test_impl, (n,))
 
 
-def test_input():
+def test_input(memory_leak_check):
     def test_impl(A):
         return len(A)
 
@@ -375,7 +375,7 @@ def test_input():
     check_func(test_impl, (arr,))
 
 
-def test_rebalance():
+def test_rebalance(memory_leak_check):
     def test_impl(N):
         A = np.arange(n)
         B = A[A > 10]
@@ -386,7 +386,7 @@ def test_rebalance():
     check_func(test_impl, (n,))
 
 
-def test_rebalance_loop():
+def test_rebalance_loop(memory_leak_check):
     def test_impl(N):
         A = np.arange(n)
         B = A[A > 10]
@@ -403,7 +403,7 @@ def test_rebalance_loop():
         bodo.transforms.distributed_analysis.auto_rebalance = False
 
 
-def test_transpose():
+def test_transpose(memory_leak_check):
     def test_impl(n):
         A = np.ones((30, 40, 50))
         B = A.transpose((0, 2, 1))
@@ -414,7 +414,7 @@ def test_transpose():
     check_func(test_impl, (n,))
 
 
-def test_np_dot():
+def test_np_dot(memory_leak_check):
     def test_impl(n, k):
         A = np.ones((n, k))
         g = np.arange(k).astype(np.float64)
@@ -426,7 +426,7 @@ def test_np_dot():
     check_func(test_impl, (n, k))
 
 
-def test_np_array():
+def test_np_array(memory_leak_check):
     """test distribution of np.array() and np.asarray().
     array input can be distributed but not list input.
     """
@@ -444,7 +444,7 @@ def test_np_array():
     check_func(test_impl2, ([1, 2, 5, 1, 2, 3],), is_out_distributed=False)
 
 
-def test_np_dot_empty_vm():
+def test_np_dot_empty_vm(memory_leak_check):
     """test for np.dot() called on empty vector and matrix (for Numba #5539)
     """
     X = np.array([]).reshape(0, 2)
@@ -454,7 +454,7 @@ def test_np_dot_empty_vm():
     np.testing.assert_array_equal(py_res, nb_res)
 
 
-def test_np_full():
+def test_np_full(memory_leak_check):
     """Test np.full() support (currently in Series pass)
     """
 
@@ -476,7 +476,7 @@ def test_np_full():
 
 
 @pytest.mark.skip(reason="Numba's perfmute generation needs to use np seed properly")
-def test_permuted_array_indexing():
+def test_permuted_array_indexing(memory_leak_check):
     def get_np_state_ptr():
         return numba._helperlib.rnd_get_np_state_ptr()
 

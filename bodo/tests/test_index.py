@@ -97,7 +97,7 @@ def test_numeric_index_constructor(memory_leak_check):
     pd.testing.assert_index_equal(bodo.jit(impl8)(), impl8())
 
 
-def test_init_numeric_index_array_analysis():
+def test_init_numeric_index_array_analysis(memory_leak_check):
     """make sure shape equivalence for init_numeric_index() is applied correctly
     """
     import numba.tests.test_array_analysis
@@ -146,7 +146,7 @@ def test_array_index_box(index, memory_leak_check):
         # pd.PeriodIndex(year=[2015, 2016, 2018], month=[1, 2, 3], freq="M"),
     ],
 )
-def test_index_values(index):
+def test_index_values(index, memory_leak_check):
     def impl(A):
         return A.values
 
@@ -173,7 +173,7 @@ def test_index_values(index):
         pd.timedelta_range(start="1D", end="15D", name="A"),
     ],
 )
-def test_index_copy(index):
+def test_index_copy(index, memory_leak_check):
     def test_impl_copy(S):
         return S.copy()
 
@@ -199,7 +199,7 @@ def test_datetime_index_unbox(dti_val, memory_leak_check):
 
 
 @pytest.mark.parametrize("field", bodo.hiframes.pd_timestamp_ext.date_fields)
-def test_datetime_field(dti_val, field):
+def test_datetime_field(dti_val, field, memory_leak_check):
     func_text = "def impl(A):\n"
     func_text += "  return A.{}\n".format(field)
     loc_vars = {}
@@ -210,7 +210,7 @@ def test_datetime_field(dti_val, field):
     pd.testing.assert_index_equal(bodo_func(dti_val), impl(dti_val))
 
 
-def test_datetime_date(dti_val):
+def test_datetime_date(dti_val, memory_leak_check):
     def impl(A):
         return A.date
 
@@ -218,7 +218,7 @@ def test_datetime_date(dti_val):
     np.testing.assert_array_equal(bodo_func(dti_val), impl(dti_val))
 
 
-def test_datetime_min(dti_val):
+def test_datetime_min(dti_val, memory_leak_check):
     def impl(A):
         return A.min()
 
@@ -226,7 +226,7 @@ def test_datetime_min(dti_val):
     np.testing.assert_array_equal(bodo_func(dti_val), impl(dti_val))
 
 
-def test_datetime_max(dti_val):
+def test_datetime_max(dti_val, memory_leak_check):
     def impl(A):
         return A.max()
 
@@ -234,7 +234,7 @@ def test_datetime_max(dti_val):
     np.testing.assert_array_equal(bodo_func(dti_val), impl(dti_val))
 
 
-def test_datetime_sub(dti_val):
+def test_datetime_sub(dti_val, memory_leak_check):
     t = dti_val.min()  # Timestamp object
     # DatetimeIndex - Timestamp
     def impl(A, t):
@@ -251,7 +251,7 @@ def test_datetime_sub(dti_val):
     pd.testing.assert_index_equal(bodo_func(dti_val, t), impl2(dti_val, t))
 
 
-def test_datetime_getitem(dti_val):
+def test_datetime_getitem(dti_val, memory_leak_check):
     # constant integer index
     def impl(A):
         return A[0]
@@ -284,7 +284,7 @@ def test_datetime_getitem(dti_val):
 
 
 @pytest.mark.parametrize("comp", ["==", "!=", ">=", ">", "<=", "<"])
-def test_datetime_str_comp(dti_val, comp):
+def test_datetime_str_comp(dti_val, comp, memory_leak_check):
     # string literal
     func_text = "def impl(A):\n"
     func_text += '  return A {} "2015-01-23"\n'.format(comp)
@@ -321,7 +321,7 @@ def test_datetime_str_comp(dti_val, comp):
         pd.DatetimeIndex(["2015-8-3", "1990-11-21"]),
     ],
 )
-def test_datetime_index_constructor(data):
+def test_datetime_index_constructor(data, memory_leak_check):
     def test_impl(d):
         return pd.DatetimeIndex(d)
 
@@ -329,7 +329,7 @@ def test_datetime_index_constructor(data):
     pd.testing.assert_index_equal(bodo_func(data), test_impl(data))
 
 
-def test_init_datetime_index_array_analysis():
+def test_init_datetime_index_array_analysis(memory_leak_check):
     """make sure shape equivalence for init_datetime_index() is applied correctly
     """
     import numba.tests.test_array_analysis
@@ -348,7 +348,7 @@ def test_init_datetime_index_array_analysis():
     assert eq_set._get_ind("I#0") == eq_set._get_ind("d#0")
 
 
-def test_pd_date_range():
+def test_pd_date_range(memory_leak_check):
     def impl():
         return pd.date_range(start="2018-01-01", end="2018-01-08")
 
@@ -399,7 +399,7 @@ def test_timedelta_index_unbox(timedelta_index_val, memory_leak_check):
         pd.TimedeltaIndex(np.arange(10)),
     ],
 )
-def test_timedelta_index_constructor(data):
+def test_timedelta_index_constructor(data, memory_leak_check):
     def test_impl(d):
         return pd.TimedeltaIndex(d)
 
@@ -407,7 +407,7 @@ def test_timedelta_index_constructor(data):
     pd.testing.assert_index_equal(bodo_func(data), test_impl(data))
 
 
-def test_init_timedelta_index_array_analysis():
+def test_init_timedelta_index_array_analysis(memory_leak_check):
     """make sure shape equivalence for init_timedelta_index() is applied correctly
     """
     import numba.tests.test_array_analysis
@@ -426,7 +426,7 @@ def test_init_timedelta_index_array_analysis():
 
 
 @pytest.mark.parametrize("field", bodo.hiframes.pd_timestamp_ext.timedelta_fields)
-def test_timedelta_field(timedelta_index_val, field):
+def test_timedelta_field(timedelta_index_val, field, memory_leak_check):
     func_text = "def impl(A):\n"
     func_text += "  return A.{}\n".format(field)
     loc_vars = {}
@@ -474,7 +474,7 @@ def test_multi_index_unbox(m_ind, memory_leak_check):
     pd.testing.assert_index_equal(bodo_func(m_ind), test_impl(m_ind))
 
 
-def test_init_string_index_array_analysis():
+def test_init_string_index_array_analysis(memory_leak_check):
     """make sure shape equivalence for init_string_index() is applied correctly
     """
     import numba.tests.test_array_analysis
@@ -492,7 +492,7 @@ def test_init_string_index_array_analysis():
     assert eq_set._get_ind("I#0") == eq_set._get_ind("d#0")
 
 
-def test_init_range_index_array_analysis():
+def test_init_range_index_array_analysis(memory_leak_check):
     """make sure shape equivalence for init_range_index() is applied correctly
     """
     import numba.tests.test_array_analysis

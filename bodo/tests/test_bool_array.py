@@ -29,7 +29,7 @@ def test_unbox(bool_arr_value, memory_leak_check):
     check_func(impl2, (bool_arr_value,))
 
 
-def test_boolean_dtype():
+def test_boolean_dtype(memory_leak_check):
     # unbox and box
     def impl(d):
         return d
@@ -43,7 +43,7 @@ def test_boolean_dtype():
     check_func(impl2, ())
 
 
-def test_unary_ufunc():
+def test_unary_ufunc(memory_leak_check):
     ufunc = np.invert
 
     def test_impl(A):
@@ -54,7 +54,7 @@ def test_unary_ufunc():
 
 
 @pytest.mark.parametrize("op", [operator.eq, operator.ne])
-def test_cmp(op):
+def test_cmp(op, memory_leak_check):
     """Test comparison of two boolean arrays
     """
     op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
@@ -69,7 +69,7 @@ def test_cmp(op):
     check_func(test_impl, (A1, A2))
 
 
-def test_cmp_scalar():
+def test_cmp_scalar(memory_leak_check):
     """Test comparison of boolean array and a scalar
     """
 

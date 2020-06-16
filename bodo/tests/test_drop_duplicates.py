@@ -31,14 +31,14 @@ from bodo.tests.utils import check_func
         ),
     ],
 )
-def test_df_drop_duplicates(test_df):
+def test_df_drop_duplicates(test_df, memory_leak_check):
     def impl(df):
         return df.drop_duplicates()
 
     check_func(impl, (test_df,), sort_output=True)
 
 
-def test_drop_duplicates_1col():
+def test_drop_duplicates_1col(memory_leak_check):
     """
     Test drop_duplicates(): with just one column
     """
@@ -51,7 +51,7 @@ def test_drop_duplicates_1col():
     check_func(test_impl, (df1,), sort_output=True)
 
 
-def test_drop_duplicates_2col():
+def test_drop_duplicates_2col(memory_leak_check):
     """
     Test drop_duplicates(): with 2 columns of integers
     """
@@ -64,7 +64,7 @@ def test_drop_duplicates_2col():
     check_func(test_impl, (df1,), sort_output=True)
 
 
-def test_drop_duplicates_2col_int_string():
+def test_drop_duplicates_2col_int_string(memory_leak_check):
     """
     Test drop_duplicates(): 2 columns one integer, one string
     """
@@ -78,7 +78,7 @@ def test_drop_duplicates_2col_int_string():
 
 
 @pytest.mark.parametrize("n, len_siz", [(100, 10), (30, 3)])
-def test_drop_duplicates_2col_random_nullable_int(n, len_siz):
+def test_drop_duplicates_2col_random_nullable_int(n, len_siz, memory_leak_check):
     """
     Test drop_duplicates(): 2 columns drop duplicates with nullable_int_bool array
     """
@@ -107,7 +107,7 @@ def test_drop_duplicates_2col_random_nullable_int(n, len_siz):
     check_func(test_impl, (df1,), sort_output=True)
 
 
-def test_list_string_array_type_specific():
+def test_list_string_array_type_specific(memory_leak_check):
     """Test of list_string_array_type in a specific case"""
 
     def test_impl(df1):
@@ -124,7 +124,7 @@ def test_list_string_array_type_specific():
     check_func(test_impl, (df1,), sort_output=True, convert_columns_to_pandas=True)
 
 
-def test_list_string_array_type_random():
+def test_list_string_array_type_random(memory_leak_check):
     """Test of list_string_array_type in parallel with a random list"""
 
     def test_impl(df1):
@@ -149,7 +149,7 @@ def test_list_string_array_type_random():
     check_func(test_impl, (df1,), sort_output=True, convert_columns_to_pandas=True)
 
 
-def test_drop_duplicates_2col_int_numpynan_bool():
+def test_drop_duplicates_2col_int_numpynan_bool(memory_leak_check):
     """
     Test drop_duplicates(): 2 columns one integer, one nullable_int_bool array
     """
@@ -171,7 +171,7 @@ def test_drop_duplicates_2col_int_numpynan_bool():
     check_func(test_impl, (get_array(150),), sort_output=True)
 
 
-def test_drop_duplicates_1col_nullable_int():
+def test_drop_duplicates_1col_nullable_int(memory_leak_check):
     """
     Test drop_duplicates(): 2 columns one integer, one nullable_int_bool array
     """
@@ -193,7 +193,7 @@ def test_drop_duplicates_1col_nullable_int():
     check_func(test_impl, (get_array(150),), sort_output=True)
 
 
-def test_drop_duplicates_2col_int_np_float():
+def test_drop_duplicates_2col_int_np_float(memory_leak_check):
     """
     Test drop_duplicates(): 2 columns one integer, one numpy array of floats
     """
@@ -208,7 +208,7 @@ def test_drop_duplicates_2col_int_np_float():
     check_func(test_impl, (df1,), sort_output=True)
 
 
-def test_drop_duplicates_2col_int_np_int():
+def test_drop_duplicates_2col_int_np_int(memory_leak_check):
     """
     Test drop_duplicates(): 2 columns one integer, one numpy array of floats
     """
@@ -221,7 +221,7 @@ def test_drop_duplicates_2col_int_np_int():
     check_func(test_impl, (df1,), sort_output=True)
 
 
-def test_drop_duplicates_2col_int_np_int_index():
+def test_drop_duplicates_2col_int_np_int_index(memory_leak_check):
     """
     Test drop_duplicates(): 2 columns one integer, one numpy array of floats and an array in indices
     """
@@ -237,7 +237,7 @@ def test_drop_duplicates_2col_int_np_int_index():
     check_func(test_impl, (df1,), sort_output=True)
 
 
-def test_drop_duplicatee_large_size():
+def test_drop_duplicatee_large_size(memory_leak_check):
     """
     Test drop_duplicates(): large size entries
     """

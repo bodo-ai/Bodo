@@ -19,7 +19,7 @@ def date_arr_value(request):
     return request.param
 
 
-def test_getitem_int(date_arr_value):
+def test_getitem_int(date_arr_value, memory_leak_check):
     def test_impl(A, i):
         return A[i]
 
@@ -28,7 +28,7 @@ def test_getitem_int(date_arr_value):
     assert bodo_func(date_arr_value, i) == test_impl(date_arr_value, i)
 
 
-def test_getitem_bool(date_arr_value):
+def test_getitem_bool(date_arr_value, memory_leak_check):
     def test_impl(A, ind):
         return A[ind]
 
@@ -41,7 +41,7 @@ def test_getitem_bool(date_arr_value):
     )
 
 
-def test_getitem_slice(date_arr_value):
+def test_getitem_slice(date_arr_value, memory_leak_check):
     def test_impl(A, ind):
         return A[ind]
 
@@ -52,7 +52,7 @@ def test_getitem_slice(date_arr_value):
         bodo_func(date_arr_value, ind), test_impl(date_arr_value, ind)
     )
 
-def test_getitem_int_arr(date_arr_value):
+def test_getitem_int_arr(date_arr_value, memory_leak_check):
     def test_impl(A, ind):
         return A[ind]
 

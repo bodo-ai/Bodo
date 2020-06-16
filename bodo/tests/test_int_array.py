@@ -85,7 +85,7 @@ def test_unbox(int_arr_value, memory_leak_check):
     check_func(impl2, (int_arr_value,))
 
 
-def test_int_dtype():
+def test_int_dtype(memory_leak_check):
     # unbox and box
     def impl(d):
         return d
@@ -106,7 +106,7 @@ def test_int_dtype():
     check_func(impl3, ())
 
 
-def test_getitem_int(int_arr_value):
+def test_getitem_int(int_arr_value, memory_leak_check):
     def test_impl(A, i):
         return A[i]
 
@@ -117,7 +117,7 @@ def test_getitem_int(int_arr_value):
     assert bodo_func(int_arr_value, i) == test_impl(int_arr_value, i)
 
 
-def test_getitem_bool(int_arr_value):
+def test_getitem_bool(int_arr_value, memory_leak_check):
     def test_impl(A, ind):
         return A[ind]
 
@@ -130,7 +130,7 @@ def test_getitem_bool(int_arr_value):
     )
 
 
-def test_getitem_slice(int_arr_value):
+def test_getitem_slice(int_arr_value, memory_leak_check):
     def test_impl(A, ind):
         return A[ind]
 
@@ -142,7 +142,7 @@ def test_getitem_slice(int_arr_value):
     )
 
 
-def test_setitem_int(int_arr_value):
+def test_setitem_int(int_arr_value, memory_leak_check):
     def test_impl(A, val):
         A[2] = val
         return A
@@ -156,7 +156,7 @@ def test_setitem_int(int_arr_value):
     )
 
 
-def test_setitem_arr(int_arr_value):
+def test_setitem_arr(int_arr_value, memory_leak_check):
     def test_impl(A, idx, val):
         A[idx] = val
         return A
@@ -197,7 +197,7 @@ def test_setitem_arr(int_arr_value):
     )
 
 
-def test_len():
+def test_len(memory_leak_check):
     def test_impl(A):
         return len(A)
 
@@ -208,7 +208,7 @@ def test_len():
     check_func(test_impl, (A,))
 
 
-def test_shape():
+def test_shape(memory_leak_check):
     def test_impl(A):
         return A.shape
 
@@ -224,7 +224,7 @@ def test_shape():
     # avoiding isnat since only supported for datetime/timedelta
     "ufunc", [f for f in numba.np.ufunc_db.get_ufuncs() if f.nin == 1 and f != np.isnat]
 )
-def test_unary_ufunc(ufunc):
+def test_unary_ufunc(ufunc, memory_leak_check):
     def test_impl(A):
         return ufunc(A)
 
@@ -235,7 +235,7 @@ def test_unary_ufunc(ufunc):
     check_func(test_impl, (A,))
 
 
-def test_unary_ufunc_explicit_np():
+def test_unary_ufunc_explicit_np(memory_leak_check):
     def test_impl(A):
         return np.negative(A)
 
@@ -250,7 +250,7 @@ def test_unary_ufunc_explicit_np():
 @pytest.mark.parametrize(
     "ufunc", [f for f in numba.np.ufunc_db.get_ufuncs() if f.nin == 2]
 )
-def test_binary_ufunc(ufunc):
+def test_binary_ufunc(ufunc, memory_leak_check):
     def test_impl(A1, A2):
         return ufunc(A1, A2)
 
@@ -268,7 +268,7 @@ def test_binary_ufunc(ufunc):
     check_func(test_impl, (arr, A2))
 
 
-def test_add():
+def test_add(memory_leak_check):
     def test_impl(A, other):
         return A+other
 
@@ -286,7 +286,7 @@ def test_add():
 @pytest.mark.parametrize(
     "op", numba.core.typing.npydecl.NumpyRulesArrayOperator._op_map.keys()
 )
-def test_binary_op(op):
+def test_binary_op(op, memory_leak_check):
     # Pandas doesn't support these operators yet, but Bodo does to be able to
     # replace all numpy arrays
     if op in (
@@ -318,7 +318,7 @@ def test_binary_op(op):
     check_func(test_impl, (2, A2))
 
 
-def test_inplace_iadd():
+def test_inplace_iadd(memory_leak_check):
     def test_impl(A, other):
         A+=other
         return A
@@ -335,7 +335,7 @@ def test_inplace_iadd():
 @pytest.mark.parametrize(
     "op", numba.core.typing.npydecl.NumpyRulesInplaceArrayOperator._op_map.keys()
 )
-def test_inplace_binary_op(op):
+def test_inplace_binary_op(op, memory_leak_check):
     # Numba can't handle itruediv
     # pandas doesn't support the others
     if op in (
@@ -370,7 +370,7 @@ def test_inplace_binary_op(op):
 
 @pytest.mark.skip(reason="pd.arrays.IntegerArray doesn't support unary op")
 @pytest.mark.parametrize("op", (operator.neg, operator.invert, operator.pos))
-def test_unary_op(op):
+def test_unary_op(op, memory_leak_check):
     # TODO: fix operator.pos
     if op == operator.pos:
         return
@@ -389,14 +389,14 @@ def test_unary_op(op):
     check_func(test_impl, (A,))
 
 
-def test_dtype(int_arr_value):
+def test_dtype(int_arr_value, memory_leak_check):
     def test_impl(A):
         return A.dtype
 
     check_func(test_impl, (int_arr_value,))
 
 
-def test_ndim():
+def test_ndim(memory_leak_check):
     def test_impl(A):
         return A.ndim
 
@@ -407,14 +407,14 @@ def test_ndim():
     check_func(test_impl, (A,))
 
 
-def test_copy(int_arr_value):
+def test_copy(int_arr_value, memory_leak_check):
     def test_impl(A):
         return A.copy()
 
     check_func(test_impl, (int_arr_value,))
 
 
-def test_astype_fast():
+def test_astype_fast(memory_leak_check):
     def test_impl(A, dtype):
         return A.astype(dtype)
 
@@ -427,21 +427,21 @@ def test_astype_fast():
 
 
 @pytest.mark.parametrize("dtype", [pd.Int8Dtype(), np.float64])
-def test_astype(int_arr_value, dtype):
+def test_astype(int_arr_value, dtype, memory_leak_check):
     def test_impl(A, dtype):
         return A.astype(dtype)
 
     check_func(test_impl, (int_arr_value, dtype))
 
 
-def test_astype_str(int_arr_value):
+def test_astype_str(int_arr_value, memory_leak_check):
     def test_impl(A):
         return A.astype("float64")
 
     check_func(test_impl, (int_arr_value,))
 
 
-def test_unique(int_arr_value):
+def test_unique(int_arr_value, memory_leak_check):
     def test_impl(A):
         return A.unique()
 
