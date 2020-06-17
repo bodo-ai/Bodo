@@ -32,12 +32,15 @@ from numba.extending import (
 )
 from numba.parfors.array_analysis import ArrayAnalysis
 from numba.core.imputils import impl_ret_borrowed
+from numba.typed.typedobjectutils import _cast
 
 from bodo.utils.typing import (
     is_list_like_index_type,
     BodoError,
     get_overload_const_str,
+    get_overload_const_int,
     is_overload_constant_str,
+    is_overload_constant_int,
 )
 from llvmlite import ir as lir
 import llvmlite.binding as ll
@@ -474,7 +477,7 @@ def _get_struct_rec_payload(context, builder, typ, rec):
     payload = cgutils.create_struct_proxy(payload_type)(
         context, builder, builder.load(meminfo_data_ptr)
     )
-    return payload
+    return payload, meminfo_data_ptr
 
 
 @box(StructRecordType)
@@ -482,7 +485,7 @@ def box_struct_rec(typ, val, c):
     """box struct records into python dictionary objects
     """
     out_dict = c.pyapi.dict_new(len(typ.data))
-    payload = _get_struct_rec_payload(c.context, c.builder, typ, val)
+    payload, _ = _get_struct_rec_payload(c.context, c.builder, typ, val)
 
     assert len(typ.data) > 0
     for i, val_typ in enumerate(typ.data):
@@ -503,10 +506,54 @@ def get_rec_data(typingctx, rec_typ=None):
 
     def codegen(context, builder, sig, args):
         (rec,) = args
-        payload = _get_struct_rec_payload(context, builder, rec_typ, rec)
+        payload, _ = _get_struct_rec_payload(context, builder, rec_typ, rec)
         return impl_ret_borrowed(context, builder, sig.return_type, payload.data)
 
     return types.BaseTuple.from_types(rec_typ.data)(rec_typ), codegen
+
+
+@intrinsic
+def set_rec_data(typingctx, rec_typ, field_ind_typ, val_typ=None):
+    """set a field in record to value. needs to replace the whole payload.
+    """
+    assert isinstance(rec_typ, StructRecordType) and is_overload_constant_int(
+        field_ind_typ
+    )
+    field_ind = get_overload_const_int(field_ind_typ)
+
+    def codegen(context, builder, sig, args):
+        (rec, _, val) = args
+        payload, meminfo_data_ptr = _get_struct_rec_payload(
+            context, builder, rec_typ, rec
+        )
+        old_data = payload.data
+        new_data = builder.insert_value(old_data, val, field_ind)
+        data_tup_typ = types.BaseTuple.from_types(rec_typ.data)
+        context.nrt.decref(builder, data_tup_typ, old_data)
+        context.nrt.incref(builder, data_tup_typ, new_data)
+        payload.data = new_data
+        builder.store(payload._getvalue(), meminfo_data_ptr)
+        return context.get_dummy_value()
+
+    return types.none(rec_typ, field_ind_typ, val_typ), codegen
+
+
+def _get_rec_field_ind(rec, ind, op):
+    """find record field index for 'ind' (a const str type) for operation 'op'.
+    Raise error if not possible.
+    """
+    if not is_overload_constant_str(ind):  # pragma: no cover
+        raise BodoError(
+            "Struct records (from struct array) only support constant strings for {}, not {}".format(
+                op, ind
+            )
+        )
+
+    ind_str = get_overload_const_str(ind)
+    if ind_str not in rec.names:  # pragma: no cover
+        raise BodoError("Field {} does not exist in record {}".format(ind_str, rec))
+
+    return rec.names.index(ind_str)
 
 
 @overload(operator.getitem, no_unliteral=True)
@@ -514,16 +561,23 @@ def struct_rec_getitem(rec, ind):
     if not isinstance(rec, StructRecordType):
         return
 
-    if not is_overload_constant_str(ind):
-        raise BodoError(
-            "Struct records (from struct array) only support constant strings for element access (getitem), not {}".format(
-                ind
-            )
-        )
-
-    field_ind = rec.names.index(get_overload_const_str(ind))
+    field_ind = _get_rec_field_ind(rec, ind, "element access (getitem)")
     # TODO: warning if value is NA?
     return lambda rec, ind: get_rec_data(rec)[field_ind]  # pragma: no cover
+
+
+@overload(operator.setitem, no_unliteral=True)
+def struct_rec_getitem(rec, ind, val):
+    if not isinstance(rec, StructRecordType):
+        return
+
+    field_ind = _get_rec_field_ind(rec, ind, "item assignment (setitem)")
+    field_typ = rec.data[field_ind]
+
+    # TODO: set NA
+    return lambda rec, ind, val: set_rec_data(
+        rec, field_ind, _cast(val, field_typ)
+    )  # pragma: no cover
 
 
 def construct_struct_record(context, builder, struct_rec_type, values, nulls):

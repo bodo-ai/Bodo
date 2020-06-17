@@ -94,3 +94,16 @@ def test_rec_getitem(struct_arr_value, memory_leak_check):
 
     i = 1
     assert bodo.jit(test_impl)(struct_arr_value, i) == test_impl(struct_arr_value, i)
+
+
+def test_rec_setitem(struct_arr_value, memory_leak_check):
+    def test_impl(A, i, val):
+        r = A[i]
+        r["Y"] = val
+        return r
+
+    i = 1
+    val = 8
+    assert bodo.jit(test_impl)(struct_arr_value, i, val) == test_impl(
+        struct_arr_value, i, val
+    )
