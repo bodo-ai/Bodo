@@ -2379,6 +2379,15 @@ def test_to_numeric(value, downcast, memory_leak_check):
     check_func(test_impl, (value,), check_dtype=False)
 
 
+def test_series_dot():
+    def test_impl(S1, S2):
+        return S1.dot(S2)
+
+    S1 = pd.Series([1.0, 2.0, 3.0])
+    S2 = pd.Series([3.0, 5.0, 9.0])
+    check_func(test_impl, (S1, S2))
+
+
 ############################### old tests ###############################
 
 

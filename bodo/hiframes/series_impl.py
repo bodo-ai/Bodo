@@ -397,6 +397,23 @@ def overload_series_std(S):
     return impl
 
 
+@overload_method(SeriesType, "dot", inline="always", no_unliteral=True)
+def overload_series_var(S, other):
+    def impl(S, other):  # pragma: no cover
+        A1 = bodo.hiframes.pd_series_ext.get_series_data(S)
+        A2 = bodo.hiframes.pd_series_ext.get_series_data(other)
+        numba.parfors.parfor.init_prange()
+        e_dot = 0
+        for i in numba.parfors.parfor.internal_prange(len(A1)):
+            val1 = A1[i]
+            val2 = A2[i]
+            e_dot += val1 * val2
+
+        return e_dot
+
+    return impl
+
+
 @overload_method(SeriesType, "cumsum", inline="always", no_unliteral=True)
 def overload_series_cumsum(S):
     # TODO: support skipna
