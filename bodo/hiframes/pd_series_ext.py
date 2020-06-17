@@ -960,7 +960,6 @@ series_unsupported_methods = (
     "droplevel",
     "drop_duplicates",
     "duplicated",
-    "equals",
     "first",
     "last",
     "reindex",

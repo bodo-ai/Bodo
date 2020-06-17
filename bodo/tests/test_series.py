@@ -203,7 +203,13 @@ def test_series_concat(series_val, memory_leak_check):
     df1 = pd.DataFrame({"A": S1.values})
     df2 = pd.DataFrame({"A": S2.values})
     if isinstance(series_val.values[0], list):
-        check_func(f, (df1, df2), sort_output=True, reset_index=True, convert_columns_to_pandas=True)
+        check_func(
+            f,
+            (df1, df2),
+            sort_output=True,
+            reset_index=True,
+            convert_columns_to_pandas=True,
+        )
     else:
         check_func(f, (df1, df2), sort_output=True, reset_index=True)
 
@@ -233,7 +239,13 @@ def test_dataframe_concat(series_val, memory_leak_check):
     df1 = pd.DataFrame({"A": S1.values})
     df2 = pd.DataFrame({"B": S2.values})
     if isinstance(series_val.values[0], list):
-        check_func(f, (df1, df2), sort_output=True, reset_index=True, convert_columns_to_pandas=True)
+        check_func(
+            f,
+            (df1, df2),
+            sort_output=True,
+            reset_index=True,
+            convert_columns_to_pandas=True,
+        )
     else:
         check_func(f, (df1, df2), sort_output=True, reset_index=True)
 
@@ -1772,6 +1784,16 @@ def test_series_median(numeric_series_val, memory_leak_check):
         return A.median()
 
     check_func(test_impl, (numeric_series_val,))
+
+
+def test_series_equals(memory_leak_check):
+    def f(S1, S2):
+        return S1.equals(S2)
+
+    S1 = pd.Series([0] + list(range(20)))
+    S2 = pd.Series([1] + list(range(20)))
+    check_func(f, (S1, S1))
+    check_func(f, (S1, S2))
 
 
 def test_series_head(series_val, memory_leak_check):

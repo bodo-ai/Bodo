@@ -290,6 +290,30 @@ def overload_series_any(S):
     return impl
 
 
+@overload_method(SeriesType, "equals", inline="always", no_unliteral=True)
+def overload_series_any(S, other):
+    def impl(S, other):  # pragma: no cover
+        A1 = bodo.hiframes.pd_series_ext.get_series_data(S)
+        A2 = bodo.hiframes.pd_series_ext.get_series_data(other)
+        numba.parfors.parfor.init_prange()
+        count = 0
+        for i in numba.parfors.parfor.internal_prange(len(A1)):
+            val = 0
+            test1 = bodo.libs.array_kernels.isna(A1, i)
+            test2 = bodo.libs.array_kernels.isna(A2, i)
+            # Direct comparison "if test1 != test2" does not compile for numba
+            if (test1 and not test2) or (not test1 and test2):
+                val = 1
+            else:
+                if not test1:
+                    if A1[i] != A2[i]:
+                        val = 1
+            count += val
+        return count == 0
+
+    return impl
+
+
 @overload_method(SeriesType, "all", inline="always", no_unliteral=True)
 def overload_series_all(S):
     def impl(S):  # pragma: no cover
