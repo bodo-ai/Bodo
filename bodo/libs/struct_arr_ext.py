@@ -33,7 +33,12 @@ from numba.extending import (
 from numba.parfors.array_analysis import ArrayAnalysis
 from numba.core.imputils import impl_ret_borrowed
 
-from bodo.utils.typing import is_list_like_index_type, BodoError, get_overload_const_str
+from bodo.utils.typing import (
+    is_list_like_index_type,
+    BodoError,
+    get_overload_const_str,
+    is_overload_constant_str,
+)
 from llvmlite import ir as lir
 import llvmlite.binding as ll
 
@@ -488,6 +493,37 @@ def box_struct_rec(typ, val, c):
 
     c.context.nrt.decref(c.builder, typ, val)
     return out_dict
+
+
+@intrinsic
+def get_rec_data(typingctx, rec_typ=None):
+    """get data values of struct record as tuple
+    """
+    assert isinstance(rec_typ, StructRecordType)
+
+    def codegen(context, builder, sig, args):
+        (rec,) = args
+        payload = _get_struct_rec_payload(context, builder, rec_typ, rec)
+        return impl_ret_borrowed(context, builder, sig.return_type, payload.data)
+
+    return types.BaseTuple.from_types(rec_typ.data)(rec_typ), codegen
+
+
+@overload(operator.getitem, no_unliteral=True)
+def struct_rec_getitem(rec, ind):
+    if not isinstance(rec, StructRecordType):
+        return
+
+    if not is_overload_constant_str(ind):
+        raise BodoError(
+            "Struct records (from struct array) only support constant strings for element access (getitem), not {}".format(
+                ind
+            )
+        )
+
+    field_ind = rec.names.index(get_overload_const_str(ind))
+    # TODO: warning if value is NA?
+    return lambda rec, ind: get_rec_data(rec)[field_ind]  # pragma: no cover
 
 
 def construct_struct_record(context, builder, struct_rec_type, values, nulls):

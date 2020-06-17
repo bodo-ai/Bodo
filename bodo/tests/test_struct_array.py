@@ -86,3 +86,11 @@ def test_getitem_slice(struct_arr_value, memory_leak_check):
     pd.testing.assert_series_equal(
         pd.Series(py_out), pd.Series(bodo_out),
     )
+
+
+def test_rec_getitem(struct_arr_value, memory_leak_check):
+    def test_impl(A, i):
+        return A[i]["Y"]
+
+    i = 1
+    assert bodo.jit(test_impl)(struct_arr_value, i) == test_impl(struct_arr_value, i)
