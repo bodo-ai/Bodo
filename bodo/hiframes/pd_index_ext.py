@@ -47,6 +47,7 @@ from bodo.utils.typing import (
     get_val_type_maybe_str_literal,
     get_overload_const_func,
     BodoError,
+    raise_bodo_error,
 )
 from bodo.utils.transform import (
     get_const_func_output_type,
@@ -1965,16 +1966,17 @@ def overload_index_map(I, mapper, na_action=None):
     if not is_const_func_type(mapper):
         raise BodoError("Index.map(): 'mapper' should be a function")
 
-    # get output element type
     dtype = I.dtype
     # getitem returns Timestamp for dt_index (TODO: pd.Timedelta when available)
     if dtype == types.NPDatetime("ns"):
         dtype = pandas_timestamp_type
+
+    # get output element type
     typing_context = numba.core.registry.cpu_target.typing_context
     try:
         f_return_type = get_const_func_output_type(mapper, (dtype,), typing_context)
     except:
-        raise BodoError("Index.map(): user-defined function not supported")
+        raise_bodo_error("Index.map(): user-defined function not supported")
 
     # unbox Timestamp to dt64 in Series (TODO: timedelta64)
     if f_return_type == pandas_timestamp_type:
