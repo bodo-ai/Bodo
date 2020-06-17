@@ -2379,6 +2379,47 @@ def test_to_numeric(value, downcast, memory_leak_check):
     check_func(test_impl, (value,), check_dtype=False)
 
 
+@pytest.fixture(
+    params=[
+        pd.Series([np.nan, -1.0, -1.0, 0.0, 78.0]),
+        pd.Series([1.0, 2.0, 3.0, 42.3]),
+        pd.Series([1, 2, 3, 42]),
+    ]
+)
+def series_stat(request):
+    return request.param
+
+
+def test_series_skew(series_stat):
+    def f(S):
+        return S.skew()
+    def f_skipna(S):
+        return S.skew(skipna=False)
+
+    check_func(f, (series_stat,))
+    check_func(f_skipna, (series_stat,))
+
+
+def test_series_kurt(series_stat):
+    def f(S):
+        return S.skew()
+    def f_skipna(S):
+        return S.skew(skipna=False)
+
+    check_func(f, (series_stat,))
+    check_func(f_skipna, (series_stat,))
+
+
+def test_series_kurtosis(series_stat):
+    def f(S):
+        return S.skew()
+    def f_skipna(S):
+        return S.skew(skipna=False)
+
+    check_func(f, (series_stat,))
+    check_func(f_skipna, (series_stat,))
+
+
 def test_series_dot():
     def test_impl(S1, S2):
         return S1.dot(S2)

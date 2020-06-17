@@ -288,6 +288,9 @@ unless support is explicitly mentioned.
 * :meth:`pandas.Series.std`
 * :meth:`pandas.Series.sum`
 * :meth:`pandas.Series.var`
+* :meth:`pandas.Series.kurt` only default arguments supported
+* :meth:`pandas.Series.kurtosis` only default arguments supported
+* :meth:`pandas.Series.skew` only default arguments supported
 * :meth:`pandas.Series.unique`
 * :meth:`pandas.Series.nunique`
 * :meth:`pandas.Series.value_counts`

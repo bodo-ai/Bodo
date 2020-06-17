@@ -364,6 +364,88 @@ def overload_series_mean(S):
     return impl
 
 
+# Formula for Kurtosis is available at
+# https://en.wikipedia.org/wiki/Kurtosis
+# Precise formula taken from ./pandas/core/nanops.py [nankurt]
+@overload_method(SeriesType, "kurt", inline="always", no_unliteral=True)
+@overload_method(SeriesType, "kurtosis", inline="always", no_unliteral=True)
+def overload_series_var(S, skipna=True):
+    def impl(S, skipna=True):  # pragma: no cover
+        A = bodo.hiframes.pd_series_ext.get_series_data(S)
+        numba.parfors.parfor.init_prange()
+        first_moment = 0.0
+        second_moment = 0.0
+        third_moment = 0.0
+        fourth_moment = 0.0
+        count = 0
+        for i in numba.parfors.parfor.internal_prange(len(A)):
+            val = 0.0
+            count_val = 0
+            if not bodo.libs.array_kernels.isna(A, i) or not skipna:
+                val = np.float64(A[i])
+                count_val = 1
+            first_moment += val
+            second_moment += val ** 2
+            third_moment += val ** 3
+            fourth_moment += val ** 4
+            count += count_val
+
+        mu = first_moment / count
+        m4 = (
+            fourth_moment
+            - 4 * third_moment * mu
+            + 6 * second_moment * mu ** 2
+            - 3 * count * mu ** 4
+        )
+        m2 = second_moment - mu * first_moment
+        adj = 3 * (count - 1) ** 2 / ((count - 2) * (count - 3))
+        numer = count * (count + 1) * (count - 1) * m4
+        denom = (count - 2) * (count - 3) * m2 ** 2
+        s = (count - 1) * (numer / denom - adj)
+        res = bodo.hiframes.series_kernels._var_handle_nan(s, count)
+        return res
+
+    return impl
+
+
+# Formula for skewness is available at
+# https://en.wikipedia.org/wiki/Skewness
+# Precise formula taken from ./pandas/core/nanops.py [nanskew]
+@overload_method(SeriesType, "skew", inline="always", no_unliteral=True)
+def overload_series_var(S, skipna=True):
+    def impl(S, skipna=True):  # pragma: no cover
+        A = bodo.hiframes.pd_series_ext.get_series_data(S)
+        numba.parfors.parfor.init_prange()
+        first_moment = 0.0
+        second_moment = 0.0
+        third_moment = 0.0
+        count = 0
+        for i in numba.parfors.parfor.internal_prange(len(A)):
+            val = 0.0
+            count_val = 0
+            if not bodo.libs.array_kernels.isna(A, i) or not skipna:
+                val = np.float64(A[i])
+                count_val = 1
+            first_moment += val
+            second_moment += val ** 2
+            third_moment += val ** 3
+            count += count_val
+
+        mu = first_moment / count
+        numerator = third_moment - 3 * second_moment * mu + 2 * count * mu ** 3
+        denominator = second_moment - mu * first_moment
+        alpha = count * (count - 1) ** (0.5) / (count - 2)
+        s = (
+            (count * (count - 1) ** (1.5) / (count - 2))
+            * numerator
+            / (denominator ** (1.5))
+        )
+        res = bodo.hiframes.series_kernels._var_handle_nan(s, count)
+        return res
+
+    return impl
+
+
 @overload_method(SeriesType, "var", inline="always", no_unliteral=True)
 def overload_series_var(S):
     def impl(S):  # pragma: no cover

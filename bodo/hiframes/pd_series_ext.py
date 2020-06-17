@@ -946,13 +946,10 @@ series_unsupported_methods = (
     "clip",
     "diff",
     "factorize",
-    "kurt",
     "mad",
     "mode",
     "rank",
     "sem",
-    "skew",
-    "kurtosis",
     # Reindexing / selection / label manipulation
     "align",
     "drop",
