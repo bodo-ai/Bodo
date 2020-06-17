@@ -33,7 +33,7 @@ from numba.extending import (
 from numba.parfors.array_analysis import ArrayAnalysis
 from numba.core.imputils import impl_ret_borrowed
 
-from bodo.utils.typing import is_list_like_index_type, BodoError
+from bodo.utils.typing import is_list_like_index_type, BodoError, get_overload_const_str
 from llvmlite import ir as lir
 import llvmlite.binding as ll
 
@@ -592,6 +592,76 @@ def struct_array_get_record(typingctx, struct_arr_typ, ind_typ=None):
     return out_typ(struct_arr_typ, ind_typ), codegen
 
 
+@intrinsic
+def get_data(typingctx, arr_typ=None):
+    """get data arrays of struct array as tuple
+    """
+    assert isinstance(arr_typ, StructArrayType)
+
+    def codegen(context, builder, sig, args):
+        (arr,) = args
+        payload = _get_struct_arr_payload(context, builder, arr_typ, arr)
+        return impl_ret_borrowed(context, builder, sig.return_type, payload.data)
+
+    return types.BaseTuple.from_types(arr_typ.data)(arr_typ), codegen
+
+
+@intrinsic
+def get_null_bitmap(typingctx, arr_typ=None):
+    """get null bitmap array of struct array
+    """
+    assert isinstance(arr_typ, StructArrayType)
+
+    def codegen(context, builder, sig, args):
+        (arr,) = args
+        payload = _get_struct_arr_payload(context, builder, arr_typ, arr)
+        return impl_ret_borrowed(context, builder, sig.return_type, payload.null_bitmap)
+
+    return types.Array(types.uint8, 1, "C")(arr_typ), codegen
+
+
+@intrinsic
+def init_struct_arr(typingctx, data_typ, null_bitmap_typ, names_typ=None):
+    """create a new struct array from input data array tuple, null bitmap, and names.
+    """
+    names = tuple(get_overload_const_str(t) for t in names_typ.types)
+    struct_arr_type = StructArrayType(data_typ.types, names)
+
+    def codegen(context, builder, sig, args):
+        data, null_bitmap, _names = args
+        # TODO: refactor to avoid duplication with construct_struct_array
+        # create payload type
+        payload_type = StructArrayPayloadType(struct_arr_type.data)
+        alloc_type = context.get_data_type(payload_type)
+        alloc_size = context.get_abi_sizeof(alloc_type)
+
+        # define dtor
+        dtor_fn = define_struct_arr_dtor(
+            context, builder, struct_arr_type, payload_type
+        )
+
+        # create meminfo
+        meminfo = context.nrt.meminfo_alloc_dtor(
+            builder, context.get_constant(types.uintp, alloc_size), dtor_fn
+        )
+        meminfo_void_ptr = context.nrt.meminfo_data(builder, meminfo)
+        meminfo_data_ptr = builder.bitcast(meminfo_void_ptr, alloc_type.as_pointer())
+
+        # set values in payload
+        payload = cgutils.create_struct_proxy(payload_type)(context, builder)
+        payload.data = data
+        payload.null_bitmap = null_bitmap
+        builder.store(payload._getvalue(), meminfo_data_ptr)
+        context.nrt.incref(builder, data_typ, data)
+        context.nrt.incref(builder, null_bitmap_typ, null_bitmap)
+
+        struct_array = context.make_helper(builder, struct_arr_type)
+        struct_array.meminfo = meminfo
+        return struct_array._getvalue()
+
+    return struct_arr_type(data_typ, null_bitmap_typ, names_typ), codegen
+
+
 @overload(operator.getitem, no_unliteral=True)
 def struct_arr_getitem(arr, ind):
     if not isinstance(arr, StructArrayType):
@@ -603,3 +673,39 @@ def struct_arr_getitem(arr, ind):
             return struct_array_get_record(arr, ind)
 
         return struct_arr_getitem_impl
+
+    # other getitem cases return an array, so just call getitem on underlying arrays
+    n_fields = len(arr.data)
+    func_text = "def impl(arr, ind):\n"
+    func_text += "  data = get_data(arr)\n"
+    func_text += "  null_bitmap = get_null_bitmap(arr)\n"
+    if is_list_like_index_type(ind) and ind.dtype == types.bool_:
+        func_text += "  out_null_bitmap = get_new_null_mask_bool_index(null_bitmap, ind, len(data[0]))\n"
+    elif is_list_like_index_type(ind) and isinstance(ind.dtype, types.Integer):
+        func_text += "  out_null_bitmap = get_new_null_mask_int_index(null_bitmap, ind, len(data[0]))\n"
+    elif isinstance(ind, types.SliceType):
+        func_text += "  out_null_bitmap = get_new_null_mask_slice_index(null_bitmap, ind, len(data[0]))\n"
+    else:  # pragma: no cover
+        raise BodoError("invalid index {} in struct array indexing".format(ind))
+    func_text += "  return init_struct_arr(({},), out_null_bitmap, ({},))\n".format(
+        ", ".join(
+            "ensure_contig_if_np(data[{}][ind])".format(i) for i in range(n_fields)
+        ),
+        ", ".join("'{}'".format(name) for name in arr.names),
+    )
+    loc_vars = {}
+    exec(
+        func_text,
+        {
+            "init_struct_arr": init_struct_arr,
+            "get_data": get_data,
+            "get_null_bitmap": get_null_bitmap,
+            "ensure_contig_if_np": bodo.utils.conversion.ensure_contig_if_np,
+            "get_new_null_mask_bool_index": bodo.utils.indexing.get_new_null_mask_bool_index,
+            "get_new_null_mask_int_index": bodo.utils.indexing.get_new_null_mask_int_index,
+            "get_new_null_mask_slice_index": bodo.utils.indexing.get_new_null_mask_slice_index,
+        },
+        loc_vars,
+    )
+    impl = loc_vars["impl"]
+    return impl

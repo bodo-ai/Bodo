@@ -807,6 +807,21 @@ def overload_get_NA_val_for_arr(arr):
     )  # pragma: no cover
 
 
+def ensure_contig_if_np(arr):  # pragma: no cover
+    return np.ascontiguousarray(arr)
+
+
+@overload(ensure_contig_if_np, no_unliteral=True)
+def overload_ensure_contig_if_np(arr):
+    """make sure array 'arr' is contiguous in memory if it is a numpy array.
+    Other arrays are always contiguous.
+    """
+    if isinstance(arr, types.Array):
+        return lambda arr: np.ascontiguousarray(arr)  # pragma: no cover
+
+    return lambda arr: arr  # pragma: no cover
+
+
 # def to_bool_array_if_np_bool(A):
 #     return A
 

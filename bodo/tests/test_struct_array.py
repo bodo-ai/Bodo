@@ -14,6 +14,7 @@ from bodo.tests.utils import check_func
 
 @pytest.fixture(
     params=[
+        # heterogeneous values
         np.array(
             [
                 {"X": 1, "Y": 3.1},
@@ -25,6 +26,7 @@ from bodo.tests.utils import check_func
                 {"X": 5, "Y": 9.0},
             ]
         ),
+        # homogeneous values
         np.array(
             [
                 {"X": 1, "Y": 3},
@@ -61,3 +63,26 @@ def test_getitem_int(struct_arr_value, memory_leak_check):
 
     i = 1
     assert bodo.jit(test_impl)(struct_arr_value, i) == test_impl(struct_arr_value, i)
+
+
+def test_getitem_bool(struct_arr_value, memory_leak_check):
+    def test_impl(A, ind):
+        return A[ind]
+
+    np.random.seed(0)
+    ind = np.random.ranf(len(struct_arr_value)) < 0.2
+    bodo_out = bodo.jit(test_impl)(struct_arr_value, ind)
+    py_out = test_impl(struct_arr_value, ind)
+    pd.testing.assert_series_equal(pd.Series(py_out), pd.Series(bodo_out))
+
+
+def test_getitem_slice(struct_arr_value, memory_leak_check):
+    def test_impl(A, ind):
+        return A[ind]
+
+    ind = slice(1, 4)
+    bodo_out = bodo.jit(test_impl)(struct_arr_value, ind)
+    py_out = test_impl(struct_arr_value, ind)
+    pd.testing.assert_series_equal(
+        pd.Series(py_out), pd.Series(bodo_out),
+    )
