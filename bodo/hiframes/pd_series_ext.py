@@ -946,7 +946,6 @@ series_unsupported_methods = (
     "clip",
     "diff",
     "factorize",
-    "mad",
     "mode",
     "rank",
     "sem",

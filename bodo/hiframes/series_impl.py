@@ -330,6 +330,50 @@ def overload_series_all(S):
     return impl
 
 
+@overload_method(SeriesType, "mad", inline="always", no_unliteral=True)
+def overload_series_mad(S, skipna=True):
+    # see core/nanops.py/nanmean() for output types
+    # TODO: more accurate port of dtypes from pandas
+    sum_dtype = types.float64
+    count_dtype = types.float64
+    if S.dtype == types.float32:
+        sum_dtype = types.float32
+        count_dtype = types.float32
+
+    val_0 = sum_dtype(0)
+    count_0 = count_dtype(0)
+    count_1 = count_dtype(1)
+
+    def impl(S, skipna=True):  # pragma: no cover
+        A = bodo.hiframes.pd_series_ext.get_series_data(S)
+        numba.parfors.parfor.init_prange()
+        # First computing the mean
+        s_mean = val_0
+        count = count_0
+        for i in numba.parfors.parfor.internal_prange(len(A)):
+            val = val_0
+            count_val = count_0
+            if not bodo.libs.array_kernels.isna(A, i) or not skipna:
+                val = A[i]
+                count_val = count_1
+            s_mean += val
+            count += count_val
+
+        res_mean = bodo.hiframes.series_kernels._mean_handle_nan(s_mean, count)
+        # Second computing the mad
+        s_mad = val_0
+        for i in numba.parfors.parfor.internal_prange(len(A)):
+            val = val_0
+            if not bodo.libs.array_kernels.isna(A, i) or not skipna:
+                val = abs(A[i] - res_mean)
+            s_mad += val
+
+        res_mad = bodo.hiframes.series_kernels._mean_handle_nan(s_mad, count)
+        return res_mad
+
+    return impl
+
+
 @overload_method(SeriesType, "mean", inline="always", no_unliteral=True)
 def overload_series_mean(S):
     # see core/nanops.py/nanmean() for output types

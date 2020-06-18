@@ -2390,7 +2390,17 @@ def series_stat(request):
     return request.param
 
 
-def test_series_skew(series_stat):
+def test_series_mad(series_stat, memory_leak_check):
+    def f(S):
+        return S.mad()
+    def f_skip(S):
+        return S.mad(skipna=False)
+
+    check_func(f, (series_stat,))
+    check_func(f_skip, (series_stat,))
+
+
+def test_series_skew(series_stat, memory_leak_check):
     def f(S):
         return S.skew()
     def f_skipna(S):
@@ -2400,7 +2410,7 @@ def test_series_skew(series_stat):
     check_func(f_skipna, (series_stat,))
 
 
-def test_series_kurt(series_stat):
+def test_series_kurt(series_stat, memory_leak_check):
     def f(S):
         return S.skew()
     def f_skipna(S):
@@ -2410,7 +2420,7 @@ def test_series_kurt(series_stat):
     check_func(f_skipna, (series_stat,))
 
 
-def test_series_kurtosis(series_stat):
+def test_series_kurtosis(series_stat, memory_leak_check):
     def f(S):
         return S.skew()
     def f_skipna(S):
@@ -2420,7 +2430,7 @@ def test_series_kurtosis(series_stat):
     check_func(f_skipna, (series_stat,))
 
 
-def test_series_dot():
+def test_series_dot(memory_leak_check):
     def test_impl(S1, S2):
         return S1.dot(S2)
 
