@@ -911,3 +911,28 @@ def struct_arr_setitem(arr, ind, val):
 def overload_struct_arr_len(A):
     if isinstance(A, StructArrayType):
         return lambda A: len(get_data(A)[0])
+
+
+@overload_attribute(StructArrayType, "shape")
+def overload_struct_arr_shape(A):
+    return lambda A: (len(get_data(A)[0]),)
+
+
+@overload_attribute(StructArrayType, "ndim")
+def overload_struct_arr_ndim(A):
+    return lambda A: 1
+
+
+@overload_method(StructArrayType, "copy", no_unliteral=True)
+def overload_struct_arr_copy(A):
+    names = A.names
+
+    def copy_impl(A):  # pragma: no cover
+        data = get_data(A)
+        null_bitmap = get_null_bitmap(A)
+        out_data_arrs = bodo.ir.join.copy_arr_tup(data)
+        out_null_bitmap = null_bitmap.copy()
+
+        return init_struct_arr(out_data_arrs, out_null_bitmap, names)
+
+    return copy_impl

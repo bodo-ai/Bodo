@@ -107,3 +107,24 @@ def test_rec_setitem(struct_arr_value, memory_leak_check):
     assert bodo.jit(test_impl)(struct_arr_value, i, val) == test_impl(
         struct_arr_value, i, val
     )
+
+
+def test_ndim(struct_arr_value, memory_leak_check):
+    def test_impl(A):
+        return A.ndim
+
+    assert bodo.jit(test_impl)(struct_arr_value) == test_impl(struct_arr_value)
+
+
+def test_shape(struct_arr_value, memory_leak_check):
+    def test_impl(A):
+        return A.shape
+
+    assert bodo.jit(test_impl)(struct_arr_value) == test_impl(struct_arr_value)
+
+
+def test_copy(struct_arr_value, memory_leak_check):
+    def test_impl(A):
+        return A.copy()
+
+    check_func(test_impl, (struct_arr_value,))
