@@ -33,7 +33,7 @@ from bodo.libs.str_ext import string_type
 from bodo.libs.str_arr_ext import string_array_type
 from bodo.libs.list_str_arr_ext import list_string_array_type
 from bodo.libs.list_item_arr_ext import ListItemArrayType
-from bodo.libs.struct_arr_ext import StructArrayType
+from bodo.libs.struct_arr_ext import StructArrayType, StructRecordType
 from bodo.libs.int_arr_ext import typeof_pd_int_dtype
 from bodo.libs.decimal_arr_ext import Decimal128Type, DecimalArrayType
 from bodo.hiframes.pd_categorical_ext import PDCategoricalDtype
@@ -163,6 +163,13 @@ def _infer_series_dtype(S):
             return string_type
         elif isinstance(first_val, bool):
             return types.bool_  # will become BooleanArray in Series and DF
+        # struct array
+        elif isinstance(first_val, dict) and all(
+            isinstance(k, str) for k in first_val.keys()
+        ):
+            field_names = tuple(first_val.keys())
+            data_types = tuple(numba.typeof(v) for v in first_val.values())
+            return StructRecordType(data_types, field_names)
         elif isinstance(S.values[i], datetime.date):
             # XXX: using .values to check date type since DatetimeIndex returns
             # Timestamp which is subtype of datetime.date
@@ -505,8 +512,12 @@ def _typeof_ndarray(val, c):
             return datetime_date_array_type  # TODO: test array of datetime.date
         if isinstance(dtype, Decimal128Type):
             return DecimalArrayType(dtype.precision, dtype.scale)
-        if isinstance(dtype, dict):
-            return StructArrayType.from_dict(dtype)
+        if isinstance(dtype, StructRecordType):
+            data = tuple(
+                bodo.hiframes.pd_series_ext._get_series_array_type(t)
+                for t in dtype.data
+            )
+            return StructArrayType(data, dtype.names)
         raise BodoError(
             "Unsupported array dtype: {}".format(val.dtype)
         )  # pragma: no cover
@@ -541,8 +552,12 @@ def _infer_ndarray_obj_dtype(val):
         return string_type
     elif isinstance(first_val, bool):
         return types.bool_
-    elif isinstance(first_val, dict):
-        return {str(k): numba.typeof(v) for k, v in first_val.items()}
+    elif isinstance(first_val, dict) and all(
+        isinstance(k, str) for k in first_val.keys()
+    ):
+        field_names = tuple(first_val.keys())
+        data_types = tuple(numba.typeof(v) for v in first_val.values())
+        return StructRecordType(data_types, field_names)
     if isinstance(first_val, list):
         return bodo.hiframes.boxing._infer_series_list_dtype(val, "array")
     if isinstance(first_val, datetime.date):

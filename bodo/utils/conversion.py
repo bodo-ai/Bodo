@@ -10,7 +10,12 @@ from numba.core import types
 from bodo.libs.decimal_arr_ext import Decimal128Type, DecimalArrayType
 from numba.extending import overload
 import bodo
-from bodo.utils.typing import is_overload_none, is_overload_true, BodoError
+from bodo.utils.typing import (
+    is_overload_none,
+    is_overload_true,
+    BodoError,
+    get_overload_const_str,
+)
 
 
 NS_DTYPE = np.dtype("M8[ns]")  # similar pandas/_libs/tslibs/conversion.pyx
@@ -820,6 +825,34 @@ def overload_ensure_contig_if_np(arr):
         return lambda arr: np.ascontiguousarray(arr)  # pragma: no cover
 
     return lambda arr: arr  # pragma: no cover
+
+
+def struct_if_heter_dict(values, names):  # pragma: no cover
+    return {k: v for k, v in zip(names, values)}
+
+
+@overload(struct_if_heter_dict, no_unliteral=True)
+def overload_struct_if_heter_dict(values, names):
+    """returns a struct with fields names 'names' and data 'values' if value types are
+    heterogeneous, otherwise a regular dict.
+    """
+
+    if not types.is_homogeneous(*values.types):
+        return lambda values, names: bodo.libs.struct_arr_ext.init_struct_rec(
+            values, names
+        )  # pragma: no cover
+
+    n_fields = len(values.types)
+    func_text = "def f(values, names):\n"
+    res = ",".join(
+        "'{}': values[{}]".format(get_overload_const_str(names.types[i]), i)
+        for i in range(n_fields)
+    )
+    func_text += "  return {{{}}}\n".format(res)
+    loc_vars = {}
+    exec(func_text, {}, loc_vars)
+    impl = loc_vars["f"]
+    return impl
 
 
 # def to_bool_array_if_np_bool(A):

@@ -64,6 +64,7 @@ from bodo.utils.transform import (
     compile_func_single_block,
     get_call_expr_arg,
     gen_const_tup,
+    fix_struct_return,
 )
 from bodo.utils.typing import BodoError, BodoWarning
 
@@ -147,6 +148,8 @@ class UntypedPass:
         # while remove_dead(blocks, self.func_ir.arg_names, self.func_ir):
         #     pass
         self.func_ir._definitions = build_definitions(blocks)
+        # return {"A": 1, "B": 2.3} -> return struct((1, 2), ("A", "B"))
+        fix_struct_return(self.func_ir)
         dprint_func_ir(self.func_ir, "after untyped pass")
 
         # raise a warning if a variable that is not an argument or return value has a
@@ -746,7 +749,9 @@ class UntypedPass:
         date_cols = self._get_const_arg(
             "read_csv", rhs.args, kws, 23, "parse_dates", [], typ="int or str"
         )
-        compression = self._get_const_arg("read_csv", rhs.args, kws, 32, "compression", "infer")
+        compression = self._get_const_arg(
+            "read_csv", rhs.args, kws, 32, "compression", "infer"
+        )
 
         # check unsupported arguments
         supported_args = (
@@ -768,16 +773,13 @@ class UntypedPass:
                 "read_csv() arguments {} not supported yet".format(unsupported_args)
             )
 
-        supported_compression_options = {
-            "infer",
-            "gzip",
-            "bz2",
-            None
-        }
+        supported_compression_options = {"infer", "gzip", "bz2", None}
         if compression not in supported_compression_options:
             raise ValueError(
                 "pd.read_json() compression = {} is not supported."
-                " Supported options are {}".format(compression, supported_compression_options)
+                " Supported options are {}".format(
+                    compression, supported_compression_options
+                )
             )
 
         # infer the column names: if no names
@@ -802,7 +804,9 @@ class UntypedPass:
                 "annotation using 'dtype' if filename is not constant"
             )
             fname_const = get_const_value(fname, self.func_ir, msg, arg_types=self.args)
-            df_type = _get_csv_df_type_from_file(fname_const, sep, skiprows, header, compression)
+            df_type = _get_csv_df_type_from_file(
+                fname_const, sep, skiprows, header, compression
+            )
             dtypes = df_type.data
             usecols = list(range(len(dtypes))) if usecols == "" else usecols
             # convert Pandas generated integer names if any
@@ -927,7 +931,9 @@ class UntypedPass:
             "read_json", rhs.args, kws, 8, "precise_float", False
         )
         lines = self._get_const_arg("read_json", rhs.args, kws, 11, "lines", True)
-        compression = self._get_const_arg("read_json", rhs.args, kws, 13, "compression", "infer")
+        compression = self._get_const_arg(
+            "read_json", rhs.args, kws, 13, "compression", "infer"
+        )
 
         # check unsupported arguments
         unsupported_args = {
@@ -948,16 +954,13 @@ class UntypedPass:
                     )
                 )
 
-        supported_compression_options = {
-            "infer",
-            "gzip",
-            "bz2",
-            None
-        }
+        supported_compression_options = {"infer", "gzip", "bz2", None}
         if compression not in supported_compression_options:
             raise ValueError(
                 "pd.read_json() compression = {} is not supported."
-                " Supported options are {}".format(compression, supported_compression_options)
+                " Supported options are {}".format(
+                    compression, supported_compression_options
+                )
             )
 
         if frame_or_series != "frame":

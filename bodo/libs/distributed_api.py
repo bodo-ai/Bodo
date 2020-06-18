@@ -42,6 +42,7 @@ from bodo.libs.list_item_arr_ext import (
     ListItemArrayType,
     pre_alloc_list_item_array,
 )
+from bodo.libs.struct_arr_ext import StructArrayType
 from bodo.hiframes.pd_categorical_ext import CategoricalArray
 from bodo.hiframes.datetime_date_ext import datetime_date_array_type
 from bodo.utils.utils import (
@@ -873,6 +874,50 @@ def gatherv(data, allgather=False):
             return all_data
 
         return gatherv_list_item_arr_impl
+
+    if isinstance(data, StructArrayType):
+        names = data.names
+        char_typ_enum = np.int32(numba_to_c_type(types.uint8))
+
+        def impl_struct_arr(data, allgather=False):
+            data_arrs = bodo.libs.struct_arr_ext.get_data(data)
+            null_bitmap = bodo.libs.struct_arr_ext.get_null_bitmap(data)
+            out_data_arrs = bodo.gatherv(data_arrs, allgather=allgather)
+            # gather the null bits similar to other arrays
+            rank = bodo.libs.distributed_api.get_rank()
+            n_loc = len(data)
+            n_bytes = (n_loc + 7) >> 3
+            recv_counts = gather_scalar(np.int32(n_loc), allgather)
+            n_total = recv_counts.sum()
+            out_null_bitmap = np.empty((n_total + 7) >> 3, np.uint8)
+            # displacements
+            recv_counts_nulls = np.empty(1, np.int32)
+            displs_nulls = np.empty(1, np.int32)
+            tmp_null_bytes = np.empty(1, np.uint8)
+            if rank == MPI_ROOT or allgather:
+                recv_counts_nulls = np.empty(len(recv_counts), np.int32)
+                for i in range(len(recv_counts)):
+                    recv_counts_nulls[i] = (recv_counts[i] + 7) >> 3
+                displs_nulls = bodo.ir.join.calc_disp(recv_counts_nulls)
+                tmp_null_bytes = np.empty(recv_counts_nulls.sum(), np.uint8)
+
+            c_gatherv(
+                null_bitmap.ctypes,
+                np.int32(n_bytes),
+                tmp_null_bytes.ctypes,
+                recv_counts_nulls.ctypes,
+                displs_nulls.ctypes,
+                char_typ_enum,
+                allgather,
+            )
+            copy_gathered_null_bytes(
+                out_null_bitmap.ctypes, tmp_null_bytes, recv_counts_nulls, recv_counts,
+            )
+            return bodo.libs.struct_arr_ext.init_struct_arr(
+                out_data_arrs, out_null_bitmap, names
+            )
+
+        return impl_struct_arr
 
     # Tuple of data containers
     if isinstance(data, types.BaseTuple):

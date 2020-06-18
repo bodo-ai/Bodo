@@ -203,7 +203,13 @@ def test_series_concat(series_val, memory_leak_check):
     df1 = pd.DataFrame({"A": S1.values})
     df2 = pd.DataFrame({"A": S2.values})
     if isinstance(series_val.values[0], list):
-        check_func(f, (df1, df2), sort_output=True, reset_index=True, convert_columns_to_pandas=True)
+        check_func(
+            f,
+            (df1, df2),
+            sort_output=True,
+            reset_index=True,
+            convert_columns_to_pandas=True,
+        )
     else:
         check_func(f, (df1, df2), sort_output=True, reset_index=True)
 
@@ -233,7 +239,13 @@ def test_dataframe_concat(series_val, memory_leak_check):
     df1 = pd.DataFrame({"A": S1.values})
     df2 = pd.DataFrame({"B": S2.values})
     if isinstance(series_val.values[0], list):
-        check_func(f, (df1, df2), sort_output=True, reset_index=True, convert_columns_to_pandas=True)
+        check_func(
+            f,
+            (df1, df2),
+            sort_output=True,
+            reset_index=True,
+            convert_columns_to_pandas=True,
+        )
     else:
         check_func(f, (df1, df2), sort_output=True, reset_index=True)
 
@@ -1448,6 +1460,22 @@ def test_series_map_list_item():
 
     S = pd.Series([1, 211, 333, 43, 51, 12, 15])
     check_func(test_impl, (S,))
+
+
+def test_series_map_dict():
+    """test dict output in map"""
+
+    # homogeneous output
+    def impl1(S):
+        return S.map(lambda a: {"A": a + 1, "B": a ** 2})
+
+    # heterogeneous output
+    def impl2(S):
+        return S.map(lambda a: {"A": a + 1, "B": a ** 2.0})
+
+    S = pd.Series([1, 211, 333, 43, 51, 12, 15])
+    check_func(impl1, (S,))
+    check_func(impl2, (S,))
 
 
 def test_series_map_date():

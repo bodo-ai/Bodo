@@ -84,10 +84,9 @@ class StructArrayType(types.ArrayCompatible):
     def as_array(self):
         return types.Array(types.undefined, 1, "C")
 
-    # TODO: we need a dict-like type that allows heterogenous values
-    # @property
-    # def dtype(self):
-    #     return types.DictType(self.data)
+    @property
+    def dtype(self):
+        return StructRecordType(tuple(t.dtype for t in self.data), self.names)
 
     @classmethod
     def from_dict(cls, d):
@@ -369,6 +368,43 @@ def box_struct_arr(typ, val, c):
     return arr
 
 
+@intrinsic
+def pre_alloc_struct_array(typingctx, num_structs_typ, dtypes_typ, names_typ=None):
+    assert isinstance(num_structs_typ, types.Integer) and isinstance(
+        dtypes_typ, types.BaseTuple
+    )
+    names = tuple(get_overload_const_str(t) for t in names_typ.types)
+    arr_typs = tuple(t.instance_type for t in dtypes_typ.types)
+    struct_arr_type = StructArrayType(arr_typs, names)
+
+    def codegen(context, builder, sig, args):
+        num_structs, _, _ = args
+        meminfo, _, _ = construct_struct_array(
+            context, builder, struct_arr_type, num_structs
+        )
+        struct_array = context.make_helper(builder, struct_arr_type)
+        struct_array.meminfo = meminfo
+        return struct_array._getvalue()
+
+    return struct_arr_type(num_structs_typ, dtypes_typ, names_typ), codegen
+
+
+def pre_alloc_struct_array_equiv(
+    self, scope, equiv_set, loc, args, kws
+):  # pragma: no cover
+    """Array analysis function for pre_alloc_struct_array() passed to Numba's array
+    analysis extension. Assigns output array's size as equivalent to the input size
+    variable.
+    """
+    assert len(args) == 3 and not kws
+    return args[0], []
+
+
+ArrayAnalysis._analyze_op_call_bodo_libs_struct_arr_ext_pre_alloc_struct_array = (
+    pre_alloc_struct_array_equiv
+)
+
+
 class StructRecordType(types.Type):
     """Data type for struct records taken as scalars from struct arrays. A regular
     dictionary doesn't work in the general case since values can have different types.
@@ -496,6 +532,47 @@ def box_struct_rec(typ, val, c):
 
     c.context.nrt.decref(c.builder, typ, val)
     return out_dict
+
+
+@intrinsic
+def init_struct_rec(typingctx, data_typ, names_typ=None):
+    """create a new struct record from input data tuple and names.
+    """
+    names = tuple(get_overload_const_str(t) for t in names_typ.types)
+    struct_rec_type = StructRecordType(data_typ.types, names)
+
+    def codegen(context, builder, sig, args):
+        data, _names = args
+        # TODO: refactor to avoid duplication with construct_struct_rec
+        # create payload type
+        payload_type = StructRecordPayloadType(struct_rec_type.data)
+        alloc_type = context.get_data_type(payload_type)
+        alloc_size = context.get_abi_sizeof(alloc_type)
+
+        # define dtor
+        dtor_fn = define_struct_rec_dtor(
+            context, builder, struct_rec_type, payload_type
+        )
+
+        # create meminfo
+        meminfo = context.nrt.meminfo_alloc_dtor(
+            builder, context.get_constant(types.uintp, alloc_size), dtor_fn
+        )
+        meminfo_void_ptr = context.nrt.meminfo_data(builder, meminfo)
+        meminfo_data_ptr = builder.bitcast(meminfo_void_ptr, alloc_type.as_pointer())
+
+        # set values in payload
+        payload = cgutils.create_struct_proxy(payload_type)(context, builder)
+        payload.data = data
+
+        builder.store(payload._getvalue(), meminfo_data_ptr)
+        context.nrt.incref(builder, data_typ, data)
+
+        struct_rec = context.make_helper(builder, struct_rec_type)
+        struct_rec.meminfo = meminfo
+        return struct_rec._getvalue()
+
+    return struct_rec_type(data_typ, names_typ), codegen
 
 
 @intrinsic
@@ -799,3 +876,38 @@ def struct_arr_getitem(arr, ind):
     )
     impl = loc_vars["impl"]
     return impl
+
+
+@overload(operator.setitem, no_unliteral=True)
+def struct_arr_setitem(arr, ind, val):
+    if not isinstance(arr, StructArrayType):
+        return
+
+    if isinstance(ind, types.Integer):
+        # TODO: support NA
+        n_fields = len(arr.data)
+        func_text = "def impl(arr, ind, val):\n"
+        func_text += "  data = get_data(arr)\n"
+        func_text += "  null_bitmap = get_null_bitmap(arr)\n"
+        func_text += "  set_bit_to_arr(null_bitmap, ind, 1)\n"
+        for i in range(n_fields):
+            func_text += "  data[{}][ind] = val['{}']\n".format(i, arr.names[i])
+
+        loc_vars = {}
+        exec(
+            func_text,
+            {
+                "get_data": get_data,
+                "get_null_bitmap": get_null_bitmap,
+                "set_bit_to_arr": bodo.libs.int_arr_ext.set_bit_to_arr,
+            },
+            loc_vars,
+        )
+        impl = loc_vars["impl"]
+        return impl
+
+
+@overload(len, no_unliteral=True)
+def overload_struct_arr_len(A):
+    if isinstance(A, StructArrayType):
+        return lambda A: len(get_data(A)[0])
