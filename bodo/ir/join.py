@@ -1411,7 +1411,12 @@ def setitem_arr_nan_overload(arr, ind, int_nan_const=0):
     ):
         return lambda arr, ind, int_nan_const=0: bodo.libs.int_arr_ext.set_bit_to_arr(
             arr._null_bitmap, ind, 0
-        )
+        )  # pragma: no cover
+
+    if isinstance(arr, bodo.libs.struct_arr_ext.StructArrayType):
+        return lambda arr, ind, int_nan_const=0: bodo.libs.int_arr_ext.set_bit_to_arr(
+            bodo.libs.struct_arr_ext.get_null_bitmap(arr), ind, 0
+        )  # pragma: no cover
 
     # TODO: support strings, bools, etc.
     # XXX: set NA values in bool arrays to False
@@ -1439,7 +1444,7 @@ def setitem_arr_nan_overload(arr, ind, int_nan_const=0):
 
         return setitem_arr_nan_int
 
-    return lambda arr, ind, int_nan_const: None
+    return lambda arr, ind, int_nan_const: None  # pragma: no cover
 
 
 def setitem_arr_tup_nan(arr_tup, ind, int_nan_const=0):  # pragma: no cover
