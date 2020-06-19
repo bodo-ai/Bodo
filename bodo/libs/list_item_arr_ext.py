@@ -34,7 +34,9 @@ from numba.extending import (
 from numba.parfors.array_analysis import ArrayAnalysis
 from numba.core.imputils import impl_ret_borrowed
 
+from bodo.hiframes.datetime_date_ext import datetime_date_type
 from bodo.utils.typing import is_list_like_index_type, BodoError
+from bodo.utils.cg_helpers import set_bitmap_bit, pyarray_getitem, is_na_value
 from llvmlite import ir as lir
 import llvmlite.binding as ll
 
@@ -189,6 +191,76 @@ def construct_list_item_array(context, builder, list_item_type, n_lists, n_elems
     return meminfo, data_ptr, offsets_ptr, null_bitmap_ptr
 
 
+def _unbox_list_item_array_generic(
+    typ, val, c, n_lists, data_ptr, offsets_ptr, null_bitmap_ptr
+):
+    """unbox list(item) array using generic Numba list unboxing to handle all item types
+    that can be unboxed.
+    """
+    context = c.context
+    builder = c.builder
+    # TODO: error checking for pyapi calls
+    # get pd.NA object to check for new NA kind
+    mod_name = context.insert_const_string(builder.module, "pandas")
+    pd_mod_obj = c.pyapi.import_module_noblock(mod_name)
+    C_NA = c.pyapi.object_getattr_string(pd_mod_obj, "NA")
+
+    list_type = typ.dtype
+    # curr_item_ind = 0
+    curr_item_ind = cgutils.alloca_once_value(builder, lir.Constant(lir.IntType(64), 0))
+    item_size = context.get_abi_sizeof(context.get_data_type(list_type.dtype))
+    # for each list
+    with cgutils.for_range(builder, n_lists) as loop:
+        list_ind = loop.index
+        item_ind = builder.load(curr_item_ind)
+        # offsets[i] = curr_item_ind
+        builder.store(
+            builder.trunc(item_ind, lir.IntType(32)),
+            builder.gep(offsets_ptr, [list_ind]),
+        )
+        # list_obj = A[i]
+        list_obj = pyarray_getitem(builder, context, val, list_ind)
+        # check for NA
+        is_na = is_na_value(builder, context, list_obj, C_NA)
+        is_na_cond = builder.icmp_unsigned("==", is_na, lir.Constant(is_na.type, 1))
+        with builder.if_else(is_na_cond) as (then, orelse):
+            # NA case
+            with then:
+                # set NA bit to 0
+                set_bitmap_bit(builder, null_bitmap_ptr, list_ind, 0)
+            # non-NA case
+            with orelse:
+                # set NA bit to 1
+                set_bitmap_bit(builder, null_bitmap_ptr, list_ind, 1)
+                # unbox list
+                list_val = c.pyapi.to_native_value(list_type, list_obj).value
+                list_payload = numba.cpython.listobj.ListInstance(
+                    context, builder, list_type, list_val
+                )
+                # copy list data
+                n_items = list_payload.size
+                dst = builder.gep(data_ptr, [item_ind])
+                cgutils.raw_memcpy(builder, dst, list_payload.data, n_items, item_size)
+                # NOTE: numba stores list meminfo inside the Python list objects, which we need
+                # to clean up
+                c.pyapi.object_set_private_data(
+                    list_obj, context.get_constant_null(types.voidptr)
+                )
+                c.context.nrt.decref(builder, list_type, list_val)
+                c.pyapi.decref(list_obj)
+                # curr_item_ind += n_items
+                builder.store(builder.add(item_ind, n_items), curr_item_ind)
+
+    # offsets[n] = curr_item_ind;
+    builder.store(
+        builder.trunc(builder.load(curr_item_ind), lir.IntType(32)),
+        builder.gep(offsets_ptr, [n_lists]),
+    )
+
+    c.pyapi.decref(pd_mod_obj)
+    c.pyapi.decref(C_NA)
+
+
 @unbox(ListItemArrayType)
 def unbox_list_item_array(typ, val, c):
     """
@@ -207,30 +279,44 @@ def unbox_list_item_array(typ, val, c):
     )
     ctype = bodo.utils.utils.numba_to_c_type(typ.elem_type)
 
-    # function signature of list_item_array_from_sequence
-    fnty = lir.FunctionType(
-        lir.VoidType(),
-        [
-            lir.IntType(8).as_pointer(),  # obj
-            lir.IntType(8).as_pointer(),  # data
-            lir.IntType(32).as_pointer(),  # offsets
-            lir.IntType(8).as_pointer(),  # null_bitmap
-            lir.IntType(32),  # ctype
-        ],
-    )
-    fn = c.builder.module.get_or_insert_function(
-        fnty, name="list_item_array_from_sequence"
-    )
-    c.builder.call(
-        fn,
-        [
-            val,
-            c.builder.bitcast(data_ptr, lir.IntType(8).as_pointer()),
-            offsets_ptr,
-            null_bitmap_ptr,
-            lir.Constant(lir.IntType(32), ctype),
-        ],
-    )
+    # use C unboxing when possible to avoid compilation and runtime overheads
+    # otherwise, use generic llvm/Numba unboxing
+    if typ.dtype.dtype in (
+        types.int64,
+        types.float64,
+        types.bool_,
+        datetime_date_type,
+    ):
+
+        # function signature of list_item_array_from_sequence
+        fnty = lir.FunctionType(
+            lir.VoidType(),
+            [
+                lir.IntType(8).as_pointer(),  # obj
+                lir.IntType(8).as_pointer(),  # data
+                lir.IntType(32).as_pointer(),  # offsets
+                lir.IntType(8).as_pointer(),  # null_bitmap
+                lir.IntType(32),  # ctype
+            ],
+        )
+        fn = c.builder.module.get_or_insert_function(
+            fnty, name="list_item_array_from_sequence"
+        )
+        c.builder.call(
+            fn,
+            [
+                val,
+                c.builder.bitcast(data_ptr, lir.IntType(8).as_pointer()),
+                offsets_ptr,
+                null_bitmap_ptr,
+                lir.Constant(lir.IntType(32), ctype),
+            ],
+        )
+
+    else:
+        _unbox_list_item_array_generic(
+            typ, val, c, n_lists, data_ptr, offsets_ptr, null_bitmap_ptr
+        )
 
     list_item_array = c.context.make_helper(c.builder, typ)
     list_item_array.meminfo = meminfo

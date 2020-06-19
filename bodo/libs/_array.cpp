@@ -430,6 +430,23 @@ void struct_array_from_sequence(PyObject* struct_arr_obj, int n_fields,
 
     Py_DECREF(pd_mod);
     Py_DECREF(C_NA);
+
+/**
+ * @brief call PyArray_GETITEM() of Numpy C-API
+ *
+ * @param arr array object
+ * @param p pointer in array object
+ * @return PyObject* value returned by getitem
+ */
+PyObject* array_getitem(PyArrayObject* arr, const char* p) {
+#define CHECK(expr, msg)               \
+    if (!(expr)) {                     \
+        std::cerr << msg << std::endl; \
+        return NULL;                   \
+    }
+    PyObject* s = PyArray_GETITEM(arr, p);
+    CHECK(s, "getting item in numpy array failed");
+    return s;
 #undef CHECK
 }
 
@@ -494,6 +511,17 @@ void* np_array_from_struct_array(int64_t num_structs, int n_fields, char** data,
     Py_DECREF(nan_obj);
     return ret;
 #undef CHECK
+
+/**
+ * @brief check if object is an NA value like None or np.nan
+ *
+ * @param s Python object to check
+ * @param C_NA pd.NA object (passed in to avoid overheads in loops)
+ * @return int 1 if value is NA, 0 otherwise
+ */
+int is_na_value(PyObject* s, PyObject* C_NA) {
+    return (s == Py_None ||
+            (PyFloat_Check(s) && std::isnan(PyFloat_AsDouble(s))) || s == C_NA);
 }
 
 PyMODINIT_FUNC PyInit_array_ext(void) {
@@ -585,5 +613,9 @@ PyMODINIT_FUNC PyInit_array_ext(void) {
     PyObject_SetAttrString(
         m, "np_array_from_struct_array",
         PyLong_FromVoidPtr((void*)(&np_array_from_struct_array)));
+    PyObject_SetAttrString(m, "array_getitem",
+                           PyLong_FromVoidPtr((void*)(&array_getitem)));
+    PyObject_SetAttrString(m, "is_na_value",
+                           PyLong_FromVoidPtr((void*)(&is_na_value)));
     return m;
 }

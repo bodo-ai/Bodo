@@ -216,11 +216,6 @@ def _infer_series_list_dtype(A, name):
             list_val = first_val[0]
             try:
                 dtype = numba.typeof(list_val)
-                assert isinstance(dtype, (types.Integer, types.Float),) or dtype in (
-                    types.bool_,
-                    string_type,
-                    datetime_date_type,
-                )
                 return types.List(dtype)
             except:
                 raise ValueError("data type for column {} not supported".format(name))
