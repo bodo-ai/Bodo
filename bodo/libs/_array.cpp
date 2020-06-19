@@ -186,6 +186,9 @@ inline void copy_item_to_buffer(char* data, Py_ssize_t ind, PyObject* item,
     } else if (dtype == Bodo_CTypes::FLOAT64) {
         double* ptr = (double*)data;
         ptr[ind] = PyFloat_AsDouble(item);
+    } else if (dtype == Bodo_CTypes::_BOOL) {
+        bool* ptr = (bool*)data;
+        ptr[ind] = (item == Py_True);
     } else
         std::cerr << "data type " << dtype
                   << " not supported for unboxing list(item) array."
@@ -274,6 +277,9 @@ inline PyObject* value_to_pyobject(const char* data, int64_t ind,
     } else if (dtype == Bodo_CTypes::FLOAT64) {
         double* ptr = (double*)data;
         return PyFloat_FromDouble(ptr[ind]);
+    } else if (dtype == Bodo_CTypes::_BOOL) {
+        bool* ptr = (bool*)data;
+        return PyBool_FromLong((long)(ptr[ind]));
     } else
         std::cerr << "data type " << dtype
                   << " not supported for boxing list(item) array." << std::endl;

@@ -217,7 +217,8 @@ def _infer_series_list_dtype(A, name):
             try:
                 dtype = numba.typeof(list_val)
                 assert isinstance(
-                    dtype, (types.Integer, types.Float, types.UnicodeType)
+                    dtype,
+                    (types.Boolean, types.Integer, types.Float, types.UnicodeType),
                 )
                 return types.List(dtype)
             except:
