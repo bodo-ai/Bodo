@@ -245,8 +245,8 @@ void list_item_array_from_sequence(PyObject* list_arr_obj, char* data,
                 Py_DECREF(v);
                 curr_item_ind++;
             }
-            Py_DECREF(s);
         }
+        Py_DECREF(s);
     }
     offsets[n] = curr_item_ind;
 
