@@ -3,7 +3,6 @@
 from numba.core import types, cgutils
 from llvmlite import ir as lir
 import llvmlite.binding as ll
-
 # NOTE: importing hdist is necessary for MPI initialization before array_ext
 from bodo.libs import hdist
 from bodo.libs import array_ext
