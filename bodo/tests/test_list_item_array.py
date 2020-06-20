@@ -3,6 +3,7 @@
 """
 import operator
 import datetime
+from decimal import Decimal
 import pandas as pd
 import numpy as np
 import pytest
@@ -36,6 +37,17 @@ from bodo.tests.utils import check_func
                 [datetime.date(2020, 11, 17)],
             ]
         ),
+        # TODO: enable Decimal test when memory leaks and test equality issues are fixed
+        # np.array(
+        #     [
+        #         [Decimal("1.6"), Decimal("-0.222")],
+        #         [Decimal("1111.316"), Decimal("1234.00046"), Decimal("5.1")],
+        #         None,
+        #         [Decimal("-11131.0056"), Decimal("0.0")],
+        #         [],
+        #         [Decimal("-11.00511")],
+        #     ]
+        # ),
     ]
 )
 def list_item_arr_value(request):
@@ -62,7 +74,10 @@ def test_getitem_int(list_item_arr_value, memory_leak_check):
     i = 1
     bodo_out = np.array(bodo.jit(test_impl)(list_item_arr_value, i))
     py_out = np.array(test_impl(list_item_arr_value, i))
-    np.testing.assert_almost_equal(bodo_out, py_out)
+    if len(py_out) and isinstance(py_out[0], datetime.date):
+        np.testing.assert_array_equal(bodo_out, py_out)
+    else:
+        np.testing.assert_almost_equal(bodo_out, py_out)
 
 
 def test_getitem_bool(list_item_arr_value, memory_leak_check):

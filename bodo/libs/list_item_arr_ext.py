@@ -36,7 +36,13 @@ from numba.core.imputils import impl_ret_borrowed
 
 from bodo.hiframes.datetime_date_ext import datetime_date_type
 from bodo.utils.typing import is_list_like_index_type, BodoError
-from bodo.utils.cg_helpers import set_bitmap_bit, pyarray_getitem, is_na_value
+from bodo.utils.cg_helpers import (
+    set_bitmap_bit,
+    pyarray_getitem,
+    pyarray_setitem,
+    is_na_value,
+    get_bitmap_bit,
+)
 from llvmlite import ir as lir
 import llvmlite.binding as ll
 
@@ -340,28 +346,90 @@ def _get_list_item_arr_payload(context, builder, arr_typ, arr):
     return payload
 
 
+def _box_list_item_array_generic(
+    typ, c, n_lists, data_ptr, offsets_ptr, null_bitmap_ptr
+):
+    """box list(item) array using generic Numba list boxing to handle all item types
+    that can be boxed.
+    """
+    context = c.context
+    builder = c.builder
+    # TODO: error checking for pyapi calls
+
+    # create array of objects with num_items shape
+    mod_name = context.insert_const_string(builder.module, "numpy")
+    np_class_obj = c.pyapi.import_module_noblock(mod_name)
+    dtype_obj = c.pyapi.object_getattr_string(np_class_obj, "object_")
+    num_items_obj = c.pyapi.long_from_longlong(n_lists)
+    out_arr = c.pyapi.call_method(np_class_obj, "ndarray", (num_items_obj, dtype_obj))
+    # get np.nan to set NA
+    nan_obj = c.pyapi.object_getattr_string(np_class_obj, "nan")
+
+    list_type = typ.dtype
+    # curr_item_ind = 0
+    curr_item_ind = cgutils.alloca_once_value(builder, lir.Constant(lir.IntType(64), 0))
+    # for each list
+    with cgutils.for_range(builder, n_lists) as loop:
+        list_ind = loop.index
+        # check for NA
+        na_bit = get_bitmap_bit(builder, null_bitmap_ptr, list_ind)
+        is_na_cond = builder.icmp_unsigned(
+            "==", na_bit, lir.Constant(lir.IntType(8), 0)
+        )
+        with builder.if_else(is_na_cond) as (then, orelse):
+            # NA case
+            with then:
+                # A[i] = np.nan
+                pyarray_setitem(builder, context, out_arr, list_ind, nan_obj)
+            # non-NA case
+            with orelse:
+                # n_items = offsets[i + 1] - offsets[i]
+                n_items = builder.sext(
+                    builder.sub(
+                        builder.load(
+                            builder.gep(
+                                offsets_ptr,
+                                [builder.add(list_ind, lir.Constant(list_ind.type, 1))],
+                            )
+                        ),
+                        builder.load(builder.gep(offsets_ptr, [list_ind])),
+                    ),
+                    lir.IntType(64),
+                )
+                # create list obj
+                list_obj = c.pyapi.list_new(n_items)
+                # store items in list
+                with cgutils.for_range(builder, n_items) as item_loop:
+                    j = item_loop.index
+                    item_ind = builder.load(curr_item_ind)
+                    buff_ptr = builder.gep(data_ptr, [item_ind])
+                    item_obj = c.pyapi.from_native_value(
+                        list_type.dtype, builder.load(buff_ptr), c.env_manager
+                    )
+                    # steals reference to item_obj
+                    c.pyapi.list_setitem(list_obj, j, item_obj)
+                    # curr_item_ind += 1
+                    builder.store(
+                        builder.add(item_ind, lir.Constant(item_ind.type, 1)),
+                        curr_item_ind,
+                    )
+
+                pyarray_setitem(builder, context, out_arr, list_ind, list_obj)
+                c.pyapi.decref(list_obj)
+
+    c.pyapi.decref(np_class_obj)
+    c.pyapi.decref(dtype_obj)
+    c.pyapi.decref(num_items_obj)
+    c.pyapi.decref(nan_obj)
+    return out_arr
+
+
 @box(ListItemArrayType)
 def box_list_item_arr(typ, val, c):
     """box packed native representation of list of item array into python objects
     """
 
     payload = _get_list_item_arr_payload(c.context, c.builder, typ, val)
-
-    ctype = bodo.utils.utils.numba_to_c_type(typ.elem_type)
-
-    fnty = lir.FunctionType(
-        c.context.get_argument_type(types.pyobject),
-        [
-            lir.IntType(64),  # num_lists
-            lir.IntType(8).as_pointer(),  # data
-            lir.IntType(32).as_pointer(),  # offsets
-            lir.IntType(8).as_pointer(),  # null_bitmap
-            lir.IntType(32),  # ctype
-        ],
-    )
-    fn_get = c.builder.module.get_or_insert_function(
-        fnty, name="np_array_from_list_item_array"
-    )
 
     data_ptr = c.context.make_helper(
         c.builder, types.Array(typ.elem_type, 1, "C"), payload.data
@@ -373,16 +441,45 @@ def box_list_item_arr(typ, val, c):
         c.builder, types.Array(types.uint8, 1, "C"), payload.null_bitmap
     ).data
 
-    arr = c.builder.call(
-        fn_get,
-        [
-            payload.n_lists,
-            c.builder.bitcast(data_ptr, lir.IntType(8).as_pointer()),
-            offsets_ptr,
-            null_bitmap_ptr,
-            lir.Constant(lir.IntType(32), ctype),
-        ],
-    )
+    # use C boxing when possible to avoid compilation and runtime overheads
+    # otherwise, use generic llvm/Numba unboxing
+    if typ.dtype.dtype in (
+        types.int64,
+        types.float64,
+        types.bool_,
+        datetime_date_type,
+    ):
+        ctype = bodo.utils.utils.numba_to_c_type(typ.elem_type)
+
+        fnty = lir.FunctionType(
+            c.context.get_argument_type(types.pyobject),
+            [
+                lir.IntType(64),  # num_lists
+                lir.IntType(8).as_pointer(),  # data
+                lir.IntType(32).as_pointer(),  # offsets
+                lir.IntType(8).as_pointer(),  # null_bitmap
+                lir.IntType(32),  # ctype
+            ],
+        )
+        fn_get = c.builder.module.get_or_insert_function(
+            fnty, name="np_array_from_list_item_array"
+        )
+
+        arr = c.builder.call(
+            fn_get,
+            [
+                payload.n_lists,
+                c.builder.bitcast(data_ptr, lir.IntType(8).as_pointer()),
+                offsets_ptr,
+                null_bitmap_ptr,
+                lir.Constant(lir.IntType(32), ctype),
+            ],
+        )
+
+    else:
+        arr = _box_list_item_array_generic(
+            typ, c, payload.n_lists, data_ptr, offsets_ptr, null_bitmap_ptr
+        )
 
     c.context.nrt.decref(c.builder, typ, val)
     return arr
