@@ -163,7 +163,7 @@ def _infer_series_dtype(S):
             return string_type
         elif isinstance(first_val, bool):
             return types.bool_  # will become BooleanArray in Series and DF
-        # struct array
+        # struct array: series of dict where all keys are strings
         elif isinstance(first_val, dict) and all(
             isinstance(k, str) for k in first_val.keys()
         ):
