@@ -552,6 +552,9 @@ def _infer_ndarray_obj_dtype(val):
         return string_type
     elif isinstance(first_val, bool):
         return types.bool_
+    # assuming object arrays with dictionary values are struct arrays, which means all
+    # keys are string and match across dictionaries, and all values with same key have
+    # same data type
     elif isinstance(first_val, dict) and all(
         isinstance(k, str) for k in first_val.keys()
     ):

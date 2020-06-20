@@ -354,8 +354,7 @@ void* np_array_from_list_item_array(int64_t num_lists, const char* buffer,
  * @param n_fields number of fields in struct array
  * @param data data buffers to be filled with all values (one buffer per field)
  * @param null_bitmap nulls buffer to be filled
- * @param dtype data types of field values, currently only float64 and int64
- * supported.
+ * @param dtype data types of field values
  * @param field_names names of struct fields.
  */
 void struct_array_from_sequence(PyObject* struct_arr_obj, int n_fields,
@@ -367,6 +366,7 @@ void struct_array_from_sequence(PyObject* struct_arr_obj, int n_fields,
         return;                        \
     }
 
+    // TODO: currently only float64 and int64 supported
     CHECK(PySequence_Check(struct_arr_obj), "expecting a PySequence");
     CHECK(data && null_bitmap, "buffer arguments must not be NULL");
 
