@@ -43,7 +43,7 @@ from bodo.utils.utils import is_call, is_array_typ
 from bodo.libs.str_arr_ext import string_array_type
 from bodo.libs.list_str_arr_ext import list_string_array_type
 from bodo.libs.list_item_arr_ext import ListItemArrayType
-from bodo.libs.struct_arr_ext import StructArrayType, StructRecordType
+from bodo.libs.struct_arr_ext import StructArrayType, StructType
 
 
 ReplaceFunc = namedtuple(
@@ -434,10 +434,10 @@ def get_const_func_output_type(func, arg_types, typing_context):
     _, f_return_type, _ = numba.core.typed_passes.type_inference_stage(
         typing_context, f_ir, arg_types, None
     )
-    # replace returned dictionary with a StructRecordType to enabling typing for
+    # replace returned dictionary with a StructType to enabling typing for
     # StructArrayType later
     if isinstance(f_return_type, types.DictType) and struct_key_names:
-        f_return_type = StructRecordType(
+        f_return_type = StructType(
             (f_return_type.value_type,) * len(struct_key_names), struct_key_names
         )
     return f_return_type

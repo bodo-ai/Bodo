@@ -86,7 +86,7 @@ class StructArrayType(types.ArrayCompatible):
 
     @property
     def dtype(self):
-        return StructRecordType(tuple(t.dtype for t in self.data), self.names)
+        return StructType(tuple(t.dtype for t in self.data), self.names)
 
     @classmethod
     def from_dict(cls, d):
@@ -405,8 +405,8 @@ ArrayAnalysis._analyze_op_call_bodo_libs_struct_arr_ext_pre_alloc_struct_array =
 )
 
 
-class StructRecordType(types.Type):
-    """Data type for struct records taken as scalars from struct arrays. A regular
+class StructType(types.Type):
+    """Data type for structs taken as scalars from struct arrays. A regular
     dictionary doesn't work in the general case since values can have different types.
     Very similar structure to StructArrayType, except that it holds scalar values and
     supports getitem/setitem of fields.
@@ -428,24 +428,22 @@ class StructRecordType(types.Type):
 
         self.data = data
         self.names = names
-        super(StructRecordType, self).__init__(
-            name="StructRecordType({}, {})".format(data, names)
-        )
+        super(StructType, self).__init__(name="StructType({}, {})".format(data, names))
 
 
-class StructRecordPayloadType(types.Type):
+class StructPayloadType(types.Type):
     def __init__(self, data):
         assert isinstance(data, tuple) and all(
             not bodo.utils.utils.is_array_typ(a, False) for a in data
         )
         self.data = data
-        super(StructRecordPayloadType, self).__init__(
-            name="StructRecordPayloadType({})".format(data)
+        super(StructPayloadType, self).__init__(
+            name="StructPayloadType({})".format(data)
         )
 
 
-@register_model(StructRecordPayloadType)
-class StructRecordPayloadModel(models.StructModel):
+@register_model(StructPayloadType)
+class StructPayloadModel(models.StructModel):
     def __init__(self, dmm, fe_type):
         members = [
             ("data", types.BaseTuple.from_types(fe_type.data)),
@@ -454,28 +452,25 @@ class StructRecordPayloadModel(models.StructModel):
         models.StructModel.__init__(self, dmm, fe_type, members)
 
 
-@register_model(StructRecordType)
-class StructRecordModel(models.StructModel):
+@register_model(StructType)
+class StructModel(models.StructModel):
     def __init__(self, dmm, fe_type):
-        payload_type = StructRecordPayloadType(fe_type.data)
+        payload_type = StructPayloadType(fe_type.data)
         members = [
             ("meminfo", types.MemInfoPointer(payload_type)),
         ]
         models.StructModel.__init__(self, dmm, fe_type, members)
 
 
-def define_struct_rec_dtor(context, builder, struct_rec_type, payload_type):
+def define_struct_dtor(context, builder, struct_type, payload_type):
     """
-    Define destructor for struct record type if not already defined
+    Define destructor for struct type if not already defined
     """
     mod = builder.module
     # Declare dtor
     fnty = lir.FunctionType(lir.VoidType(), [cgutils.voidptr_t])
     fn = mod.get_or_insert_function(
-        fnty,
-        name=".dtor.struct_rec.{}.{}.".format(
-            struct_rec_type.data, struct_rec_type.names
-        ),
+        fnty, name=".dtor.struct.{}.{}.".format(struct_type.data, struct_type.names),
     )
 
     # End early if the dtor is already defined
@@ -493,7 +488,7 @@ def define_struct_rec_dtor(context, builder, struct_rec_type, payload_type):
     payload = context.make_data_helper(builder, payload_type, ref=payload_ptr)
 
     context.nrt.decref(
-        builder, types.BaseTuple.from_types(struct_rec_type.data), payload.data
+        builder, types.BaseTuple.from_types(struct_type.data), payload.data
     )
     # no need for null_bitmap since it is using primitive types
 
@@ -501,12 +496,12 @@ def define_struct_rec_dtor(context, builder, struct_rec_type, payload_type):
     return fn
 
 
-def _get_struct_rec_payload(context, builder, typ, rec):
-    """get payload struct proxy for a struct record value
+def _get_struct_payload(context, builder, typ, struct):
+    """get payload struct proxy for a struct value
     """
-    struct_rec = context.make_helper(builder, typ, rec)
-    payload_type = StructRecordPayloadType(typ.data)
-    meminfo_void_ptr = context.nrt.meminfo_data(builder, struct_rec.meminfo)
+    struct = context.make_helper(builder, typ, struct)
+    payload_type = StructPayloadType(typ.data)
+    meminfo_void_ptr = context.nrt.meminfo_data(builder, struct.meminfo)
     meminfo_data_ptr = builder.bitcast(
         meminfo_void_ptr, context.get_data_type(payload_type).as_pointer()
     )
@@ -516,12 +511,12 @@ def _get_struct_rec_payload(context, builder, typ, rec):
     return payload, meminfo_data_ptr
 
 
-@box(StructRecordType)
-def box_struct_rec(typ, val, c):
-    """box struct records into python dictionary objects
+@box(StructType)
+def box_struct(typ, val, c):
+    """box structs into python dictionary objects
     """
     out_dict = c.pyapi.dict_new(len(typ.data))
-    payload, _ = _get_struct_rec_payload(c.context, c.builder, typ, val)
+    payload, _ = _get_struct_payload(c.context, c.builder, typ, val)
 
     assert len(typ.data) > 0
     for i, val_typ in enumerate(typ.data):
@@ -535,24 +530,22 @@ def box_struct_rec(typ, val, c):
 
 
 @intrinsic
-def init_struct_rec(typingctx, data_typ, names_typ=None):
-    """create a new struct record from input data tuple and names.
+def init_struct(typingctx, data_typ, names_typ=None):
+    """create a new struct from input data tuple and names.
     """
     names = tuple(get_overload_const_str(t) for t in names_typ.types)
-    struct_rec_type = StructRecordType(data_typ.types, names)
+    struct_type = StructType(data_typ.types, names)
 
     def codegen(context, builder, sig, args):
         data, _names = args
-        # TODO: refactor to avoid duplication with construct_struct_rec
+        # TODO: refactor to avoid duplication with construct_struct
         # create payload type
-        payload_type = StructRecordPayloadType(struct_rec_type.data)
+        payload_type = StructPayloadType(struct_type.data)
         alloc_type = context.get_data_type(payload_type)
         alloc_size = context.get_abi_sizeof(alloc_type)
 
         # define dtor
-        dtor_fn = define_struct_rec_dtor(
-            context, builder, struct_rec_type, payload_type
-        )
+        dtor_fn = define_struct_dtor(context, builder, struct_type, payload_type)
 
         # create meminfo
         meminfo = context.nrt.meminfo_alloc_dtor(
@@ -568,105 +561,105 @@ def init_struct_rec(typingctx, data_typ, names_typ=None):
         builder.store(payload._getvalue(), meminfo_data_ptr)
         context.nrt.incref(builder, data_typ, data)
 
-        struct_rec = context.make_helper(builder, struct_rec_type)
-        struct_rec.meminfo = meminfo
-        return struct_rec._getvalue()
+        struct = context.make_helper(builder, struct_type)
+        struct.meminfo = meminfo
+        return struct._getvalue()
 
-    return struct_rec_type(data_typ, names_typ), codegen
+    return struct_type(data_typ, names_typ), codegen
 
 
 @intrinsic
-def get_rec_data(typingctx, rec_typ=None):
-    """get data values of struct record as tuple
+def get_struct_data(typingctx, struct_typ=None):
+    """get data values of struct as tuple
     """
-    assert isinstance(rec_typ, StructRecordType)
+    assert isinstance(struct_typ, StructType)
 
     def codegen(context, builder, sig, args):
-        (rec,) = args
-        payload, _ = _get_struct_rec_payload(context, builder, rec_typ, rec)
+        (struct,) = args
+        payload, _ = _get_struct_payload(context, builder, struct_typ, struct)
         return impl_ret_borrowed(context, builder, sig.return_type, payload.data)
 
-    return types.BaseTuple.from_types(rec_typ.data)(rec_typ), codegen
+    return types.BaseTuple.from_types(struct_typ.data)(struct_typ), codegen
 
 
 @intrinsic
-def set_rec_data(typingctx, rec_typ, field_ind_typ, val_typ=None):
-    """set a field in record to value. needs to replace the whole payload.
+def set_struct_data(typingctx, struct_typ, field_ind_typ, val_typ=None):
+    """set a field in struct to value. needs to replace the whole payload.
     """
-    assert isinstance(rec_typ, StructRecordType) and is_overload_constant_int(
+    assert isinstance(struct_typ, StructType) and is_overload_constant_int(
         field_ind_typ
     )
     field_ind = get_overload_const_int(field_ind_typ)
 
     def codegen(context, builder, sig, args):
-        (rec, _, val) = args
-        payload, meminfo_data_ptr = _get_struct_rec_payload(
-            context, builder, rec_typ, rec
+        (struct, _, val) = args
+        payload, meminfo_data_ptr = _get_struct_payload(
+            context, builder, struct_typ, struct
         )
         old_data = payload.data
         new_data = builder.insert_value(old_data, val, field_ind)
-        data_tup_typ = types.BaseTuple.from_types(rec_typ.data)
+        data_tup_typ = types.BaseTuple.from_types(struct_typ.data)
         context.nrt.decref(builder, data_tup_typ, old_data)
         context.nrt.incref(builder, data_tup_typ, new_data)
         payload.data = new_data
         builder.store(payload._getvalue(), meminfo_data_ptr)
         return context.get_dummy_value()
 
-    return types.none(rec_typ, field_ind_typ, val_typ), codegen
+    return types.none(struct_typ, field_ind_typ, val_typ), codegen
 
 
-def _get_rec_field_ind(rec, ind, op):
-    """find record field index for 'ind' (a const str type) for operation 'op'.
+def _get_struct_field_ind(struct, ind, op):
+    """find struct field index for 'ind' (a const str type) for operation 'op'.
     Raise error if not possible.
     """
     if not is_overload_constant_str(ind):  # pragma: no cover
         raise BodoError(
-            "Struct records (from struct array) only support constant strings for {}, not {}".format(
+            "structs (from struct array) only support constant strings for {}, not {}".format(
                 op, ind
             )
         )
 
     ind_str = get_overload_const_str(ind)
-    if ind_str not in rec.names:  # pragma: no cover
-        raise BodoError("Field {} does not exist in record {}".format(ind_str, rec))
+    if ind_str not in struct.names:  # pragma: no cover
+        raise BodoError("Field {} does not exist in struct {}".format(ind_str, struct))
 
-    return rec.names.index(ind_str)
+    return struct.names.index(ind_str)
 
 
 @overload(operator.getitem, no_unliteral=True)
-def struct_rec_getitem(rec, ind):
-    if not isinstance(rec, StructRecordType):
+def struct_getitem(struct, ind):
+    if not isinstance(struct, StructType):
         return
 
-    field_ind = _get_rec_field_ind(rec, ind, "element access (getitem)")
+    field_ind = _get_struct_field_ind(struct, ind, "element access (getitem)")
     # TODO: warning if value is NA?
-    return lambda rec, ind: get_rec_data(rec)[field_ind]  # pragma: no cover
+    return lambda struct, ind: get_struct_data(struct)[field_ind]  # pragma: no cover
 
 
 @overload(operator.setitem, no_unliteral=True)
-def struct_rec_getitem(rec, ind, val):
-    if not isinstance(rec, StructRecordType):
+def struct_getitem(struct, ind, val):
+    if not isinstance(struct, StructType):
         return
 
-    field_ind = _get_rec_field_ind(rec, ind, "item assignment (setitem)")
-    field_typ = rec.data[field_ind]
+    field_ind = _get_struct_field_ind(struct, ind, "item assignment (setitem)")
+    field_typ = struct.data[field_ind]
 
     # TODO: set NA
-    return lambda rec, ind, val: set_rec_data(
-        rec, field_ind, _cast(val, field_typ)
+    return lambda struct, ind, val: set_struct_data(
+        struct, field_ind, _cast(val, field_typ)
     )  # pragma: no cover
 
 
-def construct_struct_record(context, builder, struct_rec_type, values, nulls):
-    """Creates meminfo and sets dtor and data for struct record
+def construct_struct(context, builder, struct_type, values, nulls):
+    """Creates meminfo and sets dtor and data for struct
     """
     # create payload type
-    payload_type = StructRecordPayloadType(struct_rec_type.data)
+    payload_type = StructPayloadType(struct_type.data)
     alloc_type = context.get_data_type(payload_type)
     alloc_size = context.get_abi_sizeof(alloc_type)
 
     # define dtor
-    dtor_fn = define_struct_rec_dtor(context, builder, struct_rec_type, payload_type)
+    dtor_fn = define_struct_dtor(context, builder, struct_type, payload_type)
 
     # create meminfo
     meminfo = context.nrt.meminfo_alloc_dtor(
@@ -680,7 +673,7 @@ def construct_struct_record(context, builder, struct_rec_type, values, nulls):
 
     payload.data = (
         cgutils.pack_array(builder, values)
-        if types.is_homogeneous(*struct_rec_type.data)
+        if types.is_homogeneous(*struct_type.data)
         else cgutils.pack_struct(builder, values)
     )
 
@@ -691,20 +684,20 @@ def construct_struct_record(context, builder, struct_rec_type, values, nulls):
 
 
 @intrinsic
-def struct_array_get_record(typingctx, struct_arr_typ, ind_typ=None):
-    """get struct record from struct array, e.g. A[i]
-    Returns a dictionary of value types are the same, otherwise a StructRecordType
+def struct_array_get_struct(typingctx, struct_arr_typ, ind_typ=None):
+    """get struct from struct array, e.g. A[i]
+    Returns a dictionary of value types are the same, otherwise a StructType
     """
     assert isinstance(struct_arr_typ, StructArrayType) and isinstance(
         ind_typ, types.Integer
     )
     n_fields = len(struct_arr_typ.data)
     data_types = tuple(d.dtype for d in struct_arr_typ.data)
-    # return a regular dictionary if values have the same type, otherwise record
+    # return a regular dictionary if values have the same type, otherwise struct
     if types.is_homogeneous(*struct_arr_typ.data):
         out_typ = types.DictType(bodo.string_type, data_types[0])
     else:
-        out_typ = StructRecordType(data_types, struct_arr_typ.names)
+        out_typ = StructType(data_types, struct_arr_typ.names)
 
     def codegen(context, builder, sig, args):
         struct_arr, ind = args
@@ -751,10 +744,10 @@ def struct_array_get_record(typingctx, struct_arr_typ, ind_typ=None):
                 [names_tup, val_tup],
             )
 
-        meminfo = construct_struct_record(context, builder, out_typ, data_vals, nulls)
-        struct_record = context.make_helper(builder, out_typ)
-        struct_record.meminfo = meminfo
-        return struct_record._getvalue()
+        meminfo = construct_struct(context, builder, out_typ, data_vals, nulls)
+        struct = context.make_helper(builder, out_typ)
+        struct.meminfo = meminfo
+        return struct._getvalue()
 
     return out_typ(struct_arr_typ, ind_typ), codegen
 
@@ -837,7 +830,7 @@ def struct_arr_getitem(arr, ind):
     if isinstance(ind, types.Integer):
         # TODO: warning if value is NA?
         def struct_arr_getitem_impl(arr, ind):  # pragma: no cover
-            return struct_array_get_record(arr, ind)
+            return struct_array_get_struct(arr, ind)
 
         return struct_arr_getitem_impl
 

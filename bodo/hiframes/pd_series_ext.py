@@ -45,7 +45,7 @@ import bodo
 from bodo.libs.str_ext import string_type
 from bodo.libs.list_str_arr_ext import list_string_array_type
 from bodo.libs.list_item_arr_ext import ListItemArrayType
-from bodo.libs.struct_arr_ext import StructRecordType, StructArrayType
+from bodo.libs.struct_arr_ext import StructType, StructArrayType
 from bodo.libs.str_arr_ext import string_array_type
 from bodo.libs.int_arr_ext import IntegerArrayType, IntDtype
 from bodo.libs.bool_arr_ext import boolean_array
@@ -186,7 +186,7 @@ def _get_series_array_type(dtype):
     if isinstance(dtype, Decimal128Type):
         return DecimalArrayType(dtype.precision, dtype.scale)
 
-    if isinstance(dtype, StructRecordType):
+    if isinstance(dtype, StructType):
         return StructArrayType(
             tuple(_get_series_array_type(t) for t in dtype.data), dtype.names
         )
