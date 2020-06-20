@@ -2393,6 +2393,7 @@ def series_stat(request):
 def test_series_mad(series_stat, memory_leak_check):
     def f(S):
         return S.mad()
+
     def f_skip(S):
         return S.mad(skipna=False)
 
@@ -2403,6 +2404,7 @@ def test_series_mad(series_stat, memory_leak_check):
 def test_series_skew(series_stat, memory_leak_check):
     def f(S):
         return S.skew()
+
     def f_skipna(S):
         return S.skew(skipna=False)
 
@@ -2413,6 +2415,7 @@ def test_series_skew(series_stat, memory_leak_check):
 def test_series_kurt(series_stat, memory_leak_check):
     def f(S):
         return S.skew()
+
     def f_skipna(S):
         return S.skew(skipna=False)
 
@@ -2423,6 +2426,7 @@ def test_series_kurt(series_stat, memory_leak_check):
 def test_series_kurtosis(series_stat, memory_leak_check):
     def f(S):
         return S.skew()
+
     def f_skipna(S):
         return S.skew(skipna=False)
 
@@ -2486,6 +2490,54 @@ def test_create_series_index4(memory_leak_check):
 
     bodo_func = bodo.jit(test_impl)
     pd.testing.assert_series_equal(bodo_func("A"), test_impl("A"))
+
+
+def test_series_var():
+    def f(S):
+        return S.var()
+
+    def f_skipna(S):
+        return np.isnan(S.var(skipna=False))
+
+    def f_ddof(S):
+        return S.var(ddof=2)
+
+    S = pd.Series([np.nan, 2.0, 3.0, 4.0, 5.0])
+    check_func(f, (S,))
+    check_func(f_skipna, (S,))
+    check_func(f_ddof, (S,))
+
+
+def test_series_sem():
+    def f(S):
+        return S.sem()
+
+    def f_skipna(S):
+        return np.isnan(S.sem(skipna=False))
+
+    def f_ddof(S):
+        return S.sem(ddof=2)
+
+    S = pd.Series([np.nan, 2.0, 3.0, 4.0, 5.0])
+    check_func(f, (S,))
+    check_func(f_skipna, (S,))
+    check_func(f_ddof, (S,))
+
+
+def test_series_std():
+    def f(S):
+        return S.std()
+
+    def f_skipna(S):
+        return np.isnan(S.std(skipna=False))
+
+    def f_ddof(S):
+        return S.std(ddof=2)
+
+    S = pd.Series([np.nan, 2.0, 3.0, 4.0, 5.0])
+    check_func(f, (S,))
+    check_func(f_skipna, (S,))
+    check_func(f_ddof, (S,))
 
 
 def test_series_astype_num_constructors(memory_leak_check):
@@ -3179,22 +3231,6 @@ class TestSeries(unittest.TestCase):
     def test_series_mean1(self):
         def test_impl(S):
             return S.mean()
-
-        bodo_func = bodo.jit(test_impl)
-        S = pd.Series([np.nan, 2.0, 3.0])
-        self.assertEqual(bodo_func(S), test_impl(S))
-
-    def test_series_var1(self):
-        def test_impl(S):
-            return S.var()
-
-        bodo_func = bodo.jit(test_impl)
-        S = pd.Series([np.nan, 2.0, 3.0])
-        self.assertEqual(bodo_func(S), test_impl(S))
-
-    def test_series_std1(self):
-        def test_impl(S):
-            return S.std()
 
         bodo_func = bodo.jit(test_impl)
         S = pd.Series([np.nan, 2.0, 3.0])

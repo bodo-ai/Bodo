@@ -408,12 +408,38 @@ def overload_series_mean(S):
     return impl
 
 
+@overload_method(SeriesType, "sem", inline="always", no_unliteral=True)
+def overload_series_sem(S, skipna=True, ddof=1):
+    def impl(S, skipna=True, ddof=1):  # pragma: no cover
+        A = bodo.hiframes.pd_series_ext.get_series_data(S)
+        numba.parfors.parfor.init_prange()
+        first_moment = 0
+        second_moment = 0
+        count = 0
+        for i in numba.parfors.parfor.internal_prange(len(A)):
+            val = 0
+            count_val = 0
+            if not bodo.libs.array_kernels.isna(A, i) or not skipna:
+                val = A[i]
+                count_val = 1
+            first_moment += val
+            second_moment += val * val
+            count += count_val
+
+        s = second_moment - first_moment * first_moment / count
+        res = bodo.hiframes.series_kernels._handle_nan_count_ddof(s, count, ddof)
+        res_out = (res / count) ** 0.5
+        return res_out
+
+    return impl
+
+
 # Formula for Kurtosis is available at
 # https://en.wikipedia.org/wiki/Kurtosis
 # Precise formula taken from ./pandas/core/nanops.py [nankurt]
 @overload_method(SeriesType, "kurt", inline="always", no_unliteral=True)
 @overload_method(SeriesType, "kurtosis", inline="always", no_unliteral=True)
-def overload_series_var(S, skipna=True):
+def overload_series_kurt(S, skipna=True):
     def impl(S, skipna=True):  # pragma: no cover
         A = bodo.hiframes.pd_series_ext.get_series_data(S)
         numba.parfors.parfor.init_prange()
@@ -446,7 +472,7 @@ def overload_series_var(S, skipna=True):
         numer = count * (count + 1) * (count - 1) * m4
         denom = (count - 2) * (count - 3) * m2 ** 2
         s = (count - 1) * (numer / denom - adj)
-        res = bodo.hiframes.series_kernels._var_handle_nan(s, count)
+        res = bodo.hiframes.series_kernels._handle_nan_count(s, count)
         return res
 
     return impl
@@ -456,7 +482,7 @@ def overload_series_var(S, skipna=True):
 # https://en.wikipedia.org/wiki/Skewness
 # Precise formula taken from ./pandas/core/nanops.py [nanskew]
 @overload_method(SeriesType, "skew", inline="always", no_unliteral=True)
-def overload_series_var(S, skipna=True):
+def overload_series_skew(S, skipna=True):
     def impl(S, skipna=True):  # pragma: no cover
         A = bodo.hiframes.pd_series_ext.get_series_data(S)
         numba.parfors.parfor.init_prange()
@@ -484,15 +510,15 @@ def overload_series_var(S, skipna=True):
             * numerator
             / (denominator ** (1.5))
         )
-        res = bodo.hiframes.series_kernels._var_handle_nan(s, count)
+        res = bodo.hiframes.series_kernels._handle_nan_count(s, count)
         return res
 
     return impl
 
 
 @overload_method(SeriesType, "var", inline="always", no_unliteral=True)
-def overload_series_var(S):
-    def impl(S):  # pragma: no cover
+def overload_series_var(S, skipna=True, ddof=1):
+    def impl(S, skipna=True, ddof=1):  # pragma: no cover
         A = bodo.hiframes.pd_series_ext.get_series_data(S)
         numba.parfors.parfor.init_prange()
         first_moment = 0
@@ -501,7 +527,7 @@ def overload_series_var(S):
         for i in numba.parfors.parfor.internal_prange(len(A)):
             val = 0
             count_val = 0
-            if not bodo.libs.array_kernels.isna(A, i):
+            if not bodo.libs.array_kernels.isna(A, i) or not skipna:
                 val = A[i]
                 count_val = 1
             first_moment += val
@@ -509,16 +535,16 @@ def overload_series_var(S):
             count += count_val
 
         s = second_moment - first_moment * first_moment / count
-        res = bodo.hiframes.series_kernels._var_handle_nan(s, count)
+        res = bodo.hiframes.series_kernels._handle_nan_count_ddof(s, count, ddof)
         return res
 
     return impl
 
 
 @overload_method(SeriesType, "std", inline="always", no_unliteral=True)
-def overload_series_std(S):
-    def impl(S):  # pragma: no cover
-        return S.var() ** 0.5
+def overload_series_std(S, skipna=True, ddof=1):
+    def impl(S, skipna=True, ddof=1):  # pragma: no cover
+        return S.var(skipna=skipna, ddof=ddof) ** 0.5
 
     return impl
 

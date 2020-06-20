@@ -948,7 +948,6 @@ series_unsupported_methods = (
     "factorize",
     "mode",
     "rank",
-    "sem",
     # Reindexing / selection / label manipulation
     "align",
     "drop",

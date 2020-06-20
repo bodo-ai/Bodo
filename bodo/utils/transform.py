@@ -87,7 +87,8 @@ no_side_effect_call_tuples = {
     ("alloc_datetime_date_array", "datetime_date_ext", "hiframes", bodo,),
     ("_sum_handle_nan", "series_kernels", "hiframes", bodo),
     ("_mean_handle_nan", "series_kernels", "hiframes", bodo),
-    ("_var_handle_nan", "series_kernels", "hiframes", bodo),
+    ("_handle_nan_count", "series_kernels", "hiframes", bodo),
+    ("_handle_nan_count_ddof", "series_kernels", "hiframes", bodo),
     ("dist_return", "distributed_api", bodo),
     # dataframe
     ("init_dataframe", "pd_dataframe_ext", "hiframes", bodo),

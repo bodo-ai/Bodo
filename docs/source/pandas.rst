@@ -285,9 +285,10 @@ unless support is explicitly mentioned.
   only the `periods` argument supported)
 * :meth:`pandas.Series.prod`
 * :meth:`pandas.Series.quantile`
-* :meth:`pandas.Series.std`
+* :meth:`pandas.Series.std` (support skipna and ddof arguments)
+* :meth:`pandas.Series.var` (support skipna and ddof arguments)
+* :meth:`pandas.Series.sem` (support skipna and ddof arguments)
 * :meth:`pandas.Series.sum`
-* :meth:`pandas.Series.var`
 * :meth:`pandas.Series.mad` argument skipna supported
 * :meth:`pandas.Series.kurt` argument skipna supported
 * :meth:`pandas.Series.kurtosis` argument skipna supported

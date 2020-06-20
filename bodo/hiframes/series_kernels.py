@@ -117,7 +117,9 @@ def _get_type_min_value_overload(dtype):
     # pd.Int64Dtype(), etc.
     if isinstance(dtype, IntDtype):
         _dtype = dtype.dtype
-        return lambda dtype: numba.cpython.builtins.get_type_min_value(_dtype)  # pragma: no cover
+        return lambda dtype: numba.cpython.builtins.get_type_min_value(
+            _dtype
+        )  # pragma: no cover
 
     # dt64/td64
     if isinstance(dtype.dtype, (types.NPDatetime, types.NPTimedelta)):
@@ -128,7 +130,9 @@ def _get_type_min_value_overload(dtype):
     if dtype.dtype == types.bool_:
         return lambda dtype: False  # pragma: no cover
 
-    return lambda dtype: numba.cpython.builtins.get_type_min_value(dtype)  # pragma: no cover
+    return lambda dtype: numba.cpython.builtins.get_type_min_value(
+        dtype
+    )  # pragma: no cover
 
 
 @overload(min)
@@ -180,11 +184,20 @@ def _mean_handle_nan(s, count):  # pragma: no cover
 
 
 @numba.njit
-def _var_handle_nan(s, count):  # pragma: no cover
+def _handle_nan_count(s, count):  # pragma: no cover
     if count <= 1:
         s = np.nan
     else:
         s = s / (count - 1)
+    return s
+
+
+@numba.njit
+def _handle_nan_count_ddof(s, count, ddof):  # pragma: no cover
+    if count <= ddof:
+        s = np.nan
+    else:
+        s = s / (count - ddof)
     return s
 
 
