@@ -176,6 +176,33 @@ def get_agg_func(func_ir, func_name, rhs, series_type=None, typemap=None):
         return func
     if func_name in supported_agg_funcs[:-5]:
         func = getattr(series_impl, "overload_series_" + func_name)(series_type)
+        # HACK: use simple versions of sum/prod functions without extra arguments to
+        # avoid errors in pivot
+        # TODO: remove when pivot is moved to C++ code
+        if func_name == "sum":
+            val_zero = series_type.dtype(0)
+            def func(S):  # pragma: no cover
+                A = bodo.hiframes.pd_series_ext.get_series_data(S)
+                numba.parfors.parfor.init_prange()
+                s = val_zero
+                for i in numba.parfors.parfor.internal_prange(len(A)):
+                    val = val_zero
+                    if not bodo.libs.array_kernels.isna(A, i):
+                        val = A[i]
+                    s += val
+                return s
+        if func_name == "prod":
+            val_one = series_type.dtype(1)
+            def func(S):  # pragma: no cover
+                A = bodo.hiframes.pd_series_ext.get_series_data(S)
+                numba.parfors.parfor.init_prange()
+                s = val_one
+                for i in numba.parfors.parfor.internal_prange(len(A)):
+                    val = val_one
+                    if not bodo.libs.array_kernels.isna(A, i):
+                        val = A[i]
+                    s *= val
+                return s
         func.ftype = func_name
         func.ncols_pre_shuffle = 1
         func.ncols_post_shuffle = 1

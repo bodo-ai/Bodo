@@ -931,7 +931,6 @@ series_unsupported_methods = (
     "rmod",
     "rpow",
     "combine_first",
-    "product",
     # Function application, groupby & window
     "agg",
     "aggregate",

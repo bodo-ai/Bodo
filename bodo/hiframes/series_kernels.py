@@ -193,6 +193,15 @@ def _handle_nan_count(s, count):  # pragma: no cover
 
 
 @numba.njit
+def _var_handle_mincount(s, count, min_count):  # pragma: no cover
+    if count < min_count:
+        res = np.nan
+    else:
+        res = s
+    return res
+
+
+@numba.njit
 def _handle_nan_count_ddof(s, count, ddof):  # pragma: no cover
     if count <= ddof:
         s = np.nan

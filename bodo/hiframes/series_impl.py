@@ -231,7 +231,7 @@ def overload_series_round(S, decimals=0):
 
 
 @overload_method(SeriesType, "sum", inline="always", no_unliteral=True)
-def overload_series_sum(S):
+def overload_series_sum(S, skipna=True, min_count=0):
     # TODO: series that have different underlying data type than dtype
     # like records/tuples
     if isinstance(S.dtype, types.Integer):
@@ -240,36 +240,83 @@ def overload_series_sum(S):
         retty = np.int64
     else:
         retty = S.dtype
-    zero = retty(0)
+    val_zero = retty(0)
 
-    def impl(S):  # pragma: no cover
-        A = bodo.hiframes.pd_series_ext.get_series_data(S)
-        numba.parfors.parfor.init_prange()
-        s = zero
-        for i in numba.parfors.parfor.internal_prange(len(A)):
-            val = zero
-            if not bodo.libs.array_kernels.isna(A, i):
-                val = A[i]
-            s += val
-        return s
+    # For integer array we cannot handle the missing values because
+    # we cannot mix np.nan with integers
+    if isinstance(S.dtype, types.Float) and (
+        not is_overload_true(skipna) or not is_overload_zero(min_count)
+    ):
+
+        def impl(S, skipna=True, min_count=0):  # pragma: no cover
+            A = bodo.hiframes.pd_series_ext.get_series_data(S)
+            numba.parfors.parfor.init_prange()
+            s = val_zero
+            count = 0
+            for i in numba.parfors.parfor.internal_prange(len(A)):
+                val = val_zero
+                count_val = 0
+                if not bodo.libs.array_kernels.isna(A, i) or not skipna:
+                    val = A[i]
+                    count_val = 1
+                s += val
+                count += count_val
+            res = bodo.hiframes.series_kernels._var_handle_mincount(s, count, min_count)
+            return res
+
+    else:
+
+        def impl(S, skipna=True, min_count=0):  # pragma: no cover
+            A = bodo.hiframes.pd_series_ext.get_series_data(S)
+            numba.parfors.parfor.init_prange()
+            s = val_zero
+            for i in numba.parfors.parfor.internal_prange(len(A)):
+                val = val_zero
+                if not bodo.libs.array_kernels.isna(A, i):
+                    val = A[i]
+                s += val
+            return s
 
     return impl
 
 
 @overload_method(SeriesType, "prod", inline="always", no_unliteral=True)
-def overload_series_prod(S):
-    init = S.dtype(1)
+@overload_method(SeriesType, "product", inline="always", no_unliteral=True)
+def overload_series_prod(S, skipna=True, min_count=0):
+    val_one = S.dtype(1)
 
-    def impl(S):  # pragma: no cover
-        A = bodo.hiframes.pd_series_ext.get_series_data(S)
-        numba.parfors.parfor.init_prange()
-        s = init
-        for i in numba.parfors.parfor.internal_prange(len(A)):
-            val = init
-            if not bodo.libs.array_kernels.isna(A, i):
-                val = A[i]
-            s *= val
-        return s
+    # For integer array we cannot handle the missing values because
+    # we cannot mix np.nan with integers
+    if isinstance(S.dtype, types.Float):
+
+        def impl(S, skipna=True, min_count=0):  # pragma: no cover
+            A = bodo.hiframes.pd_series_ext.get_series_data(S)
+            numba.parfors.parfor.init_prange()
+            s = val_one
+            count = 0
+            for i in numba.parfors.parfor.internal_prange(len(A)):
+                val = val_one
+                count_val = 0
+                if not bodo.libs.array_kernels.isna(A, i) or not skipna:
+                    val = A[i]
+                    count_val = 1
+                count += count_val
+                s *= val
+            res = bodo.hiframes.series_kernels._var_handle_mincount(s, count, min_count)
+            return res
+
+    else:
+
+        def impl(S, skipna=True, min_count=0):  # pragma: no cover
+            A = bodo.hiframes.pd_series_ext.get_series_data(S)
+            numba.parfors.parfor.init_prange()
+            s = val_one
+            for i in numba.parfors.parfor.internal_prange(len(A)):
+                val = val_one
+                if not bodo.libs.array_kernels.isna(A, i):
+                    val = A[i]
+                s *= val
+            return s
 
     return impl
 

@@ -1809,7 +1809,7 @@ class DataFramePass:
 
         pivot_arr = self._get_dataframe_data(df_var, columns, nodes)
         index_arr = self._get_dataframe_data(df_var, index, nodes)
-        agg_func = get_agg_func(self.func_ir, func_name, rhs)
+        agg_func = get_agg_func(self.func_ir, func_name, rhs, typemap=self.typemap)
 
         same_index = False
         return_key = True

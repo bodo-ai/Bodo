@@ -2246,8 +2246,20 @@ def test_series_sum(memory_leak_check):
         A = S.sum()
         return A
 
-    S = pd.Series(np.arange(20))
-    check_func(impl, (S,))
+    def impl_skipna(S):
+        A = S.sum(skipna=False)
+        return A
+
+    def impl_mincount(S, min_count):
+        A = S.sum(min_count = min_count)
+        return A
+
+    S_int = pd.Series(np.arange(20))
+    S_float = pd.Series([np.nan, 1, 2, 3])
+    check_func(impl, (S_int,))
+    check_func(impl_skipna, (S_float,))
+    check_func(impl_mincount, (S_float,2))
+    check_func(impl_mincount, (S_float,4))
 
 
 def test_series_prod(memory_leak_check):
@@ -2255,8 +2267,20 @@ def test_series_prod(memory_leak_check):
         A = S.prod()
         return A
 
-    S = pd.Series(1 + np.arange(20))
-    check_func(impl, (S,))
+    def impl_skipna(S):
+        A = S.prod(skipna=False)
+        return A
+
+    def impl_mincount(S, min_count):
+        A = S.product(min_count=min_count)
+        return A
+
+    S_int = pd.Series(1 + np.arange(20))
+    S_float = pd.Series([np.nan, 1.0, 2.0, 3.0])
+    check_func(impl, (S_int,))
+    check_func(impl_skipna, (S_float,))
+    check_func(impl_mincount, (S_float,2))
+    check_func(impl_mincount, (S_float,4))
 
 
 def test_singlevar_series_all(memory_leak_check):
