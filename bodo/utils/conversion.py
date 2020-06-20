@@ -838,7 +838,7 @@ def overload_struct_if_heter_dict(values, names):
     """
 
     if not types.is_homogeneous(*values.types):
-        return lambda values, names: bodo.libs.struct_arr_ext.init_struct_rec(
+        return lambda values, names: bodo.libs.struct_arr_ext.init_struct(
             values, names
         )  # pragma: no cover
 
