@@ -148,7 +148,7 @@ class UntypedPass:
         # while remove_dead(blocks, self.func_ir.arg_names, self.func_ir):
         #     pass
         self.func_ir._definitions = build_definitions(blocks)
-        # return {"A": 1, "B": 2.3} -> return struct((1, 2), ("A", "B"))
+        # return {"A": 1, "B": 2.3} -> return struct((1, 2.3), ("A", "B"))
         fix_struct_return(self.func_ir)
         dprint_func_ir(self.func_ir, "after untyped pass")
 

@@ -3,7 +3,7 @@
 Corresponds to Spark's StructType: https://spark.apache.org/docs/latest/sql-reference.html
 Corresponds to Arrow's Struct arrays: https://arrow.apache.org/docs/format/Columnar.html
 
-The values are stored in contingous data arrays; one array per field. For example:
+The values are stored in contiguous data arrays; one array per field. For example:
 A:             ["AA", "B", "C"]
 B:             [1, 2, 4]
 """

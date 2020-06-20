@@ -445,7 +445,7 @@ def get_const_func_output_type(func, arg_types, typing_context):
 
 def _replace_const_map_return(f_ir, block, label):
     """replaces constant dictionary return value with a struct if values are not
-    homogeneous, e.g. {"A": 1, "B": 2.3} -> struct((1, 2), ("A", "B"))
+    homogeneous, e.g. {"A": 1, "B": 2.3} -> struct((1, 2.3), ("A", "B"))
     """
     # get const map in return
     require(isinstance(block.body[-1], ir.Return))
