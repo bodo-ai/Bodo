@@ -40,6 +40,7 @@ from bodo.utils.cg_helpers import (
     set_bitmap_bit,
     pyarray_getitem,
     pyarray_setitem,
+    list_check,
     is_na_value,
     get_bitmap_bit,
 )
@@ -238,24 +239,47 @@ def _unbox_list_item_array_generic(
             with orelse:
                 # set NA bit to 1
                 set_bitmap_bit(builder, null_bitmap_ptr, list_ind, 1)
-                # unbox list
-                list_val = c.pyapi.to_native_value(list_type, list_obj).value
-                list_payload = numba.cpython.listobj.ListInstance(
-                    context, builder, list_type, list_val
+                # each item can be either a list or an array
+                # check for list
+                l_check = list_check(builder, context, list_obj)
+                is_list = builder.icmp_unsigned(
+                    "==", l_check, lir.Constant(l_check.type, 1)
                 )
-                # copy list data
-                n_items = list_payload.size
-                dst = builder.gep(data_ptr, [item_ind])
-                cgutils.raw_memcpy(builder, dst, list_payload.data, n_items, item_size)
-                # NOTE: numba stores list meminfo inside the Python list objects, which we need
-                # to clean up
-                c.pyapi.object_set_private_data(
-                    list_obj, context.get_constant_null(types.voidptr)
-                )
-                c.context.nrt.decref(builder, list_type, list_val)
-                c.pyapi.decref(list_obj)
-                # curr_item_ind += n_items
-                builder.store(builder.add(item_ind, n_items), curr_item_ind)
+                with builder.if_else(is_list) as (list_case, array_case):
+                    with list_case:
+                        # unbox list
+                        list_val = c.pyapi.to_native_value(list_type, list_obj).value
+                        list_payload = numba.cpython.listobj.ListInstance(
+                            context, builder, list_type, list_val
+                        )
+                        # copy list data
+                        n_items = list_payload.size
+                        dst = builder.gep(data_ptr, [item_ind])
+                        cgutils.raw_memcpy(
+                            builder, dst, list_payload.data, n_items, item_size
+                        )
+                        # NOTE: numba stores list meminfo inside the Python list
+                        # objects, which we need to clean up
+                        c.pyapi.object_set_private_data(
+                            list_obj, context.get_constant_null(types.voidptr)
+                        )
+                        c.context.nrt.decref(builder, list_type, list_val)
+                        c.pyapi.decref(list_obj)
+                        # curr_item_ind += n_items
+                        builder.store(builder.add(item_ind, n_items), curr_item_ind)
+                    with array_case:
+                        # unbox array
+                        arr_typ = types.Array(list_type.dtype, 1, "C")
+                        arr_val = c.pyapi.to_native_value(arr_typ, list_obj).value
+                        arr = context.make_array(arr_typ)(context, builder, arr_val)
+                        # copy array data
+                        (n_items,) = cgutils.unpack_tuple(builder, arr.shape, count=1)
+                        dst = builder.gep(data_ptr, [item_ind])
+                        cgutils.raw_memcpy(builder, dst, arr.data, n_items, item_size)
+                        c.context.nrt.decref(builder, arr_typ, arr_val)
+                        c.pyapi.decref(list_obj)
+                        # curr_item_ind += n_items
+                        builder.store(builder.add(item_ind, n_items), curr_item_ind)
 
     # offsets[n] = curr_item_ind;
     builder.store(

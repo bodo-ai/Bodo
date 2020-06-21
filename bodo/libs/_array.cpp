@@ -513,6 +513,14 @@ void* np_array_from_struct_array(int64_t num_structs, int n_fields, char** data,
 #undef CHECK
 
 /**
+ * @brief check if obj is a list
+ *
+ * @param obj object to check
+ * @return int 1 if a list, 0 otherwise
+ */
+int list_check(PyArrayObject* obj) { return PyList_Check(obj); }
+
+/**
  * @brief check if object is an NA value like None or np.nan
  *
  * @param s Python object to check
@@ -615,6 +623,8 @@ PyMODINIT_FUNC PyInit_array_ext(void) {
         PyLong_FromVoidPtr((void*)(&np_array_from_struct_array)));
     PyObject_SetAttrString(m, "array_getitem",
                            PyLong_FromVoidPtr((void*)(&array_getitem)));
+    PyObject_SetAttrString(m, "list_check",
+                           PyLong_FromVoidPtr((void*)(&list_check)));
     PyObject_SetAttrString(m, "is_na_value",
                            PyLong_FromVoidPtr((void*)(&is_na_value)));
     return m;

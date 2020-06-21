@@ -9,6 +9,7 @@ from bodo.libs import hdist
 from bodo.libs import array_ext
 
 ll.add_symbol("array_getitem", array_ext.array_getitem)
+ll.add_symbol("list_check", array_ext.list_check)
 ll.add_symbol("is_na_value", array_ext.is_na_value)
 
 
@@ -103,3 +104,13 @@ def is_na_value(builder, context, val, C_NA):
         arr_isna_fnty, name="is_na_value"
     )
     return builder.call(arr_isna_fn, [val, C_NA])
+
+
+def list_check(builder, context, obj):
+    """check if Python object 'obj' is a list
+    """
+    pyobj = context.get_argument_type(types.pyobject)
+    int32_type = context.get_value_type(types.int32)
+    fnty = lir.FunctionType(int32_type, [pyobj])
+    fn = builder.module.get_or_insert_function(fnty, name="list_check")
+    return builder.call(fn, [obj])

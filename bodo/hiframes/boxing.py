@@ -558,7 +558,7 @@ def _infer_ndarray_obj_dtype(val):
         field_names = tuple(first_val.keys())
         data_types = tuple(numba.typeof(v) for v in first_val.values())
         return StructType(data_types, field_names)
-    if isinstance(first_val, list):
+    if isinstance(first_val, (list, np.ndarray)):
         return bodo.hiframes.boxing._infer_series_list_dtype(val, "array")
     if isinstance(first_val, datetime.date):
         return datetime_date_type

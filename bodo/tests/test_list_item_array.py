@@ -37,6 +37,17 @@ from bodo.tests.utils import check_func
                 [datetime.date(2020, 11, 17)],
             ]
         ),
+        # data from Spark-generated Parquet files can have array elements
+        np.array(
+            [
+                np.array([1, 3], np.int32),
+                np.array([2], np.int32),
+                None,
+                np.array([4, 5, 6], np.int32),
+                np.array([], np.int32),
+                np.array([1, 1], np.int32),
+            ]
+        ),
         # TODO: enable Decimal test when memory leaks and test equality issues are fixed
         # np.array(
         #     [
