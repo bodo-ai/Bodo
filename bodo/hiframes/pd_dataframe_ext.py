@@ -3148,7 +3148,7 @@ def _install_pd_unsupported():
     """
     for f in pd_unsupported:
         fname = "pd." + f.__name__
-        overload(f)(create_unsupported_overload(fname))
+        overload(f, no_unliteral=True)(create_unsupported_overload(fname))
 
 
 _install_pd_unsupported()

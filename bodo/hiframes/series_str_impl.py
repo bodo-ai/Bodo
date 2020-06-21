@@ -171,8 +171,14 @@ def common_validate_padding(func_name, width, fillchar):
 
 @overload_attribute(SeriesType, "str")
 def overload_series_str(S):
-    if not isinstance(S, SeriesType) or not S.data in (string_array_type, string_array_split_view_type, list_string_array_type):
-        raise BodoError("Series.str(): input should be a series of string or list string or string view")
+    if not isinstance(S, SeriesType) or not S.data in (
+        string_array_type,
+        string_array_split_view_type,
+        list_string_array_type,
+    ):
+        raise BodoError(
+            "Series.str(): input should be a series of string or list string or string view"
+        )
     return lambda S: bodo.hiframes.series_str_impl.init_series_str_method(S)
 
 
@@ -1139,14 +1145,18 @@ def _install_str2str_methods():
     # install methods that just transform the string into another string
     for op in bodo.hiframes.pd_series_ext.str2str_methods:
         overload_impl = create_str2str_methods_overload(op)
-        overload_method(SeriesStrMethodType, op, inline="always")(overload_impl)
+        overload_method(SeriesStrMethodType, op, inline="always", no_unliteral=True)(
+            overload_impl
+        )
 
 
 def _install_str2bool_methods():
     # install methods that just transform the string into another boolean
     for op in bodo.hiframes.pd_series_ext.str2bool_methods:
         overload_impl = create_str2bool_methods_overload(op)
-        overload_method(SeriesStrMethodType, op, inline="always")(overload_impl)
+        overload_method(SeriesStrMethodType, op, inline="always", no_unliteral=True)(
+            overload_impl
+        )
 
 
 _install_str2str_methods()

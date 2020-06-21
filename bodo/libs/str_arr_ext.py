@@ -245,7 +245,7 @@ def _install_binary_ops():
         operator.lt,
     ):
         overload_impl = create_binary_op_overload(op)
-        overload(op)(overload_impl)
+        overload(op, no_unliteral=True)(overload_impl)
 
 
 _install_binary_ops()
@@ -1538,7 +1538,7 @@ dummy_use = numba.njit(lambda a: None)
 
 
 # TODO: support literals directly and turn on `no_unliteral=True`
-#@overload(operator.setitem, no_unliteral=True)
+# @overload(operator.setitem, no_unliteral=True)
 @overload(operator.setitem)
 def str_arr_setitem(A, idx, val):
     if A != string_array_type:

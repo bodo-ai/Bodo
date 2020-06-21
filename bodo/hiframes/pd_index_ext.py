@@ -491,7 +491,7 @@ def _install_dti_str_comp_ops():
         operator.le,
         operator.lt,
     ):
-        overload(op)(overload_binop_dti_str(op))
+        overload(op, no_unliteral=True)(overload_binop_dti_str(op))
 
 
 _install_dti_str_comp_ops()
@@ -1615,7 +1615,7 @@ def _install_numeric_constructors():
         (pd.Float64Index, np.float64),
     ):
         overload_impl = create_numeric_constructor(func, default_dtype)
-        overload(func)(overload_impl)
+        overload(func, no_unliteral=True)(overload_impl)
 
 
 _install_numeric_constructors()

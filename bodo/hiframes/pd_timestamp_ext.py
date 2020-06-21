@@ -1150,7 +1150,7 @@ def _install_timestamp_cmp_ops():
         operator.lt,
     ):
         overload_impl = create_timestamp_cmp_op_overload(op)
-        overload(op)(overload_impl)
+        overload(op, no_unliteral=True)(overload_impl)
 
 
 _install_timestamp_cmp_ops()
