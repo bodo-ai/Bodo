@@ -1655,16 +1655,112 @@ def create_explicit_binary_op_overload(op):
     return overload_series_explicit_binary_op
 
 
-# TODO: radd, ...
-explicit_binop_funcs = {
-    operator.add: "add",
-    operator.sub: "sub",
-    operator.mul: "mul",
-    operator.truediv: "div",
-    operator.truediv: "truediv",
-    operator.floordiv: "floordiv",
-    operator.mod: "mod",
-    operator.pow: "pow",
+# identical to the above overloads, except inputs to op() functions are reversed to
+# support radd/rpow/...
+# TODO: avoid code duplication
+def create_explicit_binary_reverse_op_overload(op):
+    def overload_series_explicit_binary_reverse_op(
+        S, other, level=None, fill_value=None, axis=0
+    ):
+        if not is_overload_none(level):
+            raise ValueError("level argument not supported")
+
+        if not is_overload_zero(axis):
+            raise ValueError("axis argument not supported")
+
+        # TODO: string array, datetimeindex/timedeltaindex
+        if not isinstance(S.dtype, types.Number):
+            raise TypeError("only numeric values supported")
+
+        typing_context = numba.core.registry.cpu_target.typing_context
+        # scalar case
+        if isinstance(other, types.Number):
+            args = (other, S.data)
+            ret_dtype = typing_context.resolve_function_type(op, args, {}).return_type
+            # Pandas 1.0 returns nullable bool array for nullable int array
+            if isinstance(S.data, IntegerArrayType) and ret_dtype == types.Array(
+                types.bool_, 1, "C"
+            ):
+                ret_dtype = boolean_array
+
+            def impl_scalar(
+                S, other, level=None, fill_value=None, axis=0
+            ):  # pragma: no cover
+                arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+                index = bodo.hiframes.pd_series_ext.get_series_index(S)
+                name = bodo.hiframes.pd_series_ext.get_series_name(S)
+                numba.parfors.parfor.init_prange()
+                # other could be tuple, list, array, Index, or Series
+                n = len(arr)
+                out_arr = bodo.utils.utils.alloc_type(n, ret_dtype, None)
+                for i in numba.parfors.parfor.internal_prange(n):
+                    left_nan = bodo.libs.array_kernels.isna(arr, i)
+                    if left_nan:
+                        if fill_value is None:
+                            bodo.ir.join.setitem_arr_nan(out_arr, i)
+                        else:
+                            out_arr[i] = op(other, fill_value)
+                    else:
+                        out_arr[i] = op(other, arr[i])
+
+                return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
+
+            return impl_scalar
+
+        args = (types.Array(other.dtype, 1, "C"), S.data)
+        ret_dtype = typing_context.resolve_function_type(op, args, {}).return_type
+        # Pandas 1.0 returns nullable bool array for nullable int array
+        if isinstance(S.data, IntegerArrayType) and ret_dtype == types.Array(
+            types.bool_, 1, "C"
+        ):
+            ret_dtype = boolean_array
+
+        def impl(S, other, level=None, fill_value=None, axis=0):  # pragma: no cover
+            arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+            index = bodo.hiframes.pd_series_ext.get_series_index(S)
+            name = bodo.hiframes.pd_series_ext.get_series_name(S)
+            # other could be tuple, list, array, Index, or Series
+            other_arr = bodo.hiframes.pd_series_ext.get_series_data(other)
+            numba.parfors.parfor.init_prange()
+            n = len(arr)
+            out_arr = bodo.utils.utils.alloc_type(n, ret_dtype, None)
+            for i in numba.parfors.parfor.internal_prange(n):
+                left_nan = bodo.libs.array_kernels.isna(arr, i)
+                right_nan = bodo.libs.array_kernels.isna(other_arr, i)
+                out_arr[i] = op(other_arr[i], arr[i])
+                if left_nan and right_nan:
+                    bodo.ir.join.setitem_arr_nan(out_arr, i)
+                elif left_nan:
+                    if fill_value is None:
+                        bodo.ir.join.setitem_arr_nan(out_arr, i)
+                    else:
+                        out_arr[i] = op(other_arr[i], fill_value)
+                elif right_nan:
+                    if fill_value is None:
+                        bodo.ir.join.setitem_arr_nan(out_arr, i)
+                    else:
+                        out_arr[i] = op(fill_value, arr[i])
+                else:
+                    out_arr[i] = op(other_arr[i], arr[i])
+
+            return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
+
+        return impl
+
+    return overload_series_explicit_binary_reverse_op
+
+
+explicit_binop_funcs_two_ways = {
+    operator.add: {"add"},
+    operator.sub: {"sub"},
+    operator.mul: {"mul"},
+    operator.truediv: {"div", "truediv"},
+    operator.floordiv: {"floordiv"},
+    operator.mod: {"mod"},
+    operator.pow: {"pow"},
+}
+
+explicit_binop_funcs_single = {
     operator.lt: "lt",
     operator.gt: "gt",
     operator.le: "le",
@@ -1672,12 +1768,22 @@ explicit_binop_funcs = {
     operator.ne: "ne",
     operator.eq: "eq",
 }
+explicit_binop_funcs = set()
 
 
 def _install_explicit_binary_ops():
-    for op, name in explicit_binop_funcs.items():
+    for op, list_name in explicit_binop_funcs_two_ways.items():
+        for name in list_name:
+            overload_impl = create_explicit_binary_op_overload(op)
+            overload_reverse_impl = create_explicit_binary_reverse_op_overload(op)
+            r_name = "r" + name
+            overload_method(SeriesType, name)(overload_impl)
+            overload_method(SeriesType, r_name)(overload_reverse_impl)
+            explicit_binop_funcs.add(name)
+    for op, name in explicit_binop_funcs_single.items():
         overload_impl = create_explicit_binary_op_overload(op)
         overload_method(SeriesType, name)(overload_impl)
+        explicit_binop_funcs.add(name)
 
 
 _install_explicit_binary_ops()

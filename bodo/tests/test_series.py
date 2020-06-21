@@ -942,6 +942,55 @@ def test_series_setitem_list_int(series_val, idx, list_val_arg, memory_leak_chec
 ############################ binary ops #############################
 
 
+def test_series_operations(memory_leak_check):
+    def f_rpow(S1, S2):
+        return S1.rpow(S2)
+
+    def f_rsub(S1, S2):
+        return S1.rsub(S2)
+
+    def f_rmul(S1, S2):
+        return S1.rmul(S2)
+
+    def f_radd(S1, S2):
+        return S1.radd(S2)
+
+    def f_rdiv(S1, S2):
+        return S1.rdiv(S2)
+
+    def f_truediv(S1, S2):
+        return S1.truediv(S2)
+
+    def f_rtruediv(S1, S2):
+        return S1.rtruediv(S2)
+
+    def f_floordiv(S1, S2):
+        return S1.floordiv(S2)
+
+    def f_rfloordiv(S1, S2):
+        return S1.rfloordiv(S2)
+
+    def f_mod(S1, S2):
+        return S1.mod(S2)
+
+    def f_rmod(S1, S2):
+        return S1.rmod(S2)
+
+    S1 = pd.Series([2, 3, 4])
+    S2 = pd.Series([6, 7, 8])
+    check_func(f_rpow, (S1, S2))
+    check_func(f_rsub, (S1, S2))
+    check_func(f_rmul, (S1, S2))
+    check_func(f_radd, (S1, S2))
+    check_func(f_rdiv, (S1, S2))
+    check_func(f_truediv, (S1, S2))
+    check_func(f_rtruediv, (S1, S2))
+    check_func(f_floordiv, (S1, S2))
+    check_func(f_rfloordiv, (S1, S2))
+    check_func(f_mod, (S1, S2))
+    check_func(f_rmod, (S1, S2))
+
+
 def test_series_add(memory_leak_check):
     def test_impl(s):
         return s.add(s, None)

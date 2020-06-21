@@ -1802,12 +1802,39 @@ class SeriesPass:
                 kws=dict(rhs.kws),
             )
 
-        if func_name in bodo.hiframes.series_impl.explicit_binop_funcs.values():
+        def get_operator_func_name(f_name):
+            if f_name == "div":
+                return "truediv"
+            return f_name
+
+        # inline Series.add/pow/...
+        if func_name in bodo.hiframes.series_impl.explicit_binop_funcs:
             rhs.args.insert(0, series_var)
             arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
             kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
-            op = getattr(operator, func_name)
+            op = getattr(operator, get_operator_func_name(func_name))
             overload_func = bodo.hiframes.series_impl.create_explicit_binary_op_overload(
+                op
+            )
+            impl = overload_func(*arg_typs, **kw_typs)
+            return replace_func(
+                self,
+                impl,
+                rhs.args,
+                pysig=numba.core.utils.pysignature(impl),
+                kws=dict(rhs.kws),
+            )
+
+        # inline S.radd/rpow/...
+        if (
+            func_name[0] == "r"
+            and func_name[1:] in bodo.hiframes.series_impl.explicit_binop_funcs
+        ):
+            rhs.args.insert(0, series_var)
+            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
+            kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
+            op = getattr(operator, get_operator_func_name(func_name[1:]))
+            overload_func = bodo.hiframes.series_impl.create_explicit_binary_reverse_op_overload(
                 op
             )
             impl = overload_func(*arg_typs, **kw_typs)

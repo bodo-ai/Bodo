@@ -922,14 +922,6 @@ series_unsupported_methods = (
     "item",
     "xs",
     # Binary operator functions
-    "radd",
-    "rsub",
-    "rmul",
-    "rdiv",
-    "rtruediv",
-    "rfloordiv",
-    "rmod",
-    "rpow",
     "combine_first",
     # Function application, groupby & window
     "agg",
