@@ -82,8 +82,8 @@ from bodo.hiframes.datetime_date_ext import datetime_date_array_type
 from bodo.hiframes.datetime_timedelta_ext import datetime_timedelta_type
 from bodo.hiframes.datetime_datetime_ext import datetime_datetime_type
 from bodo.libs.decimal_arr_ext import DecimalArrayType
-from bodo.libs.list_item_arr_ext import ListItemArrayType
 from bodo.libs.struct_arr_ext import StructArrayType
+from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.hiframes.split_impl import (
     string_array_split_view_type,
     StringArraySplitViewType,
@@ -1448,9 +1448,9 @@ class SeriesPass:
                 if isinstance(dtype, types.Record):
                     dtype = numba.np.numpy_support.as_dtype(dtype)
                 impl = lambda n, t, s=None: np.empty(n, _dtype)  # pragma: no cover
-            elif isinstance(typ, ListItemArrayType):
+            elif isinstance(typ, ArrayItemArrayType):
                 dtype = typ.elem_type
-                impl = lambda n, t, s=None: bodo.libs.list_item_arr_ext.pre_alloc_list_item_array(
+                impl = lambda n, t, s=None: bodo.libs.array_item_arr_ext.pre_alloc_array_item_array(
                     n, s[0], _dtype
                 )  # pragma: no cover
             elif isinstance(typ, StructArrayType):

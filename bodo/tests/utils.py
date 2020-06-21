@@ -557,12 +557,12 @@ def convert_list_string_decimal_columns(df):
     # Determine which columns have list of strings in them
     # Determine which columns have Decimals in them.
     col_names_list_string = []
-    col_names_list_item = []
+    col_names_array_item = []
     col_names_decimal = []
     for e_col_name in list_col:
         e_col = df[e_col_name]
         nb_list_string = 0
-        nb_list_item = 0
+        nb_array_item = 0
         nb_decimal = 0
         for i_row in range(n_rows):
             e_ent = e_col.iat[i_row]
@@ -571,13 +571,13 @@ def convert_list_string_decimal_columns(df):
                     if isinstance(e_ent[0], str):
                         nb_list_string += 1
                     if isinstance(e_ent[0], (int, float)):
-                        nb_list_item += 1
+                        nb_array_item += 1
             if isinstance(e_ent, Decimal):
                 nb_decimal += 1
         if nb_list_string > 0:
             col_names_list_string.append(e_col_name)
-        if nb_list_item > 0:
-            col_names_list_item.append(e_col_name)
+        if nb_array_item > 0:
+            col_names_array_item.append(e_col_name)
         if nb_decimal > 0:
             col_names_decimal.append(e_col_name)
     for e_col_name in col_names_list_string:
@@ -591,7 +591,7 @@ def convert_list_string_decimal_columns(df):
             else:
                 e_list_str.append(np.nan)
         df_copy[e_col_name] = e_list_str
-    for e_col_name in col_names_list_item:
+    for e_col_name in col_names_array_item:
         e_list_str = []
         e_col = df[e_col_name]
         for i_row in range(n_rows):

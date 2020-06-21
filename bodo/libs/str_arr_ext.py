@@ -40,7 +40,7 @@ from numba.extending import (
 from numba.core import cgutils
 from bodo.libs.str_ext import string_type
 from bodo.libs.list_str_arr_ext import list_string_array_type
-from bodo.libs.list_item_arr_ext import ListItemArrayType
+from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.decimal_arr_ext import Decimal128Type, DecimalArrayType
 from bodo.hiframes.datetime_date_ext import datetime_date_array_type, datetime_date_type
 from bodo.utils.typing import (

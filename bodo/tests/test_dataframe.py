@@ -1388,8 +1388,8 @@ def test_df_apply_list_str():
     check_func(test_impl, (df,))
 
 
-def test_df_apply_list_item():
-    """make sure list(item) output can be handled in apply() properly
+def test_df_apply_array_item():
+    """make sure array(item) output can be handled in apply() properly
     """
 
     def test_impl(df):

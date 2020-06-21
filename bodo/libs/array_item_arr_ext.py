@@ -1,10 +1,10 @@
 # Copyright (C) 2020 Bodo Inc. All rights reserved.
-"""Array implementation for list of fixed size items, which are usually immutable.
+"""Array implementation for variable-size array items.
 Corresponds to Spark's ArrayType: https://spark.apache.org/docs/latest/sql-reference.html
 Corresponds to Arrow's Variable-size List: https://arrow.apache.org/docs/format/Columnar.html
 
 The values are stored in a contingous data array, while an offsets array marks the
-individual lists. For example:
+individual arrays. For example:
 value:             [[1, 2], [3], None, [5, 4, 6], []]
 data:              [1, 2, 3, 5, 4, 6]
 offsets:           [0, 2, 3, 3, 6, 6]
@@ -53,19 +53,19 @@ from bodo.libs import array_ext
 
 
 ll.add_symbol("count_total_elems_list_array", array_ext.count_total_elems_list_array)
-ll.add_symbol("list_item_array_from_sequence", array_ext.list_item_array_from_sequence)
-ll.add_symbol("np_array_from_list_item_array", array_ext.np_array_from_list_item_array)
+ll.add_symbol("array_item_array_from_sequence", array_ext.array_item_array_from_sequence)
+ll.add_symbol("np_array_from_array_item_array", array_ext.np_array_from_array_item_array)
 
 
 # offset index types
 offset_typ = types.uint32
 
 
-class ListItemArrayType(types.ArrayCompatible):
+class ArrayItemArrayType(types.ArrayCompatible):
     def __init__(self, elem_type):
         self.elem_type = elem_type
-        super(ListItemArrayType, self).__init__(
-            name="ListItemArrayType({})".format(elem_type)
+        super(ArrayItemArrayType, self).__init__(
+            name="ArrayItemArrayType({})".format(elem_type)
         )
 
     @property
@@ -77,22 +77,22 @@ class ListItemArrayType(types.ArrayCompatible):
         return types.List(self.elem_type)
 
     def copy(self):
-        return ListItemArrayType(self.elem_type)
+        return ArrayItemArrayType(self.elem_type)
 
 
-class ListItemArrayPayloadType(types.Type):
+class ArrayItemArrayPayloadType(types.Type):
     def __init__(self, list_type):
         self.list_type = list_type
-        super(ListItemArrayPayloadType, self).__init__(
-            name="ListItemArrayPayloadType({})".format(list_type)
+        super(ArrayItemArrayPayloadType, self).__init__(
+            name="ArrayItemArrayPayloadType({})".format(list_type)
         )
 
 
-@register_model(ListItemArrayPayloadType)
-class ListItemArrayPayloadModel(models.StructModel):
+@register_model(ArrayItemArrayPayloadType)
+class ArrayItemArrayPayloadModel(models.StructModel):
     def __init__(self, dmm, fe_type):
         members = [
-            ("n_lists", types.int64),
+            ("n_arrays", types.int64),
             ("data", types.Array(fe_type.list_type.elem_type, 1, "C")),
             ("offsets", types.Array(offset_typ, 1, "C")),
             ("null_bitmap", types.Array(types.uint8, 1, "C")),
@@ -100,25 +100,25 @@ class ListItemArrayPayloadModel(models.StructModel):
         models.StructModel.__init__(self, dmm, fe_type, members)
 
 
-@register_model(ListItemArrayType)
-class ListItemArrayModel(models.StructModel):
+@register_model(ArrayItemArrayType)
+class ArrayItemArrayModel(models.StructModel):
     def __init__(self, dmm, fe_type):
-        payload_type = ListItemArrayPayloadType(fe_type)
+        payload_type = ArrayItemArrayPayloadType(fe_type)
         members = [
             ("meminfo", types.MemInfoPointer(payload_type)),
         ]
         models.StructModel.__init__(self, dmm, fe_type, members)
 
 
-def define_list_item_dtor(context, builder, list_item_type, payload_type):
+def define_array_item_dtor(context, builder, array_item_type, payload_type):
     """
-    Define destructor for list(item) array type if not already defined
+    Define destructor for array(item) array type if not already defined
     """
     mod = builder.module
     # Declare dtor
     fnty = lir.FunctionType(lir.VoidType(), [cgutils.voidptr_t])
     fn = mod.get_or_insert_function(
-        fnty, name=".dtor.list_item.{}".format(list_item_type.elem_type)
+        fnty, name=".dtor.array_item.{}".format(array_item_type.elem_type)
     )
 
     # End early if the dtor is already defined
@@ -136,7 +136,7 @@ def define_list_item_dtor(context, builder, list_item_type, payload_type):
     payload = context.make_data_helper(builder, payload_type, ref=payload_ptr)
 
     context.nrt.decref(
-        builder, types.Array(list_item_type.elem_type, 1, "C"), payload.data
+        builder, types.Array(array_item_type.elem_type, 1, "C"), payload.data
     )
     context.nrt.decref(builder, types.Array(offset_typ, 1, "C"), payload.offsets)
     context.nrt.decref(builder, types.Array(types.uint8, 1, "C"), payload.null_bitmap)
@@ -145,16 +145,16 @@ def define_list_item_dtor(context, builder, list_item_type, payload_type):
     return fn
 
 
-def construct_list_item_array(context, builder, list_item_type, n_lists, n_elems):
-    """Creates meminfo and sets dtor, and allocates buffers for list(item) array
+def construct_array_item_array(context, builder, array_item_type, n_arrays, n_elems):
+    """Creates meminfo and sets dtor, and allocates buffers for array(item) array
     """
     # create payload type
-    payload_type = ListItemArrayPayloadType(list_item_type)
+    payload_type = ArrayItemArrayPayloadType(array_item_type)
     alloc_type = context.get_data_type(payload_type)
     alloc_size = context.get_abi_sizeof(alloc_type)
 
     # define dtor
-    dtor_fn = define_list_item_dtor(context, builder, list_item_type, payload_type)
+    dtor_fn = define_array_item_dtor(context, builder, array_item_type, payload_type)
 
     # create meminfo
     meminfo = context.nrt.meminfo_alloc_dtor(
@@ -165,26 +165,26 @@ def construct_list_item_array(context, builder, list_item_type, n_lists, n_elems
 
     # alloc values in payload
     payload = cgutils.create_struct_proxy(payload_type)(context, builder)
-    payload.n_lists = n_lists
+    payload.n_arrays = n_arrays
 
     # alloc data
     data = bodo.utils.utils._empty_nd_impl(
-        context, builder, types.Array(list_item_type.elem_type, 1, "C"), [n_elems]
+        context, builder, types.Array(array_item_type.elem_type, 1, "C"), [n_elems]
     )
     data_ptr = data.data
     payload.data = data._getvalue()
 
     # alloc offsets
-    n_lists_plus_1 = builder.add(n_lists, lir.Constant(lir.IntType(64), 1))
+    n_arrays_plus_1 = builder.add(n_arrays, lir.Constant(lir.IntType(64), 1))
     offsets = bodo.utils.utils._empty_nd_impl(
-        context, builder, types.Array(offset_typ, 1, "C"), [n_lists_plus_1]
+        context, builder, types.Array(offset_typ, 1, "C"), [n_arrays_plus_1]
     )
     offsets_ptr = offsets.data
     payload.offsets = offsets._getvalue()
 
     # alloc null bitmap
     n_bitmask_bytes = builder.udiv(
-        builder.add(n_lists, lir.Constant(lir.IntType(64), 7)),
+        builder.add(n_arrays, lir.Constant(lir.IntType(64), 7)),
         lir.Constant(lir.IntType(64), 8),
     )
     null_bitmap = bodo.utils.utils._empty_nd_impl(
@@ -198,10 +198,10 @@ def construct_list_item_array(context, builder, list_item_type, n_lists, n_elems
     return meminfo, data_ptr, offsets_ptr, null_bitmap_ptr
 
 
-def _unbox_list_item_array_generic(
-    typ, val, c, n_lists, data_ptr, offsets_ptr, null_bitmap_ptr
+def _unbox_array_item_array_generic(
+    typ, val, c, n_arrays, data_ptr, offsets_ptr, null_bitmap_ptr
 ):
-    """unbox list(item) array using generic Numba list unboxing to handle all item types
+    """unbox array(item) array using generic Numba list unboxing to handle all item types
     that can be unboxed.
     """
     context = c.context
@@ -235,17 +235,17 @@ def _unbox_list_item_array_generic(
     # curr_item_ind = 0
     curr_item_ind = cgutils.alloca_once_value(builder, lir.Constant(lir.IntType(64), 0))
     item_size = context.get_abi_sizeof(context.get_data_type(list_type.dtype))
-    # for each list
-    with cgutils.for_range(builder, n_lists) as loop:
-        list_ind = loop.index
+    # for each array
+    with cgutils.for_range(builder, n_arrays) as loop:
+        array_ind = loop.index
         item_ind = builder.load(curr_item_ind)
         # offsets[i] = curr_item_ind
         builder.store(
             builder.trunc(item_ind, lir.IntType(32)),
-            builder.gep(offsets_ptr, [list_ind]),
+            builder.gep(offsets_ptr, [array_ind]),
         )
         # list_obj = A[i]
-        list_obj = pyarray_getitem(builder, context, val, list_ind)
+        list_obj = pyarray_getitem(builder, context, val, array_ind)
         # check for NA
         is_na = is_na_value(builder, context, list_obj, C_NA)
         is_na_cond = builder.icmp_unsigned("==", is_na, lir.Constant(is_na.type, 1))
@@ -253,11 +253,11 @@ def _unbox_list_item_array_generic(
             # NA case
             with then:
                 # set NA bit to 0
-                set_bitmap_bit(builder, null_bitmap_ptr, list_ind, 0)
+                set_bitmap_bit(builder, null_bitmap_ptr, array_ind, 0)
             # non-NA case
             with orelse:
                 # set NA bit to 1
-                set_bitmap_bit(builder, null_bitmap_ptr, list_ind, 1)
+                set_bitmap_bit(builder, null_bitmap_ptr, array_ind, 1)
                 # each item can be either a list or an array
                 # check for list
                 l_check = list_check(builder, context, list_obj)
@@ -303,28 +303,28 @@ def _unbox_list_item_array_generic(
     # offsets[n] = curr_item_ind;
     builder.store(
         builder.trunc(builder.load(curr_item_ind), lir.IntType(32)),
-        builder.gep(offsets_ptr, [n_lists]),
+        builder.gep(offsets_ptr, [n_arrays]),
     )
 
     c.pyapi.decref(pd_mod_obj)
     c.pyapi.decref(C_NA)
 
 
-@unbox(ListItemArrayType)
-def unbox_list_item_array(typ, val, c):
+@unbox(ArrayItemArrayType)
+def unbox_array_item_array(typ, val, c):
     """
-    Unbox a numpy array with list of data values.
+    Unbox a numpy array with array of data values.
     """
 
-    n_lists = bodo.utils.utils.object_length(c, val)
+    n_arrays = bodo.utils.utils.object_length(c, val)
     fnty = lir.FunctionType(lir.IntType(64), [lir.IntType(8).as_pointer()],)
     fn_tp = c.builder.module.get_or_insert_function(
         fnty, name="count_total_elems_list_array"
     )
     n_elems = c.builder.call(fn_tp, [val])
 
-    meminfo, data_ptr, offsets_ptr, null_bitmap_ptr = construct_list_item_array(
-        c.context, c.builder, typ, n_lists, n_elems
+    meminfo, data_ptr, offsets_ptr, null_bitmap_ptr = construct_array_item_array(
+        c.context, c.builder, typ, n_arrays, n_elems
     )
     ctype = bodo.utils.utils.numba_to_c_type(typ.elem_type)
 
@@ -337,7 +337,7 @@ def unbox_list_item_array(typ, val, c):
         datetime_date_type,
     ):
 
-        # function signature of list_item_array_from_sequence
+        # function signature of array_item_array_from_sequence
         fnty = lir.FunctionType(
             lir.VoidType(),
             [
@@ -349,7 +349,7 @@ def unbox_list_item_array(typ, val, c):
             ],
         )
         fn = c.builder.module.get_or_insert_function(
-            fnty, name="list_item_array_from_sequence"
+            fnty, name="array_item_array_from_sequence"
         )
         c.builder.call(
             fn,
@@ -363,23 +363,23 @@ def unbox_list_item_array(typ, val, c):
         )
 
     else:
-        _unbox_list_item_array_generic(
-            typ, val, c, n_lists, data_ptr, offsets_ptr, null_bitmap_ptr
+        _unbox_array_item_array_generic(
+            typ, val, c, n_arrays, data_ptr, offsets_ptr, null_bitmap_ptr
         )
 
-    list_item_array = c.context.make_helper(c.builder, typ)
-    list_item_array.meminfo = meminfo
+    array_item_array = c.context.make_helper(c.builder, typ)
+    array_item_array.meminfo = meminfo
 
     is_error = cgutils.is_not_null(c.builder, c.pyapi.err_occurred())
-    return NativeValue(list_item_array._getvalue(), is_error=is_error)
+    return NativeValue(array_item_array._getvalue(), is_error=is_error)
 
 
-def _get_list_item_arr_payload(context, builder, arr_typ, arr):
-    """get payload struct proxy for a list(item) value
+def _get_array_item_arr_payload(context, builder, arr_typ, arr):
+    """get payload struct proxy for a array(item) value
     """
-    list_item_array = context.make_helper(builder, arr_typ, arr)
-    payload_type = ListItemArrayPayloadType(arr_typ)
-    meminfo_void_ptr = context.nrt.meminfo_data(builder, list_item_array.meminfo)
+    array_item_array = context.make_helper(builder, arr_typ, arr)
+    payload_type = ArrayItemArrayPayloadType(arr_typ)
+    meminfo_void_ptr = context.nrt.meminfo_data(builder, array_item_array.meminfo)
     meminfo_data_ptr = builder.bitcast(
         meminfo_void_ptr, context.get_data_type(payload_type).as_pointer()
     )
@@ -389,10 +389,10 @@ def _get_list_item_arr_payload(context, builder, arr_typ, arr):
     return payload
 
 
-def _box_list_item_array_generic(
-    typ, c, n_lists, data_ptr, offsets_ptr, null_bitmap_ptr
+def _box_array_item_array_generic(
+    typ, c, n_arrays, data_ptr, offsets_ptr, null_bitmap_ptr
 ):
-    """box list(item) array using generic Numba list boxing to handle all item types
+    """box array(item) array using generic Numba list boxing to handle all item types
     that can be boxed.
     """
     context = c.context
@@ -417,7 +417,7 @@ def _box_list_item_array_generic(
     mod_name = context.insert_const_string(builder.module, "numpy")
     np_class_obj = c.pyapi.import_module_noblock(mod_name)
     dtype_obj = c.pyapi.object_getattr_string(np_class_obj, "object_")
-    num_items_obj = c.pyapi.long_from_longlong(n_lists)
+    num_items_obj = c.pyapi.long_from_longlong(n_arrays)
     out_arr = c.pyapi.call_method(np_class_obj, "ndarray", (num_items_obj, dtype_obj))
     # get np.nan to set NA
     nan_obj = c.pyapi.object_getattr_string(np_class_obj, "nan")
@@ -425,11 +425,11 @@ def _box_list_item_array_generic(
     list_type = typ.dtype
     # curr_item_ind = 0
     curr_item_ind = cgutils.alloca_once_value(builder, lir.Constant(lir.IntType(64), 0))
-    # for each list
-    with cgutils.for_range(builder, n_lists) as loop:
-        list_ind = loop.index
+    # for each array
+    with cgutils.for_range(builder, n_arrays) as loop:
+        array_ind = loop.index
         # check for NA
-        na_bit = get_bitmap_bit(builder, null_bitmap_ptr, list_ind)
+        na_bit = get_bitmap_bit(builder, null_bitmap_ptr, array_ind)
         is_na_cond = builder.icmp_unsigned(
             "==", na_bit, lir.Constant(lir.IntType(8), 0)
         )
@@ -437,7 +437,7 @@ def _box_list_item_array_generic(
             # NA case
             with then:
                 # A[i] = np.nan
-                pyarray_setitem(builder, context, out_arr, list_ind, nan_obj)
+                pyarray_setitem(builder, context, out_arr, array_ind, nan_obj)
             # non-NA case
             with orelse:
                 # n_items = offsets[i + 1] - offsets[i]
@@ -446,10 +446,10 @@ def _box_list_item_array_generic(
                         builder.load(
                             builder.gep(
                                 offsets_ptr,
-                                [builder.add(list_ind, lir.Constant(list_ind.type, 1))],
+                                [builder.add(array_ind, lir.Constant(array_ind.type, 1))],
                             )
                         ),
-                        builder.load(builder.gep(offsets_ptr, [list_ind])),
+                        builder.load(builder.gep(offsets_ptr, [array_ind])),
                     ),
                     lir.IntType(64),
                 )
@@ -471,7 +471,7 @@ def _box_list_item_array_generic(
                         curr_item_ind,
                     )
 
-                pyarray_setitem(builder, context, out_arr, list_ind, list_obj)
+                pyarray_setitem(builder, context, out_arr, array_ind, list_obj)
                 c.pyapi.decref(list_obj)
 
     c.pyapi.decref(np_class_obj)
@@ -481,12 +481,12 @@ def _box_list_item_array_generic(
     return out_arr
 
 
-@box(ListItemArrayType)
-def box_list_item_arr(typ, val, c):
-    """box packed native representation of list of item array into python objects
+@box(ArrayItemArrayType)
+def box_array_item_arr(typ, val, c):
+    """box packed native representation of array of item array into python objects
     """
 
-    payload = _get_list_item_arr_payload(c.context, c.builder, typ, val)
+    payload = _get_array_item_arr_payload(c.context, c.builder, typ, val)
 
     data_ptr = c.context.make_helper(
         c.builder, types.Array(typ.elem_type, 1, "C"), payload.data
@@ -519,13 +519,13 @@ def box_list_item_arr(typ, val, c):
             ],
         )
         fn_get = c.builder.module.get_or_insert_function(
-            fnty, name="np_array_from_list_item_array"
+            fnty, name="np_array_from_array_item_array"
         )
 
         arr = c.builder.call(
             fn_get,
             [
-                payload.n_lists,
+                payload.n_arrays,
                 c.builder.bitcast(data_ptr, lir.IntType(8).as_pointer()),
                 offsets_ptr,
                 null_bitmap_ptr,
@@ -534,8 +534,8 @@ def box_list_item_arr(typ, val, c):
         )
 
     else:
-        arr = _box_list_item_array_generic(
-            typ, c, payload.n_lists, data_ptr, offsets_ptr, null_bitmap_ptr
+        arr = _box_array_item_array_generic(
+            typ, c, payload.n_arrays, data_ptr, offsets_ptr, null_bitmap_ptr
         )
 
     c.context.nrt.decref(c.builder, typ, val)
@@ -543,30 +543,30 @@ def box_list_item_arr(typ, val, c):
 
 
 @intrinsic
-def pre_alloc_list_item_array(typingctx, num_lists_typ, num_values_typ, dtype_typ=None):
+def pre_alloc_array_item_array(typingctx, num_lists_typ, num_values_typ, dtype_typ=None):
     assert (
         isinstance(num_lists_typ, types.Integer)
         and isinstance(num_values_typ, types.Integer)
         and isinstance(dtype_typ, (types.DType, types.NumberClass))
     )
-    list_item_type = ListItemArrayType(dtype_typ.dtype)
+    array_item_type = ArrayItemArrayType(dtype_typ.dtype)
 
     def codegen(context, builder, sig, args):
         num_lists, num_values, _ = args
-        meminfo, _, _, _ = construct_list_item_array(
-            context, builder, list_item_type, num_lists, num_values
+        meminfo, _, _, _ = construct_array_item_array(
+            context, builder, array_item_type, num_lists, num_values
         )
-        list_item_array = context.make_helper(builder, list_item_type)
-        list_item_array.meminfo = meminfo
-        return list_item_array._getvalue()
+        array_item_array = context.make_helper(builder, array_item_type)
+        array_item_array.meminfo = meminfo
+        return array_item_array._getvalue()
 
-    return list_item_type(types.int64, types.int64, dtype_typ), codegen
+    return array_item_type(types.int64, types.int64, dtype_typ), codegen
 
 
-def pre_alloc_list_item_array_equiv(
+def pre_alloc_array_item_array_equiv(
     self, scope, equiv_set, loc, args, kws
 ):  # pragma: no cover
-    """Array analysis function for pre_alloc_list_item_array() passed to Numba's array
+    """Array analysis function for pre_alloc_array_item_array() passed to Numba's array
     analysis extension. Assigns output array's size as equivalent to the input size
     variable.
     """
@@ -574,19 +574,19 @@ def pre_alloc_list_item_array_equiv(
     return args[0], []
 
 
-ArrayAnalysis._analyze_op_call_bodo_libs_list_item_arr_ext_pre_alloc_list_item_array = (
-    pre_alloc_list_item_array_equiv
+ArrayAnalysis._analyze_op_call_bodo_libs_array_item_arr_ext_pre_alloc_array_item_array = (
+    pre_alloc_array_item_array_equiv
 )
 
 
 @intrinsic
 def get_offsets(typingctx, arr_typ=None):
-    assert isinstance(arr_typ, ListItemArrayType)
+    assert isinstance(arr_typ, ArrayItemArrayType)
     # TODO: alias analysis extension functions for get_offsets, etc.?
 
     def codegen(context, builder, sig, args):
         (arr,) = args
-        payload = _get_list_item_arr_payload(context, builder, arr_typ, arr)
+        payload = _get_array_item_arr_payload(context, builder, arr_typ, arr)
         return impl_ret_borrowed(context, builder, sig.return_type, payload.offsets)
 
     return types.Array(offset_typ, 1, "C")(arr_typ), codegen
@@ -594,11 +594,11 @@ def get_offsets(typingctx, arr_typ=None):
 
 @intrinsic
 def get_data(typingctx, arr_typ=None):
-    assert isinstance(arr_typ, ListItemArrayType)
+    assert isinstance(arr_typ, ArrayItemArrayType)
 
     def codegen(context, builder, sig, args):
         (arr,) = args
-        payload = _get_list_item_arr_payload(context, builder, arr_typ, arr)
+        payload = _get_array_item_arr_payload(context, builder, arr_typ, arr)
         return impl_ret_borrowed(context, builder, sig.return_type, payload.data)
 
     return types.Array(arr_typ.elem_type, 1, "C")(arr_typ), codegen
@@ -606,53 +606,53 @@ def get_data(typingctx, arr_typ=None):
 
 @intrinsic
 def get_null_bitmap(typingctx, arr_typ=None):
-    assert isinstance(arr_typ, ListItemArrayType)
+    assert isinstance(arr_typ, ArrayItemArrayType)
 
     def codegen(context, builder, sig, args):
         (arr,) = args
-        payload = _get_list_item_arr_payload(context, builder, arr_typ, arr)
+        payload = _get_array_item_arr_payload(context, builder, arr_typ, arr)
         return impl_ret_borrowed(context, builder, sig.return_type, payload.null_bitmap)
 
     return types.Array(types.uint8, 1, "C")(arr_typ), codegen
 
 
 @intrinsic
-def get_n_lists(typingctx, arr_typ=None):
-    assert isinstance(arr_typ, ListItemArrayType)
+def get_n_arrays(typingctx, arr_typ=None):
+    assert isinstance(arr_typ, ArrayItemArrayType)
 
     def codegen(context, builder, sig, args):
         (arr,) = args
-        payload = _get_list_item_arr_payload(context, builder, arr_typ, arr)
-        return impl_ret_borrowed(context, builder, sig.return_type, payload.n_lists)
+        payload = _get_array_item_arr_payload(context, builder, arr_typ, arr)
+        return impl_ret_borrowed(context, builder, sig.return_type, payload.n_arrays)
 
     return types.int64(arr_typ), codegen
 
 
 @overload(len, no_unliteral=True)
-def overload_list_item_arr_len(A):
-    if isinstance(A, ListItemArrayType):
-        return lambda A: get_n_lists(A)
+def overload_array_item_arr_len(A):
+    if isinstance(A, ArrayItemArrayType):
+        return lambda A: get_n_arrays(A)
 
 
-@overload_attribute(ListItemArrayType, "shape")
-def overload_list_item_arr_shape(A):
-    return lambda A: (get_n_lists(A),)
+@overload_attribute(ArrayItemArrayType, "shape")
+def overload_array_item_arr_shape(A):
+    return lambda A: (get_n_arrays(A),)
 
 
-@overload_attribute(ListItemArrayType, "ndim")
-def overload_list_item_arr_ndim(A):
+@overload_attribute(ArrayItemArrayType, "ndim")
+def overload_array_item_arr_ndim(A):
     return lambda A: 1
 
 
 @overload(operator.getitem, no_unliteral=True)
-def list_item_arr_getitem_array(arr, ind):
-    if not isinstance(arr, ListItemArrayType):
+def array_item_arr_getitem_array(arr, ind):
+    if not isinstance(arr, ArrayItemArrayType):
         return
 
     if isinstance(types.unliteral(ind), types.Integer):
         # returning [] if NA due to type stability issues
         # TODO: warning if value is NA?
-        def list_item_arr_getitem_impl(arr, ind):  # pragma: no cover
+        def array_item_arr_getitem_impl(arr, ind):  # pragma: no cover
             offsets = get_offsets(arr)
             data = get_data(arr)
             l_start_offset = offsets[ind]
@@ -662,7 +662,7 @@ def list_item_arr_getitem_array(arr, ind):
                 out.append(data[i])
             return out
 
-        return list_item_arr_getitem_impl
+        return array_item_arr_getitem_impl
 
     # bool arr indexing
     if is_list_like_index_type(ind) and ind.dtype == types.bool_:
@@ -678,14 +678,14 @@ def list_item_arr_getitem_array(arr, ind):
             null_bitmap = get_null_bitmap(arr)
 
             # count the number of lists and value in output and allocate
-            n_lists = 0
+            n_arrays = 0
             n_values = 0
             for i in range(n):
                 if ind[i]:
-                    n_lists += 1
+                    n_arrays += 1
                     n_values += int(offsets[i + 1] - offsets[i])
 
-            out_arr = pre_alloc_list_item_array(n_lists, n_values, data.dtype)
+            out_arr = pre_alloc_array_item_array(n_arrays, n_values, data.dtype)
             out_offsets = get_offsets(out_arr)
             out_data = get_data(out_arr)
             out_null_bitmap = get_null_bitmap(out_arr)
@@ -725,13 +725,13 @@ def list_item_arr_getitem_array(arr, ind):
             null_bitmap = get_null_bitmap(arr)
 
             n = len(ind)
-            n_lists = n
+            n_arrays = n
             n_values = 0
             for k in range(n):
                 i = ind[k]
                 n_values += int(offsets[i + 1] - offsets[i])
 
-            out_arr = pre_alloc_list_item_array(n_lists, n_values, data.dtype)
+            out_arr = pre_alloc_array_item_array(n_arrays, n_values, data.dtype)
             out_offsets = get_offsets(out_arr)
             out_data = get_data(out_arr)
             out_null_bitmap = get_null_bitmap(out_arr)
@@ -774,8 +774,8 @@ def list_item_arr_getitem_array(arr, ind):
 
 
 @overload(operator.setitem)
-def list_item_arr_setitem(A, idx, val):
-    if not isinstance(A, ListItemArrayType):
+def array_item_arr_setitem(A, idx, val):
+    if not isinstance(A, ArrayItemArrayType):
         return
 
     # scalar case
@@ -803,8 +803,8 @@ def list_item_arr_setitem(A, idx, val):
     )  # pragma: no cover
 
 
-@overload_method(ListItemArrayType, "copy", no_unliteral=True)
-def overload_list_item_arr_copy(A):
+@overload_method(ArrayItemArrayType, "copy", no_unliteral=True)
+def overload_array_item_arr_copy(A):
     def copy_impl(A):  # pragma: no cover
         offsets = get_offsets(A)
         data = get_data(A)
@@ -813,7 +813,7 @@ def overload_list_item_arr_copy(A):
         # allocate
         n = len(A)
         n_values = offsets[-1]
-        out_arr = pre_alloc_list_item_array(n, n_values, data.dtype)
+        out_arr = pre_alloc_array_item_array(n, n_values, data.dtype)
         out_offsets = get_offsets(out_arr)
         out_data = get_data(out_arr)
         out_null_bitmap = get_null_bitmap(out_arr)
