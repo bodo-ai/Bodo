@@ -81,10 +81,10 @@ class ArrayItemArrayType(types.ArrayCompatible):
 
 
 class ArrayItemArrayPayloadType(types.Type):
-    def __init__(self, list_type):
-        self.list_type = list_type
+    def __init__(self, array_type):
+        self.array_type = array_type
         super(ArrayItemArrayPayloadType, self).__init__(
-            name="ArrayItemArrayPayloadType({})".format(list_type)
+            name="ArrayItemArrayPayloadType({})".format(array_type)
         )
 
 
@@ -93,7 +93,7 @@ class ArrayItemArrayPayloadModel(models.StructModel):
     def __init__(self, dmm, fe_type):
         members = [
             ("n_arrays", types.int64),
-            ("data", fe_type.list_type.dtype),
+            ("data", fe_type.array_type.dtype),
             ("offsets", types.Array(offset_typ, 1, "C")),
             ("null_bitmap", types.Array(types.uint8, 1, "C")),
         ]
