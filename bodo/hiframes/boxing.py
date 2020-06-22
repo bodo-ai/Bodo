@@ -132,57 +132,7 @@ def get_hiframes_dtypes(df):
 
 def _infer_series_dtype(S):
     if S.dtype == np.dtype("O"):
-        # XXX: assume empty series/column is string since it's the most common
-        # TODO: checks for distributed case with list/datetime.date/...
-        # e.g. one rank's data is empty but other ranks have other types
-        # XXX assuming the whole column is strings if 1st val is string
-        # TODO: handle NA as 1st value
-        i = 0
-        while i < len(S) and (
-            S.iloc[i] is np.nan
-            or S.iloc[i] is None
-            or (isinstance(S.iloc[i], float) and math.isnan(S.iloc[i]))
-        ):
-            i += 1
-        if i == len(S):
-            # assume all NA object column is string
-            warnings.warn(
-                BodoWarning(
-                    "Empty object array passed to Bodo, which causes ambiguity in typing. "
-                    "This can cause errors in parallel execution."
-                )
-            )
-            return string_type
-
-        first_val = S.iloc[i]
-        # NOTE: pandas may create array(array(str)) instead of array(list(str))
-        # see test_io.py::test_pq_list_str
-        if isinstance(first_val, (list, np.ndarray)):
-            return _infer_series_list_dtype(S.values, S.name)
-        elif isinstance(first_val, str):
-            return string_type
-        elif isinstance(first_val, bool):
-            return types.bool_  # will become BooleanArray in Series and DF
-        # struct array: series of dict where all keys are strings
-        elif isinstance(first_val, dict) and all(
-            isinstance(k, str) for k in first_val.keys()
-        ):
-            field_names = tuple(first_val.keys())
-            data_types = tuple(numba.typeof(v) for v in first_val.values())
-            return StructType(data_types, field_names)
-        elif isinstance(S.values[i], datetime.date):
-            # XXX: using .values to check date type since DatetimeIndex returns
-            # Timestamp which is subtype of datetime.date
-            return datetime_date_type
-        if isinstance(first_val, decimal.Decimal):
-            # NOTE: converting decimal.Decimal objects to 38/18, same as Spark
-            return Decimal128Type(38, 18)
-        else:
-            raise BodoError(
-                "object dtype infer: data type for column {} not supported".format(
-                    S.name
-                )
-            )
+        return numba.typeof(S.values).dtype
 
     # nullable int dtype
     if isinstance(S.dtype, pd.core.arrays.integer._IntegerDtype):
