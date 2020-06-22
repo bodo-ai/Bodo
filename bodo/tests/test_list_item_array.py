@@ -2,6 +2,8 @@
 """Tests for array of list of fixed size items.
 """
 import operator
+import datetime
+from decimal import Decimal
 import pandas as pd
 import numpy as np
 import pytest
@@ -15,6 +17,48 @@ from bodo.tests.utils import check_func
     params=[
         np.array([[1, 3], [2], None, [4, 5, 6], [], [1, 1]]),
         np.array([[2.0, -3.2], [2.2, 1.3], None, [4.1, 5.2, 6.3], [], [1.1, 1.2]]),
+        np.array(
+            [
+                [True, False],
+                [False, False],
+                None,
+                [True, False, True] * 4,
+                [],
+                [True, True],
+            ]
+        ),
+        np.array(
+            [
+                [datetime.date(2018, 1, 24), datetime.date(1983, 1, 3)],
+                [datetime.date(1966, 4, 27), datetime.date(1999, 12, 7)],
+                None,
+                [datetime.date(1966, 4, 27), datetime.date(2004, 7, 8)],
+                [],
+                [datetime.date(2020, 11, 17)],
+            ]
+        ),
+        # data from Spark-generated Parquet files can have array elements
+        np.array(
+            [
+                np.array([1, 3], np.int32),
+                np.array([2], np.int32),
+                None,
+                np.array([4, 5, 6], np.int32),
+                np.array([], np.int32),
+                np.array([1, 1], np.int32),
+            ]
+        ),
+        # TODO: enable Decimal test when memory leaks and test equality issues are fixed
+        # np.array(
+        #     [
+        #         [Decimal("1.6"), Decimal("-0.222")],
+        #         [Decimal("1111.316"), Decimal("1234.00046"), Decimal("5.1")],
+        #         None,
+        #         [Decimal("-11131.0056"), Decimal("0.0")],
+        #         [],
+        #         [Decimal("-11.00511")],
+        #     ]
+        # ),
     ]
 )
 def list_item_arr_value(request):
@@ -41,7 +85,10 @@ def test_getitem_int(list_item_arr_value, memory_leak_check):
     i = 1
     bodo_out = np.array(bodo.jit(test_impl)(list_item_arr_value, i))
     py_out = np.array(test_impl(list_item_arr_value, i))
-    np.testing.assert_almost_equal(bodo_out, py_out)
+    if len(py_out) and isinstance(py_out[0], datetime.date):
+        np.testing.assert_array_equal(bodo_out, py_out)
+    else:
+        np.testing.assert_almost_equal(bodo_out, py_out)
 
 
 def test_getitem_bool(list_item_arr_value, memory_leak_check):

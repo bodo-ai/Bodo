@@ -188,6 +188,7 @@ void unbox_decimal(PyObject* obj, uint8_t* data_ptr)
                            "decimal rescale error", d128_18);
     d128_18.ToBytes(data_ptr);
     Py_DECREF(str_obj);
+    Py_DECREF(decimal_mod);
 
     PyGILState_Release(gilstate);
 }

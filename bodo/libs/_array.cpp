@@ -7,6 +7,7 @@
  */
 
 #include <Python.h>
+#include <datetime.h>
 #define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
 #include <numpy/arrayobject.h>
 #include "_array_operations.h"
@@ -186,6 +187,21 @@ inline void copy_item_to_buffer(char* data, Py_ssize_t ind, PyObject* item,
     } else if (dtype == Bodo_CTypes::FLOAT64) {
         double* ptr = (double*)data;
         ptr[ind] = PyFloat_AsDouble(item);
+    } else if (dtype == Bodo_CTypes::_BOOL) {
+        bool* ptr = (bool*)data;
+        ptr[ind] = (item == Py_True);
+    } else if (dtype == Bodo_CTypes::DATE) {
+        int64_t* ptr = (int64_t*)data;
+        PyObject* year_obj = PyObject_GetAttrString(item, "year");
+        PyObject* month_obj = PyObject_GetAttrString(item, "month");
+        PyObject* day_obj = PyObject_GetAttrString(item, "day");
+        int64_t year = PyLong_AsLongLong(year_obj);
+        int64_t month = PyLong_AsLongLong(month_obj);
+        int64_t day = PyLong_AsLongLong(day_obj);
+        ptr[ind] = (year << 32) + (month << 16) + day;
+        Py_DECREF(year_obj);
+        Py_DECREF(month_obj);
+        Py_DECREF(day_obj);
     } else
         std::cerr << "data type " << dtype
                   << " not supported for unboxing list(item) array."
@@ -274,6 +290,16 @@ inline PyObject* value_to_pyobject(const char* data, int64_t ind,
     } else if (dtype == Bodo_CTypes::FLOAT64) {
         double* ptr = (double*)data;
         return PyFloat_FromDouble(ptr[ind]);
+    } else if (dtype == Bodo_CTypes::_BOOL) {
+        bool* ptr = (bool*)data;
+        return PyBool_FromLong((long)(ptr[ind]));
+    } else if (dtype == Bodo_CTypes::DATE) {
+        int64_t* ptr = (int64_t*)data;
+        int64_t val = ptr[ind];
+        int year = val >> 32;
+        int month = (val >> 16) & 0xFFFF;
+        int day = val & 0xFFFF;
+        return PyDate_FromDate(year, month, day);
     } else
         std::cerr << "data type " << dtype
                   << " not supported for boxing list(item) array." << std::endl;
@@ -408,6 +434,25 @@ void struct_array_from_sequence(PyObject* struct_arr_obj, int n_fields,
 }
 
 /**
+ * @brief call PyArray_GETITEM() of Numpy C-API
+ *
+ * @param arr array object
+ * @param p pointer in array object
+ * @return PyObject* value returned by getitem
+ */
+PyObject* array_getitem(PyArrayObject* arr, const char* p) {
+#define CHECK(expr, msg)               \
+    if (!(expr)) {                     \
+        std::cerr << msg << std::endl; \
+        return NULL;                   \
+    }
+    PyObject* s = PyArray_GETITEM(arr, p);
+    CHECK(s, "getting item in numpy array failed");
+    return s;
+#undef CHECK
+}
+
+/**
  * @brief create a numpy array of dict objects from a StructArray
  *
  * @param num_structs number of structs in input array (length of array)
@@ -470,6 +515,26 @@ void* np_array_from_struct_array(int64_t num_structs, int n_fields, char** data,
 #undef CHECK
 }
 
+/**
+ * @brief check if obj is a list
+ *
+ * @param obj object to check
+ * @return int 1 if a list, 0 otherwise
+ */
+int list_check(PyArrayObject* obj) { return PyList_Check(obj); }
+
+/**
+ * @brief check if object is an NA value like None or np.nan
+ *
+ * @param s Python object to check
+ * @param C_NA pd.NA object (passed in to avoid overheads in loops)
+ * @return int 1 if value is NA, 0 otherwise
+ */
+int is_na_value(PyObject* s, PyObject* C_NA) {
+    return (s == Py_None ||
+            (PyFloat_Check(s) && std::isnan(PyFloat_AsDouble(s))) || s == C_NA);
+}
+
 PyMODINIT_FUNC PyInit_array_ext(void) {
     PyObject* m;
     static struct PyModuleDef moduledef = {
@@ -477,6 +542,9 @@ PyMODINIT_FUNC PyInit_array_ext(void) {
     };
     m = PyModule_Create(&moduledef);
     if (m == NULL) return NULL;
+
+    // init datetime APIs
+    PyDateTime_IMPORT;
 
     // init numpy
     import_array();
@@ -556,5 +624,11 @@ PyMODINIT_FUNC PyInit_array_ext(void) {
     PyObject_SetAttrString(
         m, "np_array_from_struct_array",
         PyLong_FromVoidPtr((void*)(&np_array_from_struct_array)));
+    PyObject_SetAttrString(m, "array_getitem",
+                           PyLong_FromVoidPtr((void*)(&array_getitem)));
+    PyObject_SetAttrString(m, "list_check",
+                           PyLong_FromVoidPtr((void*)(&list_check)));
+    PyObject_SetAttrString(m, "is_na_value",
+                           PyLong_FromVoidPtr((void*)(&is_na_value)));
     return m;
 }
