@@ -496,28 +496,7 @@ def _typeof_ndarray(val, c):
         dtype = types.pyobject
 
     if dtype == types.pyobject:
-        dtype = _infer_ndarray_obj_dtype(val)
-        if dtype == string_type:
-            return string_array_type
-        if dtype == types.bool_:
-            return bodo.libs.bool_arr_ext.boolean_array
-        if dtype == types.List(string_type):
-            return list_string_array_type
-        if isinstance(dtype, types.List):
-            return ArrayItemArrayType(dtype.dtype)
-        if dtype == datetime_date_type:
-            return datetime_date_array_type  # TODO: test array of datetime.date
-        if isinstance(dtype, Decimal128Type):
-            return DecimalArrayType(dtype.precision, dtype.scale)
-        if isinstance(dtype, StructType):
-            data = tuple(
-                bodo.hiframes.pd_series_ext._get_series_array_type(t)
-                for t in dtype.data
-            )
-            return StructArrayType(data, dtype.names)
-        raise BodoError(
-            "Unsupported array dtype: {}".format(val.dtype)
-        )  # pragma: no cover
+        return _infer_ndarray_obj_dtype(val)
 
     layout = numba.np.numpy_support.map_layout(val)
     readonly = not val.flags.writeable
@@ -542,13 +521,13 @@ def _infer_ndarray_obj_dtype(val):
                 "This can cause errors in parallel execution."
             )
         )
-        return string_type
+        return string_array_type
 
     first_val = val[i]
     if isinstance(first_val, str):
-        return string_type
+        return string_array_type
     elif isinstance(first_val, bool):
-        return types.bool_
+        return bodo.libs.bool_arr_ext.boolean_array
     # assuming object arrays with dictionary values are struct arrays, which means all
     # keys are string and match across dictionaries, and all values with same key have
     # same data type
@@ -556,15 +535,22 @@ def _infer_ndarray_obj_dtype(val):
         isinstance(k, str) for k in first_val.keys()
     ):
         field_names = tuple(first_val.keys())
-        data_types = tuple(numba.typeof(v) for v in first_val.values())
-        return StructType(data_types, field_names)
+        data_types = tuple(
+            bodo.hiframes.pd_series_ext._get_series_array_type(numba.typeof(v))
+            for v in first_val.values()
+        )
+        return StructArrayType(data_types, field_names)
     if isinstance(first_val, (list, np.ndarray)):
-        return bodo.hiframes.boxing._infer_series_list_dtype(val, "array")
+        dtype = bodo.hiframes.boxing._infer_series_list_dtype(val, "array")
+        assert isinstance(dtype, types.List)
+        if dtype == types.List(string_type):
+            return list_string_array_type
+        return ArrayItemArrayType(dtype.dtype)
     if isinstance(first_val, datetime.date):
-        return datetime_date_type
+        return datetime_date_array_type
     if isinstance(first_val, decimal.Decimal):
         # NOTE: converting decimal.Decimal objects to 38/18, same as Spark
-        return Decimal128Type(38, 18)
+        return DecimalArrayType(38, 18)
 
     raise BodoError(
         "Unsupported object array with first value: {}".format(first_val)
