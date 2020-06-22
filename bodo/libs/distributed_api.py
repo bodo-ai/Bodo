@@ -783,7 +783,7 @@ def gatherv(data, allgather=False):
     # array(item) array
     if isinstance(data, ArrayItemArrayType):
         int32_typ_enum = np.int32(numba_to_c_type(types.int32))
-        data_typ_enum = np.int32(numba_to_c_type(data.elem_type))
+        data_typ_enum = np.int32(numba_to_c_type(data.dtype.dtype))
         char_typ_enum = np.int32(numba_to_c_type(types.uint8))
 
         def gatherv_array_item_arr_impl(data, allgather=False):  # pragma: no cover
@@ -1275,7 +1275,7 @@ def scatterv_impl(data):
         # Code adapted from the string code. Both the string and array(item) codes should be
         # refactored.
         int32_typ_enum = np.int32(numba_to_c_type(types.int32))
-        data_typ_enum = np.int32(numba_to_c_type(data.elem_type))
+        data_typ_enum = np.int32(numba_to_c_type(data.dtype.dtype))
         char_typ_enum = np.int32(numba_to_c_type(types.uint8))
 
         def scatterv_array_item_impl(data):
@@ -1332,7 +1332,9 @@ def scatterv_impl(data):
             recv_arr = pre_alloc_array_item_array(n_loc, n_loc_item, in_data_arr.dtype)
             recv_offsets_arr = bodo.libs.array_item_arr_ext.get_offsets(recv_arr)
             recv_data_arr = bodo.libs.array_item_arr_ext.get_data(recv_arr)
-            recv_null_bitmap_arr = bodo.libs.array_item_arr_ext.get_null_bitmap(recv_arr)
+            recv_null_bitmap_arr = bodo.libs.array_item_arr_ext.get_null_bitmap(
+                recv_arr
+            )
 
             # ----- list of item lengths -----------
 

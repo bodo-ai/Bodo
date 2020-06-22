@@ -53,8 +53,12 @@ from bodo.libs import array_ext
 
 
 ll.add_symbol("count_total_elems_list_array", array_ext.count_total_elems_list_array)
-ll.add_symbol("array_item_array_from_sequence", array_ext.array_item_array_from_sequence)
-ll.add_symbol("np_array_from_array_item_array", array_ext.np_array_from_array_item_array)
+ll.add_symbol(
+    "array_item_array_from_sequence", array_ext.array_item_array_from_sequence
+)
+ll.add_symbol(
+    "np_array_from_array_item_array", array_ext.np_array_from_array_item_array
+)
 
 
 # offset index types
@@ -62,22 +66,18 @@ offset_typ = types.uint32
 
 
 class ArrayItemArrayType(types.ArrayCompatible):
-    def __init__(self, elem_type):
-        self.elem_type = elem_type
+    def __init__(self, dtype):
+        self.dtype = dtype
         super(ArrayItemArrayType, self).__init__(
-            name="ArrayItemArrayType({})".format(elem_type)
+            name="ArrayItemArrayType({})".format(dtype)
         )
 
     @property
     def as_array(self):
         return types.Array(types.undefined, 1, "C")
 
-    @property
-    def dtype(self):
-        return types.List(self.elem_type)
-
     def copy(self):
-        return ArrayItemArrayType(self.elem_type)
+        return ArrayItemArrayType(self.dtype)
 
 
 class ArrayItemArrayPayloadType(types.Type):
@@ -93,7 +93,7 @@ class ArrayItemArrayPayloadModel(models.StructModel):
     def __init__(self, dmm, fe_type):
         members = [
             ("n_arrays", types.int64),
-            ("data", types.Array(fe_type.list_type.elem_type, 1, "C")),
+            ("data", fe_type.list_type.dtype),
             ("offsets", types.Array(offset_typ, 1, "C")),
             ("null_bitmap", types.Array(types.uint8, 1, "C")),
         ]
@@ -118,7 +118,7 @@ def define_array_item_dtor(context, builder, array_item_type, payload_type):
     # Declare dtor
     fnty = lir.FunctionType(lir.VoidType(), [cgutils.voidptr_t])
     fn = mod.get_or_insert_function(
-        fnty, name=".dtor.array_item.{}".format(array_item_type.elem_type)
+        fnty, name=".dtor.array_item.{}".format(array_item_type.dtype)
     )
 
     # End early if the dtor is already defined
@@ -135,9 +135,7 @@ def define_array_item_dtor(context, builder, array_item_type, payload_type):
     payload_ptr = builder.bitcast(base_ptr, ptrty)
     payload = context.make_data_helper(builder, payload_type, ref=payload_ptr)
 
-    context.nrt.decref(
-        builder, types.Array(array_item_type.elem_type, 1, "C"), payload.data
-    )
+    context.nrt.decref(builder, array_item_type.dtype, payload.data)
     context.nrt.decref(builder, types.Array(offset_typ, 1, "C"), payload.offsets)
     context.nrt.decref(builder, types.Array(types.uint8, 1, "C"), payload.null_bitmap)
 
@@ -169,7 +167,7 @@ def construct_array_item_array(context, builder, array_item_type, n_arrays, n_el
 
     # alloc data
     data = bodo.utils.utils._empty_nd_impl(
-        context, builder, types.Array(array_item_type.elem_type, 1, "C"), [n_elems]
+        context, builder, types.Array(array_item_type.dtype.dtype, 1, "C"), [n_elems]
     )
     data_ptr = data.data
     payload.data = data._getvalue()
@@ -211,7 +209,6 @@ def _unbox_array_item_array_generic(
     mod_name = context.insert_const_string(builder.module, "pandas")
     pd_mod_obj = c.pyapi.import_module_noblock(mod_name)
     C_NA = c.pyapi.object_getattr_string(pd_mod_obj, "NA")
-
 
     # pseudocode for code generation:
     # curr_item_ind = 0
@@ -326,7 +323,7 @@ def unbox_array_item_array(typ, val, c):
     meminfo, data_ptr, offsets_ptr, null_bitmap_ptr = construct_array_item_array(
         c.context, c.builder, typ, n_arrays, n_elems
     )
-    ctype = bodo.utils.utils.numba_to_c_type(typ.elem_type)
+    ctype = bodo.utils.utils.numba_to_c_type(typ.dtype.dtype)
 
     # use C unboxing when possible to avoid compilation and runtime overheads
     # otherwise, use generic llvm/Numba unboxing
@@ -446,7 +443,11 @@ def _box_array_item_array_generic(
                         builder.load(
                             builder.gep(
                                 offsets_ptr,
-                                [builder.add(array_ind, lir.Constant(array_ind.type, 1))],
+                                [
+                                    builder.add(
+                                        array_ind, lir.Constant(array_ind.type, 1)
+                                    )
+                                ],
                             )
                         ),
                         builder.load(builder.gep(offsets_ptr, [array_ind])),
@@ -488,9 +489,7 @@ def box_array_item_arr(typ, val, c):
 
     payload = _get_array_item_arr_payload(c.context, c.builder, typ, val)
 
-    data_ptr = c.context.make_helper(
-        c.builder, types.Array(typ.elem_type, 1, "C"), payload.data
-    ).data
+    data_ptr = c.context.make_helper(c.builder, typ.dtype, payload.data).data
     offsets_ptr = c.context.make_helper(
         c.builder, types.Array(offset_typ, 1, "C"), payload.offsets
     ).data
@@ -506,7 +505,7 @@ def box_array_item_arr(typ, val, c):
         types.bool_,
         datetime_date_type,
     ):
-        ctype = bodo.utils.utils.numba_to_c_type(typ.elem_type)
+        ctype = bodo.utils.utils.numba_to_c_type(typ.dtype.dtype)
 
         fnty = lir.FunctionType(
             c.context.get_argument_type(types.pyobject),
@@ -543,13 +542,17 @@ def box_array_item_arr(typ, val, c):
 
 
 @intrinsic
-def pre_alloc_array_item_array(typingctx, num_lists_typ, num_values_typ, dtype_typ=None):
+def pre_alloc_array_item_array(
+    typingctx, num_lists_typ, num_values_typ, dtype_typ=None
+):
     assert (
         isinstance(num_lists_typ, types.Integer)
         and isinstance(num_values_typ, types.Integer)
         and isinstance(dtype_typ, (types.DType, types.NumberClass))
     )
-    array_item_type = ArrayItemArrayType(dtype_typ.dtype)
+    array_item_type = ArrayItemArrayType(
+        bodo.hiframes.pd_series_ext._get_series_array_type(dtype_typ.dtype)
+    )
 
     def codegen(context, builder, sig, args):
         num_lists, num_values, _ = args
@@ -601,7 +604,7 @@ def get_data(typingctx, arr_typ=None):
         payload = _get_array_item_arr_payload(context, builder, arr_typ, arr)
         return impl_ret_borrowed(context, builder, sig.return_type, payload.data)
 
-    return types.Array(arr_typ.elem_type, 1, "C")(arr_typ), codegen
+    return (arr_typ.dtype)(arr_typ), codegen
 
 
 @intrinsic

@@ -160,7 +160,7 @@ def _get_series_array_type(dtype):
         return string_array_type
 
     elif isinstance(dtype, types.Array):
-        return ArrayItemArrayType(dtype.dtype)
+        return ArrayItemArrayType(dtype)
 
     # categorical
     if isinstance(dtype, PDCategoricalDtype):

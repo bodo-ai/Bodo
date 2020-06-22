@@ -476,7 +476,7 @@ def _infer_ndarray_obj_dtype(val):
         val_typ = numba.typeof(first_val)
         if val_typ == string_array_type:
             return list_string_array_type
-        return ArrayItemArrayType(val_typ.dtype)
+        return ArrayItemArrayType(val_typ)
     if isinstance(first_val, datetime.date):
         return datetime_date_array_type
     if isinstance(first_val, decimal.Decimal):
