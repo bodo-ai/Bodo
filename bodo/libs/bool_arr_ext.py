@@ -729,7 +729,7 @@ def _install_np_ufuncs():
 
     for ufunc in numba.np.ufunc_db.get_ufuncs():
         overload_impl = create_op_overload(ufunc, ufunc.nin)
-        overload(ufunc)(overload_impl)
+        overload(ufunc, no_unliteral=True)(overload_impl)
 
 
 _install_np_ufuncs()
@@ -742,7 +742,7 @@ def _install_binary_ops():
     # install binary ops such as add, sub, pow, eq, ...
     for op in numba.core.typing.npydecl.NumpyRulesArrayOperator._op_map.keys():
         overload_impl = create_op_overload(op, 2)
-        overload(op)(overload_impl)
+        overload(op, no_unliteral=True)(overload_impl)
 
 
 _install_binary_ops()
@@ -755,7 +755,7 @@ def _install_inplace_binary_ops():
     # install inplace binary ops such as iadd, isub, ...
     for op in numba.core.typing.npydecl.NumpyRulesInplaceArrayOperator._op_map.keys():
         overload_impl = create_op_overload(op, 2)
-        overload(op)(overload_impl)
+        overload(op, no_unliteral=True)(overload_impl)
 
 
 _install_inplace_binary_ops()
@@ -768,7 +768,7 @@ def _install_unary_ops():
     # install unary operators: ~, -, +
     for op in (operator.neg, operator.invert, operator.pos):
         overload_impl = create_op_overload(op, 1)
-        overload(op)(overload_impl)
+        overload(op, no_unliteral=True)(overload_impl)
 
 
 _install_unary_ops()

@@ -1024,7 +1024,9 @@ def _install_series_unsupported():
 
     for fname in series_unsupported_methods:
         full_name = "Series." + fname
-        overload_method(SeriesType, fname)(create_unsupported_overload(full_name))
+        overload_method(SeriesType, fname, no_unliteral=True)(
+            create_unsupported_overload(full_name)
+        )
 
 
 _install_series_unsupported()
