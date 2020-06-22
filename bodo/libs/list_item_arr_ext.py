@@ -212,6 +212,25 @@ def _unbox_list_item_array_generic(
     pd_mod_obj = c.pyapi.import_module_noblock(mod_name)
     C_NA = c.pyapi.object_getattr_string(pd_mod_obj, "NA")
 
+
+    # pseudocode for code generation:
+    # curr_item_ind = 0
+    # for i in range(len(A)):
+    #   offsets[i] = curr_item_ind
+    #   list_obj = A[i]
+    #   if isna(list_obj):
+    #     set null_bitmap i'th bit to 0
+    #   else:
+    #     set null_bitmap i'th bit to 1
+    #     n_items = len(list_obj)
+    #     if isinstance(list_obj, list):
+    #        unbox(list_obj) and copy data to data_ptr
+    #        curr_item_ind += n_items
+    #     else:  # list_obj is ndarray
+    #        unbox(list_obj) and copy data to data_ptr
+    #        curr_item_ind += n_items
+    # offsets[n] = curr_item_ind;
+
     list_type = typ.dtype
     # curr_item_ind = 0
     curr_item_ind = cgutils.alloca_once_value(builder, lir.Constant(lir.IntType(64), 0))
@@ -379,6 +398,20 @@ def _box_list_item_array_generic(
     context = c.context
     builder = c.builder
     # TODO: error checking for pyapi calls
+
+    # pseudocode for code generation:
+    # out_arr = np.ndarray(n, np.object_)
+    # curr_item_ind = 0
+    # for i in range(n):
+    #   if isna(A[i]):
+    #     out_arr[i] = np.nan
+    #   else:
+    #     n_items = offsets[i + 1] - offsets[i]
+    #     list_obj = list_new(n_items)
+    #     for j in range(n_items):
+    #        list_obj[j] = A.data[curr_item_ind]
+    #        # curr_item_ind += 1
+    #     A[i] = list_obj
 
     # create array of objects with num_items shape
     mod_name = context.insert_const_string(builder.module, "numpy")
