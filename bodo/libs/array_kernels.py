@@ -37,6 +37,7 @@ from bodo.ir.sort import (
 )
 from bodo.libs.list_str_arr_ext import list_string_array_type
 from bodo.libs.list_item_arr_ext import ListItemArrayType
+from bodo.libs.struct_arr_ext import StructArrayType
 from bodo.hiframes.split_impl import string_array_split_view_type
 from bodo.hiframes.datetime_date_ext import datetime_date_array_type
 
@@ -102,6 +103,12 @@ def overload_isna(arr, i):
     if isinstance(arr, ListItemArrayType):
         return lambda arr, i: not bodo.libs.int_arr_ext.get_bit_bitmap_arr(
             bodo.libs.list_item_arr_ext.get_null_bitmap(arr), i
+        )  # pragma: no cover
+
+    # struct array
+    if isinstance(arr, StructArrayType):
+        return lambda arr, i: not bodo.libs.int_arr_ext.get_bit_bitmap_arr(
+            bodo.libs.struct_arr_ext.get_null_bitmap(arr), i
         )  # pragma: no cover
 
     # TODO: extend to other types (which ones are missing?)

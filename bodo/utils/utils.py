@@ -152,6 +152,10 @@ def is_alloc_callname(func_name, mod_name):
             func_name == "pre_alloc_list_item_array"
             and mod_name == "bodo.libs.list_item_arr_ext"
         )
+        or (
+            func_name == "pre_alloc_struct_array"
+            and mod_name == "bodo.libs.struct_arr_ext"
+        )
         or (func_name == "alloc_bool_array" and mod_name == "bodo.libs.bool_arr_ext")
         or (func_name == "alloc_int_array" and mod_name == "bodo.libs.int_arr_ext")
         or (
@@ -298,6 +302,7 @@ def is_array_typ(var_typ, include_index_series=True):
         or isinstance(var_typ, bodo.hiframes.pd_categorical_ext.CategoricalArray)
         or var_typ == bodo.libs.str_ext.random_access_string_array
         or isinstance(var_typ, bodo.libs.list_item_arr_ext.ListItemArrayType)
+        or isinstance(var_typ, bodo.libs.struct_arr_ext.StructArrayType)
         or (
             include_index_series
             and isinstance(var_typ, bodo.hiframes.pd_series_ext.SeriesType)
@@ -670,6 +675,13 @@ def overload_alloc_type(n, t, s=None):
         dtype = typ.elem_type
         return lambda n, t, s=None: bodo.libs.list_item_arr_ext.pre_alloc_list_item_array(
             n, s[0], dtype
+        )  # pragma: no cover
+
+    if isinstance(typ, bodo.libs.struct_arr_ext.StructArrayType):
+        dtypes = typ.data
+        names = typ.names
+        return lambda n, t, s=None: bodo.libs.struct_arr_ext.pre_alloc_struct_array(
+            n, dtypes, names
         )  # pragma: no cover
 
     if isinstance(typ, bodo.hiframes.pd_categorical_ext.CategoricalArray):

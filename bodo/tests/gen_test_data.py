@@ -277,6 +277,14 @@ df.to_parquet("list_str_arr.pq")
 sdf = spark.createDataFrame(df)
 sdf.write.parquet("list_str_parts.pq", "overwrite")
 
+
+dtype = StructType([StructField("X", LongType(), True), StructField("Y", FloatType(), True)])
+schema = StructType([StructField("A", dtype, True)])
+data = [Row(Row(1, 1.1)), Row(Row(4, 2.2)), None, Row(Row(-1, 3.0))] * 2
+sdf = spark.createDataFrame(data, schema)
+sdf.write.parquet("struct.pq", "overwrite")
+
+
 spark.stop()
 
 # data for str array read from csv

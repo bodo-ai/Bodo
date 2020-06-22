@@ -1,0 +1,130 @@
+# Copyright (C) 2020 Bodo Inc. All rights reserved.
+"""Tests for array of struct values.
+"""
+import operator
+from collections import namedtuple
+import pandas as pd
+import numpy as np
+import pytest
+
+import numba
+import bodo
+from bodo.tests.utils import check_func
+
+
+@pytest.fixture(
+    params=[
+        # heterogeneous values
+        np.array(
+            [
+                {"X": 1, "Y": 3.1},
+                {"X": 2, "Y": 1.1},
+                None,
+                {"X": -1, "Y": -1.1},
+                {"X": 3, "Y": 4.0},
+                {"X": -3, "Y": -1.2},
+                {"X": 5, "Y": 9.0},
+            ]
+        ),
+        # homogeneous values
+        np.array(
+            [
+                {"X": 1, "Y": 3},
+                {"X": 2, "Y": 1},
+                None,
+                {"X": -1, "Y": -1},
+                {"X": 3, "Y": 4},
+                {"X": -3, "Y": -1},
+                {"X": 5, "Y": 9},
+            ]
+        ),
+    ]
+)
+def struct_arr_value(request):
+    return request.param
+
+
+def test_unbox(struct_arr_value, memory_leak_check):
+    # just unbox
+    def impl(arr_arg):
+        return True
+
+    # unbox and box
+    def impl2(arr_arg):
+        return arr_arg
+
+    check_func(impl, (struct_arr_value,))
+    check_func(impl2, (struct_arr_value,))
+
+
+def test_getitem_int(struct_arr_value, memory_leak_check):
+    def test_impl(A, i):
+        return A[i]
+
+    i = 1
+    assert bodo.jit(test_impl)(struct_arr_value, i) == test_impl(struct_arr_value, i)
+
+
+def test_getitem_bool(struct_arr_value, memory_leak_check):
+    def test_impl(A, ind):
+        return A[ind]
+
+    np.random.seed(0)
+    ind = np.random.ranf(len(struct_arr_value)) < 0.2
+    bodo_out = bodo.jit(test_impl)(struct_arr_value, ind)
+    py_out = test_impl(struct_arr_value, ind)
+    pd.testing.assert_series_equal(pd.Series(py_out), pd.Series(bodo_out))
+
+
+def test_getitem_slice(struct_arr_value, memory_leak_check):
+    def test_impl(A, ind):
+        return A[ind]
+
+    ind = slice(1, 4)
+    bodo_out = bodo.jit(test_impl)(struct_arr_value, ind)
+    py_out = test_impl(struct_arr_value, ind)
+    pd.testing.assert_series_equal(
+        pd.Series(py_out), pd.Series(bodo_out),
+    )
+
+
+def test_rec_getitem(struct_arr_value, memory_leak_check):
+    def test_impl(A, i):
+        return A[i]["Y"]
+
+    i = 1
+    assert bodo.jit(test_impl)(struct_arr_value, i) == test_impl(struct_arr_value, i)
+
+
+def test_rec_setitem(struct_arr_value, memory_leak_check):
+    def test_impl(A, i, val):
+        r = A[i]
+        r["Y"] = val
+        return r
+
+    i = 1
+    val = 8
+    assert bodo.jit(test_impl)(struct_arr_value, i, val) == test_impl(
+        struct_arr_value, i, val
+    )
+
+
+def test_ndim(struct_arr_value, memory_leak_check):
+    def test_impl(A):
+        return A.ndim
+
+    assert bodo.jit(test_impl)(struct_arr_value) == test_impl(struct_arr_value)
+
+
+def test_shape(struct_arr_value, memory_leak_check):
+    def test_impl(A):
+        return A.shape
+
+    assert bodo.jit(test_impl)(struct_arr_value) == test_impl(struct_arr_value)
+
+
+def test_copy(struct_arr_value, memory_leak_check):
+    def test_impl(A):
+        return A.copy()
+
+    check_func(test_impl, (struct_arr_value,))

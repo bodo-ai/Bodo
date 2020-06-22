@@ -1501,7 +1501,7 @@ def test_series_map_list_str(memory_leak_check):
     check_func(test_impl, (S,))
 
 
-def test_series_map_list_item():
+def test_series_map_list_item(memory_leak_check):
     """test list(item) output in map"""
 
     def test_impl(S):
@@ -1511,7 +1511,23 @@ def test_series_map_list_item():
     check_func(test_impl, (S,))
 
 
-def test_series_map_date():
+def test_series_map_dict(memory_leak_check):
+    """test dict output in map"""
+
+    # homogeneous output
+    def impl1(S):
+        return S.map(lambda a: {"A": a + 1, "B": a ** 2})
+
+    # heterogeneous output
+    def impl2(S):
+        return S.map(lambda a: {"A": a + 1, "B": a ** 2.0})
+
+    S = pd.Series([1, 211, 333, 43, 51, 12, 15])
+    check_func(impl1, (S,))
+    check_func(impl2, (S,))
+
+
+def test_series_map_date(memory_leak_check):
     """make sure datetime.date output can be handled in map() properly
     """
 
@@ -1522,7 +1538,7 @@ def test_series_map_date():
     check_func(test_impl, (S,))
 
 
-def test_series_map_timestamp():
+def test_series_map_timestamp(memory_leak_check):
     """make sure Timestamp (converted to datetime64) output can be handled in map()
     properly
     """
@@ -1534,7 +1550,7 @@ def test_series_map_timestamp():
     check_func(test_impl, (S,))
 
 
-def test_series_map_decimal():
+def test_series_map_decimal(memory_leak_check):
     """make sure Decimal output can be handled in map() properly
     """
     # just returning input value since we don't support any Decimal creation yet
@@ -1557,7 +1573,7 @@ def test_series_map_decimal():
     check_func(test_impl, (S,))
 
 
-def test_series_map_dt_str():
+def test_series_map_dt_str(memory_leak_check):
     """test string output in map with dt64/Timestamp input"""
 
     def test_impl(S):

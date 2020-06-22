@@ -24,6 +24,7 @@ from numba.core.ir_utils import (
     find_callname,
     build_definitions,
     mk_unique_var,
+    compute_cfg_from_blocks,
 )
 from numba.core.registry import CPUDispatcher
 
@@ -42,6 +43,7 @@ from bodo.utils.utils import is_call, is_array_typ
 from bodo.libs.str_arr_ext import string_array_type
 from bodo.libs.list_str_arr_ext import list_string_array_type
 from bodo.libs.list_item_arr_ext import ListItemArrayType
+from bodo.libs.struct_arr_ext import StructArrayType, StructType
 
 
 ReplaceFunc = namedtuple(
@@ -138,6 +140,8 @@ no_side_effect_call_tuples = {
     (bodo.libs.list_str_arr_ext.pre_alloc_list_string_array,),
     ("pre_alloc_list_item_array", "list_item_arr_ext", "libs", bodo),
     (bodo.libs.list_item_arr_ext.pre_alloc_list_item_array,),
+    ("pre_alloc_struct_array", "struct_arr_ext", "libs", bodo),
+    (bodo.libs.struct_arr_ext.pre_alloc_struct_array,),
     ("dist_reduce", "distributed_api", "libs", bodo),
     (bodo.libs.distributed_api.dist_reduce,),
     ("pre_alloc_string_array", "str_arr_ext", "libs", bodo),
@@ -428,10 +432,89 @@ def get_const_func_output_type(func, arg_types, typing_context):
         py_func = func.dispatcher.py_func
         f_ir = numba.core.compiler.run_frontend(py_func, inline_closures=True)
 
+    struct_key_names = fix_struct_return(f_ir)
     _, f_return_type, _ = numba.core.typed_passes.type_inference_stage(
         typing_context, f_ir, arg_types, None
     )
+    # replace returned dictionary with a StructType to enabling typing for
+    # StructArrayType later
+    if isinstance(f_return_type, types.DictType) and struct_key_names:
+        f_return_type = StructType(
+            (f_return_type.value_type,) * len(struct_key_names), struct_key_names
+        )
     return f_return_type
+
+
+def _replace_const_map_return(f_ir, block, label):
+    """replaces constant dictionary return value with a struct if values are not
+    homogeneous, e.g. {"A": 1, "B": 2.3} -> struct((1, 2.3), ("A", "B"))
+    """
+    # get const map in return
+    require(isinstance(block.body[-1], ir.Return))
+    return_val = block.body[-1].value
+    cast_def = guard(get_definition, f_ir, return_val)
+    require(is_expr(cast_def, "cast"))
+    ret_def = guard(get_definition, f_ir, cast_def.value)
+    require(is_expr(ret_def, "build_map"))
+    require(len(ret_def.items) > 0)
+    keys = []
+    key_strs = []
+    values = []
+    for (k, v) in ret_def.items:
+        k_str = find_const(f_ir, k)
+        require(isinstance(k_str, str))
+        key_strs.append(k_str)
+        keys.append(k)
+        values.append(v)
+
+    # {"A": v1, "B": v2} -> struct_if_heter_dict((v1, v2), ("A", "B"))
+    loc = block.loc
+    scope = block.scope
+    # val_tup = (v1, v2)
+    val_tup = ir.Var(scope, mk_unique_var("val_tup"), loc)
+    val_tup_assign = ir.Assign(ir.Expr.build_tuple(values, loc), val_tup, loc)
+    f_ir._definitions[val_tup.name] = [val_tup_assign.value]
+    # key_tup = ("A", "B")
+    key_tup = ir.Var(scope, mk_unique_var("key_tup"), loc)
+    key_tup_assign = ir.Assign(ir.Expr.build_tuple(keys, loc), key_tup, loc)
+    f_ir._definitions[key_tup.name] = [key_tup_assign.value]
+    # new_Var = struct_if_heter_dict(val_tup, key_tup)
+    call_var = ir.Var(scope, mk_unique_var("conv_call"), loc)
+    call_global = ir.Assign(
+        ir.Global(
+            "struct_if_heter_dict", bodo.utils.conversion.struct_if_heter_dict, loc
+        ),
+        call_var,
+        loc,
+    )
+    f_ir._definitions[call_var.name] = [call_global.value]
+    new_var = ir.Var(scope, mk_unique_var("struct_val"), loc)
+    new_assign = ir.Assign(
+        ir.Expr.call(call_var, [val_tup, key_tup], {}, loc), new_var, loc
+    )
+    f_ir._definitions[new_var.name] = [new_assign.value]
+    cast_def.value = new_var
+    # {"A": v1, "B": v2} -> {"A": "A", "B": "B"} to avoid typing errors
+    ret_def.items = [(k, k) for (k, _) in ret_def.items]
+    block.body = (
+        block.body[:-2]
+        + [val_tup_assign, key_tup_assign, call_global, new_assign]
+        + block.body[-2:]
+    )
+    return tuple(key_strs)
+
+
+def fix_struct_return(f_ir):
+    """replaces constant dictionary return value with a struct for all return blocks
+    in 'f_ir'. Returns the key names if output is a struct.
+    """
+    key_names = None
+    cfg = compute_cfg_from_blocks(f_ir.blocks)
+    for exit_label in cfg.exit_points():
+        key_names = guard(
+            _replace_const_map_return, f_ir, f_ir.blocks[exit_label], exit_label
+        )
+    return key_names
 
 
 def update_node_list_definitions(node_list, func_ir):
@@ -581,8 +664,13 @@ def is_var_size_item_array_type(t):
     """returns True if array type 't' has variable size items (e.g. strings)
     """
     assert is_array_typ(t, False)
-    return t in (string_array_type, list_string_array_type) or isinstance(
-        t, ListItemArrayType
+    return (
+        t in (string_array_type, list_string_array_type)
+        or isinstance(t, ListItemArrayType)
+        or (
+            isinstance(t, StructArrayType)
+            and any(is_var_size_item_array_type(d) for d in t.data)
+        )
     )
 
 
