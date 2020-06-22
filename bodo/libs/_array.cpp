@@ -430,6 +430,8 @@ void struct_array_from_sequence(PyObject* struct_arr_obj, int n_fields,
 
     Py_DECREF(pd_mod);
     Py_DECREF(C_NA);
+#undef CHECK
+}
 
 /**
  * @brief call PyArray_GETITEM() of Numpy C-API
@@ -511,6 +513,7 @@ void* np_array_from_struct_array(int64_t num_structs, int n_fields, char** data,
     Py_DECREF(nan_obj);
     return ret;
 #undef CHECK
+}
 
 /**
  * @brief check if obj is a list
