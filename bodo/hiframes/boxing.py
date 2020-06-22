@@ -153,26 +153,6 @@ def _infer_series_dtype(S):
         )
 
 
-def _infer_series_list_dtype(A, name):
-    for i in range(len(A)):
-        first_val = A[i]
-        if isinstance(first_val, float) and np.isnan(first_val) or first_val is None:
-            continue
-        if not isinstance(first_val, (list, np.ndarray)):
-            raise ValueError("data type for column {} not supported".format(name))
-        if len(first_val) > 0:
-            # TODO: support more types
-            # TODO: can nulls be inside the list?
-            list_val = first_val[0]
-            try:
-                dtype = numba.typeof(list_val)
-                return types.List(dtype)
-            except:
-                raise ValueError("data type for column {} not supported".format(name))
-    # assuming array of all empty lists is string by default
-    return types.List(string_type)
-
-
 @box(DataFrameType)
 def box_dataframe(typ, val, c):
     """Boxes native dataframe value into Python dataframe object, required for function
@@ -491,11 +471,12 @@ def _infer_ndarray_obj_dtype(val):
         )
         return StructArrayType(data_types, field_names)
     if isinstance(first_val, (list, np.ndarray)):
-        dtype = bodo.hiframes.boxing._infer_series_list_dtype(val, "array")
-        assert isinstance(dtype, types.List)
-        if dtype == types.List(string_type):
+        # normalize list to array
+        first_val = np.array(first_val)
+        val_typ = numba.typeof(first_val)
+        if val_typ == string_array_type:
             return list_string_array_type
-        return ArrayItemArrayType(dtype.dtype)
+        return ArrayItemArrayType(val_typ.dtype)
     if isinstance(first_val, datetime.date):
         return datetime_date_array_type
     if isinstance(first_val, decimal.Decimal):

@@ -151,13 +151,15 @@ def _get_series_array_type(dtype):
     """get underlying default array type of series based on its dtype
     """
     # list(list(str))
-    if dtype == types.List(string_type):
+    if dtype == string_array_type:
         # default data layout is list but split view is used if possible
         return list_string_array_type
+
     # string array
     elif dtype == string_type:
         return string_array_type
-    elif isinstance(dtype, types.List):
+
+    elif isinstance(dtype, types.Array):
         return ArrayItemArrayType(dtype.dtype)
 
     # categorical
