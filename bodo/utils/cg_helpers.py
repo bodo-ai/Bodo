@@ -1,13 +1,16 @@
 """helper functions for code generation with llvmlite
 """
 from numba.core import types, cgutils
+import bodo
 from llvmlite import ir as lir
 import llvmlite.binding as ll
+
 # NOTE: importing hdist is necessary for MPI initialization before array_ext
 from bodo.libs import hdist
 from bodo.libs import array_ext
 
 ll.add_symbol("array_getitem", array_ext.array_getitem)
+ll.add_symbol("seq_getitem", array_ext.seq_getitem)
 ll.add_symbol("list_check", array_ext.list_check)
 ll.add_symbol("is_na_value", array_ext.is_na_value)
 
@@ -93,6 +96,16 @@ def pyarray_setitem(builder, context, arr_obj, ind, val_obj):
     builder.call(arr_setitem_fn, [arr_obj, arr_ptr, val_obj])
 
 
+def seq_getitem(builder, context, obj, ind):
+    """getitem for a sequence object (e.g. list/array)
+    """
+    pyobj = context.get_argument_type(types.pyobject)
+    py_ssize_t = context.get_value_type(types.intp)
+    getitem_fnty = lir.FunctionType(pyobj, [pyobj, py_ssize_t])
+    getitem_fn = builder.module.get_or_insert_function(getitem_fnty, name="seq_getitem")
+    return builder.call(getitem_fn, [obj, ind])
+
+
 def is_na_value(builder, context, val, C_NA):
     """check if Python object 'val' is an NA value (None, or np.nan or pd.NA).
     passing pd.NA in as C_NA to avoid getattr overheads inside loops.
@@ -113,3 +126,60 @@ def list_check(builder, context, obj):
     fnty = lir.FunctionType(int32_type, [pyobj])
     fn = builder.module.get_or_insert_function(fnty, name="list_check")
     return builder.call(fn, [obj])
+
+
+def count_array_inner_elems(c, builder, context, arr_obj, typ):
+    """count inner elements of array for upfront allocation.
+    For example, [[1, None, 3], [3], None, [4, None, 2]] return (7,).
+    """
+    n = bodo.utils.utils.object_length(c, arr_obj)
+
+    # get pd.NA object to check for new NA kind
+    mod_name = context.insert_const_string(builder.module, "pandas")
+    pd_mod_obj = c.pyapi.import_module_noblock(mod_name)
+    C_NA = c.pyapi.object_getattr_string(pd_mod_obj, "NA")
+
+    # create a tuple for nested counts
+    n_inner_nested_count = bodo.utils.transform.get_n_nested_counts(typ.dtype)
+    counts_val = context.make_tuple(
+        builder,
+        types.Tuple((n_inner_nested_count + 1) * [types.int64]),
+        (n_inner_nested_count + 1) * [context.get_constant(types.int64, 0)],
+    )
+    counts = cgutils.alloca_once_value(builder, counts_val)
+
+    # pseudocode for code generation:
+    # n_elems = 0
+    # for i in range(len(A)):
+    #   list_obj = A[i]
+    #   if not isna(list_obj):
+    #     n_elems += len(list_obj)
+
+    # for each array
+    with cgutils.for_range(builder, n) as loop:
+        array_ind = loop.index
+        # list_obj = A[i]
+        list_obj = seq_getitem(builder, context, arr_obj, array_ind)
+        # check for NA
+        is_na = is_na_value(builder, context, list_obj, C_NA)
+        not_na_cond = builder.icmp_unsigned("!=", is_na, lir.Constant(is_na.type, 1))
+        with builder.if_then(not_na_cond):
+            # n_elems += len(list_obj)
+            n_vals = bodo.utils.utils.object_length(c, list_obj)
+            counts_val = builder.load(counts)
+            new_count = builder.add(builder.extract_value(counts_val, 0), n_vals)
+            counts_val = builder.insert_value(counts_val, new_count, 0)
+            # if nested, call recursively and add values
+            if n_inner_nested_count > 0:
+                n_vals_inner = count_array_inner_elems(
+                    c, builder, context, list_obj, typ.dtype
+                )
+                for i in range(n_inner_nested_count):
+                    total_count = builder.extract_value(counts_val, i + 1)
+                    curr_count = builder.extract_value(n_vals_inner, i)
+                    counts_val = builder.insert_value(
+                        counts_val, builder.add(total_count, curr_count), i + 1
+                    )
+            builder.store(counts_val, counts)
+
+    return builder.load(counts)

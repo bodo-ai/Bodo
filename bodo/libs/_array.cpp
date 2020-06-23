@@ -452,6 +452,27 @@ PyObject* array_getitem(PyArrayObject* arr, const char* p) {
 #undef CHECK
 }
 
+
+/**
+ * @brief call PySequence_GetItem() of Python C-API
+ *
+ * @param obj sequence object (e.g. list)
+ * @param i index
+ * @return PyObject* value returned by getitem
+ */
+PyObject* seq_getitem(PyObject* obj, Py_ssize_t i) {
+#define CHECK(expr, msg)               \
+    if (!(expr)) {                     \
+        std::cerr << msg << std::endl; \
+        return NULL;                   \
+    }
+    PyObject* s = PySequence_GetItem(obj, i);
+    CHECK(s, "getting item failed");
+    return s;
+#undef CHECK
+}
+
+
 /**
  * @brief create a numpy array of dict objects from a StructArray
  *
@@ -628,6 +649,8 @@ PyMODINIT_FUNC PyInit_array_ext(void) {
                            PyLong_FromVoidPtr((void*)(&array_getitem)));
     PyObject_SetAttrString(m, "list_check",
                            PyLong_FromVoidPtr((void*)(&list_check)));
+    PyObject_SetAttrString(m, "seq_getitem",
+                        PyLong_FromVoidPtr((void*)(&seq_getitem)));
     PyObject_SetAttrString(m, "is_na_value",
                            PyLong_FromVoidPtr((void*)(&is_na_value)));
     return m;

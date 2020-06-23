@@ -43,6 +43,8 @@ from bodo.utils.cg_helpers import (
     list_check,
     is_na_value,
     get_bitmap_bit,
+    count_array_inner_elems,
+    seq_getitem,
 )
 from llvmlite import ir as lir
 import llvmlite.binding as ll
@@ -166,11 +168,28 @@ def construct_array_item_array(context, builder, array_item_type, n_arrays, n_el
     payload.n_arrays = n_arrays
 
     # alloc data
-    data = bodo.utils.utils._empty_nd_impl(
-        context, builder, types.Array(array_item_type.dtype.dtype, 1, "C"), [n_elems]
-    )
-    data_ptr = data.data
-    payload.data = data._getvalue()
+    if isinstance(array_item_type.dtype, ArrayItemArrayType):
+        n_counts = n_elems.type.count
+        n_items = builder.extract_value(n_elems, 0)
+        n_nested_elems = cgutils.pack_array(
+            builder, [builder.extract_value(n_elems, i) for i in range(1, n_counts)]
+        )
+        sig = (array_item_type.dtype)(
+            types.int64,
+            types.Tuple([types.int64] * (n_counts - 1)),
+            types.TypeRef(array_item_type.dtype.dtype),
+        )
+        args = (n_items, n_nested_elems, context.get_dummy_value())
+        data = lower_pre_alloc_array_item_array(context, builder, sig, args)
+        payload.data = data
+    else:
+        data = bodo.utils.utils._empty_nd_impl(
+            context,
+            builder,
+            types.Array(array_item_type.dtype.dtype, 1, "C"),
+            [builder.extract_value(n_elems, 0)],
+        )
+        payload.data = data._getvalue()
 
     # alloc offsets
     n_arrays_plus_1 = builder.add(n_arrays, lir.Constant(lir.IntType(64), 1))
@@ -193,11 +212,53 @@ def construct_array_item_array(context, builder, array_item_type, n_arrays, n_el
 
     builder.store(payload._getvalue(), meminfo_data_ptr)
 
-    return meminfo, data_ptr, offsets_ptr, null_bitmap_ptr
+    return meminfo, payload.data, offsets_ptr, null_bitmap_ptr
+
+
+def _unbox_array_item_array_copy_data(
+    typ, arr_obj, np_array_method, c, data_arr, item_ind, n_items
+):
+    """unbox 'arr_obj' and copy data to 'data_arr' at index 'item_ind'
+    """
+    context = c.context
+    builder = c.builder
+    if isinstance(typ.dtype, ArrayItemArrayType):
+        nested_payload = _get_array_item_arr_payload(
+            context, builder, typ.dtype, data_arr
+        )
+        nested_offsets_ptr = c.context.make_helper(
+            c.builder, types.Array(offset_typ, 1, "C"), nested_payload.offsets
+        ).data
+        nested_null_bitmap_ptr = c.context.make_helper(
+            c.builder, types.Array(types.uint8, 1, "C"), nested_payload.null_bitmap
+        ).data
+        _unbox_array_item_array_generic(
+            typ.dtype,
+            arr_obj,
+            c,
+            n_items,
+            nested_payload.data,
+            nested_offsets_ptr,
+            nested_null_bitmap_ptr,
+            item_ind,
+        )
+    else:
+        arr_obj = c.pyapi.call(np_array_method, c.pyapi.tuple_pack([arr_obj]))
+        data_ptr = context.make_array(typ.dtype)(context, builder, data_arr).data
+        item_size = context.get_abi_sizeof(context.get_data_type(typ.dtype.dtype))
+        # unbox array
+        arr_typ = typ.dtype
+        arr_val = c.pyapi.to_native_value(arr_typ, arr_obj).value
+        arr = context.make_array(arr_typ)(context, builder, arr_val)
+        # copy array data
+        (n_items,) = cgutils.unpack_tuple(builder, arr.shape, count=1)
+        dst = builder.gep(data_ptr, [item_ind])
+        cgutils.raw_memcpy(builder, dst, arr.data, n_items, item_size)
+        c.context.nrt.decref(builder, arr_typ, arr_val)
 
 
 def _unbox_array_item_array_generic(
-    typ, val, c, n_arrays, data_ptr, offsets_ptr, null_bitmap_ptr
+    typ, val, c, n_arrays, data_arr, offsets_ptr, null_bitmap_ptr, starting_offset
 ):
     """unbox array(item) array using generic Numba list unboxing to handle all item types
     that can be unboxed.
@@ -210,97 +271,75 @@ def _unbox_array_item_array_generic(
     pd_mod_obj = c.pyapi.import_module_noblock(mod_name)
     C_NA = c.pyapi.object_getattr_string(pd_mod_obj, "NA")
 
+    # get np.array to convert list items to array
+    mod_name = context.insert_const_string(builder.module, "numpy")
+    np_mod_obj = c.pyapi.import_module_noblock(mod_name)
+    np_array_method = c.pyapi.object_getattr_string(np_mod_obj, "array")
+
+    is_first = builder.icmp_unsigned(
+        "==", starting_offset, lir.Constant(starting_offset.type, 0)
+    )
+    with builder.if_then(is_first):
+        zero32 = c.context.get_constant(types.int32, 0)
+        c.builder.store(zero32, offsets_ptr)
+
     # pseudocode for code generation:
     # curr_item_ind = 0
     # for i in range(len(A)):
     #   offsets[i] = curr_item_ind
-    #   list_obj = A[i]
-    #   if isna(list_obj):
+    #   arr_obj = A[i]
+    #   if isna(arr_obj):
     #     set null_bitmap i'th bit to 0
     #   else:
     #     set null_bitmap i'th bit to 1
-    #     n_items = len(list_obj)
-    #     if isinstance(list_obj, list):
-    #        unbox(list_obj) and copy data to data_ptr
+    #     n_items = len(arr_obj)
+    #     if isinstance(arr_obj, list):
+    #        unbox(arr_obj) and copy data to data_arr
     #        curr_item_ind += n_items
-    #     else:  # list_obj is ndarray
-    #        unbox(list_obj) and copy data to data_ptr
+    #     else:  # arr_obj is ndarray
+    #        unbox(arr_obj) and copy data to data_arr
     #        curr_item_ind += n_items
     # offsets[n] = curr_item_ind;
 
-    list_type = typ.dtype
-    # curr_item_ind = 0
-    curr_item_ind = cgutils.alloca_once_value(builder, lir.Constant(lir.IntType(64), 0))
-    item_size = context.get_abi_sizeof(context.get_data_type(list_type.dtype))
+    # curr_item_ind = 0 (or first item index in nested case)
+    first_item_ind = builder.load(builder.gep(offsets_ptr, [starting_offset]))
+    curr_item_ind = cgutils.alloca_once_value(
+        builder, builder.sext(first_item_ind, lir.IntType(64))
+    )
     # for each array
     with cgutils.for_range(builder, n_arrays) as loop:
         array_ind = loop.index
+        write_ind = builder.add(array_ind, starting_offset)
         item_ind = builder.load(curr_item_ind)
+
         # offsets[i] = curr_item_ind
         builder.store(
             builder.trunc(item_ind, lir.IntType(32)),
-            builder.gep(offsets_ptr, [array_ind]),
+            builder.gep(offsets_ptr, [write_ind]),
         )
-        # list_obj = A[i]
-        list_obj = pyarray_getitem(builder, context, val, array_ind)
+        # arr_obj = A[i]
+        arr_obj = seq_getitem(builder, context, val, array_ind)
+        # set NA bit to 0
+        set_bitmap_bit(builder, null_bitmap_ptr, write_ind, 0)
+
         # check for NA
-        is_na = is_na_value(builder, context, list_obj, C_NA)
-        is_na_cond = builder.icmp_unsigned("==", is_na, lir.Constant(is_na.type, 1))
-        with builder.if_else(is_na_cond) as (then, orelse):
-            # NA case
-            with then:
-                # set NA bit to 0
-                set_bitmap_bit(builder, null_bitmap_ptr, array_ind, 0)
-            # non-NA case
-            with orelse:
-                # set NA bit to 1
-                set_bitmap_bit(builder, null_bitmap_ptr, array_ind, 1)
-                # each item can be either a list or an array
-                # check for list
-                l_check = list_check(builder, context, list_obj)
-                is_list = builder.icmp_unsigned(
-                    "==", l_check, lir.Constant(l_check.type, 1)
-                )
-                with builder.if_else(is_list) as (list_case, array_case):
-                    with list_case:
-                        # unbox list
-                        list_val = c.pyapi.to_native_value(list_type, list_obj).value
-                        list_payload = numba.cpython.listobj.ListInstance(
-                            context, builder, list_type, list_val
-                        )
-                        # copy list data
-                        n_items = list_payload.size
-                        dst = builder.gep(data_ptr, [item_ind])
-                        cgutils.raw_memcpy(
-                            builder, dst, list_payload.data, n_items, item_size
-                        )
-                        # NOTE: numba stores list meminfo inside the Python list
-                        # objects, which we need to clean up
-                        c.pyapi.object_set_private_data(
-                            list_obj, context.get_constant_null(types.voidptr)
-                        )
-                        c.context.nrt.decref(builder, list_type, list_val)
-                        c.pyapi.decref(list_obj)
-                        # curr_item_ind += n_items
-                        builder.store(builder.add(item_ind, n_items), curr_item_ind)
-                    with array_case:
-                        # unbox array
-                        arr_typ = types.Array(list_type.dtype, 1, "C")
-                        arr_val = c.pyapi.to_native_value(arr_typ, list_obj).value
-                        arr = context.make_array(arr_typ)(context, builder, arr_val)
-                        # copy array data
-                        (n_items,) = cgutils.unpack_tuple(builder, arr.shape, count=1)
-                        dst = builder.gep(data_ptr, [item_ind])
-                        cgutils.raw_memcpy(builder, dst, arr.data, n_items, item_size)
-                        c.context.nrt.decref(builder, arr_typ, arr_val)
-                        c.pyapi.decref(list_obj)
-                        # curr_item_ind += n_items
-                        builder.store(builder.add(item_ind, n_items), curr_item_ind)
+        is_na = is_na_value(builder, context, arr_obj, C_NA)
+        is_na_cond = builder.icmp_unsigned("!=", is_na, lir.Constant(is_na.type, 1))
+        with builder.if_then(is_na_cond):
+            # set NA bit to 1
+            set_bitmap_bit(builder, null_bitmap_ptr, write_ind, 1)
+            n_items = bodo.utils.utils.object_length(c, arr_obj)
+            _unbox_array_item_array_copy_data(
+                typ, arr_obj, np_array_method, c, data_arr, item_ind, n_items
+            )
+            c.pyapi.decref(arr_obj)
+            # curr_item_ind += n_items
+            builder.store(builder.add(item_ind, n_items), curr_item_ind)
 
     # offsets[n] = curr_item_ind;
     builder.store(
         builder.trunc(builder.load(curr_item_ind), lir.IntType(32)),
-        builder.gep(offsets_ptr, [n_arrays]),
+        builder.gep(offsets_ptr, [builder.add(n_arrays, starting_offset)]),
     )
 
     c.pyapi.decref(pd_mod_obj)
@@ -313,27 +352,33 @@ def unbox_array_item_array(typ, val, c):
     Unbox a numpy array with array of data values.
     """
 
-    n_arrays = bodo.utils.utils.object_length(c, val)
-    fnty = lir.FunctionType(lir.IntType(64), [lir.IntType(8).as_pointer()],)
-    fn_tp = c.builder.module.get_or_insert_function(
-        fnty, name="count_total_elems_list_array"
-    )
-    n_elems = c.builder.call(fn_tp, [val])
-
-    meminfo, data_ptr, offsets_ptr, null_bitmap_ptr = construct_array_item_array(
-        c.context, c.builder, typ, n_arrays, n_elems
-    )
-    ctype = bodo.utils.utils.numba_to_c_type(typ.dtype.dtype)
-
-    # use C unboxing when possible to avoid compilation and runtime overheads
-    # otherwise, use generic llvm/Numba unboxing
-    if typ.dtype.dtype in (
+    handle_in_c = typ.dtype.dtype in (
         types.int64,
         types.float64,
         types.bool_,
         datetime_date_type,
-    ):
+    )
 
+    n_arrays = bodo.utils.utils.object_length(c, val)
+
+    if handle_in_c:
+        fnty = lir.FunctionType(lir.IntType(64), [lir.IntType(8).as_pointer()],)
+        fn_tp = c.builder.module.get_or_insert_function(
+            fnty, name="count_total_elems_list_array"
+        )
+        n_elems = cgutils.pack_array(c.builder, [c.builder.call(fn_tp, [val])])
+    else:
+        n_elems = count_array_inner_elems(c, c.builder, c.context, val, typ)
+
+    meminfo, data_arr, offsets_ptr, null_bitmap_ptr = construct_array_item_array(
+        c.context, c.builder, typ, n_arrays, n_elems
+    )
+
+    # use C unboxing when possible to avoid compilation and runtime overheads
+    # otherwise, use generic llvm/Numba unboxing
+    if handle_in_c:
+        ctype = bodo.utils.utils.numba_to_c_type(typ.dtype.dtype)
+        data_ptr = c.context.make_array(typ.dtype)(c.context, c.builder, data_arr).data
         # function signature of array_item_array_from_sequence
         fnty = lir.FunctionType(
             lir.VoidType(),
@@ -360,8 +405,9 @@ def unbox_array_item_array(typ, val, c):
         )
 
     else:
+        zero64 = c.context.get_constant(types.int64, 0)
         _unbox_array_item_array_generic(
-            typ, val, c, n_arrays, data_ptr, offsets_ptr, null_bitmap_ptr
+            typ, val, c, n_arrays, data_arr, offsets_ptr, null_bitmap_ptr, zero64
         )
 
     array_item_array = c.context.make_helper(c.builder, typ)
@@ -541,29 +587,27 @@ def box_array_item_arr(typ, val, c):
     return arr
 
 
-@intrinsic
-def pre_alloc_array_item_array(
-    typingctx, num_lists_typ, num_values_typ, dtype_typ=None
-):
-    assert (
-        isinstance(num_lists_typ, types.Integer)
-        and isinstance(num_values_typ, types.Integer)
-        and isinstance(dtype_typ, (types.DType, types.NumberClass))
+def lower_pre_alloc_array_item_array(context, builder, sig, args):
+    array_item_type = sig.return_type
+    num_arrs, num_values, _ = args
+    meminfo, _, _, _ = construct_array_item_array(
+        context, builder, array_item_type, num_arrs, num_values
     )
+    array_item_array = context.make_helper(builder, array_item_type)
+    array_item_array.meminfo = meminfo
+    return array_item_array._getvalue()
+
+
+@intrinsic
+def pre_alloc_array_item_array(typingctx, num_arrs_typ, num_values_typ, dtype_typ=None):
+    assert isinstance(num_arrs_typ, types.Integer)
     array_item_type = ArrayItemArrayType(
         bodo.hiframes.pd_series_ext._get_series_array_type(dtype_typ.dtype)
     )
-
-    def codegen(context, builder, sig, args):
-        num_lists, num_values, _ = args
-        meminfo, _, _, _ = construct_array_item_array(
-            context, builder, array_item_type, num_lists, num_values
-        )
-        array_item_array = context.make_helper(builder, array_item_type)
-        array_item_array.meminfo = meminfo
-        return array_item_array._getvalue()
-
-    return array_item_type(types.int64, types.int64, dtype_typ), codegen
+    return (
+        array_item_type(types.int64, types.int64, dtype_typ),
+        lower_pre_alloc_array_item_array,
+    )
 
 
 def pre_alloc_array_item_array_equiv(
