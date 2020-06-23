@@ -683,6 +683,58 @@ ArrayAnalysis._analyze_op_call_bodo_libs_array_item_arr_ext_pre_alloc_array_item
 
 
 @intrinsic
+def init_array_item_array(
+    typingctx, n_arrays_typ, data_type, offsets_typ, null_bitmap_typ=None
+):
+    """Create a ArrayItemArray with provided offsets, data and null bitmap values.
+    """
+    assert null_bitmap_typ == types.Array(types.uint8, 1, "C")
+
+    def codegen(context, builder, signature, args):
+        n_arrays, data, offsets, null_bitmap = args
+        array_item_type = signature.return_type
+
+        # TODO: refactor with construct_array_item_array
+        # create payload type
+        payload_type = ArrayItemArrayPayloadType(array_item_type)
+        alloc_type = context.get_data_type(payload_type)
+        alloc_size = context.get_abi_sizeof(alloc_type)
+
+        # define dtor
+        dtor_fn = define_array_item_dtor(
+            context, builder, array_item_type, payload_type
+        )
+
+        # create meminfo
+        meminfo = context.nrt.meminfo_alloc_dtor(
+            builder, context.get_constant(types.uintp, alloc_size), dtor_fn
+        )
+        meminfo_void_ptr = context.nrt.meminfo_data(builder, meminfo)
+        meminfo_data_ptr = builder.bitcast(meminfo_void_ptr, alloc_type.as_pointer())
+
+        # alloc values in payload
+        payload = cgutils.create_struct_proxy(payload_type)(context, builder)
+        payload.n_arrays = n_arrays
+        payload.data = data
+        payload.offsets = offsets
+        payload.null_bitmap = null_bitmap
+        builder.store(payload._getvalue(), meminfo_data_ptr)
+
+        # increase refcount of stored values
+        context.nrt.incref(builder, signature.args[1], data)
+        context.nrt.incref(builder, signature.args[2], offsets)
+        context.nrt.incref(builder, signature.args[3], null_bitmap)
+
+        array_item_array = context.make_helper(builder, array_item_type)
+        array_item_array.meminfo = meminfo
+        return array_item_array._getvalue()
+
+    ret_typ = ArrayItemArrayType(data_type)
+    sig = ret_typ(n_arrays_typ, data_type, offsets_typ, null_bitmap_typ)
+    return sig, codegen
+
+
+@intrinsic
 def get_offsets(typingctx, arr_typ=None):
     assert isinstance(arr_typ, ArrayItemArrayType)
     # TODO: alias analysis extension functions for get_offsets, etc.?

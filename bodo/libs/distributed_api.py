@@ -783,7 +783,6 @@ def gatherv(data, allgather=False):
     # array(item) array
     if isinstance(data, ArrayItemArrayType):
         int32_typ_enum = np.int32(numba_to_c_type(types.int32))
-        data_typ_enum = np.int32(numba_to_c_type(data.dtype.dtype))
         char_typ_enum = np.int32(numba_to_c_type(types.uint8))
 
         def gatherv_array_item_arr_impl(data, allgather=False):  # pragma: no cover
@@ -804,44 +803,25 @@ def gatherv(data, allgather=False):
             recv_counts = gather_scalar(np.int32(n_loc), allgather)
             recv_counts_vals = gather_scalar(np.int32(n_all_vals), allgather)
             n_total = recv_counts.sum()
-            n_total_vals = recv_counts_vals.sum()
 
             # displacements
-            all_data = pre_alloc_array_item_array(
-                0, (0,), data_arr.dtype
-            )  # dummy arrays on non-root PEs
             displs = np.empty(1, np.int32)
-            displs_vals = np.empty(1, np.int32)
             recv_counts_nulls = np.empty(1, np.int32)
             displs_nulls = np.empty(1, np.int32)
             tmp_null_bytes = np.empty(1, np.uint8)
 
             if rank == MPI_ROOT or allgather:
-                all_data = pre_alloc_array_item_array(
-                    n_total, (n_total_vals,), data_arr.dtype
-                )
                 displs = bodo.ir.join.calc_disp(recv_counts)
-                displs_vals = bodo.ir.join.calc_disp(recv_counts_vals)
                 recv_counts_nulls = np.empty(len(recv_counts), np.int32)
                 for k in range(len(recv_counts)):
                     recv_counts_nulls[k] = (recv_counts[k] + 7) >> 3
                 displs_nulls = bodo.ir.join.calc_disp(recv_counts_nulls)
                 tmp_null_bytes = np.empty(recv_counts_nulls.sum(), np.uint8)
 
-            out_offsets_arr = bodo.libs.array_item_arr_ext.get_offsets(all_data)
-            out_data_arr = bodo.libs.array_item_arr_ext.get_data(all_data)
-            out_null_bitmap_arr = bodo.libs.array_item_arr_ext.get_null_bitmap(all_data)
+            out_offsets_arr = np.empty(n_total + 1, np.uint32)
+            out_data_arr = bodo.gatherv(data_arr)
+            out_null_bitmap_arr = np.empty((n_total + 7) >> 3, np.uint8)
 
-            # data
-            c_gatherv(
-                data_arr.ctypes,
-                np.int32(n_all_vals),
-                out_data_arr.ctypes,
-                recv_counts_vals.ctypes,
-                displs_vals.ctypes,
-                data_typ_enum,
-                allgather,
-            )
             # index offset
             c_gatherv(
                 send_list_lens.ctypes,
@@ -871,7 +851,10 @@ def gatherv(data, allgather=False):
                 recv_counts_nulls,
                 recv_counts,
             )
-            return all_data
+            out_arr = bodo.libs.array_item_arr_ext.init_array_item_array(
+                n_total, out_data_arr, out_offsets_arr, out_null_bitmap_arr
+            )
+            return out_arr
 
         return gatherv_array_item_arr_impl
 
