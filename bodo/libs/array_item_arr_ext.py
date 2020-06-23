@@ -605,7 +605,7 @@ def pre_alloc_array_item_array(typingctx, num_arrs_typ, num_values_typ, dtype_ty
         bodo.hiframes.pd_series_ext._get_series_array_type(dtype_typ.dtype)
     )
     return (
-        array_item_type(types.int64, types.int64, dtype_typ),
+        array_item_type(types.int64, num_values_typ, dtype_typ),
         lower_pre_alloc_array_item_array,
     )
 
@@ -732,7 +732,7 @@ def array_item_arr_getitem_array(arr, ind):
                     n_arrays += 1
                     n_values += int(offsets[i + 1] - offsets[i])
 
-            out_arr = pre_alloc_array_item_array(n_arrays, n_values, data.dtype)
+            out_arr = pre_alloc_array_item_array(n_arrays, (n_values,), data.dtype)
             out_offsets = get_offsets(out_arr)
             out_data = get_data(out_arr)
             out_null_bitmap = get_null_bitmap(out_arr)
@@ -778,7 +778,7 @@ def array_item_arr_getitem_array(arr, ind):
                 i = ind[k]
                 n_values += int(offsets[i + 1] - offsets[i])
 
-            out_arr = pre_alloc_array_item_array(n_arrays, n_values, data.dtype)
+            out_arr = pre_alloc_array_item_array(n_arrays, (n_values,), data.dtype)
             out_offsets = get_offsets(out_arr)
             out_data = get_data(out_arr)
             out_null_bitmap = get_null_bitmap(out_arr)
@@ -860,7 +860,7 @@ def overload_array_item_arr_copy(A):
         # allocate
         n = len(A)
         n_values = offsets[-1]
-        out_arr = pre_alloc_array_item_array(n, n_values, data.dtype)
+        out_arr = pre_alloc_array_item_array(n, (n_values,), data.dtype)
         out_offsets = get_offsets(out_arr)
         out_data = get_data(out_arr)
         out_null_bitmap = get_null_bitmap(out_arr)

@@ -808,7 +808,7 @@ def gatherv(data, allgather=False):
 
             # displacements
             all_data = pre_alloc_array_item_array(
-                0, 0, data_arr.dtype
+                0, (0,), data_arr.dtype
             )  # dummy arrays on non-root PEs
             displs = np.empty(1, np.int32)
             displs_vals = np.empty(1, np.int32)
@@ -818,7 +818,7 @@ def gatherv(data, allgather=False):
 
             if rank == MPI_ROOT or allgather:
                 all_data = pre_alloc_array_item_array(
-                    n_total, n_total_vals, data_arr.dtype
+                    n_total, (n_total_vals,), data_arr.dtype
                 )
                 displs = bodo.ir.join.calc_disp(recv_counts)
                 displs_vals = bodo.ir.join.calc_disp(recv_counts_vals)
@@ -1329,7 +1329,9 @@ def scatterv_impl(data):
             # alloc output array
             n_loc = sendcounts[rank]  # total number of elements on this PE
             n_loc_item = sendcounts_item[rank]
-            recv_arr = pre_alloc_array_item_array(n_loc, n_loc_item, in_data_arr.dtype)
+            recv_arr = pre_alloc_array_item_array(
+                n_loc, (n_loc_item,), in_data_arr.dtype
+            )
             recv_offsets_arr = bodo.libs.array_item_arr_ext.get_offsets(recv_arr)
             recv_data_arr = bodo.libs.array_item_arr_ext.get_data(recv_arr)
             recv_null_bitmap_arr = bodo.libs.array_item_arr_ext.get_null_bitmap(

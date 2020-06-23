@@ -555,7 +555,7 @@ def concat_overload(arr_list):
                 num_items += n_items
             dtype = bodo.libs.array_item_arr_ext.get_data(arr_list[0]).dtype
             out_arr = bodo.libs.array_item_arr_ext.pre_alloc_array_item_array(
-                num_lists, num_items, dtype
+                num_lists, (num_items,), dtype
             )
             out_offsets = bodo.libs.array_item_arr_ext.get_offsets(out_arr)
             out_data = bodo.libs.array_item_arr_ext.get_data(out_arr)
@@ -692,7 +692,7 @@ def concat_overload(arr_list):
                 curr_chars += n_char
 
             out_arr._index_offsets[num_lists] = num_strs
-            out_arr. _data_offsets[num_strs] = num_chars
+            out_arr._data_offsets[num_strs] = num_chars
             return out_arr
 
         return list_string_array_concat_impl
@@ -871,7 +871,7 @@ def overload_gen_na_array(n, arr):
             in_data = bodo.libs.array_item_arr_ext.get_data(arr)
             dtype = in_data.dtype
             out_arr = bodo.libs.array_item_arr_ext.pre_alloc_array_item_array(
-                num_lists, num_items, dtype
+                num_lists, (num_items,), dtype
             )
             out_offsets = bodo.libs.array_item_arr_ext.get_offsets(out_arr)
             out_data = bodo.libs.array_item_arr_ext.get_data(out_arr)

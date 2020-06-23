@@ -1451,7 +1451,7 @@ class SeriesPass:
             elif isinstance(typ, ArrayItemArrayType):
                 dtype = typ.dtype.dtype
                 impl = lambda n, t, s=None: bodo.libs.array_item_arr_ext.pre_alloc_array_item_array(
-                    n, s[0], _dtype
+                    n, s, _dtype
                 )  # pragma: no cover
             elif isinstance(typ, StructArrayType):
                 dtypes = typ.data
