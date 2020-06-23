@@ -348,7 +348,7 @@ def test_pq_list_str(datapath):
     check_func(test_impl, (datapath("list_str_parts.pq"),))
 
 
-def test_pq_list_item(datapath):
+def test_pq_array_item(datapath):
     def test_impl(fname):
         return pd.read_parquet(fname)
 

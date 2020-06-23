@@ -137,9 +137,9 @@ array_info* info_from_table(table_info* table, int64_t col_ind) {
 }
 
 /**
- * @brief count the total number of data elements in list(item) arrays
+ * @brief count the total number of data elements in array(item) arrays
  *
- * @param list_arr_obj list(item) array object
+ * @param list_arr_obj array(item) array object
  * @return int64_t total number of data elements
  */
 int64_t count_total_elems_list_array(PyObject* list_arr_obj) {
@@ -204,23 +204,23 @@ inline void copy_item_to_buffer(char* data, Py_ssize_t ind, PyObject* item,
         Py_DECREF(day_obj);
     } else
         std::cerr << "data type " << dtype
-                  << " not supported for unboxing list(item) array."
+                  << " not supported for unboxing array(item) array."
                   << std::endl;
 }
 
 /**
- * @brief compute offsets, data, and null_bitmap values for list(item) array
+ * @brief compute offsets, data, and null_bitmap values for array(item) array
  * from an array of lists of values. The lists inside array can have different
  * lengths.
  *
- * @param list_item_arr_obj Python Sequence object, intended to be an array of
+ * @param array_item_arr_obj Python Sequence object, intended to be an array of
  * lists of items.
  * @param data data buffer to be filled with all values
  * @param offsets offsets buffer to be filled with computed offsets
  * @param null_bitmap nulls buffer to be filled
  * @param dtype data type of values, currently only float64 and int64 supported.
  */
-void list_item_array_from_sequence(PyObject* list_arr_obj, char* data,
+void array_item_array_from_sequence(PyObject* list_arr_obj, char* data,
                                    uint32_t* offsets, uint8_t* null_bitmap,
                                    Bodo_CTypes::CTypeEnum dtype) {
 #define CHECK(expr, msg)               \
@@ -244,7 +244,7 @@ void list_item_array_from_sequence(PyObject* list_arr_obj, char* data,
     for (Py_ssize_t i = 0; i < n; ++i) {
         offsets[i] = curr_item_ind;
         PyObject* s = PySequence_GetItem(list_arr_obj, i);
-        CHECK(s, "getting list(item) array element failed");
+        CHECK(s, "getting array(item) array element failed");
         // Pandas stores NA as either None or nan
         if (s == Py_None ||
             (PyFloat_Check(s) && std::isnan(PyFloat_AsDouble(s))) ||
@@ -302,12 +302,12 @@ inline PyObject* value_to_pyobject(const char* data, int64_t ind,
         return PyDate_FromDate(year, month, day);
     } else
         std::cerr << "data type " << dtype
-                  << " not supported for boxing list(item) array." << std::endl;
+                  << " not supported for boxing array(item) array." << std::endl;
     return NULL;
 }
 
 /**
- * @brief create a numpy array of lists of item objects from a ListItemArray
+ * @brief create a numpy array of lists of item objects from a ArrayItemArray
  *
  * @param num_lists number of lists in input array
  * @param buffer all values
@@ -316,7 +316,7 @@ inline PyObject* value_to_pyobject(const char* data, int64_t ind,
  * @param dtype data type of values (currently, only int/float)
  * @return numpy array of list of item objects
  */
-void* np_array_from_list_item_array(int64_t num_lists, const char* buffer,
+void* np_array_from_array_item_array(int64_t num_lists, const char* buffer,
                                     const uint32_t* offsets,
                                     const uint8_t* null_bitmap,
                                     Bodo_CTypes::CTypeEnum dtype) {
@@ -613,17 +613,17 @@ PyMODINIT_FUNC PyInit_array_ext(void) {
         m, "count_total_elems_list_array",
         PyLong_FromVoidPtr((void*)(&count_total_elems_list_array)));
     PyObject_SetAttrString(
-        m, "list_item_array_from_sequence",
-        PyLong_FromVoidPtr((void*)(&list_item_array_from_sequence)));
-    PyObject_SetAttrString(
-        m, "np_array_from_list_item_array",
-        PyLong_FromVoidPtr((void*)(&np_array_from_list_item_array)));
+        m, "array_item_array_from_sequence",
+        PyLong_FromVoidPtr((void*)(&array_item_array_from_sequence)));
     PyObject_SetAttrString(
         m, "struct_array_from_sequence",
         PyLong_FromVoidPtr((void*)(&struct_array_from_sequence)));
     PyObject_SetAttrString(
         m, "np_array_from_struct_array",
         PyLong_FromVoidPtr((void*)(&np_array_from_struct_array)));
+    PyObject_SetAttrString(
+        m, "np_array_from_array_item_array",
+        PyLong_FromVoidPtr((void*)(&np_array_from_array_item_array)));
     PyObject_SetAttrString(m, "array_getitem",
                            PyLong_FromVoidPtr((void*)(&array_getitem)));
     PyObject_SetAttrString(m, "list_check",

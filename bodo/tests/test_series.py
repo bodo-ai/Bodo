@@ -383,7 +383,7 @@ def test_series_astype_numeric(numeric_series_val, memory_leak_check):
 
 
 def test_series_astype_str(series_val):
-    # not supported for list(string) and list(item)
+    # not supported for list(string) and array(item)
     if isinstance(series_val.values[0], list):
         return
 
@@ -531,7 +531,7 @@ def test_series_iat_getitem(series_val):
 
 
 def test_series_iat_setitem(series_val, memory_leak_check):
-    # not supported for list(string) and list(item)
+    # not supported for list(string) and array(item)
     if isinstance(series_val.values[0], list):
         return
 
@@ -600,7 +600,7 @@ def test_series_iloc_getitem_array_bool(series_val, memory_leak_check):
 
 
 def test_series_iloc_setitem_int(series_val, memory_leak_check):
-    # not supported for list(string) and list(item)
+    # not supported for list(string) and array(item)
     if isinstance(series_val.values[0], list):
         return
 
@@ -624,7 +624,7 @@ def test_series_iloc_setitem_int(series_val, memory_leak_check):
 
 
 def test_series_iloc_setitem_list_bool(series_val, memory_leak_check):
-    # not supported for list(string) and list(item)
+    # not supported for list(string) and array(item)
     if isinstance(series_val.values[0], list):
         return
 
@@ -676,7 +676,7 @@ def test_series_iloc_setitem_list_bool(series_val, memory_leak_check):
 
 
 def test_series_iloc_setitem_slice(series_val, memory_leak_check):
-    # not supported for list(string) and list(item)
+    # not supported for list(string) and array(item)
     if isinstance(series_val.values[0], list):
         return
 
@@ -728,7 +728,7 @@ def test_series_iloc_setitem_slice(series_val, memory_leak_check):
 
 @pytest.mark.parametrize("idx", [[1, 3], np.array([1, 3]), pd.Series([1, 3])])
 def test_series_iloc_setitem_list_int(series_val, idx, memory_leak_check):
-    # not supported for list(string) and list(item)
+    # not supported for list(string) and array(item)
     if isinstance(series_val.values[0], list):
         return
 
@@ -849,7 +849,7 @@ def test_series_getitem_array_bool(series_val, memory_leak_check):
 
 
 def test_series_setitem_int(series_val, memory_leak_check):
-    # not supported for list(string) and list(item)
+    # not supported for list(string) and array(item)
     if isinstance(series_val.values[0], list):
         return
 
@@ -876,7 +876,7 @@ def test_series_setitem_int(series_val, memory_leak_check):
 
 
 def test_series_setitem_slice(series_val, memory_leak_check):
-    # not supported for list(string) and list(item)
+    # not supported for list(string) and array(item)
     if isinstance(series_val.values[0], list):
         return
 
@@ -904,7 +904,7 @@ def test_series_setitem_slice(series_val, memory_leak_check):
 @pytest.mark.parametrize("idx", [[1, 4], np.array([1, 4]), pd.Series([1, 4])])
 @pytest.mark.parametrize("list_val_arg", [True, False])
 def test_series_setitem_list_int(series_val, idx, list_val_arg, memory_leak_check):
-    # not supported for list(string) and list(item)
+    # not supported for list(string) and array(item)
     if isinstance(series_val.values[0], list):
         return
 
@@ -1501,8 +1501,8 @@ def test_series_map_list_str(memory_leak_check):
     check_func(test_impl, (S,))
 
 
-def test_series_map_list_item(memory_leak_check):
-    """test list(item) output in map"""
+def test_series_map_array_item(memory_leak_check):
+    """test array(item) output in map"""
 
     def test_impl(S):
         return S.map(lambda a: [a, 3] if a > 200 else [2 * a])
@@ -1694,7 +1694,7 @@ def test_series_min(series_val, memory_leak_check):
     if series_val.dtype == np.dtype("timedelta64[ns]"):
         return
 
-    # not supported for list(string) and list(item)
+    # not supported for list(string) and array(item)
     if isinstance(series_val.values[0], list):
         return
 
@@ -1721,7 +1721,7 @@ def test_series_max(series_val, memory_leak_check):
     if series_val.dtype == np.dtype("timedelta64[ns]"):
         return
 
-    # not supported for list(string) and list(item)
+    # not supported for list(string) and array(item)
     if isinstance(series_val.values[0], list):
         return
 
@@ -1763,7 +1763,7 @@ def test_series_idxmin(series_val, memory_leak_check):
     if series_val.dtype == np.dtype("timedelta64[ns]"):
         return
 
-    # not supported for list(string) and list(item)
+    # not supported for list(string) and array(item)
     if isinstance(series_val.values[0], list):
         return
 
@@ -1800,7 +1800,7 @@ def test_series_idxmax(series_val, memory_leak_check):
     if series_val.dtype == np.dtype("timedelta64[ns]"):
         return
 
-    # not supported for list(string) and list(item)
+    # not supported for list(string) and array(item)
     if isinstance(series_val.values[0], list):
         return
 
@@ -1862,7 +1862,7 @@ def test_series_equals(memory_leak_check):
 
 
 def test_series_head(series_val, memory_leak_check):
-    # not supported for list(string) and list(item)
+    # not supported for list(string) and array(item)
     if isinstance(series_val.values[0], list):
         return
 
@@ -1873,7 +1873,7 @@ def test_series_head(series_val, memory_leak_check):
 
 
 def test_series_tail(series_val, memory_leak_check):
-    # not supported for list(string) and list(item)
+    # not supported for list(string) and array(item)
     if isinstance(series_val.values[0], list):
         return
 
@@ -1993,7 +1993,7 @@ def test_series_argsort_fast(memory_leak_check):
 
 @pytest.mark.slow
 def test_series_argsort(series_val, memory_leak_check):
-    # not supported for list(string) and list(item)
+    # not supported for list(string) and array(item)
     if isinstance(series_val.values[0], list):
         return
 
@@ -2039,7 +2039,7 @@ def test_series_sort_values(series_val, memory_leak_check):
 
 @pytest.mark.parametrize("ignore_index", [True, False])
 def test_series_append_single(series_val, ignore_index, memory_leak_check):
-    # not supported for list(string) and list(item)
+    # not supported for list(string) and array(item)
     if isinstance(series_val.values[0], list):
         return
 
@@ -2068,7 +2068,7 @@ def test_series_append_single(series_val, ignore_index, memory_leak_check):
 
 @pytest.mark.parametrize("ignore_index", [True, False])
 def test_series_append_multi(series_val, ignore_index, memory_leak_check):
-    # not supported for list(string) and list(item)
+    # not supported for list(string) and array(item)
     if isinstance(series_val.values[0], list):
         return
 

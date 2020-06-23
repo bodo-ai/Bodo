@@ -38,9 +38,9 @@ from bodo.libs.list_str_arr_ext import (
     list_string_array_type,
     pre_alloc_list_string_array,
 )
-from bodo.libs.list_item_arr_ext import (
-    ListItemArrayType,
-    pre_alloc_list_item_array,
+from bodo.libs.array_item_arr_ext import (
+    ArrayItemArrayType,
+    pre_alloc_array_item_array,
 )
 from bodo.libs.struct_arr_ext import StructArrayType
 from bodo.hiframes.pd_categorical_ext import CategoricalArray
@@ -780,17 +780,17 @@ def gatherv(data, allgather=False):
 
         return gatherv_list_str_arr_impl
 
-    # list(item) array
-    if isinstance(data, ListItemArrayType):
+    # array(item) array
+    if isinstance(data, ArrayItemArrayType):
         int32_typ_enum = np.int32(numba_to_c_type(types.int32))
         data_typ_enum = np.int32(numba_to_c_type(data.elem_type))
         char_typ_enum = np.int32(numba_to_c_type(types.uint8))
 
-        def gatherv_list_item_arr_impl(data, allgather=False):  # pragma: no cover
+        def gatherv_array_item_arr_impl(data, allgather=False):  # pragma: no cover
             rank = bodo.libs.distributed_api.get_rank()
-            offsets_arr = bodo.libs.list_item_arr_ext.get_offsets(data)
-            data_arr = bodo.libs.list_item_arr_ext.get_data(data)
-            null_bitmap_arr = bodo.libs.list_item_arr_ext.get_null_bitmap(data)
+            offsets_arr = bodo.libs.array_item_arr_ext.get_offsets(data)
+            data_arr = bodo.libs.array_item_arr_ext.get_data(data)
+            null_bitmap_arr = bodo.libs.array_item_arr_ext.get_null_bitmap(data)
             n_loc = len(data)
             n_all_vals = int(offsets_arr[-1])
 
@@ -807,7 +807,7 @@ def gatherv(data, allgather=False):
             n_total_vals = recv_counts_vals.sum()
 
             # displacements
-            all_data = pre_alloc_list_item_array(
+            all_data = pre_alloc_array_item_array(
                 0, 0, data_arr.dtype
             )  # dummy arrays on non-root PEs
             displs = np.empty(1, np.int32)
@@ -817,7 +817,7 @@ def gatherv(data, allgather=False):
             tmp_null_bytes = np.empty(1, np.uint8)
 
             if rank == MPI_ROOT or allgather:
-                all_data = pre_alloc_list_item_array(
+                all_data = pre_alloc_array_item_array(
                     n_total, n_total_vals, data_arr.dtype
                 )
                 displs = bodo.ir.join.calc_disp(recv_counts)
@@ -828,9 +828,9 @@ def gatherv(data, allgather=False):
                 displs_nulls = bodo.ir.join.calc_disp(recv_counts_nulls)
                 tmp_null_bytes = np.empty(recv_counts_nulls.sum(), np.uint8)
 
-            out_offsets_arr = bodo.libs.list_item_arr_ext.get_offsets(all_data)
-            out_data_arr = bodo.libs.list_item_arr_ext.get_data(all_data)
-            out_null_bitmap_arr = bodo.libs.list_item_arr_ext.get_null_bitmap(all_data)
+            out_offsets_arr = bodo.libs.array_item_arr_ext.get_offsets(all_data)
+            out_data_arr = bodo.libs.array_item_arr_ext.get_data(all_data)
+            out_null_bitmap_arr = bodo.libs.array_item_arr_ext.get_null_bitmap(all_data)
 
             # data
             c_gatherv(
@@ -873,7 +873,7 @@ def gatherv(data, allgather=False):
             )
             return all_data
 
-        return gatherv_list_item_arr_impl
+        return gatherv_array_item_arr_impl
 
     if isinstance(data, StructArrayType):
         names = data.names
@@ -1135,7 +1135,7 @@ def get_value_for_type(dtype):  # pragma: no cover
     if isinstance(dtype, types.BaseTuple):
         return tuple(get_value_for_type(t) for t in dtype.types)
 
-    if isinstance(dtype, ListItemArrayType):
+    if isinstance(dtype, ArrayItemArrayType):
         if isinstance(dtype.dtype.dtype, types.Integer):
             return pd.Series([[1, 2], []]).values
         if isinstance(dtype.dtype.dtype, types.Float):
@@ -1271,17 +1271,17 @@ def scatterv_impl(data):
 
         return scatterv_str_arr_impl
 
-    if isinstance(data, ListItemArrayType):
-        # Code adapted from the string code. Both the string and list(item) codes should be
+    if isinstance(data, ArrayItemArrayType):
+        # Code adapted from the string code. Both the string and array(item) codes should be
         # refactored.
         int32_typ_enum = np.int32(numba_to_c_type(types.int32))
         data_typ_enum = np.int32(numba_to_c_type(data.elem_type))
         char_typ_enum = np.int32(numba_to_c_type(types.uint8))
 
-        def scatterv_list_item_impl(data):
-            in_offsets_arr = bodo.libs.list_item_arr_ext.get_offsets(data)
-            in_data_arr = bodo.libs.list_item_arr_ext.get_data(data)
-            in_null_bitmap_arr = bodo.libs.list_item_arr_ext.get_null_bitmap(data)
+        def scatterv_array_item_impl(data):
+            in_offsets_arr = bodo.libs.array_item_arr_ext.get_offsets(data)
+            in_data_arr = bodo.libs.array_item_arr_ext.get_data(data)
+            in_null_bitmap_arr = bodo.libs.array_item_arr_ext.get_null_bitmap(data)
             #
             rank = bodo.libs.distributed_api.get_rank()
             n_pes = bodo.libs.distributed_api.get_size()
@@ -1329,10 +1329,10 @@ def scatterv_impl(data):
             # alloc output array
             n_loc = sendcounts[rank]  # total number of elements on this PE
             n_loc_item = sendcounts_item[rank]
-            recv_arr = pre_alloc_list_item_array(n_loc, n_loc_item, in_data_arr.dtype)
-            recv_offsets_arr = bodo.libs.list_item_arr_ext.get_offsets(recv_arr)
-            recv_data_arr = bodo.libs.list_item_arr_ext.get_data(recv_arr)
-            recv_null_bitmap_arr = bodo.libs.list_item_arr_ext.get_null_bitmap(recv_arr)
+            recv_arr = pre_alloc_array_item_array(n_loc, n_loc_item, in_data_arr.dtype)
+            recv_offsets_arr = bodo.libs.array_item_arr_ext.get_offsets(recv_arr)
+            recv_data_arr = bodo.libs.array_item_arr_ext.get_data(recv_arr)
+            recv_null_bitmap_arr = bodo.libs.array_item_arr_ext.get_null_bitmap(recv_arr)
 
             # ----- list of item lengths -----------
 
@@ -1377,7 +1377,7 @@ def scatterv_impl(data):
 
             return recv_arr
 
-        return scatterv_list_item_impl
+        return scatterv_array_item_impl
 
     if isinstance(data, (IntegerArrayType, DecimalArrayType)) or data in (
         boolean_array,

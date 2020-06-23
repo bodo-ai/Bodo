@@ -606,7 +606,7 @@ int64_t pq_read_list_string_single_file(
  * @param[out] data_vec : vector of data (elements of type out_dtype)
  * @param[out] null_vec : vector specifying if rows contain nulls or not
  */
-int64_t pq_read_list_item_single_file(
+int64_t pq_read_array_item_single_file(
     std::shared_ptr<parquet::arrow::FileReader> arrow_reader,
     int64_t column_idx, int out_dtype, int64_t start, int64_t count,
     std::vector<uint32_t>* offset_vec, std::vector<uint8_t>* data_vec,

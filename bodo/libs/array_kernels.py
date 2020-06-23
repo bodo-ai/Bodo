@@ -36,8 +36,8 @@ from bodo.ir.sort import (
     alloc_pre_shuffle_metadata,
 )
 from bodo.libs.list_str_arr_ext import list_string_array_type
-from bodo.libs.list_item_arr_ext import ListItemArrayType
 from bodo.libs.struct_arr_ext import StructArrayType
+from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.hiframes.split_impl import string_array_split_view_type
 from bodo.hiframes.datetime_date_ext import datetime_date_array_type
 
@@ -99,10 +99,10 @@ def overload_isna(arr, i):
             arr._null_bitmap, i
         )  # pragma: no cover
 
-    # list(item) array
-    if isinstance(arr, ListItemArrayType):
+    # array(item) array
+    if isinstance(arr, ArrayItemArrayType):
         return lambda arr, i: not bodo.libs.int_arr_ext.get_bit_bitmap_arr(
-            bodo.libs.list_item_arr_ext.get_null_bitmap(arr), i
+            bodo.libs.array_item_arr_ext.get_null_bitmap(arr), i
         )  # pragma: no cover
 
     # struct array
@@ -540,33 +540,33 @@ def concat_overload(arr_list):
     # TODO: handle numerics to string casting case
 
     if isinstance(arr_list, types.UniTuple) and isinstance(
-        arr_list.dtype, ListItemArrayType
+        arr_list.dtype, ArrayItemArrayType
     ):
 
-        def list_item_concat_impl(arr_list):  # pragma: no cover
+        def array_item_concat_impl(arr_list):  # pragma: no cover
             # preallocate the output
             num_lists = 0
             num_items = 0
             for A in arr_list:
                 n_lists = len(A)
-                in_offsets = bodo.libs.list_item_arr_ext.get_offsets(A)
+                in_offsets = bodo.libs.array_item_arr_ext.get_offsets(A)
                 n_items = in_offsets[n_lists]
                 num_lists += n_lists
                 num_items += n_items
-            dtype = bodo.libs.list_item_arr_ext.get_data(arr_list[0]).dtype
-            out_arr = bodo.libs.list_item_arr_ext.pre_alloc_list_item_array(
+            dtype = bodo.libs.array_item_arr_ext.get_data(arr_list[0]).dtype
+            out_arr = bodo.libs.array_item_arr_ext.pre_alloc_array_item_array(
                 num_lists, num_items, dtype
             )
-            out_offsets = bodo.libs.list_item_arr_ext.get_offsets(out_arr)
-            out_data = bodo.libs.list_item_arr_ext.get_data(out_arr)
-            out_null_bitmap = bodo.libs.list_item_arr_ext.get_null_bitmap(out_arr)
+            out_offsets = bodo.libs.array_item_arr_ext.get_offsets(out_arr)
+            out_data = bodo.libs.array_item_arr_ext.get_data(out_arr)
+            out_null_bitmap = bodo.libs.array_item_arr_ext.get_null_bitmap(out_arr)
             # copy data to output
             curr_list = 0
             curr_item = 0
             for A in arr_list:
-                in_offsets = bodo.libs.list_item_arr_ext.get_offsets(A)
-                in_data = bodo.libs.list_item_arr_ext.get_data(A)
-                in_null_bitmap = bodo.libs.list_item_arr_ext.get_null_bitmap(A)
+                in_offsets = bodo.libs.array_item_arr_ext.get_offsets(A)
+                in_data = bodo.libs.array_item_arr_ext.get_data(A)
+                in_null_bitmap = bodo.libs.array_item_arr_ext.get_null_bitmap(A)
                 n_lists = len(A)
                 n_items = in_offsets[n_lists]
                 # copying of index
@@ -584,7 +584,7 @@ def concat_overload(arr_list):
             out_offsets[curr_list] = curr_item
             return out_arr
 
-        return list_item_concat_impl
+        return array_item_concat_impl
 
     if (
         isinstance(arr_list, types.UniTuple)
@@ -862,27 +862,27 @@ def overload_gen_na_array(n, arr):
     else:
         dtype = arr.dtype
 
-    if isinstance(arr, ListItemArrayType):
+    if isinstance(arr, ArrayItemArrayType):
 
-        def list_item_impl(n, arr):  # pragma: no cover
+        def array_item_impl(n, arr):  # pragma: no cover
             # preallocate the output
             num_lists = n
             num_items = 0
-            in_data = bodo.libs.list_item_arr_ext.get_data(arr)
+            in_data = bodo.libs.array_item_arr_ext.get_data(arr)
             dtype = in_data.dtype
-            out_arr = bodo.libs.list_item_arr_ext.pre_alloc_list_item_array(
+            out_arr = bodo.libs.array_item_arr_ext.pre_alloc_array_item_array(
                 num_lists, num_items, dtype
             )
-            out_offsets = bodo.libs.list_item_arr_ext.get_offsets(out_arr)
-            out_data = bodo.libs.list_item_arr_ext.get_data(out_arr)
-            out_null_bitmap = bodo.libs.list_item_arr_ext.get_null_bitmap(out_arr)
+            out_offsets = bodo.libs.array_item_arr_ext.get_offsets(out_arr)
+            out_data = bodo.libs.array_item_arr_ext.get_data(out_arr)
+            out_null_bitmap = bodo.libs.array_item_arr_ext.get_null_bitmap(out_arr)
             for i in range(n + 1):
                 out_offsets[i] = 0
             for i in range(n):
                 bodo.libs.int_arr_ext.set_bit_to_arr(out_null_bitmap, i, 0)
             return out_arr
 
-        return list_item_impl
+        return array_item_impl
 
     if arr == datetime_date_array_type:
 

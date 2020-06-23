@@ -27,7 +27,7 @@ int64_t pq_read_list_string_single_file(
     std::vector<uint32_t> *index_offset_vec = NULL,
     std::vector<uint8_t> *data_vec = NULL, std::vector<bool> *null_vec = NULL);
 
-int64_t pq_read_list_item_single_file(
+int64_t pq_read_array_item_single_file(
     std::shared_ptr<parquet::arrow::FileReader>, int64_t column_idx,
     int out_dtype, int64_t start, int64_t count,
     std::vector<uint32_t> *offset_vec = NULL,

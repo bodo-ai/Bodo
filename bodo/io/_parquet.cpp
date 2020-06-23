@@ -52,7 +52,7 @@ int pq_read_string(DatasetReader *reader, int64_t column_idx,
 int pq_read_list_string(DatasetReader *reader, int64_t column_idx,
                         uint32_t **out_offsets, uint32_t **index_offsets,
                         uint8_t **out_data, uint8_t **out_nulls);
-int pq_read_list_item(DatasetReader *reader, int64_t column_idx, int out_dtype,
+int pq_read_array_item(DatasetReader *reader, int64_t column_idx, int out_dtype,
                       array_info **out_offsets, array_info **out_data,
                       array_info **out_nulls);
 
@@ -102,8 +102,8 @@ PyMODINIT_FUNC PyInit_parquet_cpp(void) {
                            PyLong_FromVoidPtr((void *)(&pq_read_string)));
     PyObject_SetAttrString(m, "pq_read_list_string",
                            PyLong_FromVoidPtr((void *)(&pq_read_list_string)));
-    PyObject_SetAttrString(m, "pq_read_list_item",
-                           PyLong_FromVoidPtr((void *)(&pq_read_list_item)));
+    PyObject_SetAttrString(m, "pq_read_array_item",
+                           PyLong_FromVoidPtr((void *)(&pq_read_array_item)));
     PyObject_SetAttrString(m, "pq_write",
                            PyLong_FromVoidPtr((void *)(&pq_write)));
 
@@ -376,7 +376,7 @@ int pq_read_list_string(DatasetReader *ds_reader, int64_t column_idx,
     return n_all_vals;
 }
 
-int pq_read_list_item(DatasetReader *ds_reader, int64_t column_idx,
+int pq_read_array_item(DatasetReader *ds_reader, int64_t column_idx,
                       int out_dtype, array_info **out_offsets,
                       array_info **out_data, array_info **out_nulls) {
     if (ds_reader->count == 0) return 0;
@@ -394,7 +394,7 @@ int pq_read_list_item(DatasetReader *ds_reader, int64_t column_idx,
         int64_t rows_to_read =
             std::min(ds_reader->count - read_rows, file_size - start);
 
-        pq_read_list_item_single_file(file_reader, column_idx, out_dtype, start,
+        pq_read_array_item_single_file(file_reader, column_idx, out_dtype, start,
                                       rows_to_read, &offset_vec, &data_vec,
                                       &null_vec);
 

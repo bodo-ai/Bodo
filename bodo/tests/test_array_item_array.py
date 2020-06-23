@@ -61,11 +61,11 @@ from bodo.tests.utils import check_func
         # ),
     ]
 )
-def list_item_arr_value(request):
+def array_item_arr_value(request):
     return request.param
 
 
-def test_unbox(list_item_arr_value, memory_leak_check):
+def test_unbox(array_item_arr_value, memory_leak_check):
     # just unbox
     def impl(arr_arg):
         return True
@@ -74,43 +74,43 @@ def test_unbox(list_item_arr_value, memory_leak_check):
     def impl2(arr_arg):
         return arr_arg
 
-    check_func(impl, (list_item_arr_value,))
-    check_func(impl2, (list_item_arr_value,))
+    check_func(impl, (array_item_arr_value,))
+    check_func(impl2, (array_item_arr_value,))
 
 
-def test_getitem_int(list_item_arr_value, memory_leak_check):
+def test_getitem_int(array_item_arr_value, memory_leak_check):
     def test_impl(A, i):
         return A[i]
 
     i = 1
-    bodo_out = np.array(bodo.jit(test_impl)(list_item_arr_value, i))
-    py_out = np.array(test_impl(list_item_arr_value, i))
+    bodo_out = np.array(bodo.jit(test_impl)(array_item_arr_value, i))
+    py_out = np.array(test_impl(array_item_arr_value, i))
     if len(py_out) and isinstance(py_out[0], datetime.date):
         np.testing.assert_array_equal(bodo_out, py_out)
     else:
         np.testing.assert_almost_equal(bodo_out, py_out)
 
 
-def test_getitem_bool(list_item_arr_value, memory_leak_check):
+def test_getitem_bool(array_item_arr_value, memory_leak_check):
     def test_impl(A, ind):
         return A[ind]
 
     np.random.seed(0)
-    ind = np.random.ranf(len(list_item_arr_value)) < 0.2
-    bodo_out = bodo.jit(test_impl)(list_item_arr_value, ind)
-    py_out = test_impl(list_item_arr_value, ind)
+    ind = np.random.ranf(len(array_item_arr_value)) < 0.2
+    bodo_out = bodo.jit(test_impl)(array_item_arr_value, ind)
+    py_out = test_impl(array_item_arr_value, ind)
     pd.testing.assert_series_equal(
         pd.Series(py_out), pd.Series(bodo_out), check_dtype=False
     )
 
 
-def test_getitem_slice(list_item_arr_value, memory_leak_check):
+def test_getitem_slice(array_item_arr_value, memory_leak_check):
     def test_impl(A, ind):
         return A[ind]
 
     ind = slice(1, 4)
-    bodo_out = bodo.jit(test_impl)(list_item_arr_value, ind)
-    py_out = test_impl(list_item_arr_value, ind)
+    bodo_out = bodo.jit(test_impl)(array_item_arr_value, ind)
+    py_out = test_impl(array_item_arr_value, ind)
     pd.testing.assert_series_equal(
         pd.Series(py_out), pd.Series(bodo_out), check_dtype=False
     )
@@ -132,8 +132,8 @@ def test_shape():
     assert bodo.jit(test_impl)(A) == test_impl(A)
 
 
-def test_copy(list_item_arr_value, memory_leak_check):
+def test_copy(array_item_arr_value, memory_leak_check):
     def test_impl(A):
         return A.copy()
 
-    check_func(test_impl, (list_item_arr_value,))
+    check_func(test_impl, (array_item_arr_value,))

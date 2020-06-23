@@ -26,11 +26,11 @@ from bodo.libs.list_str_arr_ext import (
     ListStringArrayPayloadType,
     construct_list_string_array,
 )
-from bodo.libs.list_item_arr_ext import (
-    ListItemArrayType,
-    ListItemArrayPayloadType,
-    construct_list_item_array,
-    define_list_item_dtor,
+from bodo.libs.array_item_arr_ext import (
+    ArrayItemArrayType,
+    ArrayItemArrayPayloadType,
+    construct_array_item_array,
+    define_array_item_dtor,
 )
 from bodo.hiframes.datetime_date_ext import (
     datetime_date_type,
@@ -72,7 +72,7 @@ def read_parquet_list_str():  # pragma: no cover
     return 0
 
 
-def read_parquet_list_item():  # pragma: no cover
+def read_parquet_array_item():  # pragma: no cover
     return 0
 
 
@@ -233,7 +233,7 @@ def _gen_pq_reader_py(
         "read_parquet": read_parquet,
         "read_parquet_str": read_parquet_str,
         "read_parquet_list_str": read_parquet_list_str,
-        "read_parquet_list_item": read_parquet_list_item,
+        "read_parquet_array_item": read_parquet_array_item,
         "unicode_to_char_ptr": unicode_to_char_ptr,
         "NS_DTYPE": np.dtype("M8[ns]"),
         "np": np,
@@ -267,8 +267,8 @@ def gen_column_read(func_text, cname, c_ind, c_type, is_parallel):
         func_text += "  {} = read_parquet_list_str(ds_reader, {}, {}_size)\n".format(
             cname, c_ind, cname
         )
-    elif isinstance(c_type, ListItemArrayType):
-        func_text += "  {} = read_parquet_list_item(ds_reader, {}, {}_size, np.int32({}), {})\n".format(
+    elif isinstance(c_type, ArrayItemArrayType):
+        func_text += "  {} = read_parquet_array_item(ds_reader, {}, {}_size, np.int32({}), {})\n".format(
             cname, c_ind, cname, bodo.utils.utils.numba_to_c_type(c_type.elem_type), get_element_type(c_type.elem_type)
         )
     else:
@@ -367,7 +367,7 @@ def _get_numba_typ_from_pa_typ(pa_typ, is_index, nullable_from_metadata):
         # TODO this should check for the list of types that we support
         if pa_typ.type.value_type not in _typ_map:
             raise BodoError("Arrow data type {} not supported yet".format(pa_typ.type))
-        return ListItemArrayType(_typ_map[pa_typ.type.value_type])
+        return ArrayItemArrayType(_typ_map[pa_typ.type.value_type])
 
     if pa_typ.type not in _typ_map:
         raise BodoError("Arrow data type {} not supported yet".format(pa_typ.type))
@@ -578,13 +578,13 @@ class ReadParquetListStrInfer(AbstractTemplate):
         return signature(list_string_array_type, *unliteral_all(args))
 
 
-@infer_global(read_parquet_list_item)
-class ReadParquetListItemInfer(AbstractTemplate):
+@infer_global(read_parquet_array_item)
+class ReadParquetArrayItemInfer(AbstractTemplate):
     def generic(self, args, kws):
         assert not kws
         assert len(args) == 5
         elem_type = args[4].dtype
-        return signature(ListItemArrayType(elem_type), *unliteral_all(args))
+        return signature(ArrayItemArrayType(elem_type), *unliteral_all(args))
 
 
 from numba.core import cgutils
@@ -604,7 +604,7 @@ if _has_pyarrow:
     ll.add_symbol("pq_read", parquet_cpp.pq_read)
     ll.add_symbol("pq_read_string", parquet_cpp.pq_read_string)
     ll.add_symbol("pq_read_list_string", parquet_cpp.pq_read_list_string)
-    ll.add_symbol("pq_read_list_item", parquet_cpp.pq_read_list_item)
+    ll.add_symbol("pq_read_array_item", parquet_cpp.pq_read_array_item)
     ll.add_symbol("pq_write", parquet_cpp.pq_write)
 
 
@@ -827,25 +827,25 @@ def pq_read_list_string_lower(context, builder, sig, args):
 
 
 @lower_builtin(
-    read_parquet_list_item,
+    read_parquet_array_item,
     types.Opaque("arrow_reader"),
     types.intp,
     types.intp,
     types.int32,
     types.Any,  # item data type which is ignored in lowering
 )
-def pq_read_list_item_lower(context, builder, sig, args):
+def pq_read_array_item_lower(context, builder, sig, args):
 
-    list_item_type = sig.return_type
+    array_item_type = sig.return_type
 
-    # TODO: refactor list(item) payload handling copied from construct_list_item_array
+    # TODO: refactor array(item) payload handling copied from construct_array_item_array
     # create payload type
-    payload_type = ListItemArrayPayloadType(list_item_type)
+    payload_type = ArrayItemArrayPayloadType(array_item_type)
     alloc_type = context.get_data_type(payload_type)
     alloc_size = context.get_abi_sizeof(alloc_type)
 
     # define dtor
-    dtor_fn = define_list_item_dtor(context, builder, list_item_type, payload_type)
+    dtor_fn = define_array_item_dtor(context, builder, array_item_type, payload_type)
 
     # create meminfo
     meminfo = context.nrt.meminfo_alloc_dtor(
@@ -856,9 +856,9 @@ def pq_read_list_item_lower(context, builder, sig, args):
 
     # alloc values in payload
     payload = cgutils.create_struct_proxy(payload_type)(context, builder)
-    payload.n_lists = args[2]  # set size
+    payload.n_arrays = args[2]  # set size
 
-    # allocate array_info pointers (to be allocated in pq_read_list_item C++ code)
+    # allocate array_info pointers (to be allocated in pq_read_array_item C++ code)
     ll_array_info_type = context.get_data_type(array_info_type)
     data_info_ptr = cgutils.alloca_once(builder, ll_array_info_type)
     offsets_info_ptr = cgutils.alloca_once(builder, ll_array_info_type)
@@ -877,7 +877,7 @@ def pq_read_list_item_lower(context, builder, sig, args):
         ],
     )
 
-    fn = builder.module.get_or_insert_function(fnty, name="pq_read_list_item")
+    fn = builder.module.get_or_insert_function(fnty, name="pq_read_array_item")
     builder.call(
         fn,
         [
@@ -892,7 +892,7 @@ def pq_read_list_item_lower(context, builder, sig, args):
 
     # convert array_info to numpy arrays and set payload attributes
     payload.data = _lower_info_to_array_numpy(
-        types.Array(list_item_type.elem_type, 1, "C"),
+        types.Array(array_item_type.elem_type, 1, "C"),
         context,
         builder,
         builder.load(data_info_ptr),
@@ -909,11 +909,11 @@ def pq_read_list_item_lower(context, builder, sig, args):
 
     builder.store(payload._getvalue(), meminfo_data_ptr)
 
-    list_item_array = context.make_helper(builder, list_item_type)
+    array_item_array = context.make_helper(builder, array_item_type)
 
-    list_item_array.meminfo = meminfo
-    ret = list_item_array._getvalue()
-    return impl_ret_new_ref(context, builder, list_item_type, ret)
+    array_item_array.meminfo = meminfo
+    ret = array_item_array._getvalue()
+    return impl_ret_new_ref(context, builder, array_item_type, ret)
 
 
 ############################ parquet write table #############################
