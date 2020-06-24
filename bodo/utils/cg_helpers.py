@@ -188,48 +188,32 @@ def count_array_inner_elems(c, builder, context, arr_obj, typ):
     return builder.load(counts)
 
 
-def gen_allocate_array(context, builder, arr_type, n_elems):
+def gen_allocate_array(context, builder, arr_type, n_elems, c=None):
     """gen array allocation for type 'arr_type'.
     'n_elems' is a tuple of all counts needed for allocation, e.g. (3, 5) for array item
     that has 3 arrays and 5 primitive elements.
+    'c' is boxing/unboxing context and can be None if not in boxing/unboxing steps.
+    When in boxing/unboxing, 'call_jit_code' is used to handle Python error model.
     """
+    n_counts = n_elems.type.count
+    assert n_counts >= 1
     length = builder.extract_value(n_elems, 0)
-    if isinstance(arr_type, bodo.libs.array_item_arr_ext.ArrayItemArrayType):
-        n_counts = n_elems.type.count
+    # if nested counts are provided, pack a new tuple for them
+    if n_counts != 1:
         n_nested_elems = cgutils.pack_array(
             builder, [builder.extract_value(n_elems, i) for i in range(1, n_counts)]
         )
-        sig = (arr_type)(
-            types.int64,
-            types.Tuple([types.int64] * (n_counts - 1)),
-            types.TypeRef(arr_type.dtype),
-        )
-        args = (length, n_nested_elems, context.get_dummy_value())
-        out_arr = bodo.libs.array_item_arr_ext.lower_pre_alloc_array_item_array(
-            context, builder, sig, args
-        )
-    elif arr_type == bodo.libs.bool_arr_ext.boolean_array:
-        data_arr = bodo.utils.utils._empty_nd_impl(
-            context, builder, types.Array(types.bool_, 1, "C"), [length],
-        )._getvalue()
-        n_bitmask_bytes = builder.udiv(
-            builder.add(length, lir.Constant(lir.IntType(64), 7)),
-            lir.Constant(lir.IntType(64), 8),
-        )
-        nulls = bodo.utils.utils._empty_nd_impl(
-            context, builder, types.Array(types.uint8, 1, "C"), [n_bitmask_bytes],
-        )._getvalue()
-        sig = bodo.libs.bool_arr_ext.boolean_array(
-            types.Array(types.bool_, 1, "C"), types.Array(types.uint8, 1, "C")
-        )
-        out_arr = bodo.libs.bool_arr_ext.lower_init_bool_array(
-            context, builder, sig, [data_arr, nulls]
-        )
-        context.nrt.decref(builder, types.Array(types.bool_, 1, "C"), data_arr)
-        context.nrt.decref(builder, types.Array(types.uint8, 1, "C"), nulls)
+        nested_counts_typ = types.Tuple([types.int64] * (n_counts - 1))
     else:
-        assert isinstance(arr_type, types.Array)
-        out_arr = bodo.utils.utils._empty_nd_impl(
-            context, builder, arr_type, [length],
-        )._getvalue()
+        n_nested_elems = context.get_dummy_value()
+        nested_counts_typ = types.none
+    # call alloc_type
+    t_ref = types.TypeRef(arr_type)
+    sig = arr_type(types.int64, t_ref, nested_counts_typ)
+    args = [length, context.get_dummy_value(), n_nested_elems]
+    impl = lambda n, t, s: bodo.utils.utils.alloc_type(n, t, s)
+    if c:
+        _is_error, out_arr = c.pyapi.call_jit_code(impl, sig, args)
+    else:
+        out_arr = context.compile_internal(builder, impl, sig, args)
     return out_arr

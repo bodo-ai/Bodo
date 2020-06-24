@@ -146,7 +146,9 @@ def define_array_item_dtor(context, builder, array_item_type, payload_type):
     return fn
 
 
-def construct_array_item_array(context, builder, array_item_type, n_arrays, n_elems):
+def construct_array_item_array(
+    context, builder, array_item_type, n_arrays, n_elems, c=None
+):
     """Creates meminfo and sets dtor, and allocates buffers for array(item) array
     """
     # create payload type
@@ -169,7 +171,9 @@ def construct_array_item_array(context, builder, array_item_type, n_arrays, n_el
     payload.n_arrays = n_arrays
 
     # alloc data
-    payload.data = gen_allocate_array(context, builder, array_item_type.dtype, n_elems)
+    payload.data = gen_allocate_array(
+        context, builder, array_item_type.dtype, n_elems, c
+    )
 
     # alloc offsets
     n_arrays_plus_1 = builder.add(n_arrays, lir.Constant(lir.IntType(64), 1))
@@ -357,7 +361,7 @@ def unbox_array_item_array(typ, val, c):
         n_elems = count_array_inner_elems(c, c.builder, c.context, val, typ)
 
     meminfo, data_arr, offsets_ptr, null_bitmap_ptr = construct_array_item_array(
-        c.context, c.builder, typ, n_arrays, n_elems
+        c.context, c.builder, typ, n_arrays, n_elems, c
     )
 
     # use C unboxing when possible to avoid compilation and runtime overheads
