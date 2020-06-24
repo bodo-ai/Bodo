@@ -4,6 +4,113 @@
 #include <iostream>
 #include <string>
 
+/**
+ * Append values from a byte buffer to a primitive array builder.
+ * @param values: pointer to buffer containing data
+ * @param offset: offset of starting element (not byte units)
+ * @param length: number of elements to copy
+ * @param builder: primitive array builder holding output array
+ * @param valid_elems: non-zero if elem i is non-null
+ */
+void append_to_primitive(const uint8_t *values, int64_t offset, int64_t length,
+                         arrow::ArrayBuilder *builder,
+                         const std::vector<uint8_t> &valid_elems) {
+    if (builder->type()->id() == arrow::Type::INT32) {
+        auto typed_builder = dynamic_cast<arrow::NumericBuilder<arrow::Int32Type>*>(builder);
+        typed_builder->AppendValues((int32_t*)values + offset, length, valid_elems.data());
+    } else if (builder->type()->id() == arrow::Type::DOUBLE) {
+        auto typed_builder = dynamic_cast<arrow::NumericBuilder<arrow::DoubleType>*>(builder);
+        typed_builder->AppendValues((double*)values + offset, length, valid_elems.data());
+    } else {
+        Bodo_PyErr_SetString(PyExc_RuntimeError,
+                             "Unsupported primitive type building arrow array");
+    }
+}
+
+/**
+ * Generate Arrow array on the fly by appending values from a given input
+ * array.
+ * Can be called multiple times with different input arrays but they must
+ * be of the same type.
+ * The first call should pass the base (root) input array, range of rows
+ * to append to output, and a builder. The builder must have the same type as
+ * the input array. For example, if the input array is list(list(string))
+ * the builder must be for list(list(string)). When the builder is created
+ * (outside of this function) it has an empty array. Each time this function
+ * is called the builder will append new values to its array.
+ *
+ * Note that this is a recursive algorithm and works with nested arrays.
+ *
+ * @param input_array : current input array in the tree of arrays
+ * @param start_offset : starting offset in input_array
+ * @param end_offset : ending offset in input_array
+ * @param builder : array builder of the same type as input_array. constructs
+                    the output array.
+ */
+void append_to_out_array(std::shared_ptr<arrow::Array> input_array,
+                         int64_t start_offset, int64_t end_offset,
+                         arrow::ArrayBuilder *builder) {
+    // TODO check for nulls and append nulls
+    if (input_array->type_id() == arrow::Type::LIST) {
+        // TODO: assert builder.type() == LIST
+        std::shared_ptr<arrow::ListArray> list_array = std::dynamic_pointer_cast<arrow::ListArray>(input_array);
+        auto list_builder = dynamic_cast<arrow::ListBuilder*>(builder);
+        arrow::ArrayBuilder *child_builder = list_builder->value_builder();
+
+        for (int64_t idx = start_offset; idx < end_offset; idx++) {
+            if (list_array->IsNull(idx)) {
+                list_builder->AppendNull();
+                continue;
+            }
+            list_builder->Append();  // indicate list boundary
+            // TODO optimize
+            append_to_out_array(list_array->values(),  // child array
+                                list_array->value_offset(idx), list_array->value_offset(idx + 1),
+                                child_builder);
+        }
+    } else if (input_array->type_id() == arrow::Type::STRUCT) {
+        // TODO: assert builder.type() == STRUCT
+        auto struct_array = std::dynamic_pointer_cast<arrow::StructArray>(input_array);
+        auto struct_type = std::dynamic_pointer_cast<arrow::StructType>(struct_array->type());
+        auto struct_builder = dynamic_cast<arrow::StructBuilder*>(builder);
+        for (int64_t idx = start_offset; idx < end_offset; idx++) {
+            if (struct_array->IsNull(idx)) {
+                struct_builder->AppendNull();
+                continue;
+            }
+            for (int i=0; i < struct_type->num_children(); i++) {  // each field is an array
+                arrow::ArrayBuilder *field_builder = builder->child(i);
+                append_to_out_array(struct_array->field(i), idx, idx + 1, field_builder);
+            }
+            struct_builder->Append();
+        }
+        // finished appending (end_offset - start_offset) structs
+        //struct_builder->AppendValues(end_offset - start_offset, NULLPTR);
+    } else if (input_array->type_id() == arrow::Type::STRING) {
+        auto str_array = std::dynamic_pointer_cast<arrow::StringArray>(input_array);
+        auto str_builder = dynamic_cast<arrow::StringBuilder*>(builder);
+        int64_t num_elems = end_offset - start_offset;
+        // TODO: optimize
+        for (int64_t i=0; i < num_elems; i++) {
+            if (str_array->IsNull(start_offset + i))
+                str_builder->AppendNull();
+            else
+                str_builder->AppendValues({str_array->GetString(start_offset + i)});
+        }
+    } else {
+        int64_t num_elems = end_offset - start_offset;
+        // assume this is array of primitive values
+        // TODO: decimal, date, etc.
+        auto primitive_array = std::dynamic_pointer_cast<arrow::PrimitiveArray>(input_array);
+        std::vector<uint8_t> valid_elems(num_elems, 0);
+        // TODO: more efficient way of getting null data?
+        size_t j=0;
+        for (int64_t i = start_offset; i < start_offset + num_elems; i++)
+            valid_elems[j++] = !primitive_array->IsNull(i);
+        append_to_primitive(primitive_array->values()->data(), start_offset, num_elems, builder, valid_elems);
+    }
+}
+
 array_info* RetrieveArray(
     table_info* const& in_table,
     std::vector<std::pair<std::ptrdiff_t, std::ptrdiff_t>> const& ListPairWrite,
@@ -219,6 +326,41 @@ array_info* RetrieveArray(
                 SetBitTo(out_null_bitmask, iRow, bit);
             }
         }
+    }
+    if (arr_type == bodo_array_type::ARROW) {
+        // Arrow builder for output array. builds it dynamically (buffer
+        // sizes are not known in advance)
+        std::unique_ptr<arrow::ArrayBuilder> builder;
+        for (size_t iRow = 0; iRow < nRowOut; iRow++) {
+            std::pair<size_t, std::ptrdiff_t> pairShiftRow = get_iRow(iRow);
+            if (pairShiftRow.second >= 0) {
+                // non-null value for output
+                std::shared_ptr<arrow::Array> in_arr = in_table->columns[pairShiftRow.first]->array;
+                if (!builder)
+                    // make array builder of same type as the input array.
+                    // works for nested arrays of any type
+                    arrow::MakeBuilder(arrow::default_memory_pool(), in_arr->type(), &builder);
+                size_t row = pairShiftRow.second;
+                // append value in position 'row' of input array to builder's array
+                // (this is a recursive algorithm, can traverse nested arrays)
+                append_to_out_array(in_arr, row, row + 1, builder.get());
+            } else {
+                // null value for output
+                if (!builder) {
+                    std::shared_ptr<arrow::Array> in_arr = in_table->columns[pairShiftRow.first]->array;
+                    arrow::MakeBuilder(arrow::default_memory_pool(), in_arr->type(), &builder);
+                }
+                builder->AppendNull();
+            }
+        }
+
+        // get final output array from builder
+        std::shared_ptr<arrow::Array> out_arrow_array;
+        // TODO: assert builder is not null (at least one row added)
+        builder->Finish(&out_arrow_array);
+        out_arr = new array_info(bodo_array_type::ARROW, Bodo_CTypes::INT8/*dummy*/, -1,
+                      -1, -1, NULL, NULL, NULL, NULL, /*meminfo TODO*/NULL,
+                      NULL, out_arrow_array);
     }
     return out_arr;
 };

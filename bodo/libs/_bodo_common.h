@@ -11,6 +11,7 @@
 #include <Python.h>
 #include <vector>
 #include "_meminfo.h"
+#include <arrow/api.h>
 
 struct Bodo_CTypes {
     enum CTypeEnum {
@@ -56,6 +57,7 @@ struct bodo_array_type {
         STRING = 1,
         NULLABLE_INT_BOOL = 2,  // nullable int or bool
         LIST_STRING = 3, // list_string_array_type
+        ARROW = 4, // Arrow Array
         // string_array_split_view_type, etc.
     };
 };
@@ -102,6 +104,7 @@ struct array_info {
     char* null_bitmask;  // for nullable arrays like strings
     NRT_MemInfo* meminfo;
     NRT_MemInfo* meminfo_bitmask;
+    std::shared_ptr<arrow::Array> array;
     int32_t precision;  // for array of decimals
     int32_t scale;      // for array of decimals
     // TODO: shape/stride for multi-dim arrays
@@ -111,6 +114,7 @@ struct array_info {
                         char* _data1, char* _data2,
                         char* _data3, char* _null_bitmask,
                         NRT_MemInfo* _meminfo, NRT_MemInfo* _meminfo_bitmask,
+                        std::shared_ptr<arrow::Array> _array = nullptr,
                         int32_t _precision = 0, int32_t _scale = 0)
         : arr_type(_arr_type),
           dtype(_dtype),
@@ -123,6 +127,7 @@ struct array_info {
           null_bitmask(_null_bitmask),
           meminfo(_meminfo),
           meminfo_bitmask(_meminfo_bitmask),
+          array(_array),
           precision(_precision),
           scale(_scale) {}
 

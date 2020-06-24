@@ -63,7 +63,7 @@ ll.add_symbol("allocate_list_string_array", hstr_ext.allocate_list_string_array)
 
 
 char_typ = types.uint8
-offset_typ = types.uint32
+offset_typ = types.int32
 
 data_ctypes_type = types.ArrayCTypes(types.Array(char_typ, 1, "C"))
 offset_ctypes_type = types.ArrayCTypes(types.Array(offset_typ, 1, "C"))

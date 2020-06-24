@@ -16,18 +16,45 @@
 #include "_groupby.h"
 #include "_join.h"
 #include "_shuffle.h"
+#include <arrow/api.h>
 
 MPI_Datatype decimal_mpi_type = MPI_DATATYPE_NULL;
 
-array_info* list_string_array_to_info(uint64_t n_items, uint64_t n_strings,
-                                      uint64_t n_chars, char* data,
-                                      char* data_offsets, char* index_offsets,
-                                      char* null_bitmap, NRT_MemInfo* meminfo) {
+array_info* list_string_array_to_info(uint64_t n_items, uint64_t n_strings, uint64_t n_chars,
+                                      char* data, char* data_offsets, char* index_offsets,
+                                      char* _null_bitmap, NRT_MemInfo* meminfo) {
+
+    // compile time assert to make sure our offset type matches Arrow's
+    // TODO replace int32_t here with macro
+    static_assert (std::is_same<arrow::ListType::offset_type, int32_t>::value);
+
+    // Convert to Arrow Array to test the Arrow code path
+
+    // make arrow string array
+    std::shared_ptr<arrow::Buffer> char_buffer = std::make_shared<arrow::Buffer>(
+                (uint8_t *)data, n_chars);
+    std::shared_ptr<arrow::Buffer> str_offsets = std::make_shared<arrow::Buffer>(
+                (uint8_t *)data_offsets, sizeof(int32_t) * (n_strings + 1));
+    std::shared_ptr<arrow::Array> string_array = std::make_shared<arrow::StringArray>(n_strings,
+                                                     str_offsets, char_buffer);
+
+    // make arrow list (of string) array
+    std::shared_ptr<arrow::Buffer> list_offsets = std::make_shared<arrow::Buffer>(
+                (uint8_t *)index_offsets, sizeof(int32_t) * (n_items + 1));
+    std::shared_ptr<arrow::Buffer> null_bitmap = std::make_shared<arrow::Buffer>(
+                (uint8_t *)_null_bitmap, (n_items + 7) >> 3);
+    std::shared_ptr<arrow::Array> array = std::make_shared<arrow::ListArray>(arrow::list(arrow::utf8()),
+                                              n_items, list_offsets, string_array, null_bitmap);
+
+    return new array_info(bodo_array_type::ARROW, Bodo_CTypes::INT8/*dummy*/, -1,
+                          -1, -1, NULL, NULL, NULL, NULL, meminfo,
+                          NULL, array);
+
+    // original code
     // TODO: better memory management of struct, meminfo refcount?
-    return new array_info(bodo_array_type::LIST_STRING,
-                          Bodo_CTypes::LIST_STRING, n_items, n_strings, n_chars,
-                          data, data_offsets, index_offsets, null_bitmap,
-                          meminfo, NULL);
+    /*return new array_info(bodo_array_type::LIST_STRING, Bodo_CTypes::LIST_STRING, n_items,
+                          n_strings, n_chars, data, data_offsets, index_offsets, null_bitmap, meminfo,
+                          NULL);*/
 }
 
 array_info* string_array_to_info(uint64_t n_items, uint64_t n_chars, char* data,
@@ -63,30 +90,67 @@ array_info* decimal_array_to_info(uint64_t n_items, char* data, int typ_enum,
                                   int32_t precision, int32_t scale) {
     // TODO: better memory management of struct, meminfo refcount?
     return new array_info(bodo_array_type::NULLABLE_INT_BOOL,
-                          (Bodo_CTypes::CTypeEnum)typ_enum, n_items, -1, -1,
-                          data, NULL, NULL, null_bitmap, meminfo,
-                          meminfo_bitmask, precision, scale);
+                          (Bodo_CTypes::CTypeEnum)typ_enum, n_items, -1, -1, data,
+                          NULL, NULL, null_bitmap, meminfo, meminfo_bitmask,
+                          NULL, precision, scale);
 }
 
-void info_to_list_string_array(array_info* info, uint64_t* n_items,
-                               uint64_t* n_strings, uint64_t* n_chars,
-                               char** data, char** data_offsets,
-                               char** index_offsets, char** null_bitmap,
-                               NRT_MemInfo** meminfo) {
-    if (info->arr_type != bodo_array_type::LIST_STRING) {
-        Bodo_PyErr_SetString(
-            PyExc_RuntimeError,
-            "info_to_list_string_array requires list string input");
-        return;
+
+void info_to_list_string_array(array_info* info,
+                               uint64_t* n_items, uint64_t* n_strings, uint64_t* n_chars,
+                               char** data, char** data_offsets, char** index_offsets,
+                               char** null_bitmap, NRT_MemInfo** meminfo) {
+    if (info->arr_type == bodo_array_type::ARROW) {
+        if (!info->array->type()->Equals(arrow::list(arrow::utf8()))) {
+            Bodo_PyErr_SetString(PyExc_RuntimeError,
+                                 "info_to_list_string_array requires list string input");
+            return;
+        }
+        auto list_array = std::dynamic_pointer_cast<arrow::ListArray>(info->array);
+        auto str_array = std::dynamic_pointer_cast<arrow::StringArray>(list_array->values());
+
+        NRT_MemInfo* _meminfo = NRT_MemInfo_alloc_dtor_safe(
+            sizeof(list_str_arr_payload), (NRT_dtor_function)dtor_list_string_array);
+        list_str_arr_payload* payload = (list_str_arr_payload*)_meminfo->data;
+        allocate_list_string_array(&(payload->data), &(payload->data_offsets),
+                                   &(payload->index_offsets), &(payload->null_bitmap),
+                                   list_array->length(), str_array->length(),
+                                   str_array->value_data()->size(), 0);
+
+        memcpy(payload->data, str_array->value_data()->mutable_data(),
+               str_array->value_data()->size());
+        memcpy(payload->data_offsets, str_array->value_offsets()->mutable_data(),
+               sizeof(int32_t) * (str_array->length() + 1));
+        memcpy(payload->index_offsets, list_array->value_offsets()->mutable_data(),
+               sizeof(int32_t) * (list_array->length() + 1));
+        if (list_array->null_bitmap_data())
+            memcpy(payload->null_bitmap, list_array->null_bitmap_data(),
+                   (list_array->length() + 7) >> 3);
+
+        *n_items = list_array->length();
+        *n_strings = str_array->length();
+        *n_chars = str_array->value_data()->size();
+
+        *data = payload->data;
+        *data_offsets = (char*)payload->data_offsets;
+        *index_offsets = (char*)payload->index_offsets;
+        *null_bitmap = (char*)payload->null_bitmap;
+        *meminfo = _meminfo;
+    } else {
+        if (info->arr_type != bodo_array_type::LIST_STRING) {
+            Bodo_PyErr_SetString(PyExc_RuntimeError,
+                                 "info_to_list_string_array requires list string input");
+            return;
+        }
+        *n_items = info->length;
+        *n_strings = info->n_sub_elems;
+        *n_chars = info->n_sub_sub_elems;
+        *data = info->data1;
+        *data_offsets = info->data2;
+        *index_offsets = info->data3;
+        *null_bitmap = info->null_bitmask;
+        *meminfo = info->meminfo;
     }
-    *n_items = info->length;
-    *n_strings = info->n_sub_elems;
-    *n_chars = info->n_sub_sub_elems;
-    *data = info->data1;
-    *data_offsets = info->data2;
-    *index_offsets = info->data3;
-    *null_bitmap = info->null_bitmask;
-    *meminfo = info->meminfo;
 }
 
 void info_to_string_array(array_info* info, NRT_MemInfo** meminfo) {

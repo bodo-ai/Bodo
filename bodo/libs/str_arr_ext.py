@@ -68,7 +68,7 @@ use_pd_string_array = False
 
 
 char_typ = types.uint8
-offset_typ = types.uint32
+offset_typ = types.int32
 
 data_ctypes_type = types.ArrayCTypes(types.Array(char_typ, 1, "C"))
 offset_ctypes_type = types.ArrayCTypes(types.Array(offset_typ, 1, "C"))
