@@ -542,7 +542,7 @@ def concat_overload(arr_list):
     if isinstance(arr_list, types.UniTuple) and isinstance(
         arr_list.dtype, ArrayItemArrayType
     ):
-
+        data_arr_type = arr_list.dtype.dtype
         def array_item_concat_impl(arr_list):  # pragma: no cover
             # preallocate the output
             num_lists = 0
@@ -553,9 +553,8 @@ def concat_overload(arr_list):
                 n_items = in_offsets[n_lists]
                 num_lists += n_lists
                 num_items += n_items
-            dtype = bodo.libs.array_item_arr_ext.get_data(arr_list[0]).dtype
             out_arr = bodo.libs.array_item_arr_ext.pre_alloc_array_item_array(
-                num_lists, (num_items,), dtype
+                num_lists, (num_items,), data_arr_type
             )
             out_offsets = bodo.libs.array_item_arr_ext.get_offsets(out_arr)
             out_data = bodo.libs.array_item_arr_ext.get_data(out_arr)
@@ -863,15 +862,14 @@ def overload_gen_na_array(n, arr):
         dtype = arr.dtype
 
     if isinstance(arr, ArrayItemArrayType):
-
+        data_arr_type = arr.dtype
         def array_item_impl(n, arr):  # pragma: no cover
             # preallocate the output
             num_lists = n
             num_items = 0
             in_data = bodo.libs.array_item_arr_ext.get_data(arr)
-            dtype = in_data.dtype
             out_arr = bodo.libs.array_item_arr_ext.pre_alloc_array_item_array(
-                num_lists, (num_items,), dtype
+                num_lists, (num_items,), data_arr_type
             )
             out_offsets = bodo.libs.array_item_arr_ext.get_offsets(out_arr)
             out_data = bodo.libs.array_item_arr_ext.get_data(out_arr)

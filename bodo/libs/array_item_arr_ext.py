@@ -590,9 +590,7 @@ def lower_pre_alloc_array_item_array(context, builder, sig, args):
 @intrinsic
 def pre_alloc_array_item_array(typingctx, num_arrs_typ, num_values_typ, dtype_typ=None):
     assert isinstance(num_arrs_typ, types.Integer)
-    array_item_type = ArrayItemArrayType(
-        bodo.hiframes.pd_series_ext._get_series_array_type(dtype_typ.dtype)
-    )
+    array_item_type = ArrayItemArrayType(dtype_typ.instance_type)
     return (
         array_item_type(types.int64, num_values_typ, dtype_typ),
         lower_pre_alloc_array_item_array,
@@ -755,6 +753,7 @@ def array_item_arr_getitem_array(arr, ind):
     # bool arr indexing
     if is_list_like_index_type(ind) and ind.dtype == types.bool_:
 
+        data_arr_type = arr.dtype
         def impl_bool(arr, ind):  # pragma: no cover
             n = len(arr)
             if n != len(ind):
@@ -773,7 +772,7 @@ def array_item_arr_getitem_array(arr, ind):
                     n_arrays += 1
                     n_values += int(offsets[i + 1] - offsets[i])
 
-            out_arr = pre_alloc_array_item_array(n_arrays, (n_values,), data.dtype)
+            out_arr = pre_alloc_array_item_array(n_arrays, (n_values,), data_arr_type)
             out_offsets = get_offsets(out_arr)
             out_data = get_data(out_arr)
             out_null_bitmap = get_null_bitmap(out_arr)
@@ -807,6 +806,7 @@ def array_item_arr_getitem_array(arr, ind):
     # TODO: avoid code duplication
     if is_list_like_index_type(ind) and isinstance(ind.dtype, types.Integer):
 
+        data_arr_type = arr.dtype
         def impl_int(arr, ind):  # pragma: no cover
             offsets = get_offsets(arr)
             data = get_data(arr)
@@ -819,7 +819,7 @@ def array_item_arr_getitem_array(arr, ind):
                 i = ind[k]
                 n_values += int(offsets[i + 1] - offsets[i])
 
-            out_arr = pre_alloc_array_item_array(n_arrays, (n_values,), data.dtype)
+            out_arr = pre_alloc_array_item_array(n_arrays, (n_values,), data_arr_type)
             out_offsets = get_offsets(out_arr)
             out_data = get_data(out_arr)
             out_null_bitmap = get_null_bitmap(out_arr)
@@ -893,6 +893,7 @@ def array_item_arr_setitem(A, idx, val):
 
 @overload_method(ArrayItemArrayType, "copy", no_unliteral=True)
 def overload_array_item_arr_copy(A):
+    data_arr_type = arr.dtype
     def copy_impl(A):  # pragma: no cover
         offsets = get_offsets(A)
         data = get_data(A)
@@ -901,7 +902,7 @@ def overload_array_item_arr_copy(A):
         # allocate
         n = len(A)
         n_values = offsets[-1]
-        out_arr = pre_alloc_array_item_array(n, (n_values,), data.dtype)
+        out_arr = pre_alloc_array_item_array(n, (n_values,), data_arr_type)
         out_offsets = get_offsets(out_arr)
         out_data = get_data(out_arr)
         out_null_bitmap = get_null_bitmap(out_arr)

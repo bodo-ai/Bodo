@@ -485,6 +485,10 @@ def _infer_ndarray_obj_dtype(val):
         # normalize list to array, 'np.object_' dtype to consider potential nulls
         if isinstance(first_val, list):
             first_val = np.array(first_val, np.object_)
+            # assume float lists can be regular np.float64 arrays
+            # TODO handle corener cases where None could be used as NA instead of np.nan
+            if len(first_val) and isinstance(first_val[0], float):
+                first_val = np.array(first_val, np.float64)
         val_typ = numba.typeof(first_val)
         if val_typ == string_array_type:
             return list_string_array_type

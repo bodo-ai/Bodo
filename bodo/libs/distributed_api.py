@@ -1258,6 +1258,7 @@ def scatterv_impl(data):
         int32_typ_enum = np.int32(numba_to_c_type(types.int32))
         data_typ_enum = np.int32(numba_to_c_type(data.dtype.dtype))
         char_typ_enum = np.int32(numba_to_c_type(types.uint8))
+        data_arr_type = data.dtype
 
         def scatterv_array_item_impl(data):
             in_offsets_arr = bodo.libs.array_item_arr_ext.get_offsets(data)
@@ -1311,7 +1312,7 @@ def scatterv_impl(data):
             n_loc = sendcounts[rank]  # total number of elements on this PE
             n_loc_item = sendcounts_item[rank]
             recv_arr = pre_alloc_array_item_array(
-                n_loc, (n_loc_item,), in_data_arr.dtype
+                n_loc, (n_loc_item,), data_arr_type
             )
             recv_offsets_arr = bodo.libs.array_item_arr_ext.get_offsets(recv_arr)
             recv_data_arr = bodo.libs.array_item_arr_ext.get_data(recv_arr)
