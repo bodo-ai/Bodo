@@ -206,10 +206,21 @@ def _unbox_array_item_array_copy_data(
     """
     context = c.context
     builder = c.builder
-    # make sure item is array, not list
-    old_obj = arr_obj
-    arr_obj = c.pyapi.call(np_array_method, c.pyapi.tuple_pack([arr_obj]))
-    c.pyapi.decref(old_obj)
+
+    # convert arr_obj to array if it is a list (list_check is needed since converting
+    # pd arrays like IntergerArray can cause errors)
+    # if isinstance(arr_obj, list):
+    #   arr_obj = np.array(arr_obj)
+    arr_obj_ptr = cgutils.alloca_once_value(builder, arr_obj)
+    is_list = list_check(builder, context, arr_obj)
+    is_list_cond = builder.icmp_unsigned("!=", is_list, lir.Constant(is_list.type, 0))
+    with builder.if_then(is_list_cond):
+        old_obj = builder.load(arr_obj_ptr)
+        new_obj = c.pyapi.call(np_array_method, c.pyapi.tuple_pack([old_obj]))
+        c.pyapi.decref(old_obj)
+        builder.store(new_obj, arr_obj_ptr)
+    arr_obj = builder.load(arr_obj_ptr)
+
     if isinstance(typ.dtype, ArrayItemArrayType):
         nested_payload = _get_array_item_arr_payload(
             context, builder, typ.dtype, data_arr

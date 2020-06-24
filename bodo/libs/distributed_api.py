@@ -791,7 +791,6 @@ def gatherv(data, allgather=False):
             data_arr = bodo.libs.array_item_arr_ext.get_data(data)
             null_bitmap_arr = bodo.libs.array_item_arr_ext.get_null_bitmap(data)
             n_loc = len(data)
-            n_all_vals = int(offsets_arr[-1])
 
             # allocate buffer for sending lengths of lists
             send_list_lens = np.empty(n_loc, np.uint32)  # XXX offset type is uint32
@@ -801,7 +800,6 @@ def gatherv(data, allgather=False):
                 send_list_lens[i] = offsets_arr[i + 1] - offsets_arr[i]
 
             recv_counts = gather_scalar(np.int32(n_loc), allgather)
-            recv_counts_vals = gather_scalar(np.int32(n_all_vals), allgather)
             n_total = recv_counts.sum()
 
             # displacements

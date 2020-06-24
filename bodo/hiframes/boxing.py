@@ -472,7 +472,16 @@ def _infer_ndarray_obj_dtype(val):
             for v in first_val.values()
         )
         return StructArrayType(data_types, field_names)
-    if isinstance(first_val, (list, np.ndarray)):
+    if isinstance(
+        first_val,
+        (
+            list,
+            np.ndarray,
+            pd.arrays.BooleanArray,
+            pd.arrays.IntegerArray,
+            pd.arrays.StringArray,
+        ),
+    ):
         # normalize list to array, 'np.object_' dtype to consider potential nulls
         if isinstance(first_val, list):
             first_val = np.array(first_val, np.object_)
