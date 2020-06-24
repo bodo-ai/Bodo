@@ -458,6 +458,8 @@ def _infer_ndarray_obj_dtype(val):
         return string_array_type
     elif isinstance(first_val, bool):
         return bodo.libs.bool_arr_ext.boolean_array
+    elif isinstance(first_val, int):
+        return bodo.libs.int_arr_ext.IntegerArrayType(numba.typeof(first_val))
     # assuming object arrays with dictionary values are struct arrays, which means all
     # keys are string and match across dictionaries, and all values with same key have
     # same data type
@@ -471,8 +473,9 @@ def _infer_ndarray_obj_dtype(val):
         )
         return StructArrayType(data_types, field_names)
     if isinstance(first_val, (list, np.ndarray)):
-        # normalize list to array
-        first_val = np.array(first_val)
+        # normalize list to array, 'np.object_' dtype to consider potential nulls
+        if isinstance(first_val, list):
+            first_val = np.array(first_val, np.object_)
         val_typ = numba.typeof(first_val)
         if val_typ == string_array_type:
             return list_string_array_type

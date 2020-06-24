@@ -33,7 +33,14 @@ from llvmlite import ir as lir
 import llvmlite.binding as ll
 from bodo.libs import hstr_ext
 
+# NOTE: importing hdist is necessary for MPI initialization before array_ext
+from bodo.libs import hdist
+from bodo.libs import array_ext
+
 ll.add_symbol("mask_arr_to_bitmap", hstr_ext.mask_arr_to_bitmap)
+ll.add_symbol("is_pd_int_array", array_ext.is_pd_int_array)
+ll.add_symbol("int_array_from_sequence", array_ext.int_array_from_sequence)
+
 from bodo.utils.typing import (
     is_overload_none,
     is_overload_true,
@@ -171,74 +178,88 @@ def unbox_int_array(typ, obj, c):
     """
     Convert a pd.arrays.IntegerArray object to a native IntegerArray structure.
     """
-    # TODO: handle or disallow reflection
-    int_arr = cgutils.create_struct_proxy(typ)(c.context, c.builder)
-
-    data_obj = c.pyapi.object_getattr_string(obj, "_data")
-    int_arr.data = c.pyapi.to_native_value(
-        types.Array(typ.dtype, 1, "C"), data_obj
-    ).value
-
-    mask_arr_obj = c.pyapi.object_getattr_string(obj, "_mask")
-    mask_arr = c.pyapi.to_native_value(
-        types.Array(types.bool_, 1, "C"), mask_arr_obj
-    ).value
-    c.pyapi.decref(data_obj)
-    c.pyapi.decref(mask_arr_obj)
-
-    # TODO: use this when Numba's #4435 is resolved
-    # bt_typ = c.context.typing_context.resolve_value_type(mask_arr_to_bitmap)
-    # bt_sig = bt_typ.get_call_type(
-    #     c.context.typing_context, (types.Array(types.bool_, 1, 'C'),), {})
-    # bt_impl = c.context.get_function(bt_typ, bt_sig)
-    # int_arr.null_bitmap = bt_impl(c.builder, (mask_arr,))
-
-    # XXX: workaround wrapper can be used
-    # fnty = c.context.call_conv.get_function_type(bt_sig.return_type, bt_sig.args)
-    # mod = c.builder.module
-    # fn = lir.Function(
-    #     mod, fnty, name=mod.get_unique_name('.mask_arr_conv'),
-    # )
-    # fn.linkage = 'internal'
-    # inner_builder = lir.IRBuilder(fn.append_basic_block())
-    # [inner_item] = c.context.call_conv.decode_arguments(
-    #     inner_builder, bt_sig.args, fn,
-    # )
-    # h = bt_impl(inner_builder, (inner_item,))
-    # c.context.call_conv.return_value(inner_builder, h)
-
-    # status, retval = c.context.call_conv.call_function(
-    #     c.builder, fn, bt_sig.return_type, bt_sig.args, [mask_arr],
-    # )
-
-    # int_arr.null_bitmap = retval
-
     n_obj = c.pyapi.call_method(obj, "__len__", ())
     n = c.pyapi.long_as_longlong(n_obj)
     c.pyapi.decref(n_obj)
+
+    # TODO: handle or disallow reflection
+    int_arr = cgutils.create_struct_proxy(typ)(c.context, c.builder)
+
     n_bytes = c.builder.udiv(
         c.builder.add(n, lir.Constant(lir.IntType(64), 7)),
         lir.Constant(lir.IntType(64), 8),
-    )
-    mask_arr_struct = c.context.make_array(types.Array(types.bool_, 1, "C"))(
-        c.context, c.builder, mask_arr
     )
     bitmap_arr_struct = bodo.utils.utils._empty_nd_impl(
         c.context, c.builder, types.Array(types.uint8, 1, "C"), [n_bytes]
     )
 
-    fnty = lir.FunctionType(
-        lir.VoidType(),
-        [lir.IntType(8).as_pointer(), lir.IntType(8).as_pointer(), lir.IntType(64)],
-    )
-    fn = c.builder.module.get_or_insert_function(fnty, name="mask_arr_to_bitmap")
-    c.builder.call(fn, [bitmap_arr_struct.data, mask_arr_struct.data, n])
+    fnty = lir.FunctionType(lir.IntType(32), [lir.IntType(8).as_pointer()])
+    fn = c.builder.module.get_or_insert_function(fnty, name="is_pd_int_array")
+
+    is_pd_int = c.builder.call(fn, [obj])
+    cond_pd = c.builder.icmp_unsigned("!=", is_pd_int, is_pd_int.type(0))
+    with c.builder.if_else(cond_pd) as (pd_then, pd_otherwise):
+        with pd_then:
+            data_obj = c.pyapi.object_getattr_string(obj, "_data")
+            int_arr.data = c.pyapi.to_native_value(
+                types.Array(typ.dtype, 1, "C"), data_obj
+            ).value
+
+            mask_arr_obj = c.pyapi.object_getattr_string(obj, "_mask")
+            mask_arr = c.pyapi.to_native_value(
+                types.Array(types.bool_, 1, "C"), mask_arr_obj
+            ).value
+            c.pyapi.decref(data_obj)
+            c.pyapi.decref(mask_arr_obj)
+
+            mask_arr_struct = c.context.make_array(types.Array(types.bool_, 1, "C"))(
+                c.context, c.builder, mask_arr
+            )
+
+            fnty = lir.FunctionType(
+                lir.VoidType(),
+                [
+                    lir.IntType(8).as_pointer(),
+                    lir.IntType(8).as_pointer(),
+                    lir.IntType(64),
+                ],
+            )
+            fn = c.builder.module.get_or_insert_function(
+                fnty, name="mask_arr_to_bitmap"
+            )
+            c.builder.call(fn, [bitmap_arr_struct.data, mask_arr_struct.data, n])
+
+            # clean up native mask array after creating bitmap from it
+            c.context.nrt.decref(c.builder, types.Array(types.bool_, 1, "C"), mask_arr)
+        with pd_otherwise:
+            # assuming objects are all int64 (TODO: handle corner cases like np.int32)
+            data_arr_struct = bodo.utils.utils._empty_nd_impl(
+                c.context, c.builder, types.Array(typ.dtype, 1, "C"), [n]
+            )
+            fnty = lir.FunctionType(
+                lir.IntType(32),
+                [
+                    lir.IntType(8).as_pointer(),
+                    lir.IntType(8).as_pointer(),
+                    lir.IntType(8).as_pointer(),
+                ],
+            )
+            unbox_fn = c.builder.module.get_or_insert_function(
+                fnty, name="int_array_from_sequence"
+            )
+            c.builder.call(
+                unbox_fn,
+                [
+                    obj,
+                    c.builder.bitcast(
+                        data_arr_struct.data, lir.IntType(8).as_pointer()
+                    ),
+                    bitmap_arr_struct.data,
+                ],
+            )
+            int_arr.data = data_arr_struct._getvalue()
 
     int_arr.null_bitmap = bitmap_arr_struct._getvalue()
-
-    # clean up native mask array after creating bitmap from it
-    c.context.nrt.decref(c.builder, types.Array(types.bool_, 1, "C"), mask_arr)
-
     is_error = cgutils.is_not_null(c.builder, c.pyapi.err_occurred())
     return NativeValue(int_arr._getvalue(), is_error=is_error)
 

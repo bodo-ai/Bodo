@@ -221,8 +221,8 @@ inline void copy_item_to_buffer(char* data, Py_ssize_t ind, PyObject* item,
  * @param dtype data type of values, currently only float64 and int64 supported.
  */
 void array_item_array_from_sequence(PyObject* list_arr_obj, char* data,
-                                   uint32_t* offsets, uint8_t* null_bitmap,
-                                   Bodo_CTypes::CTypeEnum dtype) {
+                                    uint32_t* offsets, uint8_t* null_bitmap,
+                                    Bodo_CTypes::CTypeEnum dtype) {
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
         std::cerr << msg << std::endl; \
@@ -302,7 +302,8 @@ inline PyObject* value_to_pyobject(const char* data, int64_t ind,
         return PyDate_FromDate(year, month, day);
     } else
         std::cerr << "data type " << dtype
-                  << " not supported for boxing array(item) array." << std::endl;
+                  << " not supported for boxing array(item) array."
+                  << std::endl;
     return NULL;
 }
 
@@ -317,9 +318,9 @@ inline PyObject* value_to_pyobject(const char* data, int64_t ind,
  * @return numpy array of list of item objects
  */
 void* np_array_from_array_item_array(int64_t num_lists, const char* buffer,
-                                    const uint32_t* offsets,
-                                    const uint8_t* null_bitmap,
-                                    Bodo_CTypes::CTypeEnum dtype) {
+                                     const uint32_t* offsets,
+                                     const uint8_t* null_bitmap,
+                                     Bodo_CTypes::CTypeEnum dtype) {
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
         std::cerr << msg << std::endl; \
@@ -452,7 +453,6 @@ PyObject* array_getitem(PyArrayObject* arr, const char* p) {
 #undef CHECK
 }
 
-
 /**
  * @brief call PySequence_GetItem() of Python C-API
  *
@@ -471,7 +471,6 @@ PyObject* seq_getitem(PyObject* obj, Py_ssize_t i) {
     return s;
 #undef CHECK
 }
-
 
 /**
  * @brief create a numpy array of dict objects from a StructArray
@@ -554,6 +553,88 @@ int list_check(PyArrayObject* obj) { return PyList_Check(obj); }
 int is_na_value(PyObject* s, PyObject* C_NA) {
     return (s == Py_None ||
             (PyFloat_Check(s) && std::isnan(PyFloat_AsDouble(s))) || s == C_NA);
+}
+
+int is_pd_int_array(PyObject* arr) {
+#define CHECK(expr, msg)               \
+    if (!(expr)) {                     \
+        std::cerr << msg << std::endl; \
+        PyGILState_Release(gilstate);  \
+        return false;                  \
+    }
+
+    auto gilstate = PyGILState_Ensure();
+    // pd.arrays.IntegerArray
+    PyObject* pd_mod = PyImport_ImportModule("pandas");
+    CHECK(pd_mod, "importing pandas module failed");
+    PyObject* pd_arrays_obj = PyObject_GetAttrString(pd_mod, "arrays");
+    CHECK(pd_arrays_obj, "getting pd.arrays failed");
+    PyObject* pd_arrays_int_arr_obj =
+        PyObject_GetAttrString(pd_arrays_obj, "IntegerArray");
+    CHECK(pd_arrays_obj, "getting pd.arrays.IntegerArray failed");
+
+    // isinstance(arr, IntegerArray)
+    int ret = PyObject_IsInstance(arr, pd_arrays_int_arr_obj);
+    CHECK(ret >= 0, "isinstance fails");
+
+    Py_DECREF(pd_mod);
+    Py_DECREF(pd_arrays_obj);
+    Py_DECREF(pd_arrays_int_arr_obj);
+    PyGILState_Release(gilstate);
+    return ret;
+
+#undef CHECK
+}
+
+/**
+ * @brief unbox object array into native data and null_bitmap of native nullable
+ * int array
+ *
+ * @param arr_obj object array with int or NA values
+ * @param data native int data array of output array
+ * @param null_bitmap null bitmap of output array
+ */
+void int_array_from_sequence(PyObject* arr_obj, int64_t* data,
+                             uint8_t* null_bitmap) {
+#define CHECK(expr, msg)               \
+    if (!(expr)) {                     \
+        std::cerr << msg << std::endl; \
+        return;                        \
+    }
+
+    CHECK(PySequence_Check(arr_obj), "expecting a PySequence");
+    CHECK(data && null_bitmap, "buffer arguments must not be NULL");
+
+    // get pd.NA object to check for new NA kind
+    PyObject* pd_mod = PyImport_ImportModule("pandas");
+    CHECK(pd_mod, "importing pandas module failed");
+    PyObject* C_NA = PyObject_GetAttrString(pd_mod, "NA");
+    CHECK(C_NA, "getting pd.NA failed");
+
+    Py_ssize_t n = PyObject_Size(arr_obj);
+
+    for (Py_ssize_t i = 0; i < n; ++i) {
+        PyObject* s = PySequence_GetItem(arr_obj, i);
+        CHECK(s, "getting int array element failed");
+        // Pandas stores NA as either None or nan
+        if (s == Py_None ||
+            (PyFloat_Check(s) && std::isnan(PyFloat_AsDouble(s))) ||
+            s == C_NA) {
+            // set null bit to 0
+            SetBitTo(null_bitmap, i, 0);
+        } else {
+            // set null bit to 1
+            null_bitmap[i / 8] |= kBitmask[i % 8];
+            // TODO: checking int fails for some reason
+            // CHECK(PyLong_Check(s), "expecting an int");
+            data[i] = PyLong_AsLongLong(s);
+        }
+        Py_DECREF(s);
+    }
+
+    Py_DECREF(pd_mod);
+    Py_DECREF(C_NA);
+#undef CHECK
 }
 
 PyMODINIT_FUNC PyInit_array_ext(void) {
@@ -650,8 +731,13 @@ PyMODINIT_FUNC PyInit_array_ext(void) {
     PyObject_SetAttrString(m, "list_check",
                            PyLong_FromVoidPtr((void*)(&list_check)));
     PyObject_SetAttrString(m, "seq_getitem",
-                        PyLong_FromVoidPtr((void*)(&seq_getitem)));
+                           PyLong_FromVoidPtr((void*)(&seq_getitem)));
     PyObject_SetAttrString(m, "is_na_value",
                            PyLong_FromVoidPtr((void*)(&is_na_value)));
+    PyObject_SetAttrString(m, "is_pd_int_array",
+                           PyLong_FromVoidPtr((void*)(&is_pd_int_array)));
+    PyObject_SetAttrString(
+        m, "int_array_from_sequence",
+        PyLong_FromVoidPtr((void*)(&int_array_from_sequence)));
     return m;
 }
