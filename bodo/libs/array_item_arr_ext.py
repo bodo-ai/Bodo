@@ -221,44 +221,23 @@ def _unbox_array_item_array_copy_data(
         builder.store(new_obj, arr_obj_ptr)
     arr_obj = builder.load(arr_obj_ptr)
 
-    if isinstance(typ.dtype, ArrayItemArrayType):
-        nested_payload = _get_array_item_arr_payload(
-            context, builder, typ.dtype, data_arr
-        )
-        nested_offsets_ptr = c.context.make_helper(
-            c.builder, types.Array(offset_typ, 1, "C"), nested_payload.offsets
-        ).data
-        nested_null_bitmap_ptr = c.context.make_helper(
-            c.builder, types.Array(types.uint8, 1, "C"), nested_payload.null_bitmap
-        ).data
-        _unbox_array_item_array_generic(
-            typ.dtype,
-            arr_obj,
-            c,
-            n_items,
-            nested_payload.data,
-            nested_offsets_ptr,
-            nested_null_bitmap_ptr,
-            item_ind,
-        )
-    else:
-        # unbox array
-        arr_typ = typ.dtype
-        arr_val = c.pyapi.to_native_value(arr_typ, arr_obj).value
-        # copy array data
-        sig = types.none(arr_typ, types.int64, types.int64, arr_typ)
+    # unbox array
+    arr_typ = typ.dtype
+    arr_val = c.pyapi.to_native_value(arr_typ, arr_obj).value
+    # copy array data
+    sig = types.none(arr_typ, types.int64, types.int64, arr_typ)
 
-        def copy_data(data_arr, item_ind, n_items, arr_val):
-            data_arr[item_ind : item_ind + n_items] = arr_val
+    def copy_data(data_arr, item_ind, n_items, arr_val):
+        data_arr[item_ind : item_ind + n_items] = arr_val
 
-        _is_error, _res = c.pyapi.call_jit_code(
-            copy_data, sig, [data_arr, item_ind, n_items, arr_val]
-        )
-        c.context.nrt.decref(builder, arr_typ, arr_val)
+    _is_error, _res = c.pyapi.call_jit_code(
+        copy_data, sig, [data_arr, item_ind, n_items, arr_val]
+    )
+    c.context.nrt.decref(builder, arr_typ, arr_val)
 
 
 def _unbox_array_item_array_generic(
-    typ, val, c, n_arrays, data_arr, offsets_ptr, null_bitmap_ptr, starting_offset
+    typ, val, c, n_arrays, data_arr, offsets_ptr, null_bitmap_ptr
 ):
     """unbox array(item) array using generic Numba list unboxing to handle all item types
     that can be unboxed.
@@ -276,12 +255,8 @@ def _unbox_array_item_array_generic(
     np_mod_obj = c.pyapi.import_module_noblock(mod_name)
     np_array_method = c.pyapi.object_getattr_string(np_mod_obj, "array")
 
-    is_first = builder.icmp_unsigned(
-        "==", starting_offset, lir.Constant(starting_offset.type, 0)
-    )
-    with builder.if_then(is_first):
-        zero32 = c.context.get_constant(types.int32, 0)
-        c.builder.store(zero32, offsets_ptr)
+    zero32 = c.context.get_constant(types.int32, 0)
+    builder.store(zero32, offsets_ptr)
 
     # pseudocode for code generation:
     # curr_item_ind = 0
@@ -301,33 +276,31 @@ def _unbox_array_item_array_generic(
     #        curr_item_ind += n_items
     # offsets[n] = curr_item_ind;
 
-    # curr_item_ind = 0 (or first item index in nested case)
-    first_item_ind = builder.load(builder.gep(offsets_ptr, [starting_offset]))
+    # curr_item_ind = 0
     curr_item_ind = cgutils.alloca_once_value(
-        builder, builder.sext(first_item_ind, lir.IntType(64))
+        builder, context.get_constant(types.int64, 0)
     )
     # for each array
     with cgutils.for_range(builder, n_arrays) as loop:
         array_ind = loop.index
-        write_ind = builder.add(array_ind, starting_offset)
         item_ind = builder.load(curr_item_ind)
 
         # offsets[i] = curr_item_ind
         builder.store(
             builder.trunc(item_ind, lir.IntType(32)),
-            builder.gep(offsets_ptr, [write_ind]),
+            builder.gep(offsets_ptr, [array_ind]),
         )
         # arr_obj = A[i]
         arr_obj = seq_getitem(builder, context, val, array_ind)
         # set NA bit to 0
-        set_bitmap_bit(builder, null_bitmap_ptr, write_ind, 0)
+        set_bitmap_bit(builder, null_bitmap_ptr, array_ind, 0)
 
         # check for NA
         is_na = is_na_value(builder, context, arr_obj, C_NA)
         is_na_cond = builder.icmp_unsigned("!=", is_na, lir.Constant(is_na.type, 1))
         with builder.if_then(is_na_cond):
             # set NA bit to 1
-            set_bitmap_bit(builder, null_bitmap_ptr, write_ind, 1)
+            set_bitmap_bit(builder, null_bitmap_ptr, array_ind, 1)
             n_items = bodo.utils.utils.object_length(c, arr_obj)
             _unbox_array_item_array_copy_data(
                 typ, arr_obj, np_array_method, c, data_arr, item_ind, n_items
@@ -339,7 +312,7 @@ def _unbox_array_item_array_generic(
     # offsets[n] = curr_item_ind;
     builder.store(
         builder.trunc(builder.load(curr_item_ind), lir.IntType(32)),
-        builder.gep(offsets_ptr, [builder.add(n_arrays, starting_offset)]),
+        builder.gep(offsets_ptr, [n_arrays]),
     )
 
     c.pyapi.decref(pd_mod_obj)
@@ -406,9 +379,8 @@ def unbox_array_item_array(typ, val, c):
         )
 
     else:
-        zero64 = c.context.get_constant(types.int64, 0)
         _unbox_array_item_array_generic(
-            typ, val, c, n_arrays, data_arr, offsets_ptr, null_bitmap_ptr, zero64
+            typ, val, c, n_arrays, data_arr, offsets_ptr, null_bitmap_ptr
         )
 
     array_item_array = c.context.make_helper(c.builder, typ)
@@ -754,6 +726,7 @@ def array_item_arr_getitem_array(arr, ind):
     if is_list_like_index_type(ind) and ind.dtype == types.bool_:
 
         data_arr_type = arr.dtype
+
         def impl_bool(arr, ind):  # pragma: no cover
             n = len(arr)
             if n != len(ind):
@@ -807,6 +780,7 @@ def array_item_arr_getitem_array(arr, ind):
     if is_list_like_index_type(ind) and isinstance(ind.dtype, types.Integer):
 
         data_arr_type = arr.dtype
+
         def impl_int(arr, ind):  # pragma: no cover
             offsets = get_offsets(arr)
             data = get_data(arr)
@@ -886,6 +860,43 @@ def array_item_arr_setitem(A, idx, val):
 
         return impl_scalar
 
+    # slice case (used in unboxing)
+    if isinstance(idx, types.SliceType):
+
+        def impl_slice(A, idx, val):  # pragma: no cover
+            # get output arrays
+            offsets = get_offsets(A)
+            data = get_data(A)
+            null_bitmap = get_null_bitmap(A)
+
+            # get input arrays
+            val_offsets = get_offsets(val)
+            val_data = get_data(val)
+            val_null_bitmap = get_null_bitmap(val)
+
+            n = len(A)
+            slice_idx = numba.cpython.unicode._normalize_slice(idx, n)
+            start, stop = slice_idx.start, slice_idx.stop
+            assert slice_idx.step == 1
+
+            # copy data from first offset
+            if start == 0:
+                offsets[start] = 0
+            start_offset = offsets[start]
+            data[start_offset : start_offset + len(val_data)] = val_data
+
+            # copy offsets (n+1 elements)
+            offsets[start : stop + 1] = val_offsets + start_offset
+
+            # copy null bits
+            val_ind = 0
+            for i in range(start, stop):
+                bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(val_null_bitmap, val_ind)
+                bodo.libs.int_arr_ext.set_bit_to_arr(null_bitmap, i, bit)
+                val_ind += 1
+
+        return impl_slice
+
     raise BodoError(
         "only setitem with scalar index is currently supported for list arrays"
     )  # pragma: no cover
@@ -894,6 +905,7 @@ def array_item_arr_setitem(A, idx, val):
 @overload_method(ArrayItemArrayType, "copy", no_unliteral=True)
 def overload_array_item_arr_copy(A):
     data_arr_type = arr.dtype
+
     def copy_impl(A):  # pragma: no cover
         offsets = get_offsets(A)
         data = get_data(A)
