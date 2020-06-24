@@ -45,6 +45,7 @@ from bodo.utils.cg_helpers import (
     get_bitmap_bit,
     count_array_inner_elems,
     seq_getitem,
+    gen_allocate_array,
 )
 from llvmlite import ir as lir
 import llvmlite.binding as ll
@@ -168,28 +169,7 @@ def construct_array_item_array(context, builder, array_item_type, n_arrays, n_el
     payload.n_arrays = n_arrays
 
     # alloc data
-    if isinstance(array_item_type.dtype, ArrayItemArrayType):
-        n_counts = n_elems.type.count
-        n_items = builder.extract_value(n_elems, 0)
-        n_nested_elems = cgutils.pack_array(
-            builder, [builder.extract_value(n_elems, i) for i in range(1, n_counts)]
-        )
-        sig = (array_item_type.dtype)(
-            types.int64,
-            types.Tuple([types.int64] * (n_counts - 1)),
-            types.TypeRef(array_item_type.dtype.dtype),
-        )
-        args = (n_items, n_nested_elems, context.get_dummy_value())
-        data = lower_pre_alloc_array_item_array(context, builder, sig, args)
-        payload.data = data
-    else:
-        data = bodo.utils.utils._empty_nd_impl(
-            context,
-            builder,
-            types.Array(array_item_type.dtype.dtype, 1, "C"),
-            [builder.extract_value(n_elems, 0)],
-        )
-        payload.data = data._getvalue()
+    payload.data = gen_allocate_array(context, builder, array_item_type.dtype, n_elems)
 
     # alloc offsets
     n_arrays_plus_1 = builder.add(n_arrays, lir.Constant(lir.IntType(64), 1))
@@ -222,6 +202,10 @@ def _unbox_array_item_array_copy_data(
     """
     context = c.context
     builder = c.builder
+    # make sure item is array, not list
+    old_obj = arr_obj
+    arr_obj = c.pyapi.call(np_array_method, c.pyapi.tuple_pack([arr_obj]))
+    c.pyapi.decref(old_obj)
     if isinstance(typ.dtype, ArrayItemArrayType):
         nested_payload = _get_array_item_arr_payload(
             context, builder, typ.dtype, data_arr
@@ -243,17 +227,18 @@ def _unbox_array_item_array_copy_data(
             item_ind,
         )
     else:
-        arr_obj = c.pyapi.call(np_array_method, c.pyapi.tuple_pack([arr_obj]))
-        data_ptr = context.make_array(typ.dtype)(context, builder, data_arr).data
-        item_size = context.get_abi_sizeof(context.get_data_type(typ.dtype.dtype))
         # unbox array
         arr_typ = typ.dtype
         arr_val = c.pyapi.to_native_value(arr_typ, arr_obj).value
-        arr = context.make_array(arr_typ)(context, builder, arr_val)
         # copy array data
-        (n_items,) = cgutils.unpack_tuple(builder, arr.shape, count=1)
-        dst = builder.gep(data_ptr, [item_ind])
-        cgutils.raw_memcpy(builder, dst, arr.data, n_items, item_size)
+        sig = types.none(arr_typ, types.int64, types.int64, arr_typ)
+
+        def copy_data(data_arr, item_ind, n_items, arr_val):
+            data_arr[item_ind : item_ind + n_items] = arr_val
+
+        _is_error, _res = c.pyapi.call_jit_code(
+            copy_data, sig, [data_arr, item_ind, n_items, arr_val]
+        )
         c.context.nrt.decref(builder, arr_typ, arr_val)
 
 
@@ -332,9 +317,9 @@ def _unbox_array_item_array_generic(
             _unbox_array_item_array_copy_data(
                 typ, arr_obj, np_array_method, c, data_arr, item_ind, n_items
             )
-            c.pyapi.decref(arr_obj)
             # curr_item_ind += n_items
             builder.store(builder.add(item_ind, n_items), curr_item_ind)
+        c.pyapi.decref(arr_obj)
 
     # offsets[n] = curr_item_ind;
     builder.store(
@@ -344,6 +329,8 @@ def _unbox_array_item_array_generic(
 
     c.pyapi.decref(pd_mod_obj)
     c.pyapi.decref(C_NA)
+    c.pyapi.decref(np_mod_obj)
+    c.pyapi.decref(np_array_method)
 
 
 @unbox(ArrayItemArrayType)
@@ -351,8 +338,7 @@ def unbox_array_item_array(typ, val, c):
     """
     Unbox a numpy array with array of data values.
     """
-
-    handle_in_c = typ.dtype.dtype in (
+    handle_in_c = isinstance(typ.dtype, types.Array) and typ.dtype.dtype in (
         types.int64,
         types.float64,
         types.bool_,
@@ -432,62 +418,8 @@ def _get_array_item_arr_payload(context, builder, arr_typ, arr):
     return payload
 
 
-def _box_array_from_data(
-    c, context, builder, data_arr, data_type, curr_item_ind, n_items, out_arr_obj
-):
-    """box 'n_items' elements from 'data_arr' starting from 'curr_item_ind' and write to
-    'out_arr_obj'
-    """
-    if isinstance(data_type, ArrayItemArrayType):
-        nested_payload = _get_array_item_arr_payload(
-            context, builder, data_type, data_arr
-        )
-        nested_offsets_ptr = c.context.make_helper(
-            c.builder, types.Array(offset_typ, 1, "C"), nested_payload.offsets
-        ).data
-        nested_null_bitmap_ptr = c.context.make_helper(
-            c.builder, types.Array(types.uint8, 1, "C"), nested_payload.null_bitmap
-        ).data
-        array_item_obj = _box_array_item_array_generic(
-            data_type,
-            c,
-            n_items,
-            nested_payload.data,
-            nested_offsets_ptr,
-            nested_null_bitmap_ptr,
-            builder.load(curr_item_ind),
-        )
-        # store items in array
-        with cgutils.for_range(builder, n_items) as item_loop:
-            j = item_loop.index
-            item_ind = builder.load(curr_item_ind)
-            item_obj = pyarray_getitem(builder, context, array_item_obj, j)
-            # steals reference to item_obj
-            pyarray_setitem(builder, context, out_arr_obj, j, item_obj)
-            # curr_item_ind += 1
-            builder.store(
-                builder.add(item_ind, lir.Constant(item_ind.type, 1)), curr_item_ind,
-            )
-    else:
-        data_ptr = context.make_array(data_type)(context, builder, data_arr).data
-        # store items in array
-        with cgutils.for_range(builder, n_items) as item_loop:
-            j = item_loop.index
-            item_ind = builder.load(curr_item_ind)
-            buff_ptr = builder.gep(data_ptr, [item_ind])
-            item_obj = c.pyapi.from_native_value(
-                data_type.dtype, builder.load(buff_ptr), c.env_manager
-            )
-            # steals reference to item_obj
-            pyarray_setitem(builder, context, out_arr_obj, j, item_obj)
-            # curr_item_ind += 1
-            builder.store(
-                builder.add(item_ind, lir.Constant(item_ind.type, 1)), curr_item_ind,
-            )
-
-
 def _box_array_item_array_generic(
-    typ, c, n_arrays, data_arr, offsets_ptr, null_bitmap_ptr, starting_offset
+    typ, c, n_arrays, data_arr, offsets_ptr, null_bitmap_ptr
 ):
     """box array(item) array using generic Numba list boxing to handle all item types
     that can be boxed.
@@ -519,27 +451,15 @@ def _box_array_item_array_generic(
     # get np.nan to set NA
     nan_obj = c.pyapi.object_getattr_string(np_class_obj, "nan")
 
-    # get np.empty to create array elements
-    np_empty_method = c.pyapi.object_getattr_string(np_class_obj, "empty")
-    if isinstance(typ.dtype, types.Array):
-        np_dtype = numba.np.numpy_support.as_dtype(typ.dtype.dtype)
-        dtypeptr = c.env_manager.read_const(c.env_manager.add_const(np_dtype))
-    else:
-        dtypeptr = dtype_obj
-
-    # curr_item_ind = 0 (or first item index in nested case)
-    first_item_ind = builder.load(builder.gep(offsets_ptr, [starting_offset]))
-    curr_item_ind = cgutils.alloca_once_value(
-        builder, builder.sext(first_item_ind, lir.IntType(64))
-    )
+    # curr_item_ind = 0
+    curr_item_ind = cgutils.alloca_once_value(builder, lir.Constant(lir.IntType(64), 0))
     # for each array
     with cgutils.for_range(builder, n_arrays) as loop:
-        write_ind = loop.index
-        read_ind = builder.add(write_ind, starting_offset)
+        array_ind = loop.index
         # A[i] = np.nan
-        pyarray_setitem(builder, context, out_arr, write_ind, nan_obj)
+        pyarray_setitem(builder, context, out_arr, array_ind, nan_obj)
         # check for NA
-        na_bit = get_bitmap_bit(builder, null_bitmap_ptr, read_ind)
+        na_bit = get_bitmap_bit(builder, null_bitmap_ptr, array_ind)
         not_na_cond = builder.icmp_unsigned(
             "!=", na_bit, lir.Constant(lir.IntType(8), 0)
         )
@@ -550,29 +470,28 @@ def _box_array_item_array_generic(
                     builder.load(
                         builder.gep(
                             offsets_ptr,
-                            [builder.add(read_ind, lir.Constant(read_ind.type, 1))],
+                            [builder.add(array_ind, lir.Constant(array_ind.type, 1))],
                         )
                     ),
-                    builder.load(builder.gep(offsets_ptr, [read_ind])),
+                    builder.load(builder.gep(offsets_ptr, [array_ind])),
                 ),
                 lir.IntType(64),
             )
             # create array obj
             n_items_obj = c.pyapi.long_from_longlong(n_items)
-            arr_obj = c.pyapi.call(
-                np_empty_method, c.pyapi.tuple_pack([n_items_obj, dtypeptr])
+            item_ind = builder.load(curr_item_ind)
+            _is_error, arr_slice = c.pyapi.call_jit_code(
+                lambda data_arr, item_ind, n_items: data_arr[
+                    item_ind : item_ind + n_items
+                ],
+                (typ.dtype)(typ.dtype, types.int64, types.int64),
+                [data_arr, item_ind, n_items],
             )
-            _box_array_from_data(
-                c,
-                context,
-                builder,
-                data_arr,
-                typ.dtype,
-                curr_item_ind,
-                n_items,
-                arr_obj,
+            builder.store(
+                builder.add(item_ind, n_items), curr_item_ind,
             )
-            pyarray_setitem(builder, context, out_arr, write_ind, arr_obj)
+            arr_obj = c.pyapi.from_native_value(typ.dtype, arr_slice, c.env_manager)
+            pyarray_setitem(builder, context, out_arr, array_ind, arr_obj)
             c.pyapi.decref(n_items_obj)
             c.pyapi.decref(arr_obj)
 
@@ -599,7 +518,7 @@ def box_array_item_arr(typ, val, c):
 
     # use C boxing when possible to avoid compilation and runtime overheads
     # otherwise, use generic llvm/Numba unboxing
-    if typ.dtype.dtype in (
+    if isinstance(typ.dtype, types.Array) and typ.dtype.dtype in (
         types.int64,
         types.float64,
         types.bool_,
@@ -634,9 +553,8 @@ def box_array_item_arr(typ, val, c):
         )
 
     else:
-        zero64 = c.context.get_constant(types.int64, 0)
         arr = _box_array_item_array_generic(
-            typ, c, payload.n_arrays, data_arr, offsets_ptr, null_bitmap_ptr, zero64
+            typ, c, payload.n_arrays, data_arr, offsets_ptr, null_bitmap_ptr
         )
 
     c.context.nrt.decref(c.builder, typ, val)
