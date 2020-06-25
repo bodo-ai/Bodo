@@ -120,6 +120,7 @@ html_theme_options = {
     "link_hover": "#48A037",
     "show_powered_by": "false",
     "show_relbar_top": "true",
+    "analytics_id": "UA-170687885-1",
 }
 
 html_show_sphinx = False
