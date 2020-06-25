@@ -47,6 +47,7 @@ from bodo.utils.cg_helpers import (
     seq_getitem,
     gen_allocate_array,
 )
+from bodo.utils.indexing import init_nested_counts, add_nested_counts
 from llvmlite import ir as lir
 import llvmlite.binding as ll
 
@@ -181,6 +182,7 @@ def construct_array_item_array(
         context, builder, types.Array(offset_typ, 1, "C"), [n_arrays_plus_1]
     )
     offsets_ptr = offsets.data
+    builder.store(context.get_constant(types.int32, 0), offsets_ptr)
     payload.offsets = offsets._getvalue()
 
     # alloc null bitmap
@@ -708,17 +710,14 @@ def array_item_arr_getitem_array(arr, ind):
         return
 
     if isinstance(types.unliteral(ind), types.Integer):
-        # returning [] if NA due to type stability issues
+        # returning empty array if NA due to type stability issues
         # TODO: warning if value is NA?
         def array_item_arr_getitem_impl(arr, ind):  # pragma: no cover
             offsets = get_offsets(arr)
             data = get_data(arr)
             l_start_offset = offsets[ind]
             l_end_offset = offsets[ind + 1]
-            out = []
-            for i in range(l_start_offset, l_end_offset):
-                out.append(data[i])
-            return out
+            return data[l_start_offset:l_end_offset]
 
         return array_item_arr_getitem_impl
 
@@ -733,44 +732,30 @@ def array_item_arr_getitem_array(arr, ind):
                 raise IndexError(
                     "boolean index did not match indexed array along dimension 0"
                 )
-            offsets = get_offsets(arr)
-            data = get_data(arr)
             null_bitmap = get_null_bitmap(arr)
 
             # count the number of lists and value in output and allocate
             n_arrays = 0
-            n_values = 0
+            nested_counts = init_nested_counts(data_arr_type)
             for i in range(n):
                 if ind[i]:
                     n_arrays += 1
-                    n_values += int(offsets[i + 1] - offsets[i])
+                    arr_item = arr[i]
+                    nested_counts = add_nested_counts(nested_counts, arr_item)
 
-            out_arr = pre_alloc_array_item_array(n_arrays, (n_values,), data_arr_type)
-            out_offsets = get_offsets(out_arr)
-            out_data = get_data(out_arr)
+            out_arr = pre_alloc_array_item_array(n_arrays, nested_counts, data_arr_type)
             out_null_bitmap = get_null_bitmap(out_arr)
 
             # write output
             out_ind = 0
-            curr_offset = 0
             for ii in range(n):
                 if ind[ii]:
-                    l_start_offset = offsets[ii]
-                    l_end_offset = offsets[ii + 1]
-                    n_vals = int(l_end_offset - l_start_offset)
-                    val_ind = 0
-                    for jj in range(l_start_offset, l_end_offset):
-                        out_data[curr_offset + val_ind] = data[jj]
-                        val_ind += 1
-
-                    out_offsets[out_ind] = curr_offset
-                    curr_offset += n_vals
+                    out_arr[out_ind] = arr[ii]
                     # set NA
                     bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(null_bitmap, ii)
                     bodo.libs.int_arr_ext.set_bit_to_arr(out_null_bitmap, out_ind, bit)
                     out_ind += 1
 
-            out_offsets[out_ind] = curr_offset
             return out_arr
 
         return impl_bool
@@ -782,42 +767,26 @@ def array_item_arr_getitem_array(arr, ind):
         data_arr_type = arr.dtype
 
         def impl_int(arr, ind):  # pragma: no cover
-            offsets = get_offsets(arr)
-            data = get_data(arr)
             null_bitmap = get_null_bitmap(arr)
 
             n = len(ind)
             n_arrays = n
-            n_values = 0
+            nested_counts = init_nested_counts(data_arr_type)
             for k in range(n):
                 i = ind[k]
-                n_values += int(offsets[i + 1] - offsets[i])
+                arr_item = arr[i]
+                nested_counts = add_nested_counts(nested_counts, arr_item)
 
-            out_arr = pre_alloc_array_item_array(n_arrays, (n_values,), data_arr_type)
-            out_offsets = get_offsets(out_arr)
-            out_data = get_data(out_arr)
+            out_arr = pre_alloc_array_item_array(n_arrays, nested_counts, data_arr_type)
             out_null_bitmap = get_null_bitmap(out_arr)
 
-            out_ind = 0
-            curr_offset = 0
             for kk in range(n):
                 ii = ind[kk]
-                l_start_offset = offsets[ii]
-                l_end_offset = offsets[ii + 1]
-                n_vals = int(l_end_offset - l_start_offset)
-                val_ind = 0
-                for jj in range(l_start_offset, l_end_offset):
-                    out_data[curr_offset + val_ind] = data[jj]
-                    val_ind += 1
-
-                out_offsets[out_ind] = curr_offset
-                curr_offset += n_vals
+                out_arr[kk] = arr[ii]
                 # set NA
                 bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(null_bitmap, ii)
-                bodo.libs.int_arr_ext.set_bit_to_arr(out_null_bitmap, out_ind, bit)
-                out_ind += 1
+                bodo.libs.int_arr_ext.set_bit_to_arr(out_null_bitmap, kk, bit)
 
-            out_offsets[out_ind] = curr_offset
             return out_arr
 
         return impl_int
@@ -844,7 +813,6 @@ def array_item_arr_setitem(A, idx, val):
     # NOTE: assuming that the array is being built and all previous elements are set
     # TODO: make sure array is being build
     if isinstance(types.unliteral(idx), types.Integer):
-        assert isinstance(val, types.List)  # TODO: raise proper error
 
         def impl_scalar(A, idx, val):  # pragma: no cover
             offsets = get_offsets(A)
