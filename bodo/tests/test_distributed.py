@@ -835,6 +835,7 @@ def test_dist_warning3():
 def test_getitem_bool_REP():
     """make sure output of array getitem with bool index can make its inputs REP
     """
+
     def test_impl(n):
         df = pd.DataFrame({"A": np.arange(n), "B": np.arange(n) + 3})
         df = df[df.A != 0]

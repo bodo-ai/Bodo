@@ -53,7 +53,7 @@ from bodo.utils.utils import (
     CTypeEnum,
     tuple_to_scalar,
 )
-from bodo.utils.typing import BodoError
+from bodo.utils.typing import BodoError, is_overload_none
 from numba.core.typing.builtins import IndexValueType
 from llvmlite import ir as lir
 from bodo.libs import hdist
@@ -972,7 +972,24 @@ def _bcast_dtype(data):
 
 
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
-def _scatterv_np(data):
+def _get_scatterv_send_counts(send_counts, n_pes, n):
+    """compute send counts if 'send_counts' is None.
+    """
+    if not is_overload_none(send_counts):
+        return lambda send_counts, n_pes, n: send_counts
+
+    def impl(send_counts, n_pes, n):  # pragma: no cover
+        # compute send counts if not available
+        send_counts = np.empty(n_pes, np.int32)
+        for i in range(n_pes):
+            send_counts[i] = get_node_portion(n, n_pes, i)
+        return send_counts
+
+    return impl
+
+
+@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
+def _scatterv_np(data, send_counts=None):
     """scatterv() implementation for numpy arrays, refactored here with
     no_cpython_wrapper=True to enable int128 data array of decimal arrays. Otherwise,
     Numba creates a wrapper and complains about unboxing int128.
@@ -987,7 +1004,7 @@ def _scatterv_np(data):
         dtype = np.dtype("timedelta64[ns]")
     zero_shape = (0,) * ndim
 
-    def scatterv_arr_impl(data):  # pragma: no cover
+    def scatterv_arr_impl(data, send_counts=None):  # pragma: no cover
         rank = bodo.libs.distributed_api.get_rank()
         n_pes = bodo.libs.distributed_api.get_size()
 
@@ -1001,21 +1018,19 @@ def _scatterv_np(data):
         shape = bcast_tuple(shape)
         n_elem_per_row = get_tuple_prod(shape[1:])
 
-        # compute send counts
-        sendcounts = np.empty(n_pes, np.int32)
-        for i in range(n_pes):
-            sendcounts[i] = get_node_portion(shape[0], n_pes, i) * n_elem_per_row
+        send_counts = _get_scatterv_send_counts(send_counts, n_pes, shape[0])
+        send_counts *= n_elem_per_row
 
         # allocate output
-        n_loc = sendcounts[rank]  # total number of elements on this PE
+        n_loc = send_counts[rank]  # total number of elements on this PE
         recv_data = np.empty(n_loc, dtype)
 
         # displacements
-        displs = bodo.ir.join.calc_disp(sendcounts)
+        displs = bodo.ir.join.calc_disp(send_counts)
 
         c_scatterv(
             data_ptr,
-            sendcounts.ctypes,
+            send_counts.ctypes,
             displs.ctypes,
             recv_data.ctypes,
             np.int32(n_loc),
@@ -1117,16 +1132,15 @@ def get_value_for_type(dtype):  # pragma: no cover
         return tuple(get_value_for_type(t) for t in dtype.types)
 
     if isinstance(dtype, ArrayItemArrayType):
-        if isinstance(dtype.dtype.dtype, types.Integer):
-            return pd.Series([[1, 2], []]).values
-        if isinstance(dtype.dtype.dtype, types.Float):
-            return pd.Series([[1.0, 2.0], []]).values
+        return pd.Series(
+            [get_value_for_type(dtype.dtype), get_value_for_type(dtype.dtype)]
+        ).values
 
     # TODO: Add missing data types
     raise BodoError("get_value_for_type(dtype): Missing data type")
 
 
-def scatterv(data):
+def scatterv(data, send_counts=None):
     """scatterv() distributes data from rank 0 to all ranks.
     Rank 0 passes the data but the other ranks just pass None.
     """
@@ -1142,21 +1156,23 @@ def scatterv(data):
     if rank != MPI_ROOT:
         data = get_value_for_type(dtype)
 
-    return scatterv_impl(data)
+    return scatterv_impl(data, send_counts)
 
 
 @numba.generated_jit(nopython=True)
-def scatterv_impl(data):
+def scatterv_impl(data, send_counts=None):
     """nopython implementation of scatterv()
     """
     if isinstance(data, types.Array):
-        return lambda data: _scatterv_np(data)  # pragma: no cover
+        return lambda data, send_counts=None: _scatterv_np(
+            data, send_counts
+        )  # pragma: no cover
 
     if data == string_array_type:
         int32_typ_enum = np.int32(numba_to_c_type(types.int32))
         char_typ_enum = np.int32(numba_to_c_type(types.uint8))
 
-        def scatterv_str_arr_impl(data):  # pragma: no cover
+        def scatterv_str_arr_impl(data, send_counts=None):  # pragma: no cover
             rank = bodo.libs.distributed_api.get_rank()
             n_pes = bodo.libs.distributed_api.get_size()
             n_all = bcast_scalar(len(data))
@@ -1170,48 +1186,45 @@ def scatterv_impl(data):
 
             # ------- calculate buffer counts -------
 
-            # compute send counts
-            sendcounts = np.empty(n_pes, np.int32)
-            for i in range(n_pes):
-                sendcounts[i] = get_node_portion(n_all, n_pes, i)
+            send_counts = _get_scatterv_send_counts(send_counts, n_pes, n_all)
 
             # displacements
-            displs = bodo.ir.join.calc_disp(sendcounts)
+            displs = bodo.ir.join.calc_disp(send_counts)
 
             # compute send counts for characters
-            sendcounts_char = np.empty(n_pes, np.int32)
+            send_counts_char = np.empty(n_pes, np.int32)
             if rank == 0:
                 curr_str = 0
                 for i in range(n_pes):
                     c = 0
-                    for _ in range(sendcounts[i]):
+                    for _ in range(send_counts[i]):
                         c += send_arr_lens[curr_str]
                         curr_str += 1
-                    sendcounts_char[i] = c
+                    send_counts_char[i] = c
 
-            bcast(sendcounts_char)
+            bcast(send_counts_char)
 
             # displacements for characters
-            displs_char = bodo.ir.join.calc_disp(sendcounts_char)
+            displs_char = bodo.ir.join.calc_disp(send_counts_char)
 
             # compute send counts for nulls
-            sendcounts_nulls = np.empty(n_pes, np.int32)
+            send_counts_nulls = np.empty(n_pes, np.int32)
             for i in range(n_pes):
-                sendcounts_nulls[i] = (sendcounts[i] + 7) >> 3
+                send_counts_nulls[i] = (send_counts[i] + 7) >> 3
 
             # displacements for nulls
-            displs_nulls = bodo.ir.join.calc_disp(sendcounts_nulls)
+            displs_nulls = bodo.ir.join.calc_disp(send_counts_nulls)
 
             # alloc output array
-            n_loc = sendcounts[rank]  # total number of elements on this PE
-            n_loc_char = sendcounts_char[rank]
+            n_loc = send_counts[rank]  # total number of elements on this PE
+            n_loc_char = send_counts_char[rank]
             recv_arr = pre_alloc_string_array(n_loc, n_loc_char)
 
             # ----- string lengths -----------
 
             c_scatterv(
                 send_arr_lens.ctypes,
-                sendcounts.ctypes,
+                send_counts.ctypes,
                 displs.ctypes,
                 get_offset_ptr(recv_arr),
                 np.int32(n_loc),
@@ -1224,7 +1237,7 @@ def scatterv_impl(data):
 
             c_scatterv(
                 get_data_ptr(data),
-                sendcounts_char.ctypes,
+                send_counts_char.ctypes,
                 displs_char.ctypes,
                 get_data_ptr(recv_arr),
                 np.int32(n_loc_char),
@@ -1236,12 +1249,12 @@ def scatterv_impl(data):
             n_recv_bytes = (n_loc + 7) >> 3
 
             send_null_bitmap = get_scatter_null_bytes_buff(
-                get_null_bitmap_ptr(data), sendcounts, sendcounts_nulls
+                get_null_bitmap_ptr(data), send_counts, send_counts_nulls
             )
 
             c_scatterv(
                 send_null_bitmap.ctypes,
-                sendcounts_nulls.ctypes,
+                send_counts_nulls.ctypes,
                 displs_nulls.ctypes,
                 get_null_bitmap_ptr(recv_arr),
                 np.int32(n_recv_bytes),
@@ -1256,15 +1269,13 @@ def scatterv_impl(data):
         # Code adapted from the string code. Both the string and array(item) codes should be
         # refactored.
         int32_typ_enum = np.int32(numba_to_c_type(types.int32))
-        data_typ_enum = np.int32(numba_to_c_type(data.dtype.dtype))
         char_typ_enum = np.int32(numba_to_c_type(types.uint8))
-        data_arr_type = data.dtype
 
-        def scatterv_array_item_impl(data):
+        def scatterv_array_item_impl(data, send_counts=None):  # pragma: no cover
             in_offsets_arr = bodo.libs.array_item_arr_ext.get_offsets(data)
             in_data_arr = bodo.libs.array_item_arr_ext.get_data(data)
             in_null_bitmap_arr = bodo.libs.array_item_arr_ext.get_null_bitmap(data)
-            #
+
             rank = bodo.libs.distributed_api.get_rank()
             n_pes = bodo.libs.distributed_api.get_size()
             n_all = bcast_scalar(len(data))
@@ -1276,55 +1287,47 @@ def scatterv_impl(data):
 
             # ------- calculate buffer counts -------
 
-            # compute send counts
-            sendcounts = np.empty(n_pes, np.int32)
-            for i in range(n_pes):
-                sendcounts[i] = get_node_portion(n_all, n_pes, i)
+            send_counts = _get_scatterv_send_counts(send_counts, n_pes, n_all)
 
             # displacements
-            displs = bodo.ir.join.calc_disp(sendcounts)
+            displs = bodo.ir.join.calc_disp(send_counts)
 
             # compute send counts for items
-            sendcounts_item = np.empty(n_pes, np.int32)
+            send_counts_item = np.empty(n_pes, np.int32)
             if rank == 0:
-                curr_str = 0
+                curr_item = 0
                 for i in range(n_pes):
                     c = 0
-                    for _ in range(sendcounts[i]):
-                        c += send_arr_lens[curr_str]
-                        curr_str += 1
-                    sendcounts_item[i] = c
+                    for _ in range(send_counts[i]):
+                        c += send_arr_lens[curr_item]
+                        curr_item += 1
+                    send_counts_item[i] = c
 
-            bcast(sendcounts_item)
-
-            # displacements for items
-            displs_item = bodo.ir.join.calc_disp(sendcounts_item)
+            bcast(send_counts_item)
 
             # compute send counts for nulls
-            sendcounts_nulls = np.empty(n_pes, np.int32)
+            send_counts_nulls = np.empty(n_pes, np.int32)
             for i in range(n_pes):
-                sendcounts_nulls[i] = (sendcounts[i] + 7) >> 3
+                send_counts_nulls[i] = (send_counts[i] + 7) >> 3
 
             # displacements for nulls
-            displs_nulls = bodo.ir.join.calc_disp(sendcounts_nulls)
+            displs_nulls = bodo.ir.join.calc_disp(send_counts_nulls)
 
             # alloc output array
-            n_loc = sendcounts[rank]  # total number of elements on this PE
-            n_loc_item = sendcounts_item[rank]
-            recv_arr = pre_alloc_array_item_array(
-                n_loc, (n_loc_item,), data_arr_type
+            n_loc = send_counts[rank]  # total number of elements on this PE
+            recv_offsets_arr = np.empty(n_loc + 1, np.uint32)
+
+            recv_data_arr = bodo.libs.distributed_api.scatterv_impl(
+                in_data_arr, send_counts_item
             )
-            recv_offsets_arr = bodo.libs.array_item_arr_ext.get_offsets(recv_arr)
-            recv_data_arr = bodo.libs.array_item_arr_ext.get_data(recv_arr)
-            recv_null_bitmap_arr = bodo.libs.array_item_arr_ext.get_null_bitmap(
-                recv_arr
-            )
+            n_recv_null_bytes = (n_loc + 7) >> 3
+            recv_null_bitmap_arr = np.empty(n_recv_null_bytes, np.uint8)
 
             # ----- list of item lengths -----------
 
             c_scatterv(
                 send_arr_lens.ctypes,
-                sendcounts.ctypes,
+                send_counts.ctypes,
                 displs.ctypes,
                 recv_offsets_arr.ctypes,
                 np.int32(n_loc),
@@ -1333,35 +1336,24 @@ def scatterv_impl(data):
 
             convert_len_arr_to_offset(recv_offsets_arr.ctypes, n_loc)
 
-            # ----- items -----------
-
-            c_scatterv(
-                in_data_arr.ctypes,
-                sendcounts_item.ctypes,
-                displs_item.ctypes,
-                recv_data_arr.ctypes,
-                np.int32(n_loc_item),
-                data_typ_enum,
-            )
-
             # ----------- null bitmap -------------
 
-            n_recv_bytes = (n_loc + 7) >> 3
-
             send_null_bitmap = get_scatter_null_bytes_buff(
-                in_null_bitmap_arr.ctypes, sendcounts, sendcounts_nulls
+                in_null_bitmap_arr.ctypes, send_counts, send_counts_nulls
             )
 
             c_scatterv(
                 send_null_bitmap.ctypes,
-                sendcounts_nulls.ctypes,
+                send_counts_nulls.ctypes,
                 displs_nulls.ctypes,
                 recv_null_bitmap_arr.ctypes,
-                np.int32(n_recv_bytes),
+                np.int32(n_recv_null_bytes),
                 char_typ_enum,
             )
 
-            return recv_arr
+            return bodo.libs.array_item_arr_ext.init_array_item_array(
+                n_loc, recv_data_arr, recv_offsets_arr, recv_null_bitmap_arr
+            )
 
         return scatterv_array_item_impl
 
@@ -1388,39 +1380,36 @@ def scatterv_impl(data):
         if data == datetime_date_array_type:
             init_func = bodo.hiframes.datetime_date_ext.init_datetime_date_array
 
-        def scatterv_impl_int_arr(data):  # pragma: no cover
+        def scatterv_impl_int_arr(data, send_counts=None):  # pragma: no cover
             n_pes = bodo.libs.distributed_api.get_size()
 
             data_in = data._data
             null_bitmap = data._null_bitmap
             n_in = len(data_in)
 
-            data_recv = _scatterv_np(data_in)
+            data_recv = _scatterv_np(data_in, send_counts)
 
             n_all = bcast_scalar(n_in)
             n_recv_bytes = (len(data_recv) + 7) >> 3
             bitmap_recv = np.empty(n_recv_bytes, np.uint8)
 
-            # compute send counts
-            sendcounts = np.empty(n_pes, np.int32)
-            for i in range(n_pes):
-                sendcounts[i] = get_node_portion(n_all, n_pes, i)
+            send_counts = _get_scatterv_send_counts(send_counts, n_pes, n_all)
 
             # compute send counts for nulls
-            sendcounts_nulls = np.empty(n_pes, np.int32)
+            send_counts_nulls = np.empty(n_pes, np.int32)
             for i in range(n_pes):
-                sendcounts_nulls[i] = (sendcounts[i] + 7) >> 3
+                send_counts_nulls[i] = (send_counts[i] + 7) >> 3
 
             # displacements for nulls
-            displs_nulls = bodo.ir.join.calc_disp(sendcounts_nulls)
+            displs_nulls = bodo.ir.join.calc_disp(send_counts_nulls)
 
             send_null_bitmap = get_scatter_null_bytes_buff(
-                null_bitmap.ctypes, sendcounts, sendcounts_nulls
+                null_bitmap.ctypes, send_counts, send_counts_nulls
             )
 
             c_scatterv(
                 send_null_bitmap.ctypes,
-                sendcounts_nulls.ctypes,
+                send_counts_nulls.ctypes,
                 displs_nulls.ctypes,
                 bitmap_recv.ctypes,
                 np.int32(n_recv_bytes),
@@ -1431,8 +1420,8 @@ def scatterv_impl(data):
         return scatterv_impl_int_arr
 
     if isinstance(data, bodo.hiframes.pd_index_ext.RangeIndexType):
-
-        def impl_range_index(data):  # pragma: no cover
+        # TODO: support send_counts
+        def impl_range_index(data, send_counts=None):  # pragma: no cover
             rank = bodo.libs.distributed_api.get_rank()
             n_pes = bodo.libs.distributed_api.get_size()
 
@@ -1462,11 +1451,11 @@ def scatterv_impl(data):
 
     if bodo.hiframes.pd_index_ext.is_pd_index_type(data):
 
-        def impl_pd_index(data):  # pragma: no cover
+        def impl_pd_index(data, send_counts=None):  # pragma: no cover
             data_in = data._data
             name = data._name
             name = bcast_scalar(name)
-            arr = bodo.libs.distributed_api.scatterv_impl(data_in)
+            arr = bodo.libs.distributed_api.scatterv_impl(data_in, send_counts)
             return bodo.utils.conversion.index_from_array(arr, name)
 
         return impl_pd_index
@@ -1474,8 +1463,8 @@ def scatterv_impl(data):
     # MultiIndex index
     if isinstance(data, bodo.hiframes.pd_multi_index_ext.MultiIndexType):
         # TODO: handle `levels` and `codes` when available
-        def impl_multi_index(data):  # pragma: no cover
-            all_data = bodo.libs.distributed_api.scatterv_impl(data._data)
+        def impl_multi_index(data, send_counts=None):  # pragma: no cover
+            all_data = bodo.libs.distributed_api.scatterv_impl(data._data, send_counts)
             name = bcast_scalar(data._name)
             names = bcast_tuple(data._names)
             return bodo.hiframes.pd_multi_index_ext.init_multi_index(
@@ -1486,15 +1475,15 @@ def scatterv_impl(data):
 
     if isinstance(data, bodo.hiframes.pd_series_ext.SeriesType):
 
-        def impl_series(data):  # pragma: no cover
+        def impl_series(data, send_counts=None):  # pragma: no cover
             # get data and index arrays
             arr = bodo.hiframes.pd_series_ext.get_series_data(data)
             index = bodo.hiframes.pd_series_ext.get_series_index(data)
             name = bodo.hiframes.pd_series_ext.get_series_name(data)
             # scatter data
             out_name = bcast_scalar(name)
-            out_arr = bodo.libs.distributed_api.scatterv_impl(arr)
-            out_index = bodo.libs.distributed_api.scatterv_impl(index)
+            out_arr = bodo.libs.distributed_api.scatterv_impl(arr, send_counts)
+            out_index = bodo.libs.distributed_api.scatterv_impl(index, send_counts)
             # create output Series
             return bodo.hiframes.pd_series_ext.init_series(out_arr, out_index, out_name)
 
@@ -1505,18 +1494,20 @@ def scatterv_impl(data):
         data_args = ", ".join("g_data_{}".format(i) for i in range(n_cols))
         col_var = bodo.utils.transform.gen_const_tup(data.columns)
 
-        func_text = "def impl_df(data):\n"
+        func_text = "def impl_df(data, send_counts=None):\n"
         for i in range(n_cols):
             func_text += "  data_{} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(data, {})\n".format(
                 i, i
             )
-            func_text += "  g_data_{} = bodo.libs.distributed_api.scatterv_impl(data_{})\n".format(
+            func_text += "  g_data_{} = bodo.libs.distributed_api.scatterv_impl(data_{}, send_counts)\n".format(
                 i, i
             )
         func_text += (
             "  index = bodo.hiframes.pd_dataframe_ext.get_dataframe_index(data)\n"
         )
-        func_text += "  g_index = bodo.libs.distributed_api.scatterv_impl(index)\n"
+        func_text += (
+            "  g_index = bodo.libs.distributed_api.scatterv_impl(index, send_counts)\n"
+        )
         func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), g_index, {})\n".format(
             data_args, col_var
         )
@@ -1527,8 +1518,8 @@ def scatterv_impl(data):
 
     if isinstance(data, CategoricalArray):
 
-        def impl_cat(data):  # pragma: no cover
-            codes = bodo.libs.distributed_api.scatterv_impl(data._codes)
+        def impl_cat(data, send_counts=None):  # pragma: no cover
+            codes = bodo.libs.distributed_api.scatterv_impl(data._codes, send_counts)
             return bodo.hiframes.pd_categorical_ext.init_categorical_array(
                 codes, data.dtype
             )
@@ -1539,7 +1530,7 @@ def scatterv_impl(data):
         int32_typ_enum = np.int32(numba_to_c_type(types.int32))
         char_typ_enum = np.int32(numba_to_c_type(types.uint8))
 
-        def scatterv_list_str_arr_impl(data):  # pragma: no cover
+        def scatterv_list_str_arr_impl(data, send_counts=None):  # pragma: no cover
             rank = bodo.libs.distributed_api.get_rank()
             n_pes = bodo.libs.distributed_api.get_size()
 
@@ -1559,65 +1550,62 @@ def scatterv_impl(data):
 
             # ------- calculate buffer counts -------
 
-            # compute send counts
-            sendcounts = np.empty(n_pes, np.int32)
-            for ii in range(n_pes):
-                sendcounts[ii] = get_node_portion(n_all, n_pes, ii)
+            send_counts = _get_scatterv_send_counts(send_counts, n_pes, n_all)
 
             # displacements
-            displs = bodo.ir.join.calc_disp(sendcounts)
+            displs = bodo.ir.join.calc_disp(send_counts)
 
             # compute send counts for list lengths (number of strings)
-            sendcounts_str = np.empty(n_pes, np.int32)
+            send_counts_str = np.empty(n_pes, np.int32)
             if rank == 0:
                 curr_str = 0
                 for k in range(n_pes):
                     c = 0
-                    for _ in range(sendcounts[k]):
+                    for _ in range(send_counts[k]):
                         c += send_list_lens[curr_str]
                         curr_str += 1
-                    sendcounts_str[k] = c
+                    send_counts_str[k] = c
 
-            bcast(sendcounts_str)
+            bcast(send_counts_str)
 
             # displacements for characters
-            displs_str = bodo.ir.join.calc_disp(sendcounts_str)
+            displs_str = bodo.ir.join.calc_disp(send_counts_str)
 
             # compute send counts for string lengths (number of characters)
-            sendcounts_char = np.empty(n_pes, np.int32)
+            send_counts_char = np.empty(n_pes, np.int32)
             if rank == 0:
                 curr_str = 0
                 for kk in range(n_pes):
                     c = 0
-                    for _ in range(sendcounts_str[kk]):
+                    for _ in range(send_counts_str[kk]):
                         c += send_str_lens[curr_str]
                         curr_str += 1
-                    sendcounts_char[kk] = c
+                    send_counts_char[kk] = c
 
-            bcast(sendcounts_char)
+            bcast(send_counts_char)
 
             # displacements for characters
-            displs_char = bodo.ir.join.calc_disp(sendcounts_char)
+            displs_char = bodo.ir.join.calc_disp(send_counts_char)
 
             # compute send counts for nulls
-            sendcounts_nulls = np.empty(n_pes, np.int32)
+            send_counts_nulls = np.empty(n_pes, np.int32)
             for i_i in range(n_pes):
-                sendcounts_nulls[i_i] = (sendcounts[i_i] + 7) >> 3
+                send_counts_nulls[i_i] = (send_counts[i_i] + 7) >> 3
 
             # displacements for nulls
-            displs_nulls = bodo.ir.join.calc_disp(sendcounts_nulls)
+            displs_nulls = bodo.ir.join.calc_disp(send_counts_nulls)
 
             # alloc output array
-            n_loc = sendcounts[rank]  # total number of elements on this PE
-            n_loc_str = sendcounts_str[rank]
-            n_loc_char = sendcounts_char[rank]
+            n_loc = send_counts[rank]  # total number of elements on this PE
+            n_loc_str = send_counts_str[rank]
+            n_loc_char = send_counts_char[rank]
             recv_arr = pre_alloc_list_string_array(n_loc, n_loc_str, n_loc_char)
 
             # ----- list lengths -----------
 
             c_scatterv(
                 send_list_lens.ctypes,
-                sendcounts.ctypes,
+                send_counts.ctypes,
                 displs.ctypes,
                 cptr_to_voidptr(recv_arr._index_offsets),
                 np.int32(n_loc),
@@ -1630,7 +1618,7 @@ def scatterv_impl(data):
 
             c_scatterv(
                 send_str_lens.ctypes,
-                sendcounts_str.ctypes,
+                send_counts_str.ctypes,
                 displs_str.ctypes,
                 cptr_to_voidptr(recv_arr._data_offsets),
                 np.int32(n_loc_str),
@@ -1645,7 +1633,7 @@ def scatterv_impl(data):
 
             c_scatterv(
                 cptr_to_voidptr(data._data),
-                sendcounts_char.ctypes,
+                send_counts_char.ctypes,
                 displs_char.ctypes,
                 cptr_to_voidptr(recv_arr._data),
                 np.int32(n_loc_char),
@@ -1657,12 +1645,12 @@ def scatterv_impl(data):
             n_recv_bytes = (n_loc + 7) >> 3
 
             send_null_bitmap = get_scatter_null_bytes_buff(
-                cptr_to_voidptr(data._null_bitmap), sendcounts, sendcounts_nulls
+                cptr_to_voidptr(data._null_bitmap), send_counts, send_counts_nulls
             )
 
             c_scatterv(
                 send_null_bitmap.ctypes,
-                sendcounts_nulls.ctypes,
+                send_counts_nulls.ctypes,
                 displs_nulls.ctypes,
                 cptr_to_voidptr(recv_arr._null_bitmap),
                 np.int32(n_recv_bytes),
@@ -1676,10 +1664,12 @@ def scatterv_impl(data):
 
     # Tuple of data containers
     if isinstance(data, types.BaseTuple):
-        func_text = "def impl_tuple(data):\n"
+        func_text = "def impl_tuple(data, send_counts=None):\n"
         func_text += "  return ({}{})\n".format(
             ", ".join(
-                "bodo.libs.distributed_api.scatterv_impl(data[{}])".format(i)
+                "bodo.libs.distributed_api.scatterv_impl(data[{}], send_counts)".format(
+                    i
+                )
                 for i in range(len(data))
             ),
             "," if len(data) > 0 else "",
@@ -1690,7 +1680,7 @@ def scatterv_impl(data):
         return impl_tuple
 
     if data is types.none:  # pragma: no cover
-        return lambda data: None
+        return lambda data, send_counts=None: None
 
     raise BodoError("scatterv() not available for {}".format(data))  # pragma: no cover
 

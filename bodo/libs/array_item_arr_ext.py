@@ -644,7 +644,7 @@ def init_array_item_array(
         return array_item_array._getvalue()
 
     ret_typ = ArrayItemArrayType(data_type)
-    sig = ret_typ(n_arrays_typ, data_type, offsets_typ, null_bitmap_typ)
+    sig = ret_typ(types.int64, data_type, offsets_typ, null_bitmap_typ)
     return sig, codegen
 
 

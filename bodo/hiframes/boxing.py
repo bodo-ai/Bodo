@@ -440,8 +440,12 @@ def _infer_ndarray_obj_dtype(val):
 
     # XXX assuming the whole array is strings if 1st val is string
     i = 0
+    # skip NAs and empty lists/arrays (for array(item) array cases)
     # is_scalar call necessary since pd.isna() treats list of string as array
-    while i < len(val) and pd.api.types.is_scalar(val[i]) and pd.isna(val[i]):
+    while i < len(val) and (
+        (pd.api.types.is_scalar(val[i]) and pd.isna(val[i]))
+        or (not pd.api.types.is_scalar(val[i]) and len(val[i]) == 0)
+    ):
         i += 1
     if i == len(val):
         # empty or all NA object arrays are assumed to be strings
