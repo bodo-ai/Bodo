@@ -22,10 +22,10 @@ Conda Build Bodo
     cd Bodo
     python buildscripts/remove_docstring.py
     cd buildscripts/bodo-conda-recipe/
-    # if trial version
-    # export TRIAL_PERIOD=14
-    # if core count limit
-    # export MAX_CORE_COUNT=1000
+    # if binary should check license expiration
+    # export CHECK_LICENSE_EXPIRED=1
+    # if binary should check license max cores
+    # export CHECK_LICENSE_CORE_COUNT=1
     conda-build . -c bodo.ai -c conda-forge --no-test
 
 Open a new terminal window (replace yourContainerID :code:`docker container ls`

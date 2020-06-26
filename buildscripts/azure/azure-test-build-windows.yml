@@ -38,7 +38,7 @@ jobs:
   - bash: |
       source activate bodo_build
       cd buildscripts/bodo-conda-recipe/
-      conda build . -c bodo.ai -c conda-forge -c intel --no-test --output-folder ../../
+      conda build . -c bodo.ai -c conda-forge -c intel -c numba --no-test --output-folder ../../
     displayName: 'Conda build Bodo'
 
   - bash: |

@@ -42,7 +42,7 @@ jobs:
       export PATH=$HOME/miniconda3/bin:${PATH}
       conda create -y -n $CONDA_ENV
       source activate $CONDA_ENV
-      conda install -y h5py scipy bodo -c file://$(HOME)/bodo-inc/bodo-inc/ -c bodo.ai -c conda-forge
+      conda install -y h5py scipy bodo -c file://$(HOME)/bodo-inc/bodo-inc/ -c bodo.ai -c conda-forge -c numba
     displayName: 'Install Bodo from conda'
 
   - script: |
@@ -79,7 +79,16 @@ jobs:
       conda install -y -c conda-forge xlrd xlsxwriter
     displayName: 'Setup excel testing'
 
+  - task: DownloadSecureFile@1
+    name: testLicense
+    displayName: 'Download test license'
+    inputs:
+      secureFile: 'bodo.lic'
+
   - script: |
+      sudo chown root:root $(testLicense.secureFilePath)
+      sudo chmod a+r $(testLicense.secureFilePath)
+      sudo cp $(testLicense.secureFilePath) $HOME/bodo-inc
       export PATH=$HOME/miniconda3/bin:${PATH}
       source activate $CONDA_ENV
       pip install pytest pytest-azurepipelines

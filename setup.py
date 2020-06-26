@@ -148,16 +148,21 @@ ext_hdf5 = Extension(
 )
 
 
+# TODO Windows build fails because ssl.lib not found. Disabling licensing
+# check on windows for now
 dist_macros = []
-if "TRIAL_PERIOD" in os.environ and os.environ["TRIAL_PERIOD"] != "":
-    trial_period = os.environ["TRIAL_PERIOD"]
-    trial_start = str(int(time.time()))
-    dist_macros.append(("TRIAL_PERIOD", trial_period))
-    dist_macros.append(("TRIAL_START", trial_start))
+if os.environ.get("CHECK_LICENSE_EXPIRED", None) == "1" and not is_win:
+    dist_macros.append(("CHECK_LICENSE_EXPIRED", "1"))
 
-if "MAX_CORE_COUNT" in os.environ and os.environ["MAX_CORE_COUNT"] != "":
-    max_core_count = os.environ["MAX_CORE_COUNT"]
-    dist_macros.append(("MAX_CORE_COUNT", max_core_count))
+if os.environ.get("CHECK_LICENSE_CORE_COUNT", None) == "1" and not is_win:
+    dist_macros.append(("CHECK_LICENSE_CORE_COUNT", "1"))
+
+dist_libs = []
+if not is_win and (
+    os.environ.get("CHECK_LICENSE_EXPIRED", None) == "1"
+    or os.environ.get("CHECK_LICENSE_CORE_COUNT", None) == "1"
+):
+    dist_libs += ["ssl", "crypto"]
 
 ext_hdist = Extension(
     name="bodo.libs.hdist",
@@ -167,7 +172,7 @@ ext_hdist = Extension(
         "bodo/libs/_bodo_common.cpp",
         "bodo/libs/_distributed.h",
     ],
-    libraries=MPI_LIBS,
+    libraries=MPI_LIBS + dist_libs,
     define_macros=dist_macros,
     extra_compile_args=eca,
     extra_link_args=ela,

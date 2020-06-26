@@ -448,12 +448,8 @@ We currently have three build pipelines on `Azure DevOps <https://dev.azure.com/
 
 For the two release pipelines(Bodo-build-binary and Bodo-build-binary-obfuscated), there are some variables used, and they can all be changed manually triggering the pipelines:
 
-- :code:`TRIAL_END_OF_MONTH` has default value 1 set through Azure's UI. So the pipelines by default builds binaries expiring at the end of the month.
-- :code:`TRIAL_END_OF_NEXT_MONTH` have default value 0 set through Azure's UI.
-- :code:`TRIAL_DAYS` have default value 0 set through Azure's UI.
-- :code:`MAX_CORE_COUNT` does not have a default value set through Azure's UI.
-
-:code:`TRIAL_PERIOD` will be calculated according to when the binary is built and when it should expire based on :code:`TRIAL_END_OF_MONTH`, :code:`TRIAL_END_OF_NEXT_MONTH`, and :code:`TRIAL_DAYS`. 
+- :code:`CHECK_LICENSE_EXPIRED` has a default value of 1 set through Azure's UI. If set to 1, binary will do license check of expiration date
+- :code:`CHECK_LICENSE_CORE_COUNT` has a default value of 1 set through Azure's UI. If set to 1, binary will do license check of max core count
 
 :code:`OBFUSCATE` is set to 0 for :code:`Bodo-build-binary` pipeline and 1 for :code:`Bodo-build-binary-obfuscated` pipeline.
 

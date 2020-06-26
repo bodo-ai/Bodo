@@ -1,8 +1,149 @@
 // Copyright (C) 2019 Bodo Inc. All rights reserved.
 #include "_distributed.h"
+#include <openssl/err.h>
+#include <openssl/evp.h>
+#include <openssl/pem.h>
 #include <ctime>
+#include <fstream>
+#include <vector>
 
 MPI_Datatype decimal_mpi_type = MPI_DATATYPE_NULL;
+
+#if defined(CHECK_LICENSE_EXPIRED) || defined(CHECK_LICENSE_CORE_COUNT)
+
+// public key to verify signature of license file
+const char *pubkey =
+    "-----BEGIN PUBLIC KEY-----\n"
+    "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAom4enwn8WEk3saSpAhOd\n"
+    "n3JCkEf00p+EJuVV9WYK1DbAAog0Szm8TSAtNLNp2cQavctkEmq2qDhPHZL8MhFm\n"
+    "x83FVDo/4Jv4U99Jk1T+Xuy25REsbzQ4dPm0tl0yFRcTOOkMrTH2lZ/NOZ6EXIUQ\n"
+    "btvjAtgyq3mzFuKZognaterprzlEvNWsMh0ZaO6fF4bT65L9Zv6BCSuwJC0jgssJ\n"
+    "wnKmdK2q/zCBnBTlsU3VMYp0WcyWY4hQKzGfKi1zW04kGLKBLIBF/xAR4U/mIj23\n"
+    "zk2rTVKWc5IJaYCNG9XiFt71CLosb+sSA6PVVPLz4AKjoUkslhYSzjSkn6uP9ebj\n"
+    "lQIDAQAB\n"
+    "-----END PUBLIC KEY-----";
+
+/**
+ * Return public key in `const char *pubkey` global as openssl data structure.
+ */
+static EVP_PKEY *get_public_key() {
+    BIO *mem = BIO_new_mem_buf((void *)pubkey, strlen(pubkey));
+    EVP_PKEY *key = PEM_read_bio_PUBKEY(mem, NULL, NULL, NULL);
+    BIO_free(mem);
+    return key;
+}
+
+/**
+ * Verifies that the license file is valid (originates from Bodo).
+ * @param msg: byte array with license content
+ * @param mlen: length of msg in bytes
+ * @param sig: signature (obtained when signing license content with Bodo private key)
+ * @param slen: length of signature in bytes
+ * @return : 1 if verified correctly, 0 otherwise.
+ */
+static int verify_license(EVP_PKEY *key, void *msg, const size_t mlen,
+                          const unsigned char *sig, size_t slen) {
+    EVP_MD_CTX *mdctx = NULL;
+
+    // create the Message Digest Context
+    if (!(mdctx = EVP_MD_CTX_create())) return 0;
+
+    // initialize the DigestSign operation - use SHA-256 as the message
+    // digest function
+    if (1 != EVP_DigestVerifyInit(mdctx, NULL, EVP_sha256(), NULL, key))
+        return 0;
+
+    // call update with the message
+    if (1 != EVP_DigestVerifyUpdate(mdctx, msg, mlen)) return 0;
+
+    // verify the signature
+    if (1 != EVP_DigestVerifyFinal(mdctx, sig, slen)) return 0;
+
+    // clean up
+    if (mdctx) EVP_MD_CTX_destroy(mdctx);
+
+    return 1;  // verified correctly
+}
+
+/**
+ * Read license from environment variable BODO_LICENSE or from license file.
+ * The license contains max cores and expiration date followed by digital
+ * signature (of max cores and expiration date).
+ * Note that the first int of the decoded license is the total number of bytes
+ * of everything in the decoded license.
+ * @param[out] num_cores: max cores in the license
+ * @param[out] year: expiration year
+ * @param[out] month: expiration month
+ * @param[out] day: expiration day
+ * @param[out] signature: binary digital signature
+ * @param[in] b64_encoded: true if license is Base64 encoded
+ */
+static void read_license(int &num_cores, int &year, int &month, int &day,
+                         std::vector<char> &signature, bool b64_encoded) {
+    std::vector<char> data;  // store license
+
+    // first check if license is in environment variable
+    char *license_text = std::getenv("BODO_LICENSE");
+    if (license_text != NULL && strlen(license_text) > 0) {
+        data.assign(license_text, license_text + strlen(license_text));
+    } else {
+        // read from "bodo.lic" file in cwd
+        // TODO: check HOME directory or some other directory?
+        std::ifstream f("bodo.lic", std::ios::binary);
+        if (f.fail()) {
+            Bodo_PyErr_SetString(PyExc_RuntimeError, "Bodo license not found");
+            return;
+        }
+        data.assign(std::istreambuf_iterator<char>{f}, {});
+    }
+
+    if (b64_encoded) {
+        // decode from Base64 to binary
+        // decoded data is smaller than encoded
+        std::vector<char> decoded_data(data.size());
+        int dlen = EVP_DecodeBlock((unsigned char *)decoded_data.data(),
+                                   (unsigned char *)data.data(), data.size());
+        if (dlen == -1) {
+            // ERR_print_errors_fp(stderr);  // print ssl errors
+            Bodo_PyErr_SetString(PyExc_RuntimeError, "Invalid license");
+            return;
+        }
+        int actual_size = ((int *)decoded_data.data())[0];
+        decoded_data.resize(actual_size);
+        data = std::move(decoded_data);
+    }
+
+    const int *msg = (int *)data.data();
+    num_cores = msg[1];
+    year = msg[2];
+    month = msg[3];
+    day = msg[4];
+    signature.assign(data.begin() + sizeof(int) * 5, data.end());
+}
+
+/**
+ * Determine if current date is greater than expiration date.
+ * @param exp_year: expiration year
+ * @param exp_month: expiration month
+ * @param exp_day: expiration day
+ * @return : true if expired, false otherwise
+ */
+static bool is_expired(int exp_year, int exp_month, int exp_day) {
+    std::time_t t = std::time(0);  // get time now
+    std::tm *now = std::localtime(&t);
+    int year_now = now->tm_year + 1900;
+    int month_now = now->tm_mon + 1;
+    int day_now = now->tm_mday;
+
+    if (year_now > exp_year) return true;
+    if (year_now == exp_year) {
+        if (month_now > exp_month) return true;
+        if (month_now == exp_month) return day_now > exp_day;
+    }
+    return false;
+}
+
+#endif
 
 PyMODINIT_FUNC PyInit_hdist(void) {
     PyObject *m;
@@ -12,14 +153,38 @@ PyMODINIT_FUNC PyInit_hdist(void) {
     m = PyModule_Create(&moduledef);
     if (m == NULL) return NULL;
 
-#ifdef TRIAL_PERIOD
-    // printf("trial period %d\n", TRIAL_PERIOD);
-    // printf("trial start %d\n", TRIAL_START);
+#if defined(CHECK_LICENSE_EXPIRED) || defined(CHECK_LICENSE_CORE_COUNT)
+    // get max cores and expiration date from license, and verify license
+    // using digital signature with asymmetric cryptography
+    int max_cores = -1;
+    int year, month, day;
+    std::vector<char> signature;  // to store signature contained in license
+
+    bool b64_encoded = true;  // license encoded in Base64
+    read_license(max_cores, year, month, day, signature, b64_encoded);
+    if (max_cores == -1)
+        return NULL;  // error has been set in read_license function
+    std::vector<int> msg = {max_cores, year, month, day};
+
+    EVP_PKEY *key = get_public_key();
+    if (!key) {
+        // ERR_print_errors_fp(stderr);  // print ssl errors
+        Bodo_PyErr_SetString(PyExc_RuntimeError, "Error obtaining public key");
+        return NULL;
+    }
+
+    if (!verify_license(key, msg.data(), msg.size() * sizeof(int),
+                        (unsigned char *)signature.data(), signature.size())) {
+        // ERR_print_errors_fp(stderr);  // print ssl errors
+        Bodo_PyErr_SetString(PyExc_RuntimeError, "Invalid license\n");
+        return NULL;
+    }
+    EVP_PKEY_free(key);
+#endif
+
+#ifdef CHECK_LICENSE_EXPIRED
     // check expiration date
-    std::time_t curr_time = std::time(0);  // get time of now
-    std::time_t start_time = TRIAL_START;
-    double time_diff = std::difftime(curr_time, start_time) / (60 * 60 * 24);
-    if (time_diff > TRIAL_PERIOD) {
+    if (is_expired(year, month, day)) {
         Bodo_PyErr_SetString(PyExc_RuntimeError,
                              "Bodo trial period has expired!");
         return NULL;
@@ -32,14 +197,14 @@ PyMODINIT_FUNC PyInit_hdist(void) {
     MPI_Initialized(&is_initialized);
     if (!is_initialized) MPI_Init(NULL, NULL);
 
-#ifdef MAX_CORE_COUNT
+#ifdef CHECK_LICENSE_CORE_COUNT
     int num_pes;
     MPI_Comm_size(MPI_COMM_WORLD, &num_pes);
-    // printf("max core count %d\n", MAX_CORE_COUNT);
-    // printf("number of processors %d\n", num_pes);
-    if (num_pes > MAX_CORE_COUNT) {
-        Bodo_PyErr_SetString(PyExc_RuntimeError,
-                             "Exceeded the max core count!");
+    if (num_pes > max_cores) {
+        char error_msg[100];
+        sprintf(error_msg, "License is for %d cores. Max core count exceeded.",
+                max_cores);
+        Bodo_PyErr_SetString(PyExc_RuntimeError, error_msg);
         return NULL;
     }
 #endif
