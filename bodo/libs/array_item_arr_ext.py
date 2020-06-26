@@ -71,6 +71,7 @@ offset_typ = types.uint32
 
 class ArrayItemArrayType(types.ArrayCompatible):
     def __init__(self, dtype):
+        assert bodo.utils.utils.is_array_typ(dtype, False)
         self.dtype = dtype
         super(ArrayItemArrayType, self).__init__(
             name="ArrayItemArrayType({})".format(dtype)

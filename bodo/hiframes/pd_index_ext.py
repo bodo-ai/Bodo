@@ -48,6 +48,7 @@ from bodo.utils.typing import (
     get_overload_const_func,
     BodoError,
     raise_bodo_error,
+    get_udf_out_arr_type,
 )
 from bodo.utils.transform import (
     get_const_func_output_type,
@@ -1978,11 +1979,7 @@ def overload_index_map(I, mapper, na_action=None):
     except:
         raise_bodo_error("Index.map(): user-defined function not supported")
 
-    # unbox Timestamp to dt64 in Series (TODO: timedelta64)
-    if f_return_type == pandas_timestamp_type:
-        f_return_type = types.NPDatetime("ns")
-
-    out_arr_type = bodo.hiframes.pd_series_ext._get_series_array_type(f_return_type)
+    out_arr_type = get_udf_out_arr_type(f_return_type)
 
     func = get_overload_const_func(mapper)
     func_text = "def f(I, mapper, na_action=None):\n"
