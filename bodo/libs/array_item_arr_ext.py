@@ -872,26 +872,10 @@ def array_item_arr_setitem(A, idx, val):
 
 @overload_method(ArrayItemArrayType, "copy", no_unliteral=True)
 def overload_array_item_arr_copy(A):
-    data_arr_type = arr.dtype
 
     def copy_impl(A):  # pragma: no cover
-        offsets = get_offsets(A)
-        data = get_data(A)
-        null_bitmap = get_null_bitmap(A)
-
-        # allocate
-        n = len(A)
-        n_values = offsets[-1]
-        out_arr = pre_alloc_array_item_array(n, (n_values,), data_arr_type)
-        out_offsets = get_offsets(out_arr)
-        out_data = get_data(out_arr)
-        out_null_bitmap = get_null_bitmap(out_arr)
-
-        # copy input values to output values
-        out_offsets[:] = offsets
-        out_data[:] = data
-        out_null_bitmap[:] = null_bitmap
-
-        return out_arr
+        return init_array_item_array(
+            len(A), get_data(A).copy(), get_offsets(A).copy(), get_null_bitmap(A).copy()
+        )
 
     return copy_impl
