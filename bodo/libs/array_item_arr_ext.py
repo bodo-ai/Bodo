@@ -182,7 +182,13 @@ def construct_array_item_array(
         context, builder, types.Array(offset_typ, 1, "C"), [n_arrays_plus_1]
     )
     offsets_ptr = offsets.data
+    # offsets[0] = 0
     builder.store(context.get_constant(types.int32, 0), offsets_ptr)
+    # offsets[n] = n_elems
+    builder.store(
+        builder.trunc(builder.extract_value(n_elems, 0), lir.IntType(32)),
+        builder.gep(offsets_ptr, [n_arrays]),
+    )
     payload.offsets = offsets._getvalue()
 
     # alloc null bitmap
@@ -219,7 +225,9 @@ def _unbox_array_item_array_copy_data(
     with builder.if_then(is_list_cond):
         old_obj = builder.load(arr_obj_ptr)
         new_obj = c.pyapi.call(np_array_method, c.pyapi.tuple_pack([old_obj]))
-        c.pyapi.decref(old_obj)
+        # TODO: this decref causes crashes for some reason in test_array_item_array.py
+        # needs to be investigated to avoid object leaks
+        # c.pyapi.decref(old_obj)
         builder.store(new_obj, arr_obj_ptr)
     arr_obj = builder.load(arr_obj_ptr)
 
@@ -255,7 +263,7 @@ def _unbox_array_item_array_generic(
     # get np.array to convert list items to array
     mod_name = context.insert_const_string(builder.module, "numpy")
     np_mod_obj = c.pyapi.import_module_noblock(mod_name)
-    np_array_method = c.pyapi.object_getattr_string(np_mod_obj, "array")
+    np_array_method = c.pyapi.object_getattr_string(np_mod_obj, "asarray")
 
     zero32 = c.context.get_constant(types.int32, 0)
     builder.store(zero32, offsets_ptr)
@@ -683,7 +691,7 @@ def get_n_arrays(typingctx, arr_typ=None):
     def codegen(context, builder, sig, args):
         (arr,) = args
         payload = _get_array_item_arr_payload(context, builder, arr_typ, arr)
-        return impl_ret_borrowed(context, builder, sig.return_type, payload.n_arrays)
+        return payload.n_arrays
 
     return types.int64(arr_typ), codegen
 
@@ -872,7 +880,6 @@ def array_item_arr_setitem(A, idx, val):
 
 @overload_method(ArrayItemArrayType, "copy", no_unliteral=True)
 def overload_array_item_arr_copy(A):
-
     def copy_impl(A):  # pragma: no cover
         return init_array_item_array(
             len(A), get_data(A).copy(), get_offsets(A).copy(), get_null_bitmap(A).copy()
