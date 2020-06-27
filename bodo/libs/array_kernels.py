@@ -543,28 +543,23 @@ def concat_overload(arr_list):
         arr_list.dtype, ArrayItemArrayType
     ):
         data_arr_type = arr_list.dtype.dtype
+
         def array_item_concat_impl(arr_list):  # pragma: no cover
             # preallocate the output
             num_lists = 0
-            num_items = 0
+            data_arrs = []
             for A in arr_list:
                 n_lists = len(A)
-                in_offsets = bodo.libs.array_item_arr_ext.get_offsets(A)
-                n_items = in_offsets[n_lists]
+                data_arrs.append(bodo.libs.array_item_arr_ext.get_data(A))
                 num_lists += n_lists
-                num_items += n_items
-            out_arr = bodo.libs.array_item_arr_ext.pre_alloc_array_item_array(
-                num_lists, (num_items,), data_arr_type
-            )
-            out_offsets = bodo.libs.array_item_arr_ext.get_offsets(out_arr)
-            out_data = bodo.libs.array_item_arr_ext.get_data(out_arr)
-            out_null_bitmap = bodo.libs.array_item_arr_ext.get_null_bitmap(out_arr)
+            out_offsets = np.empty(num_lists + 1, np.uint32)
+            out_data = bodo.libs.array_kernels.concat(data_arrs)
+            out_null_bitmap = np.empty((num_lists + 7) >> 3, np.uint8)
             # copy data to output
             curr_list = 0
             curr_item = 0
             for A in arr_list:
                 in_offsets = bodo.libs.array_item_arr_ext.get_offsets(A)
-                in_data = bodo.libs.array_item_arr_ext.get_data(A)
                 in_null_bitmap = bodo.libs.array_item_arr_ext.get_null_bitmap(A)
                 n_lists = len(A)
                 n_items = in_offsets[n_lists]
@@ -575,12 +570,13 @@ def concat_overload(arr_list):
                     bodo.libs.int_arr_ext.set_bit_to_arr(
                         out_null_bitmap, i + curr_list, bit
                     )
-                for i in range(n_items):
-                    out_data[i + curr_item] = in_data[i]
                 # shifting indexes
                 curr_list += n_lists
                 curr_item += n_items
             out_offsets[curr_list] = curr_item
+            out_arr = bodo.libs.array_item_arr_ext.init_array_item_array(
+                num_lists, out_data, out_offsets, out_null_bitmap
+            )
             return out_arr
 
         return array_item_concat_impl
@@ -729,6 +725,31 @@ def concat_overload(arr_list):
             bodo.libs.int_arr_ext.concat_bitmap_tup(arr_list),
         )
 
+    # list of nullable int arrays
+    if isinstance(arr_list, types.List) and isinstance(
+        arr_list.dtype, IntegerArrayType
+    ):
+
+        def impl_int_arr_list(arr_list):
+            all_data = []
+            n_all = 0
+            for A in arr_list:
+                all_data.append(A._data)
+                n_all += len(A)
+            out_data = bodo.libs.array_kernels.concat(all_data)
+            n_bytes = (n_all + 7) >> 3
+            new_mask = np.empty(n_bytes, np.uint8)
+            curr_bit = 0
+            for A in arr_list:
+                old_mask = A._null_bitmap
+                for j in range(len(A)):
+                    bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(old_mask, j)
+                    bodo.libs.int_arr_ext.set_bit_to_arr(new_mask, curr_bit, bit)
+                    curr_bit += 1
+            return bodo.libs.int_arr_ext.init_integer_array(out_data, new_mask,)
+
+        return impl_int_arr_list
+
     if isinstance(arr_list, types.UniTuple) and arr_list.dtype == boolean_array:
         # reusing int arr concat functions
         # TODO: test
@@ -736,6 +757,28 @@ def concat_overload(arr_list):
             np.concatenate(bodo.libs.int_arr_ext.get_int_arr_data_tup(arr_list)),
             bodo.libs.int_arr_ext.concat_bitmap_tup(arr_list),
         )
+
+    # list of 1D np arrays
+    if (
+        isinstance(arr_list, types.List)
+        and isinstance(arr_list.dtype, types.Array)
+        and arr_list.dtype.ndim == 1
+    ):
+        dtype = arr_list.dtype.dtype
+
+        def impl_np_arr_list(arr_list):
+            n_all = 0
+            for A in arr_list:
+                n_all += len(A)
+            out_arr = np.empty(n_all, dtype)
+            curr_val = 0
+            for A in arr_list:
+                n = len(A)
+                out_arr[curr_val : curr_val + n] = A
+                curr_val += n
+            return out_arr
+
+        return impl_np_arr_list
 
     # arrays of int/float mix need conversion to all-float before concat
     if (
@@ -863,6 +906,7 @@ def overload_gen_na_array(n, arr):
 
     if isinstance(arr, ArrayItemArrayType):
         data_arr_type = arr.dtype
+
         def array_item_impl(n, arr):  # pragma: no cover
             # preallocate the output
             num_lists = n

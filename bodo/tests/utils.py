@@ -570,11 +570,23 @@ def convert_list_string_decimal_columns(df):
         nb_decimal = 0
         for i_row in range(n_rows):
             e_ent = e_col.iat[i_row]
-            if isinstance(e_ent, list):
+            if isinstance(
+                e_ent,
+                (
+                    list,
+                    np.ndarray,
+                    pd.arrays.BooleanArray,
+                    pd.arrays.IntegerArray,
+                    pd.arrays.StringArray,
+                ),
+            ):
                 if len(e_ent) > 0:
                     if isinstance(e_ent[0], str):
                         nb_list_string += 1
-                    if isinstance(e_ent[0], (int, float)):
+                    if isinstance(
+                        e_ent[0],
+                        (int, float, np.int32, np.int64, np.float32, np.float64),
+                    ):
                         nb_array_item += 1
             if isinstance(e_ent, Decimal):
                 nb_decimal += 1
@@ -600,7 +612,16 @@ def convert_list_string_decimal_columns(df):
         e_col = df[e_col_name]
         for i_row in range(n_rows):
             e_ent = e_col.iat[i_row]
-            if isinstance(e_ent, list):
+            if isinstance(
+                e_ent,
+                (
+                    list,
+                    np.ndarray,
+                    pd.arrays.BooleanArray,
+                    pd.arrays.IntegerArray,
+                    pd.arrays.StringArray,
+                ),
+            ):
                 e_str = ",".join([str(x) for x in e_ent]) + ","
                 e_list_str.append(e_str)
             else:
