@@ -169,9 +169,6 @@ array_info* alloc_nullable_array(int64_t length,
                                  Bodo_CTypes::CTypeEnum typ_enum,
                                  int64_t extra_null_bytes);
 
-array_info* alloc_list_string_array(int64_t length, int64_t n_strings, int64_t n_chars,
-                                    int64_t extra_null_bytes);
-
 array_info* alloc_string_array(int64_t length, int64_t n_chars,
                                int64_t extra_null_bytes);
 
@@ -205,13 +202,6 @@ struct str_arr_payload {
     uint8_t* null_bitmap;
 };
 
-// XXX: equivalent to payload data model in list_str_arr_ext.py
-struct list_str_arr_payload {
-    char* data;
-    uint32_t* data_offsets;
-    uint32_t* index_offsets;
-    uint8_t* null_bitmap;
-};
 
 // XXX: equivalent to payload data model in split_impl.py
 struct str_arr_split_view_payload {
@@ -222,17 +212,10 @@ struct str_arr_split_view_payload {
 
 void dtor_string_array(str_arr_payload* in_str_arr, int64_t size, void* in);
 
-void dtor_list_string_array(list_str_arr_payload* in_list_str_arr, int64_t size,
-                            void* in);
 
 void allocate_string_array(uint32_t** offsets, char** data,
                            uint8_t** null_bitmap, int64_t num_strings,
                            int64_t total_size, int64_t extra_null_bytes);
-
-void allocate_list_string_array(char** data, uint32_t** data_offsets,
-                                uint32_t** index_offsets, uint8_t** null_bitmap,
-                                int64_t num_lists, int64_t num_strings,
-                                int64_t num_chars, int64_t extra_null_bytes);
 
 // copied from Arrow bit_util.h
 // Bitmask selecting the k-th bit in a byte

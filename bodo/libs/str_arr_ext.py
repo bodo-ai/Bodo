@@ -39,7 +39,6 @@ from numba.extending import (
 )
 from numba.core import cgutils
 from bodo.libs.str_ext import string_type
-from bodo.libs.list_str_arr_ext import list_string_array_type
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.decimal_arr_ext import Decimal128Type, DecimalArrayType
 from bodo.hiframes.datetime_date_ext import datetime_date_array_type, datetime_date_type
@@ -1154,16 +1153,11 @@ def box_str_arr(typ, val, c):
 @intrinsic
 def str_arr_is_na(typingctx, str_arr_typ, ind_typ=None):
     # None default to make IntelliSense happy
-    # reuse for list_string_array_type
-    assert str_arr_typ in (string_array_type, list_string_array_type)
+    assert str_arr_typ == string_array_type
 
     def codegen(context, builder, sig, args):
         in_str_arr, ind = args
-        if str_arr_typ == string_array_type:
-            payload = _get_string_arr_payload(context, builder, in_str_arr)
-        else:
-            # TODO: refactor list_string_array_type case
-            payload = context.make_helper(builder, str_arr_typ, in_str_arr)
+        payload = _get_string_arr_payload(context, builder, in_str_arr)
 
         # (null_bitmap[i / 8] & kBitmask[i % 8]) == 0;
         byte_ind = builder.lshr(ind, lir.Constant(lir.IntType(64), 3))
@@ -1188,16 +1182,11 @@ def str_arr_is_na(typingctx, str_arr_typ, ind_typ=None):
 @intrinsic
 def str_arr_set_na(typingctx, str_arr_typ, ind_typ=None):
     # None default to make IntelliSense happy
-    # reuse for list_string_array_type
-    assert str_arr_typ in (string_array_type, list_string_array_type)
+    assert str_arr_typ == string_array_type
 
     def codegen(context, builder, sig, args):
         in_str_arr, ind = args
-        if str_arr_typ == string_array_type:
-            payload = _get_string_arr_payload(context, builder, in_str_arr)
-        else:
-            # TODO: refactor list_string_array_type case
-            payload = context.make_helper(builder, str_arr_typ, in_str_arr)
+        payload = _get_string_arr_payload(context, builder, in_str_arr)
 
         # bits[i / 8] |= kBitmask[i % 8];
         byte_ind = builder.lshr(ind, lir.Constant(lir.IntType(64), 3))
@@ -1239,15 +1228,11 @@ def str_arr_set_na(typingctx, str_arr_typ, ind_typ=None):
 @intrinsic
 def str_arr_set_not_na(typingctx, str_arr_typ, ind_typ=None):
     # None default to make IntelliSense happy
-    assert str_arr_typ in (string_array_type, list_string_array_type)
+    assert str_arr_typ == string_array_type
 
     def codegen(context, builder, sig, args):
         in_str_arr, ind = args
-        if str_arr_typ == string_array_type:
-            payload = _get_string_arr_payload(context, builder, in_str_arr)
-        else:
-            # TODO: refactor list_string_array_type case
-            payload = context.make_helper(builder, str_arr_typ, in_str_arr)
+        payload = _get_string_arr_payload(context, builder, in_str_arr)
 
         # bits[i / 8] |= kBitmask[i % 8];
         byte_ind = builder.lshr(ind, lir.Constant(lir.IntType(64), 3))

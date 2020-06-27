@@ -445,3 +445,55 @@ def cast_str_to_float64(context, builder, fromty, toty, val):
 def cast_unicode_str_to_float64(context, builder, fromty, toty, val):
     std_str = gen_unicode_to_std_str(context, builder, val)
     return cast_str_to_float64(context, builder, std_str_type, toty, std_str)
+
+
+@numba.njit
+def str_split(arr, pat, n):  # pragma: no cover
+    """spits string array's elements into lists and creates an array of string arrays
+    """
+    # numba.parfors.parfor.init_prange()
+    l = len(arr)
+    num_strs = 0
+    num_chars = 0
+    for i in numba.parfors.parfor.internal_prange(l):
+        if bodo.libs.array_kernels.isna(arr, i):
+            continue
+        vals = arr[i].split(pat, n)
+        num_strs += len(vals)
+        for s in vals:
+            num_chars += bodo.libs.str_arr_ext.get_utf8_size(s)
+
+    out_arr = bodo.libs.array_item_arr_ext.pre_alloc_array_item_array(
+        l, num_strs, (num_chars,), bodo.libs.str_arr_ext.string_array_type
+    )
+    # XXX helper functions to establish aliasing between array and pointer
+    # TODO: fix aliasing for getattr
+    index_offsets = bodo.libs.array_item_arr_ext.get_offsets(out_arr)
+    data = bodo.libs.array_item_arr_ext.get_data(out_arr)
+    data_offsets = bodo.libs.str_arr_ext.get_offset_ptr(data)
+    data_ptr = bodo.libs.str_arr_ext.get_offset_ptr.get_data_ptr(data)
+    curr_s_offset = 0
+    curr_d_offset = 0
+    for j in numba.parfors.parfor.internal_prange(l):
+        # TODO: NA
+        index_offsets[j] = curr_s_offset
+        vals = arr[j].split(pat, n)
+        n_str = len(vals)
+        for k in range(n_str):
+            s = vals[k]
+            utf8_str, n_char = bodo.libs.str_ext.unicode_to_utf8_and_len(s)
+            data_offsets[curr_s_offset + k] = curr_d_offset
+            out_ptr = bodo.hiframes.split_impl.get_c_arr_ptr(
+                data_ptr, curr_d_offset
+            )
+            bodo.libs.str_arr_ext._memcpy(out_ptr, utf8_str, n_char, 1)
+            curr_d_offset += n_char
+        # set NA
+        if bodo.libs.array_kernels.isna(arr, j):
+            bodo.ir.join.setitem_arr_nan(out_arr, j)
+
+        curr_s_offset += n_str
+
+    index_offsets[l] = curr_s_offset
+    data_offsets[curr_s_offset] = curr_d_offset
+    return out_arr

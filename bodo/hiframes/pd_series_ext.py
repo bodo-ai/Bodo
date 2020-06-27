@@ -43,7 +43,6 @@ from llvmlite import ir as lir
 
 import bodo
 from bodo.libs.str_ext import string_type
-from bodo.libs.list_str_arr_ext import list_string_array_type
 from bodo.libs.struct_arr_ext import StructType, StructArrayType
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.str_arr_ext import string_array_type
@@ -151,18 +150,12 @@ class SeriesType(types.IterableType, types.ArrayCompatible):
 def _get_series_array_type(dtype):
     """get underlying default array type of series based on its dtype
     """
-    # list(list(str))
-    if dtype == string_array_type or (
-        isinstance(dtype, types.List) and dtype.dtype == string_type
-    ):
-        # default data layout is list but split view is used if possible
-        return list_string_array_type
 
     # string array
-    elif dtype == string_type:
+    if dtype == string_type:
         return string_array_type
 
-    elif bodo.utils.utils.is_array_typ(dtype, False):
+    if bodo.utils.utils.is_array_typ(dtype, False):
         return ArrayItemArrayType(dtype)
 
     # categorical

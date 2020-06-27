@@ -34,10 +34,6 @@ from bodo.libs.str_arr_ext import (
 from bodo.libs.int_arr_ext import IntegerArrayType, set_bit_to_arr
 from bodo.libs.bool_arr_ext import boolean_array
 from bodo.libs.decimal_arr_ext import DecimalArrayType
-from bodo.libs.list_str_arr_ext import (
-    list_string_array_type,
-    pre_alloc_list_string_array,
-)
 from bodo.libs.array_item_arr_ext import (
     ArrayItemArrayType,
     pre_alloc_array_item_array,
@@ -690,114 +686,6 @@ def gatherv(data, allgather=False, warn_if_rep=True):
         impl_df = loc_vars["impl_df"]
         return impl_df
 
-    if data == list_string_array_type:
-        int32_typ_enum = np.int32(numba_to_c_type(types.int32))
-        char_typ_enum = np.int32(numba_to_c_type(types.uint8))
-
-        def gatherv_list_str_arr_impl(
-            data, allgather=False, warn_if_rep=True
-        ):  # pragma: no cover
-            rank = bodo.libs.distributed_api.get_rank()
-            n_loc = len(data)
-            n_all_strs = data._num_total_strings
-            n_all_chars = data._num_total_chars
-
-            # allocate buffer for sending lengths of lists and strings
-            send_list_lens = np.empty(n_loc, np.uint32)  # XXX offset type is uint32
-            send_str_lens = np.empty(n_all_strs, np.uint32)
-            n_bytes = (n_loc + 7) >> 3
-
-            for i in range(n_loc):
-                send_list_lens[i] = data._index_offsets[i + 1] - data._index_offsets[i]
-            for j in range(n_all_strs):
-                send_str_lens[j] = data._data_offsets[j + 1] - data._data_offsets[j]
-
-            recv_counts = gather_scalar(np.int32(n_loc), allgather)
-            recv_counts_str = gather_scalar(np.int32(n_all_strs), allgather)
-            recv_counts_char = gather_scalar(np.int32(n_all_chars), allgather)
-            n_total = recv_counts.sum()
-            n_total_str = recv_counts_str.sum()
-            n_total_char = recv_counts_char.sum()
-
-            # displacements
-            all_data = pre_alloc_list_string_array(
-                0, 0, 0
-            )  # dummy arrays on non-root PEs
-            displs = np.empty(1, np.int32)
-            displs_str = np.empty(1, np.int32)
-            displs_char = np.empty(1, np.int32)
-            recv_counts_nulls = np.empty(1, np.int32)
-            displs_nulls = np.empty(1, np.int32)
-            tmp_null_bytes = np.empty(1, np.uint8)
-
-            if rank == MPI_ROOT or allgather:
-                all_data = pre_alloc_list_string_array(
-                    n_total, n_total_str, n_total_char
-                )
-                displs = bodo.ir.join.calc_disp(recv_counts)
-                displs_str = bodo.ir.join.calc_disp(recv_counts_str)
-                displs_char = bodo.ir.join.calc_disp(recv_counts_char)
-                recv_counts_nulls = np.empty(len(recv_counts), np.int32)
-                for k in range(len(recv_counts)):
-                    recv_counts_nulls[k] = (recv_counts[k] + 7) >> 3
-                displs_nulls = bodo.ir.join.calc_disp(recv_counts_nulls)
-                tmp_null_bytes = np.empty(recv_counts_nulls.sum(), np.uint8)
-
-            # data
-            c_gatherv(
-                cptr_to_voidptr(data._data),
-                np.int32(n_all_chars),
-                cptr_to_voidptr(all_data._data),
-                recv_counts_char.ctypes,
-                displs_char.ctypes,
-                char_typ_enum,
-                allgather,
-            )
-            # data offset
-            c_gatherv(
-                send_str_lens.ctypes,
-                np.int32(n_all_strs),
-                cptr_to_voidptr(all_data._data_offsets),
-                recv_counts_str.ctypes,
-                displs_str.ctypes,
-                int32_typ_enum,
-                allgather,
-            )
-            # index offset
-            c_gatherv(
-                send_list_lens.ctypes,
-                np.int32(n_loc),
-                cptr_to_voidptr(all_data._index_offsets),
-                recv_counts.ctypes,
-                displs.ctypes,
-                int32_typ_enum,
-                allgather,
-            )
-            c_gatherv(
-                cptr_to_voidptr(data._null_bitmap),
-                np.int32(n_bytes),
-                tmp_null_bytes.ctypes,
-                recv_counts_nulls.ctypes,
-                displs_nulls.ctypes,
-                char_typ_enum,
-                allgather,
-            )
-            dummy_use(data)  # needed?
-
-            convert_len_arr_to_offset(
-                cptr_to_voidptr(all_data._data_offsets), n_total_str
-            )
-            convert_len_arr_to_offset(cptr_to_voidptr(all_data._index_offsets), n_total)
-            copy_gathered_null_bytes(
-                cptr_to_voidptr(all_data._null_bitmap),
-                tmp_null_bytes,
-                recv_counts_nulls,
-                recv_counts,
-            )
-            return all_data
-
-        return gatherv_list_str_arr_impl
-
     # array(item) array
     if isinstance(data, ArrayItemArrayType):
         int32_typ_enum = np.int32(numba_to_c_type(types.int32))
@@ -1145,9 +1033,6 @@ def get_value_for_type(dtype):  # pragma: no cover
 
     if isinstance(dtype, CategoricalArray):
         return pd.Categorical.from_codes([0], dtype.dtype.categories)
-
-    if dtype == list_string_array_type:
-        return pd.Series([["AA", "B"],]).values
 
     if isinstance(dtype, types.BaseTuple):
         return tuple(get_value_for_type(t) for t in dtype.types)
@@ -1546,142 +1431,6 @@ def scatterv_impl(data, send_counts=None):
             )
 
         return impl_cat
-
-    if data == list_string_array_type:
-        int32_typ_enum = np.int32(numba_to_c_type(types.int32))
-        char_typ_enum = np.int32(numba_to_c_type(types.uint8))
-
-        def scatterv_list_str_arr_impl(data, send_counts=None):  # pragma: no cover
-            rank = bodo.libs.distributed_api.get_rank()
-            n_pes = bodo.libs.distributed_api.get_size()
-
-            n_in = len(data)
-            n_in_strs = data._num_total_strings
-
-            n_all = bcast_scalar(n_in)
-
-            # convert offsets to lengths of strings
-            send_list_lens = np.empty(n_in, np.uint32)  # XXX offset type is uint32
-            send_str_lens = np.empty(n_in_strs, np.uint32)
-
-            for i in range(n_in):
-                send_list_lens[i] = data._index_offsets[i + 1] - data._index_offsets[i]
-            for j in range(n_in_strs):
-                send_str_lens[j] = data._data_offsets[j + 1] - data._data_offsets[j]
-
-            # ------- calculate buffer counts -------
-
-            send_counts = _get_scatterv_send_counts(send_counts, n_pes, n_all)
-
-            # displacements
-            displs = bodo.ir.join.calc_disp(send_counts)
-
-            # compute send counts for list lengths (number of strings)
-            send_counts_str = np.empty(n_pes, np.int32)
-            if rank == 0:
-                curr_str = 0
-                for k in range(n_pes):
-                    c = 0
-                    for _ in range(send_counts[k]):
-                        c += send_list_lens[curr_str]
-                        curr_str += 1
-                    send_counts_str[k] = c
-
-            bcast(send_counts_str)
-
-            # displacements for characters
-            displs_str = bodo.ir.join.calc_disp(send_counts_str)
-
-            # compute send counts for string lengths (number of characters)
-            send_counts_char = np.empty(n_pes, np.int32)
-            if rank == 0:
-                curr_str = 0
-                for kk in range(n_pes):
-                    c = 0
-                    for _ in range(send_counts_str[kk]):
-                        c += send_str_lens[curr_str]
-                        curr_str += 1
-                    send_counts_char[kk] = c
-
-            bcast(send_counts_char)
-
-            # displacements for characters
-            displs_char = bodo.ir.join.calc_disp(send_counts_char)
-
-            # compute send counts for nulls
-            send_counts_nulls = np.empty(n_pes, np.int32)
-            for i_i in range(n_pes):
-                send_counts_nulls[i_i] = (send_counts[i_i] + 7) >> 3
-
-            # displacements for nulls
-            displs_nulls = bodo.ir.join.calc_disp(send_counts_nulls)
-
-            # alloc output array
-            n_loc = send_counts[rank]  # total number of elements on this PE
-            n_loc_str = send_counts_str[rank]
-            n_loc_char = send_counts_char[rank]
-            recv_arr = pre_alloc_list_string_array(n_loc, n_loc_str, n_loc_char)
-
-            # ----- list lengths -----------
-
-            c_scatterv(
-                send_list_lens.ctypes,
-                send_counts.ctypes,
-                displs.ctypes,
-                cptr_to_voidptr(recv_arr._index_offsets),
-                np.int32(n_loc),
-                int32_typ_enum,
-            )
-
-            convert_len_arr_to_offset(cptr_to_voidptr(recv_arr._index_offsets), n_loc)
-
-            # ----- string lengths -----------
-
-            c_scatterv(
-                send_str_lens.ctypes,
-                send_counts_str.ctypes,
-                displs_str.ctypes,
-                cptr_to_voidptr(recv_arr._data_offsets),
-                np.int32(n_loc_str),
-                int32_typ_enum,
-            )
-
-            convert_len_arr_to_offset(
-                cptr_to_voidptr(recv_arr._data_offsets), n_loc_str
-            )
-
-            # ----- string characters -----------
-
-            c_scatterv(
-                cptr_to_voidptr(data._data),
-                send_counts_char.ctypes,
-                displs_char.ctypes,
-                cptr_to_voidptr(recv_arr._data),
-                np.int32(n_loc_char),
-                char_typ_enum,
-            )
-
-            # ----------- null bitmap -------------
-
-            n_recv_bytes = (n_loc + 7) >> 3
-
-            send_null_bitmap = get_scatter_null_bytes_buff(
-                cptr_to_voidptr(data._null_bitmap), send_counts, send_counts_nulls
-            )
-
-            c_scatterv(
-                send_null_bitmap.ctypes,
-                send_counts_nulls.ctypes,
-                displs_nulls.ctypes,
-                cptr_to_voidptr(recv_arr._null_bitmap),
-                np.int32(n_recv_bytes),
-                char_typ_enum,
-            )
-            dummy_use(data)  # needed?
-
-            return recv_arr
-
-        return scatterv_list_str_arr_impl
 
     # Tuple of data containers
     if isinstance(data, types.BaseTuple):

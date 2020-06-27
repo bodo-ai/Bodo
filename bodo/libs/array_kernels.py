@@ -35,7 +35,6 @@ from bodo.ir.sort import (
     update_shuffle_meta,
     alloc_pre_shuffle_metadata,
 )
-from bodo.libs.list_str_arr_ext import list_string_array_type
 from bodo.libs.struct_arr_ext import StructArrayType
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.hiframes.split_impl import string_array_split_view_type
@@ -77,7 +76,7 @@ def isna(arr, i):  # pragma: no cover
 def overload_isna(arr, i):
     i = types.unliteral(i)
     # String array
-    if arr in (string_array_type, list_string_array_type):
+    if arr == string_array_type:
         return lambda arr, i: bodo.libs.str_arr_ext.str_arr_is_na(
             arr, i
         )  # pragma: no cover
@@ -693,66 +692,6 @@ def concat_overload(arr_list):
 
         return decimal_array_concat_impl
 
-    if (
-        isinstance(arr_list, types.UniTuple)
-        and arr_list.dtype == list_string_array_type
-    ):
-
-        def list_string_array_concat_impl(arr_list):  # pragma: no cover
-            # preallocate the output
-            num_lists = 0
-            num_strs = 0
-            num_chars = 0
-            for A in arr_list:
-                arr = A
-                n_list = len(arr)
-                n_str = arr._index_offsets[
-                    n_list
-                ]  # We use here that the first index is 0
-                n_char = arr._data_offsets[n_str]
-                num_lists += n_list
-                num_strs += n_str
-                num_chars += n_char
-            out_arr = bodo.libs.list_str_arr_ext.pre_alloc_list_string_array(
-                num_lists, num_strs, num_chars
-            )
-            curr_lists = 0
-            curr_strs = 0
-            curr_chars = 0
-            for A in arr_list:
-                n_list = len(A)
-                n_str = A._index_offsets[n_list]
-                n_char = A._data_offsets[n_str]
-                # adjusting the indexes
-                for i in range(n_list):
-                    out_arr._index_offsets[curr_lists + i] = (
-                        A._index_offsets[i] + curr_strs
-                    )
-                    bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(A._null_bitmap, i)
-                    bodo.libs.int_arr_ext.set_bit_to_arr(
-                        out_arr._null_bitmap, i + curr_lists, bit
-                    )
-                for i in range(n_str):
-                    out_arr._data_offsets[curr_strs + i] = (
-                        A._data_offsets[i] + curr_chars
-                    )
-                # Copying the characters
-                in_ptr = bodo.hiframes.split_impl.get_c_arr_ptr(A._data, 0)
-                out_ptr = bodo.hiframes.split_impl.get_c_arr_ptr(
-                    out_arr._data, curr_chars
-                )
-                bodo.libs.str_arr_ext._memcpy(out_ptr, in_ptr, n_char, 1)
-                # Updating the shifts
-                curr_lists += n_list
-                curr_strs += n_str
-                curr_chars += n_char
-
-            out_arr._index_offsets[num_lists] = num_strs
-            out_arr._data_offsets[num_strs] = num_chars
-            return out_arr
-
-        return list_string_array_concat_impl
-
     if isinstance(arr_list, types.UniTuple) and arr_list.dtype == string_array_type:
 
         def string_concat_impl(arr_list):  # pragma: no cover
@@ -1082,26 +1021,6 @@ def overload_gen_na_array(n, arr):
             return A
 
         return impl_decimal
-
-    if arr == list_string_array_type:
-
-        def impl_list_string(n, arr):  # pragma: no cover
-            # preallocate the output
-            num_lists = n
-            num_strs = 0
-            num_chars = 0
-            out_arr = bodo.libs.list_str_arr_ext.pre_alloc_list_string_array(
-                num_lists, num_strs, num_chars
-            )
-
-            for i in numba.parfors.parfor.internal_prange(n):
-                out_arr._index_offsets[i] = 0
-                bit = 0
-                bodo.libs.int_arr_ext.set_bit_to_arr(out_arr._null_bitmap, i, bit)
-
-            return out_arr
-
-        return impl_list_string
 
     # array of np.nan values if 'arr' is float or int Numpy array
     # TODO: use nullable int array

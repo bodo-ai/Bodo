@@ -81,21 +81,6 @@ array_info* alloc_nullable_array(int64_t length,
 }
 
 
-array_info* alloc_list_string_array(int64_t length, int64_t n_strings, int64_t n_chars,
-                                    int64_t extra_null_bytes) {
-    NRT_MemInfo* meminfo = NRT_MemInfo_alloc_dtor_safe(
-        sizeof(list_str_arr_payload), (NRT_dtor_function)dtor_list_string_array);
-    list_str_arr_payload* payload = (list_str_arr_payload*)meminfo->data;
-    allocate_list_string_array(&(payload->data), &(payload->data_offsets),
-                               &(payload->index_offsets), &(payload->null_bitmap),
-                               length, n_strings, n_chars, extra_null_bytes);
-    return new array_info(bodo_array_type::LIST_STRING, Bodo_CTypes::LIST_STRING, length,
-                          n_strings, n_chars,
-                          payload->data, (char*)payload->data_offsets, (char*)payload->index_offsets,
-                          (char*)payload->null_bitmap, meminfo, NULL);
-}
-
-
 array_info* alloc_string_array(int64_t length, int64_t n_chars,
                                int64_t extra_null_bytes) {
     // extra_null_bytes are necessary for communication buffers around the edges
@@ -130,8 +115,6 @@ array_info* alloc_array(int64_t length, int64_t n_sub_elems, int64_t n_sub_sub_e
                         bodo_array_type::arr_type_enum arr_type,
                         Bodo_CTypes::CTypeEnum dtype,
                         int64_t extra_null_bytes) {
-    if (arr_type == bodo_array_type::LIST_STRING)
-        return alloc_list_string_array(length, n_sub_elems, n_sub_sub_elems, extra_null_bytes);
 
     if (arr_type == bodo_array_type::STRING)
         return alloc_string_array(length, n_sub_elems, extra_null_bytes);
@@ -232,14 +215,6 @@ void dtor_string_array(str_arr_payload* in_str_arr, int64_t size, void* in) {
     if (in_str_arr->null_bitmap != nullptr) delete[] in_str_arr->null_bitmap;
 }
 
-void dtor_list_string_array(list_str_arr_payload* in_list_str_arr, int64_t size,
-                            void* in) {
-    delete[] in_list_str_arr->data;
-    delete[] in_list_str_arr->data_offsets;
-    delete[] in_list_str_arr->index_offsets;
-    if (in_list_str_arr->null_bitmap != nullptr)
-        delete[] in_list_str_arr->null_bitmap;
-}
 
 void allocate_string_array(uint32_t** offsets, char** data,
                            uint8_t** null_bitmap, int64_t num_strings,
@@ -257,31 +232,5 @@ void allocate_string_array(uint32_t** offsets, char** data,
     // set all bits to 1 indicating non-null as default
     memset(*null_bitmap, 0xff, n_bytes);
     // *data = (char*) new std::string("gggg");
-}
-
-void allocate_list_string_array(char** data, uint32_t** data_offsets,
-                                uint32_t** index_offsets, uint8_t** null_bitmap,
-                                int64_t num_lists, int64_t num_strings,
-                                int64_t num_chars, int64_t extra_null_bytes) {
-    // std::cout << "allocating list string array: " << num_lists << " "<<
-    // num_strings << " " <<
-    //                                                 num_chars << std::endl;
-    *data = new char[num_chars];
-
-    *data_offsets = new uint32_t[num_strings + 1];
-    (*data_offsets)[0] = 0;
-    (*data_offsets)[num_strings] =
-        (uint32_t)num_chars;  // in case total chars is read from here
-
-    *index_offsets = new uint32_t[num_lists + 1];
-    (*index_offsets)[0] = 0;
-    (*index_offsets)[num_lists] =
-        (uint32_t)num_strings;  // in case total strings is read from here
-
-    // allocate nulls
-    int64_t n_bytes = ((num_lists + 7) >> 3) + extra_null_bytes;
-    *null_bitmap = new uint8_t[(size_t)n_bytes];
-    // set all bits to 1 indicating non-null as default
-    memset(*null_bitmap, 0xff, n_bytes);
 }
 }

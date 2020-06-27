@@ -22,11 +22,6 @@ from bodo.libs.str_arr_ext import (
     StringArrayPayloadType,
     construct_string_array,
 )
-from bodo.libs.list_str_arr_ext import (
-    list_string_array_type,
-    ListStringArrayPayloadType,
-    construct_list_string_array,
-)
 from bodo.libs.array_item_arr_ext import (
     ArrayItemArrayType,
     ArrayItemArrayPayloadType,
@@ -66,10 +61,6 @@ def read_parquet():  # pragma: no cover
 
 
 def read_parquet_str():  # pragma: no cover
-    return 0
-
-
-def read_parquet_list_str():  # pragma: no cover
     return 0
 
 
@@ -233,7 +224,6 @@ def _gen_pq_reader_py(
         "get_column_size_parquet": get_column_size_parquet,
         "read_parquet": read_parquet,
         "read_parquet_str": read_parquet_str,
-        "read_parquet_list_str": read_parquet_list_str,
         "read_parquet_array_item": read_parquet_array_item,
         "unicode_to_utf8": unicode_to_utf8,
         "NS_DTYPE": np.dtype("M8[ns]"),
@@ -261,11 +251,6 @@ def gen_column_read(func_text, cname, c_ind, c_type, is_parallel):
     if c_type == string_array_type:
         # pass size for easier allocation and distributed analysis
         func_text += "  {} = read_parquet_str(ds_reader, {}, {}_size)\n".format(
-            cname, c_ind, cname
-        )
-    elif c_type == list_string_array_type:
-        # pass size for easier allocation and distributed analysis
-        func_text += "  {} = read_parquet_list_str(ds_reader, {}, {}_size)\n".format(
             cname, c_ind, cname
         )
     elif isinstance(c_type, ArrayItemArrayType):
@@ -329,13 +314,6 @@ def get_element_type(dtype):
 
 def _get_numba_typ_from_pa_typ(pa_typ, is_index, nullable_from_metadata):
     import pyarrow as pa
-
-    # TODO: comparing list(string) type using pa_typ.type == pa.list_(pa.string())
-    # doesn't seem to work properly. The string representation is also inconsistent:
-    # "ListType(list<element: string>)", or "ListType(list<item: string>)"
-    # likely an Arrow/Parquet bug
-    if isinstance(pa_typ.type, pa.ListType) and pa_typ.type.value_type == pa.string():
-        return list_string_array_type
 
     # Decimal128Array type
     if isinstance(pa_typ.type, pa.Decimal128Type):
@@ -578,14 +556,6 @@ class ReadParquetStrInfer(AbstractTemplate):
         return signature(string_array_type, *unliteral_all(args))
 
 
-@infer_global(read_parquet_list_str)
-class ReadParquetListStrInfer(AbstractTemplate):
-    def generic(self, args, kws):
-        assert not kws
-        assert len(args) == 3
-        return signature(list_string_array_type, *unliteral_all(args))
-
-
 @infer_global(read_parquet_array_item)
 class ReadParquetArrayItemInfer(AbstractTemplate):
     def generic(self, args, kws):
@@ -764,72 +734,6 @@ def pq_read_string_lower(context, builder, sig, args):
 
     string_array.meminfo = meminfo
     ret = string_array._getvalue()
-    return impl_ret_new_ref(context, builder, typ, ret)
-
-
-############################## read list of strings ###############################
-
-
-@lower_builtin(
-    read_parquet_list_str, types.Opaque("arrow_reader"), types.intp, types.intp
-)
-def pq_read_list_string_lower(context, builder, sig, args):
-
-    # construct array and payload
-    typ = sig.return_type
-    dtype = ListStringArrayPayloadType()
-    meminfo, meminfo_data_ptr = construct_list_string_array(context, builder)
-    list_str_array = context.make_helper(builder, typ)
-
-    list_str_arr_payload = cgutils.create_struct_proxy(dtype)(context, builder)
-    list_str_array.num_items = args[2]  # set size
-
-    # read payload data
-    fnty = lir.FunctionType(
-        lir.IntType(32),
-        [
-            lir.IntType(8).as_pointer(),
-            lir.IntType(64),
-            lir.IntType(32).as_pointer().as_pointer(),
-            lir.IntType(32).as_pointer().as_pointer(),
-            lir.IntType(8).as_pointer().as_pointer(),
-            lir.IntType(8).as_pointer().as_pointer(),
-        ],
-    )
-
-    fn = builder.module.get_or_insert_function(fnty, name="pq_read_list_string")
-    _res = builder.call(
-        fn,
-        [
-            args[0],
-            args[1],
-            list_str_arr_payload._get_ptr_by_name("data_offsets"),
-            list_str_arr_payload._get_ptr_by_name("index_offsets"),
-            list_str_arr_payload._get_ptr_by_name("data"),
-            list_str_arr_payload._get_ptr_by_name("null_bitmap"),
-        ],
-    )
-
-    # set array values
-    builder.store(list_str_arr_payload._getvalue(), meminfo_data_ptr)
-    list_str_array.meminfo = meminfo
-    list_str_array.data_offsets = list_str_arr_payload.data_offsets
-    list_str_array.index_offsets = list_str_arr_payload.index_offsets
-    list_str_array.data = list_str_arr_payload.data
-    list_str_array.null_bitmap = list_str_arr_payload.null_bitmap
-    list_str_array.num_total_strings = builder.zext(
-        builder.load(
-            builder.gep(list_str_array.index_offsets, [list_str_array.num_items])
-        ),
-        lir.IntType(64),
-    )
-    list_str_array.num_total_chars = builder.zext(
-        builder.load(
-            builder.gep(list_str_array.data_offsets, [list_str_array.num_total_strings])
-        ),
-        lir.IntType(64),
-    )
-    ret = list_str_array._getvalue()
     return impl_ret_new_ref(context, builder, typ, ret)
 
 

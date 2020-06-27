@@ -54,7 +54,7 @@ from bodo.libs.str_ext import string_type
 from bodo.libs.int_arr_ext import IntegerArrayType, IntDtype
 from bodo.libs.bool_arr_ext import BooleanArrayType
 from bodo.utils.utils import build_set
-from bodo.libs.list_str_arr_ext import ListStringArrayType, pre_alloc_list_string_array
+from bodo.libs.array_item_arr_ext import ArrayItemArrayType, pre_alloc_array_item_array
 from bodo.utils.typing import list_cumulative
 from bodo.libs.str_arr_ext import (
     string_array_type,
@@ -850,7 +850,8 @@ def agg_distributed_run(
         {
             "pd": pd,
             "pre_alloc_string_array": pre_alloc_string_array,
-            "pre_alloc_list_string_array": pre_alloc_list_string_array,
+            "pre_alloc_array_item_array": pre_alloc_array_item_array,
+            "string_array_type": string_array_type,
             "alloc_decimal_array": alloc_decimal_array,
             "agg_seq_iter": agg_seq_iter,
             "parallel_agg": parallel_agg,
@@ -1811,8 +1812,8 @@ def gen_top_level_agg_func(
                 )
             elif isinstance(out_col_typs[i], StringArrayType):
                 func_text += "    {} = pre_alloc_string_array(1,1)\n".format(out_name)
-            elif isinstance(out_col_typs[i], ListStringArrayType):
-                func_text += "    {} = pre_alloc_list_string_array(1,1,1)\n".format(
+            elif out_col_typs[i] == ArrayItemArrayType(string_array_type):
+                func_text += "    {} = pre_alloc_array_item_array(1, (1, 1), string_array_type)\n".format(
                     out_name
                 )
             elif isinstance(out_col_typs[i], DecimalArrayType):

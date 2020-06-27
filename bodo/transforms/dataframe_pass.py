@@ -72,7 +72,6 @@ from bodo.libs.str_arr_ext import (
     pre_alloc_string_array,
 )
 from bodo.hiframes.split_impl import string_array_split_view_type
-from bodo.libs.list_str_arr_ext import list_string_array_type
 from bodo.libs.bool_arr_ext import BooleanArrayType
 from bodo.hiframes.pd_index_ext import RangeIndexType
 from bodo.hiframes.pd_multi_index_ext import MultiIndexType

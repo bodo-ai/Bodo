@@ -32,7 +32,6 @@ exclude =
 	bodo/libs/array_kernels.py
 	bodo/libs/str_arr_ext.py
 	bodo/libs/str_ext.py
-	bodo/libs/list_str_arr_ext.py
 	bodo/utils/conversion.py
 	bodo/utils/shuffle.py
 	bodo/utils/utils.py

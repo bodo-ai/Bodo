@@ -46,7 +46,7 @@ from bodo.hiframes.split_impl import (
     get_split_view_index,
     get_split_view_data_ptr,
 )
-from bodo.libs.list_str_arr_ext import list_string_array_type
+from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.utils.typing import (
     BodoError,
     is_overload_none,
@@ -174,7 +174,7 @@ def overload_series_str(S):
     if not isinstance(S, SeriesType) or not S.data in (
         string_array_type,
         string_array_split_view_type,
-        list_string_array_type,
+        ArrayItemArrayType(string_array_type),
     ):
         raise BodoError(
             "Series.str(): input should be a series of string or list string or string view"
@@ -237,7 +237,7 @@ def overload_str_method_split(S_str, pat=None, n=-1, expand=False):
         index = bodo.hiframes.pd_series_ext.get_series_index(S)
         name = bodo.hiframes.pd_series_ext.get_series_name(S)
         # not inlining loops since fusion optimization doesn't seem likely
-        out_arr = bodo.libs.list_str_arr_ext.str_split(arr, pat, n)
+        out_arr = bodo.libs.str_ext.str_split(arr, pat, n)
         return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
     return _str_split_impl
@@ -248,7 +248,7 @@ def overload_str_method_get(S_str, i):
     arr_typ = S_str.stype.data
     if (
         arr_typ != string_array_split_view_type
-        and arr_typ != list_string_array_type
+        and arr_typ != ArrayItemArrayType(string_array_type)
         and arr_typ != string_array_type
     ):
         raise BodoError(
@@ -329,7 +329,7 @@ def overload_str_method_join(S_str, sep):
     arr_typ = S_str.stype.data
     if (
         arr_typ != string_array_split_view_type
-        and arr_typ != list_string_array_type
+        and arr_typ != ArrayItemArrayType(string_array_type)
         and arr_typ != string_array_type
     ):
         raise BodoError(
