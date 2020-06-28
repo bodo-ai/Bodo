@@ -641,9 +641,6 @@ def test_flatten2(test_unicode_no_nan):
         A = S.str.split()
         return pd.Series(list(itertools.chain(*A)))
 
-    S = pd.Series(
-        ["AB  CC", "C ABB  D", "CAD", "CA\tD", "AA\t\tD"], [3, 1, 2, 0, 4], name="A"
-    )
     check_func(impl, (test_unicode_no_nan,))
 
 
@@ -734,5 +731,5 @@ def test_join_splitview_nan_entry():
         B = S.str.split(",")
         return B.str.join("-")
 
-    S = pd.Series(["ABCDD,OSAJD", "a1b2d314f,sdf234", np.nan], [4,3,1], name="A")
+    S = pd.Series(["ABCDD,OSAJD", "a1b2d314f,sdf234", np.nan], [4, 3, 1], name="A")
     check_func(test_impl, (S,))

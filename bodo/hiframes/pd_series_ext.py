@@ -974,7 +974,6 @@ series_unsupported_methods = (
     "sort_index",
     "swaplevel",
     "unstack",
-    "explode",
     "searchsorted",
     "ravel",
     "repeat",

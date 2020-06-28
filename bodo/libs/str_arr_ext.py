@@ -1560,12 +1560,36 @@ def str_arr_setitem(A, idx, val):
                 val._is_ascii,
                 idx,
             )
+            str_arr_set_not_na(A, idx)
             # dummy use function to avoid decref of A
             # TODO: refcounting support for _offsets, ... to avoid this workaround
             dummy_use(A)
             dummy_use(val)
 
         return impl_scalar
+
+    # slice case
+    if isinstance(idx, types.SliceType) and val == string_array_type:
+
+        def impl_slice(A, idx, val):  # pragma: no cover
+            slice_idx = numba.cpython.unicode._normalize_slice(idx, len(A))
+            start = slice_idx.start
+            set_string_array_range(
+                A, val, start, np.int64(getitem_str_offset(A, start))
+            )
+            for i in range(slice_idx.start, slice_idx.stop, slice_idx.step):
+                str_arr_set_not_na(A, i)
+
+        return impl_slice
+
+    if isinstance(idx, types.SliceType) and val == string_type:
+
+        def impl_slice(A, idx, val):  # pragma: no cover
+            slice_idx = numba.cpython.unicode._normalize_slice(idx, len(A))
+            for i in range(slice_idx.start, slice_idx.stop, slice_idx.step):
+                A[i] = val
+
+        return impl_slice
 
     # TODO: other setitem cases
 

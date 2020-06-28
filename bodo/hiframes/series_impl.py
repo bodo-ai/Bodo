@@ -34,6 +34,7 @@ from bodo.utils.transform import gen_const_tup
 from numba.core.typing.templates import infer_global, AbstractTemplate
 from bodo.libs.bool_arr_ext import BooleanArrayType, boolean_array
 from bodo.libs.int_arr_ext import IntegerArrayType
+from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 
 
 @overload_attribute(SeriesType, "index", inline="always")
@@ -1496,6 +1497,24 @@ def overload_series_fillna(
                 return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
             return fillna_impl
+
+
+@overload_method(SeriesType, "explode", inline="always", no_unliteral=True)
+def overload_series_explode(S):
+    if not isinstance(S.data, ArrayItemArrayType):
+        # pandas copies input if not iterable
+        return lambda S: S.copy()  # pragma: no cover
+
+    def impl(S):  # pragma: no cover
+        arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+        index = bodo.hiframes.pd_series_ext.get_series_index(S)
+        name = bodo.hiframes.pd_series_ext.get_series_name(S)
+        index_arr = bodo.utils.conversion.index_to_array(index)
+        out_arr, out_index_arr = bodo.libs.array_kernels.explode(arr, index_arr)
+        out_index = bodo.utils.conversion.index_from_array(out_index_arr)
+        return bodo.hiframes.pd_series_ext.init_series(out_arr, out_index, name)
+
+    return impl
 
 
 @overload_method(SeriesType, "dropna", inline="always", no_unliteral=True)

@@ -2316,15 +2316,15 @@ def test_series_sum(memory_leak_check):
         return A
 
     def impl_mincount(S, min_count):
-        A = S.sum(min_count = min_count)
+        A = S.sum(min_count=min_count)
         return A
 
     S_int = pd.Series(np.arange(20))
     S_float = pd.Series([np.nan, 1, 2, 3])
     check_func(impl, (S_int,))
     check_func(impl_skipna, (S_float,))
-    check_func(impl_mincount, (S_float,2))
-    check_func(impl_mincount, (S_float,4))
+    check_func(impl_mincount, (S_float, 2))
+    check_func(impl_mincount, (S_float, 4))
 
 
 def test_series_prod(memory_leak_check):
@@ -2344,8 +2344,8 @@ def test_series_prod(memory_leak_check):
     S_float = pd.Series([np.nan, 1.0, 2.0, 3.0])
     check_func(impl, (S_int,))
     check_func(impl_skipna, (S_float,))
-    check_func(impl_mincount, (S_float,2))
-    check_func(impl_mincount, (S_float,4))
+    check_func(impl_mincount, (S_float, 2))
+    check_func(impl_mincount, (S_float, 4))
 
 
 def test_singlevar_series_all(memory_leak_check):
@@ -2627,6 +2627,37 @@ def test_series_std():
     check_func(f, (S,))
     check_func(f_skipna, (S,))
     check_func(f_ddof, (S,))
+
+
+@pytest.mark.parametrize(
+    "S",
+    [
+        pd.Series(
+            [[1, 3, None], [2], None, [4, None, 5, 6], [], [1, 1]] * 2,
+            [1.2, 3.1, 4.0, -1.2, 0.3, 11.1] * 2,
+        ),
+        # TODO: enable when old list(str) array is removed
+        # pd.Series([["AAC", None, "FG"], [], ["", "AB"], None, ["CC"], [], ["A", "CC"]]*2, ["A", "BB", "C", "", "ABC", "DD", "LKL"]*2),
+        # nested array(item) array
+        pd.Series(
+            [
+                [[1, 3], [2]],
+                [[3, 1]],
+                None,
+                [[4, 5, 6], [1], [1, 2]],
+                [],
+                [[1], None, [1, 4], []],
+            ]
+            * 2,
+            [1.2, 3.1, 4.0, -1.2, 0.3, 11.1] * 2,
+        ),
+    ],
+)
+def test_series_explode(S, memory_leak_check):
+    def test_impl(S):
+        return S.explode()
+
+    check_func(test_impl, (S,))
 
 
 def test_series_astype_num_constructors(memory_leak_check):
