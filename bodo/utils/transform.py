@@ -707,3 +707,12 @@ def gen_varsize_item_sizes(t, item, var_names):
         ).format(var_names[0], var_names[1], item)
     if isinstance(t, ArrayItemArrayType):
         return "    {} += len({})\n".format(var_names[0], item)
+
+
+def get_n_nested_counts(t):
+    """get the number of nested counts needed for upfront allocation of array of type
+    't' (excluding the regular length).
+    For example, ArrayItemArrayType(ArrayItemArrayType(array(int64))) returns 2.
+    """
+    # TODO: struct array, strings
+    return 1 + get_n_nested_counts(t.dtype) if isinstance(t, ArrayItemArrayType) else 0

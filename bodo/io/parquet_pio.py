@@ -15,6 +15,7 @@ from numba.core.typing import signature
 from numba.core.imputils import impl_ret_new_ref
 import numpy as np
 import bodo
+from bodo.hiframes.pd_series_ext import _get_series_array_type
 from bodo.libs.str_ext import string_type, unicode_to_char_ptr
 from bodo.libs.str_arr_ext import (
     string_array_type,
@@ -268,8 +269,13 @@ def gen_column_read(func_text, cname, c_ind, c_type, is_parallel):
             cname, c_ind, cname
         )
     elif isinstance(c_type, ArrayItemArrayType):
+        elem_typ = c_type.dtype.dtype
         func_text += "  {} = read_parquet_array_item(ds_reader, {}, {}_size, np.int32({}), {})\n".format(
-            cname, c_ind, cname, bodo.utils.utils.numba_to_c_type(c_type.elem_type), get_element_type(c_type.elem_type)
+            cname,
+            c_ind,
+            cname,
+            bodo.utils.utils.numba_to_c_type(elem_typ),
+            get_element_type(elem_typ),
         )
     else:
         el_type = get_element_type(c_type.dtype)
@@ -367,7 +373,9 @@ def _get_numba_typ_from_pa_typ(pa_typ, is_index, nullable_from_metadata):
         # TODO this should check for the list of types that we support
         if pa_typ.type.value_type not in _typ_map:
             raise BodoError("Arrow data type {} not supported yet".format(pa_typ.type))
-        return ArrayItemArrayType(_typ_map[pa_typ.type.value_type])
+        return ArrayItemArrayType(
+            _get_series_array_type(_typ_map[pa_typ.type.value_type])
+        )
 
     if pa_typ.type not in _typ_map:
         raise BodoError("Arrow data type {} not supported yet".format(pa_typ.type))
@@ -584,7 +592,9 @@ class ReadParquetArrayItemInfer(AbstractTemplate):
         assert not kws
         assert len(args) == 5
         elem_type = args[4].dtype
-        return signature(ArrayItemArrayType(elem_type), *unliteral_all(args))
+        return signature(
+            ArrayItemArrayType(_get_series_array_type(elem_type)), *unliteral_all(args)
+        )
 
 
 from numba.core import cgutils
@@ -892,10 +902,7 @@ def pq_read_array_item_lower(context, builder, sig, args):
 
     # convert array_info to numpy arrays and set payload attributes
     payload.data = _lower_info_to_array_numpy(
-        types.Array(array_item_type.elem_type, 1, "C"),
-        context,
-        builder,
-        builder.load(data_info_ptr),
+        array_item_type.dtype, context, builder, builder.load(data_info_ptr),
     )
     payload.offsets = _lower_info_to_array_numpy(
         types.Array(types.uint32, 1, "C"),

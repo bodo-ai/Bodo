@@ -132,57 +132,7 @@ def get_hiframes_dtypes(df):
 
 def _infer_series_dtype(S):
     if S.dtype == np.dtype("O"):
-        # XXX: assume empty series/column is string since it's the most common
-        # TODO: checks for distributed case with list/datetime.date/...
-        # e.g. one rank's data is empty but other ranks have other types
-        # XXX assuming the whole column is strings if 1st val is string
-        # TODO: handle NA as 1st value
-        i = 0
-        while i < len(S) and (
-            S.iloc[i] is np.nan
-            or S.iloc[i] is None
-            or (isinstance(S.iloc[i], float) and math.isnan(S.iloc[i]))
-        ):
-            i += 1
-        if i == len(S):
-            # assume all NA object column is string
-            warnings.warn(
-                BodoWarning(
-                    "Empty object array passed to Bodo, which causes ambiguity in typing. "
-                    "This can cause errors in parallel execution."
-                )
-            )
-            return string_type
-
-        first_val = S.iloc[i]
-        # NOTE: pandas may create array(array(str)) instead of array(list(str))
-        # see test_io.py::test_pq_list_str
-        if isinstance(first_val, (list, np.ndarray)):
-            return _infer_series_list_dtype(S.values, S.name)
-        elif isinstance(first_val, str):
-            return string_type
-        elif isinstance(first_val, bool):
-            return types.bool_  # will become BooleanArray in Series and DF
-        # struct array: series of dict where all keys are strings
-        elif isinstance(first_val, dict) and all(
-            isinstance(k, str) for k in first_val.keys()
-        ):
-            field_names = tuple(first_val.keys())
-            data_types = tuple(numba.typeof(v) for v in first_val.values())
-            return StructType(data_types, field_names)
-        elif isinstance(S.values[i], datetime.date):
-            # XXX: using .values to check date type since DatetimeIndex returns
-            # Timestamp which is subtype of datetime.date
-            return datetime_date_type
-        if isinstance(first_val, decimal.Decimal):
-            # NOTE: converting decimal.Decimal objects to 38/18, same as Spark
-            return Decimal128Type(38, 18)
-        else:
-            raise BodoError(
-                "object dtype infer: data type for column {} not supported".format(
-                    S.name
-                )
-            )
+        return numba.typeof(S.values).dtype
 
     # nullable int dtype
     if isinstance(S.dtype, pd.core.arrays.integer._IntegerDtype):
@@ -201,26 +151,6 @@ def _infer_series_dtype(S):
         raise ValueError(
             "np dtype infer: data type for column {} not supported".format(S.name)
         )
-
-
-def _infer_series_list_dtype(A, name):
-    for i in range(len(A)):
-        first_val = A[i]
-        if isinstance(first_val, float) and np.isnan(first_val) or first_val is None:
-            continue
-        if not isinstance(first_val, (list, np.ndarray)):
-            raise ValueError("data type for column {} not supported".format(name))
-        if len(first_val) > 0:
-            # TODO: support more types
-            # TODO: can nulls be inside the list?
-            list_val = first_val[0]
-            try:
-                dtype = numba.typeof(list_val)
-                return types.List(dtype)
-            except:
-                raise ValueError("data type for column {} not supported".format(name))
-    # assuming array of all empty lists is string by default
-    return types.List(string_type)
 
 
 @box(DataFrameType)
@@ -496,28 +426,7 @@ def _typeof_ndarray(val, c):
         dtype = types.pyobject
 
     if dtype == types.pyobject:
-        dtype = _infer_ndarray_obj_dtype(val)
-        if dtype == string_type:
-            return string_array_type
-        if dtype == types.bool_:
-            return bodo.libs.bool_arr_ext.boolean_array
-        if dtype == types.List(string_type):
-            return list_string_array_type
-        if isinstance(dtype, types.List):
-            return ArrayItemArrayType(dtype.dtype)
-        if dtype == datetime_date_type:
-            return datetime_date_array_type  # TODO: test array of datetime.date
-        if isinstance(dtype, Decimal128Type):
-            return DecimalArrayType(dtype.precision, dtype.scale)
-        if isinstance(dtype, StructType):
-            data = tuple(
-                bodo.hiframes.pd_series_ext._get_series_array_type(t)
-                for t in dtype.data
-            )
-            return StructArrayType(data, dtype.names)
-        raise BodoError(
-            "Unsupported array dtype: {}".format(val.dtype)
-        )  # pragma: no cover
+        return _infer_ndarray_obj_dtype(val)
 
     layout = numba.np.numpy_support.map_layout(val)
     readonly = not val.flags.writeable
@@ -531,8 +440,12 @@ def _infer_ndarray_obj_dtype(val):
 
     # XXX assuming the whole array is strings if 1st val is string
     i = 0
+    # skip NAs and empty lists/arrays (for array(item) array cases)
     # is_scalar call necessary since pd.isna() treats list of string as array
-    while i < len(val) and pd.api.types.is_scalar(val[i]) and pd.isna(val[i]):
+    while i < len(val) and (
+        (pd.api.types.is_scalar(val[i]) and pd.isna(val[i]))
+        or (not pd.api.types.is_scalar(val[i]) and len(val[i]) == 0)
+    ):
         i += 1
     if i == len(val):
         # empty or all NA object arrays are assumed to be strings
@@ -542,13 +455,15 @@ def _infer_ndarray_obj_dtype(val):
                 "This can cause errors in parallel execution."
             )
         )
-        return string_type
+        return string_array_type
 
     first_val = val[i]
     if isinstance(first_val, str):
-        return string_type
+        return string_array_type
     elif isinstance(first_val, bool):
-        return types.bool_
+        return bodo.libs.bool_arr_ext.boolean_array
+    elif isinstance(first_val, int):
+        return bodo.libs.int_arr_ext.IntegerArrayType(numba.typeof(first_val))
     # assuming object arrays with dictionary values are struct arrays, which means all
     # keys are string and match across dictionaries, and all values with same key have
     # same data type
@@ -556,15 +471,37 @@ def _infer_ndarray_obj_dtype(val):
         isinstance(k, str) for k in first_val.keys()
     ):
         field_names = tuple(first_val.keys())
-        data_types = tuple(numba.typeof(v) for v in first_val.values())
-        return StructType(data_types, field_names)
-    if isinstance(first_val, (list, np.ndarray)):
-        return bodo.hiframes.boxing._infer_series_list_dtype(val, "array")
+        data_types = tuple(
+            bodo.hiframes.pd_series_ext._get_series_array_type(numba.typeof(v))
+            for v in first_val.values()
+        )
+        return StructArrayType(data_types, field_names)
+    if isinstance(
+        first_val,
+        (
+            list,
+            np.ndarray,
+            pd.arrays.BooleanArray,
+            pd.arrays.IntegerArray,
+            pd.arrays.StringArray,
+        ),
+    ):
+        # normalize list to array, 'np.object_' dtype to consider potential nulls
+        if isinstance(first_val, list):
+            first_val = np.array(first_val, np.object_)
+            # assume float lists can be regular np.float64 arrays
+            # TODO handle corener cases where None could be used as NA instead of np.nan
+            if len(first_val) and isinstance(first_val[0], float):
+                first_val = np.array(first_val, np.float64)
+        val_typ = numba.typeof(first_val)
+        if val_typ == string_array_type:
+            return list_string_array_type
+        return ArrayItemArrayType(val_typ)
     if isinstance(first_val, datetime.date):
-        return datetime_date_type
+        return datetime_date_array_type
     if isinstance(first_val, decimal.Decimal):
         # NOTE: converting decimal.Decimal objects to 38/18, same as Spark
-        return Decimal128Type(38, 18)
+        return DecimalArrayType(38, 18)
 
     raise BodoError(
         "Unsupported object array with first value: {}".format(first_val)

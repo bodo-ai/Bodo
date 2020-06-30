@@ -342,28 +342,28 @@ def box_bool_arr(typ, val, c):
     return res
 
 
+def lower_init_bool_array(context, builder, signature, args):
+    data_val, bitmap_val = args
+    # create bool_arr struct and store values
+    bool_arr = cgutils.create_struct_proxy(signature.return_type)(context, builder)
+    bool_arr.data = data_val
+    bool_arr.null_bitmap = bitmap_val
+
+    # increase refcount of stored values
+    context.nrt.incref(builder, signature.args[0], data_val)
+    context.nrt.incref(builder, signature.args[1], bitmap_val)
+
+    return bool_arr._getvalue()
+
+
 @intrinsic
 def init_bool_array(typingctx, data, null_bitmap=None):
     """Create a BooleanArray with provided data and null bitmap values.
     """
     assert data == types.Array(types.bool_, 1, "C")
     assert null_bitmap == types.Array(types.uint8, 1, "C")
-
-    def codegen(context, builder, signature, args):
-        data_val, bitmap_val = args
-        # create bool_arr struct and store values
-        bool_arr = cgutils.create_struct_proxy(signature.return_type)(context, builder)
-        bool_arr.data = data_val
-        bool_arr.null_bitmap = bitmap_val
-
-        # increase refcount of stored values
-        context.nrt.incref(builder, signature.args[0], data_val)
-        context.nrt.incref(builder, signature.args[1], bitmap_val)
-
-        return bool_arr._getvalue()
-
     sig = boolean_array(data, null_bitmap)
-    return sig, codegen
+    return sig, lower_init_bool_array
 
 
 # using a function for getting data to enable extending various analysis

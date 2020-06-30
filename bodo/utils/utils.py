@@ -672,9 +672,9 @@ def overload_alloc_type(n, t, s=None):
         )  # pragma: no cover
 
     if isinstance(typ, bodo.libs.array_item_arr_ext.ArrayItemArrayType):
-        dtype = typ.elem_type
+        dtype = typ.dtype
         return lambda n, t, s=None: bodo.libs.array_item_arr_ext.pre_alloc_array_item_array(
-            n, s[0], dtype
+            n, s, dtype
         )  # pragma: no cover
 
     if isinstance(typ, bodo.libs.struct_arr_ext.StructArrayType):

@@ -68,6 +68,7 @@ from bodo.utils.typing import (
     ensure_constant_values,
     create_unsupported_overload,
     get_overload_const,
+    get_udf_out_arr_type,
 )
 from bodo.utils.transform import (
     get_const_func_output_type,
@@ -267,10 +268,10 @@ class DataFrameAttribute(AttributeTemplate):
         except:
             raise BodoError("DataFrame.apply(): user-defined function not supported")
 
-        # unbox Timestamp to dt64 in Series (TODO: timedelta64)
-        if f_return_type == bodo.hiframes.pd_timestamp_ext.pandas_timestamp_type:
-            f_return_type = types.NPDatetime("ns")
-        return signature(SeriesType(f_return_type, index=df.index), *args)
+        out_arr_type = get_udf_out_arr_type(f_return_type)
+        return signature(
+            SeriesType(out_arr_type.dtype, out_arr_type, index=df.index), *args
+        )
 
     def generic_resolve(self, df, attr):
         # column selection

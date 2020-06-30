@@ -1449,9 +1449,9 @@ class SeriesPass:
                     dtype = numba.np.numpy_support.as_dtype(dtype)
                 impl = lambda n, t, s=None: np.empty(n, _dtype)  # pragma: no cover
             elif isinstance(typ, ArrayItemArrayType):
-                dtype = typ.elem_type
+                dtype = typ.dtype
                 impl = lambda n, t, s=None: bodo.libs.array_item_arr_ext.pre_alloc_array_item_array(
-                    n, s[0], _dtype
+                    n, s, _dtype
                 )  # pragma: no cover
             elif isinstance(typ, StructArrayType):
                 dtypes = typ.data

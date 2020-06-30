@@ -674,6 +674,24 @@ def scalar_to_array_type(t):
     return types.Array(t, 1, "C")
 
 
+def get_udf_out_arr_type(f_return_type):
+    """get output array type of a UDF call, give UDF's scalar output type.
+    E.g. S.map(lambda a: 2) -> array(int64)
+    """
+    # unbox Timestamp to dt64 in Series (TODO: timedelta64)
+    if f_return_type == bodo.hiframes.pd_timestamp_ext.pandas_timestamp_type:
+        f_return_type = types.NPDatetime("ns")
+
+    # convert list output type to array for ArrayItemArrayType (TODO: add str case)
+    if isinstance(f_return_type, types.List):
+        f_return_type = bodo.hiframes.pd_series_ext._get_series_array_type(
+            f_return_type.dtype
+        )
+
+    out_arr_type = bodo.hiframes.pd_series_ext._get_series_array_type(f_return_type)
+    return out_arr_type
+
+
 # dummy empty itertools implementation to avoid typing errors for series str
 # flatten case
 @overload(itertools.chain, no_unliteral=True)

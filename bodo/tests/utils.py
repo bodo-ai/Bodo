@@ -108,7 +108,9 @@ def check_func(
     # in situations where pandas is buggy/lacks support
     if py_output is None:
         if convert_columns_to_pandas:
-            call_args_mapped = tuple(convert_list_string_decimal_columns(a) for a in call_args)
+            call_args_mapped = tuple(
+                convert_list_string_decimal_columns(a) for a in call_args
+            )
             py_output = func(*call_args_mapped)
         else:
             py_output = func(*call_args)
@@ -339,7 +341,8 @@ def sort_series_values_index(S):
     # pandas fails if all null integer column is sorted
     if S1.isnull().all():
         return S1
-    return S1.sort_values(kind='mergesort')
+    return S1.sort_values(kind="mergesort")
+
 
 def sort_dataframe_values_index(df):
     if isinstance(df.index, pd.MultiIndex):
@@ -448,7 +451,8 @@ def is_bool_object_series(S):
         S = S.values
     return (
         S.dtype == np.dtype("O")
-        and bodo.hiframes.boxing._infer_ndarray_obj_dtype(S) == numba.core.types.bool_
+        and bodo.hiframes.boxing._infer_ndarray_obj_dtype(S).dtype
+        == numba.core.types.bool_
     )
 
 
@@ -457,7 +461,7 @@ def is_list_str_object_series(S):
         S = S.values
     return S.dtype == np.dtype("O") and bodo.hiframes.boxing._infer_ndarray_obj_dtype(
         S
-    ) == numba.core.types.List(numba.core.types.unicode_type)
+    ).dtype == numba.core.types.List(numba.core.types.unicode_type)
 
 
 class DeadcodeTestPipeline(bodo.compiler.BodoCompiler):
@@ -566,11 +570,23 @@ def convert_list_string_decimal_columns(df):
         nb_decimal = 0
         for i_row in range(n_rows):
             e_ent = e_col.iat[i_row]
-            if isinstance(e_ent, list):
+            if isinstance(
+                e_ent,
+                (
+                    list,
+                    np.ndarray,
+                    pd.arrays.BooleanArray,
+                    pd.arrays.IntegerArray,
+                    pd.arrays.StringArray,
+                ),
+            ):
                 if len(e_ent) > 0:
                     if isinstance(e_ent[0], str):
                         nb_list_string += 1
-                    if isinstance(e_ent[0], (int, float)):
+                    if isinstance(
+                        e_ent[0],
+                        (int, float, np.int32, np.int64, np.float32, np.float64),
+                    ):
                         nb_array_item += 1
             if isinstance(e_ent, Decimal):
                 nb_decimal += 1
@@ -596,7 +612,16 @@ def convert_list_string_decimal_columns(df):
         e_col = df[e_col_name]
         for i_row in range(n_rows):
             e_ent = e_col.iat[i_row]
-            if isinstance(e_ent, list):
+            if isinstance(
+                e_ent,
+                (
+                    list,
+                    np.ndarray,
+                    pd.arrays.BooleanArray,
+                    pd.arrays.IntegerArray,
+                    pd.arrays.StringArray,
+                ),
+            ):
                 e_str = ",".join([str(x) for x in e_ent]) + ","
                 e_list_str.append(e_str)
             else:
@@ -683,6 +708,7 @@ def compute_random_decimal_array(option, n):
     option=1 will give random arrays with collision happening (guaranteed for n>100)
     option=2 will give random arrays with collision unlikely to happen
     """
+
     def random_str1():
         e_str1 = str(1 + random.randint(1, 8))
         e_str2 = str(1 + random.randint(1, 8))

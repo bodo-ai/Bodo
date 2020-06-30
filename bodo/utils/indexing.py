@@ -5,7 +5,7 @@ Collection of utility functions for indexing implementation (getitem/setitem)
 import numpy as np
 
 import numba
-from numba.extending import register_jitable
+from numba.extending import register_jitable, overload
 import bodo
 
 
@@ -152,3 +152,37 @@ def array_setitem_slice_index(A, idx, val):  # pragma: no cover
         bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(src_bitmap, val_ind)
         bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, i, bit)
         val_ind += 1
+
+
+def init_nested_counts(arr_typ):
+    return (0,)
+
+
+@overload(init_nested_counts)
+def overload_init_nested_counts(arr_typ):
+    """initialize nested counts for counting nested elements in array of type 'arr_typ'.
+    E.g. array(array(int)) will return (0, 0)
+    """
+    arr_typ = arr_typ.instance_type
+    if isinstance(arr_typ, bodo.libs.array_item_arr_ext.ArrayItemArrayType):
+        data_arr_typ = arr_typ.dtype
+        return lambda arr_typ: (0,) + init_nested_counts(data_arr_typ)
+    return lambda arr_typ: (0,)
+
+
+def add_nested_counts(nested_counts, arr_item):
+    return (0,)
+
+
+@overload(add_nested_counts)
+def overload_add_nested_counts(nested_counts, arr_item):
+    """add nested counts of elements in 'arr_item', which could be array(item) array or
+    regular array, to nested counts. For example, [[1, 2, 3], [2]] will add (2, 4)
+    """
+    if isinstance(arr_item, bodo.libs.array_item_arr_ext.ArrayItemArrayType):
+        return lambda nested_counts, arr_item: (
+            nested_counts[0] + len(arr_item),
+        ) + add_nested_counts(
+            nested_counts[1:], bodo.libs.array_item_arr_ext.get_data(arr_item)
+        )
+    return lambda nested_counts, arr_item: (nested_counts[0] + len(arr_item),)

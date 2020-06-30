@@ -59,6 +59,7 @@ from bodo.utils.typing import (
     is_overload_none,
     create_unsupported_overload,
     BodoError,
+    get_udf_out_arr_type,
 )
 from bodo.utils.transform import get_const_func_output_type
 
@@ -151,14 +152,18 @@ def _get_series_array_type(dtype):
     """get underlying default array type of series based on its dtype
     """
     # list(list(str))
-    if dtype == types.List(string_type):
+    if dtype == string_array_type or (
+        isinstance(dtype, types.List) and dtype.dtype == string_type
+    ):
         # default data layout is list but split view is used if possible
         return list_string_array_type
+
     # string array
     elif dtype == string_type:
         return string_array_type
-    elif isinstance(dtype, types.List):
-        return ArrayItemArrayType(dtype.dtype)
+
+    elif bodo.utils.utils.is_array_typ(dtype, False):
+        return ArrayItemArrayType(dtype)
 
     # categorical
     if isinstance(dtype, PDCategoricalDtype):
@@ -563,11 +568,7 @@ class SeriesAttribute(AttributeTemplate):
         except:
             raise BodoError(f"Series.{fname}(): user-defined function not supported")
 
-        # unbox Timestamp to dt64 in Series (TODO: timedelta64)
-        if f_return_type == pandas_timestamp_type:
-            f_return_type = types.NPDatetime("ns")
-
-        data_arr = _get_series_array_type(f_return_type)
+        data_arr = get_udf_out_arr_type(f_return_type)
         # Series.map codegen returns np bool array instead of boolean_array currently
         # TODO: return nullable boolean_array
         if f_return_type == types.bool_:
