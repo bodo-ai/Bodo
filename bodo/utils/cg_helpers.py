@@ -131,6 +131,8 @@ def list_check(builder, context, obj):
 def count_array_inner_elems(c, builder, context, arr_obj, typ):
     """count inner elements of array for upfront allocation.
     For example, [[1, None, 3], [3], None, [4, None, 2]] return (7,).
+    A recursive example: [[[1, None, 3], [2]], [[3], [4, 5]], None, [[4, None, 2]]]
+    returns (5, 10).
     """
     n = bodo.utils.utils.object_length(c, arr_obj)
 
@@ -149,30 +151,31 @@ def count_array_inner_elems(c, builder, context, arr_obj, typ):
     counts = cgutils.alloca_once_value(builder, counts_val)
 
     # pseudocode for code generation:
-    # n_elems = 0
+    # counts = (0, ...)  # tuple of nested counts
     # for i in range(len(A)):
-    #   list_obj = A[i]
-    #   if not isna(list_obj):
-    #     n_elems += len(list_obj)
+    #   arr_item_obj = A[i]
+    #   if not isna(arr_item_obj):
+    #     counts[0] += len(arr_item_obj)
+    #     counts[1:] += count_array_inner_elems(arr_item_obj)
 
     # for each array
     with cgutils.for_range(builder, n) as loop:
         array_ind = loop.index
-        # list_obj = A[i]
-        list_obj = seq_getitem(builder, context, arr_obj, array_ind)
+        # arr_item_obj = A[i]
+        arr_item_obj = seq_getitem(builder, context, arr_obj, array_ind)
         # check for NA
-        is_na = is_na_value(builder, context, list_obj, C_NA)
+        is_na = is_na_value(builder, context, arr_item_obj, C_NA)
         not_na_cond = builder.icmp_unsigned("!=", is_na, lir.Constant(is_na.type, 1))
         with builder.if_then(not_na_cond):
-            # n_elems += len(list_obj)
-            n_vals = bodo.utils.utils.object_length(c, list_obj)
+            # n_elems += len(arr_item_obj)
+            n_vals = bodo.utils.utils.object_length(c, arr_item_obj)
             counts_val = builder.load(counts)
             new_count = builder.add(builder.extract_value(counts_val, 0), n_vals)
             counts_val = builder.insert_value(counts_val, new_count, 0)
             # if nested, call recursively and add values
             if n_inner_nested_count > 0:
                 n_vals_inner = count_array_inner_elems(
-                    c, builder, context, list_obj, typ.dtype
+                    c, builder, context, arr_item_obj, typ.dtype
                 )
                 for i in range(n_inner_nested_count):
                     total_count = builder.extract_value(counts_val, i + 1)
@@ -181,7 +184,7 @@ def count_array_inner_elems(c, builder, context, arr_obj, typ):
                         counts_val, builder.add(total_count, curr_count), i + 1
                     )
             builder.store(counts_val, counts)
-        c.pyapi.decref(list_obj)
+        c.pyapi.decref(arr_item_obj)
 
     c.pyapi.decref(pd_mod_obj)
     c.pyapi.decref(C_NA)
