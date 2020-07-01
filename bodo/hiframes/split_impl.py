@@ -59,7 +59,7 @@ ll.add_symbol("str_arr_split_view_impl", hstr_ext.str_arr_split_view_impl)
 ll.add_symbol("str_arr_split_view_alloc", hstr_ext.str_arr_split_view_alloc)
 
 char_typ = types.uint8
-offset_typ = types.uint32
+offset_typ = types.int32
 
 data_ctypes_type = types.ArrayCTypes(types.Array(char_typ, 1, "C"))
 offset_ctypes_type = types.ArrayCTypes(types.Array(offset_typ, 1, "C"))

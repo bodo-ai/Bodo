@@ -538,7 +538,7 @@ def overload_list_str_arr_copy(A):
         n_strs = A._num_total_strings
         n_chars = A._num_total_chars
         B = pre_alloc_list_string_array(n_lists, n_strs, n_chars)
-        offset_typ_size = 4  # uint32 offsets
+        offset_typ_size = 4  # int32 offsets
         bodo.libs.str_arr_ext._memcpy(
             cptr_to_voidptr(B._index_offsets),
             cptr_to_voidptr(A._index_offsets),

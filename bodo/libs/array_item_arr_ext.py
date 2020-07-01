@@ -67,7 +67,7 @@ ll.add_symbol(
 
 
 # offset index types
-offset_typ = types.uint32
+offset_typ = types.int32
 
 
 class ArrayItemArrayType(types.ArrayCompatible):
