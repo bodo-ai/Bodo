@@ -138,7 +138,7 @@ def _infer_series_dtype(S):
     if isinstance(S.dtype, pd.core.arrays.integer._IntegerDtype):
         return typeof_pd_int_dtype(S.dtype, None)
     elif isinstance(S.dtype, pd.CategoricalDtype):
-        return PDCategoricalDtype(S.dtype.categories.to_list())
+        return bodo.typeof(S.dtype)
     elif isinstance(S.dtype, pd.StringDtype):
         return string_type
     elif isinstance(S.dtype, pd.BooleanDtype):

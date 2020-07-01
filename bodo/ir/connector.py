@@ -23,7 +23,6 @@ from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.bool_arr_ext import boolean_array
 from bodo.utils.utils import sanitize_varname
 from bodo import objmode
-from bodo.hiframes.pd_categorical_ext import PDCategoricalDtype, CategoricalArray
 
 
 def connector_array_analysis(node, equiv_set, typemap, array_analysis):
