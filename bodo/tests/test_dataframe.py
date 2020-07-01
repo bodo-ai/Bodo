@@ -1636,6 +1636,33 @@ def test_df_const_set_rm_index():
         bodo.jit(impl)(A)
 
 
+def test_df_dropna():
+    """Test df.dropna() with various data types and arguments
+    """
+
+    def impl1(df):
+        return df.dropna(subset=["A", "B"])
+
+    def impl2(df):
+        return df.dropna(thresh=2)
+
+    def impl3(df):
+        return df.dropna(how="all")
+
+    df = pd.DataFrame(
+        {
+            "A": [1.0, 2.0, np.nan, 1.0] * 2,
+            "B": [4, 5, 6, np.nan] * 2,
+            "C": [np.nan, "AA", np.nan, "ABC"] * 2,
+            "D": [[1, 2], None, [1], []] * 2,
+        }
+    )
+    # TODO: fix 1D_Var RangeIndex
+    check_func(impl1, (df,), reset_index=True)
+    check_func(impl2, (df,), reset_index=True)
+    check_func(impl3, (df,), reset_index=True)
+
+
 def test_df_dropna_inplace_check():
     """make sure inplace=True is not used in df.dropna()
     """

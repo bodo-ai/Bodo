@@ -388,6 +388,7 @@ class TypingTransforms:
             "join": [(1, "on"), (2, "how"), (3, "lsuffix"), (4, "rsuffix"),],
             "rename": [(2, "columns")],
             "drop": [(0, "labels"), (1, "axis"), (3, "columns"), (5, "inplace"),],
+            "dropna": [(0, "axis"), (1, "how"), (3, "subset"),],
         }
 
         if func_name in df_call_const_args:
