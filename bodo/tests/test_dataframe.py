@@ -2708,6 +2708,7 @@ class TestDataFrame(unittest.TestCase):
         h_out = bodo_func(df)
         pd.testing.assert_frame_equal(out, h_out)
 
+    @unittest.skip("pending remove of old list(str) array")
     def test_df_dropna_str1(self):
         def test_impl(df):
             return df.dropna()
