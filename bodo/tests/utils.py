@@ -413,7 +413,7 @@ def _test_equal(
             )
         else:
             np.testing.assert_array_equal(bodo_out, py_out)
-    elif isinstance(py_out, pd.arrays.IntegerArray):
+    elif pd.api.types.is_extension_array_dtype(py_out):
         if sort_output:
             py_out = py_out[py_out.argsort()]
             bodo_out = bodo_out[bodo_out.argsort()]

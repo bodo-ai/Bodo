@@ -142,27 +142,41 @@ class CategoricalArray(types.ArrayCompatible):
         return types.Array(types.undefined, 1, "C")
 
 
+@typeof_impl.register(pd.Categorical)
+def _typeof_pd_cat(val, c):
+    return CategoricalArray(bodo.typeof(val.dtype))
+
+
+# TODO: use payload to enable mutability?
 @register_model(CategoricalArray)
 class CategoricalArrayModel(models.StructModel):
     def __init__(self, dmm, fe_type):
         int_dtype = get_categories_int_type(fe_type.dtype)
-        members = [("codes", types.Array(int_dtype, 1, "C"))]
+        members = [("dtype", fe_type.dtype), ("codes", types.Array(int_dtype, 1, "C"))]
         super(CategoricalArrayModel, self).__init__(dmm, fe_type, members)
 
 
-make_attribute_wrapper(CategoricalArray, "codes", "_codes")
+make_attribute_wrapper(CategoricalArray, "codes", "codes")
+make_attribute_wrapper(CategoricalArray, "dtype", "dtype")
 
 
 @unbox(CategoricalArray)
 def unbox_categorical_array(typ, val, c):
+    """unbox pd.Categorical array to native value
+    """
     arr_obj = c.pyapi.object_getattr_string(val, "codes")
     dtype = get_categories_int_type(typ.dtype)
     codes = c.pyapi.to_native_value(types.Array(dtype, 1, "C"), arr_obj).value
     c.pyapi.decref(arr_obj)
 
+    dtype_obj = c.pyapi.object_getattr_string(val, "dtype")
+    dtype_val = c.pyapi.to_native_value(typ.dtype, dtype_obj).value
+    c.pyapi.decref(dtype_obj)
+
     # create CategoricalArray
     cat_arr_val = cgutils.create_struct_proxy(typ)(c.context, c.builder)
     cat_arr_val.codes = codes
+    cat_arr_val.dtype = dtype_val
     return NativeValue(cat_arr_val._getvalue())
 
 
@@ -180,44 +194,32 @@ def get_categories_int_type(cat_dtype):
 
 @box(CategoricalArray)
 def box_categorical_array(typ, val, c):
+    """box native CategoricalArray to pd.Categorical array object
+    """
     dtype = typ.dtype
     mod_name = c.context.insert_const_string(c.builder.module, "pandas")
     pd_class_obj = c.pyapi.import_module_noblock(mod_name)
 
-    # categories list e.g. ['A', 'B', 'C']
-    item_objs = _get_cat_obj_items(dtype.categories, c)
-    n = len(item_objs)
-    list_obj = c.pyapi.list_new(c.context.get_constant(types.intp, n))
-    for i in range(n):
-        idx = c.context.get_constant(types.intp, i)
-        c.pyapi.incref(item_objs[i])
-        c.pyapi.list_setitem(list_obj, idx, item_objs[i])
-    # TODO: why does list_pack crash for test_csv_cat2?
-    # list_obj = c.pyapi.list_pack(item_objs)
-
-    # call pd.api.types.CategoricalDtype(['A', 'B', 'C'])
-    # api_obj = c.pyapi.object_getattr_string(pd_class_obj, "api")
-    # types_obj = c.pyapi.object_getattr_string(api_obj, "types")
-    # pd_dtype = c.pyapi.call_method(types_obj, "CategoricalDtype", (list_obj,))
-    # c.pyapi.decref(api_obj)
-    # c.pyapi.decref(types_obj)
-
+    # get codes and dtype objects
     int_dtype = get_categories_int_type(dtype)
-    codes = cgutils.create_struct_proxy(typ)(c.context, c.builder, val).codes
-    arr = c.pyapi.from_native_value(
-        types.Array(int_dtype, 1, "C"), codes, c.env_manager
+    cat_arr = cgutils.create_struct_proxy(typ)(c.context, c.builder, val)
+    arr_obj = c.pyapi.from_native_value(
+        types.Array(int_dtype, 1, "C"), cat_arr.codes, c.env_manager
+    )
+    dtype_obj = c.pyapi.from_native_value(dtype, cat_arr.dtype, c.env_manager)
+    none_obj = c.pyapi.borrow_none()  # no need to decref
+
+    # call pd.Categorical.from_codes()
+    pdcat_cls_obj = c.pyapi.object_getattr_string(pd_class_obj, "Categorical")
+    cat_arr_obj = c.pyapi.call_method(
+        pdcat_cls_obj, "from_codes", (arr_obj, none_obj, none_obj, dtype_obj)
     )
 
-    pdcat_cls_obj = c.pyapi.object_getattr_string(pd_class_obj, "Categorical")
-    cat_arr = c.pyapi.call_method(pdcat_cls_obj, "from_codes", (arr, list_obj))
     c.pyapi.decref(pdcat_cls_obj)
-    c.pyapi.decref(arr)
-    c.pyapi.decref(list_obj)
-    for obj in item_objs:
-        c.pyapi.decref(obj)
-
+    c.pyapi.decref(arr_obj)
+    c.pyapi.decref(dtype_obj)
     c.pyapi.decref(pd_class_obj)
-    return cat_arr
+    return cat_arr_obj
 
 
 # TODO: handle all ops
@@ -227,20 +229,10 @@ def overload_cat_arr_eq_str(A, other):
         other_idx = list(A.dtype.categories).index(other.literal_value)
 
         def impl(A, other):  # pragma: no cover
-            out_arr = A._codes == other_idx
+            out_arr = A.codes == other_idx
             return out_arr
 
         return impl
-
-
-def _get_cat_obj_items(categories, c):
-    assert len(categories) > 0
-    val = categories[0]
-    if isinstance(val, str):
-        return [c.pyapi.string_from_constant_string(item) for item in categories]
-
-    dtype = numba.typeof(val)
-    return [c.box(dtype, c.context.get_constant(dtype, item)) for item in categories]
 
 
 # HACK: dummy overload for CategoricalDtype to avoid type inference errors
@@ -257,13 +249,15 @@ def init_categorical_array(typingctx, codes, cat_dtype=None):
     assert isinstance(codes, types.Array) and isinstance(codes.dtype, types.Integer)
 
     def codegen(context, builder, signature, args):
-        data_val = args[0]
+        data_val, dtype_val = args
         # create cat_arr struct and store values
         cat_arr = cgutils.create_struct_proxy(signature.return_type)(context, builder)
         cat_arr.codes = data_val
+        cat_arr.dtype = dtype_val
 
-        # increase refcount of stored array
+        # increase refcount of stored values
         context.nrt.incref(builder, signature.args[0], data_val)
+        context.nrt.incref(builder, signature.args[1], dtype_val)
 
         return cat_arr._getvalue()
 
@@ -274,18 +268,18 @@ def init_categorical_array(typingctx, codes, cat_dtype=None):
 
 @overload_method(CategoricalArray, "copy", no_unliteral=True)
 def cat_arr_copy_overload(arr):
-    return lambda arr: init_categorical_array(arr._codes.copy(), arr.dtype)
+    return lambda arr: init_categorical_array(arr.codes.copy(), arr.dtype)
 
 
 @overload(len, no_unliteral=True)
 def overload_cat_arr_len(A):
     if isinstance(A, CategoricalArray):
-        return lambda A: len(A._codes)
+        return lambda A: len(A.codes)
 
 
 @overload_attribute(CategoricalArray, "shape")
 def overload_cat_arr_shape(A):
-    return lambda A: (len(A._codes),)
+    return lambda A: (len(A.codes),)
 
 
 @overload_attribute(CategoricalArray, "ndim")
@@ -303,9 +297,3 @@ def init_cat_dtype(typingctx, cat_dtype=None):
 
     sig = cat_dtype.instance_type(cat_dtype)
     return sig, codegen
-
-
-@overload_attribute(CategoricalArray, "dtype")
-def overload_cat_arr_dtype(A):
-    dtype = A.dtype
-    return lambda A: init_cat_dtype(dtype)

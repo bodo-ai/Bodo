@@ -440,7 +440,7 @@ class DistributedAnalysis:
             self._set_var_dist(lhs, array_dists, new_dist)
             self._set_var_dist(rhs.value.name, array_dists, new_dist)
             return
-        elif isinstance(rhs_typ, CategoricalArray) and rhs.attr == "_codes":
+        elif isinstance(rhs_typ, CategoricalArray) and rhs.attr == "codes":
             # categorical array and its underlying codes array have same distributions
             arr = rhs.value.name
             self._meet_array_dists(lhs, arr, array_dists)

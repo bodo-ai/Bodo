@@ -1445,7 +1445,7 @@ def setitem_arr_nan_overload(arr, ind, int_nan_const=0):
     if isinstance(arr, CategoricalArray):
 
         def setitem_arr_nan_cat(arr, ind, int_nan_const=0):  # pragma: no cover
-            arr._codes[ind] = -1
+            arr.codes[ind] = -1
 
         return setitem_arr_nan_cat
 

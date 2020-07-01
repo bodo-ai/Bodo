@@ -406,7 +406,7 @@ def gatherv(data, allgather=False):
     if isinstance(data, CategoricalArray):
 
         def impl_cat(data, allgather=False):  # pragma: no cover
-            codes = bodo.gatherv(data._codes, allgather)
+            codes = bodo.gatherv(data.codes, allgather)
             return bodo.hiframes.pd_categorical_ext.init_categorical_array(
                 codes, data.dtype
             )
@@ -1519,7 +1519,7 @@ def scatterv_impl(data, send_counts=None):
     if isinstance(data, CategoricalArray):
 
         def impl_cat(data, send_counts=None):  # pragma: no cover
-            codes = bodo.libs.distributed_api.scatterv_impl(data._codes, send_counts)
+            codes = bodo.libs.distributed_api.scatterv_impl(data.codes, send_counts)
             return bodo.hiframes.pd_categorical_ext.init_categorical_array(
                 codes, data.dtype
             )
