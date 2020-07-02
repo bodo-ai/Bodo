@@ -413,11 +413,14 @@ def _test_equal(
             )
         else:
             np.testing.assert_array_equal(bodo_out, py_out)
-    elif pd.api.types.is_extension_array_dtype(py_out):
+    # check for array since is_extension_array_dtype() matches dtypes also
+    elif pd.api.types.is_array_like(py_out) and pd.api.types.is_extension_array_dtype(
+        py_out
+    ):
         if sort_output:
             py_out = py_out[py_out.argsort()]
             bodo_out = bodo_out[bodo_out.argsort()]
-        pd.util.testing.assert_extension_array_equal(bodo_out, py_out)
+        pd.testing.assert_extension_array_equal(bodo_out, py_out)
     elif isinstance(py_out, float):
         # avoid equality check since paralellism can affect floating point operations
         np.testing.assert_allclose(py_out, bodo_out, 1e-4)
