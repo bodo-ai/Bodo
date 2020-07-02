@@ -157,7 +157,7 @@ def define_struct_arr_dtor(context, builder, struct_arr_type, payload_type):
     # get payload struct
     ptrty = context.get_value_type(payload_type).as_pointer()
     payload_ptr = builder.bitcast(base_ptr, ptrty)
-    payload = context.make_data_helper(builder, payload_type, ref=payload_ptr)
+    payload = context.make_helper(builder, payload_type, ref=payload_ptr)
 
     context.nrt.decref(
         builder, types.BaseTuple.from_types(struct_arr_type.data), payload.data
@@ -485,7 +485,7 @@ def define_struct_dtor(context, builder, struct_type, payload_type):
     # get payload struct
     ptrty = context.get_value_type(payload_type).as_pointer()
     payload_ptr = builder.bitcast(base_ptr, ptrty)
-    payload = context.make_data_helper(builder, payload_type, ref=payload_ptr)
+    payload = context.make_helper(builder, payload_type, ref=payload_ptr)
 
     context.nrt.decref(
         builder, types.BaseTuple.from_types(struct_type.data), payload.data

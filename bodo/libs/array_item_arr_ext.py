@@ -138,7 +138,7 @@ def define_array_item_dtor(context, builder, array_item_type, payload_type):
     # get payload struct
     ptrty = context.get_value_type(payload_type).as_pointer()
     payload_ptr = builder.bitcast(base_ptr, ptrty)
-    payload = context.make_data_helper(builder, payload_type, ref=payload_ptr)
+    payload = context.make_helper(builder, payload_type, ref=payload_ptr)
 
     context.nrt.decref(builder, array_item_type.dtype, payload.data)
     context.nrt.decref(builder, types.Array(offset_typ, 1, "C"), payload.offsets)

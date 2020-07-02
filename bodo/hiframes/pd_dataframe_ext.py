@@ -350,7 +350,7 @@ def define_df_dtor(context, builder, df_type, payload_type):
     # get payload struct
     ptrty = context.get_value_type(payload_type).as_pointer()
     payload_ptr = builder.bitcast(base_ptr, ptrty)
-    payload = context.make_data_helper(builder, payload_type, ref=payload_ptr)
+    payload = context.make_helper(builder, payload_type, ref=payload_ptr)
 
     decref_df_data(context, builder, payload, df_type)
 
@@ -474,7 +474,7 @@ def get_dataframe_payload(context, builder, df_type, value):
     payload = context.nrt.meminfo_data(builder, meminfo)
     ptrty = context.get_value_type(payload_type).as_pointer()
     payload = builder.bitcast(payload, ptrty)
-    return context.make_data_helper(builder, payload_type, ref=payload)
+    return context.make_helper(builder, payload_type, ref=payload)
 
 
 @intrinsic
