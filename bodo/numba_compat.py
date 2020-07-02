@@ -1073,7 +1073,14 @@ def bodo_remove_dead_block(
         else:
             lives |= {v.name for v in stmt.list_vars()}
             if isinstance(stmt, ir.Assign):
-                lives.remove(lhs.name)
+                # bodo change:
+                # target variable of assignment is not live anymore only if it is not
+                # used in right hand side. e.g. A = -A
+                rhs_vars = set()
+                if isinstance(rhs, ir.Expr):
+                    rhs_vars = {v.name for v in rhs.list_vars()}
+                if lhs.name not in rhs_vars:
+                    lives.remove(lhs.name)
 
         new_body.append(stmt)
     new_body.reverse()

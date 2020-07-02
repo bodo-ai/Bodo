@@ -49,7 +49,7 @@ from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.hiframes.pd_multi_index_ext import MultiIndexType
 from bodo.hiframes.pd_categorical_ext import CategoricalArray
 from bodo.utils.transform import get_stmt_defs, get_call_expr_arg
-from bodo.utils.typing import BodoWarning, BodoError
+from bodo.utils.typing import BodoWarning, BodoError, is_overload_false
 from bodo.libs.bool_arr_ext import boolean_array
 
 
@@ -588,9 +588,17 @@ class DistributedAnalysis:
         # input of gatherv should not be REP (likely a user mistake),
         # but the output is REP
         if fdef == ("gatherv", "bodo") or fdef == ("allgatherv", "bodo"):
-            if is_REP(array_dists[rhs.args[0].name]):
+            arg_no = 2 if fdef[0] == "gatherv" else 1
+            warn_flag = get_call_expr_arg(
+                fdef[0], rhs.args, kws, arg_no, "warn_if_rep", True
+            )
+            if isinstance(warn_flag, ir.Var):
+                # warn if flag is not constant False. Otherwise just raise warning (not
+                # an error if flag is not const since not critical)
+                warn_flag = not is_overload_false(self.typemap[warn_flag.name])
+            if warn_flag and is_REP(array_dists[rhs.args[0].name]):
                 # TODO: test
-                raise BodoWarning("Input to gatherv is not distributed array")
+                warnings.warn(BodoWarning("Input to gatherv is not distributed array"))
             array_dists[lhs] = Distribution.REP
             return
 
@@ -916,6 +924,11 @@ class DistributedAnalysis:
                 lhs, rhs.args[1].name, array_dists, new_dist
             )
             array_dists[rhs.args[0].name] = new_dist
+            return
+
+        if fdef == ("init_categorical_array", "bodo.hiframes.pd_categorical_ext"):
+            # lhs and codes should have the same distribution
+            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
             return
 
         if fdef == ("get_dataframe_data", "bodo.hiframes.pd_dataframe_ext"):

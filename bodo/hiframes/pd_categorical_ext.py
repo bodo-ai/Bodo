@@ -20,8 +20,10 @@ from numba.extending import (
     intrinsic,
 )
 from numba.core import cgutils, types
+from numba.parfors.array_analysis import ArrayAnalysis
 from llvmlite import ir as lir
 import bodo
+from bodo.utils.typing import is_overload_constant_bool, is_overload_true
 
 
 # type for pd.CategoricalDtype objects in Pandas
@@ -74,6 +76,32 @@ class PDCategoricalDtypeModel(models.StructModel):
         models.StructModel.__init__(self, dmm, fe_type, members)
 
 
+make_attribute_wrapper(PDCategoricalDtype, "ordered", "ordered")
+make_attribute_wrapper(PDCategoricalDtype, "categories", "categories")
+
+
+@intrinsic
+def init_cat_dtype(typingctx, categories_typ, ordered_typ=None):
+    """Create a CategoricalDtype from categories array and ordered flag
+    """
+    assert bodo.utils.utils.is_array_typ(categories_typ, False)
+    assert is_overload_constant_bool(ordered_typ)
+
+    def codegen(context, builder, sig, args):
+        categories, ordered = args
+        cat_dtype = cgutils.create_struct_proxy(sig.return_type)(context, builder)
+        cat_dtype.categories = categories
+        context.nrt.incref(builder, sig.args[0], categories)
+        context.nrt.incref(builder, sig.args[1], ordered)
+        cat_dtype.ordered = ordered
+        return cat_dtype._getvalue()
+
+    ret_type = PDCategoricalDtype(
+        None, categories_typ.dtype, is_overload_true(ordered_typ)
+    )
+    return ret_type(categories_typ, ordered_typ), codegen
+
+
 @unbox(PDCategoricalDtype)
 def unbox_cat_dtype(typ, obj, c):
     """
@@ -83,10 +111,7 @@ def unbox_cat_dtype(typ, obj, c):
 
     # unbox obj.ordered flag
     ordered_obj = c.pyapi.object_getattr_string(obj, "ordered")
-    # unbox bool similar to Numba's bool unboxing
-    istrue = c.pyapi.object_istrue(ordered_obj)
-    zero = lir.Constant(istrue.type, 0)
-    cat_dtype.ordered = c.builder.icmp_signed("!=", istrue, zero)
+    cat_dtype.ordered = c.pyapi.to_native_value(types.bool_, ordered_obj).value
     c.pyapi.decref(ordered_obj)
 
     # unbox obj.categories.values
@@ -182,6 +207,9 @@ def unbox_categorical_array(typ, val, c):
 
 def get_categories_int_type(cat_dtype):
     dtype = types.int64
+    # if categories are not known upfront, assume worst case int64 for codes
+    if cat_dtype.categories is None:
+        return dtype
     n_cats = len(cat_dtype.categories)
     if n_cats < np.iinfo(np.int8).max:
         dtype = types.int8
@@ -266,6 +294,33 @@ def init_categorical_array(typingctx, codes, cat_dtype=None):
     return sig, codegen
 
 
+def init_categorical_array_equiv(self, scope, equiv_set, loc, args, kws):
+    """out array of init_categorical_array has the same shape as input codes array
+    """
+    assert len(args) == 2 and not kws
+    var = args[0]
+    if equiv_set.has_shape(var):
+        return var, []
+    return None
+
+
+ArrayAnalysis._analyze_op_call_bodo_hiframes_pd_categorical_ext_init_categorical_array = (
+    init_categorical_array_equiv
+)
+
+
+def alias_ext_dummy_func(lhs_name, args, alias_map, arg_aliases):
+    """the codes array is kept inside Categorical array so it aliases
+    """
+    assert len(args) >= 1
+    numba.core.ir_utils._add_alias(lhs_name, args[0].name, alias_map, arg_aliases)
+
+
+numba.core.ir_utils.alias_func_extensions[
+    ("init_categorical_array", "bodo.hiframes.pd_categorical_ext")
+] = alias_ext_dummy_func
+
+
 @overload_method(CategoricalArray, "copy", no_unliteral=True)
 def cat_arr_copy_overload(arr):
     return lambda arr: init_categorical_array(arr.codes.copy(), arr.dtype)
@@ -287,13 +342,16 @@ def overload_cat_arr_ndim(A):
     return lambda A: 1
 
 
-@intrinsic
-def init_cat_dtype(typingctx, cat_dtype=None):
-    """Create a dummy value for CategoricalDtype
-    """
+@numba.njit
+def get_label_dict_from_categories(vals):
+    labels = dict()
 
-    def codegen(context, builder, signature, args):
-        return context.get_dummy_value()
+    curr_ind = 0
+    for i in range(len(vals)):
+        val = vals[i]
+        if val in labels:
+            continue
+        labels[val] = curr_ind
+        curr_ind += 1
 
-    sig = cat_dtype.instance_type(cat_dtype)
-    return sig, codegen
+    return labels

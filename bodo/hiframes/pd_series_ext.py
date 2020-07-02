@@ -292,7 +292,7 @@ def construct_series(context, builder, series_type, data_val, index_val, name_va
     series_payload.name = name_val
 
     # create meminfo and store payload
-    payload_ll_type = context.get_data_type(payload_type)
+    payload_ll_type = context.get_value_type(payload_type)
     payload_size = context.get_abi_sizeof(payload_ll_type)
     dtor_fn = define_series_dtor(context, builder, series_type, payload_type)
     meminfo = context.nrt.meminfo_alloc_dtor(

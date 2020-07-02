@@ -15,6 +15,7 @@ from bodo.utils.typing import (
     is_overload_true,
     BodoError,
     get_overload_const_str,
+    is_overload_constant_str,
 )
 
 
@@ -403,8 +404,52 @@ def overload_fix_arr_dtype(data, new_dtype, copy=None):
 
     if is_overload_none(new_dtype):
         if do_copy:
-            return lambda data, new_dtype, copy=None: data.copy()
-        return lambda data, new_dtype, copy=None: data
+            return lambda data, new_dtype, copy=None: data.copy()  # pragma: no cover
+        return lambda data, new_dtype, copy=None: data  # pragma: no cover
+
+    # convert to Categorical with predefined CategoricalDtype
+    if isinstance(new_dtype, bodo.hiframes.pd_categorical_ext.PDCategoricalDtype):
+        int_dtype = bodo.hiframes.pd_categorical_ext.get_categories_int_type(new_dtype)
+
+        def impl_cat_dtype(data, new_dtype, copy=None):  # pragma: no cover
+            n = len(data)
+            numba.parfors.parfor.init_prange()
+            label_dict = bodo.hiframes.pd_categorical_ext.get_label_dict_from_categories(
+                new_dtype.categories
+            )
+            codes = np.empty(n, int_dtype)
+            for i in numba.parfors.parfor.internal_prange(n):
+                if bodo.libs.array_kernels.isna(data, i):
+                    codes[i] = -1
+                    continue
+                val = data[i]
+                if val not in label_dict:
+                    codes[i] = -1
+                    continue
+                codes[i] = label_dict[val]
+            A = bodo.hiframes.pd_categorical_ext.init_categorical_array(
+                codes, new_dtype
+            )
+            return A
+
+        return impl_cat_dtype
+
+    if (
+        is_overload_constant_str(new_dtype)
+        and get_overload_const_str(new_dtype) == "category"
+    ):
+        # find categorical dtype from data first and reuse the explicit dtype impl
+        def impl_category(data, new_dtype, copy=None):  # pragma: no cover
+            # find categories in data
+            cats = bodo.libs.array_kernels.unique(data)
+            # make sure categories are replicated since dtype is replicated
+            cats = bodo.allgatherv(cats, False)
+            # sort categories to match Pandas
+            cats = pd.Series(cats).sort_values().values
+            cat_dtype = bodo.hiframes.pd_categorical_ext.init_cat_dtype(cats, False)
+            return bodo.utils.conversion.fix_arr_dtype(data, cat_dtype, copy)
+
+        return impl_category
 
     # handle constructor functions, e.g. Series.astype(float)
     if isinstance(new_dtype, types.Function):
@@ -451,9 +496,11 @@ def overload_fix_arr_dtype(data, new_dtype, copy=None):
 
     # Array case
     if do_copy or data.dtype != nb_dtype:
-        return lambda data, new_dtype, copy=None: data.astype(nb_dtype)
+        return lambda data, new_dtype, copy=None: data.astype(
+            nb_dtype
+        )  # pragma: no cover
 
-    return lambda data, new_dtype, copy=None: data
+    return lambda data, new_dtype, copy=None: data  # pragma: no cover
 
 
 @numba.jit
