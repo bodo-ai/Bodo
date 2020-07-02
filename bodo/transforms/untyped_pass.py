@@ -1167,7 +1167,9 @@ class UntypedPass:
                 "categories",
                 err_msg=err_msg,
             )
-            typ = PDCategoricalDtype(cats)
+            elem_typ = bodo.string_type if len(cats) == 0 else bodo.typeof(cats[0])
+            # TODO: support other possible CategoricalDtype() calls
+            typ = PDCategoricalDtype(cats, elem_typ, False)
             return CategoricalArray(typ)
 
         if not isinstance(dtype_def, ir.Expr) or dtype_def.op != "getattr":
