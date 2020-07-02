@@ -2342,36 +2342,47 @@ def dropna_overload(df, axis=0, how="any", thresh=None, subset=None, inplace=Fal
     if not is_overload_constant_bool(inplace) or is_overload_true(inplace):
         raise BodoError("DataFrame.dropna(): inplace=True is not supported")
 
-    # TODO: avoid dummy and generate func here when inlining is possible
-    # TODO: inplace of df with parent (reflection)
-    def _impl(
-        df, axis=0, how="any", thresh=None, subset=None, inplace=False
-    ):  # pragma: no cover
-        return bodo.hiframes.pd_dataframe_ext.dropna_dummy(df)
+    # check axis=0
+    if not is_overload_zero(axis):
+        raise_bodo_error(f"df.dropna(): only axis=0 supported")
 
-    return _impl
+    ensure_constant_values("dropna", "how", how, ("any", "all"))
 
+    # get the index of columns to consider for NA check
+    if is_overload_none(subset):
+        subset_ints = list(range(len(df.columns)))
+    elif not is_overload_constant_list(subset):
+        raise_bodo_error(
+            f"df.dropna(): subset argument should a constant list, not {subset}"
+        )
+    else:
+        subset_vals = get_overload_const_list(subset)
+        subset_ints = []
+        for s in subset_vals:
+            if s not in df.columns:
+                raise_bodo_error(
+                    f"df.dropna(): column '{s}' not in data frame columns {df}"
+                )
+            subset_ints.append(df.columns.index(s))
 
-def dropna_dummy(df, n):  # pragma: no cover
-    return df
+    n_cols = len(df.columns)
+    data_args = ", ".join("data_{}".format(i) for i in range(n_cols))
 
-
-@infer_global(dropna_dummy)
-class DropnaDummyTyper(AbstractTemplate):
-    def generic(self, args, kws):
-        (df,) = args
-        # copy type to set has_parent False
-        index = df.index
-        if isinstance(index, RangeIndexType):
-            index = NumericIndexType(types.int64)
-        out_df = DataFrameType(df.data, index, df.columns)
-        return signature(out_df, *args)
-
-
-@lower_builtin(dropna_dummy, types.VarArg(types.Any))
-def lower_dropna_dummy(context, builder, sig, args):
-    out_obj = cgutils.create_struct_proxy(sig.return_type)(context, builder)
-    return out_obj._getvalue()
+    func_text = (
+        "def impl(df, axis=0, how='any', thresh=None, subset=None, inplace=False):\n"
+    )
+    for i in range(n_cols):
+        func_text += "  data_{0} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {0})\n".format(
+            i
+        )
+    index = "bodo.utils.conversion.index_to_array(bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df))"
+    func_text += "  ({0}, index_arr) = bodo.libs.array_kernels.dropna(({0}, {1}), how, thresh, ({2},))\n".format(
+        data_args, index, ", ".join(str(a) for a in subset_ints)
+    )
+    func_text += "  index = bodo.utils.conversion.index_from_array(index_arr)\n"
+    return bodo.hiframes.dataframe_impl._gen_init_df(
+        func_text, df.columns, data_args, "index"
+    )
 
 
 @overload_method(DataFrameType, "drop", inline="always", no_unliteral=True)

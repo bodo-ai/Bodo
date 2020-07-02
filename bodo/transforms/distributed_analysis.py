@@ -735,6 +735,20 @@ class DistributedAnalysis:
             array_dists[rhs.args[1].name] = new_dist
             return
 
+        if fdef == ("dropna", "bodo.libs.array_kernels"):
+            # output of dropna is variable-length even if input is 1D
+            if lhs not in array_dists:
+                self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
+
+            in_dist = Distribution(min(a.value for a in array_dists[rhs.args[0].name]))
+            out_dist = Distribution(min(a.value for a in array_dists[lhs]))
+            out_dist = Distribution(min(out_dist.value, in_dist.value))
+            self._set_var_dist(lhs, array_dists, out_dist)
+            # output can cause input REP
+            if out_dist != Distribution.OneD_Var:
+                self._set_var_dist(rhs.args[0].name, array_dists, out_dist)
+            return
+
         if fdef == ("nancorr", "bodo.libs.array_kernels"):
             array_dists[lhs] = Distribution.REP
             return

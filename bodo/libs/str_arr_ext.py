@@ -1217,6 +1217,15 @@ def str_arr_set_na(typingctx, str_arr_typ, ind_typ=None):
         mask = builder.xor(mask, lir.Constant(lir.IntType(8), -1))
         # unset masked bit
         builder.store(builder.and_(byte, mask), byte_ptr)
+        if str_arr_typ == string_array_type:
+            # offsets[ind+1] = offsets[ind]
+            builder.store(
+                builder.load(builder.gep(payload.offsets, [ind])),
+                builder.gep(
+                    payload.offsets,
+                    [builder.add(ind, lir.Constant(lir.IntType(64), 1))],
+                ),
+            )
         return context.get_dummy_value()
 
     return types.void(str_arr_typ, types.intp), codegen

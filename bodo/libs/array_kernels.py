@@ -55,7 +55,12 @@ from bodo.libs.array import (
     info_to_array,
     delete_table,
 )
-from bodo.utils.typing import BodoError
+from bodo.utils.typing import (
+    BodoError,
+    get_overload_const_list,
+    get_overload_const_str,
+    is_overload_none,
+)
 
 ll.add_symbol("quantile_sequential", quantile_alg.quantile_sequential)
 ll.add_symbol("quantile_parallel", quantile_alg.quantile_parallel)
@@ -529,6 +534,79 @@ def overload_drop_duplicates(data, ind_arr, parallel=False):
     )
     impl = loc_vars["impl"]
     return impl
+
+
+def dropna(data, how, thresh, subset, parallel=False):  # pragma: no cover
+    return data
+
+
+@overload(dropna, no_unliteral=True)
+def overload_dropna(data, how, thresh, subset):
+    """drop NA rows in tuple of arrays 'data'. 'subset' is the index numbers of arrays
+    to consider for NA check. 'how' and 'thresh' are the same as df.dropna().
+    """
+
+    n_data_arrs = len(data.types)
+    out_names = ["out" + str(i) for i in range(n_data_arrs)]
+    subset_inds = get_overload_const_list(subset)
+    how = get_overload_const_str(how)
+
+    # gen NA check code
+    isna_calls = ["isna(data[{}], i)".format(i) for i in subset_inds]
+    isna_check = "not ({})".format(" or ".join(isna_calls))
+    if not is_overload_none(thresh):
+        isna_check = "(({}) <= ({}) - thresh)".format(
+            " + ".join(isna_calls), n_data_arrs - 1
+        )
+    elif how == "all":
+        isna_check = "not ({})".format(" and ".join(isna_calls))
+
+    # count the number of elements in output arrays, allocate output arrays, fill data
+    func_text = "def _dropna_imp(data, how, thresh, subset):\n"
+    func_text += "  old_len = len(data[0])\n"
+    func_text += "  new_len = 0\n"
+    for i in range(n_data_arrs):
+        func_text += "  nested_counts_{0} = init_nested_counts(d{0})\n".format(i)
+    func_text += "  for i in range(old_len):\n"
+    func_text += "    if {}:\n".format(isna_check)
+    for i in range(n_data_arrs):
+        func_text += "      if not isna(data[{}], i):\n".format(i)
+        func_text += "        nested_counts_{0} = add_nested_counts(nested_counts_{0}, data[{0}][i])\n".format(
+            i
+        )
+    func_text += "      new_len += 1\n"
+    # allocate new arrays
+    for i, out in enumerate(out_names):
+        func_text += "  {0} = bodo.utils.utils.alloc_type(new_len, t{1}, nested_counts_{1})\n".format(
+            out, i
+        )
+    func_text += "  curr_ind = 0\n"
+    func_text += "  for i in range(old_len):\n"
+    func_text += "    if {}:\n".format(isna_check)
+    for i in range(n_data_arrs):
+        func_text += "      if isna(data[{}], i):\n".format(i)
+        func_text += "        bodo.ir.join.setitem_arr_nan({}, curr_ind)\n".format(
+            out_names[i]
+        )
+        func_text += "      else:\n"
+        func_text += "        {}[curr_ind] = data[{}][i]\n".format(out_names[i], i)
+    func_text += "      curr_ind += 1\n"
+    func_text += "  return {}\n".format(", ".join(out_names))
+    loc_vars = {}
+    # pass data types to generated code
+    _globals = {"t{}".format(i): t for i, t in enumerate(data.types)}
+    _globals.update({"d{}".format(i): t.dtype for i, t in enumerate(data.types)})
+    _globals.update(
+        {
+            "isna": isna,
+            "init_nested_counts": bodo.utils.indexing.init_nested_counts,
+            "add_nested_counts": bodo.utils.indexing.add_nested_counts,
+            "bodo": bodo,
+        }
+    )
+    exec(func_text, _globals, loc_vars)
+    _dropna_imp = loc_vars["_dropna_imp"]
+    return _dropna_imp
 
 
 def concat(arr_list):  # pragma: no cover
