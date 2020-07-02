@@ -2176,15 +2176,20 @@ def compile_to_optimized_ir(func, arg_typs, typingctx):
                 "get_series_data",
                 "bodo.hiframes.pd_series_ext",
             ):
+                f_ir._definitions[stmt.target.name].remove(stmt.value)
                 stmt.value = stmt.value.args[0]
+                f_ir._definitions[stmt.target.name].append(stmt.value)
             # remove isna() calls since NA cannot be handled in UDFs yet
             # TODO: support NA in UDFs
             if is_call_assign(stmt) and find_callname(f_ir, stmt.value) == (
                 "isna",
                 "bodo.libs.array_kernels",
             ):
+                f_ir._definitions[stmt.target.name].remove(stmt.value)
                 stmt.value = ir.Const(False, stmt.loc)
+                f_ir._definitions[stmt.target.name].append(stmt.value)
 
+    bodo.transforms.untyped_pass.remove_dead_branches(f_ir)
     preparfor_pass = numba.parfors.parfor.PreParforPass(
         f_ir, typemap, calltypes, typingctx, options
     )

@@ -1533,8 +1533,16 @@ def remove_dead_branches(func_ir):
         assert len(block.body) > 0
         last_stmt = block.body[-1]
         if isinstance(last_stmt, ir.Branch):
+            # handle const bool() calls like bool(False)
+            cond = last_stmt.cond
+            cond_def = guard(get_definition, func_ir, cond)
+            if (
+                guard(find_callname, func_ir, cond_def) == ("bool", "numpy")
+                and guard(find_const, func_ir, cond_def.args[0]) is not None
+            ):
+                cond = cond_def.args[0]
             try:
-                cond_val = find_const(func_ir, last_stmt.cond)
+                cond_val = find_const(func_ir, cond)
                 target_label = last_stmt.truebr if cond_val else last_stmt.falsebr
                 block.body[-1] = ir.Jump(target_label, last_stmt.loc)
             except GuardException:
