@@ -851,7 +851,7 @@ def pq_read_array_item_lower(context, builder, sig, args):
     # TODO: refactor array(item) payload handling copied from construct_array_item_array
     # create payload type
     payload_type = ArrayItemArrayPayloadType(array_item_type)
-    alloc_type = context.get_data_type(payload_type)
+    alloc_type = context.get_value_type(payload_type)
     alloc_size = context.get_abi_sizeof(alloc_type)
 
     # define dtor
@@ -869,7 +869,7 @@ def pq_read_array_item_lower(context, builder, sig, args):
     payload.n_arrays = args[2]  # set size
 
     # allocate array_info pointers (to be allocated in pq_read_array_item C++ code)
-    ll_array_info_type = context.get_data_type(array_info_type)
+    ll_array_info_type = context.get_value_type(array_info_type)
     data_info_ptr = cgutils.alloca_once(builder, ll_array_info_type)
     offsets_info_ptr = cgutils.alloca_once(builder, ll_array_info_type)
     nulls_info_ptr = cgutils.alloca_once(builder, ll_array_info_type)

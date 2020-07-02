@@ -145,7 +145,7 @@ make_attribute_wrapper(StringArraySplitViewType, "null_bitmap", "_null_bitmap")
 def construct_str_arr_split_view(context, builder):
     """Creates meminfo and sets dtor.
     """
-    alloc_type = context.get_data_type(str_arr_split_view_payload_type)
+    alloc_type = context.get_value_type(str_arr_split_view_payload_type)
     alloc_size = context.get_abi_sizeof(alloc_type)
 
     llvoidptr = context.get_value_type(types.voidptr)

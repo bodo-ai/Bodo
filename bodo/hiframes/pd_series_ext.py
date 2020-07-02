@@ -271,7 +271,7 @@ def define_series_dtor(context, builder, series_type, payload_type):
     base_ptr = fn.args[0]  # void*
 
     # get payload struct
-    ptrty = context.get_data_type(payload_type).as_pointer()
+    ptrty = context.get_value_type(payload_type).as_pointer()
     payload_ptr = builder.bitcast(base_ptr, ptrty)
     payload = context.make_data_helper(builder, payload_type, ref=payload_ptr)
 
@@ -368,7 +368,7 @@ def get_series_payload(context, builder, series_type, value):
     meminfo = cgutils.create_struct_proxy(series_type)(context, builder, value).meminfo
     payload_type = SeriesPayloadType(series_type)
     payload = context.nrt.meminfo_data(builder, meminfo)
-    ptrty = context.get_data_type(payload_type).as_pointer()
+    ptrty = context.get_value_type(payload_type).as_pointer()
     payload = builder.bitcast(payload, ptrty)
     return context.make_data_helper(builder, payload_type, ref=payload)
 

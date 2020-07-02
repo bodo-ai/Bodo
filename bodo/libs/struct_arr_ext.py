@@ -155,7 +155,7 @@ def define_struct_arr_dtor(context, builder, struct_arr_type, payload_type):
     base_ptr = fn.args[0]  # void*
 
     # get payload struct
-    ptrty = context.get_data_type(payload_type).as_pointer()
+    ptrty = context.get_value_type(payload_type).as_pointer()
     payload_ptr = builder.bitcast(base_ptr, ptrty)
     payload = context.make_data_helper(builder, payload_type, ref=payload_ptr)
 
@@ -173,7 +173,7 @@ def construct_struct_array(context, builder, struct_arr_type, n_structs):
     """
     # create payload type
     payload_type = StructArrayPayloadType(struct_arr_type.data)
-    alloc_type = context.get_data_type(payload_type)
+    alloc_type = context.get_value_type(payload_type)
     alloc_size = context.get_abi_sizeof(alloc_type)
 
     # define dtor
@@ -305,7 +305,7 @@ def _get_struct_arr_payload(context, builder, arr_typ, arr):
     payload_type = StructArrayPayloadType(arr_typ.data)
     meminfo_void_ptr = context.nrt.meminfo_data(builder, struct_array.meminfo)
     meminfo_data_ptr = builder.bitcast(
-        meminfo_void_ptr, context.get_data_type(payload_type).as_pointer()
+        meminfo_void_ptr, context.get_value_type(payload_type).as_pointer()
     )
     payload = cgutils.create_struct_proxy(payload_type)(
         context, builder, builder.load(meminfo_data_ptr)
@@ -483,7 +483,7 @@ def define_struct_dtor(context, builder, struct_type, payload_type):
     base_ptr = fn.args[0]  # void*
 
     # get payload struct
-    ptrty = context.get_data_type(payload_type).as_pointer()
+    ptrty = context.get_value_type(payload_type).as_pointer()
     payload_ptr = builder.bitcast(base_ptr, ptrty)
     payload = context.make_data_helper(builder, payload_type, ref=payload_ptr)
 
@@ -503,7 +503,7 @@ def _get_struct_payload(context, builder, typ, struct):
     payload_type = StructPayloadType(typ.data)
     meminfo_void_ptr = context.nrt.meminfo_data(builder, struct.meminfo)
     meminfo_data_ptr = builder.bitcast(
-        meminfo_void_ptr, context.get_data_type(payload_type).as_pointer()
+        meminfo_void_ptr, context.get_value_type(payload_type).as_pointer()
     )
     payload = cgutils.create_struct_proxy(payload_type)(
         context, builder, builder.load(meminfo_data_ptr)
@@ -541,7 +541,7 @@ def init_struct(typingctx, data_typ, names_typ=None):
         # TODO: refactor to avoid duplication with construct_struct
         # create payload type
         payload_type = StructPayloadType(struct_type.data)
-        alloc_type = context.get_data_type(payload_type)
+        alloc_type = context.get_value_type(payload_type)
         alloc_size = context.get_abi_sizeof(alloc_type)
 
         # define dtor
@@ -655,7 +655,7 @@ def construct_struct(context, builder, struct_type, values, nulls):
     """
     # create payload type
     payload_type = StructPayloadType(struct_type.data)
-    alloc_type = context.get_data_type(payload_type)
+    alloc_type = context.get_value_type(payload_type)
     alloc_size = context.get_abi_sizeof(alloc_type)
 
     # define dtor
@@ -792,7 +792,7 @@ def init_struct_arr(typingctx, data_typ, null_bitmap_typ, names_typ=None):
         # TODO: refactor to avoid duplication with construct_struct_array
         # create payload type
         payload_type = StructArrayPayloadType(struct_arr_type.data)
-        alloc_type = context.get_data_type(payload_type)
+        alloc_type = context.get_value_type(payload_type)
         alloc_size = context.get_abi_sizeof(alloc_type)
 
         # define dtor

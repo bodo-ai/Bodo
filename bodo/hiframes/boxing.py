@@ -306,7 +306,7 @@ def unbox_dataframe_column(typingctx, df, i=None):
         # store payload
         payload_type = DataFramePayloadType(df_typ)
         payload_ptr = context.nrt.meminfo_data(builder, dataframe.meminfo)
-        ptrty = context.get_data_type(payload_type).as_pointer()
+        ptrty = context.get_value_type(payload_type).as_pointer()
         payload_ptr = builder.bitcast(payload_ptr, ptrty)
         builder.store(dataframe_payload._getvalue(), payload_ptr)
 

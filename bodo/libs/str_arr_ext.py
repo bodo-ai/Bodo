@@ -391,7 +391,7 @@ def _get_string_arr_payload(context, builder, str_arr_value):
     string_array = context.make_helper(builder, string_array_type, str_arr_value)
     meminfo_data_ptr = context.nrt.meminfo_data(builder, string_array.meminfo)
     meminfo_data_ptr = builder.bitcast(
-        meminfo_data_ptr, context.get_data_type(str_arr_payload_type).as_pointer()
+        meminfo_data_ptr, context.get_value_type(str_arr_payload_type).as_pointer()
     )
     payload = cgutils.create_struct_proxy(str_arr_payload_type)(
         context, builder, builder.load(meminfo_data_ptr)
@@ -640,7 +640,7 @@ def copy_non_null_offsets(typingctx, str_arr_typ, out_str_arr_typ=None):
                 builder.store(in_val, builder.gep(out_payload.offsets, [curr_offset]))
                 builder.store(
                     builder.add(
-                        curr_offset, lir.Constant(context.get_data_type(offset_typ), 1)
+                        curr_offset, lir.Constant(context.get_value_type(offset_typ), 1)
                     ),
                     curr_offset_ptr,
                 )
@@ -938,7 +938,7 @@ _print_str_arr = types.ExternalFunction(
 def construct_string_array(context, builder):
     """Creates meminfo and sets dtor.
     """
-    alloc_type = context.get_data_type(str_arr_payload_type)
+    alloc_type = context.get_value_type(str_arr_payload_type)
     alloc_size = context.get_abi_sizeof(alloc_type)
 
     llvoidptr = context.get_value_type(types.voidptr)
@@ -1302,7 +1302,7 @@ def move_str_arr_payload(typingctx, to_str_arr_typ, from_str_arr_typ=None):
         )
         from_meminfo_data_ptr = builder.bitcast(
             from_meminfo_data_ptr,
-            context.get_data_type(str_arr_payload_type).as_pointer(),
+            context.get_value_type(str_arr_payload_type).as_pointer(),
         )
 
         to_string_array = context.make_helper(builder, string_array_type, to_str_arr)
@@ -1311,7 +1311,7 @@ def move_str_arr_payload(typingctx, to_str_arr_typ, from_str_arr_typ=None):
         )
         to_meminfo_data_ptr = builder.bitcast(
             to_meminfo_data_void_ptr,
-            context.get_data_type(str_arr_payload_type).as_pointer(),
+            context.get_value_type(str_arr_payload_type).as_pointer(),
         )
 
         # delete existing data by calling destructor
