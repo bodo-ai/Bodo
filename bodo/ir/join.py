@@ -1403,6 +1403,7 @@ def setitem_arr_nan_overload(arr, ind, int_nan_const=0):
         return _setnan_impl
 
     if arr == string_array_type:
+        # TODO: set offsets
         return lambda arr, ind, int_nan_const=0: str_arr_set_na(arr, ind)
 
     if isinstance(arr, (IntegerArrayType, DecimalArrayType)) or arr in (
@@ -1412,6 +1413,19 @@ def setitem_arr_nan_overload(arr, ind, int_nan_const=0):
         return lambda arr, ind, int_nan_const=0: bodo.libs.int_arr_ext.set_bit_to_arr(
             arr._null_bitmap, ind, 0
         )  # pragma: no cover
+
+    if isinstance(arr, bodo.libs.array_item_arr_ext.ArrayItemArrayType):
+
+        def impl_arr_item(arr, ind, int_nan_const=0):  # pragma: no cover
+            # set offset
+            offsets = bodo.libs.array_item_arr_ext.get_offsets(arr)
+            offsets[ind + 1] = offsets[ind]
+            # set NA bitmask
+            bodo.libs.int_arr_ext.set_bit_to_arr(
+                bodo.libs.array_item_arr_ext.get_null_bitmap(arr), ind, 0
+            )
+
+        return impl_arr_item
 
     if isinstance(arr, bodo.libs.struct_arr_ext.StructArrayType):
         return lambda arr, ind, int_nan_const=0: bodo.libs.int_arr_ext.set_bit_to_arr(

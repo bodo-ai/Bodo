@@ -715,4 +715,8 @@ def get_n_nested_counts(t):
     For example, ArrayItemArrayType(ArrayItemArrayType(array(int64))) returns 2.
     """
     # TODO: struct array, strings
-    return 1 + get_n_nested_counts(t.dtype) if isinstance(t, ArrayItemArrayType) else 0
+    return (
+        1 + get_n_nested_counts(t.dtype)
+        if isinstance(t, ArrayItemArrayType) or t == string_array_type
+        else 0
+    )

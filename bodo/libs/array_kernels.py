@@ -40,6 +40,7 @@ from bodo.libs.struct_arr_ext import StructArrayType
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.hiframes.split_impl import string_array_split_view_type
 from bodo.hiframes.datetime_date_ext import datetime_date_array_type
+from bodo.utils.indexing import init_nested_counts, add_nested_counts
 
 from llvmlite import ir as lir
 from bodo.libs import quantile_alg
@@ -886,6 +887,70 @@ def unique_overload_parallel(A):
         return bodo.utils.utils.unique(out_arr)
 
     return unique_par
+
+
+def explode(arr, index_arr):  # pragma: no cover
+    return pd.Series(arr, index_arr).explode()
+
+
+@overload(explode, no_unliteral=True)
+def overload_explode(arr, index_arr):
+    """
+    Internal kernel for Series.explode(). Transforms each item in array(item) array into
+    its own row, replicating the index values. Each empty array will have an NA in
+    output.
+    """
+    assert isinstance(arr, ArrayItemArrayType)
+    data_arr_type = arr.dtype
+    index_arr_type = index_arr
+    index_dtype = index_arr_type.dtype
+
+    def impl(arr, index_arr):
+        n = len(arr)
+        nested_counts = init_nested_counts(data_arr_type)
+        nested_index_counts = init_nested_counts(index_dtype)
+        for i in range(n):
+            ind_val = index_arr[i]
+            if isna(arr, i):
+                nested_counts = (nested_counts[0] + 1,) + nested_counts[1:]
+                nested_index_counts = add_nested_counts(nested_index_counts, ind_val)
+                continue
+            arr_item = arr[i]
+            if len(arr_item) == 0:
+                nested_counts = (nested_counts[0] + 1,) + nested_counts[1:]
+                nested_index_counts = add_nested_counts(nested_index_counts, ind_val)
+                continue
+            nested_counts = add_nested_counts(nested_counts, arr_item)
+            for _ in range(len(arr_item)):
+                nested_index_counts = add_nested_counts(nested_index_counts, ind_val)
+        out_arr = bodo.utils.utils.alloc_type(
+            nested_counts[0], data_arr_type, nested_counts[1:]
+        )
+        out_index_arr = bodo.utils.utils.alloc_type(
+            nested_counts[0], index_arr_type, nested_index_counts
+        )
+
+        curr_item = 0
+        for i in range(n):
+            if isna(arr, i):
+                bodo.ir.join.setitem_arr_nan(out_arr, curr_item)
+                out_index_arr[curr_item] = index_arr[i]
+                curr_item += 1
+                continue
+            arr_item = arr[i]
+            n_items = len(arr_item)
+            if n_items == 0:
+                bodo.ir.join.setitem_arr_nan(out_arr, curr_item)
+                out_index_arr[curr_item] = index_arr[i]
+                curr_item += 1
+                continue
+            out_arr[curr_item : curr_item + n_items] = arr_item
+            out_index_arr[curr_item : curr_item + n_items] = index_arr[i]
+            curr_item += n_items
+
+        return out_arr, out_index_arr
+
+    return impl
 
 
 def gen_na_array(n, arr):  # pragma: no cover

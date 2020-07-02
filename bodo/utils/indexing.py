@@ -164,10 +164,17 @@ def overload_init_nested_counts(arr_typ):
     E.g. array(array(int)) will return (0, 0)
     """
     arr_typ = arr_typ.instance_type
-    if isinstance(arr_typ, bodo.libs.array_item_arr_ext.ArrayItemArrayType):
+    if (
+        isinstance(arr_typ, bodo.libs.array_item_arr_ext.ArrayItemArrayType)
+        or arr_typ == bodo.string_array_type
+    ):
         data_arr_typ = arr_typ.dtype
         return lambda arr_typ: (0,) + init_nested_counts(data_arr_typ)
-    return lambda arr_typ: (0,)
+
+    if bodo.utils.utils.is_array_typ(arr_typ, False) or arr_typ == bodo.string_type:
+        return lambda arr_typ: (0,)
+
+    return lambda arr_typ: ()
 
 
 def add_nested_counts(nested_counts, arr_item):
@@ -185,4 +192,14 @@ def overload_add_nested_counts(nested_counts, arr_item):
         ) + add_nested_counts(
             nested_counts[1:], bodo.libs.array_item_arr_ext.get_data(arr_item)
         )
-    return lambda nested_counts, arr_item: (nested_counts[0] + len(arr_item),)
+
+    if arr_item == bodo.string_array_type:
+        return lambda nested_counts, arr_item: (
+            nested_counts[0] + len(arr_item),
+            np.int64(bodo.libs.str_arr_ext.num_total_chars(arr_item)),
+        )
+
+    if bodo.utils.utils.is_array_typ(arr_item, False) or arr_item == bodo.string_type:
+        return lambda nested_counts, arr_item: (nested_counts[0] + len(arr_item),)
+
+    return lambda nested_counts, arr_item: ()

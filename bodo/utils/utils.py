@@ -658,7 +658,11 @@ def overload_alloc_type(n, t, s=None):
     needed for allocation.
     """
     typ = t.instance_type if isinstance(t, types.TypeRef) else t
-    assert bodo.utils.transform.is_var_size_item_array_type(typ) or is_overload_none(s)
+    assert (
+        bodo.utils.transform.is_var_size_item_array_type(typ)
+        or is_overload_none(s)
+        or s == types.Tuple([])
+    )
     # TODO: decimal arrays
 
     if typ == string_array_type:
