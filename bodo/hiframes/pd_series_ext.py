@@ -904,7 +904,6 @@ series_unsupported_attrs = (
     "is_unique",
     "is_monotonic_increasing",
     "is_monotonic_decreasing",
-    "cat",
     "sparse",
 )
 

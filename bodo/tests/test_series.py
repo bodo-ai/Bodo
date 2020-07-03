@@ -494,6 +494,21 @@ def test_series_cat_comp(S, memory_leak_check):
     check_func(test_impl, (S,))
 
 
+@pytest.mark.parametrize(
+    "S",
+    [
+        pd.Series(["BB", "C", "A", None, "A", "BBB", None, "C", "BB", "A"]).astype(
+            "category"
+        )
+    ],
+)
+def test_series_cat_codes(S, memory_leak_check):
+    def test_impl(S):
+        return S.cat.codes
+
+    check_func(test_impl, (S,))
+
+
 def test_series_copy(series_val, memory_leak_check):
     # TODO: test deep/shallow cases properly
     def test_deep(S):
