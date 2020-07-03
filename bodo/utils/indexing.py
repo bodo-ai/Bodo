@@ -154,7 +154,7 @@ def array_setitem_slice_index(A, idx, val):  # pragma: no cover
         val_ind += 1
 
 
-def init_nested_counts(arr_typ):
+def init_nested_counts(arr_typ):  # pragma: no cover
     return (0,)
 
 
@@ -169,15 +169,17 @@ def overload_init_nested_counts(arr_typ):
         or arr_typ == bodo.string_array_type
     ):
         data_arr_typ = arr_typ.dtype
-        return lambda arr_typ: (0,) + init_nested_counts(data_arr_typ)
+        return lambda arr_typ: (0,) + init_nested_counts(
+            data_arr_typ
+        )  # pragma: no cover
 
     if bodo.utils.utils.is_array_typ(arr_typ, False) or arr_typ == bodo.string_type:
-        return lambda arr_typ: (0,)
+        return lambda arr_typ: (0,)  # pragma: no cover
 
-    return lambda arr_typ: ()
+    return lambda arr_typ: ()  # pragma: no cover
 
 
-def add_nested_counts(nested_counts, arr_item):
+def add_nested_counts(nested_counts, arr_item):  # pragma: no cover
     return (0,)
 
 
@@ -186,20 +188,29 @@ def overload_add_nested_counts(nested_counts, arr_item):
     """add nested counts of elements in 'arr_item', which could be array(item) array or
     regular array, to nested counts. For example, [[1, 2, 3], [2]] will add (2, 4)
     """
+    from bodo.libs.str_arr_ext import get_utf8_size
+
     if isinstance(arr_item, bodo.libs.array_item_arr_ext.ArrayItemArrayType):
         return lambda nested_counts, arr_item: (
             nested_counts[0] + len(arr_item),
         ) + add_nested_counts(
             nested_counts[1:], bodo.libs.array_item_arr_ext.get_data(arr_item)
-        )
+        )  # pragma: no cover
 
     if arr_item == bodo.string_array_type:
         return lambda nested_counts, arr_item: (
             nested_counts[0] + len(arr_item),
             np.int64(bodo.libs.str_arr_ext.num_total_chars(arr_item)),
-        )
+        )  # pragma: no cover
 
-    if bodo.utils.utils.is_array_typ(arr_item, False) or arr_item == bodo.string_type:
-        return lambda nested_counts, arr_item: (nested_counts[0] + len(arr_item),)
+    if bodo.utils.utils.is_array_typ(arr_item, False):
+        return lambda nested_counts, arr_item: (
+            nested_counts[0] + len(arr_item),
+        )  # pragma: no cover
 
-    return lambda nested_counts, arr_item: ()
+    if arr_item == bodo.string_type:
+        return lambda nested_counts, arr_item: (
+            nested_counts[0] + get_utf8_size(arr_item),
+        )  # pragma: no cover
+
+    return lambda nested_counts, arr_item: ()  # pragma: no cover
