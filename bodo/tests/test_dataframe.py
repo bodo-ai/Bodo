@@ -425,6 +425,21 @@ def test_df_values(numeric_df_value):
     check_func(impl, (numeric_df_value,))
 
 
+def test_df_values_nullable_int():
+    def impl(df):
+        return df.values
+
+    # avoiding nullable integer column for Pandas test since the output becomes object
+    # array with pd.NA object and comparison is not possible. Bodo may convert some int
+    # columns to nullable somtimes when Pandas converts to float, so this matches actual
+    # use cases.
+    df = pd.DataFrame({"A": pd.array([3, 1, None, 4]), "B": [1.2, 3.0, -1.1, 2.0]})
+    df2 = pd.DataFrame({"A": [3, 1, None, 4], "B": [1.2, 3.0, -1.1, 2.0]})
+    bodo_out = bodo.jit(impl)(df)
+    py_out = impl(df2)
+    np.testing.assert_allclose(bodo_out, py_out)
+
+
 def test_df_to_numpy(numeric_df_value):
     def impl(df):
         return df.to_numpy()
