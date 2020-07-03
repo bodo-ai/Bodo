@@ -717,7 +717,9 @@ class DistributedPass:
         if fdef == ("median", "bodo.libs.array_kernels") and (
             self._is_1D_arr(rhs.args[0].name) or self._is_1D_Var_arr(rhs.args[0].name)
         ):
-            f = lambda arr: bodo.libs.array_kernels.median(arr, True)
+            f = lambda arr, skipna: bodo.libs.array_kernels.median(
+                arr, skipna=skipna, parallel=True
+            )
             return compile_func_single_block(f, rhs.args, assign.target, self)
 
         if fdef == ("duplicated", "bodo.libs.array_kernels") and (

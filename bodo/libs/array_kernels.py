@@ -64,19 +64,6 @@ from bodo.utils.typing import (
 
 ll.add_symbol("quantile_sequential", quantile_alg.quantile_sequential)
 ll.add_symbol("quantile_parallel", quantile_alg.quantile_parallel)
-ll.add_symbol("nth_sequential", quantile_alg.nth_sequential)
-ll.add_symbol("nth_parallel", quantile_alg.nth_parallel)
-
-
-nth_sequential = types.ExternalFunction(
-    "nth_sequential",
-    types.void(types.voidptr, types.voidptr, types.int64, types.int64, types.int32),
-)
-
-nth_parallel = types.ExternalFunction(
-    "nth_parallel",
-    types.void(types.voidptr, types.voidptr, types.int64, types.int64, types.int32),
-)
 
 MPI_ROOT = 0
 sum_op = np.int32(bodo.libs.distributed_api.Reduce_Type.Sum.value)
@@ -134,33 +121,28 @@ def overload_isna(arr, i):
 ################################ median ####################################
 
 
-@numba.njit
-def nth_element(arr, k, parallel=False):  # pragma: no cover
-    res = np.empty(1, arr.dtype)
-    type_enum = bodo.libs.distributed_api.get_type_enum(arr)
-    if parallel:
-        nth_parallel(res.ctypes, arr.ctypes, len(arr), k, type_enum)
-    else:
-        nth_sequential(res.ctypes, arr.ctypes, len(arr), k, type_enum)
-    return res[0]
+ll.add_symbol("median_series_computation", quantile_alg.median_series_computation)
+
+
+_median_series_computation = types.ExternalFunction(
+    "median_series_computation",
+    types.void(
+        types.voidptr, bodo.libs.array.array_info_type, types.bool_, types.bool_
+    ),
+)
 
 
 @numba.njit
-def median(arr, parallel=False):  # pragma: no cover
-    # similar to numpy/lib/function_base.py:_median
+def median_series_computation(res, arr, is_parallel, skipna):
+    _median_series_computation(res, array_to_info(arr), is_parallel, skipna)
+
+
+@numba.njit
+def median(arr, skipna=True, parallel=False):  # pragma: no cover
     # TODO: check return types, e.g. float32 -> float32
-    n = len(arr)
-    if parallel:
-        n = bodo.libs.distributed_api.dist_reduce(n, np.int32(sum_op))
-    k = n // 2
-
-    # odd length case
-    if n % 2 == 1:
-        return nth_element(arr, k, parallel)
-
-    v1 = nth_element(arr, k - 1, parallel)
-    v2 = nth_element(arr, k, parallel)
-    return (v1 + v2) / 2
+    res = np.empty(1, types.float64)
+    median_series_computation(res.ctypes, arr, parallel, skipna)
+    return res[0]
 
 
 ################################ quantile ####################################

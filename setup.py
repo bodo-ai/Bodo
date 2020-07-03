@@ -263,13 +263,18 @@ ext_dt = Extension(
 
 ext_quantile = Extension(
     name="bodo.libs.quantile_alg",
-    sources=["bodo/libs/_quantile_alg.cpp"],
-    depends=["bodo/libs/_bodo_common.h", "bodo/libs/_bodo_common.cpp"],
-    libraries=MPI_LIBS,
+    sources=["bodo/libs/_quantile_alg.cpp", "bodo/libs/_decimal_ext.cpp",],
+    depends=[
+        "bodo/libs/_bodo_common.h",
+        "bodo/libs/_bodo_common.cpp",
+        "bodo/libs/_decimal_ext.cpp",
+        "bodo/libs/_decimal_ext.h",
+    ],
+    libraries=MPI_LIBS + np_compile_args["libraries"] + ["arrow"],
     extra_compile_args=eca,
     extra_link_args=ela,
-    include_dirs=ind,
-    library_dirs=lid,
+    include_dirs=np_compile_args["include_dirs"] + ind + extra_hash_ind,
+    library_dirs=np_compile_args["library_dirs"] + lid,
 )
 
 

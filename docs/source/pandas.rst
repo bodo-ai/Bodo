@@ -277,7 +277,7 @@ unless support is explicitly mentioned.
 * :meth:`pandas.Series.describe` currently returns a string instead of Series object.
 * :meth:`pandas.Series.max`
 * :meth:`pandas.Series.mean`
-* :meth:`pandas.Series.median`
+* :meth:`pandas.Series.median` (supports skipna argument)
 * :meth:`pandas.Series.min`
 * :meth:`pandas.Series.nlargest` (non-numerics not supported yet)
 * :meth:`pandas.Series.nsmallest` (non-numerics not supported yet)

@@ -884,13 +884,12 @@ def overload_series_idxmax(S, axis=0, skipna=True):
 
 
 @overload_method(SeriesType, "median", inline="always", no_unliteral=True)
-def overload_series_median(S, axis=None, skipna=None, level=None, numeric_only=None):
+def overload_series_median(S, axis=None, skipna=True, level=None, numeric_only=None):
     if not (is_overload_none(axis) or is_overload_zero(axis)):
         raise ValueError("Series.median(): axis argument not supported")
 
-    # TODO: support NA
-    return lambda S, axis=None, skipna=None, level=None, numeric_only=None: bodo.libs.array_kernels.median(
-        bodo.hiframes.pd_series_ext.get_series_data(S)
+    return lambda S, axis=None, skipna=True, level=None, numeric_only=None: bodo.libs.array_kernels.median(
+        bodo.hiframes.pd_series_ext.get_series_data(S), skipna
     )
 
 

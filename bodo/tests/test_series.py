@@ -1832,23 +1832,40 @@ def test_series_idxmax(series_val, memory_leak_check):
     # TODO: support more distribtued types and test
 
 
-def test_series_median(numeric_series_val, memory_leak_check):
-    # NA not supported yet, TODO: support
-    if numeric_series_val.dtype == np.float:
-        return
+@pytest.mark.parametrize(
+    "numeric_series_median",
+    [
+        pd.Series([1, 2, 3]),
+        pd.Series([1, 2, 3, 4]),
+        pd.Series([1.0, 2.0, 4.5, 5.0, np.nan]),
+        pd.Series(4 * [np.nan]),
+        pd.Series([Decimal("1"), Decimal("2"), Decimal("4.5"), Decimal("5"), np.nan]),
+    ],
+)
+def test_series_median(numeric_series_median):
+    """There is a memory leak needing to be resolved"""
 
-    # TODO: support nullable int
-    if isinstance(numeric_series_val.dtype, pd.core.arrays.integer._IntegerDtype):
-        return
+    def f(S):
+        return S.median()
 
-    # median not supported for dt64
-    if numeric_series_val.dtype == np.dtype("datetime64[ns]"):
-        return
+    def f_noskip(S):
+        return S.median(skipna=False)
 
-    def test_impl(A):
-        return A.median()
+    check_func(f, (numeric_series_median,))
+    check_func(f_noskip, (numeric_series_median,), check_dtype=False)
 
-    check_func(test_impl, (numeric_series_val,))
+
+def test_series_median_nullable():
+    """<NA> values from pandas correspond to np.nan from bodo. So specific test"""
+    S = pd.Series(pd.array([1, None, 2, 3], dtype="UInt16"))
+
+    def f(S):
+        return S.median(skipna=False)
+
+    bodo_f = bodo.jit(f)
+    ret_val1 = f(S)
+    ret_val2 = bodo_f(S)
+    assert pd.isnull(ret_val1) == pd.isnull(ret_val2)
 
 
 def test_series_equals(memory_leak_check):
