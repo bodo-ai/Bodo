@@ -54,7 +54,11 @@ def remove_files(file_names):
 
 def compress_dir(dir_name):
     if bodo.get_rank() == 0:
-        for fname in [f for f in os.listdir(dir_name) if f.endswith(".csv") and os.path.getsize(dir_name + "/" + f) > 0]:
+        for fname in [
+            f
+            for f in os.listdir(dir_name)
+            if f.endswith(".csv") and os.path.getsize(dir_name + "/" + f) > 0
+        ]:
             subprocess.run(["gzip", "-f", fname], cwd=dir_name)
     bodo.barrier()
 
@@ -365,7 +369,9 @@ def test_pq_array_item(datapath):
         bodo.barrier()
         check_func(test_impl, ("test_pq_list_item.pq",))
 
-    a = np.array([[[2.0], [-3.2]], [[2.2, 1.3]], None, [[4.1, 5.2], [6.3]], [], [[1.1, 1.2]]])
+    a = np.array(
+        [[[2.0], [-3.2]], [[2.2, 1.3]], None, [[4.1, 5.2], [6.3]], [], [[1.1, 1.2]]]
+    )
     b = np.array([[[1], [3]], [[2]], None, [[4, 5, 6]], [], [[1, 1]]])
     df = pd.DataFrame({"A": a, "B": b})
     with ensure_clean("test_pq_list_item.pq"):
@@ -842,7 +848,9 @@ def test_csv_int_na2(datapath):
 
     def test_impl(fname, compression):
         dtype = {"A": "int", "B": pd.Int32Dtype()}
-        return pd.read_csv(fname, names=dtype.keys(), dtype=dtype, compression=compression)
+        return pd.read_csv(
+            fname, names=dtype.keys(), dtype=dtype, compression=compression
+        )
 
     check_func(test_impl, (fname, "infer"))
 
@@ -1188,7 +1196,7 @@ def test_csv_header_none(datapath):
     p_df = test_impl()
     # convert column names from integer to string since Bodo only supports string names
     p_df.columns = [str(c) for c in p_df.columns]
-    pd.testing.assert_frame_equal(b_df, p_df)
+    pd.testing.assert_frame_equal(b_df, p_df, check_dtype=False)
 
 
 def test_csv_sep_arg(datapath):
@@ -1199,14 +1207,27 @@ def test_csv_sep_arg(datapath):
     def test_impl(fname, sep):
         return pd.read_csv(fname, sep=sep)
 
-    check_func(test_impl, (fname, "|",))
+    check_func(test_impl, (fname, "|",), check_dtype=False)
 
     compressed_names = compress_file(fname)
     try:
         for fname in compressed_names:
-            check_func(test_impl, (fname, "|",))
+            check_func(test_impl, (fname, "|",), check_dtype=False)
     finally:
         remove_files(compressed_names)
+
+
+def test_csv_int_none(datapath):
+    """Make sure int columns that have nulls later in the data (not seen by our 100 row
+    type inference step) are handled properly
+    """
+
+    def test_impl(fname):
+        df = pd.read_csv(fname)
+        return df
+
+    fname = datapath("csv_data_int_none.csv")
+    check_func(test_impl, (fname,), check_dtype=False)
 
 
 def test_csv_spark_header(datapath):
@@ -1810,7 +1831,7 @@ class TestIO(unittest.TestCase):
             return pd.read_csv(fname)
 
         bodo_func = bodo.jit(test_impl)
-        pd.testing.assert_frame_equal(bodo_func(), test_impl())
+        pd.testing.assert_frame_equal(bodo_func(), test_impl(), check_dtype=False)
 
     def test_csv_infer_parallel1(self):
         fname = os.path.join("bodo", "tests", "data", "csv_data_infer1.csv")
@@ -1853,7 +1874,7 @@ class TestIO(unittest.TestCase):
             return pd.read_csv(fname, skiprows=2)
 
         bodo_func = bodo.jit(test_impl)
-        pd.testing.assert_frame_equal(bodo_func(), test_impl())
+        pd.testing.assert_frame_equal(bodo_func(), test_impl(), check_dtype=False)
 
     def test_csv_infer_skip_parallel1(self):
         fname = os.path.join("bodo", "tests", "data", "csv_data_infer1.csv")

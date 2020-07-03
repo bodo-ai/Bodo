@@ -692,6 +692,32 @@ def get_udf_out_arr_type(f_return_type):
     return out_arr_type
 
 
+def to_nullable_type(t):
+    """Converts types that cannot hold NAs to corresponding nullable types.
+    For example, boolean_array is returned for Numpy array(bool_) and IntegerArray is
+    returned for Numpy array(int).
+    Converts data in DataFrame and Series types as well.
+    """
+    from bodo.hiframes.pd_dataframe_ext import DataFrameType
+    from bodo.hiframes.pd_series_ext import SeriesType
+
+    if isinstance(t, DataFrameType):
+        new_data = tuple(to_nullable_type(t) for t in t.data)
+        return DataFrameType(new_data, t.index, t.columns, t.has_parent)
+
+    if isinstance(t, SeriesType):
+        return SeriesType(t.dtype, to_nullable_type(t.data), t.index, t.name_typ)
+
+    if isinstance(t, types.Array):
+        if t.dtype == types.bool_:
+            return bodo.libs.bool_arr_ext.boolean_array
+
+        if isinstance(t.dtype, types.Integer):
+            return bodo.libs.int_arr_ext.IntegerArrayType(t.dtype)
+
+    return t
+
+
 # dummy empty itertools implementation to avoid typing errors for series str
 # flatten case
 @overload(itertools.chain, no_unliteral=True)
