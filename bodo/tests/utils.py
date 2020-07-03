@@ -417,6 +417,9 @@ def _test_equal(
     elif pd.api.types.is_array_like(py_out) and pd.api.types.is_extension_array_dtype(
         py_out
     ):
+        # bodo currently returns np object array instead of pd StringArray
+        if not pd.api.types.is_extension_array_dtype(bodo_out):
+            bodo_out = pd.array(bodo_out)
         if sort_output:
             py_out = py_out[py_out.argsort()]
             bodo_out = bodo_out[bodo_out.argsort()]
