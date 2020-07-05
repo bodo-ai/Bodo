@@ -128,13 +128,115 @@ def list_check(builder, context, obj):
     return builder.call(fn, [obj])
 
 
-def count_array_inner_elems(c, builder, context, arr_obj, typ):
-    """count inner elements of array for upfront allocation.
-    For example, [[1, None, 3], [3], None, [4, None, 2]] return (7,).
-    A recursive example: [[[1, None, 3], [2]], [[3], [4, 5]], None, [[4, None, 2]]]
-    returns (5, 10).
+def to_arr_obj_if_list_obj(c, context, builder, val, typ):
+    """convert object 'val' to array if it is a list to enable proper unboxing
     """
+    if not (isinstance(typ, types.List) or bodo.utils.utils.is_array_typ(typ, False)):
+        return val
+
+    # convert val to array if it is a list (list_check is needed since converting
+    # pd arrays like IntergerArray can cause errors)
+    # if isinstance(val, list):
+    #   val = np.array(val)
+    val_ptr = cgutils.alloca_once_value(builder, val)
+    is_list = list_check(builder, context, val)
+    is_list_cond = builder.icmp_unsigned("!=", is_list, lir.Constant(is_list.type, 0))
+    with builder.if_then(is_list_cond):
+
+        # get np.array to convert list items to array
+        mod_name = context.insert_const_string(builder.module, "numpy")
+        np_mod_obj = c.pyapi.import_module_noblock(mod_name)
+        np_array_method = c.pyapi.object_getattr_string(np_mod_obj, "asarray")
+
+        old_obj = builder.load(val_ptr)
+        new_obj = c.pyapi.call(np_array_method, c.pyapi.tuple_pack([old_obj]))
+        # TODO: this decref causes crashes for some reason in test_array_item_array.py
+        # needs to be investigated to avoid object leaks
+        # c.pyapi.decref(old_obj)
+        builder.store(new_obj, val_ptr)
+        c.pyapi.decref(np_mod_obj)
+        c.pyapi.decref(np_array_method)
+
+    val = builder.load(val_ptr)
+    return val
+
+
+def get_array_elem_counts(c, builder, context, arr_obj, typ):
+    """count elements of array for upfront allocation (called recursively).
+    For example, [[1, None, 3], [3], None, [4, None, 2]] return (4, 7).
+    A recursive example: [[[1, None, 3], [2]], [[3], [4, 5]], None, [[4, None, 2]]]
+    returns (4, 5, 10).
+    """
+    from bodo.libs.array_item_arr_ext import ArrayItemArrayType
+    from bodo.libs.struct_arr_ext import StructArrayType, StructType
+    from bodo.libs.str_arr_ext import string_array_type, get_utf8_size
+
+    # get utf8 character count for strings
+    if typ == bodo.string_type:
+        str_item = c.pyapi.to_native_value(bodo.string_type, arr_obj).value
+        _is_error, n_chars = c.pyapi.call_jit_code(
+            lambda a: get_utf8_size(a), types.int64(bodo.string_type), [str_item]
+        )
+        context.nrt.decref(builder, typ, str_item)
+        return cgutils.pack_array(builder, [n_chars])
+
+    # get counts for struct value (e.g. counts for strings or array items in struct)
+    if isinstance(typ, StructType):
+
+        # get pd.NA object to check for new NA kind
+        mod_name = context.insert_const_string(builder.module, "pandas")
+        pd_mod_obj = c.pyapi.import_module_noblock(mod_name)
+        C_NA = c.pyapi.object_getattr_string(pd_mod_obj, "NA")
+
+        n_nested_count = bodo.utils.transform.get_type_alloc_counts(typ)
+        counts_val = context.make_tuple(
+            builder,
+            types.Tuple(n_nested_count * [types.int64]),
+            n_nested_count * [context.get_constant(types.int64, 0)],
+        )
+        counts = cgutils.alloca_once_value(builder, counts_val)
+        curr_count_ind = 0
+        for i, t in enumerate(typ.data):
+            n_nested_count_t = bodo.utils.transform.get_type_alloc_counts(t)
+            if n_nested_count_t == 0:
+                continue
+            val_obj = c.pyapi.dict_getitem_string(arr_obj, typ.names[i])
+            # check for NA
+            is_na = is_na_value(builder, context, val_obj, C_NA)
+            not_na_cond = builder.icmp_unsigned(
+                "!=", is_na, lir.Constant(is_na.type, 1)
+            )
+            with builder.if_then(not_na_cond):
+                counts_val = builder.load(counts)
+                n_vals_inner = get_array_elem_counts(c, builder, context, val_obj, t)
+                for i in range(n_nested_count_t):
+                    total_count = builder.extract_value(counts_val, curr_count_ind + i)
+                    curr_count = builder.extract_value(n_vals_inner, i)
+                    counts_val = builder.insert_value(
+                        counts_val,
+                        builder.add(total_count, curr_count),
+                        curr_count_ind + i,
+                    )
+                builder.store(counts_val, counts)
+            # no need to decref val_obj, dict_getitem_string returns borrowed ref
+            curr_count_ind += n_nested_count_t
+
+        c.pyapi.decref(pd_mod_obj)
+        c.pyapi.decref(C_NA)
+        return builder.load(counts)
+
+    # return empty tuple for non-arrays
+    if not bodo.utils.utils.is_array_typ(typ, False):
+        return cgutils.pack_array(builder, [], lir.IntType(64))
+
     n = bodo.utils.utils.object_length(c, arr_obj)
+
+    # return (n,) for non-nested arrays
+    if not (
+        isinstance(typ, (ArrayItemArrayType, StructArrayType))
+        or typ == string_array_type
+    ):
+        return cgutils.pack_array(builder, [n])
 
     # get pd.NA object to check for new NA kind
     mod_name = context.insert_const_string(builder.module, "pandas")
@@ -142,21 +244,20 @@ def count_array_inner_elems(c, builder, context, arr_obj, typ):
     C_NA = c.pyapi.object_getattr_string(pd_mod_obj, "NA")
 
     # create a tuple for nested counts
-    n_inner_nested_count = bodo.utils.transform.get_n_nested_counts(typ.dtype)
+    n_nested_count = bodo.utils.transform.get_type_alloc_counts(typ)
     counts_val = context.make_tuple(
         builder,
-        types.Tuple((n_inner_nested_count + 1) * [types.int64]),
-        (n_inner_nested_count + 1) * [context.get_constant(types.int64, 0)],
+        types.Tuple(n_nested_count * [types.int64]),
+        [n] + (n_nested_count - 1) * [context.get_constant(types.int64, 0)],
     )
     counts = cgutils.alloca_once_value(builder, counts_val)
 
     # pseudocode for code generation:
-    # counts = (0, ...)  # tuple of nested counts
+    # counts = (n, 0, 0, ...)  # tuple of nested counts
     # for i in range(len(A)):
     #   arr_item_obj = A[i]
     #   if not isna(arr_item_obj):
-    #     counts[0] += len(arr_item_obj)
-    #     counts[1:] += count_array_inner_elems(arr_item_obj)
+    #     counts[1:] += get_array_elem_counts(arr_item_obj)
 
     # for each array
     with cgutils.for_range(builder, n) as loop:
@@ -167,23 +268,53 @@ def count_array_inner_elems(c, builder, context, arr_obj, typ):
         is_na = is_na_value(builder, context, arr_item_obj, C_NA)
         not_na_cond = builder.icmp_unsigned("!=", is_na, lir.Constant(is_na.type, 1))
         with builder.if_then(not_na_cond):
-            # n_elems += len(arr_item_obj)
-            n_vals = bodo.utils.utils.object_length(c, arr_item_obj)
-            counts_val = builder.load(counts)
-            new_count = builder.add(builder.extract_value(counts_val, 0), n_vals)
-            counts_val = builder.insert_value(counts_val, new_count, 0)
-            # if nested, call recursively and add values
-            if n_inner_nested_count > 0:
-                n_vals_inner = count_array_inner_elems(
+            if isinstance(typ, ArrayItemArrayType) or typ == string_array_type:
+                counts_val = builder.load(counts)
+                # if nested, call recursively and add values
+                n_vals_inner = get_array_elem_counts(
                     c, builder, context, arr_item_obj, typ.dtype
                 )
-                for i in range(n_inner_nested_count):
+                # counts[1:] += get_array_elem_counts(arr_item_obj)
+                for i in range(n_nested_count - 1):
                     total_count = builder.extract_value(counts_val, i + 1)
                     curr_count = builder.extract_value(n_vals_inner, i)
                     counts_val = builder.insert_value(
                         counts_val, builder.add(total_count, curr_count), i + 1
                     )
-            builder.store(counts_val, counts)
+                builder.store(counts_val, counts)
+            else:
+                assert isinstance(typ, StructArrayType), typ
+                curr_count_ind = 1  # skip total array length
+                for i, t in enumerate(typ.data):
+                    n_nested_count_t = bodo.utils.transform.get_type_alloc_counts(
+                        t.dtype
+                    )
+                    if n_nested_count_t == 0:
+                        continue
+                    val_obj = c.pyapi.dict_getitem_string(arr_item_obj, typ.names[i])
+                    # check for NA
+                    is_na = is_na_value(builder, context, val_obj, C_NA)
+                    not_na_cond = builder.icmp_unsigned(
+                        "!=", is_na, lir.Constant(is_na.type, 1)
+                    )
+                    with builder.if_then(not_na_cond):
+                        counts_val = builder.load(counts)
+                        n_vals_inner = get_array_elem_counts(
+                            c, builder, context, val_obj, t.dtype
+                        )
+                        for i in range(n_nested_count_t):
+                            total_count = builder.extract_value(
+                                counts_val, curr_count_ind + i
+                            )
+                            curr_count = builder.extract_value(n_vals_inner, i)
+                            counts_val = builder.insert_value(
+                                counts_val,
+                                builder.add(total_count, curr_count),
+                                curr_count_ind + i,
+                            )
+                        builder.store(counts_val, counts)
+                    # no need to decref val_obj, dict_getitem_string returns borrowed ref
+                    curr_count_ind += n_nested_count_t
         c.pyapi.decref(arr_item_obj)
 
     c.pyapi.decref(pd_mod_obj)

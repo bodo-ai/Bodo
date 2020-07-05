@@ -1472,7 +1472,7 @@ class SeriesPass:
                 names = typ.names
                 return compile_func_single_block(
                     lambda n, t, s=None: bodo.libs.struct_arr_ext.pre_alloc_struct_array(
-                        n, _dtypes, _names
+                        n, s, _dtypes, _names
                     ),
                     rhs.args,
                     assign.target,

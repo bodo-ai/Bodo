@@ -42,6 +42,19 @@ from bodo.utils.typing import (
     is_overload_constant_str,
     is_overload_constant_int,
 )
+from bodo.hiframes.datetime_date_ext import datetime_date_type
+from bodo.utils.cg_helpers import (
+    set_bitmap_bit,
+    pyarray_getitem,
+    pyarray_setitem,
+    list_check,
+    is_na_value,
+    get_bitmap_bit,
+    get_array_elem_counts,
+    seq_getitem,
+    gen_allocate_array,
+    to_arr_obj_if_list_obj,
+)
 from llvmlite import ir as lir
 import llvmlite.binding as ll
 
@@ -168,7 +181,9 @@ def define_struct_arr_dtor(context, builder, struct_arr_type, payload_type):
     return fn
 
 
-def construct_struct_array(context, builder, struct_arr_type, n_structs):
+def construct_struct_array(
+    context, builder, struct_arr_type, n_structs, n_elems, c=None
+):
     """Creates meminfo and sets dtor, and allocates buffers for struct array
     """
     # create payload type
@@ -190,13 +205,21 @@ def construct_struct_array(context, builder, struct_arr_type, n_structs):
     payload = cgutils.create_struct_proxy(payload_type)(context, builder)
 
     # alloc data
-    # TODO: general alloc, not just Numpy
     arrs = []
-    arr_ptrs = []
+    curr_count_ind = 0
     for arr_typ in struct_arr_type.data:
-        arr = bodo.utils.utils._empty_nd_impl(context, builder, arr_typ, [n_structs])
-        arr_ptrs.append(arr.data)
-        arrs.append(arr._getvalue())
+        n_nested_count_t = bodo.utils.transform.get_type_alloc_counts(arr_typ.dtype)
+        n_all_elems = cgutils.pack_array(
+            builder,
+            [n_structs]
+            + [
+                builder.extract_value(n_elems, i)
+                for i in range(curr_count_ind, curr_count_ind + n_nested_count_t)
+            ],
+        )
+        arr = gen_allocate_array(context, builder, arr_typ, n_all_elems, c)
+        arrs.append(arr)
+        curr_count_ind += n_nested_count_t
 
     payload.data = (
         cgutils.pack_array(builder, arrs)
@@ -217,24 +240,32 @@ def construct_struct_array(context, builder, struct_arr_type, n_structs):
 
     builder.store(payload._getvalue(), meminfo_data_ptr)
 
-    return meminfo, arr_ptrs, null_bitmap_ptr
+    return meminfo, payload.data, null_bitmap_ptr
 
 
-def _get_C_API_ptrs(c, arr_ptrs, data, names):
+def _get_C_API_ptrs(c, data_tup, data_typ, names):
     """convert struct array info into pointers to pass to C API
     """
 
+    data_ptrs = []
+    assert len(data_typ) > 0
+    # TODO: support non-Numpy arrays
+    for i, arr_typ in enumerate(data_typ):
+        arr_ptr = c.builder.extract_value(data_tup, i)
+        arr = c.context.make_array(arr_typ)(c.context, c.builder, value=arr_ptr)
+        data_ptrs.append(arr.data)
+
     # get pointer to a tuple of data pointers to pass to C
     data_ptr_tup = (
-        cgutils.pack_array(c.builder, arr_ptrs)
-        if types.is_homogeneous(*data)
-        else cgutils.pack_struct(c.builder, arr_ptrs)
+        cgutils.pack_array(c.builder, data_ptrs)
+        if types.is_homogeneous(*data_typ)
+        else cgutils.pack_struct(c.builder, data_ptrs)
     )
     data_ptr_tup_ptr = cgutils.alloca_once_value(c.builder, data_ptr_tup)
     # get pointer to a tuple of c type enums to pass to C
     c_types = [
         c.context.get_constant(types.int32, bodo.utils.utils.numba_to_c_type(a.dtype))
-        for a in data
+        for a in data_typ
     ]
     c_types_ptr = cgutils.alloca_once_value(
         c.builder, cgutils.pack_array(c.builder, c_types)
@@ -254,48 +285,154 @@ def unbox_struct_array(typ, val, c):
     """
     # get length
     n_structs = bodo.utils.utils.object_length(c, val)
+
+    # can be handled in C if all data arrays are Numpy and in handled dtypes
+    handle_in_c = all(
+        isinstance(t, types.Array)
+        and t.dtype in (types.int64, types.float64, types.bool_, datetime_date_type,)
+        for t in typ.data
+    )
+
+    if handle_in_c:
+        n_elems = cgutils.pack_array(c.builder, [], lir.IntType(64))
+    else:
+        n_elems_all = get_array_elem_counts(c, c.builder, c.context, val, typ)
+        # ignore first value in tuple which is array length
+        n_elems = cgutils.pack_array(
+            c.builder,
+            [
+                c.builder.extract_value(n_elems_all, i)
+                for i in range(1, n_elems_all.type.count)
+            ],
+            lir.IntType(64),
+        )
+
     # create struct array
-    meminfo, arr_ptrs, null_bitmap_ptr = construct_struct_array(
-        c.context, c.builder, typ, n_structs
+    meminfo, data_tup, null_bitmap_ptr = construct_struct_array(
+        c.context, c.builder, typ, n_structs, n_elems, c
     )
 
-    data_ptr_tup_ptr, c_types_ptr, field_names_ptr = _get_C_API_ptrs(
-        c, arr_ptrs, typ.data, typ.names
-    )
+    if handle_in_c:
+        data_ptr_tup_ptr, c_types_ptr, field_names_ptr = _get_C_API_ptrs(
+            c, data_tup, typ.data, typ.names
+        )
 
-    # function signature of struct_array_from_sequence
-    fnty = lir.FunctionType(
-        lir.VoidType(),
-        [
-            lir.IntType(8).as_pointer(),  # obj
-            lir.IntType(32),  # number of arrays
-            lir.IntType(8).as_pointer(),  # data
-            lir.IntType(8).as_pointer(),  # null_bitmap
-            lir.IntType(8).as_pointer(),  # c types
-            lir.IntType(8).as_pointer(),  # field names
-        ],
-    )
-    fn = c.builder.module.get_or_insert_function(
-        fnty, name="struct_array_from_sequence"
-    )
+        # function signature of struct_array_from_sequence
+        fnty = lir.FunctionType(
+            lir.VoidType(),
+            [
+                lir.IntType(8).as_pointer(),  # obj
+                lir.IntType(32),  # number of arrays
+                lir.IntType(8).as_pointer(),  # data
+                lir.IntType(8).as_pointer(),  # null_bitmap
+                lir.IntType(8).as_pointer(),  # c types
+                lir.IntType(8).as_pointer(),  # field names
+            ],
+        )
+        fn = c.builder.module.get_or_insert_function(
+            fnty, name="struct_array_from_sequence"
+        )
 
-    c.builder.call(
-        fn,
-        [
-            val,
-            c.context.get_constant(types.int32, len(typ.data)),
-            c.builder.bitcast(data_ptr_tup_ptr, lir.IntType(8).as_pointer()),
-            null_bitmap_ptr,
-            c.builder.bitcast(c_types_ptr, lir.IntType(8).as_pointer()),
-            c.builder.bitcast(field_names_ptr, lir.IntType(8).as_pointer()),
-        ],
-    )
+        c.builder.call(
+            fn,
+            [
+                val,
+                c.context.get_constant(types.int32, len(typ.data)),
+                c.builder.bitcast(data_ptr_tup_ptr, lir.IntType(8).as_pointer()),
+                null_bitmap_ptr,
+                c.builder.bitcast(c_types_ptr, lir.IntType(8).as_pointer()),
+                c.builder.bitcast(field_names_ptr, lir.IntType(8).as_pointer()),
+            ],
+        )
+    else:
+        _unbox_struct_array_generic(typ, val, c, n_structs, data_tup, null_bitmap_ptr)
 
     struct_array = c.context.make_helper(c.builder, typ)
     struct_array.meminfo = meminfo
 
     is_error = cgutils.is_not_null(c.builder, c.pyapi.err_occurred())
     return NativeValue(struct_array._getvalue(), is_error=is_error)
+
+
+def _unbox_struct_array_generic(typ, val, c, n_structs, data_tup, null_bitmap_ptr):
+    """unbox struct array using generic Numba unboxing to handle all item types
+    that can be unboxed.
+    """
+    context = c.context
+    builder = c.builder
+
+    # TODO: error checking for pyapi calls
+    # get pd.NA object to check for new NA kind
+    mod_name = context.insert_const_string(builder.module, "pandas")
+    pd_mod_obj = c.pyapi.import_module_noblock(mod_name)
+    C_NA = c.pyapi.object_getattr_string(pd_mod_obj, "NA")
+
+    # pseudocode for code generation:
+    # for i in range(len(A)):
+    #   dict_obj = A[i]
+    #   if isna(dict_obj):
+    #     set null_bitmap i'th bit to 0
+    #   else:
+    #     set null_bitmap i'th bit to 1
+    #     for j, name in enumerate(field_names):
+    #        val_obj = dict_obj[name]
+    #        A.data[j] = unbox(val_obj)
+
+    # for each struct
+    with cgutils.for_range(builder, n_structs) as loop:
+        struct_ind = loop.index
+
+        # dict_obj = A[i]
+        dict_obj = seq_getitem(builder, context, val, struct_ind)
+
+        # set NA bit to 0
+        set_bitmap_bit(builder, null_bitmap_ptr, struct_ind, 0)
+        # set field values to NA (will be overwritten below if not NA)
+        # this approach is used to avoid if/else which can be buggy
+        for j in range(len(typ.data)):
+            arr_typ = typ.data[j]
+            data_arr = builder.extract_value(data_tup, j)
+
+            def set_na(data_arr, i):
+                bodo.ir.join.setitem_arr_nan(data_arr, i)
+
+            sig = types.none(arr_typ, types.int64)
+            _is_error, _res = c.pyapi.call_jit_code(set_na, sig, [data_arr, struct_ind])
+
+        # check for NA
+        is_na = is_na_value(builder, context, dict_obj, C_NA)
+        is_na_cond = builder.icmp_unsigned("!=", is_na, lir.Constant(is_na.type, 1))
+        with builder.if_then(is_na_cond):
+            # set NA bit to 1
+            set_bitmap_bit(builder, null_bitmap_ptr, struct_ind, 1)
+            for j in range(len(typ.data)):
+                arr_typ = typ.data[j]
+                val_obj = c.pyapi.dict_getitem_string(dict_obj, typ.names[j])
+                # check for NA
+                is_na = is_na_value(builder, context, val_obj, C_NA)
+                is_na_cond = builder.icmp_unsigned(
+                    "!=", is_na, lir.Constant(is_na.type, 1)
+                )
+                with builder.if_then(is_na_cond):
+                    val_obj = to_arr_obj_if_list_obj(
+                        c, context, builder, val_obj, arr_typ.dtype
+                    )
+                    field_val = c.pyapi.to_native_value(arr_typ.dtype, val_obj).value
+                    data_arr = builder.extract_value(data_tup, j)
+
+                    def set_data(data_arr, i, field_val):
+                        data_arr[i] = field_val
+
+                    sig = types.none(arr_typ, types.int64, arr_typ.dtype)
+                    _is_error, _res = c.pyapi.call_jit_code(
+                        set_data, sig, [data_arr, struct_ind, field_val]
+                    )
+                    c.context.nrt.decref(builder, arr_typ.dtype, field_val)
+                # no need to decref val_obj, dict_getitem_string returns borrowed ref
+        c.pyapi.decref(dict_obj)
+
+    c.pyapi.decref(pd_mod_obj)
+    c.pyapi.decref(C_NA)
 
 
 def _get_struct_arr_payload(context, builder, arr_typ, arr):
@@ -319,19 +456,12 @@ def box_struct_arr(typ, val, c):
     """
 
     payload = _get_struct_arr_payload(c.context, c.builder, typ, val)
-    data_ptrs = []
-    assert len(typ.data) > 0
-    # TODO: support non-Numpy arrays
-    for i, arr_typ in enumerate(typ.data):
-        arr_ptr = c.builder.extract_value(payload.data, i)
-        arr = c.context.make_array(arr_typ)(c.context, c.builder, value=arr_ptr)
-        data_ptrs.append(arr.data)
-        # get length from first array
-        if i == 0:
-            length = c.builder.extract_value(arr.shape, 0)
+
     data_ptr_tup_ptr, c_types_ptr, field_names_ptr = _get_C_API_ptrs(
-        c, data_ptrs, typ.data, typ.names
+        c, payload.data, typ.data, typ.names
     )
+
+    _is_error, length = c.pyapi.call_jit_code(lambda A: len(A), types.int64(typ), [val])
 
     fnty = lir.FunctionType(
         c.context.get_argument_type(types.pyobject),
@@ -369,7 +499,9 @@ def box_struct_arr(typ, val, c):
 
 
 @intrinsic
-def pre_alloc_struct_array(typingctx, num_structs_typ, dtypes_typ, names_typ=None):
+def pre_alloc_struct_array(
+    typingctx, num_structs_typ, nested_counts_typ, dtypes_typ, names_typ=None
+):
     assert isinstance(num_structs_typ, types.Integer) and isinstance(
         dtypes_typ, types.BaseTuple
     )
@@ -378,15 +510,18 @@ def pre_alloc_struct_array(typingctx, num_structs_typ, dtypes_typ, names_typ=Non
     struct_arr_type = StructArrayType(arr_typs, names)
 
     def codegen(context, builder, sig, args):
-        num_structs, _, _ = args
+        num_structs, nested_counts, _, _ = args
         meminfo, _, _ = construct_struct_array(
-            context, builder, struct_arr_type, num_structs
+            context, builder, struct_arr_type, num_structs, nested_counts
         )
         struct_array = context.make_helper(builder, struct_arr_type)
         struct_array.meminfo = meminfo
         return struct_array._getvalue()
 
-    return struct_arr_type(num_structs_typ, dtypes_typ, names_typ), codegen
+    return (
+        struct_arr_type(num_structs_typ, nested_counts_typ, dtypes_typ, names_typ),
+        codegen,
+    )
 
 
 def pre_alloc_struct_array_equiv(
@@ -511,6 +646,51 @@ def _get_struct_payload(context, builder, typ, struct):
     return payload, meminfo_data_ptr
 
 
+@unbox(StructType)
+def unbox_struct(typ, val, c):
+    """
+    Unbox a dict into a struct.
+    """
+    context = c.context
+    builder = c.builder
+
+    # get pd.NA object to check for new NA kind
+    mod_name = context.insert_const_string(builder.module, "pandas")
+    pd_mod_obj = c.pyapi.import_module_noblock(mod_name)
+    C_NA = c.pyapi.object_getattr_string(pd_mod_obj, "NA")
+
+    data_vals = []
+    nulls = []
+    for i, t in enumerate(typ.data):
+        field_val_obj = c.pyapi.dict_getitem_string(val, typ.names[i])
+        # use NA as default
+        null_ptr = cgutils.alloca_once_value(
+            c.builder, context.get_constant(types.uint8, 0)
+        )
+        data_ptr = cgutils.alloca_once_value(
+            c.builder, cgutils.get_null_value(context.get_value_type(t))
+        )
+        # check for NA
+        is_na = is_na_value(builder, context, field_val_obj, C_NA)
+        not_na_cond = builder.icmp_unsigned("!=", is_na, lir.Constant(is_na.type, 1))
+        with builder.if_then(not_na_cond):
+            builder.store(context.get_constant(types.uint8, 1), null_ptr)
+            field_val = c.pyapi.to_native_value(t, field_val_obj).value
+            builder.store(field_val, data_ptr)
+        # no need to decref field_val_obj, dict_getitem_string returns borrowed ref
+        data_vals.append(builder.load(data_ptr))
+        nulls.append(builder.load(null_ptr))
+
+    c.pyapi.decref(pd_mod_obj)
+    c.pyapi.decref(C_NA)
+
+    meminfo = construct_struct(context, builder, typ, data_vals, nulls)
+    struct = context.make_helper(builder, typ)
+    struct.meminfo = meminfo
+    is_error = cgutils.is_not_null(c.builder, c.pyapi.err_occurred())
+    return NativeValue(struct._getvalue(), is_error=is_error)
+
+
 @box(StructType)
 def box_struct(typ, val, c):
     """box structs into python dictionary objects
@@ -519,6 +699,7 @@ def box_struct(typ, val, c):
     payload, _ = _get_struct_payload(c.context, c.builder, typ, val)
 
     assert len(typ.data) > 0
+    # TODO: support NAs
     for i, val_typ in enumerate(typ.data):
         value = c.builder.extract_value(payload.data, i)
         val_obj = c.pyapi.from_native_value(val_typ, value, c.env_manager)

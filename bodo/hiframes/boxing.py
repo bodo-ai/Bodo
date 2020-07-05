@@ -471,8 +471,15 @@ def _infer_ndarray_obj_dtype(val):
         isinstance(k, str) for k in first_val.keys()
     ):
         field_names = tuple(first_val.keys())
+        # TODO: handle None value in first_val elements
         data_types = tuple(
-            bodo.hiframes.pd_series_ext._get_series_array_type(numba.typeof(v))
+            numba.typeof(_value_to_array(v))
+            if isinstance(v, dict)
+            else bodo.hiframes.pd_series_ext._get_series_array_type(
+                numba.typeof(_value_to_array(v))
+            )
+            if isinstance(v, list)
+            else bodo.hiframes.pd_series_ext._get_series_array_type(numba.typeof(v))
             for v in first_val.values()
         )
         return StructArrayType(data_types, field_names)
@@ -488,11 +495,7 @@ def _infer_ndarray_obj_dtype(val):
     ):
         # normalize list to array, 'np.object_' dtype to consider potential nulls
         if isinstance(first_val, list):
-            first_val = np.array(first_val, np.object_)
-            # assume float lists can be regular np.float64 arrays
-            # TODO handle corener cases where None could be used as NA instead of np.nan
-            if len(first_val) and isinstance(first_val[0], float):
-                first_val = np.array(first_val, np.float64)
+            first_val = _value_to_array(first_val)
         val_typ = numba.typeof(first_val)
         if val_typ == string_array_type:
             return list_string_array_type
@@ -506,6 +509,20 @@ def _infer_ndarray_obj_dtype(val):
     raise BodoError(
         "Unsupported object array with first value: {}".format(first_val)
     )  # pragma: no cover
+
+
+def _value_to_array(val):
+    """convert list or dict value to object array for typing purposes
+    """
+    assert isinstance(val, (list, dict))
+    if isinstance(val, dict):
+        return np.array([val], np.object_)
+    arr = np.array(val, np.object_)
+    # assume float lists can be regular np.float64 arrays
+    # TODO handle corener cases where None could be used as NA instead of np.nan
+    if len(val) and isinstance(val[0], float):
+        arr = np.array(val, np.float64)
+    return arr
 
 
 # TODO: support array of strings
