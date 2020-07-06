@@ -78,9 +78,16 @@ def overload_dataframe_columns(df):
 
 @overload_attribute(DataFrameType, "values")
 def overload_dataframe_values(df):
+    # TODO: error checking to make sure df only has numerical values
     n_cols = len(df.columns)
+    # convert nullable int columns to float to match Pandas behavior
+    nullable_int_cols = set(
+        i for i in range(n_cols) if isinstance(df.data[i], IntegerArrayType)
+    )
     data_args = ", ".join(
-        "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {})".format(i)
+        "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {}){}".format(
+            i, ".astype(float)" if i in nullable_int_cols else ""
+        )
         for i in range(n_cols)
     )
     func_text = "def f(df):\n".format()

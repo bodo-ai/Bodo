@@ -385,8 +385,18 @@ def get_overload_const_func(val):
     raise BodoError("'{}' not a constant function type".format(val))
 
 
-# TODO: move to Numba
 def parse_dtype(dtype):
+    """Parse dtype type specified in various forms into actual numba type
+    (e.g. StringLiteral("int32") to types.int32)
+    """
+    # handle constructor functions, e.g. Series.astype(float)
+    if isinstance(dtype, types.Function):
+        # TODO: other constructor functions?
+        if dtype.key[0] == float:
+            dtype = types.StringLiteral("float")
+        elif dtype.key[0] == int:
+            dtype = types.StringLiteral("int")
+
     if isinstance(dtype, types.DTypeSpec):
         return dtype.dtype
 
