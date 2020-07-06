@@ -622,9 +622,17 @@ def define_struct_dtor(context, builder, struct_type, payload_type):
     payload_ptr = builder.bitcast(base_ptr, ptrty)
     payload = context.make_helper(builder, payload_type, ref=payload_ptr)
 
-    context.nrt.decref(
-        builder, types.BaseTuple.from_types(struct_type.data), payload.data
-    )
+    # decref all non-NA values
+    for i in range(len(struct_type.data)):
+        null_mask = builder.extract_value(payload.null_bitmap, i)
+        not_na_cond = builder.icmp_unsigned(
+            "==", null_mask, lir.Constant(null_mask.type, 1)
+        )
+
+        with builder.if_then(not_na_cond):
+            val = builder.extract_value(payload.data, i)
+            context.nrt.decref(builder, struct_type.data[i], val)
+
     # no need for null_bitmap since it is using primitive types
 
     builder.ret_void()
@@ -764,6 +772,21 @@ def get_struct_data(typingctx, struct_typ=None):
 
 
 @intrinsic
+def get_struct_null_bitmap(typingctx, struct_typ=None):
+    """get null bitmap tuple of struct value
+    """
+    assert isinstance(struct_typ, StructType)
+
+    def codegen(context, builder, sig, args):
+        (struct,) = args
+        payload, _ = _get_struct_payload(context, builder, struct_typ, struct)
+        return impl_ret_borrowed(context, builder, sig.return_type, payload.null_bitmap)
+
+    ret_typ = types.UniTuple(types.int8, len(struct_typ.data))
+    return ret_typ(struct_typ), codegen
+
+
+@intrinsic
 def set_struct_data(typingctx, struct_typ, field_ind_typ, val_typ=None):
     """set a field in struct to value. needs to replace the whole payload.
     """
@@ -805,6 +828,20 @@ def _get_struct_field_ind(struct, ind, op):
         raise BodoError("Field {} does not exist in struct {}".format(ind_str, struct))
 
     return struct.names.index(ind_str)
+
+
+def is_field_value_null(s, field_name):  # pragma: no cover
+    pass
+
+
+@overload(is_field_value_null)
+def overload_is_field_value_null(s, field_name):
+    """return True if struct field is NA
+    """
+    field_ind = _get_struct_field_ind(s, field_name, "element access (getitem)")
+    return (
+        lambda s, field_name: get_struct_null_bitmap(s)[field_ind] == 0
+    )  # pragma: no cover
 
 
 @overload(operator.getitem, no_unliteral=True)
@@ -1065,15 +1102,27 @@ def struct_arr_setitem(arr, ind, val):
         func_text += "  null_bitmap = get_null_bitmap(arr)\n"
         func_text += "  set_bit_to_arr(null_bitmap, ind, 1)\n"
         for i in range(n_fields):
-            func_text += "  data[{}][ind] = val['{}']\n".format(i, arr.names[i])
+            if isinstance(val, StructType):
+                func_text += "  if is_field_value_null(val, '{}'):\n".format(
+                    arr.names[i]
+                )
+                func_text += "    bodo.ir.join.setitem_arr_nan(data[{}], ind)\n".format(
+                    i
+                )
+                func_text += "  else:\n"
+                func_text += "    data[{}][ind] = val['{}']\n".format(i, arr.names[i])
+            else:
+                func_text += "  data[{}][ind] = val['{}']\n".format(i, arr.names[i])
 
         loc_vars = {}
         exec(
             func_text,
             {
+                "bodo": bodo,
                 "get_data": get_data,
                 "get_null_bitmap": get_null_bitmap,
                 "set_bit_to_arr": bodo.libs.int_arr_ext.set_bit_to_arr,
+                "is_field_value_null": is_field_value_null,
             },
             loc_vars,
         )
