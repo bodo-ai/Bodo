@@ -66,7 +66,7 @@ from bodo.utils.transform import (
     gen_const_tup,
     fix_struct_return,
 )
-from bodo.utils.typing import BodoError, BodoWarning
+from bodo.utils.typing import BodoError, BodoWarning, to_nullable_type
 
 
 # dummy sentinel singleton to designate constant value not found for variable
@@ -1611,8 +1611,10 @@ def _get_json_df_type_from_file(
                 file_name_or_handler.close()
 
         # TODO: categorical, etc.
-        # TODO: Integer NA case: sample data might not include NA
         df_type = numba.typeof(df)
+        # always convert to nullable type since initial rows of a column could be all
+        # int for example, but later rows could have NAs
+        df_type = to_nullable_type(df_type)
 
     df_type = comm.bcast(df_type)
     return df_type
@@ -1642,6 +1644,9 @@ def _get_excel_df_type_from_file(
             parse_dates=date_cols,
         )
         df_type = numba.typeof(df)
+        # always convert to nullable type since initial rows of a column could be all
+        # int for example, but later rows could have NAs
+        df_type = to_nullable_type(df_type)
 
     df_type = comm.bcast(df_type)
     return df_type
@@ -1661,6 +1666,9 @@ def _get_sql_df_type_from_db(sql_const, con_const):
         sql_call = f"select * from ({sql_const}) x LIMIT {rows_to_read}"
         df = pd.read_sql(sql_call, con_const)
         df_type = numba.typeof(df)
+        # always convert to nullable type since initial rows of a column could be all
+        # int for example, but later rows could have NAs
+        df_type = to_nullable_type(df_type)
 
     df_type = comm.bcast(df_type)
     return df_type
@@ -1709,8 +1717,10 @@ def _get_csv_df_type_from_file(fname_const, sep, skiprows, header, compression):
                 file_name_or_handler.close()
 
         # TODO: categorical, etc.
-        # TODO: Integer NA case: sample data might not include NA
         df_type = numba.typeof(df)
+        # always convert to nullable type since initial rows of a column could be all
+        # int for example, but later rows could have NAs
+        df_type = to_nullable_type(df_type)
 
     df_type = comm.bcast(df_type)
     return df_type

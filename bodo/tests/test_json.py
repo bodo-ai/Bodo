@@ -1,4 +1,7 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
+"""
+Test I/O for JSON files using pd.read_json()
+"""
 import os
 import subprocess
 import pytest
@@ -27,7 +30,11 @@ def remove_files(file_names):
 
 def compress_dir(dir_name):
     if bodo.get_rank() == 0:
-        for fname in [f for f in os.listdir(dir_name) if f.endswith(".json") and os.path.getsize(dir_name + "/" + f) > 0]:
+        for fname in [
+            f
+            for f in os.listdir(dir_name)
+            if f.endswith(".json") and os.path.getsize(dir_name + "/" + f) > 0
+        ]:
             subprocess.run(["gzip", "-f", fname], cwd=dir_name)
     bodo.barrier()
 

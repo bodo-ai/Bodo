@@ -49,8 +49,8 @@ def test_s3_csv_data1_compressed(minio_server, s3_bucket, datapath):
     fname = datapath("csv_data1.csv")
     py_output = pd.read_csv(fname, names=["A", "B", "C", "D"], header=None)
 
-    check_func(test_impl_gzip, (), py_output=py_output)
-    check_func(test_impl_bz2, (), py_output=py_output)
+    check_func(test_impl_gzip, (), py_output=py_output, check_dtype=False)
+    check_func(test_impl_bz2, (), py_output=py_output, check_dtype=False)
 
 
 def test_s3_csv_data_date1(minio_server, s3_bucket, datapath):
