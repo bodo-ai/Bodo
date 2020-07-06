@@ -620,7 +620,7 @@ def pre_alloc_struct_array_equiv(
     analysis extension. Assigns output array's size as equivalent to the input size
     variable.
     """
-    assert len(args) == 3 and not kws
+    assert len(args) == 4 and not kws
     return args[0], []
 
 
@@ -835,6 +835,12 @@ def init_struct(typingctx, data_typ, names_typ=None):
         # set values in payload
         payload = cgutils.create_struct_proxy(payload_type)(context, builder)
         payload.data = data
+        # assuming all values are non-NA
+        # TODO: support setting NA values in this function (maybe new arg for mask)
+        payload.null_bitmap = cgutils.pack_array(
+            builder,
+            [context.get_constant(types.uint8, 1) for _ in range(len(data_typ.types))],
+        )
 
         builder.store(payload._getvalue(), meminfo_data_ptr)
         context.nrt.incref(builder, data_typ, data)
@@ -1105,7 +1111,7 @@ def init_struct_arr(typingctx, data_typ, null_bitmap_typ, names_typ=None):
 
     def codegen(context, builder, sig, args):
         data, null_bitmap, _names = args
-        # TODO: refactor to avoid duplication with construct_struct_array
+        # TODO: refactor to avoid duplication with construct_struct
         # create payload type
         payload_type = StructArrayPayloadType(struct_arr_type.data)
         alloc_type = context.get_value_type(payload_type)
