@@ -1033,13 +1033,22 @@ def struct_array_get_struct(typingctx, struct_arr_typ, ind_typ=None):
             )
             null_vals.append(na_val)
 
-            data_val = context.compile_internal(
-                builder,
-                lambda arr, ind: arr[ind],
-                arr_typ.dtype(arr_typ, types.int64),
-                [arr_ptr, ind],
+            data_val_ptr = cgutils.alloca_once_value(
+                builder, context.get_constant_null(arr_typ.dtype)
             )
-            data_vals.append(data_val)
+            # check for not NA
+            not_na_cond = builder.icmp_unsigned(
+                "==", na_val, lir.Constant(na_val.type, 1)
+            )
+            with builder.if_then(not_na_cond):
+                data_val = context.compile_internal(
+                    builder,
+                    lambda arr, ind: arr[ind],
+                    arr_typ.dtype(arr_typ, types.int64),
+                    [arr_ptr, ind],
+                )
+                builder.store(data_val, data_val_ptr)
+            data_vals.append(builder.load(data_val_ptr))
 
         if isinstance(out_typ, types.DictType):
             names_consts = [
