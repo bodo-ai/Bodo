@@ -456,46 +456,135 @@ def box_struct_arr(typ, val, c):
     """
 
     payload = _get_struct_arr_payload(c.context, c.builder, typ, val)
-
-    data_ptr_tup_ptr, c_types_ptr, field_names_ptr = _get_C_API_ptrs(
-        c, payload.data, typ.data, typ.names
-    )
-
     _is_error, length = c.pyapi.call_jit_code(lambda A: len(A), types.int64(typ), [val])
-
-    fnty = lir.FunctionType(
-        c.context.get_argument_type(types.pyobject),
-        [
-            lir.IntType(64),  # length
-            lir.IntType(32),  # number of arrays
-            lir.IntType(8).as_pointer(),  # data
-            lir.IntType(8).as_pointer(),  # null_bitmap
-            lir.IntType(8).as_pointer(),  # c types
-            lir.IntType(8).as_pointer(),  # field names
-        ],
-    )
-    fn_get = c.builder.module.get_or_insert_function(
-        fnty, name="np_array_from_struct_array"
-    )
-
     null_bitmap_ptr = c.context.make_helper(
         c.builder, types.Array(types.uint8, 1, "C"), payload.null_bitmap
     ).data
 
-    arr = c.builder.call(
-        fn_get,
-        [
-            length,
-            c.context.get_constant(types.int32, len(typ.data)),
-            c.builder.bitcast(data_ptr_tup_ptr, lir.IntType(8).as_pointer()),
-            null_bitmap_ptr,
-            c.builder.bitcast(c_types_ptr, lir.IntType(8).as_pointer()),
-            c.builder.bitcast(field_names_ptr, lir.IntType(8).as_pointer()),
-        ],
+    # can be handled in C if all data arrays are Numpy and in handled dtypes
+    handle_in_c = all(
+        isinstance(t, types.Array)
+        and t.dtype in (types.int64, types.float64, types.bool_, datetime_date_type,)
+        for t in typ.data
     )
+
+    if handle_in_c:
+        data_ptr_tup_ptr, c_types_ptr, field_names_ptr = _get_C_API_ptrs(
+            c, payload.data, typ.data, typ.names
+        )
+
+        fnty = lir.FunctionType(
+            c.context.get_argument_type(types.pyobject),
+            [
+                lir.IntType(64),  # length
+                lir.IntType(32),  # number of arrays
+                lir.IntType(8).as_pointer(),  # data
+                lir.IntType(8).as_pointer(),  # null_bitmap
+                lir.IntType(8).as_pointer(),  # c types
+                lir.IntType(8).as_pointer(),  # field names
+            ],
+        )
+        fn_get = c.builder.module.get_or_insert_function(
+            fnty, name="np_array_from_struct_array"
+        )
+
+        arr = c.builder.call(
+            fn_get,
+            [
+                length,
+                c.context.get_constant(types.int32, len(typ.data)),
+                c.builder.bitcast(data_ptr_tup_ptr, lir.IntType(8).as_pointer()),
+                null_bitmap_ptr,
+                c.builder.bitcast(c_types_ptr, lir.IntType(8).as_pointer()),
+                c.builder.bitcast(field_names_ptr, lir.IntType(8).as_pointer()),
+            ],
+        )
+    else:
+        arr = _box_struct_array_generic(typ, c, length, payload.data, null_bitmap_ptr)
 
     c.context.nrt.decref(c.builder, typ, val)
     return arr
+
+
+def _box_struct_array_generic(typ, c, length, data_arrs_tup, null_bitmap_ptr):
+    """box struct array using generic Numba boxing to handle all item types
+    that can be boxed.
+    """
+    context = c.context
+    builder = c.builder
+    # TODO: error checking for pyapi calls
+
+    # pseudocode for code generation:
+    # out_arr = np.ndarray(n, np.object_)
+    # for i in range(n):
+    #   if isna(A[i]):
+    #     out_arr[i] = np.nan
+    #   else:
+    #     dict_obj = dict_new(n_items)
+    #     for j in range(n_items):
+    #        dict_obj[field_names[i]] = A.data[j]
+
+    # create array of objects with num_items shape
+    mod_name = context.insert_const_string(builder.module, "numpy")
+    np_class_obj = c.pyapi.import_module_noblock(mod_name)
+    dtype_obj = c.pyapi.object_getattr_string(np_class_obj, "object_")
+    num_items_obj = c.pyapi.long_from_longlong(length)
+    out_arr = c.pyapi.call_method(np_class_obj, "ndarray", (num_items_obj, dtype_obj))
+    # get np.nan to set NA
+    nan_obj = c.pyapi.object_getattr_string(np_class_obj, "nan")
+
+    # for each struct
+    with cgutils.for_range(builder, length) as loop:
+        struct_ind = loop.index
+        # A[i] = np.nan
+        pyarray_setitem(builder, context, out_arr, struct_ind, nan_obj)
+        # check for NA
+        na_bit = get_bitmap_bit(builder, null_bitmap_ptr, struct_ind)
+        not_na_cond = builder.icmp_unsigned(
+            "!=", na_bit, lir.Constant(lir.IntType(8), 0)
+        )
+        with builder.if_then(not_na_cond):
+            # create dict obj
+            dict_obj = c.pyapi.dict_new(len(typ.data))
+
+            # set field values
+            for i, arr_typ in enumerate(typ.data):
+                # set NA as default
+                c.pyapi.dict_setitem_string(dict_obj, typ.names[i], nan_obj)
+
+                # is_not_na_val = not isna(data_arr, struct_ind)
+                data_arr = c.builder.extract_value(data_arrs_tup, i)
+                _is_error, is_not_na_val = c.pyapi.call_jit_code(
+                    lambda data_arr, ind: not bodo.libs.array_kernels.isna(
+                        data_arr, ind
+                    ),
+                    types.bool_(arr_typ, types.int64),
+                    [data_arr, struct_ind],
+                )
+
+                # if value is not NA
+                with builder.if_then(is_not_na_val):
+                    # field_val = data_arr[struct_ind]
+                    _is_error, field_val = c.pyapi.call_jit_code(
+                        lambda data_arr, ind: data_arr[ind],
+                        (arr_typ.dtype)(arr_typ, types.int64),
+                        [data_arr, struct_ind],
+                    )
+
+                    # dict_obj[field_name] = field_val
+                    field_val_obj = c.pyapi.from_native_value(
+                        arr_typ.dtype, field_val, c.env_manager
+                    )
+                    c.pyapi.dict_setitem_string(dict_obj, typ.names[i], field_val_obj)
+                    c.pyapi.decref(field_val_obj)
+                    c.context.nrt.decref(c.builder, arr_typ.dtype, field_val)
+            pyarray_setitem(builder, context, out_arr, struct_ind, dict_obj)
+
+    c.pyapi.decref(np_class_obj)
+    c.pyapi.decref(dtype_obj)
+    c.pyapi.decref(num_items_obj)
+    c.pyapi.decref(nan_obj)
+    return out_arr
 
 
 @intrinsic
