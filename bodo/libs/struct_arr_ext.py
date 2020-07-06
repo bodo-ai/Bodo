@@ -1052,7 +1052,7 @@ def struct_array_get_struct(typingctx, struct_arr_typ, ind_typ=None):
                     d[name] = vals[i]
                 return d
 
-            return context.compile_internal(
+            dict_out = context.compile_internal(
                 builder,
                 impl,
                 out_typ(
@@ -1065,6 +1065,9 @@ def struct_array_get_struct(typingctx, struct_arr_typ, ind_typ=None):
                 ),
                 [names_tup, val_tup],
             )
+            # decref values after use
+            context.nrt.decref(builder, types.BaseTuple.from_types(data_types), val_tup)
+            return dict_out
 
         meminfo = construct_struct(context, builder, out_typ, data_vals, null_vals)
         struct = context.make_helper(builder, out_typ)
