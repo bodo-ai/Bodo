@@ -639,11 +639,7 @@ class StructType(types.Type):
     def __init__(self, data, names):
         # data is tuple of scalar types
         # names is a tuple of field names
-        assert (
-            isinstance(data, tuple)
-            and len(data) > 0
-            and all(not bodo.utils.utils.is_array_typ(a, False) for a in data)
-        )
+        assert isinstance(data, tuple) and len(data) > 0
         assert (
             isinstance(names, tuple)
             and all(isinstance(a, str) for a in names)
@@ -657,9 +653,7 @@ class StructType(types.Type):
 
 class StructPayloadType(types.Type):
     def __init__(self, data):
-        assert isinstance(data, tuple) and all(
-            not bodo.utils.utils.is_array_typ(a, False) for a in data
-        )
+        assert isinstance(data, tuple)
         self.data = data
         super(StructPayloadType, self).__init__(
             name="StructPayloadType({})".format(data)
@@ -796,12 +790,21 @@ def box_struct(typ, val, c):
     payload, _ = _get_struct_payload(c.context, c.builder, typ, val)
 
     assert len(typ.data) > 0
-    # TODO: support NAs
     for i, val_typ in enumerate(typ.data):
-        value = c.builder.extract_value(payload.data, i)
-        val_obj = c.pyapi.from_native_value(val_typ, value, c.env_manager)
-        c.pyapi.dict_setitem_string(out_dict, typ.names[i], val_obj)
-        c.pyapi.decref(val_obj)
+        # set None as default
+        c.pyapi.dict_setitem_string(out_dict, typ.names[i], c.pyapi.borrow_none())
+        # check for not NA
+        null_mask = c.builder.extract_value(payload.null_bitmap, i)
+        not_na_cond = c.builder.icmp_unsigned(
+            "==", null_mask, lir.Constant(null_mask.type, 1)
+        )
+        with c.builder.if_then(not_na_cond):
+            # out_dict['field_name'] = value
+            value = c.builder.extract_value(payload.data, i)
+            c.context.nrt.incref(c.builder, val_typ, value)
+            val_obj = c.pyapi.from_native_value(val_typ, value, c.env_manager)
+            c.pyapi.dict_setitem_string(out_dict, typ.names[i], val_obj)
+            c.pyapi.decref(val_obj)
 
     c.context.nrt.decref(c.builder, typ, val)
     return out_dict
