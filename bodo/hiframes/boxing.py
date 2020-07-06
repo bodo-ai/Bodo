@@ -138,7 +138,7 @@ def _infer_series_dtype(S):
     if isinstance(S.dtype, pd.core.arrays.integer._IntegerDtype):
         return typeof_pd_int_dtype(S.dtype, None)
     elif isinstance(S.dtype, pd.CategoricalDtype):
-        return PDCategoricalDtype(S.dtype.categories.to_list())
+        return bodo.typeof(S.dtype)
     elif isinstance(S.dtype, pd.StringDtype):
         return string_type
     elif isinstance(S.dtype, pd.BooleanDtype):
@@ -306,7 +306,7 @@ def unbox_dataframe_column(typingctx, df, i=None):
         # store payload
         payload_type = DataFramePayloadType(df_typ)
         payload_ptr = context.nrt.meminfo_data(builder, dataframe.meminfo)
-        ptrty = context.get_data_type(payload_type).as_pointer()
+        ptrty = context.get_value_type(payload_type).as_pointer()
         payload_ptr = builder.bitcast(payload_ptr, ptrty)
         builder.store(dataframe_payload._getvalue(), payload_ptr)
 

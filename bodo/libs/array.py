@@ -380,11 +380,7 @@ def info_to_array(typingctx, info_type, arr_type):
                 fnty, name="info_to_string_array"
             )
             builder.call(
-                fn_tp,
-                [
-                    in_info,
-                    string_array._get_ptr_by_name("meminfo"),
-                ],
+                fn_tp, [in_info, string_array._get_ptr_by_name("meminfo"),],
             )
             return string_array._getvalue()
 
@@ -395,6 +391,12 @@ def info_to_array(typingctx, info_type, arr_type):
             out_arr.codes = _lower_info_to_array_numpy(
                 int_arr_type, context, builder, in_info
             )
+            # set categorical dtype of output array to be same as input array
+            dtype = cgutils.create_struct_proxy(arr_type)(
+                context, builder, args[1]
+            ).dtype
+            out_arr.dtype = dtype
+            context.nrt.incref(builder, arr_type.dtype, dtype)
             return out_arr._getvalue()
 
         # Numpy
@@ -679,7 +681,9 @@ def compute_node_partition_by_hash(typingctx, table_t, n_keys_t, n_pes_t):
 
 
 @intrinsic
-def sort_values_table(typingctx, table_t, n_keys_t, vect_ascending_t, na_position_b_t, parallel_t):
+def sort_values_table(
+    typingctx, table_t, n_keys_t, vect_ascending_t, na_position_b_t, parallel_t
+):
     """
     Interface to the sorting of tables.
     """
@@ -699,7 +703,10 @@ def sort_values_table(typingctx, table_t, n_keys_t, vect_ascending_t, na_positio
         fn_tp = builder.module.get_or_insert_function(fnty, name="sort_values_table")
         return builder.call(fn_tp, args)
 
-    return table_type(table_t, types.int64, types.voidptr, types.boolean, types.boolean), codegen
+    return (
+        table_type(table_t, types.int64, types.voidptr, types.boolean, types.boolean),
+        codegen,
+    )
 
 
 @intrinsic

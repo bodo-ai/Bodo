@@ -452,15 +452,26 @@ def test_series_astype_bool_arr(S, memory_leak_check):
     check_func(test_impl, (S,))
 
 
-@pytest.mark.skip(reason="categorical feature gaps")
-@pytest.mark.parametrize("S", [pd.Series(["A", "BB", "A", "BBB", "BB", "A"])])
+@pytest.mark.parametrize(
+    "S", [pd.Series(["BB", "C", "A", None, "A", "BBB", None, "C", "BB", "A"])]
+)
 def test_series_astype_cat(S, memory_leak_check):
-    ctype = pd.CategoricalDtype(S.unique())
-
-    def test_impl(S):
+    def test_impl(S, ctype):
         return S.astype(ctype)
 
-    check_func(test_impl, (S,))
+    def test_impl2(S):
+        return S.astype("category")
+
+    # full dtype values
+    ctype = pd.CategoricalDtype(S.dropna().unique())
+    check_func(test_impl, (S, ctype))
+    # partial dtype values to force NA
+    new_cats = ctype.categories.tolist()[:-1]
+    np.random.shuffle(new_cats)
+    ctype = pd.CategoricalDtype(new_cats)
+    check_func(test_impl, (S, ctype))
+    # dtype not specified
+    check_func(test_impl2, (S,))
 
 
 @pytest.mark.parametrize(
@@ -479,6 +490,21 @@ def test_series_cat_box(S, memory_leak_check):
 def test_series_cat_comp(S, memory_leak_check):
     def test_impl(S):
         return S == "BB"
+
+    check_func(test_impl, (S,))
+
+
+@pytest.mark.parametrize(
+    "S",
+    [
+        pd.Series(["BB", "C", "A", None, "A", "BBB", None, "C", "BB", "A"]).astype(
+            "category"
+        )
+    ],
+)
+def test_series_cat_codes(S, memory_leak_check):
+    def test_impl(S):
+        return S.cat.codes
 
     check_func(test_impl, (S,))
 

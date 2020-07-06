@@ -271,9 +271,9 @@ def define_series_dtor(context, builder, series_type, payload_type):
     base_ptr = fn.args[0]  # void*
 
     # get payload struct
-    ptrty = context.get_data_type(payload_type).as_pointer()
+    ptrty = context.get_value_type(payload_type).as_pointer()
     payload_ptr = builder.bitcast(base_ptr, ptrty)
-    payload = context.make_data_helper(builder, payload_type, ref=payload_ptr)
+    payload = context.make_helper(builder, payload_type, ref=payload_ptr)
 
     context.nrt.decref(builder, series_type.data, payload.data)
     context.nrt.decref(builder, series_type.index, payload.index)
@@ -292,7 +292,7 @@ def construct_series(context, builder, series_type, data_val, index_val, name_va
     series_payload.name = name_val
 
     # create meminfo and store payload
-    payload_ll_type = context.get_data_type(payload_type)
+    payload_ll_type = context.get_value_type(payload_type)
     payload_size = context.get_abi_sizeof(payload_ll_type)
     dtor_fn = define_series_dtor(context, builder, series_type, payload_type)
     meminfo = context.nrt.meminfo_alloc_dtor(
@@ -368,9 +368,9 @@ def get_series_payload(context, builder, series_type, value):
     meminfo = cgutils.create_struct_proxy(series_type)(context, builder, value).meminfo
     payload_type = SeriesPayloadType(series_type)
     payload = context.nrt.meminfo_data(builder, meminfo)
-    ptrty = context.get_data_type(payload_type).as_pointer()
+    ptrty = context.get_value_type(payload_type).as_pointer()
     payload = builder.bitcast(payload, ptrty)
-    return context.make_data_helper(builder, payload_type, ref=payload)
+    return context.make_helper(builder, payload_type, ref=payload)
 
 
 @intrinsic
@@ -904,7 +904,6 @@ series_unsupported_attrs = (
     "is_unique",
     "is_monotonic_increasing",
     "is_monotonic_decreasing",
-    "cat",
     "sparse",
 )
 

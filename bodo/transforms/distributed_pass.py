@@ -805,6 +805,13 @@ class DistributedPass:
                     extra_globals={"_op": np.int32(Reduce_Type.Sum.value)},
                 )
 
+        # no need to gather if input data is replicated
+        if (
+            fdef == ("gatherv", "bodo") or fdef == ("allgatherv", "bodo")
+        ) and self._is_REP(rhs.args[0].name):
+            assign.value = rhs.args[0]
+            return [assign]
+
         if fdef == ("dist_return", "bodo.libs.distributed_api"):
             # always rebalance returned distributed arrays
             # TODO: need different flag for 1D_Var return (distributed_var)?

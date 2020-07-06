@@ -74,7 +74,7 @@ import bodo.hiframes.series_indexing  # side effect: install Series overloads
 import bodo.hiframes.series_str_impl  # side effect: install Series overloads
 import bodo.hiframes.series_dt_impl  # side effect: install Series overloads
 from bodo.hiframes.series_dt_impl import SeriesDatetimePropertiesType
-from bodo.hiframes.series_str_impl import SeriesStrMethodType
+from bodo.hiframes.series_str_impl import SeriesStrMethodType, SeriesCatMethodType
 from bodo.hiframes.series_indexing import SeriesIatType, SeriesIlocType, SeriesLocType
 from bodo.ir.aggregate import Aggregate
 from bodo.hiframes import series_kernels
@@ -415,6 +415,14 @@ class SeriesPass:
             assign.value = rhs_def.value
             return [assign]
 
+        if isinstance(rhs_type, SeriesCatMethodType) and rhs.attr == "_obj":
+            rhs_def = guard(get_definition, self.func_ir, rhs.value)
+            if rhs_def is None:
+                raise ValueError("Invalid Series.cat, cannot handle conditional yet")
+            assert is_expr(rhs_def, "getattr")
+            assign.value = rhs_def.value
+            return [assign]
+
         if isinstance(rhs_type, SeriesDatetimePropertiesType) and rhs.attr == "_obj":
             rhs_def = guard(get_definition, self.func_ir, rhs.value)
             if rhs_def is None:
@@ -422,6 +430,12 @@ class SeriesPass:
             assert is_expr(rhs_def, "getattr")
             assign.value = rhs_def.value
             return [assign]
+
+        # inline Series.cat.codes
+        if isinstance(rhs_type, SeriesCatMethodType):
+            if rhs.attr == "codes":
+                impl = bodo.hiframes.series_str_impl.series_cat_codes_overload(rhs_type)
+                return replace_func(self, impl, [rhs.value])
 
         # inline Series.dt.field
         if isinstance(rhs_type, SeriesDatetimePropertiesType):

@@ -1161,3 +1161,58 @@ def _install_str2bool_methods():
 
 _install_str2str_methods()
 _install_str2bool_methods()
+
+
+@overload_attribute(SeriesType, "cat")
+def overload_series_cat(s):
+    if not isinstance(s.dtype, bodo.hiframes.pd_categorical_ext.PDCategoricalDtype):
+        raise BodoError("Can only use .cat accessor with categorical values.")
+    return lambda s: bodo.hiframes.series_str_impl.init_series_cat_method(s)
+
+
+class SeriesCatMethodType(types.Type):
+    def __init__(self, stype):
+        self.stype = stype
+        name = "SeriesCatMethodType({})".format(stype)
+        super(SeriesCatMethodType, self).__init__(name)
+
+
+@register_model(SeriesCatMethodType)
+class SeriesCatModel(models.StructModel):
+    def __init__(self, dmm, fe_type):
+        members = [("obj", fe_type.stype)]
+        super(SeriesCatModel, self).__init__(dmm, fe_type, members)
+
+
+make_attribute_wrapper(SeriesCatMethodType, "obj", "_obj")
+
+
+@intrinsic
+def init_series_cat_method(typingctx, obj=None):
+    def codegen(context, builder, signature, args):
+        (obj_val,) = args
+        cat_method_type = signature.return_type
+
+        cat_method_val = cgutils.create_struct_proxy(cat_method_type)(context, builder)
+        cat_method_val.obj = obj_val
+
+        # increase refcount of stored values
+        context.nrt.incref(builder, signature.args[0], obj_val)
+
+        return cat_method_val._getvalue()
+
+    return SeriesCatMethodType(obj)(obj), codegen
+
+
+@overload_attribute(SeriesCatMethodType, "codes")
+def series_cat_codes_overload(S_dt):
+    def impl(S_dt):  # pragma: no cover
+        S = S_dt._obj
+        arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+        index = bodo.hiframes.pd_series_ext.get_series_index(S)
+        # Pandas ignores Series name for some reason currently
+        # name = bodo.hiframes.pd_series_ext.get_series_name(S)
+        name = None
+        return bodo.hiframes.pd_series_ext.init_series(arr.codes, index, name)
+
+    return impl

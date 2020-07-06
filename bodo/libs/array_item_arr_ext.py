@@ -136,9 +136,9 @@ def define_array_item_dtor(context, builder, array_item_type, payload_type):
     base_ptr = fn.args[0]  # void*
 
     # get payload struct
-    ptrty = context.get_data_type(payload_type).as_pointer()
+    ptrty = context.get_value_type(payload_type).as_pointer()
     payload_ptr = builder.bitcast(base_ptr, ptrty)
-    payload = context.make_data_helper(builder, payload_type, ref=payload_ptr)
+    payload = context.make_helper(builder, payload_type, ref=payload_ptr)
 
     context.nrt.decref(builder, array_item_type.dtype, payload.data)
     context.nrt.decref(builder, types.Array(offset_typ, 1, "C"), payload.offsets)
@@ -155,7 +155,7 @@ def construct_array_item_array(
     """
     # create payload type
     payload_type = ArrayItemArrayPayloadType(array_item_type)
-    alloc_type = context.get_data_type(payload_type)
+    alloc_type = context.get_value_type(payload_type)
     alloc_size = context.get_abi_sizeof(alloc_type)
 
     # define dtor
@@ -408,7 +408,7 @@ def _get_array_item_arr_payload(context, builder, arr_typ, arr):
     payload_type = ArrayItemArrayPayloadType(arr_typ)
     meminfo_void_ptr = context.nrt.meminfo_data(builder, array_item_array.meminfo)
     meminfo_data_ptr = builder.bitcast(
-        meminfo_void_ptr, context.get_data_type(payload_type).as_pointer()
+        meminfo_void_ptr, context.get_value_type(payload_type).as_pointer()
     )
     payload = cgutils.create_struct_proxy(payload_type)(
         context, builder, builder.load(meminfo_data_ptr)
@@ -611,7 +611,7 @@ def init_array_item_array(
         # TODO: refactor with construct_array_item_array
         # create payload type
         payload_type = ArrayItemArrayPayloadType(array_item_type)
-        alloc_type = context.get_data_type(payload_type)
+        alloc_type = context.get_value_type(payload_type)
         alloc_size = context.get_abi_sizeof(alloc_type)
 
         # define dtor

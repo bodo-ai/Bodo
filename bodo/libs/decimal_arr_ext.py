@@ -232,7 +232,7 @@ def unbox_decimal(typ, val, c):
         lir.VoidType(), [lir.IntType(8).as_pointer(), lir.IntType(128).as_pointer(),],
     )
     fn = c.builder.module.get_or_insert_function(fnty, name="unbox_decimal")
-    res = cgutils.alloca_once(c.builder, c.context.get_data_type(int128_type))
+    res = cgutils.alloca_once(c.builder, c.context.get_value_type(int128_type))
     c.builder.call(
         fn, [val, res],
     )
