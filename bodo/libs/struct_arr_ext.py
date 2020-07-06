@@ -577,8 +577,8 @@ def _box_struct_array_generic(typ, c, length, data_arrs_tup, null_bitmap_ptr):
                     )
                     c.pyapi.dict_setitem_string(dict_obj, typ.names[i], field_val_obj)
                     c.pyapi.decref(field_val_obj)
-                    c.context.nrt.decref(c.builder, arr_typ.dtype, field_val)
             pyarray_setitem(builder, context, out_arr, struct_ind, dict_obj)
+            c.pyapi.decref(dict_obj)
 
     c.pyapi.decref(np_class_obj)
     c.pyapi.decref(dtype_obj)
@@ -998,7 +998,6 @@ def struct_array_get_struct(typingctx, struct_arr_typ, ind_typ=None):
     assert isinstance(struct_arr_typ, StructArrayType) and isinstance(
         ind_typ, types.Integer
     )
-    n_fields = len(struct_arr_typ.data)
     data_types = tuple(d.dtype for d in struct_arr_typ.data)
     # return a regular dictionary if values have the same type, otherwise struct
     if types.is_homogeneous(*struct_arr_typ.data):
@@ -1011,17 +1010,27 @@ def struct_array_get_struct(typingctx, struct_arr_typ, ind_typ=None):
 
         payload = _get_struct_arr_payload(context, builder, struct_arr_typ, struct_arr)
         data_vals = []
-        # TODO: set nulls from data arrays
-        nulls = [context.get_constant(types.uint8, 1) for _ in range(n_fields)]
-        # TODO: support non-Numpy arrays
+        null_vals = []
         for i, arr_typ in enumerate(struct_arr_typ.data):
             arr_ptr = builder.extract_value(payload.data, i)
-            arr = context.make_array(arr_typ)(context, builder, value=arr_ptr)
-            data_vals.append(
-                numba.np.arrayobj._getitem_array_single_int(
-                    context, builder, arr_typ.dtype, arr_typ, arr, ind
-                )
+
+            na_val = context.compile_internal(
+                builder,
+                lambda arr, ind: np.uint8(0)
+                if bodo.libs.array_kernels.isna(arr, ind)
+                else np.uint8(1),
+                types.uint8(arr_typ, types.int64),
+                [arr_ptr, ind],
             )
+            null_vals.append(na_val)
+
+            data_val = context.compile_internal(
+                builder,
+                lambda arr, ind: arr[ind],
+                arr_typ.dtype(arr_typ, types.int64),
+                [arr_ptr, ind],
+            )
+            data_vals.append(data_val)
 
         if isinstance(out_typ, types.DictType):
             names_consts = [
@@ -1051,7 +1060,7 @@ def struct_array_get_struct(typingctx, struct_arr_typ, ind_typ=None):
                 [names_tup, val_tup],
             )
 
-        meminfo = construct_struct(context, builder, out_typ, data_vals, nulls)
+        meminfo = construct_struct(context, builder, out_typ, data_vals, null_vals)
         struct = context.make_helper(builder, out_typ)
         struct.meminfo = meminfo
         return struct._getvalue()
@@ -1184,7 +1193,6 @@ def struct_arr_setitem(arr, ind, val):
         return
 
     if isinstance(ind, types.Integer):
-        # TODO: support NA
         n_fields = len(arr.data)
         func_text = "def impl(arr, ind, val):\n"
         func_text += "  data = get_data(arr)\n"
