@@ -408,9 +408,13 @@ def _test_equal(
             bodo_out.dtype == np.dtype("O")
             or isinstance(bodo_out.dtype, pd.BooleanDtype)
         ):
-            pd.testing.assert_series_equal(
-                pd.Series(py_out), pd.Series(bodo_out), check_dtype=False
-            )
+            # struct array needs special handling in nested case
+            if len(py_out) > 0 and isinstance(py_out[0], dict):
+                _test_equal_struct_array(bodo_out, py_out)
+            else:
+                pd.testing.assert_series_equal(
+                    pd.Series(py_out), pd.Series(bodo_out), check_dtype=False
+                )
         else:
             np.testing.assert_array_equal(bodo_out, py_out)
     # check for array since is_extension_array_dtype() matches dtypes also
@@ -431,8 +435,53 @@ def _test_equal(
         assert len(py_out) == len(bodo_out)
         for p, b in zip(py_out, bodo_out):
             _test_equal(b, p, sort_output, check_names, check_dtype)
+    elif isinstance(py_out, dict):
+        _test_equal_struct(
+            bodo_out, py_out, sort_output, check_names, check_dtype, reset_index,
+        )
     else:
         assert bodo_out == py_out
+
+
+def _test_equal_struct(
+    bodo_out,
+    py_out,
+    sort_output=False,
+    check_names=True,
+    check_dtype=True,
+    reset_index=False,
+):
+    """check struct/dict to be equal. checking individual elements separately since
+    regular assertion cannot handle nested arrays properly
+    """
+    assert py_out.keys() == bodo_out.keys()
+    for py_field, bodo_field in zip(py_out, bodo_out):
+        _test_equal(
+            bodo_field, py_field, sort_output, check_names, check_dtype, reset_index,
+        )
+
+
+def _test_equal_struct_array(
+    bodo_out,
+    py_out,
+    sort_output=False,
+    check_names=True,
+    check_dtype=True,
+    reset_index=False,
+):
+    """check struct arrays to be equal. checking individual elements separately since
+    assert_series_equal() cannot handle nested case properly
+    """
+    assert len(py_out) == len(bodo_out)
+    for i in range(len(py_out)):
+        py_val = py_out[i]
+        bodo_val = bodo_out[i]
+        if pd.isna(py_val):
+            assert pd.isna(bodo_val)
+            continue
+        _test_equal_struct(
+            bodo_val, py_val, sort_output, check_names, check_dtype, reset_index,
+        )
 
 
 def _typeof(val):
