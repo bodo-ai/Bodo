@@ -10,6 +10,7 @@ Welcome to Bodo Development's documentation!
    :maxdepth: 2
    :caption: Contents:
 
+   source/getting_started
    source/build_bodo
    source/bodo_dev
    source/github_practices
