@@ -27,14 +27,16 @@ develop Numba extensions is necessary.
 - | `Extending Numba page <http://numba.pydata.org/numba-doc/latest/extending/index.html>`_
     provides details on how to provide native implementations for data types and functions.
     The low-level API should be avoided as much as possible for ease of development and
-    code readability. The `unicode support <https://github.com/numba/numba/blob/master/numba/unicode.py>`_
+    code readability. The `unicode support <https://github.com/numba/numba/blob/56fc9d7eeb098002753c13480bcde72dcfe0296c/numba/cpython/unicode.py>`_
     in Numba is an example of a modern extension for Numba (documentation planned).
+- | `Customizing the compiler page <http://numba.pydata.org/numba-doc/latest/developer/custom_pipeline.html>`_
+    describes the process of adding a compiler pass. Make sure you understand the example code and the produced IRs.
 - | A more complex extension is `the new dictionary implementation in
     Numba <https://github.com/numba/numba/blob/master/numba/dictobject.py>`_ (documentation planned).
     It has examples of calling into C code which is implemented as
-    `a C extension library <https://github.com/numba/numba/blob/master/numba/_dictobject.c>`_.
+    `a C extension library <https://github.com/numba/numba/blob/56fc9d7eeb098002753c13480bcde72dcfe0296c/numba/typed/dictobject.py>`_.
     For a simpler example of calling into C library, see Bodo's I/O features like
-    `get_file_size <https://github.com/IntelLabs/bodo/blob/master/bodo/io.py#L12>`_.
+    `get_file_size <https://github.com/Bodo-inc/Bodo/blob/e66f66931a07f5a6c193dffb0b63c88f15a912e0/bodo/io/np_io.py#L197>`_.
 - | `Developer reference manual <http://numba.pydata.org/numba-doc/latest/developer/index.html>`_
     provides more details if necessary.
 
@@ -46,29 +48,30 @@ Numba IR classes are defined `here <https://github.com/numba/numba/blob/master/n
 Below is a brief summary.
 
 
-ir.FunctionIR: IR of a function
-    blocks: dictionary mapping block lables to ir.Block values
+`ir.FunctionIR <https://github.com/numba/numba/blob/56fc9d7eeb098002753c13480bcde72dcfe0296c/numba/core/ir.py#L1306>`_: IR of a function
+    blocks: dictionary mapping block labels to ir.Block values
+    _definitions: map variables to their potential definitions. Critical for analysis and optimization and needs to be kept updated.
 
-ir.Block: a basic block
+`ir.Block <https://github.com/numba/numba/blob/56fc9d7eeb098002753c13480bcde72dcfe0296c/numba/core/ir.py#L1174>`_: a basic block
     body: list of statements (assignment, print, jump, branch)
 
-ir.Var: a variable
+`ir.Var <https://github.com/numba/numba/blob/56fc9d7eeb098002753c13480bcde72dcfe0296c/numba/core/ir.py#L983>`_: a variable
     name: name of variable (use only variable name for comparison or keeping in data structures)
 
-ir.Jump: unconditional jump to another basic block
+`ir.Jump <https://github.com/numba/numba/blob/56fc9d7eeb098002753c13480bcde72dcfe0296c/numba/core/ir.py#L795>`_: unconditional jump to another basic block
     target: label of other basic block
 
-ir.Branch: jump to block based on condition
+`ir.Branch <https://github.com/numba/numba/blob/56fc9d7eeb098002753c13480bcde72dcfe0296c/numba/core/ir.py#L812>`_: jump to block based on condition
     cond: condition variable
     truebr: label of target block if cond is true
     falsebr: label of target block if cond is false
 
-ir.Assign: an assignment
+`ir.Assign <https://github.com/numba/numba/blob/56fc9d7eeb098002753c13480bcde72dcfe0296c/numba/core/ir.py#L832>`_: an assignment
     target: target variable (left-hand side) of assignment
     value: value to assign, could be ir.Var, ir.Const, ir.Expr,
     ir.Arg, ir.Global, ir.FreeVar
 
-ir.Expr: an expression
+`ir.Expr <https://github.com/numba/numba/blob/56fc9d7eeb098002753c13480bcde72dcfe0296c/numba/core/ir.py#L366>`_: an expression (cannot be a full statement)
     op: operation of Expr, determines its other attributes
 
     `call`: a function call

@@ -17,7 +17,7 @@ implement the `Pandas Series API <https://pandas.pydata.org/pandas-docs/stable/r
 Compiler Stages
 ---------------
 
-`BodoCompiler <https://github.com/Bodo-inc/Bodo/blob/master/bodo/compiler.py#L68>`_
+`BodoCompiler <https://github.com/Bodo-inc/Bodo/blob/82e47e6d426cdd7b72c7b7b950a9b8b9b75184fd/bodo/compiler.py#L72>`_
 class defines the compiler pipeline. Below are the main stages.
 
 - `TranslateByteCode`, ... before `BodoUntypedPass`:
