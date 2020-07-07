@@ -72,7 +72,7 @@ inline_all_calls = False
 class BodoCompiler(numba.core.compiler.CompilerBase):
     """Bodo compiler pipeline which adds the following passes to Numba's pipeline:
     InlinePass, BodoUntypedPass, BodoTypeInference, BodoDataFramePass, BodoSeriesPass,
-    LowerParforSeq, BodoDumpDiagnosticsPass.
+    LowerParforSeq, BodoDumpDistDiagnosticsPass.
     See class docstrings for more info.
     """
 
@@ -112,7 +112,7 @@ class BodoCompiler(numba.core.compiler.CompilerBase):
         else:
             pm.add_pass_after(LowerParforSeq, ParforPass)
 
-        pm.add_pass_after(BodoDumpDiagnosticsPass, DumpParforDiagnostics)
+        pm.add_pass_after(BodoDumpDistDiagnosticsPass, DumpParforDiagnostics)
         pm.finalize()
         return [pm]
 
@@ -307,7 +307,7 @@ class BodoDataFramePass(FunctionPass):
 
 
 @register_pass(mutates_CFG=False, analysis_only=True)
-class BodoDumpDiagnosticsPass(AnalysisPass):
+class BodoDumpDistDiagnosticsPass(AnalysisPass):
     """Print Bodo's distributed diagnostics info if needed
     """
 
@@ -328,7 +328,7 @@ class BodoDumpDiagnosticsPass(AnalysisPass):
         except:
             pass
 
-        if diag_level > 0:
+        if diag_level > 0 and "distributed_diagnostics" in state.metadata:
             state.metadata["distributed_diagnostics"].dump(diag_level)
         return True
 
