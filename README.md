@@ -24,6 +24,6 @@ alternatives like [Apache Spark](http://spark.apache.org).
 - [Customer Code Rewrite](https://github.com/Bodo-inc/Bodo/blob/master/dev_docs/source/testing_poc_SQL.rst)
 - [Release Checklist](https://github.com/Bodo-inc/Bodo/blob/master/dev_docs/source/release_checklist.rst)
 	
-To build the Development guide locally and view it with your browser, follow instructions [here](https://github.com/Bodo-inc/Bodo/blob/master/dev_docs/source/documentation.rst#building-documentation)
+To build the Development guide locally and view it with your browser, follow instructions [here](https://github.com/Bodo-inc/Bodo/blob/master/dev_docs/source/dev_process.rst#building-documentation)
 
 Bodo Documentation: https://docs.bodo.ai

@@ -11,7 +11,8 @@ Getting Started
 #. Go over Bodo `getting started tutorial <https://github.com/Bodo-inc/Bodo-tutorial/blob/master/bodo_getting_started.ipynb>`_
    and `extended tutorial <https://github.com/Bodo-inc/Bodo-tutorial/blob/master/bodo_tutorial.ipynb>`_
    and watch the `tutorial workshop video <https://drive.google.com/file/d/1X3X5iv0P5hbAkeb5mIrwBBEd7TJc6-ak/view?usp=sharing>`_.
-#. Go over Bodo development page :ref:`development`.
+#. Go over Bodo Engine Development page :ref:`bodo_dev`.
+#. Go over Development Process page :ref:`dev_process`.
 #. Read through our github practices, see :ref:`github_practices`.
 #. Go over `Bodo user documentation <http://docs.bodo.ai/>`_.
 #. Go over `a basic SQL tutorial <https://mode.com/sql-tutorial/introduction-to-sql>`_.
