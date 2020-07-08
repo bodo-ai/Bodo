@@ -561,29 +561,28 @@ Debugging the Python code
       # example of printing after parfor pass
       export NUMBA_DEBUG_PRINT_AFTER='parfor_pass'
 
-  Other common one: ``'bodo_distributed_pass', 'bodo_series_pass'``
+  Other common one: ``'bodo_distributed_pass', 'bodo_series_pass'``, ``bodo_dataframe_pass``
 - mpiexec redirect stdout from differet processes to different files::
 
-    export PYTHONUNBUFFERED=1 # set the enviroment variable
+    export PYTHONUNBUFFERED=1  # avoid IO buffering
     mpiexec -outfile-pattern="out_%r.log" -n 8 python small_test01.py
 
   or::
 
-    # use the flag instead of setting the enviroment variable
+    # use "-u" instead of setting the enviroment variable
     mpiexec -outfile-pattern="out_%r.log" -n 8 python -u small_test01.py
 
 
 Debugging the C++ code
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-In order to debug C++ code, the method is to use sanitizers of the C++ and C
-compiler of GCC.
-The compilation option need to be added to the `setup.py` initialization program::
+Sanitizers of GCC can be used for debugging C/C++ code.
+The compilation option need to be added to `setup.py`::
 
     eca = ["-std=c++11", "-fsanitize=address"]
     ela = ["-std=c++11", "-fsanitize=address"]
 
-In the docker, the next step is to do add the library::
+In the docker, the next step is to add the library::
 
     export LD_PRELOAD=/root/miniconda3/envs/BODODEV/lib/libasan.so.5
 
@@ -598,7 +597,9 @@ Bodo uses the PEP8 standard for Python code style.
 We use `black <https://github.com/psf/black>`_ as formatter
 and check format with `flake8 <http://flake8.pycqa.org/en/latest/>`_.
 
-Currently our :code:`.flake8` config ignores a number of files, so whenever you are done working on a python file, run  `black <https://github.com/psf/black>`_, remove the file from :code:`.flake8`, and ensure `flake8 <http://flake8.pycqa.org/en/latest/>`_ does not raise any error.
+Currently our :code:`.flake8` config ignores a number of files,
+so whenever you are done working on a python file, run  `black <https://github.com/psf/black>`_,
+remove the file from :code:`.flake8`, and ensure `flake8 <http://flake8.pycqa.org/en/latest/>`_ does not raise any error.
 
 We use the Google C++ code style guide
 and enforce with `cpplint <https://github.com/cpplint/cpplint>`_.
@@ -606,14 +607,14 @@ We use `clang-format` as the formatter.
 See `instructions in Pandas <https://pandas.pydata.org/pandas-docs/stable/development/contributing.html#c-cpplint>`_.
 
 Removing Unused Imports
-~~~~~~~~~~~~~~~~~~~~~~~~
-When removing unused imports across all the files in the repository, `autoflake` can be used.
+~~~~~~~~~~~~~~~~~~~~~~~
+`autoflake` can be used to remove unused imports across all the files in the repository.
 
 First install `autoflake`::
 
-    pip install --upgrade autoflake
+    conda install autoflake -c conda-forge
 
-Following command remove unused import in a file. ::
+Following command remove unused import in a file::
 
     autoflake --in-place --remove-all-unused-imports <filename>
 
@@ -623,12 +624,14 @@ More information can be found `here <https://github.com/myint/autoflake>`_.
 .. _dev_codecoverage:
 
 Code Coverage
----------------
+-------------
 
 We use `codecov <https://codecov.io/gh/Bodo-inc/Bodo>`_ for coverage reports. 
-In `setup.cfg <https://github.com/Bodo-inc/Bodo/blob/package_config/setup.cfg>`_, there are two `coverage <https://coverage.readthedocs.io/en/coverage-5.0/>`_ configurations related sections.
+In `setup.cfg <https://github.com/Bodo-inc/Bodo/blob/package_config/setup.cfg>`_,
+there are two `coverage <https://coverage.readthedocs.io/en/coverage-5.0/>`_ configurations related sections.
 
-To have a more accurate codecov report, during development, add :code:`# pragma: no cover` to numba compiled functions and dummy functions used for typing, which includes:
+To have a more accurate codecov report during development, add :code:`# pragma: no cover`
+to numba compiled functions and dummy functions used for typing, which includes:
 
 1. :code:`@numba.njit` functions (`example <https://github.com/Bodo-inc/Bodo/blob/8ec0446ee0972c92a878e338cff15d6011fe7605/bodo/hiframes/pd_index_ext.py#L217>`_)
 2. :code:`@numba.extending.register_jitable` functions (`example <https://github.com/Bodo-inc/Bodo/blob/8ec0446ee0972c92a878e338cff15d6011fe7605/bodo/libs/int_arr_ext.py#L147>`_)
@@ -640,17 +643,29 @@ To have a more accurate codecov report, during development, add :code:`# pragma:
 .. _dev_devops:
 
 DevOps
-----------
+------
 
 We currently have three build pipelines on `Azure DevOps <https://dev.azure.com/bodo-inc/Bodo/_build>`_:
 
-1. Bodo-inc.Bodo: This pipeline is triggered whenever a pull request whose target branch is set to :code:`master` is created and following commits. This does not test on the full test suite in order to save time. A `codecov <https://codecov.io/gh/Bodo-inc/Bodo>`_ code coverage report is generated and uploaded for testing on Linux with one processor.
+1. Bodo-inc.Bodo: This pipeline is triggered whenever a pull request whose target branch is set
+   to :code:`master` is created, as well as its later commits. This does not test on the full
+   test suite in order to save time. A `codecov <https://codecov.io/gh/Bodo-inc/Bodo>`_ code coverage
+   report is generated and uploaded after testing on Linux with one processor.
 
-2. Bodo-build-binary: This pipeline is used for automatic nightly testing on full test suite. It can also be triggered by pushing tags. It has two stages. The first stage removes docstrings, builds the bodo binary and makes the artifact(:code:`bodo-inc.zip`) available for downloads. The second stage runs the full test suite with the binary we just built on Linux with 1, 2, and 3 processors. It is structured this way so that in case of emergency bug fix release, we can still download the binary without waiting for the tests to finish. 
+2. Bodo-build-binary: This pipeline is used for automatic nightly testing on full test suite.
+   It can also be triggered by pushing tags. It has two stages. The first stage removes docstrings,
+   builds the bodo binary and makes the artifact(:code:`bodo-inc.zip`) available for downloads.
+   The second stage runs the full test suite with the binary we just built on Linux with 1, 2, and 3 processors.
+   It is structured this way so that in case of emergency bug fix release,
+   we can still download the binary without waiting for the tests to finish.
 
-3. Bodo-build-binary-obfuscated: This pipeline is used for release and automatic nightly testing on full test suite, triggered by pushing tags. This pipeline is performing exactly the same operations as :code:`Bodo-build-binary` pipeline does, except that the files in the artifact are obfuscated. We use this to build binaries for customers.
+3. Bodo-build-binary-obfuscated: This pipeline is used for release and automatic nightly testing
+   on full test suite, triggered by pushing tags. This pipeline is performing exactly the same operations
+   as :code:`Bodo-build-binary` pipeline does, except that the files in the artifact are obfuscated.
+   We use this to build binaries for customers.
 
-For the two release pipelines(Bodo-build-binary and Bodo-build-binary-obfuscated), there are some variables used, and they can all be changed manually triggering the pipelines:
+For the two release pipelines (Bodo-build-binary and Bodo-build-binary-obfuscated), there are some variables used,
+and they can all be changed manually triggering the pipelines:
 
 - :code:`CHECK_LICENSE_EXPIRED` has a default value of 1 set through Azure's UI. If set to 1, binary will do license check of expiration date
 - :code:`CHECK_LICENSE_CORE_COUNT` has a default value of 1 set through Azure's UI. If set to 1, binary will do license check of max core count
@@ -660,9 +675,9 @@ For the two release pipelines(Bodo-build-binary and Bodo-build-binary-obfuscated
 .. _dev_benchmark:
 
 Performance Benchmarking
--------------------------
+------------------------
 
-We use AWS EC2 instance for performance benchmark on Bodo. 
+We use AWS EC2 instances for performance benchmark on Bodo.
 This is essentially to check the performance variations based on commits to master branch.
 Similar to our nightly build, benchmarking is set to run regularly. 
 To set up this infrastructure there are 3 things that should be constructed. 
