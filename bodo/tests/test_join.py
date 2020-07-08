@@ -14,7 +14,8 @@ from bodo.tests.utils import (
     count_array_REPs,
     count_parfor_REPs,
     check_func,
-    compute_random_decimal_array,
+    gen_random_decimal_array,
+    gen_random_list_string_array,
     count_parfor_OneDs,
     count_array_OneDs,
     dist_IR_contains,
@@ -155,14 +156,14 @@ def test_merge_decimal():
     n = 50
     df1 = pd.DataFrame(
         {
-            "A": compute_random_decimal_array(1, n),
-            "B": compute_random_decimal_array(1, n),
+            "A": gen_random_decimal_array(1, n),
+            "B": gen_random_decimal_array(1, n),
         }
     )
     df2 = pd.DataFrame(
         {
-            "A": compute_random_decimal_array(1, n),
-            "D": compute_random_decimal_array(1, n),
+            "A": gen_random_decimal_array(1, n),
+            "D": gen_random_decimal_array(1, n),
         }
     )
     check_func(f, (df1, df2), sort_output=True, reset_index=True)
@@ -213,32 +214,11 @@ def test_list_string_array_type_random():
         df3 = df1.merge(df2, on="A")
         return df3
 
-    def rand_col_l_str(n):
-        e_list_list = []
-        for _ in range(n):
-            if random.random() < 0.1:
-                e_ent = np.nan
-            else:
-                e_ent = []
-                for _ in range(random.randint(1, 3)):
-                    k = random.randint(1, 3)
-                    val = "".join(random.choices(["A", "B", "C"], k=k))
-                    e_ent.append(val)
-            e_list_list.append(e_ent)
-        return e_list_list
-
-    def rand_col_str(n):
-        e_list = []
-        for _ in range(n):
-            k = random.randint(1, 3)
-            val = "".join(random.choices(["A", "B", "C"], k=k))
-            e_list.append(val)
-        return e_list
-
     random.seed(5)
-    n = 500
-    df1 = pd.DataFrame({"A": rand_col_l_str(n), "C": rand_col_l_str(n)})
-    df2 = pd.DataFrame({"A": rand_col_l_str(n), "D": rand_col_l_str(n)})
+    n1 = 50
+    n2 = 100
+    df1 = pd.DataFrame({"A": gen_random_list_string_array(1,n1), "C": gen_random_list_string_array(1,n1)})
+    df2 = pd.DataFrame({"A": gen_random_list_string_array(1,n2), "D": gen_random_list_string_array(1,n2)})
     check_func(test_impl, (df1, df2), sort_output=True, reset_index=True, convert_columns_to_pandas=True)
 
 

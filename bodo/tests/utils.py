@@ -758,7 +758,38 @@ def check_parallel_coherency(
     assert n_passed == n_pes
 
 
-def compute_random_decimal_array(option, n):
+def gen_random_list_string_array(option, n):
+    """Generate a random array of list(string)
+    option=1 for series with nullable values
+    option=2 for series without nullable entries.
+    """
+
+    def rand_col_str(n):
+        e_ent = []
+        for _ in range(n):
+            k = random.randint(1, 3)
+            val = "".join(random.choices(["A", "B", "C"], k=k))
+            e_ent.append(val)
+        return e_ent
+
+    def rand_col_l_str(n):
+        e_list = []
+        for _ in range(n):
+            if random.random() < 0.1:
+                e_ent = np.nan
+            else:
+                e_ent = rand_col_str(random.randint(1,3))
+            e_list.append(e_ent)
+        return e_list
+
+    if option==1:
+        e_list = rand_col_l_str(n)
+    if option==2:
+        e_list = rand_col_str(n)
+    return e_list
+
+
+def gen_random_decimal_array(option, n):
     """Compute a random decimal series for tests
     option=1 will give random arrays with collision happening (guaranteed for n>100)
     option=2 will give random arrays with collision unlikely to happen
@@ -804,3 +835,5 @@ def gen_random_string_array(n, max_str_len=10):
     if bodo.libs.str_arr_ext.use_pd_string_array:
         return pd.array(str_vals, "string")
     return np.array(str_vals, dtype="object")  # avoid unichr dtype (TODO: support?)
+
+

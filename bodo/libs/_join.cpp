@@ -7,9 +7,9 @@
 
 table_info* hash_join_table(table_info* in_table, int64_t n_key_t,
                             int64_t n_data_left_t, int64_t n_data_right_t,
-                            int64_t* vect_same_key, int64_t* vect_need_typechange,
-                            bool is_left, bool is_right,
-                            bool is_join, bool optional_col) {
+                            int64_t* vect_same_key,
+                            int64_t* vect_need_typechange, bool is_left,
+                            bool is_right, bool is_join, bool optional_col) {
 #ifdef DEBUG_JOIN
     std::cout << "IN_TABLE (hash_join_table):\n";
     DEBUG_PrintSetOfColumn(std::cout, in_table->columns);
@@ -33,7 +33,8 @@ table_info* hash_join_table(table_info* in_table, int64_t n_key_t,
     std::cout << "n_key_t=" << n_key_t << "\n";
     for (size_t iKey = 0; iKey < n_key; iKey++) {
         int64_t val = vect_same_key[iKey];
-        std::cout << "iKey=" << iKey << "/" << n_key_t << " vect_same_key[iKey]=" << val << "\n";
+        std::cout << "iKey=" << iKey << "/" << n_key_t
+                  << " vect_same_key[iKey]=" << val << "\n";
     }
     std::cout << "n_data_left_t=" << n_data_left_t
               << " n_data_right_t=" << n_data_right_t << "\n";
@@ -42,8 +43,9 @@ table_info* hash_join_table(table_info* in_table, int64_t n_key_t,
 #endif
     // in the case of merging on index and one column, it can only be one column
     if (n_key_t > 1 && optional_col) {
-        Bodo_PyErr_SetString(PyExc_RuntimeError,
-                             "if optional_col=true then we must have n_key_t=1");
+        Bodo_PyErr_SetString(
+            PyExc_RuntimeError,
+            "if optional_col=true then we must have n_key_t=1");
         return NULL;
     }
     // This is a hack because we may access vect_same_key_b above n_key
@@ -141,22 +143,44 @@ table_info* hash_join_table(table_info* in_table, int64_t n_key_t,
                                                         size_t iRowB) -> bool {
         size_t jRowA, jRowB;
         size_t shift_A, shift_B;
+#ifdef DEBUG_JOIN
+        std::cout << "Considered entries : ";
+#endif
         if (iRowA < short_table_rows) {
             shift_A = short_table_shift;
             jRowA = iRowA;
+#ifdef DEBUG_JOIN
+            std::cout << "Short jRowA=" << jRowA << " ";
+#endif
         } else {
             shift_A = long_table_shift;
             jRowA = iRowA - short_table_rows;
+#ifdef DEBUG_JOIN
+            std::cout << "Long jRowA=" << jRowA << " ";
+#endif
         }
         if (iRowB < short_table_rows) {
             shift_B = short_table_shift;
             jRowB = iRowB;
+#ifdef DEBUG_JOIN
+            std::cout << "Short jRowB=" << jRowB << " ";
+#endif
         } else {
             shift_B = long_table_shift;
             jRowB = iRowB - short_table_rows;
+#ifdef DEBUG_JOIN
+            std::cout << "Long jRowB=" << jRowB << " ";
+#endif
         }
-        return TestEqual(in_table->columns, n_key, shift_A, jRowA, shift_B,
-                         jRowB);
+#ifdef DEBUG_JOIN
+        std::cout << "\n";
+#endif
+        bool test =
+            TestEqual(in_table->columns, n_key, shift_A, jRowA, shift_B, jRowB);
+#ifdef DEBUG_JOIN
+        std::cout << "After TestEqual call test=" << test << "\n";
+#endif
+        return test;
     };
     // The entList contains the hash of the short table.
     // We address the entry by the row index. We store all the rows which are
@@ -191,6 +215,9 @@ table_info* hash_join_table(table_info* in_table, int64_t n_key_t,
     // We now iterate over all entries of the long table in order to get
     // the entries in the ListPairWrite.
     for (size_t i_long = 0; i_long < long_table_rows; i_long++) {
+#ifdef DEBUG_JOIN
+        std::cout << "i_long=" << i_long << "\n";
+#endif
         size_t i_long_shift = i_long + short_table_rows;
         auto iter = entList.find(i_long_shift);
         if (iter == entList.end()) {
@@ -207,8 +234,11 @@ table_info* hash_join_table(table_info* in_table, int64_t n_key_t,
                 ListPairWrite.push_back({j_short, i_long});
         }
     }
-    // if short_table is in output then we need to check
-    // if they are used by the long table and if so use them on output.
+        // if short_table is in output then we need to check
+        // if they are used by the long table and if so use them on output.
+#ifdef DEBUG_JOIN
+    std::cout << "short_table_work=" << short_table_work << "\n";
+#endif
     if (short_table_work) {
         auto iter = entList.begin();
         size_t iter_s = 0;
@@ -238,40 +268,46 @@ table_info* hash_join_table(table_info* in_table, int64_t n_key_t,
         size_t i = 0;
         bool map_integer_type = false;
         if (ChoiceOpt == 0) {
-            out_arrs.push_back(
-                RetrieveArray(in_table, ListPairWrite, i, n_tot_left + i, 2, map_integer_type));
+            out_arrs.push_back(RetrieveArray(in_table, ListPairWrite, i,
+                                             n_tot_left + i, 2,
+                                             map_integer_type));
         } else {
-            out_arrs.push_back(
-                RetrieveArray(in_table, ListPairWrite, n_tot_left + i, i, 2, map_integer_type));
+            out_arrs.push_back(RetrieveArray(in_table, ListPairWrite,
+                                             n_tot_left + i, i, 2,
+                                             map_integer_type));
         }
     }
 #ifdef DEBUG_JOIN
-    std::cout << "After optional_col construction optional_col=" << optional_col << "\n";
+    std::cout << "After optional_col construction optional_col=" << optional_col
+              << "\n";
 #endif
     // Inserting the Left side of the table
-    int idx=0;
+    int idx = 0;
     for (size_t i = 0; i < n_tot_left; i++) {
         if (i < n_key && vect_same_key[i < n_key ? i : 0] == 1) {
-            // We are in the case of a key that has the same name on left and right.
-            // This means that additional NaNs cannot happen.
-            bool map_integer_type=false;
+            // We are in the case of a key that has the same name on left and
+            // right. This means that additional NaNs cannot happen.
+            bool map_integer_type = false;
             if (ChoiceOpt == 0) {
-                out_arrs.emplace_back(
-                    RetrieveArray(in_table, ListPairWrite, i, n_tot_left + i, 2, map_integer_type));
+                out_arrs.emplace_back(RetrieveArray(in_table, ListPairWrite, i,
+                                                    n_tot_left + i, 2,
+                                                    map_integer_type));
             } else {
-                out_arrs.emplace_back(
-                    RetrieveArray(in_table, ListPairWrite, n_tot_left + i, i, 2, map_integer_type));
+                out_arrs.emplace_back(RetrieveArray(in_table, ListPairWrite,
+                                                    n_tot_left + i, i, 2,
+                                                    map_integer_type));
             }
         } else {
-            // We are in data case or in the case of a key that is taken only from one side.
-            // Therefore we have to plan for the possibility of additional NaN.
+            // We are in data case or in the case of a key that is taken only
+            // from one side. Therefore we have to plan for the possibility of
+            // additional NaN.
             bool map_integer_type = vect_need_typechange[idx];
             if (ChoiceOpt == 0) {
-                out_arrs.emplace_back(
-                    RetrieveArray(in_table, ListPairWrite, i, -1, 0, map_integer_type));
+                out_arrs.emplace_back(RetrieveArray(in_table, ListPairWrite, i,
+                                                    -1, 0, map_integer_type));
             } else {
-                out_arrs.emplace_back(
-                    RetrieveArray(in_table, ListPairWrite, -1, i, 1, map_integer_type));
+                out_arrs.emplace_back(RetrieveArray(in_table, ListPairWrite, -1,
+                                                    i, 1, map_integer_type));
             }
         }
         idx++;
@@ -284,14 +320,17 @@ table_info* hash_join_table(table_info* in_table, int64_t n_key_t,
         // There are two cases where we put the column in output:
         // ---It is a right key column with different name from the left.
         // ---It is a right data column
-        if (i >= n_key || (i < n_key && vect_same_key[i < n_key ? i : 0] == 0 && !is_join)) {
+        if (i >= n_key ||
+            (i < n_key && vect_same_key[i < n_key ? i : 0] == 0 && !is_join)) {
             bool map_integer_type = vect_need_typechange[idx];
             if (ChoiceOpt == 0) {
-                out_arrs.emplace_back(
-                    RetrieveArray(in_table, ListPairWrite, -1, n_tot_left + i, 1, map_integer_type));
+                out_arrs.emplace_back(RetrieveArray(in_table, ListPairWrite, -1,
+                                                    n_tot_left + i, 1,
+                                                    map_integer_type));
             } else {
-                out_arrs.emplace_back(
-                    RetrieveArray(in_table, ListPairWrite, n_tot_left + i, -1, 0, map_integer_type));
+                out_arrs.emplace_back(RetrieveArray(in_table, ListPairWrite,
+                                                    n_tot_left + i, -1, 0,
+                                                    map_integer_type));
             }
             idx++;
         }

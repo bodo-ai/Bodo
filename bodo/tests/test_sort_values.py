@@ -16,7 +16,7 @@ import random
 import string
 import pytest
 from decimal import Decimal
-from bodo.tests.utils import check_func, is_bool_object_series, compute_random_decimal_array
+from bodo.tests.utils import check_func, is_bool_object_series, gen_random_decimal_array
 from bodo.utils.typing import BodoWarning, BodoError
 import os
 
@@ -711,6 +711,36 @@ def test_list_string(memory_leak_check):
     check_func(test_impl, (df1,))
 
 
+def test_list_string_arrow(memory_leak_check):
+    """Sorting values by list of strings
+    """
+
+    def f(df1):
+        df2 = df1.sort_values(by="A", kind="mergesort")
+        return df2
+
+    def rand_col_l_str(n):
+        e_list = []
+        for _ in range(n):
+            if random.random() < 0.1:
+                e_ent = np.nan
+            else:
+                e_ent = []
+                for _ in range(random.randint(1, 5)):
+                    k = random.randint(1, 5)
+                    val = "".join(random.choices(["A", "B", "C"], k=k))
+                    e_ent.append(val)
+            e_list.append(e_ent)
+        return e_list
+
+    random.seed(5)
+    n = 1000
+    list_rand = [random.randint(1,30) for _ in range(n)]
+    df1 = pd.DataFrame({"A": list_rand, "B": rand_col_l_str(n)})
+
+    check_func(f, (df1,))
+
+
 # ------------------------------ error checking ------------------------------ #
 
 
@@ -924,5 +954,5 @@ def test_random_decimal():
 
     random.seed(5)
     n = 50
-    df1 = pd.DataFrame({"A": compute_random_decimal_array(2, n)})
+    df1 = pd.DataFrame({"A": gen_random_decimal_array(2, n)})
     check_func(f, (df1,), convert_columns_to_pandas=True)

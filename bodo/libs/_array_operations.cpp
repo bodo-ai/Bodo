@@ -184,8 +184,8 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
 #undef DEBUG_SORT
 #ifdef DEBUG_SORT
     std::cout << "sort_values_table : in_table:\n";
-    DEBUG_PrintSetOfColumn(std::cout, in_table->columns);
     DEBUG_PrintRefct(std::cout, in_table->columns);
+    DEBUG_PrintSetOfColumn(std::cout, in_table->columns);
 #endif
     table_info* local_sort =
         sort_values_table_local(in_table, n_key_t, vect_ascending, na_position);
@@ -283,7 +283,8 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
     uint32_t node_id = 0;
     for (int64_t i = 0; i < n_local; i++) {
         size_t shift_key1 = 0, shift_key2 = 0;
-        // using 'while' since a partition can be empty which needs to be skipped
+        // using 'while' since a partition can be empty which needs to be
+        // skipped
         while (node_id < uint32_t(n_pes - 1) &&
                KeyComparisonAsPython(n_key_t, vect_ascending, bounds->columns,
                                      shift_key2, node_id, local_sort->columns,
@@ -478,8 +479,9 @@ static table_info* drop_duplicates_table_inner(table_info* in_table,
 #ifdef DEBUG_DD
     int nbRow = ListPairWrite.size();
     std::cout << "|ListPairWrite|=" << nbRow << "\n";
-    for (int iRow=0; iRow<nbRow; iRow++) {
-      std::cout << "iRow=" << iRow << " pair=" << ListPairWrite[iRow].first << " , " << ListPairWrite[iRow].second << "\n";
+    for (int iRow = 0; iRow < nbRow; iRow++) {
+        std::cout << "iRow=" << iRow << " pair=" << ListPairWrite[iRow].first
+                  << " , " << ListPairWrite[iRow].second << "\n";
     }
 #endif
     // Now building the out_arrs array.

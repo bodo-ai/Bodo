@@ -14,7 +14,7 @@ from bodo.tests.utils import (
     count_array_OneDs,
     dist_IR_contains,
     check_parallel_coherency,
-    compute_random_decimal_array,
+    gen_random_decimal_array,
     convert_list_string_decimal_columns,
     get_start_end,
     check_func,
@@ -277,8 +277,8 @@ def test_random_decimal_sum_min_max_last():
     n = 10
     df1 = pd.DataFrame(
         {
-            "A": compute_random_decimal_array(1, n),
-            "B": compute_random_decimal_array(2, n),
+            "A": gen_random_decimal_array(1, n),
+            "B": gen_random_decimal_array(2, n),
         }
     )
 
