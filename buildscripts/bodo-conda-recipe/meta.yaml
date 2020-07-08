@@ -19,7 +19,7 @@ requirements:
   host:
     - python
     - setuptools
-    - numba 0.50.*
+    - numba 0.50.1
     - numpy
     - pandas >=1.0.0
     - pyarrow =0.17.1
@@ -39,7 +39,7 @@ requirements:
     - pandas >=1.0.0
     - pyarrow =0.17.1
     - boost-cpp
-    - numba 0.50.*
+    - numba 0.50.1
     - openjdk =8
     - sqlalchemy
     - mpich # [not win]
