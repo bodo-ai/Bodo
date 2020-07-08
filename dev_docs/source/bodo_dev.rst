@@ -468,15 +468,16 @@ List of Non-Bodo testing functions that can also be used while testing are
 
 Error Checking
 ~~~~~~~~~~~~~~
-When the implementation of function does not fully encounter various types of possible input data, 
-Numba starts to compare the given data type to other types to find right action for the given input.
-If not found or all existing signatures failed, Numba falls back to object mode (eg. string type will be converted to unicode type). This potentially makes the program slow
-and most importantly, the error message that Numba generates is not user friendly as it throws out pages of errors.
-To prevent it and to provide users useful and meaningful message, we perform error checking. 
-Depending on situations, we check for input data types and even their values.
+When the implementation of a function (e.g. overload) does not support a particular input set (i.e. argument types),
+Numba may throw hard-to-understand generic and long errors that are not user friendly.
+To prevent this and to provide useful and meaningful error messages to users,
+we need to provide comprehensive error checking to all supported APIs.
+
+Depending on the situation, we check for input data types and even their literal values if necessary.
 We raise ``BodoError``, a subclass of python ``BaseException``, when the input is of wrong types or unsupported/invalid values.
-Implementing ``BodoError`` from ``BaseExecption`` class instead of ``Exception`` was necessary because Numba sometimes catches ``Exeception`` and perform tasks accordingly instead of
-just terminating the program. BodoError will terminate the program and provide simple error message for the users. 
+Implementing ``BodoError`` from ``BaseExecption`` class instead of ``Exception`` is currently necessary because Numba sometimes
+catches ``Exeception`` and tries to continue with its own error path instead of
+just terminating compilation. BodoError will terminate compilation and provide simple error message for the user.
 Following is an example of our error checking for unsupported input::
 
     @overload_method(SeriesStrMethodType, "get", no_unliteral=True)
@@ -493,9 +494,7 @@ Following is an example of our error checking for unsupported input::
             )
 
 
-
-
-Once error checking is implemented on a function, we should test whether the error checking is functional::
+Once error checking is implemented for a function, we should test whether the error checking is functional::
 
     @pytest.mark.parametrize(
         "input",
