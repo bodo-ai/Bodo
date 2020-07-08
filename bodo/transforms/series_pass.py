@@ -2608,6 +2608,7 @@ def _fix_typ_undefs(new_typ, old_typ):
                 types.Array,
                 SeriesType,
                 StringArrayType,
+                ArrayItemArrayType,
                 types.List,
                 StringArraySplitViewType,
             ),

@@ -33,6 +33,8 @@ struct Bodo_CTypes {
         TIMEDELTA = 15,
         INT128 = 16,
         LIST_STRING = 17,
+        LIST = 18,  // for nested datastructures, maps to Arrow List
+        STRUCT = 19,  // for nested datastructures, maps to Arrow Struct
         _numtypes
     };
 };
