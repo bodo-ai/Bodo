@@ -310,6 +310,37 @@ represent `merge` and `groupby/aggregate` operations of Pandas respectively.
 IR extensions have full transformation and analysis support (usually
 more extensive that builtin functions).
 
+
+.. _pandas_extensions:
+
+Supporting New Data Structures and APIs
+---------------------------------------
+
+Comprehensive coverage of analytics data structures and APIs is an important goal for Bodo.
+To support new data structures and APIs, we need to create Numba extensions for them.
+Our `datetime.datetime <https://github.com/Bodo-inc/Bodo/blob/ddf9434081f1f092a3a0757bd3c5faa44ba3a61c/bodo/hiframes/datetime_datetime_ext.py>`_
+support is a straighforward example. Also see `Numba documentation for extensions <http://numba.pydata.org/numba-doc/latest/extending/index.html>`_.
+
+There are more requirements when supporting APIs that need to be parallelized (such as Pandas APIs).
+The implementation should be parallelization, which means it has to use only
+parallelizable constructs (other parallel APIs, prange, builtins).
+In addition, the implementation has to be inlined so that
+the distributed pass can analyze and parallelize it (see the nunique example above).
+
+Pandas APIs in particular have a lot of nuances to handle. But internal code of Pandas
+is reasonably readable. Therefore, it is recommended to step through the
+implementation using simple inputs to understand the functionality in detail.
+For example, one can use `pdb.run('S.sum()')` inside ``ipython`` to step through `sum` method
+of Series objects.
+
+When a function is not performance critical, we can support it using the `object` mode of Numba
+(see `objmode docs <http://numba.pydata.org/numba-doc/latest/user/withobjmode.html>`_)
+to avoid extensive effort of providing native implementation.
+This means that the jit execution jumps into regular python to run the implementation.
+See our `re.search implementation <https://github.com/Bodo-inc/Bodo/blob/ddf9434081f1f092a3a0757bd3c5faa44ba3a61c/bodo/libs/re_ext.py#L151>`_
+as an example.
+
+
 .. _resources:
 
 Resources
