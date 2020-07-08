@@ -17,7 +17,6 @@ Welcome to Bodo Development's documentation!
    source/github_practices
    source/numba_info
    source/connectors
-   source/documentation
    source/dev_with_docker
    source/conda_build
    source/testing_poc_SQL
