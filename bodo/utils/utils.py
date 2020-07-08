@@ -685,7 +685,7 @@ def overload_alloc_type(n, t, s=None):
         dtypes = typ.data
         names = typ.names
         return lambda n, t, s=None: bodo.libs.struct_arr_ext.pre_alloc_struct_array(
-            n, dtypes, names
+            n, s, dtypes, names
         )  # pragma: no cover
 
     if isinstance(typ, bodo.hiframes.pd_categorical_ext.CategoricalArray):

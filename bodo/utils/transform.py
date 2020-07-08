@@ -709,14 +709,20 @@ def gen_varsize_item_sizes(t, item, var_names):
         return "    {} += len({})\n".format(var_names[0], item)
 
 
-def get_n_nested_counts(t):
-    """get the number of nested counts needed for upfront allocation of array of type
-    't' (excluding the regular length).
-    For example, ArrayItemArrayType(ArrayItemArrayType(array(int64))) returns 2.
+def get_type_alloc_counts(t):
+    """get the number of counts needed for upfront allocation of array of type 't'.
+    For example, ArrayItemArrayType(ArrayItemArrayType(array(int64))) returns 3.
     """
-    # TODO: struct array, strings
-    return (
-        1 + get_n_nested_counts(t.dtype)
-        if isinstance(t, ArrayItemArrayType) or t == string_array_type
-        else 0
-    )
+    if isinstance(t, StructArrayType):
+        return 1 + sum(get_type_alloc_counts(d.dtype) for d in t.data)
+
+    if isinstance(t, ArrayItemArrayType) or t == string_array_type:
+        return 1 + get_type_alloc_counts(t.dtype)
+
+    if bodo.utils.utils.is_array_typ(t, False) or t == bodo.string_type:
+        return 1
+
+    if isinstance(t, StructType):
+        return sum(get_type_alloc_counts(d) for d in t.data)
+
+    return 0

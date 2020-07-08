@@ -43,9 +43,10 @@ from bodo.utils.cg_helpers import (
     list_check,
     is_na_value,
     get_bitmap_bit,
-    count_array_inner_elems,
+    get_array_elem_counts,
     seq_getitem,
     gen_allocate_array,
+    to_arr_obj_if_list_obj,
 )
 from bodo.utils.indexing import init_nested_counts, add_nested_counts
 from llvmlite import ir as lir
@@ -208,32 +209,15 @@ def construct_array_item_array(
     return meminfo, payload.data, offsets_ptr, null_bitmap_ptr
 
 
-def _unbox_array_item_array_copy_data(
-    typ, arr_obj, np_array_method, c, data_arr, item_ind, n_items
-):
+def _unbox_array_item_array_copy_data(typ, arr_obj, c, data_arr, item_ind, n_items):
     """unbox 'arr_obj' and copy data to 'data_arr' at index 'item_ind'
     """
     context = c.context
     builder = c.builder
 
-    # convert arr_obj to array if it is a list (list_check is needed since converting
-    # pd arrays like IntergerArray can cause errors)
-    # if isinstance(arr_obj, list):
-    #   arr_obj = np.array(arr_obj)
-    arr_obj_ptr = cgutils.alloca_once_value(builder, arr_obj)
-    is_list = list_check(builder, context, arr_obj)
-    is_list_cond = builder.icmp_unsigned("!=", is_list, lir.Constant(is_list.type, 0))
-    with builder.if_then(is_list_cond):
-        old_obj = builder.load(arr_obj_ptr)
-        new_obj = c.pyapi.call(np_array_method, c.pyapi.tuple_pack([old_obj]))
-        # TODO: this decref causes crashes for some reason in test_array_item_array.py
-        # needs to be investigated to avoid object leaks
-        # c.pyapi.decref(old_obj)
-        builder.store(new_obj, arr_obj_ptr)
-    arr_obj = builder.load(arr_obj_ptr)
-
     # unbox array
     arr_typ = typ.dtype
+    arr_obj = to_arr_obj_if_list_obj(c, context, builder, arr_obj, arr_typ)
     arr_val = c.pyapi.to_native_value(arr_typ, arr_obj).value
     # copy array data
     sig = types.none(arr_typ, types.int64, types.int64, arr_typ)
@@ -260,11 +244,6 @@ def _unbox_array_item_array_generic(
     mod_name = context.insert_const_string(builder.module, "pandas")
     pd_mod_obj = c.pyapi.import_module_noblock(mod_name)
     C_NA = c.pyapi.object_getattr_string(pd_mod_obj, "NA")
-
-    # get np.array to convert list items to array
-    mod_name = context.insert_const_string(builder.module, "numpy")
-    np_mod_obj = c.pyapi.import_module_noblock(mod_name)
-    np_array_method = c.pyapi.object_getattr_string(np_mod_obj, "asarray")
 
     zero32 = c.context.get_constant(types.int32, 0)
     builder.store(zero32, offsets_ptr)
@@ -314,7 +293,7 @@ def _unbox_array_item_array_generic(
             set_bitmap_bit(builder, null_bitmap_ptr, array_ind, 1)
             n_items = bodo.utils.utils.object_length(c, arr_obj)
             _unbox_array_item_array_copy_data(
-                typ, arr_obj, np_array_method, c, data_arr, item_ind, n_items
+                typ, arr_obj, c, data_arr, item_ind, n_items
             )
             # curr_item_ind += n_items
             builder.store(builder.add(item_ind, n_items), curr_item_ind)
@@ -328,8 +307,6 @@ def _unbox_array_item_array_generic(
 
     c.pyapi.decref(pd_mod_obj)
     c.pyapi.decref(C_NA)
-    c.pyapi.decref(np_mod_obj)
-    c.pyapi.decref(np_array_method)
 
 
 @unbox(ArrayItemArrayType)
@@ -353,7 +330,15 @@ def unbox_array_item_array(typ, val, c):
         )
         n_elems = cgutils.pack_array(c.builder, [c.builder.call(fn_tp, [val])])
     else:
-        n_elems = count_array_inner_elems(c, c.builder, c.context, val, typ)
+        n_elems_all = get_array_elem_counts(c, c.builder, c.context, val, typ)
+        # ignore first value in tuple which is array length
+        n_elems = cgutils.pack_array(
+            c.builder,
+            [
+                c.builder.extract_value(n_elems_all, i)
+                for i in range(1, n_elems_all.type.count)
+            ],
+        )
 
     meminfo, data_arr, offsets_ptr, null_bitmap_ptr = construct_array_item_array(
         c.context, c.builder, typ, n_arrays, n_elems, c

@@ -1218,14 +1218,19 @@ def str_arr_set_na(typingctx, str_arr_typ, ind_typ=None):
         # unset masked bit
         builder.store(builder.and_(byte, mask), byte_ptr)
         if str_arr_typ == string_array_type:
-            # offsets[ind+1] = offsets[ind]
-            builder.store(
-                builder.load(builder.gep(payload.offsets, [ind])),
-                builder.gep(
-                    payload.offsets,
-                    [builder.add(ind, lir.Constant(lir.IntType(64), 1))],
-                ),
-            )
+            # NOTE: sometimes during construction, setna may be called before setting
+            # the actual value (see struct array unboxing). setting the last offset can
+            # make output of num_total_chars() invalid
+            # TODO: refactor string array to avoid C code
+            # if ind+1 != num_strings
+            #   offsets[ind+1] = offsets[ind]
+            ind_plus1 = builder.add(ind, lir.Constant(lir.IntType(64), 1))
+            is_na_cond = builder.icmp_unsigned("!=", ind_plus1, payload.num_strings)
+            with builder.if_then(is_na_cond):
+                builder.store(
+                    builder.load(builder.gep(payload.offsets, [ind])),
+                    builder.gep(payload.offsets, [ind_plus1],),
+                )
         return context.get_dummy_value()
 
     return types.void(str_arr_typ, types.intp), codegen
