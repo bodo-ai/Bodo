@@ -34,7 +34,7 @@ from bodo.libs.decimal_arr_ext import DecimalArrayType, int128_type
 from bodo.hiframes.pd_categorical_ext import CategoricalArray, get_categories_int_type
 from bodo.libs.bool_arr_ext import boolean_array
 from bodo.hiframes.datetime_date_ext import datetime_date_array_type
-from bodo.utils.transform import get_n_nested_counts
+from bodo.utils.transform import get_type_alloc_counts
 
 from bodo.libs import array_ext
 from llvmlite import ir as lir
@@ -671,11 +671,11 @@ def info_to_array(typingctx, info_type, arr_type):
                     # (all Arrow arrays are nullable)
                     return 2
 
-            n = get_n_nested_counts(arr_type)
+            n = get_type_alloc_counts(arr_type)
             # allocate zero-initialized array of lengths for each array in
             # nested datastructure (to be filled out by C++)
             lengths = cgutils.pack_array(
-                builder, [lir.Constant(lir.IntType(64), 0) for _ in range(n + 1)]
+                builder, [lir.Constant(lir.IntType(64), 0) for _ in range(n)]
             )
             lengths_ptr = cgutils.alloca_once_value(builder, lengths)
             # allocate array of null pointers for each buffer in the
