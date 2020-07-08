@@ -13,6 +13,7 @@ Welcome to Bodo Development's documentation!
    source/getting_started
    source/build_bodo
    source/bodo_dev
+   source/dev_process
    source/github_practices
    source/numba_info
    source/connectors
