@@ -21,7 +21,6 @@ Welcome to Bodo Development's documentation!
    source/dev_with_docker
    source/conda_build
    source/testing_poc_SQL
-   source/resources
    source/release_checklist
 
 
