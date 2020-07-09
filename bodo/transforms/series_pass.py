@@ -2085,17 +2085,6 @@ class SeriesPass:
         return [assign]
 
     def _run_call_rolling(self, assign, lhs, rhs, func_name):
-        # replace input arguments with data arrays from Series
-        nodes = []
-        new_args = []
-        for arg in rhs.args:
-            if isinstance(self.typemap[arg.name], SeriesType):
-                new_args.append(self._get_series_data(arg, nodes))
-            else:
-                new_args.append(arg)
-
-        self._convert_series_calltype(rhs)
-        rhs.args = new_args
 
         if func_name == "rolling_corr":
 
@@ -2109,7 +2098,8 @@ class SeriesPass:
                 )
                 return cov / (a_std * b_std)
 
-            return replace_func(self, rolling_corr_impl, rhs.args, pre_nodes=nodes)
+            return replace_func(self, rolling_corr_impl, rhs.args)
+
         if func_name == "rolling_cov":
 
             def rolling_cov_impl(arr, other, w, center):  # pragma: no cover
@@ -2133,7 +2123,8 @@ class SeriesPass:
                 bias_adj = count / (count - ddof)
                 return (mean_XtY - mean_X * mean_Y) * bias_adj
 
-            return replace_func(self, rolling_cov_impl, rhs.args, pre_nodes=nodes)
+            return replace_func(self, rolling_cov_impl, rhs.args)
+
         # replace apply function with dispatcher obj, now the type is known
         if func_name == "rolling_fixed" and is_const_func_type(
             self.typemap[rhs.args[4].name]
@@ -2148,7 +2139,7 @@ class SeriesPass:
             def f(arr, w, center):  # pragma: no cover
                 return bodo.hiframes.rolling.rolling_fixed(arr, w, center, False, _func)
 
-            return nodes + compile_func_single_block(
+            return compile_func_single_block(
                 f, rhs.args[:-2], lhs, self, extra_globals={"_func": imp_dis}
             )
         elif func_name == "rolling_variable" and is_const_func_type(
@@ -2166,12 +2157,11 @@ class SeriesPass:
                     arr, on_arr, w, center, False, _func
                 )
 
-            return nodes + compile_func_single_block(
+            return compile_func_single_block(
                 f, rhs.args[:-2], lhs, self, extra_globals={"_func": imp_dis}
             )
 
-        nodes.append(assign)
-        return nodes
+        return [assign]
 
     def _handle_series_combine(self, assign, lhs, rhs, series_var):
         """translate s1.combine(s2, lambda x1,x2 :...) to prange()
