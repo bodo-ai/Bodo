@@ -132,6 +132,18 @@ def array_setitem_bool_index(A, idx, val):  # pragma: no cover
 
 
 @register_jitable
+def setitem_slice_index_null_bits(dst_bitmap, src_bitmap, idx, n):  # pragma: no cover
+    """set null bits for setitem with slice index for nullable arrays.
+    """
+    slice_idx = numba.cpython.unicode._normalize_slice(idx, n)
+    val_ind = 0
+    for i in range(slice_idx.start, slice_idx.stop, slice_idx.step):
+        bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(src_bitmap, val_ind)
+        bodo.libs.int_arr_ext.set_bit_to_arr(dst_bitmap, i, bit)
+        val_ind += 1
+
+
+@register_jitable
 def array_setitem_slice_index(A, idx, val):  # pragma: no cover
     """implements setitem with slice index for arrays that have a '_data' attribute and
     '_null_bitmap' attribute (e.g. int/bool/decimal/date). The value is assumed to be
@@ -146,12 +158,7 @@ def array_setitem_slice_index(A, idx, val):  # pragma: no cover
     # XXX: conservative copy of bitmap in case there is overlap
     # TODO: check for overlap and copy only if necessary
     src_bitmap = val._null_bitmap.copy()
-    slice_idx = numba.cpython.unicode._normalize_slice(idx, n)
-    val_ind = 0
-    for i in range(slice_idx.start, slice_idx.stop, slice_idx.step):
-        bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(src_bitmap, val_ind)
-        bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, i, bit)
-        val_ind += 1
+    setitem_slice_index_null_bits(A._null_bitmap, src_bitmap, idx, n)
 
 
 def init_nested_counts(arr_typ):  # pragma: no cover
