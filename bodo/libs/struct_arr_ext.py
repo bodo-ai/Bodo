@@ -112,6 +112,9 @@ class StructArrayType(types.ArrayCompatible):
         )
         return StructArrayType(data, names)
 
+    def copy(self):
+        return StructArrayType(self.data, self.names)
+
 
 class StructArrayPayloadType(types.Type):
     def __init__(self, data):
