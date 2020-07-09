@@ -1250,6 +1250,38 @@ def struct_arr_setitem(arr, ind, val):
         impl = loc_vars["impl"]
         return impl
 
+    # slice case (used in unboxing)
+    if isinstance(ind, types.SliceType):
+        # set data arrays and null bitmap
+        n_fields = len(arr.data)
+        func_text = "def impl(arr, ind, val):\n"
+        func_text += "  data = get_data(arr)\n"
+        func_text += "  null_bitmap = get_null_bitmap(arr)\n"
+        func_text += "  val_data = get_data(val)\n"
+        func_text += "  val_null_bitmap = get_null_bitmap(val)\n"
+        func_text += "  setitem_slice_index_null_bits(null_bitmap, val_null_bitmap, ind, len(arr))\n"
+        for i in range(n_fields):
+            func_text += "  data[{0}][ind] = val_data[{0}]\n".format(i)
+
+        loc_vars = {}
+        exec(
+            func_text,
+            {
+                "bodo": bodo,
+                "get_data": get_data,
+                "get_null_bitmap": get_null_bitmap,
+                "set_bit_to_arr": bodo.libs.int_arr_ext.set_bit_to_arr,
+                "setitem_slice_index_null_bits": bodo.utils.indexing.setitem_slice_index_null_bits,
+            },
+            loc_vars,
+        )
+        impl = loc_vars["impl"]
+        return impl
+
+    raise BodoError(
+        "only setitem with scalar/slice index is currently supported for struct arrays"
+    )  # pragma: no cover
+
 
 @overload(len, no_unliteral=True)
 def overload_struct_arr_len(A):
