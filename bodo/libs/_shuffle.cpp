@@ -554,7 +554,7 @@ std::shared_ptr<arrow::Buffer> compute_bitmap_array(
     }
 #endif
     MPI_Datatype mpi_typ_null = get_MPI_typ(Bodo_CTypes::UINT8);
-    std::vector<uint8_t> send_null_bitmask((n_rows + 7) >> 3);
+    std::vector<uint8_t> send_null_bitmask((n_rows + 7) >> 3, 0);
     for (size_t i_row = 0; i_row < n_rows; i_row++)
         SetBitTo(send_null_bitmask.data(), i_row, !input_array->IsNull(i_row));
     int n_row_send_null =
@@ -583,7 +583,7 @@ std::shared_ptr<arrow::Buffer> compute_bitmap_array(
                   recv_array_null_bitmask.data(), recv_count_null.data(),
                   recv_disp_null.data(), mpi_typ_null, MPI_COMM_WORLD);
 #ifdef DEBUG_ARROW_SHUFFLE
-    for (int i = 0; i < n_row_send_null; i++)
+    for (int i = 0; i < n_row_recv_null; i++)
         std::cout << "recv_array_null_bitmask i=" << i
                   << " val=" << (int)recv_array_null_bitmask[i] << "\n";
 #endif
@@ -703,16 +703,50 @@ std::shared_ptr<arrow::Buffer> shuffle_arrow_primitive_array(
     std::vector<int> const& send_count, std::vector<int> const& recv_count,
     uint32_t* hashes, int const& n_pes,
     std::shared_ptr<arrow::PrimitiveArray> const& input_array) {
-    if (input_array->type()->id() == arrow::Type::INT32)
+    arrow::Type::type typ = input_array->type()->id();
+    if (typ == arrow::Type::INT8)
+        return shuffle_arrow_primitive_array_T<int8_t, Bodo_CTypes::INT8>(
+            send_count, recv_count, hashes,
+            (int8_t*)input_array->values()->data(), n_pes, input_array);
+    if (typ == arrow::Type::UINT8)
+        return shuffle_arrow_primitive_array_T<uint8_t, Bodo_CTypes::UINT8>(
+            send_count, recv_count, hashes,
+            (uint8_t*)input_array->values()->data(), n_pes, input_array);
+    if (typ == arrow::Type::INT16)
+        return shuffle_arrow_primitive_array_T<int16_t, Bodo_CTypes::INT16>(
+            send_count, recv_count, hashes,
+            (int16_t*)input_array->values()->data(), n_pes, input_array);
+    if (typ == arrow::Type::UINT16)
+        return shuffle_arrow_primitive_array_T<uint16_t, Bodo_CTypes::UINT16>(
+            send_count, recv_count, hashes,
+            (uint16_t*)input_array->values()->data(), n_pes, input_array);
+    if (typ == arrow::Type::INT32)
         return shuffle_arrow_primitive_array_T<int32_t, Bodo_CTypes::INT32>(
             send_count, recv_count, hashes,
             (int32_t*)input_array->values()->data(), n_pes, input_array);
-    if (input_array->type()->id() == arrow::Type::DOUBLE)
+    if (typ == arrow::Type::UINT32)
+        return shuffle_arrow_primitive_array_T<uint32_t, Bodo_CTypes::UINT32>(
+            send_count, recv_count, hashes,
+            (uint32_t*)input_array->values()->data(), n_pes, input_array);
+    if (typ == arrow::Type::INT64)
+        return shuffle_arrow_primitive_array_T<int64_t, Bodo_CTypes::INT64>(
+            send_count, recv_count, hashes,
+            (int64_t*)input_array->values()->data(), n_pes, input_array);
+    if (typ == arrow::Type::UINT64)
+        return shuffle_arrow_primitive_array_T<uint64_t, Bodo_CTypes::UINT64>(
+            send_count, recv_count, hashes,
+            (uint64_t*)input_array->values()->data(), n_pes, input_array);
+    if (typ == arrow::Type::FLOAT)
+        return shuffle_arrow_primitive_array_T<float, Bodo_CTypes::FLOAT32>(
+            send_count, recv_count, hashes,
+            (float*)input_array->values()->data(), n_pes, input_array);
+    if (typ == arrow::Type::DOUBLE)
         return shuffle_arrow_primitive_array_T<double, Bodo_CTypes::FLOAT64>(
             send_count, recv_count, hashes,
             (double*)input_array->values()->data(), n_pes, input_array);
     // Unsupported data type.
-    Bodo_PyErr_SetString(PyExc_RuntimeError, "unsupported type");
+    std::string err_msg = "shuffle_arrow_primitive_array : Unsupported type " + input_array->type()->ToString();
+    Bodo_PyErr_SetString(PyExc_RuntimeError, err_msg.c_str());
     return nullptr;
 }
 
@@ -797,13 +831,13 @@ std::shared_ptr<arrow::Buffer> compute_string_buffer_array(
  */
 std::shared_ptr<arrow::Array> shuffle_arrow_array(
     std::shared_ptr<arrow::Array> input_array, uint32_t* hashes, int n_pes) {
-#ifdef DEBUG_ARROW_SHUFFLE
-    std::cout << "Beginning of shuffle_arrow_array\n";
-#endif
     // Computing total number of rows on output
     // Note that the number of rows, counts and hashes varies according
     // to the array in the recursive structure
     size_t n_rows = (size_t)input_array->length();
+#ifdef DEBUG_ARROW_SHUFFLE
+    std::cout << "Beginning of shuffle_arrow_array n_rows=" << n_rows << "\n";
+#endif
     std::vector<int> send_count(n_pes, 0);
     std::vector<int> recv_count(n_pes);
     for (size_t i_row = 0; i_row < n_rows; i_row++) {

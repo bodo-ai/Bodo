@@ -35,6 +35,12 @@
 #endif
 // ------------------------------------------------
 
+
+Bodo_CTypes::CTypeEnum arrow_to_bodo_type(arrow::Type::type type);
+
+
+
+
 inline void CheckEqualityArrayType(array_info* arr1, array_info* arr2) {
     if (arr1->arr_type != arr2->arr_type) {
         Bodo_PyErr_SetString(

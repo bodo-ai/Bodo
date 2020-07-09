@@ -2,6 +2,7 @@
 #include <arrow/api.h>
 #include "_bodo_common.h"
 #include "_murmurhash3.h"
+#include "_array_utils.h"
 
 /**
  * Computation of the inner hash of the functions. This covers the NUMPY case.
@@ -251,14 +252,51 @@ void hash_arrow_array(uint32_t* out_hashes,
     } else {
         auto primitive_array =
             std::dynamic_pointer_cast<arrow::PrimitiveArray>(input_array);
-        if (primitive_array->type()->id() == arrow::Type::INT32)
+        arrow::Type::type typ = primitive_array->type()->id();
+        if (typ == arrow::Type::INT8) {
+            apply_arrow_numeric_hash_T<int8_t, Bodo_CTypes::INT8>(
+                out_hashes, list_offsets, n_rows,
+                (int8_t*)primitive_array->values()->data(), primitive_array);
+        } else if (typ == arrow::Type::UINT8) {
+            apply_arrow_numeric_hash_T<uint8_t, Bodo_CTypes::UINT8>(
+                out_hashes, list_offsets, n_rows,
+                (uint8_t*)primitive_array->values()->data(), primitive_array);
+        } else if (typ == arrow::Type::INT16) {
+            apply_arrow_numeric_hash_T<int16_t, Bodo_CTypes::INT16>(
+                out_hashes, list_offsets, n_rows,
+                (int16_t*)primitive_array->values()->data(), primitive_array);
+        } else if (typ == arrow::Type::UINT16) {
+            apply_arrow_numeric_hash_T<uint16_t, Bodo_CTypes::UINT16>(
+                out_hashes, list_offsets, n_rows,
+                (uint16_t*)primitive_array->values()->data(), primitive_array);
+        } else if (typ == arrow::Type::INT32) {
             apply_arrow_numeric_hash_T<int32_t, Bodo_CTypes::INT32>(
                 out_hashes, list_offsets, n_rows,
                 (int32_t*)primitive_array->values()->data(), primitive_array);
-        if (primitive_array->type()->id() == arrow::Type::DOUBLE)
+        } else if (typ == arrow::Type::UINT32) {
+            apply_arrow_numeric_hash_T<uint32_t, Bodo_CTypes::UINT32>(
+                out_hashes, list_offsets, n_rows,
+                (uint32_t*)primitive_array->values()->data(), primitive_array);
+        } else if (typ == arrow::Type::INT64) {
+            apply_arrow_numeric_hash_T<int64_t, Bodo_CTypes::INT64>(
+                out_hashes, list_offsets, n_rows,
+                (int64_t*)primitive_array->values()->data(), primitive_array);
+        } else if (typ == arrow::Type::UINT64) {
+            apply_arrow_numeric_hash_T<uint64_t, Bodo_CTypes::UINT64>(
+                out_hashes, list_offsets, n_rows,
+                (uint64_t*)primitive_array->values()->data(), primitive_array);
+        } else if (typ == arrow::Type::FLOAT) {
+            apply_arrow_numeric_hash_T<float, Bodo_CTypes::FLOAT32>(
+                out_hashes, list_offsets, n_rows,
+                (float*)primitive_array->values()->data(), primitive_array);
+        } else if (typ == arrow::Type::DOUBLE) {
             apply_arrow_numeric_hash_T<double, Bodo_CTypes::FLOAT64>(
                 out_hashes, list_offsets, n_rows,
                 (double*)primitive_array->values()->data(), primitive_array);
+        } else {
+          std::string err_msg = "hash_arrow_array : Unsupported type " + primitive_array->type()->ToString();
+          Bodo_PyErr_SetString(PyExc_RuntimeError, err_msg.c_str());
+        }
         apply_arrow_bitmask_hash(out_hashes, list_offsets, n_rows,
                                  primitive_array);
     }

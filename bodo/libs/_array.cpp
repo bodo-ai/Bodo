@@ -23,36 +23,6 @@ MPI_Datatype decimal_mpi_type = MPI_DATATYPE_NULL;
 
 #undef USE_ARROW_FOR_LIST_STRING
 
-Bodo_CTypes::CTypeEnum arrow_to_bodo_type(arrow::Type::type type) {
-    switch (type) {
-        case arrow::Type::INT8:
-            return Bodo_CTypes::INT8;
-        case arrow::Type::UINT8:
-            return Bodo_CTypes::UINT8;
-        case arrow::Type::INT16:
-            return Bodo_CTypes::INT16;
-        case arrow::Type::UINT16:
-            return Bodo_CTypes::UINT16;
-        case arrow::Type::INT32:
-            return Bodo_CTypes::INT32;
-        case arrow::Type::UINT32:
-            return Bodo_CTypes::UINT32;
-        case arrow::Type::INT64:
-            return Bodo_CTypes::INT64;
-        case arrow::Type::UINT64:
-            return Bodo_CTypes::UINT64;
-        case arrow::Type::FLOAT:
-            return Bodo_CTypes::FLOAT32;
-        case arrow::Type::DOUBLE:
-            return Bodo_CTypes::FLOAT64;
-        // TODO Decimal, Date, Datetime, Timedelta, String, Bool
-        default:
-            Bodo_PyErr_SetString(
-                PyExc_RuntimeError,
-                "invalid type in conversion from Arrow to Bodo type");
-    }
-}
-
 struct ArrayBuildInfo {
     ArrayBuildInfo(std::shared_ptr<arrow::Array> a, int p1, int p2)
         : array(a), types_pos(p1), buf_pos(p2) {}

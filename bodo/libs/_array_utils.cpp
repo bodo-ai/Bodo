@@ -4,6 +4,39 @@
 #include <string>
 #include "_decimal_ext.h"
 
+Bodo_CTypes::CTypeEnum arrow_to_bodo_type(arrow::Type::type type) {
+    switch (type) {
+        case arrow::Type::INT8:
+            return Bodo_CTypes::INT8;
+        case arrow::Type::UINT8:
+            return Bodo_CTypes::UINT8;
+        case arrow::Type::INT16:
+            return Bodo_CTypes::INT16;
+        case arrow::Type::UINT16:
+            return Bodo_CTypes::UINT16;
+        case arrow::Type::INT32:
+            return Bodo_CTypes::INT32;
+        case arrow::Type::UINT32:
+            return Bodo_CTypes::UINT32;
+        case arrow::Type::INT64:
+            return Bodo_CTypes::INT64;
+        case arrow::Type::UINT64:
+            return Bodo_CTypes::UINT64;
+        case arrow::Type::FLOAT:
+            return Bodo_CTypes::FLOAT32;
+        case arrow::Type::DOUBLE:
+            return Bodo_CTypes::FLOAT64;
+        // TODO Decimal, Date, Datetime, Timedelta, String, Bool
+        default:
+          {
+            std::string err_msg = "arrow_to_bodo_type : Unsupported type";
+            Bodo_PyErr_SetString(PyExc_RuntimeError, err_msg.c_str());
+          }
+    }
+}
+
+
+
 /**
  * Append values from a byte buffer to a primitive array builder.
  * @param values: pointer to buffer containing data
@@ -15,19 +48,60 @@
 void append_to_primitive(const uint8_t* values, int64_t offset, int64_t length,
                          arrow::ArrayBuilder* builder,
                          const std::vector<uint8_t>& valid_elems) {
-    if (builder->type()->id() == arrow::Type::INT32) {
+    arrow::Type::type typ = builder->type()->id();
+    if (typ == arrow::Type::INT8) {
+        auto typed_builder =
+            dynamic_cast<arrow::NumericBuilder<arrow::Int8Type>*>(builder);
+        typed_builder->AppendValues((int8_t*)values + offset, length,
+                                    valid_elems.data());
+    } else if (typ == arrow::Type::UINT8) {
+        auto typed_builder =
+            dynamic_cast<arrow::NumericBuilder<arrow::UInt8Type>*>(builder);
+        typed_builder->AppendValues((uint8_t*)values + offset, length,
+                                    valid_elems.data());
+    } else if (typ == arrow::Type::INT16) {
+        auto typed_builder =
+            dynamic_cast<arrow::NumericBuilder<arrow::Int16Type>*>(builder);
+        typed_builder->AppendValues((int16_t*)values + offset, length,
+                                    valid_elems.data());
+    } else if (typ == arrow::Type::UINT16) {
+        auto typed_builder =
+            dynamic_cast<arrow::NumericBuilder<arrow::UInt16Type>*>(builder);
+        typed_builder->AppendValues((uint16_t*)values + offset, length,
+                                    valid_elems.data());
+    } else if (typ == arrow::Type::INT32) {
         auto typed_builder =
             dynamic_cast<arrow::NumericBuilder<arrow::Int32Type>*>(builder);
         typed_builder->AppendValues((int32_t*)values + offset, length,
                                     valid_elems.data());
-    } else if (builder->type()->id() == arrow::Type::DOUBLE) {
+    } else if (typ == arrow::Type::UINT32) {
+        auto typed_builder =
+            dynamic_cast<arrow::NumericBuilder<arrow::UInt32Type>*>(builder);
+        typed_builder->AppendValues((uint32_t*)values + offset, length,
+                                    valid_elems.data());
+    } else if (typ == arrow::Type::INT64) {
+        auto typed_builder =
+            dynamic_cast<arrow::NumericBuilder<arrow::Int64Type>*>(builder);
+        typed_builder->AppendValues((int64_t*)values + offset, length,
+                                    valid_elems.data());
+    } else if (typ == arrow::Type::UINT64) {
+        auto typed_builder =
+            dynamic_cast<arrow::NumericBuilder<arrow::UInt64Type>*>(builder);
+        typed_builder->AppendValues((uint64_t*)values + offset, length,
+                                    valid_elems.data());
+    } else if (typ == arrow::Type::FLOAT) {
+        auto typed_builder =
+            dynamic_cast<arrow::NumericBuilder<arrow::FloatType>*>(builder);
+        typed_builder->AppendValues((float*)values + offset, length,
+                                    valid_elems.data());
+    } else if (typ == arrow::Type::DOUBLE) {
         auto typed_builder =
             dynamic_cast<arrow::NumericBuilder<arrow::DoubleType>*>(builder);
         typed_builder->AppendValues((double*)values + offset, length,
                                     valid_elems.data());
     } else {
-        Bodo_PyErr_SetString(PyExc_RuntimeError,
-                             "Unsupported primitive type building arrow array");
+      std::string err_msg = "append_to_primitive : Unsupported type " + builder->type()->ToString();
+      Bodo_PyErr_SetString(PyExc_RuntimeError, err_msg.c_str());
     }
 }
 
@@ -596,27 +670,12 @@ int ComparisonArrowColumn(std::shared_ptr<arrow::Array> const& arr1,
             if (epair.second) {
                 int test = 0;
                 // TODO: implement other types
-                if (primitive_array1->type()->id() != arrow::Type::INT32 &&
-                    primitive_array1->type()->id() == arrow::Type::DOUBLE) {
-                  Bodo_PyErr_SetString(PyExc_RuntimeError,
-                                       "Unsupported primitive type for comparison");
-                }
-                if (primitive_array1->type()->id() == arrow::Type::INT32) {
-                    char* ptr1 = (char*)primitive_array1->values()->data() +
-                                 sizeof(int32_t) * n_pos1_s;
-                    char* ptr2 = (char*)primitive_array2->values()->data() +
-                                 sizeof(int32_t) * n_pos2_s;
-                    test = NumericComparison(Bodo_CTypes::INT32, ptr1, ptr2,
-                                             na_position_bis);
-                }
-                if (primitive_array1->type()->id() == arrow::Type::DOUBLE) {
-                    char* ptr1 = (char*)primitive_array1->values()->data() +
-                                 sizeof(double) * n_pos1_s;
-                    char* ptr2 = (char*)primitive_array2->values()->data() +
-                                 sizeof(double) * n_pos2_s;
-                    test = NumericComparison(Bodo_CTypes::FLOAT64, ptr1, ptr2,
-                                             na_position_bis);
-                }
+                arrow::Type::type typ = primitive_array1->type()->id();
+                Bodo_CTypes::CTypeEnum bodo_typ = arrow_to_bodo_type(typ);
+                size_t siz_typ = numpy_item_size[bodo_typ];
+                char* ptr1 = (char*)primitive_array1->values()->data() + siz_typ * n_pos1_s;
+                char* ptr2 = (char*)primitive_array2->values()->data() + siz_typ * n_pos2_s;
+                test = NumericComparison(bodo_typ, ptr1, ptr2, na_position_bis);
                 if (!test) return test;
             }
         }
@@ -981,8 +1040,32 @@ void DEBUG_append_to_primitive(arrow::Type::type const& type,
                                const uint8_t* values, int64_t offset,
                                int64_t length, std::string& string_builder,
                                const std::vector<uint8_t>& valid_elems) {
-    if (type == arrow::Type::INT32) {
+    if (type == arrow::Type::INT8) {
+        DEBUG_append_to_primitive_T((int8_t*)values, offset, length,
+                                    string_builder, valid_elems);
+    } else if (type == arrow::Type::UINT8) {
+        DEBUG_append_to_primitive_T((uint8_t*)values, offset, length,
+                                    string_builder, valid_elems);
+    } else if (type == arrow::Type::INT16) {
+        DEBUG_append_to_primitive_T((int16_t*)values, offset, length,
+                                    string_builder, valid_elems);
+    } else if (type == arrow::Type::UINT16) {
+        DEBUG_append_to_primitive_T((uint16_t*)values, offset, length,
+                                    string_builder, valid_elems);
+    } else if (type == arrow::Type::INT32) {
         DEBUG_append_to_primitive_T((int32_t*)values, offset, length,
+                                    string_builder, valid_elems);
+    } else if (type == arrow::Type::UINT32) {
+        DEBUG_append_to_primitive_T((uint32_t*)values, offset, length,
+                                    string_builder, valid_elems);
+    } else if (type == arrow::Type::INT64) {
+        DEBUG_append_to_primitive_T((int64_t*)values, offset, length,
+                                    string_builder, valid_elems);
+    } else if (type == arrow::Type::UINT64) {
+        DEBUG_append_to_primitive_T((uint64_t*)values, offset, length,
+                                    string_builder, valid_elems);
+    } else if (type == arrow::Type::FLOAT) {
+        DEBUG_append_to_primitive_T((float*)values, offset, length,
                                     string_builder, valid_elems);
     } else if (type == arrow::Type::DOUBLE) {
         DEBUG_append_to_primitive_T((double*)values, offset, length,
@@ -1003,13 +1086,15 @@ void DEBUG_append_to_out_array(std::shared_ptr<arrow::Array> input_array,
 
         string_builder += "[";
         for (int64_t idx = start_offset; idx < end_offset; idx++) {
+            if (idx > start_offset) {
+                string_builder += ", ";
+            }
             if (list_array->IsNull(idx)) {
                 string_builder += "None";
-                continue;
+            } else {
+                DEBUG_append_to_out_array(list_array->values(), list_array->value_offset(idx),
+                                          list_array->value_offset(idx + 1), string_builder);
             }
-            DEBUG_append_to_out_array(
-                list_array->values(), list_array->value_offset(idx),
-                list_array->value_offset(idx + 1), string_builder);
         }
         string_builder += "]";
     } else if (input_array->type_id() == arrow::Type::STRUCT) {
@@ -1038,7 +1123,7 @@ void DEBUG_append_to_out_array(std::shared_ptr<arrow::Array> input_array,
         int64_t num_elems = end_offset - start_offset;
         string_builder += "[";
         for (int64_t i = 0; i < num_elems; i++) {
-            if (i > 0) string_builder += ",";
+            if (i > 0) string_builder += ", ";
             if (str_array->IsNull(start_offset + i))
                 string_builder += "None";
             else
@@ -1147,7 +1232,8 @@ std::vector<std::string> DEBUG_PrintColumn(array_info* arr) {
         for (size_t iRow = 0; iRow < nRow; iRow++) {
             strOut = "";
             DEBUG_append_to_out_array(in_arr, iRow, iRow + 1, strOut);
-            ListStr[iRow] = strOut;
+            size_t len = strOut.size();
+            ListStr[iRow] = strOut.substr(1,len-2);
         }
     }
     return ListStr;

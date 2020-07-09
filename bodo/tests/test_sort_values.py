@@ -956,3 +956,24 @@ def test_random_decimal():
     n = 50
     df1 = pd.DataFrame({"A": gen_random_decimal_array(2, n)})
     check_func(f, (df1,), convert_columns_to_pandas=True)
+
+
+def test_sort_list_list():
+    data = np.array(
+        [
+            [[[1, 2], [3]], [[2, None]]],
+            [[[3], [], [1, None, 4]]],
+            [[[3], [42], [1, None, 4]]],
+            None,
+            [[[4, 5, 6], []], [[1]], [[1, 2]]],
+            [[[4, 5, 6], [32]], [[1]], [[1, 2]]],
+            [],
+            [[[], [1]], None, [[1, 4]], []],
+        ]
+    )
+    df = pd.DataFrame({"A": [5, 1, 4, 2, 3, 0, 12, 23], "B": data})
+    def f(df):
+        df_ret = df.sort_values(by="A", ascending=True, na_position="first")
+        return df_ret
+
+    check_func(f, (df,))
