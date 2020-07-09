@@ -17,6 +17,7 @@ from bodo.utils.typing import (
     get_overload_const_str,
     is_overload_constant_str,
     is_const_func_type,
+    get_overload_const_func,
 )
 
 
@@ -95,11 +96,9 @@ def rolling_corr(arr, arr2, win):  # pragma: no cover
 @infer_global(rolling_corr)
 class RollingCovType(AbstractTemplate):
     def generic(self, args, kws):
-        arr = args[0]  # array or series
-        # series_pass pass replaces series input with array after typing
-        from bodo.hiframes.pd_series_ext import if_series_to_array_type
+        arr = args[0]  # array
 
-        ret_typ = if_series_to_array_type(arr).copy(dtype=types.float64)
+        ret_typ = arr.copy(dtype=types.float64)
         return signature(ret_typ, *unliteral_all(args))
 
 
@@ -108,8 +107,9 @@ def overload_rolling_fixed(a, w, c, p, fname):
 
     # UDF case
     if is_const_func_type(fname):
+        func = _get_apply_func(fname)
         return lambda a, w, c, p, fname: roll_fixed_apply(
-            a, w, c, p, fname
+            a, w, c, p, func
         )  # pragma: no cover
 
     assert is_overload_constant_str(fname)
@@ -143,8 +143,9 @@ def overload_rolling_variable(a, o, w, c, p, fname):
 
     # UDF case
     if is_const_func_type(fname):
+        func = _get_apply_func(fname)
         return lambda a, o, w, c, p, fname: roll_variable_apply(
-            a, o, w, c, p, fname
+            a, o, w, c, p, func
         )  # pragma: no cover
 
     assert is_overload_constant_str(fname)
@@ -174,6 +175,27 @@ def overload_rolling_variable(a, o, w, c, p, fname):
     return lambda a, o, w, c, p, fname: roll_var_linear_generic(
         a, o, w, c, p, init_kernel, add_kernel, remove_kernel, calc_kernel
     )  # pragma: no cover
+
+
+def _get_apply_func(f_type):
+    """get UDF function from function type and jit it with Bodo's sequential pipeline to
+    avoid parallel errors.
+    """
+    func = get_overload_const_func(f_type)
+    # using Bodo's sequential/inline pipeline for the UDF to make sure nested calls
+    # are inlined and not distributed. Otherwise, generated barriers cause hangs
+    # see: test_df_apply_func_case2
+    parallel = {
+        "comprehension": True,
+        "setitem": False,
+        "reduction": True,
+        "numpy": True,
+        "stencil": True,
+        "fusion": True,
+    }
+    return numba.njit(
+        func, parallel=parallel, pipeline_class=bodo.compiler.BodoCompilerSeqInline
+    )
 
 
 #### adapted from pandas window.pyx ####

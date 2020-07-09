@@ -2085,6 +2085,8 @@ class SeriesPass:
         return [assign]
 
     def _run_call_rolling(self, assign, lhs, rhs, func_name):
+        """inline implementation for rolling_corr/cov functions
+        """
 
         if func_name == "rolling_corr":
 
@@ -2124,42 +2126,6 @@ class SeriesPass:
                 return (mean_XtY - mean_X * mean_Y) * bias_adj
 
             return replace_func(self, rolling_cov_impl, rhs.args)
-
-        # replace apply function with dispatcher obj, now the type is known
-        if func_name == "rolling_fixed" and is_const_func_type(
-            self.typemap[rhs.args[4].name]
-        ):
-            # for apply case, create a dispatcher for the kernel and pass it
-            # TODO: automatically handle lambdas in Numba
-            dtype = self.typemap[rhs.args[0].name].dtype
-            out_dtype = self.typemap[lhs.name].dtype
-            func_node = guard(get_definition, self.func_ir, rhs.args[4])
-            imp_dis = self._handle_rolling_apply_func(func_node, dtype, out_dtype)
-
-            def f(arr, w, center):  # pragma: no cover
-                return bodo.hiframes.rolling.rolling_fixed(arr, w, center, False, _func)
-
-            return compile_func_single_block(
-                f, rhs.args[:-2], lhs, self, extra_globals={"_func": imp_dis}
-            )
-        elif func_name == "rolling_variable" and is_const_func_type(
-            self.typemap[rhs.args[5].name]
-        ):
-            # for apply case, create a dispatcher for the kernel and pass it
-            # TODO: automatically handle lambdas in Numba
-            dtype = self.typemap[rhs.args[0].name].dtype
-            out_dtype = self.typemap[lhs.name].dtype
-            func_node = guard(get_definition, self.func_ir, rhs.args[5])
-            imp_dis = self._handle_rolling_apply_func(func_node, dtype, out_dtype)
-
-            def f(arr, on_arr, w, center):  # pragma: no cover
-                return bodo.hiframes.rolling.rolling_variable(
-                    arr, on_arr, w, center, False, _func
-                )
-
-            return compile_func_single_block(
-                f, rhs.args[:-2], lhs, self, extra_globals={"_func": imp_dis}
-            )
 
         return [assign]
 
@@ -2290,10 +2256,7 @@ class SeriesPass:
                 self, f, [data, other, window, center, index, name], pre_nodes=nodes
             )
         elif func_name == "apply":
-            func_node = guard(get_definition, self.func_ir, rhs.args[0])
-            dtype = self.typemap[data.name].dtype
-            out_dtype = self.typemap[lhs.name].dtype
-            func_global = self._handle_rolling_apply_func(func_node, dtype, out_dtype)
+            func_global = get_overload_const_func(self.typemap[rhs.args[0].name])
         else:
             func_global = func_name
 
