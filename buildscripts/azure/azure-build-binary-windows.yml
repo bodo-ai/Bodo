@@ -54,7 +54,7 @@ jobs:
       cd buildscripts/bodo-conda-recipe/
       export CHECK_LICENSE_EXPIRED=$(CHECK_LICENSE_EXPIRED)
       export CHECK_LICENSE_CORE_COUNT=$(CHECK_LICENSE_CORE_COUNT)
-      conda build . -c bodo.ai -c conda-forge -c intel -c numba --no-test --output-folder ../../
+      conda build . -c bodo.ai -c conda-forge -c intel --no-test --output-folder ../../
     displayName: 'Conda build Bodo'
 
   - bash: |
