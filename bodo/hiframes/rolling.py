@@ -1,4 +1,6 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
+"""implementations of rolling window functions (sequential and parallel)
+"""
 import numpy as np
 import pandas as pd
 import bodo

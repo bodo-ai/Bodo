@@ -1,15 +1,13 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
+"""typing for rolling window functions
+"""
 from numba.core import types
 from numba.extending import (
     models,
     register_model,
-    lower_cast,
     infer_getattr,
-    type_callable,
     infer,
     overload,
-    make_attribute_wrapper,
-    intrinsic,
     lower_builtin,
     overload_method,
 )
@@ -18,7 +16,6 @@ from numba.core.typing.templates import (
     AbstractTemplate,
     signature,
     AttributeTemplate,
-    bound_function,
 )
 import bodo
 from bodo.hiframes.pd_dataframe_ext import DataFrameType

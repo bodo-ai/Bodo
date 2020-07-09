@@ -2272,63 +2272,6 @@ class SeriesPass:
             self, f, args, pre_nodes=nodes, extra_globals={"_func": func_global}
         )
 
-    def _handle_rolling_apply_func(
-        self, func_node, dtype, out_dtype
-    ):  # pragma: no cover
-        # using Bodo's sequential/inline pipeline for the UDF to make sure nested calls
-        # are inlined and not distributed. Otherwise, generated barriers cause hangs
-        # see: test_df_apply_func_case2
-        # also handles Pandas calls inside UDF
-        parallel = {
-            "comprehension": True,
-            "setitem": False,
-            "reduction": True,
-            "numpy": True,
-            "stencil": True,
-            "fusion": True,
-        }
-        if isinstance(func_node, ir.Global) and isinstance(
-            func_node.value, numba.core.registry.CPUDispatcher
-        ):
-            return numba.njit(
-                func_node.value.py_func,
-                parallel=parallel,
-                pipeline_class=bodo.compiler.BodoCompilerSeqInline,
-            )
-        # other UDF cases are not currently possible currently due to Numba's
-        # MakeFunctionToJitFunction pass but may be possible later
-        if func_node is None:
-            raise ValueError("cannot find kernel function for rolling.apply() call")
-        # TODO: more error checking on the kernel to make sure it doesn't
-        # use global/closure variables
-        if func_node.closure is not None:
-            raise ValueError(
-                "rolling apply kernel functions cannot have closure variables"
-            )
-        if func_node.defaults is not None:
-            raise ValueError(
-                "rolling apply kernel functions cannot have default arguments"
-            )
-        # create a function from the code object
-        glbs = self.func_ir.func_id.func.__globals__
-        lcs = {}
-        exec("def f(A): return A", glbs, lcs)
-        kernel_func = lcs["f"]
-        kernel_func.__code__ = func_node.code
-        kernel_func.__name__ = func_node.code.co_name
-
-        m = numba.core.ir_utils._max_label
-        impl_disp = numba.njit(
-            kernel_func,
-            parallel=parallel,
-            pipeline_class=bodo.compiler.BodoCompilerSeqInline,
-        )
-        # precompile to avoid REP counting conflict in testing
-        sig = out_dtype(types.Array(dtype, 1, "C"))
-        impl_disp.compile(sig)
-        numba.core.ir_utils._max_label += m
-        return impl_disp
-
     def _run_pd_DatetimeIndex(self, assign, lhs, rhs):
         """transform pd.DatetimeIndex() call with string array argument
         """
