@@ -655,8 +655,17 @@ class DistributedPass:
         ):
             # set parallel flag to true
             true_var = ir.Var(scope, mk_unique_var("true_var"), loc)
-            self.typemap[true_var.name] = types.boolean
+            self.typemap[true_var.name] = BooleanLiteral(True)
             rhs.args[4] = true_var
+            # fix parallel arg type in calltype
+            call_type = self.calltypes.pop(rhs)
+            arg_typs = tuple(
+                BooleanLiteral(True) if i == 4 else call_type.args[i]
+                for i in range(len(call_type.args))
+            )
+            self.calltypes[rhs] = self.typemap[rhs.func.name].get_call_type(
+                self.typingctx, arg_typs, {}
+            )
             out = [ir.Assign(ir.Const(True, loc), true_var, loc), assign]
 
         if (

@@ -91,22 +91,6 @@ def rolling_corr(arr, arr2, win):  # pragma: no cover
     return arr
 
 
-@infer_global(rolling_variable)
-class RollingVarType(AbstractTemplate):
-    def generic(self, args, kws):
-        arr = args[0]  # array or series
-        on_arr = args[1]
-        # result is always float64 in pandas
-        # see _prep_values() in window.py
-        f_type = args[5]
-        from bodo.hiframes.pd_series_ext import if_series_to_array_type
-
-        ret_typ = if_series_to_array_type(arr).copy(dtype=types.float64)
-        return signature(
-            ret_typ, arr, on_arr, types.intp, types.bool_, types.bool_, f_type
-        )
-
-
 @infer_global(rolling_cov)
 @infer_global(rolling_corr)
 class RollingCovType(AbstractTemplate):
@@ -144,7 +128,9 @@ def overload_rolling_fixed(a, w, c, p, fname):
         exec(func_text, {"np": np}, loc_vars)
         kernel_func = numba.njit(loc_vars["kernel_func"])
 
-        return lambda a, w, c, p, fname: roll_fixed_apply(a, w, c, p, kernel_func)
+        return lambda a, w, c, p, fname: roll_fixed_apply(
+            a, w, c, p, kernel_func
+        )  # pragma: no cover
 
     init_kernel, add_kernel, remove_kernel, calc_kernel = linear_kernels[func_name]
     return lambda a, w, c, p, fname: roll_fixed_linear_generic(
@@ -152,39 +138,26 @@ def overload_rolling_fixed(a, w, c, p, fname):
     )  # pragma: no cover
 
 
-@lower_builtin(
-    rolling_variable,
-    types.Array,
-    types.Array,
-    types.Integer,
-    types.Boolean,
-    types.Boolean,
-    types.StringLiteral,
-)
-def lower_rolling_variable(context, builder, sig, args):
-    func_name = sig.args[-1].literal_value
-    if func_name == "sum":
-        func = lambda a, o, w, c, p: roll_var_linear_generic(
-            a, o, w, c, p, init_data_sum, add_sum, remove_sum, calc_sum
+@overload(rolling_variable, no_unliteral=True)
+def overload_rolling_variable(a, o, w, c, p, fname):
+
+    # UDF case
+    if is_const_func_type(fname):
+        return lambda a, o, w, c, p, fname: roll_variable_apply(
+            a, o, w, c, p, fname
+        )  # pragma: no cover
+
+    assert is_overload_constant_str(fname)
+    func_name = get_overload_const_str(fname)
+
+    if func_name not in ("sum", "mean", "var", "std", "count", "median", "min", "max"):
+        raise BodoError(
+            "invalid rolling (variable window) function {}".format(func_name)
         )
-    elif func_name == "mean":
-        func = lambda a, o, w, c, p: roll_var_linear_generic(
-            a, o, w, c, p, init_data_mean, add_mean, remove_mean, calc_mean
-        )
-    elif func_name == "var":
-        func = lambda a, o, w, c, p: roll_var_linear_generic(
-            a, o, w, c, p, init_data_var, add_var, remove_var, calc_var
-        )
-    elif func_name == "std":
-        func = lambda a, o, w, c, p: roll_var_linear_generic(
-            a, o, w, c, p, init_data_var, add_var, remove_var, calc_std
-        )
-    elif func_name == "count":
-        func = lambda a, o, w, c, p: roll_var_linear_generic(
-            a, o, w, c, p, init_data_count, add_count, remove_count, calc_count_var
-        )
-    elif func_name in ["median", "min", "max"]:
-        # TODO: linear support
+
+    if func_name in ("median", "min", "max"):
+        # just using 'apply' since we don't have streaming/linear support
+        # TODO: implement linear support similar to others
         func_text = "def kernel_func(A):\n"
         func_text += "  arr  = dropna(A)\n"
         func_text += "  if len(arr) == 0: return np.nan\n"
@@ -193,31 +166,14 @@ def lower_rolling_variable(context, builder, sig, args):
         exec(func_text, {"np": np, "dropna": _dropna}, loc_vars)
         kernel_func = numba.njit(loc_vars["kernel_func"])
 
-        def func(a, o, w, c, p):  # pragma: no cover
-            return roll_variable_apply(a, o, w, c, p, kernel_func)
+        return lambda a, o, w, c, p, fname: roll_variable_apply(
+            a, o, w, c, p, kernel_func
+        )  # pragma: no cover
 
-    else:
-        raise ValueError("invalid rolling (variable) function {}".format(func_name))
-
-    res = context.compile_internal(
-        builder, func, signature(sig.return_type, *sig.args[:-1]), args[:-1]
-    )
-    return impl_ret_borrowed(context, builder, sig.return_type, res)
-
-
-@lower_builtin(
-    rolling_variable,
-    types.Array,
-    types.Array,
-    types.Integer,
-    types.Boolean,
-    types.Boolean,
-    types.functions.Dispatcher,
-)
-def lower_rolling_variable_apply(context, builder, sig, args):
-    func = lambda a, o, w, c, p, f: roll_variable_apply(a, o, w, c, p, f)
-    res = context.compile_internal(builder, func, sig, args)
-    return impl_ret_borrowed(context, builder, sig.return_type, res)
+    init_kernel, add_kernel, remove_kernel, calc_kernel = linear_kernels[func_name]
+    return lambda a, o, w, c, p, fname: roll_var_linear_generic(
+        a, o, w, c, p, init_kernel, add_kernel, remove_kernel, calc_kernel
+    )  # pragma: no cover
 
 
 #### adapted from pandas window.pyx ####
