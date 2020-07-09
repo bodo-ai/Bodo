@@ -12,6 +12,12 @@ from numba.core.ir_utils import guard, find_const
 
 from bodo.libs.distributed_api import Reduce_Type
 from bodo.utils.utils import unliteral_all
+from bodo.utils.typing import (
+    BodoError,
+    get_overload_const_str,
+    is_overload_constant_str,
+    is_const_func_type,
+)
 
 
 supported_rolling_funcs = (
@@ -73,10 +79,6 @@ def rolling_fixed(arr, win):  # pragma: no cover
     return arr
 
 
-def rolling_fixed_parallel(arr, win):  # pragma: no cover
-    return arr
-
-
 def rolling_variable(arr, on_arr, win):  # pragma: no cover
     return arr
 
@@ -87,20 +89,6 @@ def rolling_cov(arr, arr2, win):  # pragma: no cover
 
 def rolling_corr(arr, arr2, win):  # pragma: no cover
     return arr
-
-
-@infer_global(rolling_fixed)
-@infer_global(rolling_fixed_parallel)
-class RollingType(AbstractTemplate):
-    def generic(self, args, kws):
-        arr = args[0]  # array or series
-        # result is always float64 in pandas
-        # see _prep_values() in window.py
-        f_type = args[4]
-        from bodo.hiframes.pd_series_ext import if_series_to_array_type
-
-        ret_typ = if_series_to_array_type(arr).copy(dtype=types.float64)
-        return signature(ret_typ, arr, types.intp, types.bool_, types.bool_, f_type)
 
 
 @infer_global(rolling_variable)
@@ -131,37 +119,22 @@ class RollingCovType(AbstractTemplate):
         return signature(ret_typ, *unliteral_all(args))
 
 
-@lower_builtin(
-    rolling_fixed,
-    types.Array,
-    types.Integer,
-    types.Boolean,
-    types.Boolean,
-    types.StringLiteral,
-)
-def lower_rolling_fixed(context, builder, sig, args):
-    func_name = sig.args[-1].literal_value
-    if func_name == "sum":
-        func = lambda a, w, c, p: roll_fixed_linear_generic(
-            a, w, c, p, init_data_sum, add_sum, remove_sum, calc_sum
-        )
-    elif func_name == "mean":
-        func = lambda a, w, c, p: roll_fixed_linear_generic(
-            a, w, c, p, init_data_mean, add_mean, remove_mean, calc_mean
-        )
-    elif func_name == "var":
-        func = lambda a, w, c, p: roll_fixed_linear_generic(
-            a, w, c, p, init_data_var, add_var, remove_var, calc_var
-        )
-    elif func_name == "std":
-        func = lambda a, w, c, p: roll_fixed_linear_generic(
-            a, w, c, p, init_data_var, add_var, remove_var, calc_std
-        )
-    elif func_name == "count":
-        func = lambda a, w, c, p: roll_fixed_linear_generic(
-            a, w, c, p, init_data_count, add_count, remove_count, calc_count
-        )
-    elif func_name in ["median", "min", "max"]:
+@overload(rolling_fixed, no_unliteral=True)
+def overload_rolling_fixed(a, w, c, p, fname):
+
+    # UDF case
+    if is_const_func_type(fname):
+        return lambda a, w, c, p, fname: roll_fixed_apply(
+            a, w, c, p, fname
+        )  # pragma: no cover
+
+    assert is_overload_constant_str(fname)
+    func_name = get_overload_const_str(fname)
+
+    if func_name not in ("sum", "mean", "var", "std", "count", "median", "min", "max"):
+        raise BodoError("invalid rolling (fixed window) function {}".format(func_name))
+
+    if func_name in ("median", "min", "max"):
         # just using 'apply' since we don't have streaming/linear support
         # TODO: implement linear support similar to others
         func_text = "def kernel_func(A):\n"
@@ -171,30 +144,12 @@ def lower_rolling_fixed(context, builder, sig, args):
         exec(func_text, {"np": np}, loc_vars)
         kernel_func = numba.njit(loc_vars["kernel_func"])
 
-        def func(a, w, c, p):  # pragma: no cover
-            return roll_fixed_apply(a, w, c, p, kernel_func)
+        return lambda a, w, c, p, fname: roll_fixed_apply(a, w, c, p, kernel_func)
 
-    else:
-        raise ValueError("invalid rolling (fixed) function {}".format(func_name))
-
-    res = context.compile_internal(
-        builder, func, signature(sig.return_type, *sig.args[:-1]), args[:-1]
-    )
-    return impl_ret_borrowed(context, builder, sig.return_type, res)
-
-
-@lower_builtin(
-    rolling_fixed,
-    types.Array,
-    types.Integer,
-    types.Boolean,
-    types.Boolean,
-    types.functions.Dispatcher,
-)
-def lower_rolling_fixed_apply(context, builder, sig, args):
-    func = lambda a, w, c, p, f: roll_fixed_apply(a, w, c, p, f)
-    res = context.compile_internal(builder, func, sig, args)
-    return impl_ret_borrowed(context, builder, sig.return_type, res)
+    init_kernel, add_kernel, remove_kernel, calc_kernel = linear_kernels[func_name]
+    return lambda a, w, c, p, fname: roll_fixed_linear_generic(
+        a, w, c, p, init_kernel, add_kernel, remove_kernel, calc_kernel
+    )  # pragma: no cover
 
 
 @lower_builtin(
@@ -930,6 +885,16 @@ def calc_count(minp, count_x):  # pragma: no cover
 @register_jitable
 def calc_count_var(minp, count_x):  # pragma: no cover
     return count_x if count_x >= minp else np.nan
+
+
+# kernels for linear/streaming execution of rolling functions
+linear_kernels = {
+    "sum": (init_data_sum, add_sum, remove_sum, calc_sum),
+    "mean": (init_data_mean, add_mean, remove_mean, calc_mean),
+    "var": (init_data_var, add_var, remove_var, calc_var),
+    "std": (init_data_var, add_var, remove_var, calc_std),
+    "count": (init_data_count, add_count, remove_count, calc_count),
+}
 
 
 # shift -------------

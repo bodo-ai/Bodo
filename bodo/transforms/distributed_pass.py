@@ -60,7 +60,7 @@ from bodo.transforms.distributed_analysis import (
 )
 
 import bodo.utils.utils
-from bodo.utils.typing import BodoError
+from bodo.utils.typing import BodoError, BooleanLiteral
 from bodo.utils.transform import (
     compile_func_single_block,
     get_call_expr_arg,
@@ -637,8 +637,17 @@ class DistributedPass:
         ):
             # set parallel flag to true
             true_var = ir.Var(scope, mk_unique_var("true_var"), loc)
-            self.typemap[true_var.name] = types.boolean
+            self.typemap[true_var.name] = BooleanLiteral(True)
             rhs.args[3] = true_var
+            # fix parallel arg type in calltype
+            call_type = self.calltypes.pop(rhs)
+            arg_typs = tuple(
+                BooleanLiteral(True) if i == 3 else call_type.args[i]
+                for i in range(len(call_type.args))
+            )
+            self.calltypes[rhs] = self.typemap[rhs.func.name].get_call_type(
+                self.typingctx, arg_typs, {}
+            )
             out = [ir.Assign(ir.Const(True, loc), true_var, loc), assign]
 
         if fdef == ("rolling_variable", "bodo.hiframes.rolling") and (
