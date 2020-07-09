@@ -287,9 +287,24 @@ void info_to_list_string_array(array_info* info, uint64_t* n_items,
 #endif
 }
 
+/**
+ * Given an Arrow array, populate array of lengths and array of array_info*
+ * with the data from the array and all of its descendant arrays.
+ * This is called recursively, and will create one array_info for each individual
+ * buffer (offsets, null_bitmaps, data).
+ * @param array: The input Arrow array
+ * @param lengths: The lengths array to fill
+ * @param infos: The array_info* array to fill
+ * @param lengths_pos: current position in lengths (this is passed by reference
+ *        because we are traversing an arbitrary tree of arrays. Some arrays
+ *        (like StructArray) have multiple children and upon returning from
+ *        one of the child subtrees we need to know the current position in
+ *        lengths.
+ * @param infos_pos: same as lengths_pos but tracks the position in infos array
+ */
 void nested_array_to_c(std::shared_ptr<arrow::Array> array, int64_t* lengths,
-                       array_info** infos, int64_t lengths_pos,
-                       int64_t infos_pos) {
+                       array_info** infos, int64_t &lengths_pos,
+                       int64_t &infos_pos) {
     if (array->type_id() == arrow::Type::LIST) {
         std::shared_ptr<arrow::ListArray> list_array =
             std::dynamic_pointer_cast<arrow::ListArray>(array);
@@ -377,7 +392,9 @@ void nested_array_to_c(std::shared_ptr<arrow::Array> array, int64_t* lengths,
 }
 
 void info_to_nested_array(array_info* info, int64_t* lengths, array_info** out_infos) {
-    nested_array_to_c(info->array, lengths, out_infos, 0, 0);
+    int64_t lengths_pos = 0;
+    int64_t infos_pos = 0;
+    nested_array_to_c(info->array, lengths, out_infos, lengths_pos, infos_pos);
 }
 
 void info_to_string_array(array_info* info, NRT_MemInfo** meminfo) {
