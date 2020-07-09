@@ -1673,9 +1673,9 @@ def test_df_dropna():
         }
     )
     # TODO: fix 1D_Var RangeIndex
-    check_func(impl1, (df,), reset_index=True)
-    check_func(impl2, (df,), reset_index=True)
-    check_func(impl3, (df,), reset_index=True)
+    check_func(impl1, (df,))
+    check_func(impl2, (df,))
+    check_func(impl3, (df,))
 
 
 def test_df_dropna_inplace_check():

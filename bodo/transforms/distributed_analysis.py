@@ -754,7 +754,8 @@ class DistributedAnalysis:
             self._set_var_dist(lhs, array_dists, out_dist)
             # output can cause input REP
             if out_dist != Distribution.OneD_Var:
-                self._set_var_dist(rhs.args[0].name, array_dists, out_dist)
+                in_dist = out_dist
+            self._set_var_dist(rhs.args[0].name, array_dists, in_dist)
             return
 
         if fdef == ("nancorr", "bodo.libs.array_kernels"):
@@ -1661,12 +1662,10 @@ class DistributedAnalysis:
         # sometimes, e.g. SeriesILocType. check_type=False handles these cases.
         typ = self.typemap[varname]
         dist = self._get_dist(typ, dist)
-        # XXX: Index values can be None so they should have distribution
         # TODO: use proper "FullRangeIndex" type
         if not check_type or (
             is_distributable_typ(typ)
             or is_distributable_tuple_typ(typ)
-            or typ is types.none
         ):
             array_dists[varname] = dist
 
