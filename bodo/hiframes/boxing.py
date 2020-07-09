@@ -42,7 +42,7 @@ from bodo.hiframes.split_impl import (
     string_array_split_view_type,
     box_str_arr_split_view,
 )
-from bodo.utils.typing import BodoWarning, BodoError
+from bodo.utils.typing import BodoWarning, BodoError, to_nullable_type
 
 from bodo.libs import hstr_ext
 from llvmlite import ir as lir
@@ -472,16 +472,7 @@ def _infer_ndarray_obj_dtype(val):
     ):
         field_names = tuple(first_val.keys())
         # TODO: handle None value in first_val elements
-        data_types = tuple(
-            numba.typeof(_value_to_array(v))
-            if isinstance(v, dict)
-            else bodo.hiframes.pd_series_ext._get_series_array_type(
-                numba.typeof(_value_to_array(v))
-            )
-            if isinstance(v, list)
-            else bodo.hiframes.pd_series_ext._get_series_array_type(numba.typeof(v))
-            for v in first_val.values()
-        )
+        data_types = tuple(_get_struct_value_arr_type(v) for v in first_val.values())
         return StructArrayType(data_types, field_names)
     if isinstance(
         first_val,
@@ -523,6 +514,25 @@ def _value_to_array(val):
     if len(val) and isinstance(val[0], float):
         arr = np.array(val, np.float64)
     return arr
+
+
+def _get_struct_value_arr_type(v):
+    """get data array type for a field value of a struct array
+    """
+    if isinstance(v, dict):
+        return numba.typeof(_value_to_array(v))
+
+    if isinstance(v, list):
+        return bodo.hiframes.pd_series_ext._get_series_array_type(
+            numba.typeof(_value_to_array(v))
+        )
+
+    arr_typ = bodo.hiframes.pd_series_ext._get_series_array_type(numba.typeof(v))
+    # use nullable arrays for integer/bool values since there could be None objects
+    if isinstance(v, (int, bool)):
+        arr_typ = to_nullable_type(arr_typ)
+
+    return arr_typ
 
 
 # TODO: support array of strings
