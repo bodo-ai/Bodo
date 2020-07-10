@@ -109,7 +109,7 @@ def check_func(
     if py_output is None:
         if convert_columns_to_pandas:
             call_args_mapped = tuple(
-                convert_list_string_decimal_columns(a) for a in call_args
+                convert_non_pandas_columns(a) for a in call_args
             )
             py_output = func(*call_args_mapped)
         else:
@@ -205,7 +205,7 @@ def check_func_seq(
         )
         bodo_out = bodo_func(*call_args)
         if convert_columns_to_pandas:
-            bodo_out = convert_list_string_decimal_columns(bodo_out)
+            bodo_out = convert_non_pandas_columns(bodo_out)
 
     passed = _test_equal_guard(
         bodo_out, py_output, sort_output, check_names, check_dtype, reset_index
@@ -240,7 +240,7 @@ def check_func_1D(
     dist_args = tuple(_get_dist_arg(a, copy_input) for a in args)
     bodo_output = bodo_func(*dist_args)
     if convert_columns_to_pandas:
-        bodo_output = convert_list_string_decimal_columns(bodo_output)
+        bodo_output = convert_non_pandas_columns(bodo_output)
     if is_out_distributed:
         bodo_output = bodo.gatherv(bodo_output)
     # only rank 0 should check if gatherv() called on output
@@ -276,7 +276,7 @@ def check_func_1D_var(
     dist_args = tuple(_get_dist_arg(a, copy_input, True) for a in args)
     bodo_output = bodo_func(*dist_args)
     if convert_columns_to_pandas:
-        bodo_output = convert_list_string_decimal_columns(bodo_output)
+        bodo_output = convert_non_pandas_columns(bodo_output)
     if is_out_distributed:
         bodo_output = bodo.gatherv(bodo_output)
     passed = 1
@@ -589,6 +589,20 @@ def check_timing_func(func, args):
     assert True
 
 
+def string_list_ent(x):
+    if isinstance(x, (int, np.int64)):
+        return str(x)
+    if isinstance(x, (list, np.ndarray, pd.arrays.IntegerArray)):
+        l_str = []
+        for e_val in x:
+            l_str.append(string_list_ent(e_val))
+        return "[" + ",".join(l_str) + "]"
+    if pd.isna(x):
+        return "nan"
+    print("Failed to find matching type")
+    assert False
+
+
 # The functionality below exist because in the case of column having
 # a list-string or Decimal as data type, several functionalities are missing from pandas:
 # For pandas and list of strings:
@@ -606,7 +620,7 @@ def check_timing_func(func, args):
 # ---to transform columns of decimals into columns of floats
 #
 # Note: We cannot use df_copy["e_col_name"].str.join(',') because of unahashable list.
-def convert_list_string_decimal_columns(df):
+def convert_non_pandas_columns(df):
     if not isinstance(df, pd.DataFrame):
         return df
 
@@ -617,11 +631,13 @@ def convert_list_string_decimal_columns(df):
     # Determine which columns have Decimals in them.
     col_names_list_string = []
     col_names_array_item = []
+    col_names_arrow_array_item = []
     col_names_decimal = []
     for e_col_name in list_col:
         e_col = df[e_col_name]
         nb_list_string = 0
         nb_array_item = 0
+        nb_arrow_array_item = 0
         nb_decimal = 0
         for i_row in range(n_rows):
             e_ent = e_col.iat[i_row]
@@ -643,12 +659,19 @@ def convert_list_string_decimal_columns(df):
                         (int, float, np.int32, np.int64, np.float32, np.float64),
                     ):
                         nb_array_item += 1
+                    for e_val in e_ent:
+                        if isinstance(
+                            e_val, (list, np.ndarray, pd.arrays.IntegerArray)
+                        ):
+                            nb_arrow_array_item += 1
             if isinstance(e_ent, Decimal):
                 nb_decimal += 1
         if nb_list_string > 0:
             col_names_list_string.append(e_col_name)
         if nb_array_item > 0:
             col_names_array_item.append(e_col_name)
+        if nb_arrow_array_item > 0:
+            col_names_arrow_array_item.append(e_col_name)
         if nb_decimal > 0:
             col_names_decimal.append(e_col_name)
     for e_col_name in col_names_list_string:
@@ -681,6 +704,14 @@ def convert_list_string_decimal_columns(df):
                 e_list_str.append(e_str)
             else:
                 e_list_str.append(np.nan)
+        df_copy[e_col_name] = e_list_str
+    for e_col_name in col_names_arrow_array_item:
+        e_list_str = []
+        e_col = df[e_col_name]
+        for i_row in range(n_rows):
+            e_ent = e_col.iat[i_row]
+            f_ent = string_list_ent(e_ent)
+            e_list_str.append(f_ent)
         df_copy[e_col_name] = e_list_str
     for e_col_name in col_names_decimal:
         e_list_float = []
@@ -716,7 +747,7 @@ def check_parallel_coherency(
         all_args_distributed_block=False, all_returns_distributed=False
     )(func)
     serial_output_raw = bodo_func_serial(*call_args_serial)
-    serial_output_final = convert_list_string_decimal_columns(serial_output_raw)
+    serial_output_final = convert_non_pandas_columns(serial_output_raw)
 
     # If running on just one processor, nothing more is needed.
     if n_pes == 1:
@@ -731,7 +762,7 @@ def check_parallel_coherency(
     )
 
     parall_output_raw = bodo_func_parall(*call_args_parall)
-    parall_output_proc = convert_list_string_decimal_columns(parall_output_raw)
+    parall_output_proc = convert_non_pandas_columns(parall_output_raw)
     # Collating the parallel output on just one processor.
     parall_output_final = bodo.gatherv(parall_output_proc)
 
@@ -778,13 +809,13 @@ def gen_random_list_string_array(option, n):
             if random.random() < 0.1:
                 e_ent = np.nan
             else:
-                e_ent = rand_col_str(random.randint(1,3))
+                e_ent = rand_col_str(random.randint(1, 3))
             e_list.append(e_ent)
         return e_list
 
-    if option==1:
+    if option == 1:
         e_list = rand_col_l_str(n)
-    if option==2:
+    if option == 2:
         e_list = rand_col_str(n)
     return e_list
 
@@ -835,5 +866,3 @@ def gen_random_string_array(n, max_str_len=10):
     if bodo.libs.str_arr_ext.use_pd_string_array:
         return pd.array(str_vals, "string")
     return np.array(str_vals, dtype="object")  # avoid unichr dtype (TODO: support?)
-
-

@@ -15,7 +15,7 @@ from bodo.tests.utils import (
     dist_IR_contains,
     check_parallel_coherency,
     gen_random_decimal_array,
-    convert_list_string_decimal_columns,
+    convert_non_pandas_columns,
     get_start_end,
     check_func,
 )
@@ -581,10 +581,10 @@ def test_sum_max_min_list_string_random():
     def check_fct(the_fct, df1, select_col_comparison):
         bodo_fct = bodo.jit(the_fct)
         # Computing images via pandas and pandas but applying the merging of columns
-        df1_merge = convert_list_string_decimal_columns(df1)
+        df1_merge = convert_non_pandas_columns(df1)
         df2_merge_preA = the_fct(df1_merge)
         df2_merge_A = df2_merge_preA[select_col_comparison]
-        df2_merge_preB = convert_list_string_decimal_columns(bodo_fct(df1))
+        df2_merge_preB = convert_non_pandas_columns(bodo_fct(df1))
         df2_merge_B = df2_merge_preB[select_col_comparison]
         # Now comparing the results.
         list_col_names = df2_merge_A.columns.to_list()

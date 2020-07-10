@@ -22,6 +22,7 @@
 MPI_Datatype decimal_mpi_type = MPI_DATATYPE_NULL;
 
 #undef USE_ARROW_FOR_LIST_STRING
+#undef DEBUG_ARROW_ARRAY
 
 struct ArrayBuildInfo {
     ArrayBuildInfo(std::shared_ptr<arrow::Array> a, int p1, int p2)
@@ -44,9 +45,15 @@ struct ArrayBuildInfo {
 ArrayBuildInfo nested_array_from_c(const int* types, const uint8_t** buffers,
                                    const int64_t* lengths, int types_pos,
                                    int buf_pos) {
+#ifdef DEBUG_ARROW_ARRAY
+    std::cout << "Begin of nested_array_from_c\n";
+#endif
     Bodo_CTypes::CTypeEnum type = (Bodo_CTypes::CTypeEnum)types[types_pos];
     int64_t length = lengths[types_pos];
     if (type == Bodo_CTypes::LIST) {
+#ifdef DEBUG_ARROW_ARRAY
+        std::cout << "nested_array_from_c, LIST case\n";
+#endif
         const uint8_t* _offsets = buffers[buf_pos++];
         const uint8_t* _null_bitmap = buffers[buf_pos++];
 
@@ -71,6 +78,9 @@ ArrayBuildInfo nested_array_from_c(const int* types, const uint8_t** buffers,
 
         return ArrayBuildInfo(array, types_pos, buf_pos);
     } else if (type == Bodo_CTypes::STRUCT) {
+#ifdef DEBUG_ARROW_ARRAY
+        std::cout << "nested_array_from_c, STRUCT case\n";
+#endif
         int num_fields = types[types_pos + 1];
         types_pos += 2;
 
@@ -102,6 +112,9 @@ ArrayBuildInfo nested_array_from_c(const int* types, const uint8_t** buffers,
         return ArrayBuildInfo(array, types_pos, buf_pos);
         // TODO: string array
     } else {
+#ifdef DEBUG_ARROW_ARRAY
+        std::cout << "nested_array_from_c, PRIMITIVE case\n";
+#endif
         // numeric array
         std::shared_ptr<arrow::Array> array;
         std::shared_ptr<arrow::Buffer> data;
@@ -136,6 +149,9 @@ ArrayBuildInfo nested_array_from_c(const int* types, const uint8_t** buffers,
 
 array_info* nested_array_to_info(int* types, const uint8_t** buffers,
                                  int64_t* lengths, NRT_MemInfo* meminfo) {
+#ifdef DEBUG_ARROW_ARRAY
+    std::cout << "Beginning of nested_array_to_info\n";
+#endif
     ArrayBuildInfo ai = nested_array_from_c(types, buffers, lengths, 0, 0);
     // TODO: better memory management of struct, meminfo refcount?
     return new array_info(bodo_array_type::ARROW, Bodo_CTypes::INT8 /*dummy*/,
@@ -305,7 +321,13 @@ void info_to_list_string_array(array_info* info, uint64_t* n_items,
 void nested_array_to_c(std::shared_ptr<arrow::Array> array, int64_t* lengths,
                        array_info** infos, int64_t &lengths_pos,
                        int64_t &infos_pos) {
+#ifdef DEBUG_ARROW_ARRAY
+    std::cout << "Beginning of nested_array_to_c\n";
+#endif
     if (array->type_id() == arrow::Type::LIST) {
+#ifdef DEBUG_ARROW_ARRAY
+        std::cout << "nested_array_to_c, LIST case\n";
+#endif
         std::shared_ptr<arrow::ListArray> list_array =
             std::dynamic_pointer_cast<arrow::ListArray>(array);
         lengths[lengths_pos++] = list_array->length();
@@ -332,6 +354,9 @@ void nested_array_to_c(std::shared_ptr<arrow::Array> array, int64_t* lengths,
         nested_array_to_c(list_array->values(), lengths, infos, lengths_pos,
                           infos_pos);
     } else if (array->type_id() == arrow::Type::STRUCT) {
+#ifdef DEBUG_ARROW_ARRAY
+        std::cout << "nested_array_to_c, STRUCT case\n";
+#endif
         auto struct_array =
             std::dynamic_pointer_cast<arrow::StructArray>(array);
         auto struct_type =
@@ -363,6 +388,9 @@ void nested_array_to_c(std::shared_ptr<arrow::Array> array, int64_t* lengths,
         //array_info* str_arr = alloc_string_array(...);
         //infos[infos_pos++] = str_arr;
     } else {
+#ifdef DEBUG_ARROW_ARRAY
+        std::cout << "nested_array_to_c, PRIMITIVE case\n";
+#endif
         auto primitive_array =
             std::dynamic_pointer_cast<arrow::PrimitiveArray>(array);
         lengths[lengths_pos++] = primitive_array->length();
@@ -392,6 +420,9 @@ void nested_array_to_c(std::shared_ptr<arrow::Array> array, int64_t* lengths,
 }
 
 void info_to_nested_array(array_info* info, int64_t* lengths, array_info** out_infos) {
+#ifdef DEBUG_ARROW_ARRAY
+    std::cout << "Beginning of info_to_nested_array\n";
+#endif
     int64_t lengths_pos = 0;
     int64_t infos_pos = 0;
     nested_array_to_c(info->array, lengths, out_infos, lengths_pos, infos_pos);

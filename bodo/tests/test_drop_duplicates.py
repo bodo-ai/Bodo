@@ -125,7 +125,9 @@ def test_list_string_array_type_specific(memory_leak_check):
 
 
 def test_list_string_array_type_random(memory_leak_check):
-    """Test of list_string_array_type in parallel with a random list"""
+    """Test of list_string_array_type in parallel with a random list
+    Also put a test on two columns for the combine_hash functionality
+    """
 
     def test_impl(df1):
         df2 = df1.drop_duplicates()
@@ -146,7 +148,9 @@ def test_list_string_array_type_random(memory_leak_check):
 
     n = 50
     df1 = pd.DataFrame({"A": rand_col_l_str(n)})
+    df2 = pd.DataFrame({"A": rand_col_l_str(n), "B": rand_col_l_str(n)})
     check_func(test_impl, (df1,), sort_output=True, convert_columns_to_pandas=True)
+    check_func(test_impl, (df2,), sort_output=True, convert_columns_to_pandas=True)
 
 
 def test_drop_duplicates_2col_int_numpynan_bool(memory_leak_check):
@@ -260,6 +264,57 @@ def test_drop_duplicatee_large_size(memory_leak_check):
 
     check_func(test_impl, (get_df(396),), sort_output=True)
     check_func(test_impl, (get_df(11111),), sort_output=True)
+
+
+
+
+
+def test_drop_duplicate_large_size(memory_leak_check):
+    """
+    Test drop_duplicates(): large size entries
+    """
+
+    def test_impl(df1):
+        df2 = df1.drop_duplicates()
+        return df2
+
+    def get_df(n):
+        e_list_a = np.array([0] * n, dtype=np.int64)
+        e_list_b = np.array([0] * n, dtype=np.int64)
+        for i in range(n):
+            idx = i % 100
+            i_a = idx % 10
+            i_b = (idx - i_a) / 10
+            e_list_a[i] = i_a
+            e_list_b[i] = i_b
+        df1 = pd.DataFrame({"A": e_list_a, "B": e_list_b})
+        return df1
+
+    check_func(test_impl, (get_df(396),), sort_output=True)
+    check_func(test_impl, (get_df(11111),), sort_output=True)
+
+
+
+def test_drop_duplicate_arrow_list_list():
+    def f(df):
+        df2 = df.drop_duplicates()
+        return df2
+
+    data = np.array(
+        [
+            [[[1, 2], [3]], [[2, None]]],
+            [[[3], [], [1, None, 4]]],
+            None,
+            [[[4, 5, 6], []], [[1]], [[1, 2]]],
+            [[[4, 5, 6], [42]], [[1]], [[1, 2]]],
+            [],
+            [[[], [1]], None, [[1, 4]], []],
+            [[[], [1]], None, [[1, 4]], [[33]]],
+        ]
+    )
+    df = pd.DataFrame({"A": [7, 6, 5, 1, 4, 2, 3, 0], "B": data})
+    check_func(f, (df,), sort_output=True, convert_columns_to_pandas=True)
+
 
 
 #

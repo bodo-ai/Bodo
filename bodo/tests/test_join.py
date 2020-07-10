@@ -1523,6 +1523,43 @@ def test_merge_common_col_ordering():
     check_func(impl, (df1, df2), sort_output=True, reset_index=True)
 
 
+def test_merge_nested_arrays_non_keys():
+    def test_impl(df1, df2):
+        df3 = df1.merge(df2, on="A")
+        return df3
+
+    data1 = np.array(
+        [
+            [[[1, 2], [3]], [[2, None]]],
+            [[[3], [], [1, None, 4]]],
+            None,
+            [[[4, 5, 6], []], [[1]], [[1, 2]]],
+            [[[4, 5, 6], [7,6]], [[1]], [[1, 2]]],
+            [],
+            [[[], [1]], None, [[1, 4]], []],
+            [[[], [1]], None, [[1, 4]], [[7]]],
+        ]
+    )
+    df1 = pd.DataFrame({"A": [0, 1, 9, 3, 4, 5, 6, 7], "B": data1})
+    data2 = np.array(
+        [
+            [[[6, 8, 3], [1]], [[0, None]]],
+            [[[30], [1], [], [10, None, 4]]],
+            [[[1, 2, 3, 4], [1]], [[]], []],
+            [[[1, 2, 3, 4], [1]], [[4]], []],
+            None,
+            [[[1]], None, [[500, 4]], [[33]]],
+            [[[], [1]], None, [[1, 4]], []],
+            [[[], [1]], None, [[1, 4]], [[34]]],
+        ]
+    )
+    df2 = pd.DataFrame({"A": [0, 1, 9, 0, 6, 4, 7, 5], "C": data2})
+    bodo_impl = bodo.jit(test_impl)
+    
+    check_func(test_impl, (df1, df2), sort_output=True, reset_index=True, convert_columns_to_pandas=True)
+
+
+
 # ------------------------------ merge_asof() ------------------------------ #
 
 
