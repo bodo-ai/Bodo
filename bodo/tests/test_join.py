@@ -25,6 +25,106 @@ from bodo.tests.utils import (
 import pytest
 
 
+# pytest fixture for df3 = df1.merge(df2, on="A") tests with nested arrays.
+# These pairs of arrays are used to generate column "B" of df1 and df2 respectively
+@pytest.fixture(
+    params=[
+        (
+            np.array(
+                [
+                    [[[1, 2], [3]], [[2, None]]],
+                    [[[3], [], [1, None, 4]]],
+                    [[[3], [], [1, None, 4]]],
+                    [[[4, 5, 6], []], [[1]], [[1, 2]]],
+                    [],
+                    [[[], [1]], None, [[1, 4]], []],
+                ]
+            ),
+            np.array(
+                [
+                    [[[6, 8, 3], [1]], [[0, None]]],
+                    [[[30], [1], [], [10, None, 4]]],
+                    [[[1, 2, 3, 4], [1]], [[]], []],
+                    [[[1, 2, 3, 4], [1]], [[]], []],
+                    [[[1]], None, [[500, 4]], [[33]]],
+                    [],
+                ]
+            ),
+        ),
+        # TODO None value fields in structs is not supported in typing.
+        # Using -1 instead of None. Can change to None in the future
+        (
+            np.array(
+                [
+                    [{"A": 1, "B": 2}, {"A": 10, "B": 20}],
+                    [{"A": 3, "B": -1}],
+                    [{"A": 5, "B": 6}, {"A": 50, "B": 60}, {"A": 500, "B": 600}],
+                    [{"A": 10, "B": 20}, {"A": 100, "B": 200}],
+                    [{"A": 30, "B": 40}],
+                    [{"A": -1, "B": 60}, {"A": 500, "B": 600}, {"A": 5000, "B": 6000}],
+                ]
+            ),
+            np.array(
+                [
+                    [{"A": 3, "B": 45}],
+                    [{"A": -1, "B": 60}, {"A": -1, "B": 60}, {"A": 3, "B": 3}, {"A": -7, "B": 13}],
+                    [{"A": 11, "B": 60}, {"A": 500, "B": 33}, {"A": 55, "B": 57}],
+                    [{"A": 10, "B": 20}, {"A": 5, "B": -1}],
+                    [{"A": 3, "B": 4}, {"A": 10, "B": 20}],
+                    [{"A": 1, "B": 7}],
+                ]
+            ),
+        ),
+        (
+            np.array(
+                [
+                    {"A": 1, "B": 2},
+                    {"A": 3, "B": -1},
+                    {"A": 5, "B": 6},
+                    {"A": 10, "B": 20},
+                    {"A": 30, "B": 40},
+                    {"A": -1, "B": 60},
+                ]
+            ),
+            np.array(
+                [
+                    {"A": 3, "B": 45},
+                    {"A": -1, "B": 60},
+                    {"A": 11, "B": 33},
+                    {"A": 10, "B": 20},
+                    {"A": 3, "B": 4},
+                    {"A": 1, "B": 7},
+                ]
+            ),
+        ),
+        (
+            np.array(
+                [
+                    {"A": {"A1": 10, "A2": 2}, "B": {"B1": -11, "B2": 4}},
+                    {"A": {"A1": -19, "A2": 5}, "B": {"B1": 5, "B2": 19}},
+                    {"A": {"A1": -5, "A2": -9}, "B": {"B1": -15, "B2": 13}},
+                    {"A": {"A1": -12, "A2": 2}, "B": {"B1": 14, "B2": 2}},
+                    {"A": {"A1": 17, "A2": -12}, "B": {"B1": 14, "B2": -18}},
+                    {"A": {"A1": 17, "A2": 10}, "B": {"B1": -13, "B2": 18}},
+                ]
+            ),
+            np.array(
+                [
+                    {"A": {"A1": 11, "A2": -1}, "B": {"B1": -10, "B2": -6}},
+                    {"A": {"A1": 12, "A2": 17}, "B": {"B1": 12, "B2": -1}},
+                    {"A": {"A1": 17, "A2": 2}, "B": {"B1": 19, "B2": -2}},
+                    {"A": {"A1": 17, "A2": 16}, "B": {"B1": 6, "B2": -20}},
+                    {"A": {"A1": 4, "A2": -12}, "B": {"B1": 10, "B2": 3}},
+                    {"A": {"A1": 19, "A2": 11}, "B": {"B1": 3, "B2": 16}},
+                ]
+            ),
+        ),
+    ]
+)
+def nested_arrays_value(request):
+    return request.param
+
+
 def _gen_df_str(n):
     """
     helper function that generate dataframe with int and string columns
@@ -1523,41 +1623,16 @@ def test_merge_common_col_ordering():
     check_func(impl, (df1, df2), sort_output=True, reset_index=True)
 
 
-def test_merge_nested_arrays_non_keys():
+def test_merge_nested_arrays_non_keys(nested_arrays_value):
+
     def test_impl(df1, df2):
         df3 = df1.merge(df2, on="A")
         return df3
 
-    data1 = np.array(
-        [
-            [[[1, 2], [3]], [[2, None]]],
-            [[[3], [], [1, None, 4]]],
-            None,
-            [[[4, 5, 6], []], [[1]], [[1, 2]]],
-            [[[4, 5, 6], [7,6]], [[1]], [[1, 2]]],
-            [],
-            [[[], [1]], None, [[1, 4]], []],
-            [[[], [1]], None, [[1, 4]], [[7]]],
-        ]
-    )
-    df1 = pd.DataFrame({"A": [0, 1, 9, 3, 4, 5, 6, 7], "B": data1})
-    data2 = np.array(
-        [
-            [[[6, 8, 3], [1]], [[0, None]]],
-            [[[30], [1], [], [10, None, 4]]],
-            [[[1, 2, 3, 4], [1]], [[]], []],
-            [[[1, 2, 3, 4], [1]], [[4]], []],
-            None,
-            [[[1]], None, [[500, 4]], [[33]]],
-            [[[], [1]], None, [[1, 4]], []],
-            [[[], [1]], None, [[1, 4]], [[34]]],
-        ]
-    )
-    df2 = pd.DataFrame({"A": [0, 1, 9, 0, 6, 4, 7, 5], "C": data2})
-    bodo_impl = bodo.jit(test_impl)
-    
-    check_func(test_impl, (df1, df2), sort_output=True, reset_index=True, convert_columns_to_pandas=True)
+    df1 = pd.DataFrame({"A": [0, 10, 200, 3000, 40000, 500000], "B": nested_arrays_value[0]})
+    df2 = pd.DataFrame({"A": [0, 200, 200, 500000, 0, 3000], "B": nested_arrays_value[1]})
 
+    check_func(test_impl, (df1, df2), sort_output=True, reset_index=True, convert_columns_to_pandas=True)
 
 
 # ------------------------------ merge_asof() ------------------------------ #
