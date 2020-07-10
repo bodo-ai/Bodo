@@ -882,7 +882,7 @@ def test_empty_object_array_warning():
         bodo.jit(impl)(np.array([], dtype=np.object))
     with pytest.warns(BodoWarning, match="Empty object array passed to Bodo"):
         bodo.jit(impl)(pd.Series(np.array([], dtype=np.object)))
-    with pytest.warns(BodoWarning, match="field value in struct array is NA"):
+    with pytest.warns(BodoWarning, match="Field value in struct array is NA"):
         bodo.jit(impl)(
             pd.Series(np.array([{"A": None, "B": 2.2}, {"A": "CC", "B": 1.2}]))
         )
