@@ -241,6 +241,34 @@ def test_get():
     )
 
 
+@pytest.mark.parametrize(
+    "S",
+    [
+        pd.Series([[1, 3, None], None, [2, 4], [2], [], [5, -3, 1, 6]]),
+        pd.Series(
+            [
+                [[[1, 2], [3]], [[2, None]]],
+                [[[3], [], [1, None, 4]]],
+                None,
+                [[[4, 5, 6], []], [[1]], [[1, 2]]],
+                [],
+                [[[], [1]], None, [[1, 4]], []],
+            ]
+            * 2
+        ),
+        # TODO: nested string test when old list(str) type is removed
+    ],
+)
+def test_get_array_item(S):
+    """Tests Series.str.get() support for non-string arrays like array(item).
+    """
+
+    def test_impl(S):
+        return S.str.get(1)
+
+    check_func(test_impl, (S,), check_dtype=False)
+
+
 def test_replace_regex(test_unicode):
     def test_impl(S):
         return S.str.replace("AB*", "EE", regex=True)

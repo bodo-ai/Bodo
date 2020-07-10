@@ -788,6 +788,10 @@ class DistributedAnalysis:
             self._set_var_dist(rhs.args[0].name, array_dists, in_dist)
             return
 
+        if fdef == ("get", "bodo.libs.array_kernels"):
+            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            return
+
         if fdef == ("nancorr", "bodo.libs.array_kernels"):
             array_dists[lhs] = Distribution.REP
             return
