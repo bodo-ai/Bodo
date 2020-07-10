@@ -99,6 +99,9 @@ class StructArrayType(types.ArrayCompatible):
 
     @property
     def dtype(self):
+        # TODO: consider enabling dict return if possible
+        # if types.is_homogeneous(*self.data):
+        #     return types.DictType(bodo.string_type, self.data[0].dtype)
         return StructType(tuple(t.dtype for t in self.data), self.names)
 
     @classmethod
@@ -1011,11 +1014,13 @@ def struct_array_get_struct(typingctx, struct_arr_typ, ind_typ=None):
         ind_typ, types.Integer
     )
     data_types = tuple(d.dtype for d in struct_arr_typ.data)
-    # return a regular dictionary if values have the same type, otherwise struct
-    if types.is_homogeneous(*struct_arr_typ.data):
-        out_typ = types.DictType(bodo.string_type, data_types[0])
-    else:
-        out_typ = StructType(data_types, struct_arr_typ.names)
+    # TODO: consider enabling dict return if possible
+    # # return a regular dictionary if values have the same type, otherwise struct
+    # if types.is_homogeneous(*struct_arr_typ.data):
+    #     out_typ = types.DictType(bodo.string_type, data_types[0])
+    # else:
+    #     out_typ = StructType(data_types, struct_arr_typ.names)
+    out_typ = StructType(data_types, struct_arr_typ.names)
 
     def codegen(context, builder, sig, args):
         struct_arr, ind = args

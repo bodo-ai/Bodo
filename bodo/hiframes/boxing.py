@@ -21,6 +21,7 @@ from numba.extending import (
 from numba.core import types, cgutils
 from numba.np import numpy_support
 from numba.core.typing import signature
+from numba.typed.typeddict import Dict
 
 import bodo
 from bodo.hiframes.pd_dataframe_ext import (
@@ -467,7 +468,7 @@ def _infer_ndarray_obj_dtype(val):
     # assuming object arrays with dictionary values are struct arrays, which means all
     # keys are string and match across dictionaries, and all values with same key have
     # same data type
-    elif isinstance(first_val, dict) and all(
+    elif isinstance(first_val, (dict, Dict)) and all(
         isinstance(k, str) for k in first_val.keys()
     ):
         field_names = tuple(first_val.keys())
@@ -505,8 +506,9 @@ def _infer_ndarray_obj_dtype(val):
 def _value_to_array(val):
     """convert list or dict value to object array for typing purposes
     """
-    assert isinstance(val, (list, dict))
-    if isinstance(val, dict):
+    assert isinstance(val, (list, dict, Dict))
+    if isinstance(val, (dict, Dict)):
+        val = dict(val)
         return np.array([val], np.object_)
     arr = np.array(val, np.object_)
     # assume float lists can be regular np.float64 arrays
@@ -519,7 +521,7 @@ def _value_to_array(val):
 def _get_struct_value_arr_type(v):
     """get data array type for a field value of a struct array
     """
-    if isinstance(v, dict):
+    if isinstance(v, (dict, Dict)):
         return numba.typeof(_value_to_array(v))
 
     if isinstance(v, list):

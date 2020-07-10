@@ -925,7 +925,8 @@ def gatherv(data, allgather=False, warn_if_rep=True):
         func_text = "def impl_tuple(data, allgather=False, warn_if_rep=True):\n"
         func_text += "  return ({}{})\n".format(
             ", ".join(
-                "bodo.gatherv(data[{}], allgather)".format(i) for i in range(len(data))
+                "bodo.gatherv(data[{}], allgather, warn_if_rep)".format(i)
+                for i in range(len(data))
             ),
             "," if len(data) > 0 else "",
         )

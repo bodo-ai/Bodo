@@ -70,6 +70,17 @@ from bodo.tests.utils import check_func
                 {"X": None, "Y": [], "Z": None, "W": {"A": 11, "B": None}},
             ]
         ),
+        # nested struct data with homogeneous values
+        np.array(
+            [
+                {"X": {"A1": 10, "A2": 2}, "Y": {"B1": -11, "B2": 4}},
+                {"X": {"A1": -19, "A2": 5}, "Y": {"B1": 5, "B2": 19}},
+                {"X": {"A1": -5, "A2": -9}, "Y": {"B1": -15, "B2": 13}},
+                {"X": {"A1": -12, "A2": 2}, "Y": {"B1": 14, "B2": 2}},
+                {"X": {"A1": 17, "A2": -12}, "Y": {"B1": 14, "B2": -18}},
+                {"X": {"A1": 17, "A2": 10}, "Y": {"B1": -13, "B2": 18}},
+            ]
+        ),
     ]
 )
 def struct_arr_value(request):
