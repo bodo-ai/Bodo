@@ -242,6 +242,7 @@ def check_func_1D(
     if convert_columns_to_pandas:
         bodo_output = convert_non_pandas_columns(bodo_output)
     if is_out_distributed:
+        _check_typing_issues(bodo_output)
         bodo_output = bodo.gatherv(bodo_output)
     # only rank 0 should check if gatherv() called on output
     passed = 1
@@ -278,6 +279,7 @@ def check_func_1D_var(
     if convert_columns_to_pandas:
         bodo_output = convert_non_pandas_columns(bodo_output)
     if is_out_distributed:
+        _check_typing_issues(bodo_output)
         bodo_output = bodo.gatherv(bodo_output)
     passed = 1
     if not is_out_distributed or bodo.get_rank() == 0:
@@ -312,8 +314,12 @@ def _get_dist_arg(a, copy=False, var_length=False):
             start -= 1
 
     if isinstance(a, (pd.Series, pd.DataFrame)):
-        return a.iloc[start:end]
-    return a[start:end]
+        out_val = a.iloc[start:end]
+    else:
+        out_val = a[start:end]
+
+    _check_typing_issues(out_val)
+    return out_val
 
 
 def _test_equal_guard(
@@ -772,6 +778,7 @@ def check_parallel_coherency(
     parall_output_raw = bodo_func_parall(*call_args_parall)
     parall_output_proc = convert_non_pandas_columns(parall_output_raw)
     # Collating the parallel output on just one processor.
+    _check_typing_issues(parall_output_proc)
     parall_output_final = bodo.gatherv(parall_output_proc)
 
     # Doing the sorting. Mandatory here
@@ -874,3 +881,12 @@ def gen_random_string_array(n, max_str_len=10):
     if bodo.libs.str_arr_ext.use_pd_string_array:
         return pd.array(str_vals, "string")
     return np.array(str_vals, dtype="object")  # avoid unichr dtype (TODO: support?)
+
+
+def _check_typing_issues(val):
+    """Raises an error if there is a typing issue for value 'val'.
+    Runs bodo typing on value and converts warnings to errors.
+    """
+    with warnings.catch_warnings(record=True):
+        warnings.simplefilter("error")
+        bodo.typeof(val)

@@ -529,6 +529,17 @@ def _get_struct_value_arr_type(v):
             numba.typeof(_value_to_array(v))
         )
 
+    if pd.api.types.is_scalar(v) and pd.isna(v):
+        # assume string array if first field value is NA
+        # TODO: use other rows until non-NA is found
+        warnings.warn(
+            BodoWarning(
+                "Field value in struct array is NA, which causes ambiguity in typing. "
+                "This can cause errors in parallel execution."
+            )
+        )
+        return string_array_type
+
     arr_typ = bodo.hiframes.pd_series_ext._get_series_array_type(numba.typeof(v))
     # use nullable arrays for integer/bool values since there could be None objects
     if isinstance(v, (int, bool)):
