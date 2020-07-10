@@ -289,7 +289,8 @@ def test_empty_df_create():
         return pd.DataFrame(columns=["A"], dtype=np.float32)
 
     check_func(impl1, ())
-    check_func(impl2, ())
+    # check_typing_issues=False since the input is intentionally empty
+    check_func(impl2, (), check_typing_issues=False)
     check_func(impl3, ())
 
 

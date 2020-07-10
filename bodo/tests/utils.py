@@ -95,6 +95,7 @@ def check_func(
     convert_columns_to_pandas=False,
     py_output=None,
     dist_test=True,
+    check_typing_issues=True,
 ):
     """test bodo compilation of function 'func' on arguments using REP, 1D, and 1D_Var
     inputs/outputs
@@ -162,6 +163,7 @@ def check_func(
         check_names,
         check_dtype,
         reset_index,
+        check_typing_issues,
         convert_columns_to_pandas,
         n_pes,
     )
@@ -176,6 +178,7 @@ def check_func(
         check_names,
         check_dtype,
         reset_index,
+        check_typing_issues,
         convert_columns_to_pandas,
         n_pes,
     )
@@ -227,6 +230,7 @@ def check_func_1D(
     check_names,
     check_dtype,
     reset_index,
+    check_typing_issues,
     convert_columns_to_pandas,
     n_pes,
 ):
@@ -237,12 +241,15 @@ def check_func_1D(
     bodo_func = bodo.jit(
         all_args_distributed_block=True, all_returns_distributed=is_out_distributed
     )(func)
-    dist_args = tuple(_get_dist_arg(a, copy_input) for a in args)
+    dist_args = tuple(
+        _get_dist_arg(a, copy_input, False, check_typing_issues) for a in args
+    )
     bodo_output = bodo_func(*dist_args)
     if convert_columns_to_pandas:
         bodo_output = convert_non_pandas_columns(bodo_output)
     if is_out_distributed:
-        _check_typing_issues(bodo_output)
+        if check_typing_issues:
+            _check_typing_issues(bodo_output)
         bodo_output = bodo.gatherv(bodo_output)
     # only rank 0 should check if gatherv() called on output
     passed = 1
@@ -265,6 +272,7 @@ def check_func_1D_var(
     check_names,
     check_dtype,
     reset_index,
+    check_typing_issues,
     convert_columns_to_pandas,
     n_pes,
 ):
@@ -274,12 +282,15 @@ def check_func_1D_var(
     bodo_func = bodo.jit(
         all_args_distributed_varlength=True, all_returns_distributed=is_out_distributed
     )(func)
-    dist_args = tuple(_get_dist_arg(a, copy_input, True) for a in args)
+    dist_args = tuple(
+        _get_dist_arg(a, copy_input, True, check_typing_issues) for a in args
+    )
     bodo_output = bodo_func(*dist_args)
     if convert_columns_to_pandas:
         bodo_output = convert_non_pandas_columns(bodo_output)
     if is_out_distributed:
-        _check_typing_issues(bodo_output)
+        if check_typing_issues:
+            _check_typing_issues(bodo_output)
         bodo_output = bodo.gatherv(bodo_output)
     passed = 1
     if not is_out_distributed or bodo.get_rank() == 0:
@@ -296,7 +307,7 @@ def _get_arg(a, copy=False):
     return a
 
 
-def _get_dist_arg(a, copy=False, var_length=False):
+def _get_dist_arg(a, copy=False, var_length=False, check_typing_issues=True):
     if copy and hasattr(a, "copy"):
         a = a.copy()
 
@@ -318,7 +329,8 @@ def _get_dist_arg(a, copy=False, var_length=False):
     else:
         out_val = a[start:end]
 
-    _check_typing_issues(out_val)
+    if check_typing_issues:
+        _check_typing_issues(out_val)
     return out_val
 
 
