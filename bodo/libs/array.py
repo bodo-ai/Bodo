@@ -140,17 +140,17 @@ def array_to_info(typingctx, arr_type_t):
             def get_types(arr_typ):
                 """ Get list of all types (in Bodo_CTypes enum format) in the
                     nested structure rooted at arr_typ """
-                if isinstance(
-                    arr_typ, (types.Array, ArrayItemArrayType, IntegerArrayType)
-                ):  # elements in the nested structure that are arrays are a List in Arrow
+                if isinstance(arr_typ, ArrayItemArrayType):
                     return [CTypeEnum.LIST.value] + get_types(arr_typ.dtype)
                 # TODO: add Categorical, String
-                elif isinstance(arr_typ, StructType):
+                elif isinstance(arr_typ, (StructType, StructArrayType)):
                     # for struct include the type ID and number of fields
                     types_list = [CTypeEnum.STRUCT.value, len(arr_typ.names)]
                     for field_typ in arr_typ.data:
                         types_list += get_types(field_typ)
                     return types_list
+                elif isinstance(arr_typ, (types.Array, IntegerArrayType)):
+                    return get_types(arr_typ.dtype)
                 else:
                     return [numba_to_c_type(arr_typ)]
 
@@ -281,7 +281,7 @@ def array_to_info(typingctx, arr_type_t):
                 return buffers
 
             # get list of all types in the nested datastructure (to pass to C++)
-            types_list = get_types(arr_type.dtype)
+            types_list = get_types(arr_type)
             types_array = cgutils.pack_array(
                 builder, [context.get_constant(types.int32, t) for t in types_list]
             )
