@@ -1057,11 +1057,11 @@ def test_df_duplicated():
         return df.duplicated()
 
     df = pd.DataFrame({"A": ["A", "B", "A", "B", "C"], "B": ["F", "E", "F", "S", "C"]})
-    check_func(impl, (df,), sort_output=True, reset_index=True)
+    check_func(impl, (df,), sort_output=True)
     df = pd.DataFrame(
         {"A": [1, 3, 1, 2, 3], "B": ["F", "E", "F", "S", "C"]}, index=[3, 1, 2, 4, 6]
     )
-    check_func(impl, (df,), sort_output=True, reset_index=True)
+    check_func(impl, (df,), sort_output=True)
 
 
 ##################### binary ops ###############################
@@ -1673,9 +1673,9 @@ def test_df_dropna():
         }
     )
     # TODO: fix 1D_Var RangeIndex
-    check_func(impl1, (df,), reset_index=True)
-    check_func(impl2, (df,), reset_index=True)
-    check_func(impl3, (df,), reset_index=True)
+    check_func(impl1, (df,))
+    check_func(impl2, (df,))
+    check_func(impl3, (df,))
 
 
 def test_df_dropna_inplace_check():

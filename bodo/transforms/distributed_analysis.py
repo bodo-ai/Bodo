@@ -709,38 +709,63 @@ class DistributedAnalysis:
             return
 
         if fdef == ("drop_duplicates", "bodo.libs.array_kernels"):
-            lhs_typ = self.typemap[lhs]
-            arg_dist = min(a.value for a in array_dists[rhs.args[0].name])
-            lhs_dist = arg_dist
-            if lhs in array_dists:
-                lhs_dist = min(a.value for a in array_dists[lhs][0])
-                lhs_dist = min(lhs_dist, array_dists[lhs][1].value)
-            new_dist = Distribution(
-                min(array_dists[rhs.args[1].name].value, arg_dist, lhs_dist)
+            # output of drop_duplicates is variable-length even if input is 1D
+            if lhs not in array_dists:
+                self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
+
+            # arg0 is a tuple of arrays, arg1 is an array
+            in_dist = Distribution(
+                min(
+                    min(a.value for a in array_dists[rhs.args[0].name]),
+                    array_dists[rhs.args[1].name].value,
+                )
             )
-            array_dists[lhs] = [
-                [new_dist for _ in range(len(lhs_typ.types[0]))],
-                new_dist,
-            ]
-            array_dists[rhs.args[0].name] = [
-                new_dist for _ in range(len(array_dists[rhs.args[0].name]))
-            ]
-            array_dists[rhs.args[1].name] = new_dist
+            # return is a tuple(tuple(arrays), array)
+            out_dist = Distribution(
+                min(
+                    min(a.value for a in array_dists[lhs][0]),
+                    array_dists[lhs][1].value,
+                    in_dist.value,
+                )
+            )
+            self._set_var_dist(lhs, array_dists, out_dist)
+
+            # output can cause input REP
+            if out_dist != Distribution.OneD_Var:
+                in_dist = out_dist
+
+            self._set_var_dist(rhs.args[0].name, array_dists, in_dist)
+            self._set_var_dist(rhs.args[1].name, array_dists, in_dist)
             return
 
         if fdef == ("duplicated", "bodo.libs.array_kernels"):
-            arg_dist = min(a.value for a in array_dists[rhs.args[0].name])
-            lhs_dist = arg_dist
-            if lhs in array_dists:
-                lhs_dist = min(a.value for a in array_dists[lhs])
-            new_dist = Distribution(
-                min(array_dists[rhs.args[1].name].value, arg_dist, lhs_dist)
+            # output of duplicated is variable-length even if input is 1D
+            if lhs not in array_dists:
+                self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
+
+            # arg0 is a tuple of arrays, arg1 is an array
+            in_dist = Distribution(
+                min(
+                    min(a.value for a in array_dists[rhs.args[0].name]),
+                    array_dists[rhs.args[1].name].value,
+                )
             )
-            array_dists[lhs] = [new_dist for _ in range(len(self.typemap[lhs]))]
-            array_dists[rhs.args[0].name] = [
-                new_dist for _ in range(len(array_dists[rhs.args[0].name]))
-            ]
-            array_dists[rhs.args[1].name] = new_dist
+            # return is a tuple(array, array)
+            out_dist = Distribution(
+                min(
+                    array_dists[lhs][0].value,
+                    array_dists[lhs][1].value,
+                    in_dist.value,
+                )
+            )
+            self._set_var_dist(lhs, array_dists, out_dist)
+
+            # output can cause input REP
+            if out_dist != Distribution.OneD_Var:
+                in_dist = out_dist
+
+            self._set_var_dist(rhs.args[0].name, array_dists, in_dist)
+            self._set_var_dist(rhs.args[1].name, array_dists, in_dist)
             return
 
         if fdef == ("dropna", "bodo.libs.array_kernels"):
@@ -754,7 +779,8 @@ class DistributedAnalysis:
             self._set_var_dist(lhs, array_dists, out_dist)
             # output can cause input REP
             if out_dist != Distribution.OneD_Var:
-                self._set_var_dist(rhs.args[0].name, array_dists, out_dist)
+                in_dist = out_dist
+            self._set_var_dist(rhs.args[0].name, array_dists, in_dist)
             return
 
         if fdef == ("nancorr", "bodo.libs.array_kernels"):
@@ -842,8 +868,10 @@ class DistributedAnalysis:
             self._set_var_dist(lhs, array_dists, out_dist)
             # output can cause input REP
             if out_dist != Distribution.OneD_Var:
-                array_dists[rhs.args[0].name] = out_dist
-                array_dists[rhs.args[1].name] = out_dist
+                in_dist = out_dist
+
+            array_dists[rhs.args[0].name] = in_dist
+            array_dists[rhs.args[1].name] = in_dist
             return
 
         if fdef == ("str_split", "bodo.libs.list_str_arr_ext"):
@@ -1661,12 +1689,9 @@ class DistributedAnalysis:
         # sometimes, e.g. SeriesILocType. check_type=False handles these cases.
         typ = self.typemap[varname]
         dist = self._get_dist(typ, dist)
-        # XXX: Index values can be None so they should have distribution
         # TODO: use proper "FullRangeIndex" type
         if not check_type or (
-            is_distributable_typ(typ)
-            or is_distributable_tuple_typ(typ)
-            or typ is types.none
+            is_distributable_typ(typ) or is_distributable_tuple_typ(typ)
         ):
             array_dists[varname] = dist
 
