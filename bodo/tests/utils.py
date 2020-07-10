@@ -592,6 +592,12 @@ def check_timing_func(func, args):
 def string_list_ent(x):
     if isinstance(x, (int, np.int64)):
         return str(x)
+    if isinstance(x, dict):
+        l_str = []
+        for k in x:
+            estr = "\"" + str(k) + "\": " + string_list_ent(x[k])
+            l_str.append(estr)
+        return "{" + ", ".join(l_str) + "}"
     if isinstance(x, (list, np.ndarray, pd.arrays.IntegerArray)):
         l_str = []
         for e_val in x:
@@ -661,9 +667,11 @@ def convert_non_pandas_columns(df):
                         nb_array_item += 1
                     for e_val in e_ent:
                         if isinstance(
-                            e_val, (list, np.ndarray, pd.arrays.IntegerArray)
+                            e_val, (list, dict, np.ndarray, pd.arrays.IntegerArray)
                         ):
                             nb_arrow_array_item += 1
+            if isinstance(e_ent, dict):
+                nb_arrow_array_item += 1
             if isinstance(e_ent, Decimal):
                 nb_decimal += 1
         if nb_list_string > 0:
