@@ -9,6 +9,66 @@ import bodo
 from bodo.tests.utils import check_func
 
 
+@pytest.fixture(
+    params=[
+        np.array(
+            [
+                [[[1, 2], [3]], [[2, None]]],
+                [[[1, 2], [3]], [[2, None]]],
+                [[[3], [], [1, None, 4]]],
+                [[[3], [], [1, None, 4]]],
+                [[[4, 5, 6], []], [[1]], [[1, 2]]],
+                [[[4, 5, 6], []], [[1]], [[1, 2]]],
+            ]
+        ),
+        # TODO None value fields in structs is not supported in typing.
+        # Using -1 instead of None. Can change to None in the future
+        np.array(
+            [
+                [{"A": 1, "B": 2}, {"A": 10, "B": 20}],
+                [{"A": 1, "B": 2}, {"A": 10, "B": 20}],
+                [{"A": 3, "B": -1}],
+                [{"A": 3, "B": -1}],
+                [{"A": 5, "B": 6}, {"A": 50, "B": 60}, {"A": 500, "B": 600}],
+                [{"A": 5, "B": 6}, {"A": 50, "B": 60}, {"A": 500, "B": 600}],
+            ]
+        ),
+        np.array(
+            [
+                {"A": 3, "B": -1},
+                {"A": 3, "B": -1},
+                {"A": 5, "B": 6},
+                {"A": 5, "B": 6},
+                {"A": 30, "B": 40},
+                {"A": 30, "B": 40},
+            ]
+        ),
+        np.array(
+            [
+                {"A": [3, 5, 7], "B": [-1]},
+                {"A": [3, 5, 7], "B": [-1]},
+                {"A": [5], "B": [6, 9, 12, 15]},
+                {"A": [5], "B": [6, 9, 12, 15]},
+                {"A": [30, 40], "B": [40, 50, 51, 52, 53]},
+                {"A": [30, 40], "B": [40, 50, 51, 52, 53]},
+            ]
+        ),
+        np.array(
+            [
+                {"A": {"A1": 10, "A2": 2}, "B": {"B1": -11, "B2": 4}},
+                {"A": {"A1": 10, "A2": 2}, "B": {"B1": -11, "B2": 4}},
+                {"A": {"A1": -5, "A2": -9}, "B": {"B1": -15, "B2": 13}},
+                {"A": {"A1": -5, "A2": -9}, "B": {"B1": -15, "B2": 13}},
+                {"A": {"A1": -12, "A2": 2}, "B": {"B1": 14, "B2": 2}},
+                {"A": {"A1": -12, "A2": 2}, "B": {"B1": 14, "B2": 2}},
+            ]
+        ),
+    ]
+)
+def nested_arrays_value(request):
+    return request.param
+
+
 @pytest.mark.parametrize(
     "test_df",
     [
@@ -294,27 +354,14 @@ def test_drop_duplicate_large_size(memory_leak_check):
     check_func(test_impl, (get_df(11111),), sort_output=True)
 
 
+def test_drop_duplicate_nested_arrays(nested_arrays_value):
 
-def test_drop_duplicate_arrow_list_list():
     def f(df):
         df2 = df.drop_duplicates()
         return df2
 
-    data = np.array(
-        [
-            [[[1, 2], [3]], [[2, None]]],
-            [[[3], [], [1, None, 4]]],
-            None,
-            [[[4, 5, 6], []], [[1]], [[1, 2]]],
-            [[[4, 5, 6], [42]], [[1]], [[1, 2]]],
-            [],
-            [[[], [1]], None, [[1, 4]], []],
-            [[[], [1]], None, [[1, 4]], [[33]]],
-        ]
-    )
-    df = pd.DataFrame({"A": [7, 6, 5, 1, 4, 2, 3, 0], "B": data})
+    df = pd.DataFrame({"A": [10, 10, 3000, 3000, 0, 0], "B": nested_arrays_value})
     check_func(f, (df,), sort_output=True, convert_columns_to_pandas=True)
-
 
 
 #
