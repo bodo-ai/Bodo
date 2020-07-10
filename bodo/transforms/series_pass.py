@@ -2085,17 +2085,8 @@ class SeriesPass:
         return [assign]
 
     def _run_call_rolling(self, assign, lhs, rhs, func_name):
-        # replace input arguments with data arrays from Series
-        nodes = []
-        new_args = []
-        for arg in rhs.args:
-            if isinstance(self.typemap[arg.name], SeriesType):
-                new_args.append(self._get_series_data(arg, nodes))
-            else:
-                new_args.append(arg)
-
-        self._convert_series_calltype(rhs)
-        rhs.args = new_args
+        """inline implementation for rolling_corr/cov functions
+        """
 
         if func_name == "rolling_corr":
 
@@ -2109,7 +2100,8 @@ class SeriesPass:
                 )
                 return cov / (a_std * b_std)
 
-            return replace_func(self, rolling_corr_impl, rhs.args, pre_nodes=nodes)
+            return replace_func(self, rolling_corr_impl, rhs.args)
+
         if func_name == "rolling_cov":
 
             def rolling_cov_impl(arr, other, w, center):  # pragma: no cover
@@ -2133,45 +2125,9 @@ class SeriesPass:
                 bias_adj = count / (count - ddof)
                 return (mean_XtY - mean_X * mean_Y) * bias_adj
 
-            return replace_func(self, rolling_cov_impl, rhs.args, pre_nodes=nodes)
-        # replace apply function with dispatcher obj, now the type is known
-        if func_name == "rolling_fixed" and is_const_func_type(
-            self.typemap[rhs.args[4].name]
-        ):
-            # for apply case, create a dispatcher for the kernel and pass it
-            # TODO: automatically handle lambdas in Numba
-            dtype = self.typemap[rhs.args[0].name].dtype
-            out_dtype = self.typemap[lhs.name].dtype
-            func_node = guard(get_definition, self.func_ir, rhs.args[4])
-            imp_dis = self._handle_rolling_apply_func(func_node, dtype, out_dtype)
+            return replace_func(self, rolling_cov_impl, rhs.args)
 
-            def f(arr, w, center):  # pragma: no cover
-                return bodo.hiframes.rolling.rolling_fixed(arr, w, center, False, _func)
-
-            return nodes + compile_func_single_block(
-                f, rhs.args[:-2], lhs, self, extra_globals={"_func": imp_dis}
-            )
-        elif func_name == "rolling_variable" and is_const_func_type(
-            self.typemap[rhs.args[5].name]
-        ):
-            # for apply case, create a dispatcher for the kernel and pass it
-            # TODO: automatically handle lambdas in Numba
-            dtype = self.typemap[rhs.args[0].name].dtype
-            out_dtype = self.typemap[lhs.name].dtype
-            func_node = guard(get_definition, self.func_ir, rhs.args[5])
-            imp_dis = self._handle_rolling_apply_func(func_node, dtype, out_dtype)
-
-            def f(arr, on_arr, w, center):  # pragma: no cover
-                return bodo.hiframes.rolling.rolling_variable(
-                    arr, on_arr, w, center, False, _func
-                )
-
-            return nodes + compile_func_single_block(
-                f, rhs.args[:-2], lhs, self, extra_globals={"_func": imp_dis}
-            )
-
-        nodes.append(assign)
-        return nodes
+        return [assign]
 
     def _handle_series_combine(self, assign, lhs, rhs, series_var):
         """translate s1.combine(s2, lambda x1,x2 :...) to prange()
@@ -2300,10 +2256,7 @@ class SeriesPass:
                 self, f, [data, other, window, center, index, name], pre_nodes=nodes
             )
         elif func_name == "apply":
-            func_node = guard(get_definition, self.func_ir, rhs.args[0])
-            dtype = self.typemap[data.name].dtype
-            out_dtype = self.typemap[lhs.name].dtype
-            func_global = self._handle_rolling_apply_func(func_node, dtype, out_dtype)
+            func_global = get_overload_const_func(self.typemap[rhs.args[0].name])
         else:
             func_global = func_name
 
@@ -2318,63 +2271,6 @@ class SeriesPass:
         return replace_func(
             self, f, args, pre_nodes=nodes, extra_globals={"_func": func_global}
         )
-
-    def _handle_rolling_apply_func(
-        self, func_node, dtype, out_dtype
-    ):  # pragma: no cover
-        # using Bodo's sequential/inline pipeline for the UDF to make sure nested calls
-        # are inlined and not distributed. Otherwise, generated barriers cause hangs
-        # see: test_df_apply_func_case2
-        # also handles Pandas calls inside UDF
-        parallel = {
-            "comprehension": True,
-            "setitem": False,
-            "reduction": True,
-            "numpy": True,
-            "stencil": True,
-            "fusion": True,
-        }
-        if isinstance(func_node, ir.Global) and isinstance(
-            func_node.value, numba.core.registry.CPUDispatcher
-        ):
-            return numba.njit(
-                func_node.value.py_func,
-                parallel=parallel,
-                pipeline_class=bodo.compiler.BodoCompilerSeqInline,
-            )
-        # other UDF cases are not currently possible currently due to Numba's
-        # MakeFunctionToJitFunction pass but may be possible later
-        if func_node is None:
-            raise ValueError("cannot find kernel function for rolling.apply() call")
-        # TODO: more error checking on the kernel to make sure it doesn't
-        # use global/closure variables
-        if func_node.closure is not None:
-            raise ValueError(
-                "rolling apply kernel functions cannot have closure variables"
-            )
-        if func_node.defaults is not None:
-            raise ValueError(
-                "rolling apply kernel functions cannot have default arguments"
-            )
-        # create a function from the code object
-        glbs = self.func_ir.func_id.func.__globals__
-        lcs = {}
-        exec("def f(A): return A", glbs, lcs)
-        kernel_func = lcs["f"]
-        kernel_func.__code__ = func_node.code
-        kernel_func.__name__ = func_node.code.co_name
-
-        m = numba.core.ir_utils._max_label
-        impl_disp = numba.njit(
-            kernel_func,
-            parallel=parallel,
-            pipeline_class=bodo.compiler.BodoCompilerSeqInline,
-        )
-        # precompile to avoid REP counting conflict in testing
-        sig = out_dtype(types.Array(dtype, 1, "C"))
-        impl_disp.compile(sig)
-        numba.core.ir_utils._max_label += m
-        return impl_disp
 
     def _run_pd_DatetimeIndex(self, assign, lhs, rhs):
         """transform pd.DatetimeIndex() call with string array argument
