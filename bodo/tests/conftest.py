@@ -156,8 +156,12 @@ def s3_bucket(minio_server, datapath):
                 # upload compressed versions of this file too for testing
                 subprocess.run(["gzip", "-k", "-f", file_name])
                 subprocess.run(["bzip2", "-k", "-f", file_name])
-                s3.meta.client.upload_file(file_name + ".gz", "bodo-test", "csv_data1.csv.gz")
-                s3.meta.client.upload_file(file_name + ".bz2", "bodo-test", "csv_data1.csv.bz2")
+                s3.meta.client.upload_file(
+                    file_name + ".gz", "bodo-test", "csv_data1.csv.gz"
+                )
+                s3.meta.client.upload_file(
+                    file_name + ".bz2", "bodo-test", "csv_data1.csv.bz2"
+                )
                 os.remove(file_name + ".gz")
                 os.remove(file_name + ".bz2")
 

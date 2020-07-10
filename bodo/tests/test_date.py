@@ -350,7 +350,7 @@ def test_function_to_datetime_string_array():
     def f(S, formating):
         return pd.to_datetime(S, format=formating)
 
-    S = pd.Series(["2019-01-01", "2019-01-02"]).values
+    S = pd.Series(["2019-01-01", "2019-01-02"] * 3).values
     formating = "%Y-%d-%m"
     check_func(f, (S, formating))
 
@@ -1242,5 +1242,5 @@ def test_datetime_date_array_len():
     def test_impl(A):
         return len(A)
 
-    A = np.array([datetime.date(2012, 1, 1), datetime.date(2011, 3, 3)])
+    A = np.array([datetime.date(2012, 1, 1), datetime.date(2011, 3, 3)] * 3)
     check_func(test_impl, (A,))

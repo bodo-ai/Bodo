@@ -32,16 +32,17 @@ from bodo.utils.typing import BodoError
 def test_df_query_unicode_expr(expr):
     """Test DataFrame.query with unicode(non-constant) expr
     """
+
     def impl(df, expr, a):
         return df.query(expr)
 
     df = pd.DataFrame(
         {
-            "A": [1, 8, 4, 11, -3],
-            "B B": [1.1, np.nan, 4.2, 3.1, -1.3],
-            "C": ["AA", "BBB", "C", "AA", "C"],
+            "A": [1, 8, 4, 11, -3] * 3,
+            "B B": [1.1, np.nan, 4.2, 3.1, -1.3] * 3,
+            "C": ["AA", "BBB", "C", "AA", "C"] * 3,
         },
-        index=[3, 1, 2, 4, 5],
+        index=[3, 1, 2, 4, 5] * 3,
     )
     check_func(impl, (df, expr, 1))
 
@@ -49,6 +50,7 @@ def test_df_query_unicode_expr(expr):
 def test_df_query_stringliteral_expr():
     """Test DataFrame.query with StringLiteral(constant) expr
     """
+
     def impl(df):
         return df.query("a > b")
 
@@ -60,6 +62,7 @@ def test_df_query_stringliteral_expr():
 def test_df_query_dt():
     """Test DataFrame.query with Series.dt expression (#451)
     """
+
     def impl(df):
         return df.query("A.dt.year == 2012")
 
@@ -70,14 +73,12 @@ def test_df_query_dt():
 def test_df_query_bool_expr():
     """Test DataFrame.query with boolean expressions (#453)
     """
+
     def impl(df):
         return df.query("A | B")
 
     df = pd.DataFrame(
-        {
-            "A": [True, False, True, False, True],
-            "B": [False, True, True, False, False],
-        }
+        {"A": [True, False, True, False, True], "B": [False, True, True, False, False],}
     )
     check_func(impl, (df,))
 
@@ -97,7 +98,7 @@ def test_df_query_inplace_false():
         return df.query("a > b", inplace="True")
 
     def impl3(df, inplace):
-        return df.query("a > b", inplace = inplace)
+        return df.query("a > b", inplace=inplace)
 
     inplace = True
     df = pd.DataFrame({"A": [1, 2, 2], "B": [2, 2, 1]})
@@ -143,7 +144,7 @@ def test_df_query_expr_non_empty_str():
 
     def impl1(df):
         return df.query("")
-    
+
     def impl2(df, expr):
         return df.query(expr)
 
@@ -186,11 +187,7 @@ def test_df_query_str_column():
         return df.query(expr)
 
     expr = "C.str.contains('1')"
-    df = pd.DataFrame(
-        {
-            "A": ['1', '8', '4', '11', '-3']
-        }
-    )
+    df = pd.DataFrame({"A": ["1", "8", "4", "11", "-3"]})
     with pytest.raises(BodoError, match="column .* is not found in dataframe columns"):
         bodo.jit(impl1)(df)
     with pytest.raises(BodoError, match="column .* is not found in dataframe columns"):
@@ -238,11 +235,7 @@ def test_df_query_undef_var():
     def impl3(df, expr):
         return df.query(expr)
 
-    df = pd.DataFrame(
-        {
-            "A": ['1', '8', '4', '11', '-3']
-        }
-    )
+    df = pd.DataFrame({"A": ["1", "8", "4", "11", "-3"]})
     expr1 = "A > @a"
     expr2 = "B > 2"
     with pytest.raises(BodoError, match="undefined variable"):
@@ -268,14 +261,15 @@ def test_df_query_index_name():
 
     expr = "index_name<3"
     df = pd.DataFrame(
-            {
-                "A": [True, False, True, False, True],
-                "B": [False, True, True, False, False],
-            }
-        )
+        {"A": [True, False, True, False, True], "B": [False, True, True, False, False],}
+    )
     df.index.name = "index_name"
 
-    with pytest.raises(BodoError, match="Refering to named index .* by name is not supported"):
+    with pytest.raises(
+        BodoError, match="Refering to named index .* by name is not supported"
+    ):
         bodo.jit(impl1)(df)
-    with pytest.raises(BodoError, match="Refering to named index .* by name is not supported"):
+    with pytest.raises(
+        BodoError, match="Refering to named index .* by name is not supported"
+    ):
         bodo.jit(impl2)(df, expr)

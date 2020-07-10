@@ -2077,7 +2077,7 @@ def test_series_sort_values(series_val, memory_leak_check):
     def test_impl(A):
         return A.sort_values()
 
-    check_func(test_impl, (series_val,))
+    check_func(test_impl, (series_val,), check_typing_issues=False)
 
 
 @pytest.mark.parametrize("ignore_index", [True, False])
@@ -2711,13 +2711,13 @@ def test_series_astype_num_constructors(memory_leak_check):
     def impl1(A):
         return A.astype(float)
 
-    S = pd.Series(["3.2", "1", np.nan])
+    S = pd.Series(["3.2", "1", np.nan, "3.2", "5.1"])
     check_func(impl1, (S,))
 
     def impl2(A):
         return A.astype(int)
 
-    S = pd.Series(["3", "1", "-4"])
+    S = pd.Series(["3", "1", "-4", "2", "11"])
     check_func(impl2, (S,))
 
 

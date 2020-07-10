@@ -52,6 +52,7 @@ def test_getitem_slice(date_arr_value, memory_leak_check):
         bodo_func(date_arr_value, ind), test_impl(date_arr_value, ind)
     )
 
+
 def test_getitem_int_arr(date_arr_value, memory_leak_check):
     def test_impl(A, ind):
         return A[ind]

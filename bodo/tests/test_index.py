@@ -137,7 +137,7 @@ def test_array_index_box(index, memory_leak_check):
         pd.Int64Index([10, 12]),
         pd.Float64Index([10.1, 12.1]),
         pd.UInt64Index([10, 12]),
-        pd.Index(["A", "B"]),
+        pd.Index(["A", "B"] * 4),
         pd.RangeIndex(10),
         # pd.RangeIndex(3, 10, 2), # TODO: support
         pd.date_range(start="2018-04-24", end="2018-04-27", periods=3, name="A"),

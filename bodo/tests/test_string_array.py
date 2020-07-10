@@ -114,18 +114,18 @@ def test_dtype():
     def test_impl(A):
         return A.dtype
 
-    check_func(test_impl, (pd.array(["AA", "B"]),))
+    check_func(test_impl, (pd.array(["AA", "B"] * 4),))
 
 
 def test_ndim():
     def test_impl(A):
         return A.ndim
 
-    check_func(test_impl, (pd.array(["AA", "B"]),))
+    check_func(test_impl, (pd.array(["AA", "B"] * 4),))
 
 
 def test_astype_str():
     def test_impl(A):
         return A.astype(str)
 
-    check_func(test_impl, (pd.array(["AA", "B"]),))
+    check_func(test_impl, (pd.array(["AA", "B"] * 4),))

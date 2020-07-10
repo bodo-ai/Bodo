@@ -65,8 +65,11 @@ import os
         # after string column with nans is properly sorted
         # and a Series(str list) test too
         pd.DataFrame(
-            {"A": ["AA", "AA", "", "D", "GG"], "B": [1, 8, 4, -1, 2]},
-            [-2.1, 0.1, 1.1, 7.1, 9.0],
+            {
+                "A": ["AA", "AA", "", "D", "GG", "B", "ZZ", "K2", "F123"],
+                "B": [1, 8, 4, -1, 2, 11, 3, 19, 14],
+            },
+            [-2.1, 0.1, 1.1, 7.1, 9.0, 1.2, -3.0, -1.2, 0.2],
         ),
         # TODO: parallel range index with start != 0 and stop != 1
         # datetime columns, int index
@@ -638,11 +641,11 @@ def test_sort_with_nan_entries(memory_leak_check):
     df3 = pd.DataFrame({"A": pd.array([1, 2, None, 3], dtype="UInt16")})
     df4 = pd.DataFrame({"A": pd.Series([1, 8, 4, np.nan, 3], dtype="Int32")})
     df5 = pd.DataFrame({"A": pd.Series(["AA", np.nan, "", "D", "GG"])})
-    check_func(impl1, (df1,), sort_output=False)
+    check_func(impl1, (df1,), sort_output=False, check_typing_issues=False)
     check_func(impl1, (df2,), sort_output=False)
     check_func(impl1, (df3,), sort_output=False)
     check_func(impl1, (df4,), sort_output=False)
-    check_func(impl1, (df5,), sort_output=False)
+    check_func(impl1, (df5,), sort_output=False, check_typing_issues=False)
 
 
 def test_sort_values_list_inference(memory_leak_check):

@@ -390,7 +390,6 @@ class TestHiFrames(unittest.TestCase):
         bodo_func = bodo.jit(test_impl)
         pd.testing.assert_series_equal(bodo_func(df), test_impl(df), check_names=False)
 
-
     def test_str_split2(self):
         def test_impl(df):
             B = df.A.str.split(",")
@@ -399,7 +398,6 @@ class TestHiFrames(unittest.TestCase):
         df = pd.DataFrame({"A": ["AB,CC", "C,ABB,D", "G", "", np.nan, "g,f"]})
         bodo_func = bodo.jit(test_impl)
         pd.testing.assert_series_equal(bodo_func(df), test_impl(df))
-
 
     def test_str_split_filter(self):
         def test_impl(df):
