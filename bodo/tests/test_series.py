@@ -1469,11 +1469,29 @@ def test_series_map_func_cases1(memory_leak_check):
     def test_impl3(S, h):
         return S.map(h)
 
+    # test function closure
+    def test_impl4(S):
+        def f2(a):
+            return 2 * a + 1
+
+        return S.map(lambda x: f2(x))
+
+    # test const str freevar, function freevar, function closure
+    s = "AA"
+
+    def test_impl5(S):
+        def f2(a):
+            return 2 * a + 1
+
+        return S.map(lambda x: f(x) + f2(x) + len(s))
+
     S = pd.Series([1.0, 2.0, 3.0, 4.0, 5.0])
     check_func(test_impl1, (S,))
     check_func(test_impl2, (S,))
     check_func(test_impl3, (S, g1))
     check_func(test_impl3, (S, g2))
+    check_func(test_impl4, (S,))
+    check_func(test_impl5, (S,))
 
 
 def test_series_map_global_jit(memory_leak_check):

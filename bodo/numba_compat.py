@@ -3,6 +3,7 @@ Numba monkey patches to fix issues related to Bodo. Should be imported before an
 other module in bodo package.
 """
 import operator
+import types as pytypes
 import functools
 import hashlib
 import sys
@@ -33,6 +34,7 @@ from numba.core.ir_utils import (
     analysis,
     visit_vars_extensions,
     visit_vars_inner,
+    _create_function_from_code_obj,
 )
 from numba.extending import lower_builtin
 import numba.np.linalg
@@ -45,7 +47,7 @@ from numba.core.typing.templates import (
     _OverloadMethodTemplate,
 )
 from numba.core.types.functions import _ResolutionFailures, _termcolor
-from numba.core.errors import LiteralTypingError
+from numba.core.errors import LiteralTypingError, TypingError
 from numba.core.types import literal
 
 
@@ -1290,3 +1292,112 @@ if (
     )
 
 numba.parfors.array_analysis.ArrayAnalysis._analyze_broadcast = _analyze_broadcast
+
+
+# support handling nested UDFs inside and outside the jit functions
+def convert_code_obj_to_function(code_obj, caller_ir):
+    """
+    Converts a code object from a `make_function.code` attr in the IR into a
+    python function, caller_ir is the FunctionIR of the caller and is used for
+    the resolution of freevars.
+    """
+    fcode = code_obj.code
+    nfree = len(fcode.co_freevars)
+
+    # bodo change: support closures that have global/freevar (as well as literal)
+    free_var_names = fcode.co_freevars
+    if code_obj.closure is not None:
+        # code_obj.closure is a tuple variable of freevar variables
+        assert isinstance(code_obj.closure, ir.Var)
+        items, op = ir_utils.find_build_sequence(caller_ir, code_obj.closure)
+        assert op == "build_tuple"
+        free_var_names = [v.name for v in items]
+
+    # bodo change: brought glbls upfront to be able to update with function globals
+    # globals are the same as those in the caller
+    glbls = caller_ir.func_id.func.__globals__
+
+    # try and resolve freevars if they are consts in the caller's IR
+    # these can be baked into the new function
+    freevars = []
+    for x in free_var_names:
+        # not using guard here to differentiate between multiple definition and
+        # non-const variable
+        try:
+            freevar_def = caller_ir.get_definition(x)
+        except KeyError:
+            msg = (
+                "Cannot capture a constant value for variable '%s' as there "
+                "are multiple definitions present." % x
+            )
+            raise TypingError(msg, loc=code_obj.loc)
+        # bodo change: support Global/FreeVar and function constants/strs
+        if isinstance(freevar_def, (ir.Const, ir.Global, ir.FreeVar)):
+            val = freevar_def.value
+            if isinstance(val, str):
+                val = "'{}'".format(val)
+            # value can be constant function
+            if isinstance(val, pytypes.FunctionType):
+                func_name = ir_utils.mk_unique_var("nested_func").replace(".", "_")
+                glbls[func_name] = numba.njit(val)
+                val = func_name
+            freevars.append(val)
+        # bodo change: support nested lambdas using recursive call
+        elif isinstance(freevar_def, ir.Expr) and freevar_def.op == "make_function":
+            nested_func = convert_code_obj_to_function(freevar_def, caller_ir)
+            func_name = ir_utils.mk_unique_var("nested_func").replace(".", "_")
+            glbls[func_name] = numba.njit(nested_func)
+            freevars.append(func_name)
+        else:
+            msg = (
+                "Cannot capture the non-constant value associated with "
+                "variable '%s' in a function that will escape." % x
+            )
+            raise TypingError(msg, loc=code_obj.loc)
+
+    func_env = "\n".join(["  c_%d = %s" % (i, x) for i, x in enumerate(freevars)])
+    func_clo = ",".join(["c_%d" % i for i in range(nfree)])
+    co_varnames = list(fcode.co_varnames)
+
+    # This is horrible. The code object knows about the number of args present
+    # it also knows the name of the args but these are bundled in with other
+    # vars in `co_varnames`. The make_function IR node knows what the defaults
+    # are, they are defined in the IR as consts. The following finds the total
+    # number of args (args + kwargs with defaults), finds the default values
+    # and infers the number of "kwargs with defaults" from this and then infers
+    # the number of actual arguments from that.
+    n_kwargs = 0
+    n_allargs = fcode.co_argcount
+    kwarg_defaults = caller_ir.get_definition(code_obj.defaults)
+    if kwarg_defaults is not None:
+        if isinstance(kwarg_defaults, tuple):
+            d = [caller_ir.get_definition(x).value for x in kwarg_defaults]
+            kwarg_defaults_tup = tuple(d)
+        else:
+            d = [caller_ir.get_definition(x).value for x in kwarg_defaults.items]
+            kwarg_defaults_tup = tuple(d)
+        n_kwargs = len(kwarg_defaults_tup)
+    nargs = n_allargs - n_kwargs
+
+    func_arg = ",".join(["%s" % (co_varnames[i]) for i in range(nargs)])
+    if n_kwargs:
+        kw_const = [
+            "%s = %s" % (co_varnames[i + nargs], kwarg_defaults_tup[i])
+            for i in range(n_kwargs)
+        ]
+        func_arg += ", "
+        func_arg += ", ".join(kw_const)
+
+    # create the function and return it
+    return _create_function_from_code_obj(fcode, func_env, func_arg, func_clo, glbls)
+
+
+lines = inspect.getsource(numba.core.ir_utils.convert_code_obj_to_function)
+if (
+    hashlib.sha256(lines.encode()).hexdigest()
+    != "b6b51a980f1952532f128fc20653b836a3d45ceb93add91fa14acd54901444d7"
+):  # pragma: no cover
+    warnings.warn("numba.core.ir_utils.convert_code_obj_to_function has changed")
+
+numba.core.ir_utils.convert_code_obj_to_function = convert_code_obj_to_function
+numba.core.untyped_passes.convert_code_obj_to_function = convert_code_obj_to_function
