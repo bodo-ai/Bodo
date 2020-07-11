@@ -388,12 +388,12 @@ def test_groupby_missing_entry():
     df3 = pd.DataFrame(
         {"A": [3, 2, 3, 1, 11] * 3, "B": ["aa", "bb", "cc", "", "AA"] * 3}
     )
-    check_func(test_drop_sum, (df1,), sort_output=True)
-    check_func(test_drop_sum, (df2,), sort_output=True)
-    check_func(test_drop_sum, (df3,), sort_output=True)
-    check_func(test_drop_count, (df1,), sort_output=True)
-    check_func(test_drop_count, (df2,), sort_output=True)
-    check_func(test_drop_count, (df3,), sort_output=True)
+    check_func(test_drop_sum, (df1,), sort_output=True, check_typing_issues=False)
+    check_func(test_drop_sum, (df2,), sort_output=True, check_typing_issues=False)
+    check_func(test_drop_sum, (df3,), sort_output=True, check_typing_issues=False)
+    check_func(test_drop_count, (df1,), sort_output=True, check_typing_issues=False)
+    check_func(test_drop_count, (df2,), sort_output=True, check_typing_issues=False)
+    check_func(test_drop_count, (df3,), sort_output=True, check_typing_issues=False)
 
 
 def test_agg_str_key():
@@ -2129,12 +2129,12 @@ def test_first_last_one_col(test_df):
     if pd.Int64Dtype() in test_df.dtypes.to_list():
         check_dtype = False
     check_func(impl1, (test_df,), sort_output=True, check_dtype=check_dtype)
-    check_func(impl1, (df_str,), sort_output=True)
+    check_func(impl1, (df_str,), sort_output=True, check_typing_issues=False)
     check_func(impl1, (df_bool,), sort_output=True)
     check_func(impl1, (df_dt,), sort_output=True)
     check_func(impl2, (11,), sort_output=True)
     check_func(impl3, (test_df,), sort_output=True, check_dtype=check_dtype)
-    check_func(impl3, (df_str,), sort_output=True)
+    check_func(impl3, (df_str,), sort_output=True, check_typing_issues=False)
     check_func(impl3, (df_bool,), sort_output=True)
     check_func(impl3, (df_dt,), sort_output=True)
     check_func(impl4, (11,), sort_output=True)
