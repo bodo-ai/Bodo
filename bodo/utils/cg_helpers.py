@@ -147,15 +147,24 @@ def to_arr_obj_if_list_obj(c, context, builder, val, typ):
         mod_name = context.insert_const_string(builder.module, "numpy")
         np_mod_obj = c.pyapi.import_module_noblock(mod_name)
         np_array_method = c.pyapi.object_getattr_string(np_mod_obj, "asarray")
+        dtype_str = "object_"
+        # float lists become float arrays, but others are object arrays
+        # (see _value_to_array in boxing.py)
+        if isinstance(typ.dtype, types.Float):
+            dtype_str = str(typ.dtype)
+        dtype_obj = c.pyapi.object_getattr_string(np_mod_obj, dtype_str)
 
         old_obj = builder.load(val_ptr)
-        new_obj = c.pyapi.call(np_array_method, c.pyapi.tuple_pack([old_obj]))
+        new_obj = c.pyapi.call(
+            np_array_method, c.pyapi.tuple_pack([old_obj, dtype_obj])
+        )
         # TODO: this decref causes crashes for some reason in test_array_item_array.py
         # needs to be investigated to avoid object leaks
         # c.pyapi.decref(old_obj)
         builder.store(new_obj, val_ptr)
         c.pyapi.decref(np_mod_obj)
         c.pyapi.decref(np_array_method)
+        c.pyapi.decref(dtype_obj)
 
     val = builder.load(val_ptr)
     return val
