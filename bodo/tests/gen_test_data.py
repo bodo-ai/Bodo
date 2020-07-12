@@ -136,7 +136,7 @@ A = [int(a) if random.random() < 0.8 else None for a in A]
 data = [Row(a) for a in A]
 df = pd.DataFrame({"A": A})
 df.to_csv("int_nulls.csv", header=False)
-df.to_json("int_nulls.json",orient = 'records', lines = True)
+df.to_json("int_nulls.json", orient="records", lines=True)
 sdf = spark.createDataFrame(data, schema)
 sdf.write.parquet("int_nulls_multi.pq", "overwrite")
 
@@ -278,7 +278,9 @@ sdf = spark.createDataFrame(df)
 sdf.write.parquet("list_str_parts.pq", "overwrite")
 
 
-dtype = StructType([StructField("X", LongType(), True), StructField("Y", FloatType(), True)])
+dtype = StructType(
+    [StructField("X", LongType(), True), StructField("Y", FloatType(), True)]
+)
 schema = StructType([StructField("A", dtype, True)])
 data = [Row(Row(1, 1.1)), Row(Row(4, 2.2)), None, Row(Row(-1, 3.0))] * 2
 sdf = spark.createDataFrame(data, schema)
@@ -323,7 +325,7 @@ df = pd.DataFrame(
     }
 )
 df.to_csv("str_arr.csv", header=False, index=False)
-df.to_json("str_arr.json",orient = 'records', lines = True)
+df.to_json("str_arr.json", orient="records", lines=True)
 sdf = spark.createDataFrame(df)
 sdf.write.mode("overwrite").csv("str_arr_parts.csv")
 sdf.write.mode("overwrite").json("str_arr_parts.json")
@@ -341,13 +343,13 @@ df = pd.DataFrame(
     }
 )
 sdf = spark.createDataFrame(df)
-df.to_json("example.json",orient = 'records', lines = True)
-df.to_csv("example.csv",index=False)
-sdf.write.mode('overwrite').json('example_multi.json')
-sdf.write.mode('overwrite').option("header", "true").csv('example_multi.csv')
+df.to_json("example.json", orient="records", lines=True)
+df.to_csv("example.csv", index=False)
+sdf.write.mode("overwrite").json("example_multi.json")
+sdf.write.mode("overwrite").option("header", "true").csv("example_multi.csv")
 sdf = sdf.repartition(1)
-sdf.write.mode('overwrite').json('example_single.json')
-sdf.write.mode('overwrite').option("header", "true").csv('example_single.csv')
+sdf.write.mode("overwrite").json("example_single.json")
+sdf.write.mode("overwrite").option("header", "true").csv("example_single.csv")
 spark.stop()
 
 # data for testing read of parquet files with unsupported column types in unselected

@@ -19,7 +19,9 @@ from bodo.tests.utils import (
 
 def get_random_integerarray(tot_size):
     np.random.seed(0)
-    return pd.arrays.IntegerArray(np.random.randint(0, 100, tot_size), np.random.ranf(tot_size) < 0.3)
+    return pd.arrays.IntegerArray(
+        np.random.randint(0, 100, tot_size), np.random.ranf(tot_size) < 0.3
+    )
 
 
 @pytest.fixture(
@@ -222,7 +224,8 @@ def test_shape(memory_leak_check):
 @pytest.mark.slow
 @pytest.mark.parametrize(
     # avoiding isnat since only supported for datetime/timedelta
-    "ufunc", [f for f in numba.np.ufunc_db.get_ufuncs() if f.nin == 1 and f != np.isnat]
+    "ufunc",
+    [f for f in numba.np.ufunc_db.get_ufuncs() if f.nin == 1 and f != np.isnat],
 )
 def test_unary_ufunc(ufunc, memory_leak_check):
     def test_impl(A):
@@ -270,7 +273,7 @@ def test_binary_ufunc(ufunc, memory_leak_check):
 
 def test_add(memory_leak_check):
     def test_impl(A, other):
-        return A+other
+        return A + other
 
     A = pd.arrays.IntegerArray(
         np.array([1, 1, 1, -3, 10], np.int64),
@@ -320,7 +323,7 @@ def test_binary_op(op, memory_leak_check):
 
 def test_inplace_iadd(memory_leak_check):
     def test_impl(A, other):
-        A+=other
+        A += other
         return A
 
     A = pd.arrays.IntegerArray(
@@ -419,9 +422,9 @@ def test_astype_fast(memory_leak_check):
         return A.astype(dtype)
 
     A = pd.arrays.IntegerArray(
-            np.array([1, -3, 2, 3, 10], np.int8),
-            np.array([False, True, True, False, False]),
-        )
+        np.array([1, -3, 2, 3, 10], np.int8),
+        np.array([False, True, True, False, False]),
+    )
     dtype = pd.Int8Dtype()
     check_func(test_impl, (A, dtype))
 

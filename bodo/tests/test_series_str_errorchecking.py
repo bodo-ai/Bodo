@@ -235,7 +235,10 @@ def test_get_input(input):
     def impl(input):
         return input.str.get(1)
 
-    with pytest.raises(BodoError, match="input should be a series of string or list string or string view"):
+    with pytest.raises(
+        BodoError,
+        match="input should be a series of string or list string or string view",
+    ):
         bodo.jit(impl)(input)
 
 
@@ -511,7 +514,10 @@ def test_join_input(input):
     def impl(input):
         return input.str.join("-")
 
-    with pytest.raises(BodoError, match="input should be a series of string or list string or string view"):
+    with pytest.raises(
+        BodoError,
+        match="input should be a series of string or list string or string view",
+    ):
         bodo.jit(impl)(input)
 
 

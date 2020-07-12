@@ -300,8 +300,18 @@ def test_merge_left_right_index():
         df3 = df1.merge(df2, left_index=True, right_index=True)
         return df3
 
-    df1 = pd.DataFrame({"A": [1, 2], "C": ["a", "b"]})
-    df2 = pd.DataFrame({"A": [1, 2], "B": ["c", "d"]})
+    df1 = pd.DataFrame(
+        {
+            "A": [1, 2, 3, 4, 5, 11, 3, 8] * 2,
+            "C": ["a", "b", "A", "C", "CC", "A", "LL", "D"] * 2,
+        }
+    )
+    df2 = pd.DataFrame(
+        {
+            "A": [1, 2, 4, 3, 5, 11, 8, 3] * 2,
+            "B": ["c", "d", "VV", "DD", "", "D", "SS", "A"] * 2,
+        }
+    )
 
     check_func(f, (df1, df2), sort_output=True)
 
@@ -353,8 +363,8 @@ def test_merge_left_right_nontrivial_index():
         df3 = df1.merge(df2, left_index=True, right_index=True)
         return df3
 
-    df1 = pd.DataFrame({"A": [1, 2], "C": ["a", "b"]}, index=[3, 4])
-    df2 = pd.DataFrame({"A": [1, 2], "B": ["c", "d"]}, index=[4, 5])
+    df1 = pd.DataFrame({"A": [1, 2], "C": [3.2, 1.2]}, index=[3, 4])
+    df2 = pd.DataFrame({"A": [1, 2], "B": [1.1, 3.1]}, index=[4, 5])
 
     check_func(f, (df1, df2), sort_output=True)
 
@@ -833,7 +843,7 @@ def test_merge_out_str_na():
         }
     )
 
-    check_func(test_impl, (df1, df2))
+    check_func(test_impl, (df1, df2), check_typing_issues=False)
 
 
 def test_merge_datetime():
@@ -1048,7 +1058,7 @@ def test_merge_non_unique_index(df1, df2):
         df3 = df1.merge(df2, left_index=True, right_index=True)
         return df3
 
-    check_func(impl, (df1, df2), sort_output=True)
+    check_func(impl, (df1, df2), sort_output=True, check_typing_issues=False)
 
 
 def test_merge_all_nan_cols():
@@ -1449,7 +1459,6 @@ def test_merge_index_column_second():
         }
     ).set_index("Y")
 
-
     for df1 in [df1A, df1B, df1C, df1D, df1E]:
         for df2 in [df2A, df2B, df2C]:
             check_func(f, (df1, df2), sort_output=True)
@@ -1471,8 +1480,8 @@ def test_merge_index_column():
     df1 = pd.DataFrame({"A": [1, 2], "C": ["a", "b"]})
     df2 = pd.DataFrame({"A": [1, 2], "B": ["c", "d"]})
 
-    check_func(f1, (df1, df2), sort_output=True)
-    check_func(f2, (df1, df2), sort_output=True)
+    check_func(f1, (df1, df2), sort_output=True, check_typing_issues=False)
+    check_func(f2, (df1, df2), sort_output=True, check_typing_issues=False)
 
 
 def test_merge_index_column_returning_empty():
@@ -1488,7 +1497,9 @@ def test_merge_index_column_returning_empty():
     df2 = pd.DataFrame({"A": [4, 5], "B": ["c", "d"]})
 
     # We need reset_index=True because the dataframe is empty.
-    check_func(f1, (df1, df2), sort_output=True, reset_index=True)
+    check_func(
+        f1, (df1, df2), sort_output=True, reset_index=True, check_typing_issues=False
+    )
 
 
 def test_merge_index_column_nontrivial_index():
@@ -1503,7 +1514,7 @@ def test_merge_index_column_nontrivial_index():
     df1 = pd.DataFrame({"A": [4, 5], "C": ["a", "b"]}, index=[4, 5])
     df2 = pd.DataFrame({"A": [4, 5], "B": ["c", "d"]}, index=[4, 5])
 
-    check_func(f1, (df1, df2), sort_output=True)
+    check_func(f1, (df1, df2), sort_output=True, check_typing_issues=False)
 
 
 def test_merge_index_column_double_index():
@@ -1518,7 +1529,7 @@ def test_merge_index_column_double_index():
     df1 = pd.DataFrame({"A": [4.0, 5.0], "C": ["a", "b"]}, index=[0.0, 4.0])
     df2 = pd.DataFrame({"A": [4.0, 5.0], "C": ["a", "b"]}, index=[0.0, 4.0])
 
-    check_func(f1, (df1, df2), sort_output=True)
+    check_func(f1, (df1, df2), sort_output=True, check_typing_issues=False)
 
 
 def test_merge_index_column_string_index():
@@ -1533,7 +1544,7 @@ def test_merge_index_column_string_index():
     df1 = pd.DataFrame({"A": ["aa", "bb"], "C": ["a", "b"]}, index=["zz", "aa"])
     df2 = pd.DataFrame({"A": ["aa", "bb"], "C": ["a", "b"]}, index=["zz", "aa"])
 
-    check_func(f1, (df1, df2), sort_output=True)
+    check_func(f1, (df1, df2), sort_output=True, check_typing_issues=False)
 
 
 def test_merge_index_column_how():

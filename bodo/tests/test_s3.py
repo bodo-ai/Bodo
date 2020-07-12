@@ -37,14 +37,14 @@ def test_s3_csv_data1_compressed(minio_server, s3_bucket, datapath):
     """
 
     def test_impl_gzip():
-        return pd.read_csv("s3://bodo-test/csv_data1.csv.gz",
-                           names=["A", "B", "C", "D"],
-                           header=None)
+        return pd.read_csv(
+            "s3://bodo-test/csv_data1.csv.gz", names=["A", "B", "C", "D"], header=None
+        )
 
     def test_impl_bz2():
-        return pd.read_csv("s3://bodo-test/csv_data1.csv.bz2",
-                           names=["A", "B", "C", "D"],
-                           header=None)
+        return pd.read_csv(
+            "s3://bodo-test/csv_data1.csv.bz2", names=["A", "B", "C", "D"], header=None
+        )
 
     fname = datapath("csv_data1.csv")
     py_output = pd.read_csv(fname, names=["A", "B", "C", "D"], header=None)

@@ -191,7 +191,7 @@ def test_len(test_unicode):
     def test_impl(S):
         return S.str.len()
 
-    check_func(test_impl, (test_unicode,), check_dtype=False)
+    check_func(test_impl, (test_unicode,), check_dtype=False, check_typing_issues=False)
 
 
 def test_split(test_unicode_no_nan):
@@ -292,8 +292,8 @@ def test_extract(test_unicode):
     def test_impl2(S):
         return S.str.extract(r"(?P<BBB>[아])(?P<C>\d+)")
 
-    check_func(test_impl, (test_unicode,))
-    check_func(test_impl2, (test_unicode,))
+    check_func(test_impl, (test_unicode,), check_typing_issues=False)
+    check_func(test_impl2, (test_unicode,), check_typing_issues=False)
 
 
 def test_extract_noexpand(test_unicode):
@@ -307,9 +307,9 @@ def test_extract_noexpand(test_unicode):
     def test_impl_noname(S):
         return S.str.extract(r"([abd]+)\d+", expand=False)
 
-    check_func(test_impl, (test_unicode,))
-    check_func(test_impl_noname, (test_unicode,))
-    check_func(test_impl2, (test_unicode,))
+    check_func(test_impl, (test_unicode,), check_typing_issues=False)
+    check_func(test_impl_noname, (test_unicode,), check_typing_issues=False)
+    check_func(test_impl2, (test_unicode,), check_typing_issues=False)
 
 
 def test_extractall():
@@ -732,4 +732,4 @@ def test_join_splitview_nan_entry():
         return B.str.join("-")
 
     S = pd.Series(["ABCDD,OSAJD", "a1b2d314f,sdf234", np.nan], [4, 3, 1], name="A")
-    check_func(test_impl, (S,))
+    check_func(test_impl, (S,), check_typing_issues=False)

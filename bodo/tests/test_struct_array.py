@@ -20,7 +20,7 @@ from bodo.tests.utils import check_func
                 {"X": 1, "Y": 3.1},
                 {"X": 2, "Y": 1.1},
                 None,
-                {"X": -1, "Y": np.nan},
+                {"X": -1, "Y": 7.8},
                 {"X": 3, "Y": 4.0},
                 {"X": -3, "Y": -1.2},
                 {"X": None, "Y": 9.0},
