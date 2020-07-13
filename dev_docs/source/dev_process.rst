@@ -53,7 +53,8 @@ We have three customized `pytest markers <http://doc.pytest.org/en/latest/exampl
       pytest -s -v -m "firsthalf"
       pytest -s -v -m "not firsthalf"
 
-   We use this marker in the nightly CI build & test pipeline due to limited memory available on azure.
+   We use this marker in the nightly CI build & test pipeline to split the test suite
+   for faster turn around times.
 
 3. :code:`s3` defined in `pytest.ini <https://github.com/Bodo-inc/Bodo/blob/master/pytest.ini>`_::
 
@@ -140,8 +141,8 @@ Following code is an example of using `check_func`::
         check_func(test_impl, (S, timestamp))
 
 `check_func` performs 3 testings. 
-    - Sequential testing
-    - distributed testing with all the processors having the same size of data
+    - Sequential testing where inputs/outputs are replicated and there is no communication across processes.
+    - distributed testing that automatically distributes data to equal chunks among processes.
     - distributed testing with processors having different sizes of data. 
         - The second last processor will have 1 less element
         - The last processor will have 1 more element
@@ -232,8 +233,8 @@ Below is the high level structure of the code.
 - ``ir`` directory defines and implements Bodo specific IR nodes such as
   Sort and Join.
 - ``libs`` directory provides supporting data structures and libraries such as
-  strings, dictionary, quantiles, timsort. It also includes helper C
-  extensions.
+  strings, dictionary, quantiles, timsort. It also includes helper C/C++
+  extensions and C++ runtime engine for join, groupby and other operations.
 - ``io`` directory provides I/O support such as CSV, HDF5, Parquet and Numpy.
 - ``tests`` provides unittests.
 

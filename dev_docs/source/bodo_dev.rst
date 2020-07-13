@@ -189,7 +189,10 @@ which is a builtin function.
 Distributed pass first analyzes parallelism in the program
 (`here <https://github.com/Bodo-inc/Bodo/blob/82e47e6d426cdd7b72c7b7b950a9b8b9b75184fd/bodo/transforms/distributed_analysis.py#L178>`_),
 then divides the allocation call and loop start/stop
-across processors based on `rank` and total number of processors. In addition, it replaces the
+across processors based on `rank` and total number of processors.
+Hence, each process will allocate its own chunk of data, and work on
+its own iteration range in parallel loops.
+In addition, it replaces the
 builtin function `nunique` with its parallel version `nunique_parallel`, and converts the parfor into a regular loop::
 
     -------------------------------------__main__.f: bodo: AFTER bodo_distributed_pass--------------------------------------
