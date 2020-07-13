@@ -512,7 +512,7 @@ def make_overload_attribute_template(
     *overload_func*.
     """
     assert isinstance(typ, types.Type) or issubclass(typ, types.Type)
-    name = "OverloadTemplate_%s_%s" % (typ, attr)
+    name = "OverloadAttributeTemplate_%s_%s" % (typ, attr)
     # Note the implementation cache is subclass-specific
     dct = dict(
         key=typ,
@@ -531,7 +531,7 @@ def make_overload_attribute_template(
 lines = inspect.getsource(numba.core.typing.templates.make_overload_attribute_template)
 if (
     hashlib.sha256(lines.encode()).hexdigest()
-    != "e85ed81e6a6bceb09ee2cee43b5a2d4c11a2805e29e2f60f37fe49b2b9996f55"
+    != "704aca2ece0e4dba2ecb02bf743809ddc828ca5d64f37d3a290d2084a6873e60"
 ):  # pragma: no cover
     warnings.warn(
         "numba.core.typing.templates.make_overload_attribute_template has changed"
