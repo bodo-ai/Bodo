@@ -46,6 +46,7 @@ from bodo.utils.typing import (
     is_overload_true,
     is_overload_false,
     parse_dtype,
+    to_nullable_type,
 )
 from bodo.utils.indexing import (
     array_getitem_bool_index,
@@ -705,82 +706,20 @@ ufunc_aliases = {
 
 
 def create_op_overload(op, n_inputs):
-    # see __array_ufunc__() of pd.arrays.IntegerArray
-    # XXX: pandas assigns np.nan to NA positions which translates to True
-    # for bool output of ufuncs, except the ones that are mapped to comparison
-    # operators
-    # TODO: use nullable Bool type
-    # https://github.com/pandas-dev/pandas/blob/5de4e55d60bf8487a2ce64a440b6d5d92345a4bc/pandas/core/arrays/integer.py#L408
-    op_name = op.__name__
-    op_name = ufunc_aliases.get(op_name, op_name)
-    # comparison operators assign False except 'ne'
-    # https://github.com/pandas-dev/pandas/blob/5de4e55d60bf8487a2ce64a440b6d5d92345a4bc/pandas/core/arrays/integer.py#L631
-    mask_fill = op_name not in ("eq", "lt", "gt", "le", "ge")
-    # TODO: 1 ** np.nan is 1. So we have to unmask those.
-    inplace = None
-    if op in numba.core.typing.npydecl.NumpyRulesInplaceArrayOperator._op_map.keys():
-        inplace = True
-
+    """creates overloads for operations on Integer arrays
+    """
     if n_inputs == 1:
 
         def overload_int_arr_op_nin_1(A):
             if isinstance(A, IntegerArrayType):
-
-                def impl(A):  # pragma: no cover
-                    arr = bodo.libs.int_arr_ext.get_int_arr_data(A)
-                    bitmap = bodo.libs.int_arr_ext.get_int_arr_bitmap(A)
-                    out_arr = op(arr)
-                    return bodo.libs.int_arr_ext.apply_null_mask(
-                        out_arr, bitmap, mask_fill, inplace
-                    )
-
-                return impl
+                return get_nullable_array_unary_impl(op, A)
 
         return overload_int_arr_op_nin_1
     elif n_inputs == 2:
 
         def overload_series_op_nin_2(A1, A2):
-            # both are IntegerArray
-            if isinstance(A1, IntegerArrayType) and isinstance(A2, IntegerArrayType):
-
-                def impl_both(A1, A2):  # pragma: no cover
-                    arr1 = bodo.libs.int_arr_ext.get_int_arr_data(A1)
-                    bitmap1 = bodo.libs.int_arr_ext.get_int_arr_bitmap(A1)
-                    arr2 = bodo.libs.int_arr_ext.get_int_arr_data(A2)
-                    bitmap2 = bodo.libs.int_arr_ext.get_int_arr_bitmap(A2)
-                    out_arr = op(arr1, arr2)
-                    bitmap = bodo.libs.int_arr_ext.merge_bitmaps(
-                        bitmap1, bitmap2, len(arr1), inplace
-                    )
-                    return bodo.libs.int_arr_ext.apply_null_mask(
-                        out_arr, bitmap, mask_fill, inplace
-                    )
-
-                return impl_both
-            # left arg is IntegerArray
-            if isinstance(A1, IntegerArrayType):
-
-                def impl_left(A1, A2):  # pragma: no cover
-                    arr1 = bodo.libs.int_arr_ext.get_int_arr_data(A1)
-                    bitmap = bodo.libs.int_arr_ext.get_int_arr_bitmap(A1)
-                    out_arr = op(arr1, A2)
-                    return bodo.libs.int_arr_ext.apply_null_mask(
-                        out_arr, bitmap, mask_fill, inplace
-                    )
-
-                return impl_left
-            # right arg is IntegerArray
-            if isinstance(A2, IntegerArrayType):
-
-                def impl_right(A1, A2):  # pragma: no cover
-                    arr2 = bodo.libs.int_arr_ext.get_int_arr_data(A2)
-                    bitmap = bodo.libs.int_arr_ext.get_int_arr_bitmap(A2)
-                    out_arr = op(A1, arr2)
-                    return bodo.libs.int_arr_ext.apply_null_mask(
-                        out_arr, bitmap, mask_fill, inplace
-                    )
-
-                return impl_right
+            if isinstance(A1, IntegerArrayType) or isinstance(A2, IntegerArrayType):
+                return get_nullable_array_binary_impl(op, A1, A2)
 
         return overload_series_op_nin_2
     else:
@@ -908,3 +847,101 @@ def overload_unique(A):
         return init_integer_array(new_data, new_mask)
 
     return impl_int_arr
+
+
+def get_nullable_array_unary_impl(op, A):
+    """generate implementation for unary operation on nullable integer or boolean array
+    """
+    # use type inference to get output dtype
+    typing_context = numba.core.registry.cpu_target.typing_context
+    ret_dtype = typing_context.resolve_function_type(
+        op, (A.dtype,), {}
+    ).return_type
+    ret_dtype = bodo.hiframes.pd_series_ext._get_series_array_type(
+        ret_dtype
+    )
+    ret_dtype = to_nullable_type(ret_dtype)
+
+    def impl(A):  # pragma: no cover
+        n = len(A)
+        out_arr = bodo.utils.utils.alloc_type(n, ret_dtype, None)
+        for i in numba.parfors.parfor.internal_prange(n):
+            if bodo.libs.array_kernels.isna(A, i):
+                bodo.ir.join.setitem_arr_nan(out_arr, i)
+                continue
+            out_arr[i] = op(A[i])
+        return out_arr
+
+    return impl
+
+
+def get_nullable_array_binary_impl(op, A1, A2):
+    """generate implementation for binary operation on nullable integer or boolean array
+    """
+    # TODO: 1 ** np.nan is 1. So we have to unmask those.
+    inplace = op in numba.core.typing.npydecl.NumpyRulesInplaceArrayOperator._op_map.keys()
+    is_A1_scalar = isinstance(A1, (types.Number, types.Boolean))
+    is_A2_scalar = isinstance(A2, (types.Number, types.Boolean))
+    # use type inference to get output dtype
+    dtype1 = getattr(A1, "dtype", A1)
+    dtype2 = getattr(A2, "dtype", A2)
+    typing_context = numba.core.registry.cpu_target.typing_context
+    ret_dtype = typing_context.resolve_function_type(
+        op, (dtype1, dtype2), {}
+    ).return_type
+    ret_dtype = bodo.hiframes.pd_series_ext._get_series_array_type(
+        ret_dtype
+    )
+    ret_dtype = to_nullable_type(ret_dtype)
+    # generate implementation function. Example:
+    # def impl(A1, A2):
+    #   n = len(A1)
+    #   out_arr = bodo.utils.utils.alloc_type(n, ret_dtype, None)
+    #   for i in numba.parfors.parfor.internal_prange(n):
+    #     if (bodo.libs.array_kernels.isna(A1, i)
+    #         or bodo.libs.array_kernels.isna(A2, i)):
+    #       bodo.ir.join.setitem_arr_nan(out_arr, i)
+    #       continue
+    #     out_arr[i] = op(A1[i], A2[i])
+    #   return out_arr
+    access_str1 = "A1" if is_A1_scalar else "A1[i]"
+    access_str2 = "A2" if is_A2_scalar else "A2[i]"
+    na_str1 = (
+        "False" if is_A1_scalar else "bodo.libs.array_kernels.isna(A1, i)"
+    )
+    na_str2 = (
+        "False" if is_A2_scalar else "bodo.libs.array_kernels.isna(A2, i)"
+    )
+    func_text = "def impl(A1, A2):\n"
+    func_text += "  n = len({})\n".format(
+        "A1" if not is_A1_scalar else "A2"
+    )
+    if inplace:
+        func_text += "  out_arr = A1\n"
+    else:
+        func_text += (
+            "  out_arr = bodo.utils.utils.alloc_type(n, ret_dtype, None)\n"
+        )
+    func_text += "  for i in numba.parfors.parfor.internal_prange(n):\n"
+    func_text += "    if ({}\n".format(na_str1)
+    func_text += "        or {}):\n".format(na_str2)
+    func_text += "      bodo.ir.join.setitem_arr_nan(out_arr, i)\n"
+    func_text += "      continue\n"
+    func_text += "    out_arr[i] = op({}, {})\n".format(
+        access_str1, access_str2
+    )
+    func_text += "  return out_arr\n"
+    loc_vars = {}
+    exec(
+        func_text,
+        {
+            "bodo": bodo,
+            "numba": numba,
+            "np": np,
+            "ret_dtype": ret_dtype,
+            "op": op,
+        },
+        loc_vars,
+    )
+    impl = loc_vars["impl"]
+    return impl
