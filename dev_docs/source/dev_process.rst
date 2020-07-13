@@ -227,7 +227,7 @@ Below is the high level structure of the code.
   Currently just ``@jit`` is provided but more is expected.
 - ``compiler.py`` defines the compiler pipeline for this decorator.
 - ``transforms`` directory defines Bodo specific analysis and transformation
-  passes.
+  passes such distributed analysis and transformation.
 - ``hiframes`` directory provides Pandas functionality such as DataFrame,
   Series and Index.
 - ``ir`` directory defines and implements Bodo specific IR nodes such as
