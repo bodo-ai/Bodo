@@ -44,6 +44,7 @@ from bodo.utils.typing import (
     is_overload_true,
     is_overload_false,
     parse_dtype,
+    to_nullable_type,
 )
 from bodo.utils.indexing import (
     array_getitem_bool_index,
@@ -628,8 +629,6 @@ ufunc_aliases = {
 
 
 def create_op_overload(op, n_inputs):
-    # the result of comparison with np.nan is always False, except for
-    # not equal which is always True
     op_name = op.__name__
     op_name = ufunc_aliases.get(op_name, op_name)
 
@@ -646,6 +645,7 @@ def create_op_overload(op, n_inputs):
                 ret_dtype = bodo.hiframes.pd_series_ext._get_series_array_type(
                     ret_dtype
                 )
+                ret_dtype = to_nullable_type(ret_dtype)
 
                 def impl(A):  # pragma: no cover
                     n = len(A)
@@ -676,6 +676,7 @@ def create_op_overload(op, n_inputs):
                 ret_dtype = bodo.hiframes.pd_series_ext._get_series_array_type(
                     ret_dtype
                 )
+                ret_dtype = to_nullable_type(ret_dtype)
                 # generate implementation function. Example:
                 # def impl(A1, A2):
                 #   n = len(A1)
