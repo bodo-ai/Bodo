@@ -19,22 +19,20 @@ such as Numba on Ubuntu Linux::
     source activate DEV
     # Linux: conda install gcc_linux-64 gxx_linux-64 gfortran_linux-64 -c conda-forge
     # Mac: conda install clang_osx-64 clangxx_osx-64 gfortran_osx-64 -c conda-forge
+    # NOTE: for development/debugging purposes, it's best to install Numba from source instead
     conda install numba=0.50.1 -c conda-forge
-    conda install -c conda-forge hdf5=*=*mpich*
-    conda install -c conda-forge pyarrow=0.17.1
-    conda install -c conda-forge pymysql sqlalchemy
-    # The following 2 commands are required for s3 related development and tests
-    # conda install -c conda-forge botocore s3fs
-    # conda install -c conda-forge boto3
+    conda install -c conda-forge hdf5=*=*mpich* pyarrow=0.17.1 pymysql sqlalchemy
+    # The following is required for s3 related development and tests
+    # conda install -c conda-forge boto3 botocore s3fs
     git clone https://github.com/Bodo-inc/Bodo.git
     cd Bodo
     # build Bodo
     python setup.py develop
 
-For hdfs related development, use the :ref:`docker image <docker-images>`.
+For HDFS related development, use the :ref:`docker image <docker-images>`.
 
 On Windows
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~
 
 * Install Visual Studio Community 2017 (15.9.18)
 * From the Visual Studio installer, install following individual components::
@@ -91,15 +89,8 @@ and set for `minio <https://min.io/?gclid=Cj0KCQiAsvTxBRDkARIsAH4W_j9rNeSft9zVAr
 
 In case of issues, reinstalling in a new conda environment is recommended.
 
-To run hdfs related unit tests, use the :ref:`docker image <docker-images>`.
+To run HDFS related unit tests, use the :ref:`docker image <docker-images>`.
 
 Other useful packages for development::
 
-    conda install pytest sphinx pylint jupyter
-
-
-
-
-
-
-
+    conda install pytest sphinx pylint jupyter xlrd xlsxwriter mpi4py ipyparallel matplotlib jupyterlab aws-sdk-cpp

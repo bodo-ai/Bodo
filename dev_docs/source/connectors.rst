@@ -3,15 +3,18 @@
 Connectors
 ===========
 
-This section briefly describes the implementations, known limitations of CSV, JSON, and NumPy Binaries I/O (Parquet not discussed). This section also explains how we read and write from and to POSIX, S3, and Hadoop file systems.
+This section briefly describes the implementations and known limitations of CSV, JSON, and NumPy Binaries I/O (Parquet not discussed).
+This section also explains how we read and write from and to POSIX, S3, and Hadoop file systems.
 
 ``Bodo/bodo/io``
 -----------------
-- ``_bodo_file_reader.h``: ``FileReader``, ``SingleFileReader``, and ``DirectoryFileReader`` used for reading CSV, and JSON files. These classes can be easily used to read other file formats that can be read bytes by bytes.
+- ``_bodo_file_reader.h``: ``FileReader``, ``SingleFileReader``, and ``DirectoryFileReader``
+  used for reading CSV, and JSON files. These classes can be easily used to read other file formats that can be read bytes by bytes.
 - ``_csv_json_reader.cpp``: 
 	* ``LocalFileReader`` and ``LocalDirectoryFileReader`` are used to read CSV, and JSON files from POSIX file system. 
 	* ``stream_reader_read()`` is the ``read()`` function called by pandas, when we pass our own file-like objects to ``pd.read_csv()`` and ``pd.read_json()``.
-	* ``count_entries()`` counts the lines for CSV files and records for JSON files. Both are equivalent to rows of dataframes. Each rank only reads a portion of the input.
+	* ``count_entries()`` counts the lines for CSV files and records for JSON files.
+	  Both are equivalent to rows of dataframes. Each rank only reads a portion of the input.
 	* ``chunk_reader()``  calls ``count_entries()``. 
 	Then calculate the start offset relative to the entire input and the size of the chunk for each rank using MPI.
 - ``_csv_json_writer.cpp``: used for ``df.to_csv()`` and ``df.to_json()``
@@ -69,7 +72,7 @@ Reading CSV/JSON
 | entry. Each rank reads its own chunk for the file/directory, and find offests for the start of  |
 | of each entry.                                                                                  |
 +------------------------------------------------+------------------------------------------------+
-| ``stream_reader`` returned to pandas with start offset(depending on ranks) and size to read for |
+| ``stream_reader`` returned to pandas with start offset (depending on ranks) and size to read for|
 | each rank, calculated with mpi communication, so that the input is evenly distributed           | 
 | entry(row in Dataframe)-wise across ranks.                                                      |
 +------------------------------------------------+------------------------------------------------+
@@ -84,7 +87,7 @@ Reading CSV With Headers
 
 When reading a file: We use ``skiprows`` to skip the header row.
 When reading a directory: When initializing the directory, 
-we read the first(lexigraphical order) non-empty file with the right extension in the directory to
+we read the first (lexigraphical order) non-empty file with the right extension in the directory to
 find the number of bytes of the header. When ``DirectoryFileReader`` creates ``SingleFileReader``, 
 ``DirectoryFileReader`` passes down ``csv_header_bytes``, so that ``SingleFileReader`` can skip the
 header row in ``seek()``. Directory size is also calculated excluding headers.
@@ -152,4 +155,6 @@ See its docstring in ``_fs_io.h`` for how writing is done differently for the tw
 ``parallel_in_order_write`` is a general in-order write function 
 where more than more processors write to the same file. 
 
-``arrow-cpp`` does not have append implemented for S3, but has it implemented for HDFS. Here, if ``dfs.replication`` set in ``hdfs-site.xml`` is inconsistent with the number of nodes in the cluster, an error could happen in ``parallel_in_order_write`` because appending depends on it.
+``arrow-cpp`` does not have append implemented for S3, but has it implemented for HDFS.
+Here, if ``dfs.replication`` set in ``hdfs-site.xml`` is inconsistent with the number of
+nodes in the cluster, an error could happen in ``parallel_in_order_write`` because appending depends on it.
