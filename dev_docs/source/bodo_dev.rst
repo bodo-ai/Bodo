@@ -288,7 +288,7 @@ if the data array is available at that point in the program
 (Series object was created using ``init_series`` and not altered).
 
 
-For the pipline to handle a builtin function properly
+For the pipeline to handle a builtin function properly
 the following has to be specified:
 
 - side effects for dead code elimination
