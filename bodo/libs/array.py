@@ -725,7 +725,7 @@ def info_to_array(typingctx, info_type, arr_type):
         # TODO: update meminfo?
 
         if isinstance(arr_type, ArrayItemArrayType) and arr_type.dtype == string_array_type:
-            array_item_array = context.make_helper(builder, arr_type)
+            array_item_array_from_cpp = context.make_helper(builder, arr_type)
             fnty = lir.FunctionType(
                 lir.VoidType(),
                 [
@@ -740,9 +740,42 @@ def info_to_array(typingctx, info_type, arr_type):
                 fn_tp,
                 [
                     in_info,
-                    array_item_array._get_ptr_by_name("meminfo"),
+                    array_item_array_from_cpp._get_ptr_by_name("meminfo"),
                 ],
             )
+
+            payload = _get_array_item_arr_payload(
+                context, builder, arr_type, array_item_array_from_cpp._getvalue()
+            )
+
+            payload_type = ArrayItemArrayPayloadType(arr_type)
+            payload_alloc_type = context.get_data_type(payload_type)
+            payload_alloc_size = context.get_abi_sizeof(payload_alloc_type)
+
+            # define dtor
+            dtor_fn = define_array_item_dtor(context, builder, arr_type, payload_type)
+
+            # create meminfo
+            meminfo = context.nrt.meminfo_alloc_dtor(
+                builder, context.get_constant(types.uintp, payload_alloc_size), dtor_fn
+            )
+            meminfo_void_ptr = context.nrt.meminfo_data(builder, meminfo)
+            meminfo_data_ptr = builder.bitcast(
+                meminfo_void_ptr, payload_alloc_type.as_pointer()
+            )
+
+            payload_new = cgutils.create_struct_proxy(payload_type)(context, builder)
+            payload_new.n_arrays = payload.n_arrays
+            payload_new.data = payload.data
+            payload_new.offsets = payload.offsets
+            payload_new.null_bitmap = payload.null_bitmap
+
+            builder.store(payload_new._getvalue(), meminfo_data_ptr)
+            array_item_array = context.make_helper(builder, arr_type)
+            array_item_array.meminfo = meminfo
+
+            context.nrt.decref(builder, arr_type, array_item_array_from_cpp._getvalue())
+
             return array_item_array._getvalue()
 
         if isinstance(arr_type, (ArrayItemArrayType, StructArrayType)):
