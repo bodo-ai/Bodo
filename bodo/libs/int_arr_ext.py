@@ -855,11 +855,8 @@ def get_nullable_array_unary_impl(op, A):
     # use type inference to get output dtype
     typing_context = numba.core.registry.cpu_target.typing_context
     ret_dtype = typing_context.resolve_function_type(
-        op, (A.dtype,), {}
+        op, (types.Array(A.dtype, 1, "C"),), {}
     ).return_type
-    ret_dtype = bodo.hiframes.pd_series_ext._get_series_array_type(
-        ret_dtype
-    )
     ret_dtype = to_nullable_type(ret_dtype)
 
     def impl(A):  # pragma: no cover
@@ -883,15 +880,15 @@ def get_nullable_array_binary_impl(op, A1, A2):
     is_A1_scalar = isinstance(A1, (types.Number, types.Boolean))
     is_A2_scalar = isinstance(A2, (types.Number, types.Boolean))
     # use type inference to get output dtype
-    dtype1 = getattr(A1, "dtype", A1)
-    dtype2 = getattr(A2, "dtype", A2)
+    # NOTE: using Numpy array instead of scalar dtypes since output dtype can be
+    # different for arrays. For example, int32 + int32 is int64 for scalar but int32 for
+    # arrays. see test_series_add.
+    dtype1 = types.Array(getattr(A1, "dtype", A1), 1, "C")
+    dtype2 = types.Array(getattr(A2, "dtype", A2), 1, "C")
     typing_context = numba.core.registry.cpu_target.typing_context
     ret_dtype = typing_context.resolve_function_type(
         op, (dtype1, dtype2), {}
     ).return_type
-    ret_dtype = bodo.hiframes.pd_series_ext._get_series_array_type(
-        ret_dtype
-    )
     ret_dtype = to_nullable_type(ret_dtype)
     # generate implementation function. Example:
     # def impl(A1, A2):
