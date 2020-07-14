@@ -230,6 +230,22 @@ void free_array(array_info* arr) {
   }
 }
 
+void free_list_string_array(NRT_MemInfo* meminfo) {
+    array_item_arr_payload *payload = (array_item_arr_payload*)(meminfo->data);
+
+    // delete string array
+    payload->data->refct--;
+    NRT_MemInfo_call_dtor(payload->data);
+
+    // delete array item array
+    payload->offsets.meminfo->refct--;
+    NRT_MemInfo_call_dtor(payload->offsets.meminfo);
+    payload->null_bitmap.meminfo->refct--;
+    NRT_MemInfo_call_dtor(payload->null_bitmap.meminfo);
+    meminfo->refct--;
+    NRT_MemInfo_call_dtor(meminfo);
+}
+
 extern "C" {
 
 void dtor_string_array(str_arr_payload* in_str_arr, int64_t size, void* in) {

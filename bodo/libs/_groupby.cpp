@@ -1534,17 +1534,27 @@ void apply_to_column(array_info* in_col, array_info* out_col,
                                 nb_char += e_str.size();
                         }
                     }
-                    delete[] out_col->data1;
-                    delete[] out_col->data2;
-                    out_col->data1 = new char[nb_char];
-                    out_col->data2 =
-                        new char[sizeof(uint32_t) * (nb_string + 1)];
-                    // update list(str) array payload to reflect change
-                    //list_str_arr_payload* payload = (list_str_arr_payload*)out_col->meminfo->data;
-                    //payload->data = out_col->data1;
-                    //payload->data_offsets = (uint32_t*)out_col->data2;
+                    // Allocation needs to be done through alloc_list_string_array,
+                    // which allocates with meminfos and same data structs that
+                    // Python uses. We need to re-allocate here because number
+                    // of strings and chars has been determined here (previous
+                    // out_col was just an empty dummy allocation).
+
+                    // TODO this is hacky, but is similar to previous solution.
+                    // Improving this would likely require deeper architectural changes
+                    NRT_MemInfo *old_meminfo = out_col->meminfo;
+                    array_info* aux_info = alloc_list_string_array(out_col->length, nb_string, nb_char, 0);
                     out_col->n_sub_elems = nb_string;
                     out_col->n_sub_sub_elems = nb_char;
+                    array_item_arr_payload *payload = (array_item_arr_payload*)(aux_info->meminfo->data);
+                    str_arr_payload *sub_payload = (str_arr_payload*)(payload->data->data);
+                    out_col->meminfo = aux_info->meminfo;
+                    out_col->data1 = (char*)sub_payload->data;
+                    out_col->data2 = (char*)sub_payload->offsets;
+                    out_col->data3 = (char*)payload->offsets.data;
+                    out_col->null_bitmask = (char*)payload->null_bitmap.data;
+                    delete aux_info;
+
                     uint32_t* index_offsets_o = (uint32_t*)out_col->data3;
                     uint32_t* data_offsets_o = (uint32_t*)out_col->data2;
                     // Writing the list_strings in output
@@ -1570,9 +1580,13 @@ void apply_to_column(array_info* in_col, array_info* out_col,
                                     data_offsets_o[pos_data - 1] + n_char;
                             }
                             pos_index += n_string;
+                            SetBitTo((uint8_t*)out_col->null_bitmask, i_grp, true);
+                        } else {
+                            SetBitTo((uint8_t*)out_col->null_bitmask, i_grp, false);
                         }
                     }
                     index_offsets_o[num_groups] = pos_index;
+                    free_list_string_array(old_meminfo);  // free dummy array
                     return;
             }
 

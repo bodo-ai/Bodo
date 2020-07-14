@@ -189,6 +189,11 @@ void delete_table_free_arrays(table_info* table);
  */
 void free_array(array_info* arr);
 
+/**
+ * Free all memory of list of string array.
+ */
+void free_list_string_array(NRT_MemInfo* meminfo);
+
 inline void Bodo_PyErr_SetString(PyObject* type, const char* message) {
     std::cerr << "BodoRuntimeCppError, setting PyErr_SetString to " << message
               << "\n";
