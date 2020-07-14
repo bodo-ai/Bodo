@@ -710,6 +710,7 @@ def gen_varsize_array_counts(t, item, var_names):
         return "    {} += bodo.libs.str_arr_ext.get_num_total_chars({})\n".format(
             var_names[0], item
         )
+    return ""
 
 
 def get_type_alloc_counts(t):
