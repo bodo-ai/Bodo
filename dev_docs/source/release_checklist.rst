@@ -3,7 +3,8 @@
 Release Checklist
 ----------------------
 
-1. Create a new ``Month_Year.rst`` (ex. Feb_2020.rst) file for the new release under `docs/source/release_notes directory <https://github.com/Bodo-inc/Bodo/tree/master/docs/source/release_notes>`_, fill out the contents, add it to the `release notes page <https://github.com/Bodo-inc/Bodo/blob/master/docs/source/releases.rst>`_.
+1. Create a new ``Month_Year.rst`` (ex. Feb_2020.rst) file for the new release under `docs/source/release_notes directory <https://github.com/Bodo-inc/Bodo/tree/master/docs/source/release_notes>`_, fill out the contents, add it to the `release notes page <https://github.com/Bodo-inc/Bodo/blob/master/docs/source/releases.rst>`_. To prepare the release notes, it is useful to view the PRs closed since
+the last release. For example, use the following filter on GitHub: ``is:pr is:closed merged:>=yyyy-mm-dd base:master``.
 
 2. Change ``:caption:`` field in ``docs/index.rst`` to ``Version year.month`` (ex. 2020.04).
 
