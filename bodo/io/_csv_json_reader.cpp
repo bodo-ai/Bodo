@@ -380,10 +380,12 @@ class PathInfo {
     /**
      * @param file_path : path passed in pd.read_csv/pd.read_json call
      */
-    PathInfo(const char *file_path, const std::string &compression_pyarg) : file_path(file_path) {
+    PathInfo(const char *file_path, const std::string &compression_pyarg)
+        : file_path(file_path) {
         // obtain path info on rank 0, broadcast to other ranks.
         // this sets PathInfo attributes on all ranks
         obtain_is_directory();
+        if (!is_valid) return;
         obtain_file_names_and_sizes();
         obtain_compression_scheme(compression_pyarg);
     }
@@ -409,24 +411,18 @@ class PathInfo {
      * If the path is a directory, it only considers files of size greater than
      * zero whose name is not "_SUCCESS" or ends in ".crc".
      */
-    const std::vector<int64_t> &get_file_sizes() const {
-        return file_sizes;
-    }
+    const std::vector<int64_t> &get_file_sizes() const { return file_sizes; }
 
     /**
      * Return name of first file in path. If path is a single file then just
      * return the name of that file.
      */
-    const std::string get_first_file() const {
-        return file_names[0];
-    }
+    const std::string get_first_file() const { return file_names[0]; }
 
     /**
      * Return total size of all files in path.
      */
-    int64_t get_size() const {
-        return total_ds_size;
-    }
+    int64_t get_size() const { return total_ds_size; }
 
     /**
      * Get arrow::fs::FileSystem object necessary to read data from this path.
@@ -470,8 +466,15 @@ class PathInfo {
         return fs;
     }
 
-   private:
+    /**
+     * @brief return whether the provide path is valid or not
+     *
+     * @return true
+     * @return false
+     */
+    bool is_path_valid() { return is_valid; }
 
+   private:
     /**
      * Determines if path is a directory or a single file.
      * The filesystem is accessed only on rank 0, result is communicated to
@@ -487,12 +490,18 @@ class PathInfo {
                 c_is_dir = 1;
             else if (file_stat.IsFile())
                 c_is_dir = 0;
-            else
+            else {
+                c_is_dir = -1;
                 Bodo_PyErr_SetString(
                     PyExc_RuntimeError,
-                    "Error in PathInfo::is_directory: invalid path");
+                    (std::string(
+                         "Error in PathInfo::is_directory: invalid path ") +
+                     std::string(file_path))
+                        .c_str());
+            }
         }
         MPI_Bcast(&c_is_dir, 1, MPI_INT, 0, MPI_COMM_WORLD);
+        is_valid = (c_is_dir != -1);
         is_dir = bool(c_is_dir);
     }
 
@@ -613,6 +622,7 @@ class PathInfo {
 
     /// original file path passed through read_csv/read_json
     std::string file_path;
+    bool is_valid;
     bool is_dir;
     std::string compression = "UNKNOWN";
     std::vector<std::string> file_names;
@@ -643,7 +653,8 @@ int64_t get_header_size(const std::string &fname, int64_t file_size,
         int64_t seen_size = 0;
         while (!header_found && seen_size < file_size) {
             // TODO check status
-            int64_t read_size = std::min(int64_t(data.size()), file_size - seen_size);
+            int64_t read_size =
+                std::min(int64_t(data.size()), file_size - seen_size);
             arrow::Result<int64_t> res = file->Read(read_size, data.data());
             for (int64_t i = 0; i < read_size; i++, header_size++) {
                 if (data[i] == row_separator) {
@@ -689,7 +700,8 @@ class MemReader : public FileReader {
      *                          records span multiple lines
      */
     MemReader(char row_separator, bool json_multi_line = false)
-        // note that none of the parameters passed to super class affect MemReader
+        // note that none of the parameters passed to super class affect
+        // MemReader
         : FileReader("", false, !json_multi_line),
           row_separator(row_separator),
           json_multi_line(json_multi_line) {}
@@ -701,7 +713,8 @@ class MemReader : public FileReader {
      *                          records span multiple lines
      */
     MemReader(size_t size, char row_separator, bool json_multi_line = false)
-        // note that none of the parameters passed to super class affect MemReader
+        // note that none of the parameters passed to super class affect
+        // MemReader
         : FileReader("", false, !json_multi_line),
           row_separator(row_separator),
           json_multi_line(json_multi_line) {
@@ -713,9 +726,7 @@ class MemReader : public FileReader {
     /**
      * Return total size of data.
      */
-    uint64_t getSize() {
-        return data.size() - start;
-    }
+    uint64_t getSize() { return data.size() - start; }
 
     /**
      * Read size bytes into given buffer s (from current position)
@@ -767,9 +778,7 @@ class MemReader : public FileReader {
     /**
      * Get number of rows in data.
      */
-    int64_t get_num_rows() {
-        return row_offsets.size() - 1;
-    }
+    int64_t get_num_rows() { return row_offsets.size() - 1; }
 
     /**
      * Replace data with new_data (MemReader takes ownership of it).
@@ -830,7 +839,8 @@ class MemReader : public FileReader {
             // read a chunk of READ_SIZE bytes
             data.resize(data.size() + READ_SIZE);
             int64_t bytes_read =
-                istream->Read(READ_SIZE, data.data() + actual_size).ValueOrDie();
+                istream->Read(READ_SIZE, data.data() + actual_size)
+                    .ValueOrDie();
             if (bytes_read == 0) break;
             if (!skipped_header) {
                 // check for row_separator in new data read
@@ -962,8 +972,7 @@ void skip_rows(MemReader *reader, int64_t skiprows, bool is_parallel) {
         // determine the number of rows we need to skip on each rank,
         // and modify starting offset of data accordingly
         for (int rank = 0; rank < num_ranks; rank++) {
-            int64_t rank_skip =
-                std::min(skiprows, num_rows_ranks[rank]);
+            int64_t rank_skip = std::min(skiprows, num_rows_ranks[rank]);
             if (rank == my_rank) {
                 reader->start = reader->row_offsets[rank_skip];
                 return;
@@ -992,8 +1001,7 @@ void skip_rows(MemReader *reader, int64_t skiprows, bool is_parallel) {
  *                   from this rank to 'rank'. Only needs to contain values
  *                   for num_rows > 0 cases.
  */
-void calc_row_transfer(const std::vector<int64_t> &num_rows,
-                       int64_t total_rows,
+void calc_row_transfer(const std::vector<int64_t> &num_rows, int64_t total_rows,
                        std::vector<std::pair<int, int64_t>> &to_send) {
     int myrank = dist_get_rank();
     int num_ranks = dist_get_size();
@@ -1032,8 +1040,8 @@ void calc_row_transfer(const std::vector<int64_t> &num_rows,
 
 /**
  * Redistribute rows across MemReaders of all ranks to ensure that the number
- * of rows is "balanced" (matches dist_get_node_portion(total_rows, num_ranks, rank)
- * for each rank). See calc_row_transfer for details on how row transfer
+ * of rows is "balanced" (matches dist_get_node_portion(total_rows, num_ranks,
+ * rank) for each rank). See calc_row_transfer for details on how row transfer
  * is calculated.
  * IMPORTANT: this assumes that the data in each MemReader consists of complete
  * rows.
@@ -1055,7 +1063,8 @@ void balance_rows(MemReader *reader) {
 
     // check that all ranks have same number of rows. in that case there is no
     // need to do anything
-    auto result = std::minmax_element(num_rows_ranks.begin(), num_rows_ranks.end());
+    auto result =
+        std::minmax_element(num_rows_ranks.begin(), num_rows_ranks.end());
     int64_t min = *result.first;
     int64_t max = *result.second;
     if (min == max) return;  // already balanced
@@ -1117,7 +1126,8 @@ void balance_rows(MemReader *reader) {
  * @param suffix : "csv" or "json"
  * @param is_parallel : indicates whether data is distributed or replicated
  * @param skiprows : number of rows to skip in global dataset
- * @param json_lines : true if JSON file is in JSON Lines format (one row/record per line)
+ * @param json_lines : true if JSON file is in JSON Lines format (one row/record
+ * per line)
  * @param csv_header : true if CSV files contain headers
  * @param compression_pyarg : compression scheme
  */
@@ -1146,6 +1156,9 @@ extern "C" PyObject *file_chunk_reader(const char *fname, const char *suffix,
     MemReader *mem_reader = nullptr;
 
     PathInfo path_info(fname, compression_pyarg);
+    if (!path_info.is_path_valid()) {
+        return NULL;
+    }
     const std::string compression = path_info.get_compression_scheme();
 
     if (compression == "UNCOMPRESSED") {
@@ -1158,8 +1171,8 @@ extern "C" PyObject *file_chunk_reader(const char *fname, const char *suffix,
         // total size excluding headers
         int64_t total_size =
             path_info.get_size() - (file_names.size() * header_size_bytes);
-        // now determine which files to read from and what portion from each file
-        // this is based on partitioning of global dataset based on bytes.
+        // now determine which files to read from and what portion from each
+        // file this is based on partitioning of global dataset based on bytes.
         // As such, this first phase can end up with rows of data in multiple
         // processes
         int64_t start_global = 0;
@@ -1202,9 +1215,9 @@ extern "C" PyObject *file_chunk_reader(const char *fname, const char *suffix,
         // correct data so that each rank only has complete rows
         if (is_parallel) data_row_correction(mem_reader, row_separator);
     } else {
-        // if files are compressed, one rank will be responsible for decompressing
-        // a whole file into memory. Data will later be redistributed (see
-        // balance_rows below)
+        // if files are compressed, one rank will be responsible for
+        // decompressing a whole file into memory. Data will later be
+        // redistributed (see balance_rows below)
         const std::vector<std::string> &file_names = path_info.get_file_names();
         mem_reader = new MemReader(row_separator, !json_lines);
         int64_t num_files = file_names.size();
@@ -1265,7 +1278,8 @@ extern "C" PyObject *file_chunk_reader(const char *fname, const char *suffix,
 
 extern "C" PyObject *csv_file_chunk_reader(const char *fname, bool is_parallel,
                                            int64_t skiprows, int64_t nrows,
-                                           bool header, const char *compression) {
+                                           bool header,
+                                           const char *compression) {
     // TODO nrows not used??
     return file_chunk_reader(fname, "csv", is_parallel, skiprows, nrows, true,
                              header, compression);
@@ -1275,8 +1289,8 @@ extern "C" PyObject *json_file_chunk_reader(const char *fname, bool lines,
                                             bool is_parallel, int64_t nrows,
                                             const char *compression) {
     // TODO nrows not used??
-    return file_chunk_reader(fname, "json", is_parallel, 0, nrows, lines,
-                             false, compression);
+    return file_chunk_reader(fname, "json", is_parallel, 0, nrows, lines, false,
+                             compression);
 }
 
 // NOTE: some old testing code that is commented out due to

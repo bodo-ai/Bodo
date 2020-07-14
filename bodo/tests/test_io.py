@@ -1599,6 +1599,18 @@ def test_unsupported_error_checking():
         bodo.jit(test_impl)()
 
 
+def test_csv_invalid_path():
+    """test error raise when CSV file path is invalid and the data types are provided
+    explicitly (so that path check is done in C++ runtime).
+    """
+
+    def test_impl(fname):
+        return pd.read_csv(fname, names=["A"], dtype={"A": np.int64})
+
+    with pytest.raises(FileNotFoundError, match="File does not exist"):
+        bodo.jit(test_impl)("f.csv")
+
+
 class TestIO(unittest.TestCase):
     def test_h5_write_parallel(self):
         fname = "lr_w.hdf5"
