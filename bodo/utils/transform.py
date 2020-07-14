@@ -674,26 +674,42 @@ def gen_init_varsize_alloc_sizes(t):
     """generate initialization code as text for allocation sizes for arrays with
     variable items, e.g. total number of characters in string arrays
     """
-    assert is_var_size_item_array_type(t)
+    # TODO: handle all possible array types and nested cases, e.g. struct
     if t == string_array_type:
         vname = "num_chars_{}".format(ir_utils.next_label())
         return f"  {vname} = 0\n", (vname,)
     if isinstance(t, ArrayItemArrayType):
+        inner_code, inner_vars = gen_init_varsize_alloc_sizes(t.dtype)
         vname = "num_items_{}".format(ir_utils.next_label())
-        return f"  {vname} = 0\n", (vname,)
+        return f"  {vname} = 0\n" + inner_code, (vname,) + inner_vars
+    return "", ()
 
 
 def gen_varsize_item_sizes(t, item, var_names):
     """generate aggregation code as text for allocation sizes for arrays with
     variable items, e.g. total number of characters in string arrays
     """
-    assert is_var_size_item_array_type(t)
+    # TODO: handle all possible array types and nested cases, e.g. struct
     if t == string_array_type:
         return "    {} += bodo.libs.str_arr_ext.get_utf8_size({})\n".format(
             var_names[0], item
         )
     if isinstance(t, ArrayItemArrayType):
-        return "    {} += len({})\n".format(var_names[0], item)
+        return "    {} += len({})\n".format(
+            var_names[0], item
+        ) + gen_varsize_array_counts(t.dtype, item, var_names[1:])
+    return ""
+
+
+def gen_varsize_array_counts(t, item, var_names):
+    """count the total number of elements in a nested array. e.g. total characters in a
+    string array.
+    """
+    # TODO: other arrays
+    if t == string_array_type:
+        return "    {} += bodo.libs.str_arr_ext.get_num_total_chars({})\n".format(
+            var_names[0], item
+        )
 
 
 def get_type_alloc_counts(t):

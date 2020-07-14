@@ -846,6 +846,30 @@ def str_list_to_array_overload(str_list):
     return lambda str_list: str_list
 
 
+def get_num_total_chars(A):  # pragma: no cover
+    pass
+
+
+@overload(get_num_total_chars)
+def overload_get_num_total_chars(A):
+    """get total number of characters in a list(str) or string array
+    """
+    if isinstance(A, types.List) and A.dtype == string_type:
+
+        def str_list_impl(A):  # pragma: no cover
+            n = len(A)
+            n_char = 0
+            for i in range(n):
+                _str = A[i]
+                n_char += get_utf8_size(_str)
+            return n_char
+
+        return str_list_impl
+
+    assert A == string_array_type
+    return lambda A: num_total_chars(A)  # pragma: no cover
+
+
 def is_str_arr_typ(typ):
     from bodo.hiframes.pd_series_ext import is_str_series_typ
 
@@ -1580,6 +1604,19 @@ def str_arr_setitem(A, idx, val):
                 str_arr_set_not_na(A, i)
 
         return impl_slice
+
+    # slice case with list(str)
+    if (
+        isinstance(idx, types.SliceType)
+        and isinstance(val, types.List)
+        and val.dtype == string_type
+    ):
+
+        def impl_slice_list(A, idx, val):  # pragma: no cover
+            val_arr = str_list_to_array(val)
+            A[idx] = val_arr
+
+        return impl_slice_list
 
     if isinstance(idx, types.SliceType) and val == string_type:
 
