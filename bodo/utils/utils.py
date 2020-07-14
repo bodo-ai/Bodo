@@ -204,6 +204,7 @@ typ_to_format = {
     types.uint64: "llu",
     types.float32: "f",
     types.float64: "lf",
+    types.voidptr: "s",
 }
 
 

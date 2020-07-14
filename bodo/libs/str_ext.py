@@ -137,6 +137,11 @@ def unicode_to_utf8_and_len(typingctx, str_typ=None):
                     fn_encode,
                     [utf8_str.data, uni_str.data, uni_str.length, uni_str.kind],
                 )
+                # set last character to NULL
+                builder.store(
+                    lir.Constant(lir.IntType(8), 0),
+                    builder.gep(utf8_str.data, [utf8_len]),
+                )
 
         out_tup.f0 = utf8_str._getvalue()
 
@@ -278,7 +283,7 @@ def gen_std_str_to_unicode(context, builder, std_str_val, del_str=False):
 
     def _std_str_to_unicode(std_str):  # pragma: no cover
         length = bodo.libs.str_ext.get_std_str_len(std_str)
-        ret = numba.cpython.unicode._empty_string(kind, length)
+        ret = numba.cpython.unicode._empty_string(kind, length, 1)
         bodo.libs.str_arr_ext._memcpy(
             ret._data, bodo.libs.str_ext.get_c_str(std_str), length, 1
         )
