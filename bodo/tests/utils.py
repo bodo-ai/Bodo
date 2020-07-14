@@ -705,7 +705,7 @@ def convert_non_pandas_columns(df):
         e_col = df[e_col_name]
         for i_row in range(n_rows):
             e_ent = e_col.iat[i_row]
-            if isinstance(e_ent, list):
+            if isinstance(e_ent, (list, np.ndarray)):
                 e_str = ",".join(e_ent) + ","
                 e_list_str.append(e_str)
             else:
