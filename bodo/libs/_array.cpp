@@ -159,11 +159,7 @@ array_info* nested_array_to_info(int* types, const uint8_t** buffers,
                           NULL, ai.array);
 }
 
-array_info* list_string_array_to_info(uint64_t n_items, uint64_t n_strings,
-                                      uint64_t n_chars, char* data,
-                                      char* data_offsets, char* index_offsets,
-                                      char* _null_bitmap,
-                                      NRT_MemInfo* meminfo) {
+array_info* list_string_array_to_info(NRT_MemInfo* meminfo) {
 #ifdef USE_ARROW_FOR_LIST_STRING
     // compile time assert to make sure our offset type matches Arrow's
     // TODO replace int32_t here with macro
@@ -196,10 +192,18 @@ array_info* list_string_array_to_info(uint64_t n_items, uint64_t n_strings,
                           n_items, -1, -1, NULL, NULL, NULL, NULL, meminfo,
                           NULL, array);
 #else
-    // TODO: better memory management of struct, meminfo refcount?
-    return new array_info(bodo_array_type::LIST_STRING,
-                          Bodo_CTypes::LIST_STRING, n_items, n_strings, n_chars, data,
-                          data_offsets, index_offsets, _null_bitmap, meminfo, NULL);
+    array_item_arr_payload *payload = (array_item_arr_payload*)meminfo->data;
+    int64_t n_items = payload->n_arrays;
+
+    str_arr_payload *sub_payload = (str_arr_payload*)payload->data->data;
+    int64_t n_strings = sub_payload->num_strings;
+    int64_t n_chars = sub_payload->offsets[n_strings];
+
+    return new array_info(bodo_array_type::LIST_STRING, Bodo_CTypes::LIST_STRING,
+                          n_items, n_strings, n_chars, (char*)sub_payload->data,
+                          (char*)sub_payload->offsets, (char*)payload->offsets.data,
+                          (char*)payload->null_bitmap.data,
+                          meminfo, nullptr);
 #endif
 }
 
@@ -241,12 +245,10 @@ array_info* decimal_array_to_info(uint64_t n_items, char* data, int typ_enum,
                           meminfo_bitmask, NULL, precision, scale);
 }
 
-void info_to_list_string_array(array_info* info, uint64_t* n_items,
-                               uint64_t* n_strings, uint64_t* n_chars,
-                               char** data, char** data_offsets,
-                               char** index_offsets, char** null_bitmap,
-                               NRT_MemInfo** meminfo) {
+void info_to_list_string_array(array_info* info, NRT_MemInfo** array_item_meminfo) {
 #ifdef USE_ARROW_FOR_LIST_STRING
+    // TODO update for ArrayItemArray(StringArray)
+
     if (info->arr_type != bodo_array_type::ARROW) {
         Bodo_PyErr_SetString(PyExc_RuntimeError, "It has to be arrow array");
         return;
@@ -292,14 +294,8 @@ void info_to_list_string_array(array_info* info, uint64_t* n_items,
                              "info_to_list_string_array requires list string input");
         return;
     }
-    *n_items = info->length;
-    *n_strings = info->n_sub_elems;
-    *n_chars = info->n_sub_sub_elems;
-    *data = info->data1;
-    *data_offsets = info->data2;
-    *index_offsets = info->data3;
-    *null_bitmap = info->null_bitmask;
-    *meminfo = info->meminfo;
+
+    *array_item_meminfo = info->meminfo;
 #endif
 }
 

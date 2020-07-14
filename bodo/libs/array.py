@@ -53,6 +53,7 @@ ll.add_symbol("numpy_array_to_info", array_ext.numpy_array_to_info)
 ll.add_symbol("nullable_array_to_info", array_ext.nullable_array_to_info)
 ll.add_symbol("decimal_array_to_info", array_ext.decimal_array_to_info)
 ll.add_symbol("info_to_nested_array", array_ext.info_to_nested_array)
+ll.add_symbol("info_to_list_string_array", array_ext.info_to_list_string_array)
 ll.add_symbol("info_to_string_array", array_ext.info_to_string_array)
 ll.add_symbol("info_to_numpy_array", array_ext.info_to_numpy_array)
 ll.add_symbol("info_to_nullable_array", array_ext.info_to_nullable_array)
@@ -97,6 +98,25 @@ def array_to_info(typingctx, arr_type_t):
         arr_type = arr_type_t
         # arr_info struct keeps a reference
         context.nrt.incref(builder, arr_type, in_arr)
+
+        if isinstance(arr_type, ArrayItemArrayType) and arr_type.dtype == string_array_type:
+            # map ArrayItemArrayType(StringArrayType()) to array_info of type LIST_STRING
+            array_item_array = context.make_helper(builder, arr_type, in_arr)
+            fnty = lir.FunctionType(
+                lir.IntType(8).as_pointer(),
+                [
+                    lir.IntType(8).as_pointer(),
+                ],
+            )
+            fn_tp = builder.module.get_or_insert_function(
+                fnty, name="list_string_array_to_info"
+            )
+            return builder.call(
+                fn_tp,
+                [
+                    array_item_array.meminfo,
+                ],
+            )
 
         if isinstance(arr_type, (ArrayItemArrayType, StructArrayType)):
 
@@ -703,6 +723,27 @@ def info_to_array(typingctx, info_type, arr_type):
     def codegen(context, builder, sig, args):
         in_info, _ = args
         # TODO: update meminfo?
+
+        if isinstance(arr_type, ArrayItemArrayType) and arr_type.dtype == string_array_type:
+            array_item_array = context.make_helper(builder, arr_type)
+            fnty = lir.FunctionType(
+                lir.VoidType(),
+                [
+                    lir.IntType(8).as_pointer(),  # info
+                    lir.IntType(8).as_pointer().as_pointer(),  # meminfo
+                ],
+            )
+            fn_tp = builder.module.get_or_insert_function(
+                fnty, name="info_to_list_string_array"
+            )
+            builder.call(
+                fn_tp,
+                [
+                    in_info,
+                    array_item_array._get_ptr_by_name("meminfo"),
+                ],
+            )
+            return array_item_array._getvalue()
 
         if isinstance(arr_type, (ArrayItemArrayType, StructArrayType)):
 

@@ -26,6 +26,8 @@ from bodo.libs.int_arr_ext import IntegerArrayType, IntDtype
 from enum import Enum
 import bodo
 from bodo.hiframes.pd_series_ext import SeriesType, _get_series_array_type
+from bodo.libs.array_item_arr_ext import ArrayItemArrayType
+from bodo.libs.str_arr_ext import string_array_type
 from bodo.libs.str_ext import string_type
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.hiframes.pd_index_ext import RangeIndexType
@@ -279,6 +281,7 @@ def get_groupby_output_dtype(arr_type, func_name):
     If the operation is not feasible (e.g. summing dates) then an error message
     is passed upward to be decided according to the context.
     """
+    is_list_string = (arr_type == ArrayItemArrayType(string_array_type))
     in_dtype = arr_type.dtype
     if func_name == "median" and not isinstance(
         in_dtype, (Decimal128Type, types.Float, types.Integer)
@@ -288,10 +291,6 @@ def get_groupby_output_dtype(arr_type, func_name):
         in_dtype, (Decimal128Type, types.Integer, types.Float)):
         return types.float64, "ok"
     if not isinstance(in_dtype, (types.Integer, types.Float, types.Boolean)):
-        is_list_string = (
-            isinstance(in_dtype, numba.core.types.containers.List)
-            and in_dtype.dtype == types.unicode_type
-        )
         if is_list_string or in_dtype == types.unicode_type:
             if func_name not in {
                 "count",
@@ -324,6 +323,8 @@ def get_groupby_output_dtype(arr_type, func_name):
     else:
         if isinstance(arr_type, IntegerArrayType):
             return IntDtype(in_dtype), "ok"
+        elif is_list_string:
+            return arr_type, "ok"
         return in_dtype, "ok"  # default: return same dtype as input
 
 
@@ -403,7 +404,10 @@ class DataframeGroupByAttribute(AttributeTemplate):
                 out_dtype, err_msg = get_groupby_output_dtype(data, func_name)
 
             if err_msg == "ok":
-                out_arr = _get_series_array_type(out_dtype)
+                if out_dtype != ArrayItemArrayType(string_array_type):
+                    out_arr = _get_series_array_type(out_dtype)
+                else:
+                    out_arr = out_dtype
                 out_data.append(out_arr)
                 out_columns.append(c)
                 out_column_type.append(e_column_type)
