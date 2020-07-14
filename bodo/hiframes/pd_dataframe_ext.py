@@ -39,7 +39,7 @@ import bodo
 from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.hiframes.series_indexing import SeriesIlocType
 from bodo.hiframes.pd_index_ext import RangeIndexType, NumericIndexType
-from bodo.libs.str_ext import string_type, unicode_to_char_ptr
+from bodo.libs.str_ext import string_type, unicode_to_utf8
 from bodo.utils.typing import (
     BodoWarning,
     BodoError,
@@ -2711,22 +2711,22 @@ def to_parquet_overload(
     func_text += "    else:\n"
     func_text += "        name_ptr = 'null'\n"
     if write_rangeindex_to_metadata:
-        func_text += "    parquet_write_table_cpp(unicode_to_char_ptr(fname),\n"
+        func_text += "    parquet_write_table_cpp(unicode_to_utf8(fname),\n"
         func_text += "                            table, col_names, index_col,\n"
         func_text += "                            " + str(write_index) + ",\n"
-        func_text += "                            unicode_to_char_ptr(metadata),\n"
-        func_text += "                            unicode_to_char_ptr(compression),\n"
+        func_text += "                            unicode_to_utf8(metadata),\n"
+        func_text += "                            unicode_to_utf8(compression),\n"
         func_text += "                            _is_parallel, 1, df.index.start,\n"
         func_text += "                            df.index.stop, df.index.step,\n"
-        func_text += "                            unicode_to_char_ptr(name_ptr))\n"
+        func_text += "                            unicode_to_utf8(name_ptr))\n"
     else:
-        func_text += "    parquet_write_table_cpp(unicode_to_char_ptr(fname),\n"
+        func_text += "    parquet_write_table_cpp(unicode_to_utf8(fname),\n"
         func_text += "                            table, col_names, index_col,\n"
         func_text += "                            " + str(write_index) + ",\n"
-        func_text += "                            unicode_to_char_ptr(metadata),\n"
-        func_text += "                            unicode_to_char_ptr(compression),\n"
+        func_text += "                            unicode_to_utf8(metadata),\n"
+        func_text += "                            unicode_to_utf8(compression),\n"
         func_text += "                            _is_parallel, 0, 0, 0, 0,\n"
-        func_text += "                            unicode_to_char_ptr(name_ptr))\n"
+        func_text += "                            unicode_to_utf8(name_ptr))\n"
 
     loc_vars = {}
     exec(
@@ -2734,7 +2734,7 @@ def to_parquet_overload(
         {
             "np": np,
             "bodo": bodo,
-            "unicode_to_char_ptr": unicode_to_char_ptr,
+            "unicode_to_utf8": unicode_to_utf8,
             "array_to_info": array_to_info,
             "arr_info_list_to_table": arr_info_list_to_table,
             "str_arr_from_sequence": str_arr_from_sequence,
@@ -2863,9 +2863,6 @@ def to_sql_overload(
     return _impl
 
 
-dummy_use = numba.njit(lambda a: None)
-
-
 # TODO: other Pandas versions (0.24 defaults are different than 0.23)
 @overload_method(DataFrameType, "to_csv", no_unliteral=True)
 def to_csv_overload(
@@ -2988,10 +2985,8 @@ def to_csv_overload(
                 escapechar,
                 decimal,
             )
-        _csv_write(unicode_to_char_ptr(path_or_buf), D._data, 0, len(D), False)
-        # ensure path_or_buf and D are not deleted before call to _csv_write completes
-        dummy_use(path_or_buf)
-        dummy_use(D)
+        # TODO: support non-ASCII file names?
+        _csv_write(unicode_to_utf8(path_or_buf), unicode_to_utf8(D), 0, len(D), False)
 
     return _impl
 
@@ -3079,15 +3074,17 @@ def to_json_overload(
             )
         if lines and orient == "records":
             _json_write(
-                unicode_to_char_ptr(path_or_buf), D._data, 0, len(D), False, True
+                unicode_to_utf8(path_or_buf), unicode_to_utf8(D), 0, len(D), False, True
             )
         else:
             _json_write(
-                unicode_to_char_ptr(path_or_buf), D._data, 0, len(D), False, False
+                unicode_to_utf8(path_or_buf),
+                unicode_to_utf8(D),
+                0,
+                len(D),
+                False,
+                False,
             )
-        # ensure path_or_buf and D are not deleted before call to _json_write completes
-        dummy_use(path_or_buf)
-        dummy_use(D)
 
     return _impl
 

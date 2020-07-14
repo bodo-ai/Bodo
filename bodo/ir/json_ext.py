@@ -145,7 +145,9 @@ typeinfer.typeinfer_extensions[JsonReader] = bodo.ir.connector.connector_typeinf
 # add call to visit json variable
 ir_utils.visit_vars_extensions[JsonReader] = bodo.ir.connector.visit_vars_connector
 ir_utils.remove_dead_extensions[JsonReader] = remove_dead_json
-numba.core.analysis.ir_extension_usedefs[JsonReader] = bodo.ir.connector.connector_usedefs
+numba.core.analysis.ir_extension_usedefs[
+    JsonReader
+] = bodo.ir.connector.connector_usedefs
 ir_utils.copy_propagate_extensions[JsonReader] = bodo.ir.connector.get_copies_connector
 ir_utils.apply_copy_propagate_extensions[
     JsonReader
@@ -160,9 +162,6 @@ distributed_pass.distributed_run_extensions[JsonReader] = json_distributed_run
 # the reference to the dynamic function inside them
 # (numba/lowering.py:self.context.add_dynamic_addr ...)
 compiled_funcs = []
-
-
-dummy_use = numba.njit(lambda a: None)
 
 
 def _gen_json_reader_py(
@@ -203,10 +202,12 @@ def _gen_json_reader_py(
         compression = compression
 
     func_text = "def json_reader_py(fname):\n"
-    # TODO: unicode name
-    func_text += "  f_reader = json_file_chunk_reader(fname._data, "
-    func_text += "    {}, {}, -1, bodo.libs.str_ext.string_to_char_ptr('{}'))\n".format(lines, parallel, compression)
-    func_text += "  dummy_use(fname)\n"
+    func_text += (
+        "  f_reader = json_file_chunk_reader(bodo.libs.str_ext.unicode_to_utf8(fname), "
+    )
+    func_text += "    {}, {}, -1, bodo.libs.str_ext.unicode_to_utf8('{}'))\n".format(
+        lines, parallel, compression
+    )
     func_text += "  with objmode({}):\n".format(typ_strs)
     func_text += "    df = pd.read_json(f_reader, orient='{}',\n".format(orient)
     func_text += "       convert_dates = {}, \n".format(convert_dates)

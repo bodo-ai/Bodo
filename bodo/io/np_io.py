@@ -4,7 +4,7 @@ import bodo
 import numba
 from numba.core import types
 from numba.extending import overload, intrinsic, overload_method
-from bodo.libs.str_ext import string_type
+from bodo.libs.str_ext import string_type, unicode_to_utf8
 
 from numba.core.ir_utils import compile_to_numba_ir, replace_arg_nodes
 
@@ -35,9 +35,6 @@ _file_write_parallel = types.ExternalFunction(
     "file_write_parallel",
     types.void(types.voidptr, types.voidptr, types.intp, types.intp, types.intp),
 )
-
-
-dummy_use = numba.njit(lambda a: None)
 
 
 # @overload(np.fromfile, no_unliteral=True)
@@ -116,8 +113,7 @@ def tofile_overload(arr, fname):
             A = np.ascontiguousarray(arr)
             dtype_size = get_dtype_size(A.dtype)
             # TODO: unicode name
-            file_write(fname._data, A.ctypes, dtype_size * A.size)
-            dummy_use(fname)
+            file_write(unicode_to_utf8(fname), A.ctypes, dtype_size * A.size)
 
         return tofile_impl
 
@@ -151,8 +147,9 @@ def file_write_parallel_overload(fname, arr, start, count):
             )
             # bodo.cprint(start, count, elem_size)
             # TODO: unicode name
-            _file_write_parallel(fname._data, A.ctypes, start, count, elem_size)
-            dummy_use(fname)
+            _file_write_parallel(
+                unicode_to_utf8(fname), A.ctypes, start, count, elem_size
+            )
 
         return _impl
 
@@ -168,9 +165,11 @@ def file_read_parallel_overload(fname, arr, start, count):
         def _impl(fname, arr, start, count):  # pragma: no cover
             dtype_size = get_dtype_size(arr.dtype)
             _file_read_parallel(
-                fname._data, arr.ctypes, start * dtype_size, count * dtype_size
+                unicode_to_utf8(fname),
+                arr.ctypes,
+                start * dtype_size,
+                count * dtype_size,
             )
-            dummy_use(fname)
 
         return _impl
 
@@ -184,8 +183,7 @@ def file_read_overload(fname, arr, size):
     if fname == string_type:
         # TODO: unicode name
         def impl(fname, arr, size):  # pragma: no cover
-            _file_read(fname._data, arr.ctypes, size)
-            dummy_use(fname)
+            _file_read(unicode_to_utf8(fname), arr.ctypes, size)
 
         return impl
 
@@ -199,8 +197,7 @@ def get_file_size_overload(fname):
     if fname == string_type:
         # TODO: unicode name
         def impl(fname):  # pragma: no cover
-            s = _get_file_size(fname._data)
-            dummy_use(fname)
+            s = _get_file_size(unicode_to_utf8(fname))
             return s
 
         return impl

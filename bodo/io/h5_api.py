@@ -22,7 +22,7 @@ from numba.extending import (
 )
 from bodo.libs.str_ext import (
     string_type,
-    string_to_char_ptr,
+    unicode_to_utf8,
     std_str_type,
     std_str_to_unicode,
 )
@@ -141,9 +141,6 @@ h5_open = types.ExternalFunction(
 )
 
 
-dummy_use = numba.njit(lambda a: None)
-
-
 if bodo.config._has_h5py:
 
     @overload(h5py.File)
@@ -175,9 +172,7 @@ if bodo.config._has_h5py:
         ):  # pragma: no cover
             if mode is None:
                 mode = "a"  # TODO: support and test
-            f = h5_open(name._data, mode._data, _is_parallel)
-            dummy_use(name)
-            dummy_use(mode)
+            f = h5_open(unicode_to_utf8(name), unicode_to_utf8(mode), _is_parallel)
             return f
 
         return impl
@@ -226,7 +221,7 @@ def overload_h5_file_create_dataset(obj_id, name, shape=None, dtype=None, data=N
     def impl(obj_id, name, shape=None, dtype=None, data=None):  # pragma: no cover
         counts = np.asarray(shape)
         return h5_create_dset(
-            unify_h5_id(obj_id), string_to_char_ptr(name), ndim, counts.ctypes, typ_enum
+            unify_h5_id(obj_id), unicode_to_utf8(name), ndim, counts.ctypes, typ_enum
         )
 
     return impl
@@ -243,7 +238,7 @@ def overload_h5_file_create_group(obj_id, name, track_order=None):
     assert is_overload_none(track_order)  # TODO: support?
 
     def impl(obj_id, name, track_order=None):  # pragma: no cover
-        return h5_create_group(unify_h5_id(obj_id), string_to_char_ptr(name))
+        return h5_create_group(unify_h5_id(obj_id), unicode_to_utf8(name))
 
     return impl
 
@@ -258,8 +253,7 @@ def overload_getitem_file(in_f, in_idx):
     if in_f in (h5file_type, h5dataset_or_group_type) and in_idx == string_type:
 
         def impl(in_f, in_idx):  # pragma: no cover
-            d = h5_open_dset_or_group_obj(unify_h5_id(in_f), in_idx._data)
-            dummy_use(in_idx)
+            d = h5_open_dset_or_group_obj(unify_h5_id(in_f), unicode_to_utf8(in_idx))
             return d
 
         return impl

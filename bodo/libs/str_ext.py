@@ -50,25 +50,6 @@ ll.add_symbol("unicode_to_utf8", hstr_ext.unicode_to_utf8)
 string_type = types.unicode_type
 
 
-@intrinsic
-def string_to_char_ptr(typingctx, str_tp=None):
-    assert str_tp == string_type or isinstance(str_tp, types.StringLiteral)
-
-    def codegen(context, builder, sig, args):
-
-        if str_tp == string_type:
-            uni_str = cgutils.create_struct_proxy(str_tp)(
-                context, builder, value=args[0]
-            )
-            return uni_str.data
-        else:
-            # TODO: what about unicode strings?
-            ptr = context.insert_const_string(builder.module, str_tp.literal_value)
-            return ptr
-
-    return types.voidptr(str_tp), codegen
-
-
 @numba.njit
 def contains_regex(e, in_str):  # pragma: no cover
     with numba.objmode(res="bool_"):
@@ -95,7 +76,9 @@ def unicode_to_utf8_and_len(typingctx, str_typ=None):
     If input is ascii, just wrap its data and meminfo. Otherwise, allocate
     a new buffer and call encoder.
     """
-    assert str_typ == string_type
+    assert str_typ in (string_type, types.Optional(string_type)) or isinstance(
+        str_typ, types.StringLiteral
+    )
     ret_typ = types.Tuple([utf8_str_type, types.int64])
 
     def codegen(context, builder, sig, args):
@@ -139,8 +122,7 @@ def unicode_to_utf8_and_len(typingctx, str_typ=None):
                 )
                 null_ptr = context.get_constant_null(types.voidptr)
                 utf8_len = builder.call(
-                    fn_encode,
-                    [null_ptr, uni_str.data, uni_str.length, uni_str.kind],
+                    fn_encode, [null_ptr, uni_str.data, uni_str.length, uni_str.kind],
                 )
                 out_tup.f1 = utf8_len
 
@@ -161,6 +143,15 @@ def unicode_to_utf8_and_len(typingctx, str_typ=None):
         return out_tup._getvalue()
 
     return ret_typ(string_type), codegen
+
+
+def unicode_to_utf8(s):  # pragma: no cover
+    return s
+
+
+@overload(unicode_to_utf8)
+def overload_unicode_to_utf8(s):
+    return lambda s: unicode_to_utf8_and_len(s)[0]  # pragma: no cover
 
 
 #######################  type for std string pointer  ########################
@@ -309,18 +300,6 @@ def gen_get_unicode_chars(context, builder, unicode_val):
         context, builder, value=unicode_val
     )
     return uni_str.data
-
-
-def unicode_to_char_ptr(in_str):  # pragma: no cover
-    return in_str
-
-
-@overload(unicode_to_char_ptr)
-def unicode_to_char_ptr_overload(a):
-    # str._data is not safe since str might be literal
-    # overload resolves str literal to unicode_type
-    if a == string_type:
-        return lambda a: a._data
 
 
 @intrinsic

@@ -16,7 +16,7 @@ from numba.core.imputils import impl_ret_new_ref
 import numpy as np
 import bodo
 from bodo.hiframes.pd_series_ext import _get_series_array_type
-from bodo.libs.str_ext import string_type, unicode_to_char_ptr
+from bodo.libs.str_ext import string_type, unicode_to_utf8
 from bodo.libs.str_arr_ext import (
     string_array_type,
     StringArrayPayloadType,
@@ -216,7 +216,7 @@ def _gen_pq_reader_py(
     # open a DatasetReader, which is a C++ object defined in _parquet.cpp that
     # contains file readers for the files from which this process needs to read,
     # and other information to read this process' chunk
-    func_text += "  ds_reader = get_dataset_reader(unicode_to_char_ptr(fname), {})\n".format(
+    func_text += "  ds_reader = get_dataset_reader(unicode_to_utf8(fname), {})\n".format(
         is_parallel
     )
     for c, ind, t in zip(col_names, col_indices, out_types):
@@ -235,7 +235,7 @@ def _gen_pq_reader_py(
         "read_parquet_str": read_parquet_str,
         "read_parquet_list_str": read_parquet_list_str,
         "read_parquet_array_item": read_parquet_array_item,
-        "unicode_to_char_ptr": unicode_to_char_ptr,
+        "unicode_to_utf8": unicode_to_utf8,
         "NS_DTYPE": np.dtype("M8[ns]"),
         "np": np,
         "bodo": bodo,
