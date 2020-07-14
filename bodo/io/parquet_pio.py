@@ -24,6 +24,7 @@ from bodo.libs.str_arr_ext import (
 )
 from bodo.libs.array_item_arr_ext import (
     ArrayItemArrayType,
+    _get_array_item_arr_payload,
     ArrayItemArrayPayloadType,
     construct_array_item_array,
     define_array_item_dtor,
@@ -61,6 +62,10 @@ def read_parquet():  # pragma: no cover
 
 
 def read_parquet_str():  # pragma: no cover
+    return 0
+
+
+def read_parquet_list_str():  # pragma: no cover
     return 0
 
 
@@ -224,6 +229,7 @@ def _gen_pq_reader_py(
         "get_column_size_parquet": get_column_size_parquet,
         "read_parquet": read_parquet,
         "read_parquet_str": read_parquet_str,
+        "read_parquet_list_str": read_parquet_list_str,
         "read_parquet_array_item": read_parquet_array_item,
         "unicode_to_utf8": unicode_to_utf8,
         "NS_DTYPE": np.dtype("M8[ns]"),
@@ -251,6 +257,11 @@ def gen_column_read(func_text, cname, c_ind, c_type, is_parallel):
     if c_type == string_array_type:
         # pass size for easier allocation and distributed analysis
         func_text += "  {} = read_parquet_str(ds_reader, {}, {}_size)\n".format(
+            cname, c_ind, cname
+        )
+    elif c_type == ArrayItemArrayType(string_array_type):
+        # pass size for easier allocation and distributed analysis
+        func_text += "  {} = read_parquet_list_str(ds_reader, {}, {}_size)\n".format(
             cname, c_ind, cname
         )
     elif isinstance(c_type, ArrayItemArrayType):
@@ -314,6 +325,13 @@ def get_element_type(dtype):
 
 def _get_numba_typ_from_pa_typ(pa_typ, is_index, nullable_from_metadata):
     import pyarrow as pa
+
+    # TODO: comparing list(string) type using pa_typ.type == pa.list_(pa.string())
+    # doesn't seem to work properly. The string representation is also inconsistent:
+    # "ListType(list<element: string>)", or "ListType(list<item: string>)"
+    # likely an Arrow/Parquet bug
+    if isinstance(pa_typ.type, pa.ListType) and pa_typ.type.value_type == pa.string():
+        return ArrayItemArrayType(string_array_type)
 
     # Decimal128Array type
     if isinstance(pa_typ.type, pa.Decimal128Type):
@@ -556,6 +574,14 @@ class ReadParquetStrInfer(AbstractTemplate):
         return signature(string_array_type, *unliteral_all(args))
 
 
+@infer_global(read_parquet_list_str)
+class ReadParquetListStrInfer(AbstractTemplate):
+    def generic(self, args, kws):
+        assert not kws
+        assert len(args) == 3
+        return signature(ArrayItemArrayType(string_array_type), *unliteral_all(args))
+
+
 @infer_global(read_parquet_array_item)
 class ReadParquetArrayItemInfer(AbstractTemplate):
     def generic(self, args, kws):
@@ -734,6 +760,76 @@ def pq_read_string_lower(context, builder, sig, args):
 
     string_array.meminfo = meminfo
     ret = string_array._getvalue()
+    return impl_ret_new_ref(context, builder, typ, ret)
+
+
+############################## read list of strings ###############################
+
+
+@lower_builtin(
+    read_parquet_list_str, types.Opaque("arrow_reader"), types.intp, types.intp
+)
+def pq_read_list_string_lower(context, builder, sig, args):
+
+    # construct array and payload
+    typ = sig.return_type
+    array_item_array_from_cpp = context.make_helper(builder, typ)
+
+    # read payload data
+    fnty = lir.FunctionType(
+        lir.IntType(32),
+        [
+            lir.IntType(8).as_pointer(),
+            lir.IntType(64),
+            lir.IntType(8).as_pointer().as_pointer(),  # meminfo
+        ],
+    )
+
+    fn = builder.module.get_or_insert_function(fnty, name="pq_read_list_string")
+    _res = builder.call(
+        fn,
+        [
+            args[0],
+            args[1],
+            array_item_array_from_cpp._get_ptr_by_name("meminfo"),
+        ],
+    )
+
+    payload = _get_array_item_arr_payload(
+        context, builder, typ, array_item_array_from_cpp._getvalue()
+    )
+
+    # create a new payload (with dtor) and set members from payload received
+    # from C++
+    payload_type = ArrayItemArrayPayloadType(typ)
+    payload_alloc_type = context.get_data_type(payload_type)
+    payload_alloc_size = context.get_abi_sizeof(payload_alloc_type)
+
+    # define dtor
+    dtor_fn = define_array_item_dtor(context, builder, typ, payload_type)
+
+    # create meminfo
+    meminfo = context.nrt.meminfo_alloc_dtor(
+        builder, context.get_constant(types.uintp, payload_alloc_size), dtor_fn
+    )
+    meminfo_void_ptr = context.nrt.meminfo_data(builder, meminfo)
+    meminfo_data_ptr = builder.bitcast(
+        meminfo_void_ptr, payload_alloc_type.as_pointer()
+    )
+
+    payload_new = cgutils.create_struct_proxy(payload_type)(context, builder)
+    payload_new.n_arrays = payload.n_arrays
+    payload_new.data = payload.data
+    payload_new.offsets = payload.offsets
+    payload_new.null_bitmap = payload.null_bitmap
+
+    builder.store(payload_new._getvalue(), meminfo_data_ptr)
+    array_item_array = context.make_helper(builder, typ)
+    array_item_array.meminfo = meminfo
+
+    context.nrt.decref(builder, typ, array_item_array_from_cpp._getvalue())
+
+    ret = array_item_array._getvalue()
     return impl_ret_new_ref(context, builder, typ, ret)
 
 
