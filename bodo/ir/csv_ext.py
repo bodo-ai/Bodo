@@ -242,12 +242,17 @@ def _get_pd_dtype_str(t):
 compiled_funcs = []
 
 
-dummy_use = numba.njit(lambda a: None)
-
-
 def _gen_csv_reader_py(
-    col_names, col_typs, usecols, sep, typingctx, targetctx, parallel, skiprows,
-    header, compression
+    col_names,
+    col_typs,
+    usecols,
+    sep,
+    typingctx,
+    targetctx,
+    parallel,
+    skiprows,
+    header,
+    compression,
 ):
     # TODO: support non-numpy types like strings
     sanitized_cnames = [sanitize_varname(c) for c in col_names]
@@ -280,14 +285,16 @@ def _gen_csv_reader_py(
 
     func_text = "def csv_reader_py(fname):\n"
     func_text += "  skiprows = {}\n".format(skiprows)
-    # TODO: unicode name
-    func_text += "  f_reader = csv_file_chunk_reader(fname._data, "
-    func_text += "    {}, skiprows, -1, {}, bodo.libs.str_ext.string_to_char_ptr('{}'))\n".format(parallel, has_header, compression)
-    func_text += "  dummy_use(fname)\n"
+    func_text += (
+        "  f_reader = csv_file_chunk_reader(bodo.libs.str_ext.unicode_to_utf8(fname), "
+    )
+    func_text += "    {}, skiprows, -1, {}, bodo.libs.str_ext.unicode_to_utf8('{}'))\n".format(
+        parallel, has_header, compression
+    )
     func_text += "  with objmode({}):\n".format(typ_strs)
     func_text += "    df = pd.read_csv(f_reader, names={},\n".format(col_names)
     # header is always None here because header information was found in untyped pass.
-    # this pd.read_csv() happens at runtime and is passing a file reader(f_reader) 
+    # this pd.read_csv() happens at runtime and is passing a file reader(f_reader)
     # to pandas. f_reader skips the header, so we have to tell pandas header=None.
     func_text += "       header=None,\n"
     func_text += "       parse_dates=[{}],\n".format(date_inds)

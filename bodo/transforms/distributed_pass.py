@@ -51,7 +51,7 @@ import numpy as np
 
 import bodo
 from bodo.io.h5_api import h5file_type, h5group_type
-from bodo.libs.str_ext import string_type, unicode_to_utf8_and_len
+from bodo.libs.str_ext import string_type, unicode_to_utf8_and_len, unicode_to_utf8
 from bodo.libs.str_arr_ext import string_array_type
 from bodo.transforms.distributed_analysis import (
     Distribution,
@@ -112,9 +112,6 @@ _json_write = types.ExternalFunction(
         types.voidptr, types.voidptr, types.int64, types.int64, types.bool_, types.bool_
     ),
 )
-
-
-dummy_use = numba.njit(lambda a: None)
 
 
 class DistributedPass:
@@ -1195,8 +1192,7 @@ class DistributedPass:
                 utf8_str, utf8_len = unicode_to_utf8_and_len(str_out)
                 start = bodo.libs.distributed_api.dist_exscan(utf8_len, _op)
                 # TODO: unicode file name
-                _csv_write(fname._data, utf8_str, start, utf8_len, True)
-                dummy_use(fname)
+                _csv_write(unicode_to_utf8(fname), utf8_str, start, utf8_len, True)
 
             return nodes + compile_func_single_block(
                 f,
@@ -1205,9 +1201,9 @@ class DistributedPass:
                 self,
                 extra_globals={
                     "unicode_to_utf8_and_len": unicode_to_utf8_and_len,
+                    "unicode_to_utf8": unicode_to_utf8,
                     "_op": np.int32(Reduce_Type.Sum.value),
                     "_csv_write": _csv_write,
-                    "dummy_use": dummy_use,
                 },
             )
 
@@ -1288,9 +1284,13 @@ class DistributedPass:
                 start = bodo.libs.distributed_api.dist_exscan(utf8_len, _op)
                 # TODO: unicode file name
                 _json_write(
-                    fname._data, utf8_str, start, utf8_len, True, is_records_lines
+                    unicode_to_utf8(fname),
+                    utf8_str,
+                    start,
+                    utf8_len,
+                    True,
+                    is_records_lines,
                 )
-                dummy_use(fname)
 
             return nodes + compile_func_single_block(
                 f,
@@ -1299,9 +1299,9 @@ class DistributedPass:
                 self,
                 extra_globals={
                     "unicode_to_utf8_and_len": unicode_to_utf8_and_len,
+                    "unicode_to_utf8": unicode_to_utf8,
                     "_op": np.int32(Reduce_Type.Sum.value),
                     "_json_write": _json_write,
-                    "dummy_use": dummy_use,
                 },
             )
         return [assign]
