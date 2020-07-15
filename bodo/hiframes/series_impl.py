@@ -1516,6 +1516,18 @@ def overload_series_explode(S):
     return impl
 
 
+@overload(np.digitize, inline="always", no_unliteral=True)
+def overload_series_np_digitize(x, bins, right=False):
+    # np.digitize() just uses underlying Series array and returns an output array
+    if isinstance(x, SeriesType):
+
+        def impl(x, bins, right=False):  # pragma: no cover
+            arr = bodo.hiframes.pd_series_ext.get_series_data(x)
+            return np.digitize(arr, bins, right)
+
+        return impl
+
+
 @overload_method(SeriesType, "dropna", inline="always", no_unliteral=True)
 def overload_series_dropna(S, axis=0, inplace=False):
 
