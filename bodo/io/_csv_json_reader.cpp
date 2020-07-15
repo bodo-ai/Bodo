@@ -467,7 +467,7 @@ class PathInfo {
     }
 
     /**
-     * @brief return whether the provide path is valid or not
+     * @brief return whether the provided path is valid or not
      *
      * @return true
      * @return false
