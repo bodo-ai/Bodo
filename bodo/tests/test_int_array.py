@@ -228,6 +228,12 @@ def test_shape(memory_leak_check):
     [f for f in numba.np.ufunc_db.get_ufuncs() if f.nin == 1 and f != np.isnat],
 )
 def test_unary_ufunc(ufunc, memory_leak_check):
+    # IntegerArray is buggy as of Pandas 1.0.5 and doesn't put NA mask on output yet
+    # revisit in Pandas 1.1
+    assert pd.__version__.startswith("1.0"), "revisit Pandas issues for int arr"
+    if ufunc in (np.logical_not, np.isnan, np.isinf, np.isfinite, np.signbit):
+        return
+
     def test_impl(A):
         return ufunc(A)
 
@@ -254,6 +260,12 @@ def test_unary_ufunc_explicit_np(memory_leak_check):
     "ufunc", [f for f in numba.np.ufunc_db.get_ufuncs() if f.nin == 2]
 )
 def test_binary_ufunc(ufunc, memory_leak_check):
+    # IntegerArray is buggy as of Pandas 1.0.5 and doesn't put NA mask on output yet
+    # revisit in Pandas 1.1
+    assert pd.__version__.startswith("1.0"), "revisit Pandas issues for int arr"
+    if ufunc in (np.logical_and, np.logical_or, np.logical_xor):
+        return
+
     def test_impl(A1, A2):
         return ufunc(A1, A2)
 

@@ -8,6 +8,7 @@ import copy
 import warnings
 import inspect
 from enum import Enum
+import numpy as np
 
 import numba
 from numba.core import ir, ir_utils, types
@@ -540,9 +541,15 @@ class DistributedAnalysis:
                 func_def.value, numba.core.dispatcher.ObjModeLiftedWith
             ):
                 return
-            warnings.warn("function call couldn't be found for distributed analysis")
-            self._analyze_call_set_REP(lhs, args, array_dists, fdef)
-            return
+            # some functions like overload_bool_arr_op_nin_1 may generate const ufuncs
+            if isinstance(func_def, ir.Const) and isinstance(func_def.value, np.ufunc):
+                fdef = (func_def.value.__name__, "numpy")
+            else:
+                warnings.warn(
+                    "function call couldn't be found for distributed analysis"
+                )
+                self._analyze_call_set_REP(lhs, args, array_dists, fdef)
+                return
         else:
             func_name, func_mod = fdef
 
@@ -753,9 +760,7 @@ class DistributedAnalysis:
             # return is a tuple(array, array)
             out_dist = Distribution(
                 min(
-                    array_dists[lhs][0].value,
-                    array_dists[lhs][1].value,
-                    in_dist.value,
+                    array_dists[lhs][0].value, array_dists[lhs][1].value, in_dist.value,
                 )
             )
             self._set_var_dist(lhs, array_dists, out_dist)
