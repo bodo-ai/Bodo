@@ -2310,6 +2310,25 @@ def test_series_drop_inplace_check(memory_leak_check):
 
 
 @pytest.mark.parametrize(
+    "S,to_replace,value",
+    [
+        (
+            pd.Series([1.0, 2.0, np.nan, 1.0, 2.0, 1.3], [3, 4, 2, 1, -3, 6], name="A"),
+            2.0,
+            5.0,
+        ),
+        # TODO: support strings
+        # (pd.Series(["aa", "bc", None, "ccc", "bc", "A", ""], [3, 4, 2, 1, -3, -2, 6], name="A"), "bc", "abdd"),
+    ],
+)
+def test_series_replace(S, to_replace, value, memory_leak_check):
+    def test_impl(A, to_replace, val):
+        return A.replace(to_replace, val)
+
+    check_func(test_impl, (S, to_replace, value))
+
+
+@pytest.mark.parametrize(
     "periods", [2, -2],
 )
 def test_series_shift(numeric_series_val, periods, memory_leak_check):
