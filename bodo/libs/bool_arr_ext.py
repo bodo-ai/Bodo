@@ -44,7 +44,6 @@ from bodo.utils.typing import (
     is_overload_true,
     is_overload_false,
     parse_dtype,
-    to_nullable_type,
 )
 from bodo.utils.indexing import (
     array_getitem_bool_index,
