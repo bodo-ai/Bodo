@@ -242,9 +242,10 @@ class DataFrameAttribute(AttributeTemplate):
     def resolve_apply(self, df, args, kws):
         kws = dict(kws)
         func = args[0] if len(args) > 0 else kws.get("func", None)
+        axis = args[1] if len(args) > 1 else kws.get("axis", None)
+        f_args = args[4] if len(args) > 4 else kws.pop("args", None)
 
         # check axis
-        axis = args[1] if len(args) > 1 else kws.get("axis", None)
         if not (is_overload_constant_int(axis) and get_overload_const_int(axis) == 1):
             raise BodoError("only apply() with axis=1 supported")
 
@@ -263,15 +264,25 @@ class DataFrameAttribute(AttributeTemplate):
             dtypes.append(el_typ)
 
         row_typ = types.NamedTuple(dtypes, Row)
+        arg_typs = (row_typ,)
+        if f_args is not None:
+            arg_typs += tuple(f_args.types)
         try:
-            f_return_type = get_const_func_output_type(func, (row_typ,), self.context)
+            f_return_type = get_const_func_output_type(func, arg_typs, self.context)
         except:
             raise BodoError("DataFrame.apply(): user-defined function not supported")
 
         out_arr_type = get_udf_out_arr_type(f_return_type)
+
+        def apply_stub(
+            func, axis=0, raw=False, result_type=None, args=()
+        ):  # pragma: no cover
+            pass
+
+        pysig = numba.core.utils.pysignature(apply_stub)
         return signature(
             SeriesType(out_arr_type.dtype, out_arr_type, index=df.index), *args
-        )
+        ).replace(pysig=pysig)
 
     def generic_resolve(self, df, attr):
         # column selection

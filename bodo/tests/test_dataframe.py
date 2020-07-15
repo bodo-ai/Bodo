@@ -1467,6 +1467,18 @@ def test_df_apply_decimal():
     check_func(test_impl, (df,))
 
 
+def test_df_apply_args():
+    """test passing extra args to apply UDF
+    """
+
+    def test_impl(df, b):
+        return df.apply(lambda r, a: r.A == a, axis=1, args=(b,))
+
+    n = 121
+    df = pd.DataFrame({"A": np.arange(n)})
+    check_func(test_impl, (df, 3))
+
+
 def g(r):
     return 2 * r.A
 
