@@ -973,17 +973,15 @@ def overload_gen_na_array(n, arr):
 
     if isinstance(arr, ArrayItemArrayType):
         data_arr_type = arr.dtype
+        nested_counts = bodo.utils.transform.get_type_alloc_counts(data_arr_type)
+        n_items = (0,) * nested_counts
 
         def array_item_impl(n, arr):  # pragma: no cover
             # preallocate the output
-            num_lists = n
-            num_items = 0
-            in_data = bodo.libs.array_item_arr_ext.get_data(arr)
             out_arr = bodo.libs.array_item_arr_ext.pre_alloc_array_item_array(
-                num_lists, (num_items,), data_arr_type
+                n, n_items, data_arr_type
             )
             out_offsets = bodo.libs.array_item_arr_ext.get_offsets(out_arr)
-            out_data = bodo.libs.array_item_arr_ext.get_data(out_arr)
             out_null_bitmap = bodo.libs.array_item_arr_ext.get_null_bitmap(out_arr)
             for i in range(n + 1):
                 out_offsets[i] = 0
