@@ -379,6 +379,9 @@ def _test_equal(
     check_dtype=True,
     reset_index=False,
 ):
+    # Bodo converts lists to array in array(item) array cases
+    if isinstance(py_out, list) and isinstance(bodo_out, np.ndarray):
+        py_out = np.array(py_out)
 
     if isinstance(py_out, pd.Series):
         if sort_output:

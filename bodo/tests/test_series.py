@@ -21,6 +21,7 @@ from bodo.tests.utils import (
     check_func,
     is_bool_object_series,
     _get_dist_arg,
+    _test_equal,
 )
 import pytest
 
@@ -551,7 +552,9 @@ def test_series_iat_getitem(series_val):
         return S.iat[2]
 
     bodo_func = bodo.jit(test_impl)
-    assert bodo_func(series_val) == test_impl(series_val)
+    bodo_out = bodo_func(series_val)
+    py_out = test_impl(series_val)
+    _test_equal(bodo_out, py_out)
     # fix distributed
     # check_func(test_impl, (series_val,))
 
@@ -588,7 +591,9 @@ def test_series_iloc_getitem_int(series_val):
         return S.iloc[2]
 
     bodo_func = bodo.jit(test_impl)
-    assert bodo_func(series_val) == test_impl(series_val)
+    bodo_out = bodo_func(series_val)
+    py_out = test_impl(series_val)
+    _test_equal(bodo_out, py_out)
     # fix distributed
     # check_func(test_impl, (series_val,))
 
@@ -823,7 +828,9 @@ def test_series_getitem_int(series_val):
         with pytest.raises(numba.TypingError):  # TODO: ValueError
             bodo_func(series_val)
     else:
-        assert bodo_func(series_val) == test_impl(series_val)
+        bodo_out = bodo_func(series_val)
+        py_out = test_impl(series_val)
+        _test_equal(bodo_out, py_out)
 
 
 def test_series_getitem_slice(series_val, memory_leak_check):
