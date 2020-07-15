@@ -464,36 +464,27 @@ def str_split(arr, pat, n):  # pragma: no cover
             num_chars += bodo.libs.str_arr_ext.get_utf8_size(s)
 
     out_arr = bodo.libs.array_item_arr_ext.pre_alloc_array_item_array(
-        l, num_strs, (num_chars,), bodo.libs.str_arr_ext.string_array_type
+        l, (num_strs, num_chars), bodo.libs.str_arr_ext.string_array_type
     )
     # XXX helper functions to establish aliasing between array and pointer
     # TODO: fix aliasing for getattr
     index_offsets = bodo.libs.array_item_arr_ext.get_offsets(out_arr)
+    null_bitmap = bodo.libs.array_item_arr_ext.get_null_bitmap(out_arr)
     data = bodo.libs.array_item_arr_ext.get_data(out_arr)
-    data_offsets = bodo.libs.str_arr_ext.get_offset_ptr(data)
-    data_ptr = bodo.libs.str_arr_ext.get_offset_ptr.get_data_ptr(data)
-    curr_s_offset = 0
-    curr_d_offset = 0
+    curr_ind = 0
     for j in numba.parfors.parfor.internal_prange(l):
-        # TODO: NA
-        index_offsets[j] = curr_s_offset
+        index_offsets[j] = curr_ind
+        # set NA
+        if bodo.libs.array_kernels.isna(arr, j):
+            bodo.libs.int_arr_ext.set_bit_to_arr(null_bitmap, j, 0)
+            continue
+        bodo.libs.int_arr_ext.set_bit_to_arr(null_bitmap, j, 1)
         vals = arr[j].split(pat, n)
         n_str = len(vals)
         for k in range(n_str):
             s = vals[k]
-            utf8_str, n_char = bodo.libs.str_ext.unicode_to_utf8_and_len(s)
-            data_offsets[curr_s_offset + k] = curr_d_offset
-            out_ptr = bodo.hiframes.split_impl.get_c_arr_ptr(
-                data_ptr, curr_d_offset
-            )
-            bodo.libs.str_arr_ext._memcpy(out_ptr, utf8_str, n_char, 1)
-            curr_d_offset += n_char
-        # set NA
-        if bodo.libs.array_kernels.isna(arr, j):
-            bodo.ir.join.setitem_arr_nan(out_arr, j)
+            data[curr_ind] = s
+            curr_ind += 1
 
-        curr_s_offset += n_str
-
-    index_offsets[l] = curr_s_offset
-    data_offsets[curr_s_offset] = curr_d_offset
+    index_offsets[l] = curr_ind
     return out_arr
