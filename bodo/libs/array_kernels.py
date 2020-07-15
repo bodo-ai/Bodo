@@ -599,7 +599,7 @@ def concat_overload(arr_list):
     # all string input case
     # TODO: handle numerics to string casting case
 
-    if isinstance(arr_list, types.UniTuple) and isinstance(
+    if isinstance(arr_list, (types.UniTuple, types.List)) and isinstance(
         arr_list.dtype, ArrayItemArrayType
     ):
         data_arr_type = arr_list.dtype.dtype
@@ -642,7 +642,7 @@ def concat_overload(arr_list):
         return array_item_concat_impl
 
     if (
-        isinstance(arr_list, types.UniTuple)
+        isinstance(arr_list, (types.UniTuple, types.List))
         and arr_list.dtype == datetime_date_array_type
     ):
 
@@ -665,7 +665,7 @@ def concat_overload(arr_list):
 
         return datetime_date_array_concat_impl
 
-    if isinstance(arr_list, types.UniTuple) and isinstance(
+    if isinstance(arr_list, (types.UniTuple, types.List)) and isinstance(
         arr_list.dtype, DecimalArrayType
     ):
         precision = arr_list.dtype.precision
@@ -692,7 +692,10 @@ def concat_overload(arr_list):
 
         return decimal_array_concat_impl
 
-    if isinstance(arr_list, types.UniTuple) and arr_list.dtype == string_array_type:
+    if (
+        isinstance(arr_list, (types.UniTuple, types.List))
+        and arr_list.dtype == string_array_type
+    ):
 
         def string_concat_impl(arr_list):  # pragma: no cover
             # preallocate the output
