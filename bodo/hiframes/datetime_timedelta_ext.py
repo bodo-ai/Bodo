@@ -507,9 +507,9 @@ def timedelta_abs(lhs):
 def cast_numpy_timedelta_to_int(typingctx, val=None):
     """Cast timedelta64 value to int
     """
-    assert val == types.NPTimedelta("ns")
+    assert val in (types.NPTimedelta("ns"), types.int64)
 
     def codegen(context, builder, signature, args):
         return args[0]
 
-    return types.int64(types.NPTimedelta("ns")), codegen
+    return types.int64(val), codegen

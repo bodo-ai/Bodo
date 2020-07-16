@@ -156,6 +156,7 @@ def test_datetime_operations():
     t2 = pd.Timestamp(2013, 1, 13)
     check_func(test_min, (t1, t2))
     check_func(test_max, (t2, t1))
+    check_func(test_sub, (t2, t1))
 
 
 def test_dt64_sub_output():
