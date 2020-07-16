@@ -2349,6 +2349,20 @@ def test_series_pct_change(numeric_series_val, periods, memory_leak_check):
     check_func(test_impl, (numeric_series_val, periods))
 
 
+@pytest.mark.parametrize(
+    "S,bins",
+    [
+        (pd.Series([11, 21, 55, 41, 11, 77, 111, 81, 3], name="BB"), [31, 61, 91],),
+        (np.array([11, 21, 55, 41, 11, 77, 111, 81, 3]), [31, 61, 91]),
+    ],
+)
+def test_series_digitize(S, bins, memory_leak_check):
+    def test_impl(A, bins):
+        return np.digitize(A, bins)
+
+    check_func(test_impl, (S, bins))
+
+
 def test_series_index_cast(memory_leak_check):
     # cast None index to integer index if necessary
     def test_impl(n):
