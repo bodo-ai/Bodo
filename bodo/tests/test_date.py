@@ -348,12 +348,14 @@ def test_function_to_datetime_string_array():
     """Test pd.to_datetime for an array of strings
     """
 
-    def f(S, formating):
-        return pd.to_datetime(S, format=formating)
+    def f(S, formatting):
+        return pd.to_datetime(S, format=formatting)
 
-    S = pd.Series(["2019-01-01", "2019-01-02"] * 3).values
-    formating = "%Y-%d-%m"
-    check_func(f, (S, formating))
+    S = pd.Series(["2019-01-01", "2019-01-02"] * 3)
+    formatting = "%Y-%d-%m"
+    check_func(f, (S.values, formatting))
+
+    check_func(f, (S, formatting))
 
 
 def test_function_to_datetime_scalar():

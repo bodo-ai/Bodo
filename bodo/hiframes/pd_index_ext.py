@@ -122,6 +122,9 @@ class DatetimeIndexType(types.IterableType, types.ArrayCompatible):
         return types.iterators.ArrayIterator(_dt_index_data_typ)
 
 
+types.datetime_index = DatetimeIndexType()
+
+
 @typeof_impl.register(pd.DatetimeIndex)
 def typeof_datetime_index(val, c):
     # TODO: check value for freq, tz, etc. and raise error since unsupported

@@ -715,6 +715,10 @@ class DistributedAnalysis:
             self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
             return
 
+        if fdef == ("pandas_string_array_to_datetime", "bodo.hiframes.pd_timestamp_ext"):
+            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            return
+
         if fdef == ("drop_duplicates", "bodo.libs.array_kernels"):
             # output of drop_duplicates is variable-length even if input is 1D
             if lhs not in array_dists:

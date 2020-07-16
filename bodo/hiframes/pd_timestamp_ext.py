@@ -829,6 +829,38 @@ def to_datetime_scalar(
     return t
 
 
+@numba.njit
+def pandas_string_array_to_datetime(
+    arr,
+    errors,
+    dayfirst,
+    yearfirst,
+    utc,
+    format,
+    exact,
+    unit,
+    infer_datetime_format,
+    origin,
+    cache,
+):
+    with numba.objmode(result="datetime_index"):
+        # pd.to_datetime(string_array) returns DatetimeIndex
+        result = pd.to_datetime(
+            arr,
+            errors=errors,
+            dayfirst=dayfirst,
+            yearfirst=yearfirst,
+            utc=utc,
+            format=format,
+            exact=exact,
+            unit=unit,
+            infer_datetime_format=infer_datetime_format,
+            origin=origin,
+            cache=cache,
+        )
+    return result
+
+
 @overload(pd.to_datetime, inline="always", no_unliteral=True)
 def overload_to_datetime(
     arg_a,
@@ -981,29 +1013,21 @@ def overload_to_datetime(
             origin="unix",
             cache=True,
         ):  # pragma: no cover
-            n = len(arg_a)
-            B = np.empty(n, dt64_dtype)
-            val_nat = bodo.hiframes.pd_timestamp_ext.integer_to_dt64(iNaT)
-            for i in numba.parfors.parfor.internal_prange(n):
-                val = val_nat
-                if not bodo.libs.array_kernels.isna(arg_a, i):
-                    data = arg_a[i]
-                    out = to_datetime_scalar(
-                        data,
-                        errors=errors,
-                        dayfirst=dayfirst,
-                        yearfirst=yearfirst,
-                        utc=utc,
-                        format=format,
-                        exact=exact,
-                        unit=unit,
-                        infer_datetime_format=infer_datetime_format,
-                        origin=origin,
-                        cache=cache,
-                    )
-                    val = bodo.hiframes.pd_timestamp_ext.datetime_datetime_to_dt64(out)
-                B[i] = val
-            return bodo.hiframes.pd_index_ext.init_datetime_index(B, None)
+            # need to call a separately compiled function because inlining
+            # doesn't work with objmode currently
+            return pandas_string_array_to_datetime(
+                arg_a,
+                errors,
+                dayfirst,
+                yearfirst,
+                utc,
+                format,
+                exact,
+                unit,
+                infer_datetime_format,
+                origin,
+                cache,
+            )
 
         return impl_string_array
 
