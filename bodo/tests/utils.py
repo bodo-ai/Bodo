@@ -611,7 +611,7 @@ def check_timing_func(func, args):
 
 
 def string_list_ent(x):
-    if isinstance(x, (int, np.int64)):
+    if isinstance(x, (int, np.int64, float)):
         return str(x)
     if isinstance(x, dict):
         l_str = []

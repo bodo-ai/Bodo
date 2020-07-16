@@ -123,7 +123,14 @@ ArrayBuildInfo nested_array_from_c(const int* types, const uint8_t** buffers,
         if (_null_bitmap)
             null_bitmap = std::make_shared<arrow::Buffer>(_null_bitmap,
                                                           (length + 7) >> 3);
-        if (type == Bodo_CTypes::INT32) {
+        if (type == Bodo_CTypes::_BOOL) {
+            // Arrow's boolean array uses 1 bit for each bool
+            // we use uint8 for now to avoid conversion
+            data = std::make_shared<arrow::Buffer>(buffers[buf_pos++],
+                                                   length * sizeof(bool));
+            array = std::make_shared<arrow::NumericArray<arrow::UInt8Type>>(
+                length, data, null_bitmap);
+        } else if (type == Bodo_CTypes::INT32) {
             data = std::make_shared<arrow::Buffer>(buffers[buf_pos++],
                                                    length * sizeof(int32_t));
             array = std::make_shared<arrow::NumericArray<arrow::Int32Type>>(
@@ -132,6 +139,11 @@ ArrayBuildInfo nested_array_from_c(const int* types, const uint8_t** buffers,
             data = std::make_shared<arrow::Buffer>(buffers[buf_pos++],
                                                    length * sizeof(int64_t));
             array = std::make_shared<arrow::NumericArray<arrow::Int64Type>>(
+                length, data, null_bitmap);
+        } else if (type == Bodo_CTypes::FLOAT32) {
+            data = std::make_shared<arrow::Buffer>(buffers[buf_pos++],
+                                                   length * sizeof(float));
+            array = std::make_shared<arrow::NumericArray<arrow::FloatType>>(
                 length, data, null_bitmap);
         } else if (type == Bodo_CTypes::FLOAT64) {
             data = std::make_shared<arrow::Buffer>(buffers[buf_pos++],

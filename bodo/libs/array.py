@@ -132,7 +132,7 @@ def array_to_info(typingctx, arr_type_t):
                     for field_typ in arr_typ.data:
                         types_list += get_types(field_typ)
                     return types_list
-                elif isinstance(arr_typ, (types.Array, IntegerArrayType)):
+                elif isinstance(arr_typ, (types.Array, IntegerArrayType)) or arr_typ == boolean_array:
                     return get_types(arr_typ.dtype)
                 else:
                     return [numba_to_c_type(arr_typ)]
