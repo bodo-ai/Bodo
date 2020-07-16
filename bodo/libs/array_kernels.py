@@ -590,6 +590,47 @@ def overload_dropna(data, how, thresh, subset):
     return _dropna_imp
 
 
+def get(arr, ind):  # pragma: no cover
+    return pd.Series(arr).str.get(ind)
+
+
+@overload(get, no_unliteral=True)
+def overload_get(arr, ind):
+
+    if isinstance(arr, ArrayItemArrayType):
+        arr_typ = arr.dtype
+        out_dtype = arr_typ.dtype
+
+        def get_arr_item(arr, ind):
+            n = len(arr)
+            nested_counts = init_nested_counts(out_dtype)
+            for k in range(n):
+                if bodo.libs.array_kernels.isna(arr, k):
+                    continue
+                val = arr[k]
+                if not (len(val) > ind >= -len(val)) or bodo.libs.array_kernels.isna(
+                    val, ind
+                ):
+                    continue
+                nested_counts = add_nested_counts(nested_counts, val[ind])
+            out_arr = bodo.utils.utils.alloc_type(n, arr_typ, nested_counts)
+            for j in range(n):
+                if bodo.libs.array_kernels.isna(arr, j):
+                    bodo.ir.join.setitem_arr_nan(out_arr, j)
+                    continue
+                val = arr[j]
+                if not (len(val) > ind >= -len(val)) or bodo.libs.array_kernels.isna(
+                    val, ind
+                ):
+                    bodo.ir.join.setitem_arr_nan(out_arr, j)
+                    continue
+
+                out_arr[j] = val[ind]
+            return out_arr
+
+        return get_arr_item
+
+
 def concat(arr_list):  # pragma: no cover
     return pd.concat(arr_list)
 

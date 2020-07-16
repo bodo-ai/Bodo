@@ -39,6 +39,7 @@ from bodo.libs.str_arr_ext import (
     pre_alloc_string_array,
     get_utf8_size,
 )
+from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.hiframes.split_impl import (
     string_array_split_view_type,
     getitem_c_arr,
@@ -171,14 +172,12 @@ def common_validate_padding(func_name, width, fillchar):
 
 @overload_attribute(SeriesType, "str")
 def overload_series_str(S):
-    if not isinstance(S, SeriesType) or not S.data in (
-        string_array_type,
-        string_array_split_view_type,
-        ArrayItemArrayType(string_array_type),
+    if not isinstance(S, SeriesType) or not (
+        S.data
+        in (string_array_type, string_array_split_view_type)
+        or isinstance(S.data, ArrayItemArrayType)
     ):
-        raise BodoError(
-            "Series.str(): input should be a series of string or list string or string view"
-        )
+        raise BodoError("Series.str: input should be a series of string or arrays")
     return lambda S: bodo.hiframes.series_str_impl.init_series_str_method(S)
 
 
@@ -248,16 +247,27 @@ def overload_str_method_get(S_str, i):
     arr_typ = S_str.stype.data
     if (
         arr_typ != string_array_split_view_type
-        and arr_typ != ArrayItemArrayType(string_array_type)
         and arr_typ != string_array_type
-    ):
+    ) and not isinstance(arr_typ, ArrayItemArrayType):
         raise BodoError(
-            "Series.str.get(): only supports input type of Series(list(str)) "
+            "Series.str.get(): only supports input type of Series(array(item)) "
             "and Series(str)"
         )
     int_arg_check("get", "i", i)
     # TODO: support and test NA
     # TODO: support distributed
+
+    if isinstance(arr_typ, ArrayItemArrayType):
+
+        def _str_get_array_impl(S_str, i):  # pragma: no cover
+            S = S_str._obj
+            arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+            index = bodo.hiframes.pd_series_ext.get_series_index(S)
+            name = bodo.hiframes.pd_series_ext.get_series_name(S)
+            out_arr = bodo.libs.array_kernels.get(arr, i)
+            return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
+
+        return _str_get_array_impl
 
     if arr_typ == string_array_split_view_type:
         # TODO: refactor and enable distributed
