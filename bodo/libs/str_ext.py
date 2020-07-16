@@ -76,6 +76,7 @@ def unicode_to_utf8_and_len(typingctx, str_typ=None):
     If input is ascii, just wrap its data and meminfo. Otherwise, allocate
     a new buffer and call encoder.
     """
+    # Optional(string_type) means string or None. In this case, it is actually a string
     assert str_typ in (string_type, types.Optional(string_type)) or isinstance(
         str_typ, types.StringLiteral
     )
