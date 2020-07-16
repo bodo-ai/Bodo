@@ -29,6 +29,7 @@ from bodo.utils.typing import (
     is_literal_type,
     get_literal_value,
     get_overload_const_str,
+    check_unsupported_args,
 )
 from bodo.utils.transform import gen_const_tup
 from numba.core.typing.templates import infer_global, AbstractTemplate
@@ -1508,6 +1509,9 @@ def overload_series_replace(
     regex=False,
     method="pad",
 ):
+    unsupported_args = dict(inplace=inplace, limit=limit, regex=regex, method=method)
+    merge_defaults = dict(inplace=False, limit=None, regex=False, method="pad")
+    check_unsupported_args("replace", unsupported_args, merge_defaults)
     # TODO: error checking
     # TODO: support all types and cases
     def replace_impl(
