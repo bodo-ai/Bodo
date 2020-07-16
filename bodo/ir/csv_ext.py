@@ -2,7 +2,7 @@
 from collections import defaultdict
 import numba
 from numba.core import ir, ir_utils, typeinfer, types
-from numba.extending import box, models, register_model
+from numba.extending import box, models, register_model, intrinsic
 from numba.core.ir_utils import (
     visit_vars_inner,
     replace_vars_inner,
@@ -72,6 +72,20 @@ csv_file_chunk_reader = types.ExternalFunction(
         types.voidptr, types.bool_, types.int64, types.int64, types.bool_, types.voidptr
     ),
 )
+
+
+@intrinsic
+def is_null_chunk_reader(typingctx, obj_typ=None):
+    """check whether the chunk reader object is NULL or not
+    """
+    assert obj_typ == bodo.ir.connector.stream_reader_type
+
+    def codegen(context, builder, signature, args):
+        (obj,) = args
+        null = context.get_constant_null(obj_typ)
+        return builder.icmp_unsigned("==", obj, null)
+
+    return types.bool_(obj_typ), codegen
 
 
 def remove_dead_csv(
@@ -291,6 +305,8 @@ def _gen_csv_reader_py(
     func_text += "    {}, skiprows, -1, {}, bodo.libs.str_ext.unicode_to_utf8('{}'))\n".format(
         parallel, has_header, compression
     )
+    func_text += "  if is_null_chunk_reader(f_reader):\n"
+    func_text += "      raise FileNotFoundError('File does not exist')\n"
     func_text += "  with objmode({}):\n".format(typ_strs)
     func_text += "    df = pd.read_csv(f_reader, names={},\n".format(col_names)
     # header is always None here because header information was found in untyped pass.
