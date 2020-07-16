@@ -1059,7 +1059,9 @@ class DistributedAnalysis:
 
         if func_name == "digitize":
             in_arr = get_call_expr_arg("digitize", args, kws, 0, "x")
+            bins = get_call_expr_arg("digitize", args, kws, 1, "bins")
             self._meet_array_dists(lhs, in_arr.name, array_dists)
+            self._set_var_dist(bins.name, array_dists, Distribution.REP)
             return
 
         if func_name == "concatenate":
