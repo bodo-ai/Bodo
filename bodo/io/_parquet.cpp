@@ -50,8 +50,7 @@ int pq_read_string(DatasetReader *reader, int64_t column_idx,
                    uint32_t **out_offsets, uint8_t **out_data,
                    uint8_t **out_nulls);
 int pq_read_list_string(DatasetReader *reader, int64_t column_idx,
-                        uint32_t **out_offsets, uint32_t **index_offsets,
-                        uint8_t **out_data, uint8_t **out_nulls);
+                        NRT_MemInfo** array_item_meminfo);
 int pq_read_array_item(DatasetReader *reader, int64_t column_idx, int out_dtype,
                       array_info **out_offsets, array_info **out_data,
                       array_info **out_nulls);
@@ -320,12 +319,12 @@ int pq_read_string(DatasetReader *ds_reader, int64_t column_idx,
 }
 
 int pq_read_list_string(DatasetReader *ds_reader, int64_t column_idx,
-                        uint32_t **out_offsets, uint32_t **index_offsets,
-                        uint8_t **out_data, uint8_t **out_nulls) {
+                        NRT_MemInfo** array_item_meminfo) {
     if (ds_reader->count == 0) return 0;
 
     int64_t start = ds_reader->start_row_first_file;
 
+    // TODO get nulls for strings too (not just lists)
     int64_t n_all_vals = 0;
     std::vector<uint32_t> index_offset_vec;
     std::vector<uint32_t> offset_vec;
@@ -363,16 +362,24 @@ int pq_read_list_string(DatasetReader *ds_reader, int64_t column_idx,
     offset_vec.push_back(last_str_offset);
     index_offset_vec.push_back(last_index_offset);
 
-    *out_offsets = new uint32_t[offset_vec.size()];
-    *index_offsets = new uint32_t[index_offset_vec.size()];
-    *out_data = new uint8_t[data_vec.size()];
-
-    memcpy(*out_offsets, offset_vec.data(),
-           offset_vec.size() * sizeof(uint32_t));
-    memcpy(*index_offsets, index_offset_vec.data(),
-           index_offset_vec.size() * sizeof(uint32_t));
-    memcpy(*out_data, data_vec.data(), data_vec.size());
-    pack_null_bitmap(out_nulls, null_vec, n_all_vals);
+    int64_t n_lists = n_all_vals;
+    int64_t n_strings = offset_vec.size() - 1;
+    int64_t n_chars = data_vec.size();
+    array_info* info = alloc_list_string_array(n_lists, n_strings, n_chars, 0);
+    array_item_arr_payload *payload = (array_item_arr_payload*)(info->meminfo->data);
+    str_arr_payload *sub_payload = (str_arr_payload*)(payload->data->data);
+    memcpy(sub_payload->offsets, offset_vec.data(),
+           offset_vec.size() * sizeof(int32_t));
+    memcpy(sub_payload->data, data_vec.data(), data_vec.size());
+    memcpy(payload->offsets.data, index_offset_vec.data(),
+           index_offset_vec.size() * sizeof(int32_t));
+    int64_t n_bytes = (n_all_vals + 7) >> 3;
+    memset(payload->null_bitmap.data, 0, n_bytes);
+    for (int64_t i = 0; i < n_all_vals; i++) {
+        if (null_vec[i]) ::arrow::BitUtil::SetBit((uint8_t*)payload->null_bitmap.data, i);
+    }
+    *array_item_meminfo = info->meminfo;
+    delete info;
     return n_all_vals;
 }
 

@@ -446,3 +446,46 @@ def cast_str_to_float64(context, builder, fromty, toty, val):
 def cast_unicode_str_to_float64(context, builder, fromty, toty, val):
     std_str = gen_unicode_to_std_str(context, builder, val)
     return cast_str_to_float64(context, builder, std_str_type, toty, std_str)
+
+
+@numba.njit
+def str_split(arr, pat, n):  # pragma: no cover
+    """spits string array's elements into lists and creates an array of string arrays
+    """
+    # numba.parfors.parfor.init_prange()
+    l = len(arr)
+    num_strs = 0
+    num_chars = 0
+    for i in numba.parfors.parfor.internal_prange(l):
+        if bodo.libs.array_kernels.isna(arr, i):
+            continue
+        vals = arr[i].split(pat, n)
+        num_strs += len(vals)
+        for s in vals:
+            num_chars += bodo.libs.str_arr_ext.get_utf8_size(s)
+
+    out_arr = bodo.libs.array_item_arr_ext.pre_alloc_array_item_array(
+        l, (num_strs, num_chars), bodo.libs.str_arr_ext.string_array_type
+    )
+    # XXX helper functions to establish aliasing between array and pointer
+    # TODO: fix aliasing for getattr
+    index_offsets = bodo.libs.array_item_arr_ext.get_offsets(out_arr)
+    null_bitmap = bodo.libs.array_item_arr_ext.get_null_bitmap(out_arr)
+    data = bodo.libs.array_item_arr_ext.get_data(out_arr)
+    curr_ind = 0
+    for j in numba.parfors.parfor.internal_prange(l):
+        index_offsets[j] = curr_ind
+        # set NA
+        if bodo.libs.array_kernels.isna(arr, j):
+            bodo.libs.int_arr_ext.set_bit_to_arr(null_bitmap, j, 0)
+            continue
+        bodo.libs.int_arr_ext.set_bit_to_arr(null_bitmap, j, 1)
+        vals = arr[j].split(pat, n)
+        n_str = len(vals)
+        for k in range(n_str):
+            s = vals[k]
+            data[curr_ind] = s
+            curr_ind += 1
+
+    index_offsets[l] = curr_ind
+    return out_arr

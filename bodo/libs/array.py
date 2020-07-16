@@ -20,7 +20,6 @@ from numba.extending import (
     overload_attribute,
 )
 from bodo.libs.str_arr_ext import string_array_type, _get_string_arr_payload
-from bodo.libs.list_str_arr_ext import list_string_array_type
 from bodo.libs.array_item_arr_ext import (
     ArrayItemArrayType,
     _get_array_item_arr_payload,
@@ -54,10 +53,10 @@ ll.add_symbol("numpy_array_to_info", array_ext.numpy_array_to_info)
 ll.add_symbol("nullable_array_to_info", array_ext.nullable_array_to_info)
 ll.add_symbol("decimal_array_to_info", array_ext.decimal_array_to_info)
 ll.add_symbol("info_to_nested_array", array_ext.info_to_nested_array)
+ll.add_symbol("info_to_list_string_array", array_ext.info_to_list_string_array)
 ll.add_symbol("info_to_string_array", array_ext.info_to_string_array)
 ll.add_symbol("info_to_numpy_array", array_ext.info_to_numpy_array)
 ll.add_symbol("info_to_nullable_array", array_ext.info_to_nullable_array)
-ll.add_symbol("info_to_list_string_array", array_ext.info_to_list_string_array)
 ll.add_symbol("alloc_numpy", array_ext.alloc_numpy)
 ll.add_symbol("alloc_string_array", array_ext.alloc_string_array)
 ll.add_symbol("arr_info_list_to_table", array_ext.arr_info_list_to_table)
@@ -100,21 +99,12 @@ def array_to_info(typingctx, arr_type_t):
         # arr_info struct keeps a reference
         context.nrt.incref(builder, arr_type, in_arr)
 
-        # ListStringArray
-        if arr_type == list_string_array_type:
-            list_string_array = context.make_helper(
-                builder, list_string_array_type, in_arr
-            )
+        if isinstance(arr_type, ArrayItemArrayType) and arr_type.dtype == string_array_type:
+            # map ArrayItemArrayType(StringArrayType()) to array_info of type LIST_STRING
+            array_item_array = context.make_helper(builder, arr_type, in_arr)
             fnty = lir.FunctionType(
                 lir.IntType(8).as_pointer(),
                 [
-                    lir.IntType(64),
-                    lir.IntType(64),
-                    lir.IntType(64),
-                    lir.IntType(8).as_pointer(),
-                    lir.IntType(32).as_pointer(),
-                    lir.IntType(32).as_pointer(),
-                    lir.IntType(8).as_pointer(),
                     lir.IntType(8).as_pointer(),
                 ],
             )
@@ -124,14 +114,7 @@ def array_to_info(typingctx, arr_type_t):
             return builder.call(
                 fn_tp,
                 [
-                    list_string_array.num_items,
-                    list_string_array.num_total_strings,
-                    list_string_array.num_total_chars,
-                    list_string_array.data,
-                    list_string_array.data_offsets,
-                    list_string_array.index_offsets,
-                    list_string_array.null_bitmap,
-                    list_string_array.meminfo,
+                    array_item_array.meminfo,
                 ],
             )
 
@@ -741,23 +724,15 @@ def info_to_array(typingctx, info_type, arr_type):
         in_info, _ = args
         # TODO: update meminfo?
 
-        # ListStringArray
-        if arr_type == list_string_array_type:
-            list_string_array = context.make_helper(builder, list_string_array_type)
+        if isinstance(arr_type, ArrayItemArrayType) and arr_type.dtype == string_array_type:
+            array_item_array_from_cpp = context.make_helper(builder, arr_type)
             fnty = lir.FunctionType(
                 lir.VoidType(),
                 [
                     lir.IntType(8).as_pointer(),  # info
-                    lir.IntType(64).as_pointer(),  # num_items
-                    lir.IntType(64).as_pointer(),  # num_strings
-                    lir.IntType(64).as_pointer(),  # num_tot_chars
-                    lir.IntType(8).as_pointer().as_pointer(),  # data
-                    lir.IntType(32).as_pointer().as_pointer(),  # data_offsets
-                    lir.IntType(32).as_pointer().as_pointer(),  # index_offsets
-                    lir.IntType(8).as_pointer().as_pointer(),  # null_bitmap
-                    lir.IntType(8).as_pointer().as_pointer(),
+                    lir.IntType(8).as_pointer().as_pointer(),  # meminfo
                 ],
-            )  # meminfo
+            )
             fn_tp = builder.module.get_or_insert_function(
                 fnty, name="info_to_list_string_array"
             )
@@ -765,19 +740,45 @@ def info_to_array(typingctx, info_type, arr_type):
                 fn_tp,
                 [
                     in_info,
-                    list_string_array._get_ptr_by_name("num_items"),
-                    list_string_array._get_ptr_by_name("num_total_strings"),
-                    list_string_array._get_ptr_by_name("num_total_chars"),
-                    list_string_array._get_ptr_by_name("data"),
-                    list_string_array._get_ptr_by_name("data_offsets"),
-                    list_string_array._get_ptr_by_name("index_offsets"),
-                    list_string_array._get_ptr_by_name("null_bitmap"),
-                    list_string_array._get_ptr_by_name("meminfo"),
+                    array_item_array_from_cpp._get_ptr_by_name("meminfo"),
                 ],
             )
-            return list_string_array._getvalue()
 
-        elif isinstance(arr_type, (ArrayItemArrayType, StructArrayType)):
+            payload = _get_array_item_arr_payload(
+                context, builder, arr_type, array_item_array_from_cpp._getvalue()
+            )
+
+            payload_type = ArrayItemArrayPayloadType(arr_type)
+            payload_alloc_type = context.get_data_type(payload_type)
+            payload_alloc_size = context.get_abi_sizeof(payload_alloc_type)
+
+            # define dtor
+            dtor_fn = define_array_item_dtor(context, builder, arr_type, payload_type)
+
+            # create meminfo
+            meminfo = context.nrt.meminfo_alloc_dtor(
+                builder, context.get_constant(types.uintp, payload_alloc_size), dtor_fn
+            )
+            meminfo_void_ptr = context.nrt.meminfo_data(builder, meminfo)
+            meminfo_data_ptr = builder.bitcast(
+                meminfo_void_ptr, payload_alloc_type.as_pointer()
+            )
+
+            payload_new = cgutils.create_struct_proxy(payload_type)(context, builder)
+            payload_new.n_arrays = payload.n_arrays
+            payload_new.data = payload.data
+            payload_new.offsets = payload.offsets
+            payload_new.null_bitmap = payload.null_bitmap
+
+            builder.store(payload_new._getvalue(), meminfo_data_ptr)
+            array_item_array = context.make_helper(builder, arr_type)
+            array_item_array.meminfo = meminfo
+
+            context.nrt.decref(builder, arr_type, array_item_array_from_cpp._getvalue())
+
+            return array_item_array._getvalue()
+
+        if isinstance(arr_type, (ArrayItemArrayType, StructArrayType)):
 
             def get_num_arrays(arr_typ):
                 """ get total number of arrays in nested array """

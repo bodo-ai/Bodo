@@ -32,7 +32,6 @@ from bodo.hiframes.pd_dataframe_ext import (
 from bodo.hiframes.datetime_date_ext import datetime_date_type, datetime_date_array_type
 from bodo.libs.str_ext import string_type
 from bodo.libs.str_arr_ext import string_array_type
-from bodo.libs.list_str_arr_ext import list_string_array_type
 from bodo.libs.struct_arr_ext import StructArrayType, StructType
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.int_arr_ext import typeof_pd_int_dtype
@@ -489,8 +488,6 @@ def _infer_ndarray_obj_dtype(val):
         if isinstance(first_val, list):
             first_val = _value_to_array(first_val)
         val_typ = numba.typeof(first_val)
-        if val_typ == string_array_type:
-            return list_string_array_type
         return ArrayItemArrayType(val_typ)
     if isinstance(first_val, datetime.date):
         return datetime_date_array_type

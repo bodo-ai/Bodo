@@ -207,7 +207,8 @@ def overload_add_nested_counts(nested_counts, arr_item):
     if arr_item == bodo.string_array_type:
         return lambda nested_counts, arr_item: (
             nested_counts[0] + len(arr_item),
-            np.int64(bodo.libs.str_arr_ext.num_total_chars(arr_item)),
+            nested_counts[1]
+            + np.int64(bodo.libs.str_arr_ext.num_total_chars(arr_item)),
         )  # pragma: no cover
 
     if bodo.utils.utils.is_array_typ(arr_item, False):

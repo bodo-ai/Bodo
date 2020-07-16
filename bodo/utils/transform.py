@@ -41,7 +41,6 @@ from bodo.utils.typing import (
 )
 from bodo.utils.utils import is_call, is_array_typ
 from bodo.libs.str_arr_ext import string_array_type
-from bodo.libs.list_str_arr_ext import list_string_array_type
 from bodo.libs.struct_arr_ext import StructArrayType, StructType
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 
@@ -136,8 +135,6 @@ no_side_effect_call_tuples = {
     ("_normalize_slice", "unicode", numba),
     # hdf5
     ("h5size", "h5_api", "io", bodo),
-    ("pre_alloc_list_string_array", "list_str_arr_ext", "libs", bodo),
-    (bodo.libs.list_str_arr_ext.pre_alloc_list_string_array,),
     ("pre_alloc_struct_array", "struct_arr_ext", "libs", bodo),
     (bodo.libs.struct_arr_ext.pre_alloc_struct_array,),
     ("pre_alloc_array_item_array", "array_item_arr_ext", "libs", bodo),
@@ -181,7 +178,6 @@ def remove_hiframes(rhs, lives, call_list):
     if call_tuple in (
         (bodo.io.parquet_pio.get_column_size_parquet,),
         (bodo.io.parquet_pio.read_parquet_str,),
-        (bodo.io.parquet_pio.read_parquet_list_str,),
         (bodo.io.parquet_pio.read_parquet_array_item,),
     ):  # pragma: no cover
         return True
@@ -665,7 +661,7 @@ def is_var_size_item_array_type(t):
     """
     assert is_array_typ(t, False)
     return (
-        t in (string_array_type, list_string_array_type)
+        t == string_array_type
         or isinstance(t, ArrayItemArrayType)
         or (
             isinstance(t, StructArrayType)
@@ -678,35 +674,43 @@ def gen_init_varsize_alloc_sizes(t):
     """generate initialization code as text for allocation sizes for arrays with
     variable items, e.g. total number of characters in string arrays
     """
-    assert is_var_size_item_array_type(t)
+    # TODO: handle all possible array types and nested cases, e.g. struct
     if t == string_array_type:
         vname = "num_chars_{}".format(ir_utils.next_label())
         return f"  {vname} = 0\n", (vname,)
-    if t == list_string_array_type:
-        vname1 = "num_lists_{}".format(ir_utils.next_label())
-        vname2 = "num_chars_{}".format(ir_utils.next_label())
-        return (f"  {vname1} = 0\n" f"  {vname2} = 0\n"), (vname1, vname2)
     if isinstance(t, ArrayItemArrayType):
+        inner_code, inner_vars = gen_init_varsize_alloc_sizes(t.dtype)
         vname = "num_items_{}".format(ir_utils.next_label())
-        return f"  {vname} = 0\n", (vname,)
+        return f"  {vname} = 0\n" + inner_code, (vname,) + inner_vars
+    return "", ()
 
 
 def gen_varsize_item_sizes(t, item, var_names):
     """generate aggregation code as text for allocation sizes for arrays with
     variable items, e.g. total number of characters in string arrays
     """
-    assert is_var_size_item_array_type(t)
+    # TODO: handle all possible array types and nested cases, e.g. struct
     if t == string_array_type:
         return "    {} += bodo.libs.str_arr_ext.get_utf8_size({})\n".format(
             var_names[0], item
         )
-    if t == list_string_array_type:
-        return (
-            "    {0} += len({2})\n"
-            "    {1} += bodo.libs.list_str_arr_ext.get_list_str_utf8_size({2})\n"
-        ).format(var_names[0], var_names[1], item)
     if isinstance(t, ArrayItemArrayType):
-        return "    {} += len({})\n".format(var_names[0], item)
+        return "    {} += len({})\n".format(
+            var_names[0], item
+        ) + gen_varsize_array_counts(t.dtype, item, var_names[1:])
+    return ""
+
+
+def gen_varsize_array_counts(t, item, var_names):
+    """count the total number of elements in a nested array. e.g. total characters in a
+    string array.
+    """
+    # TODO: other arrays
+    if t == string_array_type:
+        return "    {} += bodo.libs.str_arr_ext.get_num_total_chars({})\n".format(
+            var_names[0], item
+        )
+    return ""
 
 
 def get_type_alloc_counts(t):

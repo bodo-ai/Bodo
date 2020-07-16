@@ -26,7 +26,6 @@ from llvmlite import ir as lir
 import numpy as np
 import bodo
 from bodo.libs.str_ext import string_type
-from bodo.libs.list_str_arr_ext import list_string_array_type
 from bodo.libs.str_arr_ext import (
     string_array_type,
     num_total_chars,
@@ -145,10 +144,6 @@ def is_alloc_callname(func_name, mod_name):
         or (
             func_name == "alloc_random_access_string_array"
             and mod_name == "bodo.libs.str_ext"
-        )
-        or (
-            func_name == "pre_alloc_list_string_array"
-            and mod_name == "bodo.libs.list_str_arr_ext"
         )
         or (
             func_name == "pre_alloc_array_item_array"
@@ -295,7 +290,6 @@ def is_array_typ(var_typ, include_index_series=True):
         or var_typ
         in (
             string_array_type,
-            list_string_array_type,
             bodo.hiframes.split_impl.string_array_split_view_type,
             bodo.hiframes.datetime_date_ext.datetime_date_array_type,
         )
@@ -671,11 +665,6 @@ def overload_alloc_type(n, t, s=None):
     if typ == string_array_type:
         return lambda n, t, s=None: bodo.libs.str_arr_ext.pre_alloc_string_array(
             n, s[0]
-        )  # pragma: no cover
-
-    if typ == list_string_array_type:
-        return lambda n, t, s=None: bodo.libs.list_str_arr_ext.pre_alloc_list_string_array(
-            n, s[0], s[1]
         )  # pragma: no cover
 
     if isinstance(typ, bodo.libs.array_item_arr_ext.ArrayItemArrayType):

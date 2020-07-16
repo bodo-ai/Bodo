@@ -39,7 +39,6 @@ from numba.extending import (
 )
 from numba.core import cgutils
 from bodo.libs.str_ext import string_type
-from bodo.libs.list_str_arr_ext import list_string_array_type
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.decimal_arr_ext import Decimal128Type, DecimalArrayType
 from bodo.hiframes.datetime_date_ext import datetime_date_array_type, datetime_date_type
@@ -847,6 +846,30 @@ def str_list_to_array_overload(str_list):
     return lambda str_list: str_list
 
 
+def get_num_total_chars(A):  # pragma: no cover
+    pass
+
+
+@overload(get_num_total_chars)
+def overload_get_num_total_chars(A):
+    """get total number of characters in a list(str) or string array
+    """
+    if isinstance(A, types.List) and A.dtype == string_type:
+
+        def str_list_impl(A):  # pragma: no cover
+            n = len(A)
+            n_char = 0
+            for i in range(n):
+                _str = A[i]
+                n_char += get_utf8_size(_str)
+            return n_char
+
+        return str_list_impl
+
+    assert A == string_array_type
+    return lambda A: num_total_chars(A)  # pragma: no cover
+
+
 def is_str_arr_typ(typ):
     from bodo.hiframes.pd_series_ext import is_str_series_typ
 
@@ -1154,16 +1177,11 @@ def box_str_arr(typ, val, c):
 @intrinsic
 def str_arr_is_na(typingctx, str_arr_typ, ind_typ=None):
     # None default to make IntelliSense happy
-    # reuse for list_string_array_type
-    assert str_arr_typ in (string_array_type, list_string_array_type)
+    assert str_arr_typ == string_array_type
 
     def codegen(context, builder, sig, args):
         in_str_arr, ind = args
-        if str_arr_typ == string_array_type:
-            payload = _get_string_arr_payload(context, builder, in_str_arr)
-        else:
-            # TODO: refactor list_string_array_type case
-            payload = context.make_helper(builder, str_arr_typ, in_str_arr)
+        payload = _get_string_arr_payload(context, builder, in_str_arr)
 
         # (null_bitmap[i / 8] & kBitmask[i % 8]) == 0;
         byte_ind = builder.lshr(ind, lir.Constant(lir.IntType(64), 3))
@@ -1188,16 +1206,11 @@ def str_arr_is_na(typingctx, str_arr_typ, ind_typ=None):
 @intrinsic
 def str_arr_set_na(typingctx, str_arr_typ, ind_typ=None):
     # None default to make IntelliSense happy
-    # reuse for list_string_array_type
-    assert str_arr_typ in (string_array_type, list_string_array_type)
+    assert str_arr_typ == string_array_type
 
     def codegen(context, builder, sig, args):
         in_str_arr, ind = args
-        if str_arr_typ == string_array_type:
-            payload = _get_string_arr_payload(context, builder, in_str_arr)
-        else:
-            # TODO: refactor list_string_array_type case
-            payload = context.make_helper(builder, str_arr_typ, in_str_arr)
+        payload = _get_string_arr_payload(context, builder, in_str_arr)
 
         # bits[i / 8] |= kBitmask[i % 8];
         byte_ind = builder.lshr(ind, lir.Constant(lir.IntType(64), 3))
@@ -1239,15 +1252,11 @@ def str_arr_set_na(typingctx, str_arr_typ, ind_typ=None):
 @intrinsic
 def str_arr_set_not_na(typingctx, str_arr_typ, ind_typ=None):
     # None default to make IntelliSense happy
-    assert str_arr_typ in (string_array_type, list_string_array_type)
+    assert str_arr_typ == string_array_type
 
     def codegen(context, builder, sig, args):
         in_str_arr, ind = args
-        if str_arr_typ == string_array_type:
-            payload = _get_string_arr_payload(context, builder, in_str_arr)
-        else:
-            # TODO: refactor list_string_array_type case
-            payload = context.make_helper(builder, str_arr_typ, in_str_arr)
+        payload = _get_string_arr_payload(context, builder, in_str_arr)
 
         # bits[i / 8] |= kBitmask[i % 8];
         byte_ind = builder.lshr(ind, lir.Constant(lir.IntType(64), 3))
@@ -1595,6 +1604,19 @@ def str_arr_setitem(A, idx, val):
                 str_arr_set_not_na(A, i)
 
         return impl_slice
+
+    # slice case with list(str)
+    if (
+        isinstance(idx, types.SliceType)
+        and isinstance(val, types.List)
+        and val.dtype == string_type
+    ):
+
+        def impl_slice_list(A, idx, val):  # pragma: no cover
+            val_arr = str_list_to_array(val)
+            A[idx] = val_arr
+
+        return impl_slice_list
 
     if isinstance(idx, types.SliceType) and val == string_type:
 

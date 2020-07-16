@@ -22,13 +22,9 @@ from bodo.libs.str_arr_ext import (
     StringArrayPayloadType,
     construct_string_array,
 )
-from bodo.libs.list_str_arr_ext import (
-    list_string_array_type,
-    ListStringArrayPayloadType,
-    construct_list_string_array,
-)
 from bodo.libs.array_item_arr_ext import (
     ArrayItemArrayType,
+    _get_array_item_arr_payload,
     ArrayItemArrayPayloadType,
     construct_array_item_array,
     define_array_item_dtor,
@@ -263,7 +259,7 @@ def gen_column_read(func_text, cname, c_ind, c_type, is_parallel):
         func_text += "  {} = read_parquet_str(ds_reader, {}, {}_size)\n".format(
             cname, c_ind, cname
         )
-    elif c_type == list_string_array_type:
+    elif c_type == ArrayItemArrayType(string_array_type):
         # pass size for easier allocation and distributed analysis
         func_text += "  {} = read_parquet_list_str(ds_reader, {}, {}_size)\n".format(
             cname, c_ind, cname
@@ -335,7 +331,7 @@ def _get_numba_typ_from_pa_typ(pa_typ, is_index, nullable_from_metadata):
     # "ListType(list<element: string>)", or "ListType(list<item: string>)"
     # likely an Arrow/Parquet bug
     if isinstance(pa_typ.type, pa.ListType) and pa_typ.type.value_type == pa.string():
-        return list_string_array_type
+        return ArrayItemArrayType(string_array_type)
 
     # Decimal128Array type
     if isinstance(pa_typ.type, pa.Decimal128Type):
@@ -583,7 +579,7 @@ class ReadParquetListStrInfer(AbstractTemplate):
     def generic(self, args, kws):
         assert not kws
         assert len(args) == 3
-        return signature(list_string_array_type, *unliteral_all(args))
+        return signature(ArrayItemArrayType(string_array_type), *unliteral_all(args))
 
 
 @infer_global(read_parquet_array_item)
@@ -777,12 +773,7 @@ def pq_read_list_string_lower(context, builder, sig, args):
 
     # construct array and payload
     typ = sig.return_type
-    dtype = ListStringArrayPayloadType()
-    meminfo, meminfo_data_ptr = construct_list_string_array(context, builder)
-    list_str_array = context.make_helper(builder, typ)
-
-    list_str_arr_payload = cgutils.create_struct_proxy(dtype)(context, builder)
-    list_str_array.num_items = args[2]  # set size
+    array_item_array_from_cpp = context.make_helper(builder, typ)
 
     # read payload data
     fnty = lir.FunctionType(
@@ -790,10 +781,7 @@ def pq_read_list_string_lower(context, builder, sig, args):
         [
             lir.IntType(8).as_pointer(),
             lir.IntType(64),
-            lir.IntType(32).as_pointer().as_pointer(),
-            lir.IntType(32).as_pointer().as_pointer(),
-            lir.IntType(8).as_pointer().as_pointer(),
-            lir.IntType(8).as_pointer().as_pointer(),
+            lir.IntType(8).as_pointer().as_pointer(),  # meminfo
         ],
     )
 
@@ -803,33 +791,45 @@ def pq_read_list_string_lower(context, builder, sig, args):
         [
             args[0],
             args[1],
-            list_str_arr_payload._get_ptr_by_name("data_offsets"),
-            list_str_arr_payload._get_ptr_by_name("index_offsets"),
-            list_str_arr_payload._get_ptr_by_name("data"),
-            list_str_arr_payload._get_ptr_by_name("null_bitmap"),
+            array_item_array_from_cpp._get_ptr_by_name("meminfo"),
         ],
     )
 
-    # set array values
-    builder.store(list_str_arr_payload._getvalue(), meminfo_data_ptr)
-    list_str_array.meminfo = meminfo
-    list_str_array.data_offsets = list_str_arr_payload.data_offsets
-    list_str_array.index_offsets = list_str_arr_payload.index_offsets
-    list_str_array.data = list_str_arr_payload.data
-    list_str_array.null_bitmap = list_str_arr_payload.null_bitmap
-    list_str_array.num_total_strings = builder.zext(
-        builder.load(
-            builder.gep(list_str_array.index_offsets, [list_str_array.num_items])
-        ),
-        lir.IntType(64),
+    payload = _get_array_item_arr_payload(
+        context, builder, typ, array_item_array_from_cpp._getvalue()
     )
-    list_str_array.num_total_chars = builder.zext(
-        builder.load(
-            builder.gep(list_str_array.data_offsets, [list_str_array.num_total_strings])
-        ),
-        lir.IntType(64),
+
+    # create a new payload (with dtor) and set members from payload received
+    # from C++
+    payload_type = ArrayItemArrayPayloadType(typ)
+    payload_alloc_type = context.get_data_type(payload_type)
+    payload_alloc_size = context.get_abi_sizeof(payload_alloc_type)
+
+    # define dtor
+    dtor_fn = define_array_item_dtor(context, builder, typ, payload_type)
+
+    # create meminfo
+    meminfo = context.nrt.meminfo_alloc_dtor(
+        builder, context.get_constant(types.uintp, payload_alloc_size), dtor_fn
     )
-    ret = list_str_array._getvalue()
+    meminfo_void_ptr = context.nrt.meminfo_data(builder, meminfo)
+    meminfo_data_ptr = builder.bitcast(
+        meminfo_void_ptr, payload_alloc_type.as_pointer()
+    )
+
+    payload_new = cgutils.create_struct_proxy(payload_type)(context, builder)
+    payload_new.n_arrays = payload.n_arrays
+    payload_new.data = payload.data
+    payload_new.offsets = payload.offsets
+    payload_new.null_bitmap = payload.null_bitmap
+
+    builder.store(payload_new._getvalue(), meminfo_data_ptr)
+    array_item_array = context.make_helper(builder, typ)
+    array_item_array.meminfo = meminfo
+
+    context.nrt.decref(builder, typ, array_item_array_from_cpp._getvalue())
+
+    ret = array_item_array._getvalue()
     return impl_ret_new_ref(context, builder, typ, ret)
 
 

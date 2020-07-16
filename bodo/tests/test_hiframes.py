@@ -386,7 +386,7 @@ class TestHiFrames(unittest.TestCase):
         def test_impl(df):
             return df.A.str.split()
 
-        df = pd.DataFrame({"A": ["AB CC", "C ABB D", "G ", " ", "g\t f"]})
+        df = pd.DataFrame({"A": ["AB CC", "C ABB D", "G ", np.nan, "g\t f"]})
         bodo_func = bodo.jit(test_impl)
         pd.testing.assert_series_equal(bodo_func(df), test_impl(df), check_names=False)
 
@@ -427,7 +427,7 @@ class TestHiFrames(unittest.TestCase):
         df = pd.DataFrame({"A": ["AB,CC", "C,ABB,D"]})
         df2 = pd.DataFrame({"A": df.A.str.split(",")})
         bodo_func = bodo.jit(test_impl)
-        self.assertEqual(bodo_func(df2), test_impl(df2))
+        np.testing.assert_array_equal(bodo_func(df2), test_impl(df2))
 
     def test_str_split_bool_index(self):
         def test_impl(df):

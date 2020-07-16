@@ -169,11 +169,11 @@ array_info* alloc_nullable_array(int64_t length,
                                  Bodo_CTypes::CTypeEnum typ_enum,
                                  int64_t extra_null_bytes);
 
-array_info* alloc_list_string_array(int64_t length, int64_t n_strings, int64_t n_chars,
-                                    int64_t extra_null_bytes);
-
 array_info* alloc_string_array(int64_t length, int64_t n_chars,
                                int64_t extra_null_bytes);
+
+array_info* alloc_list_string_array(int64_t n_lists, int64_t n_strings, int64_t n_chars,
+                                    int64_t extra_null_bytes);
 
 array_info* copy_array(array_info* arr);
 
@@ -189,6 +189,11 @@ void delete_table_free_arrays(table_info* table);
  */
 void free_array(array_info* arr);
 
+/**
+ * Free all memory of list of string array.
+ */
+void free_list_string_array(NRT_MemInfo* meminfo);
+
 inline void Bodo_PyErr_SetString(PyObject* type, const char* message) {
     std::cerr << "BodoRuntimeCppError, setting PyErr_SetString to " << message
               << "\n";
@@ -197,20 +202,31 @@ inline void Bodo_PyErr_SetString(PyObject* type, const char* message) {
 
 extern "C" {
 
+struct numpy_arr_payload {
+    NRT_MemInfo *meminfo;
+    PyObject *parent;
+    int64_t nitems;
+    int64_t itemsize;
+    char *data;
+    int64_t shape;
+    int64_t strides;
+};
+
 // XXX: equivalent to payload data model in str_arr_ext.py
 struct str_arr_payload {
     int64_t num_strings;
-    uint32_t* offsets;
+    int32_t* offsets;
     char* data;
     uint8_t* null_bitmap;
 };
 
-// XXX: equivalent to payload data model in list_str_arr_ext.py
-struct list_str_arr_payload {
-    char* data;
-    uint32_t* data_offsets;
-    uint32_t* index_offsets;
-    uint8_t* null_bitmap;
+struct array_item_arr_payload {
+    int64_t n_arrays;
+    // currently this is not general. this is specific for arrays whose model
+    // is a meminfo (like StringArray)
+    NRT_MemInfo *data;
+    numpy_arr_payload offsets;
+    numpy_arr_payload null_bitmap;
 };
 
 // XXX: equivalent to payload data model in split_impl.py
@@ -222,17 +238,14 @@ struct str_arr_split_view_payload {
 
 void dtor_string_array(str_arr_payload* in_str_arr, int64_t size, void* in);
 
-void dtor_list_string_array(list_str_arr_payload* in_list_str_arr, int64_t size,
-                            void* in);
 
-void allocate_string_array(uint32_t** offsets, char** data,
+void allocate_string_array(int32_t** offsets, char** data,
                            uint8_t** null_bitmap, int64_t num_strings,
                            int64_t total_size, int64_t extra_null_bytes);
 
-void allocate_list_string_array(char** data, uint32_t** data_offsets,
-                                uint32_t** index_offsets, uint8_t** null_bitmap,
-                                int64_t num_lists, int64_t num_strings,
-                                int64_t num_chars, int64_t extra_null_bytes);
+void allocate_list_string_array(int64_t n_lists, int64_t n_strings, int64_t n_chars,
+                                int64_t extra_null_bytes,
+                                array_item_arr_payload *payload, str_arr_payload *sub_payload);
 
 // copied from Arrow bit_util.h
 // Bitmask selecting the k-th bit in a byte

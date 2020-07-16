@@ -589,7 +589,9 @@ def test_getitem_int(list_str_arr_value):
 
     bodo_func = bodo.jit(test_impl)
     i = 2
-    assert bodo_func(list_str_arr_value, i) == test_impl(list_str_arr_value, i)
+    np.testing.assert_array_equal(
+        bodo_func(list_str_arr_value, i), test_impl(list_str_arr_value, i)
+    )
 
 
 def test_getitem_bool(list_str_arr_value):

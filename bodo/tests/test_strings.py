@@ -51,9 +51,8 @@ def test_get_list_string():
         value = df1["A"].iat[1]
         return value
 
-    df1 = pd.DataFrame({"A": [["A"], np.nan, ["AB", "CD"]]})
-    bodo_impl = bodo.jit(test_impl)
-    np.testing.assert_allclose(bodo_impl(df1), test_impl(df1), 1e-4)
+    df1 = pd.DataFrame({"A":[["A"], np.nan, ["AB","CD"]]})
+    np.testing.assert_array_equal(bodo.jit(test_impl)(df1), [])
 
 
 @pytest.mark.parametrize(

@@ -81,21 +81,6 @@ array_info* alloc_nullable_array(int64_t length,
 }
 
 
-array_info* alloc_list_string_array(int64_t length, int64_t n_strings, int64_t n_chars,
-                                    int64_t extra_null_bytes) {
-    NRT_MemInfo* meminfo = NRT_MemInfo_alloc_dtor_safe(
-        sizeof(list_str_arr_payload), (NRT_dtor_function)dtor_list_string_array);
-    list_str_arr_payload* payload = (list_str_arr_payload*)meminfo->data;
-    allocate_list_string_array(&(payload->data), &(payload->data_offsets),
-                               &(payload->index_offsets), &(payload->null_bitmap),
-                               length, n_strings, n_chars, extra_null_bytes);
-    return new array_info(bodo_array_type::LIST_STRING, Bodo_CTypes::LIST_STRING, length,
-                          n_strings, n_chars,
-                          payload->data, (char*)payload->data_offsets, (char*)payload->index_offsets,
-                          (char*)payload->null_bitmap, meminfo, NULL);
-}
-
-
 array_info* alloc_string_array(int64_t length, int64_t n_chars,
                                int64_t extra_null_bytes) {
     // extra_null_bytes are necessary for communication buffers around the edges
@@ -111,6 +96,27 @@ array_info* alloc_string_array(int64_t length, int64_t n_chars,
                           (char*)payload->null_bitmap, meminfo, NULL);
 }
 
+array_info* alloc_list_string_array(int64_t n_lists, int64_t n_strings, int64_t n_chars,
+                                    int64_t extra_null_bytes) {
+
+    // allocate payload structs for list and string arrays
+    NRT_MemInfo* meminfo_list_array = NRT_MemInfo_alloc_safe_aligned(sizeof(array_item_arr_payload), ALIGNMENT);
+    NRT_MemInfo* meminfo_string_array = NRT_MemInfo_alloc_dtor_safe(
+        sizeof(str_arr_payload), (NRT_dtor_function)dtor_string_array);
+
+    array_item_arr_payload *payload = (array_item_arr_payload*)(meminfo_list_array->data);
+    payload->data = meminfo_string_array;
+    str_arr_payload *sub_payload = (str_arr_payload*)(meminfo_string_array->data);
+
+    // allocate all buffers and set them in payloads
+    allocate_list_string_array(n_lists, n_strings, n_chars, extra_null_bytes,
+                               payload, sub_payload);
+
+    return new array_info(bodo_array_type::LIST_STRING, Bodo_CTypes::LIST_STRING, n_lists,
+                          n_strings, n_chars, (char*)sub_payload->data, (char*)sub_payload->offsets,
+                          (char*)payload->offsets.data,
+                          (char*)payload->null_bitmap.data, meminfo_list_array, NULL);
+}
 
 /**
  * The allocations array function for the function.
@@ -130,6 +136,7 @@ array_info* alloc_array(int64_t length, int64_t n_sub_elems, int64_t n_sub_sub_e
                         bodo_array_type::arr_type_enum arr_type,
                         Bodo_CTypes::CTypeEnum dtype,
                         int64_t extra_null_bytes) {
+
     if (arr_type == bodo_array_type::LIST_STRING)
         return alloc_list_string_array(length, n_sub_elems, n_sub_sub_elems, extra_null_bytes);
 
@@ -223,6 +230,22 @@ void free_array(array_info* arr) {
   }
 }
 
+void free_list_string_array(NRT_MemInfo* meminfo) {
+    array_item_arr_payload *payload = (array_item_arr_payload*)(meminfo->data);
+
+    // delete string array
+    payload->data->refct--;
+    NRT_MemInfo_call_dtor(payload->data);
+
+    // delete array item array
+    payload->offsets.meminfo->refct--;
+    NRT_MemInfo_call_dtor(payload->offsets.meminfo);
+    payload->null_bitmap.meminfo->refct--;
+    NRT_MemInfo_call_dtor(payload->null_bitmap.meminfo);
+    meminfo->refct--;
+    NRT_MemInfo_call_dtor(meminfo);
+}
+
 extern "C" {
 
 void dtor_string_array(str_arr_payload* in_str_arr, int64_t size, void* in) {
@@ -232,21 +255,12 @@ void dtor_string_array(str_arr_payload* in_str_arr, int64_t size, void* in) {
     if (in_str_arr->null_bitmap != nullptr) delete[] in_str_arr->null_bitmap;
 }
 
-void dtor_list_string_array(list_str_arr_payload* in_list_str_arr, int64_t size,
-                            void* in) {
-    delete[] in_list_str_arr->data;
-    delete[] in_list_str_arr->data_offsets;
-    delete[] in_list_str_arr->index_offsets;
-    if (in_list_str_arr->null_bitmap != nullptr)
-        delete[] in_list_str_arr->null_bitmap;
-}
-
-void allocate_string_array(uint32_t** offsets, char** data,
+void allocate_string_array(int32_t** offsets, char** data,
                            uint8_t** null_bitmap, int64_t num_strings,
                            int64_t total_size, int64_t extra_null_bytes) {
     // std::cout << "allocating string array: " << num_strings << " " <<
     //                                                 total_size << std::endl;
-    *offsets = new uint32_t[num_strings + 1];
+    *offsets = new int32_t[num_strings + 1];
     *data = new char[total_size];
     (*offsets)[0] = 0;
     (*offsets)[num_strings] =
@@ -259,29 +273,50 @@ void allocate_string_array(uint32_t** offsets, char** data,
     // *data = (char*) new std::string("gggg");
 }
 
-void allocate_list_string_array(char** data, uint32_t** data_offsets,
-                                uint32_t** index_offsets, uint8_t** null_bitmap,
-                                int64_t num_lists, int64_t num_strings,
-                                int64_t num_chars, int64_t extra_null_bytes) {
-    // std::cout << "allocating list string array: " << num_lists << " "<<
-    // num_strings << " " <<
-    //                                                 num_chars << std::endl;
-    *data = new char[num_chars];
+void allocate_list_string_array(int64_t n_lists, int64_t n_strings, int64_t n_chars,
+                                int64_t extra_null_bytes,
+                                array_item_arr_payload *payload, str_arr_payload *sub_payload) {
+    // string array
+    sub_payload->num_strings = n_strings;
+    sub_payload->offsets = new int32_t[n_strings + 1];
+    sub_payload->data = new char[n_chars];
+    sub_payload->offsets[0] = 0;
+    sub_payload->offsets[n_strings] = (int32_t)n_chars;  // in case total chars is read from here
+    // allocate nulls
+    int64_t n_bytes = ((n_strings + 7) >> 3) + extra_null_bytes;
+    sub_payload->null_bitmap = new uint8_t[(size_t)n_bytes];
+    // set all bits to 1 indicating non-null as default
+    memset(sub_payload->null_bitmap, 0xff, n_bytes);
 
-    *data_offsets = new uint32_t[num_strings + 1];
-    (*data_offsets)[0] = 0;
-    (*data_offsets)[num_strings] =
-        (uint32_t)num_chars;  // in case total chars is read from here
+    // list array
+    payload->n_arrays = n_lists;
 
-    *index_offsets = new uint32_t[num_lists + 1];
-    (*index_offsets)[0] = 0;
-    (*index_offsets)[num_lists] =
-        (uint32_t)num_strings;  // in case total strings is read from here
+    // allocate offsets
+    NRT_MemInfo* meminfo_offsets_array = NRT_MemInfo_alloc_safe_aligned(sizeof(int32_t) * (n_lists + 1), ALIGNMENT);
+    payload->offsets.meminfo = meminfo_offsets_array;
+    payload->offsets.parent = NULL;
+    payload->offsets.nitems = n_lists + 1;
+    payload->offsets.itemsize = sizeof(int32_t);
+    payload->offsets.data = (char*)meminfo_offsets_array->data;
+    payload->offsets.shape = n_lists + 1;
+    payload->offsets.strides = 1;
+    ((int32_t*)payload->offsets.data)[0] = 0;
+    // in case total strings is read from here
+    ((int32_t*)payload->offsets.data)[n_lists] = (int32_t)n_strings;
 
     // allocate nulls
-    int64_t n_bytes = ((num_lists + 7) >> 3) + extra_null_bytes;
-    *null_bitmap = new uint8_t[(size_t)n_bytes];
+    n_bytes = ((n_lists + 7) >> 3) + extra_null_bytes;
+    NRT_MemInfo* meminfo_nulls_array = NRT_MemInfo_alloc_safe_aligned(n_bytes, ALIGNMENT);
+    payload->null_bitmap.meminfo = meminfo_nulls_array;
+    payload->null_bitmap.parent = NULL;
+    payload->null_bitmap.nitems = n_bytes;
+    payload->null_bitmap.itemsize = 1;
+    payload->null_bitmap.data = (char*)meminfo_nulls_array->data;
+    payload->null_bitmap.shape = n_bytes;
+    payload->null_bitmap.strides = 1;
     // set all bits to 1 indicating non-null as default
-    memset(*null_bitmap, 0xff, n_bytes);
+    memset(payload->null_bitmap.data, 0xff, n_bytes);
 }
+
 }
+

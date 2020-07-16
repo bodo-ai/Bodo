@@ -28,7 +28,6 @@ from numba.extending import (
     lower_cast,
 )
 from numba.parfors.array_analysis import ArrayAnalysis
-from bodo.libs.list_str_arr_ext import list_string_array_type
 from bodo.libs.str_arr_ext import string_array_type
 from bodo.utils.typing import is_list_like_index_type
 from numba.core.imputils import impl_ret_borrowed
@@ -752,7 +751,6 @@ def bool_arr_ind_getitem(A, ind):
         or A
         in (
             string_array_type,
-            list_string_array_type,
             bodo.hiframes.split_impl.string_array_split_view_type,
             boolean_array,
         )
