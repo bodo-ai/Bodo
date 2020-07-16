@@ -270,7 +270,7 @@ class DataFrameAttribute(AttributeTemplate):
         try:
             f_return_type = get_const_func_output_type(func, arg_typs, self.context)
         except:
-            raise BodoError("DataFrame.apply(): user-defined function not supported")
+            raise_bodo_error("DataFrame.apply(): user-defined function not supported")
 
         out_arr_type = get_udf_out_arr_type(f_return_type)
 
