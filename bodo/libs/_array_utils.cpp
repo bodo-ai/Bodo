@@ -676,7 +676,7 @@ int ComparisonArrowColumn(std::shared_ptr<arrow::Array> const& arr1,
                 char* ptr1 = (char*)primitive_array1->values()->data() + siz_typ * n_pos1_s;
                 char* ptr2 = (char*)primitive_array2->values()->data() + siz_typ * n_pos2_s;
                 test = NumericComparison(bodo_typ, ptr1, ptr2, na_position_bis);
-                if (!test) return test;
+                if (test != 0) return test;
             }
         }
         return process_length(len1, len2);
