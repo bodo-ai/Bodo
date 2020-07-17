@@ -29,6 +29,7 @@ from bodo.utils.typing import (
     is_literal_type,
     get_literal_value,
     get_overload_const_str,
+    check_unsupported_args,
 )
 from bodo.utils.transform import gen_const_tup
 from numba.core.typing.templates import infer_global, AbstractTemplate
@@ -1496,6 +1497,48 @@ def overload_series_fillna(
                 return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
             return fillna_impl
+
+
+@overload_method(SeriesType, "replace", inline="always", no_unliteral=True)
+def overload_series_replace(
+    S,
+    to_replace=None,
+    value=None,
+    inplace=False,
+    limit=None,
+    regex=False,
+    method="pad",
+):
+    unsupported_args = dict(inplace=inplace, limit=limit, regex=regex, method=method)
+    merge_defaults = dict(inplace=False, limit=None, regex=False, method="pad")
+    check_unsupported_args("replace", unsupported_args, merge_defaults)
+    # TODO: error checking
+    # TODO: support all types and cases
+    def replace_impl(
+        S,
+        to_replace=None,
+        value=None,
+        inplace=False,
+        limit=None,
+        regex=False,
+        method="pad",
+    ):  # pragma: no cover
+        in_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+        index = bodo.hiframes.pd_series_ext.get_series_index(S)
+        name = bodo.hiframes.pd_series_ext.get_series_name(S)
+        n = len(in_arr)
+        out_arr = np.empty(n, in_arr.dtype)
+        for i in numba.parfors.parfor.internal_prange(n):
+            if bodo.libs.array_kernels.isna(in_arr, i):
+                bodo.ir.join.setitem_arr_nan(out_arr, i)
+                continue
+            s = in_arr[i]
+            if s == to_replace:
+                s = value
+            out_arr[i] = s
+        return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
+
+    return replace_impl
 
 
 @overload_method(SeriesType, "explode", inline="always", no_unliteral=True)

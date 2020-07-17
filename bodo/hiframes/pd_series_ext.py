@@ -972,7 +972,6 @@ series_unsupported_methods = (
     "squeeze",
     "view",
     # Combining / joining / merging
-    "replace",
     "update",
     # Time series-related
     "asfreq",
