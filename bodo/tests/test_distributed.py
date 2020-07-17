@@ -265,6 +265,27 @@ def test_bodo_func_dist_call_star_arg():
     assert count_array_REPs() == 0
 
 
+def test_bodo_func_dist_call_tup():
+    """make sure calling other bodo functions with their distributed flags set works
+    when they return tuples.
+    """
+
+    @bodo.jit(distributed=["A", "B"])
+    def f1(n):
+        A = np.arange(n)
+        B = np.ones(n)
+        S = A, B
+        return S
+
+    @bodo.jit(distributed=["B"])
+    def impl1(n):
+        A, B = f1(n)
+        return B
+
+    impl1(11)
+    assert count_array_REPs() == 0
+
+
 def test_dist_flag_warn1():
     """raise a warning when distributed flag is used for variables other than arguments
     and return values.

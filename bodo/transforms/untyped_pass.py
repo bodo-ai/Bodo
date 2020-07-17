@@ -1478,9 +1478,11 @@ class UntypedPass:
         ):
             nodes = []
             new_var_list = []
+            tup_varnames = []
             for v in cast_def.items:
                 vname = v.name.split(".")[0]
                 self._return_varnames.add(vname)
+                tup_varnames.append(vname)
                 if vname in flagged_vars or all_returns_distributed:
                     flag = (
                         "distributed"
@@ -1494,6 +1496,9 @@ class UntypedPass:
                     new_var_list.append(nodes[-1].target)
                 else:
                     new_var_list.append(v)
+            # the return tuple is distributed if all its items are distributed
+            if all(v in self.metadata["distributed"] for v in tup_varnames):
+                self.metadata["is_return_distributed"] = True
             new_tuple_node = ir.Expr.build_tuple(new_var_list, loc)
             new_tuple_var = ir.Var(scope, mk_unique_var("dist_return_tp"), loc)
             nodes.append(ir.Assign(new_tuple_node, new_tuple_var, loc))
