@@ -599,7 +599,7 @@ class DistributedPass:
             out.append(assign)
             return out
 
-        if fdef == ("setitem_arr_nan", "bodo.ir.join") and self._dist_arr_needs_adjust(
+        if fdef == ("setna", "bodo.libs.array_kernels") and self._dist_arr_needs_adjust(
             rhs.args[0].name
         ):
             arr = rhs.args[0]
@@ -2772,7 +2772,7 @@ class DistributedPass:
             fdef = guard(find_callname, self.func_ir, rhs, self.typemap)
             if fdef in (
                 ("isna", "bodo.libs.array_kernels"),
-                ("setitem_arr_nan", "bodo.ir.join"),
+                ("setna", "bodo.libs.array_kernels"),
                 ("str_arr_item_to_numeric", "bodo.libs.str_arr_ext"),
                 ("setitem_str_arr_ptr", "bodo.libs.str_arr_ext"),
                 ("get_str_arr_item_length", "bodo.libs.str_arr_ext"),

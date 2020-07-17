@@ -1041,7 +1041,7 @@ def overload_isna_scalar(obj):
 @overload(operator.setitem, no_unliteral=True)
 def overload_setitem_arr_none(A, idx, val):
     if is_array_typ(A, False) and isinstance(idx, types.Integer) and val == types.none:
-        return lambda A, idx, val: bodo.ir.join.setitem_arr_nan(A, idx)
+        return lambda A, idx, val: bodo.libs.array_kernels.setna(A, idx)
 
 
 @overload(pd.notna, inline="always", no_unliteral=True)

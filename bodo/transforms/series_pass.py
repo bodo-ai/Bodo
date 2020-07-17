@@ -376,7 +376,7 @@ class SeriesPass:
             and self.typemap[inst.value.name] == types.none
         ):
             return nodes + compile_func_single_block(
-                lambda A, idx: bodo.ir.join.setitem_arr_nan(A, idx),
+                lambda A, idx: bodo.libs.array_kernels.setna(A, idx),
                 [inst.target, index_var],
                 None,
                 self,

@@ -274,7 +274,7 @@ def overload_string_array_add(A, B):
                     B, j
                 ):
                     out_arr[j] = ""
-                    bodo.ir.join.setitem_arr_nan(out_arr, j)
+                    bodo.libs.array_kernels.setna(out_arr, j)
                 else:
                     out_arr[j] = A[j] + B[j]
 
@@ -299,7 +299,7 @@ def overload_string_array_add(A, B):
             for j in numba.parfors.parfor.internal_prange(l):
                 if bodo.libs.array_kernels.isna(A, j):
                     out_arr[j] = ""
-                    bodo.ir.join.setitem_arr_nan(out_arr, j)
+                    bodo.libs.array_kernels.setna(out_arr, j)
                 else:
                     out_arr[j] = A[j] + B
 
@@ -324,7 +324,7 @@ def overload_string_array_add(A, B):
             for j in numba.parfors.parfor.internal_prange(l):
                 if bodo.libs.array_kernels.isna(B, j):
                     out_arr[j] = ""
-                    bodo.ir.join.setitem_arr_nan(out_arr, j)
+                    bodo.libs.array_kernels.setna(out_arr, j)
                 else:
                     out_arr[j] = A + B[j]
 

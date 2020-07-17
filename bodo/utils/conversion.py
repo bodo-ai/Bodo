@@ -464,7 +464,7 @@ def overload_fix_arr_dtype(data, new_dtype, copy=None):
                 B = bodo.libs.int_arr_ext.alloc_int_array(n, _dtype)
                 for i in numba.parfors.parfor.internal_prange(n):
                     if bodo.libs.array_kernels.isna(data, i):
-                        bodo.ir.join.setitem_arr_nan(B, i)
+                        bodo.libs.array_kernels.setna(B, i)
                     else:
                         B[i] = int(data[i])
                         # no need for setting null bit since done by int arr's setitem
