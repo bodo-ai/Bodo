@@ -438,13 +438,15 @@ def _copy_array_nodes(var, nodes, typingctx, typemap, calltypes):
     return nodes[-1].target
 
 
-def get_sort_cpp_section(key_name_args, col_name_args, ascending_list, na_position_b, parallel_b):
+def get_sort_cpp_section(
+    key_name_args, col_name_args, ascending_list, na_position_b, parallel_b
+):
     key_count = len(key_name_args)
     data_count = len(col_name_args)
     total_list = ["array_to_info({})".format(name) for name in key_name_args] + [
         "array_to_info({})".format(name) for name in col_name_args
     ]
-    func_text  = "  info_list_total = [{}]\n".format(",".join(total_list))
+    func_text = "  info_list_total = [{}]\n".format(",".join(total_list))
     func_text += "  table_total = arr_info_list_to_table(info_list_total)\n"
     func_text += "  vect_ascending = np.array([{}])\n".format(
         ",".join("1" if x else "0" for x in ascending_list)

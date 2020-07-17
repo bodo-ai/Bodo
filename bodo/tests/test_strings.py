@@ -51,7 +51,7 @@ def test_get_list_string():
         value = df1["A"].iat[1]
         return value
 
-    df1 = pd.DataFrame({"A":[["A"], np.nan, ["AB","CD"]]})
+    df1 = pd.DataFrame({"A": [["A"], np.nan, ["AB", "CD"]]})
     np.testing.assert_array_equal(bodo.jit(test_impl)(df1), [])
 
 

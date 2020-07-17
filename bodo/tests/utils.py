@@ -109,9 +109,7 @@ def check_func(
     # in situations where pandas is buggy/lacks support
     if py_output is None:
         if convert_columns_to_pandas:
-            call_args_mapped = tuple(
-                convert_non_pandas_columns(a) for a in call_args
-            )
+            call_args_mapped = tuple(convert_non_pandas_columns(a) for a in call_args)
             py_output = func(*call_args_mapped)
         else:
             py_output = func(*call_args)
@@ -616,7 +614,7 @@ def string_list_ent(x):
     if isinstance(x, dict):
         l_str = []
         for k in x:
-            estr = "\"" + str(k) + "\": " + string_list_ent(x[k])
+            estr = '"' + str(k) + '": ' + string_list_ent(x[k])
             l_str.append(estr)
         return "{" + ", ".join(l_str) + "}"
     if isinstance(x, (list, np.ndarray, pd.arrays.IntegerArray)):

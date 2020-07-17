@@ -47,11 +47,7 @@ def ensure_clean_dir(dirname):
             # wait for all ranks to complete
             barrier()
             # delete on rank 0
-            if (
-                get_rank() == 0 
-                and os.path.exists(dirname) 
-                and os.path.isdir(dirname)
-            ):
+            if get_rank() == 0 and os.path.exists(dirname) and os.path.isdir(dirname):
                 shutil.rmtree(dirname)
         except Exception as e:
             print("Exception on removing directory: {error}".format(error=e))

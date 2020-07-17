@@ -123,7 +123,7 @@ str_arr_model_members = [
     ("index_offsets", types.CPointer(offset_typ)),
     ("data_offsets", types.CPointer(offset_typ)),
     ("data", data_ctypes_type),
-    ('null_bitmap', types.CPointer(char_typ)),
+    ("null_bitmap", types.CPointer(char_typ)),
     ("meminfo", types.MemInfoPointer(str_arr_split_view_payload_type)),
 ]
 
@@ -246,7 +246,6 @@ def box_str_arr_split_view(typ, val, c):
     num_items_obj = c.pyapi.long_from_longlong(l_num_items)
     out_arr = c.pyapi.call_method(np_class_obj, "ndarray", (num_items_obj, dtype))
 
-
     # Array setitem call
     arr_get_fnty = LLType.function(
         lir.IntType(8).as_pointer(), [c.pyapi.pyobj, c.pyapi.py_ssize_t]
@@ -283,9 +282,7 @@ def box_str_arr_split_view(typ, val, c):
         mask = builder.trunc(
             builder.and_(str_ind, lir.Constant(lir.IntType(64), 7)), lir.IntType(8)
         )
-        val = builder.and_(
-            builder.lshr(byte, mask), lir.Constant(lir.IntType(8), 1)
-        )
+        val = builder.and_(builder.lshr(byte, mask), lir.Constant(lir.IntType(8), 1))
 
         # Build a new Python list
         nitems = builder.sub(list_end_offset, list_start_offset)
@@ -297,7 +294,9 @@ def box_str_arr_split_view(typ, val, c):
         with c.builder.if_else(cond) as (then, otherwise):
             with then:
                 list_obj = c.pyapi.list_new(nitems)
-                with c.builder.if_then(cgutils.is_not_null(c.builder, list_obj), likely=True):
+                with c.builder.if_then(
+                    cgutils.is_not_null(c.builder, list_obj), likely=True
+                ):
                     with cgutils.for_range(c.builder, nitems) as loop:
                         # data_offsets of current list
                         start_index = builder.add(list_start_offset, loop.index)
@@ -319,14 +318,15 @@ def box_str_arr_split_view(typ, val, c):
                         str_size = builder.sext(
                             builder.sub(data_end, data_start), lir.IntType(64)
                         )
-                        str_obj = c.pyapi.string_from_string_and_size(data_ptr, str_size)
+                        str_obj = c.pyapi.string_from_string_and_size(
+                            data_ptr, str_size
+                        )
                         c.pyapi.list_setitem(list_obj, loop.index, str_obj)
 
                 builder.call(arr_setitem_fn, [out_arr, arr_ptr, list_obj])
             with otherwise:
                 # Assigning the NaN value.
                 builder.call(arr_setitem_fn, [out_arr, arr_ptr, nan_obj])
-
 
     c.pyapi.decref(np_class_obj)
     c.pyapi.decref(dtype)
@@ -442,9 +442,11 @@ def get_split_view_index(arr, item_ind, str_ind):  # pragma: no cover
     if not bit:
         return 0, 0, 0
     start_index = getitem_c_arr(arr._index_offsets, item_ind)
-    end_index = getitem_c_arr(arr._index_offsets, item_ind+1) - 1
+    end_index = getitem_c_arr(arr._index_offsets, item_ind + 1) - 1
     num_strings = end_index - start_index
-    if str_ind >= num_strings: # We request a string when the index is higher than what is available.
+    if (
+        str_ind >= num_strings
+    ):  # We request a string when the index is higher than what is available.
         return 0, 0, 0
     data_start = getitem_c_arr(arr._data_offsets, start_index + str_ind)
     data_start += 1
@@ -474,7 +476,9 @@ def overload_split_view_arr_shape(A):
 
 @overload(operator.getitem, no_unliteral=True)
 def str_arr_split_view_getitem_overload(A, ind):
-    if A == string_array_split_view_type and isinstance(types.unliteral(ind), types.Integer):
+    if A == string_array_split_view_type and isinstance(
+        types.unliteral(ind), types.Integer
+    ):
         kind = numba.cpython.unicode.PY_UNICODE_1BYTE_KIND
 
         def _impl(A, ind):  # pragma: no cover
@@ -537,7 +541,9 @@ def str_arr_split_view_getitem_overload(A, ind):
                     out_ptr = get_c_arr_ptr(out_arr._data_offsets, offset_ind)
                     _memcpy(out_ptr, ptr, n_offsets, 4)
                     bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(A._null_bitmap, i)
-                    bodo.libs.int_arr_ext.set_bit_to_arr(out_arr._null_bitmap, item_ind, bit)
+                    bodo.libs.int_arr_ext.set_bit_to_arr(
+                        out_arr._null_bitmap, item_ind, bit
+                    )
                     item_ind += 1
                     offset_ind += n_offsets
 

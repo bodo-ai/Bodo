@@ -738,7 +738,7 @@ def test_list_string_arrow(memory_leak_check):
 
     random.seed(5)
     n = 1000
-    list_rand = [random.randint(1,30) for _ in range(n)]
+    list_rand = [random.randint(1, 30) for _ in range(n)]
     df1 = pd.DataFrame({"A": list_rand, "B": rand_col_l_str(n)})
 
     check_func(f, (df1,))
@@ -975,6 +975,7 @@ def test_sort_list_list():
         ]
     )
     df = pd.DataFrame({"A": [5, 1, 4, 2, 3, 0, 12, 23], "B": data})
+
     def f(df):
         df_ret = df.sort_values(by="A", ascending=True, na_position="first")
         return df_ret

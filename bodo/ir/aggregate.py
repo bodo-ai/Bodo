@@ -181,6 +181,7 @@ def get_agg_func(func_ir, func_name, rhs, series_type=None, typemap=None):
         # TODO: remove when pivot is moved to C++ code
         if func_name == "sum":
             val_zero = series_type.dtype(0)
+
             def func(S):  # pragma: no cover
                 A = bodo.hiframes.pd_series_ext.get_series_data(S)
                 numba.parfors.parfor.init_prange()
@@ -191,8 +192,10 @@ def get_agg_func(func_ir, func_name, rhs, series_type=None, typemap=None):
                         val = A[i]
                     s += val
                 return s
+
         if func_name == "prod":
             val_one = series_type.dtype(1)
+
             def func(S):  # pragma: no cover
                 A = bodo.hiframes.pd_series_ext.get_series_data(S)
                 numba.parfors.parfor.init_prange()
@@ -203,6 +206,7 @@ def get_agg_func(func_ir, func_name, rhs, series_type=None, typemap=None):
                         val = A[i]
                     s *= val
                 return s
+
         func.ftype = func_name
         func.ncols_pre_shuffle = 1
         func.ncols_post_shuffle = 1

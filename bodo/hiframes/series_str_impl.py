@@ -173,8 +173,7 @@ def common_validate_padding(func_name, width, fillchar):
 @overload_attribute(SeriesType, "str")
 def overload_series_str(S):
     if not isinstance(S, SeriesType) or not (
-        S.data
-        in (string_array_type, string_array_split_view_type)
+        S.data in (string_array_type, string_array_split_view_type)
         or isinstance(S.data, ArrayItemArrayType)
     ):
         raise BodoError("Series.str: input should be a series of string or arrays")
@@ -246,8 +245,7 @@ def overload_str_method_split(S_str, pat=None, n=-1, expand=False):
 def overload_str_method_get(S_str, i):
     arr_typ = S_str.stype.data
     if (
-        arr_typ != string_array_split_view_type
-        and arr_typ != string_array_type
+        arr_typ != string_array_split_view_type and arr_typ != string_array_type
     ) and not isinstance(arr_typ, ArrayItemArrayType):
         raise BodoError(
             "Series.str.get(): only supports input type of Series(array(item)) "

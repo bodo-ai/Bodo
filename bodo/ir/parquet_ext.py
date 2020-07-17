@@ -79,7 +79,9 @@ distributed_analysis.distributed_analysis_extensions[
 typeinfer.typeinfer_extensions[ParquetReader] = bodo.ir.connector.connector_typeinfer
 ir_utils.visit_vars_extensions[ParquetReader] = bodo.ir.connector.visit_vars_connector
 ir_utils.remove_dead_extensions[ParquetReader] = remove_dead_pq
-numba.core.analysis.ir_extension_usedefs[ParquetReader] = bodo.ir.connector.connector_usedefs
+numba.core.analysis.ir_extension_usedefs[
+    ParquetReader
+] = bodo.ir.connector.connector_usedefs
 ir_utils.copy_propagate_extensions[
     ParquetReader
 ] = bodo.ir.connector.get_copies_connector

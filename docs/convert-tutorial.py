@@ -34,7 +34,7 @@ def process_html_block(l, infile, outfile):
     block.append(l)
     while True:
         l = infile.readline()
-        if len(l) > 0 and l[0] not in (' ', '\t', '\n'):
+        if len(l) > 0 and l[0] not in (" ", "\t", "\n"):
             # found non-indented text, so no longer in block
             break
         else:
@@ -72,7 +72,7 @@ def process(infile_name, outfile_name):
     outfile = open(outfile_name, "w")
     skip_section = False
     line_buf = []  # temporary buffer. will read from here instead of file
-                   # if there are lines here
+    # if there are lines here
 
     def read_next():
         if len(line_buf) == 0:

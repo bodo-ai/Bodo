@@ -278,10 +278,7 @@ def test_random_decimal_sum_min_max_last():
     random.seed(5)
     n = 10
     df1 = pd.DataFrame(
-        {
-            "A": gen_random_decimal_array(1, n),
-            "B": gen_random_decimal_array(2, n),
-        }
+        {"A": gen_random_decimal_array(1, n), "B": gen_random_decimal_array(2, n),}
     )
 
     # Direct checks for which pandas has equivalent functions.

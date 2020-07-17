@@ -62,7 +62,9 @@ def bodo_set_flags(self, flags):
     self.values = orig_values
 
 
-numba.core.options.TargetOptions.numba_set_flags = numba.core.options.TargetOptions.set_flags
+numba.core.options.TargetOptions.numba_set_flags = (
+    numba.core.options.TargetOptions.set_flags
+)
 numba.core.options.TargetOptions.set_flags = bodo_set_flags
 
 
@@ -104,6 +106,7 @@ def master_mode_wrapper(numba_jit_wrapper):  # pragma: no cover
     def _wrapper(pyfunc):
         dispatcher = numba_jit_wrapper(pyfunc)
         return master_mode.MasterModeDispatcher(dispatcher)
+
     return _wrapper
 
 
@@ -125,7 +128,9 @@ def jit(signature_or_function=None, **options):
     numba_jit = numba.jit(
         signature_or_function, pipeline_class=bodo.compiler.BodoCompiler, **options
     )
-    if master_mode.master_mode_on and bodo.get_rank() == master_mode.MASTER_RANK:  # pragma: no cover
+    if (
+        master_mode.master_mode_on and bodo.get_rank() == master_mode.MASTER_RANK
+    ):  # pragma: no cover
         # when options are passed, this function is called with
         # signature_or_function==None, so numba.jit doesn't return a Dispatcher
         # object. it returns a decorator ("_jit.<locals>.wrapper") to apply

@@ -876,7 +876,9 @@ def get_nullable_array_binary_impl(op, A1, A2):
     """generate implementation for binary operation on nullable integer or boolean array
     """
     # TODO: 1 ** np.nan is 1. So we have to unmask those.
-    inplace = op in numba.core.typing.npydecl.NumpyRulesInplaceArrayOperator._op_map.keys()
+    inplace = (
+        op in numba.core.typing.npydecl.NumpyRulesInplaceArrayOperator._op_map.keys()
+    )
     is_A1_scalar = isinstance(A1, (types.Number, types.Boolean))
     is_A2_scalar = isinstance(A2, (types.Number, types.Boolean))
     # use type inference to get output dtype
@@ -903,41 +905,25 @@ def get_nullable_array_binary_impl(op, A1, A2):
     #   return out_arr
     access_str1 = "A1" if is_A1_scalar else "A1[i]"
     access_str2 = "A2" if is_A2_scalar else "A2[i]"
-    na_str1 = (
-        "False" if is_A1_scalar else "bodo.libs.array_kernels.isna(A1, i)"
-    )
-    na_str2 = (
-        "False" if is_A2_scalar else "bodo.libs.array_kernels.isna(A2, i)"
-    )
+    na_str1 = "False" if is_A1_scalar else "bodo.libs.array_kernels.isna(A1, i)"
+    na_str2 = "False" if is_A2_scalar else "bodo.libs.array_kernels.isna(A2, i)"
     func_text = "def impl(A1, A2):\n"
-    func_text += "  n = len({})\n".format(
-        "A1" if not is_A1_scalar else "A2"
-    )
+    func_text += "  n = len({})\n".format("A1" if not is_A1_scalar else "A2")
     if inplace:
         func_text += "  out_arr = A1\n"
     else:
-        func_text += (
-            "  out_arr = bodo.utils.utils.alloc_type(n, ret_dtype, None)\n"
-        )
+        func_text += "  out_arr = bodo.utils.utils.alloc_type(n, ret_dtype, None)\n"
     func_text += "  for i in numba.parfors.parfor.internal_prange(n):\n"
     func_text += "    if ({}\n".format(na_str1)
     func_text += "        or {}):\n".format(na_str2)
     func_text += "      bodo.ir.join.setitem_arr_nan(out_arr, i)\n"
     func_text += "      continue\n"
-    func_text += "    out_arr[i] = op({}, {})\n".format(
-        access_str1, access_str2
-    )
+    func_text += "    out_arr[i] = op({}, {})\n".format(access_str1, access_str2)
     func_text += "  return out_arr\n"
     loc_vars = {}
     exec(
         func_text,
-        {
-            "bodo": bodo,
-            "numba": numba,
-            "np": np,
-            "ret_dtype": ret_dtype,
-            "op": op,
-        },
+        {"bodo": bodo, "numba": numba, "np": np, "ret_dtype": ret_dtype, "op": op,},
         loc_vars,
     )
     impl = loc_vars["impl"]

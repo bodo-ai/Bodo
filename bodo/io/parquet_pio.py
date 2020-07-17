@@ -787,12 +787,7 @@ def pq_read_list_string_lower(context, builder, sig, args):
 
     fn = builder.module.get_or_insert_function(fnty, name="pq_read_list_string")
     _res = builder.call(
-        fn,
-        [
-            args[0],
-            args[1],
-            array_item_array_from_cpp._get_ptr_by_name("meminfo"),
-        ],
+        fn, [args[0], args[1], array_item_array_from_cpp._get_ptr_by_name("meminfo"),],
     )
 
     payload = _get_array_item_arr_payload(

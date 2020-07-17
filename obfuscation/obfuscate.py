@@ -188,11 +188,13 @@ def random_string(minlength, maxlength):
         for x in range(random.randint(minlength, maxlength))
     )
 
+
 class VariableRetriever(ast.NodeTransformer):
     """This class takes a node and allows to compute all the variables
     that occur in that block.
     This is used for lambdas for which basically every variable can a priori be
     a global one and they should be fixed."""
+
     def __init__(self):
         ast.NodeTransformer.__init__(self)
         self.list_variables = set()
@@ -257,6 +259,7 @@ class Obfuscator(ast.NodeTransformer):
     Two passes are made:
     * Computing the fixed variables and for the moving variable their assigned one.
     * In a second pass, we changed the names occurring."""
+
     def __init__(self):
         ast.NodeTransformer.__init__(self)
         self.processing_pass = 0
@@ -334,8 +337,8 @@ class Obfuscator(ast.NodeTransformer):
         # Call case. We have to handle separately the instance that we want to be careful about.
         # The attribute starargs and kwargs have been removed since version 3.5
         if isinstance(node.func, ast.Name):
-            if node.func.id=="isinstance":
-                if len(node.args)!=2:
+            if node.func.id == "isinstance":
+                if len(node.args) != 2:
                     print("The number of entries in args of isinstance must be 2")
                     exit(0)
                 if isinstance(node.args[1], ast.Name):
@@ -453,6 +456,7 @@ class Obfuscator(ast.NodeTransformer):
         self.visit(node.value)
         return node
 
+
 #
 # The processing of individual files
 #
@@ -461,7 +465,7 @@ class Obfuscator(ast.NodeTransformer):
 def process_file(efile, stdoutput):
     root = ast.parse(open(efile, "rb").read())
     sys.stderr.write("  Initial source code has been read\n")
-#    print("ROOT = ", ast.dump(root))
+    #    print("ROOT = ", ast.dump(root))
 
     obf = Obfuscator()
     root = obf.visit(root)
@@ -473,7 +477,7 @@ def process_file(efile, stdoutput):
 
     if stdoutput:
         sys.stderr.write("------------------------------------------------\n")
-        sys.stderr.write("The abstract Syntax Tree : " +  ast.dump(root) + "\n")
+        sys.stderr.write("The abstract Syntax Tree : " + ast.dump(root) + "\n")
         sys.stderr.write("------------------------------------------------\n")
         sys.stdout.write(astor.to_source(root))
     else:
@@ -481,29 +485,30 @@ def process_file(efile, stdoutput):
         f.write(astor.to_source(root))
 
 
-
-
 def process_input(argv):
     if len(argv) < 3:
         sys.stderr.write("Usage:\n")
-        sys.stderr.write("--- For obfuscating and printing the obfuscated to standard output:\n")
+        sys.stderr.write(
+            "--- For obfuscating and printing the obfuscated to standard output:\n"
+        )
         sys.stderr.write("     obfuscate.py stdout file1.py ... fileN.py\n")
         sys.stderr.write("--- For obfuscating the files themselves:\n")
         sys.stderr.write("     obfuscate.py file file1.py ... fileN.py\n")
         exit(0)
 
-    if argv[1]=="stdout":
-        stdoutput=True
-    elif argv[1]=="file":
-        stdoutput=False
+    if argv[1] == "stdout":
+        stdoutput = True
+    elif argv[1] == "file":
+        stdoutput = False
     else:
         sys.stderr.write("Value of first argument is stdout or file\n")
         exit(0)
 
-    nb_file=len(argv)-2
+    nb_file = len(argv) - 2
     for ifile in range(nb_file):
-        efile=argv[ifile+2]
+        efile = argv[ifile + 2]
         sys.stderr.write("ifile={}/{} file={}".format(ifile, nb_file, efile))
         process_file(efile, stdoutput)
+
 
 process_input(sys.argv)

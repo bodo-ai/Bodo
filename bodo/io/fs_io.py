@@ -182,7 +182,11 @@ def find_file_name_or_handler(path, ftype):
     err_msg = f"pd.{func_name}(): there is no {ftype} file in directory: {fname}"
 
     def filter_files(file_names):
-        return [f for f in file_names if f.lower() != "_success" and not f.lower().endswith(".crc")]
+        return [
+            f
+            for f in file_names
+            if f.lower() != "_success" and not f.lower().endswith(".crc")
+        ]
 
     if parsed_url.scheme == "s3":
         is_handler = True
@@ -225,11 +229,7 @@ def find_file_name_or_handler(path, ftype):
 
         if os.path.isdir(path):
             files = filter_files(glob.glob(os.path.join(path, "*")))
-            all_csv_files = [
-                f
-                for f in sorted(files)
-                if os.path.getsize(f) > 0
-            ]
+            all_csv_files = [f for f in sorted(files) if os.path.getsize(f) > 0]
             if len(all_csv_files) == 0:  # pragma: no cover
                 # TODO: test
                 raise BodoError(err_msg)
