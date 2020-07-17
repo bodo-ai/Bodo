@@ -67,7 +67,12 @@ import pytest
             np.array(
                 [
                     [{"A": 3, "B": 45}],
-                    [{"A": -1, "B": 60}, {"A": -1, "B": 60}, {"A": 3, "B": 3}, {"A": -7, "B": 13}],
+                    [
+                        {"A": -1, "B": 60},
+                        {"A": -1, "B": 60},
+                        {"A": 3, "B": 3},
+                        {"A": -7, "B": 13},
+                    ],
                     [{"A": 11, "B": 60}, {"A": 500, "B": 33}, {"A": 55, "B": 57}],
                     [{"A": 10, "B": 20}, {"A": 5, "B": -1}],
                     [{"A": 3, "B": 4}, {"A": 10, "B": 20}],
@@ -277,16 +282,10 @@ def test_merge_decimal():
     random.seed(5)
     n = 50
     df1 = pd.DataFrame(
-        {
-            "A": gen_random_decimal_array(1, n),
-            "B": gen_random_decimal_array(1, n),
-        }
+        {"A": gen_random_decimal_array(1, n), "B": gen_random_decimal_array(1, n),}
     )
     df2 = pd.DataFrame(
-        {
-            "A": gen_random_decimal_array(1, n),
-            "D": gen_random_decimal_array(1, n),
-        }
+        {"A": gen_random_decimal_array(1, n), "D": gen_random_decimal_array(1, n),}
     )
     check_func(f, (df1, df2), sort_output=True, reset_index=True)
 
@@ -349,9 +348,25 @@ def test_list_string_array_type_random():
     random.seed(5)
     n1 = 50
     n2 = 100
-    df1 = pd.DataFrame({"A": gen_random_list_string_array(1,n1), "C": gen_random_list_string_array(1,n1)})
-    df2 = pd.DataFrame({"A": gen_random_list_string_array(1,n2), "D": gen_random_list_string_array(1,n2)})
-    check_func(test_impl, (df1, df2), sort_output=True, reset_index=True, convert_columns_to_pandas=True)
+    df1 = pd.DataFrame(
+        {
+            "A": gen_random_list_string_array(1, n1),
+            "C": gen_random_list_string_array(1, n1),
+        }
+    )
+    df2 = pd.DataFrame(
+        {
+            "A": gen_random_list_string_array(1, n2),
+            "D": gen_random_list_string_array(1, n2),
+        }
+    )
+    check_func(
+        test_impl,
+        (df1, df2),
+        sort_output=True,
+        reset_index=True,
+        convert_columns_to_pandas=True,
+    )
 
 
 def test_merge_left_right_nontrivial_index():
@@ -1657,15 +1672,24 @@ def test_merge_common_col_ordering():
 
 
 def test_merge_nested_arrays_non_keys(nested_arrays_value):
-
     def test_impl(df1, df2):
         df3 = df1.merge(df2, on="A")
         return df3
 
-    df1 = pd.DataFrame({"A": [0, 10, 200, 3000, 40000, 500000], "B": nested_arrays_value[0]})
-    df2 = pd.DataFrame({"A": [0, 200, 200, 500000, 0, 3000], "B": nested_arrays_value[1]})
+    df1 = pd.DataFrame(
+        {"A": [0, 10, 200, 3000, 40000, 500000], "B": nested_arrays_value[0]}
+    )
+    df2 = pd.DataFrame(
+        {"A": [0, 200, 200, 500000, 0, 3000], "B": nested_arrays_value[1]}
+    )
 
-    check_func(test_impl, (df1, df2), sort_output=True, reset_index=True, convert_columns_to_pandas=True)
+    check_func(
+        test_impl,
+        (df1, df2),
+        sort_output=True,
+        reset_index=True,
+        convert_columns_to_pandas=True,
+    )
 
 
 # ------------------------------ merge_asof() ------------------------------ #

@@ -281,14 +281,18 @@ def get_groupby_output_dtype(arr_type, func_name):
     If the operation is not feasible (e.g. summing dates) then an error message
     is passed upward to be decided according to the context.
     """
-    is_list_string = (arr_type == ArrayItemArrayType(string_array_type))
+    is_list_string = arr_type == ArrayItemArrayType(string_array_type)
     in_dtype = arr_type.dtype
     if func_name == "median" and not isinstance(
         in_dtype, (Decimal128Type, types.Float, types.Integer)
     ):
-        return None, "For median, only column of integer, float or Decimal type are allowed"
+        return (
+            None,
+            "For median, only column of integer, float or Decimal type are allowed",
+        )
     if (func_name in {"median", "mean", "var", "std"}) and isinstance(
-        in_dtype, (Decimal128Type, types.Integer, types.Float)):
+        in_dtype, (Decimal128Type, types.Integer, types.Float)
+    ):
         return types.float64, "ok"
     if not isinstance(in_dtype, (types.Integer, types.Float, types.Boolean)):
         if is_list_string or in_dtype == types.unicode_type:
@@ -301,7 +305,12 @@ def get_groupby_output_dtype(arr_type, func_name):
                 "first",
                 "last",
             }:
-                return None, "column type of strings or list of strings is not supported in groupby built-in function {}".format(func_name)
+                return (
+                    None,
+                    "column type of strings or list of strings is not supported in groupby built-in function {}".format(
+                        func_name
+                    ),
+                )
         else:
             if func_name not in {"count", "nunique", "min", "max", "first", "last"}:
                 return (
@@ -339,7 +348,7 @@ class DataframeGroupByAttribute(AttributeTemplate):
     key = DataFrameGroupByType
 
     def _get_keys_not_as_index(
-            self, grp, out_columns, out_data, out_column_type, multi_level_names=False
+        self, grp, out_columns, out_data, out_column_type, multi_level_names=False
     ):
         """ Add groupby keys to output columns (to be used when
             as_index=False) """
@@ -382,7 +391,9 @@ class DataframeGroupByAttribute(AttributeTemplate):
             ind = grp.df_type.columns.index(c)
             data = grp.df_type.data[ind]
             e_column_type = ColumnType.NonNumericalColumn.value
-            if isinstance(data, (types.Array, IntegerArrayType)) and isinstance(data.dtype, (types.Integer, types.Float)):
+            if isinstance(data, (types.Array, IntegerArrayType)) and isinstance(
+                data.dtype, (types.Integer, types.Float)
+            ):
                 e_column_type = ColumnType.NumericalColumn.value
 
             if func_name == "agg":
@@ -414,11 +425,21 @@ class DataframeGroupByAttribute(AttributeTemplate):
             else:
                 list_err_msg.append(err_msg)
 
-        if func_name == 'sum':
-            has_numeric = any([x == ColumnType.NumericalColumn.value for x in out_column_type])
+        if func_name == "sum":
+            has_numeric = any(
+                [x == ColumnType.NumericalColumn.value for x in out_column_type]
+            )
             if has_numeric:
-                out_data = [x for x, y in zip(out_data, out_column_type) if y != ColumnType.NonNumericalColumn.value]
-                out_columns = [x for x, y in zip(out_columns, out_column_type) if y != ColumnType.NonNumericalColumn.value]
+                out_data = [
+                    x
+                    for x, y in zip(out_data, out_column_type)
+                    if y != ColumnType.NonNumericalColumn.value
+                ]
+                out_columns = [
+                    x
+                    for x, y in zip(out_columns, out_column_type)
+                    if y != ColumnType.NonNumericalColumn.value
+                ]
 
         nb_drop = len(list_err_msg)
         if len(out_data) == 0:
@@ -427,7 +448,9 @@ class DataframeGroupByAttribute(AttributeTemplate):
             else:
                 raise BodoError(
                     "No columns in output. {} column{} dropped for following reasons: {}".format(
-                        nb_drop, " was" if nb_drop == 1 else "s were", ",".join(list_err_msg)
+                        nb_drop,
+                        " was" if nb_drop == 1 else "s were",
+                        ",".join(list_err_msg),
                     )
                 )
 
@@ -524,7 +547,11 @@ class DataframeGroupByAttribute(AttributeTemplate):
             out_column_type = []
             if not grp.as_index:
                 self._get_keys_not_as_index(
-                    grp, out_columns, out_data, out_column_type, multi_level_names=multi_level_names
+                    grp,
+                    out_columns,
+                    out_data,
+                    out_column_type,
+                    multi_level_names=multi_level_names,
                 )
             for col_name, f_val in col_map.items():
                 if isinstance(f_val, (tuple, list)):

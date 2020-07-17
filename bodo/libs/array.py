@@ -99,24 +99,19 @@ def array_to_info(typingctx, arr_type_t):
         # arr_info struct keeps a reference
         context.nrt.incref(builder, arr_type, in_arr)
 
-        if isinstance(arr_type, ArrayItemArrayType) and arr_type.dtype == string_array_type:
+        if (
+            isinstance(arr_type, ArrayItemArrayType)
+            and arr_type.dtype == string_array_type
+        ):
             # map ArrayItemArrayType(StringArrayType()) to array_info of type LIST_STRING
             array_item_array = context.make_helper(builder, arr_type, in_arr)
             fnty = lir.FunctionType(
-                lir.IntType(8).as_pointer(),
-                [
-                    lir.IntType(8).as_pointer(),
-                ],
+                lir.IntType(8).as_pointer(), [lir.IntType(8).as_pointer(),],
             )
             fn_tp = builder.module.get_or_insert_function(
                 fnty, name="list_string_array_to_info"
             )
-            return builder.call(
-                fn_tp,
-                [
-                    array_item_array.meminfo,
-                ],
-            )
+            return builder.call(fn_tp, [array_item_array.meminfo,],)
 
         if isinstance(arr_type, (ArrayItemArrayType, StructArrayType)):
 
@@ -132,7 +127,10 @@ def array_to_info(typingctx, arr_type_t):
                     for field_typ in arr_typ.data:
                         types_list += get_types(field_typ)
                     return types_list
-                elif isinstance(arr_typ, (types.Array, IntegerArrayType)) or arr_typ == boolean_array:
+                elif (
+                    isinstance(arr_typ, (types.Array, IntegerArrayType))
+                    or arr_typ == boolean_array
+                ):
                     return get_types(arr_typ.dtype)
                 else:
                     return [numba_to_c_type(arr_typ)]
@@ -724,7 +722,10 @@ def info_to_array(typingctx, info_type, arr_type):
         in_info, _ = args
         # TODO: update meminfo?
 
-        if isinstance(arr_type, ArrayItemArrayType) and arr_type.dtype == string_array_type:
+        if (
+            isinstance(arr_type, ArrayItemArrayType)
+            and arr_type.dtype == string_array_type
+        ):
             array_item_array_from_cpp = context.make_helper(builder, arr_type)
             fnty = lir.FunctionType(
                 lir.VoidType(),
@@ -738,10 +739,7 @@ def info_to_array(typingctx, info_type, arr_type):
             )
             builder.call(
                 fn_tp,
-                [
-                    in_info,
-                    array_item_array_from_cpp._get_ptr_by_name("meminfo"),
-                ],
+                [in_info, array_item_array_from_cpp._get_ptr_by_name("meminfo"),],
             )
 
             payload = _get_array_item_arr_payload(

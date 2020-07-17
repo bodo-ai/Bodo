@@ -97,7 +97,7 @@ todo_include_todos = True
 #
 html_theme = "bodo-theme"
 html_theme_path = ["."]
-html_favicon = 'source/favicon.png'
+html_favicon = "source/favicon.png"
 
 # Theme options are theme-specific and customize the look and feel of a theme
 # further.  For a list of options available for each theme, see the
@@ -131,12 +131,7 @@ html_show_sourcelink = False
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
 html_static_path = ["_static"]
-html_sidebars = {
-    '**': [
-        'searchbox.html',
-        'navigation.html',
-    ]
-}
+html_sidebars = {"**": ["searchbox.html", "navigation.html",]}
 
 # -- Options for HTMLHelp output ------------------------------------------
 
@@ -198,5 +193,5 @@ intersphinx_mapping = {
     "numpy": ("http://docs.scipy.org/doc/numpy", None),
     "llvmlite": ("http://llvmlite.pydata.org/en/latest/", None),
     "numba": ("http://numba.pydata.org/numba-doc/latest/", None),
-    "pandas": ("https://pandas.pydata.org/pandas-docs/stable/", None)
+    "pandas": ("https://pandas.pydata.org/pandas-docs/stable/", None),
 }

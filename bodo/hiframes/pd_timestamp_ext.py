@@ -1249,9 +1249,12 @@ def timestamp_sub(lhs, rhs):
     if lhs == pandas_timestamp_type and rhs == pandas_timestamp_type:
         # TODO: use pd.Timedelta instead of datetime.timedelta when available
         def impl_timestamp(lhs, rhs):  # pragma: no cover
-            return convert_numpy_timedelta64_to_datetime_timedelta(lhs.value - rhs.value)
+            return convert_numpy_timedelta64_to_datetime_timedelta(
+                lhs.value - rhs.value
+            )
 
         return impl_timestamp
+
 
 @overload(operator.add, no_unliteral=True)
 def timestamp_add(lhs, rhs):

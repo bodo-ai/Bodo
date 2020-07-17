@@ -90,7 +90,10 @@ def worker_loop():  # pragma: no cover
 
             # send result to MASTER
             # TODO: find the right signature if several
-            if retval is not None and func.overloads[func.signatures[0]].metadata["is_return_distributed"]:
+            if (
+                retval is not None
+                and func.overloads[func.signatures[0]].metadata["is_return_distributed"]
+            ):
                 bodo.gatherv(retval)
             # delete and garbage collect everything now (otherwise objects
             # won't be deleted until the next command replaces them)
@@ -136,9 +139,9 @@ def master_wrapper(func, *args, **kwargs):  # pragma: no cover
         options = func.targetoptions
 
         def get_distribution(argname):
-            if argname in options.get(
-                "distributed", []
-            ) or argname in options.get("distributed_block", []):
+            if argname in options.get("distributed", []) or argname in options.get(
+                "distributed_block", []
+            ):
                 return "scatter"
             else:
                 return "bcast"
@@ -158,9 +161,7 @@ def master_wrapper(func, *args, **kwargs):  # pragma: no cover
     # which is executed by cloudpickle
     pickled_func = pickle.dumps(func.py_func)
     # broadcast the execute command to workers
-    comm.bcast(
-        ["exec", pickled_func, pos_arg_distribution, kwargs_distribution]
-    )
+    comm.bcast(["exec", pickled_func, pos_arg_distribution, kwargs_distribution])
 
     # build list of real arguments and keyword arguments with which
     # to call the bodo function (some arguments could be distributed
@@ -188,7 +189,9 @@ def master_wrapper(func, *args, **kwargs):  # pragma: no cover
     restore_globals = []
     for objname, obj in list(func.py_func.__globals__.items()):
         if isinstance(obj, MasterModeDispatcher):
-            restore_globals.append((func.py_func.__globals__, objname, func.py_func.__globals__[objname]))
+            restore_globals.append(
+                (func.py_func.__globals__, objname, func.py_func.__globals__[objname])
+            )
             func.py_func.__globals__[objname] = obj.dispatcher
 
     # call bodo function
@@ -199,7 +202,10 @@ def master_wrapper(func, *args, **kwargs):  # pragma: no cover
 
     # collect result on MASTER
     # TODO: find the right signature if several
-    if retval is not None and func.overloads[func.signatures[0]].metadata["is_return_distributed"]:
+    if (
+        retval is not None
+        and func.overloads[func.signatures[0]].metadata["is_return_distributed"]
+    ):
         retval = bodo.gatherv(retval)
     return retval
 
@@ -209,7 +215,9 @@ def init_master_mode():  # pragma: no cover
         return
 
     global master_mode_on
-    assert master_mode_on is False, "init_master_mode can only be called once on each process"
+    assert (
+        master_mode_on is False
+    ), "init_master_mode can only be called once on each process"
     master_mode_on = True
 
     # Python 3.8+ required for cloudpickle_fast
@@ -217,12 +225,14 @@ def init_master_mode():  # pragma: no cover
 
     # cannot import jit at module top level since jit does not exist yet
     from bodo import jit
-    globals()['jit'] = jit
+
+    globals()["jit"] = jit
     # we only import cloudpickle and mpi4py if master mode is needed
     import cloudpickle
     from mpi4py import MPI
-    globals()['pickle'] = cloudpickle
-    globals()['MPI'] = MPI
+
+    globals()["pickle"] = cloudpickle
+    globals()["MPI"] = MPI
 
     def master_exit():
         """ this is called at exit on MASTER to tell workers to exit. this
@@ -231,6 +241,7 @@ def init_master_mode():  # pragma: no cover
 
     if bodo.get_rank() == MASTER_RANK:
         import atexit
+
         atexit.register(master_exit)
     else:
         worker_loop()

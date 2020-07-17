@@ -20,9 +20,7 @@ def run_docker_build(ns):
 
 
 def verify_config(ns):
-    valid_configs = {
-        os.path.basename(f)[:-5] for f in glob.glob(".ci_support/*.yaml")
-    }
+    valid_configs = {os.path.basename(f)[:-5] for f in glob.glob(".ci_support/*.yaml")}
     print(f"valid configs are {valid_configs}")
     if ns.config in valid_configs:
         print("Using " + ns.config + " configuration")
@@ -43,9 +41,7 @@ def verify_config(ns):
         raise ValueError("config " + ns.config + " is not valid")
     # Remove the following, as implemented
     if not ns.config.startswith("linux"):
-        raise ValueError(
-            f"only Linux configs currently supported, got {ns.config}"
-        )
+        raise ValueError(f"only Linux configs currently supported, got {ns.config}")
 
 
 def main(args=None):
