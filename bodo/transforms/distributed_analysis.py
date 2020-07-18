@@ -1189,7 +1189,7 @@ class DistributedAnalysis:
 
         for v in var_set:
             # array analysis adds "#0" to array name to designate 1st dimension
-            if "#0" in v:
+            if isinstance(v, str) and "#0" in v:
                 arr_name = v.split("#")[0]
                 if is_distributable_typ(self.typemap[arr_name]):
                     self._meet_array_dists(lhs, arr_name, array_dists)
