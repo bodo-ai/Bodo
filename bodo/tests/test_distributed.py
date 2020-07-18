@@ -410,6 +410,28 @@ def test_1D_Var_alloc3():
     assert count_parfor_REPs() == 0
 
 
+def test_1D_Var_alloc4():
+    """make sure allocation can match output's distribution with other arrays with same
+    size. The arrays of "CC" columns should be assigned 1D_Var even though they don't
+    interact directly with other arrays of their dataframes.
+    """
+    @bodo.jit(distributed=["df1", "df2", "df3"])
+    def f(df1, df2):
+        df1 = df1.rename(columns={"A": "B"})
+        df1["CC"] = 11
+        df2 = df2.rename(columns={"A": "B"})
+        df2["CC"] = 1
+        df3 = pd.concat([df1, df2])
+        return df3
+
+    df1 = pd.DataFrame({"A": [3, 4, 8]})
+    df2 = pd.DataFrame({"A": [3, 4, 8]})
+    f(df1, df2)
+    assert count_array_REPs() == 0
+    assert count_array_OneDs() == 0
+    assert count_array_OneD_Vars() != 0
+
+
 def test_str_alloc_equiv1():
     def impl(n):
         C = bodo.libs.str_arr_ext.pre_alloc_string_array(n, 10)
