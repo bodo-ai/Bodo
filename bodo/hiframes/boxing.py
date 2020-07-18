@@ -259,13 +259,10 @@ def unbox_dataframe_column(typingctx, df, i=None):
         dataframe = cgutils.create_struct_proxy(sig.args[0])(
             context, builder, value=args[0]
         )
+        context.nrt.incref(builder, columns_typ, dataframe.columns)
         columns_obj = pyapi.from_native_value(
             columns_typ, dataframe.columns, context.get_env_manager(builder)
         )
-        # XXX: this incref seems necessary, which is probably due to Numba's limitations
-        # in boxing of tuples
-        # TODO: fix boxing refcount
-        context.nrt.incref(builder, columns_typ, dataframe.columns)
         # no decref for 'col_name_obj' since tuple_getitem returns borrowed reference
         col_name_obj = pyapi.tuple_getitem(columns_obj, col_ind)
         series_obj = c.pyapi.object_getitem(dataframe.parent, col_name_obj)
