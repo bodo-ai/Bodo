@@ -1256,8 +1256,15 @@ def test_set_column_scalar_str():
         df["C"] = "AA"
         return df
 
+    # test unicode characters
+    def test_impl2(n):
+        df = pd.DataFrame({"A": np.ones(n), "B": np.arange(n)})
+        df["C"] = "😀🐍,⚡ 오늘 ، هذاú,úũ"
+        return df
+
     n = 11
     check_func(test_impl, (n,))
+    check_func(test_impl2, (n,))
 
 
 def test_set_column_scalar_num():
