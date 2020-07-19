@@ -400,7 +400,7 @@ def _unbox_struct_array_generic(typ, val, c, n_structs, data_tup, null_bitmap_pt
             data_arr = builder.extract_value(data_tup, j)
 
             def set_na(data_arr, i):
-                bodo.ir.join.setitem_arr_nan(data_arr, i)
+                bodo.libs.array_kernels.setna(data_arr, i)
 
             sig = types.none(arr_typ, types.int64)
             _is_error, _res = c.pyapi.call_jit_code(set_na, sig, [data_arr, struct_ind])
@@ -1232,7 +1232,7 @@ def struct_arr_setitem(arr, ind, val):
                 func_text += "  if is_field_value_null(val, '{}'):\n".format(
                     arr.names[i]
                 )
-                func_text += "    bodo.ir.join.setitem_arr_nan(data[{}], ind)\n".format(
+                func_text += "    bodo.libs.array_kernels.setna(data[{}], ind)\n".format(
                     i
                 )
                 func_text += "  else:\n"

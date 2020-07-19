@@ -864,7 +864,7 @@ def get_nullable_array_unary_impl(op, A):
         out_arr = bodo.utils.utils.alloc_type(n, ret_dtype, None)
         for i in numba.parfors.parfor.internal_prange(n):
             if bodo.libs.array_kernels.isna(A, i):
-                bodo.ir.join.setitem_arr_nan(out_arr, i)
+                bodo.libs.array_kernels.setna(out_arr, i)
                 continue
             out_arr[i] = op(A[i])
         return out_arr
@@ -899,7 +899,7 @@ def get_nullable_array_binary_impl(op, A1, A2):
     #   for i in numba.parfors.parfor.internal_prange(n):
     #     if (bodo.libs.array_kernels.isna(A1, i)
     #         or bodo.libs.array_kernels.isna(A2, i)):
-    #       bodo.ir.join.setitem_arr_nan(out_arr, i)
+    #       bodo.libs.array_kernels.setna(out_arr, i)
     #       continue
     #     out_arr[i] = op(A1[i], A2[i])
     #   return out_arr
@@ -916,7 +916,7 @@ def get_nullable_array_binary_impl(op, A1, A2):
     func_text += "  for i in numba.parfors.parfor.internal_prange(n):\n"
     func_text += "    if ({}\n".format(na_str1)
     func_text += "        or {}):\n".format(na_str2)
-    func_text += "      bodo.ir.join.setitem_arr_nan(out_arr, i)\n"
+    func_text += "      bodo.libs.array_kernels.setna(out_arr, i)\n"
     func_text += "      continue\n"
     func_text += "    out_arr[i] = op({}, {})\n".format(access_str1, access_str2)
     func_text += "  return out_arr\n"

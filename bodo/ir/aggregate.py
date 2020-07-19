@@ -66,7 +66,7 @@ from bodo.libs.str_arr_ext import (
 )
 from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.hiframes import series_impl
-from bodo.ir.join import write_send_buff, setitem_arr_tup_nan, setitem_arr_nan
+from bodo.ir.join import write_send_buff
 from bodo.libs.timsort import getitem_arr_tup, setitem_arr_tup
 from bodo.utils.transform import get_call_expr_arg
 from bodo.utils.shuffle import (
@@ -3235,7 +3235,7 @@ def group_cumsum(key_arrs, data):  # pragma: no cover
     for i in range(n):
         if isna_tup(key_arrs, i):
             # group_cumsum stores -1 for int arrays in location of NAs
-            setitem_arr_tup_nan(out, i, -1)
+            bodo.libs.array_kernels.setna_tup(out, i, -1)
             continue
         k = getitem_arr_tup_single(key_arrs, i)
         val = getitem_arr_tup_single(data, i)
@@ -3385,10 +3385,10 @@ def setitem_arr_tup_na_match_overload(arr_tup1, arr_tup2, ind):
     func_text = "def f(arr_tup1, arr_tup2, ind):\n"
     for i in range(count):
         func_text += "  if bodo.libs.array_kernels.isna(arr_tup2[{}], ind):\n".format(i)
-        func_text += "    setitem_arr_nan(arr_tup1[{}], ind)\n".format(i)
+        func_text += "    setna(arr_tup1[{}], ind)\n".format(i)
 
     loc_vars = {}
-    exec(func_text, {"bodo": bodo, "setitem_arr_nan": setitem_arr_nan}, loc_vars)
+    exec(func_text, {"bodo": bodo, "setna": bodo.libs.array_kernels.setna}, loc_vars)
     impl = loc_vars["f"]
     return impl
 

@@ -609,7 +609,7 @@ class DistributedAnalysis:
             array_dists[lhs] = Distribution.REP
             return
 
-        if fdef == ("setitem_arr_nan", "bodo.ir.join"):
+        if fdef == ("setna", "bodo.libs.array_kernels"):
             return
 
         # bodo.libs.distributed_api functions
@@ -1949,7 +1949,7 @@ def _get_array_accesses(blocks, func_ir, typemap, accesses=None):
                             accesses.add((rhs.args[0].name, rhs.args[1].name, False))
                         if fdef == ("setitem_str_arr_ptr", "bodo.libs.str_arr_ext"):
                             accesses.add((rhs.args[0].name, rhs.args[1].name, False))
-                        if fdef == ("setitem_arr_nan", "bodo.ir.join"):
+                        if fdef == ("setna", "bodo.libs.array_kernels"):
                             accesses.add((rhs.args[0].name, rhs.args[1].name, False))
                         if fdef == ("str_arr_item_to_numeric", "bodo.libs.str_arr_ext"):
                             accesses.add((rhs.args[0].name, rhs.args[1].name, False))

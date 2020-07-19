@@ -21,7 +21,7 @@ def _column_filter_impl(B, ind):  # pragma: no cover
         if ind[i]:
             A[i] = B[i]
         else:
-            bodo.ir.join.setitem_arr_nan(A, i)
+            bodo.libs.array_kernels.setna(A, i)
     return A
 
 

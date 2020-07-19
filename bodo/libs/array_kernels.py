@@ -23,6 +23,7 @@ from bodo.libs.str_arr_ext import (
     string_array_type,
     pre_alloc_string_array,
     get_str_arr_item_length,
+    str_arr_set_na,
 )
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.bool_arr_ext import BooleanArrayType, boolean_array
@@ -115,6 +116,109 @@ def overload_isna(arr, i):
 
     # XXX integers don't have nans, extend to boolean
     return lambda arr, i: False
+
+
+def setna(arr, ind, int_nan_const=0):  # pragma: no cover
+    arr[ind] = np.nan
+
+
+@overload(setna, no_unliteral=True)
+def setna_overload(arr, ind, int_nan_const=0):
+    if isinstance(arr.dtype, types.Float):
+        return setna
+
+    if isinstance(arr.dtype, (types.NPDatetime, types.NPTimedelta)):
+        nat = arr.dtype("NaT")
+
+        def _setnan_impl(arr, ind, int_nan_const=0):  # pragma: no cover
+            arr[ind] = nat
+
+        return _setnan_impl
+
+    if arr == string_array_type:
+        # TODO: set offsets
+        return lambda arr, ind, int_nan_const=0: str_arr_set_na(arr, ind)
+
+    if isinstance(arr, (IntegerArrayType, DecimalArrayType)) or arr in (
+        boolean_array,
+        datetime_date_array_type,
+    ):
+        return lambda arr, ind, int_nan_const=0: bodo.libs.int_arr_ext.set_bit_to_arr(
+            arr._null_bitmap, ind, 0
+        )  # pragma: no cover
+
+    if isinstance(arr, bodo.libs.array_item_arr_ext.ArrayItemArrayType):
+
+        def impl_arr_item(arr, ind, int_nan_const=0):  # pragma: no cover
+            # set offset
+            offsets = bodo.libs.array_item_arr_ext.get_offsets(arr)
+            offsets[ind + 1] = offsets[ind]
+            # set NA bitmask
+            bodo.libs.int_arr_ext.set_bit_to_arr(
+                bodo.libs.array_item_arr_ext.get_null_bitmap(arr), ind, 0
+            )
+
+        return impl_arr_item
+
+    if isinstance(arr, bodo.libs.struct_arr_ext.StructArrayType):
+
+        def impl(arr, ind, int_nan_const=0):  # pragma: no cover
+            bodo.libs.int_arr_ext.set_bit_to_arr(
+                bodo.libs.struct_arr_ext.get_null_bitmap(arr), ind, 0
+            )
+            # set all data values to NA for this index
+            data = bodo.libs.struct_arr_ext.get_data(arr)
+            setna_tup(data, ind)
+
+        return impl
+
+    # TODO: support strings, bools, etc.
+    # XXX: set NA values in bool arrays to False
+    # FIXME: replace with proper NaN
+    if arr.dtype == types.bool_:
+
+        def b_set(arr, ind, int_nan_const=0):  # pragma: no cover
+            arr[ind] = False
+
+        return b_set
+
+    if isinstance(arr, bodo.hiframes.pd_categorical_ext.CategoricalArray):
+
+        def setna_cat(arr, ind, int_nan_const=0):  # pragma: no cover
+            arr.codes[ind] = -1
+
+        return setna_cat
+
+    # XXX set integer NA to 0 to avoid unexpected errors
+    # TODO: convert integer to float if nan
+    if isinstance(arr.dtype, types.Integer):
+
+        def setna_int(arr, ind, int_nan_const=0):  # pragma: no cover
+            arr[ind] = int_nan_const
+
+        return setna_int
+
+    return lambda arr, ind, int_nan_const: None  # pragma: no cover
+
+
+def setna_tup(arr_tup, ind, int_nan_const=0):  # pragma: no cover
+    for arr in arr_tup:
+        arr[ind] = np.nan
+
+
+@overload(setna_tup, no_unliteral=True)
+def overload_setna_tup(arr_tup, ind, int_nan_const=0):
+    count = arr_tup.count
+
+    func_text = "def f(arr_tup, ind, int_nan_const=0):\n"
+    for i in range(count):
+        func_text += "  setna(arr_tup[{}], ind, int_nan_const)\n".format(i)
+    func_text += "  return\n"
+
+    loc_vars = {}
+    exec(func_text, {"setna": setna}, loc_vars)
+    impl = loc_vars["f"]
+    return impl
 
 
 ################################ median ####################################
@@ -566,7 +670,7 @@ def overload_dropna(data, how, thresh, subset):
     func_text += "    if {}:\n".format(isna_check)
     for i in range(n_data_arrs):
         func_text += "      if isna(data[{}], i):\n".format(i)
-        func_text += "        bodo.ir.join.setitem_arr_nan({}, curr_ind)\n".format(
+        func_text += "        setna({}, curr_ind)\n".format(
             out_names[i]
         )
         func_text += "      else:\n"
@@ -580,6 +684,7 @@ def overload_dropna(data, how, thresh, subset):
     _globals.update(
         {
             "isna": isna,
+            "setna": setna,
             "init_nested_counts": bodo.utils.indexing.init_nested_counts,
             "add_nested_counts": bodo.utils.indexing.add_nested_counts,
             "bodo": bodo,
@@ -616,13 +721,13 @@ def overload_get(arr, ind):
             out_arr = bodo.utils.utils.alloc_type(n, arr_typ, nested_counts)
             for j in range(n):
                 if bodo.libs.array_kernels.isna(arr, j):
-                    bodo.ir.join.setitem_arr_nan(out_arr, j)
+                    setna(out_arr, j)
                     continue
                 val = arr[j]
                 if not (len(val) > ind >= -len(val)) or bodo.libs.array_kernels.isna(
                     val, ind
                 ):
-                    bodo.ir.join.setitem_arr_nan(out_arr, j)
+                    setna(out_arr, j)
                     continue
 
                 out_arr[j] = val[ind]
@@ -976,14 +1081,14 @@ def overload_explode(arr, index_arr):
         curr_item = 0
         for i in range(n):
             if isna(arr, i):
-                bodo.ir.join.setitem_arr_nan(out_arr, curr_item)
+                setna(out_arr, curr_item)
                 out_index_arr[curr_item] = index_arr[i]
                 curr_item += 1
                 continue
             arr_item = arr[i]
             n_items = len(arr_item)
             if n_items == 0:
-                bodo.ir.join.setitem_arr_nan(out_arr, curr_item)
+                setna(out_arr, curr_item)
                 out_index_arr[curr_item] = index_arr[i]
                 curr_item += 1
                 continue
@@ -1100,7 +1205,7 @@ def overload_gen_na_array(n, arr):
             out_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(n, 0)
             for j in numba.parfors.parfor.internal_prange(n):
                 out_arr[j] = ""
-                bodo.ir.join.setitem_arr_nan(out_arr, j)
+                setna(out_arr, j)
             return out_arr
 
         return impl_str

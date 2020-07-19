@@ -192,7 +192,7 @@ def overload_str_method_len(S_str):
         out_arr = bodo.libs.int_arr_ext.alloc_int_array(n, np.int64)
         for i in numba.parfors.parfor.internal_prange(n):
             if bodo.libs.array_kernels.isna(arr, i):
-                bodo.ir.join.setitem_arr_nan(out_arr, i)
+                bodo.libs.array_kernels.setna(out_arr, i)
             else:
                 # TODO: optimize str len on string array (count unicode chars inplace)
                 out_arr[i] = len(arr[i])
@@ -285,7 +285,7 @@ def overload_str_method_get(S_str, i):
             for j in numba.parfors.parfor.internal_prange(n):
                 status, data_start, length = get_split_view_index(arr, j, i)
                 if status == 0:
-                    bodo.ir.join.setitem_arr_nan(out_arr, j)
+                    bodo.libs.array_kernels.setna(out_arr, j)
                     ptr = get_split_view_data_ptr(arr, 0)
                 else:
                     ptr = get_split_view_data_ptr(arr, data_start)
@@ -323,7 +323,7 @@ def overload_str_method_get(S_str, i):
         for j in numba.parfors.parfor.internal_prange(n):
             if na_map[j]:
                 out_arr[j] = ""
-                bodo.ir.join.setitem_arr_nan(out_arr, j)
+                bodo.libs.array_kernels.setna(out_arr, j)
             else:
                 _str = str_list[j]
                 out_arr[j] = _str
@@ -365,7 +365,7 @@ def overload_str_method_join(S_str, sep):
         for j in numba.parfors.parfor.internal_prange(n):
             if bodo.libs.array_kernels.isna(str_arr, j):
                 out_arr[j] = ""
-                bodo.ir.join.setitem_arr_nan(out_arr, j)
+                bodo.libs.array_kernels.setna(out_arr, j)
             else:
                 in_list_str = str_arr[j]
                 out_arr[j] = sep.join(in_list_str)
@@ -409,7 +409,7 @@ def overload_str_method_replace(S_str, pat, repl, n=-1, case=None, flags=0, rege
             for j in numba.parfors.parfor.internal_prange(l):
                 if bodo.libs.array_kernels.isna(arr, j):
                     out_arr[j] = ""
-                    bodo.ir.join.setitem_arr_nan(out_arr, j)
+                    bodo.libs.array_kernels.setna(out_arr, j)
                     continue
                 _str = str_list[j]
                 out_arr[j] = _str
@@ -442,7 +442,7 @@ def overload_str_method_replace(S_str, pat, repl, n=-1, case=None, flags=0, rege
         for j in numba.parfors.parfor.internal_prange(l):
             if bodo.libs.array_kernels.isna(arr, j):
                 out_arr[j] = ""
-                bodo.ir.join.setitem_arr_nan(out_arr, j)
+                bodo.libs.array_kernels.setna(out_arr, j)
                 continue
             _str = str_list[j]
             out_arr[j] = _str
@@ -474,7 +474,7 @@ def overload_str_method_contains(S_str, pat, case=True, flags=0, na=np.nan, rege
             out_arr = bodo.libs.bool_arr_ext.alloc_bool_array(l)
             for i in numba.parfors.parfor.internal_prange(l):
                 if bodo.libs.array_kernels.isna(arr, i):
-                    bodo.ir.join.setitem_arr_nan(out_arr, i)
+                    bodo.libs.array_kernels.setna(out_arr, i)
                 else:
                     out_arr[i] = bodo.libs.str_ext.contains_regex(e, arr[i])
             return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
@@ -496,7 +496,7 @@ def overload_str_method_contains(S_str, pat, case=True, flags=0, na=np.nan, rege
         out_arr = bodo.libs.bool_arr_ext.alloc_bool_array(l)
         for i in numba.parfors.parfor.internal_prange(l):
             if bodo.libs.array_kernels.isna(arr, i):
-                bodo.ir.join.setitem_arr_nan(out_arr, i)
+                bodo.libs.array_kernels.setna(out_arr, i)
             else:
                 out_arr[i] = pat in arr[i]
         return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
@@ -521,7 +521,7 @@ def overload_str_method_count(S_str, pat, flags=0):
         out_arr = bodo.libs.int_arr_ext.alloc_int_array(l, np.int64)
         for i in numba.parfors.parfor.internal_prange(l):
             if bodo.libs.array_kernels.isna(str_arr, i):
-                bodo.ir.join.setitem_arr_nan(out_arr, i)
+                bodo.libs.array_kernels.setna(out_arr, i)
             else:
                 out_arr[i] = str_findall_count(e, str_arr[i])
         return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
@@ -544,7 +544,7 @@ def overload_str_method_find(S_str, sub):
         out_arr = bodo.libs.int_arr_ext.alloc_int_array(l, np.int64)
         for i in numba.parfors.parfor.internal_prange(l):
             if bodo.libs.array_kernels.isna(str_arr, i):
-                bodo.ir.join.setitem_arr_nan(out_arr, i)
+                bodo.libs.array_kernels.setna(out_arr, i)
             else:
                 out_arr[i] = str_arr[i].find(sub)
         return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
@@ -570,7 +570,7 @@ def overload_str_method_rfind(S_str, sub, start=0, end=None):
         out_arr = bodo.libs.int_arr_ext.alloc_int_array(l, np.int64)
         for i in numba.parfors.parfor.internal_prange(l):
             if bodo.libs.array_kernels.isna(str_arr, i):
-                bodo.ir.join.setitem_arr_nan(out_arr, i)
+                bodo.libs.array_kernels.setna(out_arr, i)
             else:
                 out_arr[i] = str_arr[i].rfind(sub, start, end)
         return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
@@ -602,7 +602,7 @@ def overload_str_method_center(S_str, width, fillchar=" "):
         for j in numba.parfors.parfor.internal_prange(l):
             if bodo.libs.array_kernels.isna(str_arr, j):
                 out_arr[j] = ""
-                bodo.ir.join.setitem_arr_nan(out_arr, j)
+                bodo.libs.array_kernels.setna(out_arr, j)
             else:
                 out_arr[j] = str_arr[j].center(width, fillchar)
         return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
@@ -634,7 +634,7 @@ def overload_str_method_ljust(S_str, width, fillchar=" "):
         for j in numba.parfors.parfor.internal_prange(l):
             if bodo.libs.array_kernels.isna(str_arr, j):
                 out_arr[j] = ""
-                bodo.ir.join.setitem_arr_nan(out_arr, j)
+                bodo.libs.array_kernels.setna(out_arr, j)
             else:
                 out_arr[j] = str_arr[j].ljust(width, fillchar)
         return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
@@ -666,7 +666,7 @@ def overload_str_method_rjust(S_str, width, fillchar=" "):
         for j in numba.parfors.parfor.internal_prange(l):
             if bodo.libs.array_kernels.isna(str_arr, j):
                 out_arr[j] = ""
-                bodo.ir.join.setitem_arr_nan(out_arr, j)
+                bodo.libs.array_kernels.setna(out_arr, j)
             else:
                 out_arr[j] = str_arr[j].rjust(width, fillchar)
         return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
@@ -716,7 +716,7 @@ def overload_str_method_pad(S_str, width, side="left", fillchar=" "):
         for j in numba.parfors.parfor.internal_prange(l):
             if bodo.libs.array_kernels.isna(str_arr, j):
                 out_arr[j] = ""
-                bodo.ir.join.setitem_arr_nan(out_arr, j)
+                bodo.libs.array_kernels.setna(out_arr, j)
             else:
                 if side == "left":
                     out_arr[j] = str_arr[j].rjust(width, fillchar)
@@ -751,7 +751,7 @@ def overload_str_method_zfill(S_str, width):
         for j in numba.parfors.parfor.internal_prange(l):
             if bodo.libs.array_kernels.isna(str_arr, j):
                 out_arr[j] = ""
-                bodo.ir.join.setitem_arr_nan(out_arr, j)
+                bodo.libs.array_kernels.setna(out_arr, j)
             else:
                 out_arr[j] = str_arr[j].zfill(width)
         return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
@@ -786,7 +786,7 @@ def overload_str_method_slice(S_str, start=None, stop=None, step=None):
         for j in numba.parfors.parfor.internal_prange(l):
             if bodo.libs.array_kernels.isna(str_arr, j):
                 out_arr[j] = ""
-                bodo.ir.join.setitem_arr_nan(out_arr, j)
+                bodo.libs.array_kernels.setna(out_arr, j)
             else:
                 out_arr[j] = str_arr[j][start:stop:step]
         return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
@@ -809,7 +809,7 @@ def overload_str_method_startswith(S_str, pat, na=np.nan):
         out_arr = bodo.libs.bool_arr_ext.alloc_bool_array(l)
         for i in numba.parfors.parfor.internal_prange(l):
             if bodo.libs.array_kernels.isna(str_arr, i):
-                bodo.ir.join.setitem_arr_nan(out_arr, i)
+                bodo.libs.array_kernels.setna(out_arr, i)
             else:
                 out_arr[i] = str_arr[i].startswith(pat)
         return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
@@ -832,7 +832,7 @@ def overload_str_method_endswith(S_str, pat, na=np.nan):
         out_arr = bodo.libs.bool_arr_ext.alloc_bool_array(l)
         for i in numba.parfors.parfor.internal_prange(l):
             if bodo.libs.array_kernels.isna(str_arr, i):
-                bodo.ir.join.setitem_arr_nan(out_arr, i)
+                bodo.libs.array_kernels.setna(out_arr, i)
             else:
                 out_arr[i] = str_arr[i].endswith(pat)
         return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
@@ -901,7 +901,7 @@ def overload_str_method_extract(S_str, pat, flags=0, expand=True):
     func_text += "      if bodo.libs.array_kernels.isna(str_arr, j):\n"
     for i in range(n_cols):
         func_text += "          out_arr_{}[j] = ''\n".format(i)
-        func_text += "          bodo.ir.join.setitem_arr_nan(out_arr_{}, j)\n".format(i)
+        func_text += "          bodo.libs.array_kernels.setna(out_arr_{}, j)\n".format(i)
     func_text += "      else:\n"
     func_text += "          m = regex.search(str_arr[j])\n"
     func_text += "          if m:\n"
@@ -911,7 +911,7 @@ def overload_str_method_extract(S_str, pat, flags=0, expand=True):
     func_text += "          else:\n"
     for i in range(n_cols):
         func_text += "            out_arr_{}[j] = ''\n".format(i)
-        func_text += "            bodo.ir.join.setitem_arr_nan(out_arr_{}, j)\n".format(
+        func_text += "            bodo.libs.array_kernels.setna(out_arr_{}, j)\n".format(
             i
         )
 
@@ -1097,7 +1097,7 @@ def create_str2str_methods_overload(func_name):
         func_text += "    for j in numba.parfors.parfor.internal_prange(n):\n"
         func_text += "        if bodo.libs.array_kernels.isna(str_arr, j):\n"
         func_text += '            out_arr[j] = ""\n'
-        func_text += "            bodo.ir.join.setitem_arr_nan(out_arr, j)\n"
+        func_text += "            bodo.libs.array_kernels.setna(out_arr, j)\n"
         func_text += "        else:\n"
         func_text += "            out_arr[j] = str_arr[j].{}()\n".format(func_name)
         func_text += (
@@ -1133,7 +1133,7 @@ def create_str2bool_methods_overload(func_name):
         func_text += "    out_arr = bodo.libs.bool_arr_ext.alloc_bool_array(l)\n"
         func_text += "    for i in numba.parfors.parfor.internal_prange(l):\n"
         func_text += "        if bodo.libs.array_kernels.isna(str_arr, i):\n"
-        func_text += "            bodo.ir.join.setitem_arr_nan(out_arr, i)\n"
+        func_text += "            bodo.libs.array_kernels.setna(out_arr, i)\n"
         func_text += "        else:\n"
         func_text += "            out_arr[i] = str_arr[i].{}()\n".format(func_name)
         func_text += "    return bodo.hiframes.pd_series_ext.init_series(\n"

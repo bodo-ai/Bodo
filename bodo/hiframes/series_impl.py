@@ -1405,7 +1405,7 @@ def overload_series_fillna(
                         if bodo.libs.array_kernels.isna(
                             in_arr, j
                         ) and bodo.libs.array_kernels.isna(fill_arr, j):
-                            bodo.ir.join.setitem_arr_nan(out_arr, j)
+                            bodo.libs.array_kernels.setna(out_arr, j)
                     return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
                 return str_fillna_alloc_series_impl
@@ -1530,7 +1530,7 @@ def overload_series_replace(
         out_arr = np.empty(n, in_arr.dtype)
         for i in numba.parfors.parfor.internal_prange(n):
             if bodo.libs.array_kernels.isna(in_arr, i):
-                bodo.ir.join.setitem_arr_nan(out_arr, i)
+                bodo.libs.array_kernels.setna(out_arr, i)
                 continue
             s = in_arr[i]
             if s == to_replace:
@@ -1676,7 +1676,7 @@ def create_explicit_binary_op_overload(op):
                     left_nan = bodo.libs.array_kernels.isna(arr, i)
                     if left_nan:
                         if fill_value is None:
-                            bodo.ir.join.setitem_arr_nan(out_arr, i)
+                            bodo.libs.array_kernels.setna(out_arr, i)
                         else:
                             out_arr[i] = op(fill_value, other)
                     else:
@@ -1707,15 +1707,15 @@ def create_explicit_binary_op_overload(op):
                 left_nan = bodo.libs.array_kernels.isna(arr, i)
                 right_nan = bodo.libs.array_kernels.isna(other_arr, i)
                 if left_nan and right_nan:
-                    bodo.ir.join.setitem_arr_nan(out_arr, i)
+                    bodo.libs.array_kernels.setna(out_arr, i)
                 elif left_nan:
                     if fill_value is None:
-                        bodo.ir.join.setitem_arr_nan(out_arr, i)
+                        bodo.libs.array_kernels.setna(out_arr, i)
                     else:
                         out_arr[i] = op(fill_value, other_arr[i])
                 elif right_nan:
                     if fill_value is None:
-                        bodo.ir.join.setitem_arr_nan(out_arr, i)
+                        bodo.libs.array_kernels.setna(out_arr, i)
                     else:
                         out_arr[i] = op(arr[i], fill_value)
                 else:
@@ -1770,7 +1770,7 @@ def create_explicit_binary_reverse_op_overload(op):
                     left_nan = bodo.libs.array_kernels.isna(arr, i)
                     if left_nan:
                         if fill_value is None:
-                            bodo.ir.join.setitem_arr_nan(out_arr, i)
+                            bodo.libs.array_kernels.setna(out_arr, i)
                         else:
                             out_arr[i] = op(other, fill_value)
                     else:
@@ -1802,15 +1802,15 @@ def create_explicit_binary_reverse_op_overload(op):
                 right_nan = bodo.libs.array_kernels.isna(other_arr, i)
                 out_arr[i] = op(other_arr[i], arr[i])
                 if left_nan and right_nan:
-                    bodo.ir.join.setitem_arr_nan(out_arr, i)
+                    bodo.libs.array_kernels.setna(out_arr, i)
                 elif left_nan:
                     if fill_value is None:
-                        bodo.ir.join.setitem_arr_nan(out_arr, i)
+                        bodo.libs.array_kernels.setna(out_arr, i)
                     else:
                         out_arr[i] = op(other_arr[i], fill_value)
                 elif right_nan:
                     if fill_value is None:
-                        bodo.ir.join.setitem_arr_nan(out_arr, i)
+                        bodo.libs.array_kernels.setna(out_arr, i)
                     else:
                         out_arr[i] = op(fill_value, arr[i])
                 else:
@@ -2175,7 +2175,7 @@ def overload_to_numeric(arg_a, errors="raise", downcast=None):
             B = np.empty(n, np.float64)
             for i in numba.parfors.parfor.internal_prange(n):
                 if bodo.libs.array_kernels.isna(arg_a, i):
-                    bodo.ir.join.setitem_arr_nan(B, i)
+                    bodo.libs.array_kernels.setna(B, i)
                 else:
                     bodo.libs.str_arr_ext.str_arr_item_to_numeric(B, i, arg_a, i)
 
@@ -2192,12 +2192,12 @@ def overload_to_numeric(arg_a, errors="raise", downcast=None):
             B = bodo.libs.int_arr_ext.alloc_int_array(n, np.int64)
             for i in numba.parfors.parfor.internal_prange(n):
                 if bodo.libs.array_kernels.isna(arg_a, i):
-                    bodo.ir.join.setitem_arr_nan(B, i)
+                    bodo.libs.array_kernels.setna(B, i)
                 else:
                     err = bodo.libs.str_arr_ext.str_arr_item_to_numeric(B, i, arg_a, i)
                     # error code -1 means the input element is invalid
                     if err == -1:
-                        bodo.ir.join.setitem_arr_nan(B, i)
+                        bodo.libs.array_kernels.setna(B, i)
                     else:
                         bodo.libs.int_arr_ext.set_bit_to_arr(B._null_bitmap, i, 1)
 
@@ -2297,13 +2297,13 @@ def overload_np_where(condition, x, y):
     func_text += "      out_arr[j] = {}\n".format("x[j]" if is_x_arr else "x")
     if is_x_arr:
         func_text += (
-            "      if bodo.libs.array_kernels.isna(x, j): setitem_arr_nan(out_arr, j)\n"
+            "      if bodo.libs.array_kernels.isna(x, j): setna(out_arr, j)\n"
         )
     func_text += "    else:\n"
     func_text += "      out_arr[j] = {}\n".format("y[j]" if is_y_arr else "y")
     if is_y_arr:
         func_text += (
-            "      if bodo.libs.array_kernels.isna(y, j): setitem_arr_nan(out_arr, j)\n"
+            "      if bodo.libs.array_kernels.isna(y, j): setna(out_arr, j)\n"
         )
     func_text += "  return out_arr\n"
     loc_vars = {}
@@ -2314,7 +2314,7 @@ def overload_np_where(condition, x, y):
             "numba": numba,
             "get_utf8_size": get_utf8_size,
             "pre_alloc_string_array": pre_alloc_string_array,
-            "setitem_arr_nan": bodo.ir.join.setitem_arr_nan,
+            "setna": bodo.libs.array_kernels.setna,
             "np": np,
             "out_dtype": out_dtype,
         },
