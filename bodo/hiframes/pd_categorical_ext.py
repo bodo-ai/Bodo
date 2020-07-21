@@ -166,6 +166,9 @@ class CategoricalArray(types.ArrayCompatible):
     def as_array(self):
         return types.Array(types.undefined, 1, "C")
 
+    def copy(self):
+        return CategoricalArray(self.dtype)
+
 
 @typeof_impl.register(pd.Categorical)
 def _typeof_pd_cat(val, c):
@@ -355,3 +358,18 @@ def get_label_dict_from_categories(vals):
         curr_ind += 1
 
     return labels
+
+
+@overload(operator.getitem, no_unliteral=True)
+def categorical_array_getitem(arr, ind):
+    if not isinstance(arr, CategoricalArray):
+        return
+
+    if isinstance(types.unliteral(ind), types.Integer):
+        # TODO: support returning NA
+        def categorical_getitem_impl(arr, ind):  # pragma: no cover
+            code = arr.codes[ind]
+            assert code != -1, "returning NA value from Categorical array not supported"
+            return arr.dtype.categories[code]
+
+        return categorical_getitem_impl

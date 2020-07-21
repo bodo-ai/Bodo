@@ -55,3 +55,11 @@ def test_unbox_cat_arr(cat_arr_value, memory_leak_check):
         return arr
 
     check_func(impl2, (cat_arr_value,))
+
+
+def test_getitem_int(cat_arr_value, memory_leak_check):
+    def test_impl(A, i):
+        return A[i]
+
+    i = 1
+    assert bodo.jit(test_impl)(cat_arr_value, i) == test_impl(cat_arr_value, i)

@@ -339,6 +339,9 @@ class RandomAccessStringArrayType(types.ArrayCompatible):
     def dtype(self):
         return string_type
 
+    def copy(self):
+        RandomAccessStringArrayType()
+
 
 random_access_string_array = RandomAccessStringArrayType()
 
