@@ -204,18 +204,18 @@ array_info* list_string_array_to_info(NRT_MemInfo* meminfo) {
                           n_items, -1, -1, NULL, NULL, NULL, NULL, meminfo,
                           NULL, array);
 #else
-    array_item_arr_payload *payload = (array_item_arr_payload*)meminfo->data;
+    array_item_arr_payload* payload = (array_item_arr_payload*)meminfo->data;
     int64_t n_items = payload->n_arrays;
 
-    str_arr_payload *sub_payload = (str_arr_payload*)payload->data->data;
+    str_arr_payload* sub_payload = (str_arr_payload*)payload->data->data;
     int64_t n_strings = sub_payload->num_strings;
     int64_t n_chars = sub_payload->offsets[n_strings];
 
-    return new array_info(bodo_array_type::LIST_STRING, Bodo_CTypes::LIST_STRING,
-                          n_items, n_strings, n_chars, (char*)sub_payload->data,
-                          (char*)sub_payload->offsets, (char*)payload->offsets.data,
-                          (char*)payload->null_bitmap.data,
-                          meminfo, nullptr);
+    return new array_info(bodo_array_type::LIST_STRING,
+                          Bodo_CTypes::LIST_STRING, n_items, n_strings, n_chars,
+                          (char*)sub_payload->data, (char*)sub_payload->offsets,
+                          (char*)payload->offsets.data,
+                          (char*)payload->null_bitmap.data, meminfo, nullptr);
 #endif
 }
 
@@ -257,7 +257,8 @@ array_info* decimal_array_to_info(uint64_t n_items, char* data, int typ_enum,
                           meminfo_bitmask, NULL, precision, scale);
 }
 
-void info_to_list_string_array(array_info* info, NRT_MemInfo** array_item_meminfo) {
+void info_to_list_string_array(array_info* info,
+                               NRT_MemInfo** array_item_meminfo) {
 #ifdef USE_ARROW_FOR_LIST_STRING
     // TODO update for ArrayItemArray(StringArray)
 
@@ -266,20 +267,22 @@ void info_to_list_string_array(array_info* info, NRT_MemInfo** array_item_meminf
         return;
     }
     if (!info->array->type()->Equals(arrow::list(arrow::utf8()))) {
-      Bodo_PyErr_SetString(PyExc_RuntimeError,"info_to_list_string_array requires list string input");
-      return;
+        Bodo_PyErr_SetString(
+            PyExc_RuntimeError,
+            "info_to_list_string_array requires list string input");
+        return;
     }
     auto list_array = std::dynamic_pointer_cast<arrow::ListArray>(info->array);
-    auto str_array = std::dynamic_pointer_cast<arrow::StringArray>(list_array->values());
-    NRT_MemInfo* _meminfo = NRT_MemInfo_alloc_dtor_safe(
-         sizeof(list_str_arr_payload),
-         (NRT_dtor_function)dtor_list_string_array);
+    auto str_array =
+        std::dynamic_pointer_cast<arrow::StringArray>(list_array->values());
+    NRT_MemInfo* _meminfo =
+        NRT_MemInfo_alloc_dtor_safe(sizeof(list_str_arr_payload),
+                                    (NRT_dtor_function)dtor_list_string_array);
     list_str_arr_payload* payload = (list_str_arr_payload*)_meminfo->data;
-    allocate_list_string_array(&(payload->data), &(payload->data_offsets),
-                               &(payload->index_offsets),
-                               &(payload->null_bitmap),
-                               list_array->length(), str_array->length(),
-                               str_array->value_data()->size(), 0);
+    allocate_list_string_array(
+        &(payload->data), &(payload->data_offsets), &(payload->index_offsets),
+        &(payload->null_bitmap), list_array->length(), str_array->length(),
+        str_array->value_data()->size(), 0);
 
     memcpy(payload->data, str_array->value_data()->data(),
            str_array->value_data()->size());
@@ -288,13 +291,13 @@ void info_to_list_string_array(array_info* info, NRT_MemInfo** array_item_meminf
     memcpy(payload->index_offsets, list_array->value_offsets()->data(),
            sizeof(int32_t) * (list_array->length() + 1));
     if (list_array->null_bitmap_data())
-      memcpy(payload->null_bitmap, list_array->null_bitmap_data(),
-             (list_array->length() + 7) >> 3);
+        memcpy(payload->null_bitmap, list_array->null_bitmap_data(),
+               (list_array->length() + 7) >> 3);
 
     *n_items = list_array->length();
     *n_strings = str_array->length();
     *n_chars = str_array->value_data()->size();
-    
+
     *data = payload->data;
     *data_offsets = (char*)payload->data_offsets;
     *index_offsets = (char*)payload->index_offsets;
@@ -302,8 +305,9 @@ void info_to_list_string_array(array_info* info, NRT_MemInfo** array_item_meminf
     *meminfo = _meminfo;
 #else
     if (info->arr_type != bodo_array_type::LIST_STRING) {
-        Bodo_PyErr_SetString(PyExc_RuntimeError,
-                             "info_to_list_string_array requires list string input");
+        Bodo_PyErr_SetString(
+            PyExc_RuntimeError,
+            "info_to_list_string_array requires list string input");
         return;
     }
 
@@ -314,8 +318,8 @@ void info_to_list_string_array(array_info* info, NRT_MemInfo** array_item_meminf
 /**
  * Given an Arrow array, populate array of lengths and array of array_info*
  * with the data from the array and all of its descendant arrays.
- * This is called recursively, and will create one array_info for each individual
- * buffer (offsets, null_bitmaps, data).
+ * This is called recursively, and will create one array_info for each
+ * individual buffer (offsets, null_bitmaps, data).
  * @param array: The input Arrow array
  * @param lengths: The lengths array to fill
  * @param infos: The array_info* array to fill
@@ -327,8 +331,8 @@ void info_to_list_string_array(array_info* info, NRT_MemInfo** array_item_meminf
  * @param infos_pos: same as lengths_pos but tracks the position in infos array
  */
 void nested_array_to_c(std::shared_ptr<arrow::Array> array, int64_t* lengths,
-                       array_info** infos, int64_t &lengths_pos,
-                       int64_t &infos_pos) {
+                       array_info** infos, int64_t& lengths_pos,
+                       int64_t& infos_pos) {
 #ifdef DEBUG_ARROW_ARRAY
     std::cout << "Beginning of nested_array_to_c\n";
 #endif
@@ -393,8 +397,8 @@ void nested_array_to_c(std::shared_ptr<arrow::Array> array, int64_t* lengths,
             PyExc_RuntimeError,
             "nested_array_to_c: string array not supported yet");
         return;
-        //array_info* str_arr = alloc_string_array(...);
-        //infos[infos_pos++] = str_arr;
+        // array_info* str_arr = alloc_string_array(...);
+        // infos[infos_pos++] = str_arr;
     } else {
 #ifdef DEBUG_ARROW_ARRAY
         std::cout << "nested_array_to_c, PRIMITIVE case\n";
@@ -427,7 +431,8 @@ void nested_array_to_c(std::shared_ptr<arrow::Array> array, int64_t* lengths,
     }
 }
 
-void info_to_nested_array(array_info* info, int64_t* lengths, array_info** out_infos) {
+void info_to_nested_array(array_info* info, int64_t* lengths,
+                          array_info** out_infos) {
 #ifdef DEBUG_ARROW_ARRAY
     std::cout << "Beginning of info_to_nested_array\n";
 #endif
@@ -782,6 +787,83 @@ void struct_array_from_sequence(PyObject* struct_arr_obj, int n_fields,
 }
 
 /**
+ * @brief extract key/value data, offsets and null_bitmap values for map array
+ * from an array of dict of values.
+ *
+ * @param map_arr_obj Python Sequence object, intended to be an array of
+ * dicts.
+ * @param key_data data buffer for keys
+ * @param value_data data buffer for values
+ * @param offsets offsets for different map key/value pairs
+ * @param null_bitmap nulls buffer to be filled
+ * @param key_dtype data types of keys
+ * @param value_dtype data types of values
+ */
+void map_array_from_sequence(PyObject* map_arr_obj, char* key_data,
+                             char* value_data, uint32_t* offsets,
+                             uint8_t* null_bitmap,
+                             Bodo_CTypes::CTypeEnum key_dtype,
+                             Bodo_CTypes::CTypeEnum value_dtype) {
+#define CHECK(expr, msg)               \
+    if (!(expr)) {                     \
+        std::cerr << msg << std::endl; \
+        return;                        \
+    }
+
+    // TODO: currently only a few types like float64 and int64 supported
+    CHECK(PySequence_Check(map_arr_obj), "expecting a PySequence");
+    CHECK(key_data && value_data && offsets && null_bitmap,
+          "buffer arguments must not be NULL");
+
+    // get pd.NA object to check for new NA kind
+    PyObject* pd_mod = PyImport_ImportModule("pandas");
+    CHECK(pd_mod, "importing pandas module failed");
+    PyObject* C_NA = PyObject_GetAttrString(pd_mod, "NA");
+    CHECK(C_NA, "getting pd.NA failed");
+
+    Py_ssize_t n = PyObject_Size(map_arr_obj);
+
+    int64_t curr_item_ind = 0;
+    for (Py_ssize_t i = 0; i < n; ++i) {
+        offsets[i] = curr_item_ind;
+        PyObject* s = PySequence_GetItem(map_arr_obj, i);
+        CHECK(s, "getting map array element failed");
+        // Pandas stores NA as either None or nan
+        if (s == Py_None ||
+            (PyFloat_Check(s) && std::isnan(PyFloat_AsDouble(s))) ||
+            s == C_NA) {
+            // set null bit to 0
+            SetBitTo(null_bitmap, i, 0);
+        } else {
+            // set null bit to 1
+            null_bitmap[i / 8] |= kBitmask[i % 8];
+            CHECK(PyDict_Check(s), "invalid non-dict element in map array");
+            PyObject* key_list = PyDict_Keys(s);
+            PyObject* value_list = PyDict_Values(s);
+            Py_ssize_t n_items = PyObject_Size(key_list);
+            // set field data values
+            for (Py_ssize_t j = 0; j < n_items; j++) {
+                PyObject* v1 =
+                    PyList_GET_ITEM(key_list, j);  // returns borrowed reference
+                PyObject* v2 = PyList_GET_ITEM(
+                    value_list, j);  // returns borrowed reference
+                copy_item_to_buffer(key_data, curr_item_ind, v1,
+                                    (Bodo_CTypes::CTypeEnum)key_dtype);
+                copy_item_to_buffer(value_data, curr_item_ind, v2,
+                                    (Bodo_CTypes::CTypeEnum)value_dtype);
+                curr_item_ind++;
+            }
+        }
+        Py_DECREF(s);
+    }
+    offsets[n] = curr_item_ind;
+
+    Py_DECREF(pd_mod);
+    Py_DECREF(C_NA);
+#undef CHECK
+}
+
+/**
  * @brief call PyArray_GETITEM() of Numpy C-API
  *
  * @param arr array object
@@ -1071,6 +1153,9 @@ PyMODINIT_FUNC PyInit_array_ext(void) {
     PyObject_SetAttrString(
         m, "struct_array_from_sequence",
         PyLong_FromVoidPtr((void*)(&struct_array_from_sequence)));
+    PyObject_SetAttrString(
+        m, "map_array_from_sequence",
+        PyLong_FromVoidPtr((void*)(&map_array_from_sequence)));
     PyObject_SetAttrString(
         m, "np_array_from_struct_array",
         PyLong_FromVoidPtr((void*)(&np_array_from_struct_array)));

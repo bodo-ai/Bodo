@@ -34,6 +34,7 @@ from bodo.libs.str_ext import string_type
 from bodo.libs.str_arr_ext import string_array_type
 from bodo.libs.struct_arr_ext import StructArrayType, StructType
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
+from bodo.libs.map_arr_ext import MapArrayType
 from bodo.libs.int_arr_ext import typeof_pd_int_dtype
 from bodo.libs.decimal_arr_ext import Decimal128Type, DecimalArrayType
 from bodo.hiframes.pd_categorical_ext import PDCategoricalDtype
@@ -464,9 +465,10 @@ def _infer_ndarray_obj_dtype(val):
         return bodo.libs.bool_arr_ext.boolean_array
     elif isinstance(first_val, int):
         return bodo.libs.int_arr_ext.IntegerArrayType(numba.typeof(first_val))
-    # assuming object arrays with dictionary values are struct arrays, which means all
-    # keys are string and match across dictionaries, and all values with same key have
-    # same data type
+    # assuming object arrays with dictionary values string keys are struct arrays, which
+    # means all keys are string and match across dictionaries, and all values with same
+    # key have same data type
+    # TODO: distinguish between Struct and Map arrays properly
     elif isinstance(first_val, (dict, Dict)) and all(
         isinstance(k, str) for k in first_val.keys()
     ):
@@ -474,6 +476,11 @@ def _infer_ndarray_obj_dtype(val):
         # TODO: handle None value in first_val elements
         data_types = tuple(_get_struct_value_arr_type(v) for v in first_val.values())
         return StructArrayType(data_types, field_names)
+    elif isinstance(first_val, (dict, Dict)):
+        key_arr_type = numba.typeof(np.array(list(first_val.keys())))
+        value_arr_type = numba.typeof(np.array(list(first_val.values())))
+        # TODO: handle 2D ndarray case
+        return MapArrayType(key_arr_type, value_arr_type)
     if isinstance(
         first_val,
         (
