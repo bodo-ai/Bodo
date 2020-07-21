@@ -43,6 +43,7 @@ from bodo.utils.utils import is_call, is_array_typ
 from bodo.libs.str_arr_ext import string_array_type
 from bodo.libs.struct_arr_ext import StructArrayType, StructType
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
+from bodo.libs.map_arr_ext import MapArrayType
 
 
 ReplaceFunc = namedtuple(
@@ -722,6 +723,13 @@ def get_type_alloc_counts(t):
 
     if isinstance(t, ArrayItemArrayType) or t == string_array_type:
         return 1 + get_type_alloc_counts(t.dtype)
+
+    if isinstance(t, MapArrayType):
+        # 2 counts are needed for length and total number of key/value pairs, which are
+        # included since length of key/value arrays is counted twice
+        return get_type_alloc_counts(t.key_arr_type) + get_type_alloc_counts(
+            t.value_arr_type
+        )
 
     if bodo.utils.utils.is_array_typ(t, False) or t == bodo.string_type:
         return 1

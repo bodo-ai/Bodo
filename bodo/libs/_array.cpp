@@ -973,6 +973,22 @@ void* np_array_from_struct_array(int64_t num_structs, int n_fields, char** data,
 int list_check(PyArrayObject* obj) { return PyList_Check(obj); }
 
 /**
+ * @brief return key list of dict
+ *
+ * @param obj dict object
+ * @return list of keys object
+ */
+PyObject* dict_keys(PyObject* obj) { return PyDict_Keys(obj); }
+
+/**
+ * @brief return values list of dict
+ *
+ * @param obj dict object
+ * @return list of values object
+ */
+PyObject* dict_values(PyObject* obj) { return PyDict_Values(obj); }
+
+/**
  * @brief check if object is an NA value like None or np.nan
  *
  * @param s Python object to check
@@ -1166,6 +1182,10 @@ PyMODINIT_FUNC PyInit_array_ext(void) {
                            PyLong_FromVoidPtr((void*)(&array_getitem)));
     PyObject_SetAttrString(m, "list_check",
                            PyLong_FromVoidPtr((void*)(&list_check)));
+    PyObject_SetAttrString(m, "dict_keys",
+                           PyLong_FromVoidPtr((void*)(&dict_keys)));
+    PyObject_SetAttrString(m, "dict_values",
+                           PyLong_FromVoidPtr((void*)(&dict_values)));
     PyObject_SetAttrString(m, "seq_getitem",
                            PyLong_FromVoidPtr((void*)(&seq_getitem)));
     PyObject_SetAttrString(m, "is_na_value",
