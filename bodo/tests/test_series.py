@@ -215,6 +215,18 @@ def test_series_concat(series_val, memory_leak_check):
         check_func(f, (df1, df2), sort_output=True, reset_index=True)
 
 
+def test_series_concat_categorical(memory_leak_check):
+    """test of concatenation of categorical series.
+    TODO: refactor concat tests
+    """
+
+    def f(S1, S2):
+        return pd.concat([S1, S2])
+
+    S = pd.Series(["AA", "BB", "", "AA", "BB", "AA"], dtype="category")
+    check_func(f, (S, S), sort_output=True, reset_index=True)
+
+
 #   The code that we want to have.
 #    bodo_f = bodo.jit(f)
 #    pd.testing.assert_series_equal(
