@@ -74,3 +74,14 @@ def test_getitem_bool(cat_arr_value, memory_leak_check):
     bodo_out = bodo.jit(test_impl)(cat_arr_value, ind)
     py_out = test_impl(cat_arr_value, ind)
     pd.testing.assert_extension_array_equal(py_out, bodo_out)
+
+
+@pytest.mark.slow
+def test_getitem_slice(cat_arr_value, memory_leak_check):
+    def test_impl(A, ind):
+        return A[ind]
+
+    ind = slice(1, 4)
+    bodo_out = bodo.jit(test_impl)(cat_arr_value, ind)
+    py_out = test_impl(cat_arr_value, ind)
+    pd.testing.assert_extension_array_equal(py_out, bodo_out)

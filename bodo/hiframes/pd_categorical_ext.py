@@ -379,8 +379,8 @@ def categorical_array_getitem(arr, ind):
 
         return categorical_getitem_impl
 
-    # bool arr indexing
-    if is_list_like_index_type(ind) and ind.dtype == types.bool_:
+    # bool/int arr indexing
+    if is_list_like_index_type(ind) or isinstance(ind, types.SliceType):
 
         def impl_bool(arr, ind):  # pragma: no cover
             return init_categorical_array(arr.codes[ind], arr.dtype)
