@@ -1572,6 +1572,18 @@ def test_df_filter_rm_index():
         bodo.jit(impl)(df1, df2)
 
 
+def test_concat_df_columns():
+    """Test dataframe concatenation with axis=1 (add new columns)
+    """
+
+    def test_impl(df, df2):
+        return pd.concat([df, df2], axis=1)
+
+    df = pd.DataFrame({"A": [1, 2, 3, 9, 11]})
+    df2 = pd.DataFrame({"B": [4.0, 5.0, 4.1, 6.2, 2.1], "C": [7, 1, 3, -4, -1]})
+    check_func(test_impl, (df, df2))
+
+
 def test_concat_int_float():
     """Test dataframe concatenation when integer and float are put together
     """

@@ -2011,16 +2011,34 @@ class DataFramePass:
         return nodes + compile_func_single_block(_init_df, out_vars, lhs, self)
 
     def _run_call_concat_columns(self, objs, out_typ, lhs):
+        """concatenate series/dataframe columns with axis=1
+        """
         nodes = []
         out_vars = []
         for obj in objs:
-            nodes += compile_func_single_block(
-                lambda S: bodo.hiframes.pd_series_ext.get_series_data(S),
-                (obj,),
-                None,
-                self,
-            )
-            out_vars.append(nodes[-1].target)
+            obj_typ = self.typemap[obj.name]
+            if isinstance(obj_typ, DataFrameType):
+                for i in range(len(obj_typ.columns)):
+                    nodes += compile_func_single_block(
+                        lambda df: bodo.hiframes.pd_dataframe_ext.get_dataframe_data(
+                            df, _i
+                        ),
+                        (obj,),
+                        None,
+                        self,
+                        extra_globals={"_i": i},
+                    )
+                    out_vars.append(nodes[-1].target)
+            else:
+                assert isinstance(obj_typ, SeriesType)
+                # TODO: other types like arrays?
+                nodes += compile_func_single_block(
+                    lambda S: bodo.hiframes.pd_series_ext.get_series_data(S),
+                    (obj,),
+                    None,
+                    self,
+                )
+                out_vars.append(nodes[-1].target)
 
         _init_df = _gen_init_df(out_typ.columns)
 
