@@ -23,7 +23,11 @@ from numba.core import cgutils, types
 from numba.parfors.array_analysis import ArrayAnalysis
 from llvmlite import ir as lir
 import bodo
-from bodo.utils.typing import is_overload_constant_bool, is_overload_true
+from bodo.utils.typing import (
+    is_overload_constant_bool,
+    is_overload_true,
+    is_list_like_index_type,
+)
 
 
 # type for pd.CategoricalDtype objects in Pandas
@@ -365,6 +369,7 @@ def categorical_array_getitem(arr, ind):
     if not isinstance(arr, CategoricalArray):
         return
 
+    # scalar int
     if isinstance(types.unliteral(ind), types.Integer):
         # TODO: support returning NA
         def categorical_getitem_impl(arr, ind):  # pragma: no cover
@@ -373,3 +378,11 @@ def categorical_array_getitem(arr, ind):
             return arr.dtype.categories[code]
 
         return categorical_getitem_impl
+
+    # bool arr indexing
+    if is_list_like_index_type(ind) and ind.dtype == types.bool_:
+
+        def impl_bool(arr, ind):  # pragma: no cover
+            return init_categorical_array(arr.codes[ind], arr.dtype)
+
+        return impl_bool
