@@ -24,6 +24,7 @@ from numba.core.ir_utils import (
     build_definitions,
     find_build_sequence,
     find_const,
+    GuardException,
 )
 from numba.parfors.parfor import Parfor
 from numba.parfors.parfor import wrap_parfor_blocks, unwrap_parfor_blocks
@@ -1682,6 +1683,18 @@ class DistributedAnalysis:
         if self._is_dist_return_var(var):
             return
 
+        # in case of tuple return, individual variables may be flagged separately
+        try:
+            vdef = get_definition(self.func_ir, var)
+            require(is_expr(vdef, "cast"))
+            dcall = get_definition(self.func_ir, vdef.value)
+            require(is_expr(dcall, "build_tuple"))
+            for v in dcall.items:
+                self._analyze_return(v, array_dists)
+            return
+        except GuardException:
+            pass
+
         if is_distributable_typ(self.typemap[var.name]):
             info = (
                 "Distributed analysis replicated return variable "
@@ -1695,15 +1708,18 @@ class DistributedAnalysis:
     def _is_dist_return_var(self, var):
         try:
             vdef = get_definition(self.func_ir, var)
-            require(is_expr(vdef, "cast"))
-            dcall = get_definition(self.func_ir, vdef.value)
+            if is_expr(vdef, "cast"):
+                dcall = get_definition(self.func_ir, vdef.value)
+            else:
+                # tuple return variables don't have "cast" separately
+                dcall = vdef
             require(is_expr(dcall, "call"))
             require(
                 find_callname(self.func_ir, dcall)
                 == ("dist_return", "bodo.libs.distributed_api")
             )
             return True
-        except:
+        except GuardException:
             return False
 
     def _meet_array_dists(self, arr1, arr2, array_dists, top_dist=None):
