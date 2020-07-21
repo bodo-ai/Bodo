@@ -355,7 +355,7 @@ class DistributedAnalysis:
             self._analyze_getattr(lhs, rhs, array_dists)
         elif is_expr(rhs, "call"):
             self._analyze_call(
-                lhs, rhs, rhs.func.name, rhs.args, dict(rhs.kws), array_dists
+                lhs, rhs, rhs.func.name, rhs.args, dict(rhs.kws), equiv_set, array_dists
             )
         # handle for A in arr_container: ...
         # A = pair_first(iternext(getiter(arr_container)))
@@ -527,7 +527,7 @@ class DistributedAnalysis:
             self.in_parallel_parfor = -1
         return
 
-    def _analyze_call(self, lhs, rhs, func_var, args, kws, array_dists):
+    def _analyze_call(self, lhs, rhs, func_var, args, kws, equiv_set, array_dists):
         """analyze array distributions in function calls
         """
         func_name = ""
@@ -556,6 +556,7 @@ class DistributedAnalysis:
         if is_alloc_callname(func_name, func_mod):
             if lhs not in array_dists:
                 array_dists[lhs] = Distribution.OneD
+            self._alloc_call_size_equiv(lhs, rhs.args[0], equiv_set, array_dists)
             size_def = guard(get_definition, self.func_ir, rhs.args[0])
             # local 1D_var if local_alloc_size() is used
             if is_expr(size_def, "call") and guard(
@@ -1164,6 +1165,35 @@ class DistributedAnalysis:
         # set REP if not found
         self._analyze_call_set_REP(lhs, args, array_dists, "np." + func_name)
 
+    def _alloc_call_size_equiv(self, lhs, size_var, equiv_set, array_dists):
+        """match distribution of output variable 'lhs' of allocation with distributions
+        of equivalent arrays (as found by allocation size 'size_var').
+        See test_1D_Var_alloc4.
+        """
+        size_def = guard(get_definition, self.func_ir, size_var)
+        # find trivial calc_nitems(0, n, 1) call and use n instead
+        if (
+            guard(find_callname, self.func_ir, size_def)
+            == ("calc_nitems", "bodo.libs.array_kernels")
+            and guard(find_const, self.func_ir, size_def.args[0]) == 0
+            and guard(find_const, self.func_ir, size_def.args[2]) == 1
+        ):  # pragma: no cover
+            # TODO: unittest for this case
+            size_var = size_def.args[1]
+            size_def = guard(get_definition, self.func_ir, size_var)
+
+        # all arrays with equivalent size should have same distribution
+        var_set = equiv_set.get_equiv_set(size_var)
+        if not var_set:
+            return
+
+        for v in var_set:
+            # array analysis adds "#0" to array name to designate 1st dimension
+            if isinstance(v, str) and "#0" in v:
+                arr_name = v.split("#")[0]
+                if is_distributable_typ(self.typemap[arr_name]):
+                    self._meet_array_dists(lhs, arr_name, array_dists)
+
     def _analyze_call_array(self, lhs, arr, func_name, args, array_dists):
         """analyze distributions of array functions (arr.func_name)
         """
@@ -1258,6 +1288,7 @@ class DistributedAnalysis:
                     "distributed return of array {} not valid"
                     " since it is replicated".format(arr_name)
                 )
+            array_dists[lhs] = array_dists[arr_name]
             return
 
         if func_name == "threaded_return":
