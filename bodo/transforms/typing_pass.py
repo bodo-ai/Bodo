@@ -397,7 +397,7 @@ class TypingTransforms:
 
         # transform df.assign() here since (**kwargs) is not supported in overload
         if func_name == "assign":
-            return nodes + self._handle_df_assign(assign.target, rhs, df_var)
+            return nodes + self._handle_df_assign(assign.target, rhs, df_var, assign)
 
         # handle calls that have inplace=True that changes the schema, by replacing the
         # dataframe variable instead of inplace change if possible
@@ -424,12 +424,15 @@ class TypingTransforms:
 
         return nodes + [assign]
 
-    def _handle_df_assign(self, lhs, rhs, df_var):
+    def _handle_df_assign(self, lhs, rhs, df_var, assign):
         """replace df.assign() with its implementation to avoid overload errors with
         (**kwargs)
         """
         kws = dict(rhs.kws)
-        df_type = self.typemap[df_var.name]
+        df_type = self.typemap.get(df_var.name, None)
+        # cannot transform yet if dataframe type is not available yet
+        if df_type is None:
+            return [assign]
         additional_columns = tuple(kws.keys())
         previous_columns = set(df_type.columns)
         # columns below are preserved
