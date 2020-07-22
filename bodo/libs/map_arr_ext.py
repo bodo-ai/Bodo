@@ -73,6 +73,7 @@ from bodo.libs import array_ext
 
 ll.add_symbol("count_total_elems_list_array", array_ext.count_total_elems_list_array)
 ll.add_symbol("map_array_from_sequence", array_ext.map_array_from_sequence)
+ll.add_symbol("np_array_from_map_array", array_ext.np_array_from_map_array)
 
 
 class MapArrayType(types.ArrayCompatible):
@@ -312,3 +313,109 @@ def _unbox_map_array_generic(
 
     c.pyapi.decref(pd_mod_obj)
     c.pyapi.decref(C_NA)
+
+
+@box(MapArrayType)
+def box_map_arr(typ, val, c):
+    """box packed native representation of map array into python objects
+    """
+    map_array = c.context.make_helper(c.builder, typ, val)
+    data_arr = map_array.data
+
+    # allocate data array
+    data_arr_type = _get_map_arr_data_type(typ)
+    data_payload = _get_array_item_arr_payload(
+        c.context, c.builder, data_arr_type, data_arr
+    )
+
+    # get null and offset array pointers to pass to boxing
+    null_bitmap_ptr = c.context.make_array(types.Array(types.uint8, 1, "C"))(
+        c.context, c.builder, data_payload.null_bitmap
+    ).data
+    offsets_ptr = c.context.make_array(types.Array(offset_typ, 1, "C"))(
+        c.context, c.builder, data_payload.offsets
+    ).data
+
+    # get key/value arrays
+    struct_arr_payload = _get_struct_arr_payload(
+        c.context, c.builder, data_arr_type.dtype, data_payload.data
+    )
+    key_arr = c.builder.extract_value(struct_arr_payload.data, 0)
+    value_arr = c.builder.extract_value(struct_arr_payload.data, 1)
+
+    # use C boxing when possible to avoid compilation and runtime overheads
+    # otherwise, use generic llvm/Numba boxing
+    if all(
+        isinstance(t, types.Array)
+        and t.dtype in (types.int64, types.float64, types.bool_, datetime_date_type)
+        for t in (typ.key_arr_type, typ.value_arr_type)
+    ):
+
+        key_arr_ptr = c.context.make_array(data_arr_type.dtype.data[0])(
+            c.context, c.builder, key_arr
+        ).data
+        value_arr_ptr = c.context.make_array(data_arr_type.dtype.data[1])(
+            c.context, c.builder, value_arr
+        ).data
+
+        fnty = lir.FunctionType(
+            c.context.get_argument_type(types.pyobject),
+            [
+                lir.IntType(64),  # num_maps
+                lir.IntType(8).as_pointer(),  # key data
+                lir.IntType(8).as_pointer(),  # value data
+                lir.IntType(32).as_pointer(),  # offsets
+                lir.IntType(8).as_pointer(),  # null_bitmap
+                lir.IntType(32),  # key ctype
+                lir.IntType(32),  # value ctype
+            ],
+        )
+        fn_get = c.builder.module.get_or_insert_function(
+            fnty, name="np_array_from_map_array"
+        )
+
+        key_ctype = bodo.utils.utils.numba_to_c_type(typ.key_arr_type.dtype)
+        value_ctype = bodo.utils.utils.numba_to_c_type(typ.value_arr_type.dtype)
+        arr = c.builder.call(
+            fn_get,
+            [
+                data_payload.n_arrays,
+                c.builder.bitcast(key_arr_ptr, lir.IntType(8).as_pointer()),
+                c.builder.bitcast(value_arr_ptr, lir.IntType(8).as_pointer()),
+                offsets_ptr,
+                null_bitmap_ptr,
+                lir.Constant(lir.IntType(32), key_ctype),
+                lir.Constant(lir.IntType(32), value_ctype),
+            ],
+        )
+
+    else:
+        pass
+
+    c.context.nrt.decref(c.builder, typ, val)
+    return arr
+
+
+@intrinsic
+def init_map_arr(typingctx, data_typ=None):
+    """create a new map array from input data list(struct) array data
+    """
+    assert isinstance(data_typ, ArrayItemArrayType) and isinstance(
+        data_typ.dtype, StructArrayType
+    )
+    map_arr_type = MapArrayType(data_typ.dtype.data[0], data_typ.dtype.data[1])
+
+    def codegen(context, builder, sig, args):
+        (data_arr,) = args
+        map_array = context.make_helper(builder, map_arr_type)
+        map_array.data = data_arr
+        context.nrt.incref(builder, data_typ, data_arr)
+        return map_array._getvalue()
+
+    return map_arr_type(data_typ), codegen
+
+
+@overload(len, no_unliteral=True)
+def overload_map_arr_len(A):
+    if isinstance(A, MapArrayType):
+        return lambda A: len(A._data)  # pragma: no cover

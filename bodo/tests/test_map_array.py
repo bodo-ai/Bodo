@@ -54,4 +54,4 @@ def test_unbox(map_arr_value, memory_leak_check):
         return arr_arg
 
     check_func(impl, (map_arr_value,))
-    # check_func(impl2, (map_arr_value,))
+    check_func(impl2, (map_arr_value,))

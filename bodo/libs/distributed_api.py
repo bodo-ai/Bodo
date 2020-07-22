@@ -39,6 +39,7 @@ from bodo.libs.array_item_arr_ext import (
     pre_alloc_array_item_array,
 )
 from bodo.libs.struct_arr_ext import StructArrayType
+from bodo.libs.map_arr_ext import MapArrayType
 from bodo.hiframes.pd_categorical_ext import CategoricalArray
 from bodo.hiframes.datetime_date_ext import datetime_date_array_type
 from bodo.utils.utils import (
@@ -807,6 +808,14 @@ def gatherv(data, allgather=False, warn_if_rep=True):
             )
 
         return impl_struct_arr
+
+    if isinstance(data, MapArrayType):
+        # gather the data array
+        def impl_map_arr(data, allgather=False, warn_if_rep=True):  # pragma: no cover
+            all_data = bodo.gatherv(data._data, allgather, warn_if_rep)
+            return bodo.libs.map_arr_ext.init_map_arr(all_data)
+
+        return impl_map_arr
 
     # Tuple of data containers
     if isinstance(data, types.BaseTuple):

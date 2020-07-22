@@ -724,6 +724,79 @@ void* np_array_from_array_item_array(int64_t num_lists, const char* buffer,
 }
 
 /**
+ * @brief create a numpy array of dict objects from a MapArrayType
+ *
+ * @param num_maps number of map in input array
+ * @param key_data data buffer for keys
+ * @param value_data data buffer for values
+ * @param offsets offsets for different map key/value pairs
+ * @param null_bitmap nulls buffer
+ * @param key_dtype data types of keys
+ * @param value_dtype data types of values
+ * @return numpy array of dict objects
+ */
+void* np_array_from_map_array(int64_t num_maps, const char* key_data,
+                              const char* value_data, const uint32_t* offsets,
+                              const uint8_t* null_bitmap,
+                              Bodo_CTypes::CTypeEnum key_dtype,
+                              Bodo_CTypes::CTypeEnum value_dtype) {
+#define CHECK(expr, msg)               \
+    if (!(expr)) {                     \
+        std::cerr << msg << std::endl; \
+        return NULL;                   \
+    }
+
+    // allocate array and get nan object
+    npy_intp dims[] = {num_maps};
+    PyObject* ret = PyArray_SimpleNew(1, dims, NPY_OBJECT);
+    CHECK(ret, "allocating numpy array failed");
+    int err;
+    PyObject* np_mod = PyImport_ImportModule("numpy");
+    CHECK(np_mod, "importing numpy module failed");
+    PyObject* nan_obj = PyObject_GetAttrString(np_mod, "nan");
+    CHECK(nan_obj, "getting np.nan failed");
+
+    size_t curr_item = 0;
+    // for each map
+    for (int64_t i = 0; i < num_maps; ++i) {
+        // set nan if item is NA
+        auto p = PyArray_GETPTR1((PyArrayObject*)ret, i);
+        CHECK(p, "getting offset in numpy array failed");
+        if (is_na(null_bitmap, i)) {
+            err = PyArray_SETITEM((PyArrayObject*)ret, (char*)p, nan_obj);
+            CHECK(err == 0, "setting item in numpy array failed");
+            continue;
+        }
+
+        // create dict and fill key/value items
+        Py_ssize_t n_items = (Py_ssize_t)(offsets[i + 1] - offsets[i]);
+        PyObject* dict = PyDict_New();
+
+        for (Py_ssize_t j = 0; j < n_items; j++) {
+            PyObject* key_obj =
+                value_to_pyobject(key_data, curr_item, key_dtype);
+            CHECK(key_obj, "creating Python int/float object failed");
+            PyObject* value_obj =
+                value_to_pyobject(value_data, curr_item, value_dtype);
+            CHECK(value_obj, "creating Python int/float object failed");
+            PyDict_SetItem(dict, key_obj, value_obj);
+            Py_DECREF(key_obj);
+            Py_DECREF(value_obj);
+            curr_item++;
+        }
+
+        err = PyArray_SETITEM((PyArrayObject*)ret, (char*)p, dict);
+        CHECK(err == 0, "setting item in numpy array failed");
+        Py_DECREF(dict);
+    }
+
+    Py_DECREF(np_mod);
+    Py_DECREF(nan_obj);
+    return ret;
+#undef CHECK
+}
+
+/**
  * @brief extract data and null_bitmap values for struct array
  * from an array of dict of values. The dicts inside array should have
  * the same key names.
@@ -1178,6 +1251,9 @@ PyMODINIT_FUNC PyInit_array_ext(void) {
     PyObject_SetAttrString(
         m, "np_array_from_array_item_array",
         PyLong_FromVoidPtr((void*)(&np_array_from_array_item_array)));
+    PyObject_SetAttrString(
+        m, "np_array_from_map_array",
+        PyLong_FromVoidPtr((void*)(&np_array_from_map_array)));
     PyObject_SetAttrString(m, "array_getitem",
                            PyLong_FromVoidPtr((void*)(&array_getitem)));
     PyObject_SetAttrString(m, "list_check",
