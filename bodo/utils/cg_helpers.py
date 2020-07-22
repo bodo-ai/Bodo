@@ -170,7 +170,7 @@ def to_arr_obj_if_list_obj(c, context, builder, val, typ):
         dtype_str = "object_"
         # float lists become float arrays, but others are object arrays
         # (see _value_to_array in boxing.py)
-        if isinstance(typ.dtype, types.Float):
+        if isinstance(typ, types.Array) or isinstance(typ.dtype, types.Float):
             dtype_str = str(typ.dtype)
         dtype_obj = c.pyapi.object_getattr_string(np_mod_obj, dtype_str)
 
