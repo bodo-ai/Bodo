@@ -45,6 +45,7 @@ import bodo
 from bodo.libs.str_ext import string_type
 from bodo.libs.struct_arr_ext import StructType, StructArrayType
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
+from bodo.libs.map_arr_ext import MapArrayType
 from bodo.libs.str_arr_ext import string_array_type
 from bodo.libs.int_arr_ext import IntegerArrayType, IntDtype
 from bodo.libs.bool_arr_ext import boolean_array
@@ -187,6 +188,12 @@ def _get_series_array_type(dtype):
     if isinstance(dtype, StructType):
         return StructArrayType(
             tuple(_get_series_array_type(t) for t in dtype.data), dtype.names
+        )
+
+    if isinstance(dtype, types.DictType):
+        return MapArrayType(
+            _get_series_array_type(dtype.key_type),
+            _get_series_array_type(dtype.value_type),
         )
 
     # TODO: other types?

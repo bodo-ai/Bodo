@@ -548,3 +548,24 @@ def overload_map_arr_shape(A):
 @overload_attribute(MapArrayType, "ndim")
 def overload_map_arr_ndim(A):
     return lambda A: 1  # pragma: no cover
+
+
+@overload(operator.getitem, no_unliteral=True)
+def map_arr_getitem(arr, ind):
+    if not isinstance(arr, MapArrayType):
+        return
+
+    if isinstance(ind, types.Integer):
+        # TODO: warning if value is NA?
+        def map_arr_getitem_impl(arr, ind):  # pragma: no cover
+            out = dict()
+            offsets = bodo.libs.array_item_arr_ext.get_offsets(arr._data)
+            struct_arr = bodo.libs.array_item_arr_ext.get_data(arr._data)
+            key_data, value_data = bodo.libs.struct_arr_ext.get_data(struct_arr)
+            start_offset = offsets[ind]
+            end_offset = offsets[ind + 1]
+            for i in range(start_offset, end_offset):
+                out[key_data[i]] = value_data[i]
+            return out
+
+        return map_arr_getitem_impl

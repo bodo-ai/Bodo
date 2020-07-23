@@ -1578,6 +1578,16 @@ def test_series_map_dict(memory_leak_check):
     check_func(impl2, (S,))
 
 
+def test_series_map_dict_input(memory_leak_check):
+    """test dict input in map"""
+
+    def impl(S):
+        return S.map(lambda a: a[1])
+
+    S = pd.Series([{1: 1.4, 2: 3.1}, {7: -1.2, 1: 2.2}])
+    check_func(impl, (S,))
+
+
 def test_series_map_date(memory_leak_check):
     """make sure datetime.date output can be handled in map() properly
     """
