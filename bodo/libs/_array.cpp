@@ -1062,6 +1062,19 @@ PyObject* dict_keys(PyObject* obj) { return PyDict_Keys(obj); }
 PyObject* dict_values(PyObject* obj) { return PyDict_Values(obj); }
 
 /**
+ * @brief call PyDict_MergeFromSeq2() to fill a dict
+ *
+ * @param dict_obj dict object
+ * @param seq2 iterator of key/value pairs
+ */
+void dict_merge_from_seq2(PyObject* dict_obj, PyObject* seq2) {
+    int err = PyDict_MergeFromSeq2(dict_obj, seq2, 0);
+    if (err != 0) {
+        std::cerr << "PyDict_MergeFromSeq2 failed" << std::endl;
+    }
+}
+
+/**
  * @brief check if object is an NA value like None or np.nan
  *
  * @param s Python object to check
@@ -1262,6 +1275,8 @@ PyMODINIT_FUNC PyInit_array_ext(void) {
                            PyLong_FromVoidPtr((void*)(&dict_keys)));
     PyObject_SetAttrString(m, "dict_values",
                            PyLong_FromVoidPtr((void*)(&dict_values)));
+    PyObject_SetAttrString(m, "dict_merge_from_seq2",
+                           PyLong_FromVoidPtr((void*)(&dict_merge_from_seq2)));
     PyObject_SetAttrString(m, "seq_getitem",
                            PyLong_FromVoidPtr((void*)(&seq_getitem)));
     PyObject_SetAttrString(m, "is_na_value",

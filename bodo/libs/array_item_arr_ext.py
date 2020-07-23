@@ -460,7 +460,6 @@ def _box_array_item_array_generic(
                 lir.IntType(64),
             )
             # create array obj
-            n_items_obj = c.pyapi.long_from_longlong(n_items)
             item_ind = builder.load(curr_item_ind)
             _is_error, arr_slice = c.pyapi.call_jit_code(
                 lambda data_arr, item_ind, n_items: data_arr[
@@ -474,7 +473,6 @@ def _box_array_item_array_generic(
             )
             arr_obj = c.pyapi.from_native_value(typ.dtype, arr_slice, c.env_manager)
             pyarray_setitem(builder, context, out_arr, array_ind, arr_obj)
-            c.pyapi.decref(n_items_obj)
             c.pyapi.decref(arr_obj)
 
     c.pyapi.decref(np_class_obj)

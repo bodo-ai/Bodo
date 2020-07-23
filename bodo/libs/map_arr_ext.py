@@ -62,6 +62,7 @@ from bodo.utils.cg_helpers import (
     to_arr_obj_if_list_obj,
     dict_keys,
     dict_values,
+    dict_merge_from_seq2,
 )
 from llvmlite import ir as lir
 import llvmlite.binding as ll
@@ -390,10 +391,128 @@ def box_map_arr(typ, val, c):
         )
 
     else:
-        pass
+        arr = _box_map_array_generic(
+            typ,
+            c,
+            data_payload.n_arrays,
+            key_arr,
+            value_arr,
+            offsets_ptr,
+            null_bitmap_ptr,
+        )
 
     c.context.nrt.decref(c.builder, typ, val)
     return arr
+
+
+def _box_map_array_generic(
+    typ, c, n_maps, key_arr, value_arr, offsets_ptr, null_bitmap_ptr
+):
+    """box map array using generic Numba boxing to handle all item types that can be
+    boxed.
+    """
+    # TODO: refactor with _box_array_item_array_generic
+    context = c.context
+    builder = c.builder
+    # TODO: error checking for pyapi calls
+
+    # pseudocode for code generation:
+    # out_arr = np.ndarray(n, np.object_)
+    # curr_item_ind = 0
+    # for i in range(n):
+    #   if isna(A[i]):
+    #     out_arr[i] = np.nan
+    #   else:
+    #     n_items = offsets[i + 1] - offsets[i]
+    #     dict_obj = dict_new(n_items)
+    #     for j in range(n_items):
+    #        key = A.data[0][curr_item_ind]
+    #        value = A.data[1][curr_item_ind]
+    #        dict_obj[j][key] = value
+    #        curr_item_ind += 1
+    #     A[i] = dict_obj
+
+    # create array of objects with num_items shape
+    mod_name = context.insert_const_string(builder.module, "numpy")
+    np_class_obj = c.pyapi.import_module_noblock(mod_name)
+    dtype_obj = c.pyapi.object_getattr_string(np_class_obj, "object_")
+    num_items_obj = c.pyapi.long_from_longlong(n_maps)
+    out_arr = c.pyapi.call_method(np_class_obj, "ndarray", (num_items_obj, dtype_obj))
+    # get np.nan to set NA
+    nan_obj = c.pyapi.object_getattr_string(np_class_obj, "nan")
+
+    zip_func_obj = c.pyapi.unserialize(c.pyapi.serialize_object(zip))
+
+    # curr_item_ind = 0
+    curr_item_ind = cgutils.alloca_once_value(builder, lir.Constant(lir.IntType(64), 0))
+    # for each map
+    with cgutils.for_range(builder, n_maps) as loop:
+        map_ind = loop.index
+        # A[i] = np.nan
+        pyarray_setitem(builder, context, out_arr, map_ind, nan_obj)
+        # check for NA
+        na_bit = get_bitmap_bit(builder, null_bitmap_ptr, map_ind)
+        not_na_cond = builder.icmp_unsigned(
+            "!=", na_bit, lir.Constant(lir.IntType(8), 0)
+        )
+        with builder.if_then(not_na_cond):
+            # n_items = offsets[i + 1] - offsets[i]
+            n_items = builder.sext(
+                builder.sub(
+                    builder.load(
+                        builder.gep(
+                            offsets_ptr,
+                            [builder.add(map_ind, lir.Constant(map_ind.type, 1))],
+                        )
+                    ),
+                    builder.load(builder.gep(offsets_ptr, [map_ind])),
+                ),
+                lir.IntType(64),
+            )
+            # create dict obj
+            item_ind = builder.load(curr_item_ind)
+            dict_obj = c.pyapi.dict_new()
+            # box key and value arrays
+            f = lambda data_arr, item_ind, n_items: data_arr[
+                item_ind : item_ind + n_items
+            ]
+            _is_error, key_arr_slice = c.pyapi.call_jit_code(
+                f,
+                (typ.key_arr_type)(typ.key_arr_type, types.int64, types.int64),
+                [key_arr, item_ind, n_items],
+            )
+            _is_error, value_arr_slice = c.pyapi.call_jit_code(
+                f,
+                (typ.value_arr_type)(typ.value_arr_type, types.int64, types.int64),
+                [value_arr, item_ind, n_items],
+            )
+            key_arr_obj = c.pyapi.from_native_value(
+                typ.key_arr_type, key_arr_slice, c.env_manager
+            )
+            value_arr_obj = c.pyapi.from_native_value(
+                typ.value_arr_type, value_arr_slice, c.env_manager
+            )
+
+            # get zip(keys, values) iterator
+            key_value_iter_obj = c.pyapi.call_function_objargs(
+                zip_func_obj, (key_arr_obj, value_arr_obj)
+            )
+            # dict.update(zip_arr_iter)
+            dict_merge_from_seq2(builder, context, dict_obj, key_value_iter_obj)
+
+            builder.store(builder.add(item_ind, n_items), curr_item_ind)
+            pyarray_setitem(builder, context, out_arr, map_ind, dict_obj)
+            c.pyapi.decref(key_value_iter_obj)
+            c.pyapi.decref(key_arr_obj)
+            c.pyapi.decref(value_arr_obj)
+            c.pyapi.decref(dict_obj)
+
+    c.pyapi.decref(zip_func_obj)
+    c.pyapi.decref(np_class_obj)
+    c.pyapi.decref(dtype_obj)
+    c.pyapi.decref(num_items_obj)
+    c.pyapi.decref(nan_obj)
+    return out_arr
 
 
 @intrinsic

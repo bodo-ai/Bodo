@@ -14,6 +14,7 @@ ll.add_symbol("seq_getitem", array_ext.seq_getitem)
 ll.add_symbol("list_check", array_ext.list_check)
 ll.add_symbol("dict_keys", array_ext.dict_keys)
 ll.add_symbol("dict_values", array_ext.dict_values)
+ll.add_symbol("dict_merge_from_seq2", array_ext.dict_merge_from_seq2)
 ll.add_symbol("is_na_value", array_ext.is_na_value)
 
 
@@ -148,6 +149,15 @@ def dict_values(builder, context, obj):
     return builder.call(fn, [obj])
 
 
+def dict_merge_from_seq2(builder, context, dict_obj, seq2_obj):
+    """call PyDict_MergeFromSeq2()
+    """
+    pyobj = context.get_argument_type(types.pyobject)
+    fnty = lir.FunctionType(lir.VoidType(), [pyobj, pyobj])
+    fn = builder.module.get_or_insert_function(fnty, name="dict_merge_from_seq2")
+    builder.call(fn, [dict_obj, seq2_obj])
+
+
 def to_arr_obj_if_list_obj(c, context, builder, val, typ):
     """convert object 'val' to array if it is a list to enable proper unboxing
     """
@@ -166,7 +176,6 @@ def to_arr_obj_if_list_obj(c, context, builder, val, typ):
         # get np.array to convert list items to array
         mod_name = context.insert_const_string(builder.module, "numpy")
         np_mod_obj = c.pyapi.import_module_noblock(mod_name)
-        np_array_method = c.pyapi.object_getattr_string(np_mod_obj, "asarray")
         dtype_str = "object_"
         # float lists become float arrays, but others are object arrays
         # (see _value_to_array in boxing.py)
@@ -175,15 +184,12 @@ def to_arr_obj_if_list_obj(c, context, builder, val, typ):
         dtype_obj = c.pyapi.object_getattr_string(np_mod_obj, dtype_str)
 
         old_obj = builder.load(val_ptr)
-        new_obj = c.pyapi.call(
-            np_array_method, c.pyapi.tuple_pack([old_obj, dtype_obj])
-        )
+        new_obj = c.pyapi.call_method(np_mod_obj, "asarray", (old_obj, dtype_obj))
         # TODO: this decref causes crashes for some reason in test_array_item_array.py
         # needs to be investigated to avoid object leaks
         # c.pyapi.decref(old_obj)
         builder.store(new_obj, val_ptr)
         c.pyapi.decref(np_mod_obj)
-        c.pyapi.decref(np_array_method)
         c.pyapi.decref(dtype_obj)
 
     val = builder.load(val_ptr)
@@ -379,6 +385,8 @@ def get_array_elem_counts(c, builder, context, arr_obj, typ):
                         counts_val, builder.add(total_count, curr_count), i
                     )
                 builder.store(counts_val, counts)
+                c.pyapi.decref(key_list)
+                c.pyapi.decref(value_list)
         c.pyapi.decref(arr_item_obj)
 
     c.pyapi.decref(pd_mod_obj)
