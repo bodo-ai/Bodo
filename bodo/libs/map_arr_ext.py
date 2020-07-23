@@ -538,3 +538,13 @@ def init_map_arr(typingctx, data_typ=None):
 def overload_map_arr_len(A):
     if isinstance(A, MapArrayType):
         return lambda A: len(A._data)  # pragma: no cover
+
+
+@overload_attribute(MapArrayType, "shape")
+def overload_map_arr_shape(A):
+    return lambda A: (len(A._data),)  # pragma: no cover
+
+
+@overload_attribute(MapArrayType, "ndim")
+def overload_map_arr_ndim(A):
+    return lambda A: 1  # pragma: no cover
