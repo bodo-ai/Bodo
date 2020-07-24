@@ -13,6 +13,8 @@ import numba
 import bodo
 from bodo.tests.utils import check_func, get_start_end
 
+sql_user_pass_and_hostname = "admin:some_pass@ec2-34-230-65-187.compute-1.amazonaws.com"
+
 
 def test_write_sql_aws():
     """This test for a write down on a SQL database"""
@@ -22,7 +24,7 @@ def test_write_sql_aws():
 
     def test_specific_dataframe(test_impl, is_distributed, df_in):
         table_name = "test_table_ABCD"
-        conn = "mysql+pymysql://admin:Bodosql2#@bodosqldb.cutkvh6do3qv.us-east-1.rds.amazonaws.com/employees"
+        conn = "mysql+pymysql://" + sql_user_pass_and_hostname + "/employees"
         bodo_impl = bodo.jit(all_args_distributed_block=is_distributed)(test_impl)
         if is_distributed:
             start, end = get_start_end(len(df_in))
@@ -70,7 +72,7 @@ def test_sql_if_exists_fail_errorchecking():
     list_datetime = pd.date_range("2001-01-01", periods=len_list)
     df1 = pd.DataFrame({"A": list_int, "B": list_double, "C": list_datetime})
     table_name = "test_table_ABCD"
-    conn = "mysql+pymysql://admin:Bodosql2#@bodosqldb.cutkvh6do3qv.us-east-1.rds.amazonaws.com/employees"
+    conn = "mysql+pymysql://" + sql_user_pass_and_hostname + "/employees"
     bodo_impl = bodo.jit(all_args_distributed_block=True)(test_impl_fails)
     #    with pytest.raises(ValueError, match="Table .* already exists"):
     with pytest.raises(ValueError, match="error in to_sql.* operation"):
@@ -82,7 +84,7 @@ def test_sql_hardcoded_aws():
 
     def test_impl_hardcoded():
         sql_request = "select * from employees"
-        conn = "mysql+pymysql://admin:Bodosql2#@bodosqldb.cutkvh6do3qv.us-east-1.rds.amazonaws.com/employees"
+        conn = "mysql+pymysql://" + sql_user_pass_and_hostname + "/employees"
         frame = pd.read_sql(sql_request, conn)
         return frame
 
@@ -94,7 +96,7 @@ def test_read_sql_hardcoded_time_offset_aws():
 
     def test_impl_offset():
         sql_request = "select * from employees limit 1000 offset 4000"
-        conn = "mysql+pymysql://admin:Bodosql2#@bodosqldb.cutkvh6do3qv.us-east-1.rds.amazonaws.com/employees"
+        conn = "mysql+pymysql://" + sql_user_pass_and_hostname + "/employees"
         frame = pd.read_sql(sql_request, conn)
         return frame
 
@@ -106,7 +108,7 @@ def test_read_sql_hardcoded_twocol_aws():
 
     def test_impl_hardcoded_twocol():
         sql_request = "select first_name,last_name from employees"
-        conn = "mysql+pymysql://admin:Bodosql2#@bodosqldb.cutkvh6do3qv.us-east-1.rds.amazonaws.com/employees"
+        conn = "mysql+pymysql://" + sql_user_pass_and_hostname + "/employees"
         frame = pd.read_sql(sql_request, conn)
         return frame
 
@@ -126,5 +128,5 @@ def test_sql_argument_passing():
         return df
 
     sql_request = "select * from employees"
-    conn = "mysql+pymysql://admin:Bodosql2#@bodosqldb.cutkvh6do3qv.us-east-1.rds.amazonaws.com/employees"
+    conn = "mysql+pymysql://" + sql_user_pass_and_hostname + "/employees"
     check_func(test_impl_arg_passing, (sql_request, conn))
