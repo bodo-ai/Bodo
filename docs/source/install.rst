@@ -28,7 +28,7 @@ and there should be a host file listing their addresses
 
 
 License key
-===========
+-----------
 
 Bodo requires a license key to run. The key can be provided in two ways:
 
