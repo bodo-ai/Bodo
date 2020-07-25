@@ -27,6 +27,7 @@ from bodo.libs.str_arr_ext import (
 )
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.bool_arr_ext import BooleanArrayType, boolean_array
+from bodo.hiframes.pd_categorical_ext import CategoricalArray, init_categorical_array
 from bodo.libs.decimal_arr_ext import DecimalArrayType
 from bodo.utils.shuffle import getitem_arr_tup_single
 from bodo.utils.utils import build_set
@@ -670,9 +671,7 @@ def overload_dropna(data, how, thresh, subset):
     func_text += "    if {}:\n".format(isna_check)
     for i in range(n_data_arrs):
         func_text += "      if isna(data[{}], i):\n".format(i)
-        func_text += "        setna({}, curr_ind)\n".format(
-            out_names[i]
-        )
+        func_text += "        setna({}, curr_ind)\n".format(out_names[i])
         func_text += "      else:\n"
         func_text += "        {}[curr_ind] = data[{}][i]\n".format(out_names[i], i)
     func_text += "      curr_ind += 1\n"
@@ -907,6 +906,20 @@ def concat_overload(arr_list):
             bodo.libs.int_arr_ext.concat_bitmap_tup(arr_list),
         )
 
+    if isinstance(arr_list, (types.UniTuple, types.List)) and isinstance(
+        arr_list.dtype, CategoricalArray
+    ):
+
+        def cat_array_concat_impl(arr_list):  # pragma: no cover
+            new_code_arrs = []
+            for A in arr_list:
+                new_code_arrs.append(A.codes)
+            return init_categorical_array(
+                bodo.libs.array_kernels.concat(new_code_arrs), arr_list[0].dtype
+            )
+
+        return cat_array_concat_impl
+
     # list of 1D np arrays
     if (
         isinstance(arr_list, types.List)
@@ -946,7 +959,9 @@ def concat_overload(arr_list):
 
     for typ in arr_list:
         if not isinstance(typ, types.Array):
-            raise BodoError("concat supports only numerical and string arrays")
+            raise BodoError(
+                "concat supports only numerical and string arrays, got {}".format(typ)
+            )
     # numerical input
     return lambda arr_list: np.concatenate(arr_list)
 

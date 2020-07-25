@@ -23,7 +23,11 @@ from numba.core import cgutils, types
 from numba.parfors.array_analysis import ArrayAnalysis
 from llvmlite import ir as lir
 import bodo
-from bodo.utils.typing import is_overload_constant_bool, is_overload_true
+from bodo.utils.typing import (
+    is_overload_constant_bool,
+    is_overload_true,
+    is_list_like_index_type,
+)
 
 
 # type for pd.CategoricalDtype objects in Pandas
@@ -165,6 +169,9 @@ class CategoricalArray(types.ArrayCompatible):
     @property
     def as_array(self):
         return types.Array(types.undefined, 1, "C")
+
+    def copy(self):
+        return CategoricalArray(self.dtype)
 
 
 @typeof_impl.register(pd.Categorical)
@@ -355,3 +362,27 @@ def get_label_dict_from_categories(vals):
         curr_ind += 1
 
     return labels
+
+
+@overload(operator.getitem, no_unliteral=True)
+def categorical_array_getitem(arr, ind):
+    if not isinstance(arr, CategoricalArray):
+        return
+
+    # scalar int
+    if isinstance(types.unliteral(ind), types.Integer):
+        # TODO: support returning NA
+        def categorical_getitem_impl(arr, ind):  # pragma: no cover
+            code = arr.codes[ind]
+            assert code != -1, "returning NA value from Categorical array not supported"
+            return arr.dtype.categories[code]
+
+        return categorical_getitem_impl
+
+    # bool/int arr indexing
+    if is_list_like_index_type(ind) or isinstance(ind, types.SliceType):
+
+        def impl_bool(arr, ind):  # pragma: no cover
+            return init_categorical_array(arr.codes[ind], arr.dtype)
+
+        return impl_bool
