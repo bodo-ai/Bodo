@@ -223,7 +223,7 @@ def test_series_concat_categorical(memory_leak_check):
     def f(S1, S2):
         return pd.concat([S1, S2])
 
-    S = pd.Series(["AA", "BB", "", "AA", "BB", "AA"], dtype="category")
+    S = pd.Series(["AA", "BB", "", "AA", None, "AA"], dtype="category")
     check_func(f, (S, S), sort_output=True, reset_index=True)
 
 
