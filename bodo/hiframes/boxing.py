@@ -79,22 +79,6 @@ def unbox_dataframe(typ, val, c):
     """
     n_cols = len(typ.columns)
 
-    # unbox "columns" as a tuple instead of Index (for simplicity of codegen in
-    # bodo-generated dataframes)
-    columns_obj = c.pyapi.object_getattr_string(val, "columns")
-    columns_list_obj = c.pyapi.call_method(columns_obj, "to_list", ())
-    tuple_class_obj = c.pyapi.unserialize(c.pyapi.serialize_object(tuple))
-    columns_tup_obj = c.pyapi.call_function_objargs(
-        tuple_class_obj, (columns_list_obj,)
-    )
-    columns_tup = c.pyapi.to_native_value(
-        numba.typeof(typ.columns), columns_tup_obj
-    ).value
-    c.pyapi.decref(columns_obj)
-    c.pyapi.decref(columns_list_obj)
-    c.pyapi.decref(tuple_class_obj)
-    c.pyapi.decref(columns_tup_obj)
-
     # set all columns as not unboxed
     zero = c.context.get_constant(types.int8, 0)
     unboxed_tup = c.context.make_tuple(
@@ -113,7 +97,7 @@ def unbox_dataframe(typ, val, c):
     data_tup = c.context.make_tuple(c.builder, types.Tuple(typ.data), data_nulls)
 
     dataframe_val = construct_dataframe(
-        c.context, c.builder, typ, data_tup, index_val, columns_tup, unboxed_tup, val
+        c.context, c.builder, typ, data_tup, index_val, unboxed_tup, val
     )
 
     return NativeValue(dataframe_val)
@@ -176,8 +160,10 @@ def box_dataframe(typ, val, c):
     has_parent = cgutils.is_not_null(builder, obj)
 
     # get column names object
-    columns = dataframe.columns
+    # TODO: avoid generating large tuples and lower a constant Index if possible
+    # (e.g. if homogeneous names)
     columns_typ = numba.typeof(typ.columns)
+    columns = context.get_constant_generic(builder, columns_typ, typ.columns)
     context.nrt.incref(builder, columns_typ, columns)
     columns_obj = pyapi.from_native_value(columns_typ, columns, c.env_manager)
 
@@ -259,13 +245,15 @@ def unbox_dataframe_column(typingctx, df, i=None):
         dataframe = cgutils.create_struct_proxy(sig.args[0])(
             context, builder, value=args[0]
         )
-        context.nrt.incref(builder, columns_typ, dataframe.columns)
-        columns_obj = pyapi.from_native_value(
-            columns_typ, dataframe.columns, context.get_env_manager(builder)
-        )
-        # no decref for 'col_name_obj' since tuple_getitem returns borrowed reference
-        col_name_obj = pyapi.tuple_getitem(columns_obj, col_ind)
-        series_obj = c.pyapi.object_getitem(dataframe.parent, col_name_obj)
+        # generate df.iloc[:,i] for parent dataframe object
+        none_obj = c.pyapi.borrow_none()
+        slice_class_obj = c.pyapi.unserialize(c.pyapi.serialize_object(slice))
+        slice_obj = c.pyapi.call_function_objargs(slice_class_obj, [none_obj])
+        col_ind_obj = c.pyapi.long_from_longlong(args[1])
+        slice_ind_tup_obj = c.pyapi.tuple_pack([slice_obj, col_ind_obj])
+
+        df_iloc_obj = c.pyapi.object_getattr_string(dataframe.parent, "iloc")
+        series_obj = c.pyapi.object_getitem(df_iloc_obj, slice_ind_tup_obj)
         arr_obj_orig = c.pyapi.object_getattr_string(series_obj, "values")
 
         if isinstance(data_typ, types.Array):
@@ -285,6 +273,11 @@ def unbox_dataframe_column(typingctx, df, i=None):
         # TODO: support column of tuples?
         native_val = _unbox_series_data(data_typ.dtype, data_typ, arr_obj, c)
 
+        c.pyapi.decref(slice_class_obj)
+        c.pyapi.decref(slice_obj)
+        c.pyapi.decref(col_ind_obj)
+        c.pyapi.decref(slice_ind_tup_obj)
+        c.pyapi.decref(df_iloc_obj)
         c.pyapi.decref(series_obj)
         c.pyapi.decref(arr_obj)
         pyapi.gil_release(gil_state)  # release GIL

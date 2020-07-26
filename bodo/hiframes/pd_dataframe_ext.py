@@ -222,16 +222,11 @@ class DataFrameModel(models.StructModel):
         # payload_type = types.Opaque('Opaque.DataFrame')
         # TODO: does meminfo decref content when object is deallocated?
         members = [
-            ("columns", numba.typeof(fe_type.columns)),
             ("meminfo", types.MemInfoPointer(payload_type)),
             # for boxed DataFrames, enables updating original DataFrame object
             ("parent", types.pyobject),
         ]
         super(DataFrameModel, self).__init__(dmm, fe_type, members)
-
-
-make_attribute_wrapper(DataFrameType, "columns", "_columns")
-make_attribute_wrapper(DataFrameType, "parent", "_parent")
 
 
 @infer_getattr
@@ -378,7 +373,7 @@ def define_df_dtor(context, builder, df_type, payload_type):
 
 
 def construct_dataframe(
-    context, builder, df_type, data_tup, index_val, column_tup, unboxed_tup, parent=None
+    context, builder, df_type, data_tup, index_val, unboxed_tup, parent=None
 ):
 
     # create payload struct and store values
@@ -400,7 +395,6 @@ def construct_dataframe(
 
     # create dataframe struct
     dataframe = cgutils.create_struct_proxy(df_type)(context, builder)
-    dataframe.columns = column_tup
     dataframe.meminfo = meminfo
     if parent is None:
         # Set parent to NULL
@@ -441,10 +435,6 @@ def init_dataframe(typingctx, data_tup_typ, index_typ, col_names_typ=None):
         df_type = signature.return_type
         data_tup = args[0]
         index_val = args[1]
-        columns_type = numba.typeof(column_names)
-
-        # column names
-        columns_tup = context.get_constant_generic(builder, columns_type, column_names)
 
         # set unboxed flags to 1 so that dtor decrefs all arrays
         one = context.get_constant(types.int8, 1)
@@ -453,13 +443,12 @@ def init_dataframe(typingctx, data_tup_typ, index_typ, col_names_typ=None):
         )
 
         dataframe_val = construct_dataframe(
-            context, builder, df_type, data_tup, index_val, columns_tup, unboxed_tup
+            context, builder, df_type, data_tup, index_val, unboxed_tup
         )
 
         # increase refcount of stored values
         context.nrt.incref(builder, data_tup_typ, data_tup)
         context.nrt.incref(builder, index_typ, index_val)
-        context.nrt.incref(builder, columns_type, columns_tup)
 
         return dataframe_val
 
@@ -667,19 +656,13 @@ def set_df_index(typingctx, df_t, index_t=None):
             signature.return_type,
             in_df_payload.data,
             index_val,
-            in_df.columns,
             in_df_payload.unboxed,
             in_df.parent,
         )
 
         # increase refcount of stored values
         context.nrt.incref(builder, index_t, index_val)
-        # TODO: refcount
         context.nrt.incref(builder, types.Tuple(df_t.data), in_df_payload.data)
-        context.nrt.incref(
-            builder, types.UniTuple(string_type, len(df_t.columns)), in_df.columns
-        )
-
         return dataframe
 
     ret_typ = DataFrameType(df_t.data, index_t, df_t.columns)
@@ -744,9 +727,6 @@ def set_df_column_with_reflect(typingctx, df, cname, arr, inplace=None):
 
         data_tup = context.make_tuple(builder, types.Tuple(data_typs), data_arrs)
 
-        # column names
-        columns_type = numba.typeof(column_names)
-        columns_tup = context.get_constant_generic(builder, columns_type, column_names)
         unboxed_tup = context.make_tuple(
             builder, types.UniTuple(types.int8, new_n_cols + 1), unboxed_vals
         )
@@ -758,7 +738,6 @@ def set_df_column_with_reflect(typingctx, df, cname, arr, inplace=None):
             signature.return_type,
             data_tup,
             index_val,
-            columns_tup,
             unboxed_tup,
             in_dataframe.parent,
         )
@@ -767,7 +746,6 @@ def set_df_column_with_reflect(typingctx, df, cname, arr, inplace=None):
         context.nrt.incref(builder, index_typ, index_val)
         for var, typ in zip(data_arrs, data_typs):
             context.nrt.incref(builder, typ, var)
-        context.nrt.incref(builder, columns_type, columns_tup)
 
         # TODO: test this
         # test_set_column_cond3 doesn't test it for some reason
@@ -790,7 +768,6 @@ def set_df_column_with_reflect(typingctx, df, cname, arr, inplace=None):
             context.nrt.incref(builder, index_typ, index_val)
             for var, typ in zip(data_arrs, data_typs):
                 context.nrt.incref(builder, typ, var)
-            context.nrt.incref(builder, columns_type, columns_tup)
 
         # set column of parent
         # get boxed array
@@ -842,9 +819,6 @@ def lower_constant_dataframe(context, builder, df_type, pyval):
         tuple(pyval.iloc[:, i].values for i in range(n_cols)),
     )
     index_val = context.get_constant_generic(builder, df_type.index, pyval.index)
-    columns_tup = context.get_constant_generic(
-        builder, numba.typeof(df_type.columns), df_type.columns
-    )
 
     # set unboxed flags to 1 for all arrays
     one = context.get_constant(types.int8, 1)
@@ -853,7 +827,7 @@ def lower_constant_dataframe(context, builder, df_type, pyval):
     )
 
     dataframe_val = construct_dataframe(
-        context, builder, df_type, data_tup, index_val, columns_tup, unboxed_tup
+        context, builder, df_type, data_tup, index_val, unboxed_tup
     )
 
     return dataframe_val
