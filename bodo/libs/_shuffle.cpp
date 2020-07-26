@@ -698,7 +698,6 @@ std::shared_ptr<arrow::Buffer> shuffle_arrow_primitive_array_T(
     return buffer;
 }
 
-
 std::shared_ptr<arrow::Buffer> shuffle_arrow_primitive_array(
     std::vector<int> const& send_count, std::vector<int> const& recv_count,
     uint32_t* hashes, int const& n_pes,
@@ -745,7 +744,8 @@ std::shared_ptr<arrow::Buffer> shuffle_arrow_primitive_array(
             send_count, recv_count, hashes,
             (double*)input_array->values()->data(), n_pes, input_array);
     // Unsupported data type.
-    std::string err_msg = "shuffle_arrow_primitive_array : Unsupported type " + input_array->type()->ToString();
+    std::string err_msg = "shuffle_arrow_primitive_array : Unsupported type " +
+                          input_array->type()->ToString();
     Bodo_PyErr_SetString(PyExc_RuntimeError, err_msg.c_str());
     return nullptr;
 }
@@ -785,7 +785,7 @@ std::shared_ptr<arrow::Buffer> compute_string_buffer_array(
 #ifdef DEBUG_ARROW_SHUFFLE
     std::cout << "n_chars_recv_tot=" << n_chars_recv_tot << "\n";
 #endif
-    char *send_char = new char[n_chars_send_tot];
+    char* send_char = new char[n_chars_send_tot];
     std::shared_ptr<arrow::Buffer> buffer;
     size_t siz_out = sizeof(char) * n_chars_send_tot;
     if (!arrow::AllocateBuffer(siz_out, &buffer).ok()) {
@@ -1418,4 +1418,74 @@ table_info* compute_node_partition_by_hash(table_info* in_table, int64_t n_keys,
     }
     out_arrs.push_back(out_arr);
     return new table_info(out_arrs);
+}
+
+/* Whether or not a reshuffling is needed.
+   The idea is following:
+   ---What slows down the running is if one or 2 processors have a much higher
+   load than other because it serializes the computation.
+   ---If 1 or 2 processors have little load then that is not so bad. It just
+   decreases the number of effective processors used.
+   ---Thus the metric to consider or not a reshuffling is
+          (max nb_row) / (avg nb_row)
+   ---If the value is larger than 2 then reshuffling is interesting
+ */
+bool need_reshuffling(table_info* in_table, double crit_fraction) {
+    int64_t n_rows = in_table->nrows(), sum_n_rows, max_n_rows;
+    int n_pes;
+    MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
+    if (n_pes == 1) return false;
+    MPI_Allreduce(&n_rows, &sum_n_rows, 1, MPI_LONG_LONG_INT, MPI_SUM,
+                  MPI_COMM_WORLD);
+    MPI_Allreduce(&n_rows, &max_n_rows, 1, MPI_LONG_LONG_INT, MPI_MAX,
+                  MPI_COMM_WORLD);
+    double avg_n_rows = ceil(double(sum_n_rows) / double(n_pes));
+    double objective_measure = double(max_n_rows) / avg_n_rows;
+    bool result = objective_measure > crit_fraction;
+#undef DEBUG_BOUND_INFO
+#ifdef DEBUG_BOUND_INFO
+    std::cout << "n_rows=" << n_rows << "\n";
+    std::cout << "avg_n_rows=" << avg_n_rows << " max_n_rows=" << max_n_rows
+              << "\n";
+    std::cout << "objective_measure=" << objective_measure
+              << " result=" << result << "\n";
+#endif
+    return result;
+}
+
+/* Apply a renormalization shuffling
+   After the operation, all nodes will have a standard size
+ */
+table_info* shuffle_renormalization(table_info* in_table) {
+    int64_t n_rows = in_table->nrows();
+    int n_pes, myrank;
+    MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
+    MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+    std::vector<int64_t> AllSizes(n_pes);
+    MPI_Allgather(&n_rows, 1, MPI_LONG_LONG_INT, AllSizes.data(), 1,
+                  MPI_LONG_LONG_INT, MPI_COMM_WORLD);
+    int64_t n_rows_tot = std::accumulate(AllSizes.begin(), AllSizes.end(), 0);
+    int64_t shift = 0;
+    for (int i_p = 0; i_p < myrank; i_p++) shift += AllSizes[i_p];
+    // We use the word "hashes" as they are used all over the shuffle code.
+    // However, in that case, it does not mean literally "hash". What it means
+    // is the index to which the row is going to be sent.
+    std::vector<uint32_t> hashes(n_rows);
+    for (int64_t i_row = 0; i_row < n_rows; i_row++) {
+        int64_t glob_row = shift + i_row;
+        int64_t rnk = index_rank(n_rows_tot, n_pes, glob_row);
+        hashes[i_row] = rnk;
+    }
+    //
+    mpi_comm_info comm_info(n_pes, in_table->columns);
+    comm_info.set_counts(hashes.data());
+    table_info* ret_table =
+        shuffle_table_kernel(in_table, hashes.data(), n_pes, comm_info);
+#ifdef DEBUG_SHUFFLE
+    std::cout << "RET_TABLE (shuffle_renormalization):\n";
+    DEBUG_PrintSetOfColumn(std::cout, ret_table->columns);
+    DEBUG_PrintRefct(std::cout, ret_table->columns);
+    std::cout << "Leaving now the shuffle_renormalization\n";
+#endif
+    return ret_table;
 }

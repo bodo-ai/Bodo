@@ -149,7 +149,7 @@ static int64_t dist_get_node_portion(int64_t total, int num_pes, int node_id) {
            dist_get_start(total, num_pes, node_id);
 }
 
-static int64_t index_rank(int64_t total, int num_pes, int index) {
+static int64_t index_rank(int64_t total, int num_pes, int64_t index) {
     int64_t res = total % num_pes;
     int64_t blk_size = (total - res) / num_pes;
     // In the part 0:crit_index the size of the blocks is blk_size+1.

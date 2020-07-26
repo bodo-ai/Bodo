@@ -863,6 +863,23 @@ def test_sort_values_ascending_bool(memory_leak_check):
         bodo.jit(impl5)(df)
 
 
+
+def test_sort_force_reshuffling(memory_leak_check):
+    """By having only one key we guarantee that all rows will be put into just one bin.
+    This gets us a very skewed partition and therefore triggers the reshuffling after sort"""
+    def f(df):
+        return df.sort_values(by=["A"], kind="mergesort")
+
+    random.seed(5)
+    n=100
+    list_A = [1] * n
+    list_B = [random.randint(0,10) for _ in range(n)]
+    df = pd.DataFrame({"A":list_A, "B":list_B})
+    check_func(f, (df,))
+
+
+
+
 def test_sort_values_inplace_bool(memory_leak_check):
     """
     Test sort_values(): 'inplace' must be of type bool
@@ -965,6 +982,7 @@ def test_sort_list_list():
     data = np.array(
         [
             [[[1, 2], [3]], [[2, None]]],
+            [[[1, 2], [3]], [[2, 4]]],
             [[[3], [], [1, None, 4]]],
             [[[3], [42], [1, None, 4]]],
             None,
@@ -974,7 +992,7 @@ def test_sort_list_list():
             [[[], [1]], None, [[1, 4]], []],
         ]
     )
-    df = pd.DataFrame({"A": [5, 1, 4, 2, 3, 0, 12, 23], "B": data})
+    df = pd.DataFrame({"A": [8, 7, 6, 5, 1, 4, 2, 3, 0], "B": data})
 
     def f(df):
         df_ret = df.sort_values(by="A", ascending=True, na_position="first")

@@ -181,6 +181,7 @@ table_info* sort_values_table_local(table_info* in_table, int64_t n_key_t,
 table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
                               int64_t* vect_ascending, bool na_position,
                               bool parallel) {
+#undef BOUND_INFO
 #undef DEBUG_SORT
 #ifdef DEBUG_SORT
     std::cout << "sort_values_table : in_table:\n";
@@ -214,7 +215,7 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
     double fraction = std::min(
         double(sampleSize) / double(std::max(n_total, int64_t(1))), double(1));
     int64_t n_loc_sample = std::min(n_local, int64_t(ceil(fraction * n_local)));
-#ifdef DEBUG_SORT
+#if defined DEBUG_SORT || defined BOUND_INFO
     std::cout << "sampleSize=" << sampleSize << " fraction=" << fraction
               << " n_loc_sample=" << n_loc_sample << "\n";
 #endif
@@ -234,11 +235,16 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
 #endif
     // Collecting all samples
     table_info* all_samples = gather_table(samples, n_key_t);
-#ifdef DEBUG_SORT
-    if (myrank == 0) {
+#if defined DEBUG_SORT || defined BOUND_INFO
+    if (myrank == mpi_root) {
+# ifdef BOUND_INFO
+        std::cout << "|all_samples|=" << all_samples->nrows() << "\n";
+# endif
+# ifdef DEBUG_SORT
         std::cout << "sort_values_table : all_samples:\n";
         DEBUG_PrintSetOfColumn(std::cout, all_samples->columns);
         DEBUG_PrintRefct(std::cout, all_samples->columns);
+# endif
     }
 #endif
 
@@ -247,7 +253,7 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
     if (myrank == mpi_root) {
         table_info* all_samples_sort = sort_values_table_local(
             all_samples, n_key_t, vect_ascending, na_position);
-#ifdef DEBUG_SORT
+#if defined DEBUG_SORT || defined BOUND_INFO
         std::cout << "sort_values_table : all_samples_sort:\n";
         DEBUG_PrintSetOfColumn(std::cout, all_samples_sort->columns);
         DEBUG_PrintRefct(std::cout, all_samples_sort->columns);
@@ -261,7 +267,7 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
             ListPairWriteBounds[i] = {std::ptrdiff_t(pos), -1};
         }
         pre_bounds = RetrieveTable(all_samples_sort, ListPairWriteBounds, -1);
-#ifdef DEBUG_SORT
+#if defined DEBUG_SORT || defined BOUND_INFO
         std::cout << "sort_values_table : pre_bounds:\n";
         DEBUG_PrintSetOfColumn(std::cout, pre_bounds->columns);
         DEBUG_PrintRefct(std::cout, pre_bounds->columns);
@@ -332,6 +338,18 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
     DEBUG_PrintRefct(std::cout, ret_table->columns);
 #endif
     delete_table_free_arrays(collected_table);
+    // If the maximum number of rows divided by its average is higher than 2.0
+    // then we trigger reshuffling. If not, we do not do anything.
+    // This value may be adjusted in the future as it is an heuristic constant.
+    const double crit_fraction = 2.0;
+    if (need_reshuffling(ret_table, crit_fraction)) {
+#ifdef DEBUG_SORT
+      std::cout << " Doing reshuffling\n";
+#endif
+      table_info* table_shuffle_renorm = shuffle_renormalization(ret_table);
+      delete_table_free_arrays(ret_table);
+      return table_shuffle_renorm;
+    }
     return ret_table;
 }
 

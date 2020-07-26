@@ -86,3 +86,32 @@ table_info* gather_table(table_info* in_table, size_t n_cols);
  */
 table_info* compute_node_partition_by_hash(table_info* in_table, int64_t n_keys,
                                            int64_t n_pes);
+
+/** Compute whether we need to do a reshuffling or not for performance reasons.
+    The dilemna is following:
+    ---If the workload is not well partitioned then the code becomes serialized and slower.
+    ---Reshuffling itself is an expensive operation.
+
+    The heuristic idea is following:
+    ---What slows down the running is if one or 2 processors have a much higher load
+       than other because it serializes the computation.
+    ---If 1 or 2 processors have little load then that is not so bad. It just decreases
+       the number of effective processors used.
+    ---Thus the metric to consider or not a reshuffling is
+        (max nb_row) / (avg nb_row)
+    ---If the value is larger than 2 then reshuffling is interesting
+
+    @param in_table : the input partitioned table
+    @param crit_fraction : the critical fraction
+    @return the boolean saying whether or not we need to do reshuffling.
+*/
+bool need_reshuffling(table_info* in_table, double crit_fraction);
+
+
+/* Apply a renormalization shuffling
+   After the operation, all nodes will have a standard size.
+
+   @param in_table : the input partitioned table
+   @return the reshuffled table
+ */
+table_info* shuffle_renormalization(table_info* in_table);
