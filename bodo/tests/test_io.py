@@ -1611,6 +1611,17 @@ def test_csv_invalid_path():
         bodo.jit(test_impl)("f.csv")
 
 
+def test_csv_invalid_path_const():
+    """test error raise when CSV file path provided as constant but is invalid.
+    """
+
+    def test_impl():
+        return pd.read_csv("in_csv.csv")
+
+    with pytest.raises(FileNotFoundError, match="No such file or directory"):
+        bodo.jit(test_impl)()
+
+
 class TestIO(unittest.TestCase):
     def test_h5_write_parallel(self):
         fname = "lr_w.hdf5"
