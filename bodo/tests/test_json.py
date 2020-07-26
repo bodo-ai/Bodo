@@ -178,6 +178,17 @@ def test_json_read_multiline_object(datapath):
     )
 
 
+def test_json_invalid_path_const():
+    """test error raise when file path provided as constant but is invalid.
+    """
+
+    def test_impl():
+        return pd.read_json("in_data_invalid.json")
+
+    with pytest.raises(FileNotFoundError, match="No such file or directory"):
+        bodo.jit(test_impl)()
+
+
 def json_write_test(test_impl, read_impl, df, sort_col, reset_index=False):
     """
     A helper function used to test json write correctness
