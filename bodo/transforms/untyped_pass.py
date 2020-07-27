@@ -1562,30 +1562,34 @@ def remove_dead_branches(func_ir):
 def _get_json_df_type_from_file(
     fname_const, orient, convert_dates, precise_float, lines, compression
 ):
-    """get dataframe type for read_json() using file path constant.
+    """get dataframe type for read_json() using file path constant or raise error if
+    path is invalid.
     Only rank 0 looks at the file to infer df type, then broadcasts.
     """
     from mpi4py import MPI
 
     comm = MPI.COMM_WORLD
 
-    df_type = None
+    # dataframe type or Exception raised trying to find the type
+    df_type_or_e = None
     if bodo.get_rank() == 0:
         from bodo.io.fs_io import find_file_name_or_handler
 
-        rows_to_read = 20  # TODO: tune this
-        is_handler, file_name_or_handler, f_size, _ = find_file_name_or_handler(
-            fname_const, "json"
-        )
-        if is_handler and compression == "infer":
-            # pandas can't infer compression without filename, we need to do it
-            if fname_const.endswith(".gz"):
-                compression = "gzip"
-            elif fname_const.endswith(".bz2"):
-                compression = "bz2"
-            else:
-                compression = None
+        is_handler = None
         try:
+            rows_to_read = 20  # TODO: tune this
+            is_handler, file_name_or_handler, f_size, _ = find_file_name_or_handler(
+                fname_const, "json"
+            )
+            if is_handler and compression == "infer":
+                # pandas can't infer compression without filename, we need to do it
+                if fname_const.endswith(".gz"):
+                    compression = "gzip"
+                elif fname_const.endswith(".bz2"):
+                    compression = "bz2"
+                else:
+                    compression = None
+
             # Ideally, we should use chunksize to read the number of rows desired
             # instead of manually reading the number of rows into a buffer.
             # There is a issue for it in pandas:
@@ -1621,18 +1625,25 @@ def _get_json_df_type_from_file(
                 compression=compression,
                 # chunksize=rows_to_read,
             )
+
+            # TODO: categorical, etc.
+            df_type_or_e = numba.typeof(df)
+            # always convert to nullable type since initial rows of a column could be all
+            # int for example, but later rows could have NAs
+            df_type_or_e = to_nullable_type(df_type_or_e)
+        except Exception as e:
+            df_type_or_e = e
         finally:
             if is_handler:
                 file_name_or_handler.close()
 
-        # TODO: categorical, etc.
-        df_type = numba.typeof(df)
-        # always convert to nullable type since initial rows of a column could be all
-        # int for example, but later rows could have NAs
-        df_type = to_nullable_type(df_type)
+    df_type_or_e = comm.bcast(df_type_or_e)
 
-    df_type = comm.bcast(df_type)
-    return df_type
+    # raise error on all processors if found (not just rank 0 which would cause hangs)
+    if isinstance(df_type_or_e, Exception):
+        raise df_type_or_e
+
+    return df_type_or_e
 
 
 def _get_excel_df_type_from_file(
@@ -1690,8 +1701,9 @@ def _get_sql_df_type_from_db(sql_const, con_const):
 
 
 def _get_csv_df_type_from_file(fname_const, sep, skiprows, header, compression):
-    """get dataframe type for read_csv() using file path constant.
-    If fname_const points to a directory, find a non empty csv file from 
+    """get dataframe type for read_csv() using file path constant or raise error if not
+    possible (e.g. file doesn't exist).
+    If fname_const points to a directory, find a non-empty csv file from
     the directory. 
     For posix, pass the file name directly to pandas. For s3 & hdfs, open the 
     file reader, and pass it to pandas.
@@ -1701,24 +1713,27 @@ def _get_csv_df_type_from_file(fname_const, sep, skiprows, header, compression):
 
     comm = MPI.COMM_WORLD
 
-    df_type = None
+    # dataframe type or Exception raised trying to find the type
+    df_type_or_e = None
     if bodo.get_rank() == 0:
         from bodo.io.fs_io import find_file_name_or_handler
 
-        rows_to_read = 100  # TODO: tune this
-        is_handler, file_name_or_handler, _, _ = find_file_name_or_handler(
-            fname_const, "csv"
-        )
-
-        if is_handler and compression == "infer":
-            # pandas can't infer compression without filename, we need to do it
-            if fname_const.endswith(".gz"):
-                compression = "gzip"
-            elif fname_const.endswith(".bz2"):
-                compression = "bz2"
-            else:
-                compression = None
+        is_handler = None
         try:
+            is_handler, file_name_or_handler, _, _ = find_file_name_or_handler(
+                fname_const, "csv"
+            )
+
+            if is_handler and compression == "infer":
+                # pandas can't infer compression without filename, we need to do it
+                if fname_const.endswith(".gz"):
+                    compression = "gzip"
+                elif fname_const.endswith(".bz2"):
+                    compression = "bz2"
+                else:
+                    compression = None
+
+            rows_to_read = 100  # TODO: tune this
             df = pd.read_csv(
                 file_name_or_handler,
                 sep=sep,
@@ -1727,18 +1742,25 @@ def _get_csv_df_type_from_file(fname_const, sep, skiprows, header, compression):
                 header=header,
                 compression=compression,
             )
+
+            # TODO: categorical, etc.
+            df_type_or_e = numba.typeof(df)
+            # always convert to nullable type since initial rows of a column could be all
+            # int for example, but later rows could have NAs
+            df_type_or_e = to_nullable_type(df_type_or_e)
+        except Exception as e:
+            df_type_or_e = e
         finally:
             if is_handler:
                 file_name_or_handler.close()
 
-        # TODO: categorical, etc.
-        df_type = numba.typeof(df)
-        # always convert to nullable type since initial rows of a column could be all
-        # int for example, but later rows could have NAs
-        df_type = to_nullable_type(df_type)
+    df_type_or_e = comm.bcast(df_type_or_e)
 
-    df_type = comm.bcast(df_type)
-    return df_type
+    # raise error on all processors if found (not just rank 0 which would cause hangs)
+    if isinstance(df_type_or_e, Exception):
+        raise df_type_or_e
+
+    return df_type_or_e
 
 
 def _check_type(val, typ):
