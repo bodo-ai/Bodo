@@ -588,11 +588,12 @@ std::shared_ptr<arrow::Buffer> compute_bitmap_array(
                   << " val=" << (int)recv_array_null_bitmask[i] << "\n";
 #endif
     int siz_out = (n_rows_out + 7) >> 3;
-    std::shared_ptr<arrow::Buffer> buffer;
-    if (!arrow::AllocateBuffer(siz_out, &buffer).ok()) {
+    arrow::Result<std::unique_ptr<arrow::Buffer>> maybe_buffer = arrow::AllocateBuffer(siz_out);
+    if (!maybe_buffer.ok()) {
         Bodo_PyErr_SetString(PyExc_RuntimeError, "allocation error");
         return nullptr;
     }
+    std::shared_ptr<arrow::Buffer> buffer = *std::move(maybe_buffer);
     uint8_t* null_bitmask_out_ptr = buffer->mutable_data();
     copy_gathered_null_bytes(null_bitmask_out_ptr, recv_array_null_bitmask,
                              recv_count_null, recv_count);
@@ -634,12 +635,13 @@ std::shared_ptr<arrow::Buffer> compute_offset_array(
     MPI_Alltoallv(send_len.data(), send_count.data(), send_disp.data(), mpi_typ,
                   recv_len.data(), recv_count.data(), recv_disp.data(), mpi_typ,
                   MPI_COMM_WORLD);
-    std::shared_ptr<arrow::Buffer> buffer;
     size_t siz_out = sizeof(int32_t) * (n_rows_out + 1);
-    if (!arrow::AllocateBuffer(siz_out, &buffer).ok()) {
+    arrow::Result<std::unique_ptr<arrow::Buffer>> maybe_buffer = arrow::AllocateBuffer(siz_out);
+    if (!maybe_buffer.ok()) {
         Bodo_PyErr_SetString(PyExc_RuntimeError, "allocation error");
         return nullptr;
     }
+    std::shared_ptr<arrow::Buffer> buffer = *std::move(maybe_buffer);
     uint8_t* list_offsets_ptr_ui8 = buffer->mutable_data();
     int32_t* list_offsets_ptr = (int32_t*)list_offsets_ptr_ui8;
     int32_t pos = 0;
@@ -684,12 +686,13 @@ std::shared_ptr<arrow::Buffer> shuffle_arrow_primitive_array_T(
     fill_send_array_inner<T>(send_arr, values, hashes, send_disp, n_pes,
                              n_rows);
     MPI_Datatype mpi_typ = get_MPI_typ(dtype);
-    std::shared_ptr<arrow::Buffer> buffer;
     size_t siz_out = sizeof(T) * n_rows_out;
-    if (!arrow::AllocateBuffer(siz_out, &buffer).ok()) {
+    arrow::Result<std::unique_ptr<arrow::Buffer>> maybe_buffer = arrow::AllocateBuffer(siz_out);
+    if (!maybe_buffer.ok()) {
         Bodo_PyErr_SetString(PyExc_RuntimeError, "allocation error");
         return nullptr;
     }
+    std::shared_ptr<arrow::Buffer> buffer = *std::move(maybe_buffer);
     T* data_ptr = (T*)buffer->mutable_data();
     MPI_Alltoallv(send_arr, send_count.data(), send_disp.data(), mpi_typ,
                   data_ptr, recv_count.data(), recv_disp.data(), mpi_typ,
@@ -780,18 +783,19 @@ std::shared_ptr<arrow::Buffer> compute_string_buffer_array(
     calc_disp(recv_disp_char, recv_count_char);
     int n_chars_send_tot =
         std::accumulate(send_count_char.begin(), send_count_char.end(), 0);
+#ifdef DEBUG_ARROW_SHUFFLE
     int n_chars_recv_tot =
         std::accumulate(recv_count_char.begin(), recv_count_char.end(), 0);
-#ifdef DEBUG_ARROW_SHUFFLE
     std::cout << "n_chars_recv_tot=" << n_chars_recv_tot << "\n";
 #endif
-    char* send_char = new char[n_chars_send_tot];
-    std::shared_ptr<arrow::Buffer> buffer;
+    char *send_char = new char[n_chars_send_tot];
     size_t siz_out = sizeof(char) * n_chars_send_tot;
-    if (!arrow::AllocateBuffer(siz_out, &buffer).ok()) {
+    arrow::Result<std::unique_ptr<arrow::Buffer>> maybe_buffer = arrow::AllocateBuffer(siz_out);
+    if (!maybe_buffer.ok()) {
         Bodo_PyErr_SetString(PyExc_RuntimeError, "allocation error");
         return nullptr;
     }
+    std::shared_ptr<arrow::Buffer> buffer = *std::move(maybe_buffer);
     char* recv_char = (char*)buffer->mutable_data();
     std::vector<int> list_shift = send_disp_char;
 #ifdef DEBUG_ARROW_SHUFFLE

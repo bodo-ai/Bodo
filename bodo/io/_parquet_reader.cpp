@@ -220,7 +220,7 @@ inline void copy_data_dt32(uint64_t* out_data, const int32_t* buff,
     for (int64_t i = 0; i < rows_to_read; i++) {
         int32_t val = buff[rows_to_skip + i];
         // convert date32 into packed datetime.date value
-        int64_t year, month, day;
+        int64_t year=-1, month=-1, day=-1; // assigned to non-realized value to make any error crash.
         get_date_from_days(val, &year, &month, &day);
         out_data[i] = (year << 32) + (month << 16) + day;
     }
@@ -639,7 +639,6 @@ int64_t pq_read_array_item_single_file(
     }
 
     uint32_t curr_offset = 0;
-    uint32_t curr_index_offset = 0;
     int64_t num_items = 0;
 
     /* ------- read offsets and data ------ */

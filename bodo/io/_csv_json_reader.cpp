@@ -1048,7 +1048,6 @@ void calc_row_transfer(const std::vector<int64_t> &num_rows, int64_t total_rows,
  * This can be called multiple times as needed.
  */
 void balance_rows(MemReader *reader) {
-    int myrank = dist_get_rank();
     int num_ranks = dist_get_size();
 
     // need the row offsets to balance rows

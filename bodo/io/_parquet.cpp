@@ -664,7 +664,7 @@ void pq_write(const char *_path_name, const table_info *table,
         check = sprintf(new_metadata.data(), metadata, idx_name, idx_name,
                         idx_name, idx_name);
     }
-    if (check + 1 > new_metadata.size())
+    if (size_t(check + 1) > new_metadata.size())
         std::cerr << "Fatal error: number of written char for metadata is "
                      "greater than new_metadata size"
                   << std::endl;
