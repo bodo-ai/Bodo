@@ -17,6 +17,13 @@ import string
 import pytest
 from decimal import Decimal
 from bodo.tests.utils import check_func, is_bool_object_series, gen_random_decimal_array
+from bodo.tests.utils import (
+    gen_random_arrow_array_struct_int,
+    gen_random_arrow_array_struct_list_int,
+    gen_random_arrow_list_list,
+    gen_random_arrow_struct_struct,
+    check_parallel_coherency,
+)
 from bodo.utils.typing import BodoWarning, BodoError
 import os
 
@@ -999,3 +1006,20 @@ def test_sort_list_list():
         return df_ret
 
     check_func(f, (df,))
+
+
+def test_sort_values_nested_arrays_random():
+    def f(df):
+        df2 = df.sort_values(by="A")
+        return df2
+
+    random.seed(5)
+    n = 1000
+    df1 = pd.DataFrame({"A": gen_random_arrow_array_struct_int(10, n)})
+    df2 = pd.DataFrame({"A": gen_random_arrow_array_struct_list_int(10, n)})
+    df3 = pd.DataFrame({"A": gen_random_arrow_list_list(1, n)})
+    df4 = pd.DataFrame({"A": gen_random_arrow_struct_struct(10, n)})
+    check_parallel_coherency(f, (df1,))
+    check_parallel_coherency(f, (df2,))
+    check_parallel_coherency(f, (df3,))
+    check_parallel_coherency(f, (df4,))

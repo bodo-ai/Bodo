@@ -59,13 +59,14 @@ table_info* shuffle_table_kernel(table_info* in_table, uint32_t* hashes,
 /** Broadcasting a table.
  * The table in the nodes of rank 0 is broadcast to all nodes.
  *
- * @param in_table : the input table. It can be a NULL
- *                   for the nodes of rank not equal to 0 since it is not
- *                   read for those nodes.
- * @param n_cols   : the number of columns of the keys.
+ * @param ref_table : the reference table used for the types
+ * @param in_table  : the input table. It can be a NULL
+ *                    for the nodes of rank not equal to 0 since it is not
+ *                    read for those nodes.
+ * @param n_cols    : the number of columns of the keys.
  * @return the table equal to in_table but available on all the nodes.
  */
-table_info* broadcast_table(table_info* in_table, size_t n_cols);
+table_info* broadcast_table(table_info* ref_table, table_info* in_table, size_t n_cols);
 
 /** Gather a table.
  *

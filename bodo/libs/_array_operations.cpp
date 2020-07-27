@@ -160,9 +160,14 @@ table_info* sort_values_table_local(table_info* in_table, int64_t n_key_t,
     std::function<bool(size_t, size_t)> f = [&](size_t const& iRow1,
                                                 size_t const& iRow2) -> bool {
         size_t shift_key1 = 0, shift_key2 = 0;
-        return KeyComparisonAsPython(n_key, vect_ascending, in_table->columns,
-                                     shift_key1, iRow1, in_table->columns,
-                                     shift_key2, iRow2, na_position);
+        bool test = KeyComparisonAsPython(
+            n_key, vect_ascending, in_table->columns, shift_key1, iRow1,
+            in_table->columns, shift_key2, iRow2, na_position);
+#ifdef DEBUG_SORT_LOCAL
+        std::cout << "iRow1=" << iRow1 << " iRow2=" << iRow2 << " test=" << test
+                  << "\n";
+#endif
+        return test;
     };
     gfx::timsort(V.begin(), V.end(), f);
     std::vector<std::pair<std::ptrdiff_t, std::ptrdiff_t>> ListPairWrite(
@@ -274,10 +279,21 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
 #endif
         delete_table_free_arrays(all_samples_sort);
     }
+#ifdef DEBUG_SORT
+    std::cout << "delete_table_free_arrays operations 1\n";
+#endif
     delete_table_free_arrays(samples);
+#ifdef DEBUG_SORT
+    std::cout << "delete_table_free_arrays operations 2\n";
+#endif
     delete_table_free_arrays(all_samples);
+#ifdef DEBUG_SORT
+    std::cout << "delete_table_free_arrays operations 3\n";
+#endif
     // broadcasting the bounds
-    table_info* bounds = broadcast_table(pre_bounds, n_key_t);
+    // The in_table is used as reference for the data type of the array.
+    // This is because pre_bounds is NULL for ranks != 0
+    table_info* bounds = broadcast_table(in_table, pre_bounds, n_key_t);
 #ifdef DEBUG_SORT
     std::cout << "sort_values_table : bounds:\n";
     DEBUG_PrintSetOfColumn(std::cout, bounds->columns);

@@ -27,15 +27,12 @@ Bodo_CTypes::CTypeEnum arrow_to_bodo_type(arrow::Type::type type) {
         case arrow::Type::DOUBLE:
             return Bodo_CTypes::FLOAT64;
         // TODO Decimal, Date, Datetime, Timedelta, String, Bool
-        default:
-          {
+        default: {
             std::string err_msg = "arrow_to_bodo_type : Unsupported type";
             Bodo_PyErr_SetString(PyExc_RuntimeError, err_msg.c_str());
-          }
+        }
     }
 }
-
-
 
 /**
  * Append values from a byte buffer to a primitive array builder.
@@ -100,8 +97,9 @@ void append_to_primitive(const uint8_t* values, int64_t offset, int64_t length,
         typed_builder->AppendValues((double*)values + offset, length,
                                     valid_elems.data());
     } else {
-      std::string err_msg = "append_to_primitive : Unsupported type " + builder->type()->ToString();
-      Bodo_PyErr_SetString(PyExc_RuntimeError, err_msg.c_str());
+        std::string err_msg = "append_to_primitive : Unsupported type " +
+                              builder->type()->ToString();
+        Bodo_PyErr_SetString(PyExc_RuntimeError, err_msg.c_str());
     }
 }
 
@@ -499,17 +497,29 @@ std::pair<int, bool> process_arrow_bitmap(bool const& na_position_bis,
     bool bit1 = !arrow1->IsNull(pos1);
     bool bit2 = !arrow2->IsNull(pos2);
 #ifdef DEBUG_ARROW_COMPARISON
-    std::cout << "    process_arrow_bitmap bit1=" << bit1 << " bit2=" << bit2
-              << "\n";
+    std::cout << "    process_arrow_bitmap na_position_bis=" << na_position_bis
+              << " bit1=" << bit1 << " bit2=" << bit2 << " pos1=" << pos1
+              << " pos2=" << pos2 << "\n";
 #endif
     if (bit1 && !bit2) {
-        if (na_position_bis) return {1, true};
-        return {-1, true};
+        int val = -1;
+        if (na_position_bis) val = 1;
+#ifdef DEBUG_ARROW_COMPARISON
+        std::cout << "      p_a_b val=" << val << " bit=true\n";
+#endif
+        return {val, true};
     }
     if (!bit1 && bit2) {
-        if (na_position_bis) return {-1, true};
-        return {1, true};
+        int val = 1;
+        if (na_position_bis) val = -1;
+#ifdef DEBUG_ARROW_COMPARISON
+        std::cout << "      p_a_b val=" << val << " bit=true\n";
+#endif
+        return {val, true};
     }
+#ifdef DEBUG_ARROW_COMPARISON
+    std::cout << "      p_a_b val=0 bit=" << bit1 << "\n";
+#endif
     return {0, bit1};
 }
 
@@ -518,6 +528,9 @@ int ComparisonArrowColumn(std::shared_ptr<arrow::Array> const& arr1,
                           std::shared_ptr<arrow::Array> const& arr2,
                           int64_t pos2_s, int64_t pos2_e,
                           bool const& na_position_bis) {
+#ifdef DEBUG_ARROW_COMPARISON
+    std::cout << "  Beginning of ComparisonArrowColumn\n";
+#endif
     auto process_length = [](int const& len1, int const& len2) -> int {
         if (len1 > len2) return -1;
         if (len1 < len2) return 1;
@@ -561,7 +574,7 @@ int ComparisonArrowColumn(std::shared_ptr<arrow::Array> const& arr1,
                 int test = ComparisonArrowColumn(
                     list_array1->values(), n_pos1_s, n_pos1_e,
                     list_array2->values(), n_pos2_s, n_pos2_e, na_position_bis);
-                if (test != 0) return test;
+                if (test) return test;
             }
         }
 #ifdef DEBUG_ARROW_COMPARISON
@@ -584,11 +597,19 @@ int ComparisonArrowColumn(std::shared_ptr<arrow::Array> const& arr1,
         int64_t len1 = pos1_e - pos1_s;
         int64_t len2 = pos2_e - pos2_s;
         int64_t min_len = std::min(len1, len2);
+#ifdef DEBUG_ARROW_COMPARISON
+        std::cout << "  len1=" << len1 << " len2=" << len2
+                  << " min_len=" << min_len << "\n";
+#endif
         for (int64_t idx = 0; idx < min_len; idx++) {
             int n_pos1_s = pos1_s + idx;
             int n_pos1_e = pos1_s + idx + 1;
             int n_pos2_s = pos2_s + idx;
             int n_pos2_e = pos2_s + idx + 1;
+#ifdef DEBUG_ARROW_COMPARISON
+            std::cout << "  idx=" << idx << " n_pos1_s=" << n_pos1_s
+                      << " n_pos2_s=" << n_pos2_s << "\n";
+#endif
             std::pair<int, bool> epair =
                 process_arrow_bitmap(na_position_bis, struct_array1, n_pos1_s,
                                      struct_array2, n_pos2_s);
@@ -599,7 +620,11 @@ int ComparisonArrowColumn(std::shared_ptr<arrow::Array> const& arr1,
                         struct_array1->field(i), n_pos1_s, n_pos1_e,
                         struct_array2->field(i), n_pos2_s, n_pos2_e,
                         na_position_bis);
-                    if (test != 0) return test;
+#ifdef DEBUG_ARROW_COMPARISON
+                    std::cout << "  i=" << i << " / " << num_children
+                              << " test=" << test << "\n";
+#endif
+                    if (test) return test;
                 }
             }
         }
@@ -642,7 +667,7 @@ int ComparisonArrowColumn(std::shared_ptr<arrow::Array> const& arr1,
                 uint32_t len2 = str2.size();
                 uint32_t minlen = std::min(len1, len2);
                 int test = std::strncmp(str2.c_str(), str1.c_str(), minlen);
-                if (test != 0) return test;
+                if (test) return test;
                 // If not, we may be able to conclude via the string length.
                 if (len1 > len2) return -1;
                 if (len1 < len2) return 1;
@@ -673,10 +698,19 @@ int ComparisonArrowColumn(std::shared_ptr<arrow::Array> const& arr1,
                 arrow::Type::type typ = primitive_array1->type()->id();
                 Bodo_CTypes::CTypeEnum bodo_typ = arrow_to_bodo_type(typ);
                 size_t siz_typ = numpy_item_size[bodo_typ];
-                char* ptr1 = (char*)primitive_array1->values()->data() + siz_typ * n_pos1_s;
-                char* ptr2 = (char*)primitive_array2->values()->data() + siz_typ * n_pos2_s;
+#ifdef DEBUG_ARROW_COMPARISON
+                std::cout << "  typ=" << typ << " bodo_typ=" << bodo_typ
+                          << " siz_typ=" << siz_typ << "\n";
+#endif
+                char* ptr1 = (char*)primitive_array1->values()->data() +
+                             siz_typ * n_pos1_s;
+                char* ptr2 = (char*)primitive_array2->values()->data() +
+                             siz_typ * n_pos2_s;
                 test = NumericComparison(bodo_typ, ptr1, ptr2, na_position_bis);
-                if (test != 0) return test;
+#ifdef DEBUG_ARROW_COMPARISON
+                std::cout << "  test=" << test << "\n";
+#endif
+                if (test) return test;
             }
         }
         return process_length(len1, len2);
@@ -837,7 +871,7 @@ int KeyComparisonAsPython_Column(bool const& na_position_bis, array_info* arr1,
             char* ptr2 = arr2->data1 + (siztype * iRow2);
             int test =
                 NumericComparison(arr1->dtype, ptr1, ptr2, na_position_bis);
-            if (test != 0) return test;
+            if (test) return test;
         }
     }
     if (arr1->arr_type == bodo_array_type::LIST_STRING) {
@@ -880,7 +914,7 @@ int KeyComparisonAsPython_Column(bool const& na_position_bis, array_info* arr1,
                 // We check the strings for comparison and check if we can
                 // conclude.
                 int test = std::strncmp(data1_2, data1_1, minlen);
-                if (test != 0) return test;
+                if (test) return test;
                 // If not, we may be able to conclude via their length
                 if (len1 > len2) return -1;
                 if (len1 < len2) return 1;
@@ -922,7 +956,7 @@ int KeyComparisonAsPython_Column(bool const& na_position_bis, array_info* arr1,
             char* data1_1 = (char*)arr1->data1 + pos1_prev;
             char* data1_2 = (char*)arr2->data1 + pos2_prev;
             int test = std::strncmp(data1_2, data1_1, minlen);
-            if (test != 0) return test;
+            if (test) return test;
             // If not, we may be able to conclude via the string length.
             if (len1 > len2) return -1;
             if (len1 < len2) return 1;
@@ -944,7 +978,7 @@ bool KeyComparisonAsPython(size_t const& n_key, int64_t* vect_ascending,
         int test = KeyComparisonAsPython_Column(
             na_position_bis, columns1[shift_key1 + iKey], iRow1,
             columns2[shift_key2 + iKey], iRow2);
-        if (test != 0) {
+        if (test) {
             if (ascending) return test > 0;
             return test < 0;
         }
@@ -1092,8 +1126,9 @@ void DEBUG_append_to_out_array(std::shared_ptr<arrow::Array> input_array,
             if (list_array->IsNull(idx)) {
                 string_builder += "None";
             } else {
-                DEBUG_append_to_out_array(list_array->values(), list_array->value_offset(idx),
-                                          list_array->value_offset(idx + 1), string_builder);
+                DEBUG_append_to_out_array(
+                    list_array->values(), list_array->value_offset(idx),
+                    list_array->value_offset(idx + 1), string_builder);
             }
         }
         string_builder += "]";
@@ -1110,25 +1145,24 @@ void DEBUG_append_to_out_array(std::shared_ptr<arrow::Array> input_array,
                 continue;
             }
             string_builder += "{";
-            for (int i = 0; i < struct_type->num_children();
-                 i++) {  // each field is an array
-                DEBUG_append_to_out_array(struct_array->field(i), idx, idx + 1,
-                                          string_builder);
+            for (int i_child = 0; i_child < struct_type->num_children();
+                 i_child++) {  // each field is an array
+                if (i_child > 0) string_builder += ", ";
+                DEBUG_append_to_out_array(struct_array->field(i_child), idx,
+                                          idx + 1, string_builder);
             }
             string_builder += "}";
         }
     } else if (input_array->type_id() == arrow::Type::STRING) {
         auto str_array =
             std::dynamic_pointer_cast<arrow::StringArray>(input_array);
-        int64_t num_elems = end_offset - start_offset;
         string_builder += "[";
-        for (int64_t i = 0; i < num_elems; i++) {
+        for (int64_t i = start_offset; i < end_offset; i++) {
             if (i > 0) string_builder += ", ";
-            if (str_array->IsNull(start_offset + i))
+            if (str_array->IsNull(i))
                 string_builder += "None";
             else
-                string_builder +=
-                    "\"" + str_array->GetString(start_offset + i) + "\"";
+                string_builder += "\"" + str_array->GetString(i) + "\"";
         }
         string_builder += "]";
     } else {
@@ -1232,8 +1266,9 @@ std::vector<std::string> DEBUG_PrintColumn(array_info* arr) {
         for (size_t iRow = 0; iRow < nRow; iRow++) {
             strOut = "";
             DEBUG_append_to_out_array(in_arr, iRow, iRow + 1, strOut);
-            size_t len = strOut.size();
-            ListStr[iRow] = strOut.substr(1,len-2);
+            ListStr[iRow] = strOut;
+            //            size_t len = strOut.size();
+            //            ListStr[iRow] = strOut.substr(1,len-2);
         }
     }
     return ListStr;

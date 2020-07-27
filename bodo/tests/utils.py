@@ -817,6 +817,55 @@ def check_parallel_coherency(
     assert n_passed == n_pes
 
 
+def gen_random_arrow_array_struct_int(span, n):
+    e_list = []
+    for _ in range(n):
+        valA = random.randint(0, span)
+        valB = random.randint(0, span)
+        e_ent = {"A": valA, "B": valB}
+        e_list.append(e_ent)
+    return e_list
+
+
+def gen_random_arrow_array_struct_list_int(span, n):
+    e_list = []
+    for _ in range(n):
+        # We cannot allow empty block because if the first one is such type
+        # gets found to be wrong.
+        valA = [random.randint(0, span) for _ in range(random.randint(1, 5))]
+        valB = [random.randint(0, span) for _ in range(random.randint(1, 5))]
+        e_ent = {"A": valA, "B": valB}
+        e_list.append(e_ent)
+    return e_list
+
+
+def gen_random_arrow_list_list(rec_lev, n):
+    def random_list_rec(rec_lev):
+        if random.random() < 0.1:
+            return None
+        else:
+            if rec_lev == 0:
+                return random.randint(0, 10)
+            else:
+                return [
+                    random_list_rec(rec_lev - 1) for _ in range(random.randint(0, 3))
+                ]
+
+    return [random_list_rec(rec_lev) for _ in range(n)]
+
+
+def gen_random_arrow_struct_struct(span, n):
+    e_list = []
+    for _ in range(n):
+        valA1 = random.randint(0, span)
+        valA2 = random.randint(0, span)
+        valB1 = random.randint(0, span)
+        valB2 = random.randint(0, span)
+        e_ent = {"A": {"A1": valA1, "A2": valA2}, "B": {"B1": valB1, "B2": valB2}}
+        e_list.append(e_ent)
+    return e_list
+
+
 def gen_random_list_string_array(option, n):
     """Generate a random array of list(string)
     option=1 for series with nullable values
