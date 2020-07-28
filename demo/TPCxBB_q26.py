@@ -26,25 +26,24 @@ def q26(ss_file, i_file, category, item_count):
     count1 = sale_items.groupby("ss_customer_sk")["ss_item_sk"].count()
     gp1 = sale_items.groupby("ss_customer_sk")["i_class_id"]
 
-    customer_i_class = gp1.agg(
-        (
-            lambda x: (x == 1).sum(),
-            lambda x: (x == 2).sum(),
-            lambda x: (x == 3).sum(),
-            lambda x: (x == 4).sum(),
-            lambda x: (x == 5).sum(),
-            lambda x: (x == 6).sum(),
-            lambda x: (x == 7).sum(),
-            lambda x: (x == 8).sum(),
-            lambda x: (x == 9).sum(),
-            lambda x: (x == 10).sum(),
-            lambda x: (x == 11).sum(),
-            lambda x: (x == 12).sum(),
-            lambda x: (x == 13).sum(),
-            lambda x: (x == 14).sum(),
-            lambda x: (x == 15).sum(),
-        )
-    )
+    def id1(x): return (x==1).sum()
+    def id2(x): return (x==2).sum()
+    def id3(x): return (x==3).sum()
+    def id4(x): return (x==4).sum()
+    def id5(x): return (x==5).sum()
+    def id6(x): return (x==6).sum()
+    def id7(x): return (x==7).sum()
+    def id8(x): return (x==8).sum()
+    def id9(x): return (x==9).sum()
+    def id10(x): return (x==10).sum()
+    def id11(x): return (x==11).sum()
+    def id12(x): return (x==12).sum()
+    def id13(x): return (x==13).sum()
+    def id14(x): return (x==14).sum()
+    def id15(x): return (x==15).sum()
+
+    customer_i_class = gp1.agg((id1, id2, id3, id4, id5, id6, id7, id8, id9,
+        id10, id11, id12, id13, id14, id15))
 
     customer_i_class["ss_item_count"] = count1
 
