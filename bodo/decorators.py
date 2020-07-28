@@ -110,6 +110,23 @@ def master_mode_wrapper(numba_jit_wrapper):  # pragma: no cover
     return _wrapper
 
 
+# shows whether jit compilation is on inside a function or not. The overloaded version
+# returns True while regular interpreted version returns False.
+# example:
+# @bodo.jit
+# def f():
+#     print(bodo.is_jit_execution())  # prints True
+# def g():
+#     print(bodo.is_jit_execution())  # prints False
+def is_jit_execution():  # pragma: no cover
+    return False
+
+
+@numba.extending.overload(is_jit_execution)
+def is_jit_execution_overload():
+    return lambda: True  # pragma: no cover
+
+
 def jit(signature_or_function=None, **options):
     # set nopython by default
     if "nopython" not in options:
