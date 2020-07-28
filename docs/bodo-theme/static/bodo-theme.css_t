@@ -612,22 +612,22 @@ a:hover tt, a:hover code {
 
     body {
         margin: 0;
-        padding: 20px 30px;
+        padding: 20px 8px;
     }
 
     div.documentwrapper {
         float: none;
-        background: {{ theme_base_bg }};
+				background-color: #fff;
     }
 
     div.sphinxsidebar {
         display: block;
         float: none;
-        width: 102.5%;
+        width: 110%;
         {%- if theme_fixed_sidebar|lower == 'true' %}
         margin: -20px -30px 20px -30px;
         {%- else %}
-        margin: 50px -30px -20px -30px;
+        margin: 50px -8px -20px -8px;
         {%- endif %}
         padding: 10px 20px;
         background: {{ theme_narrow_sidebar_bg }};
@@ -658,6 +658,7 @@ a:hover tt, a:hover code {
 
     div.bodywrapper {
         margin: 0;
+        padding: 0 20px 40px 20px;
     }
 
     div.body {
