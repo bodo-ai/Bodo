@@ -5,9 +5,18 @@ Installation
 ============
 
 Bodo is a Python package and can be installed in a Conda environment easily.
-Install Conda if not installed already. For example::
+Install Conda if not installed already. For example:
+
+On Linux::
 
     wget https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh
+    chmod +x miniconda.sh
+    ./miniconda.sh -b
+    export PATH=$HOME/miniconda3/bin:$PATH
+
+On macOS::
+
+    wget https://repo.continuum.io/miniconda/Miniconda3-latest-MacOSX-x86_64.sh -O miniconda.sh
     chmod +x miniconda.sh
     ./miniconda.sh -b
     export PATH=$HOME/miniconda3/bin:$PATH
@@ -17,7 +26,7 @@ dependencies (replace "{full-path-to-bodo-package-directory}")::
 
     conda create -n Bodo python
     source activate Bodo
-    conda install bodo h5py scipy hdf5=*=*mpich* -c file://{full-path-to-bodo-package-directory} -c conda-forge
+    conda install bodo h5py scipy "hdf5=*=*mpich*" -c file://{full-path-to-bodo-package-directory} -c conda-forge
 
 Bodo uses `MPI <https://en.wikipedia.org/wiki/Message_Passing_Interface>`_ for parallelization,
 which is automatically installed as part of
