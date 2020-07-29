@@ -41,7 +41,7 @@ jobs:
   - bash: |
       source activate bodo_build
       if [[ $OBFUSCATE == 1 ]]; then
-        conda install -y astor
+        conda install -y astor -c conda-forge
         cd obfuscation
         ./do_obfuscation.py
       else
