@@ -35,10 +35,10 @@ else
 fi
 
 $CONDA_INSTALL -c conda-forge pyarrow=0.17.1
-$CONDA_INSTALL pandas>=1.0.0 -c conda-forge
+$CONDA_INSTALL pandas=1.0.5 -c conda-forge
 $CONDA_INSTALL numba=0.50.1 -c conda-forge
 $CONDA_INSTALL mpi4py -c conda-forge
-$CONDA_INSTALL -c conda-forge hdf5=*=*mpich*
-$CONDA_INSTALL -c conda-forge xlrd xlsxwriter
+$CONDA_INSTALL hdf5=*=*mpich* -c conda-forge
+$CONDA_INSTALL xlrd xlsxwriter -c conda-forge
 
 if [ "$RUN_COVERAGE" == "yes" ]; then $CONDA_INSTALL coveralls; fi
