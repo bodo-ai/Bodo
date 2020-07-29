@@ -24,4 +24,4 @@ for e_dir in list_dir:
 
 list_command_args = [sys.executable, "./obfuscate.py", "file"] + list_files
 
-subprocess.run(list_command_args)
+exit(subprocess.run(list_command_args).returncode)
