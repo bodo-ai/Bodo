@@ -1070,7 +1070,7 @@ PyObject* dict_values(PyObject* obj) { return PyDict_Values(obj); }
 void dict_merge_from_seq2(PyObject* dict_obj, PyObject* seq2) {
     int err = PyDict_MergeFromSeq2(dict_obj, seq2, 0);
     if (err != 0) {
-        std::cerr << "PyDict_MergeFromSeq2 failed" << std::endl;
+        Bodo_PyErr_SetString(PyExc_RuntimeError, "PyDict_MergeFromSeq2 failed");
     }
 }
 
