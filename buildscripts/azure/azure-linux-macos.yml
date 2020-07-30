@@ -25,6 +25,12 @@ jobs:
     displayName: 'Setup Miniconda'
 
   - script: |
+      if [[ "${{ parameters.name }}" == "macOS" ]]; then
+        buildscripts/setup_osx_sdk.sh
+      fi
+    displayName: 'Setup OSX SDK'
+
+  - script: |
       buildscripts/setup_minio.sh
     displayName: 'Setup minio'
 

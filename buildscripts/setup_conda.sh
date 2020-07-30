@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -ex
+
 # Install Miniconda
 # Reference:
 # https://github.com/numba/numba/blob/master/buildscripts/incremental/install_miniconda.sh
@@ -29,7 +31,7 @@ source activate $CONDA_ENV
 if [[ "$unamestr" == 'Linux' ]]; then
     $CONDA_INSTALL gcc_linux-64 gxx_linux-64 gfortran_linux-64
 elif [[ "$unamestr" == 'Darwin' ]]; then
-    $CONDA_INSTALL -c conda-forge clang_osx-64=9.0.1 clangxx_osx-64=9.0.1
+    $CONDA_INSTALL -c conda-forge clang_osx-64 clangxx_osx-64
 else
     echo "Error in compiler install"
 fi

@@ -33,6 +33,12 @@ jobs:
     displayName: 'Setup Miniconda'
 
   - script: |
+      if [[ "${{ parameters.name }}" == "macOS" ]]; then
+        buildscripts/setup_osx_sdk.sh
+      fi
+    displayName: 'Setup OSX SDK'
+
+  - script: |
       export PATH=$HOME/miniconda3/bin:$PATH
       source activate bodo_build
       conda install -y flake8
@@ -58,6 +64,8 @@ jobs:
 
   - script: |
       export PATH=$HOME/miniconda3/bin:${PATH}
+      export MACOSX_DEPLOYMENT_TARGET=${MACOSX_DEPLOYMENT_TARGET:-10.9}
+      export CONDA_BUILD_SYSROOT="/opt/MacOSX${MACOSX_DEPLOYMENT_TARGET}.sdk"
       source activate bodo_build
       cd buildscripts/bodo-conda-recipe/
       export CHECK_LICENSE_EXPIRED=$(CHECK_LICENSE_EXPIRED)

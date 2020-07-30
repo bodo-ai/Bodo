@@ -31,7 +31,7 @@ stages:
       vmImage: ubuntu-latest
   - template: buildscripts/azure/azure-build-binary-linux-macos.yml
     parameters:
-      name: Mac
+      name: macOS
       vmImage: macOS-latest
   - template: buildscripts/azure/azure-build-binary-windows.yml
     parameters:
@@ -43,7 +43,7 @@ stages:
   jobs:
   - template: buildscripts/azure/azure-test-binary-linux-macos.yml
     parameters:
-      name: Mac
+      name: macOS
       vmImage: macOS-latest
       matrix:
         TEST_1P_SLOW:
