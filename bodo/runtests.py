@@ -40,6 +40,7 @@ if codecov:
 
 # run each test module in a separate process to avoid out-of-memory issues
 # due to leaks
+tests_failed = False
 for i, m in enumerate(modules):
     # run tests only of module m
 
@@ -63,11 +64,17 @@ for i, m in enumerate(modules):
     p = subprocess.Popen(cmd, shell=False)
     rc = p.wait()
     if rc not in (0, 5):  # pytest returns error code 5 when no tests found
-        raise RuntimeError("An error occurred when running the command " + str(cmd))
+        # raise RuntimeError("An error occurred when running the command " + str(cmd))
+        tests_failed = True
+        continue  # continue with rest of the tests
     if codecov:
         assert os.path.isfile(".coverage"), "Coverage file was not created"
         # rename coverage file and move aside to avoid conflicts with pytest-cov
         os.rename(".coverage", "./cov_files/.coverage." + str(i))
+
+
+if tests_failed:
+    exit(1)
 
 
 if codecov:
