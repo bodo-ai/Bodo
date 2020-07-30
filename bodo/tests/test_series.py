@@ -1806,6 +1806,22 @@ def test_series_max(series_val, memory_leak_check):
     check_func(test_impl, (series_val,))
 
 
+def test_min_max_sum_series(memory_leak_check):
+    """Another syntax for computing the maximum
+    """
+    def f1(S):
+        return max(S)
+    def f2(S):
+        return max(S)
+    def f3(S):
+        return sum(S)
+
+    S = pd.Series([1, 3, 4, 2])
+    check_func(f1, (S,), is_out_distributed=False)
+    check_func(f2, (S,), is_out_distributed=False)
+    check_func(f3, (S,), is_out_distributed=False)
+
+
 def test_series_min_max_int_output_type(memory_leak_check):
     """make sure output type of min/max for integer input is not converted to float
     """
@@ -1817,8 +1833,8 @@ def test_series_min_max_int_output_type(memory_leak_check):
         return S.max()
 
     S = pd.Series([1, 3, 4, 2])
-    assert isinstance(bodo.jit(impl1)(S), int)
-    assert isinstance(bodo.jit(impl2)(S), int)
+    check_func(impl1, (S,), is_out_distributed=False)
+    check_func(impl2, (S,), is_out_distributed=False)
 
 
 def test_series_idxmin(series_val, memory_leak_check):

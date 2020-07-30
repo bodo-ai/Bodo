@@ -797,6 +797,30 @@ def overload_series_min(S, axis=None, skipna=None, level=None, numeric_only=None
     return impl
 
 
+@overload(max, inline="always", no_unliteral=True)
+def overload_series_max(S):
+    if isinstance(S, SeriesType):
+        def impl(S):
+            return S.max()
+        return impl
+
+
+@overload(min, inline="always", no_unliteral=True)
+def overload_series_min(S):
+    if isinstance(S, SeriesType):
+        def impl(S):
+            return S.min()
+        return impl
+
+
+@overload(sum, inline="always", no_unliteral=True)
+def overload_series_sum(S):
+    if isinstance(S, SeriesType):
+        def impl(S):
+            return S.sum()
+        return impl
+
+
 @overload_method(SeriesType, "max", inline="always", no_unliteral=True)
 def overload_series_max(S, axis=None, skipna=None, level=None, numeric_only=None):
     if not (is_overload_none(axis) or is_overload_zero(axis)):
