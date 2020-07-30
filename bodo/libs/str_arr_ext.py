@@ -1600,8 +1600,14 @@ def str_arr_setitem(A, idx, val):
             set_string_array_range(
                 A, val, start, np.int64(getitem_str_offset(A, start))
             )
+            # nulls of input and output arrays should match
+            curr = 0
             for i in range(slice_idx.start, slice_idx.stop, slice_idx.step):
-                str_arr_set_not_na(A, i)
+                if str_arr_is_na(val, curr):
+                    str_arr_set_na(A, i)
+                else:
+                    str_arr_set_not_na(A, i)
+                curr += 1
 
         return impl_slice
 
