@@ -1622,6 +1622,17 @@ def test_csv_invalid_path_const():
         bodo.jit(test_impl)()
 
 
+def test_read_parquet_invalid_path_const():
+    """test error raise when parquet file path provided as constant but is invalid.
+    """
+
+    def test_impl():
+        return pd.read_parquet("I_dont_exist.pq")
+
+    with pytest.raises(OSError, match="Passed non-file path"):
+        bodo.jit(test_impl)()
+
+
 class TestIO(unittest.TestCase):
     def test_h5_write_parallel(self):
         fname = "lr_w.hdf5"

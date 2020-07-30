@@ -128,7 +128,7 @@ DatasetReader *get_dataset_reader(char *file_name, bool parallel) {
     PyObject *ds = PyObject_CallMethod(pq_mod, "get_parquet_dataset", "si",
                                        file_name, int(parallel));
     PYERR_CHECK(!PyErr_Occurred(),
-                "Python error during Parquet dataset metadata")
+                "Python error reading parquet dataset")
     Py_DECREF(pq_mod);
 
     // total_rows = ds._bodo_total_rows
