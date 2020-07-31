@@ -54,7 +54,7 @@ use_pandas_join = False
 use_cpp_drop_duplicates = True
 # sql_access_method = "multiple_access_by_block"
 sql_access_method = "multiple_access_nb_row_first"
-from bodo.decorators import jit
+from bodo.decorators import jit, is_jit_execution
 from bodo.master_mode import init_master_mode
 
 multithread_mode = False

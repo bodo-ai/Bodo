@@ -347,6 +347,14 @@ def test_dead_branch_remove(memory_leak_check):
     _check_IR_single_label(test_impl2, ())
 
 
+def test_is_jit_execution(memory_leak_check):
+    """make sure bodo.is_jit_execution() returns True inside a jit function, but False
+    otherwise.
+    """
+    assert bodo.is_jit_execution() == False
+    assert bodo.jit(lambda: bodo.is_jit_execution())() == True
+
+
 def test_return(memory_leak_check):
     def test_impl(N):
         A = np.arange(N)
