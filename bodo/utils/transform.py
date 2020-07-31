@@ -4,6 +4,7 @@ Helper functions for transformations.
 """
 import operator
 from collections import namedtuple
+import inspect
 import math
 import itertools
 import pandas as pd
@@ -199,6 +200,11 @@ def remove_hiframes(rhs, lives, call_list):
     # TODO: needed?
     # if call_list == ['set_parent_dummy', 'pd_dataframe_ext', 'hiframes', bodo]:
     #     return True
+
+    # constructor calls of tuple subclasses like namedtuple don't have side-effect
+    # e.g. Row(a, b) in UDFs
+    if len(call_tuple) == 1 and tuple in getattr(call_tuple[0], "__mro__", ()):
+        return True
 
     return False
 

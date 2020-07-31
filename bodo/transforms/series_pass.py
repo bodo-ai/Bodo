@@ -611,6 +611,16 @@ class SeriesPass:
                     assign.value = r_def.args[2]
             return [assign]
 
+        # replace namedtuple access with original value if possible
+        # for example: r = Row(a, b); c = r.R1 -> c = a
+        # used for df.apply() UDF optimization
+        if isinstance(rhs_type, types.BaseNamedTuple):
+            named_tup_def = guard(get_definition, self.func_ir, rhs.value)
+            # TODO: support kws
+            if is_expr(named_tup_def, "call") and not named_tup_def.kws:
+                arg_no = rhs_type.instance_class._fields.index(rhs.attr)
+                assign.value = named_tup_def.args[arg_no]
+
         return [assign]
 
     def _run_binop(self, assign, rhs):
