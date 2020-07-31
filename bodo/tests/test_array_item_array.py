@@ -15,8 +15,10 @@ from bodo.tests.utils import check_func
 
 @pytest.fixture(
     params=[
-        np.array([[1, 3, None], [2], None, [4, None, 5, 6], [], [1, 1]]),
-        np.array([[2.0, -3.2], [2.2, 1.3], None, [4.1, np.nan, 6.3], [], [1.1, 1.2]]),
+        np.array([[1, 3, None], [2], None, [4, None, 5, 6], [], [1, 1]] * 2),
+        np.array(
+            [[2.0, -3.2], [2.2, 1.3], None, [4.1, np.nan, 6.3], [], [1.1, 1.2]] * 2
+        ),
         np.array(
             [
                 [True, False, None],
@@ -26,6 +28,7 @@ from bodo.tests.utils import check_func
                 [],
                 [True, True],
             ]
+            * 2
         ),
         np.array(
             [
@@ -36,6 +39,7 @@ from bodo.tests.utils import check_func
                 [],
                 [datetime.date(2020, 11, 17)],
             ]
+            * 2
         ),
         # data from Spark-generated Parquet files can have array elements
         np.array(
@@ -47,6 +51,7 @@ from bodo.tests.utils import check_func
                 np.array([], np.int32),
                 np.array([1, 1], np.int32),
             ]
+            * 2
         ),
         # TODO: enable Decimal test when memory leaks and test equality issues are fixed
         # np.array(
@@ -69,6 +74,7 @@ from bodo.tests.utils import check_func
                 [],
                 [[1], None, [1, 4], []],
             ]
+            * 2
         ),
         # string data with NA
         np.array([[["1", "2", "8"], ["3"]], [["2", None]]] * 4),
@@ -82,6 +88,7 @@ from bodo.tests.utils import check_func
                 [],
                 [[[], [1]], None, [[1, 4]], []],
             ]
+            * 2
         ),
         # struct data
         np.array(
