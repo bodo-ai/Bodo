@@ -50,6 +50,7 @@ ll.add_symbol("list_string_array_to_info", array_ext.list_string_array_to_info)
 ll.add_symbol("nested_array_to_info", array_ext.nested_array_to_info)
 ll.add_symbol("string_array_to_info", array_ext.string_array_to_info)
 ll.add_symbol("numpy_array_to_info", array_ext.numpy_array_to_info)
+ll.add_symbol("categorical_array_to_info", array_ext.categorical_array_to_info)
 ll.add_symbol("nullable_array_to_info", array_ext.nullable_array_to_info)
 ll.add_symbol("decimal_array_to_info", array_ext.decimal_array_to_info)
 ll.add_symbol("info_to_nested_array", array_ext.info_to_nested_array)
@@ -342,12 +343,17 @@ def array_to_info(typingctx, arr_type_t):
         # get codes array from CategoricalArray to be handled similar to other Numpy
         # arrays.
         # TODO: create CategoricalArray on C++ side to handle NAs (-1) properly
+        is_categorical = False
         if isinstance(arr_type, CategoricalArray):
+            num_categories = context.compile_internal(
+                builder, lambda a: len(a.dtype.categories), types.intp(arr_type), [in_arr]
+            )
             in_arr = cgutils.create_struct_proxy(arr_type)(
                 context, builder, in_arr
             ).codes
             int_dtype = get_categories_int_type(arr_type.dtype)
             arr_type = types.Array(int_dtype, 1, "C")
+            is_categorical = True
 
         # Numpy
         if isinstance(arr_type, types.Array):
@@ -360,27 +366,52 @@ def array_to_info(typingctx, arr_type_t):
                 builder, lir.Constant(lir.IntType(32), typ_enum)
             )
 
-            fnty = lir.FunctionType(
-                lir.IntType(8).as_pointer(),
-                [
-                    lir.IntType(64),
+            if is_categorical:
+                fnty = lir.FunctionType(
                     lir.IntType(8).as_pointer(),
-                    lir.IntType(32),
+                    [
+                        lir.IntType(64),
+                        lir.IntType(8).as_pointer(),
+                        lir.IntType(32),
+                        lir.IntType(64),
+                        lir.IntType(8).as_pointer(),
+                    ],
+                )
+                fn_tp = builder.module.get_or_insert_function(
+                    fnty, name="categorical_array_to_info"
+                )
+                return builder.call(
+                    fn_tp,
+                    [
+                        length,
+                        builder.bitcast(arr.data, lir.IntType(8).as_pointer()),
+                        builder.load(typ_arg),
+                        num_categories,
+                        arr.meminfo,
+                    ],
+                )
+            else:
+                fnty = lir.FunctionType(
                     lir.IntType(8).as_pointer(),
-                ],
-            )
-            fn_tp = builder.module.get_or_insert_function(
-                fnty, name="numpy_array_to_info"
-            )
-            return builder.call(
-                fn_tp,
-                [
-                    length,
-                    builder.bitcast(arr.data, lir.IntType(8).as_pointer()),
-                    builder.load(typ_arg),
-                    arr.meminfo,
-                ],
-            )
+                    [
+                        lir.IntType(64),
+                        lir.IntType(8).as_pointer(),
+                        lir.IntType(32),
+                        lir.IntType(8).as_pointer(),
+                    ],
+                )
+                fn_tp = builder.module.get_or_insert_function(
+                    fnty, name="numpy_array_to_info"
+                )
+                return builder.call(
+                    fn_tp,
+                    [
+                        length,
+                        builder.bitcast(arr.data, lir.IntType(8).as_pointer()),
+                        builder.load(typ_arg),
+                        arr.meminfo,
+                    ],
+                )
 
         # nullable integer/bool array
         if isinstance(arr_type, (IntegerArrayType, DecimalArrayType)) or arr_type in (

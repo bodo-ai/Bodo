@@ -115,7 +115,7 @@ void array_isin(array_info* out_arr, array_info* in_arr, array_info* in_values,
     // Creation of the output array.
     int64_t len = shuf_table_in_arr->columns[0]->length;
     array_info* shuf_out_arr =
-        alloc_array(len, -1, -1, out_arr->arr_type, out_arr->dtype, 0);
+        alloc_array(len, -1, -1, out_arr->arr_type, out_arr->dtype, 0, out_arr->num_categories);
     // Calling isin on the shuffled info
     array_isin_kernel(shuf_out_arr, shuf_table_in_arr->columns[0],
                       shuf_table_in_values->columns[0]);
@@ -404,7 +404,7 @@ static table_info* drop_duplicates_table_inner(table_info* in_table,
         key_arrs[iKey] = in_table->columns[iKey];
 #ifdef DEBUG_DD
     size_t n_col = in_table->ncols();
-    std::cout << "INPUT:\n";
+    std::cout << "drop_duplicates_table_inner : INPUT:\n";
     std::cout << "n_col=" << n_col << " n_rows=" << n_rows
               << " num_keys=" << num_keys << "\n";
     DEBUG_PrintSetOfColumn(std::cout, in_table->columns);
@@ -413,6 +413,9 @@ static table_info* drop_duplicates_table_inner(table_info* in_table,
 
     uint32_t seed = 0xb0d01287;
     uint32_t* hashes = hash_keys(key_arrs, seed);
+#ifdef DEBUG_DD
+    std::cout << "drop_duplicates : we have hashes\n";
+#endif
     /* This is a function for computing the hash (here returning computed value)
      * This is the first function passed as argument for the map function.
      *
@@ -523,7 +526,7 @@ static table_info* drop_duplicates_table_inner(table_info* in_table,
     //
     delete[] hashes;
 #ifdef DEBUG_DD
-    std::cout << "OUTPUT:\n";
+    std::cout << "drop_duplicates_table_inner : OUTPUT:\n";
     DEBUG_PrintSetOfColumn(std::cout, ret_table->columns);
     DEBUG_PrintRefct(std::cout, ret_table->columns);
 #endif

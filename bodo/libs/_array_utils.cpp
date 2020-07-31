@@ -262,7 +262,7 @@ array_info* RetrieveArray(
             tot_size_data += size_data;
         }
         out_arr = alloc_array(nRowOut, tot_size_index, tot_size_data, arr_type,
-                              dtype, 0);
+                              dtype, 0, 0);
         uint8_t* out_null_bitmask = (uint8_t*)out_arr->null_bitmask;
         uint32_t pos_index = 0;
         uint32_t pos_data = 0;
@@ -325,7 +325,7 @@ array_info* RetrieveArray(
             ListSizes[iRow] = size;
             n_chars += size;
         }
-        out_arr = alloc_array(nRowOut, n_chars, -1, arr_type, dtype, 0);
+        out_arr = alloc_array(nRowOut, n_chars, -1, arr_type, dtype, 0, 0);
         uint8_t* out_null_bitmask = (uint8_t*)out_arr->null_bitmask;
         uint32_t pos = 0;
         uint32_t* out_offsets = (uint32_t*)out_arr->data2;
@@ -341,12 +341,11 @@ array_info* RetrieveArray(
                 uint32_t* in_offsets =
                     (uint32_t*)in_table->columns[pairShiftRow.first]->data2;
                 uint32_t start_offset = in_offsets[pairShiftRow.second];
-                for (uint32_t i = 0; i < size; i++) {
-                    out_arr->data1[pos] = in_table->columns[pairShiftRow.first]
-                                              ->data1[start_offset];
-                    pos++;
-                    start_offset++;
-                }
+                char* out_ptr = out_arr->data1 + pos;
+                char* in_ptr =
+                    in_table->columns[pairShiftRow.first]->data1 + start_offset;
+                memcpy(out_ptr, in_ptr, size);
+                pos += size;
                 bit = GetBit(in_null_bitmask, pairShiftRow.second);
             }
             SetBitTo(out_null_bitmask, iRow, bit);
@@ -360,7 +359,7 @@ array_info* RetrieveArray(
         // suffices for the copy.
         // In the case of missing array a value of false is assigned
         // to the bitmask.
-        out_arr = alloc_array(nRowOut, -1, -1, arr_type, dtype, 0);
+        out_arr = alloc_array(nRowOut, -1, -1, arr_type, dtype, 0, 0);
         uint8_t* out_null_bitmask = (uint8_t*)out_arr->null_bitmask;
         uint64_t siztype = numpy_item_size[dtype];
         for (size_t iRow = 0; iRow < nRowOut; iRow++) {
@@ -370,13 +369,34 @@ array_info* RetrieveArray(
                 uint8_t* in_null_bitmask =
                     (uint8_t*)in_table->columns[pairShiftRow.first]
                         ->null_bitmask;
-                for (uint64_t u = 0; u < siztype; u++)
-                    out_arr->data1[siztype * iRow + u] =
-                        in_table->columns[pairShiftRow.first]
-                            ->data1[siztype * pairShiftRow.second + u];
+                char* out_ptr = out_arr->data1 + siztype * iRow;
+                char* in_ptr = in_table->columns[pairShiftRow.first]->data1 +
+                               siztype * pairShiftRow.second;
+                memcpy(out_ptr, in_ptr, siztype);
                 bit = GetBit(in_null_bitmask, pairShiftRow.second);
             }
             SetBitTo(out_null_bitmask, iRow, bit);
+        }
+    }
+    if (arr_type == bodo_array_type::CATEGORICAL) {
+        // In the case of CATEGORICAL array we have only to put a single
+        // entry. For the NaN entry the value is -1.
+        uint64_t siztype = numpy_item_size[dtype];
+        std::vector<char> vectNaN =
+            RetrieveNaNentry(dtype);  // returns a -1 for integer values.
+        int64_t num_categories = in_table->columns[eshift]->num_categories;
+        out_arr = alloc_categorical(nRowOut, dtype, num_categories);
+        for (size_t iRow = 0; iRow < nRowOut; iRow++) {
+            std::pair<size_t, std::ptrdiff_t> pairShiftRow = get_iRow(iRow);
+            //
+            char* out_ptr = out_arr->data1 + siztype * iRow;
+            char* in_ptr;
+            if (pairShiftRow.second >= 0)
+                in_ptr = in_table->columns[pairShiftRow.first]->data1 +
+                         siztype * pairShiftRow.second;
+            else
+                in_ptr = vectNaN.data();
+            memcpy(out_ptr, in_ptr, siztype);
         }
     }
     if (arr_type == bodo_array_type::NUMPY) {
@@ -391,34 +411,34 @@ array_info* RetrieveArray(
         uint64_t siztype = numpy_item_size[dtype];
         if (!map_integer_type) {
             std::vector<char> vectNaN = RetrieveNaNentry(dtype);
-            out_arr = alloc_array(nRowOut, -1, -1, arr_type, dtype, 0);
+            out_arr = alloc_array(nRowOut, -1, -1, arr_type, dtype, 0, 0);
             for (size_t iRow = 0; iRow < nRowOut; iRow++) {
                 std::pair<size_t, std::ptrdiff_t> pairShiftRow = get_iRow(iRow);
                 //
-                if (pairShiftRow.second >= 0) {
-                    for (uint64_t u = 0; u < siztype; u++)
-                        out_arr->data1[siztype * iRow + u] =
-                            in_table->columns[pairShiftRow.first]
-                                ->data1[siztype * pairShiftRow.second + u];
-                } else {
-                    for (uint64_t u = 0; u < siztype; u++)
-                        out_arr->data1[siztype * iRow + u] = vectNaN[u];
-                }
+                char* out_ptr = out_arr->data1 + siztype * iRow;
+                char* in_ptr;
+                if (pairShiftRow.second >= 0)
+                    in_ptr = in_table->columns[pairShiftRow.first]->data1 +
+                             siztype * pairShiftRow.second;
+                else
+                    in_ptr = vectNaN.data();
+                memcpy(out_ptr, in_ptr, siztype);
             }
         } else {
             bodo_array_type::arr_type_enum arr_type_o =
                 bodo_array_type::NULLABLE_INT_BOOL;
-            out_arr = alloc_array(nRowOut, -1, -1, arr_type_o, dtype, 0);
+            out_arr = alloc_array(nRowOut, -1, -1, arr_type_o, dtype, 0, 0);
             uint8_t* out_null_bitmask = (uint8_t*)out_arr->null_bitmask;
             for (size_t iRow = 0; iRow < nRowOut; iRow++) {
                 std::pair<size_t, std::ptrdiff_t> pairShiftRow = get_iRow(iRow);
                 //
                 bool bit = false;
                 if (pairShiftRow.second >= 0) {
-                    for (uint64_t u = 0; u < siztype; u++)
-                        out_arr->data1[siztype * iRow + u] =
-                            in_table->columns[pairShiftRow.first]
-                                ->data1[siztype * pairShiftRow.second + u];
+                    char* out_ptr = out_arr->data1 + siztype * iRow;
+                    char* in_ptr =
+                        in_table->columns[pairShiftRow.first]->data1 +
+                        siztype * pairShiftRow.second;
+                    memcpy(out_ptr, in_ptr, siztype);
                     bit = true;
                 }
                 SetBitTo(out_null_bitmask, iRow, bit);
@@ -734,7 +754,8 @@ bool TestEqualColumn(array_info* arr1, int64_t pos1, array_info* arr2,
 #endif
         return val == 0;
     }
-    if (arr1->arr_type == bodo_array_type::NUMPY) {
+    if (arr1->arr_type == bodo_array_type::NUMPY ||
+        arr1->arr_type == bodo_array_type::CATEGORICAL) {
         // In the case of NUMPY, we compare the values for concluding.
         uint64_t siztype = numpy_item_size[arr1->dtype];
         char* ptr1 = arr1->data1 + siztype * pos1;
@@ -840,7 +861,8 @@ int KeyComparisonAsPython_Column(bool const& na_position_bis, array_info* arr1,
         return ComparisonArrowColumn(arr1->array, pos1_s, pos1_e, arr2->array,
                                      pos2_s, pos2_e, na_position_bis);
     }
-    if (arr1->arr_type == bodo_array_type::NUMPY) {
+    if (arr1->arr_type == bodo_array_type::NUMPY ||
+        arr1->arr_type == bodo_array_type::CATEGORICAL) {
         // In the case of NUMPY, we compare the values for concluding.
         uint64_t siztype = numpy_item_size[arr1->dtype];
         char* ptr1 = arr1->data1 + (siztype * iRow1);
@@ -1198,7 +1220,8 @@ std::vector<std::string> DEBUG_PrintColumn(array_info* arr) {
             ListStr[iRow] = strOut;
         }
     }
-    if (arr->arr_type == bodo_array_type::NUMPY) {
+    if ((arr->arr_type == bodo_array_type::NUMPY) ||
+        (arr->arr_type == bodo_array_type::CATEGORICAL)) {
         uint64_t siztype = numpy_item_size[arr->dtype];
         for (size_t iRow = 0; iRow < nRow; iRow++) {
             char* ptrdata1 = &(arr->data1[siztype * iRow]);
@@ -1267,8 +1290,14 @@ std::vector<std::string> DEBUG_PrintColumn(array_info* arr) {
             strOut = "";
             DEBUG_append_to_out_array(in_arr, iRow, iRow + 1, strOut);
             ListStr[iRow] = strOut;
-            //            size_t len = strOut.size();
-            //            ListStr[iRow] = strOut.substr(1,len-2);
+        }
+    }
+    if (arr->arr_type == bodo_array_type::CATEGORICAL) {
+        uint64_t siztype = numpy_item_size[arr->dtype];
+        for (size_t iRow = 0; iRow < nRow; iRow++) {
+            char* ptrdata1 = &(arr->data1[siztype * iRow]);
+            strOut = GetStringExpression(arr->dtype, ptrdata1, arr->scale);
+            ListStr[iRow] = strOut;
         }
     }
     return ListStr;
@@ -1350,6 +1379,7 @@ void DEBUG_PrintRefct(std::ostream& os,
         if (arr_type == bodo_array_type::NULLABLE_INT_BOOL) return "NULLABLE";
         if (arr_type == bodo_array_type::LIST_STRING) return "LIST_STRING";
         if (arr_type == bodo_array_type::ARROW) return "ARROW";
+        if (arr_type == bodo_array_type::CATEGORICAL) return "CATEGORICAL";
         return "Uncovered case in DEBUG_PrintRefct\n";
     };
     auto GetNRTinfo = [](NRT_MemInfo* meminf) -> std::string {

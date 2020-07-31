@@ -4,9 +4,10 @@
 #include <limits>
 #include "_array_hash.h"
 #include "_array_utils.h"
+#include "_decimal_ext.h"
+#include "_distributed.h"
 #include "_murmurhash3.h"
 #include "_shuffle.h"
-#include "_decimal_ext.h"
 
 #undef DEBUG_GROUPBY
 
@@ -325,9 +326,6 @@ struct aggstring<Bodo_FTypes::last> {
     static void apply(std::string& v1, std::string& v2) { v1 = v2; }
 };
 
-
-
-
 template <int ftype, typename Enable = void>
 struct aggliststring {
     /**
@@ -387,17 +385,18 @@ struct aggliststring<Bodo_FTypes::last> {
     }
 };
 
-
 // common template function
 
 template <typename T, int dtype>
-inline typename std::enable_if<!is_decimal<dtype>::value, double>::type to_double(T const& val) {
-  return (double)val;
+inline typename std::enable_if<!is_decimal<dtype>::value, double>::type
+to_double(T const& val) {
+    return (double)val;
 }
 
 template <typename T, int dtype>
-inline typename std::enable_if<is_decimal<dtype>::value, double>::type to_double(T const& val) {
-  return decimal_to_double(val);
+inline typename std::enable_if<is_decimal<dtype>::value, double>::type
+to_double(T const& val) {
+    return decimal_to_double(val);
 }
 
 // count
@@ -473,15 +472,15 @@ struct mean_agg<
     typename std::enable_if<!std::is_floating_point<T>::value &&
                             !is_datetime_timedelta<dtype>::value>::type> {
     static void apply(double& v1, T& v2, uint64_t& count) {
-        v1 += to_double<T,dtype>(v2);
+        v1 += to_double<T, dtype>(v2);
         count += 1;
     }
 };
 
 template <typename T, int dtype>
-struct mean_agg<
-    T, dtype, typename std::enable_if<std::is_floating_point<T>::value &&
-                                      !is_decimal<dtype>::value>::type> {
+struct mean_agg<T, dtype,
+                typename std::enable_if<std::is_floating_point<T>::value &&
+                                        !is_decimal<dtype>::value>::type> {
     static void apply(double& v1, T& v2, uint64_t& count) {
         if (!isnan(v2)) {
             v1 += (double)v2;
@@ -489,7 +488,6 @@ struct mean_agg<
         }
     }
 };
-
 
 /**
  * Final evaluation step for mean, which calculates the mean based on the
@@ -543,7 +541,7 @@ struct var_agg<
                             !is_datetime_timedelta<dtype>::value>::type> {
     inline static void apply(T& v2, uint64_t& count, double& mean_x,
                              double& m2) {
-        double v2_double = to_double<T,dtype>(v2);
+        double v2_double = to_double<T, dtype>(v2);
         count += 1;
         double delta = v2_double - mean_x;
         mean_x += delta / count;
@@ -553,9 +551,9 @@ struct var_agg<
 };
 
 template <typename T, int dtype>
-struct var_agg<
-    T, dtype, typename std::enable_if<std::is_floating_point<T>::value &&
-                                      !is_decimal<dtype>::value>::type> {
+struct var_agg<T, dtype,
+               typename std::enable_if<std::is_floating_point<T>::value &&
+                                       !is_decimal<dtype>::value>::type> {
     inline static void apply(T& v2, uint64_t& count, double& mean_x,
                              double& m2) {
         if (!isnan(v2)) {
@@ -1534,20 +1532,25 @@ void apply_to_column(array_info* in_col, array_info* out_col,
                                 nb_char += e_str.size();
                         }
                     }
-                    // Allocation needs to be done through alloc_list_string_array,
-                    // which allocates with meminfos and same data structs that
-                    // Python uses. We need to re-allocate here because number
-                    // of strings and chars has been determined here (previous
-                    // out_col was just an empty dummy allocation).
+                    // Allocation needs to be done through
+                    // alloc_list_string_array, which allocates with meminfos
+                    // and same data structs that Python uses. We need to
+                    // re-allocate here because number of strings and chars has
+                    // been determined here (previous out_col was just an empty
+                    // dummy allocation).
 
                     // TODO this is hacky, but is similar to previous solution.
-                    // Improving this would likely require deeper architectural changes
-                    NRT_MemInfo *old_meminfo = out_col->meminfo;
-                    array_info* aux_info = alloc_list_string_array(out_col->length, nb_string, nb_char, 0);
+                    // Improving this would likely require deeper architectural
+                    // changes
+                    NRT_MemInfo* old_meminfo = out_col->meminfo;
+                    array_info* aux_info = alloc_list_string_array(
+                        out_col->length, nb_string, nb_char, 0);
                     out_col->n_sub_elems = nb_string;
                     out_col->n_sub_sub_elems = nb_char;
-                    array_item_arr_payload *payload = (array_item_arr_payload*)(aux_info->meminfo->data);
-                    str_arr_payload *sub_payload = (str_arr_payload*)(payload->data->data);
+                    array_item_arr_payload* payload =
+                        (array_item_arr_payload*)(aux_info->meminfo->data);
+                    str_arr_payload* sub_payload =
+                        (str_arr_payload*)(payload->data->data);
                     out_col->meminfo = aux_info->meminfo;
                     out_col->data1 = (char*)sub_payload->data;
                     out_col->data2 = (char*)sub_payload->offsets;
@@ -1580,9 +1583,11 @@ void apply_to_column(array_info* in_col, array_info* out_col,
                                     data_offsets_o[pos_data - 1] + n_char;
                             }
                             pos_index += n_string;
-                            SetBitTo((uint8_t*)out_col->null_bitmask, i_grp, true);
+                            SetBitTo((uint8_t*)out_col->null_bitmask, i_grp,
+                                     true);
                         } else {
-                            SetBitTo((uint8_t*)out_col->null_bitmask, i_grp, false);
+                            SetBitTo((uint8_t*)out_col->null_bitmask, i_grp,
+                                     false);
                         }
                     }
                     index_offsets_o[num_groups] = pos_index;
@@ -1640,7 +1645,8 @@ void apply_to_column(array_info* in_col, array_info* out_col,
                     out_col->data1 = new char[nb_char];
                     out_col->n_sub_elems = nb_char;
                     // update string array payload to reflect change
-                    str_arr_payload* payload = (str_arr_payload*)out_col->meminfo->data;
+                    str_arr_payload* payload =
+                        (str_arr_payload*)out_col->meminfo->data;
                     payload->data = out_col->data1;
                     // Writing the strings in output
                     char* data_o = out_col->data1;
@@ -2314,7 +2320,8 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
         case Bodo_CTypes::DECIMAL:
             switch (ftype) {
                 case Bodo_FTypes::first:
-                    return apply_to_column<decimal_value_cpp, Bodo_FTypes::first,
+                    return apply_to_column<decimal_value_cpp,
+                                           Bodo_FTypes::first,
                                            Bodo_CTypes::DECIMAL>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::last:
@@ -2334,7 +2341,8 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                                            Bodo_CTypes::DECIMAL>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::mean_eval:
-                    return apply_to_column<decimal_value_cpp, Bodo_FTypes::mean_eval,
+                    return apply_to_column<decimal_value_cpp,
+                                           Bodo_FTypes::mean_eval,
                                            Bodo_CTypes::DECIMAL>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::var:
@@ -2343,11 +2351,13 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                                            Bodo_CTypes::DECIMAL>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::var_eval:
-                    return apply_to_column<decimal_value_cpp, Bodo_FTypes::var_eval,
+                    return apply_to_column<decimal_value_cpp,
+                                           Bodo_FTypes::var_eval,
                                            Bodo_CTypes::DECIMAL>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::std_eval:
-                    return apply_to_column<decimal_value_cpp, Bodo_FTypes::std_eval,
+                    return apply_to_column<decimal_value_cpp,
+                                           Bodo_FTypes::std_eval,
                                            Bodo_CTypes::DECIMAL>(
                         in_col, out_col, aux_cols, grp_info);
             }
@@ -2509,7 +2519,7 @@ void aggfunc_output_initialize(array_info* out_col, int ftype) {
                     return;
                 case Bodo_CTypes::DECIMAL:
                     std::fill((int64_t*)out_col->data1,
-                              (int64_t*)out_col->data1 + 2*out_col->length,
+                              (int64_t*)out_col->data1 + 2 * out_col->length,
                               std::numeric_limits<int64_t>::max());
                     return;
                 case Bodo_CTypes::STRING:
@@ -2592,7 +2602,7 @@ void aggfunc_output_initialize(array_info* out_col, int ftype) {
                     return;
                 case Bodo_CTypes::DECIMAL:
                     std::fill((int64_t*)out_col->data1,
-                              (int64_t*)out_col->data1 + 2*out_col->length,
+                              (int64_t*)out_col->data1 + 2 * out_col->length,
                               std::numeric_limits<int64_t>::min());
                     return;
                 case Bodo_CTypes::STRING:
@@ -2729,9 +2739,10 @@ class BasicColSet {
                                       std::vector<array_info*>& out_cols) {
         bodo_array_type::arr_type_enum arr_type = in_col->arr_type;
         Bodo_CTypes::CTypeEnum dtype = in_col->dtype;
+        int64_t num_categories = in_col->num_categories;
         // calling this modifies arr_type and dtype
         get_groupby_output_dtype(ftype, arr_type, dtype, false);
-        out_cols.push_back(alloc_array(num_groups, 1, 1, arr_type, dtype, 0));
+        out_cols.push_back(alloc_array(num_groups, 1, 1, arr_type, dtype, 0, num_categories));
         update_cols.push_back(out_cols.back());
     }
 
@@ -2773,10 +2784,11 @@ class BasicColSet {
         for (auto col : update_cols) {
             bodo_array_type::arr_type_enum arr_type = col->arr_type;
             Bodo_CTypes::CTypeEnum dtype = col->dtype;
+            int64_t num_categories = col->num_categories;
             // calling this modifies arr_type and dtype
             get_groupby_output_dtype(combine_ftype, arr_type, dtype, false);
             out_cols.push_back(
-                alloc_array(num_groups, 1, 1, arr_type, dtype, 0));
+                alloc_array(num_groups, 1, 1, arr_type, dtype, 0, num_categories));
             combine_cols.push_back(out_cols.back());
         }
     }
@@ -2845,9 +2857,9 @@ class MeanColSet : public BasicColSet {
                                       std::vector<array_info*>& out_cols) {
         array_info* c1 =
             alloc_array(num_groups, 1, 1, bodo_array_type::NUMPY,
-                        Bodo_CTypes::FLOAT64, 0);  // for sum and result
+                        Bodo_CTypes::FLOAT64, 0, 0);  // for sum and result
         array_info* c2 = alloc_array(num_groups, 1, 1, bodo_array_type::NUMPY,
-                                     Bodo_CTypes::UINT64, 0);  // for counts
+                                     Bodo_CTypes::UINT64, 0, 0);  // for counts
         out_cols.push_back(c1);
         out_cols.push_back(c2);
         update_cols.push_back(c1);
@@ -2894,16 +2906,16 @@ class VarStdColSet : public BasicColSet {
             // need to create output column now
             array_info* col =
                 alloc_array(num_groups, 1, 1, bodo_array_type::NUMPY,
-                            Bodo_CTypes::FLOAT64, 0);  // for result
+                            Bodo_CTypes::FLOAT64, 0, 0);  // for result
             out_cols.push_back(col);
             update_cols.push_back(col);
         }
         array_info* count_col = alloc_array(
-            num_groups, 1, 1, bodo_array_type::NUMPY, Bodo_CTypes::UINT64, 0);
+            num_groups, 1, 1, bodo_array_type::NUMPY, Bodo_CTypes::UINT64, 0, 0);
         array_info* mean_col = alloc_array(
-            num_groups, 1, 1, bodo_array_type::NUMPY, Bodo_CTypes::FLOAT64, 0);
+            num_groups, 1, 1, bodo_array_type::NUMPY, Bodo_CTypes::FLOAT64, 0, 0);
         array_info* m2_col = alloc_array(
-            num_groups, 1, 1, bodo_array_type::NUMPY, Bodo_CTypes::FLOAT64, 0);
+            num_groups, 1, 1, bodo_array_type::NUMPY, Bodo_CTypes::FLOAT64, 0, 0);
         aggfunc_output_initialize(count_col,
                                   Bodo_FTypes::count);  // zero initialize
         aggfunc_output_initialize(mean_col,
@@ -2935,7 +2947,7 @@ class VarStdColSet : public BasicColSet {
     virtual void alloc_combine_columns(size_t num_groups,
                                        std::vector<array_info*>& out_cols) {
         array_info* col = alloc_array(num_groups, 1, 1, bodo_array_type::NUMPY,
-                                      Bodo_CTypes::FLOAT64, 0);  // for result
+                                      Bodo_CTypes::FLOAT64, 0, 0);  // for result
         out_cols.push_back(col);
         combine_cols.push_back(col);
         BasicColSet::alloc_combine_columns(num_groups, out_cols);
@@ -2996,8 +3008,9 @@ class UdfColSet : public BasicColSet {
             bodo_array_type::arr_type_enum arr_type =
                 udf_table->columns[i]->arr_type;
             Bodo_CTypes::CTypeEnum dtype = udf_table->columns[i]->dtype;
+            int64_t num_categories = udf_table->columns[i]->num_categories;
             out_cols.push_back(
-                alloc_array(num_groups, 1, 1, arr_type, dtype, 0));
+                alloc_array(num_groups, 1, 1, arr_type, dtype, 0, num_categories));
             if (!combine_step) update_cols.push_back(out_cols.back());
         }
     }
@@ -3021,8 +3034,9 @@ class UdfColSet : public BasicColSet {
             bodo_array_type::arr_type_enum arr_type =
                 udf_table->columns[i]->arr_type;
             Bodo_CTypes::CTypeEnum dtype = udf_table->columns[i]->dtype;
+            int64_t num_categories = udf_table->columns[i]->num_categories;
             out_cols.push_back(
-                alloc_array(num_groups, 1, 1, arr_type, dtype, 0));
+                alloc_array(num_groups, 1, 1, arr_type, dtype, 0, num_categories));
             combine_cols.push_back(out_cols.back());
         }
     }
@@ -3082,7 +3096,7 @@ class CumOpColSet : public BasicColSet {
         // NOTE: output size of cum ops is the same as input size
         //       (NOT the number of groups)
         out_cols.push_back(alloc_array(in_col->length, 1, 1, in_col->arr_type,
-                                       in_col->dtype, 0));
+                                       in_col->dtype, 0, in_col->num_categories));
         update_cols.push_back(out_cols.back());
     }
 
@@ -3327,7 +3341,7 @@ class GroupbyPipeline {
             if (key_col->arr_type == bodo_array_type::NUMPY ||
                 key_col->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
                 new_key_col = alloc_array(num_groups, 1, 1, key_col->arr_type,
-                                          key_col->dtype, 0);
+                                          key_col->dtype, 0, key_col->num_categories);
                 int64_t dtype_size = numpy_item_size[key_col->dtype];
                 for (size_t j = 0; j < num_groups; j++)
                     memcpy(new_key_col->data1 + j * dtype_size,
@@ -3336,10 +3350,12 @@ class GroupbyPipeline {
                            dtype_size);
                 if (key_col->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
                     uint8_t* in_null_bitmask = (uint8_t*)key_col->null_bitmask;
-                    uint8_t* out_null_bitmask = (uint8_t*)new_key_col->null_bitmask;
+                    uint8_t* out_null_bitmask =
+                        (uint8_t*)new_key_col->null_bitmask;
                     for (size_t j = 0; j < num_groups; j++) {
                         size_t in_row = grp_info.group_to_first_row[j];
-                        SetBitTo(out_null_bitmask, j,GetBit(in_null_bitmask, in_row));
+                        SetBitTo(out_null_bitmask, j,
+                                 GetBit(in_null_bitmask, in_row));
                     }
                 }
             }
@@ -3354,7 +3370,7 @@ class GroupbyPipeline {
                     n_chars += in_offsets[row + 1] - in_offsets[row];
                 }
                 new_key_col = alloc_array(num_groups, n_chars, 1,
-                                          key_col->arr_type, key_col->dtype, 0);
+                                          key_col->arr_type, key_col->dtype, 0, key_col->num_categories);
 
                 uint8_t* in_null_bitmask = (uint8_t*)key_col->null_bitmask;
                 uint8_t* out_null_bitmask = (uint8_t*)new_key_col->null_bitmask;
@@ -3391,7 +3407,7 @@ class GroupbyPipeline {
                                in_data_offsets[in_index_offsets[row]];
                 }
                 new_key_col = alloc_array(num_groups, n_strings, n_chars,
-                                          key_col->arr_type, key_col->dtype, 0);
+                                          key_col->arr_type, key_col->dtype, 0, key_col->num_categories);
                 uint8_t* in_null_bitmask = (uint8_t*)key_col->null_bitmask;
                 uint8_t* out_null_bitmask = (uint8_t*)new_key_col->null_bitmask;
                 uint32_t* out_index_offsets = (uint32_t*)new_key_col->data3;
@@ -3460,6 +3476,563 @@ class GroupbyPipeline {
     size_t num_groups;
 };
 
+template <typename Tkey, typename T, int dtype>
+void mpi_exscan_computation_numpy_T(std::vector<array_info*>& out_arrs,
+                                    table_info* in_table, int64_t num_keys,
+                                    int64_t k, int64_t max_row_idx, int* ftypes,
+                                    int* func_offsets, bool is_parallel,
+                                    bool skipdropna) {
+    array_info* first_col = in_table->columns[0];
+    int64_t n_rows = in_table->nrows();
+    int start = func_offsets[k];
+    int end = func_offsets[k + 1];
+    int n_oper = end - start;
+#ifdef DEBUG_GROUPBY
+    std::cout << "Beginning of mpi_exscan_computation_numpy_T\n";
+    std::cout << "k=" << k << " max_row_idx=" << max_row_idx
+              << " n_oper=" << n_oper << "\n";
+#endif
+    std::vector<T> cumulative(max_row_idx * n_oper);
+    for (int j = start; j != end; j++) {
+        int ftype = ftypes[j];
+        T value_init = -1;  // Not correct value
+        if (ftype == Bodo_FTypes::cumsum) value_init = 0;
+        if (ftype == Bodo_FTypes::cumprod) value_init = 1;
+        if (ftype == Bodo_FTypes::cummax)
+            value_init = std::numeric_limits<T>::min();
+        if (ftype == Bodo_FTypes::cummin)
+            value_init = std::numeric_limits<T>::max();
+#ifdef DEBUG_GROUPBY
+        std::cout << "j=" << j << " value_init=" << value_init << "\n";
+#endif
+        for (int i_row = 0; i_row < max_row_idx; i_row++)
+            cumulative[i_row + max_row_idx * (j - start)] = value_init;
+    }
+    std::vector<T> cumulative_recv = cumulative;
+    array_info* in_col = in_table->columns[k + num_keys];
+    for (int j = start; j != end; j++) {
+        array_info* work_col = out_arrs[j];
+        int ftype = ftypes[j];
+        if (ftype == Bodo_FTypes::cumsum) {
+            for (int64_t i_row = 0; i_row < n_rows; i_row++) {
+                Tkey idx = first_col->at<Tkey>(i_row);
+                size_t pos = idx + max_row_idx * (j - start);
+                T val = in_col->at<T>(i_row);
+                if (skipdropna && isnan_alltype<T, dtype>(val)) {
+                    work_col->at<T>(i_row) = val;
+                } else {
+                    T new_val = val + cumulative[pos];
+                    work_col->at<T>(i_row) = new_val;
+                    cumulative[pos] = new_val;
+                }
+            }
+        }
+        if (ftype == Bodo_FTypes::cumprod) {
+            for (int64_t i_row = 0; i_row < n_rows; i_row++) {
+                Tkey idx = first_col->at<Tkey>(i_row);
+                size_t pos = idx + max_row_idx * (j - start);
+                T val = in_col->at<T>(i_row);
+                if (skipdropna && isnan_alltype<T, dtype>(val)) {
+                    work_col->at<T>(i_row) = val;
+                } else {
+                    T new_val = val * cumulative[pos];
+                    work_col->at<T>(i_row) = new_val;
+                    cumulative[pos] = new_val;
+                }
+            }
+        }
+        if (ftype == Bodo_FTypes::cummax) {
+            for (int64_t i_row = 0; i_row < n_rows; i_row++) {
+                Tkey idx = first_col->at<Tkey>(i_row);
+                size_t pos = idx + max_row_idx * (j - start);
+                T val = in_col->at<T>(i_row);
+                if (skipdropna && isnan_alltype<T, dtype>(val)) {
+                    work_col->at<T>(i_row) = val;
+                } else {
+                    T new_val = std::max(val, cumulative[pos]);
+                    work_col->at<T>(i_row) = new_val;
+                    cumulative[pos] = new_val;
+                }
+            }
+        }
+        if (ftype == Bodo_FTypes::cummin) {
+            for (int64_t i_row = 0; i_row < n_rows; i_row++) {
+                Tkey idx = first_col->at<Tkey>(i_row);
+                size_t pos = idx + max_row_idx * (j - start);
+                T val = in_col->at<T>(i_row);
+                if (skipdropna && isnan_alltype<T, dtype>(val)) {
+                    work_col->at<T>(i_row) = val;
+                } else {
+                    T new_val = std::min(val, cumulative[pos]);
+                    work_col->at<T>(i_row) = new_val;
+                    cumulative[pos] = new_val;
+                }
+            }
+        }
+    }
+    if (!is_parallel) return;
+    MPI_Datatype mpi_typ = get_MPI_typ(dtype);
+    for (int j = start; j != end; j++) {
+        T* data_s = cumulative.data() + max_row_idx * (j - start);
+        T* data_r = cumulative_recv.data() + max_row_idx * (j - start);
+        int ftype = ftypes[j];
+        if (ftype == Bodo_FTypes::cumsum)
+            MPI_Exscan(data_s, data_r, max_row_idx, mpi_typ, MPI_SUM,
+                       MPI_COMM_WORLD);
+        if (ftype == Bodo_FTypes::cumprod)
+            MPI_Exscan(data_s, data_r, max_row_idx, mpi_typ, MPI_PROD,
+                       MPI_COMM_WORLD);
+        if (ftype == Bodo_FTypes::cummax)
+            MPI_Exscan(data_s, data_r, max_row_idx, mpi_typ, MPI_MAX,
+                       MPI_COMM_WORLD);
+        if (ftype == Bodo_FTypes::cummin)
+            MPI_Exscan(data_s, data_r, max_row_idx, mpi_typ, MPI_MIN,
+                       MPI_COMM_WORLD);
+    }
+    for (int j = start; j != end; j++) {
+        array_info* work_col = out_arrs[j];
+        int ftype = ftypes[j];
+        // For skipdropna:
+        //   The cumulative is never a NaN. The sum therefore works
+        //   correctly whether val is a NaN or not.
+        // For !skipdropna:
+        //   the cumulative can be a NaN. The sum also works correctly.
+        if (ftype == Bodo_FTypes::cumsum) {
+            for (int64_t i_row = 0; i_row < n_rows; i_row++) {
+                Tkey idx = first_col->at<Tkey>(i_row);
+                size_t pos = idx + max_row_idx * (j - start);
+                T val = work_col->at<T>(i_row);
+                T new_val = val + cumulative_recv[pos];
+                work_col->at<T>(i_row) = new_val;
+#ifdef DEBUG_GROUPBY
+                std::cout << "NUMPY : i_row=" << i_row << " idx=" << int(idx) << " val=" << val << " new_val=" << new_val << "\n";
+#endif
+            }
+        }
+        if (ftype == Bodo_FTypes::cumprod) {
+            for (int64_t i_row = 0; i_row < n_rows; i_row++) {
+                Tkey idx = first_col->at<Tkey>(i_row);
+                size_t pos = idx + max_row_idx * (j - start);
+                T val = work_col->at<T>(i_row);
+                work_col->at<T>(i_row) = val * cumulative_recv[pos];
+            }
+        }
+        if (ftype == Bodo_FTypes::cummax) {
+            for (int64_t i_row = 0; i_row < n_rows; i_row++) {
+                Tkey idx = first_col->at<Tkey>(i_row);
+                size_t pos = idx + max_row_idx * (j - start);
+                T val = work_col->at<T>(i_row);
+                work_col->at<T>(i_row) = std::max(val, cumulative_recv[pos]);
+            }
+        }
+        if (ftype == Bodo_FTypes::cummin) {
+            for (int64_t i_row = 0; i_row < n_rows; i_row++) {
+                Tkey idx = first_col->at<Tkey>(i_row);
+                size_t pos = idx + max_row_idx * (j - start);
+                T val = work_col->at<T>(i_row);
+                work_col->at<T>(i_row) = std::min(val, cumulative_recv[pos]);
+            }
+        }
+    }
+}
+
+template <typename Tkey, typename T, int dtype>
+void mpi_exscan_computation_nullable_T(std::vector<array_info*>& out_arrs,
+                                       table_info* in_table, int64_t num_keys,
+                                       int64_t k, int64_t max_row_idx,
+                                       int* ftypes, int* func_offsets,
+                                       bool is_parallel, bool skipdropna) {
+    array_info* first_col = in_table->columns[0];
+    int64_t n_rows = in_table->nrows();
+    int start = func_offsets[k];
+    int end = func_offsets[k + 1];
+    int n_oper = end - start;
+#ifdef DEBUG_GROUPBY
+    std::cout << "Beginning of mpi_exscan_computation_nullable_T\n";
+    std::cout << "k=" << k << " max_row_idx=" << max_row_idx
+              << " n_oper=" << n_oper << "\n";
+#endif
+    std::vector<T> cumulative(max_row_idx * n_oper);
+    for (int j = start; j != end; j++) {
+        int ftype = ftypes[j];
+        T value_init = -1;  // Not correct value
+        if (ftype == Bodo_FTypes::cumsum) value_init = 0;
+        if (ftype == Bodo_FTypes::cumprod) value_init = 1;
+        if (ftype == Bodo_FTypes::cummax)
+            value_init = std::numeric_limits<T>::min();
+        if (ftype == Bodo_FTypes::cummin)
+            value_init = std::numeric_limits<T>::max();
+#ifdef DEBUG_GROUPBY
+        std::cout << "j=" << j << " value_init=" << value_init << "\n";
+#endif
+        for (int i_row = 0; i_row < max_row_idx; i_row++)
+            cumulative[i_row + max_row_idx * (j - start)] = value_init;
+    }
+    std::vector<T> cumulative_recv = cumulative;
+    std::vector<uint8_t> cumulative_mask, cumulative_mask_recv;
+    // If we use skipdropna then we do not need to keep track of
+    // the previous values
+    if (!skipdropna) {
+        cumulative_mask = std::vector<uint8_t>(max_row_idx * n_oper, 0);
+        cumulative_mask_recv = std::vector<uint8_t>(max_row_idx * n_oper, 0);
+    }
+    array_info* in_col = in_table->columns[k + num_keys];
+    uint8_t* null_bitmask_i = (uint8_t*)in_col->null_bitmask;
+    for (int j = start; j != end; j++) {
+        array_info* work_col = out_arrs[j];
+        uint8_t* null_bitmask_o = (uint8_t*)work_col->null_bitmask;
+        int ftype = ftypes[j];
+        auto SetValue = [&](int64_t i_row, size_t pos, bool const& bit_i,
+                            T const& new_val) -> void {
+            bool bit_o = bit_i;
+            work_col->at<T>(i_row) = new_val;
+            if (skipdropna) {
+                if (bit_i) cumulative[pos] = new_val;
+            } else {
+                if (bit_i) {
+                    if (cumulative_mask[pos] == 1)
+                        bit_o = false;
+                    else
+                        cumulative[pos] = new_val;
+                } else
+                    cumulative_mask[pos] = 1;
+            }
+            SetBitTo(null_bitmask_o, i_row, bit_o);
+        };
+        if (ftype == Bodo_FTypes::cumsum) {
+            for (int64_t i_row = 0; i_row < n_rows; i_row++) {
+                Tkey idx = first_col->at<Tkey>(i_row);
+                size_t pos = idx + max_row_idx * (j - start);
+                T val = in_col->at<T>(i_row);
+                bool bit_i = GetBit(null_bitmask_i, i_row);
+                T new_val = val + cumulative[pos];
+                SetValue(i_row, pos, bit_i, new_val);
+            }
+        }
+        if (ftype == Bodo_FTypes::cumprod) {
+            for (int64_t i_row = 0; i_row < n_rows; i_row++) {
+                Tkey idx = first_col->at<Tkey>(i_row);
+                size_t pos = idx + max_row_idx * (j - start);
+                T val = in_col->at<T>(i_row);
+                bool bit_i = GetBit(null_bitmask_i, i_row);
+                T new_val = val * cumulative[pos];
+                SetValue(i_row, pos, bit_i, new_val);
+            }
+        }
+        if (ftype == Bodo_FTypes::cummax) {
+            for (int64_t i_row = 0; i_row < n_rows; i_row++) {
+                Tkey idx = first_col->at<Tkey>(i_row);
+                size_t pos = idx + max_row_idx * (j - start);
+                T val = in_col->at<T>(i_row);
+                bool bit_i = GetBit(null_bitmask_i, i_row);
+                T new_val = std::max(val, cumulative[pos]);
+                SetValue(i_row, pos, bit_i, new_val);
+            }
+        }
+        if (ftype == Bodo_FTypes::cummin) {
+            for (int64_t i_row = 0; i_row < n_rows; i_row++) {
+                Tkey idx = first_col->at<Tkey>(i_row);
+                size_t pos = idx + max_row_idx * (j - start);
+                T val = in_col->at<T>(i_row);
+                bool bit_i = GetBit(null_bitmask_i, i_row);
+                T new_val = std::min(val, cumulative[pos]);
+                SetValue(i_row, pos, bit_i, new_val);
+            }
+        }
+    }
+    if (!is_parallel) return;
+    MPI_Datatype mpi_typ = get_MPI_typ(dtype);
+    for (int j = start; j != end; j++) {
+        T* data_s = cumulative.data() + max_row_idx * (j - start);
+        T* data_r = cumulative_recv.data() + max_row_idx * (j - start);
+        int ftype = ftypes[j];
+        if (ftype == Bodo_FTypes::cumsum)
+            MPI_Exscan(data_s, data_r, max_row_idx, mpi_typ, MPI_SUM,
+                       MPI_COMM_WORLD);
+        if (ftype == Bodo_FTypes::cumprod)
+            MPI_Exscan(data_s, data_r, max_row_idx, mpi_typ, MPI_PROD,
+                       MPI_COMM_WORLD);
+        if (ftype == Bodo_FTypes::cummax)
+            MPI_Exscan(data_s, data_r, max_row_idx, mpi_typ, MPI_MAX,
+                       MPI_COMM_WORLD);
+        if (ftype == Bodo_FTypes::cummin)
+            MPI_Exscan(data_s, data_r, max_row_idx, mpi_typ, MPI_MIN,
+                       MPI_COMM_WORLD);
+    }
+    if (!skipdropna) {
+        mpi_typ = get_MPI_typ(Bodo_CTypes::UINT8);
+        MPI_Exscan(cumulative_mask.data(), cumulative_mask_recv.data(),
+                   max_row_idx * n_oper, mpi_typ, MPI_MAX, MPI_COMM_WORLD);
+    }
+    for (int j = start; j != end; j++) {
+        array_info* work_col = out_arrs[j];
+        uint8_t* null_bitmask_o = (uint8_t*)work_col->null_bitmask;
+        int ftype = ftypes[j];
+        if (ftype == Bodo_FTypes::cumsum) {
+            for (int64_t i_row = 0; i_row < n_rows; i_row++) {
+                Tkey idx = first_col->at<Tkey>(i_row);
+                size_t pos = idx + max_row_idx * (j - start);
+                T val = work_col->at<T>(i_row);
+                T new_val = val + cumulative_recv[pos];
+                work_col->at<T>(i_row) = new_val;
+#ifdef DEBUG_GROUPBY
+                std::cout << "i_row=" << i_row << " val=" << val << " new_val=" << new_val << "\n";
+#endif
+                if (!skipdropna && cumulative_mask_recv[pos] == 1) {
+#ifdef DEBUG_GROUPBY
+                    std::cout << "SetBitTo to false i_row=" << i_row << "\n";
+#endif
+                    SetBitTo(null_bitmask_o, i_row, false);
+                }
+            }
+        }
+        if (ftype == Bodo_FTypes::cumprod) {
+            for (int64_t i_row = 0; i_row < n_rows; i_row++) {
+                Tkey idx = first_col->at<Tkey>(i_row);
+                size_t pos = idx + max_row_idx * (j - start);
+                T val = work_col->at<T>(i_row);
+                T new_val = val * cumulative_recv[pos];
+                work_col->at<T>(i_row) = new_val;
+                if (!skipdropna && cumulative_mask_recv[pos] == 1)
+                    SetBitTo(null_bitmask_o, i_row, false);
+            }
+        }
+        if (ftype == Bodo_FTypes::cummax) {
+            for (int64_t i_row = 0; i_row < n_rows; i_row++) {
+                Tkey idx = first_col->at<Tkey>(i_row);
+                size_t pos = idx + max_row_idx * (j - start);
+                T val = work_col->at<T>(i_row);
+                T new_val = std::max(val, cumulative_recv[pos]);
+                work_col->at<T>(i_row) = new_val;
+                if (!skipdropna && cumulative_mask_recv[pos] == 1)
+                    SetBitTo(null_bitmask_o, i_row, false);
+            }
+        }
+        if (ftype == Bodo_FTypes::cummin) {
+            for (int64_t i_row = 0; i_row < n_rows; i_row++) {
+                Tkey idx = first_col->at<Tkey>(i_row);
+                size_t pos = idx + max_row_idx * (j - start);
+                T val = work_col->at<T>(i_row);
+                T new_val = std::min(val, cumulative_recv[pos]);
+                work_col->at<T>(i_row) = new_val;
+                if (!skipdropna && cumulative_mask_recv[pos] == 1)
+                    SetBitTo(null_bitmask_o, i_row, false);
+            }
+        }
+    }
+}
+
+template <typename Tkey, typename T, int dtype>
+void mpi_exscan_computation_T(std::vector<array_info*>& out_arrs,
+                              table_info* in_table, int64_t num_keys, int64_t k,
+                              int64_t max_row_idx, int* ftypes,
+                              int* func_offsets, bool is_parallel,
+                              bool skipdropna) {
+    array_info* in_col = in_table->columns[k + num_keys];
+    if (in_col->arr_type == bodo_array_type::NUMPY)
+        return mpi_exscan_computation_numpy_T<Tkey, T, dtype>(
+            out_arrs, in_table, num_keys, k, max_row_idx, ftypes, func_offsets,
+            is_parallel, skipdropna);
+    else
+        return mpi_exscan_computation_nullable_T<Tkey, T, dtype>(
+            out_arrs, in_table, num_keys, k, max_row_idx, ftypes, func_offsets,
+            is_parallel, skipdropna);
+}
+
+template <typename Tkey>
+table_info* mpi_exscan_computation_Tkey(table_info* in_table, int64_t num_keys,
+                                        int* ftypes, int* func_offsets,
+                                        bool is_parallel, bool skipdropna,
+                                        bool return_key, bool return_index) {
+#ifdef DEBUG_GROUPBY
+    std::cout << "mpi_exscan_computation (in_table)\n";
+    DEBUG_PrintSetOfColumn(std::cout, in_table->columns);
+    DEBUG_PrintRefct(std::cout, in_table->columns);
+#endif
+    std::vector<array_info*> out_arrs;
+    // We do not return the keys in output in the case of cumulative operations.
+    int64_t n_rows = in_table->nrows();
+    int return_index_i = return_index;
+    int k = 0;
+    for (int64_t i = num_keys; i < in_table->ncols() - return_index_i;
+         i++, k++) {
+        array_info* col = in_table->columns[i];
+        int start = func_offsets[k];
+        int end = func_offsets[k + 1];
+        for (int j = start; j != end; j++) {
+            array_info* out_col =
+                alloc_array(n_rows, 1, 1, col->arr_type, col->dtype, 0, col->num_categories);
+            int ftype = ftypes[j];
+            aggfunc_output_initialize(out_col, ftype);
+            out_arrs.push_back(out_col);
+        }
+    }
+    // We assume here that the key is categorical and thus has only one row and
+    // integers in it.
+    // First determination of the
+    int64_t max_row_idx = in_table->columns[0]->num_categories;
+    // Since each column can have different data type and MPI_Exscan can only do
+    // one type at a time. thus we have an iteration over the columns of the
+    // input table. But we can consider the various cumsum / cumprod / cummax /
+    // cummin in turn.
+    k = 0;
+    for (int64_t i = num_keys; i < in_table->ncols() - return_index_i;
+         i++, k++) {
+        array_info* col = in_table->columns[i];
+        const Bodo_CTypes::CTypeEnum dtype = col->dtype;
+        if (dtype == Bodo_CTypes::INT8)
+            mpi_exscan_computation_T<Tkey, int8_t, Bodo_CTypes::INT8>(
+                out_arrs, in_table, num_keys, k, max_row_idx, ftypes,
+                func_offsets, is_parallel, skipdropna);
+        if (dtype == Bodo_CTypes::UINT8)
+            mpi_exscan_computation_T<Tkey, uint8_t, Bodo_CTypes::UINT8>(
+                out_arrs, in_table, num_keys, k, max_row_idx, ftypes,
+                func_offsets, is_parallel, skipdropna);
+        if (dtype == Bodo_CTypes::INT16)
+            mpi_exscan_computation_T<Tkey, int16_t, Bodo_CTypes::INT16>(
+                out_arrs, in_table, num_keys, k, max_row_idx, ftypes,
+                func_offsets, is_parallel, skipdropna);
+        if (dtype == Bodo_CTypes::UINT16)
+            mpi_exscan_computation_T<Tkey, uint16_t, Bodo_CTypes::UINT16>(
+                out_arrs, in_table, num_keys, k, max_row_idx, ftypes,
+                func_offsets, is_parallel, skipdropna);
+        if (dtype == Bodo_CTypes::INT32)
+            mpi_exscan_computation_T<Tkey, int32_t, Bodo_CTypes::INT32>(
+                out_arrs, in_table, num_keys, k, max_row_idx, ftypes,
+                func_offsets, is_parallel, skipdropna);
+        if (dtype == Bodo_CTypes::UINT32)
+            mpi_exscan_computation_T<Tkey, uint32_t, Bodo_CTypes::UINT32>(
+                out_arrs, in_table, num_keys, k, max_row_idx, ftypes,
+                func_offsets, is_parallel, skipdropna);
+        if (dtype == Bodo_CTypes::INT64)
+            mpi_exscan_computation_T<Tkey, int64_t, Bodo_CTypes::INT64>(
+                out_arrs, in_table, num_keys, k, max_row_idx, ftypes,
+                func_offsets, is_parallel, skipdropna);
+        if (dtype == Bodo_CTypes::UINT64)
+            mpi_exscan_computation_T<Tkey, uint64_t, Bodo_CTypes::UINT64>(
+                out_arrs, in_table, num_keys, k, max_row_idx, ftypes,
+                func_offsets, is_parallel, skipdropna);
+        if (dtype == Bodo_CTypes::FLOAT32)
+            mpi_exscan_computation_T<Tkey, float, Bodo_CTypes::FLOAT32>(
+                out_arrs, in_table, num_keys, k, max_row_idx, ftypes,
+                func_offsets, is_parallel, skipdropna);
+        if (dtype == Bodo_CTypes::FLOAT64)
+            mpi_exscan_computation_T<Tkey, double, Bodo_CTypes::FLOAT64>(
+                out_arrs, in_table, num_keys, k, max_row_idx, ftypes,
+                func_offsets, is_parallel, skipdropna);
+    }
+    if (return_index) out_arrs.push_back(copy_array(in_table->columns.back()));
+#ifdef DEBUG_GROUPBY
+    std::cout << "mpi_exscan_computation(out_arrs)\n";
+    DEBUG_PrintSetOfColumn(std::cout, out_arrs);
+    DEBUG_PrintRefct(std::cout, out_arrs);
+#endif
+    return new table_info(out_arrs);
+}
+
+table_info* mpi_exscan_computation(table_info* in_table, int64_t num_keys,
+                                   int* ftypes, int* func_offsets,
+                                   bool is_parallel, bool skipdropna,
+                                   bool return_key, bool return_index) {
+    array_info* first_col = in_table->columns[0];
+    const Bodo_CTypes::CTypeEnum dtype = first_col->dtype;
+    if (dtype == Bodo_CTypes::INT8)
+        return mpi_exscan_computation_Tkey<int8_t>(
+            in_table, num_keys, ftypes, func_offsets, is_parallel, skipdropna,
+            return_key, return_index);
+    if (dtype == Bodo_CTypes::UINT8)
+        return mpi_exscan_computation_Tkey<uint8_t>(
+            in_table, num_keys, ftypes, func_offsets, is_parallel, skipdropna,
+            return_key, return_index);
+    if (dtype == Bodo_CTypes::INT16)
+        return mpi_exscan_computation_Tkey<int16_t>(
+            in_table, num_keys, ftypes, func_offsets, is_parallel, skipdropna,
+            return_key, return_index);
+    if (dtype == Bodo_CTypes::UINT16)
+        return mpi_exscan_computation_Tkey<uint16_t>(
+            in_table, num_keys, ftypes, func_offsets, is_parallel, skipdropna,
+            return_key, return_index);
+    if (dtype == Bodo_CTypes::INT32)
+        return mpi_exscan_computation_Tkey<int32_t>(
+            in_table, num_keys, ftypes, func_offsets, is_parallel, skipdropna,
+            return_key, return_index);
+    if (dtype == Bodo_CTypes::UINT32)
+        return mpi_exscan_computation_Tkey<uint32_t>(
+            in_table, num_keys, ftypes, func_offsets, is_parallel, skipdropna,
+            return_key, return_index);
+    if (dtype == Bodo_CTypes::INT64)
+        return mpi_exscan_computation_Tkey<int64_t>(
+            in_table, num_keys, ftypes, func_offsets, is_parallel, skipdropna,
+            return_key, return_index);
+    if (dtype == Bodo_CTypes::UINT64)
+        return mpi_exscan_computation_Tkey<uint64_t>(
+            in_table, num_keys, ftypes, func_offsets, is_parallel, skipdropna,
+            return_key, return_index);
+    //
+    Bodo_PyErr_SetString(PyExc_RuntimeError, "failed to find matching dtype");
+    return nullptr;
+}
+
+/* Determine the strategy to be used for the computation of the groupby.
+   This computation is done whether a strategy is possible. But it also
+   makes heuristic computation in order to reach a decision.
+   ---
+   @param in_table : input table
+   @param num_keys : number of keys
+   @param ftypes : the type of operations.
+   @param func_offsets : the function offsets
+   @param return_index : whether to return the index or not
+   @return strategy to use : 0 will use the GroupbyPipeline based on hash
+   partitioning 1 will use the MPI_Exscan strategy.
+ */
+int determine_groupy_strategy(table_info* in_table, int64_t num_keys,
+                              int* ftypes, int* func_offsets, bool is_parallel,
+                              bool return_index) {
+    // First decision: If it is cumulative, then we can use the MPI_Exscan.
+    // Otherwise no
+    bool has_non_cumulative_op = false;
+    bool has_cumulative_op = false;
+    int return_index_i = return_index;
+    for (int i = 0;
+         i < func_offsets[in_table->ncols() - num_keys - return_index_i]; i++) {
+        int ftype = ftypes[i];
+        if (ftype == Bodo_FTypes::cumsum || ftype == Bodo_FTypes::cummin ||
+            ftype == Bodo_FTypes::cumprod || ftype == Bodo_FTypes::cummax) {
+            has_cumulative_op = true;
+        } else {
+            has_non_cumulative_op = true;
+        }
+    }
+    if (has_non_cumulative_op)
+        return 0;  // No choice, we have to use the classic hash scheme
+    if (!has_cumulative_op) return 0;  // It does not make sense to use it here.
+    // Second decision: Whether it is arithmetic or not. If arithmetic, we can
+    // use MPI_Exscan. If not, we may make it work for cumsum of strings or list
+    // of strings but that would be definitely quite complicated and use more
+    // than just MPI_Exscan.
+    bool has_non_arithmetic_type = false;
+    for (int i = num_keys; i < in_table->ncols(); i++) {
+        array_info* oper_col = in_table->columns[i];
+        if (oper_col->arr_type != bodo_array_type::NUMPY &&
+            oper_col->arr_type != bodo_array_type::NULLABLE_INT_BOOL)
+            has_non_arithmetic_type = true;
+    }
+    if (has_non_cumulative_op || has_non_arithmetic_type)
+        return 0;  // No choice, we have to use the classic hash scheme
+    // Third decision: Whether we use categorical with just one key. Working
+    // with other keys would require some preprocessing.
+    if (num_keys > 1)
+        return 0;  // For more than 1 key column, use hash partition
+    bodo_array_type::arr_type_enum key_arr_type =
+        in_table->columns[0]->arr_type;
+    if (key_arr_type != bodo_array_type::CATEGORICAL)
+        return 0;  // For key column that are not categorical, use hash
+                   // partition
+    if (in_table->columns[0]->num_categories > 1000)
+        return 0;  // For too many categories the hash partition will be better
+    return 1;      // all conditions satisfied. Let's go for EXSCAN code
+}
+
 table_info* groupby_and_aggregate(table_info* in_table, int64_t num_keys,
                                   int* ftypes, int* func_offsets,
                                   int* udf_nredvars, bool is_parallel,
@@ -3471,19 +4044,37 @@ table_info* groupby_and_aggregate(table_info* in_table, int64_t num_keys,
     std::cout << "IN_TABLE (groupby):\n";
     DEBUG_PrintSetOfColumn(std::cout, in_table->columns);
     DEBUG_PrintRefct(std::cout, in_table->columns);
+    std::cout << "num_keys=" << num_keys << " is_parallel=" << is_parallel << "\n";
 #endif
 
-    GroupbyPipeline groupby(in_table, num_keys, is_parallel, ftypes,
-                            func_offsets, udf_nredvars, udf_dummy_table,
-                            (udf_table_op_fn)update_cb,
-                            (udf_table_op_fn)combine_cb, (udf_eval_fn)eval_cb,
-                            skipdropna, return_key, return_index);
+    int strategy = determine_groupy_strategy(
+        in_table, num_keys, ftypes, func_offsets, is_parallel, return_index);
 
-    table_info* ret_table = groupby.run();
+    if (strategy == 0) {
+        GroupbyPipeline groupby(
+            in_table, num_keys, is_parallel, ftypes, func_offsets, udf_nredvars,
+            udf_dummy_table, (udf_table_op_fn)update_cb,
+            (udf_table_op_fn)combine_cb, (udf_eval_fn)eval_cb, skipdropna,
+            return_key, return_index);
+
+        table_info* ret_table = groupby.run();
 #ifdef DEBUG_GROUPBY
-    std::cout << "RET_TABLE (groupby):\n";
-    DEBUG_PrintSetOfColumn(std::cout, ret_table->columns);
-    DEBUG_PrintRefct(std::cout, ret_table->columns);
+        std::cout << "RET_TABLE (groupby, classic code path):\n";
+        DEBUG_PrintSetOfColumn(std::cout, ret_table->columns);
+        DEBUG_PrintRefct(std::cout, ret_table->columns);
 #endif
-    return ret_table;
+        return ret_table;
+    }
+    if (strategy == 1) {
+        table_info* ret_table = mpi_exscan_computation(in_table, num_keys, ftypes, func_offsets,
+                                      is_parallel, skipdropna, return_key,
+                                      return_index);
+#ifdef DEBUG_GROUPBY
+        std::cout << "RET_TABLE (groupby, mpi_exscan code path):\n";
+        DEBUG_PrintSetOfColumn(std::cout, ret_table->columns);
+        DEBUG_PrintRefct(std::cout, ret_table->columns);
+#endif
+        return ret_table;
+    }
+    return nullptr;
 }

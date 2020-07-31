@@ -653,7 +653,9 @@ static void hash_array_combine(uint32_t* out_hashes, array_info* array,
 uint32_t* hash_keys(std::vector<array_info*> const& key_arrs,
                     const uint32_t seed) {
 #ifdef DEBUG_HASH
-    std::cout << "Beginning of hash_keys\n";
+    std::cout << "Beginning of hash_keys. key_arrs=\n";
+    DEBUG_PrintSetOfColumn(std::cout, key_arrs);
+    DEBUG_PrintRefct(std::cout, key_arrs);
 #endif
     size_t n_rows = (size_t)key_arrs[0]->length;
 #ifdef DEBUG_HASH
@@ -673,6 +675,8 @@ uint32_t* hash_keys(std::vector<array_info*> const& key_arrs,
         hash_array_combine(hashes, key_arrs[i], n_rows, seed);
     }
 #ifdef DEBUG_HASH
+    for (size_t i_row=0; i_row<n_rows; i_row++)
+      std::cout << "hash_keys : i_row=" << i_row << " hash=" << hashes[i_row] << "\n";
     std::cout << "Ending of hash_keys\n";
 #endif
     return hashes;

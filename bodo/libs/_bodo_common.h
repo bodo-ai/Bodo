@@ -60,6 +60,7 @@ struct bodo_array_type {
         NULLABLE_INT_BOOL = 2,  // nullable int or bool
         LIST_STRING = 3, // list_string_array_type
         ARROW = 4, // Arrow Array
+        CATEGORICAL = 5,
         // string_array_split_view_type, etc.
     };
 };
@@ -109,6 +110,7 @@ struct array_info {
     std::shared_ptr<arrow::Array> array;
     int32_t precision;  // for array of decimals
     int32_t scale;      // for array of decimals
+    int64_t num_categories;  // for categorical arrays
     // TODO: shape/stride for multi-dim arrays
     explicit array_info(bodo_array_type::arr_type_enum _arr_type,
                         Bodo_CTypes::CTypeEnum _dtype, int64_t _length,
@@ -117,7 +119,7 @@ struct array_info {
                         char* _data3, char* _null_bitmask,
                         NRT_MemInfo* _meminfo, NRT_MemInfo* _meminfo_bitmask,
                         std::shared_ptr<arrow::Array> _array = nullptr,
-                        int32_t _precision = 0, int32_t _scale = 0)
+                        int32_t _precision = 0, int32_t _scale = 0, int64_t _num_categories = 0)
         : arr_type(_arr_type),
           dtype(_dtype),
           length(_length),
@@ -131,7 +133,8 @@ struct array_info {
           meminfo_bitmask(_meminfo_bitmask),
           array(_array),
           precision(_precision),
-          scale(_scale) {}
+          scale(_scale),
+          num_categories(_num_categories) {}
 
     template <typename T>
     T& at(size_t idx) {
@@ -159,11 +162,14 @@ struct table_info {
 /// Initialize numpy_item_size and verify size of dtypes
 void bodo_common_init();
 
-array_info* alloc_array(int64_t length, int64_t n_sub_elems, int64_t n_sub_sub_elems, 
+array_info* alloc_array(int64_t length, int64_t n_sub_elems, int64_t n_sub_sub_elems,
                         bodo_array_type::arr_type_enum arr_type,
-                        Bodo_CTypes::CTypeEnum dtype, int64_t extra_null_bytes);
+                        Bodo_CTypes::CTypeEnum dtype, int64_t extra_null_bytes,
+                        int64_t num_categories);
 
 array_info* alloc_numpy(int64_t length, Bodo_CTypes::CTypeEnum typ_enum);
+
+array_info* alloc_categorical(int64_t length, Bodo_CTypes::CTypeEnum typ_enum, int64_t num_categories);
 
 array_info* alloc_nullable_array(int64_t length,
                                  Bodo_CTypes::CTypeEnum typ_enum,

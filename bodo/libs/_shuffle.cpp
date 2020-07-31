@@ -489,6 +489,7 @@ static void shuffle_array(array_info* send_arr, array_info* out_arr,
                       MPI_COMM_WORLD);
     }
     if (send_arr->arr_type == bodo_array_type::NUMPY ||
+        send_arr->arr_type == bodo_array_type::CATEGORICAL ||
         send_arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
         MPI_Datatype mpi_typ = get_MPI_typ(send_arr->dtype);
         MPI_Alltoallv(send_arr->data1, send_count.data(), send_disp.data(),
@@ -993,14 +994,14 @@ table_info* shuffle_table_kernel(table_info* in_table, uint32_t* hashes,
         if (in_arr->arr_type != bodo_array_type::ARROW) {
             array_info* send_arr = alloc_array(
                 n_rows, in_arr->n_sub_elems, in_arr->n_sub_sub_elems,
-                in_arr->arr_type, in_arr->dtype, 2 * n_pes);
+                in_arr->arr_type, in_arr->dtype, 2 * n_pes, in_arr->num_categories);
 #ifdef DEBUG_SHUFFLE
             std::cout << "shuffle_table_kernel i=" << i << " / " << n_cols
                       << " step 2\n";
 #endif
             out_arr =
                 alloc_array(total_recv, n_sub_recvs[i], n_sub_sub_recvs[i],
-                            in_arr->arr_type, in_arr->dtype, 0);
+                            in_arr->arr_type, in_arr->dtype, 0, in_arr->num_categories);
 #ifdef DEBUG_SHUFFLE
             std::cout << "shuffle_table_kernel i=" << i << " / " << n_cols
                       << " step 3\n";
@@ -1445,15 +1446,16 @@ table_info* broadcast_table(table_info* ref_table, table_info* in_table,
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
     std::vector<array_info*> out_arrs;
     for (size_t i_col = 0; i_col < n_cols; i_col++) {
-        int64_t arr_bcast[5];
+        int64_t arr_bcast[6];
         if (myrank == mpi_root) {
             arr_bcast[0] = in_table->columns[i_col]->length;
             arr_bcast[1] = in_table->columns[i_col]->dtype;
             arr_bcast[2] = in_table->columns[i_col]->arr_type;
             arr_bcast[3] = in_table->columns[i_col]->n_sub_elems;
             arr_bcast[4] = in_table->columns[i_col]->n_sub_sub_elems;
+            arr_bcast[5] = in_table->columns[i_col]->num_categories;
         }
-        MPI_Bcast(arr_bcast, 5, MPI_LONG_LONG_INT, mpi_root, MPI_COMM_WORLD);
+        MPI_Bcast(arr_bcast, 6, MPI_LONG_LONG_INT, mpi_root, MPI_COMM_WORLD);
         int64_t n_rows = arr_bcast[0];
         Bodo_CTypes::CTypeEnum dtype = Bodo_CTypes::CTypeEnum(arr_bcast[1]);
         bodo_array_type::arr_type_enum arr_type =
@@ -1464,6 +1466,7 @@ table_info* broadcast_table(table_info* ref_table, table_info* in_table,
 #endif
         int64_t n_sub_elems = arr_bcast[3];
         int64_t n_sub_sub_elems = arr_bcast[4];
+        int64_t num_categories = arr_bcast[5];
         //
         array_info* out_arr;
         if (arr_type == bodo_array_type::ARROW) {
@@ -1498,12 +1501,13 @@ table_info* broadcast_table(table_info* ref_table, table_info* in_table,
 #endif
         }
         if (arr_type == bodo_array_type::NUMPY ||
+            arr_type == bodo_array_type::CATEGORICAL ||
             arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
             MPI_Datatype mpi_typ = get_MPI_typ(dtype);
             if (myrank == mpi_root)
                 out_arr = copy_array(in_table->columns[i_col]);
             else
-                out_arr = alloc_array(n_rows, -1, -1, arr_type, dtype, 0);
+                out_arr = alloc_array(n_rows, -1, -1, arr_type, dtype, 0, 0);
             MPI_Bcast(out_arr->data1, n_rows, mpi_typ, mpi_root,
                       MPI_COMM_WORLD);
         }
@@ -1514,7 +1518,7 @@ table_info* broadcast_table(table_info* ref_table, table_info* in_table,
                 out_arr = copy_array(in_table->columns[i_col]);
             else
                 out_arr = alloc_array(n_rows, n_sub_elems, n_sub_sub_elems,
-                                      arr_type, dtype, 0);
+                                      arr_type, dtype, 0, num_categories);
             MPI_Bcast(out_arr->data1, n_sub_elems, mpi_typ8, mpi_root,
                       MPI_COMM_WORLD);
             MPI_Bcast(out_arr->data2, n_rows, mpi_typ32, mpi_root,
@@ -1527,7 +1531,7 @@ table_info* broadcast_table(table_info* ref_table, table_info* in_table,
                 out_arr = copy_array(in_table->columns[i_col]);
             else
                 out_arr = alloc_array(n_rows, n_sub_elems, n_sub_sub_elems,
-                                      arr_type, dtype, 0);
+                                      arr_type, dtype, 0, num_categories);
             MPI_Bcast(out_arr->data1, n_sub_sub_elems, mpi_typ8, mpi_root,
                       MPI_COMM_WORLD);
             MPI_Bcast(out_arr->data2, n_sub_elems, mpi_typ32, mpi_root,
@@ -1902,6 +1906,7 @@ table_info* gather_table(table_info* in_table, size_t n_cols) {
         Bodo_CTypes::CTypeEnum dtype = in_table->columns[i_col]->dtype;
         bodo_array_type::arr_type_enum arr_type =
             in_table->columns[i_col]->arr_type;
+        int64_t num_categories = in_table->columns[i_col]->num_categories;
         //
         std::vector<int> rows_disps(n_pes), rows_counts(n_pes);
         int rows_pos = 0;
@@ -1937,6 +1942,7 @@ table_info* gather_table(table_info* in_table, size_t n_cols) {
 #endif
         }
         if (arr_type == bodo_array_type::NUMPY ||
+            arr_type == bodo_array_type::CATEGORICAL ||
             arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
             MPI_Datatype mpi_typ = get_MPI_typ(dtype);
 #ifdef DEBUG_GATHER
@@ -1952,7 +1958,7 @@ table_info* gather_table(table_info* in_table, size_t n_cols) {
 #endif
             char* data1_ptr = NULL;
             if (myrank == mpi_root) {
-                out_arr = alloc_array(n_rows_tot, -1, -1, arr_type, dtype, 0);
+                out_arr = alloc_array(n_rows_tot, -1, -1, arr_type, dtype, 0, num_categories);
                 data1_ptr = out_arr->data1;
             }
             MPI_Gatherv(in_table->columns[i_col]->data1, n_rows, mpi_typ,
@@ -1973,7 +1979,7 @@ table_info* gather_table(table_info* in_table, size_t n_cols) {
             char* data1_ptr = NULL;
             if (myrank == mpi_root) {
                 out_arr = alloc_array(n_rows_tot, n_chars_tot, -1, arr_type,
-                                      dtype, 0);
+                                      dtype, 0, num_categories);
                 data1_ptr = out_arr->data1;
             }
             std::vector<int> char_disps(n_pes), char_counts(n_pes);
@@ -2027,7 +2033,7 @@ table_info* gather_table(table_info* in_table, size_t n_cols) {
             char* data1_ptr = NULL;
             if (myrank == mpi_root) {
                 out_arr = alloc_array(n_rows_tot, n_sub_elems_tot,
-                                      n_sub_sub_elems_tot, arr_type, dtype, 0);
+                                      n_sub_sub_elems_tot, arr_type, dtype, 0, num_categories);
                 data1_ptr = out_arr->data1;
             }
             std::vector<int> char_disps(n_pes), char_counts(n_pes);
@@ -2148,7 +2154,7 @@ table_info* compute_node_partition_by_hash(table_info* in_table, int64_t n_keys,
 
     std::vector<array_info*> out_arrs;
     array_info* out_arr = alloc_array(n_rows, -1, -1, bodo_array_type::NUMPY,
-                                      Bodo_CTypes::INT32, 0);
+                                      Bodo_CTypes::INT32, 0, 0);
 #ifdef DEBUG_COMP_HASH
     std::cout << "COMPUTE_HASH\n";
 #endif

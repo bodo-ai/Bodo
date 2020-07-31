@@ -236,6 +236,20 @@ array_info* numpy_array_to_info(uint64_t n_items, char* data, int typ_enum,
                           data, NULL, NULL, NULL, meminfo, NULL);
 }
 
+#undef DEBUG_CATEGORICAL
+
+array_info* categorical_array_to_info(uint64_t n_items, char* data, int typ_enum, int64_t num_categories,
+                                      NRT_MemInfo* meminfo) {
+    // TODO: better memory management of struct, meminfo refcount?
+#ifdef DEBUG_CATEGORICAL
+    std::cout << "num_categories=" << num_categories << " n_items=" << n_items << "\n";
+    std::cout << "typ_enum=" << typ_enum << "\n";
+#endif
+    return new array_info(bodo_array_type::CATEGORICAL,
+                          (Bodo_CTypes::CTypeEnum)typ_enum, n_items, -1, -1,
+                          data, NULL, NULL, NULL, meminfo, NULL, nullptr, 0, 0, num_categories);
+}
+
 array_info* nullable_array_to_info(uint64_t n_items, char* data, int typ_enum,
                                    char* null_bitmap, NRT_MemInfo* meminfo,
                                    NRT_MemInfo* meminfo_bitmask) {
@@ -347,11 +361,11 @@ void nested_array_to_c(std::shared_ptr<arrow::Array> array, int64_t* lengths,
         // allocate output arrays and copy data
         array_info* offsets = alloc_array(list_array->length() + 1, -1, -1,
                                           bodo_array_type::arr_type_enum::NUMPY,
-                                          Bodo_CTypes::INT32, 0);
+                                          Bodo_CTypes::INT32, 0, 0);
         int64_t n_null_bytes = (list_array->length() + 7) >> 3;
         array_info* nulls = alloc_array(n_null_bytes, -1, -1,
                                         bodo_array_type::arr_type_enum::NUMPY,
-                                        Bodo_CTypes::UINT8, 0);
+                                        Bodo_CTypes::UINT8, 0, 0);
 
         memcpy(offsets->data1, list_array->value_offsets()->data(),
                (list_array->length() + 1) * sizeof(int32_t));
@@ -379,7 +393,7 @@ void nested_array_to_c(std::shared_ptr<arrow::Array> array, int64_t* lengths,
         int64_t n_null_bytes = (struct_array->length() + 7) >> 3;
         array_info* nulls = alloc_array(n_null_bytes, -1, -1,
                                         bodo_array_type::arr_type_enum::NUMPY,
-                                        Bodo_CTypes::UINT8, 0);
+                                        Bodo_CTypes::UINT8, 0, 0);
         memset(nulls->data1, 0, n_null_bytes);
         for (int64_t i = 0; i < struct_array->length(); i++) {
             if (!struct_array->IsNull(i))
@@ -413,11 +427,11 @@ void nested_array_to_c(std::shared_ptr<arrow::Array> array, int64_t* lengths,
         // allocate output arrays and copy data
         array_info* data =
             alloc_array(primitive_array->length(), -1, -1,
-                        bodo_array_type::arr_type_enum::NUMPY, dtype, 0);
+                        bodo_array_type::arr_type_enum::NUMPY, dtype, 0, 0);
         int64_t n_null_bytes = (primitive_array->length() + 7) >> 3;
         array_info* nulls = alloc_array(n_null_bytes, -1, -1,
                                         bodo_array_type::arr_type_enum::NUMPY,
-                                        Bodo_CTypes::UINT8, 0);
+                                        Bodo_CTypes::UINT8, 0, 0);
 
         memcpy(data->data1, primitive_array->values()->data(),
                numpy_item_size[dtype] * primitive_array->length());
@@ -452,7 +466,7 @@ void info_to_string_array(array_info* info, NRT_MemInfo** meminfo) {
 
 void info_to_numpy_array(array_info* info, uint64_t* n_items, char** data,
                          NRT_MemInfo** meminfo) {
-    if (info->arr_type != bodo_array_type::NUMPY) {
+    if ((info->arr_type != bodo_array_type::NUMPY) && (info->arr_type != bodo_array_type::CATEGORICAL)) {
         Bodo_PyErr_SetString(PyExc_RuntimeError,
                              "info_to_numpy_array requires numpy input");
         return;
@@ -1203,6 +1217,8 @@ PyMODINIT_FUNC PyInit_array_ext(void) {
                            PyLong_FromVoidPtr((void*)(&string_array_to_info)));
     PyObject_SetAttrString(m, "numpy_array_to_info",
                            PyLong_FromVoidPtr((void*)(&numpy_array_to_info)));
+    PyObject_SetAttrString(m, "categorical_array_to_info",
+                           PyLong_FromVoidPtr((void*)(&categorical_array_to_info)));
     PyObject_SetAttrString(
         m, "nullable_array_to_info",
         PyLong_FromVoidPtr((void*)(&nullable_array_to_info)));

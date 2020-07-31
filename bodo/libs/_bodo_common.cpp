@@ -61,8 +61,18 @@ array_info* alloc_numpy(int64_t length, Bodo_CTypes::CTypeEnum typ_enum) {
     int64_t size = length * numpy_item_size[typ_enum];
     NRT_MemInfo* meminfo = NRT_MemInfo_alloc_safe_aligned(size, ALIGNMENT);
     char* data = (char*)meminfo->data;
-    return new array_info(bodo_array_type::NUMPY, typ_enum, length, -1, -1, data,
-                          NULL, NULL, NULL, meminfo, NULL);
+    return new array_info(bodo_array_type::NUMPY, typ_enum, length, -1, -1,
+                          data, NULL, NULL, NULL, meminfo, NULL);
+}
+
+array_info* alloc_categorical(int64_t length, Bodo_CTypes::CTypeEnum typ_enum,
+                              int64_t num_categories) {
+    int64_t size = length * numpy_item_size[typ_enum];
+    NRT_MemInfo* meminfo = NRT_MemInfo_alloc_safe_aligned(size, ALIGNMENT);
+    char* data = (char*)meminfo->data;
+    return new array_info(bodo_array_type::CATEGORICAL, typ_enum, length, -1,
+                          -1, data, NULL, NULL, NULL, meminfo, NULL, 0, 0,
+                          num_categories);
 }
 
 array_info* alloc_nullable_array(int64_t length,
@@ -80,7 +90,6 @@ array_info* alloc_nullable_array(int64_t length,
                           meminfo_bitmask);
 }
 
-
 array_info* alloc_string_array(int64_t length, int64_t n_chars,
                                int64_t extra_null_bytes) {
     // extra_null_bytes are necessary for communication buffers around the edges
@@ -92,38 +101,41 @@ array_info* alloc_string_array(int64_t length, int64_t n_chars,
                           extra_null_bytes);
     payload->num_strings = length;
     return new array_info(bodo_array_type::STRING, Bodo_CTypes::STRING, length,
-                          n_chars, -1, payload->data, (char*)payload->offsets, NULL,
-                          (char*)payload->null_bitmap, meminfo, NULL);
+                          n_chars, -1, payload->data, (char*)payload->offsets,
+                          NULL, (char*)payload->null_bitmap, meminfo, NULL);
 }
 
-array_info* alloc_list_string_array(int64_t n_lists, int64_t n_strings, int64_t n_chars,
-                                    int64_t extra_null_bytes) {
-
+array_info* alloc_list_string_array(int64_t n_lists, int64_t n_strings,
+                                    int64_t n_chars, int64_t extra_null_bytes) {
     // allocate payload structs for list and string arrays
-    NRT_MemInfo* meminfo_list_array = NRT_MemInfo_alloc_safe_aligned(sizeof(array_item_arr_payload), ALIGNMENT);
+    NRT_MemInfo* meminfo_list_array = NRT_MemInfo_alloc_safe_aligned(
+        sizeof(array_item_arr_payload), ALIGNMENT);
     NRT_MemInfo* meminfo_string_array = NRT_MemInfo_alloc_dtor_safe(
         sizeof(str_arr_payload), (NRT_dtor_function)dtor_string_array);
 
-    array_item_arr_payload *payload = (array_item_arr_payload*)(meminfo_list_array->data);
+    array_item_arr_payload* payload =
+        (array_item_arr_payload*)(meminfo_list_array->data);
     payload->data = meminfo_string_array;
-    str_arr_payload *sub_payload = (str_arr_payload*)(meminfo_string_array->data);
+    str_arr_payload* sub_payload =
+        (str_arr_payload*)(meminfo_string_array->data);
 
     // allocate all buffers and set them in payloads
     allocate_list_string_array(n_lists, n_strings, n_chars, extra_null_bytes,
                                payload, sub_payload);
 
-    return new array_info(bodo_array_type::LIST_STRING, Bodo_CTypes::LIST_STRING, n_lists,
-                          n_strings, n_chars, (char*)sub_payload->data, (char*)sub_payload->offsets,
-                          (char*)payload->offsets.data,
-                          (char*)payload->null_bitmap.data, meminfo_list_array, NULL);
+    return new array_info(
+        bodo_array_type::LIST_STRING, Bodo_CTypes::LIST_STRING, n_lists,
+        n_strings, n_chars, (char*)sub_payload->data,
+        (char*)sub_payload->offsets, (char*)payload->offsets.data,
+        (char*)payload->null_bitmap.data, meminfo_list_array, NULL);
 }
 
 /**
  * The allocations array function for the function.
  *
- * In the case of NUMPY or NULLABLE_INT_BOOL,
- * -- length is the number of rows, and n_sub_elems, n_sub_sub_elems do not matter.
- * In the case of STRING:
+ * In the case of NUMPY/CATEGORICAL or NULLABLE_INT_BOOL,
+ * -- length is the number of rows, and n_sub_elems, n_sub_sub_elems do not
+ * matter. In the case of STRING:
  * -- length is the number of rows (= number of strings)
  * -- n_sub_elems is the total number of characters.
  * In the case of LIST_STRING:
@@ -132,32 +144,38 @@ array_info* alloc_list_string_array(int64_t n_lists, int64_t n_strings, int64_t 
  * -- n_sub_sub_elems is the total number of characters.
  *
  */
-array_info* alloc_array(int64_t length, int64_t n_sub_elems, int64_t n_sub_sub_elems,
+array_info* alloc_array(int64_t length, int64_t n_sub_elems,
+                        int64_t n_sub_sub_elems,
                         bodo_array_type::arr_type_enum arr_type,
                         Bodo_CTypes::CTypeEnum dtype,
-                        int64_t extra_null_bytes) {
-
+                        int64_t extra_null_bytes,
+                        int64_t num_categories) {
     if (arr_type == bodo_array_type::LIST_STRING)
-        return alloc_list_string_array(length, n_sub_elems, n_sub_sub_elems, extra_null_bytes);
+        return alloc_list_string_array(length, n_sub_elems, n_sub_sub_elems,
+                                       extra_null_bytes);
 
     if (arr_type == bodo_array_type::STRING)
         return alloc_string_array(length, n_sub_elems, extra_null_bytes);
 
-    // nullable array
     if (arr_type == bodo_array_type::NULLABLE_INT_BOOL)
         return alloc_nullable_array(length, dtype, extra_null_bytes);
 
-    // Numpy
-    // TODO: error check
-    return alloc_numpy(length, dtype);
+    if (arr_type == bodo_array_type::NUMPY) return alloc_numpy(length, dtype);
+
+    if (arr_type == bodo_array_type::CATEGORICAL)
+      return alloc_categorical(length, dtype, num_categories);
+
+    Bodo_PyErr_SetString(PyExc_RuntimeError, "Type not covered in alloc_array");
+    return nullptr;
 }
 
 array_info* copy_array(array_info* earr) {
     int64_t extra_null_bytes = 0;
     array_info* farr =
-        alloc_array(earr->length, earr->n_sub_elems, earr->n_sub_sub_elems, earr->arr_type,
-                    earr->dtype, extra_null_bytes);
-    if (earr->arr_type == bodo_array_type::NUMPY) {
+        alloc_array(earr->length, earr->n_sub_elems, earr->n_sub_sub_elems,
+                    earr->arr_type, earr->dtype, extra_null_bytes, earr->num_categories);
+    if (earr->arr_type == bodo_array_type::NUMPY ||
+        earr->arr_type == bodo_array_type::CATEGORICAL) {
         uint64_t siztype = numpy_item_size[earr->dtype];
         memcpy(farr->data1, earr->data1, siztype * earr->length);
     }
@@ -175,7 +193,8 @@ array_info* copy_array(array_info* earr) {
     }
     if (earr->arr_type == bodo_array_type::LIST_STRING) {
         memcpy(farr->data1, earr->data1, earr->n_sub_sub_elems);
-        memcpy(farr->data2, earr->data2, sizeof(uint32_t) * (earr->n_sub_elems + 1));
+        memcpy(farr->data2, earr->data2,
+               sizeof(uint32_t) * (earr->n_sub_elems + 1));
         memcpy(farr->data3, earr->data3, sizeof(uint32_t) * (earr->length + 1));
         int64_t n_bytes = ((earr->length + 7) >> 3);
         memcpy(farr->null_bitmask, earr->null_bitmask, n_bytes);
@@ -210,28 +229,29 @@ void delete_table_free_arrays(table_info* table) {
   from
   https://github.com/numba/numba/blob/ce2139c7dd93127efb04b35f28f4bebc7f44dfd5/numba/core/runtime/nrtdynmod.py#L64
   *
-  On the C++ side, we cannot call this function directly. But we have to manually calling
-  the destructor. We cannot do operations directly on the arrays. For example deallocating data1
-  and then reallocating it is deadly, since the Python side tries to deallocate again the data1
-  (double free error) and leaves the current allocation intact.
+  On the C++ side, we cannot call this function directly. But we have to
+  manually calling the destructor. We cannot do operations directly on the
+  arrays. For example deallocating data1 and then reallocating it is deadly,
+  since the Python side tries to deallocate again the data1 (double free error)
+  and leaves the current allocation intact.
   *
   The entries to be called are the NRT_MemInfo*
   An array_info contains two NRT_MemInfo*: meminfo and meminfo_bitmask
   Thus we have two calls for destructors when they are not NULL.
  */
 void free_array(array_info* arr) {
-  if (arr->meminfo != NULL) {
-    arr->meminfo->refct--;
-    NRT_MemInfo_call_dtor(arr->meminfo);
-  }
-  if (arr->meminfo_bitmask != NULL) {
-    arr->meminfo_bitmask->refct--;
-    NRT_MemInfo_call_dtor(arr->meminfo_bitmask);
-  }
+    if (arr->meminfo != NULL) {
+        arr->meminfo->refct--;
+        NRT_MemInfo_call_dtor(arr->meminfo);
+    }
+    if (arr->meminfo_bitmask != NULL) {
+        arr->meminfo_bitmask->refct--;
+        NRT_MemInfo_call_dtor(arr->meminfo_bitmask);
+    }
 }
 
 void free_list_string_array(NRT_MemInfo* meminfo) {
-    array_item_arr_payload *payload = (array_item_arr_payload*)(meminfo->data);
+    array_item_arr_payload* payload = (array_item_arr_payload*)(meminfo->data);
 
     // delete string array
     payload->data->refct--;
@@ -273,15 +293,17 @@ void allocate_string_array(int32_t** offsets, char** data,
     // *data = (char*) new std::string("gggg");
 }
 
-void allocate_list_string_array(int64_t n_lists, int64_t n_strings, int64_t n_chars,
-                                int64_t extra_null_bytes,
-                                array_item_arr_payload *payload, str_arr_payload *sub_payload) {
+void allocate_list_string_array(int64_t n_lists, int64_t n_strings,
+                                int64_t n_chars, int64_t extra_null_bytes,
+                                array_item_arr_payload* payload,
+                                str_arr_payload* sub_payload) {
     // string array
     sub_payload->num_strings = n_strings;
     sub_payload->offsets = new int32_t[n_strings + 1];
     sub_payload->data = new char[n_chars];
     sub_payload->offsets[0] = 0;
-    sub_payload->offsets[n_strings] = (int32_t)n_chars;  // in case total chars is read from here
+    sub_payload->offsets[n_strings] =
+        (int32_t)n_chars;  // in case total chars is read from here
     // allocate nulls
     int64_t n_bytes = ((n_strings + 7) >> 3) + extra_null_bytes;
     sub_payload->null_bitmap = new uint8_t[(size_t)n_bytes];
@@ -292,7 +314,8 @@ void allocate_list_string_array(int64_t n_lists, int64_t n_strings, int64_t n_ch
     payload->n_arrays = n_lists;
 
     // allocate offsets
-    NRT_MemInfo* meminfo_offsets_array = NRT_MemInfo_alloc_safe_aligned(sizeof(int32_t) * (n_lists + 1), ALIGNMENT);
+    NRT_MemInfo* meminfo_offsets_array = NRT_MemInfo_alloc_safe_aligned(
+        sizeof(int32_t) * (n_lists + 1), ALIGNMENT);
     payload->offsets.meminfo = meminfo_offsets_array;
     payload->offsets.parent = NULL;
     payload->offsets.nitems = n_lists + 1;
@@ -306,7 +329,8 @@ void allocate_list_string_array(int64_t n_lists, int64_t n_strings, int64_t n_ch
 
     // allocate nulls
     n_bytes = ((n_lists + 7) >> 3) + extra_null_bytes;
-    NRT_MemInfo* meminfo_nulls_array = NRT_MemInfo_alloc_safe_aligned(n_bytes, ALIGNMENT);
+    NRT_MemInfo* meminfo_nulls_array =
+        NRT_MemInfo_alloc_safe_aligned(n_bytes, ALIGNMENT);
     payload->null_bitmap.meminfo = meminfo_nulls_array;
     payload->null_bitmap.parent = NULL;
     payload->null_bitmap.nitems = n_bytes;
@@ -317,6 +341,4 @@ void allocate_list_string_array(int64_t n_lists, int64_t n_strings, int64_t n_ch
     // set all bits to 1 indicating non-null as default
     memset(payload->null_bitmap.data, 0xff, n_bytes);
 }
-
 }
-

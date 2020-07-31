@@ -871,7 +871,7 @@ def test_df_nunique(df_value):
         return df.nunique()
 
     # TODO: make sure output is REP
-    check_func(impl, (df_value,), False)
+    check_func(impl, (df_value,), is_out_distributed=False)
 
 
 def _is_supported_argminmax_typ(d):

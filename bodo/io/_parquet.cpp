@@ -420,14 +420,14 @@ int pq_read_array_item(DatasetReader *ds_reader, int64_t column_idx,
     // allocate output arrays and copy data
     *out_offsets = alloc_array(offset_vec.size(), 1, 1,
                                bodo_array_type::arr_type_enum::NUMPY,
-                               Bodo_CTypes::UINT32, 0);
+                               Bodo_CTypes::UINT32, 0, 0);
     *out_data = alloc_array(data_vec.size(), 1, 1,
                             bodo_array_type::arr_type_enum::NUMPY,
-                            (Bodo_CTypes::CTypeEnum)out_dtype, 0);
+                            (Bodo_CTypes::CTypeEnum)out_dtype, 0, 0);
     int64_t n_null_bytes = (n_all_vals + 7) >> 3;
     *out_nulls =
         alloc_array(n_null_bytes, 1, 1, bodo_array_type::arr_type_enum::NUMPY,
-                    Bodo_CTypes::UINT8, 0);
+                    Bodo_CTypes::UINT8, 0, 0);
 
     memcpy((*out_offsets)->data1, offset_vec.data(),
            offset_vec.size() * sizeof(uint32_t));
