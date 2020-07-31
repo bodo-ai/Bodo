@@ -121,6 +121,8 @@ from pyspark.sql.types import (
     FloatType,
     ArrayType,
     Row,
+    MapType,
+    StringType,
 )
 
 spark = SparkSession.builder.appName("GenSparkData").getOrCreate()
@@ -286,6 +288,20 @@ data = [Row(Row(1, 1.1)), Row(Row(4, 2.2)), None, Row(Row(-1, 3.0))] * 2
 sdf = spark.createDataFrame(data, schema)
 sdf.write.parquet("struct.pq", "overwrite")
 
+
+dtype = MapType(LongType(), StringType())
+schema = StructType([StructField("A", dtype, True)])
+data = [
+    Row({1: "AA", 2: "BB", 3: "C"}),
+    Row({6: "H"}),
+    Row({1: "", 4: None, 0: "J"}),
+] * 3
+sdf = spark.createDataFrame(data, schema)
+sdf.write.parquet("map.pq", "overwrite")
+
+# Arrow cannot read/write map type or even convert to Pandas yet (as of 0.17.1)
+# pa.array([[{"key": 1, "value": "A"}, {"key": 2, "value": ""}],
+#     [{"key": 6, "value": "BCD"}]]*3, pa.map_(pa.int64(), pa.string()))
 
 spark.stop()
 

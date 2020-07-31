@@ -209,14 +209,13 @@ def construct_array_item_array(
     return meminfo, payload.data, offsets_ptr, null_bitmap_ptr
 
 
-def _unbox_array_item_array_copy_data(typ, arr_obj, c, data_arr, item_ind, n_items):
+def _unbox_array_item_array_copy_data(arr_typ, arr_obj, c, data_arr, item_ind, n_items):
     """unbox 'arr_obj' and copy data to 'data_arr' at index 'item_ind'
     """
     context = c.context
     builder = c.builder
 
     # unbox array
-    arr_typ = typ.dtype
     arr_obj = to_arr_obj_if_list_obj(c, context, builder, arr_obj, arr_typ)
     arr_val = c.pyapi.to_native_value(arr_typ, arr_obj).value
     # copy array data
@@ -293,7 +292,7 @@ def _unbox_array_item_array_generic(
             set_bitmap_bit(builder, null_bitmap_ptr, array_ind, 1)
             n_items = bodo.utils.utils.object_length(c, arr_obj)
             _unbox_array_item_array_copy_data(
-                typ, arr_obj, c, data_arr, item_ind, n_items
+                typ.dtype, arr_obj, c, data_arr, item_ind, n_items
             )
             # curr_item_ind += n_items
             builder.store(builder.add(item_ind, n_items), curr_item_ind)
@@ -461,7 +460,6 @@ def _box_array_item_array_generic(
                 lir.IntType(64),
             )
             # create array obj
-            n_items_obj = c.pyapi.long_from_longlong(n_items)
             item_ind = builder.load(curr_item_ind)
             _is_error, arr_slice = c.pyapi.call_jit_code(
                 lambda data_arr, item_ind, n_items: data_arr[
@@ -475,7 +473,6 @@ def _box_array_item_array_generic(
             )
             arr_obj = c.pyapi.from_native_value(typ.dtype, arr_slice, c.env_manager)
             pyarray_setitem(builder, context, out_arr, array_ind, arr_obj)
-            c.pyapi.decref(n_items_obj)
             c.pyapi.decref(arr_obj)
 
     c.pyapi.decref(np_class_obj)

@@ -748,6 +748,7 @@ def bool_arr_ind_getitem(A, ind):
         isinstance(A, (types.Array, bodo.libs.int_arr_ext.IntegerArrayType))
         or isinstance(A, bodo.libs.struct_arr_ext.StructArrayType)
         or isinstance(A, bodo.libs.array_item_arr_ext.ArrayItemArrayType)
+        or isinstance(A, bodo.libs.map_arr_ext.MapArrayType)
         or A
         in (
             string_array_type,

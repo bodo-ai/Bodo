@@ -12,6 +12,9 @@ from bodo.libs import array_ext
 ll.add_symbol("array_getitem", array_ext.array_getitem)
 ll.add_symbol("seq_getitem", array_ext.seq_getitem)
 ll.add_symbol("list_check", array_ext.list_check)
+ll.add_symbol("dict_keys", array_ext.dict_keys)
+ll.add_symbol("dict_values", array_ext.dict_values)
+ll.add_symbol("dict_merge_from_seq2", array_ext.dict_merge_from_seq2)
 ll.add_symbol("is_na_value", array_ext.is_na_value)
 
 
@@ -128,6 +131,33 @@ def list_check(builder, context, obj):
     return builder.call(fn, [obj])
 
 
+def dict_keys(builder, context, obj):
+    """call PyDict_Keys
+    """
+    pyobj = context.get_argument_type(types.pyobject)
+    fnty = lir.FunctionType(pyobj, [pyobj])
+    fn = builder.module.get_or_insert_function(fnty, name="dict_keys")
+    return builder.call(fn, [obj])
+
+
+def dict_values(builder, context, obj):
+    """call PyDict_Values
+    """
+    pyobj = context.get_argument_type(types.pyobject)
+    fnty = lir.FunctionType(pyobj, [pyobj])
+    fn = builder.module.get_or_insert_function(fnty, name="dict_values")
+    return builder.call(fn, [obj])
+
+
+def dict_merge_from_seq2(builder, context, dict_obj, seq2_obj):
+    """call PyDict_MergeFromSeq2()
+    """
+    pyobj = context.get_argument_type(types.pyobject)
+    fnty = lir.FunctionType(lir.VoidType(), [pyobj, pyobj])
+    fn = builder.module.get_or_insert_function(fnty, name="dict_merge_from_seq2")
+    builder.call(fn, [dict_obj, seq2_obj])
+
+
 def to_arr_obj_if_list_obj(c, context, builder, val, typ):
     """convert object 'val' to array if it is a list to enable proper unboxing
     """
@@ -146,24 +176,20 @@ def to_arr_obj_if_list_obj(c, context, builder, val, typ):
         # get np.array to convert list items to array
         mod_name = context.insert_const_string(builder.module, "numpy")
         np_mod_obj = c.pyapi.import_module_noblock(mod_name)
-        np_array_method = c.pyapi.object_getattr_string(np_mod_obj, "asarray")
         dtype_str = "object_"
         # float lists become float arrays, but others are object arrays
         # (see _value_to_array in boxing.py)
-        if isinstance(typ.dtype, types.Float):
+        if isinstance(typ, types.Array) or isinstance(typ.dtype, types.Float):
             dtype_str = str(typ.dtype)
         dtype_obj = c.pyapi.object_getattr_string(np_mod_obj, dtype_str)
 
         old_obj = builder.load(val_ptr)
-        new_obj = c.pyapi.call(
-            np_array_method, c.pyapi.tuple_pack([old_obj, dtype_obj])
-        )
+        new_obj = c.pyapi.call_method(np_mod_obj, "asarray", (old_obj, dtype_obj))
         # TODO: this decref causes crashes for some reason in test_array_item_array.py
         # needs to be investigated to avoid object leaks
         # c.pyapi.decref(old_obj)
         builder.store(new_obj, val_ptr)
         c.pyapi.decref(np_mod_obj)
-        c.pyapi.decref(np_array_method)
         c.pyapi.decref(dtype_obj)
 
     val = builder.load(val_ptr)
@@ -178,6 +204,7 @@ def get_array_elem_counts(c, builder, context, arr_obj, typ):
     """
     from bodo.libs.array_item_arr_ext import ArrayItemArrayType
     from bodo.libs.struct_arr_ext import StructArrayType, StructType
+    from bodo.libs.map_arr_ext import MapArrayType
     from bodo.libs.str_arr_ext import string_array_type, get_utf8_size
 
     # get utf8 character count for strings
@@ -242,7 +269,7 @@ def get_array_elem_counts(c, builder, context, arr_obj, typ):
 
     # return (n,) for non-nested arrays
     if not (
-        isinstance(typ, (ArrayItemArrayType, StructArrayType))
+        isinstance(typ, (ArrayItemArrayType, StructArrayType, MapArrayType))
         or typ == string_array_type
     ):
         return cgutils.pack_array(builder, [n])
@@ -291,8 +318,7 @@ def get_array_elem_counts(c, builder, context, arr_obj, typ):
                         counts_val, builder.add(total_count, curr_count), i + 1
                     )
                 builder.store(counts_val, counts)
-            else:
-                assert isinstance(typ, StructArrayType), typ
+            elif isinstance(typ, StructArrayType):
                 curr_count_ind = 1  # skip total array length
                 for i, t in enumerate(typ.data):
                     n_nested_count_t = bodo.utils.transform.get_type_alloc_counts(
@@ -324,6 +350,43 @@ def get_array_elem_counts(c, builder, context, arr_obj, typ):
                         builder.store(counts_val, counts)
                     # no need to decref val_obj, dict_getitem_string returns borrowed ref
                     curr_count_ind += n_nested_count_t
+            else:
+                assert isinstance(typ, MapArrayType), typ
+                # add nested counts from dict key and value lists
+                # NOTE: length of array(item) is counted from the length of key list and
+                # should not be counted again from the value list
+                counts_val = builder.load(counts)
+                key_list = dict_keys(builder, context, arr_item_obj)
+                value_list = dict_values(builder, context, arr_item_obj)
+                # if nested, call recursively and add values
+                n_keys_inner = get_array_elem_counts(
+                    c, builder, context, key_list, typ.key_arr_type
+                )
+                n_key_nested_count = bodo.utils.transform.get_type_alloc_counts(
+                    typ.key_arr_type
+                )
+                # counts[1:n_keys+1] += get_array_elem_counts(key_list)
+                for i in range(1, n_key_nested_count + 1):
+                    total_count = builder.extract_value(counts_val, i)
+                    curr_count = builder.extract_value(n_keys_inner, i - 1)
+                    counts_val = builder.insert_value(
+                        counts_val, builder.add(total_count, curr_count), i
+                    )
+                n_values_inner = get_array_elem_counts(
+                    c, builder, context, value_list, typ.value_arr_type
+                )
+                # counts[n_keys+1:] += get_array_elem_counts(value_list)[1:]
+                for i in range(n_key_nested_count + 1, n_nested_count):
+                    total_count = builder.extract_value(counts_val, i)
+                    curr_count = builder.extract_value(
+                        n_values_inner, i - n_key_nested_count
+                    )
+                    counts_val = builder.insert_value(
+                        counts_val, builder.add(total_count, curr_count), i
+                    )
+                builder.store(counts_val, counts)
+                c.pyapi.decref(key_list)
+                c.pyapi.decref(value_list)
         c.pyapi.decref(arr_item_obj)
 
     c.pyapi.decref(pd_mod_obj)
