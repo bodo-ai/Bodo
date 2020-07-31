@@ -173,6 +173,10 @@ class InlinePass(FunctionPass):
         # Ensure we have an IR and type information.
         assert state.func_ir
         inline_calls(state.func_ir, state.locals)
+        # sometimes type inference fails after inlining since blocks are inserted
+        # at the end and there are agg constraints (categorical_split case)
+        # CFG simplification fixes this case
+        state.func_ir.blocks = ir_utils.simplify_CFG(state.func_ir.blocks)
         return True
 
 
@@ -272,6 +276,7 @@ class BodoSeriesPass(FunctionPass):
             state.typingctx,
             state.type_annotation.typemap,
             state.type_annotation.calltypes,
+            state.locals,
         )
         series_pass.run()
         return True
@@ -368,27 +373,49 @@ class LowerParforSeq(FunctionPass):
         return True
 
 
-def inline_calls(func_ir, _locals):
-    """Inlines all decorated functions. Use Numba's #3743 when merged.
+def inline_calls(
+    func_ir, _locals, work_list=None, typingctx=None, typemap=None, calltypes=None
+):
+    """Inlines all bodo.jit decorated functions in worklist.
+    Returns the set of block labels that were processed.
     """
-    work_list = list(func_ir.blocks.items())
+    if work_list is None:
+        work_list = list(func_ir.blocks.items())
+    new_labels = set()
     while work_list:
-        _label, block = work_list.pop()
+        label, block = work_list.pop()
+        new_labels.add(label)
         for i, instr in enumerate(block.body):
             if isinstance(instr, ir.Assign):
                 expr = instr.value
                 if isinstance(expr, ir.Expr) and expr.op == "call":
                     func_def = guard(get_definition, func_ir, expr.func)
-                    if isinstance(func_def, (ir.Global, ir.FreeVar)) and isinstance(
-                        func_def.value, CPUDispatcher
+
+                    if (
+                        isinstance(func_def, (ir.Global, ir.FreeVar))
+                        and isinstance(func_def.value, CPUDispatcher)
+                        and func_def.value._compiler.pipeline_class == BodoCompiler
                     ):
                         py_func = func_def.value.py_func
+                        arg_types = None
+                        # pass argument types if in a typed pass
+                        if typingctx:
+                            kws = dict(expr.kws)
+                            a_types = tuple(typemap[v.name] for v in expr.args)
+                            k_types = {k: typemap[v.name] for k, v in kws.items()}
+                            _, arg_types = func_def.value.fold_argument_types(
+                                a_types, k_types
+                            )
                         _, var_dict = inline_closure_call(
                             func_ir,
                             py_func.__globals__,
                             block,
                             i,
                             py_func,
+                            typingctx,
+                            arg_types,
+                            typemap,
+                            calltypes,
                             work_list=work_list,
                         )
 
@@ -400,13 +427,37 @@ def inline_calls(func_ir, _locals):
                         # TODO: support options like "distributed" if applied to the
                         # inlined function
 
-                        # for block in new_blocks:
-                        #     work_list.append(block)
                         # current block is modified, skip the rest
                         # (included in new blocks)
                         break
+    return new_labels
 
-    # sometimes type inference fails after inlining since blocks are inserted
-    # at the end and there are agg constraints (categorical_split case)
-    # CFG simplification fixes this case
-    func_ir.blocks = ir_utils.simplify_CFG(func_ir.blocks)
+
+def udf_jit(signature_or_function=None, **options):
+    """decorator for UDF implementation. Using Bodo's sequential/inline pipeline for
+    the UDF to make sure nested calls are inlined and not distributed. Otherwise,
+    generated barriers cause hangs. see: test_df_apply_func_case2
+    """
+    parallel = {
+        "comprehension": True,
+        "setitem": False,
+        "reduction": True,
+        "numpy": True,
+        "stencil": True,
+        "fusion": True,
+    }
+    return numba.njit(
+        signature_or_function,
+        parallel=parallel,
+        pipeline_class=bodo.compiler.BodoCompilerSeqInline,
+        **options
+    )
+
+
+def is_udf_call(func_type):
+    """deterimines if function type is a Bodo UDF call
+    """
+    return (
+        isinstance(func_type, numba.core.types.Dispatcher)
+        and func_type.dispatcher._compiler.pipeline_class == BodoCompilerSeqInline
+    )

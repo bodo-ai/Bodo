@@ -48,7 +48,8 @@ from bodo.libs.map_arr_ext import MapArrayType
 
 
 ReplaceFunc = namedtuple(
-    "ReplaceFunc", ["func", "arg_types", "args", "glbls", "pre_nodes"]
+    "ReplaceFunc",
+    ["func", "arg_types", "args", "glbls", "inline_bodo_calls", "pre_nodes"],
 )
 
 
@@ -639,6 +640,7 @@ def replace_func(
     extra_globals=None,
     pysig=None,
     kws=None,
+    inline_bodo_calls=False,
 ):
     """
     """
@@ -680,7 +682,7 @@ def replace_func(
             else:
                 new_args.append(arg_typs[i])
         arg_typs = tuple(new_args)
-    return ReplaceFunc(func, arg_typs, args, glbls, pre_nodes)
+    return ReplaceFunc(func, arg_typs, args, glbls, inline_bodo_calls, pre_nodes)
 
 
 ############################# UDF utils ############################

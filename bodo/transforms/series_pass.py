@@ -169,11 +169,12 @@ class SeriesPass:
     provide implementation and enable optimization.
     """
 
-    def __init__(self, func_ir, typingctx, typemap, calltypes):
+    def __init__(self, func_ir, typingctx, typemap, calltypes, _locals):
         self.func_ir = func_ir
         self.typingctx = typingctx
         self.typemap = typemap
         self.calltypes = calltypes
+        self.locals = _locals
         self.array_analysis = numba.parfors.array_analysis.ArrayAnalysis(
             typingctx, func_ir, typemap, calltypes
         )
@@ -223,6 +224,8 @@ class SeriesPass:
                         inst.loc,
                     )
                     block.body = new_body + block.body[i:]
+                    # save work_list length to know how many new items are added
+                    n_prev_work_items = len(work_list)
                     callee_blocks, _ = inline_closure_call(
                         self.func_ir,
                         rp_func.glbls,
@@ -235,10 +238,32 @@ class SeriesPass:
                         self.calltypes,
                         work_list,
                     )
-                    # update Loc objects
-                    for c_block in callee_blocks.values():
-                        c_block.loc = self.curr_loc
-                        update_locs(c_block.body, self.curr_loc)
+                    # recursively inline Bodo functions if necessary (UDF case)
+                    if rp_func.inline_bodo_calls:
+                        # account for the new block inline_closure_call adds for code
+                        # before the call in working block
+                        n_prev_work_items += 1
+                        # blocks of newly inlined function
+                        inline_worklist = work_list[n_prev_work_items:]
+                        new_labels = bodo.compiler.inline_calls(
+                            self.func_ir,
+                            self.locals,
+                            inline_worklist,
+                            self.typingctx,
+                            self.typemap,
+                            self.calltypes,
+                        )
+                        # add blocks added by inliner to be processed
+                        work_list = work_list[:n_prev_work_items]  # avoid duplication
+                        for l in new_labels:
+                            work_list.append((l, blocks[l]))
+                    # Loc objects are not updated for user Bodo functions to keep source
+                    # mapping
+                    else:
+                        # update Loc objects
+                        for c_block in callee_blocks.values():
+                            c_block.loc = self.curr_loc
+                            update_locs(c_block.body, self.curr_loc)
                     replaced = True
                     break
 
@@ -854,6 +879,13 @@ class SeriesPass:
             return [assign]
         else:
             func_name, func_mod = fdef
+
+        # inline UDFs to enable more optimization
+        func_type = self.typemap[rhs.func.name]
+        if bodo.compiler.is_udf_call(func_type):
+            return replace_func(
+                self, func_type.dispatcher.py_func, rhs.args, inline_bodo_calls=True
+            )
 
         # support call ufuncs on Series
         if (
@@ -2029,20 +2061,7 @@ class SeriesPass:
         if isinstance(out_dtype, types.BaseTuple):
             out_dtype = np.dtype(",".join(str(t) for t in out_dtype.types), align=True)
 
-        # using Bodo's sequential/inline pipeline for the UDF to make sure nested calls
-        # are inlined and not distributed. Otherwise, generated barriers cause hangs
-        # see: test_df_apply_func_case2
-        parallel = {
-            "comprehension": True,
-            "setitem": False,
-            "reduction": True,
-            "numpy": True,
-            "stencil": True,
-            "fusion": True,
-        }
-        map_func = numba.njit(
-            func, parallel=parallel, pipeline_class=bodo.compiler.BodoCompilerSeqInline
-        )
+        map_func = bodo.compiler.udf_jit(func)
 
         args = [data, index, name] + extra_args
         return replace_func(

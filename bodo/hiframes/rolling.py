@@ -184,20 +184,7 @@ def _get_apply_func(f_type):
     avoid parallel errors.
     """
     func = get_overload_const_func(f_type)
-    # using Bodo's sequential/inline pipeline for the UDF to make sure nested calls
-    # are inlined and not distributed. Otherwise, generated barriers cause hangs
-    # see: test_df_apply_func_case2
-    parallel = {
-        "comprehension": True,
-        "setitem": False,
-        "reduction": True,
-        "numpy": True,
-        "stencil": True,
-        "fusion": True,
-    }
-    return numba.njit(
-        func, parallel=parallel, pipeline_class=bodo.compiler.BodoCompilerSeqInline
-    )
+    return bodo.compiler.udf_jit(func)
 
 
 #### adapted from pandas window.pyx ####
