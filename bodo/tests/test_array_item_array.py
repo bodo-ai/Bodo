@@ -70,6 +70,8 @@ from bodo.tests.utils import check_func
                 [[1], None, [1, 4], []],
             ]
         ),
+        # string data with NA
+        np.array([[["1", "2", "8"], ["3"]], [["2", None]]] * 4),
         # two level nesting
         np.array(
             [
