@@ -472,6 +472,37 @@ def get_const_func_output_type(func, arg_types, typing_context):
     return f_return_type
 
 
+def extract_keyvals_from_struct_map(f_ir, build_map, loc, scope, typemap=None):
+    """extract keys and values from Expr.build_map of a struct value.
+    Returns struct key names, tuple variables for keys/values, and assignments for
+    generation of tuples.
+    """
+    keys = []
+    key_strs = []
+    values = []
+    for (k, v) in build_map.items:
+        k_str = find_const(f_ir, k)
+        require(isinstance(k_str, str))
+        key_strs.append(k_str)
+        keys.append(k)
+        values.append(v)
+
+    # val_tup = (v1, v2)
+    val_tup = ir.Var(scope, mk_unique_var("val_tup"), loc)
+    val_tup_assign = ir.Assign(ir.Expr.build_tuple(values, loc), val_tup, loc)
+    f_ir._definitions[val_tup.name] = [val_tup_assign.value]
+    # key_tup = ("A", "B")
+    key_tup = ir.Var(scope, mk_unique_var("key_tup"), loc)
+    key_tup_assign = ir.Assign(ir.Expr.build_tuple(keys, loc), key_tup, loc)
+    f_ir._definitions[key_tup.name] = [key_tup_assign.value]
+
+    if typemap is not None:
+        typemap[val_tup.name] = types.Tuple([typemap[v.name] for v in values])
+        typemap[key_tup.name] = types.Tuple([typemap[v.name] for v in keys])
+
+    return key_strs, val_tup, val_tup_assign, key_tup, key_tup_assign
+
+
 def _replace_const_map_return(f_ir, block, label):
     """replaces constant dictionary return value with a struct if values are not
     homogeneous, e.g. {"A": 1, "B": 2.3} -> struct((1, 2.3), ("A", "B"))
@@ -484,27 +515,17 @@ def _replace_const_map_return(f_ir, block, label):
     ret_def = guard(get_definition, f_ir, cast_def.value)
     require(is_expr(ret_def, "build_map"))
     require(len(ret_def.items) > 0)
-    keys = []
-    key_strs = []
-    values = []
-    for (k, v) in ret_def.items:
-        k_str = find_const(f_ir, k)
-        require(isinstance(k_str, str))
-        key_strs.append(k_str)
-        keys.append(k)
-        values.append(v)
-
     # {"A": v1, "B": v2} -> struct_if_heter_dict((v1, v2), ("A", "B"))
     loc = block.loc
     scope = block.scope
-    # val_tup = (v1, v2)
-    val_tup = ir.Var(scope, mk_unique_var("val_tup"), loc)
-    val_tup_assign = ir.Assign(ir.Expr.build_tuple(values, loc), val_tup, loc)
-    f_ir._definitions[val_tup.name] = [val_tup_assign.value]
-    # key_tup = ("A", "B")
-    key_tup = ir.Var(scope, mk_unique_var("key_tup"), loc)
-    key_tup_assign = ir.Assign(ir.Expr.build_tuple(keys, loc), key_tup, loc)
-    f_ir._definitions[key_tup.name] = [key_tup_assign.value]
+    (
+        key_strs,
+        val_tup,
+        val_tup_assign,
+        key_tup,
+        key_tup_assign,
+    ) = extract_keyvals_from_struct_map(f_ir, ret_def, loc, scope)
+
     # new_Var = struct_if_heter_dict(val_tup, key_tup)
     call_var = ir.Var(scope, mk_unique_var("conv_call"), loc)
     call_global = ir.Assign(

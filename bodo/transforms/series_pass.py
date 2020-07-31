@@ -100,6 +100,7 @@ from bodo.utils.transform import (
     is_var_size_item_array_type,
     gen_init_varsize_alloc_sizes,
     gen_varsize_item_sizes,
+    extract_keyvals_from_struct_map,
 )
 from bodo.utils.typing import get_overload_const_func, is_const_func_type, BodoError
 
@@ -393,6 +394,33 @@ class SeriesPass:
         nodes = []
         index_var = get_getsetitem_index_var(inst, self.typemap, nodes)
         index_typ = self.typemap[index_var.name]
+
+        # handle struct setitem (needed for UDF inlining, see test_series_map_dict)
+        # S[i] = {"A": v1, "B": v2} -> S[i] = struct_if_heter_dict((v1, v2), ("A", "B"))
+        if isinstance(target_typ, StructArrayType):
+            val_def = guard(get_definition, self.func_ir, inst.value)
+            if is_expr(val_def, "build_map"):
+                (
+                    _,
+                    val_tup,
+                    val_tup_assign,
+                    key_tup,
+                    key_tup_assign,
+                ) = extract_keyvals_from_struct_map(
+                    self.func_ir, val_def, inst.loc, inst.target.scope, self.typemap
+                )
+                return (
+                    [val_tup_assign, key_tup_assign]
+                    + compile_func_single_block(
+                        lambda vals, keys: bodo.utils.conversion.struct_if_heter_dict(
+                            vals, keys
+                        ),
+                        (val_tup, key_tup),
+                        inst.value,
+                        self,
+                    )
+                    + [inst]
+                )
 
         # support A[i] = None array setitem using our array NA setting function
         if (
