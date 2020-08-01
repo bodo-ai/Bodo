@@ -1016,6 +1016,9 @@ class DistributedAnalysis:
         if fdef == ("num_total_chars", "bodo.libs.str_arr_ext"):
             return
 
+        if fdef == ("inplace_eq", "bodo.libs.str_arr_ext"):
+            return
+
         if fdef == (
             "_series_dropna_str_alloc_impl_inner",
             "bodo.hiframes.series_kernels",
@@ -2014,6 +2017,8 @@ def _get_array_accesses(blocks, func_ir, typemap, accesses=None):
                             accesses.add((rhs.args[0].name, rhs.args[1].name, False))
                             accesses.add((rhs.args[2].name, rhs.args[3].name, False))
                         if fdef == ("get_str_arr_item_length", "bodo.libs.str_arr_ext"):
+                            accesses.add((rhs.args[0].name, rhs.args[1].name, False))
+                        if fdef == ("inplace_eq", "bodo.libs.str_arr_ext"):
                             accesses.add((rhs.args[0].name, rhs.args[1].name, False))
                         if fdef == ("get_bit_bitmap_arr", "bodo.libs.int_arr_ext"):
                             accesses.add((rhs.args[0].name, rhs.args[1].name, True))

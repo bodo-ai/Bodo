@@ -45,6 +45,7 @@ from bodo.libs import hstr_ext
 
 ll.add_symbol("del_str", hstr_ext.del_str)
 ll.add_symbol("unicode_to_utf8", hstr_ext.unicode_to_utf8)
+ll.add_symbol("memcmp", hstr_ext.memcmp)
 
 
 string_type = types.unicode_type
@@ -158,6 +159,26 @@ def unicode_to_utf8(s):  # pragma: no cover
 @overload(unicode_to_utf8)
 def overload_unicode_to_utf8(s):
     return lambda s: unicode_to_utf8_and_len(s)[0]  # pragma: no cover
+
+
+@intrinsic
+def memcmp(typingctx, dest_t, src_t, count_t=None):
+    """call memcmp() in C
+    """
+
+    def codegen(context, builder, sig, args):
+        fnty = lir.FunctionType(
+            lir.IntType(32),
+            [
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(64),
+            ],
+        )
+        memcmp_func = builder.module.get_or_insert_function(fnty, name="memcmp")
+        return builder.call(memcmp_func, args,)
+
+    return types.int32(types.voidptr, types.voidptr, types.intp), codegen
 
 
 #######################  type for std string pointer  ########################

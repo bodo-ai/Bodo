@@ -188,6 +188,8 @@ PyMODINIT_FUNC PyInit_hstr_ext(void) {
                            PyLong_FromVoidPtr((void*)(&is_pd_boolean_array)));
     PyObject_SetAttrString(m, "unbox_bool_array_obj",
                            PyLong_FromVoidPtr((void*)(&unbox_bool_array_obj)));
+    PyObject_SetAttrString(m, "memcmp",
+                        PyLong_FromVoidPtr((void*)(&memcmp)));
     return m;
 }
 

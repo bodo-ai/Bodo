@@ -635,6 +635,22 @@ class SeriesPass:
             impl = bodo.hiframes.pd_categorical_ext.overload_cat_arr_eq_str(typ1, typ2)
             return replace_func(self, impl, [arg1, arg2])
 
+        # optimize string array element comparison to operate inplace and avoid string
+        # allocation overhead
+        # A[i] == val -> inplace_eq(A, i, val)
+        if typ1 == string_type and rhs.fn == operator.eq:
+            arg1_def = guard(get_definition, self.func_ir, arg1)
+            if (
+                is_expr(arg1_def, "getitem")
+                and self.typemap[arg1_def.value.name] == string_array_type
+            ):
+                return compile_func_single_block(
+                    lambda A, i, val: bodo.libs.str_arr_ext.inplace_eq(A, i, val),
+                    (arg1_def.value, arg1_def.index, arg2),
+                    assign.target,
+                    self,
+                )
+
         # both dt64
         if (
             is_dt64_series_typ(typ1)
