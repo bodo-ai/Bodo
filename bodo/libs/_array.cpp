@@ -110,7 +110,26 @@ ArrayBuildInfo nested_array_from_c(const int* types, const uint8_t** buffers,
             std::make_shared<arrow::StructArray>(struct_type, length,
                                                  child_arrays, null_bitmap);
         return ArrayBuildInfo(array, types_pos, buf_pos);
-        // TODO: string array
+    } else if (type == Bodo_CTypes::STRING) {
+        const uint8_t* _offsets = buffers[buf_pos++];
+        const uint8_t* _null_bitmap = buffers[buf_pos++];
+
+        std::shared_ptr<arrow::Buffer> str_offsets =
+            std::make_shared<arrow::Buffer>(_offsets,
+                                            sizeof(int32_t) * (length + 1));
+
+        std::shared_ptr<arrow::Buffer> null_bitmap = NULLPTR;
+        if (_null_bitmap)
+            null_bitmap = std::make_shared<arrow::Buffer>(_null_bitmap,
+                                                          (length + 7) >> 3);
+
+        int64_t num_chars = ((int32_t*)_offsets)[length];
+        std::shared_ptr<arrow::Buffer> data = std::make_shared<arrow::Buffer>(buffers[buf_pos++],
+                                               num_chars * sizeof(char));
+
+        std::shared_ptr<arrow::Array> array =
+            std::make_shared<arrow::StringArray>(length, str_offsets, data, null_bitmap);
+        return ArrayBuildInfo(array, types_pos + 1, buf_pos);
     } else {
 #ifdef DEBUG_ARROW_ARRAY
         std::cout << "nested_array_from_c, PRIMITIVE case\n";
@@ -405,14 +424,21 @@ void nested_array_to_c(std::shared_ptr<arrow::Array> array, int64_t* lengths,
             nested_array_to_c(struct_array->field(i), lengths, infos,
                               lengths_pos, infos_pos);
         }
-
     } else if (array->type_id() == arrow::Type::STRING) {
-        Bodo_PyErr_SetString(
-            PyExc_RuntimeError,
-            "nested_array_to_c: string array not supported yet");
-        return;
-        // array_info* str_arr = alloc_string_array(...);
-        // infos[infos_pos++] = str_arr;
+        auto str_array = std::dynamic_pointer_cast<arrow::StringArray>(array);
+        lengths[lengths_pos++] = str_array->length();
+        int64_t n_strings = str_array->length();
+        int64_t n_chars = ((int32_t*)str_array->value_offsets()->data())[n_strings];
+        array_info* str_arr_info = alloc_string_array(n_strings, n_chars, 0);
+        memcpy(str_arr_info->data1, str_array->value_data()->data(), sizeof(char) * n_chars);  // data
+        memcpy(str_arr_info->data2, str_array->value_offsets()->data(), sizeof(int32_t) * (n_strings + 1));  // offsets
+        int64_t n_null_bytes = (n_strings + 7) >> 3;
+        memset(str_arr_info->null_bitmask, 0, n_null_bytes);
+        for (int64_t i = 0; i < n_strings; i++) {
+            if (!str_array->IsNull(i))
+                SetBitTo((uint8_t*)str_arr_info->null_bitmask, i, true);
+        }
+        infos[infos_pos++] = str_arr_info;
     } else {
 #ifdef DEBUG_ARROW_ARRAY
         std::cout << "nested_array_to_c, PRIMITIVE case\n";

@@ -55,7 +55,7 @@ class CTypeEnum(Enum):
     Float64 = 6
     Int16 = 8
     UInt16 = 9
-    # NOTE: 10 is used by STRING in bodo_common.h
+    STRING = 10
     Bool = 11
     Decimal = 12
     Date = 13

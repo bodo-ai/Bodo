@@ -624,6 +624,8 @@ def string_list_ent(x):
         return "[" + ",".join(l_str) + "]"
     if pd.isna(x):
         return "nan"
+    if isinstance(x, str):
+        return x
     print("Failed to find matching type")
     assert False
 

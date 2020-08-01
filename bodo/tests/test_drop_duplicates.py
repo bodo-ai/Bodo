@@ -23,6 +23,18 @@ from bodo.tests.utils import check_func
             ]
             * 2
         ),
+        np.array(
+            [
+                [[["a", "bb", "c"], ["dddd"]], [["ee", None]]],
+                [[["fff", "g"], ["hh"]], [["iiiii", None]]],
+                [[["jj"], ["kkkk"], ["lll", None, "mm"]]],
+                [[["n"], [], ["o", None, "p"]]],
+                [[["qq", "rr", "sssssss", "ttt"], []], [["u"]], [["vvv", "ww"]]],
+                [[["x", "yy", "zzz"], []], [["aa"]], [["b", "c"]]],
+                [[["dddd", "eee", "ff"], []], [["gg"], ["hhhhhhh", "i"]]],
+            ]
+            * 2
+        ),
         # TODO None value fields in structs is not supported in typing.
         # Using -1 instead of None. Can change to None in the future
         np.array(
