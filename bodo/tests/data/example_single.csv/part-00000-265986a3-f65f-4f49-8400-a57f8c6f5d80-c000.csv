@@ -1,0 +1,15 @@
+one,two,three,four,five
+-1.0,foo,true,-1.0,foo
+NaN,bar,false,5.1,bar
+2.5,baz,true,2.5,baz
+3.0,foo,true,3.0,""
+4.0,bar,true,4.0,bar
+6.0,baz,false,6.0,baz
+10.0,foo,false,11.0,foo
+-1.0,foo,true,-1.0,foo
+NaN,bar,false,5.1,bar
+2.5,baz,true,2.5,baz
+3.0,foo,true,3.0,""
+4.0,bar,true,4.0,bar
+6.0,baz,false,6.0,baz
+10.0,foo,false,11.0,foo

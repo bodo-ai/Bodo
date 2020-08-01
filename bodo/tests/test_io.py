@@ -841,6 +841,7 @@ def test_csv_int_na1(datapath):
     finally:
         if bodo.get_rank() == 0 and os.path.exists(new_fname):
             os.rename(new_fname, fname)
+        bodo.barrier()
 
 
 def test_csv_int_na2(datapath):

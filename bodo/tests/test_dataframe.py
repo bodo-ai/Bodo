@@ -67,16 +67,16 @@ from bodo.tests.utils import (
         # range index
         pytest.param(
             pd.DataFrame(
-                {"A": [1, 8, 4, 1, -2], "B": ["A", "B", "CG", "ACDE", "C"]},
-                range(0, 5, 1),
+                {"A": [1, 8, 4, 1, -2] * 3, "B": ["A", "B", "CG", "ACDE", "C"] * 3},
+                range(0, 5*3, 1),
             ),
             marks=pytest.mark.slow,
         ),
         # TODO: parallel range index with start != 0 and stop != 1
         # int index
         pd.DataFrame(
-            {"A": [1, 8, 4, 1, -3], "B": ["A", "B", "CG", "ACDE", "C"]},
-            [-2, 1, 3, 5, 9],
+            {"A": [1, 8, 4, 1, -3] * 2, "B": ["A", "B", "CG", "ACDE", "C"] * 2},
+            [-2, 1, 3, 5, 9, -3, -5, 0, 4, 7],
         ),
         # string index
         pytest.param(
