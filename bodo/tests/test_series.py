@@ -1233,8 +1233,9 @@ def test_series_binary_ufunc(ufunc, memory_leak_check):
 @pytest.mark.parametrize(
     "S",
     [
-        pd.Series([True, False, False, True, True, True, False, False]),
-        pd.Series([True, False, np.nan, True, True, False, True, False]),
+        # dtype="boolean" makes these nullable Boolean arrays
+        pd.Series([True, False, False, True, True, True, False, False], dtype="boolean"),
+        pd.Series([True, False, np.nan, True, True, False, True, False], dtype="boolean"),
     ],
 )
 def test_series_bool_cmp_op(S, op, memory_leak_check):
@@ -1257,8 +1258,9 @@ def test_series_bool_cmp_op(S, op, memory_leak_check):
 @pytest.mark.parametrize(
     "S",
     [
-        pd.Series([True, False, False, True, True, True, False, False]),
-        pd.Series([True, False, np.nan, True, True, False, True, False]),
+        # dtype="boolean" makes these nullable Boolean arrays
+        pd.Series([True, False, False, True, True, True, False, False], dtype="boolean"),
+        pd.Series([True, False, np.nan, True, True, False, True, False], dtype="boolean"),
     ],
 )
 def test_series_bool_vals_cmp_op(S, op, memory_leak_check):
