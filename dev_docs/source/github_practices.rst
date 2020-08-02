@@ -1,4 +1,4 @@
-.. _github_practices:
+.. _github_practices_info:
 
 Github Practices
 ----------------------
