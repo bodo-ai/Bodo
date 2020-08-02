@@ -317,6 +317,7 @@ class SeriesPass:
         nodes = []
         idx = get_getsetitem_index_var(rhs, self.typemap, nodes)
         idx_typ = self.typemap[idx.name]
+        rhs_type = self.typemap[rhs.value.name]
 
         # optimize out trivial slicing on arrays
         if is_array_typ(target_typ) and guard(
@@ -383,6 +384,18 @@ class SeriesPass:
                 target_typ, idx_typ
             )
             return replace_func(self, impl, (target, idx), pre_nodes=nodes)
+
+        # replace namedtuple access with original value if possible
+        # for example: r = Row(a, b); c = r["R1"] -> c = a
+        # used for df.apply() UDF optimization
+        if isinstance(rhs_type, types.BaseNamedTuple) and isinstance(
+            idx_typ, types.StringLiteral
+        ):
+            named_tup_def = guard(get_definition, self.func_ir, rhs.value)
+            # TODO: support kws
+            if is_expr(named_tup_def, "call") and not named_tup_def.kws:
+                arg_no = rhs_type.instance_class._fields.index(idx_typ.literal_value)
+                assign.value = named_tup_def.args[arg_no]
 
         nodes.append(assign)
         return nodes
