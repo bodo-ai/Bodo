@@ -170,12 +170,16 @@ class SeriesPass:
     provide implementation and enable optimization.
     """
 
-    def __init__(self, func_ir, typingctx, typemap, calltypes, _locals):
+    def __init__(
+        self, func_ir, typingctx, typemap, calltypes, _locals, optimize_inplace_ops=True
+    ):
         self.func_ir = func_ir
         self.typingctx = typingctx
         self.typemap = typemap
         self.calltypes = calltypes
         self.locals = _locals
+        # flag to enable inplace array op optimization: A[i] == v -> inplace_eq(A, i, v)
+        self.optimize_inplace_ops = optimize_inplace_ops
         self.array_analysis = numba.parfors.array_analysis.ArrayAnalysis(
             typingctx, func_ir, typemap, calltypes
         )
@@ -651,7 +655,7 @@ class SeriesPass:
         # optimize string array element comparison to operate inplace and avoid string
         # allocation overhead
         # A[i] == val -> inplace_eq(A, i, val)
-        if typ1 == string_type and rhs.fn == operator.eq:
+        if self.optimize_inplace_ops and typ1 == string_type and rhs.fn == operator.eq:
             arg1_def = guard(get_definition, self.func_ir, arg1)
             if (
                 is_expr(arg1_def, "getitem")

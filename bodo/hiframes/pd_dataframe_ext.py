@@ -329,7 +329,7 @@ def tuple_typer(self, args, kws):
 lines = inspect.getsource(numba.core.typing.builtins.StaticGetItemTuple.generic)
 if (
     hashlib.sha256(lines.encode()).hexdigest()
-    != "a6e246826cc454a865fde2da746ff62d23a06d453d49c4f653434a670258017d"
+    != "d2b994d8b92761a1f8c9cb9c3114f75b9816a813d4173243e093c5b275ff203a"
 ):  # pragma: no cover
     warnings.warn("numba.core.typing.builtins.StaticGetItemTuple.generic has changed")
 
