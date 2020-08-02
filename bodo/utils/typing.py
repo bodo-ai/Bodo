@@ -713,7 +713,7 @@ def to_nullable_type(t):
 
     if isinstance(t, DataFrameType):
         new_data = tuple(to_nullable_type(t) for t in t.data)
-        return DataFrameType(new_data, t.index, t.columns, t.has_parent)
+        return DataFrameType(new_data, t.index, t.columns)
 
     if isinstance(t, SeriesType):
         return SeriesType(t.dtype, to_nullable_type(t.data), t.index, t.name_typ)
