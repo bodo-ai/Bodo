@@ -155,8 +155,8 @@ def numeric_df_value(request):
 @pytest.fixture(
     params=[
         # column name overlaps with pandas function
-        pd.DataFrame({"product": ["a", "b", "c"]}),
-        pd.DataFrame({"product": ["a", "b", "c"], "keys": [1, 2, 3]}),
+        pd.DataFrame({"product": ["a", "b", "c", "d", "e", "f"]}),
+        pd.DataFrame({"product": ["a", "b", "c", "d", "e", "f"], "keys": [1, 2, 3, 4, 5, 6]}),
     ]
 )
 def column_name_df_value(request):
@@ -181,9 +181,9 @@ def test_assign():
     def test_impl5(df):
         return df.assign(A=df["B"], B=df["B"])
 
-    df_int = pd.DataFrame({"A": [1, 2, 3]})
-    df_str = pd.DataFrame({"A": ["a", "b", "c"]})
-    df_twocol = pd.DataFrame({"A": [1, 2, 3], "B": [4, 5, 6]})
+    df_int = pd.DataFrame({"A": [1, 2, 3] * 2})
+    df_str = pd.DataFrame({"A": ["a", "b", "c", "d", "e", "f", "g"]})
+    df_twocol = pd.DataFrame({"A": [1, 2, 3] * 2, "B": [4, 5, 6] * 2})
     check_func(test_impl1, (df_int,))
     check_func(test_impl2, (df_int,))
     check_func(test_impl3, (df_int,))
@@ -1362,9 +1362,9 @@ def test_df_filter():
 
     df = pd.DataFrame(
         {
-            "A": [2, 1, 1, 1, 2, 2, 1],
-            "B": ["A", "B", np.nan, "ACDE", "C", np.nan, "AA"],
-            "C": [2, 3, -1, 1, np.nan, 3.1, -1],
+            "A": [2, 1, 1, 1, 2, 2, 1] * 2,
+            "B": ["A", "B", np.nan, "ACDE", "C", np.nan, "AA"] * 2,
+            "C": [2, 3, -1, 1, np.nan, 3.1, -1] * 2,
         }
     )
     cond = df.A > 1
@@ -1701,10 +1701,10 @@ def test_df_dropna():
 
     df = pd.DataFrame(
         {
-            "A": [1.0, 2.0, np.nan, 1.0] * 2,
-            "B": [4, 5, 6, np.nan] * 2,
-            "C": [np.nan, "AA", np.nan, "ABC"] * 2,
-            "D": [[1, 2], None, [1], []] * 2,
+            "A": [1.0, 2.0, np.nan, 1.0] * 3,
+            "B": [4, 5, 6, np.nan] * 3,
+            "C": [np.nan, "AA", np.nan, "ABC"] * 3,
+            "D": [[1, 2], None, [1], []] * 3,
         }
     )
     # TODO: fix 1D_Var RangeIndex
