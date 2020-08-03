@@ -875,7 +875,7 @@ def _get_df_args(data, index, columns, dtype, copy):
     if isinstance(data, types.BaseTuple):
         # first element is sentinel
         if not data.types[0] == types.StringLiteral("__bodo_tup"):
-            raise ValueError("pd.DataFrame tuple input data not supported yet")
+            raise BodoError("pd.DataFrame tuple input data not supported yet")
         n_cols = (len(data.types) - 1) // 2
         data_keys = [t.literal_value for t in data.types[1 : n_cols + 1]]
         data_arrs = [
