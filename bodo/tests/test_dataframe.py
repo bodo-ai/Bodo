@@ -71,7 +71,7 @@ from bodo.tests.utils import (
         pytest.param(
             pd.DataFrame(
                 {"A": [1, 8, 4, 1, -2] * 3, "B": ["A", "B", "CG", "ACDE", "C"] * 3},
-                range(0, 5*3, 1),
+                range(0, 5 * 3, 1),
             ),
             marks=pytest.mark.slow,
         ),
@@ -156,7 +156,9 @@ def numeric_df_value(request):
     params=[
         # column name overlaps with pandas function
         pd.DataFrame({"product": ["a", "b", "c", "d", "e", "f"]}),
-        pd.DataFrame({"product": ["a", "b", "c", "d", "e", "f"], "keys": [1, 2, 3, 4, 5, 6]}),
+        pd.DataFrame(
+            {"product": ["a", "b", "c", "d", "e", "f"], "keys": [1, 2, 3, 4, 5, 6]}
+        ),
     ]
 )
 def column_name_df_value(request):
@@ -338,6 +340,17 @@ def test_df_from_np_array_int():
         return pd.DataFrame({"A": np_arr[:, 0], "B": np_arr[:, 1], "C": np_arr[:, 2]})
 
     check_func(impl, (), is_out_distributed=False)
+
+
+def test_create_df_force_const():
+    """
+    Test forcing dataframe column name to be constant in pd.DataFrame()
+    """
+
+    def impl(c_name, n):
+        return pd.DataFrame({"A": np.ones(n), c_name: np.arange(n)})
+
+    check_func(impl, ("BB", 11))
 
 
 def test_df_from_np_array_bool():
@@ -2042,7 +2055,7 @@ def test_dataframe_sample_sorted():
 
     n = 10
     df = pd.DataFrame({"A": [x for x in range(n)]})
-    check_func(f, (df,n), reset_index=True, sort_output=True, is_out_distributed=False)
+    check_func(f, (df, n), reset_index=True, sort_output=True, is_out_distributed=False)
 
 
 def test_dataframe_sample_index():
@@ -2053,7 +2066,9 @@ def test_dataframe_sample_index():
         return df.sample(5)
 
     df = pd.DataFrame({"A": list(range(20))})
-    bodo_f = bodo.jit(all_args_distributed_block=False, all_returns_distributed=False)(f)
+    bodo_f = bodo.jit(all_args_distributed_block=False, all_returns_distributed=False)(
+        f
+    )
     df_ret = bodo_f(df)
     S = df_ret.index == df_ret["A"]
     assert S.all()
@@ -2062,14 +2077,19 @@ def test_dataframe_sample_index():
 def test_dataframe_sample_nested_datastructures():
     """The sample function relies on allgather operations that deserve to be tested
     """
+
     def check_gather_operation(df):
         siz = df.size
+
         def f(df, m):
             return df.sample(n=m, replace=False).size
+
         py_output = f(df, siz)
         start, end = get_start_end(len(df))
         df_loc = df.iloc[start:end]
-        bodo_f = bodo.jit(all_args_distributed_block=True, all_returns_distributed=False)(f)
+        bodo_f = bodo.jit(
+            all_args_distributed_block=True, all_returns_distributed=False
+        )(f)
         df_ret = bodo_f(df_loc, siz)
         assert df_ret == py_output
 

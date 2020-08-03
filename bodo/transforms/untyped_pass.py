@@ -436,13 +436,18 @@ class UntypedPass:
         arg_def = guard(get_definition, self.func_ir, data_arg)
 
         if isinstance(arg_def, ir.Expr) and arg_def.op == "build_map":
+            msg = "DataFrame column names should be constant strings or ints"
             # check column names to be string
-            col_names = tuple(
-                guard(find_const, self.func_ir, t[0]) for t in arg_def.items
-            )
-            if not all(isinstance(c, str) for c in col_names):
-                # TODO: support int column names?
-                raise ValueError("DataFrame column names should be constant strings")
+            try:
+                col_names = tuple(
+                    get_const_value_inner(self.func_ir, t[0], self.args,)
+                    for t in arg_def.items
+                )
+            except GuardException:
+                raise BodoError(msg)
+
+            if not all(isinstance(c, (str, int)) for c in col_names):
+                raise BodoError(msg)
 
             # create tuple with sentinel
             sentinel_var = ir.Var(lhs.scope, mk_unique_var("sentinel"), lhs.loc)
