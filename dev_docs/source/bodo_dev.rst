@@ -346,7 +346,7 @@ as an example.
 
 .. _parallelization_debug:
 
-Debugging Parralelization Issues
+Debugging Parallelization Issues
 --------------------------------
 
 Parallelization bugs are likely when a function works sequentially but segfaults or produces
@@ -360,6 +360,13 @@ variables::
 If distribution of a variable is wrong, the most likely cause is a function not being handled
 properly in distributed analysis (input/output distributions not set properly).
 
+If distribution analysis is correct, distributed transformation issues could be the cause
+which can be checked by looking at the IR after transformation::
+
+    export NUMBA_DEBUG_PRINT_AFTER="bodo_distributed_pass"
+
+In addition, many operations are implemented in Bodo's MPI/C++ runtime, which would require debugging
+similar to other MPI/C++ codes. See :ref:`dev_debugging`.
 
 .. _resources:
 
