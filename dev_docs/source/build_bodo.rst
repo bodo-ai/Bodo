@@ -1,4 +1,4 @@
-.. _build_bodo:
+.. _build_bodo_source:
 
 
 Building Bodo from Source

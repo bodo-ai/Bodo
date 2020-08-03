@@ -1,4 +1,4 @@
-.. _bodo_dev:
+.. _bodo_dev_info:
 
 Bodo Engine Development
 =======================
@@ -274,7 +274,7 @@ Finally, Numba converts this IR to LLVM IR and generates the binary.
 .. _dev_builtin_functions:
 
 Builtin Functions
-------------------
+-----------------
 
 As we just observed for ``nunique`` in the previous example,
 Bodo transforms Pandas APIs (and others if needed) into *builtin*
@@ -343,6 +343,30 @@ This means that the jit execution jumps into regular python to run the implement
 See our `re.search implementation <https://github.com/Bodo-inc/Bodo/blob/ddf9434081f1f092a3a0757bd3c5faa44ba3a61c/bodo/libs/re_ext.py#L151>`_
 as an example.
 
+
+.. _parallelization_debug:
+
+Debugging Parallelization Issues
+--------------------------------
+
+Parallelization bugs are likely when a function works sequentially but segfaults or produces
+wrong results when run in parallel. To debug these cases, set these environment
+variables to see the IR before distributed analysis, as well as the distributions assigned to
+variables::
+
+    export NUMBA_DEBUG_PRINT_AFTER="parfor_pass"
+    export BODO_DISTRIBUTED_DIAGNOSTICS=1
+
+If distribution of a variable is wrong, the most likely cause is a function not being handled
+properly in distributed analysis (input/output distributions not set properly).
+
+If distribution analysis is correct, distributed transformation issues could be the cause
+which can be checked by looking at the IR after transformation::
+
+    export NUMBA_DEBUG_PRINT_AFTER="bodo_distributed_pass"
+
+In addition, many operations are implemented in Bodo's MPI/C++ runtime, which would require debugging
+similar to other MPI/C++ codes. See :ref:`dev_debugging`.
 
 .. _resources:
 

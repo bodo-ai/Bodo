@@ -1,7 +1,7 @@
-.. _numba:
+.. _numba_info:
 
 Numba 
------------------
+-----
 
 Bodo sits on top of Numba and is heavily tied to many of its features.
 Therefore, understanding Numba's internal details and being able to

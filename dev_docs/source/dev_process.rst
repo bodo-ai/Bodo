@@ -1,4 +1,4 @@
-.. _dev_process:
+.. _dev_process_info:
 
 Development Process
 ===================
