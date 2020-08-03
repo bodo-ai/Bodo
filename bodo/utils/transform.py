@@ -13,6 +13,7 @@ import warnings
 
 import numba
 from numba.core import ir, ir_utils, types
+from numba.core.typing.templates import fold_arguments
 from numba.core.ir_utils import (
     compile_to_numba_ir,
     replace_arg_nodes,
@@ -400,12 +401,36 @@ def get_const_value_inner(
     raise GuardException("Constant value not found")
 
 
+# similar to Dispatcher.fold_argument_types in Numba
+# https://github.com/numba/numba/blob/0872b372ca6bcab3b7c3f979d92b3427885713ad/numba/core/dispatcher.py#L56
+def fold_argument_types(pysig, args, kws):
+    """
+    Given positional and named argument types, fold keyword arguments
+    and resolve defaults by inserting types.Omitted() instances.
+    """
+
+    def normal_handler(index, param, value):
+        return value
+
+    def default_handler(index, param, default):
+        return types.Omitted(default)
+
+    def stararg_handler(index, param, values):
+        return types.StarArgTuple(values)
+
+    args = fold_arguments(
+        pysig, args, kws, normal_handler, default_handler, stararg_handler
+    )
+    return args
+
+
 def get_const_func_output_type(func, arg_types, typing_context):
     """Get output type of constant function 'func' when compiled with 'arg_types' as
     argument types.
     'func' can be a MakeFunctionLiteral (inline lambda) or FunctionLiteral (function)
     """
 
+    py_func = None
     # MakeFunctionLiteral is not possible currently due to Numba's
     # MakeFunctionToJitFunction pass but may be possible later
     if isinstance(func, types.MakeFunctionLiteral):  # pragma: no cover
@@ -418,9 +443,8 @@ def get_const_func_output_type(func, arg_types, typing_context):
 
         f_ir = numba.core.ir_utils.get_ir_of_code(_globals, code)
     elif isinstance(func, bodo.utils.typing.FunctionLiteral):
-        f_ir = numba.core.compiler.run_frontend(
-            func.literal_value, inline_closures=True
-        )
+        py_func = func.literal_value
+        f_ir = numba.core.compiler.run_frontend(py_func, inline_closures=True)
     elif isinstance(func, CPUDispatcher):
         py_func = func.py_func
         f_ir = numba.core.compiler.run_frontend(py_func, inline_closures=True)
@@ -428,6 +452,11 @@ def get_const_func_output_type(func, arg_types, typing_context):
         assert isinstance(func, types.Dispatcher)
         py_func = func.dispatcher.py_func
         f_ir = numba.core.compiler.run_frontend(py_func, inline_closures=True)
+
+    # fold arguments to handle cases like default values
+    if py_func is not None:
+        pysig = numba.core.utils.pysignature(py_func)
+        arg_types = fold_argument_types(pysig, arg_types, {})
 
     struct_key_names = fix_struct_return(f_ir)
     _, f_return_type, _ = numba.core.typed_passes.type_inference_stage(
