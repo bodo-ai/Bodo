@@ -728,6 +728,19 @@ def to_nullable_type(t):
     return t
 
 
+def is_iterable_type(t):
+    """return True if 't' is an iterable type like list, array, Series, ...
+    """
+    from bodo.hiframes.pd_series_ext import SeriesType
+    from bodo.hiframes.pd_dataframe_ext import DataFrameType
+
+    return (
+        bodo.utils.utils.is_array_typ(t, False)
+        or isinstance(t, (SeriesType, DataFrameType, types.List, types.BaseTuple))
+        or bodo.hiframes.pd_index_ext.is_index_type(t)
+    )
+
+
 # dummy empty itertools implementation to avoid typing errors for series str
 # flatten case
 @overload(itertools.chain, no_unliteral=True)

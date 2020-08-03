@@ -294,7 +294,7 @@ def overload_coerce_to_ndarray(
         return impl_num
 
     if is_overload_true(error_on_nonarray):
-        raise TypeError("cannot coerce {} to array".format(data))
+        raise BodoError("cannot coerce {} to array".format(data))
 
     return (
         lambda data, error_on_nonarray=True, use_nullable_array=None, scalar_to_arr_len=None: data

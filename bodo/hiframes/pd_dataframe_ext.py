@@ -69,6 +69,7 @@ from bodo.utils.typing import (
     create_unsupported_overload,
     get_overload_const,
     get_udf_out_arr_type,
+    is_iterable_type,
 )
 from bodo.utils.transform import (
     get_const_func_output_type,
@@ -876,14 +877,11 @@ def _get_df_args(data, index, columns, dtype, copy):
         # first element is sentinel
         if not data.types[0] == types.StringLiteral("__bodo_tup"):
             raise BodoError("pd.DataFrame tuple input data not supported yet")
+        assert len(data.types) % 2 == 1, "invalid const dict tuple structure"
         n_cols = (len(data.types) - 1) // 2
         data_keys = [t.literal_value for t in data.types[1 : n_cols + 1]]
-        data_arrs = [
-            "bodo.utils.conversion.coerce_to_array(data[{}], True){}".format(
-                i, astype_str
-            )
-            for i in range(n_cols + 1, 2 * n_cols + 1)
-        ]
+        data_val_types = dict(zip(data_keys, data.types[n_cols + 1 :]))
+        data_arrs = ["data[{}]".format(i) for i in range(n_cols + 1, 2 * n_cols + 1)]
         data_dict = dict(zip(data_keys, data_arrs))
         # if no index provided and there are Series inputs, get index from them
         # XXX cannot handle alignment of multiple Series
@@ -898,6 +896,7 @@ def _get_df_args(data, index, columns, dtype, copy):
     # empty dataframe
     elif is_overload_none(data):
         data_dict = {}
+        data_val_types = {}
     else:
         # ndarray case
         # checks for 2d and column args
@@ -911,11 +910,11 @@ def _get_df_args(data, index, columns, dtype, copy):
                 "pd.DataFrame() column argument is required when"
                 "ndarray is passed as data"
             )
-        if copy:
-            astype_str += ".copy()"
+        copy_str = ".copy()" if copy else ""
         columns_consts = get_overload_const_list(columns)
         n_cols = len(columns_consts)
-        data_arrs = ["data[:,{}]{}".format(i, astype_str) for i in range(n_cols)]
+        data_val_types = {c: data.copy(ndim=1) for c in columns_consts}
+        data_arrs = ["data[:,{}]{}".format(i, copy_str) for i in range(n_cols)]
         data_dict = dict(zip(columns_consts, data_arrs))
 
     if is_overload_none(columns):
@@ -923,7 +922,9 @@ def _get_df_args(data, index, columns, dtype, copy):
     else:
         col_names = get_overload_const_list(columns)
 
-    df_len = _get_df_len_from_info(data_dict, col_names, index_is_none, index_arg)
+    df_len = _get_df_len_from_info(
+        data_dict, data_val_types, col_names, index_is_none, index_arg
+    )
     _fill_null_arrays(data_dict, col_names, df_len, dtype)
 
     # set default RangeIndex if index argument is None and data argument isn't Series
@@ -936,20 +937,29 @@ def _get_df_args(data, index, columns, dtype, copy):
                 df_len
             )
 
-    data_args = "({},)".format(", ".join(data_dict[c] for c in col_names))
+    data_args = "({},)".format(
+        ", ".join(
+            "bodo.utils.conversion.coerce_to_array({}, True, scalar_to_arr_len={}){}".format(
+                data_dict[c], df_len, astype_str
+            )
+            for c in col_names
+        )
+    )
     if len(col_names) == 0:
         data_args = "()"
 
     return col_names, data_args, index_arg
 
 
-def _get_df_len_from_info(data_dict, col_names, index_is_none, index_arg):
+def _get_df_len_from_info(
+    data_dict, data_val_types, col_names, index_is_none, index_arg
+):
     """return generated text for length of dataframe, given the input info in the
     pd.DataFrame() call
     """
     df_len = "0"
     for c in col_names:
-        if c in data_dict:
+        if c in data_dict and is_iterable_type(data_val_types[c]):
             df_len = "len({})".format(data_dict[c])
             break
 

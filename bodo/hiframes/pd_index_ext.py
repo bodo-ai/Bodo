@@ -2042,3 +2042,18 @@ def overload_index_map(I, mapper, na_action=None):
     )
     f = loc_vars["f"]
     return f
+
+
+def is_index_type(t):
+    """return True if 't' is an Index type"""
+    return isinstance(
+        t,
+        (
+            RangeIndexType,
+            NumericIndexType,
+            StringIndexType,
+            PeriodIndexType,
+            DatetimeIndexType,
+            TimedeltaIndexType,
+        ),
+    )
