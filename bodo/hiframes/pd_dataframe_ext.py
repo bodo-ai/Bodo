@@ -2848,6 +2848,45 @@ def to_sql_overload(
     return _impl
 
 
+@overload_method(DataFrameType, "sample", inline="always", no_unliteral=True)
+def sample_overload(
+    df, n=None, frac=None, replace=False, weights=None, random_state=None, axis=None
+):
+    """Implementation of the sample functionality from
+    https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.DataFrame.sample.html
+    """
+    unsupported_args = dict(random_state=random_state, weights=weights, axis=axis)
+    sample_defaults = dict(random_state=None, weights=None, axis=None)
+    check_unsupported_args("sample", unsupported_args, sample_defaults)
+    if not is_overload_none(n) and not is_overload_none(frac):
+        raise BodoError("sample(): only one of n and frac option can be selected")
+
+    n_cols = len(df.columns)
+    data_args = ", ".join("data_{}".format(i) for i in range(n_cols))
+
+    func_text = "def impl(df, n=None, frac=None, replace=False, weights=None, random_state=None, axis=None):\n"
+    for i in range(n_cols):
+        func_text += "  data_{0} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {0})\n".format(
+            i
+        )
+    func_text += "  if frac is None:\n"
+    func_text += "    frac_d = -1.0\n"
+    func_text += "  else:\n"
+    func_text += "    frac_d = frac\n"
+    func_text += "  if n is None:\n"
+    func_text += "    n_i = 0\n"
+    func_text += "  else:\n"
+    func_text += "    n_i = n\n"
+    index = "bodo.utils.conversion.index_to_array(bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df))"
+    func_text += "  ({0},), index_arr = bodo.libs.array_kernels.sample_table_operation(({0},), {1}, n_i, frac_d, replace)\n".format(
+        data_args, index
+    )
+    func_text += "  index = bodo.utils.conversion.index_from_array(index_arr)\n"
+    return bodo.hiframes.dataframe_impl._gen_init_df(
+        func_text, df.columns, data_args, "index"
+    )
+
+
 # TODO: other Pandas versions (0.24 defaults are different than 0.23)
 @overload_method(DataFrameType, "to_csv", no_unliteral=True)
 def to_csv_overload(

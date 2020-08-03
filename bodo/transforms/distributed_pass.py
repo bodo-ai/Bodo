@@ -753,6 +753,14 @@ class DistributedPass:
             )
             return compile_func_single_block(f, rhs.args, assign.target, self)
 
+        if fdef == ("sample_table_operation", "bodo.libs.array_kernels") and (
+            self._is_1D_tup(rhs.args[0].name) or self._is_1D_Var_tup(rhs.args[0].name)
+        ):
+            f = lambda arr, ind_arr, n, frac, replace: bodo.libs.array_kernels.sample_table_operation(
+                arr, ind_arr, n, frac, replace, True
+            )
+            return compile_func_single_block(f, rhs.args, assign.target, self)
+
         if fdef == ("convert_rec_to_tup", "bodo.utils.typing"):
             # optimize Series back to back map pattern with tuples
             # TODO: create another optimization pass?

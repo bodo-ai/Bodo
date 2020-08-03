@@ -1552,10 +1552,34 @@ table_info* broadcast_table(table_info* ref_table, table_info* in_table,
     return new table_info(out_arrs);
 }
 
+int MPI_Gengather(void *sendbuf, int sendcount, MPI_Datatype sendtype,
+                  void *recvbuf, int recvcount, MPI_Datatype recvtype,
+                  int root_pe, MPI_Comm comm, bool all_gather)
+{
+  if (all_gather) {
+    return MPI_Allgather(sendbuf, sendcount, sendtype, recvbuf, recvcount, recvtype, comm);
+  } else {
+    return MPI_Gather(sendbuf, sendcount, sendtype, recvbuf, recvcount, recvtype, root_pe, comm);
+  }
+}
+
+int MPI_Gengatherv(const void *sendbuf, int sendcount, MPI_Datatype sendtype,
+                   void *recvbuf, const int *recvcounts, const int *displs,
+                   MPI_Datatype recvtype, int root_pe, MPI_Comm comm, bool all_gather)
+{
+  if (all_gather) {
+    return MPI_Allgatherv(sendbuf, sendcount, sendtype, recvbuf, recvcounts, displs, recvtype, comm);
+  } else {
+    return MPI_Gatherv(sendbuf, sendcount, sendtype, recvbuf, recvcounts, displs, recvtype, root_pe, comm);
+  }
+}
+
+
+
 #undef DEBUG_GATHER
 
 template <typename T>
-std::shared_ptr<arrow::Buffer> gather_arrow_offset_buffer(T const& arr) {
+std::shared_ptr<arrow::Buffer> gather_arrow_offset_buffer(T const& arr, bool all_gather) {
 #ifdef DEBUG_GATHER
     std::cout << "Beginning of gather_arrow_offset_buffer\n";
 #endif
@@ -1566,7 +1590,7 @@ std::shared_ptr<arrow::Buffer> gather_arrow_offset_buffer(T const& arr) {
     std::cout << "gather_arrow_offset_buffer, step 1\n";
 #endif
     std::vector<int> rows_count, rows_disps;
-    if (myrank == mpi_root) {
+    if (myrank == mpi_root || all_gather) {
         rows_count.resize(n_pes);
         rows_disps.resize(n_pes);
     }
@@ -1574,14 +1598,14 @@ std::shared_ptr<arrow::Buffer> gather_arrow_offset_buffer(T const& arr) {
 #ifdef DEBUG_GATHER
     std::cout << "gather_arrow_offset_buffer, step 2 n_rows=" << n_rows << "\n";
 #endif
-    MPI_Gather(&n_rows, 1, MPI_INT, rows_count.data(), 1, MPI_INT, mpi_root,
-               MPI_COMM_WORLD);
+    MPI_Gengather(&n_rows, 1, MPI_INT, rows_count.data(), 1, MPI_INT, mpi_root,
+                  MPI_COMM_WORLD, all_gather);
 #ifdef DEBUG_GATHER
     std::cout << "gather_arrow_offset_buffer, step 3\n";
 #endif
     int64_t n_rows_tot =
         std::accumulate(rows_count.begin(), rows_count.end(), 0);
-    if (myrank == mpi_root) {
+    if (myrank == mpi_root || all_gather) {
         int64_t rows_pos = 0;
         for (int i_p = 0; i_p < n_pes; i_p++) {
             rows_disps[i_p] = rows_pos;
@@ -1599,13 +1623,13 @@ std::shared_ptr<arrow::Buffer> gather_arrow_offset_buffer(T const& arr) {
 #ifdef DEBUG_GATHER
     std::cout << "gather_arrow_offset_buffer, step 5\n";
 #endif
-    MPI_Gatherv(list_siz_loc.data(), n_rows, mpi_typ, list_siz_tot.data(),
-                rows_count.data(), rows_disps.data(), mpi_typ, mpi_root,
-                MPI_COMM_WORLD);
+    MPI_Gengatherv(list_siz_loc.data(), n_rows, mpi_typ, list_siz_tot.data(),
+                   rows_count.data(), rows_disps.data(), mpi_typ, mpi_root,
+                   MPI_COMM_WORLD, all_gather);
 #ifdef DEBUG_GATHER
     std::cout << "gather_arrow_offset_buffer, step 6\n";
 #endif
-    if (myrank == mpi_root) {
+    if (myrank == mpi_root || all_gather) {
 #ifdef DEBUG_GATHER
         std::cout << "gather_arrow_offset_buffer, step 7\n";
 #endif
@@ -1633,16 +1657,15 @@ std::shared_ptr<arrow::Buffer> gather_arrow_offset_buffer(T const& arr) {
         std::cout << "End of gather_arrow_offset_buffer 1\n";
 #endif
         return buffer;
-    } else {
-#ifdef DEBUG_GATHER
-        std::cout << "End of gather_arrow_offset_buffer 2\n";
-#endif
-        return nullptr;
     }
+#ifdef DEBUG_GATHER
+    std::cout << "End of gather_arrow_offset_buffer 2\n";
+#endif
+    return nullptr;
 }
 
 template <typename T>
-std::shared_ptr<arrow::Buffer> gather_arrow_bitmap_buffer(T const& arr) {
+std::shared_ptr<arrow::Buffer> gather_arrow_bitmap_buffer(T const& arr, bool all_gather) {
 #ifdef DEBUG_GATHER
     std::cout << "Beginning of gather_arrow_bitmap_buffer\n";
 #endif
@@ -1650,16 +1673,16 @@ std::shared_ptr<arrow::Buffer> gather_arrow_bitmap_buffer(T const& arr) {
     MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
     std::vector<int> rows_count, recv_count_null, recv_disp_null;
-    if (myrank == mpi_root) {
+    if (myrank == mpi_root || all_gather) {
         rows_count.resize(n_pes);
         recv_count_null.resize(n_pes);
         recv_disp_null.resize(n_pes);
     }
     int n_rows = arr->length();
-    MPI_Gather(&n_rows, 1, MPI_INT, rows_count.data(), 1, MPI_INT, mpi_root,
-               MPI_COMM_WORLD);
+    MPI_Gengather(&n_rows, 1, MPI_INT, rows_count.data(), 1, MPI_INT, mpi_root,
+                  MPI_COMM_WORLD, all_gather);
     int n_rows_tot = std::accumulate(rows_count.begin(), rows_count.end(), 0);
-    if (myrank == mpi_root) {
+    if (myrank == mpi_root || all_gather) {
         for (size_t i = 0; i < size_t(n_pes); i++)
             recv_count_null[i] = (rows_count[i] + 7) >> 3;
         calc_disp(recv_disp_null, recv_count_null);
@@ -1673,10 +1696,10 @@ std::shared_ptr<arrow::Buffer> gather_arrow_bitmap_buffer(T const& arr) {
         std::accumulate(recv_count_null.begin(), recv_count_null.end(), 0);
     std::vector<uint8_t> tmp_null_bytes(n_null_bytes, 0);
     MPI_Datatype mpi_typ = get_MPI_typ(Bodo_CTypes::UINT8);
-    MPI_Gatherv(send_null_bitmask.data(), n_bytes, mpi_typ,
-                tmp_null_bytes.data(), recv_count_null.data(),
-                recv_disp_null.data(), mpi_typ, mpi_root, MPI_COMM_WORLD);
-    if (myrank == mpi_root) {
+    MPI_Gengatherv(send_null_bitmask.data(), n_bytes, mpi_typ,
+                   tmp_null_bytes.data(), recv_count_null.data(),
+                   recv_disp_null.data(), mpi_typ, mpi_root, MPI_COMM_WORLD, all_gather);
+    if (myrank == mpi_root || all_gather) {
         size_t siz_out = (n_rows_tot + 7) >> 3;
         arrow::Result<std::unique_ptr<arrow::Buffer>> maybe_buffer = arrow::AllocateBuffer(siz_out);
         if (!maybe_buffer.ok()) {
@@ -1688,19 +1711,20 @@ std::shared_ptr<arrow::Buffer> gather_arrow_bitmap_buffer(T const& arr) {
         copy_gathered_null_bytes(data_out_ptr, tmp_null_bytes, recv_count_null,
                                  rows_count);
 #ifdef DEBUG_GATHER
+        for (int i_row=0; i_row<n_rows_tot; i_row++)
+          std::cout << "i_row=" << i_row << "/" << n_rows_tot << " msk=" << GetBit(data_out_ptr, i_row) << "\n";
         std::cout << "End of gather_arrow_bitmap_buffer 1\n";
 #endif
         return buffer;
-    } else {
-#ifdef DEBUG_GATHER
-        std::cout << "End of gather_arrow_bitmap_buffer 2\n";
-#endif
-        return nullptr;
     }
+#ifdef DEBUG_GATHER
+    std::cout << "End of gather_arrow_bitmap_buffer 2\n";
+#endif
+    return nullptr;
 }
 
 std::shared_ptr<arrow::Buffer> gather_arrow_string_buffer(
-    std::shared_ptr<arrow::StringArray> const& arr) {
+      std::shared_ptr<arrow::StringArray> const& arr, bool all_gather) {
 #ifdef DEBUG_GATHER
     std::cout << "Beginning of gather_arrow_string_buffer\n";
 #endif
@@ -1708,19 +1732,19 @@ std::shared_ptr<arrow::Buffer> gather_arrow_string_buffer(
     MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
     std::vector<int> char_count, char_disps;
-    if (myrank == mpi_root) {
+    if (myrank == mpi_root || all_gather) {
         char_count.resize(n_pes);
         char_disps.resize(n_pes);
     }
     int n_string = arr->length();
     int n_char = arr->value_offset(n_string);
-    MPI_Gather(&n_char, 1, MPI_INT, char_count.data(), 1, MPI_INT, mpi_root,
-               MPI_COMM_WORLD);
+    MPI_Gengather(&n_char, 1, MPI_INT, char_count.data(), 1, MPI_INT, mpi_root,
+                  MPI_COMM_WORLD, all_gather);
     int n_char_tot = std::accumulate(char_count.begin(), char_count.end(), 0);
-    if (myrank == mpi_root) calc_disp(char_disps, char_count);
+    if (myrank == mpi_root || all_gather) calc_disp(char_disps, char_count);
     std::shared_ptr<arrow::Buffer> buffer = nullptr;
     uint8_t* data_out_ptr = nullptr;
-    if (myrank == mpi_root) {
+    if (myrank == mpi_root || all_gather) {
         size_t siz_out = n_char_tot;
         arrow::Result<std::unique_ptr<arrow::Buffer>> maybe_buffer = arrow::AllocateBuffer(siz_out);
         if (!maybe_buffer.ok()) {
@@ -1733,8 +1757,8 @@ std::shared_ptr<arrow::Buffer> gather_arrow_string_buffer(
     MPI_Datatype mpi_typ = get_MPI_typ(Bodo_CTypes::UINT8);
     std::shared_ptr<arrow::Buffer> data_buff = arr->value_data();
     uint8_t* data_in_ptr = (uint8_t*)data_buff->data();
-    MPI_Gatherv(data_in_ptr, n_char, mpi_typ, data_out_ptr, char_count.data(),
-                char_disps.data(), mpi_typ, mpi_root, MPI_COMM_WORLD);
+    MPI_Gengatherv(data_in_ptr, n_char, mpi_typ, data_out_ptr, char_count.data(),
+                   char_disps.data(), mpi_typ, mpi_root, MPI_COMM_WORLD, all_gather);
 #ifdef DEBUG_GATHER
     std::cout << "End of gather_arrow_string_buffer\n";
 #endif
@@ -1742,7 +1766,7 @@ std::shared_ptr<arrow::Buffer> gather_arrow_string_buffer(
 }
 
 std::shared_ptr<arrow::Buffer> gather_arrow_primitive_buffer(
-    int64_t n_rows, std::shared_ptr<arrow::PrimitiveArray> const& arr) {
+      int64_t n_rows, std::shared_ptr<arrow::PrimitiveArray> const& arr, bool all_gather) {
 #ifdef DEBUG_GATHER
     std::cout << "Beginning of gather_arrow_primitive_buffer\n";
 #endif
@@ -1754,18 +1778,22 @@ std::shared_ptr<arrow::Buffer> gather_arrow_primitive_buffer(
     int64_t siz_typ = numpy_item_size[bodo_typ];
     // Determination of sizes
     std::vector<int> char_count, char_disps;
-    if (myrank == mpi_root) {
+    if (myrank == mpi_root || all_gather) {
         char_count.resize(n_pes);
         char_disps.resize(n_pes);
     }
     int n_char = n_rows * siz_typ;
-    MPI_Gather(&n_char, 1, MPI_INT, char_count.data(), 1, MPI_INT, mpi_root,
-               MPI_COMM_WORLD);
+    MPI_Gengather(&n_char, 1, MPI_INT, char_count.data(), 1, MPI_INT, mpi_root,
+                  MPI_COMM_WORLD, all_gather);
     int n_char_tot = std::accumulate(char_count.begin(), char_count.end(), 0);
-    if (myrank == mpi_root) calc_disp(char_disps, char_count);
+#ifdef DEBUG_GATHER
+    std::cout << "n_char=" << n_char << " n_char_tot=" << n_char_tot << " siz_typ=" << siz_typ << "\n";
+#endif
+    if (myrank == mpi_root || all_gather)
+        calc_disp(char_disps, char_count);
     std::shared_ptr<arrow::Buffer> buffer = nullptr;
     uint8_t* data_out_ptr = nullptr;
-    if (myrank == mpi_root) {
+    if (myrank == mpi_root || all_gather) {
         size_t siz_out = n_char_tot;
         arrow::Result<std::unique_ptr<arrow::Buffer>> maybe_buffer = arrow::AllocateBuffer(siz_out);
         if (!maybe_buffer.ok()) {
@@ -1776,17 +1804,35 @@ std::shared_ptr<arrow::Buffer> gather_arrow_primitive_buffer(
         data_out_ptr = buffer->mutable_data();
     }
     uint8_t* send_data = (uint8_t*)arr->values()->data();
-    MPI_Datatype mpi_typ = get_MPI_typ(Bodo_CTypes::UINT8);
-    MPI_Gatherv(send_data, n_char, mpi_typ, data_out_ptr, char_count.data(),
-                char_disps.data(), mpi_typ, mpi_root, MPI_COMM_WORLD);
 #ifdef DEBUG_GATHER
-    std::cout << "End of gather_arrow_primitive_buffer\n";
+    if (bodo_typ == Bodo_CTypes::INT64) {
+        int64_t* send_data_i64 = (int64_t*)send_data;
+        for (int i_row=0; i_row<n_rows; i_row++) {
+          int64_t val = send_data_i64[i_row];
+          std::cout << "send_data : i_row=" << i_row << " val=" << val << "\n";
+        }
+    }
+#endif
+    MPI_Datatype mpi_typ = get_MPI_typ(Bodo_CTypes::UINT8);
+    MPI_Gengatherv(send_data, n_char, mpi_typ, data_out_ptr, char_count.data(),
+                   char_disps.data(), mpi_typ, mpi_root, MPI_COMM_WORLD, all_gather);
+#ifdef DEBUG_GATHER
+    int n_rows_tot = n_char_tot / siz_typ;
+    // Most debug case use int64 as input. No need for code for other types
+    if (bodo_typ == Bodo_CTypes::INT64) {
+        int64_t* data_out_i64 = (int64_t*)data_out_ptr;
+        for (int i_row=0; i_row<n_rows_tot; i_row++) {
+          int64_t val = data_out_i64[i_row];
+          std::cout << "data_out_ptr : i_row=" << i_row << " val=" << val << "\n";
+        }
+    }
+    std::cout << "End of gather_arrow_primitive_buffer n_rows_tot=" << n_rows_tot << "\n";
 #endif
     return buffer;
 }
 
 std::shared_ptr<arrow::Array> gather_arrow_array(
-    std::shared_ptr<arrow::Array> const& arr) {
+      std::shared_ptr<arrow::Array> const& arr, bool all_gather) {
 #ifdef DEBUG_GATHER
     std::cout << "Beginning of gather_arrow_array\n";
 #endif
@@ -1794,18 +1840,24 @@ std::shared_ptr<arrow::Array> gather_arrow_array(
     MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
     int n_rows_tot = 0, n_rows = arr->length();
-    MPI_Reduce(&n_rows, &n_rows_tot, 1, MPI_INT, MPI_SUM, mpi_root,
-               MPI_COMM_WORLD);
+    if (all_gather)
+      MPI_Allreduce(&n_rows, &n_rows_tot, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+    else
+      MPI_Reduce(&n_rows, &n_rows_tot, 1, MPI_INT, MPI_SUM, mpi_root,
+                 MPI_COMM_WORLD);
+#ifdef DEBUG_GATHER
+    std::cout << "n_rows=" << n_rows << " n_rows_tot=" << n_rows_tot << "\n";
+#endif
     if (arr->type_id() == arrow::Type::LIST) {
         std::shared_ptr<arrow::ListArray> list_arr =
             std::dynamic_pointer_cast<arrow::ListArray>(arr);
         std::shared_ptr<arrow::Buffer> list_offsets =
-            gather_arrow_offset_buffer(list_arr);
+            gather_arrow_offset_buffer(list_arr, all_gather);
         std::shared_ptr<arrow::Buffer> null_bitmap_out =
-            gather_arrow_bitmap_buffer(list_arr);
+            gather_arrow_bitmap_buffer(list_arr, all_gather);
         std::shared_ptr<arrow::Array> child_array =
-            gather_arrow_array(list_arr->values());
-        if (myrank == mpi_root) {
+            gather_arrow_array(list_arr->values(), all_gather);
+        if (myrank == mpi_root || all_gather) {
 #ifdef DEBUG_GATHER
             std::cout << "Exiting gather_arrow_array in LIST case 1\n";
 #endif
@@ -1824,12 +1876,12 @@ std::shared_ptr<arrow::Array> gather_arrow_array(
             std::dynamic_pointer_cast<arrow::StructType>(struct_arr->type());
         std::vector<std::shared_ptr<arrow::Array>> children;
         for (int i_child = 0; i_child < struct_type->num_children(); i_child++)
-            children.push_back(gather_arrow_array(struct_arr->field(i_child)));
+            children.push_back(gather_arrow_array(struct_arr->field(i_child), all_gather));
         std::shared_ptr<arrow::Buffer> null_bitmap_out =
-            gather_arrow_bitmap_buffer(struct_arr);
-        if (myrank == mpi_root) {
+          gather_arrow_bitmap_buffer(struct_arr, all_gather);
+        if (myrank == mpi_root || all_gather) {
 #ifdef DEBUG_GATHER
-            std::cout << "Exiting gather_arrow_array in STRUCT case 1\n";
+            std::cout << "Exiting gather_arrow_array in STRUCT case 1 n_rows_tot=" << n_rows_tot << "\n";
 #endif
             return std::make_shared<arrow::StructArray>(
                 struct_arr->type(), n_rows_tot, children, null_bitmap_out);
@@ -1842,12 +1894,12 @@ std::shared_ptr<arrow::Array> gather_arrow_array(
         std::shared_ptr<arrow::StringArray> string_arr =
             std::dynamic_pointer_cast<arrow::StringArray>(arr);
         std::shared_ptr<arrow::Buffer> list_offsets =
-            gather_arrow_offset_buffer(string_arr);
+            gather_arrow_offset_buffer(string_arr, all_gather);
         std::shared_ptr<arrow::Buffer> null_bitmap_out =
-            gather_arrow_bitmap_buffer(string_arr);
+            gather_arrow_bitmap_buffer(string_arr, all_gather);
         std::shared_ptr<arrow::Buffer> data =
-            gather_arrow_string_buffer(string_arr);
-        if (myrank == mpi_root) {
+            gather_arrow_string_buffer(string_arr, all_gather);
+        if (myrank == mpi_root || all_gather) {
 #ifdef DEBUG_GATHER
             std::cout << "Exiting gather_arrow_array in STRING case 1\n";
 #endif
@@ -1862,10 +1914,10 @@ std::shared_ptr<arrow::Array> gather_arrow_array(
         std::shared_ptr<arrow::PrimitiveArray> primitive_arr =
             std::dynamic_pointer_cast<arrow::PrimitiveArray>(arr);
         std::shared_ptr<arrow::Buffer> null_bitmap_out =
-            gather_arrow_bitmap_buffer(primitive_arr);
+            gather_arrow_bitmap_buffer(primitive_arr, all_gather);
         std::shared_ptr<arrow::Buffer> data =
-            gather_arrow_primitive_buffer(n_rows, primitive_arr);
-        if (myrank == mpi_root) {
+            gather_arrow_primitive_buffer(n_rows, primitive_arr, all_gather);
+        if (myrank == mpi_root || all_gather) {
 #ifdef DEBUG_GATHER
             std::cout << "Exiting gather_arrow_array in PRIMITIVE case 1\n";
 #endif
@@ -1879,7 +1931,7 @@ std::shared_ptr<arrow::Array> gather_arrow_array(
     }
 }
 
-table_info* gather_table(table_info* in_table, size_t n_cols) {
+table_info* gather_table(table_info* in_table, size_t n_cols, bool all_gather) {
     int n_pes, myrank;
     int mpi_root = 0;
     MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
@@ -1901,8 +1953,8 @@ table_info* gather_table(table_info* in_table, size_t n_cols) {
         arr_gath_s[1] = n_sub_elems;
         arr_gath_s[2] = n_sub_sub_elems;
         std::vector<int64_t> arr_gath_r(3 * n_pes, 0);
-        MPI_Gather(arr_gath_s, 3, MPI_LONG_LONG_INT, arr_gath_r.data(), 3,
-                   MPI_LONG_LONG_INT, mpi_root, MPI_COMM_WORLD);
+        MPI_Gengather(arr_gath_s, 3, MPI_LONG_LONG_INT, arr_gath_r.data(), 3,
+                      MPI_LONG_LONG_INT, mpi_root, MPI_COMM_WORLD, all_gather);
         Bodo_CTypes::CTypeEnum dtype = in_table->columns[i_col]->dtype;
         bodo_array_type::arr_type_enum arr_type =
             in_table->columns[i_col]->arr_type;
@@ -1927,15 +1979,15 @@ table_info* gather_table(table_info* in_table, size_t n_cols) {
 #ifdef DEBUG_GATHER
             std::cout << "gather_table, arrow case, step 2\n";
 #endif
-            std::shared_ptr<arrow::Array> out_array = gather_arrow_array(array);
+            std::shared_ptr<arrow::Array> out_array = gather_arrow_array(array, all_gather);
 #ifdef DEBUG_GATHER
             std::cout << "gather_table, arrow case, step 3\n";
 #endif
-            uint64_t n_rows = 0;
+            uint64_t n_rows_tot = 0;
             NRT_MemInfo* meminfo = NULL;
-            if (myrank == mpi_root) n_rows = array->length();
+            if (myrank == mpi_root || all_gather) n_rows_tot = out_array->length();
             out_arr = new array_info(
-                bodo_array_type::ARROW, Bodo_CTypes::INT8 /*dummy*/, n_rows, -1,
+                bodo_array_type::ARROW, Bodo_CTypes::INT8 /*dummy*/, n_rows_tot, -1,
                 -1, NULL, NULL, NULL, NULL, meminfo, NULL, out_array);
 #ifdef DEBUG_GATHER
             std::cout << "gather_table, arrow case, step 4\n";
@@ -1957,13 +2009,13 @@ table_info* gather_table(table_info* in_table, size_t n_cols) {
             std::cout << "n_rows_tot=" << n_rows_tot << "\n";
 #endif
             char* data1_ptr = NULL;
-            if (myrank == mpi_root) {
+            if (myrank == mpi_root || all_gather) {
                 out_arr = alloc_array(n_rows_tot, -1, -1, arr_type, dtype, 0, num_categories);
                 data1_ptr = out_arr->data1;
             }
-            MPI_Gatherv(in_table->columns[i_col]->data1, n_rows, mpi_typ,
-                        data1_ptr, rows_counts.data(), rows_disps.data(),
-                        mpi_typ, mpi_root, MPI_COMM_WORLD);
+            MPI_Gengatherv(in_table->columns[i_col]->data1, n_rows, mpi_typ,
+                           data1_ptr, rows_counts.data(), rows_disps.data(),
+                           mpi_typ, mpi_root, MPI_COMM_WORLD, all_gather);
         }
         if (arr_type == bodo_array_type::STRING) {
             MPI_Datatype mpi_typ32 = get_MPI_typ(Bodo_CTypes::UINT32);
@@ -1977,7 +2029,7 @@ table_info* gather_table(table_info* in_table, size_t n_cols) {
             }
             // Doing the characters
             char* data1_ptr = NULL;
-            if (myrank == mpi_root) {
+            if (myrank == mpi_root || all_gather) {
                 out_arr = alloc_array(n_rows_tot, n_chars_tot, -1, arr_type,
                                       dtype, 0, num_categories);
                 data1_ptr = out_arr->data1;
@@ -1990,9 +2042,9 @@ table_info* gather_table(table_info* in_table, size_t n_cols) {
                 char_counts[i_p] = siz;
                 pos += siz;
             }
-            MPI_Gatherv(in_table->columns[i_col]->data1, n_sub_elems, mpi_typ8,
-                        data1_ptr, char_counts.data(), char_disps.data(),
-                        mpi_typ8, mpi_root, MPI_COMM_WORLD);
+            MPI_Gengatherv(in_table->columns[i_col]->data1, n_sub_elems, mpi_typ8,
+                           data1_ptr, char_counts.data(), char_disps.data(),
+                           mpi_typ8, mpi_root, MPI_COMM_WORLD, all_gather);
             // Collecting the offsets data
             std::vector<uint32_t> list_count_loc(n_rows);
             uint32_t* offsets_i = (uint32_t*)in_table->columns[i_col]->data2;
@@ -2003,10 +2055,10 @@ table_info* gather_table(table_info* in_table, size_t n_cols) {
                 curr_offset = new_offset;
             }
             std::vector<uint32_t> list_count_tot(n_rows_tot);
-            MPI_Gatherv(list_count_loc.data(), n_rows, mpi_typ32,
-                        list_count_tot.data(), rows_counts.data(),
-                        rows_disps.data(), mpi_typ32, mpi_root, MPI_COMM_WORLD);
-            if (myrank == mpi_root) {
+            MPI_Gengatherv(list_count_loc.data(), n_rows, mpi_typ32,
+                           list_count_tot.data(), rows_counts.data(),
+                           rows_disps.data(), mpi_typ32, mpi_root, MPI_COMM_WORLD, all_gather);
+            if (myrank == mpi_root || all_gather) {
                 uint32_t* offsets_o = (uint32_t*)out_arr->data2;
                 offsets_o[0] = 0;
                 for (int64_t pos = 0; pos < n_rows_tot; pos++)
@@ -2031,7 +2083,7 @@ table_info* gather_table(table_info* in_table, size_t n_cols) {
                       << " n_sub_sub_elems_tot=" << n_sub_sub_elems_tot << "\n";
 #endif
             char* data1_ptr = NULL;
-            if (myrank == mpi_root) {
+            if (myrank == mpi_root || all_gather) {
                 out_arr = alloc_array(n_rows_tot, n_sub_elems_tot,
                                       n_sub_sub_elems_tot, arr_type, dtype, 0, num_categories);
                 data1_ptr = out_arr->data1;
@@ -2044,9 +2096,9 @@ table_info* gather_table(table_info* in_table, size_t n_cols) {
                 char_counts[i_p] = siz;
                 pos += siz;
             }
-            MPI_Gatherv(in_table->columns[i_col]->data1, n_sub_sub_elems,
-                        mpi_typ8, data1_ptr, char_counts.data(),
-                        char_disps.data(), mpi_typ8, mpi_root, MPI_COMM_WORLD);
+            MPI_Gengatherv(in_table->columns[i_col]->data1, n_sub_sub_elems, mpi_typ8,
+                           data1_ptr, char_counts.data(), char_disps.data(),
+                           mpi_typ8, mpi_root, MPI_COMM_WORLD, all_gather);
             // Sending of the data_offsets
             std::vector<int> data_offsets_disps(n_pes),
                 data_offsets_counts(n_pes);
@@ -2068,11 +2120,10 @@ table_info* gather_table(table_info* in_table, size_t n_cols) {
                 curr_data_offset = new_data_offset;
             }
             std::vector<uint32_t> len_strings_tot(n_sub_elems_tot);
-            MPI_Gatherv(len_strings_loc.data(), n_sub_elems, mpi_typ32,
-                        len_strings_tot.data(), data_offsets_counts.data(),
-                        data_offsets_disps.data(), mpi_typ32, mpi_root,
-                        MPI_COMM_WORLD);
-            if (myrank == mpi_root) {
+            MPI_Gengatherv(len_strings_loc.data(), n_sub_elems, mpi_typ32,
+                           len_strings_tot.data(), data_offsets_counts.data(),
+                           data_offsets_disps.data(), mpi_typ32, mpi_root, MPI_COMM_WORLD, all_gather);
+            if (myrank == mpi_root || all_gather) {
                 uint32_t* data_offsets_o = (uint32_t*)out_arr->data2;
                 data_offsets_o[0] = 0;
                 for (int64_t pos = 0; pos < n_sub_elems_tot; pos++)
@@ -2100,11 +2151,10 @@ table_info* gather_table(table_info* in_table, size_t n_cols) {
                 curr_index_offset = new_index_offset;
             }
             std::vector<uint32_t> n_strings_tot(n_rows_tot, 405);
-            MPI_Gatherv(n_strings_loc.data(), n_rows, mpi_typ32,
-                        n_strings_tot.data(), index_offsets_counts.data(),
-                        index_offsets_disps.data(), mpi_typ32, mpi_root,
-                        MPI_COMM_WORLD);
-            if (myrank == mpi_root) {
+            MPI_Gengatherv(n_strings_loc.data(), n_rows, mpi_typ32,
+                           n_strings_tot.data(), index_offsets_counts.data(),
+                           index_offsets_disps.data(), mpi_typ32, mpi_root, MPI_COMM_WORLD, all_gather);
+            if (myrank == mpi_root || all_gather) {
                 uint32_t* index_offsets_o = (uint32_t*)out_arr->data3;
                 index_offsets_o[0] = 0;
                 for (int64_t pos = 0; pos < n_rows_tot; pos++)
@@ -2125,10 +2175,10 @@ table_info* gather_table(table_info* in_table, size_t n_cols) {
             std::vector<uint8_t> tmp_null_bytes(n_null_bytes, 0);
             MPI_Datatype mpi_typ = get_MPI_typ(Bodo_CTypes::UINT8);
             int n_bytes = (n_rows + 7) >> 3;
-            MPI_Gatherv(null_bitmask_i, n_bytes, mpi_typ, tmp_null_bytes.data(),
-                        recv_count_null.data(), recv_disp_null.data(), mpi_typ,
-                        mpi_root, MPI_COMM_WORLD);
-            if (myrank == mpi_root) {
+            MPI_Gengatherv(null_bitmask_i, n_bytes, mpi_typ, tmp_null_bytes.data(),
+                           recv_count_null.data(), recv_disp_null.data(), mpi_typ,
+                           mpi_root, MPI_COMM_WORLD, all_gather);
+            if (myrank == mpi_root || all_gather) {
                 char* null_bitmask_o = out_arr->null_bitmask;
                 copy_gathered_null_bytes((uint8_t*)null_bitmask_o,
                                          tmp_null_bytes, recv_count_null,

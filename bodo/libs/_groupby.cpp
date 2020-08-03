@@ -854,7 +854,7 @@ void get_group_info(table_info& table, std::vector<int64_t>& row_to_group,
     // in the map (but note that the group values I record in the output go from
     // 0 to num_groups - 1)
     int next_group = 1;
-    MAP_CONTAINER<multi_col_key, int64_t, key_hash> key_to_group;
+    UNORD_MAP_CONTAINER<multi_col_key, int64_t, key_hash> key_to_group;
     bool key_is_nullable = false;
     if (check_for_null_keys) {
         key_is_nullable = does_keys_have_nulls(key_cols);
@@ -906,7 +906,7 @@ grouping_info get_group_info_iterate(table_info* table, bool consider_missing) {
     // in the map (but note that the group values I record in the output go from
     // 0 to num_groups - 1)
     int next_group = 1;
-    MAP_CONTAINER<multi_col_key, int64_t, key_hash> key_to_group;
+    UNORD_MAP_CONTAINER<multi_col_key, int64_t, key_hash> key_to_group;
     for (int64_t i = 0; i < table->nrows(); i++) {
         if (key_is_nullable) {
             if (does_row_has_nulls(key_cols, i)) {
@@ -1229,7 +1229,7 @@ void nunique_computation(array_info* arr, array_info* out_arr,
                 char* ptr2 = arr->data1 + i2 * siztype;
                 return memcmp(ptr1, ptr2, siztype) == 0;
             };
-            SET_CONTAINER<int64_t, std::function<size_t(int64_t)>,
+            UNORD_SET_CONTAINER<int64_t, std::function<size_t(int64_t)>,
                           std::function<bool(int64_t, int64_t)>>
                 eset({}, hash_fct, equal_fct);
             int64_t i = grp_inf.group_to_first_row[igrp];
@@ -1291,7 +1291,7 @@ void nunique_computation(array_info* arr, array_info* out_arr,
                     sizeof(uint32_t) * in_data_offsets[in_index_offsets[i2]];
                 return strncmp(ptr1, ptr2, len1) == 0;
             };
-            SET_CONTAINER<int64_t, std::function<size_t(int64_t)>,
+            UNORD_SET_CONTAINER<int64_t, std::function<size_t(int64_t)>,
                           std::function<bool(int64_t, int64_t)>>
                 eset({}, hash_fct, equal_fct);
             int64_t i = grp_inf.group_to_first_row[igrp];
@@ -1332,7 +1332,7 @@ void nunique_computation(array_info* arr, array_info* out_arr,
                 char* ptr2 = arr->data1 + in_offsets[i2];
                 return strncmp(ptr1, ptr2, len1) == 0;
             };
-            SET_CONTAINER<int64_t, std::function<size_t(int64_t)>,
+            UNORD_SET_CONTAINER<int64_t, std::function<size_t(int64_t)>,
                           std::function<bool(int64_t, int64_t)>>
                 eset({}, hash_fct, equal_fct);
             int64_t i = grp_inf.group_to_first_row[igrp];
@@ -1370,7 +1370,7 @@ void nunique_computation(array_info* arr, array_info* out_arr,
                 char* ptr2 = arr->data1 + i2 * siztype;
                 return memcmp(ptr1, ptr2, siztype) == 0;
             };
-            SET_CONTAINER<int64_t, std::function<size_t(int64_t)>,
+            UNORD_SET_CONTAINER<int64_t, std::function<size_t(int64_t)>,
                           std::function<bool(int64_t, int64_t)>>
                 eset({}, hash_fct, equal_fct);
             int64_t i = grp_inf.group_to_first_row[igrp];

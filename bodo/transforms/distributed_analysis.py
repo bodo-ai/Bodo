@@ -717,6 +717,18 @@ class DistributedAnalysis:
             self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
             return
 
+        if fdef == ("sample_table_operation", "bodo.libs.array_kernels"):
+            in_dist = Distribution(
+                min(
+                    min(a.value for a in array_dists[rhs.args[0].name]),
+                    array_dists[rhs.args[1].name].value,
+                )
+            )
+            self._set_var_dist(rhs.args[0].name, array_dists, in_dist)
+            self._set_var_dist(rhs.args[1].name, array_dists, in_dist)
+            self._set_var_dist(lhs, array_dists, Distribution.REP)
+            return
+
         if fdef == (
             "pandas_string_array_to_datetime",
             "bodo.hiframes.pd_timestamp_ext",

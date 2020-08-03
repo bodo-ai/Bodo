@@ -185,7 +185,7 @@ table_info* hash_join_table(table_info* in_table, int64_t n_key_t,
     // The entList contains the hash of the short table.
     // We address the entry by the row index. We store all the rows which are
     // identical in the std::vector.
-    MAP_CONTAINER<size_t, std::vector<size_t>, std::function<size_t(size_t)>,
+    UNORD_MAP_CONTAINER<size_t, std::vector<size_t>, std::function<size_t(size_t)>,
                   std::function<bool(size_t, size_t)>>
         entList({}, hash_fct, equal_fct);
     // The loop over the short table.

@@ -21,8 +21,11 @@ from bodo.tests.utils import (
     is_bool_object_series,
     _get_dist_arg,
     AnalysisTestPipeline,
+    gen_random_arrow_array_struct_int,
+    gen_random_arrow_array_struct_list_int,
+    gen_random_arrow_list_list,
+    gen_random_arrow_struct_struct,
 )
-
 
 # TODO: other possible df types like Categorical, dt64, td64, ...
 @pytest.fixture(
@@ -416,7 +419,7 @@ def test_df_columns(df_value):
     def impl(df):
         return df.columns
 
-    check_func(impl, (df_value,), False)
+    check_func(impl, (df_value,), is_out_distributed=False)
 
 
 def test_df_values(numeric_df_value):
@@ -582,14 +585,14 @@ def test_df_head(df_value):
     def impl(df):
         return df.head(3)
 
-    check_func(impl, (df_value,), False)
+    check_func(impl, (df_value,), is_out_distributed=False)
 
 
 def test_df_tail(df_value):
     def impl(df):
         return df.tail(3)
 
-    check_func(impl, (df_value,), False)
+    check_func(impl, (df_value,), is_out_distributed=False)
 
 
 @pytest.mark.parametrize(
@@ -637,7 +640,7 @@ def test_df_corr(df_value):
     def impl(df):
         return df.corr()
 
-    check_func(impl, (df_value,), False)
+    check_func(impl, (df_value,), is_out_distributed=False)
 
 
 def test_df_corr_parallel():
@@ -665,14 +668,14 @@ def test_df_cov(df_value):
     def impl(df):
         return df.cov()
 
-    check_func(impl, (df_value,), False)
+    check_func(impl, (df_value,), is_out_distributed=False)
 
 
 def test_df_count(df_value):
     def impl(df):
         return df.count()
 
-    check_func(impl, (df_value,), False)
+    check_func(impl, (df_value,), is_out_distributed=False)
 
 
 def test_df_prod(df_value):
@@ -683,7 +686,7 @@ def test_df_prod(df_value):
     def impl(df):
         return df.prod()
 
-    check_func(impl, (df_value,), False)
+    check_func(impl, (df_value,), is_out_distributed=False)
 
 
 def test_df_sum(numeric_df_value):
@@ -694,7 +697,7 @@ def test_df_sum(numeric_df_value):
     def impl(df):
         return df.sum()
 
-    check_func(impl, (numeric_df_value,), False)
+    check_func(impl, (numeric_df_value,), is_out_distributed=False)
 
 
 def test_df_min(numeric_df_value):
@@ -705,7 +708,7 @@ def test_df_min(numeric_df_value):
     def impl(df):
         return df.min()
 
-    check_func(impl, (numeric_df_value,), False)
+    check_func(impl, (numeric_df_value,), is_out_distributed=False)
 
 
 def test_df_max(numeric_df_value):
@@ -716,7 +719,7 @@ def test_df_max(numeric_df_value):
     def impl(df):
         return df.max()
 
-    check_func(impl, (numeric_df_value,), False)
+    check_func(impl, (numeric_df_value,), is_out_distributed=False)
 
 
 def test_df_mean(numeric_df_value):
@@ -727,7 +730,7 @@ def test_df_mean(numeric_df_value):
     def impl(df):
         return df.mean()
 
-    check_func(impl, (numeric_df_value,), False)
+    check_func(impl, (numeric_df_value,), is_out_distributed=False)
 
 
 def test_df_var(numeric_df_value):
@@ -738,7 +741,7 @@ def test_df_var(numeric_df_value):
     def impl(df):
         return df.var()
 
-    check_func(impl, (numeric_df_value,), False)
+    check_func(impl, (numeric_df_value,), is_out_distributed=False)
 
 
 def test_df_std(numeric_df_value):
@@ -749,7 +752,7 @@ def test_df_std(numeric_df_value):
     def impl(df):
         return df.std()
 
-    check_func(impl, (numeric_df_value,), False)
+    check_func(impl, (numeric_df_value,), is_out_distributed=False)
 
 
 def test_df_median1():
@@ -758,7 +761,7 @@ def test_df_median1():
         return df.median()
 
     df = pd.DataFrame({"A": [1, 8, 4, 11, -3]})
-    check_func(impl, (df,), False)
+    check_func(impl, (df,), is_out_distributed=False)
 
 
 def test_df_median2(numeric_df_value):
@@ -774,7 +777,7 @@ def test_df_median2(numeric_df_value):
     def impl(df):
         return df.median()
 
-    check_func(impl, (numeric_df_value,), False)
+    check_func(impl, (numeric_df_value,), is_out_distributed=False)
 
 
 def test_df_quantile(df_value):
@@ -789,7 +792,7 @@ def test_df_quantile(df_value):
     def impl(df):
         return df.quantile(0.3)
 
-    check_func(impl, (df_value,), False, check_names=False)
+    check_func(impl, (df_value,), is_out_distributed=False, check_names=False)
 
 
 def test_df_pct_change(numeric_df_value):
@@ -812,7 +815,7 @@ def test_df_describe(numeric_df_value):
     def test_impl(df):
         return df.describe()
 
-    check_func(test_impl, (numeric_df_value,), False)
+    check_func(test_impl, (numeric_df_value,), is_out_distributed=False)
 
 
 @pytest.mark.skip(reason="distributed cumprod not available yet")
@@ -892,7 +895,7 @@ def test_df_idxmax_datetime():
         {"A": [3, 5, 1, -1, 2]},
         pd.date_range(start="2018-04-24", end="2018-04-29", periods=5),
     )
-    check_func(impl, (df,), False)
+    check_func(impl, (df,), is_out_distributed=False)
 
 
 def test_df_idxmax(numeric_df_value):
@@ -902,7 +905,7 @@ def test_df_idxmax(numeric_df_value):
     def impl(df):
         return df.idxmax()
 
-    check_func(impl, (numeric_df_value,), False)
+    check_func(impl, (numeric_df_value,), is_out_distributed=False)
 
 
 def test_df_idxmin(numeric_df_value):
@@ -912,7 +915,7 @@ def test_df_idxmin(numeric_df_value):
     def impl(df):
         return df.idxmin()
 
-    check_func(impl, (numeric_df_value,), False)
+    check_func(impl, (numeric_df_value,), is_out_distributed=False)
 
 
 def test_df_take(df_value):
@@ -1997,6 +2000,88 @@ def test_dataframe_constant_lowering():
         return df
 
     pd.testing.assert_frame_equal(bodo.jit(impl)(), df)
+
+
+def test_dataframe_sample_number():
+    """Checking the random routine is especially difficult to do.
+    We can mostly only check incidental information about the code"""
+
+    def f(df):
+        return df.sample(n=4, replace=False).size
+
+    bodo_f = bodo.jit(all_args_distributed_block=True, all_returns_distributed=False)(f)
+    n = 10
+    df = pd.DataFrame({"A": [x for x in range(n)]})
+    py_output = f(df)
+    df_loc = _get_dist_arg(df)
+    assert bodo_f(df_loc) == py_output
+
+
+def test_dataframe_sample_uniform():
+    """Checking the random routine, this time with uniform input"""
+
+    def f1(df):
+        return df.sample(n=4, replace=False)
+
+    def f2(df):
+        return df.sample(frac=0.5, replace=False)
+
+    n = 10
+    df = pd.DataFrame({"A": [1 for _ in range(n)]})
+    check_func(f1, (df,), reset_index=True, is_out_distributed=False)
+    check_func(f2, (df,), reset_index=True, is_out_distributed=False)
+
+
+def test_dataframe_sample_sorted():
+    """Checking the random routine. Since we use sorted and the number of entries is equal to
+    the number of sampled rows, after sorting the output becomes deterministic, that is independent
+    of the random number generated"""
+
+    def f(df, n):
+        return df.sample(n=n, replace=False)
+
+    n = 10
+    df = pd.DataFrame({"A": [x for x in range(n)]})
+    check_func(f, (df,n), reset_index=True, sort_output=True, is_out_distributed=False)
+
+
+def test_dataframe_sample_index():
+    """Checking that the index passed coherently to the A entry.
+    """
+
+    def f(df):
+        return df.sample(5)
+
+    df = pd.DataFrame({"A": list(range(20))})
+    bodo_f = bodo.jit(all_args_distributed_block=False, all_returns_distributed=False)(f)
+    df_ret = bodo_f(df)
+    S = df_ret.index == df_ret["A"]
+    assert S.all()
+
+
+def test_dataframe_sample_nested_datastructures():
+    """The sample function relies on allgather operations that deserve to be tested
+    """
+    def check_gather_operation(df):
+        siz = df.size
+        def f(df, m):
+            return df.sample(n=m, replace=False).size
+        py_output = f(df, siz)
+        start, end = get_start_end(len(df))
+        df_loc = df.iloc[start:end]
+        bodo_f = bodo.jit(all_args_distributed_block=True, all_returns_distributed=False)(f)
+        df_ret = bodo_f(df_loc, siz)
+        assert df_ret == py_output
+
+    n = 10
+    df1 = pd.DataFrame({"B": gen_random_arrow_array_struct_int(10, n)})
+    df2 = pd.DataFrame({"B": gen_random_arrow_array_struct_list_int(10, n)})
+    df3 = pd.DataFrame({"B": gen_random_arrow_list_list(1, n)})
+    df4 = pd.DataFrame({"B": gen_random_arrow_struct_struct(10, n)})
+    check_gather_operation(df1)
+    check_gather_operation(df2)
+    check_gather_operation(df3)
+    check_gather_operation(df4)
 
 
 ############################# old tests ###############################

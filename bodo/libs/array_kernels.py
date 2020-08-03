@@ -52,6 +52,7 @@ from bodo.libs.array import (
     arr_info_list_to_table,
     shuffle_table,
     drop_duplicates_table,
+    sample_table,
     info_from_table,
     info_to_array,
     delete_table,
@@ -564,6 +565,58 @@ def duplicated(data, ind_arr, parallel=False):  # pragma: no cover
     return out, ind_arr
 
 
+def sample_table_operation(data, ind_arr, n, frac, replace, parallel=False):
+    return data, ind_arr
+
+
+@overload(sample_table_operation, no_unliteral=True)
+def overload_sample_table_operation(data, ind_arr, n, frac, replace, parallel=False):
+    """This is the code calling the C++ function for the sampling procedure.
+    Parameters passed in argument are:
+    ---the number of rows.
+    ---The fraction used (-1 if the number of rows is used.
+    ---Whether to allow collision of values."""
+    count = len(data)
+
+    func_text = "def impl(data, ind_arr, n, frac, replace, parallel=False):\n"
+    func_text += "  info_list_total = [{}, array_to_info(ind_arr)]\n".format(
+        ", ".join("array_to_info(data[{}])".format(x) for x in range(count))
+    )
+    func_text += "  table_total = arr_info_list_to_table(info_list_total)\n"
+    func_text += "  out_table = sample_table(table_total, n, frac, replace, parallel)\n".format(
+        count
+    )
+    for i_col in range(count):
+        func_text += "  out_arr_{} = info_to_array(info_from_table(out_table, {}), data[{}])\n".format(
+            i_col, i_col, i_col
+        )
+    func_text += "  out_arr_index = info_to_array(info_from_table(out_table, {}), ind_arr)\n".format(
+        count
+    )
+    func_text += "  delete_table(out_table)\n"
+    func_text += "  delete_table(table_total)\n"
+    func_text += "  return ({},), out_arr_index\n".format(
+        ", ".join("out_arr_{}".format(i) for i in range(count))
+    )
+    loc_vars = {}
+    exec(
+        func_text,
+        {
+            "np": np,
+            "bodo": bodo,
+            "array_to_info": array_to_info,
+            "sample_table": sample_table,
+            "arr_info_list_to_table": arr_info_list_to_table,
+            "info_from_table": info_from_table,
+            "info_to_array": info_to_array,
+            "delete_table": delete_table,
+        },
+        loc_vars,
+    )
+    impl = loc_vars["impl"]
+    return impl
+
+
 def drop_duplicates(data, ind_arr, parallel=False):  # pragma: no cover
     return data, ind_arr
 
@@ -604,14 +657,9 @@ def overload_drop_duplicates(data, ind_arr, parallel=False):
         {
             "np": np,
             "bodo": bodo,
-            "pre_alloc_string_array": pre_alloc_string_array,
-            "getitem_arr_tup_single": getitem_arr_tup_single,
-            "get_str_arr_item_length": get_str_arr_item_length,
-            "trim_arr": bodo.ir.join.trim_arr,
             "array_to_info": array_to_info,
             "drop_duplicates_table": drop_duplicates_table,
             "arr_info_list_to_table": arr_info_list_to_table,
-            "shuffle_table": shuffle_table,
             "info_from_table": info_from_table,
             "info_to_array": info_to_array,
             "delete_table": delete_table,

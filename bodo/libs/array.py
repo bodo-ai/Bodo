@@ -67,6 +67,7 @@ ll.add_symbol("shuffle_table", array_ext.shuffle_table)
 ll.add_symbol("hash_join_table", array_ext.hash_join_table)
 ll.add_symbol("drop_duplicates_table", array_ext.drop_duplicates_table)
 ll.add_symbol("sort_values_table", array_ext.sort_values_table)
+ll.add_symbol("sample_table", array_ext.sample_table)
 ll.add_symbol("groupby_and_aggregate", array_ext.groupby_and_aggregate)
 ll.add_symbol("array_isin", array_ext.array_isin)
 ll.add_symbol(
@@ -1231,6 +1232,33 @@ def sort_values_table(
 
     return (
         table_type(table_t, types.int64, types.voidptr, types.boolean, types.boolean),
+        codegen,
+    )
+
+
+@intrinsic
+def sample_table(typingctx, table_t, n_keys_t, frac_t, replace_t, parallel_t):
+    """
+    Interface to the sorting of tables.
+    """
+    assert table_t == table_type
+
+    def codegen(context, builder, sig, args):
+        fnty = lir.FunctionType(
+            lir.IntType(8).as_pointer(),
+            [
+                lir.IntType(8).as_pointer(),
+                lir.IntType(64),
+                lir.DoubleType(),
+                lir.IntType(1),
+                lir.IntType(1),
+            ],
+        )
+        fn_tp = builder.module.get_or_insert_function(fnty, name="sample_table")
+        return builder.call(fn_tp, args)
+
+    return (
+        table_type(table_t, types.int64, types.float64, types.boolean, types.boolean),
         codegen,
     )
 

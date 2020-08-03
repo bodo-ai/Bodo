@@ -1,5 +1,7 @@
 // Copyright (C) 2019 Bodo Inc. All rights reserved.
 #include <functional>
+#include <set>
+#include <random>
 #include "_array_hash.h"
 #include "_array_utils.h"
 #include "_bodo_common.h"
@@ -63,7 +65,7 @@ static void array_isin_kernel(array_info* out_arr, array_info* in_arr,
             value = hashes_in_arr[pos - len_values];
         return (size_t)value;
     };
-    SET_CONTAINER<size_t, std::function<size_t(int64_t)>,
+    UNORD_SET_CONTAINER<size_t, std::function<size_t(int64_t)>,
                   std::function<bool(int64_t, int64_t)>>
         eset({}, hash_fct, equal_fct);
     for (int64_t pos = 0; pos < len_values; pos++) {
@@ -226,10 +228,12 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
 #endif
     //
     // building the samples.
+    std::random_device rd;
+    std::mt19937 gen(rd());
     std::vector<std::pair<std::ptrdiff_t, std::ptrdiff_t>> ListPairWrite(
         n_loc_sample);
     for (int64_t i = 0; i < n_loc_sample; i++) {
-        int pos = rand() % n_local;
+        int pos = std::uniform_int_distribution<>(0, n_local-1)(gen);
         ListPairWrite[i] = {std::ptrdiff_t(pos), -1};
     }
     table_info* samples = RetrieveTable(local_sort, ListPairWrite, n_key_t);
@@ -239,17 +243,18 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
     DEBUG_PrintRefct(std::cout, samples->columns);
 #endif
     // Collecting all samples
-    table_info* all_samples = gather_table(samples, n_key_t);
+    bool all_gather = false;
+    table_info* all_samples = gather_table(samples, n_key_t, all_gather);
 #if defined DEBUG_SORT || defined BOUND_INFO
     if (myrank == mpi_root) {
-# ifdef BOUND_INFO
+#ifdef BOUND_INFO
         std::cout << "|all_samples|=" << all_samples->nrows() << "\n";
-# endif
-# ifdef DEBUG_SORT
+#endif
+#ifdef DEBUG_SORT
         std::cout << "sort_values_table : all_samples:\n";
         DEBUG_PrintSetOfColumn(std::cout, all_samples->columns);
         DEBUG_PrintRefct(std::cout, all_samples->columns);
-# endif
+#endif
     }
 #endif
 
@@ -360,11 +365,11 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
     const double crit_fraction = 2.0;
     if (need_reshuffling(ret_table, crit_fraction)) {
 #ifdef DEBUG_SORT
-      std::cout << " Doing reshuffling\n";
+        std::cout << " Doing reshuffling\n";
 #endif
-      table_info* table_shuffle_renorm = shuffle_renormalization(ret_table);
-      delete_table_free_arrays(ret_table);
-      return table_shuffle_renorm;
+        table_info* table_shuffle_renorm = shuffle_renormalization(ret_table);
+        delete_table_free_arrays(ret_table);
+        return table_shuffle_renorm;
     }
     return ret_table;
 }
@@ -446,7 +451,7 @@ static table_info* drop_duplicates_table_inner(table_info* in_table,
     };
     // The entSet contains the hash of the table.
     // We address the entry by the row index.
-    MAP_CONTAINER<size_t, size_t, std::function<size_t(size_t)>,
+    UNORD_MAP_CONTAINER<size_t, size_t, std::function<size_t(size_t)>,
                   std::function<bool(size_t, size_t)>>
         entSet({}, hash_fct, equal_fct);
     // The loop over the short table.
@@ -569,4 +574,254 @@ table_info* drop_duplicates_table(table_info* in_table, bool is_parallel,
 #endif
     // returning table
     return ret_table;
+}
+
+table_info* sample_table(table_info* in_table, int64_t n, double frac,
+                         bool replace, bool parallel) {
+#undef DEBUG_SAMPLE
+#ifdef DEBUG_SAMPLE
+    std::cout << "sample_table : in_table\n";
+    DEBUG_PrintSetOfColumn(std::cout, in_table->columns);
+    DEBUG_PrintRefct(std::cout, in_table->columns);
+    std::cout << "sample_table : n=" << n << " frac=" << frac << "\n";
+    std::cout << "sample_table : parallel=" << parallel << "\n";
+#endif
+    int n_local = in_table->nrows();
+    std::vector<int> ListSizes;
+    int n_pes = 0, myrank = 0, mpi_root = 0;
+    MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
+    MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+    if (parallel) {
+        // Number of rows to collect
+        if (myrank == mpi_root) ListSizes.resize(n_pes);
+        MPI_Gather(&n_local, 1, MPI_INT, ListSizes.data(), 1, MPI_INT, mpi_root,
+                   MPI_COMM_WORLD);
+#ifdef DEBUG_SAMPLE
+        if (myrank == mpi_root) {
+            for (int i_pes = 0; i_pes < n_pes; i_pes++)
+                std::cout << "i_pes=" << i_pes << " size=" << ListSizes[i_pes]
+                          << "\n";
+        }
+#endif
+    }
+    // n_total is used only on node 0. If parallel then its value is correct only on node 0
+    int n_total;
+    if (parallel)
+        n_total = std::accumulate(ListSizes.begin(), ListSizes.end(), 0);
+    else
+        n_total = n_local;
+    // The total number of sampled node. Its value is used only on node 0.
+    int n_samp;
+    if (frac < 0)
+        n_samp = n;
+    else
+        n_samp = round(n_total * frac);
+#ifdef DEBUG_SAMPLE
+    if (!parallel || myrank == 0)
+        std::cout << "sample_table : n_total=" << n_total << " n_samp=" << n_samp
+                  << "\n";
+#endif
+    std::vector<int> ListIdxChosen;
+    std::vector<int> ListByProcessor;
+    std::vector<int> ListCounts;
+    // We compute random points. In the case of parallel=T we consider it with
+    // respect to the whole array while in the case of parallel=F we need to
+    // select the same rows on all nodes.
+    if (myrank == 0) {
+        ListIdxChosen.resize(n_samp);
+        if (parallel) {
+            ListByProcessor.resize(n_samp);
+            ListCounts.resize(n_pes);
+            for (int i_p = 0; i_p < n_pes; i_p++) ListCounts[i_p] = 0;
+        }
+        auto GetIProc_IPos = [&](int const& idx_rand) -> std::pair<int, int> {
+            int new_siz, sum_siz = 0;
+            int iProc = 0;
+            while (true) {
+                new_siz = sum_siz + ListSizes[iProc];
+                if (idx_rand < new_siz) {
+                    int pos = idx_rand - sum_siz;
+                    return {iProc, pos};
+                }
+                sum_siz = new_siz;
+                iProc++;
+            }
+            return {-1, -1};  // This code path should not happen. Put here to
+                              // avoid warnings.
+        };
+        // In the case of replace, we simply have to take points at random.
+        //
+        // In the case of not replacing operation, this is more complicated.
+        // The issue is considered in
+        // ---Bentley J., Programming Pearls, 2nd, Column 12
+        // ---Knuth D., TAOCP, Seminumerical algorithms, Section 3.4.2
+        // The algorithms implemented here are based on the approximation of m
+        // small.
+        std::set<int> SetIdxChosen;
+        UNORD_SET_CONTAINER<int> UnordsetIdxChosen;
+        std::random_device rd;
+        std::mt19937 gen(rd());
+        auto get_rand=[&](int const& len) -> int {
+          return std::uniform_int_distribution<>(0, len-1)(gen);
+        };
+        auto GetIdx_Rand = [&]() -> int64_t {
+            if (replace) return get_rand(n_total);
+            // Two different algorithms according to the size
+            // Complexity will be of about O(m log m)
+            if (n_samp * 2 < n_total) {
+                // In the case of small sampling state we can iterate in order
+                // to conclude.
+                while (true) {
+                    int idx_rand = get_rand(n_total);
+                    if (UnordsetIdxChosen.count(idx_rand) == 0) {
+                        UnordsetIdxChosen.insert(idx_rand);
+                        return idx_rand;
+                    }
+                }
+            } else {
+                // If the number of sampling points is near to the size of the
+                // object then the random will be too slow. So, something more
+                // complicated is needed.
+                int64_t siz = SetIdxChosen.size();
+                int64_t idx_rand = get_rand(n_total - siz);
+#ifdef DEBUG_SAMPLE
+                std::cout << "  CRIT idx_rand=" << idx_rand << "\n";
+                std::cout << "    SetIdxChosen =";
+                for (auto& eVal : SetIdxChosen) std::cout << " " << eVal;
+                std::cout << "\n";
+#endif
+                auto iter = SetIdxChosen.begin();
+                while (iter != SetIdxChosen.end()) {
+                    if (idx_rand < *iter) break;
+                    iter++;
+                    idx_rand++;
+                }
+                SetIdxChosen.insert(idx_rand);
+                return idx_rand;
+            }
+        };
+        for (int i_samp = 0; i_samp < n_samp; i_samp++) {
+            int64_t idx_rand = GetIdx_Rand();
+#ifdef DEBUG_SAMPLE
+            std::cout << "i_samp=" << i_samp << " idx_rand=" << idx_rand
+                      << "\n";
+#endif
+            if (parallel) {
+                std::pair<int, int> ePair = GetIProc_IPos(idx_rand);
+                int iProc = ePair.first;
+                int pos = ePair.second;
+#ifdef DEBUG_SAMPLE
+                std::cout << "i_samp=" << i_samp << " idx_rand=" << idx_rand
+                          << "\n";
+                std::cout << "  iProc=" << iProc << " pos=" << pos << "\n";
+#endif
+                ListByProcessor[i_samp] = iProc;
+                ListIdxChosen[i_samp] = pos;
+                ListCounts[iProc]++;
+            } else {
+                ListIdxChosen[i_samp] = idx_rand;
+            }
+        }
+    }
+    if (!parallel && myrank != 0) {
+        ListIdxChosen.resize(n_samp);
+    }
+#ifdef DEBUG_SAMPLE
+    if (myrank == 0 && parallel) {
+        for (int iProc = 0; iProc < n_pes; iProc++)
+            std::cout << "iProc=" << iProc << " count=" << ListCounts[iProc]
+                      << "\n";
+    }
+#endif
+    int n_samp_out;
+    if (parallel) {
+        MPI_Scatter(ListCounts.data(), 1, MPI_INT, &n_samp_out, 1, MPI_INT,
+                    mpi_root, MPI_COMM_WORLD);
+    } else {
+        n_samp_out = n_samp;
+    }
+
+    std::vector<int> ListIdxExport(n_samp_out), ListDisps, ListIdxChosenExport;
+    if (myrank == 0 && parallel) {
+        ListDisps.resize(n_pes);
+        ListIdxChosenExport.resize(n_samp);
+        ListDisps[0] = 0;
+        for (int i_pes = 1; i_pes < n_pes; i_pes++)
+            ListDisps[i_pes] = ListDisps[i_pes - 1] + ListCounts[i_pes - 1];
+        std::vector<int> ListShift(n_pes, 0);
+        for (int i_samp = 0; i_samp < n_samp; i_samp++) {
+            int iProc = ListByProcessor[i_samp];
+            ListIdxChosenExport[ListDisps[iProc] + ListShift[iProc]] =
+                ListIdxChosen[i_samp];
+            ListShift[iProc]++;
+        }
+    } else {
+        if (myrank == 0) {
+            for (int i_samp = 0; i_samp < n_samp; i_samp++)
+                ListIdxExport[i_samp] = ListIdxChosen[i_samp];
+        }
+    }
+#ifdef DEBUG_SAMPLE
+    std::cout << "n_samp_out=" << n_samp_out << "\n";
+    if (myrank == 0 && parallel) {
+        std::cout << "ListIdxChosen / ListShift built\n";
+        for (int i_pes = 0; i_pes < n_pes; i_pes++)
+            std::cout << "i_pes=" << i_pes << " count=" << ListCounts[i_pes]
+                      << " disp=" << ListDisps[i_pes] << "\n";
+        for (int i_samp = 0; i_samp < n_samp; i_samp++)
+            std::cout << "i_samp=" << i_samp
+                      << " ListIdxChosen[i_samp]=" << ListIdxChosen[i_samp]
+                      << "\n";
+        for (int i_samp = 0; i_samp < n_samp; i_samp++)
+            std::cout << "i_samp=" << i_samp << " ListIdxChosenExport[i_samp]="
+                      << ListIdxChosenExport[i_samp] << "\n";
+    }
+#endif
+    if (parallel) {
+        // Exporting to all nodes, the data that they must extract
+        MPI_Scatterv(ListIdxChosenExport.data(), ListCounts.data(),
+                     ListDisps.data(), MPI_INT, ListIdxExport.data(),
+                     n_samp_out, MPI_INT, mpi_root, MPI_COMM_WORLD);
+    } else {
+        MPI_Bcast(ListIdxExport.data(), n_samp_out, MPI_INT, mpi_root,
+                  MPI_COMM_WORLD);
+    }
+    //
+    std::vector<std::pair<std::ptrdiff_t, std::ptrdiff_t>> ListPairWrite;
+    for (int i_samp_out = 0; i_samp_out < n_samp_out; i_samp_out++) {
+        int idx_export = ListIdxExport[i_samp_out];
+#ifdef DEBUG_SAMPLE
+        std::cout << "ListPairWrite : i_samp_out=" << i_samp_out
+                  << " idx_export=" << idx_export << "\n";
+#endif
+        ListPairWrite.push_back({idx_export, -1});
+    }
+#ifdef DEBUG_SAMPLE
+    //    std::cout << "sample_table : in_table\n";
+    //    DEBUG_PrintSetOfColumn(std::cout, in_table->columns);
+    //    DEBUG_PrintRefct(std::cout, in_table->columns);
+#endif
+    table_info* tab_out = RetrieveTable(in_table, ListPairWrite, -1);
+#ifdef DEBUG_SAMPLE
+    std::cout << "sample_table : tab_out\n";
+    DEBUG_PrintSetOfColumn(std::cout, tab_out->columns);
+    DEBUG_PrintRefct(std::cout, tab_out->columns);
+#endif
+    if (parallel) {
+        bool all_gather = true;
+        size_t n_cols = tab_out->ncols();
+        table_info* tab_ret = gather_table(tab_out, n_cols, all_gather);
+        delete_table_free_arrays(tab_out);
+#ifdef DEBUG_SAMPLE
+        std::cout << "sample_table : tab_ret\n";
+        DEBUG_PrintSetOfColumn(std::cout, tab_ret->columns);
+        DEBUG_PrintRefct(std::cout, tab_ret->columns);
+        std::cout << "Final exiting statement of sample_table 1\n";
+#endif
+        return tab_ret;
+    }
+#ifdef DEBUG_SAMPLE
+    std::cout << "Final exiting statement of sample_table 2\n";
+#endif
+    return tab_out;
 }

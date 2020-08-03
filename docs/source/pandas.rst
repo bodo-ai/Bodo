@@ -497,6 +497,7 @@ Reshaping, sorting, transposing:
 * :meth:`pandas.DataFrame.sort_values` ``by`` argument should be constant string or
   constant list of strings. ``ascending`` and ``na_position`` arguments are supported.
 * :meth:`pandas.DataFrame.drop_duplicates` is supported.
+* :meth:`pandas.DataFrame.sample` is supported except for the arguments ``random_state``, ``weights`` and ``axis``.
 * :meth:`pandas.DataFrame.sort_index` `ascending` argument is supported.
 
 Combining / joining / merging:

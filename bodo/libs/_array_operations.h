@@ -50,3 +50,15 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
  */
 table_info* drop_duplicates_table(table_info* in_table, bool is_parallel,
                                   int64_t num_keys, int64_t keep);
+
+
+/** This function is the function for the sampling of rows in the dataframe
+ *  This code uses
+ * @param table_info: the input table
+ * @param n_samp: the number of rows in output
+ * @param frac: the fraction of rows selected
+ * @param replace: whether we allow replaced entries or not
+ * @param parallel: if true the array is distributed, if false it is replicated
+ * @return the sampled entries in the table (in a replicated state).
+ */
+table_info* sample_table(table_info* in_table, int64_t n, double frac, bool replace, bool parallel);

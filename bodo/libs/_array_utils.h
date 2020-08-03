@@ -12,26 +12,26 @@
 #ifdef USE_STD
 #include <unordered_map>
 #include <unordered_set>
-#define MAP_CONTAINER std::unordered_map
-#define SET_CONTAINER std::unordered_set
+#define UNORD_MAP_CONTAINER std::unordered_map
+#define UNORD_SET_CONTAINER std::unordered_set
 #endif
 #ifdef USE_TSL_ROBIN
 #include <include/tsl/robin_map.h>
 #include <include/tsl/robin_set.h>
-#define MAP_CONTAINER tsl::robin_map
-#define SET_CONTAINER tsl::robin_set
+#define UNORD_MAP_CONTAINER tsl::robin_map
+#define UNORD_SET_CONTAINER tsl::robin_set
 #endif
 #ifdef USE_TSL_SPARSE
 #include <include/tsl/sparse_map.h>
 #include <include/tsl/sparse_set.h>
-#define MAP_CONTAINER tsl::sparse_map
-#define SET_CONTAINER tsl::sparse_set
+#define UNORD_MAP_CONTAINER tsl::sparse_map
+#define UNORD_SET_CONTAINER tsl::sparse_set
 #endif
 #ifdef USE_TSL_HOPSCOTCH
 #include <include/tsl/hopscotch_map.h>
 #include <include/tsl/hopscotch_set.h>
-#define MAP_CONTAINER tsl::hopscotch_map
-#define SET_CONTAINER tsl::hopscotch_set
+#define UNORD_MAP_CONTAINER tsl::hopscotch_map
+#define UNORD_SET_CONTAINER tsl::hopscotch_set
 #endif
 // ------------------------------------------------
 

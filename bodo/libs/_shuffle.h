@@ -75,7 +75,7 @@ table_info* broadcast_table(table_info* ref_table, table_info* in_table, size_t 
  * @return the table obtained by concatenating the tables
  *         on the node 0.
  */
-table_info* gather_table(table_info* in_table, size_t n_cols);
+table_info* gather_table(table_info* in_table, size_t n_cols, bool all_gather);
 
 /** Getting the computing node on which a row belongs to
  *

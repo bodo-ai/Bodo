@@ -1277,6 +1277,8 @@ PyMODINIT_FUNC PyInit_array_ext(void) {
                            PyLong_FromVoidPtr((void*)(&shuffle_table)));
     PyObject_SetAttrString(m, "hash_join_table",
                            PyLong_FromVoidPtr((void*)(&hash_join_table)));
+    PyObject_SetAttrString(m, "sample_table",
+                           PyLong_FromVoidPtr((void*)(&sample_table)));
     PyObject_SetAttrString(m, "sort_values_table",
                            PyLong_FromVoidPtr((void*)(&sort_values_table)));
     PyObject_SetAttrString(m, "drop_duplicates_table",
