@@ -1234,8 +1234,12 @@ def test_series_binary_ufunc(ufunc, memory_leak_check):
     "S",
     [
         # dtype="boolean" makes these nullable Boolean arrays
-        pd.Series([True, False, False, True, True, True, False, False], dtype="boolean"),
-        pd.Series([True, False, np.nan, True, True, False, True, False], dtype="boolean"),
+        pd.Series(
+            [True, False, False, True, True, True, False, False], dtype="boolean"
+        ),
+        pd.Series(
+            [True, False, np.nan, True, True, False, True, False], dtype="boolean"
+        ),
     ],
 )
 def test_series_bool_cmp_op(S, op, memory_leak_check):
@@ -1259,8 +1263,12 @@ def test_series_bool_cmp_op(S, op, memory_leak_check):
     "S",
     [
         # dtype="boolean" makes these nullable Boolean arrays
-        pd.Series([True, False, False, True, True, True, False, False], dtype="boolean"),
-        pd.Series([True, False, np.nan, True, True, False, True, False], dtype="boolean"),
+        pd.Series(
+            [True, False, False, True, True, True, False, False], dtype="boolean"
+        ),
+        pd.Series(
+            [True, False, np.nan, True, True, False, True, False], dtype="boolean"
+        ),
     ],
 )
 def test_series_bool_vals_cmp_op(S, op, memory_leak_check):
@@ -1821,10 +1829,13 @@ def test_series_max(series_val, memory_leak_check):
 def test_min_max_sum_series(memory_leak_check):
     """Another syntax for computing the maximum
     """
+
     def f1(S):
         return max(S)
+
     def f2(S):
         return max(S)
+
     def f3(S):
         return sum(S)
 
@@ -2588,6 +2599,20 @@ def test_series_np_where_num(memory_leak_check):
     cond = S == 2.0
     check_func(test_impl1, (S,))
     check_func(test_impl2, (S, 12, cond))
+
+
+def test_series_where(memory_leak_check):
+    """basic test for Series.where(cond, val)
+    """
+
+    def test_impl(S, cond, val):
+        return S.where(cond, val)
+
+    S = pd.Series(
+        [4.0, 2.0, 1.1, 9.1, 2.0, np.nan, 2.5], [5, 1, 2, 0, 3, 4, 9], name="AA"
+    )
+    cond = S == 2.0
+    check_func(test_impl, (S, cond, 12))
 
 
 @pytest.mark.parametrize(

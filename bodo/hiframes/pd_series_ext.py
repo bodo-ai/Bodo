@@ -959,7 +959,6 @@ series_unsupported_methods = (
     "sample",
     "set_axis",
     "truncate",
-    "where",
     "mask",
     "add_prefix",
     "add_suffix",
