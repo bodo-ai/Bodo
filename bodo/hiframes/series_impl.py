@@ -800,24 +800,30 @@ def overload_series_min(S, axis=None, skipna=None, level=None, numeric_only=None
 @overload(max, inline="always", no_unliteral=True)
 def overload_series_max(S):
     if isinstance(S, SeriesType):
+
         def impl(S):
             return S.max()
+
         return impl
 
 
 @overload(min, inline="always", no_unliteral=True)
 def overload_series_min(S):
     if isinstance(S, SeriesType):
+
         def impl(S):
             return S.min()
+
         return impl
 
 
 @overload(sum, inline="always", no_unliteral=True)
 def overload_series_sum(S):
     if isinstance(S, SeriesType):
+
         def impl(S):
             return S.sum()
+
         return impl
 
 
@@ -1658,6 +1664,38 @@ def overload_series_pct_change(S, periods=1, fill_method="pad", limit=None, freq
     return impl
 
 
+@overload_method(SeriesType, "where", inline="always", no_unliteral=True)
+def overload_series_where(
+    S,
+    cond,
+    other=np.nan,
+    inplace=False,
+    axis=None,
+    level=None,
+    errors="raise",
+    try_cast=False,
+):
+    # TODO: handle other cases
+    # TODO: error-checking for input
+    def impl(
+        S,
+        cond,
+        other=np.nan,
+        inplace=False,
+        axis=None,
+        level=None,
+        errors="raise",
+        try_cast=False,
+    ):  # pragma: no cover
+        arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+        index = bodo.hiframes.pd_series_ext.get_series_index(S)
+        name = bodo.hiframes.pd_series_ext.get_series_name(S)
+        out_arr = bodo.hiframes.series_impl.where_impl(cond, arr, other)
+        return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
+
+    return impl
+
+
 ############################ binary operators #############################
 
 
@@ -2320,15 +2358,11 @@ def overload_np_where(condition, x, y):
     func_text += "    if condition[j]:\n"
     func_text += "      out_arr[j] = {}\n".format("x[j]" if is_x_arr else "x")
     if is_x_arr:
-        func_text += (
-            "      if bodo.libs.array_kernels.isna(x, j): setna(out_arr, j)\n"
-        )
+        func_text += "      if bodo.libs.array_kernels.isna(x, j): setna(out_arr, j)\n"
     func_text += "    else:\n"
     func_text += "      out_arr[j] = {}\n".format("y[j]" if is_y_arr else "y")
     if is_y_arr:
-        func_text += (
-            "      if bodo.libs.array_kernels.isna(y, j): setna(out_arr, j)\n"
-        )
+        func_text += "      if bodo.libs.array_kernels.isna(y, j): setna(out_arr, j)\n"
     func_text += "  return out_arr\n"
     loc_vars = {}
     exec(

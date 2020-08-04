@@ -2612,6 +2612,20 @@ def test_series_np_where_num(memory_leak_check):
     check_func(test_impl2, (S, 12, cond))
 
 
+def test_series_where(memory_leak_check):
+    """basic test for Series.where(cond, val)
+    """
+
+    def test_impl(S, cond, val):
+        return S.where(cond, val)
+
+    S = pd.Series(
+        [4.0, 2.0, 1.1, 9.1, 2.0, np.nan, 2.5], [5, 1, 2, 0, 3, 4, 9], name="AA"
+    )
+    cond = S == 2.0
+    check_func(test_impl, (S, cond, 12))
+
+
 @pytest.mark.parametrize(
     "value, downcast",
     [
