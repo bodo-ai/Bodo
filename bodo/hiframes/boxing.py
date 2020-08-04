@@ -60,7 +60,7 @@ def typeof_pd_dataframe(val, c):
     col_types = get_hiframes_dtypes(val)
     index_typ = numba.typeof(val.index)
 
-    return DataFrameType(col_types, index_typ, col_names, True)
+    return DataFrameType(col_types, index_typ, col_names)
 
 
 # register series types for import

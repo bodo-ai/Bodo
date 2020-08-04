@@ -109,7 +109,7 @@ class DataFrameType(types.ArrayCompatible):  # TODO: IterableType over column na
     """Temporary type class for DataFrame objects.
     """
 
-    def __init__(self, data=None, index=None, columns=None, has_parent=False):
+    def __init__(self, data=None, index=None, columns=None):
         # data is tuple of Array types (not Series)
         # index is Index obj (not Array type)
         # columns is a tuple of column names (strings, ints, or tuples in case of
@@ -120,21 +120,16 @@ class DataFrameType(types.ArrayCompatible):  # TODO: IterableType over column na
             index = RangeIndexType(types.none)
         self.index = index
         self.columns = columns
-        # keeping whether it is unboxed from Python to enable reflection of new
-        # columns
-        self.has_parent = has_parent
         super(DataFrameType, self).__init__(
-            name="dataframe({}, {}, {}, {})".format(data, index, columns, has_parent)
+            name="dataframe({}, {}, {})".format(data, index, columns)
         )
 
-    def copy(self, index=None, has_parent=None):
+    def copy(self, index=None):
         # XXX is copy necessary?
         if index is None:
             index = self.index.copy()
         data = tuple(a.copy() for a in self.data)
-        if has_parent is None:
-            has_parent = self.has_parent
-        return DataFrameType(data, index, self.columns, has_parent)
+        return DataFrameType(data, index, self.columns)
 
     @property
     def as_array(self):
@@ -144,7 +139,7 @@ class DataFrameType(types.ArrayCompatible):  # TODO: IterableType over column na
     @property
     def key(self):
         # needed?
-        return self.data, self.index, self.columns, self.has_parent
+        return self.data, self.index, self.columns
 
     def unify(self, typingctx, other):
         """unifies two possible dataframe types into a single type
@@ -154,7 +149,6 @@ class DataFrameType(types.ArrayCompatible):  # TODO: IterableType over column na
             isinstance(other, DataFrameType)
             and len(other.data) == len(self.data)
             and other.columns == self.columns
-            and other.has_parent == self.has_parent
         ):
             new_index = self.index.unify(typingctx, other.index)
             data = tuple(a.unify(typingctx, b) for a, b in zip(self.data, other.data))
@@ -163,7 +157,7 @@ class DataFrameType(types.ArrayCompatible):  # TODO: IterableType over column na
             # That doesn't happen in df case since all arrays are 1D and C layout.
             # see: https://github.com/numba/numba/blob/13ece9b97e6f01f750e870347f231282325f60c3/numba/core/types/npytypes.py#L436
             if new_index is not None and None not in data:  # pragma: no cover
-                return DataFrameType(data, new_index, self.columns, self.has_parent)
+                return DataFrameType(data, new_index, self.columns)
 
     def can_convert_to(self, typingctx, other):
         return
@@ -803,7 +797,7 @@ def set_df_column_with_reflect(typingctx, df, cname, arr, inplace=None):
 
         return out_dataframe
 
-    ret_typ = DataFrameType(data_typs, index_typ, column_names, True)
+    ret_typ = DataFrameType(data_typs, index_typ, column_names)
     sig = signature(ret_typ, df, cname, arr, inplace)
     return sig, codegen
 
@@ -1898,7 +1892,7 @@ class ConcatDummyTyper(AbstractTemplate):
             ret_typ = objs.dtype.copy(index=RangeIndexType(types.none))
             if isinstance(ret_typ, DataFrameType):
                 ret_typ = ret_typ.copy(
-                    has_parent=False, index=RangeIndexType(types.none)
+                    index=RangeIndexType(types.none)
                 )
             return signature(ret_typ, *args)
 
@@ -2101,7 +2095,7 @@ class SortDummyTyper(AbstractTemplate):
         index = df.index
         if isinstance(index, bodo.hiframes.pd_index_ext.RangeIndexType):
             index = bodo.hiframes.pd_index_ext.NumericIndexType(types.int64)
-        ret_typ = df.copy(index=index, has_parent=False)
+        ret_typ = df.copy(index=index)
         return signature(ret_typ, *args)
 
 
@@ -2158,7 +2152,7 @@ class ParentDummyTyper(AbstractTemplate):
     def generic(self, args, kws):
         assert not kws
         (df,) = args
-        ret = DataFrameType(df.data, df.index, df.columns, True)
+        ret = DataFrameType(df.data, df.index, df.columns)
         return signature(ret, *args)
 
 

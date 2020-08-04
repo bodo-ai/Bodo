@@ -1269,7 +1269,10 @@ class DataFramePass:
             new_arr = nodes[-1].target
 
         # set unboxed df column with reflection
-        if df_typ.has_parent:
+        df_def = guard(get_definition, self.func_ir, df_var)
+        # TODO: consider dataframe alias cases where definition is not directly ir.Arg
+        # but dataframe has a parent object
+        if isinstance(df_def, ir.Arg):
             return replace_func(
                 self,
                 lambda df, cname, arr, inplace: bodo.hiframes.pd_dataframe_ext.set_df_column_with_reflect(
