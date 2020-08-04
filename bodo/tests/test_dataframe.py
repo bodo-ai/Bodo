@@ -746,6 +746,19 @@ def test_df_max(numeric_df_value):
     check_func(impl, (numeric_df_value,), is_out_distributed=False)
 
 
+def test_df_reduce_axis1():
+    """test dataframe reductions across columns (axis=1)
+    """
+    # TODO: support and test other reduce functions
+
+    def impl(df):
+        return df.max(axis=1)
+
+    n = 11
+    df = pd.DataFrame({"A": np.arange(n, dtype=np.float64), "B": np.ones(n) + 4})
+    check_func(impl, (df,))
+
+
 def test_df_mean(numeric_df_value):
     # empty dataframe output not supported yet
     if len(numeric_df_value._get_numeric_data().columns) == 0:

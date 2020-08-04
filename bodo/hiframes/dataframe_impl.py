@@ -38,6 +38,7 @@ from bodo.utils.typing import (
     is_overload_constant_list,
     get_overload_const_list,
     unliteral_val,
+    get_overload_const_int,
 )
 from bodo.utils.transform import gen_const_tup
 from bodo.utils.utils import is_array_typ
@@ -478,50 +479,50 @@ def overload_dataframe_nunique(df, axis=0, dropna=True):
 def overload_dataframe_prod(
     df, axis=None, skipna=None, level=None, numeric_only=None, min_count=0
 ):
-    return _gen_reduce_impl(df, "prod")
+    return _gen_reduce_impl(df, "prod", axis=axis)
 
 
 @overload_method(DataFrameType, "sum", inline="always", no_unliteral=True)
 def overload_dataframe_sum(
     df, axis=None, skipna=None, level=None, numeric_only=None, min_count=0
 ):
-    return _gen_reduce_impl(df, "sum")
+    return _gen_reduce_impl(df, "sum", axis=axis)
 
 
 @overload_method(DataFrameType, "max", inline="always", no_unliteral=True)
 def overload_dataframe_max(df, axis=None, skipna=None, level=None, numeric_only=None):
-    return _gen_reduce_impl(df, "max")
+    return _gen_reduce_impl(df, "max", axis=axis)
 
 
 @overload_method(DataFrameType, "min", inline="always", no_unliteral=True)
 def overload_dataframe_min(df, axis=None, skipna=None, level=None, numeric_only=None):
-    return _gen_reduce_impl(df, "min")
+    return _gen_reduce_impl(df, "min", axis=axis)
 
 
 @overload_method(DataFrameType, "mean", inline="always", no_unliteral=True)
 def overload_dataframe_mean(df, axis=None, skipna=None, level=None, numeric_only=None):
-    return _gen_reduce_impl(df, "mean")
+    return _gen_reduce_impl(df, "mean", axis=axis)
 
 
 @overload_method(DataFrameType, "var", inline="always", no_unliteral=True)
 def overload_dataframe_var(
     df, axis=None, skipna=None, level=None, ddof=1, numeric_only=None
 ):
-    return _gen_reduce_impl(df, "var")
+    return _gen_reduce_impl(df, "var", axis=axis)
 
 
 @overload_method(DataFrameType, "std", inline="always", no_unliteral=True)
 def overload_dataframe_std(
     df, axis=None, skipna=None, level=None, ddof=1, numeric_only=None
 ):
-    return _gen_reduce_impl(df, "std")
+    return _gen_reduce_impl(df, "std", axis=axis)
 
 
 @overload_method(DataFrameType, "median", inline="always", no_unliteral=True)
 def overload_dataframe_median(
     df, axis=None, skipna=None, level=None, numeric_only=None
 ):
-    return _gen_reduce_impl(df, "median")
+    return _gen_reduce_impl(df, "median", axis=axis)
 
 
 @overload_method(DataFrameType, "quantile", inline="always", no_unliteral=True)
@@ -529,21 +530,31 @@ def overload_dataframe_quantile(
     df, q=0.5, axis=0, numeric_only=True, interpolation="linear"
 ):
     # TODO: name is str(q)
-    return _gen_reduce_impl(df, "quantile", "q")
+    return _gen_reduce_impl(df, "quantile", "q", axis=axis)
 
 
 @overload_method(DataFrameType, "idxmax", inline="always", no_unliteral=True)
 def overload_dataframe_idxmax(df, axis=0, skipna=True):
-    return _gen_reduce_impl(df, "idxmax")
+    return _gen_reduce_impl(df, "idxmax", axis=axis)
 
 
 @overload_method(DataFrameType, "idxmin", inline="always", no_unliteral=True)
 def overload_dataframe_idxmin(df, axis=0, skipna=True):
-    return _gen_reduce_impl(df, "idxmin")
+    return _gen_reduce_impl(df, "idxmin", axis=axis)
 
 
-def _gen_reduce_impl(df, func_name, args=None):
-    args = "" if args is None else args
+def _gen_reduce_impl(df, func_name, args=None, axis=None):
+    """generate implementation for dataframe reduction functions like min, max, sum, ...
+    """
+    args = "" if is_overload_none(args) else args
+
+    # axis is 0 by default. Some reduce functions have None as the default value.
+    if is_overload_none(axis):
+        axis = 0
+    else:
+        axis = get_overload_const_int(axis)
+
+    assert axis in (0, 1), "invalid axis argument for DataFrame.{}".format(func_name)
 
     if func_name in ("idxmax", "idxmin"):
         out_colnames = df.columns
@@ -563,6 +574,39 @@ def _gen_reduce_impl(df, func_name, args=None):
     ]
     comm_dtype = numba.np.numpy_support.from_dtype(np.find_common_type(dtypes, []))
 
+    # generate function signature
+    minc = ""
+    if func_name in ("sum", "prod"):
+        minc = ", min_count=0"
+
+    ddof = ""
+    if func_name in ("var", "std"):
+        ddof = "ddof=1, "
+
+    func_text = "def impl(df, axis=None, skipna=None, level=None,{} numeric_only=None{}):\n".format(
+        ddof, minc
+    )
+    if func_name == "quantile":
+        func_text = (
+            "def impl(df, q=0.5, axis=0, numeric_only=True, interpolation='linear'):\n"
+        )
+    if func_name in ("idxmax", "idxmin"):
+        func_text = "def impl(df, axis=0, skipna=True):\n"
+
+    if axis == 0:
+        func_text += _gen_reduce_impl_axis0(func_name, out_colnames, comm_dtype, args)
+    else:
+        func_text += _gen_reduce_impl_axis1(func_name, out_colnames, comm_dtype, df)
+
+    loc_vars = {}
+    exec(func_text, {"bodo": bodo, "np": np, "numba": numba}, loc_vars)
+    impl = loc_vars["impl"]
+    return impl
+
+
+def _gen_reduce_impl_axis0(func_name, out_colnames, comm_dtype, args):
+    """generate function body for dataframe reduction across rows
+    """
     # XXX: use common type for min/max to avoid float for ints due to NaN
     # TODO: handle NaN for ints better
     typ_cast = ""
@@ -588,25 +632,7 @@ def _gen_reduce_impl(df, func_name, args=None):
     str_arr = "bodo.utils.conversion.coerce_to_array({})".format(out_colnames)
     index = "bodo.hiframes.pd_index_ext.init_string_index({})\n".format(str_arr)
 
-    minc = ""
-    if func_name in ("sum", "prod"):
-        minc = ", min_count=0"
-
-    ddof = ""
-    if func_name in ("var", "std"):
-        ddof = "ddof=1, "
-
-    # function signature
-    func_text = "def impl(df, axis=None, skipna=None, level=None,{} numeric_only=None{}):\n".format(
-        ddof, minc
-    )
-    if func_name == "quantile":
-        func_text = (
-            "def impl(df, q=0.5, axis=0, numeric_only=True, interpolation='linear'):\n"
-        )
-    if func_name in ("idxmax", "idxmin"):
-        func_text = "def impl(df, axis=0, skipna=True):\n"
-
+    func_text = ""
     # data conversion
     if func_name in ("idxmax", "idxmin"):
         # idxmax/idxmin don't cast type since just index value is produced
@@ -620,11 +646,32 @@ def _gen_reduce_impl(df, func_name, args=None):
     func_text += "  return bodo.hiframes.pd_series_ext.init_series(data, {})\n".format(
         index
     )
-    # print(func_text)
-    loc_vars = {}
-    exec(func_text, {"bodo": bodo, "np": np}, loc_vars)
-    impl = loc_vars["impl"]
-    return impl
+    return func_text
+
+
+def _gen_reduce_impl_axis1(func_name, out_colnames, comm_dtype, df_type):
+    """generate function body for dataframe reduction across columns
+    """
+    col_inds = [df_type.columns.index(c) for c in out_colnames]
+    index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)"
+    data_args = "\n    ".join(
+        "arr_{0} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {0})".format(i)
+        for i in col_inds
+    )
+    # TODO: support empty dataframes
+    assert len(data_args) > 0, f"empty dataframe in DataFrame.{func_name}()"
+    df_len = f"len(arr_0)"
+    arr_accesses = ", ".join("arr_{}[i]".format(i) for i in col_inds)
+    func_text = f"""
+    {data_args}
+    numba.parfors.parfor.init_prange()
+    n = {df_len}
+    A = np.empty(n, np.{comm_dtype})
+    for i in numba.parfors.parfor.internal_prange(n):
+        A[i] = {func_name}({arr_accesses})
+    return bodo.hiframes.pd_series_ext.init_series(A, {index})
+"""
+    return func_text
 
 
 @overload_method(DataFrameType, "pct_change", inline="always", no_unliteral=True)
