@@ -366,6 +366,17 @@ def test_df_from_np_array_bool():
     check_func(impl, (), is_out_distributed=False)
 
 
+def test_create_df_scalar():
+    """
+    Test scalar to array conversion in pd.DataFrame()
+    """
+
+    def impl(n):
+        return pd.DataFrame({"A": 2, "B": np.arange(n)})
+
+    check_func(impl, (11,))
+
+
 def test_df_multi_get_level():
     """
     getitem with string to get a level of dataframe with MultiIndex columns structure
