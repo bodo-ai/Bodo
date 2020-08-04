@@ -115,11 +115,7 @@ class BodoTypeInference(PartialTypeInference):
         # run regular type inference again with _raise_errors = True to set function
         # return type and raise errors if any
         # TODO: avoid this extra pass when possible in Numba
-        try:
-            self._raise_errors = True
-            NopythonTypeInference.run_pass(self, state)
-        finally:
-            self._raise_errors = False
+        NopythonTypeInference().run_pass(state)
         return True
 
 
