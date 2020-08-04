@@ -1234,8 +1234,12 @@ def test_series_binary_ufunc(ufunc, memory_leak_check):
     "S",
     [
         # dtype="boolean" makes these nullable Boolean arrays
-        pd.Series([True, False, False, True, True, True, False, False], dtype="boolean"),
-        pd.Series([True, False, np.nan, True, True, False, True, False], dtype="boolean"),
+        pd.Series(
+            [True, False, False, True, True, True, False, False], dtype="boolean"
+        ),
+        pd.Series(
+            [True, False, np.nan, True, True, False, True, False], dtype="boolean"
+        ),
     ],
 )
 def test_series_bool_cmp_op(S, op, memory_leak_check):
@@ -1259,8 +1263,12 @@ def test_series_bool_cmp_op(S, op, memory_leak_check):
     "S",
     [
         # dtype="boolean" makes these nullable Boolean arrays
-        pd.Series([True, False, False, True, True, True, False, False], dtype="boolean"),
-        pd.Series([True, False, np.nan, True, True, False, True, False], dtype="boolean"),
+        pd.Series(
+            [True, False, False, True, True, True, False, False], dtype="boolean"
+        ),
+        pd.Series(
+            [True, False, np.nan, True, True, False, True, False], dtype="boolean"
+        ),
     ],
 )
 def test_series_bool_vals_cmp_op(S, op, memory_leak_check):
@@ -1675,6 +1683,17 @@ def test_series_map_nested_func(memory_leak_check):
     pd.testing.assert_series_equal(res, py_res)
 
 
+def test_series_map_arg_fold(memory_leak_check):
+    """test handling UDF default value (argument folding)
+    """
+
+    def test_impl(S):
+        return S.map(lambda a, b=1.1: a + b)
+
+    S = pd.Series([1.0, 2.0, 3.0, 4.0, 5.0])
+    check_func(test_impl, (S,))
+
+
 def test_series_map_error_check(memory_leak_check):
     """make sure proper error is raised when UDF is not supported
     """
@@ -1821,10 +1840,13 @@ def test_series_max(series_val, memory_leak_check):
 def test_min_max_sum_series(memory_leak_check):
     """Another syntax for computing the maximum
     """
+
     def f1(S):
         return max(S)
+
     def f2(S):
         return max(S)
+
     def f3(S):
         return sum(S)
 
