@@ -575,6 +575,7 @@ class DistributedPass:
             out.append(assign)
             return out
 
+        # adjust array index variable to be within current processor's data chunk
         if fdef == (
             "inplace_eq",
             "bodo.libs.str_arr_ext",
