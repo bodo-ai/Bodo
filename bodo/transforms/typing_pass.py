@@ -81,6 +81,8 @@ class BodoTypeInference(PartialTypeInference):
         saved_in_partial_typing = in_partial_typing
         saved_typing_transform_required = typing_transform_required
         curr_typing_pass_required = False
+        # flag indicating that transformation has run at least once
+        ran_transform = False
         while True:
             try:
                 # set global partial typing flag, see comment above
@@ -98,6 +100,7 @@ class BodoTypeInference(PartialTypeInference):
                 and not curr_typing_pass_required
             ):
                 break
+            ran_transform = True
             typing_transforms_pass = TypingTransforms(
                 state.func_ir,
                 state.typingctx,
@@ -110,6 +113,18 @@ class BodoTypeInference(PartialTypeInference):
             if not changed:
                 # error will be raised below if there are still unknown types
                 break
+
+        # make sure transformation has run at least once to handle cases that may not
+        # throw typing errors like "df.B = v". See test_set_column_setattr
+        if not ran_transform:
+            typing_transforms_pass = TypingTransforms(
+                state.func_ir,
+                state.typingctx,
+                state.typemap,
+                state.calltypes,
+                state.args,
+            )
+            typing_transforms_pass.run()
 
         dprint_func_ir(state.func_ir, "after typing pass")
         # run regular type inference again with _raise_errors = True to set function
@@ -168,6 +183,8 @@ class TypingTransforms:
                 # df['col'] = arr
                 if isinstance(inst, (ir.SetItem, ir.StaticSetItem)):
                     out_nodes = self._run_setitem(inst, label)
+                elif isinstance(inst, ir.SetAttr):
+                    out_nodes = self._run_setattr(inst, label)
                 elif isinstance(inst, ir.Assign):
                     self.func_ir._definitions[inst.target.name].remove(inst.value)
                     self.rhs_labels[inst.value] = label
@@ -314,12 +331,20 @@ class TypingTransforms:
 
         # df["B"] = A
         if isinstance(target_typ, DataFrameType):
-            # cfg needed for set df column
-            cfg = compute_cfg_from_blocks(self.func_ir.blocks)
-            self.changed = True
-            return nodes + self._run_df_set_column(inst, label, cfg)
+            return nodes + self._run_df_set_column(inst, inst.index, label)
 
         return nodes + [inst]
+
+    def _run_setattr(self, inst, label):
+        """handle ir.SetAttr node
+        """
+        target_typ = self.typemap.get(inst.target.name, None)
+
+        # df.B = A transform
+        if isinstance(target_typ, DataFrameType):
+            return self._run_df_set_column(inst, inst.attr, label)
+
+        return [inst]
 
     def _run_call(self, assign, rhs, label):
         fdef = guard(find_callname, self.func_ir, rhs, self.typemap)
@@ -565,13 +590,13 @@ class TypingTransforms:
                 return False
         return True
 
-    def _run_df_set_column(self, inst, label, cfg):
+    def _run_df_set_column(self, inst, col_name, label):
         """replace setitem of string index with a call to handle possible
         dataframe case where schema is changed:
         df['new_col'] = arr  ->  df2 = set_df_col(df, 'new_col', arr)
-        dataframe_pass will replace set_df_col() with regular setitem if target
-        is not dataframe
         """
+        cfg = compute_cfg_from_blocks(self.func_ir.blocks)
+        self.changed = True
         # setting column possible only when:
         #   1) it dominates the df creation, so we can create a new df variable
         #      to replace the existing variable for the rest of the program,
@@ -613,7 +638,7 @@ class TypingTransforms:
         # return df2
         # create var for string index
         cname_var = ir.Var(inst.value.scope, mk_unique_var("$cname_const"), inst.loc)
-        nodes = [ir.Assign(ir.Const(inst.index, inst.loc), cname_var, inst.loc)]
+        nodes = [ir.Assign(ir.Const(col_name, inst.loc), cname_var, inst.loc)]
         inplace = not dominates
 
         func = lambda df, cname, arr: bodo.hiframes.dataframe_impl.set_df_col(
