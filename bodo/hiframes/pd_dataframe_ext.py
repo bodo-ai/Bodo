@@ -1659,6 +1659,9 @@ class JoinTyper(AbstractTemplate):
         return signature(out_df, *args)
 
 
+JoinTyper._no_unliteral = True
+
+
 # dummy lowering to avoid overload errors, remove after overload inline PR
 # is merged
 @lower_builtin(join_dummy, types.VarArg(types.Any))
@@ -1986,6 +1989,9 @@ class ConcatDummyTyper(AbstractTemplate):
         # TODO: handle other iterables like arrays, lists, ...
 
 
+ConcatDummyTyper._no_unliteral = True
+
+
 # dummy lowering to avoid overload errors, remove after overload inline PR
 # is merged
 @lower_builtin(concat_dummy, types.VarArg(types.Any))
@@ -2109,6 +2115,9 @@ class SortDummyTyper(AbstractTemplate):
             index = bodo.hiframes.pd_index_ext.NumericIndexType(types.int64)
         ret_typ = df.copy(index=index)
         return signature(ret_typ, *args)
+
+
+SortDummyTyper._no_unliteral = True
 
 
 # dummy lowering to avoid overload errors, remove after overload inline PR
@@ -2246,6 +2255,9 @@ class FillnaDummyTyper(AbstractTemplate):
             out_df = DataFrameType(df.data, df.index, df.columns)
             return signature(out_df, *args)
         return signature(types.none, *args)
+
+
+FillnaDummyTyper._no_unliteral = True
 
 
 @lower_builtin(fillna_dummy, types.VarArg(types.Any))

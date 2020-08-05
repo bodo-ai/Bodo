@@ -236,6 +236,9 @@ class GroupbyTyper(AbstractTemplate):
         return signature(out_typ, *args)
 
 
+GroupbyTyper._no_unliteral = True
+
+
 # dummy lowering to avoid overload errors, remove after overload inline PR
 # is merged
 @lower_builtin(groupby_dummy, types.VarArg(types.Any))

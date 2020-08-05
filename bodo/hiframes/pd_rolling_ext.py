@@ -103,6 +103,9 @@ class RollingTyper(AbstractTemplate):
         return signature(out_typ, *args)
 
 
+RollingTyper._no_unliteral = True
+
+
 # dummy lowering to avoid overload errors, remove after overload inline PR
 # is merged
 @lower_builtin(rolling_dummy, types.VarArg(types.Any))
