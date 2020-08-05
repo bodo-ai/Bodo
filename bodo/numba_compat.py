@@ -56,6 +56,12 @@ from numba.core.errors import LiteralTypingError, TypingError
 from numba.core.types import literal
 
 
+# Make sure literals are tried first for typing Bodo's intrinsics, since output type
+# may depend on literals.
+# see test_join.py::test_merge_index_column_second"[df21-df10]"
+numba.core.typing.templates._IntrinsicTemplate.prefer_literal = True
+
+
 # `run_frontend` function of Numba is used in inline_closure_call to get the IR of the
 # function to be inlined.
 # The code below is copied from Numba and modified to handle 'raise' nodes by running

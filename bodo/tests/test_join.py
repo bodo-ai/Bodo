@@ -1425,7 +1425,53 @@ def test_join_how(df1, df2):
 # ------------------------------ merge on the index and column ------------------------------ #
 
 
-def test_merge_index_column_second():
+@pytest.mark.parametrize(
+    "df1",
+    [
+        # left dataframes
+        pd.DataFrame(
+            {"A": [3, 1, 1, 3, 4], "B": [1, 2, 3, 2, 3], "C": [7, 8, 9, 4, 5]}
+        ).set_index("A"),
+        pd.DataFrame(
+            {"B": [1, 2, 3, 2, 3], "C": [7, 8, 9, 4, 5]}, index=[3, 1, 1, 3, 4]
+        ),
+        pd.DataFrame(
+            {"X": [1, 2, 3, 2, 3], "C": [7, 8, 9, 4, 5]}, index=[3, 1, 1, 3, 4]
+        ),
+        pd.DataFrame(
+            {"A": [1, 2, 3, 2, 3], "C": [7, 8, 9, 4, 5]}, index=[3, 1, 1, 3, 4]
+        ),
+        pd.DataFrame(
+            {"A": [1, 2, 3, 2, 3], "C": [7, 8, 9, 4, 5], "Z": [3, 1, 1, 3, 4]}
+        ).set_index("Z"),
+    ],
+)
+@pytest.mark.parametrize(
+    "df2",
+    [
+        # right dataframes
+        pd.DataFrame(
+            {"A": [2, 1, 4, 4, 3], "B": [1, 3, 2, 3, 2], "D": [1, 2, 3, 4, 8]}
+        ),
+        pd.DataFrame(
+            {
+                "A": [2, 1, 4, 4, 3],
+                "B": [1, 3, 2, 3, 2],
+                "D": [1, 2, 3, 4, 8],
+                "Y": [10, 11, 12, 13, 14],
+            }
+        ).set_index("Y"),
+        pd.DataFrame(
+            {
+                "A": [2, 1, 4, 4, 3],
+                "B": [1, 3, 2, 3, 2],
+                "D": [1, 2, 3, 4, 8],
+                "Y": ["a", "b", "c", "d", "e"],
+            }
+        ).set_index("Y"),
+    ],
+)
+def test_merge_index_column_second(df1, df2):
     """
     Test merge(): test the merging with one key on the index and the other on the column
     This is another pattern.
@@ -1435,48 +1481,7 @@ def test_merge_index_column_second():
         df3 = df1.merge(df2, left_index=True, right_on=["A"])
         return df3
 
-    bodo_f = bodo.jit(f)
-
-    # left dataframes
-    df1A = pd.DataFrame(
-        {"A": [3, 1, 1, 3, 4], "B": [1, 2, 3, 2, 3], "C": [7, 8, 9, 4, 5]}
-    ).set_index("A")
-    df1B = pd.DataFrame(
-        {"B": [1, 2, 3, 2, 3], "C": [7, 8, 9, 4, 5]}, index=[3, 1, 1, 3, 4]
-    )
-    df1C = pd.DataFrame(
-        {"X": [1, 2, 3, 2, 3], "C": [7, 8, 9, 4, 5]}, index=[3, 1, 1, 3, 4]
-    )
-    df1D = pd.DataFrame(
-        {"A": [1, 2, 3, 2, 3], "C": [7, 8, 9, 4, 5]}, index=[3, 1, 1, 3, 4]
-    )
-    df1E = pd.DataFrame(
-        {"A": [1, 2, 3, 2, 3], "C": [7, 8, 9, 4, 5], "Z": [3, 1, 1, 3, 4]}
-    ).set_index("Z")
-    # right dataframes
-    df2A = pd.DataFrame(
-        {"A": [2, 1, 4, 4, 3], "B": [1, 3, 2, 3, 2], "D": [1, 2, 3, 4, 8]}
-    )
-    df2B = pd.DataFrame(
-        {
-            "A": [2, 1, 4, 4, 3],
-            "B": [1, 3, 2, 3, 2],
-            "D": [1, 2, 3, 4, 8],
-            "Y": [10, 11, 12, 13, 14],
-        }
-    ).set_index("Y")
-    df2C = pd.DataFrame(
-        {
-            "A": [2, 1, 4, 4, 3],
-            "B": [1, 3, 2, 3, 2],
-            "D": [1, 2, 3, 4, 8],
-            "Y": ["a", "b", "c", "d", "e"],
-        }
-    ).set_index("Y")
-
-    for df1 in [df1A, df1B, df1C, df1D, df1E]:
-        for df2 in [df2A, df2B, df2C]:
-            check_func(f, (df1, df2), sort_output=True)
+    check_func(f, (df1, df2), sort_output=True)
 
 
 def test_merge_index_column():
