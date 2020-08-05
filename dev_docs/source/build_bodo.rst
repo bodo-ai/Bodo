@@ -21,9 +21,9 @@ such as Numba on Ubuntu Linux::
     # Mac: conda install clang_osx-64 clangxx_osx-64 gfortran_osx-64 -c conda-forge
     # NOTE: for development/debugging purposes, it's best to install Numba from source instead
     conda install numba=0.50.1 -c conda-forge
-    conda install -c conda-forge hdf5=*=*mpich* pyarrow=0.17.1 pymysql sqlalchemy
+    conda install -c conda-forge hdf5=*=*mpich* pyarrow=1.0.0 pymysql sqlalchemy
     # If you get the error "zsh: no matches found: hdf5=*=*mpich*" (typically on Mac), try the following instead:
-    # conda install -c conda-forge "hdf5=*=*mpich*" pyarrow=0.17.1 pymysql sqlalchemy
+    # conda install -c conda-forge "hdf5=*=*mpich*" pyarrow=1.0.0 pymysql sqlalchemy
     # The following is required for s3 related development and tests
     # conda install -c conda-forge boto3 botocore s3fs
     git clone https://github.com/Bodo-inc/Bodo.git
@@ -52,7 +52,7 @@ On Windows
     conda install numba=0.50.1 -c conda-forge
     conda install vc vs2015_runtime vs2015_win-64
     conda install -c defaults -c intel impi_rt impi-devel
-    conda install -c conda-forge pyarrow=0.17.1
+    conda install -c conda-forge pyarrow=1.0.0
     git clone https://github.com/Bodo-inc/Bodo.git
     cd Bodo
     # build Bodo
