@@ -659,6 +659,28 @@ def test_arr_reshape(dtype):
     check_func(impl7, (A, 12))
 
 
+def test_np_dot():
+    """test np.dot() distribute transform
+    """
+
+    # reduction across rows, input: (1D dist array, 2D dist array)
+    def impl1(X, Y):
+        return np.dot(Y, X)
+
+    # reduction across rows, input: (2D dist array, 1D REP array)
+    def impl2(X, d):
+        w = np.arange(0, d, 1, np.float64)
+        return np.dot(X, w)
+
+    n = 11
+    d = 3
+    np.random.seed(1)
+    X = np.random.ranf((n, d))
+    Y = np.arange(n, dtype=np.float64)
+    check_func(impl1, (X, Y), is_out_distributed=False)
+    check_func(impl2, (X, d))
+
+
 def test_dist_tuple1():
     def impl1(A):
         B1, B2 = A

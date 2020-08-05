@@ -444,7 +444,11 @@ def _test_equal(
                     pd.Series(py_out), pd.Series(bodo_out), check_dtype=False
                 )
         else:
-            np.testing.assert_array_equal(bodo_out, py_out)
+            # parallel reduction can result in floating point differences
+            if py_out.dtype in (np.float32, np.float64):
+                np.testing.assert_allclose(bodo_out, py_out)
+            else:
+                np.testing.assert_array_equal(bodo_out, py_out)
     # check for array since is_extension_array_dtype() matches dtypes also
     elif pd.api.types.is_array_like(py_out) and pd.api.types.is_extension_array_dtype(
         py_out

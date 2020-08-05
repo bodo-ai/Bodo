@@ -1489,7 +1489,7 @@ class DistributedPass:
         t1 = arg1 in self._T_arrs
 
         # reduction across dataset
-        if self._is_1D_arr(arg0) and self._is_1D_arr(arg1):
+        if self._is_1D_or_1D_Var_arr(arg0) and self._is_1D_or_1D_Var_arr(arg1):
             dprint("run dot dist reduce:", arg0, arg1)
             reduce_op = Reduce_Type.Sum
             reduce_var = assign.target
