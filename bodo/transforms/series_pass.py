@@ -955,7 +955,12 @@ class SeriesPass:
         func_type = self.typemap[rhs.func.name]
         if bodo.compiler.is_udf_call(func_type):
             return replace_func(
-                self, func_type.dispatcher.py_func, rhs.args, inline_bodo_calls=True
+                self,
+                func_type.dispatcher.py_func,
+                rhs.args,
+                kws=rhs.kws,
+                pysig=func_type.dispatcher._compiler.pysig,
+                inline_bodo_calls=True,
             )
 
         # support call ufuncs on Series
