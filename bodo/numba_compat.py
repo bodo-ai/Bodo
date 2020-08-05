@@ -46,7 +46,12 @@ from numba.core.typing.templates import (
     _OverloadAttributeTemplate,
     _OverloadMethodTemplate,
 )
-from numba.core.types.functions import _ResolutionFailures, _termcolor
+from numba.core.types.functions import (
+    _ResolutionFailures,
+    _termcolor,
+    _unlit_non_poison,
+    _bt_as_lines,
+)
 from numba.core.errors import LiteralTypingError, TypingError
 from numba.core.types import literal
 
@@ -319,7 +324,14 @@ _overload_default_jit_options = {"no_cpython_wrapper": True}
 
 
 # change: added no_unliteral argument
-def overload(func, jit_options={}, strict=True, inline="never", no_unliteral=False):
+def overload(
+    func,
+    jit_options={},
+    strict=True,
+    inline="never",
+    prefer_literal=False,
+    no_unliteral=False,
+):
     from numba.core.typing.templates import make_overload_template, infer_global, infer
 
     # set default options
@@ -329,7 +341,7 @@ def overload(func, jit_options={}, strict=True, inline="never", no_unliteral=Fal
     def decorate(overload_func):
         # change: added no_unliteral argument
         template = make_overload_template(
-            func, overload_func, opts, strict, inline, no_unliteral
+            func, overload_func, opts, strict, inline, prefer_literal, no_unliteral
         )
         infer(template)
         if callable(func):
@@ -343,7 +355,7 @@ def overload(func, jit_options={}, strict=True, inline="never", no_unliteral=Fal
 lines = inspect.getsource(numba.core.extending.overload)
 if (
     hashlib.sha256(lines.encode()).hexdigest()
-    != "dbcb7029c1538d6ee6324ae6a6d787527cf840997a4464d3053f46af0cd696b2"
+    != "9a2e592c984bd1d2df462bc3f2724a155962f85a30dc468d67acbd78cb023cc5"
 ):  # pragma: no cover
     warnings.warn("numba.core.extending.overload has changed")
 
@@ -361,6 +373,7 @@ def overload_method(typ, attr, **kwargs):
             attr,
             overload_func,
             inline=kwargs.get("inline", "never"),
+            prefer_literal=kwargs.get("prefer_literal", False),
             # change: added no_unliteral argument
             no_unliteral=kwargs.get("no_unliteral", False),
         )
@@ -375,7 +388,7 @@ def overload_method(typ, attr, **kwargs):
 lines = inspect.getsource(numba.core.extending.overload_method)
 if (
     hashlib.sha256(lines.encode()).hexdigest()
-    != "628441a93db4b93feae28e78a027a7682933a95936ff3afdc2d64b98388d7d95"
+    != "0d2663f1499836c32413f6a4dd8e4c1a407453320034b81b343e38fc34cf0658"
 ):  # pragma: no cover
     warnings.warn("numba.core.extending.overload_method has changed")
 
@@ -389,7 +402,13 @@ from numba.core.cpu_options import InlineOptions
 
 # change: added no_unliteral argument
 def make_overload_template(
-    func, overload_func, jit_options, strict, inline, no_unliteral
+    func,
+    overload_func,
+    jit_options,
+    strict,
+    inline,
+    prefer_literal=False,
+    no_unliteral=False,
 ):
     """
     Make a template class for function *func* overloaded by *overload_func*.
@@ -406,8 +425,9 @@ def make_overload_template(
         _jit_options=jit_options,
         _strict=strict,
         _inline=staticmethod(InlineOptions(inline)),
-        # change: added no_unliteral argument
         _inline_overloads={},
+        prefer_literal=prefer_literal,
+        # Bodo change: added no_unliteral argument
         _no_unliteral=no_unliteral,
     )
     return type(base)(name, (base,), dct)
@@ -417,7 +437,7 @@ def make_overload_template(
 lines = inspect.getsource(numba.core.typing.templates.make_overload_template)
 if (
     hashlib.sha256(lines.encode()).hexdigest()
-    != "b62d5f58dbfeb9753e8c6c94bdf6ffb9ffa39eb5c34bd2c2bea2be2a89c8d7ec"
+    != "1d304a414a1bfb2d7185ddddabcf637790ef2357b4c7d90035970b4f60e2d058"
 ):  # pragma: no cover
     warnings.warn("numba.core.typing.templates.make_overload_template has changed")
 
@@ -434,10 +454,11 @@ def _resolve(self, typ, attr):
     class MethodTemplate(AbstractTemplate):
         key = (self.key, attr)
         _inline = self._inline
-        # change: added _no_unliteral attribute
+        # Bodo change: added _no_unliteral attribute
         _no_unliteral = getattr(self, "_no_unliteral", False)
         _overload_func = staticmethod(self._overload_func)
         _inline_overloads = self._inline_overloads
+        prefer_literal = self.prefer_literal
 
         def generic(_, args, kws):
             args = (typ,) + tuple(args)
@@ -456,7 +477,7 @@ def _resolve(self, typ, attr):
 lines = inspect.getsource(numba.core.typing.templates._OverloadMethodTemplate._resolve)
 if (
     hashlib.sha256(lines.encode()).hexdigest()
-    != "40645505764f3f6fc52c8b479cbb4dc6203025fa409d95177f9dad89569c118e"
+    != "ccfe9f8dec20f58cf61f95420e25abe5419faf2cfffde78f39118fe6f91949e3"
 ):  # pragma: no cover
     warnings.warn(
         "numba.core.typing.templates._OverloadMethodTemplate._resolve has changed"
@@ -472,6 +493,7 @@ def make_overload_attribute_template(
     attr,
     overload_func,
     inline,
+    prefer_literal=False,
     no_unliteral=False,
     base=_OverloadAttributeTemplate,
 ):
@@ -488,18 +510,20 @@ def make_overload_attribute_template(
         _impl_cache={},
         _inline=staticmethod(InlineOptions(inline)),
         _inline_overloads={},
-        # change: added _no_unliteral argument
+        # Bodo change: added _no_unliteral argument
         _no_unliteral=no_unliteral,
         _overload_func=staticmethod(overload_func),
+        prefer_literal=prefer_literal,
     )
-    return type(base)(name, (base,), dct)
+    obj = type(base)(name, (base,), dct)
+    return obj
 
 
 # make sure make_overload_attribute_template hasn't changed before replacing it
 lines = inspect.getsource(numba.core.typing.templates.make_overload_attribute_template)
 if (
     hashlib.sha256(lines.encode()).hexdigest()
-    != "704aca2ece0e4dba2ecb02bf743809ddc828ca5d64f37d3a290d2084a6873e60"
+    != "fced9b9ca8b1f94d3f6b5fd2377acc544df3be01dfd4adf7044d6e27473a357a"
 ):  # pragma: no cover
     warnings.warn(
         "numba.core.typing.templates.make_overload_attribute_template has changed"
@@ -512,19 +536,22 @@ numba.core.typing.templates.make_overload_attribute_template = (
 
 
 # change: added no_unliteral argument
-def make_overload_method_template(typ, attr, overload_func, inline, no_unliteral):
+def make_overload_method_template(
+    typ, attr, overload_func, inline, prefer_literal=False, no_unliteral=False
+):
     """
     Make a template class for method *attr* of *typ* overloaded by
     *overload_func*.
     """
     return make_overload_attribute_template(
-        # change: added no_unliteral argument
+        # Bodo change: added no_unliteral argument
         typ,
         attr,
         overload_func,
         inline=inline,
         no_unliteral=no_unliteral,
         base=_OverloadMethodTemplate,
+        prefer_literal=prefer_literal,
     )
 
 
@@ -532,7 +559,7 @@ def make_overload_method_template(typ, attr, overload_func, inline, no_unliteral
 lines = inspect.getsource(numba.core.typing.templates.make_overload_method_template)
 if (
     hashlib.sha256(lines.encode()).hexdigest()
-    != "899327427f7db757cfdd6d5d916f81912831e8e41f8dc07436790254502ffc27"
+    != "09157f571dec522776accc54e9ec9261300100cac107c0cc94b7d17fb51238a1"
 ):  # pragma: no cover
     warnings.warn(
         "numba.core.typing.templates.make_overload_method_template has changed"
@@ -596,18 +623,23 @@ numba.core.typing.templates.bound_function = bound_function
 
 
 def get_call_type(self, context, args, kws):
+    prefer_lit = [True, False]  # old behavior preferring literal
+    prefer_not = [False, True]  # new behavior preferring non-literal
     failures = _ResolutionFailures(context, self, args, kws, depth=self._depth)
     self._depth += 1
     for temp_cls in self.templates:
         temp = temp_cls(context)
-        for uselit in [True, False]:
+        # The template can override the default and prefer literal args
+        choice = prefer_lit if temp.prefer_literal else prefer_not
+        # Bodo change: check _no_unliteral attribute if present
+        choice = [True] if getattr(temp, "_no_unliteral", False) else choice
+        for uselit in choice:
             try:
                 if uselit:
                     sig = temp.apply(args, kws)
-                # Bodo change: check _no_unliteral attribute if present
-                elif not getattr(temp, "_no_unliteral", False):
-                    nolitargs = tuple([unliteral(a) for a in args])
-                    nolitkws = {k: unliteral(v) for k, v in kws.items()}
+                else:
+                    nolitargs = tuple([_unlit_non_poison(a) for a in args])
+                    nolitkws = {k: _unlit_non_poison(v) for k, v in kws.items()}
                     sig = temp.apply(nolitargs, nolitkws)
             except Exception as e:
                 sig = None
@@ -641,7 +673,7 @@ def get_call_type(self, context, args, kws):
 lines = inspect.getsource(numba.core.types.functions.BaseFunction.get_call_type)
 if (
     hashlib.sha256(lines.encode()).hexdigest()
-    != "1dbcaa9fdbfd835681192e51347708c0906cdd42c6218e0c1d92cef4738893a6"
+    != "eea3bba0b35522f006f451309e9155f1fbfd94448060e2c9763df8a37d105880"
 ):  # pragma: no cover
     warnings.warn("numba.core.types.functions.BaseFunction.get_call_type has changed")
 
@@ -653,33 +685,46 @@ def get_call_type2(self, context, args, kws):
     template = self.template(context)
     literal_e = None
     nonliteral_e = None
+    out = None
 
-    # Try with Literal
-    try:
-        out = template.apply(args, kws)
-    except Exception as exc:
-        if isinstance(exc, errors.ForceLiteralArg):
-            raise exc
-        literal_e = exc
-        out = None
-
-    # if the unliteral_args and unliteral_kws are the same as the literal
-    # ones, set up to not bother retrying
-    unliteral_args = tuple([unliteral(a) for a in args])
-    unliteral_kws = {k: unliteral(v) for k, v in kws.items()}
-    skip = unliteral_args == args and kws == unliteral_kws
-
-    # If the above template application failed and the non-literal args are
-    # different to the literal ones, try again with literals rewritten as
-    # non-literals
+    choice = [True, False] if template.prefer_literal else [False, True]
     # Bodo change: check _no_unliteral attribute if present
-    if not skip and out is None and not getattr(template, "_no_unliteral", False):
-        try:
-            out = template.apply(unliteral_args, unliteral_kws)
-        except Exception as exc:
-            if isinstance(exc, errors.ForceLiteralArg):
-                raise exc
-            nonliteral_e = exc
+    choice = [True] if getattr(template, "_no_unliteral", False) else choice
+    for uselit in choice:
+        if uselit:
+            # Try with Literal
+            try:
+                out = template.apply(args, kws)
+            except Exception as exc:
+                if isinstance(exc, errors.ForceLiteralArg):
+                    raise exc
+                literal_e = exc
+                out = None
+            else:
+                break
+        else:
+            # if the unliteral_args and unliteral_kws are the same as the literal
+            # ones, set up to not bother retrying
+            unliteral_args = tuple([_unlit_non_poison(a) for a in args])
+            unliteral_kws = {k: _unlit_non_poison(v) for k, v in kws.items()}
+            skip = unliteral_args == args and kws == unliteral_kws
+
+            # If the above template application failed and the non-literal args are
+            # different to the literal ones, try again with literals rewritten as
+            # non-literals
+            if not skip and out is None:
+                try:
+                    out = template.apply(unliteral_args, unliteral_kws)
+                except Exception as exc:
+                    if isinstance(exc, errors.ForceLiteralArg):
+                        if template.prefer_literal:
+                            # For template that prefers literal types,
+                            # reaching here means that the literal types
+                            # have failed typing as well.
+                            raise exc
+                    nonliteral_e = exc
+                else:
+                    break
 
     if out is None and (nonliteral_e is not None or literal_e is not None):
         header = "- Resolution failure for {} arguments:\n{}\n"
@@ -696,7 +741,7 @@ def get_call_type2(self, context, args, kws):
                 else:
                     bt = [""]
                 nd2indent = "\n{}".format(2 * indent)
-                errstr += _termcolor.reset(nd2indent + nd2indent.join(bt_as_lines))
+                errstr = _termcolor.reset(nd2indent + nd2indent.join(_bt_as_lines(bt)))
                 return _termcolor.reset(errstr)
 
         else:
@@ -718,7 +763,7 @@ def get_call_type2(self, context, args, kws):
 lines = inspect.getsource(numba.core.types.functions.BoundFunction.get_call_type)
 if (
     hashlib.sha256(lines.encode()).hexdigest()
-    != "bea523c496de56822d0b94facc3a237b4c65608fd7f4ab1fe33dd06c8fb21fc9"
+    != "84bf54d63ce923117c14e7c96a1aedbef5fe25ed8586bdba4ca06e5cf4101ece"
 ):  # pragma: no cover
     warnings.warn("numba.core.types.functions.BoundFunction.get_call_type has changed")
 
