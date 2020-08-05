@@ -2338,6 +2338,7 @@ class ResetIndexDummyTyper(AbstractTemplate):
         df, drop, inplace = args
         # safe to just get const values here, since error checking is done in
         # reset_index overload
+        assert is_overload_constant_bool(drop)
         drop = is_overload_true(drop)
 
         # default output index is simple integer index with no name
@@ -2357,6 +2358,9 @@ class ResetIndexDummyTyper(AbstractTemplate):
 
         out_df = DataFrameType(data, index, columns)
         return signature(out_df, *args)
+
+
+ResetIndexDummyTyper._no_unliteral = True
 
 
 @lower_builtin(reset_index_dummy, types.VarArg(types.Any))
