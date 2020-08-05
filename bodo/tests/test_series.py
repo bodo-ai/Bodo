@@ -1262,7 +1262,6 @@ def test_series_bool_cmp_op(S, op, memory_leak_check):
 @pytest.mark.parametrize(
     "S",
     [
-        # dtype="boolean" makes these nullable Boolean arrays
         pd.Series(
             [True, False, False, True, True, True, False, False], dtype="boolean"
         ),
@@ -1272,6 +1271,17 @@ def test_series_bool_cmp_op(S, op, memory_leak_check):
     ],
 )
 def test_series_bool_vals_cmp_op(S, op, memory_leak_check):
+    """The comparison operation for missing value can be somewhat complicated:
+    ---In Python/C++/Fortran/Javascript, the comparison NaN == NaN returns false.
+    ---In Pandas the nan or None or missing values are all considered in the same
+    way and the result is a missing value in output.
+         -
+    The following is badly treated in pandas 1.1.0 currently:
+    pd.Series([True, False, np.nan, True, True, False, True, False]) .
+    Instead of [True, True, <NA>, True, ..., True], pandas returns
+    [True, True, False, True, ..., True].
+    Adding the ', dtype="boolean"' resolves the issue.
+    """
     op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
     func_text = "def test_impl(S, other):\n"
     func_text += "  return S.values {} other.values\n".format(op_str)

@@ -392,8 +392,13 @@ def _test_equal(
         # doesn't return them by default in all APIs yet.
         if py_out.dtype in (np.object, np.bool_):
             check_dtype = False
+        # TODO: support freq attribute of DatetimeIndex/TimedeltaIndex
         pd.testing.assert_series_equal(
-            bodo_out, py_out, check_names=check_names, check_dtype=check_dtype
+            bodo_out,
+            py_out,
+            check_names=check_names,
+            check_dtype=check_dtype,
+            check_freq=False,
         )
     elif isinstance(py_out, pd.Index):
         if sort_output:
@@ -415,7 +420,11 @@ def _test_equal(
         ):
             check_dtype = False
         pd.testing.assert_frame_equal(
-            bodo_out, py_out, check_names=check_names, check_dtype=check_dtype
+            bodo_out,
+            py_out,
+            check_names=check_names,
+            check_dtype=check_dtype,
+            check_freq=False,
         )
     elif isinstance(py_out, np.ndarray):
         if sort_output:

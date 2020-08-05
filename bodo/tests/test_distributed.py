@@ -436,6 +436,7 @@ def test_1D_Var_alloc4():
     size. The arrays of "CC" columns should be assigned 1D_Var even though they don't
     interact directly with other arrays of their dataframes.
     """
+
     @bodo.jit(distributed=["df1", "df2", "df3"])
     def f(df1, df2):
         df1 = df1.rename(columns={"A": "B"})
