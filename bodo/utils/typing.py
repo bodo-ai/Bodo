@@ -136,12 +136,25 @@ def is_overload_constant_str(val):
 
 
 def is_overload_constant_list(val):
+    """return True if 'val' is a constant list in overload. Currently considers tuples
+    as well since tuples and lists are interchangable in most Pandas APIs
+    (TODO: revisit).
+    """
     return (
-        isinstance(val, types.BaseTuple)
-        and all(isinstance(t, types.Literal) for t in val.types)
-        # avoid const dict values stored as const tuple
-        and (not val.types or val.types[0] != types.StringLiteral(CONST_DICT_SENTINEL))
-    ) or (isinstance(val, bodo.utils.typing.ListLiteral))
+        isinstance(val, (list, tuple))
+        or (isinstance(val, types.Omitted) and isinstance(val.value, tuple))
+        or (isinstance(val, types.List) and val.initial_value is not None)
+        or isinstance(val, bodo.utils.typing.ListLiteral)
+        or (
+            isinstance(val, types.BaseTuple)
+            and all(isinstance(t, types.Literal) for t in val.types)
+            # avoid const dict values stored as const tuple
+            and (
+                not val.types
+                or val.types[0] != types.StringLiteral(CONST_DICT_SENTINEL)
+            )
+        )
+    )
 
 
 def is_overload_constant_tuple(val):
@@ -321,6 +334,12 @@ def get_overload_const_list(val):
     """returns a constant list from type 'val', which could be a single value
     literal, a constant list or a constant tuple.
     """
+    if isinstance(val, (list, tuple)):
+        return val
+    if isinstance(val, types.Omitted) and isinstance(val.value, tuple):
+        return val.value
+    if isinstance(val, types.List) and val.initial_value is not None:
+        return val.initial_value
     if isinstance(val, bodo.utils.typing.ListLiteral):
         return val.literal_value
     if isinstance(val, types.Omitted):

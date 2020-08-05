@@ -2179,6 +2179,9 @@ class DataFramePass:
             var_typ = var_typ.type
         if isinstance(var_typ, bodo.utils.typing.ListLiteral):
             return var_typ.literal_value
+        if isinstance(var_typ, types.List) and var_typ.initial_value is not None:
+            return var_typ.initial_value
+
 
         typ = str if typ is None else typ
         by_arg_def = guard(find_build_sequence, self.func_ir, by_arg)
