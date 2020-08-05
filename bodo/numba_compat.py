@@ -1216,7 +1216,6 @@ types.misc.maybe_literal = maybe_literal
 
 
 def CacheImpl__init__(self, py_func):
-    self._is_closure = bool(py_func.__closure__)
     self._lineno = py_func.__code__.co_firstlineno
     # Get qualname
     try:
@@ -1260,7 +1259,7 @@ def CacheImpl__init__(self, py_func):
 lines = inspect.getsource(numba.core.caching._CacheImpl.__init__)
 if (
     hashlib.sha256(lines.encode()).hexdigest()
-    != "f84d6f319647b4eb905b1b59b576772a4caf7655a5bd094405f4f40ccb7a9c95"
+    != "b46d298146e3844e9eaeef29d36f5165ba4796c270ca50d2b35f9fcdc0fa032a"
 ):  # pragma: no cover
     warnings.warn("numba.core.caching._CacheImpl.__init__ has changed")
 
