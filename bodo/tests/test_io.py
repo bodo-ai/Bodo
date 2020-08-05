@@ -501,11 +501,16 @@ def test_read_write_parquet():
         return pd.read_parquet("_test_io___.pq")
 
     def pandas_write(df, filename):
-        # pandas/pyarrow throws this error when writing datetime64[ns]:
+        # pandas/pyarrow throws this error when writing datetime64[ns]
+        # to parquet 1.x:
         # pyarrow.lib.ArrowInvalid: Casting from timestamp[ns] to timestamp[ms] would lose data: xxx
-        # unless allow_truncated_timestamps=True.
-        # NOTE: it will write with ms precision
-        df.to_parquet(filename, allow_truncated_timestamps=True)
+        # So we have to truncate to ms precision. pandas 1.1.0 apparently got
+        # rid of allow_truncated_timestamps option of to_parquet, so we do this
+        # manually
+        for col_name in df.columns:
+            if pd.api.types.is_datetime64_any_dtype(df[col_name]):
+                df[col_name] = df[col_name].dt.floor('ms')
+        df.to_parquet(filename)
 
     def gen_dataframe(num_elements, write_index):
         df = pd.DataFrame()
@@ -801,7 +806,9 @@ def test_csv_bool1(datapath):
 
     def test_impl(fname):
         dtype = {"A": "int", "B": "bool", "C": "float"}
-        return pd.read_csv(fname, names=dtype.keys(), dtype=dtype, index_col=False)
+        return pd.read_csv(
+            fname, names=list(dtype.keys()), dtype=dtype, index_col=False
+        )
 
     # passing file name as argument to exercise value-based dispatch
     fname = datapath("csv_data_bool1.csv")
@@ -820,7 +827,9 @@ def test_csv_int_na1(datapath):
 
     def test_impl(fname):
         dtype = {"A": "int", "B": "Int32"}
-        return pd.read_csv(fname, names=dtype.keys(), dtype=dtype, compression="infer")
+        return pd.read_csv(
+            fname, names=list(dtype.keys()), dtype=dtype, compression="infer"
+        )
 
     check_func(test_impl, (fname,))
 
@@ -850,7 +859,7 @@ def test_csv_int_na2(datapath):
     def test_impl(fname, compression):
         dtype = {"A": "int", "B": pd.Int32Dtype()}
         return pd.read_csv(
-            fname, names=dtype.keys(), dtype=dtype, compression=compression
+            fname, names=list(dtype.keys()), dtype=dtype, compression=compression
         )
 
     check_func(test_impl, (fname, "infer"))
@@ -871,7 +880,7 @@ def test_csv_bool_na(datapath):
         # Pandas dtypes
         # see Pandas GH20591
         dtype = {"ind": "int32", "B": "bool"}
-        return pd.read_csv(fname, names=dtype.keys(), dtype=dtype, usecols=[0, 2])
+        return pd.read_csv(fname, names=list(dtype.keys()), dtype=dtype, usecols=[0, 2])
 
     check_func(test_impl, (fname,))
 
@@ -1556,7 +1565,7 @@ def test_excel1(datapath):
             sheet_name="Sheet1",
             parse_dates=["C"],
             dtype=dtype,
-            names=dtype.keys(),
+            names=list(dtype.keys()),
         )
 
     def test_impl3(fname):
@@ -1844,7 +1853,7 @@ class TestIO(unittest.TestCase):
 
         def test_impl():
             dtype = {"A": np.int, "B": np.float, "C": np.float, "D": np.int}
-            return pd.read_csv(fname, names=dtype.keys(), dtype=dtype)
+            return pd.read_csv(fname, names=list(dtype.keys()), dtype=dtype)
 
         bodo_func = bodo.jit(test_impl)
         pd.testing.assert_frame_equal(bodo_func(), test_impl())
@@ -1854,7 +1863,7 @@ class TestIO(unittest.TestCase):
 
         def test_impl():
             dtype = {"A": "int", "B": "float64", "C": "float", "D": "int64"}
-            return pd.read_csv(fname, names=dtype.keys(), dtype=dtype)
+            return pd.read_csv(fname, names=list(dtype.keys()), dtype=dtype)
 
         bodo_func = bodo.jit(test_impl)
         pd.testing.assert_frame_equal(bodo_func(), test_impl())

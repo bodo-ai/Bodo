@@ -162,8 +162,11 @@ def test_return_type_nullable_cumsum_cumprod(df_null):
     Test Groupby when one row is a nullable-int-bool.
     A current problem is that cumsum/cumprod with pandas return an array of float for Int64
     in input. That is why we put check_dtype=False here.
+    ---
+    The agg(("cumsum", "cumprod")) is disabled at the time being because of a pandas bug:
+    https://github.com/pandas-dev/pandas/issues/35490
     """
-
+    assert pd.__version__=='1.1.0', "revisit the agg((cumsum, cumprod)) at next pandas version"
     def impl1(df):
         df2 = df.groupby("A")["B"].agg(("cumsum", "cumprod"))
         return df2
@@ -172,7 +175,7 @@ def test_return_type_nullable_cumsum_cumprod(df_null):
         df2 = df.groupby("A")["B"].cumsum()
         return df2
 
-    check_func(impl1, (df_null,), sort_output=True, check_dtype=False)
+#    check_func(impl1, (df_null,), sort_output=True, check_dtype=False)
     check_func(impl2, (df_null,), sort_output=True, check_dtype=False)
 
 
@@ -464,6 +467,12 @@ def test_agg_bool_expr():
     ],
 )
 def test_cumsum_index_preservation(df_index):
+    """For the cumsum operation, the number of rows remains the same and the index is preserved.
+    ---
+    At the present time the agg(("cumsum", "cumprod")) is broken in pandas. See
+    https://github.com/pandas-dev/pandas/issues/35490
+    """
+    assert pd.__version__=='1.1.0', "revisit the agg((cumsum, cumprod)) at next pandas version"
     def test_impl_basic(df1):
         df2 = df1.groupby("B").cumsum()
         return df2
@@ -478,15 +487,9 @@ def test_cumsum_index_preservation(df_index):
         )
         return df2
 
-    check_func(
-        test_impl_basic, (df_index,), sort_output=True, check_dtype=False,
-    )
-    check_func(
-        test_impl_both, (df_index,), sort_output=True, check_dtype=False,
-    )
-    check_func(
-        test_impl_all, (df_index,), sort_output=True, check_dtype=False,
-    )
+    check_func(test_impl_basic, (df_index,), sort_output=True, check_dtype=False)
+#    check_func(test_impl_both, (df_index,), sort_output=True, check_dtype=False)
+#    check_func(test_impl_all, (df_index,), sort_output=True, check_dtype=False)
 
 
 def test_cumsum_random_index():
@@ -919,7 +922,11 @@ def test_agg_len_mix():
 def test_agg_multi_udf():
     """
     Test Groupby.agg() multiple user defined functions
+    ---
+    The agg(("cumsum", "cumprod")) is currently broken because of a bug in pandas.
+    https://github.com/pandas-dev/pandas/issues/35490
     """
+    assert pd.__version__=='1.1.0', "revisit the agg((cumsum, cumprod)) at next pandas version"
 
     def impl(df):
         def id1(x):
@@ -956,7 +963,7 @@ def test_agg_multi_udf():
     check_func(impl2, (df,), sort_output=True)
     # check_dtype=False since Bodo returns float for Series.min/max. TODO: fix min/max
     check_func(impl3, (df,), sort_output=True, check_dtype=False)
-    check_func(impl4, (df,), sort_output=True)
+#    check_func(impl4, (df,), sort_output=True)
 
 
 def test_aggregate():
@@ -1500,6 +1507,12 @@ def test_cumsum_large_random_numpy():
 
 
 def test_cummin_cummax_large_random_numpy():
+    """A bunch of tests related to cummin/cummax functions.
+    ---
+    The agg(("cummin", "cummax")) is currently broken because of a bug in pandas.
+    https://github.com/pandas-dev/pandas/issues/35490
+    """
+    assert pd.__version__=='1.1.0', "revisit the agg((cummin, cummax)) at next pandas version"
     def get_random_array(n, sizlen):
         elist = []
         for i in range(n):
@@ -1547,7 +1560,7 @@ def test_cummin_cummax_large_random_numpy():
     nb = 100
     df1 = pd.DataFrame({"A": get_random_array(nb, 10), "B": get_random_array(nb, 100)})
     # Need reset_index as none is set on input.
-    check_func(impl1, (df1,), sort_output=True, reset_index=True)
+#    check_func(impl1, (df1,), sort_output=True, reset_index=True)
     check_func(impl2, (df1,), sort_output=True, reset_index=True)
     check_func(impl3, (df1,), sort_output=True, reset_index=True)
     check_func(impl4, (df1,), sort_output=True, reset_index=True)
@@ -2234,10 +2247,16 @@ def test_std(test_df_int_no_null):
 def test_std_one_col(test_df):
     """
     Test Groupby.std() with one column selected
+    ---
+    For the df.groupby("A")["B"].std() we have an error for test_df1
+    This is due to a bug in pandas. See
+    https://github.com/pandas-dev/pandas/issues/35516
     """
+    assert pd.__version__=='1.1.0', "revisit the df.groupby(A)[B].std() issue at next pandas version"
 
     def impl1(df):
-        A = df.groupby("A")["B"].std()
+#        A = df.groupby("A")["B"].std()
+        A = df.groupby("A")["B"].var()
         return A
 
     def impl2(n):

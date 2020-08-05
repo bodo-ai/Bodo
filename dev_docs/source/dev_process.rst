@@ -443,3 +443,17 @@ For each new release of Bodo version, user documentation should also be updated.
     3. Next, the `latest` symbolic link from gh-pages branch of Bodo-doc repository should be updated to the new version. 
 
 For more release related instruction, visit our `release checklist <https://github.com/Bodo-inc/Bodo/wiki/Release-Checklist>`_ Wiki page.
+
+Updating external packages versions
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+From time to time, we need to update the version of an important software used in bodo such as numba, pandas or pyarrow.
+
+When this happens, the update needs to be done at several places in the codebase and it is important not to forget any as
+this makes just a loss of time for all involved. Packages pyarrow, pandas and numba show up in:
+
+    1. The Dockerfiles in `docker/*/Dockerfile`.
+    2. The script `buildscripts/setup_conda.sh`
+    3. The CI script `buildscripts/bodo-conda-recipe/meta.yaml`
+    4. The documentation file `dev_docs/source/build_bodo.rst`
+    5. The file `requirements.txt`

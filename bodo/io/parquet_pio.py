@@ -445,7 +445,9 @@ def get_parquet_dataset(file_name, parallel, get_row_counts=True):
                     dataset = pq.ParquetDataset(file_names, filesystem=fs)
                 except Exception as e:
                     raise BodoError(
-                        "read_parquet(): Hadoop file system cannot be created: {}".format(e)
+                        "read_parquet(): Hadoop file system cannot be created: {}".format(
+                            e
+                        )
                     )
 
         if dataset is None:

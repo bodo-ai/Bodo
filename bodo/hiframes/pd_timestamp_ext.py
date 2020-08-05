@@ -1103,7 +1103,7 @@ def overload_to_timedelta(arg_a, unit="ns", errors="raise"):
     # from Pandas implementation:
     # https://github.com/pandas-dev/pandas/blob/2e0e013703390377faad57ee97f2cfaf98ba039e/pandas/core/arrays/timedeltas.py#L956
     if is_list_like_index_type(arg_a) and isinstance(arg_a.dtype, types.Float):
-        m, p = pd._libs.tslibs.timedeltas.precision_from_unit(unit)
+        m, p = pd._libs.tslibs.conversion.precision_from_unit(unit)
         td64_dtype = np.dtype("timedelta64[ns]")
 
         def impl_float(arg_a, unit="ns", errors="raise"):  # pragma: no cover

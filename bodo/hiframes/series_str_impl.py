@@ -901,7 +901,9 @@ def overload_str_method_extract(S_str, pat, flags=0, expand=True):
     func_text += "      if bodo.libs.array_kernels.isna(str_arr, j):\n"
     for i in range(n_cols):
         func_text += "          out_arr_{}[j] = ''\n".format(i)
-        func_text += "          bodo.libs.array_kernels.setna(out_arr_{}, j)\n".format(i)
+        func_text += "          bodo.libs.array_kernels.setna(out_arr_{}, j)\n".format(
+            i
+        )
     func_text += "      else:\n"
     func_text += "          m = regex.search(str_arr[j])\n"
     func_text += "          if m:\n"
