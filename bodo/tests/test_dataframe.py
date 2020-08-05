@@ -1381,6 +1381,27 @@ def test_set_column_cond3():
     pd.testing.assert_frame_equal(df1, df2)
 
 
+def test_set_column_setattr():
+    """set df column using setattr instead of setitem
+    """
+
+    # same type as existing column
+    def impl1(n):
+        df = pd.DataFrame({"A": np.ones(n), "B": np.arange(n)})
+        df.B = 2
+        return df
+
+    # change column type
+    def impl2(n):
+        df = pd.DataFrame({"A": np.ones(n), "B": np.arange(n)})
+        df.B = "AA"
+        return df
+
+    n = 11
+    check_func(impl1, (n,))
+    check_func(impl2, (n,))
+
+
 def test_df_filter():
     def test_impl(df, cond):
         df2 = df[cond]
