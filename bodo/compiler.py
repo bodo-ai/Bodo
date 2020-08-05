@@ -441,6 +441,9 @@ def udf_jit(signature_or_function=None, **options):
     parallel = {
         "comprehension": True,
         "setitem": False,
+        # setting the new inplace_binop option to False until it is tested and handled
+        # TODO: evaluate and enable
+        "inplace_binop": False,
         "reduction": True,
         "numpy": True,
         "stencil": True,
