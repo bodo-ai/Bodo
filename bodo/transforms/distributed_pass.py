@@ -575,6 +575,22 @@ class DistributedPass:
             out.append(assign)
             return out
 
+        # adjust array index variable to be within current processor's data chunk
+        if fdef == (
+            "inplace_eq",
+            "bodo.libs.str_arr_ext",
+        ) and self._dist_arr_needs_adjust(rhs.args[0].name):
+            arr = rhs.args[0]
+            index_var = self._fix_index_var(rhs.args[1])
+            start_var, nodes = self._get_parallel_access_start_var(
+                arr, equiv_set, index_var, avail_vars
+            )
+            sub_nodes = self._get_ind_sub(index_var, start_var)
+            out = nodes + sub_nodes
+            rhs.args[1] = sub_nodes[-1].target
+            out.append(assign)
+            return out
+
         if fdef == (
             "str_arr_item_to_numeric",
             "bodo.libs.str_arr_ext",
@@ -2784,6 +2800,7 @@ class DistributedPass:
                 ("str_arr_item_to_numeric", "bodo.libs.str_arr_ext"),
                 ("setitem_str_arr_ptr", "bodo.libs.str_arr_ext"),
                 ("get_str_arr_item_length", "bodo.libs.str_arr_ext"),
+                ("inplace_eq", "bodo.libs.str_arr_ext"),
                 ("get_split_view_index", "bodo.hiframes.split_impl"),
                 ("get_bit_bitmap_arr", "bodo.libs.int_arr_ext"),
                 ("set_bit_to_arr", "bodo.libs.int_arr_ext"),

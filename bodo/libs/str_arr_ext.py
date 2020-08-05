@@ -38,7 +38,7 @@ from numba.extending import (
     register_jitable,
 )
 from numba.core import cgutils
-from bodo.libs.str_ext import string_type
+from bodo.libs.str_ext import string_type, unicode_to_utf8_and_len, memcmp
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.decimal_arr_ext import Decimal128Type, DecimalArrayType
 from bodo.hiframes.datetime_date_ext import datetime_date_array_type, datetime_date_type
@@ -1449,6 +1449,29 @@ def print_str_arr(arr):  # pragma: no cover
     _print_str_arr(
         num_strings(arr), num_total_chars(arr), get_offset_ptr(arr), get_data_ptr(arr)
     )
+
+
+def inplace_eq(A, i, val):  # pragma: no cover
+    return A[i] == val
+
+
+@overload(inplace_eq)
+def inplace_eq_overload(A, ind, val):
+    """compare string array element to a string value inplace, without creating a string
+    value from the element (which incurrs allocation overhead).
+    """
+
+    def impl(A, ind, val):  # pragma: no cover
+        utf8_str, utf8_len = unicode_to_utf8_and_len(val)
+        start_offset = getitem_str_offset(A, ind)
+        end_offset = getitem_str_offset(A, ind + 1)
+        arr_val_len = end_offset - start_offset
+        if arr_val_len != utf8_len:
+            return False
+        ptr = get_data_ptr_ind(A, start_offset)
+        return memcmp(ptr, utf8_str, utf8_len) == 0
+
+    return impl
 
 
 @overload(operator.getitem, no_unliteral=True)

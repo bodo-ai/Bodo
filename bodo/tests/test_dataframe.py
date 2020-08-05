@@ -1447,6 +1447,19 @@ def test_create_series_input1():
     pd.testing.assert_frame_equal(bodo_func(S), test_impl(S))
 
 
+def test_df_apply_getitem():
+    """test getitem access of row value passed in df.apply()
+    """
+
+    def test_impl(df):
+        return df.apply(lambda r: r["B"] if r["A"] == "AA" else 0, axis=1)
+
+    df = pd.DataFrame(
+        {"A": ["AA", "B", "CC", "C", "AA"], "B": [3, 1, 2, 5, 9]}, index=[3, 1, 4, 6, 0]
+    )
+    check_func(test_impl, (df,))
+
+
 def test_df_apply_bool():
     # check bool output of UDF for BooleanArray use
     def test_impl(df):

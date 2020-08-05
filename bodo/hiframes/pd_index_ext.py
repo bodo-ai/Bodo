@@ -2012,20 +2012,7 @@ def overload_index_map(I, mapper, na_action=None):
     func_text += "    S[i] = bodo.utils.conversion.unbox_if_timestamp(v)\n"
     func_text += "  return bodo.utils.conversion.index_from_array(S, name)\n"
 
-    # using Bodo's sequential/inline pipeline for the UDF to make sure nested calls
-    # are inlined and not distributed. Otherwise, generated barriers cause hangs
-    # see: test_df_apply_func_case2
-    parallel = {
-        "comprehension": True,
-        "setitem": False,
-        "reduction": True,
-        "numpy": True,
-        "stencil": True,
-        "fusion": True,
-    }
-    map_func = numba.njit(
-        func, parallel=parallel, pipeline_class=bodo.compiler.BodoCompilerSeqInline
-    )
+    map_func = bodo.compiler.udf_jit(func)
 
     loc_vars = {}
     exec(

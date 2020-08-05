@@ -2162,7 +2162,7 @@ def compile_to_optimized_ir(func, arg_typs, typingctx):
     inline_overload_pass.run_pass(pm)
 
     series_pass = bodo.transforms.series_pass.SeriesPass(
-        f_ir, typingctx, typemap, calltypes
+        f_ir, typingctx, typemap, calltypes, {}, False
     )
     series_pass.run()
     # change the input type to UDF from Series to Array since Bodo passes Arrays to UDFs

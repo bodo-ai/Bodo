@@ -606,21 +606,7 @@ class DataFramePass:
         nodes = []
         col_vars = [self._get_dataframe_data(df_var, c, nodes) for c in used_cols]
         df_index_var = self._get_dataframe_index(df_var, nodes)
-
-        # using Bodo's sequential/inline pipeline for the UDF to make sure nested calls
-        # are inlined and not distributed. Otherwise, generated barriers cause hangs
-        # see: test_df_apply_func_case2
-        parallel = {
-            "comprehension": True,
-            "setitem": False,
-            "reduction": True,
-            "numpy": True,
-            "stencil": True,
-            "fusion": True,
-        }
-        map_func = numba.njit(
-            func, parallel=parallel, pipeline_class=bodo.compiler.BodoCompilerSeqInline
-        )
+        map_func = bodo.compiler.udf_jit(func)
 
         return replace_func(
             self,
