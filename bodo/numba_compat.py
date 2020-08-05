@@ -311,40 +311,6 @@ if (
 ir_utils.find_potential_aliases = find_potential_aliases
 
 
-# The code below is copied from Numba and modified to fix Numba #5539.
-# TODO: remove when the issue is fixed
-# https://github.com/numba/numba/blob/afd5c67b1ed6f51c040d1845a014abea8b87846a/numba/np/linalg.py#L462
-def dot_2_vm(context, builder, sig, args):
-    """
-    np.dot(vector, matrix)
-    """
-
-    def dot_impl(a, b):  # pragma: no cover
-        (m,) = a.shape
-        _m, n = b.shape
-        # changed code: initialize with zeros if inputs are empty
-        if m == 0:
-            out = np.zeros((n,), a.dtype)
-        else:
-            out = np.empty((n,), a.dtype)
-        return np.dot(a, b, out)
-
-    res = context.compile_internal(builder, dot_impl, sig, args)
-    return impl_ret_new_ref(context, builder, sig.return_type, res)
-
-
-# make sure numba.np.linalg.dot_2_vm hasn't changed before replacing it
-lines = inspect.getsource(numba.np.linalg.dot_2_vm)
-if (
-    hashlib.sha256(lines.encode()).hexdigest()
-    != "85c6fa1687773b818f76b08b2e43cf6251d5cc87ac64906434ba5dfaa0bcc3cb"
-):  # pragma: no cover
-    warnings.warn("numba.np.linalg.dot_2_vm has changed")
-
-
-numba.np.linalg.dot_2_vm = dot_2_vm
-
-
 # replace Numba's overload/overload_method handling functions to support a new option
 # called 'no_unliteral', which avoids a second run of overload with literal types
 # converted to non-literal versions. This solves hiding errors such as #889
