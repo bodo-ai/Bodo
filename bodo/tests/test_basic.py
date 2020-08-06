@@ -620,3 +620,17 @@ def test_permuted_array_indexing(memory_leak_check):
     for arr_len in [15, 23, 26]:
         A, B, _ = hpat_func3(arr_len)
         np.testing.assert_allclose(A, B)
+
+
+def test_reversed():
+    """
+    test reversed on a list of floats
+    """
+
+    def test_impl(l):
+        out = []
+        for i in reversed(l):
+            out.append(i)
+        return out
+    
+    check_func(test_impl, ([0.1,0.2,0.3,0.4],))
