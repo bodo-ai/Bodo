@@ -622,7 +622,7 @@ def test_permuted_array_indexing(memory_leak_check):
         np.testing.assert_allclose(A, B)
 
 
-def test_reversed(memory_leak_check):
+def test_reversed():
     """
     test reversed on a list of floats
     """
