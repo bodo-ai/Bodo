@@ -701,7 +701,19 @@ class TypingTransforms:
         for (arg_no, arg_name) in func_args:
             var = get_call_expr_arg(func_name, rhs.args, kws, arg_no, arg_name, "")
             # skip if argument not specified or literal already
-            if var == "" or is_literal_type(self.typemap.get(var.name, None)):
+            if var == "":
+                continue
+            if is_literal_type(self.typemap.get(var.name, None)):
+                if var.name in self._updated_containers:
+                    raise BodoError(
+                        "{}(): argument '{}' requires a constant value but variable '{}' is updated inplace using '{}'\n{}\n".format(
+                            func_name,
+                            arg_name,
+                            var.name,
+                            self._updated_containers[var.name],
+                            rhs.loc.strformat(),
+                        )
+                    )
                 continue
             # get constant value for variable if possible.
             # Otherwise, just skip, assuming that the issue may be fixed later or
