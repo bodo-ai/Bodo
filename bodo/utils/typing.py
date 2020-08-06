@@ -166,7 +166,7 @@ def is_overload_constant_tuple(val):
 def is_overload_constant_dict(val):
     """const dict values are stored as a const tuple with a sentinel
     """
-    return (
+    return (isinstance(val, types.DictType) and val.initial_value is not None) or (
         isinstance(val, types.BaseTuple)
         and val.types
         and val.types[0] == types.StringLiteral(CONST_DICT_SENTINEL)
@@ -310,11 +310,15 @@ def get_overload_const_tuple(val):
 def get_overload_constant_dict(val):
     """get constant dict values from literal type (stored as const tuple)
     """
-    assert (
+    assert (isinstance(val, types.DictType) and val.initial_value is not None) or (
         isinstance(val, types.BaseTuple)
         and val.types
         and val.types[0] == types.StringLiteral(CONST_DICT_SENTINEL)
-    )
+    ), "invalid const dict"
+    if isinstance(val, types.DictType):
+        assert val.initial_value is not None, "invalid dict initial value"
+        return val.initial_value
+
     # get values excluding sentinel
     items = [get_overload_const(v) for v in val.types[1:]]
     # create dict and return
