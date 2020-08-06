@@ -522,6 +522,12 @@ class TypingTransforms:
                 (6, "right_index"),
                 (10, "suffixes"),
             ],
+            # NOTE: this enables const replacement to avoid errors in
+            # test_excel1::test_impl2 caused by Numba 0.51 literals
+            # TODO: fix underlying issue in Numba
+            "read_excel": [
+                (3, "names"),
+            ],
         }
 
         if func_name in top_level_call_const_args:
