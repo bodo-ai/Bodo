@@ -869,3 +869,19 @@ def dump_node_list(node_list):  # pragma: no cover
 
 def debug_prints():
     return numba.core.config.DEBUG_ARRAY_OPT == 1
+
+
+# TODO: Move to Numba
+@overload(reversed)
+def list_reverse(A):
+    """
+    reversed(list)
+    """
+    if isinstance(A, types.List):
+        
+        def impl_reversed(A):
+            A_len = len(A)
+            for i in range(A_len):
+                yield A[A_len-1-i]
+        
+        return impl_reversed

@@ -548,14 +548,3 @@ def decimal_arr_getitem(A, ind):
             return init_decimal_array(new_data, new_mask, precision, scale)
 
         return impl_slice
-
-@overload(reversed)
-def list_reverse(A):
-
-    def impl(A):
-        A_len = len(A)
-        for i in range(A_len):
-            yield A[A_len-1-i]
-
-    if isinstance(A, types.List):
-        return impl
