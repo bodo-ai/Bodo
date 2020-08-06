@@ -257,7 +257,7 @@ def test_unary_ufunc_explicit_np(memory_leak_check):
 
 @pytest.mark.slow
 @pytest.mark.parametrize(
-    "ufunc", [f for f in numba.np.ufunc_db.get_ufuncs() if f.nin == 2]
+    "ufunc", [f for f in numba.np.ufunc_db.get_ufuncs() if f.nin == 2 and f.nout == 1]
 )
 def test_binary_ufunc(ufunc, memory_leak_check):
     # IntegerArray is buggy as of Pandas 1.1.0 and doesn't put NA mask on output yet
