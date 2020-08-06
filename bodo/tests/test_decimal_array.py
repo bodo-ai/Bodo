@@ -143,3 +143,16 @@ def test_join(decimal_arr_value):
     df1 = pd.DataFrame({"A": np.arange(n), "B": decimal_arr_value})
     df2 = pd.DataFrame({"A": np.arange(n) + 3, "C": decimal_arr_value})
     check_func(test_impl, (df1, df2), sort_output=True, reset_index=True)
+
+def test_reversed(decimal_list):
+    """
+    test reversed on a list of floats
+    """
+
+    def test_impl(l):
+        out = []
+        for i in reversed(l):
+            out.append(i)
+        return out
+    
+    check_func(test_impl, ([0.1,0.2,0.3,0.4],))
