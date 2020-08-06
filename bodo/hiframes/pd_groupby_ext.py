@@ -38,6 +38,7 @@ from bodo.utils.typing import (
     list_cumulative,
     BodoError,
     raise_const_error,
+    raise_bodo_error,
     is_overload_none,
     get_overload_const_list,
     is_overload_true,
@@ -225,7 +226,7 @@ class GroupbyTyper(AbstractTemplate):
             selection.remove(k)
 
         if isinstance(as_index, bodo.utils.typing.BooleanLiteral):
-            as_index = as_index.literal_value
+            as_index = is_overload_true(as_index)
         else:
             # XXX as_index type is just bool when value not passed. Therefore,
             # we assume the default True value.
@@ -591,9 +592,11 @@ class DataframeGroupByAttribute(AttributeTemplate):
             return signature(out_res, *args)
 
         # multi-function tuple case
-        if isinstance(func, types.BaseTuple):
+        if isinstance(func, types.BaseTuple) and not isinstance(
+            func, types.LiteralStrKeyDict
+        ):
             if not (len(grp.selection) == 1 and grp.explicit_select):
-                raise BodoError(
+                raise_bodo_error(
                     "Groupby.agg()/aggregate(): must select exactly one column when more than one functions supplied"
                 )
             assert len(func) > 0

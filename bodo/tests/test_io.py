@@ -509,7 +509,7 @@ def test_read_write_parquet():
         # manually
         for col_name in df.columns:
             if pd.api.types.is_datetime64_any_dtype(df[col_name]):
-                df[col_name] = df[col_name].dt.floor('ms')
+                df[col_name] = df[col_name].dt.floor("ms")
         df.to_parquet(filename)
 
     def gen_dataframe(num_elements, write_index):

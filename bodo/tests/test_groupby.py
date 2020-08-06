@@ -166,7 +166,10 @@ def test_return_type_nullable_cumsum_cumprod(df_null):
     The agg(("cumsum", "cumprod")) is disabled at the time being because of a pandas bug:
     https://github.com/pandas-dev/pandas/issues/35490
     """
-    assert pd.__version__=='1.1.0', "revisit the agg((cumsum, cumprod)) at next pandas version"
+    assert (
+        pd.__version__ == "1.1.0"
+    ), "revisit the agg((cumsum, cumprod)) at next pandas version"
+
     def impl1(df):
         df2 = df.groupby("A")["B"].agg(("cumsum", "cumprod"))
         return df2
@@ -175,7 +178,7 @@ def test_return_type_nullable_cumsum_cumprod(df_null):
         df2 = df.groupby("A")["B"].cumsum()
         return df2
 
-#    check_func(impl1, (df_null,), sort_output=True, check_dtype=False)
+    #    check_func(impl1, (df_null,), sort_output=True, check_dtype=False)
     check_func(impl2, (df_null,), sort_output=True, check_dtype=False)
 
 
@@ -472,7 +475,10 @@ def test_cumsum_index_preservation(df_index):
     At the present time the agg(("cumsum", "cumprod")) is broken in pandas. See
     https://github.com/pandas-dev/pandas/issues/35490
     """
-    assert pd.__version__=='1.1.0', "revisit the agg((cumsum, cumprod)) at next pandas version"
+    assert (
+        pd.__version__ == "1.1.0"
+    ), "revisit the agg((cumsum, cumprod)) at next pandas version"
+
     def test_impl_basic(df1):
         df2 = df1.groupby("B").cumsum()
         return df2
@@ -488,6 +494,8 @@ def test_cumsum_index_preservation(df_index):
         return df2
 
     check_func(test_impl_basic, (df_index,), sort_output=True, check_dtype=False)
+
+
 #    check_func(test_impl_both, (df_index,), sort_output=True, check_dtype=False)
 #    check_func(test_impl_all, (df_index,), sort_output=True, check_dtype=False)
 
@@ -545,11 +553,12 @@ def test_cumsum_random_index():
     check_func(test_impl, (df3,), sort_output=True, check_dtype=False)
 
 
-
 def test_cumsum_exscan_categorical_random():
     """For categorical and cumsum, a special code path allows for better performance"""
+
     def f1(df):
         return df.groupby("A").cumsum(skipna=False)
+
     def f2(df):
         return df.groupby("A").cumsum(skipna=True)
 
@@ -561,8 +570,8 @@ def test_cumsum_exscan_categorical_random():
     def get_random_nullable_column(n):
         elist = []
         for _ in range(n):
-            prob = random.randint(1,10)
-            if prob==1:
+            prob = random.randint(1, 10)
+            if prob == 1:
                 elist.append(None)
             else:
                 elist.append(prob)
@@ -571,14 +580,21 @@ def test_cumsum_exscan_categorical_random():
     random.seed(5)
     n = 10
     list_A = ["".join(random.choices(["A", "B", "C"], k=3)) for _ in range(n)]
-    list_B_i = [random.randint(1,100) for _ in range(n)]
+    list_B_i = [random.randint(1, 100) for _ in range(n)]
     list_C_f = [random.random() for _ in range(n)]
     list_D_f_nan = [random_f_nan() for _ in range(n)]
     list_E_i_null = get_random_nullable_column(n)
-    df = pd.DataFrame({"A": pd.Categorical(list_A), "B":list_B_i, "C":list_C_f, "D":list_D_f_nan, "E":list_E_i_null})
+    df = pd.DataFrame(
+        {
+            "A": pd.Categorical(list_A),
+            "B": list_B_i,
+            "C": list_C_f,
+            "D": list_D_f_nan,
+            "E": list_E_i_null,
+        }
+    )
     check_func(f1, (df,), check_dtype=False)
     check_func(f2, (df,), check_dtype=False)
-
 
 
 def test_sum_max_min_list_string_random():
@@ -926,7 +942,9 @@ def test_agg_multi_udf():
     The agg(("cumsum", "cumprod")) is currently broken because of a bug in pandas.
     https://github.com/pandas-dev/pandas/issues/35490
     """
-    assert pd.__version__=='1.1.0', "revisit the agg((cumsum, cumprod)) at next pandas version"
+    assert (
+        pd.__version__ == "1.1.0"
+    ), "revisit the agg((cumsum, cumprod)) at next pandas version"
 
     def impl(df):
         def id1(x):
@@ -963,6 +981,8 @@ def test_agg_multi_udf():
     check_func(impl2, (df,), sort_output=True)
     # check_dtype=False since Bodo returns float for Series.min/max. TODO: fix min/max
     check_func(impl3, (df,), sort_output=True, check_dtype=False)
+
+
 #    check_func(impl4, (df,), sort_output=True)
 
 
@@ -1512,7 +1532,10 @@ def test_cummin_cummax_large_random_numpy():
     The agg(("cummin", "cummax")) is currently broken because of a bug in pandas.
     https://github.com/pandas-dev/pandas/issues/35490
     """
-    assert pd.__version__=='1.1.0', "revisit the agg((cummin, cummax)) at next pandas version"
+    assert (
+        pd.__version__ == "1.1.0"
+    ), "revisit the agg((cummin, cummax)) at next pandas version"
+
     def get_random_array(n, sizlen):
         elist = []
         for i in range(n):
@@ -1560,7 +1583,7 @@ def test_cummin_cummax_large_random_numpy():
     nb = 100
     df1 = pd.DataFrame({"A": get_random_array(nb, 10), "B": get_random_array(nb, 100)})
     # Need reset_index as none is set on input.
-#    check_func(impl1, (df1,), sort_output=True, reset_index=True)
+    #    check_func(impl1, (df1,), sort_output=True, reset_index=True)
     check_func(impl2, (df1,), sort_output=True, reset_index=True)
     check_func(impl3, (df1,), sort_output=True, reset_index=True)
     check_func(impl4, (df1,), sort_output=True, reset_index=True)
@@ -2252,10 +2275,12 @@ def test_std_one_col(test_df):
     This is due to a bug in pandas. See
     https://github.com/pandas-dev/pandas/issues/35516
     """
-    assert pd.__version__=='1.1.0', "revisit the df.groupby(A)[B].std() issue at next pandas version"
+    assert (
+        pd.__version__ == "1.1.0"
+    ), "revisit the df.groupby(A)[B].std() issue at next pandas version"
 
     def impl1(df):
-#        A = df.groupby("A")["B"].std()
+        #        A = df.groupby("A")["B"].std()
         A = df.groupby("A")["B"].var()
         return A
 

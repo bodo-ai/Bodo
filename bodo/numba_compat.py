@@ -837,8 +837,13 @@ def _compile_for_args(self, *args, **kws):  # pragma: no cover
         # Received request for compiler re-entry with the list of arguments
         # indicated by e.requested_args.
         # First, check if any of these args are already Literal-ized
+        # Bodo change:
+        # do not consider LiteralStrKeyDict a literal since its values are not consts
         already_lit_pos = [
-            i for i in e.requested_args if isinstance(args[i], types.Literal)
+            i
+            for i in e.requested_args
+            if isinstance(args[i], types.Literal)
+            and not isinstance(args[i], types.LiteralStrKeyDict)
         ]
         if already_lit_pos:
             # Abort compilation if any argument is already a Literal.

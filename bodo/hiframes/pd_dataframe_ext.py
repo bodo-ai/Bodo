@@ -1906,9 +1906,7 @@ class ConcatDummyTyper(AbstractTemplate):
             # TODO: support Index in append/concat
             ret_typ = objs.dtype.copy(index=RangeIndexType(types.none))
             if isinstance(ret_typ, DataFrameType):
-                ret_typ = ret_typ.copy(
-                    index=RangeIndexType(types.none)
-                )
+                ret_typ = ret_typ.copy(index=RangeIndexType(types.none))
             return signature(ret_typ, *args)
 
         if not isinstance(objs, types.BaseTuple):
