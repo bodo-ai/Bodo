@@ -29,7 +29,7 @@ phases:
       - cd Bodo
       - ./aws_scripts/git_env_var.sh
       - cd buildscripts/bodo-conda-recipe/
-      - conda-build . -c bodo.ai -c conda-forge --no-test
+      - conda-build . -c bodo.ai -c conda-forge -c numba --no-test
       
   post_build:
     commands:
