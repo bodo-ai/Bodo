@@ -26,7 +26,7 @@ Conda Build Bodo
     # export CHECK_LICENSE_EXPIRED=1
     # if binary should check license max cores
     # export CHECK_LICENSE_CORE_COUNT=1
-    conda-build . -c bodo.ai -c conda-forge --no-test
+    conda-build . -c bodo.ai -c conda-forge -c numba --no-test
 
 Open a new terminal window (replace yourContainerID :code:`docker container ls`
 and the name of `.tar.bz2` File)::

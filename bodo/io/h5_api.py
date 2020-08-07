@@ -366,6 +366,9 @@ class H5ReadType(AbstractTemplate):
         return signature(ret_typ, *args)
 
 
+H5ReadType._no_unliteral = True
+
+
 _h5size = types.ExternalFunction("h5_size", types.int64(h5dataset_type, types.int32))
 
 

@@ -43,7 +43,13 @@ from bodo.hiframes.split_impl import (
     string_array_split_view_type,
     box_str_arr_split_view,
 )
-from bodo.utils.typing import BodoWarning, BodoError, to_nullable_type
+from bodo.utils.typing import (
+    BodoWarning,
+    BodoError,
+    to_nullable_type,
+    is_overload_constant_int,
+    get_overload_const_int,
+)
 
 from bodo.libs import hstr_ext
 from llvmlite import ir as lir
@@ -232,15 +238,16 @@ def box_dataframe(typ, val, c):
 
 @intrinsic
 def unbox_dataframe_column(typingctx, df, i=None):
+    assert isinstance(df, DataFrameType) and is_overload_constant_int(i)
+
     def codegen(context, builder, sig, args):
         pyapi = context.get_python_api(builder)
         c = numba.core.pythonapi._UnboxContext(context, builder, pyapi)
         gil_state = pyapi.gil_ensure()  # acquire GIL
 
         df_typ = sig.args[0]
-        col_ind = sig.args[1].literal_value
+        col_ind = get_overload_const_int(sig.args[1])
         data_typ = df_typ.data[col_ind]
-        columns_typ = numba.typeof(df_typ.columns)
         # TODO: refcounts?
 
         dataframe = cgutils.create_struct_proxy(sig.args[0])(

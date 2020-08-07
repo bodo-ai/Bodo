@@ -1540,7 +1540,7 @@ def box_numeric_index(typ, val, c):
 def init_numeric_index(typingctx, data, name=None):
     """Create NumericIndex object
     """
-    name = types.none if name is None else name
+    name = types.none if is_overload_none(name) else name
 
     def codegen(context, builder, signature, args):
         assert len(args) == 2

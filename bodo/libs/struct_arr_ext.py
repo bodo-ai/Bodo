@@ -938,7 +938,7 @@ def is_field_value_null(s, field_name):  # pragma: no cover
     pass
 
 
-@overload(is_field_value_null)
+@overload(is_field_value_null, no_unliteral=True)
 def overload_is_field_value_null(s, field_name):
     """return True if struct field is NA
     """

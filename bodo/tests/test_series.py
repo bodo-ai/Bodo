@@ -1213,7 +1213,7 @@ def test_series_unary_ufunc_np_call(memory_leak_check):
 
 @pytest.mark.slow
 @pytest.mark.parametrize(
-    "ufunc", [f for f in numba.np.ufunc_db.get_ufuncs() if f.nin == 2]
+    "ufunc", [f for f in numba.np.ufunc_db.get_ufuncs() if f.nin == 2 and f.nout == 1]
 )
 def test_series_binary_ufunc(ufunc, memory_leak_check):
     def test_impl(S1, S2):

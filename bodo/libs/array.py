@@ -177,7 +177,11 @@ def array_to_info(typingctx, arr_type_t):
                 # TODO: add Struct, Categorical, String
                 elif isinstance(
                     arr_typ, (IntegerArrayType, DecimalArrayType, types.Array)
-                ) or arr_typ in (boolean_array, datetime_date_array_type, string_array_type):
+                ) or arr_typ in (
+                    boolean_array,
+                    datetime_date_array_type,
+                    string_array_type,
+                ):
                     lengths = cgutils.pack_array(builder, [length])
                 else:
                     raise RuntimeError("array_to_info: unsupported type for subarray")
@@ -254,9 +258,18 @@ def array_to_info(typingctx, arr_type_t):
                     buffers = cgutils.pack_array(builder, [null_bitmap_ptr, data_ptr])
                 elif arr_typ == string_array_type:
                     payload = _get_string_arr_payload(context, builder, arr)
-                    buffers = cgutils.pack_array(builder, [builder.bitcast(payload.offsets, lir.IntType(8).as_pointer()),
-                                                           builder.bitcast(payload.null_bitmap, lir.IntType(8).as_pointer()),
-                                                           builder.bitcast(payload.data, lir.IntType(8).as_pointer())])
+                    buffers = cgutils.pack_array(
+                        builder,
+                        [
+                            builder.bitcast(
+                                payload.offsets, lir.IntType(8).as_pointer()
+                            ),
+                            builder.bitcast(
+                                payload.null_bitmap, lir.IntType(8).as_pointer()
+                            ),
+                            builder.bitcast(payload.data, lir.IntType(8).as_pointer()),
+                        ],
+                    )
                 elif isinstance(arr_typ, types.Array):
                     arr = context.make_array(arr_typ)(context, builder, arr)
                     data_ptr = builder.bitcast(arr.data, lir.IntType(8).as_pointer())
@@ -354,7 +367,10 @@ def array_to_info(typingctx, arr_type_t):
         is_categorical = False
         if isinstance(arr_type, CategoricalArray):
             num_categories = context.compile_internal(
-                builder, lambda a: len(a.dtype.categories), types.intp(arr_type), [in_arr]
+                builder,
+                lambda a: len(a.dtype.categories),
+                types.intp(arr_type),
+                [in_arr],
             )
             in_arr = cgutils.create_struct_proxy(arr_type)(
                 context, builder, in_arr

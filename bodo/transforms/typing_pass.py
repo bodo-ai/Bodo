@@ -522,6 +522,12 @@ class TypingTransforms:
                 (6, "right_index"),
                 (10, "suffixes"),
             ],
+            # NOTE: this enables const replacement to avoid errors in
+            # test_excel1::test_impl2 caused by Numba 0.51 literals
+            # TODO: fix underlying issue in Numba
+            "read_excel": [
+                (3, "names"),
+            ],
         }
 
         if func_name in top_level_call_const_args:
@@ -701,7 +707,19 @@ class TypingTransforms:
         for (arg_no, arg_name) in func_args:
             var = get_call_expr_arg(func_name, rhs.args, kws, arg_no, arg_name, "")
             # skip if argument not specified or literal already
-            if var == "" or is_literal_type(self.typemap.get(var.name, None)):
+            if var == "":
+                continue
+            if is_literal_type(self.typemap.get(var.name, None)):
+                if var.name in self._updated_containers:
+                    raise BodoError(
+                        "{}(): argument '{}' requires a constant value but variable '{}' is updated inplace using '{}'\n{}\n".format(
+                            func_name,
+                            arg_name,
+                            var.name,
+                            self._updated_containers[var.name],
+                            rhs.loc.strformat(),
+                        )
+                    )
                 continue
             # get constant value for variable if possible.
             # Otherwise, just skip, assuming that the issue may be fixed later or

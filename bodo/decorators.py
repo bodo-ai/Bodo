@@ -136,6 +136,9 @@ def jit(signature_or_function=None, **options):
     options["parallel"] = {
         "comprehension": True,
         "setitem": False,  # FIXME: support parallel setitem
+        # setting the new inplace_binop option to False until it is tested and handled
+        # TODO: evaluate and enable
+        "inplace_binop": False,
         "reduction": True,
         "numpy": True,
         "stencil": True,

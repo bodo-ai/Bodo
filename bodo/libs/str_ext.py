@@ -244,26 +244,10 @@ class StrConstInfer(AbstractTemplate):
         assert not kws
         assert len(args) == 1
         assert args[0] in [
-            types.int32,
-            types.int64,
             types.float32,
             types.float64,
-            string_type,
         ]
         return signature(string_type, *args)
-
-
-@overload(str, no_unliteral=True)
-def overload_str(val):
-    if val in (
-        types.int8,
-        types.int16,
-        types.uint8,
-        types.uint16,
-        types.uint32,
-        types.uint64,
-    ):
-        return lambda val: str(np.int64(val))
 
 
 ll.add_symbol("init_string_const", hstr_ext.init_string_const)
@@ -271,8 +255,6 @@ ll.add_symbol("get_c_str", hstr_ext.get_c_str)
 ll.add_symbol("str_to_int64", hstr_ext.str_to_int64)
 ll.add_symbol("str_to_float64", hstr_ext.str_to_float64)
 ll.add_symbol("get_str_len", hstr_ext.get_str_len)
-ll.add_symbol("str_from_int32", hstr_ext.str_from_int32)
-ll.add_symbol("str_from_int64", hstr_ext.str_from_int64)
 ll.add_symbol("str_from_float32", hstr_ext.str_from_float32)
 ll.add_symbol("str_from_float64", hstr_ext.str_from_float64)
 
@@ -446,11 +428,9 @@ ArrayAnalysis._analyze_op_call_bodo_libs_str_ext_alloc_random_access_string_arra
 )
 
 
-@lower_builtin(str, types.Any)
+@lower_builtin(str, types.Float)
 def string_from_impl(context, builder, sig, args):
     in_typ = sig.args[0]
-    if in_typ == string_type:
-        return args[0]
     ll_in_typ = context.get_value_type(sig.args[0])
     fnty = lir.FunctionType(lir.IntType(8).as_pointer(), [ll_in_typ])
     fn = builder.module.get_or_insert_function(fnty, name="str_from_" + str(in_typ))

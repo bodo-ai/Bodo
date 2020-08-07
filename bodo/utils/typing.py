@@ -136,12 +136,26 @@ def is_overload_constant_str(val):
 
 
 def is_overload_constant_list(val):
+    """return True if 'val' is a constant list in overload. Currently considers tuples
+    as well since tuples and lists are interchangable in most Pandas APIs
+    (TODO: revisit).
+    """
     return (
-        isinstance(val, types.BaseTuple)
-        and all(isinstance(t, types.Literal) for t in val.types)
-        # avoid const dict values stored as const tuple
-        and (not val.types or val.types[0] != types.StringLiteral(CONST_DICT_SENTINEL))
-    ) or (isinstance(val, bodo.utils.typing.ListLiteral))
+        isinstance(val, (list, tuple))
+        or (isinstance(val, types.Omitted) and isinstance(val.value, tuple))
+        or is_initial_value_list_type(val)
+        or isinstance(val, types.LiteralList)
+        or isinstance(val, bodo.utils.typing.ListLiteral)
+        or (
+            isinstance(val, types.BaseTuple)
+            and all(is_literal_type(t) for t in val.types)
+            # avoid const dict values stored as const tuple
+            and (
+                not val.types
+                or val.types[0] != types.StringLiteral(CONST_DICT_SENTINEL)
+            )
+        )
+    )
 
 
 def is_overload_constant_tuple(val):
@@ -150,13 +164,49 @@ def is_overload_constant_tuple(val):
     )
 
 
+def is_initial_value_type(t):
+    """return True if 't' is a dict/list container with initial constant values
+    """
+    if not isinstance(t, types.InitialValue) or t.initial_value is None:
+        return False
+    vals = t.initial_value
+    if isinstance(vals, dict):
+        vals = vals.values()
+    # Numba 0.51 assigns unkown or Poison to values sometimes
+    # see test_groupby_agg_const_dict::impl16
+    return not any(
+        isinstance(v, (types.Poison, numba.core.interpreter._UNKNOWN_VALUE))
+        for v in vals
+    )
+
+
+def is_initial_value_list_type(t):
+    """return True if 't' is a list with initial constant values
+    """
+    return isinstance(t, types.List) and is_initial_value_type(t)
+
+
+def is_initial_value_dict_type(t):
+    """return True if 't' is a dict with initial constant values
+    """
+    return isinstance(t, types.DictType) and is_initial_value_type(t)
+
+
 def is_overload_constant_dict(val):
     """const dict values are stored as a const tuple with a sentinel
     """
+
     return (
-        isinstance(val, types.BaseTuple)
-        and val.types
-        and val.types[0] == types.StringLiteral(CONST_DICT_SENTINEL)
+        (
+            isinstance(val, types.LiteralStrKeyDict)
+            and all(is_literal_type(v) for v in val.types)
+        )
+        or is_initial_value_dict_type(val)
+        or (
+            isinstance(val, types.BaseTuple)
+            and val.types
+            and val.types[0] == types.StringLiteral(CONST_DICT_SENTINEL)
+        )
     )
 
 
@@ -297,11 +347,22 @@ def get_overload_const_tuple(val):
 def get_overload_constant_dict(val):
     """get constant dict values from literal type (stored as const tuple)
     """
-    assert (
+    # LiteralStrKeyDict with all const values, e.g. {"A": ["B"]}
+    # see test_groupby_agg_const_dict::impl4
+    if isinstance(val, types.LiteralStrKeyDict):
+        return {
+            get_literal_value(k): get_literal_value(v)
+            for k, v in val.literal_value.items()
+        }
+    assert is_initial_value_dict_type(val) or (
         isinstance(val, types.BaseTuple)
         and val.types
         and val.types[0] == types.StringLiteral(CONST_DICT_SENTINEL)
-    )
+    ), "invalid const dict"
+    if isinstance(val, types.DictType):
+        assert val.initial_value is not None, "invalid dict initial value"
+        return val.initial_value
+
     # get values excluding sentinel
     items = [get_overload_const(v) for v in val.types[1:]]
     # create dict and return
@@ -321,6 +382,14 @@ def get_overload_const_list(val):
     """returns a constant list from type 'val', which could be a single value
     literal, a constant list or a constant tuple.
     """
+    if isinstance(val, (list, tuple)):
+        return val
+    if isinstance(val, types.Omitted) and isinstance(val.value, tuple):
+        return val.value
+    if is_initial_value_list_type(val):
+        return val.initial_value
+    if isinstance(val, types.LiteralList):
+        return [get_literal_value(v) for v in val.literal_value]
     if isinstance(val, bodo.utils.typing.ListLiteral):
         return val.literal_value
     if isinstance(val, types.Omitted):
@@ -328,9 +397,7 @@ def get_overload_const_list(val):
     # literal case
     if isinstance(val, types.Literal):
         return [val.literal_value]
-    if isinstance(val, types.BaseTuple) and all(
-        isinstance(t, types.Literal) for t in val.types
-    ):
+    if isinstance(val, types.BaseTuple) and all(is_literal_type(t) for t in val.types):
         return tuple(t.literal_value for t in val.types)
 
 
@@ -625,16 +692,33 @@ def lower_to_const_tuple(context, builder, sig, args):
 
 def is_literal_type(t):
     return (
-        isinstance(t, (types.Literal, types.Omitted))
+        # LiteralStrKeyDict is not always a literal since its values are not necessarily
+        # constant
+        (
+            isinstance(t, (types.Literal, types.Omitted))
+            and not isinstance(t, types.LiteralStrKeyDict)
+        )
         or t == types.none  # None type is always literal since single value
         or isinstance(t, types.Dispatcher)
+        # LiteralStrKeyDict is a BaseTuple in Numba 0.51 also
         or (isinstance(t, types.BaseTuple) and all(is_literal_type(v) for v in t.types))
+        # List/Dict types preserve const initial values in Numba 0.51
+        or is_initial_value_type(t)
     )
 
 
 def get_literal_value(t):
     assert is_literal_type(t)
     if isinstance(t, types.Literal):
+        # LiteralStrKeyDict with all const values, e.g. {"A": ["B"]}
+        if isinstance(t, types.LiteralStrKeyDict):
+            return {
+                get_literal_value(k): get_literal_value(v)
+                for k, v in t.literal_value.items()
+            }
+        # types.LiteralList stores values as Literal types so needs get_literal_value
+        if isinstance(t, types.LiteralList):
+            return [get_literal_value(v) for v in t.literal_value]
         return t.literal_value
     if isinstance(t, types.Omitted):
         return t.value
@@ -642,6 +726,8 @@ def get_literal_value(t):
         return tuple(get_literal_value(v) for v in t.types)
     if isinstance(t, types.Dispatcher):
         return t
+    if isinstance(t, types.InitialValue):
+        return t.initial_value
 
 
 def can_literalize_type(t):
