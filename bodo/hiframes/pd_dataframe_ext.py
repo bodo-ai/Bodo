@@ -161,6 +161,13 @@ class DataFrameType(types.ArrayCompatible):  # TODO: IterableType over column na
             if new_index is not None and None not in data:  # pragma: no cover
                 return DataFrameType(data, new_index, self.columns)
 
+        # convert empty dataframe to any other dataframe to support important common
+        # cases (see test_append_empty_df), even though it's not fully accurate.
+        # TODO: detect and handle wrong corner cases (or raise warning) in compiler
+        # passes
+        if isinstance(other, DataFrameType) and len(self.data) == 0:
+            return other
+
     def can_convert_to(self, typingctx, other):
         return
         # overload resolution tries to convert for even get_dataframe_data()
@@ -844,6 +851,44 @@ def lower_constant_dataframe(context, builder, df_type, pyval):
     )
 
     return dataframe_val
+
+
+@lower_cast(DataFrameType, DataFrameType)
+def cast_empty_df(context, builder, fromty, toty, val):
+    """cast empty dataframe to another dataframe
+    (common pattern, see test_append_empty_df)
+    """
+    # generate empty dataframe with target type using empty arrays for data columns and
+    # index
+    extra_globals = {}
+    # TODO: support MultiIndex
+    if isinstance(toty.index, RangeIndexType):
+        index = "bodo.hiframes.pd_index_ext.init_range_index(0, 0, 1, None)"
+    else:
+        index_arr_type = get_index_data_arr_types(toty.index)[0]
+        n_extra_sizes = bodo.utils.transform.get_type_alloc_counts(index_arr_type) - 1
+        extra_sizes = ", ".join("0" for _ in range(n_extra_sizes))
+        index = "bodo.utils.conversion.index_from_array(bodo.utils.utils.alloc_type(0, index_arr_type, ({}{})))".format(
+            extra_sizes, ", " if n_extra_sizes == 1 else ""
+        )
+        extra_globals["index_arr_type"] = index_arr_type
+
+    data_args = []
+    for i, arr_typ in enumerate(toty.data):
+        n_extra_sizes = bodo.utils.transform.get_type_alloc_counts(arr_typ) - 1
+        extra_sizes = ", ".join("0" for _ in range(n_extra_sizes))
+        empty_arr = "bodo.utils.utils.alloc_type(0, arr_type{}, ({}{}))".format(
+            i, extra_sizes, ", " if n_extra_sizes == 1 else ""
+        )
+        data_args.append(empty_arr)
+        extra_globals[f"arr_type{i}"] = arr_typ
+    data_args = ", ".join(data_args)
+
+    func_text = "def impl():\n"
+    gen_func = bodo.hiframes.dataframe_impl._gen_init_df(
+        func_text, toty.columns, data_args, index, extra_globals
+    )
+    return context.compile_internal(builder, gen_func, toty(), [])
 
 
 @overload(pd.DataFrame, inline="always", no_unliteral=True)
