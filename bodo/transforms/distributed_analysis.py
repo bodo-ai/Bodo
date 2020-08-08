@@ -3,6 +3,7 @@
 analyzes the IR to decide parallelism of arrays and parfors
 for distributed transformation.
 """
+import operator
 from collections import namedtuple, defaultdict
 import copy
 import warnings
@@ -26,8 +27,12 @@ from numba.core.ir_utils import (
     find_const,
     GuardException,
 )
-from numba.parfors.parfor import Parfor
-from numba.parfors.parfor import wrap_parfor_blocks, unwrap_parfor_blocks
+from numba.parfors.parfor import (
+    Parfor,
+    get_parfor_reductions,
+    wrap_parfor_blocks,
+    unwrap_parfor_blocks,
+)
 
 import bodo
 import bodo.io
@@ -46,6 +51,7 @@ from bodo.utils.utils import (
     is_distributable_tuple_typ,
     is_static_getsetitem,
     get_getsetitem_index_var,
+    is_call_assign,
 )
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.hiframes.pd_multi_index_ext import MultiIndexType
@@ -53,6 +59,8 @@ from bodo.hiframes.pd_categorical_ext import CategoricalArray
 from bodo.utils.transform import get_stmt_defs, get_call_expr_arg
 from bodo.utils.typing import BodoWarning, BodoError, is_overload_false
 from bodo.libs.bool_arr_ext import boolean_array
+
+from bodo.libs.distributed_api import Reduce_Type
 
 
 class Distribution(Enum):
@@ -73,7 +81,9 @@ class Distribution(Enum):
         return name_map[self.name]
 
 
-_dist_analysis_result = namedtuple("dist_analysis_result", "array_dists,parfor_dists")
+_dist_analysis_result = namedtuple(
+    "dist_analysis_result", "array_dists,parfor_dists,concat_reduce_varnames"
+)
 
 
 distributed_analysis_extensions = {}
@@ -196,6 +206,9 @@ class DistributedAnalysis:
         self.parfor_locs = {}
         self.array_locs = {}
         self.diag_info = []
+        # keep track of concat reduce vars to handle in concat analysis and
+        # transaforms properly
+        self._concat_reduce_vars = set()
 
     def _init_run(self):
         self.func_ir._definitions = build_definitions(self.func_ir.blocks)
@@ -203,6 +216,7 @@ class DistributedAnalysis:
         self._T_arrs = set()
         self.second_pass = False
         self.in_parallel_parfor = -1
+        self._concat_reduce_vars = set()
 
     def run(self):
         self._init_run()
@@ -244,7 +258,9 @@ class DistributedAnalysis:
             self.diag_info,
             self.func_ir,
         )
-        return _dist_analysis_result(array_dists, parfor_dists)
+        return _dist_analysis_result(
+            array_dists, parfor_dists, self._concat_reduce_vars
+        )
 
     def _run_analysis(self, blocks, topo_order, array_dists, parfor_dists):
         save_array_dists = {}
@@ -448,6 +464,12 @@ class DistributedAnalysis:
             self._meet_array_dists(lhs, arr, array_dists)
 
     def _analyze_parfor(self, parfor, array_dists, parfor_dists):
+        # get reduction info for parfor if not already available.
+        # can compute & save it since parfor doesn't change at this compiler stage
+        if not "redvars" in parfor._kws:
+            parfor.redvars, parfor.reddict = get_parfor_reductions(
+                self.func_ir, parfor, parfor.params, self.calltypes
+            )
         if parfor.id not in parfor_dists:
             parfor_dists[parfor.id] = Distribution.OneD
             # save parfor loc for diagnostics
@@ -505,6 +527,10 @@ class DistributedAnalysis:
         for arr in parfor_arrs:
             if arr in array_dists:
                 out_dist = Distribution(min(out_dist.value, array_dists[arr].value))
+
+        # analyze reductions like concat that can affect parfor distribution
+        out_dist = self._get_parfor_reduce_dists(parfor, out_dist, array_dists)
+
         parfor_dists[parfor.id] = out_dist
         for arr in parfor_arrs:
             if arr in array_dists:
@@ -527,6 +553,38 @@ class DistributedAnalysis:
         if self.in_parallel_parfor == parfor.id:
             self.in_parallel_parfor = -1
         return
+
+    def _get_parfor_reduce_dists(self, parfor, out_dist, array_dists):
+        """analyze parfor reductions like concat that can affect parfor distribution
+        TODO: support other similar reductions?
+        """
+
+        for reduce_varname, (_init_val, reduce_nodes, _op) in parfor.reddict.items():
+            reduce_op = guard(
+                get_reduce_op, reduce_varname, reduce_nodes, self.func_ir, self.typemap
+            )
+            if reduce_op == Reduce_Type.Concat:
+                # if output array is replicated, parfor should be replicated too
+                if is_REP(array_dists[reduce_varname]):
+                    out_dist = Distribution.REP
+                else:
+                    array_dists[reduce_varname] = Distribution.OneD_Var
+                # if pafor is replicated, output array is replicated
+                if is_REP(out_dist):
+                    array_dists[reduce_varname] = Distribution.REP
+                # keep track of concat reduce vars to handle in concat analysis and
+                # transaforms properly
+                for inst in reduce_nodes:
+                    if is_call_assign(inst) and guard(
+                        find_callname, self.func_ir, inst.value, self.typemap
+                    ) == ("concat", "bodo.libs.array_kernels"):
+                        self._concat_reduce_vars.add(inst.target.name)
+                    if is_call_assign(inst) and guard(
+                        find_callname, self.func_ir, inst.value, self.typemap
+                    ) == ("init_range_index", "bodo.hiframes.pd_index_ext"):
+                        self._concat_reduce_vars.add(inst.target.name)
+
+        return out_dist
 
     def _analyze_call(self, lhs, rhs, func_var, args, kws, equiv_set, array_dists):
         """analyze array distributions in function calls
@@ -1420,6 +1478,11 @@ class DistributedAnalysis:
         tup_def = guard(get_definition, self.func_ir, args[0])
         assert isinstance(tup_def, ir.Expr) and tup_def.op == "build_tuple"
         in_arrs = tup_def.items
+
+        # concat reduction variables are handled in parfor analysis
+        if lhs in self._concat_reduce_vars:
+            return
+
         # input arrays have same distribution
         in_dist = Distribution.OneD
         for v in in_arrs:
@@ -1911,6 +1974,81 @@ class DistributedAnalysis:
                     new_body.append(inst)
 
             block.body = new_body
+
+
+def get_reduce_op(reduce_varname, reduce_nodes, func_ir, typemap):
+    """find reduction operation in parfor reduction IR nodes.
+    """
+    if guard(_is_concat_reduce, reduce_varname, reduce_nodes, func_ir, typemap):
+        return Reduce_Type.Concat
+
+    require(len(reduce_nodes) == 2)
+    require(isinstance(reduce_nodes[0], ir.Assign))
+    require(isinstance(reduce_nodes[1], ir.Assign))
+    require(isinstance(reduce_nodes[0].value, ir.Expr))
+    require(isinstance(reduce_nodes[1].value, ir.Var))
+    rhs = reduce_nodes[0].value
+
+    if rhs.op == "inplace_binop":
+        if rhs.fn in ("+=", operator.iadd):
+            return Reduce_Type.Sum
+        if rhs.fn in ("|=", operator.ior):
+            return Reduce_Type.Or
+        if rhs.fn in ("*=", operator.imul):
+            return Reduce_Type.Prod
+
+    if rhs.op == "call":
+        func = find_callname(func_ir, rhs, typemap)
+        if func == ("min", "builtins"):
+            if isinstance(
+                typemap[rhs.args[0].name], numba.core.typing.builtins.IndexValueType,
+            ):
+                return Reduce_Type.Argmin
+            return Reduce_Type.Min
+        if func == ("max", "builtins"):
+            if isinstance(
+                typemap[rhs.args[0].name], numba.core.typing.builtins.IndexValueType,
+            ):
+                return Reduce_Type.Argmax
+            return Reduce_Type.Max
+
+    raise GuardException  # pragma: no cover
+
+
+def _is_concat_reduce(reduce_varname, reduce_nodes, func_ir, typemap):
+    """return True if reduction nodes match concat pattern
+    """
+    # assuming this structure:
+    # A = concat((A, B))
+    # I = init_range_index()
+    # $df12 = init_dataframe((A,), I, ("A",))
+    # df = $df12
+    # see test_concat_reduction
+
+    # df = $df12
+    require(
+        isinstance(reduce_nodes[-1], ir.Assign)
+        and reduce_nodes[-1].target.name == reduce_varname
+        and isinstance(reduce_nodes[-1].value, ir.Var)
+    )
+    # $df212 = call()
+    require(
+        is_call_assign(reduce_nodes[-2])
+        and reduce_nodes[-2].target.name == reduce_nodes[-1].value.name
+    )
+    reduce_func_call = reduce_nodes[-2].value
+    fdef = find_callname(func_ir, reduce_nodes[-2].value)
+    if fdef == ("init_dataframe", "bodo.hiframes.pd_dataframe_ext"):
+        arg_def = get_definition(func_ir, reduce_func_call.args[0])
+        require(is_expr(arg_def, "build_tuple"))
+        require(len(arg_def.items) > 0)
+        reduce_func_call = get_definition(func_ir, arg_def.items[0])
+
+    require(
+        find_callname(func_ir, reduce_func_call)
+        == ("concat", "bodo.libs.array_kernels")
+    )
+    return True
 
 
 def _get_pair_first_container(func_ir, rhs):
