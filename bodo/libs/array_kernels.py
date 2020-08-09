@@ -59,6 +59,7 @@ from bodo.libs.array import (
 )
 from bodo.utils.typing import (
     BodoError,
+    raise_bodo_error,
     get_overload_const_list,
     get_overload_const_str,
     is_overload_none,
@@ -1007,7 +1008,7 @@ def concat_overload(arr_list):
 
     for typ in arr_list:
         if not isinstance(typ, types.Array):
-            raise BodoError(
+            raise_bodo_error(
                 "concat supports only numerical and string arrays, got {}".format(typ)
             )
     # numerical input

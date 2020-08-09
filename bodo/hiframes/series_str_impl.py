@@ -50,6 +50,7 @@ from bodo.hiframes.split_impl import (
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.utils.typing import (
     BodoError,
+    raise_bodo_error,
     is_overload_none,
     get_overload_const_list,
     is_overload_true,
@@ -105,7 +106,7 @@ def str_arg_check(func_name, arg_name, arg):
     when the argument is NOT a string(UnicodeType) or const string
     """
     if not isinstance(arg, types.UnicodeType) and not is_overload_constant_str(arg):
-        raise BodoError(
+        raise_bodo_error(
             "Series.str.{}(): parameter '{}' expected a string object, not {}".format(
                 func_name, arg_name, arg
             )
@@ -176,7 +177,7 @@ def overload_series_str(S):
         S.data in (string_array_type, string_array_split_view_type)
         or isinstance(S.data, ArrayItemArrayType)
     ):
-        raise BodoError("Series.str: input should be a series of string or arrays")
+        raise_bodo_error("Series.str: input should be a series of string or arrays")
     return lambda S: bodo.hiframes.series_str_impl.init_series_str_method(S)
 
 
@@ -247,7 +248,7 @@ def overload_str_method_get(S_str, i):
     if (
         arr_typ != string_array_split_view_type and arr_typ != string_array_type
     ) and not isinstance(arr_typ, ArrayItemArrayType):
-        raise BodoError(
+        raise_bodo_error(
             "Series.str.get(): only supports input type of Series(array(item)) "
             "and Series(str)"
         )
@@ -340,7 +341,7 @@ def overload_str_method_join(S_str, sep):
         and arr_typ != ArrayItemArrayType(string_array_type)
         and arr_typ != string_array_type
     ):
-        raise BodoError(
+        raise_bodo_error(
             "Series.str.join(): only supports input type of Series(list(str)) "
             "and Series(str)"
         )
