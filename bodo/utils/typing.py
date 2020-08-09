@@ -468,6 +468,10 @@ def parse_dtype(dtype):
     if isinstance(dtype, types.DTypeSpec):
         return dtype.dtype
 
+    # input is array dtype already
+    if isinstance(dtype, types.Number) or dtype == bodo.string_type:
+        return dtype
+
     try:
         d_str = get_overload_const_str(dtype)
         if d_str.startswith("Int") or d_str.startswith("UInt"):
