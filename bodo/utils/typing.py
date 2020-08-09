@@ -828,6 +828,16 @@ def is_iterable_type(t):
     )
 
 
+def find_common_np_dtype(arr_types):
+    """finds common numpy dtype of array types using np.find_common_type
+    """
+    return numba.np.numpy_support.from_dtype(
+        np.find_common_type(
+            [numba.np.numpy_support.as_dtype(t.dtype) for t in arr_types], []
+        )
+    )
+
+
 # dummy empty itertools implementation to avoid typing errors for series str
 # flatten case
 @overload(itertools.chain, no_unliteral=True)
