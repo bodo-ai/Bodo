@@ -1914,6 +1914,23 @@ def test_df_drop_inplace_instability_check():
         bodo.jit(test_impl)([2, 3])
 
 
+def test_df_range_index_unify():
+    """Test dataframe type unification when RangeIndex should be converted to
+    IntegerIndex
+    """
+
+    def test_impl(df, df2):
+        if len(df2) > 0:
+            df = df2
+        return df
+
+    df = pd.DataFrame({"A": [1, -2, 3, 5, 11, 4, -1]})
+    df2 = pd.DataFrame(
+        {"A": [0, 4, 11, 2, -2, -3, 9]}, index=[11, -20, 31, 52, 1, 41, -11]
+    )
+    check_func(test_impl, (df, df2), sort_output=True, reset_index=True)
+
+
 ################################## indexing  #################################
 
 

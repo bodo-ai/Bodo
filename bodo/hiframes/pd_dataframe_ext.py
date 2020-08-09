@@ -854,10 +854,39 @@ def lower_constant_dataframe(context, builder, df_type, pyval):
 
 
 @lower_cast(DataFrameType, DataFrameType)
-def cast_empty_df(context, builder, fromty, toty, val):
-    """cast empty dataframe to another dataframe
+def cast_df_to_df(context, builder, fromty, toty, val):
+    """
+    Support dataframe casting cases:
+    1) convert RangeIndex to Int64Index
+    2) cast empty dataframe to another dataframe
     (common pattern, see test_append_empty_df)
     """
+    # RangeIndex to Int64Index case
+    if (
+        len(fromty.data) == len(toty.data)
+        and isinstance(fromty.index, RangeIndexType)
+        and isinstance(toty.index, NumericIndexType)
+    ):
+        dataframe_payload = get_dataframe_payload(context, builder, fromty, val)
+        new_index = context.cast(
+            builder, dataframe_payload.index, fromty.index, toty.index
+        )
+        new_data = dataframe_payload.data
+        context.nrt.incref(builder, types.BaseTuple.from_types(fromty.data), new_data)
+
+        return construct_dataframe(
+            context,
+            builder,
+            toty,
+            new_data,
+            new_index,
+            dataframe_payload.unboxed,
+            dataframe_payload.parent,
+        )
+
+    # empty dataframe case
+    assert len(fromty.data) == 0
+
     # generate empty dataframe with target type using empty arrays for data columns and
     # index
     extra_globals = {}
