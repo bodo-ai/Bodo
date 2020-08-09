@@ -982,14 +982,39 @@ def concat_overload(arr_list):
 
         return impl_int_arr_list
 
-    if isinstance(arr_list, types.UniTuple) and arr_list.dtype == boolean_array:
-        # reusing int arr concat functions
-        # TODO: test
-        return lambda arr_list: bodo.libs.bool_arr_ext.init_bool_array(
-            np.concatenate(bodo.libs.int_arr_ext.get_int_arr_data_tup(arr_list)),
-            bodo.libs.int_arr_ext.concat_bitmap_tup(arr_list),
+    # Boolean array input, or mix of Numpy and nullable boolean
+    if (
+        isinstance(arr_list, types.UniTuple)
+        and arr_list.dtype == boolean_array
+        or (
+            isinstance(arr_list, types.BaseTuple)
+            and all(t.dtype == types.bool_ for t in arr_list.types)
+            and any(t == boolean_array for t in arr_list.types)
         )
+    ):
+        # TODO: refactor to avoid duplication with integer array
+        def impl_bool_arr_list(arr_list):
+            arr_list_converted = convert_to_nullable_tup(arr_list)
+            all_data = []
+            n_all = 0
+            for A in arr_list_converted:
+                all_data.append(A._data)
+                n_all += len(A)
+            out_data = bodo.libs.array_kernels.concat(all_data)
+            n_bytes = (n_all + 7) >> 3
+            new_mask = np.empty(n_bytes, np.uint8)
+            curr_bit = 0
+            for A in arr_list_converted:
+                old_mask = A._null_bitmap
+                for j in range(len(A)):
+                    bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(old_mask, j)
+                    bodo.libs.int_arr_ext.set_bit_to_arr(new_mask, curr_bit, bit)
+                    curr_bit += 1
+            return bodo.libs.bool_arr_ext.init_bool_array(out_data, new_mask)
 
+        return impl_bool_arr_list
+
+    # categorical arrays
     if isinstance(arr_list, (types.UniTuple, types.List)) and isinstance(
         arr_list.dtype, CategoricalArray
     ):
@@ -1043,10 +1068,9 @@ def concat_overload(arr_list):
 
     for typ in arr_list:
         if not isinstance(typ, types.Array):
-            raise_bodo_error(
-                "concat supports only numerical and string arrays, got {}".format(typ)
-            )
-    # numerical input
+            raise_bodo_error("concat of array types {} not supported".format(arr_list))
+
+    # numpy array input
     return lambda arr_list: np.concatenate(arr_list)
 
 
@@ -1079,24 +1103,29 @@ def convert_to_nullable_tup(arr_tup):
 
 @overload(convert_to_nullable_tup, no_unliteral=True)
 def overload_convert_to_nullable_tup(arr_tup):
-    """converts a tuple of integer arrays to nullable integer arrays with common dtype
+    """converts a tuple of integer/bool arrays to nullable integer/bool arrays with
+    common dtype
     """
     # no need for conversion if already nullable int
     if isinstance(arr_tup, (types.UniTuple, types.List)) and isinstance(
-        arr_tup.dtype, IntegerArrayType
+        arr_tup.dtype, (IntegerArrayType, BooleanArrayType)
     ):
         return lambda arr_tup: arr_tup  # pragma: no cover
 
     assert isinstance(arr_tup, types.BaseTuple)
     count = len(arr_tup.types)
     comm_dtype = find_common_np_dtype(arr_tup.types)
-    out_dtype = bodo.libs.int_arr_ext.IntDtype(comm_dtype)
+    out_dtype = None
+    astype_str = ""
+    if isinstance(comm_dtype, types.Integer):
+        out_dtype = bodo.libs.int_arr_ext.IntDtype(comm_dtype)
+        astype_str = ".astype(out_dtype, False)"
 
     func_text = "def f(arr_tup):\n"
     func_text += "  return ({}{})\n".format(
         ",".join(
-            "bodo.utils.conversion.coerce_to_array(arr_tup[{}], use_nullable_array=True).astype(out_dtype, False)".format(
-                i
+            "bodo.utils.conversion.coerce_to_array(arr_tup[{}], use_nullable_array=True){}".format(
+                i, astype_str
             )
             for i in range(count)
         ),

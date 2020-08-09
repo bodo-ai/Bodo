@@ -264,16 +264,29 @@ def test_dataframe_concat(series_val, memory_leak_check):
 
 
 def test_series_concat_convert_to_nullable(memory_leak_check):
-    """make sure numpy integer arrays are converted to nullable integer arrays in
+    """make sure numpy integer/bool arrays are converted to nullable integer arrays in
     concatenation properly
     """
 
-    def f(S1, S2):
+    def impl1(S1, S2):
         return pd.concat([S1, S2])
 
+    # Integer case
     S1 = pd.Series([3, 2, 1, -4, None, 11, 21, 31, None] * 2, dtype="Int64")
     S2 = pd.Series(np.arange(11) * 2, dtype="int32")
-    check_func(f, (S1, S2), sort_output=True, reset_index=True)
+    check_func(impl1, (S1, S2), sort_output=True, reset_index=True)
+
+    # calling pd.Series inside the function to force values to be Numpy bool since Bodo
+    # assumes nullable for bool input arrays during unboxing by default
+    def impl2(S1, S2):
+        return pd.concat([S1, pd.Series(S2)])
+
+    # Boolean case
+    S1 = pd.Series(
+        [True, False, False, True, None, False, False, True, None] * 2, dtype="boolean"
+    )
+    S2 = pd.Series([True, False, False, True, True, False, False], dtype="bool").values
+    check_func(impl2, (S1, S2), sort_output=True, reset_index=True)
 
 
 # TODO: timedelta, period, tuple, etc.
