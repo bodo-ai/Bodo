@@ -574,15 +574,21 @@ class DistributedAnalysis:
                     array_dists[reduce_varname] = Distribution.REP
                 # keep track of concat reduce vars to handle in concat analysis and
                 # transaforms properly
+                concat_reduce_vars = set()
                 for inst in reduce_nodes:
                     if is_call_assign(inst) and guard(
                         find_callname, self.func_ir, inst.value, self.typemap
                     ) == ("concat", "bodo.libs.array_kernels"):
-                        self._concat_reduce_vars.add(inst.target.name)
+                        concat_reduce_vars.add(inst.target.name)
                     if is_call_assign(inst) and guard(
                         find_callname, self.func_ir, inst.value, self.typemap
                     ) == ("init_range_index", "bodo.hiframes.pd_index_ext"):
-                        self._concat_reduce_vars.add(inst.target.name)
+                        concat_reduce_vars.add(inst.target.name)
+                # add concat reduce vars only if it is a parallel reduction
+                if not is_REP(out_dist):
+                    self._concat_reduce_vars |= concat_reduce_vars
+                else:
+                    self._concat_reduce_vars -= concat_reduce_vars
 
         return out_dist
 
