@@ -153,7 +153,10 @@ class DataFrameType(types.ArrayCompatible):  # TODO: IterableType over column na
             and other.columns == self.columns
         ):
             new_index = self.index.unify(typingctx, other.index)
-            data = tuple(a.unify(typingctx, b) for a, b in zip(self.data, other.data))
+            data = tuple(
+                a.unify(typingctx, b) if a != b else a
+                for a, b in zip(self.data, other.data)
+            )
             # NOTE: unification is an extreme corner case probably, since arrays can
             # be unified only if just their layout or alignment is different.
             # That doesn't happen in df case since all arrays are 1D and C layout.
