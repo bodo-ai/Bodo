@@ -39,7 +39,6 @@ from numba.core.ir_utils import (
     rename_labels,
     simplify,
 )
-from numba.core.inline_closurecall import inline_closure_call
 from numba.parfors.parfor import (
     get_parfor_reductions,
     get_parfor_params,
@@ -261,6 +260,11 @@ class DistributedPass:
                     )
                 elif isinstance(inst, ir.Return):
                     out_nodes = self._gen_barrier() + [inst]
+                # avoid replicated prints, print on all PEs only when there is dist arg
+                elif isinstance(inst, ir.Print) and all(
+                    self._is_REP(v.name) for v in inst.args
+                ):
+                    out_nodes = self._run_print(inst)
 
                 if out_nodes is None:
                     out_nodes = [inst]
@@ -270,63 +274,6 @@ class DistributedPass:
                 new_body += out_nodes
 
             blocks[label].body = new_body
-
-        # replace prints of replicated values to run only on rank 0
-        # NOTE: inlining the 'if' instead of calling single_print() since calling a
-        # function with a print results in "missing environment" error of Numba when
-        # caching is enabled
-        # TODO: remove this when Numba is fixed
-        # see: https://github.com/numba/numba/issues/3555
-        work_list = list((l, blocks[l]) for l in reversed(topo_order))
-        while work_list:
-            label, block = work_list.pop()
-            new_body = []
-            replaced = False
-            for i, inst in enumerate(block.body):
-
-                # avoid replicated prints, print on all PEs only when there is dist arg
-                if isinstance(inst, ir.Print) and all(
-                    self._is_REP(v.name) for v in inst.args
-                ):
-                    rp_func = self._run_print(inst)
-                    # replace inst to a call with target args
-                    # as expected by inline_closure_call
-                    block.body[i] = ir.Assign(
-                        ir.Expr.call(
-                            ir.Var(block.scope, "dummy", inst.loc),
-                            rp_func.args,
-                            (),
-                            inst.loc,
-                        ),
-                        ir.Var(block.scope, mk_unique_var("print"), inst.loc),
-                        inst.loc,
-                    )
-                    block.body = new_body + block.body[i:]
-                    # use a dummy work_list and just add the last block to the actual
-                    # work_list since processing the print again results in infinite
-                    # loop
-                    dummy_work_list = []
-                    _, _ = inline_closure_call(
-                        self.func_ir,
-                        rp_func.glbls,
-                        block,
-                        len(new_body),
-                        rp_func.func,
-                        self.typingctx,
-                        rp_func.arg_types,
-                        self.typemap,
-                        self.calltypes,
-                        dummy_work_list,
-                    )
-                    # inline_closure_call() adds the last block to worklist first
-                    work_list.append(dummy_work_list[0])
-                    replaced = True
-                    break
-                else:
-                    new_body.append(inst)
-
-            if not replaced:
-                blocks[label].body = new_body
 
         return blocks
 
@@ -2345,13 +2292,12 @@ class DistributedPass:
             args.append(print_node.vararg)
 
         func_text = "def impl({}):\n".format(arg_names)
-        func_text += "  if bodo.get_rank() == 0:\n"
-        func_text += "      print({})\n".format(print_args)
+        func_text += "  bodo.libs.distributed_api.single_print({})\n".format(print_args)
         loc_vars = {}
         exec(func_text, {"bodo": bodo}, loc_vars)
         impl = loc_vars["impl"]
 
-        return replace_func(self, impl, args)
+        return compile_func_single_block(impl, args, None, self)
 
     def _get_dist_var_start_count(self, arr, equiv_set, avail_vars):
         nodes = []
