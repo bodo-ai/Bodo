@@ -6,7 +6,7 @@ Jupyter Notebook Setup
 To use Bodo with Jupyter Notebook, install ``jupyter`` and ``ipyparallel``
 in your Bodo Conda environment::
 
-    conda install jupyter ipyparallel -c conda-forge
+    conda install jupyter ipyparallel mpi4py -c conda-forge
 
 Create an MPI profile for IPython::
 
@@ -32,6 +32,12 @@ Now start a new notebook and run this code in a cell to setup the environment::
     c = ipp.Client(profile='mpi')
     view = c[:]
     view.activate()
+    view.block = True  # equivalent to running with %%px --block
+
+    # Set the working directory:
+    import os
+    view["cwd"] = os.getcwd()
+    %px cd $cwd
 
 This should complete without any errors. An error may appear if the cluster
 is not initialized yet (usually `NoEnginesRegistered`).
@@ -42,7 +48,7 @@ using `ipyparallel` hooks such as ``%%px`` magic
 and the work will be distributed
 across the engines. For example, run this code in a cell::
 
-    %%px --block
+    %%px
     import bodo
     import numpy as np
     import time
