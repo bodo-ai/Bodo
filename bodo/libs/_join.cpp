@@ -56,7 +56,7 @@ table_info* hash_join_table(table_info* in_table, int64_t n_key_t,
     //
     std::vector<array_info*> key_arrs_left = std::vector<array_info*>(
         in_table->columns.begin(), in_table->columns.begin() + n_key);
-    uint32_t seed = 0xb0d01288;
+    uint32_t seed = SEED_HASH_JOIN;
     uint32_t* hashes_left = hash_keys(key_arrs_left, seed);
 
     std::vector<array_info*> key_arrs_right = std::vector<array_info*>(

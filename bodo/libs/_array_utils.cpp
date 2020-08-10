@@ -4,6 +4,7 @@
 #include <string>
 #include "_decimal_ext.h"
 
+
 Bodo_CTypes::CTypeEnum arrow_to_bodo_type(arrow::Type::type type) {
     switch (type) {
         case arrow::Type::INT8:

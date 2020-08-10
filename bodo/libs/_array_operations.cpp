@@ -9,6 +9,10 @@
 #include "_shuffle.h"
 #include "gfx/timsort.hpp"
 
+//
+//   ARRAY ISIN
+//
+
 /**
  * Compute the boolean array on output corresponds to the "isin" function in
  * matlab. each group, writes the result to a new output table containing one
@@ -26,7 +30,7 @@ static void array_isin_kernel(array_info* out_arr, array_info* in_arr,
                              "array out_arr should be a boolean array");
         return;
     }
-    uint32_t seed = 0xb0d01d80;
+    uint32_t seed = SEED_HASH_CONTAINER;
 
     int64_t len_values = in_values->length;
     uint32_t* hashes_values = new uint32_t[len_values];
@@ -140,6 +144,10 @@ void array_isin(array_info* out_arr, array_info* in_arr, array_info* in_values,
     free_array(shuf_out_arr);
     delete[] hashes;
 }
+
+//
+//   SORT VALUES
+//
 
 table_info* sort_values_table_local(table_info* in_table, int64_t n_key_t,
                                     int64_t* vect_ascending, bool na_position) {
@@ -374,6 +382,89 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
     return ret_table;
 }
 
+//
+//   DROP DUPLICATES
+//
+
+/** This function is for dropping the non-null keys.
+ * It is used for drop_duplicates_nonnull_keys and
+ * then transitively by compute_categorical_index
+ *
+ * External function used are "RetrieveTable" and "TestEqual"
+ *
+ * @param in_table : the input table
+ * @param num_keys : the number of keys
+ * @return the table to be used.
+ */
+static table_info* drop_duplicates_nonnull_keys_inner(table_info* in_table, int64_t num_keys)
+{
+#undef DEBUG_DD
+#ifdef DEBUG_DD
+    std::cout << "drop_duplicates_nonnull_keys_inner : beginning\n";
+#endif
+    size_t n_rows = (size_t)in_table->nrows();
+    std::vector<array_info*> key_arrs(in_table->columns.begin(), in_table->columns.begin() + num_keys);
+    uint32_t seed = SEED_HASH_CONTAINER;
+    uint32_t* hashes = hash_keys(key_arrs, seed);
+#ifdef DEBUG_DD
+    std::cout << "drop_duplicates_nonnull_keys_inner : we have hashes\n";
+#endif
+    std::function<size_t(size_t)> hash_fct = [&](size_t const& iRow) -> size_t {
+        return size_t(hashes[iRow]);
+    };
+    std::function<bool(size_t, size_t)> equal_fct =
+        [&](size_t const& iRowA, size_t const& iRowB) -> bool {
+        size_t shift_A = 0, shift_B = 0;
+        bool test =
+            TestEqual(key_arrs, num_keys, shift_A, iRowA, shift_B, iRowB);
+        return test;
+    };
+    UNORD_MAP_CONTAINER<size_t, size_t, std::function<size_t(size_t)>,
+                  std::function<bool(size_t, size_t)>>
+        entSet({}, hash_fct, equal_fct);
+    //
+    std::vector<int64_t> ListRow;
+    uint64_t next_ent = 0;
+    bool has_nulls = does_keys_have_nulls(key_arrs);
+    auto is_ok=[&](size_t i_row) -> bool {
+      if (!has_nulls)
+        return true;
+      return !does_row_has_nulls(key_arrs, i_row);
+    };
+    for (size_t i_row = 0; i_row < n_rows; i_row++) {
+        if (is_ok(i_row)) {
+            size_t& group = entSet[i_row];
+            if (group == 0) {
+                next_ent++;
+                group = next_ent;
+                ListRow.emplace_back(i_row);
+            }
+        }
+    }
+    std::vector<std::pair<std::ptrdiff_t, std::ptrdiff_t>> ListPairWrite;
+    for (auto& eRow : ListRow)
+      if (eRow != -1) ListPairWrite.push_back({eRow, -1});
+#ifdef DEBUG_DD
+    int nbRow = ListPairWrite.size();
+    std::cout << "|ListPairWrite|=" << nbRow << "\n";
+    for (int iRow = 0; iRow < nbRow; iRow++) {
+        std::cout << "iRow=" << iRow << " pair=" << ListPairWrite[iRow].first
+                  << " , " << ListPairWrite[iRow].second << "\n";
+    }
+#endif
+    // Now building the out_arrs array. We select only the first num_keys.
+    table_info* ret_table = RetrieveTable(in_table, ListPairWrite, num_keys);
+    //
+    delete[] hashes;
+#ifdef DEBUG_DD
+    std::cout << "drop_duplicates_nonnull_keys_inner : OUTPUT:\n";
+    DEBUG_PrintSetOfColumn(std::cout, ret_table->columns);
+    DEBUG_PrintRefct(std::cout, ret_table->columns);
+#endif
+    return ret_table;
+}
+
+
 /** This function is the inner function for the dropping of duplicated rows.
  * This C++ code is used for the drop_duplicates.
  * Two support cases:
@@ -397,7 +488,7 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
  *              2 corresponds to the first step of the operation where we
  * collate the rows on the computational node 1 corresponds to the second step
  * of the operation after the rows have been merged on the computation
- * @return the vector of pointers to be used.
+ * @return the table to be used.
  */
 static table_info* drop_duplicates_table_inner(table_info* in_table,
                                                int64_t num_keys, int64_t keep,
@@ -416,10 +507,10 @@ static table_info* drop_duplicates_table_inner(table_info* in_table,
     DEBUG_PrintRefct(std::cout, in_table->columns);
 #endif
 
-    uint32_t seed = 0xb0d01287;
+    uint32_t seed = SEED_HASH_CONTAINER;
     uint32_t* hashes = hash_keys(key_arrs, seed);
 #ifdef DEBUG_DD
-    std::cout << "drop_duplicates : we have hashes\n";
+    std::cout << "drop_duplicates_table_inner : we have hashes\n";
 #endif
     /* This is a function for computing the hash (here returning computed value)
      * This is the first function passed as argument for the map function.
@@ -538,6 +629,76 @@ static table_info* drop_duplicates_table_inner(table_info* in_table,
     return ret_table;
 }
 
+
+/** This function is for dropping the null keys.
+ * This C++ code is used for the compute_categorical_index
+ * ---It keeps only the non-null keys
+ * ---It returns only the keys.
+ *
+ * As for the join, this relies on using hash keys for the partitionning.
+ * The computation is done locally.
+ *
+ * External function used are "RetrieveTable" and "TestEqual"
+ *
+ * @param in_table : the input table
+ * @param num_keys : the number of keys
+ * @param is_parallel: whether we run in parallel or not.
+ * @return the vector of pointers to be used.
+ */
+table_info* drop_duplicates_nonnull_keys(table_info* in_table, int64_t num_keys, bool is_parallel)
+{
+#ifdef DEBUG_DD
+    std::cout << "drop_duplicates_nonnull_keys : is_parallel=" << is_parallel << "\n";
+#endif
+    // serial case
+    if (!is_parallel) {
+        return drop_duplicates_nonnull_keys_inner(in_table, num_keys);
+    }
+    // parallel case
+    // pre reduction of duplicates
+#ifdef DEBUG_DD
+    std::cout << "Before the drop duplicates_nonnull on the local nodes\n";
+#endif
+    table_info* red_table = drop_duplicates_nonnull_keys_inner(in_table, num_keys);
+    // shuffling of values
+#ifdef DEBUG_DD
+    std::cout << "Before the shuffling\n";
+#endif
+    table_info* shuf_table = shuffle_table(red_table, num_keys);
+    delete_table_free_arrays(red_table);
+    // reduction after shuffling
+#ifdef DEBUG_DD
+    std::cout << "Before the second shuffling\n";
+#endif
+    int keep = 0;
+    table_info* ret_table =
+        drop_duplicates_table_inner(shuf_table, num_keys, keep, 1);
+    delete_table_free_arrays(shuf_table);
+#ifdef DEBUG_DD
+    std::cout << "Final returning table\n";
+    DEBUG_PrintSetOfColumn(std::cout, ret_table->columns);
+    DEBUG_PrintRefct(std::cout, ret_table->columns);
+#endif
+    // returning table
+    return ret_table;
+}
+
+
+/** This function is for dropping the null keys.
+ * This C++ code is used for the compute_categorical_index
+ * ---Even non-null keys occur in the output.
+ * ---Everything is returned, not just the keys.
+ *
+ * @param in_table : the input table
+ * @param is_parallel: the boolean specifying if the computation is parallel or
+ * not.
+ * @param num_keys: the number of keys used for the computation
+ * @param keep: integer specifying the expected behavior.
+ *        keep = 0 corresponds to the case of keep="first" keep first entry
+ *        keep = 1 corresponds to the case of keep="last" keep last entry
+ *        keep = 2 corresponds to the case of keep=False : remove all duplicates
+ * @return the vector of pointers to be used.
+ */
 table_info* drop_duplicates_table(table_info* in_table, bool is_parallel,
                                   int64_t num_keys, int64_t keep) {
 #ifdef DEBUG_DD
@@ -575,6 +736,10 @@ table_info* drop_duplicates_table(table_info* in_table, bool is_parallel,
     // returning table
     return ret_table;
 }
+
+//
+//   SAMPLE
+//
 
 table_info* sample_table(table_info* in_table, int64_t n, double frac,
                          bool replace, bool parallel) {

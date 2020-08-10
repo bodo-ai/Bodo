@@ -1,6 +1,10 @@
 // Copyright (C) 2019 Bodo Inc. All rights reserved.
 #include "_bodo_common.h"
 
+const int max_global_number_groups_exscan = 1000;
+
+
+
 /// Initialize C++ groupby module
 void groupby_init();
 

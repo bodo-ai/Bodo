@@ -71,7 +71,7 @@ array_info* alloc_categorical(int64_t length, Bodo_CTypes::CTypeEnum typ_enum,
     NRT_MemInfo* meminfo = NRT_MemInfo_alloc_safe_aligned(size, ALIGNMENT);
     char* data = (char*)meminfo->data;
     return new array_info(bodo_array_type::CATEGORICAL, typ_enum, length, -1,
-                          -1, data, NULL, NULL, NULL, meminfo, NULL, 0, 0,
+                          -1, data, NULL, NULL, NULL, meminfo, NULL, NULL, 0, 0,
                           num_categories);
 }
 

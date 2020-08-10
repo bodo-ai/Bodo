@@ -487,3 +487,46 @@ void DEBUG_PrintSetOfColumn(std::ostream& os,
  */
 void DEBUG_PrintRefct(std::ostream& os,
                       std::vector<array_info*> const& ListArr);
+
+
+inline bool does_keys_have_nulls(std::vector<array_info*> const& key_cols) {
+    for (auto key_col : key_cols) {
+        if ((key_col->arr_type == bodo_array_type::NUMPY &&
+             (key_col->dtype == Bodo_CTypes::FLOAT32 ||
+              key_col->dtype == Bodo_CTypes::FLOAT64 ||
+              key_col->dtype == Bodo_CTypes::DATETIME ||
+              key_col->dtype == Bodo_CTypes::TIMEDELTA)) ||
+            key_col->arr_type == bodo_array_type::STRING ||
+            key_col->arr_type == bodo_array_type::LIST_STRING ||
+            key_col->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
+            return true;
+        }
+    }
+    return false;
+}
+
+
+inline bool does_row_has_nulls(std::vector<array_info*> const& key_cols,
+                               int64_t const& i) {
+    for (auto key_col : key_cols) {
+        if (key_col->arr_type == bodo_array_type::STRING ||
+            key_col->arr_type == bodo_array_type::LIST_STRING ||
+            key_col->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
+            if (!GetBit((uint8_t*)key_col->null_bitmask, i)) return true;
+        } else if (key_col->arr_type == bodo_array_type::NUMPY) {
+            if ((key_col->dtype == Bodo_CTypes::FLOAT32 &&
+                 isnan(key_col->at<float>(i))) ||
+                (key_col->dtype == Bodo_CTypes::FLOAT64 &&
+                 isnan(key_col->at<double>(i))) ||
+                (key_col->dtype == Bodo_CTypes::DATETIME &&
+                 key_col->at<int64_t>(i) ==
+                     std::numeric_limits<int64_t>::min()) ||
+                (key_col->dtype == Bodo_CTypes::TIMEDELTA &&
+                 key_col->at<int64_t>(i) ==
+                     std::numeric_limits<int64_t>::min()))
+                return true;
+        }
+    }
+    return false;
+}
+

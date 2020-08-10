@@ -46,10 +46,24 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
  *        keep = 0 corresponds to the case of keep="first" keep first entry
  *        keep = 1 corresponds to the case of keep="last" keep last entry
  *        keep = 2 corresponds to the case of keep=False : remove all duplicates
- * @return the vector of pointers to be used.
+ * @return the unicized table
  */
 table_info* drop_duplicates_table(table_info* in_table, bool is_parallel,
                                   int64_t num_keys, int64_t keep);
+
+
+/** This function is the function for the dropping of duplicated keys:
+ * ---only the keys are returned
+ * ---non-null entries are removed from the output.
+ *
+ * @param in_table : the input table
+ * @param num_keys: the number of keys used for the computation
+ * @param is_parallel: the boolean specifying if the computation is parallel or
+ * not.
+ * @return the table in output
+ */
+table_info* drop_duplicates_nonnull_keys(table_info* in_table, int64_t num_keys, bool is_parallel);
+
 
 
 /** This function is the function for the sampling of rows in the dataframe

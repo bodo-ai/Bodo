@@ -577,24 +577,81 @@ def test_cumsum_exscan_categorical_random():
                 elist.append(prob)
         return pd.array(elist, dtype="UInt16")
 
+    def get_random_categorical_column(prob_none, n):
+        elist = []
+        for _ in range(n):
+            prob = random.randint(1, 10)
+            if prob == prob_none:
+                elist.append(None)
+            else:
+                elist.append("".join(random.choices(["A", "B", "C"], k=3)))
+        return pd.Categorical(elist)
+
     random.seed(5)
     n = 10
-    list_A = ["".join(random.choices(["A", "B", "C"], k=3)) for _ in range(n)]
+    list_A1 = get_random_categorical_column(-1, n)
+    list_A2 = get_random_categorical_column(1, n)
     list_B_i = [random.randint(1, 100) for _ in range(n)]
     list_C_f = [random.random() for _ in range(n)]
     list_D_f_nan = [random_f_nan() for _ in range(n)]
     list_E_i_null = get_random_nullable_column(n)
-    df = pd.DataFrame(
+    df1 = pd.DataFrame(
         {
-            "A": pd.Categorical(list_A),
+            "A": list_A1,
             "B": list_B_i,
             "C": list_C_f,
             "D": list_D_f_nan,
             "E": list_E_i_null,
         }
     )
-    check_func(f1, (df,), check_dtype=False)
-    check_func(f2, (df,), check_dtype=False)
+    df2 = pd.DataFrame(
+        {"A": list_A2, "C": list_C_f, "D": list_D_f_nan, "E": list_E_i_null}
+    )
+    check_func(f1, (df1,), check_dtype=False)
+    check_func(f2, (df1,), check_dtype=False)
+    check_func(f1, (df2,), check_dtype=False)
+    check_func(f2, (df2,), check_dtype=False)
+
+
+def test_cumsum_exscan_multikey_random():
+    """For cumulative sum of integers, a special code that create a categorical key column
+    allows for better performance"""
+
+    def f(df):
+        return df.groupby(["A", "B"]).cumsum()
+
+    def random_f_nan():
+        if random.random() < 0.1:
+            return np.nan
+        return random.random()
+
+    def get_random_nullable_column(n):
+        elist = []
+        for _ in range(n):
+            prob = random.randint(1, 10)
+            if prob == 1:
+                elist.append(None)
+            else:
+                elist.append(prob)
+        return pd.array(elist, dtype="UInt16")
+
+    random.seed(5)
+    n = 100
+    list_A_key1 = get_random_nullable_column(n)
+    list_B_key2 = get_random_nullable_column(n)
+    list_C_f = [random.random() for _ in range(n)]
+    list_D_f_nan = [random_f_nan() for _ in range(n)]
+    list_E_i_null = get_random_nullable_column(n)
+    df = pd.DataFrame(
+        {
+            "A": list_A_key1,
+            "B": list_B_key2,
+            "C": list_C_f,
+            "D": list_D_f_nan,
+            "E": list_E_i_null,
+        }
+    )
+    check_func(f, (df,), check_dtype=False)
 
 
 def test_sum_max_min_list_string_random():

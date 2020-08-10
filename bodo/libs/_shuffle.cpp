@@ -1946,7 +1946,7 @@ table_info* gather_table(table_info* in_table, size_t n_cols, bool all_gather) {
         int64_t n_sub_elems = in_table->columns[i_col]->n_sub_elems;
         int64_t n_sub_sub_elems = in_table->columns[i_col]->n_sub_sub_elems;
 #ifdef DEBUG_GATHER
-        std::cout << " n_rows=" << n_rows << " n_sub_elems=" << n_sub_elems
+        std::cout << "i_col=" << i_col << " n_rows=" << n_rows << " n_sub_elems=" << n_sub_elems
                   << " n_sub_sub_elems=" << n_sub_sub_elems << "\n";
 #endif
         arr_gath_s[0] = n_rows;
@@ -1959,6 +1959,9 @@ table_info* gather_table(table_info* in_table, size_t n_cols, bool all_gather) {
         bodo_array_type::arr_type_enum arr_type =
             in_table->columns[i_col]->arr_type;
         int64_t num_categories = in_table->columns[i_col]->num_categories;
+#ifdef DEBUG_GATHER
+        std::cout << "  num_categories=" << num_categories << "\n";
+#endif
         //
         std::vector<int> rows_disps(n_pes), rows_counts(n_pes);
         int rows_pos = 0;
@@ -1968,20 +1971,23 @@ table_info* gather_table(table_info* in_table, size_t n_cols, bool all_gather) {
             rows_disps[i_p] = rows_pos;
             rows_pos += siz;
         }
+#ifdef DEBUG_GATHER
+        std::cout << "  rows_counts / rows_disps built\n";
+#endif
         //
         array_info* out_arr = NULL;
         if (arr_type == bodo_array_type::ARROW) {
 #ifdef DEBUG_GATHER
-            std::cout << "gather_table, arrow case, step 1\n";
+            std::cout << "  gather_table, arrow case, step 1\n";
 #endif
             std::shared_ptr<arrow::Array> array =
                 in_table->columns[i_col]->array;
 #ifdef DEBUG_GATHER
-            std::cout << "gather_table, arrow case, step 2\n";
+            std::cout << "  gather_table, arrow case, step 2\n";
 #endif
             std::shared_ptr<arrow::Array> out_array = gather_arrow_array(array, all_gather);
 #ifdef DEBUG_GATHER
-            std::cout << "gather_table, arrow case, step 3\n";
+            std::cout << "  gather_table, arrow case, step 3\n";
 #endif
             uint64_t n_rows_tot = 0;
             NRT_MemInfo* meminfo = NULL;
@@ -1990,7 +1996,7 @@ table_info* gather_table(table_info* in_table, size_t n_cols, bool all_gather) {
                 bodo_array_type::ARROW, Bodo_CTypes::INT8 /*dummy*/, n_rows_tot, -1,
                 -1, NULL, NULL, NULL, NULL, meminfo, NULL, out_array);
 #ifdef DEBUG_GATHER
-            std::cout << "gather_table, arrow case, step 4\n";
+            std::cout << "  gather_table, arrow case, step 4\n";
 #endif
         }
         if (arr_type == bodo_array_type::NUMPY ||
@@ -1998,7 +2004,7 @@ table_info* gather_table(table_info* in_table, size_t n_cols, bool all_gather) {
             arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
             MPI_Datatype mpi_typ = get_MPI_typ(dtype);
 #ifdef DEBUG_GATHER
-            std::cout << "dtype=" << dtype << " mpi_typ=" << mpi_typ << "\n";
+            std::cout << "  NUMPY/CATEGORICAL/NULLABLE dtype=" << dtype << " mpi_typ=" << mpi_typ << "\n";
 #endif
             // Computing the total number of rows.
             // On mpi_root, all rows, on others just 1 row for consistency.
@@ -2006,7 +2012,7 @@ table_info* gather_table(table_info* in_table, size_t n_cols, bool all_gather) {
             for (int i_p = 0; i_p < n_pes; i_p++)
                 n_rows_tot += arr_gath_r[3 * i_p];
 #ifdef DEBUG_GATHER
-            std::cout << "n_rows_tot=" << n_rows_tot << "\n";
+            std::cout << "  n_rows_tot=" << n_rows_tot << "\n";
 #endif
             char* data1_ptr = NULL;
             if (myrank == mpi_root || all_gather) {
@@ -2016,6 +2022,9 @@ table_info* gather_table(table_info* in_table, size_t n_cols, bool all_gather) {
             MPI_Gengatherv(in_table->columns[i_col]->data1, n_rows, mpi_typ,
                            data1_ptr, rows_counts.data(), rows_disps.data(),
                            mpi_typ, mpi_root, MPI_COMM_WORLD, all_gather);
+#ifdef DEBUG_GATHER
+            std::cout << "  After MPI_Gengatherv\n";
+#endif
         }
         if (arr_type == bodo_array_type::STRING) {
             MPI_Datatype mpi_typ32 = get_MPI_typ(Bodo_CTypes::UINT32);
@@ -2078,7 +2087,7 @@ table_info* gather_table(table_info* in_table, size_t n_cols, bool all_gather) {
                 n_sub_sub_elems_tot += arr_gath_r[3 * i_p + 2];
             }
 #ifdef DEBUG_GATHER
-            std::cout << " n_rows_tot=" << n_rows_tot
+            std::cout << "  n_rows_tot=" << n_rows_tot
                       << " n_sub_elems_tot=" << n_sub_elems_tot
                       << " n_sub_sub_elems_tot=" << n_sub_sub_elems_tot << "\n";
 #endif
@@ -2185,7 +2194,13 @@ table_info* gather_table(table_info* in_table, size_t n_cols, bool all_gather) {
                                          rows_counts);
             }
         }
+#ifdef DEBUG_GATHER
+        std::cout << "  After consideration of all cases\n";
+#endif
         out_arrs.push_back(out_arr);
+#ifdef DEBUG_GATHER
+        std::cout << "  After push_back operation\n";
+#endif
     }
 #ifdef DEBUG_GATHER
     std::cout << "Exiting gather_table\n";
