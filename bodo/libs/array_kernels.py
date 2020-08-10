@@ -41,6 +41,7 @@ from bodo.libs.struct_arr_ext import StructArrayType
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.hiframes.split_impl import string_array_split_view_type
 from bodo.hiframes.datetime_date_ext import datetime_date_array_type
+from bodo.hiframes.datetime_timedelta_ext import datetime_timedelta_array_type
 from bodo.utils.indexing import init_nested_counts, add_nested_counts
 
 from llvmlite import ir as lir
@@ -88,6 +89,7 @@ def overload_isna(arr, i):
     if isinstance(arr, (IntegerArrayType, DecimalArrayType)) or arr in (
         boolean_array,
         datetime_date_array_type,
+        datetime_timedelta_array_type,
         string_array_split_view_type,
     ):
         return lambda arr, i: not bodo.libs.int_arr_ext.get_bit_bitmap_arr(
@@ -144,6 +146,7 @@ def setna_overload(arr, ind, int_nan_const=0):
     if isinstance(arr, (IntegerArrayType, DecimalArrayType)) or arr in (
         boolean_array,
         datetime_date_array_type,
+        datetime_timedelta_array_type,
     ):
         return lambda arr, ind, int_nan_const=0: bodo.libs.int_arr_ext.set_bit_to_arr(
             arr._null_bitmap, ind, 0
@@ -858,6 +861,34 @@ def concat_overload(arr_list):
 
         return datetime_date_array_concat_impl
 
+    if (
+        isinstance(arr_list, (types.UniTuple, types.List))
+        and arr_list.dtype == datetime_timedelta_array_type
+    ):
+
+        def datetime_timedelta_array_concat_impl(arr_list):  # pragma: no cover
+            tot_len = 0
+            for A in arr_list:
+                tot_len += len(A)
+            Aret = bodo.hiframes.datetime_timedelta_ext.alloc_datetime_timedelta_array(
+                tot_len
+            )
+            curr_pos = 0
+            for A in arr_list:
+                for i in range(len(A)):
+                    Aret._days_data[i + curr_pos] = A._days_data[i]
+                    Aret._seconds_data[i + curr_pos] = A._seconds_data[i]
+                    Aret._microseconds_data[i + curr_pos] = A._microseconds_data[i]
+                    bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(A._null_bitmap, i)
+                    bodo.libs.int_arr_ext.set_bit_to_arr(
+                        Aret._null_bitmap, i + curr_pos, bit
+                    )
+                curr_pos += len(A)
+
+            return Aret
+
+        return datetime_timedelta_array_concat_impl
+
     if isinstance(arr_list, (types.UniTuple, types.List)) and isinstance(
         arr_list.dtype, DecimalArrayType
     ):
@@ -1209,6 +1240,16 @@ def overload_gen_na_array(n, arr):
             return A
 
         return impl_datetime_date
+
+    if arr == datetime_timedelta_array_type:
+
+        def impl_datetime_timedelta(n, arr):  # pragma: no cover
+            A = bodo.hiframes.datetime_timedelta_ext.alloc_datetime_timedelta_array(n)
+            for i in range(n):
+                bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, i, 0)
+            return A
+
+        return impl_datetime_timedelta
 
     if arr == boolean_array:
 

@@ -1,0 +1,70 @@
+# Copyright (C) 2020 Bodo Inc. All rights reserved.
+""" 
+    Test File for timedelta array types. Covers basic functionality of get_item
+    operations, but it is not comprehensive. It does not cover exception cases
+    or test extensively against None.
+"""
+import datetime
+import pandas as pd
+import numpy as np
+import pytest
+
+import bodo
+
+
+@pytest.fixture(
+    params=[
+        np.append(
+            datetime.timedelta(days=5, seconds=4, weeks=4),
+            [None, datetime.timedelta(microseconds=100000001213131, hours=5)],
+        )
+    ]
+)
+def timedelta_arr_value(request):
+    return request.param
+
+
+def test_getitem_int(timedelta_arr_value, memory_leak_check):
+    def test_impl(A, i):
+        return A[i]
+
+    bodo_func = bodo.jit(test_impl)
+    i = 0
+    assert bodo_func(timedelta_arr_value, i) == test_impl(timedelta_arr_value, i)
+
+
+def test_getitem_bool(timedelta_arr_value, memory_leak_check):
+    def test_impl(A, ind):
+        return A[ind]
+
+    bodo_func = bodo.jit(test_impl)
+    np.random.seed(0)
+    ind = np.random.ranf(len(timedelta_arr_value)) < 0.2
+    # TODO: parallel test
+    np.testing.assert_array_equal(
+        bodo_func(timedelta_arr_value, ind), test_impl(timedelta_arr_value, ind)
+    )
+
+
+def test_getitem_slice(timedelta_arr_value, memory_leak_check):
+    def test_impl(A, ind):
+        return A[ind]
+
+    bodo_func = bodo.jit(test_impl)
+    ind = slice(1, 4)
+    # TODO: parallel test
+    np.testing.assert_array_equal(
+        bodo_func(timedelta_arr_value, ind), test_impl(timedelta_arr_value, ind)
+    )
+
+
+def test_getitem_int_arr(timedelta_arr_value, memory_leak_check):
+    def test_impl(A, ind):
+        return A[ind]
+
+    bodo_func = bodo.jit(test_impl)
+    ind = np.array([1, 2])
+    # TODO: parallel test
+    np.testing.assert_array_equal(
+        bodo_func(timedelta_arr_value, ind), test_impl(timedelta_arr_value, ind)
+    )

@@ -42,6 +42,7 @@ from bodo.libs.struct_arr_ext import StructArrayType
 from bodo.libs.map_arr_ext import MapArrayType
 from bodo.hiframes.pd_categorical_ext import CategoricalArray
 from bodo.hiframes.datetime_date_ext import datetime_date_array_type
+from bodo.hiframes.datetime_timedelta_ext import datetime_timedelta_array_type
 from bodo.utils.utils import (
     debug_prints,
     empty_like_type,
@@ -529,6 +530,79 @@ def gatherv(data, allgather=False, warn_if_rep=True):
 
         return gatherv_str_arr_impl
 
+    # Handle datetime error as special because no _data field
+    if data == datetime_timedelta_array_type:
+        typ_val = numba_to_c_type(types.int64)
+        char_typ_enum = np.int32(numba_to_c_type(types.uint8))
+
+        def gatherv_impl_int_arr(
+            data, allgather=False, warn_if_rep=True
+        ):  # pragma: no cover
+            rank = bodo.libs.distributed_api.get_rank()
+            n_loc = len(data)
+            n_bytes = (n_loc + 7) >> 3
+            recv_counts = gather_scalar(np.int32(n_loc), allgather)
+            n_total = recv_counts.sum()
+            all_data = empty_like_type(n_total, data)
+            # displacements
+            displs = np.empty(1, np.int32)
+            recv_counts_nulls = np.empty(1, np.int32)
+            displs_nulls = np.empty(1, np.int32)
+            tmp_null_bytes = np.empty(1, np.uint8)
+            if rank == MPI_ROOT or allgather:
+                displs = bodo.ir.join.calc_disp(recv_counts)
+                recv_counts_nulls = np.empty(len(recv_counts), np.int32)
+                for i in range(len(recv_counts)):
+                    recv_counts_nulls[i] = (recv_counts[i] + 7) >> 3
+                displs_nulls = bodo.ir.join.calc_disp(recv_counts_nulls)
+                tmp_null_bytes = np.empty(recv_counts_nulls.sum(), np.uint8)
+            #  print(rank, n_loc, n_total, recv_counts, displs)
+            c_gatherv(
+                data._days_data.ctypes,
+                np.int32(n_loc),
+                all_data._days_data.ctypes,
+                recv_counts.ctypes,
+                displs.ctypes,
+                np.int32(typ_val),
+                allgather,
+            )
+            c_gatherv(
+                data._seconds_data.ctypes,
+                np.int32(n_loc),
+                all_data._seconds_data.ctypes,
+                recv_counts.ctypes,
+                displs.ctypes,
+                np.int32(typ_val),
+                allgather,
+            )
+            c_gatherv(
+                data._microseconds_data.ctypes,
+                np.int32(n_loc),
+                all_data._microseconds_data.ctypes,
+                recv_counts.ctypes,
+                displs.ctypes,
+                np.int32(typ_val),
+                allgather,
+            )
+            c_gatherv(
+                data._null_bitmap.ctypes,
+                np.int32(n_bytes),
+                tmp_null_bytes.ctypes,
+                recv_counts_nulls.ctypes,
+                displs_nulls.ctypes,
+                char_typ_enum,
+                allgather,
+            )
+            copy_gathered_null_bytes(
+                all_data._null_bitmap.ctypes,
+                tmp_null_bytes,
+                recv_counts_nulls,
+                recv_counts,
+            )
+            return all_data
+
+        return gatherv_impl_int_arr
+
     if isinstance(data, (IntegerArrayType, DecimalArrayType)) or data in (
         boolean_array,
         datetime_date_array_type,
@@ -1008,6 +1082,10 @@ def get_value_for_type(dtype):  # pragma: no cover
     # date array
     if dtype == datetime_date_array_type:
         return np.array([datetime.date(2011, 8, 9)])
+
+    # timedelta array
+    if dtype == datetime_timedelta_array_type:
+        return np.array([datetime.timedelta(33)])
 
     # Index types
     if bodo.hiframes.pd_index_ext.is_pd_index_type(dtype):
@@ -1713,6 +1791,19 @@ def slice_getitem_from_start_overload(arr, slice_index):
             rank = bodo.libs.distributed_api.get_rank()
             k = slice_index.stop
             A = bodo.hiframes.datetime_date_ext.alloc_datetime_date_array(k)
+            if rank == 0:
+                A = arr[:k]
+            bodo.libs.distributed_api.bcast(A)
+            return A
+
+        return getitem_datetime_date_impl
+
+    if arr == bodo.hiframes.datetime_timedelta_ext.datetime_timedelta_array_type:
+
+        def getitem_datetime_timedelta_impl(arr, slice_index):  # pragma: no cover
+            rank = bodo.libs.distributed_api.get_rank()
+            k = slice_index.stop
+            A = bodo.hiframes.datetime_timedelta_ext.alloc_datetime_timedelta_array(k)
             if rank == 0:
                 A = arr[:k]
             bodo.libs.distributed_api.bcast(A)

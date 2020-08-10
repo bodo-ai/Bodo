@@ -30,6 +30,7 @@ from bodo.hiframes.pd_dataframe_ext import (
     DataFramePayloadType,
 )
 from bodo.hiframes.datetime_date_ext import datetime_date_type, datetime_date_array_type
+from bodo.hiframes.datetime_timedelta_ext import datetime_timedelta_type, datetime_timedelta_array_type
 from bodo.libs.str_ext import string_type
 from bodo.libs.str_arr_ext import string_array_type
 from bodo.libs.struct_arr_ext import StructArrayType, StructType
@@ -495,6 +496,8 @@ def _infer_ndarray_obj_dtype(val):
         return ArrayItemArrayType(val_typ)
     if isinstance(first_val, datetime.date):
         return datetime_date_array_type
+    if isinstance(first_val, datetime.timedelta):
+        return datetime_timedelta_array_type
     if isinstance(first_val, decimal.Decimal):
         # NOTE: converting decimal.Decimal objects to 38/18, same as Spark
         return DecimalArrayType(38, 18)

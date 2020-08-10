@@ -83,7 +83,9 @@ date_fields = [
     "microsecond",
     "nanosecond",
 ]
+# Timedelta fields separated by return type
 timedelta_fields = ["days", "seconds", "microseconds", "nanoseconds"]
+timedelta_methods = ["total_seconds", "to_pytimedelta"]
 iNaT = pd._libs.tslibs.iNaT
 
 
