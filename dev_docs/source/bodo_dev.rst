@@ -343,6 +343,41 @@ This means that the jit execution jumps into regular python to run the implement
 See our `re.search implementation <https://github.com/Bodo-inc/Bodo/blob/ddf9434081f1f092a3a0757bd3c5faa44ba3a61c/bodo/libs/re_ext.py#L151>`_
 as an example.
 
+.. _array_extensions:
+
+Create an Array
+---------------------------------------
+
+To provide sufficient coverage of analytical data structures and APIs you may find it necessary to create an
+array for a type not previously available. Unfortunately bodo cannot support arrays with `dtype=object`,
+so any object type that needs to be contained in an array must have a custom class and array stucture defined, which
+is used instead of a call to numpy or another array creation technique. For a detailed example look at the example with the `datetime.date` array `shown here 
+<https://github.com/Bodo-inc/Bodo/blob/ddf9434081f1f092a3a0757bd3c5faa44ba3a61c/bodo/hiframes/datetime_date_ext.py#L549>`_.
+In addition, consider looking at the example on adding a new type in the
+`numba documentation <https://numba.pydata.org/numba-doc/latest/extending/interval-example.html>`_.
+
+In general you should be able to copy much of the implementation in the example, but there are a couple things you should note:
+
+- If you want support for indexing already provided in `bodo/utils/indexing.py`, you need your data represented with two attributes: `_data` and `_null_bitmap`.
+- The `unbox` and `box` conversions require directly using `llvmlite`. It may also be difficult to express everything in 
+  Python, so you may need to contribute C++ code (see this 
+  `example <https://github.com/Bodo-inc/Bodo/blob/ddf9434081f1f092a3a0757bd3c5faa44ba3a61c/bodo/libs/_datetime_ext.cpp#L162>`_). 
+  If so you remember you are responsible for decrementing reference counts when engaging with `PyObjs`.
+- If you find yourself writing C++ code, you will need to register your bindings with LLVM
+  (see `the Python version 
+  <https://github.com/Bodo-inc/Bodo/blob/ddf9434081f1f092a3a0757bd3c5faa44ba3a61c/bodo/hiframes/datetime_date_ext.py#L58>`_ 
+  and `the C++ portion <https://github.com/Bodo-inc/Bodo/blob/ddf9434081f1f092a3a0757bd3c5faa44ba3a61c/bodo/libs/_datetime_ext.cpp#L319>`_).
+- Arrays have a lot of operations they need to support. Hopefully exactly what operations are required is comming soon. However, until then it is likely
+  necessary to just try copy the code from `datetime_date_array`. Consider searching for exactly what operation are supported with a command like
+  `grep -r datetime_date_array .` from the `bodo` root directory. Be careful though because it is easy to miss operations.
+- You must add your array to `is_array_typ` in `bodo/utils/utils.py`. Failure to add your array here fails to define the array but may not thrown an error
+  (so you won't know you are missing operations).
+- If you find an operation isn't supported you likely just forgot to provide support for that operation. Look for that operation explicitly for 
+  `datetime_date_array` and then search for that operation. You likely need to add your new array types to the types supporting that operation, but be careful
+  to rewrite the operation for the fields/functions you explicitly support.
+
+Overall your array will likely be very similar, with some adjustments made to support your native representation and the operations
+you need to support.
 
 .. _parallelization_debug:
 
