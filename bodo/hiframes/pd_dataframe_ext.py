@@ -409,10 +409,13 @@ def construct_dataframe(
     else:
         dataframe.parent = parent
         dataframe_payload.parent = parent
-        pyapi = context.get_python_api(builder)
-        gil_state = pyapi.gil_ensure()  # acquire GIL
-        pyapi.incref(parent)
-        pyapi.gil_release(gil_state)  # release GIL
+        # incref parent dataframe object if not null (not fully known until runtime)
+        has_parent = cgutils.is_not_null(builder, parent)
+        with builder.if_then(has_parent):
+            pyapi = context.get_python_api(builder)
+            gil_state = pyapi.gil_ensure()  # acquire GIL
+            pyapi.incref(parent)
+            pyapi.gil_release(gil_state)  # release GIL
 
     builder.store(dataframe_payload._getvalue(), meminfo_data_ptr)
     return dataframe._getvalue()
@@ -776,36 +779,39 @@ def set_df_column_with_reflect(typingctx, df, cname, arr, inplace=None):
             for var, typ in zip(data_arrs, data_typs):
                 context.nrt.incref(builder, typ, var)
 
-        # set column of parent
-        # get boxed array
-        pyapi = context.get_python_api(builder)
-        gil_state = pyapi.gil_ensure()  # acquire GIL
-        env_manager = context.get_env_manager(builder)
+        # set column of parent if not null, which is not fully known until runtime
+        # see test_set_column_reflect_error
+        has_parent = cgutils.is_not_null(builder, in_dataframe.parent)
+        with builder.if_then(has_parent):
+            # get boxed array
+            pyapi = context.get_python_api(builder)
+            gil_state = pyapi.gil_ensure()  # acquire GIL
+            env_manager = context.get_env_manager(builder)
 
-        context.nrt.incref(builder, arr, arr_arg)
+            context.nrt.incref(builder, arr, arr_arg)
 
-        # call boxing for array data
-        # TODO: check complex data types possible for Series for dataframes set column here
-        c = numba.core.pythonapi._BoxContext(context, builder, pyapi, env_manager)
-        py_arr = bodo.hiframes.boxing._box_series_data(arr.dtype, arr, arr_arg, c)
+            # call boxing for array data
+            # TODO: check complex data types possible for Series for dataframes set column here
+            c = numba.core.pythonapi._BoxContext(context, builder, pyapi, env_manager)
+            py_arr = bodo.hiframes.boxing._box_series_data(arr.dtype, arr, arr_arg, c)
 
-        # get column as string or int obj
-        if isinstance(col_name, str):
-            cstr = context.insert_const_string(builder.module, col_name)
-            cstr_obj = pyapi.string_from_string(cstr)
-        else:
-            assert isinstance(col_name, int)
-            cstr_obj = pyapi.long_from_longlong(
-                context.get_constant(types.intp, col_name)
-            )
+            # get column as string or int obj
+            if isinstance(col_name, str):
+                cstr = context.insert_const_string(builder.module, col_name)
+                cstr_obj = pyapi.string_from_string(cstr)
+            else:
+                assert isinstance(col_name, int)
+                cstr_obj = pyapi.long_from_longlong(
+                    context.get_constant(types.intp, col_name)
+                )
 
-        # set column array
-        pyapi.object_setitem(in_dataframe.parent, cstr_obj, py_arr)
+            # set column array
+            pyapi.object_setitem(in_dataframe.parent, cstr_obj, py_arr)
 
-        pyapi.decref(py_arr)
-        pyapi.decref(cstr_obj)
+            pyapi.decref(py_arr)
+            pyapi.decref(cstr_obj)
 
-        pyapi.gil_release(gil_state)  # release GIL
+            pyapi.gil_release(gil_state)  # release GIL
 
         return out_dataframe
 

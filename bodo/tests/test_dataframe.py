@@ -1415,6 +1415,25 @@ def test_set_column_setattr():
     check_func(impl2, (n,))
 
 
+def test_set_column_reflect_error(memory_leak_check):
+    """set column of dataframe argument that is passed from another JIT function, so it
+    doesn't have a parent dataframe object (even though it is an argument).
+    See set_df_column_with_reflect()
+    """
+
+    @bodo.jit
+    def f(data):
+        data["B"] = data["A"].str.len()
+        return data
+
+    def impl():
+        df = pd.DataFrame({"A": ["BB", "CCB", "DDD", "A"]})
+        df = f(df)
+        return df
+
+    pd.testing.assert_frame_equal(bodo.jit(impl)(), impl())
+
+
 def test_df_filter():
     def test_impl(df, cond):
         df2 = df[cond]
