@@ -1785,7 +1785,9 @@ class SeriesPass:
         # convert Series to Array for unhandled calls
         # TODO check all the functions that get here and handle if necessary
         # e.g. np.sum, prod, min, max, argmin, argmax, mean, var, and std
-        if any(isinstance(self.typemap[arg.name], SeriesType) for arg in rhs.args):
+        if func_mod in ("numpy", "ufunc") and any(
+            isinstance(self.typemap[arg.name], SeriesType) for arg in rhs.args
+        ):
             return self._fix_unhandled_calls(assign, lhs, rhs)
 
         return [assign]
