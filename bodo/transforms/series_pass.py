@@ -101,6 +101,7 @@ from bodo.utils.transform import (
     gen_init_varsize_alloc_sizes,
     gen_varsize_item_sizes,
     extract_keyvals_from_struct_map,
+    func_has_assertions,
 )
 from bodo.utils.typing import get_overload_const_func, is_const_func_type, BodoError
 
@@ -952,8 +953,11 @@ class SeriesPass:
             func_name, func_mod = fdef
 
         # inline UDFs to enable more optimization
+        # cannot inline if function has assertions. see test_df_apply_assertion
         func_type = self.typemap[rhs.func.name]
-        if bodo.compiler.is_udf_call(func_type):
+        if bodo.compiler.is_udf_call(func_type) and not func_has_assertions(
+            func_type.dispatcher.py_func
+        ):
             return replace_func(
                 self,
                 func_type.dispatcher.py_func,
