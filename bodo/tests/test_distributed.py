@@ -998,6 +998,22 @@ def test_dist_objmode():
     np.testing.assert_allclose(bodo.jit(objmode_test)(10), objmode_test(10))
 
 
+def test_dist_objmode_dist():
+    """make sure output chunks from objmode are assigned 1D_Var distribution
+    """
+
+    def impl(n):
+        A = np.arange(n)
+        with bodo.objmode(B="int64[:]"):
+            B = A[:3]
+        return B
+
+    n = 111
+    res = bodo.jit(all_returns_distributed=True)(impl)(n)
+    assert len(res) == 3
+    assert count_array_OneD_Vars() > 0
+
+
 def test_diagnostics_not_compiled_error():
     """make sure error is thrown when calling diagnostics for a function that is not
     compiled yet
