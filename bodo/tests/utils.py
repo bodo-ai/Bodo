@@ -247,7 +247,19 @@ def check_func_1D(
         bodo_output = convert_non_pandas_columns(bodo_output)
     if is_out_distributed:
         if check_typing_issues:
-            _check_typing_issues(bodo_output)
+            from mpi4py import MPI
+
+            comm = MPI.COMM_WORLD
+            try:
+                _check_typing_issues(bodo_output)
+                typing_issues_res = comm.gather(None)
+            except BaseException as e:
+                typing_issues_res = comm.gather(e)
+                raise
+            if bodo.get_rank() == 0:
+                for e in typing_issues_res:
+                    if isinstance(e, BaseException):
+                        raise e
         bodo_output = bodo.gatherv(bodo_output)
     # only rank 0 should check if gatherv() called on output
     passed = 1
@@ -854,16 +866,31 @@ def gen_random_arrow_array_struct_list_int(span, n):
     return e_list
 
 
-def gen_random_arrow_list_list(rec_lev, n):
+def gen_random_arrow_list_list_int(rec_lev, prob_none, n):
     def random_list_rec(rec_lev):
-        if random.random() < 0.1:
+        if random.random() < prob_none:
             return None
         else:
             if rec_lev == 0:
                 return random.randint(0, 10)
             else:
                 return [
-                    random_list_rec(rec_lev - 1) for _ in range(random.randint(0, 3))
+                    random_list_rec(rec_lev - 1) for _ in range(random.randint(1, 3))
+                ]
+
+    return [random_list_rec(rec_lev) for _ in range(n)]
+
+
+def gen_random_arrow_list_list_double(rec_lev, prob_none, n):
+    def random_list_rec(rec_lev):
+        if random.random() < prob_none:
+            return None
+        else:
+            if rec_lev == 0:
+                return 0.4 + random.randint(0, 10)
+            else:
+                return [
+                    random_list_rec(rec_lev - 1) for _ in range(random.randint(1, 3))
                 ]
 
     return [random_list_rec(rec_lev) for _ in range(n)]

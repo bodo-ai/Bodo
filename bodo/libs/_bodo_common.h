@@ -13,6 +13,13 @@
 #include "_meminfo.h"
 #include <arrow/api.h>
 
+
+inline void Bodo_PyErr_SetString(PyObject* type, const char* message) {
+    std::cerr << "BodoRuntimeCppError, setting PyErr_SetString to " << message
+              << "\n";
+    PyErr_SetString(type, message);
+}
+
 struct Bodo_CTypes {
     enum CTypeEnum {
         INT8 = 0,
@@ -38,6 +45,61 @@ struct Bodo_CTypes {
         _numtypes
     };
 };
+
+
+/** Getting the expression of a T value as a vector of characters
+ *
+ * The template paramter is T.
+ * @param val the value in the type T.
+ * @return the vector of characters on output
+ */
+template <typename T>
+inline std::vector<char> GetCharVector(T const& val) {
+    const T* valptr = &val;
+    const char* charptr = (char*)valptr;
+    std::vector<char> V(sizeof(T));
+    for (size_t u = 0; u < sizeof(T); u++) V[u] = charptr[u];
+    return V;
+}
+
+
+
+
+/* The NaN entry used in the case a normal value is not available.
+ *
+ * The choice are done in following way:
+ * ---int8_t / int16_t / int32_t / int64_t : return a -1 value
+ * ---uint8_t / uint16_t / uint32_t / uint64_t : return a 0 value
+ * ---float / double : return a NaN
+ * This is obviously not perfect as -1 can be a legitimate value, but here goes.
+ *
+ * @param the dtype used.
+ * @return the list of characters in output.
+ */
+inline std::vector<char> RetrieveNaNentry(Bodo_CTypes::CTypeEnum const& dtype) {
+    if (dtype == Bodo_CTypes::_BOOL) return GetCharVector<bool>(false);
+    if (dtype == Bodo_CTypes::INT8) return GetCharVector<int8_t>(-1);
+    if (dtype == Bodo_CTypes::UINT8) return GetCharVector<uint8_t>(0);
+    if (dtype == Bodo_CTypes::INT16) return GetCharVector<int16_t>(-1);
+    if (dtype == Bodo_CTypes::UINT16) return GetCharVector<uint16_t>(0);
+    if (dtype == Bodo_CTypes::INT32) return GetCharVector<int32_t>(-1);
+    if (dtype == Bodo_CTypes::UINT32) return GetCharVector<uint32_t>(0);
+    if (dtype == Bodo_CTypes::INT64) return GetCharVector<int64_t>(-1);
+    if (dtype == Bodo_CTypes::UINT64) return GetCharVector<uint64_t>(0);
+    if (dtype == Bodo_CTypes::DATE) {
+        Bodo_PyErr_SetString(PyExc_RuntimeError,
+                             "In DATE case missing values are handled by NULLABLE_INT_BOOL so this case is impossible");
+    }
+    if (dtype == Bodo_CTypes::DATETIME || dtype == Bodo_CTypes::TIMEDELTA)
+        return GetCharVector<int64_t>(std::numeric_limits<int64_t>::min());
+    if (dtype == Bodo_CTypes::FLOAT32)
+        return GetCharVector<float>(std::nanf("1"));
+    if (dtype == Bodo_CTypes::FLOAT64)
+        return GetCharVector<double>(std::nan("1"));
+    return {};
+}
+
+
 
 #define BYTES_PER_DECIMAL 16
 
@@ -200,12 +262,6 @@ void free_array(array_info* arr);
  */
 void free_list_string_array(NRT_MemInfo* meminfo);
 
-inline void Bodo_PyErr_SetString(PyObject* type, const char* message) {
-    std::cerr << "BodoRuntimeCppError, setting PyErr_SetString to " << message
-              << "\n";
-    PyErr_SetString(type, message);
-}
-
 extern "C" {
 
 struct numpy_arr_payload {
@@ -252,6 +308,12 @@ void allocate_string_array(int32_t** offsets, char** data,
 void allocate_list_string_array(int64_t n_lists, int64_t n_strings, int64_t n_chars,
                                 int64_t extra_null_bytes,
                                 array_item_arr_payload *payload, str_arr_payload *sub_payload);
+
+Bodo_CTypes::CTypeEnum arrow_to_bodo_type(arrow::Type::type type);
+
+void nested_array_to_c(std::shared_ptr<arrow::Array> array, int64_t* lengths,
+                       array_info** infos, int64_t &lengths_pos,
+                       int64_t &infos_pos);
 
 // copied from Arrow bit_util.h
 // Bitmask selecting the k-th bit in a byte

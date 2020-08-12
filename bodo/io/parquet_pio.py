@@ -29,6 +29,7 @@ from bodo.libs.array_item_arr_ext import (
     construct_array_item_array,
     define_array_item_dtor,
 )
+from bodo.libs.struct_arr_ext import StructArrayType
 from bodo.hiframes.datetime_date_ext import (
     datetime_date_type,
     datetime_date_array_type,
@@ -70,6 +71,10 @@ def read_parquet_list_str():  # pragma: no cover
 
 
 def read_parquet_array_item():  # pragma: no cover
+    return 0
+
+
+def read_parquet_arrow_array():  # pragma: no cover
     return 0
 
 
@@ -119,20 +124,37 @@ class ParquetHandler:
             file_name_str = get_const_value(
                 file_name, self.func_ir, msg, arg_types=self.args
             )
-            col_names, col_types, index_col, col_indices = parquet_file_schema(
-                file_name_str, columns
-            )
+            (
+                col_names,
+                col_types,
+                index_col,
+                col_indices,
+                col_nb_fields,
+            ) = parquet_file_schema(file_name_str, columns)
         else:
-            col_names = list(table_types.keys())
-            col_types = [t for t in table_types.values()]
-            index_col = "index" if "index" in col_names else None
-            col_indices = list(range(len(col_names)))
+            col_names_total = list(table_types.keys())
+            col_types_total = [t for t in table_types.values()]
+            index_col = "index" if "index" in col_names_total else None
+            col_nb_fields_total = [
+                compute_number_of_fields(c_typ) for c_typ in col_types_total
+            ]
+            col_indices_total = compute_column_index(col_nb_fields_total)
             # TODO: allow specifying types of only selected columns
-            if columns is not None:
-                col_indices = [col_names.index(c) for c in columns]
-                col_types = [col_types[i] for i in col_indices]
-                col_names = columns
-                index_col = index_col if index_col in col_names else None
+            if columns is None:
+                selected_columns = col_names_total
+            else:
+                selected_columns = columns
+            col_indices = [
+                col_indices_total[col_names_total.index(c)] for c in selected_columns
+            ]
+            col_types = [
+                col_types_total[col_names_total.index(c)] for c in selected_columns
+            ]
+            col_nb_fields = [
+                col_nb_fields_total[col_names_total.index(c)] for c in selected_columns
+            ]
+            col_names = selected_columns
+            index_col = index_col if index_col in col_names else None
 
         # HACK convert types using decorator for int columns with NaN
         for i, c in enumerate(col_names):
@@ -142,7 +164,14 @@ class ParquetHandler:
         data_arrs = [ir.Var(scope, mk_unique_var(c), loc) for c in col_names]
         nodes = [
             bodo.ir.parquet_ext.ParquetReader(
-                file_name, lhs.name, col_names, col_indices, col_types, data_arrs, loc
+                file_name,
+                lhs.name,
+                col_names,
+                col_indices,
+                col_nb_fields,
+                col_types,
+                data_arrs,
+                loc,
             )
         ]
         return col_names, data_arrs, index_col, nodes
@@ -173,12 +202,12 @@ def pq_distributed_run(
     pq_reader_py = _gen_pq_reader_py(
         pq_node.col_names,
         pq_node.col_indices,
+        pq_node.col_nb_fields,
         pq_node.out_types,
         typingctx,
         targetctx,
         parallel,
     )
-
     f_block = compile_to_numba_ir(
         pq_impl,
         {"_pq_reader_py": pq_reader_py},
@@ -202,7 +231,7 @@ distributed_pass.distributed_run_extensions[
 
 
 def _gen_pq_reader_py(
-    col_names, col_indices, out_types, typingctx, targetctx, parallel
+    col_names, col_indices, col_nb_fields, out_types, typingctx, targetctx, parallel
 ):
     if len(parallel) > 0:
         # in parallel read, we assume all columns are parallel
@@ -215,8 +244,17 @@ def _gen_pq_reader_py(
     func_text += "  ds_reader = get_dataset_reader(unicode_to_utf8(fname), {})\n".format(
         is_parallel
     )
-    for c, ind, t in zip(col_names, col_indices, out_types):
-        func_text = gen_column_read(func_text, c, ind, t, c in parallel)
+
+    local_types = {}
+    for c_name, col_ind, col_siz, c_typ in zip(
+        col_names, col_indices, col_nb_fields, out_types
+    ):
+        ret_type, func_text = gen_column_read(
+            func_text, c_name, col_ind, col_siz, c_typ, c_name in parallel
+        )
+        if ret_type != None:
+            local_types[ret_type] = c_typ
+
     func_text += "  del_dataset_reader(ds_reader)\n"
     func_text += "  return ({},)\n".format(
         ", ".join("{0}, {0}_size".format(sanitize_varname(c)) for c in col_names)
@@ -231,11 +269,13 @@ def _gen_pq_reader_py(
         "read_parquet_str": read_parquet_str,
         "read_parquet_list_str": read_parquet_list_str,
         "read_parquet_array_item": read_parquet_array_item,
+        "read_parquet_arrow_array": read_parquet_arrow_array,
         "unicode_to_utf8": unicode_to_utf8,
         "NS_DTYPE": np.dtype("M8[ns]"),
         "np": np,
         "bodo": bodo,
     }
+    glbs.update(local_types)
 
     exec(func_text, glbs, loc_vars)
     pq_reader_py = loc_vars["pq_reader_py"]
@@ -244,7 +284,7 @@ def _gen_pq_reader_py(
     return jit_func
 
 
-def gen_column_read(func_text, cname, c_ind, c_type, is_parallel):
+def gen_column_read(func_text, cname, c_ind, c_siz, c_type, is_parallel):
     cname = sanitize_varname(cname)
     # handle size variables
     # get_column_size_parquet returns local size of column (number of rows
@@ -254,24 +294,42 @@ def gen_column_read(func_text, cname, c_ind, c_type, is_parallel):
     )
     alloc_size = "{}_size".format(cname)
 
+    ret_type = None
     if c_type == string_array_type:
         # pass size for easier allocation and distributed analysis
         func_text += "  {} = read_parquet_str(ds_reader, {}, {}_size)\n".format(
             cname, c_ind, cname
         )
     elif c_type == ArrayItemArrayType(string_array_type):
+        # TODO does not support null strings?
         # pass size for easier allocation and distributed analysis
         func_text += "  {} = read_parquet_list_str(ds_reader, {}, {}_size)\n".format(
             cname, c_ind, cname
         )
     elif isinstance(c_type, ArrayItemArrayType):
-        elem_typ = c_type.dtype.dtype
-        func_text += "  {} = read_parquet_array_item(ds_reader, {}, {}_size, np.int32({}), {})\n".format(
-            cname,
-            c_ind,
-            cname,
-            bodo.utils.utils.numba_to_c_type(elem_typ),
-            get_element_type(elem_typ),
+        # Force generalized path for all ArrayItemArrayType(...) (see FIXME below)
+        if not isinstance(c_type.dtype, types.Float):
+            ret_type = "nested_type{}".format(c_ind)
+            func_text += "  {} = read_parquet_arrow_array(ds_reader, {}, {}, {})\n".format(
+                cname, c_ind, c_siz, ret_type
+            )
+        else:
+            # FIXME This code path does not support nullable items,
+            # for example: ArrayItemArray(IntegerArray(int64))
+            # The main gap is in ReadParquetArrayItemInfer and pq_read_array_item_lower
+            # Right now we use it only for the float where we do not need nullable items.
+            elem_typ = c_type.dtype.dtype
+            func_text += "  {} = read_parquet_array_item(ds_reader, {}, {}_size, np.int32({}), {})\n".format(
+                cname,
+                c_ind,
+                cname,
+                bodo.utils.utils.numba_to_c_type(elem_typ),
+                get_element_type(elem_typ),
+            )
+    elif isinstance(c_type, StructArrayType):
+        ret_type = "nested_type{}".format(c_ind)
+        func_text += "  {} = read_parquet_arrow_array(ds_reader, {}, {}, {})\n".format(
+            cname, c_ind, c_siz, ret_type
         )
     else:
         el_type = get_element_type(c_type.dtype)
@@ -280,7 +338,7 @@ def gen_column_read(func_text, cname, c_ind, c_type, is_parallel):
             c_ind, cname, bodo.utils.utils.numba_to_c_type(c_type.dtype)
         )
 
-    return func_text
+    return ret_type, func_text
 
 
 def _gen_alloc(c_type, cname, alloc_size, el_type):
@@ -323,15 +381,47 @@ def get_element_type(dtype):
     return "np." + out
 
 
+def compute_number_of_fields(numba_typ):
+    """For data structures like structs, the data is stored on several columns
+    in parquet. This has to be determined beforehand."""
+    if isinstance(numba_typ, ArrayItemArrayType):
+        return compute_number_of_fields(numba_typ.dtype)
+    if isinstance(numba_typ, StructArrayType):
+        return sum([compute_number_of_fields(e_ent) for e_ent in numba_typ.data])
+    return 1
+
+
+def compute_column_index(list_siz):
+    """The columns have a number of fields. From the list of number of fields the
+    list of indices are computed."""
+    sum_index = 0
+    list_cumsum = []
+    for e_siz in list_siz:
+        list_cumsum.append(sum_index)
+        sum_index += e_siz
+    return list_cumsum
+
+
 def _get_numba_typ_from_pa_typ(pa_typ, is_index, nullable_from_metadata):
     import pyarrow as pa
 
-    # TODO: comparing list(string) type using pa_typ.type == pa.list_(pa.string())
-    # doesn't seem to work properly. The string representation is also inconsistent:
-    # "ListType(list<element: string>)", or "ListType(list<item: string>)"
-    # likely an Arrow/Parquet bug
-    if isinstance(pa_typ.type, pa.ListType) and pa_typ.type.value_type == pa.string():
-        return ArrayItemArrayType(string_array_type)
+    if isinstance(pa_typ.type, pa.ListType):
+        return ArrayItemArrayType(
+            # nullable_from_metadata is only used for non-nested Int arrays
+            _get_numba_typ_from_pa_typ(
+                pa_typ.type.value_field, is_index, nullable_from_metadata
+            )
+        )
+
+    if isinstance(pa_typ.type, pa.StructType):
+        child_types = []
+        field_names = []
+        for field in pa_typ.flatten():
+            field_names.append(field.name.split(".")[-1])
+            child_types.append(
+                _get_numba_typ_from_pa_typ(field, is_index, nullable_from_metadata)
+            )
+        return StructArrayType(tuple(child_types), tuple(field_names))
 
     # Decimal128Array type
     if isinstance(pa_typ.type, pa.Decimal128Type):
@@ -364,14 +454,6 @@ def _get_numba_typ_from_pa_typ(pa_typ, is_index, nullable_from_metadata):
         pa.timestamp("ms"): types.NPDatetime("ns"),
         pa.timestamp("s"): types.NPDatetime("ns"),
     }
-
-    if isinstance(pa_typ.type, pa.ListType):
-        # TODO this should check for the list of types that we support
-        if pa_typ.type.value_type not in _typ_map:
-            raise BodoError("Arrow data type {} not supported yet".format(pa_typ.type))
-        return ArrayItemArrayType(
-            _get_series_array_type(_typ_map[pa_typ.type.value_type])
-        )
 
     if pa_typ.type not in _typ_map:
         raise BodoError("Arrow data type {} not supported yet".format(pa_typ.type))
@@ -524,31 +606,46 @@ def parquet_file_schema(file_name, selected_columns):
                 else:
                     nullable_from_metadata[col_name] = False
 
-    # handle column selection if available
-    col_indices = list(range(len(col_names)))
-    if selected_columns is not None:
-        # make sure selected columns are in the schema
-        for c in selected_columns:
-            if c not in col_names:
-                raise BodoError(
-                    "Selected column {} not in Parquet file schema".format(c)
-                )
-        if index_col and not isinstance(index_col, dict):
-            # if index_col is "__index__level_0" or some other name, append it.
-            # If the index column is not selected when reading parquet, the index
-            # should still be included.
-            selected_columns.append(index_col)
-        col_indices = [col_names.index(c) for c in selected_columns]
-        col_names = selected_columns
-
-    col_types = [
+    col_types_total = [
         _get_numba_typ_from_pa_typ(
             pa_schema.field(c), c == index_col, nullable_from_metadata[c]
         )
         for c in col_names
     ]
+    col_nb_fields_total = [compute_number_of_fields(typ) for typ in col_types_total]
+    col_indices_total = compute_column_index(col_nb_fields_total)
+    # The numbering of the columns in pandas does not match the numbering in parquet.
+    # That is a column of structs {"A": 1, "B": 3} is 1 column in pandas but 2 columns
+    # in parquet. Fortunately, those 2 columns are consecutive in parquet.
+    # Thus we need to compute the shifts in order to match them.
+    # The col_nb_fields is the total number of fields in the column (so 2 in above example).
+    # In parquet it is named "column size".
+    # The col_indices is for each bodo column the first index in parquet.
+
+    # if no selected columns, set it to all of them.
+    if selected_columns is None:
+        selected_columns = col_names
+
+    # make sure selected columns are in the schema
+    for c in selected_columns:
+        if c not in col_names:
+            raise BodoError("Selected column {} not in Parquet file schema".format(c))
+    if (
+        index_col
+        and not isinstance(index_col, dict)
+        and index_col not in selected_columns
+    ):
+        # if index_col is "__index__level_0" or some other name, append it.
+        # If the index column is not selected when reading parquet, the index
+        # should still be included.
+        selected_columns.append(index_col)
+
+    col_indices = [col_indices_total[col_names.index(c)] for c in selected_columns]
+    col_types = [col_types_total[col_names.index(c)] for c in selected_columns]
+    col_nb_fields = [col_nb_fields_total[col_names.index(c)] for c in selected_columns]
+    col_names = selected_columns
     # TODO: close file?
-    return col_names, col_types, index_col, col_indices
+    return col_names, col_types, index_col, col_indices, col_nb_fields
 
 
 _get_dataset_reader = types.ExternalFunction(
@@ -599,9 +696,16 @@ class ReadParquetArrayItemInfer(AbstractTemplate):
         assert not kws
         assert len(args) == 5
         elem_type = args[4].dtype
-        return signature(
-            ArrayItemArrayType(_get_series_array_type(elem_type)), *unliteral_all(args)
-        )
+        # Implement IntegerArrayType(elem_type) when this code path is restored.
+        return signature(ArrayItemArrayType(_get_series_array_type(elem_type)), *unliteral_all(args))
+
+
+@infer_global(read_parquet_arrow_array)
+class ReadParquetArrowArrayInfer(AbstractTemplate):
+    def generic(self, args, kws):
+        assert not kws
+        assert len(args) == 4
+        return signature(args[3].instance_type, *unliteral_all(args[:3]))
 
 
 from numba.core import cgutils
@@ -622,6 +726,7 @@ if _has_pyarrow:
     ll.add_symbol("pq_read_string", parquet_cpp.pq_read_string)
     ll.add_symbol("pq_read_list_string", parquet_cpp.pq_read_list_string)
     ll.add_symbol("pq_read_array_item", parquet_cpp.pq_read_array_item)
+    ll.add_symbol("pq_read_arrow_array", parquet_cpp.pq_read_arrow_array)
     ll.add_symbol("pq_write", parquet_cpp.pq_write)
 
 
@@ -927,6 +1032,95 @@ def pq_read_array_item_lower(context, builder, sig, args):
     array_item_array.meminfo = meminfo
     ret = array_item_array._getvalue()
     return impl_ret_new_ref(context, builder, array_item_type, ret)
+
+
+############################ parquet read array table ########################
+
+
+@lower_builtin(
+    read_parquet_arrow_array, types.Opaque("arrow_reader"), types.intp, types.intp,
+)
+def pq_read_arrow_array_lower(context, builder, sig, args):
+
+    # TODO attempt more refactoring with code in array.py::info_to_array?
+
+    arr_type = sig.return_type
+
+    def get_num_arrays(arr_typ):
+        """ get total number of arrays in nested array """
+        if isinstance(arr_typ, ArrayItemArrayType):
+            return 1 + get_num_arrays(arr_typ.dtype)
+        elif isinstance(arr_typ, StructArrayType):
+            return 1 + sum([get_num_arrays(d) for d in arr_typ.data])
+        else:
+            return 1
+
+    def get_num_infos(arr_typ):
+        """ get number of array_infos that need to be returned from
+            C++ to reconstruct this array """
+        if isinstance(arr_typ, ArrayItemArrayType):
+            # 1 buffer for offsets, 1 buffer for nulls + children buffer count
+            return 2 + get_num_infos(arr_typ.dtype)
+        elif isinstance(arr_typ, StructArrayType):
+            # 1 for nulls + children buffer count
+            return 1 + sum([get_num_infos(d) for d in arr_typ.data])
+        elif arr_typ == string_array_type:
+            # C++ will just use one array_info
+            return 1
+        else:
+            # for primitive types: nulls and data
+            # NOTE for non-nullable arrays C++ will still return two
+            # buffers since it doesn't know that the Arrow array of
+            # primitive values is going to be converted to a Numpy array
+            # (all Arrow arrays are nullable)
+            return 2
+
+    n = get_num_arrays(arr_type)
+    # allocate zero-initialized array of lengths for each array in
+    # nested datastructure (to be filled out by C++)
+    lengths = cgutils.pack_array(
+        builder, [lir.Constant(lir.IntType(64), 0) for _ in range(n)]
+    )
+    lengths_ptr = cgutils.alloca_once_value(builder, lengths)
+    # allocate array of null pointers for each buffer in the
+    # nested datastructure (to be filled out by C++ as pointers to array_info)
+    nullptr = lir.Constant(lir.IntType(8).as_pointer(), None)
+    array_infos = cgutils.pack_array(
+        builder, [nullptr for _ in range(get_num_infos(arr_type))]
+    )
+    array_infos_ptr = cgutils.alloca_once_value(builder, array_infos)
+
+    # call C++ info_to_nested_array to fill lengths and array_info arrays
+    # each array_info corresponds to one individual buffer (can be
+    # offsets, null or data buffer)
+    fnty = lir.FunctionType(
+        lir.VoidType(),
+        [
+            lir.IntType(8).as_pointer(),  # dataset reader
+            lir.IntType(64),  # column index
+            lir.IntType(64),  # number of fields in column
+            lir.IntType(64).as_pointer(),  # lengths array
+            lir.IntType(8).as_pointer().as_pointer(),  # array of array_info*
+        ],
+    )
+    fn_tp = builder.module.get_or_insert_function(fnty, name="pq_read_arrow_array")
+    builder.call(
+        fn_tp,
+        [
+            args[0],  # dataset reader
+            args[1],  # column index
+            args[2],  # number of fields in column
+            builder.bitcast(lengths_ptr, lir.IntType(64).as_pointer()),
+            builder.bitcast(array_infos_ptr, lir.IntType(8).as_pointer().as_pointer()),
+        ],
+    )
+
+    # generate code recursively to construct nested arrays from buffers
+    # returned from C++
+    arr, _, _ = bodo.libs.array.nested_to_array(
+        context, builder, arr_type, lengths_ptr, array_infos_ptr, 0, 0
+    )
+    return arr
 
 
 ############################ parquet write table #############################

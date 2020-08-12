@@ -21,6 +21,8 @@
 #include <arrow/io/api.h>
 #include "parquet/arrow/writer.h"
 
+#undef DEBUG_NESTED_PARQUET
+
 /**
  * This holds the file readers and other information that this process needs
  * to read its chunk of a Parquet dataset.
@@ -50,11 +52,13 @@ int pq_read_string(DatasetReader *reader, int64_t column_idx,
                    uint32_t **out_offsets, uint8_t **out_data,
                    uint8_t **out_nulls);
 int pq_read_list_string(DatasetReader *reader, int64_t column_idx,
-                        NRT_MemInfo** array_item_meminfo);
+                        NRT_MemInfo **array_item_meminfo);
 int pq_read_array_item(DatasetReader *reader, int64_t column_idx, int out_dtype,
-                      array_info **out_offsets, array_info **out_data,
-                      array_info **out_nulls);
-
+                       array_info **out_offsets, array_info **out_data,
+                       array_info **out_nulls);
+int pq_read_arrow_array(DatasetReader *reader, int64_t column_idx,
+                        int64_t column_siz, int64_t *lengths,
+                        array_info **out_infos);
 void pack_null_bitmap(uint8_t **out_nulls, std::vector<bool> &null_vec,
                       int64_t n_all_vals);
 void pq_write(const char *filename, const table_info *table,
@@ -94,7 +98,8 @@ PyMODINIT_FUNC PyInit_parquet_cpp(void) {
                            PyLong_FromVoidPtr((void *)(&get_dataset_reader)));
     PyObject_SetAttrString(m, "del_dataset_reader",
                            PyLong_FromVoidPtr((void *)(&del_dataset_reader)));
-    PyObject_SetAttrString(m, "pq_read", PyLong_FromVoidPtr((void *)(&pq_read)));
+    PyObject_SetAttrString(m, "pq_read",
+                           PyLong_FromVoidPtr((void *)(&pq_read)));
     PyObject_SetAttrString(m, "pq_get_size",
                            PyLong_FromVoidPtr((void *)(&pq_get_size)));
     PyObject_SetAttrString(m, "pq_read_string",
@@ -103,6 +108,8 @@ PyMODINIT_FUNC PyInit_parquet_cpp(void) {
                            PyLong_FromVoidPtr((void *)(&pq_read_list_string)));
     PyObject_SetAttrString(m, "pq_read_array_item",
                            PyLong_FromVoidPtr((void *)(&pq_read_array_item)));
+    PyObject_SetAttrString(m, "pq_read_arrow_array",
+                           PyLong_FromVoidPtr((void *)(&pq_read_arrow_array)));
     PyObject_SetAttrString(m, "pq_write",
                            PyLong_FromVoidPtr((void *)(&pq_write)));
 
@@ -116,7 +123,9 @@ DatasetReader *get_dataset_reader(char *file_name, bool parallel) {
         PyGILState_Release(gilstate);  \
         return ds_reader;              \
     }
-
+#ifdef DEBUG_NESTED_PARQUET
+    std::cout << "GET_DATASET_READER, beginning\n";
+#endif
     auto gilstate = PyGILState_Ensure();
 
     DatasetReader *ds_reader = new DatasetReader();
@@ -127,8 +136,7 @@ DatasetReader *get_dataset_reader(char *file_name, bool parallel) {
     // ds = bodo.io.parquet_pio.get_parquet_dataset(file_name, parallel)
     PyObject *ds = PyObject_CallMethod(pq_mod, "get_parquet_dataset", "si",
                                        file_name, int(parallel));
-    PYERR_CHECK(!PyErr_Occurred(),
-                "Python error reading parquet dataset")
+    PYERR_CHECK(!PyErr_Occurred(), "Python error reading parquet dataset")
     Py_DECREF(pq_mod);
 
     // total_rows = ds._bodo_total_rows
@@ -319,7 +327,7 @@ int pq_read_string(DatasetReader *ds_reader, int64_t column_idx,
 }
 
 int pq_read_list_string(DatasetReader *ds_reader, int64_t column_idx,
-                        NRT_MemInfo** array_item_meminfo) {
+                        NRT_MemInfo **array_item_meminfo) {
     if (ds_reader->count == 0) return 0;
 
     int64_t start = ds_reader->start_row_first_file;
@@ -365,9 +373,10 @@ int pq_read_list_string(DatasetReader *ds_reader, int64_t column_idx,
     int64_t n_lists = n_all_vals;
     int64_t n_strings = offset_vec.size() - 1;
     int64_t n_chars = data_vec.size();
-    array_info* info = alloc_list_string_array(n_lists, n_strings, n_chars, 0);
-    array_item_arr_payload *payload = (array_item_arr_payload*)(info->meminfo->data);
-    str_arr_payload *sub_payload = (str_arr_payload*)(payload->data->data);
+    array_info *info = alloc_list_string_array(n_lists, n_strings, n_chars, 0);
+    array_item_arr_payload *payload =
+        (array_item_arr_payload *)(info->meminfo->data);
+    str_arr_payload *sub_payload = (str_arr_payload *)(payload->data->data);
     memcpy(sub_payload->offsets, offset_vec.data(),
            offset_vec.size() * sizeof(int32_t));
     memcpy(sub_payload->data, data_vec.data(), data_vec.size());
@@ -376,16 +385,50 @@ int pq_read_list_string(DatasetReader *ds_reader, int64_t column_idx,
     int64_t n_bytes = (n_all_vals + 7) >> 3;
     memset(payload->null_bitmap.data, 0, n_bytes);
     for (int64_t i = 0; i < n_all_vals; i++) {
-        if (null_vec[i]) ::arrow::BitUtil::SetBit((uint8_t*)payload->null_bitmap.data, i);
+        if (null_vec[i])
+            ::arrow::BitUtil::SetBit((uint8_t *)payload->null_bitmap.data, i);
     }
     *array_item_meminfo = info->meminfo;
     delete info;
     return n_all_vals;
 }
 
+int pq_read_arrow_array(DatasetReader *ds_reader, int64_t column_idx,
+                        int64_t column_siz, int64_t *lengths,
+                        array_info **out_infos) {
+    if (ds_reader->count == 0) return 0;
+
+    int64_t start = ds_reader->start_row_first_file;
+    int64_t read_rows = 0;  // rows read so far
+    arrow::ArrayVector
+        parts;  // vector of arrays read, one array for each row group
+    std::vector<int> column_indices(column_siz);
+    for (int64_t i = 0; i < column_siz; i++) column_indices[i] = column_idx + i;
+    for (auto file_reader : ds_reader->readers) {
+        int64_t file_size = pq_get_size_single_file(file_reader, column_idx);
+        int64_t rows_to_read =
+            std::min(ds_reader->count - read_rows, file_size - start);
+
+        pq_read_arrow_single_file(file_reader, column_indices, start,
+                                  rows_to_read, parts);
+
+        read_rows += rows_to_read;
+        start = 0;  // start becomes 0 after reading non-empty first chunk
+    }
+
+    std::shared_ptr<::arrow::Array> out_array;
+    arrow::Concatenate(parts, arrow::default_memory_pool(), &out_array);
+    parts.clear();  // memory of each array will be freed now
+
+    int64_t lengths_pos = 0;
+    int64_t infos_pos = 0;
+    nested_array_to_c(out_array, lengths, out_infos, lengths_pos, infos_pos);
+    return read_rows;
+}
+
 int pq_read_array_item(DatasetReader *ds_reader, int64_t column_idx,
-                      int out_dtype, array_info **out_offsets,
-                      array_info **out_data, array_info **out_nulls) {
+                       int out_dtype, array_info **out_offsets,
+                       array_info **out_data, array_info **out_nulls) {
     if (ds_reader->count == 0) return 0;
 
     int64_t start = ds_reader->start_row_first_file;
@@ -401,9 +444,9 @@ int pq_read_array_item(DatasetReader *ds_reader, int64_t column_idx,
         int64_t rows_to_read =
             std::min(ds_reader->count - read_rows, file_size - start);
 
-        pq_read_array_item_single_file(file_reader, column_idx, out_dtype, start,
-                                      rows_to_read, &offset_vec, &data_vec,
-                                      &null_vec);
+        pq_read_array_item_single_file(file_reader, column_idx, out_dtype,
+                                       start, rows_to_read, &offset_vec,
+                                       &data_vec, &null_vec);
 
         size_t size = offset_vec.size();
         for (int64_t i = 1; i <= rows_to_read + 1; i++)
@@ -435,8 +478,7 @@ int pq_read_array_item(DatasetReader *ds_reader, int64_t column_idx,
 
     memset((*out_nulls)->data1, 0, n_null_bytes);
     for (int64_t i = 0; i < n_all_vals; i++) {
-        if (null_vec[i])
-            SetBitTo((uint8_t *)((*out_nulls)->data1), i, true);
+        if (null_vec[i]) SetBitTo((uint8_t *)((*out_nulls)->data1), i, true);
     }
 
     return n_all_vals;

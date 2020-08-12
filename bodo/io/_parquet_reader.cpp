@@ -611,6 +611,7 @@ int64_t pq_read_array_item_single_file(
     int64_t column_idx, int out_dtype, int64_t start, int64_t count,
     std::vector<uint32_t>* offset_vec, std::vector<uint8_t>* data_vec,
     std::vector<bool>* null_vec) {
+    Bodo_CTypes::CTypeEnum out_dtype_ct = Bodo_CTypes::CTypeEnum(out_dtype);
     std::shared_ptr<arrow::DataType> arrow_type =
         get_arrow_type(arrow_reader, column_idx);
     if (arrow_type->id() != Type::LIST)
@@ -624,6 +625,7 @@ int64_t pq_read_array_item_single_file(
     int64_t skipped_rows = 0;
     int64_t read_rows = 0;
     int dtype_size = numpy_item_size[out_dtype];
+    std::vector<char> vectNaN = RetrieveNaNentry(out_dtype_ct);
 
     auto rg_metadata =
         arrow_reader->parquet_reader()->metadata()->RowGroup(row_group_index);
@@ -667,7 +669,7 @@ int64_t pq_read_array_item_single_file(
                       << std::endl;
         }
 
-        auto child_buffers = child_data[0]->buffers;
+        std::vector<std::shared_ptr<arrow::Buffer>> child_buffers = child_data[0]->buffers;
         if (child_buffers.size() != 2) {
             std::cerr << "invalid parquet item number of array buffers "
                       << child_buffers.size() << std::endl;
@@ -675,6 +677,7 @@ int64_t pq_read_array_item_single_file(
 
         const uint32_t* offsets_buff =
             (const uint32_t*)parent_buffers[1]->data();
+        const uint8_t* data_null_buff = child_buffers[0]->data();
         const uint8_t* data_buff = child_buffers[1]->data();
         const uint8_t* null_buff = arr->null_bitmap_data();
 
@@ -700,11 +703,31 @@ int64_t pq_read_array_item_single_file(
 
         int data_size = offsets_buff[rows_to_skip + rows_to_read] -
                         offsets_buff[rows_to_skip];
-        data_vec->insert(
-            data_vec->end(),
-            data_buff + offsets_buff[rows_to_skip] * dtype_size,
-            data_buff + (offsets_buff[rows_to_skip] + data_size) * dtype_size);
-
+        // We convert the missing entry floating point values to NAN.
+        // Howver if any of following condition is satisfied:
+        // ---data_null_buff is null pointer
+        // ---data is not a float
+        // Then we return directly the values.
+        if (data_null_buff == nullptr || (out_dtype_ct != Bodo_CTypes::FLOAT32 && out_dtype_ct != Bodo_CTypes::FLOAT64)) {
+            data_vec->insert(
+                data_vec->end(),
+                data_buff + offsets_buff[rows_to_skip] * dtype_size,
+                data_buff + (offsets_buff[rows_to_skip] + data_size) * dtype_size);
+        } else {
+            for (int i=0; i<rows_to_read; i++) {
+                bool bit = ::arrow::BitUtil::GetBit(null_buff, rows_to_skip + i);
+                std::vector<uint8_t> V(dtype_size);
+                for (int j=offsets_buff[rows_to_skip + i]; j<offsets_buff[rows_to_skip + i + 1]; j++) {
+                    bool bit = ::arrow::BitUtil::GetBit(data_null_buff, j);
+                    if (!bit) {
+                        memcpy(V.data(), vectNaN.data(), dtype_size);
+                    } else {
+                        memcpy(V.data(), data_buff + j * dtype_size, dtype_size);
+                    }
+                    data_vec->insert(data_vec->end(), V.begin(), V.end());
+                }
+            }
+        }
         append_bits_to_vec(null_vec, null_buff, parent_null_size, rows_to_skip,
                            rows_to_read);
 
@@ -724,6 +747,67 @@ int64_t pq_read_array_item_single_file(
 
     offset_vec->push_back(curr_offset);
     return num_items;
+}
+
+void pq_read_arrow_single_file(
+    std::shared_ptr<parquet::arrow::FileReader> arrow_reader,
+    const std::vector<int> &column_indices, int64_t start, int64_t count,
+    arrow::ArrayVector &parts) {
+
+    int64_t n_row_groups =
+        arrow_reader->parquet_reader()->metadata()->num_row_groups();
+
+    int row_group_index = 0;
+    int64_t skipped_rows = 0;  // number of rows skipped so far
+                               // (start-skipped_rows is rows left to skip to
+                               // reach starting point)
+    int64_t read_rows = 0;     // number of rows read so far for this reader
+
+    auto rg_metadata =
+        arrow_reader->parquet_reader()->metadata()->RowGroup(row_group_index);
+    int64_t nrows_in_group = rg_metadata->ColumnChunk(column_indices[0])->num_values();
+
+    // skip whole row groups if no need to read any rows
+    while (start - skipped_rows >= nrows_in_group) {
+        skipped_rows += nrows_in_group;
+        row_group_index++;
+        auto rg_metadata = arrow_reader->parquet_reader()->metadata()->RowGroup(
+            row_group_index);
+        nrows_in_group = rg_metadata->ColumnChunk(column_indices[0])->num_values();
+    }
+
+    while (read_rows < count) {
+        /* -------- read row group ---------- */
+        std::shared_ptr<::arrow::Table> table;
+        arrow::Status status =
+            arrow_reader->ReadRowGroup(row_group_index, column_indices, &table);
+        CHECK_ARROW(status, "arrow_reader->ReadRowGroup");
+        std::shared_ptr<::arrow::ChunkedArray> chunked_arr = table->column(0);
+        if (chunked_arr->num_chunks() != 1) {
+            std::cerr << "invalid parquet number of array chunks" << std::endl;
+        }
+        std::shared_ptr<::arrow::Array> arr = chunked_arr->chunk(0);
+        /* ----------- read row group ------- */
+
+        int64_t rows_to_skip = start - skipped_rows;
+        int64_t rows_to_read =
+            std::min(count - read_rows, nrows_in_group - rows_to_skip);
+
+        parts.push_back(arr->Slice(rows_to_skip, rows_to_read));
+
+        skipped_rows += rows_to_skip;
+        read_rows += rows_to_read;
+
+        row_group_index++;
+        if (row_group_index < n_row_groups) {
+            auto rg_metadata =
+                arrow_reader->parquet_reader()->metadata()->RowGroup(
+                    row_group_index);
+            nrows_in_group = rg_metadata->ColumnChunk(column_indices[0])->num_values();
+        } else
+            break;
+    }
+    if (read_rows != count) std::cerr << "parquet read incomplete" << '\n';
 }
 
 void pq_init_reader(const char* file_name,

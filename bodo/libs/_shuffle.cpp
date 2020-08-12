@@ -898,8 +898,8 @@ std::shared_ptr<arrow::Array> shuffle_arrow_array(
             std::dynamic_pointer_cast<arrow::StructType>(struct_array->type());
         // Now computing the children arrays
         std::vector<std::shared_ptr<arrow::Array>> children;
-        for (int i_child = 0; i_child < struct_type->num_children(); i_child++)
-            children.push_back(shuffle_arrow_array(struct_array->field(i_child),
+        for (int i = 0; i < struct_type->num_fields(); i++)
+            children.push_back(shuffle_arrow_array(struct_array->field(i),
                                                    hashes, n_pes));
         // Now computing the bitmap
         std::shared_ptr<arrow::Buffer> null_bitmap_out =
@@ -1328,38 +1328,38 @@ std::shared_ptr<arrow::Array> broadcast_arrow_array(
 #ifdef DEBUG_BROADCAST
         std::cout << "STRUCT case, step 2\n";
 #endif
-        int64_t num_children = 0;
+        int64_t num_fields = 0;
         if (myrank == mpi_root) {
             struct_arr = std::dynamic_pointer_cast<arrow::StructArray>(arr);
             auto struct_type = std::dynamic_pointer_cast<arrow::StructType>(
                 struct_arr->type());
-            num_children = struct_type->num_children();
+            num_fields = struct_type->num_fields();
         }
 #ifdef DEBUG_BROADCAST
         std::cout << "STRUCT case, step 3\n";
 #endif
-        MPI_Bcast(&num_children, 1, MPI_LONG_LONG_INT, mpi_root,
+        MPI_Bcast(&num_fields, 1, MPI_LONG_LONG_INT, mpi_root,
                   MPI_COMM_WORLD);
 #ifdef DEBUG_BROADCAST
         std::cout << "STRUCT case, step 4\n";
 #endif
         std::vector<std::shared_ptr<arrow::Array>> children;
-        for (int i_child = 0; i_child < int(num_children); i_child++) {
+        for (int i_field = 0; i_field < int(num_fields); i_field++) {
 #ifdef DEBUG_BROADCAST
-            std::cout << "STRUCT case, step 5 i_child=" << i_child << "\n";
+            std::cout << "STRUCT case, step 5 i_field=" << i_field << "\n";
 #endif
             std::shared_ptr<arrow::Array> child = nullptr;
 #ifdef DEBUG_BROADCAST
-            std::cout << "STRUCT case, step 6 i_child=" << i_child << "\n";
+            std::cout << "STRUCT case, step 6 i_field=" << i_field << "\n";
 #endif
             std::shared_ptr<arrow::Array> ref_child =
-                ref_struct_arr->field(i_child);
+                ref_struct_arr->field(i_field);
 #ifdef DEBUG_BROADCAST
-            std::cout << "STRUCT case, step 7 i_child=" << i_child << "\n";
+            std::cout << "STRUCT case, step 7 i_field=" << i_field << "\n";
 #endif
-            if (myrank == mpi_root) child = struct_arr->field(i_child);
+            if (myrank == mpi_root) child = struct_arr->field(i_field);
 #ifdef DEBUG_BROADCAST
-            std::cout << "STRUCT case, step 8 i_child=" << i_child << "\n";
+            std::cout << "STRUCT case, step 8 i_field=" << i_field << "\n";
 #endif
             children.push_back(broadcast_arrow_array(ref_child, child));
         }
@@ -1875,8 +1875,8 @@ std::shared_ptr<arrow::Array> gather_arrow_array(
         auto struct_type =
             std::dynamic_pointer_cast<arrow::StructType>(struct_arr->type());
         std::vector<std::shared_ptr<arrow::Array>> children;
-        for (int i_child = 0; i_child < struct_type->num_children(); i_child++)
-            children.push_back(gather_arrow_array(struct_arr->field(i_child), all_gather));
+        for (int i_field = 0; i_field < struct_type->num_fields(); i_field++)
+            children.push_back(gather_arrow_array(struct_arr->field(i_field), all_gather));
         std::shared_ptr<arrow::Buffer> null_bitmap_out =
           gather_arrow_bitmap_buffer(struct_arr, all_gather);
         if (myrank == mpi_root || all_gather) {

@@ -9,9 +9,15 @@ import numpy as np
 import h5py
 import numba
 import bodo
+import random
 from bodo.utils.typing import BodoError
 from bodo.utils.testing import ensure_clean
 from bodo.tests.utils import (
+    gen_random_arrow_array_struct_int,
+    gen_random_arrow_array_struct_list_int,
+    gen_random_arrow_list_list_int,
+    gen_random_arrow_list_list_double,
+    gen_random_arrow_struct_struct,
     count_array_REPs,
     count_parfor_REPs,
     count_parfor_OneDs,
@@ -352,6 +358,58 @@ def test_pq_list_str(datapath):
     check_func(test_impl, (datapath("list_str_parts.pq"),))
 
 
+def test_pq_arrow_array_random():
+    def test_impl(fname):
+        return pd.read_parquet(fname)
+
+    def gen_random_arrow_array_struct_single_int(span, n):
+        e_list = []
+        for _ in range(n):
+            valA = random.randint(0, span)
+            e_ent = {"A": valA}
+            e_list.append(e_ent)
+        return e_list
+
+    random.seed(5)
+    n = 20
+    # One single entry {"A": 1} pass
+    df_work1 = pd.DataFrame({"X": gen_random_arrow_array_struct_single_int(10, n)})
+
+    # Two degree of recursion and missing values. It passes.
+    df_work2 = pd.DataFrame({"X": gen_random_arrow_list_list_double(2, 0.1, n)})
+
+    # Two degrees of recursion and integers. It passes.
+    df_work3 = pd.DataFrame({"X": gen_random_arrow_list_list_int(2, 0.1, n)})
+
+    # One degree of recursion. Calls another code path!
+    df_work4 = pd.DataFrame({"X": gen_random_arrow_list_list_double(1, 0.1, n)})
+
+    # One degree of freedom. Converting to a arrow array
+    df_work5 = pd.DataFrame({"X": gen_random_arrow_list_list_int(1, 0.1, n)})
+
+    # Two entries in the rows is failing {"A":1, "B":3}.
+    # We treat this by calling the function several times.
+    df_work6 = pd.DataFrame({"X": gen_random_arrow_array_struct_int(10, n)})
+
+    # recursive struct construction
+    df_work7 = pd.DataFrame({"X": gen_random_arrow_struct_struct(10, n)})
+
+    # Missing in pyarrow and arrow-cpp 1.0 when reading parquet files:
+    # E   pyarrow.lib.ArrowInvalid: Mix of struct and list types not yet supported
+    # It also does not work in pandas
+    # df_bug = pd.DataFrame({"X": gen_random_arrow_array_struct_list_int(10, n)})
+    def process_df(df):
+        fname = "test_pq_nested_tmp.pq"
+        with ensure_clean(fname):
+            if bodo.get_rank() == 0:
+                df.to_parquet(fname)
+            bodo.barrier()
+            check_func(test_impl, (fname,), check_dtype=False)
+
+    for df in [df_work1, df_work2, df_work3, df_work4, df_work5, df_work6, df_work7]:
+        process_df(df)
+
+
 def test_pq_array_item(datapath):
     def test_impl(fname):
         return pd.read_parquet(fname)
@@ -378,8 +436,7 @@ def test_pq_array_item(datapath):
         if bodo.get_rank() == 0:
             df.to_parquet("test_pq_list_item.pq")
         bodo.barrier()
-        with pytest.raises(BodoError, match="Arrow data type .* not supported yet"):
-            bodo.jit(test_impl)("test_pq_list_item.pq")
+        check_func(test_impl, ("test_pq_list_item.pq",))
 
 
 def test_pq_unsupported_types(datapath):

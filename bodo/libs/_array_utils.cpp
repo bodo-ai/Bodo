@@ -4,37 +4,6 @@
 #include <string>
 #include "_decimal_ext.h"
 
-
-Bodo_CTypes::CTypeEnum arrow_to_bodo_type(arrow::Type::type type) {
-    switch (type) {
-        case arrow::Type::INT8:
-            return Bodo_CTypes::INT8;
-        case arrow::Type::UINT8:
-            return Bodo_CTypes::UINT8;
-        case arrow::Type::INT16:
-            return Bodo_CTypes::INT16;
-        case arrow::Type::UINT16:
-            return Bodo_CTypes::UINT16;
-        case arrow::Type::INT32:
-            return Bodo_CTypes::INT32;
-        case arrow::Type::UINT32:
-            return Bodo_CTypes::UINT32;
-        case arrow::Type::INT64:
-            return Bodo_CTypes::INT64;
-        case arrow::Type::UINT64:
-            return Bodo_CTypes::UINT64;
-        case arrow::Type::FLOAT:
-            return Bodo_CTypes::FLOAT32;
-        case arrow::Type::DOUBLE:
-            return Bodo_CTypes::FLOAT64;
-        // TODO Decimal, Date, Datetime, Timedelta, String, Bool
-        default: {
-            std::string err_msg = "arrow_to_bodo_type : Unsupported type";
-            Bodo_PyErr_SetString(PyExc_RuntimeError, err_msg.c_str());
-        }
-    }
-}
-
 /**
  * Append values from a byte buffer to a primitive array builder.
  * @param values: pointer to buffer containing data
@@ -159,7 +128,7 @@ void append_to_out_array(std::shared_ptr<arrow::Array> input_array,
                 struct_builder->AppendNull();
                 continue;
             }
-            for (int i = 0; i < struct_type->num_children();
+            for (int i = 0; i < struct_type->num_fields();
                  i++) {  // each field is an array
                 arrow::ArrayBuilder* field_builder = builder->child(i);
                 append_to_out_array(struct_array->field(i), idx, idx + 1,
@@ -614,7 +583,7 @@ int ComparisonArrowColumn(std::shared_ptr<arrow::Array> const& arr1,
             std::dynamic_pointer_cast<arrow::StructType>(struct_array1->type());
         auto struct_type2 =
             std::dynamic_pointer_cast<arrow::StructType>(struct_array2->type());
-        int num_children = struct_type1->num_children();
+        int num_fields = struct_type1->num_fields();
         int64_t len1 = pos1_e - pos1_s;
         int64_t len2 = pos2_e - pos2_s;
         int64_t min_len = std::min(len1, len2);
@@ -636,13 +605,13 @@ int ComparisonArrowColumn(std::shared_ptr<arrow::Array> const& arr1,
                                      struct_array2, n_pos2_s);
             if (epair.first != 0) return epair.first;
             if (epair.second) {
-                for (int i = 0; i < num_children; i++) {
+                for (int i = 0; i < num_fields; i++) {
                     int test = ComparisonArrowColumn(
                         struct_array1->field(i), n_pos1_s, n_pos1_e,
                         struct_array2->field(i), n_pos2_s, n_pos2_e,
                         na_position_bis);
 #ifdef DEBUG_ARROW_COMPARISON
-                    std::cout << "  i=" << i << " / " << num_children
+                    std::cout << "  i=" << i << " / " << num_fields
                               << " test=" << test << "\n";
 #endif
                     if (test) return test;
@@ -1168,10 +1137,9 @@ void DEBUG_append_to_out_array(std::shared_ptr<arrow::Array> input_array,
                 continue;
             }
             string_builder += "{";
-            for (int i_child = 0; i_child < struct_type->num_children();
-                 i_child++) {  // each field is an array
-                if (i_child > 0) string_builder += ", ";
-                DEBUG_append_to_out_array(struct_array->field(i_child), idx,
+            for (int i = 0; i < struct_type->num_fields(); i++) {  // each field is an array
+                if (i > 0) string_builder += ", ";
+                DEBUG_append_to_out_array(struct_array->field(i), idx,
                                           idx + 1, string_builder);
             }
             string_builder += "}";

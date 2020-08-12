@@ -23,7 +23,7 @@ from bodo.tests.utils import (
     AnalysisTestPipeline,
     gen_random_arrow_array_struct_int,
     gen_random_arrow_array_struct_list_int,
-    gen_random_arrow_list_list,
+    gen_random_arrow_list_list_int,
     gen_random_arrow_struct_struct,
 )
 
@@ -2180,7 +2180,7 @@ def test_dataframe_sample_nested_datastructures():
     n = 10
     df1 = pd.DataFrame({"B": gen_random_arrow_array_struct_int(10, n)})
     df2 = pd.DataFrame({"B": gen_random_arrow_array_struct_list_int(10, n)})
-    df3 = pd.DataFrame({"B": gen_random_arrow_list_list(1, n)})
+    df3 = pd.DataFrame({"B": gen_random_arrow_list_list_int(1, 0.1, n)})
     df4 = pd.DataFrame({"B": gen_random_arrow_struct_struct(10, n)})
     check_gather_operation(df1)
     check_gather_operation(df2)

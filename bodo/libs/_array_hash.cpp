@@ -295,9 +295,9 @@ void hash_arrow_array(uint32_t* out_hashes,
             std::dynamic_pointer_cast<arrow::StructArray>(input_array);
         auto struct_type =
             std::dynamic_pointer_cast<arrow::StructType>(struct_array->type());
-        for (int i_child = 0; i_child < struct_type->num_children(); i_child++)
+        for (int i_field = 0; i_field < struct_type->num_fields(); i_field++)
             hash_arrow_array(out_hashes, list_offsets, n_rows,
-                             struct_array->field(i_child));
+                             struct_array->field(i_field));
         apply_arrow_bitmask_hash(out_hashes, list_offsets, n_rows, input_array);
     } else if (input_array->type_id() == arrow::Type::STRING) {
         auto str_array =

@@ -35,12 +35,6 @@
 #endif
 // ------------------------------------------------
 
-
-Bodo_CTypes::CTypeEnum arrow_to_bodo_type(arrow::Type::type type);
-
-
-
-
 inline void CheckEqualityArrayType(array_info* arr1, array_info* arr2) {
     if (arr1->arr_type != arr2->arr_type) {
         Bodo_PyErr_SetString(
@@ -56,21 +50,6 @@ inline void CheckEqualityArrayType(array_info* arr1, array_info* arr2) {
             return;
         }
     }
-}
-
-/** Getting the expression of a T value as a vector of characters
- *
- * The template paramter is T.
- * @param val the value in the type T.
- * @return the vector of characters on output
- */
-template <typename T>
-inline std::vector<char> GetCharVector(T const& val) {
-    const T* valptr = &val;
-    const char* charptr = (char*)valptr;
-    std::vector<char> V(sizeof(T));
-    for (size_t u = 0; u < sizeof(T); u++) V[u] = charptr[u];
-    return V;
 }
 
 /** Getting the expression of a string of characters as a T value
@@ -109,40 +88,6 @@ inline double GetDoubleEntry(Bodo_CTypes::CTypeEnum dtype, char* ptr) {
     if (dtype == Bodo_CTypes::DECIMAL) return decimal_to_double(GetTentry<decimal_value_cpp>(ptr));
     Bodo_PyErr_SetString(PyExc_RuntimeError, "Unsupported case in GetDoubleEntry");
     return 0;
-}
-
-/* The NaN entry used in the case a normal value is not available.
- *
- * The choice are done in following way:
- * ---int8_t / int16_t / int32_t / int64_t : return a -1 value
- * ---uint8_t / uint16_t / uint32_t / uint64_t : return a 0 value
- * ---float / double : return a NaN
- * This is obviously not perfect as -1 can be a legitimate value, but here goes.
- *
- * @param the dtype used.
- * @return the list of characters in output.
- */
-inline std::vector<char> RetrieveNaNentry(Bodo_CTypes::CTypeEnum const& dtype) {
-    if (dtype == Bodo_CTypes::_BOOL) return GetCharVector<bool>(false);
-    if (dtype == Bodo_CTypes::INT8) return GetCharVector<int8_t>(-1);
-    if (dtype == Bodo_CTypes::UINT8) return GetCharVector<uint8_t>(0);
-    if (dtype == Bodo_CTypes::INT16) return GetCharVector<int16_t>(-1);
-    if (dtype == Bodo_CTypes::UINT16) return GetCharVector<uint16_t>(0);
-    if (dtype == Bodo_CTypes::INT32) return GetCharVector<int32_t>(-1);
-    if (dtype == Bodo_CTypes::UINT32) return GetCharVector<uint32_t>(0);
-    if (dtype == Bodo_CTypes::INT64) return GetCharVector<int64_t>(-1);
-    if (dtype == Bodo_CTypes::UINT64) return GetCharVector<uint64_t>(0);
-    if (dtype == Bodo_CTypes::DATE) {
-        Bodo_PyErr_SetString(PyExc_RuntimeError,
-                             "In DATE case missing values are handled by NULLABLE_INT_BOOL so this case is impossible");
-    }
-    if (dtype == Bodo_CTypes::DATETIME || dtype == Bodo_CTypes::TIMEDELTA)
-        return GetCharVector<int64_t>(std::numeric_limits<int64_t>::min());
-    if (dtype == Bodo_CTypes::FLOAT32)
-        return GetCharVector<float>(std::nanf("1"));
-    if (dtype == Bodo_CTypes::FLOAT64)
-        return GetCharVector<double>(std::nan("1"));
-    return {};
 }
 
 /** This function uses the combinatorial information computed in the

@@ -33,4 +33,9 @@ int64_t pq_read_array_item_single_file(
     std::vector<uint32_t> *offset_vec = NULL,
     std::vector<uint8_t> *data_vec = NULL, std::vector<bool> *null_vec = NULL);
 
+void pq_read_arrow_single_file(
+    std::shared_ptr<parquet::arrow::FileReader> arrow_reader,
+    const std::vector<int> &column_indices, int64_t start, int64_t count,
+    arrow::ArrayVector &parts);
+
 #endif  // _PARQUET_READER_H_INCLUDED

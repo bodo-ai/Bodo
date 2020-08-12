@@ -20,24 +20,34 @@ import numpy as np
 
 class ParquetReader(ir.Stmt):
     def __init__(
-        self, file_name, df_out, col_names, col_indices, out_types, out_vars, loc
+        self,
+        file_name,
+        df_out,
+        col_names,
+        col_indices,
+        col_nb_fields,
+        out_types,
+        out_vars,
+        loc,
     ):
         self.connector_typ = "parquet"
         self.file_name = file_name
         self.df_out = df_out  # used only for printing
         self.col_names = col_names
         self.col_indices = col_indices
+        self.col_nb_fields = col_nb_fields
         self.out_types = out_types
         self.out_vars = out_vars
         self.loc = loc
 
     def __repr__(self):  # pragma: no cover
         # TODO
-        return "({}) = ReadParquet({}, {}, {}, {}, {})".format(
+        return "({}) = ReadParquet({}, {}, {}, {}, {}, {})".format(
             self.df_out,
             self.file_name.name,
             self.col_names,
             self.col_indices,
+            self.col_nb_fields,
             self.out_types,
             self.out_vars,
         )
@@ -51,6 +61,7 @@ def remove_dead_pq(
     new_out_vars = []
     new_out_types = []
     new_col_indices = []
+    new_col_nb_fields = []
 
     for i, col_var in enumerate(pq_node.out_vars):
         if col_var.name in lives:
@@ -58,11 +69,13 @@ def remove_dead_pq(
             new_out_vars.append(pq_node.out_vars[i])
             new_out_types.append(pq_node.out_types[i])
             new_col_indices.append(pq_node.col_indices[i])
+            new_col_nb_fields.append(pq_node.col_nb_fields[i])
 
     pq_node.col_names = new_col_names
     pq_node.out_vars = new_out_vars
     pq_node.out_types = new_out_types
     pq_node.col_indices = new_col_indices
+    pq_node.col_nb_fields = new_col_nb_fields
 
     if len(pq_node.out_vars) == 0:
         return None

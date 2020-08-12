@@ -2,6 +2,8 @@
 
 #define ALIGNMENT 64  // preferred alignment for AVX512
 
+#undef DEBUG_ARROW_ARRAY
+
 std::vector<size_t> numpy_item_size(Bodo_CTypes::_numtypes);
 
 void bodo_common_init() {
@@ -54,6 +56,37 @@ void bodo_common_init() {
         Bodo_PyErr_SetString(PyExc_RuntimeError,
                              "float64 size mismatch between C++ and NumPy!");
         return;
+    }
+}
+
+Bodo_CTypes::CTypeEnum arrow_to_bodo_type(arrow::Type::type type) {
+    switch (type) {
+        case arrow::Type::INT8:
+            return Bodo_CTypes::INT8;
+        case arrow::Type::UINT8:
+            return Bodo_CTypes::UINT8;
+        case arrow::Type::INT16:
+            return Bodo_CTypes::INT16;
+        case arrow::Type::UINT16:
+            return Bodo_CTypes::UINT16;
+        case arrow::Type::INT32:
+            return Bodo_CTypes::INT32;
+        case arrow::Type::UINT32:
+            return Bodo_CTypes::UINT32;
+        case arrow::Type::INT64:
+            return Bodo_CTypes::INT64;
+        case arrow::Type::UINT64:
+            return Bodo_CTypes::UINT64;
+        case arrow::Type::FLOAT:
+            return Bodo_CTypes::FLOAT32;
+        case arrow::Type::DOUBLE:
+            return Bodo_CTypes::FLOAT64;
+        // TODO Decimal, Date, Datetime, Timedelta, String, Bool
+        default:
+          {
+            std::string err_msg = "arrow_to_bodo_type : Unsupported type";
+            Bodo_PyErr_SetString(PyExc_RuntimeError, err_msg.c_str());
+          }
     }
 }
 
@@ -266,6 +299,139 @@ void free_list_string_array(NRT_MemInfo* meminfo) {
     NRT_MemInfo_call_dtor(meminfo);
 }
 
+
+/**
+ * Given an Arrow array, populate array of lengths and array of array_info*
+ * with the data from the array and all of its descendant arrays.
+ * This is called recursively, and will create one array_info for each
+ * individual buffer (offsets, null_bitmaps, data).
+ * @param array: The input Arrow array
+ * @param lengths: The lengths array to fill
+ * @param infos: The array_info* array to fill
+ * @param lengths_pos: current position in lengths (this is passed by reference
+ *        because we are traversing an arbitrary tree of arrays. Some arrays
+ *        (like StructArray) have multiple children and upon returning from
+ *        one of the child subtrees we need to know the current position in
+ *        lengths.
+ * @param infos_pos: same as lengths_pos but tracks the position in infos array
+ */
+void nested_array_to_c(std::shared_ptr<arrow::Array> array, int64_t* lengths,
+                       array_info** infos, int64_t& lengths_pos,
+                       int64_t& infos_pos) {
+#ifdef DEBUG_ARROW_ARRAY
+    std::cout << "nested_array_to_c : Beginning of nested_array_to_c\n";
+#endif
+    if (array->type_id() == arrow::Type::LIST) {
+#ifdef DEBUG_ARROW_ARRAY
+        std::cout << "nested_array_to_c : LIST case\n";
+#endif
+        std::shared_ptr<arrow::ListArray> list_array =
+            std::dynamic_pointer_cast<arrow::ListArray>(array);
+        lengths[lengths_pos++] = list_array->length();
+
+        // allocate output arrays and copy data
+        array_info* offsets = alloc_array(list_array->length() + 1, -1, -1,
+                                          bodo_array_type::arr_type_enum::NUMPY,
+                                          Bodo_CTypes::INT32, 0, 0);
+        int64_t n_null_bytes = (list_array->length() + 7) >> 3;
+        array_info* nulls = alloc_array(n_null_bytes, -1, -1,
+                                        bodo_array_type::arr_type_enum::NUMPY,
+                                        Bodo_CTypes::UINT8, 0, 0);
+
+        memcpy(offsets->data1, list_array->value_offsets()->data(),
+               (list_array->length() + 1) * sizeof(int32_t));
+        memset(nulls->data1, 0, n_null_bytes);
+        for (int64_t i = 0; i < list_array->length(); i++) {
+            if (!list_array->IsNull(i))
+                SetBitTo((uint8_t*)nulls->data1, i, true);
+        }
+
+        infos[infos_pos++] = offsets;
+        infos[infos_pos++] = nulls;
+        nested_array_to_c(list_array->values(), lengths, infos, lengths_pos,
+                          infos_pos);
+    } else if (array->type_id() == arrow::Type::STRUCT) {
+#ifdef DEBUG_ARROW_ARRAY
+        std::cout << "nested_array_to_c : STRUCT case\n";
+#endif
+        auto struct_array =
+            std::dynamic_pointer_cast<arrow::StructArray>(array);
+        auto struct_type =
+            std::dynamic_pointer_cast<arrow::StructType>(struct_array->type());
+        lengths[lengths_pos++] = struct_array->length();
+
+        // allocate output arrays and copy data
+        int64_t n_null_bytes = (struct_array->length() + 7) >> 3;
+        array_info* nulls = alloc_array(n_null_bytes, -1, -1,
+                                        bodo_array_type::arr_type_enum::NUMPY,
+                                        Bodo_CTypes::UINT8, 0, 0);
+        memset(nulls->data1, 0, n_null_bytes);
+        for (int64_t i = 0; i < struct_array->length(); i++) {
+            if (!struct_array->IsNull(i))
+                SetBitTo((uint8_t*)nulls->data1, i, true);
+        }
+        infos[infos_pos++] = nulls;
+        // Now outputing the fields.
+        for (int i = 0; i < struct_type->num_fields();
+             i++) {  // each field is an array
+            nested_array_to_c(struct_array->field(i), lengths, infos,
+                              lengths_pos, infos_pos);
+        }
+    } else if (array->type_id() == arrow::Type::STRING) {
+#ifdef DEBUG_ARROW_ARRAY
+        std::cout << "nested_array_to_c : STRING case\n";
+#endif
+        auto str_array = std::dynamic_pointer_cast<arrow::StringArray>(array);
+        lengths[lengths_pos++] = str_array->length();
+        int64_t n_strings = str_array->length();
+        int64_t n_chars = ((int32_t*)str_array->value_offsets()->data())[n_strings];
+        array_info* str_arr_info = alloc_string_array(n_strings, n_chars, 0);
+        memcpy(str_arr_info->data1, str_array->value_data()->data(), sizeof(char) * n_chars);  // data
+        memcpy(str_arr_info->data2, str_array->value_offsets()->data(), sizeof(int32_t) * (n_strings + 1));  // offsets
+        int64_t n_null_bytes = (n_strings + 7) >> 3;
+        memset(str_arr_info->null_bitmask, 0, n_null_bytes);
+        for (int64_t i = 0; i < n_strings; i++) {
+            if (!str_array->IsNull(i))
+                SetBitTo((uint8_t*)str_arr_info->null_bitmask, i, true);
+        }
+        infos[infos_pos++] = str_arr_info;
+    } else {
+#ifdef DEBUG_ARROW_ARRAY
+        std::cout << "nested_array_to_c : PRIMITIVE case\n";
+#endif
+        auto primitive_array =
+            std::dynamic_pointer_cast<arrow::PrimitiveArray>(array);
+        lengths[lengths_pos++] = primitive_array->length();
+
+        Bodo_CTypes::CTypeEnum dtype =
+            arrow_to_bodo_type(primitive_array->type_id());
+
+        // allocate output arrays and copy data
+        array_info* data =
+            alloc_array(primitive_array->length(), -1, -1,
+                        bodo_array_type::arr_type_enum::NUMPY, dtype, 0, 0);
+        int64_t n_null_bytes = (primitive_array->length() + 7) >> 3;
+        array_info* nulls = alloc_array(n_null_bytes, -1, -1,
+                                        bodo_array_type::arr_type_enum::NUMPY,
+                                        Bodo_CTypes::UINT8, 0, 0);
+
+        memcpy(data->data1, primitive_array->values()->data(),
+               numpy_item_size[dtype] * primitive_array->length());
+        memset(nulls->data1, 0, n_null_bytes);
+        std::vector<char> vectNaN = RetrieveNaNentry(dtype);
+        uint64_t siztype = numpy_item_size[dtype];
+        for (int64_t i = 0; i < primitive_array->length(); i++) {
+            if (!primitive_array->IsNull(i))
+                SetBitTo((uint8_t*)nulls->data1, i, true);
+            else
+                memcpy(data->data1 + siztype * i, vectNaN.data(), siztype);
+        }
+        infos[infos_pos++] = nulls;
+        infos[infos_pos++] = data;
+    }
+}
+
+
 extern "C" {
 
 void dtor_string_array(str_arr_payload* in_str_arr, int64_t size, void* in) {
@@ -341,4 +507,5 @@ void allocate_list_string_array(int64_t n_lists, int64_t n_strings,
     // set all bits to 1 indicating non-null as default
     memset(payload->null_bitmap.data, 0xff, n_bytes);
 }
+
 }
