@@ -90,6 +90,7 @@ no_side_effect_call_tuples = {
     ("init_bool_array", "bool_arr_ext", "libs", bodo),
     ("alloc_bool_array", "bool_arr_ext", "libs", bodo),
     ("alloc_datetime_date_array", "datetime_date_ext", "hiframes", bodo,),
+    ("alloc_datetime_timedelta_array", "datetime_timedelta_ext", "hiframes", bodo,),
     ("_sum_handle_nan", "series_kernels", "hiframes", bodo),
     ("_mean_handle_nan", "series_kernels", "hiframes", bodo),
     ("_var_handle_mincount", "series_kernels", "hiframes", bodo),

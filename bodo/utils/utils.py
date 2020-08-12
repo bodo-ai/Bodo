@@ -124,6 +124,10 @@ def numba_to_c_type(t):
     if t == bodo.hiframes.datetime_date_ext.datetime_date_type:
         return CTypeEnum.Date.value
 
+    # TODO: Timedelta arrays need to be supported
+#    if t == bodo.hiframes.datetime_timedelta_ext.datetime_timedelta_type:
+#        return CTypeEnum.Timedelta.value
+
     return _numba_to_c_type_map[t]
 
 
@@ -158,6 +162,10 @@ def is_alloc_callname(func_name, mod_name):
         or (
             func_name == "alloc_datetime_date_array"
             and mod_name == "bodo.hiframes.datetime_date_ext"
+        )
+        or (
+            func_name == "alloc_datetime_timedelta_array"
+            and mod_name == "bodo.hiframes.datetime_timedelta_ext"
         )
         or (
             func_name == "alloc_decimal_array"
@@ -292,6 +300,7 @@ def is_array_typ(var_typ, include_index_series=True):
             string_array_type,
             bodo.hiframes.split_impl.string_array_split_view_type,
             bodo.hiframes.datetime_date_ext.datetime_date_array_type,
+            bodo.hiframes.datetime_timedelta_ext.datetime_timedelta_array_type,
         )
         or isinstance(var_typ, IntegerArrayType)
         or isinstance(var_typ, bodo.libs.decimal_arr_ext.DecimalArrayType)
@@ -499,6 +508,12 @@ def empty_like_type_overload(n, arr):
 
         return empty_like_type_datetime_date_arr
 
+    if arr == bodo.hiframes.datetime_timedelta_ext.datetime_timedelta_array_type:
+
+        def empty_like_type_datetime_timedelta_arr(n, arr):  # pragma: no cover
+            return bodo.hiframes.datetime_timedelta_ext.alloc_datetime_timedelta_array(n)
+
+        return empty_like_type_datetime_timedelta_arr
     if isinstance(arr, bodo.libs.decimal_arr_ext.DecimalArrayType):
         precision = arr.precision
         scale = arr.scale
@@ -692,6 +707,11 @@ def overload_alloc_type(n, t, s=None):
             n
         )  # pragma: no cover
 
+    if typ.dtype == bodo.hiframes.datetime_timedelta_ext.datetime_timedelta_type:
+        return lambda n, t, s=None: bodo.hiframes.datetime_timedelta_ext.alloc_datetime_timedelta_array(
+            n
+        )  # pragma: no cover
+
     if isinstance(typ, DecimalArrayType):
         precision = typ.dtype.precision
         scale = typ.dtype.scale
@@ -878,10 +898,10 @@ def list_reverse(A):
     reversed(list)
     """
     if isinstance(A, types.List):
-        
+
         def impl_reversed(A):
             A_len = len(A)
             for i in range(A_len):
-                yield A[A_len-1-i]
-        
+                yield A[A_len - 1 - i]
+
         return impl_reversed

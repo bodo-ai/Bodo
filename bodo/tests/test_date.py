@@ -955,7 +955,7 @@ def test_dt_extract_date(series_value):
 @pytest.mark.parametrize(
     "timedelta_fields", bodo.hiframes.pd_timestamp_ext.timedelta_fields
 )
-def test_dt_timedelta_fileds(timedelta_fields):
+def test_dt_timedelta_fields(timedelta_fields):
     """Test Series.dt for timedelta64 fields
     """
     func_text = "def impl(S, date_fields):\n"
@@ -966,6 +966,22 @@ def test_dt_timedelta_fileds(timedelta_fields):
 
     S = pd.timedelta_range("1s", "1d", freq="s").to_series()
     check_func(impl, (S, timedelta_fields), check_dtype=False)
+
+
+@pytest.mark.parametrize(
+    "timedelta_methods", bodo.hiframes.pd_timestamp_ext.timedelta_methods
+)
+def test_dt_timedelta_methods(timedelta_methods):
+    """Test Series.dt for timedelta64 methods
+    """
+    func_text = "def impl(S, timedelta_methods):\n"
+    func_text += "  return S.dt.{}()\n".format(timedelta_methods)
+    loc_vars = {}
+    exec(func_text, {}, loc_vars)
+    impl = loc_vars["impl"]
+
+    S = pd.timedelta_range("1s", "1d", freq="s").to_series()
+    check_func(impl, (S, timedelta_methods))
 
 
 def test_series_dt64_timestamp_cmp():
@@ -1246,4 +1262,11 @@ def test_datetime_date_array_len():
         return len(A)
 
     A = np.array([datetime.date(2012, 1, 1), datetime.date(2011, 3, 3)] * 3)
+    check_func(test_impl, (A,))
+
+def test_datetime_timedelta_array_len():
+    def test_impl(A):
+        return len(A)
+
+    A = np.array([datetime.timedelta(34), datetime.timedelta(microseconds=43000000)] * 3)
     check_func(test_impl, (A,))

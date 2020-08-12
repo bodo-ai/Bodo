@@ -192,7 +192,7 @@ def create_timedelta_field_overload(field):
         if field == "nanoseconds":
             func_text += "        B[i] = td64 % 1000\n"
         elif field == "microseconds":
-            func_text += "        B[i] = td64 // 1000 % 100000\n"
+            func_text += "        B[i] = td64 // 1000 % 1000000\n"
         elif field == "seconds":
             func_text += "        B[i] = td64 // (1000 * 1000000) % (60 * 60 * 24)\n"
         elif field == "days":
@@ -210,6 +210,62 @@ def create_timedelta_field_overload(field):
     return overload_field
 
 
+# support Timedelta methods such as S.dt.total_seconds()
+def create_timedelta_method_overload(method):
+    def overload_method(S_dt):
+        if not S_dt.stype.dtype == types.NPTimedelta("ns"):  # pragma: no cover
+            return
+        # TODO: refactor with TimedeltaIndex?
+        func_text = "def impl(S_dt):\n"
+        func_text += "    S = S_dt._obj\n"
+        func_text += "    A = bodo.hiframes.pd_series_ext.get_series_data(S)\n"
+        func_text += "    index = bodo.hiframes.pd_series_ext.get_series_index(S)\n"
+        func_text += "    name = bodo.hiframes.pd_series_ext.get_series_name(S)\n"
+        func_text += "    numba.parfors.parfor.init_prange()\n"
+        func_text += "    n = len(A)\n"
+        # total_seconds returns a float64
+        if method == "total_seconds":
+            func_text += "    B = np.empty(n, np.float64)\n"
+        # Only other method is to_pytimedelta, which is an arr of datetimes
+        else:
+            func_text += "    B = bodo.hiframes.datetime_timedelta_ext.alloc_datetime_timedelta_array(n)\n"
+
+        func_text += "    for i in numba.parfors.parfor.internal_prange(n):\n"
+        func_text += "        if bodo.libs.array_kernels.isna(A, i):\n"
+        func_text += "            bodo.libs.array_kernels.setna(B, i)\n"
+        func_text += "            continue\n"
+        # Convert the timedelta to its integer representation.
+        # Then convert to a float
+        func_text += "        td64 = bodo.hiframes.pd_timestamp_ext.timedelta64_to_integer(A[i])\n"
+        if method == "total_seconds":
+            func_text += "        B[i] = td64 / (1000.0 * 1000000.0)\n"
+        elif method == "to_pytimedelta":
+            # Convert td64 to microseconds
+            func_text += (
+                "        B[i] = datetime.timedelta(microseconds=td64 // 1000)\n"
+            )
+        else:  # pragma: no cover
+            assert False, "invalid timedelta method"
+        if method == "total_seconds":
+            func_text += (
+                "    return bodo.hiframes.pd_series_ext.init_series(B, index, name)\n"
+            )
+        else:
+            func_text += (
+                "    return B\n"
+            )
+        loc_vars = {}
+        exec(
+            func_text,
+            {"numba": numba, "np": np, "bodo": bodo, "datetime": datetime},
+            loc_vars,
+        )
+        impl = loc_vars["impl"]
+        return impl
+
+    return overload_method
+
+
 def _install_S_dt_timedelta_fields():
     for field in bodo.hiframes.pd_timestamp_ext.timedelta_fields:
         overload_impl = create_timedelta_field_overload(field)
@@ -217,6 +273,17 @@ def _install_S_dt_timedelta_fields():
 
 
 _install_S_dt_timedelta_fields()
+
+
+def _install_S_dt_timedelta_methods():
+    for method in bodo.hiframes.pd_timestamp_ext.timedelta_methods:
+        overload_impl = create_timedelta_method_overload(method)
+        overload_method(SeriesDatetimePropertiesType, method, inline="always")(
+            overload_impl
+        )
+
+
+_install_S_dt_timedelta_methods()
 
 
 def create_bin_op_overload(op):

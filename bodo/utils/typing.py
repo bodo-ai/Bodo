@@ -754,7 +754,7 @@ def scalar_to_array_type(t):
     if t == bodo.hiframes.datetime_date_ext.datetime_date_type:
         return bodo.hiframes.datetime_date_ext.datetime_date_array_type
 
-    # datetime.timedelta values are stored as td64 arrays
+    # datetime.timedelta values are stored as timedelta arrays
     if t == bodo.hiframes.datetime_timedelta_ext.datetime_timedelta_type:
         return types.Array(types.NPTimedelta("ns"), 1, "C")
 
