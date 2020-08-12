@@ -1998,6 +1998,22 @@ def test_loc_col_name():
     check_func(test_impl, (df,))
 
 
+def test_loc_col_select():
+    """test df.iloc[slice, col_ind] where col_ind is a list of column names or bools
+    """
+
+    def impl1(df):
+        return df.loc[:, ["A", "C"]]
+
+    def impl2(df):
+        return df.loc[:, [True, False, True]]
+
+    n = 11
+    df = pd.DataFrame({"A": np.arange(n), "B": np.arange(n) ** 2, "C": np.ones(n)})
+    check_func(impl1, (df,))
+    check_func(impl2, (df,))
+
+
 def test_df_schema_change():
     """
     Dataframe operations like setting new columns change the schema, so other

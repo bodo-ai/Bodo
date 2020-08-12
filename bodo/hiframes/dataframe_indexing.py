@@ -3,6 +3,8 @@
 Indexing support for pd.DataFrame type.
 """
 import operator
+import pandas as pd
+import numpy as np
 from numba.core import types, cgutils
 from numba.extending import (
     models,
@@ -345,29 +347,51 @@ def overload_loc_getitem(I, idx):
         )
 
     # df.loc[idx, "A"]
-    if (
-        isinstance(idx, types.BaseTuple)
-        and len(idx) == 2
-        and is_overload_constant_str(idx.types[1])
-    ):
-        # TODO: support non-str dataframe names
-        # TODO: error checking
-        # create Series from column data and reuse Series.loc[]
-        col_name = get_overload_const_str(idx.types[1])
-        col_ind = df.columns.index(col_name)
+    if isinstance(idx, types.BaseTuple) and len(idx) == 2:
+        col_idx = idx.types[1]
 
-        def impl_col_name(I, idx):
-            df = I._obj
-            index = bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)
-            data = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, col_ind)
-            return bodo.hiframes.pd_series_ext.init_series(data, index, col_name).loc[
-                idx[0]
-            ]
+        # df.loc[idx, "A"]
+        if is_overload_constant_str(col_idx):
+            # TODO: support non-str dataframe names
+            # TODO: error checking
+            # create Series from column data and reuse Series.loc[]
+            col_name = get_overload_const_str(col_idx)
+            col_ind = df.columns.index(col_name)
 
-        return impl_col_name
+            def impl_col_name(I, idx):
+                df = I._obj
+                index = bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)
+                data = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, col_ind)
+                return bodo.hiframes.pd_series_ext.init_series(
+                    data, index, col_name
+                ).loc[idx[0]]
+
+            return impl_col_name
+
+        # df.loc[idx, ["A", "B"]] or df.loc[idx, [True, False, True]]
+        if is_overload_constant_list(col_idx):
+            # get column list (could be list of strings or bools)
+            col_idx_list = get_overload_const_list(col_idx)
+            # get column names if bool list
+            if len(col_idx_list) > 0 and isinstance(col_idx_list[0], bool):
+                col_idx_list = list(np.array(df.columns)[col_idx_list])
+
+            # create a new dataframe, create new data/index using idx
+            new_data = ", ".join(
+                "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {})[idx[0]]".format(
+                    df.columns.index(c)
+                )
+                for c in col_idx_list
+            )
+            index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)[idx[0]]"
+            func_text = "def impl(I, idx):\n"
+            func_text += "  df = I._obj\n"
+            return bodo.hiframes.dataframe_impl._gen_init_df(
+                func_text, col_idx_list, new_data, index
+            )
 
     # TODO: error-checking test
-    raise BodoError(
+    raise_bodo_error(
         "DataFrame.loc[] getitem (location-based indexing) using {} not supported yet.".format(
             idx
         )
