@@ -535,12 +535,13 @@ class DistributedAnalysis:
         func_mod = ""
         fdef = guard(find_callname, self.func_ir, rhs, self.typemap)
         if fdef is None:
-            # check ObjModeLiftedWith, we assume distribution doesn't change
-            # blocks of data are passed in, TODO: document
+            # check ObjModeLiftedWith, we assume out data is distributed (1D_Var)
             func_def = guard(get_definition, self.func_ir, rhs.func)
             if isinstance(func_def, ir.Const) and isinstance(
                 func_def.value, numba.core.dispatcher.ObjModeLiftedWith
             ):
+                if lhs not in array_dists:
+                    self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
                 return
             # some functions like overload_bool_arr_op_nin_1 may generate const ufuncs
             if isinstance(func_def, ir.Const) and isinstance(func_def.value, np.ufunc):
