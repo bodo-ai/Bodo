@@ -20,7 +20,7 @@ such as Numba on Ubuntu Linux::
     # Linux: conda install gcc_linux-64 gxx_linux-64 gfortran_linux-64 -c conda-forge
     # Mac: conda install clang_osx-64 clangxx_osx-64 gfortran_osx-64 -c conda-forge
     # NOTE: for development/debugging purposes, it's best to install Numba from source instead
-    conda install numba=0.51.0rc1 -c numba
+    conda install numba=0.51.0 -c numba
     conda install -c conda-forge hdf5=*=*mpich* pyarrow=1.0.0 pymysql sqlalchemy
     # If you get the error "zsh: no matches found: hdf5=*=*mpich*" (typically on Mac), try the following instead:
     # conda install -c conda-forge "hdf5=*=*mpich*" pyarrow=1.0.0 pymysql sqlalchemy
@@ -49,7 +49,7 @@ On Windows
 
     conda create -n DEV python=3.8 numpy scipy pandas=1.1.0 boost-cpp cmake h5py -c conda-forge
     source activate DEV
-    conda install numba=0.51.0rc1 -c numba
+    conda install numba=0.51.0 -c numba
     conda install vc vs2015_runtime vs2015_win-64
     conda install -c defaults -c intel impi_rt impi-devel
     conda install -c conda-forge pyarrow=1.0.0
