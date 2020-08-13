@@ -79,7 +79,10 @@ from bodo.hiframes.series_indexing import SeriesIatType, SeriesIlocType, SeriesL
 from bodo.ir.aggregate import Aggregate
 from bodo.hiframes import series_kernels
 from bodo.hiframes.datetime_date_ext import datetime_date_array_type
-from bodo.hiframes.datetime_timedelta_ext import datetime_timedelta_type, datetime_timedelta_array_type
+from bodo.hiframes.datetime_timedelta_ext import (
+    datetime_timedelta_type,
+    datetime_timedelta_array_type,
+)
 from bodo.hiframes.datetime_datetime_ext import datetime_datetime_type
 from bodo.hiframes.pd_timestamp_ext import timedelta_methods
 from bodo.libs.decimal_arr_ext import DecimalArrayType
@@ -512,7 +515,7 @@ class SeriesPass:
         # inline Series.dt.field
         if (
             isinstance(rhs_type, SeriesDatetimePropertiesType)
-            and rhs.attr not in timedelta_methods 
+            and rhs.attr not in timedelta_methods
         ):
             if rhs_type.stype.dtype == types.NPDatetime("ns"):
                 if rhs.attr == "date":
@@ -715,7 +718,10 @@ class SeriesPass:
                 )
                 return replace_func(self, impl, [arg1, arg2])
 
-            if typ1 == datetime_timedelta_array_type and typ2 == datetime_timedelta_type:
+            if (
+                typ1 == datetime_timedelta_array_type
+                and typ2 == datetime_timedelta_type
+            ):
                 impl = bodo.hiframes.datetime_timedelta_ext.overload_datetime_date_arr_sub(
                     typ1, typ2
                 )
@@ -807,10 +813,13 @@ class SeriesPass:
                 return replace_func(self, impl, [arg1, arg2])
 
             # datetime_timedelta_array operations
-            if typ1 == datetime_timedelta_array_type or typ2 == datetime_timedelta_array_type:
-                impl = bodo.hiframes.datetime_timedelta_ext.create_cmp_op_overload(rhs.fn)(
-                    typ1, typ2
-                )
+            if (
+                typ1 == datetime_timedelta_array_type
+                or typ2 == datetime_timedelta_array_type
+            ):
+                impl = bodo.hiframes.datetime_timedelta_ext.create_cmp_op_overload(
+                    rhs.fn
+                )(typ1, typ2)
                 return replace_func(self, impl, [arg1, arg2])
 
             # series(timedelta) and timedelta

@@ -1264,9 +1264,12 @@ def test_datetime_date_array_len():
     A = np.array([datetime.date(2012, 1, 1), datetime.date(2011, 3, 3)] * 3)
     check_func(test_impl, (A,))
 
+
 def test_datetime_timedelta_array_len():
     def test_impl(A):
         return len(A)
 
-    A = np.array([datetime.timedelta(34), datetime.timedelta(microseconds=43000000)] * 3)
+    A = np.array(
+        [datetime.timedelta(34), datetime.timedelta(microseconds=43000000)] * 3
+    )
     check_func(test_impl, (A,))

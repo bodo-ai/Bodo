@@ -89,15 +89,18 @@ def remove_dead_json(
 
 
 def json_distributed_run(
-    json_node, array_dists, typemap, calltypes, typingctx, targetctx, dist_pass
+    json_node, array_dists, typemap, calltypes, typingctx, targetctx
 ):
-    parallel = True
-    for v in json_node.out_vars:
-        if (
-            array_dists[v.name] != distributed_pass.Distribution.OneD
-            and array_dists[v.name] != distributed_pass.Distribution.OneD_Var
-        ):
-            parallel = False
+    parallel = False
+    if array_dists is not None:
+        parallel = True
+        for v in json_node.out_vars:
+            if (
+                array_dists[v.name] != distributed_pass.Distribution.OneD
+                and array_dists[v.name] != distributed_pass.Distribution.OneD_Var
+            ):
+                parallel = False
+
     n_cols = len(json_node.out_vars)
     # TODO: rebalance if output distributions are 1D instead of 1D_Var
     # get column variables

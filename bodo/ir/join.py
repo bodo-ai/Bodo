@@ -415,9 +415,14 @@ ir_utils.build_defs_extensions[Join] = build_join_definitions
 
 
 def join_distributed_run(
-    join_node, array_dists, typemap, calltypes, typingctx, targetctx, dist_pass
+    join_node, array_dists, typemap, calltypes, typingctx, targetctx
 ):
-    left_parallel, right_parallel = _get_table_parallel_flags(join_node, array_dists)
+    left_parallel, right_parallel = False, False
+    if array_dists is not None:
+        left_parallel, right_parallel = _get_table_parallel_flags(
+            join_node, array_dists
+        )
+
     # TODO: rebalance if output distributions are 1D instead of 1D_Var
     loc = join_node.loc
     n_keys = len(join_node.left_keys)
@@ -665,7 +670,6 @@ def join_distributed_run(
     ).blocks.popitem()[1]
     replace_arg_nodes(f_block, arg_vars)
 
-    tuple_assign = f_block.body[-3]
     nodes = f_block.body[:-3]
     for i in range(len(merge_out)):
         nodes[-len(merge_out) + i].target = merge_out[i]
