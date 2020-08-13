@@ -3,7 +3,10 @@
 PYTEST_DONT_REWRITE
 """
 import unittest
+import pandas as pd
 import bodo
+from bodo.tests.utils import check_func
+
 
 # using separate file for assert tests to avoid pytest rewrite errors
 class AssertTest(unittest.TestCase):
@@ -21,3 +24,24 @@ class AssertTest(unittest.TestCase):
         # TODO: check for static raise presence in IR
         hpat_f = bodo.jit(f)
         hpat_f()
+
+
+def test_df_apply_assertion():
+    """test assertion in UDF passed to df.apply().
+    Bodo shouldn't inline the UDF since Numba's prange doesn't support assertions
+    (multiple loop exit points in general).
+    TODO: support assertions in parallel loops in general.
+    """
+
+    def test_impl(df):
+        def udf(r):
+            if r.A == 2:
+                return 3
+            assert r.A == 1
+            return 5
+
+        return df.apply(udf, axis=1)
+
+    n = 11
+    df = pd.DataFrame({"A": [1, 1, 2] * n})
+    check_func(test_impl, (df,))

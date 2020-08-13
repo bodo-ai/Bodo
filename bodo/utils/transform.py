@@ -659,6 +659,16 @@ def set_call_expr_arg(var, args, kws, arg_no, arg_name):
         )  # pragma: no cover
 
 
+def func_has_assertions(py_func):
+    """return True if input function has any assertion inside
+    """
+    f_ir = numba.core.compiler.run_frontend(py_func, inline_closures=True)
+    for block in f_ir.blocks.values():
+        if isinstance(block.body[-1], (ir.Raise, ir.StaticRaise)):
+            return True
+    return False
+
+
 def replace_func(
     pass_info,
     func,
