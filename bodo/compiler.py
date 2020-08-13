@@ -38,6 +38,14 @@ import bodo.libs
 import bodo.libs.array_kernels  # side effect: install Numba functions
 import bodo.libs.int_arr_ext  # side effect
 import bodo.libs.re_ext  # side effect: initialize Numba extensions
+try:
+    import sklearn
+    import bodo.libs.sklearn_ext  # side effect: initialize Numba extensions
+except ImportError:
+    # TODO if sklearn is not installed, trying to use sklearn inside
+    # bodo functions should give more meaningful errors than:
+    # Untyped global name 'RandomForestClassifier': cannot determine Numba type of <class 'abc.ABCMeta'>
+    pass
 import bodo.hiframes.datetime_timedelta_ext  # side effect: initialize Numba extensions
 import bodo.hiframes.datetime_datetime_ext  # side effect: initialize Numba extensions
 import bodo.hiframes.dataframe_indexing  # side effect: initialize Numba extensions

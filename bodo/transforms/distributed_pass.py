@@ -366,6 +366,45 @@ class DistributedPass:
         else:
             func_name, func_mod = fdef
 
+        if (
+            func_name == "fit"
+            and isinstance(func_mod, numba.core.ir.Var)
+            and isinstance(
+                self.typemap[func_mod.name],
+                bodo.libs.sklearn_ext.BodoRandomForestClassifierType,
+            )
+        ):
+            if self._is_1D_arr(rhs.args[0].name) or self._is_1D_Var_arr(
+                rhs.args[0].name
+            ):
+                rhs = assign.value
+                model = func_mod
+                f = lambda model, X, y: model.fit(X, y, _is_data_distributed=True)
+                return compile_func_single_block(
+                    f, [model] + rhs.args[:2], assign.target, self
+                )
+
+        if (
+            func_name == "score"
+            and isinstance(func_mod, numba.core.ir.Var)
+            and isinstance(
+                self.typemap[func_mod.name],
+                bodo.libs.sklearn_ext.BodoRandomForestClassifierType,
+            )
+        ):
+            if self._is_1D_arr(rhs.args[0].name) or self._is_1D_Var_arr(
+                rhs.args[0].name
+            ):
+                rhs = assign.value
+                model = func_mod
+
+                # TODO sample_weight argument
+
+                f = lambda model, X, y: model.score(X, y, sample_weight=None, _is_data_distributed=True)
+                return compile_func_single_block(
+                    f, [model] + rhs.args[:2], assign.target, self
+                )
+
         # divide 1D alloc
         # XXX allocs should be matched before going to _run_call_np
         if self._is_1D_arr(lhs) and is_alloc_callname(func_name, func_mod):

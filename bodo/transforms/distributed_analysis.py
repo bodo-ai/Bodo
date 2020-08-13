@@ -554,6 +554,23 @@ class DistributedAnalysis:
         else:
             func_name, func_mod = fdef
 
+        if (
+            func_name in {"fit", "predict", "score"}
+            and isinstance(func_mod, numba.core.ir.Var)
+            and isinstance(
+                self.typemap[func_mod.name],
+                bodo.libs.sklearn_ext.BodoRandomForestClassifierType,
+            )
+        ):
+            if func_name == "fit":
+                self._meet_array_dists(rhs.args[0].name, rhs.args[1].name, array_dists)
+            elif func_name == "predict":
+                # match input and output distributions
+                self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            elif func_name == "score":
+                self._meet_array_dists(rhs.args[0].name, rhs.args[1].name, array_dists)
+            return
+
         if is_alloc_callname(func_name, func_mod):
             if lhs not in array_dists:
                 array_dists[lhs] = Distribution.OneD
