@@ -168,6 +168,31 @@ def column_name_df_value(request):
     return request.param
 
 
+def test_df_select_dtypes():
+    def test_impl1(df):
+        return df.select_dtypes("bool")
+
+    def test_impl2(df):
+        return df.select_dtypes("float64")
+
+    def test_impl3(df):
+        return df.select_dtypes(exclude="bool")
+
+    def test_impl4(df):
+        return df.select_dtypes(exclude="float64")
+
+    def test_impl5(df):
+        return df.select_dtypes("number", "float64")
+
+    df = pd.DataFrame({"a": [1, 2] * 3, "b": [True, False] * 3, "c": [1.0, 2.0] * 3})
+    check_func(test_impl1, (df,))
+    check_func(test_impl2, (df,))
+    check_func(test_impl3, (df,))
+    check_func(test_impl4, (df,))
+    # TODO: Add support for np.number by string and type hierarchy
+    # check_func(test_impl5, (df,))
+
+
 def test_assign():
     """Assign statements"""
 

@@ -410,6 +410,7 @@ class TypingTransforms:
             "rename": [(2, "columns")],
             "drop": [(0, "labels"), (1, "axis"), (3, "columns"), (5, "inplace"),],
             "dropna": [(0, "axis"), (1, "how"), (3, "subset"),],
+            "select_dtypes": [(0, "include"), (1, "exclude")],
         }
 
         if func_name in df_call_const_args:
@@ -525,9 +526,7 @@ class TypingTransforms:
             # NOTE: this enables const replacement to avoid errors in
             # test_excel1::test_impl2 caused by Numba 0.51 literals
             # TODO: fix underlying issue in Numba
-            "read_excel": [
-                (3, "names"),
-            ],
+            "read_excel": [(3, "names"),],
         }
 
         if func_name in top_level_call_const_args:
