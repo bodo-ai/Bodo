@@ -403,6 +403,20 @@ def test_df_multi_get_level():
     check_func(impl3, (df,))
 
 
+def test_df_replace():
+    # Implementation for single value and single value
+    def impl1(df):
+        return df.replace(np.inf, np.nan).replace(-np.inf, np.nan)
+
+    # Implementation for list and single value
+    def impl2(df):
+        return df.replace([np.inf, -np.inf], np.nan)
+
+    df = pd.DataFrame({"A": [1.0, 2.4, -np.inf], "B": [np.inf, np.nan, 5.2]})
+    check_func(impl1, (df,))
+    check_func(impl2, (df,))
+
+
 def test_box_df():
     # box dataframe contains column with name overlaps with pandas function
     def impl():

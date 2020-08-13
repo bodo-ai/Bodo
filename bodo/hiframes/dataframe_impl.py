@@ -39,6 +39,7 @@ from bodo.utils.typing import (
     get_overload_const_list,
     unliteral_val,
     get_overload_const_int,
+    check_unsupported_args,
 )
 from bodo.utils.transform import gen_const_tup
 from bodo.utils.utils import is_array_typ
@@ -1119,6 +1120,48 @@ def _get_pd_dtype_str(t):
         return "'datetime64[ns]'"
 
     return bodo.ir.csv_ext._get_pd_dtype_str(t)
+
+
+@overload_method(DataFrameType, "replace", inline="always", no_unliteral=True)
+def replace_overload(
+    df,
+    to_replace=None,
+    value=None,
+    inplace=False,
+    limit=None,
+    regex=False,
+    method="pad",
+):
+
+    # Check that to_replace is never none
+    if is_overload_none(to_replace):
+        raise BodoError("replace(): to_replace value of None is not supported")
+
+    # TODO: Add error checking to ensure this is only called on supported types.e
+
+    # Handle type error checking for defaults only supported
+    # Right now this will be everything except to_replace
+    # and value
+    args_dict = {
+        "inplace": inplace,
+        "limit": limit,
+        "regex": regex,
+        "method": method,
+    }
+    args_default_dict = {
+        "inplace": False,
+        "limit": None,
+        "regex": False,
+        "method": "pad",
+    }
+
+    check_unsupported_args("replace", args_dict, args_default_dict)
+
+    data_args = ", ".join(
+        "df['{}'].replace(to_replace, value).values".format(c) for c in df.columns
+    )
+    header = "def impl(df, to_replace=None, value=None, inplace=False, limit=None, regex=False, method='pad'):\n"
+    return _gen_init_df(header, df.columns, data_args)
 
 
 @overload(pd.read_excel, no_unliteral=True)
