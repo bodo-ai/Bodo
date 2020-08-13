@@ -1152,6 +1152,15 @@ def scatterv(data, send_counts=None):
     return scatterv_impl(data, send_counts)
 
 
+@overload(scatterv)
+def scatterv_overload(data, send_counts=None):
+    """support scatterv inside jit functions
+    """
+    return lambda data, send_counts=None: scatterv_impl(
+        data, send_counts
+    )  # pragma: no cover
+
+
 @numba.generated_jit(nopython=True)
 def scatterv_impl(data, send_counts=None):
     """nopython implementation of scatterv()
