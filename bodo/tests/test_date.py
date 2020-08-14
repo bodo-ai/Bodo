@@ -1146,6 +1146,53 @@ def test_timestamp_date():
     check_func(test_impl, (ts,))
 
 
+@pytest.mark.parametrize(
+    "ts",
+    [
+        pd.Timestamp(1800, 1, 1),
+        pd.Timestamp(1800, 6, 1),
+        pd.Timestamp(1800, 10, 1),
+        pd.Timestamp(1800, 1, 14),
+        pd.Timestamp(1800, 6, 14),
+        pd.Timestamp(1800, 10, 14),
+        pd.Timestamp(1800, 1, 28),
+        pd.Timestamp(1800, 6, 28),
+        pd.Timestamp(1800, 10, 28),
+        pd.Timestamp(1920, 1, 1),
+        pd.Timestamp(1920, 6, 1),
+        pd.Timestamp(1920, 10, 1),
+        pd.Timestamp(1920, 6, 28),
+        pd.Timestamp(1920, 10, 28),
+        pd.Timestamp(1952, 6, 14),
+        pd.Timestamp(1952, 10, 14),
+        pd.Timestamp(1997, 1, 1),
+        pd.Timestamp(1997, 6, 1),
+        pd.Timestamp(1997, 10, 1),
+        pd.Timestamp(1997, 1, 14),
+        pd.Timestamp(2015, 1, 1),
+        pd.Timestamp(2015, 6, 1),
+        pd.Timestamp(2015, 10, 1),
+        pd.Timestamp(2019, 1, 1),
+        pd.Timestamp(2019, 6, 1),
+        pd.Timestamp(2019, 10, 1),
+        pd.Timestamp(2020, 1, 28),
+        pd.Timestamp(2020, 6, 28),
+        pd.Timestamp(2020, 10, 28),
+        pd.Timestamp(2025, 1, 28),
+        pd.Timestamp(2025, 6, 28),
+        pd.Timestamp(2025, 10, 28),
+    ],
+)
+def test_timestamp_isocalendar(ts):
+    """ Test timestamp's isocalendar() method
+    """
+
+    def test_impl(ts):
+        return ts.isocalendar()
+
+    check_func(test_impl, (ts,))
+
+
 # ------------------------- DatetimeIndex Testing  -------------------------- #
 
 
@@ -1264,9 +1311,12 @@ def test_datetime_date_array_len():
     A = np.array([datetime.date(2012, 1, 1), datetime.date(2011, 3, 3)] * 3)
     check_func(test_impl, (A,))
 
+
 def test_datetime_timedelta_array_len():
     def test_impl(A):
         return len(A)
 
-    A = np.array([datetime.timedelta(34), datetime.timedelta(microseconds=43000000)] * 3)
+    A = np.array(
+        [datetime.timedelta(34), datetime.timedelta(microseconds=43000000)] * 3
+    )
     check_func(test_impl, (A,))

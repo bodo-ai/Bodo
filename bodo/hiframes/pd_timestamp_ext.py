@@ -570,6 +570,83 @@ def overload_pd_timestamp_date(ptt):
     return pd_timestamp_date_impl
 
 
+@overload_method(PandasTimestampType, "isocalendar", no_unliteral=True)
+def overload_pd_timestamp_isocalendar(ptt):
+    def pd_timestamp_isocalendar_impl(ptt):
+
+        # NOTE: Pandas has weird behavior and it doesn't seem to be well defined.
+        # The documentation is sparse:
+        # https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.Timestamp.isocalendar.html
+        # Weird bugs also seem to happen with certain calendar inputs (but not all). This seems to
+        # typically occur at the start of specific years believing they are part of the previous year
+        # Example:
+        # >>> pd.Timestamp(2000, 1, 1, 1).isocalendar()
+        # (1999, 52, 6)
+        # Our implementation does not have this weird behavior/these bugs
+        # >>> pd.Timestamp(2000, 1, 1, 1).isocalendar()
+        # (2000, 1, 7)
+        # It also seems that for these years the problems will persist each day of that year.
+        # Pandas also has issues with input validation. Early years are not rejected by crash due to
+        # storage issues.
+
+        # Copied from C++ code:
+        # https://github.com/Bodo-inc/Bodo/blob/cb25c780f01cbaa2d3733d0637fa696908b84653/bodo/libs/_datetime_ext.h#L12.
+        # TODO(nick): Reuse the C++ implementation
+        normal_year = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+        leap_year = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+
+        # TODO(nick): Add computation to C++ function for reuse + speed
+
+        # Calculate the weekday of the day before 1601 for easy
+        # leap year calculation (but pandas won't accept 1601-1677.
+        earliest_year = 1601
+        # This year started on a Monday and we will calculate years with
+        # it. However we want to add the days so we are "starting" at the
+        # end of 1600.
+
+        # For now calculations assume Monday = 0 -> Sunday = 6 for calcuating weeks.
+        # Panda does -> Monday = 1, Sunday = 7, so we will add 1 to our output
+
+        # Start 1 day early to make the math simpler
+        start_day = 6
+
+        current_year = ptt.year
+        year_difference = current_year - earliest_year
+
+        # Calculate the number of leap years
+        # Leap years are divisible by 4, but not 100 (unless they are by 400)
+        num_leap_years = (
+            (year_difference // 4) - (year_difference // 100) + (year_difference // 400)
+        )
+
+        # Our day offset differs form the constant value for 1601 by the number of years
+        # + number_leap years between them
+        start_offset = year_difference + num_leap_years
+        start_day = (start_day + start_offset) % 7
+
+        # TODO(nick): Reuse the C++ implementation
+        # https://github.com/Bodo-inc/Bodo/blob/cb25c780f01cbaa2d3733d0637fa696908b84653/bodo/libs/_datetime_ext.h#L6
+        # Check if this year is a leap year and add the days from prev months
+        if current_year % 400 == 0 or (
+            current_year % 100 != 0 and current_year % 4 == 0
+        ):
+            arr = leap_year[: ptt.month - 1]
+        else:
+            arr = normal_year[: ptt.month - 1]
+        for days in arr:
+            start_day += days
+
+        # Include the days from this month
+        start_day += ptt.day
+
+        # Include +1 for 1 indexing
+        current_week = (start_day // 7) + 1
+        current_day = (start_day % 7) + 1
+        return (current_year, current_week, current_day)
+
+    return pd_timestamp_isocalendar_impl
+
+
 @overload_method(PandasTimestampType, "isoformat", no_unliteral=True)
 def overload_pd_timestamp_isoformat(ts_typ, sep=None):
     if sep is None:
