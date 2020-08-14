@@ -658,17 +658,42 @@ def _gen_reduce_impl_axis1(func_name, out_colnames, comm_dtype, df_type):
         "arr_{0} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {0})".format(i)
         for i in col_inds
     )
+    data_accesses = "\n        ".join(
+        f"row[{i}] = arr_{i}[i]" for i in range(len(out_colnames))
+    )
     # TODO: support empty dataframes
     assert len(data_args) > 0, f"empty dataframe in DataFrame.{func_name}()"
-    df_len = f"len(arr_0)"
-    arr_accesses = ", ".join("arr_{}[i]".format(i) for i in col_inds)
-    func_text = f"""
+    df_len = "len(arr_0)"
+
+    func_np_func_map = {
+        "max": "np.nanmax",
+        "min": "np.nanmin",
+        "sum": "np.nansum",
+        "prod": "np.nanprod",
+        "mean": "np.nanmean",
+        "median": "np.nanmedian",
+        # TODO: Handle these cases. Numba doesn't support the
+        # ddof argument and pd & np
+        # implementations vary (sample vs population)
+        #'var': '(lambda A: np.nanvar(A, ddof=1))',
+        #'std': '(lambda A: np.nanstd(A, ddof=1))',
+    }
+
+    if func_name in func_np_func_map:
+        np_func = func_np_func_map[func_name]
+        # NOTE: Pandas outputs float64 output even for int64 dataframes
+        # when using df.mean() and df.median()
+        # TODO: More sophisticated manner of computing this output_dtype
+        output_dtype = "float64" if func_name in ["mean", "median"] else comm_dtype
+        func_text = f"""
     {data_args}
     numba.parfors.parfor.init_prange()
     n = {df_len}
-    A = np.empty(n, np.{comm_dtype})
+    row = np.empty({len(out_colnames)}, np.{comm_dtype})
+    A = np.empty(n, np.{output_dtype})
     for i in numba.parfors.parfor.internal_prange(n):
-        A[i] = {func_name}({arr_accesses})
+        {data_accesses}
+        A[i] = {np_func}(row)
     return bodo.hiframes.pd_series_ext.init_series(A, {index})
 """
     return func_text

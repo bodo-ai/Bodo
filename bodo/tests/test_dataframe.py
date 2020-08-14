@@ -753,17 +753,61 @@ def test_df_max(numeric_df_value):
     check_func(impl, (numeric_df_value,), is_out_distributed=False, check_dtype=False)
 
 
-def test_df_reduce_axis1():
+@pytest.mark.parametrize(
+    "df",
+    [
+        pd.DataFrame({"A": np.arange(11, dtype=np.float64), "B": np.ones(11) + 4}),
+        pd.DataFrame({"A": [1, 2, 3, 4, 5, 5, 5], "B": [1, 2, 3, 3, 4, 5, 10]}),
+        pd.DataFrame(
+            {
+                "A": [1.0, 2.0, 3.0, 4.0, None, 5.0, 6.0, None],
+                "B": [1.0, 2.0, None, 3.0, 4.0, 5.0, 6.0, None],
+            }
+        ),
+        pd.DataFrame(
+            {
+                "A": [1, 2, 3, 4, np.nan, 5, 6, None],
+                "B": [1, 2, None, 3, 4, 5, 6, np.nan],
+            }
+        ),
+        pd.DataFrame(
+            {
+                "A": [1, 2, 3.0, 4, None, 5, 6, None],
+                "B": [1, 2, None, 3, 4, 5.0, 6, None],
+            }
+        ),
+    ],
+)
+def test_df_reduce_axis1(df):
     """test dataframe reductions across columns (axis=1)
     """
     # TODO: support and test other reduce functions
+    # TODO: Test with nullable ints
 
-    def impl(df):
+    def impl_max(df):
         return df.max(axis=1)
 
-    n = 11
-    df = pd.DataFrame({"A": np.arange(n, dtype=np.float64), "B": np.ones(n) + 4})
-    check_func(impl, (df,))
+    def impl_min(df):
+        return df.min(axis=1)
+
+    def impl_sum(df):
+        return df.sum(axis=1)
+
+    def impl_prod(df):
+        return df.prod(axis=1)
+
+    def impl_mean(df):
+        return df.mean(axis=1)
+
+    def impl_median(df):
+        return df.median(axis=1)
+
+    check_func(impl_max, (df,))
+    check_func(impl_min, (df,))
+    check_func(impl_sum, (df,))
+    check_func(impl_prod, (df,))
+    check_func(impl_mean, (df,))
+    check_func(impl_median, (df,))
 
 
 def test_df_mean(numeric_df_value):
