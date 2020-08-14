@@ -1170,3 +1170,15 @@ def test_scatterv(data):
         data = None
 
     _check_scatterv(data, n)
+
+
+def test_scatterv_jit():
+    """test using scatterv inside jit functions
+    """
+
+    def impl(df):
+        return bodo.scatterv(df)
+
+    df = pd.DataFrame({"A": [3, 1, 4, 2, 11], "B": [1.1, 2.2, 5.5, 1.3, -1.1]})
+    df_scattered = bodo.jit(all_returns_distributed=True)(impl)(df)
+    pd.testing.assert_frame_equal(df, bodo.allgatherv(df_scattered))

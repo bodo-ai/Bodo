@@ -626,7 +626,18 @@ class DistributedAnalysis:
             if warn_flag and is_REP(array_dists[rhs.args[0].name]):
                 # TODO: test
                 warnings.warn(BodoWarning("Input to gatherv is not distributed array"))
-            array_dists[lhs] = Distribution.REP
+            self._set_var_dist(lhs, array_dists, Distribution.REP)
+            return
+
+        if fdef == ("scatterv", "bodo"):
+            # output of scatterv is 1D
+            if lhs not in array_dists:
+                self._set_var_dist(lhs, array_dists, Distribution.OneD)
+            elif is_REP(array_dists[lhs]):
+                raise BodoError("Output of scatterv should be a distributed array")
+
+            # input of scatterv should be replicated
+            self._set_var_dist(rhs.args[0].name, array_dists, Distribution.REP)
             return
 
         if fdef == ("setna", "bodo.libs.array_kernels"):
