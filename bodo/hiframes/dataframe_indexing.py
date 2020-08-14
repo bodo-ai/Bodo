@@ -372,23 +372,7 @@ def overload_loc_getitem(I, idx):
         if is_overload_constant_list(col_idx):
             # get column list (could be list of strings or bools)
             col_idx_list = get_overload_const_list(col_idx)
-            # get column names if bool list
-            if len(col_idx_list) > 0 and isinstance(col_idx_list[0], bool):
-                col_idx_list = list(np.array(df.columns)[col_idx_list])
-
-            # create a new dataframe, create new data/index using idx
-            new_data = ", ".join(
-                "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {})[idx[0]]".format(
-                    df.columns.index(c)
-                )
-                for c in col_idx_list
-            )
-            index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)[idx[0]]"
-            func_text = "def impl(I, idx):\n"
-            func_text += "  df = I._obj\n"
-            return bodo.hiframes.dataframe_impl._gen_init_df(
-                func_text, col_idx_list, new_data, index
-            )
+            return gen_df_loc_col_select_impl(df, col_idx_list)
 
     # TODO: error-checking test
     raise_bodo_error(
@@ -396,6 +380,29 @@ def overload_loc_getitem(I, idx):
             idx
         )
     )  # pragma: no cover
+
+
+def gen_df_loc_col_select_impl(df, col_idx_list):
+    """generate implementation for cases like df.loc[:, ["A", "B"]] and
+    df.loc[:, [True, False, True]]
+    """
+    # get column names if bool list
+    if len(col_idx_list) > 0 and isinstance(col_idx_list[0], (bool, np.bool_)):
+        col_idx_list = list(np.array(df.columns)[col_idx_list])
+
+    # create a new dataframe, create new data/index using idx
+    new_data = ", ".join(
+        "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {})[idx[0]]".format(
+            df.columns.index(c)
+        )
+        for c in col_idx_list
+    )
+    index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)[idx[0]]"
+    func_text = "def impl(I, idx):\n"
+    func_text += "  df = I._obj\n"
+    return bodo.hiframes.dataframe_impl._gen_init_df(
+        func_text, col_idx_list, new_data, index
+    )
 
 
 ##################################  df.iat  ##################################

@@ -2008,10 +2008,14 @@ def test_loc_col_select():
     def impl2(df):
         return df.loc[:, [True, False, True]]
 
+    def impl3(df):
+        return df.loc[:, df.columns != "B"]
+
     n = 11
     df = pd.DataFrame({"A": np.arange(n), "B": np.arange(n) ** 2, "C": np.ones(n)})
     check_func(impl1, (df,))
     check_func(impl2, (df,))
+    check_func(impl3, (df,))
 
 
 def test_df_schema_change():

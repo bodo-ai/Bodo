@@ -2031,6 +2031,49 @@ def overload_index_map(I, mapper, na_action=None):
     return f
 
 
+# TODO(ehsan): binary operators should be handled and tested for all Index types,
+# properly (this is just to enable common cases in the short term). See #1415
+####################### binary operators ###############################
+
+
+def create_binary_op_overload(op):
+    def overload_index_binary_op(S, other):
+
+        # left arg is Index
+        if is_index_type(S):
+
+            def impl(S, other):  # pragma: no cover
+                arr = bodo.hiframes.pd_index_ext.get_index_data(S)
+                other_arr = bodo.utils.conversion.get_array_if_series_or_index(other)
+                out_arr = op(arr, other_arr)
+                return out_arr
+
+            return impl
+
+        # right arg is Index
+        if is_index_type(other):
+
+            def impl2(S, other):  # pragma: no cover
+                arr = bodo.hiframes.pd_index_ext.get_index_data(other)
+                other_arr = bodo.utils.conversion.get_array_if_series_or_index(S)
+                out_arr = op(other_arr, arr)
+                return out_arr
+
+            return impl2
+
+    return overload_index_binary_op
+
+
+def _install_binary_ops():
+    # install binary ops such as add, sub, pow, eq, ...
+    for op in bodo.hiframes.pd_series_ext.series_binary_ops:
+        overload_impl = create_binary_op_overload(op)
+        overload(op, no_unliteral=True)(overload_impl)
+
+
+_install_binary_ops()
+
+
 def is_index_type(t):
     """return True if 't' is an Index type"""
     return isinstance(

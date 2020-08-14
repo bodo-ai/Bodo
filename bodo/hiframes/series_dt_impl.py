@@ -251,9 +251,7 @@ def create_timedelta_method_overload(method):
                 "    return bodo.hiframes.pd_series_ext.init_series(B, index, name)\n"
             )
         else:
-            func_text += (
-                "    return B\n"
-            )
+            func_text += "    return B\n"
         loc_vars = {}
         exec(
             func_text,

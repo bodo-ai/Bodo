@@ -30,6 +30,7 @@ from bodo.utils.typing import (
     is_literal_type,
     CONST_DICT_SENTINEL,
     BodoConstUpdatedError,
+    is_list_like_index_type,
 )
 from bodo.utils.utils import (
     is_assign,
@@ -46,7 +47,7 @@ from bodo.utils.transform import (
     set_call_expr_arg,
 )
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
-from bodo.hiframes.dataframe_indexing import DataFrameILocType
+from bodo.hiframes.dataframe_indexing import DataFrameILocType, DataFrameLocType
 from bodo.hiframes.pd_groupby_ext import DataFrameGroupByType
 
 # global flag indicating that we are in partial type inference, so that error checking
@@ -320,6 +321,37 @@ class TypingTransforms:
                 impl, [target, tup_list[0]], assign.target, self
             )
 
+        # transform df.loc[:, df.columns != "B"] case here since slice info not
+        # available in overload
+        if (
+            isinstance(target_typ, DataFrameLocType)
+            and isinstance(idx_typ, types.BaseTuple)
+            and len(idx_typ.types) == 2
+            and is_list_like_index_type(idx_typ.types[1])
+        ):
+            # get column index var
+            tup_list = guard(find_build_tuple, self.func_ir, idx)
+            if tup_list is None or len(tup_list) != 2:  # pragma: no cover
+                raise BodoError("Invalid df.loc[ind,ind] case")
+            col_ind_var = tup_list[1]
+
+            # try to find index values
+            try:
+                val = get_const_value_inner(
+                    self.func_ir, col_ind_var, self.arg_types, self.typemap
+                )
+            except GuardException:
+                # couldn't find values, just return to be handled later
+                nodes.append(assign)
+                return nodes
+
+            impl = bodo.hiframes.dataframe_indexing.gen_df_loc_col_select_impl(
+                target_typ.df_type, val
+            )
+            return nodes + compile_func_single_block(
+                impl, [target, idx], assign.target, self
+            )
+
         nodes.append(assign)
         return nodes
 
@@ -525,9 +557,7 @@ class TypingTransforms:
             # NOTE: this enables const replacement to avoid errors in
             # test_excel1::test_impl2 caused by Numba 0.51 literals
             # TODO: fix underlying issue in Numba
-            "read_excel": [
-                (3, "names"),
-            ],
+            "read_excel": [(3, "names"),],
         }
 
         if func_name in top_level_call_const_args:

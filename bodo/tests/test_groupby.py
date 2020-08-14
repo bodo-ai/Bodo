@@ -2604,22 +2604,36 @@ def test_idxmax():
         return A
 
     def impl2(df):
-        A = df.groupby("group").agg({"values_1": "idxmax", "values_2": lambda x: x.max() - x.min()})
+        A = df.groupby("group").agg(
+            {"values_1": "idxmax", "values_2": lambda x: x.max() - x.min()}
+        )
         return A
 
-    df1 = pd.DataFrame({'values_1': [10.51, 103.11, 55.48, 23.3, 53.2, 12.3, 7200.722],
-                        'values_2': [37, 19, 1712, 55, 668, 489, 25],
-                        'group': [0, 1, 1, 0, 0, 11, 1]},
-                        index=['A', 'B', 'C', 'D', 'E', 'F', 'G'])
+    df1 = pd.DataFrame(
+        {
+            "values_1": [10.51, 103.11, 55.48, 23.3, 53.2, 12.3, 7200.722],
+            "values_2": [37, 19, 1712, 55, 668, 489, 25],
+            "group": [0, 1, 1, 0, 0, 11, 1],
+        },
+        index=["A", "B", "C", "D", "E", "F", "G"],
+    )
 
-    df2 = pd.DataFrame({'values_1': [10.51, 103.11, 55.48, 23.3, 53.2, 12.3, 3.67],
-                        'values_2': [37, 19, 1712, 55, 668, 489, 18],
-                        'group': [0, 1, 1, 0, 0, 11, 1]})
+    df2 = pd.DataFrame(
+        {
+            "values_1": [10.51, 103.11, 55.48, 23.3, 53.2, 12.3, 3.67],
+            "values_2": [37, 19, 1712, 55, 668, 489, 18],
+            "group": [0, 1, 1, 0, 0, 11, 1],
+        }
+    )
 
-    df3 = pd.DataFrame({'values_1': [10.51, 55.48, 103.11, 23.3, 53.2, 12.3, 50.23],
-                        'values_2': [37, 19, 1712, 55, 668, 489, 1713],
-                        'group': [0, 1, 1, 0, 0, 11, 1]},
-                        index=[33, 4, 3, 7, 11, 127, 0])
+    df3 = pd.DataFrame(
+        {
+            "values_1": [10.51, 55.48, 103.11, 23.3, 53.2, 12.3, 50.23],
+            "values_2": [37, 19, 1712, 55, 668, 489, 1713],
+            "group": [0, 1, 1, 0, 0, 11, 1],
+        },
+        index=[33, 4, 3, 7, 11, 127, 0],
+    )
 
     check_func(impl1, (df1,), sort_output=True)
     check_func(impl1, (df2,), sort_output=True)

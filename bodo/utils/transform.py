@@ -335,7 +335,9 @@ def get_const_value_inner(
     if is_expr(var_def, "getattr") and typemap:
         obj_typ = typemap.get(var_def.value.name, None)
         if isinstance(obj_typ, bodo.hiframes.pd_dataframe_ext.DataFrameType):
-            return obj_typ.columns
+            # pandas columns are Index objects (accurate object is needed for const
+            # computations, see test_loc_col_select::impl3)
+            return pd.Index(obj_typ.columns)
 
     # list/set/dict cases
 
