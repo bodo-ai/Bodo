@@ -207,7 +207,7 @@ class DistributedAnalysis:
         self.array_locs = {}
         self.diag_info = []
         # keep track of concat reduce vars to handle in concat analysis and
-        # transaforms properly
+        # transforms properly
         self._concat_reduce_vars = set()
 
     def _init_run(self):
@@ -573,7 +573,7 @@ class DistributedAnalysis:
                 if is_REP(out_dist):
                     array_dists[reduce_varname] = Distribution.REP
                 # keep track of concat reduce vars to handle in concat analysis and
-                # transaforms properly
+                # transforms properly
                 concat_reduce_vars = set()
                 for inst in reduce_nodes:
                     if is_call_assign(inst) and guard(
