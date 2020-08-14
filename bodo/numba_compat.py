@@ -52,7 +52,7 @@ from numba.core.types.functions import (
     _unlit_non_poison,
     _bt_as_lines,
 )
-from numba.core.errors import LiteralTypingError, TypingError
+from numba.core.errors import LiteralTypingError, TypingError, ForceLiteralArg
 from numba.core.types import literal
 
 
@@ -759,6 +759,10 @@ def get_call_type2(self, context, args, kws):
             new_e = errors.TypingError(textwrap.dedent(estr))
             return tmplt.format(literalness, str(new_e))
 
+        # Bodo change
+        import bodo
+        if isinstance(literal_e, bodo.utils.typing.BodoError):
+            raise literal_e
         raise errors.TypingError(
             nested_msg("literal", literal_e) + nested_msg("non-literal", nonliteral_e)
         )
@@ -907,6 +911,11 @@ def _compile_for_args(self, *args, **kws):  # pragma: no cover
         # this is from trying to infer something as constant when it isn't
         # or isn't supported as a constant
         error_rewrite(e, "constant_inference")
+    # Bodo change: handle BodoError
+    except bodo.utils.typing.BodoError as e:
+        # create a new error so that the stacktrace only reaches
+        # the point where the new error is raised
+        error = bodo.utils.typing.BodoError(str(e))
     except Exception as e:
         if numba.core.config.SHOW_HELP:
             if hasattr(e, "patch_message"):
@@ -914,11 +923,6 @@ def _compile_for_args(self, *args, **kws):  # pragma: no cover
                 e.patch_message("\n".join((str(e).rstrip(), help_msg)))
         # ignore the FULL_TRACEBACKS config, this needs reporting!
         raise e
-    # Bodo change: handle BodoError
-    except bodo.utils.typing.BodoError as e:
-        # create a new error so that the stacktrace only reaches
-        # the point where the new error is raised
-        error = bodo.utils.typing.BodoError(str(e))
     # Bodo change: avoid arg leak
     finally:
         # avoid issue of reference leak of arguments to jitted function:
@@ -965,6 +969,17 @@ def propagate(self, typeinfer):
                     str(e), loc=constraint.loc, highlighting=False,
                 )
                 errors.append(numba.core.utils.chain_exception(new_exc, e))
+            # Bodo change
+            except bodo.utils.typing.BodoError as e:
+                if e.is_new:
+                    # the first time we see BodoError during type inference, we
+                    # put the code location in the error message, and re-raise
+                    loc = constraint.loc
+                    errors.append(bodo.utils.typing.BodoError(
+                        str(e.msg) + "\n" + loc.strformat() + "\n", is_new=False
+                    ))
+                else:
+                    errors.append(bodo.utils.typing.BodoError(e.msg, is_new=False))
             except Exception as e:
                 numba.core.typeinfer._logger.debug("captured error", exc_info=e)
                 msg = (
@@ -977,18 +992,6 @@ def propagate(self, typeinfer):
                     highlighting=False,
                 )
                 errors.append(numba.core.utils.chain_exception(new_exc, e))
-            except bodo.utils.typing.BodoError as e:
-                if e.is_new:
-                    # the first time we see BodoError during type inference, we
-                    # put the code location in the error message, and re-raise
-                    loc = constraint.loc
-                    raise bodo.utils.typing.BodoError(
-                        str(e) + "\n" + loc.strformat() + "\n", is_new=False
-                    )
-                else:
-                    # keep raising and propagating the error through numba until
-                    # it reaches the user
-                    raise e
     return errors
 
 
@@ -999,6 +1002,27 @@ if (
 ):  # pragma: no cover
     warnings.warn("numba.core.typeinfer.ConstraintNetwork.propagate has changed")
 numba.core.typeinfer.ConstraintNetwork.propagate = propagate
+
+
+def raise_error(self):
+    import bodo
+    for faillist in self._failures.values():
+        for fail in faillist:
+            if isinstance(fail.error, ForceLiteralArg):
+                raise fail.error
+            # Bodo change
+            if isinstance(fail.error, bodo.utils.typing.BodoError):
+                raise fail.error
+    raise TypingError(self.format())
+
+
+lines = inspect.getsource(numba.core.types.functions._ResolutionFailures.raise_error)
+if (
+    hashlib.sha256(lines.encode()).hexdigest()
+    != "84b89430f5c8b46cfc684804e6037f00a0f170005cd128ad245551787b2568ea"
+):  # pragma: no cover
+    warnings.warn("numba.core.types.functions._ResolutionFailures.raise_error has changed")
+numba.core.types.functions._ResolutionFailures.raise_error = raise_error
 
 
 # replaces remove_dead_block of Numba to add Bodo optimization (e.g. replace dead array
@@ -1422,3 +1446,45 @@ if (
 
 numba.core.ir_utils.convert_code_obj_to_function = convert_code_obj_to_function
 numba.core.untyped_passes.convert_code_obj_to_function = convert_code_obj_to_function
+
+
+def passmanager_run(self, state):
+    """
+    Run the defined pipelines on the state.
+    """
+    from numba.core.compiler import _EarlyPipelineCompletion
+    if not self.finalized:
+        raise RuntimeError("Cannot run non-finalised pipeline")
+
+    # Bodo change
+    import bodo
+    from numba.core.compiler_machinery import _pass_registry, CompilerPass
+
+    # walk the passes and run them
+    for idx, (pss, pass_desc) in enumerate(self.passes):
+        try:
+            numba.core.tracing.event("-- %s" % pass_desc)
+            pass_inst = _pass_registry.get(pss).pass_inst
+            if isinstance(pass_inst, CompilerPass):
+                self._runPass(idx, pass_inst, state)
+            else:
+                raise BaseException("Legacy pass in use")
+        except _EarlyPipelineCompletion as e:
+            raise e
+        # Bodo change
+        except bodo.utils.typing.BodoError as e:
+            raise
+        except Exception as e:
+            msg = "Failed in %s mode pipeline (step: %s)" % \
+                (self.pipeline_name, pass_desc)
+            patched_exception = self._patch_error(msg, e)
+            raise patched_exception
+
+
+lines = inspect.getsource(numba.core.compiler_machinery.PassManager.run)
+if (
+    hashlib.sha256(lines.encode()).hexdigest()
+    != "5d21271317cfa1bdcec1cc71973d80df0ffd7126c4608eeef4ad676bbff8f0d3"
+):  # pragma: no cover
+    warnings.warn("numba.core.compiler_machinery.PassManager.run has changed")
+numba.core.compiler_machinery.PassManager.run = passmanager_run
