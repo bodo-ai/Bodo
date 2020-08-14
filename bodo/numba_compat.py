@@ -1522,6 +1522,7 @@ def get_reduce_nodes(reduction_node, nodes, func_ir):
                 next_node = nodes[i + 1]
                 target_name = next_node.target.unversioned_name
                 # Bodo change: avoid raising error for concat reduction case
+                # opened issue to handle Bodo cases and raise proper errors: #1414
                 # see test_concat_reduction
                 # if not (isinstance(next_node, ir.Assign) and target_name == unversioned_name):
                 #     raise ValueError(

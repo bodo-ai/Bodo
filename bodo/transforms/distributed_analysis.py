@@ -568,6 +568,8 @@ class DistributedAnalysis:
                 if is_REP(array_dists[reduce_varname]):
                     out_dist = Distribution.REP
                 else:
+                    # concat reduce variables are 1D_Var since each rank can produce
+                    # variable amount of data
                     array_dists[reduce_varname] = Distribution.OneD_Var
                 # if pafor is replicated, output array is replicated
                 if is_REP(out_dist):
