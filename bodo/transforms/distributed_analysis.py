@@ -634,9 +634,7 @@ class DistributedAnalysis:
             if lhs not in array_dists:
                 self._set_var_dist(lhs, array_dists, Distribution.OneD)
             elif is_REP(array_dists[lhs]):
-                warnings.warn(
-                    BodoWarning("Output of scatterv is not distributed array")
-                )
+                raise BodoError("Output of scatterv should be a distributed array")
 
             # input of scatterv should be replicated
             self._set_var_dist(rhs.args[0].name, array_dists, Distribution.REP)
