@@ -90,6 +90,39 @@ Bodo_CTypes::CTypeEnum arrow_to_bodo_type(arrow::Type::type type) {
     }
 }
 
+array_info& array_info::operator=(array_info&& other) noexcept {
+    if (this != &other) {
+        // delete this array's original data
+        if (this->arr_type == bodo_array_type::LIST_STRING)
+            free_list_string_array(this->meminfo);
+        else
+            free_array(this);
+
+        // copy the other array's pointers into this array_info
+        this->n_sub_elems = other.n_sub_elems;
+        this->n_sub_sub_elems = other.n_sub_sub_elems;
+        this->data1 = other.data1;
+        this->data2 = other.data2;
+        this->data3 = other.data3;
+        this->null_bitmask = other.null_bitmask;
+        this->meminfo = other.meminfo;
+        this->meminfo_bitmask = other.meminfo_bitmask;
+        this->array = other.array;
+        this->precision = other.precision;
+        this->scale = other.scale;
+
+        // reset the other array_info's pointers
+        other.data1 = nullptr;
+        other.data2 = nullptr;
+        other.data3 = nullptr;
+        other.null_bitmask = nullptr;
+        other.meminfo = nullptr;
+        other.meminfo_bitmask = nullptr;
+        other.array = nullptr;
+    }
+    return *this;
+}
+
 array_info* alloc_numpy(int64_t length, Bodo_CTypes::CTypeEnum typ_enum) {
     int64_t size = length * numpy_item_size[typ_enum];
     NRT_MemInfo* meminfo = NRT_MemInfo_alloc_safe_aligned(size, ALIGNMENT);

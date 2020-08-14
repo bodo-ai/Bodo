@@ -2043,6 +2043,7 @@ class SeriesPass:
                 self.typemap[series_var.name]
             )
             agg_func.ftype = "count"
+            input_has_index = False
             same_index = False
             return_key = True
             agg_node = bodo.ir.aggregate.Aggregate(
@@ -2054,6 +2055,7 @@ class SeriesPass:
                 {"data": data},
                 [data],
                 agg_func,
+                input_has_index,
                 same_index,
                 return_key,
                 lhs.loc,

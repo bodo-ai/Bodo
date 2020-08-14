@@ -107,6 +107,8 @@ AggFuncTemplateStruct = namedtuple(
 AggFuncStruct = namedtuple("AggFuncStruct", ["func", "ftype"])
 
 
+# !!! IMPORTANT: this is supposed to match the positions in
+# Bodo_FTypes::FTypeEnum in _groupby.cpp
 supported_agg_funcs = [
     "sum",
     "count",
@@ -122,6 +124,7 @@ supported_agg_funcs = [
     "prod",
     "first",
     "last",
+    "idxmax",
     "var",
     "std",
     "udf",
@@ -174,7 +177,13 @@ def get_agg_func(func_ir, func_name, rhs, series_type=None, typemap=None):
         func.ncols_pre_shuffle = 1
         func.ncols_post_shuffle = 1
         return func
-    if func_name in supported_agg_funcs[:-5]:
+    if func_name == "idxmax":
+        func = pytypes.SimpleNamespace()
+        func.ftype = func_name
+        func.ncols_pre_shuffle = 2
+        func.ncols_post_shuffle = 2
+        return func
+    if func_name in supported_agg_funcs[:-6]:
         func = getattr(series_impl, "overload_series_" + func_name)(series_type)
         # HACK: use simple versions of sum/prod functions without extra arguments to
         # avoid errors in pivot
@@ -418,6 +427,7 @@ class Aggregate(ir.Stmt):
         df_in_vars,
         key_arrs,
         agg_func,
+        input_has_index,
         same_index,
         return_key,
         loc,
@@ -438,6 +448,7 @@ class Aggregate(ir.Stmt):
         self.key_arrs = key_arrs
 
         self.agg_func = agg_func
+        self.input_has_index = input_has_index
         self.same_index = same_index
         self.return_key = return_key
         self.loc = loc
@@ -826,7 +837,7 @@ def agg_distributed_run(
     offload = agg_node.pivot_arr is None
     udf_func_struct = get_udf_func_struct(
         agg_node.agg_func,
-        agg_node.same_index,
+        agg_node.input_has_index,
         in_col_typs,
         out_col_typs,
         typingctx,
@@ -845,6 +856,7 @@ def agg_distributed_run(
         agg_node.df_in_vars.keys(),
         agg_node.df_out_vars.keys(),
         agg_node.agg_func,
+        agg_node.input_has_index,
         agg_node.same_index,
         parallel,
         offload,
@@ -1694,6 +1706,7 @@ def gen_top_level_agg_func(
     in_col_names,
     out_col_names,
     agg_func,
+    input_has_index,
     same_index,
     parallel,
     offload,
@@ -1703,6 +1716,8 @@ def gen_top_level_agg_func(
     """
     # If we output the index then we need to remove it from the list of variables.
     if same_index:
+        assert input_has_index
+    if input_has_index:
         in_col_typs = in_col_typs[0:-1]
         in_col_names = list(in_col_names)[0:-1]
     out_typs = [t.dtype for t in out_col_typs]
@@ -1791,13 +1806,13 @@ def gen_top_level_agg_func(
         # If we put the index as argument, then it is the last argument of the
         # function.
         func_text = "def agg_top({}{}{}, pivot_arr):\n".format(
-            key_args, in_args, ", index_arg" if same_index else ""
+            key_args, in_args, ", index_arg" if input_has_index else ""
         )
 
         # convert arrays to table
         func_text += "    info_list = [{}{}]\n".format(
             ", ".join("array_to_info({})".format(a) for a in all_arrs),
-            ", array_to_info(index_arg)" if same_index else "",
+            ", array_to_info(index_arg)" if input_has_index else "",
         )
         func_text += "    table = arr_info_list_to_table(info_list)\n"
 
@@ -1955,9 +1970,10 @@ def gen_top_level_agg_func(
         # call C++ groupby
         # We pass the logical arguments to the function (skipdropna, return_key, same_index, ...)
         func_text += (
-            "    out_table = groupby_and_aggregate(table, {},"
+            "    out_table = groupby_and_aggregate(table, {}, {},"
             " ftypes.ctypes.data, func_offsets.ctypes.data, udf_ncols.ctypes.data, {}, {}, {}, {}, {}, {}, {}, udf_table_dummy)\n".format(
                 n_keys,
+                input_has_index,
                 parallel,
                 skipdropna,
                 return_key,
@@ -2238,7 +2254,7 @@ def replace_closures(f_ir, closure, code):
 
 def get_udf_func_struct(
     agg_func,
-    same_index,
+    input_has_index,
     in_col_types,
     out_col_typs,
     typingctx,
@@ -2262,9 +2278,9 @@ def get_udf_func_struct(
     # offsets of reduce vars
     curr_offset = 0
     redvar_offsets = [0]
-    # If same_index is selected the index is put as last argument.
+    # If input_has_index is True the index is put as last argument.
     # So, it needs to be removed from the list of input columns
-    if same_index:
+    if input_has_index:
         in_col_types = in_col_types[0:-1]
 
     if is_crosstab and len(in_col_types) == 0:

@@ -1474,6 +1474,7 @@ class DataFramePass:
                 # in this case, the input columns are the ones in the dict
                 in_cols = [name for name in func_dict.keys()]
         agg_func = get_agg_func(self.func_ir, func_name, rhs, typemap=self.typemap)
+        input_has_index = False
         same_index = False
         return_key = True
         # allfuncs is the set of all functions used
@@ -1481,13 +1482,17 @@ class DataFramePass:
         # return_key is True if we return the keys from the table. In case
         # of aggregate on cumsum or other cumulative function, there is no such need.
         # same_index is True if we return the index from the table (which is the case for
-        # cumulative operations not using RangeIndex
+        # cumulative operations not using RangeIndex)
         for func in allfuncs:
             if func.ftype in list_cumulative:
+                input_has_index = True
                 same_index = True
                 return_key = False
+            if func.ftype in {"idxmin", "idxmax"}:
+                input_has_index = True
         if same_index and isinstance(grp_typ.df_type.index, RangeIndexType):
             same_index = False
+            input_has_index = False
 
         df_in_vars = {c: self._get_dataframe_data(df_var, c, nodes) for c in in_cols}
 
@@ -1502,9 +1507,11 @@ class DataFramePass:
                 self.typemap[out_key_var.name] = df_type.data[ind]
                 out_key_vars.append(out_key_var)
 
-        if same_index:
+        if input_has_index:
             in_index_var = self._gen_array_from_index(df_var, nodes)
             df_in_vars["$_bodo_index_"] = in_index_var
+
+        if same_index:
             out_index_var = ir.Var(lhs.scope, mk_unique_var("out_index"), lhs.loc)
             self.typemap[out_index_var.name] = self.typemap[in_index_var.name]
             if out_key_vars == None:
@@ -1540,6 +1547,7 @@ class DataFramePass:
             df_in_vars,
             in_key_arrs,
             agg_func,
+            input_has_index,
             same_index,
             return_key,
             lhs.loc,
@@ -1654,6 +1662,7 @@ class DataFramePass:
         index_arr = self._get_dataframe_data(df_var, index, nodes)
         agg_func = get_agg_func(self.func_ir, func_name, rhs, typemap=self.typemap)
 
+        input_has_index = False
         same_index = False
         return_key = True
         agg_node = bodo.ir.aggregate.Aggregate(
@@ -1665,6 +1674,7 @@ class DataFramePass:
             in_vars,
             [index_arr],
             agg_func,
+            input_has_index,
             same_index,
             return_key,
             lhs.loc,
@@ -1720,6 +1730,7 @@ class DataFramePass:
             return len(in_arr)
 
         # TODO: make out_key_var an index column
+        input_has_index = False
         same_index = False
         return_key = True
         agg_node = bodo.ir.aggregate.Aggregate(
@@ -1731,6 +1742,7 @@ class DataFramePass:
             in_vars,
             [index],
             _agg_len_impl,
+            input_has_index,
             same_index,
             return_key,
             lhs.loc,

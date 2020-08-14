@@ -35,6 +35,7 @@ struct Bodo_FTypes {
         prod,
         first,
         last,
+        idxmax,
         var,
         std,
         udf,
@@ -288,6 +289,56 @@ struct aggfunc<
     typename std::enable_if<std::is_floating_point<T>::value>::type> {
     static void apply(T& v1, T& v2) {
         if (!isnan(v2)) v1 *= v2;
+    }
+};
+
+// idxmax
+
+template <typename T, int dtype, typename Enable = void>
+struct idxmax_agg {
+    static void apply(T& v1, T& v2, uint64_t& index_pos, int64_t i);
+};
+
+template <typename T, int dtype>
+struct idxmax_agg<
+    T, dtype,
+    typename std::enable_if<!std::is_floating_point<T>::value &&
+                            is_datetime_timedelta<dtype>::value>::type> {
+    static void apply(T& v1, T& v2, uint64_t& index_pos, int64_t i) {
+        // TODO should it be <=?
+        if ((v2 != std::numeric_limits<T>::min()) && (v1 < v2)) {
+            v1 = v2;
+            index_pos = i;
+        }
+    }
+};
+
+template <typename T, int dtype>
+struct idxmax_agg<
+    T, dtype,
+    typename std::enable_if<!std::is_floating_point<T>::value &&
+                            !is_datetime_timedelta<dtype>::value>::type> {
+    static void apply(T& v1, T& v2, uint64_t& index_pos, int64_t i) {
+        // TODO should it be <=?
+        if (v1 < v2) {
+            v1 = v2;
+            index_pos = i;
+        }
+    }
+};
+
+template <typename T, int dtype>
+struct idxmax_agg<
+    T, dtype, typename std::enable_if<std::is_floating_point<T>::value>::type> {
+    static void apply(T& v1, T& v2, uint64_t& index_pos, int64_t i) {
+        if (!isnan(v2)) {
+            // v1 is initialized as NaN
+            // TODO should it be <=?
+            if (isnan(v1) || (v1 < v2)) {
+                v1 = v2;
+                index_pos = i;
+            }
+        }
     }
 };
 
@@ -1424,6 +1475,16 @@ void apply_to_column(array_info* in_col, array_info* out_col,
                         SetBitTo(out_col_bitmask, group, true);
                     }
                 }
+            } else if (ftype == Bodo_FTypes::idxmax) {
+                array_info* index_pos = aux_cols[0];
+                for (int64_t i = 0; i < in_col->length; i++) {
+                    int64_t grp = grp_info.row_to_group[i];
+                    if (grp != -1) {
+                        idxmax_agg<T, dtype>::apply(
+                            out_col->at<T>(grp), in_col->at<T>(i),
+                            index_pos->at<uint64_t>(grp), i);
+                    }
+                }
             } else {
                 for (int64_t i = 0; i < in_col->length; i++)
                     if (grp_info.row_to_group[i] != -1)
@@ -1500,29 +1561,12 @@ void apply_to_column(array_info* in_col, array_info* out_col,
                     // been determined here (previous out_col was just an empty
                     // dummy allocation).
 
-                    // TODO this is hacky, but is similar to previous solution.
-                    // Improving this would likely require deeper architectural
-                    // changes
-                    NRT_MemInfo* old_meminfo = out_col->meminfo;
-                    array_info* aux_info = alloc_list_string_array(
+                    array_info* new_out_col = alloc_list_string_array(
                         out_col->length, nb_string, nb_char, 0);
-                    out_col->n_sub_elems = nb_string;
-                    out_col->n_sub_sub_elems = nb_char;
-                    array_item_arr_payload* payload =
-                        (array_item_arr_payload*)(aux_info->meminfo->data);
-                    str_arr_payload* sub_payload =
-                        (str_arr_payload*)(payload->data->data);
-                    out_col->meminfo = aux_info->meminfo;
-                    out_col->data1 = (char*)sub_payload->data;
-                    out_col->data2 = (char*)sub_payload->offsets;
-                    out_col->data3 = (char*)payload->offsets.data;
-                    out_col->null_bitmask = (char*)payload->null_bitmap.data;
-                    delete aux_info;
-
-                    uint32_t* index_offsets_o = (uint32_t*)out_col->data3;
-                    uint32_t* data_offsets_o = (uint32_t*)out_col->data2;
+                    uint32_t* index_offsets_o = (uint32_t*)new_out_col->data3;
+                    uint32_t* data_offsets_o = (uint32_t*)new_out_col->data2;
                     // Writing the list_strings in output
-                    char* data_o = out_col->data1;
+                    char* data_o = new_out_col->data1;
                     data_offsets_o[0] = 0;
                     uint32_t pos_index = 0;
                     uint32_t pos_data = 0;
@@ -1544,15 +1588,16 @@ void apply_to_column(array_info* in_col, array_info* out_col,
                                     data_offsets_o[pos_data - 1] + n_char;
                             }
                             pos_index += n_string;
-                            SetBitTo((uint8_t*)out_col->null_bitmask, i_grp,
+                            SetBitTo((uint8_t*)new_out_col->null_bitmask, i_grp,
                                      true);
                         } else {
-                            SetBitTo((uint8_t*)out_col->null_bitmask, i_grp,
+                            SetBitTo((uint8_t*)new_out_col->null_bitmask, i_grp,
                                      false);
                         }
                     }
                     index_offsets_o[num_groups] = pos_index;
-                    free_list_string_array(old_meminfo);  // free dummy array
+                    *out_col = std::move(*new_out_col);
+                    delete new_out_col;
                     return;
             }
 
@@ -1780,6 +1825,10 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                     return apply_to_column<bool, Bodo_FTypes::last,
                                            Bodo_CTypes::_BOOL>(
                         in_col, out_col, aux_cols, grp_info);
+                case Bodo_FTypes::idxmax:
+                    return apply_to_column<bool, Bodo_FTypes::idxmax,
+                                           Bodo_CTypes::_BOOL>(
+                        in_col, out_col, aux_cols, grp_info);
                 default:
                     Bodo_PyErr_SetString(
                         PyExc_RuntimeError,
@@ -1821,6 +1870,10 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                     return apply_to_column<int8_t, Bodo_FTypes::var,
                                            Bodo_CTypes::INT8>(
                         in_col, out_col, aux_cols, grp_info);
+                case Bodo_FTypes::idxmax:
+                    return apply_to_column<int8_t, Bodo_FTypes::idxmax,
+                                           Bodo_CTypes::INT8>(
+                        in_col, out_col, aux_cols, grp_info);
             }
         case Bodo_CTypes::UINT8:
             switch (ftype) {
@@ -1855,6 +1908,10 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                 case Bodo_FTypes::var:
                 case Bodo_FTypes::std:
                     return apply_to_column<uint8_t, Bodo_FTypes::var,
+                                           Bodo_CTypes::UINT8>(
+                        in_col, out_col, aux_cols, grp_info);
+                case Bodo_FTypes::idxmax:
+                    return apply_to_column<uint8_t, Bodo_FTypes::idxmax,
                                            Bodo_CTypes::UINT8>(
                         in_col, out_col, aux_cols, grp_info);
             }
@@ -1893,6 +1950,10 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                     return apply_to_column<int16_t, Bodo_FTypes::var,
                                            Bodo_CTypes::INT16>(
                         in_col, out_col, aux_cols, grp_info);
+                case Bodo_FTypes::idxmax:
+                    return apply_to_column<int16_t, Bodo_FTypes::idxmax,
+                                           Bodo_CTypes::INT16>(
+                        in_col, out_col, aux_cols, grp_info);
             }
         case Bodo_CTypes::UINT16:
             switch (ftype) {
@@ -1927,6 +1988,10 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                 case Bodo_FTypes::var:
                 case Bodo_FTypes::std:
                     return apply_to_column<uint16_t, Bodo_FTypes::var,
+                                           Bodo_CTypes::UINT16>(
+                        in_col, out_col, aux_cols, grp_info);
+                case Bodo_FTypes::idxmax:
+                    return apply_to_column<uint16_t, Bodo_FTypes::idxmax,
                                            Bodo_CTypes::UINT16>(
                         in_col, out_col, aux_cols, grp_info);
             }
@@ -1965,6 +2030,10 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                     return apply_to_column<int32_t, Bodo_FTypes::var,
                                            Bodo_CTypes::INT32>(
                         in_col, out_col, aux_cols, grp_info);
+                case Bodo_FTypes::idxmax:
+                    return apply_to_column<int32_t, Bodo_FTypes::idxmax,
+                                           Bodo_CTypes::INT32>(
+                        in_col, out_col, aux_cols, grp_info);
             }
         case Bodo_CTypes::UINT32:
             switch (ftype) {
@@ -1999,6 +2068,10 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                 case Bodo_FTypes::var:
                 case Bodo_FTypes::std:
                     return apply_to_column<uint32_t, Bodo_FTypes::var,
+                                           Bodo_CTypes::UINT32>(
+                        in_col, out_col, aux_cols, grp_info);
+                case Bodo_FTypes::idxmax:
+                    return apply_to_column<uint32_t, Bodo_FTypes::idxmax,
                                            Bodo_CTypes::UINT32>(
                         in_col, out_col, aux_cols, grp_info);
             }
@@ -2037,6 +2110,10 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                     return apply_to_column<int64_t, Bodo_FTypes::var,
                                            Bodo_CTypes::INT64>(
                         in_col, out_col, aux_cols, grp_info);
+                case Bodo_FTypes::idxmax:
+                    return apply_to_column<int64_t, Bodo_FTypes::idxmax,
+                                           Bodo_CTypes::INT64>(
+                        in_col, out_col, aux_cols, grp_info);
             }
         case Bodo_CTypes::UINT64:
             switch (ftype) {
@@ -2071,6 +2148,10 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                 case Bodo_FTypes::var:
                 case Bodo_FTypes::std:
                     return apply_to_column<uint64_t, Bodo_FTypes::var,
+                                           Bodo_CTypes::UINT64>(
+                        in_col, out_col, aux_cols, grp_info);
+                case Bodo_FTypes::idxmax:
+                    return apply_to_column<uint64_t, Bodo_FTypes::idxmax,
                                            Bodo_CTypes::UINT64>(
                         in_col, out_col, aux_cols, grp_info);
             }
@@ -2109,6 +2190,10 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                     return apply_to_column<int64_t, Bodo_FTypes::var,
                                            Bodo_CTypes::DATE>(
                         in_col, out_col, aux_cols, grp_info);
+                case Bodo_FTypes::idxmax:
+                    return apply_to_column<int64_t, Bodo_FTypes::idxmax,
+                                           Bodo_CTypes::DATE>(
+                        in_col, out_col, aux_cols, grp_info);
             }
         case Bodo_CTypes::DATETIME:
             switch (ftype) {
@@ -2145,6 +2230,10 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                     return apply_to_column<int64_t, Bodo_FTypes::var,
                                            Bodo_CTypes::DATETIME>(
                         in_col, out_col, aux_cols, grp_info);
+                case Bodo_FTypes::idxmax:
+                    return apply_to_column<int64_t, Bodo_FTypes::idxmax,
+                                           Bodo_CTypes::DATETIME>(
+                        in_col, out_col, aux_cols, grp_info);
             }
         case Bodo_CTypes::TIMEDELTA:
             switch (ftype) {
@@ -2179,6 +2268,10 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                 case Bodo_FTypes::var:
                 case Bodo_FTypes::std:
                     return apply_to_column<int64_t, Bodo_FTypes::var,
+                                           Bodo_CTypes::TIMEDELTA>(
+                        in_col, out_col, aux_cols, grp_info);
+                case Bodo_FTypes::idxmax:
+                    return apply_to_column<int64_t, Bodo_FTypes::idxmax,
                                            Bodo_CTypes::TIMEDELTA>(
                         in_col, out_col, aux_cols, grp_info);
             }
@@ -2229,6 +2322,10 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                     return apply_to_column<float, Bodo_FTypes::std_eval,
                                            Bodo_CTypes::FLOAT32>(
                         in_col, out_col, aux_cols, grp_info);
+                case Bodo_FTypes::idxmax:
+                    return apply_to_column<float, Bodo_FTypes::idxmax,
+                                           Bodo_CTypes::FLOAT32>(
+                        in_col, out_col, aux_cols, grp_info);
             }
         case Bodo_CTypes::FLOAT64:
             switch (ftype) {
@@ -2277,6 +2374,10 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                     return apply_to_column<double, Bodo_FTypes::std_eval,
                                            Bodo_CTypes::FLOAT64>(
                         in_col, out_col, aux_cols, grp_info);
+                case Bodo_FTypes::idxmax:
+                    return apply_to_column<double, Bodo_FTypes::idxmax,
+                                           Bodo_CTypes::FLOAT64>(
+                        in_col, out_col, aux_cols, grp_info);
             }
         case Bodo_CTypes::DECIMAL:
             switch (ftype) {
@@ -2319,6 +2420,10 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                 case Bodo_FTypes::std_eval:
                     return apply_to_column<decimal_value_cpp,
                                            Bodo_FTypes::std_eval,
+                                           Bodo_CTypes::DECIMAL>(
+                        in_col, out_col, aux_cols, grp_info);
+                case Bodo_FTypes::idxmax:
+                    return apply_to_column<decimal_value_cpp, Bodo_FTypes::idxmax,
                                            Bodo_CTypes::DECIMAL>(
                         in_col, out_col, aux_cols, grp_info);
             }
@@ -2856,6 +2961,114 @@ class MeanColSet : public BasicColSet {
     }
 };
 
+class IdxMaxColSet : public BasicColSet {
+   public:
+    IdxMaxColSet(array_info* in_col, array_info* _index_col, int ftype,
+                 bool combine_step)
+        : BasicColSet(in_col, ftype, combine_step), index_col(_index_col) {}
+    virtual ~IdxMaxColSet() {}
+
+    virtual void alloc_update_columns(size_t num_groups,
+                                      std::vector<array_info*>& out_cols) {
+        // output column containing index values. dummy for now. will be
+        // assigned the real data at the end of update()
+        array_info* out_col = alloc_array(num_groups, 1, 1, index_col->arr_type,
+                                          index_col->dtype, 0, 0);
+        // create array to store max value
+        array_info* max_col = alloc_array(num_groups, 1, 1, in_col->arr_type,
+                                          in_col->dtype, 0, 0);  // for max
+        // create array to store index position of max value
+        array_info* index_pos_col =
+            alloc_array(num_groups, 1, 1, bodo_array_type::NUMPY,
+                        Bodo_CTypes::UINT64, 0, 0);
+        out_cols.push_back(out_col);
+        out_cols.push_back(max_col);
+        update_cols.push_back(out_col);
+        update_cols.push_back(max_col);
+        update_cols.push_back(index_pos_col);
+    }
+
+    virtual void update(const grouping_info& grp_info) {
+        array_info* index_pos_col = update_cols[2];
+        std::vector<array_info*> aux_cols = {index_pos_col};
+        aggfunc_output_initialize(update_cols[1], Bodo_FTypes::max);
+        aggfunc_output_initialize(index_pos_col,
+                                  Bodo_FTypes::count);  // zero init
+        do_apply_to_column(in_col, update_cols[1], aux_cols, grp_info, ftype);
+
+        // TODO we should be able to call RetrieveArray without building
+        // ListPairWrite which is essentially an unnecessary copy
+        std::vector<array_info*> index_col_vec = {index_col};
+        table_info t(index_col_vec);
+        std::vector<std::pair<std::ptrdiff_t, std::ptrdiff_t>> ListPairWrite(
+            index_pos_col->length);
+        for (int64_t i = 0; i < index_pos_col->length; i++) {
+            ListPairWrite[i] = {index_pos_col->at<uint64_t>(i), 0};
+        }
+        array_info* real_out_col =
+            RetrieveArray(&t, ListPairWrite, 0, 0, 0, false);
+
+        array_info* out_col = update_cols[0];
+        *out_col = std::move(*real_out_col);
+        delete real_out_col;
+        free_array(index_pos_col);
+        delete index_pos_col;
+        update_cols.pop_back();
+    }
+
+    virtual void alloc_combine_columns(size_t num_groups,
+                                       std::vector<array_info*>& out_cols) {
+        // output column containing index values. dummy for now. will be
+        // assigned the real data at the end of combine()
+        array_info* out_col = alloc_array(num_groups, 1, 1, index_col->arr_type,
+                                          index_col->dtype, 0, 0);
+        // create array to store max value
+        array_info* max_col = alloc_array(num_groups, 1, 1, in_col->arr_type,
+                                          in_col->dtype, 0, 0);  // for max
+        // create array to store index position of max value
+        array_info* index_pos_col =
+            alloc_array(num_groups, 1, 1, bodo_array_type::NUMPY,
+                        Bodo_CTypes::UINT64, 0, 0);
+        out_cols.push_back(out_col);
+        out_cols.push_back(max_col);
+        combine_cols.push_back(out_col);
+        combine_cols.push_back(max_col);
+        combine_cols.push_back(index_pos_col);
+    }
+
+    virtual void combine(const grouping_info& grp_info) {
+        array_info* index_pos_col = combine_cols[2];
+        std::vector<array_info*> aux_cols = {index_pos_col};
+        aggfunc_output_initialize(combine_cols[1], Bodo_FTypes::max);
+        aggfunc_output_initialize(index_pos_col,
+                                  Bodo_FTypes::count);  // zero init
+        do_apply_to_column(update_cols[1], combine_cols[1], aux_cols, grp_info,
+                           ftype);
+
+        // TODO we should be able to call RetrieveArray without building
+        // ListPairWrite which is essentially an unnecessary copy
+        std::vector<array_info*> index_col_vec = {update_cols[0]};
+        table_info t(index_col_vec);
+        std::vector<std::pair<std::ptrdiff_t, std::ptrdiff_t>> ListPairWrite(
+            index_pos_col->length);
+        for (int64_t i = 0; i < index_pos_col->length; i++) {
+            ListPairWrite[i] = {index_pos_col->at<uint64_t>(i), 0};
+        }
+        array_info* real_out_col =
+            RetrieveArray(&t, ListPairWrite, 0, 0, 0, false);
+
+        array_info* out_col = combine_cols[0];
+        *out_col = std::move(*real_out_col);
+        delete real_out_col;
+        free_array(index_pos_col);
+        delete index_pos_col;
+        combine_cols.pop_back();
+    }
+
+   private:
+    array_info* index_col;
+};
+
 class VarStdColSet : public BasicColSet {
    public:
     VarStdColSet(array_info* in_col, int ftype, bool combine_step)
@@ -3077,8 +3290,9 @@ class CumOpColSet : public BasicColSet {
 
 class GroupbyPipeline {
    public:
-    GroupbyPipeline(table_info* _in_table, int64_t _num_keys, bool _is_parallel,
-                    int* ftypes, int* func_offsets, int* _udf_nredvars,
+    GroupbyPipeline(table_info* _in_table, int64_t _num_keys,
+                    bool input_has_index, bool _is_parallel, int* ftypes,
+                    int* func_offsets, int* _udf_nredvars,
                     table_info* _udf_table, udf_table_op_fn update_cb,
                     udf_table_op_fn combine_cb, udf_eval_fn eval_cb,
                     bool skipna, bool _return_key, bool _return_index)
@@ -3092,15 +3306,14 @@ class GroupbyPipeline {
         udf_info = {udf_table, update_cb, combine_cb, eval_cb};
         // if true, the last column is the index on input and output.
         // this is relevant only to cumulative operation like cumsum.
-        int return_index_i = return_index;
+        int index_i = int(input_has_index);
 
         // NOTE cumulative operations (cumsum, cumprod, etc.) cannot be mixed
         // with non cumulative ops. This is checked at compile time in
         // aggregate.py
 
         for (int i = 0;
-             i < func_offsets[in_table->ncols() - num_keys - return_index_i];
-             i++) {
+             i < func_offsets[in_table->ncols() - num_keys - index_i]; i++) {
             int ftype = ftypes[i];
             if (ftype == Bodo_FTypes::nunique || ftype == Bodo_FTypes::median ||
                 ftype == Bodo_FTypes::cumsum || ftype == Bodo_FTypes::cumprod ||
@@ -3123,18 +3336,21 @@ class GroupbyPipeline {
         // a shuffle has not been done at the start of the groupby pipeline
         do_combine = is_parallel && !shuffle_before_update;
 
+        array_info* index_col = nullptr;
+        if (input_has_index)
+            index_col = in_table->columns[in_table->columns.size() - 1];
+
         // construct the column sets, one for each (input_column, func) pair
         // ftypes is an array of function types received from generated code,
         // and has one ftype for each (input_column, func) pair
         int k = 0;
-        for (int64_t i = num_keys; i < in_table->ncols() - return_index_i;
-             i++, k++) {
+        for (int64_t i = num_keys; i < in_table->ncols() - index_i; i++, k++) {
             array_info* col = in_table->columns[i];
             int start = func_offsets[k];
             int end = func_offsets[k + 1];
             for (int j = start; j != end; j++) {
                 col_sets.push_back(
-                    makeColSet(col, ftypes[j], do_combine, skipna));
+                    makeColSet(col, index_col, ftypes[j], do_combine, skipna));
             }
         }
     }
@@ -3169,8 +3385,8 @@ class GroupbyPipeline {
      *        or not.
      * @param skipna option used for nunique, cumsum, cumprod, cummin, cummax
      */
-    BasicColSet* makeColSet(array_info* in_col, int ftype, bool do_combine,
-                            bool skipna) {
+    BasicColSet* makeColSet(array_info* in_col, array_info* index_col,
+                            int ftype, bool do_combine, bool skipna) {
         BasicColSet* col_set;
         switch (ftype) {
             case Bodo_FTypes::udf:
@@ -3193,6 +3409,8 @@ class GroupbyPipeline {
             case Bodo_FTypes::var:
             case Bodo_FTypes::std:
                 return new VarStdColSet(in_col, ftype, do_combine);
+            case Bodo_FTypes::idxmax:
+                return new IdxMaxColSet(in_col, index_col, ftype, do_combine);
             default:
                 return new BasicColSet(in_col, ftype, do_combine);
         }
@@ -4017,7 +4235,7 @@ array_info* compute_categorical_index(table_info* in_table, int64_t num_keys,
    @param num_keys : number of keys
    @param ftypes : the type of operations.
    @param func_offsets : the function offsets
-   @param return_index : whether to return the index or not
+   @param input_has_index : whether input table contains index col in last position
    @return strategy to use :
    ---0 will use the GroupbyPipeline based on hash partitioning
    ---1 will use the MPI_Exscan strategy with CATEGORICAL column
@@ -4025,14 +4243,14 @@ array_info* compute_categorical_index(table_info* in_table, int64_t num_keys,
  */
 int determine_groupby_strategy(table_info* in_table, int64_t num_keys,
                                int* ftypes, int* func_offsets, bool is_parallel,
-                               bool return_index) {
+                               bool input_has_index) {
     // First decision: If it is cumulative, then we can use the MPI_Exscan.
     // Otherwise no
     bool has_non_cumulative_op = false;
     bool has_cumulative_op = false;
-    int return_index_i = return_index;
+    int index_i = int(input_has_index);
     for (int i = 0;
-         i < func_offsets[in_table->ncols() - num_keys - return_index_i]; i++) {
+         i < func_offsets[in_table->ncols() - num_keys - index_i]; i++) {
         int ftype = ftypes[i];
         if (ftype == Bodo_FTypes::cumsum || ftype == Bodo_FTypes::cummin ||
             ftype == Bodo_FTypes::cumprod || ftype == Bodo_FTypes::cummax) {
@@ -4050,7 +4268,7 @@ int determine_groupby_strategy(table_info* in_table, int64_t num_keys,
     // of strings but that would be definitely quite complicated and use more
     // than just MPI_Exscan.
     bool has_non_arithmetic_type = false;
-    for (int i = num_keys; i < in_table->ncols(); i++) {
+    for (int64_t i = num_keys; i < in_table->ncols() - index_i; i++) {
         array_info* oper_col = in_table->columns[i];
         if (oper_col->arr_type != bodo_array_type::NUMPY &&
             oper_col->arr_type != bodo_array_type::NULLABLE_INT_BOOL)
@@ -4073,32 +4291,32 @@ int determine_groupby_strategy(table_info* in_table, int64_t num_keys,
 }
 
 table_info* groupby_and_aggregate(table_info* in_table, int64_t num_keys,
-                                  int* ftypes, int* func_offsets,
-                                  int* udf_nredvars, bool is_parallel,
-                                  bool skipdropna, bool return_key,
-                                  bool return_index, void* update_cb,
-                                  void* combine_cb, void* eval_cb,
-                                  table_info* udf_dummy_table) {
+                                  bool input_has_index, int* ftypes,
+                                  int* func_offsets, int* udf_nredvars,
+                                  bool is_parallel, bool skipdropna,
+                                  bool return_key, bool return_index,
+                                  void* update_cb, void* combine_cb,
+                                  void* eval_cb, table_info* udf_dummy_table) {
 #ifdef DEBUG_GROUPBY
     std::cout << "IN_TABLE (groupby):\n";
     DEBUG_PrintSetOfColumn(std::cout, in_table->columns);
     DEBUG_PrintRefct(std::cout, in_table->columns);
     std::cout << "num_keys=" << num_keys << " is_parallel=" << is_parallel
-              << "\n";
+              << " input_has_index=" << input_has_index << "\n";
 #endif
 
     int strategy = determine_groupby_strategy(
-        in_table, num_keys, ftypes, func_offsets, is_parallel, return_index);
+        in_table, num_keys, ftypes, func_offsets, is_parallel, input_has_index);
 #ifdef DEBUG_GROUPBY
     std::cout << "groupby : strategy = " << strategy << "\n";
 #endif
 
     auto implement_strategy0 = [&]() -> table_info* {
         GroupbyPipeline groupby(
-            in_table, num_keys, is_parallel, ftypes, func_offsets, udf_nredvars,
-            udf_dummy_table, (udf_table_op_fn)update_cb,
-            (udf_table_op_fn)combine_cb, (udf_eval_fn)eval_cb, skipdropna,
-            return_key, return_index);
+            in_table, num_keys, input_has_index, is_parallel, ftypes,
+            func_offsets, udf_nredvars, udf_dummy_table,
+            (udf_table_op_fn)update_cb, (udf_table_op_fn)combine_cb,
+            (udf_eval_fn)eval_cb, skipdropna, return_key, return_index);
 
         table_info* ret_table = groupby.run();
 #ifdef DEBUG_GROUPBY

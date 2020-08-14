@@ -52,6 +52,7 @@ from bodo.utils.typing import (
     get_overload_const_str,
     is_overload_constant_dict,
     get_overload_constant_dict,
+    get_index_data_arr_types,
 )
 from bodo.utils.transform import get_const_func_output_type, get_call_expr_arg
 from bodo.utils.utils import is_expr
@@ -278,7 +279,7 @@ class GetItemDataFrameGroupBy(AbstractTemplate):
             return signature(ret_grp, *args)
 
 
-def get_groupby_output_dtype(arr_type, func_name):
+def get_groupby_output_dtype(arr_type, func_name, index_type=None):
     """
     Return output dtype for groupby aggregation function based on the
     function and the input array type and dtype.
@@ -331,6 +332,8 @@ def get_groupby_output_dtype(arr_type, func_name):
                 func_name
             ),
         )
+    if func_name == "idxmax":
+        return get_index_data_arr_types(index_type)[0].dtype, "ok"
     if func_name in {"count", "nunique"}:
         return types.int64, "ok"
     else:
@@ -416,7 +419,7 @@ class DataframeGroupByAttribute(AttributeTemplate):
                         )
                     )
             else:
-                out_dtype, err_msg = get_groupby_output_dtype(data, func_name)
+                out_dtype, err_msg = get_groupby_output_dtype(data, func_name, grp.df_type.index)
 
             if err_msg == "ok":
                 if out_dtype != ArrayItemArrayType(string_array_type):
@@ -684,6 +687,10 @@ class DataframeGroupByAttribute(AttributeTemplate):
     @bound_function("groupby.last", no_unliteral=True)
     def resolve_last(self, grp, args, kws):
         return self._get_agg_typ(grp, args, "last")
+
+    @bound_function("groupby.idxmax", no_unliteral=True)
+    def resolve_idxmax(self, grp, args, kws):
+        return self._get_agg_typ(grp, args, "idxmax")
 
     def resolve_cumulative(self, grp, args, kws, msg, is_minmax):
         """For datetime and timedelta datatypes, we can support cummin / cummax,

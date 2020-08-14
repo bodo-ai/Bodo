@@ -58,9 +58,9 @@ void groupby_init();
  *        udfs
  */
 table_info* groupby_and_aggregate(table_info* in_table, int64_t num_keys,
-                                  int* ftypes, int* func_offsets,
-                                  int* udf_nredvars, bool is_parallel,
-                                  bool skipdropna, bool return_key,
-                                  bool return_index, void* update_cb,
-                                  void* combine_cb, void* eval_cb,
-                                  table_info* udf_dummy_table);
+                                  bool input_has_index, int* ftypes,
+                                  int* func_offsets, int* udf_nredvars,
+                                  bool is_parallel, bool skipdropna,
+                                  bool return_key, bool return_index,
+                                  void* update_cb, void* combine_cb,
+                                  void* eval_cb, table_info* udf_dummy_table);

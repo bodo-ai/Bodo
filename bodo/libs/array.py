@@ -1309,6 +1309,7 @@ def groupby_and_aggregate(
     typingctx,
     table_t,
     n_keys_t,
+    input_has_index,
     ftypes,
     func_offsets,
     udf_n_redvars,
@@ -1334,6 +1335,7 @@ def groupby_and_aggregate(
             [
                 lir.IntType(8).as_pointer(),
                 lir.IntType(64),
+                lir.IntType(1),
                 lir.IntType(64),
                 lir.IntType(64),
                 lir.IntType(64),
@@ -1356,6 +1358,7 @@ def groupby_and_aggregate(
         table_type(
             table_t,
             types.int64,
+            types.boolean,
             types.intp,
             types.intp,
             types.intp,

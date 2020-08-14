@@ -202,6 +202,9 @@ struct array_info {
     T& at(size_t idx) {
         return ((T*)data1)[idx];
     }
+
+    array_info& operator=(
+        array_info&& other) noexcept;  // move assignment operator
 };
 
 struct table_info {
