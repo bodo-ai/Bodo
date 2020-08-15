@@ -21,7 +21,7 @@ from numba.core import ir
 from numba.core.ir_utils import mk_unique_var, next_label
 import bodo
 from bodo.hiframes.pd_dataframe_ext import DataFrameType, handle_inplace_df_type_change
-from bodo.hiframes.pd_series_ext import SeriesType
+from bodo.hiframes.pd_series_ext import SeriesType, _get_series_array_type
 from bodo.utils.typing import (
     is_overload_none,
     is_overload_true,
@@ -39,6 +39,7 @@ from bodo.utils.typing import (
     get_overload_const_list,
     unliteral_val,
     get_overload_const_int,
+    parse_dtype,
 )
 from bodo.utils.transform import gen_const_tup
 from bodo.utils.utils import is_array_typ
@@ -237,6 +238,44 @@ def overload_dataframe_isna(df):
     data_args = ", ".join("df['{}'].isna().values".format(c) for c in df.columns)
     header = "def impl(df):\n"
     return _gen_init_df(header, df.columns, data_args)
+
+
+@overload_method(DataFrameType, "select_dtypes", inline="always", no_unliteral=True)
+def overload_dataframe_select_dtypes(df, include=None, exclude=None):
+
+    # Check that at least one of include or exclude exists
+    include_none = is_overload_none(include)
+    exclude_none = is_overload_none(exclude)
+
+    if include_none and exclude_none:
+        raise BodoError(
+            "select_dtypes() At least one of include or exclude must not be none"
+        )
+    # For now we will meet our use case by just allowing scalar literal str arguments.
+    if not include_none:
+        if not is_overload_constant_str(include):
+            raise BodoError("select_dtypes() Only supports str literals as arguments")
+        # Filter columns to those with a matching datatype
+        include_type = _get_series_array_type(parse_dtype(include))
+        chosen_columns = [
+            c for i, c in enumerate(df.columns) if df.data[i] == include_type
+        ]
+    else:
+        chosen_columns = df.columns
+    if not exclude_none:
+        if not is_overload_constant_str(exclude):
+            raise BodoError("select_dtypes() Only supports str literals as arguments")
+        # Filter columns to those without a matching datatype
+        exclude_type = _get_series_array_type(parse_dtype(exclude))
+        chosen_columns = [
+            c for i, c in enumerate(chosen_columns) if df.data[i] != exclude_type
+        ]
+
+    data_args = ", ".join("df['{}'].values".format(c) for c in chosen_columns)
+    # Define our function
+    header = "def impl(df, include=None, exclude=None):\n"
+
+    return _gen_init_df(header, chosen_columns, data_args)
 
 
 @overload_method(DataFrameType, "notna", inline="always", no_unliteral=True)

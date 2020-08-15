@@ -442,6 +442,7 @@ class TypingTransforms:
             "rename": [(2, "columns")],
             "drop": [(0, "labels"), (1, "axis"), (3, "columns"), (5, "inplace"),],
             "dropna": [(0, "axis"), (1, "how"), (3, "subset"),],
+            "select_dtypes": [(0, "include"), (1, "exclude")],
         }
 
         if func_name in df_call_const_args:
