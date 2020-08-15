@@ -697,7 +697,9 @@ class ReadParquetArrayItemInfer(AbstractTemplate):
         assert len(args) == 5
         elem_type = args[4].dtype
         # Implement IntegerArrayType(elem_type) when this code path is restored.
-        return signature(ArrayItemArrayType(_get_series_array_type(elem_type)), *unliteral_all(args))
+        return signature(
+            ArrayItemArrayType(_get_series_array_type(elem_type)), *unliteral_all(args)
+        )
 
 
 @infer_global(read_parquet_arrow_array)

@@ -419,7 +419,9 @@ class DataframeGroupByAttribute(AttributeTemplate):
                         )
                     )
             else:
-                out_dtype, err_msg = get_groupby_output_dtype(data, func_name, grp.df_type.index)
+                out_dtype, err_msg = get_groupby_output_dtype(
+                    data, func_name, grp.df_type.index
+                )
 
             if err_msg == "ok":
                 if out_dtype != ArrayItemArrayType(string_array_type):

@@ -763,6 +763,7 @@ def get_call_type2(self, context, args, kws):
 
         # Bodo change
         import bodo
+
         if isinstance(literal_e, bodo.utils.typing.BodoError):
             raise literal_e
         raise errors.TypingError(
@@ -977,9 +978,11 @@ def propagate(self, typeinfer):
                     # the first time we see BodoError during type inference, we
                     # put the code location in the error message, and re-raise
                     loc = constraint.loc
-                    errors.append(bodo.utils.typing.BodoError(
-                        str(e.msg) + "\n" + loc.strformat() + "\n", is_new=False
-                    ))
+                    errors.append(
+                        bodo.utils.typing.BodoError(
+                            str(e.msg) + "\n" + loc.strformat() + "\n", is_new=False
+                        )
+                    )
                 else:
                     errors.append(bodo.utils.typing.BodoError(e.msg, is_new=False))
             except Exception as e:
@@ -1008,6 +1011,7 @@ numba.core.typeinfer.ConstraintNetwork.propagate = propagate
 
 def raise_error(self):
     import bodo
+
     for faillist in self._failures.values():
         for fail in faillist:
             if isinstance(fail.error, ForceLiteralArg):
@@ -1023,7 +1027,9 @@ if (
     hashlib.sha256(lines.encode()).hexdigest()
     != "84b89430f5c8b46cfc684804e6037f00a0f170005cd128ad245551787b2568ea"
 ):  # pragma: no cover
-    warnings.warn("numba.core.types.functions._ResolutionFailures.raise_error has changed")
+    warnings.warn(
+        "numba.core.types.functions._ResolutionFailures.raise_error has changed"
+    )
 numba.core.types.functions._ResolutionFailures.raise_error = raise_error
 
 
@@ -1455,6 +1461,7 @@ def passmanager_run(self, state):
     Run the defined pipelines on the state.
     """
     from numba.core.compiler import _EarlyPipelineCompletion
+
     if not self.finalized:
         raise RuntimeError("Cannot run non-finalised pipeline")
 
@@ -1477,8 +1484,10 @@ def passmanager_run(self, state):
         except bodo.utils.typing.BodoError as e:
             raise
         except Exception as e:
-            msg = "Failed in %s mode pipeline (step: %s)" % \
-                (self.pipeline_name, pass_desc)
+            msg = "Failed in %s mode pipeline (step: %s)" % (
+                self.pipeline_name,
+                pass_desc,
+            )
             patched_exception = self._patch_error(msg, e)
             raise patched_exception
 

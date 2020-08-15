@@ -409,7 +409,9 @@ class DistributedPass:
 
                 # TODO sample_weight argument
 
-                f = lambda model, X, y: model.score(X, y, sample_weight=None, _is_data_distributed=True)
+                f = lambda model, X, y: model.score(
+                    X, y, sample_weight=None, _is_data_distributed=True
+                )
                 return compile_func_single_block(
                     f, [model] + rhs.args[:2], assign.target, self
                 )
