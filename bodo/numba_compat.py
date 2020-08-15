@@ -776,7 +776,7 @@ def get_call_type2(self, context, args, kws):
 lines = inspect.getsource(numba.core.types.functions.BoundFunction.get_call_type)
 if (
     hashlib.sha256(lines.encode()).hexdigest()
-    != "84bf54d63ce923117c14e7c96a1aedbef5fe25ed8586bdba4ca06e5cf4101ece"
+    != "5427d7ba522b97a4e34745587365b1eacb7b9641229649a02737f944e150bfba"
 ):  # pragma: no cover
     warnings.warn("numba.core.types.functions.BoundFunction.get_call_type has changed")
 
