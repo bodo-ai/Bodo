@@ -20,6 +20,7 @@ from numba.extending import (
     NativeValue,
     intrinsic,
 )
+from numba.core.errors import NumbaError
 from numba.core.typing.templates import infer_global, AbstractTemplate, CallableTemplate
 from numba.core.typing import signature
 from numba.core.imputils import lower_builtin, impl_ret_borrowed, impl_ret_new_ref
@@ -40,10 +41,10 @@ def is_dtype_nullable(in_dtype):
     return isinstance(in_dtype, (types.Float, types.NPDatetime, types.NPTimedelta))
 
 
-class BodoError(BaseException):
-    """Bodo error class that inherits from BaseException instead of Exception to avoid
-    numba's error catching, which enables raising simpler error directly to the user.
-    TODO: change to Exception when possible.
+class BodoError(NumbaError):
+    """Bodo error that is a regular exception to allow typing pass to catch it.
+       Numba will handle it in a special way to remove any context information
+       when printing so that it only prints the error message and code location.
     """
 
     def __init__(self, msg, is_new=True):
@@ -467,6 +468,10 @@ def parse_dtype(dtype):
     if isinstance(dtype, types.DTypeSpec):
         return dtype.dtype
 
+    # input is array dtype already
+    if isinstance(dtype, types.Number) or dtype == bodo.string_type:
+        return dtype
+
     try:
         d_str = get_overload_const_str(dtype)
         if d_str.startswith("Int") or d_str.startswith("UInt"):
@@ -824,6 +829,16 @@ def is_iterable_type(t):
         bodo.utils.utils.is_array_typ(t, False)
         or isinstance(t, (SeriesType, DataFrameType, types.List, types.BaseTuple))
         or bodo.hiframes.pd_index_ext.is_index_type(t)
+    )
+
+
+def find_common_np_dtype(arr_types):
+    """finds common numpy dtype of array types using np.find_common_type
+    """
+    return numba.np.numpy_support.from_dtype(
+        np.find_common_type(
+            [numba.np.numpy_support.as_dtype(t.dtype) for t in arr_types], []
+        )
     )
 
 

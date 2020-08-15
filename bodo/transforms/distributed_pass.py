@@ -56,6 +56,7 @@ from bodo.transforms.distributed_analysis import (
     Distribution,
     DistributedAnalysis,
     _get_array_accesses,
+    get_reduce_op,
 )
 
 import bodo.utils.utils
@@ -250,7 +251,11 @@ class DistributedPass:
                     unwrap_parfor_blocks(inst)
                 elif isinstance(inst, ir.Assign):
                     rhs = inst.value
-                    if isinstance(rhs, ir.Expr):
+                    # concat reduction variables don't need transformation
+                    # see test_concat_reduction
+                    if inst.target.name in self._dist_analysis.concat_reduce_varnames:
+                        out_nodes = [inst]
+                    elif isinstance(rhs, ir.Expr):
                         out_nodes = self._run_expr(inst, equiv_set, avail_vars)
                 elif isinstance(inst, (ir.StaticSetItem, ir.SetItem)):
                     out_nodes = []
@@ -296,6 +301,10 @@ class DistributedPass:
             and rhs.attr == "shape"
             and (self._is_1D_arr(rhs.value.name) or self._is_1D_Var_arr(rhs.value.name))
         ):
+            # concat reduction variables don't need transformation
+            # see test_concat_reduction
+            if rhs.value.name in self._dist_analysis.concat_reduce_varnames:
+                return [inst]
             return self._run_array_shape(inst.target, rhs.value, equiv_set)
 
         # array.size
@@ -400,7 +409,9 @@ class DistributedPass:
 
                 # TODO sample_weight argument
 
-                f = lambda model, X, y: model.score(X, y, sample_weight=None, _is_data_distributed=True)
+                f = lambda model, X, y: model.score(
+                    X, y, sample_weight=None, _is_data_distributed=True
+                )
                 return compile_func_single_block(
                     f, [model] + rhs.args[:2], assign.target, self
                 )
@@ -470,6 +481,10 @@ class DistributedPass:
             )
         ):
             arr = rhs.args[0]
+            # concat reduction variables don't need transformation
+            # see test_concat_reduction
+            if arr.name in self._dist_analysis.concat_reduce_varnames:
+                return [assign]
             nodes = []
             assign.value = self._get_dist_var_len(arr, nodes, equiv_set)
             nodes.append(assign)
@@ -1686,6 +1701,11 @@ class DistributedPass:
             size_var = size_def.args[1]
             size_def = guard(get_definition, self.func_ir, size_var)
 
+        # corner case: empty dataframe/series could be both input/output of concat()
+        # see test_append_empty_df
+        if isinstance(size_def, ir.Const) and size_def.value == 0:
+            return size_var
+
         new_size_var = None
         for v in equiv_set.get_equiv_set(size_var):
             if "#" in v and self._is_1D_Var_arr(v.split("#")[0]):
@@ -2285,14 +2305,12 @@ class DistributedPass:
         loc = parfor.init_block.loc
         pre = []
         out = []
-        _, reductions = get_parfor_reductions(
-            self.func_ir, parfor, parfor.params, self.calltypes
-        )
 
-        for reduce_varname, (_init_val, reduce_nodes, _op) in reductions.items():
-            reduce_op = guard(self._get_reduce_op, reduce_nodes)
+        for reduce_varname, (_init_val, reduce_nodes, _op) in parfor.reddict.items():
+            reduce_op = guard(
+                get_reduce_op, reduce_varname, reduce_nodes, self.func_ir, self.typemap
+            )
             reduce_var = reduce_nodes[-1].target
-            assert reduce_var.name == reduce_varname
             # TODO: initialize reduction vars (arrays)
             pre += self._gen_init_reduce(reduce_var, reduce_op)
             out += self._gen_reduce(reduce_var, reduce_op, scope, loc)
@@ -2608,6 +2626,13 @@ class DistributedPass:
         )
 
     def _gen_reduce(self, reduce_var, reduce_op, scope, loc):
+        """generate distributed reduction code for after parfor's local execution
+        """
+        # concat reduction variables don't need aggregation since output is distributed
+        # see test_concat_reduction
+        if reduce_op == Reduce_Type.Concat:
+            return []
+
         op_var = ir.Var(scope, mk_unique_var("$reduce_op"), loc)
         self.typemap[op_var.name] = types.int32
         op_assign = ir.Assign(ir.Const(reduce_op.value, loc), op_var, loc)
@@ -2630,45 +2655,14 @@ class DistributedPass:
         dist_reduce_nodes[-1].target = reduce_var
         return dist_reduce_nodes
 
-    def _get_reduce_op(self, reduce_nodes):
-        require(len(reduce_nodes) == 2)
-        require(isinstance(reduce_nodes[0], ir.Assign))
-        require(isinstance(reduce_nodes[1], ir.Assign))
-        require(isinstance(reduce_nodes[0].value, ir.Expr))
-        require(isinstance(reduce_nodes[1].value, ir.Var))
-        rhs = reduce_nodes[0].value
-
-        if rhs.op == "inplace_binop":
-            if rhs.fn in ("+=", operator.iadd):
-                return Reduce_Type.Sum
-            if rhs.fn in ("|=", operator.ior):
-                return Reduce_Type.Or
-            if rhs.fn in ("*=", operator.imul):
-                return Reduce_Type.Prod
-
-        if rhs.op == "call":
-            func = find_callname(self.func_ir, rhs, self.typemap)
-            if func == ("min", "builtins"):
-                if isinstance(
-                    self.typemap[rhs.args[0].name],
-                    numba.core.typing.builtins.IndexValueType,
-                ):
-                    return Reduce_Type.Argmin
-                return Reduce_Type.Min
-            if func == ("max", "builtins"):
-                if isinstance(
-                    self.typemap[rhs.args[0].name],
-                    numba.core.typing.builtins.IndexValueType,
-                ):
-                    return Reduce_Type.Argmax
-                return Reduce_Type.Max
-
-        raise GuardException  # pragma: no cover
-
     def _gen_init_reduce(self, reduce_var, reduce_op):
         """generate code to initialize reduction variables on non-root
         processors.
         """
+        # TODO: support initialization for concat reductions
+        if reduce_op == Reduce_Type.Concat:
+            return []
+
         red_var_typ = self.typemap[reduce_var.name]
         el_typ = red_var_typ
         if is_np_array_typ(self.typemap[reduce_var.name]):

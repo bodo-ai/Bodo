@@ -412,14 +412,16 @@ class DataframeGroupByAttribute(AttributeTemplate):
                     )
                     err_msg = "ok"
                 except:
-                    raise BodoError(
+                    raise_bodo_error(
                         "Groupy.agg()/Groupy.aggregate(): column {col} of type {type} "
                         "is unsupported/not a valid input type for user defined function".format(
                             col=c, type=data.dtype
                         )
                     )
             else:
-                out_dtype, err_msg = get_groupby_output_dtype(data, func_name, grp.df_type.index)
+                out_dtype, err_msg = get_groupby_output_dtype(
+                    data, func_name, grp.df_type.index
+                )
 
             if err_msg == "ok":
                 if out_dtype != ArrayItemArrayType(string_array_type):

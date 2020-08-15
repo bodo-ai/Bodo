@@ -168,6 +168,31 @@ def column_name_df_value(request):
     return request.param
 
 
+def test_df_select_dtypes():
+    def test_impl1(df):
+        return df.select_dtypes("bool")
+
+    def test_impl2(df):
+        return df.select_dtypes("float64")
+
+    def test_impl3(df):
+        return df.select_dtypes(exclude="bool")
+
+    def test_impl4(df):
+        return df.select_dtypes(exclude="float64")
+
+    def test_impl5(df):
+        return df.select_dtypes("number", "float64")
+
+    df = pd.DataFrame({"a": [1, 2] * 3, "b": [True, False] * 3, "c": [1.0, 2.0] * 3})
+    check_func(test_impl1, (df,))
+    check_func(test_impl2, (df,))
+    check_func(test_impl3, (df,))
+    check_func(test_impl4, (df,))
+    # TODO: Add support for np.number by string and type hierarchy
+    # check_func(test_impl5, (df,))
+
+
 def test_assign():
     """Assign statements"""
 
@@ -767,17 +792,61 @@ def test_df_max(numeric_df_value):
     check_func(impl, (numeric_df_value,), is_out_distributed=False, check_dtype=False)
 
 
-def test_df_reduce_axis1():
+@pytest.mark.parametrize(
+    "df",
+    [
+        pd.DataFrame({"A": np.arange(11, dtype=np.float64), "B": np.ones(11) + 4}),
+        pd.DataFrame({"A": [1, 2, 3, 4, 5, 5, 5], "B": [1, 2, 3, 3, 4, 5, 10]}),
+        pd.DataFrame(
+            {
+                "A": [1.0, 2.0, 3.0, 4.0, None, 5.0, 6.0, None],
+                "B": [1.0, 2.0, None, 3.0, 4.0, 5.0, 6.0, None],
+            }
+        ),
+        pd.DataFrame(
+            {
+                "A": [1, 2, 3, 4, np.nan, 5, 6, None],
+                "B": [1, 2, None, 3, 4, 5, 6, np.nan],
+            }
+        ),
+        pd.DataFrame(
+            {
+                "A": [1, 2, 3.0, 4, None, 5, 6, None],
+                "B": [1, 2, None, 3, 4, 5.0, 6, None],
+            }
+        ),
+    ],
+)
+def test_df_reduce_axis1(df):
     """test dataframe reductions across columns (axis=1)
     """
     # TODO: support and test other reduce functions
+    # TODO: Test with nullable ints
 
-    def impl(df):
+    def impl_max(df):
         return df.max(axis=1)
 
-    n = 11
-    df = pd.DataFrame({"A": np.arange(n, dtype=np.float64), "B": np.ones(n) + 4})
-    check_func(impl, (df,))
+    def impl_min(df):
+        return df.min(axis=1)
+
+    def impl_sum(df):
+        return df.sum(axis=1)
+
+    def impl_prod(df):
+        return df.prod(axis=1)
+
+    def impl_mean(df):
+        return df.mean(axis=1)
+
+    def impl_median(df):
+        return df.median(axis=1)
+
+    check_func(impl_max, (df,))
+    check_func(impl_min, (df,))
+    check_func(impl_sum, (df,))
+    check_func(impl_prod, (df,))
+    check_func(impl_mean, (df,))
+    check_func(impl_median, (df,))
 
 
 def test_df_mean(numeric_df_value):
@@ -1745,6 +1814,37 @@ def test_concat_nulls():
     check_func(test_impl_concat, (df, df2), sort_output=True, reset_index=True)
 
 
+@pytest.mark.parametrize(
+    "df",
+    [
+        # RangeIndex and numeric types
+        pd.DataFrame(
+            {
+                "B": np.arange(11),
+                "C": np.ones(11),
+                "E": pd.timedelta_range(start=3, periods=11),
+            },
+        ),
+        # variable item size data and index
+        pd.DataFrame(
+            {"A": ["ABC", None, "AA", "B", None, "AA", "CC", "G"],},
+            index=["AA", "C", "BB", "A", "D", "L", "K", "P"],
+        ),
+    ],
+)
+def test_append_empty_df(df):
+    """Test appending to an empty dataframe in a loop (common pattern)
+    """
+
+    def test_impl(df2):
+        df = pd.DataFrame()
+        for _ in range(3):
+            df = df.append(df2)
+        return df
+
+    check_func(test_impl, (df,), sort_output=True, reset_index=True, check_dtype=False)
+
+
 def test_init_dataframe_array_analysis():
     """make sure shape equivalence for init_dataframe() is applied correctly
     """
@@ -2010,6 +2110,26 @@ def test_loc_col_name():
     n = 11
     df = pd.DataFrame({"A": np.arange(n), "B": np.arange(n) ** 2})
     check_func(test_impl, (df,))
+
+
+def test_loc_col_select():
+    """test df.iloc[slice, col_ind] where col_ind is a list of column names or bools
+    """
+
+    def impl1(df):
+        return df.loc[:, ["A", "C"]]
+
+    def impl2(df):
+        return df.loc[:, [True, False, True]]
+
+    def impl3(df):
+        return df.loc[:, df.columns != "B"]
+
+    n = 11
+    df = pd.DataFrame({"A": np.arange(n), "B": np.arange(n) ** 2, "C": np.ones(n)})
+    check_func(impl1, (df,))
+    check_func(impl2, (df,))
+    check_func(impl3, (df,))
 
 
 def test_df_schema_change():

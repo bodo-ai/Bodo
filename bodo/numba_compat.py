@@ -35,6 +35,7 @@ from numba.core.ir_utils import (
     visit_vars_extensions,
     visit_vars_inner,
     _create_function_from_code_obj,
+    replace_vars_inner,
 )
 from numba.extending import lower_builtin
 import numba.np.linalg
@@ -52,8 +53,9 @@ from numba.core.types.functions import (
     _unlit_non_poison,
     _bt_as_lines,
 )
-from numba.core.errors import LiteralTypingError, TypingError
+from numba.core.errors import LiteralTypingError, TypingError, ForceLiteralArg
 from numba.core.types import literal
+from numba.parfors.parfor import get_expr_args
 
 
 # Make sure literals are tried first for typing Bodo's intrinsics, since output type
@@ -759,6 +761,11 @@ def get_call_type2(self, context, args, kws):
             new_e = errors.TypingError(textwrap.dedent(estr))
             return tmplt.format(literalness, str(new_e))
 
+        # Bodo change
+        import bodo
+
+        if isinstance(literal_e, bodo.utils.typing.BodoError):
+            raise literal_e
         raise errors.TypingError(
             nested_msg("literal", literal_e) + nested_msg("non-literal", nonliteral_e)
         )
@@ -907,6 +914,11 @@ def _compile_for_args(self, *args, **kws):  # pragma: no cover
         # this is from trying to infer something as constant when it isn't
         # or isn't supported as a constant
         error_rewrite(e, "constant_inference")
+    # Bodo change: handle BodoError
+    except bodo.utils.typing.BodoError as e:
+        # create a new error so that the stacktrace only reaches
+        # the point where the new error is raised
+        error = bodo.utils.typing.BodoError(str(e))
     except Exception as e:
         if numba.core.config.SHOW_HELP:
             if hasattr(e, "patch_message"):
@@ -914,11 +926,6 @@ def _compile_for_args(self, *args, **kws):  # pragma: no cover
                 e.patch_message("\n".join((str(e).rstrip(), help_msg)))
         # ignore the FULL_TRACEBACKS config, this needs reporting!
         raise e
-    # Bodo change: handle BodoError
-    except bodo.utils.typing.BodoError as e:
-        # create a new error so that the stacktrace only reaches
-        # the point where the new error is raised
-        error = bodo.utils.typing.BodoError(str(e))
     # Bodo change: avoid arg leak
     finally:
         # avoid issue of reference leak of arguments to jitted function:
@@ -965,6 +972,19 @@ def propagate(self, typeinfer):
                     str(e), loc=constraint.loc, highlighting=False,
                 )
                 errors.append(numba.core.utils.chain_exception(new_exc, e))
+            # Bodo change
+            except bodo.utils.typing.BodoError as e:
+                if e.is_new:
+                    # the first time we see BodoError during type inference, we
+                    # put the code location in the error message, and re-raise
+                    loc = constraint.loc
+                    errors.append(
+                        bodo.utils.typing.BodoError(
+                            str(e.msg) + "\n" + loc.strformat() + "\n", is_new=False
+                        )
+                    )
+                else:
+                    errors.append(bodo.utils.typing.BodoError(e.msg, is_new=False))
             except Exception as e:
                 numba.core.typeinfer._logger.debug("captured error", exc_info=e)
                 msg = (
@@ -977,18 +997,6 @@ def propagate(self, typeinfer):
                     highlighting=False,
                 )
                 errors.append(numba.core.utils.chain_exception(new_exc, e))
-            except bodo.utils.typing.BodoError as e:
-                if e.is_new:
-                    # the first time we see BodoError during type inference, we
-                    # put the code location in the error message, and re-raise
-                    loc = constraint.loc
-                    raise bodo.utils.typing.BodoError(
-                        str(e) + "\n" + loc.strformat() + "\n", is_new=False
-                    )
-                else:
-                    # keep raising and propagating the error through numba until
-                    # it reaches the user
-                    raise e
     return errors
 
 
@@ -999,6 +1007,30 @@ if (
 ):  # pragma: no cover
     warnings.warn("numba.core.typeinfer.ConstraintNetwork.propagate has changed")
 numba.core.typeinfer.ConstraintNetwork.propagate = propagate
+
+
+def raise_error(self):
+    import bodo
+
+    for faillist in self._failures.values():
+        for fail in faillist:
+            if isinstance(fail.error, ForceLiteralArg):
+                raise fail.error
+            # Bodo change
+            if isinstance(fail.error, bodo.utils.typing.BodoError):
+                raise fail.error
+    raise TypingError(self.format())
+
+
+lines = inspect.getsource(numba.core.types.functions._ResolutionFailures.raise_error)
+if (
+    hashlib.sha256(lines.encode()).hexdigest()
+    != "84b89430f5c8b46cfc684804e6037f00a0f170005cd128ad245551787b2568ea"
+):  # pragma: no cover
+    warnings.warn(
+        "numba.core.types.functions._ResolutionFailures.raise_error has changed"
+    )
+numba.core.types.functions._ResolutionFailures.raise_error = raise_error
 
 
 # replaces remove_dead_block of Numba to add Bodo optimization (e.g. replace dead array
@@ -1422,3 +1454,115 @@ if (
 
 numba.core.ir_utils.convert_code_obj_to_function = convert_code_obj_to_function
 numba.core.untyped_passes.convert_code_obj_to_function = convert_code_obj_to_function
+
+
+def passmanager_run(self, state):
+    """
+    Run the defined pipelines on the state.
+    """
+    from numba.core.compiler import _EarlyPipelineCompletion
+
+    if not self.finalized:
+        raise RuntimeError("Cannot run non-finalised pipeline")
+
+    # Bodo change
+    import bodo
+    from numba.core.compiler_machinery import _pass_registry, CompilerPass
+
+    # walk the passes and run them
+    for idx, (pss, pass_desc) in enumerate(self.passes):
+        try:
+            numba.core.tracing.event("-- %s" % pass_desc)
+            pass_inst = _pass_registry.get(pss).pass_inst
+            if isinstance(pass_inst, CompilerPass):
+                self._runPass(idx, pass_inst, state)
+            else:
+                raise BaseException("Legacy pass in use")
+        except _EarlyPipelineCompletion as e:
+            raise e
+        # Bodo change
+        except bodo.utils.typing.BodoError as e:
+            raise
+        except Exception as e:
+            msg = "Failed in %s mode pipeline (step: %s)" % (
+                self.pipeline_name,
+                pass_desc,
+            )
+            patched_exception = self._patch_error(msg, e)
+            raise patched_exception
+
+
+lines = inspect.getsource(numba.core.compiler_machinery.PassManager.run)
+if (
+    hashlib.sha256(lines.encode()).hexdigest()
+    != "5d21271317cfa1bdcec1cc71973d80df0ffd7126c4608eeef4ad676bbff8f0d3"
+):  # pragma: no cover
+    warnings.warn("numba.core.compiler_machinery.PassManager.run has changed")
+numba.core.compiler_machinery.PassManager.run = passmanager_run
+
+
+def get_reduce_nodes(reduction_node, nodes, func_ir):
+    """
+    Get nodes that combine the reduction variable with a sentinel variable.
+    Recognizes the first node that combines the reduction variable with another
+    variable.
+    """
+    reduce_nodes = None
+    defs = {}
+
+    def lookup(var, varonly=True):
+        val = defs.get(var.name, None)
+        if isinstance(val, ir.Var):
+            return lookup(val)
+        else:
+            return var if (varonly or val is None) else val
+
+    name = reduction_node.name
+    unversioned_name = reduction_node.unversioned_name
+    for i, stmt in enumerate(nodes):
+        lhs = stmt.target
+        rhs = stmt.value
+        defs[lhs.name] = rhs
+        if isinstance(rhs, ir.Var) and rhs.name in defs:
+            rhs = lookup(rhs)
+        if isinstance(rhs, ir.Expr):
+            in_vars = set(lookup(v, True).name for v in rhs.list_vars())
+            if name in in_vars:
+                next_node = nodes[i + 1]
+                target_name = next_node.target.unversioned_name
+                # Bodo change: avoid raising error for concat reduction case
+                # opened issue to handle Bodo cases and raise proper errors: #1414
+                # see test_concat_reduction
+                # if not (isinstance(next_node, ir.Assign) and target_name == unversioned_name):
+                #     raise ValueError(
+                #         f"Use of reduction variable {unversioned_name!r} other "
+                #         "than in a supported reduction function is not "
+                #         "permitted."
+                #     )
+
+                # if not supported_reduction(rhs, func_ir):
+                #     raise ValueError(("Use of reduction variable " + unversioned_name +
+                #                       " in an unsupported reduction function."))
+                args = [(x.name, lookup(x, True)) for x in get_expr_args(rhs)]
+                non_red_args = [x for (x, y) in args if y.name != name]
+                assert len(non_red_args) == 1
+                args = [(x, y) for (x, y) in args if x != y.name]
+                replace_dict = dict(args)
+                replace_dict[non_red_args[0]] = ir.Var(
+                    lhs.scope, name + "#init", lhs.loc
+                )
+                replace_vars_inner(rhs, replace_dict)
+                reduce_nodes = nodes[i:]
+                break
+    return reduce_nodes
+
+
+lines = inspect.getsource(numba.parfors.parfor.get_reduce_nodes)
+if (
+    hashlib.sha256(lines.encode()).hexdigest()
+    != "5e99297a2346e2c01d60ad39e814da5c7308a3c0e6f342530d2e49f976327079"
+):  # pragma: no cover
+    warnings.warn("numba.parfors.parfor.get_reduce_nodes has changed")
+
+
+numba.parfors.parfor.get_reduce_nodes = get_reduce_nodes

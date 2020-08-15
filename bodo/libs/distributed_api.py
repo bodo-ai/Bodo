@@ -105,6 +105,7 @@ class Reduce_Type(Enum):
     Argmin = 4
     Argmax = 5
     Or = 6
+    Concat = 7
 
 
 _get_rank = types.ExternalFunction("c_get_rank", types.int32())
@@ -1150,6 +1151,15 @@ def scatterv(data, send_counts=None):
         data = get_value_for_type(dtype)
 
     return scatterv_impl(data, send_counts)
+
+
+@overload(scatterv)
+def scatterv_overload(data, send_counts=None):
+    """support scatterv inside jit functions
+    """
+    return lambda data, send_counts=None: scatterv_impl(
+        data, send_counts
+    )  # pragma: no cover
 
 
 @numba.generated_jit(nopython=True)

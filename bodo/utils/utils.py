@@ -125,8 +125,8 @@ def numba_to_c_type(t):
         return CTypeEnum.Date.value
 
     # TODO: Timedelta arrays need to be supported
-#    if t == bodo.hiframes.datetime_timedelta_ext.datetime_timedelta_type:
-#        return CTypeEnum.Timedelta.value
+    #    if t == bodo.hiframes.datetime_timedelta_ext.datetime_timedelta_type:
+    #        return CTypeEnum.Timedelta.value
 
     return _numba_to_c_type_map[t]
 
@@ -511,7 +511,9 @@ def empty_like_type_overload(n, arr):
     if arr == bodo.hiframes.datetime_timedelta_ext.datetime_timedelta_array_type:
 
         def empty_like_type_datetime_timedelta_arr(n, arr):  # pragma: no cover
-            return bodo.hiframes.datetime_timedelta_ext.alloc_datetime_timedelta_array(n)
+            return bodo.hiframes.datetime_timedelta_ext.alloc_datetime_timedelta_array(
+                n
+            )
 
         return empty_like_type_datetime_timedelta_arr
     if isinstance(arr, bodo.libs.decimal_arr_ext.DecimalArrayType):

@@ -849,6 +849,20 @@ def test_dist_dict_setitem1():
     assert count_array_OneDs() >= 2
 
 
+def test_concat_reduction():
+    """test dataframe concat reduction, which produces distributed output
+    """
+
+    def impl(n):
+        df = pd.DataFrame()
+        for i in bodo.prange(n):
+            df = df.append(pd.DataFrame({"A": np.arange(i)}))
+
+        return df
+
+    check_func(impl, (11,), reset_index=True, check_dtype=False)
+
+
 def test_dist_warning1():
     """Make sure BodoWarning is thrown when there is no parallelism discovered due
     to unsupported function
@@ -1170,3 +1184,15 @@ def test_scatterv(data):
         data = None
 
     _check_scatterv(data, n)
+
+
+def test_scatterv_jit():
+    """test using scatterv inside jit functions
+    """
+
+    def impl(df):
+        return bodo.scatterv(df)
+
+    df = pd.DataFrame({"A": [3, 1, 4, 2, 11], "B": [1.1, 2.2, 5.5, 1.3, -1.1]})
+    df_scattered = bodo.jit(all_returns_distributed=True)(impl)(df)
+    pd.testing.assert_frame_equal(df, bodo.allgatherv(df_scattered))

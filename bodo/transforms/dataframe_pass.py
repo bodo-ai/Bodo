@@ -87,6 +87,8 @@ from bodo.utils.typing import (
     is_overload_constant_list,
     get_overload_const_list,
     is_initial_value_list_type,
+    is_literal_type,
+    get_literal_value,
 )
 
 binary_op_names = [f.__name__ for f in bodo.hiframes.pd_series_ext.series_binary_ops]
@@ -1991,6 +1993,17 @@ class DataFramePass:
                 df_typ = self.typemap[df.name]
                 # generate full NaN column
                 if cname not in df_typ.columns:
+                    # corner case: empty dataframe concat
+                    if len(df_typ.columns) == 0:
+                        nodes += compile_func_single_block(
+                            lambda A: bodo.libs.array_kernels.gen_na_array(0, A),
+                            (example_arr,),
+                            None,
+                            self,
+                        )
+                        args.append(nodes[-1].target)
+                        continue
+
                     arr = self._get_dataframe_data(df, df_typ.columns[0], nodes)
                     nodes += compile_func_single_block(
                         lambda arr, A: bodo.libs.array_kernels.gen_na_array(
@@ -2190,10 +2203,10 @@ class DataFramePass:
         var_typ = self.typemap[by_arg.name]
         if isinstance(var_typ, types.Optional):
             var_typ = var_typ.type
-        if isinstance(var_typ, bodo.utils.typing.ListLiteral):
-            return var_typ.literal_value
-        if is_initial_value_list_type(var_typ):
-            return var_typ.initial_value
+        if is_overload_constant_list(var_typ):
+            return get_overload_const_list(var_typ)
+        if is_literal_type(var_typ):
+            return [get_literal_value(var_typ)]
 
         typ = str if typ is None else typ
         by_arg_def = guard(find_build_sequence, self.func_ir, by_arg)

@@ -97,10 +97,34 @@ def test_iris(criterion):
 def test_multioutput():
     # Check estimators on multi-output problems.
 
-    X_train = [[-2, -1], [-1, -1], [-1, -2], [1, 1], [1, 2], [2, 1], [-2, 1],
-               [-1, 1], [-1, 2], [2, -1], [1, -1], [1, -2]]
-    y_train = [[-1, 0], [-1, 0], [-1, 0], [1, 1], [1, 1], [1, 1], [-1, 2],
-               [-1, 2], [-1, 2], [1, 3], [1, 3], [1, 3]]
+    X_train = [
+        [-2, -1],
+        [-1, -1],
+        [-1, -2],
+        [1, 1],
+        [1, 2],
+        [2, 1],
+        [-2, 1],
+        [-1, 1],
+        [-1, 2],
+        [2, -1],
+        [1, -1],
+        [1, -2],
+    ]
+    y_train = [
+        [-1, 0],
+        [-1, 0],
+        [-1, 0],
+        [1, 1],
+        [1, 1],
+        [1, 1],
+        [-1, 2],
+        [-1, 2],
+        [-1, 2],
+        [1, 3],
+        [1, 3],
+        [1, 3],
+    ]
     X_test = [[-1, -1], [1, 1], [-1, 1], [1, -1]] * 3
     y_test = [[-1, 0], [1, 1], [-1, 2], [1, 3]] * 3
 
@@ -124,15 +148,41 @@ def test_multioutput():
 def test_multioutput_string():
     # Check estimators on multi-output problems with string outputs.
 
-    X_train = [[-2, -1], [-1, -1], [-1, -2], [1, 1], [1, 2], [2, 1], [-2, 1],
-               [-1, 1], [-1, 2], [2, -1], [1, -1], [1, -2]]
-    y_train = [["red", "blue"], ["red", "blue"], ["red", "blue"],
-               ["green", "green"], ["green", "green"], ["green", "green"],
-               ["red", "purple"], ["red", "purple"], ["red", "purple"],
-               ["green", "yellow"], ["green", "yellow"], ["green", "yellow"]]
+    X_train = [
+        [-2, -1],
+        [-1, -1],
+        [-1, -2],
+        [1, 1],
+        [1, 2],
+        [2, 1],
+        [-2, 1],
+        [-1, 1],
+        [-1, 2],
+        [2, -1],
+        [1, -1],
+        [1, -2],
+    ]
+    y_train = [
+        ["red", "blue"],
+        ["red", "blue"],
+        ["red", "blue"],
+        ["green", "green"],
+        ["green", "green"],
+        ["green", "green"],
+        ["red", "purple"],
+        ["red", "purple"],
+        ["red", "purple"],
+        ["green", "yellow"],
+        ["green", "yellow"],
+        ["green", "yellow"],
+    ]
     X_test = [[-1, -1], [1, 1], [-1, 1], [1, -1]]
-    y_test = [["red", "blue"], ["green", "green"],
-              ["red", "purple"], ["green", "yellow"]]
+    y_test = [
+        ["red", "blue"],
+        ["green", "green"],
+        ["red", "purple"],
+        ["green", "yellow"],
+    ]
 
     def impl(X_train, y_train, X_test):
         est = RandomForestClassifier(random_state=0, bootstrap=False)
