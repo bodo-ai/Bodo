@@ -1123,7 +1123,7 @@ def validate_unicity_output_column_names(
 
     def insertOutColumn(col_name):
         if col_name in NatureLR:
-            raise BodoError(
+            raise_bodo_error(
                 "join(): two columns happen to have the same name : {}".format(col_name)
             )
         NatureLR[col_name] = 0
@@ -1598,7 +1598,7 @@ def validate_join_spec(left, other, on, how, lsuffix, rsuffix, sort):
     if len(comm_cols) > 0:
         # make sure two dataframes do not have common columns
         # because we are not supporting lsuffix and rsuffix
-        raise BodoError(
+        raise_bodo_error(
             "join(): not supporting joining on overlapping columns:"
             "{cols} Use DataFrame.merge() instead.".format(cols=comm_cols)
         )

@@ -106,7 +106,7 @@ def df_getitem_overload(df, ind):
         # error checking, TODO: test
         for c in ind_columns:
             if c not in df.columns:
-                raise BodoError(
+                raise_bodo_error(
                     "Column {} not found in dataframe columns {}".format(c, df.columns)
                 )
         new_data = ", ".join(

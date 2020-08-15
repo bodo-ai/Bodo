@@ -33,6 +33,7 @@ from bodo.hiframes.pd_timestamp_ext import (
 )
 from bodo.utils.typing import (
     BodoError,
+    raise_bodo_error,
     is_list_like_index_type,
     is_overload_false,
     is_overload_true,
@@ -91,7 +92,7 @@ def overload_series_dt(s):
         bodo.hiframes.pd_series_ext.is_dt64_series_typ(s)
         or bodo.hiframes.pd_series_ext.is_timedelta64_series_typ(s)
     ):
-        raise BodoError("Can only use .dt accessor with datetimelike values.")
+        raise_bodo_error("Can only use .dt accessor with datetimelike values.")
     return lambda s: bodo.hiframes.series_dt_impl.init_series_dt_properties(s)
 
 
