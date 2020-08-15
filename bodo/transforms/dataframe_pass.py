@@ -1991,6 +1991,17 @@ class DataFramePass:
                 df_typ = self.typemap[df.name]
                 # generate full NaN column
                 if cname not in df_typ.columns:
+                    # corner case: empty dataframe concat
+                    if len(df_typ.columns) == 0:
+                        nodes += compile_func_single_block(
+                            lambda A: bodo.libs.array_kernels.gen_na_array(0, A),
+                            (example_arr,),
+                            None,
+                            self,
+                        )
+                        args.append(nodes[-1].target)
+                        continue
+
                     arr = self._get_dataframe_data(df, df_typ.columns[0], nodes)
                     nodes += compile_func_single_block(
                         lambda arr, A: bodo.libs.array_kernels.gen_na_array(

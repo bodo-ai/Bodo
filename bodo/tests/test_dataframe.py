@@ -1775,6 +1775,37 @@ def test_concat_nulls():
     check_func(test_impl_concat, (df, df2), sort_output=True, reset_index=True)
 
 
+@pytest.mark.parametrize(
+    "df",
+    [
+        # RangeIndex and numeric types
+        pd.DataFrame(
+            {
+                "B": np.arange(11),
+                "C": np.ones(11),
+                "E": pd.timedelta_range(start=3, periods=11),
+            },
+        ),
+        # variable item size data and index
+        pd.DataFrame(
+            {"A": ["ABC", None, "AA", "B", None, "AA", "CC", "G"],},
+            index=["AA", "C", "BB", "A", "D", "L", "K", "P"],
+        ),
+    ],
+)
+def test_append_empty_df(df):
+    """Test appending to an empty dataframe in a loop (common pattern)
+    """
+
+    def test_impl(df2):
+        df = pd.DataFrame()
+        for _ in range(3):
+            df = df.append(df2)
+        return df
+
+    check_func(test_impl, (df,), sort_output=True, reset_index=True, check_dtype=False)
+
+
 def test_init_dataframe_array_analysis():
     """make sure shape equivalence for init_dataframe() is applied correctly
     """

@@ -35,6 +35,7 @@ from numba.core.ir_utils import (
     visit_vars_extensions,
     visit_vars_inner,
     _create_function_from_code_obj,
+    replace_vars_inner,
 )
 from numba.extending import lower_builtin
 import numba.np.linalg
@@ -54,6 +55,7 @@ from numba.core.types.functions import (
 )
 from numba.core.errors import LiteralTypingError, TypingError, ForceLiteralArg
 from numba.core.types import literal
+from numba.parfors.parfor import get_expr_args
 
 
 # Make sure literals are tried first for typing Bodo's intrinsics, since output type
@@ -1488,3 +1490,70 @@ if (
 ):  # pragma: no cover
     warnings.warn("numba.core.compiler_machinery.PassManager.run has changed")
 numba.core.compiler_machinery.PassManager.run = passmanager_run
+
+
+def get_reduce_nodes(reduction_node, nodes, func_ir):
+    """
+    Get nodes that combine the reduction variable with a sentinel variable.
+    Recognizes the first node that combines the reduction variable with another
+    variable.
+    """
+    reduce_nodes = None
+    defs = {}
+
+    def lookup(var, varonly=True):
+        val = defs.get(var.name, None)
+        if isinstance(val, ir.Var):
+            return lookup(val)
+        else:
+            return var if (varonly or val is None) else val
+
+    name = reduction_node.name
+    unversioned_name = reduction_node.unversioned_name
+    for i, stmt in enumerate(nodes):
+        lhs = stmt.target
+        rhs = stmt.value
+        defs[lhs.name] = rhs
+        if isinstance(rhs, ir.Var) and rhs.name in defs:
+            rhs = lookup(rhs)
+        if isinstance(rhs, ir.Expr):
+            in_vars = set(lookup(v, True).name for v in rhs.list_vars())
+            if name in in_vars:
+                next_node = nodes[i + 1]
+                target_name = next_node.target.unversioned_name
+                # Bodo change: avoid raising error for concat reduction case
+                # opened issue to handle Bodo cases and raise proper errors: #1414
+                # see test_concat_reduction
+                # if not (isinstance(next_node, ir.Assign) and target_name == unversioned_name):
+                #     raise ValueError(
+                #         f"Use of reduction variable {unversioned_name!r} other "
+                #         "than in a supported reduction function is not "
+                #         "permitted."
+                #     )
+
+                # if not supported_reduction(rhs, func_ir):
+                #     raise ValueError(("Use of reduction variable " + unversioned_name +
+                #                       " in an unsupported reduction function."))
+                args = [(x.name, lookup(x, True)) for x in get_expr_args(rhs)]
+                non_red_args = [x for (x, y) in args if y.name != name]
+                assert len(non_red_args) == 1
+                args = [(x, y) for (x, y) in args if x != y.name]
+                replace_dict = dict(args)
+                replace_dict[non_red_args[0]] = ir.Var(
+                    lhs.scope, name + "#init", lhs.loc
+                )
+                replace_vars_inner(rhs, replace_dict)
+                reduce_nodes = nodes[i:]
+                break
+    return reduce_nodes
+
+
+lines = inspect.getsource(numba.parfors.parfor.get_reduce_nodes)
+if (
+    hashlib.sha256(lines.encode()).hexdigest()
+    != "5e99297a2346e2c01d60ad39e814da5c7308a3c0e6f342530d2e49f976327079"
+):  # pragma: no cover
+    warnings.warn("numba.parfors.parfor.get_reduce_nodes has changed")
+
+
+numba.parfors.parfor.get_reduce_nodes = get_reduce_nodes

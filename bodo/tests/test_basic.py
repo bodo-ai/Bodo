@@ -632,5 +632,5 @@ def test_reversed():
         for i in reversed(l):
             out.append(i)
         return out
-    
-    check_func(test_impl, ([0.1,0.2,0.3,0.4],))
+
+    check_func(test_impl, ([0.1, 0.2, 0.3, 0.4],))

@@ -849,6 +849,20 @@ def test_dist_dict_setitem1():
     assert count_array_OneDs() >= 2
 
 
+def test_concat_reduction():
+    """test dataframe concat reduction, which produces distributed output
+    """
+
+    def impl(n):
+        df = pd.DataFrame()
+        for i in bodo.prange(n):
+            df = df.append(pd.DataFrame({"A": np.arange(i)}))
+
+        return df
+
+    check_func(impl, (11,), reset_index=True, check_dtype=False)
+
+
 def test_dist_warning1():
     """Make sure BodoWarning is thrown when there is no parallelism discovered due
     to unsupported function
