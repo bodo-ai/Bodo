@@ -691,6 +691,7 @@ def test_sort_values_force_literal(memory_leak_check):
         }
     )
     check_func(impl, (df, ["B"], "first"))
+    check_func(impl, (df, "B", "first"))
 
 
 def test_list_string(memory_leak_check):
