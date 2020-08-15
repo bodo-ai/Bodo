@@ -468,6 +468,10 @@ def parse_dtype(dtype):
     if isinstance(dtype, types.DTypeSpec):
         return dtype.dtype
 
+    # input is array dtype already
+    if isinstance(dtype, types.Number) or dtype == bodo.string_type:
+        return dtype
+
     try:
         d_str = get_overload_const_str(dtype)
         if d_str.startswith("Int") or d_str.startswith("UInt"):
@@ -825,6 +829,16 @@ def is_iterable_type(t):
         bodo.utils.utils.is_array_typ(t, False)
         or isinstance(t, (SeriesType, DataFrameType, types.List, types.BaseTuple))
         or bodo.hiframes.pd_index_ext.is_index_type(t)
+    )
+
+
+def find_common_np_dtype(arr_types):
+    """finds common numpy dtype of array types using np.find_common_type
+    """
+    return numba.np.numpy_support.from_dtype(
+        np.find_common_type(
+            [numba.np.numpy_support.as_dtype(t.dtype) for t in arr_types], []
+        )
     )
 
 

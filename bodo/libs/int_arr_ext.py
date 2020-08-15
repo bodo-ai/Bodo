@@ -559,6 +559,12 @@ def overload_int_arr_copy(A):
 
 @overload_method(IntegerArrayType, "astype", no_unliteral=True)
 def overload_int_arr_astype(A, dtype, copy=True):
+    # dtype becomes NumberClass if type reference is passed
+    # see convert_to_nullable_tup in array_kernels.py
+    # see test_series_concat_convert_to_nullable
+    if isinstance(dtype, types.NumberClass):
+        dtype = dtype.dtype
+
     # same dtype case
     if isinstance(dtype, IntDtype) and A.dtype == dtype.dtype:
         # copy=False
