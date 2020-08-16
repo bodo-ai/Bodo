@@ -1539,12 +1539,12 @@ def overload_series_replace(
     regex=False,
     method="pad",
 ):
+
     unsupported_args = dict(inplace=inplace, limit=limit, regex=regex, method=method)
     merge_defaults = dict(inplace=False, limit=None, regex=False, method="pad")
     check_unsupported_args("replace", unsupported_args, merge_defaults)
-    # TODO: error checking
-    # TODO: support all types and cases
-    def replace_impl(
+
+    def impl(
         S,
         to_replace=None,
         value=None,
@@ -1553,22 +1553,59 @@ def overload_series_replace(
         regex=False,
         method="pad",
     ):  # pragma: no cover
+
         in_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
         index = bodo.hiframes.pd_series_ext.get_series_index(S)
         name = bodo.hiframes.pd_series_ext.get_series_name(S)
         n = len(in_arr)
         out_arr = np.empty(n, in_arr.dtype)
+        replace_dict = build_replace_dict(to_replace, value)
         for i in numba.parfors.parfor.internal_prange(n):
             if bodo.libs.array_kernels.isna(in_arr, i):
-                bodo.libs.array_kernels.setna(out_arr, i)
-                continue
+                if bodo.libs.array_kernels.isna(in_arr, i):
+                    bodo.libs.array_kernels.setna(out_arr, i)
+                    continue
             s = in_arr[i]
-            if s == to_replace:
-                s = value
+            if s in replace_dict:
+                s = replace_dict[s]
             out_arr[i] = s
         return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
-    return replace_impl
+    return impl
+
+
+# Helper function for creating the dictionary map[replace -> new value]
+# For various data types.
+def build_replace_dict(to_replace, value):
+    # Dummy function used for overload
+    pass
+
+
+@overload(build_replace_dict)
+def _build_replace_dict(to_replace, value):
+
+    # Scalar case
+    # TODO: replace with something that captures all scalars
+    if isinstance(to_replace, types.Number):
+
+        def impl(to_replace, value):
+            replace_dict = {}
+            replace_dict[to_replace] = value
+            return replace_dict
+
+        return impl
+
+    # List case
+    # TODO: replace with explicit checking for to_replace types that are/aren't supported
+    else:
+
+        def impl(to_replace, value):
+            replace_dict = {}
+            for r in to_replace:
+                replace_dict[r] = value
+            return replace_dict
+
+        return impl
 
 
 @overload_method(SeriesType, "explode", inline="always", no_unliteral=True)

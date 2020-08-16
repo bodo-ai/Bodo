@@ -2431,11 +2431,32 @@ def test_series_drop_inplace_check(memory_leak_check):
         # (pd.Series(["aa", "bc", None, "ccc", "bc", "A", ""], [3, 4, 2, 1, -3, -2, 6], name="A"), "bc", "abdd"),
     ],
 )
-def test_series_replace(S, to_replace, value, memory_leak_check):
+def test_series_replace_scalar(S, to_replace, value, memory_leak_check):
     def test_impl(A, to_replace, val):
         return A.replace(to_replace, val)
 
     check_func(test_impl, (S, to_replace, value))
+
+
+@pytest.mark.parametrize(
+    "S,to_replace_list,value",
+    [
+        (
+            pd.Series([1.0, 2.0, np.nan, 1.0, 2.0, 1.3], [3, 4, 2, 1, -3, 6], name="A"),
+            [2.0, 1.3],
+            5.0,
+        ),
+        # TODO: support strings
+        # (pd.Series(["aa", "bc", None, "ccc", "bc", "A", ""], [3, 4, 2, 1, -3, -2, 6], name="A"), "bc", "abdd"),
+    ],
+)
+def test_series_replace_list(S, to_replace_list, value, memory_leak_check):
+    def test_impl(A, to_replace, val):
+        return A.replace(to_replace, val)
+
+    # NOTE: Lists are not distributable. As a result, check_func will not
+    # distribute it (not even in 1D or 1Dvar cases).
+    check_func(test_impl, (S, to_replace_list, value))
 
 
 @pytest.mark.parametrize(
