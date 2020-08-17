@@ -36,8 +36,8 @@ def get_s3_fs():
                 "AWS_SECRET_ACCESS_KEY is not set."
             )
         )
-    s3fs.S3FileSystem.clear_instance_cache()
-    fs = s3fs.S3FileSystem(
+    s3fs.core.S3FileSystem.clear_instance_cache()
+    fs = s3fs.core.S3FileSystem(
         key=aws_access_key_id,
         secret=aws_secret_access_key,
         client_kwargs={"endpoint_url": custom_endpoint},
@@ -241,3 +241,37 @@ def find_file_name_or_handler(path, ftype):
     # although fs is never used, we need to return it so that s3/hdfs
     # connections are not closed
     return is_handler, file_name_or_handler, f_size, fs
+
+
+def get_s3_bucket_name(s3_fs, s3_filepath):
+    """Get the name of the bucket from a s3 url of type s3://<BUCKET_NAME>/<FILEPATH (optional)>"""
+    path_parts = s3_filepath.replace("s3://", "").split("/")
+    bucket = path_parts[0]
+    return bucket
+
+
+def get_s3_bucket_region(s3_filepath):
+    """Get the region of the s3 bucket from a s3 url of type s3://<BUCKET_NAME>/<FILEPATH>"""
+    try:
+        import s3fs
+    except:  # pragma: no cover
+        raise BodoError("Reading from s3 requires s3fs currently.")
+
+    s3_fs = get_s3_fs()
+    bucket_name = get_s3_bucket_name(s3_fs, s3_filepath)
+    try:
+        bucket_loc = s3_fs.s3.get_bucket_location(Bucket=bucket_name)[
+            "LocationConstraint"
+        ]
+    except Exception as e:
+        warnings.warn(
+            BodoWarning(
+                "Unable to get S3 Bucket Region. "
+                f"{e}. "
+                "Will use the value defined in the AWS_DEFAULT_REGION environment variable (or us-east-1 if that is not provided either)."
+            )
+        )
+        return ""
+    if bucket_loc is None:
+        bucket_loc = "us-east-1"
+    return bucket_loc

@@ -27,7 +27,8 @@ extern "C" void PyInit_json(PyObject *);
  **/
 extern "C" PyObject *csv_file_chunk_reader(const char *fname, bool is_parallel,
                                            int64_t skiprows, int64_t nrows,
-                                           bool header, const char *compression);
+                                           bool header, const char *compression,
+                                           const char *bucket_region);
 
 /**
  * Split file into chunks and return a file-like object per rank. The returned

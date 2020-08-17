@@ -29,8 +29,18 @@
 std::shared_ptr<arrow::fs::S3FileSystem> s3_fs;
 bool is_fs_initialized = false;
 
-std::shared_ptr<arrow::fs::S3FileSystem> get_s3_fs() {
-    if (!is_fs_initialized) {
+std::shared_ptr<arrow::fs::S3FileSystem> get_s3_fs(std::string bucket_region) {
+    // if already initialized but region for this bucket is different than the
+    // current region, then re-initialize with the right region
+    if (is_fs_initialized && bucket_region != "") {
+        arrow::fs::S3Options options = s3_fs->options();
+        if (bucket_region != options.region) {
+            options.region = bucket_region;
+            arrow::Result<std::shared_ptr<arrow::fs::S3FileSystem>> result;
+            result = arrow::fs::S3FileSystem::Make(options);
+            CHECK_ARROW_AND_ASSIGN(result, "S3FileSystem::Make", s3_fs)
+        }
+    } else if (!is_fs_initialized) {
         arrow::Status status;
         // initialize S3 APIs
         arrow::fs::S3GlobalOptions g_options;
@@ -42,12 +52,18 @@ std::shared_ptr<arrow::fs::S3FileSystem> get_s3_fs() {
         arrow::fs::S3Options options = arrow::fs::S3Options::Defaults();
         char *default_region = std::getenv("AWS_DEFAULT_REGION");
         // TODO: handle regions properly
-        if (default_region)
+        if (bucket_region != "") {
+            options.region = std::string(bucket_region);
+        } else if (default_region) {
             options.region = std::string(default_region);
-        else
-            std::cerr << "Warning: AWS_DEFAULT_REGION environment variable not "
-                         "found. Region defaults to 'us-east-1' currently."
-                      << std::endl;
+        } else {
+            // TODO: Need a better err msg here
+            std::cerr
+                << "Warning: S3 Bucket Region could not be determined "
+                   "automatically. AWS_DEFAULT_REGION environment variable not "
+                   "found either. Region defaults to 'us-east-1' currently."
+                << std::endl;
+        }
         char *custom_endpoint = std::getenv("AWS_S3_ENDPOINT");
         if (custom_endpoint)
             options.endpoint_override = std::string(custom_endpoint);
@@ -88,7 +104,7 @@ class S3FileReader : public SingleFileReader {
     S3FileReader(const char *_fname, const char *f_type, bool csv_header,
                  bool json_lines)
         : SingleFileReader(_fname, f_type, csv_header, json_lines) {
-        fs = get_s3_fs();
+        fs = get_s3_fs("");
         // open file
         result = fs->OpenInputFile(std::string(_fname));
         CHECK_ARROW_AND_ASSIGN(result, "S3FileSystem::OpenInputFile", s3_file)
@@ -134,7 +150,7 @@ class S3DirectoryFileReader : public DirectoryFileReader {
         // initialize dir_selector
         dir_selector.base_dir = this->dirname;
 
-        fs = get_s3_fs();
+        fs = get_s3_fs("");
 
         arrow::Result<std::vector<arrow::fs::FileInfo>> result =
             fs->GetFileInfo(dir_selector);
@@ -161,14 +177,15 @@ class S3DirectoryFileReader : public DirectoryFileReader {
 
 extern "C" {
 
-void s3_get_fs(std::shared_ptr<arrow::fs::S3FileSystem> *fs) {
-    *fs = get_s3_fs();
+void s3_get_fs(std::shared_ptr<arrow::fs::S3FileSystem> *fs,
+               std::string bucket_region) {
+    *fs = get_s3_fs(bucket_region);
 }
 
 FileReader *init_s3_reader(const char *fname, const char *suffix,
                            bool csv_header, bool json_lines) {
     arrow::fs::FileInfo file_stat;
-    std::shared_ptr<arrow::fs::S3FileSystem> fs = get_s3_fs();
+    std::shared_ptr<arrow::fs::S3FileSystem> fs = get_s3_fs("");
     arrow::Result<arrow::fs::FileInfo> result =
         fs->GetFileInfo(std::string(fname));
     CHECK_ARROW_AND_ASSIGN(result, "fs->GetFileInfo", file_stat)
@@ -185,7 +202,7 @@ FileReader *init_s3_reader(const char *fname, const char *suffix,
 
 void s3_open_file(const char *fname,
                   std::shared_ptr<::arrow::io::RandomAccessFile> *file) {
-    std::shared_ptr<arrow::fs::S3FileSystem> fs = get_s3_fs();
+    std::shared_ptr<arrow::fs::S3FileSystem> fs = get_s3_fs("");
     arrow::Result<std::shared_ptr<::arrow::io::RandomAccessFile>> result;
     result = fs->OpenInputFile(std::string(fname));
     CHECK_ARROW_AND_ASSIGN(result, "fs->OpenInputFile", *file)

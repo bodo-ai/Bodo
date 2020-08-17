@@ -146,7 +146,7 @@ void file_write(char* file_name, void* buff, int64_t size) {
         get_get_fs_pyobject(Bodo_Fs::s3, "", f_mod, func_obj);
 
         s3_get_fs_t s3_get_fs = (s3_get_fs_t)PyNumber_AsSsize_t(func_obj, NULL);
-        s3_get_fs(&s3_fs);
+        s3_get_fs(&s3_fs, "");
 
         open_file_outstream(Bodo_Fs::s3, "", file_name + 5, s3_fs, NULL,
                             &out_stream);
@@ -282,7 +282,7 @@ void file_write_parallel(char* file_name, char* buff, int64_t start,
         import_fs_module(Bodo_Fs::s3, "", f_mod);
         get_get_fs_pyobject(Bodo_Fs::s3, "", f_mod, func_obj);
         s3_get_fs_t s3_get_fs = (s3_get_fs_t)PyNumber_AsSsize_t(func_obj, NULL);
-        s3_get_fs(&s3_fs);
+        s3_get_fs(&s3_fs, "");
         parallel_in_order_write(Bodo_Fs::s3, "", fname, buff, count, elem_size,
                                 s3_fs, NULL);
         Py_DECREF(f_mod);
@@ -319,15 +319,16 @@ void file_write_parallel(char* file_name, char* buff, int64_t start,
                 if (err_class != MPI_ERR_NO_SUCH_FILE)
                     Bodo_PyErr_SetString(
                         PyExc_RuntimeError,
-                        ("File delete error: " + std::string(file_name)).c_str());
+                        ("File delete error: " + std::string(file_name))
+                            .c_str());
             }
         }
         MPI_Barrier(MPI_COMM_WORLD);
 
         MPI_File fh;
         ierr = MPI_File_open(MPI_COMM_WORLD, (const char*)file_name,
-                             MPI_MODE_CREATE | MPI_MODE_WRONLY,
-                             MPI_INFO_NULL, &fh);
+                             MPI_MODE_CREATE | MPI_MODE_WRONLY, MPI_INFO_NULL,
+                             &fh);
         if (ierr != 0)
             Bodo_PyErr_SetString(
                 PyExc_RuntimeError,

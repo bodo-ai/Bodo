@@ -380,8 +380,9 @@ class PathInfo {
     /**
      * @param file_path : path passed in pd.read_csv/pd.read_json call
      */
-    PathInfo(const char *file_path, const std::string &compression_pyarg)
-        : file_path(file_path) {
+    PathInfo(const char *file_path, const std::string &compression_pyarg,
+             const char *bucket_region)
+        : file_path(file_path), bucket_region(bucket_region) {
         // obtain path info on rank 0, broadcast to other ranks.
         // this sets PathInfo attributes on all ranks
         obtain_is_directory();
@@ -442,7 +443,7 @@ class PathInfo {
                     s3_get_fs_t s3_get_fs =
                         (s3_get_fs_t)PyNumber_AsSsize_t(func_obj, NULL);
                     std::shared_ptr<arrow::fs::S3FileSystem> s3_fs;
-                    s3_get_fs(&s3_fs);
+                    s3_get_fs(&s3_fs, bucket_region);
                     fs = s3_fs;
                     // remove s3:// prefix from file_path
                     arrow::fs::S3Options::FromUri(uri, &file_path);
@@ -622,6 +623,7 @@ class PathInfo {
 
     /// original file path passed through read_csv/read_json
     std::string file_path;
+    std::string bucket_region;  // only useful if it's an s3 path
     bool is_valid;
     bool is_dir;
     std::string compression = "UNKNOWN";
@@ -1134,7 +1136,8 @@ extern "C" PyObject *file_chunk_reader(const char *fname, const char *suffix,
                                        bool is_parallel, int64_t skiprows,
                                        int64_t nrows, bool json_lines,
                                        bool csv_header,
-                                       const char *compression_pyarg) {
+                                       const char *compression_pyarg,
+                                       const char *bucket_region) {
     // TODO nrows looks like it is not used. remove
 
     // TODO check that skiprows >= 0
@@ -1154,7 +1157,7 @@ extern "C" PyObject *file_chunk_reader(const char *fname, const char *suffix,
     int num_ranks = dist_get_size();
     MemReader *mem_reader = nullptr;
 
-    PathInfo path_info(fname, compression_pyarg);
+    PathInfo path_info(fname, compression_pyarg, bucket_region);
     if (!path_info.is_path_valid()) {
         return NULL;
     }
@@ -1277,11 +1280,11 @@ extern "C" PyObject *file_chunk_reader(const char *fname, const char *suffix,
 
 extern "C" PyObject *csv_file_chunk_reader(const char *fname, bool is_parallel,
                                            int64_t skiprows, int64_t nrows,
-                                           bool header,
-                                           const char *compression) {
+                                           bool header, const char *compression,
+                                           const char *bucket_region) {
     // TODO nrows not used??
     return file_chunk_reader(fname, "csv", is_parallel, skiprows, nrows, true,
-                             header, compression);
+                             header, compression, bucket_region);
 }
 
 extern "C" PyObject *json_file_chunk_reader(const char *fname, bool lines,
@@ -1289,7 +1292,7 @@ extern "C" PyObject *json_file_chunk_reader(const char *fname, bool lines,
                                             const char *compression) {
     // TODO nrows not used??
     return file_chunk_reader(fname, "json", is_parallel, 0, nrows, lines, false,
-                             compression);
+                             compression, "");
 }
 
 // NOTE: some old testing code that is commented out due to

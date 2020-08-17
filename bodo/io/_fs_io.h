@@ -5,8 +5,8 @@
 #include <arrow/io/api.h>
 #include <string>
 #include "_bodo_file_reader.h"
-#include "arrow/filesystem/s3fs.h"
 #include "arrow/filesystem/hdfs.h"
+#include "arrow/filesystem/s3fs.h"
 
 struct Bodo_Fs {
     enum FsEnum { posix = 0, s3 = 1, hdfs = 2 };
@@ -15,7 +15,8 @@ struct Bodo_Fs {
 typedef FileReader *(*s3_reader_init_t)(const char *, const char *, bool, bool);
 typedef FileReader *(*hdfs_reader_init_t)(const char *, const char *, bool,
                                           bool);
-typedef void (*s3_get_fs_t)(std::shared_ptr<::arrow::fs::S3FileSystem> *);
+typedef void (*s3_get_fs_t)(std::shared_ptr<::arrow::fs::S3FileSystem> *,
+                            std::string);
 typedef void (*hdfs_get_fs_t)(const std::string &,
                               std::shared_ptr<::arrow::fs::HadoopFileSystem> *);
 

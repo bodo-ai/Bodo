@@ -212,7 +212,7 @@ void open_outstream(Bodo_Fs::FsEnum fs_option, bool is_parallel, int myrank,
         s3_get_fs_t s3_get_fs =
             (s3_get_fs_t)PyNumber_AsSsize_t(s3_func_obj, NULL);
 
-        s3_get_fs(&s3_fs);
+        s3_get_fs(&s3_fs, "");
         if (is_parallel) {
             open_file_outstream(fs_option, file_type, dirname + "/" + fname,
                                 s3_fs, NULL, out_stream);

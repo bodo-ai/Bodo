@@ -69,7 +69,13 @@ ll.add_symbol("csv_file_chunk_reader", csv_cpp.csv_file_chunk_reader)
 csv_file_chunk_reader = types.ExternalFunction(
     "csv_file_chunk_reader",
     bodo.ir.connector.stream_reader_type(
-        types.voidptr, types.bool_, types.int64, types.int64, types.bool_, types.voidptr
+        types.voidptr,
+        types.bool_,
+        types.int64,
+        types.int64,
+        types.bool_,
+        types.voidptr,
+        types.voidptr,
     ),
 )
 
@@ -301,10 +307,16 @@ def _gen_csv_reader_py(
 
     func_text = "def csv_reader_py(fname):\n"
     func_text += "  skiprows = {}\n".format(skiprows)
+    func_text += "  is_s3_url = fname.startswith('s3://')\n"
+    func_text += "  bucket_region = ''\n"
+    # if it's an s3 url, get the region and pass it into the c++ code
+    func_text += "  if is_s3_url:\n"
+    func_text += "    with objmode(bucket_region='unicode_type'):\n"
+    func_text += "      bucket_region = bodo.io.fs_io.get_s3_bucket_region(fname)\n"
     func_text += (
         "  f_reader = csv_file_chunk_reader(bodo.libs.str_ext.unicode_to_utf8(fname), "
     )
-    func_text += "    {}, skiprows, -1, {}, bodo.libs.str_ext.unicode_to_utf8('{}'))\n".format(
+    func_text += "    {}, skiprows, -1, {}, bodo.libs.str_ext.unicode_to_utf8('{}'), bodo.libs.str_ext.unicode_to_utf8(bucket_region) )\n".format(
         parallel, has_header, compression
     )
     func_text += "  if is_null_chunk_reader(f_reader):\n"
@@ -322,7 +334,6 @@ def _gen_csv_reader_py(
         func_text += "    {} = df['{}'].values\n".format(s_cname, cname)
         # func_text += "    print({})\n".format(s_cname)
     func_text += "  return ({},)\n".format(", ".join(sc for sc in sanitized_cnames))
-
     glbls = globals()  # TODO: fix globals after Numba's #3355 is resolved
     # {'objmode': objmode, 'csv_file_chunk_reader': csv_file_chunk_reader,
     # 'pd': pd, 'np': np}
