@@ -780,6 +780,7 @@ struct multi_col_key {
                         GetBit((uint8_t*)c2->null_bitmask, other.row))
                         return false;
                     if (!GetBit((uint8_t*)c1->null_bitmask, row)) continue;
+                case bodo_array_type::CATEGORICAL:
                 case bodo_array_type::NUMPY:
                     siztype = numpy_item_size[c1->dtype];
                     if (memcmp(c1->data1 + siztype * row,
@@ -856,6 +857,9 @@ struct key_hash {
 void get_group_info(table_info& table, std::vector<int64_t>& row_to_group,
                     std::vector<int64_t>& group_to_first_row,
                     bool check_for_null_keys) {
+#ifdef DEBUG_GROUPBY
+    std::cout << "Beginning of get_group_info\n";
+#endif
     std::vector<array_info*> key_cols = std::vector<array_info*>(
         table.columns.begin(), table.columns.begin() + table.num_keys);
     uint32_t seed = SEED_HASH_GROUPBY_SHUFFLE;
@@ -871,6 +875,10 @@ void get_group_info(table_info& table, std::vector<int64_t>& row_to_group,
     if (check_for_null_keys) {
         key_is_nullable = does_keys_have_nulls(key_cols);
     }
+#ifdef DEBUG_GROUPBY
+    std::cout << "check_for_null_keys=" << check_for_null_keys
+              << " key_is_nullable=" << key_is_nullable << "\n";
+#endif
     for (int64_t i = 0; i < table.nrows(); i++) {
         if (key_is_nullable) {
             if (does_row_has_nulls(key_cols, i)) {
@@ -902,6 +910,9 @@ void get_group_info(table_info& table, std::vector<int64_t>& row_to_group,
  *                that belongs to that group
  */
 grouping_info get_group_info_iterate(table_info* table, bool consider_missing) {
+#ifdef DEBUG_GROUPBY
+    std::cout << "Beginning of get_group_info_iterate\n";
+#endif
     std::vector<int64_t> row_to_group(table->nrows());
     std::vector<int64_t> group_to_first_row;
     std::vector<int64_t> next_row_in_group(table->nrows(), -1);
@@ -1419,6 +1430,20 @@ void apply_to_column(array_info* in_col, array_info* out_col,
                      std::vector<array_info*>& aux_cols,
                      const grouping_info& grp_info) {
     switch (in_col->arr_type) {
+        case bodo_array_type::CATEGORICAL:
+            if (ftype == Bodo_FTypes::count) {
+                for (int64_t i = 0; i < in_col->length; i++) {
+                    if (grp_info.row_to_group[i] != -1) {
+                        T& val = in_col->at<T>(i);
+                        if (!isnan_categorical<T, dtype>(val)) {
+                            count_agg<T, dtype>::apply(
+                                out_col->at<int64_t>(grp_info.row_to_group[i]),
+                                in_col->at<T>(i));
+                        }
+                    }
+                }
+                return;
+            }
         case bodo_array_type::NUMPY:
             if (ftype == Bodo_FTypes::mean) {
                 array_info* count_col = aux_cols[0];
@@ -1755,6 +1780,9 @@ void apply_to_column(array_info* in_col, array_info* out_col,
 void do_apply_to_column(array_info* in_col, array_info* out_col,
                         std::vector<array_info*>& aux_cols,
                         const grouping_info& grp_info, int ftype) {
+#ifdef DEBUG_GROUPBY
+    std::cout << "Beginning of do_apply_to_coulm\n";
+#endif
     if (in_col->arr_type == bodo_array_type::STRING ||
         in_col->arr_type == bodo_array_type::LIST_STRING) {
         switch (ftype) {
@@ -2808,6 +2836,12 @@ class BasicColSet {
         int64_t num_categories = in_col->num_categories;
         // calling this modifies arr_type and dtype
         get_groupby_output_dtype(ftype, arr_type, dtype, false);
+#ifdef DEBUG_GROUPBY
+        std::cout << "num_groups=" << num_groups
+                  << " num_categories=" << num_categories << "\n";
+        std::cout << "arr_type=" << int(arr_type) << " dtype=" << int(dtype)
+                  << "\n";
+#endif
         out_cols.push_back(
             alloc_array(num_groups, 1, 1, arr_type, dtype, 0, num_categories));
         update_cols.push_back(out_cols.back());
@@ -3524,6 +3558,7 @@ class GroupbyPipeline {
             const array_info* key_col = (*from_table)[i];
             array_info* new_key_col;
             if (key_col->arr_type == bodo_array_type::NUMPY ||
+                key_col->arr_type == bodo_array_type::CATEGORICAL ||
                 key_col->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
                 new_key_col =
                     alloc_array(num_groups, 1, 1, key_col->arr_type,
@@ -4362,3 +4397,4 @@ table_info* groupby_and_aggregate(table_info* in_table, int64_t num_keys,
     }
     return nullptr;
 }
+

@@ -85,10 +85,13 @@ inline double GetDoubleEntry(Bodo_CTypes::CTypeEnum dtype, char* ptr) {
     if (dtype == Bodo_CTypes::DATE) return double(GetTentry<int64_t>(ptr));
     if (dtype == Bodo_CTypes::DATETIME) return double(GetTentry<int64_t>(ptr));
     if (dtype == Bodo_CTypes::TIMEDELTA) return double(GetTentry<int64_t>(ptr));
-    if (dtype == Bodo_CTypes::DECIMAL) return decimal_to_double(GetTentry<decimal_value_cpp>(ptr));
-    Bodo_PyErr_SetString(PyExc_RuntimeError, "Unsupported case in GetDoubleEntry");
+    if (dtype == Bodo_CTypes::DECIMAL)
+        return decimal_to_double(GetTentry<decimal_value_cpp>(ptr));
+    Bodo_PyErr_SetString(PyExc_RuntimeError,
+                         "Unsupported case in GetDoubleEntry");
     return 0;
 }
+
 
 /** This function uses the combinatorial information computed in the
  * "ListPairWrite" array. The other arguments shift1, shift2 and ChoiceColumn
@@ -129,13 +132,14 @@ array_info* RetrieveArray(
  * @param in_table is the input table.
  * @param ListPairWrite is the vector of list of pairs for the writing of the
  * output table
- * @param the number of columns to be selected. if equal to -1 then all columns are selected.
+ * @param the number of columns to be selected. if equal to -1 then all columns
+ * are selected.
  * @return the table output.
  */
 table_info* RetrieveTable(
     table_info* const& in_table,
-    std::vector<std::pair<std::ptrdiff_t, std::ptrdiff_t>> const&
-    ListPairWrite, int const& n_col);
+    std::vector<std::pair<std::ptrdiff_t, std::ptrdiff_t>> const& ListPairWrite,
+    int const& n_col);
 
 /** This code test if two keys are equal (Before that the hash should have been
  * used) It is used that way because we assume that the left key have the same
@@ -205,8 +209,18 @@ struct is_decimal<Bodo_CTypes::DECIMAL> {
     static const bool value = true;
 };
 
+template <typename T, int dtype>
+inline typename std::enable_if<std::is_integral<T>::value, bool>::type
+isnan_categorical(T const& val) {
+    T miss_idx = -1;
+    return val == miss_idx;
+}
 
-
+template <typename T, int dtype>
+inline typename std::enable_if<!std::is_integral<T>::value, bool>::type
+isnan_categorical(T const& val) {
+    return false;
+}
 
 template <typename T, int dtype>
 inline typename std::enable_if<std::is_floating_point<T>::value, bool>::type
@@ -257,7 +271,8 @@ int NumericComparison_int(char* ptr1, char* ptr2, bool const& na_position) {
  * used)
  * @return 1 if *ptr1 < *ptr2
  */
-inline int NumericComparison_decimal(char* ptr1, char* ptr2, bool const& na_position) {
+inline int NumericComparison_decimal(char* ptr1, char* ptr2,
+                                     bool const& na_position) {
     decimal_value_cpp* ptr1_dec = (decimal_value_cpp*)ptr1;
     decimal_value_cpp* ptr2_dec = (decimal_value_cpp*)ptr2;
     double value1 = decimal_to_double(*ptr1_dec);
@@ -312,8 +327,8 @@ int NumericComparison_date(char* ptr1, char* ptr2, bool const& na_position) {
     T* ptr2_T = (T*)ptr2;
     T val1 = *ptr1_T;
     T val2 = *ptr2_T;
-    auto isnan_date=[&](T const& val) {
-      return val == std::numeric_limits<T>::min();
+    auto isnan_date = [&](T const& val) {
+        return val == std::numeric_limits<T>::min();
     };
     if (isnan_date(val1) && isnan_date(val2)) return 0;
     if (isnan_date(val2)) {
@@ -359,7 +374,8 @@ inline int NumericComparison(Bodo_CTypes::CTypeEnum const& dtype, char* ptr1,
         return NumericComparison_int<int64_t>(ptr1, ptr2, na_position);
     if (dtype == Bodo_CTypes::UINT64)
         return NumericComparison_int<uint64_t>(ptr1, ptr2, na_position);
-    // For DATETIME and TIMEDELTA the NA is done via the std::numeric_limits<int64_t>::min()
+    // For DATETIME and TIMEDELTA the NA is done via the
+    // std::numeric_limits<int64_t>::min()
     if (dtype == Bodo_CTypes::DATETIME || dtype == Bodo_CTypes::TIMEDELTA)
         return NumericComparison_date<int64_t>(ptr1, ptr2, na_position);
     if (dtype == Bodo_CTypes::FLOAT32)
@@ -433,7 +449,6 @@ void DEBUG_PrintSetOfColumn(std::ostream& os,
 void DEBUG_PrintRefct(std::ostream& os,
                       std::vector<array_info*> const& ListArr);
 
-
 inline bool does_keys_have_nulls(std::vector<array_info*> const& key_cols) {
     for (auto key_col : key_cols) {
         if ((key_col->arr_type == bodo_array_type::NUMPY &&
@@ -442,6 +457,7 @@ inline bool does_keys_have_nulls(std::vector<array_info*> const& key_cols) {
               key_col->dtype == Bodo_CTypes::DATETIME ||
               key_col->dtype == Bodo_CTypes::TIMEDELTA)) ||
             key_col->arr_type == bodo_array_type::STRING ||
+            key_col->arr_type == bodo_array_type::CATEGORICAL ||
             key_col->arr_type == bodo_array_type::LIST_STRING ||
             key_col->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
             return true;
@@ -450,13 +466,18 @@ inline bool does_keys_have_nulls(std::vector<array_info*> const& key_cols) {
     return false;
 }
 
-
 inline bool does_row_has_nulls(std::vector<array_info*> const& key_cols,
                                int64_t const& i) {
     for (auto key_col : key_cols) {
-        if (key_col->arr_type == bodo_array_type::STRING ||
-            key_col->arr_type == bodo_array_type::LIST_STRING ||
-            key_col->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
+        if (key_col->arr_type == bodo_array_type::CATEGORICAL) {
+            std::vector<char> vectNaN = RetrieveNaNentry(key_col->dtype);
+            size_t siztype = numpy_item_size[key_col->dtype];
+            if (memcmp(key_col->data1 + i * siztype, vectNaN.data(), siztype) ==
+                0)
+                return true;
+        } else if (key_col->arr_type == bodo_array_type::STRING ||
+                   key_col->arr_type == bodo_array_type::LIST_STRING ||
+                   key_col->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
             if (!GetBit((uint8_t*)key_col->null_bitmask, i)) return true;
         } else if (key_col->arr_type == bodo_array_type::NUMPY) {
             if ((key_col->dtype == Bodo_CTypes::FLOAT32 &&
@@ -474,4 +495,3 @@ inline bool does_row_has_nulls(std::vector<array_info*> const& key_cols,
     }
     return false;
 }
-

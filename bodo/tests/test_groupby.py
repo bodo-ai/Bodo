@@ -15,6 +15,7 @@ from bodo.tests.utils import (
     dist_IR_contains,
     check_parallel_coherency,
     gen_random_decimal_array,
+    gen_random_string_array,
     convert_non_pandas_columns,
     get_start_end,
     check_func,
@@ -551,6 +552,57 @@ def test_cumsum_random_index():
     check_func(test_impl, (df1,), sort_output=True, check_dtype=False, reset_index=True)
     check_func(test_impl, (df2,), sort_output=True, check_dtype=False)
     check_func(test_impl, (df3,), sort_output=True, check_dtype=False)
+
+
+def test_sum_categorical_key():
+    """Testing of categorical keys and their missing value"""
+
+    def f(df):
+        return df.groupby("A", as_index=False).sum()
+
+    def get_categorical_column(prob, n):
+        elist = []
+        for _ in range(n):
+            if random.random() < prob:
+                value = None
+            else:
+                value = "".join(random.choices(["A", "B", "C"], k=3))
+            elist.append(value)
+        return pd.Categorical(elist)
+
+    random.seed(5)
+    n = 100
+    # Select NaN with probability 10% and otherwise single characters.
+    colA = get_categorical_column(0.1, n)
+    colB = [random.randint(0, 10) for _ in range(n)]
+    df = pd.DataFrame({"A": colA, "B": colB})
+    check_func(f, (df,), sort_output=True, reset_index=True)
+
+
+def test_all_categorical_count():
+    """Testing of categorical keys and their missing value.
+    Also the count itself is done for a categorical column with missing value"""
+
+    def f(df):
+        return df.groupby("A", as_index=False).count()
+
+    def get_categorical_column(prob, n):
+        elist = []
+        for _ in range(n):
+            if random.random() < prob:
+                value = None
+            else:
+                value = "".join(random.choices(["A", "B", "C"], k=3))
+            elist.append(value)
+        return pd.Categorical(elist)
+
+    random.seed(5)
+    n = 100
+    # Select NaN with probability 10% and otherwise single characters.
+    colA = get_categorical_column(0.1, n)
+    colB = get_categorical_column(0.1, n)
+    df = pd.DataFrame({"A": colA, "B": colB})
+    check_func(f, (df,), sort_output=True, reset_index=True)
 
 
 def test_cumsum_exscan_categorical_random():
