@@ -515,17 +515,38 @@ def get_parquet_dataset(file_name, parallel, get_row_counts=True):
             file_names = s3_list_dir_fnames(fs, file_name)
 
             if file_names is not None:  # pragma: no cover
-                try:
-                    dataset = pq.ParquetDataset(file_names, filesystem=fs)
-                except Exception as e:
-                    raise BodoError(
-                        "read_parquet(): S3 file system cannot be created: {}".format(e)
-                    )
+                # Get only the parquet files, otherwise pq.ParquetDataset
+                # fails when using the s3fs filesystem object
+                valid_file_names = []
+                for fname in file_names:
+                    # Spark typically generates one .crc for each .parquet
+                    # file it writes, and we can just skip these
+                    if fname.endswith(".crc"):
+                        continue
+                    try:
+                        pq.ParquetDataset(fname, filesystem=fs)
+                        valid_file_names.append(fname)
+                    except:
+                        # this is not a valid parquet file
+                        pass
+                if len(valid_file_names) > 0:
+                    try:
+                        dataset = pq.ParquetDataset(valid_file_names, filesystem=fs)
+                    except Exception as e:
+                        raise BodoError(
+                            "read_parquet(): S3 file system cannot be created: {}".format(
+                                e
+                            )
+                        )
         elif file_name.startswith("hdfs://"):  # pragma: no cover
             fs = get_hdfs_fs(file_name)
             (_, file_names) = hdfs_list_dir_fnames(file_name)
 
             if file_names is not None:
+                # TODO check if ParquetDataset passing list of file names
+                # using HDFS filesystem object works or not if the files
+                # include ".crc" or other non-parquet files. Otherwise we need
+                # to use a similar scheme as s3 above
                 try:
                     dataset = pq.ParquetDataset(file_names, filesystem=fs)
                 except Exception as e:
