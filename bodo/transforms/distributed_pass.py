@@ -1003,26 +1003,6 @@ class DistributedPass:
 
         return out
 
-    def _get_variable_const_ll(
-        self, assign, nodes, fct_name, rhs, kws, pos_arg, var_name, default_value
-    ):
-        """This is for assignment having a default value.
-        Type is set according to the default value and nodes is updated accordingly.
-        """
-        ll_var = ir.Var(
-            assign.target.scope, mk_unique_var(fct_name + "_" + var_name), rhs.loc
-        )
-        nodes.append(ir.Assign(ir.Const(default_value, rhs.loc), ll_var, rhs.loc))
-        if default_value == None:
-            self.typemap[ll_var.name] = types.none
-        elif isinstance(default_value, str):
-            self.typemap[ll_var.name] = types.StringLiteral(default_value)
-        elif isinstance(default_value, bool):
-            self.typemap[ll_var.name] = bodo.utils.typing.BooleanLiteral(default_value)
-        else:
-            raise BodoError("Missing type support. Insert your code here")
-        return get_call_expr_arg(fct_name, rhs.args, kws, pos_arg, var_name, ll_var)
-
     def _run_call_df(self, lhs, df, func_name, assign, args):
         if func_name == "to_parquet" and (self._is_1D_or_1D_Var_arr(df.name)):
             self._set_last_arg_to_true(assign.value)
