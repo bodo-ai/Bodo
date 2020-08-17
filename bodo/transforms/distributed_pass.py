@@ -382,16 +382,9 @@ class DistributedPass:
                 bodo.libs.sklearn_ext.BodoRandomForestClassifierType,
             )
         ):
-            if self._is_1D_arr(rhs.args[0].name) or self._is_1D_Var_arr(
-                rhs.args[0].name
-            ):
-                rhs = assign.value
-                model = func_mod
-                f = lambda model, X, y: model.fit(X, y, _is_data_distributed=True)
-                return compile_func_single_block(
-                    f, [model] + rhs.args[:2], assign.target, self
-                )
-
+            if self._is_1D_or_1D_Var_arr(rhs.args[0].name):
+                self._set_last_arg_to_true(assign.value)
+                return [assign]
         if (
             func_name == "score"
             and isinstance(func_mod, numba.core.ir.Var)
@@ -400,20 +393,9 @@ class DistributedPass:
                 bodo.libs.sklearn_ext.BodoRandomForestClassifierType,
             )
         ):
-            if self._is_1D_arr(rhs.args[0].name) or self._is_1D_Var_arr(
-                rhs.args[0].name
-            ):
-                rhs = assign.value
-                model = func_mod
-
-                # TODO sample_weight argument
-
-                f = lambda model, X, y: model.score(
-                    X, y, sample_weight=None, _is_data_distributed=True
-                )
-                return compile_func_single_block(
-                    f, [model] + rhs.args[:2], assign.target, self
-                )
+            if self._is_1D_or_1D_Var_arr(rhs.args[0].name):
+                self._set_last_arg_to_true(assign.value)
+                return [assign]
 
         # divide 1D alloc
         # XXX allocs should be matched before going to _run_call_np
@@ -738,44 +720,34 @@ class DistributedPass:
             return compile_func_single_block(f, rhs.args, assign.target, self)
 
         if fdef == ("nancorr", "bodo.libs.array_kernels") and (
-            self._is_1D_arr(rhs.args[0].name) or self._is_1D_Var_arr(rhs.args[0].name)
+            self._is_1D_or_1D_Var_arr(rhs.args[0].name)
         ):
-            f = lambda mat, cov, minpv: bodo.libs.array_kernels.nancorr(
-                mat, cov, minpv, True
-            )
-            return compile_func_single_block(f, rhs.args, assign.target, self)
+            self._set_last_arg_to_true(assign.value)
+            return [assign]
 
         if fdef == ("median", "bodo.libs.array_kernels") and (
-            self._is_1D_arr(rhs.args[0].name) or self._is_1D_Var_arr(rhs.args[0].name)
+            self._is_1D_or_1D_Var_arr(rhs.args[0].name)
         ):
-            f = lambda arr, skipna: bodo.libs.array_kernels.median(
-                arr, skipna=skipna, parallel=True
-            )
-            return compile_func_single_block(f, rhs.args, assign.target, self)
+            self._set_last_arg_to_true(assign.value)
+            return [assign]
 
         if fdef == ("duplicated", "bodo.libs.array_kernels") and (
             self._is_1D_tup(rhs.args[0].name) or self._is_1D_Var_tup(rhs.args[0].name)
         ):
-            f = lambda arr, ind_arr: bodo.libs.array_kernels.duplicated(
-                arr, ind_arr, True
-            )
-            return compile_func_single_block(f, rhs.args, assign.target, self)
+            self._set_last_arg_to_true(assign.value)
+            return [assign]
 
         if fdef == ("drop_duplicates", "bodo.libs.array_kernels") and (
             self._is_1D_tup(rhs.args[0].name) or self._is_1D_Var_tup(rhs.args[0].name)
         ):
-            f = lambda arr, ind_arr: bodo.libs.array_kernels.drop_duplicates(
-                arr, ind_arr, True
-            )
-            return compile_func_single_block(f, rhs.args, assign.target, self)
+            self._set_last_arg_to_true(assign.value)
+            return [assign]
 
         if fdef == ("sample_table_operation", "bodo.libs.array_kernels") and (
             self._is_1D_tup(rhs.args[0].name) or self._is_1D_Var_tup(rhs.args[0].name)
         ):
-            f = lambda arr, ind_arr, n, frac, replace: bodo.libs.array_kernels.sample_table_operation(
-                arr, ind_arr, n, frac, replace, True
-            )
-            return compile_func_single_block(f, rhs.args, assign.target, self)
+            self._set_last_arg_to_true(assign.value)
+            return [assign]
 
         if fdef == ("convert_rec_to_tup", "bodo.utils.typing"):
             # optimize Series back to back map pattern with tuples
@@ -1052,104 +1024,13 @@ class DistributedPass:
         return get_call_expr_arg(fct_name, rhs.args, kws, pos_arg, var_name, ll_var)
 
     def _run_call_df(self, lhs, df, func_name, assign, args):
-        if func_name == "to_parquet" and (
-            self._is_1D_arr(df.name) or self._is_1D_Var_arr(df.name)
-        ):
-            rhs = assign.value
-            kws = dict(rhs.kws)
-            nodes = []
-
-            fname = get_call_expr_arg("to_parquet", rhs.args, kws, 0, "fname")
-
-            compression_var = ir.Var(
-                assign.target.scope, mk_unique_var("to_pq_compression"), rhs.loc
-            )
-            nodes.append(
-                ir.Assign(ir.Const("snappy", rhs.loc), compression_var, rhs.loc)
-            )
-            self.typemap[compression_var.name] = types.StringLiteral("snappy")
-            compression = get_call_expr_arg(
-                "to_parquet", rhs.args, kws, 2, "compression", compression_var
-            )
-
-            index_var = ir.Var(
-                assign.target.scope, mk_unique_var("to_pq_index"), rhs.loc
-            )
-            nodes.append(ir.Assign(ir.Const(None, rhs.loc), index_var, rhs.loc))
-            self.typemap[index_var.name] = types.none
-            index = get_call_expr_arg(
-                "to_parquet", rhs.args, kws, 3, "index", index_var
-            )
-
-            f = lambda df, fname, compression, index: df.to_parquet(
-                fname, compression=compression, index=index, _is_parallel=True
-            )
-            return nodes + compile_func_single_block(
-                f, [df, fname, compression, index], assign.target, self
-            )
-        elif func_name == "to_sql" and (
-            self._is_1D_arr(df.name) or self._is_1D_Var_arr(df.name)
-        ):
+        if func_name == "to_parquet" and (self._is_1D_or_1D_Var_arr(df.name)):
+            self._set_last_arg_to_true(assign.value)
+            return [assign]
+        elif func_name == "to_sql" and (self._is_1D_or_1D_Var_arr(df.name)):
             # Calling in parallel case
-            rhs = assign.value
-            kws = dict(rhs.kws)
-            nodes = []
-
-            name = get_call_expr_arg("to_sql", rhs.args, kws, 0, "name")
-            con = get_call_expr_arg("to_sql", rhs.args, kws, 1, "con")
-            schema = self._get_variable_const_ll(
-                assign, nodes, "to_sql", rhs, kws, 2, "schema", None
-            )
-            if_exists = self._get_variable_const_ll(
-                assign, nodes, "to_sql", rhs, kws, 3, "if_exists", "fail"
-            )
-            # For variable index, we choose to use "True" since we did not find a type BooleanLiteral.
-            #
-            index = self._get_variable_const_ll(
-                assign, nodes, "to_sql", rhs, kws, 4, "index", True
-            )
-            index_label = self._get_variable_const_ll(
-                assign, nodes, "to_sql", rhs, kws, 5, "index_label", None
-            )
-            chunksize = self._get_variable_const_ll(
-                assign, nodes, "to_sql", rhs, kws, 6, "chunksize", None
-            )
-            dtype = self._get_variable_const_ll(
-                assign, nodes, "to_sql", rhs, kws, 7, "dtype", None
-            )
-            method = self._get_variable_const_ll(
-                assign, nodes, "to_sql", rhs, kws, 8, "dtype", None
-            )
-
-            f = lambda df, name, con, schema, if_exists, index, index_label, chunksize, dtype, method: df.to_sql(
-                name,
-                con,
-                schema=schema,
-                if_exists=if_exists,
-                index=index,
-                index_label=index_label,
-                chunksize=chunksize,
-                dtype=dtype,
-                method=method,
-                _is_parallel=True,
-            )
-            return nodes + compile_func_single_block(
-                f,
-                [
-                    df,
-                    name,
-                    con,
-                    schema,
-                    if_exists,
-                    index,
-                    index_label,
-                    chunksize,
-                    dtype,
-                    method,
-                ],
-                assign.target,
-                self,
-            )
+            self._set_last_arg_to_true(assign.value)
+            return [assign]
         elif func_name == "to_csv" and (
             self._is_1D_arr(df.name) or self._is_1D_Var_arr(df.name)
         ):
@@ -2755,6 +2636,18 @@ class DistributedPass:
         first_block = blocks[topo_order[0]]
         first_block.body = nodes + first_block.body
         return
+
+    def _set_last_arg_to_true(self, rhs):
+        """set last argument of call expr 'rhs' to True, assuming that it is an Omitted
+        arg with value of False.
+        This is usually used for Bodo overloads that have an extra flag as last argument
+        to enable parallelism.
+        """
+        call_type = self.calltypes.pop(rhs)
+        assert call_type.args[-1] == types.Omitted(False)
+        self.calltypes[rhs] = self.typemap[rhs.func.name].get_call_type(
+            self.typingctx, call_type.args[:-1] + (types.Omitted(True),), {}
+        )
 
     def _update_avail_vars(self, avail_vars, nodes):
         for stmt in nodes:
