@@ -116,15 +116,17 @@ def remove_dead_csv(
 
 
 def csv_distributed_run(
-    csv_node, array_dists, typemap, calltypes, typingctx, targetctx, dist_pass
+    csv_node, array_dists, typemap, calltypes, typingctx, targetctx
 ):
-    parallel = True
-    for v in csv_node.out_vars:
-        if (
-            array_dists[v.name] != distributed_pass.Distribution.OneD
-            and array_dists[v.name] != distributed_pass.Distribution.OneD_Var
-        ):
-            parallel = False
+    parallel = False
+    if array_dists is not None:
+        parallel = True
+        for v in csv_node.out_vars:
+            if (
+                array_dists[v.name] != distributed_pass.Distribution.OneD
+                and array_dists[v.name] != distributed_pass.Distribution.OneD_Var
+            ):
+                parallel = False
 
     n_cols = len(csv_node.out_vars)
     # TODO: rebalance if output distributions are 1D instead of 1D_Var

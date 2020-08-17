@@ -120,6 +120,7 @@ class BodoCompiler(numba.core.compiler.CompilerBase):
             pm.add_pass_after(BodoDistributedPass, ParforPass)
         else:
             pm.add_pass_after(LowerParforSeq, ParforPass)
+            pm.add_pass_after(LowerBodoIRExtSeq, LowerParforSeq)
 
         pm.add_pass_after(BodoDumpDistDiagnosticsPass, DumpParforDiagnostics)
         pm.finalize()
@@ -379,6 +380,41 @@ class LowerParforSeq(FunctionPass):
         bodo.transforms.distributed_pass.lower_parfor_sequential(
             state.typingctx, state.func_ir, state.typemap, state.calltypes
         )
+        return True
+
+
+@register_pass(mutates_CFG=False, analysis_only=True)
+class LowerBodoIRExtSeq(FunctionPass):
+    """Lower Bodo IR extensions nodes to regular Numba IR
+    """
+
+    _name = "bodo_lower_ir_ext_pass"
+
+    def __init__(self):
+        FunctionPass.__init__(self)
+
+    def run_pass(self, state):
+        from bodo.transforms.distributed_pass import distributed_run_extensions
+
+        for block in state.func_ir.blocks.values():
+            new_body = []
+            for inst in block.body:
+                if type(inst) in distributed_run_extensions:
+                    f = distributed_run_extensions[type(inst)]
+                    out_nodes = f(
+                        inst,
+                        None,
+                        state.typemap,
+                        state.calltypes,
+                        state.typingctx,
+                        state.targetctx,
+                    )
+                    new_body += out_nodes
+                else:
+                    new_body.append(inst)
+
+            block.body = new_body
+
         return True
 
 

@@ -86,15 +86,17 @@ def remove_dead_sql(
 
 
 def sql_distributed_run(
-    sql_node, array_dists, typemap, calltypes, typingctx, targetctx, dist_pass
+    sql_node, array_dists, typemap, calltypes, typingctx, targetctx
 ):
-    parallel = True
-    for v in sql_node.out_vars:
-        if (
-            array_dists[v.name] != distributed_pass.Distribution.OneD
-            and array_dists[v.name] != distributed_pass.Distribution.OneD_Var
-        ):
-            parallel = False
+    parallel = False
+    if array_dists is not None:
+        parallel = True
+        for v in sql_node.out_vars:
+            if (
+                array_dists[v.name] != distributed_pass.Distribution.OneD
+                and array_dists[v.name] != distributed_pass.Distribution.OneD_Var
+            ):
+                parallel = False
 
     n_cols = len(sql_node.out_vars)
     arg_names = ", ".join("arr" + str(i) for i in range(n_cols))

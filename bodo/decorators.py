@@ -145,8 +145,13 @@ def jit(signature_or_function=None, **options):
         "fusion": True,
     }
 
+    pipeline_class = bodo.compiler.BodoCompiler
+    if "distributed" in options and isinstance(options["distributed"], bool):
+        dist = options.pop("distributed")
+        pipeline_class = pipeline_class if dist else bodo.compiler.BodoCompilerSeq
+
     numba_jit = numba.jit(
-        signature_or_function, pipeline_class=bodo.compiler.BodoCompiler, **options
+        signature_or_function, pipeline_class=pipeline_class, **options
     )
     if (
         master_mode.master_mode_on and bodo.get_rank() == master_mode.MASTER_RANK

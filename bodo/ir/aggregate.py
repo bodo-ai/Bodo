@@ -791,27 +791,29 @@ class EvalDummyTyper(AbstractTemplate):
 
 
 def agg_distributed_run(
-    agg_node, array_dists, typemap, calltypes, typingctx, targetctx, dist_pass
+    agg_node, array_dists, typemap, calltypes, typingctx, targetctx
 ):
-    parallel = True
-    for v in (
-        list(agg_node.df_in_vars.values())
-        + list(agg_node.df_out_vars.values())
-        + agg_node.key_arrs
-    ):
-        if (
-            array_dists[v.name] != distributed_pass.Distribution.OneD
-            and array_dists[v.name] != distributed_pass.Distribution.OneD_Var
+    parallel = False
+    if array_dists is not None:
+        parallel = True
+        for v in (
+            list(agg_node.df_in_vars.values())
+            + list(agg_node.df_out_vars.values())
+            + agg_node.key_arrs
         ):
-            parallel = False
-        # TODO: check supported types
-        # if (typemap[v.name] != types.Array(types.intp, 1, 'C')
-        #         and typemap[v.name] != types.Array(types.float64, 1, 'C')):
-        #     raise ValueError(
-        #         "Only int64 and float64 columns are currently supported in aggregate")
-        # if (typemap[left_key_var.name] != types.Array(types.intp, 1, 'C')
-        #     or typemap[right_key_var.name] != types.Array(types.intp, 1, 'C')):
-        # raise ValueError("Only int64 keys are currently supported in aggregate")
+            if (
+                array_dists[v.name] != distributed_pass.Distribution.OneD
+                and array_dists[v.name] != distributed_pass.Distribution.OneD_Var
+            ):
+                parallel = False
+            # TODO: check supported types
+            # if (typemap[v.name] != types.Array(types.intp, 1, 'C')
+            #         and typemap[v.name] != types.Array(types.float64, 1, 'C')):
+            #     raise ValueError(
+            #         "Only int64 and float64 columns are currently supported in aggregate")
+            # if (typemap[left_key_var.name] != types.Array(types.intp, 1, 'C')
+            #     or typemap[right_key_var.name] != types.Array(types.intp, 1, 'C')):
+            # raise ValueError("Only int64 keys are currently supported in aggregate")
 
     # TODO: rebalance if output distributions are 1D instead of 1D_Var
 

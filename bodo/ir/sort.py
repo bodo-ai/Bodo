@@ -333,17 +333,19 @@ ir_utils.apply_copy_propagate_extensions[Sort] = apply_copies_sort
 
 
 def sort_distributed_run(
-    sort_node, array_dists, typemap, calltypes, typingctx, targetctx, dist_pass
+    sort_node, array_dists, typemap, calltypes, typingctx, targetctx
 ):
-    parallel = True
+    parallel = False
     in_vars = list(sort_node.df_in_vars.values())
     out_vars = list(sort_node.df_out_vars.values())
-    for v in sort_node.key_arrs + sort_node.out_key_arrs + in_vars + out_vars:
-        if (
-            array_dists[v.name] != distributed_pass.Distribution.OneD
-            and array_dists[v.name] != distributed_pass.Distribution.OneD_Var
-        ):
-            parallel = False
+    if array_dists is not None:
+        parallel = True
+        for v in sort_node.key_arrs + sort_node.out_key_arrs + in_vars + out_vars:
+            if (
+                array_dists[v.name] != distributed_pass.Distribution.OneD
+                and array_dists[v.name] != distributed_pass.Distribution.OneD_Var
+            ):
+                parallel = False
 
     loc = sort_node.loc
     scope = sort_node.key_arrs[0].scope

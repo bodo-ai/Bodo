@@ -192,6 +192,25 @@ def test_1D_Var_parfor4():
     assert count_array_REPs() == 0
 
 
+def test_jit_inside_prange():
+    """test calling jit functions inside a prange loop
+    """
+
+    @bodo.jit(distributed=False)
+    def f(df):
+        return df.sort_values("A")
+
+    def impl(df, n):
+        s = 0
+        for i in bodo.prange(n):
+            s += f(df).A.iloc[-1] + i
+        return s
+
+    df = pd.DataFrame({"A": [3, 1, 11, -3, 9, 1, 6]})
+    n = 11
+    assert bodo.jit(impl)(df, n) == impl(df, n)
+
+
 def test_print1():
     # no vararg
     # TODO: capture stdout and make sure there is only one print

@@ -240,7 +240,6 @@ class DistributedPass:
                         self.calltypes,
                         self.typingctx,
                         self.targetctx,
-                        self,
                     )
                 elif isinstance(inst, Parfor):
                     out_nodes = self._run_parfor(inst, equiv_set, avail_vars)

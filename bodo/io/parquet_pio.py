@@ -177,9 +177,7 @@ class ParquetHandler:
         return col_names, data_arrs, index_col, nodes
 
 
-def pq_distributed_run(
-    pq_node, array_dists, typemap, calltypes, typingctx, targetctx, dist_pass
-):
+def pq_distributed_run(pq_node, array_dists, typemap, calltypes, typingctx, targetctx):
 
     n_cols = len(pq_node.out_vars)
     # get column variables and their sizes
@@ -192,12 +190,17 @@ def pq_distributed_run(
     pq_impl = loc_vars["pq_impl"]
 
     # parallel columns
-    parallel = [
-        c
-        for c, v in zip(pq_node.col_names, pq_node.out_vars)
-        if array_dists[v.name]
-        in (distributed_pass.Distribution.OneD, distributed_pass.Distribution.OneD_Var)
-    ]
+    parallel = []
+    if array_dists is not None:
+        parallel = [
+            c
+            for c, v in zip(pq_node.col_names, pq_node.out_vars)
+            if array_dists[v.name]
+            in (
+                distributed_pass.Distribution.OneD,
+                distributed_pass.Distribution.OneD_Var,
+            )
+        ]
 
     pq_reader_py = _gen_pq_reader_py(
         pq_node.col_names,
