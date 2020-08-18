@@ -1676,6 +1676,11 @@ def overload_series_dropna(S, axis=0, inplace=False):
 @overload_method(SeriesType, "shift", inline="always", no_unliteral=True)
 def overload_series_shift(S, periods=1, freq=None, axis=0, fill_value=None):
     # TODO: handle dt64, strings
+
+    unsupported_args = dict(freq=freq, axis=axis, fill_value=fill_value)
+    arg_defaults = dict(freq=None, axis=0, fill_value=None)
+    check_unsupported_args("shift", unsupported_args, arg_defaults)
+
     def impl(S, periods=1, freq=None, axis=0, fill_value=None):  # pragma: no cover
         arr = bodo.hiframes.pd_series_ext.get_series_data(S)
         index = bodo.hiframes.pd_series_ext.get_series_index(S)

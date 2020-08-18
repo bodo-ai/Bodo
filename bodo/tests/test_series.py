@@ -4035,9 +4035,28 @@ class TestSeries(unittest.TestCase):
         def test_impl(S):
             return S.shift()
 
+        #testing for correct default values
+        def test_unsup_1(S):
+            return S.shift(freq=None, axis=0, fill_value=None)
+
+        #testing when integer default value is unsupported
+        def test_unsup_2(S):
+            return S.shift(axis=1)
+
+        #testing when nonetype default value is unsupported
+        def test_unsup_3(S):
+            return S.shift(freq=1)
+
         bodo_func = bodo.jit(test_impl)
+        bodo_func_2 = bodo.jit(test_unsup_2)
+        bodo_func_3 = bodo.jit(test_unsup_3)
         S = pd.Series([np.nan, 2.0, 3.0, 5.0, np.nan, 6.0, 7.0])
         pd.testing.assert_series_equal(bodo_func(S), test_impl(S))
+        pd.testing.assert_series_equal(test_impl(S), test_unsup_1(S))
+        with pytest.raises(BodoError):
+            bodo_func_2(S)
+        with pytest.raises(BodoError):
+            bodo_func_3(S)
 
 
 if __name__ == "__main__":
