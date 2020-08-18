@@ -2,11 +2,13 @@
 import numpy as np
 import bodo
 import numba
-from numba.core import types
+from numba.core import types, ir
 from numba.extending import overload, intrinsic, overload_method
 from bodo.libs.str_ext import string_type, unicode_to_utf8
 
 from numba.core.ir_utils import compile_to_numba_ir, replace_arg_nodes
+
+from bodo.utils.transform import get_call_expr_arg
 
 from bodo.libs import hio
 import llvmlite.binding as ll
@@ -20,7 +22,7 @@ ll.add_symbol("file_write_parallel", hio.file_write_parallel)
 
 _get_file_size = types.ExternalFunction("get_file_size", types.int64(types.voidptr))
 _file_read = types.ExternalFunction(
-    "file_read", types.void(types.voidptr, types.voidptr, types.intp)
+    "file_read", types.void(types.voidptr, types.voidptr, types.intp, types.intp)
 )
 _file_read_parallel = types.ExternalFunction(
     "file_read_parallel",
@@ -67,14 +69,21 @@ def _handle_np_fromfile(assign, lhs, rhs):
     if len(rhs.args) != 2:  # pragma: no cover
         raise ValueError("np.fromfile(): file name and dtype expected")
 
+    kws = dict(rhs.kws)
     _fname = rhs.args[0]
     _dtype = rhs.args[1]
 
-    def fromfile_impl(fname, dtype):  # pragma: no cover
-        size = get_file_size(fname)
+    count_default = ir.Const(-1, lhs.loc)
+    offset_default = ir.Const(0, lhs.loc)
+
+    _count = get_call_expr_arg("np.fromfile", rhs.args, kws, 2, "count", default=count_default) 
+    _offset = get_call_expr_arg("np.fromfile", rhs.args, kws, 3, "offset", default=offset_default)
+
+    def fromfile_impl(fname, dtype, count, offset):  # pragma: no cover
         dtype_size = get_dtype_size(dtype)
+        size = get_file_size(fname, count, offset, dtype_size)
         A = np.empty(size // dtype_size, dtype=dtype)
-        file_read(fname, A, size)
+        file_read(fname, A, size, offset)
         read_arr = A
 
     f_block = compile_to_numba_ir(
@@ -86,7 +95,7 @@ def _handle_np_fromfile(assign, lhs, rhs):
             "get_dtype_size": get_dtype_size,
         },
     ).blocks.popitem()[1]
-    replace_arg_nodes(f_block, [_fname, _dtype])
+    replace_arg_nodes(f_block, [_fname, _dtype, _count, _offset])
     nodes = f_block.body[:-3]  # remove none return
     nodes[-1].target = lhs
     return nodes
@@ -159,45 +168,53 @@ def file_read_parallel(fname, arr, start, count):  # pragma: no cover
 
 
 @overload(file_read_parallel)
-def file_read_parallel_overload(fname, arr, start, count):
+def file_read_parallel_overload(fname, arr, start, count, offset):
     if fname == string_type:
 
-        def _impl(fname, arr, start, count):  # pragma: no cover
+        def _impl(fname, arr, start, count, offset):  # pragma: no cover
             dtype_size = get_dtype_size(arr.dtype)
             _file_read_parallel(
                 unicode_to_utf8(fname),
                 arr.ctypes,
-                start * dtype_size,
+                (start * dtype_size) + offset, # Offset is given in bytes
                 count * dtype_size,
             )
 
         return _impl
 
 
-def file_read(fname, arr, size):  # pragma: no cover
+def file_read(fname, arr, size, offset):  # pragma: no cover
     return
 
 
 @overload(file_read)
-def file_read_overload(fname, arr, size):
+def file_read_overload(fname, arr, size, offset):
     if fname == string_type:
         # TODO: unicode name
-        def impl(fname, arr, size):  # pragma: no cover
-            _file_read(unicode_to_utf8(fname), arr.ctypes, size)
+        def impl(fname, arr, size, offset):  # pragma: no cover
+            _file_read(unicode_to_utf8(fname), arr.ctypes, size, offset)
 
         return impl
 
 
-def get_file_size(fname):  # pragma: no cover
+def get_file_size(fname, count, offset, dtype_size):  # pragma: no cover
     return 0
 
 
 @overload(get_file_size)
-def get_file_size_overload(fname):
+def get_file_size_overload(fname, count, offset, dtype_size):
     if fname == string_type:
         # TODO: unicode name
-        def impl(fname):  # pragma: no cover
-            s = _get_file_size(unicode_to_utf8(fname))
+        def impl(fname, count, offset, dtype_size):  # pragma: no cover
+            # TODO(Nick): What is the best way to handle error cases
+            if offset < 0:
+                return -1
+            s = _get_file_size(unicode_to_utf8(fname)) - offset
+            if count != -1:
+                s = min(s, count * dtype_size)
+            # TODO(Nick): What is the best way to handle error cases
+            if s < 0:
+                return -1
             return s
 
         return impl

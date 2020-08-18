@@ -27,7 +27,7 @@ PyObject* f_mod = nullptr;  // imported python module:
 extern "C" {
 
 uint64_t get_file_size(char* file_name);
-void file_read(char* file_name, void* buff, int64_t size);
+void file_read(char* file_name, void* buff, int64_t size, int64_t offset);
 void file_write(char* file_name, void* buff, int64_t size);
 void file_read_parallel(char* file_name, char* buff, int64_t start,
                         int64_t count);
@@ -110,10 +110,12 @@ uint64_t get_file_size(char* file_name) {
     return f_size;
 }
 
-void file_read(char* file_name, void* buff, int64_t size) {
+void file_read(char* file_name, void* buff, int64_t size, int64_t offset) {
     if (strncmp("s3://", file_name, 5) == 0 ||
         strncmp("hdfs://", file_name, 7) == 0) {
-        f_reader->seek(0);
+        // Assumes that the default offset when not given
+        // will be 0.
+        f_reader->seek(offset);
         f_reader->read((char*)buff, size);
         delete f_reader;
         f_reader = nullptr;
@@ -121,6 +123,8 @@ void file_read(char* file_name, void* buff, int64_t size) {
         // posix
         FILE* fp = fopen(file_name, "rb");
         if (fp == NULL) return;
+        int64_t seek_res = fseek(fp, offset, SEEK_SET);
+        if (seek_res != 0) return;
         size_t ret_code = fread(buff, 1, (size_t)size, fp);
         if (ret_code != (size_t)size) {
             Bodo_PyErr_SetString(
