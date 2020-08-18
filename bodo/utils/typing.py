@@ -269,6 +269,8 @@ def get_overload_const(val):
     # sometimes Dispatcher objects become TypeRef, see test_groupby_agg_const_dict
     if isinstance(val, types.TypeRef):
         val = val.instance_type
+    if val == types.none:
+        return None
     # actual value
     if val is None or isinstance(val, (bool, int, str, tuple)):
         return val
