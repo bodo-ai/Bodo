@@ -5,7 +5,8 @@
 #include "parquet/arrow/reader.h"
 
 void pq_init_reader(const char *file_name,
-                    std::shared_ptr<parquet::arrow::FileReader> *a_reader);
+                    std::shared_ptr<parquet::arrow::FileReader> *a_reader,
+                    const char *bucket_region);
 
 int64_t pq_get_size_single_file(std::shared_ptr<parquet::arrow::FileReader>,
                                 int64_t column_idx);

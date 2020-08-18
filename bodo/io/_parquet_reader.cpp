@@ -59,7 +59,8 @@ void set_null_buff(uint8_t** out_nulls, const uint8_t* null_buff,
     }
 
 typedef void (*s3_opener_t)(const char*,
-                            std::shared_ptr<::arrow::io::RandomAccessFile>*);
+                            std::shared_ptr<::arrow::io::RandomAccessFile>*,
+                            const char*);
 
 typedef void (*hdfs_open_file_t)(
     const char*, std::shared_ptr<::arrow::io::HdfsReadableFile>*);
@@ -220,7 +221,11 @@ inline void copy_data_dt32(uint64_t* out_data, const int32_t* buff,
     for (int64_t i = 0; i < rows_to_read; i++) {
         int32_t val = buff[rows_to_skip + i];
         // convert date32 into packed datetime.date value
-        int64_t year=-1, month=-1, day=-1; // assigned to non-realized value to make any error crash.
+        int64_t
+            year = -1,
+            month = -1,
+            day =
+                -1;  // assigned to non-realized value to make any error crash.
         get_date_from_days(val, &year, &month, &day);
         out_data[i] = (year << 32) + (month << 16) + day;
     }
@@ -458,7 +463,8 @@ int pq_read_string_single_file(
  * @param start : starting row in column to read
  * @param count : num rows from start to read
  * @param[out] offset_vec : vector of offsets (where each string starts in data)
- * @param[out] index_offset_vec : vector of offsets (where each list starts in data)
+ * @param[out] index_offset_vec : vector of offsets (where each list starts in
+ * data)
  * @param[out] data_vec : vector of data (elements of type out_dtype)
  * @param[out] null_vec : vector specifying if rows contain nulls or not
  */
@@ -669,7 +675,8 @@ int64_t pq_read_array_item_single_file(
                       << std::endl;
         }
 
-        std::vector<std::shared_ptr<arrow::Buffer>> child_buffers = child_data[0]->buffers;
+        std::vector<std::shared_ptr<arrow::Buffer>> child_buffers =
+            child_data[0]->buffers;
         if (child_buffers.size() != 2) {
             std::cerr << "invalid parquet item number of array buffers "
                       << child_buffers.size() << std::endl;
@@ -708,21 +715,27 @@ int64_t pq_read_array_item_single_file(
         // ---data_null_buff is null pointer
         // ---data is not a float
         // Then we return directly the values.
-        if (data_null_buff == nullptr || (out_dtype_ct != Bodo_CTypes::FLOAT32 && out_dtype_ct != Bodo_CTypes::FLOAT64)) {
+        if (data_null_buff == nullptr ||
+            (out_dtype_ct != Bodo_CTypes::FLOAT32 &&
+             out_dtype_ct != Bodo_CTypes::FLOAT64)) {
             data_vec->insert(
                 data_vec->end(),
                 data_buff + offsets_buff[rows_to_skip] * dtype_size,
-                data_buff + (offsets_buff[rows_to_skip] + data_size) * dtype_size);
+                data_buff +
+                    (offsets_buff[rows_to_skip] + data_size) * dtype_size);
         } else {
-            for (int i=0; i<rows_to_read; i++) {
-                bool bit = ::arrow::BitUtil::GetBit(null_buff, rows_to_skip + i);
+            for (int i = 0; i < rows_to_read; i++) {
+                bool bit =
+                    ::arrow::BitUtil::GetBit(null_buff, rows_to_skip + i);
                 std::vector<uint8_t> V(dtype_size);
-                for (int j=offsets_buff[rows_to_skip + i]; j<offsets_buff[rows_to_skip + i + 1]; j++) {
+                for (int j = offsets_buff[rows_to_skip + i];
+                     j < offsets_buff[rows_to_skip + i + 1]; j++) {
                     bool bit = ::arrow::BitUtil::GetBit(data_null_buff, j);
                     if (!bit) {
                         memcpy(V.data(), vectNaN.data(), dtype_size);
                     } else {
-                        memcpy(V.data(), data_buff + j * dtype_size, dtype_size);
+                        memcpy(V.data(), data_buff + j * dtype_size,
+                               dtype_size);
                     }
                     data_vec->insert(data_vec->end(), V.begin(), V.end());
                 }
@@ -751,9 +764,8 @@ int64_t pq_read_array_item_single_file(
 
 void pq_read_arrow_single_file(
     std::shared_ptr<parquet::arrow::FileReader> arrow_reader,
-    const std::vector<int> &column_indices, int64_t start, int64_t count,
-    arrow::ArrayVector &parts) {
-
+    const std::vector<int>& column_indices, int64_t start, int64_t count,
+    arrow::ArrayVector& parts) {
     int64_t n_row_groups =
         arrow_reader->parquet_reader()->metadata()->num_row_groups();
 
@@ -765,7 +777,8 @@ void pq_read_arrow_single_file(
 
     auto rg_metadata =
         arrow_reader->parquet_reader()->metadata()->RowGroup(row_group_index);
-    int64_t nrows_in_group = rg_metadata->ColumnChunk(column_indices[0])->num_values();
+    int64_t nrows_in_group =
+        rg_metadata->ColumnChunk(column_indices[0])->num_values();
 
     // skip whole row groups if no need to read any rows
     while (start - skipped_rows >= nrows_in_group) {
@@ -773,7 +786,8 @@ void pq_read_arrow_single_file(
         row_group_index++;
         auto rg_metadata = arrow_reader->parquet_reader()->metadata()->RowGroup(
             row_group_index);
-        nrows_in_group = rg_metadata->ColumnChunk(column_indices[0])->num_values();
+        nrows_in_group =
+            rg_metadata->ColumnChunk(column_indices[0])->num_values();
     }
 
     while (read_rows < count) {
@@ -803,7 +817,8 @@ void pq_read_arrow_single_file(
             auto rg_metadata =
                 arrow_reader->parquet_reader()->metadata()->RowGroup(
                     row_group_index);
-            nrows_in_group = rg_metadata->ColumnChunk(column_indices[0])->num_values();
+            nrows_in_group =
+                rg_metadata->ColumnChunk(column_indices[0])->num_values();
         } else
             break;
     }
@@ -811,7 +826,8 @@ void pq_read_arrow_single_file(
 }
 
 void pq_init_reader(const char* file_name,
-                    std::shared_ptr<parquet::arrow::FileReader>* a_reader) {
+                    std::shared_ptr<parquet::arrow::FileReader>* a_reader,
+                    const char* bucket_region) {
     PyObject* f_mod;
     std::string f_name(file_name);
     auto pool = ::arrow::default_memory_pool();
@@ -848,7 +864,7 @@ void pq_init_reader(const char* file_name,
         s3_opener_t s3_open_file =
             (s3_opener_t)PyNumber_AsSsize_t(func_obj, NULL);
         // open Parquet file
-        s3_open_file(f_name.c_str(), &file);
+        s3_open_file(f_name.c_str(), &file, bucket_region);
         // create Arrow reader
         status = parquet::arrow::FileReader::Make(
             pool, ParquetFileReader::Open(file), &arrow_reader);

@@ -241,10 +241,16 @@ def _gen_pq_reader_py(
         assert col_names == parallel
     is_parallel = len(parallel) > 0
     func_text = "def pq_reader_py(fname):\n"
+    func_text += "  is_s3_url = fname.startswith('s3://')\n"
+    func_text += "  bucket_region = ''\n"
+    # if it's an s3 url, get the region and pass it into the c++ code
+    func_text += "  if is_s3_url:\n"
+    func_text += "    with bodo.objmode(bucket_region='unicode_type'):\n"
+    func_text += "      bucket_region = bodo.io.fs_io.get_s3_bucket_region(fname)\n"
     # open a DatasetReader, which is a C++ object defined in _parquet.cpp that
     # contains file readers for the files from which this process needs to read,
     # and other information to read this process' chunk
-    func_text += "  ds_reader = get_dataset_reader(unicode_to_utf8(fname), {})\n".format(
+    func_text += "  ds_reader = get_dataset_reader(unicode_to_utf8(fname), {}, unicode_to_utf8(bucket_region) )\n".format(
         is_parallel
     )
 
@@ -673,7 +679,8 @@ def parquet_file_schema(file_name, selected_columns):
 
 
 _get_dataset_reader = types.ExternalFunction(
-    "get_dataset_reader", types.Opaque("arrow_reader")(types.voidptr, types.boolean)
+    "get_dataset_reader",
+    types.Opaque("arrow_reader")(types.voidptr, types.boolean, types.voidptr),
 )
 _del_dataset_reader = types.ExternalFunction(
     "del_dataset_reader", types.void(types.Opaque("arrow_reader"))

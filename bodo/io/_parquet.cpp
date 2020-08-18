@@ -42,7 +42,8 @@ struct DatasetReader {
  * @param file_name : file or directory of parquet files
  * @param is_parallel : true if processes will read chunks of the dataset
  */
-DatasetReader *get_dataset_reader(char *file_name, bool is_parallel);
+DatasetReader *get_dataset_reader(char *file_name, bool is_parallel,
+                                  char *bucket_region);
 void del_dataset_reader(DatasetReader *reader);
 
 int64_t pq_get_size(DatasetReader *reader, int64_t column_idx);
@@ -116,7 +117,8 @@ PyMODINIT_FUNC PyInit_parquet_cpp(void) {
     return m;
 }
 
-DatasetReader *get_dataset_reader(char *file_name, bool parallel) {
+DatasetReader *get_dataset_reader(char *file_name, bool parallel,
+                                  char *bucket_region) {
 #define PYERR_CHECK(expr, msg)         \
     if (!(expr)) {                     \
         std::cerr << msg << std::endl; \
@@ -175,7 +177,7 @@ DatasetReader *get_dataset_reader(char *file_name, bool parallel) {
                     const char *c_path = PyUnicode_AsUTF8(p);
                     std::shared_ptr<parquet::arrow::FileReader> arrow_reader;
                     // open and store file reader for this piece
-                    pq_init_reader(c_path, &arrow_reader);
+                    pq_init_reader(c_path, &arrow_reader, bucket_region);
                     ds_reader->readers.push_back(arrow_reader);
                     Py_DECREF(p);
                 }
@@ -233,7 +235,7 @@ DatasetReader *get_dataset_reader(char *file_name, bool parallel) {
                 PyObject *p = PyObject_GetAttrString(piece, "path");
                 const char *c_path = PyUnicode_AsUTF8(p);
                 std::shared_ptr<parquet::arrow::FileReader> arrow_reader;
-                pq_init_reader(c_path, &arrow_reader);
+                pq_init_reader(c_path, &arrow_reader, bucket_region);
                 ds_reader->readers.push_back(arrow_reader);
                 Py_DECREF(p);
             }

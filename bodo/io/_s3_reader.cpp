@@ -201,8 +201,9 @@ FileReader *init_s3_reader(const char *fname, const char *suffix,
 }
 
 void s3_open_file(const char *fname,
-                  std::shared_ptr<::arrow::io::RandomAccessFile> *file) {
-    std::shared_ptr<arrow::fs::S3FileSystem> fs = get_s3_fs("");
+                  std::shared_ptr<::arrow::io::RandomAccessFile> *file,
+                  const char *bucket_region) {
+    std::shared_ptr<arrow::fs::S3FileSystem> fs = get_s3_fs(bucket_region);
     arrow::Result<std::shared_ptr<::arrow::io::RandomAccessFile>> result;
     result = fs->OpenInputFile(std::string(fname));
     CHECK_ARROW_AND_ASSIGN(result, "fs->OpenInputFile", *file)
