@@ -4,6 +4,7 @@ according to Bodo requirements (using partial typing).
 """
 import operator
 import itertools
+import pandas as pd
 import numba
 from numba.core import types, ir, ir_utils
 from numba.core.compiler_machinery import register_pass
@@ -802,6 +803,11 @@ def _create_const_var(val, name, scope, loc, nodes):
     """create a new variable that holds constant value 'val'. Generates constant
     creation IR nodes and adds them to 'nodes'.
     """
+    # convert pd.Index values (usually coming from "df.columns") to list to enable
+    # passing values as constant (list and pd.Index are equivalent for Pandas API calls
+    # that take column names).
+    if isinstance(val, pd.Index):
+        val = list(val)
     new_var = ir.Var(scope, mk_unique_var(name), loc)
     # NOTE: create a tuple for both list/tuple, assuming that all functions accept both
     # equally (e.g. passing a tuple instead of a list is not an error).

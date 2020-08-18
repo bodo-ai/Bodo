@@ -2236,6 +2236,17 @@ def test_dataframe_constant_lowering():
     pd.testing.assert_frame_equal(bodo.jit(impl)(), df)
 
 
+def test_dataframe_columns_const_passing():
+    """Test passing df.columns as a constant to another call
+    """
+
+    def impl(df):
+        return df.dropna(subset=df.columns, how="any")
+
+    df = pd.DataFrame({"A": [2, 1], "B": [1.2, 3.3]})
+    check_func(impl, (df,))
+
+
 def test_dataframe_sample_number():
     """Checking the random routine is especially difficult to do.
     We can mostly only check incidental information about the code"""
