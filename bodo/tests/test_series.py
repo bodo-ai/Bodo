@@ -185,6 +185,7 @@ def test_series_constructor_int_arr(memory_leak_check):
         ),
         pd.Series([["a", "bc"], ["a"], ["aaa", "b", "cc"], None, ["xx", "yy"]]),
         pd.Series([[1, 2], [3], [5, 4, 6], None, [-1, 3, 4]]),
+        pd.Series(["AA", "BB", "", "AA", None, "AA"], dtype="category"),
     ]
 )
 def series_val(request):
@@ -242,6 +243,10 @@ def test_dataframe_concat(series_val, memory_leak_check):
     # Pandas converts Integer arrays to int object arrays when adding an all NaN
     # chunk, which we cannot handle in our parallel testing.
     if isinstance(series_val.dtype, pd.core.arrays.integer._IntegerDtype):
+        return
+
+    # categories to be handled separately
+    if isinstance(series_val.dtype, pd.CategoricalDtype):
         return
 
     def f(S1, S2):
@@ -313,7 +318,11 @@ def test_series_notna(series_val, memory_leak_check):
     def test_impl(S):
         return S.notna()
 
-    check_func(test_impl, (series_val,))
+    # categories to be handled separately
+    if isinstance(series_val.dtype, pd.CategoricalDtype):
+        return
+    else:
+        check_func(test_impl, (series_val,))
 
 
 def test_box(series_val, memory_leak_check):
@@ -386,7 +395,11 @@ def test_series_hasnans(series_val, memory_leak_check):
     def test_impl(S):
         return S.hasnans
 
-    check_func(test_impl, (series_val,))
+    # categories to be handled separately
+    if isinstance(series_val.dtype, pd.CategoricalDtype):
+        return
+    else:
+        check_func(test_impl, (series_val,))
 
 
 def test_series_empty(series_val, memory_leak_check):
@@ -438,6 +451,10 @@ def test_series_astype_str(series_val):
         return
 
     if series_val.dtype == np.dtype("timedelta64[ns]"):
+        return
+
+    # categories to be handled separately
+    if isinstance(series_val.dtype, pd.CategoricalDtype):
         return
 
     def test_impl(S):
@@ -662,6 +679,9 @@ def test_series_iloc_getitem_array_bool(series_val, memory_leak_check):
     def test_impl(S):
         return S.iloc[[True, True, False, True, False]]
 
+    # categories to be handled separately
+    if isinstance(series_val.dtype, pd.CategoricalDtype):
+        return
     bodo_func = bodo.jit(test_impl)
     pd.testing.assert_series_equal(
         bodo_func(series_val), test_impl(series_val), check_dtype=False
@@ -904,6 +924,10 @@ def test_series_getitem_array_bool(series_val, memory_leak_check):
     def test_impl2(S, cond):
         # using .values to test boolean_array
         return S[cond.values]
+
+    # categories to be handled separately
+    if isinstance(series_val.dtype, pd.CategoricalDtype):
+        return
 
     bodo_func = bodo.jit(test_impl)
     pd.testing.assert_series_equal(
@@ -2036,6 +2060,9 @@ def test_series_head(series_val, memory_leak_check):
     # not supported for list(string) and array(item)
     if isinstance(series_val.values[0], list):
         return
+    # categories to be handled separately
+    if isinstance(series_val.dtype, pd.CategoricalDtype):
+        return
 
     def test_impl(S):
         return S.head(3)
@@ -2046,6 +2073,9 @@ def test_series_head(series_val, memory_leak_check):
 def test_series_tail(series_val, memory_leak_check):
     # not supported for list(string) and array(item)
     if isinstance(series_val.values[0], list):
+        return
+    # categories to be handled separately
+    if isinstance(series_val.dtype, pd.CategoricalDtype):
         return
 
     def test_impl(S):
@@ -2174,6 +2204,10 @@ def test_series_argsort(series_val, memory_leak_check):
 
     # not supported for Decimal yet, TODO: support and test
     if isinstance(series_val.values[0], Decimal):
+        return
+
+    # categories to be handled separately
+    if isinstance(series_val.dtype, pd.CategoricalDtype):
         return
 
     def test_impl(A):
@@ -2325,6 +2359,10 @@ def test_series_unique(series_val, memory_leak_check):
     # np.testing.assert_array_equal() throws division by zero for bool arrays
     # with nans for some reason
     if series_val.dtype == np.dtype("O") and series_val.hasnans:
+        return
+
+    # categories to be handled separately
+    if isinstance(series_val.dtype, pd.CategoricalDtype):
         return
 
     # BooleanArray can't be key in shuffle, TODO: handle
