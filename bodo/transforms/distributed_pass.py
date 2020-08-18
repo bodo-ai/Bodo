@@ -973,10 +973,6 @@ class DistributedPass:
             return [assign]
 
         if fdef == ("dist_return", "bodo.libs.distributed_api"):
-            # always rebalance returned distributed arrays
-            # TODO: need different flag for 1D_Var return (distributed_var)?
-            # TODO: rebalance strings?
-            # return [assign]  # self._run_call_rebalance_array(lhs, assign, rhs.args)
             assign.value = rhs.args[0]
             return [assign]
 
@@ -1998,7 +1994,7 @@ class DistributedPass:
             # setitem_assign = ir.Assign(setitem_call, err_var, loc)
             # out.append(setitem_assign)
 
-        elif (self._is_1D_arr(arr.name) or self._is_1D_Var_arr(arr.name)) and (
+        elif self._is_1D_or_1D_Var_arr(arr.name) and (
             is_expr(node, "getitem") or is_expr(node, "static_getitem")
         ):
             is_multi_dim = False
@@ -2012,6 +2008,7 @@ class DistributedPass:
                 is_multi_dim = True
 
             index_typ = self.typemap[index_var.name]
+
             # no need for transformation for whole slices
             if guard(is_whole_slice, self.typemap, self.func_ir, index_var) or guard(
                 is_slice_equiv_arr, arr, index_var, self.func_ir, equiv_set
@@ -2035,8 +2032,6 @@ class DistributedPass:
                 equiv_set,
                 accept_stride=True,
             ):
-                # FIXME: we use rebalance array to handle the output array
-                # TODO: convert to neighbor exchange
                 # on each processor, the slice has to start from an offset:
                 # |step-(start%step)|
                 in_arr = full_node.value.value
@@ -2050,11 +2045,6 @@ class DistributedPass:
                 out += compile_func_single_block(
                     f, [in_arr, start_var, step], None, self
                 )
-                imb_arr = out[-1].target
-
-                # call rebalance
-                self._dist_analysis.array_dists[imb_arr.name] = Distribution.OneD_Var
-                out += self._run_call_rebalance_array(lhs.name, full_node, [imb_arr])
                 out[-1].target = lhs
 
             # general slice access like A[3:7]
