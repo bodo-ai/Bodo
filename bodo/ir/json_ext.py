@@ -59,7 +59,12 @@ ll.add_symbol("json_file_chunk_reader", json_cpp.json_file_chunk_reader)
 json_file_chunk_reader = types.ExternalFunction(
     "json_file_chunk_reader",
     bodo.ir.connector.stream_reader_type(
-        types.voidptr, types.bool_, types.bool_, types.int64, types.voidptr
+        types.voidptr,
+        types.bool_,
+        types.bool_,
+        types.int64,
+        types.voidptr,
+        types.voidptr,
     ),
 )
 
@@ -205,10 +210,16 @@ def _gen_json_reader_py(
         compression = compression
 
     func_text = "def json_reader_py(fname):\n"
+    func_text += "  is_s3_url = fname.startswith('s3://')\n"
+    func_text += "  bucket_region = ''\n"
+    # if it's an s3 url, get the region and pass it into the c++ code
+    func_text += "  if is_s3_url:\n"
+    func_text += "    with objmode(bucket_region='unicode_type'):\n"
+    func_text += "      bucket_region = bodo.io.fs_io.get_s3_bucket_region(fname)\n"
     func_text += (
         "  f_reader = json_file_chunk_reader(bodo.libs.str_ext.unicode_to_utf8(fname), "
     )
-    func_text += "    {}, {}, -1, bodo.libs.str_ext.unicode_to_utf8('{}'))\n".format(
+    func_text += "    {}, {}, -1, bodo.libs.str_ext.unicode_to_utf8('{}'), bodo.libs.str_ext.unicode_to_utf8(bucket_region) )\n".format(
         lines, parallel, compression
     )
     func_text += "  with objmode({}):\n".format(typ_strs)

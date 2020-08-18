@@ -1289,10 +1289,11 @@ extern "C" PyObject *csv_file_chunk_reader(const char *fname, bool is_parallel,
 
 extern "C" PyObject *json_file_chunk_reader(const char *fname, bool lines,
                                             bool is_parallel, int64_t nrows,
-                                            const char *compression) {
+                                            const char *compression,
+                                            const char *bucket_region) {
     // TODO nrows not used??
     return file_chunk_reader(fname, "json", is_parallel, 0, nrows, lines, false,
-                             compression, "");
+                             compression, bucket_region);
 }
 
 // NOTE: some old testing code that is commented out due to

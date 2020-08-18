@@ -47,7 +47,8 @@ extern "C" PyObject *csv_file_chunk_reader(const char *fname, bool is_parallel,
  **/
 extern "C" PyObject *json_file_chunk_reader(const char *fname, bool lines,
                                             bool is_parallel, int64_t nrows,
-                                            const char *compression);
+                                            const char *compression,
+                                            const char *bucket_region);
 
 /**
  * Split string into chunks and return a file-like object per rank. The returned
