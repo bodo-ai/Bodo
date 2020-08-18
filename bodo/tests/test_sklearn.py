@@ -1,16 +1,22 @@
 # Copied and adapted from https://github.com/scikit-learn/scikit-learn/blob/master/sklearn/ensemble/tests/test_forest.py
 
 import numpy as np
+import pandas as pd
 import bodo
 from bodo.tests.utils import (
     check_func,
     _get_dist_arg,
 )
 import pytest
+import random
 
 from sklearn import datasets
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.utils.validation import check_random_state
+
+from sklearn.metrics import precision_score, recall_score, f1_score
+
+# ---------------------- RandomForestClassifier tests ----------------------
 
 # toy sample
 X = [[-2, -1], [-1, -1], [-1, -2], [1, 1], [1, 2], [2, 1]]
@@ -25,6 +31,21 @@ rng = check_random_state(0)
 perm = rng.permutation(iris.target.size)
 iris.data = iris.data[perm]
 iris.target = iris.target[perm]
+
+
+def test_simple_pandas_input():
+    """Check classification against sklearn with toy data from pandas"""
+
+    def impl(X, y, T):
+        m = RandomForestClassifier(n_estimators=10, random_state=57)
+        m.fit(X, y)
+        return m.predict(T)
+
+    train = pd.DataFrame({"A": range(20), "B": range(100, 120)})
+    train_labels = pd.Series(range(20))
+    predict_test = pd.DataFrame({"A": range(10), "B": range(100, 110)})
+
+    check_func(impl, (train, train_labels, predict_test))
 
 
 def test_classification_toy():
@@ -196,3 +217,45 @@ def test_multioutput_string():
     )
 
     # TODO sklearn test does more stuff that we don't support currently
+
+# ---------------------- sklearn.metrics score tests ----------------------
+
+def gen_random(n, true_chance, return_arrays=True):
+    random.seed(5)
+    y_true = [random.randint(-3, 3) for _ in range(n)]
+    valid_cats = set(y_true)
+    y_pred = []
+    for i in range(n):
+        if random.random() < true_chance:
+            y_pred.append(y_true[i])
+        else:
+            y_pred.append(random.choice(list(valid_cats - {y_true[i]})))
+    if return_arrays:
+        return [np.array(y_true), np.array(y_pred)]
+    else:
+        return [y_true, y_pred]
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        gen_random(10, 0.5, return_arrays=True),
+        gen_random(50, 0.7, return_arrays=True),
+        gen_random(76, 0.3, return_arrays=False),
+        gen_random(11, 0.43, return_arrays=False),
+    ],
+)
+@pytest.mark.parametrize("average", ["micro", "macro", "weighted", None])
+def test_score(data, average):
+
+    def test_precision(y_true, y_pred, average):
+        return precision_score(y_true, y_pred, average=average)
+
+    def test_recall(y_true, y_pred, average):
+        return recall_score(y_true, y_pred, average=average)
+
+    def test_f1(y_true, y_pred, average):
+        return f1_score(y_true, y_pred, average=average)
+
+    check_func(test_precision, tuple(data + [average]), is_out_distributed=False)
+    check_func(test_recall, tuple(data + [average]), is_out_distributed=False)
+    check_func(test_f1, tuple(data + [average]), is_out_distributed=False)

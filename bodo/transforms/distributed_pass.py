@@ -10,6 +10,10 @@ from collections import defaultdict
 import math
 import numpy as np
 import numba
+try:
+    import sklearn
+except:
+    pass
 from numba.core import ir, ir_utils, postproc, types
 from bodo.utils.typing import list_cumulative
 from numba.core.ir_utils import (
@@ -413,6 +417,93 @@ class DistributedPass:
                 )
                 return compile_func_single_block(
                     f, [model] + rhs.args[:2], assign.target, self
+                )
+
+        if func_mod == "sklearn.metrics._classification" and func_name == "precision_score":
+            if self._is_1D_arr(rhs.args[0].name) or self._is_1D_Var_arr(
+                rhs.args[0].name
+            ):
+                rhs = assign.value
+                kws = dict(rhs.kws)
+                nodes = []
+
+                y_true = get_call_expr_arg("sklearn.metrics.precision_score", rhs.args, kws, 0, "y_true")
+                y_pred = get_call_expr_arg("sklearn.metrics.precision_score", rhs.args, kws, 1, "y_pred")
+
+                # TODO other arguments
+                average_var = ir.Var(
+                    assign.target.scope, mk_unique_var("precision_score_average"), rhs.loc
+                )
+                nodes.append(
+                    ir.Assign(ir.Const("binary", rhs.loc), average_var, rhs.loc)
+                )
+                self.typemap[average_var.name] = types.StringLiteral("binary")
+                # average cannot be specified positionally
+                average = get_call_expr_arg(
+                    "precision_score", rhs.args, kws, 1e6, "average", average_var
+                )
+
+                f = lambda y_true, y_pred, average: sklearn.metrics.precision_score(y_true, y_pred, average=average, _is_data_distributed=True)
+                return nodes + compile_func_single_block(
+                    f, [y_true, y_pred, average], assign.target, self, extra_globals={"sklearn": sklearn}
+                )
+
+        if func_mod == "sklearn.metrics._classification" and func_name == "recall_score":
+            if self._is_1D_arr(rhs.args[0].name) or self._is_1D_Var_arr(
+                rhs.args[0].name
+            ):
+                rhs = assign.value
+                kws = dict(rhs.kws)
+                nodes = []
+
+                y_true = get_call_expr_arg("sklearn.metrics.recall_score", rhs.args, kws, 0, "y_true")
+                y_pred = get_call_expr_arg("sklearn.metrics.recall_score", rhs.args, kws, 1, "y_pred")
+
+                # TODO other arguments
+                average_var = ir.Var(
+                    assign.target.scope, mk_unique_var("recall_score_average"), rhs.loc
+                )
+                nodes.append(
+                    ir.Assign(ir.Const("binary", rhs.loc), average_var, rhs.loc)
+                )
+                self.typemap[average_var.name] = types.StringLiteral("binary")
+                # average cannot be specified positionally
+                average = get_call_expr_arg(
+                    "recall_score", rhs.args, kws, 1e6, "average", average_var
+                )
+
+                f = lambda y_true, y_pred, average: sklearn.metrics.recall_score(y_true, y_pred, average=average, _is_data_distributed=True)
+                return nodes + compile_func_single_block(
+                    f, [y_true, y_pred, average], assign.target, self, extra_globals={"sklearn": sklearn}
+                )
+
+        if func_mod == "sklearn.metrics._classification" and func_name == "f1_score":
+            if self._is_1D_arr(rhs.args[0].name) or self._is_1D_Var_arr(
+                rhs.args[0].name
+            ):
+                rhs = assign.value
+                kws = dict(rhs.kws)
+                nodes = []
+
+                y_true = get_call_expr_arg("sklearn.metrics.f1_score", rhs.args, kws, 0, "y_true")
+                y_pred = get_call_expr_arg("sklearn.metrics.f1_score", rhs.args, kws, 1, "y_pred")
+
+                # TODO other arguments
+                average_var = ir.Var(
+                    assign.target.scope, mk_unique_var("f1_score_average"), rhs.loc
+                )
+                nodes.append(
+                    ir.Assign(ir.Const("binary", rhs.loc), average_var, rhs.loc)
+                )
+                self.typemap[average_var.name] = types.StringLiteral("binary")
+                # average cannot be specified positionally
+                average = get_call_expr_arg(
+                    "f1_score", rhs.args, kws, 1e6, "average", average_var
+                )
+
+                f = lambda y_true, y_pred, average: sklearn.metrics.f1_score(y_true, y_pred, average=average, _is_data_distributed=True)
+                return nodes + compile_func_single_block(
+                    f, [y_true, y_pred, average], assign.target, self, extra_globals={"sklearn": sklearn}
                 )
 
         # divide 1D alloc

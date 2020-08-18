@@ -636,6 +636,22 @@ class DistributedAnalysis:
                 self._meet_array_dists(rhs.args[0].name, rhs.args[1].name, array_dists)
             return
 
+        if func_mod == "sklearn.metrics._classification":
+            if func_name in {"precision_score", "recall_score", "f1_score"}:
+                # output is always replicated, and the output can be an array
+                # if average=None so we have to set it
+                # TODO this shouldn't be done if output is float?
+                self._set_var_dist(lhs, array_dists, Distribution.REP)
+                dist_arg0 = is_distributable_typ(self.typemap[rhs.args[0].name])
+                dist_arg1 = is_distributable_typ(self.typemap[rhs.args[1].name])
+                if dist_arg0 and dist_arg1:
+                    self._meet_array_dists(rhs.args[0].name, rhs.args[1].name, array_dists)
+                elif not dist_arg0 and dist_arg1:
+                    self._set_var_dist(rhs.args[1].name, array_dists, Distribution.REP)
+                elif not dist_arg1 and dist_arg0:
+                    self._set_var_dist(rhs.args[0].name, array_dists, Distribution.REP)
+            return
+
         if is_alloc_callname(func_name, func_mod):
             if lhs not in array_dists:
                 array_dists[lhs] = Distribution.OneD

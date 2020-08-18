@@ -1,6 +1,7 @@
 """Support sklearn.ensemble.RandomForestClassifier using object mode of Numba
 """
 import numpy as np
+import pandas as pd
 import numba
 from numba.core import types
 from numba.extending import (
@@ -14,13 +15,20 @@ from numba.extending import (
     typeof_impl,
 )
 
-from bodo.utils.typing import is_overload_constant_str, get_overload_const_str
+from bodo.utils.typing import (
+    is_overload_constant_str,
+    get_overload_const_str,
+    is_overload_true,
+    is_overload_false,
+    is_overload_none,
+)
 
 import bodo
-from bodo.libs.distributed_api import get_node_portion
+from bodo.libs.distributed_api import dist_reduce, Reduce_Type, get_node_portion
 from mpi4py import MPI
 import itertools
 import sklearn.ensemble
+import sklearn.metrics
 
 
 def model_fit(m, X, y):
@@ -217,7 +225,11 @@ def overload_model_predict(m, X):
         with numba.objmode(result="int64[:]"):
             # currently we do data-parallel prediction
             m.n_jobs = 1
-            result = m.predict(X).astype(np.int64).flatten()
+            if len(X) == 0:
+                # TODO If X is replicated this should be an error (same as sklearn)
+                result = np.empty(0, dtype=np.int64)
+            else:
+                result = m.predict(X).astype(np.int64).flatten()
         return result
 
     return _model_predict_impl
@@ -249,3 +261,265 @@ def overload_model_score(
         return result.mean()
 
     return _model_score_impl
+
+
+def precision_recall_fscore_support_helper(MCM, average):
+    def multilabel_confusion_matrix(
+        y_true, y_pred, *, sample_weight=None, labels=None, samplewise=False
+    ):
+        return MCM
+
+    # Dynamic monkey patching: here we temporarily swap scikit-learn's
+    # implementation of multilabel_confusion_matrix function for our own. This
+    # is done in order to allow us to call sklearn's precision_recall_fscore_support
+    # function and thus reuse most of their implementation.
+    # The downside of this approach is that it could break in the future with
+    # changes in scikit-learn, since we call precision_recall_fscore_support
+    # with dummy values, but maybe it is easy to make more robust.
+    f = sklearn.metrics._classification.multilabel_confusion_matrix
+    result = -1.0
+    try:
+        sklearn.metrics._classification.multilabel_confusion_matrix = (
+            multilabel_confusion_matrix
+        )
+
+        result = sklearn.metrics._classification.precision_recall_fscore_support(
+            [], [], average=average
+        )
+    finally:
+        sklearn.metrics._classification.multilabel_confusion_matrix = f
+    return result
+
+
+@numba.njit
+def precision_recall_fscore_parallel(y_true, y_pred, operation, average="binary"):
+    labels = bodo.libs.array_kernels.unique_parallel(y_true)
+    labels = bodo.allgatherv(labels, False)
+    labels = pd.Series(labels).sort_values().values
+
+    nlabels = len(labels)
+    # true positive for each label
+    tp_sum = np.zeros(nlabels, np.int64)
+    # count of label appearance in y_true
+    true_sum = np.zeros(nlabels, np.int64)
+    # count of label appearance in y_pred
+    pred_sum = np.zeros(nlabels, np.int64)
+    label_dict = bodo.hiframes.pd_categorical_ext.get_label_dict_from_categories(labels)
+    for i in range(len(y_true)):
+        label = label_dict[y_pred[i]]
+        pred_sum[label] += 1
+        true_sum[label_dict[y_true[i]]] += 1
+        if y_true[i] == y_pred[i]:
+            tp_sum[label] += 1
+
+    # gather global tp_sum, true_sum and pred_sum on every process
+    tp_sum = dist_reduce(tp_sum, np.int32(Reduce_Type.Sum.value))
+    true_sum = dist_reduce(true_sum, np.int32(Reduce_Type.Sum.value))
+    pred_sum = dist_reduce(pred_sum, np.int32(Reduce_Type.Sum.value))
+
+    # see https://github.com/scikit-learn/scikit-learn/blob/e0abd262ea3328f44ae8e612f5b2f2cece7434b6/sklearn/metrics/_classification.py#L526
+    fp = pred_sum - tp_sum
+    fn = true_sum - tp_sum
+    tp = tp_sum
+    # see https://github.com/scikit-learn/scikit-learn/blob/e0abd262ea3328f44ae8e612f5b2f2cece7434b6/sklearn/metrics/_classification.py#L541
+    tn = y_true.shape[0] - tp - fp - fn
+
+    with numba.objmode(result="float64[:]"):
+        # see https://github.com/scikit-learn/scikit-learn/blob/e0abd262ea3328f44ae8e612f5b2f2cece7434b6/sklearn/metrics/_classification.py#L543
+        MCM = np.array([tn, fp, fn, tp]).T.reshape(-1, 2, 2)
+        if operation == "precision":
+            result = precision_recall_fscore_support_helper(MCM, average)[0]
+        elif operation == "recall":
+            result = precision_recall_fscore_support_helper(MCM, average)[1]
+        elif operation == "f1":
+            result = precision_recall_fscore_support_helper(MCM, average)[2]
+        if average is not None:
+            # put result in an array so that the return type of this function
+            # is array of floats regardless of value of 'average'
+            result = np.array([result])
+
+    return result
+
+
+@overload(sklearn.metrics.precision_score, no_unliteral=True)
+def overload_precision_score(
+    y_true, y_pred, average="binary", _is_data_distributed=False
+):
+
+    if is_overload_none(average):
+        # this case returns an array of floats, one for each label
+        if is_overload_false(_is_data_distributed):
+
+            def _precision_score_impl(
+                y_true, y_pred, average="binary", _is_data_distributed=False
+            ):
+                # user could pass lists and numba throws error if passing lists
+                # to object mode, so we convert to arrays
+                y_true = bodo.utils.conversion.coerce_to_array(y_true)
+                y_pred = bodo.utils.conversion.coerce_to_array(y_pred)
+                with numba.objmode(score="float64[:]"):
+                    score = sklearn.metrics.precision_score(
+                        y_true, y_pred, average=average
+                    )
+                return score
+
+            return _precision_score_impl
+        else:
+
+            def _precision_score_impl(
+                y_true, y_pred, average="binary", _is_data_distributed=False
+            ):
+                return precision_recall_fscore_parallel(
+                    y_true, y_pred, "precision", average=average
+                )
+
+            return _precision_score_impl
+    else:
+        # this case returns one float
+        if is_overload_false(_is_data_distributed):
+
+            def _precision_score_impl(
+                y_true, y_pred, average="binary", _is_data_distributed=False
+            ):
+                # user could pass lists and numba throws error if passing lists
+                # to object mode, so we convert to arrays
+                y_true = bodo.utils.conversion.coerce_to_array(y_true)
+                y_pred = bodo.utils.conversion.coerce_to_array(y_pred)
+                with numba.objmode(score="float64"):
+                    score = sklearn.metrics.precision_score(
+                        y_true, y_pred, average=average
+                    )
+                return score
+
+            return _precision_score_impl
+        else:
+
+            def _precision_score_impl(
+                y_true, y_pred, average="binary", _is_data_distributed=False
+            ):
+                score = precision_recall_fscore_parallel(
+                    y_true, y_pred, "precision", average=average
+                )
+                return score[0]
+
+            return _precision_score_impl
+
+
+@overload(sklearn.metrics.recall_score, no_unliteral=True)
+def overload_recall_score(y_true, y_pred, average="binary", _is_data_distributed=False):
+
+    if is_overload_none(average):
+        # this case returns an array of floats, one for each label
+        if is_overload_false(_is_data_distributed):
+
+            def _recall_score_impl(
+                y_true, y_pred, average="binary", _is_data_distributed=False
+            ):
+                # user could pass lists and numba throws error if passing lists
+                # to object mode, so we convert to arrays
+                y_true = bodo.utils.conversion.coerce_to_array(y_true)
+                y_pred = bodo.utils.conversion.coerce_to_array(y_pred)
+                with numba.objmode(score="float64[:]"):
+                    score = sklearn.metrics.recall_score(
+                        y_true, y_pred, average=average
+                    )
+                return score
+
+            return _recall_score_impl
+        else:
+
+            def _recall_score_impl(
+                y_true, y_pred, average="binary", _is_data_distributed=False
+            ):
+                return precision_recall_fscore_parallel(
+                    y_true, y_pred, "recall", average=average
+                )
+
+            return _recall_score_impl
+    else:
+        # this case returns one float
+        if is_overload_false(_is_data_distributed):
+
+            def _recall_score_impl(
+                y_true, y_pred, average="binary", _is_data_distributed=False
+            ):
+                # user could pass lists and numba throws error if passing lists
+                # to object mode, so we convert to arrays
+                y_true = bodo.utils.conversion.coerce_to_array(y_true)
+                y_pred = bodo.utils.conversion.coerce_to_array(y_pred)
+                with numba.objmode(score="float64"):
+                    score = sklearn.metrics.recall_score(
+                        y_true, y_pred, average=average
+                    )
+                return score
+
+            return _recall_score_impl
+        else:
+
+            def _recall_score_impl(
+                y_true, y_pred, average="binary", _is_data_distributed=False
+            ):
+                score = precision_recall_fscore_parallel(
+                    y_true, y_pred, "recall", average=average
+                )
+                return score[0]
+
+            return _recall_score_impl
+
+
+@overload(sklearn.metrics.f1_score, no_unliteral=True)
+def overload_f1_score(y_true, y_pred, average="binary", _is_data_distributed=False):
+
+    if is_overload_none(average):
+        # this case returns an array of floats, one for each label
+        if is_overload_false(_is_data_distributed):
+
+            def _f1_score_impl(
+                y_true, y_pred, average="binary", _is_data_distributed=False
+            ):
+                # user could pass lists and numba throws error if passing lists
+                # to object mode, so we convert to arrays
+                y_true = bodo.utils.conversion.coerce_to_array(y_true)
+                y_pred = bodo.utils.conversion.coerce_to_array(y_pred)
+                with numba.objmode(score="float64[:]"):
+                    score = sklearn.metrics.f1_score(y_true, y_pred, average=average)
+                return score
+
+            return _f1_score_impl
+        else:
+
+            def _f1_score_impl(
+                y_true, y_pred, average="binary", _is_data_distributed=False
+            ):
+                return precision_recall_fscore_parallel(
+                    y_true, y_pred, "f1", average=average
+                )
+
+            return _f1_score_impl
+    else:
+        # this case returns one float
+        if is_overload_false(_is_data_distributed):
+
+            def _f1_score_impl(
+                y_true, y_pred, average="binary", _is_data_distributed=False
+            ):
+                # user could pass lists and numba throws error if passing lists
+                # to object mode, so we convert to arrays
+                y_true = bodo.utils.conversion.coerce_to_array(y_true)
+                y_pred = bodo.utils.conversion.coerce_to_array(y_pred)
+                with numba.objmode(score="float64"):
+                    score = sklearn.metrics.f1_score(y_true, y_pred, average=average)
+                return score
+
+            return _f1_score_impl
+        else:
+
+            def _f1_score_impl(
+                y_true, y_pred, average="binary", _is_data_distributed=False
+            ):
+                score = precision_recall_fscore_parallel(
+                    y_true, y_pred, "f1", average=average
+                )
+                return score[0]
+
+            return _f1_score_impl
