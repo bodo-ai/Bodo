@@ -1013,6 +1013,16 @@ class RangeIndexType(types.IterableType, types.ArrayCompatible):
     def numpy_type_name(self):
         return str(self.dtype)
 
+    def unify(self, typingctx, other):
+        """unify RangeIndexType with equivalent NumericIndexType
+        """
+        if isinstance(other, NumericIndexType):
+            name_typ = self.name_typ.unify(typingctx, other.name_typ)
+            # TODO: test and support name type differences properly
+            if name_typ is None:
+                name_typ = types.none
+            return NumericIndexType(types.int64, name_typ)
+
 
 @typeof_impl.register(pd.RangeIndex)
 def typeof_pd_range_index(val, c):
@@ -2087,3 +2097,11 @@ def is_index_type(t):
             TimedeltaIndexType,
         ),
     )
+
+
+@lower_cast(RangeIndexType, NumericIndexType)
+def cast_range_index_to_int_index(context, builder, fromty, toty, val):
+    """cast RangeIndex to equivalent Int64Index
+    """
+    f = lambda I: init_numeric_index(np.arange(I._start, I._stop, I._step))
+    return context.compile_internal(builder, f, toty(fromty), [val])

@@ -491,32 +491,27 @@ def if_series_to_array_type(typ):
     return typ
 
 
-@numba.njit
-def convert_index_to_int64(S):  # pragma: no cover
-    # convert Series with none index to numeric index
-    data = bodo.hiframes.pd_series_ext.get_series_data(S)
-    index_arr = np.arange(len(data))
-    name = bodo.hiframes.pd_series_ext.get_series_name(S)
-    return bodo.hiframes.pd_series_ext.init_series(
-        data, bodo.utils.conversion.convert_to_index(index_arr), name
-    )
-
-
-# cast Series(int8) to Series(cat) for init_series() in test_csv_cat1
-# TODO: separate array type for Categorical data
 @lower_cast(SeriesType, SeriesType)
 def cast_series(context, builder, fromty, toty, val):
-    # convert None index to Integer index if everything else is same
+    # convert RangeIndex to NumericIndex if everything else is same
     if (
         fromty.copy(index=toty.index) == toty
-        and fromty.index == types.none
-        and toty.index
-        == bodo.hiframes.pd_index_ext.NumericIndexType(types.int64, types.none)
+        and isinstance(fromty.index, bodo.hiframes.pd_index_ext.RangeIndexType)
+        and isinstance(toty.index, bodo.hiframes.pd_index_ext.NumericIndexType)
     ):
-        cn_typ = context.typing_context.resolve_value_type(convert_index_to_int64)
-        cn_sig = cn_typ.get_call_type(context.typing_context, (fromty,), {})
-        cn_impl = context.get_function(cn_typ, cn_sig)
-        return cn_impl(builder, (val,))
+
+        series_payload = get_series_payload(context, builder, fromty, val)
+        new_index = context.cast(
+            builder, series_payload.index, fromty.index, toty.index
+        )
+
+        # increase refcount of stored values
+        context.nrt.incref(builder, fromty.data, series_payload.data)
+        context.nrt.incref(builder, fromty.name_typ, series_payload.name)
+
+        return construct_series(
+            context, builder, toty, series_payload.data, new_index, series_payload.name
+        )
 
     return val
 
