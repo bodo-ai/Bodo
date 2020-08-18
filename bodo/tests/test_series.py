@@ -2948,7 +2948,7 @@ def test_series_unsupported_error_checking(memory_leak_check):
         return S.to_hdf("data.dat")
 
     with pytest.raises(BodoError, match="not supported yet"):
-        bodo.jit(test_attr)(pd.Series([1, 2]))
+        bodo.jit(test_method)(pd.Series([1, 2]))
 
 
 class TestSeries(unittest.TestCase):
