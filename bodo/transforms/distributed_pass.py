@@ -71,6 +71,7 @@ from bodo.utils.transform import (
     get_call_expr_arg,
     replace_func,
     ReplaceFunc,
+    get_const_value_inner,
 )
 from bodo.utils.utils import (
     is_alloc_callname,
@@ -917,8 +918,20 @@ class DistributedPass:
             # FIXME: assuming start == 0 and step == 1
             # TODO: support start != 0 and step != 1 in parallel mode
             if (
-                guard(find_const, self.func_ir, rhs.args[0]) != 0
-                or guard(find_const, self.func_ir, rhs.args[2]) != 1
+                guard(
+                    get_const_value_inner,
+                    self.func_ir,
+                    rhs.args[0],
+                    typemap=self.typemap,
+                )
+                != 0
+                or guard(
+                    get_const_value_inner,
+                    self.func_ir,
+                    rhs.args[2],
+                    typemap=self.typemap,
+                )
+                != 1
             ):
                 raise BodoError(
                     "creating parallel RangeIndex() with start != 0 and/or step != 1 not supported yet"
