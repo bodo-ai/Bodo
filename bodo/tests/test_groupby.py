@@ -2920,14 +2920,3 @@ def test_crosstab_parallel(datapath):
 
     bodo_func = bodo.jit(pivots={"pt": ["small", "large"]})(impl)
     assert bodo_func() == impl()
-
-def test_groupby_unsupported_error_checking():
-    """ Test that a Bodo error is raised for unsupported
-    groupby methods
-    """
-    def test_method(df):
-        return df.groupby("a").sample(n=1, random_state=1)
-
-    with pytest.raises(BodoError, match="not supported yet"):
-        bodo.jit(test_method)(df = pd.DataFrame(
-            {"a": ["red"] * 2 + ["blue"] * 2 + ["black"] * 2, "b": range(6)}))

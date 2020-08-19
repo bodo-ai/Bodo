@@ -842,68 +842,49 @@ def lower_crosstab_dummy(context, builder, sig, args):
 
 
 groupby_unsupported = (
-    "pd.core.groupby.GroupBy.__iter__", 
-    "pd.core.groupby.GroupBy.all",
     "pd.core.groupby.DataFrameGroupBy.all",
-    "pd.core.groupby.GroupBy.any",
     "pd.core.groupby.DataFrameGroupBy.any",
-    "pd.core.groupby.GroupBy.apply",
-    "pd.core.groupby.GroupBy.backfill",
+    "pd.core.groupby.DataFrameGroupBy.apply",
     "pd.core.groupby.DataFrameGroupBy.backfill",
     "pd.core.groupby.DataFrameGroupBy.bfill",
     "pd.core.groupby.DataFrameGroupBy.boxplot",
     "pd.core.groupby.DataFrameGroupBy.corr",
+    "pd.core.groupby.DataFrameGroupBy.corrwith",
+    "pd.core.groupby.DataFrameGroupBy.cumcount",
+    "pd.core.groupby.DataFrameGroupBy.cummax",
     "pd.core.groupby.DataFrameGroupBy.cov",
     "pd.core.groupby.DataFrameGroupBy.diff",
     "pd.core.groupby.DataFrameGroupBy.fillna",
     "pd.core.groupby.DataFrameGroupBy.hist",
-    "pd.core.groupby.SeriesGroupBy.hist",
     "pd.core.groupby.DataFrameGroupBy.idxmin",
-    "pd.core.groupby.DataFrameGroupBy.corrwith",
-    "pd.core.groupby.GroupBy.cumcount",
-    "pd.core.groupby.DataFrameGroupBy.cumcount",
-    "pd.core.groupby.GroupBy.cummax",
     "pd.core.groupby.DataFrameGroupBy.mad",
     "pd.core.groupby.DataFrameGroupBy.skew",
     "pd.core.groupby.DataFrameGroupBy.take",
-    "pd.core.groupby.DataFrameGroupBy.cummax",
-    "pd.core.groupby.GroupBy.cummin",
     "pd.core.groupby.DataFrameGroupBy.cummin",
-    "pd.core.groupby.GroupBy.cumprod",
     "pd.core.groupby.DataFrameGroupBy.cumprod",
     "pd.core.groupby.DataFrameGroupBy.describe",
-    "pd.core.groupby.GroupBy.ffill",
     "pd.core.groupby.DataFrameGroupBy.ffill",
     "pd.core.groupby.DataFrameGroupBy.filter",
-    "pd.core.groupby.GroupBy.get_group",
-    "pd.core.groupby.GroupBy.head",
-    "pd.core.groupby.SeriesGroupBy.is_monotonic_decreasing",
-    "pd.core.groupby.SeriesGroupBy.is_monotonic_increasing",
-    "pd.core.groupby.GroupBy.ngroup",
-    "pd.core.groupby.SeriesGroupBy.nlargest",
-    "pd.core.groupby.SeriesGroupBy.nsmallest",
-    "pd.core.groupby.GroupBy.nth",
-    "pd.core.groupby.GroupBy.ohlc",
-    "pd.core.groupby.GroupBy.pad",
+    "pd.core.groupby.DataFrameGroupBy.get_group",
+    "pd.core.groupby.DataFrameGroupBy.head",
+    "pd.core.groupby.DataFrameGroupBy.ngroup",
+    "pd.core.groupby.DataFrameGroupBy.nth",
+    "pd.core.groupby.DataFrameGroupBy.ohlc",
     "pd.core.groupby.DataFrameGroupBy.pad",
-    "pd.core.groupby.GroupBy.pct_change",
     "pd.core.groupby.DataFrameGroupBy.pct_change",
-    "pd.core.groupby.GroupBy.pipe",
+    "pd.core.groupby.DataFrameGroupBy.pipe",
+    "pd.core.groupby.DataFrameGroupBy.plot",
     "pd.core.groupby.DataFrameGroupBy.quantile",
-    "pd.core.groupby.GroupBy.rank",
     "pd.core.groupby.DataFrameGroupBy.rank",
     "pd.core.groupby.DataFrameGroupBy.resample",
+    "pd.core.groupby.DataFrameGroupBy.rolling",
     "pd.core.groupby.DataFrameGroupBy.sample",
-    "pd.core.groupby.GroupBy.sem",
+    "pd.core.groupby.DataFrameGroupBy.sem",
     "pd.core.groupby.DataFrameGroupBy.shift",
-    "pd.core.groupby.GroupBy.size",
     "pd.core.groupby.DataFrameGroupBy.size",
-    "pd.core.groupby.GroupBy.tail",
+    "pd.core.groupby.DataFrameGroupBy.tail",
     "pd.core.groupby.DataFrameGroupBy.transform",
-    "pd.core.groupby.SeriesGroupBy.transform",
     "pd.core.groupby.DataFrameGroupBy.tshift",
-    "pd.core.groupby.SeriesGroupBy.unique",
-    "pd.core.groupby.SeriesGroupBy.value_counts"
 )
 
 def _install_groupy_unsupported():
@@ -913,7 +894,9 @@ def _install_groupy_unsupported():
 
     for fname in groupby_unsupported:
         func_name = fname.split(".")[-1]
-        overload(func_name)(create_unsupported_overload(fname))
+        overload_method(DataFrameGroupByType, func_name, no_unliteral=True)(
+            create_unsupported_overload(fname)
+        )
 
 
 _install_groupy_unsupported()
