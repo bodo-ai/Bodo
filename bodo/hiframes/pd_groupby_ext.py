@@ -912,7 +912,8 @@ def _install_groupy_unsupported():
     """
 
     for fname in groupby_unsupported:
-        overload(f)(create_unsupported_overload(fname))
+        func_name = fname.split(".")[-1]
+        overload(func_name)(create_unsupported_overload(fname))
 
 
 _install_groupy_unsupported()
