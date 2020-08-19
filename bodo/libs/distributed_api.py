@@ -399,7 +399,7 @@ def copy_gathered_null_bytes(
         curr_tmp_byte += n_bytes
 
 
-@numba.generated_jit(nopython=True)
+@numba.generated_jit(nopython=True, cache=True)
 def gatherv(data, allgather=False, warn_if_rep=True):
     """gathers distributed data into rank 0 or all ranks if 'allgather' is set.
     'warn_if_rep' flag controls if a warning is raised if the input is replicated and
@@ -1815,21 +1815,13 @@ def slice_getitem(arr, slice_index, arr_start, total_len, is_1D):  # pragma: no 
     return arr[slice_index]
 
 
-@overload(slice_getitem, no_unliteral=True)
+@overload(slice_getitem, no_unliteral=True, jit_options={"cache": True})
 def slice_getitem_overload(arr, slice_index, arr_start, total_len, is_1D):
     def getitem_impl(arr, slice_index, arr_start, total_len, is_1D):  # pragma: no cover
         # normalize slice
         slice_index = numba.cpython.unicode._normalize_slice(slice_index, total_len)
         start = slice_index.start
         step = slice_index.step
-
-        # just broadcast from rank 0 in the common case A[:k] (for S.head())
-        n_pes = bodo.libs.distributed_api.get_size()
-        rank_0_portion = bodo.libs.distributed_api.get_node_portion(
-            total_len, n_pes, np.int32(0)
-        )
-        if start == 0 and step == 1 and is_1D and rank_0_portion >= slice_index.stop:
-            return slice_getitem_from_start(arr, slice_index)
 
         offset = (
             0
@@ -1838,8 +1830,7 @@ def slice_getitem_overload(arr, slice_index, arr_start, total_len, is_1D):
         )
         new_start = max(arr_start, slice_index.start) - arr_start + offset
         new_stop = max(slice_index.stop - arr_start, 0)
-        my_arr = arr[new_start:new_stop:step]
-        return bodo.libs.distributed_api.allgatherv(my_arr)
+        return bodo.utils.conversion.ensure_contig_if_np(arr[new_start:new_stop:step])
 
     return getitem_impl
 

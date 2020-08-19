@@ -292,7 +292,7 @@ def overload_dataframe_head(df, n=5):
     # call head() on column Series
     data_args = ", ".join("df['{}'].head(n).values".format(c) for c in df.columns)
     header = "def impl(df, n=5):\n"
-    index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)[:n]"
+    index = "bodo.allgatherv(bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)[:n], False)"
     return _gen_init_df(header, df.columns, data_args, index)
 
 
@@ -301,7 +301,7 @@ def overload_dataframe_tail(df, n=5):
     # call tail() on column Series
     data_args = ", ".join("df['{}'].tail(n).values".format(c) for c in df.columns)
     header = "def impl(df, n=5):\n"
-    index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)[-n:]"
+    index = "bodo.allgatherv(bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)[-n:], False)"
     return _gen_init_df(header, df.columns, data_args, index)
 
 

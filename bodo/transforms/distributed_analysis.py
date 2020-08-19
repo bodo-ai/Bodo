@@ -1714,29 +1714,14 @@ class DistributedAnalysis:
 
         # whole slice access, output has same distribution as input
         # for example: A = X[:,5]
-        if guard(
-            is_whole_slice, self.typemap, self.func_ir, index_var
-        ) or guard(
-            is_slice_equiv_arr,
-            inst.target,
-            index_var,
-            self.func_ir,
-            equiv_set,
+        if guard(is_whole_slice, self.typemap, self.func_ir, index_var) or guard(
+            is_slice_equiv_arr, inst.target, index_var, self.func_ir, equiv_set,
         ):
             self._meet_array_dists(lhs, in_var.name, array_dists)
             return
-        # strided slice can be 1D_Var
-        # example: A = X[::2,5]
-        elif guard(
-            is_whole_slice, self.typemap, self.func_ir, index_var, accept_stride=True
-        ) or guard(
-            is_slice_equiv_arr,
-            inst.target,
-            index_var,
-            self.func_ir,
-            equiv_set,
-            accept_stride=True,
-        ):
+        # chunked slice or strided slice can be 1D_Var
+        # examples: A = X[:n//3], A = X[::2,5]
+        elif isinstance(index_typ, types.SliceType):
             # output array is 1D_Var if input array is distributed
             out_dist = self._min_dist(Distribution.OneD_Var, array_dists[in_var.name])
             array_dists[lhs] = out_dist
@@ -1745,18 +1730,10 @@ class DistributedAnalysis:
                 array_dists[in_var.name] = out_dist
             return
 
-        # avoid parallel slice/scalar getitem when inside a parfor
+        # avoid parallel scalar getitem when inside a parfor
         # examples: test_np_dot, logistic_regression_rand
         if self.in_parallel_parfor != -1:
             self._set_REP(inst.list_vars(), array_dists)
-            return
-
-        # output of operations like S.head() is REP since it's a "small" slice
-        # input can remain 1D
-        if isinstance(index_typ, types.SliceType):
-            # TODO: since array and its slice alias, make sure array or its
-            # slice or their aliases are not written to
-            array_dists[lhs] = Distribution.REP
             return
 
         # int index of dist array

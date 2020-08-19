@@ -951,7 +951,9 @@ def overload_series_head(S, n=5):
         arr = bodo.hiframes.pd_series_ext.get_series_data(S)
         index = bodo.hiframes.pd_series_ext.get_series_index(S)
         name = bodo.hiframes.pd_series_ext.get_series_name(S)
-        return bodo.hiframes.pd_series_ext.init_series(arr[:n], index[:n], name)
+        new_data = bodo.allgatherv(arr[:n], False)
+        new_index = bodo.allgatherv(index[:n], False)
+        return bodo.hiframes.pd_series_ext.init_series(new_data, new_index, name)
 
     return impl
 
@@ -962,7 +964,9 @@ def overload_series_tail(S, n=5):
         arr = bodo.hiframes.pd_series_ext.get_series_data(S)
         index = bodo.hiframes.pd_series_ext.get_series_index(S)
         name = bodo.hiframes.pd_series_ext.get_series_name(S)
-        return bodo.hiframes.pd_series_ext.init_series(arr[-n:], index[-n:], name)
+        new_data = bodo.allgatherv(arr[-n:], False)
+        new_index = bodo.allgatherv(index[-n:], False)
+        return bodo.hiframes.pd_series_ext.init_series(new_data, new_index, name)
 
     return impl
 

@@ -2048,9 +2048,7 @@ class DistributedPass:
                 out[-1].target = lhs
 
             # general slice access like A[3:7]
-            elif self._is_REP(lhs.name) and isinstance(index_typ, types.SliceType):
-                # cases like S.head()
-                # bcast if all in rank 0, otherwise gatherv
+            elif isinstance(index_typ, types.SliceType):
                 in_arr = full_node.value.value
                 start_var, nodes = self._get_dist_start_var(
                     in_arr, equiv_set, avail_vars
