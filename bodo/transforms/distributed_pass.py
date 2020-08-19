@@ -913,70 +913,9 @@ class DistributedPass:
         if fdef == ("init_range_index", "bodo.hiframes.pd_index_ext") and (
             self._is_1D_arr(lhs) or self._is_1D_Var_arr(lhs)
         ):
-            assert len(rhs.args) == 4, "invalid init_range_index() call"
-            # parallelize init_range_index() similar to parfors
-            # FIXME: assuming start == 0 and step == 1
-            # TODO: support start != 0 and step != 1 in parallel mode
-            if (
-                guard(
-                    get_const_value_inner,
-                    self.func_ir,
-                    rhs.args[0],
-                    typemap=self.typemap,
-                )
-                != 0
-                or guard(
-                    get_const_value_inner,
-                    self.func_ir,
-                    rhs.args[2],
-                    typemap=self.typemap,
-                )
-                != 1
-            ):
-                raise BodoError(
-                    "creating parallel RangeIndex() with start != 0 and/or step != 1 not supported yet"
-                )
-
-            size_var = rhs.args[1]
-
-            if self._is_1D_arr(lhs):
-                out = []
-                start_var = self._get_1D_start(size_var, avail_vars, out)
-                end_var = self._get_1D_end(size_var, out)
-                self._update_avail_vars(avail_vars, out)
-                rhs.args[0] = start_var
-                rhs.args[1] = end_var
-
-                def impl(start, stop, step, name):
-                    res = bodo.hiframes.pd_index_ext.init_range_index(
-                        start, stop, step, name
-                    )
-                    return res
-
-                return out + compile_func_single_block(
-                    impl, rhs.args, assign.target, self
-                )
-            else:
-                # 1D_Var case
-                assert self._is_1D_Var_arr(lhs)
-                out = []
-                new_size_var = self._get_1D_Var_size(
-                    size_var, equiv_set, avail_vars, out
-                )
-
-                def impl(stop, name):  # pragma: no cover
-                    prefix = bodo.libs.distributed_api.dist_exscan(stop, _op)
-                    return bodo.hiframes.pd_index_ext.init_range_index(
-                        prefix, prefix + stop, 1, name
-                    )
-
-                return out + compile_func_single_block(
-                    impl,
-                    [new_size_var, rhs.args[3]],
-                    assign.target,
-                    self,
-                    extra_globals={"_op": np.int32(Reduce_Type.Sum.value)},
-                )
+            return self._run_call_init_range_index(
+                lhs, assign, rhs.args, avail_vars, equiv_set
+            )
 
         # no need to gather if input data is replicated
         if (
@@ -1059,6 +998,60 @@ class DistributedPass:
                 out[-1].target = assign.target
 
         return out
+
+    def _run_call_init_range_index(self, lhs, assign, args, avail_vars, equiv_set):
+        """transform init_range_index() calls
+        """
+        assert len(args) == 4, "invalid init_range_index() call"
+        # parallelize init_range_index() similar to parfors
+        if (
+            guard(get_const_value_inner, self.func_ir, args[0], typemap=self.typemap,)
+            != 0
+            or guard(
+                get_const_value_inner, self.func_ir, args[2], typemap=self.typemap,
+            )
+            != 1
+        ):
+            raise BodoError(
+                "creating parallel RangeIndex() with start != 0 and/or step != 1 not supported yet"
+            )
+
+        size_var = args[1]
+
+        if self._is_1D_arr(lhs):
+            out = []
+            start_var = self._get_1D_start(size_var, avail_vars, out)
+            end_var = self._get_1D_end(size_var, out)
+            self._update_avail_vars(avail_vars, out)
+            args[0] = start_var
+            args[1] = end_var
+
+            def impl(start, stop, step, name):
+                res = bodo.hiframes.pd_index_ext.init_range_index(
+                    start, stop, step, name
+                )
+                return res
+
+            return out + compile_func_single_block(impl, args, assign.target, self)
+        else:
+            # 1D_Var case
+            assert self._is_1D_Var_arr(lhs)
+            out = []
+            new_size_var = self._get_1D_Var_size(size_var, equiv_set, avail_vars, out)
+
+            def impl(stop, name):  # pragma: no cover
+                prefix = bodo.libs.distributed_api.dist_exscan(stop, _op)
+                return bodo.hiframes.pd_index_ext.init_range_index(
+                    prefix, prefix + stop, 1, name
+                )
+
+            return out + compile_func_single_block(
+                impl,
+                [new_size_var, args[3]],
+                assign.target,
+                self,
+                extra_globals={"_op": np.int32(Reduce_Type.Sum.value)},
+            )
 
     def _run_call_np(self, lhs, func_name, assign, args, kws, equiv_set):
         """transform np.func() calls
