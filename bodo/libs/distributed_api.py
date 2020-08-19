@@ -399,7 +399,7 @@ def copy_gathered_null_bytes(
         curr_tmp_byte += n_bytes
 
 
-@numba.generated_jit(nopython=True, cache=True)
+@numba.generated_jit(nopython=True)
 def gatherv(data, allgather=False, warn_if_rep=True):
     """gathers distributed data into rank 0 or all ranks if 'allgather' is set.
     'warn_if_rep' flag controls if a warning is raised if the input is replicated and
@@ -677,21 +677,34 @@ def gatherv(data, allgather=False, warn_if_rep=True):
         return impl
 
     if isinstance(data, bodo.hiframes.pd_index_ext.RangeIndexType):
+        INT64_MAX = np.iinfo(np.int64).max
+        INT64_MIN = np.iinfo(np.int64).min
 
         def impl_range_index(
             data, allgather=False, warn_if_rep=True
         ):  # pragma: no cover
-            # XXX: assuming global range starts from zero
-            # and each process has a chunk, and step is 1
-            local_n = data._stop - data._start
-            n = bodo.libs.distributed_api.dist_reduce(
-                local_n, np.int32(Reduce_Type.Sum.value)
+            # NOTE: assuming processes have chunks of a global RangeIndex with equal
+            # steps. using min/max reductions to get start/stop of global range
+            start = data._start
+            stop = data._stop
+            # ignore empty ranges coming from slicing, see test_getitem_slice
+            if len(data) == 0:
+                start = INT64_MAX
+                stop = INT64_MIN
+            start = bodo.libs.distributed_api.dist_reduce(
+                start, np.int32(Reduce_Type.Min.value)
+            )
+            stop = bodo.libs.distributed_api.dist_reduce(
+                stop, np.int32(Reduce_Type.Max.value)
             )
             # gatherv() of dataframe returns 0-length arrays so index should
             # be 0-length to match
             if bodo.get_rank() != 0 and not allgather:
-                n = 0
-            return bodo.hiframes.pd_index_ext.init_range_index(0, n, 1, data._name)
+                start = 0
+                stop = 0
+            return bodo.hiframes.pd_index_ext.init_range_index(
+                start, stop, data._step, data._name
+            )
 
         return impl_range_index
 

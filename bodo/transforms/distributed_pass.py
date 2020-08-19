@@ -343,13 +343,11 @@ class DistributedPass:
             and (self._is_1D_arr(rhs.value.name) or self._is_1D_Var_arr(rhs.value.name))
         ):
             return [inst] + compile_func_single_block(
-                lambda r: bodo.libs.distributed_api.dist_reduce(
-                    r._stop - r._start, _op
-                ),
+                lambda r: bodo.libs.distributed_api.dist_reduce(r._stop, _op),
                 (rhs.value,),
                 inst.target,
                 self,
-                extra_globals={"_op": np.int32(Reduce_Type.Sum.value)},
+                extra_globals={"_op": np.int32(Reduce_Type.Max.value)},
             )
 
         # RangeIndex._start, get global value
@@ -364,11 +362,11 @@ class DistributedPass:
             and (self._is_1D_arr(rhs.value.name) or self._is_1D_Var_arr(rhs.value.name))
         ):
             return [inst] + compile_func_single_block(
-                lambda r: 0,
+                lambda r: bodo.libs.distributed_api.dist_reduce(r._start, _op),
                 (rhs.value,),
                 inst.target,
                 self,
-                extra_globals={"_op": np.int32(Reduce_Type.Sum.value)},
+                extra_globals={"_op": np.int32(Reduce_Type.Min.value)},
             )
 
         return [inst]
@@ -1004,39 +1002,56 @@ class DistributedPass:
         """
         assert len(args) == 4, "invalid init_range_index() call"
         # parallelize init_range_index() similar to parfors
-        if (
+        is_simple_range = (
             guard(get_const_value_inner, self.func_ir, args[0], typemap=self.typemap,)
-            != 0
-            or guard(
+            == 0
+            and guard(
                 get_const_value_inner, self.func_ir, args[2], typemap=self.typemap,
             )
-            != 1
-        ):
-            raise BodoError(
-                "creating parallel RangeIndex() with start != 0 and/or step != 1 not supported yet"
-            )
+            == 1
+        )
+        out = []
 
-        size_var = args[1]
+        # range size is equal to stop if simple range with start = 0 and step = 1
+        if is_simple_range:
+            size_var = args[1]
+        else:
+            f = lambda start, stop, step: max(0, -(-(stop - start) // step))
+            out += compile_func_single_block(f, args[:-1], None, self)
+            size_var = out[-1].target
 
         if self._is_1D_arr(lhs):
-            out = []
             start_var = self._get_1D_start(size_var, avail_vars, out)
             end_var = self._get_1D_end(size_var, out)
             self._update_avail_vars(avail_vars, out)
-            args[0] = start_var
-            args[1] = end_var
 
-            def impl(start, stop, step, name):
-                res = bodo.hiframes.pd_index_ext.init_range_index(
-                    start, stop, step, name
-                )
-                return res
+            if is_simple_range:
+                args[0] = start_var
+                args[1] = end_var
+
+                def impl(start, stop, step, name):
+                    res = bodo.hiframes.pd_index_ext.init_range_index(
+                        start, stop, step, name
+                    )
+                    return res
+
+            else:
+
+                def impl(start, stop, step, name, chunk_start, chunk_end):
+                    chunk_start = start + step * chunk_start
+                    chunk_end = start + step * chunk_end
+                    res = bodo.hiframes.pd_index_ext.init_range_index(
+                        chunk_start, chunk_end, step, name
+                    )
+                    return res
+
+                args = args + [start_var, end_var]
 
             return out + compile_func_single_block(impl, args, assign.target, self)
         else:
             # 1D_Var case
             assert self._is_1D_Var_arr(lhs)
-            out = []
+            assert is_simple_range, "only simple 1D_Var RangeIndex is supported"
             new_size_var = self._get_1D_Var_size(size_var, equiv_set, avail_vars, out)
 
             def impl(stop, name):  # pragma: no cover

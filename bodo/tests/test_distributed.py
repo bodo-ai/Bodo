@@ -504,39 +504,24 @@ def test_series_alloc_equiv1():
 
 # TODO: test other array types
 @pytest.mark.parametrize(
-    "A", [np.arange(11), np.arange(33).reshape(11, 3), pd.Series(["aa", "bb", "c"] * 4)]
+    "A",
+    [
+        np.arange(11),
+        np.arange(33).reshape(11, 3),
+        pd.Series(["aa", "bb", "c"] * 4),
+        pd.RangeIndex(11, 19, 3),
+        pd.Series(1, pd.RangeIndex(11, 19, 3)),
+    ],
 )
 @pytest.mark.parametrize(
     "s", [slice(3), slice(1, 9), slice(7, None), slice(4, 6), slice(-3, None)]
 )
-def test_getitem_slice_1D(A, s):
-    # get a slice of 1D array
+def test_getitem_slice(A, s):
+    # get a slice of 1D/1D_Var array
     def impl1(A, s):
         return A[s]
 
-    bodo_func = bodo.jit(distributed_block={"A"})(impl1)
-    start, end = get_start_end(len(A))
-    np.testing.assert_array_equal(bodo_func(A[start:end], s), impl1(A, s))
-    assert count_array_OneDs() > 0
-
-
-@pytest.mark.parametrize(
-    "A", [np.arange(11), np.arange(33).reshape(11, 3), pd.Series(["aa", "bb", "c"] * 4)]
-)
-@pytest.mark.parametrize("s", [slice(3), slice(1, 9), slice(7, None), slice(4, 6)])
-def test_getitem_slice_1D_Var(A, s):
-    # get a slice of 1D array
-    def impl1(A, B, s):
-        C = A[B]
-        return C[s]
-
-    bodo_func = bodo.jit(distributed_block={"A", "B"})(impl1)
-    start, end = get_start_end(len(A))
-    B = np.arange(len(A)) % 2 != 0
-    np.testing.assert_array_equal(
-        bodo_func(A[start:end], B[start:end], s), impl1(A, B, s)
-    )
-    assert count_array_OneD_Vars() > 0
+    check_func(impl1, (A, s), check_typing_issues=False)
 
 
 # TODO: np.arange(33).reshape(11, 3)
