@@ -962,15 +962,19 @@ class DistributedPass:
         ):
             fname = rhs.args[0]
             arr = rhs.args[1]
+            # File offset in readfile is needed for the parallel seek
+            file_offset = rhs.args[3]
+
             nodes, start_var, count_var = self._get_dist_var_start_count(
                 arr, equiv_set, avail_vars
             )
 
-            def impl(fname, data_ptr, start, count):  # pragma: no cover
-                return bodo.io.np_io.file_read_parallel(fname, data_ptr, start, count)
+            def impl(fname, data_ptr, start, count, offset):  # pragma: no cover
+                return bodo.io.np_io.file_read_parallel(fname, data_ptr, start, count, offset)
 
             return nodes + compile_func_single_block(
-                impl, [fname, arr, start_var, count_var], assign.target, self
+                # Increment start_var by the file offset
+                impl, [fname, arr, start_var, count_var, file_offset], assign.target, self
             )
 
         # replace get_type_max_value(arr.dtype) since parfors

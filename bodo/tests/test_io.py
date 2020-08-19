@@ -1234,6 +1234,107 @@ def test_np_io4():
         np.testing.assert_almost_equal(A2, B2)
 
 
+def test_np_io5(datapath):
+    # Test count optional argument small
+    fname = datapath("np_file1.dat")
+
+    def test_impl():
+        A = np.fromfile(fname, np.float64, count=10)
+        return A
+
+    bodo_func = bodo.jit(test_impl)
+    np.testing.assert_almost_equal(bodo_func(), test_impl())
+
+
+def test_np_io6(datapath):
+    # Test count optional argument huge
+    fname = datapath("np_file1.dat")
+
+    def test_impl():
+        A = np.fromfile(fname, np.float64, count=100000000)
+        return A
+
+    bodo_func = bodo.jit(test_impl)
+    np.testing.assert_almost_equal(bodo_func(), test_impl())
+
+
+def test_np_io7(datapath):
+    # Test offset optional argument
+    fname = datapath("np_file1.dat")
+
+    def test_impl():
+        A = np.fromfile(fname, np.float64, offset=10)
+        return A
+
+    bodo_func = bodo.jit(test_impl)
+    np.testing.assert_almost_equal(bodo_func(), test_impl())
+
+
+def test_np_io8(datapath):
+    # Test offset and count optional arguments
+    fname = datapath("np_file1.dat")
+
+    def test_impl():
+        A = np.fromfile(fname, np.float64, offset=10, count=10)
+        return A
+
+    bodo_func = bodo.jit(test_impl)
+    np.testing.assert_almost_equal(bodo_func(), test_impl())
+
+
+def test_np_io9(datapath):
+    # Test count optional argument small, parallel
+    fname = datapath("np_file1.dat")
+
+    def test_impl():
+        A = np.fromfile(fname, np.float64, count=10)
+        return A.sum()
+
+    bodo_func = bodo.jit(test_impl)
+    np.testing.assert_almost_equal(bodo_func(), test_impl())
+
+
+def test_np_io10(datapath):
+    # Test count optional argument huge, parallel
+    fname = datapath("np_file1.dat")
+
+    def test_impl():
+        A = np.fromfile(fname, np.float64, count=100000000)
+        return A.sum()
+
+    bodo_func = bodo.jit(test_impl)
+    np.testing.assert_almost_equal(bodo_func(), test_impl())
+
+
+def test_np_io11(datapath):
+    # Test offset optional argument, parallel
+    fname = datapath("np_file1.dat")
+
+    def test_impl():
+        A = np.fromfile(fname, np.float64, offset=10)
+        print(A.shape, A)
+        return A.sum()
+
+    bodo_func = bodo.jit(test_impl)
+    v1 = bodo_func()
+    v2 = test_impl()
+    np.testing.assert_almost_equal(v1, v2)
+
+
+def test_np_io12(datapath):
+    # Test offset and count optional arguments, parallel
+    fname = datapath("np_file1.dat")
+
+    def test_impl():
+        A = np.fromfile(fname, np.float64, offset=10, count=10)
+        return A.sum()
+
+    bodo_func = bodo.jit(test_impl)
+    np.testing.assert_almost_equal(bodo_func(), test_impl())
+
+
+# TODO(Nick): Add a test for Parallel version with both offset and count.
+
 def test_csv_double_box(datapath):
     """Make sure boxing the output of read_csv() twice doesn't cause crashes
     See dataframe boxing function for extra incref of native arrays.
