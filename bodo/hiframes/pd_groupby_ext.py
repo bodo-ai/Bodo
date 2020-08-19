@@ -746,6 +746,8 @@ class DataframeGroupByAttribute(AttributeTemplate):
         return self.resolve_cumulative(grp, args, kws, msg, True)
 
     def generic_resolve(self, grpby, attr):
+        if attr in groupby_unsupported:
+            return
         if attr not in grpby.df_type.columns:
             raise_const_error(
                 "groupby: invalid attribute {} (column not found in dataframe or unsupported function)".format(
