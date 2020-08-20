@@ -6,6 +6,7 @@ import warnings
 from urllib.parse import urlparse
 import glob
 import os
+import numba
 
 from bodo.utils.typing import BodoWarning, BodoError
 
@@ -274,4 +275,13 @@ def get_s3_bucket_region(s3_filepath):
         return ""
     if bucket_loc is None:
         bucket_loc = "us-east-1"
+    return bucket_loc
+
+
+@numba.njit()
+def get_s3_bucket_region_njit(s3_filepath):
+    with numba.objmode(bucket_loc="unicode_type"):
+        bucket_loc = ""
+        if s3_filepath.startswith("s3://"):
+            bucket_loc = get_s3_bucket_region(s3_filepath)
     return bucket_loc

@@ -94,14 +94,27 @@ import llvmlite.binding as ll
 
 _csv_write = types.ExternalFunction(
     "csv_write",
-    types.void(types.voidptr, types.voidptr, types.int64, types.int64, types.bool_),
+    types.void(
+        types.voidptr,
+        types.voidptr,
+        types.int64,
+        types.int64,
+        types.bool_,
+        types.voidptr,
+    ),
 )
 ll.add_symbol("csv_write", csv_cpp.csv_write)
 
 _json_write = types.ExternalFunction(
     "json_write",
     types.void(
-        types.voidptr, types.voidptr, types.int64, types.int64, types.bool_, types.bool_
+        types.voidptr,
+        types.voidptr,
+        types.int64,
+        types.int64,
+        types.bool_,
+        types.bool_,
+        types.voidptr,
     ),
 )
 ll.add_symbol("json_write", json_cpp.json_write)
@@ -2808,6 +2821,8 @@ def to_parquet_overload(
     func_text += "        name_ptr = df.index.name\n"
     func_text += "    else:\n"
     func_text += "        name_ptr = 'null'\n"
+    # if it's an s3 url, get the region and pass it into the c++ code
+    func_text += "    bucket_region = bodo.io.fs_io.get_s3_bucket_region_njit(fname)\n"
     if write_rangeindex_to_metadata:
         func_text += "    parquet_write_table_cpp(unicode_to_utf8(fname),\n"
         func_text += "                            table, col_names, index_col,\n"
@@ -2816,7 +2831,8 @@ def to_parquet_overload(
         func_text += "                            unicode_to_utf8(compression),\n"
         func_text += "                            _is_parallel, 1, df.index.start,\n"
         func_text += "                            df.index.stop, df.index.step,\n"
-        func_text += "                            unicode_to_utf8(name_ptr))\n"
+        func_text += "                            unicode_to_utf8(name_ptr),\n"
+        func_text += "                            unicode_to_utf8(bucket_region))\n"
     else:
         func_text += "    parquet_write_table_cpp(unicode_to_utf8(fname),\n"
         func_text += "                            table, col_names, index_col,\n"
@@ -2824,7 +2840,8 @@ def to_parquet_overload(
         func_text += "                            unicode_to_utf8(metadata),\n"
         func_text += "                            unicode_to_utf8(compression),\n"
         func_text += "                            _is_parallel, 0, 0, 0, 0,\n"
-        func_text += "                            unicode_to_utf8(name_ptr))\n"
+        func_text += "                            unicode_to_utf8(name_ptr),\n"
+        func_text += "                            unicode_to_utf8(bucket_region))\n"
 
     loc_vars = {}
     exec(
@@ -3122,8 +3139,18 @@ def to_csv_overload(
                 escapechar,
                 decimal,
             )
+
+        # Assuming that path_or_buf is a string
+        bucket_region = bodo.io.fs_io.get_s3_bucket_region_njit(path_or_buf)
         # TODO: support non-ASCII file names?
-        _csv_write(unicode_to_utf8(path_or_buf), unicode_to_utf8(D), 0, len(D), False)
+        _csv_write(
+            unicode_to_utf8(path_or_buf),
+            unicode_to_utf8(D),
+            0,
+            len(D),
+            False,
+            unicode_to_utf8(bucket_region),
+        )
 
     return _impl
 
@@ -3209,9 +3236,19 @@ def to_json_overload(
                 index,
                 indent,
             )
+
+        # Assuming that path_or_buf is a string
+        bucket_region = bodo.io.fs_io.get_s3_bucket_region_njit(path_or_buf)
+
         if lines and orient == "records":
             _json_write(
-                unicode_to_utf8(path_or_buf), unicode_to_utf8(D), 0, len(D), False, True
+                unicode_to_utf8(path_or_buf),
+                unicode_to_utf8(D),
+                0,
+                len(D),
+                False,
+                True,
+                unicode_to_utf8(bucket_region),
             )
         else:
             _json_write(
@@ -3221,6 +3258,7 @@ def to_json_overload(
                 len(D),
                 False,
                 False,
+                unicode_to_utf8(bucket_region),
             )
 
     return _impl

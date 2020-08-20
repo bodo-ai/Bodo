@@ -129,7 +129,8 @@ void open_outstream(Bodo_Fs::FsEnum fs_option, bool is_parallel, int myrank,
                     const std::string &file_type, std::string &dirname,
                     std::string &fname, std::string &orig_path,
                     std::string &path_name,
-                    std::shared_ptr<::arrow::io::OutputStream> *out_stream);
+                    std::shared_ptr<::arrow::io::OutputStream> *out_stream,
+                    const std::string &bucket_region);
 
 /*
  * Generic implementation for writing to s3 & hdfs,

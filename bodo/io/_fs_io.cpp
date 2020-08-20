@@ -165,7 +165,8 @@ void open_outstream(Bodo_Fs::FsEnum fs_option, bool is_parallel, int myrank,
                     const std::string &file_type, std::string &dirname,
                     std::string &fname, std::string &orig_path,
                     std::string &path_name,
-                    std::shared_ptr<::arrow::io::OutputStream> *out_stream) {
+                    std::shared_ptr<::arrow::io::OutputStream> *out_stream,
+                    const std::string &bucket_region) {
     PyObject *f_mod = nullptr;
     if (fs_option == Bodo_Fs::posix) {
         if (file_type == "csv") {
@@ -212,7 +213,7 @@ void open_outstream(Bodo_Fs::FsEnum fs_option, bool is_parallel, int myrank,
         s3_get_fs_t s3_get_fs =
             (s3_get_fs_t)PyNumber_AsSsize_t(s3_func_obj, NULL);
 
-        s3_get_fs(&s3_fs, "");
+        s3_get_fs(&s3_fs, bucket_region);
         if (is_parallel) {
             open_file_outstream(fs_option, file_type, dirname + "/" + fname,
                                 s3_fs, NULL, out_stream);

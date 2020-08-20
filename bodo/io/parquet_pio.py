@@ -241,12 +241,8 @@ def _gen_pq_reader_py(
         assert col_names == parallel
     is_parallel = len(parallel) > 0
     func_text = "def pq_reader_py(fname):\n"
-    func_text += "  is_s3_url = fname.startswith('s3://')\n"
-    func_text += "  bucket_region = ''\n"
     # if it's an s3 url, get the region and pass it into the c++ code
-    func_text += "  if is_s3_url:\n"
-    func_text += "    with bodo.objmode(bucket_region='unicode_type'):\n"
-    func_text += "      bucket_region = bodo.io.fs_io.get_s3_bucket_region(fname)\n"
+    func_text += "  bucket_region = bodo.io.fs_io.get_s3_bucket_region_njit(fname)\n"
     # open a DatasetReader, which is a C++ object defined in _parquet.cpp that
     # contains file readers for the files from which this process needs to read,
     # and other information to read this process' chunk
@@ -1175,6 +1171,7 @@ def parquet_write_table_cpp(
     stop,
     step,
     name,
+    bucket_region,
 ):
     """
     Call C++ parquet write function
@@ -1197,6 +1194,7 @@ def parquet_write_table_cpp(
                 lir.IntType(32),
                 lir.IntType(32),
                 lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
             ],
         )
         fn_tp = builder.module.get_or_insert_function(fnty, name="pq_write")
@@ -1216,6 +1214,7 @@ def parquet_write_table_cpp(
             types.int32,
             types.int32,
             types.int32,
+            types.voidptr,
             types.voidptr,
         ),
         codegen,

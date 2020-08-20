@@ -66,7 +66,8 @@ void pq_write(const char *filename, const table_info *table,
               const array_info *col_names, const array_info *index,
               bool write_index, const char *metadata, const char *compression,
               bool parallel, bool write_rangeindex_to_metadata, const int start,
-              const int stop, const int step, const char *name);
+              const int stop, const int step, const char *name,
+              const char *bucket_region);
 
 #define CHECK(expr, msg)                                           \
     if (!(expr)) {                                                 \
@@ -694,7 +695,7 @@ void pq_write(const char *_path_name, const table_info *table,
               bool write_index, const char *metadata, const char *compression,
               bool is_parallel, bool write_rangeindex_to_metadata,
               const int ri_start, const int ri_stop, const int ri_step,
-              const char *idx_name) {
+              const char *idx_name, const char *bucket_region) {
     // Write actual values of start, stop, step to the metadata which is a
     // string that contains %d
     int check;
@@ -729,7 +730,7 @@ void pq_write(const char *_path_name, const table_info *table,
                         &fs_option, &dirname, &fname, &orig_path, &path_name);
 
     open_outstream(fs_option, is_parallel, myrank, "parquet", dirname, fname,
-                   orig_path, path_name, &out_stream);
+                   orig_path, path_name, &out_stream, bucket_region);
 
     // copy column names to a std::vector<string>
     std::vector<std::string> col_names;

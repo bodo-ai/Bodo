@@ -40,7 +40,7 @@ extern "C" {
  */
 void write_buff(char *_path_name, char *buff, int64_t start, int64_t count,
                 bool is_parallel, const std::string &suffix,
-                bool is_records_lines) {
+                bool is_records_lines, char *bucket_region) {
     int myrank, num_ranks;
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
     MPI_Comm_size(MPI_COMM_WORLD, &num_ranks);
@@ -79,7 +79,7 @@ void write_buff(char *_path_name, char *buff, int64_t start, int64_t count,
     // handling s3 and hdfs with arrow
     // & handling posix json directory outputs with boost
     open_outstream(fs_option, is_parallel, myrank, suffix.substr(1), dirname,
-                   fname, orig_path, path_name, &out_stream);
+                   fname, orig_path, path_name, &out_stream, bucket_region);
 
     status = out_stream->Write(buff, count);
     CHECK_ARROW(status, "arrow::io::OutputStream::Write");
@@ -106,8 +106,9 @@ void write_buff(char *_path_name, char *buff, int64_t start, int64_t count,
  * @param is_parallel: true if df, from pandas to_csv(df), is distributed
  */
 void csv_write(char *_path_name, char *buff, int64_t start, int64_t count,
-               bool is_parallel) {
-    write_buff(_path_name, buff, start, count, is_parallel, ".csv", true);
+               bool is_parallel, char *bucket_region) {
+    write_buff(_path_name, buff, start, count, is_parallel, ".csv", true,
+               bucket_region);
 }
 
 /*
@@ -120,9 +121,9 @@ void csv_write(char *_path_name, char *buff, int64_t start, int64_t count,
  * @param is_record_lines: true if pd.to_json(oriend = 'records', lines=True)
  */
 void json_write(char *_path_name, char *buff, int64_t start, int64_t count,
-                bool is_parallel, bool is_records_lines) {
+                bool is_parallel, bool is_records_lines, char *bucket_region) {
     write_buff(_path_name, buff, start, count, is_parallel, ".json",
-               is_records_lines);
+               is_records_lines, bucket_region);
 }
 
 /*

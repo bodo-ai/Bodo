@@ -10,6 +10,7 @@ from collections import defaultdict
 import math
 import numpy as np
 import numba
+
 try:
     import sklearn
 except:
@@ -103,7 +104,14 @@ saved_array_analysis = None
 
 _csv_write = types.ExternalFunction(
     "csv_write",
-    types.void(types.voidptr, types.voidptr, types.int64, types.int64, types.bool_),
+    types.void(
+        types.voidptr,
+        types.voidptr,
+        types.int64,
+        types.int64,
+        types.bool_,
+        types.voidptr,
+    ),
 )
 
 _csv_output_is_dir = types.ExternalFunction(
@@ -113,7 +121,13 @@ _csv_output_is_dir = types.ExternalFunction(
 _json_write = types.ExternalFunction(
     "json_write",
     types.void(
-        types.voidptr, types.voidptr, types.int64, types.int64, types.bool_, types.bool_
+        types.voidptr,
+        types.voidptr,
+        types.int64,
+        types.int64,
+        types.bool_,
+        types.bool_,
+        types.voidptr,
     ),
 )
 
@@ -401,7 +415,10 @@ class DistributedPass:
                 self._set_last_arg_to_true(assign.value)
                 return [assign]
 
-        if func_mod == "sklearn.metrics._classification" and func_name == "precision_score":
+        if (
+            func_mod == "sklearn.metrics._classification"
+            and func_name == "precision_score"
+        ):
             if self._is_1D_arr(rhs.args[0].name) or self._is_1D_Var_arr(
                 rhs.args[0].name
             ):
@@ -409,12 +426,18 @@ class DistributedPass:
                 kws = dict(rhs.kws)
                 nodes = []
 
-                y_true = get_call_expr_arg("sklearn.metrics.precision_score", rhs.args, kws, 0, "y_true")
-                y_pred = get_call_expr_arg("sklearn.metrics.precision_score", rhs.args, kws, 1, "y_pred")
+                y_true = get_call_expr_arg(
+                    "sklearn.metrics.precision_score", rhs.args, kws, 0, "y_true"
+                )
+                y_pred = get_call_expr_arg(
+                    "sklearn.metrics.precision_score", rhs.args, kws, 1, "y_pred"
+                )
 
                 # TODO other arguments
                 average_var = ir.Var(
-                    assign.target.scope, mk_unique_var("precision_score_average"), rhs.loc
+                    assign.target.scope,
+                    mk_unique_var("precision_score_average"),
+                    rhs.loc,
                 )
                 nodes.append(
                     ir.Assign(ir.Const("binary", rhs.loc), average_var, rhs.loc)
@@ -425,12 +448,21 @@ class DistributedPass:
                     "precision_score", rhs.args, kws, 1e6, "average", average_var
                 )
 
-                f = lambda y_true, y_pred, average: sklearn.metrics.precision_score(y_true, y_pred, average=average, _is_data_distributed=True)
+                f = lambda y_true, y_pred, average: sklearn.metrics.precision_score(
+                    y_true, y_pred, average=average, _is_data_distributed=True
+                )
                 return nodes + compile_func_single_block(
-                    f, [y_true, y_pred, average], assign.target, self, extra_globals={"sklearn": sklearn}
+                    f,
+                    [y_true, y_pred, average],
+                    assign.target,
+                    self,
+                    extra_globals={"sklearn": sklearn},
                 )
 
-        if func_mod == "sklearn.metrics._classification" and func_name == "recall_score":
+        if (
+            func_mod == "sklearn.metrics._classification"
+            and func_name == "recall_score"
+        ):
             if self._is_1D_arr(rhs.args[0].name) or self._is_1D_Var_arr(
                 rhs.args[0].name
             ):
@@ -438,8 +470,12 @@ class DistributedPass:
                 kws = dict(rhs.kws)
                 nodes = []
 
-                y_true = get_call_expr_arg("sklearn.metrics.recall_score", rhs.args, kws, 0, "y_true")
-                y_pred = get_call_expr_arg("sklearn.metrics.recall_score", rhs.args, kws, 1, "y_pred")
+                y_true = get_call_expr_arg(
+                    "sklearn.metrics.recall_score", rhs.args, kws, 0, "y_true"
+                )
+                y_pred = get_call_expr_arg(
+                    "sklearn.metrics.recall_score", rhs.args, kws, 1, "y_pred"
+                )
 
                 # TODO other arguments
                 average_var = ir.Var(
@@ -454,9 +490,15 @@ class DistributedPass:
                     "recall_score", rhs.args, kws, 1e6, "average", average_var
                 )
 
-                f = lambda y_true, y_pred, average: sklearn.metrics.recall_score(y_true, y_pred, average=average, _is_data_distributed=True)
+                f = lambda y_true, y_pred, average: sklearn.metrics.recall_score(
+                    y_true, y_pred, average=average, _is_data_distributed=True
+                )
                 return nodes + compile_func_single_block(
-                    f, [y_true, y_pred, average], assign.target, self, extra_globals={"sklearn": sklearn}
+                    f,
+                    [y_true, y_pred, average],
+                    assign.target,
+                    self,
+                    extra_globals={"sklearn": sklearn},
                 )
 
         if func_mod == "sklearn.metrics._classification" and func_name == "f1_score":
@@ -467,8 +509,12 @@ class DistributedPass:
                 kws = dict(rhs.kws)
                 nodes = []
 
-                y_true = get_call_expr_arg("sklearn.metrics.f1_score", rhs.args, kws, 0, "y_true")
-                y_pred = get_call_expr_arg("sklearn.metrics.f1_score", rhs.args, kws, 1, "y_pred")
+                y_true = get_call_expr_arg(
+                    "sklearn.metrics.f1_score", rhs.args, kws, 0, "y_true"
+                )
+                y_pred = get_call_expr_arg(
+                    "sklearn.metrics.f1_score", rhs.args, kws, 1, "y_pred"
+                )
 
                 # TODO other arguments
                 average_var = ir.Var(
@@ -483,9 +529,15 @@ class DistributedPass:
                     "f1_score", rhs.args, kws, 1e6, "average", average_var
                 )
 
-                f = lambda y_true, y_pred, average: sklearn.metrics.f1_score(y_true, y_pred, average=average, _is_data_distributed=True)
+                f = lambda y_true, y_pred, average: sklearn.metrics.f1_score(
+                    y_true, y_pred, average=average, _is_data_distributed=True
+                )
                 return nodes + compile_func_single_block(
-                    f, [y_true, y_pred, average], assign.target, self, extra_globals={"sklearn": sklearn}
+                    f,
+                    [y_true, y_pred, average],
+                    assign.target,
+                    self,
+                    extra_globals={"sklearn": sklearn},
                 )
 
         # divide 1D alloc
@@ -1171,8 +1223,17 @@ class DistributedPass:
             def f(fname, str_out):  # pragma: no cover
                 utf8_str, utf8_len = unicode_to_utf8_and_len(str_out)
                 start = bodo.libs.distributed_api.dist_exscan(utf8_len, _op)
+                # Assuming that path_or_buf is a string
+                bucket_region = bodo.io.fs_io.get_s3_bucket_region_njit(fname)
                 # TODO: unicode file name
-                _csv_write(unicode_to_utf8(fname), utf8_str, start, utf8_len, True)
+                _csv_write(
+                    unicode_to_utf8(fname),
+                    utf8_str,
+                    start,
+                    utf8_len,
+                    True,
+                    unicode_to_utf8(bucket_region),
+                )
 
             return nodes + compile_func_single_block(
                 f,
@@ -1184,6 +1245,7 @@ class DistributedPass:
                     "unicode_to_utf8": unicode_to_utf8,
                     "_op": np.int32(Reduce_Type.Sum.value),
                     "_csv_write": _csv_write,
+                    "bodo": bodo,
                 },
             )
 
@@ -1262,6 +1324,8 @@ class DistributedPass:
             def f(fname, str_out, is_records_lines):  # pragma: no cover
                 utf8_str, utf8_len = unicode_to_utf8_and_len(str_out)
                 start = bodo.libs.distributed_api.dist_exscan(utf8_len, _op)
+                # Assuming that path_or_buf is a string
+                bucket_region = bodo.io.fs_io.get_s3_bucket_region_njit(fname)
                 # TODO: unicode file name
                 _json_write(
                     unicode_to_utf8(fname),
@@ -1270,6 +1334,7 @@ class DistributedPass:
                     utf8_len,
                     True,
                     is_records_lines,
+                    unicode_to_utf8(bucket_region),
                 )
 
             return nodes + compile_func_single_block(
@@ -1282,6 +1347,7 @@ class DistributedPass:
                     "unicode_to_utf8": unicode_to_utf8,
                     "_op": np.int32(Reduce_Type.Sum.value),
                     "_json_write": _json_write,
+                    "bodo": bodo,
                 },
             )
         return [assign]
