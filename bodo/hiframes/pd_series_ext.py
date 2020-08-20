@@ -765,59 +765,6 @@ for fname in supported_rolling_funcs:
     install_rolling_method(fname)
 
 
-@infer
-@infer_global(operator.eq)
-@infer_global(operator.ne)
-@infer_global(operator.ge)
-@infer_global(operator.gt)
-@infer_global(operator.le)
-@infer_global(operator.lt)
-class SeriesCompEqual(AbstractTemplate):
-    key = "=="
-
-    def generic(self, args, kws):
-
-        assert not kws
-        [va, vb] = args
-
-        if (is_dt64_series_typ(va) and vb in (string_type, types.NPDatetime("ns"))) or (
-            is_dt64_series_typ(vb) and va in (string_type, types.NPDatetime("ns"))
-        ):
-            if is_dt64_series_typ(va):
-                index_typ = va.index
-            else:
-                index_typ = vb.index
-            return signature(
-                SeriesType(types.boolean, boolean_array, index_typ), va, vb
-            )
-
-
-
-@infer
-class CmpOpNEqSeries(SeriesCompEqual):
-    key = "!="
-
-
-@infer
-class CmpOpGESeries(SeriesCompEqual):
-    key = ">="
-
-
-@infer
-class CmpOpGTSeries(SeriesCompEqual):
-    key = ">"
-
-
-@infer
-class CmpOpLESeries(SeriesCompEqual):
-    key = "<="
-
-
-@infer
-class CmpOpLTSeries(SeriesCompEqual):
-    key = "<"
-
-
 @overload(pd.Series, no_unliteral=True)
 def pd_series_overload(
     data=None, index=None, dtype=None, name=None, copy=False, fastpath=False
