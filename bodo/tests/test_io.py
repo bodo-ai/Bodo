@@ -1790,6 +1790,18 @@ def test_csv_invalid_path_const():
         bodo.jit(test_impl)()
 
 
+def test_read_parquet_invalid_path():
+    """test error raise when parquet file path is invalid in C++ code.
+    """
+
+    def test_impl():
+        df = pd.read_parquet("I_dont_exist.pq")
+        return df
+
+    with pytest.raises(ValueError, match="Error reading Parquet dataset"):
+        bodo.jit(locals={"df": {"A": bodo.int64[:]}})(test_impl)()
+
+
 def test_read_parquet_invalid_path_const():
     """test error raise when parquet file path provided as constant but is invalid.
     """
