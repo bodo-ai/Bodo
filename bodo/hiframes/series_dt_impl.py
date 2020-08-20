@@ -769,10 +769,10 @@ def create_cmp_op_overload(op):
             nat = A1.dtype("NaT")
 
             def impl(A1, A2):  # pragma: no cover
-                numba.parfors.parfor.init_prange()
                 arr = bodo.hiframes.pd_series_ext.get_series_data(A1)
                 index = bodo.hiframes.pd_series_ext.get_series_index(A1)
                 name = bodo.hiframes.pd_series_ext.get_series_name(A1)
+                numba.parfors.parfor.init_prange()
                 n = len(arr)
                 out_arr = bodo.libs.bool_arr_ext.alloc_bool_array(n)
                 nat_int = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(nat)
@@ -797,10 +797,10 @@ def create_cmp_op_overload(op):
             nat = A2.dtype("NaT")
 
             def impl(A1, A2):  # pragma: no cover
-                numba.parfors.parfor.init_prange()
                 arr = bodo.hiframes.pd_series_ext.get_series_data(A2)
                 index = bodo.hiframes.pd_series_ext.get_series_index(A2)
                 name = bodo.hiframes.pd_series_ext.get_series_name(A2)
+                numba.parfors.parfor.init_prange()
                 n = len(arr)
                 out_arr = bodo.libs.bool_arr_ext.alloc_bool_array(n)
                 nat_int = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(nat)
@@ -812,58 +812,6 @@ def create_cmp_op_overload(op):
                         ret_val = default_value
                     else:
                         ret_val = op(date, dt64)
-                    out_arr[i] = ret_val
-                return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
-
-            return impl
-
-        # A1 is series(dt64) and A2 is dt64
-        if bodo.hiframes.pd_series_ext.is_dt64_series_typ(
-            A1
-        ) and A2 == types.NPDatetime("ns"):
-            nat = A1.dtype("NaT")
-
-            def impl(A1, A2):  # pragma: no cover
-                numba.parfors.parfor.init_prange()
-                arr = bodo.hiframes.pd_series_ext.get_series_data(A1)
-                index = bodo.hiframes.pd_series_ext.get_series_index(A1)
-                name = bodo.hiframes.pd_series_ext.get_series_name(A1)
-                n = len(arr)
-                out_arr = bodo.libs.bool_arr_ext.alloc_bool_array(n)
-                nat_int = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(nat)
-                for i in numba.parfors.parfor.internal_prange(n):
-                    dt64_1 = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(arr[i])
-                    dt64_2 = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(A2)
-                    if dt64_1 == nat_int or dt64_2 == nat_int:
-                        ret_val = default_value
-                    else:
-                        ret_val = op(dt64_1, dt64_2)
-                    out_arr[i] = ret_val
-                return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
-
-            return impl
-
-        # A1 is dt64 and A2 is series(dt64)
-        if bodo.hiframes.pd_series_ext.is_dt64_series_typ(
-            A2
-        ) and A1 == types.NPDatetime("ns"):
-            nat = A2.dtype("NaT")
-
-            def impl(A1, A2):  # pragma: no cover
-                numba.parfors.parfor.init_prange()
-                arr = bodo.hiframes.pd_series_ext.get_series_data(A2)
-                index = bodo.hiframes.pd_series_ext.get_series_index(A2)
-                name = bodo.hiframes.pd_series_ext.get_series_name(A2)
-                n = len(arr)
-                out_arr = bodo.libs.bool_arr_ext.alloc_bool_array(n)
-                nat_int = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(nat)
-                for i in numba.parfors.parfor.internal_prange(n):
-                    dt64_1 = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(arr[i])
-                    dt64_2 = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(A1)
-                    if dt64_1 == nat_int or dt64_2 == nat_int:
-                        ret_val = default_value
-                    else:
-                        ret_val = op(dt64_2, dt64_1)
                     out_arr[i] = ret_val
                 return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
