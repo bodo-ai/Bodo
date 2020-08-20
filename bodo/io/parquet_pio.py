@@ -249,6 +249,8 @@ def _gen_pq_reader_py(
     func_text += "  ds_reader = get_dataset_reader(unicode_to_utf8(fname), {}, unicode_to_utf8(bucket_region) )\n".format(
         is_parallel
     )
+    func_text += "  if is_null_ds_reader(ds_reader):\n"
+    func_text += "    raise ValueError('Error reading Parquet dataset')\n"
 
     local_types = {}
     for c_name, col_ind, col_siz, c_typ in zip(
@@ -268,6 +270,7 @@ def _gen_pq_reader_py(
     loc_vars = {}
     glbs = {
         "get_dataset_reader": _get_dataset_reader,
+        "is_null_ds_reader": is_null_ds_reader,
         "del_dataset_reader": _del_dataset_reader,
         "get_column_size_parquet": get_column_size_parquet,
         "read_parquet": read_parquet,
@@ -672,6 +675,20 @@ def parquet_file_schema(file_name, selected_columns):
     col_names = selected_columns
     # TODO: close file?
     return col_names, col_types, index_col, col_indices, col_nb_fields
+
+
+@intrinsic
+def is_null_ds_reader(typingctx, obj_typ=None):
+    """check whether the dataset reader object is NULL or not
+    """
+    assert obj_typ == types.Opaque("arrow_reader")
+
+    def codegen(context, builder, signature, args):
+        (obj,) = args
+        null = context.get_constant_null(obj_typ)
+        return builder.icmp_unsigned("==", obj, null)
+
+    return types.bool_(obj_typ), codegen
 
 
 _get_dataset_reader = types.ExternalFunction(

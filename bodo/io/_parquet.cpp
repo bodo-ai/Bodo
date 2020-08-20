@@ -120,12 +120,6 @@ PyMODINIT_FUNC PyInit_parquet_cpp(void) {
 
 DatasetReader *get_dataset_reader(char *file_name, bool parallel,
                                   char *bucket_region) {
-#define PYERR_CHECK(expr, msg)         \
-    if (!(expr)) {                     \
-        std::cerr << msg << std::endl; \
-        PyGILState_Release(gilstate);  \
-        return ds_reader;              \
-    }
 #ifdef DEBUG_NESTED_PARQUET
     std::cout << "GET_DATASET_READER, beginning\n";
 #endif
@@ -139,7 +133,9 @@ DatasetReader *get_dataset_reader(char *file_name, bool parallel,
     // ds = bodo.io.parquet_pio.get_parquet_dataset(file_name, parallel)
     PyObject *ds = PyObject_CallMethod(pq_mod, "get_parquet_dataset", "si",
                                        file_name, int(parallel));
-    PYERR_CHECK(!PyErr_Occurred(), "Python error reading parquet dataset")
+    if (PyErr_Occurred())
+        return NULL;
+
     Py_DECREF(pq_mod);
 
     // total_rows = ds._bodo_total_rows
@@ -188,8 +184,8 @@ DatasetReader *get_dataset_reader(char *file_name, bool parallel,
 
         Py_DECREF(iterator);
 
-        PYERR_CHECK(!PyErr_Occurred(),
-                    "Python error during Parquet dataset metadata")
+        if (PyErr_Occurred())
+            return NULL;
         PyGILState_Release(gilstate);
         return ds_reader;
     }
@@ -251,11 +247,10 @@ DatasetReader *get_dataset_reader(char *file_name, bool parallel,
 
     Py_DECREF(iterator);
 
-    PYERR_CHECK(!PyErr_Occurred(),
-                "Python error during Parquet dataset metadata")
+    if (PyErr_Occurred())
+        return NULL;
     PyGILState_Release(gilstate);
     return ds_reader;
-#undef PYERR_CHECK
 }
 
 void del_dataset_reader(DatasetReader *reader) { delete reader; }
