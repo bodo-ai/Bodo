@@ -42,7 +42,6 @@ from bodo.libs.str_ext import string_type
 from bodo.libs.str_arr_ext import (
     string_array_type,
     StringArrayType,
-    is_str_arr_typ,
     pre_alloc_string_array,
     get_utf8_size,
 )
@@ -649,9 +648,9 @@ class SeriesPass:
         return [assign]
 
     def _run_binop(self, assign, rhs):
-        res = self._handle_string_array_expr(assign, rhs)
-        if res is not None:
-            return res
+        """Handle binary operators. Mostly inlining overloads since not possible in
+        Numba yet.
+        """
 
         arg1, arg2 = rhs.lhs, rhs.rhs
         typ1, typ2 = self.typemap[arg1.name], self.typemap[arg2.name]
@@ -659,6 +658,20 @@ class SeriesPass:
         if isinstance(typ1, CategoricalArray) and isinstance(typ2, types.StringLiteral):
             impl = bodo.hiframes.pd_categorical_ext.overload_cat_arr_eq_str(typ1, typ2)
             return replace_func(self, impl, [arg1, arg2])
+
+        # inline string array comparison ops
+        if (
+            rhs.fn in _string_array_comp_ops
+            and (typ1 == string_array_type or typ2 == string_array_type)
+            and all(
+                types.unliteral(t) in (string_array_type, string_type)
+                for t in (typ1, typ2)
+            )
+        ):
+            f = bodo.libs.str_arr_ext.create_binary_op_overload(rhs.fn)(
+                self.typemap[rhs.lhs.name], self.typemap[rhs.rhs.name]
+            )
+            return replace_func(self, f, [arg1, arg2])
 
         # optimize string array element comparison to operate inplace and avoid string
         # allocation overhead
@@ -2412,68 +2425,6 @@ class SeriesPass:
         return replace_func(
             self, impl, rhs.args, pysig=self.calltypes[rhs].pysig, kws=dict(rhs.kws)
         )
-
-    def _handle_string_array_expr(self, assign, rhs):  # pragma: no cover
-        # convert str_arr==str into parfor
-        if rhs.fn in _string_array_comp_ops and (
-            is_str_arr_typ(self.typemap[rhs.lhs.name])
-            or is_str_arr_typ(self.typemap[rhs.rhs.name])
-        ):
-            nodes = []
-            arg1 = rhs.lhs
-            arg2 = rhs.rhs
-            is_series = False
-            index_var = None
-            if is_str_series_typ(self.typemap[arg1.name]):
-                index_var = self._get_series_index(arg1, nodes)
-                arg1 = self._get_series_data(arg1, nodes)
-                is_series = True
-            if is_str_series_typ(self.typemap[arg2.name]):
-                index_var = self._get_series_index(arg2, nodes)
-                arg2 = self._get_series_data(arg2, nodes)
-                is_series = True
-
-            if not is_series:
-                # just inline string array ops
-                # TODO: remove when binop inlining is supported
-                f = bodo.libs.str_arr_ext.create_binary_op_overload(rhs.fn)(
-                    self.typemap[rhs.lhs.name], self.typemap[rhs.rhs.name]
-                )
-                return replace_func(self, f, [arg1, arg2], pre_nodes=nodes)
-
-            arg1_access = "A"
-            arg2_access = "B"
-            len_call = "len(A)"
-            if is_str_arr_typ(self.typemap[arg1.name]):
-                arg1_access = "A[i]"
-                # replace type now for correct typing of len, etc.
-                self.typemap.pop(arg1.name)
-                self.typemap[arg1.name] = string_array_type
-
-            if is_str_arr_typ(self.typemap[arg2.name]):
-                arg1_access = "B[i]"
-                len_call = "len(B)"
-                self.typemap.pop(arg2.name)
-                self.typemap[arg2.name] = string_array_type
-
-            op_str = _binop_to_str[rhs.fn]
-
-            func_text = "def f(A, B, index):\n"
-            func_text += "  l = {}\n".format(len_call)
-            func_text += "  S = bodo.libs.bool_arr_ext.alloc_bool_array(l)\n"
-            func_text += "  for i in numba.parfors.parfor.internal_prange(l):\n"
-            func_text += "    S[i] = {} {} {}\n".format(
-                arg1_access, op_str, arg2_access
-            )
-            func_text += "  return bodo.hiframes.pd_series_ext.init_series(S, index)\n"
-
-            loc_vars = {}
-            exec(func_text, {}, loc_vars)
-            f = loc_vars["f"]
-            args = [arg1, arg2, index_var]
-            return replace_func(self, f, args, pre_nodes=nodes)
-
-        return None
 
     def _handle_empty_like(self, assign, lhs, rhs):
         # B = empty_like(A) -> B = empty(len(A), dtype)

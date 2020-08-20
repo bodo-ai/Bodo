@@ -1356,6 +1356,17 @@ def test_series_str_add(memory_leak_check):
     check_func(test_impl, ("CC", S))
 
 
+def test_series_str_cmp(memory_leak_check):
+    """Test basic comparison for string Series (#1381)
+    """
+
+    def test_impl(S):
+        return S == "A"
+
+    S = pd.Series(["AA", "D", None, "녁은", "AA🐍"], [3, 5, 0, 7, -1])
+    check_func(test_impl, (S,))
+
+
 @pytest.mark.slow
 @pytest.mark.parametrize(
     "S1,S2,fill,raises",

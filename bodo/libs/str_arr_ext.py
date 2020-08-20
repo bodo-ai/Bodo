@@ -401,7 +401,7 @@ def _get_string_arr_payload(context, builder, str_arr_value):
 @intrinsic
 def num_strings(typingctx, str_arr_typ=None):
     # None default to make IntelliSense happy
-    assert is_str_arr_typ(str_arr_typ)
+    assert str_arr_typ == string_array_type
 
     def codegen(context, builder, sig, args):
         (in_str_arr,) = args
@@ -423,7 +423,7 @@ def _get_num_total_chars(builder, offsets, num_strings):
 @intrinsic
 def num_total_chars(typingctx, str_arr_typ=None):
     # None default to make IntelliSense happy
-    assert is_str_arr_typ(str_arr_typ)
+    assert str_arr_typ == string_array_type
 
     def codegen(context, builder, sig, args):
         (in_str_arr,) = args
@@ -435,7 +435,7 @@ def num_total_chars(typingctx, str_arr_typ=None):
 
 @intrinsic
 def get_offset_ptr(typingctx, str_arr_typ=None):
-    assert is_str_arr_typ(str_arr_typ)
+    assert str_arr_typ == string_array_type
 
     def codegen(context, builder, sig, args):
         (in_str_arr,) = args
@@ -454,7 +454,7 @@ def get_offset_ptr(typingctx, str_arr_typ=None):
 
 @intrinsic
 def get_data_ptr(typingctx, str_arr_typ=None):
-    assert is_str_arr_typ(str_arr_typ)
+    assert str_arr_typ == string_array_type
 
     def codegen(context, builder, sig, args):
         (in_str_arr,) = args
@@ -473,7 +473,7 @@ def get_data_ptr(typingctx, str_arr_typ=None):
 
 @intrinsic
 def get_data_ptr_ind(typingctx, str_arr_typ, int_t=None):
-    assert is_str_arr_typ(str_arr_typ)
+    assert str_arr_typ == string_array_type
 
     def codegen(context, builder, sig, args):
         in_str_arr, ind = args
@@ -492,7 +492,7 @@ def get_data_ptr_ind(typingctx, str_arr_typ, int_t=None):
 
 @intrinsic
 def get_null_bitmap_ptr(typingctx, str_arr_typ=None):
-    assert is_str_arr_typ(str_arr_typ)
+    assert str_arr_typ == string_array_type
 
     def codegen(context, builder, sig, args):
         (in_str_arr,) = args
@@ -712,7 +712,7 @@ def to_string_list_overload(data, str_null_bools=None):
     an array of bools as null mask for each string array
     """
     # TODO: create a StringRandomWriteArray
-    if is_str_arr_typ(data):
+    if data == string_array_type:
 
         def to_string_impl(data, str_null_bools=None):  # pragma: no cover
             n = len(data)
@@ -730,7 +730,7 @@ def to_string_list_overload(data, str_null_bools=None):
             out += [
                 "get_str_null_bools(data[{}])".format(i)
                 for i in range(count)
-                if is_str_arr_typ(data.types[i])
+                if data.types[i] == string_array_type
             ]
 
         func_text = "def f(data, str_null_bools=None):\n"
@@ -739,7 +739,6 @@ def to_string_list_overload(data, str_null_bools=None):
         )  # single value needs comma to become tuple
 
         loc_vars = {}
-        # print(func_text)
         exec(
             func_text,
             {
@@ -765,7 +764,7 @@ def cp_str_list_to_array_overload(str_arr, list_data, str_null_bools=None):
     list_data includes an extra bool array for each string array's null masks.
     When data is string array, str_null_bools is the null masks to apply.
     """
-    if is_str_arr_typ(str_arr):
+    if str_arr == string_array_type:
         if is_overload_none(str_null_bools):
 
             def cp_str_list_impl(
@@ -799,7 +798,10 @@ def cp_str_list_to_array_overload(str_arr, list_data, str_null_bools=None):
         str_ind = 0
         func_text = "def f(str_arr, list_data, str_null_bools=None):\n"
         for i in range(count):
-            if is_overload_true(str_null_bools) and is_str_arr_typ(str_arr.types[i]):
+            if (
+                is_overload_true(str_null_bools)
+                and str_arr.types[i] == string_array_type
+            ):
                 func_text += "  cp_str_list_to_array(str_arr[{}], list_data[{}], list_data[{}])\n".format(
                     i, i, count + str_ind
                 )
@@ -870,12 +872,6 @@ def overload_get_num_total_chars(A):
     return lambda A: num_total_chars(A)  # pragma: no cover
 
 
-def is_str_arr_typ(typ):
-    from bodo.hiframes.pd_series_ext import is_str_series_typ
-
-    return typ == string_array_type or is_str_series_typ(typ)
-
-
 @overload_method(StringArrayType, "copy", no_unliteral=True)
 def str_arr_copy_overload(arr):
     def copy_impl(arr):  # pragma: no cover
@@ -890,7 +886,7 @@ def str_arr_copy_overload(arr):
 
 @overload(len, no_unliteral=True)
 def str_arr_len_overload(str_arr):
-    if is_str_arr_typ(str_arr):
+    if str_arr == string_array_type:
 
         def str_arr_len(str_arr):  # pragma: no cover
             return str_arr.size
@@ -1085,7 +1081,7 @@ def set_string_array_range(
     Copy input string array to a range of output string array starting from
     curr_str_ind string index and curr_chars_ind character index.
     """
-    assert is_str_arr_typ(out_typ) and is_str_arr_typ(in_typ)
+    assert out_typ == string_array_type and in_typ == string_array_type
     assert curr_str_typ == types.intp and curr_chars_typ == types.intp
 
     def codegen(context, builder, sig, args):
@@ -1281,7 +1277,7 @@ def str_arr_set_not_na(typingctx, str_arr_typ, ind_typ=None):
 
 @intrinsic
 def set_null_bits(typingctx, str_arr_typ=None):
-    assert is_str_arr_typ(str_arr_typ)
+    assert str_arr_typ == string_array_type
 
     def codegen(context, builder, sig, args):
         (in_str_arr,) = args
@@ -1302,7 +1298,7 @@ def set_null_bits(typingctx, str_arr_typ=None):
 def move_str_arr_payload(typingctx, to_str_arr_typ, from_str_arr_typ=None):
     """Move string array payload from one array to another.
     """
-    assert is_str_arr_typ(to_str_arr_typ) and is_str_arr_typ(from_str_arr_typ)
+    assert to_str_arr_typ == string_array_type and from_str_arr_typ == string_array_type
 
     def codegen(context, builder, sig, args):
         (to_str_arr, from_str_arr) = args
