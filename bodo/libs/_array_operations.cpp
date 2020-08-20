@@ -165,8 +165,8 @@ table_info* sort_values_table_local(table_info* in_table, int64_t n_key_t,
     DEBUG_PrintRefct(std::cout, in_table->columns);
     std::cout << "n_rows=" << n_rows << " n_key=" << n_key << "\n";
 #endif
-    std::vector<size_t> V(n_rows);
-    for (size_t i = 0; i < n_rows; i++) V[i] = i;
+    std::vector<size_t> ListIdx(n_rows);
+    for (size_t i = 0; i < n_rows; i++) ListIdx[i] = i;
     std::function<bool(size_t, size_t)> f = [&](size_t const& iRow1,
                                                 size_t const& iRow2) -> bool {
         size_t shift_key1 = 0, shift_key2 = 0;
@@ -179,12 +179,9 @@ table_info* sort_values_table_local(table_info* in_table, int64_t n_key_t,
 #endif
         return test;
     };
-    gfx::timsort(V.begin(), V.end(), f);
-    std::vector<std::pair<std::ptrdiff_t, std::ptrdiff_t>> ListPairWrite(
-        n_rows);
-    for (size_t i = 0; i < n_rows; i++) ListPairWrite[i] = {V[i], -1};
+    gfx::timsort(ListIdx.begin(), ListIdx.end(), f);
     //
-    table_info* ret_table = RetrieveTable(in_table, ListPairWrite, -1);
+    table_info* ret_table = RetrieveTable(in_table, ListIdx, -1);
 #ifdef DEBUG_SORT_LOCAL
     std::cout << "OUTPUT:\n";
     DEBUG_PrintSetOfColumn(std::cout, ret_table->columns);
@@ -238,13 +235,12 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
     // building the samples.
     std::random_device rd;
     std::mt19937 gen(rd());
-    std::vector<std::pair<std::ptrdiff_t, std::ptrdiff_t>> ListPairWrite(
-        n_loc_sample);
+    std::vector<size_t> ListIdx(n_loc_sample);
     for (int64_t i = 0; i < n_loc_sample; i++) {
-        int pos = std::uniform_int_distribution<>(0, n_local-1)(gen);
-        ListPairWrite[i] = {std::ptrdiff_t(pos), -1};
+        size_t pos = std::uniform_int_distribution<>(0, n_local-1)(gen);
+        ListIdx[i] = pos;
     }
-    table_info* samples = RetrieveTable(local_sort, ListPairWrite, n_key_t);
+    table_info* samples = RetrieveTable(local_sort, ListIdx, n_key_t);
 #ifdef DEBUG_SORT
     std::cout << "sort_values_table : samples:\n";
     DEBUG_PrintSetOfColumn(std::cout, samples->columns);
@@ -278,13 +274,12 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
 #endif
         int64_t n_samples = all_samples_sort->nrows();
         int64_t step = ceil(double(n_samples) / double(n_pes));
-        std::vector<std::pair<std::ptrdiff_t, std::ptrdiff_t>>
-            ListPairWriteBounds(n_pes - 1);
+        std::vector<size_t> ListIdxBounds(n_pes - 1);
         for (int i = 0; i < n_pes - 1; i++) {
-            int pos = std::min((i + 1) * step, n_samples - 1);
-            ListPairWriteBounds[i] = {std::ptrdiff_t(pos), -1};
+            size_t pos = std::min((i + 1) * step, n_samples - 1);
+            ListIdxBounds[i] = pos;
         }
-        pre_bounds = RetrieveTable(all_samples_sort, ListPairWriteBounds, -1);
+        pre_bounds = RetrieveTable(all_samples_sort, ListIdxBounds, -1);
 #if defined DEBUG_SORT || defined BOUND_INFO
         std::cout << "sort_values_table : pre_bounds:\n";
         DEBUG_PrintSetOfColumn(std::cout, pre_bounds->columns);
@@ -441,19 +436,18 @@ static table_info* drop_duplicates_nonnull_keys_inner(table_info* in_table, int6
             }
         }
     }
-    std::vector<std::pair<std::ptrdiff_t, std::ptrdiff_t>> ListPairWrite;
+    std::vector<size_t> ListIdx;
     for (auto& eRow : ListRow)
-      if (eRow != -1) ListPairWrite.push_back({eRow, -1});
+      if (eRow != -1) ListIdx.push_back(eRow);
 #ifdef DEBUG_DD
-    int nbRow = ListPairWrite.size();
+    int nbRow = ListIdx.size();
     std::cout << "|ListPairWrite|=" << nbRow << "\n";
     for (int iRow = 0; iRow < nbRow; iRow++) {
-        std::cout << "iRow=" << iRow << " pair=" << ListPairWrite[iRow].first
-                  << " , " << ListPairWrite[iRow].second << "\n";
+        std::cout << "iRow=" << iRow << " idx=" << ListIdx[iRow] << "\n";
     }
 #endif
     // Now building the out_arrs array. We select only the first num_keys.
-    table_info* ret_table = RetrieveTable(in_table, ListPairWrite, num_keys);
+    table_info* ret_table = RetrieveTable(in_table, ListIdx, num_keys);
     //
     delete[] hashes;
 #ifdef DEBUG_DD
@@ -550,8 +544,7 @@ static table_info* drop_duplicates_table_inner(table_info* in_table,
     // in value.
     //
     // In the first case we keep only one entry.
-    auto RetrievePair1 =
-        [&]() -> std::vector<std::pair<std::ptrdiff_t, std::ptrdiff_t>> {
+    auto RetrieveListIdx1 = [&]() -> std::vector<size_t> {
         std::vector<int64_t> ListRow;
         uint64_t next_ent = 0;
         for (size_t i_row = 0; i_row < n_rows; i_row++) {
@@ -572,16 +565,14 @@ static table_info* drop_duplicates_table_inner(table_info* in_table,
                 }
             }
         }
-        std::vector<std::pair<std::ptrdiff_t, std::ptrdiff_t>> ListPairWrite;
-        for (auto& eRow : ListRow) {
-            if (eRow != -1) ListPairWrite.push_back({eRow, -1});
-        }
-        return std::move(ListPairWrite);
+        std::vector<size_t> ListIdx;
+        for (auto& eRow : ListRow)
+            if (eRow != -1) ListIdx.push_back(eRow);
+        return std::move(ListIdx);
     };
     // In this case we store the pairs of values, the first and the last.
     // This allows to reach conclusions in all possible cases.
-    auto RetrievePair2 =
-        [&]() -> std::vector<std::pair<std::ptrdiff_t, std::ptrdiff_t>> {
+    auto RetrieveListIdx2 = [&]() -> std::vector<size_t> {
         std::vector<std::pair<int64_t, int64_t>> ListRowPair;
         size_t next_ent = 0;
         for (size_t i_row = 0; i_row < n_rows; i_row++) {
@@ -595,30 +586,26 @@ static table_info* drop_duplicates_table_inner(table_info* in_table,
                 ListRowPair[pos].second = i_row;
             }
         }
-        std::vector<std::pair<std::ptrdiff_t, std::ptrdiff_t>> ListPairWrite;
+        std::vector<size_t> ListIdx;
         for (auto& eRowPair : ListRowPair) {
             if (eRowPair.first != -1)
-                ListPairWrite.push_back({eRowPair.first, -1});
+                ListIdx.push_back(eRowPair.first);
             if (eRowPair.second != -1)
-                ListPairWrite.push_back({eRowPair.second, -1});
+                ListIdx.push_back(eRowPair.second);
         }
-        return std::move(ListPairWrite);
+        return std::move(ListIdx);
     };
-    std::vector<std::pair<std::ptrdiff_t, std::ptrdiff_t>> ListPairWrite;
+    std::vector<size_t> ListIdx;
     if (step == 1 || keep == 0 || keep == 1)
-        ListPairWrite = RetrievePair1();
+        ListIdx = RetrieveListIdx1();
     else
-        ListPairWrite = RetrievePair2();
+        ListIdx = RetrieveListIdx2();
 #ifdef DEBUG_DD
-    int nbRow = ListPairWrite.size();
-    std::cout << "|ListPairWrite|=" << nbRow << "\n";
-    for (int iRow = 0; iRow < nbRow; iRow++) {
-        std::cout << "iRow=" << iRow << " pair=" << ListPairWrite[iRow].first
-                  << " , " << ListPairWrite[iRow].second << "\n";
-    }
+    int nbRow = ListIdx.size();
+    std::cout << "|ListIdx|=" << nbRow << "\n";
 #endif
     // Now building the out_arrs array.
-    table_info* ret_table = RetrieveTable(in_table, ListPairWrite, -1);
+    table_info* ret_table = RetrieveTable(in_table, ListIdx, -1);
     //
     delete[] hashes;
 #ifdef DEBUG_DD
@@ -952,21 +939,17 @@ table_info* sample_table(table_info* in_table, int64_t n, double frac,
                   MPI_COMM_WORLD);
     }
     //
-    std::vector<std::pair<std::ptrdiff_t, std::ptrdiff_t>> ListPairWrite;
+    std::vector<size_t> ListIdx;
     for (int i_samp_out = 0; i_samp_out < n_samp_out; i_samp_out++) {
-        int idx_export = ListIdxExport[i_samp_out];
-#ifdef DEBUG_SAMPLE
-        std::cout << "ListPairWrite : i_samp_out=" << i_samp_out
-                  << " idx_export=" << idx_export << "\n";
-#endif
-        ListPairWrite.push_back({idx_export, -1});
+        size_t idx_export = ListIdxExport[i_samp_out];
+        ListIdx.push_back(idx_export);
     }
 #ifdef DEBUG_SAMPLE
     //    std::cout << "sample_table : in_table\n";
     //    DEBUG_PrintSetOfColumn(std::cout, in_table->columns);
     //    DEBUG_PrintRefct(std::cout, in_table->columns);
 #endif
-    table_info* tab_out = RetrieveTable(in_table, ListPairWrite, -1);
+    table_info* tab_out = RetrieveTable(in_table, ListIdx, -1);
 #ifdef DEBUG_SAMPLE
     std::cout << "sample_table : tab_out\n";
     DEBUG_PrintSetOfColumn(std::cout, tab_out->columns);

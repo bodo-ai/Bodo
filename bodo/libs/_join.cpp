@@ -268,11 +268,11 @@ table_info* hash_join_table(table_info* in_table, int64_t n_key_t,
         size_t i = 0;
         bool map_integer_type = false;
         if (ChoiceOpt == 0) {
-            out_arrs.push_back(RetrieveArray(in_table, ListPairWrite, i,
+            out_arrs.push_back(RetrieveArray_TwoColumns(in_table, ListPairWrite, i,
                                              n_tot_left + i, 2,
                                              map_integer_type));
         } else {
-            out_arrs.push_back(RetrieveArray(in_table, ListPairWrite,
+            out_arrs.push_back(RetrieveArray_TwoColumns(in_table, ListPairWrite,
                                              n_tot_left + i, i, 2,
                                              map_integer_type));
         }
@@ -289,11 +289,11 @@ table_info* hash_join_table(table_info* in_table, int64_t n_key_t,
             // right. This means that additional NaNs cannot happen.
             bool map_integer_type = false;
             if (ChoiceOpt == 0) {
-                out_arrs.emplace_back(RetrieveArray(in_table, ListPairWrite, i,
+                out_arrs.emplace_back(RetrieveArray_TwoColumns(in_table, ListPairWrite, i,
                                                     n_tot_left + i, 2,
                                                     map_integer_type));
             } else {
-                out_arrs.emplace_back(RetrieveArray(in_table, ListPairWrite,
+                out_arrs.emplace_back(RetrieveArray_TwoColumns(in_table, ListPairWrite,
                                                     n_tot_left + i, i, 2,
                                                     map_integer_type));
             }
@@ -303,10 +303,10 @@ table_info* hash_join_table(table_info* in_table, int64_t n_key_t,
             // additional NaN.
             bool map_integer_type = vect_need_typechange[idx];
             if (ChoiceOpt == 0) {
-                out_arrs.emplace_back(RetrieveArray(in_table, ListPairWrite, i,
+                out_arrs.emplace_back(RetrieveArray_TwoColumns(in_table, ListPairWrite, i,
                                                     -1, 0, map_integer_type));
             } else {
-                out_arrs.emplace_back(RetrieveArray(in_table, ListPairWrite, -1,
+                out_arrs.emplace_back(RetrieveArray_TwoColumns(in_table, ListPairWrite, -1,
                                                     i, 1, map_integer_type));
             }
         }
@@ -324,11 +324,11 @@ table_info* hash_join_table(table_info* in_table, int64_t n_key_t,
             (i < n_key && vect_same_key[i < n_key ? i : 0] == 0 && !is_join)) {
             bool map_integer_type = vect_need_typechange[idx];
             if (ChoiceOpt == 0) {
-                out_arrs.emplace_back(RetrieveArray(in_table, ListPairWrite, -1,
+                out_arrs.emplace_back(RetrieveArray_TwoColumns(in_table, ListPairWrite, -1,
                                                     n_tot_left + i, 1,
                                                     map_integer_type));
             } else {
-                out_arrs.emplace_back(RetrieveArray(in_table, ListPairWrite,
+                out_arrs.emplace_back(RetrieveArray_TwoColumns(in_table, ListPairWrite,
                                                     n_tot_left + i, -1, 0,
                                                     map_integer_type));
             }

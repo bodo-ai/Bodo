@@ -120,11 +120,28 @@ inline double GetDoubleEntry(Bodo_CTypes::CTypeEnum dtype, char* ptr) {
  *    NUMPY to NULLABLE_INT_ARRAY if not available.
  * @return one column of the table output.
  */
-array_info* RetrieveArray(
+array_info* RetrieveArray_TwoColumns(
     table_info* const& in_table,
     std::vector<std::pair<std::ptrdiff_t, std::ptrdiff_t>> const& ListPairWrite,
     size_t const& shift1, size_t const& shift2, int const& ChoiceColumn,
     bool const& map_integer_type);
+
+/** This function returns the column with the rows with the rows given in "ListIdx"
+ *
+ * @param array_info* : the input pointer
+ * @param ListIdx is the vector of list of rows selected
+ * @return one array
+ */
+array_info* RetrieveArray_SingleColumn(array_info* in_arr, std::vector<size_t> const& ListIdx);
+
+/** This function uses the combinatorial information computed in the
+ * "ListIdx" array and return the coulm with the selecetd rows.
+ *
+ * @param in_arr : the input column
+ * @param idx_arr : the index column
+ * @return one array
+ */
+array_info* RetrieveArray_SingleColumn_arr(array_info* in_arr, array_info* idx_arr);
 
 /** This function takes a table, a list of rows and returns the rows obtained
  * by selecting the rows.
@@ -136,10 +153,7 @@ array_info* RetrieveArray(
  * are selected.
  * @return the table output.
  */
-table_info* RetrieveTable(
-    table_info* const& in_table,
-    std::vector<std::pair<std::ptrdiff_t, std::ptrdiff_t>> const& ListPairWrite,
-    int const& n_col);
+table_info* RetrieveTable(table_info* const& in_table, std::vector<size_t> const& ListIdx, int const& n_col);
 
 /** This code test if two keys are equal (Before that the hash should have been
  * used) It is used that way because we assume that the left key have the same

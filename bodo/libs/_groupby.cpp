@@ -3030,18 +3030,7 @@ class IdxMaxColSet : public BasicColSet {
                                   Bodo_FTypes::count);  // zero init
         do_apply_to_column(in_col, update_cols[1], aux_cols, grp_info, ftype);
 
-        // TODO we should be able to call RetrieveArray without building
-        // ListPairWrite which is essentially an unnecessary copy
-        std::vector<array_info*> index_col_vec = {index_col};
-        table_info t(index_col_vec);
-        std::vector<std::pair<std::ptrdiff_t, std::ptrdiff_t>> ListPairWrite(
-            index_pos_col->length);
-        for (int64_t i = 0; i < index_pos_col->length; i++) {
-            ListPairWrite[i] = {index_pos_col->at<uint64_t>(i), 0};
-        }
-        array_info* real_out_col =
-            RetrieveArray(&t, ListPairWrite, 0, 0, 0, false);
-
+        array_info* real_out_col = RetrieveArray_SingleColumn_arr(index_col, index_pos_col);
         array_info* out_col = update_cols[0];
         *out_col = std::move(*real_out_col);
         delete real_out_col;
@@ -3079,18 +3068,7 @@ class IdxMaxColSet : public BasicColSet {
         do_apply_to_column(update_cols[1], combine_cols[1], aux_cols, grp_info,
                            ftype);
 
-        // TODO we should be able to call RetrieveArray without building
-        // ListPairWrite which is essentially an unnecessary copy
-        std::vector<array_info*> index_col_vec = {update_cols[0]};
-        table_info t(index_col_vec);
-        std::vector<std::pair<std::ptrdiff_t, std::ptrdiff_t>> ListPairWrite(
-            index_pos_col->length);
-        for (int64_t i = 0; i < index_pos_col->length; i++) {
-            ListPairWrite[i] = {index_pos_col->at<uint64_t>(i), 0};
-        }
-        array_info* real_out_col =
-            RetrieveArray(&t, ListPairWrite, 0, 0, 0, false);
-
+        array_info* real_out_col = RetrieveArray_SingleColumn_arr(update_cols[0], index_pos_col);
         array_info* out_col = combine_cols[0];
         *out_col = std::move(*real_out_col);
         delete real_out_col;

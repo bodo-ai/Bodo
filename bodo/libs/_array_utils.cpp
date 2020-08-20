@@ -167,7 +167,210 @@ void append_to_out_array(std::shared_ptr<arrow::Array> input_array,
     }
 }
 
-array_info* RetrieveArray(
+template<typename F>
+array_info* RetrieveArray_SingleColumn_F(array_info* in_arr, F f, size_t nRowOut)
+{
+    array_info* out_arr = NULL;
+    bodo_array_type::arr_type_enum arr_type = in_arr->arr_type;
+    Bodo_CTypes::CTypeEnum dtype = in_arr->dtype;
+    if (arr_type == bodo_array_type::LIST_STRING) {
+        // In the first case of STRING, we have to deal with offsets first so we
+        // need one first loop to determine the needed length. In the second
+        // loop, the assignation is made. If the entries are missing then the
+        // bitmask is set to false.
+        std::vector<uint32_t> ListSizes_index(nRowOut);
+        std::vector<uint32_t> ListSizes_data(nRowOut);
+        int64_t tot_size_index = 0;
+        int64_t tot_size_data = 0;
+        uint32_t* index_offsets = (uint32_t*)in_arr->data3;
+        uint32_t* data_offsets = (uint32_t*)in_arr->data2;
+        for (size_t iRow = 0; iRow < nRowOut; iRow++) {
+            size_t idx = f(iRow);
+            uint32_t size_index = 0;
+            uint32_t size_data = 0;
+            uint32_t start_offset_index = index_offsets[idx];
+            uint32_t end_offset_index = index_offsets[idx + 1];
+            size_index = end_offset_index - start_offset_index;
+            uint32_t start_offset_data = data_offsets[start_offset_index];
+            uint32_t end_offset_data = data_offsets[end_offset_index];
+            size_data = end_offset_data - start_offset_data;
+            ListSizes_index[iRow] = size_index;
+            ListSizes_data[iRow] = size_data;
+            tot_size_index += size_index;
+            tot_size_data += size_data;
+        }
+        out_arr = alloc_array(nRowOut, tot_size_index, tot_size_data, arr_type,
+                              dtype, 0, 0);
+        uint8_t* out_null_bitmask = (uint8_t*)out_arr->null_bitmask;
+        uint32_t pos_index = 0;
+        uint32_t pos_data = 0;
+        uint32_t* out_index_offsets = (uint32_t*)out_arr->data3;
+        uint32_t* out_data_offsets = (uint32_t*)out_arr->data2;
+        char* out_data1 = out_arr->data1;
+        out_data_offsets[0] = 0;
+        uint8_t* in_null_bitmask = (uint8_t*)in_arr->null_bitmask;
+        uint32_t* in_index_offsets = (uint32_t*)in_arr->data3;
+        uint32_t* in_data_offsets = (uint32_t*)in_arr->data2;
+        char* in_data1 = in_arr->data1;
+        for (size_t iRow = 0; iRow < nRowOut; iRow++) {
+            size_t idx = f(iRow);
+            uint32_t size_index = ListSizes_index[iRow];
+            uint32_t size_data = ListSizes_data[iRow];
+            out_index_offsets[iRow] = pos_index;
+            uint32_t start_index_offset = in_index_offsets[idx];
+            uint32_t start_data_offset = in_data_offsets[start_index_offset];
+            for (uint32_t u = 0; u < size_index; u++) {
+                uint32_t len_str = in_data_offsets[start_index_offset + u + 1] -
+                    in_data_offsets[start_index_offset + u];
+                out_data_offsets[pos_index + u + 1] = out_data_offsets[pos_index + u] + len_str;
+            }
+            memcpy(&out_data1[pos_data], &in_data1[start_data_offset], size_data);
+            bool bit = GetBit(in_null_bitmask, idx);
+            pos_index += size_index;
+            pos_data += size_data;
+            SetBitTo(out_null_bitmask, iRow, bit);
+        }
+        out_index_offsets[nRowOut] = pos_index;
+    }
+    if (arr_type == bodo_array_type::STRING) {
+        // In the first case of STRING, we have to deal with offsets first so we
+        // need one first loop to determine the needed length. In the second
+        // loop, the assignation is made. If the entries are missing then the
+        // bitmask is set to false.
+        int64_t n_chars = 0;
+        std::vector<uint32_t> ListSizes(nRowOut);
+        uint32_t* in_offsets = (uint32_t*)in_arr->data2;
+        uint8_t* in_null_bitmask = (uint8_t*)in_arr->null_bitmask;
+        char* in_data1 = in_arr->data1;
+        for (size_t iRow = 0; iRow < nRowOut; iRow++) {
+            size_t idx = f(iRow);
+            uint32_t size = 0;
+            uint32_t start_offset = in_offsets[idx];
+            uint32_t end_offset = in_offsets[idx + 1];
+            size = end_offset - start_offset;
+            ListSizes[iRow] = size;
+            n_chars += size;
+        }
+        out_arr = alloc_array(nRowOut, n_chars, -1, arr_type, dtype, 0, 0);
+        uint32_t* out_offsets = (uint32_t*)out_arr->data2;
+        uint8_t* out_null_bitmask = (uint8_t*)out_arr->null_bitmask;
+        char* out_data1 = out_arr->data1;
+        uint32_t pos = 0;
+        for (size_t iRow = 0; iRow < nRowOut; iRow++) {
+            size_t idx = f(iRow);
+            uint32_t size = ListSizes[iRow];
+            out_offsets[iRow] = pos;
+            uint32_t start_offset = in_offsets[idx];
+            char* out_ptr = out_data1 + pos;
+            char* in_ptr = in_data1 + start_offset;
+            memcpy(out_ptr, in_ptr, size);
+            pos += size;
+            bool bit = GetBit(in_null_bitmask, idx);
+            SetBitTo(out_null_bitmask, iRow, bit);
+        }
+        out_offsets[nRowOut] = pos;
+    }
+    if (arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
+        // In the case of NULLABLE array, we do a single loop for
+        // assigning the arrays.
+        // We do not need to reassign the pointers, only their size
+        // suffices for the copy.
+        // In the case of missing array a value of false is assigned
+        // to the bitmask.
+        uint8_t* in_null_bitmask = (uint8_t*)in_arr->null_bitmask;
+        char* in_data1 = in_arr->data1;
+        out_arr = alloc_array(nRowOut, -1, -1, arr_type, dtype, 0, 0);
+        uint8_t* out_null_bitmask = (uint8_t*)out_arr->null_bitmask;
+        char* out_data1 = out_arr->data1;
+        uint64_t siztype = numpy_item_size[dtype];
+        for (size_t iRow = 0; iRow < nRowOut; iRow++) {
+            size_t idx = f(iRow);
+            char* out_ptr = out_data1 + siztype * iRow;
+            char* in_ptr = in_data1 + siztype * idx;
+            memcpy(out_ptr, in_ptr, siztype);
+            bool bit = GetBit(in_null_bitmask, idx);
+            SetBitTo(out_null_bitmask, iRow, bit);
+        }
+    }
+    if (arr_type == bodo_array_type::CATEGORICAL) {
+        // In the case of CATEGORICAL array we have only to put a single
+        // entry. For the NaN entry the value is -1.
+        uint64_t siztype = numpy_item_size[dtype];
+        char* in_data1 = in_arr->data1;
+        int64_t num_categories = in_arr->num_categories;
+        out_arr = alloc_categorical(nRowOut, dtype, num_categories);
+        char* out_data1 = out_arr->data1;
+        for (size_t iRow = 0; iRow < nRowOut; iRow++) {
+            size_t idx = f(iRow);
+            char* out_ptr = out_data1 + siztype * iRow;
+            char* in_ptr = in_data1 + siztype * idx;
+            memcpy(out_ptr, in_ptr, siztype);
+        }
+    }
+    if (arr_type == bodo_array_type::NUMPY) {
+        // In the case of NUMPY array we have only to put a single
+        // entry.
+        uint64_t siztype = numpy_item_size[dtype];
+        char* in_data1 = in_arr->data1;
+        out_arr = alloc_array(nRowOut, -1, -1, arr_type, dtype, 0, 0);
+        char* out_data1 = out_arr->data1;
+        for (size_t iRow = 0; iRow < nRowOut; iRow++) {
+            size_t idx = f(iRow);
+            char* out_ptr = out_data1 + siztype * iRow;
+            char* in_ptr = in_data1 + siztype * idx;
+            memcpy(out_ptr, in_ptr, siztype);
+        }
+    }
+    if (arr_type == bodo_array_type::ARROW) {
+        // Arrow builder for output array. builds it dynamically (buffer
+        // sizes are not known in advance)
+        std::unique_ptr<arrow::ArrayBuilder> builder;
+        std::shared_ptr<arrow::Array> in_arrow_array = in_arr->array;
+        arrow::MakeBuilder(arrow::default_memory_pool(), in_arrow_array->type(),
+                           &builder);
+        for (size_t iRow = 0; iRow < nRowOut; iRow++) {
+            size_t idx = f(iRow);
+            // append value in position 'row' of input array to builder's
+            // array (this is a recursive algorithm, can traverse nested
+            // arrays)
+            append_to_out_array(in_arrow_array, idx, idx + 1, builder.get());
+        }
+
+        // get final output array from builder
+        std::shared_ptr<arrow::Array> out_arrow_array;
+        // TODO: assert builder is not null (at least one row added)
+        builder->Finish(&out_arrow_array);
+        out_arr =
+            new array_info(bodo_array_type::ARROW, Bodo_CTypes::INT8 /*dummy*/,
+                           nRowOut, -1, -1, NULL, NULL, NULL, NULL,
+                           /*meminfo TODO*/ NULL, NULL, out_arrow_array);
+    }
+    return out_arr;
+};
+
+array_info* RetrieveArray_SingleColumn(array_info* in_arr, std::vector<size_t> const& ListIdx)
+{
+    return RetrieveArray_SingleColumn_F(in_arr,
+            [&](size_t iRow) -> size_t {return ListIdx[iRow];},
+            ListIdx.size());
+}
+
+array_info* RetrieveArray_SingleColumn_arr(array_info* in_arr, array_info* idx_arr)
+{
+    if (idx_arr->dtype != Bodo_CTypes::UINT64) {
+        Bodo_PyErr_SetString(PyExc_RuntimeError, "UINT64 is the only index type allowed");
+        return nullptr;
+    }
+    size_t siz = idx_arr->length;
+    return RetrieveArray_SingleColumn_F(in_arr,
+            [&](size_t idx) -> size_t {
+                 uint64_t val = idx_arr->at<uint64_t>(idx);
+                 return size_t(val);
+               }, siz);
+}
+
+
+array_info* RetrieveArray_TwoColumns(
     table_info* const& in_table,
     std::vector<std::pair<std::ptrdiff_t, std::ptrdiff_t>> const& ListPairWrite,
     size_t const& shift1, size_t const& shift2, int const& ChoiceColumn,
@@ -461,20 +664,16 @@ array_info* RetrieveArray(
     return out_arr;
 };
 
-table_info* RetrieveTable(
-    table_info* const& in_table,
-    std::vector<std::pair<std::ptrdiff_t, std::ptrdiff_t>> const& ListPairWrite,
-    int const& n_cols_arg) {
+table_info* RetrieveTable(table_info* const& in_table, std::vector<size_t> const& ListIdx,
+                          int const& n_cols_arg) {
     std::vector<array_info*> out_arrs;
-    bool map_integer_type = false;
     size_t n_cols;
     if (n_cols_arg == -1)
         n_cols = (size_t)in_table->ncols();
     else
         n_cols = n_cols_arg;
     for (size_t i_col = 0; i_col < n_cols; i_col++)
-        out_arrs.emplace_back(RetrieveArray(in_table, ListPairWrite, i_col, -1,
-                                            0, map_integer_type));
+        out_arrs.emplace_back(RetrieveArray_SingleColumn(in_table->columns[i_col], ListIdx));
     return new table_info(out_arrs);
 }
 
