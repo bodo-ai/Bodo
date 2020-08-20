@@ -314,6 +314,33 @@ IR extensions have full transformation and analysis support (usually
 more extensive that builtin functions).
 
 
+.. _dev_code_structure:
+
+Code Structure
+--------------
+
+Below is the high level structure of the code.
+
+- ``transforms`` directory defines Bodo specific analysis and transformation
+  passes such distributed analysis and transformation.
+- ``hiframes`` directory provides Pandas functionality such as DataFrame,
+  Series and Index.
+- ``ir`` directory defines and implements Bodo specific IR nodes such as
+  Sort and Join.
+- ``libs`` directory provides supporting data structures and libraries such as
+  Bodo arrays, distributed APIs. It also includes helper C/C++
+  extensions and C++ runtime engine for join, groupby and other operations.
+- ``io`` directory provides I/O support such as CSV, HDF5, Parquet and Numpy.
+- ``tests`` provides unittests.
+- ``utils`` provides utility functions for various stages of compilation
+  such as typing and codegen.
+- ``decorators.py`` is the starting point, which defines decorators of Bodo.
+  Currently just ``@jit`` is provided but more is expected.
+- ``compiler.py`` defines the compiler pipeline for this decorator.
+- ``numba_compat.py`` includes our Numba monkey patches (i.e. replaces some internals of Numba for Bodo purposes).
+- ``master_mode.py`` defines an experimental master/executor mode.
+
+
 .. _pandas_extensions:
 
 Supporting New Data Structures and APIs
