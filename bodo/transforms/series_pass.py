@@ -860,15 +860,6 @@ class SeriesPass:
                 )
                 return replace_func(self, impl, [arg1, arg2])
 
-            # series(dt64) comp ops with dt64 type
-            if (is_dt64_series_typ(typ1) and typ2 == types.NPDatetime("ns")) or (
-                is_dt64_series_typ(typ2) and typ1 == types.NPDatetime("ns")
-            ):
-                impl = bodo.hiframes.series_dt_impl.create_cmp_op_overload(rhs.fn)(
-                    typ1, typ2
-                )
-                return replace_func(self, impl, [arg1, arg2])
-
             # string comparison with DatetimeIndex
             if (
                 isinstance(typ1, DatetimeIndexType)
