@@ -791,8 +791,6 @@ class SeriesCompEqual(AbstractTemplate):
                 SeriesType(types.boolean, boolean_array, index_typ), va, vb
             )
 
-        if is_dt64_series_typ(va) and is_dt64_series_typ(vb):
-            return signature(SeriesType(types.boolean, boolean_array, va.index), va, vb)
 
 
 @infer

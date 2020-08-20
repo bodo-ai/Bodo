@@ -689,26 +689,6 @@ class SeriesPass:
                     self,
                 )
 
-        # both dt64
-        if (
-            is_dt64_series_typ(typ1)
-            and is_dt64_series_typ(typ2)
-            and rhs.fn != operator.sub
-        ):
-            func = rhs.fn
-
-            def impl(S1, S2):  # pragma: no cover
-                index = bodo.hiframes.pd_series_ext.get_series_index(S1)
-                arr1 = bodo.hiframes.pd_series_ext.get_series_data(S1)
-                arr2 = bodo.hiframes.pd_series_ext.get_series_data(S2)
-                l = len(arr1)
-                S = bodo.libs.bool_arr_ext.alloc_bool_array(l)
-                for i in numba.parfors.parfor.internal_prange(l):
-                    S[i] = func(arr1[i], arr2[i])
-                return bodo.hiframes.pd_series_ext.init_series(S, index)
-
-            return replace_func(self, impl, [arg1, arg2])
-
         # inline overloaded
         # TODO: use overload inlining when available
         if rhs.fn == operator.sub:
