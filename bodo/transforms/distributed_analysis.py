@@ -1723,7 +1723,10 @@ class DistributedAnalysis:
         # examples: A = X[:n//3], A = X[::2,5]
         elif isinstance(index_typ, types.SliceType):
             # output array is 1D_Var if input array is distributed
-            out_dist = self._min_dist(Distribution.OneD_Var, array_dists[in_var.name])
+            out_dist = Distribution.OneD_Var
+            if lhs in array_dists:
+                out_dist = self._min_dist(out_dist, array_dists[lhs])
+            out_dist = self._min_dist(out_dist, array_dists[in_var.name])
             array_dists[lhs] = out_dist
             # input can become REP
             if out_dist != Distribution.OneD_Var:
