@@ -697,6 +697,10 @@ def gatherv(data, allgather=False, warn_if_rep=True):
             stop = bodo.libs.distributed_api.dist_reduce(
                 stop, np.int32(Reduce_Type.Max.value)
             )
+            # output is empty if all range chunks are empty
+            if start == INT64_MAX and stop == INT64_MIN:
+                start = 0
+                stop = 0
             # gatherv() of dataframe returns 0-length arrays so index should
             # be 0-length to match
             if bodo.get_rank() != 0 and not allgather:
