@@ -216,28 +216,6 @@ Once error checking is implemented for a function, we should test whether the er
             bodo.jit(impl)(input)
 
 
-.. _dev_code_structure:
-
-Code Structure
---------------
-
-Below is the high level structure of the code.
-
-- ``decorators.py`` is the starting point, which defines decorators of Bodo.
-  Currently just ``@jit`` is provided but more is expected.
-- ``compiler.py`` defines the compiler pipeline for this decorator.
-- ``transforms`` directory defines Bodo specific analysis and transformation
-  passes such distributed analysis and transformation.
-- ``hiframes`` directory provides Pandas functionality such as DataFrame,
-  Series and Index.
-- ``ir`` directory defines and implements Bodo specific IR nodes such as
-  Sort and Join.
-- ``libs`` directory provides supporting data structures and libraries such as
-  strings, dictionary, quantiles, timsort. It also includes helper C/C++
-  extensions and C++ runtime engine for join, groupby and other operations.
-- ``io`` directory provides I/O support such as CSV, HDF5, Parquet and Numpy.
-- ``tests`` provides unittests.
-
 .. _dev_debugging:
 
 Debugging
