@@ -886,6 +886,12 @@ class DistributedPass:
             self._set_last_arg_to_true(assign.value)
             return [assign]
 
+        if fdef == ("rebalance", "bodo.libs.distributed_api") and (
+            self._is_1D_arr(rhs.args[0].name) or self._is_1D_Var_arr(rhs.args[0].name)
+        ):
+            f = lambda df: bodo.libs.distributed_api.rebalance_kernel(df)
+            return compile_func_single_block(f, rhs.args, assign.target, self)
+
         if fdef == ("sample_table_operation", "bodo.libs.array_kernels") and (
             self._is_1D_tup(rhs.args[0].name) or self._is_1D_Var_tup(rhs.args[0].name)
         ):

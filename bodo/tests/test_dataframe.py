@@ -9,6 +9,7 @@ import numpy as np
 import datetime
 from decimal import Decimal
 import pytest
+import random
 
 import numba
 import bodo
@@ -426,6 +427,46 @@ def test_df_multi_get_level():
     check_func(impl1, (df,))
     check_func(impl2, (df,))
     check_func(impl3, (df,))
+
+
+def test_rebalance():
+    """The bodo.rebalance function. It is kind of """
+    random.seed(5)
+    # We create an unbalanced dataframe on input.
+    rank = bodo.get_rank()
+    n = 10 * (1 + rank)
+    # The data from other nodes. It ends at prev_siz
+    prev_siz = 10 * rank + 5 * rank * (rank - 1)
+    # We need a nontrivial index for the run to be correct.
+    elist = [4 + prev_siz + x for x in range(n)]
+    flist = [prev_siz + x for x in range(n)]
+    df_in = pd.DataFrame({"A": elist}, index=flist)
+    df_in_merge = bodo.gatherv(df_in)
+    # Direct calling the function
+    df_out = bodo.libs.distributed_api.rebalance_kernel(df_in)
+    df_out_merge = bodo.gatherv(df_out)
+    pd.testing.assert_frame_equal(df_in_merge, df_out_merge)
+    # The distributed case
+    def f(df):
+        return bodo.libs.distributed_api.rebalance(df)
+
+    bodo_dist = bodo.jit(all_args_distributed_block=True, all_returns_distributed=True)(
+        f
+    )
+    df_out_dist = bodo_dist(df_in)
+    df_out_dist_merge = bodo.gatherv(df_out_dist)
+    df_len_dist = pd.DataFrame({"A":[len(df_out_dist)]})
+    df_len_dist_merge = bodo.gatherv(df_len_dist)
+    if bodo.get_rank()==0:
+        delta_size = df_len_dist_merge["A"].max() - df_len_dist_merge["A"].min();
+        assert delta_size <= 1
+    pd.testing.assert_frame_equal(df_in_merge, df_out_dist_merge)
+    # The replicated case
+    bodo_rep = bodo.jit(
+        all_args_distributed_block=False, all_returns_distributed=False
+    )(f)
+    df_out_rep = bodo_rep(df_in_merge)
+    pd.testing.assert_frame_equal(df_in_merge, df_out_rep)
 
 
 def test_df_replace():

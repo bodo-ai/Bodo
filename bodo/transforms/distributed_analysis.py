@@ -645,7 +645,9 @@ class DistributedAnalysis:
                 dist_arg0 = is_distributable_typ(self.typemap[rhs.args[0].name])
                 dist_arg1 = is_distributable_typ(self.typemap[rhs.args[1].name])
                 if dist_arg0 and dist_arg1:
-                    self._meet_array_dists(rhs.args[0].name, rhs.args[1].name, array_dists)
+                    self._meet_array_dists(
+                        rhs.args[0].name, rhs.args[1].name, array_dists
+                    )
                 elif not dist_arg0 and dist_arg1:
                     self._set_var_dist(rhs.args[1].name, array_dists, Distribution.REP)
                 elif not dist_arg1 and dist_arg0:
@@ -1434,6 +1436,11 @@ class DistributedAnalysis:
                 array_dists[lhs] = Distribution.OneD
             else:
                 self._meet_array_dists(lhs, in_arr, array_dists)
+            return
+
+        if func_name == "rebalance":
+            arr_name = args[0].name
+            self._meet_array_dists(lhs, arr_name, array_dists)
             return
 
         # set REP if not found
