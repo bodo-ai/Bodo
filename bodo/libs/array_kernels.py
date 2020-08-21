@@ -56,6 +56,7 @@ from bodo.libs.array import (
     sample_table,
     info_from_table,
     info_to_array,
+    delete_info_decref_array,
     delete_table,
 )
 from bodo.utils.typing import (
@@ -244,7 +245,9 @@ _median_series_computation = types.ExternalFunction(
 
 @numba.njit
 def median_series_computation(res, arr, is_parallel, skipna):
-    _median_series_computation(res, array_to_info(arr), is_parallel, skipna)
+    arr_info = array_to_info(arr)
+    _median_series_computation(res, arr_info, is_parallel, skipna)
+    delete_info_decref_array(arr_info)
 
 
 @numba.njit
