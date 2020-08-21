@@ -284,6 +284,16 @@ def array_to_info(typingctx, arr_type_t):
                     )
                 return buffers
 
+            def get_field_names(arr_typ):
+                l_field_names = []
+                if isinstance(arr_typ, StructArrayType):
+                    for e_name, e_arr in zip(arr_typ.dtype.names, arr_typ.data):
+                        l_field_names.append(e_name)
+                        l_field_names += get_field_names(e_arr)
+                elif isinstance(arr_typ, ArrayItemArrayType):
+                    l_field_names += get_field_names(arr_typ.dtype)
+                return l_field_names
+
             # get list of all types in the nested datastructure (to pass to C++)
             types_list = get_types(arr_type)
             types_array = cgutils.pack_array(
@@ -300,6 +310,18 @@ def array_to_info(typingctx, arr_type_t):
             buffers = get_buffers(arr_type, in_arr)
             buffers_ptr = cgutils.alloca_once_value(builder, buffers)
 
+            l_field_names = get_field_names(arr_type)
+            # Field names is used for struct arrays. For nested data structures that do not
+            # contain structs we may have an empty l_field_names which causes typing problems.
+            # Thus in that case we assign to some non-empty array that will not be used.
+            if len(l_field_names) == 0:
+                l_field_names = ["irrelevant"]
+            field_names = cgutils.pack_array(
+                builder,
+                [context.insert_const_string(builder.module, a) for a in l_field_names],
+            )
+            field_names_ptr = cgutils.alloca_once_value(builder, field_names)
+
             nested_array = context.make_helper(builder, arr_type, in_arr)
 
             # pass all the data to C++ so that an array_info using nested Arrow
@@ -311,6 +333,7 @@ def array_to_info(typingctx, arr_type_t):
                     lir.IntType(8).as_pointer().as_pointer(),
                     lir.IntType(64).as_pointer(),
                     lir.IntType(8).as_pointer(),
+                    lir.IntType(8).as_pointer(), # Maybe it should be lit.IntType(8).as_pointer().as_pointer()
                 ],
             )
             fn_tp = builder.module.get_or_insert_function(
@@ -324,6 +347,7 @@ def array_to_info(typingctx, arr_type_t):
                         buffers_ptr, lir.IntType(8).as_pointer().as_pointer()
                     ),
                     builder.bitcast(lengths_ptr, lir.IntType(64).as_pointer()),
+                    builder.bitcast(field_names_ptr, lir.IntType(8).as_pointer()),
                     nested_array.meminfo,
                 ],
             )

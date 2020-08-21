@@ -47,19 +47,21 @@ DatasetReader *get_dataset_reader(char *file_name, bool is_parallel,
 void del_dataset_reader(DatasetReader *reader);
 
 int64_t pq_get_size(DatasetReader *reader, int64_t column_idx);
-int64_t pq_read(DatasetReader *reader, int64_t column_idx, uint8_t *out_data,
-                int out_dtype, uint8_t *out_nulls = nullptr);
-int pq_read_string(DatasetReader *reader, int64_t column_idx,
-                   uint32_t **out_offsets, uint8_t **out_data,
-                   uint8_t **out_nulls);
-int pq_read_list_string(DatasetReader *reader, int64_t column_idx,
-                        NRT_MemInfo **array_item_meminfo);
-int pq_read_array_item(DatasetReader *reader, int64_t column_idx, int out_dtype,
+int64_t pq_read(DatasetReader *reader, int64_t real_column_idx,
+                int64_t column_idx, uint8_t *out_data, int out_dtype,
+                uint8_t *out_nulls = nullptr);
+int pq_read_string(DatasetReader *reader, int64_t real_column_idx,
+                   int64_t column_idx, uint32_t **out_offsets,
+                   uint8_t **out_data, uint8_t **out_nulls);
+int pq_read_list_string(DatasetReader *reader, int64_t real_column_idx,
+                        int64_t column_idx, NRT_MemInfo **array_item_meminfo);
+int pq_read_array_item(DatasetReader *reader, int64_t real_column_idx,
+                       int64_t column_idx, int out_dtype,
                        array_info **out_offsets, array_info **out_data,
                        array_info **out_nulls);
-int pq_read_arrow_array(DatasetReader *reader, int64_t column_idx,
-                        int64_t column_siz, int64_t *lengths,
-                        array_info **out_infos);
+int pq_read_arrow_array(DatasetReader *reader, int64_t real_column_idx,
+                        int64_t column_idx, int64_t column_siz,
+                        int64_t *lengths, array_info **out_infos);
 void pack_null_bitmap(uint8_t **out_nulls, std::vector<bool> &null_vec,
                       int64_t n_all_vals);
 void pq_write(const char *filename, const table_info *table,
@@ -133,8 +135,7 @@ DatasetReader *get_dataset_reader(char *file_name, bool parallel,
     // ds = bodo.io.parquet_pio.get_parquet_dataset(file_name, parallel)
     PyObject *ds = PyObject_CallMethod(pq_mod, "get_parquet_dataset", "si",
                                        file_name, int(parallel));
-    if (PyErr_Occurred())
-        return NULL;
+    if (PyErr_Occurred()) return NULL;
 
     Py_DECREF(pq_mod);
 
@@ -184,8 +185,7 @@ DatasetReader *get_dataset_reader(char *file_name, bool parallel,
 
         Py_DECREF(iterator);
 
-        if (PyErr_Occurred())
-            return NULL;
+        if (PyErr_Occurred()) return NULL;
         PyGILState_Release(gilstate);
         return ds_reader;
     }
@@ -247,8 +247,7 @@ DatasetReader *get_dataset_reader(char *file_name, bool parallel,
 
     Py_DECREF(iterator);
 
-    if (PyErr_Occurred())
-        return NULL;
+    if (PyErr_Occurred()) return NULL;
     PyGILState_Release(gilstate);
     return ds_reader;
 }
@@ -259,8 +258,9 @@ int64_t pq_get_size(DatasetReader *reader, int64_t column_idx) {
     return reader->count;
 }
 
-int64_t pq_read(DatasetReader *ds_reader, int64_t column_idx, uint8_t *out_data,
-                int out_dtype, uint8_t *out_nulls) {
+int64_t pq_read(DatasetReader *ds_reader, int64_t real_column_idx,
+                int64_t column_idx, uint8_t *out_data, int out_dtype,
+                uint8_t *out_nulls) {
     if (ds_reader->count == 0) return 0;
 
     int64_t start = ds_reader->start_row_first_file;
@@ -272,7 +272,7 @@ int64_t pq_read(DatasetReader *ds_reader, int64_t column_idx, uint8_t *out_data,
         int64_t rows_to_read =
             std::min(ds_reader->count - read_rows, file_size - start);
 
-        pq_read_single_file(file_reader, column_idx,
+        pq_read_single_file(file_reader, real_column_idx, column_idx,
                             out_data + read_rows * dtype_size, out_dtype, start,
                             rows_to_read, out_nulls, read_rows);
         read_rows += rows_to_read;
@@ -281,9 +281,9 @@ int64_t pq_read(DatasetReader *ds_reader, int64_t column_idx, uint8_t *out_data,
     return 0;
 }
 
-int pq_read_string(DatasetReader *ds_reader, int64_t column_idx,
-                   uint32_t **out_offsets, uint8_t **out_data,
-                   uint8_t **out_nulls) {
+int pq_read_string(DatasetReader *ds_reader, int64_t real_column_idx,
+                   int64_t column_idx, uint32_t **out_offsets,
+                   uint8_t **out_data, uint8_t **out_nulls) {
     if (ds_reader->count == 0) return 0;
 
     int64_t start = ds_reader->start_row_first_file;
@@ -299,8 +299,9 @@ int pq_read_string(DatasetReader *ds_reader, int64_t column_idx,
         int64_t rows_to_read =
             std::min(ds_reader->count - read_rows, file_size - start);
 
-        pq_read_string_single_file(file_reader, column_idx, start, rows_to_read,
-                                   &offset_vec, &data_vec, &null_vec);
+        pq_read_string_single_file(file_reader, real_column_idx, column_idx,
+                                   start, rows_to_read, &offset_vec, &data_vec,
+                                   &null_vec);
 
         size_t size = offset_vec.size();
         for (int64_t i = 1; i <= rows_to_read + 1; i++)
@@ -324,8 +325,8 @@ int pq_read_string(DatasetReader *ds_reader, int64_t column_idx,
     return n_all_vals;
 }
 
-int pq_read_list_string(DatasetReader *ds_reader, int64_t column_idx,
-                        NRT_MemInfo **array_item_meminfo) {
+int pq_read_list_string(DatasetReader *ds_reader, int64_t real_column_idx,
+                        int64_t column_idx, NRT_MemInfo **array_item_meminfo) {
     if (ds_reader->count == 0) return 0;
 
     int64_t start = ds_reader->start_row_first_file;
@@ -345,8 +346,8 @@ int pq_read_list_string(DatasetReader *ds_reader, int64_t column_idx,
             std::min(ds_reader->count - read_rows, file_size - start);
 
         int64_t n_strings = pq_read_list_string_single_file(
-            file_reader, column_idx, start, rows_to_read, &offset_vec,
-            &index_offset_vec, &data_vec, &null_vec);
+            file_reader, real_column_idx, column_idx, start, rows_to_read,
+            &offset_vec, &index_offset_vec, &data_vec, &null_vec);
 
         size_t size = offset_vec.size();
         for (int64_t i = 1; i <= n_strings + 1; i++)
@@ -391,9 +392,9 @@ int pq_read_list_string(DatasetReader *ds_reader, int64_t column_idx,
     return n_all_vals;
 }
 
-int pq_read_arrow_array(DatasetReader *ds_reader, int64_t column_idx,
-                        int64_t column_siz, int64_t *lengths,
-                        array_info **out_infos) {
+int pq_read_arrow_array(DatasetReader *ds_reader, int64_t real_column_idx,
+                        int64_t column_idx, int64_t column_siz,
+                        int64_t *lengths, array_info **out_infos) {
     if (ds_reader->count == 0) return 0;
 
     int64_t start = ds_reader->start_row_first_file;
@@ -424,9 +425,10 @@ int pq_read_arrow_array(DatasetReader *ds_reader, int64_t column_idx,
     return read_rows;
 }
 
-int pq_read_array_item(DatasetReader *ds_reader, int64_t column_idx,
-                       int out_dtype, array_info **out_offsets,
-                       array_info **out_data, array_info **out_nulls) {
+int pq_read_array_item(DatasetReader *ds_reader, int64_t real_column_idx,
+                       int64_t column_idx, int out_dtype,
+                       array_info **out_offsets, array_info **out_data,
+                       array_info **out_nulls) {
     if (ds_reader->count == 0) return 0;
 
     int64_t start = ds_reader->start_row_first_file;
@@ -442,9 +444,9 @@ int pq_read_array_item(DatasetReader *ds_reader, int64_t column_idx,
         int64_t rows_to_read =
             std::min(ds_reader->count - read_rows, file_size - start);
 
-        pq_read_array_item_single_file(file_reader, column_idx, out_dtype,
-                                       start, rows_to_read, &offset_vec,
-                                       &data_vec, &null_vec);
+        pq_read_array_item_single_file(file_reader, real_column_idx, column_idx,
+                                       out_dtype, start, rows_to_read,
+                                       &offset_vec, &data_vec, &null_vec);
 
         size_t size = offset_vec.size();
         for (int64_t i = 1; i <= rows_to_read + 1; i++)
@@ -515,6 +517,12 @@ void bodo_array_to_arrow(
     memset(null_bitmap->mutable_data(), 0, static_cast<size_t>(null_bytes));
 
     int64_t null_count_ = 0;
+    if (array->arr_type == bodo_array_type::ARROW) {
+        schema_vector.push_back(arrow::field(col_name, array->array->type()));
+        std::shared_ptr<arrow::ArrayData> typ_data = array->array->data();
+        *out = std::make_shared<arrow::ChunkedArray>(array->array);
+    }
+
     if (array->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
         // set arrow bit mask based on bodo bitmask
         for (int64_t i = 0; i < array->length; i++) {
@@ -691,6 +699,9 @@ void pq_write(const char *_path_name, const table_info *table,
               bool is_parallel, bool write_rangeindex_to_metadata,
               const int ri_start, const int ri_stop, const int ri_step,
               const char *idx_name, const char *bucket_region) {
+#ifdef DEBUG_NESTED_PARQUET
+    std::cout << "pq_write, step 1\n";
+#endif
     // Write actual values of start, stop, step to the metadata which is a
     // string that contains %d
     int check;
@@ -708,6 +719,11 @@ void pq_write(const char *_path_name, const table_info *table,
         std::cerr << "Fatal error: number of written char for metadata is "
                      "greater than new_metadata size"
                   << std::endl;
+#ifdef DEBUG_NESTED_PARQUET
+    std::string str(new_metadata.data());
+    std::cout << "pq_write, str=" << str << "\n";
+    std::cout << "pq_write, step 2\n";
+#endif
 
     int myrank, num_ranks;
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
@@ -721,11 +737,20 @@ void pq_write(const char *_path_name, const table_info *table,
     std::shared_ptr<::arrow::io::OutputStream> out_stream;
     Bodo_Fs::FsEnum fs_option;
 
+#ifdef DEBUG_NESTED_PARQUET
+    std::cout << "pq_write, step 3\n";
+#endif
     extract_fs_dir_path(_path_name, is_parallel, ".parquet", myrank, num_ranks,
                         &fs_option, &dirname, &fname, &orig_path, &path_name);
 
+#ifdef DEBUG_NESTED_PARQUET
+    std::cout << "pq_write, step 4\n";
+#endif
     open_outstream(fs_option, is_parallel, myrank, "parquet", dirname, fname,
                    orig_path, path_name, &out_stream, bucket_region);
+#ifdef DEBUG_NESTED_PARQUET
+    std::cout << "pq_write, step 5\n";
+#endif
 
     // copy column names to a std::vector<string>
     std::vector<std::string> col_names;
@@ -738,6 +763,9 @@ void pq_write(const char *_path_name, const table_info *table,
     }
 
     auto pool = ::arrow::default_memory_pool();
+#ifdef DEBUG_NESTED_PARQUET
+    std::cout << "pq_write, step 6\n";
+#endif
 
     // convert Bodo table to Arrow: construct Arrow Schema and ChunkedArray
     // columns
@@ -749,9 +777,12 @@ void pq_write(const char *_path_name, const table_info *table,
         bodo_array_to_arrow(pool, col, col_names[i], schema_vector,
                             &columns[i]);
     }
+#ifdef DEBUG_NESTED_PARQUET
+    std::cout << "pq_write, |schema_vector|=" << schema_vector.size() << "\n";
+    std::cout << "pq_write, step 7\n";
+    std::cout << "pq_write, write_index=" << write_index << "\n";
+#endif
 
-    // make Arrow Schema object
-    std::shared_ptr<arrow::Schema> schema;
     if (write_index) {
         // if there is an index, construct ChunkedArray index column and add
         // metadata to the schema
@@ -764,16 +795,37 @@ void pq_write(const char *_path_name, const table_info *table,
                                 &chunked_arr);
         columns.push_back(chunked_arr);
     }
+#ifdef DEBUG_NESTED_PARQUET
+    std::cout << "pq_write, step 8\n";
+#endif
 
-    auto schema_metadata =
+    std::shared_ptr<arrow::KeyValueMetadata> schema_metadata =
         ::arrow::key_value_metadata({{"pandas", new_metadata.data()}});
 
-    schema = std::make_shared<arrow::Schema>(schema_vector, schema_metadata);
+#ifdef DEBUG_NESTED_PARQUET
+    std::unordered_map<std::string, std::string> unord_map;
+    schema_metadata->ToUnorderedMap(&unord_map);
+    for (auto &e_pair : unord_map)
+        std::cout << "key=" << e_pair.first << " val=" << e_pair.second << "\n";
+    std::cout << "pq_write, step 9\n";
+#endif
+    // make Arrow Schema object
+    std::shared_ptr<arrow::Schema> schema =
+        std::make_shared<arrow::Schema>(schema_vector, schema_metadata);
+#ifdef DEBUG_NESTED_PARQUET
+    std::vector<std::string> l_names = schema->field_names();
+    for (int i = 0; i < l_names.size(); i++)
+        std::cout << "i=" << i << " name=" << l_names[i] << "\n";
+#endif
 
     // make Arrow table from Schema and ChunkedArray columns
     int64_t row_group_size = table->nrows();
     std::shared_ptr<arrow::Table> arrow_table =
         arrow::Table::Make(schema, columns, row_group_size);
+#ifdef DEBUG_NESTED_PARQUET
+    std::cout << "row_group_size=" << row_group_size << "\n";
+    std::cout << "pq_write, step 10\n";
+#endif
 
     // set compression option
     ::arrow::Compression::type codec_type;
@@ -790,6 +842,9 @@ void pq_write(const char *_path_name, const table_info *table,
     prop_builder.compression(codec_type);
     std::shared_ptr<parquet::WriterProperties> writer_properties =
         prop_builder.build();
+#ifdef DEBUG_NESTED_PARQUET
+    std::cout << "pq_write, step 11\n";
+#endif
 
     // open file and write table
     arrow::Status status = parquet::arrow::WriteTable(
@@ -802,6 +857,9 @@ void pq_write(const char *_path_name, const table_info *table,
             ->allow_truncated_timestamps()
             ->store_schema()
             ->build());
+#ifdef DEBUG_NESTED_PARQUET
+    std::cout << "pq_write, step 12\n";
+#endif
     CHECK_ARROW(status, "parquet::arrow::WriteTable");
 }
 

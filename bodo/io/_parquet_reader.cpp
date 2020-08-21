@@ -30,7 +30,7 @@ void pack_null_bitmap(uint8_t** out_nulls, std::vector<bool>& null_vec,
                       int64_t n_all_vals);
 std::shared_ptr<arrow::DataType> get_arrow_type(
     std::shared_ptr<parquet::arrow::FileReader> arrow_reader,
-    int64_t column_idx);
+    int64_t real_column_idx);
 bool arrowBodoTypesEqual(std::shared_ptr<arrow::DataType> arrow_type,
                          Bodo_CTypes::CTypeEnum pq_type);
 inline void copy_data(uint8_t* out_data, const uint8_t* buff,
@@ -106,8 +106,9 @@ int64_t pq_get_size_single_file(
  */
 int pq_read_single_file(
     std::shared_ptr<parquet::arrow::FileReader> arrow_reader,
-    int64_t column_idx, uint8_t* out_data, int out_dtype, int64_t start,
-    int64_t count, uint8_t* out_nulls, int64_t null_offset) {
+    int64_t real_column_idx, int64_t column_idx, uint8_t* out_data,
+    int out_dtype, int64_t start, int64_t count, uint8_t* out_nulls,
+    int64_t null_offset) {
     if (count == 0) {
         return 0;
     }
@@ -127,7 +128,7 @@ int pq_read_single_file(
         arrow_reader->parquet_reader()->metadata()->RowGroup(row_group_index);
     int64_t nrows_in_group = rg_metadata->ColumnChunk(column_idx)->num_values();
     std::shared_ptr<arrow::DataType> arrow_type =
-        get_arrow_type(arrow_reader, column_idx);
+        get_arrow_type(arrow_reader, real_column_idx);
     int dtype_size = numpy_item_size[out_dtype];
 
     // skip whole row groups if no need to read any rows
@@ -357,13 +358,14 @@ inline void copy_data(uint8_t* out_data, const uint8_t* buff,
  */
 int pq_read_string_single_file(
     std::shared_ptr<parquet::arrow::FileReader> arrow_reader,
-    int64_t column_idx, int64_t start, int64_t count,
+    int64_t real_column_idx, int64_t column_idx, int64_t start, int64_t count,
     std::vector<uint32_t>* offset_vec, std::vector<uint8_t>* data_vec,
     std::vector<bool>* null_vec) {
     std::shared_ptr<arrow::DataType> arrow_type =
-        get_arrow_type(arrow_reader, column_idx);
+        get_arrow_type(arrow_reader, real_column_idx);
     if (arrow_type->id() != Type::STRING)
-        std::cerr << "Invalid Parquet string data type" << '\n';
+        std::cerr << "Invalid Parquet string data type: "
+                  << arrow_type->ToString() << '\n';
 
     int64_t n_row_groups =
         arrow_reader->parquet_reader()->metadata()->num_row_groups();
@@ -470,11 +472,11 @@ int pq_read_string_single_file(
  */
 int64_t pq_read_list_string_single_file(
     std::shared_ptr<parquet::arrow::FileReader> arrow_reader,
-    int64_t column_idx, int64_t start, int64_t count,
+    int64_t real_column_idx, int64_t column_idx, int64_t start, int64_t count,
     std::vector<uint32_t>* offset_vec, std::vector<uint32_t>* index_offset_vec,
     std::vector<uint8_t>* data_vec, std::vector<bool>* null_vec) {
     std::shared_ptr<arrow::DataType> arrow_type =
-        get_arrow_type(arrow_reader, column_idx);
+        get_arrow_type(arrow_reader, real_column_idx);
     if (arrow_type->id() != Type::LIST)
         std::cerr << "Invalid Parquet list data type" << '\n';
     // TODO check that list of string
@@ -614,12 +616,12 @@ int64_t pq_read_list_string_single_file(
  */
 int64_t pq_read_array_item_single_file(
     std::shared_ptr<parquet::arrow::FileReader> arrow_reader,
-    int64_t column_idx, int out_dtype, int64_t start, int64_t count,
-    std::vector<uint32_t>* offset_vec, std::vector<uint8_t>* data_vec,
-    std::vector<bool>* null_vec) {
+    int64_t real_column_idx, int64_t column_idx, int out_dtype, int64_t start,
+    int64_t count, std::vector<uint32_t>* offset_vec,
+    std::vector<uint8_t>* data_vec, std::vector<bool>* null_vec) {
     Bodo_CTypes::CTypeEnum out_dtype_ct = Bodo_CTypes::CTypeEnum(out_dtype);
     std::shared_ptr<arrow::DataType> arrow_type =
-        get_arrow_type(arrow_reader, column_idx);
+        get_arrow_type(arrow_reader, real_column_idx);
     if (arrow_type->id() != Type::LIST)
         std::cerr << "Invalid Parquet list data type" << '\n';
 
@@ -887,13 +889,13 @@ void pq_init_reader(const char* file_name,
 // TODO: handle more complex types
 std::shared_ptr<arrow::DataType> get_arrow_type(
     std::shared_ptr<parquet::arrow::FileReader> arrow_reader,
-    int64_t column_idx) {
+    int64_t real_column_idx) {
     // TODO: error checking
     // GetSchema supported as of arrow version=0.15.1
     std::shared_ptr<::arrow::Schema> col_schema;
     arrow::Status status = arrow_reader->GetSchema(&col_schema);
     CHECK_ARROW(status, "arrow_reader->GetSchema");
-    return col_schema->field(column_idx)->type();
+    return col_schema->field(real_column_idx)->type();
 }
 
 bool arrowBodoTypesEqual(std::shared_ptr<arrow::DataType> arrow_type,

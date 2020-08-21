@@ -13,6 +13,8 @@ import numpy as np
 import numba
 from numba.core import types, cgutils
 from bodo.hiframes.pd_index_ext import StringIndexType
+from bodo.libs.struct_arr_ext import StructArrayType, StructType
+from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from numba.extending import (
     models,
     register_model,
@@ -2672,6 +2674,12 @@ def gen_pandas_parquet_metadata(
             numpy_type = col_type.dtype.name
         elif col_type == datetime_date_array_type:
             pandas_type = "datetime"
+            numpy_type = "object"
+        elif isinstance(col_type, (StructArrayType, ArrayItemArrayType)):
+            # TODO: provide meaningful pandas_type when possible.
+            # For example "pandas_type": "list[list[int64]]", "numpy_type": "object"
+            # can occur
+            pandas_type = "object"
             numpy_type = "object"
         else:  # pragma: no cover
             raise BodoError(

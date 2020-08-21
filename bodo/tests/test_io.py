@@ -564,9 +564,8 @@ def test_read_write_parquet():
         # So we have to truncate to ms precision. pandas 1.1.0 apparently got
         # rid of allow_truncated_timestamps option of to_parquet, so we do this
         # manually
-        for col_name in df.columns:
-            if pd.api.types.is_datetime64_any_dtype(df[col_name]):
-                df[col_name] = df[col_name].dt.floor("ms")
+        if hasattr(df, "_datetime_col"):
+            df[df._datetime_col] = df[df._datetime_col].dt.floor("ms")
         df.to_parquet(filename)
 
     def gen_dataframe(num_elements, write_index):
@@ -597,6 +596,9 @@ def test_read_write_parquet():
             "Decimal",
             "Date",
             "Datetime",
+            "nested_arrow0",
+            "nested_arrow1",
+            "nested_arrow2",
         ]:
             col_name = "col_" + str(cur_col)
             if dtype == "String":
@@ -641,6 +643,22 @@ def test_read_write_parquet():
                 )
                 df[col_name] = dates
                 df._datetime_col = col_name
+            elif dtype == "nested_arrow0":
+                # Disabling Nones because currently they very easily induce
+                # typing errors during unboxing for nested lists.
+                # _infer_ndarray_obj_dtype in boxing.py needs to be made more robust.
+                # TODO: include Nones
+                df[col_name] = pd.Series(gen_random_arrow_list_list_int(2, 0, num_elements))
+            elif dtype == "nested_arrow1":
+                df[col_name] = pd.Series(gen_random_arrow_array_struct_int(10, num_elements))
+            elif dtype == "nested_arrow2":
+                # TODO: Include following types when they are supported in PYARROW:
+                # We cannot read this dataframe in bodo. Fails at unboxing.
+                # df_bug1 = pd.DataFrame({"X": gen_random_arrow_list_list_double(2, -0.1, n)})
+                # This dataframe can be written by the code. However we cannot read
+                # due to a limitation in pyarrow
+                # df_bug2 = pd.DataFrame({"X": gen_random_arrow_array_struct_list_int(10, n)})
+                df[col_name] = pd.Series(gen_random_arrow_struct_struct(10, num_elements))
             else:
                 df[col_name] = np.arange(num_elements, dtype=dtype)
             cur_col += 1
@@ -659,14 +677,7 @@ def test_read_write_parquet():
     n_pes = bodo.get_size()
     NUM_ELEMS = 80  # length of each column in generated dataset
 
-    # workaround for pandas/pyarrow writing nullable Int64 issue:
-    # https://issues.apache.org/jira/browse/ARROW-5379
-    import pyarrow
-
-    pd.arrays.IntegerArray.__arrow_array__ = lambda self, type: pyarrow.array(
-        self._data, mask=self._mask, type=type
-    )
-
+    random.seed(5)
     for write_index in [None, "string", "numeric"]:
         for mode in ["sequential", "1d-distributed", "1d-distributed-varlength"]:
             df = gen_dataframe(NUM_ELEMS, write_index)

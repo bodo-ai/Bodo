@@ -144,9 +144,11 @@ class ParquetHandler:
                 selected_columns = col_names_total
             else:
                 selected_columns = columns
-            col_indices = [
-                col_indices_total[col_names_total.index(c)] for c in selected_columns
-            ]
+            # store tuples of (real_column_index, index of first column in parquet file)
+            col_indices = []
+            for c in selected_columns:
+                real_col_idx = col_names_total.index(c)
+                col_indices.append((real_col_idx, col_indices_total[real_col_idx]))
             col_types = [
                 col_types_total[col_names_total.index(c)] for c in selected_columns
             ]
@@ -253,11 +255,11 @@ def _gen_pq_reader_py(
     func_text += "    raise ValueError('Error reading Parquet dataset')\n"
 
     local_types = {}
-    for c_name, col_ind, col_siz, c_typ in zip(
+    for c_name, (real_col_ind, col_ind), col_siz, c_typ in zip(
         col_names, col_indices, col_nb_fields, out_types
     ):
         ret_type, func_text = gen_column_read(
-            func_text, c_name, col_ind, col_siz, c_typ, c_name in parallel
+            func_text, c_name, real_col_ind, col_ind, col_siz, c_typ, c_name in parallel
         )
         if ret_type != None:
             local_types[ret_type] = c_typ
@@ -292,7 +294,7 @@ def _gen_pq_reader_py(
     return jit_func
 
 
-def gen_column_read(func_text, cname, c_ind, c_siz, c_type, is_parallel):
+def gen_column_read(func_text, cname, c_ind_real, c_ind, c_siz, c_type, is_parallel):
     cname = sanitize_varname(cname)
     # handle size variables
     # get_column_size_parquet returns local size of column (number of rows
@@ -305,21 +307,21 @@ def gen_column_read(func_text, cname, c_ind, c_siz, c_type, is_parallel):
     ret_type = None
     if c_type == string_array_type:
         # pass size for easier allocation and distributed analysis
-        func_text += "  {} = read_parquet_str(ds_reader, {}, {}_size)\n".format(
-            cname, c_ind, cname
+        func_text += "  {} = read_parquet_str(ds_reader, {}, {}, {}_size)\n".format(
+            cname, c_ind_real, c_ind, cname
         )
     elif c_type == ArrayItemArrayType(string_array_type):
         # TODO does not support null strings?
         # pass size for easier allocation and distributed analysis
-        func_text += "  {} = read_parquet_list_str(ds_reader, {}, {}_size)\n".format(
-            cname, c_ind, cname
+        func_text += "  {} = read_parquet_list_str(ds_reader, {}, {}, {}_size)\n".format(
+            cname, c_ind_real, c_ind, cname
         )
     elif isinstance(c_type, ArrayItemArrayType):
         # Force generalized path for all ArrayItemArrayType(...) (see FIXME below)
         if not isinstance(c_type.dtype, types.Float):
             ret_type = "nested_type{}".format(c_ind)
-            func_text += "  {} = read_parquet_arrow_array(ds_reader, {}, {}, {})\n".format(
-                cname, c_ind, c_siz, ret_type
+            func_text += "  {} = read_parquet_arrow_array(ds_reader, {}, {}, {}, {})\n".format(
+                cname, c_ind_real, c_ind, c_siz, ret_type
             )
         else:
             # FIXME This code path does not support nullable items,
@@ -327,8 +329,9 @@ def gen_column_read(func_text, cname, c_ind, c_siz, c_type, is_parallel):
             # The main gap is in ReadParquetArrayItemInfer and pq_read_array_item_lower
             # Right now we use it only for the float where we do not need nullable items.
             elem_typ = c_type.dtype.dtype
-            func_text += "  {} = read_parquet_array_item(ds_reader, {}, {}_size, np.int32({}), {})\n".format(
+            func_text += "  {} = read_parquet_array_item(ds_reader, {}, {}, {}_size, np.int32({}), {})\n".format(
                 cname,
+                c_ind_real,
                 c_ind,
                 cname,
                 bodo.utils.utils.numba_to_c_type(elem_typ),
@@ -336,14 +339,14 @@ def gen_column_read(func_text, cname, c_ind, c_siz, c_type, is_parallel):
             )
     elif isinstance(c_type, StructArrayType):
         ret_type = "nested_type{}".format(c_ind)
-        func_text += "  {} = read_parquet_arrow_array(ds_reader, {}, {}, {})\n".format(
-            cname, c_ind, c_siz, ret_type
+        func_text += "  {} = read_parquet_arrow_array(ds_reader, {}, {}, {}, {})\n".format(
+            cname, c_ind_real, c_ind, c_siz, ret_type
         )
     else:
         el_type = get_element_type(c_type.dtype)
         func_text += _gen_alloc(c_type, cname, alloc_size, el_type)
-        func_text += "  status = read_parquet(ds_reader, {}, {}, np.int32({}))\n".format(
-            c_ind, cname, bodo.utils.utils.numba_to_c_type(c_type.dtype)
+        func_text += "  status = read_parquet(ds_reader, {}, {}, {}, np.int32({}))\n".format(
+            c_ind_real, c_ind, cname, bodo.utils.utils.numba_to_c_type(c_type.dtype)
         )
 
     return ret_type, func_text
@@ -669,7 +672,11 @@ def parquet_file_schema(file_name, selected_columns):
         # should still be included.
         selected_columns.append(index_col)
 
-    col_indices = [col_indices_total[col_names.index(c)] for c in selected_columns]
+    # store tuples of (real_column_index, index of first column in parquet file)
+    col_indices = []
+    for c in selected_columns:
+        real_col_idx = col_names.index(c)
+        col_indices.append((real_col_idx, col_indices_total[real_col_idx]))
     col_types = [col_types_total[col_names.index(c)] for c in selected_columns]
     col_nb_fields = [col_nb_fields_total[col_names.index(c)] for c in selected_columns]
     col_names = selected_columns
@@ -712,8 +719,8 @@ class SizeParquetInfer(AbstractTemplate):
 class ReadParquetInfer(AbstractTemplate):
     def generic(self, args, kws):
         assert not kws
-        assert len(args) == 4
-        if args[2] == types.intp:  # string read call, returns string array
+        assert len(args) == 5
+        if args[3] == types.intp:  # string read call, returns string array
             return signature(string_array_type, *unliteral_all(args))
         return signature(types.int64, *unliteral_all(args))
 
@@ -722,7 +729,7 @@ class ReadParquetInfer(AbstractTemplate):
 class ReadParquetStrInfer(AbstractTemplate):
     def generic(self, args, kws):
         assert not kws
-        assert len(args) == 3
+        assert len(args) == 4
         return signature(string_array_type, *unliteral_all(args))
 
 
@@ -730,7 +737,7 @@ class ReadParquetStrInfer(AbstractTemplate):
 class ReadParquetListStrInfer(AbstractTemplate):
     def generic(self, args, kws):
         assert not kws
-        assert len(args) == 3
+        assert len(args) == 4
         return signature(ArrayItemArrayType(string_array_type), *unliteral_all(args))
 
 
@@ -738,7 +745,7 @@ class ReadParquetListStrInfer(AbstractTemplate):
 class ReadParquetArrayItemInfer(AbstractTemplate):
     def generic(self, args, kws):
         assert not kws
-        assert len(args) == 5
+        assert len(args) == 6
         elem_type = args[4].dtype
         # Implement IntegerArrayType(elem_type) when this code path is restored.
         return signature(
@@ -750,8 +757,8 @@ class ReadParquetArrayItemInfer(AbstractTemplate):
 class ReadParquetArrowArrayInfer(AbstractTemplate):
     def generic(self, args, kws):
         assert not kws
-        assert len(args) == 4
-        return signature(args[3].instance_type, *unliteral_all(args[:3]))
+        assert len(args) == 5
+        return signature(args[4].instance_type, *unliteral_all(args[:4]))
 
 
 from numba.core import cgutils
@@ -786,7 +793,12 @@ def pq_size_lower(context, builder, sig, args):
 
 
 @lower_builtin(
-    read_parquet, types.Opaque("arrow_reader"), types.intp, types.Array, types.int32
+    read_parquet,
+    types.Opaque("arrow_reader"),
+    types.intp,
+    types.intp,
+    types.Array,
+    types.int32,
 )
 def pq_read_lower(context, builder, sig, args):
     fnty = lir.FunctionType(
@@ -794,12 +806,13 @@ def pq_read_lower(context, builder, sig, args):
         [
             lir.IntType(8).as_pointer(),
             lir.IntType(64),
+            lir.IntType(64),
             lir.IntType(8).as_pointer(),
             lir.IntType(32),
             lir.IntType(8).as_pointer(),
         ],
     )
-    out_array = make_array(sig.args[2])(context, builder, args[2])
+    out_array = make_array(sig.args[3])(context, builder, args[3])
     zero_ptr = context.get_constant_null(types.voidptr)
 
     fn = builder.module.get_or_insert_function(fnty, name="pq_read")
@@ -808,8 +821,9 @@ def pq_read_lower(context, builder, sig, args):
         [
             args[0],
             args[1],
+            args[2],
             builder.bitcast(out_array.data, lir.IntType(8).as_pointer()),
-            args[3],
+            args[4],
             zero_ptr,
         ],
     )
@@ -822,12 +836,14 @@ def pq_read_lower(context, builder, sig, args):
     read_parquet,
     types.Opaque("arrow_reader"),
     types.intp,
+    types.intp,
     IntegerArrayType,
     types.int32,
 )
 @lower_builtin(
     read_parquet,
     types.Opaque("arrow_reader"),
+    types.intp,
     types.intp,
     BooleanArrayType,
     types.int32,
@@ -836,12 +852,14 @@ def pq_read_lower(context, builder, sig, args):
     read_parquet,
     types.Opaque("arrow_reader"),
     types.intp,
+    types.intp,
     DecimalArrayType,
     types.int32,
 )
 @lower_builtin(
     read_parquet,
     types.Opaque("arrow_reader"),
+    types.intp,
     types.intp,
     datetime_date_array_type,
     types.int32,
@@ -852,13 +870,14 @@ def pq_read_int_arr_lower(context, builder, sig, args):
         [
             lir.IntType(8).as_pointer(),
             lir.IntType(64),
+            lir.IntType(64),
             lir.IntType(8).as_pointer(),
             lir.IntType(32),
             lir.IntType(8).as_pointer(),
         ],
     )
-    int_arr_typ = sig.args[2]
-    int_arr = cgutils.create_struct_proxy(int_arr_typ)(context, builder, args[2])
+    int_arr_typ = sig.args[3]
+    int_arr = cgutils.create_struct_proxy(int_arr_typ)(context, builder, args[3])
     dtype = int_arr_typ.dtype
     if isinstance(int_arr_typ, DecimalArrayType):
         dtype = bodo.libs.decimal_arr_ext.int128_type
@@ -875,8 +894,9 @@ def pq_read_int_arr_lower(context, builder, sig, args):
         [
             args[0],
             args[1],
+            args[2],
             builder.bitcast(data_array.data, lir.IntType(8).as_pointer()),
-            args[3],
+            args[4],
             builder.bitcast(bitmap.data, lir.IntType(8).as_pointer()),
         ],
     )
@@ -885,7 +905,9 @@ def pq_read_int_arr_lower(context, builder, sig, args):
 ############################## read strings ###############################
 
 
-@lower_builtin(read_parquet_str, types.Opaque("arrow_reader"), types.intp, types.intp)
+@lower_builtin(
+    read_parquet_str, types.Opaque("arrow_reader"), types.intp, types.intp, types.intp
+)
 def pq_read_string_lower(context, builder, sig, args):
 
     typ = sig.return_type
@@ -894,12 +916,13 @@ def pq_read_string_lower(context, builder, sig, args):
     string_array = context.make_helper(builder, typ)
 
     str_arr_payload = cgutils.create_struct_proxy(dtype)(context, builder)
-    str_arr_payload.num_strings = args[2]
+    str_arr_payload.num_strings = args[3]
 
     fnty = lir.FunctionType(
         lir.IntType(32),
         [
             lir.IntType(8).as_pointer(),
+            lir.IntType(64),
             lir.IntType(64),
             lir.IntType(32).as_pointer().as_pointer(),
             lir.IntType(8).as_pointer().as_pointer(),
@@ -913,6 +936,7 @@ def pq_read_string_lower(context, builder, sig, args):
         [
             args[0],
             args[1],
+            args[2],
             str_arr_payload._get_ptr_by_name("offsets"),
             str_arr_payload._get_ptr_by_name("data"),
             str_arr_payload._get_ptr_by_name("null_bitmap"),
@@ -929,7 +953,11 @@ def pq_read_string_lower(context, builder, sig, args):
 
 
 @lower_builtin(
-    read_parquet_list_str, types.Opaque("arrow_reader"), types.intp, types.intp
+    read_parquet_list_str,
+    types.Opaque("arrow_reader"),
+    types.intp,
+    types.intp,
+    types.intp,
 )
 def pq_read_list_string_lower(context, builder, sig, args):
 
@@ -943,13 +971,20 @@ def pq_read_list_string_lower(context, builder, sig, args):
         [
             lir.IntType(8).as_pointer(),
             lir.IntType(64),
+            lir.IntType(64),
             lir.IntType(8).as_pointer().as_pointer(),  # meminfo
         ],
     )
 
     fn = builder.module.get_or_insert_function(fnty, name="pq_read_list_string")
     _res = builder.call(
-        fn, [args[0], args[1], array_item_array_from_cpp._get_ptr_by_name("meminfo"),],
+        fn,
+        [
+            args[0],
+            args[1],
+            args[2],
+            array_item_array_from_cpp._get_ptr_by_name("meminfo"),
+        ],
     )
 
     payload = _get_array_item_arr_payload(
@@ -998,6 +1033,7 @@ def pq_read_list_string_lower(context, builder, sig, args):
     types.Opaque("arrow_reader"),
     types.intp,
     types.intp,
+    types.intp,
     types.int32,
     types.Any,  # item data type which is ignored in lowering
 )
@@ -1037,6 +1073,7 @@ def pq_read_array_item_lower(context, builder, sig, args):
         [
             lir.IntType(8).as_pointer(),
             lir.IntType(64),
+            lir.IntType(64),
             lir.IntType(32),
             ll_array_info_type.as_pointer(),
             ll_array_info_type.as_pointer(),
@@ -1050,7 +1087,8 @@ def pq_read_array_item_lower(context, builder, sig, args):
         [
             args[0],  # dataset reader
             args[1],  # column index
-            args[3],  # out_dtype (int32 format, see bodo_common.h)
+            args[2],  # real column index
+            args[4],  # out_dtype (int32 format, see bodo_common.h)
             offsets_info_ptr,  # offsets array info pointer
             data_info_ptr,  # data array info pointer
             nulls_info_ptr,  # null array info pointer
@@ -1084,7 +1122,11 @@ def pq_read_array_item_lower(context, builder, sig, args):
 
 
 @lower_builtin(
-    read_parquet_arrow_array, types.Opaque("arrow_reader"), types.intp, types.intp,
+    read_parquet_arrow_array,
+    types.Opaque("arrow_reader"),
+    types.intp,
+    types.intp,
+    types.intp,
 )
 def pq_read_arrow_array_lower(context, builder, sig, args):
 
@@ -1144,6 +1186,7 @@ def pq_read_arrow_array_lower(context, builder, sig, args):
         [
             lir.IntType(8).as_pointer(),  # dataset reader
             lir.IntType(64),  # column index
+            lir.IntType(64),  # real column index
             lir.IntType(64),  # number of fields in column
             lir.IntType(64).as_pointer(),  # lengths array
             lir.IntType(8).as_pointer().as_pointer(),  # array of array_info*
@@ -1155,7 +1198,8 @@ def pq_read_arrow_array_lower(context, builder, sig, args):
         [
             args[0],  # dataset reader
             args[1],  # column index
-            args[2],  # number of fields in column
+            args[2],  # real column index
+            args[3],  # number of fields in column
             builder.bitcast(lengths_ptr, lir.IntType(64).as_pointer()),
             builder.bitcast(array_infos_ptr, lir.IntType(8).as_pointer().as_pointer()),
         ],
