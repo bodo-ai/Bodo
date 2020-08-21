@@ -642,12 +642,22 @@ ArrayAnalysis._analyze_op_call_bodo_hiframes_pd_dataframe_ext_get_dataframe_data
 
 @intrinsic
 def set_dataframe_data(typingctx, df_typ, c_ind_typ, arr_typ=None):
-    col_ind = c_ind_typ.literal_value
+    """set column data of a dataframe inplace
+    """
+    assert is_overload_constant_int(c_ind_typ)
+    col_ind = get_overload_const_int(c_ind_typ)
 
     def codegen(context, builder, signature, args):
-        # TODO: fix refcount
         df_arg, _, arr_arg = args
         dataframe_payload = get_dataframe_payload(context, builder, df_typ, df_arg)
+
+        # decref existing data column if valid (unboxed)
+        unboxed = builder.extract_value(dataframe_payload.unboxed, col_ind)
+        is_unboxed = builder.icmp_unsigned("==", unboxed, lir.Constant(unboxed.type, 1))
+        with builder.if_then(is_unboxed):
+            arr = builder.extract_value(dataframe_payload.data, col_ind)
+            context.nrt.decref(builder, df_typ.data[col_ind], arr)
+
         # assign array and set unboxed flag
         dataframe_payload.data = builder.insert_value(
             dataframe_payload.data, arr_arg, col_ind
