@@ -82,6 +82,7 @@ date_fields = [
     "second",
     "microsecond",
     "nanosecond",
+    "dayofyear",
 ]
 # Timedelta fields separated by return type
 timedelta_fields = ["days", "seconds", "microseconds", "nanoseconds"]
@@ -562,6 +563,14 @@ def overload_pd_timestamp(
         return impl_date
 
 
+@overload_attribute(PandasTimestampType, "dayofyear")
+def overload_pd_dayofyear(ptt):
+    def pd_dayofyear(ptt):
+        return get_day_of_year(ptt.year, ptt.month, ptt.day)
+
+    return pd_dayofyear
+
+
 @overload_method(PandasTimestampType, "date", no_unliteral=True)
 def overload_pd_timestamp_date(ptt):
     def pd_timestamp_date_impl(ptt):  # pragma: no cover
@@ -752,6 +761,46 @@ def get_month_day(typingctx, year_t, days_t=None):
         return cgutils.pack_array(builder, [builder.load(month), builder.load(day)])
 
     return types.Tuple([types.int64, types.int64])(types.int64, types.int64), codegen
+
+
+@numba.njit
+def get_day_of_year(year, month, day):
+    """gets day offset within year"""
+    # mostly copied from https://github.com/pandas-dev/pandas/blob/6b2d0260c818e62052eaf535767f3a8c4b446c69/pandas/_libs/tslibs/ccalendar.pyx
+    month_offset = [
+        0,
+        31,
+        59,
+        90,
+        120,
+        151,
+        181,
+        212,
+        243,
+        273,
+        304,
+        334,
+        365,
+        0,
+        31,
+        60,
+        91,
+        121,
+        152,
+        182,
+        213,
+        244,
+        274,
+        305,
+        335,
+        366,
+    ]
+
+    is_leap = (year & 0x3) == 0 and ((year % 100) != 0 or (year % 400) == 0)
+    mo_off = month_offset[is_leap * 13 + month - 1]
+
+    day_of_year = mo_off + day
+    return day_of_year
 
 
 @numba.njit
