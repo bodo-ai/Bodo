@@ -247,19 +247,7 @@ def check_func_1D(
         bodo_output = convert_non_pandas_columns(bodo_output)
     if is_out_distributed:
         if check_typing_issues:
-            from mpi4py import MPI
-
-            comm = MPI.COMM_WORLD
-            try:
-                _check_typing_issues(bodo_output)
-                typing_issues_res = comm.gather(None)
-            except BaseException as e:
-                typing_issues_res = comm.gather(e)
-                raise
-            if bodo.get_rank() == 0:
-                for e in typing_issues_res:
-                    if isinstance(e, BaseException):
-                        raise e
+            _check_typing_issues(bodo_output)
         bodo_output = bodo.gatherv(bodo_output)
     # only rank 0 should check if gatherv() called on output
     passed = 1
@@ -991,6 +979,21 @@ def _check_typing_issues(val):
     """Raises an error if there is a typing issue for value 'val'.
     Runs bodo typing on value and converts warnings to errors.
     """
-    with warnings.catch_warnings(record=True):
-        warnings.simplefilter("error")
-        bodo.typeof(val)
+    from mpi4py import MPI
+
+    comm = MPI.COMM_WORLD
+    try:
+        with warnings.catch_warnings(record=True):
+            warnings.simplefilter("error")
+            bodo.typeof(val)
+        errors = comm.allgather(None)
+    except Exception as e:
+        # The typing issue typically occurs on only a subset of processes,
+        # because the process got a chunk of data from Python that is empty
+        # or that we cannot currently type correctly.
+        # To avoid a hang, we need to notify every rank of the error.
+        comm.allgather(e)
+        raise
+    for e in errors:
+        if isinstance(e, Exception):
+            raise e
