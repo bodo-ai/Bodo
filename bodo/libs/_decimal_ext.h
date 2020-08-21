@@ -6,6 +6,8 @@ std::string decimal_value_cpp_to_std_string(decimal_value_cpp const& value, int 
 
 bool operator<(decimal_value_cpp const& left, decimal_value_cpp const& right);
 
+bool operator>(decimal_value_cpp const& left, decimal_value_cpp const& right);
+
 double decimal_to_double(decimal_value_cpp const& val);
 
 #endif

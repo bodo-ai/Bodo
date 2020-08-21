@@ -2646,16 +2646,26 @@ def test_var_one_col(test_df):
     check_func(impl2, (11,), sort_output=True, check_dtype=False)
 
 
-def test_idxmax():
+def test_idxmin_idxmax():
     """
-    Test Groupby.idxmax()
+    Test Groupby.idxmin() and Groupby.idxmax()
     """
 
     def impl1(df):
-        A = df.groupby("group").idxmax()
+        A = df.groupby("group").idxmin()
         return A
 
     def impl2(df):
+        A = df.groupby("group").agg(
+            {"values_1": "idxmin", "values_2": lambda x: x.max() - x.min()}
+        )
+        return A
+
+    def impl3(df):
+        A = df.groupby("group").idxmax()
+        return A
+
+    def impl4(df):
         A = df.groupby("group").agg(
             {"values_1": "idxmax", "values_2": lambda x: x.max() - x.min()}
         )
@@ -2691,6 +2701,11 @@ def test_idxmax():
     check_func(impl1, (df2,), sort_output=True)
     check_func(impl1, (df3,), sort_output=True)
     check_func(impl2, (df1,), sort_output=True)
+
+    check_func(impl3, (df1,), sort_output=True)
+    check_func(impl3, (df2,), sort_output=True)
+    check_func(impl3, (df3,), sort_output=True)
+    check_func(impl4, (df1,), sort_output=True)
 
 
 def test_groupby_as_index_var():

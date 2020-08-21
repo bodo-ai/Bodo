@@ -124,6 +124,7 @@ supported_agg_funcs = [
     "prod",
     "first",
     "last",
+    "idxmin",
     "idxmax",
     "var",
     "std",
@@ -177,13 +178,13 @@ def get_agg_func(func_ir, func_name, rhs, series_type=None, typemap=None):
         func.ncols_pre_shuffle = 1
         func.ncols_post_shuffle = 1
         return func
-    if func_name == "idxmax":
+    if func_name in {"idxmin", "idxmax"}:
         func = pytypes.SimpleNamespace()
         func.ftype = func_name
         func.ncols_pre_shuffle = 2
         func.ncols_post_shuffle = 2
         return func
-    if func_name in supported_agg_funcs[:-6]:
+    if func_name in supported_agg_funcs[:-7]:
         func = getattr(series_impl, "overload_series_" + func_name)(series_type)
         # HACK: use simple versions of sum/prod functions without extra arguments to
         # avoid errors in pivot

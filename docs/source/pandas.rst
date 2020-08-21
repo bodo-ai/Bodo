@@ -680,6 +680,8 @@ The operations are documented on `pandas.DataFrame.groupby <https://pandas.pydat
 * :meth:`pandas.core.groupby.GroupBy.std`
 * :meth:`pandas.core.groupby.GroupBy.sum`
 * :meth:`pandas.core.groupby.GroupBy.var`
+* :meth:`pandas.core.groupby.GroupBy.idxmin`
+* :meth:`pandas.core.groupby.GroupBy.idxmax`
 
 
 Integer NA issue in Pandas

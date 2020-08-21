@@ -332,7 +332,7 @@ def get_groupby_output_dtype(arr_type, func_name, index_type=None):
                 func_name
             ),
         )
-    if func_name == "idxmax":
+    if func_name in {"idxmin", "idxmax"}:
         return get_index_data_arr_types(index_type)[0].dtype, "ok"
     if func_name in {"count", "nunique"}:
         return types.int64, "ok"
@@ -689,6 +689,10 @@ class DataframeGroupByAttribute(AttributeTemplate):
     @bound_function("groupby.last", no_unliteral=True)
     def resolve_last(self, grp, args, kws):
         return self._get_agg_typ(grp, args, "last")
+
+    @bound_function("groupby.idxmin", no_unliteral=True)
+    def resolve_idxmin(self, grp, args, kws):
+        return self._get_agg_typ(grp, args, "idxmin")
 
     @bound_function("groupby.idxmax", no_unliteral=True)
     def resolve_idxmax(self, grp, args, kws):

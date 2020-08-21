@@ -42,6 +42,13 @@ bool operator<(decimal_value_cpp const& left, decimal_value_cpp const& right)
     return arrow_decimal_left < arrow_decimal_right;
 }
 
+bool operator>(decimal_value_cpp const& left, decimal_value_cpp const& right)
+{
+    arrow::Decimal128 arrow_decimal_left(left.high, left.low);
+    arrow::Decimal128 arrow_decimal_right(right.high, right.low);
+    return arrow_decimal_left > arrow_decimal_right;
+}
+
 double decimal_to_double(decimal_value_cpp const& val)
 {
     int scale = 18;

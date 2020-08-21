@@ -35,6 +35,7 @@ struct Bodo_FTypes {
         prod,
         first,
         last,
+        idxmin,
         idxmax,
         var,
         std,
@@ -289,6 +290,56 @@ struct aggfunc<
     typename std::enable_if<std::is_floating_point<T>::value>::type> {
     static void apply(T& v1, T& v2) {
         if (!isnan(v2)) v1 *= v2;
+    }
+};
+
+// idxmin
+
+template <typename T, int dtype, typename Enable = void>
+struct idxmin_agg {
+    static void apply(T& v1, T& v2, uint64_t& index_pos, int64_t i);
+};
+
+template <typename T, int dtype>
+struct idxmin_agg<
+    T, dtype,
+    typename std::enable_if<!std::is_floating_point<T>::value &&
+                            is_datetime_timedelta<dtype>::value>::type> {
+    static void apply(T& v1, T& v2, uint64_t& index_pos, int64_t i) {
+        // TODO should it be >=?
+        if ((v2 != std::numeric_limits<T>::max()) && (v1 > v2)) {
+            v1 = v2;
+            index_pos = i;
+        }
+    }
+};
+
+template <typename T, int dtype>
+struct idxmin_agg<
+    T, dtype,
+    typename std::enable_if<!std::is_floating_point<T>::value &&
+                            !is_datetime_timedelta<dtype>::value>::type> {
+    static void apply(T& v1, T& v2, uint64_t& index_pos, int64_t i) {
+        // TODO should it be >=?
+        if (v1 > v2) {
+            v1 = v2;
+            index_pos = i;
+        }
+    }
+};
+
+template <typename T, int dtype>
+struct idxmin_agg<
+    T, dtype, typename std::enable_if<std::is_floating_point<T>::value>::type> {
+    static void apply(T& v1, T& v2, uint64_t& index_pos, int64_t i) {
+        if (!isnan(v2)) {
+            // v1 is initialized as NaN
+            // TODO should it be >=?
+            if (isnan(v1) || (v1 > v2)) {
+                v1 = v2;
+                index_pos = i;
+            }
+        }
     }
 };
 
@@ -1510,6 +1561,16 @@ void apply_to_column(array_info* in_col, array_info* out_col,
                             index_pos->at<uint64_t>(grp), i);
                     }
                 }
+            } else if (ftype == Bodo_FTypes::idxmin) {
+                array_info* index_pos = aux_cols[0];
+                for (int64_t i = 0; i < in_col->length; i++) {
+                    int64_t grp = grp_info.row_to_group[i];
+                    if (grp != -1) {
+                        idxmin_agg<T, dtype>::apply(
+                            out_col->at<T>(grp), in_col->at<T>(i),
+                            index_pos->at<uint64_t>(grp), i);
+                    }
+                }
             } else {
                 for (int64_t i = 0; i < in_col->length; i++)
                     if (grp_info.row_to_group[i] != -1)
@@ -1853,6 +1914,10 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                     return apply_to_column<bool, Bodo_FTypes::last,
                                            Bodo_CTypes::_BOOL>(
                         in_col, out_col, aux_cols, grp_info);
+                case Bodo_FTypes::idxmin:
+                    return apply_to_column<bool, Bodo_FTypes::idxmin,
+                                           Bodo_CTypes::_BOOL>(
+                        in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::idxmax:
                     return apply_to_column<bool, Bodo_FTypes::idxmax,
                                            Bodo_CTypes::_BOOL>(
@@ -1898,6 +1963,10 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                     return apply_to_column<int8_t, Bodo_FTypes::var,
                                            Bodo_CTypes::INT8>(
                         in_col, out_col, aux_cols, grp_info);
+                case Bodo_FTypes::idxmin:
+                    return apply_to_column<int8_t, Bodo_FTypes::idxmin,
+                                           Bodo_CTypes::INT8>(
+                        in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::idxmax:
                     return apply_to_column<int8_t, Bodo_FTypes::idxmax,
                                            Bodo_CTypes::INT8>(
@@ -1936,6 +2005,10 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                 case Bodo_FTypes::var:
                 case Bodo_FTypes::std:
                     return apply_to_column<uint8_t, Bodo_FTypes::var,
+                                           Bodo_CTypes::UINT8>(
+                        in_col, out_col, aux_cols, grp_info);
+                case Bodo_FTypes::idxmin:
+                    return apply_to_column<uint8_t, Bodo_FTypes::idxmin,
                                            Bodo_CTypes::UINT8>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::idxmax:
@@ -1978,6 +2051,10 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                     return apply_to_column<int16_t, Bodo_FTypes::var,
                                            Bodo_CTypes::INT16>(
                         in_col, out_col, aux_cols, grp_info);
+                case Bodo_FTypes::idxmin:
+                    return apply_to_column<int16_t, Bodo_FTypes::idxmin,
+                                           Bodo_CTypes::INT16>(
+                        in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::idxmax:
                     return apply_to_column<int16_t, Bodo_FTypes::idxmax,
                                            Bodo_CTypes::INT16>(
@@ -2016,6 +2093,10 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                 case Bodo_FTypes::var:
                 case Bodo_FTypes::std:
                     return apply_to_column<uint16_t, Bodo_FTypes::var,
+                                           Bodo_CTypes::UINT16>(
+                        in_col, out_col, aux_cols, grp_info);
+                case Bodo_FTypes::idxmin:
+                    return apply_to_column<uint16_t, Bodo_FTypes::idxmin,
                                            Bodo_CTypes::UINT16>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::idxmax:
@@ -2058,6 +2139,10 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                     return apply_to_column<int32_t, Bodo_FTypes::var,
                                            Bodo_CTypes::INT32>(
                         in_col, out_col, aux_cols, grp_info);
+                case Bodo_FTypes::idxmin:
+                    return apply_to_column<int32_t, Bodo_FTypes::idxmin,
+                                           Bodo_CTypes::INT32>(
+                        in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::idxmax:
                     return apply_to_column<int32_t, Bodo_FTypes::idxmax,
                                            Bodo_CTypes::INT32>(
@@ -2096,6 +2181,10 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                 case Bodo_FTypes::var:
                 case Bodo_FTypes::std:
                     return apply_to_column<uint32_t, Bodo_FTypes::var,
+                                           Bodo_CTypes::UINT32>(
+                        in_col, out_col, aux_cols, grp_info);
+                case Bodo_FTypes::idxmin:
+                    return apply_to_column<uint32_t, Bodo_FTypes::idxmin,
                                            Bodo_CTypes::UINT32>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::idxmax:
@@ -2138,6 +2227,10 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                     return apply_to_column<int64_t, Bodo_FTypes::var,
                                            Bodo_CTypes::INT64>(
                         in_col, out_col, aux_cols, grp_info);
+                case Bodo_FTypes::idxmin:
+                    return apply_to_column<int64_t, Bodo_FTypes::idxmin,
+                                           Bodo_CTypes::INT64>(
+                        in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::idxmax:
                     return apply_to_column<int64_t, Bodo_FTypes::idxmax,
                                            Bodo_CTypes::INT64>(
@@ -2176,6 +2269,10 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                 case Bodo_FTypes::var:
                 case Bodo_FTypes::std:
                     return apply_to_column<uint64_t, Bodo_FTypes::var,
+                                           Bodo_CTypes::UINT64>(
+                        in_col, out_col, aux_cols, grp_info);
+                case Bodo_FTypes::idxmin:
+                    return apply_to_column<uint64_t, Bodo_FTypes::idxmin,
                                            Bodo_CTypes::UINT64>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::idxmax:
@@ -2218,6 +2315,10 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                     return apply_to_column<int64_t, Bodo_FTypes::var,
                                            Bodo_CTypes::DATE>(
                         in_col, out_col, aux_cols, grp_info);
+                case Bodo_FTypes::idxmin:
+                    return apply_to_column<int64_t, Bodo_FTypes::idxmin,
+                                           Bodo_CTypes::DATE>(
+                        in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::idxmax:
                     return apply_to_column<int64_t, Bodo_FTypes::idxmax,
                                            Bodo_CTypes::DATE>(
@@ -2258,6 +2359,10 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                     return apply_to_column<int64_t, Bodo_FTypes::var,
                                            Bodo_CTypes::DATETIME>(
                         in_col, out_col, aux_cols, grp_info);
+                case Bodo_FTypes::idxmin:
+                    return apply_to_column<int64_t, Bodo_FTypes::idxmin,
+                                           Bodo_CTypes::DATETIME>(
+                        in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::idxmax:
                     return apply_to_column<int64_t, Bodo_FTypes::idxmax,
                                            Bodo_CTypes::DATETIME>(
@@ -2296,6 +2401,10 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                 case Bodo_FTypes::var:
                 case Bodo_FTypes::std:
                     return apply_to_column<int64_t, Bodo_FTypes::var,
+                                           Bodo_CTypes::TIMEDELTA>(
+                        in_col, out_col, aux_cols, grp_info);
+                case Bodo_FTypes::idxmin:
+                    return apply_to_column<int64_t, Bodo_FTypes::idxmin,
                                            Bodo_CTypes::TIMEDELTA>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::idxmax:
@@ -2350,6 +2459,10 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                     return apply_to_column<float, Bodo_FTypes::std_eval,
                                            Bodo_CTypes::FLOAT32>(
                         in_col, out_col, aux_cols, grp_info);
+                case Bodo_FTypes::idxmin:
+                    return apply_to_column<float, Bodo_FTypes::idxmin,
+                                           Bodo_CTypes::FLOAT32>(
+                        in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::idxmax:
                     return apply_to_column<float, Bodo_FTypes::idxmax,
                                            Bodo_CTypes::FLOAT32>(
@@ -2402,6 +2515,10 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                     return apply_to_column<double, Bodo_FTypes::std_eval,
                                            Bodo_CTypes::FLOAT64>(
                         in_col, out_col, aux_cols, grp_info);
+                case Bodo_FTypes::idxmin:
+                    return apply_to_column<double, Bodo_FTypes::idxmin,
+                                           Bodo_CTypes::FLOAT64>(
+                        in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::idxmax:
                     return apply_to_column<double, Bodo_FTypes::idxmax,
                                            Bodo_CTypes::FLOAT64>(
@@ -2448,6 +2565,10 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                 case Bodo_FTypes::std_eval:
                     return apply_to_column<decimal_value_cpp,
                                            Bodo_FTypes::std_eval,
+                                           Bodo_CTypes::DECIMAL>(
+                        in_col, out_col, aux_cols, grp_info);
+                case Bodo_FTypes::idxmin:
+                    return apply_to_column<decimal_value_cpp, Bodo_FTypes::idxmin,
                                            Bodo_CTypes::DECIMAL>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::idxmax:
@@ -2995,12 +3116,12 @@ class MeanColSet : public BasicColSet {
     }
 };
 
-class IdxMaxColSet : public BasicColSet {
+class IdxMinMaxColSet : public BasicColSet {
    public:
-    IdxMaxColSet(array_info* in_col, array_info* _index_col, int ftype,
+    IdxMinMaxColSet(array_info* in_col, array_info* _index_col, int ftype,
                  bool combine_step)
         : BasicColSet(in_col, ftype, combine_step), index_col(_index_col) {}
-    virtual ~IdxMaxColSet() {}
+    virtual ~IdxMinMaxColSet() {}
 
     virtual void alloc_update_columns(size_t num_groups,
                                       std::vector<array_info*>& out_cols) {
@@ -3008,10 +3129,10 @@ class IdxMaxColSet : public BasicColSet {
         // assigned the real data at the end of update()
         array_info* out_col = alloc_array(num_groups, 1, 1, index_col->arr_type,
                                           index_col->dtype, 0, 0);
-        // create array to store max value
+        // create array to store min/max value
         array_info* max_col = alloc_array(num_groups, 1, 1, in_col->arr_type,
-                                          in_col->dtype, 0, 0);  // for max
-        // create array to store index position of max value
+                                          in_col->dtype, 0, 0);  // for min/max
+        // create array to store index position of min/max value
         array_info* index_pos_col =
             alloc_array(num_groups, 1, 1, bodo_array_type::NUMPY,
                         Bodo_CTypes::UINT64, 0, 0);
@@ -3025,7 +3146,10 @@ class IdxMaxColSet : public BasicColSet {
     virtual void update(const grouping_info& grp_info) {
         array_info* index_pos_col = update_cols[2];
         std::vector<array_info*> aux_cols = {index_pos_col};
-        aggfunc_output_initialize(update_cols[1], Bodo_FTypes::max);
+        if (ftype == Bodo_FTypes::idxmax)
+            aggfunc_output_initialize(update_cols[1], Bodo_FTypes::max);
+        if (ftype == Bodo_FTypes::idxmin)
+            aggfunc_output_initialize(update_cols[1], Bodo_FTypes::min);
         aggfunc_output_initialize(index_pos_col,
                                   Bodo_FTypes::count);  // zero init
         do_apply_to_column(in_col, update_cols[1], aux_cols, grp_info, ftype);
@@ -3045,10 +3169,10 @@ class IdxMaxColSet : public BasicColSet {
         // assigned the real data at the end of combine()
         array_info* out_col = alloc_array(num_groups, 1, 1, index_col->arr_type,
                                           index_col->dtype, 0, 0);
-        // create array to store max value
+        // create array to store min/max value
         array_info* max_col = alloc_array(num_groups, 1, 1, in_col->arr_type,
-                                          in_col->dtype, 0, 0);  // for max
-        // create array to store index position of max value
+                                          in_col->dtype, 0, 0);  // for min/max
+        // create array to store index position of min/max value
         array_info* index_pos_col =
             alloc_array(num_groups, 1, 1, bodo_array_type::NUMPY,
                         Bodo_CTypes::UINT64, 0, 0);
@@ -3062,7 +3186,10 @@ class IdxMaxColSet : public BasicColSet {
     virtual void combine(const grouping_info& grp_info) {
         array_info* index_pos_col = combine_cols[2];
         std::vector<array_info*> aux_cols = {index_pos_col};
-        aggfunc_output_initialize(combine_cols[1], Bodo_FTypes::max);
+        if (ftype == Bodo_FTypes::idxmax)
+            aggfunc_output_initialize(combine_cols[1], Bodo_FTypes::max);
+        if (ftype == Bodo_FTypes::idxmin)
+            aggfunc_output_initialize(combine_cols[1], Bodo_FTypes::min);
         aggfunc_output_initialize(index_pos_col,
                                   Bodo_FTypes::count);  // zero init
         do_apply_to_column(update_cols[1], combine_cols[1], aux_cols, grp_info,
@@ -3421,8 +3548,9 @@ class GroupbyPipeline {
             case Bodo_FTypes::var:
             case Bodo_FTypes::std:
                 return new VarStdColSet(in_col, ftype, do_combine);
+            case Bodo_FTypes::idxmin:
             case Bodo_FTypes::idxmax:
-                return new IdxMaxColSet(in_col, index_col, ftype, do_combine);
+                return new IdxMinMaxColSet(in_col, index_col, ftype, do_combine);
             default:
                 return new BasicColSet(in_col, ftype, do_combine);
         }
