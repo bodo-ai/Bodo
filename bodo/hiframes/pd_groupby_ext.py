@@ -843,7 +843,7 @@ def lower_crosstab_dummy(context, builder, sig, args):
     return context.get_constant_null(sig.return_type)
 
 
-groupby_unsupported = (
+groupby_unsupported = {
     "all",
     "any",
     "apply",
@@ -887,7 +887,7 @@ groupby_unsupported = (
     "tail",
     "transform",
     "tshift",
-)
+}
 
 def _install_groupy_unsupported():
     """install an overload that raises BodoError for unsupported methods of GroupBy,
