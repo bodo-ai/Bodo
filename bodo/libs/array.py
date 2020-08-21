@@ -62,6 +62,8 @@ ll.add_symbol("alloc_numpy", array_ext.alloc_numpy)
 ll.add_symbol("alloc_string_array", array_ext.alloc_string_array)
 ll.add_symbol("arr_info_list_to_table", array_ext.arr_info_list_to_table)
 ll.add_symbol("info_from_table", array_ext.info_from_table)
+ll.add_symbol("delete_info_decref_array", array_ext.delete_info_decref_array)
+ll.add_symbol("delete_table_free_arrays", array_ext.delete_table_free_arrays)
 ll.add_symbol("delete_table", array_ext.delete_table)
 ll.add_symbol("shuffle_table", array_ext.shuffle_table)
 ll.add_symbol("hash_join_table", array_ext.hash_join_table)
@@ -1141,6 +1143,11 @@ def info_from_table(typingctx, table_t, ind_t):
         return builder.call(fn_tp, args)
 
     return array_info_type(table_t, ind_t), codegen
+
+
+delete_info_decref_array = types.ExternalFunction(
+    "delete_info_decref_array", types.void(array_info_type),
+)
 
 
 @intrinsic

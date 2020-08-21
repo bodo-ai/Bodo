@@ -82,11 +82,10 @@ Bodo_CTypes::CTypeEnum arrow_to_bodo_type(arrow::Type::type type) {
         case arrow::Type::DOUBLE:
             return Bodo_CTypes::FLOAT64;
         // TODO Decimal, Date, Datetime, Timedelta, String, Bool
-        default:
-          {
+        default: {
             std::string err_msg = "arrow_to_bodo_type : Unsupported type";
             Bodo_PyErr_SetString(PyExc_RuntimeError, err_msg.c_str());
-          }
+        }
     }
 }
 
@@ -213,8 +212,7 @@ array_info* alloc_list_string_array(int64_t n_lists, int64_t n_strings,
 array_info* alloc_array(int64_t length, int64_t n_sub_elems,
                         int64_t n_sub_sub_elems,
                         bodo_array_type::arr_type_enum arr_type,
-                        Bodo_CTypes::CTypeEnum dtype,
-                        int64_t extra_null_bytes,
+                        Bodo_CTypes::CTypeEnum dtype, int64_t extra_null_bytes,
                         int64_t num_categories) {
     if (arr_type == bodo_array_type::LIST_STRING)
         return alloc_list_string_array(length, n_sub_elems, n_sub_sub_elems,
@@ -229,7 +227,7 @@ array_info* alloc_array(int64_t length, int64_t n_sub_elems,
     if (arr_type == bodo_array_type::NUMPY) return alloc_numpy(length, dtype);
 
     if (arr_type == bodo_array_type::CATEGORICAL)
-      return alloc_categorical(length, dtype, num_categories);
+        return alloc_categorical(length, dtype, num_categories);
 
     Bodo_PyErr_SetString(PyExc_RuntimeError, "Type not covered in alloc_array");
     return nullptr;
@@ -237,9 +235,9 @@ array_info* alloc_array(int64_t length, int64_t n_sub_elems,
 
 array_info* copy_array(array_info* earr) {
     int64_t extra_null_bytes = 0;
-    array_info* farr =
-        alloc_array(earr->length, earr->n_sub_elems, earr->n_sub_sub_elems,
-                    earr->arr_type, earr->dtype, extra_null_bytes, earr->num_categories);
+    array_info* farr = alloc_array(
+        earr->length, earr->n_sub_elems, earr->n_sub_sub_elems, earr->arr_type,
+        earr->dtype, extra_null_bytes, earr->num_categories);
     if (earr->arr_type == bodo_array_type::NUMPY ||
         earr->arr_type == bodo_array_type::CATEGORICAL) {
         uint64_t siztype = numpy_item_size[earr->dtype];
@@ -268,6 +266,17 @@ array_info* copy_array(array_info* earr) {
     return farr;
 }
 
+/**
+ * Free underlying array of array_info pointer and delete the pointer
+ */
+void delete_info_decref_array(array_info* arr) {
+    free_array(arr);
+    delete arr;
+}
+
+/**
+ * delete table pointer and its column array_info pointers (but not the arrays).
+ */
 void delete_table(table_info* table) {
     for (array_info* a : table->columns) {
         delete a;
@@ -275,6 +284,9 @@ void delete_table(table_info* table) {
     delete table;
 }
 
+/**
+ * Free all arrays of a table and delete the table.
+ */
 void delete_table_free_arrays(table_info* table) {
     for (array_info* a : table->columns) {
         if (a != NULL) {
@@ -308,11 +320,12 @@ void delete_table_free_arrays(table_info* table) {
 void free_array(array_info* arr) {
     if (arr->meminfo != NULL) {
         arr->meminfo->refct--;
-        NRT_MemInfo_call_dtor(arr->meminfo);
+        if (arr->meminfo->refct == 0) NRT_MemInfo_call_dtor(arr->meminfo);
     }
     if (arr->meminfo_bitmask != NULL) {
         arr->meminfo_bitmask->refct--;
-        NRT_MemInfo_call_dtor(arr->meminfo_bitmask);
+        if (arr->meminfo_bitmask->refct == 0)
+            NRT_MemInfo_call_dtor(arr->meminfo_bitmask);
     }
 }
 
@@ -331,7 +344,6 @@ void free_list_string_array(NRT_MemInfo* meminfo) {
     meminfo->refct--;
     NRT_MemInfo_call_dtor(meminfo);
 }
-
 
 /**
  * Given an Arrow array, populate array of lengths and array of array_info*
@@ -417,10 +429,13 @@ void nested_array_to_c(std::shared_ptr<arrow::Array> array, int64_t* lengths,
         auto str_array = std::dynamic_pointer_cast<arrow::StringArray>(array);
         lengths[lengths_pos++] = str_array->length();
         int64_t n_strings = str_array->length();
-        int64_t n_chars = ((int32_t*)str_array->value_offsets()->data())[n_strings];
+        int64_t n_chars =
+            ((int32_t*)str_array->value_offsets()->data())[n_strings];
         array_info* str_arr_info = alloc_string_array(n_strings, n_chars, 0);
-        memcpy(str_arr_info->data1, str_array->value_data()->data(), sizeof(char) * n_chars);  // data
-        memcpy(str_arr_info->data2, str_array->value_offsets()->data(), sizeof(int32_t) * (n_strings + 1));  // offsets
+        memcpy(str_arr_info->data1, str_array->value_data()->data(),
+               sizeof(char) * n_chars);  // data
+        memcpy(str_arr_info->data2, str_array->value_offsets()->data(),
+               sizeof(int32_t) * (n_strings + 1));  // offsets
         int64_t n_null_bytes = (n_strings + 7) >> 3;
         memset(str_arr_info->null_bitmask, 0, n_null_bytes);
         for (int64_t i = 0; i < n_strings; i++) {
@@ -463,7 +478,6 @@ void nested_array_to_c(std::shared_ptr<arrow::Array> array, int64_t* lengths,
         infos[infos_pos++] = data;
     }
 }
-
 
 extern "C" {
 
@@ -540,5 +554,4 @@ void allocate_list_string_array(int64_t n_lists, int64_t n_strings,
     // set all bits to 1 indicating non-null as default
     memset(payload->null_bitmap.data, 0xff, n_bytes);
 }
-
 }
