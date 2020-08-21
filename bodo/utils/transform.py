@@ -338,6 +338,60 @@ def get_const_value_inner(
             # pandas columns are Index objects (accurate object is needed for const
             # computations, see test_loc_col_select::impl3)
             return pd.Index(obj_typ.columns)
+        # start/stop/step of slice
+        if isinstance(obj_typ, types.SliceType):
+            slice_def = get_definition(func_ir, var_def.value)
+            require(is_call(slice_def))
+            slice_callname = find_callname(func_ir, slice_def)
+
+            # _normalize_slice may change slice attributes if negative or out-of-bounds
+            # we can only return start = 0 or step = 1 if normalizes
+            check_normalize = False
+            if slice_callname == ("_normalize_slice", "numba.cpython.unicode"):
+                require(var_def.attr in ("start", "step"))
+                slice_def = get_definition(func_ir, slice_def.args[0])
+                check_normalize = True
+
+            require(find_callname(func_ir, slice_def) == ("slice", "builtins"))
+            # slice(stop) call has start = 0 and step = 1 by default
+            if len(slice_def.args) == 1:
+                if var_def.attr == "start":
+                    return 0
+                if var_def.attr == "step":
+                    return 1
+                require(var_def.attr == "stop")
+                return get_const_value_inner(
+                    func_ir, slice_def.args[0], arg_types, typemap
+                )
+
+            # slice(start, stop[, step]) case
+            if var_def.attr == "start":
+                val = get_const_value_inner(
+                    func_ir, slice_def.args[0], arg_types, typemap
+                )
+                if val is None:
+                    val = 0
+                if check_normalize:
+                    require(val == 0)
+                return val
+            if var_def.attr == "stop":
+                assert not check_normalize
+                return get_const_value_inner(
+                    func_ir, slice_def.args[1], arg_types, typemap
+                )
+            require(var_def.attr == "step")
+            # step is 1 by default if not provided
+            if len(slice_def.args) == 2:
+                return 1
+            else:
+                val = get_const_value_inner(
+                    func_ir, slice_def.args[2], arg_types, typemap
+                )
+                if val is None:
+                    val = 1
+                if check_normalize:
+                    require(val == 1)
+                return val
 
     # list/set/dict cases
 

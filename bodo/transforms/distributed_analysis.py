@@ -1627,7 +1627,10 @@ class DistributedAnalysis:
                 self.diag_info.append(info)
 
     def _analyze_getitem(self, inst, lhs, rhs, equiv_set, array_dists):
-        in_typ = self.typemap[rhs.value.name]
+        """analyze getitem nodes for distribution
+        """
+        in_var = rhs.value
+        in_typ = self.typemap[in_var.name]
         # get index_var without changing IR since we are in analysis
         index_var = get_getsetitem_index_var(rhs, self.typemap, [])
         index_typ = self.typemap[index_var.name]
@@ -1709,33 +1712,31 @@ class DistributedAnalysis:
                 )
             return
 
-        # whole slice or strided slice access
-        # for example: A = X[:,5], A = X[::2,5]
-        if guard(
-            is_whole_slice, self.typemap, self.func_ir, index_var, accept_stride=True
-        ) or guard(
-            is_slice_equiv_arr,
-            inst.target,
-            index_var,
-            self.func_ir,
-            equiv_set,
-            accept_stride=True,
+        # whole slice access, output has same distribution as input
+        # for example: A = X[:,5]
+        if guard(is_whole_slice, self.typemap, self.func_ir, index_var) or guard(
+            is_slice_equiv_arr, inst.target, index_var, self.func_ir, equiv_set,
         ):
-            self._meet_array_dists(lhs, rhs.value.name, array_dists)
+            self._meet_array_dists(lhs, in_var.name, array_dists)
+            return
+        # chunked slice or strided slice can be 1D_Var
+        # examples: A = X[:n//3], A = X[::2,5]
+        elif isinstance(index_typ, types.SliceType):
+            # output array is 1D_Var if input array is distributed
+            out_dist = Distribution.OneD_Var
+            if lhs in array_dists:
+                out_dist = self._min_dist(out_dist, array_dists[lhs])
+            out_dist = self._min_dist(out_dist, array_dists[in_var.name])
+            array_dists[lhs] = out_dist
+            # input can become REP
+            if out_dist != Distribution.OneD_Var:
+                array_dists[in_var.name] = out_dist
             return
 
-        # avoid parallel slice/scalar getitem when inside a parfor
+        # avoid parallel scalar getitem when inside a parfor
         # examples: test_np_dot, logistic_regression_rand
         if self.in_parallel_parfor != -1:
             self._set_REP(inst.list_vars(), array_dists)
-            return
-
-        # output of operations like S.head() is REP since it's a "small" slice
-        # input can remain 1D
-        if isinstance(index_typ, types.SliceType):
-            # TODO: since array and its slice alias, make sure array or its
-            # slice or their aliases are not written to
-            array_dists[lhs] = Distribution.REP
             return
 
         # int index of dist array
@@ -1859,8 +1860,8 @@ class DistributedAnalysis:
             return False
 
     def _meet_array_dists(self, arr1, arr2, array_dists, top_dist=None):
-        typ1 = self.typemap[arr1]
-        typ2 = self.typemap[arr2]
+        """meet distributions of arrays for consistent distribution
+        """
 
         if top_dist is None:
             top_dist = Distribution.OneD

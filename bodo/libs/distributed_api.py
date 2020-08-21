@@ -677,21 +677,48 @@ def gatherv(data, allgather=False, warn_if_rep=True):
         return impl
 
     if isinstance(data, bodo.hiframes.pd_index_ext.RangeIndexType):
+        INT64_MAX = np.iinfo(np.int64).max
+        INT64_MIN = np.iinfo(np.int64).min
 
         def impl_range_index(
             data, allgather=False, warn_if_rep=True
         ):  # pragma: no cover
-            # XXX: assuming global range starts from zero
-            # and each process has a chunk, and step is 1
-            local_n = data._stop - data._start
-            n = bodo.libs.distributed_api.dist_reduce(
-                local_n, np.int32(Reduce_Type.Sum.value)
+            # NOTE: assuming processes have chunks of a global RangeIndex with equal
+            # steps. using min/max reductions to get start/stop of global range
+            start = data._start
+            stop = data._stop
+            # ignore empty ranges coming from slicing, see test_getitem_slice
+            if len(data) == 0:
+                start = INT64_MAX
+                stop = INT64_MIN
+            start = bodo.libs.distributed_api.dist_reduce(
+                start, np.int32(Reduce_Type.Min.value)
             )
+            stop = bodo.libs.distributed_api.dist_reduce(
+                stop, np.int32(Reduce_Type.Max.value)
+            )
+            total_len = bodo.libs.distributed_api.dist_reduce(
+                len(data), np.int32(Reduce_Type.Sum.value)
+            )
+            # output is empty if all range chunks are empty
+            if start == INT64_MAX and stop == INT64_MIN:
+                start = 0
+                stop = 0
+
+            # make sure global length is consistent in case the user passes in incorrect
+            # RangeIndex chunks (e.g. trivial index in each chunk), see test_rebalance
+            l = max(0, -(-(stop - start) // data._step))
+            if l < total_len:
+                stop = start + data._step * total_len
+
             # gatherv() of dataframe returns 0-length arrays so index should
             # be 0-length to match
             if bodo.get_rank() != 0 and not allgather:
-                n = 0
-            return bodo.hiframes.pd_index_ext.init_range_index(0, n, 1, data._name)
+                start = 0
+                stop = 0
+            return bodo.hiframes.pd_index_ext.init_range_index(
+                start, stop, data._step, data._name
+            )
 
         return impl_range_index
 
@@ -1815,21 +1842,13 @@ def slice_getitem(arr, slice_index, arr_start, total_len, is_1D):  # pragma: no 
     return arr[slice_index]
 
 
-@overload(slice_getitem, no_unliteral=True)
+@overload(slice_getitem, no_unliteral=True, jit_options={"cache": True})
 def slice_getitem_overload(arr, slice_index, arr_start, total_len, is_1D):
     def getitem_impl(arr, slice_index, arr_start, total_len, is_1D):  # pragma: no cover
         # normalize slice
         slice_index = numba.cpython.unicode._normalize_slice(slice_index, total_len)
         start = slice_index.start
         step = slice_index.step
-
-        # just broadcast from rank 0 in the common case A[:k] (for S.head())
-        n_pes = bodo.libs.distributed_api.get_size()
-        rank_0_portion = bodo.libs.distributed_api.get_node_portion(
-            total_len, n_pes, np.int32(0)
-        )
-        if start == 0 and step == 1 and is_1D and rank_0_portion >= slice_index.stop:
-            return slice_getitem_from_start(arr, slice_index)
 
         offset = (
             0
@@ -1838,8 +1857,7 @@ def slice_getitem_overload(arr, slice_index, arr_start, total_len, is_1D):
         )
         new_start = max(arr_start, slice_index.start) - arr_start + offset
         new_stop = max(slice_index.stop - arr_start, 0)
-        my_arr = arr[new_start:new_stop:step]
-        return bodo.libs.distributed_api.allgatherv(my_arr)
+        return bodo.utils.conversion.ensure_contig_if_np(arr[new_start:new_stop:step])
 
     return getitem_impl
 
