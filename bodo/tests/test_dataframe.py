@@ -2125,11 +2125,10 @@ def test_iloc_slice_col_slice():
     check_func(test_impl1, (df,))
     check_func(test_impl2, (df,))
     check_func(test_impl3, (df,))
-    # TODO: remove is_out_distributed=False when dist (1:) slice is fully supported
-    check_func(test_impl4, (df,), is_out_distributed=False)
+    check_func(test_impl4, (df,))
     check_func(test_impl5, (df,))
     # error checking for when slice is not constant
-    with pytest.raises(BodoError, match="df.iloc\[slice1,slice2\] should be constant"):
+    with pytest.raises(BodoError, match=r"df.iloc\[slice1,slice2\] should be constant"):
         bodo.jit(test_impl6)(df, 3)
     check_func(test_impl7, (df,))
 
