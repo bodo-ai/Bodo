@@ -464,7 +464,7 @@ def test_sort_values_strings_variable_length(n, len_str, memory_leak_check):
 
 @pytest.mark.parametrize(
     "n, len_str",
-    [(100, 30), pytest.param(1000, 10, marks=pytest.mark.slow), (10, 30), (100, 30)],
+    [(100, 30), pytest.param(1000, 10, marks=pytest.mark.slow), (100, 30)],
 )
 def test_sort_values_strings(n, len_str, memory_leak_check):
     """

@@ -430,7 +430,8 @@ def test_df_multi_get_level():
 
 
 def test_rebalance():
-    """The bodo.rebalance function. It is kind of """
+    """The bodo.rebalance function. It takes a dataframe which is unbalanced and
+    returns a balanced one"""
     random.seed(5)
     # We create an unbalanced dataframe on input.
     rank = bodo.get_rank()
@@ -448,7 +449,7 @@ def test_rebalance():
     pd.testing.assert_frame_equal(df_in_merge, df_out_merge)
     # The distributed case
     def f(df):
-        return bodo.libs.distributed_api.rebalance(df)
+        return bodo.rebalance(df)
 
     bodo_dist = bodo.jit(all_args_distributed_block=True, all_returns_distributed=True)(
         f

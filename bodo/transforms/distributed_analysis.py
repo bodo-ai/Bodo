@@ -725,6 +725,10 @@ class DistributedAnalysis:
         if fdef == ("setna", "bodo.libs.array_kernels"):
             return
 
+        if (isinstance(func_mod, str) and func_mod == "bodo") and func_name == "rebalance":
+            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            return
+
         # bodo.libs.distributed_api functions
         if isinstance(func_mod, str) and func_mod == "bodo.libs.distributed_api":
             self._analyze_call_bodo_dist(lhs, func_name, args, array_dists)
@@ -1439,8 +1443,7 @@ class DistributedAnalysis:
             return
 
         if func_name == "rebalance":
-            arr_name = args[0].name
-            self._meet_array_dists(lhs, arr_name, array_dists)
+            self._meet_array_dists(lhs, args[0].name, array_dists)
             return
 
         # set REP if not found

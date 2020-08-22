@@ -35,6 +35,7 @@ from bodo.libs.distributed_api import (
     barrier,
     gatherv,
     allgatherv,
+    rebalance,
     scatterv,
 )
 

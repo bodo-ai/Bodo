@@ -317,7 +317,7 @@ class DistributedPass:
         if (
             rhs.op == "getattr"
             and rhs.attr == "shape"
-            and (self._is_1D_arr(rhs.value.name) or self._is_1D_Var_arr(rhs.value.name))
+            and self._is_1D_or_1D_Var_arr(rhs.value.name)
         ):
             # concat reduction variables don't need transformation
             # see test_concat_reduction
@@ -329,7 +329,7 @@ class DistributedPass:
         if (
             rhs.op == "getattr"
             and rhs.attr == "size"
-            and (self._is_1D_arr(rhs.value.name) or self._is_1D_Var_arr(rhs.value.name))
+            and self._is_1D_or_1D_Var_arr(rhs.value.name)
         ):
             return self._run_array_size(inst.target, rhs.value, equiv_set)
 
@@ -340,7 +340,7 @@ class DistributedPass:
             and isinstance(
                 self.typemap[rhs.value.name], bodo.hiframes.pd_index_ext.RangeIndexType
             )
-            and (self._is_1D_arr(rhs.value.name) or self._is_1D_Var_arr(rhs.value.name))
+            and self._is_1D_or_1D_Var_arr(rhs.value.name)
         ):
             return [inst] + compile_func_single_block(
                 lambda r: bodo.libs.distributed_api.dist_reduce(r._stop, _op),
@@ -359,7 +359,7 @@ class DistributedPass:
             and isinstance(
                 self.typemap[rhs.value.name], bodo.hiframes.pd_index_ext.RangeIndexType
             )
-            and (self._is_1D_arr(rhs.value.name) or self._is_1D_Var_arr(rhs.value.name))
+            and self._is_1D_or_1D_Var_arr(rhs.value.name)
         ):
             return [inst] + compile_func_single_block(
                 lambda r: bodo.libs.distributed_api.dist_reduce(r._start, _op),
@@ -418,9 +418,7 @@ class DistributedPass:
             func_mod == "sklearn.metrics._classification"
             and func_name == "precision_score"
         ):
-            if self._is_1D_arr(rhs.args[0].name) or self._is_1D_Var_arr(
-                rhs.args[0].name
-            ):
+            if self._is_1D_or_1D_Var_arr(rhs.args[0].name):
                 rhs = assign.value
                 kws = dict(rhs.kws)
                 nodes = []
@@ -462,9 +460,7 @@ class DistributedPass:
             func_mod == "sklearn.metrics._classification"
             and func_name == "recall_score"
         ):
-            if self._is_1D_arr(rhs.args[0].name) or self._is_1D_Var_arr(
-                rhs.args[0].name
-            ):
+            if self._is_1D_or_1D_Var_arr(rhs.args[0].name):
                 rhs = assign.value
                 kws = dict(rhs.kws)
                 nodes = []
@@ -501,9 +497,7 @@ class DistributedPass:
                 )
 
         if func_mod == "sklearn.metrics._classification" and func_name == "f1_score":
-            if self._is_1D_arr(rhs.args[0].name) or self._is_1D_Var_arr(
-                rhs.args[0].name
-            ):
+            if self._is_1D_or_1D_Var_arr(rhs.args[0].name):
                 rhs = assign.value
                 kws = dict(rhs.kws)
                 nodes = []
@@ -598,10 +592,7 @@ class DistributedPass:
         if (
             fdef == ("len", "builtins")
             and rhs.args
-            and (
-                self._is_1D_arr(rhs.args[0].name)
-                or self._is_1D_Var_arr(rhs.args[0].name)
-            )
+            and self._is_1D_or_1D_Var_arr(rhs.args[0].name)
         ):
             arr = rhs.args[0]
             # concat reduction variables don't need transformation
@@ -769,9 +760,7 @@ class DistributedPass:
             rhs.args[1] = out[-1].target
             out.append(assign)
 
-        if fdef == ("rolling_fixed", "bodo.hiframes.rolling") and (
-            self._is_1D_arr(rhs.args[0].name) or self._is_1D_Var_arr(rhs.args[0].name)
-        ):
+        if fdef == ("rolling_fixed", "bodo.hiframes.rolling") and self._is_1D_or_1D_Var_arr(rhs.args[0].name):
             # set parallel flag to true
             true_var = ir.Var(scope, mk_unique_var("true_var"), loc)
             self.typemap[true_var.name] = BooleanLiteral(True)
@@ -787,9 +776,7 @@ class DistributedPass:
             )
             out = [ir.Assign(ir.Const(True, loc), true_var, loc), assign]
 
-        if fdef == ("rolling_variable", "bodo.hiframes.rolling") and (
-            self._is_1D_arr(rhs.args[0].name) or self._is_1D_Var_arr(rhs.args[0].name)
-        ):
+        if fdef == ("rolling_variable", "bodo.hiframes.rolling") and self._is_1D_or_1D_Var_arr(rhs.args[0].name):
             # set parallel flag to true
             true_var = ir.Var(scope, mk_unique_var("true_var"), loc)
             self.typemap[true_var.name] = BooleanLiteral(True)
@@ -808,10 +795,7 @@ class DistributedPass:
         if (
             func_mod == "bodo.hiframes.rolling"
             and func_name in ("shift", "pct_change")
-            and (
-                self._is_1D_arr(rhs.args[0].name)
-                or self._is_1D_Var_arr(rhs.args[0].name)
-            )
+            and self._is_1D_or_1D_Var_arr(rhs.args[0].name)
         ):
             # set parallel flag to true
             true_var = ir.Var(scope, mk_unique_var("true_var"), loc)
@@ -819,18 +803,14 @@ class DistributedPass:
             rhs.args[2] = true_var
             out = [ir.Assign(ir.Const(True, loc), true_var, loc), assign]
 
-        if fdef == ("array_isin", "bodo.libs.array") and (
-            self._is_1D_arr(rhs.args[2].name) or self._is_1D_Var_arr(rhs.args[2].name)
-        ):
+        if fdef == ("array_isin", "bodo.libs.array") and self._is_1D_or_1D_Var_arr(rhs.args[2].name):
             # array_isin requires shuffling data only if values array is distributed
             f = lambda out_arr, in_arr, vals, p: bodo.libs.array.array_isin(
                 out_arr, in_arr, vals, True
             )
             return compile_func_single_block(f, rhs.args, assign.target, self)
 
-        if fdef == ("quantile", "bodo.libs.array_kernels") and (
-            self._is_1D_arr(rhs.args[0].name) or self._is_1D_Var_arr(rhs.args[0].name)
-        ):
+        if fdef == ("quantile", "bodo.libs.array_kernels") and self._is_1D_or_1D_Var_arr(rhs.args[0].name):
             arr = rhs.args[0]
             nodes = []
             size_var = self._get_dist_var_len(arr, nodes, equiv_set)
@@ -841,21 +821,15 @@ class DistributedPass:
             )
             return nodes + compile_func_single_block(f, rhs.args, assign.target, self)
 
-        if fdef == ("nunique", "bodo.libs.array_kernels") and (
-            self._is_1D_arr(rhs.args[0].name) or self._is_1D_Var_arr(rhs.args[0].name)
-        ):
+        if fdef == ("nunique", "bodo.libs.array_kernels") and self._is_1D_or_1D_Var_arr(rhs.args[0].name):
             f = lambda arr: bodo.libs.array_kernels.nunique_parallel(arr)
             return compile_func_single_block(f, rhs.args, assign.target, self)
 
-        if fdef == ("unique", "bodo.libs.array_kernels") and (
-            self._is_1D_arr(rhs.args[0].name) or self._is_1D_Var_arr(rhs.args[0].name)
-        ):
+        if fdef == ("unique", "bodo.libs.array_kernels") and self._is_1D_or_1D_Var_arr(rhs.args[0].name):
             f = lambda arr: bodo.libs.array_kernels.unique_parallel(arr)
             return compile_func_single_block(f, rhs.args, assign.target, self)
 
-        if fdef == ("nlargest", "bodo.libs.array_kernels") and (
-            self._is_1D_arr(rhs.args[0].name) or self._is_1D_Var_arr(rhs.args[0].name)
-        ):
+        if fdef == ("nlargest", "bodo.libs.array_kernels") and self._is_1D_or_1D_Var_arr(rhs.args[0].name):
             f = lambda arr, I, k, i, f: bodo.libs.array_kernels.nlargest_parallel(
                 arr, I, k, i, f
             )
@@ -885,11 +859,12 @@ class DistributedPass:
             self._set_last_arg_to_true(assign.value)
             return [assign]
 
-        if fdef == ("rebalance", "bodo.libs.distributed_api") and (
-            self._is_1D_arr(rhs.args[0].name) or self._is_1D_Var_arr(rhs.args[0].name)
-        ):
-            f = lambda df: bodo.libs.distributed_api.rebalance_kernel(df)
-            return compile_func_single_block(f, rhs.args, assign.target, self)
+        if func_name == "rebalance" and func_mod in {"bodo.libs.distributed_api", "bodo"}:
+            if self._is_1D_or_1D_Var_arr(rhs.args[0].name):
+                f = lambda df: bodo.libs.distributed_api.rebalance_kernel(df)
+                return compile_func_single_block(f, rhs.args, assign.target, self)
+            else:
+                warnings.warn("Invoking rebalance on a replicated array has no effect")
 
         if fdef == ("sample_table_operation", "bodo.libs.array_kernels") and (
             self._is_1D_tup(rhs.args[0].name) or self._is_1D_Var_tup(rhs.args[0].name)
@@ -908,9 +883,7 @@ class DistributedPass:
                 assign.value = arg_def.args[0]
             return out
 
-        if fdef == ("init_range_index", "bodo.hiframes.pd_index_ext") and (
-            self._is_1D_arr(lhs) or self._is_1D_Var_arr(lhs)
-        ):
+        if fdef == ("init_range_index", "bodo.hiframes.pd_index_ext") and self._is_1D_or_1D_Var_arr(lhs):
             return self._run_call_init_range_index(
                 lhs, assign, rhs.args, avail_vars, equiv_set
             )
@@ -933,9 +906,7 @@ class DistributedPass:
         if fdef == ("rebalance_array", "bodo.libs.distributed_api"):
             return self._run_call_rebalance_array(lhs, assign, rhs.args)
 
-        if fdef == ("file_read", "bodo.io.np_io") and (
-            self._is_1D_arr(rhs.args[1].name) or self._is_1D_Var_arr(rhs.args[1].name)
-        ):
+        if fdef == ("file_read", "bodo.io.np_io") and self._is_1D_or_1D_Var_arr(rhs.args[1].name):
             fname = rhs.args[0]
             arr = rhs.args[1]
             # File offset in readfile is needed for the parallel seek
@@ -1073,7 +1044,7 @@ class DistributedPass:
         """
         # allocs are handled separately
         assert not (
-            (self._is_1D_Var_arr(lhs) or self._is_1D_arr(lhs))
+            self._is_1D_or_1D_Var_arr(lhs)
             and func_name in bodo.utils.utils.np_alloc_callnames
         ), (
             "allocation calls handled separately "
@@ -1096,9 +1067,7 @@ class DistributedPass:
         if func_name == "ravel" and self._is_1D_arr(args[0].name):
             assert self.typemap[args[0].name].ndim == 1, "only 1D ravel supported"
 
-        if func_name in list_cumulative and (
-            self._is_1D_arr(args[0].name) or self._is_1D_Var_arr(args[0].name)
-        ):
+        if func_name in list_cumulative and self._is_1D_or_1D_Var_arr(args[0].name):
             in_arr_var = args[0]
             lhs_var = assign.target
             # TODO: compute inplace if input array is dead
@@ -1113,9 +1082,7 @@ class DistributedPass:
             )
 
         # sum over the first axis is distributed, A.sum(0)
-        if func_name == "sum" and (
-            self._is_1D_arr(args[0].name) or self._is_1D_Var_arr(args[0].name)
-        ):
+        if func_name == "sum" and self._is_1D_or_1D_Var_arr(args[0].name):
             axis = get_call_expr_arg("sum", args, kws, 1, "axis", "")
             if guard(find_const, self.func_ir, axis) == 0:
                 reduce_op = Reduce_Type.Sum
@@ -1181,9 +1148,7 @@ class DistributedPass:
             # Calling in parallel case
             self._set_last_arg_to_true(assign.value)
             return [assign]
-        elif func_name == "to_csv" and (
-            self._is_1D_arr(df.name) or self._is_1D_Var_arr(df.name)
-        ):
+        elif func_name == "to_csv" and self._is_1D_or_1D_Var_arr(df.name):
             # avoid header for non-zero ranks
             # write to string then parallel file write
             # df.to_csv(fname) ->
@@ -1272,9 +1237,7 @@ class DistributedPass:
                 },
             )
 
-        elif func_name == "to_json" and (
-            self._is_1D_arr(df.name) or self._is_1D_Var_arr(df.name)
-        ):
+        elif func_name == "to_json" and self._is_1D_or_1D_Var_arr(df.name):
             # write to string then parallel file write
             # df.to_json(fname) ->
             # str_out = df.to_json(None, header=header)

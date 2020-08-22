@@ -2245,7 +2245,7 @@ table_info* compute_node_partition_by_hash(table_info* in_table, int64_t n_keys,
    ---If the value is larger than 2 then reshuffling is interesting
  */
 bool need_reshuffling(table_info* in_table, double crit_fraction) {
-    int64_t n_rows = in_table->nrows(), sum_n_rows, max_n_rows;
+    int64_t n_rows = in_table->nrows(), sum_n_rows, max_n_rows, min_n_rows;
     int n_pes;
     MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
     if (n_pes == 1) return false;
