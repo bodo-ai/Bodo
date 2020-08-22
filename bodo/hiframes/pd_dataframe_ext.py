@@ -3151,7 +3151,7 @@ def to_csv_overload(
         # Assuming that path_or_buf is a string
         bucket_region = bodo.io.fs_io.get_s3_bucket_region_njit(path_or_buf)
         # TODO: support non-ASCII file names?
-        _csv_write(
+        bodo.hiframes.pd_dataframe_ext._csv_write(
             unicode_to_utf8(path_or_buf),
             unicode_to_utf8(D),
             0,
@@ -3249,7 +3249,7 @@ def to_json_overload(
         bucket_region = bodo.io.fs_io.get_s3_bucket_region_njit(path_or_buf)
 
         if lines and orient == "records":
-            _json_write(
+            bodo.hiframes.pd_dataframe_ext._json_write(
                 unicode_to_utf8(path_or_buf),
                 unicode_to_utf8(D),
                 0,
@@ -3259,7 +3259,7 @@ def to_json_overload(
                 unicode_to_utf8(bucket_region),
             )
         else:
-            _json_write(
+            bodo.hiframes.pd_dataframe_ext._json_write(
                 unicode_to_utf8(path_or_buf),
                 unicode_to_utf8(D),
                 0,
