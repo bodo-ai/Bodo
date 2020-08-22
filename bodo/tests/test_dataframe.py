@@ -169,7 +169,7 @@ def column_name_df_value(request):
     return request.param
 
 
-def test_df_select_dtypes():
+def test_df_select_dtypes(memory_leak_check):
     def test_impl1(df):
         return df.select_dtypes("bool")
 
@@ -194,7 +194,7 @@ def test_df_select_dtypes():
     # check_func(test_impl5, (df,))
 
 
-def test_assign():
+def test_assign(memory_leak_check):
     """Assign statements"""
 
     def test_impl1(df):
@@ -243,7 +243,7 @@ def test_unbox_df1(df_value, memory_leak_check):
     check_func(impl3, (df_value,))
 
 
-def test_unbox_df2(column_name_df_value):
+def test_unbox_df2(column_name_df_value, memory_leak_check):
     # unbox column with name overlaps with pandas function
     def impl1(df_arg):
         return df_arg["product"]
@@ -251,7 +251,7 @@ def test_unbox_df2(column_name_df_value):
     check_func(impl1, (column_name_df_value,))
 
 
-def test_unbox_df3():
+def test_unbox_df3(memory_leak_check):
     # unbox dataframe datetime and unsigned int indices
     def impl(df):
         return df
@@ -282,7 +282,7 @@ def test_unbox_df_leak_test(memory_leak_check):
     bodo_func(df1)
 
 
-def test_unbox_df_multi():
+def test_unbox_df_multi(memory_leak_check):
     """
     box/unbox dataframe with MultiIndex columns structure (sometimes created in groupby,
     ...)
@@ -298,7 +298,7 @@ def test_unbox_df_multi():
     check_func(impl, (df,))
 
 
-def test_empty_df_unbox():
+def test_empty_df_unbox(memory_leak_check):
     """test boxing/unboxing of an empty df
     """
 
@@ -309,7 +309,7 @@ def test_empty_df_unbox():
     check_func(impl, (df,))
 
 
-def test_empty_df_create():
+def test_empty_df_create(memory_leak_check):
     """test creation of an empty df
     """
 
@@ -328,7 +328,7 @@ def test_empty_df_create():
     check_func(impl3, ())
 
 
-def test_empty_df_set_column():
+def test_empty_df_set_column(memory_leak_check):
     """test column setitem of an empty df
     """
 
@@ -346,7 +346,7 @@ def test_empty_df_set_column():
     check_func(impl2, (11,))
 
 
-def test_empty_df_drop_column():
+def test_empty_df_drop_column(memory_leak_check):
     """test dropping the only column of a dataframe so it becomes empty
     """
 
@@ -358,7 +358,7 @@ def test_empty_df_drop_column():
     check_func(impl1, (11,))
 
 
-def test_df_from_np_array_int():
+def test_df_from_np_array_int(memory_leak_check):
     """
     Create a dataframe from numpy 2D-array of type int
     """
@@ -371,7 +371,7 @@ def test_df_from_np_array_int():
     check_func(impl, (), is_out_distributed=False)
 
 
-def test_create_df_force_const():
+def test_create_df_force_const(memory_leak_check):
     """
     Test forcing dataframe column name to be constant in pd.DataFrame()
     """
@@ -382,7 +382,7 @@ def test_create_df_force_const():
     check_func(impl, ("BB", 11))
 
 
-def test_df_from_np_array_bool():
+def test_df_from_np_array_bool(memory_leak_check):
     """
     Create a dataframe from numpy 2D-array of type bool
     """
@@ -395,7 +395,7 @@ def test_df_from_np_array_bool():
     check_func(impl, (), is_out_distributed=False)
 
 
-def test_create_df_scalar():
+def test_create_df_scalar(memory_leak_check):
     """
     Test scalar to array conversion in pd.DataFrame()
     """
@@ -406,7 +406,7 @@ def test_create_df_scalar():
     check_func(impl, (11,))
 
 
-def test_df_multi_get_level():
+def test_df_multi_get_level(memory_leak_check):
     """
     getitem with string to get a level of dataframe with MultiIndex columns structure
     """
@@ -456,10 +456,10 @@ def test_rebalance():
     )
     df_out_dist = bodo_dist(df_in)
     df_out_dist_merge = bodo.gatherv(df_out_dist)
-    df_len_dist = pd.DataFrame({"A":[len(df_out_dist)]})
+    df_len_dist = pd.DataFrame({"A": [len(df_out_dist)]})
     df_len_dist_merge = bodo.gatherv(df_len_dist)
-    if bodo.get_rank()==0:
-        delta_size = df_len_dist_merge["A"].max() - df_len_dist_merge["A"].min();
+    if bodo.get_rank() == 0:
+        delta_size = df_len_dist_merge["A"].max() - df_len_dist_merge["A"].min()
         assert delta_size <= 1
     pd.testing.assert_frame_equal(df_in_merge, df_out_dist_merge)
     # The replicated case
@@ -470,7 +470,7 @@ def test_rebalance():
     pd.testing.assert_frame_equal(df_in_merge, df_out_rep)
 
 
-def test_df_replace():
+def test_df_replace(memory_leak_check):
     # Implementation for single value and single value
     def impl1(df):
         return df.replace(np.inf, np.nan).replace(-np.inf, np.nan)
@@ -484,7 +484,7 @@ def test_df_replace():
     check_func(impl2, (df,))
 
 
-def test_box_df():
+def test_box_df(memory_leak_check):
     # box dataframe contains column with name overlaps with pandas function
     def impl():
         df = pd.DataFrame({"product": ["a", "b", "c"], "keys": [1, 2, 3]})
@@ -506,14 +506,14 @@ def test_df_dtor(df_value, memory_leak_check):
     check_func(impl, (df_value,))
 
 
-def test_df_index(df_value):
+def test_df_index(df_value, memory_leak_check):
     def impl(df):
         return df.index
 
     check_func(impl, (df_value,))
 
 
-def test_df_index_non():
+def test_df_index_non(memory_leak_check):
     # test None index created inside the function
     def impl():
         df = pd.DataFrame({"A": [2, 3, 1]})
@@ -523,21 +523,21 @@ def test_df_index_non():
     pd.testing.assert_index_equal(bodo_func(), impl())
 
 
-def test_df_columns(df_value):
+def test_df_columns(df_value, memory_leak_check):
     def impl(df):
         return df.columns
 
     check_func(impl, (df_value,), is_out_distributed=False)
 
 
-def test_df_values(numeric_df_value):
+def test_df_values(numeric_df_value, memory_leak_check):
     def impl(df):
         return df.values
 
     check_func(impl, (numeric_df_value,))
 
 
-def test_df_values_nullable_int():
+def test_df_values_nullable_int(memory_leak_check):
     def impl(df):
         return df.values
 
@@ -552,28 +552,28 @@ def test_df_values_nullable_int():
     np.testing.assert_allclose(bodo_out, py_out)
 
 
-def test_df_to_numpy(numeric_df_value):
+def test_df_to_numpy(numeric_df_value, memory_leak_check):
     def impl(df):
         return df.to_numpy()
 
     check_func(impl, (numeric_df_value,))
 
 
-def test_df_ndim(df_value):
+def test_df_ndim(df_value, memory_leak_check):
     def impl(df):
         return df.ndim
 
     check_func(impl, (df_value,))
 
 
-def test_df_size(df_value):
+def test_df_size(df_value, memory_leak_check):
     def impl(df):
         return df.size
 
     check_func(impl, (df_value,))
 
 
-def test_df_shape(df_value):
+def test_df_shape(df_value, memory_leak_check):
     def impl(df):
         return df.shape
 
@@ -582,7 +582,7 @@ def test_df_shape(df_value):
 
 # TODO: empty df: pd.DataFrame()
 @pytest.mark.parametrize("df", [pd.DataFrame({"A": [1, 3]}), pd.DataFrame({"A": []})])
-def test_df_empty(df):
+def test_df_empty(df, memory_leak_check):
     def impl(df):
         return df.empty
 
@@ -590,7 +590,7 @@ def test_df_empty(df):
     assert bodo_func(df) == impl(df)
 
 
-def test_df_astype_num(numeric_df_value):
+def test_df_astype_num(numeric_df_value, memory_leak_check):
     # not supported for dt64
     if any(d == np.dtype("datetime64[ns]") for d in numeric_df_value.dtypes):
         return
@@ -601,7 +601,7 @@ def test_df_astype_num(numeric_df_value):
     check_func(impl, (numeric_df_value,))
 
 
-def test_df_astype_str(numeric_df_value):
+def test_df_astype_str(numeric_df_value, memory_leak_check):
     # not supported for dt64
     if any(d == np.dtype("datetime64[ns]") for d in numeric_df_value.dtypes):
         return
@@ -619,21 +619,21 @@ def test_df_astype_str(numeric_df_value):
     check_func(impl, (numeric_df_value,))
 
 
-def test_df_copy_deep(df_value):
+def test_df_copy_deep(df_value, memory_leak_check):
     def impl(df):
         return df.copy()
 
     check_func(impl, (df_value,))
 
 
-def test_df_copy_shallow(df_value):
+def test_df_copy_shallow(df_value, memory_leak_check):
     def impl(df):
         return df.copy(deep=False)
 
     check_func(impl, (df_value,))
 
 
-def test_df_rename():
+def test_df_rename(memory_leak_check):
     def impl(df):
         return df.rename(columns={"B": "bb", "C": "cc"})
 
@@ -673,7 +673,7 @@ def test_df_rename():
         bodo.jit(impl4)(df)
 
 
-def test_df_isna(df_value):
+def test_df_isna(df_value, memory_leak_check):
     # TODO: test dt64 NAT, categorical, etc.
     def impl(df):
         return df.isna()
@@ -681,7 +681,7 @@ def test_df_isna(df_value):
     check_func(impl, (df_value,))
 
 
-def test_df_notna(df_value):
+def test_df_notna(df_value, memory_leak_check):
     # TODO: test dt64 NAT, categorical, etc.
     def impl(df):
         return df.notna()
@@ -689,14 +689,14 @@ def test_df_notna(df_value):
     check_func(impl, (df_value,))
 
 
-def test_df_head(df_value):
+def test_df_head(df_value, memory_leak_check):
     def impl(df):
         return df.head(3)
 
     check_func(impl, (df_value,), is_out_distributed=False)
 
 
-def test_df_tail(df_value):
+def test_df_tail(df_value, memory_leak_check):
     def impl(df):
         return df.tail(3)
 
@@ -706,7 +706,7 @@ def test_df_tail(df_value):
 @pytest.mark.parametrize(
     "other", [pd.DataFrame({"A": np.arange(5), "C": np.arange(5) ** 2}), [2, 3, 4, 5]]
 )
-def test_df_isin(other):
+def test_df_isin(other, memory_leak_check):
     # TODO: more tests, other data types
     # TODO: Series and dictionary values cases
     def impl(df, other):
@@ -716,7 +716,7 @@ def test_df_isin(other):
     check_func(impl, (df, other))
 
 
-def test_df_abs1():
+def test_df_abs1(memory_leak_check):
     def impl(df):
         return df.abs()
 
@@ -724,7 +724,7 @@ def test_df_abs1():
     check_func(impl, (df,))
 
 
-def test_df_abs2(numeric_df_value):
+def test_df_abs2(numeric_df_value, memory_leak_check):
     # not supported for dt64
     if any(d == np.dtype("datetime64[ns]") for d in numeric_df_value.dtypes):
         return
@@ -735,7 +735,7 @@ def test_df_abs2(numeric_df_value):
     check_func(impl, (numeric_df_value,))
 
 
-def test_df_corr(df_value):
+def test_df_corr(df_value, memory_leak_check):
     # empty dataframe output not supported yet
     if len(df_value._get_numeric_data().columns) == 0:
         return
@@ -751,7 +751,7 @@ def test_df_corr(df_value):
     check_func(impl, (df_value,), is_out_distributed=False)
 
 
-def test_df_corr_parallel():
+def test_df_corr_parallel(memory_leak_check):
     def impl(n):
         df = pd.DataFrame({"A": np.arange(n), "B": np.arange(n) ** 2})
         return df.corr()
@@ -763,7 +763,7 @@ def test_df_corr_parallel():
     assert count_parfor_OneDs() >= 1
 
 
-def test_df_cov(df_value):
+def test_df_cov(df_value, memory_leak_check):
     # empty dataframe output not supported yet
     if len(df_value._get_numeric_data().columns) == 0:
         return
@@ -779,14 +779,14 @@ def test_df_cov(df_value):
     check_func(impl, (df_value,), is_out_distributed=False)
 
 
-def test_df_count(df_value):
+def test_df_count(df_value, memory_leak_check):
     def impl(df):
         return df.count()
 
     check_func(impl, (df_value,), is_out_distributed=False)
 
 
-def test_df_prod(df_value):
+def test_df_prod(df_value, memory_leak_check):
     # empty dataframe output not supported yet
     if len(df_value._get_numeric_data().columns) == 0:
         return
@@ -798,7 +798,7 @@ def test_df_prod(df_value):
     check_func(impl, (df_value,), is_out_distributed=False, check_dtype=False)
 
 
-def test_df_sum(numeric_df_value):
+def test_df_sum(numeric_df_value, memory_leak_check):
     # empty dataframe output not supported yet
     if len(numeric_df_value._get_numeric_data().columns) == 0:
         return
@@ -810,7 +810,7 @@ def test_df_sum(numeric_df_value):
     check_func(impl, (numeric_df_value,), is_out_distributed=False, check_dtype=False)
 
 
-def test_df_min(numeric_df_value):
+def test_df_min(numeric_df_value, memory_leak_check):
     # empty dataframe output not supported yet
     if len(numeric_df_value._get_numeric_data().columns) == 0:
         return
@@ -822,7 +822,7 @@ def test_df_min(numeric_df_value):
     check_func(impl, (numeric_df_value,), is_out_distributed=False, check_dtype=False)
 
 
-def test_df_max(numeric_df_value):
+def test_df_max(numeric_df_value, memory_leak_check):
     # empty dataframe output not supported yet
     if len(numeric_df_value._get_numeric_data().columns) == 0:
         return
@@ -859,7 +859,7 @@ def test_df_max(numeric_df_value):
         ),
     ],
 )
-def test_df_reduce_axis1(df):
+def test_df_reduce_axis1(df, memory_leak_check):
     """test dataframe reductions across columns (axis=1)
     """
     # TODO: support and test other reduce functions
@@ -891,7 +891,7 @@ def test_df_reduce_axis1(df):
     check_func(impl_median, (df,))
 
 
-def test_df_mean(numeric_df_value):
+def test_df_mean(numeric_df_value, memory_leak_check):
     # empty dataframe output not supported yet
     if len(numeric_df_value._get_numeric_data().columns) == 0:
         return
@@ -903,7 +903,7 @@ def test_df_mean(numeric_df_value):
     check_func(impl, (numeric_df_value,), is_out_distributed=False, check_dtype=False)
 
 
-def test_df_var(numeric_df_value):
+def test_df_var(numeric_df_value, memory_leak_check):
     # empty dataframe output not supported yet
     if len(numeric_df_value._get_numeric_data().columns) == 0:
         return
@@ -915,7 +915,7 @@ def test_df_var(numeric_df_value):
     check_func(impl, (numeric_df_value,), is_out_distributed=False, check_dtype=False)
 
 
-def test_df_std(numeric_df_value):
+def test_df_std(numeric_df_value, memory_leak_check):
     # empty dataframe output not supported yet
     if len(numeric_df_value._get_numeric_data().columns) == 0:
         return
@@ -927,7 +927,7 @@ def test_df_std(numeric_df_value):
     check_func(impl, (numeric_df_value,), is_out_distributed=False, check_dtype=False)
 
 
-def test_df_median1():
+def test_df_median1(memory_leak_check):
     # remove this after NAs are properly handled
     def impl(df):
         return df.median()
@@ -936,7 +936,7 @@ def test_df_median1():
     check_func(impl, (df,), is_out_distributed=False)
 
 
-def test_df_median2(numeric_df_value):
+def test_df_median2(numeric_df_value, memory_leak_check):
     # empty dataframe output not supported yet
     if len(numeric_df_value._get_numeric_data().columns) == 0:
         return
@@ -952,7 +952,7 @@ def test_df_median2(numeric_df_value):
     check_func(impl, (numeric_df_value,), is_out_distributed=False)
 
 
-def test_df_quantile(df_value):
+def test_df_quantile(df_value, memory_leak_check):
     # empty dataframe output not supported yet
     if len(df_value._get_numeric_data().columns) == 0:
         return
@@ -967,7 +967,7 @@ def test_df_quantile(df_value):
     check_func(impl, (df_value,), is_out_distributed=False, check_names=False)
 
 
-def test_df_pct_change(numeric_df_value):
+def test_df_pct_change(numeric_df_value, memory_leak_check):
     # not supported for dt64 yet, TODO: support and test
     if any(d == np.dtype("datetime64[ns]") for d in numeric_df_value.dtypes):
         return
@@ -979,7 +979,7 @@ def test_df_pct_change(numeric_df_value):
 
 
 @pytest.mark.slow
-def test_df_describe(numeric_df_value):
+def test_df_describe(numeric_df_value, memory_leak_check):
     # not supported for dt64 yet, TODO: support and test
     if any(d == np.dtype("datetime64[ns]") for d in numeric_df_value.dtypes):
         return
@@ -991,7 +991,7 @@ def test_df_describe(numeric_df_value):
 
 
 @pytest.mark.skip(reason="distributed cumprod not available yet")
-def test_df_cumprod(numeric_df_value):
+def test_df_cumprod(numeric_df_value, memory_leak_check):
     # empty dataframe output not supported yet
     if len(numeric_df_value._get_numeric_data().columns) == 0:
         return
@@ -1007,7 +1007,7 @@ def test_df_cumprod(numeric_df_value):
     check_func(impl, (numeric_df_value,))
 
 
-def test_df_cumsum1():
+def test_df_cumsum1(memory_leak_check):
     # remove this after NAs are properly handled
     def impl(df):
         return df.cumsum()
@@ -1016,7 +1016,7 @@ def test_df_cumsum1():
     check_func(impl, (df,))
 
 
-def test_df_cumsum2(numeric_df_value):
+def test_df_cumsum2(numeric_df_value, memory_leak_check):
     # empty dataframe output not supported yet
     if len(numeric_df_value._get_numeric_data().columns) == 0:
         return
@@ -1032,7 +1032,7 @@ def test_df_cumsum2(numeric_df_value):
     check_func(impl, (numeric_df_value,))
 
 
-def test_df_nunique(df_value):
+def test_df_nunique(df_value, memory_leak_check):
     # not supported for dt64 yet, TODO: support and test
     if any(d == np.dtype("datetime64[ns]") for d in df_value.dtypes):
         return
@@ -1059,7 +1059,7 @@ def _is_supported_argminmax_typ(d):
     return d in supported_typs
 
 
-def test_df_idxmax_datetime():
+def test_df_idxmax_datetime(memory_leak_check):
     def impl(df):
         return df.idxmax()
 
@@ -1070,7 +1070,7 @@ def test_df_idxmax_datetime():
     check_func(impl, (df,), is_out_distributed=False)
 
 
-def test_df_idxmax(numeric_df_value):
+def test_df_idxmax(numeric_df_value, memory_leak_check):
     if any(not _is_supported_argminmax_typ(d) for d in numeric_df_value.dtypes):
         return
 
@@ -1080,7 +1080,7 @@ def test_df_idxmax(numeric_df_value):
     check_func(impl, (numeric_df_value,), is_out_distributed=False)
 
 
-def test_df_idxmin(numeric_df_value):
+def test_df_idxmin(numeric_df_value, memory_leak_check):
     if any(not _is_supported_argminmax_typ(d) for d in numeric_df_value.dtypes):
         return
 
@@ -1090,7 +1090,7 @@ def test_df_idxmin(numeric_df_value):
     check_func(impl, (numeric_df_value,), is_out_distributed=False)
 
 
-def test_df_take(df_value):
+def test_df_take(df_value, memory_leak_check):
     def impl(df):
         return df.take([1, 3])
 
@@ -1100,7 +1100,7 @@ def test_df_take(df_value):
     )
 
 
-def test_df_sort_index(df_value):
+def test_df_sort_index(df_value, memory_leak_check):
     # skip NAs
     # TODO: handle NA order
     if df_value.isna().sum().sum():
@@ -1112,7 +1112,7 @@ def test_df_sort_index(df_value):
     check_func(impl, (df_value,))
 
 
-def test_df_shift(numeric_df_value):
+def test_df_shift(numeric_df_value, memory_leak_check):
     # not supported for dt64
     if any(d == np.dtype("datetime64[ns]") for d in numeric_df_value.dtypes):
         return
@@ -1123,7 +1123,7 @@ def test_df_shift(numeric_df_value):
     check_func(impl, (numeric_df_value,))
 
 
-def test_df_set_index(df_value):
+def test_df_set_index(df_value, memory_leak_check):
     # singe column dfs become zero column which are not supported, TODO: fix
     if len(df_value.columns) < 2:
         return
@@ -1138,7 +1138,7 @@ def test_df_set_index(df_value):
     check_func(impl, (df_value,))
 
 
-def test_df_reset_index1(df_value):
+def test_df_reset_index1(df_value, memory_leak_check):
     """Test DataFrame.reset_index(drop=False) on various dataframe/index combinations
     """
 
@@ -1180,7 +1180,7 @@ def test_df_reset_index1(df_value):
         ),
     ],
 )
-def test_df_reset_index2(test_index):
+def test_df_reset_index2(test_index, memory_leak_check):
     """Test DataFrame.reset_index(drop=False) with MultiIndex and named indexes
     """
 
@@ -1192,6 +1192,7 @@ def test_df_reset_index2(test_index):
     check_func(impl, (test_df,))
 
 
+# TODO: add memory_leak_check when groupby leaks are resolved (#1472)
 def test_df_reset_index3():
     """Test DataFrame.reset_index(drop=False) after groupby() which is a common pattern
     """
@@ -1213,7 +1214,7 @@ def test_df_reset_index3():
     check_func(impl2, (df,), sort_output=True, reset_index=True)
 
 
-def test_df_reset_index4():
+def test_df_reset_index4(memory_leak_check):
     """Test DataFrame.reset_index(drop=False, inplace=True)
     """
 
@@ -1228,7 +1229,7 @@ def test_df_reset_index4():
     check_func(impl, (test_df,), copy_input=True)
 
 
-def test_df_duplicated():
+def test_df_duplicated(memory_leak_check):
     def impl(df):
         return df.duplicated()
 
@@ -1243,7 +1244,7 @@ def test_df_duplicated():
 ##################### binary ops ###############################
 
 
-def test_dataframe_binary_add():
+def test_dataframe_binary_add(memory_leak_check):
     def test_impl(df, other):
         return df + other
 
@@ -1257,7 +1258,7 @@ def test_dataframe_binary_add():
 
 @pytest.mark.slow
 @pytest.mark.parametrize("op", bodo.hiframes.pd_series_ext.series_binary_ops)
-def test_dataframe_binary_op(op):
+def test_dataframe_binary_op(op, memory_leak_check):
     # TODO: test parallelism
     op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
     func_text = "def test_impl(df, other):\n"
@@ -1274,7 +1275,7 @@ def test_dataframe_binary_op(op):
     check_func(test_impl, (2, df))
 
 
-def test_dataframe_binary_iadd():
+def test_dataframe_binary_iadd(memory_leak_check):
     def test_impl(df, other):
         df += other
         return df
@@ -1286,7 +1287,7 @@ def test_dataframe_binary_iadd():
 
 @pytest.mark.slow
 @pytest.mark.parametrize("op", bodo.hiframes.pd_series_ext.series_inplace_binary_ops)
-def test_dataframe_inplace_binary_op(op):
+def test_dataframe_inplace_binary_op(op, memory_leak_check):
     op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
     func_text = "def test_impl(df, other):\n"
     func_text += "  df {} other\n".format(op_str)
@@ -1301,7 +1302,7 @@ def test_dataframe_inplace_binary_op(op):
 
 
 @pytest.mark.parametrize("op", bodo.hiframes.pd_series_ext.series_unary_ops)
-def test_dataframe_unary_op(op):
+def test_dataframe_unary_op(op, memory_leak_check):
     # TODO: fix operator.pos
     import operator
 
@@ -1351,7 +1352,7 @@ def na_test_obj(request):
     return request.param
 
 
-def test_pd_isna(na_test_obj):
+def test_pd_isna(na_test_obj, memory_leak_check):
     obj = na_test_obj
 
     def impl(obj):
@@ -1361,7 +1362,7 @@ def test_pd_isna(na_test_obj):
     check_func(impl, (obj,), is_out_distributed)
 
 
-def test_pd_notna(na_test_obj):
+def test_pd_notna(na_test_obj, memory_leak_check):
     obj = na_test_obj
 
     def impl(obj):
@@ -1371,7 +1372,7 @@ def test_pd_notna(na_test_obj):
     check_func(impl, (obj,), is_out_distributed)
 
 
-def test_pd_isna_getitem():
+def test_pd_isna_getitem(memory_leak_check):
     """test support for NA check for array values, e.g. pd.isna(A[i]) pattern matching
     in SeriesPass
     """
@@ -1406,7 +1407,7 @@ def test_pd_isna_getitem():
     assert bodo.jit(impl3)(A, 2) == impl3(A, 2)
 
 
-def test_setitem_na():
+def test_setitem_na(memory_leak_check):
     """test support for setting NA value to array location, e.g. A[i] = None
     """
 
@@ -1422,7 +1423,7 @@ def test_setitem_na():
     pd.testing.assert_series_equal(bodo_func(S.copy(), 2), impl(S.copy(), 2))
 
 
-def test_set_column_scalar_str():
+def test_set_column_scalar_str(memory_leak_check):
     """set df column with a string scalar
     """
 
@@ -1442,7 +1443,7 @@ def test_set_column_scalar_str():
     check_func(test_impl2, (n,))
 
 
-def test_set_column_scalar_num():
+def test_set_column_scalar_num(memory_leak_check):
     """set df column with a numeric scalar
     """
 
@@ -1455,7 +1456,7 @@ def test_set_column_scalar_num():
     check_func(test_impl, (n,))
 
 
-def test_set_column_scalar_timestamp():
+def test_set_column_scalar_timestamp(memory_leak_check):
     """set df column with a timestamp scalar
     """
 
@@ -1469,7 +1470,7 @@ def test_set_column_scalar_timestamp():
     check_func(test_impl, (n, t))
 
 
-def test_set_column_cond1():
+def test_set_column_cond1(memory_leak_check):
     # df created inside function case
     def test_impl(n, cond):
         df = pd.DataFrame({"A": np.ones(n), "B": np.arange(n)})
@@ -1483,7 +1484,7 @@ def test_set_column_cond1():
     pd.testing.assert_series_equal(bodo_func(n, False), test_impl(n, False))
 
 
-def test_set_column_cond2():
+def test_set_column_cond2(memory_leak_check):
     # df is assigned to other variable case (mutability)
     def test_impl(n, cond):
         df = pd.DataFrame({"A": np.ones(n), "B": np.arange(n)})
@@ -1499,7 +1500,7 @@ def test_set_column_cond2():
     pd.testing.assert_frame_equal(bodo_func(n, False), test_impl(n, False))
 
 
-def test_set_column_cond3():
+def test_set_column_cond3(memory_leak_check):
     # df is assigned to other variable case (mutability) and has parent
     def test_impl(df, cond):
         df2 = df
@@ -1522,7 +1523,7 @@ def test_set_column_cond3():
     pd.testing.assert_frame_equal(df1, df2)
 
 
-def test_set_column_setattr():
+def test_set_column_setattr(memory_leak_check):
     """set df column using setattr instead of setitem
     """
 
@@ -1562,7 +1563,7 @@ def test_set_column_reflect_error(memory_leak_check):
     pd.testing.assert_frame_equal(bodo.jit(impl)(), impl())
 
 
-def test_df_filter():
+def test_df_filter(memory_leak_check):
     def test_impl(df, cond):
         df2 = df[cond]
         return df2
@@ -1584,7 +1585,7 @@ def test_df_filter():
     check_func(test_impl2, (df, cond))
 
 
-def test_create_series_input1():
+def test_create_series_input1(memory_leak_check):
     def test_impl(S):
         df = pd.DataFrame({"A": S})
         return df
@@ -1594,7 +1595,7 @@ def test_create_series_input1():
     pd.testing.assert_frame_equal(bodo_func(S), test_impl(S))
 
 
-def test_df_apply_getitem():
+def test_df_apply_getitem(memory_leak_check):
     """test getitem access of row value passed in df.apply()
     """
 
@@ -1607,7 +1608,7 @@ def test_df_apply_getitem():
     check_func(test_impl, (df,))
 
 
-def test_df_apply_bool():
+def test_df_apply_bool(memory_leak_check):
     # check bool output of UDF for BooleanArray use
     def test_impl(df):
         return df.apply(lambda r: r.A == 2, axis=1)
@@ -1617,7 +1618,7 @@ def test_df_apply_bool():
     check_func(test_impl, (df,))
 
 
-def test_df_apply_str():
+def test_df_apply_str(memory_leak_check):
     """make sure string output can be handled in apply() properly
     """
 
@@ -1628,7 +1629,7 @@ def test_df_apply_str():
     check_func(test_impl, (df,))
 
 
-def test_df_apply_list_str():
+def test_df_apply_list_str(memory_leak_check):
     """make sure list(str) output can be handled in apply() properly
     """
 
@@ -1639,7 +1640,7 @@ def test_df_apply_list_str():
     check_func(test_impl, (df,))
 
 
-def test_df_apply_array_item():
+def test_df_apply_array_item(memory_leak_check):
     """make sure array(item) output can be handled in apply() properly
     """
 
@@ -1650,7 +1651,7 @@ def test_df_apply_array_item():
     check_func(test_impl, (df,))
 
 
-def test_df_apply_date():
+def test_df_apply_date(memory_leak_check):
     """make sure datetime.date output can be handled in apply() properly
     """
 
@@ -1663,7 +1664,7 @@ def test_df_apply_date():
     check_func(test_impl, (df,))
 
 
-def test_df_apply_timestamp():
+def test_df_apply_timestamp(memory_leak_check):
     """make sure Timestamp (converted to datetime64) output can be handled in apply()
     properly
     """
@@ -1677,7 +1678,7 @@ def test_df_apply_timestamp():
     check_func(test_impl, (df,))
 
 
-def test_df_apply_decimal():
+def test_df_apply_decimal(memory_leak_check):
     """make sure Decimal output can be handled in apply() properly
     """
     # just returning input value since we don't support any Decimal creation yet
@@ -1702,7 +1703,7 @@ def test_df_apply_decimal():
     check_func(test_impl, (df,))
 
 
-def test_df_apply_args():
+def test_df_apply_args(memory_leak_check):
     """test passing extra args to apply UDF
     """
 
@@ -1718,7 +1719,7 @@ def g(r):
     return 2 * r.A
 
 
-def test_df_apply_func_case1():
+def test_df_apply_func_case1(memory_leak_check):
     """make sure a global function can be used in df.apply
     """
 
@@ -1735,7 +1736,7 @@ def g2(r):
     return 2 * r[0]
 
 
-def test_df_apply_func_case2():
+def test_df_apply_func_case2(memory_leak_check):
     """make sure a UDF calling another function doesn't fail (#964)
     """
 
@@ -1769,7 +1770,7 @@ def test_df_apply_error_check():
         bodo.jit(test_impl)(df)
 
 
-def test_df_drop_inplace_branch():
+def test_df_drop_inplace_branch(memory_leak_check):
     def test_impl(cond):
         if cond:
             df = pd.DataFrame({"A": [2, 3, 4], "B": [1, 2, 6]})
@@ -1781,6 +1782,7 @@ def test_df_drop_inplace_branch():
     check_func(test_impl, (True,), False)
 
 
+# TODO: add memory_leak_check when join memory leaks are fixed
 def test_df_filter_rm_index():
     """
     Make sure dataframe index is removed correctly and parallelism warning is thrown
@@ -1800,7 +1802,7 @@ def test_df_filter_rm_index():
         bodo.jit(impl)(df1, df2)
 
 
-def test_concat_df_columns():
+def test_concat_df_columns(memory_leak_check):
     """Test dataframe concatenation with axis=1 (add new columns)
     """
 
@@ -1812,7 +1814,7 @@ def test_concat_df_columns():
     check_func(test_impl, (df, df2))
 
 
-def test_concat_int_float():
+def test_concat_int_float(memory_leak_check):
     """Test dataframe concatenation when integer and float are put together
     """
 
@@ -1828,7 +1830,7 @@ def test_concat_int_float():
     check_func(test_impl_concat, (df, df2), sort_output=True, reset_index=True)
 
 
-def test_concat_nulls():
+def test_concat_nulls(memory_leak_check):
     """Test dataframe concatenation when full NA arrays need to be appended
     """
 
@@ -1877,6 +1879,7 @@ def test_concat_nulls():
 def test_append_empty_df(df):
     """Test appending to an empty dataframe in a loop (common pattern)
     """
+    # TODO: fix casting refcount in Numba since Numba increfs value after cast
 
     def test_impl(df2):
         df = pd.DataFrame()
@@ -1923,7 +1926,7 @@ def test_get_dataframe_data_array_analysis():
     assert eq_set._get_ind("df#0") == eq_set._get_ind("B#0")
 
 
-def test_df_const_set_rm_index():
+def test_df_const_set_rm_index(memory_leak_check):
     """Make sure dataframe related variables like the index are removed correctly and
     parallelism warning is thrown when a column is being set using a constant.
     Test for a bug that was keeping RangeIndex around as a 1D so warning wasn't thrown.
@@ -1942,7 +1945,7 @@ def test_df_const_set_rm_index():
         bodo.jit(impl)(A)
 
 
-def test_df_dropna():
+def test_df_dropna(memory_leak_check):
     """Test df.dropna() with various data types and arguments
     """
 
@@ -1995,6 +1998,7 @@ def test_df_drop_inplace_instability_check():
         bodo.jit(test_impl)([2, 3])
 
 
+# TODO: fix casting refcount in Numba since Numba increfs value after cast
 def test_df_range_index_unify():
     """Test dataframe type unification when RangeIndex should be converted to
     IntegerIndex
@@ -2015,7 +2019,7 @@ def test_df_range_index_unify():
 ################################## indexing  #################################
 
 
-def test_column_list_getitem1():
+def test_column_list_getitem1(memory_leak_check):
     """Test df[["A", "B"]] getitem case
     """
 
@@ -2034,7 +2038,7 @@ def test_column_list_getitem1():
     check_func(test_impl, (df,))
 
 
-def test_column_list_getitem_infer():
+def test_column_list_getitem_infer(memory_leak_check):
     """Test df[["A", "B"]] getitem case when column names list has to be inferred in
     partial typing.
     """
@@ -2054,7 +2058,7 @@ def test_column_list_getitem_infer():
     check_func(test_impl, (df,))
 
 
-def test_iloc_bool_arr():
+def test_iloc_bool_arr(memory_leak_check):
     """test df.iloc[bool_arr]
     """
 
@@ -2066,7 +2070,7 @@ def test_iloc_bool_arr():
     check_func(test_impl, (df,))
 
 
-def test_iloc_slice():
+def test_iloc_slice(memory_leak_check):
     def test_impl(df, n):
         return df.iloc[1:n]
 
@@ -2077,7 +2081,7 @@ def test_iloc_slice():
     pd.testing.assert_frame_equal(bodo_func(df, n), test_impl(df, n))
 
 
-def test_iloc_slice_col_ind():
+def test_iloc_slice_col_ind(memory_leak_check):
     """test df.iloc[slice, col_ind]
     """
 
@@ -2089,7 +2093,7 @@ def test_iloc_slice_col_ind():
     check_func(test_impl, (df,))
 
 
-def test_iloc_slice_col_slice():
+def test_iloc_slice_col_slice(memory_leak_check):
     """test df.iloc[slice, slice] which selects a set of columns
     """
 
@@ -2134,7 +2138,7 @@ def test_iloc_slice_col_slice():
     check_func(test_impl7, (df,))
 
 
-def test_iloc_int_col_ind():
+def test_iloc_int_col_ind(memory_leak_check):
     """test df.iloc[int, col_ind]
     """
 
@@ -2146,7 +2150,7 @@ def test_iloc_int_col_ind():
     check_func(test_impl, (df,))
 
 
-def test_loc_bool_arr():
+def test_loc_bool_arr(memory_leak_check):
     """test df.loc[bool_arr]
     """
 
@@ -2158,7 +2162,7 @@ def test_loc_bool_arr():
     check_func(test_impl, (df,))
 
 
-def test_loc_col_name():
+def test_loc_col_name(memory_leak_check):
     """test df.iloc[slice, col_ind]
     """
 
@@ -2170,7 +2174,7 @@ def test_loc_col_name():
     check_func(test_impl, (df,))
 
 
-def test_loc_col_select():
+def test_loc_col_select(memory_leak_check):
     """test df.iloc[slice, col_ind] where col_ind is a list of column names or bools
     """
 
@@ -2190,7 +2194,7 @@ def test_loc_col_select():
     check_func(impl3, (df,))
 
 
-def test_df_schema_change():
+def test_df_schema_change(memory_leak_check):
     """
     Dataframe operations like setting new columns change the schema, so other
     operations need to handle type change during typing pass.
@@ -2208,7 +2212,7 @@ def test_df_schema_change():
     pd.testing.assert_frame_equal(bodo_func(df), test_impl(df))
 
 
-def test_df_multi_schema_change():
+def test_df_multi_schema_change(memory_leak_check):
     """Test multiple df schema changes while also calling other Bodo functions.
     Makes sure global state variables in typing pass are saved properly and are not
     disrupted by calling another Bodo function (which calls the compiler recursively)
@@ -2231,7 +2235,7 @@ def test_df_multi_schema_change():
     pd.testing.assert_frame_equal(bodo_func(df), test_impl(df))
 
 
-def test_df_drop_column_check():
+def test_df_drop_column_check(memory_leak_check):
     def test_impl(df):
         return df.drop(columns=["C"])
 
@@ -2240,7 +2244,7 @@ def test_df_drop_column_check():
         bodo.jit(test_impl)(df)
 
 
-def test_df_fillna_str_inplace():
+def test_df_fillna_str_inplace(memory_leak_check):
     """Make sure inplace fillna for string columns is reflected in output
     """
 
@@ -2254,7 +2258,7 @@ def test_df_fillna_str_inplace():
     check_func(test_impl, (df_str,), copy_input=True)
 
 
-def test_df_alias():
+def test_df_alias(memory_leak_check):
     """Test alias analysis for df data arrays. Without proper alias info, the fillna
     changes in data array will be optimized away incorrectly.
     This example is from the forecast code.
@@ -2285,6 +2289,7 @@ def test_df_type_unify_error():
         bodo.jit(test_impl)([3, 4])
 
 
+# TODO: fix memory leak and add memory_leak_check
 def test_dataframe_constant_lowering():
     df = pd.DataFrame({"A": [2, 1], "B": [1.2, 3.3]})
 
@@ -2294,7 +2299,7 @@ def test_dataframe_constant_lowering():
     pd.testing.assert_frame_equal(bodo.jit(impl)(), df)
 
 
-def test_dataframe_columns_const_passing():
+def test_dataframe_columns_const_passing(memory_leak_check):
     """Test passing df.columns as a constant to another call
     """
 
@@ -2305,7 +2310,7 @@ def test_dataframe_columns_const_passing():
     check_func(impl, (df,))
 
 
-def test_dataframe_sample_number():
+def test_dataframe_sample_number(memory_leak_check):
     """Checking the random routine is especially difficult to do.
     We can mostly only check incidental information about the code"""
 
@@ -2320,7 +2325,7 @@ def test_dataframe_sample_number():
     assert bodo_f(df_loc) == py_output
 
 
-def test_dataframe_sample_uniform():
+def test_dataframe_sample_uniform(memory_leak_check):
     """Checking the random routine, this time with uniform input"""
 
     def f1(df):
@@ -2335,7 +2340,7 @@ def test_dataframe_sample_uniform():
     check_func(f2, (df,), reset_index=True, is_out_distributed=False)
 
 
-def test_dataframe_sample_sorted():
+def test_dataframe_sample_sorted(memory_leak_check):
     """Checking the random routine. Since we use sorted and the number of entries is equal to
     the number of sampled rows, after sorting the output becomes deterministic, that is independent
     of the random number generated"""
@@ -2348,7 +2353,7 @@ def test_dataframe_sample_sorted():
     check_func(f, (df, n), reset_index=True, sort_output=True, is_out_distributed=False)
 
 
-def test_dataframe_sample_index():
+def test_dataframe_sample_index(memory_leak_check):
     """Checking that the index passed coherently to the A entry.
     """
 
@@ -2364,6 +2369,7 @@ def test_dataframe_sample_index():
     assert S.all()
 
 
+# TODO: fix leak and add memory_leak_check
 def test_dataframe_sample_nested_datastructures():
     """The sample function relies on allgather operations that deserve to be tested
     """

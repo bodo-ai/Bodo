@@ -1150,6 +1150,11 @@ delete_info_decref_array = types.ExternalFunction(
 )
 
 
+delete_table_free_arrays = types.ExternalFunction(
+    "delete_table_free_arrays", types.void(table_type),
+)
+
+
 @intrinsic
 def delete_table(typingctx, table_t):
     """Deletes table and its array_info objects. Doesn't delete array data.
