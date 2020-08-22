@@ -5,8 +5,8 @@ Getting Started
 ---------------
 
 #. This `company slide deck <https://drive.google.com/file/d/1V5Kq1n-Ud1qk87TqiPNs7ePaZpZzTBgX/view?usp=sharing>`_ provides an overview of the company and technology.
-#. Go over `a basic Pandas tutorial <https://pandas.pydata.org/pandas-docs/stable/getting_started/10min.html#min>`_.
-#. Learn Numba usage and compiler architecture, see :ref:`numba_info`.
+#. Go over `a basic Pandas tutorial <https://pandas.pydata.org/pandas-docs/stable/user_guide/10min.html>`_.
+#. Learn Numba usage and compiler architecture, see :ref:`numba-info`.
 #. Install Bodo for development, see :ref:`build_bodo_source`.
 #. Go over Bodo `getting started tutorial <https://github.com/Bodo-inc/Bodo-tutorial/blob/master/bodo_getting_started.ipynb>`_
    and `extended tutorial <https://github.com/Bodo-inc/Bodo-tutorial/blob/master/bodo_tutorial.ipynb>`_

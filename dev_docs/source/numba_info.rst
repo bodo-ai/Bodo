@@ -1,4 +1,4 @@
-.. _numba_info:
+.. _numba-info:
 
 Numba 
 -----
