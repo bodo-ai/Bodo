@@ -7,6 +7,7 @@ from urllib.parse import urlparse
 import glob
 import os
 import numba
+import bodo
 
 from bodo.utils.typing import BodoWarning, BodoError
 
@@ -258,23 +259,28 @@ def get_s3_bucket_region(s3_filepath):
     except:  # pragma: no cover
         raise BodoError("Reading from s3 requires s3fs currently.")
 
-    s3_fs = get_s3_fs()
-    bucket_name = get_s3_bucket_name(s3_fs, s3_filepath)
-    try:
-        bucket_loc = s3_fs.s3.get_bucket_location(Bucket=bucket_name)[
-            "LocationConstraint"
-        ]
-    except Exception as e:
-        warnings.warn(
-            BodoWarning(
-                "Unable to get S3 Bucket Region. "
-                f"{e}. "
-                "Will use the value defined in the AWS_DEFAULT_REGION environment variable (or us-east-1 if that is not provided either)."
+    from mpi4py import MPI
+
+    comm = MPI.COMM_WORLD
+
+    bucket_loc = None
+    if bodo.get_rank() == 0:
+        s3_fs = get_s3_fs()
+        bucket_name = get_s3_bucket_name(s3_fs, s3_filepath)
+        try:
+            bucket_loc = s3_fs.s3.get_bucket_location(Bucket=bucket_name)[
+                "LocationConstraint"
+            ]
+            if bucket_loc is None:
+                bucket_loc = "us-east-1"
+
+        except Exception as e:
+            print(
+                f"BodoWarning: Unable to get S3 Bucket Region.\n{e}.\nWill use the value defined in the AWS_DEFAULT_REGION environment variable (or us-east-1 if that is not provided either)."
             )
-        )
-        return ""
-    if bucket_loc is None:
-        bucket_loc = "us-east-1"
+            bucket_loc = ""
+
+    bucket_loc = comm.bcast(bucket_loc)
     return bucket_loc
 
 
