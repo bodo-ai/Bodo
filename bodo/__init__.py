@@ -1,6 +1,13 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 """Top-level init file for bodo package
 """
+# set number of threads to 1 for Numpy to avoid interference with Bodo's parallelism
+# NOTE: has to be done before importing Numpy, and for all threading backends
+import os
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+
 # NOTE: 'numba_compat' has to be imported first in bodo package to make sure all Numba
 # patches are applied before Bodo's Numba use (e.g. 'overload' is replaced properly)
 import bodo.numba_compat
