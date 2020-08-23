@@ -243,33 +243,66 @@ def overload_dataframe_isna(df):
 
 @overload_method(DataFrameType, "select_dtypes", inline="always", no_unliteral=True)
 def overload_dataframe_select_dtypes(df, include=None, exclude=None):
-
     # Check that at least one of include or exclude exists
     include_none = is_overload_none(include)
     exclude_none = is_overload_none(exclude)
 
     if include_none and exclude_none:
-        raise BodoError(
-            "select_dtypes() At least one of include or exclude must not be none"
+        raise_bodo_error(
+            "DataFrame.select_dtypes() At least one of include or exclude must not be none"
         )
-    # For now we will meet our use case by just allowing scalar literal str arguments.
+
+    def is_legal_input(elem):
+        # TODO(Nick): Replace with the correct type check
+        return (
+            is_overload_constant_str(elem)
+            or isinstance(elem, types.DTypeSpec)
+            or isinstance(elem, types.Function)
+        )
+
     if not include_none:
-        if not is_overload_constant_str(include):
-            raise BodoError("select_dtypes() Only supports str literals as arguments")
+        # If the input is a list process each elem in the list
+        if is_overload_constant_list(include):
+            include = get_overload_const_list(include)
+            include_types = [
+                _get_series_array_type(parse_dtype(elem)) for elem in include
+            ]
+        # If its a scalar then just make it a list of 1 element
+        elif is_legal_input(include):
+            include_types = [_get_series_array_type(parse_dtype(include))]
+        else:
+            raise_bodo_error(
+                "DataFrame.select_dtypes() only supports constant strings or types as arguments"
+            )
         # Filter columns to those with a matching datatype
-        include_type = _get_series_array_type(parse_dtype(include))
+        # TODO(Nick): Add more general support for type rules:
+        # ex. np.number for all numeric types, np.object for all obj types,
+        # "string" for all string types
         chosen_columns = [
-            c for i, c in enumerate(df.columns) if df.data[i] == include_type
+            c for i, c in enumerate(df.columns) if df.data[i] in include_types
         ]
     else:
         chosen_columns = df.columns
     if not exclude_none:
-        if not is_overload_constant_str(exclude):
-            raise BodoError("select_dtypes() Only supports str literals as arguments")
+        # If the input is a list process each elem in the list
+        if is_overload_constant_list(exclude):
+            exclude = get_overload_const_list(exclude)
+            exclude_types = [
+                _get_series_array_type(parse_dtype(elem)) for elem in exclude
+            ]
+        # If its a scalar then just make it a list of 1 element
+        elif is_legal_input(exclude):
+            exclude_types = [_get_series_array_type(parse_dtype(exclude))]
+        else:
+            raise_bodo_error(
+                "DataFrame.select_dtypes() only supports constant strings or types as arguments"
+            )
         # Filter columns to those without a matching datatype
-        exclude_type = _get_series_array_type(parse_dtype(exclude))
+        # TODO(Nick): Add more general support for type rules:
+        # ex. np.number for all numeric types, np.object for all obj types,
+        # "string" for all string types
         chosen_columns = [
-            c for i, c in enumerate(chosen_columns) if df.data[i] != exclude_type
+            c for i, c in enumerate(chosen_columns) if df.data[i] not in exclude_types
         ]
 
     data_args = ", ".join("df['{}'].values".format(c) for c in chosen_columns)

@@ -185,13 +185,72 @@ def test_df_select_dtypes(memory_leak_check):
     def test_impl5(df):
         return df.select_dtypes("number", "float64")
 
+    def test_impl6(df):
+        return df.select_dtypes(np.bool)
+
+    def test_impl7(df):
+        return df.select_dtypes(np.float64)
+
+    def test_impl8(df):
+        return df.select_dtypes(exclude=np.bool)
+
+    def test_impl9(df):
+        return df.select_dtypes(exclude=np.float64)
+
+    def test_impl10(df):
+        return df.select_dtypes(np.number, np.float64)
+
+    def test_impl11(df):
+        return df.select_dtypes(["bool"])
+
+    def test_impl12(df):
+        return df.select_dtypes([np.bool_])
+
+    def test_impl13(df):
+        return df.select_dtypes(["float64", "bool"])
+
+    def test_impl14(df):
+        return df.select_dtypes([np.float64, np.bool_])
+
+    def test_impl15(df):
+        return df.select_dtypes([np.number, "bool"])
+
+    def test_impl16(df):
+        return df.select_dtypes(exclude=["bool"])
+
+    def test_impl17(df):
+        return df.select_dtypes(exclude=[np.float64])
+
+    def test_impl18(df):
+        return df.select_dtypes(exclude=["float64", "bool"])
+
+    def test_impl19(df):
+        return df.select_dtypes(exclude=[np.float64, "bool"])
+
+    def test_impl20(df):
+        return df.select_dtypes(exclude=[np.number, "bool"])
+
     df = pd.DataFrame({"a": [1, 2] * 3, "b": [True, False] * 3, "c": [1.0, 2.0] * 3})
     check_func(test_impl1, (df,))
     check_func(test_impl2, (df,))
     check_func(test_impl3, (df,))
     check_func(test_impl4, (df,))
-    # TODO: Add support for np.number by string and type hierarchy
     # check_func(test_impl5, (df,))
+    check_func(test_impl6, (df,))
+    check_func(test_impl7, (df,))
+    check_func(test_impl8, (df,))
+    check_func(test_impl9, (df,))
+    # check_func(test_impl10, (df,))
+    check_func(test_impl11, (df,))
+    # check_func(test_impl12, (df,))
+    check_func(test_impl13, (df,))
+    check_func(test_impl14, (df,))
+    # check_func(test_impl15, (df,))
+    check_func(test_impl16, (df,))
+    # check_func(test_impl17, (df,))
+    check_func(test_impl18, (df,))
+    check_func(test_impl19, (df,))
+    # check_func(test_impl20, (df,))
 
 
 def test_assign(memory_leak_check):

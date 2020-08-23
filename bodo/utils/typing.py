@@ -466,6 +466,8 @@ def parse_dtype(dtype):
             dtype = types.StringLiteral("float")
         elif dtype.key[0] == int:
             dtype = types.StringLiteral("int")
+        elif dtype.key[0] == np.bool:
+            dtype = types.StringLiteral("bool")
 
     if isinstance(dtype, types.DTypeSpec):
         return dtype.dtype
@@ -711,6 +713,8 @@ def is_literal_type(t):
         or (isinstance(t, types.BaseTuple) and all(is_literal_type(v) for v in t.types))
         # List/Dict types preserve const initial values in Numba 0.51
         or is_initial_value_type(t)
+        # dtype literals should be treated as literals
+        or isinstance(t, types.DTypeSpec)
     )
 
 
@@ -735,6 +739,8 @@ def get_literal_value(t):
         return t
     if isinstance(t, types.InitialValue):
         return t.initial_value
+    if isinstance(t, types.DTypeSpec):
+        return t
 
 
 def can_literalize_type(t):
