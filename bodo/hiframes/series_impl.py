@@ -31,7 +31,7 @@ from bodo.utils.typing import (
     get_overload_const_str,
     check_unsupported_args,
 )
-from bodo.utils.transform import gen_const_tup
+from bodo.utils.transform import gen_const_tup, is_var_size_item_array_type
 from numba.core.typing.templates import infer_global, AbstractTemplate
 from bodo.libs.bool_arr_ext import BooleanArrayType, boolean_array
 from bodo.libs.int_arr_ext import IntegerArrayType
@@ -1513,6 +1513,13 @@ def overload_series_fillna(
 
     if not (is_overload_none(axis) or is_overload_zero(axis)):
         raise BodoError("Series.min(): axis argument not supported")
+
+    # Pandas doesn't support fillna for non-scalar values as of 1.1.0
+    # TODO(ehsan): revisit when supported in Pandas
+    if is_var_size_item_array_type(S.data) and not S.dtype == bodo.string_type:
+        raise BodoError(
+            f"Series.fillna() with inplace=True not supported for {S.dtype} values yet"
+        )
 
     if is_overload_true(inplace):
         if S.dtype == bodo.string_type:
