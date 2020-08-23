@@ -485,9 +485,6 @@ class DataFramePass:
         if fdef == ("itertuples_dummy", "bodo.hiframes.pd_dataframe_ext"):
             return self._run_call_df_itertuples(assign, lhs, rhs)
 
-        if fdef == ("fillna_dummy", "bodo.hiframes.pd_dataframe_ext"):
-            return self._run_call_df_fillna(assign, lhs, rhs)
-
         if fdef == ("reset_index_dummy", "bodo.hiframes.pd_dataframe_ext"):
             return self._run_call_reset_index(assign, lhs, rhs)
 
@@ -804,51 +801,6 @@ class DataFramePass:
         nodes = []
         col_vars = [self._get_dataframe_data(df_var, c, nodes) for c in df_typ.columns]
         return replace_func(self, _mean_impl, col_vars, pre_nodes=nodes)
-
-    def _run_call_df_fillna(self, assign, lhs, rhs):
-        df_var = rhs.args[0]
-        value = rhs.args[1]
-        inplace_var = rhs.args[2]
-        inplace = guard(find_const, self.func_ir, inplace_var)
-        df_typ = self.typemap[df_var.name]
-
-        # impl: for each column, convert data to series, call S.fillna(), get
-        # output data and create a new dataframe
-        n_cols = len(df_typ.columns)
-        data_args = tuple("data{}".format(i) for i in range(n_cols))
-
-        col_var = gen_const_tup(df_typ.columns)
-        func_text = "def _fillna_impl({}, df_index, val):\n".format(
-            ", ".join(data_args)
-        )
-        for d in data_args:
-            func_text += "  ind_{0} = bodo.hiframes.pd_index_ext.init_range_index(0, len({0}), 1, None)\n".format(
-                d
-            )
-            func_text += "  {0} = bodo.hiframes.pd_series_ext.init_series({1}, ind_{1})\n".format(
-                d + "_S", d
-            )
-            if not inplace:
-                func_text += "  {} = {}.fillna(val)\n".format(d + "_S", d + "_S")
-                func_text += "  {} = bodo.hiframes.pd_series_ext.get_series_data({})\n".format(
-                    d + "_O", d + "_S"
-                )
-            else:
-                func_text += "  {}.fillna(val, inplace=True)\n".format(d + "_S")
-
-        if not inplace:
-            func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), df_index, {})\n".format(
-                ", ".join(d + "_O" for d in data_args), col_var
-            )
-        loc_vars = {}
-        exec(func_text, {}, loc_vars)
-        _fillna_impl = loc_vars["_fillna_impl"]
-
-        nodes = []
-        col_vars = [self._get_dataframe_data(df_var, c, nodes) for c in df_typ.columns]
-        index_arg = self._get_dataframe_index(df_var, nodes)
-        args = col_vars + [index_arg, value]
-        return nodes + compile_func_single_block(_fillna_impl, args, lhs, self)
 
     def _run_call_reset_index(self, assign, lhs, rhs):
         # TODO: reflection
