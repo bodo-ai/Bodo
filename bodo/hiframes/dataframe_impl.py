@@ -716,7 +716,9 @@ def _gen_reduce_impl_axis1(func_name, out_colnames, comm_dtype, df_type):
         # ddof argument and pd & np
         # implementations vary (sample vs population)
         #'var': '(lambda A: np.nanvar(A, ddof=1))',
+        "var": "bodo.utils.utils.nanvar_ddof1",
         #'std': '(lambda A: np.nanstd(A, ddof=1))',
+        "std": "bodo.utils.utils.nanstd_ddof1",
     }
 
     if func_name in func_np_func_map:
@@ -724,7 +726,9 @@ def _gen_reduce_impl_axis1(func_name, out_colnames, comm_dtype, df_type):
         # NOTE: Pandas outputs float64 output even for int64 dataframes
         # when using df.mean() and df.median()
         # TODO: More sophisticated manner of computing this output_dtype
-        output_dtype = "float64" if func_name in ["mean", "median"] else comm_dtype
+        output_dtype = (
+            "float64" if func_name in ["mean", "median", "std", "var"] else comm_dtype
+        )
         func_text = f"""
     {data_args}
     numba.parfors.parfor.init_prange()

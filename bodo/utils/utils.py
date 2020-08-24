@@ -907,3 +907,30 @@ def list_reverse(A):
                 yield A[A_len - 1 - i]
 
         return impl_reversed
+
+
+@numba.njit()
+def count_nonnan(a):
+    """
+    Count number of non-NaN elements in an array
+    """
+    return np.count_nonzero(~np.isnan(a))
+
+
+@numba.njit()
+def nanvar_ddof1(a):
+    """
+    Simple implementation for np.nanvar(arr, ddof=1)
+    """
+    num_el = count_nonnan(a)
+    if num_el <= 1:
+        return np.nan
+    return np.nanvar(a) * (num_el / (num_el - 1))
+
+
+@numba.njit()
+def nanstd_ddof1(a):
+    """
+    Simple implementation for np.nanstd(arr, ddof=1)
+    """
+    return np.sqrt(nanvar_ddof1(a))
