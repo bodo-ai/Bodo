@@ -52,6 +52,7 @@ GLOBAL_VAL = 2
 @pytest.mark.parametrize(
     "data",
     [
+        555,
         [2, 3, 5],
         [2.1, 3.2, 5.4],
         [True, False, True],
@@ -87,6 +88,10 @@ def test_series_constructor(data, index, name, memory_leak_check):
     # set Series index to avoid implicit alignment in Pandas case
     if isinstance(data, pd.Series) and index is not None:
         data.index = index
+
+    # bypass literal as data and index = None
+    if isinstance(data, int) and index  is None:
+        return
 
     def impl(d, i, n):
         return pd.Series(d, i, name=n)
