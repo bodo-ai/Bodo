@@ -537,3 +537,13 @@ def test_center_errorcheck():
     S = pd.Series(pd.date_range(start="1/1/2018", periods=5, freq="3ms"))
     with pytest.raises(BodoError, match="input should be a series of string"):
         bodo.jit(f)(S)
+
+
+def test_unsupported_str_method():
+    """ Raise Bodo error for unsupported str methods"""
+    def test_impl():
+        return pd.Series([" 123", "abc  "]).str.cat(sep=' ')
+
+    with pytest.raises(BodoError, match="not supported yet"):
+        bodo.jit(test_impl)()
+    

@@ -62,6 +62,7 @@ from bodo.utils.typing import (
     get_overload_const_str_len,
     is_overload_constant_int,
     get_overload_const_int,
+    create_unsupported_overload,
 )
 
 
@@ -1227,3 +1228,57 @@ def series_cat_codes_overload(S_dt):
         return bodo.hiframes.pd_series_ext.init_series(arr.codes, index, name)
 
     return impl
+
+unsupported_str_methods = {
+    '_freeze',
+    '_get_series_list',
+    '_make_accessor',
+    '_validate',
+    '_wrap_result',
+    'capitalize',
+    'casefold',
+    'cat',
+    'decode',
+    'encode',
+    'findall',
+    'fullmatch',
+    'get_dummies',
+    'index',
+    'isalnum',
+    'isalpha',
+    'isdecimal',
+    'isdigit',
+    'islower',
+    'isnumeric',
+    'isspace',
+    'istitle',
+    'isupper',
+    'lower',
+    'lstrip',
+    'match',
+    'normalize',
+    'partition',
+    'repeat',
+    'rindex',
+    'rpartition',
+    'rsplit',
+    'rstrip',
+    'slice_replace',
+    'strip',
+    'swapcase',
+    'title',
+    'translate',
+    'upper',
+    'wrap',
+}
+
+def _install_strseries_unsupported():
+    """install an overload that raises BodoError for unsupported Series str methods
+    """
+
+    for fname in unsupported_str_methods:
+        full_name = "Series.str" + fname
+        overload_method(SeriesStrMethodType, fname)(create_unsupported_overload(full_name))
+
+
+_install_strseries_unsupported()
