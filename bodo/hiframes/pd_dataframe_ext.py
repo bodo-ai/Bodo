@@ -1979,6 +1979,37 @@ def concat_overload(
 ):
     # TODO: handle options
     # TODO: support Index
+
+    axis = get_overload_const_int(axis)
+
+    func_text = ("def impl(objs, axis=0, join='outer', join_axes=None, "
+        "ignore_index=False, keys=None, levels=None, names=None, "
+        "verify_integrity=False, sort=None, copy=True):\n")
+
+
+    # concat of columns into a dataframe
+    if axis == 1:
+        if not isinstance(objs, types.BaseTuple):
+            raise BodoError("Only argument for pd.concat(axis=1) expected")
+        index = "bodo.hiframes.pd_index_ext.init_range_index(0, len(objs[0]), 1, None)"
+        col_no = 0
+        data_args = []
+        names = []
+        for i, obj in enumerate(objs.types):
+            assert isinstance(obj, (SeriesType, DataFrameType))
+            if isinstance(obj, SeriesType):
+                # TODO: use Series name if possible
+                names.append(str(col_no))
+                col_no += 1
+                data_args.append("bodo.hiframes.pd_series_ext.get_series_data(objs[{}])".format(i))
+            else:  # DataFrameType
+                names.extend(obj.columns)
+                for j in range(len(obj.data)):
+                    data_args.append("bodo.hiframes.pd_dataframe_ext.get_dataframe_data(objs[{}], {})".format(i, j))
+        return bodo.hiframes.dataframe_impl._gen_init_df(
+            func_text, names, ", ".join(data_args), index
+        )
+
     return lambda objs, axis=0, join="outer", join_axes=None, ignore_index=False, keys=None, levels=None, names=None, verify_integrity=False, sort=None, copy=True: bodo.hiframes.pd_dataframe_ext.concat_dummy(
         objs, axis
     )
@@ -2010,27 +2041,6 @@ class ConcatDummyTyper(AbstractTemplate):
         if not isinstance(objs, types.BaseTuple):
             raise ValueError("Tuple argument for pd.concat expected")
         assert len(objs.types) > 0
-
-        if axis == 1:
-            data = []
-            names = []
-            col_no = 0
-            for obj in objs.types:
-                assert isinstance(obj, (SeriesType, DataFrameType))
-                if isinstance(obj, SeriesType):
-                    # TODO: handle names of SeriesTypes
-                    data.append(obj.data)
-                    names.append(str(col_no))
-                    col_no += 1
-                else:  # DataFrameType
-                    # TODO: test
-                    data.extend(obj.data)
-                    names.extend(obj.columns)
-
-            ret_typ = DataFrameType(
-                tuple(data), RangeIndexType(types.none), tuple(names)
-            )
-            return signature(ret_typ, *args)
 
         assert axis == 0
         # dataframe case
