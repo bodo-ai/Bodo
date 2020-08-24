@@ -31,7 +31,7 @@ from bodo.utils.typing import (
     get_overload_const_str,
     check_unsupported_args,
 )
-from bodo.utils.transform import gen_const_tup
+from bodo.utils.transform import gen_const_tup, is_var_size_item_array_type
 from numba.core.typing.templates import infer_global, AbstractTemplate
 from bodo.libs.bool_arr_ext import BooleanArrayType, boolean_array
 from bodo.libs.int_arr_ext import IntegerArrayType
@@ -1332,6 +1332,189 @@ def overload_series_describe(S, percentiles=None, include=None, exclude=None):
     return impl
 
 
+def str_fillna_inplace_series_impl(
+    S, value=None, method=None, axis=None, inplace=False, limit=None, downcast=None,
+):  # pragma: no cover
+    in_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+    fill_arr = bodo.hiframes.pd_series_ext.get_series_data(value)
+    n = len(in_arr)
+    num_chars = 0
+    # get total chars in new array
+    for i in numba.parfors.parfor.internal_prange(n):
+        s_len = get_str_arr_item_length(in_arr, i)
+        if bodo.libs.array_kernels.isna(in_arr, i) and not bodo.libs.array_kernels.isna(
+            fill_arr, i
+        ):
+            l = get_str_arr_item_length(fill_arr, i)
+        else:
+            l = s_len
+        num_chars += l
+    out_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(n, num_chars)
+    for j in numba.parfors.parfor.internal_prange(n):
+        s = in_arr[j]
+        if bodo.libs.array_kernels.isna(in_arr, j) and not bodo.libs.array_kernels.isna(
+            fill_arr, j
+        ):
+            s = fill_arr[j]
+        out_arr[j] = s
+    bodo.libs.str_arr_ext.move_str_arr_payload(in_arr, out_arr)
+    return
+
+
+# Since string arrays can't be changed, we have to create a new
+# array and update the same Series variable
+# TODO: handle string array reflection
+# TODO: handle init_series() optimization guard for mutability
+def str_fillna_inplace_impl(
+    S, value=None, method=None, axis=None, inplace=False, limit=None, downcast=None,
+):  # pragma: no cover
+    in_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+    val_len = bodo.libs.str_arr_ext.get_utf8_size(value)
+    n = len(in_arr)
+    num_chars = 0
+    # get total chars in new array
+    for i in numba.parfors.parfor.internal_prange(n):
+        s_len = get_str_arr_item_length(in_arr, i)
+        if bodo.libs.array_kernels.isna(in_arr, i):
+            l = val_len
+        else:
+            l = s_len
+        num_chars += l
+    out_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(n, num_chars)
+    for j in numba.parfors.parfor.internal_prange(n):
+        s = in_arr[j]
+        if bodo.libs.array_kernels.isna(in_arr, j):
+            s = value
+        out_arr[j] = s
+    bodo.libs.str_arr_ext.move_str_arr_payload(in_arr, out_arr)
+    return
+
+
+def fillna_inplace_series_impl(
+    S, value=None, method=None, axis=None, inplace=False, limit=None, downcast=None,
+):  # pragma: no cover
+    in_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+    fill_arr = bodo.hiframes.pd_series_ext.get_series_data(value)
+    for i in numba.parfors.parfor.internal_prange(len(in_arr)):
+        s = in_arr[i]
+        if bodo.libs.array_kernels.isna(in_arr, i) and not bodo.libs.array_kernels.isna(
+            fill_arr, i
+        ):
+            s = fill_arr[i]
+        in_arr[i] = s
+
+
+def fillna_inplace_impl(
+    S, value=None, method=None, axis=None, inplace=False, limit=None, downcast=None,
+):  # pragma: no cover
+    in_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+    for i in numba.parfors.parfor.internal_prange(len(in_arr)):
+        s = in_arr[i]
+        if bodo.libs.array_kernels.isna(in_arr, i):
+            s = value
+        in_arr[i] = s
+
+
+def str_fillna_alloc_series_impl(
+    S, value=None, method=None, axis=None, inplace=False, limit=None, downcast=None,
+):  # pragma: no cover
+    in_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+    index = bodo.hiframes.pd_series_ext.get_series_index(S)
+    name = bodo.hiframes.pd_series_ext.get_series_name(S)
+    fill_arr = bodo.hiframes.pd_series_ext.get_series_data(value)
+    n = len(in_arr)
+    num_chars = 0
+    # get total chars in new array
+    for i in numba.parfors.parfor.internal_prange(n):
+        s_len = get_str_arr_item_length(in_arr, i)
+        if bodo.libs.array_kernels.isna(in_arr, i) and not bodo.libs.array_kernels.isna(
+            fill_arr, i
+        ):
+            l = get_str_arr_item_length(fill_arr, i)
+        else:
+            l = s_len
+        num_chars += l
+    out_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(n, num_chars)
+    # TODO: fix SSA for loop variables
+    for j in numba.parfors.parfor.internal_prange(n):
+        s = in_arr[j]
+        if bodo.libs.array_kernels.isna(in_arr, j) and not bodo.libs.array_kernels.isna(
+            fill_arr, j
+        ):
+            s = fill_arr[j]
+        out_arr[j] = s
+        if bodo.libs.array_kernels.isna(in_arr, j) and bodo.libs.array_kernels.isna(
+            fill_arr, j
+        ):
+            bodo.libs.array_kernels.setna(out_arr, j)
+    return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
+
+
+def str_fillna_alloc_impl(
+    S, value=None, method=None, axis=None, inplace=False, limit=None, downcast=None,
+):  # pragma: no cover
+    in_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+    index = bodo.hiframes.pd_series_ext.get_series_index(S)
+    name = bodo.hiframes.pd_series_ext.get_series_name(S)
+    val_len = bodo.libs.str_arr_ext.get_utf8_size(value)
+    n = len(in_arr)
+    num_chars = 0
+    # get total chars in new array
+    for i in numba.parfors.parfor.internal_prange(n):
+        s_len = get_str_arr_item_length(in_arr, i)
+        # TODO: fix dist reduce when "num_chars += ..." is in
+        # both branches
+        if bodo.libs.array_kernels.isna(in_arr, i):
+            l = val_len
+        else:
+            l = s_len
+        num_chars += l
+    out_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(n, num_chars)
+    # TODO: fix SSA for loop variables
+    for j in numba.parfors.parfor.internal_prange(n):
+        s = in_arr[j]
+        if bodo.libs.array_kernels.isna(in_arr, j):
+            s = value
+        out_arr[j] = s
+    return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
+
+
+# XXX: assuming indices are equivalent and alignment is not needed
+def fillna_series_impl(
+    S, value=None, method=None, axis=None, inplace=False, limit=None, downcast=None,
+):  # pragma: no cover
+    in_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+    index = bodo.hiframes.pd_series_ext.get_series_index(S)
+    name = bodo.hiframes.pd_series_ext.get_series_name(S)
+    fill_arr = bodo.hiframes.pd_series_ext.get_series_data(value)
+    n = len(in_arr)
+    out_arr = np.empty(n, in_arr.dtype)
+    for i in numba.parfors.parfor.internal_prange(n):
+        s = in_arr[i]
+        if bodo.libs.array_kernels.isna(in_arr, i) and not bodo.libs.array_kernels.isna(
+            fill_arr, i
+        ):
+            s = fill_arr[i]
+        out_arr[i] = s
+    return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
+
+
+def fillna_impl(
+    S, value=None, method=None, axis=None, inplace=False, limit=None, downcast=None,
+):  # pragma: no cover
+    in_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+    index = bodo.hiframes.pd_series_ext.get_series_index(S)
+    name = bodo.hiframes.pd_series_ext.get_series_name(S)
+    n = len(in_arr)
+    out_arr = np.empty(n, in_arr.dtype)
+    for i in numba.parfors.parfor.internal_prange(n):
+        s = in_arr[i]
+        if bodo.libs.array_kernels.isna(in_arr, i):
+            s = value
+        out_arr[i] = s
+    return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
+
+
 @overload_method(SeriesType, "fillna", no_unliteral=True)
 def overload_series_fillna(
     S, value=None, method=None, axis=None, inplace=False, limit=None, downcast=None
@@ -1343,6 +1526,13 @@ def overload_series_fillna(
     if not (is_overload_none(axis) or is_overload_zero(axis)):
         raise BodoError("Series.min(): axis argument not supported")
 
+    # Pandas doesn't support fillna for non-scalar values as of 1.1.0
+    # TODO(ehsan): revisit when supported in Pandas
+    if is_var_size_item_array_type(S.data) and not S.dtype == bodo.string_type:
+        raise BodoError(
+            f"Series.fillna() with inplace=True not supported for {S.dtype} values yet"
+        )
+
     if is_overload_true(inplace):
         if S.dtype == bodo.string_type:
             # optimization: just set null bit if fill is empty
@@ -1350,254 +1540,29 @@ def overload_series_fillna(
                 return lambda S, value=None, method=None, axis=None, inplace=False, limit=None, downcast=None: bodo.libs.str_arr_ext.set_null_bits(
                     bodo.hiframes.pd_series_ext.get_series_data(S)
                 )
+
             # value is a Series
             if isinstance(value, SeriesType):
-
-                def str_fillna_inplace_series_impl(
-                    S,
-                    value=None,
-                    method=None,
-                    axis=None,
-                    inplace=False,
-                    limit=None,
-                    downcast=None,
-                ):  # pragma: no cover
-                    in_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
-                    fill_arr = bodo.hiframes.pd_series_ext.get_series_data(value)
-                    n = len(in_arr)
-                    num_chars = 0
-                    # get total chars in new array
-                    for i in numba.parfors.parfor.internal_prange(n):
-                        s_len = get_str_arr_item_length(in_arr, i)
-                        if bodo.libs.array_kernels.isna(
-                            in_arr, i
-                        ) and not bodo.libs.array_kernels.isna(fill_arr, i):
-                            l = get_str_arr_item_length(fill_arr, i)
-                        else:
-                            l = s_len
-                        num_chars += l
-                    out_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(n, num_chars)
-                    for j in numba.parfors.parfor.internal_prange(n):
-                        s = in_arr[j]
-                        if bodo.libs.array_kernels.isna(
-                            in_arr, j
-                        ) and not bodo.libs.array_kernels.isna(fill_arr, j):
-                            s = fill_arr[j]
-                        out_arr[j] = s
-                    bodo.libs.str_arr_ext.move_str_arr_payload(in_arr, out_arr)
-                    return
-
                 return str_fillna_inplace_series_impl
-
-            # Since string arrays can't be changed, we have to create a new
-            # array and update the same Series variable
-            # TODO: handle string array reflection
-            # TODO: handle init_series() optimization guard for mutability
-            def str_fillna_inplace_impl(
-                S,
-                value=None,
-                method=None,
-                axis=None,
-                inplace=False,
-                limit=None,
-                downcast=None,
-            ):  # pragma: no cover
-                in_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
-                val_len = bodo.libs.str_arr_ext.get_utf8_size(value)
-                n = len(in_arr)
-                num_chars = 0
-                # get total chars in new array
-                for i in numba.parfors.parfor.internal_prange(n):
-                    s_len = get_str_arr_item_length(in_arr, i)
-                    if bodo.libs.array_kernels.isna(in_arr, i):
-                        l = val_len
-                    else:
-                        l = s_len
-                    num_chars += l
-                out_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(n, num_chars)
-                for j in numba.parfors.parfor.internal_prange(n):
-                    s = in_arr[j]
-                    if bodo.libs.array_kernels.isna(in_arr, j):
-                        s = value
-                    out_arr[j] = s
-                bodo.libs.str_arr_ext.move_str_arr_payload(in_arr, out_arr)
-                return
 
             return str_fillna_inplace_impl
         else:
             # value is a Series
             if isinstance(value, SeriesType):
-
-                def fillna_inplace_series_impl(
-                    S,
-                    value=None,
-                    method=None,
-                    axis=None,
-                    inplace=False,
-                    limit=None,
-                    downcast=None,
-                ):  # pragma: no cover
-                    in_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
-                    fill_arr = bodo.hiframes.pd_series_ext.get_series_data(value)
-                    for i in numba.parfors.parfor.internal_prange(len(in_arr)):
-                        s = in_arr[i]
-                        if bodo.libs.array_kernels.isna(
-                            in_arr, i
-                        ) and not bodo.libs.array_kernels.isna(fill_arr, i):
-                            s = fill_arr[i]
-                        in_arr[i] = s
-
                 return fillna_inplace_series_impl
-
-            def fillna_inplace_impl(
-                S,
-                value=None,
-                method=None,
-                axis=None,
-                inplace=False,
-                limit=None,
-                downcast=None,
-            ):  # pragma: no cover
-                in_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
-                for i in numba.parfors.parfor.internal_prange(len(in_arr)):
-                    s = in_arr[i]
-                    if bodo.libs.array_kernels.isna(in_arr, i):
-                        s = value
-                    in_arr[i] = s
 
             return fillna_inplace_impl
     else:  # not inplace
         if S.dtype == bodo.string_type:
             # value is a Series
             if isinstance(value, SeriesType):
-
-                def str_fillna_alloc_series_impl(
-                    S,
-                    value=None,
-                    method=None,
-                    axis=None,
-                    inplace=False,
-                    limit=None,
-                    downcast=None,
-                ):  # pragma: no cover
-                    in_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
-                    index = bodo.hiframes.pd_series_ext.get_series_index(S)
-                    name = bodo.hiframes.pd_series_ext.get_series_name(S)
-                    fill_arr = bodo.hiframes.pd_series_ext.get_series_data(value)
-                    n = len(in_arr)
-                    num_chars = 0
-                    # get total chars in new array
-                    for i in numba.parfors.parfor.internal_prange(n):
-                        s_len = get_str_arr_item_length(in_arr, i)
-                        if bodo.libs.array_kernels.isna(
-                            in_arr, i
-                        ) and not bodo.libs.array_kernels.isna(fill_arr, i):
-                            l = get_str_arr_item_length(fill_arr, i)
-                        else:
-                            l = s_len
-                        num_chars += l
-                    out_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(n, num_chars)
-                    # TODO: fix SSA for loop variables
-                    for j in numba.parfors.parfor.internal_prange(n):
-                        s = in_arr[j]
-                        if bodo.libs.array_kernels.isna(
-                            in_arr, j
-                        ) and not bodo.libs.array_kernels.isna(fill_arr, j):
-                            s = fill_arr[j]
-                        out_arr[j] = s
-                        if bodo.libs.array_kernels.isna(
-                            in_arr, j
-                        ) and bodo.libs.array_kernels.isna(fill_arr, j):
-                            bodo.libs.array_kernels.setna(out_arr, j)
-                    return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
-
                 return str_fillna_alloc_series_impl
-
-            def str_fillna_alloc_impl(
-                S,
-                value=None,
-                method=None,
-                axis=None,
-                inplace=False,
-                limit=None,
-                downcast=None,
-            ):  # pragma: no cover
-                in_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
-                index = bodo.hiframes.pd_series_ext.get_series_index(S)
-                name = bodo.hiframes.pd_series_ext.get_series_name(S)
-                val_len = bodo.libs.str_arr_ext.get_utf8_size(value)
-                n = len(in_arr)
-                num_chars = 0
-                # get total chars in new array
-                for i in numba.parfors.parfor.internal_prange(n):
-                    s_len = get_str_arr_item_length(in_arr, i)
-                    # TODO: fix dist reduce when "num_chars += ..." is in
-                    # both branches
-                    if bodo.libs.array_kernels.isna(in_arr, i):
-                        l = val_len
-                    else:
-                        l = s_len
-                    num_chars += l
-                out_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(n, num_chars)
-                # TODO: fix SSA for loop variables
-                for j in numba.parfors.parfor.internal_prange(n):
-                    s = in_arr[j]
-                    if bodo.libs.array_kernels.isna(in_arr, j):
-                        s = value
-                    out_arr[j] = s
-                return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
             return str_fillna_alloc_impl
         else:
             # value is a Series
             if isinstance(value, SeriesType):
-                # XXX: assuming indices are equivalent and alignment is not needed
-                def fillna_series_impl(
-                    S,
-                    value=None,
-                    method=None,
-                    axis=None,
-                    inplace=False,
-                    limit=None,
-                    downcast=None,
-                ):  # pragma: no cover
-                    in_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
-                    index = bodo.hiframes.pd_series_ext.get_series_index(S)
-                    name = bodo.hiframes.pd_series_ext.get_series_name(S)
-                    fill_arr = bodo.hiframes.pd_series_ext.get_series_data(value)
-                    n = len(in_arr)
-                    out_arr = np.empty(n, in_arr.dtype)
-                    for i in numba.parfors.parfor.internal_prange(n):
-                        s = in_arr[i]
-                        if bodo.libs.array_kernels.isna(
-                            in_arr, i
-                        ) and not bodo.libs.array_kernels.isna(fill_arr, i):
-                            s = fill_arr[i]
-                        out_arr[i] = s
-                    return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
-
                 return fillna_series_impl
-
-            def fillna_impl(
-                S,
-                value=None,
-                method=None,
-                axis=None,
-                inplace=False,
-                limit=None,
-                downcast=None,
-            ):  # pragma: no cover
-                in_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
-                index = bodo.hiframes.pd_series_ext.get_series_index(S)
-                name = bodo.hiframes.pd_series_ext.get_series_name(S)
-                n = len(in_arr)
-                out_arr = np.empty(n, in_arr.dtype)
-                for i in numba.parfors.parfor.internal_prange(n):
-                    s = in_arr[i]
-                    if bodo.libs.array_kernels.isna(in_arr, i):
-                        s = value
-                    out_arr[i] = s
-                return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
             return fillna_impl
 
