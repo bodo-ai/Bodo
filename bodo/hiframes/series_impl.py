@@ -642,23 +642,35 @@ def overload_series_cumprod(S):
 @overload_method(SeriesType, "cummin", inline="always", no_unliteral=True)
 def overload_series_cummin(S):
     # TODO: support skipna
+    #
+    # The big difference between cumsum/cumprod and cummin/cummax
+    # is that cumsum/cumprod are part of numpy and implemented in NUMBA,
+    # but cummin/cummax are not implemented in numpy and therefore not in numba.
+    # Thus for cummin/cummax we need to roll out our own implementation.
+    # We cannot use parfor as it is not easily parallelizable and thus requires a
+    # hand crafted parallelization (see dist_cummin/dist_cummax)
     def impl(S):  # pragma: no cover
-        A = bodo.hiframes.pd_series_ext.get_series_data(S)
+        arr = bodo.hiframes.pd_series_ext.get_series_data(S)
         index = bodo.hiframes.pd_series_ext.get_series_index(S)
         name = bodo.hiframes.pd_series_ext.get_series_name(S)
-        return bodo.hiframes.pd_series_ext.init_series(A.cummin(), index, name)
+        return bodo.hiframes.pd_series_ext.init_series(
+            bodo.libs.array_kernels.cummin(arr), index, name
+        )
 
     return impl
 
 
 @overload_method(SeriesType, "cummax", inline="always", no_unliteral=True)
 def overload_series_cummax(S):
+    # Remarks for cummin applies here.
     # TODO: support skipna
     def impl(S):  # pragma: no cover
-        A = bodo.hiframes.pd_series_ext.get_series_data(S)
+        arr = bodo.hiframes.pd_series_ext.get_series_data(S)
         index = bodo.hiframes.pd_series_ext.get_series_index(S)
         name = bodo.hiframes.pd_series_ext.get_series_name(S)
-        return bodo.hiframes.pd_series_ext.init_series(A.cummax(), index, name)
+        return bodo.hiframes.pd_series_ext.init_series(
+            bodo.libs.array_kernels.cummax(arr), index, name
+        )
 
     return impl
 

@@ -2168,9 +2168,78 @@ def dist_cumsum(in_arr, out_arr):
     return cumsum_impl
 
 
-def dist_cumprod(arr):  # pragma: no cover
-    """dummy to implement cumprod"""
-    return arr
+@numba.generated_jit(nopython=True)
+def dist_cumprod(in_arr, out_arr):
+    neutral_val = in_arr.dtype(1)
+    op = np.int32(Reduce_Type.Prod.value)
+
+    def cumprod_impl(in_arr, out_arr):  # pragma: no cover
+        c = neutral_val
+        for v in np.nditer(in_arr):
+            c *= v.item()
+        prefix_var = dist_exscan(c, op)
+        # The MPI_Exscan has the default that on the first node, the value
+        # are not set to their neutral value (0 for sum, 1 for prod, etc.)
+        # bad design.
+        # For dist_cumsum that is ok since variable are set to 0 by python.
+        # But for product/min/max, we need to do it manually.
+        if get_rank() == 0:
+            prefix_var = neutral_val
+        for i in range(in_arr.size):
+            prefix_var *= in_arr[i]
+            out_arr[i] = prefix_var
+        return 0
+
+    return cumprod_impl
+
+
+@numba.generated_jit(nopython=True)
+def dist_cummin(in_arr, out_arr):
+    if isinstance(in_arr.dtype, types.Float):
+        neutral_val = np.finfo(in_arr.dtype(1).dtype).max
+    else:
+        neutral_val = np.iinfo(in_arr.dtype(1).dtype).max
+    op = np.int32(Reduce_Type.Min.value)
+
+    def cummin_impl(in_arr, out_arr):  # pragma: no cover
+        c = neutral_val
+        for v in np.nditer(in_arr):
+            c = min(c, v.item())
+        prefix_var = dist_exscan(c, op)
+        # Remarks for dist_cumprod applies here
+        if get_rank() == 0:
+            prefix_var = neutral_val
+        for i in range(in_arr.size):
+            prefix_var = min(prefix_var, in_arr[i])
+            out_arr[i] = prefix_var
+        return 0
+
+    return cummin_impl
+
+
+@numba.generated_jit(nopython=True)
+def dist_cummax(in_arr, out_arr):
+    if isinstance(in_arr.dtype, types.Float):
+        neutral_val = np.finfo(in_arr.dtype(1).dtype).min
+    else:
+        neutral_val = np.iinfo(in_arr.dtype(1).dtype).min
+    neutral_val = in_arr.dtype(1)
+    op = np.int32(Reduce_Type.Max.value)
+
+    def cummax_impl(in_arr, out_arr):  # pragma: no cover
+        c = neutral_val
+        for v in np.nditer(in_arr):
+            c = max(c, v.item())
+        prefix_var = dist_exscan(c, op)
+        # Remarks for dist_cumprod applies here
+        if get_rank() == 0:
+            prefix_var = neutral_val
+        for i in range(in_arr.size):
+            prefix_var = max(prefix_var, in_arr[i])
+            out_arr[i] = prefix_var
+        return 0
+
+    return cummax_impl
 
 
 def dist_setitem(arr, index, val):  # pragma: no cover

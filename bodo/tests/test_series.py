@@ -1827,19 +1827,24 @@ def test_series_cumsum(S, memory_leak_check):
     "S",
     [
         pd.Series([1.0, 2.2, 3.1, 4.6, 5.9]),
+        pd.Series([2, 3, 5, 8, 7]),
+        pd.Series([7, 6, 5, 4, 1]),
         pd.Series([1.0, 2.2, 3.1, 4.6, 5.9], [3, 1, 0, 2, 4], name="ABC"),
     ],
 )
-def test_series_cumprod(S, memory_leak_check):
-    # TODO: datetime64, timedelta64
-    # TODO: support skipna
-    def test_impl(S):
+def test_series_cum_minmaxprod(S, memory_leak_check):
+    def f1(S):
         return S.cumprod()
 
-    bodo_func = bodo.jit(test_impl)
-    pd.testing.assert_series_equal(bodo_func(S), test_impl(S))
-    # TODO: implement distributed cumprod
-    # check_func(test_impl, (S,))
+    def f2(S):
+        return S.cummin()
+
+    def f3(S):
+        return S.cummax()
+
+    check_func(f1, (S,))
+    check_func(f2, (S,))
+    check_func(f3, (S,))
 
 
 def test_series_rename(memory_leak_check):

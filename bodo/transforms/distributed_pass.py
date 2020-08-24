@@ -564,6 +564,21 @@ class DistributedPass:
             out.append(assign)
             return out
 
+        if func_mod == "bodo.libs.array_kernels" and func_name in {"cummin", "cummax"}:
+            if self._is_1D_or_1D_Var_arr(rhs.args[0].name):
+                in_arr_var = rhs.args[0]
+                lhs_var = assign.target
+                # TODO: compute inplace if input array is dead
+                def impl(A):  # pragma: no cover
+                    B = np.empty_like(A)
+                    _func(A, B)
+                    return B
+
+                func = getattr(bodo.libs.distributed_api, "dist_" + func_name)
+                return compile_func_single_block(
+                    impl, [in_arr_var], lhs_var, self, extra_globals={"_func": func}
+                )
+
         # numpy direct functions
         if isinstance(func_mod, str) and func_mod == "numpy":
             return self._run_call_np(
@@ -760,7 +775,10 @@ class DistributedPass:
             rhs.args[1] = out[-1].target
             out.append(assign)
 
-        if fdef == ("rolling_fixed", "bodo.hiframes.rolling") and self._is_1D_or_1D_Var_arr(rhs.args[0].name):
+        if fdef == (
+            "rolling_fixed",
+            "bodo.hiframes.rolling",
+        ) and self._is_1D_or_1D_Var_arr(rhs.args[0].name):
             # set parallel flag to true
             true_var = ir.Var(scope, mk_unique_var("true_var"), loc)
             self.typemap[true_var.name] = BooleanLiteral(True)
@@ -776,7 +794,10 @@ class DistributedPass:
             )
             out = [ir.Assign(ir.Const(True, loc), true_var, loc), assign]
 
-        if fdef == ("rolling_variable", "bodo.hiframes.rolling") and self._is_1D_or_1D_Var_arr(rhs.args[0].name):
+        if fdef == (
+            "rolling_variable",
+            "bodo.hiframes.rolling",
+        ) and self._is_1D_or_1D_Var_arr(rhs.args[0].name):
             # set parallel flag to true
             true_var = ir.Var(scope, mk_unique_var("true_var"), loc)
             self.typemap[true_var.name] = BooleanLiteral(True)
@@ -803,14 +824,19 @@ class DistributedPass:
             rhs.args[2] = true_var
             out = [ir.Assign(ir.Const(True, loc), true_var, loc), assign]
 
-        if fdef == ("array_isin", "bodo.libs.array") and self._is_1D_or_1D_Var_arr(rhs.args[2].name):
+        if fdef == ("array_isin", "bodo.libs.array") and self._is_1D_or_1D_Var_arr(
+            rhs.args[2].name
+        ):
             # array_isin requires shuffling data only if values array is distributed
             f = lambda out_arr, in_arr, vals, p: bodo.libs.array.array_isin(
                 out_arr, in_arr, vals, True
             )
             return compile_func_single_block(f, rhs.args, assign.target, self)
 
-        if fdef == ("quantile", "bodo.libs.array_kernels") and self._is_1D_or_1D_Var_arr(rhs.args[0].name):
+        if fdef == (
+            "quantile",
+            "bodo.libs.array_kernels",
+        ) and self._is_1D_or_1D_Var_arr(rhs.args[0].name):
             arr = rhs.args[0]
             nodes = []
             size_var = self._get_dist_var_len(arr, nodes, equiv_set)
@@ -821,15 +847,22 @@ class DistributedPass:
             )
             return nodes + compile_func_single_block(f, rhs.args, assign.target, self)
 
-        if fdef == ("nunique", "bodo.libs.array_kernels") and self._is_1D_or_1D_Var_arr(rhs.args[0].name):
+        if fdef == ("nunique", "bodo.libs.array_kernels") and self._is_1D_or_1D_Var_arr(
+            rhs.args[0].name
+        ):
             f = lambda arr: bodo.libs.array_kernels.nunique_parallel(arr)
             return compile_func_single_block(f, rhs.args, assign.target, self)
 
-        if fdef == ("unique", "bodo.libs.array_kernels") and self._is_1D_or_1D_Var_arr(rhs.args[0].name):
+        if fdef == ("unique", "bodo.libs.array_kernels") and self._is_1D_or_1D_Var_arr(
+            rhs.args[0].name
+        ):
             f = lambda arr: bodo.libs.array_kernels.unique_parallel(arr)
             return compile_func_single_block(f, rhs.args, assign.target, self)
 
-        if fdef == ("nlargest", "bodo.libs.array_kernels") and self._is_1D_or_1D_Var_arr(rhs.args[0].name):
+        if fdef == (
+            "nlargest",
+            "bodo.libs.array_kernels",
+        ) and self._is_1D_or_1D_Var_arr(rhs.args[0].name):
             f = lambda arr, I, k, i, f: bodo.libs.array_kernels.nlargest_parallel(
                 arr, I, k, i, f
             )
@@ -859,7 +892,10 @@ class DistributedPass:
             self._set_last_arg_to_true(assign.value)
             return [assign]
 
-        if func_name == "rebalance" and func_mod in {"bodo.libs.distributed_api", "bodo"}:
+        if func_name == "rebalance" and func_mod in {
+            "bodo.libs.distributed_api",
+            "bodo",
+        }:
             if self._is_1D_or_1D_Var_arr(rhs.args[0].name):
                 f = lambda df: bodo.libs.distributed_api.rebalance_kernel(df)
                 return compile_func_single_block(f, rhs.args, assign.target, self)
@@ -883,7 +919,10 @@ class DistributedPass:
                 assign.value = arg_def.args[0]
             return out
 
-        if fdef == ("init_range_index", "bodo.hiframes.pd_index_ext") and self._is_1D_or_1D_Var_arr(lhs):
+        if fdef == (
+            "init_range_index",
+            "bodo.hiframes.pd_index_ext",
+        ) and self._is_1D_or_1D_Var_arr(lhs):
             return self._run_call_init_range_index(
                 lhs, assign, rhs.args, avail_vars, equiv_set
             )
@@ -906,7 +945,9 @@ class DistributedPass:
         if fdef == ("rebalance_array", "bodo.libs.distributed_api"):
             return self._run_call_rebalance_array(lhs, assign, rhs.args)
 
-        if fdef == ("file_read", "bodo.io.np_io") and self._is_1D_or_1D_Var_arr(rhs.args[1].name):
+        if fdef == ("file_read", "bodo.io.np_io") and self._is_1D_or_1D_Var_arr(
+            rhs.args[1].name
+        ):
             fname = rhs.args[0]
             arr = rhs.args[1]
             # File offset in readfile is needed for the parallel seek
@@ -917,11 +958,16 @@ class DistributedPass:
             )
 
             def impl(fname, data_ptr, start, count, offset):  # pragma: no cover
-                return bodo.io.np_io.file_read_parallel(fname, data_ptr, start, count, offset)
+                return bodo.io.np_io.file_read_parallel(
+                    fname, data_ptr, start, count, offset
+                )
 
             return nodes + compile_func_single_block(
                 # Increment start_var by the file offset
-                impl, [fname, arr, start_var, count_var, file_offset], assign.target, self
+                impl,
+                [fname, arr, start_var, count_var, file_offset],
+                assign.target,
+                self,
             )
 
         # replace get_type_max_value(arr.dtype) since parfors

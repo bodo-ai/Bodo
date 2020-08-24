@@ -456,10 +456,10 @@ def test_rebalance():
     )
     df_out_dist = bodo_dist(df_in)
     df_out_dist_merge = bodo.gatherv(df_out_dist)
-    df_len_dist = pd.DataFrame({"A":[len(df_out_dist)]})
+    df_len_dist = pd.DataFrame({"A": [len(df_out_dist)]})
     df_len_dist_merge = bodo.gatherv(df_len_dist)
-    if bodo.get_rank()==0:
-        delta_size = df_len_dist_merge["A"].max() - df_len_dist_merge["A"].min();
+    if bodo.get_rank() == 0:
+        delta_size = df_len_dist_merge["A"].max() - df_len_dist_merge["A"].min()
         assert delta_size <= 1
     pd.testing.assert_frame_equal(df_in_merge, df_out_dist_merge)
     # The replicated case
@@ -990,7 +990,6 @@ def test_df_describe(numeric_df_value):
     check_func(test_impl, (numeric_df_value,), is_out_distributed=False)
 
 
-@pytest.mark.skip(reason="distributed cumprod not available yet")
 def test_df_cumprod(numeric_df_value):
     # empty dataframe output not supported yet
     if len(numeric_df_value._get_numeric_data().columns) == 0:
