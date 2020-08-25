@@ -500,6 +500,22 @@ def _install_dti_str_comp_ops():
 
 _install_dti_str_comp_ops()
 
+@overload(pd.Index, no_unliteral=True)
+def pd_index_overload(data=None, dtype=None, copy=False, name=None,
+                      tupleize_cols=True):
+    if isinstance(data, types.List) and data.dtype == types.int64:
+        def impl(data=None, dtype=None, copy=False, name=None, tupleize_cols=True):
+            return pd.Int64Index(data, copy=copy, dtype=dtype, name=name)
+
+    if isinstance(data, types.List) and data.dtype == types.uint64:
+        def impl(data=None, dtype=None, copy=False, name=None, tupleize_cols=True):
+            return pd.UInt64Index(data, copy=copy, dtype=dtype, name=name)
+
+    if isinstance(data, types.List) and data.dtype == types.float64:
+        def impl(data=None, dtype=None, copy=False, name=None, tupleize_cols=True):
+            return pd.Float64Index(data, copy=copy, dtype=dtype, name=name)
+
+    return impl
 
 @overload(operator.getitem, no_unliteral=True)
 def overload_datetime_index_getitem(dti, ind):
@@ -1460,7 +1476,6 @@ class NumericIndexType(types.IterableType, types.ArrayCompatible):
     @property
     def numpy_type_name(self):
         return str(self.dtype)
-
 
 @typeof_impl.register(pd.Int64Index)
 def typeof_pd_int64_index(val, c):
