@@ -84,7 +84,9 @@ date_fields = [
     "nanosecond",
     "dayofyear",
     "dayofweek",
+    "is_leap_year",
 ]
+
 # Timedelta fields separated by return type
 timedelta_fields = ["days", "seconds", "microseconds", "nanoseconds"]
 timedelta_methods = ["total_seconds", "to_pytimedelta"]
@@ -580,6 +582,14 @@ def overload_pd_dayofweek(ptt):
     return pd_dayofweek
 
 
+@overload_attribute(PandasTimestampType, "is_leap_year")
+def overload_pd_dayofweek(ptt):
+    def pd_is_leap_year(ptt):
+        return is_leap_year(ptt.year)
+
+    return pd_is_leap_year
+
+
 @overload_method(PandasTimestampType, "date", no_unliteral=True)
 def overload_pd_timestamp_date(ptt):
     def pd_timestamp_date_impl(ptt):  # pragma: no cover
@@ -823,6 +833,13 @@ def get_day_of_week(y, m, d):
     day = (y + y // 4 - y // 100 + y // 400 + sakamoto_arr[m - 1] + d) % 7
     # convert to python day
     return (day + 6) % 7
+
+
+@numba.njit
+def is_leap_year(year):
+    """returns 1 if leap year 0 otherwise"""
+    # copied from https://github.com/pandas-dev/pandas/blob/6b2d0260c818e62052eaf535767f3a8c4b446c69/pandas/_libs/tslibs/ccalendar.pyx#L161
+    return (year & 0x3) == 0 and ((year % 100) != 0 or (year % 400) == 0)
 
 
 @numba.njit

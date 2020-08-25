@@ -107,9 +107,13 @@ def create_date_field_overload(field):
         func_text += "    name = bodo.hiframes.pd_series_ext.get_series_name(S)\n"
         func_text += "    numba.parfors.parfor.init_prange()\n"
         func_text += "    n = len(arr)\n"
-        func_text += (
-            "    out_arr = bodo.libs.int_arr_ext.alloc_int_array(n, np.int64)\n"
-        )
+        if field not in ("is_leap_year",):
+            func_text += (
+                "    out_arr = bodo.libs.int_arr_ext.alloc_int_array(n, np.int64)\n"
+            )
+        else:
+            func_text += "    out_arr = np.empty(n, np.bool_)\n"
+
         func_text += "    for i in numba.parfors.parfor.internal_prange(n):\n"
         func_text += "        if bodo.libs.array_kernels.isna(arr, i):\n"
         func_text += "            bodo.libs.array_kernels.setna(out_arr, i)\n"
@@ -123,13 +127,19 @@ def create_date_field_overload(field):
             if field in ("month", "day"):
                 func_text += "        month, day = bodo.hiframes.pd_timestamp_ext.get_month_day(year, days)\n"
             func_text += "        out_arr[i] = {}\n".format(field)
-        elif field in ("dayofyear", "dayofweek"):
-            funcdict = {"dayofyear": "get_day_of_year", "dayofweek": "get_day_of_week"}
+        elif field in ("dayofyear", "dayofweek",):
+            funcdict = {
+                "dayofyear": "get_day_of_year",
+                "dayofweek": "get_day_of_week",
+            }
             func_text += "        dt, year, days = bodo.hiframes.pd_timestamp_ext.extract_year_days(dt64)\n"
             func_text += "        month, day = bodo.hiframes.pd_timestamp_ext.get_month_day(year, days)\n"
             func_text += "        out_arr[i] = bodo.hiframes.pd_timestamp_ext.{}(year, month, day)\n".format(
                 funcdict[field]
             )
+        elif field == "is_leap_year":
+            func_text += "        dt, year, days = bodo.hiframes.pd_timestamp_ext.extract_year_days(dt64)\n"
+            func_text += "        out_arr[i] = bodo.hiframes.pd_timestamp_ext.is_leap_year(year)\n"
         else:
             func_text += "        ts = bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(dt64)\n"
             func_text += "        out_arr[i] = ts." + field + "\n"

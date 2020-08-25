@@ -271,11 +271,30 @@ def gen_dti_field_impl(field):
 
 def _install_dti_date_fields():
     for field in bodo.hiframes.pd_timestamp_ext.date_fields:
+        if field == "is_leap_year":
+            continue
         impl = gen_dti_field_impl(field)
         overload_attribute(DatetimeIndexType, field)(lambda dti: impl)
 
 
 _install_dti_date_fields()
+
+
+@overload_attribute(DatetimeIndexType, "is_leap_year")
+def overload_datetime_index_is_leap_year(dti):
+    def impl(dti):  # pragma: no cover
+        numba.parfors.parfor.init_prange()
+        A = bodo.hiframes.pd_index_ext.get_index_data(dti)
+        n = len(A)
+        # TODO (ritwika): use nullable bool array.
+        S = np.empty(n, np.bool_)
+        for i in numba.parfors.parfor.internal_prange(n):
+            dt64 = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(A[i])
+            ts = bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(dt64)
+            S[i] = bodo.hiframes.pd_timestamp_ext.is_leap_year(ts.year)
+        return S
+
+    return impl
 
 
 @overload_attribute(DatetimeIndexType, "date")
