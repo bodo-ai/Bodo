@@ -1982,10 +1982,11 @@ def concat_overload(
     # TODO(ehsan): proper error checking
     axis = get_overload_const_int(axis)
 
-    func_text = ("def impl(objs, axis=0, join='outer', join_axes=None, "
+    func_text = (
+        "def impl(objs, axis=0, join='outer', join_axes=None, "
         "ignore_index=False, keys=None, levels=None, names=None, "
-        "verify_integrity=False, sort=None, copy=True):\n")
-
+        "verify_integrity=False, sort=None, copy=True):\n"
+    )
 
     # concat of columns into a dataframe
     if axis == 1:
@@ -2001,11 +2002,17 @@ def concat_overload(
                 # TODO: use Series name if possible
                 names.append(str(col_no))
                 col_no += 1
-                data_args.append("bodo.hiframes.pd_series_ext.get_series_data(objs[{}])".format(i))
+                data_args.append(
+                    "bodo.hiframes.pd_series_ext.get_series_data(objs[{}])".format(i)
+                )
             else:  # DataFrameType
                 names.extend(obj.columns)
                 for j in range(len(obj.data)):
-                    data_args.append("bodo.hiframes.pd_dataframe_ext.get_dataframe_data(objs[{}], {})".format(i, j))
+                    data_args.append(
+                        "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(objs[{}], {})".format(
+                            i, j
+                        )
+                    )
         return bodo.hiframes.dataframe_impl._gen_init_df(
             func_text, names, ", ".join(data_args), index
         )
@@ -2040,18 +2047,49 @@ def concat_overload(
             for i, df in enumerate(objs.types):
                 if c in df.columns:
                     col_ind = df.columns.index(c)
-                    args.append("bodo.hiframes.pd_dataframe_ext.get_dataframe_data(objs[{}], {})".format(i, col_ind))
+                    args.append(
+                        "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(objs[{}], {})".format(
+                            i, col_ind
+                        )
+                    )
                 else:
-                    args.append("bodo.libs.array_kernels.gen_na_array(len(objs[{}]), arr_typ{})".format(i, col_no))
-            func_text += "  A{} = bodo.libs.array_kernels.concat(({}))\n".format(col_no,
-                ", ".join(args)
+                    args.append(
+                        "bodo.libs.array_kernels.gen_na_array(len(objs[{}]), arr_typ{})".format(
+                            i, col_no
+                        )
+                    )
+            func_text += "  A{} = bodo.libs.array_kernels.concat(({}))\n".format(
+                col_no, ", ".join(args)
             )
         # TODO(ehsan): proper index support
         index = "bodo.hiframes.pd_index_ext.init_range_index(0, len(A0), 1, None)"
         return bodo.hiframes.dataframe_impl._gen_init_df(
-            func_text, all_colnames, ", ".join("A{}".format(i) for i in range(len(all_colnames))), index, arr_types
+            func_text,
+            all_colnames,
+            ", ".join("A{}".format(i) for i in range(len(all_colnames))),
+            index,
+            arr_types,
         )
 
+    # series tuples case
+    if isinstance(objs, types.BaseTuple) and isinstance(objs.types[0], SeriesType):
+        assert all(isinstance(t, SeriesType) for t in objs.types)
+        # TODO: index and name
+        func_text += "  out_arr = bodo.libs.array_kernels.concat(({}))\n".format(
+            ", ".join(
+                "bodo.hiframes.pd_series_ext.get_series_data(objs[{}])".format(i)
+                for i in range(len(objs.types))
+            )
+        )
+        func_text += "  index = bodo.hiframes.pd_index_ext.init_range_index(0, len(out_arr), 1, None)\n"
+        func_text += (
+            "  return bodo.hiframes.pd_series_ext.init_series(out_arr, index)\n"
+        )
+        loc_vars = {}
+        exec(func_text, {"bodo": bodo, "np": np, "numba": numba}, loc_vars)
+        return loc_vars["impl"]
+
+    # TODO: handle other iterables like arrays, lists, ...
 
     return lambda objs, axis=0, join="outer", join_axes=None, ignore_index=False, keys=None, levels=None, names=None, verify_integrity=False, sort=None, copy=True: bodo.hiframes.pd_dataframe_ext.concat_dummy(
         objs, axis
@@ -2086,16 +2124,6 @@ class ConcatDummyTyper(AbstractTemplate):
         assert len(objs.types) > 0
 
         assert axis == 0
-
-        # series case
-        if isinstance(objs.types[0], SeriesType):
-            assert all(isinstance(t, SeriesType) for t in objs.types)
-            arr_args = [S.data for S in objs.types]
-            concat_typ = self.context.resolve_function_type(
-                bodo.libs.array_kernels.concat, (types.Tuple(arr_args),), {}
-            ).return_type
-            ret_typ = SeriesType(concat_typ.dtype, concat_typ)
-            return signature(ret_typ, *args)
         # TODO: handle other iterables like arrays, lists, ...
 
 
