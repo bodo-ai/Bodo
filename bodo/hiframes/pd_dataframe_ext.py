@@ -1979,7 +1979,7 @@ def concat_overload(
 ):
     # TODO: handle options
     # TODO: support Index
-
+    # TODO(ehsan): proper error checking
     axis = get_overload_const_int(axis)
 
     func_text = ("def impl(objs, axis=0, join='outer', join_axes=None, "
@@ -2009,6 +2009,49 @@ def concat_overload(
         return bodo.hiframes.dataframe_impl._gen_init_df(
             func_text, names, ", ".join(data_args), index
         )
+
+    assert axis == 0
+
+    # dataframe tuples case
+    if isinstance(objs, types.BaseTuple) and isinstance(objs.types[0], DataFrameType):
+        assert all(isinstance(t, DataFrameType) for t in objs.types)
+
+        # get output column names
+        all_colnames = []
+        for df in objs.types:
+            all_colnames.extend(df.columns)
+        # TODO: verify how Pandas sorts column names
+        # remove duplicates but keep original order
+        all_colnames = list(dict.fromkeys(all_colnames).keys())
+
+        # get array types for all output columns (for NA generation for missing columns)
+        arr_types = {}
+        for col_no, c in enumerate(all_colnames):
+            for df in objs.types:
+                if c in df.columns:
+                    arr_types["arr_typ{}".format(col_no)] = df.data[df.columns.index(c)]
+                    break
+        assert len(arr_types) == len(all_colnames)
+
+        # generate concat for each output column
+        out_data = []
+        for col_no, c in enumerate(all_colnames):
+            args = []
+            for i, df in enumerate(objs.types):
+                if c in df.columns:
+                    col_ind = df.columns.index(c)
+                    args.append("bodo.hiframes.pd_dataframe_ext.get_dataframe_data(objs[{}], {})".format(i, col_ind))
+                else:
+                    args.append("bodo.libs.array_kernels.gen_na_array(len(objs[{}]), arr_typ{})".format(i, col_no))
+            func_text += "  A{} = bodo.libs.array_kernels.concat(({}))\n".format(col_no,
+                ", ".join(args)
+            )
+        # TODO(ehsan): proper index support
+        index = "bodo.hiframes.pd_index_ext.init_range_index(0, len(A0), 1, None)"
+        return bodo.hiframes.dataframe_impl._gen_init_df(
+            func_text, all_colnames, ", ".join("A{}".format(i) for i in range(len(all_colnames))), index, arr_types
+        )
+
 
     return lambda objs, axis=0, join="outer", join_axes=None, ignore_index=False, keys=None, levels=None, names=None, verify_integrity=False, sort=None, copy=True: bodo.hiframes.pd_dataframe_ext.concat_dummy(
         objs, axis
@@ -2043,48 +2086,9 @@ class ConcatDummyTyper(AbstractTemplate):
         assert len(objs.types) > 0
 
         assert axis == 0
-        # dataframe case
-        if isinstance(objs.types[0], DataFrameType):
-            assert all(isinstance(t, DataFrameType) for t in objs.types)
-            # get output column names
-            all_colnames = []
-            for df in objs.types:
-                all_colnames.extend(df.columns)
-            # TODO: verify how Pandas sorts column names
-            # remove duplicates but keep original order
-            all_colnames = list(dict.fromkeys(all_colnames).keys())
-
-            # get output data types
-            all_data = []
-            for cname in all_colnames:
-                # arguments to the generated function
-                arr_args = [
-                    df.data[df.columns.index(cname)]
-                    for df in objs.types
-                    if cname in df.columns
-                ]
-                # XXX we add arrays of float64 NaNs if an Integer column is missing
-                # so add a dummy array of float64 for accurate typing
-                # e.g. int to float conversion
-                # TODO: use nullable integer array when pandas switches
-                # TODO: fix NA column additions for other types
-                if len(arr_args) < len(objs.types) and all(
-                    isinstance(t.dtype, types.Integer) for t in arr_args
-                ):
-                    arr_args.append(types.Array(types.float64, 1, "C"))
-                # use bodo.libs.array_kernels.concat() typer
-                concat_typ = self.context.resolve_function_type(
-                    bodo.libs.array_kernels.concat, (types.Tuple(arr_args),), {}
-                ).return_type
-                all_data.append(concat_typ)
-
-            ret_typ = DataFrameType(
-                tuple(all_data), RangeIndexType(types.none), tuple(all_colnames)
-            )
-            return signature(ret_typ, *args)
 
         # series case
-        elif isinstance(objs.types[0], SeriesType):
+        if isinstance(objs.types[0], SeriesType):
             assert all(isinstance(t, SeriesType) for t in objs.types)
             arr_args = [S.data for S in objs.types]
             concat_typ = self.context.resolve_function_type(
