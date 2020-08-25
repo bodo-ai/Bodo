@@ -83,6 +83,7 @@ date_fields = [
     "microsecond",
     "nanosecond",
     "dayofyear",
+    "dayofweek",
 ]
 # Timedelta fields separated by return type
 timedelta_fields = ["days", "seconds", "microseconds", "nanoseconds"]
@@ -571,6 +572,14 @@ def overload_pd_dayofyear(ptt):
     return pd_dayofyear
 
 
+@overload_attribute(PandasTimestampType, "dayofweek")
+def overload_pd_dayofweek(ptt):
+    def pd_dayofweek(ptt):
+        return get_day_of_week(ptt.year, ptt.month, ptt.day)
+
+    return pd_dayofweek
+
+
 @overload_method(PandasTimestampType, "date", no_unliteral=True)
 def overload_pd_timestamp_date(ptt):
     def pd_timestamp_date_impl(ptt):  # pragma: no cover
@@ -766,7 +775,7 @@ def get_month_day(typingctx, year_t, days_t=None):
 @numba.njit
 def get_day_of_year(year, month, day):
     """gets day offset within year"""
-    # mostly copied from https://github.com/pandas-dev/pandas/blob/6b2d0260c818e62052eaf535767f3a8c4b446c69/pandas/_libs/tslibs/ccalendar.pyx
+    # mostly copied from https://github.com/pandas-dev/pandas/blob/6b2d0260c818e62052eaf535767f3a8c4b446c69/pandas/_libs/tslibs/ccalendar.pyx#L215
     month_offset = [
         0,
         31,
@@ -801,6 +810,19 @@ def get_day_of_year(year, month, day):
 
     day_of_year = mo_off + day
     return day_of_year
+
+
+@numba.njit
+def get_day_of_week(y, m, d):
+    """
+    gets the day of the week for the date described by the year month day tuple.
+    """
+    # mostly copied from https://github.com/pandas-dev/pandas/blob/6b2d0260c818e62052eaf535767f3a8c4b446c69/pandas/_libs/tslibs/ccalendar.pyx#L83
+    sakamoto_arr = [0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4]
+    y -= m < 3
+    day = (y + y // 4 - y // 100 + y // 400 + sakamoto_arr[m - 1] + d) % 7
+    # convert to python day
+    return (day + 6) % 7
 
 
 @numba.njit

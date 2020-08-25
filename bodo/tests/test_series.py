@@ -52,6 +52,7 @@ GLOBAL_VAL = 2
 @pytest.mark.parametrize(
     "data",
     [
+        555,
         [2, 3, 5],
         [2.1, 3.2, 5.4],
         [True, False, True],
@@ -87,6 +88,10 @@ def test_series_constructor(data, index, name, memory_leak_check):
     # set Series index to avoid implicit alignment in Pandas case
     if isinstance(data, pd.Series) and index is not None:
         data.index = index
+
+    # bypass literal as data and index = None
+    if isinstance(data, int) and index  is None:
+        return
 
     def impl(d, i, n):
         return pd.Series(d, i, name=n)
@@ -1827,19 +1832,24 @@ def test_series_cumsum(S, memory_leak_check):
     "S",
     [
         pd.Series([1.0, 2.2, 3.1, 4.6, 5.9]),
+        pd.Series([2, 3, 5, 8, 7]),
+        pd.Series([7, 6, 5, 4, 1]),
         pd.Series([1.0, 2.2, 3.1, 4.6, 5.9], [3, 1, 0, 2, 4], name="ABC"),
     ],
 )
-def test_series_cumprod(S, memory_leak_check):
-    # TODO: datetime64, timedelta64
-    # TODO: support skipna
-    def test_impl(S):
+def test_series_cum_minmaxprod(S, memory_leak_check):
+    def f1(S):
         return S.cumprod()
 
-    bodo_func = bodo.jit(test_impl)
-    pd.testing.assert_series_equal(bodo_func(S), test_impl(S))
-    # TODO: implement distributed cumprod
-    # check_func(test_impl, (S,))
+    def f2(S):
+        return S.cummin()
+
+    def f3(S):
+        return S.cummax()
+
+    check_func(f1, (S,))
+    check_func(f2, (S,))
+    check_func(f3, (S,))
 
 
 def test_series_rename(memory_leak_check):
@@ -2997,7 +3007,7 @@ def test_series_unsupported_error_checking(memory_leak_check):
         return S.to_hdf("data.dat")
 
     with pytest.raises(BodoError, match="not supported yet"):
-        bodo.jit(test_attr)(pd.Series([1, 2]))
+        bodo.jit(test_method)(pd.Series([1, 2]))
 
 
 class TestSeries(unittest.TestCase):

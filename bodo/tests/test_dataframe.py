@@ -857,6 +857,13 @@ def test_df_max(numeric_df_value, memory_leak_check):
                 "B": [1, 2, None, 3, 4, 5.0, 6, None],
             }
         ),
+        pd.DataFrame(
+            {
+                "A": [1, 4, 3, 4, None, 5, 6, None, np.nan],
+                "B": [1, 2, None, 3, 4, 5, 6, None, 0],
+                "C": [1, 2, 5, 4, None, 5, 6, None, 1],
+            }
+        ),
     ],
 )
 def test_df_reduce_axis1(df, memory_leak_check):
@@ -883,12 +890,20 @@ def test_df_reduce_axis1(df, memory_leak_check):
     def impl_median(df):
         return df.median(axis=1)
 
+    def impl_var(df):
+        return df.var(axis=1)
+
+    def impl_std(df):
+        return df.std(axis=1)
+
     check_func(impl_max, (df,))
     check_func(impl_min, (df,))
     check_func(impl_sum, (df,))
     check_func(impl_prod, (df,))
     check_func(impl_mean, (df,))
     check_func(impl_median, (df,))
+    check_func(impl_var, (df,))
+    check_func(impl_std, (df,))
 
 
 def test_df_mean(numeric_df_value, memory_leak_check):
@@ -990,7 +1005,6 @@ def test_df_describe(numeric_df_value, memory_leak_check):
     check_func(test_impl, (numeric_df_value,), is_out_distributed=False)
 
 
-@pytest.mark.skip(reason="distributed cumprod not available yet")
 def test_df_cumprod(numeric_df_value, memory_leak_check):
     # empty dataframe output not supported yet
     if len(numeric_df_value._get_numeric_data().columns) == 0:

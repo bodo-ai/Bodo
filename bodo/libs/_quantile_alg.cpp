@@ -301,6 +301,7 @@ std::pair<T, T> get_lower_upper_kth_parallel(std::vector<T> &my_array,
                                              int type_enum) {
     MPI_Datatype mpi_typ = get_MPI_typ(type_enum);
     int64_t local_size = my_array.size();
+    // This random number generation is deterministic
     std::default_random_engine r_engine(myrank);
     std::uniform_real_distribution<double> uniform_dist(0.0, 1.0);
 

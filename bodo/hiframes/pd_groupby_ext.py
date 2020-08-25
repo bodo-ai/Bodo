@@ -53,6 +53,7 @@ from bodo.utils.typing import (
     is_overload_constant_dict,
     get_overload_constant_dict,
     get_index_data_arr_types,
+    create_unsupported_overload,
 )
 from bodo.utils.transform import get_const_func_output_type, get_call_expr_arg
 from bodo.utils.utils import is_expr
@@ -749,6 +750,8 @@ class DataframeGroupByAttribute(AttributeTemplate):
         return self.resolve_cumulative(grp, args, kws, msg, True)
 
     def generic_resolve(self, grpby, attr):
+        if attr in groupby_unsupported:
+            return
         if attr not in grpby.df_type.columns:
             raise_const_error(
                 "groupby: invalid attribute {} (column not found in dataframe or unsupported function)".format(
@@ -842,3 +845,63 @@ CrossTabTyper._no_unliteral = True
 @lower_builtin(crosstab_dummy, types.VarArg(types.Any))
 def lower_crosstab_dummy(context, builder, sig, args):
     return context.get_constant_null(sig.return_type)
+
+
+groupby_unsupported = {
+    "all",
+    "any",
+    "apply",
+    "backfill",
+    "bfill",
+    "boxplot",
+    "corr",
+    "corrwith",
+    "cumcount",
+    "cummax",
+    "cov",
+    "diff",
+    "fillna",
+    "hist",
+    "idxmin",
+    "mad",
+    "skew",
+    "take",
+    "cummin",
+    "cumprod",
+    "describe",
+    "ffill",
+    "filter",
+    "get_group",
+    "head",
+    "ngroup",
+    "nth",
+    "ohlc",
+    "pad",
+    "pct_change",
+    "pipe",
+    "plot",
+    "quantile",
+    "rank",
+    "resample",
+    "rolling",
+    "sample",
+    "sem",
+    "shift",
+    "size",
+    "tail",
+    "transform",
+    "tshift",
+}
+
+def _install_groupy_unsupported():
+    """install an overload that raises BodoError for unsupported methods of GroupBy,
+    DataFrameGroupBy, and SeriesGroupBy types
+    """
+
+    for fname in groupby_unsupported:
+        overload_method(DataFrameGroupByType, fname, no_unliteral=True)(
+            create_unsupported_overload("DataFrameGroupByType" + fname)
+        )
+
+
+_install_groupy_unsupported()

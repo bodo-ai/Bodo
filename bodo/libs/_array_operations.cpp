@@ -233,8 +233,13 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
 #endif
     //
     // building the samples.
-    std::random_device rd;
-    std::mt19937 gen(rd());
+    // We use here deterministic random sampling. This is better for debugging
+    // and makes life easier. This is ok because our work does not have to be
+    // cryptographically solid.
+    // If not replace std::mt19937 gen(1234567890);
+    // by
+    // std::random_device rd; std::mt19937 gen(rd());
+    std::mt19937 gen(1234567890);
     std::vector<size_t> ListIdx(n_loc_sample);
     for (int64_t i = 0; i < n_loc_sample; i++) {
         size_t pos = std::uniform_int_distribution<>(0, n_local-1)(gen);
@@ -811,8 +816,8 @@ table_info* sample_table(table_info* in_table, int64_t n, double frac,
         // small.
         std::set<int> SetIdxChosen;
         UNORD_SET_CONTAINER<int> UnordsetIdxChosen;
-        std::random_device rd;
-        std::mt19937 gen(rd());
+        // Deterministic random number generation. See sort_values_table for rationale.
+        std::mt19937 gen(1234567890);
         auto get_rand=[&](int const& len) -> int {
           return std::uniform_int_distribution<>(0, len-1)(gen);
         };

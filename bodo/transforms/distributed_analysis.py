@@ -679,6 +679,11 @@ class DistributedAnalysis:
             self._analyze_call_np(lhs, func_name, args, kws, array_dists)
             return
 
+        # cummin/cummax (absent from numpy)
+        if func_mod == "bodo.libs.array_kernels" and func_name in {"cummin", "cummax"}:
+            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            return
+
         # handle array.func calls
         if isinstance(func_mod, ir.Var) and is_array_typ(self.typemap[func_mod.name]):
             self._analyze_call_array(lhs, func_mod, func_name, args, array_dists)
@@ -725,7 +730,9 @@ class DistributedAnalysis:
         if fdef == ("setna", "bodo.libs.array_kernels"):
             return
 
-        if (isinstance(func_mod, str) and func_mod == "bodo") and func_name == "rebalance":
+        if (
+            isinstance(func_mod, str) and func_mod == "bodo"
+        ) and func_name == "rebalance":
             self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
             return
 

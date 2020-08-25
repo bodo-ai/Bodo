@@ -1189,6 +1189,56 @@ def unique_overload(A):
     return unique_seq
 
 
+def cummin(A):  # pragma no cover
+    return A
+
+
+@overload(cummin, no_unliteral=True)
+def cummin_overload(A):
+    if isinstance(A.dtype, types.Float):
+        neutral_val = np.finfo(A.dtype(1).dtype).max
+    else:  # TODO: Add support for dates
+        neutral_val = np.iinfo(A.dtype(1).dtype).max
+    # No parallel code here. This cannot be done via parfor usual stuff but instead
+    # by the more complicated mpi_exscan
+
+    def impl(A):
+        n = len(A)
+        out_arr = np.empty(n, A.dtype)
+        curr_cumulative = neutral_val
+        for i in range(n):
+            curr_cumulative = min(curr_cumulative, A[i])
+            out_arr[i] = curr_cumulative
+        return out_arr
+
+    return impl
+
+
+def cummax(A):  # pragma no cover
+    return A
+
+
+@overload(cummax, no_unliteral=True)
+def cummax_overload(A):
+    if isinstance(A.dtype, types.Float):
+        neutral_val = np.finfo(A.dtype(1).dtype).min
+    else:  # TODO: Add support for dates
+        neutral_val = np.iinfo(A.dtype(1).dtype).min
+    # No parallel code here. This cannot be done via parfor usual stuff but instead
+    # by the more complicated mpi_exscan
+
+    def impl(A):
+        n = len(A)
+        out_arr = np.empty(n, A.dtype)
+        curr_cumulative = neutral_val
+        for i in range(n):
+            curr_cumulative = max(curr_cumulative, A[i])
+            out_arr[i] = curr_cumulative
+        return out_arr
+
+    return impl
+
+
 @overload(unique_parallel, no_unliteral=True)
 def unique_overload_parallel(A):
     def unique_par(A):  # pragma: no cover
