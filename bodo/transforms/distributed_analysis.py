@@ -944,7 +944,7 @@ class DistributedAnalysis:
 
         if fdef == ("concat", "bodo.libs.array_kernels"):
             # hiframes concat is similar to np.concatenate
-            self._analyze_call_np_concatenate(lhs, args, array_dists)
+            self._analyze_call_concat(lhs, args, array_dists)
             return
 
         if fdef == ("isna", "bodo.libs.array_kernels"):
@@ -1215,7 +1215,7 @@ class DistributedAnalysis:
             return
 
         if func_name == "concatenate":
-            self._analyze_call_np_concatenate(lhs, args, array_dists)
+            self._analyze_call_concat(lhs, args, array_dists)
             return
 
         if func_name == "array":
@@ -1523,15 +1523,33 @@ class DistributedAnalysis:
         for v in rep_vars:
             self._set_var_dist(v, array_dists, Distribution.REP)
 
-    def _analyze_call_np_concatenate(self, lhs, args, array_dists):
+    def _analyze_call_concat(self, lhs, args, array_dists):
+        """analyze distribution for bodo.libs.array_kernels.concat and np.concatenate
+        """
         assert len(args) == 1
-        tup_def = guard(get_definition, self.func_ir, args[0])
-        assert isinstance(tup_def, ir.Expr) and tup_def.op == "build_tuple"
-        in_arrs = tup_def.items
-
         # concat reduction variables are handled in parfor analysis
         if lhs in self._concat_reduce_vars:
             return
+
+        in_type = self.typemap[args[0].name]
+        # list input case
+        if isinstance(in_type, types.List):
+            in_list = args[0].name
+            # OneD_Var since sum of block sizes might not be exactly 1D
+            out_dist = Distribution.OneD_Var
+            if lhs in array_dists:
+                out_dist = Distribution(min(out_dist.value, array_dists[lhs].value))
+            out_dist = Distribution(min(out_dist.value, array_dists[in_list].value))
+            array_dists[lhs] = out_dist
+
+            # output can cause input REP
+            if out_dist != Distribution.OneD_Var:
+                array_dists[in_list] = out_dist
+            return
+
+        tup_def = guard(get_definition, self.func_ir, args[0])
+        assert isinstance(tup_def, ir.Expr) and tup_def.op == "build_tuple"
+        in_arrs = tup_def.items
 
         # input arrays have same distribution
         in_dist = Distribution.OneD

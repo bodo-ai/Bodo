@@ -2089,7 +2089,26 @@ def concat_overload(
         exec(func_text, {"bodo": bodo, "np": np, "numba": numba}, loc_vars)
         return loc_vars["impl"]
 
+    # list of dataframes
+    if isinstance(objs, types.List) and isinstance(objs.dtype, DataFrameType):
+        # TODO(ehsan): index
+        df_type = objs.dtype
+        for col_no, c in enumerate(df_type.columns):
+            func_text += "  arrs{} = []\n".format(col_no)
+            func_text += "  for i in range(len(objs)):\n"
+            func_text += "    df = objs[i]\n"
+            func_text += "    arrs{0}.append(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {0}))\n".format(col_no)
+            func_text += "  out_arr{0} = bodo.libs.array_kernels.concat(arrs{0})\n".format(col_no)
+        index = "bodo.hiframes.pd_index_ext.init_range_index(0, len(out_arr0), 1, None)"
+        return bodo.hiframes.dataframe_impl._gen_init_df(
+            func_text,
+            df_type.columns,
+            ", ".join("out_arr{}".format(i) for i in range(len(df_type.columns))),
+            index,
+        )
+
     # TODO: handle other iterables like arrays, lists, ...
+    raise BodoError("pd.concat(): input type {} not supported yet".format(objs))
 
 
 @overload_method(DataFrameType, "sort_values", inline="always", no_unliteral=True)
