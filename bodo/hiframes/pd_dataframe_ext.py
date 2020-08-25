@@ -2091,52 +2091,6 @@ def concat_overload(
 
     # TODO: handle other iterables like arrays, lists, ...
 
-    return lambda objs, axis=0, join="outer", join_axes=None, ignore_index=False, keys=None, levels=None, names=None, verify_integrity=False, sort=None, copy=True: bodo.hiframes.pd_dataframe_ext.concat_dummy(
-        objs, axis
-    )
-
-
-def concat_dummy(objs):  # pragma: no cover
-    return pd.concat(objs)
-
-
-@infer_global(concat_dummy)
-class ConcatDummyTyper(AbstractTemplate):
-    def generic(self, args, kws):
-        assert not kws
-        objs = args[0]
-        axis = 0
-
-        if isinstance(args[1], types.IntegerLiteral):
-            axis = args[1].literal_value
-
-        if isinstance(objs, types.List):
-            assert axis == 0
-            assert isinstance(objs.dtype, (SeriesType, DataFrameType))
-            # TODO: support Index in append/concat
-            ret_typ = objs.dtype.copy(index=RangeIndexType(types.none))
-            if isinstance(ret_typ, DataFrameType):
-                ret_typ = ret_typ.copy(index=RangeIndexType(types.none))
-            return signature(ret_typ, *args)
-
-        if not isinstance(objs, types.BaseTuple):
-            raise ValueError("Tuple argument for pd.concat expected")
-        assert len(objs.types) > 0
-
-        assert axis == 0
-        # TODO: handle other iterables like arrays, lists, ...
-
-
-ConcatDummyTyper._no_unliteral = True
-
-
-# dummy lowering to avoid overload errors, remove after overload inline PR
-# is merged
-@lower_builtin(concat_dummy, types.VarArg(types.Any))
-def lower_concat_dummy(context, builder, sig, args):
-    out_obj = cgutils.create_struct_proxy(sig.return_type)(context, builder)
-    return out_obj._getvalue()
-
 
 @overload_method(DataFrameType, "sort_values", inline="always", no_unliteral=True)
 def sort_values_overload(

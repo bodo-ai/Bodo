@@ -1664,11 +1664,6 @@ class SeriesPass:
         ):
             return self._run_call_index(assign, assign.target, rhs, func_mod, func_name)
 
-        if fdef == ("concat_dummy", "bodo.hiframes.pd_dataframe_ext") and isinstance(
-            self.typemap[lhs], SeriesType
-        ):
-            return self._run_call_concat(assign, lhs, rhs)
-
         if fdef == ("init_dataframe", "bodo.hiframes.pd_dataframe_ext"):
             return [assign]
 
@@ -2466,22 +2461,6 @@ class SeriesPass:
         return replace_func(
             self, full_impl, [shape_var, fill_value_var], pre_nodes=nodes
         )
-
-    def _run_call_concat(self, assign, lhs, rhs):
-        nodes = []
-        series_list = guard(get_definition, self.func_ir, rhs.args[0]).items
-        arrs = [self._get_series_data(v, nodes) for v in series_list]
-        arr_tup = ir.Var(rhs.args[0].scope, mk_unique_var("arr_tup"), rhs.args[0].loc)
-        self.typemap[arr_tup.name] = types.Tuple([self.typemap[a.name] for a in arrs])
-        tup_expr = ir.Expr.build_tuple(arrs, arr_tup.loc)
-        nodes.append(ir.Assign(tup_expr, arr_tup, arr_tup.loc))
-        # TODO: index and name
-        def impl(arr_list):  # pragma: no cover
-            arr = bodo.libs.array_kernels.concat(arr_list)
-            index = bodo.hiframes.pd_index_ext.init_range_index(0, len(arr), 1, None)
-            return bodo.hiframes.pd_series_ext.init_series(arr, index)
-
-        return replace_func(self, impl, [arr_tup], pre_nodes=nodes)
 
     def _handle_h5_write(self, dset, index, arr):
         if index != slice(None):
