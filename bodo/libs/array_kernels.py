@@ -984,7 +984,7 @@ def concat_overload(arr_list):
 
     # Boolean array input, or mix of Numpy and nullable boolean
     if (
-        isinstance(arr_list, types.UniTuple)
+        isinstance(arr_list, (types.UniTuple, types.List))
         and arr_list.dtype == boolean_array
         or (
             isinstance(arr_list, types.BaseTuple)
