@@ -1545,12 +1545,15 @@ def get_reduce_nodes(reduction_node, nodes, func_ir):
                 #                       " in an unsupported reduction function."))
                 args = [(x.name, lookup(x, True)) for x in get_expr_args(rhs)]
                 non_red_args = [x for (x, y) in args if y.name != name]
-                assert len(non_red_args) == 1
+                # Bodo change: avoid raising error for concat reduction case
+                # assert len(non_red_args) == 1
                 args = [(x, y) for (x, y) in args if x != y.name]
                 replace_dict = dict(args)
-                replace_dict[non_red_args[0]] = ir.Var(
-                    lhs.scope, name + "#init", lhs.loc
-                )
+                # Bodo change: avoid error for concat reduction case
+                if len(non_red_args) == 1:
+                    replace_dict[non_red_args[0]] = ir.Var(
+                        lhs.scope, name + "#init", lhs.loc
+                    )
                 replace_vars_inner(rhs, replace_dict)
                 reduce_nodes = nodes[i:]
                 break
@@ -1569,6 +1572,7 @@ numba.parfors.parfor.get_reduce_nodes = get_reduce_nodes
 
 
 cache_envs = {}
+
 
 def _rebuild_env(modname, consts, env_name):
     env = numba.core.environment.lookup_environment(env_name)

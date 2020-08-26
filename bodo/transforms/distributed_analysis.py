@@ -52,6 +52,7 @@ from bodo.utils.utils import (
     is_static_getsetitem,
     get_getsetitem_index_var,
     is_call_assign,
+    is_call,
 )
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.hiframes.pd_multi_index_ext import MultiIndexType
@@ -574,16 +575,10 @@ class DistributedAnalysis:
                     array_dists[reduce_varname] = Distribution.REP
                 # keep track of concat reduce vars to handle in concat analysis and
                 # transforms properly
-                concat_reduce_vars = set()
-                for inst in reduce_nodes:
-                    if is_call_assign(inst) and guard(
-                        find_callname, self.func_ir, inst.value, self.typemap
-                    ) == ("concat", "bodo.libs.array_kernels"):
-                        concat_reduce_vars.add(inst.target.name)
-                    if is_call_assign(inst) and guard(
-                        find_callname, self.func_ir, inst.value, self.typemap
-                    ) == ("init_range_index", "bodo.hiframes.pd_index_ext"):
-                        concat_reduce_vars.add(inst.target.name)
+                assert len(self.func_ir._definitions[reduce_varname]) == 2
+                conc_varname = self.func_ir._definitions[reduce_varname][1].name
+                concat_reduce_vars = self._get_concat_reduce_vars(conc_varname)
+
                 # add concat reduce vars only if it is a parallel reduction
                 if not is_REP(out_dist):
                     self._concat_reduce_vars |= concat_reduce_vars
@@ -2043,6 +2038,33 @@ class DistributedAnalysis:
                     new_body.append(inst)
 
             block.body = new_body
+
+    def _get_concat_reduce_vars(self, varname, concat_reduce_vars=None):
+        """get output variables of array_kernels.concat() calls which are related to
+        concat reduction using reduce variable name.
+        """
+        if concat_reduce_vars is None:
+            concat_reduce_vars = set()
+        var_def = guard(get_definition, self.func_ir, varname)
+        if is_call(var_def):
+            fdef = guard(find_callname, self.func_ir, var_def)
+            # data and index variables of dataframes are created from concat()
+            if fdef == ("init_dataframe", "bodo.hiframes.pd_dataframe_ext"):
+                tup_list = guard(find_build_tuple, self.func_ir, var_def.args[0])
+                assert tup_list is not None
+                for v in tup_list:
+                    self._get_concat_reduce_vars(v.name, concat_reduce_vars)
+                index_varname = var_def.args[1].name
+                # TODO(ehsan): is the index variable name actually needed
+                concat_reduce_vars.add(index_varname)
+                self._get_concat_reduce_vars(index_varname, concat_reduce_vars)
+            if fdef == ("concat", "bodo.libs.array_kernels"):
+                concat_reduce_vars.add(varname)
+            # Index is created from concat(), TODO(ehsan): other index init calls
+            if fdef == ("init_numeric_index", "bodo.hiframes.pd_index_ext"):
+                self._get_concat_reduce_vars(var_def.args[0].name, concat_reduce_vars)
+
+        return concat_reduce_vars
 
 
 def get_reduce_op(reduce_varname, reduce_nodes, func_ir, typemap):
