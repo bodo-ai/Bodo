@@ -3735,7 +3735,7 @@ class TestSeries(unittest.TestCase):
         # TODO: handle index in concat
         pd.testing.assert_series_equal(
             bodo_func(S1, S2),
-            test_impl(S1, S2).reset_index(drop=True),
+            test_impl(S1, S2),
             check_dtype=False,
         )
 
