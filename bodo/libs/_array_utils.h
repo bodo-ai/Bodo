@@ -1,4 +1,7 @@
 // Copyright (C) 2019 Bodo Inc. All rights reserved.
+#ifndef _ARRAY_UTILS_H_INCLUDED
+#define _ARRAY_UTILS_H_INCLUDED
+
 #include "_bodo_common.h"
 #include "_decimal_ext.h"
 
@@ -168,6 +171,25 @@ table_info* RetrieveTable(table_info* const& in_table, std::vector<size_t> const
  */
 bool TestEqualColumn(array_info* arr1, int64_t pos1, array_info* arr2,
                      int64_t pos2);
+
+
+/* This function test if two rows of two arrow columns (which may or may not be the same)
+ * are equal, greater or lower than the other.
+ *
+ * @param arr1            : the first arrow array
+ * @param pos1_s, pos1_e  : the starting and ending positions
+ * @param arr2            : the second arrow array
+ * @param pos2_s, pos2_e  : the starting and ending positions
+ * @param na_position_bis : Whether the missing data is first or last
+ * @return 1 is arr1[pos1_s:pos1_e] < arr2[pos2_s:pos2_e], 0 is equality, -1 if >.
+ */
+int ComparisonArrowColumn(std::shared_ptr<arrow::Array> const& arr1,
+                          int64_t pos1_s, int64_t pos1_e,
+                          std::shared_ptr<arrow::Array> const& arr2,
+                          int64_t pos2_s, int64_t pos2_e,
+                          bool const& na_position_bis);
+
+
 
 /** This code test if two keys are equal (Before that the hash should have been
  * used) It is used that way because we assume that the left key have the same
@@ -509,3 +531,5 @@ inline bool does_row_has_nulls(std::vector<array_info*> const& key_cols,
     }
     return false;
 }
+
+#endif // _ARRAY_UTILS_H_INCLUDED

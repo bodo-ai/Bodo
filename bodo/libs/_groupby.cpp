@@ -826,12 +826,23 @@ struct multi_col_key {
             array_info* c2 = other.table->columns[i];
             size_t siztype;
             switch (c1->arr_type) {
+                case bodo_array_type::ARROW: {
+                    int64_t pos1_s = row;
+                    int64_t pos1_e = row + 1;
+                    int64_t pos2_s = other.row;
+                    int64_t pos2_e = other.row + 1;
+                    bool na_position_bis=true;
+                    int test = ComparisonArrowColumn(c1->array, pos1_s, pos1_e, c2->array, pos2_s, pos2_e, na_position_bis);
+                    if (test != 0)
+                        return false;
+                }
+                    continue;
                 case bodo_array_type::NULLABLE_INT_BOOL:
                     if (GetBit((uint8_t*)c1->null_bitmask, row) !=
                         GetBit((uint8_t*)c2->null_bitmask, other.row))
                         return false;
                     if (!GetBit((uint8_t*)c1->null_bitmask, row)) continue;
-                case bodo_array_type::CATEGORICAL:
+                case bodo_array_type::CATEGORICAL: // Even in missing case (value -1) this works
                 case bodo_array_type::NUMPY:
                     siztype = numpy_item_size[c1->dtype];
                     if (memcmp(c1->data1 + siztype * row,

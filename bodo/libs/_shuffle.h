@@ -1,4 +1,8 @@
 // Copyright (C) 2019 Bodo Inc. All rights reserved.
+#ifndef _SHUFFLE_H_INCLUDED
+#define _SHUFFLE_H_INCLUDED
+
+
 #include <mpi.h>
 #include "_bodo_common.h"
 
@@ -116,3 +120,5 @@ bool need_reshuffling(table_info* in_table, double crit_fraction);
    @return the reshuffled table
  */
 table_info* shuffle_renormalization(table_info* in_table);
+
+#endif // _SHUFFLE_H_INCLUDED

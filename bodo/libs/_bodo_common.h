@@ -1,6 +1,6 @@
 // Copyright (C) 2019 Bodo Inc. All rights reserved.
-#ifndef BODO_COMMON_H_
-#define BODO_COMMON_H_
+#ifndef BODO_COMMON_H_INCLUDED_
+#define BODO_COMMON_H_INCLUDED_
 
 #if defined(__GNUC__)
 #define __UNUSED__ __attribute__((unused))
@@ -345,4 +345,4 @@ inline bool is_na(const uint8_t* null_bitmap, int64_t i) {
 }
 }
 
-#endif /* BODO_COMMON_H_ */
+#endif /* BODO_COMMON_H_INCLUDED_ */

@@ -1,6 +1,6 @@
 // Copyright (C) 2020 Bodo Inc. All rights reserved.
-#ifndef BODO_DATETIME_H_
-#define BODO_DATETIME_H_
+#ifndef BODO_DATETIME_H_INCLUDED_
+#define BODO_DATETIME_H_INCLUDED_
 #include <cstdint>
 
 static int is_leapyear(int64_t year) {
@@ -113,4 +113,4 @@ static int64_t days_to_yearsdays(int64_t *days_) {
 }
 
 
-#endif /* BODO_DATETIME_H_ */
+#endif /* BODO_DATETIME_H_INCLUDED_ */
