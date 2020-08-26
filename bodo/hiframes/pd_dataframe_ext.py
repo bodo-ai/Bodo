@@ -2625,18 +2625,22 @@ def lower_val_isin_dummy(context, builder, sig, args):
 def append_overload(df, other, ignore_index=False, verify_integrity=False, sort=None):
     if isinstance(other, DataFrameType):
         return lambda df, other, ignore_index=False, verify_integrity=False, sort=None: pd.concat(
-            (df, other)
+            (df, other), ignore_index=ignore_index, verify_integrity=verify_integrity
         )
 
-    # TODO: tuple case
+    if isinstance(other, types.BaseTuple):
+        return lambda df, other, ignore_index=False, verify_integrity=False, sort=None: pd.concat(
+            (df,) + other, ignore_index=ignore_index, verify_integrity=verify_integrity
+        )
+
     # TODO: non-homogenous build_list case
     if isinstance(other, types.List) and isinstance(other.dtype, DataFrameType):
         return lambda df, other, ignore_index=False, verify_integrity=False, sort=None: pd.concat(
-            [df] + other
+            [df] + other, ignore_index=ignore_index, verify_integrity=verify_integrity
         )
 
-    raise ValueError(
-        "invalid df.append() input. Only dataframe and list" " of dataframes supported"
+    raise BodoError(
+        "invalid df.append() input. Only dataframe and list/tuple of dataframes supported"
     )
 
 
