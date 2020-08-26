@@ -1327,9 +1327,9 @@ def overload_gen_na_array(n, arr):
     # TODO: support all array types
 
     if isinstance(arr, types.TypeRef):
-        dtype = arr.instance_type.dtype
-    else:
-        dtype = arr.dtype
+        arr = arr.instance_type
+
+    dtype = arr.dtype
 
     if isinstance(arr, ArrayItemArrayType):
         data_arr_type = arr.dtype
