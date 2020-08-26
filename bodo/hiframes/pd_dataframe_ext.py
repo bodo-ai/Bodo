@@ -2059,16 +2059,17 @@ def concat_overload(
                             i, col_no
                         )
                     )
-            func_text += "  A{} = bodo.libs.array_kernels.concat(({}))\n".format(
+            func_text += "  A{} = bodo.libs.array_kernels.concat(({},))\n".format(
                 col_no, ", ".join(args)
             )
         if ignore_index:
             index = "bodo.hiframes.pd_index_ext.init_range_index(0, len(A0), 1, None)"
         else:
-            index = "bodo.utils.conversion.index_from_array(bodo.libs.array_kernels.concat(({})))\n".format(
+            index = "bodo.utils.conversion.index_from_array(bodo.libs.array_kernels.concat(({},)))\n".format(
             ", ".join(
                 "bodo.utils.conversion.index_to_array(bodo.hiframes.pd_dataframe_ext.get_dataframe_index(objs[{}]))".format(i)
-                for i in range(len(objs.types))
+                # ignore dummy string index of empty dataframes (test_append_empty_df)
+                for i in range(len(objs.types)) if len(objs[i].columns) > 0
             ))
         return bodo.hiframes.dataframe_impl._gen_init_df(
             func_text,
@@ -2082,7 +2083,7 @@ def concat_overload(
     if isinstance(objs, types.BaseTuple) and isinstance(objs.types[0], SeriesType):
         assert all(isinstance(t, SeriesType) for t in objs.types)
         # TODO: index and name
-        func_text += "  out_arr = bodo.libs.array_kernels.concat(({}))\n".format(
+        func_text += "  out_arr = bodo.libs.array_kernels.concat(({},))\n".format(
             ", ".join(
                 "bodo.hiframes.pd_series_ext.get_series_data(objs[{}])".format(i)
                 for i in range(len(objs.types))
@@ -2091,7 +2092,7 @@ def concat_overload(
         if ignore_index:
             func_text += "  index = bodo.hiframes.pd_index_ext.init_range_index(0, len(out_arr), 1, None)\n"
         else:
-            func_text += "  index = bodo.utils.conversion.index_from_array(bodo.libs.array_kernels.concat(({})))\n".format(
+            func_text += "  index = bodo.utils.conversion.index_from_array(bodo.libs.array_kernels.concat(({},)))\n".format(
             ", ".join(
                 "bodo.utils.conversion.index_to_array(bodo.hiframes.pd_series_ext.get_series_index(objs[{}]))".format(i)
                 for i in range(len(objs.types))
