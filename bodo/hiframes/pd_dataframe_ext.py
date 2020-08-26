@@ -2062,8 +2062,14 @@ def concat_overload(
             func_text += "  A{} = bodo.libs.array_kernels.concat(({}))\n".format(
                 col_no, ", ".join(args)
             )
-        # TODO(ehsan): proper index support
-        index = "bodo.hiframes.pd_index_ext.init_range_index(0, len(A0), 1, None)"
+        if ignore_index:
+            index = "bodo.hiframes.pd_index_ext.init_range_index(0, len(A0), 1, None)"
+        else:
+            index = "bodo.utils.conversion.index_from_array(bodo.libs.array_kernels.concat(({})))\n".format(
+            ", ".join(
+                "bodo.utils.conversion.index_to_array(bodo.hiframes.pd_dataframe_ext.get_dataframe_index(objs[{}]))".format(i)
+                for i in range(len(objs.types))
+            ))
         return bodo.hiframes.dataframe_impl._gen_init_df(
             func_text,
             all_colnames,
@@ -2082,7 +2088,14 @@ def concat_overload(
                 for i in range(len(objs.types))
             )
         )
-        func_text += "  index = bodo.hiframes.pd_index_ext.init_range_index(0, len(out_arr), 1, None)\n"
+        if ignore_index:
+            func_text += "  index = bodo.hiframes.pd_index_ext.init_range_index(0, len(out_arr), 1, None)\n"
+        else:
+            func_text += "  index = bodo.utils.conversion.index_from_array(bodo.libs.array_kernels.concat(({})))\n".format(
+            ", ".join(
+                "bodo.utils.conversion.index_to_array(bodo.hiframes.pd_series_ext.get_series_index(objs[{}]))".format(i)
+                for i in range(len(objs.types))
+            ))
         func_text += (
             "  return bodo.hiframes.pd_series_ext.init_series(out_arr, index)\n"
         )
