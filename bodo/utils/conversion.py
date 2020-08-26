@@ -831,25 +831,6 @@ def overload_extract_index_array(A):
     return lambda A: np.arange(len(A))
 
 
-def extract_index_array_tup(series_tup):  # pragma: no cover
-    return tuple(extract_index_array(s) for s in series_tup)
-
-
-@overload(extract_index_array_tup, no_unliteral=True)
-def overload_extract_index_array_tup(series_tup):
-    n_series = len(series_tup.types)
-    func_text = "def f(series_tup):\n"
-    res = ",".join(
-        "bodo.utils.conversion.extract_index_array(series_tup[{}])".format(i)
-        for i in range(n_series)
-    )
-    func_text += "  return ({}{})\n".format(res, "," if n_series == 1 else "")
-    loc_vars = {}
-    exec(func_text, {"bodo": bodo}, loc_vars)
-    impl = loc_vars["f"]
-    return impl
-
-
 # return the NA value for array type (dtypes that support sentinel NA)
 def get_NA_val_for_arr(arr):  # pragma: no cover
     return np.nan

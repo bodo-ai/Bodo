@@ -2107,6 +2107,20 @@ def concat_overload(
             index,
         )
 
+    # list of Series
+    if isinstance(objs, types.List) and isinstance(objs.dtype, SeriesType):
+        func_text += "  arrs = []\n"
+        func_text += "  for i in range(len(objs)):\n"
+        func_text += "    arrs.append(bodo.hiframes.pd_series_ext.get_series_data(objs[i]))\n"
+        func_text += "  out_arr = bodo.libs.array_kernels.concat(arrs)\n"
+        func_text += "  index = bodo.hiframes.pd_index_ext.init_range_index(0, len(out_arr), 1, None)\n"
+        func_text += (
+            "  return bodo.hiframes.pd_series_ext.init_series(out_arr, index)\n"
+        )
+        loc_vars = {}
+        exec(func_text, {"bodo": bodo, "np": np, "numba": numba}, loc_vars)
+        return loc_vars["impl"]
+
     # TODO: handle other iterables like arrays, lists, ...
     raise BodoError("pd.concat(): input type {} not supported yet".format(objs))
 

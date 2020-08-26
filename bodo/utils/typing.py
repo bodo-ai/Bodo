@@ -673,30 +673,6 @@ class MetaType(types.Type):
 register_model(MetaType)(models.OpaqueModel)
 
 
-# convert const tuple expressions or const list to tuple statically
-def to_const_tuple(arrs):  # pragma: no cover
-    return tuple(arrs)
-
-
-@infer_global(to_const_tuple)
-class ToConstTupleTyper(AbstractTemplate):
-    def generic(self, args, kws):
-        assert not kws
-        assert len(args) == 1
-        arr = args[0]
-        ret_typ = arr
-        # XXX: returns a dummy type that should be fixed in series_pass
-        if isinstance(arr, types.List):
-            ret_typ = types.Tuple((arr.dtype,))
-        return signature(ret_typ, arr)
-
-
-# dummy lowerer
-@lower_builtin(to_const_tuple, types.Any)
-def lower_to_const_tuple(context, builder, sig, args):
-    return context.get_constant_null(sig.return_type)
-
-
 def is_literal_type(t):
     return (
         # LiteralStrKeyDict is not always a literal since its values are not necessarily

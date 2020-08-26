@@ -189,8 +189,6 @@ class SeriesPass:
         )
         # Loc object of current location being translated
         self.curr_loc = self.func_ir.loc
-        # keep track of tuple variables change by to_const_tuple
-        self._type_changed_vars = []
 
     def run(self):
         blocks = self.func_ir.blocks
@@ -286,12 +284,6 @@ class SeriesPass:
     def _run_assign(self, assign):
         lhs = assign.target.name
         rhs = assign.value
-
-        # fix type of lhs if type of rhs has been changed
-        if isinstance(rhs, ir.Var) and rhs.name in self._type_changed_vars:
-            self.typemap.pop(lhs)
-            self.typemap[lhs] = self.typemap[rhs.name]
-            self._type_changed_vars.append(lhs)
 
         if isinstance(rhs, ir.Expr):
             if rhs.op == "getattr":
@@ -1449,13 +1441,6 @@ class SeriesPass:
             nodes.append(assign)
             return nodes
 
-        if fdef == ("get_series_data_tup", "bodo.hiframes.pd_series_ext"):
-            arg = rhs.args[0]
-            impl = bodo.hiframes.pd_series_ext.overload_get_series_data_tup(
-                self.typemap[arg.name]
-            )
-            return compile_func_single_block(impl, (arg,), assign.target, self)
-
         if fdef == ("get_index_data", "bodo.hiframes.pd_index_ext"):
             var_def = guard(get_definition, self.func_ir, rhs.args[0])
             call_def = guard(find_callname, self.func_ir, var_def)
@@ -1661,19 +1646,6 @@ class SeriesPass:
             call_def = guard(find_callname, self.func_ir, var_def)
             if call_def == ("init_dataframe", "bodo.hiframes.pd_dataframe_ext"):
                 assign.value = var_def.args[1]
-
-        if fdef == ("to_const_tuple", "bodo.utils.typing"):
-            tup = rhs.args[0]
-            tup_items = self._get_const_tup(tup)
-            new_tup = ir.Expr.build_tuple(tup_items, tup.loc)
-            assign.value = new_tup
-            # fix type and definition of lhs
-            self.typemap.pop(lhs)
-            self._type_changed_vars.append(lhs)
-            self.typemap[lhs] = types.Tuple(
-                tuple(self.typemap[a.name] for a in tup_items)
-            )
-            return [assign]
 
         # inline conversion functions to enable optimization
         if func_mod == "bodo.utils.conversion" and func_name != "flatten_array":

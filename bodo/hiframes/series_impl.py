@@ -1159,83 +1159,19 @@ def overload_series_sort_values(
 def overload_series_append(S, to_append, ignore_index=False, verify_integrity=False):
     unsupported_args = dict(verify_integrity=verify_integrity)
     arg_defaults = dict(verify_integrity=False)
-    check_unsupported_args("series.series_append", unsupported_args, arg_defaults)
+    check_unsupported_args("series.append", unsupported_args, arg_defaults)
 
-    if is_overload_true(ignore_index):
-        if isinstance(to_append, (types.BaseTuple, types.List)):
+    # call pd.concat()
+    # single Series case
+    if isinstance(to_append, SeriesType):
+        return lambda S, to_append, ignore_index=False, verify_integrity=False: pd.concat((S, to_append), ignore_index=ignore_index, verify_integrity=verify_integrity)  # pragma: no cover
 
-            def impl_multi_noindex(
-                S, to_append, ignore_index=False, verify_integrity=False
-            ):  # pragma: no cover
-                arr = bodo.hiframes.pd_series_ext.get_series_data(S)
-                tup_other = bodo.utils.typing.to_const_tuple(to_append)
-                other_arrs = bodo.hiframes.pd_series_ext.get_series_data_tup(tup_other)
-                all_arrs = bodo.utils.typing.to_const_tuple((arr,) + other_arrs)
-                out_arr = bodo.libs.array_kernels.concat(all_arrs)
-                index = bodo.hiframes.pd_index_ext.init_range_index(
-                    0, len(out_arr), 1, None
-                )
-                return bodo.hiframes.pd_series_ext.init_series(out_arr, index)
+    # tuple case
+    if isinstance(to_append, types.BaseTuple):
+        return lambda S, to_append, ignore_index=False, verify_integrity=False: pd.concat((S,) + to_append, ignore_index=ignore_index, verify_integrity=verify_integrity)  # pragma: no cover
 
-            return impl_multi_noindex
-
-        def impl_single_noindex(
-            S, to_append, ignore_index=False, verify_integrity=False
-        ):  # pragma: no cover
-            arr = bodo.hiframes.pd_series_ext.get_series_data(S)
-            other = bodo.hiframes.pd_series_ext.get_series_data(to_append)
-            out_arr = bodo.libs.array_kernels.concat((arr, other))
-            index = bodo.hiframes.pd_index_ext.init_range_index(
-                0, len(out_arr), 1, None
-            )
-            return bodo.hiframes.pd_series_ext.init_series(out_arr, index)
-
-        return impl_single_noindex
-
-    # TODO: other containers of Series
-    if isinstance(to_append, (types.BaseTuple, types.List)):
-
-        def impl(
-            S, to_append, ignore_index=False, verify_integrity=False
-        ):  # pragma: no cover
-            arr = bodo.hiframes.pd_series_ext.get_series_data(S)
-            index_arr = bodo.utils.conversion.extract_index_array(S)
-
-            tup_other = bodo.utils.typing.to_const_tuple(to_append)
-            other_arrs = bodo.hiframes.pd_series_ext.get_series_data_tup(tup_other)
-            other_inds = bodo.utils.conversion.extract_index_array_tup(tup_other)
-            # TODO: use regular list when tuple is not required
-            # all_arrs = [arr]
-            # all_inds = [index_arr]
-            # for A in to_append:
-            #     all_arrs.append(bodo.hiframes.pd_series_ext.get_series_data(A))
-            #     all_inds.append(bodo.utils.conversion.extract_index_array(A))
-
-            all_arrs = bodo.utils.typing.to_const_tuple((arr,) + other_arrs)
-            all_inds = bodo.utils.typing.to_const_tuple((index_arr,) + other_inds)
-            out_arr = bodo.libs.array_kernels.concat(all_arrs)
-            out_index_arr = bodo.libs.array_kernels.concat(all_inds)
-            out_index = bodo.utils.conversion.convert_to_index(out_index_arr)
-            return bodo.hiframes.pd_series_ext.init_series(out_arr, out_index)
-
-        return impl
-
-    def impl_single(
-        S, to_append, ignore_index=False, verify_integrity=False
-    ):  # pragma: no cover
-        arr = bodo.hiframes.pd_series_ext.get_series_data(S)
-        index_arr = bodo.utils.conversion.extract_index_array(S)
-        # name = bodo.hiframes.pd_series_ext.get_series_name(S)
-
-        other = bodo.hiframes.pd_series_ext.get_series_data(to_append)
-        other_index = bodo.utils.conversion.extract_index_array(to_append)
-
-        out_arr = bodo.libs.array_kernels.concat((arr, other))
-        out_index_arr = bodo.libs.array_kernels.concat((index_arr, other_index))
-        out_index = bodo.utils.conversion.convert_to_index(out_index_arr)
-        return bodo.hiframes.pd_series_ext.init_series(out_arr, out_index)
-
-    return impl_single
+    # list/other cases
+    return lambda S, to_append, ignore_index=False, verify_integrity=False: pd.concat([S] + to_append, ignore_index=ignore_index, verify_integrity=verify_integrity)  # pragma: no cover
 
 
 @overload_method(SeriesType, "isin", inline="always", no_unliteral=True)
