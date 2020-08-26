@@ -1981,6 +1981,7 @@ def concat_overload(
     # TODO: support Index
     # TODO(ehsan): proper error checking
     axis = get_overload_const_int(axis)
+    ignore_index = is_overload_true(ignore_index)
 
     func_text = (
         "def impl(objs, axis=0, join='outer', join_axes=None, "
@@ -2097,9 +2098,22 @@ def concat_overload(
             func_text += "  arrs{} = []\n".format(col_no)
             func_text += "  for i in range(len(objs)):\n"
             func_text += "    df = objs[i]\n"
-            func_text += "    arrs{0}.append(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {0}))\n".format(col_no)
-            func_text += "  out_arr{0} = bodo.libs.array_kernels.concat(arrs{0})\n".format(col_no)
-        index = "bodo.hiframes.pd_index_ext.init_range_index(0, len(out_arr0), 1, None)"
+            func_text += "    arrs{0}.append(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {0}))\n".format(
+                col_no
+            )
+            func_text += "  out_arr{0} = bodo.libs.array_kernels.concat(arrs{0})\n".format(
+                col_no
+            )
+        if ignore_index:
+            index = (
+                "bodo.hiframes.pd_index_ext.init_range_index(0, len(out_arr0), 1, None)"
+            )
+        else:
+            func_text += "  arrs_index = []\n"
+            func_text += "  for i in range(len(objs)):\n"
+            func_text += "    df = objs[i]\n"
+            func_text += "    arrs_index.append(bodo.utils.conversion.index_to_array(bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)))\n"
+            index = "bodo.utils.conversion.index_from_array(bodo.libs.array_kernels.concat(arrs_index))\n"
         return bodo.hiframes.dataframe_impl._gen_init_df(
             func_text,
             df_type.columns,
@@ -2111,9 +2125,18 @@ def concat_overload(
     if isinstance(objs, types.List) and isinstance(objs.dtype, SeriesType):
         func_text += "  arrs = []\n"
         func_text += "  for i in range(len(objs)):\n"
-        func_text += "    arrs.append(bodo.hiframes.pd_series_ext.get_series_data(objs[i]))\n"
+        func_text += (
+            "    arrs.append(bodo.hiframes.pd_series_ext.get_series_data(objs[i]))\n"
+        )
         func_text += "  out_arr = bodo.libs.array_kernels.concat(arrs)\n"
-        func_text += "  index = bodo.hiframes.pd_index_ext.init_range_index(0, len(out_arr), 1, None)\n"
+        if ignore_index:
+            func_text += "  index = bodo.hiframes.pd_index_ext.init_range_index(0, len(out_arr), 1, None)\n"
+        else:
+            func_text += "  arrs_index = []\n"
+            func_text += "  for i in range(len(objs)):\n"
+            func_text += "    S = objs[i]\n"
+            func_text += "    arrs_index.append(bodo.utils.conversion.index_to_array(bodo.hiframes.pd_series_ext.get_series_index(S)))\n"
+            func_text += "  index = bodo.utils.conversion.index_from_array(bodo.libs.array_kernels.concat(arrs_index))\n"
         func_text += (
             "  return bodo.hiframes.pd_series_ext.init_series(out_arr, index)\n"
         )
