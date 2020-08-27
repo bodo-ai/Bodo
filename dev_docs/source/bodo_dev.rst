@@ -17,7 +17,7 @@ Bodo Architecture
 
 The figure below provides an overview of Bodo's internal architecture.
 
-- The compiler pipeline is descibed in :ref:`Compiler Stages <dev_compiler_stages>`.
+- The compiler pipeline is described in :ref:`Compiler Stages <dev_compiler_stages>`.
 - `API Extensions` are implementations of Python APIs (e.g. Pandas) using
   Numba's extension features such as `overload`.
 - `IR Extensions` are Bodo IR nodes such as `Join` which are additions to the basic set of Numba IR nodes (e.g. `ir.Assign`).
