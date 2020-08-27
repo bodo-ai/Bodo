@@ -50,6 +50,7 @@ from bodo.io.fs_io import (
     get_hdfs_fs,
     hdfs_list_dir_fnames,
 )
+from bodo.libs.distributed_api import get_start, get_end, get_node_portion
 from numba.extending import intrinsic
 from collections import defaultdict
 
@@ -268,7 +269,6 @@ def _gen_pq_reader_py(
     func_text += "  return ({},)\n".format(
         ", ".join("{0}, {0}_size".format(sanitize_varname(c)) for c in col_names)
     )
-
     loc_vars = {}
     glbs = {
         "get_dataset_reader": _get_dataset_reader,
@@ -564,17 +564,6 @@ def get_parquet_dataset(file_name, parallel, get_row_counts=True):
             if dataset_or_e is None:
                 dataset_or_e = pq.ParquetDataset(file_name, filesystem=fs)
 
-            # store the total number of rows and rows of each piece in the ParquetDataset
-            # object, then broadcast to every process
-            # NOTE: the information that other processes need to only open file
-            # readers for their chunk are the total number of rows and number of rows
-            # of each piece, as well as the path of each piece
-            if get_row_counts:
-                dataset_or_e._bodo_total_rows = 0
-                for piece in dataset_or_e.pieces:
-                    piece._bodo_num_rows = piece.get_metadata().num_rows
-                    dataset_or_e._bodo_total_rows += piece._bodo_num_rows
-
         except BaseException as e:  # BaseException to include BodoError
             dataset_or_e = e
 
@@ -583,6 +572,38 @@ def get_parquet_dataset(file_name, parallel, get_row_counts=True):
 
     if isinstance(dataset_or_e, Exception):
         raise dataset_or_e
+
+    # parallel implementation of getting the row counts for each piece in
+    # the ParquetDataset. Each process works on a set of of pieces. This
+    # information is then (all)-gathered on all processes so that all
+    # processes know the row counts of each piece. total number of rows
+    # is calculated as just the sum over all row counts.
+    # NOTE: the information that other processes need to only open file
+    # readers for their chunk are the total number of rows and number of rows
+    # of each piece, as well as the path of each piece
+
+    if get_row_counts:
+        dataset_or_e._bodo_total_rows = 0
+        num_pieces, num_procs, proc_rank = (
+            len(dataset_or_e.pieces),
+            bodo.get_size(),
+            bodo.get_rank(),
+        )
+        node_start, node_end, node_portion_size = (
+            get_start(num_pieces, num_procs, proc_rank),
+            get_end(num_pieces, num_procs, proc_rank),
+            get_node_portion(num_pieces, num_procs, proc_rank),
+        )
+        local_bodo_num_rows = np.empty(node_portion_size, dtype=np.int64)
+        for i, piece in enumerate(dataset_or_e.pieces[node_start:node_end]):
+            local_bodo_num_rows[i] = piece.get_metadata().num_rows
+
+        bodo_num_rows = comm.allgather(local_bodo_num_rows)
+        bodo_num_rows = np.concatenate(bodo_num_rows)
+
+        for i in range(len(dataset_or_e.pieces)):
+            dataset_or_e.pieces[i]._bodo_num_rows = bodo_num_rows[i]
+            dataset_or_e._bodo_total_rows += bodo_num_rows[i]
 
     return dataset_or_e
 
