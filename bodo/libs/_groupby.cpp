@@ -1128,10 +1128,199 @@ void cumulative_computation_T(array_info* arr, array_info* out_arr,
     }
 }
 
+void cumulative_computation_list_string(array_info* arr, array_info* out_arr,
+                                        grouping_info const& grp_inf, int32_t const& ftype,
+                                        bool const& skipna) {
+#ifdef DEBUG_GROUPBY
+    std::cout << "Beginning of cumulative_computation_string\n";
+#endif
+    if (ftype != Bodo_FTypes::cumsum) {
+        Bodo_PyErr_SetString(PyExc_RuntimeError, "So far only cumulative sums for list-strings");
+    }
+    int64_t n = arr->length;
+    using T = std::pair<bool, std::vector<std::string>>;
+    std::vector<T> V(n);
+    uint8_t* null_bitmask = (uint8_t*)arr->null_bitmask;
+    char* data = arr->data1;
+    uint32_t* data_offsets = (uint32_t*)arr->data2;
+    uint32_t* index_offsets = (uint32_t*)arr->data3;
+    auto get_entry=[&](int64_t i) -> T {
+        bool isna = !GetBit(null_bitmask, i);
+        uint32_t start_idx_offset = index_offsets[i];
+        uint32_t end_idx_offset = index_offsets[i + 1];
+        std::vector<std::string> LStr;
+        for (uint32_t idx=start_idx_offset; idx<end_idx_offset; idx++) {
+            uint32_t str_len = data_offsets[idx+1] - data_offsets[idx];
+            uint32_t start_data_offset = data_offsets[idx];
+            std::string val(&data[start_data_offset], str_len);
+            LStr.push_back(val);
+        }
+        return {isna, LStr};
+    };
+    size_t num_group = grp_inf.group_to_first_row.size();
+    for (size_t igrp = 0; igrp < num_group; igrp++) {
+        int64_t i = grp_inf.group_to_first_row[igrp];
+        T ePair{false, {}};
+        while (true) {
+            T fPair = get_entry(i);
+            if (fPair.first) {  // the value is a NaN.
+                if (skipna) {
+                    V[i] = fPair;
+                } else {
+                    ePair = fPair;
+                    V[i] = ePair;
+                }
+            } else {  // The value is a normal one.
+                for (auto & eStr : fPair.second)
+                  ePair.second.push_back(eStr);
+                V[i] = ePair;
+            }
+            i = grp_inf.next_row_in_group[i];
+            if (i == -1) break;
+        }
+    }
+    T pairNaN{true, {}};
+    for (auto& idx_miss : grp_inf.list_missing)
+        V[idx_miss] = pairNaN;
+    // Now writing down in the array.
+    int64_t nb_char = 0, nb_str = 0;
+    for (auto & kPair : V) {
+        nb_str += kPair.second.size();
+        for (auto & estr : kPair.second)
+            nb_char += estr.size();
+    }
+    // Doing the alocation trickery.
+    NRT_MemInfo* old_meminfo = out_arr->meminfo;
+    array_info* aux_info = alloc_list_string_array(n, nb_str, nb_char, 0);
+    out_arr->n_sub_elems = nb_str;
+    out_arr->n_sub_sub_elems = nb_char;
+    array_item_arr_payload* payload =
+      (array_item_arr_payload*)(aux_info->meminfo->data);
+    str_arr_payload* sub_payload =
+      (str_arr_payload*)(payload->data->data);
+    out_arr->meminfo = aux_info->meminfo;
+    out_arr->data1 = (char*)sub_payload->data;
+    out_arr->data2 = (char*)sub_payload->offsets;
+    out_arr->data3 = (char*)payload->offsets.data;
+    out_arr->null_bitmask = (char*)payload->null_bitmap.data;
+    delete aux_info;
+    // Writing the strings in output
+    char* data_o = out_arr->data1;
+    uint32_t* data_offsets_o = (uint32_t*)out_arr->data2;
+    uint32_t* index_offsets_o = (uint32_t*)out_arr->data3;
+    uint8_t* null_bitmask_o = (uint8_t*)out_arr->null_bitmask;
+    uint32_t pos_idx = 0;
+    uint32_t pos_char = 0;
+    for (int64_t i=0; i<n; i++) {
+        index_offsets_o[i] = pos_idx;
+        T uPair = V[i];
+        SetBitTo(null_bitmask_o, i, !uPair.first);
+        size_t n_str = V[i].second.size();
+        for (size_t i_str=0; i_str<n_str; i_str++) {
+            std::string estr = V[i].second[i_str];
+            size_t len = estr.size();
+            memcpy(data_o, estr.data(), len);
+            data_offsets_o[pos_idx + i_str] = pos_char;
+            pos_char += len;
+            data_o += len;
+        }
+        pos_idx += n_str;
+    }
+    index_offsets_o[n] = pos_idx;
+    data_offsets_o[nb_str] = pos_char;
+    free_list_string_array(old_meminfo);  // free dummy array
+#ifdef DEBUG_GROUPBY
+    std::cout << "End of cumulative_computation_string\n";
+#endif
+}
+
+void cumulative_computation_string(array_info* arr, array_info* out_arr,
+                                   grouping_info const& grp_inf, int32_t const& ftype,
+                                   bool const& skipna) {
+#ifdef DEBUG_GROUPBY
+    std::cout << "Beginning of cumulative_computation_string\n";
+#endif
+    if (ftype != Bodo_FTypes::cumsum) {
+        Bodo_PyErr_SetString(PyExc_RuntimeError, "So far only cumulative sums for strings");
+    }
+    int64_t n = arr->length;
+    using T = std::pair<bool, std::string>;
+    std::vector<T> V(n);
+    uint8_t* null_bitmask = (uint8_t*)arr->null_bitmask;
+    char* data = arr->data1;
+    uint32_t* offsets = (uint32_t*)arr->data2;
+    auto get_entry=[&](int64_t i) -> T {
+        bool isna = !GetBit(null_bitmask, i);
+        uint32_t start_offset = offsets[i];
+        uint32_t end_offset = offsets[i + 1];
+        uint32_t len = end_offset - start_offset;
+        std::string val(&data[start_offset], len);
+        return {isna, val};
+    };
+    size_t num_group = grp_inf.group_to_first_row.size();
+    for (size_t igrp = 0; igrp < num_group; igrp++) {
+        int64_t i = grp_inf.group_to_first_row[igrp];
+        T ePair{false, ""};
+        while (true) {
+            T fPair = get_entry(i);
+            if (fPair.first) {  // the value is a NaN.
+                if (skipna) {
+                    V[i] = fPair;
+                } else {
+                    ePair = fPair;
+                    V[i] = ePair;
+                }
+            } else {  // The value is a normal one.
+                ePair.second += fPair.second;
+                V[i] = ePair;
+            }
+            i = grp_inf.next_row_in_group[i];
+            if (i == -1) break;
+        }
+    }
+    T pairNaN{true, ""};
+    for (auto& idx_miss : grp_inf.list_missing)
+        V[idx_miss] = pairNaN;
+    // Now writing down in the array.
+    int64_t nb_char = 0;
+    for (auto & kPair : V)
+      nb_char += kPair.second.size();
+    delete[] out_arr->data1;
+    out_arr->data1 = new char[nb_char];
+    out_arr->n_sub_elems = nb_char;
+    // update string array payload to reflect change
+    str_arr_payload* payload =
+        (str_arr_payload*)out_arr->meminfo->data;
+    payload->data = out_arr->data1;
+    // Writing the strings in output
+    char* data_o = out_arr->data1;
+    uint32_t* offsets_o = (uint32_t*)out_arr->data2;
+    uint8_t* null_bitmask_o = (uint8_t*)out_arr->null_bitmask;
+    uint32_t pos = 0;
+    for (int64_t i=0; i<n; i++) {
+        offsets_o[i] = pos;
+        T uPair = V[i];
+        SetBitTo(null_bitmask_o, i, !uPair.first);
+        size_t len = V[i].second.size();
+        memcpy(data_o, V[i].second.data(), len);
+        data_o += len;
+        pos += len;
+    }
+    offsets_o[n] = pos;
+#ifdef DEBUG_GROUPBY
+    std::cout << "End of cumulative_computation_string\n";
+#endif
+}
+
+
 void cumulative_computation(array_info* arr, array_info* out_arr,
                             grouping_info const& grp_inf, int32_t const& ftype,
                             bool const& skipna) {
     Bodo_CTypes::CTypeEnum dtype = arr->dtype;
+    if (arr->arr_type == bodo_array_type::STRING)
+        return cumulative_computation_string(arr, out_arr, grp_inf, ftype, skipna);
+    if (arr->arr_type == bodo_array_type::LIST_STRING)
+        return cumulative_computation_list_string(arr, out_arr, grp_inf, ftype, skipna);
     if (dtype == Bodo_CTypes::INT8)
         return cumulative_computation_T<int8_t, Bodo_CTypes::INT8>(
             arr, out_arr, grp_inf, ftype, skipna);
@@ -3456,8 +3645,11 @@ class GroupbyPipeline {
         udf_info = {udf_table, update_cb, combine_cb, eval_cb};
         // if true, the last column is the index on input and output.
         // this is relevant only to cumulative operation like cumsum.
+        int return_index_i = return_index;
         int index_i = int(input_has_index);
-
+#ifdef DEBUG_GROUPBY
+        std::cout << "return_index_i=" << return_index_i << " index_i=" << index_i << "\n";
+#endif
         // NOTE cumulative operations (cumsum, cumprod, etc.) cannot be mixed
         // with non cumulative ops. This is checked at compile time in
         // aggregate.py
@@ -3481,10 +3673,36 @@ class GroupbyPipeline {
                 break;
             }
         }
-        if (shuffle_before_update) in_table = shuffle_table(in_table, num_keys);
+#ifdef DEBUG_GROUPBY
+        std::cout << "cumulative_op=" << cumulative_op << "\n";
+        std::cout << "req_extended_group_info=" << req_extended_group_info << "\n";
+        std::cout << "shuffle_before_update=" << shuffle_before_update << "\n";
+#endif
+        if (shuffle_before_update) {
+            // Code below is equivalent to
+            // table_info* shuf_table = shuffle_table(update_table, num_keys);
+            // We do this more complicated construction because we may need later the hashes
+            // and comm_info.
+            comm_info_ptr = new mpi_comm_info(in_table->columns);
+            hashes = hash_keys_table(in_table, num_keys, SEED_HASH_PARTITION);
+            comm_info_ptr->set_counts(hashes);
+            in_table = shuffle_table_kernel(in_table, hashes, *comm_info_ptr);
+            if (!cumulative_op) {
+                delete hashes;
+                delete comm_info_ptr;
+            }
+        }
+#ifdef DEBUG_GROUPBY
+        std::cout << "After shuffle\n";
+#endif
+
+
         // a combine operation is only necessary when data is distributed and
         // a shuffle has not been done at the start of the groupby pipeline
         do_combine = is_parallel && !shuffle_before_update;
+#ifdef DEBUG_GROUPBY
+        std::cout << "do_combine=" << do_combine << "\n";
+#endif
 
         array_info* index_col = nullptr;
         if (input_has_index)
@@ -3503,6 +3721,9 @@ class GroupbyPipeline {
                     makeColSet(col, index_col, ftypes[j], do_combine, skipna));
             }
         }
+#ifdef DEBUG_GROUPBY
+        std::cout << "End of constructor\n";
+#endif
     }
 
     ~GroupbyPipeline() {
@@ -3513,16 +3734,31 @@ class GroupbyPipeline {
      * This is the main control flow of the Groupby pipeline.
      */
     table_info* run() {
+#ifdef DEBUG_GROUPBY
+        std::cout << "Before update()\n";
+#endif
         update();
+#ifdef DEBUG_GROUPBY
+        std::cout << "After update()\n";
+#endif
         if (shuffle_before_update)
             // in_table was created in C++ during shuffling and not needed
             // anymore
             delete_table_free_arrays(in_table);
         if (is_parallel && !shuffle_before_update) {
             shuffle();
+#ifdef DEBUG_GROUPBY
+            std::cout << "After shuffle()\n";
+#endif
             combine();
+#ifdef DEBUG_GROUPBY
+            std::cout << "After combine()\n";
+#endif
         }
         eval();
+#ifdef DEBUG_GROUPBY
+        std::cout << "After eval()\n";
+#endif
         return getOutputTable();
     }
 
@@ -3573,7 +3809,13 @@ class GroupbyPipeline {
      * More specifically, it will invoke the update method of each column set.
      */
     void update() {
+#ifdef DEBUG_GROUPBY
+        std::cout << "Beginning of update()\n";
+#endif
         in_table->num_keys = num_keys;
+#ifdef DEBUG_GROUPBY
+        std::cout << "req_extended_group_info=" << req_extended_group_info << "\n";
+#endif
         if (req_extended_group_info) {
             bool consider_missing = cumulative_op;
             grp_info = get_group_info_iterate(in_table, consider_missing);
@@ -3581,6 +3823,9 @@ class GroupbyPipeline {
             get_group_info(*in_table, grp_info.row_to_group,
                            grp_info.group_to_first_row, true);
         num_groups = grp_info.group_to_first_row.size();
+#ifdef DEBUG_GROUPBY
+        std::cout << "num_groups=" << num_groups << "\n";
+#endif
 
         update_table = cur_table = new table_info();
         if (cumulative_op)
@@ -3593,12 +3838,21 @@ class GroupbyPipeline {
             col_set->alloc_update_columns(num_groups, update_table->columns);
             col_set->update(grp_info);
         }
+#ifdef DEBUG_GROUPBY
+        std::cout << "After alloc_update_columns\n";
+#endif
         if (return_index)
             update_table->columns.push_back(
                 copy_array(in_table->columns.back()));
+#ifdef DEBUG_GROUPBY
+        std::cout << "After return_index\n";
+#endif
         if (n_udf > 0)
             udf_info.update(in_table, update_table,
                             grp_info.row_to_group.data());
+#ifdef DEBUG_GROUPBY
+        std::cout << "After n_udf\n";
+#endif
     }
 
     /**
@@ -3606,7 +3860,14 @@ class GroupbyPipeline {
      * shuffled table.
      */
     void shuffle() {
-        table_info* shuf_table = shuffle_table(update_table, num_keys);
+        comm_info_ptr = new mpi_comm_info(update_table->columns);
+        hashes = hash_keys_table(update_table, num_keys, SEED_HASH_PARTITION);
+        comm_info_ptr->set_counts(hashes);
+        table_info* shuf_table = shuffle_table_kernel(update_table, hashes, *comm_info_ptr);
+        if (!cumulative_op) {
+            delete hashes;
+            delete comm_info_ptr;
+        }
         delete_table_free_arrays(update_table);
         update_table = cur_table = shuf_table;
 
@@ -3662,6 +3923,25 @@ class GroupbyPipeline {
             out_table->columns.push_back(col_set->getOutputColumn());
         if (return_index)
             out_table->columns.push_back(cur_table->columns.back());
+        if (cumulative_op && is_parallel) {
+#ifdef DEBUG_GROUPBY
+            std::cout << "Before reverse_shuffle_table_kernel\n";
+#endif
+            table_info* revshuf_table = reverse_shuffle_table_kernel(out_table, hashes, *comm_info_ptr);
+            delete hashes;
+            delete comm_info_ptr;
+#ifdef DEBUG_GROUPBY
+            std::cout << "After reverse_shuffle_table_kernel\n";
+#endif
+            delete_table_free_arrays(out_table);
+#ifdef DEBUG_GROUPBY
+            std::cout << "After delete_table_free_arrays\n";
+#endif
+            out_table = revshuf_table;
+#ifdef DEBUG_GROUPBY
+            std::cout << "After out_table assignation\n";
+#endif
+        }
         delete cur_table;
         return out_table;
     }
@@ -3671,6 +3951,9 @@ class GroupbyPipeline {
      * values of key columns from from_table to populate out_table.
      */
     void alloc_init_keys(table_info* from_table, table_info* out_table) {
+#ifdef DEBUG_GROUPBY
+        std::cout << "Beginning of alloc_init_keys\n";
+#endif
         for (int64_t i = 0; i < num_keys; i++) {
             const array_info* key_col = (*from_table)[i];
             array_info* new_key_col;
@@ -3785,9 +4068,11 @@ class GroupbyPipeline {
             }
             out_table->columns.push_back(new_key_col);
         }
+#ifdef DEBUG_GROUPBY
+        std::cout << "End of alloc_init_keys\n";
+#endif
     }
 
-   private:
     table_info* in_table;  // input table of groupby
     int64_t num_keys;
     bool is_parallel;
@@ -3814,6 +4099,9 @@ class GroupbyPipeline {
 
     grouping_info grp_info;
     size_t num_groups;
+    // shuffling stuff
+    uint32_t* hashes;
+    mpi_comm_info* comm_info_ptr = nullptr;
 };
 
 template <typename Tkey, typename T, int dtype>
@@ -4441,6 +4729,7 @@ int determine_groupby_strategy(table_info* in_table, int64_t num_keys,
         return 0;  // For too many categories the hash partition will be better
     return 1;      // all conditions satisfied. Let's go for EXSCAN code
 }
+
 
 table_info* groupby_and_aggregate(table_info* in_table, int64_t num_keys,
                                   bool input_has_index, int* ftypes,

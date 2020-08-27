@@ -3,6 +3,7 @@
 #include "_bodo_common.h"
 #include "_murmurhash3.h"
 #include "_array_utils.h"
+#include "_array_hash.h"
 
 #undef DEBUG_HASH
 

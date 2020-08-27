@@ -396,22 +396,6 @@ def test_groupby_built_in_col_type():
         bodo.jit(impl)(df)
 
 
-def test_groupby_cumsum_in_col_str():
-    """
-    Test Groupby.cumsum() does not accept string columns
-    """
-
-    def impl(df):
-        return df.groupby(by=["A"]).cumsum()
-
-    df = pd.DataFrame({"A": [1, 2, 2], "B": ["aa", "bb", "cc"]})
-    with pytest.raises(
-        BodoError,
-        match="Groupby.cumsum.* only supports columns of types integer, float, string or liststring",
-    ):
-        bodo.jit(impl)(df)
-
-
 def test_groupby_cumsum_col_type():
     """
     Test Groupby.cumsum() only accepts integers and floats
@@ -620,9 +604,13 @@ def test_groupby_unsupported_error_checking():
     """ Test that a Bodo error is raised for unsupported
     groupby methods
     """
+
     def test_method(df):
         return df.groupby("a").sample(n=1, random_state=1)
 
     with pytest.raises(BodoError, match="not supported yet"):
-        bodo.jit(test_method)(df = pd.DataFrame(
-            {"a": ["red"] * 2 + ["blue"] * 2 + ["black"] * 2, "b": range(6)}))
+        bodo.jit(test_method)(
+            df=pd.DataFrame(
+                {"a": ["red"] * 2 + ["blue"] * 2 + ["black"] * 2, "b": range(6)}
+            )
+        )

@@ -554,6 +554,67 @@ def test_cumsum_random_index():
     check_func(test_impl, (df3,), sort_output=True, check_dtype=False)
 
 
+def test_cumsum_reverse_shuffle_list_string():
+    """We want to use here the classical scheme of the groupby for cumsum.
+    We trigger it by using strings which are not supported by the Exscan scheme"""
+
+    def f(df):
+        df["C"] = df.groupby("A").B.cumsum()
+        return df
+
+    random.seed(5)
+    n = 10
+    colA = [random.randint(0, 10) for _ in range(n)]
+    colB = [
+        random.choices(["A", "BB", "CCC", "DE"], k=random.randint(3, 10))
+        for _ in range(n)
+    ]
+    df = pd.DataFrame({"A": colA, "B": colB})
+    bodo_f = bodo.jit(f)
+    # We use the output of bodo because the functionality is missing from pandas
+    df_out = bodo_f(df)
+    check_func(f, (df,), convert_columns_to_pandas=True, py_output=df_out)
+
+
+def test_cumsum_reverse_shuffle_string():
+    """We want to use here the classical scheme of the groupby for cumsum.
+    We trigger it by using strings which are not supported by the Exscan scheme"""
+
+    def f(df):
+        df["C"] = df.groupby("A").B.cumsum()
+        return df
+
+    random.seed(5)
+    n = 10
+    colA = [random.randint(0, 10) for _ in range(n)]
+    colB = [
+        "".join(random.choices(["A", "B", "C"], k=random.randint(3, 10)))
+        for _ in range(n)
+    ]
+    df = pd.DataFrame({"A": colA, "B": colB})
+    bodo_f = bodo.jit(f)
+    # We use the output of bodo because the functionality is missing from pandas
+    df_out = bodo_f(df)
+    check_func(f, (df,), py_output=df_out)
+
+
+def test_cumsum_reverse_shuffle_large_numpy():
+    """We want to use here the classical scheme of the groupby for cumsum.
+    We trigger it by using strings which are not supported by the Exscan scheme"""
+
+    def f(df):
+        df["C"] = df.groupby("A").B.cumsum()
+        return df
+
+    random.seed(5)
+    n = 10000
+    n_key = 10000
+    colA = [random.randint(0, n_key) for _ in range(n)]
+    colB = [random.randint(0, 50) for _ in range(n)]
+    df = pd.DataFrame({"A": colA, "B": colB})
+    check_func(f, (df,))
+
+
 def test_sum_categorical_key():
     """Testing of categorical keys and their missing value"""
 

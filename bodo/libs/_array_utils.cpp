@@ -1370,11 +1370,19 @@ void DEBUG_append_to_out_array(std::shared_ptr<arrow::Array> input_array,
     }
 }
 
+#undef DEBUG_DEBUG // Yes, it is a concept
+
 std::vector<std::string> DEBUG_PrintColumn(array_info* arr) {
     size_t nRow = arr->length;
     std::vector<std::string> ListStr(nRow);
     std::string strOut;
+#ifdef DEBUG_DEBUG
+    std::cout << "Beginning of DEBUG_PrintColumn\n";
+#endif
     if (arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
+#ifdef DEBUG_DEBUG
+        std::cout << "DEBUG, Case NULLABLE_INT_BOOL\n";
+#endif
         uint8_t* null_bitmask = (uint8_t*)arr->null_bitmask;
         uint64_t siztype = numpy_item_size[arr->dtype];
         for (size_t iRow = 0; iRow < nRow; iRow++) {
@@ -1388,8 +1396,10 @@ std::vector<std::string> DEBUG_PrintColumn(array_info* arr) {
             ListStr[iRow] = strOut;
         }
     }
-    if ((arr->arr_type == bodo_array_type::NUMPY) ||
-        (arr->arr_type == bodo_array_type::CATEGORICAL)) {
+    if (arr->arr_type == bodo_array_type::NUMPY) {
+#ifdef DEBUG_DEBUG
+        std::cout << "DEBUG, Case NUMPY\n";
+#endif
         uint64_t siztype = numpy_item_size[arr->dtype];
         for (size_t iRow = 0; iRow < nRow; iRow++) {
             char* ptrdata1 = &(arr->data1[siztype * iRow]);
@@ -1398,15 +1408,30 @@ std::vector<std::string> DEBUG_PrintColumn(array_info* arr) {
         }
     }
     if (arr->arr_type == bodo_array_type::STRING) {
+#ifdef DEBUG_DEBUG
+        std::cout << "DEBUG, Case STRING\n";
+#endif
         uint8_t* null_bitmask = (uint8_t*)arr->null_bitmask;
         uint32_t* data2 = (uint32_t*)arr->data2;
         char* data1 = arr->data1;
+#ifdef DEBUG_DEBUG
+        std::cout << "DEBUG, We have the pointers\n";
+#endif
         for (size_t iRow = 0; iRow < nRow; iRow++) {
+#ifdef DEBUG_DEBUG
+            std::cout << "DEBUG, iRow=" << iRow << "\n";
+#endif
             bool bit = GetBit(null_bitmask, iRow);
+#ifdef DEBUG_DEBUG
+            std::cout << "DEBUG, bit=" << bit << "\n";
+#endif
             if (bit) {
                 uint32_t start_pos = data2[iRow];
                 uint32_t end_pos = data2[iRow + 1];
                 uint32_t len = end_pos - start_pos;
+#ifdef DEBUG_DEBUG
+                std::cout << "start_pos=" << start_pos << " end_pos=" << end_pos << " len=" << len << "\n";
+#endif
                 char* strname;
                 strname = new char[len + 1];
                 for (uint32_t i = 0; i < len; i++) {
@@ -1422,6 +1447,9 @@ std::vector<std::string> DEBUG_PrintColumn(array_info* arr) {
         }
     }
     if (arr->arr_type == bodo_array_type::LIST_STRING) {
+#ifdef DEBUG_DEBUG
+        std::cout << "DEBUG, Case LIST_STRING\n";
+#endif
         uint8_t* null_bitmask = (uint8_t*)arr->null_bitmask;
         uint32_t* data3 = (uint32_t*)arr->data3;
         uint32_t* data2 = (uint32_t*)arr->data2;
@@ -1453,6 +1481,9 @@ std::vector<std::string> DEBUG_PrintColumn(array_info* arr) {
         }
     }
     if (arr->arr_type == bodo_array_type::ARROW) {
+#ifdef DEBUG_DEBUG
+        std::cout << "DEBUG, Case ARROW\n";
+#endif
         std::shared_ptr<arrow::Array> in_arr = arr->array;
         for (size_t iRow = 0; iRow < nRow; iRow++) {
             strOut = "";
@@ -1461,6 +1492,9 @@ std::vector<std::string> DEBUG_PrintColumn(array_info* arr) {
         }
     }
     if (arr->arr_type == bodo_array_type::CATEGORICAL) {
+#ifdef DEBUG_DEBUG
+        std::cout << "DEBUG, Case CATEGORICAL\n";
+#endif
         uint64_t siztype = numpy_item_size[arr->dtype];
         for (size_t iRow = 0; iRow < nRow; iRow++) {
             char* ptrdata1 = &(arr->data1[siztype * iRow]);
@@ -1480,7 +1514,7 @@ void DEBUG_PrintSetOfColumn(std::ostream& os,
     }
     std::vector<int> ListLen(nCol);
     int nRowMax = 0;
-    os << "List of number of rows:";
+    os << "nCol=" << nCol << " List of number of rows:";
     for (int iCol = 0; iCol < nCol; iCol++) {
         int nRow = ListArr[iCol]->length;
         os << " " << nRow;

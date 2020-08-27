@@ -113,6 +113,9 @@ def check_func(
             py_output = func(*call_args_mapped)
         else:
             py_output = func(*call_args)
+    else:
+        if convert_columns_to_pandas:
+            py_output = convert_non_pandas_columns(py_output)
 
     # sequential
     w = check_func_seq(
