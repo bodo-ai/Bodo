@@ -140,6 +140,16 @@ def create_date_field_overload(field):
         elif field == "is_leap_year":
             func_text += "        dt, year, days = bodo.hiframes.pd_timestamp_ext.extract_year_days(dt64)\n"
             func_text += "        out_arr[i] = bodo.hiframes.pd_timestamp_ext.is_leap_year(year)\n"
+        elif field in ("daysinmonth", "days_in_month"):
+            funcdict = {
+                "days_in_month": "get_days_in_month",
+                "daysinmonth": "get_days_in_month",
+            }
+            func_text += "        dt, year, days = bodo.hiframes.pd_timestamp_ext.extract_year_days(dt64)\n"
+            func_text += "        month, day = bodo.hiframes.pd_timestamp_ext.get_month_day(year, days)\n"
+            func_text += "        out_arr[i] = bodo.hiframes.pd_timestamp_ext.{}(year, month)\n".format(
+                funcdict[field]
+            )
         else:
             func_text += "        ts = bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(dt64)\n"
             func_text += "        out_arr[i] = ts." + field + "\n"

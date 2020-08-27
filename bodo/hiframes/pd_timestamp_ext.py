@@ -84,6 +84,8 @@ date_fields = [
     "nanosecond",
     "dayofyear",
     "dayofweek",
+    "daysinmonth",
+    "days_in_month",
     "is_leap_year",
 ]
 
@@ -582,8 +584,17 @@ def overload_pd_dayofweek(ptt):
     return pd_dayofweek
 
 
+@overload_attribute(PandasTimestampType, "days_in_month")
+@overload_attribute(PandasTimestampType, "daysinmonth")
+def overload_pd_daysinmonth(ptt):
+    def pd_daysinmonth(ptt):
+        return get_days_in_month(ptt.year, ptt.month)
+
+    return pd_daysinmonth
+
+
 @overload_attribute(PandasTimestampType, "is_leap_year")
-def overload_pd_dayofweek(ptt):
+def overload_pd_is_leap_year(ptt):
     def pd_is_leap_year(ptt):
         return is_leap_year(ptt.year)
 
@@ -815,7 +826,7 @@ def get_day_of_year(year, month, day):
         366,
     ]
 
-    is_leap = (year & 0x3) == 0 and ((year % 100) != 0 or (year % 400) == 0)
+    is_leap = is_leap_year(year)
     mo_off = month_offset[is_leap * 13 + month - 1]
 
     day_of_year = mo_off + day
@@ -825,7 +836,7 @@ def get_day_of_year(year, month, day):
 @numba.njit
 def get_day_of_week(y, m, d):
     """
-    gets the day of the week for the date described by the year month day tuple.
+    gets the day of the week for the date described by the year month day tuple. Assumes that the arguments are valid.
     """
     # mostly copied from https://github.com/pandas-dev/pandas/blob/6b2d0260c818e62052eaf535767f3a8c4b446c69/pandas/_libs/tslibs/ccalendar.pyx#L83
     sakamoto_arr = [0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4]
@@ -834,6 +845,18 @@ def get_day_of_week(y, m, d):
     # convert to python day
     return (day + 6) % 7
 
+
+@numba.njit
+def get_days_in_month(year, month):
+    """
+    gets the number of days in month
+    """
+    # mostly copied from   https://github.com/pandas-dev/pandas/blob/6b2d0260c818e62052eaf535767f3a8c4b446c69/pandas/_libs/tslibs/ccalendar.pyx#L59
+    is_leap_year = ((year & 0x3) == 0 and  ((year % 100) != 0 or (year % 400) == 0))
+    days_per_month_array = [
+        31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31,
+        31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+    return days_per_month_array[12 * is_leap_year + month - 1]
 
 @numba.njit
 def is_leap_year(year):
