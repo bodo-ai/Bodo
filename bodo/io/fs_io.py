@@ -82,6 +82,9 @@ def s3_list_dir_fnames(fs, path):
     ["s3://bucket-name/path/file_name", ...]
     If path is a file, return None
     """
+    import s3fs
+    import botocore
+
     file_names = None
     try:
         # check if path is a directory, and if there is a zero-size object
@@ -106,8 +109,21 @@ def s3_list_dir_fnames(fs, path):
             else:
                 file_names = ["s3://" + fname for fname in files]
 
+    except botocore.exceptions.NoCredentialsError as e:
+        raise BodoError(
+            f"S3 NoCredentialsError: {e}.\n"
+            "Most likely cause: you haven't provided S3 credentials, "
+            "neither through environment variables, nor through a local "
+            "AWS setup that makes the credentials available at $HOME/.aws/credentials"
+        )
+    except s3fs.errors.ERROR_CODE_TO_EXCEPTION["AccessDenied"] as e:
+        raise BodoError(
+            f"S3 PermissionError: {e}. \n"
+            "Most likely cause: your S3 credentials are incorrect or do not have the "
+            "correct permissions."
+        )
     except:  # pragma: no cover
-        pass
+        raise
 
     return file_names
 

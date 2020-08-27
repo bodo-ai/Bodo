@@ -1657,30 +1657,38 @@ def _get_excel_df_type_from_file(
     """get dataframe type for read_excel() using file path constant.
     Only rank 0 looks at the file to infer df type, then broadcasts.
     """
+
     from mpi4py import MPI
 
     comm = MPI.COMM_WORLD
 
-    df_type = None
+    df_type_or_e = None
     if bodo.get_rank() == 0:
-        rows_to_read = 100  # TODO: tune this
-        df = pd.read_excel(
-            fname_const,
-            sheet_name=sheet_name,
-            nrows=rows_to_read,
-            skiprows=skiprows,
-            header=header,
-            # index_col=index_col,
-            comment=comment,
-            parse_dates=date_cols,
-        )
-        df_type = numba.typeof(df)
-        # always convert to nullable type since initial rows of a column could be all
-        # int for example, but later rows could have NAs
-        df_type = to_nullable_type(df_type)
+        try:
+            rows_to_read = 100  # TODO: tune this
+            df = pd.read_excel(
+                fname_const,
+                sheet_name=sheet_name,
+                nrows=rows_to_read,
+                skiprows=skiprows,
+                header=header,
+                # index_col=index_col,
+                comment=comment,
+                parse_dates=date_cols,
+            )
+            df_type_or_e = numba.typeof(df)
+            # always convert to nullable type since initial rows of a column could be all
+            # int for example, but later rows could have NAs
+            df_type_or_e = to_nullable_type(df_type_or_e)
+        except Exception as e:
+            df_type_or_e = e
 
-    df_type = comm.bcast(df_type)
-    return df_type
+    df_type_or_e = comm.bcast(df_type_or_e)
+    # raise error on all processors if found (not just rank 0 which would cause hangs)
+    if isinstance(df_type_or_e, Exception):
+        raise BodoError(df_type_or_e)
+
+    return df_type_or_e
 
 
 def _get_sql_df_type_from_db(sql_const, con_const):

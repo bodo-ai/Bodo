@@ -507,85 +507,84 @@ def get_parquet_dataset(file_name, parallel, get_row_counts=True):
 
     comm = MPI.COMM_WORLD
 
+    fs = None
+    dataset_or_e = None
+
     # we read the dataset info only on rank 0 and broadcast it to the rest
-    if parallel and bodo.get_rank() != 0:  # pragma: no cover
-        dataset = comm.bcast(None)
-        if isinstance(dataset, BaseException):
-            # we received an error from rank 0. Use BaseException to include BodoError
-            raise dataset
-        return dataset
+    if (not parallel) or bodo.get_rank() == 0:
+        try:
+            if file_name.startswith("s3://"):
+                fs = get_s3_fs()
+                file_names = s3_list_dir_fnames(fs, file_name)
 
-    try:
-        fs = None
-        dataset = None
-        if file_name.startswith("s3://"):
-            fs = get_s3_fs()
-            file_names = s3_list_dir_fnames(fs, file_name)
+                if file_names is not None:  # pragma: no cover
+                    # Get only the parquet files, otherwise pq.ParquetDataset
+                    # fails when using the s3fs filesystem object
+                    valid_file_names = []
+                    for fname in file_names:
+                        # Spark typically generates one .crc for each .parquet
+                        # file it writes, and we can just skip these
+                        if fname.endswith(".crc"):
+                            continue
+                        try:
+                            pq.ParquetDataset(fname, filesystem=fs)
+                            valid_file_names.append(fname)
+                        except:
+                            # this is not a valid parquet file
+                            pass
+                    if len(valid_file_names) > 0:
+                        try:
+                            dataset_or_e = pq.ParquetDataset(
+                                valid_file_names, filesystem=fs
+                            )
+                        except Exception as e:
+                            raise BodoError(
+                                "read_parquet(): S3 file system cannot be created: {}".format(
+                                    e
+                                )
+                            )
+            elif file_name.startswith("hdfs://"):  # pragma: no cover
+                fs = get_hdfs_fs(file_name)
+                (_, file_names) = hdfs_list_dir_fnames(file_name)
 
-            if file_names is not None:  # pragma: no cover
-                # Get only the parquet files, otherwise pq.ParquetDataset
-                # fails when using the s3fs filesystem object
-                valid_file_names = []
-                for fname in file_names:
-                    # Spark typically generates one .crc for each .parquet
-                    # file it writes, and we can just skip these
-                    if fname.endswith(".crc"):
-                        continue
+                if file_names is not None:
+                    # TODO check if ParquetDataset passing list of file names
+                    # using HDFS filesystem object works or not if the files
+                    # include ".crc" or other non-parquet files. Otherwise we need
+                    # to use a similar scheme as s3 above
                     try:
-                        pq.ParquetDataset(fname, filesystem=fs)
-                        valid_file_names.append(fname)
-                    except:
-                        # this is not a valid parquet file
-                        pass
-                if len(valid_file_names) > 0:
-                    try:
-                        dataset = pq.ParquetDataset(valid_file_names, filesystem=fs)
+                        dataset_or_e = pq.ParquetDataset(file_names, filesystem=fs)
                     except Exception as e:
                         raise BodoError(
-                            "read_parquet(): S3 file system cannot be created: {}".format(
+                            "read_parquet(): Hadoop file system cannot be created: {}".format(
                                 e
                             )
                         )
-        elif file_name.startswith("hdfs://"):  # pragma: no cover
-            fs = get_hdfs_fs(file_name)
-            (_, file_names) = hdfs_list_dir_fnames(file_name)
 
-            if file_names is not None:
-                # TODO check if ParquetDataset passing list of file names
-                # using HDFS filesystem object works or not if the files
-                # include ".crc" or other non-parquet files. Otherwise we need
-                # to use a similar scheme as s3 above
-                try:
-                    dataset = pq.ParquetDataset(file_names, filesystem=fs)
-                except Exception as e:
-                    raise BodoError(
-                        "read_parquet(): Hadoop file system cannot be created: {}".format(
-                            e
-                        )
-                    )
+            if dataset_or_e is None:
+                dataset_or_e = pq.ParquetDataset(file_name, filesystem=fs)
 
-        if dataset is None:
-            dataset = pq.ParquetDataset(file_name, filesystem=fs)
+            # store the total number of rows and rows of each piece in the ParquetDataset
+            # object, then broadcast to every process
+            # NOTE: the information that other processes need to only open file
+            # readers for their chunk are the total number of rows and number of rows
+            # of each piece, as well as the path of each piece
+            if get_row_counts:
+                dataset_or_e._bodo_total_rows = 0
+                for piece in dataset_or_e.pieces:
+                    piece._bodo_num_rows = piece.get_metadata().num_rows
+                    dataset_or_e._bodo_total_rows += piece._bodo_num_rows
 
-        # store the total number of rows and rows of each piece in the ParquetDataset
-        # object, then broadcast to every process
-        # NOTE: the information that other processes need to only open file
-        # readers for their chunk are the total number of rows and number of rows
-        # of each piece, as well as the path of each piece
-        if get_row_counts:
-            dataset._bodo_total_rows = 0
-            for piece in dataset.pieces:
-                piece._bodo_num_rows = piece.get_metadata().num_rows
-                dataset._bodo_total_rows += piece._bodo_num_rows
-        if parallel:
-            assert bodo.get_rank() == 0
-            comm.bcast(dataset)
-        return dataset
-    except BaseException as e:  # BaseException to include BodoError
-        if parallel:
-            assert bodo.get_rank() == 0
-            comm.bcast(e)
-        raise
+        except BaseException as e:  # BaseException to include BodoError
+            dataset_or_e = e
+
+    if parallel:
+        dataset_or_e = comm.bcast(dataset_or_e)
+
+    if isinstance(dataset_or_e, Exception):
+        raise dataset_or_e
+
+    return dataset_or_e
 
 
 def parquet_file_schema(file_name, selected_columns):
