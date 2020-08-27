@@ -1083,9 +1083,9 @@ def _fill_null_arrays(data_dict, col_names, df_len, dtype):
 
     # object array of NaNs if dtype not specified
     if is_overload_none(dtype):
-        dtype = "bodo.string_type"
+        dtype = "bodo.string_array_type"
     else:
-        dtype = "dtype"
+        dtype = "bodo.utils.conversion.dtype_to_array_type(dtype)"
 
     # array with NaNs
     null_arr = "bodo.libs.array_kernels.gen_na_array({}, {})".format(df_len, dtype)

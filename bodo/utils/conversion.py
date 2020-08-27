@@ -514,6 +514,22 @@ def overload_fix_arr_dtype(data, new_dtype, copy=None):
     return lambda data, new_dtype, copy=None: data  # pragma: no cover
 
 
+def dtype_to_array_type(dtype):
+    return bodo.hiframes.pd_series_ext._get_series_array_type(
+        bodo.utils.typing.parse_dtype(dtype)
+    )
+
+
+@overload(dtype_to_array_type)
+def overload_dtype_to_array_type(dtype):
+    """parse dtype and return corresponding array type TypeRef
+    """
+    arr_type = bodo.hiframes.pd_series_ext._get_series_array_type(
+        bodo.utils.typing.parse_dtype(dtype)
+    )
+    return lambda dtype: arr_type
+
+
 @numba.jit
 def flatten_array(A):  # pragma: no cover
     flat_list = []
