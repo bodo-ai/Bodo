@@ -1,7 +1,7 @@
-Real-time Video Enconding on FPGAs
-==================================
+Real-time Video Encoding on FPGAs
+=================================
 
-High quality and efficient video enconding is critical for modern video streaming
+High quality and efficient video encoding is critical for modern video streaming
 services. Bodo and Xilinx are collaborating on a video encoding solution called
 Efficient Elastic Ensemble (E3) that provides high quality encoding in real-time
 at a fraction of total cost of ownership (TCO) of existing solutions.
