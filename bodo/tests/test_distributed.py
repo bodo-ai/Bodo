@@ -470,7 +470,7 @@ def test_1D_Var_alloc4():
     f(df1, df2)
     assert count_array_REPs() == 0
     assert count_array_OneDs() == 0
-    assert count_array_OneD_Vars() != 0
+    assert count_array_OneD_Vars() > 0
 
 
 def test_str_alloc_equiv1():

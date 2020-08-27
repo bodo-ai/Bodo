@@ -1315,6 +1315,12 @@ class DistributedAnalysis:
             size_var = size_def.args[1]
             size_def = guard(get_definition, self.func_ir, size_var)
 
+        # find calc_nitems(r._start, r._stop, r._step) for RangeIndex and match dists
+        # see index test_1D_Var_alloc4 for example
+        r = guard(self._get_calc_n_items_range_index, size_def)
+        if r is not None:
+            self._meet_array_dists(lhs, r.name, array_dists)
+
         # all arrays with equivalent size should have same distribution
         var_set = equiv_set.get_equiv_set(size_var)
         if not var_set:
@@ -2038,6 +2044,33 @@ class DistributedAnalysis:
                     new_body.append(inst)
 
             block.body = new_body
+
+    def _get_calc_n_items_range_index(self, size_def):
+        """match RangeIndex calc_nitems(r._start, r._stop, r._step) call and return r
+        """
+        require(
+            find_callname(self.func_ir, size_def)
+            == ("calc_nitems", "bodo.libs.array_kernels")
+        )
+        start_def = get_definition(self.func_ir, size_def.args[0])
+        stop_def = get_definition(self.func_ir, size_def.args[1])
+        step_def = get_definition(self.func_ir, size_def.args[2])
+        require(is_expr(start_def, "getattr") and start_def.attr == "_start")
+        r = start_def.value
+        require(
+            isinstance(self.typemap[r.name], bodo.hiframes.pd_index_ext.RangeIndexType)
+        )
+        require(
+            is_expr(stop_def, "getattr")
+            and stop_def.attr == "_stop"
+            and stop_def.value.name == r.name
+        )
+        require(
+            is_expr(step_def, "getattr")
+            and step_def.attr == "_step"
+            and step_def.value.name == r.name
+        )
+        return r
 
     def _get_concat_reduce_vars(self, varname, concat_reduce_vars=None):
         """get output variables of array_kernels.concat() calls which are related to
