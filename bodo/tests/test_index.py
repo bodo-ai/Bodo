@@ -50,6 +50,12 @@ def test_range_index_constructor(memory_leak_check):
     r = pd.RangeIndex(3, 10, 2)
     assert bodo.jit(impl7)(r) == impl7(r)
 
+    def impl8():  # pd.Index
+        return pd.Index(range(1,10))
+
+    pd.testing.assert_index_equal(bodo.jit(impl8)(), impl8())
+
+
 
 def test_numeric_index_constructor(memory_leak_check):
     """
@@ -95,6 +101,11 @@ def test_numeric_index_constructor(memory_leak_check):
         return pd.Float64Index(np.ones(3, dtype=np.int32))
 
     pd.testing.assert_index_equal(bodo.jit(impl8)(), impl8())
+
+    def impl9():  # pd.Index
+        return pd.Index(np.ones(3, dtype=np.int64))
+
+    pd.testing.assert_index_equal(bodo.jit(impl9)(), impl9())
 
 
 def test_init_numeric_index_array_analysis(memory_leak_check):

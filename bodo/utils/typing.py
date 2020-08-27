@@ -35,6 +35,15 @@ CONST_DICT_SENTINEL = "$_bodo_const_dict_$"
 
 list_cumulative = {"cumsum", "cumprod", "cummin", "cummax"}
 
+def is_array_or_list_type(in_dtype):
+    return isinstance(in_dtype, (types.List, types.Array))
+
+def is_signed_int_type(in_dtype):
+    return in_dtype == types.int64 or in_dtype == types.int32
+
+def is_unsigned_int_type(in_dtype):
+    return in_dtype == types.uint64 or in_dtype == types.uint32
+
 
 def is_dtype_nullable(in_dtype):
     """checks whether 'in_dtype' has sentinel NA values (as opposed to bitmap)"""
