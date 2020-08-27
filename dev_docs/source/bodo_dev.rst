@@ -12,6 +12,31 @@ and `Series transformations <https://github.com/Bodo-inc/Bodo/blob/master/bodo/t
 implement the `Pandas Series API <https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.Series.html>`_.
 
 
+Bodo Architecture
+-----------------
+
+The figure below provides an overview of Bodo's internal architecture.
+
+- The compiler pipeline is descibed in :ref:`Compiler Stages <dev_compiler_stages>`.
+- `API Extensions` are implementations of Python APIs (e.g. Pandas) using
+  Numba's extension features such as `overload`.
+- `IR Extensions` are Bodo IR nodes such as `Join` which are additions to the basic set of Numba IR nodes (e.g. `ir.Assign`).
+- `Arrays` are Bodo's underlying array data structures to hold data for Series/DataFrame, such as strings, decimals, etc.
+- `Builtin Kernels` are Bodo's implementation of some operations that cannot be represented in regular parallel loops
+  due to more complex parallel structure, such as `unique`.
+- `I/O` is Bodo's I/O capabilities, such as scalable read/write of Parquet files.
+- `Utils` is a collection of utility functions for all stages of compilation and runtime.
+- `C++ Runtime` consists of efficient parallel implementation of some operations in MPI/C++ such as Join.
+  Using C++ avoids Numba's compilation time, and enables the use of C++ libraries.
+
+
+.. figure:: ../figs/Bodo_arch.jpeg
+    :alt: Bodo Architecture
+
+    Bodo Architecture
+
+
+
 .. _dev_compiler_stages:
 
 Compiler Stages
