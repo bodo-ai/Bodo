@@ -50,4 +50,18 @@ automatically by the JIT compiler. This enables fully elastic and scalable execu
 #. Computation is parallelized and offloaded to FPGA devices automatically.
 #. The output is written to a file in parallel (``result.tofile``), which essentially "stitches" the data chunks together.
 
+To execute a E3 program all you need to do is execute your normal Python program in MPI and 
+indicate the number of processes you want.
+
+For example to use 8 processes, you would execute the command: 
+
+.. code:: bash
+
+mpiexec -n 8 python -u E3.py video_args
+
+The components of this command are:
+
+#. ``mpiexec -n 8`` - Create 8 MPI processes.
+#. ``python -u E3.py video_args`` - Execute your python program using the MPI processes.
+
 This page will include more details of supported APIs and operations as incorporated in future versions of Bodo.
