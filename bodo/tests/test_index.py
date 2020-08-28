@@ -51,10 +51,9 @@ def test_range_index_constructor(memory_leak_check):
     assert bodo.jit(impl7)(r) == impl7(r)
 
     def impl8():  # pd.Index
-        return pd.Index(range(1,10))
+        return pd.Index(range(1, 10))
 
     pd.testing.assert_index_equal(bodo.jit(impl8)(), impl8())
-
 
 
 def test_numeric_index_constructor(memory_leak_check):
@@ -109,8 +108,7 @@ def test_numeric_index_constructor(memory_leak_check):
 
 
 def test_init_numeric_index_array_analysis(memory_leak_check):
-    """make sure shape equivalence for init_numeric_index() is applied correctly
-    """
+    """make sure shape equivalence for init_numeric_index() is applied correctly"""
     import numba.tests.test_array_analysis
 
     def impl(d):
@@ -341,8 +339,7 @@ def test_datetime_index_constructor(data, memory_leak_check):
 
 
 def test_init_datetime_index_array_analysis(memory_leak_check):
-    """make sure shape equivalence for init_datetime_index() is applied correctly
-    """
+    """make sure shape equivalence for init_datetime_index() is applied correctly"""
     import numba.tests.test_array_analysis
 
     def impl(n):
@@ -419,8 +416,7 @@ def test_timedelta_index_constructor(data, memory_leak_check):
 
 
 def test_init_timedelta_index_array_analysis(memory_leak_check):
-    """make sure shape equivalence for init_timedelta_index() is applied correctly
-    """
+    """make sure shape equivalence for init_timedelta_index() is applied correctly"""
     import numba.tests.test_array_analysis
 
     def impl(d):
@@ -486,8 +482,7 @@ def test_multi_index_unbox(m_ind, memory_leak_check):
 
 
 def test_init_string_index_array_analysis(memory_leak_check):
-    """make sure shape equivalence for init_string_index() is applied correctly
-    """
+    """make sure shape equivalence for init_string_index() is applied correctly"""
     import numba.tests.test_array_analysis
 
     def impl(d):
@@ -504,8 +499,7 @@ def test_init_string_index_array_analysis(memory_leak_check):
 
 
 def test_init_range_index_array_analysis(memory_leak_check):
-    """make sure shape equivalence for init_range_index() is applied correctly
-    """
+    """make sure shape equivalence for init_range_index() is applied correctly"""
     import numba.tests.test_array_analysis
 
     def impl(n):
@@ -544,8 +538,7 @@ def test_map_str(memory_leak_check):
     ],
 )
 def test_map(index, memory_leak_check):
-    """test Index.map for all Index types
-    """
+    """test Index.map for all Index types"""
 
     def test_impl(I):
         return I.map(lambda a: a)

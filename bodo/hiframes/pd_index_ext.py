@@ -64,7 +64,8 @@ from bodo.libs.int_arr_ext import IntegerArrayType
 
 
 from bodo.hiframes.datetime_timedelta_ext import (
-    datetime_timedelta_type, datetime_datetime_type,
+    datetime_timedelta_type,
+    datetime_datetime_type,
 )
 
 _dt_index_data_typ = types.Array(types.NPDatetime("ns"), 1, "C")
@@ -93,8 +94,7 @@ def typeof_pd_index(val, c):
 
 
 class DatetimeIndexType(types.IterableType, types.ArrayCompatible):
-    """type class for DatetimeIndex objects.
-    """
+    """type class for DatetimeIndex objects."""
 
     def __init__(self, name_typ=None):
         name_typ = types.none if name_typ is None else name_typ
@@ -168,8 +168,7 @@ def DatetimeIndex_get_name(di):
 
 @box(DatetimeIndexType)
 def box_dt_index(typ, val, c):
-    """
-    """
+    """"""
     mod_name = c.context.insert_const_string(c.builder.module, "pandas")
     pd_class_obj = c.pyapi.import_module_noblock(mod_name)
 
@@ -215,8 +214,7 @@ def unbox_datetime_index(typ, val, c):
 
 @intrinsic
 def init_datetime_index(typingctx, data, name=None):
-    """Create a DatetimeIndex with provided data and name values.
-    """
+    """Create a DatetimeIndex with provided data and name values."""
     name = types.none if name is None else name
 
     def codegen(context, builder, signature, args):
@@ -508,52 +506,85 @@ def _install_dti_str_comp_ops():
 
 _install_dti_str_comp_ops()
 
-@overload(pd.Index, no_unliteral=True)
-def pd_index_overload(data=None, dtype=None, copy=False, name=None,
-                      tupleize_cols=True):
 
+@overload(pd.Index, no_unliteral=True)
+def pd_index_overload(data=None, dtype=None, copy=False, name=None, tupleize_cols=True):
 
     # Datetime index:
     if data.dtype == datetime_datetime_type or dtype == datetime_datetime_type:
+
         def impl(data=None, dtype=None, copy=False, name=None, tupleize_cols=True):
             return pd.DatetimeIndex(data, copy=copy, dtype=dtype, name=name)
 
     # Timedelta index:
     if data.dtype == datetime_timedelta_type or dtype == datetime_timedelta_type:
+
         def impl(data=None, dtype=None, copy=False, name=None, tupleize_cols=True):
             return pd.TimedeltaIndex(data, copy=copy, dtype=dtype, name=name)
 
     # Period index:
-    if data.dtype == pd._libs.tslibs.period.Period or dtype == pd._libs.tslibs.period.Period:
+    if (
+        data.dtype == pd._libs.tslibs.period.Period
+        or dtype == pd._libs.tslibs.period.Period
+    ):
+
         def impl(data=None, dtype=None, copy=False, name=None, tupleize_cols=True):
             return pd.PeriodIndex(data, copy=copy, dtype=dtype, name=name)
 
     # Range index:
     if isinstance(data, types.iterators.RangeType):
+
         def impl(data=None, dtype=None, copy=False, name=None, tupleize_cols=True):
-            return pd.RangeIndex(start=data.start, stop=data.stop, step=data.step, copy=copy, dtype=dtype, name=name)
+            return pd.RangeIndex(
+                start=data.start,
+                stop=data.stop,
+                step=data.step,
+                copy=copy,
+                dtype=dtype,
+                name=name,
+            )
 
     # Numeric Indices:
-    if is_array_or_list_type(data)  and (is_signed_int_type(data.dtype) or is_signed_int_type(dtype)):
+    if is_array_or_list_type(data) and (
+        is_signed_int_type(data.dtype) or is_signed_int_type(dtype)
+    ):
+
         def impl(data=None, dtype=None, copy=False, name=None, tupleize_cols=True):
             return pd.Int64Index(data, copy=copy, dtype=dtype, name=name)
 
-    if is_array_or_list_type(data)  and (is_unsigned_int_type(data.dtype) or is_unsigned_int_type(dtype)):
+    if is_array_or_list_type(data) and (
+        is_unsigned_int_type(data.dtype) or is_unsigned_int_type(dtype)
+    ):
+
         def impl(data=None, dtype=None, copy=False, name=None, tupleize_cols=True):
             return pd.UInt64Index(data, copy=copy, dtype=dtype, name=name)
 
-    if is_array_or_list_type(data) and data.dtype == types.float64 or dtype == types.float64:
+    if (
+        is_array_or_list_type(data)
+        and data.dtype == types.float64
+        or dtype == types.float64
+    ):
+
         def impl(data=None, dtype=None, copy=False, name=None, tupleize_cols=True):
             return pd.Float64Index(data, copy=copy, dtype=dtype, name=name)
 
     # String index:
-    if is_array_or_list_type(data) and data.dtype == types.string or dtype == types.string:
+    if (
+        is_array_or_list_type(data)
+        and data.dtype == types.string
+        or dtype == types.string
+    ):
+
         def impl(data=None, dtype=None, copy=False, name=None, tupleize_cols=True):
-            return bodo.hiframes.pd_index_ext.init_string_index(bodo.utils.conversion.coerce_to_array(data), name=name)
+            return bodo.hiframes.pd_index_ext.init_string_index(
+                bodo.utils.conversion.coerce_to_array(data), name=name
+            )
 
     # raise error for data being None or scalar
     if data is None or is_literal_type(data.dtype):
-        raise ValueError("data argument in pd.Index() is invalid: None or scalar is not acceptable")
+        raise ValueError(
+            "data argument in pd.Index() is invalid: None or scalar is not acceptable"
+        )
     # todo: check if data has attr __array__ and handle it
 
     return impl
@@ -622,8 +653,7 @@ def validate_endpoints(closed):  # pragma: no cover
 
 @numba.njit
 def to_offset_value(freq):  # pragma: no cover
-    """Converts freq (string and integer) to offset nanoseconds.
-    """
+    """Converts freq (string and integer) to offset nanoseconds."""
     if freq is None:
         return None
 
@@ -772,8 +802,7 @@ def pd_date_range_overload(
 
 # similar to DatetimeIndex
 class TimedeltaIndexType(types.IterableType, types.ArrayCompatible):
-    """Temporary type class for TimedeltaIndex objects.
-    """
+    """Temporary type class for TimedeltaIndex objects."""
 
     def __init__(self, name_typ=None):
         name_typ = types.none if name_typ is None else name_typ
@@ -824,8 +853,7 @@ def typeof_timedelta_index(val, c):
 
 @box(TimedeltaIndexType)
 def box_timedelta_index(typ, val, c):
-    """
-    """
+    """"""
     mod_name = c.context.insert_const_string(c.builder.module, "pandas")
     pd_class_obj = c.pyapi.import_module_noblock(mod_name)
 
@@ -875,8 +903,7 @@ def unbox_timedelta_index(typ, val, c):
 
 @intrinsic
 def init_timedelta_index(typingctx, data, name=None):
-    """Create a TimedeltaIndex with provided data and name values.
-    """
+    """Create a TimedeltaIndex with provided data and name values."""
     name = types.none if name is None else name
 
     def codegen(context, builder, signature, args):
@@ -1038,8 +1065,7 @@ def pd_timedelta_index_overload(
 
 # pd.RangeIndex(): simply keep start/stop/step/name
 class RangeIndexType(types.IterableType, types.ArrayCompatible):
-    """type class for pd.RangeIndex() objects.
-    """
+    """type class for pd.RangeIndex() objects."""
 
     def __init__(self, name_typ):
         self.name_typ = name_typ
@@ -1072,8 +1098,7 @@ class RangeIndexType(types.IterableType, types.ArrayCompatible):
         return str(self.dtype)
 
     def unify(self, typingctx, other):
-        """unify RangeIndexType with equivalent NumericIndexType
-        """
+        """unify RangeIndexType with equivalent NumericIndexType"""
         if isinstance(other, NumericIndexType):
             name_typ = self.name_typ.unify(typingctx, other.name_typ)
             # TODO: test and support name type differences properly
@@ -1141,8 +1166,7 @@ def box_range_index(typ, val, c):
 
 @intrinsic
 def init_range_index(typingctx, start, stop, step, name=None):
-    """Create RangeIndex object
-    """
+    """Create RangeIndex object"""
     name = types.none if name is None else name
 
     def codegen(context, builder, signature, args):
@@ -1206,8 +1230,7 @@ def unbox_range_index(typ, val, c):
 
 @lower_constant(RangeIndexType)
 def lower_constant_range_index(context, builder, ty, pyval):
-    """embed constant RangeIndex by simply creating the data struct and assigning values
-    """
+    """embed constant RangeIndex by simply creating the data struct and assigning values"""
     start = context.get_constant(types.int64, pyval.start)
     stop = context.get_constant(types.int64, pyval.stop)
     step = context.get_constant(types.int64, pyval.step)
@@ -1344,8 +1367,7 @@ def overload_range_len(r):
 
 # Simple type for PeriodIndex for now, freq is saved as a constant string
 class PeriodIndexType(types.IterableType):
-    """type class for pd.PeriodIndex. Contains frequency as constant string
-    """
+    """type class for pd.PeriodIndex. Contains frequency as constant string"""
 
     def __init__(self, freq, name_typ=None):
         name_typ = types.none if name_typ is None else name_typ
@@ -1399,8 +1421,7 @@ def overload_period_index_copy(A):
 
 @intrinsic
 def init_period_index(typingctx, data, name, freq):
-    """Create a PeriodIndex with provided data, name and freq values.
-    """
+    """Create a PeriodIndex with provided data, name and freq values."""
     name = types.none if name is None else name
 
     def codegen(context, builder, signature, args):
@@ -1485,8 +1506,7 @@ def unbox_period_index(typ, val, c):
 # represents numeric indices (excluding RangeIndex):
 #   Int64Index, UInt64Index, Float64Index
 class NumericIndexType(types.IterableType, types.ArrayCompatible):
-    """type class for pd.Int64Index/UInt64Index/Float64Index objects.
-    """
+    """type class for pd.Int64Index/UInt64Index/Float64Index objects."""
 
     def __init__(self, dtype, name_typ=None):
         name_typ = types.none if name_typ is None else name_typ
@@ -1518,6 +1538,7 @@ class NumericIndexType(types.IterableType, types.ArrayCompatible):
     @property
     def numpy_type_name(self):
         return str(self.dtype)
+
 
 @typeof_impl.register(pd.Int64Index)
 def typeof_pd_int64_index(val, c):
@@ -1605,8 +1626,7 @@ def box_numeric_index(typ, val, c):
 
 @intrinsic
 def init_numeric_index(typingctx, data, name=None):
-    """Create NumericIndex object
-    """
+    """Create NumericIndex object"""
     name = types.none if is_overload_none(name) else name
 
     def codegen(context, builder, signature, args):
@@ -1698,8 +1718,7 @@ _install_numeric_constructors()
 # represents string index, which doesn't have direct Pandas type
 # pd.Index() infers string
 class StringIndexType(types.IterableType, types.ArrayCompatible):
-    """type class for pd.Index() objects with 'string' as inferred_dtype.
-    """
+    """type class for pd.Index() objects with 'string' as inferred_dtype."""
 
     def __init__(self, name_typ=None):
         name_typ = types.none if name_typ is None else name_typ
@@ -1785,8 +1804,7 @@ def box_string_index(typ, val, c):
 
 @intrinsic
 def init_string_index(typingctx, data, name=None):
-    """Create StringIndex object
-    """
+    """Create StringIndex object"""
     name = types.none if name is None else name
 
     def codegen(context, builder, signature, args):
@@ -2158,7 +2176,6 @@ def is_index_type(t):
 
 @lower_cast(RangeIndexType, NumericIndexType)
 def cast_range_index_to_int_index(context, builder, fromty, toty, val):
-    """cast RangeIndex to equivalent Int64Index
-    """
+    """cast RangeIndex to equivalent Int64Index"""
     f = lambda I: init_numeric_index(np.arange(I._start, I._stop, I._step))
     return context.compile_internal(builder, f, toty(fromty), [val])
