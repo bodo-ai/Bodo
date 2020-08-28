@@ -943,14 +943,32 @@ def overload_series_idxmax(S, axis=0, skipna=True):
         return impl
 
 
+@overload_attribute(SeriesType, "is_monotonic_increasing", inline="always")
+def overload_series_is_monotonic_increasing(S):
+    return lambda S: bodo.libs.array_kernels.series_monotonicity(
+        bodo.hiframes.pd_series_ext.get_series_data(S), 1
+    )
+
+
+@overload_attribute(SeriesType, "is_monotonic_decreasing", inline="always")
+def overload_series_is_monotonic_decreasing(S):
+    return lambda S: bodo.libs.array_kernels.series_monotonicity(
+        bodo.hiframes.pd_series_ext.get_series_data(S), 2
+    )
+
+
+@overload_method(SeriesType, "autocorr", inline="always", no_unliteral=True)
+def overload_series_autocorr(S, lag=1):
+    return lambda S, lag=1: bodo.libs.array_kernels.autocorr(
+        bodo.hiframes.pd_series_ext.get_series_data(S), lag
+    )
+
+
 @overload_method(SeriesType, "median", inline="always", no_unliteral=True)
 def overload_series_median(S, axis=None, skipna=True, level=None, numeric_only=None):
     unsupported_args = dict(level=level, numeric_only=numeric_only)
     arg_defaults = dict(level=None, numeric_only=None)
     check_unsupported_args("series.median", unsupported_args, arg_defaults)
-
-    if not (is_overload_none(axis) or is_overload_zero(axis)):
-        raise ValueError("Series.median(): axis argument not supported")
 
     return lambda S, axis=None, skipna=True, level=None, numeric_only=None: bodo.libs.array_kernels.median(
         bodo.hiframes.pd_series_ext.get_series_data(S), skipna

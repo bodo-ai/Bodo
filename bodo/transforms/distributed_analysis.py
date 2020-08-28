@@ -939,6 +939,12 @@ class DistributedAnalysis:
             array_dists[lhs] = Distribution.REP
             return
 
+        if fdef == ("series_monotonicity", "bodo.libs.array_kernels"):
+            return
+
+        if fdef == ("autocorr", "bodo.libs.array_kernels"):
+            return
+
         if fdef == ("median", "bodo.libs.array_kernels"):
             return
 

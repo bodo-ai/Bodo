@@ -9,8 +9,6 @@ std::vector<size_t> numpy_item_size(Bodo_CTypes::_numtypes);
 void bodo_common_init() {
     static bool initialized = false;
     if (initialized) {
-        Bodo_PyErr_SetString(PyExc_RuntimeError,
-                             "bodo_common_init called multiple times");
         return;
     }
     initialized = true;

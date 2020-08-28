@@ -1775,6 +1775,43 @@ def test_series_map_arg_fold(memory_leak_check):
     check_func(test_impl, (S,))
 
 
+def test_autocorr():
+    def f(S, lag):
+        return S.autocorr(lag=lag)
+
+    random.seed(5)
+    n=80
+    e_list = [random.randint(1,10) for _ in range(n)]
+    S = pd.Series(e_list)
+    check_func(f, (S,1))
+    check_func(f, (S,40))
+
+
+def test_monotonicity():
+    def f1(S):
+        return S.is_monotonic_increasing
+    def f2(S):
+        return S.is_monotonic_decreasing
+
+    random.seed(5)
+    n=100
+    e_list = [random.randint(1,10) for _ in range(n)]
+    Srand = pd.Series(e_list)
+    S_inc = Srand.cumsum()
+    S_dec = Srand.sum() - S_inc
+    #
+    e_list_fail = e_list
+    e_list[random.randint(0,n-1)] = -1
+    Srand2 = pd.Series(e_list_fail)
+    S_inc_fail = Srand2.cumsum()
+    check_func(f1, (S_inc,))
+    check_func(f2, (S_inc,))
+    check_func(f1, (S_dec,))
+    check_func(f2, (S_dec,))
+    check_func(f1, (S_inc_fail,))
+
+
+
 def test_series_map_error_check(memory_leak_check):
     """make sure proper error is raised when UDF is not supported
     """

@@ -835,8 +835,6 @@ series_unsupported_attrs = (
     "array",  # TODO: support
     "nbytes",
     "is_unique",
-    "is_monotonic_increasing",
-    "is_monotonic_decreasing",
     "sparse",
 )
 
@@ -871,7 +869,6 @@ series_unsupported_methods = (
     "ewm",
     "pipe",
     # Computations / descriptive stats
-    "autocorr",
     "between",
     "clip",
     "diff",

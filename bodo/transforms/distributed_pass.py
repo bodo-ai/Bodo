@@ -874,6 +874,18 @@ class DistributedPass:
             self._set_last_arg_to_true(assign.value)
             return [assign]
 
+        if fdef == ("series_monotonicity", "bodo.libs.array_kernels") and (
+            self._is_1D_or_1D_Var_arr(rhs.args[0].name)
+        ):
+            self._set_last_arg_to_true(assign.value)
+            return [assign]
+
+        if fdef == ("autocorr", "bodo.libs.array_kernels") and (
+            self._is_1D_or_1D_Var_arr(rhs.args[0].name)
+        ):
+            self._set_last_arg_to_true(assign.value)
+            return [assign]
+
         if fdef == ("median", "bodo.libs.array_kernels") and (
             self._is_1D_or_1D_Var_arr(rhs.args[0].name)
         ):

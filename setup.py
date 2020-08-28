@@ -263,7 +263,11 @@ ext_dt = Extension(
 
 ext_quantile = Extension(
     name="bodo.libs.quantile_alg",
-    sources=["bodo/libs/_quantile_alg.cpp", "bodo/libs/_decimal_ext.cpp",],
+    sources=["bodo/libs/_quantile_alg.cpp",
+             "bodo/libs/_decimal_ext.cpp",
+             "bodo/libs/_bodo_common.cpp",
+             "bodo/libs/_array_utils.cpp",
+    ],
     depends=[
         "bodo/libs/_bodo_common.h",
         "bodo/libs/_bodo_common.cpp",
