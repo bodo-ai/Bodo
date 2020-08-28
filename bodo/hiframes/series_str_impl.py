@@ -103,7 +103,7 @@ def init_series_str_method(typingctx, obj=None):
 
 def str_arg_check(func_name, arg_name, arg):
     """
-    Helper function to raise BodoError 
+    Helper function to raise BodoError
     when the argument is NOT a string(UnicodeType) or const string
     """
     if not isinstance(arg, types.UnicodeType) and not is_overload_constant_str(arg):
@@ -116,7 +116,7 @@ def str_arg_check(func_name, arg_name, arg):
 
 def int_arg_check(func_name, arg_name, arg):
     """
-    Helper function to raise BodoError 
+    Helper function to raise BodoError
     when the argument is NOT an Integer type
     """
     if not isinstance(arg, types.Integer) and not is_overload_constant_int(arg):
@@ -129,7 +129,7 @@ def int_arg_check(func_name, arg_name, arg):
 
 def not_supported_arg_check(func_name, arg_name, arg, defval):
     """
-    Helper function to raise BodoError 
+    Helper function to raise BodoError
     when not supported argument is provided by users
     """
     if arg_name == "na":
@@ -152,7 +152,7 @@ def not_supported_arg_check(func_name, arg_name, arg, defval):
 
 def common_validate_padding(func_name, width, fillchar):
     """
-    Helper function to raise BodoError 
+    Helper function to raise BodoError
     for checking arguments' types of ljust,rjust,center,padding
     """
     if is_overload_constant_str(fillchar):
@@ -915,8 +915,8 @@ def overload_str_method_extract(S_str, pat, flags=0, expand=True):
     func_text += "          else:\n"
     for i in range(n_cols):
         func_text += "            out_arr_{}[j] = ''\n".format(i)
-        func_text += "            bodo.libs.array_kernels.setna(out_arr_{}, j)\n".format(
-            i
+        func_text += (
+            "            bodo.libs.array_kernels.setna(out_arr_{}, j)\n".format(i)
         )
 
     # no expand case
@@ -1145,7 +1145,13 @@ def create_str2bool_methods_overload(func_name):
         loc_vars = {}
         # print(func_text)
         exec(
-            func_text, {"bodo": bodo, "numba": numba, "np": np,}, loc_vars,
+            func_text,
+            {
+                "bodo": bodo,
+                "numba": numba,
+                "np": np,
+            },
+            loc_vars,
         )
         f = loc_vars["f"]
         return f
@@ -1229,40 +1235,43 @@ def series_cat_codes_overload(S_dt):
 
     return impl
 
+
 unsupported_str_methods = {
-    '_freeze',
-    '_get_series_list',
-    '_make_accessor',
-    '_validate',
-    '_wrap_result',
-    'casefold',
-    'cat',
-    'decode',
-    'encode',
-    'findall',
-    'fullmatch',
-    'get_dummies',
-    'index',
-    'isupper',
-    'match',
-    'normalize',
-    'partition',
-    'repeat',
-    'rindex',
-    'rpartition',
-    'rsplit',
-    'slice_replace',
-    'translate',
-    'wrap',
+    "_freeze",
+    "_get_series_list",
+    "_make_accessor",
+    "_validate",
+    "_wrap_result",
+    "casefold",
+    "cat",
+    "decode",
+    "encode",
+    "findall",
+    "fullmatch",
+    "get_dummies",
+    "index",
+    "isupper",
+    "match",
+    "normalize",
+    "partition",
+    "repeat",
+    "rindex",
+    "rpartition",
+    "rsplit",
+    "slice_replace",
+    "translate",
+    "wrap",
 }
 
+
 def _install_strseries_unsupported():
-    """install an overload that raises BodoError for unsupported Series str methods
-    """
+    """install an overload that raises BodoError for unsupported Series str methods"""
 
     for fname in unsupported_str_methods:
         full_name = "Series.str" + fname
-        overload_method(SeriesStrMethodType, fname)(create_unsupported_overload(full_name))
+        overload_method(SeriesStrMethodType, fname)(
+            create_unsupported_overload(full_name)
+        )
 
 
 _install_strseries_unsupported()

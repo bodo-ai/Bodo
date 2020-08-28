@@ -541,9 +541,9 @@ def test_center_errorcheck():
 
 def test_unsupported_str_method():
     """ Raise Bodo error for unsupported str methods"""
+
     def test_impl():
-        return pd.Series([" 123", "abc  "]).str.cat(sep=' ')
+        return pd.Series([" 123", "abc  "]).str.cat(sep=" ")
 
     with pytest.raises(BodoError, match="not supported yet"):
         bodo.jit(test_impl)()
-    
