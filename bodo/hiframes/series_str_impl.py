@@ -1245,7 +1245,6 @@ unsupported_str_methods = {
     "fullmatch",
     "get_dummies",
     "index",
-    "isupper",
     "match",
     "normalize",
     "partition",
