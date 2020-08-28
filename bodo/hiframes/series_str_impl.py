@@ -1268,7 +1268,7 @@ def _install_strseries_unsupported():
     """install an overload that raises BodoError for unsupported Series str methods"""
 
     for fname in unsupported_str_methods:
-        full_name = "Series.str" + fname
+        full_name = "Series.str." + fname
         overload_method(SeriesStrMethodType, fname)(
             create_unsupported_overload(full_name)
         )
