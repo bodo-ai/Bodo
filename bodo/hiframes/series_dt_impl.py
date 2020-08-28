@@ -37,6 +37,7 @@ from bodo.utils.typing import (
     is_list_like_index_type,
     is_overload_false,
     is_overload_true,
+    create_unsupported_overload,
 )
 
 
@@ -874,3 +875,29 @@ def _install_bin_ops():
 
 
 _install_bin_ops()
+
+series_dt_unsupported_methods = {
+    'asfreq', 'ceil', 'day_name', 'floor', 'isocalendar', 'month_name', 'normalize', 'round', 'strftime', 'to_period', 'to_pydatetime', 'to_pytimedelta', 'to_timestamp', 'total_seconds', 'tz_convert', 'tz_localize'
+}
+
+series_dt_unsupported_attrs = {
+'components', 'day', 'dayofweek', 'dayofyear', 'days', 'days_in_month', 'daysinmonth', 'end_time', 'freq', 'hour', 'is_leap_year', 'is_month_end', 'is_month_start', 'is_quarter_end', 'is_quarter_start', 'is_year_end', 'is_year_start', 'microsecond', 'microseconds', 'minute', 'month', 'nanosecond', 'nanoseconds', 'quarter', 'qyear', 'second', 'seconds', 'start_time', 'time', 'timetz', 'tz', 'week', 'weekday', 'weekofyear', 'year']
+}
+
+def _install_series_dt_unsupported():
+    """install an overload that raises BodoError for unsupported methods of Series.dt """
+
+    for attr_name in series_dt_unsupported_attrs:
+        full_name = "Series.dt." + attr_name
+        overload_attribute(SeriesDatetimePropertiesType, attr_name)(
+            create_unsupported_overload(full_name)
+        )
+
+    for fname in series_dt_unsupported_methods:
+        full_name = "Series.dt." + fname
+        overload_method(SeriesDatetimePropertiesType, fname, no_unliteral=True)(
+            create_unsupported_overload(full_name)
+        )
+
+
+_install_series_dt_unsupported()
