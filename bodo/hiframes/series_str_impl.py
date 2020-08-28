@@ -1237,11 +1237,6 @@ def series_cat_codes_overload(S_dt):
 
 
 unsupported_str_methods = {
-    "_freeze",
-    "_get_series_list",
-    "_make_accessor",
-    "_validate",
-    "_wrap_result",
     "casefold",
     "cat",
     "decode",
