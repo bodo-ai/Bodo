@@ -1501,6 +1501,18 @@ if (
 numba.core.compiler_machinery.PassManager.run = passmanager_run
 
 
+lines = inspect.getsource(numba.np.ufunc.parallel._launch_threads)
+if (
+    hashlib.sha256(lines.encode()).hexdigest()
+    != "3d7e5889ad7dcd2b1ff0389cf37df400855e0b0b25b956927073b49015298736"
+):  # pragma: no cover
+    warnings.warn("numba.np.ufunc.parallel._launch_threads has changed")
+
+
+# avoid launching threads in Numba, which may throw "omp_set_nested routine deprecated"
+numba.np.ufunc.parallel._launch_threads = lambda: None
+
+
 def get_reduce_nodes(reduction_node, nodes, func_ir):
     """
     Get nodes that combine the reduction variable with a sentinel variable.
