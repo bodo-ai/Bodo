@@ -1261,7 +1261,7 @@ def _install_strseries_unsupported():
     """
 
     for fname in unsupported_str_methods:
-        full_name = "Series.str" + fname
+        full_name = "Series.str." + fname
         overload_method(SeriesStrMethodType, fname)(create_unsupported_overload(full_name))
 
 
