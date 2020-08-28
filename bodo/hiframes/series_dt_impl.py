@@ -128,7 +128,10 @@ def create_date_field_overload(field):
             if field in ("month", "day"):
                 func_text += "        month, day = bodo.hiframes.pd_timestamp_ext.get_month_day(year, days)\n"
             func_text += "        out_arr[i] = {}\n".format(field)
-        elif field in ("dayofyear", "dayofweek",):
+        elif field in (
+            "dayofyear",
+            "dayofweek",
+        ):
             funcdict = {
                 "dayofyear": "get_day_of_year",
                 "dayofweek": "get_day_of_week",
@@ -314,7 +317,7 @@ _install_S_dt_timedelta_methods()
 
 
 def create_bin_op_overload(op):
-    """create overload function for binary operators 
+    """create overload function for binary operators
     with series(dt64)/series(timedelta) type
     """
 
@@ -660,8 +663,7 @@ def create_bin_op_overload(op):
 
 
 def create_cmp_op_overload(op):
-    """create overload function for comparison operators with series(dt64) type
-    """
+    """create overload function for comparison operators with series(dt64) type"""
 
     def overload_series_dt64_cmp(A1, A2):
         if op == operator.ne:
@@ -684,8 +686,8 @@ def create_cmp_op_overload(op):
                 n = len(arr)
                 out_arr = bodo.libs.bool_arr_ext.alloc_bool_array(n)
                 nat_int = bodo.hiframes.pd_timestamp_ext.timedelta64_to_integer(nat)
-                td64_pre_2 = bodo.hiframes.pd_timestamp_ext.datetime_timedelta_to_timedelta64(
-                    A2
+                td64_pre_2 = (
+                    bodo.hiframes.pd_timestamp_ext.datetime_timedelta_to_timedelta64(A2)
                 )
                 dt64_2 = bodo.hiframes.pd_timestamp_ext.timedelta64_to_integer(
                     td64_pre_2
@@ -718,8 +720,8 @@ def create_cmp_op_overload(op):
                 n = len(arr)
                 out_arr = bodo.libs.bool_arr_ext.alloc_bool_array(n)
                 nat_int = bodo.hiframes.pd_timestamp_ext.timedelta64_to_integer(nat)
-                td64_pre_1 = bodo.hiframes.pd_timestamp_ext.datetime_timedelta_to_timedelta64(
-                    A1
+                td64_pre_1 = (
+                    bodo.hiframes.pd_timestamp_ext.datetime_timedelta_to_timedelta64(A1)
                 )
                 dt64_1 = bodo.hiframes.pd_timestamp_ext.timedelta64_to_integer(
                     td64_pre_1
@@ -849,8 +851,7 @@ def create_cmp_op_overload(op):
 
 
 def _install_cmp_ops():
-    """install overloads for comparison operators with series(dt64) type
-    """
+    """install overloads for comparison operators with series(dt64) type"""
     for op in (
         operator.eq,
         operator.ne,
@@ -867,8 +868,7 @@ _install_cmp_ops()
 
 
 def _install_bin_ops():
-    """install overloads for operators with series(dt64) type
-    """
+    """install overloads for operators with series(dt64) type"""
     for op in (operator.add, operator.sub):
         overload_impl = create_bin_op_overload(op)
         overload(op, no_unliteral=True)(overload_impl)
@@ -877,12 +877,62 @@ def _install_bin_ops():
 _install_bin_ops()
 
 series_dt_unsupported_methods = {
-    'asfreq', 'ceil', 'day_name', 'floor', 'isocalendar', 'month_name', 'normalize', 'round', 'strftime', 'to_period', 'to_pydatetime', 'to_pytimedelta', 'to_timestamp', 'total_seconds', 'tz_convert', 'tz_localize'
+    "asfreq",
+    "ceil",
+    "day_name",
+    "floor",
+    "isocalendar",
+    "month_name",
+    "normalize",
+    "round",
+    "strftime",
+    "to_period",
+    "to_pydatetime",
+    "to_pytimedelta",
+    "to_timestamp",
+    "total_seconds",
+    "tz_convert",
+    "tz_localize",
 }
 
 series_dt_unsupported_attrs = {
-'components', 'day', 'dayofweek', 'dayofyear', 'days', 'days_in_month', 'daysinmonth', 'end_time', 'freq', 'hour', 'is_leap_year', 'is_month_end', 'is_month_start', 'is_quarter_end', 'is_quarter_start', 'is_year_end', 'is_year_start', 'microsecond', 'microseconds', 'minute', 'month', 'nanosecond', 'nanoseconds', 'quarter', 'qyear', 'second', 'seconds', 'start_time', 'time', 'timetz', 'tz', 'week', 'weekday', 'weekofyear', 'year']
+    "components",
+    "day",
+    "dayofweek",
+    "dayofyear",
+    "days",
+    "days_in_month",
+    "daysinmonth",
+    "end_time",
+    "freq",
+    "hour",
+    "is_leap_year",
+    "is_month_end",
+    "is_month_start",
+    "is_quarter_end",
+    "is_quarter_start",
+    "is_year_end",
+    "is_year_start",
+    "microsecond",
+    "microseconds",
+    "minute",
+    "month",
+    "nanosecond",
+    "nanoseconds",
+    "quarter",
+    "qyear",
+    "second",
+    "seconds",
+    "start_time",
+    "time",
+    "timetz",
+    "tz",
+    "week",
+    "weekday",
+    "weekofyear",
+    "year",
 }
+
 
 def _install_series_dt_unsupported():
     """install an overload that raises BodoError for unsupported methods of Series.dt """
