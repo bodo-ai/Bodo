@@ -924,6 +924,12 @@ ll.add_symbol("str_arr_to_float64", hstr_ext.str_arr_to_float64)
 ll.add_symbol("dtor_string_array", hstr_ext.dtor_string_array)
 ll.add_symbol("get_utf8_size", hstr_ext.get_utf8_size)
 ll.add_symbol("print_str_arr", hstr_ext.print_str_arr)
+ll.add_symbol("inplace_int64_to_str", hstr_ext.inplace_int64_to_str)
+
+
+inplace_int64_to_str = types.ExternalFunction(
+    "inplace_int64_to_str", types.void(types.voidptr, types.int64, types.int64)
+)
 
 convert_len_arr_to_offset = types.ExternalFunction(
     "convert_len_arr_to_offset", types.void(types.voidptr, types.intp)
@@ -1466,6 +1472,61 @@ def inplace_eq_overload(A, ind, val):
             return False
         ptr = get_data_ptr_ind(A, start_offset)
         return memcmp(ptr, utf8_str, utf8_len) == 0
+
+    return impl
+
+
+def str_arr_setitem_int_to_str(A, ind, value):
+    A[ind] = str(value)
+
+
+@overload(str_arr_setitem_int_to_str)
+def overload_str_arr_setitem_int_to_str(A, ind, val):
+    """
+    Set string array element to string representation of an integer value
+    """
+
+    def impl(A, ind, val):  # pragma: no cover
+        # get pointer to string position and its length
+        start_offset = getitem_str_offset(A, ind)
+        arr_val_len = bodo.libs.str_ext.int_to_str_len(val)
+        ptr = get_data_ptr_ind(A, start_offset)
+        # convert integer to string and write to output string position inplace
+        inplace_int64_to_str(ptr, arr_val_len, val)
+        # set end offset of string element
+        setitem_str_offset(A, ind + 1, start_offset + arr_val_len)
+
+    return impl
+
+
+@intrinsic
+def inplace_set_NA_str(typingctx, ptr_typ=None):
+    """
+    Write "<NA>" (string representation of pd.NA) to string pointer
+    """
+
+    def codegen(context, builder, sig, args):
+        (ptr,) = args
+        na_str = context.insert_const_string(builder.module, "<NA>")
+        na_str_len = lir.Constant(lir.IntType(64), len("<NA>"))
+        cgutils.raw_memcpy(builder, ptr, na_str, na_str_len, 1)
+
+    return types.none(types.voidptr), codegen
+
+
+def str_arr_setitem_NA_str(A, ind):
+    A[ind] = "<NA>"
+
+
+@overload(str_arr_setitem_NA_str)
+def overload_str_arr_setitem_NA_str(A, ind):
+    """
+    Set string array element to "<NA>" (string representation of pd.NA)
+    """
+
+    def impl(A, ind):  # pragma: no cover
+        ptr = get_data_ptr_ind(A, ind)
+        inplace_set_NA_str(ptr)
 
     return impl
 
