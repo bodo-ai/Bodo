@@ -507,7 +507,7 @@ def _install_dti_str_comp_ops():
 _install_dti_str_comp_ops()
 
 
-@overload(pd.Index, no_unliteral=True)
+@overload(pd.Index, inline="always", no_unliteral=True)
 def pd_index_overload(data=None, dtype=None, copy=False, name=None, tupleize_cols=True):
 
     # Datetime index:
