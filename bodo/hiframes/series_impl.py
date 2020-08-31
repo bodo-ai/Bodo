@@ -1061,6 +1061,36 @@ def overload_series_astype(S, dtype, copy=True, errors="raise"):
 
     if isinstance(dtype, types.Function) and dtype.key[0] == str:
 
+        # special optimized case for int to string conversion, uses inplace write to
+        # string array to avoid extra allocation
+        if isinstance(S.dtype, types.Integer):
+            na_str_len = len("<NA>")
+
+            def impl_int_str(S, dtype, copy=True, errors="raise"):  # pragma: no cover
+                arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+                index = bodo.hiframes.pd_series_ext.get_series_index(S)
+                name = bodo.hiframes.pd_series_ext.get_series_name(S)
+                numba.parfors.parfor.init_prange()
+                n = len(arr)
+                num_chars = 0
+                # get total chars in new array
+                for i in numba.parfors.parfor.internal_prange(n):
+                    if bodo.libs.array_kernels.isna(arr, i):
+                        l = na_str_len  # Pandas assigns '<NA>' to Int array nulls
+                    else:
+                        l = bodo.libs.str_ext.int_to_str_len(arr[i])
+                    num_chars += l
+                A = bodo.libs.str_arr_ext.pre_alloc_string_array(n, num_chars)
+                for j in numba.parfors.parfor.internal_prange(n):
+                    if bodo.libs.array_kernels.isna(arr, j):
+                        bodo.libs.str_arr_ext.str_arr_setitem_NA_str(A, j)
+                    else:
+                        bodo.libs.str_arr_ext.str_arr_setitem_int_to_str(A, j, arr[j])
+
+                return bodo.hiframes.pd_series_ext.init_series(A, index, name)
+
+            return impl_int_str
+
         def impl_str(S, dtype, copy=True, errors="raise"):  # pragma: no cover
             arr = bodo.hiframes.pd_series_ext.get_series_data(S)
             index = bodo.hiframes.pd_series_ext.get_series_index(S)
