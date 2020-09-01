@@ -498,7 +498,7 @@ def render(pieces, style):
     elif style == "git-describe-long":
         rendered = render_git_describe_long(pieces)
     else:
-        raise BodoError("unknown style '%s'" % style)
+        raise ValueError("unknown style '%s'" % style)
 
     return {
         "version": rendered,
