@@ -1091,15 +1091,6 @@ def bodo_remove_dead_block(
                 and rhs.attr == "shape"
                 and is_array_typ(typemap[rhs.value.name])
                 and rhs.value.name not in lives
-                and isinstance(
-                    guard(get_definition, func_ir, rhs.value),
-                    (
-                        bodo.ir.csv_ext.CsvReader,
-                        bodo.ir.json_ext.JsonReader,
-                        bodo.ir.parquet_ext.ParquetReader,
-                        bodo.ir.sql_ext.SqlReader,
-                    ),
-                )
             ):
                 # TODO: use proper block to label mapping
                 block_to_label = {v: k for k, v in func_ir.blocks.items()}
