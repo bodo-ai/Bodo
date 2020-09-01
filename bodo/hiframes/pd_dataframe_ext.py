@@ -2028,7 +2028,7 @@ def concat_overload(
         all_colnames = []
         for df in objs.types:
             all_colnames.extend(df.columns)
-        # TODO: verify how Pandas sorts column names
+
         # remove duplicates but keep original order
         all_colnames = list(dict.fromkeys(all_colnames).keys())
 
