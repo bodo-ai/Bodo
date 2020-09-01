@@ -90,7 +90,7 @@ def test_series_constructor(data, index, name, memory_leak_check):
         data.index = index
 
     # bypass literal as data and index = None
-    if isinstance(data, int) and index  is None:
+    if isinstance(data, int) and index is None:
         return
 
     def impl(d, i, n):
@@ -1665,6 +1665,22 @@ def test_series_map_array_item(memory_leak_check):
     check_func(test_impl, (S,))
 
 
+def test_series_map_array_item_input(memory_leak_check):
+    """test array(item) input and output in map"""
+
+    def test_impl(S):
+        return S.map(lambda a: a[1:4])
+
+    S = pd.Series(
+        [
+            np.array([1.2, 3.2, 4.2, 5.5, 6.1, 7.6]),
+            np.array([1.2, 4.4, 2.1, 2.1, 12.3, 1112.4]),
+        ]
+        * 11
+    )
+    check_func(test_impl, (S,))
+
+
 def test_series_map_dict(memory_leak_check):
     """test dict output in map"""
 
@@ -1780,28 +1796,29 @@ def test_autocorr():
         return S.autocorr(lag=lag)
 
     random.seed(5)
-    n=80
-    e_list = [random.randint(1,10) for _ in range(n)]
+    n = 80
+    e_list = [random.randint(1, 10) for _ in range(n)]
     S = pd.Series(e_list)
-    check_func(f, (S,1))
-    check_func(f, (S,40))
+    check_func(f, (S, 1))
+    check_func(f, (S, 40))
 
 
 def test_monotonicity():
     def f1(S):
         return S.is_monotonic_increasing
+
     def f2(S):
         return S.is_monotonic_decreasing
 
     random.seed(5)
-    n=100
-    e_list = [random.randint(1,10) for _ in range(n)]
+    n = 100
+    e_list = [random.randint(1, 10) for _ in range(n)]
     Srand = pd.Series(e_list)
     S_inc = Srand.cumsum()
     S_dec = Srand.sum() - S_inc
     #
     e_list_fail = e_list
-    e_list[random.randint(0,n-1)] = -1
+    e_list[random.randint(0, n - 1)] = -1
     Srand2 = pd.Series(e_list_fail)
     S_inc_fail = Srand2.cumsum()
     check_func(f1, (S_inc,))
@@ -1809,7 +1826,6 @@ def test_monotonicity():
     check_func(f1, (S_dec,))
     check_func(f2, (S_dec,))
     check_func(f1, (S_inc_fail,))
-
 
 
 def test_series_map_error_check(memory_leak_check):

@@ -1094,17 +1094,21 @@ def bodo_remove_dead_block(
             ):
                 # TODO: use proper block to label mapping
                 block_to_label = {v: k for k, v in func_ir.blocks.items()}
-                label = block_to_label[block]
-                eq_set = saved_array_analysis.get_equiv_set(label)
-                var_eq_set = eq_set.get_equiv_set(rhs.value)
-                if var_eq_set is not None:
-                    for v in var_eq_set:
-                        if v.endswith("#0"):
-                            v = v[:-2]
-                        if v in typemap and is_array_typ(typemap[v]) and v in lives:
-                            rhs.value = ir.Var(rhs.value.scope, v, rhs.value.loc)
-                            removed = True
-                            break
+                # blocks inside parfors are not available in block_to_label
+                # (see test_series_map_array_item_input without the isinstance check
+                # above)
+                if block in block_to_label:
+                    label = block_to_label[block]
+                    eq_set = saved_array_analysis.get_equiv_set(label)
+                    var_eq_set = eq_set.get_equiv_set(rhs.value)
+                    if var_eq_set is not None:
+                        for v in var_eq_set:
+                            if v.endswith("#0"):
+                                v = v[:-2]
+                            if v in typemap and is_array_typ(typemap[v]) and v in lives:
+                                rhs.value = ir.Var(rhs.value.scope, v, rhs.value.loc)
+                                removed = True
+                                break
 
             if isinstance(rhs, ir.Var) and lhs.name == rhs.name:
                 removed = True
@@ -1581,6 +1585,7 @@ numba.parfors.parfor.get_reduce_nodes = get_reduce_nodes
 
 
 cache_envs = {}
+
 
 def _rebuild_env(modname, consts, env_name):
     env = numba.core.environment.lookup_environment(env_name)
