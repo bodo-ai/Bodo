@@ -2022,7 +2022,7 @@ class ConcatDummyTyper(AbstractTemplate):
             return signature(ret_typ, *args)
 
         if not isinstance(objs, types.BaseTuple):
-            raise ValueError("Tuple argument for pd.concat expected")
+            raise BodoError("Tuple argument for pd.concat expected")
         assert len(objs.types) > 0
 
         if axis == 1:
@@ -2620,7 +2620,7 @@ def append_overload(df, other, ignore_index=False, verify_integrity=False, sort=
             [df] + other
         )
 
-    raise ValueError(
+    raise BodoError(
         "invalid df.append() input. Only dataframe and list" " of dataframes supported"
     )
 
@@ -2968,7 +2968,7 @@ def to_sql_overload(
         if err_msg != "all_ok":
             # TODO: We cannot do a simple raise ValueError(err_msg).
             print("err_msg=", err_msg)
-            raise ValueError("error in to_sql() operation")
+            raise BodoError("error in to_sql() operation")
 
     return _impl
 

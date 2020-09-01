@@ -52,7 +52,7 @@ def overload_series_values(s):
 def overload_series_dtype(s):
     # TODO: check other dtypes like tuple, etc.
     if s.dtype == bodo.string_type:
-        raise ValueError("Series.dtype not supported for string Series yet")
+        raise BodoError("Series.dtype not supported for string Series yet")
 
     return lambda s: bodo.hiframes.pd_series_ext.get_series_data(s).dtype
 
@@ -678,7 +678,7 @@ def overload_series_cummax(S):
 @overload_method(SeriesType, "rename", inline="always", no_unliteral=True)
 def overload_series_rename(S, index=None):
     if not (index == bodo.string_type or isinstance(index, types.StringLiteral)):
-        raise ValueError("Series.rename() 'index' can only be a string")
+        raise BodoError("Series.rename() 'index' can only be a string")
 
     # TODO: support index rename, kws
     def impl(S, index=None):  # pragma: no cover
@@ -723,10 +723,10 @@ def overload_series_count(S):
 @overload_method(SeriesType, "corr", inline="always", no_unliteral=True)
 def overload_series_corr(S, other, method="pearson", min_periods=None):
     if not is_overload_none(min_periods):
-        raise ValueError("Series.corr(): 'min_periods' is not supported yet")
+        raise BodoError("Series.corr(): 'min_periods' is not supported yet")
 
     if not is_overload_str(method, "pearson"):
-        raise ValueError("Series.corr(): 'method' is not supported yet")
+        raise BodoError("Series.corr(): 'method' is not supported yet")
 
     def impl(S, other, method="pearson", min_periods=None):  # pragma: no cover
         n = S.count()
@@ -747,7 +747,7 @@ def overload_series_corr(S, other, method="pearson", min_periods=None):
 @overload_method(SeriesType, "cov", inline="always", no_unliteral=True)
 def overload_series_cov(S, other, min_periods=None):
     if not is_overload_none(min_periods):
-        raise ValueError("Series.cov(): 'min_periods' is not supported yet")
+        raise BodoError("Series.cov(): 'min_periods' is not supported yet")
 
     # TODO: use online algorithm, e.g. StatFunctions.scala
     # https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance
@@ -926,7 +926,7 @@ def overload_series_idxmax(S, axis=0, skipna=True):
     check_unsupported_args("series.idxmax", unsupported_args, arg_defaults)
 
     if not is_overload_zero(axis):
-        raise ValueError("Series.idxmax(): axis argument not supported")
+        raise BodoError("Series.idxmax(): axis argument not supported")
 
     # TODO: other types like strings
     if S.dtype == types.none:
@@ -1835,10 +1835,10 @@ def create_explicit_binary_op_overload(op):
         S, other, level=None, fill_value=None, axis=0
     ):
         if not is_overload_none(level):
-            raise ValueError("level argument not supported")
+            raise BodoError("level argument not supported")
 
         if not is_overload_zero(axis):
-            raise ValueError("axis argument not supported")
+            raise BodoError("axis argument not supported")
 
         # TODO: string array, datetimeindex/timedeltaindex
         if not isinstance(S.dtype, types.Number):
@@ -1929,10 +1929,10 @@ def create_explicit_binary_reverse_op_overload(op):
         S, other, level=None, fill_value=None, axis=0
     ):
         if not is_overload_none(level):
-            raise ValueError("level argument not supported")
+            raise BodoError("level argument not supported")
 
         if not is_overload_zero(axis):
-            raise ValueError("axis argument not supported")
+            raise BodoError("axis argument not supported")
 
         # TODO: string array, datetimeindex/timedeltaindex
         if not isinstance(S.dtype, types.Number):

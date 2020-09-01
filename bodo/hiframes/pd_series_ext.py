@@ -173,7 +173,7 @@ def _get_series_array_type(dtype):
     if isinstance(dtype, types.BaseTuple):
         if any(not isinstance(t, types.Number) for t in dtype.types):
             # TODO: support more types. what types can be in recarrays?
-            raise ValueError(
+            raise BodoError(
                 "series tuple dtype {} includes non-numerics".format(dtype)
             )
         np_dtype = np.dtype(",".join(str(t) for t in dtype.types), align=True)
@@ -775,11 +775,11 @@ def pd_series_overload(
 
     # TODO: None or empty data
     if is_overload_none(data):
-        raise ValueError("pd.Series(): 'data' argument required.")
+        raise BodoError("pd.Series(): 'data' argument required.")
 
     # fastpath not supported
     if not is_overload_false(fastpath):
-        raise ValueError("pd.Series(): 'fastpath' argument not supported.")
+        raise BodoError("pd.Series(): 'fastpath' argument not supported.")
 
     def impl(
         data=None, index=None, dtype=None, name=None, copy=False, fastpath=False

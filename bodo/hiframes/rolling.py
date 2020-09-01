@@ -51,7 +51,7 @@ def get_rolling_setup_args(func_ir, rhs, get_consts=True):
     elif "window" in kws:
         window = kws["window"]
     else:  # pragma: no cover
-        raise ValueError("window argument to rolling() required")
+        raise BodoError("window argument to rolling() required")
     if get_consts:
         window_const = guard(find_const, func_ir, window)
         window = window_const if window_const is not None else window
@@ -63,14 +63,14 @@ def get_rolling_setup_args(func_ir, rhs, get_consts=True):
     if "on" in kws:
         on = guard(find_const, func_ir, kws["on"])
         if on is None:
-            raise ValueError("'on' argument to rolling() should be constant string")
+            raise BodoError("'on' argument to rolling() should be constant string")
     # convert string offset window statically to nanos
     # TODO: support dynamic conversion
     # TODO: support other offsets types (time delta, etc.)
     if on is not None:
         window = guard(find_const, func_ir, window)
         if not isinstance(window, str):
-            raise ValueError(
+            raise BodoError(
                 "window argument to rolling should be constant"
                 "string in the offset case (variable window)"
             )

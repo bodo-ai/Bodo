@@ -93,7 +93,7 @@ def overload_series_iat(s):
 def overload_series_iat_getitem(I, idx):
     if isinstance(I, SeriesIatType):
         if not isinstance(types.unliteral(idx), types.Integer):
-            raise ValueError("iAt based indexing can only have integer indexers")
+            raise BodoError("iAt based indexing can only have integer indexers")
 
         # box dt64 to timestamp
         if I.stype.dtype == types.NPDatetime("ns"):
@@ -115,10 +115,10 @@ def overload_series_iat_getitem(I, idx):
 def overload_series_iat_setitem(I, idx, val):
     if isinstance(I, SeriesIatType):
         if not isinstance(types.unliteral(idx), types.Integer):
-            raise ValueError("iAt based indexing can only have integer indexers")
+            raise BodoError("iAt based indexing can only have integer indexers")
         # check string setitem
         if I.stype.dtype == bodo.string_type and val is not types.none:
-            raise ValueError("Series string setitem not supported yet")
+            raise BodoError("Series string setitem not supported yet")
         # unbox dt64 from Timestamp (TODO: timedelta and other datetimelike)
         # see unboxing pandas/core/arrays/datetimes.py:
         # DatetimeArray._unbox_scalar
@@ -393,7 +393,7 @@ def overload_series_getitem(S, idx):
             if isinstance(S.index, NumericIndexType) and isinstance(
                 S.index.dtype, types.Integer
             ):
-                raise ValueError(
+                raise BodoError(
                     "Indexing Series with Integer index using []"
                     " (which is label-based) not supported yet"
                 )
@@ -422,7 +422,7 @@ def overload_series_getitem(S, idx):
                 and isinstance(S.index.dtype, types.Integer)
                 and isinstance(idx.dtype, types.Integer)
             ):
-                raise ValueError(
+                raise BodoError(
                     "Indexing Series with Integer index using []"
                     " (which is label-based) not supported yet"
                 )
@@ -450,7 +450,7 @@ def overload_series_getitem(S, idx):
             return impl_slice
 
         # TODO: handle idx as SeriesType on array
-        raise ValueError("setting Series value using {} not supported yet".format(idx))
+        raise BodoError("setting Series value using {} not supported yet".format(idx))
 
     # convert Series index on Array getitem to array
     elif bodo.utils.utils.is_array_typ(S) and isinstance(idx, SeriesType):
@@ -462,14 +462,14 @@ def overload_series_setitem(S, idx, val):
     if isinstance(S, SeriesType):
         # check string setitem
         if S.dtype == bodo.string_type and val is not types.none:
-            raise ValueError("Series string setitem not supported yet")
+            raise BodoError("Series string setitem not supported yet")
 
         # integer case same as iat
         if isinstance(types.unliteral(idx), types.Integer):
             if isinstance(S.index, NumericIndexType) and isinstance(
                 S.index.dtype, types.Integer
             ):
-                raise ValueError(
+                raise BodoError(
                     "Indexing Series with Integer index using []"
                     " (which is label-based) not supported yet"
                 )
@@ -518,7 +518,7 @@ def overload_series_setitem(S, idx, val):
                 and isinstance(S.index.dtype, types.Integer)
                 and isinstance(idx.dtype, types.Integer)
             ):
-                raise ValueError(
+                raise BodoError(
                     "Indexing Series with Integer index using []"
                     " (which is label-based) not supported yet"
                 )
@@ -531,7 +531,7 @@ def overload_series_setitem(S, idx, val):
 
             return impl_arr
 
-        raise ValueError("Series [] setitem using {} not supported".format(idx))
+        raise BodoError("Series [] setitem using {} not supported".format(idx))
 
 
 @overload(operator.setitem, no_unliteral=True)
