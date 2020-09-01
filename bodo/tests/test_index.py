@@ -468,6 +468,8 @@ def test_period_index_box(period_index, memory_leak_check):
                 pd.date_range(start="2018-04-24", end="2018-04-27", periods=5),
             ]
         ),
+        # repeated names
+        pd.MultiIndex.from_arrays([[1, 5, 9], [2, 1, 8]], names=["A", "A"])
     ],
 )
 def test_multi_index_unbox(m_ind, memory_leak_check):
