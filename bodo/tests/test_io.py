@@ -763,7 +763,7 @@ def test_read_write_parquet():
     df = pd.DataFrame({"A": range(5)})
 
     with pytest.raises(
-        BodoError, match="Bodo does not currently support partition_cols option"
+        BodoError, match="partition_cols parameter only supports default value None"
     ):
         bodo.jit(error_check1)(df)
 

@@ -2728,10 +2728,9 @@ def to_parquet_overload(
     # TODO handle possible **kwargs options?
     _is_parallel=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
 ):
-    if not is_overload_none(partition_cols):
-        raise BodoError(
-            "to_parquet(): Bodo does not currently support partition_cols option"
-        )
+    unsupported_args = dict(partition_cols=partition_cols)
+    arg_defaults = dict(partition_cols=None)
+    check_unsupported_args("to_parquet", unsupported_args, arg_defaults)
 
     if not is_overload_none(compression) and get_overload_const_str(
         compression
@@ -2924,8 +2923,9 @@ def to_sql_overload(
     # Additional entry
     _is_parallel=False,
 ):
-    if not is_overload_none(chunksize):
-        raise BodoError("to_sql(): chunksize option is not supported")
+    unsupported_args = dict(chunksize=chunksize)
+    arg_defaults = dict(chunksize=None)
+    check_unsupported_args("to_sql", unsupported_args, arg_defaults)
 
     def _impl(
         df,
