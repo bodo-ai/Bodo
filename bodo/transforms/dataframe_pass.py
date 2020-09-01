@@ -485,9 +485,6 @@ class DataFramePass:
         if fdef == ("itertuples_dummy", "bodo.hiframes.pd_dataframe_ext"):
             return self._run_call_df_itertuples(assign, lhs, rhs)
 
-        if fdef == ("reset_index_dummy", "bodo.hiframes.pd_dataframe_ext"):
-            return self._run_call_reset_index(assign, lhs, rhs)
-
         if fdef == ("query_dummy", "bodo.hiframes.pd_dataframe_ext"):
             return self._run_call_query(assign, lhs, rhs)
 
@@ -801,61 +798,6 @@ class DataFramePass:
         nodes = []
         col_vars = [self._get_dataframe_data(df_var, c, nodes) for c in df_typ.columns]
         return replace_func(self, _mean_impl, col_vars, pre_nodes=nodes)
-
-    def _run_call_reset_index(self, assign, lhs, rhs):
-        # TODO: reflection
-        df_var = rhs.args[0]
-        drop = guard(find_const, self.func_ir, rhs.args[1])
-        inplace = guard(find_const, self.func_ir, rhs.args[2])
-        df_typ = self.typemap[df_var.name]
-        out_df_typ = self.typemap[lhs.name]
-        n_ind = len(out_df_typ.columns) - len(df_typ.columns)
-        assert drop or n_ind != 0  # there are index columns when not dropping index
-
-        # impl: for each column, copy data and create a new dataframe
-        n_cols = len(out_df_typ.columns)
-        data_args = ["data{}".format(i) for i in range(n_cols)]
-
-        col_var = gen_const_tup(out_df_typ.columns)
-        func_text = "def _reset_index_impl({}):\n".format(", ".join(data_args))
-        for i, d in enumerate(data_args):
-            if not inplace and i >= n_ind:
-                func_text += "  {} = {}.copy()\n".format(d, d)
-        func_text += "  index = bodo.hiframes.pd_index_ext.init_range_index(0, len({}), 1, None)\n".format(
-            data_args[0]
-        )
-        func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), index, {})\n".format(
-            ", ".join(data_args), col_var
-        )
-        loc_vars = {}
-        exec(func_text, {}, loc_vars)
-        _reset_index_impl = loc_vars["_reset_index_impl"]
-
-        nodes = []
-        args = [self._get_dataframe_data(df_var, c, nodes) for c in df_typ.columns]
-        # add index array arguments if not dropping index
-        if not drop:
-            if isinstance(df_typ.index, MultiIndexType):
-                # MultiIndex case takes multiple arrays from MultiIndex._data
-                ind_var = self._get_dataframe_index(df_var, nodes)
-                nodes += compile_func_single_block(
-                    lambda ind: ind._data, [ind_var], None, self
-                )
-                arr_tup = nodes[-1].target
-                arr_args = []
-                for i in range(n_ind):
-                    arr_var = ir.Var(ind_var.scope, mk_unique_var("ind_arr"), lhs.loc)
-                    self.typemap[arr_var.name] = df_typ.index.array_types[i]
-                    gen_getitem(arr_var, arr_tup, i, self.calltypes, nodes)
-                    arr_args.append(arr_var)
-                args = arr_args + args
-            else:
-                ind_var = self._gen_array_from_index(df_var, nodes)
-                args = [ind_var] + args
-
-        # return new df even for inplace case, since typing pass replaces input variable
-        # using output of the call
-        return nodes + compile_func_single_block(_reset_index_impl, args, lhs, self)
 
     def _run_call_query(self, assign, lhs, rhs):
         """Transform query expr to Numba IR using the expr parser in Pandas.
