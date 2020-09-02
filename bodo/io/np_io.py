@@ -67,7 +67,7 @@ def _handle_np_fromfile(assign, lhs, rhs):
     """
     # TODO: dtype in kws
     if len(rhs.args) != 2:  # pragma: no cover
-        raise ValueError("np.fromfile(): file name and dtype expected")
+        raise BodoError("np.fromfile(): file name and dtype expected")
 
     kws = dict(rhs.kws)
     _fname = rhs.args[0]

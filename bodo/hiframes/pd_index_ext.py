@@ -563,7 +563,7 @@ def validate_endpoints(closed):  # pragma: no cover
 
     Raises
     ------
-    BodoError : if argument is not among valid values
+    ValueError : if argument is not among valid values
     """
     left_closed = False
     right_closed = False
@@ -576,7 +576,7 @@ def validate_endpoints(closed):  # pragma: no cover
     elif closed == "right":
         right_closed = True
     else:
-        raise BodoError("Closed has to be either 'left', 'right' or None")
+        raise ValueError("Closed has to be either 'left', 'right' or None")
 
     return left_closed, right_closed
 
@@ -663,7 +663,7 @@ def pd_date_range_overload(
             end_t = pd.Timestamp(end)
 
         if start is None and end is None and closed is not None:
-            raise BodoError(
+            raise ValueError(
                 "Closed has to be None if not both of start" "and end are defined"
             )
         # TODO: check start and end for NaT
@@ -692,7 +692,7 @@ def pd_date_range_overload(
                 addend = np.int64(periods) * np.int64(-stride)
                 b = np.int64(e) + addend
             else:
-                raise BodoError(
+                raise ValueError(
                     "at least 'start' or 'end' should be specified "
                     "if a 'period' is given."
                 )

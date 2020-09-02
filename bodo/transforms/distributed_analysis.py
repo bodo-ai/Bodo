@@ -1349,13 +1349,13 @@ class DistributedAnalysis:
         """
         if func_name == "transpose":
             if len(args) == 0:
-                raise ValueError("Transpose with no arguments is not" " supported")
+                raise BodoError("Transpose with no arguments is not" " supported")
             in_arr_name = arr.name
             arg0 = guard(get_constant, self.func_ir, args[0])
             if isinstance(arg0, tuple):
                 arg0 = arg0[0]
             if arg0 != 0:
-                raise ValueError(
+                raise BodoError(
                     "Transpose with non-zero first argument" " is not supported"
                 )
             self._meet_array_dists(lhs, in_arr_name, array_dists)
@@ -1434,7 +1434,7 @@ class DistributedAnalysis:
             )
             assert arr_name in array_dists, "array distribution not found"
             if is_REP(array_dists[arr_name]):
-                raise ValueError(
+                raise BodoError(
                     "distributed return of array {} not valid"
                     " since it is replicated".format(arr_name)
                 )
@@ -1445,7 +1445,7 @@ class DistributedAnalysis:
             arr_name = args[0].name
             assert arr_name in array_dists, "array distribution not found"
             if is_REP(array_dists[arr_name]):
-                raise ValueError(
+                raise BodoError(
                     "threaded return of array {} not valid" " since it is replicated"
                 )
             array_dists[arr_name] = Distribution.Thread

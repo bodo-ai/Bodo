@@ -2521,7 +2521,7 @@ class DistributedPass:
             start_var = self._get_1D_start(size_var, avail_vars, nodes)
             return start_var, nodes
 
-        raise ValueError("invalid parallel access")
+        raise BodoError("invalid parallel access")
 
     def _gen_1D_Var_len(self, arr):
         def f(A, op):  # pragma: no cover

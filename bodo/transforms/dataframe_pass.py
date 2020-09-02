@@ -651,7 +651,7 @@ class DataFramePass:
             err_msg="ascending should be bool or a list of bool of the number of keys",
         )
         if not all(k in set_possible_keys for k in key_names):
-            raise ValueError("invalid sort keys {}".format(key_names))
+            raise BodoError("invalid sort keys {}".format(key_names))
 
         nodes = []
         in_vars = {
@@ -984,7 +984,7 @@ class DataFramePass:
                     and name in ("floor", "ceil")
                 ):
                     if name not in new_funcs:
-                        raise ValueError(
+                        raise BodoError(
                             '"{0}" is not a supported function'.format(name)
                         )
 
@@ -1735,7 +1735,7 @@ class DataFramePass:
         # TODO: support dynamic conversion
         # TODO: support other offsets types (time delta, etc.)
         if on is not None and not isinstance(window_const, str):
-            raise ValueError(
+            raise BodoError(
                 "window argument to rolling should be constant"
                 "string in the offset case (variable window)"
             )
@@ -2045,7 +2045,7 @@ class DataFramePass:
                 )
             if tup_def.op in ("build_tuple", "build_list"):
                 return tup_def.items
-        raise ValueError("constant tuple expected")
+        raise BodoError("constant tuple expected")
 
     def _get_dataframe_data(self, df_var, col_name, nodes):
         # optimization: return data var directly if not ambiguous
@@ -2168,7 +2168,7 @@ class DataFramePass:
             if by_arg_def is None:
                 if default is not None:
                     return default
-                raise ValueError(err_msg)
+                raise BodoError(err_msg)
             if isinstance(var_typ, types.BaseTuple):
                 assert isinstance(by_arg_def, tuple)
                 return by_arg_def
@@ -2177,14 +2177,14 @@ class DataFramePass:
             if list_only and by_arg_def[1] != "build_list":
                 if default is not None:
                     return default
-                raise ValueError(err_msg)
+                raise BodoError(err_msg)
             key_colnames = tuple(
                 guard(find_const, self.func_ir, v) for v in by_arg_def[0]
             )
             if any(not isinstance(v, typ) for v in key_colnames):
                 if default is not None:
                     return default
-                raise ValueError(err_msg)
+                raise BodoError(err_msg)
         return key_colnames
 
     def _get_list_value_spec_length(self, by_arg, n_key, err_msg=None):

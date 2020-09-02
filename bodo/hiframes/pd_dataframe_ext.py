@@ -2968,7 +2968,7 @@ def to_sql_overload(
         if err_msg != "all_ok":
             # TODO: We cannot do a simple raise ValueError(err_msg).
             print("err_msg=", err_msg)
-            raise BodoError("error in to_sql() operation")
+            raise ValueError("error in to_sql() operation")
 
     return _impl
 

@@ -488,7 +488,7 @@ class SeriesPass:
             # else:
             #    S_str = S2.str
             if rhs_def is None:
-                raise ValueError("Invalid Series.str, cannot handle conditional yet")
+                raise BodoError("Invalid Series.str, cannot handle conditional yet")
             assert is_expr(rhs_def, "getattr")
             assign.value = rhs_def.value
             return [assign]
@@ -496,7 +496,7 @@ class SeriesPass:
         if isinstance(rhs_type, SeriesCatMethodType) and rhs.attr == "_obj":
             rhs_def = guard(get_definition, self.func_ir, rhs.value)
             if rhs_def is None:
-                raise ValueError("Invalid Series.cat, cannot handle conditional yet")
+                raise BodoError("Invalid Series.cat, cannot handle conditional yet")
             assert is_expr(rhs_def, "getattr")
             assign.value = rhs_def.value
             return [assign]
@@ -504,7 +504,7 @@ class SeriesPass:
         if isinstance(rhs_type, SeriesDatetimePropertiesType) and rhs.attr == "_obj":
             rhs_def = guard(get_definition, self.func_ir, rhs.value)
             if rhs_def is None:
-                raise ValueError("Invalid Series.dt, cannot handle conditional yet")
+                raise BodoError("Invalid Series.dt, cannot handle conditional yet")
             assert is_expr(rhs_def, "getattr")
             assign.value = rhs_def.value
             return [assign]
@@ -1927,7 +1927,7 @@ class SeriesPass:
                     self, impl, args, extra_globals={"_ufunc": np_ufunc}
                 )
         else:
-            raise ValueError("Unsupported numpy ufunc {}".format(ufunc_name))
+            raise BodoError("Unsupported numpy ufunc {}".format(ufunc_name))
 
     def _handle_ufuncs_int_arr(self, ufunc_name, args):
         np_ufunc = getattr(np, ufunc_name)
@@ -2490,7 +2490,7 @@ class SeriesPass:
 
     def _handle_h5_write(self, dset, index, arr):
         if index != slice(None):
-            raise ValueError("Only HDF5 write of full array supported")
+            raise BodoError("Only HDF5 write of full array supported")
         assert isinstance(self.typemap[arr.name], types.Array)
         ndim = self.typemap[arr.name].ndim
 
@@ -2529,7 +2529,7 @@ class SeriesPass:
                 )
             if tup_def.op in ("build_tuple", "build_list"):
                 return tup_def.items
-        raise ValueError("constant tuple expected")
+        raise BodoError("constant tuple expected")
 
     def _get_index_data(self, dt_var, nodes):
         var_def = guard(get_definition, self.func_ir, dt_var)

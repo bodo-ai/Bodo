@@ -1564,7 +1564,7 @@ def arange_parallel_impl(return_type, *args):
     elif len(args) == 4:
         return arange_4
     else:
-        raise ValueError("parallel arange with types {}".format(args))
+        raise BodoError("parallel arange with types {}".format(args))
 
 
 numba.parfors.parfor.replace_functions_map[("arange", "numpy")] = arange_parallel_impl

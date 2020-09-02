@@ -253,7 +253,7 @@ def _gen_pq_reader_py(
         is_parallel
     )
     func_text += "  if is_null_ds_reader(ds_reader):\n"
-    func_text += "    raise ValueError('Error reading Parquet dataset')\n"
+    func_text += "    raise BodoError('Error reading Parquet dataset')\n"
 
     local_types = {}
     for c_name, (real_col_ind, col_ind), col_siz, c_typ in zip(
