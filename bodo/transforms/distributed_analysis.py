@@ -1725,9 +1725,6 @@ class DistributedAnalysis:
             other_ind_vars = tup_list[1:]
             self._set_REP(other_ind_vars, array_dists)
 
-        if isinstance(index_var, int):
-            self._set_REP(inst.list_vars(), array_dists)
-            return
         assert isinstance(index_var, ir.Var)
         index_typ = self.typemap[index_var.name]
 
