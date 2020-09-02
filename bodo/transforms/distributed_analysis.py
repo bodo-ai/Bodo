@@ -1790,13 +1790,13 @@ class DistributedAnalysis:
         return
 
     def _analyze_setitem(self, inst, equiv_set, array_dists):
-        index_var = inst.index_var if is_static_getsetitem(inst) else inst.index
+        """analyze getitem nodes for distribution
+        """
+        # get index_var without changing IR since we are in analysis
+        index_var = get_getsetitem_index_var(inst, self.typemap, [])
+        index_typ = self.typemap[index_var.name]
         target_typ = self.typemap[inst.target.name]
         value_typ = self.typemap[inst.value.name]
-
-        if index_var is None:
-            self._set_REP(inst.list_vars(), array_dists)
-            return
 
         # setitem on list/dictionary of distributed values
         if isinstance(target_typ, (types.List, types.DictType)) and (
@@ -1808,6 +1808,7 @@ class DistributedAnalysis:
 
         if (inst.target.name, index_var.name) in self._parallel_accesses:
             # no parallel to parallel array set (TODO)
+            self._set_REP([inst.value], array_dists)
             return
 
         tup_list = guard(find_build_tuple, self.func_ir, index_var)
@@ -1816,10 +1817,11 @@ class DistributedAnalysis:
             # rest of indices should be replicated if array
             self._set_REP(tup_list[1:], array_dists)
 
+        # whole slice access, output has same distribution as input
+        # for example: X[:,3] = A
         if guard(is_whole_slice, self.typemap, self.func_ir, index_var) or guard(
             is_slice_equiv_arr, inst.target, index_var, self.func_ir, equiv_set
         ):
-            # for example: X[:,3] = A
             self._meet_array_dists(inst.target.name, inst.value.name, array_dists)
             return
 
