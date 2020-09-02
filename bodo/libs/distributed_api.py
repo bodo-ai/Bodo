@@ -2242,10 +2242,6 @@ def dist_cummax(in_arr, out_arr):
     return cummax_impl
 
 
-def dist_setitem(arr, index, val):  # pragma: no cover
-    return 0
-
-
 _allgather = types.ExternalFunction(
     "allgather", types.void(types.voidptr, types.int32, types.voidptr, types.int32)
 )
@@ -2366,14 +2362,6 @@ def single_print(*args):  # pragma: no cover
 
 
 wait = types.ExternalFunction("dist_wait", types.void(mpi_req_numba_type, types.bool_))
-
-
-# @infer_global(dist_setitem)
-# class DistSetitem(AbstractTemplate):
-#     def generic(self, args, kws):
-#         assert not kws
-#         assert len(args)==5
-#         return signature(types.int32, *unliteral_all(args))
 
 
 class ReqArrayType(types.Type):
