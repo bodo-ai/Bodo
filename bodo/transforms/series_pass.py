@@ -189,8 +189,6 @@ class SeriesPass:
         )
         # Loc object of current location being translated
         self.curr_loc = self.func_ir.loc
-        # keep track of tuple variables change by to_const_tuple
-        self._type_changed_vars = []
 
     def run(self):
         blocks = self.func_ir.blocks
@@ -286,12 +284,6 @@ class SeriesPass:
     def _run_assign(self, assign):
         lhs = assign.target.name
         rhs = assign.value
-
-        # fix type of lhs if type of rhs has been changed
-        if isinstance(rhs, ir.Var) and rhs.name in self._type_changed_vars:
-            self.typemap.pop(lhs)
-            self.typemap[lhs] = self.typemap[rhs.name]
-            self._type_changed_vars.append(lhs)
 
         if isinstance(rhs, ir.Expr):
             if rhs.op == "getattr":
@@ -1295,40 +1287,6 @@ class SeriesPass:
                 self, impl, rhs.args, pysig=self.calltypes[rhs].pysig, kws=dict(rhs.kws)
             )
 
-        if fdef == ("concat", "bodo.libs.array_kernels"):
-            # concat() case where tuple type changes by to_const_type()
-            if any([a.name in self._type_changed_vars for a in rhs.args]):
-                argtyps = tuple(self.typemap[a.name] for a in rhs.args)
-                old_sig = self.calltypes.pop(rhs)
-                new_sig = self.typemap[rhs.func.name].get_call_type(
-                    self.typingctx, argtyps, dict(rhs.kws)
-                )
-                self.calltypes[rhs] = new_sig
-
-            # replace tuple of Series with tuple of Arrays
-            in_vars, _ = guard(find_build_sequence, self.func_ir, rhs.args[0])
-            nodes = []
-            s_arrs = [
-                self._get_series_data(v, nodes)
-                if isinstance(self.typemap[v.name], SeriesType)
-                else v
-                for v in in_vars
-            ]
-            loc = assign.target.loc
-            scope = assign.target.scope
-            new_tup = ir.Expr.build_tuple(s_arrs, loc)
-            new_arg = ir.Var(scope, mk_unique_var(rhs.args[0].name + "_arrs"), loc)
-            self.typemap[new_arg.name] = self.typemap[rhs.args[0].name]
-            nodes.append(ir.Assign(new_tup, new_arg, loc))
-            rhs.args[0] = new_arg
-            nodes.append(assign)
-            self.calltypes.pop(rhs)
-            new_sig = self.typemap[rhs.func.name].get_call_type(
-                self.typingctx, (self.typemap[new_arg.name],), dict(rhs.kws)
-            )
-            self.calltypes[rhs] = new_sig
-            return nodes
-
         # pattern match pd.isna(A[i]) and replace it with array_kernels.isna(A, i)
         if fdef in (("isna", "pandas"), ("isnull", "pandas")):
             obj = get_call_expr_arg(fdef[0], rhs.args, dict(rhs.kws), 0, "obj")
@@ -1487,13 +1445,6 @@ class SeriesPass:
 
             nodes.append(assign)
             return nodes
-
-        if fdef == ("get_series_data_tup", "bodo.hiframes.pd_series_ext"):
-            arg = rhs.args[0]
-            impl = bodo.hiframes.pd_series_ext.overload_get_series_data_tup(
-                self.typemap[arg.name]
-            )
-            return compile_func_single_block(impl, (arg,), assign.target, self)
 
         if fdef == ("get_index_data", "bodo.hiframes.pd_index_ext"):
             var_def = guard(get_definition, self.func_ir, rhs.args[0])
@@ -1669,11 +1620,6 @@ class SeriesPass:
         ):
             return self._run_call_index(assign, assign.target, rhs, func_mod, func_name)
 
-        if fdef == ("concat_dummy", "bodo.hiframes.pd_dataframe_ext") and isinstance(
-            self.typemap[lhs], SeriesType
-        ):
-            return self._run_call_concat(assign, lhs, rhs)
-
         if fdef == ("init_dataframe", "bodo.hiframes.pd_dataframe_ext"):
             return [assign]
 
@@ -1705,19 +1651,6 @@ class SeriesPass:
             call_def = guard(find_callname, self.func_ir, var_def)
             if call_def == ("init_dataframe", "bodo.hiframes.pd_dataframe_ext"):
                 assign.value = var_def.args[1]
-
-        if fdef == ("to_const_tuple", "bodo.utils.typing"):
-            tup = rhs.args[0]
-            tup_items = self._get_const_tup(tup)
-            new_tup = ir.Expr.build_tuple(tup_items, tup.loc)
-            assign.value = new_tup
-            # fix type and definition of lhs
-            self.typemap.pop(lhs)
-            self._type_changed_vars.append(lhs)
-            self.typemap[lhs] = types.Tuple(
-                tuple(self.typemap[a.name] for a in tup_items)
-            )
-            return [assign]
 
         # inline conversion functions to enable optimization
         if func_mod == "bodo.utils.conversion" and func_name != "flatten_array":
@@ -2471,22 +2404,6 @@ class SeriesPass:
         return replace_func(
             self, full_impl, [shape_var, fill_value_var], pre_nodes=nodes
         )
-
-    def _run_call_concat(self, assign, lhs, rhs):
-        nodes = []
-        series_list = guard(get_definition, self.func_ir, rhs.args[0]).items
-        arrs = [self._get_series_data(v, nodes) for v in series_list]
-        arr_tup = ir.Var(rhs.args[0].scope, mk_unique_var("arr_tup"), rhs.args[0].loc)
-        self.typemap[arr_tup.name] = types.Tuple([self.typemap[a.name] for a in arrs])
-        tup_expr = ir.Expr.build_tuple(arrs, arr_tup.loc)
-        nodes.append(ir.Assign(tup_expr, arr_tup, arr_tup.loc))
-        # TODO: index and name
-        def impl(arr_list):  # pragma: no cover
-            arr = bodo.libs.array_kernels.concat(arr_list)
-            index = bodo.hiframes.pd_index_ext.init_range_index(0, len(arr), 1, None)
-            return bodo.hiframes.pd_series_ext.init_series(arr, index)
-
-        return replace_func(self, impl, [arr_tup], pre_nodes=nodes)
 
     def _handle_h5_write(self, dset, index, arr):
         if index != slice(None):
