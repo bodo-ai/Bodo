@@ -127,6 +127,28 @@ import pytest
         (
             np.array(
                 [
+                    {"A": [Decimal("1.0"), Decimal("2.2")], "B": [Decimal("4.14")]},
+                    {"A": [Decimal("0"), Decimal("3.2"), Decimal("4")], "B": [Decimal("-1")]},
+                    {"A": [Decimal("5")], "B": [Decimal("644"), Decimal("9.1"), Decimal("154")]},
+                    {"A": [Decimal("10.0"), Decimal("13.4")], "B": [Decimal("3.14159")]},
+                    {"A": [Decimal("30"), Decimal("5.2")], "B": [Decimal("0"), Decimal("2")]},
+                    {"A": [Decimal("-1"), None, Decimal("-3")], "B": [Decimal("60")]},
+                ]
+            ),
+            np.array(
+                [
+                    {"A": [Decimal("2.78"), Decimal("3"), Decimal("2")], "B": [Decimal("45")]},
+                    {"A": [Decimal("-1"), Decimal("-10")], "B": [Decimal("4568")]},
+                    {"A": [Decimal("11"), None, Decimal("-44.7")], "B": [Decimal("33")]},
+                    {"A": [Decimal("10.4")], "B": [Decimal("20.6")]},
+                    {"A": [Decimal("3.5"), Decimal("5.5")], "B": [Decimal("4")]},
+                    {"A": [Decimal("1")], "B": [Decimal("7"), None]},
+                ]
+            ),
+        ),
+        (
+            np.array(
+                [
                     {"A": {"A1": 10, "A2": 2}, "B": {"B1": -11, "B2": 4}},
                     {"A": {"A1": -19, "A2": 5}, "B": {"B1": 5, "B2": 19}},
                     {"A": {"A1": -5, "A2": -9}, "B": {"B1": -15, "B2": 13}},

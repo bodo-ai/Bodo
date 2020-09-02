@@ -4,6 +4,9 @@
 #include <string>
 #include "_decimal_ext.h"
 
+#undef DEBUG_ARROW_BUILDER
+
+
 /**
  * Append values from a byte buffer to a primitive array builder.
  * @param values: pointer to buffer containing data
@@ -15,6 +18,9 @@
 void append_to_primitive(const uint8_t* values, int64_t offset, int64_t length,
                          arrow::ArrayBuilder* builder,
                          const std::vector<uint8_t>& valid_elems) {
+#ifdef DEBUG_ARROW_BUILDER
+    std::cout << "Beginning of append_to_primitive\n";
+#endif
     arrow::Type::type typ = builder->type()->id();
     if (typ == arrow::Type::INT8) {
         auto typed_builder =
@@ -66,6 +72,14 @@ void append_to_primitive(const uint8_t* values, int64_t offset, int64_t length,
             dynamic_cast<arrow::NumericBuilder<arrow::DoubleType>*>(builder);
         typed_builder->AppendValues((double*)values + offset, length,
                                     valid_elems.data());
+    } else if (typ == arrow::Type::DECIMAL) {
+#ifdef DEBUG_ARROW_BUILDER
+        std::cout << "Beginning of append_to_primitive DECIMAL\n";
+#endif
+        auto typed_builder =
+            dynamic_cast<arrow::Decimal128Builder*>(builder);
+        typed_builder->AppendValues((uint8_t*)values + BYTES_PER_DECIMAL * offset, length,
+                                    valid_elems.data());
     } else {
         std::string err_msg = "append_to_primitive : Unsupported type " +
                               builder->type()->ToString();
@@ -96,8 +110,14 @@ void append_to_primitive(const uint8_t* values, int64_t offset, int64_t length,
 void append_to_out_array(std::shared_ptr<arrow::Array> input_array,
                          int64_t start_offset, int64_t end_offset,
                          arrow::ArrayBuilder* builder) {
+#ifdef DEBUG_ARROW_BUILDER
+    std::cout << "Beginning of append_to_out_array\n";
+#endif
     // TODO check for nulls and append nulls
     if (input_array->type_id() == arrow::Type::LIST) {
+#ifdef DEBUG_ARROW_BUILDER
+        std::cout << "Beginning of append_to_out_array LIST\n";
+#endif
         // TODO: assert builder.type() == LIST
         std::shared_ptr<arrow::ListArray> list_array =
             std::dynamic_pointer_cast<arrow::ListArray>(input_array);
@@ -117,6 +137,9 @@ void append_to_out_array(std::shared_ptr<arrow::Array> input_array,
                                 child_builder);
         }
     } else if (input_array->type_id() == arrow::Type::STRUCT) {
+#ifdef DEBUG_ARROW_BUILDER
+        std::cout << "Beginning of append_to_out_array STRUCT\n";
+#endif
         // TODO: assert builder.type() == STRUCT
         auto struct_array =
             std::dynamic_pointer_cast<arrow::StructArray>(input_array);
@@ -139,6 +162,9 @@ void append_to_out_array(std::shared_ptr<arrow::Array> input_array,
         // finished appending (end_offset - start_offset) structs
         // struct_builder->AppendValues(end_offset - start_offset, NULLPTR);
     } else if (input_array->type_id() == arrow::Type::STRING) {
+#ifdef DEBUG_ARROW_BUILDER
+        std::cout << "Beginning of append_to_out_array STRING\n";
+#endif
         auto str_array =
             std::dynamic_pointer_cast<arrow::StringArray>(input_array);
         auto str_builder = dynamic_cast<arrow::StringBuilder*>(builder);
@@ -152,6 +178,9 @@ void append_to_out_array(std::shared_ptr<arrow::Array> input_array,
                     {str_array->GetString(start_offset + i)});
         }
     } else {
+#ifdef DEBUG_ARROW_BUILDER
+        std::cout << "Beginning of append_to_out_array PRIMITIVE\n";
+#endif
         int64_t num_elems = end_offset - start_offset;
         // assume this is array of primitive values
         // TODO: decimal, date, etc.

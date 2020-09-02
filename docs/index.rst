@@ -23,6 +23,7 @@ Bodo
    source/compilation
    source/aws
    source/jupyter
+   source/e3
    source/releases
    source/eula
    source/prev_doc_link

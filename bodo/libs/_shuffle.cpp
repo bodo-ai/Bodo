@@ -675,87 +675,51 @@ std::vector<uint32_t> map_hashes_array(std::vector<int> const& send_count,
     return std::move(hashes_out);
 }
 
-template <typename T, int dtype>
-std::shared_ptr<arrow::Buffer> shuffle_arrow_primitive_buffer_T(
+std::shared_ptr<arrow::Buffer> shuffle_arrow_primitive_buffer(
     std::vector<int> const& send_count, std::vector<int> const& recv_count,
-    uint32_t* hashes, const T* values, int const& n_pes,
+    uint32_t* hashes, int const& n_pes,
     std::shared_ptr<arrow::PrimitiveArray> const& input_array) {
+#ifdef DEBUG_ARROW_SHUFFLE
+    std::cout << "Beginning of shuffle_arrow_primitive_buffer\n";
+#endif
+    // Typing stuff
+    arrow::Type::type typ = input_array->type()->id();
+    Bodo_CTypes::CTypeEnum dtype = arrow_to_bodo_type(typ);
+    uint64_t siztype = numpy_item_size[dtype];
+    MPI_Datatype mpi_typ = get_MPI_typ(dtype);
+#ifdef DEBUG_ARROW_SHUFFLE
+    std::cout << "siztype=" << siztype << "\n";
+#endif
+    // Setting up the arrays
     size_t n_rows = std::accumulate(send_count.begin(), send_count.end(), 0);
-    size_t n_rows_out =
-        std::accumulate(recv_count.begin(), recv_count.end(), 0);
+    size_t n_rows_out = std::accumulate(recv_count.begin(), recv_count.end(), 0);
     std::vector<int> send_disp(n_pes);
     std::vector<int> recv_disp(n_pes);
     calc_disp(send_disp, send_count);
     calc_disp(recv_disp, recv_count);
-    T* send_arr = new T[n_rows];
-    fill_send_array_inner<T>(send_arr, values, hashes, send_disp, n_pes,
-                             n_rows);
-    MPI_Datatype mpi_typ = get_MPI_typ(dtype);
-    size_t siz_out = sizeof(T) * n_rows_out;
+    std::vector<char> send_arr(n_rows * siztype);
+    char* values = (char*)input_array->values()->data();
+    std::vector<int> tmp_offset(send_disp);
+    for (size_t i = 0; i < n_rows; i++) {
+        size_t node = (size_t)hashes[i] % (size_t)n_pes;
+        int ind = tmp_offset[node];
+        memcpy(send_arr.data() + ind * siztype, values + i * siztype, siztype);
+        tmp_offset[node]++;
+    }
+    // Allocating returning arrays
+    size_t siz_out = siztype * n_rows_out;
     arrow::Result<std::unique_ptr<arrow::Buffer>> maybe_buffer = arrow::AllocateBuffer(siz_out);
     if (!maybe_buffer.ok()) {
         Bodo_PyErr_SetString(PyExc_RuntimeError, "allocation error");
         return nullptr;
     }
     std::shared_ptr<arrow::Buffer> buffer = *std::move(maybe_buffer);
-    T* data_ptr = (T*)buffer->mutable_data();
-    MPI_Alltoallv(send_arr, send_count.data(), send_disp.data(), mpi_typ,
-                  data_ptr, recv_count.data(), recv_disp.data(), mpi_typ,
+    // Doing the exchanges
+    char* data_ptr = (char*)buffer->mutable_data();
+    MPI_Alltoallv(send_arr.data(), send_count.data(), send_disp.data(), mpi_typ,
+                  data_ptr,        recv_count.data(), recv_disp.data(), mpi_typ,
                   MPI_COMM_WORLD);
-    delete[] send_arr;
     return buffer;
-}
-
-std::shared_ptr<arrow::Buffer> shuffle_arrow_primitive_buffer(
-    std::vector<int> const& send_count, std::vector<int> const& recv_count,
-    uint32_t* hashes, int const& n_pes,
-    std::shared_ptr<arrow::PrimitiveArray> const& input_array) {
-    arrow::Type::type typ = input_array->type()->id();
-    if (typ == arrow::Type::INT8)
-        return shuffle_arrow_primitive_buffer_T<int8_t, Bodo_CTypes::INT8>(
-            send_count, recv_count, hashes,
-            (int8_t*)input_array->values()->data(), n_pes, input_array);
-    if (typ == arrow::Type::UINT8)
-        return shuffle_arrow_primitive_buffer_T<uint8_t, Bodo_CTypes::UINT8>(
-            send_count, recv_count, hashes,
-            (uint8_t*)input_array->values()->data(), n_pes, input_array);
-    if (typ == arrow::Type::INT16)
-        return shuffle_arrow_primitive_buffer_T<int16_t, Bodo_CTypes::INT16>(
-            send_count, recv_count, hashes,
-            (int16_t*)input_array->values()->data(), n_pes, input_array);
-    if (typ == arrow::Type::UINT16)
-        return shuffle_arrow_primitive_buffer_T<uint16_t, Bodo_CTypes::UINT16>(
-            send_count, recv_count, hashes,
-            (uint16_t*)input_array->values()->data(), n_pes, input_array);
-    if (typ == arrow::Type::INT32)
-        return shuffle_arrow_primitive_buffer_T<int32_t, Bodo_CTypes::INT32>(
-            send_count, recv_count, hashes,
-            (int32_t*)input_array->values()->data(), n_pes, input_array);
-    if (typ == arrow::Type::UINT32)
-        return shuffle_arrow_primitive_buffer_T<uint32_t, Bodo_CTypes::UINT32>(
-            send_count, recv_count, hashes,
-            (uint32_t*)input_array->values()->data(), n_pes, input_array);
-    if (typ == arrow::Type::INT64)
-        return shuffle_arrow_primitive_buffer_T<int64_t, Bodo_CTypes::INT64>(
-            send_count, recv_count, hashes,
-            (int64_t*)input_array->values()->data(), n_pes, input_array);
-    if (typ == arrow::Type::UINT64)
-        return shuffle_arrow_primitive_buffer_T<uint64_t, Bodo_CTypes::UINT64>(
-            send_count, recv_count, hashes,
-            (uint64_t*)input_array->values()->data(), n_pes, input_array);
-    if (typ == arrow::Type::FLOAT)
-        return shuffle_arrow_primitive_buffer_T<float, Bodo_CTypes::FLOAT32>(
-            send_count, recv_count, hashes,
-            (float*)input_array->values()->data(), n_pes, input_array);
-    if (typ == arrow::Type::DOUBLE)
-        return shuffle_arrow_primitive_buffer_T<double, Bodo_CTypes::FLOAT64>(
-            send_count, recv_count, hashes,
-            (double*)input_array->values()->data(), n_pes, input_array);
-    // Unsupported data type.
-    std::string err_msg = "shuffle_arrow_primitive_buffer : Unsupported type " +
-                          input_array->type()->ToString();
-    Bodo_PyErr_SetString(PyExc_RuntimeError, err_msg.c_str());
-    return nullptr;
 }
 
 std::shared_ptr<arrow::Buffer> shuffle_string_buffer(

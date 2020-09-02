@@ -79,7 +79,9 @@ Bodo_CTypes::CTypeEnum arrow_to_bodo_type(arrow::Type::type type) {
             return Bodo_CTypes::FLOAT32;
         case arrow::Type::DOUBLE:
             return Bodo_CTypes::FLOAT64;
-        // TODO Decimal, Date, Datetime, Timedelta, String, Bool
+        case arrow::Type::DECIMAL:
+            return Bodo_CTypes::DECIMAL;
+        // TODO Date, Datetime, Timedelta, String, Bool
         default: {
             std::string err_msg = "arrow_to_bodo_type : Unsupported type";
             Bodo_PyErr_SetString(PyExc_RuntimeError, err_msg.c_str());
@@ -448,9 +450,15 @@ void nested_array_to_c(std::shared_ptr<arrow::Array> array, int64_t* lengths,
         auto primitive_array =
             std::dynamic_pointer_cast<arrow::PrimitiveArray>(array);
         lengths[lengths_pos++] = primitive_array->length();
+#ifdef DEBUG_ARROW_ARRAY
+        std::cout << "nested_array_to_c : PRIMITIVE case, step 1\n";
+#endif
 
         Bodo_CTypes::CTypeEnum dtype =
             arrow_to_bodo_type(primitive_array->type_id());
+#ifdef DEBUG_ARROW_ARRAY
+        std::cout << "nested_array_to_c : PRIMITIVE case, step 2\n";
+#endif
 
         // allocate output arrays and copy data
         array_info* data =
@@ -460,20 +468,37 @@ void nested_array_to_c(std::shared_ptr<arrow::Array> array, int64_t* lengths,
         array_info* nulls = alloc_array(n_null_bytes, -1, -1,
                                         bodo_array_type::arr_type_enum::NUMPY,
                                         Bodo_CTypes::UINT8, 0, 0);
-
-        memcpy(data->data1, primitive_array->values()->data(),
-               numpy_item_size[dtype] * primitive_array->length());
-        memset(nulls->data1, 0, n_null_bytes);
-        std::vector<char> vectNaN = RetrieveNaNentry(dtype);
+#ifdef DEBUG_ARROW_ARRAY
+        std::cout << "nested_array_to_c : PRIMITIVE case, step 3\n";
+#endif
         uint64_t siztype = numpy_item_size[dtype];
+        memcpy(data->data1, primitive_array->values()->data(),
+               siztype * primitive_array->length());
+#ifdef DEBUG_ARROW_ARRAY
+        std::cout << "nested_array_to_c : PRIMITIVE case, step 4\n";
+#endif
+        memset(nulls->data1, 0, n_null_bytes);
+#ifdef DEBUG_ARROW_ARRAY
+        std::cout << "nested_array_to_c : PRIMITIVE case, step 5\n";
+#endif
+        std::vector<char> vectNaN = RetrieveNaNentry(dtype);
+#ifdef DEBUG_ARROW_ARRAY
+        std::cout << "nested_array_to_c : PRIMITIVE case, step 6 |vectNaN|=" << vectNaN.size() << " siztype=" << siztype << "\n";
+#endif
         for (int64_t i = 0; i < primitive_array->length(); i++) {
             if (!primitive_array->IsNull(i))
                 SetBitTo((uint8_t*)nulls->data1, i, true);
             else
                 memcpy(data->data1 + siztype * i, vectNaN.data(), siztype);
         }
+#ifdef DEBUG_ARROW_ARRAY
+        std::cout << "nested_array_to_c : PRIMITIVE case, step 7\n";
+#endif
         infos[infos_pos++] = nulls;
         infos[infos_pos++] = data;
+#ifdef DEBUG_ARROW_ARRAY
+        std::cout << "nested_array_to_c : PRIMITIVE case, step 8\n";
+#endif
     }
 }
 

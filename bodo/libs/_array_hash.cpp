@@ -247,17 +247,19 @@ void apply_arrow_string_hashes(
  * @param values: the list of values in temmplated array.
  * @param input_array: the array in input.
  */
-template <typename T, int dtype>
-void apply_arrow_numeric_hash_T(
+void apply_arrow_numeric_hash(
     uint32_t* out_hashes, std::vector<uint32_t> const& list_offsets,
-    size_t const& n_rows, T* values,
+    size_t const& n_rows,
     std::shared_ptr<arrow::PrimitiveArray> const& primitive_array) {
+    arrow::Type::type typ = primitive_array->type()->id();
+    Bodo_CTypes::CTypeEnum bodo_typ = arrow_to_bodo_type(typ);
+    uint64_t siztype = numpy_item_size[bodo_typ];
+    char* value_ptr = (char*)primitive_array->values()->data();
     for (size_t i_row = 0; i_row < n_rows; i_row++) {
         for (uint32_t idx = list_offsets[i_row]; idx < list_offsets[i_row + 1];
              idx++) {
-            T* value_ptr = values + idx;
-            char* value_ptr_c = (char*)value_ptr;
-            hash_string_32(value_ptr_c, sizeof(T), out_hashes[i_row],
+            char* value_ptr_shift = value_ptr + siztype * idx;
+            hash_string_32(value_ptr_shift, siztype, out_hashes[i_row],
                            &out_hashes[i_row]);
         }
     }
@@ -309,53 +311,8 @@ void hash_arrow_array(uint32_t* out_hashes,
     } else {
         auto primitive_array =
             std::dynamic_pointer_cast<arrow::PrimitiveArray>(input_array);
-        arrow::Type::type typ = primitive_array->type()->id();
-        if (typ == arrow::Type::INT8) {
-            apply_arrow_numeric_hash_T<int8_t, Bodo_CTypes::INT8>(
-                out_hashes, list_offsets, n_rows,
-                (int8_t*)primitive_array->values()->data(), primitive_array);
-        } else if (typ == arrow::Type::UINT8) {
-            apply_arrow_numeric_hash_T<uint8_t, Bodo_CTypes::UINT8>(
-                out_hashes, list_offsets, n_rows,
-                (uint8_t*)primitive_array->values()->data(), primitive_array);
-        } else if (typ == arrow::Type::INT16) {
-            apply_arrow_numeric_hash_T<int16_t, Bodo_CTypes::INT16>(
-                out_hashes, list_offsets, n_rows,
-                (int16_t*)primitive_array->values()->data(), primitive_array);
-        } else if (typ == arrow::Type::UINT16) {
-            apply_arrow_numeric_hash_T<uint16_t, Bodo_CTypes::UINT16>(
-                out_hashes, list_offsets, n_rows,
-                (uint16_t*)primitive_array->values()->data(), primitive_array);
-        } else if (typ == arrow::Type::INT32) {
-            apply_arrow_numeric_hash_T<int32_t, Bodo_CTypes::INT32>(
-                out_hashes, list_offsets, n_rows,
-                (int32_t*)primitive_array->values()->data(), primitive_array);
-        } else if (typ == arrow::Type::UINT32) {
-            apply_arrow_numeric_hash_T<uint32_t, Bodo_CTypes::UINT32>(
-                out_hashes, list_offsets, n_rows,
-                (uint32_t*)primitive_array->values()->data(), primitive_array);
-        } else if (typ == arrow::Type::INT64) {
-            apply_arrow_numeric_hash_T<int64_t, Bodo_CTypes::INT64>(
-                out_hashes, list_offsets, n_rows,
-                (int64_t*)primitive_array->values()->data(), primitive_array);
-        } else if (typ == arrow::Type::UINT64) {
-            apply_arrow_numeric_hash_T<uint64_t, Bodo_CTypes::UINT64>(
-                out_hashes, list_offsets, n_rows,
-                (uint64_t*)primitive_array->values()->data(), primitive_array);
-        } else if (typ == arrow::Type::FLOAT) {
-            apply_arrow_numeric_hash_T<float, Bodo_CTypes::FLOAT32>(
-                out_hashes, list_offsets, n_rows,
-                (float*)primitive_array->values()->data(), primitive_array);
-        } else if (typ == arrow::Type::DOUBLE) {
-            apply_arrow_numeric_hash_T<double, Bodo_CTypes::FLOAT64>(
-                out_hashes, list_offsets, n_rows,
-                (double*)primitive_array->values()->data(), primitive_array);
-        } else {
-          std::string err_msg = "hash_arrow_array : Unsupported type " + primitive_array->type()->ToString();
-          Bodo_PyErr_SetString(PyExc_RuntimeError, err_msg.c_str());
-        }
-        apply_arrow_bitmask_hash(out_hashes, list_offsets, n_rows,
-                                 primitive_array);
+        apply_arrow_numeric_hash(out_hashes, list_offsets, n_rows, primitive_array);
+        apply_arrow_bitmask_hash(out_hashes, list_offsets, n_rows, primitive_array);
     }
 #ifdef DEBUG_HASH
     std::cout << "Ending of hash_arrow_array\n";

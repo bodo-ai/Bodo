@@ -25,12 +25,13 @@ MPI_Datatype decimal_mpi_type = MPI_DATATYPE_NULL;
 #undef DEBUG_ARROW_ARRAY
 
 struct ArrayBuildInfo {
-    ArrayBuildInfo(std::shared_ptr<arrow::Array> a, int p1, int p2, int p3)
-        : array(a), types_pos(p1), buf_pos(p2), pos_name(p3) {}
+    ArrayBuildInfo(std::shared_ptr<arrow::Array> a, int p1, int p2, int p3, int p4)
+      : array(a), type_pos(p1), buf_pos(p2), length_pos(p3), name_pos(p4) {}
     std::shared_ptr<arrow::Array> array;
-    int types_pos;
+    int type_pos;
     int buf_pos;
-    int pos_name;
+    int length_pos;
+    int name_pos;
 };
 
 /**
@@ -40,17 +41,19 @@ struct ArrayBuildInfo {
                    (includes offset, null_bitmap and data buffers)
                    NOTE that not all arrays have all three
  * @param lengths: length of each array in nested structure
- * @param types_pos: track current position in types array
+ * @param type_pos: track current position in types array
  * @param buf_pos: track current position in buffers array
+ * @param length_pos: track current position in lengths array
+ * @param name_pos: track current position in field names
  */
 ArrayBuildInfo nested_array_from_c(const int* types, const uint8_t** buffers,
                                    const int64_t* lengths, char** field_names,
-                                   int types_pos, int buf_pos, int pos_name) {
+                                   int type_pos, int buf_pos, int length_pos, int name_pos) {
 #ifdef DEBUG_ARROW_ARRAY
-    std::cout << "Begin of nested_array_from_c buf_pos=" << buf_pos << " types_pos=" << types_pos << "\n";
+    std::cout << "Begin of nested_array_from_c buf_pos=" << buf_pos << " type_pos=" << type_pos << "\n";
 #endif
-    Bodo_CTypes::CTypeEnum type = (Bodo_CTypes::CTypeEnum)types[types_pos];
-    int64_t length = lengths[types_pos];
+    Bodo_CTypes::CTypeEnum type = (Bodo_CTypes::CTypeEnum)types[type_pos];
+    int64_t length = lengths[length_pos];
     if (type == Bodo_CTypes::LIST) {
 #ifdef DEBUG_ARROW_ARRAY
         std::cout << "nested_array_from_c, LIST case buf_pos=" << buf_pos << "\n";
@@ -60,9 +63,11 @@ ArrayBuildInfo nested_array_from_c(const int* types, const uint8_t** buffers,
 
         ArrayBuildInfo ai =
             nested_array_from_c(types, buffers, lengths, field_names,
-                                types_pos + 1, buf_pos, pos_name);
-        types_pos = ai.types_pos;
+                                type_pos + 1, buf_pos, length_pos + 1, name_pos);
+        type_pos = ai.type_pos;
         buf_pos = ai.buf_pos;
+        length_pos = ai.length_pos;
+        name_pos = ai.name_pos;
 
         std::shared_ptr<arrow::Buffer> list_offsets =
             std::make_shared<arrow::Buffer>(_offsets,
@@ -78,31 +83,33 @@ ArrayBuildInfo nested_array_from_c(const int* types, const uint8_t** buffers,
                                                list_offsets, ai.array,
                                                null_bitmap);
 
-        return ArrayBuildInfo(array, types_pos, buf_pos, pos_name);
+        return ArrayBuildInfo(array, type_pos, buf_pos, length_pos, name_pos);
     } else if (type == Bodo_CTypes::STRUCT) {
 #ifdef DEBUG_ARROW_ARRAY
         std::cout << "nested_array_from_c, STRUCT case buf_pos=" << buf_pos << "\n";
 #endif
-        int num_fields = types[types_pos + 1];
-        types_pos += 2;
+        int num_fields = types[type_pos + 1];
+        type_pos += 2;
+        length_pos += 2;
 
         const uint8_t* _null_bitmap = buffers[buf_pos++];
 
         std::vector<std::shared_ptr<arrow::Array>> child_arrays;
         std::vector<std::shared_ptr<arrow::Field>> fields;
         for (int i = 0; i < num_fields; i++) {
-            std::string e_name(field_names[pos_name]);
+            std::string e_name(field_names[name_pos]);
 #ifdef DEBUG_ARROW_ARRAY
             std::cout << "Before nested_array_from_c\n";
 #endif
             ArrayBuildInfo ai =
                 nested_array_from_c(types, buffers, lengths, field_names,
-                                    types_pos, buf_pos, pos_name + 1);
+                                    type_pos, buf_pos, length_pos, name_pos + 1);
             child_arrays.push_back(ai.array);
             fields.push_back(std::make_shared<arrow::Field>(e_name, ai.array->type()));
-            types_pos = ai.types_pos;
+            type_pos = ai.type_pos;
             buf_pos = ai.buf_pos;
-            pos_name = ai.pos_name;
+            length_pos = ai.length_pos;
+            name_pos = ai.name_pos;
 #ifdef DEBUG_ARROW_ARRAY
             std::cout << "i=" << i << " / " << num_fields << " buf_pos=" << buf_pos << "\n";
 #endif
@@ -117,8 +124,11 @@ ArrayBuildInfo nested_array_from_c(const int* types, const uint8_t** buffers,
         std::shared_ptr<arrow::Array> array =
             std::make_shared<arrow::StructArray>(struct_type, length,
                                                  child_arrays, null_bitmap);
-        return ArrayBuildInfo(array, types_pos, buf_pos, pos_name);
+        return ArrayBuildInfo(array, type_pos, buf_pos, length_pos, name_pos);
     } else if (type == Bodo_CTypes::STRING) {
+#ifdef DEBUG_ARROW_ARRAY
+        std::cout << "nested_array_from_c, STRING case\n";
+#endif
         const uint8_t* _offsets = buffers[buf_pos++];
         const uint8_t* _null_bitmap = buffers[buf_pos++];
 
@@ -136,16 +146,47 @@ ArrayBuildInfo nested_array_from_c(const int* types, const uint8_t** buffers,
             buffers[buf_pos++], num_chars * sizeof(char));
 
         std::shared_ptr<arrow::Array> array =
-            std::make_shared<arrow::StringArray>(length, str_offsets, data,
-                                                 null_bitmap);
-        return ArrayBuildInfo(array, types_pos + 1, buf_pos, pos_name);
-    } else {
+            std::make_shared<arrow::StringArray>(length, str_offsets, data, null_bitmap);
+        return ArrayBuildInfo(array, type_pos + 1, buf_pos, length_pos + 1, name_pos);
+    } else if (type == Bodo_CTypes::DECIMAL) {
+#ifdef DEBUG_ARROW_ARRAY
+        std::cout << "nested_array_from_c, DECIMAL case\n";
+#endif
+        // The null bitmap
+        const uint8_t* _null_bitmap = buffers[buf_pos++];
+        std::shared_ptr<arrow::Buffer> null_bitmap = NULLPTR;
+        int64_t null_count_ = 0;
+        if (_null_bitmap) {
+            null_bitmap = std::make_shared<arrow::Buffer>(_null_bitmap,
+                                                          (length + 7) >> 3);
+            for (int64_t i_row=0; i_row<length; i_row++) {
+                bool bit = GetBit(_null_bitmap, i_row);
+                if (!bit)
+                    null_count_++;
+            }
+        }
+        // The other buffers
+        const uint8_t* data = buffers[buf_pos++];
+        std::shared_ptr<arrow::Buffer> data_buf =
+          std::make_shared<arrow::Buffer>(data, length);
+        std::vector<std::shared_ptr<arrow::Buffer>> l_buf={null_bitmap, data_buf};
+        // The returning array.
+        int32_t precision = types[type_pos + 1];
+        int32_t scale = types[type_pos + 2];
+#ifdef DEBUG_ARROW_ARRAY
+        std::cout << "nested_array_from_c, precision=" << precision << " scale=" << scale << "\n";
+#endif
+        arrow::Result<std::shared_ptr<arrow::DataType>> type_res;
+        type_res = arrow::Decimal128Type::Make(precision, scale);
+        std::shared_ptr<arrow::DataType> type = std::move(type_res).ValueOrDie();
+        std::shared_ptr<arrow::ArrayData> arr = arrow::ArrayData::Make(type, length, l_buf, null_count_, 0);
+        std::shared_ptr<arrow::Array> array = std::make_shared<arrow::Decimal128Array>(arr);
+        return ArrayBuildInfo(array, type_pos + 3, buf_pos, length_pos + 1, name_pos);
+    } else { // Case of numeric/decimal array
 #ifdef DEBUG_ARROW_ARRAY
         std::cout << "nested_array_from_c, PRIMITIVE case buf_pos=" << buf_pos << "\n";
 #endif
-        // numeric array
-        std::shared_ptr<arrow::Array> array;
-        std::shared_ptr<arrow::Buffer> data;
+        // First the null bitmap of the array
         const uint8_t* _null_bitmap = buffers[buf_pos++];
         std::shared_ptr<arrow::Buffer> null_bitmap = NULLPTR;
         if (_null_bitmap)
@@ -154,37 +195,46 @@ ArrayBuildInfo nested_array_from_c(const int* types, const uint8_t** buffers,
 #ifdef DEBUG_ARROW_ARRAY
         std::cout << "We have null_bitmap\n";
 #endif
+        // Second the array itself
+        std::shared_ptr<arrow::Array> array;
+        int64_t siz_typ = numpy_item_size[type];
+        std::shared_ptr<arrow::Buffer> data =
+          std::make_shared<arrow::Buffer>(buffers[buf_pos++], length * siz_typ);
+        // We canot change code below to something more generic since the
+        // arrow::UInt8Type are really types and not enum values.
         if (type == Bodo_CTypes::_BOOL) {
             // Arrow's boolean array uses 1 bit for each bool
             // we use uint8 for now to avoid conversion
-            data = std::make_shared<arrow::Buffer>(buffers[buf_pos++],
-                                                   length * sizeof(bool));
             array = std::make_shared<arrow::NumericArray<arrow::UInt8Type>>(
                 length, data, null_bitmap);
+        } else if (type == Bodo_CTypes::INT8) {
+            array = std::make_shared<arrow::NumericArray<arrow::Int8Type>>(
+                length, data, null_bitmap);
+        } else if (type == Bodo_CTypes::UINT8) {
+            array = std::make_shared<arrow::NumericArray<arrow::UInt8Type>>(
+                length, data, null_bitmap);
+        } else if (type == Bodo_CTypes::INT16) {
+            array = std::make_shared<arrow::NumericArray<arrow::Int16Type>>(
+                length, data, null_bitmap);
+        } else if (type == Bodo_CTypes::UINT16) {
+            array = std::make_shared<arrow::NumericArray<arrow::UInt16Type>>(
+                length, data, null_bitmap);
         } else if (type == Bodo_CTypes::INT32) {
-#ifdef DEBUG_ARROW_ARRAY
-            std::cout << "INT32 case\n";
-#endif
-            data = std::make_shared<arrow::Buffer>(buffers[buf_pos++],
-                                                   length * sizeof(int32_t));
             array = std::make_shared<arrow::NumericArray<arrow::Int32Type>>(
                 length, data, null_bitmap);
+        } else if (type == Bodo_CTypes::UINT32) {
+            array = std::make_shared<arrow::NumericArray<arrow::UInt32Type>>(
+                length, data, null_bitmap);
         } else if (type == Bodo_CTypes::INT64) {
-#ifdef DEBUG_ARROW_ARRAY
-            std::cout << "INT64 case buf_pos=" << buf_pos << " length=" << length << "\n";
-#endif
-            data = std::make_shared<arrow::Buffer>(buffers[buf_pos++],
-                                                   length * sizeof(int64_t));
             array = std::make_shared<arrow::NumericArray<arrow::Int64Type>>(
                 length, data, null_bitmap);
+        } else if (type == Bodo_CTypes::UINT64) {
+            array = std::make_shared<arrow::NumericArray<arrow::UInt64Type>>(
+                length, data, null_bitmap);
         } else if (type == Bodo_CTypes::FLOAT32) {
-            data = std::make_shared<arrow::Buffer>(buffers[buf_pos++],
-                                                   length * sizeof(float));
             array = std::make_shared<arrow::NumericArray<arrow::FloatType>>(
                 length, data, null_bitmap);
         } else if (type == Bodo_CTypes::FLOAT64) {
-            data = std::make_shared<arrow::Buffer>(buffers[buf_pos++],
-                                                   length * sizeof(double));
             array = std::make_shared<arrow::NumericArray<arrow::DoubleType>>(
                 length, data, null_bitmap);
         } else {
@@ -193,9 +243,9 @@ ArrayBuildInfo nested_array_from_c(const int* types, const uint8_t** buffers,
 #endif
             Bodo_PyErr_SetString(PyExc_RuntimeError,
                                  "nested_array_from_c unsupported type");
-            return {nullptr, 0, 0, 0};
+            return {nullptr, 0, 0, 0, 0};
         }
-        return ArrayBuildInfo(array, types_pos + 1, buf_pos, pos_name);
+        return ArrayBuildInfo(array, type_pos + 1, buf_pos, length_pos + 1, name_pos);
     }
 }
 
@@ -205,8 +255,13 @@ array_info* nested_array_to_info(int* types, const uint8_t** buffers,
 #ifdef DEBUG_ARROW_ARRAY
     std::cout << "Beginning of nested_array_to_info\n";
 #endif
+    int type_pos=0;
+    int buf_pos=0;
+    int length_pos=0;
+    int name_pos=0;
     ArrayBuildInfo ai =
-        nested_array_from_c(types, buffers, lengths, field_names, 0, 0, 0);
+        nested_array_from_c(types, buffers, lengths, field_names,
+                            type_pos, buf_pos, length_pos, name_pos);
     // TODO: better memory management of struct, meminfo refcount?
     return new array_info(bodo_array_type::ARROW, Bodo_CTypes::INT8 /*dummy*/,
                           lengths[0], -1, -1, NULL, NULL, NULL, NULL, meminfo,

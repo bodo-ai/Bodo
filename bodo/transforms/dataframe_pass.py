@@ -474,11 +474,6 @@ class DataFramePass:
         if fdef == ("crosstab_dummy", "bodo.hiframes.pd_groupby_ext"):
             return self._run_call_crosstab(assign, lhs, rhs)
 
-        if fdef == ("concat_dummy", "bodo.hiframes.pd_dataframe_ext") and isinstance(
-            self.typemap[lhs.name], DataFrameType
-        ):
-            return self._run_call_concat(assign, lhs, rhs)
-
         if fdef == ("sort_values_dummy", "bodo.hiframes.pd_dataframe_ext"):
             return self._run_call_df_sort_values(assign, lhs, rhs)
 
@@ -1907,109 +1902,6 @@ class DataFramePass:
         return nodes + compile_func_single_block(
             f, args, out_col_var, self, extra_globals={"_func_name": func_name}
         )
-
-    def _run_call_concat(self, assign, lhs, rhs):
-        # TODO: handle non-numerical (e.g. string, datetime) columns
-        nodes = []
-        out_typ = self.typemap[lhs.name]
-        df_list = self._get_const_tup(rhs.args[0])
-        axis = guard(find_const, self.func_ir, rhs.args[1])
-        if axis == 1:
-            return self._run_call_concat_columns(df_list, out_typ, lhs)
-
-        # generate a concat call for each output column
-        # gen concat function
-        arg_names = ", ".join(["in{}".format(i) for i in range(len(df_list))])
-        func_text = "def _concat_imp({}):\n".format(arg_names)
-        func_text += "    return bodo.libs.array_kernels.concat(({}))\n".format(
-            arg_names
-        )
-        loc_vars = {}
-        exec(func_text, {}, loc_vars)
-        _concat_imp = loc_vars["_concat_imp"]
-
-        out_vars = []
-        for cname in out_typ.columns:
-            # find an example input array for this output array to use for typing in
-            # gen_na_array()
-            example_arr = None
-            for df in df_list:
-                df_typ = self.typemap[df.name]
-                if cname in df_typ.columns:
-                    example_arr = self._get_dataframe_data(df, cname, nodes)
-                    break
-            # arguments to the generated function
-            args = []
-            # get input columns
-            for df in df_list:
-                df_typ = self.typemap[df.name]
-                # generate full NaN column
-                if cname not in df_typ.columns:
-                    # corner case: empty dataframe concat
-                    if len(df_typ.columns) == 0:
-                        nodes += compile_func_single_block(
-                            lambda A: bodo.libs.array_kernels.gen_na_array(0, A),
-                            (example_arr,),
-                            None,
-                            self,
-                        )
-                        args.append(nodes[-1].target)
-                        continue
-
-                    arr = self._get_dataframe_data(df, df_typ.columns[0], nodes)
-                    nodes += compile_func_single_block(
-                        lambda arr, A: bodo.libs.array_kernels.gen_na_array(
-                            len(arr), A
-                        ),
-                        (arr, example_arr),
-                        None,
-                        self,
-                    )
-                    args.append(nodes[-1].target)
-                else:
-                    arr = self._get_dataframe_data(df, cname, nodes)
-                    args.append(arr)
-
-            nodes += compile_func_single_block(_concat_imp, args, None, self)
-            out_vars.append(nodes[-1].target)
-
-        _init_df = _gen_init_df(out_typ.columns)
-
-        return nodes + compile_func_single_block(_init_df, out_vars, lhs, self)
-
-    def _run_call_concat_columns(self, objs, out_typ, lhs):
-        """concatenate series/dataframe columns with axis=1
-        """
-        nodes = []
-        out_vars = []
-        for obj in objs:
-            obj_typ = self.typemap[obj.name]
-            if isinstance(obj_typ, DataFrameType):
-                for i in range(len(obj_typ.columns)):
-                    nodes += compile_func_single_block(
-                        lambda df: bodo.hiframes.pd_dataframe_ext.get_dataframe_data(
-                            df, _i
-                        ),
-                        (obj,),
-                        None,
-                        self,
-                        extra_globals={"_i": i},
-                    )
-                    out_vars.append(nodes[-1].target)
-            else:
-                assert isinstance(obj_typ, SeriesType)
-                # TODO: other types like arrays?
-                nodes += compile_func_single_block(
-                    lambda S: bodo.hiframes.pd_series_ext.get_series_data(S),
-                    (obj,),
-                    None,
-                    self,
-                )
-                out_vars.append(nodes[-1].target)
-
-        _init_df = _gen_init_df(out_typ.columns)
-
-        return nodes + compile_func_single_block(_init_df, out_vars, lhs, self)
 
     def _get_df_obj_select(self, obj_var, obj_name):
         """get df object for groupby() or rolling()

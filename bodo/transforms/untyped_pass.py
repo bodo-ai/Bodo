@@ -398,9 +398,6 @@ class UntypedPass:
         if fdef == ("read_parquet", "pandas"):
             return self._handle_pd_read_parquet(assign, lhs, rhs)
 
-        if fdef == ("concat", "pandas"):
-            return self._handle_concat(assign, lhs, rhs, label)
-
         if fdef == ("fromfile", "numpy"):
             return bodo.io.np_io._handle_np_fromfile(assign, lhs, rhs)
 

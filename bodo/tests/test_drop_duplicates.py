@@ -7,7 +7,7 @@ import random
 import pytest
 import bodo
 from bodo.tests.utils import check_func
-
+from decimal import Decimal
 
 @pytest.fixture(
     params=[
@@ -70,6 +70,18 @@ from bodo.tests.utils import check_func
                 {"A": [31, 41], "B": [51, 52, 53]},
                 {"A": [33], "B": [40, 50, 51, 52, 53]},
                 {"A": [30, 40, 19], "B": [1, 43, 50]},
+            ]
+            * 2
+        ),
+        np.array(
+            [
+                {"A": [Decimal("1.0"), Decimal("2.2")], "B": [Decimal("4.14")]},
+                {"A": [Decimal("0"), Decimal("3.2"), Decimal("4")], "B": [Decimal("-1")]},
+                {"A": [Decimal("5")], "B": [Decimal("644"), Decimal("9.1"), Decimal("154")]},
+                {"A": [Decimal("10.0"), Decimal("13.4")], "B": [Decimal("3.14159")]},
+                {"A": [Decimal("15.0"), None], "B": [Decimal("2.05")]},
+                {"A": [Decimal("30"), Decimal("5.2")], "B": [Decimal("0"), Decimal("2")]},
+                {"A": [Decimal("-1"), Decimal("-2"), None], "B": [Decimal("60")]},
             ]
             * 2
         ),
