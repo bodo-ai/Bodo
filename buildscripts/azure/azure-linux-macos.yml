@@ -37,8 +37,7 @@ jobs:
   - script: |
       export PATH=$HOME/miniconda3/bin:$PATH
       source activate $CONDA_ENV
-      conda install -y -c conda-forge botocore s3fs
-      conda install -y -c conda-forge boto3
+      conda install -y -c conda-forge boto3 botocore "s3fs>=0.4.2"
     displayName: 'Setup s3_tesing'
 
   - script: |
