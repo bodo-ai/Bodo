@@ -22,6 +22,7 @@ from bodo.tests.utils import (
     gen_random_arrow_array_struct_list_int,
     gen_random_arrow_list_list_int,
     gen_random_arrow_struct_struct,
+    gen_random_arrow_list_list_decimal,
     check_parallel_coherency,
 )
 from bodo.utils.typing import BodoWarning, BodoError
@@ -1018,7 +1019,9 @@ def test_sort_values_nested_arrays_random():
     df2 = pd.DataFrame({"A": gen_random_arrow_array_struct_list_int(10, n)})
     df3 = pd.DataFrame({"A": gen_random_arrow_list_list_int(1, 0.1, n)})
     df4 = pd.DataFrame({"A": gen_random_arrow_struct_struct(10, n)})
+    df5 = pd.DataFrame({"A": gen_random_arrow_list_list_decimal(2, 0.1, n)})
     check_parallel_coherency(f, (df1,))
     check_parallel_coherency(f, (df2,))
     check_parallel_coherency(f, (df3,))
     check_parallel_coherency(f, (df4,))
+    check_parallel_coherency(f, (df5,))

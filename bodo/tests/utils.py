@@ -642,6 +642,12 @@ def string_list_ent(x):
         return "nan"
     if isinstance(x, str):
         return x
+    if isinstance(x, Decimal):
+        e_s = str(x)
+        if e_s.find(".") != -1:
+            f_s = e_s.strip("0").strip(".")
+            return f_s
+        return e_s
     print("Failed to find matching type")
     assert False
 
@@ -855,6 +861,21 @@ def gen_random_arrow_array_struct_list_int(span, n):
         e_ent = {"A": valA, "B": valB}
         e_list.append(e_ent)
     return e_list
+
+
+def gen_random_arrow_list_list_decimal(rec_lev, prob_none, n):
+    def random_list_rec(rec_lev):
+        if random.random() < prob_none:
+            return None
+        else:
+            if rec_lev == 0:
+                return Decimal(str(random.randint(1,10)) + "." + str(random.randint(1,10)))
+            else:
+                return [
+                    random_list_rec(rec_lev - 1) for _ in range(random.randint(1, 3))
+                ]
+
+    return [random_list_rec(rec_lev) for _ in range(n)]
 
 
 def gen_random_arrow_list_list_int(rec_lev, prob_none, n):

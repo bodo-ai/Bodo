@@ -139,6 +139,8 @@ def array_to_info(typingctx, arr_type_t):
                     return get_types(arr_typ.dtype)
                 elif arr_typ == string_array_type:
                     return [CTypeEnum.STRING.value]
+                elif isinstance(arr_typ, DecimalArrayType):
+                    return [CTypeEnum.Decimal.value, arr_typ.precision, arr_typ.scale]
                 else:
                     return [numba_to_c_type(arr_typ)]
 
