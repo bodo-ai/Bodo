@@ -44,7 +44,7 @@ jobs:
       export PATH=$HOME/miniconda3/bin:$PATH
       source activate $CONDA_ENV
       conda install -y -c conda-forge pymysql sqlalchemy
-    displayName: 'Setup MySQL tesing'
+    displayName: 'Setup MySQL testing'
 
   - script: |
       export PATH=$HOME/miniconda3/bin:$PATH
@@ -63,16 +63,10 @@ jobs:
       export PATH=$HOME/miniconda3/bin:$PATH
       source activate $CONDA_ENV
       pip install pytest pytest-azurepipelines pytest-cov codecov
-      if [[ "$NP" -eq 1 ]]; then
-        if [[ "${{ parameters.name }}" == "Linux" ]]; then
-          python bodo/runtests.py "$NP" -s -v -m "$(PYTEST_MARKER)" --cov-report= --cov=./ bodo/tests/
-        else
-          python bodo/runtests.py "$NP" -s -v -m "$(PYTEST_MARKER) and s3" bodo/tests/
-          python bodo/runtests.py "$NP" -s -v -m "$(PYTEST_MARKER) and not s3" bodo/tests/
-        fi
+      if [[ ("$NP" -eq 1) && ("${{ parameters.name }}" == "Linux") ]]; then
+        python bodo/runtests.py "$NP" -s -v -m "$(PYTEST_MARKER)" --cov-report= --cov=./ bodo/tests/
       else
-        python bodo/runtests.py "$NP" -s -v -m "$(PYTEST_MARKER) and s3" bodo/tests/
-        python bodo/runtests.py "$NP" -s -v -m "$(PYTEST_MARKER) and not s3" bodo/tests/
+        python bodo/runtests.py "$NP" -s -v -m "$(PYTEST_MARKER)" bodo/tests/
       fi
     displayName: 'Test'
 
