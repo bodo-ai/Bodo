@@ -1943,7 +1943,6 @@ class DistributedPass:
         """
         out = [full_node]
         index_var = self._fix_index_var(index_var)
-        full_index_var = index_var
 
         # no need for transformation for getitem/setitem of distributed List/Dict
         if isinstance(self.typemap[arr.name], (types.List, types.DictType)):
@@ -1963,124 +1962,16 @@ class DistributedPass:
         elif self._is_1D_arr(arr.name) and isinstance(
             node, (ir.StaticSetItem, ir.SetItem)
         ):
-            return self._run_setitem(node, arr, index_var, equiv_set, avail_vars, out)
+            return self._run_dist_setitem(
+                node, arr, index_var, equiv_set, avail_vars, out
+            )
 
         elif self._is_1D_or_1D_Var_arr(arr.name) and (
             is_expr(node, "getitem") or is_expr(node, "static_getitem")
         ):
-            is_multi_dim = False
-            lhs = full_node.target
-            orig_index_var = index_var
-
-            # we only consider 1st dimension for multi-dim arrays
-            inds = guard(find_build_tuple, self.func_ir, index_var)
-            if inds is not None:
-                index_var = inds[0]
-                is_multi_dim = True
-
-            index_typ = self.typemap[index_var.name]
-
-            # no need for transformation for whole slices
-            if guard(is_whole_slice, self.typemap, self.func_ir, index_var) or guard(
-                is_slice_equiv_arr, arr, index_var, self.func_ir, equiv_set
-            ):
-                # A = X[:,3]
-                pass
-
-            # strided whole slice
-            # e.g. A = X[::2,5]
-            elif guard(
-                is_whole_slice,
-                self.typemap,
-                self.func_ir,
-                index_var,
-                accept_stride=True,
-            ) or guard(
-                is_slice_equiv_arr,
-                arr,
-                index_var,
-                self.func_ir,
-                equiv_set,
-                accept_stride=True,
-            ):
-                # on each processor, the slice has to start from an offset:
-                # |step-(start%step)|
-                in_arr = full_node.value.value
-                start_var, out = self._get_dist_start_var(in_arr, equiv_set, avail_vars)
-                step = get_slice_step(self.typemap, self.func_ir, index_var)
-
-                def f(A, start, step):  # pragma: no cover
-                    offset = abs(step - (start % step)) % step
-                    return A[offset::step]
-
-                out += compile_func_single_block(
-                    f, [in_arr, start_var, step], None, self
-                )
-                out[-1].target = lhs
-
-            # general slice access like A[3:7]
-            elif isinstance(index_typ, types.SliceType):
-                in_arr = full_node.value.value
-                start_var, nodes = self._get_dist_start_var(
-                    in_arr, equiv_set, avail_vars
-                )
-                size_var = self._get_dist_var_len(in_arr, nodes, equiv_set)
-                is_1D = self._is_1D_arr(arr.name)
-                # for multi-dim case, perform selection in other dimensions then handle
-                # the first dimension
-                if is_multi_dim:
-                    # gen index with first dimension as full slice, other dimensions as
-                    # full getitem index
-                    nodes += compile_func_single_block(
-                        lambda ind: (slice(None),) + ind[1:],
-                        [full_index_var],
-                        None,
-                        self,
-                    )
-                    other_ind = nodes[-1].target
-                    return nodes + compile_func_single_block(
-                        lambda arr, slice_index, start, tot_len, other_ind: bodo.libs.distributed_api.slice_getitem(
-                            operator.getitem(arr, other_ind),
-                            slice_index,
-                            start,
-                            tot_len,
-                            _is_1D,
-                        ),
-                        [in_arr, index_var, start_var, size_var, other_ind],
-                        lhs,
-                        self,
-                        extra_globals={"_is_1D": is_1D, "operator": operator},
-                    )
-                return nodes + compile_func_single_block(
-                    lambda arr, slice_index, start, tot_len: bodo.libs.distributed_api.slice_getitem(
-                        arr, slice_index, start, tot_len, _is_1D
-                    ),
-                    [in_arr, index_var, start_var, size_var],
-                    lhs,
-                    self,
-                    extra_globals={"_is_1D": is_1D},
-                )
-            # int index like A[11]
-            elif (
-                isinstance(index_typ, types.Integer)
-                and (arr.name, orig_index_var.name) not in self._parallel_accesses
-            ):
-                # TODO: handle multi-dim cases like A[0,:]
-                in_arr = full_node.value.value
-                start_var, nodes = self._get_dist_start_var(
-                    in_arr, equiv_set, avail_vars
-                )
-                size_var = self._get_dist_var_len(in_arr, nodes, equiv_set)
-                is_1D = self._is_1D_arr(arr.name)
-                return nodes + compile_func_single_block(
-                    lambda arr, ind, start, tot_len: bodo.libs.distributed_api.int_getitem(
-                        arr, ind, start, tot_len, _is_1D
-                    ),
-                    [in_arr, orig_index_var, start_var, size_var],
-                    lhs,
-                    self,
-                    extra_globals={"_is_1D": is_1D},
-                )
+            return self._run_dist_getitem(
+                node, full_node, arr, index_var, equiv_set, avail_vars, out
+            )
 
         return out
 
@@ -2116,7 +2007,116 @@ class DistributedPass:
         out.append(full_node)
         return out
 
-    def _run_setitem(self, node, arr, index_var, equiv_set, avail_vars, out):
+    def _run_dist_getitem(
+        self, node, full_node, arr, index_var, equiv_set, avail_vars, out
+    ):
+        """Transform distributed getitem
+        """
+        full_index_var = index_var
+        is_multi_dim = False
+        lhs = full_node.target
+        orig_index_var = index_var
+
+        # we only consider 1st dimension for multi-dim arrays
+        inds = guard(find_build_tuple, self.func_ir, index_var)
+        if inds is not None:
+            index_var = inds[0]
+            is_multi_dim = True
+
+        index_typ = self.typemap[index_var.name]
+
+        # no need for transformation for whole slices
+        # e.g. A = X[:,3]
+        if guard(is_whole_slice, self.typemap, self.func_ir, index_var) or guard(
+            is_slice_equiv_arr, arr, index_var, self.func_ir, equiv_set
+        ):
+            pass
+
+        # strided whole slice
+        # e.g. A = X[::2,5]
+        elif guard(
+            is_whole_slice, self.typemap, self.func_ir, index_var, accept_stride=True,
+        ) or guard(
+            is_slice_equiv_arr,
+            arr,
+            index_var,
+            self.func_ir,
+            equiv_set,
+            accept_stride=True,
+        ):
+            # on each processor, the slice has to start from an offset:
+            # |step-(start%step)|
+            in_arr = full_node.value.value
+            start_var, out = self._get_dist_start_var(in_arr, equiv_set, avail_vars)
+            step = get_slice_step(self.typemap, self.func_ir, index_var)
+
+            def f(A, start, step):  # pragma: no cover
+                offset = abs(step - (start % step)) % step
+                return A[offset::step]
+
+            out += compile_func_single_block(f, [in_arr, start_var, step], None, self)
+            out[-1].target = lhs
+
+        # general slice access like A[3:7]
+        elif isinstance(index_typ, types.SliceType):
+            in_arr = full_node.value.value
+            start_var, nodes = self._get_dist_start_var(in_arr, equiv_set, avail_vars)
+            size_var = self._get_dist_var_len(in_arr, nodes, equiv_set)
+            is_1D = self._is_1D_arr(arr.name)
+            # for multi-dim case, perform selection in other dimensions then handle
+            # the first dimension
+            if is_multi_dim:
+                # gen index with first dimension as full slice, other dimensions as
+                # full getitem index
+                nodes += compile_func_single_block(
+                    lambda ind: (slice(None),) + ind[1:], [full_index_var], None, self,
+                )
+                other_ind = nodes[-1].target
+                return nodes + compile_func_single_block(
+                    lambda arr, slice_index, start, tot_len, other_ind: bodo.libs.distributed_api.slice_getitem(
+                        operator.getitem(arr, other_ind),
+                        slice_index,
+                        start,
+                        tot_len,
+                        _is_1D,
+                    ),
+                    [in_arr, index_var, start_var, size_var, other_ind],
+                    lhs,
+                    self,
+                    extra_globals={"_is_1D": is_1D, "operator": operator},
+                )
+            return nodes + compile_func_single_block(
+                lambda arr, slice_index, start, tot_len: bodo.libs.distributed_api.slice_getitem(
+                    arr, slice_index, start, tot_len, _is_1D
+                ),
+                [in_arr, index_var, start_var, size_var],
+                lhs,
+                self,
+                extra_globals={"_is_1D": is_1D},
+            )
+        # int index like A[11]
+        elif (
+            isinstance(index_typ, types.Integer)
+            and (arr.name, orig_index_var.name) not in self._parallel_accesses
+        ):
+            # TODO: handle multi-dim cases like A[0,:]
+            in_arr = full_node.value.value
+            start_var, nodes = self._get_dist_start_var(in_arr, equiv_set, avail_vars)
+            size_var = self._get_dist_var_len(in_arr, nodes, equiv_set)
+            is_1D = self._is_1D_arr(arr.name)
+            return nodes + compile_func_single_block(
+                lambda arr, ind, start, tot_len: bodo.libs.distributed_api.int_getitem(
+                    arr, ind, start, tot_len, _is_1D
+                ),
+                [in_arr, orig_index_var, start_var, size_var],
+                lhs,
+                self,
+                extra_globals={"_is_1D": is_1D},
+            )
+
+        return out
+
+    def _run_dist_setitem(self, node, arr, index_var, equiv_set, avail_vars, out):
         """Transform distributed setitem
         """
         is_multi_dim = False
