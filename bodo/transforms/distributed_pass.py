@@ -1939,13 +1939,14 @@ class DistributedPass:
         return nodes
 
     def _run_getsetitem(self, arr, index_var, node, full_node, equiv_set, avail_vars):
+        """Transform distributed getitem/setitem operations
+        """
         out = [full_node]
         index_var = self._fix_index_var(index_var)
         full_index_var = index_var
-        in_typ = self.typemap[arr.name]
 
         # no need for transformation for getitem/setitem of distributed List/Dict
-        if isinstance(in_typ, (types.List, types.DictType)):
+        if isinstance(self.typemap[arr.name], (types.List, types.DictType)):
             return out
 
         # adjust parallel access indices (in parfors)
@@ -1962,80 +1963,7 @@ class DistributedPass:
         elif self._is_1D_arr(arr.name) and isinstance(
             node, (ir.StaticSetItem, ir.SetItem)
         ):
-            is_multi_dim = False
-            # we only consider 1st dimension for multi-dim arrays
-            inds = guard(find_build_tuple, self.func_ir, index_var)
-            if inds is not None:
-                index_var = inds[0]
-                is_multi_dim = True
-
-            # no need for transformation for whole slices
-            if guard(is_whole_slice, self.typemap, self.func_ir, index_var) or guard(
-                is_slice_equiv_arr, arr, index_var, self.func_ir, equiv_set
-            ):
-                return out
-
-            # TODO: support multi-dim slice setitem like X[a:b, c:d]
-            if is_multi_dim:  # pragma: no cover
-                raise BodoError(
-                    "multi-dimensional slicing of distributed data not supported yet"
-                )
-            nodes, start_var, count_var = self._get_dist_var_start_count(
-                arr, equiv_set, avail_vars
-            )
-
-            if isinstance(types.unliteral(self.typemap[index_var.name]), types.Integer):
-
-                def f(A, val, index, chunk_start, chunk_count):  # pragma: no cover
-                    bodo.libs.distributed_api._set_if_in_range(
-                        A, val, index, chunk_start, chunk_count
-                    )
-
-                return nodes + compile_func_single_block(
-                    f, [arr, node.value, index_var, start_var, count_var], None, self
-                )
-
-            assert isinstance(
-                self.typemap[index_var.name], types.misc.SliceType
-            ), "slice index expected"
-
-            # convert setitem with global range to setitem with local range
-            # that overlaps with the local array chunk
-            def f(A, val, start, stop, chunk_start, chunk_count):  # pragma: no cover
-                loc_start, loc_stop = bodo.libs.distributed_api._get_local_range(
-                    start, stop, chunk_start, chunk_count
-                )
-                A[loc_start:loc_stop] = val
-
-            slice_call = get_definition(self.func_ir, index_var)
-            slice_start = slice_call.args[0]
-            slice_stop = slice_call.args[1]
-            return nodes + compile_func_single_block(
-                f,
-                [arr, node.value, slice_start, slice_stop, start_var, count_var],
-                None,
-                self,
-            )
-            # print_node = ir.Print([start_var, end_var], None, loc)
-            # self.calltypes[print_node] = signature(types.none, types.int64, types.int64)
-            # out.append(print_node)
-            #
-            # setitem_attr_var = ir.Var(scope, mk_unique_var("$setitem_attr"), loc)
-            # setitem_attr_call = ir.Expr.getattr(self._g_dist_var, "dist_setitem", loc)
-            # self.typemap[setitem_attr_var.name] = get_global_func_typ(
-            #                                 distributed_api.dist_setitem)
-            # setitem_assign = ir.Assign(setitem_attr_call, setitem_attr_var, loc)
-            # out = [setitem_assign]
-            # setitem_call = ir.Expr.call(setitem_attr_var,
-            #                     [arr, index_var, node.value, start, count], (), loc)
-            # self.calltypes[setitem_call] = self.typemap[setitem_attr_var.name].get_call_type(
-            #     self.typingctx, [self.typemap[arr.name],
-            #     self.typemap[index_var.name], self.typemap[node.value.name],
-            #     types.intp, types.intp], {})
-            # err_var = ir.Var(scope, mk_unique_var("$setitem_err_var"), loc)
-            # self.typemap[err_var.name] = types.int32
-            # setitem_assign = ir.Assign(setitem_call, err_var, loc)
-            # out.append(setitem_assign)
+            return self._run_setitem(node, arr, index_var, equiv_set, avail_vars, out)
 
         elif self._is_1D_or_1D_Var_arr(arr.name) and (
             is_expr(node, "getitem") or is_expr(node, "static_getitem")
@@ -2187,6 +2115,64 @@ class DistributedPass:
 
         out.append(full_node)
         return out
+
+    def _run_setitem(self, node, arr, index_var, equiv_set, avail_vars, out):
+        """Transform distributed setitem
+        """
+        is_multi_dim = False
+        # we only consider 1st dimension for multi-dim arrays
+        inds = guard(find_build_tuple, self.func_ir, index_var)
+        if inds is not None:
+            index_var = inds[0]
+            is_multi_dim = True
+
+        # no need for transformation for whole slices
+        if guard(is_whole_slice, self.typemap, self.func_ir, index_var) or guard(
+            is_slice_equiv_arr, arr, index_var, self.func_ir, equiv_set
+        ):
+            return out
+
+        # TODO: support multi-dim slice setitem like X[a:b, c:d]
+        if is_multi_dim:  # pragma: no cover
+            raise BodoError(
+                "multi-dimensional slicing of distributed data not supported yet"
+            )
+        nodes, start_var, count_var = self._get_dist_var_start_count(
+            arr, equiv_set, avail_vars
+        )
+
+        if isinstance(types.unliteral(self.typemap[index_var.name]), types.Integer):
+
+            def f(A, val, index, chunk_start, chunk_count):  # pragma: no cover
+                bodo.libs.distributed_api._set_if_in_range(
+                    A, val, index, chunk_start, chunk_count
+                )
+
+            return nodes + compile_func_single_block(
+                f, [arr, node.value, index_var, start_var, count_var], None, self
+            )
+
+        assert isinstance(
+            self.typemap[index_var.name], types.misc.SliceType
+        ), "slice index expected"
+
+        # convert setitem with global range to setitem with local range
+        # that overlaps with the local array chunk
+        def f(A, val, start, stop, chunk_start, chunk_count):  # pragma: no cover
+            loc_start, loc_stop = bodo.libs.distributed_api._get_local_range(
+                start, stop, chunk_start, chunk_count
+            )
+            A[loc_start:loc_stop] = val
+
+        slice_call = get_definition(self.func_ir, index_var)
+        slice_start = slice_call.args[0]
+        slice_stop = slice_call.args[1]
+        return nodes + compile_func_single_block(
+            f,
+            [arr, node.value, slice_start, slice_stop, start_var, count_var],
+            None,
+            self,
+        )
 
     def _run_parfor(self, parfor, equiv_set, avail_vars):
 
