@@ -533,16 +533,10 @@ def pd_index_overload(data=None, dtype=None, copy=False, name=None, tupleize_col
     # ----- Data: Array type ------
     elif isinstance(data, (SeriesType, types.Array, types.List)):
         # Numeric Indices:
-        if typ in (types.int64, types.int32, types.float64):
+        if typ in (types.int64, types.int32, types.float64, types.uint32, types.uint64):
             def impl(data=None, dtype=None, copy=False, name=None, tupleize_cols=True):
                 data_arr = bodo.utils.conversion.coerce_to_ndarray(data)
                 data_coerced = bodo.utils.conversion.fix_arr_dtype(data_arr, typ)
-                return bodo.hiframes.pd_index_ext.init_numeric_index(data_coerced, name)
-
-        elif typ in (types.uint64, types.uint32):
-            def impl(data=None, dtype=None, copy=False, name=None, tupleize_cols=True):
-                data_arr = bodo.utils.conversion.coerce_to_ndarray(data)
-                data_coerced = bodo.utils.conversion.fix_arr_dtype(data_arr, np.dtype(np.uint64))
                 return bodo.hiframes.pd_index_ext.init_numeric_index(data_coerced, name)
 
         # String index:
