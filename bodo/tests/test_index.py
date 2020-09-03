@@ -83,7 +83,7 @@ def test_generic_index_constructor_with_dtype():
     check_func(impl, (np.ones(3, dtype=np.int32), np.float64)) # Float64Index: coerce with diff dtype
     check_func(impl, (np.ones(3, dtype=np.int32), np.float64)) # Float64Index: coerce with diff dtype
     check_func(impl, (np.arange(10), np.dtype("datetime64[ns]"))) # datetime array with dtype
-    check_func(impl, (pd.Series(["2015-8-3", "1990-11-21"]), np.dtype("datetime64[ns]"))) # series with datetime dtype
+    check_func(impl, (pd.Series(["2020-9-1", "2019-10-11", "2018-1-4", "2015-8-3", "1990-11-21"]), np.dtype("datetime64[ns]"))) # series with datetime dtype
     check_func(impl, (np.arange(10), np.dtype("timedelta64[ns]"))) # deltatime array with dtype
     check_func(impl, (pd.Series(np.arange(10)), np.dtype("timedelta64[ns]"))) # series with deltatime dtype
 
