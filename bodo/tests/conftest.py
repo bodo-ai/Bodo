@@ -33,7 +33,7 @@ def datapath():
         path = os.path.join(BASE_PATH, *args)
         if not os.path.exists(path):
             msg = "Could not find file {}."
-            raise BodoError(msg.format(path))
+            raise ValueError(msg.format(path))
         return path
 
     return deco
