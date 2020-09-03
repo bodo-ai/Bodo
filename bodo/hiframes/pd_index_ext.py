@@ -502,14 +502,14 @@ def _install_dti_str_comp_ops():
 _install_dti_str_comp_ops()
 
 
-@overload(pd.Index, no_unliteral=True)
+@overload(pd.Index, inline="always", no_unliteral=True)
 def pd_index_overload(data=None, dtype=None, copy=False, name=None, tupleize_cols=True):
 
     # Todo: support Categorical dtype, Interval dtype, Period dtype, MultiIndex (?)
     # Todo: Extension dtype (?)
 
     data_dtype = getattr(data, "dtype", None)
-    if dtype is not None:
+    if not is_overload_none(dtype):
         typ = dtype.dtype
     else:
         typ = data_dtype
@@ -543,8 +543,7 @@ def pd_index_overload(data=None, dtype=None, copy=False, name=None, tupleize_col
         elif typ == types.string:
             def impl(data=None, dtype=None, copy=False, name=None, tupleize_cols=True):
                 return bodo.hiframes.pd_index_ext.init_string_index(
-                    bodo.utils.conversion.coerce_to_array(data), name=name
-                )
+                    bodo.utils.conversion.coerce_to_array(data), name)
         else:
             raise BodoError("Index: provided array is of unsupported type.")
 
