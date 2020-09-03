@@ -50,10 +50,75 @@ def test_range_index_constructor(memory_leak_check):
     r = pd.RangeIndex(3, 10, 2)
     assert bodo.jit(impl7)(r) == impl7(r)
 
-    def impl8():  # pd.Index
+
+def test_generic_index_constructor(memory_leak_check):
+    """
+    Test the pd.Index with different inputs
+    """
+    def impl1():  # pd.Index
         return pd.Index(range(1, 10))
 
+    pd.testing.assert_index_equal(bodo.jit(impl1)(), impl1())
+
+    def impl2():  # pd.Index: array of int64
+        return pd.Index(np.ones(3, dtype=np.int64))
+
+    pd.testing.assert_index_equal(bodo.jit(impl2)(), impl2())
+
+    def impl3():  # pd.Index: array input
+        return pd.Index(np.arange(3))
+
+    pd.testing.assert_index_equal(bodo.jit(impl3)(), impl3())
+
+    def impl4():  # pd.Index: coerce with diff dtype
+        return pd.Index(np.ones(3, dtype=np.int32), dtype=np.float64)
+
+    pd.testing.assert_index_equal(bodo.jit(impl4)(), impl4())
+
+    def impl5():  # pd.Index: string
+        return pd.Index(["A", "B", "C"])
+
+    pd.testing.assert_index_equal(bodo.jit(impl5)(), impl5())
+
+    def impl6(): # pd.Index: datetime range
+        return pd.Index(pd.date_range(start="2018-04-24", end="2018-04-27", periods=3))
+
+    pd.testing.assert_index_equal(bodo.jit(impl6)(), impl6())
+
+    def impl7(): # pd.Index: datetime array
+        return pd.Index(np.arange(10).view(np.dtype("datetime64[ns]")))
+
+    pd.testing.assert_index_equal(bodo.jit(impl7)(), impl7())
+
+    def impl8(): # pd.Index: datetime array with dtype
+        return pd.Index(np.arange(10), dtype=np.dtype("datetime64[ns]"))
+
     pd.testing.assert_index_equal(bodo.jit(impl8)(), impl8())
+
+    def impl9(): # pd.Index: series with datetime dtype
+        return pd.Index(pd.Series(["2015-8-3", "1990-11-21"]), dtype=np.dtype("datetime64[ns]"))
+
+    pd.testing.assert_index_equal(bodo.jit(impl9)(), impl9())
+
+    def impl10(): # pd.Index: timedelta array
+        return pd.Index(np.arange(10).view(np.dtype("timedelta64[ns]")))
+
+    pd.testing.assert_index_equal(bodo.jit(impl10)(), impl10())
+
+    def impl11(): # pd.Index: timedelta array with dtype
+        return pd.Index(np.arange(10), dtype=np.dtype("timedelta64[ns]"))
+
+    pd.testing.assert_index_equal(bodo.jit(impl11)(), impl11())
+
+    def impl12(): # pd.Index: timedelta series
+        return pd.Index(pd.Series(np.arange(10).view(np.dtype("timedelta64[ns]"))))
+
+    pd.testing.assert_index_equal(bodo.jit(impl12)(), impl12())
+
+    def impl13(): # pd.Index: series with timedelta dtype
+        return pd.Index(pd.Series(np.arange(10)), dtype=np.dtype("timedelta64[ns]"))
+
+    pd.testing.assert_index_equal(bodo.jit(impl13)(), impl13())
 
 
 def test_numeric_index_constructor(memory_leak_check):
@@ -100,11 +165,6 @@ def test_numeric_index_constructor(memory_leak_check):
         return pd.Float64Index(np.ones(3, dtype=np.int32))
 
     pd.testing.assert_index_equal(bodo.jit(impl8)(), impl8())
-
-    def impl9():  # pd.Index
-        return pd.Index(np.ones(3, dtype=np.int64))
-
-    pd.testing.assert_index_equal(bodo.jit(impl9)(), impl9())
 
 
 def test_init_numeric_index_array_analysis(memory_leak_check):

@@ -35,7 +35,10 @@ from numba.core.imputils import lower_constant
 import bodo
 from bodo.libs.str_ext import string_type
 import bodo.hiframes
-from bodo.hiframes.pd_series_ext import string_array_type
+from bodo.hiframes.pd_series_ext import (
+    string_array_type,
+    SeriesType,
+)
 from bodo.hiframes.pd_timestamp_ext import pandas_timestamp_type
 import bodo.utils.conversion
 from bodo.utils.typing import (
@@ -44,9 +47,6 @@ from bodo.utils.typing import (
     is_overload_false,
     is_const_func_type,
     is_literal_type,
-    is_array_or_list_type,
-    is_signed_int_type,
-    is_unsigned_int_type,
     get_overload_const_str,
     get_val_type_maybe_str_literal,
     get_overload_const_func,
@@ -62,11 +62,6 @@ from bodo.utils.transform import (
 )
 from bodo.libs.int_arr_ext import IntegerArrayType
 
-
-from bodo.hiframes.datetime_timedelta_ext import (
-    datetime_timedelta_type,
-    datetime_datetime_type,
-)
 
 _dt_index_data_typ = types.Array(types.NPDatetime("ns"), 1, "C")
 _timedelta_index_data_typ = types.Array(types.NPTimedelta("ns"), 1, "C")
@@ -507,85 +502,66 @@ def _install_dti_str_comp_ops():
 _install_dti_str_comp_ops()
 
 
-@overload(pd.Index, inline="always", no_unliteral=True)
+@overload(pd.Index, no_unliteral=True)
 def pd_index_overload(data=None, dtype=None, copy=False, name=None, tupleize_cols=True):
 
-    # Datetime index:
-    if data.dtype == datetime_datetime_type or dtype == datetime_datetime_type:
+    # Todo: support Categorical dtype, Interval dtype, Period dtype, MultiIndex (?)
+    # Todo: Extension dtype (?)
 
-        def impl(data=None, dtype=None, copy=False, name=None, tupleize_cols=True):
-            return pd.DatetimeIndex(data, copy=copy, dtype=dtype, name=name)
-
-    # Timedelta index:
-    if data.dtype == datetime_timedelta_type or dtype == datetime_timedelta_type:
-
-        def impl(data=None, dtype=None, copy=False, name=None, tupleize_cols=True):
-            return pd.TimedeltaIndex(data, copy=copy, dtype=dtype, name=name)
-
-    # Period index:
-    if (
-        data.dtype == pd._libs.tslibs.period.Period
-        or dtype == pd._libs.tslibs.period.Period
-    ):
-
-        def impl(data=None, dtype=None, copy=False, name=None, tupleize_cols=True):
-            return pd.PeriodIndex(data, copy=copy, dtype=dtype, name=name)
+    data_dtype = getattr(data, "dtype", None)
+    if dtype is not None:
+        typ = dtype.dtype
+    else:
+        typ = data_dtype
 
     # Range index:
     if isinstance(data, types.iterators.RangeType):
-
         def impl(data=None, dtype=None, copy=False, name=None, tupleize_cols=True):
-            return pd.RangeIndex(
-                start=data.start,
-                stop=data.stop,
-                step=data.step,
-                copy=copy,
-                dtype=dtype,
-                name=name,
-            )
+            return bodo.hiframes.pd_index_ext.init_range_index(
+                data.start, data.stop, data.step, name)
 
-    # Numeric Indices:
-    if is_array_or_list_type(data) and (
-        is_signed_int_type(data.dtype) or is_signed_int_type(dtype)
-    ):
-
+    # Datetime index:
+    elif isinstance(data, DatetimeIndexType) or typ == types.NPDatetime("ns"):
         def impl(data=None, dtype=None, copy=False, name=None, tupleize_cols=True):
-            return pd.Int64Index(data, copy=copy, dtype=dtype, name=name)
+            return pd.DatetimeIndex(data, name)
 
-    if is_array_or_list_type(data) and (
-        is_unsigned_int_type(data.dtype) or is_unsigned_int_type(dtype)
-    ):
-
+    # Timedelta index:
+    elif isinstance(data, TimedeltaIndexType) or typ == types.NPTimedelta("ns"):
         def impl(data=None, dtype=None, copy=False, name=None, tupleize_cols=True):
-            return pd.UInt64Index(data, copy=copy, dtype=dtype, name=name)
+            return pd.TimedeltaIndex(data, name)
 
-    if (
-        is_array_or_list_type(data)
-        and data.dtype == types.float64
-        or dtype == types.float64
-    ):
+    # ----- Data: Array type ------
+    elif isinstance(data, (SeriesType, types.Array, types.List)):
+        # Numeric Indices:
+        if typ in (types.int64, types.int32, types.float64):
+            def impl(data=None, dtype=None, copy=False, name=None, tupleize_cols=True):
+                data_arr = bodo.utils.conversion.coerce_to_ndarray(data)
+                data_coerced = bodo.utils.conversion.fix_arr_dtype(data_arr, typ)
+                return bodo.hiframes.pd_index_ext.init_numeric_index(data_coerced, name)
 
-        def impl(data=None, dtype=None, copy=False, name=None, tupleize_cols=True):
-            return pd.Float64Index(data, copy=copy, dtype=dtype, name=name)
+        elif typ in (types.uint64, types.uint32):
+            def impl(data=None, dtype=None, copy=False, name=None, tupleize_cols=True):
+                data_arr = bodo.utils.conversion.coerce_to_ndarray(data)
+                data_coerced = bodo.utils.conversion.fix_arr_dtype(data_arr, np.dtype(np.uint64))
+                return bodo.hiframes.pd_index_ext.init_numeric_index(data_coerced, name)
 
-    # String index:
-    if (
-        is_array_or_list_type(data)
-        and data.dtype == types.string
-        or dtype == types.string
-    ):
+        # String index:
+        elif typ == types.string:
+            def impl(data=None, dtype=None, copy=False, name=None, tupleize_cols=True):
+                return bodo.hiframes.pd_index_ext.init_string_index(
+                    bodo.utils.conversion.coerce_to_array(data), name=name
+                )
+        else:
+            raise BodoError("Index: provided array is of unsupported type.")
 
-        def impl(data=None, dtype=None, copy=False, name=None, tupleize_cols=True):
-            return bodo.hiframes.pd_index_ext.init_string_index(
-                bodo.utils.conversion.coerce_to_array(data), name=name
-            )
 
     # raise error for data being None or scalar
-    if data is None or is_literal_type(data.dtype):
+    elif data is None or is_literal_type(data.dtype):
         raise ValueError(
             "data argument in pd.Index() is invalid: None or scalar is not acceptable"
         )
-    # todo: check if data has attr __array__ and handle it
+    else:
+        raise BodoError("Index: the provided argument type is not supported")
 
     return impl
 
@@ -1672,6 +1648,7 @@ def create_numeric_constructor(func, default_dtype):
     def overload_impl(data=None, dtype=None, copy=False, name=None, fastpath=None):
         if is_overload_false(copy):
             # if copy is False for sure, specialize to avoid branch
+
             def impl(
                 data=None, dtype=None, copy=False, name=None, fastpath=None
             ):  # pragma: no cover
