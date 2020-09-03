@@ -6,7 +6,7 @@ import numpy as np
 import random
 import pytest
 import bodo
-from bodo.tests.utils import check_func
+from bodo.tests.utils import check_func, gen_random_list_string_array
 from decimal import Decimal
 
 @pytest.fixture(
@@ -229,20 +229,12 @@ def test_list_string_array_type_random(memory_leak_check):
 
     random.seed(5)
 
-    def rand_col_l_str(n):
-        e_list_list = []
-        for _ in range(n):
-            e_list = []
-            for _ in range(random.randint(1, 2)):
-                k = random.randint(1, 3)
-                val = "".join(random.choices(["A", "B", "C"], k=k))
-                e_list.append(val)
-            e_list_list.append(e_list)
-        return e_list_list
-
-    n = 50
-    df1 = pd.DataFrame({"A": rand_col_l_str(n)})
-    df2 = pd.DataFrame({"A": rand_col_l_str(n), "B": rand_col_l_str(n)})
+    # We remove the None from the first entry because it leads to a comparison
+    # error nan vs None in the string comparison.
+    n = 100
+    df1 = pd.DataFrame({"A": gen_random_list_string_array(3, n)})
+    df2 = pd.DataFrame({"A": gen_random_list_string_array(3, n),
+                        "B": gen_random_list_string_array(3, n)})
     check_func(test_impl, (df1,), sort_output=True, convert_columns_to_pandas=True)
     check_func(test_impl, (df2,), sort_output=True, convert_columns_to_pandas=True)
 

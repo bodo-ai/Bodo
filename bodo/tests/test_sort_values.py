@@ -22,6 +22,7 @@ from bodo.tests.utils import (
     gen_random_arrow_array_struct_list_int,
     gen_random_arrow_list_list_int,
     gen_random_arrow_struct_struct,
+    gen_random_list_string_array,
     gen_random_arrow_list_list_decimal,
     check_parallel_coherency,
 )
@@ -703,24 +704,24 @@ def test_list_string(memory_leak_check):
         df2 = df1.sort_values(by="A", kind="mergesort")
         return df2
 
-    def rand_col_l_str(n):
-        e_list = []
-        for _ in range(n):
-            if random.random() < -0.1:
-                e_ent = np.nan
-            else:
-                e_ent = []
-                for _ in range(random.randint(1, 2)):
-                    k = random.randint(1, 3)
-                    val = "".join(random.choices(["A", "B", "C"], k=k))
-                    e_ent.append(val)
-            e_list.append(e_ent)
-        return e_list
-
     random.seed(5)
     n = 100
-    df1 = pd.DataFrame({"A": rand_col_l_str(n)})
+    df1 = pd.DataFrame({"A": gen_random_list_string_array(2, n)})
     check_func(test_impl, (df1,))
+
+
+def test_list_string_missing(memory_leak_check):
+    """Sorting values by list of strings
+    """
+
+    def f(df1):
+        df2 = df1.sort_values(by="A", kind="mergesort")
+        return df2
+
+    random.seed(5)
+    n = 10
+    df1 = pd.DataFrame({"A": gen_random_list_string_array(3, n)})
+    check_func(f, (df1,), convert_columns_to_pandas=True)
 
 
 def test_list_string_arrow(memory_leak_check):

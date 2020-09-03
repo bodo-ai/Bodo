@@ -168,6 +168,7 @@ struct array_info {
     char* data2;
     char* data3;
     char* null_bitmask;  // for nullable arrays like strings
+    char* sub_null_bitmask;  // for second level nullable like list-string
     NRT_MemInfo* meminfo;
     NRT_MemInfo* meminfo_bitmask;
     std::shared_ptr<arrow::Array> array;
@@ -179,8 +180,8 @@ struct array_info {
                         Bodo_CTypes::CTypeEnum _dtype, int64_t _length,
                         int64_t _n_sub_elems, int64_t _n_sub_sub_elems,
                         char* _data1, char* _data2, char* _data3,
-                        char* _null_bitmask, NRT_MemInfo* _meminfo,
-                        NRT_MemInfo* _meminfo_bitmask,
+                        char* _null_bitmask, char* _sub_null_bitmask,
+                        NRT_MemInfo* _meminfo, NRT_MemInfo* _meminfo_bitmask,
                         std::shared_ptr<arrow::Array> _array = nullptr,
                         int32_t _precision = 0, int32_t _scale = 0,
                         int64_t _num_categories = 0)
@@ -193,6 +194,7 @@ struct array_info {
           data2(_data2),
           data3(_data3),
           null_bitmask(_null_bitmask),
+          sub_null_bitmask(_sub_null_bitmask),
           meminfo(_meminfo),
           meminfo_bitmask(_meminfo_bitmask),
           array(_array),

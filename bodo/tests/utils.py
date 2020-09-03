@@ -728,10 +728,19 @@ def convert_non_pandas_columns(df):
     for e_col_name in col_names_list_string:
         e_list_str = []
         e_col = df[e_col_name]
+
+        def is_ok(val):
+            if isinstance(val, np.float):
+                return not np.isnan(val)
+            if val == None:
+                return False
+            return True
+
         for i_row in range(n_rows):
             e_ent = e_col.iat[i_row]
             if isinstance(e_ent, (list, np.ndarray)):
-                e_str = ",".join(e_ent) + ","
+                f_ent = [x if is_ok(x) else "None" for x in e_ent]
+                e_str = ",".join(f_ent) + ","
                 e_list_str.append(e_str)
             else:
                 e_list_str.append(np.nan)
@@ -944,10 +953,27 @@ def gen_random_list_string_array(option, n):
             e_list.append(e_ent)
         return e_list
 
+    def rand_col_l_str_none_no_first(n):
+        e_list_list = []
+        for _ in range(n):
+            e_list = []
+            for idx in range(random.randint(1, 4)):
+                # The None on the first index creates some problems.
+                if random.random() < 0.1 and idx > 0:
+                    val = None
+                else:
+                    k = random.randint(1, 3)
+                    val = "".join(random.choices(["A", "B", "C"], k=k))
+                e_list.append(val)
+            e_list_list.append(e_list)
+        return e_list_list
+
     if option == 1:
         e_list = rand_col_l_str(n)
     if option == 2:
         e_list = rand_col_str(n)
+    if option == 3:
+        e_list = rand_col_l_str_none_no_first(n)
     return e_list
 
 

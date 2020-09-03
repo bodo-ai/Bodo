@@ -104,6 +104,7 @@ array_info& array_info::operator=(array_info&& other) noexcept {
         this->data2 = other.data2;
         this->data3 = other.data3;
         this->null_bitmask = other.null_bitmask;
+        this->sub_null_bitmask = other.sub_null_bitmask;
         this->meminfo = other.meminfo;
         this->meminfo_bitmask = other.meminfo_bitmask;
         this->array = other.array;
@@ -115,6 +116,7 @@ array_info& array_info::operator=(array_info&& other) noexcept {
         other.data2 = nullptr;
         other.data3 = nullptr;
         other.null_bitmask = nullptr;
+        other.sub_null_bitmask = nullptr;
         other.meminfo = nullptr;
         other.meminfo_bitmask = nullptr;
         other.array = nullptr;
@@ -127,7 +129,7 @@ array_info* alloc_numpy(int64_t length, Bodo_CTypes::CTypeEnum typ_enum) {
     NRT_MemInfo* meminfo = NRT_MemInfo_alloc_safe_aligned(size, ALIGNMENT);
     char* data = (char*)meminfo->data;
     return new array_info(bodo_array_type::NUMPY, typ_enum, length, -1, -1,
-                          data, NULL, NULL, NULL, meminfo, NULL);
+                          data, NULL, NULL, NULL, NULL, meminfo, NULL);
 }
 
 array_info* alloc_categorical(int64_t length, Bodo_CTypes::CTypeEnum typ_enum,
@@ -136,7 +138,7 @@ array_info* alloc_categorical(int64_t length, Bodo_CTypes::CTypeEnum typ_enum,
     NRT_MemInfo* meminfo = NRT_MemInfo_alloc_safe_aligned(size, ALIGNMENT);
     char* data = (char*)meminfo->data;
     return new array_info(bodo_array_type::CATEGORICAL, typ_enum, length, -1,
-                          -1, data, NULL, NULL, NULL, meminfo, NULL, NULL, 0, 0,
+                          -1, data, NULL, NULL, NULL, NULL, meminfo, NULL, NULL, 0, 0,
                           num_categories);
 }
 
@@ -151,7 +153,7 @@ array_info* alloc_nullable_array(int64_t length,
         NRT_MemInfo_alloc_safe_aligned(n_bytes * sizeof(uint8_t), ALIGNMENT);
     char* null_bitmap = (char*)meminfo_bitmask->data;
     return new array_info(bodo_array_type::NULLABLE_INT_BOOL, typ_enum, length,
-                          -1, -1, data, NULL, NULL, null_bitmap, meminfo,
+                          -1, -1, data, NULL, NULL, null_bitmap, NULL, meminfo,
                           meminfo_bitmask);
 }
 
@@ -167,7 +169,7 @@ array_info* alloc_string_array(int64_t length, int64_t n_chars,
     payload->num_strings = length;
     return new array_info(bodo_array_type::STRING, Bodo_CTypes::STRING, length,
                           n_chars, -1, payload->data, (char*)payload->offsets,
-                          NULL, (char*)payload->null_bitmap, meminfo, NULL);
+                          NULL, (char*)payload->null_bitmap, NULL, meminfo, NULL);
 }
 
 array_info* alloc_list_string_array(int64_t n_lists, int64_t n_strings,
@@ -192,7 +194,8 @@ array_info* alloc_list_string_array(int64_t n_lists, int64_t n_strings,
         bodo_array_type::LIST_STRING, Bodo_CTypes::LIST_STRING, n_lists,
         n_strings, n_chars, (char*)sub_payload->data,
         (char*)sub_payload->offsets, (char*)payload->offsets.data,
-        (char*)payload->null_bitmap.data, meminfo_list_array, NULL);
+        (char*)payload->null_bitmap.data, (char*)sub_payload->null_bitmap,
+        meminfo_list_array, NULL);
 }
 
 /**
@@ -262,6 +265,8 @@ array_info* copy_array(array_info* earr) {
         memcpy(farr->data3, earr->data3, sizeof(uint32_t) * (earr->length + 1));
         int64_t n_bytes = ((earr->length + 7) >> 3);
         memcpy(farr->null_bitmask, earr->null_bitmask, n_bytes);
+        int64_t n_sub_bytes = ((earr->n_sub_elems + 7) >> 3);
+        memcpy(farr->sub_null_bitmask, earr->sub_null_bitmask, n_sub_bytes);
     }
     return farr;
 }

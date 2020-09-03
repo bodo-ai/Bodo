@@ -264,7 +264,7 @@ array_info* nested_array_to_info(int* types, const uint8_t** buffers,
                             type_pos, buf_pos, length_pos, name_pos);
     // TODO: better memory management of struct, meminfo refcount?
     return new array_info(bodo_array_type::ARROW, Bodo_CTypes::INT8 /*dummy*/,
-                          lengths[0], -1, -1, NULL, NULL, NULL, NULL, meminfo,
+                          lengths[0], -1, -1, NULL, NULL, NULL, NULL, NULL, meminfo,
                           NULL, ai.array);
 }
 
@@ -298,7 +298,7 @@ array_info* list_string_array_to_info(NRT_MemInfo* meminfo) {
         null_bitmap);
 
     return new array_info(bodo_array_type::ARROW, Bodo_CTypes::INT8 /*dummy*/,
-                          n_items, -1, -1, NULL, NULL, NULL, NULL, meminfo,
+                          n_items, -1, -1, NULL, NULL, NULL, NULL, NULL, meminfo,
                           NULL, array);
 #else
     array_item_arr_payload* payload = (array_item_arr_payload*)meminfo->data;
@@ -312,7 +312,9 @@ array_info* list_string_array_to_info(NRT_MemInfo* meminfo) {
                           Bodo_CTypes::LIST_STRING, n_items, n_strings, n_chars,
                           (char*)sub_payload->data, (char*)sub_payload->offsets,
                           (char*)payload->offsets.data,
-                          (char*)payload->null_bitmap.data, meminfo, nullptr);
+                          (char*)payload->null_bitmap.data,
+                          (char*)sub_payload->null_bitmap,
+                          meminfo, nullptr);
 #endif
 }
 
@@ -321,7 +323,7 @@ array_info* string_array_to_info(uint64_t n_items, uint64_t n_chars, char* data,
                                  NRT_MemInfo* meminfo) {
     // TODO: better memory management of struct, meminfo refcount?
     return new array_info(bodo_array_type::STRING, Bodo_CTypes::STRING, n_items,
-                          n_chars, -1, data, offsets, NULL, null_bitmap,
+                          n_chars, -1, data, offsets, NULL, null_bitmap, NULL,
                           meminfo, NULL);
 }
 
@@ -330,7 +332,7 @@ array_info* numpy_array_to_info(uint64_t n_items, char* data, int typ_enum,
     // TODO: better memory management of struct, meminfo refcount?
     return new array_info(bodo_array_type::NUMPY,
                           (Bodo_CTypes::CTypeEnum)typ_enum, n_items, -1, -1,
-                          data, NULL, NULL, NULL, meminfo, NULL);
+                          data, NULL, NULL, NULL, NULL, meminfo, NULL);
 }
 
 #undef DEBUG_CATEGORICAL
@@ -346,8 +348,7 @@ array_info* categorical_array_to_info(uint64_t n_items, char* data,
 #endif
     return new array_info(bodo_array_type::CATEGORICAL,
                           (Bodo_CTypes::CTypeEnum)typ_enum, n_items, -1, -1,
-                          data, NULL, NULL, NULL, meminfo, NULL, nullptr, 0, 0,
-                          num_categories);
+                          data, NULL, NULL, NULL, NULL, meminfo, NULL, nullptr, 0, 0, num_categories);
 }
 
 array_info* nullable_array_to_info(uint64_t n_items, char* data, int typ_enum,
@@ -356,7 +357,7 @@ array_info* nullable_array_to_info(uint64_t n_items, char* data, int typ_enum,
     // TODO: better memory management of struct, meminfo refcount?
     return new array_info(bodo_array_type::NULLABLE_INT_BOOL,
                           (Bodo_CTypes::CTypeEnum)typ_enum, n_items, -1, -1,
-                          data, NULL, NULL, null_bitmap, meminfo,
+                          data, NULL, NULL, null_bitmap, NULL, meminfo,
                           meminfo_bitmask);
 }
 
@@ -367,7 +368,7 @@ array_info* decimal_array_to_info(uint64_t n_items, char* data, int typ_enum,
     // TODO: better memory management of struct, meminfo refcount?
     return new array_info(bodo_array_type::NULLABLE_INT_BOOL,
                           (Bodo_CTypes::CTypeEnum)typ_enum, n_items, -1, -1,
-                          data, NULL, NULL, null_bitmap, meminfo,
+                          data, NULL, NULL, null_bitmap, NULL, meminfo,
                           meminfo_bitmask, NULL, precision, scale);
 }
 

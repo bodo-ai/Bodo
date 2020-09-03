@@ -16,6 +16,7 @@ from bodo.tests.utils import (
     check_parallel_coherency,
     gen_random_decimal_array,
     gen_random_string_array,
+    gen_random_list_string_array,
     convert_non_pandas_columns,
     get_start_end,
     check_func,
@@ -563,13 +564,10 @@ def test_cumsum_reverse_shuffle_list_string():
         return df
 
     random.seed(5)
-    n = 10
+    n = 100
     colA = [random.randint(0, 10) for _ in range(n)]
-    colB = [
-        random.choices(["A", "BB", "CCC", "DE"], k=random.randint(3, 10))
-        for _ in range(n)
-    ]
-    df = pd.DataFrame({"A": colA, "B": colB})
+
+    df = pd.DataFrame({"A": colA, "B": gen_random_list_string_array(3, n)})
     bodo_f = bodo.jit(f)
     # We use the output of bodo because the functionality is missing from pandas
     df_out = bodo_f(df)
@@ -806,22 +804,9 @@ def test_sum_max_min_list_string_random():
 
     random.seed(5)
 
-    def rand_col_l_str(n):
-        e_list_list = []
-        for _ in range(n):
-            if random.random() < 0.1:
-                e_ent = np.nan
-            else:
-                e_ent = []
-                for _ in range(random.randint(1, 2)):
-                    k = random.randint(1, 3)
-                    val = "".join(random.choices(["A", "B", "C"], k=k))
-                    e_ent.append(val)
-            e_list_list.append(e_ent)
-        return e_list_list
-
     n = 10
-    df1 = pd.DataFrame({"A": rand_col_l_str(n), "B": rand_col_l_str(n)})
+    df1 = pd.DataFrame({"A": gen_random_list_string_array(2, n),
+                        "B": gen_random_list_string_array(2, n)})
 
     def check_fct(the_fct, df1, select_col_comparison):
         bodo_fct = bodo.jit(the_fct)
