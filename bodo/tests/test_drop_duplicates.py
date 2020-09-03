@@ -9,6 +9,7 @@ import bodo
 from bodo.tests.utils import check_func, gen_random_list_string_array
 from decimal import Decimal
 
+
 @pytest.fixture(
     params=[
         np.array(
@@ -31,7 +32,7 @@ from decimal import Decimal
                 [[["n"], [], ["o", None, "p"]]],
                 [[["qq", "rr", "sssssss", "ttt"], []], [["u"]], [["vvv", "ww"]]],
                 [[["x", "yy", "zzz"], []], [["aa"]], [["b", "c"]]],
-                [[["dddd", "eee", "ff"], []], [["gg"], ["hhhhhhh", "i"]]],
+                [[["DD", "eee", "ff"], ["E1"]], [["gg"], ["hhhhhhh", "i"]]],
             ]
             * 2
         ),
@@ -76,11 +77,20 @@ from decimal import Decimal
         np.array(
             [
                 {"A": [Decimal("1.0"), Decimal("2.2")], "B": [Decimal("4.14")]},
-                {"A": [Decimal("0"), Decimal("3.2"), Decimal("4")], "B": [Decimal("-1")]},
-                {"A": [Decimal("5")], "B": [Decimal("644"), Decimal("9.1"), Decimal("154")]},
+                {
+                    "A": [Decimal("0"), Decimal("3.2"), Decimal("4")],
+                    "B": [Decimal("-1")],
+                },
+                {
+                    "A": [Decimal("5")],
+                    "B": [Decimal("644"), Decimal("9.1"), Decimal("154")],
+                },
                 {"A": [Decimal("10.0"), Decimal("13.4")], "B": [Decimal("3.14159")]},
                 {"A": [Decimal("15.0"), None], "B": [Decimal("2.05")]},
-                {"A": [Decimal("30"), Decimal("5.2")], "B": [Decimal("0"), Decimal("2")]},
+                {
+                    "A": [Decimal("30"), Decimal("5.2")],
+                    "B": [Decimal("0"), Decimal("2")],
+                },
                 {"A": [Decimal("-1"), Decimal("-2"), None], "B": [Decimal("60")]},
             ]
             * 2
@@ -107,16 +117,21 @@ def nested_arrays_value(request):
     "test_df",
     [
         # all string
-        pd.DataFrame({"A": ["A", "B", "A", "B", "C"], "B": ["F", "E", "F", "S", "C"]}),
+        pd.DataFrame(
+            {
+                "A": ["A", "B", "A", "B", "C", "D", "E", "A", "G"],
+                "B": ["F", "E", "F", "S", "C", "F", "H", "L", "E"],
+            }
+        ),
         # mix string and numbers and index
         pd.DataFrame(
-            {"A": [1, 3, 1, 2, 3], "B": ["F", "E", "F", "S", "C"]},
-            index=[3, 1, 2, 4, 6],
+            {"A": [1, 3, 4, 1, 2, 3, 5], "B": ["F", "E", "A", "F", "S", "C", "QQ"]},
+            index=[3, 1, 0, 2, 4, 6, 5],
         ),
         # string index
         pd.DataFrame(
-            {"A": [1, 3, 1, 2, 3], "B": ["F", "E", "F", "S", "C"]},
-            index=["A", "C", "D", "E", "AA"],
+            {"A": [1, 3, 1, 2, 3, 7, 11], "B": ["F", "E", "F", "S", "C", "AB", "d2"]},
+            index=["A", "C", "D", "E", "AA", "B", "K"],
         ),
         # all numbers
         pd.DataFrame(
@@ -167,7 +182,12 @@ def test_drop_duplicates_2col_int_string(memory_leak_check):
         df2 = df1.drop_duplicates()
         return df2
 
-    df1 = pd.DataFrame({"A": [3, 3, 3, 3, 4], "B": ["bar", "baz", "bar", "baz", "bar"]})
+    df1 = pd.DataFrame(
+        {
+            "A": [3, 3, 5, 1, 3, 3, 4, 7, 2],
+            "B": ["bar", "baz", "A", "B", "bar", "baz", "bar", "AB", "E1"],
+        }
+    )
     check_func(test_impl, (df1,), sort_output=True)
 
 
@@ -233,8 +253,12 @@ def test_list_string_array_type_random(memory_leak_check):
     # error nan vs None in the string comparison.
     n = 100
     df1 = pd.DataFrame({"A": gen_random_list_string_array(3, n)})
-    df2 = pd.DataFrame({"A": gen_random_list_string_array(3, n),
-                        "B": gen_random_list_string_array(3, n)})
+    df2 = pd.DataFrame(
+        {
+            "A": gen_random_list_string_array(3, n),
+            "B": gen_random_list_string_array(3, n),
+        }
+    )
     check_func(test_impl, (df1,), sort_output=True, convert_columns_to_pandas=True)
     check_func(test_impl, (df2,), sort_output=True, convert_columns_to_pandas=True)
 
