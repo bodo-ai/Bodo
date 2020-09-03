@@ -2046,37 +2046,9 @@ def concat_overload(
         # remove duplicates but keep original order
         all_colnames = list(dict.fromkeys(all_colnames).keys())
 
-        if not isinstance(objs, types.BaseTuple):
-            raise BodoError("Tuple argument for pd.concat expected")
-        assert len(objs.types) > 0
-
-        if axis == 1:
-            data = []
-            names = []
-            col_no = 0
-            for obj in objs.types:
-                assert isinstance(obj, (SeriesType, DataFrameType))
-                if isinstance(obj, SeriesType):
-                    # TODO: handle names of SeriesTypes
-                    data.append(obj.data)
-                    names.append(str(col_no))
-                    col_no += 1
-                else:  # DataFrameType
-                    # TODO: test
-                    data.extend(obj.data)
-                    names.extend(obj.columns)
-
-            ret_typ = DataFrameType(
-                tuple(data), RangeIndexType(types.none), tuple(names)
-            )
-            return signature(ret_typ, *args)
-
-        assert axis == 0
-        # dataframe case
-        if isinstance(objs.types[0], DataFrameType):
-            assert all(isinstance(t, DataFrameType) for t in objs.types)
-            # get output column names
-            all_colnames = []
+        # get array types for all output columns (for NA generation for missing columns)
+        arr_types = {}
+        for col_no, c in enumerate(all_colnames):
             for df in objs.types:
                 if c in df.columns:
                     arr_types["arr_typ{}".format(col_no)] = df.data[df.columns.index(c)]
@@ -2719,7 +2691,7 @@ def append_overload(df, other, ignore_index=False, verify_integrity=False, sort=
         )
 
     raise BodoError(
-        "invalid df.append() input. Only dataframe and list" " of dataframes supported"
+        "invalid df.append() input. Only dataframe and list/tuple of dataframes supported"
     )
 
 

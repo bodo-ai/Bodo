@@ -1319,29 +1319,6 @@ class UntypedPass:
 
         return self._gen_parquet_read(fname, lhs, columns)
 
-    def _handle_concat(self, assign, lhs, rhs, label):
-        # converting build_list to build_tuple before type inference to avoid
-        # errors
-        kws = dict(rhs.kws)
-        objs_arg = get_call_expr_arg("concat", rhs.args, kws, 0, "objs")
-
-        df_list = guard(get_definition, self.func_ir, objs_arg)
-        if not isinstance(df_list, ir.Expr) or not (
-            df_list.op in ["build_tuple", "build_list"]
-        ):
-            raise BodoError("pd.concat input should be constant list or tuple")
-
-        # XXX convert build_list to build_tuple since Numba doesn't handle list of
-        # arrays for np.concatenate()
-        if df_list.op == "build_list":
-            df_list.op = "build_tuple"
-
-        if len(df_list.items) == 0:
-            # copied error from pandas
-            raise BodoError("No objects to concatenate")
-
-        return [assign]
-
     def _get_const_arg(
         self, f_name, args, kws, arg_no, arg_name, default=None, err_msg=None, typ=None,
     ):
