@@ -24,7 +24,7 @@ def datapath():
 
     Raises
     ------
-    BodoError
+    ValueError
         If the path doesn't exist.
     """
     BASE_PATH = os.path.join(os.path.dirname(__file__), "data")
