@@ -4,6 +4,8 @@ FROM ubuntu:latest AS env_setup
 # docker build -t bodo_dev_hdfs .
 #
 
+ENV DEBIAN_FRONTEND=noninteractive
+
 WORKDIR /root
 #
 # Ubuntu installs and Miniconda
