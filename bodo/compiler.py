@@ -141,7 +141,7 @@ def add_pass_before(pm, pass_cls, location):
         if x == location:
             break
     else:  # pragma: no cover
-        raise BodoError("Could not find pass %s" % location)
+        raise bodo.utils.typing.BodoError("Could not find pass %s" % location)
     pm.passes.insert(idx, (pass_cls, str(pass_cls)))
     # if a pass has been added, it's not finalized
     pm._finalized = False
