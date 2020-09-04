@@ -1182,7 +1182,8 @@ def test_df_sort_index(df_value, memory_leak_check):
     def impl(df):
         return df.sort_index()
 
-    check_func(impl, (df_value,))
+    # TODO: use larger input to avoid empty object array in output
+    check_func(impl, (df_value,), check_typing_issues=False)
 
 
 def test_df_shift(numeric_df_value, memory_leak_check):
