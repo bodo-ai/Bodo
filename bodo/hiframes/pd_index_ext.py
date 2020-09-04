@@ -561,7 +561,7 @@ def pd_index_overload(data=None, dtype=None, copy=False, name=None, tupleize_col
             "data argument in pd.Index() is invalid: None or scalar is not acceptable"
         )
     else:
-        raise BodoError("Index: the provided argument type is not supported")
+        raise BodoError("pd.Index(): the provided argument type is not supported")
 
     return impl
 
