@@ -515,9 +515,9 @@ def pd_index_overload(data=None, dtype=None, copy=False, name=None, tupleize_col
         typ = data_dtype
 
     # Range index:
-    if isinstance(data, types.iterators.RangeType):
+    if isinstance(data, types.RangeType):
 
-        def impl(data=None, dtype=None, copy=False, name=None, tupleize_cols=True):
+        def impl(data=None, dtype=None, copy=False, name=None, tupleize_cols=True):  # pragma: no cover
             return bodo.hiframes.pd_index_ext.init_range_index(
                 data.start, data.stop, data.step, name
             )
@@ -553,7 +553,7 @@ def pd_index_overload(data=None, dtype=None, copy=False, name=None, tupleize_col
                 )
 
         else:
-            raise BodoError("Index: provided array is of unsupported type.")
+            raise BodoError("pd.Index(): provided array is of unsupported type.")
 
     # raise error for data being None or scalar
     elif data is None or is_literal_type(data_dtype):
@@ -561,7 +561,7 @@ def pd_index_overload(data=None, dtype=None, copy=False, name=None, tupleize_col
             "data argument in pd.Index() is invalid: None or scalar is not acceptable"
         )
     else:
-        raise BodoError("Index: the provided argument type is not supported")
+        raise BodoError("pd.Index(): the provided argument type is not supported")
 
     return impl
 
