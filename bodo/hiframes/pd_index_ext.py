@@ -517,7 +517,7 @@ def pd_index_overload(data=None, dtype=None, copy=False, name=None, tupleize_col
     # Range index:
     if isinstance(data, types.RangeType):
 
-        def impl(data=None, dtype=None, copy=False, name=None, tupleize_cols=True):
+        def impl(data=None, dtype=None, copy=False, name=None, tupleize_cols=True):  # pragma: no cover
             return bodo.hiframes.pd_index_ext.init_range_index(
                 data.start, data.stop, data.step, name
             )
