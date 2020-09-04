@@ -1850,6 +1850,16 @@ class DistributedAnalysis:
             # TODO: support slice index setitem across the whole first dimension, which
             # may require shuffling data to match slice index selection
 
+        # avoid parallel scalar setitem when inside a parfor
+        if self.in_parallel_parfor != -1:
+            self._set_REP(inst.list_vars(), array_dists)
+            return
+
+        # int index setitem of dist array
+        if isinstance(index_typ, types.Integer):
+            self._set_REP([inst.value], array_dists)
+            return
+
         self._set_REP([inst.value, arr, index_var], array_dists)
 
     def _analyze_arg(self, lhs, rhs, array_dists):

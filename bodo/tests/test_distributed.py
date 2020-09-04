@@ -618,7 +618,7 @@ def test_getitem_slice_const_size():
 
 
 def test_setitem_slice_scalar(memory_leak_check):
-    """test setitem of distributed array with a sclar or lower dimention array value
+    """test setitem of distributed array with a scalar or lower dimention array value
     """
 
     def impl(A, val):
@@ -673,6 +673,30 @@ def test_setitem_bool_index_scalar(memory_leak_check):
     I = A[:, 0] % 4 == 0
     val = [-1, -3, -2]
     check_func(impl2, (A, I, val))
+
+
+def test_setitem_scalar(memory_leak_check):
+    """test setitem of distributed array with a scalar
+    """
+
+    def impl(A, val):
+        A[1] = val
+        return A
+
+    # scalar value
+    A = np.arange(11)
+    val = -1
+    check_func(impl, (A, val))
+
+    # multi-dim array with lower dimension array value
+    # using a new implementation since Numba doesn't support lists in array setitem
+    def impl2(A, val, i):
+        A[i] = np.array(val)
+        return A
+
+    A = np.arange(33).reshape(11, 3)
+    val = [-1, -3, -2]
+    check_func(impl2, (A, val, -1))
 
 
 @pytest.mark.parametrize("dtype", [np.float32, np.uint8, np.int64])
