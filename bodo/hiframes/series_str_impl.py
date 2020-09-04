@@ -532,11 +532,13 @@ def overload_str_method_count(S_str, pat, flags=0):
 
 
 @overload_method(SeriesStrMethodType, "find", inline="always", no_unliteral=True)
-def overload_str_method_find(S_str, sub):
-    # not supporting start,end as arguments
+def overload_str_method_find(S_str, sub, start=0, end=None):
     str_arg_check("find", "sub", sub)
+    int_arg_check("find", "start", start)
+    if not is_overload_none(end):
+        int_arg_check("find", "end", end)
 
-    def impl(S_str, sub):  # pragma: no cover
+    def impl(S_str, sub, start=0, end=None):  # pragma: no cover
         S = S_str._obj
         str_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
         name = bodo.hiframes.pd_series_ext.get_series_name(S)
@@ -548,7 +550,7 @@ def overload_str_method_find(S_str, sub):
             if bodo.libs.array_kernels.isna(str_arr, i):
                 bodo.libs.array_kernels.setna(out_arr, i)
             else:
-                out_arr[i] = str_arr[i].find(sub)
+                out_arr[i] = str_arr[i].find(sub, start, end)
         return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
     return impl
