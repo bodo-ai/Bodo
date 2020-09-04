@@ -35,6 +35,7 @@ CONST_DICT_SENTINEL = "$_bodo_const_dict_$"
 
 list_cumulative = {"cumsum", "cumprod", "cummin", "cummax"}
 
+
 def is_dtype_nullable(in_dtype):
     """checks whether 'in_dtype' has sentinel NA values (as opposed to bitmap)"""
     return isinstance(in_dtype, (types.Float, types.NPDatetime, types.NPTimedelta))

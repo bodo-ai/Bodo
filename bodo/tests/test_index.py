@@ -54,13 +54,15 @@ def test_range_index_constructor(memory_leak_check):
 @pytest.mark.parametrize(
     "data",
     [
-        np.array([1, 3, 4]), # Int array
-        np.ones(3, dtype=np.int64), # Int64Index: array of int64
-        np.arange(3), # Int64Ind: array input
-        pd.date_range(start="2018-04-24", end="2018-04-27", periods=3), # datetime range
-        np.arange(10).view(np.dtype("datetime64[ns]")), # datetime array
-        np.arange(10).view(np.dtype("timedelta64[ns]")), # deltatime array
-        pd.Series(np.arange(10).view(np.dtype("timedelta64[ns]"))), # deltatime series
+        np.array([1, 3, 4]),  # Int array
+        np.ones(3, dtype=np.int64),  # Int64Index: array of int64
+        np.arange(3),  # Int64Ind: array input
+        pd.date_range(
+            start="2018-04-24", end="2018-04-27", periods=3
+        ),  # datetime range
+        np.arange(10).view(np.dtype("datetime64[ns]")),  # datetime array
+        np.arange(10).view(np.dtype("timedelta64[ns]")),  # deltatime array
+        pd.Series(np.arange(10).view(np.dtype("timedelta64[ns]"))),  # deltatime series
     ],
 )
 def test_generic_index_constructor(data):
@@ -80,12 +82,28 @@ def test_generic_index_constructor_with_dtype():
         return pd.Index(data, dtype=dtype)
 
     # parallel with  dtype
-    check_func(impl, (np.ones(3, dtype=np.int32), np.float64)) # Float64Index: coerce with diff dtype
-    check_func(impl, (np.ones(3, dtype=np.int32), np.float64)) # Float64Index: coerce with diff dtype
-    check_func(impl, (np.arange(10), np.dtype("datetime64[ns]"))) # datetime array with dtype
-    check_func(impl, (pd.Series(["2020-9-1", "2019-10-11", "2018-1-4", "2015-8-3", "1990-11-21"]), np.dtype("datetime64[ns]"))) # series with datetime dtype
-    check_func(impl, (np.arange(10), np.dtype("timedelta64[ns]"))) # deltatime array with dtype
-    check_func(impl, (pd.Series(np.arange(10)), np.dtype("timedelta64[ns]"))) # series with deltatime dtype
+    check_func(
+        impl, (np.ones(3, dtype=np.int32), np.float64)
+    )  # Float64Index: coerce with diff dtype
+    check_func(
+        impl, (np.ones(3, dtype=np.int32), np.float64)
+    )  # Float64Index: coerce with diff dtype
+    check_func(
+        impl, (np.arange(10), np.dtype("datetime64[ns]"))
+    )  # datetime array with dtype
+    check_func(
+        impl,
+        (
+            pd.Series(["2020-9-1", "2019-10-11", "2018-1-4", "2015-8-3", "1990-11-21"]),
+            np.dtype("datetime64[ns]"),
+        ),
+    )  # series with datetime dtype
+    check_func(
+        impl, (np.arange(10), np.dtype("timedelta64[ns]"))
+    )  # deltatime array with dtype
+    check_func(
+        impl, (pd.Series(np.arange(10)), np.dtype("timedelta64[ns]"))
+    )  # series with deltatime dtype
 
 
 def test_generic_index_constructor_sequential():
@@ -93,8 +111,9 @@ def test_generic_index_constructor_sequential():
         return pd.Index(data)
 
     # a couple sequential checks
-    bodo.jit(impl)([1,3,4])
+    bodo.jit(impl)([1, 3, 4])
     bodo.jit(impl)(["A", "B", "C"])
+
 
 def test_numeric_index_constructor(memory_leak_check):
     """

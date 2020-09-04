@@ -516,17 +516,21 @@ def pd_index_overload(data=None, dtype=None, copy=False, name=None, tupleize_col
 
     # Range index:
     if isinstance(data, types.iterators.RangeType):
+
         def impl(data=None, dtype=None, copy=False, name=None, tupleize_cols=True):
             return bodo.hiframes.pd_index_ext.init_range_index(
-                data.start, data.stop, data.step, name)
+                data.start, data.stop, data.step, name
+            )
 
     # Datetime index:
     elif isinstance(data, DatetimeIndexType) or typ == types.NPDatetime("ns"):
+
         def impl(data=None, dtype=None, copy=False, name=None, tupleize_cols=True):
             return pd.DatetimeIndex(data, name)
 
     # Timedelta index:
     elif isinstance(data, TimedeltaIndexType) or typ == types.NPTimedelta("ns"):
+
         def impl(data=None, dtype=None, copy=False, name=None, tupleize_cols=True):
             return pd.TimedeltaIndex(data, name)
 
@@ -534,6 +538,7 @@ def pd_index_overload(data=None, dtype=None, copy=False, name=None, tupleize_col
     elif isinstance(data, (SeriesType, types.Array, types.List)):
         # Numeric Indices:
         if typ in (types.int64, types.int32, types.float64, types.uint32, types.uint64):
+
             def impl(data=None, dtype=None, copy=False, name=None, tupleize_cols=True):
                 data_arr = bodo.utils.conversion.coerce_to_ndarray(data)
                 data_coerced = bodo.utils.conversion.fix_arr_dtype(data_arr, typ)
@@ -541,12 +546,14 @@ def pd_index_overload(data=None, dtype=None, copy=False, name=None, tupleize_col
 
         # String index:
         elif typ == types.string:
+
             def impl(data=None, dtype=None, copy=False, name=None, tupleize_cols=True):
                 return bodo.hiframes.pd_index_ext.init_string_index(
-                    bodo.utils.conversion.coerce_to_array(data), name)
+                    bodo.utils.conversion.coerce_to_array(data), name
+                )
+
         else:
             raise BodoError("Index: provided array is of unsupported type.")
-
 
     # raise error for data being None or scalar
     elif data is None or is_literal_type(data.dtype):
