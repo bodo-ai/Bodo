@@ -1959,7 +1959,7 @@ class DistributedPass:
             return self._run_parallel_access_getsetitem(
                 arr, index_var, node, full_node, equiv_set, avail_vars
             )
-        elif self._is_1D_arr(arr.name) and isinstance(
+        elif self._is_1D_or_1D_Var_arr(arr.name) and isinstance(
             node, (ir.StaticSetItem, ir.SetItem)
         ):
             return self._run_dist_setitem(
@@ -2062,7 +2062,6 @@ class DistributedPass:
             in_arr = full_node.value.value
             start_var, nodes = self._get_dist_start_var(in_arr, equiv_set, avail_vars)
             size_var = self._get_dist_var_len(in_arr, nodes, equiv_set)
-            is_1D = self._is_1D_arr(arr.name)
             # for multi-dim case, perform selection in other dimensions then handle
             # the first dimension
             if is_multi_dim:
@@ -2074,25 +2073,20 @@ class DistributedPass:
                 other_ind = nodes[-1].target
                 return nodes + compile_func_single_block(
                     lambda arr, slice_index, start, tot_len, other_ind: bodo.libs.distributed_api.slice_getitem(
-                        operator.getitem(arr, other_ind),
-                        slice_index,
-                        start,
-                        tot_len,
-                        _is_1D,
+                        operator.getitem(arr, other_ind), slice_index, start, tot_len,
                     ),
                     [in_arr, index_var, start_var, size_var, other_ind],
                     lhs,
                     self,
-                    extra_globals={"_is_1D": is_1D, "operator": operator},
+                    extra_globals={"operator": operator},
                 )
             return nodes + compile_func_single_block(
                 lambda arr, slice_index, start, tot_len: bodo.libs.distributed_api.slice_getitem(
-                    arr, slice_index, start, tot_len, _is_1D
+                    arr, slice_index, start, tot_len,
                 ),
                 [in_arr, index_var, start_var, size_var],
                 lhs,
                 self,
-                extra_globals={"_is_1D": is_1D},
             )
         # int index like A[11]
         elif (
@@ -2134,31 +2128,32 @@ class DistributedPass:
         ):
             return out
 
-        elif isinstance(index_typ, types.misc.SliceType):
+        elif isinstance(index_typ, types.SliceType):
 
-            # TODO: support multi-dim slice setitem like X[a:b, c:d]
-            if is_multi_dim:  # pragma: no cover
-                raise BodoError(
-                    "multi-dimensional slicing of distributed data not supported yet"
-                )
-            nodes, start_var, count_var = self._get_dist_var_start_count(
-                arr, equiv_set, avail_vars
+            start_var, nodes = self._get_dist_start_var(arr, equiv_set, avail_vars)
+            arr_len = self._get_dist_var_len(arr, nodes, equiv_set)
+
+            # create a tuple varialbe for lower dimension indices
+            other_inds_var = ir.Var(arr.scope, mk_unique_var("$other_inds"), arr.loc)
+            items = [] if not is_multi_dim else inds
+            other_inds_tuple = ir.Expr.build_tuple(items, arr.loc)
+            nodes.append(ir.Assign(other_inds_tuple, other_inds_var, arr.loc))
+            self.typemap[other_inds_var.name] = types.BaseTuple.from_types(
+                [self.typemap[v.name] for v in items]
             )
 
             # convert setitem with global range to setitem with local range
             # that overlaps with the local array chunk
-            def f(A, val, start, stop, chunk_start, chunk_count):  # pragma: no cover
-                loc_start, loc_stop = bodo.libs.distributed_api._get_local_range(
-                    start, stop, chunk_start, chunk_count
+            def f(A, val, idx, other_inds, chunk_start, arr_len):  # pragma: no cover
+                new_slice = bodo.libs.distributed_api.get_local_slice(
+                    idx, chunk_start, arr_len
                 )
-                A[loc_start:loc_stop] = val
+                new_ind = (new_slice,) + other_inds
+                A[new_ind] = val
 
-            slice_call = get_definition(self.func_ir, index_var)
-            slice_start = slice_call.args[0]
-            slice_stop = slice_call.args[1]
             return nodes + compile_func_single_block(
                 f,
-                [arr, node.value, slice_start, slice_stop, start_var, count_var],
+                [arr, node.value, index_var, other_inds_var, start_var, arr_len],
                 None,
                 self,
             )
@@ -2591,7 +2586,7 @@ class DistributedPass:
 
     def _get_ind_sub(self, ind_var, start_var):
         if isinstance(ind_var, slice) or isinstance(
-            self.typemap[ind_var.name], types.misc.SliceType
+            self.typemap[ind_var.name], types.SliceType
         ):
             return self._get_ind_sub_slice(ind_var, start_var)
         # gen sub

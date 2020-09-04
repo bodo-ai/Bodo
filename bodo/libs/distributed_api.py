@@ -1838,15 +1838,23 @@ def prealloc_str_for_bcast_overload(arr):
     return lambda arr: arr
 
 
-def slice_getitem(arr, slice_index, arr_start, total_len, is_1D):  # pragma: no cover
-    return arr[slice_index]
+def get_local_slice(idx, arr_start, total_len):  # pragma: no cover
+    return idx
 
 
-@overload(slice_getitem, no_unliteral=True, jit_options={"cache": True})
-def slice_getitem_overload(arr, slice_index, arr_start, total_len, is_1D):
-    def getitem_impl(arr, slice_index, arr_start, total_len, is_1D):  # pragma: no cover
+@overload(
+    get_local_slice,
+    no_unliteral=True,
+    jit_options={"cache": True, "no_cpython_wrapper": True},
+)
+def get_local_slice_overload(idx, arr_start, total_len):
+    """get local slice of a global slice, using start of array chunk and total array
+    length.
+    """
+
+    def impl(idx, arr_start, total_len):
         # normalize slice
-        slice_index = numba.cpython.unicode._normalize_slice(slice_index, total_len)
+        slice_index = numba.cpython.unicode._normalize_slice(idx, total_len)
         start = slice_index.start
         step = slice_index.step
 
@@ -1857,7 +1865,20 @@ def slice_getitem_overload(arr, slice_index, arr_start, total_len, is_1D):
         )
         new_start = max(arr_start, slice_index.start) - arr_start + offset
         new_stop = max(slice_index.stop - arr_start, 0)
-        return bodo.utils.conversion.ensure_contig_if_np(arr[new_start:new_stop:step])
+        return slice(new_start, new_stop, step)
+
+    return impl
+
+
+def slice_getitem(arr, slice_index, arr_start, total_len):  # pragma: no cover
+    return arr[slice_index]
+
+
+@overload(slice_getitem, no_unliteral=True, jit_options={"cache": True})
+def slice_getitem_overload(arr, slice_index, arr_start, total_len):
+    def getitem_impl(arr, slice_index, arr_start, total_len):  # pragma: no cover
+        new_slice = get_local_slice(slice_index, arr_start, total_len)
+        return bodo.utils.conversion.ensure_contig_if_np(arr[new_slice])
 
     return getitem_impl
 

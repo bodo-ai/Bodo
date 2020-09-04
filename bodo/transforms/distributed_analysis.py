@@ -1830,6 +1830,8 @@ class DistributedAnalysis:
                 self._meet_array_dists(arr.name, index_var.name, array_dists)
                 self._set_REP([inst.value], array_dists)
                 return
+            # TODO: support bool index setitem across the whole first dimension, which
+            # may require shuffling data to match bool index selection
 
         # whole slice access, output has same distribution as input
         # for example: X[:,3] = A
@@ -1838,8 +1840,17 @@ class DistributedAnalysis:
         ):
             self._meet_array_dists(arr.name, inst.value.name, array_dists)
             return
+        # chunked slice or strided slice
+        # examples: X[:n//3] = v, X[::2,5] = v
+        elif isinstance(index_typ, types.SliceType):
+            # if the value is scalar/lower dimension
+            if not is_array_typ(value_typ) or value_typ.ndim < target_typ.ndim:
+                self._set_REP([inst.value], array_dists)
+                return
+            # TODO: support slice index setitem across the whole first dimension, which
+            # may require shuffling data to match slice index selection
 
-        self._set_REP([inst.value], array_dists)
+        self._set_REP([inst.value, arr, index_var], array_dists)
 
     def _analyze_arg(self, lhs, rhs, array_dists):
         if (
