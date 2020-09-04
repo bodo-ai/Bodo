@@ -510,7 +510,7 @@ def pd_index_overload(data=None, dtype=None, copy=False, name=None, tupleize_col
 
     data_dtype = getattr(data, "dtype", None)
     if not is_overload_none(dtype):
-        typ = dtype.dtype
+        elem_type = dtype.dtype
     else:
         typ = data_dtype
 
@@ -523,13 +523,13 @@ def pd_index_overload(data=None, dtype=None, copy=False, name=None, tupleize_col
             )
 
     # Datetime index:
-    elif isinstance(data, DatetimeIndexType) or typ == types.NPDatetime("ns"):
+    elif isinstance(data, DatetimeIndexType) or elem_type == types.NPDatetime("ns"):
 
         def impl(data=None, dtype=None, copy=False, name=None, tupleize_cols=True):
             return pd.DatetimeIndex(data, name)
 
     # Timedelta index:
-    elif isinstance(data, TimedeltaIndexType) or typ == types.NPTimedelta("ns"):
+    elif isinstance(data, TimedeltaIndexType) or elem_type == types.NPTimedelta("ns"):
 
         def impl(data=None, dtype=None, copy=False, name=None, tupleize_cols=True):
             return pd.TimedeltaIndex(data, name)
@@ -537,7 +537,7 @@ def pd_index_overload(data=None, dtype=None, copy=False, name=None, tupleize_col
     # ----- Data: Array type ------
     elif isinstance(data, (SeriesType, types.Array, types.List)):
         # Numeric Indices:
-        if typ in (types.int64, types.int32, types.float64, types.uint32, types.uint64):
+        if elem_type in (types.int64, types.int32, types.float64, types.uint32, types.uint64):
 
             def impl(data=None, dtype=None, copy=False, name=None, tupleize_cols=True):
                 data_arr = bodo.utils.conversion.coerce_to_ndarray(data)
@@ -545,7 +545,7 @@ def pd_index_overload(data=None, dtype=None, copy=False, name=None, tupleize_col
                 return bodo.hiframes.pd_index_ext.init_numeric_index(data_coerced, name)
 
         # String index:
-        elif typ == types.string:
+        elif elem_type == types.string:
 
             def impl(data=None, dtype=None, copy=False, name=None, tupleize_cols=True):
                 return bodo.hiframes.pd_index_ext.init_string_index(
@@ -556,7 +556,7 @@ def pd_index_overload(data=None, dtype=None, copy=False, name=None, tupleize_col
             raise BodoError("Index: provided array is of unsupported type.")
 
     # raise error for data being None or scalar
-    elif data is None or is_literal_type(data.dtype):
+    elif data is None or is_literal_type(data_dtype):
         raise ValueError(
             "data argument in pd.Index() is invalid: None or scalar is not acceptable"
         )
