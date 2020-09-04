@@ -517,27 +517,26 @@ def pd_index_overload(data=None, dtype=None, copy=False, name=None, tupleize_col
     # Range index:
     if isinstance(data, RangeIndexType):
 
-        def impl(data=None, dtype=None, copy=False, name=None, tupleize_cols=True):
-            return pd.RangeIndex(data, name)
+        def impl(data=None, dtype=None, copy=False, name=None, tupleize_cols=True): # pragma: no cover
+            return pd.RangeIndex(data, name=name)
 
     # Datetime index:
     elif isinstance(data, DatetimeIndexType) or elem_type == types.NPDatetime("ns"):
-
-        def impl(data=None, dtype=None, copy=False, name=None, tupleize_cols=True):
-            return pd.DatetimeIndex(data, name)
+        def impl(data=None, dtype=None, copy=False, name=None, tupleize_cols=True): # pragma: no cover
+            return pd.DatetimeIndex(data, name=name)
 
     # Timedelta index:
     elif isinstance(data, TimedeltaIndexType) or elem_type == types.NPTimedelta("ns"):
 
-        def impl(data=None, dtype=None, copy=False, name=None, tupleize_cols=True):
-            return pd.TimedeltaIndex(data, name)
+        def impl(data=None, dtype=None, copy=False, name=None, tupleize_cols=True): # pragma: no cover
+            return pd.TimedeltaIndex(data, name=name)
 
     # ----- Data: Array type ------
     elif isinstance(data, (SeriesType, types.Array, types.List)):
         # Numeric Indices:
         if elem_type in (types.int64, types.int32, types.float64, types.uint32, types.uint64):
 
-            def impl(data=None, dtype=None, copy=False, name=None, tupleize_cols=True):
+            def impl(data=None, dtype=None, copy=False, name=None, tupleize_cols=True): # pragma: no cover
                 data_arr = bodo.utils.conversion.coerce_to_ndarray(data)
                 data_coerced = bodo.utils.conversion.fix_arr_dtype(data_arr, elem_type)
                 return bodo.hiframes.pd_index_ext.init_numeric_index(data_coerced, name)
@@ -545,7 +544,7 @@ def pd_index_overload(data=None, dtype=None, copy=False, name=None, tupleize_col
         # String index:
         elif elem_type == types.string:
 
-            def impl(data=None, dtype=None, copy=False, name=None, tupleize_cols=True):
+            def impl(data=None, dtype=None, copy=False, name=None, tupleize_cols=True): # pragma: no cover
                 return bodo.hiframes.pd_index_ext.init_string_index(
                     bodo.utils.conversion.coerce_to_array(data), name
                 )

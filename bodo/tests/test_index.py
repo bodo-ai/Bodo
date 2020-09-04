@@ -60,9 +60,9 @@ def test_range_index_constructor(memory_leak_check):
         pd.date_range(
             start="2018-04-24", end="2018-04-27", periods=3
         ),  # datetime range
-        np.arange(10).view(np.dtype("datetime64[ns]")),  # datetime array
-        np.arange(10).view(np.dtype("timedelta64[ns]")),  # deltatime array
-        pd.Series(np.arange(10).view(np.dtype("timedelta64[ns]"))),  # deltatime series
+        pd.timedelta_range(start="1D", end="3D"), # deltatime range
+        pd.date_range(start="2018-04-10", end="2018-04-27", periods=3),
+        pd.date_range(start="2018-04-10", end="2018-04-27", periods=3).to_series(),  # deltatime series
     ],
 )
 def test_generic_index_constructor(data):
@@ -77,42 +77,37 @@ def test_generic_index_constructor(data):
     check_func(impl, (data,))
 
 
-def test_generic_index_constructor_with_dtype():
+@pytest.mark.parametrize(
+    "data,dtype",
+    [
+        (np.ones(3, dtype=np.int32), np.float64),
+        (np.arange(10), np.dtype("datetime64[ns]")),
+        (pd.Series(["2020-9-1", "2019-10-11", "2018-1-4", "2015-8-3", "1990-11-21"]),
+            np.dtype("datetime64[ns]")
+         ),
+        (np.arange(10), np.dtype("timedelta64[ns]")),
+        (pd.Series(np.arange(10)), np.dtype("timedelta64[ns]")),
+    ],
+)
+def test_generic_index_constructor_with_dtype(data, dtype):
     def impl(data, dtype):
         return pd.Index(data, dtype=dtype)
 
-    # parallel with  dtype
-    check_func(
-        impl, (np.ones(3, dtype=np.int32), np.float64)
-    )  # Float64Index: coerce with diff dtype
-    check_func(
-        impl, (np.ones(3, dtype=np.int32), np.float64)
-    )  # Float64Index: coerce with diff dtype
-    check_func(
-        impl, (np.arange(10), np.dtype("datetime64[ns]"))
-    )  # datetime array with dtype
-    check_func(
-        impl,
-        (
-            pd.Series(["2020-9-1", "2019-10-11", "2018-1-4", "2015-8-3", "1990-11-21"]),
-            np.dtype("datetime64[ns]"),
-        ),
-    )  # series with datetime dtype
-    check_func(
-        impl, (np.arange(10), np.dtype("timedelta64[ns]"))
-    )  # deltatime array with dtype
-    check_func(
-        impl, (pd.Series(np.arange(10)), np.dtype("timedelta64[ns]"))
-    )  # series with deltatime dtype
+    check_func(impl, (data, dtype))
 
 
-def test_generic_index_constructor_sequential():
+@pytest.mark.parametrize(
+    "data",
+    [
+        [1, 3, 4],
+        ["A", "B", "C"],
+    ],
+)
+def test_generic_index_constructor_sequential(data):
     def impl(data):
         return pd.Index(data)
 
-    # a couple sequential checks
-    bodo.jit(impl)([1, 3, 4])
-    bodo.jit(impl)(["A", "B", "C"])
+    check_func(impl, (data,), dist_test=False)
 
 
 def test_numeric_index_constructor(memory_leak_check):
