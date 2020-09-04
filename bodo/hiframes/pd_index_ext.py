@@ -512,15 +512,13 @@ def pd_index_overload(data=None, dtype=None, copy=False, name=None, tupleize_col
     if not is_overload_none(dtype):
         elem_type = dtype.dtype
     else:
-        typ = data_dtype
+        elem_type = data_dtype
 
     # Range index:
-    if isinstance(data, types.RangeType):
+    if isinstance(data, RangeIndexType):
 
-        def impl(data=None, dtype=None, copy=False, name=None, tupleize_cols=True):  # pragma: no cover
-            return bodo.hiframes.pd_index_ext.init_range_index(
-                data.start, data.stop, data.step, name
-            )
+        def impl(data=None, dtype=None, copy=False, name=None, tupleize_cols=True):
+            return pd.RangeIndex(data, name)
 
     # Datetime index:
     elif isinstance(data, DatetimeIndexType) or elem_type == types.NPDatetime("ns"):
@@ -541,7 +539,7 @@ def pd_index_overload(data=None, dtype=None, copy=False, name=None, tupleize_col
 
             def impl(data=None, dtype=None, copy=False, name=None, tupleize_cols=True):
                 data_arr = bodo.utils.conversion.coerce_to_ndarray(data)
-                data_coerced = bodo.utils.conversion.fix_arr_dtype(data_arr, typ)
+                data_coerced = bodo.utils.conversion.fix_arr_dtype(data_arr, elem_type)
                 return bodo.hiframes.pd_index_ext.init_numeric_index(data_coerced, name)
 
         # String index:
