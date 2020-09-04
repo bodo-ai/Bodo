@@ -553,7 +553,7 @@ def pd_index_overload(data=None, dtype=None, copy=False, name=None, tupleize_col
                 )
 
         else:
-            raise BodoError("Index: provided array is of unsupported type.")
+            raise BodoError("pd.Index(): provided array is of unsupported type.")
 
     # raise error for data being None or scalar
     elif data is None or is_literal_type(data.dtype):
