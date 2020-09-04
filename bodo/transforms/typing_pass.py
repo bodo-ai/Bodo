@@ -613,6 +613,7 @@ class TypingTransforms:
             tuple_assign = ir.Assign(tuple_call, tuple_var, loc)
             nodes.append(tuple_assign)
             set_call_expr_arg(tuple_var, rhs.args, kws, arg_no, arg_name)
+            self.changed = True
 
     def _is_df_call_transformed(self, rhs):
         """check for _bodo_transformed=True in call arguments to know if df call has

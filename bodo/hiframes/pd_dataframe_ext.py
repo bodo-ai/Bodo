@@ -2006,7 +2006,8 @@ def concat_overload(
     # concat of columns into a dataframe
     if axis == 1:
         if not isinstance(objs, types.BaseTuple):
-            raise BodoError("Only argument for pd.concat(axis=1) expected")
+            # using raise_bodo_error() since typing pass may transform list to tuple
+            raise_bodo_error("Only tuple argument for pd.concat(axis=1) expected")
         index = "bodo.hiframes.pd_index_ext.init_range_index(0, len(objs[0]), 1, None)"
         col_no = 0
         data_args = []

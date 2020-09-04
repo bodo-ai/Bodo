@@ -1887,6 +1887,21 @@ def test_concat_df_columns(memory_leak_check):
     check_func(test_impl, (df, df2))
 
 
+def test_concat_typing_transform(memory_leak_check):
+    """Test list to tuple trasnform in typing pass, when other typing related changes
+    are also required.
+    """
+
+    def test_impl(df, df2):
+        df3 = pd.concat([df, df2], axis=1)
+        df3["D"] = 3
+        return df3
+
+    df = pd.DataFrame({"A": [1, 2, 3, 9, 11]})
+    df2 = pd.DataFrame({"B": [4.0, 5.0, 4.1, 6.2, 2.1], "C": [7, 1, 3, -4, -1]})
+    check_func(test_impl, (df, df2))
+
+
 def test_concat_int_float(memory_leak_check):
     """Test dataframe concatenation when integer and float are put together
     """
