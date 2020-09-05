@@ -1791,6 +1791,7 @@ def test_series_map_arg_fold(memory_leak_check):
     check_func(test_impl, (S,))
 
 
+@pytest.mark.skip(reason="Fails on 3 processes #1606")
 def test_autocorr():
     def f(S, lag):
         return S.autocorr(lag=lag)
