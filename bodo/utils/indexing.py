@@ -6,6 +6,7 @@ import numpy as np
 
 import numba
 from numba.extending import register_jitable, overload
+from numba.core import types
 import bodo
 
 
@@ -159,6 +160,20 @@ def array_setitem_slice_index(A, idx, val):  # pragma: no cover
     # TODO: check for overlap and copy only if necessary
     src_bitmap = val._null_bitmap.copy()
     setitem_slice_index_null_bits(A._null_bitmap, src_bitmap, idx, n)
+
+
+def untuple_if_one_tuple(v):
+    return v
+
+
+@overload(untuple_if_one_tuple)
+def untuple_if_one_tuple_overload(v):
+    """if 'v' is a single element tuple, return 'v[0]' to avoid unnecessary tuple value.
+    """
+    if isinstance(v, types.BaseTuple) and len(v.types) == 1:
+        return lambda v: v[0]
+
+    return lambda v: v
 
 
 def init_nested_counts(arr_typ):  # pragma: no cover

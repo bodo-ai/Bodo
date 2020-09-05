@@ -2149,6 +2149,8 @@ class DistributedPass:
                     idx, chunk_start, arr_len
                 )
                 new_ind = (new_slice,) + other_inds
+                # avoid tuple index for cases like Series that don't support it
+                new_ind = bodo.utils.indexing.untuple_if_one_tuple(new_ind)
                 A[new_ind] = val
 
             return nodes + compile_func_single_block(
