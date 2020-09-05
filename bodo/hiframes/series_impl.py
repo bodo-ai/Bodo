@@ -2323,12 +2323,7 @@ def overload_to_numeric(arg_a, errors="raise", downcast=None):
                 if bodo.libs.array_kernels.isna(arg_a, i):
                     bodo.libs.array_kernels.setna(B, i)
                 else:
-                    err = bodo.libs.str_arr_ext.str_arr_item_to_numeric(B, i, arg_a, i)
-                    # error code -1 means the input element is invalid
-                    if err == -1:
-                        bodo.libs.array_kernels.setna(B, i)
-                    else:
-                        bodo.libs.int_arr_ext.set_bit_to_arr(B._null_bitmap, i, 1)
+                    bodo.libs.str_arr_ext.str_arr_item_to_numeric(B, i, arg_a, i)
 
             return B
 

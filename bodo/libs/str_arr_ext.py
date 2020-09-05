@@ -1817,11 +1817,45 @@ def overload_get_arr_data_ptr(arr, ind):
     return impl_np
 
 
+def set_to_numeric_out_na_err(out_arr, out_ind, err_code):  # pragma: no cover
+    pass
+
+
+@overload(set_to_numeric_out_na_err)
+def set_to_numeric_out_na_err_overload(out_arr, out_ind, err_code):
+    """set NA to output of to_numeric() based on error code from C++ code.
+    """
+    # nullable int array
+    if isinstance(out_arr, bodo.libs.int_arr_ext.IntegerArrayType):
+
+        def impl_int(out_arr, out_ind, err_code):  # pragma: no cover
+            if err_code == -1:
+                bodo.libs.int_arr_ext.set_bit_to_arr(out_arr._null_bitmap, out_ind, 0)
+            else:
+                bodo.libs.int_arr_ext.set_bit_to_arr(out_arr._null_bitmap, out_ind, 1)
+
+        return impl_int
+
+    # numpy case, TODO: other
+    assert isinstance(out_arr, types.Array)
+
+    if isinstance(out_arr.dtype, types.Float):
+
+        def impl_np(out_arr, out_ind, err_code):  # pragma: no cover
+            if err_code == -1:
+                out_arr[out_ind] = np.nan
+
+        return impl_np
+
+    return lambda out_arr, out_ind: None
+
+
 @numba.njit(no_cpython_wrapper=True)
 def str_arr_item_to_numeric(out_arr, out_ind, str_arr, ind):  # pragma: no cover
-    return _str_arr_item_to_numeric(
+    err_code = _str_arr_item_to_numeric(
         get_arr_data_ptr(out_arr, out_ind), str_arr, ind, out_arr.dtype,
     )
+    set_to_numeric_out_na_err(out_arr, out_ind, err_code)
 
 
 @intrinsic
