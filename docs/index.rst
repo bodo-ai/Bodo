@@ -13,6 +13,7 @@ Bodo
 
    source/overview
    source/install
+   source/bodo_platform
    source/getting_started
    source/user_guide
    source/file_io
