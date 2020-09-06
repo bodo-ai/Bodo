@@ -62,18 +62,10 @@ jobs:
   - script: |
       export PATH=$HOME/miniconda3/bin:$PATH
       source activate $CONDA_ENV
-      pip install pytest pytest-azurepipelines pytest-cov codecov
+      pip install pytest pytest-azurepipelines pytest-cov
       if [[ ("$NP" -eq 1) && ("${{ parameters.name }}" == "Linux") ]]; then
         python bodo/runtests.py "$NP" -s -v -m "$(PYTEST_MARKER)" --cov-report= --cov=./ bodo/tests/
       else
         python bodo/runtests.py "$NP" -s -v -m "$(PYTEST_MARKER)" bodo/tests/
       fi
     displayName: 'Test'
-
-  - script: |
-      export PATH=$HOME/miniconda3/bin:$PATH
-      source activate $CONDA_ENV
-      if [[ "$NP" -eq 1 ]] && [[ "${{ parameters.name }}" == "Linux" ]]; then
-        codecov --required -t $(CODECOV_TOKEN) || (sleep 5 && codecov --required -t $(CODECOV_TOKEN)) || (sleep 5 && codecov --required -t $(CODECOV_TOKEN)) || (sleep 5 && codecov --required -t $(CODECOV_TOKEN)) || (sleep 5 && codecov --required -t $(CODECOV_TOKEN))
-      fi
-    displayName: 'codecov report upload'
