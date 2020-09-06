@@ -751,7 +751,7 @@ def to_string_list_overload(data, str_null_bools=None):
         to_str_impl = loc_vars["f"]
         return to_str_impl
 
-    return lambda data, str_null_bools=None: data
+    return lambda data, str_null_bools=None: data  # pragma: no cover
 
 
 def cp_str_list_to_array(str_arr, str_list, str_null_bools=None):  # pragma: no cover
@@ -818,7 +818,7 @@ def cp_str_list_to_array_overload(str_arr, list_data, str_null_bools=None):
         cp_str_impl = loc_vars["f"]
         return cp_str_impl
 
-    return lambda str_arr, list_data, str_null_bools=None: None
+    return lambda str_arr, list_data, str_null_bools=None: None  # pragma: no cover
 
 
 def str_list_to_array(str_list):
@@ -845,7 +845,7 @@ def str_list_to_array_overload(str_list):
 
         return str_list_impl
 
-    return lambda str_list: str_list
+    return lambda str_list: str_list  # pragma: no cover
 
 
 def get_num_total_chars(A):  # pragma: no cover
@@ -896,12 +896,12 @@ def str_arr_len_overload(str_arr):
 
 @overload_attribute(StringArrayType, "size")
 def str_arr_size_overload(str_arr):
-    return lambda str_arr: num_strings(str_arr)
+    return lambda str_arr: num_strings(str_arr)  # pragma: no cover
 
 
 @overload_attribute(StringArrayType, "shape")
 def str_arr_shape_overload(str_arr):
-    return lambda str_arr: (str_arr.size,)
+    return lambda str_arr: (str_arr.size,)  # pragma: no cover
 
 
 from llvmlite import ir as lir
@@ -1369,7 +1369,7 @@ dummy_use = numba.njit(lambda a: None)
 def get_utf8_size(s):
     if isinstance(s, types.StringLiteral):
         l = len(s.literal_value.encode())
-        return lambda s: l
+        return lambda s: l  # pragma: no cover
 
     def impl(s):  # pragma: no cover
         if s._is_ascii == 1:
@@ -1718,12 +1718,12 @@ def str_arr_setitem(A, idx, val):
 
 @overload_attribute(StringArrayType, "dtype")
 def overload_str_arr_dtype(A):
-    return lambda A: pd.StringDtype()
+    return lambda A: pd.StringDtype()  # pragma: no cover
 
 
 @overload_attribute(StringArrayType, "ndim")
 def overload_str_arr_ndim(A):
-    return lambda A: 1
+    return lambda A: 1  # pragma: no cover
 
 
 @overload_method(StringArrayType, "astype", no_unliteral=True)
@@ -1732,7 +1732,7 @@ def overload_str_arr_astype(A, dtype, copy=True):
     # same dtype case
     if isinstance(dtype, types.Function) and dtype.key[0] == str:
         # no need to copy since our StringArray is immutable
-        return lambda A, dtype, copy=True: A
+        return lambda A, dtype, copy=True: A  # pragma: no cover
 
     # numpy dtypes
     nb_dtype = parse_dtype(dtype)
@@ -1844,7 +1844,7 @@ def set_to_numeric_out_na_err_overload(out_arr, out_ind, err_code):
 
         return impl_np
 
-    return lambda out_arr, out_ind, err_code: None
+    return lambda out_arr, out_ind, err_code: None  # pragma: no cover
 
 
 @numba.njit(no_cpython_wrapper=True)
