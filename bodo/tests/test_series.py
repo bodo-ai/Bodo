@@ -3076,6 +3076,7 @@ def test_series_unsupported_error_checking(memory_leak_check):
         bodo.jit(test_method)(pd.Series([1, 2]))
 
 
+@pytest.mark.slow
 class TestSeries(unittest.TestCase):
     def test_create1(self):
         def test_impl():
