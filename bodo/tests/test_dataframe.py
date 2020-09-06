@@ -2464,6 +2464,7 @@ def test_dataframe_sample_nested_datastructures():
         assert df_ret == py_output
 
     n = 10
+    random.seed(1)
     df1 = pd.DataFrame({"B": gen_random_arrow_array_struct_int(10, n)})
     df2 = pd.DataFrame({"B": gen_random_arrow_array_struct_list_int(10, n)})
     df3 = pd.DataFrame({"B": gen_random_arrow_list_list_int(1, 0.1, n)})
