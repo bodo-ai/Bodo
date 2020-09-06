@@ -56,6 +56,8 @@ class SeriesIatType(types.Type):
         name = "SeriesIatType({})".format(stype)
         super(SeriesIatType, self).__init__(name)
 
+    ndim = 1
+
 
 @register_model(SeriesIatType)
 class SeriesIatModel(models.StructModel):
@@ -153,6 +155,8 @@ class SeriesIlocType(types.Type):
         self.stype = stype
         name = "SeriesIlocType({})".format(stype)
         super(SeriesIlocType, self).__init__(name)
+
+    ndim = 1
 
 
 @register_model(SeriesIlocType)
@@ -320,6 +324,8 @@ class SeriesLocType(types.Type):
         self.stype = stype
         name = "SeriesLocType({})".format(stype)
         super(SeriesLocType, self).__init__(name)
+
+    ndim = 1
 
 
 @register_model(SeriesLocType)
