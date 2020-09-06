@@ -1829,10 +1829,7 @@ def set_to_numeric_out_na_err_overload(out_arr, out_ind, err_code):
     if isinstance(out_arr, bodo.libs.int_arr_ext.IntegerArrayType):
 
         def impl_int(out_arr, out_ind, err_code):  # pragma: no cover
-            if err_code == -1:
-                bodo.libs.int_arr_ext.set_bit_to_arr(out_arr._null_bitmap, out_ind, 0)
-            else:
-                bodo.libs.int_arr_ext.set_bit_to_arr(out_arr._null_bitmap, out_ind, 1)
+            bodo.libs.int_arr_ext.set_bit_to_arr(out_arr._null_bitmap, out_ind, 0 if err_code == -1 else 1)
 
         return impl_int
 
@@ -1847,7 +1844,7 @@ def set_to_numeric_out_na_err_overload(out_arr, out_ind, err_code):
 
         return impl_np
 
-    return lambda out_arr, out_ind: None
+    return lambda out_arr, out_ind, err_code: None
 
 
 @numba.njit(no_cpython_wrapper=True)
