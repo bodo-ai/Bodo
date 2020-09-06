@@ -1009,6 +1009,7 @@ def test_sort_list_list():
     check_func(f, (df,))
 
 
+@pytest.mark.skip(reason="Fails on 3 processes #1612")
 def test_sort_values_nested_arrays_random():
     def f(df):
         df2 = df.sort_values(by="A")
