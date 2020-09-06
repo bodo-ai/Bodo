@@ -1959,6 +1959,9 @@ class DistributedPass:
             return self._run_parallel_access_getsetitem(
                 arr, index_var, node, full_node, equiv_set, avail_vars
             )
+        # parallel access in 1D_Var case, no need to transform
+        elif (arr.name, index_var.name) in self._parallel_accesses:
+            return out
         elif self._is_1D_or_1D_Var_arr(arr.name) and isinstance(
             node, (ir.StaticSetItem, ir.SetItem)
         ):
