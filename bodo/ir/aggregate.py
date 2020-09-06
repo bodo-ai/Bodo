@@ -65,6 +65,7 @@ from bodo.libs.str_arr_ext import (
     get_utf8_size,
 )
 from bodo.hiframes.pd_series_ext import SeriesType
+from bodo.hiframes.datetime_date_ext import DatetimeDateArrayType
 from bodo.hiframes import series_impl
 from bodo.ir.join import write_send_buff
 from bodo.libs.timsort import getitem_arr_tup, setitem_arr_tup
@@ -1821,28 +1822,33 @@ def gen_top_level_agg_func(
 
         for i in range(len(out_names)):
             out_name = out_names[i] + "_dummy"
-            if isinstance(out_col_typs[i], IntegerArrayType):
+            out_col_typ = out_col_typs[i]
+            if isinstance(out_col_typ, IntegerArrayType):
                 int_typ_name = IntDtype(out_typs[i]).name
                 assert int_typ_name.endswith("Dtype()")
                 int_typ_name = int_typ_name[:-7]  # remove trailing "Dtype()"
                 func_text += '    {} = pd.Series([1], dtype="{}").values\n'.format(
                     out_name, int_typ_name
                 )
-            elif isinstance(out_col_typs[i], BooleanArrayType):
+            elif isinstance(out_col_typ, BooleanArrayType):
                 func_text += "    {} = bodo.libs.bool_arr_ext.init_bool_array(np.empty(0, np.bool_), np.empty(0, np.uint8))\n".format(
                     out_name
                 )
-            elif isinstance(out_col_typs[i], StringArrayType):
+            elif isinstance(out_col_typ, StringArrayType):
                 func_text += "    {} = pre_alloc_string_array(1,1)\n".format(out_name)
-            elif out_col_typs[i] == ArrayItemArrayType(string_array_type):
+            elif out_col_typ == ArrayItemArrayType(string_array_type):
                 func_text += "    {} = pre_alloc_array_item_array(1, (1, 1), string_array_type)\n".format(
                     out_name
                 )
-            elif isinstance(out_col_typs[i], DecimalArrayType):
-                scale = out_col_typs[i].scale
-                precision = out_col_typs[i].precision
+            elif isinstance(out_col_typ, DecimalArrayType):
+                scale = out_col_typ.scale
+                precision = out_col_typ.precision
                 func_text += "    {} = alloc_decimal_array(1, {}, {})\n".format(
                     out_name, precision, scale
+                )
+            elif isinstance(out_col_typ, DatetimeDateArrayType):
+                func_text += "    {} = bodo.hiframes.datetime_date_ext.init_datetime_date_array(np.empty(1, np.int64), np.empty(1, np.uint8))\n".format(
+                    out_name
                 )
             else:
                 func_text += "    {} = np.empty(1, {})\n".format(

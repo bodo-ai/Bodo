@@ -1998,9 +1998,9 @@ def test_groupby_as_index_max():
     check_func(impl2, (11,), sort_output=True, reset_index=True)
 
 
-def test_max_datetime():
+def test_max_date():
     """
-    Test Groupby.max() on datetime column
+    Test Groupby.max() on datetime and datetime.date column
     for both dataframe and series returns
     """
 
@@ -2012,11 +2012,27 @@ def test_max_datetime():
         df2 = df.groupby("A", as_index=False)["B"].max()
         return df2
 
-    df = pd.DataFrame(
+    df1 = pd.DataFrame(
         {"A": [2, 1, 1, 1, 2, 2, 1], "B": pd.date_range("2019-1-3", "2019-1-9")}
     )
-    check_func(impl1, (df,), sort_output=True, reset_index=True)
-    check_func(impl2, (df,), sort_output=True, reset_index=True)
+    df2 = pd.DataFrame(
+        {
+            "A": [2, 5, 5, 5, 2, 2, 10],
+            "B": [
+                datetime.date(2018, 1, 24),
+                datetime.date(1983, 1, 3),
+                datetime.date(1966, 4, 27),
+                datetime.date(1999, 12, 7),
+                datetime.date(1966, 4, 27),
+                datetime.date(2004, 7, 8),
+                datetime.date(2020, 11, 17),
+            ],
+        }
+    )
+    check_func(impl1, (df1,), sort_output=True, reset_index=True)
+    check_func(impl1, (df2,), sort_output=True, reset_index=True)
+    check_func(impl2, (df1,), sort_output=True, reset_index=True)
+    check_func(impl2, (df2,), sort_output=True, reset_index=True)
 
 
 def test_mean(test_df):
