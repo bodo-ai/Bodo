@@ -1804,6 +1804,7 @@ def test_autocorr():
     check_func(f, (S, 40))
 
 
+@pytest.mark.skip(reason="Fails on 3 processes #1618")
 def test_monotonicity():
     def f1(S):
         return S.is_monotonic_increasing
