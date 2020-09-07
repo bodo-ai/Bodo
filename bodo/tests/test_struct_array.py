@@ -38,48 +38,64 @@ from bodo.tests.utils import check_func
                 {"X": 5, "Y": 9},
             ]
         ),
-        np.array(
-            [
-                {
-                    "X": "AB",
-                    "Y": [1.1, 2.2],
-                    "Z": [[1], None, [3, None]],
-                    "W": {"A": 1, "B": "A"},
-                },
-                {"X": "C", "Y": [1.1], "Z": [[11], None], "W": {"A": 1, "B": "ABC"}},
-                None,
-                {
-                    "X": "D",
-                    "Y": [4.0, np.nan],
-                    "Z": [[1], None],
-                    "W": {"A": 1, "B": ""},
-                },
-                {"X": "VFD", "Y": [1.2], "Z": [[], [3, 1]], "W": {"A": 1, "B": "AA"}},
-                {
-                    "X": "LMMM",
-                    "Y": [9.0, 1.2, 3.1],
-                    "Z": [[10, 11], [11, 0, -3, -5]],
-                    "W": {"A": 1, "B": "DFG"},
-                },
-            ]
-            * 2
-            + [
-                # putting structs with NA fields last since typeof() cannot handle NAs
-                # in struct fields yet. TODO: support
-                {"X": "", "Y": None, "Z": [], "W": None},
-                {"X": None, "Y": [], "Z": None, "W": {"A": 11, "B": None}},
-            ]
+        pytest.param(
+            np.array(
+                [
+                    {
+                        "X": "AB",
+                        "Y": [1.1, 2.2],
+                        "Z": [[1], None, [3, None]],
+                        "W": {"A": 1, "B": "A"},
+                    },
+                    {
+                        "X": "C",
+                        "Y": [1.1],
+                        "Z": [[11], None],
+                        "W": {"A": 1, "B": "ABC"},
+                    },
+                    None,
+                    {
+                        "X": "D",
+                        "Y": [4.0, np.nan],
+                        "Z": [[1], None],
+                        "W": {"A": 1, "B": ""},
+                    },
+                    {
+                        "X": "VFD",
+                        "Y": [1.2],
+                        "Z": [[], [3, 1]],
+                        "W": {"A": 1, "B": "AA"},
+                    },
+                    {
+                        "X": "LMMM",
+                        "Y": [9.0, 1.2, 3.1],
+                        "Z": [[10, 11], [11, 0, -3, -5]],
+                        "W": {"A": 1, "B": "DFG"},
+                    },
+                ]
+                * 2
+                + [
+                    # putting structs with NA fields last since typeof() cannot handle NAs
+                    # in struct fields yet. TODO: support
+                    {"X": "", "Y": None, "Z": [], "W": None},
+                    {"X": None, "Y": [], "Z": None, "W": {"A": 11, "B": None}},
+                ]
+            ),
+            marks=pytest.mark.slow,
         ),
         # nested struct data with homogeneous values
-        np.array(
-            [
-                {"X": {"A1": 10, "A2": 2}, "Y": {"B1": -11, "B2": 4}},
-                {"X": {"A1": -19, "A2": 5}, "Y": {"B1": 5, "B2": 19}},
-                {"X": {"A1": -5, "A2": -9}, "Y": {"B1": -15, "B2": 13}},
-                {"X": {"A1": -12, "A2": 2}, "Y": {"B1": 14, "B2": 2}},
-                {"X": {"A1": 17, "A2": -12}, "Y": {"B1": 14, "B2": -18}},
-                {"X": {"A1": 17, "A2": 10}, "Y": {"B1": -13, "B2": 18}},
-            ]
+        pytest.param(
+            np.array(
+                [
+                    {"X": {"A1": 10, "A2": 2}, "Y": {"B1": -11, "B2": 4}},
+                    {"X": {"A1": -19, "A2": 5}, "Y": {"B1": 5, "B2": 19}},
+                    {"X": {"A1": -5, "A2": -9}, "Y": {"B1": -15, "B2": 13}},
+                    {"X": {"A1": -12, "A2": 2}, "Y": {"B1": 14, "B2": 2}},
+                    {"X": {"A1": 17, "A2": -12}, "Y": {"B1": 14, "B2": -18}},
+                    {"X": {"A1": 17, "A2": 10}, "Y": {"B1": -13, "B2": 18}},
+                ]
+            ),
+            marks=pytest.mark.slow,
         ),
     ]
 )

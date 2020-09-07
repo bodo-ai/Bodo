@@ -126,6 +126,7 @@ def test_series_constructor_dtype1(memory_leak_check):
     check_func(impl, (np.array([3, 4, 1, -3, 0]),))
 
 
+@pytest.mark.slow
 def test_series_constructor_dtype2(memory_leak_check):
     def impl(d):
         return pd.Series(d, dtype="int32")
@@ -483,7 +484,9 @@ def test_series_astype_int_arr(numeric_series_val, memory_leak_check):
     "S",
     [
         pd.Series([1.0, np.nan, 3.0, 2.0], dtype="float32"),
-        pd.Series([1.0, np.nan, 3.0, 2.0], dtype="float64"),
+        pytest.param(
+            pd.Series([1.0, np.nan, 3.0, 2.0], dtype="float64"), marks=pytest.mark.slow
+        ),
     ],
 )
 def test_series_astype_float_to_int_arr(S, memory_leak_check):
@@ -500,7 +503,9 @@ def test_series_astype_float_to_int_arr(S, memory_leak_check):
 @pytest.mark.parametrize(
     "S",
     [
-        pd.Series([True, False, False, True, True]),
+        pytest.param(
+            pd.Series([True, False, False, True, True]), marks=pytest.mark.slow
+        ),
         pd.Series([True, False, False, np.nan, True]),
     ],
 )
@@ -1042,7 +1047,7 @@ def test_series_setitem_list_int(series_val, idx, list_val_arg, memory_leak_chec
 ############################ binary ops #############################
 
 
-def test_series_operations(memory_leak_check):
+def test_series_operations(memory_leak_check, is_slow_run):
     def f_rpow(S1, S2):
         return S1.rpow(S2)
 
@@ -1079,6 +1084,8 @@ def test_series_operations(memory_leak_check):
     S1 = pd.Series([2, 3, 4])
     S2 = pd.Series([6, 7, 8])
     check_func(f_rpow, (S1, S2))
+    if not is_slow_run:
+        return
     check_func(f_rsub, (S1, S2))
     check_func(f_rmul, (S1, S2))
     check_func(f_radd, (S1, S2))
@@ -1458,6 +1465,7 @@ def test_series_combine_kws(memory_leak_check):
     check_func(test_impl, (S1, S2, fill))
 
 
+@pytest.mark.slow
 def test_series_combine_kws_int(memory_leak_check):
     def test_impl(S1, S2, fill_val):
         return S1.combine(other=S2, func=lambda a, b: 2 * a + b, fill_value=fill_val)
@@ -1859,6 +1867,7 @@ def test_series_rolling(S):
     check_func(test_impl, (S,))
 
 
+@pytest.mark.slow
 def test_series_rolling_kw():
     def test_impl(S):
         return S.rolling(window=3, center=True).sum()
@@ -1870,7 +1879,7 @@ def test_series_rolling_kw():
 @pytest.mark.parametrize(
     "S",
     [
-        pd.Series([1.0, 2.2, 3.1, 4.6, 5.9]),
+        pytest.param(pd.Series([1.0, 2.2, 3.1, 4.6, 5.9]), marks=pytest.mark.slow),
         pd.Series([1.0, 2.2, 3.1, 4.6, 5.9], [3, 1, 0, 2, 4], name="ABC"),
     ],
 )
@@ -1886,9 +1895,9 @@ def test_series_cumsum(S, memory_leak_check):
 @pytest.mark.parametrize(
     "S",
     [
-        pd.Series([1.0, 2.2, 3.1, 4.6, 5.9]),
-        pd.Series([2, 3, 5, 8, 7]),
-        pd.Series([7, 6, 5, 4, 1]),
+        pytest.param(pd.Series([1.0, 2.2, 3.1, 4.6, 5.9]), marks=pytest.mark.slow),
+        pytest.param(pd.Series([2, 3, 5, 8, 7]), marks=pytest.mark.slow),
+        pytest.param(pd.Series([7, 6, 5, 4, 1]), marks=pytest.mark.slow),
         pd.Series([1.0, 2.2, 3.1, 4.6, 5.9], [3, 1, 0, 2, 4], name="ABC"),
     ],
 )
@@ -2089,19 +2098,22 @@ def test_series_idxmax(series_val, memory_leak_check):
 @pytest.mark.parametrize(
     "numeric_series_median",
     [
-        pd.Series([1, 2, 3]),
-        pd.Series([1, 2, 3, 4]),
+        pytest.param(pd.Series([1, 2, 3]), marks=pytest.mark.slow),
+        pytest.param(pd.Series([1, 2, 3, 4]), marks=pytest.mark.slow),
         pd.Series([1.0, 2.0, 4.5, 5.0, np.nan]),
-        pd.Series(4 * [np.nan]),
-        pd.Series(
-            [
-                Decimal("1"),
-                Decimal("2"),
-                Decimal("4.5"),
-                Decimal("5"),
-                np.nan,
-                Decimal("4.9"),
-            ]
+        pytest.param(pd.Series(4 * [np.nan]), marks=pytest.mark.slow),
+        pytest.param(
+            pd.Series(
+                [
+                    Decimal("1"),
+                    Decimal("2"),
+                    Decimal("4.5"),
+                    Decimal("5"),
+                    np.nan,
+                    Decimal("4.9"),
+                ]
+            ),
+            marks=pytest.mark.slow,
         ),
     ],
 )
@@ -2118,6 +2130,7 @@ def test_series_median(numeric_series_median):
     check_func(f_noskip, (numeric_series_median,), check_dtype=False)
 
 
+@pytest.mark.slow
 def test_series_median_nullable():
     """<NA> values from pandas correspond to np.nan from bodo. So specific test"""
     S = pd.Series(pd.array([1, None, 2, 3], dtype="UInt16"))
@@ -2192,6 +2205,7 @@ def test_series_isin(S, values):
     check_func(test_impl, (S, values))
 
 
+@pytest.mark.slow
 def test_series_isin_large_random():
     def get_random_array(n, len_siz):
         elist = []
@@ -2621,7 +2635,10 @@ def test_series_pct_change(numeric_series_val, periods, memory_leak_check):
     "S,bins",
     [
         (pd.Series([11, 21, 55, 41, 11, 77, 111, 81, 3], name="BB"), [31, 61, 91],),
-        (np.array([11, 21, 55, 41, 11, 77, 111, 81, 3]), [31, 61, 91]),
+        pytest.param(
+            (np.array([11, 21, 55, 41, 11, 77, 111, 81, 3]), [31, 61, 91]),
+            marks=pytest.mark.slow,
+        ),
     ],
 )
 def test_series_digitize(S, bins, memory_leak_check):
@@ -2717,6 +2734,7 @@ def test_singleval_series_any(memory_leak_check):
     check_func(impl, (S,))
 
 
+@pytest.mark.slow
 def test_random_series_all(memory_leak_check):
     def impl(S):
         A = S.all()
@@ -2740,6 +2758,7 @@ def test_random_series_all(memory_leak_check):
     check_func(impl, (S,))
 
 
+@pytest.mark.slow
 def test_random_series_any(memory_leak_check):
     def impl(S):
         A = S.any()
@@ -2900,6 +2919,7 @@ def test_series_dot(memory_leak_check):
 ############################### old tests ###############################
 
 
+@pytest.mark.slow
 def test_create_series1(memory_leak_check):
     def test_impl():
         A = pd.Series([1, 2, 3])
@@ -2909,6 +2929,7 @@ def test_create_series1(memory_leak_check):
     np.testing.assert_array_equal(bodo_func(), test_impl())
 
 
+@pytest.mark.slow
 def test_create_series_index1(memory_leak_check):
     # create and box an indexed Series
     def test_impl():
@@ -2919,6 +2940,7 @@ def test_create_series_index1(memory_leak_check):
     pd.testing.assert_series_equal(bodo_func(), test_impl())
 
 
+@pytest.mark.slow
 def test_create_series_index2(memory_leak_check):
     def test_impl():
         A = pd.Series([1, 2, 3], index=["A", "C", "B"])
@@ -2928,6 +2950,7 @@ def test_create_series_index2(memory_leak_check):
     pd.testing.assert_series_equal(bodo_func(), test_impl())
 
 
+@pytest.mark.slow
 def test_create_series_index3(memory_leak_check):
     def test_impl():
         A = pd.Series([1, 2, 3], index=["A", "C", "B"], name="A")
@@ -2937,6 +2960,7 @@ def test_create_series_index3(memory_leak_check):
     pd.testing.assert_series_equal(bodo_func(), test_impl())
 
 
+@pytest.mark.slow
 def test_create_series_index4(memory_leak_check):
     def test_impl(name):
         A = pd.Series([1, 2, 3], index=["A", "C", "B"], name=name)

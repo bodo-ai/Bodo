@@ -101,6 +101,7 @@ def test_json_read_df(datapath):
         uncompress_dir(fname_dir_multi)
 
 
+@pytest.mark.slow
 def test_json_read_int_nulls(datapath):
     """
     test read_json reads a dataframe containing nullable int column
@@ -120,6 +121,7 @@ def test_json_read_int_nulls(datapath):
     check_func(test_impl, (fname_dir_multi,), py_output=py_out)
 
 
+@pytest.mark.slow
 def test_json_read_str_arr(datapath):
     """
     test read_json reads a dataframe containing str column
