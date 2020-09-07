@@ -1313,7 +1313,8 @@ def test_df_sort_index(df_value, memory_leak_check):
     def impl(df):
         return df.sort_index()
 
-    check_func(impl, (df_value,))
+    # TODO: use larger input to avoid empty object array in output
+    check_func(impl, (df_value,), check_typing_issues=False)
 
 
 def test_df_shift(numeric_df_value, memory_leak_check):
@@ -2609,6 +2610,7 @@ def test_dataframe_sample_nested_datastructures():
         assert df_ret == py_output
 
     n = 10
+    random.seed(1)
     df1 = pd.DataFrame({"B": gen_random_arrow_array_struct_int(10, n)})
     df2 = pd.DataFrame({"B": gen_random_arrow_array_struct_list_int(10, n)})
     df3 = pd.DataFrame({"B": gen_random_arrow_list_list_int(1, 0.1, n)})

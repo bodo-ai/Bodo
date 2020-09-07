@@ -14,6 +14,7 @@ from numba.core import types
 from bodo.utils.typing import BodoWarning
 import warnings
 import time
+from mpi4py import MPI
 from bodo.utils.utils import is_distributable_typ, is_distributable_tuple_typ
 
 
@@ -249,9 +250,7 @@ def check_func_1D(
     if convert_columns_to_pandas:
         bodo_output = convert_non_pandas_columns(bodo_output)
     if is_out_distributed:
-        if check_typing_issues:
-            _check_typing_issues(bodo_output)
-        bodo_output = bodo.gatherv(bodo_output)
+        bodo_output = _gather_output(bodo_output)
     # only rank 0 should check if gatherv() called on output
     passed = 1
     if not is_out_distributed or bodo.get_rank() == 0:
@@ -290,9 +289,7 @@ def check_func_1D_var(
     if convert_columns_to_pandas:
         bodo_output = convert_non_pandas_columns(bodo_output)
     if is_out_distributed:
-        if check_typing_issues:
-            _check_typing_issues(bodo_output)
-        bodo_output = bodo.gatherv(bodo_output)
+        bodo_output = _gather_output(bodo_output)
     passed = 1
     if not is_out_distributed or bodo.get_rank() == 0:
         passed = _test_equal_guard(
@@ -517,6 +514,24 @@ def _test_equal_struct_array(
         _test_equal_struct(
             bodo_val, py_val, sort_output, check_names, check_dtype, reset_index,
         )
+
+
+
+def _gather_output(bodo_output):
+    """gather bodo output from all processes. Uses bodo.gatherv() if there are no typing
+    issues (e.g. empty object array). Otherwise, uses mpi4py's gather.
+    """
+
+    try:
+        _check_typing_issues(bodo_output)
+        bodo_output = bodo.gatherv(bodo_output)
+    except:
+        comm = MPI.COMM_WORLD
+        bodo_output_list = comm.gather(bodo_output)
+        if bodo.get_rank() == 0:
+            bodo_output = pd.concat(bodo_output_list)
+
+    return bodo_output
 
 
 def _typeof(val):

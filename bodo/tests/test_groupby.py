@@ -805,8 +805,12 @@ def test_sum_max_min_list_string_random():
     random.seed(5)
 
     n = 10
-    df1 = pd.DataFrame({"A": gen_random_list_string_array(2, n),
-                        "B": gen_random_list_string_array(2, n)})
+    df1 = pd.DataFrame(
+        {
+            "A": gen_random_list_string_array(2, n),
+            "B": gen_random_list_string_array(2, n),
+        }
+    )
 
     def check_fct(the_fct, df1, select_col_comparison):
         bodo_fct = bodo.jit(the_fct)
@@ -2815,9 +2819,9 @@ def test_const_list_inference():
 
     df = pd.DataFrame(
         {
-            "A": [2, 1, 1, 1, 2, 2, 1],
-            "B": ["a", "b", "c", "c", "b", "c", "a"],
-            "C": [1, 3, 1, 2, -4, 0, 5],
+            "A": [2, 1, 1, 1, 2, 2, 1, 3, 0],
+            "B": ["a", "b", "c", "c", "b", "c", "a", "AA", "A2"],
+            "C": [1, 3, 1, 2, -4, 0, 5, 6, 7],
         }
     )
 
@@ -2854,9 +2858,9 @@ def test_global_list():
 
     df = pd.DataFrame(
         {
-            "A": [2, 1, 1, 1, 2, 2, 1],
-            "B": ["a", "b", "c", "c", "b", "c", "a"],
-            "C": [1, 3, 1, 2, -4, 0, 5],
+            "A": [2, 1, 1, 1, 2, 2, 1, 3, 0],
+            "B": ["a", "b", "c", "c", "b", "c", "a", "AA", "A2"],
+            "C": [1, 3, 1, 2, -4, 0, 5, 6, 7],
         }
     )
 

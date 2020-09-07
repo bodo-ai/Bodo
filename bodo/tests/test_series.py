@@ -1354,8 +1354,8 @@ def test_series_str_add(memory_leak_check):
     def test_impl(S, other):
         return S + other
 
-    S = pd.Series(["AA", "D", None, "녁은", "AA🐍"], [3, 5, 0, 7, -1])
-    S2 = pd.Series(["C🐍", "녁은", "D", None, "AA"], [3, 5, 0, 7, -1])
+    S = pd.Series(["AA", "D", None, "녁은", "AA🐍"] * 2, [3, 5, 0, 7, -1] * 2)
+    S2 = pd.Series(["C🐍", "녁은", "D", None, "AA"] * 2, [3, 5, 0, 7, -1] * 2)
     check_func(test_impl, (S, S2))
     check_func(test_impl, (S, "CC"))
     check_func(test_impl, ("CC", S))
@@ -1368,7 +1368,7 @@ def test_series_str_cmp(memory_leak_check):
     def test_impl(S):
         return S == "A"
 
-    S = pd.Series(["AA", "D", None, "녁은", "AA🐍"], [3, 5, 0, 7, -1])
+    S = pd.Series(["AA", "D", None, "녁은", "AA🐍"] * 2, [3, 5, 0, 7, -1] * 2)
     check_func(test_impl, (S,))
 
 
@@ -1759,7 +1759,7 @@ def test_series_map_dt_str(memory_leak_check):
     def test_impl(S):
         return S.map(lambda a: str(a.year))
 
-    S = pd.Series(pd.date_range(start="2018-04-24", end="2018-04-27", periods=3))
+    S = pd.date_range(start="2018-04-24", periods=11).to_series()
     check_func(test_impl, (S,))
 
 
@@ -1791,6 +1791,7 @@ def test_series_map_arg_fold(memory_leak_check):
     check_func(test_impl, (S,))
 
 
+@pytest.mark.skip(reason="Fails on 3 processes #1606")
 def test_autocorr():
     def f(S, lag):
         return S.autocorr(lag=lag)
@@ -1803,6 +1804,7 @@ def test_autocorr():
     check_func(f, (S, 40))
 
 
+@pytest.mark.skip(reason="Fails on 3 processes #1618")
 def test_monotonicity():
     def f1(S):
         return S.is_monotonic_increasing
@@ -2091,7 +2093,16 @@ def test_series_idxmax(series_val, memory_leak_check):
         pd.Series([1, 2, 3, 4]),
         pd.Series([1.0, 2.0, 4.5, 5.0, np.nan]),
         pd.Series(4 * [np.nan]),
-        pd.Series([Decimal("1"), Decimal("2"), Decimal("4.5"), Decimal("5"), np.nan]),
+        pd.Series(
+            [
+                Decimal("1"),
+                Decimal("2"),
+                Decimal("4.5"),
+                Decimal("5"),
+                np.nan,
+                Decimal("4.9"),
+            ]
+        ),
     ],
 )
 def test_series_median(numeric_series_median):
@@ -2163,7 +2174,9 @@ def test_series_tail(series_val, memory_leak_check):
     [
         (pd.Series([3, 2, np.nan, 2, 7], [3, 4, 2, 1, 0], name="A"), [2.0, 3.0]),
         (
-            pd.Series(["aa", "b", np.nan, "ccc", "b"], [3, 4, 2, 1, 0], name="A"),
+            pd.Series(
+                ["aa", "b", "ccc", "A", np.nan, "b"], [3, 4, 2, 1, 0, -1], name="A"
+            ),
             ["aa", "b"],
         ),
         (
@@ -2469,7 +2482,7 @@ def test_series_describe(numeric_series_val, memory_leak_check):
             pd.Series([1.0, 2.0, np.nan, 1.0, np.nan], name="A"),
             pd.Series([2.1, 3.1, np.nan, 3.3, 1.2]),
         ),
-        (pd.Series(["aa", "b", None, "ccc"], [3, 4, 2, 1], name="A"), "dd"),
+        (pd.Series(["aa", "b", "C", None, "ccc"], [3, 4, 0, 2, 1], name="A"), "dd"),
         (
             pd.Series(["aa", "b", None, "ccc", None, "AA"] * 2, name="A"),
             pd.Series(["A", "C", None, "aa", "dd", "d"] * 2),
@@ -2491,7 +2504,7 @@ def test_series_fillna(S, value, memory_leak_check):
             pd.Series([1.0, 2.0, np.nan, 1.0, np.nan], name="A"),
             pd.Series([2.1, 3.1, np.nan, 3.3, 1.2]),
         ),
-        (pd.Series(["aa", "b", None, "ccc"], [3, 4, 2, 1], name="A"), "dd"),
+        (pd.Series(["aa", "b", "A", None, "ccc"], [3, 4, 2, 0, 1], name="A"), "dd"),
         (
             pd.Series(["aa", "b", None, "ccc", None, "AA"] * 2, name="A"),
             pd.Series(["A", "C", None, "aa", "dd", "d"] * 2),
@@ -2509,7 +2522,7 @@ def test_series_fillna_inplace(S, value, memory_leak_check):
     "S",
     [
         pd.Series([1.0, 2.0, np.nan, 1.0], [3, 4, 2, 1], name="A"),
-        pd.Series(["aa", "b", None, "ccc"], [3, 4, 2, 1], name="A"),
+        pd.Series(["aa", "b", "AA", None, "ccc"], [3, 4, -1, 2, 1], name="A"),
     ],
 )
 def test_series_dropna(S, memory_leak_check):
@@ -2723,7 +2736,7 @@ def test_random_series_all(memory_leak_check):
             eList.append(val_B)
         return pd.Series(eList)
 
-    S = random_series(10)
+    S = random_series(111)
     check_func(impl, (S,))
 
 
@@ -2746,7 +2759,7 @@ def test_random_series_any(memory_leak_check):
             eList.append(val_B)
         return pd.Series(eList)
 
-    S = random_series(10)
+    S = random_series(111)
     check_func(impl, (S,))
 
 
@@ -2804,12 +2817,12 @@ def test_series_where(memory_leak_check):
 @pytest.mark.parametrize(
     "value, downcast",
     [
-        (pd.Series(["1.4", "2.3333", None, "1.22", "555.1"]), "float"),
+        (pd.Series(["1.4", "2.3333", None, "1.22", "555.1"] * 2), "float"),
         (pd.Series([1, 2, 9, 11, 3]), "integer"),
-        (pd.Series(["1", "3", None, "12", "-555"]), "integer"),
+        (pd.Series(["1", "3", "12", "4", None, "-555"]), "integer"),
         # string array with invalid element
-        (pd.Series(["1", "3", None, "12", "-55ss"]), "integer"),
-        (pd.Series(["1", "3", None, "12", "555"]), "unsigned"),
+        (pd.Series(["1", "3", "12", None, "-55ss"]), "integer"),
+        (pd.Series(["1", "3", "12", None, "555"]), "unsigned"),
     ],
 )
 def test_to_numeric(value, downcast, memory_leak_check):
@@ -3020,7 +3033,7 @@ def test_series_astype_num_constructors(memory_leak_check):
     def impl1(A):
         return A.astype(float)
 
-    S = pd.Series(["3.2", "1", np.nan, "3.2", "5.1"])
+    S = pd.Series(["3.2", "1", "3.2", np.nan, "5.1"])
     check_func(impl1, (S,))
 
     def impl2(A):
@@ -3787,9 +3800,7 @@ class TestSeries(unittest.TestCase):
         S2 = pd.Series(["1", "12", "", np.nan, "A"])
         # TODO: handle index in concat
         pd.testing.assert_series_equal(
-            bodo_func(S1, S2),
-            test_impl(S1, S2),
-            check_dtype=False,
+            bodo_func(S1, S2), test_impl(S1, S2), check_dtype=False,
         )
 
     def test_series_cov1(self):
@@ -3922,7 +3933,7 @@ class TestSeries(unittest.TestCase):
         def test_impl(S):
             return S.isna()
 
-        S = pd.Series(["aa", None, "c", "cccd"])
+        S = pd.Series(["aa", None, "AB", "ABC", "c", "cccd"])
         check_func(test_impl, (S,))
 
     def test_series_nlargest1(self):

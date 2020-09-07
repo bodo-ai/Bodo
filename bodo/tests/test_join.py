@@ -128,18 +128,36 @@ import pytest
             np.array(
                 [
                     {"A": [Decimal("1.0"), Decimal("2.2")], "B": [Decimal("4.14")]},
-                    {"A": [Decimal("0"), Decimal("3.2"), Decimal("4")], "B": [Decimal("-1")]},
-                    {"A": [Decimal("5")], "B": [Decimal("644"), Decimal("9.1"), Decimal("154")]},
-                    {"A": [Decimal("10.0"), Decimal("13.4")], "B": [Decimal("3.14159")]},
-                    {"A": [Decimal("30"), Decimal("5.2")], "B": [Decimal("0"), Decimal("2")]},
+                    {
+                        "A": [Decimal("0"), Decimal("3.2"), Decimal("4")],
+                        "B": [Decimal("-1")],
+                    },
+                    {
+                        "A": [Decimal("5")],
+                        "B": [Decimal("644"), Decimal("9.1"), Decimal("154")],
+                    },
+                    {
+                        "A": [Decimal("10.0"), Decimal("13.4")],
+                        "B": [Decimal("3.14159")],
+                    },
+                    {
+                        "A": [Decimal("30"), Decimal("5.2")],
+                        "B": [Decimal("0"), Decimal("2")],
+                    },
                     {"A": [Decimal("-1"), None, Decimal("-3")], "B": [Decimal("60")]},
                 ]
             ),
             np.array(
                 [
-                    {"A": [Decimal("2.78"), Decimal("3"), Decimal("2")], "B": [Decimal("45")]},
+                    {
+                        "A": [Decimal("2.78"), Decimal("3"), Decimal("2")],
+                        "B": [Decimal("45")],
+                    },
                     {"A": [Decimal("-1"), Decimal("-10")], "B": [Decimal("4568")]},
-                    {"A": [Decimal("11"), None, Decimal("-44.7")], "B": [Decimal("33")]},
+                    {
+                        "A": [Decimal("11"), None, Decimal("-44.7")],
+                        "B": [Decimal("33")],
+                    },
                     {"A": [Decimal("10.4")], "B": [Decimal("20.6")]},
                     {"A": [Decimal("3.5"), Decimal("5.5")], "B": [Decimal("4")]},
                     {"A": [Decimal("1")], "B": [Decimal("7"), None]},
@@ -784,10 +802,16 @@ def test_merge_str_nan1():
         return pd.merge(df1, df2, left_on="key1", right_on="key2")
 
     df1 = pd.DataFrame(
-        {"key1": ["foo", "bar", "baz", "baz"], "A": ["b", "", np.nan, "ss"]}
+        {
+            "key1": ["foo", "bar", "baz", "baz", "c4", "c7"],
+            "A": ["b", "", "ss", "a", "b2", np.nan],
+        }
     )
     df2 = pd.DataFrame(
-        {"key2": ["baz", "bar", "baz", "foo"], "B": ["b", np.nan, "", "AA"]}
+        {
+            "key2": ["baz", "bar", "baz", "foo", "c4", "c7"],
+            "B": ["b", np.nan, "", "AA", "c", "a1"],
+        }
     )
 
     check_func(test_impl, (df1, df2), sort_output=True, reset_index=True)
@@ -849,8 +873,12 @@ def test_merge_nontrivial_index():
         df3 = df1.merge(df2, left_on="key1", right_on="key2", how="left")
         return df3
 
-    df1 = pd.DataFrame({"key1": ["foo", "bar", "baz"]}, index=[0.0, 3.0, 5.0])
-    df2 = pd.DataFrame({"key2": ["baz", "bar", "baz"]}, index=["a", "bb", "ccc"])
+    df1 = pd.DataFrame(
+        {"key1": ["foo", "c7", "bar", "baz", "c11"]}, index=[0.0, 1.1, 3.0, 5.0, 2.2]
+    )
+    df2 = pd.DataFrame(
+        {"key2": ["baz", "c7", "bar", "baz", "c11"]}, index=["a", "d", "bb", "ccc", "1"]
+    )
 
     check_func(test_impl, (df1, df2), sort_output=True, reset_index=True)
 
@@ -1166,11 +1194,21 @@ def test_merge_cat_multi_cols():
         df3 = df1.merge(df2, on=["C1", "C2"])
         return df3
 
-    ct_dtype1 = pd.CategoricalDtype(["2", "3", "4", "5"])
-    ct_dtype2 = pd.CategoricalDtype(["A", "B", "C"])
+    ct_dtype1 = pd.CategoricalDtype(["2", "3", "4", "5", "t-"])
+    ct_dtype2 = pd.CategoricalDtype(["A", "B", "C", "p"])
     dtypes = {"C1": ct_dtype1, "C2": ct_dtype2, "C3": str}
     df1 = pd.read_csv(fname, names=["C1", "C2", "C3"], dtype=dtypes, skiprows=[0])
     df2 = pd.read_csv(fname, names=["C1", "C2", "C3"], dtype=dtypes, skiprows=[1])
+    # add extra rows to avoid empty output dataframes on 3 process test
+    df3 = pd.DataFrame(
+        {
+            "C1": pd.Categorical(["t-"], ct_dtype1.categories),
+            "C2": pd.Categorical(["p"], ct_dtype2.categories),
+            "C3": ["A"],
+        }
+    )
+    df1 = df1.append((df3, df1))
+    df2 = df2.append((df3, df2))
     check_func(test_impl, (df1, df2), sort_output=True, reset_index=True)
 
 
@@ -1184,8 +1222,9 @@ def test_merge_cat1_inner():
         ct_dtype = pd.CategoricalDtype(["A", "B", "C"])
         dtypes = {"C1": np.int, "C2": ct_dtype, "C3": str}
         df1 = pd.read_csv(fname, names=["C1", "C2", "C3"], dtype=dtypes)
-        n = len(df1)
-        df2 = pd.DataFrame({"C1": 2 * np.arange(n) + 1, "AAA": n + np.arange(n) + 1.0})
+        df1["C1"] = df1.C1 * 7 + 1
+        n = len(df1) * 100
+        df2 = pd.DataFrame({"C1": np.arange(n), "AAA": n + np.arange(n) + 1.0})
         df3 = df1.merge(df2, on="C1")
         return df3
 
@@ -1222,8 +1261,9 @@ def test_merge_cat1_right_2cols2():
     def test_impl():
         dtypes = {"C1": np.int, "C2": str}
         df1 = pd.read_csv(fname, names=["C1", "C2"], dtype=dtypes)
-        n = len(df1)
-        df2 = pd.DataFrame({"C1": 2 * np.arange(n) + 1, "AAA": n + np.arange(n) + 1.0})
+        df1["C1"] = df1.C1 * 7 + 1
+        n = len(df1) * 100
+        df2 = pd.DataFrame({"C1": np.arange(n), "AAA": n + np.arange(n) + 1.0})
         df3 = df1.merge(df2, on="C1", how="right")
         return df3
 
@@ -1240,8 +1280,9 @@ def test_merge_cat1_right():
         ct_dtype = pd.CategoricalDtype(["A", "B", "C"])
         dtypes = {"C1": np.int, "C2": ct_dtype, "C3": str}
         df1 = pd.read_csv(fname, names=["C1", "C2", "C3"], dtype=dtypes)
-        n = len(df1)
-        df2 = pd.DataFrame({"C1": 2 * np.arange(n) + 1, "AAA": n + np.arange(n) + 1.0})
+        df1["C1"] = df1.C1 * 7 + 1
+        n = len(df1) * 100
+        df2 = pd.DataFrame({"C1": np.arange(n), "AAA": n + np.arange(n) + 1.0})
         df3 = df1.merge(df2, on="C1", how="right")
         return df3
 
