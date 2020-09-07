@@ -2635,10 +2635,7 @@ def test_series_pct_change(numeric_series_val, periods, memory_leak_check):
     "S,bins",
     [
         (pd.Series([11, 21, 55, 41, 11, 77, 111, 81, 3], name="BB"), [31, 61, 91],),
-        pytest.param(
-            (np.array([11, 21, 55, 41, 11, 77, 111, 81, 3]), [31, 61, 91]),
-            marks=pytest.mark.slow,
-        ),
+        (np.array([11, 21, 55, 41, 11, 77, 111, 81, 3]), [31, 61, 91]),
     ],
 )
 def test_series_digitize(S, bins, memory_leak_check):
