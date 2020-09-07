@@ -169,88 +169,219 @@ def column_name_df_value(request):
     return request.param
 
 
-def test_df_select_dtypes(memory_leak_check):
+@pytest.fixture(
+    params=[
+        pd.DataFrame({"a": [1, 2] * 20, "b": [True, False] * 20, "c": [1.0, 2.0] * 20}),
+    ]
+)
+def select_dtypes_df(request):
+    return request.param
+
+
+def test_df_select_dtypes_str_include(select_dtypes_df):
+    df = select_dtypes_df
+
     def test_impl1(df):
         return df.select_dtypes("bool")
 
     def test_impl2(df):
         return df.select_dtypes("float64")
 
-    def test_impl3(df):
-        return df.select_dtypes(exclude="bool")
-
-    def test_impl4(df):
-        return df.select_dtypes(exclude="float64")
-
-    def test_impl5(df):
-        return df.select_dtypes("number", "float64")
-
-    def test_impl6(df):
-        return df.select_dtypes(np.bool)
-
-    def test_impl7(df):
-        return df.select_dtypes(np.float64)
-
-    def test_impl8(df):
-        return df.select_dtypes(exclude=np.bool)
-
-    def test_impl9(df):
-        return df.select_dtypes(exclude=np.float64)
-
-    def test_impl10(df):
-        return df.select_dtypes(np.number, np.float64)
-
-    def test_impl11(df):
-        return df.select_dtypes(["bool"])
-
-    def test_impl12(df):
-        return df.select_dtypes([np.bool_])
-
-    def test_impl13(df):
-        return df.select_dtypes(["float64", "bool"])
-
-    def test_impl14(df):
-        return df.select_dtypes([np.float64, np.bool_])
-
-    def test_impl15(df):
-        return df.select_dtypes([np.number, "bool"])
-
-    def test_impl16(df):
-        return df.select_dtypes(exclude=["bool"])
-
-    def test_impl17(df):
-        return df.select_dtypes(exclude=[np.float64])
-
-    def test_impl18(df):
-        return df.select_dtypes(exclude=["float64", "bool"])
-
-    def test_impl19(df):
-        return df.select_dtypes(exclude=[np.float64, "bool"])
-
-    def test_impl20(df):
-        return df.select_dtypes(exclude=[np.number, "bool"])
-
-    df = pd.DataFrame({"a": [1, 2] * 3, "b": [True, False] * 3, "c": [1.0, 2.0] * 3})
     check_func(test_impl1, (df,))
     check_func(test_impl2, (df,))
-    check_func(test_impl3, (df,))
-    check_func(test_impl4, (df,))
-    # check_func(test_impl5, (df,))
-    check_func(test_impl6, (df,))
-    check_func(test_impl7, (df,))
-    check_func(test_impl8, (df,))
-    check_func(test_impl9, (df,))
-    # check_func(test_impl10, (df,))
-    check_func(test_impl11, (df,))
-    # check_func(test_impl12, (df,))
-    check_func(test_impl13, (df,))
-    check_func(test_impl14, (df,))
-    # check_func(test_impl15, (df,))
-    check_func(test_impl16, (df,))
-    # check_func(test_impl17, (df,))
-    check_func(test_impl18, (df,))
-    check_func(test_impl19, (df,))
-    # check_func(test_impl20, (df,))
+
+
+def test_df_select_dtypes_str_exclude(select_dtypes_df):
+    df = select_dtypes_df
+
+    def test_impl1(df):
+        return df.select_dtypes(exclude="bool")
+
+    def test_impl2(df):
+        return df.select_dtypes(exclude="float64")
+
+    check_func(test_impl1, (df,))
+    check_func(test_impl2, (df,))
+
+
+@pytest.mark.skip(reason="Numba issue with np.number")
+def test_df_select_dtypes_str_include_exclude(select_dtypes_df):
+    df = select_dtypes_df
+
+    def test_impl(df):
+        return df.select_dtypes("number", "float64")
+
+    check_func(test_impl, (df,))
+
+
+def test_df_select_dtypes_type_include(select_dtypes_df):
+    df = select_dtypes_df
+
+    def test_impl1(df):
+        return df.select_dtypes(np.bool)
+
+    def test_impl2(df):
+        return df.select_dtypes(np.float64)
+
+    check_func(test_impl1, (df,))
+    check_func(test_impl2, (df,))
+
+
+def test_df_select_dtypes_type_exclude(select_dtypes_df):
+    df = select_dtypes_df
+
+    def test_impl1(df):
+        return df.select_dtypes(exclude=np.bool)
+
+    def test_impl2(df):
+        return df.select_dtypes(exclude=np.float64)
+
+    check_func(test_impl1, (df,))
+    check_func(test_impl2, (df,))
+
+
+@pytest.mark.skip(reason="Numba issue with np.number")
+def test_df_select_dtypes_type_include_exclude(select_dtypes_df):
+    df = select_dtypes_df
+
+    def test_impl(df):
+        return df.select_dtypes(np.number, np.float64)
+
+    check_func(test_impl, (df,))
+
+
+@pytest.mark.skip(reason="Numba issue with one element lists")
+def test_df_select_dtypes_list_one_elem_include(select_dtypes_df):
+    df = select_dtypes_df
+
+    def test_impl1(df):
+        return df.select_dtypes(["bool"])
+
+    def test_impl2(df):
+        return df.select_dtypes([np.bool_])
+
+    check_func(test_impl1, (df,))
+    check_func(test_impl2, (df,))
+
+
+def test_df_select_dtypes_list_multi_elem_include(select_dtypes_df):
+    df = select_dtypes_df
+
+    def test_impl1(df):
+        return df.select_dtypes(["float64", "bool"])
+
+    def test_impl2(df):
+        return df.select_dtypes([np.float64, np.bool_])
+
+    check_func(test_impl1, (df,))
+    check_func(test_impl2, (df,))
+
+
+@pytest.mark.skip(reason="Numba issue with np.number")
+def test_df_select_dtypes_list_number_include(select_dtypes_df):
+    df = select_dtypes_df
+
+    def test_impl(df):
+        return df.select_dtypes([np.number, "bool"])
+
+    check_func(test_impl, (df,))
+
+
+@pytest.mark.skip(reason="Numba issue with one element lists")
+def test_df_select_dtypes_list_one_elem_exclude(select_dtypes_df):
+    df = select_dtypes_df
+
+    def test_impl1(df):
+        return df.select_dtypes(exclude=["bool"])
+
+    def test_impl2(df):
+        return df.select_dtypes(exclude=[np.float64])
+
+    check_func(test_impl1, (df,))
+    check_func(test_impl2, (df,))
+
+
+def test_df_select_dtypes_list_multi_elem_exclude(select_dtypes_df):
+    df = select_dtypes_df
+
+    def test_impl1(df):
+        return df.select_dtypes(exclude=["float64", "bool"])
+
+    def test_impl2(df):
+        return df.select_dtypes(exclude=[np.float64, "bool"])
+
+    check_func(test_impl1, (df,))
+    check_func(test_impl2, (df,))
+
+
+@pytest.mark.skip(reason="Numba issue with np.number")
+def test_df_select_dtypes_list_number_exclude(select_dtypes_df):
+    df = select_dtypes_df
+
+    def test_impl(df):
+        return df.select_dtypes(exclude=[np.number, "bool"])
+
+    check_func(test_impl, (df,))
+
+
+@pytest.mark.skip(reason="Index issue when creating Empty Dataframes #1596")
+def test_df_select_dtypes_missing_type_include(select_dtypes_df):
+    df = select_dtypes_df
+
+    def test_impl(df):
+        return df.select_dtypes(np.datetime64)
+
+    check_func(test_impl, (df,))
+
+
+@pytest.mark.skip(reason="Index issue when creating Empty Dataframes #1596")
+def test_df_select_dtypes_missing_type_exclude(select_dtypes_df):
+    df = select_dtypes_df
+
+    def test_impl(df):
+        return df.select_dtypes(exclude=np.datetime64)
+
+    check_func(test_impl, (df,))
+
+
+@pytest.mark.skip(reason="Index issue when creating Empty Dataframes #1596")
+def test_df_select_dtypes_missing_str_include(select_dtypes_df):
+    df = select_dtypes_df
+
+    def test_impl(df):
+        return df.select_dtypes("datetime64")
+
+    check_func(test_impl, (df,))
+
+
+@pytest.mark.skip(reason="Index issue when creating Empty Dataframes #1596")
+def test_df_select_dtypes_missing_str_exclude(select_dtypes_df):
+    df = select_dtypes_df
+
+    def test_impl(df):
+        return df.select_dtypes(exclude="datetime64")
+
+    check_func(test_impl, (df,))
+
+
+@pytest.mark.skip(reason="Index issue when creating Empty Dataframes #1596")
+def test_df_select_dtypes_missing_list_include(select_dtypes_df):
+    df = select_dtypes_df
+
+    def test_impl(df):
+        return df.select_dtypes([np.datetime64, "datetime64"])
+
+    check_func(test_impl, (df,))
+
+
+@pytest.mark.skip(reason="Index issue when creating Empty Dataframes #1596")
+def test_df_select_dtypes_missing_list_exclude(select_dtypes_df):
+    df = select_dtypes_df
+
+    def test_impl(df):
+        return df.select_dtypes(exclude=[np.datetime64, "datetime64"])
+
+    check_func(test_impl, (df,))
 
 
 def test_assign(memory_leak_check):
