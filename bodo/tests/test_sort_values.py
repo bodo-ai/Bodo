@@ -97,7 +97,7 @@ def df_value(request):
     return request.param
 
 
-def test_sort_datetime_missing(memory_leak_check):
+def test_sort_datetime_missing(memory_leak_check, is_slow_run):
     """Test the datetime for missing entries"""
 
     def test_impl1(df1):
@@ -140,6 +140,8 @@ def test_sort_datetime_missing(memory_leak_check):
     check_func(
         test_impl1, (df1,),
     )
+    if not is_slow_run:
+        return
     check_func(
         test_impl2, (df1,),
     )
@@ -286,6 +288,7 @@ def test_sort_values_str(memory_leak_check):
     check_func(test_impl, (df,))
 
 
+@pytest.mark.slow
 def test_sort_values_1col_long_int_list(memory_leak_check):
     """
     Test sort_values(): with 1 longer int column
@@ -311,6 +314,7 @@ def test_sort_values_1col_long_int_list(memory_leak_check):
     check_func(test_impl2, (get_quasi_random(n),))
 
 
+@pytest.mark.slow
 def test_sort_values_2col_long_np(memory_leak_check):
     """
     Test sort_values(): with just 2 longer int columns
@@ -339,6 +343,7 @@ def test_sort_values_2col_long_np(memory_leak_check):
     check_func(test_impl2, (get_quasi_random(n),))
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "dtype",
     [
@@ -377,6 +382,7 @@ def test_sort_values_1col_np_array(dtype, memory_leak_check):
     )
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "dtype1, dtype2",
     [
@@ -625,6 +631,7 @@ def test_sort_values_bool_list(memory_leak_check):
     check_func(test_impl7, (df1,), sort_output=False)
 
 
+@pytest.mark.slow
 def test_sort_values_nullable_int_array(memory_leak_check):
     """Test of NaN values for the sorting for a nullable int bool array"""
 
@@ -639,6 +646,7 @@ def test_sort_values_nullable_int_array(memory_leak_check):
     check_func(test_impl, (df1,))
 
 
+@pytest.mark.slow
 def test_sort_with_nan_entries(memory_leak_check):
     """Test of the dataframe with nan entries"""
 
@@ -696,6 +704,7 @@ def test_sort_values_force_literal(memory_leak_check):
     check_func(impl, (df, "B", "first"))
 
 
+@pytest.mark.slow
 def test_list_string(memory_leak_check):
     """Sorting values by list of strings
     """
@@ -724,6 +733,7 @@ def test_list_string_missing(memory_leak_check):
     check_func(f, (df1,), convert_columns_to_pandas=True)
 
 
+@pytest.mark.slow
 def test_list_string_arrow(memory_leak_check):
     """Sorting values by list of strings
     """

@@ -17,16 +17,16 @@ from bodo.utils.typing import BodoError
     "expr",
     [
         "`B B` > @a + 1 & 5 > index > 1",
-        "(A == @a) | (C == 'AA')",
-        "C in ['AA', 'C']",
-        "C not in ['AA', 'C']",
-        "C.str.contains('C')",
-        "abs(A) > @a",
-        "A in [1, 4]",
-        "A not in [1, 4]",
-        "C.str.len() < 3",
-        "C.str.lower() != 'A'",
-        "C.str.isalpha()",
+        pytest.param("(A == @a) | (C == 'AA')", marks=pytest.mark.slow),
+        pytest.param("C in ['AA', 'C']", marks=pytest.mark.slow),
+        pytest.param("C not in ['AA', 'C']", marks=pytest.mark.slow),
+        pytest.param("C.str.contains('C')", marks=pytest.mark.slow),
+        pytest.param("abs(A) > @a", marks=pytest.mark.slow),
+        pytest.param("A in [1, 4]", marks=pytest.mark.slow),
+        pytest.param("A not in [1, 4]", marks=pytest.mark.slow),
+        pytest.param("C.str.len() < 3", marks=pytest.mark.slow),
+        pytest.param("C.str.lower() != 'A'", marks=pytest.mark.slow),
+        pytest.param("C.str.isalpha()", marks=pytest.mark.slow),
     ],
 )
 def test_df_query_unicode_expr(expr):
@@ -47,6 +47,7 @@ def test_df_query_unicode_expr(expr):
     check_func(impl, (df, expr, 1))
 
 
+@pytest.mark.slow
 def test_df_query_stringliteral_expr():
     """Test DataFrame.query with StringLiteral(constant) expr
     """
@@ -59,6 +60,7 @@ def test_df_query_stringliteral_expr():
     check_func(impl, (df,))
 
 
+@pytest.mark.slow
 def test_df_query_dt():
     """Test DataFrame.query with Series.dt expression (#451)
     """
@@ -70,6 +72,7 @@ def test_df_query_dt():
     check_func(impl, (df,))
 
 
+@pytest.mark.slow
 def test_df_query_bool_expr():
     """Test DataFrame.query with boolean expressions (#453)
     """

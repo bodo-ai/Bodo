@@ -249,16 +249,19 @@ def test_get():
     "S",
     [
         pd.Series([[1, 3, None], None, [2, 4], [2], [], [5, -3, 1, 6]]),
-        pd.Series(
-            [
-                [[[1, 2], [3]], [[2, None]]],
-                [[[3], [], [1, None, 4]]],
-                None,
-                [[[4, 5, 6], []], [[1]], [[1, 2]]],
-                [],
-                [[[], [1]], None, [[1, 4]], []],
-            ]
-            * 2
+        pytest.param(
+            pd.Series(
+                [
+                    [[[1, 2], [3]], [[2, None]]],
+                    [[[3], [], [1, None, 4]]],
+                    None,
+                    [[[4, 5, 6], []], [[1]], [[1, 2]]],
+                    [],
+                    [[[], [1]], None, [[1, 4]], []],
+                ]
+                * 2
+            ),
+            marks=pytest.mark.slow,
         ),
         # TODO: nested string test when old list(str) type is removed
     ],

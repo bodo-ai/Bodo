@@ -282,7 +282,7 @@ def test_sub_add_timestamp_timedelta():
     check_func(f_add, (date, timedelta))
 
 
-def test_datetime_comparisons_scalar():
+def test_datetime_comparisons_scalar(is_slow_run):
     """
     Test comparison operators of datetime module objects in Bodo for single values
     """
@@ -309,39 +309,44 @@ def test_datetime_comparisons_scalar():
     dt_obj1 = datetime.timedelta(7, 7, 7)
     dt_obj2 = datetime.timedelta(2, 2, 2)
     check_func(test_eq, (dt_obj1, dt_obj2))
-    check_func(test_ne, (dt_obj1, dt_obj2))
-    check_func(test_le, (dt_obj1, dt_obj2))
-    check_func(test_lt, (dt_obj1, dt_obj2))
-    check_func(test_ge, (dt_obj1, dt_obj2))
-    check_func(test_gt, (dt_obj1, dt_obj2))
+    if is_slow_run:
+        check_func(test_ne, (dt_obj1, dt_obj2))
+        check_func(test_le, (dt_obj1, dt_obj2))
+        check_func(test_lt, (dt_obj1, dt_obj2))
+        check_func(test_ge, (dt_obj1, dt_obj2))
+        check_func(test_gt, (dt_obj1, dt_obj2))
 
     # test date
     date = datetime.date(2020, 1, 4)
     date2 = datetime.date(2020, 3, 1)
     check_func(test_eq, (date, date2))
-    check_func(test_ne, (date, date2))
-    check_func(test_le, (date, date2))
-    check_func(test_lt, (date, date2))
-    check_func(test_ge, (date, date2))
-    check_func(test_gt, (date, date2))
+    if is_slow_run:
+        check_func(test_ne, (date, date2))
+        check_func(test_le, (date, date2))
+        check_func(test_lt, (date, date2))
+        check_func(test_ge, (date, date2))
+        check_func(test_gt, (date, date2))
+
     # compare timestamp and date
     t = pd.Timestamp("2020-03-01")
     check_func(test_eq, (t, date2))
-    check_func(test_ne, (date2, t))
-    check_func(test_le, (date, t))
-    check_func(test_lt, (t, date2))
-    check_func(test_ge, (date, t))
-    check_func(test_gt, (t, date2))
+    if is_slow_run:
+        check_func(test_ne, (date2, t))
+        check_func(test_le, (date, t))
+        check_func(test_lt, (t, date2))
+        check_func(test_ge, (date, t))
+        check_func(test_gt, (t, date2))
 
     # datetime.datetime comparisons
     dt = datetime.datetime(2020, 1, 4, 10, 40, 55, 11)
     dt2 = datetime.datetime(2020, 1, 4, 11, 22, 12, 33)
     check_func(test_eq, (dt, dt2))
-    check_func(test_ne, (dt, dt2))
-    check_func(test_le, (dt, dt2))
-    check_func(test_lt, (dt, dt2))
-    check_func(test_ge, (dt, dt2))
-    check_func(test_gt, (dt, dt2))
+    if is_slow_run:
+        check_func(test_ne, (dt, dt2))
+        check_func(test_le, (dt, dt2))
+        check_func(test_lt, (dt, dt2))
+        check_func(test_ge, (dt, dt2))
+        check_func(test_gt, (dt, dt2))
 
 
 def test_function_to_datetime_string_array():
@@ -388,6 +393,7 @@ def test_function_to_datetime_infer_datetime_format():
     check_func(f, (S,))
 
 
+@pytest.mark.slow
 def test_function_to_datetime_unix_epoch():
     """Test unix to_datetime"""
 
@@ -406,7 +412,7 @@ def test_function_to_datetime_unix_epoch():
     check_func(f3, ())
 
 
-def test_datetime_comparisons_datetime_datetime():
+def test_datetime_comparisons_datetime_datetime(is_slow_run):
     """
     Test comparison operators of datetime module objects in Bodo.
     Comparison between array of datetime and datetime
@@ -445,6 +451,8 @@ def test_datetime_comparisons_datetime_datetime():
     )
     S = pd.Series(Srange)
     check_func(test_ge, (S, t))
+    if is_slow_run:
+        return
     check_func(test_ge, (t, S))
     check_func(test_gt, (t, S))
     check_func(test_gt, (S, t))
@@ -458,7 +466,7 @@ def test_datetime_comparisons_datetime_datetime():
     check_func(test_eq, (S, t))
 
 
-def test_datetime_comparisons_datetime_string():
+def test_datetime_comparisons_datetime_string(is_slow_run):
     """
     Test comparison operators of datetime module objects in Bodo.
     Comparison between datetime and string
@@ -496,6 +504,8 @@ def test_datetime_comparisons_datetime_string():
     S = pd.Series(Srange)
     t_str = "2018-04-27"
     check_func(test_ge, (t_str, S))
+    if is_slow_run:
+        return
     check_func(test_ge, (S, t_str))
     check_func(test_gt, (t_str, S))
     check_func(test_gt, (S, t_str))
@@ -509,7 +519,7 @@ def test_datetime_comparisons_datetime_string():
     check_func(test_eq, (S, t_str))
 
 
-def test_datetime_comparisons_timedelta():
+def test_datetime_comparisons_timedelta(is_slow_run):
     """
     Test comparison operators of datetime module objects in Bodo.
     Comparison between Series(timedelta64) and timedelta scalar
@@ -546,6 +556,8 @@ def test_datetime_comparisons_timedelta():
     )
     t_timedelta = datetime.timedelta(0, 7200, 0)
     check_func(test_ge, (t_timedelta, TimeDeltas))
+    if is_slow_run:
+        return
     check_func(test_ge, (TimeDeltas, t_timedelta))
     check_func(test_gt, (t_timedelta, TimeDeltas))
     check_func(test_gt, (TimeDeltas, t_timedelta))
@@ -559,7 +571,7 @@ def test_datetime_comparisons_timedelta():
     check_func(test_eq, (TimeDeltas, t_timedelta))
 
 
-def test_datetime_comparisons_datetime_list():
+def test_datetime_comparisons_datetime_list(is_slow_run):
     """
     Test comparison operators of datetime module objects in Bodo.
     Comparison between lists of datetime
@@ -609,6 +621,8 @@ def test_datetime_comparisons_datetime_list():
     S1 = pd.Series(Srange1)
     S2 = pd.Series(Srange2)
     check_func(test_ge, (S1, S2))
+    if is_slow_run:
+        return
     check_func(test_gt, (S1, S2))
     check_func(test_le, (S1, S2))
     check_func(test_lt, (S1, S2))
@@ -616,7 +630,7 @@ def test_datetime_comparisons_datetime_list():
     check_func(test_eq, (S1, S2))
 
 
-def test_datetime_comparisons_date():
+def test_datetime_comparisons_date(is_slow_run):
     """
     Test comparison operators of datetime module objects in Bodo.
     Comparison between list of dates and a scalar of date
@@ -656,6 +670,8 @@ def test_datetime_comparisons_date():
     S = pd.Series(Srange.date)
     t = datetime.date(2018, 4, 27)
     check_func(test_ge, (S, t))
+    if is_slow_run:
+        return
     check_func(test_ge, (t, S))
     check_func(test_gt, (t, S))
     check_func(test_gt, (S, t))
@@ -1150,37 +1166,37 @@ def test_timestamp_date():
     "ts",
     [
         pd.Timestamp(1800, 1, 1),
-        pd.Timestamp(1800, 6, 1),
-        pd.Timestamp(1800, 10, 1),
-        pd.Timestamp(1800, 1, 14),
-        pd.Timestamp(1800, 6, 14),
-        pd.Timestamp(1800, 10, 14),
-        pd.Timestamp(1800, 1, 28),
-        pd.Timestamp(1800, 6, 28),
-        pd.Timestamp(1800, 10, 28),
+        pytest.param(pd.Timestamp(1800, 6, 1), marks=pytest.mark.slow),
+        pytest.param(pd.Timestamp(1800, 10, 1), marks=pytest.mark.slow),
+        pytest.param(pd.Timestamp(1800, 1, 14), marks=pytest.mark.slow),
+        pytest.param(pd.Timestamp(1800, 6, 14), marks=pytest.mark.slow),
+        pytest.param(pd.Timestamp(1800, 10, 14), marks=pytest.mark.slow),
+        pytest.param(pd.Timestamp(1800, 1, 28), marks=pytest.mark.slow),
+        pytest.param(pd.Timestamp(1800, 6, 28), marks=pytest.mark.slow),
+        pytest.param(pd.Timestamp(1800, 10, 28), marks=pytest.mark.slow),
         pd.Timestamp(1920, 1, 1),
-        pd.Timestamp(1920, 6, 1),
-        pd.Timestamp(1920, 10, 1),
-        pd.Timestamp(1920, 6, 28),
-        pd.Timestamp(1920, 10, 28),
+        pytest.param(pd.Timestamp(1920, 6, 1), marks=pytest.mark.slow),
+        pytest.param(pd.Timestamp(1920, 10, 1), marks=pytest.mark.slow),
+        pytest.param(pd.Timestamp(1920, 6, 28), marks=pytest.mark.slow),
+        pytest.param(pd.Timestamp(1920, 10, 28), marks=pytest.mark.slow),
         pd.Timestamp(1952, 6, 14),
-        pd.Timestamp(1952, 10, 14),
+        pytest.param(pd.Timestamp(1952, 10, 14), marks=pytest.mark.slow),
         pd.Timestamp(1997, 1, 1),
-        pd.Timestamp(1997, 6, 1),
-        pd.Timestamp(1997, 10, 1),
-        pd.Timestamp(1997, 1, 14),
-        pd.Timestamp(2015, 1, 1),
+        pytest.param(pd.Timestamp(1997, 6, 1), marks=pytest.mark.slow),
+        pytest.param(pd.Timestamp(1997, 10, 1), marks=pytest.mark.slow),
+        pytest.param(pd.Timestamp(1997, 1, 14), marks=pytest.mark.slow),
+        pytest.param(pd.Timestamp(2015, 1, 1), marks=pytest.mark.slow),
         pd.Timestamp(2015, 6, 1),
         pd.Timestamp(2015, 10, 1),
-        pd.Timestamp(2019, 1, 1),
+        pytest.param(pd.Timestamp(2019, 1, 1), marks=pytest.mark.slow),
         pd.Timestamp(2019, 6, 1),
         pd.Timestamp(2019, 10, 1),
         pd.Timestamp(2020, 1, 28),
         pd.Timestamp(2020, 6, 28),
-        pd.Timestamp(2020, 10, 28),
-        pd.Timestamp(2025, 1, 28),
-        pd.Timestamp(2025, 6, 28),
-        pd.Timestamp(2025, 10, 28),
+        pytest.param(pd.Timestamp(2020, 10, 28), marks=pytest.mark.slow),
+        pytest.param(pd.Timestamp(2025, 1, 28), marks=pytest.mark.slow),
+        pytest.param(pd.Timestamp(2025, 6, 28), marks=pytest.mark.slow),
+        pytest.param(pd.Timestamp(2025, 10, 28), marks=pytest.mark.slow),
     ],
 )
 def test_timestamp_isocalendar(ts):

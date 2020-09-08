@@ -147,6 +147,7 @@ def test_df_drop_duplicates(test_df, memory_leak_check):
     check_func(impl, (test_df,), sort_output=True)
 
 
+@pytest.mark.slow
 def test_drop_duplicates_1col(memory_leak_check):
     """
     Test drop_duplicates(): with just one column
@@ -160,6 +161,7 @@ def test_drop_duplicates_1col(memory_leak_check):
     check_func(test_impl, (df1,), sort_output=True)
 
 
+@pytest.mark.slow
 def test_drop_duplicates_2col(memory_leak_check):
     """
     Test drop_duplicates(): with 2 columns of integers
@@ -173,6 +175,7 @@ def test_drop_duplicates_2col(memory_leak_check):
     check_func(test_impl, (df1,), sort_output=True)
 
 
+@pytest.mark.slow
 def test_drop_duplicates_2col_int_string(memory_leak_check):
     """
     Test drop_duplicates(): 2 columns one integer, one string
@@ -191,6 +194,7 @@ def test_drop_duplicates_2col_int_string(memory_leak_check):
     check_func(test_impl, (df1,), sort_output=True)
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("n, len_siz", [(100, 10), (30, 3)])
 def test_drop_duplicates_2col_random_nullable_int(n, len_siz, memory_leak_check):
     """
@@ -221,6 +225,7 @@ def test_drop_duplicates_2col_random_nullable_int(n, len_siz, memory_leak_check)
     check_func(test_impl, (df1,), sort_output=True)
 
 
+@pytest.mark.slow
 def test_list_string_array_type_specific(memory_leak_check):
     """Test of list_string_array_type in a specific case"""
 
@@ -231,13 +236,10 @@ def test_list_string_array_type_specific(memory_leak_check):
     df1 = pd.DataFrame({"A": ["AB", "A,B,C", "AB,CD", "D,E", "D,F", "A,B,C", "D,E"]})
     df1.A = df1.A.str.split(",")
     bodo_impl = bodo.jit(test_impl)
-    df2_bodo = bodo_impl(df1)
-    df2_target = pd.DataFrame(
-        {"A": [["AB"], ["A", "B", "C"], ["D", "E"], ["AB", "CD"], ["D", "F"]]}
-    )
     check_func(test_impl, (df1,), sort_output=True, convert_columns_to_pandas=True)
 
 
+@pytest.mark.slow
 def test_list_string_array_type_random(memory_leak_check):
     """Test of list_string_array_type in parallel with a random list
     Also put a test on two columns for the combine_hash functionality
@@ -263,6 +265,7 @@ def test_list_string_array_type_random(memory_leak_check):
     check_func(test_impl, (df2,), sort_output=True, convert_columns_to_pandas=True)
 
 
+@pytest.mark.slow
 def test_drop_duplicates_2col_int_numpynan_bool(memory_leak_check):
     """
     Test drop_duplicates(): 2 columns one integer, one nullable_int_bool array
@@ -285,6 +288,7 @@ def test_drop_duplicates_2col_int_numpynan_bool(memory_leak_check):
     check_func(test_impl, (get_array(150),), sort_output=True)
 
 
+@pytest.mark.slow
 def test_drop_duplicates_1col_nullable_int(memory_leak_check):
     """
     Test drop_duplicates(): 2 columns one integer, one nullable_int_bool array
@@ -307,6 +311,7 @@ def test_drop_duplicates_1col_nullable_int(memory_leak_check):
     check_func(test_impl, (get_array(150),), sort_output=True)
 
 
+@pytest.mark.slow
 def test_drop_duplicates_2col_int_np_float(memory_leak_check):
     """
     Test drop_duplicates(): 2 columns one integer, one numpy array of floats
@@ -322,6 +327,7 @@ def test_drop_duplicates_2col_int_np_float(memory_leak_check):
     check_func(test_impl, (df1,), sort_output=True)
 
 
+@pytest.mark.slow
 def test_drop_duplicates_2col_int_np_int(memory_leak_check):
     """
     Test drop_duplicates(): 2 columns one integer, one numpy array of floats
@@ -335,6 +341,7 @@ def test_drop_duplicates_2col_int_np_int(memory_leak_check):
     check_func(test_impl, (df1,), sort_output=True)
 
 
+@pytest.mark.slow
 def test_drop_duplicates_2col_int_np_int_index(memory_leak_check):
     """
     Test drop_duplicates(): 2 columns one integer, one numpy array of floats and an array in indices
@@ -351,31 +358,7 @@ def test_drop_duplicates_2col_int_np_int_index(memory_leak_check):
     check_func(test_impl, (df1,), sort_output=True)
 
 
-def test_drop_duplicatee_large_size(memory_leak_check):
-    """
-    Test drop_duplicates(): large size entries
-    """
-
-    def test_impl(df1):
-        df2 = df1.drop_duplicates()
-        return df2
-
-    def get_df(n):
-        e_list_a = np.array([0] * n, dtype=np.int64)
-        e_list_b = np.array([0] * n, dtype=np.int64)
-        for i in range(n):
-            idx = i % 100
-            i_a = idx % 10
-            i_b = (idx - i_a) / 10
-            e_list_a[i] = i_a
-            e_list_b[i] = i_b
-        df1 = pd.DataFrame({"A": e_list_a, "B": e_list_b})
-        return df1
-
-    check_func(test_impl, (get_df(396),), sort_output=True)
-    check_func(test_impl, (get_df(11111),), sort_output=True)
-
-
+@pytest.mark.slow
 def test_drop_duplicate_large_size(memory_leak_check):
     """
     Test drop_duplicates(): large size entries

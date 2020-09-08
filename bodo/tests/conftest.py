@@ -291,3 +291,11 @@ def hdfs_datapath(hadoop_server, hdfs_dir):
         return path
 
     return deco
+
+
+@pytest.fixture(scope="session", autouse=True)
+def is_slow_run(request):
+    """
+    Return a flag on whether it is a slow test run (to skip some tests)
+    """
+    return "not slow" not in request.session.config.option.markexpr
