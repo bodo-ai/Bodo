@@ -9,7 +9,7 @@ jobs:
     suffix: $[ dependencies.find_suffix.outputs['suffix_step.fileSuffix'] ]
   pool:
     vmImage: ${{ parameters.vmImage }}
-  
+
   steps:
   - task: UsePythonVersion@0
     inputs:
@@ -39,6 +39,7 @@ jobs:
     displayName: 'Create Conda Env'
 
   - bash: |
+      set -eo pipefail
       source activate bodo_build
       if [[ $OBFUSCATE == 1 ]]; then
         conda install -y astor -c conda-forge
@@ -50,6 +51,7 @@ jobs:
     displayName: 'Obfuscation'
 
   - bash: |
+      set -eo pipefail
       source activate bodo_build
       cd buildscripts/bodo-conda-recipe/
       export CHECK_LICENSE_EXPIRED=$(CHECK_LICENSE_EXPIRED)
@@ -58,6 +60,7 @@ jobs:
     displayName: 'Conda build Bodo'
 
   - bash: |
+      set -eo pipefail
       source activate bodo_build
       mkdir bodo-inc
       mkdir bodo-inc/windows-64
@@ -70,9 +73,9 @@ jobs:
       rootFolderOrFile: '$(System.DefaultWorkingDirectory)/bodo-inc'
       includeRootFolder: false
       archiveFile: '$(Build.ArtifactStagingDirectory)/${{ parameters.name }}-bodo-inc-$(suffix).zip'
-      replaceExistingArchive: true 
+      replaceExistingArchive: true
     displayName: "Archive files"
-    
+
   - task: PublishBuildArtifacts@1
     inputs:
       pathtoPublish: '$(Build.ArtifactStagingDirectory)/${{ parameters.name }}-bodo-inc-$(suffix).zip'

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -ex
+set -exo pipefail
 
 # Install Miniconda
 # Reference:

@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -exo pipefail
+
 source activate $CONDA_ENV
 
 # # install Numba in a directory to avoid import conflict

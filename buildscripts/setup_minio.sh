@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -exo pipefail
+
 # Install Minio
 
 unamestr=`uname`
