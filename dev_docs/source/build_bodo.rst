@@ -33,6 +33,20 @@ such as Numba on Ubuntu Linux::
 
 For HDFS related development, use the :ref:`docker image <docker-images>`.
 
+Troubleshooting MacOS Build
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+* If your Mac0S sdk hasn't been configured properly, you may get a clang related error like the following::
+
+     ld: unsupported tapi file type '!tapi-tbd' in YAML file
+
+* Add the following line to your .zshrc file::
+
+    export CONDA_BUILD_SYSROOT=/opt/MacOSX10.9.sdk
+
+* Execute buildscripts/setup_osx_sdk.sh to resolve this issue.
+
+
 On Windows
 ~~~~~~~~~~
 
