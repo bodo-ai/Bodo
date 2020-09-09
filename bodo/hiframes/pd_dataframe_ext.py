@@ -2443,63 +2443,45 @@ def reset_index_overload(
             "reset_index(): 'inplace' parameter should be a constant boolean value"
         )
 
-    # TODO: avoid dummy and generate func here when inlining is possible
-    # TODO: inplace of df with parent (reflection)
-    def _impl(
-        df,
-        level=None,
-        drop=False,
-        inplace=False,
-        col_level=0,
-        col_fill="",
-        _bodo_transformed=False,
-    ):  # pragma: no cover
-        return bodo.hiframes.pd_dataframe_ext.reset_index_dummy(df, drop, inplace)
+    # impl: for each column, copy data and create a new dataframe
+    func_text = "def impl(df, level=None, drop=False, inplace=False, col_level=0, col_fill='', _bodo_transformed=False,):\n"
+    func_text += (
+        "  index = bodo.hiframes.pd_index_ext.init_range_index(0, len(df), 1, None)\n"
+    )
 
-    return _impl
-
-
-def reset_index_dummy(df, n):  # pragma: no cover
-    return df
-
-
-@infer_global(reset_index_dummy)
-class ResetIndexDummyTyper(AbstractTemplate):
-    def generic(self, args, kws):
-        df, drop, inplace = args
-        # safe to just get const values here, since error checking is done in
-        # reset_index overload
-        assert is_overload_constant_bool(drop)
-        drop = is_overload_true(drop)
-
-        # default output index is simple integer index with no name
-        # TODO: handle MultiIndex and `level` argument case
-        index = RangeIndexType(types.none)
-        data = df.data
-        columns = df.columns
-        if not drop:
-            # pandas assigns "level_0" if "index" is already used as a column name
-            # https://github.com/pandas-dev/pandas/blob/08b70d837dd017d49d2c18e02369a15272b662b2/pandas/core/frame.py#L4547
-            default_name = "index" if "index" not in columns else "level_0"
-            index_names = get_index_names(
-                df.index, "DataFrame.reset_index()", default_name
+    drop = is_overload_true(drop)
+    inplace = is_overload_true(inplace)
+    columns = df.columns
+    data_args = [
+        "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {}){}\n".format(
+            i, "" if inplace else ".copy()"
+        )
+        for i in range(len(df.columns))
+    ]
+    # add index array arguments if not dropping index
+    if not drop:
+        # pandas assigns "level_0" if "index" is already used as a column name
+        # https://github.com/pandas-dev/pandas/blob/08b70d837dd017d49d2c18e02369a15272b662b2/pandas/core/frame.py#L4547
+        default_name = "index" if "index" not in columns else "level_0"
+        index_names = get_index_names(df.index, "DataFrame.reset_index()", default_name)
+        columns = index_names + columns
+        if isinstance(df.index, MultiIndexType):
+            # MultiIndex case takes multiple arrays from MultiIndex._data
+            func_text += (
+                "  m_index = bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)\n"
             )
-            columns = index_names + columns
-            data = get_index_data_arr_types(df.index) + data
+            ind_arrs = ["m_index._data[{}]".format(i) for i in range(df.index.nlevels)]
+            data_args = ind_arrs + data_args
+        else:
+            ind_arr = "bodo.utils.conversion.index_to_array(bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df))"
+            data_args = [ind_arr] + data_args
 
-        out_df = DataFrameType(data, index, columns)
-        return signature(out_df, *args)
-
-
-ResetIndexDummyTyper._no_unliteral = True
-
-
-@lower_builtin(reset_index_dummy, types.VarArg(types.Any))
-def lower_reset_index_dummy(context, builder, sig, args):
-    if sig.return_type is types.none:
-        return context.get_dummy_value()
-    out_obj = cgutils.create_struct_proxy(sig.return_type)(context, builder)
-    return out_obj._getvalue()
+    # TODO: inplace of df with parent (reflection)
+    # return new df even for inplace case, since typing pass replaces input variable
+    # using output of the call
+    return bodo.hiframes.dataframe_impl._gen_init_df(
+        func_text, columns, ", ".join(data_args), "index"
+    )
 
 
 @overload_method(DataFrameType, "dropna", inline="always", no_unliteral=True)
