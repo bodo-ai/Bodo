@@ -893,7 +893,7 @@ def test_series_getitem_int(series_val):
     bodo_func = bodo.jit(test_impl)
     # integer label-based indexing should raise error
     if type(series_val.index) in (pd.Int64Index, pd.UInt64Index):
-        with pytest.raises(numba.TypingError):  # TODO: ValueError
+        with pytest.raises(BodoError, match="not supported yet"):
             bodo_func(series_val)
     else:
         bodo_out = bodo_func(series_val)
@@ -919,7 +919,7 @@ def test_series_getitem_list_int(series_val, idx, memory_leak_check):
     bodo_func = bodo.jit(test_impl)
     # integer label-based indexing should raise error
     if type(series_val.index) in (pd.Int64Index, pd.UInt64Index):
-        with pytest.raises(numba.TypingError):  # TODO: ValueError
+        with pytest.raises(BodoError, match="not supported yet"):
             bodo_func(series_val, idx)
     else:
         pd.testing.assert_series_equal(
@@ -970,7 +970,7 @@ def test_series_setitem_int(series_val, memory_leak_check):
     bodo_func = bodo.jit(test_impl)
     # integer label-based indexing should raise error
     if type(series_val.index) in (pd.Int64Index, pd.UInt64Index):
-        with pytest.raises(numba.TypingError):  # TODO: ValueError
+        with pytest.raises(BodoError, match="not supported yet"):
             bodo_func(series_val, val)
     else:
         pd.testing.assert_series_equal(
@@ -1027,7 +1027,7 @@ def test_series_setitem_list_int(series_val, idx, list_val_arg, memory_leak_chec
     bodo_func = bodo.jit(test_impl)
     # integer label-based indexing should raise error
     if type(series_val.index) in (pd.Int64Index, pd.UInt64Index):
-        with pytest.raises(numba.TypingError):  # TODO: ValueError
+        with pytest.raises(BodoError, match="not supported yet"):
             bodo_func(series_val, val, idx)
     else:
         # Pandas coerces Series type to set values, so avoid low precision

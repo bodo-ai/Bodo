@@ -326,7 +326,7 @@ def _dti_val_finalize(s, count):  # pragma: no cover
 def overload_datetime_index_min(dti, axis=None, skipna=True):
     # TODO skipna = False
     if not is_overload_none(axis) or not is_overload_true(skipna):
-        raise ValueError("Index.min(): axis and skipna arguments not supported yet")
+        raise BodoError("Index.min(): axis and skipna arguments not supported yet")
 
     def impl(dti, axis=None, skipna=True):  # pragma: no cover
         numba.parfors.parfor.init_prange()
@@ -348,7 +348,7 @@ def overload_datetime_index_min(dti, axis=None, skipna=True):
 def overload_datetime_index_max(dti, axis=None, skipna=True):
     # TODO skipna = False
     if not is_overload_none(axis) or not is_overload_true(skipna):
-        raise ValueError("Index.max(): axis and skipna arguments not supported yet")
+        raise BodoError("Index.max(): axis and skipna arguments not supported yet")
 
     def impl(dti, axis=None, skipna=True):  # pragma: no cover
         numba.parfors.parfor.init_prange()
@@ -393,11 +393,11 @@ def pd_datetimeindex_overload(
 ):
     # TODO: check/handle other input
     if is_overload_none(data):
-        raise ValueError("data argument in pd.DatetimeIndex() expected")
+        raise BodoError("data argument in pd.DatetimeIndex() expected")
 
     # check unsupported, TODO: normalize, dayfirst, yearfirst, ...
     if any(not is_overload_none(a) for a in (freq, start, end, periods, tz, closed)):
-        raise ValueError("only data argument in pd.DatetimeIndex() supported")
+        raise BodoError("only data argument in pd.DatetimeIndex() supported")
 
     def f(
         data=None,
@@ -624,7 +624,7 @@ def pd_date_range_overload(
     # check unsupported, TODO: normalize, dayfirst, yearfirst, ...
     # TODO: parallelize after Numba branch pruning issue is fixed
     if not is_overload_none(tz):
-        raise ValueError("pd.date_range(): tz argument not supported yet")
+        raise BodoError("pd.date_range(): tz argument not supported yet")
 
     if is_overload_none(freq) and any(
         is_overload_none(t) for t in (start, end, periods)
@@ -633,7 +633,7 @@ def pd_date_range_overload(
 
     # exactly three parameters should
     if sum(not is_overload_none(t) for t in (start, end, periods, freq)) != 3:
-        raise ValueError(
+        raise BodoError(
             "Of the four parameters: start, end, periods, "
             "and freq, exactly three must be specified"
         )
@@ -966,13 +966,13 @@ def pd_timedelta_index_overload(
     # TODO handle dtype=dtype('<m8[ns]') default
     # TODO: check/handle other input
     if is_overload_none(data):
-        raise ValueError("data argument in pd.TimedeltaIndex() expected")
+        raise BodoError("data argument in pd.TimedeltaIndex() expected")
 
     if any(
         not is_overload_none(a)
         for a in (unit, freq, start, end, periods, closed, dtype)
     ):
-        raise ValueError("only data argument in pd.TimedeltaIndex() supported")
+        raise BodoError("only data argument in pd.TimedeltaIndex() supported")
 
     def impl(
         data=None,

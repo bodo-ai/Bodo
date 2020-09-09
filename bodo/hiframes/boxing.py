@@ -143,7 +143,7 @@ def _infer_series_dtype(S):
     try:
         return numpy_support.from_dtype(S.dtype)
     except NotImplementedError:
-        raise ValueError(
+        raise BodoError(
             "np dtype infer: data type for column {} not supported".format(S.name)
         )
 

@@ -889,7 +889,7 @@ def overload_dataframe_query(df, expr, inplace=False):
 def overload_dataframe_duplicated(df, subset=None, keep="first"):
     # TODO: support subset and first
     if not is_overload_none(subset):
-        raise ValueError("duplicated() subset argument not supported yet")
+        raise BodoError("duplicated() subset argument not supported yet")
 
     n_cols = len(df.columns)
 

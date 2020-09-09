@@ -606,7 +606,7 @@ def overload_convert_to_td64ns(data):
 
     if data == bodo.string_array_type:
         # TODO: support
-        raise ValueError("conversion to timedelta from string not supported yet")
+        raise BodoError("conversion to timedelta from string not supported yet")
 
     raise TypeError("invalid data type {} for dt64 conversion".format(data))
 
