@@ -424,7 +424,6 @@ def join_distributed_run(
         )
 
     # TODO: rebalance if output distributions are 1D instead of 1D_Var
-    loc = join_node.loc
     n_keys = len(join_node.left_keys)
     # get column variables
     left_key_vars = tuple(join_node.left_vars[c] for c in join_node.left_keys)
@@ -624,7 +623,7 @@ def join_distributed_run(
                 i, i, _gen_reverse_type_match(left_key_types[i], right_key_types[i])
             )
         for i in range(n_keys):
-            func_text += "    t2_keys_{} = out_t2_keys[{}]\n".format(
+            func_text += "    t2_keys_{} = out_t2_keys[{}]{}\n".format(
                 i, i, _gen_reverse_type_match(right_key_types[i], left_key_types[i])
             )
 
