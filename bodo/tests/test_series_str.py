@@ -409,6 +409,15 @@ def test_find(test_unicode):
     check_func(test_impl, (test_unicode,), check_dtype=False)
     check_func(test_impl2, (test_unicode,), check_dtype=False)
 
+def test_find_start_end(test_unicode):
+    def test_impl(S):
+        return S.str.find("AB", start=3, end=10)
+
+    def test_impl2(S):
+        return S.str.find("AB", start=1, end=5)
+
+    check_func(test_impl, (test_unicode,), check_dtype=False)
+    check_func(test_impl2, (test_unicode,), check_dtype=False)
 
 def test_rfind(test_unicode):
     def test_impl(S):
