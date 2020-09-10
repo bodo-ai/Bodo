@@ -949,6 +949,69 @@ if (
 numba.core.dispatcher._DispatcherBase._compile_for_args = _compile_for_args
 
 
+# TODO maybe we can do this in another function that we already monkey patch
+# like _compile_for_args or our own decorator
+def resolve_gb_agg_funcs(cres):
+    from bodo.ir.aggregate import gb_agg_cfunc_addr
+
+    # TODO? could there be a situation where we load multiple bodo functions
+    # and name clashing occurs?
+    for sym in cres.library._codegen._engine._defined_symbols:
+        if (
+            sym.startswith("cfunc")
+            and ("get_agg_udf_addr" not in sym)
+            and (
+                "bodo_gb_udf_update_local" in sym
+                or "bodo_gb_udf_combine" in sym
+                or "bodo_gb_udf_eval" in sym
+            )
+        ):
+            gb_agg_cfunc_addr[sym] = cres.library.get_pointer_to_function(sym)
+
+
+def compile(self, sig):
+    if not self._can_compile:
+        raise RuntimeError("compilation disabled")
+    # Use counter to track recursion compilation depth
+    with self._compiling_counter:
+        args, return_type = numba.core.sigutils.normalize_signature(sig)
+        # Don't recompile if signature already exists
+        existing = self.overloads.get(tuple(args))
+        if existing is not None:
+            return existing.entry_point
+        # Try to load from disk cache
+        cres = self._cache.load_overload(sig, self.targetctx)
+        if cres is not None:
+            resolve_gb_agg_funcs(cres)  # Bodo change
+            self._cache_hits[sig] += 1
+            # XXX fold this in add_overload()? (also see compiler.py)
+            if not cres.objectmode and not cres.interpmode:
+                self.targetctx.insert_user_function(cres.entry_point,
+                                                    cres.fndesc, [cres.library])
+            self.add_overload(cres)
+            return cres.entry_point
+
+        self._cache_misses[sig] += 1
+        try:
+            cres = self._compiler.compile(args, return_type)
+        except errors.ForceLiteralArg as e:
+            def folded(args, kws):
+                return self._compiler.fold_argument_types(args, kws)[1]
+            raise e.bind_fold_arguments(folded)
+        self.add_overload(cres)
+        self._cache.save_overload(sig, cres)
+        return cres.entry_point
+
+
+lines = inspect.getsource(numba.core.dispatcher.Dispatcher.compile)
+if (
+    hashlib.sha256(lines.encode()).hexdigest()
+    != "576d693f0138e64e0c0808a1ed812a2792ad7315c29d7a16c00074026ca7a40d"
+):  # pragma: no cover
+    warnings.warn("numba.core.dispatcher.Dispatcher.compile has changed")
+numba.core.dispatcher.Dispatcher.compile = numba.core.compiler_lock.global_compiler_lock(compile)
+
+
 def propagate(self, typeinfer):
     """
     Execute all constraints.  Errors are caught and returned as a list.

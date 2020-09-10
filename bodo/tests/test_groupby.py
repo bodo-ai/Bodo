@@ -1,4 +1,5 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
+import sys
 import random
 import string
 import datetime
@@ -20,6 +21,7 @@ from bodo.tests.utils import (
     convert_non_pandas_columns,
     get_start_end,
     check_func,
+    check_caching,
 )
 import pytest
 
@@ -1376,6 +1378,22 @@ def test_groupby_agg_const_dict():
     bodo.jit(impl16)(df)  # just check for compilation errors
     # TODO: enable is_out_distributed after fixing gatherv issue for tuple output
     check_func(impl17, (df,), sort_output=True, dist_test=False)
+
+
+def test_groupby_agg_caching():
+    """ Test compiling function that uses groupby.agg(udf) with cache=True
+        and loading from cache """
+    def impl(df):
+        A = df.groupby("A").agg(lambda x: x.max() - x.min())
+        return A
+
+    df = pd.DataFrame({"A": [0, 0, 1, 1, 0], "B": range(5)})
+    py_out = impl(df)
+    bodo_out1, bodo_out2 = check_caching(
+        sys.modules[__name__], "test_groupby_agg_caching", impl, (df,)
+    )
+    pd.testing.assert_frame_equal(py_out, bodo_out1)
+    pd.testing.assert_frame_equal(py_out, bodo_out2)
 
 
 def g(x):

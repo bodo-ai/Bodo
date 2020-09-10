@@ -1,6 +1,8 @@
 """Utility functions for testing such as check_func() that tests a function.
 """
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
+import os
+import glob
 import pandas as pd
 import numpy as np
 import random
@@ -1062,3 +1064,45 @@ def _check_typing_issues(val):
     for e in errors:
         if isinstance(e, Exception):
             raise e
+
+
+def check_caching(mod, testname, impl, args):
+    """ Test caching by compiling a function with Bodo in sequential mode with
+        cache=True, then running it again loading from cache.
+        mod: module object where the test is defined
+        testname: name of the test function in mod
+        impl: the function to compile
+        args: arguments to pass to the function
+    """
+    try:
+        # compile impl in sequential mode with cache=True
+        bodo_func = bodo.jit(cache=True)(impl)
+        bodo_out1 = bodo_func(*args)
+        # get signature of compiled function
+        sig = bodo_func.signatures[0]
+        # assert that it wasn't loaded from cache
+        assert bodo_func._cache_hits[sig] == 0
+        assert bodo_func._cache_misses[sig] == 1
+        # reset state to make sure only the cached version is used next
+        engine = bodo_func.overloads[sig].library._codegen._engine
+        bodo.ir.aggregate.gb_agg_cfunc_addr.clear()
+        bodo_func._reset_overloads()
+        engine._defined_symbols.clear()
+        del engine, bodo_func
+        # now get the function by loading from cache
+        bodo_func = bodo.jit(cache=True)(impl)
+        bodo_out2 = bodo_func(*args)
+        # assert that it was loaded from cache
+        assert bodo_func._cache_hits[sig] == 1
+        assert bodo_func._cache_misses[sig] == 0
+        return bodo_out1, bodo_out2
+    finally:
+        if bodo.get_rank() == 0:
+            thisdir = os.path.dirname(mod.__file__)
+            for f in glob.glob(
+                os.path.join(
+                    thisdir, "__pycache__", mod.__name__.split(".")[-1] + "." + testname + "*"
+                )
+            ):
+                os.remove(f)
+        bodo.barrier()
