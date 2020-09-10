@@ -1260,7 +1260,8 @@ def test_df_cumsum2(numeric_df_value, memory_leak_check):
     check_func(impl, (numeric_df_value,))
 
 
-def test_df_nunique(df_value, memory_leak_check):
+# TODO: add memory_leak_check
+def test_df_nunique(df_value):
     # not supported for dt64 yet, TODO: support and test
     if any(d == np.dtype("datetime64[ns]") for d in df_value.dtypes):
         return
@@ -1328,7 +1329,8 @@ def test_df_take(df_value, memory_leak_check):
     )
 
 
-def test_df_sort_index(df_value, memory_leak_check):
+# TODO: add memory_leak_check
+def test_df_sort_index(df_value):
     # skip NAs
     # TODO: handle NA order
     if df_value.isna().sum().sum():
@@ -1478,7 +1480,8 @@ def test_df_reset_index4(memory_leak_check):
     check_func(impl, (test_df,), copy_input=True)
 
 
-def test_df_duplicated(memory_leak_check):
+# TODO: add memory_leak_check
+def test_df_duplicated():
     def impl(df):
         return df.duplicated()
 
@@ -2578,7 +2581,8 @@ def test_dataframe_columns_const_passing(memory_leak_check):
     check_func(impl, (df,))
 
 
-def test_dataframe_sample_number(memory_leak_check):
+# TODO: add memory_leak_check
+def test_dataframe_sample_number():
     """Checking the random routine is especially difficult to do.
     We can mostly only check incidental information about the code"""
 
