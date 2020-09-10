@@ -206,7 +206,7 @@ ext_str = Extension(
 # TODO: make Arrow optional in decimal extension similar to parquet extension?
 ext_decimal = Extension(
     name="bodo.libs.decimal_ext",
-    sources=["bodo/libs/_decimal_ext.cpp"],
+    sources=["bodo/libs/_decimal_ext.cpp", "bodo/libs/_bodo_common.cpp"],
     depends=["bodo/libs/_bodo_common.h", "bodo/libs/_bodo_common.cpp"],
     libraries=np_compile_args["libraries"] + ["arrow"],
     define_macros=np_compile_args["define_macros"],
@@ -250,7 +250,8 @@ ext_arr = Extension(
 
 ext_dt = Extension(
     name="bodo.libs.hdatetime_ext",
-    sources=["bodo/libs/_datetime_ext.cpp"],
+    sources=["bodo/libs/_datetime_ext.cpp", "bodo/libs/_bodo_common.cpp"],
+    depends=["bodo/libs/_bodo_common.h", "bodo/libs/_bodo_common.cpp",],
     libraries=np_compile_args["libraries"] + ["arrow"],
     define_macros=np_compile_args["define_macros"],
     extra_compile_args=["-std=c++11"],
@@ -263,10 +264,11 @@ ext_dt = Extension(
 
 ext_quantile = Extension(
     name="bodo.libs.quantile_alg",
-    sources=["bodo/libs/_quantile_alg.cpp",
-             "bodo/libs/_decimal_ext.cpp",
-             "bodo/libs/_bodo_common.cpp",
-             "bodo/libs/_array_utils.cpp",
+    sources=[
+        "bodo/libs/_quantile_alg.cpp",
+        "bodo/libs/_decimal_ext.cpp",
+        "bodo/libs/_bodo_common.cpp",
+        "bodo/libs/_array_utils.cpp",
     ],
     depends=[
         "bodo/libs/_bodo_common.h",
