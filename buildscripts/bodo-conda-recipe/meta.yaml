@@ -22,7 +22,7 @@ requirements:
     - numba 0.51.2
     - numpy
     - s3fs >=0.4.2
-    - pandas 1.1.0
+    - pandas 1.1.*
     - pyarrow =1.0.1
     - boost-cpp
     - hdf5 * mpi_mpich_* # [not win]
@@ -37,7 +37,7 @@ requirements:
   run:
     - python
     - {{ pin_compatible('numpy') }}
-    - pandas 1.1.0
+    - pandas 1.1.*
     - pyarrow =1.0.1
     - boost-cpp
     - numba 0.51.2

@@ -3,6 +3,7 @@ import sys
 import random
 import string
 import datetime
+import re
 import pandas as pd
 import numpy as np
 import bodo
@@ -186,7 +187,7 @@ def test_return_type_nullable_cumsum_cumprod(df_null):
     https://github.com/pandas-dev/pandas/issues/35490
     """
     assert (
-        pd.__version__ == "1.1.0"
+        re.compile(r'1.1.*').match(pd. __version__)
     ), "revisit the agg((cumsum, cumprod)) at next pandas version"
 
     def impl1(df):
@@ -506,7 +507,7 @@ def test_cumsum_index_preservation(df_index):
     https://github.com/pandas-dev/pandas/issues/35490
     """
     assert (
-        pd.__version__ == "1.1.0"
+        re.compile(r'1.1.*').match(pd. __version__)
     ), "revisit the agg((cumsum, cumprod)) at next pandas version"
 
     def test_impl_basic(df1):
@@ -1137,7 +1138,7 @@ def test_agg_multi_udf():
     https://github.com/pandas-dev/pandas/issues/35490
     """
     assert (
-        pd.__version__ == "1.1.0"
+        re.compile(r'1.1.*').match(pd. __version__)
     ), "revisit the agg((cumsum, cumprod)) at next pandas version"
 
     def impl(df):
@@ -1760,7 +1761,7 @@ def test_cummin_cummax_large_random_numpy():
     https://github.com/pandas-dev/pandas/issues/35490
     """
     assert (
-        pd.__version__ == "1.1.0"
+        re.compile(r'1.1.*').match(pd. __version__)
     ), "revisit the agg((cummin, cummax)) at next pandas version"
 
     def get_random_array(n, sizlen):
@@ -2535,7 +2536,7 @@ def test_std_one_col(test_df):
     https://github.com/pandas-dev/pandas/issues/35516
     """
     assert (
-        pd.__version__ == "1.1.0"
+        re.compile(r'1.1.*').match(pd. __version__)
     ), "revisit the df.groupby(A)[B].std() issue at next pandas version"
 
     def impl1(df):

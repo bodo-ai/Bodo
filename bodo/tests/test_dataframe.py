@@ -991,7 +991,7 @@ def test_df_prod(df_value, memory_leak_check):
     def impl(df):
         return df.prod()
 
-    # TODO: match Pandas 1.1.0 output dtype
+    # TODO: match Pandas 1.1.1 output dtype
     check_func(impl, (df_value,), is_out_distributed=False, check_dtype=False)
 
 
@@ -1003,7 +1003,7 @@ def test_df_sum(numeric_df_value, memory_leak_check):
     def impl(df):
         return df.sum()
 
-    # TODO: match Pandas 1.1.0 output dtype
+    # TODO: match Pandas 1.1.1 output dtype
     check_func(impl, (numeric_df_value,), is_out_distributed=False, check_dtype=False)
 
 
@@ -1015,7 +1015,7 @@ def test_df_min(numeric_df_value, memory_leak_check):
     def impl(df):
         return df.min()
 
-    # TODO: match Pandas 1.1.0 output dtype
+    # TODO: match Pandas 1.1.1 output dtype
     check_func(impl, (numeric_df_value,), is_out_distributed=False, check_dtype=False)
 
 
@@ -1027,7 +1027,7 @@ def test_df_max(numeric_df_value, memory_leak_check):
     def impl(df):
         return df.max()
 
-    # TODO: match Pandas 1.1.0 output dtype
+    # TODO: match Pandas 1.1.1 output dtype
     check_func(impl, (numeric_df_value,), is_out_distributed=False, check_dtype=False)
 
 
@@ -1128,7 +1128,7 @@ def test_df_mean(numeric_df_value, memory_leak_check):
     def impl(df):
         return df.mean()
 
-    # TODO: match Pandas 1.1.0 output dtype
+    # TODO: match Pandas 1.1.1 output dtype
     check_func(impl, (numeric_df_value,), is_out_distributed=False, check_dtype=False)
 
 
@@ -1140,7 +1140,7 @@ def test_df_var(numeric_df_value, memory_leak_check):
     def impl(df):
         return df.var()
 
-    # TODO: match Pandas 1.1.0 output dtype
+    # TODO: match Pandas 1.1.1 output dtype
     check_func(impl, (numeric_df_value,), is_out_distributed=False, check_dtype=False)
 
 
@@ -1152,7 +1152,7 @@ def test_df_std(numeric_df_value, memory_leak_check):
     def impl(df):
         return df.std()
 
-    # TODO: match Pandas 1.1.0 output dtype
+    # TODO: match Pandas 1.1.1 output dtype
     check_func(impl, (numeric_df_value,), is_out_distributed=False, check_dtype=False)
 
 

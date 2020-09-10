@@ -37,7 +37,7 @@ else
 fi
 
 $CONDA_INSTALL -c conda-forge pyarrow=1.0.1
-$CONDA_INSTALL pandas=1.1.0 -c conda-forge
+$CONDA_INSTALL pandas='1.1.*' -c conda-forge
 $CONDA_INSTALL numba=0.51.2 -c conda-forge
 $CONDA_INSTALL mpi4py -c conda-forge
 $CONDA_INSTALL scikit-learn -c conda-forge

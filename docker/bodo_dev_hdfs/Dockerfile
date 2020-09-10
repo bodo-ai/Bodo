@@ -18,7 +18,7 @@ ENV PATH /root/miniconda3/bin/:${PATH}
 #
 # Creation of the BODODEV environment
 #
-RUN conda create -n BODODEV numpy scipy pandas=1.1.0 boost-cpp cmake h5py mpich mpi gcc_linux-64 gxx_linux-64 gfortran_linux-64 -c conda-forge
+RUN conda create -n BODODEV numpy scipy pandas='1.1.*' boost-cpp cmake h5py mpich mpi gcc_linux-64 gxx_linux-64 gfortran_linux-64 -c conda-forge
 RUN conda install -n BODODEV python numba=0.51.2 -c conda-forge
 RUN conda install -n BODODEV hdf5=*=*mpich* -c conda-forge
 RUN conda install -n BODODEV python pyarrow=1.0.1 -c conda-forge
