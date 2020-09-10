@@ -118,7 +118,7 @@ Also see :ref:`S3` and :ref:`HDFS` configuration requirements and more on :ref:`
   * ``dtype`` argument should be provided to enable type inference, or ``filepath_or_buffer`` should be a constant string for Bodo to infer types by looking at the file at compile time (not supported for multi-line JSON files)
   * Arguments ``convert_dates``, ``precise_float``, ``lines`` are supported.
 
-* :func:`pandas.to_sql`
+* :func:`pandas.DataFrame.to_sql`
 
   * :ref:`example usage and more system specific instructions <sql-section>`
   * Argument ``con`` is supported but only as a string form. SQLalchemy `connectable` is not supported.
@@ -220,6 +220,7 @@ Conversion:
   can be a Numpy numeric dtype or ``str``)
 * :meth:`pandas.Series.copy` (including ``deep`` argument)
 * :meth:`pandas.Series.to_list`
+* :meth:`pandas.Series.tolist`
 * :meth:`pandas.Series.to_numpy`
 
 
@@ -231,6 +232,7 @@ is not supported yet.
 
 * :meth:`pandas.Series.iat`
 * :meth:`pandas.Series.iloc`
+* :meth:`pandas.Series.loc`
   Read support for all indexers except using a `callable` object.
   Label-based indexing is not supported yet.
 
@@ -253,6 +255,7 @@ The `fill_value` optional argument for binary functions below is supported.
 * :meth:`pandas.Series.le`
 * :meth:`pandas.Series.ge`
 * :meth:`pandas.Series.ne`
+* :meth:`pandas.Series.dot`
 
 Function application, GroupBy & Window:
 
@@ -284,9 +287,10 @@ unless support is explicitly mentioned.
 * :meth:`pandas.Series.min`
 * :meth:`pandas.Series.nlargest` (non-numerics not supported yet)
 * :meth:`pandas.Series.nsmallest` (non-numerics not supported yet)
-* :meth:`pandas.Series.pct_change`(supports numeric types and
+* :meth:`pandas.Series.pct_change` (supports numeric types and
   only the `periods` argument supported)
 * :meth:`pandas.Series.prod`
+* :meth:`pandas.Series.product`
 * :meth:`pandas.Series.quantile`
 * :meth:`pandas.Series.std` (support skipna and ddof arguments)
 * :meth:`pandas.Series.var` (support skipna and ddof arguments)
@@ -314,13 +318,17 @@ Reindexing / Selection / Label manipulation:
   Also, requires Index name to be known at compilation time.
 * :meth:`pandas.Series.tail` (`n` argument is supported)
 * :meth:`pandas.Series.take`
+* :meth:`pandas.Series.equals`
+* :meth:`pandas.Series.where`
 
 Missing data handling:
 
 * :meth:`pandas.Series.isna`
+* :meth:`pandas.Series.isnull`
 * :meth:`pandas.Series.notna`
 * :meth:`pandas.Series.dropna`
 * :meth:`pandas.Series.fillna`
+* :meth:`pandas.Series.replace`
 
 Reshaping, sorting:
 
@@ -328,6 +336,7 @@ Reshaping, sorting:
 * :meth:`pandas.Series.sort_values`
 * :meth:`pandas.Series.append` `ignore_index` is supported.
   setting name for output Series not supported yet)
+* :meth:`pandas.Series.explode`
 
 Time series-related:
 
@@ -400,14 +409,15 @@ Bodo provides extensive DataFrame support documented below.
 Attributes and underlying data:
 
 
-* :attr:`pandas.DataFrame.index` (can access but not set new index yet)
 * :attr:`pandas.DataFrame.columns`  (can access but not set new columns yet)
-* :attr:`pandas.DataFrame.values` (only for numeric dataframes)
-* :meth:`pandas.DataFrame.to_numpy` (only for numeric dataframes)
-* :attr:`pandas.DataFrame.ndim`
-* :attr:`pandas.DataFrame.size`
-* :attr:`pandas.DataFrame.shape`
 * :attr:`pandas.DataFrame.empty`
+* :attr:`pandas.DataFrame.index` (can access but not set new index yet)
+* :attr:`pandas.DataFrame.ndim`
+* :meth:`pandas.DataFrame.select_dtypes` (only supports constant strings or types as arguments)
+* :attr:`pandas.DataFrame.shape`
+* :attr:`pandas.DataFrame.size`
+* :meth:`pandas.DataFrame.to_numpy` (only for numeric dataframes)
+* :attr:`pandas.DataFrame.values` (only for numeric dataframes)
 
 Conversion:
 
@@ -415,6 +425,7 @@ Conversion:
   of Numpy dtypes or `str`)
 * :meth:`pandas.DataFrame.copy` (including `deep` flag)
 * :meth:`pandas.DataFrame.isna`
+* :meth:`pandas.DataFrame.isnull`
 * :meth:`pandas.DataFrame.notna`
 
 
@@ -423,14 +434,15 @@ Indexing, iteration:
 * :meth:`pandas.DataFrame.head` (including `n` argument)
 * :meth:`pandas.DataFrame.iat`
 * :meth:`pandas.DataFrame.iloc`
+* :meth:`pandas.DataFrame.isin` (`values` can be a dataframe with matching index
+  or a list or a set)
+* :meth:`pandas.DataFrame.itertuples`
   Read support for all indexers except reading a single row using an
   interger, slicing across columns, or using a `callable` object.
   Label-based indexing is not supported yet.
-* :meth:`pandas.DataFrame.tail` (including `n` argument)
-* :meth:`pandas.DataFrame.isin` (`values` can be a dataframe with matching index
-  or a list or a set)
 * :meth:`pandas.DataFrame.query` (`expr` can be a constant string or an argument
   to the jit function)
+* :meth:`pandas.DataFrame.tail` (including `n` argument)
 
 Function application, GroupBy & Window:
 
@@ -448,22 +460,23 @@ Computations / Descriptive Stats:
 * :meth:`pandas.DataFrame.corr` (`min_periods` argument supported)
 * :meth:`pandas.DataFrame.count`
 * :meth:`pandas.DataFrame.cov` (`min_periods` argument supported)
+* :meth:`pandas.DataFrame.cummax`
+* :meth:`pandas.DataFrame.cummin`
 * :meth:`pandas.DataFrame.cumprod`
 * :meth:`pandas.DataFrame.cumsum`
-* :meth:`pandas.DataFrame.cummin`
-* :meth:`pandas.DataFrame.cummax`
 * :meth:`pandas.DataFrame.describe`
 * :meth:`pandas.DataFrame.max`
 * :meth:`pandas.DataFrame.mean`
 * :meth:`pandas.DataFrame.median`
 * :meth:`pandas.DataFrame.min`
+* :meth:`pandas.DataFrame.nunique` (`dropna` argument not supported yet. The behavior is slightly different from `.nunique` implementation in pandas)
 * :meth:`pandas.DataFrame.pct_change`
 * :meth:`pandas.DataFrame.prod`
+* :meth:`pandas.DataFrame.product`
 * :meth:`pandas.DataFrame.quantile`
-* :meth:`pandas.DataFrame.sum`
 * :meth:`pandas.DataFrame.std`
+* :meth:`pandas.DataFrame.sum`
 * :meth:`pandas.DataFrame.var`
-* :meth:`pandas.DataFrame.nunique` (`dropna` argument not supported yet. The behavior is slightly different from `.nunique` implementation in pandas)
 
 
 Reindexing / Selection / Label manipulation:
@@ -486,6 +499,7 @@ Missing data handling:
 
 * :meth:`pandas.DataFrame.dropna`
 * :meth:`pandas.DataFrame.fillna`
+* :meth:`pandas.DataFrame.replace`
 
 Reshaping, sorting, transposing:
 
@@ -497,11 +511,10 @@ Reshaping, sorting, transposing:
     For example, `@bodo.jit(pivots={'pt': ['small', 'large']})` declares
     the output pivot table `pt` will have columns called `small` and `large`.
 
-* :meth:`pandas.DataFrame.sort_values` ``by`` argument should be constant string or
-  constant list of strings. ``ascending`` and ``na_position`` arguments are supported.
-* :meth:`pandas.DataFrame.drop_duplicates` is supported.
 * :meth:`pandas.DataFrame.sample` is supported except for the arguments ``random_state``, ``weights`` and ``axis``.
 * :meth:`pandas.DataFrame.sort_index` `ascending` argument is supported.
+* :meth:`pandas.DataFrame.sort_values` ``by`` argument should be constant string or
+  constant list of strings. ``ascending`` and ``na_position`` arguments are supported.
 
 Combining / joining / merging:
 
@@ -527,12 +540,46 @@ Serialization / IO / conversion:
 
 Also see :ref:`S3` and :ref:`HDFS` configuration requirements and more on :ref:`file_io`.
 
-* :meth:`pandas.DataFrame.to_parquet`
 * :meth:`pandas.DataFrame.to_csv`
 * :meth:`pandas.DataFrame.to_json`
+* :meth:`pandas.DataFrame.to_parquet`
+* :meth:`pandas.DataFrame.to_sql`
+
+Index objects
+~~~~~~~~~~~~~
+
+Index
+*****
+
+Properties
+
+* :attr:`pandas.Index.name` 
+* :attr:`pandas.Index.shape` 
+* :attr:`pandas.Index.values` 
+  Returns the underlying data array
+
+Modifying and computations:
+
+* :meth:`pandas.Index.copy`
+* :meth:`pandas.Index.take`
+* :meth:`pandas.Index.min`
+* :meth:`pandas.Index.max`
+|  The min/max methods are supported for DatetimeIndex. They are supported without optional arguments
+|  (``NaT`` output for empty or all ``NaT`` input not supported yet):
+
+
+Missing values:
+
+* :meth:`pandas.Index.isna`
+
+Conversion:
+
+* :meth:`pandas.Index.map`
+
+
 
 Numeric Index
-~~~~~~~~~~~~~
+*************
 
 Numeric index objects ``RangeIndex``, ``Int64Index``, ``UInt64Index`` and
 ``Float64Index`` are supported as index to dataframes and series.
@@ -543,6 +590,7 @@ and returning them from Bodo functions (boxing) are also supported.
 
   * ``start``, ``stop`` and ``step`` arguments are supported.
 
+
 * :class:`pandas.Int64Index`
 * :class:`pandas.UInt64Index`
 * :class:`pandas.Float64Index`
@@ -552,7 +600,7 @@ and returning them from Bodo functions (boxing) are also supported.
 
 
 DatetimeIndex
-~~~~~~~~~~~~~
+*************
 
 ``DatetimeIndex`` objects are supported. They can be constructed,
 boxed/unboxed, and set as index to dataframes and series.
@@ -564,25 +612,18 @@ boxed/unboxed, and set as index to dataframes and series.
 
 Date fields of DatetimeIndex are supported:
 
-* :meth:`pandas.DatetimeIndex.year`
-* :meth:`pandas.DatetimeIndex.month`
-* :meth:`pandas.DatetimeIndex.day`
-* :meth:`pandas.DatetimeIndex.hour`
-* :meth:`pandas.DatetimeIndex.minute`
-* :meth:`pandas.DatetimeIndex.second`
-* :meth:`pandas.DatetimeIndex.microsecond`
-* :meth:`pandas.DatetimeIndex.nanosecond`
-* :meth:`pandas.DatetimeIndex.date`
+* :attr:`pandas.DatetimeIndex.year`
+* :attr:`pandas.DatetimeIndex.month`
+* :attr:`pandas.DatetimeIndex.day`
+* :attr:`pandas.DatetimeIndex.hour`
+* :attr:`pandas.DatetimeIndex.minute`
+* :attr:`pandas.DatetimeIndex.second`
+* :attr:`pandas.DatetimeIndex.microsecond`
+* :attr:`pandas.DatetimeIndex.nanosecond`
+* :attr:`pandas.DatetimeIndex.date`
+* :attr:`pandas.DatetimeIndex.is_leap_year`
 
-The min/max methods are supported without optional arguments
-(``NaT`` output for empty or all ``NaT`` input not supported yet):
 
-* :meth:`pandas.DatetimeIndex.min`
-* :meth:`pandas.DatetimeIndex.max`
-
-Returning underlying data array:
-
-* :attr:`pandas.DatetimeIndex.values`
 
 
 Subtraction of ``Timestamp`` from ``DatetimeIndex`` and vice versa
@@ -594,7 +635,7 @@ are supported.
 
 
 TimedeltaIndex
-~~~~~~~~~~~~~~
+**************
 
 ``TimedeltaIndex`` objects are supported. They can be constructed,
 boxed/unboxed, and set as index to dataframes and series.
@@ -613,7 +654,7 @@ Time fields of TimedeltaIndex are supported:
 
 
 PeriodIndex
-~~~~~~~~~~~~~
+***********
 
 ``PeriodIndex`` objects can be
 boxed/unboxed and set as index to dataframes and series.
@@ -632,7 +673,15 @@ Timestamp functionality is documented in `pandas.Timestamp <https://pandas.pydat
 * :attr:`pandas.Timestamp.nanosecond`
 * :attr:`pandas.Timestamp.second`
 * :attr:`pandas.Timestamp.year`
+* :attr:`pandas.Timestamp.is_leap_year`
+* :attr:`pandas.Timestamp.dayofyear`
+* :attr:`pandas.Timestamp.dayofweek`
+* :attr:`pandas.Timestamp.days_in_month`
+* :attr:`pandas.Timestamp.daysinmonth`
 * :meth:`pandas.Timestamp.date`
+* :meth:`pandas.Timestamp.isocalendar`
+* :meth:`pandas.Timestamp.isoformat`
+* :meth:`pandas.Timestamp.toordinal`
 
 
 Window
@@ -671,7 +720,7 @@ The operations are documented on `pandas.DataFrame.groupby <https://pandas.pydat
         def g2(x): return (x>2).sum()
         return df.groupby('A')['B'].agg((g1, g2))
 
-* :meth:`pandas.core.groupby.GroupBy.aggregate` same as `agg`
+* :meth:`pandas.core.groupby.DataFrameGroupBy.aggregate` same as `agg`
 * :meth:`pandas.core.groupby.GroupBy.count`
 * :meth:`pandas.core.groupby.GroupBy.cumsum`
 * :meth:`pandas.core.groupby.GroupBy.first`
@@ -683,8 +732,10 @@ The operations are documented on `pandas.DataFrame.groupby <https://pandas.pydat
 * :meth:`pandas.core.groupby.GroupBy.std`
 * :meth:`pandas.core.groupby.GroupBy.sum`
 * :meth:`pandas.core.groupby.GroupBy.var`
-* :meth:`pandas.core.groupby.GroupBy.idxmin`
-* :meth:`pandas.core.groupby.GroupBy.idxmax`
+* :meth:`pandas.core.groupby.DataFrameGroupBy.idxmin`
+* :meth:`pandas.core.groupby.DataFrameGroupBy.idxmax`
+* :meth:`pandas.core.groupby.DataFrameGroupBy.nunique`
+* :meth:`pandas.core.groupby.GroupBy.median`
 
 
 Integer NA issue in Pandas
