@@ -2,6 +2,7 @@
 
 set -exo pipefail
 
+export PATH=$HOME/miniconda3/bin:$PATH
 source activate $CONDA_ENV
 
 # # install Numba in a directory to avoid import conflict
