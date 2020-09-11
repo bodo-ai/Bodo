@@ -69,6 +69,7 @@ from bodo.libs.array import (
     info_from_table,
     info_to_array,
     delete_table,
+    delete_table_decref_arrays,
 )
 from bodo.hiframes.pd_categorical_ext import CategoricalArray
 
@@ -662,6 +663,7 @@ def join_distributed_run(
         "info_from_table": info_from_table,
         "info_to_array": info_to_array,
         "delete_table": delete_table,
+        "delete_table_decref_arrays": delete_table_decref_arrays,
     }
 
     f_block = compile_to_numba_ir(
@@ -843,7 +845,7 @@ def _gen_local_hash_join(
         is_join,
         optional_column,
     )
-    func_text += "    delete_table(table_total)\n"
+    func_text += "    delete_table_decref_arrays(table_total)\n"
     idx = 0
     if optional_column:
         func_text += "    opti_0 = info_to_array(info_from_table(out_table, {}), opti_c0)\n".format(
