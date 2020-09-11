@@ -647,7 +647,7 @@ table_info* drop_duplicates_nonnull_keys(table_info* in_table, int64_t num_keys,
     std::cout << "Before the shuffling\n";
 #endif
     table_info* shuf_table = shuffle_table(red_table, num_keys);
-    delete_table_decref_arrays(red_table);
+    delete_table(red_table);
     // reduction after shuffling
 #ifdef DEBUG_DD
     std::cout << "Before the second shuffling\n";
@@ -702,7 +702,7 @@ table_info* drop_duplicates_table(table_info* in_table, bool is_parallel,
     std::cout << "Before the shuffling\n";
 #endif
     table_info* shuf_table = shuffle_table(red_table, num_keys);
-    delete_table_decref_arrays(red_table);
+    delete_table(red_table);
     // reduction after shuffling
 #ifdef DEBUG_DD
     std::cout << "Before the second shuffling\n";

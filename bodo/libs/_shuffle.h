@@ -38,8 +38,8 @@ struct mpi_comm_info {
     void set_counts(uint32_t* hashes);
 };
 
-/** Shuffling a table from all nodes to all the other nodes.
- *  obtained by hashes.
+/** Shuffle a table so that same keys are on the same process.
+ *  Note: Borrows a reference from the input table.
  *
  * @param in_table : the input table.
  * @param n_keys   : the number of keys for comparison.

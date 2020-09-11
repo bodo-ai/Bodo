@@ -1210,7 +1210,8 @@ def get_allocation_stats():
 
 @intrinsic
 def shuffle_table(typingctx, table_t, n_keys_t):
-    """
+    """shuffle input table so that rows with same key are on the same process.
+    Borrows a reference from the input table.
     """
     assert table_t == table_type
 
