@@ -521,7 +521,8 @@ def test_series_astype_bool_arr(S, memory_leak_check):
 @pytest.mark.parametrize(
     "S", [pd.Series(["BB", "C", "A", None, "A", "BBB", None, "C", "BB", "A"])]
 )
-def test_series_astype_cat(S, memory_leak_check):
+# TODO: add memory_leak_check
+def test_series_astype_cat(S):
     def test_impl(S, ctype):
         return S.astype(ctype)
 
@@ -2282,7 +2283,8 @@ def test_series_take(series_val, memory_leak_check):
     # TODO: dist support for selection with index list
 
 
-def test_series_argsort_fast(memory_leak_check):
+# TODO: add memory_leak_check
+def test_series_argsort_fast():
     def test_impl(A):
         return A.argsort()
 
@@ -2320,7 +2322,8 @@ def test_series_argsort(series_val, memory_leak_check):
     # check_func(test_impl, (series_val,))
 
 
-def test_series_sort_values(series_val, memory_leak_check):
+# TODO: add memory_leak_check
+def test_series_sort_values(series_val):
     # not supported for Datetime.date yet, TODO: support and test
     if isinstance(series_val.values[0], datetime.date):
         return
@@ -2413,7 +2416,8 @@ def test_series_quantile(numeric_series_val, memory_leak_check):
     check_func(test_impl, (numeric_series_val,))
 
 
-def test_series_nunique(series_val, memory_leak_check):
+# TODO: add memory_leak_check
+def test_series_nunique(series_val):
     # not supported for Datetime.date yet, TODO: support and test
     if isinstance(series_val.values[0], datetime.date):
         return
@@ -2440,7 +2444,8 @@ def test_series_nunique(series_val, memory_leak_check):
     check_func(test_impl, (series_val,))
 
 
-def test_series_unique(series_val, memory_leak_check):
+# TODO: add memory_leak_check
+def test_series_unique(series_val):
     # timedelta setitem not supported yet
     if series_val.dtype == np.dtype("timedelta64[ns]"):
         return
@@ -2660,7 +2665,8 @@ def test_series_index_cast():
     pd.testing.assert_series_equal(bodo_func(n), test_impl(n))
 
 
-def test_series_value_counts(memory_leak_check):
+# TODO: add memory_leak_check
+def test_series_value_counts():
     """simple test for value_counts(). More comprehensive testing is necessary
     """
 

@@ -484,7 +484,8 @@ def test_sort_values_strings_variable_length(n, len_str):
     "n, len_str",
     [(100, 30), pytest.param(1000, 10, marks=pytest.mark.slow), (100, 30)],
 )
-def test_sort_values_strings(n, len_str, memory_leak_check):
+# TODO: add memory_leak_check
+def test_sort_values_strings(n, len_str):
     """
     Test sort_values(): with 1 column and strings of variable length and variable characters.
     with some entries assigned to missing values
