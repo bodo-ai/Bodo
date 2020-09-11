@@ -19,6 +19,12 @@ inline void Bodo_PyErr_SetString(PyObject* type, const char* message) {
     PyErr_SetString(type, message);
 }
 
+// get memory alloc/free info from _meminfo.h
+size_t get_stats_alloc();
+size_t get_stats_free();
+size_t get_stats_mi_alloc();
+size_t get_stats_mi_free();
+
 struct Bodo_CTypes {
     enum CTypeEnum {
         INT8 = 0,
@@ -63,8 +69,8 @@ inline std::vector<char> GetCharVector(T const& val) {
 #define BYTES_PER_DECIMAL 16
 
 struct decimal_value_cpp {
-  int64_t low;
-  int64_t high;
+    int64_t low;
+    int64_t high;
 };
 
 /* The NaN entry used in the case a normal value is not available.
@@ -100,9 +106,9 @@ inline std::vector<char> RetrieveNaNentry(Bodo_CTypes::CTypeEnum const& dtype) {
     if (dtype == Bodo_CTypes::FLOAT64)
         return GetCharVector<double>(std::nan("1"));
     if (dtype == Bodo_CTypes::DECIMAL) {
-        // Normally the null value of decimal_value should never show up anywhere.
-        // A value is assigned for simplicity of the code
-        decimal_value_cpp e_val{0,0};
+        // Normally the null value of decimal_value should never show up
+        // anywhere. A value is assigned for simplicity of the code
+        decimal_value_cpp e_val{0, 0};
         return GetCharVector<decimal_value_cpp>(e_val);
     }
     return {};
@@ -167,7 +173,7 @@ struct array_info {
     char* data1;
     char* data2;
     char* data3;
-    char* null_bitmask;  // for nullable arrays like strings
+    char* null_bitmask;      // for nullable arrays like strings
     char* sub_null_bitmask;  // for second level nullable like list-string
     NRT_MemInfo* meminfo;
     NRT_MemInfo* meminfo_bitmask;

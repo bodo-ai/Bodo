@@ -48,13 +48,17 @@ def memory_leak_check():
     """
     gc.collect()
     old = rtsys.get_allocation_stats()
+    old_bodo = bodo.libs.array.get_allocation_stats()
     yield
     gc.collect()
     new = rtsys.get_allocation_stats()
-    total_alloc = new.alloc - old.alloc
-    total_free = new.free - old.free
-    total_mi_alloc = new.mi_alloc - old.mi_alloc
-    total_mi_free = new.mi_free - old.mi_free
+    new_bodo = bodo.libs.array.get_allocation_stats()
+    total_alloc = (new.alloc - old.alloc) + (new_bodo.alloc - old_bodo.alloc)
+    total_free = (new.free - old.free) + (new_bodo.free - old_bodo.free)
+    total_mi_alloc = (new.mi_alloc - old.mi_alloc) + (
+        new_bodo.mi_alloc - old_bodo.mi_alloc
+    )
+    total_mi_free = (new.mi_free - old.mi_free) + (new_bodo.mi_free - old_bodo.mi_free)
     assert total_alloc == total_free
     assert total_mi_alloc == total_mi_free
 

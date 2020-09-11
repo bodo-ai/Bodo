@@ -55,6 +55,8 @@ void bodo_common_init() {
                              "float64 size mismatch between C++ and NumPy!");
         return;
     }
+    // initalize memory alloc/tracking system in _meminfo.h
+    NRT_MemSys_init();
 }
 
 Bodo_CTypes::CTypeEnum arrow_to_bodo_type(arrow::Type::type type) {
@@ -138,8 +140,8 @@ array_info* alloc_categorical(int64_t length, Bodo_CTypes::CTypeEnum typ_enum,
     NRT_MemInfo* meminfo = NRT_MemInfo_alloc_safe_aligned(size, ALIGNMENT);
     char* data = (char*)meminfo->data;
     return new array_info(bodo_array_type::CATEGORICAL, typ_enum, length, -1,
-                          -1, data, NULL, NULL, NULL, NULL, meminfo, NULL, NULL, 0, 0,
-                          num_categories);
+                          -1, data, NULL, NULL, NULL, NULL, meminfo, NULL, NULL,
+                          0, 0, num_categories);
 }
 
 array_info* alloc_nullable_array(int64_t length,
@@ -169,7 +171,8 @@ array_info* alloc_string_array(int64_t length, int64_t n_chars,
     payload->num_strings = length;
     return new array_info(bodo_array_type::STRING, Bodo_CTypes::STRING, length,
                           n_chars, -1, payload->data, (char*)payload->offsets,
-                          NULL, (char*)payload->null_bitmap, NULL, meminfo, NULL);
+                          NULL, (char*)payload->null_bitmap, NULL, meminfo,
+                          NULL);
 }
 
 array_info* alloc_list_string_array(int64_t n_lists, int64_t n_strings,
@@ -350,6 +353,12 @@ void free_list_string_array(NRT_MemInfo* meminfo) {
     NRT_MemInfo_call_dtor(meminfo);
 }
 
+// get memory alloc/free info from _meminfo.h
+size_t get_stats_alloc() { return NRT_MemSys_get_stats_alloc(); }
+size_t get_stats_free() { return NRT_MemSys_get_stats_free(); }
+size_t get_stats_mi_alloc() { return NRT_MemSys_get_stats_mi_alloc(); }
+size_t get_stats_mi_free() { return NRT_MemSys_get_stats_mi_free(); }
+
 /**
  * Given an Arrow array, populate array of lengths and array of array_info*
  * with the data from the array and all of its descendant arrays.
@@ -488,7 +497,8 @@ void nested_array_to_c(std::shared_ptr<arrow::Array> array, int64_t* lengths,
 #endif
         std::vector<char> vectNaN = RetrieveNaNentry(dtype);
 #ifdef DEBUG_ARROW_ARRAY
-        std::cout << "nested_array_to_c : PRIMITIVE case, step 6 |vectNaN|=" << vectNaN.size() << " siztype=" << siztype << "\n";
+        std::cout << "nested_array_to_c : PRIMITIVE case, step 6 |vectNaN|="
+                  << vectNaN.size() << " siztype=" << siztype << "\n";
 #endif
         for (int64_t i = 0; i < primitive_array->length(); i++) {
             if (!primitive_array->IsNull(i))

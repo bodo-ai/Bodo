@@ -30,15 +30,115 @@
 // typedef MemInfo* (*MemInfo_alloc_aligned_type)(size_t size, unsigned align);
 // typedef void* (*MemInfo_data_type)(MemInfo* mi);
 
+#include <cassert>
 #include <cstdarg>
 #include <cstdio>
-#include <cassert>
 #include <cstring>
 #include <iostream>
 
 // ******** copied from Numba
 // TODO: make Numba C library
+
 typedef void (*NRT_dtor_function)(void *ptr, size_t size, void *info);
+typedef size_t (*NRT_atomic_inc_dec_func)(size_t *ptr);
+typedef int (*NRT_atomic_cas_func)(void *volatile *ptr, void *cmp, void *repl,
+                                   void **oldptr);
+
+typedef void *(*NRT_malloc_func)(size_t size);
+typedef void *(*NRT_realloc_func)(void *ptr, size_t new_size);
+typedef void (*NRT_free_func)(void *ptr);
+typedef int (*atomic_meminfo_cas_func)(void **ptr, void *cmp, void *repl,
+                                       void **oldptr);
+
+struct MemSys {
+    /* Atomic increment and decrement function */
+    NRT_atomic_inc_dec_func atomic_inc, atomic_dec;
+    /* Atomic CAS */
+    atomic_meminfo_cas_func atomic_cas;
+    /* Shutdown flag */
+    int shutting;
+    /* Stats */
+    size_t stats_alloc, stats_free, stats_mi_alloc, stats_mi_free;
+    /* System allocation functions */
+    struct {
+        NRT_malloc_func malloc;
+        NRT_realloc_func realloc;
+        NRT_free_func free;
+    } allocator;
+};
+
+typedef struct MemSys NRT_MemSys;
+
+/* The Memory System object */
+static NRT_MemSys TheMSys;
+
+inline static size_t nrt_testing_atomic_inc(size_t *ptr) {
+    /* non atomic */
+    size_t out = *ptr;
+    out += 1;
+    *ptr = out;
+    return out;
+}
+
+inline static size_t nrt_testing_atomic_dec(size_t *ptr) {
+    /* non atomic */
+    size_t out = *ptr;
+    out -= 1;
+    *ptr = out;
+    return out;
+}
+
+inline static int nrt_testing_atomic_cas(void *volatile *ptr, void *cmp,
+                                         void *val, void **oldptr) {
+    /* non atomic */
+    void *old = *ptr;
+    *oldptr = old;
+    if (old == cmp) {
+        *ptr = val;
+        return 1;
+    }
+    return 0;
+}
+
+inline void NRT_MemSys_set_atomic_inc_dec(NRT_atomic_inc_dec_func inc,
+                                          NRT_atomic_inc_dec_func dec) {
+    TheMSys.atomic_inc = inc;
+    TheMSys.atomic_dec = dec;
+}
+
+inline void NRT_MemSys_set_atomic_inc_dec_stub(void) {
+    NRT_MemSys_set_atomic_inc_dec(nrt_testing_atomic_inc,
+                                  nrt_testing_atomic_dec);
+}
+
+inline void NRT_MemSys_set_atomic_cas(NRT_atomic_cas_func cas) {
+    TheMSys.atomic_cas = (atomic_meminfo_cas_func)cas;
+}
+
+inline void NRT_MemSys_set_atomic_cas_stub(void) {
+    NRT_MemSys_set_atomic_cas(nrt_testing_atomic_cas);
+}
+
+inline void NRT_MemSys_init(void) {
+    memset(&TheMSys, 0, sizeof(NRT_MemSys));
+    /* Bind to libc allocator */
+    TheMSys.allocator.malloc = malloc;
+    TheMSys.allocator.realloc = realloc;
+    TheMSys.allocator.free = free;
+    // Bodo change: initialize to non-atomic functions since we don't use
+    // multithreading
+    NRT_MemSys_set_atomic_inc_dec_stub();
+    NRT_MemSys_set_atomic_cas_stub();
+}
+
+inline size_t NRT_MemSys_get_stats_alloc() { return TheMSys.stats_alloc; }
+
+inline size_t NRT_MemSys_get_stats_free() { return TheMSys.stats_free; }
+
+inline size_t NRT_MemSys_get_stats_mi_alloc() { return TheMSys.stats_mi_alloc; }
+
+inline size_t NRT_MemSys_get_stats_mi_free() { return TheMSys.stats_mi_free; }
+
 struct MemInfo {
     size_t refct;
     NRT_dtor_function dtor;
@@ -71,16 +171,14 @@ inline void NRT_Free(void *ptr) {
 #ifdef BODO_DEBUG
     std::cerr << "NRT_Free " << ptr << "\n";
 #endif
-    free(ptr);
-    // TheMSys.allocator.free(ptr);
-    // TheMSys.atomic_inc(&TheMSys.stats_free);
+    TheMSys.allocator.free(ptr);
+    TheMSys.atomic_inc(&TheMSys.stats_free);
 }
 
 inline void NRT_MemInfo_destroy(NRT_MemInfo *mi) {
     NRT_Free(mi);
-    // TheMSys.atomic_inc(&TheMSys.stats_mi_free);
+    TheMSys.atomic_inc(&TheMSys.stats_mi_free);
 }
-
 
 /* This function is to be called only from C++.
    For Python the NUMBA decref functions are called.
@@ -90,8 +188,8 @@ inline void NRT_MemInfo_call_dtor(NRT_MemInfo *mi) {
 #ifdef BODO_DEBUG
     std::cerr << "NRT_MemInfo_call_dtor " << mi << "\n";
 #endif
-    assert(mi->refct == 0); // The reference count should be exactly 0
-    if (mi->dtor)  // && !TheMSys.shutting)
+    assert(mi->refct == 0);  // The reference count should be exactly 0
+    if (mi->dtor && !TheMSys.shutting)
         /* We have a destructor and the system is not shutting down */
         mi->dtor(mi->data, mi->size, mi->dtor_info);
     /* Clear and release MemInfo */
@@ -99,12 +197,11 @@ inline void NRT_MemInfo_call_dtor(NRT_MemInfo *mi) {
 }
 
 inline void *NRT_Allocate(size_t size) {
-    // void *ptr = TheMSys.allocator.malloc(size);
-    void *ptr = malloc(size);
+    void *ptr = TheMSys.allocator.malloc(size);
 #ifdef BODO_DEBUG
     std::cerr << "NRT_Allocate bytes=" << size << " ptr=" << ptr << "\n";
 #endif
-    // TheMSys.atomic_inc(&TheMSys.stats_alloc);
+    TheMSys.atomic_inc(&TheMSys.stats_alloc);
     return ptr;
 }
 
@@ -124,7 +221,7 @@ inline void NRT_MemInfo_init(NRT_MemInfo *mi, void *data, size_t size,
     mi->data = data;
     mi->size = size;
     /* Update stats */
-    // TheMSys.atomic_inc(&TheMSys.stats_mi_alloc);
+    TheMSys.atomic_inc(&TheMSys.stats_mi_alloc);
 }
 
 inline void nrt_internal_dtor_safe(void *ptr, size_t size, void *info) {

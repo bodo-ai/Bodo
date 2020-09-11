@@ -1677,3 +1677,125 @@ if (
 ):  # pragma: no cover
     warnings.warn("numba.core.environment._rebuild_env has changed")
 numba.core.environment._rebuild_env = _rebuild_env
+
+
+# declare array writes in Bodo IR nodes and builtins to avoid invalid statement
+# reordering in parfor fusion
+def _can_reorder_stmts(stmt, next_stmt, func_ir, call_table, alias_map, arg_aliases):
+    """
+    Check dependencies to determine if a parfor can be reordered in the IR block
+    with a non-parfor statement.
+    """
+    from numba.parfors.parfor import Parfor, is_assert_equiv, expand_aliases
+
+    # swap only parfors with non-parfors
+    # don't reorder calls with side effects (e.g. file close)
+    # only read-read dependencies are OK
+    # make sure there is no write-write, write-read dependencies
+    if (
+        isinstance(stmt, Parfor)
+        and not isinstance(next_stmt, Parfor)
+        and not isinstance(next_stmt, ir.Print)
+        and (
+            not isinstance(next_stmt, ir.Assign)
+            or has_no_side_effect(next_stmt.value, set(), call_table)
+            or guard(is_assert_equiv, func_ir, next_stmt.value)
+        )
+    ):
+        stmt_accesses = expand_aliases(
+            {v.name for v in stmt.list_vars()}, alias_map, arg_aliases
+        )
+        # Bodo change: add func_ir input
+        stmt_writes = expand_aliases(
+            get_parfor_writes(stmt, func_ir), alias_map, arg_aliases
+        )
+        next_accesses = expand_aliases(
+            {v.name for v in next_stmt.list_vars()}, alias_map, arg_aliases
+        )
+        # Bodo change: add func_ir input
+        next_writes = expand_aliases(
+            get_stmt_writes(next_stmt, func_ir), alias_map, arg_aliases
+        )
+        if len((stmt_writes & next_accesses) | (next_writes & stmt_accesses)) == 0:
+            return True
+    return False
+
+
+lines = inspect.getsource(numba.parfors.parfor._can_reorder_stmts)
+if (
+    hashlib.sha256(lines.encode()).hexdigest()
+    != "18caa9a01b21ab92b4f79f164cfdbc8574f15ea29deedf7bafdf9b0e755d777c"
+):  # pragma: no cover
+    warnings.warn("numba.parfors.parfor._can_reorder_stmts has changed")
+numba.parfors.parfor._can_reorder_stmts = _can_reorder_stmts
+
+
+# Bodo change: add func_ir input
+def get_parfor_writes(parfor, func_ir):
+    from numba.parfors.parfor import Parfor
+
+    assert isinstance(parfor, Parfor)
+    writes = set()
+    blocks = parfor.loop_body.copy()
+    blocks[-1] = parfor.init_block
+    for block in blocks.values():
+        for stmt in block.body:
+            # Bodo change: add func_ir input
+            writes.update(get_stmt_writes(stmt, func_ir))
+            if isinstance(stmt, Parfor):
+                # Bodo change: add func_ir input
+                writes.update(get_parfor_writes(stmt, func_ir))
+    return writes
+
+
+lines = inspect.getsource(numba.parfors.parfor.get_parfor_writes)
+if (
+    hashlib.sha256(lines.encode()).hexdigest()
+    != "a7b29cd76832b6f6f1f2d2397ec0678c1409b57a6eab588bffd344b775b1546f"
+):  # pragma: no cover
+    warnings.warn("numba.parfors.parfor.get_parfor_writes has changed")
+# only used locally here, no need to replace in Numba
+
+# Bodo change: add func_ir input
+def get_stmt_writes(stmt, func_ir):
+    import bodo
+    from bodo.utils.utils import is_call_assign
+
+    # TODO: test bodo nodes
+    writes = set()
+    if isinstance(stmt, (ir.Assign, ir.SetItem, ir.StaticSetItem)):
+        writes.add(stmt.target.name)
+    # Bodo change: add Bodo nodes and builtins
+    if isinstance(stmt, bodo.ir.aggregate.Aggregate):
+        writes = {v.name for v in stmt.df_out_vars.values()}
+        if stmt.out_key_vars is not None:
+            writes.update({v.name for v in stmt.out_key_vars})
+    if isinstance(stmt, (bodo.ir.csv_ext.CsvReader, bodo.ir.parquet_ext.ParquetReader)):
+        writes = {v.name for v in stmt.out_vars}
+    if isinstance(stmt, bodo.ir.join.Join):
+        writes = {v.name for v in stmt.out_data_vars.values()}
+    if isinstance(stmt, bodo.ir.sort.Sort):
+        if not stmt.inplace:
+            writes.update({v.name for v in stmt.out_key_arrs})
+            writes.update({v.name for v in stmt.df_out_vars.values()})
+    if is_call_assign(stmt):
+        fdef = guard(find_callname, func_ir, stmt.value)
+        if fdef in (
+            ("setitem_str_arr_ptr", "bodo.libs.str_arr_ext"),
+            ("setna", "bodo.libs.array_kernels"),
+            ("str_arr_item_to_numeric", "bodo.libs.str_arr_ext"),
+            ("str_arr_setitem_int_to_str", "bodo.libs.str_arr_ext",),
+            ("str_arr_setitem_NA_str", "bodo.libs.str_arr_ext"),
+            ("set_bit_to_arr", "bodo.libs.int_arr_ext"),
+        ):
+            writes.add(stmt.value.args[0].name)
+    return writes
+
+
+lines = inspect.getsource(numba.core.ir_utils.get_stmt_writes)
+if (
+    hashlib.sha256(lines.encode()).hexdigest()
+    != "1a7a80b64c9a0eb27e99dc8eaae187bde379d4da0b74c84fbf87296d87939974"
+):  # pragma: no cover
+    warnings.warn("numba.core.ir_utils.get_stmt_writes has changed")
+# only used locally here, no need to replace in Numba

@@ -140,7 +140,8 @@ def nested_arrays_value(request):
         ),
     ],
 )
-def test_df_drop_duplicates(test_df, memory_leak_check):
+# TODO: add memory_leak_check
+def test_df_drop_duplicates(test_df):
     def impl(df):
         return df.drop_duplicates()
 
