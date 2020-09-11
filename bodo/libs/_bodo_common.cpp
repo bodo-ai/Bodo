@@ -97,7 +97,7 @@ array_info& array_info::operator=(array_info&& other) noexcept {
         if (this->arr_type == bodo_array_type::LIST_STRING)
             free_list_string_array(this->meminfo);
         else
-            free_array(this);
+            decref_array(this);
 
         // copy the other array's pointers into this array_info
         this->n_sub_elems = other.n_sub_elems;
@@ -278,7 +278,7 @@ array_info* copy_array(array_info* earr) {
  * Free underlying array of array_info pointer and delete the pointer
  */
 void delete_info_decref_array(array_info* arr) {
-    free_array(arr);
+    decref_array(arr);
     delete arr;
 }
 
@@ -298,7 +298,7 @@ void delete_table(table_info* table) {
 void delete_table_free_arrays(table_info* table) {
     for (array_info* a : table->columns) {
         if (a != NULL) {
-            free_array(a);
+            decref_array(a);
             delete a;
         }
     }
@@ -306,17 +306,17 @@ void delete_table_free_arrays(table_info* table) {
 }
 
 /*
-  The free_array functionality is for deleting arrays.
+  Decreases refcount and frees array if refcount is zero.
   This is more complicated than one might expect since the structure needs to be
-  coherent with the Python side of the equation.
+  coherent with the Python side.
   *
-  On the Python side, the function to call is the numba
+  On the Python side, Numba uses this function:
   def _define_nrt_decref(module, atomic_decr):
   from
   https://github.com/numba/numba/blob/ce2139c7dd93127efb04b35f28f4bebc7f44dfd5/numba/core/runtime/nrtdynmod.py#L64
   *
   On the C++ side, we cannot call this function directly. But we have to
-  manually calling the destructor. We cannot do operations directly on the
+  manually call the destructor. We cannot do operations directly on the
   arrays. For example deallocating data1 and then reallocating it is deadly,
   since the Python side tries to deallocate again the data1 (double free error)
   and leaves the current allocation intact.
@@ -325,7 +325,7 @@ void delete_table_free_arrays(table_info* table) {
   An array_info contains two NRT_MemInfo*: meminfo and meminfo_bitmask
   Thus we have two calls for destructors when they are not NULL.
  */
-void free_array(array_info* arr) {
+void decref_array(array_info* arr) {
     if (arr->meminfo != NULL) {
         arr->meminfo->refct--;
         if (arr->meminfo->refct == 0) NRT_MemInfo_call_dtor(arr->meminfo);

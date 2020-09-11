@@ -132,7 +132,7 @@ void array_isin(array_info* out_arr, array_info* in_arr, array_info* in_values,
     fill_recv_data_inner<uint8_t>(tmp_recv.data(), (uint8_t*)out_arr->data1,
                                   hashes, comm_info.send_disp, comm_info.n_pes, n_rows);
     // freeing just before returning.
-    free_array(shuf_out_arr);
+    decref_array(shuf_out_arr);
     delete table_in_arr;
     delete[] hashes;
 }

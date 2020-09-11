@@ -3290,7 +3290,7 @@ class BasicColSet {
         array_info* out_col = mycols->at(0);
         for (auto it = mycols->begin() + 1; it != mycols->end(); it++) {
             array_info* a = *it;
-            free_array(a);
+            decref_array(a);
             delete a;
         }
         return out_col;
@@ -3396,7 +3396,7 @@ class IdxMinMaxColSet : public BasicColSet {
         array_info* out_col = update_cols[0];
         *out_col = std::move(*real_out_col);
         delete real_out_col;
-        free_array(index_pos_col);
+        decref_array(index_pos_col);
         delete index_pos_col;
         update_cols.pop_back();
     }
@@ -3437,7 +3437,7 @@ class IdxMinMaxColSet : public BasicColSet {
         array_info* out_col = combine_cols[0];
         *out_col = std::move(*real_out_col);
         delete real_out_col;
-        free_array(index_pos_col);
+        decref_array(index_pos_col);
         delete index_pos_col;
         combine_cols.pop_back();
     }
@@ -4838,7 +4838,7 @@ table_info* groupby_and_aggregate(table_info* in_table, int64_t num_keys,
                       << "\n";
 #endif
             table_info* ret_table = implement_categorical_exscan(cat_column);
-            free_array(cat_column);
+            decref_array(cat_column);
             return ret_table;
         }
     }

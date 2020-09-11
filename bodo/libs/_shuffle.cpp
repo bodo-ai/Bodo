@@ -1124,7 +1124,7 @@ table_info* shuffle_table_kernel(table_info* in_table, uint32_t* hashes,
             std::cout << "shuffle_table_kernel i=" << i << " / " << n_cols
                       << " step 5\n";
 #endif
-            free_array(send_arr);
+            decref_array(send_arr);
             delete send_arr;
         } else {
 #ifdef DEBUG_SHUFFLE
