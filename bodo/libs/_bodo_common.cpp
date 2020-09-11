@@ -353,6 +353,7 @@ void decref_list_string_array(NRT_MemInfo* meminfo) {
         NRT_MemInfo_call_dtor(payload->null_bitmap.meminfo);
     meminfo->refct--;
     if (meminfo->refct == 0) NRT_MemInfo_call_dtor(meminfo);
+    // TODO: add meminfo for sub_null_bitmask in array struct and decref it here
 }
 
 // get memory alloc/free info from _meminfo.h

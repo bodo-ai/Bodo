@@ -3905,7 +3905,8 @@ class GroupbyPipeline {
             delete hashes;
             delete comm_info_ptr;
         }
-        delete_table_decref_arrays(update_table);
+        // NOTE: shuffle_table_kernel decrefs input arrays
+        delete_table(update_table);
         update_table = cur_table = shuf_table;
 
         // update column sets with columns from shuffled table

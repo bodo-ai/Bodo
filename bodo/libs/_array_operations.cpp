@@ -349,7 +349,8 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
     DEBUG_PrintSetOfColumn(std::cout, collected_table->columns);
     DEBUG_PrintRefct(std::cout, collected_table->columns);
 #endif
-    delete_table_decref_arrays(local_sort);
+    // NOTE: shuffle_table_kernel decrefs input arrays
+    delete_table(local_sort);
     // Now final local sorting from all the stuff we collected.
     table_info* ret_table = sort_values_table_local(
         collected_table, n_key_t, vect_ascending, na_position);
