@@ -3781,7 +3781,7 @@ class GroupbyPipeline {
         if (shuffle_before_update)
             // in_table was created in C++ during shuffling and not needed
             // anymore
-            delete_table_free_arrays(in_table);
+            delete_table_decref_arrays(in_table);
         if (is_parallel && !shuffle_before_update) {
             shuffle();
 #ifdef DEBUG_GROUPBY
@@ -3905,7 +3905,7 @@ class GroupbyPipeline {
             delete hashes;
             delete comm_info_ptr;
         }
-        delete_table_free_arrays(update_table);
+        delete_table_decref_arrays(update_table);
         update_table = cur_table = shuf_table;
 
         // update column sets with columns from shuffled table
@@ -3936,7 +3936,7 @@ class GroupbyPipeline {
         if (n_udf > 0)
             udf_info.combine(update_table, combine_table,
                              grp_info.row_to_group.data());
-        delete_table_free_arrays(update_table);
+        delete_table_decref_arrays(update_table);
     }
 
     /**
@@ -3970,9 +3970,9 @@ class GroupbyPipeline {
 #ifdef DEBUG_GROUPBY
             std::cout << "After reverse_shuffle_table_kernel\n";
 #endif
-            delete_table_free_arrays(out_table);
+            delete_table_decref_arrays(out_table);
 #ifdef DEBUG_GROUPBY
-            std::cout << "After delete_table_free_arrays\n";
+            std::cout << "After delete_table_decref_arrays\n";
 #endif
             out_table = revshuf_table;
 #ifdef DEBUG_GROUPBY

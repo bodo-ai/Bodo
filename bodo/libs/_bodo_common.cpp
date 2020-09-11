@@ -295,7 +295,7 @@ void delete_table(table_info* table) {
 /**
  * Free all arrays of a table and delete the table.
  */
-void delete_table_free_arrays(table_info* table) {
+void delete_table_decref_arrays(table_info* table) {
     for (array_info* a : table->columns) {
         if (a != NULL) {
             decref_array(a);

@@ -271,9 +271,9 @@ void delete_info_decref_array(array_info* arr);
 void delete_table(table_info* table);
 
 /**
- * Free all arrays of a table and delete the table.
+ * Decref all arrays of a table and delete the table.
  */
-void delete_table_free_arrays(table_info* table);
+void delete_table_decref_arrays(table_info* table);
 
 /**
  * decref Bodo array and free all memory if refcount is zero.

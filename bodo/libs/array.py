@@ -64,7 +64,7 @@ ll.add_symbol("alloc_string_array", array_ext.alloc_string_array)
 ll.add_symbol("arr_info_list_to_table", array_ext.arr_info_list_to_table)
 ll.add_symbol("info_from_table", array_ext.info_from_table)
 ll.add_symbol("delete_info_decref_array", array_ext.delete_info_decref_array)
-ll.add_symbol("delete_table_free_arrays", array_ext.delete_table_free_arrays)
+ll.add_symbol("delete_table_decref_arrays", array_ext.delete_table_decref_arrays)
 ll.add_symbol("delete_table", array_ext.delete_table)
 ll.add_symbol("get_stats_alloc", array_ext.get_stats_alloc)
 ll.add_symbol("get_stats_free", array_ext.get_stats_free)
@@ -1168,8 +1168,8 @@ delete_info_decref_array = types.ExternalFunction(
 )
 
 
-delete_table_free_arrays = types.ExternalFunction(
-    "delete_table_free_arrays", types.void(table_type),
+delete_table_decref_arrays = types.ExternalFunction(
+    "delete_table_decref_arrays", types.void(table_type),
 )
 
 
