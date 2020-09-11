@@ -281,9 +281,9 @@ void delete_table_free_arrays(table_info* table);
 void decref_array(array_info* arr);
 
 /**
- * Free all memory of list of string array.
+ * Decref list of string array and free all memory in refcount is zero.
  */
-void free_list_string_array(NRT_MemInfo* meminfo);
+void decref_list_string_array(NRT_MemInfo* meminfo);
 
 extern "C" {
 

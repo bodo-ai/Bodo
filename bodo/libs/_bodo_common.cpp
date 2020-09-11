@@ -95,7 +95,7 @@ array_info& array_info::operator=(array_info&& other) noexcept {
     if (this != &other) {
         // delete this array's original data
         if (this->arr_type == bodo_array_type::LIST_STRING)
-            free_list_string_array(this->meminfo);
+            decref_list_string_array(this->meminfo);
         else
             decref_array(this);
 
@@ -337,20 +337,22 @@ void decref_array(array_info* arr) {
     }
 }
 
-void free_list_string_array(NRT_MemInfo* meminfo) {
+void decref_list_string_array(NRT_MemInfo* meminfo) {
     array_item_arr_payload* payload = (array_item_arr_payload*)(meminfo->data);
 
     // delete string array
     payload->data->refct--;
-    NRT_MemInfo_call_dtor(payload->data);
+    if (payload->data->refct == 0) NRT_MemInfo_call_dtor(payload->data);
 
     // delete array item array
     payload->offsets.meminfo->refct--;
-    NRT_MemInfo_call_dtor(payload->offsets.meminfo);
+    if (payload->offsets.meminfo->refct == 0)
+        NRT_MemInfo_call_dtor(payload->offsets.meminfo);
     payload->null_bitmap.meminfo->refct--;
-    NRT_MemInfo_call_dtor(payload->null_bitmap.meminfo);
+    if (payload->null_bitmap.meminfo->refct == 0)
+        NRT_MemInfo_call_dtor(payload->null_bitmap.meminfo);
     meminfo->refct--;
-    NRT_MemInfo_call_dtor(meminfo);
+    if (meminfo->refct == 0) NRT_MemInfo_call_dtor(meminfo);
 }
 
 // get memory alloc/free info from _meminfo.h
