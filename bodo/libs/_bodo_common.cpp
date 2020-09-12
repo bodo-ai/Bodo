@@ -337,6 +337,11 @@ void decref_array(array_info* arr) {
     }
 }
 
+void incref_array(array_info* arr) {
+    if (arr->meminfo != NULL) arr->meminfo->refct++;
+    if (arr->meminfo_bitmask != NULL) arr->meminfo_bitmask->refct++;
+}
+
 void decref_list_string_array(NRT_MemInfo* meminfo) {
     array_item_arr_payload* payload = (array_item_arr_payload*)(meminfo->data);
 

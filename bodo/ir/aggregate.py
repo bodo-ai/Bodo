@@ -100,6 +100,7 @@ from bodo.libs.array import (
     info_from_table,
     info_to_array,
     delete_table,
+    delete_table_decref_arrays,
 )
 
 
@@ -953,6 +954,7 @@ def agg_distributed_run(
             "delete_table": delete_table,
             "add_agg_cfunc_sym": add_agg_cfunc_sym,
             "get_agg_udf_addr": get_agg_udf_addr,
+            "delete_table_decref_arrays": delete_table_decref_arrays,
         }
     )
     if udf_func_struct is not None:
@@ -2128,7 +2130,8 @@ def gen_top_level_agg_func(
             )
             idx += 1
         # clean up
-        func_text += "    delete_table(table)\n"
+        func_text += "    delete_table_decref_arrays(table)\n"
+        func_text += "    delete_table_decref_arrays(udf_table_dummy)\n"
         func_text += "    delete_table(out_table)\n"
 
         ret_names = out_names

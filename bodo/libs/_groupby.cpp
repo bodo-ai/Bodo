@@ -3723,6 +3723,7 @@ class GroupbyPipeline {
             comm_info_ptr = new mpi_comm_info(in_table->columns);
             hashes = hash_keys_table(in_table, num_keys, SEED_HASH_PARTITION);
             comm_info_ptr->set_counts(hashes);
+            for (auto a : in_table->columns) incref_array(a);
             in_table = shuffle_table_kernel(in_table, hashes, *comm_info_ptr);
             if (!cumulative_op) {
                 delete hashes;

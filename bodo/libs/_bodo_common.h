@@ -280,6 +280,8 @@ void delete_table_decref_arrays(table_info* table);
  */
 void decref_array(array_info* arr);
 
+void incref_array(array_info* arr);
+
 /**
  * Decref list of string array and free all memory in refcount is zero.
  */
