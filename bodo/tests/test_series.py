@@ -517,6 +517,17 @@ def test_series_astype_bool_arr(S, memory_leak_check):
 
     check_func(test_impl, (S,))
 
+@pytest.mark.parametrize(
+    "S",
+    [
+        pd.Series(["a", "b", "aa", "bb", "A", "a", "BB"]),
+        pd.Series([1, 2, 41, 2, 1, 4, 2, 1, 1, 25, 5, 3])
+    ]
+)
+def test_series_drop_duplicates(S):
+    def test_impl(S):
+        return S.drop_duplicates()
+    check_func(test_impl, (S,), sort_output=True)
 
 @pytest.mark.parametrize(
     "S", [pd.Series(["BB", "C", "A", None, "A", "BBB", None, "C", "BB", "A"])]

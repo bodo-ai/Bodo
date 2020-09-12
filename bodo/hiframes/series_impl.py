@@ -2442,3 +2442,24 @@ def overload_np_where(condition, x, y):
     )
     _impl = loc_vars["_impl"]
     return _impl
+
+@overload_method(SeriesType, "drop_duplicates", inline="always", no_unliteral=True)
+def overload_series_drop_duplicates(S, subset=None, keep="first", inplace=False):
+    # TODO: support inplace
+    if not is_overload_none(subset):
+        raise BodoError("drop_duplicates() subset argument not supported yet")
+
+    if not is_overload_false(inplace):
+        raise BodoError("drop_duplicates() inplace argument not supported yet")
+
+    # XXX: can't reuse duplicated() here since it shuffles data and chunks
+    # may not match
+
+    def impl(S, subset=None, keep='first', inplace=False):
+        data_0 = bodo.hiframes.pd_series_ext.get_series_data(S)
+        index = bodo.utils.conversion.index_to_array(bodo.hiframes.pd_series_ext.get_series_index(S))
+        name = bodo.hiframes.pd_series_ext.get_series_name(S)
+        (data_0,), index_arr = bodo.libs.array_kernels.drop_duplicates((data_0,), index)
+        index = bodo.utils.conversion.index_from_array(index_arr)
+        return bodo.hiframes.pd_series_ext.init_series(data_0, index, name) 
+    return impl

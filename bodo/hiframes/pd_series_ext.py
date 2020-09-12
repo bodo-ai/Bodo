@@ -860,7 +860,6 @@ series_unsupported_methods = (
     "align",
     "drop",
     "droplevel",
-    "drop_duplicates",
     "duplicated",
     "first",
     "last",
