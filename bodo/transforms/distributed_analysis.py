@@ -1790,7 +1790,7 @@ class DistributedAnalysis:
         return
 
     def _analyze_setitem(self, inst, equiv_set, array_dists):
-        """analyze getitem nodes for distribution
+        """analyze setitem nodes for distribution
         """
         # get index_var without changing IR since we are in analysis
         index_var = get_getsetitem_index_var(inst, self.typemap, [])
