@@ -117,22 +117,31 @@ gb_agg_cfunc_addr = {}
 
 @intrinsic
 def add_agg_cfunc_sym(typingctx, func, sym):
-    """ This "registers" a cfunc that implements part of groupby.agg UDF to ensure
-        it can be cached. It does two things:
-        - Generate a dummy call to the cfunc to make sure the symbol is not
-          discarded during linking
-        - Add cfunc library to the library of the Bodo function being compiled
-          (necessary for caching so that the cfunc is part of the cached result)
+    """This "registers" a cfunc that implements part of groupby.agg UDF to ensure
+    it can be cached. It does two things:
+    - Generate a dummy call to the cfunc to make sure the symbol is not
+      discarded during linking
+    - Add cfunc library to the library of the Bodo function being compiled
+      (necessary for caching so that the cfunc is part of the cached result)
     """
+
     def codegen(context, builder, signature, args):
         # generate dummy call to the cfunc
         sig = func.signature
         if sig == types.none(types.voidptr):
             # cfunc generated with gen_eval_cb has this signature
-            fnty = lir.FunctionType(lir.VoidType(), [lir.IntType(8).as_pointer(),],)
+            fnty = lir.FunctionType(
+                lir.VoidType(),
+                [
+                    lir.IntType(8).as_pointer(),
+                ],
+            )
             fn_tp = builder.module.get_or_insert_function(fnty, sym._literal_value)
             builder.call(
-                fn_tp, [context.get_constant_null(sig.args[0]),],
+                fn_tp,
+                [
+                    context.get_constant_null(sig.args[0]),
+                ],
             )
         else:
             # Assume signature is none(voidptr, voidptr, int64*) (see gen_update_cb
@@ -171,7 +180,14 @@ def get_agg_udf_addr(name):
 
 AggFuncTemplateStruct = namedtuple(
     "AggFuncTemplateStruct",
-    ["var_typs", "init_func", "update_all_func", "combine_all_func", "eval_all_func", "cfuncs"],
+    [
+        "var_typs",
+        "init_func",
+        "update_all_func",
+        "combine_all_func",
+        "eval_all_func",
+        "cfuncs",
+    ],
 )
 
 AggFuncStruct = namedtuple("AggFuncStruct", ["func", "ftype"])
@@ -203,15 +219,15 @@ supported_agg_funcs = [
 
 
 def get_agg_func(func_ir, func_name, rhs, series_type=None, typemap=None):
-    """ Returns specification of functions used by a groupby operation. It will
-        either return:
-        - A single function (case of a single function applied to all groupby
-          input columns). For example: df.groupby("A").sum()
-        - A list (element i of the list corresponds to a function(s) to apply
-          to input column i)
-            - The list can contain functions and list of functions, meaning
-              that for each input column, a single function or list of
-              functions can be applied.
+    """Returns specification of functions used by a groupby operation. It will
+    either return:
+    - A single function (case of a single function applied to all groupby
+      input columns). For example: df.groupby("A").sum()
+    - A list (element i of the list corresponds to a function(s) to apply
+      to input column i)
+        - The list can contain functions and list of functions, meaning
+          that for each input column, a single function or list of
+          functions can be applied.
     """
 
     # FIXME: using float64 type as default to be compatible with old code
@@ -365,8 +381,7 @@ def get_agg_func(func_ir, func_name, rhs, series_type=None, typemap=None):
 
 
 def get_agg_func_udf(func_ir, f_val, rhs, series_type, typemap):
-    """get udf value for agg call
-    """
+    """get udf value for agg call"""
     if isinstance(f_val, str):
         return get_agg_func(func_ir, f_val, rhs, series_type, typemap)
     if isinstance(f_val, (tuple, list)):
@@ -382,8 +397,7 @@ def get_agg_func_udf(func_ir, f_val, rhs, series_type, typemap):
 
 
 def _get_const_agg_func(func_typ):
-    """get UDF function from its type. Wraps closures in functions.
-    """
+    """get UDF function from its type. Wraps closures in functions."""
     agg_func = get_overload_const_func(func_typ)
 
     # convert agg_func to a function if it is a make_function object
@@ -1233,8 +1247,7 @@ def get_key_dict(arr):  # pragma: no cover
 
 @overload(get_key_dict, no_unliteral=True)
 def get_key_dict_overload(arr):
-    """returns dictionary and possibly a byte_vec for multi-key case
-    """
+    """returns dictionary and possibly a byte_vec for multi-key case"""
     # get byte_vec dict for multi-key case
     if isinstance(arr, types.BaseTuple) and len(arr.types) != 1:
         key_typ = types.Tuple([a.dtype for a in arr.types])
@@ -1361,8 +1374,10 @@ def alloc_agg_output_overload(n_uniq_keys, out_dummy_tup, key_set, return_key):
             "def out_alloc_f(n_uniq_keys, out_dummy_tup, key_set, return_key):\n"
         )
         for i in range(n_data):
-            func_text += "  c_{} = empty_like_type(n_uniq_keys, out_dummy_tup[{}])\n".format(
-                i, i
+            func_text += (
+                "  c_{} = empty_like_type(n_uniq_keys, out_dummy_tup[{}])\n".format(
+                    i, i
+                )
             )
 
         if string_type in key_types:
@@ -1489,8 +1504,10 @@ def gen_update_cb(
     red_var_typs = udf_func_struct.var_typs
     n_red_vars = len(red_var_typs)
 
-    func_text = "def bodo_gb_udf_update_local{}(in_table, out_table, row_to_group):\n".format(
-        label_suffix
+    func_text = (
+        "def bodo_gb_udf_update_local{}(in_table, out_table, row_to_group):\n".format(
+            label_suffix
+        )
     )
     func_text += "    if is_null_pointer(in_table):\n"  # this is dummy call
     func_text += "        return\n"
@@ -1607,8 +1624,10 @@ def gen_combine_cb(udf_func_struct, allfuncs, n_keys, out_data_typs, label_suffi
     red_var_typs = udf_func_struct.var_typs
     n_red_vars = len(red_var_typs)
 
-    func_text = "def bodo_gb_udf_combine{}(in_table, out_table, row_to_group):\n".format(
-        label_suffix
+    func_text = (
+        "def bodo_gb_udf_combine{}(in_table, out_table, row_to_group):\n".format(
+            label_suffix
+        )
     )
     func_text += "    if is_null_pointer(in_table):\n"  # this is dummy call
     func_text += "        return\n"
@@ -1810,8 +1829,7 @@ def gen_top_level_agg_func(
     offload,
     udf_func_struct,
 ):
-    """create the top level aggregation function by generating text
-    """
+    """create the top level aggregation function by generating text"""
     # If we output the index then we need to remove it from the list of variables.
     if same_index:
         assert input_has_index
@@ -2086,8 +2104,12 @@ def gen_top_level_agg_func(
             func_text += "    cpp_cb_combine_addr = 0\n"
             func_text += "    cpp_cb_eval_addr = 0\n"
 
-        func_text += "    ftypes = np.array({}, dtype=np.int32)\n".format(
-            str([supported_agg_funcs.index(f.ftype) for f in allfuncs])
+        # NOTE: adding extra zero to make sure the list is never empty to avoid Numba
+        # typing issues
+        func_text += "    ftypes = np.array([{}, 0], dtype=np.int32)\n".format(
+            ", ".join(
+                [str(supported_agg_funcs.index(f.ftype)) for f in allfuncs] + ["0"]
+            )
         )
         func_text += "    func_offsets = np.array({}, dtype=np.int32)\n".format(
             str(func_offsets)
@@ -2100,11 +2122,13 @@ def gen_top_level_agg_func(
             func_text += "    udf_ncols = np.array([0], np.int32)\n"  # dummy
         # call C++ groupby
         # We pass the logical arguments to the function (skipdropna, return_key, same_index, ...)
-        func_text += (
-            "    out_table = groupby_and_aggregate(table, {}, {},"
-            " ftypes.ctypes.data, func_offsets.ctypes.data, udf_ncols.ctypes.data, {}, {}, {}, {}, cpp_cb_update_addr, cpp_cb_combine_addr, cpp_cb_eval_addr, udf_table_dummy)\n".format(
-                n_keys, input_has_index, parallel, skipdropna, return_key, same_index,
-            )
+        func_text += "    out_table = groupby_and_aggregate(table, {}, {}," " ftypes.ctypes.data, func_offsets.ctypes.data, udf_ncols.ctypes.data, {}, {}, {}, {}, cpp_cb_update_addr, cpp_cb_combine_addr, cpp_cb_eval_addr, udf_table_dummy)\n".format(
+            n_keys,
+            input_has_index,
+            parallel,
+            skipdropna,
+            return_key,
+            same_index,
         )
 
         key_names = ["key_" + name for name in key_names]
@@ -2117,8 +2141,10 @@ def gen_top_level_agg_func(
                 idx += 1
         for i in range(len(out_names)):
             out_name = out_names[i]
-            func_text += "    {} = info_to_array(info_from_table(out_table, {}), {})\n".format(
-                out_name, idx, out_name + "_dummy"
+            func_text += (
+                "    {} = info_to_array(info_from_table(out_table, {}), {})\n".format(
+                    out_name, idx, out_name + "_dummy"
+                )
             )
             idx += 1
         # The index as last argument in output as well.
@@ -2145,8 +2171,7 @@ def gen_top_level_agg_func(
 
 
 def gen_top_level_transform_func(key_names, in_col_names, out_col_names, parallel):
-    """create the top level transformation function by generating text
-    """
+    """create the top level transformation function by generating text"""
 
     # arg names
     in_names = tuple("in_{}".format(c) for c in in_col_names)
@@ -2359,8 +2384,7 @@ def compile_to_optimized_ir(func, arg_typs, typingctx):
 
 
 def replace_closures(f_ir, closure, code):
-    """replace closure variables similar to inline_closure_call
-    """
+    """replace closure variables similar to inline_closure_call"""
     if closure:
         closure = f_ir.get_definition(closure)
         if isinstance(closure, tuple):
@@ -3432,8 +3456,7 @@ def add_tup(val1_tup, val2_tup):
 
 @overload(add_tup, no_unliteral=True)
 def add_tup_overload(val1_tup, val2_tup):
-    """add two tuples element-wise
-    """
+    """add two tuples element-wise"""
     if not isinstance(val1_tup, types.BaseTuple):
         return lambda val1_tup, val2_tup: val1_tup + val2_tup
 
@@ -3458,8 +3481,7 @@ def isna_tup(arr_tup, ind):  # pragma: no cover
 
 @overload(isna_tup, no_unliteral=True)
 def isna_tup_overload(arr_tup, ind):
-    """return True if any array value is NA
-    """
+    """return True if any array value is NA"""
     if not isinstance(arr_tup, types.BaseTuple):
         return lambda arr_tup, ind: bodo.libs.array_kernels.isna(arr_tup, ind)
 
@@ -3484,8 +3506,7 @@ def set_nan_zero_tup(arr_tup, ind, val):  # pragma: no cover
 
 @overload(set_nan_zero_tup, no_unliteral=True)
 def set_nan_zero_tup_overload(arr_tup, ind, val):
-    """replace NAs with zero in val and return new val
-    """
+    """replace NAs with zero in val and return new val"""
     if not isinstance(val, types.BaseTuple):
         zero = val(0)
         return (
@@ -3517,8 +3538,7 @@ def setitem_arr_tup_na_match(arr_tup1, arr_tup2, ind):  # pragma: no cover
 
 @overload(setitem_arr_tup_na_match, no_unliteral=True)
 def setitem_arr_tup_na_match_overload(arr_tup1, arr_tup2, ind):
-    """set NA in arr_tup1[ind] if arr_tup2[2] is NA
-    """
+    """set NA in arr_tup1[ind] if arr_tup2[2] is NA"""
 
     count = arr_tup1.count
     func_text = "def f(arr_tup1, arr_tup2, ind):\n"
