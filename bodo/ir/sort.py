@@ -19,6 +19,7 @@ from bodo.libs.array import (
     info_from_table,
     info_to_array,
     delete_table,
+    delete_table_decref_arrays,
 )
 
 
@@ -394,6 +395,7 @@ def sort_distributed_run(
             "to_string_list": to_string_list,
             "cp_str_list_to_array": cp_str_list_to_array,
             "delete_table": delete_table,
+            "delete_table_decref_arrays": delete_table_decref_arrays,
             "info_to_array": info_to_array,
             "info_from_table": info_from_table,
             "sort_values_table": sort_values_table,
@@ -444,7 +446,6 @@ def get_sort_cpp_section(
     key_name_args, col_name_args, ascending_list, na_position_b, parallel_b
 ):
     key_count = len(key_name_args)
-    data_count = len(col_name_args)
     total_list = ["array_to_info({})".format(name) for name in key_name_args] + [
         "array_to_info({})".format(name) for name in col_name_args
     ]
@@ -476,5 +477,5 @@ def get_sort_cpp_section(
     else:
         func_text += "  data = ()\n"
     func_text += "  delete_table(out_table)\n"
-    func_text += "  delete_table(table_total)\n"
+    func_text += "  delete_table_decref_arrays(table_total)\n"
     return func_text

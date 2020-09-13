@@ -1601,7 +1601,7 @@ table_info* reverse_shuffle_table_kernel(table_info* in_table, uint32_t* hashes,
     return new table_info(out_arrs);
 }
 
-// Note: Borrows a reference from the input table.
+// Note: Steals a reference from the input table.
 table_info* shuffle_table(table_info* in_table, int64_t n_keys) {
     // error checking
     if (in_table->ncols() <= 0 || n_keys <= 0) {

@@ -39,7 +39,7 @@ struct mpi_comm_info {
 };
 
 /** Shuffle a table so that same keys are on the same process.
- *  Note: Borrows a reference from the input table.
+ *  Note: Steals a reference from the input table.
  *
  * @param in_table : the input table.
  * @param n_keys   : the number of keys for comparison.

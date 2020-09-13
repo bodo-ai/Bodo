@@ -58,6 +58,7 @@ from bodo.libs.array import (
     info_to_array,
     delete_info_decref_array,
     delete_table,
+    delete_table_decref_arrays,
 )
 from bodo.utils.typing import (
     BodoError,
@@ -707,7 +708,7 @@ def overload_drop_duplicates(data, ind_arr, parallel=False):
         count
     )
     func_text += "  delete_table(out_table)\n"
-    func_text += "  delete_table(table_total)\n"
+    func_text += "  delete_table_decref_arrays(table_total)\n"
     func_text += "  return ({},), out_arr_index\n".format(
         ", ".join("out_arr_{}".format(i) for i in range(count))
     )
@@ -724,6 +725,7 @@ def overload_drop_duplicates(data, ind_arr, parallel=False):
             "info_from_table": info_from_table,
             "info_to_array": info_to_array,
             "delete_table": delete_table,
+            "delete_table_decref_arrays": delete_table_decref_arrays,
         },
         loc_vars,
     )
