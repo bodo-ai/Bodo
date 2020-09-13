@@ -1,63 +1,64 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
-import operator
-from enum import Enum
-import math
-import time
-import pandas as pd
-import numpy as np
-import sys
 import atexit
-from decimal import Decimal
 import datetime
-from bodo.libs.decimal_arr_ext import Decimal128Type, DecimalArrayType, int128_type
+import math
+import operator
+import sys
+import time
+from decimal import Decimal
+from enum import Enum
 
+import llvmlite.binding as ll
 import numba
-from numba.core import types, cgutils, ir_utils
-from numba.core.typing.templates import AbstractTemplate, infer_global
+import numpy as np
+import pandas as pd
+from llvmlite import ir as lir
+from numba.core import cgutils, ir_utils, types
 from numba.core.typing import signature
-from numba.extending import models, register_model, intrinsic, overload
+from numba.core.typing.builtins import IndexValueType
+from numba.core.typing.templates import AbstractTemplate, infer_global
+from numba.extending import intrinsic, models, overload, register_model
 
 import bodo
-from bodo.libs.str_arr_ext import (
-    string_array_type,
-    num_total_chars,
-    pre_alloc_string_array,
-    get_offset_ptr,
-    get_null_bitmap_ptr,
-    get_data_ptr,
-    convert_len_arr_to_offset,
-    getitem_str_bitmap,
-    setitem_str_bitmap,
-    set_bit_to,
-    get_bit_bitmap,
-)
-from bodo.libs.int_arr_ext import IntegerArrayType, set_bit_to_arr
-from bodo.libs.bool_arr_ext import boolean_array
-from bodo.libs.decimal_arr_ext import DecimalArrayType
+from bodo.hiframes.datetime_date_ext import datetime_date_array_type
+from bodo.hiframes.datetime_timedelta_ext import datetime_timedelta_array_type
+from bodo.hiframes.pd_categorical_ext import CategoricalArray
+from bodo.libs import hdist
 from bodo.libs.array_item_arr_ext import (
     ArrayItemArrayType,
     pre_alloc_array_item_array,
 )
-from bodo.libs.struct_arr_ext import StructArrayType
+from bodo.libs.bool_arr_ext import boolean_array
+from bodo.libs.decimal_arr_ext import (
+    Decimal128Type,
+    DecimalArrayType,
+    int128_type,
+)
+from bodo.libs.int_arr_ext import IntegerArrayType, set_bit_to_arr
 from bodo.libs.map_arr_ext import MapArrayType
-from bodo.hiframes.pd_categorical_ext import CategoricalArray
-from bodo.hiframes.datetime_date_ext import datetime_date_array_type
-from bodo.hiframes.datetime_timedelta_ext import datetime_timedelta_array_type
+from bodo.libs.str_arr_ext import (
+    convert_len_arr_to_offset,
+    get_bit_bitmap,
+    get_data_ptr,
+    get_null_bitmap_ptr,
+    get_offset_ptr,
+    getitem_str_bitmap,
+    num_total_chars,
+    pre_alloc_string_array,
+    set_bit_to,
+    setitem_str_bitmap,
+    string_array_type,
+)
+from bodo.libs.struct_arr_ext import StructArrayType
+from bodo.utils.typing import BodoError, is_overload_none
 from bodo.utils.utils import (
+    CTypeEnum,
     debug_prints,
     empty_like_type,
     numba_to_c_type,
-    unliteral_all,
-    CTypeEnum,
     tuple_to_scalar,
+    unliteral_all,
 )
-from bodo.utils.typing import BodoError, is_overload_none
-from numba.core.typing.builtins import IndexValueType
-from llvmlite import ir as lir
-from bodo.libs import hdist
-
-import llvmlite.binding as ll
-
 
 ll.add_symbol("dist_get_time", hdist.dist_get_time)
 ll.add_symbol("get_time", hdist.get_time)
@@ -903,7 +904,10 @@ def gatherv(data, allgather=False, warn_if_rep=True):
                 allgather,
             )
             copy_gathered_null_bytes(
-                out_null_bitmap.ctypes, tmp_null_bytes, recv_counts_nulls, recv_counts,
+                out_null_bitmap.ctypes,
+                tmp_null_bytes,
+                recv_counts_nulls,
+                recv_counts,
             )
             return bodo.libs.struct_arr_ext.init_struct_arr(
                 out_data_arrs, out_null_bitmap, names
@@ -1036,8 +1040,7 @@ def get_scatter_null_bytes_buff(
 
 
 def _bcast_dtype(data):
-    """broadcast data type from rank 0 using mpi4py
-    """
+    """broadcast data type from rank 0 using mpi4py"""
     try:
         from mpi4py import MPI
     except:  # pragma: no cover
@@ -1050,8 +1053,7 @@ def _bcast_dtype(data):
 
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
 def _get_scatterv_send_counts(send_counts, n_pes, n):
-    """compute send counts if 'send_counts' is None.
-    """
+    """compute send counts if 'send_counts' is None."""
     if not is_overload_none(send_counts):
         return lambda send_counts, n_pes, n: send_counts
 
@@ -1122,8 +1124,7 @@ def _scatterv_np(data, send_counts=None):
 
 # skipping coverage since only called on multiple core case
 def _get_name_value_for_type(name_typ):  # pragma: no cover
-    """get a value for name of a Series/Index type
-    """
+    """get a value for name of a Series/Index type"""
     # assuming name is either None or a string
     assert (
         isinstance(name_typ, (types.UnicodeType, types.StringLiteral))
@@ -1239,8 +1240,7 @@ def scatterv(data, send_counts=None):
 
 @overload(scatterv)
 def scatterv_overload(data, send_counts=None):
-    """support scatterv inside jit functions
-    """
+    """support scatterv inside jit functions"""
     return lambda data, send_counts=None: scatterv_impl(
         data, send_counts
     )  # pragma: no cover
@@ -1248,8 +1248,7 @@ def scatterv_overload(data, send_counts=None):
 
 @numba.generated_jit(nopython=True)
 def scatterv_impl(data, send_counts=None):
-    """nopython implementation of scatterv()
-    """
+    """nopython implementation of scatterv()"""
     if isinstance(data, types.Array):
         return lambda data, send_counts=None: _scatterv_np(
             data, send_counts
@@ -1736,8 +1735,7 @@ def bcast_scalar(val):  # pragma: no cover
 # TODO: test
 @overload(bcast_scalar, no_unliteral=True)
 def bcast_scalar_overload(val):
-    """broadcast for a scalar value
-    """
+    """broadcast for a scalar value"""
     val = types.unliteral(val)
     # NOTE: scatterv() can call this with string on rank 0 and None on others, or an
     # Optional type
@@ -1763,7 +1761,10 @@ def bcast_scalar_overload(val):
                 utf8_str, n_char = bodo.libs.str_ext.unicode_to_utf8_and_len(val)
             n_char = bodo.libs.distributed_api.bcast_scalar(n_char)
             if rank != MPI_ROOT:
-                utf8_str = np.empty(n_char, np.uint8).ctypes
+                # add null termination character
+                utf8_str_arr = np.empty(n_char + 1, np.uint8)
+                utf8_str_arr[n_char] = 0
+                utf8_str = utf8_str_arr.ctypes
             c_bcast(utf8_str, np.int32(n_char), char_typ_enum)
             return bodo.libs.str_arr_ext.decode_utf8(utf8_str, n_char)
 
@@ -1810,7 +1811,9 @@ def overload_bcast_tuple(val):
 
     loc_vars = {}
     exec(
-        func_text, {"bcast_scalar": bcast_scalar}, loc_vars,
+        func_text,
+        {"bcast_scalar": bcast_scalar},
+        loc_vars,
     )
     bcast_tuple_impl = loc_vars["bcast_tuple_impl"]
     return bcast_tuple_impl
@@ -2464,8 +2467,7 @@ oneD_reshape_shuffle = types.ExternalFunction("oneD_reshape_shuffle", sig)
 
 @numba.njit(no_cpython_wrapper=True, cache=True)
 def dist_oneD_reshape_shuffle(lhs, in_arr, new_dim0_global_len):  # pragma: no cover
-    """shuffles the data for ndarray reshape to fill the output array properly
-    """
+    """shuffles the data for ndarray reshape to fill the output array properly"""
     c_in_arr = np.ascontiguousarray(in_arr)
     in_lower_dims_size = get_tuple_prod(c_in_arr.shape[1:])
     out_lower_dims_size = get_tuple_prod(lhs.shape[1:])
@@ -2514,8 +2516,7 @@ def dist_permutation_array_index(
 ########### finalize MPI & s3_reader, disconnect hdfs when exiting ############
 
 
-from bodo.io import s3_reader
-from bodo.io import hdfs_reader
+from bodo.io import hdfs_reader, s3_reader
 
 ll.add_symbol("finalize", hdist.finalize)
 finalize = types.ExternalFunction("finalize", types.int32())
