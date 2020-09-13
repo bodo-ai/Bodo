@@ -2147,63 +2147,6 @@ def gen_top_level_agg_func(
     return agg_top
 
 
-def gen_top_level_transform_func(key_names, in_col_names, out_col_names, parallel):
-    """create the top level transformation function by generating text
-    """
-
-    # arg names
-    in_names = tuple("in_{}".format(c) for c in in_col_names)
-    out_names = tuple("out_{}".format(c) for c in out_col_names)
-    key_names = tuple("key_{}".format(sanitize_varname(c)) for c in key_names)
-    key_args = ", ".join(key_names)
-
-    in_args = ", ".join(in_names)
-    if in_args != "":
-        in_args = ", " + in_args
-
-    func_text = "def agg_top({}{}, pivot_arr):\n".format(key_args, in_args)
-    func_text += "    data_in = ({}{})\n".format(
-        ",".join(in_names), "," if len(in_names) == 1 else ""
-    )
-    func_text += "    key_in = ({}{})\n".format(
-        ",".join(key_names), "," if len(key_names) == 1 else ""
-    )
-
-    out_tup = ", ".join(out_names)
-
-    # cumsum ignores the index and returns a Series with values in the same
-    # order as original column. Therefore, we need to shuffle the data back.
-    if parallel:
-        func_text += "    i_arr_tab = arr_info_list_to_table([{}])\n".format(
-            ",".join("array_to_info({})".format(c) for c in key_names)
-        )
-        func_text += "    n_pes = bodo.libs.distributed_api.get_size()\n"
-        func_text += "    o_arr_tab = compute_node_partition_by_hash(i_arr_tab, {}, n_pes)\n".format(
-            len(key_names)
-        )
-        func_text += "    data_dummy = np.empty(1, np.int32)\n"
-        func_text += (
-            "    node_arr = info_to_array(info_from_table(o_arr_tab, 0), data_dummy)\n"
-        )
-        func_text += "    delete_table(o_arr_tab)\n"
-        func_text += "    delete_table(i_arr_tab)\n"
-        func_text += "    key_in, data_in, orig_indices, shuffle_meta = bodo.utils.shuffle.shuffle_with_index(key_in, node_arr, data_in)\n".format()
-
-    func_text += "    ({},) = group_cumsum(key_in, data_in)\n".format(out_tup)
-
-    if parallel:
-        func_text += "    ({0},) = bodo.utils.shuffle.reverse_shuffle(({0},), orig_indices, shuffle_meta)\n".format(
-            out_tup
-        )
-
-    func_text += "    return ({},)\n".format(out_tup)
-
-    loc_vars = {}
-    exec(func_text, {}, loc_vars)
-    agg_top = loc_vars["agg_top"]
-    return agg_top
-
-
 def compile_to_optimized_ir(func, arg_typs, typingctx):
     # TODO: reuse Numba's compiler pipelines
     # XXX are outside function's globals needed?
