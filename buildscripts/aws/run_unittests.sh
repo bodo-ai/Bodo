@@ -18,7 +18,7 @@ if [[ "$OSTYPE" == "linux-gnu"* ]] && [ "$NP" = "1" ]; then
     PULL_REQUEST_ID=`echo $CODEBUILD_WEBHOOK_TRIGGER | cut -f2 -d/`
 
     # run the tests
-    python bodo/runtests.py "$NP" -s -v -m "$PYTEST_MARKER"  --cov-report= --cov=./ bodo/tests
+    python bodo/runtests.py "$NP" -s -v -m "$PYTEST_MARKER"  --cov-report= --cov=./ bodo/tests/test_series_errorchecking.py
 
     # run the sonar scanner analysis passing in the pullrequest configuration to enable decorators on the PR
     sonar-scanner-4.4.0.2170-linux/bin/sonar-scanner -Dsonar.login=$TOKEN
