@@ -48,6 +48,46 @@
         std::cerr << "Error in read: " << msg << std::endl; \
     }
 
+// if status of arrow::Result is not ok, form an err msg and raise a
+// runtime_error with it
+#define CHECK_ARROW(res, funcname, msg)                                        \
+    if (!(res.status().ok())) {                                                \
+        std::string err_msg = std::string("Error in _csv_json_reader.cpp::") + \
+                              funcname + ": " + msg + " " +                    \
+                              res.status().ToString();                         \
+        throw std::runtime_error(err_msg);                                     \
+    }
+
+// In cases where only one process is executing code that might crash, we use
+// a slightly different strategy than raising errors directly as in the macro
+// above, since in these cases that would cause hangs. In these cases, we
+// instead use the macro below to set a bool variable true if an error must be
+// raised, and form an appropriate err msg and set it to a passed in std::string
+// variable.
+#define CHECK_ARROW_ONE_PROC(res, funcname, msg, raise_err_bool, err_msg_var) \
+    if (!(res.status().ok())) {                                               \
+        err_msg_var = std::string("Error in _csv_json_reader.cpp::") +        \
+                      funcname + ": " + msg + " " + res.status().ToString();  \
+        raise_err_bool = true;                                                \
+    }
+
+// It is expected that the user will then check this boolean and immediately
+// go to a part of code that is run by all processes. We then use the macro
+// below to bcast this err bool and err msg and raise a runtime error (if
+// needed) with this err msg on all the processes, ensuring there wouldn't be
+// hangs.
+
+#define ARROW_ONE_PROC_ERR_SYNC_USING_MPI(raise_err_bool, err_msg_var)  \
+    MPI_Bcast(&raise_err_bool, 1, MPI_C_BOOL, 0, MPI_COMM_WORLD);       \
+    if (raise_err_bool) {                                               \
+        int err_msg_size = err_msg_var.size();                          \
+        MPI_Bcast(&err_msg_size, 1, MPI_INT, 0, MPI_COMM_WORLD);        \
+        err_msg_var.resize(err_msg_size);                               \
+        MPI_Bcast(const_cast<char *>(err_msg_var.data()), err_msg_size, \
+                  MPI_CHAR, 0, MPI_COMM_WORLD);                         \
+        throw std::runtime_error(err_msg_var);                          \
+    }
+
 // read local files
 // currently using ifstream, TODO: benchmark Arrow's LocalFS
 class LocalFileReader : public SingleFileReader {
@@ -483,24 +523,32 @@ class PathInfo {
      */
     void obtain_is_directory() {
         int c_is_dir = 0;
+        bool raise_runtime_err = false;
+        std::string runtime_err_msg = "";
         if (dist_get_rank() == 0) {
             std::shared_ptr<arrow::fs::FileSystem> fs = get_fs();
-            arrow::fs::FileInfo file_stat =
-                fs->GetFileInfo(file_path).ValueOrDie();
-            if (file_stat.IsDirectory())
-                c_is_dir = 1;
-            else if (file_stat.IsFile())
-                c_is_dir = 0;
-            else {
-                c_is_dir = -1;
-                Bodo_PyErr_SetString(
-                    PyExc_RuntimeError,
-                    (std::string(
-                         "Error in PathInfo::is_directory: invalid path ") +
-                     std::string(file_path))
-                        .c_str());
+            arrow::Result<arrow::fs::FileInfo> file_stat_result =
+                fs->GetFileInfo(file_path);
+            CHECK_ARROW_ONE_PROC(file_stat_result, "obtain_is_directory",
+                                 "fs->GetFileInfo", raise_runtime_err,
+                                 runtime_err_msg);
+            if (!raise_runtime_err) {
+                arrow::fs::FileInfo file_stat = file_stat_result.ValueOrDie();
+                if (file_stat.IsDirectory())
+                    c_is_dir = 1;
+                else if (file_stat.IsFile())
+                    c_is_dir = 0;
+                else {
+                    c_is_dir = -1;
+                    raise_runtime_err = true;
+                    runtime_err_msg =
+                        std::string(
+                            "Error in PathInfo::is_directory: invalid path ") +
+                        std::string(file_path);
+                }
             }
         }
+        ARROW_ONE_PROC_ERR_SYNC_USING_MPI(raise_runtime_err, runtime_err_msg);
         MPI_Bcast(&c_is_dir, 1, MPI_INT, 0, MPI_COMM_WORLD);
         is_valid = (c_is_dir != -1);
         is_dir = bool(c_is_dir);
@@ -517,49 +565,73 @@ class PathInfo {
         file_names.clear();
         file_sizes.clear();
         total_ds_size = 0;  // this attribute tracks the sum of all file sizes
+
+        bool raise_runtime_err = false;
+        std::string runtime_err_msg = "";
+
+        int64_t total_len =
+            0;  // total length of file names (including
+                // null bytes at end of each) (only used by proc0)
         if (dist_get_rank() == 0) {
             std::shared_ptr<arrow::fs::FileSystem> fs = get_fs();
-            int64_t total_len = 0;  // total length of file names (including
-                                    // null bytes at end of each)
+
             if (!is_directory()) {
                 // we always send file name to other ranks, even if just a
                 // single file, because it might be modified by
                 // PathInfo::get_fs(), which initially is only done on rank 0
                 file_names.push_back(file_path);
-                const arrow::fs::FileInfo &fi =
-                    fs->GetFileInfo(file_path).ValueOrDie();
-                file_sizes.push_back(fi.size());
-                total_ds_size += fi.size();
-                total_len = int64_t(file_path.size() + 1);
+                arrow::Result<arrow::fs::FileInfo> fi_result =
+                    fs->GetFileInfo(file_path);
+                CHECK_ARROW_ONE_PROC(fi_result, "obtain_file_names_and_sizes",
+                                     "fs->GetFileInfo", raise_runtime_err,
+                                     runtime_err_msg);
+                if (!raise_runtime_err) {
+                    const arrow::fs::FileInfo &fi = fi_result.ValueOrDie();
+                    file_sizes.push_back(fi.size());
+                    total_ds_size += fi.size();
+                    total_len = int64_t(file_path.size() + 1);
+                }
             } else {
                 arrow::fs::FileSelector dir_selector;
                 // initialize dir_selector
                 dir_selector.base_dir = file_path;
                 // FileInfo used to determine names and sizes
-                std::vector<arrow::fs::FileInfo> file_infos =
-                    fs->GetFileInfo(dir_selector).ValueOrDie();
-                // sort files by name
-                std::sort(file_infos.begin(), file_infos.end(),
-                          arrow::fs::FileInfo::ByPath{});
+                arrow::Result<std::vector<arrow::fs::FileInfo>>
+                    file_infos_results = fs->GetFileInfo(dir_selector);
+                CHECK_ARROW_ONE_PROC(
+                    file_infos_results, "obtain_file_names_and_sizes",
+                    "fs->GetFileInfo", raise_runtime_err, runtime_err_msg);
+                if (!raise_runtime_err) {
+                    std::vector<arrow::fs::FileInfo> file_infos =
+                        file_infos_results.ValueOrDie();
+                    // sort files by name
+                    std::sort(file_infos.begin(), file_infos.end(),
+                              arrow::fs::FileInfo::ByPath{});
 
-                for (auto &fi : file_infos) {
-                    const std::string &path = fi.path();
-                    const std::string &fname = fi.base_name();
-                    int64_t fsize = fi.size();
-                    // skip 0 size files and those ending in .crc or named
-                    // _SUCCESS (auxiliary files generated by Spark)
-                    if (fsize <= 0) continue;
-                    if (boost::ends_with(fname, ".crc")) continue;
-                    if (fname == "_SUCCESS") continue;
-                    total_len += int64_t(path.size() + 1);
-                    total_ds_size += fi.size();
-                    // NOTE: this gives the full path and file name.
-                    // we might just want to get the file name
-                    file_names.push_back(path);
-                    file_sizes.push_back(fsize);
+                    for (auto &fi : file_infos) {
+                        const std::string &path = fi.path();
+                        const std::string &fname = fi.base_name();
+                        int64_t fsize = fi.size();
+                        // skip 0 size files and those ending in .crc or named
+                        // _SUCCESS (auxiliary files generated by Spark)
+                        if (fsize <= 0) continue;
+                        if (boost::ends_with(fname, ".crc")) continue;
+                        if (fname == "_SUCCESS") continue;
+                        total_len += int64_t(path.size() + 1);
+                        total_ds_size += fi.size();
+                        // NOTE: this gives the full path and file name.
+                        // we might just want to get the file name
+                        file_names.push_back(path);
+                        file_sizes.push_back(fsize);
+                    }
                 }
             }
-            if (dist_get_size() > 1) {
+        }
+
+        ARROW_ONE_PROC_ERR_SYNC_USING_MPI(raise_runtime_err, runtime_err_msg);
+
+        if (dist_get_size() > 1) {
+            if (dist_get_rank() == 0) {
                 // send file names to other ranks
                 std::vector<char> str_data(total_len);
                 char *str_data_ptr = str_data.data();
@@ -571,21 +643,22 @@ class PathInfo {
                 MPI_Bcast(&total_len, 1, MPI_INT64_T, 0, MPI_COMM_WORLD);
                 MPI_Bcast(str_data.data(), str_data.size(), MPI_CHAR, 0,
                           MPI_COMM_WORLD);
+            } else {
+                // receive file names from rank 0
+                int64_t recv_size;
+                MPI_Bcast(&recv_size, 1, MPI_INT64_T, 0, MPI_COMM_WORLD);
+                std::vector<char> str_data(recv_size);
+                MPI_Bcast(str_data.data(), str_data.size(), MPI_CHAR, 0,
+                          MPI_COMM_WORLD);
+                char *cur_str = str_data.data();
+                while (cur_str < str_data.data() + recv_size) {
+                    file_names.push_back(cur_str);
+                    cur_str += file_names.back().size() + 1;
+                }
+                file_sizes.resize(file_names.size());
             }
-        } else {
-            // receive file names from rank 0
-            int64_t recv_size;
-            MPI_Bcast(&recv_size, 1, MPI_INT64_T, 0, MPI_COMM_WORLD);
-            std::vector<char> str_data(recv_size);
-            MPI_Bcast(str_data.data(), str_data.size(), MPI_CHAR, 0,
-                      MPI_COMM_WORLD);
-            char *cur_str = str_data.data();
-            while (cur_str < str_data.data() + recv_size) {
-                file_names.push_back(cur_str);
-                cur_str += file_names.back().size() + 1;
-            }
-            file_sizes.resize(file_names.size());
         }
+
         // communicate file sizes to all processes
         MPI_Bcast(file_sizes.data(), file_sizes.size(), MPI_INT64_T, 0,
                   MPI_COMM_WORLD);
@@ -644,30 +717,43 @@ class PathInfo {
 int64_t get_header_size(const std::string &fname, int64_t file_size,
                         PathInfo &path_info, char row_separator) {
     int64_t header_size = 0;
+
+    bool raise_runtime_err = false;
+    std::string runtime_err_msg = "";
     if (dist_get_rank() == 0) {
         std::shared_ptr<arrow::fs::FileSystem> fs = path_info.get_fs();
-        std::shared_ptr<arrow::io::RandomAccessFile> file =
-            fs->OpenInputFile(fname).ValueOrDie();
+        arrow::Result<std::shared_ptr<arrow::io::RandomAccessFile>>
+            file_result = fs->OpenInputFile(fname);
+        CHECK_ARROW_ONE_PROC(file_result, "get_header_size",
+                             "fs->OpenInputFile", raise_runtime_err,
+                             runtime_err_msg);
+        if (!raise_runtime_err) {
+            std::shared_ptr<arrow::io::RandomAccessFile> file =
+                file_result.ValueOrDie();
 #define BUF_SIZE 1024
-        std::vector<char> data(BUF_SIZE);
+            std::vector<char> data(BUF_SIZE);
 #undef BUF_SIZE
-        bool header_found = false;
-        int64_t seen_size = 0;
-        while (!header_found && seen_size < file_size) {
-            // TODO check status
-            int64_t read_size =
-                std::min(int64_t(data.size()), file_size - seen_size);
-            arrow::Result<int64_t> res = file->Read(read_size, data.data());
-            for (int64_t i = 0; i < read_size; i++, header_size++) {
-                if (data[i] == row_separator) {
-                    header_found = true;
-                    break;
+            bool header_found = false;
+            int64_t seen_size = 0;
+            while (!header_found && seen_size < file_size) {
+                // TODO check status
+                int64_t read_size =
+                    std::min(int64_t(data.size()), file_size - seen_size);
+                arrow::Result<int64_t> res = file->Read(read_size, data.data());
+                for (int64_t i = 0; i < read_size; i++, header_size++) {
+                    if (data[i] == row_separator) {
+                        header_found = true;
+                        break;
+                    }
                 }
+                seen_size += read_size;
             }
-            seen_size += read_size;
+            // TODO error if !header_found
         }
-        // TODO error if !header_found
     }
+
+    ARROW_ONE_PROC_ERR_SYNC_USING_MPI(raise_runtime_err, runtime_err_msg);
+
     header_size += 1;
     MPI_Bcast(&header_size, 1, MPI_INT64_T, 0, MPI_COMM_WORLD);
     return header_size;
@@ -804,8 +890,11 @@ class MemReader : public FileReader {
         int64_t read_size = file_end - file_start;
         size_t cur_data_size = data.size();
         data.resize(cur_data_size + read_size);
+        arrow::Result<std::shared_ptr<arrow::io::RandomAccessFile>>
+            file_result = fs->OpenInputFile(fname);
+        CHECK_ARROW(file_result, "read_uncompressed_file", "fs->OpenInputFile")
         std::shared_ptr<arrow::io::RandomAccessFile> file =
-            fs->OpenInputFile(fname).ValueOrDie();
+            file_result.ValueOrDie();
         arrow::Status status;
         status = file->Seek(file_start);
         // TODO check status
@@ -825,24 +914,45 @@ class MemReader : public FileReader {
                               std::shared_ptr<arrow::fs::FileSystem> fs,
                               const std::string &compression,
                               bool skip_header) {
+        arrow::Result<std::shared_ptr<arrow::io::InputStream>>
+            raw_istream_result = fs->OpenInputStream(fname);
+        CHECK_ARROW(raw_istream_result, "read_compressed_file",
+                    "fs->OpenInputStream")
         std::shared_ptr<arrow::io::InputStream> raw_istream =
-            fs->OpenInputStream(fname).ValueOrDie();
+            raw_istream_result.ValueOrDie();
+
+        arrow::Result<arrow::Compression::type> compression_type_result =
+            arrow::util::Codec::GetCompressionType(compression);
+        CHECK_ARROW(compression_type_result, "read_compressed_file",
+                    "arrow::util::Codec::GetCompressionType")
         arrow::Compression::type compression_type =
-            arrow::util::Codec::GetCompressionType(compression).ValueOrDie();
+            std::move(compression_type_result).ValueOrDie();
+
+        arrow::Result<std::unique_ptr<arrow::util::Codec>> codec_result =
+            arrow::util::Codec::Create(compression_type);
+        CHECK_ARROW(codec_result, "read_compressed_file",
+                    "arrow::util::Codec::Create")
         std::unique_ptr<arrow::util::Codec> codec =
-            arrow::util::Codec::Create(compression_type).ValueOrDie();
+            std::move(codec_result).ValueOrDie();
+
+        arrow::Result<std::shared_ptr<arrow::io::CompressedInputStream>>
+            istream_result = arrow::io::CompressedInputStream::Make(
+                codec.get(), raw_istream);
+        CHECK_ARROW(istream_result, "read_compressed_file",
+                    "arrow::io::CompressedInputStream::Make")
         std::shared_ptr<arrow::io::CompressedInputStream> istream =
-            arrow::io::CompressedInputStream::Make(codec.get(), raw_istream)
-                .ValueOrDie();
+            std::move(istream_result).ValueOrDie();
 #define READ_SIZE 8192
         int64_t actual_size = int64_t(data.size());
         bool skipped_header = !skip_header;
         while (true) {
             // read a chunk of READ_SIZE bytes
             data.resize(data.size() + READ_SIZE);
-            int64_t bytes_read =
-                istream->Read(READ_SIZE, data.data() + actual_size)
-                    .ValueOrDie();
+            arrow::Result<int64_t> bytes_read_result =
+                istream->Read(READ_SIZE, data.data() + actual_size);
+            CHECK_ARROW(bytes_read_result, "read_compressed_file",
+                        "istream->Read")
+            int64_t bytes_read = bytes_read_result.ValueOrDie();
             if (bytes_read == 0) break;
             if (!skipped_header) {
                 // check for row_separator in new data read
@@ -1141,141 +1251,150 @@ extern "C" PyObject *file_chunk_reader(const char *fname, const char *suffix,
     // TODO nrows looks like it is not used. remove
 
     // TODO check that skiprows >= 0
+    try {
+        CHECK(fname != NULL, "NULL filename provided.");
 
-    CHECK(fname != NULL, "NULL filename provided.");
+        // TODO right now we get the list of file names and file sizes on rank 0
+        // and broadcast to every process. This is potentially not scalable
+        // (think many millions of potentially long file names) and not really
+        // necessary (we could scatter instead of broadcast). But this doesn't
+        // seem like something that should worry us right now
 
-    // TODO right now we get the list of file names and file sizes on rank 0
-    // and broadcast to every process. This is potentially not scalable (think
-    // many millions of potentially long file names) and not really necessary
-    // (we could scatter instead of broadcast). But this doesn't seem like
-    // something that should worry us right now
+        char row_separator = '\n';
+        if (strcmp(suffix, "json") == 0) row_separator = '}';
 
-    char row_separator = '\n';
-    if (strcmp(suffix, "json") == 0) row_separator = '}';
+        int rank = dist_get_rank();
+        int num_ranks = dist_get_size();
+        MemReader *mem_reader = nullptr;
 
-    int rank = dist_get_rank();
-    int num_ranks = dist_get_size();
-    MemReader *mem_reader = nullptr;
-
-    PathInfo path_info(fname, compression_pyarg, bucket_region);
-    if (!path_info.is_path_valid()) {
-        return NULL;
-    }
-    const std::string compression = path_info.get_compression_scheme();
-
-    if (compression == "UNCOMPRESSED") {
-        const std::vector<std::string> &file_names = path_info.get_file_names();
-        const std::vector<int64_t> &file_sizes = path_info.get_file_sizes();
-        int64_t header_size_bytes = 0;
-        if (csv_header)
-            header_size_bytes =
-                get_header_size(file_names[0], file_sizes[0], path_info, '\n');
-        // total size excluding headers
-        int64_t total_size =
-            path_info.get_size() - (file_names.size() * header_size_bytes);
-        // now determine which files to read from and what portion from each
-        // file this is based on partitioning of global dataset based on bytes.
-        // As such, this first phase can end up with rows of data in multiple
-        // processes
-        int64_t start_global = 0;
-        int64_t end_global = total_size;
-        if (is_parallel) {
-            start_global = dist_get_start(total_size, num_ranks, rank);
-            end_global = dist_get_end(total_size, num_ranks, rank);
+        PathInfo path_info(fname, compression_pyarg, bucket_region);
+        if (!path_info.is_path_valid()) {
+            return NULL;
         }
-        int64_t to_read = end_global - start_global;
-        mem_reader = new MemReader(to_read, row_separator, !json_lines);
-        int64_t cur_size = 0;
-        // find first file to read from and read from it
-        int64_t cur_file_idx = 0;
-        for (size_t i = 0; i < file_sizes.size(); i++) {
-            int64_t fsize = file_sizes[i] - header_size_bytes;
-            if (cur_size + fsize > start_global) {
-                int64_t file_start =
-                    start_global - cur_size + header_size_bytes;
-                int64_t file_end =
-                    file_start +
-                    std::min(to_read, fsize + header_size_bytes - file_start);
-                mem_reader->read_uncompressed_file(
-                    file_names[i], file_start, file_end, path_info.get_fs());
-                to_read -= (file_end - file_start);
-                cur_file_idx = i + 1;
-                break;
+        const std::string compression = path_info.get_compression_scheme();
+
+        if (compression == "UNCOMPRESSED") {
+            const std::vector<std::string> &file_names =
+                path_info.get_file_names();
+            const std::vector<int64_t> &file_sizes = path_info.get_file_sizes();
+            int64_t header_size_bytes = 0;
+            if (csv_header)
+                header_size_bytes = get_header_size(
+                    file_names[0], file_sizes[0], path_info, '\n');
+            // total size excluding headers
+            int64_t total_size =
+                path_info.get_size() - (file_names.size() * header_size_bytes);
+            // now determine which files to read from and what portion from each
+            // file this is based on partitioning of global dataset based on
+            // bytes. As such, this first phase can end up with rows of data in
+            // multiple processes
+            int64_t start_global = 0;
+            int64_t end_global = total_size;
+            if (is_parallel) {
+                start_global = dist_get_start(total_size, num_ranks, rank);
+                end_global = dist_get_end(total_size, num_ranks, rank);
             }
-            cur_size += fsize;
-        }
-        // read from subsequent files
-        while (to_read > 0) {
-            int64_t f_to_read =
-                std::min(file_sizes[cur_file_idx] - header_size_bytes, to_read);
-            mem_reader->read_uncompressed_file(
-                file_names[cur_file_idx], header_size_bytes,
-                f_to_read + header_size_bytes, path_info.get_fs());
-            to_read -= f_to_read;
-            cur_file_idx += 1;
-        }
-        // correct data so that each rank only has complete rows
-        if (is_parallel) data_row_correction(mem_reader, row_separator);
-    } else {
-        // if files are compressed, one rank will be responsible for
-        // decompressing a whole file into memory. Data will later be
-        // redistributed (see balance_rows below)
-        const std::vector<std::string> &file_names = path_info.get_file_names();
-        mem_reader = new MemReader(row_separator, !json_lines);
-        int64_t num_files = file_names.size();
-        if (is_parallel && num_files < num_ranks) {
-            // try to space the read across nodes to avoid memory issues
-            // if decompressing huge files
-            int64_t ppf = num_ranks / num_files;
-            if (rank % ppf == 0) {
-                // I read a file
-                int64_t my_file = rank / ppf;
-                if (my_file < num_files)
-                    mem_reader->read_compressed_file(file_names[my_file],
+            int64_t to_read = end_global - start_global;
+            mem_reader = new MemReader(to_read, row_separator, !json_lines);
+            int64_t cur_size = 0;
+            // find first file to read from and read from it
+            int64_t cur_file_idx = 0;
+            for (size_t i = 0; i < file_sizes.size(); i++) {
+                int64_t fsize = file_sizes[i] - header_size_bytes;
+                if (cur_size + fsize > start_global) {
+                    int64_t file_start =
+                        start_global - cur_size + header_size_bytes;
+                    int64_t file_end =
+                        file_start +
+                        std::min(to_read,
+                                 fsize + header_size_bytes - file_start);
+                    mem_reader->read_uncompressed_file(file_names[i],
+                                                       file_start, file_end,
+                                                       path_info.get_fs());
+                    to_read -= (file_end - file_start);
+                    cur_file_idx = i + 1;
+                    break;
+                }
+                cur_size += fsize;
+            }
+            // read from subsequent files
+            while (to_read > 0) {
+                int64_t f_to_read = std::min(
+                    file_sizes[cur_file_idx] - header_size_bytes, to_read);
+                mem_reader->read_uncompressed_file(
+                    file_names[cur_file_idx], header_size_bytes,
+                    f_to_read + header_size_bytes, path_info.get_fs());
+                to_read -= f_to_read;
+                cur_file_idx += 1;
+            }
+            // correct data so that each rank only has complete rows
+            if (is_parallel) data_row_correction(mem_reader, row_separator);
+        } else {
+            // if files are compressed, one rank will be responsible for
+            // decompressing a whole file into memory. Data will later be
+            // redistributed (see balance_rows below)
+            const std::vector<std::string> &file_names =
+                path_info.get_file_names();
+            mem_reader = new MemReader(row_separator, !json_lines);
+            int64_t num_files = file_names.size();
+            if (is_parallel && num_files < num_ranks) {
+                // try to space the read across nodes to avoid memory issues
+                // if decompressing huge files
+                int64_t ppf = num_ranks / num_files;
+                if (rank % ppf == 0) {
+                    // I read a file
+                    int64_t my_file = rank / ppf;
+                    if (my_file < num_files)
+                        mem_reader->read_compressed_file(
+                            file_names[my_file], path_info.get_fs(),
+                            compression, csv_header);
+                }
+            } else {
+                int64_t start = 0;
+                int64_t end = num_files;
+                if (is_parallel) {
+                    start = dist_get_start(num_files, num_ranks, rank);
+                    end = dist_get_end(num_files, num_ranks, rank);
+                }
+                for (int64_t i = start; i < end; i++) {
+                    // note that multiple calls to read_compressed_file append
+                    // to existing data
+                    mem_reader->read_compressed_file(file_names[i],
                                                      path_info.get_fs(),
                                                      compression, csv_header);
-            }
-        } else {
-            int64_t start = 0;
-            int64_t end = num_files;
-            if (is_parallel) {
-                start = dist_get_start(num_files, num_ranks, rank);
-                end = dist_get_end(num_files, num_ranks, rank);
-            }
-            for (int64_t i = start; i < end; i++) {
-                // note that multiple calls to read_compressed_file append
-                // to existing data
-                mem_reader->read_compressed_file(
-                    file_names[i], path_info.get_fs(), compression, csv_header);
+                }
             }
         }
+
+        // skip rows if requested
+        skip_rows(mem_reader, skiprows, is_parallel);
+
+        // shuffle data so that each rank has required number of rows
+        if (is_parallel) balance_rows(mem_reader);
+
+        // prepare data for pandas
+        mem_reader->finalize();
+
+        // now create a stream reader PyObject that wraps MemReader, to be read
+        // from pandas
+        auto gilstate = PyGILState_Ensure();
+        PyObject *reader =
+            PyObject_CallFunctionObjArgs((PyObject *)&stream_reader_type, NULL);
+        PyGILState_Release(gilstate);
+        if (reader == NULL || PyErr_Occurred()) {
+            PyErr_Print();
+            std::cerr << "Could not create chunk reader object" << std::endl;
+            if (reader) delete reader;
+            reader = NULL;
+        } else {
+            stream_reader_init(reinterpret_cast<stream_reader *>(reader),
+                               mem_reader, 0, mem_reader->getSize());
+        }
+        return reader;
+    } catch (const std::exception &e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return NULL;
     }
-
-    // skip rows if requested
-    skip_rows(mem_reader, skiprows, is_parallel);
-
-    // shuffle data so that each rank has required number of rows
-    if (is_parallel) balance_rows(mem_reader);
-
-    // prepare data for pandas
-    mem_reader->finalize();
-
-    // now create a stream reader PyObject that wraps MemReader, to be read from
-    // pandas
-    auto gilstate = PyGILState_Ensure();
-    PyObject *reader =
-        PyObject_CallFunctionObjArgs((PyObject *)&stream_reader_type, NULL);
-    PyGILState_Release(gilstate);
-    if (reader == NULL || PyErr_Occurred()) {
-        PyErr_Print();
-        std::cerr << "Could not create chunk reader object" << std::endl;
-        if (reader) delete reader;
-        reader = NULL;
-    } else {
-        stream_reader_init(reinterpret_cast<stream_reader *>(reader),
-                           mem_reader, 0, mem_reader->getSize());
-    }
-    return reader;
 }
 
 extern "C" PyObject *csv_file_chunk_reader(const char *fname, bool is_parallel,

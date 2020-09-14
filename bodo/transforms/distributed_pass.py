@@ -1281,6 +1281,8 @@ class DistributedPass:
                     True,
                     unicode_to_utf8(bucket_region),
                 )
+                # Check if there was an error in the C++ code. If so, raise it.
+                bodo.utils.utils.check_and_propagate_cpp_exception()
 
             return nodes + compile_func_single_block(
                 f,
@@ -1381,6 +1383,8 @@ class DistributedPass:
                     is_records_lines,
                     unicode_to_utf8(bucket_region),
                 )
+                # Check if there was an error in the C++ code. If so, raise it.
+                bodo.utils.utils.check_and_propagate_cpp_exception()
 
             return nodes + compile_func_single_block(
                 f,
