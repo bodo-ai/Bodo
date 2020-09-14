@@ -381,6 +381,10 @@ class DistributedAnalysis:
             if arr_container is not None:
                 self._meet_array_dists(lhs, arr_container.name, array_dists)
                 return
+            # this path is not possible since pair_first is only used in the pattern
+            # above, unless if variable definitions have some issue
+            else:  # pragma: no cover
+                self._set_REP(inst.list_vars(), array_dists)
         elif isinstance(rhs, ir.Expr) and rhs.op in ("getiter", "iternext"):
             # analyze array container access in pair_first
             return

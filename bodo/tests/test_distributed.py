@@ -885,6 +885,25 @@ def test_dist_list_getitem1():
     assert count_array_OneDs() > 0
 
 
+def test_dist_list_loop():
+    """Test support for loop over distributed list
+    """
+
+    def impl1(v):
+        s = 0
+        for df in v:
+            s += df.A.sum()
+        return s
+
+    n = 11
+    df = pd.DataFrame({"A": np.arange(n)})
+    df_chunk = _get_dist_arg(df)
+    v = [df, df]
+    v_chunks = [df_chunk, df_chunk]
+    assert bodo.jit(distributed={"v", "df"})(impl1)(v_chunks) == impl1(v)
+    assert count_array_OneD_Vars() > 0
+
+
 def test_dist_list_setitem1():
     """Test support for setitem of distributed list
     """
