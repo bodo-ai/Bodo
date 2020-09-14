@@ -617,6 +617,88 @@ def test_getitem_slice_const_size():
     # check_func(impl4, ())
 
 
+def test_setitem_slice_scalar(memory_leak_check):
+    """test setitem of distributed array with a scalar or lower dimention array value
+    """
+
+    def impl(A, val):
+        A[4:-3:2] = val
+        return A
+
+    # scalar value
+    A = np.arange(11)
+    val = -1
+    check_func(impl, (A, val))
+
+    # multi-dim array with lower dimension array value
+    # using a new implementation since Numba doesn't support lists in array setitem
+    def impl2(A, val):
+        A[::2] = np.array(val)
+        return A
+
+    A = np.arange(33).reshape(11, 3)
+    val = [-1, -3, -2]
+    check_func(impl2, (A, val))
+
+
+def test_setitem_bool_index_scalar(memory_leak_check):
+    """test setting a scalar or lower dimension array value to distributed array
+    positions selected by a boolean index
+    """
+
+    def impl(A, I, val):
+        A[I] = val
+        return A
+
+    # scalar value
+    A = np.arange(11)
+    I = A % 4 == 0
+    val = -1
+    check_func(impl, (A, I, val))
+
+    # multi-dim array with scalar value
+    # TODO: support 2D bool indexing in Numba
+    # A = np.arange(33).reshape(11, 3)
+    # I = A % 4 == 0
+    # val = -1
+    # check_func(impl, (A, I, val))
+
+    # multi-dim array with lower dimension array value
+    # using a new implementation since Numba doesn't support lists in array setitem
+    def impl2(A, I, val):
+        A[I] = np.array(val)
+        return A
+
+    A = np.arange(33).reshape(11, 3)
+    I = A[:, 0] % 4 == 0
+    val = [-1, -3, -2]
+    check_func(impl2, (A, I, val))
+
+
+def test_setitem_scalar(memory_leak_check):
+    """test setitem of distributed array with a scalar
+    """
+
+    def impl(A, val):
+        A[1] = val
+        return A
+
+    # scalar value
+    A = np.arange(11)
+    val = -1
+    check_func(impl, (A, val))
+
+    # multi-dim array with lower dimension array value
+    # using a new implementation since Numba doesn't support lists in array setitem
+    def impl2(A, val, i):
+        A[i] = np.array(val)
+        return A
+
+    A = np.arange(33).reshape(11, 3)
+    val = [-1, -3, -2]
+    check_func(impl2, (A, val, -1))
+
+
 @pytest.mark.parametrize("dtype", [np.float32, np.uint8, np.int64])
 def test_arr_reshape(dtype):
     """test reshape of multi-dim distributed arrays

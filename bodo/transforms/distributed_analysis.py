@@ -1725,9 +1725,6 @@ class DistributedAnalysis:
             other_ind_vars = tup_list[1:]
             self._set_REP(other_ind_vars, array_dists)
 
-        if isinstance(index_var, int):
-            self._set_REP(inst.list_vars(), array_dists)
-            return
         assert isinstance(index_var, ir.Var)
         index_typ = self.typemap[index_var.name]
 
@@ -1793,24 +1790,26 @@ class DistributedAnalysis:
         return
 
     def _analyze_setitem(self, inst, equiv_set, array_dists):
-        index_var = inst.index_var if is_static_getsetitem(inst) else inst.index
-        target_typ = self.typemap[inst.target.name]
+        """analyze setitem nodes for distribution
+        """
+        # get index_var without changing IR since we are in analysis
+        index_var = get_getsetitem_index_var(inst, self.typemap, [])
+        index_typ = self.typemap[index_var.name]
+        arr = inst.target
+        target_typ = self.typemap[arr.name]
         value_typ = self.typemap[inst.value.name]
-
-        if index_var is None:
-            self._set_REP(inst.list_vars(), array_dists)
-            return
 
         # setitem on list/dictionary of distributed values
         if isinstance(target_typ, (types.List, types.DictType)) and (
             is_distributable_typ(value_typ) or is_distributable_tuple_typ(value_typ)
         ):
             # output and dictionary have the same distribution
-            self._meet_array_dists(inst.target.name, inst.value.name, array_dists)
+            self._meet_array_dists(arr.name, inst.value.name, array_dists)
             return
 
-        if (inst.target.name, index_var.name) in self._parallel_accesses:
+        if (arr.name, index_var.name) in self._parallel_accesses:
             # no parallel to parallel array set (TODO)
+            self._set_REP([inst.value], array_dists)
             return
 
         tup_list = guard(find_build_tuple, self.func_ir, index_var)
@@ -1819,14 +1818,49 @@ class DistributedAnalysis:
             # rest of indices should be replicated if array
             self._set_REP(tup_list[1:], array_dists)
 
-        if guard(is_whole_slice, self.typemap, self.func_ir, index_var) or guard(
-            is_slice_equiv_arr, inst.target, index_var, self.func_ir, equiv_set
+        # array selection with boolean index
+        if (
+            is_np_array_typ(index_typ)
+            and index_typ.dtype == types.boolean
+            or index_typ == boolean_array
         ):
-            # for example: X[:,3] = A
-            self._meet_array_dists(inst.target.name, inst.value.name, array_dists)
+            # setting scalar or lower dimension value, e.g. A[B] = 1
+            if not is_array_typ(value_typ) or value_typ.ndim < target_typ.ndim:
+                # input array and bool index have the same distribution
+                self._meet_array_dists(arr.name, index_var.name, array_dists)
+                self._set_REP([inst.value], array_dists)
+                return
+            # TODO: support bool index setitem across the whole first dimension, which
+            # may require shuffling data to match bool index selection
+
+        # whole slice access, output has same distribution as input
+        # for example: X[:,3] = A
+        if guard(is_whole_slice, self.typemap, self.func_ir, index_var) or guard(
+            is_slice_equiv_arr, arr, index_var, self.func_ir, equiv_set
+        ):
+            self._meet_array_dists(arr.name, inst.value.name, array_dists)
+            return
+        # chunked slice or strided slice
+        # examples: X[:n//3] = v, X[::2,5] = v
+        elif isinstance(index_typ, types.SliceType):
+            # if the value is scalar/lower dimension
+            if not is_array_typ(value_typ) or value_typ.ndim < target_typ.ndim:
+                self._set_REP([inst.value], array_dists)
+                return
+            # TODO: support slice index setitem across the whole first dimension, which
+            # may require shuffling data to match slice index selection
+
+        # avoid parallel scalar setitem when inside a parfor
+        if self.in_parallel_parfor != -1:
+            self._set_REP(inst.list_vars(), array_dists)
             return
 
-        self._set_REP([inst.value], array_dists)
+        # int index setitem of dist array
+        if isinstance(index_typ, types.Integer):
+            self._set_REP([inst.value], array_dists)
+            return
+
+        self._set_REP([inst.value, arr, index_var], array_dists)
 
     def _analyze_arg(self, lhs, rhs, array_dists):
         if (
