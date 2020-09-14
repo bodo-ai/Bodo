@@ -169,32 +169,222 @@ def column_name_df_value(request):
     return request.param
 
 
-def test_df_select_dtypes(memory_leak_check):
+@pytest.fixture(
+    params=[
+        pd.DataFrame({"a": [1, 2] * 20, "b": [True, False] * 20, "c": [1.0, 2.0] * 20}),
+    ]
+)
+def select_dtypes_df(request):
+    return request.param
+
+
+def test_df_select_dtypes_str_include(select_dtypes_df):
+    df = select_dtypes_df
+
     def test_impl1(df):
         return df.select_dtypes("bool")
 
     def test_impl2(df):
         return df.select_dtypes("float64")
 
-    def test_impl3(df):
-        return df.select_dtypes(exclude="bool")
-
-    def test_impl4(df):
-        return df.select_dtypes(exclude="float64")
-
-    def test_impl5(df):
-        return df.select_dtypes("number", "float64")
-
-    df = pd.DataFrame({"a": [1, 2] * 3, "b": [True, False] * 3, "c": [1.0, 2.0] * 3})
     check_func(test_impl1, (df,))
     check_func(test_impl2, (df,))
-    check_func(test_impl3, (df,))
-    check_func(test_impl4, (df,))
-    # TODO: Add support for np.number by string and type hierarchy
-    # check_func(test_impl5, (df,))
 
 
-def test_assign(memory_leak_check):
+def test_df_select_dtypes_str_exclude(select_dtypes_df):
+    df = select_dtypes_df
+
+    def test_impl1(df):
+        return df.select_dtypes(exclude="bool")
+
+    def test_impl2(df):
+        return df.select_dtypes(exclude="float64")
+
+    check_func(test_impl1, (df,))
+    check_func(test_impl2, (df,))
+
+
+@pytest.mark.skip(reason="Numba issue with np.number")
+def test_df_select_dtypes_str_include_exclude(select_dtypes_df):
+    df = select_dtypes_df
+
+    def test_impl(df):
+        return df.select_dtypes("number", "float64")
+
+    check_func(test_impl, (df,))
+
+
+def test_df_select_dtypes_type_include(select_dtypes_df):
+    df = select_dtypes_df
+
+    def test_impl1(df):
+        return df.select_dtypes(np.bool)
+
+    def test_impl2(df):
+        return df.select_dtypes(np.float64)
+
+    check_func(test_impl1, (df,))
+    check_func(test_impl2, (df,))
+
+
+def test_df_select_dtypes_type_exclude(select_dtypes_df):
+    df = select_dtypes_df
+
+    def test_impl1(df):
+        return df.select_dtypes(exclude=np.bool)
+
+    def test_impl2(df):
+        return df.select_dtypes(exclude=np.float64)
+
+    check_func(test_impl1, (df,))
+    check_func(test_impl2, (df,))
+
+
+@pytest.mark.skip(reason="Numba issue with np.number")
+def test_df_select_dtypes_type_include_exclude(select_dtypes_df):
+    df = select_dtypes_df
+
+    def test_impl(df):
+        return df.select_dtypes(np.number, np.float64)
+
+    check_func(test_impl, (df,))
+
+
+@pytest.mark.skip(reason="Numba issue with one element lists")
+def test_df_select_dtypes_list_one_elem_include(select_dtypes_df):
+    df = select_dtypes_df
+
+    def test_impl1(df):
+        return df.select_dtypes(["bool"])
+
+    def test_impl2(df):
+        return df.select_dtypes([np.bool_])
+
+    check_func(test_impl1, (df,))
+    check_func(test_impl2, (df,))
+
+
+def test_df_select_dtypes_list_multi_elem_include(select_dtypes_df):
+    df = select_dtypes_df
+
+    def test_impl1(df):
+        return df.select_dtypes(["float64", "bool"])
+
+    def test_impl2(df):
+        return df.select_dtypes([np.float64, np.bool_])
+
+    check_func(test_impl1, (df,))
+    check_func(test_impl2, (df,))
+
+
+@pytest.mark.skip(reason="Numba issue with np.number")
+def test_df_select_dtypes_list_number_include(select_dtypes_df):
+    df = select_dtypes_df
+
+    def test_impl(df):
+        return df.select_dtypes([np.number, "bool"])
+
+    check_func(test_impl, (df,))
+
+
+@pytest.mark.skip(reason="Numba issue with one element lists")
+def test_df_select_dtypes_list_one_elem_exclude(select_dtypes_df):
+    df = select_dtypes_df
+
+    def test_impl1(df):
+        return df.select_dtypes(exclude=["bool"])
+
+    def test_impl2(df):
+        return df.select_dtypes(exclude=[np.float64])
+
+    check_func(test_impl1, (df,))
+    check_func(test_impl2, (df,))
+
+
+def test_df_select_dtypes_list_multi_elem_exclude(select_dtypes_df):
+    df = select_dtypes_df
+
+    def test_impl1(df):
+        return df.select_dtypes(exclude=["float64", "bool"])
+
+    def test_impl2(df):
+        return df.select_dtypes(exclude=[np.float64, "bool"])
+
+    check_func(test_impl1, (df,))
+    check_func(test_impl2, (df,))
+
+
+@pytest.mark.skip(reason="Numba issue with np.number")
+def test_df_select_dtypes_list_number_exclude(select_dtypes_df):
+    df = select_dtypes_df
+
+    def test_impl(df):
+        return df.select_dtypes(exclude=[np.number, "bool"])
+
+    check_func(test_impl, (df,))
+
+
+@pytest.mark.skip(reason="Index issue when creating Empty Dataframes #1596")
+def test_df_select_dtypes_missing_type_include(select_dtypes_df):
+    df = select_dtypes_df
+
+    def test_impl(df):
+        return df.select_dtypes(np.datetime64)
+
+    check_func(test_impl, (df,))
+
+
+@pytest.mark.skip(reason="Index issue when creating Empty Dataframes #1596")
+def test_df_select_dtypes_missing_type_exclude(select_dtypes_df):
+    df = select_dtypes_df
+
+    def test_impl(df):
+        return df.select_dtypes(exclude=np.datetime64)
+
+    check_func(test_impl, (df,))
+
+
+@pytest.mark.skip(reason="Index issue when creating Empty Dataframes #1596")
+def test_df_select_dtypes_missing_str_include(select_dtypes_df):
+    df = select_dtypes_df
+
+    def test_impl(df):
+        return df.select_dtypes("datetime64")
+
+    check_func(test_impl, (df,))
+
+
+@pytest.mark.skip(reason="Index issue when creating Empty Dataframes #1596")
+def test_df_select_dtypes_missing_str_exclude(select_dtypes_df):
+    df = select_dtypes_df
+
+    def test_impl(df):
+        return df.select_dtypes(exclude="datetime64")
+
+    check_func(test_impl, (df,))
+
+
+@pytest.mark.skip(reason="Index issue when creating Empty Dataframes #1596")
+def test_df_select_dtypes_missing_list_include(select_dtypes_df):
+    df = select_dtypes_df
+
+    def test_impl(df):
+        return df.select_dtypes([np.datetime64, "datetime64"])
+
+    check_func(test_impl, (df,))
+
+
+@pytest.mark.skip(reason="Index issue when creating Empty Dataframes #1596")
+def test_df_select_dtypes_missing_list_exclude(select_dtypes_df):
+    df = select_dtypes_df
+
+    def test_impl(df):
+        return df.select_dtypes(exclude=[np.datetime64, "datetime64"])
+
+    check_func(test_impl, (df,))
+
+
+def test_assign(memory_leak_check, is_slow_run):
     """Assign statements"""
 
     def test_impl1(df):
@@ -216,6 +406,8 @@ def test_assign(memory_leak_check):
     df_str = pd.DataFrame({"A": ["a", "b", "c", "d", "e", "f", "g"]})
     df_twocol = pd.DataFrame({"A": [1, 2, 3] * 2, "B": [4, 5, 6] * 2})
     check_func(test_impl1, (df_int,))
+    if not is_slow_run:
+        return
     check_func(test_impl2, (df_int,))
     check_func(test_impl3, (df_int,))
     check_func(test_impl4, (df_str,))
@@ -243,14 +435,18 @@ def test_unbox_df1(df_value, memory_leak_check):
     check_func(impl3, (df_value,))
 
 
+@pytest.mark.slow
 def test_unbox_df2(column_name_df_value, memory_leak_check):
-    # unbox column with name overlaps with pandas function
+    """unbox column with name overlaps with pandas function
+    """
+
     def impl1(df_arg):
         return df_arg["product"]
 
     check_func(impl1, (column_name_df_value,))
 
 
+@pytest.mark.slow
 def test_unbox_df3(memory_leak_check):
     # unbox dataframe datetime and unsigned int indices
     def impl(df):
@@ -265,21 +461,6 @@ def test_unbox_df3(memory_leak_check):
     )
     check_func(impl, (df1,))
     check_func(impl, (df2,))
-
-
-def test_unbox_df_leak_test(memory_leak_check):
-    """
-    A simple test to check for memory leaks in unbox/box sequence of a dataframe.
-    TODO: the other unbox/box tests should check for memory leaks when all the leaks
-    are fixed (this test should eventually be removed).
-    """
-
-    def impl(df):
-        return df
-
-    bodo_func = bodo.jit(impl)
-    df1 = pd.DataFrame({"a": [0.0, 1.0]})
-    bodo_func(df1)
 
 
 def test_unbox_df_multi(memory_leak_check):
@@ -358,6 +539,7 @@ def test_empty_df_drop_column(memory_leak_check):
     check_func(impl1, (11,))
 
 
+@pytest.mark.slow
 def test_df_from_np_array_int(memory_leak_check):
     """
     Create a dataframe from numpy 2D-array of type int
@@ -371,6 +553,7 @@ def test_df_from_np_array_int(memory_leak_check):
     check_func(impl, (), is_out_distributed=False)
 
 
+@pytest.mark.slow
 def test_create_df_force_const(memory_leak_check):
     """
     Test forcing dataframe column name to be constant in pd.DataFrame()
@@ -382,6 +565,7 @@ def test_create_df_force_const(memory_leak_check):
     check_func(impl, ("BB", 11))
 
 
+@pytest.mark.slow
 def test_df_from_np_array_bool(memory_leak_check):
     """
     Create a dataframe from numpy 2D-array of type bool
@@ -484,8 +668,11 @@ def test_df_replace(memory_leak_check):
     check_func(impl2, (df,))
 
 
+@pytest.mark.slow
 def test_box_df(memory_leak_check):
-    # box dataframe contains column with name overlaps with pandas function
+    """box dataframe contains column with name overlaps with pandas function
+    """
+
     def impl():
         df = pd.DataFrame({"product": ["a", "b", "c"], "keys": [1, 2, 3]})
         return df
@@ -494,6 +681,7 @@ def test_box_df(memory_leak_check):
     pd.testing.assert_frame_equal(bodo_func(), impl(), check_dtype=False)
 
 
+@pytest.mark.slow
 def test_df_dtor(df_value, memory_leak_check):
     """make sure df destructor is working and there is no memory leak when columns are
     unboxed.
@@ -506,6 +694,7 @@ def test_df_dtor(df_value, memory_leak_check):
     check_func(impl, (df_value,))
 
 
+@pytest.mark.slow
 def test_df_index(df_value, memory_leak_check):
     def impl(df):
         return df.index
@@ -513,8 +702,11 @@ def test_df_index(df_value, memory_leak_check):
     check_func(impl, (df_value,))
 
 
-def test_df_index_non(memory_leak_check):
-    # test None index created inside the function
+@pytest.mark.slow
+def test_df_index_range_index(memory_leak_check):
+    """test RangeIndex created inside the function
+    """
+
     def impl():
         df = pd.DataFrame({"A": [2, 3, 1]})
         return df.index
@@ -552,6 +744,7 @@ def test_df_values_nullable_int(memory_leak_check):
     np.testing.assert_allclose(bodo_out, py_out)
 
 
+@pytest.mark.slow
 def test_df_to_numpy(numeric_df_value, memory_leak_check):
     def impl(df):
         return df.to_numpy()
@@ -559,6 +752,7 @@ def test_df_to_numpy(numeric_df_value, memory_leak_check):
     check_func(impl, (numeric_df_value,))
 
 
+@pytest.mark.slow
 def test_df_ndim(df_value, memory_leak_check):
     def impl(df):
         return df.ndim
@@ -566,6 +760,7 @@ def test_df_ndim(df_value, memory_leak_check):
     check_func(impl, (df_value,))
 
 
+@pytest.mark.slow
 def test_df_size(df_value, memory_leak_check):
     def impl(df):
         return df.size
@@ -573,6 +768,7 @@ def test_df_size(df_value, memory_leak_check):
     check_func(impl, (df_value,))
 
 
+@pytest.mark.slow
 def test_df_shape(df_value, memory_leak_check):
     def impl(df):
         return df.shape
@@ -724,6 +920,7 @@ def test_df_abs1(memory_leak_check):
     check_func(impl, (df,))
 
 
+@pytest.mark.slow
 def test_df_abs2(numeric_df_value, memory_leak_check):
     # not supported for dt64
     if any(d == np.dtype("datetime64[ns]") for d in numeric_df_value.dtypes):
@@ -794,7 +991,7 @@ def test_df_prod(df_value, memory_leak_check):
     def impl(df):
         return df.prod()
 
-    # TODO: match Pandas 1.1.0 output dtype
+    # TODO: match Pandas 1.1.1 output dtype
     check_func(impl, (df_value,), is_out_distributed=False, check_dtype=False)
 
 
@@ -806,7 +1003,7 @@ def test_df_sum(numeric_df_value, memory_leak_check):
     def impl(df):
         return df.sum()
 
-    # TODO: match Pandas 1.1.0 output dtype
+    # TODO: match Pandas 1.1.1 output dtype
     check_func(impl, (numeric_df_value,), is_out_distributed=False, check_dtype=False)
 
 
@@ -818,7 +1015,7 @@ def test_df_min(numeric_df_value, memory_leak_check):
     def impl(df):
         return df.min()
 
-    # TODO: match Pandas 1.1.0 output dtype
+    # TODO: match Pandas 1.1.1 output dtype
     check_func(impl, (numeric_df_value,), is_out_distributed=False, check_dtype=False)
 
 
@@ -830,7 +1027,7 @@ def test_df_max(numeric_df_value, memory_leak_check):
     def impl(df):
         return df.max()
 
-    # TODO: match Pandas 1.1.0 output dtype
+    # TODO: match Pandas 1.1.1 output dtype
     check_func(impl, (numeric_df_value,), is_out_distributed=False, check_dtype=False)
 
 
@@ -838,35 +1035,50 @@ def test_df_max(numeric_df_value, memory_leak_check):
     "df",
     [
         pd.DataFrame({"A": np.arange(11, dtype=np.float64), "B": np.ones(11) + 4}),
-        pd.DataFrame({"A": [1, 2, 3, 4, 5, 5, 5], "B": [1, 2, 3, 3, 4, 5, 10]}),
-        pd.DataFrame(
-            {
-                "A": [1.0, 2.0, 3.0, 4.0, None, 5.0, 6.0, None],
-                "B": [1.0, 2.0, None, 3.0, 4.0, 5.0, 6.0, None],
-            }
+        pytest.param(
+            pd.DataFrame({"A": [1, 2, 3, 4, 5, 5, 5], "B": [1, 2, 3, 3, 4, 5, 10]}),
+            marks=pytest.mark.slow,
         ),
-        pd.DataFrame(
-            {
-                "A": [1, 2, 3, 4, np.nan, 5, 6, None],
-                "B": [1, 2, None, 3, 4, 5, 6, np.nan],
-            }
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [1.0, 2.0, 3.0, 4.0, None, 5.0, 6.0, None],
+                    "B": [1.0, 2.0, None, 3.0, 4.0, 5.0, 6.0, None],
+                }
+            ),
+            marks=pytest.mark.slow,
         ),
-        pd.DataFrame(
-            {
-                "A": [1, 2, 3.0, 4, None, 5, 6, None],
-                "B": [1, 2, None, 3, 4, 5.0, 6, None],
-            }
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [1, 2, 3, 4, np.nan, 5, 6, None],
+                    "B": [1, 2, None, 3, 4, 5, 6, np.nan],
+                }
+            ),
+            marks=pytest.mark.slow,
         ),
-        pd.DataFrame(
-            {
-                "A": [1, 4, 3, 4, None, 5, 6, None, np.nan],
-                "B": [1, 2, None, 3, 4, 5, 6, None, 0],
-                "C": [1, 2, 5, 4, None, 5, 6, None, 1],
-            }
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [1, 2, 3.0, 4, None, 5, 6, None],
+                    "B": [1, 2, None, 3, 4, 5.0, 6, None],
+                }
+            ),
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [1, 4, 3, 4, None, 5, 6, None, np.nan],
+                    "B": [1, 2, None, 3, 4, 5, 6, None, 0],
+                    "C": [1, 2, 5, 4, None, 5, 6, None, 1],
+                }
+            ),
+            marks=pytest.mark.slow,
         ),
     ],
 )
-def test_df_reduce_axis1(df, memory_leak_check):
+def test_df_reduce_axis1(df, memory_leak_check, is_slow_run):
     """test dataframe reductions across columns (axis=1)
     """
     # TODO: support and test other reduce functions
@@ -897,6 +1109,8 @@ def test_df_reduce_axis1(df, memory_leak_check):
         return df.std(axis=1)
 
     check_func(impl_max, (df,))
+    if not is_slow_run:
+        return
     check_func(impl_min, (df,))
     check_func(impl_sum, (df,))
     check_func(impl_prod, (df,))
@@ -914,7 +1128,7 @@ def test_df_mean(numeric_df_value, memory_leak_check):
     def impl(df):
         return df.mean()
 
-    # TODO: match Pandas 1.1.0 output dtype
+    # TODO: match Pandas 1.1.1 output dtype
     check_func(impl, (numeric_df_value,), is_out_distributed=False, check_dtype=False)
 
 
@@ -926,7 +1140,7 @@ def test_df_var(numeric_df_value, memory_leak_check):
     def impl(df):
         return df.var()
 
-    # TODO: match Pandas 1.1.0 output dtype
+    # TODO: match Pandas 1.1.1 output dtype
     check_func(impl, (numeric_df_value,), is_out_distributed=False, check_dtype=False)
 
 
@@ -938,7 +1152,7 @@ def test_df_std(numeric_df_value, memory_leak_check):
     def impl(df):
         return df.std()
 
-    # TODO: match Pandas 1.1.0 output dtype
+    # TODO: match Pandas 1.1.1 output dtype
     check_func(impl, (numeric_df_value,), is_out_distributed=False, check_dtype=False)
 
 
@@ -1046,7 +1260,8 @@ def test_df_cumsum2(numeric_df_value, memory_leak_check):
     check_func(impl, (numeric_df_value,))
 
 
-def test_df_nunique(df_value, memory_leak_check):
+# TODO: add memory_leak_check
+def test_df_nunique(df_value):
     # not supported for dt64 yet, TODO: support and test
     if any(d == np.dtype("datetime64[ns]") for d in df_value.dtypes):
         return
@@ -1114,7 +1329,8 @@ def test_df_take(df_value, memory_leak_check):
     )
 
 
-def test_df_sort_index(df_value, memory_leak_check):
+# TODO: add memory_leak_check
+def test_df_sort_index(df_value):
     # skip NAs
     # TODO: handle NA order
     if df_value.isna().sum().sum():
@@ -1123,7 +1339,8 @@ def test_df_sort_index(df_value, memory_leak_check):
     def impl(df):
         return df.sort_index()
 
-    check_func(impl, (df_value,))
+    # TODO: use larger input to avoid empty object array in output
+    check_func(impl, (df_value,), check_typing_issues=False)
 
 
 def test_df_shift(numeric_df_value, memory_leak_check):
@@ -1167,30 +1384,50 @@ def test_df_reset_index1(df_value, memory_leak_check):
     [
         # named numeric index
         pd.Int64Index([3, 1, 2, 4, 6], name="AA"),
-        pd.UInt64Index([3, 1, 2, 4, 6], name="AA"),
-        pd.Float64Index([3.1, 1.2, 2.3, 4.4, 6.6], name="AA"),
-        pd.RangeIndex(0, 5, name="AA"),  # TODO: Range(1, 6) when RangeIndex is fixed
+        pytest.param(
+            pd.UInt64Index([3, 1, 2, 4, 6], name="AA"), marks=pytest.mark.slow
+        ),
+        pytest.param(
+            pd.Float64Index([3.1, 1.2, 2.3, 4.4, 6.6], name="AA"),
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.RangeIndex(0, 5, name="AA"), marks=pytest.mark.slow
+        ),  # TODO: Range(1, 6) when RangeIndex is fixed
         # named string index
-        pd.Index(["A", "C", "D", "E", "AA"], name="ABC"),
+        pytest.param(
+            pd.Index(["A", "C", "D", "E", "AA"], name="ABC"), marks=pytest.mark.slow
+        ),
         # named date/time index
-        pd.date_range(start="2018-04-24", end="2018-04-27", periods=5, name="ABC"),
+        pytest.param(
+            pd.date_range(start="2018-04-24", end="2018-04-27", periods=5, name="ABC"),
+            marks=pytest.mark.slow,
+        ),
         # TODO: test PeriodIndex when PeriodArray is supported
         # pd.period_range(start='2017-01-01', end='2017-05-01', freq='M', name="ACD"),
-        pd.timedelta_range(start="1D", end="5D", name="ABC"),
-        pd.MultiIndex.from_arrays(
-            [
-                ["ABCD", "V", "CAD", "", "AA"],
-                [1.3, 4.1, 3.1, -1.1, -3.2],
-                pd.date_range(start="2018-04-24", end="2018-04-27", periods=5),
-            ]
+        pytest.param(
+            pd.timedelta_range(start="1D", end="5D", name="ABC"), marks=pytest.mark.slow
         ),
-        pd.MultiIndex.from_arrays(
-            [
-                ["ABCD", "V", "CAD", "", "AA"],
-                [1.3, 4.1, 3.1, -1.1, -3.2],
-                pd.date_range(start="2018-04-24", end="2018-04-27", periods=5),
-            ],
-            names=["AA", "ABC", "ABCD"],
+        pytest.param(
+            pd.MultiIndex.from_arrays(
+                [
+                    ["ABCD", "V", "CAD", "", "AA"],
+                    [1.3, 4.1, 3.1, -1.1, -3.2],
+                    pd.date_range(start="2018-04-24", end="2018-04-27", periods=5),
+                ]
+            ),
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.MultiIndex.from_arrays(
+                [
+                    ["ABCD", "V", "CAD", "", "AA"],
+                    [1.3, 4.1, 3.1, -1.1, -3.2],
+                    pd.date_range(start="2018-04-24", end="2018-04-27", periods=5),
+                ],
+                names=["AA", "ABC", "ABCD"],
+            ),
+            marks=pytest.mark.slow,
         ),
     ],
 )
@@ -1243,7 +1480,8 @@ def test_df_reset_index4(memory_leak_check):
     check_func(impl, (test_df,), copy_input=True)
 
 
-def test_df_duplicated(memory_leak_check):
+# TODO: add memory_leak_check
+def test_df_duplicated():
     def impl(df):
         return df.duplicated()
 
@@ -1337,16 +1575,18 @@ def test_dataframe_unary_op(op, memory_leak_check):
 @pytest.fixture(
     params=[
         # array-like
-        [2, 3, 5],
-        [2.1, 3.2, np.nan, 5.4],
-        ["A", "C", "AB"],
+        pytest.param([2, 3, 5], marks=pytest.mark.slow),
+        pytest.param([2.1, 3.2, np.nan, 5.4], marks=pytest.mark.slow),
+        pytest.param(["A", "C", "AB"], marks=pytest.mark.slow),
         # int array, no NA sentinel value
-        np.array([2, 3, 5, -1, -4, 9]),
+        pytest.param(np.array([2, 3, 5, -1, -4, 9]), marks=pytest.mark.slow),
         # float array with np.nan
-        np.array([2.9, np.nan, 1.4, -1.1, -4.2]),
+        pytest.param(np.array([2.9, np.nan, 1.4, -1.1, -4.2]), marks=pytest.mark.slow),
         pd.Series([2.1, 5.3, np.nan, -1.0, -3.7], [3, 5, 6, -2, 4], name="C"),
-        pd.Int64Index([10, 12, 14, 17, 19], name="A"),
-        pd.RangeIndex(5),
+        pytest.param(
+            pd.Int64Index([10, 12, 14, 17, 19], name="A"), marks=pytest.mark.slow
+        ),
+        pytest.param(pd.RangeIndex(5), marks=pytest.mark.slow),
         # dataframe
         pd.DataFrame(
             {"A": ["AA", np.nan, "", "D", "GG"], "B": [1, 8, 4, -1, 2]},
@@ -1354,12 +1594,12 @@ def test_dataframe_unary_op(op, memory_leak_check):
         ),
         # scalars
         3,
-        1.3,
+        pytest.param(1.3, marks=pytest.mark.slow),
         np.nan,
         "ABC",
         None,
         np.datetime64("NaT"),
-        np.timedelta64("NaT"),
+        pytest.param(np.timedelta64("NaT"), marks=pytest.mark.slow),
     ]
 )
 def na_test_obj(request):
@@ -1376,6 +1616,7 @@ def test_pd_isna(na_test_obj, memory_leak_check):
     check_func(impl, (obj,), is_out_distributed)
 
 
+@pytest.mark.slow
 def test_pd_notna(na_test_obj, memory_leak_check):
     obj = na_test_obj
 
@@ -1797,6 +2038,7 @@ def test_df_drop_inplace_branch(memory_leak_check):
 
 
 # TODO: add memory_leak_check when join memory leaks are fixed
+@pytest.mark.slow
 def test_df_filter_rm_index():
     """
     Make sure dataframe index is removed correctly and parallelism warning is thrown
@@ -1822,6 +2064,21 @@ def test_concat_df_columns(memory_leak_check):
 
     def test_impl(df, df2):
         return pd.concat([df, df2], axis=1)
+
+    df = pd.DataFrame({"A": [1, 2, 3, 9, 11]})
+    df2 = pd.DataFrame({"B": [4.0, 5.0, 4.1, 6.2, 2.1], "C": [7, 1, 3, -4, -1]})
+    check_func(test_impl, (df, df2))
+
+
+def test_concat_typing_transform(memory_leak_check):
+    """Test list to tuple trasnform in typing pass, when other typing related changes
+    are also required.
+    """
+
+    def test_impl(df, df2):
+        df3 = pd.concat([df, df2], axis=1)
+        df3["D"] = 3
+        return df3
 
     df = pd.DataFrame({"A": [1, 2, 3, 9, 11]})
     df2 = pd.DataFrame({"B": [4.0, 5.0, 4.1, 6.2, 2.1], "C": [7, 1, 3, -4, -1]})
@@ -2324,7 +2581,8 @@ def test_dataframe_columns_const_passing(memory_leak_check):
     check_func(impl, (df,))
 
 
-def test_dataframe_sample_number(memory_leak_check):
+# TODO: add memory_leak_check
+def test_dataframe_sample_number():
     """Checking the random routine is especially difficult to do.
     We can mostly only check incidental information about the code"""
 
@@ -2339,6 +2597,7 @@ def test_dataframe_sample_number(memory_leak_check):
     assert bodo_f(df_loc) == py_output
 
 
+@pytest.mark.slow
 def test_dataframe_sample_uniform(memory_leak_check):
     """Checking the random routine, this time with uniform input"""
 
@@ -2354,6 +2613,7 @@ def test_dataframe_sample_uniform(memory_leak_check):
     check_func(f2, (df,), reset_index=True, is_out_distributed=False)
 
 
+@pytest.mark.slow
 def test_dataframe_sample_sorted(memory_leak_check):
     """Checking the random routine. Since we use sorted and the number of entries is equal to
     the number of sampled rows, after sorting the output becomes deterministic, that is independent
@@ -2367,6 +2627,7 @@ def test_dataframe_sample_sorted(memory_leak_check):
     check_func(f, (df, n), reset_index=True, sort_output=True, is_out_distributed=False)
 
 
+@pytest.mark.slow
 def test_dataframe_sample_index(memory_leak_check):
     """Checking that the index passed coherently to the A entry.
     """
@@ -2384,6 +2645,7 @@ def test_dataframe_sample_index(memory_leak_check):
 
 
 # TODO: fix leak and add memory_leak_check
+@pytest.mark.slow
 def test_dataframe_sample_nested_datastructures():
     """The sample function relies on allgather operations that deserve to be tested
     """
@@ -2404,6 +2666,7 @@ def test_dataframe_sample_nested_datastructures():
         assert df_ret == py_output
 
     n = 10
+    random.seed(1)
     df1 = pd.DataFrame({"B": gen_random_arrow_array_struct_int(10, n)})
     df2 = pd.DataFrame({"B": gen_random_arrow_array_struct_list_int(10, n)})
     df3 = pd.DataFrame({"B": gen_random_arrow_list_list_int(1, 0.1, n)})
@@ -2427,6 +2690,7 @@ def inner_get_column(df):
 COL_IND = 0
 
 
+@pytest.mark.slow
 class TestDataFrame(unittest.TestCase):
     def test_create1(self):
         def test_impl(n):

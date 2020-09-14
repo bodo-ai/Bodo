@@ -181,6 +181,32 @@ def memcmp(typingctx, dest_t, src_t, count_t=None):
     return types.int32(types.voidptr, types.voidptr, types.intp), codegen
 
 
+def int_to_str_len(n):  # pragma: no cover
+    return len(str(n))
+
+
+@overload(int_to_str_len)
+def overload_int_to_str_len(n):
+    """
+    count the number of characters in integer n when converted to string
+    """
+    ten = n(10)
+
+    def impl(n):  # pragma: no cover
+        if n == 0:
+            return 1  # "0"
+        count = 0
+        if n < 0:
+            n = -n
+            count += 1  # for "-"
+        while n > 0:
+            n = n // ten
+            count += 1
+        return count
+
+    return impl
+
+
 #######################  type for std string pointer  ########################
 # Some support for std::string since it is used in some C++ extension code.
 

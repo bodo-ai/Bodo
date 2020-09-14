@@ -249,16 +249,19 @@ def test_get():
     "S",
     [
         pd.Series([[1, 3, None], None, [2, 4], [2], [], [5, -3, 1, 6]]),
-        pd.Series(
-            [
-                [[[1, 2], [3]], [[2, None]]],
-                [[[3], [], [1, None, 4]]],
-                None,
-                [[[4, 5, 6], []], [[1]], [[1, 2]]],
-                [],
-                [[[], [1]], None, [[1, 4]], []],
-            ]
-            * 2
+        pytest.param(
+            pd.Series(
+                [
+                    [[[1, 2], [3]], [[2, None]]],
+                    [[[3], [], [1, None, 4]]],
+                    None,
+                    [[[4, 5, 6], []], [[1]], [[1, 2]]],
+                    [],
+                    [[[], [1]], None, [[1, 4]], []],
+                ]
+                * 2
+            ),
+            marks=pytest.mark.slow,
         ),
         # TODO: nested string test when old list(str) type is removed
     ],
@@ -363,8 +366,8 @@ def test_extractall():
         return S.str.extractall(r"([чен]+)\d+([ст]+)\d+")
 
     S2 = pd.Series(
-        ["чьь1т33", "ьнн2с222", "странаст2", np.nan, "ьнне33ст3"],
-        ["е3", "не3", "н2с2", "AA", "C"],
+        ["чьь1т33", "ьнн2с222", "странаст2", np.nan, "ьнне33ст3"] * 2,
+        ["е3", "не3", "н2с2", "AA", "C"] * 2,
     )
     check_func(test_impl2, (S2,))
 
@@ -406,6 +409,15 @@ def test_find(test_unicode):
     check_func(test_impl, (test_unicode,), check_dtype=False)
     check_func(test_impl2, (test_unicode,), check_dtype=False)
 
+def test_find_start_end(test_unicode):
+    def test_impl(S):
+        return S.str.find("AB", start=3, end=10)
+
+    def test_impl2(S):
+        return S.str.find("AB", start=1, end=5)
+
+    check_func(test_impl, (test_unicode,), check_dtype=False)
+    check_func(test_impl2, (test_unicode,), check_dtype=False)
 
 def test_rfind(test_unicode):
     def test_impl(S):

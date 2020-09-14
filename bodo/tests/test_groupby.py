@@ -1,7 +1,9 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
+import sys
 import random
 import string
 import datetime
+import re
 import pandas as pd
 import numpy as np
 import bodo
@@ -16,9 +18,11 @@ from bodo.tests.utils import (
     check_parallel_coherency,
     gen_random_decimal_array,
     gen_random_string_array,
+    gen_random_list_string_array,
     convert_non_pandas_columns,
     get_start_end,
     check_func,
+    check_caching,
 )
 import pytest
 
@@ -32,19 +36,25 @@ import pytest
                 "C": [3, 5, 6, 5, 4, 4, 3],
             }
         ),
-        pd.DataFrame(
-            {
-                "A": [2, 1, 1, 1, 2, 2, 1],
-                "B": pd.Series(np.full(7, np.nan), dtype="Int64"),
-                "C": [3, 5, 6, 5, 4, 4, 3],
-            }
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [2, 1, 1, 1, 2, 2, 1],
+                    "B": pd.Series(np.full(7, np.nan), dtype="Int64"),
+                    "C": [3, 5, 6, 5, 4, 4, 3],
+                }
+            ),
+            marks=pytest.mark.slow,
         ),
-        pd.DataFrame(
-            {
-                "A": [2.1, -1.5, 0.0, -1.5, 2.1, 2.1, 1.5],
-                "B": [-8.3, np.nan, 3.8, 1.3, 5.4, np.nan, -7.0],
-                "C": [3.4, 2.5, 9.6, 1.5, -4.3, 4.3, -3.7],
-            }
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [2.1, -1.5, 0.0, -1.5, 2.1, 2.1, 1.5],
+                    "B": [-8.3, np.nan, 3.8, 1.3, 5.4, np.nan, -7.0],
+                    "C": [3.4, 2.5, 9.6, 1.5, -4.3, 4.3, -3.7],
+                }
+            ),
+            marks=pytest.mark.slow,
         ),
     ]
 )
@@ -61,19 +71,25 @@ def test_df(request):
                 "C": [3, 5, 6, 5, 4, 4, 3],
             }
         ),
-        pd.DataFrame(
-            {
-                "A": [2, 1, 1, 1, 2, 2, 1],
-                "B": [-8, np.nan, 3, np.nan, 5, 6, 7],
-                "C": [3, 5, 6, 5, 4, 4, 3],
-            }
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [2, 1, 1, 1, 2, 2, 1],
+                    "B": [-8, np.nan, 3, np.nan, 5, 6, 7],
+                    "C": [3, 5, 6, 5, 4, 4, 3],
+                }
+            ),
+            marks=pytest.mark.slow,
         ),
-        pd.DataFrame(
-            {
-                "A": [2.1, -1.5, 0.0, -1.5, 2.1, 2.1, 1.5],
-                "B": [-8.3, np.nan, 3.8, 1.3, 5.4, np.nan, -7.0],
-                "C": [3.4, 2.5, 9.6, 1.5, -4.3, 4.3, -3.7],
-            }
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [2.1, -1.5, 0.0, -1.5, 2.1, 2.1, 1.5],
+                    "B": [-8.3, np.nan, 3.8, 1.3, 5.4, np.nan, -7.0],
+                    "C": [3.4, 2.5, 9.6, 1.5, -4.3, 4.3, -3.7],
+                }
+            ),
+            marks=pytest.mark.slow,
         ),
     ]
 )
@@ -152,9 +168,12 @@ def test_nullable_int():
             {"A": [2, 1, 1, 1], "B": pd.Series(np.full(4, np.nan), dtype="Int64")},
             index=[32, 45, 56, 76],
         ),
-        pd.DataFrame(
-            {"A": [1, 1, 1, 1], "B": pd.Series([1, 2, 3, 4], dtype="Int64")},
-            index=[3, 4, 5, 6],
+        pytest.param(
+            pd.DataFrame(
+                {"A": [1, 1, 1, 1], "B": pd.Series([1, 2, 3, 4], dtype="Int64")},
+                index=[3, 4, 5, 6],
+            ),
+            marks=pytest.mark.slow,
         ),
     ],
 )
@@ -168,7 +187,7 @@ def test_return_type_nullable_cumsum_cumprod(df_null):
     https://github.com/pandas-dev/pandas/issues/35490
     """
     assert (
-        pd.__version__ == "1.1.0"
+        re.compile(r'1.1.*').match(pd. __version__)
     ), "revisit the agg((cumsum, cumprod)) at next pandas version"
 
     def impl1(df):
@@ -222,6 +241,7 @@ def test_agg():
     check_func(impl, (udf_in_df,), sort_output=True, check_dtype=False)
 
 
+@pytest.mark.slow
 def test_sum_string():
     def impl(df):
         A = df.groupby("A").sum()
@@ -236,7 +256,7 @@ def test_sum_string():
     check_func(impl, (df1,), sort_output=True)
 
 
-def test_random_decimal_sum_min_max_last():
+def test_random_decimal_sum_min_max_last(is_slow_run):
     """We do not have decimal as index. Therefore we have to use as_index=False
     """
 
@@ -290,6 +310,8 @@ def test_random_decimal_sum_min_max_last():
 
     # Direct checks for which pandas has equivalent functions.
     check_func(impl1, (df1,), sort_output=True, reset_index=True)
+    if not is_slow_run:
+        return
     check_func(impl2, (df1,), sort_output=True, reset_index=True)
     check_func(impl3, (df1,), sort_output=True, reset_index=True)
     check_func(impl4, (df1,), sort_output=True, reset_index=True)
@@ -368,7 +390,7 @@ def test_random_string_sum_min_max_first_last():
     check_func(impl5, (df1,), sort_output=True)
 
 
-def test_groupby_missing_entry():
+def test_groupby_missing_entry(is_slow_run):
     """The columns which cannot be processed cause special problems as they are
     sometimes dropped instead of failing
     """
@@ -393,6 +415,8 @@ def test_groupby_missing_entry():
         {"A": [3, 2, 3, 1, 11] * 3, "B": ["aa", "bb", "cc", "", "AA"] * 3}
     )
     check_func(test_drop_sum, (df1,), sort_output=True, check_typing_issues=False)
+    if not is_slow_run:
+        return
     check_func(test_drop_sum, (df2,), sort_output=True, check_typing_issues=False)
     check_func(test_drop_sum, (df3,), sort_output=True, check_typing_issues=False)
     check_func(test_drop_count, (df1,), sort_output=True, check_typing_issues=False)
@@ -452,21 +476,27 @@ def test_agg_bool_expr():
             },
             index=[-1, 2, -3, 0, 4, 5, 2],
         ),
-        pd.DataFrame(
-            {
-                "A": [np.nan, 1.0, np.nan, 1.0, 2.0, 2.0, 2.0],
-                "B": [1, 2, 3, 2, 1, 1, 1],
-                "C": [3, 5, 6, 5, 4, 4, 3],
-            },
-            index=["a", "b", "c", "d", "e", "f", "g"],
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [np.nan, 1.0, np.nan, 1.0, 2.0, 2.0, 2.0],
+                    "B": [1, 2, 3, 2, 1, 1, 1],
+                    "C": [3, 5, 6, 5, 4, 4, 3],
+                },
+                index=["a", "b", "c", "d", "e", "f", "g"],
+            ),
+            marks=pytest.mark.slow,
         ),
-        pd.DataFrame(
-            {
-                "A": [np.nan, 1.0, np.nan, 1.0, 2.0, 2.0, 2.0],
-                "B": [1, 2, 3, 2, 1, 1, 1],
-                "C": [3, 5, 6, 5, 4, 4, 3],
-            },
-            index=["e", "r", "x", "u", "v", "w", "z"],
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [np.nan, 1.0, np.nan, 1.0, 2.0, 2.0, 2.0],
+                    "B": [1, 2, 3, 2, 1, 1, 1],
+                    "C": [3, 5, 6, 5, 4, 4, 3],
+                },
+                index=["e", "r", "x", "u", "v", "w", "z"],
+            ),
+            marks=pytest.mark.slow,
         ),
     ],
 )
@@ -477,7 +507,7 @@ def test_cumsum_index_preservation(df_index):
     https://github.com/pandas-dev/pandas/issues/35490
     """
     assert (
-        pd.__version__ == "1.1.0"
+        re.compile(r'1.1.*').match(pd. __version__)
     ), "revisit the agg((cumsum, cumprod)) at next pandas version"
 
     def test_impl_basic(df1):
@@ -501,6 +531,7 @@ def test_cumsum_index_preservation(df_index):
 #    check_func(test_impl_all, (df_index,), sort_output=True, check_dtype=False)
 
 
+@pytest.mark.slow
 def test_cumsum_random_index():
     def test_impl(df1):
         df2 = df1.groupby("B").cumsum()
@@ -554,6 +585,7 @@ def test_cumsum_random_index():
     check_func(test_impl, (df3,), sort_output=True, check_dtype=False)
 
 
+@pytest.mark.slow
 def test_cumsum_reverse_shuffle_list_string():
     """We want to use here the classical scheme of the groupby for cumsum.
     We trigger it by using strings which are not supported by the Exscan scheme"""
@@ -563,19 +595,17 @@ def test_cumsum_reverse_shuffle_list_string():
         return df
 
     random.seed(5)
-    n = 10
+    n = 100
     colA = [random.randint(0, 10) for _ in range(n)]
-    colB = [
-        random.choices(["A", "BB", "CCC", "DE"], k=random.randint(3, 10))
-        for _ in range(n)
-    ]
-    df = pd.DataFrame({"A": colA, "B": colB})
+
+    df = pd.DataFrame({"A": colA, "B": gen_random_list_string_array(3, n)})
     bodo_f = bodo.jit(f)
     # We use the output of bodo because the functionality is missing from pandas
     df_out = bodo_f(df)
     check_func(f, (df,), convert_columns_to_pandas=True, py_output=df_out)
 
 
+@pytest.mark.slow
 def test_cumsum_reverse_shuffle_string():
     """We want to use here the classical scheme of the groupby for cumsum.
     We trigger it by using strings which are not supported by the Exscan scheme"""
@@ -598,6 +628,7 @@ def test_cumsum_reverse_shuffle_string():
     check_func(f, (df,), py_output=df_out)
 
 
+@pytest.mark.slow
 def test_cumsum_reverse_shuffle_large_numpy():
     """We want to use here the classical scheme of the groupby for cumsum.
     We trigger it by using strings which are not supported by the Exscan scheme"""
@@ -640,6 +671,7 @@ def test_sum_categorical_key():
     check_func(f, (df,), sort_output=True, reset_index=True)
 
 
+@pytest.mark.slow
 def test_all_categorical_count():
     """Testing of categorical keys and their missing value.
     Also the count itself is done for a categorical column with missing value"""
@@ -726,6 +758,7 @@ def test_cumsum_exscan_categorical_random():
     check_func(f2, (df2,), check_dtype=False)
 
 
+@pytest.mark.slow
 def test_cumsum_exscan_multikey_random():
     """For cumulative sum of integers, a special code that create a categorical key column
     allows for better performance"""
@@ -767,6 +800,7 @@ def test_cumsum_exscan_multikey_random():
     check_func(f, (df,), check_dtype=False)
 
 
+@pytest.mark.slow
 def test_sum_max_min_list_string_random():
     """Tests for columns being a list of strings.
     We have to use as_index=False since list of strings are mutable
@@ -806,22 +840,13 @@ def test_sum_max_min_list_string_random():
 
     random.seed(5)
 
-    def rand_col_l_str(n):
-        e_list_list = []
-        for _ in range(n):
-            if random.random() < 0.1:
-                e_ent = np.nan
-            else:
-                e_ent = []
-                for _ in range(random.randint(1, 2)):
-                    k = random.randint(1, 3)
-                    val = "".join(random.choices(["A", "B", "C"], k=k))
-                    e_ent.append(val)
-            e_list_list.append(e_ent)
-        return e_list_list
-
     n = 10
-    df1 = pd.DataFrame({"A": rand_col_l_str(n), "B": rand_col_l_str(n)})
+    df1 = pd.DataFrame(
+        {
+            "A": gen_random_list_string_array(2, n),
+            "B": gen_random_list_string_array(2, n),
+        }
+    )
 
     def check_fct(the_fct, df1, select_col_comparison):
         bodo_fct = bodo.jit(the_fct)
@@ -1113,7 +1138,7 @@ def test_agg_multi_udf():
     https://github.com/pandas-dev/pandas/issues/35490
     """
     assert (
-        pd.__version__ == "1.1.0"
+        re.compile(r'1.1.*').match(pd. __version__)
     ), "revisit the agg((cumsum, cumprod)) at next pandas version"
 
     def impl(df):
@@ -1156,6 +1181,7 @@ def test_agg_multi_udf():
 #    check_func(impl4, (df,), sort_output=True)
 
 
+@pytest.mark.slow
 def test_aggregate():
     """
     Test Groupby.aggregate(): one user defined func and all cols
@@ -1176,6 +1202,7 @@ def test_aggregate():
     check_func(impl, (df,), sort_output=True, check_dtype=False)
 
 
+@pytest.mark.slow
 def test_aggregate_as_index():
     """
     Test Groupby.aggregate() on groupby() as_index=False
@@ -1197,7 +1224,7 @@ def test_aggregate_as_index():
     check_func(impl1, (df,), sort_output=True, check_dtype=False, reset_index=True)
 
 
-def test_aggregate_select_col():
+def test_aggregate_select_col(is_slow_run):
     """
     Test Groupby.aggregate() with explicitly select one column
     """
@@ -1223,6 +1250,8 @@ def test_aggregate_select_col():
         {"A": [2, 1, 1, 1, 2, 2, 1], "B": ["a", "b", "c", "c", "b", "c", "a"]}
     )
     check_func(impl_num, (df_int,), sort_output=True, check_dtype=False)
+    if not is_slow_run:
+        return
     check_func(impl_num, (df_float,), sort_output=True, check_dtype=False)
     check_func(impl_str, (df_str,), sort_output=True, check_dtype=False)
     check_func(test_impl, (11,), sort_output=True, check_dtype=False)
@@ -1352,6 +1381,22 @@ def test_groupby_agg_const_dict():
     check_func(impl17, (df,), sort_output=True, dist_test=False)
 
 
+def test_groupby_agg_caching():
+    """ Test compiling function that uses groupby.agg(udf) with cache=True
+        and loading from cache """
+    def impl(df):
+        A = df.groupby("A").agg(lambda x: x.max() - x.min())
+        return A
+
+    df = pd.DataFrame({"A": [0, 0, 1, 1, 0], "B": range(5)})
+    py_out = impl(df)
+    bodo_out1, bodo_out2 = check_caching(
+        sys.modules[__name__], "test_groupby_agg_caching", impl, (df,)
+    )
+    pd.testing.assert_frame_equal(py_out, bodo_out1)
+    pd.testing.assert_frame_equal(py_out, bodo_out2)
+
+
 def g(x):
     return (x == "a").sum()
 
@@ -1418,6 +1463,7 @@ def test_count():
     check_func(impl2, (11,), sort_output=True)
 
 
+@pytest.mark.slow
 def test_count_select_col():
     """
     Test Groupby.count() with explicitly select one column
@@ -1468,8 +1514,14 @@ def test_count_select_col():
     "df_med",
     [
         pd.DataFrame({"A": [1, 1, 1, 1], "B": [1, 2, 3, 4]}),
-        pd.DataFrame({"A": [1, 2, 2, 1, 1], "B": [1, 5, 4, 4, 3]}),
-        pd.DataFrame({"A": [1, 1, 1, 1, 1], "B": [1, 2, 3, 4, np.nan]}),
+        pytest.param(
+            pd.DataFrame({"A": [1, 2, 2, 1, 1], "B": [1, 5, 4, 4, 3]}),
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.DataFrame({"A": [1, 1, 1, 1, 1], "B": [1, 2, 3, 4, np.nan]}),
+            marks=pytest.mark.slow,
+        ),
     ],
 )
 def test_median_simple(df_med):
@@ -1484,6 +1536,7 @@ def test_median_simple(df_med):
     check_func(impl1, (df_med,), sort_output=True)
 
 
+@pytest.mark.slow
 def test_median_large_random_numpy():
     """
     Test Groupby.median() with a large random numpy vector
@@ -1508,6 +1561,7 @@ def test_median_large_random_numpy():
     check_func(impl1, (df1,), sort_output=True)
 
 
+@pytest.mark.slow
 def test_median_nullable_int_bool():
     """
     Test Groupby.median() with a large random sets of nullable_int_bool
@@ -1522,6 +1576,7 @@ def test_median_nullable_int_bool():
     check_func(impl1, (df1,), sort_output=True)
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "df_uniq",
     [
@@ -1644,6 +1699,7 @@ def test_single_col_reset_index(test_df):
     check_func(impl1, (test_df,), sort_output=True, reset_index=True)
 
 
+@pytest.mark.slow
 def test_nonvar_column_names():
     """Test column names that cannot be variable names to make sure groupby code
     generation sanitizes variable names properly.
@@ -1663,6 +1719,7 @@ def test_nonvar_column_names():
     check_func(impl1, (df,), sort_output=True)
 
 
+@pytest.mark.slow
 def test_cumsum_large_random_numpy():
     def get_random_array(n, sizlen):
         elist = []
@@ -1696,6 +1753,7 @@ def test_cumsum_large_random_numpy():
     check_func(impl3, (df1,), sort_output=True)
 
 
+@pytest.mark.slow
 def test_cummin_cummax_large_random_numpy():
     """A bunch of tests related to cummin/cummax functions.
     ---
@@ -1703,7 +1761,7 @@ def test_cummin_cummax_large_random_numpy():
     https://github.com/pandas-dev/pandas/issues/35490
     """
     assert (
-        pd.__version__ == "1.1.0"
+        re.compile(r'1.1.*').match(pd. __version__)
     ), "revisit the agg((cummin, cummax)) at next pandas version"
 
     def get_random_array(n, sizlen):
@@ -1793,6 +1851,7 @@ def test_groupby_cumprod_simple():
     check_func(impl, (df1,), sort_output=True)
 
 
+@pytest.mark.slow
 def test_groupby_cumsum():
     """
     Test Groupby.cumsum()
@@ -1838,6 +1897,7 @@ def test_groupby_cumsum():
     check_func(impl2, (df3,), sort_output=True)
 
 
+@pytest.mark.slow
 def test_groupby_multi_intlabels_cumsum_int():
     """
     Test Groupby.cumsum() on int columns
@@ -1859,6 +1919,7 @@ def test_groupby_multi_intlabels_cumsum_int():
     check_func(impl, (df,), sort_output=True)
 
 
+@pytest.mark.slow
 def test_groupby_multi_labels_cumsum_multi_cols():
     """
     Test Groupby.cumsum()
@@ -1881,6 +1942,7 @@ def test_groupby_multi_labels_cumsum_multi_cols():
     check_func(impl, (df,), sort_output=True)
 
 
+@pytest.mark.slow
 def test_groupby_as_index_cumsum():
     """
     Test Groupby.cumsum() on groupby() as_index=False
@@ -1910,6 +1972,7 @@ def test_groupby_as_index_cumsum():
     check_func(impl2, (df,), sort_output=True)
 
 
+@pytest.mark.slow
 def test_cumsum_all_nulls_col():
     """
     Test Groupby.cumsum() on column with all null entries
@@ -1960,6 +2023,7 @@ def test_max(test_df):
     check_func(impl2, (11,))
 
 
+@pytest.mark.slow
 def test_max_one_col(test_df):
     """
     Test Groupby.max() with one column selected
@@ -1993,6 +2057,7 @@ def test_max_one_col(test_df):
 #    check_func(impl2, (11,))
 
 
+@pytest.mark.slow
 def test_groupby_as_index_max():
     """
     Test max on groupby() as_index=False
@@ -2013,9 +2078,9 @@ def test_groupby_as_index_max():
     check_func(impl2, (11,), sort_output=True, reset_index=True)
 
 
-def test_max_datetime():
+def test_max_date():
     """
-    Test Groupby.max() on datetime column
+    Test Groupby.max() on datetime and datetime.date column
     for both dataframe and series returns
     """
 
@@ -2027,11 +2092,27 @@ def test_max_datetime():
         df2 = df.groupby("A", as_index=False)["B"].max()
         return df2
 
-    df = pd.DataFrame(
+    df1 = pd.DataFrame(
         {"A": [2, 1, 1, 1, 2, 2, 1], "B": pd.date_range("2019-1-3", "2019-1-9")}
     )
-    check_func(impl1, (df,), sort_output=True, reset_index=True)
-    check_func(impl2, (df,), sort_output=True, reset_index=True)
+    df2 = pd.DataFrame(
+        {
+            "A": [2, 5, 5, 5, 2, 2, 10],
+            "B": [
+                datetime.date(2018, 1, 24),
+                datetime.date(1983, 1, 3),
+                datetime.date(1966, 4, 27),
+                datetime.date(1999, 12, 7),
+                datetime.date(1966, 4, 27),
+                datetime.date(2004, 7, 8),
+                datetime.date(2020, 11, 17),
+            ],
+        }
+    )
+    check_func(impl1, (df1,), sort_output=True, reset_index=True)
+    check_func(impl1, (df2,), sort_output=True, reset_index=True)
+    check_func(impl2, (df1,), sort_output=True, reset_index=True)
+    check_func(impl2, (df2,), sort_output=True, reset_index=True)
 
 
 def test_mean(test_df):
@@ -2052,6 +2133,7 @@ def test_mean(test_df):
     check_func(impl2, (11,), sort_output=True, check_dtype=False)
 
 
+@pytest.mark.slow
 def test_mean_one_col(test_df):
     """
     Test Groupby.mean() with one column selected
@@ -2070,6 +2152,7 @@ def test_mean_one_col(test_df):
     check_func(impl2, (11,), sort_output=True, check_dtype=False)
 
 
+@pytest.mark.slow
 def test_groupby_as_index_mean():
     """
     Test mean on groupby() as_index=False
@@ -2117,6 +2200,7 @@ def test_min(test_df):
     check_func(impl2, (11,), sort_output=True)
 
 
+@pytest.mark.slow
 def test_min_one_col(test_df):
     """
     Test Groupby.min() with one column selected
@@ -2148,6 +2232,7 @@ def test_min_one_col(test_df):
     check_func(impl2, (11,), sort_output=True)
 
 
+@pytest.mark.slow
 def test_groupby_as_index_min():
     """
     Test min on groupby() as_index=False
@@ -2219,6 +2304,7 @@ def test_prod(test_df):
     check_func(impl2, (11,), sort_output=True)
 
 
+@pytest.mark.slow
 def test_prod_one_col(test_df):
     """
     Test Groupby.prod() with one column selected
@@ -2250,6 +2336,7 @@ def test_prod_one_col(test_df):
     check_func(impl2, (11,), sort_output=True)
 
 
+@pytest.mark.slow
 def test_groupby_as_index_prod():
     """
     Test prod on groupby() as_index=False
@@ -2322,6 +2409,7 @@ def test_first_last(test_df):
     check_func(impl4, (11,), sort_output=True)
 
 
+@pytest.mark.slow
 def test_first_last_one_col(test_df):
     """
     Test Groupby.first() and Groupby.last() with one column selected
@@ -2379,6 +2467,7 @@ def test_first_last_one_col(test_df):
     check_func(impl4, (11,), sort_output=True)
 
 
+@pytest.mark.slow
 def test_groupby_as_index_first_last():
     """
     Test first and last on groupby() as_index=False
@@ -2437,6 +2526,7 @@ def test_std(test_df_int_no_null):
     check_func(impl2, (11,), sort_output=True, check_dtype=False)
 
 
+@pytest.mark.slow
 def test_std_one_col(test_df):
     """
     Test Groupby.std() with one column selected
@@ -2446,7 +2536,7 @@ def test_std_one_col(test_df):
     https://github.com/pandas-dev/pandas/issues/35516
     """
     assert (
-        pd.__version__ == "1.1.0"
+        re.compile(r'1.1.*').match(pd. __version__)
     ), "revisit the df.groupby(A)[B].std() issue at next pandas version"
 
     def impl1(df):
@@ -2463,6 +2553,7 @@ def test_std_one_col(test_df):
     check_func(impl2, (11,), sort_output=True, check_dtype=False)
 
 
+@pytest.mark.slow
 def test_groupby_as_index_std():
     """
     Test std on groupby() as_index=False
@@ -2501,6 +2592,7 @@ def test_sum(test_df):
     check_func(impl2, (11,), sort_output=True)
 
 
+@pytest.mark.slow
 def test_sum_one_col(test_df):
     """
     Test Groupby.sum() with one column selected
@@ -2538,6 +2630,7 @@ def test_select_col_attr():
     check_func(impl, (df,), sort_output=True)
 
 
+@pytest.mark.slow
 def test_groupby_as_index_sum():
     """
     Test sum on groupby() as_index=False
@@ -2558,6 +2651,7 @@ def test_groupby_as_index_sum():
     check_func(impl2, (11,), sort_output=True, reset_index=True)
 
 
+@pytest.mark.slow
 def test_groupby_multi_intlabels_sum():
     """
     Test df.groupby() multiple labels of string columns
@@ -2623,6 +2717,7 @@ def test_groupby_multi_strlabels():
     check_func(impl, (df,), sort_output=True, reset_index=True)
 
 
+@pytest.mark.slow
 def test_groupby_multiselect_sum():
     """
     Test groupy.sum() on explicitly selected columns using a tuple and using a constant
@@ -2648,6 +2743,7 @@ def test_groupby_multiselect_sum():
     check_func(impl2, (df,), sort_output=True)
 
 
+@pytest.mark.slow
 def test_agg_multikey_parallel():
     """
     Test groupby multikey with distributed df
@@ -2689,6 +2785,7 @@ def test_var(test_df):
     check_func(impl2, (11,), sort_output=True, check_dtype=False)
 
 
+@pytest.mark.slow
 def test_var_one_col(test_df):
     """
     Test Groupby.var() with one column selected
@@ -2769,6 +2866,7 @@ def test_idxmin_idxmax():
     check_func(impl4, (df1,), sort_output=True)
 
 
+@pytest.mark.slow
 def test_groupby_as_index_var():
     """
     Test var on groupby() as_index=False
@@ -2814,9 +2912,9 @@ def test_const_list_inference():
 
     df = pd.DataFrame(
         {
-            "A": [2, 1, 1, 1, 2, 2, 1],
-            "B": ["a", "b", "c", "c", "b", "c", "a"],
-            "C": [1, 3, 1, 2, -4, 0, 5],
+            "A": [2, 1, 1, 1, 2, 2, 1, 3, 0],
+            "B": ["a", "b", "c", "c", "b", "c", "a", "AA", "A2"],
+            "C": [1, 3, 1, 2, -4, 0, 5, 6, 7],
         }
     )
 
@@ -2853,9 +2951,9 @@ def test_global_list():
 
     df = pd.DataFrame(
         {
-            "A": [2, 1, 1, 1, 2, 2, 1],
-            "B": ["a", "b", "c", "c", "b", "c", "a"],
-            "C": [1, 3, 1, 2, -4, 0, 5],
+            "A": [2, 1, 1, 1, 2, 2, 1, 3, 0],
+            "B": ["a", "b", "c", "c", "b", "c", "a", "AA", "A2"],
+            "C": [1, 3, 1, 2, -4, 0, 5, 6, 7],
         }
     )
 

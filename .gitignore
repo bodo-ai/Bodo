@@ -15,6 +15,7 @@ bodo/libs/__pycache__
 bodo/tests/__pycache__
 bodo/transforms/__pycache__
 bodo/utils/__pycache__
+demo/__pycache__
 
 # Python egg metadata, regenerated from source files by setuptools.
 /*.egg-info

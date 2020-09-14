@@ -776,6 +776,19 @@ def get_ctypes_ptr(typingctx, ctypes_typ=None):
     return types.voidptr(ctypes_typ), codegen
 
 
+@intrinsic
+def is_null_pointer(typingctx, ptr_typ=None):
+    """check whether the pointer type is NULL or not
+    """
+
+    def codegen(context, builder, signature, args):
+        (ptr,) = args
+        null = context.get_constant_null(ptr_typ)
+        return builder.icmp_unsigned("==", ptr, null)
+
+    return types.bool_(ptr_typ), codegen
+
+
 def object_length(c, obj):
     """
     len(obj)

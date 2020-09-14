@@ -30,13 +30,15 @@ from numba.core.ir_utils import (
     find_callname,
     get_name_var_table,
     replace_var_names,
+    next_label,
 )
 from numba.parfors.parfor import wrap_parfor_blocks, unwrap_parfor_blocks, Parfor
 from numba.core.analysis import compute_use_defs
 from numba.core.typing import signature
 from numba.core.typing.templates import infer_global, AbstractTemplate
-from numba.extending import overload, lower_builtin
+from numba.extending import overload, lower_builtin, intrinsic
 import bodo
+from llvmlite import ir as lir
 from bodo.utils.utils import (
     is_call_assign,
     is_var_assign,
@@ -46,6 +48,7 @@ from bodo.utils.utils import (
     alloc_arr_tup,
     empty_like_type,
     sanitize_varname,
+    is_null_pointer,
 )
 from bodo.transforms import distributed_pass, distributed_analysis
 from bodo.transforms.distributed_analysis import Distribution
@@ -65,6 +68,7 @@ from bodo.libs.str_arr_ext import (
     get_utf8_size,
 )
 from bodo.hiframes.pd_series_ext import SeriesType
+from bodo.hiframes.datetime_date_ext import DatetimeDateArrayType
 from bodo.hiframes import series_impl
 from bodo.ir.join import write_send_buff
 from bodo.libs.timsort import getitem_arr_tup, setitem_arr_tup
@@ -99,9 +103,75 @@ from bodo.libs.array import (
 )
 
 
+# TODO: it's probably a bad idea for these to be global. Maybe try moving them
+# to a context or dispatcher object somehow
+# Maps symbol name to cfunc object that implements UDF for groupby. This dict
+# is used only when compiling
+gb_agg_cfunc = {}
+# Maps symbol name to cfunc address (used when compiling and loading from cache)
+# When compiling, this is populated in aggregate.py::gen_top_level_agg_func
+# When loading from cache, this is populated in numba_compat.py::resolve_gb_agg_funcs
+# when the compiled result is loaded from cache
+gb_agg_cfunc_addr = {}
+
+
+@intrinsic
+def add_agg_cfunc_sym(typingctx, func, sym):
+    """ This "registers" a cfunc that implements part of groupby.agg UDF to ensure
+        it can be cached. It does two things:
+        - Generate a dummy call to the cfunc to make sure the symbol is not
+          discarded during linking
+        - Add cfunc library to the library of the Bodo function being compiled
+          (necessary for caching so that the cfunc is part of the cached result)
+    """
+    def codegen(context, builder, signature, args):
+        # generate dummy call to the cfunc
+        sig = func.signature
+        if sig == types.none(types.voidptr):
+            # cfunc generated with gen_eval_cb has this signature
+            fnty = lir.FunctionType(lir.VoidType(), [lir.IntType(8).as_pointer(),],)
+            fn_tp = builder.module.get_or_insert_function(fnty, sym._literal_value)
+            builder.call(
+                fn_tp, [context.get_constant_null(sig.args[0]),],
+            )
+        else:
+            # Assume signature is none(voidptr, voidptr, int64*) (see gen_update_cb
+            # and gen_combine_cb)
+            fnty = lir.FunctionType(
+                lir.VoidType(),
+                [
+                    lir.IntType(8).as_pointer(),
+                    lir.IntType(8).as_pointer(),
+                    lir.IntType(64).as_pointer(),
+                ],
+            )
+            fn_tp = builder.module.get_or_insert_function(fnty, sym._literal_value)
+            builder.call(
+                fn_tp,
+                [
+                    context.get_constant_null(sig.args[0]),
+                    context.get_constant_null(sig.args[1]),
+                    context.get_constant_null(sig.args[2]),
+                ],
+            )
+        # add cfunc library to the library of the Bodo function being compiled.
+        context.add_linking_libs([gb_agg_cfunc[sym._literal_value]._library])
+        return
+
+    return types.none(func, sym), codegen
+
+
+@numba.jit
+def get_agg_udf_addr(name):
+    """ Resolve address of cfunc given by its symbol name """
+    with numba.objmode(addr="int64"):
+        addr = gb_agg_cfunc_addr[name]
+    return addr
+
+
 AggFuncTemplateStruct = namedtuple(
     "AggFuncTemplateStruct",
-    ["var_typs", "init_func", "update_all_func", "combine_all_func", "eval_all_func"],
+    ["var_typs", "init_func", "update_all_func", "combine_all_func", "eval_all_func", "cfuncs"],
 )
 
 AggFuncStruct = namedtuple("AggFuncStruct", ["func", "ftype"])
@@ -881,6 +951,8 @@ def agg_distributed_run(
             "info_from_table": info_from_table,
             "info_to_array": info_to_array,
             "delete_table": delete_table,
+            "add_agg_cfunc_sym": add_agg_cfunc_sym,
+            "get_agg_udf_addr": get_agg_udf_addr,
         }
     )
     if udf_func_struct is not None:
@@ -892,6 +964,14 @@ def agg_distributed_run(
                 "__eval_res": udf_func_struct.eval_all_func,
             }
         )
+        if len(udf_func_struct.cfuncs) > 0:
+            glbs.update(
+                {
+                    "cpp_cb_update": udf_func_struct.cfuncs[0],
+                    "cpp_cb_combine": udf_func_struct.cfuncs[1],
+                    "cpp_cb_eval": udf_func_struct.cfuncs[2],
+                }
+            )
 
     f_block = compile_to_numba_ir(
         top_level_func, glbs, typingctx, arg_typs, typemap, calltypes
@@ -1399,6 +1479,7 @@ def gen_update_cb(
     out_data_typs,
     do_combine,
     func_idx_to_in_col,
+    label_suffix,
 ):
     """
     Generates a Python function (to be compiled into a numba cfunc) which
@@ -1408,7 +1489,11 @@ def gen_update_cb(
     red_var_typs = udf_func_struct.var_typs
     n_red_vars = len(red_var_typs)
 
-    func_text = "def update_local(in_table, out_table, row_to_group):\n"
+    func_text = "def bodo_gb_udf_update_local{}(in_table, out_table, row_to_group):\n".format(
+        label_suffix
+    )
+    func_text += "    if is_null_pointer(in_table):\n"  # this is dummy call
+    func_text += "        return\n"
 
     # get redvars data types
     func_text += "    data_redvar_dummy = ({}{})\n".format(
@@ -1505,13 +1590,14 @@ def gen_update_cb(
             "pre_alloc_string_array": pre_alloc_string_array,
             "__init_func": udf_func_struct.init_func,
             "__update_redvars": udf_func_struct.update_all_func,
+            "is_null_pointer": is_null_pointer,
         },
         loc_vars,
     )
-    return loc_vars["update_local"]
+    return loc_vars["bodo_gb_udf_update_local{}".format(label_suffix)]
 
 
-def gen_combine_cb(udf_func_struct, allfuncs, n_keys, out_data_typs):
+def gen_combine_cb(udf_func_struct, allfuncs, n_keys, out_data_typs, label_suffix):
     """
     Generates a Python function (to be compiled into a numba cfunc) which
     does the "combine" step of an agg operation. The code is for a specific
@@ -1521,7 +1607,11 @@ def gen_combine_cb(udf_func_struct, allfuncs, n_keys, out_data_typs):
     red_var_typs = udf_func_struct.var_typs
     n_red_vars = len(red_var_typs)
 
-    func_text = "def combine(in_table, out_table, row_to_group):\n"
+    func_text = "def bodo_gb_udf_combine{}(in_table, out_table, row_to_group):\n".format(
+        label_suffix
+    )
+    func_text += "    if is_null_pointer(in_table):\n"  # this is dummy call
+    func_text += "        return\n"
 
     # get redvars data types
     func_text += "    data_redvar_dummy = ({}{})\n".format(
@@ -1595,13 +1685,14 @@ def gen_combine_cb(udf_func_struct, allfuncs, n_keys, out_data_typs):
             "incref": incref,
             "__init_func": udf_func_struct.init_func,
             "__combine_redvars": udf_func_struct.combine_all_func,
+            "is_null_pointer": is_null_pointer,
         },
         loc_vars,
     )
-    return loc_vars["combine"]
+    return loc_vars["bodo_gb_udf_combine{}".format(label_suffix)]
 
 
-def gen_eval_cb(udf_func_struct, allfuncs, n_keys, out_data_typs_):
+def gen_eval_cb(udf_func_struct, allfuncs, n_keys, out_data_typs_, label_suffix):
     """
     Generates a Python function (to be compiled into a numba cfunc) which
     does the "eval" step of an agg operation. The code is for a specific
@@ -1631,7 +1722,10 @@ def gen_eval_cb(udf_func_struct, allfuncs, n_keys, out_data_typs_):
     assert len(redvar_offsets) == n_red_vars
     n_data_cols = len(out_data_typs)
 
-    func_text = "def eval(table):\n"
+    func_text = "def bodo_gb_udf_eval{}(table):\n".format(label_suffix)
+    func_text += "    if is_null_pointer(table):\n"  # this is dummy call
+    func_text += "        return\n"
+
     func_text += "    data_redvar_dummy = ({}{})\n".format(
         ",".join(["np.empty(1, {})".format(_get_np_dtype(t)) for t in red_var_typs]),
         "," if len(red_var_typs) == 1 else "",
@@ -1680,10 +1774,11 @@ def gen_eval_cb(udf_func_struct, allfuncs, n_keys, out_data_typs_):
             "info_from_table": info_from_table,
             "incref": incref,
             "__eval_res": udf_func_struct.eval_all_func,
+            "is_null_pointer": is_null_pointer,
         },
         loc_vars,
     )
-    return loc_vars["eval"]
+    return loc_vars["bodo_gb_udf_eval{}".format(label_suffix)]
 
 
 def gen_allfuncs(agg_func, nb_col):
@@ -1821,28 +1916,33 @@ def gen_top_level_agg_func(
 
         for i in range(len(out_names)):
             out_name = out_names[i] + "_dummy"
-            if isinstance(out_col_typs[i], IntegerArrayType):
+            out_col_typ = out_col_typs[i]
+            if isinstance(out_col_typ, IntegerArrayType):
                 int_typ_name = IntDtype(out_typs[i]).name
                 assert int_typ_name.endswith("Dtype()")
                 int_typ_name = int_typ_name[:-7]  # remove trailing "Dtype()"
                 func_text += '    {} = pd.Series([1], dtype="{}").values\n'.format(
                     out_name, int_typ_name
                 )
-            elif isinstance(out_col_typs[i], BooleanArrayType):
+            elif isinstance(out_col_typ, BooleanArrayType):
                 func_text += "    {} = bodo.libs.bool_arr_ext.init_bool_array(np.empty(0, np.bool_), np.empty(0, np.uint8))\n".format(
                     out_name
                 )
-            elif isinstance(out_col_typs[i], StringArrayType):
+            elif isinstance(out_col_typ, StringArrayType):
                 func_text += "    {} = pre_alloc_string_array(1,1)\n".format(out_name)
-            elif out_col_typs[i] == ArrayItemArrayType(string_array_type):
+            elif out_col_typ == ArrayItemArrayType(string_array_type):
                 func_text += "    {} = pre_alloc_array_item_array(1, (1, 1), string_array_type)\n".format(
                     out_name
                 )
-            elif isinstance(out_col_typs[i], DecimalArrayType):
-                scale = out_col_typs[i].scale
-                precision = out_col_typs[i].precision
+            elif isinstance(out_col_typ, DecimalArrayType):
+                scale = out_col_typ.scale
+                precision = out_col_typ.precision
                 func_text += "    {} = alloc_decimal_array(1, {}, {})\n".format(
                     out_name, precision, scale
+                )
+            elif isinstance(out_col_typ, DatetimeDateArrayType):
+                func_text += "    {} = bodo.hiframes.datetime_date_ext.init_datetime_date_array(np.empty(1, np.int64), np.empty(1, np.uint8))\n".format(
+                    out_name
                 )
             else:
                 func_text += "    {} = np.empty(1, {})\n".format(
@@ -1895,6 +1995,7 @@ def gen_top_level_agg_func(
 
         if udf_func_struct is not None:
             # there are user-defined functions
+            udf_label = next_label()
 
             # generate update, combine and eval functions for the user-defined
             # functions and compile them to numba cfuncs, to be called from C++
@@ -1910,18 +2011,25 @@ def gen_top_level_agg_func(
                     out_col_typs,
                     do_combine,
                     func_idx_to_in_col,
+                    udf_label,
                 )
             )
             cpp_cb_combine = numba.cfunc(c_sig, nopython=True)(
-                gen_combine_cb(udf_func_struct, allfuncs, n_keys, out_col_typs)
+                gen_combine_cb(
+                    udf_func_struct, allfuncs, n_keys, out_col_typs, udf_label
+                )
             )
             cpp_cb_eval = numba.cfunc("void(voidptr)", nopython=True)(
-                gen_eval_cb(udf_func_struct, allfuncs, n_keys, out_col_typs)
+                gen_eval_cb(udf_func_struct, allfuncs, n_keys, out_col_typs, udf_label)
             )
 
-            cpp_cb_update_addr = cpp_cb_update.address
-            cpp_cb_combine_addr = cpp_cb_combine.address
-            cpp_cb_eval_addr = cpp_cb_eval.address
+            assert len(udf_func_struct.cfuncs) == 0
+            udf_func_struct.cfuncs.append(cpp_cb_update)
+            udf_func_struct.cfuncs.append(cpp_cb_combine)
+            udf_func_struct.cfuncs.append(cpp_cb_eval)
+            for cfunc in udf_func_struct.cfuncs:
+                gb_agg_cfunc[cfunc.native_name] = cfunc
+                gb_agg_cfunc_addr[cfunc.native_name] = cfunc.address
 
             # generate a dummy (empty) table with correct type info for
             # output columns and reduction variables corresponding to udfs,
@@ -1949,14 +2057,34 @@ def gen_top_level_agg_func(
             func_text += (
                 "    udf_table_dummy = arr_info_list_to_table(out_info_list_dummy)\n"
             )
+            # include cfunc in library and insert a dummy call to make sure symbol
+            # is not discarded
+            func_text += "    add_agg_cfunc_sym(cpp_cb_update, '{}')\n".format(
+                cpp_cb_update.native_name
+            )
+            func_text += "    add_agg_cfunc_sym(cpp_cb_combine, '{}')\n".format(
+                cpp_cb_combine.native_name
+            )
+            func_text += "    add_agg_cfunc_sym(cpp_cb_eval, '{}')\n".format(
+                cpp_cb_eval.native_name
+            )
+            func_text += "    cpp_cb_update_addr = get_agg_udf_addr('{}')\n".format(
+                cpp_cb_update.native_name
+            )
+            func_text += "    cpp_cb_combine_addr = get_agg_udf_addr('{}')\n".format(
+                cpp_cb_combine.native_name
+            )
+            func_text += "    cpp_cb_eval_addr = get_agg_udf_addr('{}')\n".format(
+                cpp_cb_eval.native_name
+            )
 
         else:
             # if there are no udfs we don't need udf table, so just create
             # an empty one-column table
             func_text += "    udf_table_dummy = arr_info_list_to_table([array_to_info(np.empty(1))])\n"
-            cpp_cb_update_addr = 0
-            cpp_cb_combine_addr = 0
-            cpp_cb_eval_addr = 0
+            func_text += "    cpp_cb_update_addr = 0\n"
+            func_text += "    cpp_cb_combine_addr = 0\n"
+            func_text += "    cpp_cb_eval_addr = 0\n"
 
         func_text += "    ftypes = np.array({}, dtype=np.int32)\n".format(
             str([supported_agg_funcs.index(f.ftype) for f in allfuncs])
@@ -1974,16 +2102,8 @@ def gen_top_level_agg_func(
         # We pass the logical arguments to the function (skipdropna, return_key, same_index, ...)
         func_text += (
             "    out_table = groupby_and_aggregate(table, {}, {},"
-            " ftypes.ctypes.data, func_offsets.ctypes.data, udf_ncols.ctypes.data, {}, {}, {}, {}, {}, {}, {}, udf_table_dummy)\n".format(
-                n_keys,
-                input_has_index,
-                parallel,
-                skipdropna,
-                return_key,
-                same_index,
-                cpp_cb_update_addr,
-                cpp_cb_combine_addr,
-                cpp_cb_eval_addr,
+            " ftypes.ctypes.data, func_offsets.ctypes.data, udf_ncols.ctypes.data, {}, {}, {}, {}, cpp_cb_update_addr, cpp_cb_combine_addr, cpp_cb_eval_addr, udf_table_dummy)\n".format(
+                n_keys, input_has_index, parallel, skipdropna, return_key, same_index,
             )
         )
 
@@ -2451,7 +2571,7 @@ def get_udf_func_struct(
     )
 
     return AggFuncTemplateStruct(
-        all_vartypes, init_func, update_all_func, combine_all_func, eval_all_func
+        all_vartypes, init_func, update_all_func, combine_all_func, eval_all_func, []
     )
 
 

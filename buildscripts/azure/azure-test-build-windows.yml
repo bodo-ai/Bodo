@@ -6,7 +6,7 @@ jobs:
 - job: ${{ parameters.name }}
   pool:
     vmImage: ${{ parameters.vmImage }}
-  
+
   steps:
   - task: UsePythonVersion@0
     inputs:
@@ -36,12 +36,14 @@ jobs:
     displayName: 'Create Conda Env'
 
   - bash: |
+      set -eo pipefail
       source activate bodo_build
       cd buildscripts/bodo-conda-recipe/
       conda build . -c bodo.ai -c conda-forge -c intel --no-test --output-folder ../../
     displayName: 'Conda build Bodo'
 
   - bash: |
+      set -eo pipefail
       source activate bodo_build
       mkdir bodo-inc
       mkdir bodo-inc/windows-64

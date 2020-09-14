@@ -1040,7 +1040,7 @@ def concat_overload(arr_list):
 
     # Boolean array input, or mix of Numpy and nullable boolean
     if (
-        isinstance(arr_list, types.UniTuple)
+        isinstance(arr_list, (types.UniTuple, types.List))
         and arr_list.dtype == boolean_array
         or (
             isinstance(arr_list, types.BaseTuple)
@@ -1383,9 +1383,9 @@ def overload_gen_na_array(n, arr):
     # TODO: support all array types
 
     if isinstance(arr, types.TypeRef):
-        dtype = arr.instance_type
-    else:
-        dtype = arr.dtype
+        arr = arr.instance_type
+
+    dtype = arr.dtype
 
     if isinstance(arr, ArrayItemArrayType):
         data_arr_type = arr.dtype
@@ -1564,7 +1564,7 @@ def arange_parallel_impl(return_type, *args):
     elif len(args) == 4:
         return arange_4
     else:
-        raise ValueError("parallel arange with types {}".format(args))
+        raise BodoError("parallel arange with types {}".format(args))
 
 
 numba.parfors.parfor.replace_functions_map[("arange", "numpy")] = arange_parallel_impl

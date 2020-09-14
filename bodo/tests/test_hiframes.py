@@ -1,5 +1,8 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
+"""Old dataframe/series tests
+"""
 import unittest
+import pytest
 import os
 import pandas as pd
 import numpy as np
@@ -15,6 +18,7 @@ from bodo.tests.utils import (
 )
 
 
+@pytest.mark.slow
 class TestHiFrames(unittest.TestCase):
     def test_column_list_select2(self):
         # make sure Bodo copies the columns like Pandas does

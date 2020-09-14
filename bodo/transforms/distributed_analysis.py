@@ -52,6 +52,7 @@ from bodo.utils.utils import (
     is_static_getsetitem,
     get_getsetitem_index_var,
     is_call_assign,
+    is_call,
 )
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.hiframes.pd_multi_index_ext import MultiIndexType
@@ -574,16 +575,10 @@ class DistributedAnalysis:
                     array_dists[reduce_varname] = Distribution.REP
                 # keep track of concat reduce vars to handle in concat analysis and
                 # transforms properly
-                concat_reduce_vars = set()
-                for inst in reduce_nodes:
-                    if is_call_assign(inst) and guard(
-                        find_callname, self.func_ir, inst.value, self.typemap
-                    ) == ("concat", "bodo.libs.array_kernels"):
-                        concat_reduce_vars.add(inst.target.name)
-                    if is_call_assign(inst) and guard(
-                        find_callname, self.func_ir, inst.value, self.typemap
-                    ) == ("init_range_index", "bodo.hiframes.pd_index_ext"):
-                        concat_reduce_vars.add(inst.target.name)
+                assert len(self.func_ir._definitions[reduce_varname]) == 2
+                conc_varname = self.func_ir._definitions[reduce_varname][1].name
+                concat_reduce_vars = self._get_concat_reduce_vars(conc_varname)
+
                 # add concat reduce vars only if it is a parallel reduction
                 if not is_REP(out_dist):
                     self._concat_reduce_vars |= concat_reduce_vars
@@ -950,7 +945,7 @@ class DistributedAnalysis:
 
         if fdef == ("concat", "bodo.libs.array_kernels"):
             # hiframes concat is similar to np.concatenate
-            self._analyze_call_np_concatenate(lhs, args, array_dists)
+            self._analyze_call_concat(lhs, args, array_dists)
             return
 
         if fdef == ("isna", "bodo.libs.array_kernels"):
@@ -1147,6 +1142,12 @@ class DistributedAnalysis:
         if fdef == ("inplace_eq", "bodo.libs.str_arr_ext"):
             return
 
+        if fdef == ("str_arr_setitem_int_to_str", "bodo.libs.str_arr_ext"):
+            return
+
+        if fdef == ("str_arr_setitem_NA_str", "bodo.libs.str_arr_ext"):
+            return
+
         if fdef == (
             "_series_dropna_str_alloc_impl_inner",
             "bodo.hiframes.series_kernels",
@@ -1221,7 +1222,7 @@ class DistributedAnalysis:
             return
 
         if func_name == "concatenate":
-            self._analyze_call_np_concatenate(lhs, args, array_dists)
+            self._analyze_call_concat(lhs, args, array_dists)
             return
 
         if func_name == "array":
@@ -1326,6 +1327,12 @@ class DistributedAnalysis:
             size_var = size_def.args[1]
             size_def = guard(get_definition, self.func_ir, size_var)
 
+        # find calc_nitems(r._start, r._stop, r._step) for RangeIndex and match dists
+        # see index test_1D_Var_alloc4 for example
+        r = guard(self._get_calc_n_items_range_index, size_def)
+        if r is not None:
+            self._meet_array_dists(lhs, r.name, array_dists)
+
         # all arrays with equivalent size should have same distribution
         var_set = equiv_set.get_equiv_set(size_var)
         if not var_set:
@@ -1343,13 +1350,13 @@ class DistributedAnalysis:
         """
         if func_name == "transpose":
             if len(args) == 0:
-                raise ValueError("Transpose with no arguments is not" " supported")
+                raise BodoError("Transpose with no arguments is not" " supported")
             in_arr_name = arr.name
             arg0 = guard(get_constant, self.func_ir, args[0])
             if isinstance(arg0, tuple):
                 arg0 = arg0[0]
             if arg0 != 0:
-                raise ValueError(
+                raise BodoError(
                     "Transpose with non-zero first argument" " is not supported"
                 )
             self._meet_array_dists(lhs, in_arr_name, array_dists)
@@ -1428,7 +1435,7 @@ class DistributedAnalysis:
             )
             assert arr_name in array_dists, "array distribution not found"
             if is_REP(array_dists[arr_name]):
-                raise ValueError(
+                raise BodoError(
                     "distributed return of array {} not valid"
                     " since it is replicated".format(arr_name)
                 )
@@ -1439,7 +1446,7 @@ class DistributedAnalysis:
             arr_name = args[0].name
             assert arr_name in array_dists, "array distribution not found"
             if is_REP(array_dists[arr_name]):
-                raise ValueError(
+                raise BodoError(
                     "threaded return of array {} not valid" " since it is replicated"
                 )
             array_dists[arr_name] = Distribution.Thread
@@ -1529,15 +1536,33 @@ class DistributedAnalysis:
         for v in rep_vars:
             self._set_var_dist(v, array_dists, Distribution.REP)
 
-    def _analyze_call_np_concatenate(self, lhs, args, array_dists):
+    def _analyze_call_concat(self, lhs, args, array_dists):
+        """analyze distribution for bodo.libs.array_kernels.concat and np.concatenate
+        """
         assert len(args) == 1
-        tup_def = guard(get_definition, self.func_ir, args[0])
-        assert isinstance(tup_def, ir.Expr) and tup_def.op == "build_tuple"
-        in_arrs = tup_def.items
-
         # concat reduction variables are handled in parfor analysis
         if lhs in self._concat_reduce_vars:
             return
+
+        in_type = self.typemap[args[0].name]
+        # list input case
+        if isinstance(in_type, types.List):
+            in_list = args[0].name
+            # OneD_Var since sum of block sizes might not be exactly 1D
+            out_dist = Distribution.OneD_Var
+            if lhs in array_dists:
+                out_dist = Distribution(min(out_dist.value, array_dists[lhs].value))
+            out_dist = Distribution(min(out_dist.value, array_dists[in_list].value))
+            array_dists[lhs] = out_dist
+
+            # output can cause input REP
+            if out_dist != Distribution.OneD_Var:
+                array_dists[in_list] = out_dist
+            return
+
+        tup_def = guard(get_definition, self.func_ir, args[0])
+        assert isinstance(tup_def, ir.Expr) and tup_def.op == "build_tuple"
+        in_arrs = tup_def.items
 
         # input arrays have same distribution
         in_dist = Distribution.OneD
@@ -2032,6 +2057,60 @@ class DistributedAnalysis:
 
             block.body = new_body
 
+    def _get_calc_n_items_range_index(self, size_def):
+        """match RangeIndex calc_nitems(r._start, r._stop, r._step) call and return r
+        """
+        require(
+            find_callname(self.func_ir, size_def)
+            == ("calc_nitems", "bodo.libs.array_kernels")
+        )
+        start_def = get_definition(self.func_ir, size_def.args[0])
+        stop_def = get_definition(self.func_ir, size_def.args[1])
+        step_def = get_definition(self.func_ir, size_def.args[2])
+        require(is_expr(start_def, "getattr") and start_def.attr == "_start")
+        r = start_def.value
+        require(
+            isinstance(self.typemap[r.name], bodo.hiframes.pd_index_ext.RangeIndexType)
+        )
+        require(
+            is_expr(stop_def, "getattr")
+            and stop_def.attr == "_stop"
+            and stop_def.value.name == r.name
+        )
+        require(
+            is_expr(step_def, "getattr")
+            and step_def.attr == "_step"
+            and step_def.value.name == r.name
+        )
+        return r
+
+    def _get_concat_reduce_vars(self, varname, concat_reduce_vars=None):
+        """get output variables of array_kernels.concat() calls which are related to
+        concat reduction using reduce variable name.
+        """
+        if concat_reduce_vars is None:
+            concat_reduce_vars = set()
+        var_def = guard(get_definition, self.func_ir, varname)
+        if is_call(var_def):
+            fdef = guard(find_callname, self.func_ir, var_def)
+            # data and index variables of dataframes are created from concat()
+            if fdef == ("init_dataframe", "bodo.hiframes.pd_dataframe_ext"):
+                tup_list = guard(find_build_tuple, self.func_ir, var_def.args[0])
+                assert tup_list is not None
+                for v in tup_list:
+                    self._get_concat_reduce_vars(v.name, concat_reduce_vars)
+                index_varname = var_def.args[1].name
+                # TODO(ehsan): is the index variable name actually needed
+                concat_reduce_vars.add(index_varname)
+                self._get_concat_reduce_vars(index_varname, concat_reduce_vars)
+            if fdef == ("concat", "bodo.libs.array_kernels"):
+                concat_reduce_vars.add(varname)
+            # Index is created from concat(), TODO(ehsan): other index init calls
+            if fdef == ("init_numeric_index", "bodo.hiframes.pd_index_ext"):
+                self._get_concat_reduce_vars(var_def.args[0].name, concat_reduce_vars)
+
+        return concat_reduce_vars
+
 
 def get_reduce_op(reduce_varname, reduce_nodes, func_ir, typemap):
     """find reduction operation in parfor reduction IR nodes.
@@ -2232,6 +2311,13 @@ def _get_array_accesses(blocks, func_ir, typemap, accesses=None):
                         if fdef == ("get_str_arr_item_length", "bodo.libs.str_arr_ext"):
                             accesses.add((rhs.args[0].name, rhs.args[1].name, False))
                         if fdef == ("inplace_eq", "bodo.libs.str_arr_ext"):
+                            accesses.add((rhs.args[0].name, rhs.args[1].name, False))
+                        if fdef == (
+                            "str_arr_setitem_int_to_str",
+                            "bodo.libs.str_arr_ext",
+                        ):
+                            accesses.add((rhs.args[0].name, rhs.args[1].name, False))
+                        if fdef == ("str_arr_setitem_NA_str", "bodo.libs.str_arr_ext"):
                             accesses.add((rhs.args[0].name, rhs.args[1].name, False))
                         if fdef == ("get_bit_bitmap_arr", "bodo.libs.int_arr_ext"):
                             accesses.add((rhs.args[0].name, rhs.args[1].name, True))

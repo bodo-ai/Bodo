@@ -34,6 +34,8 @@ from bodo.tests.utils import check_func
                 None,
                 {4: [9, 2], 6: [8, 1]},
                 {7: [2]},
+                {11: [2, -1]},
+                {1: [-1]},
                 {},
                 {21: None, 9: []},
             ]

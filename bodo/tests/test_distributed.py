@@ -470,7 +470,7 @@ def test_1D_Var_alloc4():
     f(df1, df2)
     assert count_array_REPs() == 0
     assert count_array_OneDs() == 0
-    assert count_array_OneD_Vars() != 0
+    assert count_array_OneD_Vars() > 0
 
 
 def test_str_alloc_equiv1():
@@ -1109,27 +1109,45 @@ def get_random_int64index(n):
     "data",
     [
         np.arange(n, dtype=np.float32),  # 1D np array
-        np.arange(n * n_col).reshape(n, n_col),  # 2D np array
-        gen_random_string_array(n),  # string array
-        get_random_integerarray(n),
-        get_random_booleanarray(n),
-        get_random_decimalarray(n),
-        pd.date_range("2017-01-13", periods=n).date,  # date array
-        pd.RangeIndex(
-            n
+        pytest.param(
+            np.arange(n * n_col).reshape(n, n_col), marks=pytest.mark.slow
+        ),  # 2D np array
+        pytest.param(
+            gen_random_string_array(n), marks=pytest.mark.slow
+        ),  # string array
+        pytest.param(get_random_integerarray(n), marks=pytest.mark.slow),
+        pytest.param(get_random_booleanarray(n), marks=pytest.mark.slow),
+        pytest.param(get_random_decimalarray(n), marks=pytest.mark.slow),
+        pytest.param(
+            pd.date_range("2017-01-13", periods=n).date, marks=pytest.mark.slow
+        ),  # date array
+        pytest.param(
+            pd.RangeIndex(n), marks=pytest.mark.slow
         ),  # RangeIndex, TODO: test non-trivial start/step when gatherv() supports them
-        pd.RangeIndex(n, name="A"),  # RangeIndex with name
-        get_random_int64index(n),
-        pd.Index(gen_random_string_array(n), name="A"),  # String Index
-        pd.DatetimeIndex(pd.date_range("1983-10-15", periods=n)),  # DatetimeIndex
-        pd.timedelta_range(start="1D", periods=n, name="A"),  # TimedeltaIndex
-        pd.MultiIndex.from_arrays(
-            [
-                gen_random_string_array(n),
-                np.arange(n),
-                pd.date_range("2001-10-15", periods=n),
-            ],
-            names=["AA", "B", None],
+        pytest.param(
+            pd.RangeIndex(n, name="A"), marks=pytest.mark.slow
+        ),  # RangeIndex with name
+        pytest.param(get_random_int64index(n), marks=pytest.mark.slow),
+        pytest.param(
+            pd.Index(gen_random_string_array(n), name="A"), marks=pytest.mark.slow
+        ),  # String Index
+        pytest.param(
+            pd.DatetimeIndex(pd.date_range("1983-10-15", periods=n)),
+            marks=pytest.mark.slow,
+        ),  # DatetimeIndex
+        pytest.param(
+            pd.timedelta_range(start="1D", periods=n, name="A"), marks=pytest.mark.slow
+        ),  # TimedeltaIndex
+        pytest.param(
+            pd.MultiIndex.from_arrays(
+                [
+                    gen_random_string_array(n),
+                    np.arange(n),
+                    pd.date_range("2001-10-15", periods=n),
+                ],
+                names=["AA", "B", None],
+            ),
+            marks=pytest.mark.slow,
         ),
         pd.Series(gen_random_string_array(n), np.arange(n) + 1, name="A"),
         pd.DataFrame(
@@ -1140,42 +1158,54 @@ def get_random_int64index(n):
             },
             np.arange(n) + 2,
         ),
-        pd.Series(["BB", "CC"] + (["AA"] * (n - 2)), dtype="category"),
+        pytest.param(
+            pd.Series(["BB", "CC"] + (["AA"] * (n - 2)), dtype="category"),
+            marks=pytest.mark.slow,
+        ),
         # list(str) array
         # unboxing crashes for case below (issue #812)
         # pd.Series(gen_random_string_array(n)).map(lambda a: None if pd.isna(a) else [a, "A"]).values
-        pd.Series(["A"] * n).map(lambda a: None if pd.isna(a) else [a, "A"]).values,
-        np.array(
-            [
-                [1, 3],
-                [2],
-                np.nan,
-                [4, 5, 6],
-                [],
-                [1, 1753],
-                [],
-                [-10],
-                [4, 10],
-                np.nan,
-                [42],
-            ]
-            * 2
+        pytest.param(
+            pd.Series(["A"] * n).map(lambda a: None if pd.isna(a) else [a, "A"]).values,
+            marks=pytest.mark.slow,
         ),
-        np.array(
-            [
-                [2.0, -3.2],
-                [2.2, 1.3],
-                np.nan,
-                [4.1, 5.2, 6.3],
-                [],
-                [1.1, 1.2],
-                [],
-                [-42.0],
-                [3.14],
-                [2.0, 3.0],
-                np.nan,
-            ]
-            * 2
+        pytest.param(
+            np.array(
+                [
+                    [1, 3],
+                    [2],
+                    np.nan,
+                    [4, 5, 6],
+                    [],
+                    [1, 1753],
+                    [],
+                    [-10],
+                    [4, 10],
+                    np.nan,
+                    [42],
+                ]
+                * 2
+            ),
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            np.array(
+                [
+                    [2.0, -3.2],
+                    [2.2, 1.3],
+                    np.nan,
+                    [4.1, 5.2, 6.3],
+                    [],
+                    [1.1, 1.2],
+                    [],
+                    [-42.0],
+                    [3.14],
+                    [2.0, 3.0],
+                    np.nan,
+                ]
+                * 2
+            ),
+            marks=pytest.mark.slow,
         ),
     ],
 )

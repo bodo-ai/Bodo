@@ -29,6 +29,7 @@ def test_unbox(bool_arr_value, memory_leak_check):
     check_func(impl2, (bool_arr_value,))
 
 
+@pytest.mark.slow
 def test_boolean_dtype(memory_leak_check):
     # unbox and box
     def impl(d):
@@ -43,6 +44,7 @@ def test_boolean_dtype(memory_leak_check):
     check_func(impl2, ())
 
 
+@pytest.mark.slow
 def test_unary_ufunc(memory_leak_check):
     ufunc = np.invert
 
