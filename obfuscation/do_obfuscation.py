@@ -19,10 +19,6 @@ for e_dir in list_dir:
     complete_dir = os.path.join("../bodo", e_dir)
     content_dir = os.listdir(complete_dir)
     for e_file in content_dir:
-        # !!TODO!!: obfuscate bodo/config.py and remove this
-        if e_file == "config.py":
-            # this file is not correctly obfuscated and breaks Bodo on import
-            continue
         if e_file.endswith(".py"):
             list_files.append(os.path.join(complete_dir, e_file))
 

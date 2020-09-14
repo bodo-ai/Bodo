@@ -776,6 +776,19 @@ def get_ctypes_ptr(typingctx, ctypes_typ=None):
     return types.voidptr(ctypes_typ), codegen
 
 
+@intrinsic
+def is_null_pointer(typingctx, ptr_typ=None):
+    """check whether the pointer type is NULL or not
+    """
+
+    def codegen(context, builder, signature, args):
+        (ptr,) = args
+        null = context.get_constant_null(ptr_typ)
+        return builder.icmp_unsigned("==", ptr, null)
+
+    return types.bool_(ptr_typ), codegen
+
+
 def object_length(c, obj):
     """
     len(obj)
@@ -934,3 +947,23 @@ def nanstd_ddof1(a):
     Simple implementation for np.nanstd(arr, ddof=1)
     """
     return np.sqrt(nanvar_ddof1(a))
+
+
+@intrinsic
+def check_and_propagate_cpp_exception(typingctx):
+    """
+    Check if an error occured in C++ using the C Python API 
+    (PyErr_Occured). If it did, raise it in Python with 
+    the corresponding error message.
+    """
+
+    def codegen(context, builder, sig, args):
+
+        pyapi = context.get_python_api(builder)
+        err_flag = pyapi.err_occurred()
+        error_occured = cgutils.is_not_null(builder, err_flag)
+
+        with builder.if_then(error_occured):
+            builder.ret(numba.core.callconv.RETCODE_EXC)
+
+    return types.void(), codegen

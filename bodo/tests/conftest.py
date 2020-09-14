@@ -48,13 +48,17 @@ def memory_leak_check():
     """
     gc.collect()
     old = rtsys.get_allocation_stats()
+    old_bodo = bodo.libs.array.get_allocation_stats()
     yield
     gc.collect()
     new = rtsys.get_allocation_stats()
-    total_alloc = new.alloc - old.alloc
-    total_free = new.free - old.free
-    total_mi_alloc = new.mi_alloc - old.mi_alloc
-    total_mi_free = new.mi_free - old.mi_free
+    new_bodo = bodo.libs.array.get_allocation_stats()
+    total_alloc = (new.alloc - old.alloc) + (new_bodo.alloc - old_bodo.alloc)
+    total_free = (new.free - old.free) + (new_bodo.free - old_bodo.free)
+    total_mi_alloc = (new.mi_alloc - old.mi_alloc) + (
+        new_bodo.mi_alloc - old_bodo.mi_alloc
+    )
+    total_mi_free = (new.mi_free - old.mi_free) + (new_bodo.mi_free - old_bodo.mi_free)
     assert total_alloc == total_free
     assert total_mi_alloc == total_mi_free
 
@@ -85,6 +89,10 @@ def minio_server():
     """
     spins up minio server
     """
+    # Session level environment variables used for S3 Testing.
+    os.environ["AWS_ACCESS_KEY_ID"] = "bodotest1"
+    os.environ["AWS_SECRET_ACCESS_KEY"] = "bodosecret1"
+
     host, port = "127.0.0.1", "9000"
     access_key = os.environ["AWS_ACCESS_KEY_ID"]
     secret_key = os.environ["AWS_SECRET_ACCESS_KEY"]
@@ -122,10 +130,9 @@ def minio_server():
             shutil.rmtree(cwd + "/Data")
 
 
-@pytest.fixture(scope="session")
-def s3_bucket(minio_server, datapath):
+def s3_bucket_helper(minio_server, datapath, bucket_name, region="us-east-1"):
     """
-    creates a bucket in s3 and adds files to it
+    creates a bucket with name $bucket_name in region $region and adds files to it
     """
     boto3 = pytest.importorskip("boto3")
     botocore = pytest.importorskip("botocore")
@@ -139,9 +146,9 @@ def s3_bucket(minio_server, datapath):
             aws_access_key_id=access_key,
             aws_secret_access_key=secret_key,
             config=botocore.client.Config(signature_version="s3v4"),
-            region_name="us-east-1",
+            region_name=region,
         )
-        bucket = s3.Bucket("bodo-test")
+        bucket = s3.Bucket(bucket_name)
         bucket.create()
         test_s3_files = [
             ("csv_data1.csv", datapath("csv_data1.csv")),
@@ -151,7 +158,7 @@ def s3_bucket(minio_server, datapath):
             ("example.json", datapath("example.json")),
         ]
         for s3_key, file_name in test_s3_files:
-            s3.meta.client.upload_file(file_name, "bodo-test", s3_key)
+            s3.meta.client.upload_file(file_name, bucket_name, s3_key)
             if file_name.endswith("csv_data1.csv"):
                 # upload compressed versions of this file too for testing
                 subprocess.run(["gzip", "-k", "-f", file_name])
@@ -171,7 +178,7 @@ def s3_bucket(minio_server, datapath):
         for path in example_single_parts:
             fname = path[len(prefix) + 1 :]
             fname = "example_single.json/{}".format(fname)
-            s3.meta.client.upload_file(path, "bodo-test", fname)
+            s3.meta.client.upload_file(path, bucket_name, fname)
 
         prefix = datapath("example_multi.json")
         pat = prefix + "/*.json"
@@ -179,10 +186,32 @@ def s3_bucket(minio_server, datapath):
         for path in example_multi_parts:
             fname = path[len(prefix) + 1 :]
             fname = "example_multi.json/{}".format(fname)
-            s3.meta.client.upload_file(path, "bodo-test", fname)
+            s3.meta.client.upload_file(path, bucket_name, fname)
 
     bodo.barrier()
-    return "bodo-test"
+    return bucket_name
+
+
+@pytest.fixture(scope="session")
+def s3_bucket(minio_server, datapath):
+    """
+    creates a bucket called bodo-test in s3 (region us-east-1) and adds files to it
+    """
+    return s3_bucket_helper(minio_server, datapath, "bodo-test", "us-east-1")
+
+
+# A fixture such as the one below is run only on the first usage by a test
+# So the bucket wouldn't be initialized until it is used by a test
+# Similarly, once initialized, it remains in scope for the rest of the
+# session and isn't re-initialized.
+@pytest.fixture(scope="session")
+def s3_bucket_us_west_2(minio_server, datapath):
+    """
+    creates a bucket called bodo-test-2 in s3 in the us-west-2 region and adds files to it
+    this bucket will be useful in testing auto s3 region
+    detection functionality in bodo
+    """
+    return s3_bucket_helper(minio_server, datapath, "bodo-test-2", "us-west-2")
 
 
 @pytest.mark.hdfs
@@ -270,3 +299,11 @@ def hdfs_datapath(hadoop_server, hdfs_dir):
         return path
 
     return deco
+
+
+@pytest.fixture(scope="session", autouse=True)
+def is_slow_run(request):
+    """
+    Return a flag on whether it is a slow test run (to skip some tests)
+    """
+    return "not slow" not in request.session.config.option.markexpr

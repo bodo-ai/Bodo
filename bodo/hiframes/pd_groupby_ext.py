@@ -273,7 +273,7 @@ class GetItemDataFrameGroupBy(AbstractTemplate):
                     )
                 selection = (idx,)
             else:
-                raise ValueError("invalid groupby selection {}".format(idx))
+                raise BodoError("invalid groupby selection {}".format(idx))
             ret_grp = DataFrameGroupByType(
                 grpby.df_type, grpby.keys, selection, grpby.as_index, True
             )

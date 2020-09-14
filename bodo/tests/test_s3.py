@@ -9,14 +9,21 @@ from bodo.utils.testing import ensure_clean
 pytestmark = pytest.mark.s3
 
 
-def test_s3_csv_data1(minio_server, s3_bucket, datapath):
+@pytest.mark.parametrize(
+    "bucket_fixture,bucket_name",
+    [("s3_bucket", "bodo-test"), ("s3_bucket_us_west_2", "bodo-test-2"),],
+)
+def test_s3_csv_data1(minio_server, bucket_fixture, datapath, bucket_name, request):
     """
     test s3 read_csv
+    reading from s3_bucket_us_west_2 will check if the s3 auto region
+    detection functionality works
     """
+    request.getfixturevalue(bucket_fixture)
 
-    def test_impl():
+    def test_impl(fpath):
         return pd.read_csv(
-            "s3://bodo-test/csv_data1.csv",
+            fpath,
             names=["A", "B", "C", "D"],
             dtype={"A": np.int, "B": np.float, "C": np.float, "D": np.int},
         )
@@ -28,7 +35,7 @@ def test_s3_csv_data1(minio_server, s3_bucket, datapath):
         dtype={"A": np.int, "B": np.float, "C": np.float, "D": np.int},
     )
 
-    check_func(test_impl, (), py_output=py_output)
+    check_func(test_impl, (f"s3://{bucket_name}/csv_data1.csv",), py_output=py_output)
 
 
 def test_s3_csv_data1_compressed(minio_server, s3_bucket, datapath):
@@ -76,17 +83,24 @@ def test_s3_csv_data_date1(minio_server, s3_bucket, datapath):
     check_func(test_impl, (), py_output=py_output)
 
 
-def test_s3_pq_asof1(minio_server, s3_bucket, datapath):
+@pytest.mark.parametrize(
+    "bucket_fixture,bucket_name",
+    [("s3_bucket", "bodo-test"), ("s3_bucket_us_west_2", "bodo-test-2")],
+)
+def test_s3_pq_asof1(minio_server, bucket_fixture, datapath, bucket_name, request):
     """
     test s3 read_parquet
+    reading from s3_bucket_us_west_2 will check if the s3 auto region
+    detection functionality works
     """
+    request.getfixturevalue(bucket_fixture)
 
-    def test_impl():
-        return pd.read_parquet("s3://bodo-test/asof1.pq")
+    def test_impl(fpath):
+        return pd.read_parquet(fpath)
 
     fname = datapath("asof1.pq")
     py_output = pd.read_parquet(fname)
-    check_func(test_impl, (), py_output=py_output)
+    check_func(test_impl, (f"s3://{bucket_name}/asof1.pq",), py_output=py_output)
 
 
 def test_s3_pq_groupby3(minio_server, s3_bucket, datapath):
@@ -102,13 +116,20 @@ def test_s3_pq_groupby3(minio_server, s3_bucket, datapath):
     check_func(test_impl, (), py_output=py_output)
 
 
-def test_s3_read_json(minio_server, s3_bucket, datapath):
+@pytest.mark.parametrize(
+    "bucket_fixture,bucket_name",
+    [("s3_bucket", "bodo-test"), ("s3_bucket_us_west_2", "bodo-test-2")],
+)
+def test_s3_read_json(minio_server, bucket_fixture, datapath, bucket_name, request):
     """
     test read_json from s3
+    reading from s3_bucket_us_west_2 will check if the s3 auto region
+    detection functionality works
     """
-    fname_file = "s3://bodo-test/example.json"
-    fname_dir_single = "s3://bodo-test/example_single.json"
-    fname_dir_multi = "s3://bodo-test/example_multi.json"
+    request.getfixturevalue(bucket_fixture)
+    fname_file = f"s3://{bucket_name}/example.json"
+    fname_dir_single = f"s3://{bucket_name}/example_single.json"
+    fname_dir_multi = f"s3://{bucket_name}/example_multi.json"
 
     def test_impl(fname):
         return pd.read_json(fname, orient="records", lines=True)
@@ -151,16 +172,25 @@ def test_df(request):
     return request.param
 
 
-def test_s3_parquet_write_seq(minio_server, s3_bucket, test_df):
+@pytest.mark.parametrize(
+    "bucket_fixture,bucket_name",
+    [("s3_bucket", "bodo-test"), ("s3_bucket_us_west_2", "bodo-test-2")],
+)
+def test_s3_parquet_write_seq(
+    minio_server, bucket_fixture, test_df, bucket_name, request
+):
     """
     test s3 to_parquet sequentially
+    writing to s3_bucket_us_west_2 will check if the s3 auto region
+    detection functionality works
     """
+    request.getfixturevalue(bucket_fixture)
 
-    def test_write(test_df):
-        test_df.to_parquet("s3://bodo-test/test_df_bodo_seq.pq")
+    def test_write(test_df, fpath):
+        test_df.to_parquet(fpath)
 
     bodo_write = bodo.jit(test_write)
-    bodo_write(test_df)
+    bodo_write(test_df, f"s3://{bucket_name}/test_df_bodo_seq.pq")
 
 
 def test_s3_parquet_write_1D(minio_server, s3_bucket, test_df):
@@ -187,16 +217,25 @@ def test_s3_parquet_write_1D_var(minio_server, s3_bucket, test_df):
     bodo_write(_get_dist_arg(test_df, False, True))
 
 
-def test_s3_csv_write_seq(minio_server, s3_bucket, test_df):
+@pytest.mark.parametrize(
+    "bucket_fixture,bucket_name",
+    [("s3_bucket", "bodo-test"), ("s3_bucket_us_west_2", "bodo-test-2")],
+)
+def test_s3_csv_write_seq(minio_server, bucket_fixture, test_df, bucket_name, request):
     """
     test s3 to_csv sequentially
+    writing to s3_bucket_us_west_2 will check if the s3 auto region
+    detection functionality works
     """
+    request.getfixturevalue(bucket_fixture)
 
-    def test_write(test_df):
-        test_df.to_csv("s3://bodo-test/test_df_bodo_seq.csv", index=False, header=False)
+    def test_write(test_df, fpath):
+        test_df.to_csv(
+            fpath, index=False, header=False,
+        )
 
     bodo_write = bodo.jit(test_write)
-    bodo_write(test_df)
+    bodo_write(test_df, f"s3://{bucket_name}/test_df_bodo_seq.csv")
 
 
 def test_s3_csv_write_1D(minio_server, s3_bucket, test_df):
@@ -261,18 +300,27 @@ def test_s3_csv_write_header_1D_var(minio_server, s3_bucket, test_df):
     bodo_write(_get_dist_arg(test_df, False, True))
 
 
-def test_s3_json_write_records_lines_seq(minio_server, s3_bucket, test_df):
+@pytest.mark.parametrize(
+    "bucket_fixture,bucket_name",
+    [("s3_bucket", "bodo-test"), ("s3_bucket_us_west_2", "bodo-test-2")],
+)
+def test_s3_json_write_records_lines_seq(
+    minio_server, bucket_fixture, test_df, bucket_name, request
+):
     """
     test s3 to_json(orient="records", lines=True) sequentially
+    writing to s3_bucket_us_west_2 will check if the s3 auto region
+    detection functionality works
     """
+    request.getfixturevalue(bucket_fixture)
 
-    def test_write(test_df):
+    def test_write(test_df, fpath):
         test_df.to_json(
-            "s3://bodo-test/df_records_lines_seq.json", orient="records", lines=True
+            fpath, orient="records", lines=True,
         )
 
     bodo_write = bodo.jit(test_write)
-    bodo_write(test_df)
+    bodo_write(test_df, f"s3://{bucket_name}/df_records_lines_seq.json")
 
 
 def test_s3_json_write_records_lines_1D(minio_server, s3_bucket, test_df):

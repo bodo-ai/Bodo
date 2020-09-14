@@ -111,29 +111,23 @@ def box_multi_index(typ, val, c):
 @unbox(MultiIndexType)
 def unbox_multi_index(typ, val, c):
     """ubox pd.MultiIndex object into native representation.
-    using `to_frame()` to get arrays out since we are just storing
+    using `get_level_values()` to get arrays out since we are just storing
     arrays currently. TODO: support `levels` and `codes`
     """
-    df_obj = c.pyapi.call_method(val, "to_frame", ())
-    # using df.columns to get column names
-    df_cols_obj = c.pyapi.object_getattr_string(df_obj, "columns")
     data_arrs = []
     # save array objects to decref later since array may be created on demand and
     # cleaned up in Pandas
     arr_objs = []
 
     for i in range(typ.nlevels):
-        # generate df[df.columns[i]].to_numpy()
+        # generate val.get_level_values(i)
         i_obj = c.pyapi.unserialize(c.pyapi.serialize_object(i))
-        col_name_obj = c.pyapi.object_getitem(df_cols_obj, i_obj)
-        series_obj = c.pyapi.object_getitem(df_obj, col_name_obj)
-        # TODO: use .array when support of nullable arrays is possible
-        array_obj = c.pyapi.call_method(series_obj, "to_numpy", ())
+        level_obj = c.pyapi.call_method(val, "get_level_values", (i_obj,))
+        array_obj = c.pyapi.object_getattr_string(level_obj, "values")
+        c.pyapi.decref(level_obj)
+        c.pyapi.decref(i_obj)
         data_arr = c.pyapi.to_native_value(typ.array_types[i], array_obj).value
         data_arrs.append(data_arr)
-        c.pyapi.decref(i_obj)
-        c.pyapi.decref(col_name_obj)
-        c.pyapi.decref(series_obj)
         arr_objs.append(array_obj)
 
     # set data, names and name attributes
@@ -160,8 +154,6 @@ def unbox_multi_index(typ, val, c):
     for array_obj in arr_objs:
         c.pyapi.decref(array_obj)
 
-    c.pyapi.decref(df_obj)
-    c.pyapi.decref(df_cols_obj)
     c.pyapi.decref(names_obj)
     c.pyapi.decref(tuple_class_obj)
     c.pyapi.decref(names_tup_obj)

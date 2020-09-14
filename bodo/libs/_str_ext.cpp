@@ -74,6 +74,8 @@ int str_arr_to_float64(double* out, uint32_t* offsets, char* data,
 
 void* str_from_float32(float in);
 void* str_from_float64(double in);
+void inplace_int64_to_str(char* str, int64_t l, int64_t value);
+
 void del_str(std::string* in_str);
 int64_t hash_str(std::string* in_str);
 npy_intp array_size(PyArrayObject* arr);
@@ -160,6 +162,8 @@ PyMODINIT_FUNC PyInit_hstr_ext(void) {
                            PyLong_FromVoidPtr((void*)(&str_from_float32)));
     PyObject_SetAttrString(m, "str_from_float64",
                            PyLong_FromVoidPtr((void*)(&str_from_float64)));
+    PyObject_SetAttrString(m, "inplace_int64_to_str",
+                           PyLong_FromVoidPtr((void*)(&inplace_int64_to_str)));
     PyObject_SetAttrString(m, "is_na", PyLong_FromVoidPtr((void*)(&is_na)));
     PyObject_SetAttrString(m, "del_str", PyLong_FromVoidPtr((void*)(&del_str)));
     PyObject_SetAttrString(m, "hash_str",
@@ -182,8 +186,7 @@ PyMODINIT_FUNC PyInit_hstr_ext(void) {
                            PyLong_FromVoidPtr((void*)(&is_pd_boolean_array)));
     PyObject_SetAttrString(m, "unbox_bool_array_obj",
                            PyLong_FromVoidPtr((void*)(&unbox_bool_array_obj)));
-    PyObject_SetAttrString(m, "memcmp",
-                        PyLong_FromVoidPtr((void*)(&memcmp)));
+    PyObject_SetAttrString(m, "memcmp", PyLong_FromVoidPtr((void*)(&memcmp)));
     return m;
 }
 
@@ -417,6 +420,30 @@ void* str_from_float32(float in) { return new std::string(std::to_string(in)); }
 
 void* str_from_float64(double in) {
     return new std::string(std::to_string(in));
+}
+
+/**
+ * @brief convert int64 value to string and write to string pointer
+ *
+ * @param str output string pointer to write to
+ * @param l length of output string value
+ * @param value input integer value to convert
+ */
+void inplace_int64_to_str(char* str, int64_t l, int64_t value) {
+    if (value == 0) {
+        str[0] = '0';
+        return;
+    }
+    if (value < 0) {
+        value = -value;
+        str[0] = '-';
+    }
+    size_t i = 1;
+    while (value != 0) {
+        str[l - i] = '0' + (value % 10);
+        value /= 10;
+        i++;
+    }
 }
 
 /// @brief create a concatenated string and offset table from a pandas series of

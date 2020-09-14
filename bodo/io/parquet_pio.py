@@ -1,4 +1,5 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
+import os
 import warnings
 import numba
 from numba.core import ir, types
@@ -39,16 +40,19 @@ from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.decimal_arr_ext import DecimalArrayType, Decimal128Type
 from bodo.libs.bool_arr_ext import boolean_array, BooleanArrayType
 from bodo.libs.array import array_info_type, _lower_info_to_array_numpy
-from bodo.utils.utils import unliteral_all, sanitize_varname
+from bodo.utils.utils import unliteral_all, sanitize_varname, is_null_pointer
 from bodo.utils.typing import BodoError, BodoWarning
 import bodo.ir.parquet_ext
 from bodo.transforms import distributed_pass
 from bodo.utils.transform import get_const_value
 from bodo.io.fs_io import (
     get_s3_fs,
+    s3_is_directory,
     s3_list_dir_fnames,
     get_hdfs_fs,
+    hdfs_is_directory,
     hdfs_list_dir_fnames,
+    directory_of_files_common_filter,
 )
 from bodo.libs.distributed_api import get_start, get_end, get_node_portion
 from numba.extending import intrinsic
@@ -252,7 +256,7 @@ def _gen_pq_reader_py(
     func_text += "  ds_reader = get_dataset_reader(unicode_to_utf8(fname), {}, unicode_to_utf8(bucket_region) )\n".format(
         is_parallel
     )
-    func_text += "  if is_null_ds_reader(ds_reader):\n"
+    func_text += "  if is_null_pointer(ds_reader):\n"
     func_text += "    raise ValueError('Error reading Parquet dataset')\n"
 
     local_types = {}
@@ -269,10 +273,11 @@ def _gen_pq_reader_py(
     func_text += "  return ({},)\n".format(
         ", ".join("{0}, {0}_size".format(sanitize_varname(c)) for c in col_names)
     )
+
     loc_vars = {}
     glbs = {
         "get_dataset_reader": _get_dataset_reader,
-        "is_null_ds_reader": is_null_ds_reader,
+        "is_null_pointer": is_null_pointer,
         "del_dataset_reader": _del_dataset_reader,
         "get_column_size_parquet": get_column_size_parquet,
         "read_parquet": read_parquet,
@@ -302,6 +307,8 @@ def gen_column_read(func_text, cname, c_ind_real, c_ind, c_siz, c_type, is_paral
     func_text += "  {}_size = get_column_size_parquet(ds_reader, {})\n".format(
         cname, c_ind
     )
+    # Check if there was an error in the C++ code. If so, raise it.
+    func_text += "  bodo.utils.utils.check_and_propagate_cpp_exception()\n"
     alloc_size = "{}_size".format(cname)
 
     ret_type = None
@@ -310,12 +317,16 @@ def gen_column_read(func_text, cname, c_ind_real, c_ind, c_siz, c_type, is_paral
         func_text += "  {} = read_parquet_str(ds_reader, {}, {}, {}_size)\n".format(
             cname, c_ind_real, c_ind, cname
         )
+        # Check if there was an error in the C++ code. If so, raise it.
+        func_text += "  bodo.utils.utils.check_and_propagate_cpp_exception()\n"
     elif c_type == ArrayItemArrayType(string_array_type):
         # TODO does not support null strings?
         # pass size for easier allocation and distributed analysis
         func_text += "  {} = read_parquet_list_str(ds_reader, {}, {}, {}_size)\n".format(
             cname, c_ind_real, c_ind, cname
         )
+        # Check if there was an error in the C++ code. If so, raise it.
+        func_text += "  bodo.utils.utils.check_and_propagate_cpp_exception()\n"
     elif isinstance(c_type, ArrayItemArrayType):
         # Force generalized path for all ArrayItemArrayType(...) (see FIXME below)
         if not isinstance(c_type.dtype, types.Float):
@@ -323,6 +334,8 @@ def gen_column_read(func_text, cname, c_ind_real, c_ind, c_siz, c_type, is_paral
             func_text += "  {} = read_parquet_arrow_array(ds_reader, {}, {}, {}, {})\n".format(
                 cname, c_ind_real, c_ind, c_siz, ret_type
             )
+            # Check if there was an error in the C++ code. If so, raise it.
+            func_text += "  bodo.utils.utils.check_and_propagate_cpp_exception()\n"
         else:
             # FIXME This code path does not support nullable items,
             # for example: ArrayItemArray(IntegerArray(int64))
@@ -337,17 +350,23 @@ def gen_column_read(func_text, cname, c_ind_real, c_ind, c_siz, c_type, is_paral
                 bodo.utils.utils.numba_to_c_type(elem_typ),
                 get_element_type(elem_typ),
             )
+            # Check if there was an error in the C++ code. If so, raise it.
+            func_text += "  bodo.utils.utils.check_and_propagate_cpp_exception()\n"
     elif isinstance(c_type, StructArrayType):
         ret_type = "nested_type{}".format(c_ind)
         func_text += "  {} = read_parquet_arrow_array(ds_reader, {}, {}, {}, {})\n".format(
             cname, c_ind_real, c_ind, c_siz, ret_type
         )
+        # Check if there was an error in the C++ code. If so, raise it.
+        func_text += "  bodo.utils.utils.check_and_propagate_cpp_exception()\n"
     else:
         el_type = get_element_type(c_type.dtype)
         func_text += _gen_alloc(c_type, cname, alloc_size, el_type)
         func_text += "  status = read_parquet(ds_reader, {}, {}, {}, np.int32({}))\n".format(
             c_ind_real, c_ind, cname, bodo.utils.utils.numba_to_c_type(c_type.dtype)
         )
+        # Check if there was an error in the C++ code. If so, raise it.
+        func_text += "  bodo.utils.utils.check_and_propagate_cpp_exception()\n"
 
     return ret_type, func_text
 
@@ -496,116 +515,174 @@ def _get_numba_typ_from_pa_typ(pa_typ, is_index, nullable_from_metadata):
     return arr_typ
 
 
-def get_parquet_dataset(file_name, parallel, get_row_counts=True):
-    """ Create ParquetDataset instance from Parquet file name
-        parallel: if true only rank 0 reads dataset and broadcasts to others
-        get_row_counts : get row counts of pieces from metadata and store
-                         as attributes in ParquetDataset object
+def merge_subdatasets(subdatasets, get_row_counts):
+    """ Merge datasets of type pyarrow.parquet.ParquetDataset into one.
+        Each dataset contains a subset of pieces (parquet files) of the same dataset.
+        This function will check that the schema of all datasets is the same.
+        If get_row_counts is True, pieces must have '_bodo_num_rows' attribute
+        to indicate the number of rows of each piece, and the total number
+        of rows will be saved to the resulting dataset in '_bodo_total_rows'
+        attribute.
+        NOTE: this will modify the first dataset in the list
     """
+    dataset = None
+    for subdataset in subdatasets:
+        if subdataset is None:
+            continue
+        if isinstance(subdataset, Exception):
+            e = subdataset
+            raise e
+        if dataset is None:
+            # This is the first valid dataset in the list. We use this object
+            # to generate the result
+            dataset = subdataset
+            dataset._bodo_total_rows = 0
+        else:
+            # add this dataset's pieces to the result
+            dataset.pieces += subdataset.pieces
+        if get_row_counts:
+            for piece in subdataset.pieces:
+                dataset._bodo_total_rows += piece._bodo_num_rows
+        if dataset.schema != subdataset.schema:
+            raise BodoError("Files in directory have non-matching schema")
+    if dataset is None:
+        raise BodoError("No parquet files found in directory")
+    return dataset
+
+
+def is_directory_parallel(fpath):
+    """ Determines whether a path is a directory. Is meant to be called by
+        all ranks. Rank 0 will do the check and communicate the result. """
+    from mpi4py import MPI
+
+    comm = MPI.COMM_WORLD
+    isdir = None
+    if bodo.get_rank() == 0:
+        try:
+            if fpath.startswith("s3://"):
+                isdir = s3_is_directory(get_s3_fs(), fpath)
+            elif fpath.startswith("hdfs://"):  # pragma: no cover
+                _, isdir = hdfs_is_directory(fpath)
+            else:
+                isdir = os.path.isdir(fpath)
+        except Exception as e:
+            isdir = e
+    isdir = comm.bcast(isdir)
+    if isinstance(isdir, Exception):
+        e = isdir
+        raise e
+    return isdir
+
+
+def get_filenames_parallel(path, filter_func):
+    """ Get sorted list of file names in directory 'path'. Filter files based
+        on the filter function 'filter_func'.
+        Is meant to be called by all ranks. Rank 0 will get the list and
+        communicate the result. """
+
+    from mpi4py import MPI
+
+    comm = MPI.COMM_WORLD
+    file_names = None
+    path = path.rstrip("/")  # remove any trailing / from path
+    if bodo.get_rank() == 0:
+        try:
+            if path.startswith("s3://"):
+                file_names = s3_list_dir_fnames(get_s3_fs(), path)
+            elif path.startswith("hdfs://"):  # pragma: no cover
+                _, file_names = hdfs_list_dir_fnames(path)
+            else:
+                file_names = os.listdir(path)
+            # pq.ParquetDataset() needs the full path for each file
+            file_names = [
+                (path + "/" + f) for f in sorted(filter(filter_func, file_names))
+            ]
+        except Exception as e:
+            file_names = e
+    file_names = comm.bcast(file_names)
+    if isinstance(file_names, Exception):
+        e = file_names
+        raise e
+    return file_names
+
+
+def get_parquet_dataset(fpath, parallel, get_row_counts=True):
+
     import pyarrow.parquet as pq
     from mpi4py import MPI
 
     comm = MPI.COMM_WORLD
 
-    fs = None
-    dataset_or_e = None
+    fs = []
 
-    # we read the dataset info only on rank 0 and broadcast it to the rest
-    if (not parallel) or bodo.get_rank() == 0:
+    def getfs():
+        if len(fs) == 1:
+            return fs[0]
+        if fpath.startswith("s3://"):
+            fs.append(get_s3_fs())
+        elif fpath.startswith("hdfs://"):  # pragma: no cover
+            fs.append(get_hdfs_fs(fpath))
+        else:
+            fs.append(None)
+        return fs[0]
+
+    if is_directory_parallel(fpath):
+        file_names = get_filenames_parallel(fpath, directory_of_files_common_filter)
+        # Note that at this point there could still be files in file_names
+        # which aren't valid parquet files, so the division of work between
+        # ranks below won't be perfect.
+        # We can either do better filtering in `get_filenames_parallel` or
+        # do a further subdivision of work after checking which files are
+        # parquet files below. But I think this is already good.
         try:
-            if file_name.startswith("s3://"):
-                fs = get_s3_fs()
-                file_names = s3_list_dir_fnames(fs, file_name)
+            start = get_start(len(file_names), bodo.get_size(), bodo.get_rank())
+            end = get_end(len(file_names), bodo.get_size(), bodo.get_rank())
+            # When passing list of files these can only be valid parquet files,
+            # so we check each one of them manually.
+            # Note that for s3 this is needed anyway (if you call pq.ParquetDataset()
+            # with a directory name and the directory contains non-parquet files
+            # it will fail). And we are doing this in parallel so it shouldn't
+            # be an issue.
+            myfiles = []
+            for fname in file_names[start:end]:
+                try:
+                    pq.ParquetDataset(fname, filesystem=getfs())
+                    myfiles.append(fname)
+                except:
+                    # this is not a valid parquet file
+                    pass
+            subdataset = None
+            if len(myfiles) > 0:
+                subdataset = pq.ParquetDataset(myfiles, filesystem=getfs())
+                if get_row_counts:
+                    for piece in subdataset.pieces:
+                        piece._bodo_num_rows = piece.get_metadata().num_rows
+        except Exception as e:
+            subdataset = e
 
-                if file_names is not None:  # pragma: no cover
-                    # Get only the parquet files, otherwise pq.ParquetDataset
-                    # fails when using the s3fs filesystem object
-                    valid_file_names = []
-                    for fname in file_names:
-                        # Spark typically generates one .crc for each .parquet
-                        # file it writes, and we can just skip these
-                        if fname.endswith(".crc"):
-                            continue
-                        try:
-                            pq.ParquetDataset(fname, filesystem=fs)
-                            valid_file_names.append(fname)
-                        except:
-                            # this is not a valid parquet file
-                            pass
-                    if len(valid_file_names) > 0:
-                        try:
-                            dataset_or_e = pq.ParquetDataset(
-                                valid_file_names, filesystem=fs
-                            )
-                        except Exception as e:
-                            raise BodoError(
-                                "read_parquet(): S3 file system cannot be created: {}".format(
-                                    e
-                                )
-                            )
-            elif file_name.startswith("hdfs://"):  # pragma: no cover
-                fs = get_hdfs_fs(file_name)
-                (_, file_names) = hdfs_list_dir_fnames(file_name)
+        subdatasets = comm.allgather(subdataset)
+        # merge all the subdatasets into one
+        dataset = merge_subdatasets(subdatasets, get_row_counts)
+    else:
+        if bodo.get_rank() == 0:
+            try:
+                dataset = pq.ParquetDataset(fpath, filesystem=getfs())
+                if get_row_counts:
+                    dataset._bodo_total_rows = 0
+                    for piece in dataset.pieces:
+                        piece._bodo_num_rows = piece.get_metadata().num_rows
+                        dataset._bodo_total_rows += piece._bodo_num_rows
+            except Exception as e:
+                dataset = e
+            comm.bcast(dataset)
+        else:
+            dataset = comm.bcast(None)
 
-                if file_names is not None:
-                    # TODO check if ParquetDataset passing list of file names
-                    # using HDFS filesystem object works or not if the files
-                    # include ".crc" or other non-parquet files. Otherwise we need
-                    # to use a similar scheme as s3 above
-                    try:
-                        dataset_or_e = pq.ParquetDataset(file_names, filesystem=fs)
-                    except Exception as e:
-                        raise BodoError(
-                            "read_parquet(): Hadoop file system cannot be created: {}".format(
-                                e
-                            )
-                        )
+    if isinstance(dataset, Exception):
+        e = dataset
+        raise e
 
-            if dataset_or_e is None:
-                dataset_or_e = pq.ParquetDataset(file_name, filesystem=fs)
-
-        except BaseException as e:  # BaseException to include BodoError
-            dataset_or_e = e
-
-    if parallel:
-        dataset_or_e = comm.bcast(dataset_or_e)
-
-    if isinstance(dataset_or_e, Exception):
-        raise dataset_or_e
-
-    # parallel implementation of getting the row counts for each piece in
-    # the ParquetDataset. Each process works on a set of of pieces. This
-    # information is then (all)-gathered on all processes so that all
-    # processes know the row counts of each piece. total number of rows
-    # is calculated as just the sum over all row counts.
-    # NOTE: the information that other processes need to only open file
-    # readers for their chunk are the total number of rows and number of rows
-    # of each piece, as well as the path of each piece
-
-    if get_row_counts:
-        dataset_or_e._bodo_total_rows = 0
-        num_pieces, num_procs, proc_rank = (
-            len(dataset_or_e.pieces),
-            bodo.get_size(),
-            bodo.get_rank(),
-        )
-        node_start, node_end, node_portion_size = (
-            get_start(num_pieces, num_procs, proc_rank),
-            get_end(num_pieces, num_procs, proc_rank),
-            get_node_portion(num_pieces, num_procs, proc_rank),
-        )
-        local_bodo_num_rows = np.empty(node_portion_size, dtype=np.int64)
-        for i, piece in enumerate(dataset_or_e.pieces[node_start:node_end]):
-            local_bodo_num_rows[i] = piece.get_metadata().num_rows
-
-        bodo_num_rows = comm.allgather(local_bodo_num_rows)
-        bodo_num_rows = np.concatenate(bodo_num_rows)
-
-        for i in range(len(dataset_or_e.pieces)):
-            dataset_or_e.pieces[i]._bodo_num_rows = bodo_num_rows[i]
-            dataset_or_e._bodo_total_rows += bodo_num_rows[i]
-
-    return dataset_or_e
+    return dataset
 
 
 def parquet_file_schema(file_name, selected_columns):
@@ -702,20 +779,6 @@ def parquet_file_schema(file_name, selected_columns):
     col_names = selected_columns
     # TODO: close file?
     return col_names, col_types, index_col, col_indices, col_nb_fields
-
-
-@intrinsic
-def is_null_ds_reader(typingctx, obj_typ=None):
-    """check whether the dataset reader object is NULL or not
-    """
-    assert obj_typ == types.Opaque("arrow_reader")
-
-    def codegen(context, builder, signature, args):
-        (obj,) = args
-        null = context.get_constant_null(obj_typ)
-        return builder.icmp_unsigned("==", obj, null)
-
-    return types.bool_(obj_typ), codegen
 
 
 _get_dataset_reader = types.ExternalFunction(
@@ -962,6 +1025,7 @@ def pq_read_string_lower(context, builder, sig, args):
             str_arr_payload._get_ptr_by_name("null_bitmap"),
         ],
     )
+
     builder.store(str_arr_payload._getvalue(), meminfo_data_ptr)
 
     string_array.meminfo = meminfo

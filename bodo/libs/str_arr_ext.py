@@ -751,7 +751,7 @@ def to_string_list_overload(data, str_null_bools=None):
         to_str_impl = loc_vars["f"]
         return to_str_impl
 
-    return lambda data, str_null_bools=None: data
+    return lambda data, str_null_bools=None: data  # pragma: no cover
 
 
 def cp_str_list_to_array(str_arr, str_list, str_null_bools=None):  # pragma: no cover
@@ -818,7 +818,7 @@ def cp_str_list_to_array_overload(str_arr, list_data, str_null_bools=None):
         cp_str_impl = loc_vars["f"]
         return cp_str_impl
 
-    return lambda str_arr, list_data, str_null_bools=None: None
+    return lambda str_arr, list_data, str_null_bools=None: None  # pragma: no cover
 
 
 def str_list_to_array(str_list):
@@ -845,7 +845,7 @@ def str_list_to_array_overload(str_list):
 
         return str_list_impl
 
-    return lambda str_list: str_list
+    return lambda str_list: str_list  # pragma: no cover
 
 
 def get_num_total_chars(A):  # pragma: no cover
@@ -896,12 +896,12 @@ def str_arr_len_overload(str_arr):
 
 @overload_attribute(StringArrayType, "size")
 def str_arr_size_overload(str_arr):
-    return lambda str_arr: num_strings(str_arr)
+    return lambda str_arr: num_strings(str_arr)  # pragma: no cover
 
 
 @overload_attribute(StringArrayType, "shape")
 def str_arr_shape_overload(str_arr):
-    return lambda str_arr: (str_arr.size,)
+    return lambda str_arr: (str_arr.size,)  # pragma: no cover
 
 
 from llvmlite import ir as lir
@@ -924,6 +924,12 @@ ll.add_symbol("str_arr_to_float64", hstr_ext.str_arr_to_float64)
 ll.add_symbol("dtor_string_array", hstr_ext.dtor_string_array)
 ll.add_symbol("get_utf8_size", hstr_ext.get_utf8_size)
 ll.add_symbol("print_str_arr", hstr_ext.print_str_arr)
+ll.add_symbol("inplace_int64_to_str", hstr_ext.inplace_int64_to_str)
+
+
+inplace_int64_to_str = types.ExternalFunction(
+    "inplace_int64_to_str", types.void(types.voidptr, types.int64, types.int64)
+)
 
 convert_len_arr_to_offset = types.ExternalFunction(
     "convert_len_arr_to_offset", types.void(types.voidptr, types.intp)
@@ -1363,7 +1369,7 @@ dummy_use = numba.njit(lambda a: None)
 def get_utf8_size(s):
     if isinstance(s, types.StringLiteral):
         l = len(s.literal_value.encode())
-        return lambda s: l
+        return lambda s: l  # pragma: no cover
 
     def impl(s):  # pragma: no cover
         if s._is_ascii == 1:
@@ -1466,6 +1472,61 @@ def inplace_eq_overload(A, ind, val):
             return False
         ptr = get_data_ptr_ind(A, start_offset)
         return memcmp(ptr, utf8_str, utf8_len) == 0
+
+    return impl
+
+
+def str_arr_setitem_int_to_str(A, ind, value):
+    A[ind] = str(value)
+
+
+@overload(str_arr_setitem_int_to_str)
+def overload_str_arr_setitem_int_to_str(A, ind, val):
+    """
+    Set string array element to string representation of an integer value
+    """
+
+    def impl(A, ind, val):  # pragma: no cover
+        # get pointer to string position and its length
+        start_offset = getitem_str_offset(A, ind)
+        arr_val_len = bodo.libs.str_ext.int_to_str_len(val)
+        ptr = get_data_ptr_ind(A, start_offset)
+        # convert integer to string and write to output string position inplace
+        inplace_int64_to_str(ptr, arr_val_len, val)
+        # set end offset of string element
+        setitem_str_offset(A, ind + 1, start_offset + arr_val_len)
+
+    return impl
+
+
+@intrinsic
+def inplace_set_NA_str(typingctx, ptr_typ=None):
+    """
+    Write "<NA>" (string representation of pd.NA) to string pointer
+    """
+
+    def codegen(context, builder, sig, args):
+        (ptr,) = args
+        na_str = context.insert_const_string(builder.module, "<NA>")
+        na_str_len = lir.Constant(lir.IntType(64), len("<NA>"))
+        cgutils.raw_memcpy(builder, ptr, na_str, na_str_len, 1)
+
+    return types.none(types.voidptr), codegen
+
+
+def str_arr_setitem_NA_str(A, ind):
+    A[ind] = "<NA>"
+
+
+@overload(str_arr_setitem_NA_str)
+def overload_str_arr_setitem_NA_str(A, ind):
+    """
+    Set string array element to "<NA>" (string representation of pd.NA)
+    """
+
+    def impl(A, ind):  # pragma: no cover
+        ptr = get_data_ptr_ind(A, ind)
+        inplace_set_NA_str(ptr)
 
     return impl
 
@@ -1657,12 +1718,12 @@ def str_arr_setitem(A, idx, val):
 
 @overload_attribute(StringArrayType, "dtype")
 def overload_str_arr_dtype(A):
-    return lambda A: pd.StringDtype()
+    return lambda A: pd.StringDtype()  # pragma: no cover
 
 
 @overload_attribute(StringArrayType, "ndim")
 def overload_str_arr_ndim(A):
-    return lambda A: 1
+    return lambda A: 1  # pragma: no cover
 
 
 @overload_method(StringArrayType, "astype", no_unliteral=True)
@@ -1671,7 +1732,7 @@ def overload_str_arr_astype(A, dtype, copy=True):
     # same dtype case
     if isinstance(dtype, types.Function) and dtype.key[0] == str:
         # no need to copy since our StringArray is immutable
-        return lambda A, dtype, copy=True: A
+        return lambda A, dtype, copy=True: A  # pragma: no cover
 
     # numpy dtypes
     nb_dtype = parse_dtype(dtype)
@@ -1756,11 +1817,42 @@ def overload_get_arr_data_ptr(arr, ind):
     return impl_np
 
 
+def set_to_numeric_out_na_err(out_arr, out_ind, err_code):  # pragma: no cover
+    pass
+
+
+@overload(set_to_numeric_out_na_err)
+def set_to_numeric_out_na_err_overload(out_arr, out_ind, err_code):
+    """set NA to output of to_numeric() based on error code from C++ code.
+    """
+    # nullable int array
+    if isinstance(out_arr, bodo.libs.int_arr_ext.IntegerArrayType):
+
+        def impl_int(out_arr, out_ind, err_code):  # pragma: no cover
+            bodo.libs.int_arr_ext.set_bit_to_arr(out_arr._null_bitmap, out_ind, 0 if err_code == -1 else 1)
+
+        return impl_int
+
+    # numpy case, TODO: other
+    assert isinstance(out_arr, types.Array)
+
+    if isinstance(out_arr.dtype, types.Float):
+
+        def impl_np(out_arr, out_ind, err_code):  # pragma: no cover
+            if err_code == -1:
+                out_arr[out_ind] = np.nan
+
+        return impl_np
+
+    return lambda out_arr, out_ind, err_code: None  # pragma: no cover
+
+
 @numba.njit(no_cpython_wrapper=True)
 def str_arr_item_to_numeric(out_arr, out_ind, str_arr, ind):  # pragma: no cover
-    return _str_arr_item_to_numeric(
+    err_code = _str_arr_item_to_numeric(
         get_arr_data_ptr(out_arr, out_ind), str_arr, ind, out_arr.dtype,
     )
+    set_to_numeric_out_na_err(out_arr, out_ind, err_code)
 
 
 @intrinsic

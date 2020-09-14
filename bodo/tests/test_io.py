@@ -1,4 +1,6 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
+"""Tests I/O for CSV, Parquet, HDF5, etc.
+"""
 import unittest
 import pytest
 import os
@@ -648,9 +650,13 @@ def test_read_write_parquet():
                 # typing errors during unboxing for nested lists.
                 # _infer_ndarray_obj_dtype in boxing.py needs to be made more robust.
                 # TODO: include Nones
-                df[col_name] = pd.Series(gen_random_arrow_list_list_int(2, 0, num_elements))
+                df[col_name] = pd.Series(
+                    gen_random_arrow_list_list_int(2, 0, num_elements)
+                )
             elif dtype == "nested_arrow1":
-                df[col_name] = pd.Series(gen_random_arrow_array_struct_int(10, num_elements))
+                df[col_name] = pd.Series(
+                    gen_random_arrow_array_struct_int(10, num_elements)
+                )
             elif dtype == "nested_arrow2":
                 # TODO: Include following types when they are supported in PYARROW:
                 # We cannot read this dataframe in bodo. Fails at unboxing.
@@ -658,7 +664,9 @@ def test_read_write_parquet():
                 # This dataframe can be written by the code. However we cannot read
                 # due to a limitation in pyarrow
                 # df_bug2 = pd.DataFrame({"X": gen_random_arrow_array_struct_list_int(10, n)})
-                df[col_name] = pd.Series(gen_random_arrow_struct_struct(10, num_elements))
+                df[col_name] = pd.Series(
+                    gen_random_arrow_struct_struct(10, num_elements)
+                )
             else:
                 df[col_name] = np.arange(num_elements, dtype=dtype)
             cur_col += 1
@@ -763,7 +771,7 @@ def test_read_write_parquet():
     df = pd.DataFrame({"A": range(5)})
 
     with pytest.raises(
-        BodoError, match="Bodo does not currently support partition_cols option"
+        BodoError, match="partition_cols parameter only supports default value None"
     ):
         bodo.jit(error_check1)(df)
 
@@ -1228,20 +1236,21 @@ def test_np_io4():
     # parallel version
     def test_impl(n):
         A = np.arange(n)
-        A.tofile("np_file_3.dat")
+        A.tofile("np_file_4.dat")
 
     bodo_func = bodo.jit(test_impl)
     n1 = 111000
     n2 = 111
     A1 = np.arange(n1)
     A2 = np.arange(n2)
-    with ensure_clean("np_file_3.dat"):
+    with ensure_clean("np_file_4.dat"):
         bodo_func(n1)
-        B1 = np.fromfile("np_file_3.dat", np.int64)
+        B1 = np.fromfile("np_file_4.dat", np.int64)
         np.testing.assert_almost_equal(A1, B1)
 
+        bodo.barrier()
         bodo_func(n2)
-        B2 = np.fromfile("np_file_3.dat", np.int64)
+        B2 = np.fromfile("np_file_4.dat", np.int64)
         np.testing.assert_almost_equal(A2, B2)
 
 
@@ -1345,6 +1354,7 @@ def test_np_io12(datapath):
 
 
 # TODO(Nick): Add a test for Parallel version with both offset and count.
+
 
 def test_csv_double_box(datapath):
     """Make sure boxing the output of read_csv() twice doesn't cause crashes
@@ -1786,7 +1796,7 @@ def test_csv_invalid_path():
     def test_impl(fname):
         return pd.read_csv(fname, names=["A"], dtype={"A": np.int64})
 
-    with pytest.raises(FileNotFoundError, match="File does not exist"):
+    with pytest.raises(RuntimeError, match="invalid path"):
         bodo.jit(test_impl)("f.csv")
 
 

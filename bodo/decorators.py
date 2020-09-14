@@ -90,7 +90,7 @@ def distributed_diagnostics(self, signature=None, level=1):
         pfdiag = ol.metadata.get("distributed_diagnostics", None)
         if pfdiag is None:
             msg = "No distributed diagnostic available"
-            raise ValueError(msg)
+            raise bodo.utils.typing.BodoError(msg)
         pfdiag.dump(level)
 
     if signature is not None:

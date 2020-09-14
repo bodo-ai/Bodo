@@ -258,6 +258,59 @@ def median(arr, skipna=True, parallel=False):  # pragma: no cover
     return res[0]
 
 
+################################ autocorr ####################################
+
+ll.add_symbol("autocorr_series_computation", quantile_alg.autocorr_series_computation)
+
+
+_autocorr_series_computation = types.ExternalFunction(
+    "autocorr_series_computation",
+    types.void(
+        types.voidptr, bodo.libs.array.array_info_type, types.int64, types.bool_
+    ),
+)
+
+
+@numba.njit
+def autocorr_series_computation(res, arr, lag, is_parallel):
+    _autocorr_series_computation(res, array_to_info(arr), lag, is_parallel)
+
+
+@numba.njit
+def autocorr(arr, lag=1, parallel=False):  # pragma: no cover
+    # TODO: check return types, e.g. float32 -> float32
+    res = np.empty(1, types.float64)
+    autocorr_series_computation(res.ctypes, arr, lag, parallel)
+    return res[0]
+
+
+####################### series monotonicity ####################################
+
+ll.add_symbol("compute_series_monotonicity", quantile_alg.compute_series_monotonicity)
+
+
+_compute_series_monotonicity = types.ExternalFunction(
+    "compute_series_monotonicity",
+    types.void(
+        types.voidptr, bodo.libs.array.array_info_type, types.int64, types.bool_
+    ),
+)
+
+
+@numba.njit
+def series_monotonicity_call(res, arr, inc_dec, is_parallel):
+    _compute_series_monotonicity(res, array_to_info(arr), inc_dec, is_parallel)
+
+
+@numba.njit
+def series_monotonicity(arr, inc_dec, parallel=False):  # pragma: no cover
+    # TODO: check return types, e.g. float32 -> float32
+    res = np.empty(1, types.float64)
+    series_monotonicity_call(res.ctypes, arr, inc_dec, parallel)
+    is_correct = res[0] > 0.5
+    return is_correct
+
+
 ################################ quantile ####################################
 
 
@@ -987,7 +1040,7 @@ def concat_overload(arr_list):
 
     # Boolean array input, or mix of Numpy and nullable boolean
     if (
-        isinstance(arr_list, types.UniTuple)
+        isinstance(arr_list, (types.UniTuple, types.List))
         and arr_list.dtype == boolean_array
         or (
             isinstance(arr_list, types.BaseTuple)
@@ -1330,9 +1383,9 @@ def overload_gen_na_array(n, arr):
     # TODO: support all array types
 
     if isinstance(arr, types.TypeRef):
-        dtype = arr.instance_type
-    else:
-        dtype = arr.dtype
+        arr = arr.instance_type
+
+    dtype = arr.dtype
 
     if isinstance(arr, ArrayItemArrayType):
         data_arr_type = arr.dtype
@@ -1511,7 +1564,7 @@ def arange_parallel_impl(return_type, *args):
     elif len(args) == 4:
         return arange_4
     else:
-        raise ValueError("parallel arange with types {}".format(args))
+        raise BodoError("parallel arange with types {}".format(args))
 
 
 numba.parfors.parfor.replace_functions_map[("arange", "numpy")] = arange_parallel_impl

@@ -1,0 +1,48 @@
+trigger:
+- refs/tags/*
+
+pr: none
+
+schedules:
+- cron: "0 5 * * *"
+  displayName: 'Daily midnight build with numba-dev'
+  branches:
+    include:
+    - master
+
+stages:
+- stage: Build_Bodo_Binary
+  displayName: 'Build Bodo Binary'
+  jobs:
+  - job: find_suffix
+    pool:
+      vmImage: macOS-latest
+    steps:
+    - script: |
+        set -eo pipefail
+        export BUILD_DATE=`date  +"%Y-%m-%d"`
+        export FILE_SUFFIX=built-${BUILD_DATE}
+        echo "##vso[task.setvariable variable=fileSuffix;isOutput=true]$FILE_SUFFIX"
+      displayName: 'write FILE_SUFFIX'
+      name: suffix_step
+
+  - template: buildscripts/azure/azure-build-binary-linux-macos.yml
+    parameters:
+      name: Linux
+      vmImage: ubuntu-latest
+      useNumbaDev: true
+
+- stage: Test_Bodo_Binary
+  displayName: Test Bodo Binary
+  jobs:
+  - template: buildscripts/azure/azure-test-binary-linux-macos.yml
+    parameters:
+      name: Linux
+      vmImage: ubuntu-latest
+      useNumbaDev: true
+      matrix:
+        TEST_1P_SLOW:
+          NP: 1
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER: slow
+

@@ -92,7 +92,7 @@ class RollingTyper(AbstractTemplate):
             on = None
         else:
             if not isinstance(on, types.StringLiteral):
-                raise ValueError("'on' argument to rolling() should be constant string")
+                raise BodoError("'on' argument to rolling() should be constant string")
             on = on.literal_value
 
         selection = list(df.columns)
@@ -127,7 +127,7 @@ class GetItemDataFrameRolling2(AbstractTemplate):
             elif isinstance(idx, str):
                 selection = (idx,)
             else:
-                raise ValueError("invalid rolling selection {}".format(idx))
+                raise BodoError("invalid rolling selection {}".format(idx))
             ret_rolling = RollingType(rolling.df_type, rolling.on, selection, True)
             return signature(ret_rolling, *args)
 
@@ -138,7 +138,7 @@ class DataframeRollingAttribute(AttributeTemplate):
 
     def generic_resolve(self, rolling, func_name):
         if func_name not in supported_rolling_funcs:
-            raise ValueError(
+            raise BodoError(
                 "only ({}) supported in rolling".format(
                     ", ".join(supported_rolling_funcs)
                 )
@@ -172,13 +172,13 @@ class DataframeRollingAttribute(AttributeTemplate):
             def generic(self, args, kws):
                 if func_name in ("cov", "corr"):
                     if len(args) != 1:
-                        raise ValueError(
+                        raise BodoError(
                             "rolling {} requires one argument (other)".format(func_name)
                         )
                     # XXX pandas only accepts variable window cov/corr
                     # when both inputs have time index
                     if rolling.on is not None:
-                        raise ValueError(
+                        raise BodoError(
                             "variable window rolling {} not supported yet.".format(
                                 func_name
                             )

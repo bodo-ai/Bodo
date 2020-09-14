@@ -474,19 +474,11 @@ class DataFramePass:
         if fdef == ("crosstab_dummy", "bodo.hiframes.pd_groupby_ext"):
             return self._run_call_crosstab(assign, lhs, rhs)
 
-        if fdef == ("concat_dummy", "bodo.hiframes.pd_dataframe_ext") and isinstance(
-            self.typemap[lhs.name], DataFrameType
-        ):
-            return self._run_call_concat(assign, lhs, rhs)
-
         if fdef == ("sort_values_dummy", "bodo.hiframes.pd_dataframe_ext"):
             return self._run_call_df_sort_values(assign, lhs, rhs)
 
         if fdef == ("itertuples_dummy", "bodo.hiframes.pd_dataframe_ext"):
             return self._run_call_df_itertuples(assign, lhs, rhs)
-
-        if fdef == ("reset_index_dummy", "bodo.hiframes.pd_dataframe_ext"):
-            return self._run_call_reset_index(assign, lhs, rhs)
 
         if fdef == ("query_dummy", "bodo.hiframes.pd_dataframe_ext"):
             return self._run_call_query(assign, lhs, rhs)
@@ -651,7 +643,7 @@ class DataFramePass:
             err_msg="ascending should be bool or a list of bool of the number of keys",
         )
         if not all(k in set_possible_keys for k in key_names):
-            raise ValueError("invalid sort keys {}".format(key_names))
+            raise BodoError("invalid sort keys {}".format(key_names))
 
         nodes = []
         in_vars = {
@@ -802,61 +794,6 @@ class DataFramePass:
         col_vars = [self._get_dataframe_data(df_var, c, nodes) for c in df_typ.columns]
         return replace_func(self, _mean_impl, col_vars, pre_nodes=nodes)
 
-    def _run_call_reset_index(self, assign, lhs, rhs):
-        # TODO: reflection
-        df_var = rhs.args[0]
-        drop = guard(find_const, self.func_ir, rhs.args[1])
-        inplace = guard(find_const, self.func_ir, rhs.args[2])
-        df_typ = self.typemap[df_var.name]
-        out_df_typ = self.typemap[lhs.name]
-        n_ind = len(out_df_typ.columns) - len(df_typ.columns)
-        assert drop or n_ind != 0  # there are index columns when not dropping index
-
-        # impl: for each column, copy data and create a new dataframe
-        n_cols = len(out_df_typ.columns)
-        data_args = ["data{}".format(i) for i in range(n_cols)]
-
-        col_var = gen_const_tup(out_df_typ.columns)
-        func_text = "def _reset_index_impl({}):\n".format(", ".join(data_args))
-        for i, d in enumerate(data_args):
-            if not inplace and i >= n_ind:
-                func_text += "  {} = {}.copy()\n".format(d, d)
-        func_text += "  index = bodo.hiframes.pd_index_ext.init_range_index(0, len({}), 1, None)\n".format(
-            data_args[0]
-        )
-        func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), index, {})\n".format(
-            ", ".join(data_args), col_var
-        )
-        loc_vars = {}
-        exec(func_text, {}, loc_vars)
-        _reset_index_impl = loc_vars["_reset_index_impl"]
-
-        nodes = []
-        args = [self._get_dataframe_data(df_var, c, nodes) for c in df_typ.columns]
-        # add index array arguments if not dropping index
-        if not drop:
-            if isinstance(df_typ.index, MultiIndexType):
-                # MultiIndex case takes multiple arrays from MultiIndex._data
-                ind_var = self._get_dataframe_index(df_var, nodes)
-                nodes += compile_func_single_block(
-                    lambda ind: ind._data, [ind_var], None, self
-                )
-                arr_tup = nodes[-1].target
-                arr_args = []
-                for i in range(n_ind):
-                    arr_var = ir.Var(ind_var.scope, mk_unique_var("ind_arr"), lhs.loc)
-                    self.typemap[arr_var.name] = df_typ.index.array_types[i]
-                    gen_getitem(arr_var, arr_tup, i, self.calltypes, nodes)
-                    arr_args.append(arr_var)
-                args = arr_args + args
-            else:
-                ind_var = self._gen_array_from_index(df_var, nodes)
-                args = [ind_var] + args
-
-        # return new df even for inplace case, since typing pass replaces input variable
-        # using output of the call
-        return nodes + compile_func_single_block(_reset_index_impl, args, lhs, self)
-
     def _run_call_query(self, assign, lhs, rhs):
         """Transform query expr to Numba IR using the expr parser in Pandas.
         """
@@ -984,7 +921,7 @@ class DataFramePass:
                     and name in ("floor", "ceil")
                 ):
                     if name not in new_funcs:
-                        raise ValueError(
+                        raise BodoError(
                             '"{0}" is not a supported function'.format(name)
                         )
 
@@ -1735,7 +1672,7 @@ class DataFramePass:
         # TODO: support dynamic conversion
         # TODO: support other offsets types (time delta, etc.)
         if on is not None and not isinstance(window_const, str):
-            raise ValueError(
+            raise BodoError(
                 "window argument to rolling should be constant"
                 "string in the offset case (variable window)"
             )
@@ -1908,109 +1845,6 @@ class DataFramePass:
             f, args, out_col_var, self, extra_globals={"_func_name": func_name}
         )
 
-    def _run_call_concat(self, assign, lhs, rhs):
-        # TODO: handle non-numerical (e.g. string, datetime) columns
-        nodes = []
-        out_typ = self.typemap[lhs.name]
-        df_list = self._get_const_tup(rhs.args[0])
-        axis = guard(find_const, self.func_ir, rhs.args[1])
-        if axis == 1:
-            return self._run_call_concat_columns(df_list, out_typ, lhs)
-
-        # generate a concat call for each output column
-        # gen concat function
-        arg_names = ", ".join(["in{}".format(i) for i in range(len(df_list))])
-        func_text = "def _concat_imp({}):\n".format(arg_names)
-        func_text += "    return bodo.libs.array_kernels.concat(({}))\n".format(
-            arg_names
-        )
-        loc_vars = {}
-        exec(func_text, {}, loc_vars)
-        _concat_imp = loc_vars["_concat_imp"]
-
-        out_vars = []
-        for cname in out_typ.columns:
-            # find an example input array for this output array to use for typing in
-            # gen_na_array()
-            example_arr = None
-            for df in df_list:
-                df_typ = self.typemap[df.name]
-                if cname in df_typ.columns:
-                    example_arr = self._get_dataframe_data(df, cname, nodes)
-                    break
-            # arguments to the generated function
-            args = []
-            # get input columns
-            for df in df_list:
-                df_typ = self.typemap[df.name]
-                # generate full NaN column
-                if cname not in df_typ.columns:
-                    # corner case: empty dataframe concat
-                    if len(df_typ.columns) == 0:
-                        nodes += compile_func_single_block(
-                            lambda A: bodo.libs.array_kernels.gen_na_array(0, A),
-                            (example_arr,),
-                            None,
-                            self,
-                        )
-                        args.append(nodes[-1].target)
-                        continue
-
-                    arr = self._get_dataframe_data(df, df_typ.columns[0], nodes)
-                    nodes += compile_func_single_block(
-                        lambda arr, A: bodo.libs.array_kernels.gen_na_array(
-                            len(arr), A
-                        ),
-                        (arr, example_arr),
-                        None,
-                        self,
-                    )
-                    args.append(nodes[-1].target)
-                else:
-                    arr = self._get_dataframe_data(df, cname, nodes)
-                    args.append(arr)
-
-            nodes += compile_func_single_block(_concat_imp, args, None, self)
-            out_vars.append(nodes[-1].target)
-
-        _init_df = _gen_init_df(out_typ.columns)
-
-        return nodes + compile_func_single_block(_init_df, out_vars, lhs, self)
-
-    def _run_call_concat_columns(self, objs, out_typ, lhs):
-        """concatenate series/dataframe columns with axis=1
-        """
-        nodes = []
-        out_vars = []
-        for obj in objs:
-            obj_typ = self.typemap[obj.name]
-            if isinstance(obj_typ, DataFrameType):
-                for i in range(len(obj_typ.columns)):
-                    nodes += compile_func_single_block(
-                        lambda df: bodo.hiframes.pd_dataframe_ext.get_dataframe_data(
-                            df, _i
-                        ),
-                        (obj,),
-                        None,
-                        self,
-                        extra_globals={"_i": i},
-                    )
-                    out_vars.append(nodes[-1].target)
-            else:
-                assert isinstance(obj_typ, SeriesType)
-                # TODO: other types like arrays?
-                nodes += compile_func_single_block(
-                    lambda S: bodo.hiframes.pd_series_ext.get_series_data(S),
-                    (obj,),
-                    None,
-                    self,
-                )
-                out_vars.append(nodes[-1].target)
-
-        _init_df = _gen_init_df(out_typ.columns)
-
-        return nodes + compile_func_single_block(_init_df, out_vars, lhs, self)
-
     def _get_df_obj_select(self, obj_var, obj_name):
         """get df object for groupby() or rolling()
         e.g. groupby('A')['B'], groupby('A')['B', 'C'], groupby('A')
@@ -2045,7 +1879,7 @@ class DataFramePass:
                 )
             if tup_def.op in ("build_tuple", "build_list"):
                 return tup_def.items
-        raise ValueError("constant tuple expected")
+        raise BodoError("constant tuple expected")
 
     def _get_dataframe_data(self, df_var, col_name, nodes):
         # optimization: return data var directly if not ambiguous
@@ -2168,7 +2002,7 @@ class DataFramePass:
             if by_arg_def is None:
                 if default is not None:
                     return default
-                raise ValueError(err_msg)
+                raise BodoError(err_msg)
             if isinstance(var_typ, types.BaseTuple):
                 assert isinstance(by_arg_def, tuple)
                 return by_arg_def
@@ -2177,14 +2011,14 @@ class DataFramePass:
             if list_only and by_arg_def[1] != "build_list":
                 if default is not None:
                     return default
-                raise ValueError(err_msg)
+                raise BodoError(err_msg)
             key_colnames = tuple(
                 guard(find_const, self.func_ir, v) for v in by_arg_def[0]
             )
             if any(not isinstance(v, typ) for v in key_colnames):
                 if default is not None:
                     return default
-                raise ValueError(err_msg)
+                raise BodoError(err_msg)
         return key_colnames
 
     def _get_list_value_spec_length(self, by_arg, n_key, err_msg=None):

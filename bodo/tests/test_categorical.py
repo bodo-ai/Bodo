@@ -13,8 +13,10 @@ from bodo.tests.utils import check_func
     "dtype",
     [
         pd.CategoricalDtype(["AA", "B", "CC"]),
-        pd.CategoricalDtype(["CC", "AA", "B"], True),
-        pd.CategoricalDtype([3, 2, 1, 4]),
+        pytest.param(
+            pd.CategoricalDtype(["CC", "AA", "B"], True), marks=pytest.mark.slow
+        ),
+        pytest.param(pd.CategoricalDtype([3, 2, 1, 4]), marks=pytest.mark.slow),
     ],
 )
 def test_unbox_dtype(dtype, memory_leak_check):
@@ -34,9 +36,15 @@ def test_unbox_dtype(dtype, memory_leak_check):
 @pytest.fixture(
     params=[
         pd.Categorical(["CC", "AA", "B", "D", "AA", None, "B", "CC"]),
-        pd.Categorical(["CC", "AA", None, "B", "D", "AA", "B", "CC"], ordered=True),
-        pd.Categorical([3, 1, 2, -1, 4, 1, 3, 2]),
-        pd.Categorical([3, 1, 2, -1, 4, 1, 3, 2], ordered=True),
+        pytest.param(
+            pd.Categorical(["CC", "AA", None, "B", "D", "AA", "B", "CC"], ordered=True),
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(pd.Categorical([3, 1, 2, -1, 4, 1, 3, 2]), marks=pytest.mark.slow),
+        pytest.param(
+            pd.Categorical([3, 1, 2, -1, 4, 1, 3, 2], ordered=True),
+            marks=pytest.mark.slow,
+        ),
     ]
 )
 def cat_arr_value(request):

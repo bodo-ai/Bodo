@@ -456,10 +456,10 @@ bool KeyComparisonAsPython(size_t const& n_key, int64_t* vect_ascending,
 /* This is a function used by "DEBUG_PrintSetOfColumn"
  * It takes a column and returns a vector of string on output
  *
+ * @param os is the output stream
  * @param arr is the pointer.
- * @return The vector of strings to be used later.
  */
-std::vector<std::string> DEBUG_PrintColumn(array_info* arr);
+void DEBUG_PrintColumn(std::ostream& os, array_info* arr);
 
 /** The DEBUG_PrintSetOfColumn is printing the contents of the table to
  * the output stream.

@@ -429,6 +429,8 @@ struct aggstring<Bodo_FTypes::last> {
     static void apply(std::string& v1, std::string& v2) { v1 = v2; }
 };
 
+using pair_str_bool = std::pair<std::string, bool>;
+
 template <int ftype, typename Enable = void>
 struct aggliststring {
     /**
@@ -436,26 +438,30 @@ struct aggliststring {
      * @param[in,out] first input value, and holds the result
      * @param[in] second input value.
      */
-    static void apply(std::vector<std::string>& v1,
-                      std::vector<std::string>& v2) {}
+    static void apply(std::vector<pair_str_bool>& v1,
+                      std::vector<pair_str_bool>& v2) {}
 };
 
 template <>
 struct aggliststring<Bodo_FTypes::sum> {
-    static void apply(std::vector<std::string>& v1,
-                      std::vector<std::string>& v2) {
+    static void apply(std::vector<pair_str_bool>& v1,
+                      std::vector<pair_str_bool>& v2) {
         v1.insert(v1.end(), v2.begin(), v2.end());
     }
 };
 
 // returns -1 if v1 < v2, 0 if v1=v2 and 1 if v1 > v2
-int compare_list_string(std::vector<std::string> const& v1,
-                        std::vector<std::string> const& v2) {
+int compare_list_string(std::vector<pair_str_bool> const& v1,
+                        std::vector<pair_str_bool> const& v2) {
     size_t len1 = v1.size();
     size_t len2 = v2.size();
     size_t minlen = len1;
     if (len2 < len1) minlen = len2;
     for (size_t i = 0; i < minlen; i++) {
+        bool bit1 = v1[i].second;
+        bool bit2 = v2[i].second;
+        if (bit1 && !bit2) return 1;
+        if (!bit1 && bit2) return -1;
         if (v1[i] < v2[i]) return -1;
         if (v1[i] > v2[i]) return 1;
     }
@@ -466,24 +472,24 @@ int compare_list_string(std::vector<std::string> const& v1,
 
 template <>
 struct aggliststring<Bodo_FTypes::min> {
-    static void apply(std::vector<std::string>& v1,
-                      std::vector<std::string>& v2) {
+    static void apply(std::vector<pair_str_bool>& v1,
+                      std::vector<pair_str_bool>& v2) {
         if (compare_list_string(v1, v2) == 1) v1 = v2;
     }
 };
 
 template <>
 struct aggliststring<Bodo_FTypes::max> {
-    static void apply(std::vector<std::string>& v1,
-                      std::vector<std::string>& v2) {
+    static void apply(std::vector<pair_str_bool>& v1,
+                      std::vector<pair_str_bool>& v2) {
         if (compare_list_string(v1, v2) == -1) v1 = v2;
     }
 };
 
 template <>
 struct aggliststring<Bodo_FTypes::last> {
-    static void apply(std::vector<std::string>& v1,
-                      std::vector<std::string>& v2) {
+    static void apply(std::vector<pair_str_bool>& v1,
+                      std::vector<pair_str_bool>& v2) {
         v1 = v2;
     }
 };
@@ -851,6 +857,10 @@ struct multi_col_key {
                     }
                     continue;
                 case bodo_array_type::STRING: {
+                    uint8_t* c1_null_bitmask = (uint8_t*)c1->null_bitmask;
+                    uint8_t* c2_null_bitmask = (uint8_t*)c2->null_bitmask;
+                    if (GetBit(c1_null_bitmask, row) != GetBit(c2_null_bitmask, other.row))
+                        return false;
                     uint32_t* c1_offsets = (uint32_t*)c1->data2;
                     uint32_t* c2_offsets = (uint32_t*)c2->data2;
                     uint32_t c1_str_len = c1_offsets[row + 1] - c1_offsets[row];
@@ -863,6 +873,12 @@ struct multi_col_key {
                 }
                     continue;
                 case bodo_array_type::LIST_STRING:
+                    uint8_t* c1_null_bitmask = (uint8_t*)c1->null_bitmask;
+                    uint8_t* c2_null_bitmask = (uint8_t*)c2->null_bitmask;
+                    if (GetBit(c1_null_bitmask, row) != GetBit(c2_null_bitmask, other.row))
+                        return false;
+                    uint8_t* c1_sub_null_bitmask = (uint8_t*)c1->sub_null_bitmask;
+                    uint8_t* c2_sub_null_bitmask = (uint8_t*)c2->sub_null_bitmask;
                     uint32_t* c1_index_offsets = (uint32_t*)c1->data3;
                     uint32_t* c2_index_offsets = (uint32_t*)c2->data3;
                     uint32_t* c1_data_offsets = (uint32_t*)c1->data2;
@@ -883,6 +899,9 @@ struct multi_col_key {
                                             1] -
                             c2_data_offsets[c2_index_offsets[other.row] + u];
                         if (size_data1 != size_data2) return false;
+                        bool str_bit1 = GetBit(c1_sub_null_bitmask, c1_index_offsets[row] + u);
+                        bool str_bit2 = GetBit(c2_sub_null_bitmask, c2_index_offsets[other.row] + u);
+                        if (str_bit1 != str_bit2) return false;
                     }
                     // Now comparing the strings. Their length is the same since
                     // we pass above check
@@ -1132,15 +1151,17 @@ void cumulative_computation_list_string(array_info* arr, array_info* out_arr,
                                         grouping_info const& grp_inf, int32_t const& ftype,
                                         bool const& skipna) {
 #ifdef DEBUG_GROUPBY
-    std::cout << "Beginning of cumulative_computation_string\n";
+    std::cout << "Beginning of cumulative_computation_list_string\n";
 #endif
     if (ftype != Bodo_FTypes::cumsum) {
         Bodo_PyErr_SetString(PyExc_RuntimeError, "So far only cumulative sums for list-strings");
     }
     int64_t n = arr->length;
-    using T = std::pair<bool, std::vector<std::string>>;
+    using Tbas = std::pair<bool,std::string>;
+    using T = std::pair<bool, std::vector<Tbas>>;
     std::vector<T> V(n);
     uint8_t* null_bitmask = (uint8_t*)arr->null_bitmask;
+    uint8_t* sub_null_bitmask = (uint8_t*)arr->sub_null_bitmask;
     char* data = arr->data1;
     uint32_t* data_offsets = (uint32_t*)arr->data2;
     uint32_t* index_offsets = (uint32_t*)arr->data3;
@@ -1148,14 +1169,19 @@ void cumulative_computation_list_string(array_info* arr, array_info* out_arr,
         bool isna = !GetBit(null_bitmask, i);
         uint32_t start_idx_offset = index_offsets[i];
         uint32_t end_idx_offset = index_offsets[i + 1];
-        std::vector<std::string> LStr;
+        std::vector<Tbas> LEnt;
         for (uint32_t idx=start_idx_offset; idx<end_idx_offset; idx++) {
             uint32_t str_len = data_offsets[idx+1] - data_offsets[idx];
             uint32_t start_data_offset = data_offsets[idx];
+            bool bit = GetBit(sub_null_bitmask, idx);
+#ifdef DEBUG_GROUPBY
+            std::cout << "get_entry i=" << i << " idx=" << idx << " bit=" << bit << "\n";
+#endif
             std::string val(&data[start_data_offset], str_len);
-            LStr.push_back(val);
+            Tbas eEnt = {bit, val};
+            LEnt.push_back(eEnt);
         }
-        return {isna, LStr};
+        return {isna, LEnt};
     };
     size_t num_group = grp_inf.group_to_first_row.size();
     for (size_t igrp = 0; igrp < num_group; igrp++) {
@@ -1187,40 +1213,31 @@ void cumulative_computation_list_string(array_info* arr, array_info* out_arr,
     for (auto & kPair : V) {
         nb_str += kPair.second.size();
         for (auto & estr : kPair.second)
-            nb_char += estr.size();
+            nb_char += estr.second.size();
     }
     // Doing the alocation trickery.
-    NRT_MemInfo* old_meminfo = out_arr->meminfo;
-    array_info* aux_info = alloc_list_string_array(n, nb_str, nb_char, 0);
-    out_arr->n_sub_elems = nb_str;
-    out_arr->n_sub_sub_elems = nb_char;
-    array_item_arr_payload* payload =
-      (array_item_arr_payload*)(aux_info->meminfo->data);
-    str_arr_payload* sub_payload =
-      (str_arr_payload*)(payload->data->data);
-    out_arr->meminfo = aux_info->meminfo;
-    out_arr->data1 = (char*)sub_payload->data;
-    out_arr->data2 = (char*)sub_payload->offsets;
-    out_arr->data3 = (char*)payload->offsets.data;
-    out_arr->null_bitmask = (char*)payload->null_bitmap.data;
-    delete aux_info;
+    array_info* new_out_col = alloc_list_string_array(n, nb_str, nb_char, 0);
+    uint32_t* index_offsets_o = (uint32_t*)new_out_col->data3;
+    uint32_t* data_offsets_o = (uint32_t*)new_out_col->data2;
+    char* data_o = (char*)new_out_col->data1;
+    uint8_t* null_bitmask_o = (uint8_t*)new_out_col->null_bitmask;
+    uint8_t* sub_null_bitmask_o = (uint8_t*)new_out_col->sub_null_bitmask;
     // Writing the strings in output
-    char* data_o = out_arr->data1;
-    uint32_t* data_offsets_o = (uint32_t*)out_arr->data2;
-    uint32_t* index_offsets_o = (uint32_t*)out_arr->data3;
-    uint8_t* null_bitmask_o = (uint8_t*)out_arr->null_bitmask;
     uint32_t pos_idx = 0;
     uint32_t pos_char = 0;
     for (int64_t i=0; i<n; i++) {
         index_offsets_o[i] = pos_idx;
         T uPair = V[i];
         SetBitTo(null_bitmask_o, i, !uPair.first);
-        size_t n_str = V[i].second.size();
+        size_t n_str = uPair.second.size();
         for (size_t i_str=0; i_str<n_str; i_str++) {
-            std::string estr = V[i].second[i_str];
+            Tbas eBas = uPair.second[i_str];
+            bool bit = eBas.first;
+            std::string estr = eBas.second;
             size_t len = estr.size();
             memcpy(data_o, estr.data(), len);
             data_offsets_o[pos_idx + i_str] = pos_char;
+            SetBitTo(sub_null_bitmask_o, pos_idx + i_str, bit);
             pos_char += len;
             data_o += len;
         }
@@ -1228,10 +1245,15 @@ void cumulative_computation_list_string(array_info* arr, array_info* out_arr,
     }
     index_offsets_o[n] = pos_idx;
     data_offsets_o[nb_str] = pos_char;
-    free_list_string_array(old_meminfo);  // free dummy array
 #ifdef DEBUG_GROUPBY
-    std::cout << "End of cumulative_computation_string\n";
+    std::cout << "End of cumulative_computation_list_string\n";
 #endif
+    *out_arr = std::move(*new_out_col);
+#ifdef DEBUG_GROUPBY
+    std::cout << "out_arr : ";
+    DEBUG_PrintColumn(std::cout, out_arr);
+#endif
+    delete new_out_col;
 }
 
 void cumulative_computation_string(array_info* arr, array_info* out_arr,
@@ -1285,24 +1307,18 @@ void cumulative_computation_string(array_info* arr, array_info* out_arr,
     int64_t nb_char = 0;
     for (auto & kPair : V)
       nb_char += kPair.second.size();
-    delete[] out_arr->data1;
-    out_arr->data1 = new char[nb_char];
-    out_arr->n_sub_elems = nb_char;
-    // update string array payload to reflect change
-    str_arr_payload* payload =
-        (str_arr_payload*)out_arr->meminfo->data;
-    payload->data = out_arr->data1;
+    array_info* new_out_col = alloc_string_array(n, nb_char, 0);
+    char* data_o = new_out_col->data1;
+    uint32_t* offsets_o = (uint32_t*)new_out_col->data2;
+    uint8_t* null_bitmask_o = (uint8_t*)new_out_col->null_bitmask;
     // Writing the strings in output
-    char* data_o = out_arr->data1;
-    uint32_t* offsets_o = (uint32_t*)out_arr->data2;
-    uint8_t* null_bitmask_o = (uint8_t*)out_arr->null_bitmask;
     uint32_t pos = 0;
     for (int64_t i=0; i<n; i++) {
         offsets_o[i] = pos;
         T uPair = V[i];
         SetBitTo(null_bitmask_o, i, !uPair.first);
-        size_t len = V[i].second.size();
-        memcpy(data_o, V[i].second.data(), len);
+        size_t len = uPair.second.size();
+        memcpy(data_o, uPair.second.data(), len);
         data_o += len;
         pos += len;
     }
@@ -1310,6 +1326,12 @@ void cumulative_computation_string(array_info* arr, array_info* out_arr,
 #ifdef DEBUG_GROUPBY
     std::cout << "End of cumulative_computation_string\n";
 #endif
+    *out_arr = std::move(*new_out_col);
+#ifdef DEBUG_GROUPBY
+    std::cout << "out_arr : ";
+    DEBUG_PrintColumn(std::cout, out_arr);
+#endif
+    delete new_out_col;
 }
 
 
@@ -1527,9 +1549,12 @@ void nunique_computation(array_info* arr, array_info* out_arr,
         uint32_t* in_index_offsets = (uint32_t*)arr->data3;
         uint32_t* in_data_offsets = (uint32_t*)arr->data2;
         uint8_t* null_bitmask = (uint8_t*)arr->null_bitmask;
+        uint8_t* sub_null_bitmask = (uint8_t*)arr->sub_null_bitmask;
         uint32_t seed = SEED_HASH_CONTAINER;
         for (size_t igrp = 0; igrp < num_group; igrp++) {
             std::function<size_t(int64_t)> hash_fct = [&](int64_t i) -> size_t {
+                // We do not put the lengths and bitmask in the hash computation.
+                // after all, it is just a hash
                 char* val_chars =
                     arr->data1 + in_data_offsets[in_index_offsets[i]];
                 int len = in_data_offsets[in_index_offsets[i + 1]] -
@@ -1540,6 +1565,9 @@ void nunique_computation(array_info* arr, array_info* out_arr,
             };
             std::function<bool(int64_t, int64_t)> equal_fct =
                 [&](int64_t i1, int64_t i2) -> bool {
+                bool bit1 = GetBit(null_bitmask, i1);
+                bool bit2 = GetBit(null_bitmask, i2);
+                if (bit1 != bit2) return false; // That first case, might not be necessary.
                 size_t len1 = in_index_offsets[i1 + 1] - in_index_offsets[i1];
                 size_t len2 = in_index_offsets[i2 + 1] - in_index_offsets[i2];
                 if (len1 != len2) return false;
@@ -1551,6 +1579,9 @@ void nunique_computation(array_info* arr, array_info* out_arr,
                         in_data_offsets[in_index_offsets[i2] + 1] -
                         in_data_offsets[in_index_offsets[i2]];
                     if (len_str1 != len_str2) return false;
+                    bool bit1 = GetBit(sub_null_bitmask, in_index_offsets[i1]);
+                    bool bit2 = GetBit(sub_null_bitmask, in_index_offsets[i2]);
+                    if (bit1 != bit2) return false;
                 }
                 uint32_t nb_char1 = in_data_offsets[in_index_offsets[i1 + 1]] -
                                     in_data_offsets[in_index_offsets[i1]];
@@ -1793,24 +1824,26 @@ void apply_to_column(array_info* in_col, array_info* out_col,
                     return;
                 default:
                     size_t num_groups = grp_info.group_to_first_row.size();
-                    std::vector<std::vector<std::string>> ListListString(
+                    std::vector<std::vector<pair_str_bool>> ListListPair(
                         num_groups);
                     char* data_i = in_col->data1;
                     uint32_t* index_offsets_i = (uint32_t*)in_col->data3;
                     uint32_t* data_offsets_i = (uint32_t*)in_col->data2;
                     uint8_t* null_bitmask_i = (uint8_t*)in_col->null_bitmask;
-                    uint8_t* null_bitmask_o = (uint8_t*)out_col->null_bitmask;
+                    uint8_t* sub_null_bitmask_i = (uint8_t*)in_col->sub_null_bitmask;
                     // Computing the strings used in output.
+                    uint64_t n_bytes = (num_groups + 7) >> 3;
+                    std::vector<uint8_t> Vmask(n_bytes, 0);
                     for (int64_t i = 0; i < in_col->length; i++) {
                         int64_t i_grp = grp_info.row_to_group[i];
                         if ((i_grp != -1) && GetBit(null_bitmask_i, i)) {
-                            bool out_bit_set = GetBit(null_bitmask_o, i_grp);
+                            bool out_bit_set = GetBit(Vmask.data(), i_grp);
                             if (ftype == Bodo_FTypes::first && out_bit_set)
                                 continue;
                             uint32_t start_offset = index_offsets_i[i];
                             uint32_t end_offset = index_offsets_i[i + 1];
                             uint32_t len = end_offset - start_offset;
-                            std::vector<std::string> LString(len);
+                            std::vector<pair_str_bool> LStrB(len);
                             for (uint32_t i = 0; i < len; i++) {
                                 uint32_t len_str =
                                     data_offsets_i[start_offset + i + 1] -
@@ -1818,14 +1851,15 @@ void apply_to_column(array_info* in_col, array_info* out_col,
                                 uint32_t pos_start =
                                     data_offsets_i[start_offset + i];
                                 std::string val(&data_i[pos_start], len_str);
-                                LString[i] = val;
+                                bool str_bit = GetBit(sub_null_bitmask_i, start_offset + i);
+                                LStrB[i] = {val, str_bit};
                             }
                             if (out_bit_set) {
                                 aggliststring<ftype>::apply(
-                                    ListListString[i_grp], LString);
+                                    ListListPair[i_grp], LStrB);
                             } else {
-                                ListListString[i_grp] = LString;
-                                SetBitTo(null_bitmask_o, i_grp, true);
+                                ListListPair[i_grp] = LStrB;
+                                SetBitTo(Vmask.data(), i_grp, true);
                             }
                         }
                     }
@@ -1834,10 +1868,10 @@ void apply_to_column(array_info* in_col, array_info* out_col,
                     size_t nb_char = 0;
                     for (int64_t i_grp = 0; i_grp < int64_t(num_groups);
                          i_grp++) {
-                        if (GetBit(null_bitmask_o, i_grp)) {
-                            nb_string += ListListString[i_grp].size();
-                            for (auto& e_str : ListListString[i_grp])
-                                nb_char += e_str.size();
+                        if (GetBit(Vmask.data(), i_grp)) {
+                            nb_string += ListListPair[i_grp].size();
+                            for (auto& e_str : ListListPair[i_grp])
+                                nb_char += e_str.first.size();
                         }
                     }
                     // Allocation needs to be done through
@@ -1851,6 +1885,8 @@ void apply_to_column(array_info* in_col, array_info* out_col,
                         out_col->length, nb_string, nb_char, 0);
                     uint32_t* index_offsets_o = (uint32_t*)new_out_col->data3;
                     uint32_t* data_offsets_o = (uint32_t*)new_out_col->data2;
+                    uint8_t* null_bitmask_o = (uint8_t*)new_out_col->null_bitmask;
+                    uint8_t* sub_null_bitmask_o = (uint8_t*)new_out_col->sub_null_bitmask;
                     // Writing the list_strings in output
                     char* data_o = new_out_col->data1;
                     data_offsets_o[0] = 0;
@@ -1858,20 +1894,22 @@ void apply_to_column(array_info* in_col, array_info* out_col,
                     uint32_t pos_data = 0;
                     for (int64_t i_grp = 0; i_grp < int64_t(num_groups);
                          i_grp++) {
+                        bool bit = GetBit(Vmask.data(), i_grp);
+                        SetBitTo(null_bitmask_o, i_grp, bit);
                         index_offsets_o[i_grp] = pos_index;
-                        if (GetBit(null_bitmask_o, i_grp)) {
-                            uint32_t n_string = ListListString[i_grp].size();
+                        if (bit) {
+                            uint32_t n_string = ListListPair[i_grp].size();
                             for (uint32_t i_str = 0; i_str < n_string;
                                  i_str++) {
-                                uint32_t n_char =
-                                    ListListString[i_grp][i_str].size();
-                                memcpy(data_o,
-                                       ListListString[i_grp][i_str].data(),
-                                       n_char);
+                                std::string& estr = ListListPair[i_grp][i_str].first;
+                                uint32_t n_char = estr.size();
+                                memcpy(data_o, estr.data(), n_char);
                                 data_o += n_char;
                                 pos_data++;
                                 data_offsets_o[pos_data] =
                                     data_offsets_o[pos_data - 1] + n_char;
+                                bool bit = ListListPair[i_grp][i_str].second;
+                                SetBitTo(sub_null_bitmask_o, pos_index + i_str, bit);
                             }
                             pos_index += n_string;
                             SetBitTo((uint8_t*)new_out_col->null_bitmask, i_grp,
@@ -3645,10 +3683,9 @@ class GroupbyPipeline {
         udf_info = {udf_table, update_cb, combine_cb, eval_cb};
         // if true, the last column is the index on input and output.
         // this is relevant only to cumulative operation like cumsum.
-        int return_index_i = return_index;
         int index_i = int(input_has_index);
 #ifdef DEBUG_GROUPBY
-        std::cout << "return_index_i=" << return_index_i << " index_i=" << index_i << "\n";
+        std::cout << " index_i=" << index_i << "\n";
 #endif
         // NOTE cumulative operations (cumsum, cumprod, etc.) cannot be mixed
         // with non cumulative ops. This is checked at compile time in
@@ -4033,6 +4070,8 @@ class GroupbyPipeline {
                                           key_col->num_categories);
                 uint8_t* in_null_bitmask = (uint8_t*)key_col->null_bitmask;
                 uint8_t* out_null_bitmask = (uint8_t*)new_key_col->null_bitmask;
+                uint8_t* in_sub_null_bitmask = (uint8_t*)key_col->sub_null_bitmask;
+                uint8_t* out_sub_null_bitmask = (uint8_t*)new_key_col->sub_null_bitmask;
                 uint32_t* out_index_offsets = (uint32_t*)new_key_col->data3;
                 uint32_t* out_data_offsets = (uint32_t*)new_key_col->data2;
                 uint32_t pos_data = 0;
@@ -4051,6 +4090,8 @@ class GroupbyPipeline {
                         pos_index++;
                         out_data_offsets[pos_index] =
                             out_data_offsets[pos_index - 1] + len_str;
+                        bool bit = GetBit(in_sub_null_bitmask, pos_start + i_str);
+                        SetBitTo(out_sub_null_bitmask, pos_index, bit);
                     }
                     out_index_offsets[j + 1] = pos_index;
                     // Now the strings themselves

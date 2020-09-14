@@ -76,10 +76,38 @@ def get_hdfs_fs(path):  # pragma: no cover
     return fs
 
 
+def s3_is_directory(fs, path):
+    """
+    Return whether s3 path is a directory or not
+    """
+    import s3fs
+    import botocore
+
+    try:
+        path_info = fs.info(path)
+        return path_info["Size"] == 0 and path_info["type"].lower() == "directory"
+    except botocore.exceptions.NoCredentialsError as e:
+        raise BodoError(
+            f"S3 NoCredentialsError: {e}.\n"
+            "Most likely cause: you haven't provided S3 credentials, "
+            "neither through environment variables, nor through a local "
+            "AWS setup that makes the credentials available at $HOME/.aws/credentials"
+        )
+    except s3fs.errors.ERROR_CODE_TO_EXCEPTION["AccessDenied"] as e:
+        raise BodoError(
+            f"S3 PermissionError: {e}. \n"
+            "Most likely cause: your S3 credentials are incorrect or do not have the "
+            "correct permissions."
+        )
+    except:  # pragma: no cover
+        raise
+
+
 def s3_list_dir_fnames(fs, path):
     """
-    If path is a directory, return all file names in the directory:
-    ["s3://bucket-name/path/file_name", ...]
+    If path is a directory, return all file names in the directory.
+    This returns the base name without the path:
+    ["file_name1", "file_name2", ...]
     If path is a file, return None
     """
     import s3fs
@@ -91,23 +119,20 @@ def s3_list_dir_fnames(fs, path):
         # with the name of the directory. If there is, we have to omit it
         # because pq.ParquetDataset will throw Invalid Parquet file size is 0
         # bytes
-        path_info = fs.info(path)
-        if (
-            path_info["Size"] == 0 and path_info["type"] == "directory"
-        ):  # pragma: no cover
-            # excluded from coverage because haven't found a reliable way
-            # to create 0 size object that is a directory. For example:
-            # fs.mkdir(path)  sometimes doesn't do anything at all
+        if s3_is_directory(fs, path):
             files = fs.ls(path)  # this is "s3://bucket/path-to-dir"
             if (
                 files
                 and (files[0] == path[5:] or files[0] == path[5:] + "/")
                 and fs.info("s3://" + files[0])["Size"] == 0
-            ):
+            ):  # pragma: no cover
+                # excluded from coverage because haven't found a reliable way
+                # to create 0 size object that is a directory. For example:
+                # fs.mkdir(path)  sometimes doesn't do anything at all
                 # get actual names of objects inside the dir
-                file_names = ["s3://" + fname for fname in files[1:]]
+                file_names = [fname[fname.rindex("/") + 1 :] for fname in files[1:]]
             else:
-                file_names = ["s3://" + fname for fname in files]
+                file_names = [fname[fname.rindex("/") + 1 :] for fname in files]
 
     except botocore.exceptions.NoCredentialsError as e:
         raise BodoError(
@@ -128,18 +153,13 @@ def s3_list_dir_fnames(fs, path):
     return file_names
 
 
-def hdfs_list_dir_fnames(path):  # pragma: no cover
+def hdfs_is_directory(path):
     """
-    initialize pyarrow.fs.HadoopFileSystem from path
-    If path is a directory, file_names = ["hfsd://host:port/path/file_name", ...]
-    If path is a file, file_names = None
-    return (pyarrow.fs.HadoopFileSystem, file_names)
+    Return whether hdfs path is a directory or not
     """
-
     # this HadoopFileSystem is the new file system of pyarrow
-    from pyarrow.fs import HadoopFileSystem, FileSelector, FileType
+    from pyarrow.fs import HadoopFileSystem, FileType
 
-    file_names = None
     options = urlparse(path)
     hdfs_path = options.path  # path within hdfs(i.e. dir/file)
 
@@ -156,6 +176,29 @@ def hdfs_list_dir_fnames(path):  # pragma: no cover
         raise BodoError("{} is a " "non-existing or unreachable file".format(path))
 
     if (not target_stat[0].size) and target_stat[0].type == FileType.Directory:
+        return hdfs, True
+
+    return hdfs, False
+
+
+def hdfs_list_dir_fnames(path):  # pragma: no cover
+    """
+    initialize pyarrow.fs.HadoopFileSystem from path
+    If path is a directory, return all file names in the directory.
+    This returns the base name without the path:
+    ["file_name1", "file_name2", ...]
+    If path is a file, return None
+    return (pyarrow.fs.HadoopFileSystem, file_names)
+    """
+
+    from pyarrow.fs import FileSelector
+
+    file_names = None
+    hdfs, isdir = hdfs_is_directory(path)
+    if isdir:
+        options = urlparse(path)
+        hdfs_path = options.path  # path within hdfs(i.e. dir/file)
+
         file_selector = FileSelector(hdfs_path, recursive=True)
         try:
             file_stats = hdfs.get_file_info(file_selector)
@@ -163,9 +206,20 @@ def hdfs_list_dir_fnames(path):  # pragma: no cover
             raise BodoError(
                 "Exception on getting directory info " "of {}: {}".format(hdfs_path, e)
             )
-        file_names = [prefix + file_stat.path for file_stat in file_stats]
+        file_names = [file_stat.base_name for file_stat in file_stats]
 
     return (hdfs, file_names)
+
+
+def directory_of_files_common_filter(fname):
+    # Discard Spark-generated files like _SUCCESS and files ending with .crc
+    # as well as hidden files
+    fname_l = fname.lower()
+    return (
+        fname_l != "_success"
+        and not fname_l.startswith(".")
+        and not fname_l.endswith(".crc")
+    )
 
 
 def find_file_name_or_handler(path, ftype):
@@ -199,12 +253,7 @@ def find_file_name_or_handler(path, ftype):
     func_name = "read_json" if ftype == "json" else "read_csv"
     err_msg = f"pd.{func_name}(): there is no {ftype} file in directory: {fname}"
 
-    def filter_files(file_names):
-        return [
-            f
-            for f in file_names
-            if f.lower() != "_success" and not f.lower().endswith(".crc")
-        ]
+    filter_func = directory_of_files_common_filter
 
     if parsed_url.scheme == "s3":
         is_handler = True
@@ -213,8 +262,9 @@ def find_file_name_or_handler(path, ftype):
         f_size = fs.info(fname)["size"]
 
         if all_files:
-            all_files = filter_files(all_files)
-            all_csv_files = [f for f in sorted(all_files) if fs.info(f)["size"] > 0]
+            path = path.rstrip("/")
+            all_files = [(path + "/" + f) for f in sorted(filter(filter_func, all_files))]
+            all_csv_files = [f for f in all_files if fs.info(f)["size"] > 0]
             if len(all_csv_files) == 0:  # pragma: no cover
                 # TODO: test
                 raise BodoError(err_msg)
@@ -229,10 +279,9 @@ def find_file_name_or_handler(path, ftype):
         f_size = fs.get_file_info([fname])[0].size
 
         if all_files:
-            all_files = filter_files(all_files)
-            all_csv_files = [
-                f for f in sorted(all_files) if fs.get_file_info([f])[0].size > 0
-            ]
+            path = path.rstrip("/")
+            all_files = [(path + "/" + f) for f in sorted(filter(filter_func, all_files))]
+            all_csv_files = [f for f in all_files if fs.get_file_info([f])[0].size > 0]
             if len(all_csv_files) == 0:  # pragma: no cover
                 # TODO: test
                 raise BodoError(err_msg)
@@ -246,7 +295,7 @@ def find_file_name_or_handler(path, ftype):
         is_handler = False
 
         if os.path.isdir(path):
-            files = filter_files(glob.glob(os.path.join(path, "*")))
+            files = filter(filter_func, glob.glob(os.path.join(path, "*")))
             all_csv_files = [f for f in sorted(files) if os.path.getsize(f) > 0]
             if len(all_csv_files) == 0:  # pragma: no cover
                 # TODO: test

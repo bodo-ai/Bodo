@@ -101,6 +101,7 @@ def test_json_read_df(datapath):
         uncompress_dir(fname_dir_multi)
 
 
+@pytest.mark.slow
 def test_json_read_int_nulls(datapath):
     """
     test read_json reads a dataframe containing nullable int column
@@ -120,6 +121,7 @@ def test_json_read_int_nulls(datapath):
     check_func(test_impl, (fname_dir_multi,), py_output=py_out)
 
 
+@pytest.mark.slow
 def test_json_read_str_arr(datapath):
     """
     test read_json reads a dataframe containing str column
@@ -245,10 +247,11 @@ def json_write_test(test_impl, read_impl, df, sort_col, reset_index=False):
     params=[
         pd.DataFrame(
             {
-                "A": pd.date_range(start="2018-04-24", end="2018-04-29", periods=5),
-                "B": ["¡Y tú quién te crees?", "🐍⚡", "大处着眼，小处着手。", "hi", "a123"],
-                "C": np.arange(5).astype(np.float64),
-                "D": [True, False, np.nan, False, False],
+                "A": pd.date_range(start="2018-04-24", periods=12),
+                "B": ["¡Y tú quién te crees?", "🐍⚡", "大处着眼，小处着手。", "hi", "a123", ""]
+                * 2,
+                "C": np.arange(12).astype(np.float64),
+                "D": [True, False, np.nan, False, False, True] * 2,
             }
         )
     ]
