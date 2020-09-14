@@ -85,7 +85,7 @@ def typeof_pd_index(val, c):
     raise NotImplementedError("unsupported pd.Index type")
 
 
-# -------------------------  DatetimeIndex -----------------------------
+# -------------------------  DatetimeIndex ------------------------------
 
 
 class DatetimeIndexType(types.IterableType, types.ArrayCompatible):
