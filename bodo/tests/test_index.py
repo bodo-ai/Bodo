@@ -9,7 +9,7 @@ import pytest
 from bodo.tests.utils import check_func, AnalysisTestPipeline
 
 
-def test_range_index_constructor(memory_leak_check):
+def test_range_index_constructor(memory_leak_check, is_slow_run):
     """
     Test pd.RangeIndex()
     """
@@ -18,6 +18,8 @@ def test_range_index_constructor(memory_leak_check):
         return pd.RangeIndex(10)
 
     pd.testing.assert_index_equal(bodo.jit(impl1)(), impl1())
+    if not is_slow_run:
+        return
 
     def impl2():  # two literals
         return pd.RangeIndex(3, 10)
@@ -51,7 +53,66 @@ def test_range_index_constructor(memory_leak_check):
     assert bodo.jit(impl7)(r) == impl7(r)
 
 
-def test_numeric_index_constructor(memory_leak_check):
+@pytest.mark.parametrize(
+    "data",
+    [
+        np.array([1, 3, 4]),  # Int array
+        np.ones(3, dtype=np.int64),  # Int64Index: array of int64
+        np.arange(3),  # Int64Ind: array input
+        pd.date_range(
+            start="2018-04-24", end="2018-04-27", periods=3
+        ),  # datetime range
+        pd.timedelta_range(start="1D", end="3D"), # deltatime range
+        pd.date_range(start="2018-04-10", end="2018-04-27", periods=3),
+        pd.date_range(start="2018-04-10", end="2018-04-27", periods=3).to_series(),  # deltatime series
+    ],
+)
+def test_generic_index_constructor(data):
+    """
+    Test the pd.Index with different inputs
+    """
+
+    def impl(data):
+        return pd.Index(data)
+
+    # parallel with no dtype
+    check_func(impl, (data,))
+
+
+@pytest.mark.parametrize(
+    "data,dtype",
+    [
+        (np.ones(3, dtype=np.int32), np.float64),
+        (np.arange(10), np.dtype("datetime64[ns]")),
+        (pd.Series(["2020-9-1", "2019-10-11", "2018-1-4", "2015-8-3", "1990-11-21"]),
+            np.dtype("datetime64[ns]")
+         ),
+        (np.arange(10), np.dtype("timedelta64[ns]")),
+        (pd.Series(np.arange(10)), np.dtype("timedelta64[ns]")),
+    ],
+)
+def test_generic_index_constructor_with_dtype(data, dtype):
+    def impl(data, dtype):
+        return pd.Index(data, dtype=dtype)
+
+    check_func(impl, (data, dtype))
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        [1, 3, 4],
+        ["A", "B", "C"],
+    ],
+)
+def test_generic_index_constructor_sequential(data):
+    def impl(data):
+        return pd.Index(data)
+
+    check_func(impl, (data,), dist_test=False)
+
+
+def test_numeric_index_constructor(memory_leak_check, is_slow_run):
     """
     Test pd.Int64Index/UInt64Index/Float64Index objects
     """
@@ -60,6 +121,8 @@ def test_numeric_index_constructor(memory_leak_check):
         return pd.Int64Index([10, 12])
 
     pd.testing.assert_index_equal(bodo.jit(impl1)(), impl1())
+    if not is_slow_run:
+        return
 
     def impl2():  # list input with name
         return pd.Int64Index([10, 12], name="A")
@@ -98,8 +161,7 @@ def test_numeric_index_constructor(memory_leak_check):
 
 
 def test_init_numeric_index_array_analysis(memory_leak_check):
-    """make sure shape equivalence for init_numeric_index() is applied correctly
-    """
+    """make sure shape equivalence for init_numeric_index() is applied correctly"""
     import numba.tests.test_array_analysis
 
     def impl(d):
@@ -131,6 +193,7 @@ def test_array_index_box(index, memory_leak_check):
     pd.testing.assert_index_equal(bodo.jit(impl)(index), impl(index))
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "index",
     [
@@ -155,6 +218,7 @@ def test_index_values(index, memory_leak_check):
 
 # Need to add the code and the check for the PeriodIndex
 # pd.PeriodIndex(year=[2015, 2016, 2018], month=[1, 2, 3], freq="M"),
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "index",
     [
@@ -183,7 +247,10 @@ def test_index_copy(index, memory_leak_check):
 @pytest.fixture(
     params=[
         pd.date_range(start="2018-04-24", end="2018-04-27", periods=3),
-        pd.date_range(start="2018-04-24", end="2018-04-27", periods=3, name="A"),
+        pytest.param(
+            pd.date_range(start="2018-04-24", end="2018-04-27", periods=3, name="A"),
+            marks=pytest.mark.slow,
+        ),
     ]
 )
 def dti_val(request):
@@ -334,8 +401,7 @@ def test_datetime_index_constructor(data, memory_leak_check):
 
 
 def test_init_datetime_index_array_analysis(memory_leak_check):
-    """make sure shape equivalence for init_datetime_index() is applied correctly
-    """
+    """make sure shape equivalence for init_datetime_index() is applied correctly"""
     import numba.tests.test_array_analysis
 
     def impl(n):
@@ -375,7 +441,9 @@ def test_pd_date_range(memory_leak_check):
 @pytest.fixture(
     params=[
         pd.timedelta_range(start="1D", end="3D"),
-        pd.timedelta_range(start="1D", end="3D", name="A"),
+        pytest.param(
+            pd.timedelta_range(start="1D", end="3D", name="A"), marks=pytest.mark.slow
+        ),
     ]
 )
 def timedelta_index_val(request):
@@ -412,8 +480,7 @@ def test_timedelta_index_constructor(data, memory_leak_check):
 
 
 def test_init_timedelta_index_array_analysis(memory_leak_check):
-    """make sure shape equivalence for init_timedelta_index() is applied correctly
-    """
+    """make sure shape equivalence for init_timedelta_index() is applied correctly"""
     import numba.tests.test_array_analysis
 
     def impl(d):
@@ -447,7 +514,10 @@ def test_timedelta_field(timedelta_index_val, field, memory_leak_check):
     "period_index",
     [
         pd.PeriodIndex(year=[2015, 2016, 2018], quarter=[1, 2, 3]),
-        pd.PeriodIndex(year=[2015, 2016, 2018], month=[1, 2, 3], freq="M"),
+        pytest.param(
+            pd.PeriodIndex(year=[2015, 2016, 2018], month=[1, 2, 3], freq="M"),
+            marks=pytest.mark.slow,
+        ),
     ],
 )
 def test_period_index_box(period_index, memory_leak_check):
@@ -460,13 +530,20 @@ def test_period_index_box(period_index, memory_leak_check):
 @pytest.mark.parametrize(
     "m_ind",
     [
-        pd.MultiIndex.from_arrays([[3, 4, 1, 5, -3]]),
+        pytest.param(
+            pd.MultiIndex.from_arrays([[3, 4, 1, 5, -3]]), marks=pytest.mark.slow
+        ),
         pd.MultiIndex.from_arrays(
             [
                 ["ABCD", "V", "CAD", "", "AA"],
                 [1.3, 4.1, 3.1, -1.1, -3.2],
                 pd.date_range(start="2018-04-24", end="2018-04-27", periods=5),
             ]
+        ),
+        # repeated names
+        pytest.param(
+            pd.MultiIndex.from_arrays([[1, 5, 9], [2, 1, 8]], names=["A", "A"]),
+            marks=pytest.mark.slow,
         ),
     ],
 )
@@ -479,8 +556,7 @@ def test_multi_index_unbox(m_ind, memory_leak_check):
 
 
 def test_init_string_index_array_analysis(memory_leak_check):
-    """make sure shape equivalence for init_string_index() is applied correctly
-    """
+    """make sure shape equivalence for init_string_index() is applied correctly"""
     import numba.tests.test_array_analysis
 
     def impl(d):
@@ -497,8 +573,7 @@ def test_init_string_index_array_analysis(memory_leak_check):
 
 
 def test_init_range_index_array_analysis(memory_leak_check):
-    """make sure shape equivalence for init_range_index() is applied correctly
-    """
+    """make sure shape equivalence for init_range_index() is applied correctly"""
     import numba.tests.test_array_analysis
 
     def impl(n):
@@ -527,18 +602,23 @@ def test_map_str(memory_leak_check):
 @pytest.mark.parametrize(
     "index",
     [
-        pd.RangeIndex(11),
+        pytest.param(pd.RangeIndex(11), marks=pytest.mark.slow),
         pd.Int64Index([10, 12, 1, 3, 2, 4, 5, -1]),
-        pd.Float64Index([10.1, 12.1, 1.1, 2.2, -1.2, 4.1, -2.1]),
-        pd.Index(["A", "BB", "ABC", "", "KG", "FF", "ABCDF"]),
-        pd.date_range("2019-01-14", periods=11),
+        pytest.param(
+            pd.Float64Index([10.1, 12.1, 1.1, 2.2, -1.2, 4.1, -2.1]),
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.Index(["A", "BB", "ABC", "", "KG", "FF", "ABCDF"]),
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(pd.date_range("2019-01-14", periods=11), marks=pytest.mark.slow),
         # TODO: enable when pd.Timedelta is supported (including box_if_dt64)
         # pd.timedelta_range("3D", periods=11),
     ],
 )
 def test_map(index, memory_leak_check):
-    """test Index.map for all Index types
-    """
+    """test Index.map for all Index types"""
 
     def test_impl(I):
         return I.map(lambda a: a)

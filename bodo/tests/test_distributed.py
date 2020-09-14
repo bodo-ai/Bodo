@@ -470,7 +470,7 @@ def test_1D_Var_alloc4():
     f(df1, df2)
     assert count_array_REPs() == 0
     assert count_array_OneDs() == 0
-    assert count_array_OneD_Vars() != 0
+    assert count_array_OneD_Vars() > 0
 
 
 def test_str_alloc_equiv1():
@@ -615,6 +615,88 @@ def test_getitem_slice_const_size():
     check_func(impl2, ())
     # check_func(impl3, ())
     # check_func(impl4, ())
+
+
+def test_setitem_slice_scalar(memory_leak_check):
+    """test setitem of distributed array with a scalar or lower dimention array value
+    """
+
+    def impl(A, val):
+        A[4:-3:2] = val
+        return A
+
+    # scalar value
+    A = np.arange(11)
+    val = -1
+    check_func(impl, (A, val))
+
+    # multi-dim array with lower dimension array value
+    # using a new implementation since Numba doesn't support lists in array setitem
+    def impl2(A, val):
+        A[::2] = np.array(val)
+        return A
+
+    A = np.arange(33).reshape(11, 3)
+    val = [-1, -3, -2]
+    check_func(impl2, (A, val))
+
+
+def test_setitem_bool_index_scalar(memory_leak_check):
+    """test setting a scalar or lower dimension array value to distributed array
+    positions selected by a boolean index
+    """
+
+    def impl(A, I, val):
+        A[I] = val
+        return A
+
+    # scalar value
+    A = np.arange(11)
+    I = A % 4 == 0
+    val = -1
+    check_func(impl, (A, I, val))
+
+    # multi-dim array with scalar value
+    # TODO: support 2D bool indexing in Numba
+    # A = np.arange(33).reshape(11, 3)
+    # I = A % 4 == 0
+    # val = -1
+    # check_func(impl, (A, I, val))
+
+    # multi-dim array with lower dimension array value
+    # using a new implementation since Numba doesn't support lists in array setitem
+    def impl2(A, I, val):
+        A[I] = np.array(val)
+        return A
+
+    A = np.arange(33).reshape(11, 3)
+    I = A[:, 0] % 4 == 0
+    val = [-1, -3, -2]
+    check_func(impl2, (A, I, val))
+
+
+def test_setitem_scalar(memory_leak_check):
+    """test setitem of distributed array with a scalar
+    """
+
+    def impl(A, val):
+        A[1] = val
+        return A
+
+    # scalar value
+    A = np.arange(11)
+    val = -1
+    check_func(impl, (A, val))
+
+    # multi-dim array with lower dimension array value
+    # using a new implementation since Numba doesn't support lists in array setitem
+    def impl2(A, val, i):
+        A[i] = np.array(val)
+        return A
+
+    A = np.arange(33).reshape(11, 3)
+    val = [-1, -3, -2]
+    check_func(impl2, (A, val, -1))
 
 
 @pytest.mark.parametrize("dtype", [np.float32, np.uint8, np.int64])
@@ -1109,27 +1191,45 @@ def get_random_int64index(n):
     "data",
     [
         np.arange(n, dtype=np.float32),  # 1D np array
-        np.arange(n * n_col).reshape(n, n_col),  # 2D np array
-        gen_random_string_array(n),  # string array
-        get_random_integerarray(n),
-        get_random_booleanarray(n),
-        get_random_decimalarray(n),
-        pd.date_range("2017-01-13", periods=n).date,  # date array
-        pd.RangeIndex(
-            n
+        pytest.param(
+            np.arange(n * n_col).reshape(n, n_col), marks=pytest.mark.slow
+        ),  # 2D np array
+        pytest.param(
+            gen_random_string_array(n), marks=pytest.mark.slow
+        ),  # string array
+        pytest.param(get_random_integerarray(n), marks=pytest.mark.slow),
+        pytest.param(get_random_booleanarray(n), marks=pytest.mark.slow),
+        pytest.param(get_random_decimalarray(n), marks=pytest.mark.slow),
+        pytest.param(
+            pd.date_range("2017-01-13", periods=n).date, marks=pytest.mark.slow
+        ),  # date array
+        pytest.param(
+            pd.RangeIndex(n), marks=pytest.mark.slow
         ),  # RangeIndex, TODO: test non-trivial start/step when gatherv() supports them
-        pd.RangeIndex(n, name="A"),  # RangeIndex with name
-        get_random_int64index(n),
-        pd.Index(gen_random_string_array(n), name="A"),  # String Index
-        pd.DatetimeIndex(pd.date_range("1983-10-15", periods=n)),  # DatetimeIndex
-        pd.timedelta_range(start="1D", periods=n, name="A"),  # TimedeltaIndex
-        pd.MultiIndex.from_arrays(
-            [
-                gen_random_string_array(n),
-                np.arange(n),
-                pd.date_range("2001-10-15", periods=n),
-            ],
-            names=["AA", "B", None],
+        pytest.param(
+            pd.RangeIndex(n, name="A"), marks=pytest.mark.slow
+        ),  # RangeIndex with name
+        pytest.param(get_random_int64index(n), marks=pytest.mark.slow),
+        pytest.param(
+            pd.Index(gen_random_string_array(n), name="A"), marks=pytest.mark.slow
+        ),  # String Index
+        pytest.param(
+            pd.DatetimeIndex(pd.date_range("1983-10-15", periods=n)),
+            marks=pytest.mark.slow,
+        ),  # DatetimeIndex
+        pytest.param(
+            pd.timedelta_range(start="1D", periods=n, name="A"), marks=pytest.mark.slow
+        ),  # TimedeltaIndex
+        pytest.param(
+            pd.MultiIndex.from_arrays(
+                [
+                    gen_random_string_array(n),
+                    np.arange(n),
+                    pd.date_range("2001-10-15", periods=n),
+                ],
+                names=["AA", "B", None],
+            ),
+            marks=pytest.mark.slow,
         ),
         pd.Series(gen_random_string_array(n), np.arange(n) + 1, name="A"),
         pd.DataFrame(
@@ -1140,42 +1240,54 @@ def get_random_int64index(n):
             },
             np.arange(n) + 2,
         ),
-        pd.Series(["BB", "CC"] + (["AA"] * (n - 2)), dtype="category"),
+        pytest.param(
+            pd.Series(["BB", "CC"] + (["AA"] * (n - 2)), dtype="category"),
+            marks=pytest.mark.slow,
+        ),
         # list(str) array
         # unboxing crashes for case below (issue #812)
         # pd.Series(gen_random_string_array(n)).map(lambda a: None if pd.isna(a) else [a, "A"]).values
-        pd.Series(["A"] * n).map(lambda a: None if pd.isna(a) else [a, "A"]).values,
-        np.array(
-            [
-                [1, 3],
-                [2],
-                np.nan,
-                [4, 5, 6],
-                [],
-                [1, 1753],
-                [],
-                [-10],
-                [4, 10],
-                np.nan,
-                [42],
-            ]
-            * 2
+        pytest.param(
+            pd.Series(["A"] * n).map(lambda a: None if pd.isna(a) else [a, "A"]).values,
+            marks=pytest.mark.slow,
         ),
-        np.array(
-            [
-                [2.0, -3.2],
-                [2.2, 1.3],
-                np.nan,
-                [4.1, 5.2, 6.3],
-                [],
-                [1.1, 1.2],
-                [],
-                [-42.0],
-                [3.14],
-                [2.0, 3.0],
-                np.nan,
-            ]
-            * 2
+        pytest.param(
+            np.array(
+                [
+                    [1, 3],
+                    [2],
+                    np.nan,
+                    [4, 5, 6],
+                    [],
+                    [1, 1753],
+                    [],
+                    [-10],
+                    [4, 10],
+                    np.nan,
+                    [42],
+                ]
+                * 2
+            ),
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            np.array(
+                [
+                    [2.0, -3.2],
+                    [2.2, 1.3],
+                    np.nan,
+                    [4.1, 5.2, 6.3],
+                    [],
+                    [1.1, 1.2],
+                    [],
+                    [-42.0],
+                    [3.14],
+                    [2.0, 3.0],
+                    np.nan,
+                ]
+                * 2
+            ),
+            marks=pytest.mark.slow,
         ),
     ],
 )

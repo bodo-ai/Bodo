@@ -1,6 +1,8 @@
 """Utility functions for testing such as check_func() that tests a function.
 """
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
+import os
+import glob
 import pandas as pd
 import numpy as np
 import random
@@ -14,6 +16,7 @@ from numba.core import types
 from bodo.utils.typing import BodoWarning
 import warnings
 import time
+from mpi4py import MPI
 from bodo.utils.utils import is_distributable_typ, is_distributable_tuple_typ
 
 
@@ -249,9 +252,7 @@ def check_func_1D(
     if convert_columns_to_pandas:
         bodo_output = convert_non_pandas_columns(bodo_output)
     if is_out_distributed:
-        if check_typing_issues:
-            _check_typing_issues(bodo_output)
-        bodo_output = bodo.gatherv(bodo_output)
+        bodo_output = _gather_output(bodo_output)
     # only rank 0 should check if gatherv() called on output
     passed = 1
     if not is_out_distributed or bodo.get_rank() == 0:
@@ -290,9 +291,7 @@ def check_func_1D_var(
     if convert_columns_to_pandas:
         bodo_output = convert_non_pandas_columns(bodo_output)
     if is_out_distributed:
-        if check_typing_issues:
-            _check_typing_issues(bodo_output)
-        bodo_output = bodo.gatherv(bodo_output)
+        bodo_output = _gather_output(bodo_output)
     passed = 1
     if not is_out_distributed or bodo.get_rank() == 0:
         passed = _test_equal_guard(
@@ -519,6 +518,24 @@ def _test_equal_struct_array(
         )
 
 
+
+def _gather_output(bodo_output):
+    """gather bodo output from all processes. Uses bodo.gatherv() if there are no typing
+    issues (e.g. empty object array). Otherwise, uses mpi4py's gather.
+    """
+
+    try:
+        _check_typing_issues(bodo_output)
+        bodo_output = bodo.gatherv(bodo_output)
+    except:
+        comm = MPI.COMM_WORLD
+        bodo_output_list = comm.gather(bodo_output)
+        if bodo.get_rank() == 0:
+            bodo_output = pd.concat(bodo_output_list)
+
+    return bodo_output
+
+
 def _typeof(val):
     # Pandas returns an object array for .values or to_numpy() call on Series of
     # nullable int, which can't be handled in typeof. Bodo returns a nullable int array
@@ -642,6 +659,12 @@ def string_list_ent(x):
         return "nan"
     if isinstance(x, str):
         return x
+    if isinstance(x, Decimal):
+        e_s = str(x)
+        if e_s.find(".") != -1:
+            f_s = e_s.strip("0").strip(".")
+            return f_s
+        return e_s
     print("Failed to find matching type")
     assert False
 
@@ -722,10 +745,19 @@ def convert_non_pandas_columns(df):
     for e_col_name in col_names_list_string:
         e_list_str = []
         e_col = df[e_col_name]
+
+        def is_ok(val):
+            if isinstance(val, np.float):
+                return not np.isnan(val)
+            if val == None:
+                return False
+            return True
+
         for i_row in range(n_rows):
             e_ent = e_col.iat[i_row]
             if isinstance(e_ent, (list, np.ndarray)):
-                e_str = ",".join(e_ent) + ","
+                f_ent = [x if is_ok(x) else "None" for x in e_ent]
+                e_str = ",".join(f_ent) + ","
                 e_list_str.append(e_str)
             else:
                 e_list_str.append(np.nan)
@@ -857,6 +889,21 @@ def gen_random_arrow_array_struct_list_int(span, n):
     return e_list
 
 
+def gen_random_arrow_list_list_decimal(rec_lev, prob_none, n):
+    def random_list_rec(rec_lev):
+        if random.random() < prob_none:
+            return None
+        else:
+            if rec_lev == 0:
+                return Decimal(str(random.randint(1,10)) + "." + str(random.randint(1,10)))
+            else:
+                return [
+                    random_list_rec(rec_lev - 1) for _ in range(random.randint(1, 3))
+                ]
+
+    return [random_list_rec(rec_lev) for _ in range(n)]
+
+
 def gen_random_arrow_list_list_int(rec_lev, prob_none, n):
     def random_list_rec(rec_lev):
         if random.random() < prob_none:
@@ -923,10 +970,27 @@ def gen_random_list_string_array(option, n):
             e_list.append(e_ent)
         return e_list
 
+    def rand_col_l_str_none_no_first(n):
+        e_list_list = []
+        for _ in range(n):
+            e_list = []
+            for idx in range(random.randint(1, 4)):
+                # The None on the first index creates some problems.
+                if random.random() < 0.1 and idx > 0:
+                    val = None
+                else:
+                    k = random.randint(1, 3)
+                    val = "".join(random.choices(["A", "B", "C"], k=k))
+                e_list.append(val)
+            e_list_list.append(e_list)
+        return e_list_list
+
     if option == 1:
         e_list = rand_col_l_str(n)
     if option == 2:
         e_list = rand_col_str(n)
+    if option == 3:
+        e_list = rand_col_l_str_none_no_first(n)
     return e_list
 
 
@@ -1000,3 +1064,45 @@ def _check_typing_issues(val):
     for e in errors:
         if isinstance(e, Exception):
             raise e
+
+
+def check_caching(mod, testname, impl, args):
+    """ Test caching by compiling a function with Bodo in sequential mode with
+        cache=True, then running it again loading from cache.
+        mod: module object where the test is defined
+        testname: name of the test function in mod
+        impl: the function to compile
+        args: arguments to pass to the function
+    """
+    try:
+        # compile impl in sequential mode with cache=True
+        bodo_func = bodo.jit(cache=True)(impl)
+        bodo_out1 = bodo_func(*args)
+        # get signature of compiled function
+        sig = bodo_func.signatures[0]
+        # assert that it wasn't loaded from cache
+        assert bodo_func._cache_hits[sig] == 0
+        assert bodo_func._cache_misses[sig] == 1
+        # reset state to make sure only the cached version is used next
+        engine = bodo_func.overloads[sig].library._codegen._engine
+        bodo.ir.aggregate.gb_agg_cfunc_addr.clear()
+        bodo_func._reset_overloads()
+        engine._defined_symbols.clear()
+        del engine, bodo_func
+        # now get the function by loading from cache
+        bodo_func = bodo.jit(cache=True)(impl)
+        bodo_out2 = bodo_func(*args)
+        # assert that it was loaded from cache
+        assert bodo_func._cache_hits[sig] == 1
+        assert bodo_func._cache_misses[sig] == 0
+        return bodo_out1, bodo_out2
+    finally:
+        if bodo.get_rank() == 0:
+            thisdir = os.path.dirname(mod.__file__)
+            for f in glob.glob(
+                os.path.join(
+                    thisdir, "__pycache__", mod.__name__.split(".")[-1] + "." + testname + "*"
+                )
+            ):
+                os.remove(f)
+        bodo.barrier()

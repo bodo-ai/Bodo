@@ -195,11 +195,13 @@ class VariableRetriever(ast.NodeTransformer):
     This is used for lambdas for which basically every variable can a priori be
     a global one and they should be fixed."""
 
-    def __init__(self):
+    def __init__(self, treat_local):
+        """The treat_local=False means that function and classes variables are not computed"""
         ast.NodeTransformer.__init__(self)
         self.list_variables = set()
+        self.treat_local = treat_local
 
-    def mapping_var(self, name):
+    def add_var(self, name):
         self.list_variables.add(name)
 
     # The visitor functions
@@ -239,7 +241,7 @@ class VariableRetriever(ast.NodeTransformer):
 
     def visit_Lambda(self, node):
         for earg in node.args.args:
-            self.mapping_var(earg.arg)
+            self.add_var(earg.arg)
         self.visit(node.body)
         return node
 
@@ -248,8 +250,25 @@ class VariableRetriever(ast.NodeTransformer):
         self.visit(node.value)
         return node
 
+    def visit_FunctionDef(self, node):
+        self.add_var(node.name)
+        # The arguments and variable in a functions are local
+        if self.treat_local:
+            for earg in node.args.args:
+                self.visit(earg.arg)
+            for x in node.body:
+                self.visit(x)
+        return node
+
+    def visit_ClassDef(self, node):
+        # The arguments and variable in a functions are local
+        if self.treat_local:
+            for x in node.body:
+                self.visit(x)
+        return node
+
     def visit_Name(self, node):
-        self.mapping_var(node.id)
+        self.add_var(node.id)
         return node
 
 
@@ -366,7 +385,7 @@ class Obfuscator(ast.NodeTransformer):
     #    applies
     # ---the other variables which may be global and are difficult to track.
     def visit_Lambda(self, node):
-        retriev = VariableRetriever()
+        retriev = VariableRetriever(True)
         retriev.visit(node)
         for e_var in retriev.list_variables:
             # All the names occurring in a lambda are set to fixed because they can
@@ -383,12 +402,20 @@ class Obfuscator(ast.NodeTransformer):
     def visit_FunctionDef(self, node):
         # The function name itself is set to fixed because it can be potentially part of the API.
         self.insert_fixed_names(node.name)
+        n_decorator = len(node.decorator_list)
         for earg in node.args.args:
             # The arguments are set to fixed because they are either default ones or
             # have their name of significance in say decorator functions.
+            # TODO: Remove this when there is no decorator.
             self.insert_fixed_names(earg.arg)
 
+        node.args.args = [self.visit(x) for x in node.args.args]
         node.body = [self.visit(x) for x in node.body]
+        return node
+
+    # This is for treating the arguments to the function.
+    def visit_arg(self, node):
+        node.arg =self.mapping_var(True, node.arg)
         return node
 
     # The code is numba specific and that is bad.
@@ -424,15 +451,15 @@ class Obfuscator(ast.NodeTransformer):
         return node
 
     def visit_Module(self, node):
+        retriev = VariableRetriever(False)
+        retriev.visit(node)
+        for x in retriev.list_variables:
+            self.insert_fixed_names(x)
         for x in node.body:
-            if isinstance(x, ast.Assign):
-                for target in x.targets:
-                    # Global variable in module statements need to be fixed.
-                    self.insert_fixed_names(self.retrieve_assigned_name(target))
             self.visit(x)
         return node
 
-    # The class entries are fixed by default for obvious reasons.
+    # The class entries are fixed by default since they may be accessed from outside
     def visit_ClassDef(self, node):
         # Need to consider supporting: name, bases, keywords, decorator_list
         for x in node.body:
@@ -465,7 +492,10 @@ class Obfuscator(ast.NodeTransformer):
 def process_file(efile, stdoutput):
     root = ast.parse(open(efile, "rb").read())
     sys.stderr.write("  Initial source code has been read\n")
-    #    print("ROOT = ", ast.dump(root))
+    if stdoutput:
+        sys.stderr.write("------------------------------------------------\n")
+        sys.stderr.write("Before preprocessing.  AST = " + ast.dump(root) + "\n")
+        sys.stderr.write("------------------------------------------------\n")
 
     obf = Obfuscator()
     root = obf.visit(root)
@@ -477,7 +507,7 @@ def process_file(efile, stdoutput):
 
     if stdoutput:
         sys.stderr.write("------------------------------------------------\n")
-        sys.stderr.write("The abstract Syntax Tree : " + ast.dump(root) + "\n")
+        sys.stderr.write("After preprocessing, the Abstract Syntax Tree : " + ast.dump(root) + "\n")
         sys.stderr.write("------------------------------------------------\n")
         sys.stdout.write(astor.to_source(root))
     else:

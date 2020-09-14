@@ -10,16 +10,18 @@
 #include "arrow/result.h"
 #include "arrow/status.h"
 
-#define CHECK(expr, msg)                                        \
-    if (!(expr)) {                                              \
-        std::cerr << "Error in arrow s3: " << msg << std::endl; \
+// if status of arrow::Result is not ok, form an err msg and raise a
+// runtime_error with it.
+#define CHECK_ARROW(expr, msg)                                                \
+    if (!(expr.ok())) {                                                       \
+        std::string err_msg =                                                 \
+            std::string("Error in arrow s3: ") + msg + " " + expr.ToString(); \
+        throw std::runtime_error(err_msg);                                    \
     }
 
-#define CHECK_ARROW(expr, msg)                                                 \
-    if (!(expr.ok())) {                                                        \
-        std::cerr << "Error in arrow s3: " << msg << " " << expr << std::endl; \
-    }
-
+// if status of arrow::Result is not ok, form an err msg and raise a
+// runtime_error with it. If it is ok, get value using ValueOrDie
+// and assign it to lhs using std::move
 #define CHECK_ARROW_AND_ASSIGN(res, msg, lhs) \
     CHECK_ARROW(res.status(), msg)            \
     lhs = std::move(res).ValueOrDie();
@@ -30,8 +32,8 @@ std::shared_ptr<arrow::fs::S3FileSystem> s3_fs;
 bool is_fs_initialized = false;
 
 std::shared_ptr<arrow::fs::S3FileSystem> get_s3_fs(std::string bucket_region) {
-    // if already initialized but region for this bucket is different than the
-    // current region, then re-initialize with the right region
+    // if already initialized but region for this bucket is different
+    // than the current region, then re-initialize with the right region
     if (is_fs_initialized && bucket_region != "") {
         arrow::fs::S3Options options = s3_fs->options();
         if (bucket_region != options.region) {
@@ -58,11 +60,12 @@ std::shared_ptr<arrow::fs::S3FileSystem> get_s3_fs(std::string bucket_region) {
             options.region = std::string(default_region);
         } else {
             // TODO: Need a better err msg here
-            std::cerr
-                << "Warning: S3 Bucket Region could not be determined "
-                   "automatically. AWS_DEFAULT_REGION environment variable not "
-                   "found either. Region defaults to 'us-east-1' currently."
-                << std::endl;
+            std::cerr << "Warning: S3 Bucket Region could not be determined "
+                         "automatically. AWS_DEFAULT_REGION environment "
+                         "variable not "
+                         "found either. Region defaults to 'us-east-1' "
+                         "currently."
+                      << std::endl;
         }
         char *custom_endpoint = std::getenv("AWS_S3_ENDPOINT");
         if (custom_endpoint)
@@ -158,7 +161,8 @@ class S3DirectoryFileReader : public DirectoryFileReader {
 
         // extract file names and file sizes from file_stats
         // then sort by file names
-        // assuming the directory contains files only, i.e. no subdirectory
+        // assuming the directory contains files only, i.e. no
+        // subdirectory
         std::transform(this->file_stats.begin(), this->file_stats.end(),
                        std::back_inserter(this->file_names_sizes),
                        extract_file_name_size);
@@ -229,7 +233,6 @@ PyMODINIT_FUNC PyInit_s3_reader(void) {
     return m;
 }
 
-#undef CHECK
 #undef CHECK_ARROW
 #undef CHECK_ARROW_AND_ASSIGN
 

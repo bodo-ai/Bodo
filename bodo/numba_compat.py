@@ -949,6 +949,69 @@ if (
 numba.core.dispatcher._DispatcherBase._compile_for_args = _compile_for_args
 
 
+# TODO maybe we can do this in another function that we already monkey patch
+# like _compile_for_args or our own decorator
+def resolve_gb_agg_funcs(cres):
+    from bodo.ir.aggregate import gb_agg_cfunc_addr
+
+    # TODO? could there be a situation where we load multiple bodo functions
+    # and name clashing occurs?
+    for sym in cres.library._codegen._engine._defined_symbols:
+        if (
+            sym.startswith("cfunc")
+            and ("get_agg_udf_addr" not in sym)
+            and (
+                "bodo_gb_udf_update_local" in sym
+                or "bodo_gb_udf_combine" in sym
+                or "bodo_gb_udf_eval" in sym
+            )
+        ):
+            gb_agg_cfunc_addr[sym] = cres.library.get_pointer_to_function(sym)
+
+
+def compile(self, sig):
+    if not self._can_compile:
+        raise RuntimeError("compilation disabled")
+    # Use counter to track recursion compilation depth
+    with self._compiling_counter:
+        args, return_type = numba.core.sigutils.normalize_signature(sig)
+        # Don't recompile if signature already exists
+        existing = self.overloads.get(tuple(args))
+        if existing is not None:
+            return existing.entry_point
+        # Try to load from disk cache
+        cres = self._cache.load_overload(sig, self.targetctx)
+        if cres is not None:
+            resolve_gb_agg_funcs(cres)  # Bodo change
+            self._cache_hits[sig] += 1
+            # XXX fold this in add_overload()? (also see compiler.py)
+            if not cres.objectmode and not cres.interpmode:
+                self.targetctx.insert_user_function(cres.entry_point,
+                                                    cres.fndesc, [cres.library])
+            self.add_overload(cres)
+            return cres.entry_point
+
+        self._cache_misses[sig] += 1
+        try:
+            cres = self._compiler.compile(args, return_type)
+        except errors.ForceLiteralArg as e:
+            def folded(args, kws):
+                return self._compiler.fold_argument_types(args, kws)[1]
+            raise e.bind_fold_arguments(folded)
+        self.add_overload(cres)
+        self._cache.save_overload(sig, cres)
+        return cres.entry_point
+
+
+lines = inspect.getsource(numba.core.dispatcher.Dispatcher.compile)
+if (
+    hashlib.sha256(lines.encode()).hexdigest()
+    != "576d693f0138e64e0c0808a1ed812a2792ad7315c29d7a16c00074026ca7a40d"
+):  # pragma: no cover
+    warnings.warn("numba.core.dispatcher.Dispatcher.compile has changed")
+numba.core.dispatcher.Dispatcher.compile = numba.core.compiler_lock.global_compiler_lock(compile)
+
+
 def propagate(self, typeinfer):
     """
     Execute all constraints.  Errors are caught and returned as a list.
@@ -1094,17 +1157,21 @@ def bodo_remove_dead_block(
             ):
                 # TODO: use proper block to label mapping
                 block_to_label = {v: k for k, v in func_ir.blocks.items()}
-                label = block_to_label[block]
-                eq_set = saved_array_analysis.get_equiv_set(label)
-                var_eq_set = eq_set.get_equiv_set(rhs.value)
-                if var_eq_set is not None:
-                    for v in var_eq_set:
-                        if v.endswith("#0"):
-                            v = v[:-2]
-                        if v in typemap and is_array_typ(typemap[v]) and v in lives:
-                            rhs.value = ir.Var(rhs.value.scope, v, rhs.value.loc)
-                            removed = True
-                            break
+                # blocks inside parfors are not available in block_to_label
+                # (see test_series_map_array_item_input without the isinstance check
+                # above)
+                if block in block_to_label:
+                    label = block_to_label[block]
+                    eq_set = saved_array_analysis.get_equiv_set(label)
+                    var_eq_set = eq_set.get_equiv_set(rhs.value)
+                    if var_eq_set is not None:
+                        for v in var_eq_set:
+                            if v.endswith("#0"):
+                                v = v[:-2]
+                            if v in typemap and is_array_typ(typemap[v]) and v in lives:
+                                rhs.value = ir.Var(rhs.value.scope, v, rhs.value.loc)
+                                removed = True
+                                break
 
             if isinstance(rhs, ir.Var) and lhs.name == rhs.name:
                 removed = True
@@ -1501,6 +1568,18 @@ if (
 numba.core.compiler_machinery.PassManager.run = passmanager_run
 
 
+lines = inspect.getsource(numba.np.ufunc.parallel._launch_threads)
+if (
+    hashlib.sha256(lines.encode()).hexdigest()
+    != "3d7e5889ad7dcd2b1ff0389cf37df400855e0b0b25b956927073b49015298736"
+):  # pragma: no cover
+    warnings.warn("numba.np.ufunc.parallel._launch_threads has changed")
+
+
+# avoid launching threads in Numba, which may throw "omp_set_nested routine deprecated"
+numba.np.ufunc.parallel._launch_threads = lambda: None
+
+
 def get_reduce_nodes(reduction_node, nodes, func_ir):
     """
     Get nodes that combine the reduction variable with a sentinel variable.
@@ -1545,12 +1624,15 @@ def get_reduce_nodes(reduction_node, nodes, func_ir):
                 #                       " in an unsupported reduction function."))
                 args = [(x.name, lookup(x, True)) for x in get_expr_args(rhs)]
                 non_red_args = [x for (x, y) in args if y.name != name]
-                assert len(non_red_args) == 1
+                # Bodo change: avoid raising error for concat reduction case
+                # assert len(non_red_args) == 1
                 args = [(x, y) for (x, y) in args if x != y.name]
                 replace_dict = dict(args)
-                replace_dict[non_red_args[0]] = ir.Var(
-                    lhs.scope, name + "#init", lhs.loc
-                )
+                # Bodo change: avoid error for concat reduction case
+                if len(non_red_args) == 1:
+                    replace_dict[non_red_args[0]] = ir.Var(
+                        lhs.scope, name + "#init", lhs.loc
+                    )
                 replace_vars_inner(rhs, replace_dict)
                 reduce_nodes = nodes[i:]
                 break
@@ -1569,6 +1651,7 @@ numba.parfors.parfor.get_reduce_nodes = get_reduce_nodes
 
 
 cache_envs = {}
+
 
 def _rebuild_env(modname, consts, env_name):
     env = numba.core.environment.lookup_environment(env_name)
@@ -1594,3 +1677,125 @@ if (
 ):  # pragma: no cover
     warnings.warn("numba.core.environment._rebuild_env has changed")
 numba.core.environment._rebuild_env = _rebuild_env
+
+
+# declare array writes in Bodo IR nodes and builtins to avoid invalid statement
+# reordering in parfor fusion
+def _can_reorder_stmts(stmt, next_stmt, func_ir, call_table, alias_map, arg_aliases):
+    """
+    Check dependencies to determine if a parfor can be reordered in the IR block
+    with a non-parfor statement.
+    """
+    from numba.parfors.parfor import Parfor, is_assert_equiv, expand_aliases
+
+    # swap only parfors with non-parfors
+    # don't reorder calls with side effects (e.g. file close)
+    # only read-read dependencies are OK
+    # make sure there is no write-write, write-read dependencies
+    if (
+        isinstance(stmt, Parfor)
+        and not isinstance(next_stmt, Parfor)
+        and not isinstance(next_stmt, ir.Print)
+        and (
+            not isinstance(next_stmt, ir.Assign)
+            or has_no_side_effect(next_stmt.value, set(), call_table)
+            or guard(is_assert_equiv, func_ir, next_stmt.value)
+        )
+    ):
+        stmt_accesses = expand_aliases(
+            {v.name for v in stmt.list_vars()}, alias_map, arg_aliases
+        )
+        # Bodo change: add func_ir input
+        stmt_writes = expand_aliases(
+            get_parfor_writes(stmt, func_ir), alias_map, arg_aliases
+        )
+        next_accesses = expand_aliases(
+            {v.name for v in next_stmt.list_vars()}, alias_map, arg_aliases
+        )
+        # Bodo change: add func_ir input
+        next_writes = expand_aliases(
+            get_stmt_writes(next_stmt, func_ir), alias_map, arg_aliases
+        )
+        if len((stmt_writes & next_accesses) | (next_writes & stmt_accesses)) == 0:
+            return True
+    return False
+
+
+lines = inspect.getsource(numba.parfors.parfor._can_reorder_stmts)
+if (
+    hashlib.sha256(lines.encode()).hexdigest()
+    != "18caa9a01b21ab92b4f79f164cfdbc8574f15ea29deedf7bafdf9b0e755d777c"
+):  # pragma: no cover
+    warnings.warn("numba.parfors.parfor._can_reorder_stmts has changed")
+numba.parfors.parfor._can_reorder_stmts = _can_reorder_stmts
+
+
+# Bodo change: add func_ir input
+def get_parfor_writes(parfor, func_ir):
+    from numba.parfors.parfor import Parfor
+
+    assert isinstance(parfor, Parfor)
+    writes = set()
+    blocks = parfor.loop_body.copy()
+    blocks[-1] = parfor.init_block
+    for block in blocks.values():
+        for stmt in block.body:
+            # Bodo change: add func_ir input
+            writes.update(get_stmt_writes(stmt, func_ir))
+            if isinstance(stmt, Parfor):
+                # Bodo change: add func_ir input
+                writes.update(get_parfor_writes(stmt, func_ir))
+    return writes
+
+
+lines = inspect.getsource(numba.parfors.parfor.get_parfor_writes)
+if (
+    hashlib.sha256(lines.encode()).hexdigest()
+    != "a7b29cd76832b6f6f1f2d2397ec0678c1409b57a6eab588bffd344b775b1546f"
+):  # pragma: no cover
+    warnings.warn("numba.parfors.parfor.get_parfor_writes has changed")
+# only used locally here, no need to replace in Numba
+
+# Bodo change: add func_ir input
+def get_stmt_writes(stmt, func_ir):
+    import bodo
+    from bodo.utils.utils import is_call_assign
+
+    # TODO: test bodo nodes
+    writes = set()
+    if isinstance(stmt, (ir.Assign, ir.SetItem, ir.StaticSetItem)):
+        writes.add(stmt.target.name)
+    # Bodo change: add Bodo nodes and builtins
+    if isinstance(stmt, bodo.ir.aggregate.Aggregate):
+        writes = {v.name for v in stmt.df_out_vars.values()}
+        if stmt.out_key_vars is not None:
+            writes.update({v.name for v in stmt.out_key_vars})
+    if isinstance(stmt, (bodo.ir.csv_ext.CsvReader, bodo.ir.parquet_ext.ParquetReader)):
+        writes = {v.name for v in stmt.out_vars}
+    if isinstance(stmt, bodo.ir.join.Join):
+        writes = {v.name for v in stmt.out_data_vars.values()}
+    if isinstance(stmt, bodo.ir.sort.Sort):
+        if not stmt.inplace:
+            writes.update({v.name for v in stmt.out_key_arrs})
+            writes.update({v.name for v in stmt.df_out_vars.values()})
+    if is_call_assign(stmt):
+        fdef = guard(find_callname, func_ir, stmt.value)
+        if fdef in (
+            ("setitem_str_arr_ptr", "bodo.libs.str_arr_ext"),
+            ("setna", "bodo.libs.array_kernels"),
+            ("str_arr_item_to_numeric", "bodo.libs.str_arr_ext"),
+            ("str_arr_setitem_int_to_str", "bodo.libs.str_arr_ext",),
+            ("str_arr_setitem_NA_str", "bodo.libs.str_arr_ext"),
+            ("set_bit_to_arr", "bodo.libs.int_arr_ext"),
+        ):
+            writes.add(stmt.value.args[0].name)
+    return writes
+
+
+lines = inspect.getsource(numba.core.ir_utils.get_stmt_writes)
+if (
+    hashlib.sha256(lines.encode()).hexdigest()
+    != "1a7a80b64c9a0eb27e99dc8eaae187bde379d4da0b74c84fbf87296d87939974"
+):  # pragma: no cover
+    warnings.warn("numba.core.ir_utils.get_stmt_writes has changed")
+# only used locally here, no need to replace in Numba

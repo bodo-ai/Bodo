@@ -306,9 +306,18 @@ def precision_recall_fscore_parallel(y_true, y_pred, operation, average="binary"
     pred_sum = np.zeros(nlabels, np.int64)
     label_dict = bodo.hiframes.pd_categorical_ext.get_label_dict_from_categories(labels)
     for i in range(len(y_true)):
+        true_sum[label_dict[y_true[i]]] += 1
+        if y_pred[i] not in label_dict:
+            # TODO: Seems like this warning needs to be printed:
+            # sklearn/metrics/_classification.py:1221: UndefinedMetricWarning: Recall is ill-defined and
+            # being set to 0.0 in labels with no true samples. Use `zero_division` parameter to control
+            # this behavior.
+            # _warn_prf(average, modifier, msg_start, len(result))
+            # TODO: it looks like the warning is only thrown for recall but I would
+            # double-check carefully
+            continue
         label = label_dict[y_pred[i]]
         pred_sum[label] += 1
-        true_sum[label_dict[y_true[i]]] += 1
         if y_true[i] == y_pred[i]:
             tp_sum[label] += 1
 

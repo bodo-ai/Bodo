@@ -1,0 +1,65 @@
+package:
+  name: bodo
+  version: {{ GIT_DESCRIBE_TAG }}
+
+source:
+   path: ../..
+
+build:
+  number: {{ GIT_DESCRIBE_NUMBER|int }}
+  script_env:
+  - CHECK_LICENSE_EXPIRED
+  - CHECK_LICENSE_CORE_COUNT
+
+requirements:
+  build:
+    - {{ compiler('c') }}
+    - {{ compiler('cxx') }}
+
+  host:
+    - python
+    - setuptools
+    - numba
+    - numpy
+    - s3fs >=0.4.2
+    - pandas 1.1.0
+    - pyarrow =1.0.1
+    - boost-cpp
+    - hdf5 * mpi_mpich_* # [not win]
+    - h5py
+    - mpich # [not win]
+    - impi-devel # [win]
+    - impi_rt # [win]
+    - vc # [win]
+    - vs2015_runtime # [win]
+    - vs2015_win-64 # [win]
+
+  run:
+    - python
+    - {{ pin_compatible('numpy') }}
+    - pandas 1.1.0
+    - pyarrow =1.0.1
+    - boost-cpp
+    - numba
+    - openjdk =8
+    - sqlalchemy
+    - s3fs >=0.4.2
+    - mpich # [not win]
+    - mpi4py
+    - impi_rt # [win]
+    - vs2015_runtime # [win]
+    - vs2015_win-64 # [win]
+
+
+test:
+  imports:
+    - bodo
+  source_files:
+    - examples/pi.py
+
+
+about:
+  home: https://www.bodo-inc.com/
+  license: Proprietary
+  license_file: LICENSE.md
+  summary: Bodo Core Engine for analytics

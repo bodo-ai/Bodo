@@ -43,8 +43,8 @@ def is_dtype_nullable(in_dtype):
 
 class BodoError(NumbaError):
     """Bodo error that is a regular exception to allow typing pass to catch it.
-       Numba will handle it in a special way to remove any context information
-       when printing so that it only prints the error message and code location.
+    Numba will handle it in a special way to remove any context information
+    when printing so that it only prints the error message and code location.
     """
 
     def __init__(self, msg, is_new=True):
@@ -166,8 +166,7 @@ def is_overload_constant_tuple(val):
 
 
 def is_initial_value_type(t):
-    """return True if 't' is a dict/list container with initial constant values
-    """
+    """return True if 't' is a dict/list container with initial constant values"""
     if not isinstance(t, types.InitialValue) or t.initial_value is None:
         return False
     vals = t.initial_value
@@ -182,20 +181,17 @@ def is_initial_value_type(t):
 
 
 def is_initial_value_list_type(t):
-    """return True if 't' is a list with initial constant values
-    """
+    """return True if 't' is a list with initial constant values"""
     return isinstance(t, types.List) and is_initial_value_type(t)
 
 
 def is_initial_value_dict_type(t):
-    """return True if 't' is a dict with initial constant values
-    """
+    """return True if 't' is a dict with initial constant values"""
     return isinstance(t, types.DictType) and is_initial_value_type(t)
 
 
 def is_overload_constant_dict(val):
-    """const dict values are stored as a const tuple with a sentinel
-    """
+    """const dict values are stored as a const tuple with a sentinel"""
 
     return (
         (
@@ -348,8 +344,7 @@ def get_overload_const_tuple(val):
 
 
 def get_overload_constant_dict(val):
-    """get constant dict values from literal type (stored as const tuple)
-    """
+    """get constant dict values from literal type (stored as const tuple)"""
     # LiteralStrKeyDict with all const values, e.g. {"A": ["B"]}
     # see test_groupby_agg_const_dict::impl4
     if isinstance(val, types.LiteralStrKeyDict):
@@ -431,8 +426,7 @@ def get_overload_const_int(val):
 
 
 def is_const_func_type(t):
-    """check if 't' is a constant function type
-    """
+    """check if 't' is a constant function type"""
     return isinstance(
         t,
         (
@@ -444,8 +438,7 @@ def is_const_func_type(t):
 
 
 def get_overload_const_func(val):
-    """get constant function object or ir.Expr.make_function from function type
-    """
+    """get constant function object or ir.Expr.make_function from function type"""
     if isinstance(val, (types.MakeFunctionLiteral, bodo.utils.typing.FunctionLiteral)):
         return val.literal_value
     if isinstance(val, types.Dispatcher):
@@ -466,6 +459,8 @@ def parse_dtype(dtype):
             dtype = types.StringLiteral("float")
         elif dtype.key[0] == int:
             dtype = types.StringLiteral("int")
+        elif dtype.key[0] == np.bool:
+            dtype = types.StringLiteral("bool")
 
     if isinstance(dtype, types.DTypeSpec):
         return dtype.dtype
@@ -567,8 +562,7 @@ def get_index_data_arr_types(t):
 
 
 def get_val_type_maybe_str_literal(value):
-    """Get type of value, using StringLiteral if possible
-    """
+    """Get type of value, using StringLiteral if possible"""
     t = numba.typeof(value)
     if isinstance(value, str):
         t = types.StringLiteral(value)
@@ -625,14 +619,12 @@ def unbox_list_literal(typ, obj, c):
 # TODO: update when Numba's #4967 is merged
 # similar to MakeFunctionLiteral
 class FunctionLiteral(types.Literal, types.Opaque):
-    """Literal type for function objects (i.e. pytypes.FunctionType)
-    """
+    """Literal type for function objects (i.e. pytypes.FunctionType)"""
 
 
 @typeof_impl.register(pytypes.FunctionType)
 def typeof_function(val, c):
-    """Assign literal type to constant functions that are not overloaded in numba.
-    """
+    """Assign literal type to constant functions that are not overloaded in numba."""
     if not numba.core.registry.cpu_target.typing_context._get_global_type(val):
         return FunctionLiteral(val)
 
@@ -673,30 +665,6 @@ class MetaType(types.Type):
 register_model(MetaType)(models.OpaqueModel)
 
 
-# convert const tuple expressions or const list to tuple statically
-def to_const_tuple(arrs):  # pragma: no cover
-    return tuple(arrs)
-
-
-@infer_global(to_const_tuple)
-class ToConstTupleTyper(AbstractTemplate):
-    def generic(self, args, kws):
-        assert not kws
-        assert len(args) == 1
-        arr = args[0]
-        ret_typ = arr
-        # XXX: returns a dummy type that should be fixed in series_pass
-        if isinstance(arr, types.List):
-            ret_typ = types.Tuple((arr.dtype,))
-        return signature(ret_typ, arr)
-
-
-# dummy lowerer
-@lower_builtin(to_const_tuple, types.Any)
-def lower_to_const_tuple(context, builder, sig, args):
-    return context.get_constant_null(sig.return_type)
-
-
 def is_literal_type(t):
     return (
         # LiteralStrKeyDict is not always a literal since its values are not necessarily
@@ -711,6 +679,8 @@ def is_literal_type(t):
         or (isinstance(t, types.BaseTuple) and all(is_literal_type(v) for v in t.types))
         # List/Dict types preserve const initial values in Numba 0.51
         or is_initial_value_type(t)
+        # dtype literals should be treated as literals
+        or isinstance(t, types.DTypeSpec)
     )
 
 
@@ -735,19 +705,19 @@ def get_literal_value(t):
         return t
     if isinstance(t, types.InitialValue):
         return t.initial_value
+    if isinstance(t, types.DTypeSpec):
+        return t
 
 
 def can_literalize_type(t):
-    """return True if type 't' can have literal values
-    """
+    """return True if type 't' can have literal values"""
     return t in (bodo.string_type, types.bool_) or isinstance(
         t, (types.Integer, types.List, types.SliceType)
     )
 
 
 def scalar_to_array_type(t):
-    """convert scalar type "t" to array of "t" values
-    """
+    """convert scalar type "t" to array of "t" values"""
     if isinstance(t, (types.UnicodeType, types.StringLiteral)):
         return bodo.string_array_type
 
@@ -822,8 +792,7 @@ def to_nullable_type(t):
 
 
 def is_iterable_type(t):
-    """return True if 't' is an iterable type like list, array, Series, ...
-    """
+    """return True if 't' is an iterable type like list, array, Series, ..."""
     from bodo.hiframes.pd_series_ext import SeriesType
     from bodo.hiframes.pd_dataframe_ext import DataFrameType
 
@@ -835,8 +804,7 @@ def is_iterable_type(t):
 
 
 def find_common_np_dtype(arr_types):
-    """finds common numpy dtype of array types using np.find_common_type
-    """
+    """finds common numpy dtype of array types using np.find_common_type"""
     return numba.np.numpy_support.from_dtype(
         np.find_common_type(
             [numba.np.numpy_support.as_dtype(t.dtype) for t in arr_types], []
@@ -946,8 +914,7 @@ def lower_convert_rec_tup_impl(context, builder, sig, args):
 
 @intrinsic
 def unliteral_val(typingctx, val=None):
-    """converts the type of value 'val' to nonliteral
-    """
+    """converts the type of value 'val' to nonliteral"""
 
     def codegen(context, builder, signature, args):
         return args[0]
@@ -956,8 +923,7 @@ def unliteral_val(typingctx, val=None):
 
 
 def create_unsupported_overload(fname):
-    """Create an overload for unsupported function 'fname' that raises BodoError
-    """
+    """Create an overload for unsupported function 'fname' that raises BodoError"""
 
     def overload_f(*a, **kws):
         raise BodoError("{} not supported yet".format(fname))

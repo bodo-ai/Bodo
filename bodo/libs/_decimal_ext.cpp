@@ -84,6 +84,9 @@ PyMODINIT_FUNC PyInit_decimal_ext(void) {
     // init numpy
     import_array();
 
+    // initalize memory alloc/tracking system in _meminfo.h
+    NRT_MemSys_init();
+
     // decimal_value should be exactly 128 bits to match Python
     if (sizeof(decimal_value) != 16)
         std::cerr << "invalid decimal struct size" << std::endl;
