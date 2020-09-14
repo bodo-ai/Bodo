@@ -2372,6 +2372,16 @@ def test_dataframe_sample_nested_datastructures():
     check_gather_operation(df4)
 
 
+def test_unsupported_df_method():
+    """ Raise Bodo error for unsupported df methods"""
+
+    def test_impl():
+        df = pd.DataFrame({"A": [1, 2, 3], "B": [2, 3, 4]})
+        return df.agg(['sum', 'min'])
+
+    with pytest.raises(BodoError, match="not supported yet"):
+        bodo.jit(test_impl)()
+
 ############################# old tests ###############################
 
 
@@ -3254,16 +3264,6 @@ class TestDataFrame(unittest.TestCase):
 
         bodo_func = bodo.jit(test_impl)
         pd.testing.assert_series_equal(bodo_func(), test_impl(), check_names=False)
-
-    def test_unsupported_df_method():
-        """ Raise Bodo error for unsupported df methods"""
-
-        def test_impl():
-            df = pd.DataFrame({"A": [1, 2, 3], "B": [2, 3, 4]})
-            return df.agg(['sum', 'min'])
-
-        with pytest.raises(BodoError, match="not supported yet"):
-            bodo.jit(test_impl)()
 
 
 if __name__ == "__main__":
