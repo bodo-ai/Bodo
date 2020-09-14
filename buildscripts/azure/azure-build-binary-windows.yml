@@ -53,10 +53,20 @@ jobs:
   - bash: |
       set -eo pipefail
       source activate bodo_build
-      cd buildscripts/bodo-conda-recipe/
+      if [[ "${{ parameters.useNumbaDev }}" == "true" ]]; then
+        cd buildscripts/bodo-numba-dev-conda-recipe/
+        echo "Using Numba-Dev Conda Recipe"
+      else
+        cd buildscripts/bodo-conda-recipe/
+      fi
       export CHECK_LICENSE_EXPIRED=$(CHECK_LICENSE_EXPIRED)
       export CHECK_LICENSE_CORE_COUNT=$(CHECK_LICENSE_CORE_COUNT)
-      conda build . -c bodo.ai -c conda-forge -c intel --no-test --output-folder ../../
+      if [[ "${{ parameters.useNumbaDev }}" == "true" ]]; then
+        conda build . -c numba/label/dev -c conda-forge -c intel --no-test --output-folder ../../
+        echo "Using numba/label/dev channel"
+      else
+        conda build . -c conda-forge -c intel --no-test --output-folder ../../
+      fi
     displayName: 'Conda build Bodo'
 
   - bash: |

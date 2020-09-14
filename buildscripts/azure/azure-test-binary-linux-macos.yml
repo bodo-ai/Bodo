@@ -2,7 +2,7 @@ parameters:
   name: ''
   vmImage: ''
   matrix: []
-  
+
 jobs:
 - job: ${{ parameters.name }}
   timeoutInMinutes: 360
@@ -13,18 +13,18 @@ jobs:
     matrix:
       ${{ insert }}: ${{ parameters.matrix }}
 
-  steps: 
+  steps:
   - task: DownloadBuildArtifacts@0
     inputs:
       artifactName: bodo-inc
       downloadPath: '$(HOME)'
     displayName: 'Download Bodo'
-    
+
   - task: ExtractFiles@1
     inputs:
       archiveFilePatterns: '$(HOME)/bodo-inc/${{ parameters.name }}-bodo-inc*.zip'
       destinationFolder: '$(HOME)/bodo-inc/bodo-inc'
-    displayName: 'Extract Bodo' 
+    displayName: 'Extract Bodo'
 
   - task: UsePythonVersion@0
     inputs:
@@ -43,8 +43,38 @@ jobs:
       export PATH=$HOME/miniconda3/bin:${PATH}
       conda create -y -n $CONDA_ENV
       source activate $CONDA_ENV
-      conda install -y h5py scipy bodo -c file://$(HOME)/bodo-inc/bodo-inc/ -c bodo.ai -c conda-forge
+    displayName: 'Download miniconda and create conda env'
+
+  - script: |
+      set -eo pipefail
+      export PATH=$HOME/miniconda3/bin:${PATH}
+      source activate $CONDA_ENV
+      if [[ "${{ parameters.useNumbaDev }}" == "true" ]]; then
+        conda install -y numba -c numba/label/dev
+        echo "Using Numba-Dev"
+      else
+        echo "Skipping..."
+      fi
+    displayName: 'Install Numba-Dev'
+
+  - script: |
+      set -eo pipefail
+      export PATH=$HOME/miniconda3/bin:${PATH}
+      source activate $CONDA_ENV
+      if [[ "${{ parameters.useNumbaDev }}" == "true" ]]; then
+        conda install -y h5py scipy bodo -c file://$(HOME)/bodo-inc/bodo-inc/ -c numba/label/dev -c conda-forge
+        echo "Using Numba-Dev"
+      else
+        conda install -y h5py scipy bodo -c file://$(HOME)/bodo-inc/bodo-inc/ -c conda-forge
+      fi
     displayName: 'Install Bodo from conda'
+
+  - script: |
+      set -eo pipefail
+      export PATH=$HOME/miniconda3/bin:${PATH}
+      source activate $CONDA_ENV
+      conda list -f numba
+    displayName: 'Check Numba Version'
 
   - script: |
       set -eo pipefail

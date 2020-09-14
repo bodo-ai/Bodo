@@ -53,7 +53,7 @@ jobs:
       export PATH=$HOME/miniconda3/bin:${PATH}
       conda create -y -n bodo_build conda-build anaconda-client conda-verify
     displayName: 'Create Conda Env'
-    
+
   - script: |
       set -eo pipefail
       export PATH=$HOME/miniconda3/bin:${PATH}
@@ -73,10 +73,20 @@ jobs:
       export MACOSX_DEPLOYMENT_TARGET=${MACOSX_DEPLOYMENT_TARGET:-10.9}
       export CONDA_BUILD_SYSROOT="/opt/MacOSX${MACOSX_DEPLOYMENT_TARGET}.sdk"
       source activate bodo_build
-      cd buildscripts/bodo-conda-recipe/
+      if [[ "${{ parameters.useNumbaDev }}" == "true" ]]; then
+        cd buildscripts/bodo-numba-dev-conda-recipe/
+        echo "Using Numba-Dev Conda Recipe"
+      else
+        cd buildscripts/bodo-conda-recipe/
+      fi
       export CHECK_LICENSE_EXPIRED=$(CHECK_LICENSE_EXPIRED)
       export CHECK_LICENSE_CORE_COUNT=$(CHECK_LICENSE_CORE_COUNT)
-      conda-build . -c bodo.ai -c conda-forge --no-test
+      if [[ "${{ parameters.useNumbaDev }}" == "true" ]]; then
+        conda-build . -c numba/label/dev -c conda-forge --no-test
+        echo "Using numba/label/dev channel"
+      else
+        conda-build . -c conda-forge --no-test
+      fi
     displayName: 'Conda build Bodo'
 
   - script: |
@@ -95,15 +105,15 @@ jobs:
       conda index bodo-inc/
 
     displayName: 'index bodo-inc'
- 
+
   - task: ArchiveFiles@2
     inputs:
       rootFolderOrFile: '$(System.DefaultWorkingDirectory)/bodo-inc'
       includeRootFolder: false
       archiveFile: $(Build.ArtifactStagingDirectory)/${{ parameters.name }}-bodo-inc-$(suffix).zip
-      replaceExistingArchive: true 
+      replaceExistingArchive: true
     displayName: "Archive files"
-    
+
   - task: PublishBuildArtifacts@1
     inputs:
       pathtoPublish: $(Build.ArtifactStagingDirectory)/${{ parameters.name }}-bodo-inc-$(suffix).zip
