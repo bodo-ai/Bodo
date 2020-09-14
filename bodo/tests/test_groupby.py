@@ -96,7 +96,7 @@ def test_df(request):
 def test_df_int_no_null(request):
     """
     Testing data for functions that does not support nullable integer columns
-    with nulls only 
+    with nulls only
 
     Ideally, all testing function using test_df_int_no_null as inputs
     should support passing tests with test_df
@@ -186,8 +186,8 @@ def test_return_type_nullable_cumsum_cumprod(df_null):
     The agg(("cumsum", "cumprod")) is disabled at the time being because of a pandas bug:
     https://github.com/pandas-dev/pandas/issues/35490
     """
-    assert (
-        re.compile(r'1.1.*').match(pd. __version__)
+    assert re.compile(r"1.1.*").match(
+        pd.__version__
     ), "revisit the agg((cumsum, cumprod)) at next pandas version"
 
     def impl1(df):
@@ -257,8 +257,7 @@ def test_sum_string():
 
 
 def test_random_decimal_sum_min_max_last(is_slow_run):
-    """We do not have decimal as index. Therefore we have to use as_index=False
-    """
+    """We do not have decimal as index. Therefore we have to use as_index=False"""
 
     def impl1(df):
         df_ret = df.groupby("A", as_index=False).nunique()
@@ -305,7 +304,10 @@ def test_random_decimal_sum_min_max_last(is_slow_run):
     random.seed(5)
     n = 10
     df1 = pd.DataFrame(
-        {"A": gen_random_decimal_array(1, n), "B": gen_random_decimal_array(2, n),}
+        {
+            "A": gen_random_decimal_array(1, n),
+            "B": gen_random_decimal_array(2, n),
+        }
     )
 
     # Direct checks for which pandas has equivalent functions.
@@ -434,7 +436,10 @@ def test_agg_str_key():
         return A
 
     df = pd.DataFrame(
-        {"A": ["AA", "B", "B", "B", "AA", "AA", "B"], "B": [-8, 2, 3, 1, 5, 6, 7],}
+        {
+            "A": ["AA", "B", "B", "B", "AA", "AA", "B"],
+            "B": [-8, 2, 3, 1, 5, 6, 7],
+        }
     )
     check_func(impl, (df,), sort_output=True)
 
@@ -506,8 +511,8 @@ def test_cumsum_index_preservation(df_index):
     At the present time the agg(("cumsum", "cumprod")) is broken in pandas. See
     https://github.com/pandas-dev/pandas/issues/35490
     """
-    assert (
-        re.compile(r'1.1.*').match(pd. __version__)
+    assert re.compile(r"1.1.*").match(
+        pd.__version__
     ), "revisit the agg((cumsum, cumprod)) at next pandas version"
 
     def test_impl_basic(df1):
@@ -1137,8 +1142,8 @@ def test_agg_multi_udf():
     The agg(("cumsum", "cumprod")) is currently broken because of a bug in pandas.
     https://github.com/pandas-dev/pandas/issues/35490
     """
-    assert (
-        re.compile(r'1.1.*').match(pd. __version__)
+    assert re.compile(r"1.1.*").match(
+        pd.__version__
     ), "revisit the agg((cumsum, cumprod)) at next pandas version"
 
     def impl(df):
@@ -1382,8 +1387,9 @@ def test_groupby_agg_const_dict():
 
 
 def test_groupby_agg_caching():
-    """ Test compiling function that uses groupby.agg(udf) with cache=True
-        and loading from cache """
+    """Test compiling function that uses groupby.agg(udf) with cache=True
+    and loading from cache"""
+
     def impl(df):
         A = df.groupby("A").agg(lambda x: x.max() - x.min())
         return A
@@ -1689,8 +1695,7 @@ def test_as_index_count():
 
 
 def test_single_col_reset_index(test_df):
-    """We need the reset_index=True because otherwise the order is scrambled
-    """
+    """We need the reset_index=True because otherwise the order is scrambled"""
 
     def impl1(df):
         A = df.groupby("A")["B"].sum().reset_index()
@@ -1760,8 +1765,8 @@ def test_cummin_cummax_large_random_numpy():
     The agg(("cummin", "cummax")) is currently broken because of a bug in pandas.
     https://github.com/pandas-dev/pandas/issues/35490
     """
-    assert (
-        re.compile(r'1.1.*').match(pd. __version__)
+    assert re.compile(r"1.1.*").match(
+        pd.__version__
     ), "revisit the agg((cummin, cummax)) at next pandas version"
 
     def get_random_array(n, sizlen):
@@ -2535,8 +2540,8 @@ def test_std_one_col(test_df):
     This is due to a bug in pandas. See
     https://github.com/pandas-dev/pandas/issues/35516
     """
-    assert (
-        re.compile(r'1.1.*').match(pd. __version__)
+    assert re.compile(r"1.1.*").match(
+        pd.__version__
     ), "revisit the df.groupby(A)[B].std() issue at next pandas version"
 
     def impl1(df):
@@ -3017,6 +3022,17 @@ def test_schema_change():
 
     check_func(impl1, (df,), sort_output=True)
     check_func(impl2, (df,), sort_output=True)
+
+
+def test_groupby_empty_funcs():
+    """Test groupby that has no function to execute (issue #1590)"""
+
+    def impl(df):
+        first_df = df.groupby("A", as_index=False)["B"].max()
+        return len(first_df)
+
+    df = pd.DataFrame({"A": [0, 0, 0, 1, 1, 1], "B": range(6)})
+    assert impl(df) == bodo.jit(impl)(df)
 
 
 # ------------------------------ pivot, crosstab ------------------------------ #
