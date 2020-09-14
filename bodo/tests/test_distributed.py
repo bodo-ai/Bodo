@@ -756,6 +756,11 @@ def test_np_dot():
         w = np.arange(0, d, 1, np.float64)
         return np.dot(X, w)
 
+    # using the @ operator
+    def impl3(X, Y):
+        w = np.arange(0, d, 1, np.float64)
+        return X @ w
+
     n = 11
     d = 3
     np.random.seed(1)
@@ -763,6 +768,7 @@ def test_np_dot():
     Y = np.arange(n, dtype=np.float64)
     check_func(impl1, (X, Y), is_out_distributed=False)
     check_func(impl2, (X, d))
+    check_func(impl3, (X, d))
 
 
 def test_dist_tuple1():
