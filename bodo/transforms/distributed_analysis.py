@@ -91,8 +91,7 @@ distributed_analysis_extensions = {}
 
 
 class DistributedDiagnostics:
-    """Gather and print distributed diagnostics information
-    """
+    """Gather and print distributed diagnostics information"""
 
     def __init__(
         self, parfor_locs, array_locs, array_dists, parfor_dists, diag_info, func_ir
@@ -211,8 +210,7 @@ class DistributedAnalysis:
         self._concat_reduce_vars = set()
 
     def _init_run(self):
-        """initialize data structures for distribution analysis
-        """
+        """initialize data structures for distribution analysis"""
         self.func_ir._definitions = build_definitions(self.func_ir.blocks)
         self._parallel_accesses = set()
         self._T_arrs = set()
@@ -262,6 +260,7 @@ class DistributedAnalysis:
         )
 
     def _run_analysis(self, blocks, topo_order, array_dists, parfor_dists):
+        """run a pass of distributed analysis (fixed-point iteration algorithm)"""
         save_array_dists = {}
         save_parfor_dists = {1: 1}  # dummy value
         # fixed-point iteration
@@ -273,6 +272,7 @@ class DistributedAnalysis:
                 self._analyze_block(blocks[label], equiv_set, array_dists, parfor_dists)
 
     def _analyze_block(self, block, equiv_set, array_dists, parfor_dists):
+        """analyze basic blocks (ir.Block)"""
         for inst in block.body:
             inst_defs = get_stmt_defs(inst)
             for a in inst_defs:
@@ -295,6 +295,7 @@ class DistributedAnalysis:
                 self._set_REP(inst.list_vars(), array_dists)
 
     def _analyze_assign(self, inst, equiv_set, array_dists, parfor_dists):
+        """analyze assignment nodes (ir.Assign)"""
         lhs = inst.target.name
         rhs = inst.value
         lhs_typ = self.typemap[lhs]
@@ -375,7 +376,6 @@ class DistributedAnalysis:
             )
         # handle for A in arr_container: ...
         # A = pair_first(iternext(getiter(arr_container)))
-        # TODO: support getitem of container
         elif is_expr(rhs, "pair_first") and is_distributable_typ(lhs_typ):
             arr_container = guard(_get_pair_first_container, self.func_ir, rhs)
             if arr_container is not None:
@@ -391,6 +391,7 @@ class DistributedAnalysis:
             self._set_REP(inst.list_vars(), array_dists)
 
     def _analyze_getattr(self, lhs, rhs, array_dists):
+        """analyze getattr nodes (ir.Expr.getattr)"""
         lhs_typ = self.typemap[lhs]
         rhs_typ = self.typemap[rhs.value.name]
         if rhs.attr == "T" and is_array_typ(lhs_typ):
@@ -588,8 +589,7 @@ class DistributedAnalysis:
         return out_dist
 
     def _analyze_call(self, lhs, rhs, func_var, args, kws, equiv_set, array_dists):
-        """analyze array distributions in function calls
-        """
+        """analyze array distributions in function calls"""
         func_name = ""
         func_mod = ""
         fdef = guard(find_callname, self.func_ir, rhs, self.typemap)
@@ -898,7 +898,9 @@ class DistributedAnalysis:
             # return is a tuple(array, array)
             out_dist = Distribution(
                 min(
-                    array_dists[lhs][0].value, array_dists[lhs][1].value, in_dist.value,
+                    array_dists[lhs][0].value,
+                    array_dists[lhs][1].value,
+                    in_dist.value,
                 )
             )
             self._set_var_dist(lhs, array_dists, out_dist)
@@ -1203,8 +1205,7 @@ class DistributedAnalysis:
         self._analyze_call_set_REP(lhs, args, array_dists, fdef)
 
     def _analyze_call_np(self, lhs, func_name, args, kws, array_dists):
-        """analyze distributions of numpy functions (np.func_name)
-        """
+        """analyze distributions of numpy functions (np.func_name)"""
         # TODO: handle kw args properly
         if func_name == "ascontiguousarray":
             self._meet_array_dists(lhs, args[0].name, array_dists)
@@ -1346,8 +1347,7 @@ class DistributedAnalysis:
                     self._meet_array_dists(lhs, arr_name, array_dists)
 
     def _analyze_call_array(self, lhs, arr, func_name, args, array_dists):
-        """analyze distributions of array functions (arr.func_name)
-        """
+        """analyze distributions of array functions (arr.func_name)"""
         if func_name == "transpose":
             if len(args) == 0:
                 raise BodoError("Transpose with no arguments is not" " supported")
@@ -1384,8 +1384,7 @@ class DistributedAnalysis:
         self._analyze_call_set_REP(lhs, args, array_dists, "array." + func_name)
 
     def _analyze_call_np_reshape(self, lhs, arr, shape_vars, array_dists):
-        """distributed analysis for array.reshape or np.reshape calls
-        """
+        """distributed analysis for array.reshape or np.reshape calls"""
         # REP propagates from input to output and vice versa
         if is_REP(array_dists[arr.name]) or (
             lhs in array_dists and is_REP(array_dists[lhs])
@@ -1527,8 +1526,7 @@ class DistributedAnalysis:
             self._set_var_dist(v, array_dists, Distribution.REP)
 
     def _analyze_call_concat(self, lhs, args, array_dists):
-        """analyze distribution for bodo.libs.array_kernels.concat and np.concatenate
-        """
+        """analyze distribution for bodo.libs.array_kernels.concat and np.concatenate"""
         assert len(args) == 1
         # concat reduction variables are handled in parfor analysis
         if lhs in self._concat_reduce_vars:
@@ -1658,8 +1656,7 @@ class DistributedAnalysis:
                 self.diag_info.append(info)
 
     def _analyze_getitem(self, inst, lhs, rhs, equiv_set, array_dists):
-        """analyze getitem nodes for distribution
-        """
+        """analyze getitem nodes for distribution"""
         in_var = rhs.value
         in_typ = self.typemap[in_var.name]
         # get index_var without changing IR since we are in analysis
@@ -1743,7 +1740,11 @@ class DistributedAnalysis:
         # whole slice access, output has same distribution as input
         # for example: A = X[:,5]
         if guard(is_whole_slice, self.typemap, self.func_ir, index_var) or guard(
-            is_slice_equiv_arr, inst.target, index_var, self.func_ir, equiv_set,
+            is_slice_equiv_arr,
+            inst.target,
+            index_var,
+            self.func_ir,
+            equiv_set,
         ):
             self._meet_array_dists(lhs, in_var.name, array_dists)
             return
@@ -1780,8 +1781,7 @@ class DistributedAnalysis:
         return
 
     def _analyze_setitem(self, inst, equiv_set, array_dists):
-        """analyze setitem nodes for distribution
-        """
+        """analyze setitem nodes for distribution"""
         # get index_var without changing IR since we are in analysis
         index_var = get_getsetitem_index_var(inst, self.typemap, [])
         index_typ = self.typemap[index_var.name]
@@ -1925,8 +1925,7 @@ class DistributedAnalysis:
             return False
 
     def _meet_array_dists(self, arr1, arr2, array_dists, top_dist=None):
-        """meet distributions of arrays for consistent distribution
-        """
+        """meet distributions of arrays for consistent distribution"""
 
         if top_dist is None:
             top_dist = Distribution.OneD
@@ -1999,8 +1998,7 @@ class DistributedAnalysis:
         return Distribution(min(dist.value, top_dist.value))
 
     def _get_calc_n_items_range_index(self, size_def):
-        """match RangeIndex calc_nitems(r._start, r._stop, r._step) call and return r
-        """
+        """match RangeIndex calc_nitems(r._start, r._stop, r._step) call and return r"""
         require(
             find_callname(self.func_ir, size_def)
             == ("calc_nitems", "bodo.libs.array_kernels")
@@ -2054,8 +2052,7 @@ class DistributedAnalysis:
 
 
 def get_reduce_op(reduce_varname, reduce_nodes, func_ir, typemap):
-    """find reduction operation in parfor reduction IR nodes.
-    """
+    """find reduction operation in parfor reduction IR nodes."""
     if guard(_is_concat_reduce, reduce_varname, reduce_nodes, func_ir, typemap):
         return Reduce_Type.Concat
 
@@ -2078,13 +2075,15 @@ def get_reduce_op(reduce_varname, reduce_nodes, func_ir, typemap):
         func = find_callname(func_ir, rhs, typemap)
         if func == ("min", "builtins"):
             if isinstance(
-                typemap[rhs.args[0].name], numba.core.typing.builtins.IndexValueType,
+                typemap[rhs.args[0].name],
+                numba.core.typing.builtins.IndexValueType,
             ):
                 return Reduce_Type.Argmin
             return Reduce_Type.Min
         if func == ("max", "builtins"):
             if isinstance(
-                typemap[rhs.args[0].name], numba.core.typing.builtins.IndexValueType,
+                typemap[rhs.args[0].name],
+                numba.core.typing.builtins.IndexValueType,
             ):
                 return Reduce_Type.Argmax
             return Reduce_Type.Max
@@ -2093,8 +2092,7 @@ def get_reduce_op(reduce_varname, reduce_nodes, func_ir, typemap):
 
 
 def _is_concat_reduce(reduce_varname, reduce_nodes, func_ir, typemap):
-    """return True if reduction nodes match concat pattern
-    """
+    """return True if reduction nodes match concat pattern"""
     # assuming this structure:
     # A = concat((A, B))
     # I = init_range_index()
@@ -2214,8 +2212,7 @@ array_accesses_extensions[Parfor] = get_parfor_array_accesses
 
 
 def _get_array_accesses(blocks, func_ir, typemap, accesses=None):
-    """returns a set of arrays accessed and their indices.
-    """
+    """returns a set of arrays accessed and their indices."""
     if accesses is None:
         accesses = set()
 
