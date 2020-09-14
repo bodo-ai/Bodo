@@ -3522,7 +3522,6 @@ dataframe_unsupported = {
     "backfill",
     "stack",
     "where",
-    "groupby",
     "transpose",
     "rtruediv",
     "cummin",
