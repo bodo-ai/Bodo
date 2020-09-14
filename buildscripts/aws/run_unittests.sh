@@ -21,7 +21,7 @@ if [[ "$OSTYPE" == "linux-gnu"* ]] && [ "$NP" = "1" ]; then
     python bodo/runtests.py "$NP" -s -v -m "$PYTEST_MARKER"  --cov-report= --cov=./ bodo/tests
 
     # run the sonar scanner analysis passing in the pullrequest configuration to enable decorators on the PR
-    sonar-scanner-4.4.0.2170-linux/bin/sonar-scanner -Dsonar.login=$TOKEN -Dsonar.pullrequest.key=$PULL_REQUEST_ID -Dsonar.pullrequest.branch=$CODEBUILD_SOURCE_VERSION
+    sonar-scanner-4.4.0.2170-linux/bin/sonar-scanner -Dsonar.login=$TOKEN
 
 else
     python bodo/runtests.py "$NP" -s -v -m "$PYTEST_MARKER" bodo/tests
