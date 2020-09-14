@@ -396,6 +396,9 @@ class DistributedAnalysis:
 
     def _analyze_getattr(self, lhs, rhs, array_dists):
         """analyze getattr nodes (ir.Expr.getattr)"""
+        # NOTE: assuming getattr doesn't change distribution by default, since almost
+        # all attribute accesses are benign (e.g. A.shape). Exceptions should be handled
+        # here.
         lhs_typ = self.typemap[lhs]
         rhs_typ = self.typemap[rhs.value.name]
         if rhs.attr == "T" and is_array_typ(lhs_typ):
@@ -404,47 +407,6 @@ class DistributedAnalysis:
             self._meet_array_dists(lhs, arr, array_dists)
             # keep lhs in table for dot() handling
             self._T_arrs.add(lhs)
-            return
-        elif isinstance(rhs_typ, DataFrameType) and rhs.attr in (
-            "to_csv",
-            "to_parquet",
-            "to_sql",
-        ):
-            return
-        # list methods
-        elif isinstance(rhs_typ, types.List) and rhs.attr in (
-            "append",
-            "clear",
-            "copy",
-            "count",
-            "extend",
-            "index",
-            "insert",
-            "pop",
-            "remove",
-            "reverse",
-            "sort",
-        ):
-            return
-        elif rhs.attr in [
-            "shape",
-            "ndim",
-            "size",
-            "strides",
-            "dtype",
-            "itemsize",
-            "astype",
-            "reshape",
-            "ctypes",
-            "transpose",
-            "tofile",
-            "copy",
-            "view",
-        ]:
-            pass  # X.shape doesn't affect X distribution
-        elif isinstance(
-            rhs_typ, bodo.hiframes.pd_index_ext.RangeIndexType
-        ) and rhs.attr in ("_start", "_stop", "_step", "_name"):
             return
         elif (
             isinstance(rhs_typ, MultiIndexType)
