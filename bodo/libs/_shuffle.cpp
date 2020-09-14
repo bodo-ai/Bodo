@@ -8,10 +8,10 @@
 
 #undef DEBUG_SHUFFLE
 #undef DEBUG_GATHER
-#undef DEBUG_COMP_HASH
-#undef DEBUG_ARROW_SHUFFLE
 #undef DEBUG_BROADCAST
 #undef DEBUG_BOUND_INFO
+#undef DEBUG_COMP_HASH
+#undef DEBUG_ARROW_SHUFFLE
 
 mpi_comm_info::mpi_comm_info(std::vector<array_info*>& _arrays)
     : arrays(_arrays) {
@@ -793,7 +793,7 @@ std::vector<uint32_t> map_hashes_array(std::vector<int> const& send_count,
         int64_t off2 = input_array->value_offset(i_row + 1);
         for (int64_t idx = off1; idx < off2; idx++) hashes_out[idx] = e_hash;
     }
-    return std::move(hashes_out);
+    return hashes_out;
 }
 
 std::shared_ptr<arrow::Buffer> shuffle_arrow_primitive_buffer(
@@ -813,7 +813,8 @@ std::shared_ptr<arrow::Buffer> shuffle_arrow_primitive_buffer(
 #endif
     // Setting up the arrays
     size_t n_rows = std::accumulate(send_count.begin(), send_count.end(), 0);
-    size_t n_rows_out = std::accumulate(recv_count.begin(), recv_count.end(), 0);
+    size_t n_rows_out =
+        std::accumulate(recv_count.begin(), recv_count.end(), 0);
     std::vector<int> send_disp(n_pes);
     std::vector<int> recv_disp(n_pes);
     calc_disp(send_disp, send_count);
@@ -829,7 +830,8 @@ std::shared_ptr<arrow::Buffer> shuffle_arrow_primitive_buffer(
     }
     // Allocating returning arrays
     size_t siz_out = siztype * n_rows_out;
-    arrow::Result<std::unique_ptr<arrow::Buffer>> maybe_buffer = arrow::AllocateBuffer(siz_out);
+    arrow::Result<std::unique_ptr<arrow::Buffer>> maybe_buffer =
+        arrow::AllocateBuffer(siz_out);
     if (!maybe_buffer.ok()) {
         Bodo_PyErr_SetString(PyExc_RuntimeError, "allocation error");
         return nullptr;
@@ -838,7 +840,7 @@ std::shared_ptr<arrow::Buffer> shuffle_arrow_primitive_buffer(
     // Doing the exchanges
     char* data_ptr = (char*)buffer->mutable_data();
     MPI_Alltoallv(send_arr.data(), send_count.data(), send_disp.data(), mpi_typ,
-                  data_ptr,        recv_count.data(), recv_disp.data(), mpi_typ,
+                  data_ptr, recv_count.data(), recv_disp.data(), mpi_typ,
                   MPI_COMM_WORLD);
     return buffer;
 }
@@ -873,13 +875,13 @@ std::shared_ptr<arrow::Buffer> shuffle_string_buffer(
     calc_disp(recv_disp_char, recv_count_char);
     int n_chars_send_tot =
         std::accumulate(send_count_char.begin(), send_count_char.end(), 0);
-#ifdef DEBUG_ARROW_SHUFFLE
     int n_chars_recv_tot =
         std::accumulate(recv_count_char.begin(), recv_count_char.end(), 0);
+#ifdef DEBUG_ARROW_SHUFFLE
     std::cout << "n_chars_recv_tot=" << n_chars_recv_tot << "\n";
 #endif
     char* send_char = new char[n_chars_send_tot];
-    size_t siz_out = sizeof(char) * n_chars_send_tot;
+    size_t siz_out = sizeof(char) * n_chars_recv_tot;
     arrow::Result<std::unique_ptr<arrow::Buffer>> maybe_buffer =
         arrow::AllocateBuffer(siz_out);
     if (!maybe_buffer.ok()) {

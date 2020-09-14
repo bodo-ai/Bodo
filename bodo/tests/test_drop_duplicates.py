@@ -385,7 +385,6 @@ def test_drop_duplicate_large_size(memory_leak_check):
     check_func(test_impl, (get_df(11111),), sort_output=True)
 
 
-@pytest.mark.skip(reason="Fails on 3 processes #1613")
 def test_drop_duplicate_nested_arrays(nested_arrays_value):
     def f(df):
         df2 = df.drop_duplicates()

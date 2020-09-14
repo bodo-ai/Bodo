@@ -474,7 +474,7 @@ class PathInfo {
             bool is_s3 = boost::starts_with(file_path, "s3://");
             if (is_s3 || is_hdfs) {
                 arrow::internal::Uri uri;
-                uri.Parse(file_path);
+                (void)uri.Parse(file_path);
                 PyObject *fs_mod = nullptr;
                 PyObject *func_obj = nullptr;
                 if (is_s3) {
@@ -486,7 +486,7 @@ class PathInfo {
                     s3_get_fs(&s3_fs, bucket_region);
                     fs = s3_fs;
                     // remove s3:// prefix from file_path
-                    arrow::fs::S3Options::FromUri(uri, &file_path);
+                    (void)arrow::fs::S3Options::FromUri(uri, &file_path);
                 } else if (is_hdfs) {
                     import_fs_module(Bodo_Fs::hdfs, "", fs_mod);
                     get_get_fs_pyobject(Bodo_Fs::hdfs, "", fs_mod, func_obj);
