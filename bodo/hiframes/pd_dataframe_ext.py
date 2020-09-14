@@ -126,6 +126,8 @@ class DataFrameType(types.ArrayCompatible):  # TODO: IterableType over column na
     """Temporary type class for DataFrame objects.
     """
 
+    ndim = 2
+
     def __init__(self, data=None, index=None, columns=None):
         # data is tuple of Array types (not Series)
         # index is Index obj (not Array type)
