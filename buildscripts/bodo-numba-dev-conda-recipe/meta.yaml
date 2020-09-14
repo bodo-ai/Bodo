@@ -19,10 +19,10 @@ requirements:
   host:
     - python
     - setuptools
-    - numba 0.51.2
+    - numba
     - numpy
     - s3fs >=0.4.2
-    - pandas 1.1.*
+    - pandas 1.1.0
     - pyarrow =1.0.1
     - boost-cpp
     - hdf5 * mpi_mpich_* # [not win]
@@ -37,10 +37,10 @@ requirements:
   run:
     - python
     - {{ pin_compatible('numpy') }}
-    - pandas 1.1.*
+    - pandas 1.1.0
     - pyarrow =1.0.1
     - boost-cpp
-    - numba 0.51.2
+    - numba
     - openjdk =8
     - sqlalchemy
     - s3fs >=0.4.2

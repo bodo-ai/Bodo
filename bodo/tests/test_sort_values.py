@@ -1040,7 +1040,6 @@ def test_sort_list_list():
     check_func(f, (df,))
 
 
-@pytest.mark.skip(reason="Fails on 3 processes #1612")
 def test_sort_values_nested_arrays_random():
     def f(df):
         df2 = df.sort_values(by="A")
@@ -1050,9 +1049,9 @@ def test_sort_values_nested_arrays_random():
     n = 1000
     df1 = pd.DataFrame({"A": gen_random_arrow_array_struct_int(10, n)})
     df2 = pd.DataFrame({"A": gen_random_arrow_array_struct_list_int(10, n)})
-    df3 = pd.DataFrame({"A": gen_random_arrow_list_list_int(1, 0.1, n)})
+    df3 = pd.DataFrame({"A": gen_random_arrow_list_list_int(1, -0.1, n)})
     df4 = pd.DataFrame({"A": gen_random_arrow_struct_struct(10, n)})
-    df5 = pd.DataFrame({"A": gen_random_arrow_list_list_decimal(2, 0.1, n)})
+    df5 = pd.DataFrame({"A": gen_random_arrow_list_list_decimal(2, -0.1, n)})
     check_parallel_coherency(f, (df1,))
     check_parallel_coherency(f, (df2,))
     check_parallel_coherency(f, (df3,))

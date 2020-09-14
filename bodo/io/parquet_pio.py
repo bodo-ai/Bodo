@@ -273,6 +273,7 @@ def _gen_pq_reader_py(
     func_text += "  return ({},)\n".format(
         ", ".join("{0}, {0}_size".format(sanitize_varname(c)) for c in col_names)
     )
+
     loc_vars = {}
     glbs = {
         "get_dataset_reader": _get_dataset_reader,
@@ -306,6 +307,8 @@ def gen_column_read(func_text, cname, c_ind_real, c_ind, c_siz, c_type, is_paral
     func_text += "  {}_size = get_column_size_parquet(ds_reader, {})\n".format(
         cname, c_ind
     )
+    # Check if there was an error in the C++ code. If so, raise it.
+    func_text += "  bodo.utils.utils.check_and_propagate_cpp_exception()\n"
     alloc_size = "{}_size".format(cname)
 
     ret_type = None
@@ -314,12 +317,16 @@ def gen_column_read(func_text, cname, c_ind_real, c_ind, c_siz, c_type, is_paral
         func_text += "  {} = read_parquet_str(ds_reader, {}, {}, {}_size)\n".format(
             cname, c_ind_real, c_ind, cname
         )
+        # Check if there was an error in the C++ code. If so, raise it.
+        func_text += "  bodo.utils.utils.check_and_propagate_cpp_exception()\n"
     elif c_type == ArrayItemArrayType(string_array_type):
         # TODO does not support null strings?
         # pass size for easier allocation and distributed analysis
         func_text += "  {} = read_parquet_list_str(ds_reader, {}, {}, {}_size)\n".format(
             cname, c_ind_real, c_ind, cname
         )
+        # Check if there was an error in the C++ code. If so, raise it.
+        func_text += "  bodo.utils.utils.check_and_propagate_cpp_exception()\n"
     elif isinstance(c_type, ArrayItemArrayType):
         # Force generalized path for all ArrayItemArrayType(...) (see FIXME below)
         if not isinstance(c_type.dtype, types.Float):
@@ -327,6 +334,8 @@ def gen_column_read(func_text, cname, c_ind_real, c_ind, c_siz, c_type, is_paral
             func_text += "  {} = read_parquet_arrow_array(ds_reader, {}, {}, {}, {})\n".format(
                 cname, c_ind_real, c_ind, c_siz, ret_type
             )
+            # Check if there was an error in the C++ code. If so, raise it.
+            func_text += "  bodo.utils.utils.check_and_propagate_cpp_exception()\n"
         else:
             # FIXME This code path does not support nullable items,
             # for example: ArrayItemArray(IntegerArray(int64))
@@ -341,17 +350,23 @@ def gen_column_read(func_text, cname, c_ind_real, c_ind, c_siz, c_type, is_paral
                 bodo.utils.utils.numba_to_c_type(elem_typ),
                 get_element_type(elem_typ),
             )
+            # Check if there was an error in the C++ code. If so, raise it.
+            func_text += "  bodo.utils.utils.check_and_propagate_cpp_exception()\n"
     elif isinstance(c_type, StructArrayType):
         ret_type = "nested_type{}".format(c_ind)
         func_text += "  {} = read_parquet_arrow_array(ds_reader, {}, {}, {}, {})\n".format(
             cname, c_ind_real, c_ind, c_siz, ret_type
         )
+        # Check if there was an error in the C++ code. If so, raise it.
+        func_text += "  bodo.utils.utils.check_and_propagate_cpp_exception()\n"
     else:
         el_type = get_element_type(c_type.dtype)
         func_text += _gen_alloc(c_type, cname, alloc_size, el_type)
         func_text += "  status = read_parquet(ds_reader, {}, {}, {}, np.int32({}))\n".format(
             c_ind_real, c_ind, cname, bodo.utils.utils.numba_to_c_type(c_type.dtype)
         )
+        # Check if there was an error in the C++ code. If so, raise it.
+        func_text += "  bodo.utils.utils.check_and_propagate_cpp_exception()\n"
 
     return ret_type, func_text
 
@@ -1010,6 +1025,7 @@ def pq_read_string_lower(context, builder, sig, args):
             str_arr_payload._get_ptr_by_name("null_bitmap"),
         ],
     )
+
     builder.store(str_arr_payload._getvalue(), meminfo_data_ptr)
 
     string_array.meminfo = meminfo

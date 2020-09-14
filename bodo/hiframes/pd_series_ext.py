@@ -68,6 +68,8 @@ class SeriesType(types.IterableType, types.ArrayCompatible):
     """Temporary type class for Series objects.
     """
 
+    ndim = 1
+
     def __init__(self, dtype, data=None, index=None, name_typ=None):
         from bodo.hiframes.pd_index_ext import RangeIndexType
 

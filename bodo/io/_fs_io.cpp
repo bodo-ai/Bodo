@@ -17,18 +17,22 @@
 // to be defined in each extension module that includes it
 MPI_Datatype decimal_mpi_type = MPI_DATATYPE_NULL;
 
-#define CHECK(expr, msg, file_type)                                \
-    if (!(expr)) {                                                 \
-        std::cerr << "Error in " << file_type << " write: " << msg \
-                  << std::endl;                                    \
-        return;                                                    \
+// if expr is not true, form an err msg and raise a
+// runtime_error with it
+#define CHECK(expr, msg, file_type)                                  \
+    if (!(expr)) {                                                   \
+        std::string err_msg =                                        \
+            std::string("Error in ") + file_type + " write: " + msg; \
+        throw std::runtime_error(err_msg);                           \
     }
 
-#define CHECK_ARROW(expr, msg, file_type)                                \
-    if (!(expr.ok())) {                                                  \
-        std::cerr << "Error in arrow " << file_type << " write: " << msg \
-                  << " " << expr << std::endl;                           \
-        return;                                                          \
+// if status of arrow::Result is not ok, print err msg and return
+#define CHECK_ARROW(expr, msg, file_type)                                  \
+    if (!(expr.ok())) {                                                    \
+        std::string err_msg = std::string("Error in arrow ") + file_type + \
+                              " write: " + msg + " " + expr.ToString();    \
+        std::cerr << err_msg << std::endl;                                 \
+        return;                                                            \
     }
 
 #define CHECK_MPI(ierr, err_class, err_string, err_len, file_name)         \
@@ -43,8 +47,16 @@ MPI_Datatype decimal_mpi_type = MPI_DATATYPE_NULL;
                 .c_str());                                                 \
     }
 
-#define CHECK_ARROW_AND_ASSIGN(res, msg, lhs, file_type) \
-    CHECK_ARROW(res.status(), msg, file_type)            \
+// if status of arrow::Result is not ok, form an err msg and raise a
+// runtime_error with it. If it is ok, get value using ValueOrDie
+// and assign it to lhs using std::move
+#define CHECK_ARROW_AND_ASSIGN(res, msg, lhs, file_type)                   \
+    if (!(res.status().ok())) {                                            \
+        std::string err_msg = std::string("Error in arrow ") + file_type + \
+                              " write: " + msg + " " +                     \
+                              res.status().ToString();                     \
+        throw std::runtime_error(err_msg);                                 \
+    }                                                                      \
     lhs = std::move(res).ValueOrDie();
 
 std::shared_ptr<arrow::fs::S3FileSystem> s3_fs;

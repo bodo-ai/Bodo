@@ -6,7 +6,6 @@
 
 #undef DEBUG_ARROW_BUILDER
 
-
 /**
  * Append values from a byte buffer to a primitive array builder.
  * @param values: pointer to buffer containing data
@@ -25,61 +24,61 @@ void append_to_primitive(const uint8_t* values, int64_t offset, int64_t length,
     if (typ == arrow::Type::INT8) {
         auto typed_builder =
             dynamic_cast<arrow::NumericBuilder<arrow::Int8Type>*>(builder);
-        typed_builder->AppendValues((int8_t*)values + offset, length,
-                                    valid_elems.data());
+        (void)typed_builder->AppendValues((int8_t*)values + offset, length,
+                                          valid_elems.data());
     } else if (typ == arrow::Type::UINT8) {
         auto typed_builder =
             dynamic_cast<arrow::NumericBuilder<arrow::UInt8Type>*>(builder);
-        typed_builder->AppendValues((uint8_t*)values + offset, length,
-                                    valid_elems.data());
+        (void)typed_builder->AppendValues((uint8_t*)values + offset, length,
+                                          valid_elems.data());
     } else if (typ == arrow::Type::INT16) {
         auto typed_builder =
             dynamic_cast<arrow::NumericBuilder<arrow::Int16Type>*>(builder);
-        typed_builder->AppendValues((int16_t*)values + offset, length,
-                                    valid_elems.data());
+        (void)typed_builder->AppendValues((int16_t*)values + offset, length,
+                                          valid_elems.data());
     } else if (typ == arrow::Type::UINT16) {
         auto typed_builder =
             dynamic_cast<arrow::NumericBuilder<arrow::UInt16Type>*>(builder);
-        typed_builder->AppendValues((uint16_t*)values + offset, length,
-                                    valid_elems.data());
+        (void)typed_builder->AppendValues((uint16_t*)values + offset, length,
+                                          valid_elems.data());
     } else if (typ == arrow::Type::INT32) {
         auto typed_builder =
             dynamic_cast<arrow::NumericBuilder<arrow::Int32Type>*>(builder);
-        typed_builder->AppendValues((int32_t*)values + offset, length,
-                                    valid_elems.data());
+        (void)typed_builder->AppendValues((int32_t*)values + offset, length,
+                                          valid_elems.data());
     } else if (typ == arrow::Type::UINT32) {
         auto typed_builder =
             dynamic_cast<arrow::NumericBuilder<arrow::UInt32Type>*>(builder);
-        typed_builder->AppendValues((uint32_t*)values + offset, length,
-                                    valid_elems.data());
+        (void)typed_builder->AppendValues((uint32_t*)values + offset, length,
+                                          valid_elems.data());
     } else if (typ == arrow::Type::INT64) {
         auto typed_builder =
             dynamic_cast<arrow::NumericBuilder<arrow::Int64Type>*>(builder);
-        typed_builder->AppendValues((int64_t*)values + offset, length,
-                                    valid_elems.data());
+        (void)typed_builder->AppendValues((int64_t*)values + offset, length,
+                                          valid_elems.data());
     } else if (typ == arrow::Type::UINT64) {
         auto typed_builder =
             dynamic_cast<arrow::NumericBuilder<arrow::UInt64Type>*>(builder);
-        typed_builder->AppendValues((uint64_t*)values + offset, length,
-                                    valid_elems.data());
+        (void)typed_builder->AppendValues((uint64_t*)values + offset, length,
+                                          valid_elems.data());
     } else if (typ == arrow::Type::FLOAT) {
         auto typed_builder =
             dynamic_cast<arrow::NumericBuilder<arrow::FloatType>*>(builder);
-        typed_builder->AppendValues((float*)values + offset, length,
-                                    valid_elems.data());
+        (void)typed_builder->AppendValues((float*)values + offset, length,
+                                          valid_elems.data());
     } else if (typ == arrow::Type::DOUBLE) {
         auto typed_builder =
             dynamic_cast<arrow::NumericBuilder<arrow::DoubleType>*>(builder);
-        typed_builder->AppendValues((double*)values + offset, length,
-                                    valid_elems.data());
+        (void)typed_builder->AppendValues((double*)values + offset, length,
+                                          valid_elems.data());
     } else if (typ == arrow::Type::DECIMAL) {
 #ifdef DEBUG_ARROW_BUILDER
         std::cout << "Beginning of append_to_primitive DECIMAL\n";
 #endif
-        auto typed_builder =
-            dynamic_cast<arrow::Decimal128Builder*>(builder);
-        typed_builder->AppendValues((uint8_t*)values + BYTES_PER_DECIMAL * offset, length,
-                                    valid_elems.data());
+        auto typed_builder = dynamic_cast<arrow::Decimal128Builder*>(builder);
+        (void)typed_builder->AppendValues(
+            (uint8_t*)values + BYTES_PER_DECIMAL * offset, length,
+            valid_elems.data());
     } else {
         std::string err_msg = "append_to_primitive : Unsupported type " +
                               builder->type()->ToString();
@@ -126,10 +125,10 @@ void append_to_out_array(std::shared_ptr<arrow::Array> input_array,
 
         for (int64_t idx = start_offset; idx < end_offset; idx++) {
             if (list_array->IsNull(idx)) {
-                list_builder->AppendNull();
+                (void)list_builder->AppendNull();
                 continue;
             }
-            list_builder->Append();  // indicate list boundary
+            (void)list_builder->Append();  // indicate list boundary
             // TODO optimize
             append_to_out_array(list_array->values(),  // child array
                                 list_array->value_offset(idx),
@@ -148,7 +147,7 @@ void append_to_out_array(std::shared_ptr<arrow::Array> input_array,
         auto struct_builder = dynamic_cast<arrow::StructBuilder*>(builder);
         for (int64_t idx = start_offset; idx < end_offset; idx++) {
             if (struct_array->IsNull(idx)) {
-                struct_builder->AppendNull();
+                (void)struct_builder->AppendNull();
                 continue;
             }
             for (int i = 0; i < struct_type->num_fields();
@@ -157,7 +156,7 @@ void append_to_out_array(std::shared_ptr<arrow::Array> input_array,
                 append_to_out_array(struct_array->field(i), idx, idx + 1,
                                     field_builder);
             }
-            struct_builder->Append();
+            (void)struct_builder->Append();
         }
         // finished appending (end_offset - start_offset) structs
         // struct_builder->AppendValues(end_offset - start_offset, NULLPTR);
@@ -172,9 +171,9 @@ void append_to_out_array(std::shared_ptr<arrow::Array> input_array,
         // TODO: optimize
         for (int64_t i = 0; i < num_elems; i++) {
             if (str_array->IsNull(start_offset + i))
-                str_builder->AppendNull();
+                (void)str_builder->AppendNull();
             else
-                str_builder->AppendValues(
+                (void)str_builder->AppendValues(
                     {str_array->GetString(start_offset + i)});
         }
     } else {
@@ -198,9 +197,9 @@ void append_to_out_array(std::shared_ptr<arrow::Array> input_array,
 
 #undef DEBUG_RETRIEVE
 
-template<typename F>
-array_info* RetrieveArray_SingleColumn_F(array_info* in_arr, F f, size_t nRowOut)
-{
+template <typename F>
+array_info* RetrieveArray_SingleColumn_F(array_info* in_arr, F f,
+                                         size_t nRowOut) {
     array_info* out_arr = NULL;
     bodo_array_type::arr_type_enum arr_type = in_arr->arr_type;
     Bodo_CTypes::CTypeEnum dtype = in_arr->dtype;
@@ -254,12 +253,14 @@ array_info* RetrieveArray_SingleColumn_F(array_info* in_arr, F f, size_t nRowOut
             uint32_t start_data_offset = in_data_offsets[start_index_offset];
             for (uint32_t u = 0; u < size_index; u++) {
                 uint32_t len_str = in_data_offsets[start_index_offset + u + 1] -
-                    in_data_offsets[start_index_offset + u];
-                out_data_offsets[pos_index + u + 1] = out_data_offsets[pos_index + u] + len_str;
+                                   in_data_offsets[start_index_offset + u];
+                out_data_offsets[pos_index + u + 1] =
+                    out_data_offsets[pos_index + u] + len_str;
                 bool bit = GetBit(in_sub_null_bitmask, start_index_offset + u);
                 SetBitTo(out_sub_null_bitmask, pos_index + u, bit);
             }
-            memcpy(&out_data1[pos_data], &in_data1[start_data_offset], size_data);
+            memcpy(&out_data1[pos_data], &in_data1[start_data_offset],
+                   size_data);
             bool bit = GetBit(in_null_bitmask, idx);
             pos_index += size_index;
             pos_data += size_data;
@@ -361,8 +362,8 @@ array_info* RetrieveArray_SingleColumn_F(array_info* in_arr, F f, size_t nRowOut
         // sizes are not known in advance)
         std::unique_ptr<arrow::ArrayBuilder> builder;
         std::shared_ptr<arrow::Array> in_arrow_array = in_arr->array;
-        arrow::MakeBuilder(arrow::default_memory_pool(), in_arrow_array->type(),
-                           &builder);
+        (void)arrow::MakeBuilder(arrow::default_memory_pool(),
+                                 in_arrow_array->type(), &builder);
         for (size_t iRow = 0; iRow < nRowOut; iRow++) {
             size_t idx = f(iRow);
             // append value in position 'row' of input array to builder's
@@ -374,7 +375,7 @@ array_info* RetrieveArray_SingleColumn_F(array_info* in_arr, F f, size_t nRowOut
         // get final output array from builder
         std::shared_ptr<arrow::Array> out_arrow_array;
         // TODO: assert builder is not null (at least one row added)
-        builder->Finish(&out_arrow_array);
+        (void)builder->Finish(&out_arrow_array);
         out_arr =
             new array_info(bodo_array_type::ARROW, Bodo_CTypes::INT8 /*dummy*/,
                            nRowOut, -1, -1, NULL, NULL, NULL, NULL, NULL,
@@ -383,27 +384,29 @@ array_info* RetrieveArray_SingleColumn_F(array_info* in_arr, F f, size_t nRowOut
     return out_arr;
 };
 
-array_info* RetrieveArray_SingleColumn(array_info* in_arr, std::vector<size_t> const& ListIdx)
-{
-    return RetrieveArray_SingleColumn_F(in_arr,
-            [&](size_t iRow) -> size_t {return ListIdx[iRow];},
-            ListIdx.size());
+array_info* RetrieveArray_SingleColumn(array_info* in_arr,
+                                       std::vector<size_t> const& ListIdx) {
+    return RetrieveArray_SingleColumn_F(
+        in_arr, [&](size_t iRow) -> size_t { return ListIdx[iRow]; },
+        ListIdx.size());
 }
 
-array_info* RetrieveArray_SingleColumn_arr(array_info* in_arr, array_info* idx_arr)
-{
+array_info* RetrieveArray_SingleColumn_arr(array_info* in_arr,
+                                           array_info* idx_arr) {
     if (idx_arr->dtype != Bodo_CTypes::UINT64) {
-        Bodo_PyErr_SetString(PyExc_RuntimeError, "UINT64 is the only index type allowed");
+        Bodo_PyErr_SetString(PyExc_RuntimeError,
+                             "UINT64 is the only index type allowed");
         return nullptr;
     }
     size_t siz = idx_arr->length;
-    return RetrieveArray_SingleColumn_F(in_arr,
-            [&](size_t idx) -> size_t {
-                 uint64_t val = idx_arr->at<uint64_t>(idx);
-                 return size_t(val);
-               }, siz);
+    return RetrieveArray_SingleColumn_F(
+        in_arr,
+        [&](size_t idx) -> size_t {
+            uint64_t val = idx_arr->at<uint64_t>(idx);
+            return size_t(val);
+        },
+        siz);
 }
-
 
 array_info* RetrieveArray_TwoColumns(
     table_info* const& in_table,
@@ -511,7 +514,8 @@ array_info* RetrieveArray_TwoColumns(
                         in_data_offsets[start_index_offset + u];
                     out_data_offsets[pos_index + u + 1] =
                         out_data_offsets[pos_index + u] + len_str;
-                    bool bit = GetBit(in_sub_null_bitmask, start_index_offset + u);
+                    bool bit =
+                        GetBit(in_sub_null_bitmask, start_index_offset + u);
                     SetBitTo(out_sub_null_bitmask, pos_index + u, bit);
                 }
                 memcpy(&out_arr->data1[pos_data], &data1[start_data_offset],
@@ -694,8 +698,8 @@ array_info* RetrieveArray_TwoColumns(
         }
         std::shared_ptr<arrow::Array> in_arr_typ =
             in_table->columns[ref_shift]->array;
-        arrow::MakeBuilder(arrow::default_memory_pool(), in_arr_typ->type(),
-                           &builder);
+        (void)arrow::MakeBuilder(arrow::default_memory_pool(),
+                                 in_arr_typ->type(), &builder);
         for (size_t iRow = 0; iRow < nRowOut; iRow++) {
             std::pair<size_t, std::ptrdiff_t> pairShiftRow = get_iRow(iRow);
             if (pairShiftRow.second >= 0) {
@@ -709,14 +713,14 @@ array_info* RetrieveArray_TwoColumns(
                 append_to_out_array(in_arr, row, row + 1, builder.get());
             } else {
                 // null value for output
-                builder->AppendNull();
+                (void)builder->AppendNull();
             }
         }
 
         // get final output array from builder
         std::shared_ptr<arrow::Array> out_arrow_array;
         // TODO: assert builder is not null (at least one row added)
-        builder->Finish(&out_arrow_array);
+        (void)builder->Finish(&out_arrow_array);
         out_arr =
             new array_info(bodo_array_type::ARROW, Bodo_CTypes::INT8 /*dummy*/,
                            nRowOut, -1, -1, NULL, NULL, NULL, NULL, NULL,
@@ -725,7 +729,8 @@ array_info* RetrieveArray_TwoColumns(
     return out_arr;
 };
 
-table_info* RetrieveTable(table_info* const& in_table, std::vector<size_t> const& ListIdx,
+table_info* RetrieveTable(table_info* const& in_table,
+                          std::vector<size_t> const& ListIdx,
                           int const& n_cols_arg) {
     std::vector<array_info*> out_arrs;
     size_t n_cols;
@@ -734,7 +739,8 @@ table_info* RetrieveTable(table_info* const& in_table, std::vector<size_t> const
     else
         n_cols = n_cols_arg;
     for (size_t i_col = 0; i_col < n_cols; i_col++)
-        out_arrs.emplace_back(RetrieveArray_SingleColumn(in_table->columns[i_col], ListIdx));
+        out_arrs.emplace_back(
+            RetrieveArray_SingleColumn(in_table->columns[i_col], ListIdx));
     return new table_info(out_arrs);
 }
 
@@ -1104,7 +1110,7 @@ int KeyComparisonAsPython_Column(bool const& na_position_bis, array_info* arr1,
         char* ptr2 = arr2->data1 + (siztype * iRow2);
         return NumericComparison(arr1->dtype, ptr1, ptr2, na_position_bis);
     }
-    auto process_bits=[&](bool bit1, bool bit2) -> int {
+    auto process_bits = [&](bool bit1, bool bit2) -> int {
         if (bit1 && !bit2) {
             if (na_position_bis) return 1;
             return -1;
@@ -1147,7 +1153,7 @@ int KeyComparisonAsPython_Column(bool const& na_position_bis, array_info* arr1,
         // If bitmasks are different then we can conclude the comparison
         int reply = process_bits(bit1, bit2);
         if (reply != 0) return reply;
-        if (bit1) { // here bit1 = bit2
+        if (bit1) {  // here bit1 = bit2
             uint32_t* data3_1 = (uint32_t*)arr1->data3;
             uint32_t* data3_2 = (uint32_t*)arr2->data3;
             uint32_t* data2_1 = (uint32_t*)arr1->data2;
@@ -1165,11 +1171,13 @@ int KeyComparisonAsPython_Column(bool const& na_position_bis, array_info* arr1,
                               data2_1[istr + data3_1[iRow1]];
                 size_t len2 = data2_2[istr + 1 + data3_2[iRow2]] -
                               data2_2[istr + data3_2[iRow2]];
-                bool str_bit1 = GetBit(sub_null_bitmask1, data3_1[iRow1] + istr);
-                bool str_bit2 = GetBit(sub_null_bitmask2, data3_2[iRow2] + istr);
+                bool str_bit1 =
+                    GetBit(sub_null_bitmask1, data3_1[iRow1] + istr);
+                bool str_bit2 =
+                    GetBit(sub_null_bitmask2, data3_2[iRow2] + istr);
                 int reply_str = process_bits(str_bit1, str_bit2);
                 if (reply_str != 0) return reply_str;
-                if (str_bit1) { // here str_bit1 = str_bit2
+                if (str_bit1) {  // here str_bit1 = str_bit2
                     uint32_t minlen = len1;
                     if (len2 < len1) minlen = len2;
                     char* data1_1 = arr1->data1 + pos1_prev;
@@ -1328,6 +1336,23 @@ void DEBUG_append_to_primitive_T(const T* values, int64_t offset,
     string_builder += "]";
 }
 
+void DEBUG_append_to_primitive_decimal(
+    const decimal_value_cpp* values, int64_t offset, int64_t length,
+    std::string& string_builder, const std::vector<uint8_t>& valid_elems) {
+    string_builder += "[";
+    for (int64_t i = 0; i < length; i++) {
+        if (i > 0) string_builder += ",";
+        if (valid_elems[i]) {
+            decimal_value_cpp val = values[offset + i];
+            int scale = 18;
+            string_builder += decimal_value_cpp_to_std_string(val, scale);
+        } else {
+            string_builder += "None";
+        }
+    }
+    string_builder += "]";
+}
+
 void DEBUG_append_to_primitive(arrow::Type::type const& type,
                                const uint8_t* values, int64_t offset,
                                int64_t length, std::string& string_builder,
@@ -1362,6 +1387,9 @@ void DEBUG_append_to_primitive(arrow::Type::type const& type,
     } else if (type == arrow::Type::DOUBLE) {
         DEBUG_append_to_primitive_T((double*)values, offset, length,
                                     string_builder, valid_elems);
+    } else if (type == arrow::Type::DECIMAL) {
+        DEBUG_append_to_primitive_decimal((decimal_value_cpp*)values, offset,
+                                          length, string_builder, valid_elems);
     } else {
         Bodo_PyErr_SetString(PyExc_RuntimeError,
                              "Unsupported primitive type building arrow array");
@@ -1403,10 +1431,11 @@ void DEBUG_append_to_out_array(std::shared_ptr<arrow::Array> input_array,
                 continue;
             }
             string_builder += "{";
-            for (int i = 0; i < struct_type->num_fields(); i++) {  // each field is an array
+            for (int i = 0; i < struct_type->num_fields();
+                 i++) {  // each field is an array
                 if (i > 0) string_builder += ", ";
-                DEBUG_append_to_out_array(struct_array->field(i), idx,
-                                          idx + 1, string_builder);
+                DEBUG_append_to_out_array(struct_array->field(i), idx, idx + 1,
+                                          string_builder);
             }
             string_builder += "}";
         }
@@ -1437,7 +1466,7 @@ void DEBUG_append_to_out_array(std::shared_ptr<arrow::Array> input_array,
     }
 }
 
-#undef DEBUG_DEBUG // Yes, it is a concept
+#undef DEBUG_DEBUG  // Yes, it is a concept
 
 std::vector<std::string> GetColumn_as_ListString(array_info* arr) {
     size_t nRow = arr->length;
@@ -1497,7 +1526,8 @@ std::vector<std::string> GetColumn_as_ListString(array_info* arr) {
                 uint32_t end_pos = data2[iRow + 1];
                 uint32_t len = end_pos - start_pos;
 #ifdef DEBUG_DEBUG
-                std::cout << "start_pos=" << start_pos << " end_pos=" << end_pos << " len=" << len << "\n";
+                std::cout << "start_pos=" << start_pos << " end_pos=" << end_pos
+                          << " len=" << len << "\n";
 #endif
                 char* strname;
                 strname = new char[len + 1];
@@ -1528,16 +1558,19 @@ std::vector<std::string> GetColumn_as_ListString(array_info* arr) {
                 strOut = "[";
                 uint32_t len = index_offset[iRow + 1] - index_offset[iRow];
                 for (uint32_t u = 0; u < len; u++) {
-                    bool str_bit = GetBit(sub_null_bitmask, index_offset[iRow] + u);
+                    bool str_bit =
+                        GetBit(sub_null_bitmask, index_offset[iRow] + u);
                     if (u > 0) strOut += ",";
                     if (str_bit) {
-                        uint32_t start_pos = data_offset[index_offset[iRow] + u];
-                        uint32_t end_pos = data_offset[index_offset[iRow] + u + 1];
+                        uint32_t start_pos =
+                            data_offset[index_offset[iRow] + u];
+                        uint32_t end_pos =
+                            data_offset[index_offset[iRow] + u + 1];
                         uint32_t lenB = end_pos - start_pos;
                         char* strname;
                         strname = new char[lenB + 1];
                         for (uint32_t i = 0; i < lenB; i++)
-                          strname[i] = data1[start_pos + i];
+                            strname[i] = data1[start_pos + i];
                         strname[lenB] = '\0';
                         strOut += strname;
                         delete[] strname;
@@ -1644,8 +1677,7 @@ std::string GetDtype_as_string(Bodo_CTypes::CTypeEnum const& dtype) {
     return "unmatching dtype";
 }
 
-std::string GetArrType_as_string(bodo_array_type::arr_type_enum arr_type)
-{
+std::string GetArrType_as_string(bodo_array_type::arr_type_enum arr_type) {
     if (arr_type == bodo_array_type::NUMPY) return "NUMPY";
     if (arr_type == bodo_array_type::STRING) return "STRING";
     if (arr_type == bodo_array_type::NULLABLE_INT_BOOL) return "NULLABLE";
@@ -1663,7 +1695,8 @@ void DEBUG_PrintRefct(std::ostream& os,
         return "(refct=" + std::to_string(meminf->refct) + ")";
     };
     for (int iCol = 0; iCol < nCol; iCol++) {
-        os << "iCol=" << iCol << " : " << GetArrType_as_string(ListArr[iCol]->arr_type)
+        os << "iCol=" << iCol << " : "
+           << GetArrType_as_string(ListArr[iCol]->arr_type)
            << " dtype=" << GetDtype_as_string(ListArr[iCol]->dtype)
            << " : meminfo=" << GetNRTinfo(ListArr[iCol]->meminfo)
            << " meminfo_bitmask=" << GetNRTinfo(ListArr[iCol]->meminfo_bitmask)
@@ -1671,12 +1704,12 @@ void DEBUG_PrintRefct(std::ostream& os,
     }
 }
 
-void DEBUG_PrintColumn(std::ostream& os, array_info* arr)
-{
-  int n_rows = arr->length;
-  os << "Column n=" << n_rows << " arr=" << GetArrType_as_string(arr->arr_type)
-     << " dtype=" << GetDtype_as_string(arr->dtype) << "\n";
-  std::vector<std::string> LStr = GetColumn_as_ListString(arr);
-  for (int i_row=0; i_row<n_rows; i_row++)
-    os << "i_row=" << i_row << " S=" << LStr[i_row] << "\n";
+void DEBUG_PrintColumn(std::ostream& os, array_info* arr) {
+    int n_rows = arr->length;
+    os << "Column n=" << n_rows
+       << " arr=" << GetArrType_as_string(arr->arr_type)
+       << " dtype=" << GetDtype_as_string(arr->dtype) << "\n";
+    std::vector<std::string> LStr = GetColumn_as_ListString(arr);
+    for (int i_row = 0; i_row < n_rows; i_row++)
+        os << "i_row=" << i_row << " S=" << LStr[i_row] << "\n";
 }

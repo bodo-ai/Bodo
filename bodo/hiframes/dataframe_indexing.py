@@ -169,6 +169,8 @@ class DataFrameILocType(types.Type):
         name = "DataFrameILocType({})".format(df_type)
         super(DataFrameILocType, self).__init__(name)
 
+    ndim = 2
+
 
 @register_model(DataFrameILocType)
 class DataFrameILocModel(models.StructModel):
@@ -287,6 +289,8 @@ class DataFrameLocType(types.Type):
         self.df_type = df_type
         name = "DataFrameLocType({})".format(df_type)
         super(DataFrameLocType, self).__init__(name)
+
+    ndim = 2
 
 
 @register_model(DataFrameLocType)
@@ -414,6 +418,8 @@ class DataFrameIatType(types.Type):
         self.df_type = df_type
         name = "DataFrameIatType({})".format(df_type)
         super(DataFrameIatType, self).__init__(name)
+
+    ndim = 2
 
 
 @register_model(DataFrameIatType)

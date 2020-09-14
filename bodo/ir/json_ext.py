@@ -216,6 +216,10 @@ def _gen_json_reader_py(
     func_text += "    {}, {}, -1, bodo.libs.str_ext.unicode_to_utf8('{}'), bodo.libs.str_ext.unicode_to_utf8(bucket_region) )\n".format(
         lines, parallel, compression
     )
+    # Check if there was an error in the C++ code. If so, raise it.
+    func_text += "  bodo.utils.utils.check_and_propagate_cpp_exception()\n"
+    func_text += "  if bodo.utils.utils.is_null_pointer(f_reader):\n"
+    func_text += "      raise FileNotFoundError('File does not exist')\n"
     func_text += "  with objmode({}):\n".format(typ_strs)
     func_text += "    df = pd.read_json(f_reader, orient='{}',\n".format(orient)
     func_text += "       convert_dates = {}, \n".format(convert_dates)

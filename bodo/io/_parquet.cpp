@@ -73,19 +73,26 @@ void pq_write(const char *filename, const table_info *table,
               const int stop, const int step, const char *name,
               const char *bucket_region);
 
-#define CHECK(expr, msg)                                           \
-    if (!(expr)) {                                                 \
-        std::cerr << "Error in parquet I/O: " << msg << std::endl; \
-        return;                                                    \
+// if expr is not true (or NULL), form an err msg and raise a
+// runtime_error with it
+#define CHECK(expr, msg)                                                   \
+    if (!(expr)) {                                                         \
+        std::string err_msg = std::string("Error in parquet I/O: ") + msg; \
+        throw std::runtime_error(err_msg);                                 \
     }
 
-#define CHECK_ARROW(expr, msg)                                            \
-    if (!(expr.ok())) {                                                   \
-        std::cerr << "Error in arrow parquet I/O: " << msg << " " << expr \
-                  << std::endl;                                           \
-        return;                                                           \
+// if status of arrow::Result is not ok, form an err msg and raise a
+// runtime_error with it
+#define CHECK_ARROW(expr, msg)                                              \
+    if (!(expr.ok())) {                                                     \
+        std::string err_msg = std::string("Error in arrow parquet I/O: ") + \
+                              msg + " " + expr.ToString();                  \
+        throw std::runtime_error(err_msg);                                  \
     }
 
+// if status of arrow::Result is not ok, form an err msg and raise a
+// runtime_error with it. If it is ok, get value using ValueOrDie
+// and assign it to lhs using std::move
 #define CHECK_ARROW_AND_ASSIGN(res, msg, lhs) \
     CHECK_ARROW(res.status(), msg)            \
     lhs = std::move(res).ValueOrDie();
@@ -253,6 +260,7 @@ DatasetReader *get_dataset_reader(char *file_name, bool parallel,
 
 void del_dataset_reader(DatasetReader *reader) { delete reader; }
 
+// TODO: column_idx doesn't seem to be used. Remove?
 int64_t pq_get_size(DatasetReader *reader, int64_t column_idx) {
     return reader->count;
 }
@@ -260,248 +268,283 @@ int64_t pq_get_size(DatasetReader *reader, int64_t column_idx) {
 int64_t pq_read(DatasetReader *ds_reader, int64_t real_column_idx,
                 int64_t column_idx, uint8_t *out_data, int out_dtype,
                 uint8_t *out_nulls) {
-    if (ds_reader->count == 0) return 0;
+    try {
+        if (ds_reader->count == 0) return 0;
 
-    int64_t start = ds_reader->start_row_first_file;
+        int64_t start = ds_reader->start_row_first_file;
 
-    int64_t read_rows = 0;  // rows read so far
-    int dtype_size = numpy_item_size[out_dtype];
-    for (auto filepath : ds_reader->filepaths) {
-        // open file reader for this piece
-        std::shared_ptr<parquet::arrow::FileReader> file_reader;
-        pq_init_reader(filepath.c_str(), &file_reader,
-                       ds_reader->bucket_region.c_str());
+        int64_t read_rows = 0;  // rows read so far
+        int dtype_size = numpy_item_size[out_dtype];
+        for (auto filepath : ds_reader->filepaths) {
+            // open file reader for this piece
+            std::shared_ptr<parquet::arrow::FileReader> file_reader;
+            pq_init_reader(filepath.c_str(), &file_reader,
+                           ds_reader->bucket_region.c_str());
 
-        int64_t file_size = pq_get_size_single_file(file_reader, column_idx);
-        int64_t rows_to_read =
-            std::min(ds_reader->count - read_rows, file_size - start);
+            int64_t file_size =
+                pq_get_size_single_file(file_reader, column_idx);
+            int64_t rows_to_read =
+                std::min(ds_reader->count - read_rows, file_size - start);
 
-        pq_read_single_file(file_reader, real_column_idx, column_idx,
-                            out_data + read_rows * dtype_size, out_dtype, start,
-                            rows_to_read, out_nulls, read_rows);
-        read_rows += rows_to_read;
-        start = 0;  // start becomes 0 after reading non-empty first chunk
+            pq_read_single_file(file_reader, real_column_idx, column_idx,
+                                out_data + read_rows * dtype_size, out_dtype,
+                                start, rows_to_read, out_nulls, read_rows);
+            read_rows += rows_to_read;
+            start = 0;  // start becomes 0 after reading non-empty first chunk
+        }
+        return 0;
+    } catch (const std::exception &e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return -1;
     }
-    return 0;
 }
 
 int pq_read_string(DatasetReader *ds_reader, int64_t real_column_idx,
                    int64_t column_idx, uint32_t **out_offsets,
                    uint8_t **out_data, uint8_t **out_nulls) {
-    if (ds_reader->count == 0) return 0;
+    try {
+        if (ds_reader->count == 0) return 0;
 
-    int64_t start = ds_reader->start_row_first_file;
+        int64_t start = ds_reader->start_row_first_file;
 
-    int64_t n_all_vals = 0;
-    std::vector<uint32_t> offset_vec;
-    std::vector<uint8_t> data_vec;
-    std::vector<bool> null_vec;
-    int64_t last_offset = 0;
-    int64_t read_rows = 0;  // rows read so far
-    for (auto filepath : ds_reader->filepaths) {
-        std::shared_ptr<parquet::arrow::FileReader> file_reader;
-        pq_init_reader(filepath.c_str(), &file_reader,
-                       ds_reader->bucket_region.c_str());
+        int64_t n_all_vals = 0;
+        std::vector<uint32_t> offset_vec;
+        std::vector<uint8_t> data_vec;
+        std::vector<bool> null_vec;
+        int64_t last_offset = 0;
+        int64_t read_rows = 0;  // rows read so far
+        for (auto filepath : ds_reader->filepaths) {
+            std::shared_ptr<parquet::arrow::FileReader> file_reader;
+            pq_init_reader(filepath.c_str(), &file_reader,
+                           ds_reader->bucket_region.c_str());
 
-        int64_t file_size = pq_get_size_single_file(file_reader, column_idx);
-        int64_t rows_to_read =
-            std::min(ds_reader->count - read_rows, file_size - start);
+            int64_t file_size =
+                pq_get_size_single_file(file_reader, column_idx);
+            int64_t rows_to_read =
+                std::min(ds_reader->count - read_rows, file_size - start);
 
-        pq_read_string_single_file(file_reader, real_column_idx, column_idx,
-                                   start, rows_to_read, &offset_vec, &data_vec,
-                                   &null_vec);
+            pq_read_string_single_file(file_reader, real_column_idx, column_idx,
+                                       start, rows_to_read, &offset_vec,
+                                       &data_vec, &null_vec);
 
-        size_t size = offset_vec.size();
-        for (int64_t i = 1; i <= rows_to_read + 1; i++)
-            offset_vec[size - i] += last_offset;
-        last_offset = offset_vec[size - 1];
-        offset_vec.pop_back();
-        n_all_vals += rows_to_read;
+            size_t size = offset_vec.size();
+            for (int64_t i = 1; i <= rows_to_read + 1; i++)
+                offset_vec[size - i] += last_offset;
+            last_offset = offset_vec[size - 1];
+            offset_vec.pop_back();
+            n_all_vals += rows_to_read;
 
-        read_rows += rows_to_read;
-        start = 0;  // start becomes 0 after reading non-empty first chunk
+            read_rows += rows_to_read;
+            start = 0;  // start becomes 0 after reading non-empty first chunk
+        }
+        offset_vec.push_back(last_offset);
+
+        *out_offsets = new uint32_t[offset_vec.size()];
+        *out_data = new uint8_t[data_vec.size()];
+
+        memcpy(*out_offsets, offset_vec.data(),
+               offset_vec.size() * sizeof(uint32_t));
+        memcpy(*out_data, data_vec.data(), data_vec.size());
+        pack_null_bitmap(out_nulls, null_vec, n_all_vals);
+        return n_all_vals;
+    } catch (const std::exception &e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return -1;
     }
-    offset_vec.push_back(last_offset);
-
-    *out_offsets = new uint32_t[offset_vec.size()];
-    *out_data = new uint8_t[data_vec.size()];
-
-    memcpy(*out_offsets, offset_vec.data(),
-           offset_vec.size() * sizeof(uint32_t));
-    memcpy(*out_data, data_vec.data(), data_vec.size());
-    pack_null_bitmap(out_nulls, null_vec, n_all_vals);
-    return n_all_vals;
 }
 
 int pq_read_list_string(DatasetReader *ds_reader, int64_t real_column_idx,
                         int64_t column_idx, NRT_MemInfo **array_item_meminfo) {
-    if (ds_reader->count == 0) return 0;
+    try {
+        if (ds_reader->count == 0) return 0;
 
-    int64_t start = ds_reader->start_row_first_file;
+        int64_t start = ds_reader->start_row_first_file;
 
-    // TODO get nulls for strings too (not just lists)
-    int64_t n_all_vals = 0;
-    std::vector<uint32_t> index_offset_vec;
-    std::vector<uint32_t> offset_vec;
-    std::vector<uint8_t> data_vec;
-    std::vector<bool> null_vec;
-    int64_t last_str_offset = 0;
-    int64_t last_index_offset = 0;
-    int64_t read_rows = 0;  // rows read so far
-    for (auto filepath : ds_reader->filepaths) {
-        std::shared_ptr<parquet::arrow::FileReader> file_reader;
-        pq_init_reader(filepath.c_str(), &file_reader,
-                       ds_reader->bucket_region.c_str());
+        // TODO get nulls for strings too (not just lists)
+        int64_t n_all_vals = 0;
+        std::vector<uint32_t> index_offset_vec;
+        std::vector<uint32_t> offset_vec;
+        std::vector<uint8_t> data_vec;
+        std::vector<bool> null_vec;
+        int64_t last_str_offset = 0;
+        int64_t last_index_offset = 0;
+        int64_t read_rows = 0;  // rows read so far
+        for (auto filepath : ds_reader->filepaths) {
+            std::shared_ptr<parquet::arrow::FileReader> file_reader;
+            pq_init_reader(filepath.c_str(), &file_reader,
+                           ds_reader->bucket_region.c_str());
 
-        int64_t file_size = pq_get_size_single_file(file_reader, column_idx);
-        int64_t rows_to_read =
-            std::min(ds_reader->count - read_rows, file_size - start);
+            int64_t file_size =
+                pq_get_size_single_file(file_reader, column_idx);
+            int64_t rows_to_read =
+                std::min(ds_reader->count - read_rows, file_size - start);
 
-        int64_t n_strings = pq_read_list_string_single_file(
-            file_reader, real_column_idx, column_idx, start, rows_to_read,
-            &offset_vec, &index_offset_vec, &data_vec, &null_vec);
+            int64_t n_strings = pq_read_list_string_single_file(
+                file_reader, real_column_idx, column_idx, start, rows_to_read,
+                &offset_vec, &index_offset_vec, &data_vec, &null_vec);
 
-        size_t size = offset_vec.size();
-        for (int64_t i = 1; i <= n_strings + 1; i++)
-            offset_vec[size - i] += last_str_offset;
-        last_str_offset = offset_vec.back();
-        offset_vec.pop_back();
+            size_t size = offset_vec.size();
+            for (int64_t i = 1; i <= n_strings + 1; i++)
+                offset_vec[size - i] += last_str_offset;
+            last_str_offset = offset_vec.back();
+            offset_vec.pop_back();
 
-        size = index_offset_vec.size();
-        for (int64_t i = 1; i <= rows_to_read + 1; i++)
-            index_offset_vec[size - i] += last_index_offset;
-        last_index_offset = index_offset_vec[size - 1];
-        index_offset_vec.pop_back();
+            size = index_offset_vec.size();
+            for (int64_t i = 1; i <= rows_to_read + 1; i++)
+                index_offset_vec[size - i] += last_index_offset;
+            last_index_offset = index_offset_vec[size - 1];
+            index_offset_vec.pop_back();
 
-        n_all_vals += rows_to_read;
+            n_all_vals += rows_to_read;
 
-        read_rows += rows_to_read;
-        start = 0;  // start becomes 0 after reading non-empty first chunk
+            read_rows += rows_to_read;
+            start = 0;  // start becomes 0 after reading non-empty first chunk
+        }
+        offset_vec.push_back(last_str_offset);
+        index_offset_vec.push_back(last_index_offset);
+
+        int64_t n_lists = n_all_vals;
+        int64_t n_strings = offset_vec.size() - 1;
+        int64_t n_chars = data_vec.size();
+        array_info *info =
+            alloc_list_string_array(n_lists, n_strings, n_chars, 0);
+        array_item_arr_payload *payload =
+            (array_item_arr_payload *)(info->meminfo->data);
+        str_arr_payload *sub_payload = (str_arr_payload *)(payload->data->data);
+        memcpy(sub_payload->offsets, offset_vec.data(),
+               offset_vec.size() * sizeof(int32_t));
+        memcpy(sub_payload->data, data_vec.data(), data_vec.size());
+        memcpy(payload->offsets.data, index_offset_vec.data(),
+               index_offset_vec.size() * sizeof(int32_t));
+        int64_t n_bytes = (n_all_vals + 7) >> 3;
+        memset(payload->null_bitmap.data, 0, n_bytes);
+        for (int64_t i = 0; i < n_all_vals; i++) {
+            if (null_vec[i])
+                ::arrow::BitUtil::SetBit((uint8_t *)payload->null_bitmap.data,
+                                         i);
+        }
+        *array_item_meminfo = info->meminfo;
+        delete info;
+        return n_all_vals;
+    } catch (const std::exception &e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return -1;
     }
-    offset_vec.push_back(last_str_offset);
-    index_offset_vec.push_back(last_index_offset);
-
-    int64_t n_lists = n_all_vals;
-    int64_t n_strings = offset_vec.size() - 1;
-    int64_t n_chars = data_vec.size();
-    array_info *info = alloc_list_string_array(n_lists, n_strings, n_chars, 0);
-    array_item_arr_payload *payload =
-        (array_item_arr_payload *)(info->meminfo->data);
-    str_arr_payload *sub_payload = (str_arr_payload *)(payload->data->data);
-    memcpy(sub_payload->offsets, offset_vec.data(),
-           offset_vec.size() * sizeof(int32_t));
-    memcpy(sub_payload->data, data_vec.data(), data_vec.size());
-    memcpy(payload->offsets.data, index_offset_vec.data(),
-           index_offset_vec.size() * sizeof(int32_t));
-    int64_t n_bytes = (n_all_vals + 7) >> 3;
-    memset(payload->null_bitmap.data, 0, n_bytes);
-    for (int64_t i = 0; i < n_all_vals; i++) {
-        if (null_vec[i])
-            ::arrow::BitUtil::SetBit((uint8_t *)payload->null_bitmap.data, i);
-    }
-    *array_item_meminfo = info->meminfo;
-    delete info;
-    return n_all_vals;
 }
 
 int pq_read_arrow_array(DatasetReader *ds_reader, int64_t real_column_idx,
                         int64_t column_idx, int64_t column_siz,
                         int64_t *lengths, array_info **out_infos) {
-    if (ds_reader->count == 0) return 0;
+    try {
+        if (ds_reader->count == 0) return 0;
 
-    int64_t start = ds_reader->start_row_first_file;
-    int64_t read_rows = 0;  // rows read so far
-    arrow::ArrayVector
-        parts;  // vector of arrays read, one array for each row group
-    std::vector<int> column_indices(column_siz);
-    for (int64_t i = 0; i < column_siz; i++) column_indices[i] = column_idx + i;
-    for (auto filepath : ds_reader->filepaths) {
-        std::shared_ptr<parquet::arrow::FileReader> file_reader;
-        pq_init_reader(filepath.c_str(), &file_reader,
-                       ds_reader->bucket_region.c_str());
+        int64_t start = ds_reader->start_row_first_file;
+        int64_t read_rows = 0;  // rows read so far
+        arrow::ArrayVector
+            parts;  // vector of arrays read, one array for each row group
+        std::vector<int> column_indices(column_siz);
+        for (int64_t i = 0; i < column_siz; i++)
+            column_indices[i] = column_idx + i;
+        for (auto filepath : ds_reader->filepaths) {
+            std::shared_ptr<parquet::arrow::FileReader> file_reader;
+            pq_init_reader(filepath.c_str(), &file_reader,
+                           ds_reader->bucket_region.c_str());
 
-        int64_t file_size = pq_get_size_single_file(file_reader, column_idx);
-        int64_t rows_to_read =
-            std::min(ds_reader->count - read_rows, file_size - start);
+            int64_t file_size =
+                pq_get_size_single_file(file_reader, column_idx);
+            int64_t rows_to_read =
+                std::min(ds_reader->count - read_rows, file_size - start);
 
-        pq_read_arrow_single_file(file_reader, column_indices, start,
-                                  rows_to_read, parts);
+            pq_read_arrow_single_file(file_reader, column_indices, start,
+                                      rows_to_read, parts);
 
-        read_rows += rows_to_read;
-        start = 0;  // start becomes 0 after reading non-empty first chunk
+            read_rows += rows_to_read;
+            start = 0;  // start becomes 0 after reading non-empty first chunk
+        }
+
+        std::shared_ptr<::arrow::Array> out_array;
+        arrow::Concatenate(parts, arrow::default_memory_pool(), &out_array);
+        parts.clear();  // memory of each array will be freed now
+
+        int64_t lengths_pos = 0;
+        int64_t infos_pos = 0;
+        nested_array_to_c(out_array, lengths, out_infos, lengths_pos,
+                          infos_pos);
+        return read_rows;
+    } catch (const std::exception &e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return -1;
     }
-
-    std::shared_ptr<::arrow::Array> out_array;
-    arrow::Concatenate(parts, arrow::default_memory_pool(), &out_array);
-    parts.clear();  // memory of each array will be freed now
-
-    int64_t lengths_pos = 0;
-    int64_t infos_pos = 0;
-    nested_array_to_c(out_array, lengths, out_infos, lengths_pos, infos_pos);
-    return read_rows;
 }
 
 int pq_read_array_item(DatasetReader *ds_reader, int64_t real_column_idx,
                        int64_t column_idx, int out_dtype,
                        array_info **out_offsets, array_info **out_data,
                        array_info **out_nulls) {
-    if (ds_reader->count == 0) return 0;
+    try {
+        if (ds_reader->count == 0) return 0;
 
-    int64_t start = ds_reader->start_row_first_file;
+        int64_t start = ds_reader->start_row_first_file;
 
-    int64_t n_all_vals = 0;
-    std::vector<uint32_t> offset_vec;
-    std::vector<uint8_t> data_vec;
-    std::vector<bool> null_vec;
-    int64_t last_offset = 0;
-    int64_t read_rows = 0;  // rows read so far
-    for (auto filepath : ds_reader->filepaths) {
-        std::shared_ptr<parquet::arrow::FileReader> file_reader;
-        pq_init_reader(filepath.c_str(), &file_reader,
-                       ds_reader->bucket_region.c_str());
+        int64_t n_all_vals = 0;
+        std::vector<uint32_t> offset_vec;
+        std::vector<uint8_t> data_vec;
+        std::vector<bool> null_vec;
+        int64_t last_offset = 0;
+        int64_t read_rows = 0;  // rows read so far
+        for (auto filepath : ds_reader->filepaths) {
+            std::shared_ptr<parquet::arrow::FileReader> file_reader;
+            pq_init_reader(filepath.c_str(), &file_reader,
+                           ds_reader->bucket_region.c_str());
 
-        int64_t file_size = pq_get_size_single_file(file_reader, column_idx);
-        int64_t rows_to_read =
-            std::min(ds_reader->count - read_rows, file_size - start);
+            int64_t file_size =
+                pq_get_size_single_file(file_reader, column_idx);
+            int64_t rows_to_read =
+                std::min(ds_reader->count - read_rows, file_size - start);
 
-        pq_read_array_item_single_file(file_reader, real_column_idx, column_idx,
-                                       out_dtype, start, rows_to_read,
-                                       &offset_vec, &data_vec, &null_vec);
+            pq_read_array_item_single_file(
+                file_reader, real_column_idx, column_idx, out_dtype, start,
+                rows_to_read, &offset_vec, &data_vec, &null_vec);
 
-        size_t size = offset_vec.size();
-        for (int64_t i = 1; i <= rows_to_read + 1; i++)
-            offset_vec[size - i] += last_offset;
-        last_offset = offset_vec[size - 1];
-        offset_vec.pop_back();
-        n_all_vals += rows_to_read;
+            size_t size = offset_vec.size();
+            for (int64_t i = 1; i <= rows_to_read + 1; i++)
+                offset_vec[size - i] += last_offset;
+            last_offset = offset_vec[size - 1];
+            offset_vec.pop_back();
+            n_all_vals += rows_to_read;
 
-        read_rows += rows_to_read;
-        start = 0;  // start becomes 0 after reading non-empty first chunk
+            read_rows += rows_to_read;
+            start = 0;  // start becomes 0 after reading non-empty first chunk
+        }
+        offset_vec.push_back(last_offset);
+
+        // allocate output arrays and copy data
+        *out_offsets = alloc_array(offset_vec.size(), 1, 1,
+                                   bodo_array_type::arr_type_enum::NUMPY,
+                                   Bodo_CTypes::UINT32, 0, 0);
+        *out_data = alloc_array(data_vec.size(), 1, 1,
+                                bodo_array_type::arr_type_enum::NUMPY,
+                                (Bodo_CTypes::CTypeEnum)out_dtype, 0, 0);
+        int64_t n_null_bytes = (n_all_vals + 7) >> 3;
+        *out_nulls = alloc_array(n_null_bytes, 1, 1,
+                                 bodo_array_type::arr_type_enum::NUMPY,
+                                 Bodo_CTypes::UINT8, 0, 0);
+
+        memcpy((*out_offsets)->data1, offset_vec.data(),
+               offset_vec.size() * sizeof(uint32_t));
+        memcpy((*out_data)->data1, data_vec.data(), data_vec.size());
+
+        memset((*out_nulls)->data1, 0, n_null_bytes);
+        for (int64_t i = 0; i < n_all_vals; i++) {
+            if (null_vec[i])
+                SetBitTo((uint8_t *)((*out_nulls)->data1), i, true);
+        }
+
+        return n_all_vals;
+    } catch (const std::exception &e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return -1;
     }
-    offset_vec.push_back(last_offset);
-
-    // allocate output arrays and copy data
-    *out_offsets = alloc_array(offset_vec.size(), 1, 1,
-                               bodo_array_type::arr_type_enum::NUMPY,
-                               Bodo_CTypes::UINT32, 0, 0);
-    *out_data = alloc_array(data_vec.size(), 1, 1,
-                            bodo_array_type::arr_type_enum::NUMPY,
-                            (Bodo_CTypes::CTypeEnum)out_dtype, 0, 0);
-    int64_t n_null_bytes = (n_all_vals + 7) >> 3;
-    *out_nulls =
-        alloc_array(n_null_bytes, 1, 1, bodo_array_type::arr_type_enum::NUMPY,
-                    Bodo_CTypes::UINT8, 0, 0);
-
-    memcpy((*out_offsets)->data1, offset_vec.data(),
-           offset_vec.size() * sizeof(uint32_t));
-    memcpy((*out_data)->data1, data_vec.data(), data_vec.size());
-
-    memset((*out_nulls)->data1, 0, n_null_bytes);
-    for (int64_t i = 0; i < n_all_vals; i++) {
-        if (null_vec[i]) SetBitTo((uint8_t *)((*out_nulls)->data1), i, true);
-    }
-
-    return n_all_vals;
 }
 
 /// Convert Bodo date (year, month, day) from int64 to Arrow date32
@@ -722,165 +765,174 @@ void pq_write(const char *_path_name, const table_info *table,
 #ifdef DEBUG_NESTED_PARQUET
     std::cout << "pq_write, step 1\n";
 #endif
-    // Write actual values of start, stop, step to the metadata which is a
-    // string that contains %d
-    int check;
-    std::vector<char> new_metadata;
-    if (write_rangeindex_to_metadata) {
-        new_metadata.resize((strlen(metadata) + strlen(idx_name) + 50));
-        check = sprintf(new_metadata.data(), metadata, idx_name, ri_start,
-                        ri_stop, ri_step);
-    } else {
-        new_metadata.resize((strlen(metadata) + strlen(idx_name) * 4));
-        check = sprintf(new_metadata.data(), metadata, idx_name, idx_name,
-                        idx_name, idx_name);
+    try {
+        // Write actual values of start, stop, step to the metadata which is a
+        // string that contains %d
+        int check;
+        std::vector<char> new_metadata;
+        if (write_rangeindex_to_metadata) {
+            new_metadata.resize((strlen(metadata) + strlen(idx_name) + 50));
+            check = sprintf(new_metadata.data(), metadata, idx_name, ri_start,
+                            ri_stop, ri_step);
+        } else {
+            new_metadata.resize((strlen(metadata) + strlen(idx_name) * 4));
+            check = sprintf(new_metadata.data(), metadata, idx_name, idx_name,
+                            idx_name, idx_name);
+        }
+        if (size_t(check + 1) > new_metadata.size())
+            std::cerr << "Fatal error: number of written char for metadata is "
+                         "greater than new_metadata size"
+                      << std::endl;
+#ifdef DEBUG_NESTED_PARQUET
+        std::string str(new_metadata.data());
+        std::cout << "pq_write, str=" << str << "\n";
+        std::cout << "pq_write, step 2\n";
+#endif
+
+        int myrank, num_ranks;
+        MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+        MPI_Comm_size(MPI_COMM_WORLD, &num_ranks);
+        std::string orig_path(
+            _path_name);        // original path passed to this function
+        std::string path_name;  // original path passed to this function
+                                // (excluding prefix)
+        std::string dirname;    // path and directory name to store the parquet
+                                // files (only if is_parallel=true)
+        std::string fname;      // name of parquet file to write (excludes path)
+        std::shared_ptr<::arrow::io::OutputStream> out_stream;
+        Bodo_Fs::FsEnum fs_option;
+
+#ifdef DEBUG_NESTED_PARQUET
+        std::cout << "pq_write, step 3\n";
+#endif
+        extract_fs_dir_path(_path_name, is_parallel, ".parquet", myrank,
+                            num_ranks, &fs_option, &dirname, &fname, &orig_path,
+                            &path_name);
+
+#ifdef DEBUG_NESTED_PARQUET
+        std::cout << "pq_write, step 4\n";
+#endif
+        open_outstream(fs_option, is_parallel, myrank, "parquet", dirname,
+                       fname, orig_path, path_name, &out_stream, bucket_region);
+#ifdef DEBUG_NESTED_PARQUET
+        std::cout << "pq_write, step 5\n";
+#endif
+
+        // copy column names to a std::vector<string>
+        std::vector<std::string> col_names;
+        char *cur_str = col_names_arr->data1;
+        uint32_t *offsets = (uint32_t *)col_names_arr->data2;
+        for (int64_t i = 0; i < col_names_arr->length; i++) {
+            size_t len = offsets[i + 1] - offsets[i];
+            col_names.emplace_back(cur_str, len);
+            cur_str += len;
+        }
+
+        auto pool = ::arrow::default_memory_pool();
+#ifdef DEBUG_NESTED_PARQUET
+        std::cout << "pq_write, step 6\n";
+#endif
+
+        // convert Bodo table to Arrow: construct Arrow Schema and ChunkedArray
+        // columns
+        std::vector<std::shared_ptr<arrow::Field>> schema_vector;
+        std::vector<std::shared_ptr<arrow::ChunkedArray>> columns(
+            table->columns.size());
+        for (size_t i = 0; i < table->columns.size(); i++) {
+            auto col = table->columns[i];
+            bodo_array_to_arrow(pool, col, col_names[i], schema_vector,
+                                &columns[i]);
+        }
+#ifdef DEBUG_NESTED_PARQUET
+        std::cout << "pq_write, |schema_vector|=" << schema_vector.size()
+                  << "\n";
+        std::cout << "pq_write, step 7\n";
+        std::cout << "pq_write, write_index=" << write_index << "\n";
+#endif
+
+        if (write_index) {
+            // if there is an index, construct ChunkedArray index column and add
+            // metadata to the schema
+            std::shared_ptr<arrow::ChunkedArray> chunked_arr;
+            if (strcmp(idx_name, "null") != 0)
+                bodo_array_to_arrow(pool, index, idx_name, schema_vector,
+                                    &chunked_arr);
+            else
+                bodo_array_to_arrow(pool, index, "__index_level_0__",
+                                    schema_vector, &chunked_arr);
+            columns.push_back(chunked_arr);
+        }
+#ifdef DEBUG_NESTED_PARQUET
+        std::cout << "pq_write, step 8\n";
+#endif
+
+        std::shared_ptr<arrow::KeyValueMetadata> schema_metadata =
+            ::arrow::key_value_metadata({{"pandas", new_metadata.data()}});
+
+#ifdef DEBUG_NESTED_PARQUET
+        std::unordered_map<std::string, std::string> unord_map;
+        schema_metadata->ToUnorderedMap(&unord_map);
+        for (auto &e_pair : unord_map)
+            std::cout << "key=" << e_pair.first << " val=" << e_pair.second
+                      << "\n";
+        std::cout << "pq_write, step 9\n";
+#endif
+        // make Arrow Schema object
+        std::shared_ptr<arrow::Schema> schema =
+            std::make_shared<arrow::Schema>(schema_vector, schema_metadata);
+#ifdef DEBUG_NESTED_PARQUET
+        std::vector<std::string> l_names = schema->field_names();
+        for (int i = 0; i < l_names.size(); i++)
+            std::cout << "i=" << i << " name=" << l_names[i] << "\n";
+#endif
+
+        // make Arrow table from Schema and ChunkedArray columns
+        int64_t row_group_size = table->nrows();
+        std::shared_ptr<arrow::Table> arrow_table =
+            arrow::Table::Make(schema, columns, row_group_size);
+#ifdef DEBUG_NESTED_PARQUET
+        std::cout << "row_group_size=" << row_group_size << "\n";
+        std::cout << "pq_write, step 10\n";
+#endif
+
+        // set compression option
+        ::arrow::Compression::type codec_type;
+        if (strcmp(compression, "snappy") == 0) {
+            codec_type = ::arrow::Compression::SNAPPY;
+        } else if (strcmp(compression, "brotli") == 0) {
+            codec_type = ::arrow::Compression::BROTLI;
+        } else if (strcmp(compression, "gzip") == 0) {
+            codec_type = ::arrow::Compression::GZIP;
+        } else {
+            codec_type = ::arrow::Compression::UNCOMPRESSED;
+        }
+        parquet::WriterProperties::Builder prop_builder;
+        prop_builder.compression(codec_type);
+        std::shared_ptr<parquet::WriterProperties> writer_properties =
+            prop_builder.build();
+#ifdef DEBUG_NESTED_PARQUET
+        std::cout << "pq_write, step 11\n";
+#endif
+
+        // open file and write table
+        arrow::Status status = parquet::arrow::WriteTable(
+            *arrow_table, pool, out_stream, row_group_size, writer_properties,
+            // store_schema() = true is needed to write the schema metadata to
+            // file
+            // .coerce_timestamps(::arrow::TimeUnit::MICRO)->allow_truncated_timestamps()
+            // not needed when moving to parquet 2.0
+            ::parquet::ArrowWriterProperties::Builder()
+                .coerce_timestamps(::arrow::TimeUnit::MICRO)
+                ->allow_truncated_timestamps()
+                ->store_schema()
+                ->build());
+#ifdef DEBUG_NESTED_PARQUET
+        std::cout << "pq_write, step 12\n";
+#endif
+        CHECK_ARROW(status, "parquet::arrow::WriteTable");
+    } catch (const std::exception &e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
     }
-    if (size_t(check + 1) > new_metadata.size())
-        std::cerr << "Fatal error: number of written char for metadata is "
-                     "greater than new_metadata size"
-                  << std::endl;
-#ifdef DEBUG_NESTED_PARQUET
-    std::string str(new_metadata.data());
-    std::cout << "pq_write, str=" << str << "\n";
-    std::cout << "pq_write, step 2\n";
-#endif
-
-    int myrank, num_ranks;
-    MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
-    MPI_Comm_size(MPI_COMM_WORLD, &num_ranks);
-    std::string orig_path(_path_name);  // original path passed to this function
-    std::string
-        path_name;  // original path passed to this function (excluding prefix)
-    std::string dirname;  // path and directory name to store the parquet files
-                          // (only if is_parallel=true)
-    std::string fname;    // name of parquet file to write (excludes path)
-    std::shared_ptr<::arrow::io::OutputStream> out_stream;
-    Bodo_Fs::FsEnum fs_option;
-
-#ifdef DEBUG_NESTED_PARQUET
-    std::cout << "pq_write, step 3\n";
-#endif
-    extract_fs_dir_path(_path_name, is_parallel, ".parquet", myrank, num_ranks,
-                        &fs_option, &dirname, &fname, &orig_path, &path_name);
-
-#ifdef DEBUG_NESTED_PARQUET
-    std::cout << "pq_write, step 4\n";
-#endif
-    open_outstream(fs_option, is_parallel, myrank, "parquet", dirname, fname,
-                   orig_path, path_name, &out_stream, bucket_region);
-#ifdef DEBUG_NESTED_PARQUET
-    std::cout << "pq_write, step 5\n";
-#endif
-
-    // copy column names to a std::vector<string>
-    std::vector<std::string> col_names;
-    char *cur_str = col_names_arr->data1;
-    uint32_t *offsets = (uint32_t *)col_names_arr->data2;
-    for (int64_t i = 0; i < col_names_arr->length; i++) {
-        size_t len = offsets[i + 1] - offsets[i];
-        col_names.emplace_back(cur_str, len);
-        cur_str += len;
-    }
-
-    auto pool = ::arrow::default_memory_pool();
-#ifdef DEBUG_NESTED_PARQUET
-    std::cout << "pq_write, step 6\n";
-#endif
-
-    // convert Bodo table to Arrow: construct Arrow Schema and ChunkedArray
-    // columns
-    std::vector<std::shared_ptr<arrow::Field>> schema_vector;
-    std::vector<std::shared_ptr<arrow::ChunkedArray>> columns(
-        table->columns.size());
-    for (size_t i = 0; i < table->columns.size(); i++) {
-        auto col = table->columns[i];
-        bodo_array_to_arrow(pool, col, col_names[i], schema_vector,
-                            &columns[i]);
-    }
-#ifdef DEBUG_NESTED_PARQUET
-    std::cout << "pq_write, |schema_vector|=" << schema_vector.size() << "\n";
-    std::cout << "pq_write, step 7\n";
-    std::cout << "pq_write, write_index=" << write_index << "\n";
-#endif
-
-    if (write_index) {
-        // if there is an index, construct ChunkedArray index column and add
-        // metadata to the schema
-        std::shared_ptr<arrow::ChunkedArray> chunked_arr;
-        if (strcmp(idx_name, "null") != 0)
-            bodo_array_to_arrow(pool, index, idx_name, schema_vector,
-                                &chunked_arr);
-        else
-            bodo_array_to_arrow(pool, index, "__index_level_0__", schema_vector,
-                                &chunked_arr);
-        columns.push_back(chunked_arr);
-    }
-#ifdef DEBUG_NESTED_PARQUET
-    std::cout << "pq_write, step 8\n";
-#endif
-
-    std::shared_ptr<arrow::KeyValueMetadata> schema_metadata =
-        ::arrow::key_value_metadata({{"pandas", new_metadata.data()}});
-
-#ifdef DEBUG_NESTED_PARQUET
-    std::unordered_map<std::string, std::string> unord_map;
-    schema_metadata->ToUnorderedMap(&unord_map);
-    for (auto &e_pair : unord_map)
-        std::cout << "key=" << e_pair.first << " val=" << e_pair.second << "\n";
-    std::cout << "pq_write, step 9\n";
-#endif
-    // make Arrow Schema object
-    std::shared_ptr<arrow::Schema> schema =
-        std::make_shared<arrow::Schema>(schema_vector, schema_metadata);
-#ifdef DEBUG_NESTED_PARQUET
-    std::vector<std::string> l_names = schema->field_names();
-    for (int i = 0; i < l_names.size(); i++)
-        std::cout << "i=" << i << " name=" << l_names[i] << "\n";
-#endif
-
-    // make Arrow table from Schema and ChunkedArray columns
-    int64_t row_group_size = table->nrows();
-    std::shared_ptr<arrow::Table> arrow_table =
-        arrow::Table::Make(schema, columns, row_group_size);
-#ifdef DEBUG_NESTED_PARQUET
-    std::cout << "row_group_size=" << row_group_size << "\n";
-    std::cout << "pq_write, step 10\n";
-#endif
-
-    // set compression option
-    ::arrow::Compression::type codec_type;
-    if (strcmp(compression, "snappy") == 0) {
-        codec_type = ::arrow::Compression::SNAPPY;
-    } else if (strcmp(compression, "brotli") == 0) {
-        codec_type = ::arrow::Compression::BROTLI;
-    } else if (strcmp(compression, "gzip") == 0) {
-        codec_type = ::arrow::Compression::GZIP;
-    } else {
-        codec_type = ::arrow::Compression::UNCOMPRESSED;
-    }
-    parquet::WriterProperties::Builder prop_builder;
-    prop_builder.compression(codec_type);
-    std::shared_ptr<parquet::WriterProperties> writer_properties =
-        prop_builder.build();
-#ifdef DEBUG_NESTED_PARQUET
-    std::cout << "pq_write, step 11\n";
-#endif
-
-    // open file and write table
-    arrow::Status status = parquet::arrow::WriteTable(
-        *arrow_table, pool, out_stream, row_group_size, writer_properties,
-        // store_schema() = true is needed to write the schema metadata to file
-        // .coerce_timestamps(::arrow::TimeUnit::MICRO)->allow_truncated_timestamps()
-        // not needed when moving to parquet 2.0
-        ::parquet::ArrowWriterProperties::Builder()
-            .coerce_timestamps(::arrow::TimeUnit::MICRO)
-            ->allow_truncated_timestamps()
-            ->store_schema()
-            ->build());
-#ifdef DEBUG_NESTED_PARQUET
-    std::cout << "pq_write, step 12\n";
-#endif
-    CHECK_ARROW(status, "parquet::arrow::WriteTable");
 }
 
 #undef CHECK

@@ -650,9 +650,13 @@ def test_read_write_parquet():
                 # typing errors during unboxing for nested lists.
                 # _infer_ndarray_obj_dtype in boxing.py needs to be made more robust.
                 # TODO: include Nones
-                df[col_name] = pd.Series(gen_random_arrow_list_list_int(2, 0, num_elements))
+                df[col_name] = pd.Series(
+                    gen_random_arrow_list_list_int(2, 0, num_elements)
+                )
             elif dtype == "nested_arrow1":
-                df[col_name] = pd.Series(gen_random_arrow_array_struct_int(10, num_elements))
+                df[col_name] = pd.Series(
+                    gen_random_arrow_array_struct_int(10, num_elements)
+                )
             elif dtype == "nested_arrow2":
                 # TODO: Include following types when they are supported in PYARROW:
                 # We cannot read this dataframe in bodo. Fails at unboxing.
@@ -660,7 +664,9 @@ def test_read_write_parquet():
                 # This dataframe can be written by the code. However we cannot read
                 # due to a limitation in pyarrow
                 # df_bug2 = pd.DataFrame({"X": gen_random_arrow_array_struct_list_int(10, n)})
-                df[col_name] = pd.Series(gen_random_arrow_struct_struct(10, num_elements))
+                df[col_name] = pd.Series(
+                    gen_random_arrow_struct_struct(10, num_elements)
+                )
             else:
                 df[col_name] = np.arange(num_elements, dtype=dtype)
             cur_col += 1
@@ -1349,6 +1355,7 @@ def test_np_io12(datapath):
 
 # TODO(Nick): Add a test for Parallel version with both offset and count.
 
+
 def test_csv_double_box(datapath):
     """Make sure boxing the output of read_csv() twice doesn't cause crashes
     See dataframe boxing function for extra incref of native arrays.
@@ -1789,7 +1796,7 @@ def test_csv_invalid_path():
     def test_impl(fname):
         return pd.read_csv(fname, names=["A"], dtype={"A": np.int64})
 
-    with pytest.raises(FileNotFoundError, match="File does not exist"):
+    with pytest.raises(RuntimeError, match="invalid path"):
         bodo.jit(test_impl)("f.csv")
 
 
