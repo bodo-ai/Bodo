@@ -387,36 +387,6 @@ def test_input(memory_leak_check):
     check_func(test_impl, (arr,))
 
 
-@pytest.mark.slow
-def test_rebalance(memory_leak_check):
-    def test_impl(N):
-        A = np.arange(n)
-        B = A[A > 10]
-        C = bodo.libs.distributed_api.rebalance_array(B)
-        return C.sum()
-
-    n = 128
-    check_func(test_impl, (n,))
-
-
-@pytest.mark.slow
-def test_rebalance_loop(memory_leak_check):
-    def test_impl(N):
-        A = np.arange(n)
-        B = A[A > 10]
-        s = 0
-        for i in range(3):
-            s += B.sum()
-        return s
-
-    n = 128
-    try:
-        bodo.transforms.distributed_analysis.auto_rebalance = True
-        check_func(test_impl, (n,))
-    finally:
-        bodo.transforms.distributed_analysis.auto_rebalance = False
-
-
 def test_transpose(memory_leak_check):
     def test_impl(n):
         A = np.ones((30, 40, 50))

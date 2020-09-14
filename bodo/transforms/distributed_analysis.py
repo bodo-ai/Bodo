@@ -88,7 +88,6 @@ _dist_analysis_result = namedtuple(
 
 
 distributed_analysis_extensions = {}
-auto_rebalance = False
 
 
 class DistributedDiagnostics:
@@ -212,6 +211,8 @@ class DistributedAnalysis:
         self._concat_reduce_vars = set()
 
     def _init_run(self):
+        """initialize data structures for distribution analysis
+        """
         self.func_ir._definitions = build_definitions(self.func_ir.blocks)
         self._parallel_accesses = set()
         self._T_arrs = set()
@@ -220,6 +221,10 @@ class DistributedAnalysis:
         self._concat_reduce_vars = set()
 
     def run(self):
+        """run full distribution analysis pass over the IR.
+        It consists of two passes inside to be able to consider nested parfors
+        (see "test_kmeans" example).
+        """
         self._init_run()
         blocks = self.func_ir.blocks
         array_dists = {}
@@ -228,11 +233,6 @@ class DistributedAnalysis:
         self._run_analysis(self.func_ir.blocks, topo_order, array_dists, parfor_dists)
         self.second_pass = True
         self._run_analysis(self.func_ir.blocks, topo_order, array_dists, parfor_dists)
-        # rebalance arrays if necessary
-        if auto_rebalance and Distribution.OneD_Var in array_dists.values():
-            changed = self._rebalance_arrs(array_dists, parfor_dists)
-            if changed:
-                return self.run()
 
         # warn when there is no parallel array or parfor
         # only warn for parfor when there is no parallel array since there could be
@@ -1452,16 +1452,6 @@ class DistributedAnalysis:
             array_dists[arr_name] = Distribution.Thread
             return
 
-        if func_name == "rebalance_array":
-            if lhs not in array_dists:
-                array_dists[lhs] = Distribution.OneD
-            in_arr = args[0].name
-            if array_dists[in_arr] == Distribution.OneD_Var:
-                array_dists[lhs] = Distribution.OneD
-            else:
-                self._meet_array_dists(lhs, in_arr, array_dists)
-            return
-
         if func_name == "rebalance":
             self._meet_array_dists(lhs, args[0].name, array_dists)
             return
@@ -2007,89 +1997,6 @@ class DistributedAnalysis:
                 for i in range(n)
             ]
         return Distribution(min(dist.value, top_dist.value))
-
-    def _rebalance_arrs(self, array_dists, parfor_dists):
-        # rebalance an array if it is accessed in a parfor that has output
-        # arrays or is in a loop
-
-        # find sequential loop bodies
-        cfg = numba.core.analysis.compute_cfg_from_blocks(self.func_ir.blocks)
-        loop_bodies = set()
-        for loop in cfg.loops().values():
-            loop_bodies |= loop.body
-
-        rebalance_arrs = set()
-
-        for label, block in self.func_ir.blocks.items():
-            for inst in block.body:
-                # TODO: handle hiframes filter etc.
-                if (
-                    isinstance(inst, Parfor)
-                    and parfor_dists[inst.id] == Distribution.OneD_Var
-                ):
-                    array_accesses = _get_array_accesses(
-                        inst.loop_body, self.func_ir, self.typemap
-                    )
-                    onedv_arrs = set(
-                        arr
-                        for (arr, ind, _) in array_accesses
-                        if arr in array_dists
-                        and array_dists[arr] == Distribution.OneD_Var
-                    )
-                    if label in loop_bodies or _arrays_written(
-                        onedv_arrs, inst.loop_body
-                    ):
-                        rebalance_arrs |= onedv_arrs
-
-        if len(rebalance_arrs) != 0:
-            self._gen_rebalances(rebalance_arrs, self.func_ir.blocks)
-            return True
-
-        return False
-
-    def _gen_rebalances(self, rebalance_arrs, blocks):
-        #
-        for block in blocks.values():
-            new_body = []
-            for inst in block.body:
-                # TODO: handle hiframes filter etc.
-                if isinstance(inst, Parfor):
-                    self._gen_rebalances(rebalance_arrs, {0: inst.init_block})
-                    self._gen_rebalances(rebalance_arrs, inst.loop_body)
-                if isinstance(inst, ir.Assign) and inst.target.name in rebalance_arrs:
-                    out_arr = inst.target
-                    self.func_ir._definitions[out_arr.name].remove(inst.value)
-                    # hold inst results in tmp array
-                    tmp_arr = ir.Var(
-                        out_arr.scope, mk_unique_var("rebalance_tmp"), out_arr.loc
-                    )
-                    self.typemap[tmp_arr.name] = self.typemap[out_arr.name]
-                    inst.target = tmp_arr
-                    nodes = [inst]
-
-                    def f(in_arr):  # pragma: no cover
-                        out_a = bodo.libs.distributed_api.rebalance_array(in_arr)
-
-                    f_block = compile_to_numba_ir(
-                        f,
-                        {"bodo": bodo},
-                        self.typingctx,
-                        (self.typemap[tmp_arr.name],),
-                        self.typemap,
-                        self.calltypes,
-                    ).blocks.popitem()[1]
-                    replace_arg_nodes(f_block, [tmp_arr])
-                    nodes += f_block.body[:-3]  # remove none return
-                    nodes[-1].target = out_arr
-                    # update definitions
-                    dumm_block = ir.Block(out_arr.scope, out_arr.loc)
-                    dumm_block.body = nodes
-                    build_definitions({0: dumm_block}, self.func_ir._definitions)
-                    new_body += nodes
-                else:
-                    new_body.append(inst)
-
-            block.body = new_body
 
     def _get_calc_n_items_range_index(self, size_def):
         """match RangeIndex calc_nitems(r._start, r._stop, r._step) call and return r
