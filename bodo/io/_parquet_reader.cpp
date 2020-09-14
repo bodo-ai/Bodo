@@ -727,10 +727,8 @@ int64_t pq_read_array_item_single_file(
                     (offsets_buff[rows_to_skip] + data_size) * dtype_size);
         } else {
             for (int i = 0; i < rows_to_read; i++) {
-                bool bit =
-                    ::arrow::BitUtil::GetBit(null_buff, rows_to_skip + i);
                 std::vector<uint8_t> V(dtype_size);
-                for (int j = offsets_buff[rows_to_skip + i];
+                for (uint32_t j = offsets_buff[rows_to_skip + i];
                      j < offsets_buff[rows_to_skip + i + 1]; j++) {
                     bool bit = ::arrow::BitUtil::GetBit(data_null_buff, j);
                     if (!bit) {

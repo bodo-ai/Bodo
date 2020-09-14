@@ -624,6 +624,7 @@ def test_match_string():
     assert test_impl(m) == bodo.jit(test_impl)(m)
 
 
+@pytest.mark.slow
 class TestString(unittest.TestCase):
     def test_pass_return(self):
         def test_impl(_str):

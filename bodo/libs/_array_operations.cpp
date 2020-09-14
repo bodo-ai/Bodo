@@ -9,6 +9,12 @@
 #include "_shuffle.h"
 #include "gfx/timsort.hpp"
 
+#undef DEBUG_DD
+#undef DEBUG_SORT_LOCAL
+#undef BOUND_INFO
+#undef DEBUG_SORT
+#undef DEBUG_SAMPLE
+
 //
 //   ARRAY ISIN
 //
@@ -83,18 +89,6 @@ static void array_isin_kernel(array_info* out_arr, array_info* in_arr,
     delete[] hashes_values;
 }
 
-template <class T>
-static void fill_recv_data_inner(T* recv_buff, T* data, uint32_t* hashes,
-                                 std::vector<int> const& send_disp, int n_pes,
-                                 size_t n_rows) {
-    std::vector<int> tmp_offset(send_disp);
-    for (size_t i = 0; i < n_rows; i++) {
-        size_t node = (size_t)hashes[i] % (size_t)n_pes;
-        int ind = tmp_offset[node];
-        data[i] = recv_buff[ind];
-        tmp_offset[node]++;
-    }
-}
 
 void array_isin(array_info* out_arr, array_info* in_arr, array_info* in_values,
                 bool is_parallel) {
@@ -104,20 +98,17 @@ void array_isin(array_info* out_arr, array_info* in_arr, array_info* in_values,
     std::vector<array_info*> vect_in_values = {in_values};
     table_info table_in_values = table_info(vect_in_values);
     std::vector<array_info*> vect_in_arr = {in_arr};
-    table_info table_in_arr = table_info(vect_in_arr);
+    table_info* table_in_arr = new table_info(vect_in_arr);
 
     int64_t num_keys = 1;
     table_info* shuf_table_in_values =
         shuffle_table(&table_in_values, num_keys);
     // we need the comm_info and hashes for the reverse shuffling
-    int n_pes;
-    MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
-    mpi_comm_info comm_info(n_pes, table_in_arr.columns);
-    uint32_t seed = SEED_HASH_PARTITION;
-    uint32_t* hashes = hash_keys(vect_in_arr, seed);
+    mpi_comm_info comm_info(table_in_arr->columns);
+    uint32_t* hashes = hash_keys_table(table_in_arr, 1, SEED_HASH_PARTITION);
     comm_info.set_counts(hashes);
     table_info* shuf_table_in_arr =
-        shuffle_table_kernel(&table_in_arr, hashes, n_pes, comm_info);
+        shuffle_table_kernel(table_in_arr, hashes, comm_info);
     // Creation of the output array.
     int64_t len = shuf_table_in_arr->columns[0]->length;
     array_info* shuf_out_arr =
@@ -139,9 +130,10 @@ void array_isin(array_info* out_arr, array_info* in_arr, array_info* in_values,
                   comm_info.send_count.data(), comm_info.send_disp.data(),
                   mpi_typ, MPI_COMM_WORLD);
     fill_recv_data_inner<uint8_t>(tmp_recv.data(), (uint8_t*)out_arr->data1,
-                                  hashes, comm_info.send_disp, n_pes, n_rows);
+                                  hashes, comm_info.send_disp, comm_info.n_pes, n_rows);
     // freeing just before returning.
     free_array(shuf_out_arr);
+    delete table_in_arr;
     delete[] hashes;
 }
 
@@ -153,7 +145,6 @@ table_info* sort_values_table_local(table_info* in_table, int64_t n_key_t,
                                     int64_t* vect_ascending, bool na_position) {
     size_t n_rows = (size_t)in_table->nrows();
     size_t n_key = size_t(n_key_t);
-#undef DEBUG_SORT_LOCAL
 #ifdef DEBUG_SORT_LOCAL
     std::cout << "n_key_t=" << n_key_t << " na_position=" << na_position
               << "\n";
@@ -170,6 +161,9 @@ table_info* sort_values_table_local(table_info* in_table, int64_t n_key_t,
     std::function<bool(size_t, size_t)> f = [&](size_t const& iRow1,
                                                 size_t const& iRow2) -> bool {
         size_t shift_key1 = 0, shift_key2 = 0;
+#ifdef DEBUG_SORT_LOCAL
+        std::cout << "Before KeyComparisonAsPython\n";
+#endif
         bool test = KeyComparisonAsPython(
             n_key, vect_ascending, in_table->columns, shift_key1, iRow1,
             in_table->columns, shift_key2, iRow2, na_position);
@@ -193,8 +187,6 @@ table_info* sort_values_table_local(table_info* in_table, int64_t n_key_t,
 table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
                               int64_t* vect_ascending, bool na_position,
                               bool parallel) {
-#undef BOUND_INFO
-#undef DEBUG_SORT
 #ifdef DEBUG_SORT
     std::cout << "sort_values_table : in_table:\n";
     DEBUG_PrintRefct(std::cout, in_table->columns);
@@ -339,7 +331,7 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
     std::cout << " After bounds deallocation\n";
 #endif
     // Now shuffling all the data
-    mpi_comm_info comm_info(n_pes, local_sort->columns);
+    mpi_comm_info comm_info(local_sort->columns);
 #ifdef DEBUG_SORT
     std::cout << " We have comm_info\n";
 #endif
@@ -348,7 +340,7 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
     std::cout << " We have set_counts\n";
 #endif
     table_info* collected_table =
-        shuffle_table_kernel(local_sort, hashes_v.data(), n_pes, comm_info);
+        shuffle_table_kernel(local_sort, hashes_v.data(), comm_info);
 #ifdef DEBUG_SORT
     std::cout << " We have collected_table\n";
 #endif
@@ -398,7 +390,6 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
  */
 static table_info* drop_duplicates_nonnull_keys_inner(table_info* in_table, int64_t num_keys)
 {
-#undef DEBUG_DD
 #ifdef DEBUG_DD
     std::cout << "drop_duplicates_nonnull_keys_inner : beginning\n";
 #endif
@@ -492,7 +483,6 @@ static table_info* drop_duplicates_nonnull_keys_inner(table_info* in_table, int6
 static table_info* drop_duplicates_table_inner(table_info* in_table,
                                                int64_t num_keys, int64_t keep,
                                                int step) {
-#undef DEBUG_DD
     size_t n_rows = (size_t)in_table->nrows();
     std::vector<array_info*> key_arrs(num_keys);
     for (size_t iKey = 0; iKey < size_t(num_keys); iKey++)
@@ -694,14 +684,14 @@ table_info* drop_duplicates_nonnull_keys(table_info* in_table, int64_t num_keys,
 table_info* drop_duplicates_table(table_info* in_table, bool is_parallel,
                                   int64_t num_keys, int64_t keep) {
 #ifdef DEBUG_DD
-    std::cout << "is_parallel=" << is_parallel << "\n";
+    std::cout << "drop_duplicates_table : is_parallel=" << is_parallel << "\n";
 #endif
     // serial case
     if (!is_parallel) {
         return drop_duplicates_table_inner(in_table, num_keys, keep, 1);
     }
-        // parallel case
-        // pre reduction of duplicates
+    // parallel case
+    // pre reduction of duplicates
 #ifdef DEBUG_DD
     std::cout << "Before the drop duplicates on the local nodes\n";
 #endif
@@ -735,7 +725,6 @@ table_info* drop_duplicates_table(table_info* in_table, bool is_parallel,
 
 table_info* sample_table(table_info* in_table, int64_t n, double frac,
                          bool replace, bool parallel) {
-#undef DEBUG_SAMPLE
 #ifdef DEBUG_SAMPLE
     std::cout << "sample_table : in_table\n";
     DEBUG_PrintSetOfColumn(std::cout, in_table->columns);

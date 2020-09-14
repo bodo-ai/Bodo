@@ -16,42 +16,54 @@ from bodo.tests.utils import check_func
 @pytest.fixture(
     params=[
         np.array([[1, 3, None], [2], None, [4, None, 5, 6], [], [1, 1]] * 2),
-        np.array(
-            [[2.0, -3.2], [2.2, 1.3], None, [4.1, np.nan, 6.3], [], [1.1, 1.2]] * 2
+        pytest.param(
+            np.array(
+                [[2.0, -3.2], [2.2, 1.3], None, [4.1, np.nan, 6.3], [], [1.1, 1.2]] * 2
+            ),
+            marks=pytest.mark.slow,
         ),
-        np.array(
-            [
-                [True, False, None],
-                [False, False],
-                None,
-                [True, False, None] * 4,
-                [],
-                [True, True],
-            ]
-            * 2
+        pytest.param(
+            np.array(
+                [
+                    [True, False, None],
+                    [False, False],
+                    None,
+                    [True, False, None] * 4,
+                    [],
+                    [True, True],
+                ]
+                * 2
+            ),
+            marks=pytest.mark.slow,
         ),
-        np.array(
-            [
-                [datetime.date(2018, 1, 24), datetime.date(1983, 1, 3)],
-                [datetime.date(1966, 4, 27), datetime.date(1999, 12, 7)],
-                None,
-                [datetime.date(1966, 4, 27), datetime.date(2004, 7, 8)],
-                [],
-                [datetime.date(2020, 11, 17)],
-            ]
-            * 2
+        pytest.param(
+            np.array(
+                [
+                    [datetime.date(2018, 1, 24), datetime.date(1983, 1, 3)],
+                    [datetime.date(1966, 4, 27), datetime.date(1999, 12, 7)],
+                    None,
+                    [datetime.date(1966, 4, 27), datetime.date(2004, 7, 8)],
+                    [],
+                    [datetime.date(2020, 11, 17)],
+                ]
+                * 2
+            ),
+            marks=pytest.mark.slow,
         ),
         # data from Spark-generated Parquet files can have array elements
-        np.array(
-            [
-                np.array([1, 3], np.int32),
-                np.array([2], np.int32),
-                None,
-                np.array([4, 5, 6], np.int32),
-                np.array([], np.int32),
-                np.array([1, 1], np.int32),
-            ]
-            * 2
+        pytest.param(
+            np.array(
+                [
+                    np.array([1, 3], np.int32),
+                    np.array([2], np.int32),
+                    None,
+                    np.array([4, 5, 6], np.int32),
+                    np.array([], np.int32),
+                    np.array([1, 1], np.int32),
+                ]
+                * 2
+            ),
+            marks=pytest.mark.slow,
         ),
         # TODO: enable Decimal test when memory leaks and test equality issues are fixed
         # np.array(
@@ -65,41 +77,53 @@ from bodo.tests.utils import check_func
         #     ]
         # ),
         # nested list case with NA elems
-        np.array(
-            [
-                [[1, 3], [2]],
-                [[3, 1]],
-                None,
-                [[4, 5, 6], [1], [1, 2]],
-                [],
-                [[1], None, [1, 4], []],
-            ]
-            * 2
+        pytest.param(
+            np.array(
+                [
+                    [[1, 3], [2]],
+                    [[3, 1]],
+                    None,
+                    [[4, 5, 6], [1], [1, 2]],
+                    [],
+                    [[1], None, [1, 4], []],
+                ]
+                * 2
+            ),
+            marks=pytest.mark.slow,
         ),
         # string data with NA
-        np.array([[["1", "2", "8"], ["3"]], [["2", None]]] * 4),
+        pytest.param(
+            np.array([[["1", "2", "8"], ["3"]], [["2", None]]] * 4),
+            marks=pytest.mark.slow,
+        ),
         # two level nesting
-        np.array(
-            [
-                [[[1, 2], [3]], [[2, None]]],
-                [[[3], [], [1, None, 4]]],
-                None,
-                [[[4, 5, 6], []], [[1]], [[1, 2]]],
-                [],
-                [[[], [1]], None, [[1, 4]], []],
-            ]
-            * 2
+        pytest.param(
+            np.array(
+                [
+                    [[[1, 2], [3]], [[2, None]]],
+                    [[[3], [], [1, None, 4]]],
+                    None,
+                    [[[4, 5, 6], []], [[1]], [[1, 2]]],
+                    [],
+                    [[[], [1]], None, [[1, 4]], []],
+                ]
+                * 2
+            ),
+            marks=pytest.mark.slow,
         ),
         # struct data
-        np.array(
-            [
-                [{"A": 1, "B": 2}, {"A": 10, "B": 20}],
-                [{"A": 3, "B": 4}],
-                [{"A": 5, "B": 6}, {"A": 50, "B": 60}, {"A": 500, "B": 600}],
-                [{"A": 10, "B": 20}, {"A": 100, "B": 200}],
-                [{"A": 30, "B": 40}],
-                [{"A": 50, "B": 60}, {"A": 500, "B": 600}, {"A": 5000, "B": 6000}],
-            ]
+        pytest.param(
+            np.array(
+                [
+                    [{"A": 1, "B": 2}, {"A": 10, "B": 20}],
+                    [{"A": 3, "B": 4}],
+                    [{"A": 5, "B": 6}, {"A": 50, "B": 60}, {"A": 500, "B": 600}],
+                    [{"A": 10, "B": 20}, {"A": 100, "B": 200}],
+                    [{"A": 30, "B": 40}],
+                    [{"A": 50, "B": 60}, {"A": 500, "B": 600}, {"A": 5000, "B": 6000}],
+                ]
+            ),
+            marks=pytest.mark.slow,
         ),
     ]
 )

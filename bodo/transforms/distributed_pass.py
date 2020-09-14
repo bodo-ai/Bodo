@@ -706,9 +706,10 @@ class DistributedPass:
             return out
 
         # adjust array index variable to be within current processor's data chunk
-        if fdef == (
-            "inplace_eq",
-            "bodo.libs.str_arr_ext",
+        if fdef in (
+            ("inplace_eq", "bodo.libs.str_arr_ext",),
+            ("str_arr_setitem_int_to_str", "bodo.libs.str_arr_ext"),
+            ("str_arr_setitem_NA_str", "bodo.libs.str_arr_ext"),
         ) and self._dist_arr_needs_adjust(rhs.args[0].name):
             arr = rhs.args[0]
             index_var = self._fix_index_var(rhs.args[1])
@@ -869,6 +870,18 @@ class DistributedPass:
             return compile_func_single_block(f, rhs.args, assign.target, self)
 
         if fdef == ("nancorr", "bodo.libs.array_kernels") and (
+            self._is_1D_or_1D_Var_arr(rhs.args[0].name)
+        ):
+            self._set_last_arg_to_true(assign.value)
+            return [assign]
+
+        if fdef == ("series_monotonicity", "bodo.libs.array_kernels") and (
+            self._is_1D_or_1D_Var_arr(rhs.args[0].name)
+        ):
+            self._set_last_arg_to_true(assign.value)
+            return [assign]
+
+        if fdef == ("autocorr", "bodo.libs.array_kernels") and (
             self._is_1D_or_1D_Var_arr(rhs.args[0].name)
         ):
             self._set_last_arg_to_true(assign.value)
@@ -2508,7 +2521,7 @@ class DistributedPass:
             start_var = self._get_1D_start(size_var, avail_vars, nodes)
             return start_var, nodes
 
-        raise ValueError("invalid parallel access")
+        raise BodoError("invalid parallel access")
 
     def _gen_1D_Var_len(self, arr):
         def f(A, op):  # pragma: no cover
@@ -2837,6 +2850,8 @@ class DistributedPass:
                 ("setitem_str_arr_ptr", "bodo.libs.str_arr_ext"),
                 ("get_str_arr_item_length", "bodo.libs.str_arr_ext"),
                 ("inplace_eq", "bodo.libs.str_arr_ext"),
+                ("str_arr_setitem_int_to_str", "bodo.libs.str_arr_ext"),
+                ("str_arr_setitem_NA_str", "bodo.libs.str_arr_ext"),
                 ("get_split_view_index", "bodo.hiframes.split_impl"),
                 ("get_bit_bitmap_arr", "bodo.libs.int_arr_ext"),
                 ("set_bit_to_arr", "bodo.libs.int_arr_ext"),

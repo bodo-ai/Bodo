@@ -272,11 +272,30 @@ def gen_dti_field_impl(field):
 
 def _install_dti_date_fields():
     for field in bodo.hiframes.pd_timestamp_ext.date_fields:
+        if field == "is_leap_year":
+            continue
         impl = gen_dti_field_impl(field)
         overload_attribute(DatetimeIndexType, field)(lambda dti: impl)
 
 
 _install_dti_date_fields()
+
+
+@overload_attribute(DatetimeIndexType, "is_leap_year")
+def overload_datetime_index_is_leap_year(dti):
+    def impl(dti):  # pragma: no cover
+        numba.parfors.parfor.init_prange()
+        A = bodo.hiframes.pd_index_ext.get_index_data(dti)
+        n = len(A)
+        # TODO (ritwika): use nullable bool array.
+        S = np.empty(n, np.bool_)
+        for i in numba.parfors.parfor.internal_prange(n):
+            dt64 = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(A[i])
+            ts = bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(dt64)
+            S[i] = bodo.hiframes.pd_timestamp_ext.is_leap_year(ts.year)
+        return S
+
+    return impl
 
 
 @overload_attribute(DatetimeIndexType, "date")
@@ -308,7 +327,7 @@ def _dti_val_finalize(s, count):  # pragma: no cover
 def overload_datetime_index_min(dti, axis=None, skipna=True):
     # TODO skipna = False
     if not is_overload_none(axis) or not is_overload_true(skipna):
-        raise ValueError("Index.min(): axis and skipna arguments not supported yet")
+        raise BodoError("Index.min(): axis and skipna arguments not supported yet")
 
     def impl(dti, axis=None, skipna=True):  # pragma: no cover
         numba.parfors.parfor.init_prange()
@@ -330,7 +349,7 @@ def overload_datetime_index_min(dti, axis=None, skipna=True):
 def overload_datetime_index_max(dti, axis=None, skipna=True):
     # TODO skipna = False
     if not is_overload_none(axis) or not is_overload_true(skipna):
-        raise ValueError("Index.max(): axis and skipna arguments not supported yet")
+        raise BodoError("Index.max(): axis and skipna arguments not supported yet")
 
     def impl(dti, axis=None, skipna=True):  # pragma: no cover
         numba.parfors.parfor.init_prange()
@@ -375,11 +394,11 @@ def pd_datetimeindex_overload(
 ):
     # TODO: check/handle other input
     if is_overload_none(data):
-        raise ValueError("data argument in pd.DatetimeIndex() expected")
+        raise BodoError("data argument in pd.DatetimeIndex() expected")
 
     # check unsupported, TODO: normalize, dayfirst, yearfirst, ...
     if any(not is_overload_none(a) for a in (freq, start, end, periods, tz, closed)):
-        raise ValueError("only data argument in pd.DatetimeIndex() supported")
+        raise BodoError("only data argument in pd.DatetimeIndex() supported")
 
     def f(
         data=None,
@@ -666,7 +685,7 @@ def pd_date_range_overload(
     # check unsupported, TODO: normalize, dayfirst, yearfirst, ...
     # TODO: parallelize after Numba branch pruning issue is fixed
     if not is_overload_none(tz):
-        raise ValueError("pd.date_range(): tz argument not supported yet")
+        raise BodoError("pd.date_range(): tz argument not supported yet")
 
     if is_overload_none(freq) and any(
         is_overload_none(t) for t in (start, end, periods)
@@ -675,7 +694,7 @@ def pd_date_range_overload(
 
     # exactly three parameters should
     if sum(not is_overload_none(t) for t in (start, end, periods, freq)) != 3:
-        raise ValueError(
+        raise BodoError(
             "Of the four parameters: start, end, periods, "
             "and freq, exactly three must be specified"
         )
@@ -1005,13 +1024,13 @@ def pd_timedelta_index_overload(
     # TODO handle dtype=dtype('<m8[ns]') default
     # TODO: check/handle other input
     if is_overload_none(data):
-        raise ValueError("data argument in pd.TimedeltaIndex() expected")
+        raise BodoError("data argument in pd.TimedeltaIndex() expected")
 
     if any(
         not is_overload_none(a)
         for a in (unit, freq, start, end, periods, closed, dtype)
     ):
-        raise ValueError("only data argument in pd.TimedeltaIndex() supported")
+        raise BodoError("only data argument in pd.TimedeltaIndex() supported")
 
     def impl(
         data=None,

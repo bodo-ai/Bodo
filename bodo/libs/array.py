@@ -3,6 +3,7 @@
 """
 import numba
 from numba.core import types, cgutils
+from collections import namedtuple
 from numba.extending import (
     typeof_impl,
     type_callable,
@@ -62,7 +63,13 @@ ll.add_symbol("alloc_numpy", array_ext.alloc_numpy)
 ll.add_symbol("alloc_string_array", array_ext.alloc_string_array)
 ll.add_symbol("arr_info_list_to_table", array_ext.arr_info_list_to_table)
 ll.add_symbol("info_from_table", array_ext.info_from_table)
+ll.add_symbol("delete_info_decref_array", array_ext.delete_info_decref_array)
+ll.add_symbol("delete_table_free_arrays", array_ext.delete_table_free_arrays)
 ll.add_symbol("delete_table", array_ext.delete_table)
+ll.add_symbol("get_stats_alloc", array_ext.get_stats_alloc)
+ll.add_symbol("get_stats_free", array_ext.get_stats_free)
+ll.add_symbol("get_stats_mi_alloc", array_ext.get_stats_mi_alloc)
+ll.add_symbol("get_stats_mi_free", array_ext.get_stats_mi_free)
 ll.add_symbol("shuffle_table", array_ext.shuffle_table)
 ll.add_symbol("hash_join_table", array_ext.hash_join_table)
 ll.add_symbol("drop_duplicates_table", array_ext.drop_duplicates_table)
@@ -137,6 +144,8 @@ def array_to_info(typingctx, arr_type_t):
                     return get_types(arr_typ.dtype)
                 elif arr_typ == string_array_type:
                     return [CTypeEnum.STRING.value]
+                elif isinstance(arr_typ, DecimalArrayType):
+                    return [CTypeEnum.Decimal.value, arr_typ.precision, arr_typ.scale]
                 else:
                     return [numba_to_c_type(arr_typ)]
 
@@ -333,7 +342,9 @@ def array_to_info(typingctx, arr_type_t):
                     lir.IntType(8).as_pointer().as_pointer(),
                     lir.IntType(64).as_pointer(),
                     lir.IntType(8).as_pointer(),
-                    lir.IntType(8).as_pointer(), # Maybe it should be lit.IntType(8).as_pointer().as_pointer()
+                    lir.IntType(
+                        8
+                    ).as_pointer(),  # Maybe it should be lit.IntType(8).as_pointer().as_pointer()
                 ],
             )
             fn_tp = builder.module.get_or_insert_function(
@@ -795,7 +806,12 @@ def nested_to_array(
 
 
 @intrinsic
-def info_to_array(typingctx, info_type, arr_type):
+def info_to_array(typingctx, info_type, array_type):
+    arr_type = (
+        array_type.instance_type
+        if isinstance(array_type, types.TypeRef)
+        else array_type
+    )
     assert info_type == array_info_type
 
     def codegen(context, builder, sig, args):
@@ -1073,14 +1089,18 @@ def info_to_array(typingctx, info_type, arr_type):
             arr.null_bitmap = nulls_arr._getvalue()
             return arr._getvalue()
 
-    return arr_type(info_type, arr_type), codegen
+    return arr_type(info_type, array_type), codegen
 
 
 @intrinsic
 def test_alloc_np(typingctx, len_typ, arr_type):
+    array_type = (
+        arr_type.instance_type if isinstance(arr_type, types.TypeRef) else arr_type
+    )
+
     def codegen(context, builder, sig, args):
         length, _ = args
-        typ_enum = numba_to_c_type(arr_type.dtype)
+        typ_enum = numba_to_c_type(array_type.dtype)
         typ_arg = cgutils.alloca_once_value(
             builder, lir.Constant(lir.IntType(32), typ_enum)
         )
@@ -1143,6 +1163,16 @@ def info_from_table(typingctx, table_t, ind_t):
     return array_info_type(table_t, ind_t), codegen
 
 
+delete_info_decref_array = types.ExternalFunction(
+    "delete_info_decref_array", types.void(array_info_type),
+)
+
+
+delete_table_free_arrays = types.ExternalFunction(
+    "delete_table_free_arrays", types.void(table_type),
+)
+
+
 @intrinsic
 def delete_table(typingctx, table_t):
     """Deletes table and its array_info objects. Doesn't delete array data.
@@ -1155,6 +1185,27 @@ def delete_table(typingctx, table_t):
         builder.call(fn_tp, args)
 
     return types.void(table_t), codegen
+
+
+get_stats_alloc = types.ExternalFunction("get_stats_alloc", types.uint64(),)
+
+get_stats_free = types.ExternalFunction("get_stats_free", types.uint64(),)
+
+get_stats_mi_alloc = types.ExternalFunction("get_stats_mi_alloc", types.uint64(),)
+
+get_stats_mi_free = types.ExternalFunction("get_stats_mi_free", types.uint64(),)
+
+Mstats = namedtuple("Mstats", ["alloc", "free", "mi_alloc", "mi_free"])
+
+
+@numba.njit
+def get_allocation_stats():
+    """get allocation stats for arrays allocated in Bodo's C++ array runtime
+    """
+    # TODO: get stats from other C++ modules like _parquet.cpp
+    return Mstats(
+        get_stats_alloc(), get_stats_free(), get_stats_mi_alloc(), get_stats_mi_free()
+    )
 
 
 @intrinsic

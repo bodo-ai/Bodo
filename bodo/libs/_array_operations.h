@@ -1,3 +1,6 @@
+#ifndef _ARRAY_OPERATIONS_H_INCLUDED
+#define _ARRAY_OPERATIONS_H_INCLUDED
+
 #include "_bodo_common.h"
 
 /**
@@ -76,3 +79,5 @@ table_info* drop_duplicates_nonnull_keys(table_info* in_table, int64_t num_keys,
  * @return the sampled entries in the table (in a replicated state).
  */
 table_info* sample_table(table_info* in_table, int64_t n, double frac, bool replace, bool parallel);
+
+#endif // _ARRAY_OPERATIONS_H_INCLUDED

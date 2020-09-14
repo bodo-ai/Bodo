@@ -13,6 +13,7 @@ Bodo
 
    source/overview
    source/install
+   source/bodo_platform
    source/getting_started
    source/user_guide
    source/file_io
@@ -23,6 +24,7 @@ Bodo
    source/compilation
    source/aws
    source/jupyter
+   source/e3
    source/releases
    source/eula
    source/prev_doc_link

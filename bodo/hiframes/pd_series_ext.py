@@ -173,7 +173,7 @@ def _get_series_array_type(dtype):
     if isinstance(dtype, types.BaseTuple):
         if any(not isinstance(t, types.Number) for t in dtype.types):
             # TODO: support more types. what types can be in recarrays?
-            raise ValueError(
+            raise BodoError(
                 "series tuple dtype {} includes non-numerics".format(dtype)
             )
         np_dtype = np.dtype(",".join(str(t) for t in dtype.types), align=True)
@@ -775,11 +775,11 @@ def pd_series_overload(
 
     # TODO: None or empty data
     if is_overload_none(data):
-        raise ValueError("pd.Series(): 'data' argument required.")
+        raise BodoError("pd.Series(): 'data' argument required.")
 
     # fastpath not supported
     if not is_overload_false(fastpath):
-        raise ValueError("pd.Series(): 'fastpath' argument not supported.")
+        raise BodoError("pd.Series(): 'fastpath' argument not supported.")
 
     def impl(
         data=None, index=None, dtype=None, name=None, copy=False, fastpath=False
@@ -811,32 +811,11 @@ def pd_series_overload(
     return impl
 
 
-def get_series_data_tup(series_tup):  # pragma: no cover
-    return tuple(get_series_data(s) for s in series_tup)
-
-
-@overload(get_series_data_tup, no_unliteral=True)
-def overload_get_series_data_tup(series_tup):
-    n_series = len(series_tup.types)
-    func_text = "def f(series_tup):\n"
-    res = ",".join(
-        "bodo.hiframes.pd_series_ext.get_series_data(series_tup[{}])".format(i)
-        for i in range(n_series)
-    )
-    func_text += "  return ({}{})\n".format(res, "," if n_series == 1 else "")
-    loc_vars = {}
-    exec(func_text, {"bodo": bodo}, loc_vars)
-    impl = loc_vars["f"]
-    return impl
-
-
 # Raise Bodo Error for unsupported attributes and methods of Series
 series_unsupported_attrs = (
     "array",  # TODO: support
     "nbytes",
     "is_unique",
-    "is_monotonic_increasing",
-    "is_monotonic_decreasing",
     "sparse",
 )
 
@@ -871,7 +850,6 @@ series_unsupported_methods = (
     "ewm",
     "pipe",
     # Computations / descriptive stats
-    "autocorr",
     "between",
     "clip",
     "diff",
@@ -882,7 +860,6 @@ series_unsupported_methods = (
     "align",
     "drop",
     "droplevel",
-    "drop_duplicates",
     "duplicated",
     "first",
     "last",

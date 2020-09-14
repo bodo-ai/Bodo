@@ -53,98 +53,160 @@ import pytest
         ),
         # TODO None value fields in structs is not supported in typing.
         # Using -1 instead of None. Can change to None in the future
-        (
-            np.array(
-                [
-                    [{"A": 1, "B": 2}, {"A": 10, "B": 20}],
-                    [{"A": 3, "B": -1}],
-                    [{"A": 5, "B": 6}, {"A": 50, "B": 60}, {"A": 500, "B": 600}],
-                    [{"A": 10, "B": 20}, {"A": 100, "B": 200}],
-                    [{"A": 30, "B": 40}],
-                    [{"A": -1, "B": 60}, {"A": 500, "B": 600}, {"A": 5000, "B": 6000}],
-                ]
-            ),
-            np.array(
-                [
-                    [{"A": 3, "B": 45}],
+        pytest.param(
+            (
+                np.array(
                     [
-                        {"A": -1, "B": 60},
-                        {"A": -1, "B": 60},
-                        {"A": 3, "B": 3},
-                        {"A": -7, "B": 13},
-                    ],
-                    [{"A": 11, "B": 60}, {"A": 500, "B": 33}, {"A": 55, "B": 57}],
-                    [{"A": 10, "B": 20}, {"A": 5, "B": -1}],
-                    [{"A": 3, "B": 4}, {"A": 10, "B": 20}],
-                    [{"A": 1, "B": 7}],
-                ]
+                        [{"A": 1, "B": 2}, {"A": 10, "B": 20}],
+                        [{"A": 3, "B": -1}],
+                        [{"A": 5, "B": 6}, {"A": 50, "B": 60}, {"A": 500, "B": 600}],
+                        [{"A": 10, "B": 20}, {"A": 100, "B": 200}],
+                        [{"A": 30, "B": 40}],
+                        [
+                            {"A": -1, "B": 60},
+                            {"A": 500, "B": 600},
+                            {"A": 5000, "B": 6000},
+                        ],
+                    ]
+                ),
+                np.array(
+                    [
+                        [{"A": 3, "B": 45}],
+                        [
+                            {"A": -1, "B": 60},
+                            {"A": -1, "B": 60},
+                            {"A": 3, "B": 3},
+                            {"A": -7, "B": 13},
+                        ],
+                        [{"A": 11, "B": 60}, {"A": 500, "B": 33}, {"A": 55, "B": 57}],
+                        [{"A": 10, "B": 20}, {"A": 5, "B": -1}],
+                        [{"A": 3, "B": 4}, {"A": 10, "B": 20}],
+                        [{"A": 1, "B": 7}],
+                    ]
+                ),
             ),
+            marks=pytest.mark.slow,
         ),
-        (
-            np.array(
-                [
-                    {"A": 1.0, "B": True},
-                    {"A": 3.0, "B": False},
-                    {"A": 5.0, "B": True},
-                    {"A": 10.0, "B": True},
-                    {"A": 30.0, "B": False},
-                    {"A": -1.0, "B": True},
-                ]
+        pytest.param(
+            (
+                np.array(
+                    [
+                        {"A": 1.0, "B": True},
+                        {"A": 3.0, "B": False},
+                        {"A": 5.0, "B": True},
+                        {"A": 10.0, "B": True},
+                        {"A": 30.0, "B": False},
+                        {"A": -1.0, "B": True},
+                    ]
+                ),
+                np.array(
+                    [
+                        {"A": 3.0, "B": False},
+                        {"A": -1.0, "B": True},
+                        {"A": 11.0, "B": False},
+                        {"A": 10.0, "B": False},
+                        {"A": 3.0, "B": False},
+                        {"A": 1.0, "B": True},
+                    ]
+                ),
             ),
-            np.array(
-                [
-                    {"A": 3.0, "B": False},
-                    {"A": -1.0, "B": True},
-                    {"A": 11.0, "B": False},
-                    {"A": 10.0, "B": False},
-                    {"A": 3.0, "B": False},
-                    {"A": 1.0, "B": True},
-                ]
-            ),
+            marks=pytest.mark.slow,
         ),
-        (
-            np.array(
-                [
-                    {"A": [1, 2], "B": [2, 3]},
-                    {"A": [3, 5, 7], "B": [-1]},
-                    {"A": [5], "B": [6, 9, 12, 15]},
-                    {"A": [10, 13], "B": [20]},
-                    {"A": [30, 40], "B": [40, 50, 51, 52, 53]},
-                    {"A": [-1, -2, -3], "B": [60]},
-                ]
+        pytest.param(
+            (
+                np.array(
+                    [
+                        {"A": [1, 2], "B": [2, 3]},
+                        {"A": [3, 5, 7], "B": [-1]},
+                        {"A": [5], "B": [6, 9, 12, 15]},
+                        {"A": [10, 13], "B": [20]},
+                        {"A": [30, 40], "B": [40, 50, 51, 52, 53]},
+                        {"A": [-1, -2, -3], "B": [60]},
+                    ]
+                ),
+                np.array(
+                    [
+                        {"A": [3, 2, 1, 0], "B": [45, 46]},
+                        {"A": [-1, -10, 20], "B": [60, 70, 80]},
+                        {"A": [11, 7, 4], "B": [33, 2]},
+                        {"A": [10], "B": [20]},
+                        {"A": [3, 5], "B": [4]},
+                        {"A": [1], "B": [7, 8]},
+                    ]
+                ),
             ),
-            np.array(
-                [
-                    {"A": [3, 2, 1, 0], "B": [45, 46]},
-                    {"A": [-1, -10, 20], "B": [60, 70, 80]},
-                    {"A": [11, 7, 4], "B": [33, 2]},
-                    {"A": [10], "B": [20]},
-                    {"A": [3, 5], "B": [4]},
-                    {"A": [1], "B": [7, 8]},
-                ]
-            ),
+            marks=pytest.mark.slow,
         ),
-        (
-            np.array(
-                [
-                    {"A": {"A1": 10, "A2": 2}, "B": {"B1": -11, "B2": 4}},
-                    {"A": {"A1": -19, "A2": 5}, "B": {"B1": 5, "B2": 19}},
-                    {"A": {"A1": -5, "A2": -9}, "B": {"B1": -15, "B2": 13}},
-                    {"A": {"A1": -12, "A2": 2}, "B": {"B1": 14, "B2": 2}},
-                    {"A": {"A1": 17, "A2": -12}, "B": {"B1": 14, "B2": -18}},
-                    {"A": {"A1": 17, "A2": 10}, "B": {"B1": -13, "B2": 18}},
-                ]
+        pytest.param(
+            (
+                np.array(
+                    [
+                        {"A": [Decimal("1.0"), Decimal("2.2")], "B": [Decimal("4.14")]},
+                        {
+                            "A": [Decimal("0"), Decimal("3.2"), Decimal("4")],
+                            "B": [Decimal("-1")],
+                        },
+                        {
+                            "A": [Decimal("5")],
+                            "B": [Decimal("644"), Decimal("9.1"), Decimal("154")],
+                        },
+                        {
+                            "A": [Decimal("10.0"), Decimal("13.4")],
+                            "B": [Decimal("3.14159")],
+                        },
+                        {
+                            "A": [Decimal("30"), Decimal("5.2")],
+                            "B": [Decimal("0"), Decimal("2")],
+                        },
+                        {
+                            "A": [Decimal("-1"), None, Decimal("-3")],
+                            "B": [Decimal("60")],
+                        },
+                    ]
+                ),
+                np.array(
+                    [
+                        {
+                            "A": [Decimal("2.78"), Decimal("3"), Decimal("2")],
+                            "B": [Decimal("45")],
+                        },
+                        {"A": [Decimal("-1"), Decimal("-10")], "B": [Decimal("4568")]},
+                        {
+                            "A": [Decimal("11"), None, Decimal("-44.7")],
+                            "B": [Decimal("33")],
+                        },
+                        {"A": [Decimal("10.4")], "B": [Decimal("20.6")]},
+                        {"A": [Decimal("3.5"), Decimal("5.5")], "B": [Decimal("4")]},
+                        {"A": [Decimal("1")], "B": [Decimal("7"), None]},
+                    ]
+                ),
             ),
-            np.array(
-                [
-                    {"A": {"A1": 11, "A2": -1}, "B": {"B1": -10, "B2": -6}},
-                    {"A": {"A1": 12, "A2": 17}, "B": {"B1": 12, "B2": -1}},
-                    {"A": {"A1": 17, "A2": 2}, "B": {"B1": 19, "B2": -2}},
-                    {"A": {"A1": 17, "A2": 16}, "B": {"B1": 6, "B2": -20}},
-                    {"A": {"A1": 4, "A2": -12}, "B": {"B1": 10, "B2": 3}},
-                    {"A": {"A1": 19, "A2": 11}, "B": {"B1": 3, "B2": 16}},
-                ]
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (
+                np.array(
+                    [
+                        {"A": {"A1": 10, "A2": 2}, "B": {"B1": -11, "B2": 4}},
+                        {"A": {"A1": -19, "A2": 5}, "B": {"B1": 5, "B2": 19}},
+                        {"A": {"A1": -5, "A2": -9}, "B": {"B1": -15, "B2": 13}},
+                        {"A": {"A1": -12, "A2": 2}, "B": {"B1": 14, "B2": 2}},
+                        {"A": {"A1": 17, "A2": -12}, "B": {"B1": 14, "B2": -18}},
+                        {"A": {"A1": 17, "A2": 10}, "B": {"B1": -13, "B2": 18}},
+                    ]
+                ),
+                np.array(
+                    [
+                        {"A": {"A1": 11, "A2": -1}, "B": {"B1": -10, "B2": -6}},
+                        {"A": {"A1": 12, "A2": 17}, "B": {"B1": 12, "B2": -1}},
+                        {"A": {"A1": 17, "A2": 2}, "B": {"B1": 19, "B2": -2}},
+                        {"A": {"A1": 17, "A2": 16}, "B": {"B1": 6, "B2": -20}},
+                        {"A": {"A1": 4, "A2": -12}, "B": {"B1": 10, "B2": 3}},
+                        {"A": {"A1": 19, "A2": 11}, "B": {"B1": 3, "B2": 16}},
+                    ]
+                ),
             ),
+            marks=pytest.mark.slow,
         ),
     ]
 )
@@ -340,6 +402,7 @@ def test_list_string_array_type_specific():
     )
 
 
+@pytest.mark.slow
 def test_list_string_array_type_random():
     def test_impl(df1, df2):
         df3 = df1.merge(df2, on="A")
@@ -384,6 +447,7 @@ def test_merge_left_right_nontrivial_index():
     check_func(f, (df1, df2), sort_output=True)
 
 
+@pytest.mark.slow
 def test_merge_empty_suffix_underscore():
     """
     Test merge(): test the suffixes functionality with a pathological example
@@ -402,16 +466,26 @@ def test_merge_empty_suffix_underscore():
     "df1",
     [
         pd.DataFrame({"A": [1, 11, 3]}),
-        pd.DataFrame({"A": [1, 11, 3], "B": [4, 5, 1]}),
-        pd.DataFrame({"A": [1, 11, 3], "B": [4, 5, 1], "C": [-1, 3, 4]}),
+        pytest.param(
+            pd.DataFrame({"A": [1, 11, 3], "B": [4, 5, 1]}), marks=pytest.mark.slow
+        ),
+        pytest.param(
+            pd.DataFrame({"A": [1, 11, 3], "B": [4, 5, 1], "C": [-1, 3, 4]}),
+            marks=pytest.mark.slow,
+        ),
     ],
 )
 @pytest.mark.parametrize(
     "df2",
     [
         pd.DataFrame({"A": [-1, 1, 3]}),
-        pd.DataFrame({"A": [-1, 1, 3], "B": [-1, 0, 1]}),
-        pd.DataFrame({"A": [-1, 1, 3], "B": [-1, 0, 1], "C": [-11, 0, 4]}),
+        pytest.param(
+            pd.DataFrame({"A": [-1, 1, 3], "B": [-1, 0, 1]}), marks=pytest.mark.slow
+        ),
+        pytest.param(
+            pd.DataFrame({"A": [-1, 1, 3], "B": [-1, 0, 1], "C": [-11, 0, 4]}),
+            marks=pytest.mark.slow,
+        ),
     ],
 )
 def test_merge_common_cols(df1, df2):
@@ -445,6 +519,7 @@ def test_merge_disjoint_keys1():
     check_func(test_impl, (df1, df2), sort_output=True, reset_index=True)
 
 
+@pytest.mark.slow
 def test_merge_disjoint_keys2():
     """
     Test merge(): 'how' = inner on specified integer column
@@ -495,6 +570,7 @@ def test_merge_left1():
     check_func(test_impl, (df1, df2), sort_output=True, reset_index=True)
 
 
+@pytest.mark.slow
 def test_merge_left2():
     """
     Test merge(): 'how' = left on specified integer column
@@ -563,6 +639,7 @@ def test_merge_overlap():
     check_func(test_impl, (df1,), sort_output=True, reset_index=True)
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("n", [11, 11111])
 def test_merge_int_key(n):
     """
@@ -665,6 +742,7 @@ def test_merge_multi_int_key():
     check_func(test_impl3, (df1, df2), sort_output=True, reset_index=True)
 
 
+@pytest.mark.slow
 def test_merge_literal_arg():
     """
     Test forcing merge() args to be literals if jit arguments
@@ -762,15 +840,22 @@ def test_merge_str_nan1():
         return pd.merge(df1, df2, left_on="key1", right_on="key2")
 
     df1 = pd.DataFrame(
-        {"key1": ["foo", "bar", "baz", "baz"], "A": ["b", "", np.nan, "ss"]}
+        {
+            "key1": ["foo", "bar", "baz", "baz", "c4", "c7"],
+            "A": ["b", "", "ss", "a", "b2", np.nan],
+        }
     )
     df2 = pd.DataFrame(
-        {"key2": ["baz", "bar", "baz", "foo"], "B": ["b", np.nan, "", "AA"]}
+        {
+            "key2": ["baz", "bar", "baz", "foo", "c4", "c7"],
+            "B": ["b", np.nan, "", "AA", "c", "a1"],
+        }
     )
 
     check_func(test_impl, (df1, df2), sort_output=True, reset_index=True)
 
 
+@pytest.mark.slow
 def test_merge_str_nan2():
     """
     test merging dataframes containing string columns with nan values
@@ -827,8 +912,12 @@ def test_merge_nontrivial_index():
         df3 = df1.merge(df2, left_on="key1", right_on="key2", how="left")
         return df3
 
-    df1 = pd.DataFrame({"key1": ["foo", "bar", "baz"]}, index=[0.0, 3.0, 5.0])
-    df2 = pd.DataFrame({"key2": ["baz", "bar", "baz"]}, index=["a", "bb", "ccc"])
+    df1 = pd.DataFrame(
+        {"key1": ["foo", "c7", "bar", "baz", "c11"]}, index=[0.0, 1.1, 3.0, 5.0, 2.2]
+    )
+    df2 = pd.DataFrame(
+        {"key2": ["baz", "c7", "bar", "baz", "c11"]}, index=["a", "d", "bb", "ccc", "1"]
+    )
 
     check_func(test_impl, (df1, df2), sort_output=True, reset_index=True)
 
@@ -917,6 +1006,7 @@ def test_merge_datetime_parallel():
     assert count_parfor_REPs() == 0
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "df1",
     [
@@ -949,6 +1039,7 @@ def test_merge_suffix(df1, df2):
     check_func(impl2, (df1, df2), sort_output=True, reset_index=True)
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "df1",
     [
@@ -1027,6 +1118,7 @@ def test_merge_index_outer():
     check_func(impl, (df1, df2), sort_output=True, check_dtype=False)
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "df1, df2",
     [
@@ -1134,6 +1226,7 @@ def test_merge_cat_identical():
     check_func(test_impl, (df1,), sort_output=True, reset_index=True)
 
 
+@pytest.mark.slow
 def test_merge_cat_multi_cols():
     """
     Test merge(): merge dataframes containing mutilple categorical cols
@@ -1144,14 +1237,25 @@ def test_merge_cat_multi_cols():
         df3 = df1.merge(df2, on=["C1", "C2"])
         return df3
 
-    ct_dtype1 = pd.CategoricalDtype(["2", "3", "4", "5"])
-    ct_dtype2 = pd.CategoricalDtype(["A", "B", "C"])
+    ct_dtype1 = pd.CategoricalDtype(["2", "3", "4", "5", "t-"])
+    ct_dtype2 = pd.CategoricalDtype(["A", "B", "C", "p"])
     dtypes = {"C1": ct_dtype1, "C2": ct_dtype2, "C3": str}
     df1 = pd.read_csv(fname, names=["C1", "C2", "C3"], dtype=dtypes, skiprows=[0])
     df2 = pd.read_csv(fname, names=["C1", "C2", "C3"], dtype=dtypes, skiprows=[1])
+    # add extra rows to avoid empty output dataframes on 3 process test
+    df3 = pd.DataFrame(
+        {
+            "C1": pd.Categorical(["t-"], ct_dtype1.categories),
+            "C2": pd.Categorical(["p"], ct_dtype2.categories),
+            "C3": ["A"],
+        }
+    )
+    df1 = df1.append((df3, df1))
+    df2 = df2.append((df3, df2))
     check_func(test_impl, (df1, df2), sort_output=True, reset_index=True)
 
 
+@pytest.mark.slow
 def test_merge_cat1_inner():
     """
     Test merge(): merge dataframes containing categorical values
@@ -1162,14 +1266,16 @@ def test_merge_cat1_inner():
         ct_dtype = pd.CategoricalDtype(["A", "B", "C"])
         dtypes = {"C1": np.int, "C2": ct_dtype, "C3": str}
         df1 = pd.read_csv(fname, names=["C1", "C2", "C3"], dtype=dtypes)
-        n = len(df1)
-        df2 = pd.DataFrame({"C1": 2 * np.arange(n) + 1, "AAA": n + np.arange(n) + 1.0})
+        df1["C1"] = df1.C1 * 7 + 1
+        n = len(df1) * 100
+        df2 = pd.DataFrame({"C1": np.arange(n), "AAA": n + np.arange(n) + 1.0})
         df3 = df1.merge(df2, on="C1")
         return df3
 
     check_func(test_impl, (), sort_output=True, reset_index=True)
 
 
+@pytest.mark.slow
 def test_merge_cat1_right_2cols1():
     """
     Test merge(): setting NaN in categorical array
@@ -1189,6 +1295,7 @@ def test_merge_cat1_right_2cols1():
     check_func(test_impl, (), sort_output=True, reset_index=True)
 
 
+@pytest.mark.slow
 def test_merge_cat1_right_2cols2():
     """
     Test merge(): setting NaN in categorical array
@@ -1200,14 +1307,16 @@ def test_merge_cat1_right_2cols2():
     def test_impl():
         dtypes = {"C1": np.int, "C2": str}
         df1 = pd.read_csv(fname, names=["C1", "C2"], dtype=dtypes)
-        n = len(df1)
-        df2 = pd.DataFrame({"C1": 2 * np.arange(n) + 1, "AAA": n + np.arange(n) + 1.0})
+        df1["C1"] = df1.C1 * 7 + 1
+        n = len(df1) * 100
+        df2 = pd.DataFrame({"C1": np.arange(n), "AAA": n + np.arange(n) + 1.0})
         df3 = df1.merge(df2, on="C1", how="right")
         return df3
 
     check_func(test_impl, (), sort_output=True, reset_index=True)
 
 
+@pytest.mark.slow
 def test_merge_cat1_right():
     """
     Test merge(): setting NaN in categorical array
@@ -1218,16 +1327,18 @@ def test_merge_cat1_right():
         ct_dtype = pd.CategoricalDtype(["A", "B", "C"])
         dtypes = {"C1": np.int, "C2": ct_dtype, "C3": str}
         df1 = pd.read_csv(fname, names=["C1", "C2", "C3"], dtype=dtypes)
-        n = len(df1)
-        df2 = pd.DataFrame({"C1": 2 * np.arange(n) + 1, "AAA": n + np.arange(n) + 1.0})
+        df1["C1"] = df1.C1 * 7 + 1
+        n = len(df1) * 100
+        df2 = pd.DataFrame({"C1": np.arange(n), "AAA": n + np.arange(n) + 1.0})
         df3 = df1.merge(df2, on="C1", how="right")
         return df3
 
     check_func(test_impl, (), sort_output=True, reset_index=True)
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("n", [11, 11111])
-def test_merge_parallel_optmize(n):
+def test_merge_parallel_optimize(n):
     """
     Test merge(): ensure parallelism optimization
     """
@@ -1244,6 +1355,7 @@ def test_merge_parallel_optmize(n):
     assert count_parfor_REPs() == 0  # assert parallelism
 
 
+@pytest.mark.slow
 def test_merge_left_parallel():
     """
     Test merge(): merge with only left dataframe columns distributed
@@ -1345,8 +1457,11 @@ def test_join_deadcode_cleanup():
     "df1",
     [
         pd.DataFrame({"A": [1, 11, 3], "B": [4, 5, 1]}, index=[1, 4, 3]),
-        pd.DataFrame(
-            {"A": [1, 11, 3], "B": [4, 5, 1], "C": [-1, 3, 4]}, index=[1, 4, 3]
+        pytest.param(
+            pd.DataFrame(
+                {"A": [1, 11, 3], "B": [4, 5, 1], "C": [-1, 3, 4]}, index=[1, 4, 3]
+            ),
+            marks=pytest.mark.slow,
         ),
     ],
 )
@@ -1354,7 +1469,12 @@ def test_join_deadcode_cleanup():
     "df2",
     [
         pd.DataFrame({"D": [-1.0, 1.0, 3.0]}, index=[-1, 1, 3]),
-        pd.DataFrame({"D": [-1.0, 1.0, 3.0], "E": [-1.0, 0.0, 1.0]}, index=[-1, 1, 3]),
+        pytest.param(
+            pd.DataFrame(
+                {"D": [-1.0, 1.0, 3.0], "E": [-1.0, 0.0, 1.0]}, index=[-1, 1, 3]
+            ),
+            marks=pytest.mark.slow,
+        ),
     ],
 )
 def test_join_call(df1, df2):
@@ -1376,6 +1496,7 @@ def test_join_call(df1, df2):
     check_func(impl2, (df1, df2), sort_output=True, check_dtype=False)
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "df1",
     [
@@ -1425,6 +1546,7 @@ def test_join_how(df1, df2):
 # ------------------------------ merge on the index and column ------------------------------ #
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "df1",
     [
@@ -1522,6 +1644,7 @@ def test_merge_index_column_returning_empty():
     )
 
 
+@pytest.mark.slow
 def test_merge_index_column_nontrivial_index():
     """
     Test merge(): Same as first but with a non-trivial index
@@ -1537,6 +1660,7 @@ def test_merge_index_column_nontrivial_index():
     check_func(f1, (df1, df2), sort_output=True, check_typing_issues=False)
 
 
+@pytest.mark.slow
 def test_merge_index_column_double_index():
     """
     Test merge(): Same as first but with an index being double.
@@ -1552,6 +1676,7 @@ def test_merge_index_column_double_index():
     check_func(f1, (df1, df2), sort_output=True, check_typing_issues=False)
 
 
+@pytest.mark.slow
 def test_merge_index_column_string_index():
     """
     Test merge(): Same as first but with a string index
@@ -1743,8 +1868,8 @@ def test_merge_asof_parallel(datapath):
     assert bodo_func() == impl()
 
 
+@pytest.mark.slow
 class TestJoin(unittest.TestCase):
-    @pytest.mark.slow
     def test_join_parallel(self):
         """
         Test merge(): ensure parallelism optimization

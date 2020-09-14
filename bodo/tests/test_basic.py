@@ -21,6 +21,7 @@ import pytest
 from bodo.tests.utils import check_func
 
 
+@pytest.mark.slow
 def test_membership(memory_leak_check):
     d = numba.typed.Dict.empty(
         key_type=numba.core.types.unicode_type, value_type=numba.core.types.int64
@@ -298,6 +299,7 @@ def _check_IR_no_getitem(test_impl, args):
         )
 
 
+@pytest.mark.slow
 def test_trivial_slice_getitem_opt(memory_leak_check):
     """Make sure trivial slice getitem is optimized out, e.g. B = A[:]
     """
@@ -328,6 +330,7 @@ def _check_IR_single_label(test_impl, args):
 g_flag = True
 
 
+@pytest.mark.slow
 def test_dead_branch_remove(memory_leak_check):
     """Make sure dead branches are removed
     """
@@ -347,6 +350,7 @@ def test_dead_branch_remove(memory_leak_check):
     _check_IR_single_label(test_impl2, ())
 
 
+@pytest.mark.slow
 def test_is_jit_execution(memory_leak_check):
     """make sure bodo.is_jit_execution() returns True inside a jit function, but False
     otherwise.
@@ -383,6 +387,7 @@ def test_input(memory_leak_check):
     check_func(test_impl, (arr,))
 
 
+@pytest.mark.slow
 def test_rebalance(memory_leak_check):
     def test_impl(N):
         A = np.arange(n)
@@ -394,6 +399,7 @@ def test_rebalance(memory_leak_check):
     check_func(test_impl, (n,))
 
 
+@pytest.mark.slow
 def test_rebalance_loop(memory_leak_check):
     def test_impl(N):
         A = np.arange(n)
@@ -452,6 +458,7 @@ def test_np_array(memory_leak_check):
     check_func(test_impl2, ([1, 2, 5, 1, 2, 3],), is_out_distributed=False)
 
 
+@pytest.mark.slow
 def test_np_dot_empty_vm(memory_leak_check):
     """test for np.dot() called on empty vector and matrix (for Numba #5539)
     """
@@ -462,6 +469,7 @@ def test_np_dot_empty_vm(memory_leak_check):
     np.testing.assert_array_equal(py_res, nb_res)
 
 
+@pytest.mark.slow
 def test_np_full(memory_leak_check):
     """Test np.full() support (currently in Series pass)
     """

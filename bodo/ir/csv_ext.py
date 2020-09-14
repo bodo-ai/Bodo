@@ -80,20 +80,6 @@ csv_file_chunk_reader = types.ExternalFunction(
 )
 
 
-@intrinsic
-def is_null_chunk_reader(typingctx, obj_typ=None):
-    """check whether the chunk reader object is NULL or not
-    """
-    assert obj_typ == bodo.ir.connector.stream_reader_type
-
-    def codegen(context, builder, signature, args):
-        (obj,) = args
-        null = context.get_constant_null(obj_typ)
-        return builder.icmp_unsigned("==", obj, null)
-
-    return types.bool_(obj_typ), codegen
-
-
 def remove_dead_csv(
     csv_node, lives_no_aliases, lives, arg_aliases, alias_map, func_ir, typemap
 ):
@@ -313,7 +299,7 @@ def _gen_csv_reader_py(
     func_text += "    {}, skiprows, -1, {}, bodo.libs.str_ext.unicode_to_utf8('{}'), bodo.libs.str_ext.unicode_to_utf8(bucket_region) )\n".format(
         parallel, has_header, compression
     )
-    func_text += "  if is_null_chunk_reader(f_reader):\n"
+    func_text += "  if bodo.utils.utils.is_null_pointer(f_reader):\n"
     func_text += "      raise FileNotFoundError('File does not exist')\n"
     func_text += "  with objmode({}):\n".format(typ_strs)
     func_text += "    df = pd.read_csv(f_reader, names={},\n".format(col_names)

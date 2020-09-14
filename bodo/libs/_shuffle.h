@@ -1,4 +1,8 @@
 // Copyright (C) 2019 Bodo Inc. All rights reserved.
+#ifndef _SHUFFLE_H_INCLUDED
+#define _SHUFFLE_H_INCLUDED
+
+
 #include <mpi.h>
 #include "_bodo_common.h"
 
@@ -29,7 +33,7 @@ struct mpi_comm_info {
     std::vector<int> recv_disp_null;
     size_t n_null_bytes;
 
-    explicit mpi_comm_info(int _n_pes, std::vector<array_info*>& _arrays);
+    explicit mpi_comm_info(std::vector<array_info*>& _arrays);
 
     void set_counts(uint32_t* hashes);
 };
@@ -49,12 +53,21 @@ table_info* shuffle_table(table_info* in_table, int64_t n_keys);
  * @param hashes    : the array containing the values to be
  *                    i_node = hashes[i_row] % n_pes
  *                    for the nodes of rank not equal to 0.
- * @param n_pes     : the number of processors.
  * @param comm_info : the array for the communication.
  * @return the new table after the shuffling-
  */
 table_info* shuffle_table_kernel(table_info* in_table, uint32_t* hashes,
-                                 int n_pes, mpi_comm_info const& comm_info);
+                                 mpi_comm_info const& comm_info);
+
+/** Reverse shuffling a table from all nodes to all the other nodes.
+ *
+ * @param in_table  : the input table.
+ * @param hashes    : the hash of the reversed table
+ * @param comm_info : the array for the communication.
+ * @return the new table after the shuffling-
+ */
+table_info* reverse_shuffle_table_kernel(table_info* in_table, uint32_t* hashes,
+                                         mpi_comm_info const& comm_info);
 
 /** Broadcasting a table.
  * The table in the nodes of rank 0 is broadcast to all nodes.
@@ -116,3 +129,22 @@ bool need_reshuffling(table_info* in_table, double crit_fraction);
    @return the reshuffled table
  */
 table_info* shuffle_renormalization(table_info* in_table);
+
+/* This function is used for the reverse shuffling of numpy data.
+ *
+ * It takes the rows after the MPI_alltoall and put them at their right position
+ */
+template <class T>
+inline void fill_recv_data_inner(T* recv_buff, T* data, uint32_t* hashes,
+                          std::vector<int> const& send_disp, int n_pes,
+                          size_t n_rows) {
+    std::vector<int> tmp_offset(send_disp);
+    for (size_t i = 0; i < n_rows; i++) {
+        size_t node = (size_t)hashes[i] % (size_t)n_pes;
+        int ind = tmp_offset[node];
+        data[i] = recv_buff[ind];
+        tmp_offset[node]++;
+    }
+}
+
+#endif // _SHUFFLE_H_INCLUDED

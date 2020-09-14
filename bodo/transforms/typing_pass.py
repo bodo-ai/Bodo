@@ -47,6 +47,7 @@ from bodo.utils.transform import (
     get_const_value_inner,
     set_call_expr_arg,
 )
+from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.hiframes.dataframe_indexing import DataFrameILocType, DataFrameLocType
 from bodo.hiframes.pd_groupby_ext import DataFrameGroupByType
@@ -396,6 +397,12 @@ class TypingTransforms:
         ):
             return self._run_call_dataframe(assign, rhs, func_mod, func_name, label)
 
+        # handle Series.method() calls
+        if isinstance(func_mod, ir.Var) and isinstance(
+            self._get_method_obj_type(func_mod, rhs.func), SeriesType
+        ):
+            return self._run_call_series(assign, rhs, func_mod, func_name, label)
+
         # handle df.groupby().method() calls
         if isinstance(func_mod, ir.Var) and isinstance(
             self._get_method_obj_type(func_mod, rhs.func), DataFrameGroupByType
@@ -477,6 +484,10 @@ class TypingTransforms:
                 assign, lhs, rhs, df_var, inplace_var, label, func_name
             )
 
+        # convert const list to tuple for better optimization
+        if func_name == "append":
+            self._call_arg_list_to_tuple(rhs, "append", 0, "other", nodes)
+
         return nodes + [assign]
 
     def _handle_df_assign(self, lhs, rhs, df_var, assign):
@@ -531,6 +542,17 @@ class TypingTransforms:
 
         return nodes + [assign]
 
+    def _run_call_series(self, assign, rhs, df_var, func_name, label):
+        """Handle Series calls that need transformation to meet Bodo requirements
+        """
+        nodes = []
+
+        # convert const list to tuple for better optimization
+        if func_name == "append":
+            self._call_arg_list_to_tuple(rhs, "append", 0, "to_append", nodes)
+
+        return nodes + [assign]
+
     def _run_call_pd_top_level(self, assign, rhs, func_name):
         """transform top-level pandas functions
         """
@@ -565,7 +587,33 @@ class TypingTransforms:
         if func_name in top_level_call_const_args:
             func_args = top_level_call_const_args[func_name]
             nodes += self._replace_arg_with_literal(func_name, rhs, func_args)
+
+        # convert const list to tuple for better optimization
+        if func_name == "concat":
+            self._call_arg_list_to_tuple(rhs, "concat", 0, "objs", nodes)
+
         return nodes + [assign]
+
+    def _call_arg_list_to_tuple(self, rhs, func_name, arg_no, arg_name, nodes):
+        """Convert call argument to tuple if it is a constant list
+        """
+        kws = dict(rhs.kws)
+        objs_var = get_call_expr_arg(func_name, rhs.args, kws, arg_no, arg_name, "")
+        objs_def = guard(get_definition, self.func_ir, objs_var)
+        if (
+            is_expr(objs_def, "build_list")
+            and objs_var.name not in self._updated_containers
+        ):
+            loc = objs_var.loc
+            tuple_var = ir.Var(objs_var.scope, mk_unique_var("$tuple_var"), loc)
+            var_types = [self.typemap.get(v.name, None) for v in objs_def.items]
+            if None not in var_types:
+                self.typemap[tuple_var.name] = types.Tuple(var_types)
+            tuple_call = ir.Expr.build_tuple(objs_def.items, loc)
+            tuple_assign = ir.Assign(tuple_call, tuple_var, loc)
+            nodes.append(tuple_assign)
+            set_call_expr_arg(tuple_var, rhs.args, kws, arg_no, arg_name)
+            self.changed = True
 
     def _is_df_call_transformed(self, rhs):
         """check for _bodo_transformed=True in call arguments to know if df call has

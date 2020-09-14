@@ -744,7 +744,7 @@ static void oneD_reshape_shuffle(char* output, char* input,
     int* i_recv_counts = new int[num_pes];
     int* i_send_disp = new int[num_pes];
     int* i_recv_disp = new int[num_pes];
-    bool big_shuffle = false;
+    int big_shuffle = 0;
 
     for (int i = 0; i < num_pes; i++) {
         // any value doesn't fit in int
@@ -752,7 +752,7 @@ static void oneD_reshape_shuffle(char* output, char* input,
             recv_counts[i] >= (int64_t)INT_MAX ||
             send_disp[i] >= (int64_t)INT_MAX ||
             recv_disp[i] >= (int64_t)INT_MAX) {
-            big_shuffle = true;
+            big_shuffle = 1;
             break;
         }
         i_send_counts[i] = (int)send_counts[i];
@@ -760,6 +760,7 @@ static void oneD_reshape_shuffle(char* output, char* input,
         i_send_disp[i] = (int)send_disp[i];
         i_recv_disp[i] = (int)recv_disp[i];
     }
+    MPI_Allreduce(MPI_IN_PLACE, &big_shuffle, 1, MPI_INT, MPI_LOR, MPI_COMM_WORLD);
 
     if (!big_shuffle) {
         int ierr =

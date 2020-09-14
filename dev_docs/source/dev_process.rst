@@ -30,6 +30,12 @@ Example of running a specific test in bodo/test/test_file.py::
     pytest -s -v -m "not slow" bodo/tests/test_date.py::test_datetime_operations
 
 
+.. danger::
+
+    Input and output array/Series/DataFrame values for tests should be large enough to avoid empty object
+    array chunks in any process after distribution. This can lead to hangs and crashes, especially on 3 processes.
+    The reason is `type ambiguity of empty arrays <https://docs.bodo.ai/latest/source/compilation.html#common-compilation-runtime-errors>`_.
+
 
 pytest markers
 ^^^^^^^^^^^^^^

@@ -398,9 +398,6 @@ class UntypedPass:
         if fdef == ("read_parquet", "pandas"):
             return self._handle_pd_read_parquet(assign, lhs, rhs)
 
-        if fdef == ("concat", "pandas"):
-            return self._handle_concat(assign, lhs, rhs, label)
-
         if fdef == ("fromfile", "numpy"):
             return bodo.io.np_io._handle_np_fromfile(assign, lhs, rhs)
 
@@ -551,7 +548,7 @@ class UntypedPass:
 
         unsupported_args = set(kws.keys()) - set(supported_args)
         if unsupported_args:
-            raise ValueError(
+            raise BodoError(
                 "read_sql() arguments {} not supported yet".format(unsupported_args)
             )
 
@@ -774,13 +771,13 @@ class UntypedPass:
         )
         unsupported_args = set(kws.keys()) - set(supported_args)
         if unsupported_args:
-            raise ValueError(
+            raise BodoError(
                 "read_csv() arguments {} not supported yet".format(unsupported_args)
             )
 
         supported_compression_options = {"infer", "gzip", "bz2", None}
         if compression not in supported_compression_options:
-            raise ValueError(
+            raise BodoError(
                 "pd.read_json() compression = {} is not supported."
                 " Supported options are {}".format(
                     compression, supported_compression_options
@@ -795,7 +792,7 @@ class UntypedPass:
         if header == "infer":
             header = 0 if col_names == 0 else None
         elif header != 0 and header != None:
-            raise ValueError(
+            raise BodoError(
                 "pd.read_csv() header should be 'infer', 0, or None, not {}.".format(
                     header
                 )
@@ -839,7 +836,7 @@ class UntypedPass:
                     # find constant column name
                     c = guard(find_const, self.func_ir, n_var)
                     if c is None:  # pragma: no cover
-                        raise ValueError("dtype column names should be constant")
+                        raise BodoError("dtype column names should be constant")
                     new_dtype_map[c] = self._get_const_dtype(t_var)
 
                 # HACK replace build_map to avoid inference errors
@@ -848,7 +845,7 @@ class UntypedPass:
                 dtype_map = new_dtype_map
 
         if col_names == 0:
-            raise ValueError("pd.read_csv() names should be constant list")
+            raise BodoError("pd.read_csv() names should be constant list")
 
         # TODO: support other args
 
@@ -953,7 +950,7 @@ class UntypedPass:
         passed_unsupported = unsupported_args.intersection(kws.keys())
         if len(passed_unsupported) > 0:
             if unsupported_args:
-                raise ValueError(
+                raise BodoError(
                     "read_json() arguments {} not supported yet".format(
                         passed_unsupported
                     )
@@ -961,7 +958,7 @@ class UntypedPass:
 
         supported_compression_options = {"infer", "gzip", "bz2", None}
         if compression not in supported_compression_options:
-            raise ValueError(
+            raise BodoError(
                 "pd.read_json() compression = {} is not supported."
                 " Supported options are {}".format(
                     compression, supported_compression_options
@@ -969,19 +966,19 @@ class UntypedPass:
             )
 
         if frame_or_series != "frame":
-            raise ValueError(
+            raise BodoError(
                 "pd.read_json() typ = {} is not supported."
                 "Currently only supports orient = 'frame'".format(frame_or_series)
             )
 
         if orient != "records":
-            raise ValueError(
+            raise BodoError(
                 "pd.read_json() orient = {} is not supported."
                 "Currently only supports orient = 'records'".format(orient)
             )
 
         if type(lines) != bool:
-            raise ValueError(
+            raise BodoError(
                 "pd.read_json() lines = {} is not supported."
                 "lines must be of type bool.".format(lines)
             )
@@ -1003,7 +1000,7 @@ class UntypedPass:
             # can only read partial of the json file
             # when orient == 'records' && lines == True
             if not lines:
-                raise ValueError(
+                raise BodoError(
                     "pd.read_json() requires explicit type annotation using 'dtype',"
                     " when lines != True"
                 )
@@ -1031,7 +1028,7 @@ class UntypedPass:
                     # find constant column name
                     c = guard(find_const, self.func_ir, n_var)
                     if c is None:  # pragma: no cover
-                        raise ValueError("dtype column names should be constant")
+                        raise BodoError("dtype column names should be constant")
                     new_dtype_map[c] = self._get_const_dtype(t_var)
 
                 # HACK replace build_map to avoid inference errors
@@ -1159,7 +1156,7 @@ class UntypedPass:
                 return self._get_const_dtype(dtype_def.args[0])
 
             if not fdef == ("CategoricalDtype", "pandas"):
-                raise ValueError(
+                raise BodoError(
                     "pd.read_csv() invalid dtype "
                     "(built using a call but not Int or Categorical)"
                 )
@@ -1178,10 +1175,10 @@ class UntypedPass:
             return CategoricalArray(typ)
 
         if not isinstance(dtype_def, ir.Expr) or dtype_def.op != "getattr":
-            raise ValueError("pd.read_csv() invalid dtype")
+            raise BodoError("pd.read_csv() invalid dtype")
         glob_def = guard(get_definition, self.func_ir, dtype_def.value)
         if not isinstance(glob_def, ir.Global) or glob_def.value != np:
-            raise ValueError("pd.read_csv() invalid dtype")
+            raise BodoError("pd.read_csv() invalid dtype")
         # TODO: extend to other types like string and date, check error
         typ_name = dtype_def.attr
         typ_name = "int64" if typ_name == "int" else typ_name
@@ -1238,7 +1235,7 @@ class UntypedPass:
 
     def _handle_pq_read_table(self, assign, lhs, rhs):
         if len(rhs.args) != 1:  # pragma: no cover
-            raise ValueError("Invalid read_table() arguments")
+            raise BodoError("Invalid read_table() arguments")
         # put back the definition removed earlier but remove node
         self.func_ir._definitions[lhs.name].append(rhs)
         self.arrow_tables[lhs.name] = rhs.args[0]
@@ -1314,36 +1311,13 @@ class UntypedPass:
         fname = get_call_expr_arg("read_parquet", rhs.args, kws, 0, "path")
         engine = get_call_expr_arg("read_parquet", rhs.args, kws, 1, "engine", "auto")
         if engine not in ("auto", "pyarrow"):
-            raise ValueError("read_parquet: only pyarrow engine supported")
+            raise BodoError("read_parquet: only pyarrow engine supported")
 
         columns = self._get_const_arg("read_parquet", rhs.args, kws, 2, "columns", -1)
         if columns == -1:
             columns = None
 
         return self._gen_parquet_read(fname, lhs, columns)
-
-    def _handle_concat(self, assign, lhs, rhs, label):
-        # converting build_list to build_tuple before type inference to avoid
-        # errors
-        kws = dict(rhs.kws)
-        objs_arg = get_call_expr_arg("concat", rhs.args, kws, 0, "objs")
-
-        df_list = guard(get_definition, self.func_ir, objs_arg)
-        if not isinstance(df_list, ir.Expr) or not (
-            df_list.op in ["build_tuple", "build_list"]
-        ):
-            raise ValueError("pd.concat input should be constant list or tuple")
-
-        # XXX convert build_list to build_tuple since Numba doesn't handle list of
-        # arrays for np.concatenate()
-        if df_list.op == "build_list":
-            df_list.op = "build_tuple"
-
-        if len(df_list.items) == 0:
-            # copied error from pandas
-            raise ValueError("No objects to concatenate")
-
-        return [assign]
 
     def _get_const_arg(
         self, f_name, args, kws, arg_no, arg_name, default=None, err_msg=None, typ=None,
@@ -1406,7 +1380,7 @@ class UntypedPass:
         # check inputs to be in actuall args
         for arg_name in dist_inputs | thread_inputs:
             if arg_name not in self.func_ir.arg_names:
-                raise ValueError(
+                raise BodoError(
                     "distributed input {} not found in arguments".format(arg_name)
                 )
             self.locals.pop(arg_name + ":input")
@@ -1527,7 +1501,7 @@ class UntypedPass:
                 _th_arr = bodo.libs.distributed_api.threaded_return(_threaded_arr)
 
         else:
-            raise ValueError("Invalid return flag {}".format(flag))
+            raise BodoError("Invalid return flag {}".format(flag))
         f_block = compile_to_numba_ir(f, {"bodo": bodo}).blocks.popitem()[1]
         replace_arg_nodes(f_block, [var])
         return f_block.body[:-3]  # remove none return
@@ -1657,30 +1631,38 @@ def _get_excel_df_type_from_file(
     """get dataframe type for read_excel() using file path constant.
     Only rank 0 looks at the file to infer df type, then broadcasts.
     """
+
     from mpi4py import MPI
 
     comm = MPI.COMM_WORLD
 
-    df_type = None
+    df_type_or_e = None
     if bodo.get_rank() == 0:
-        rows_to_read = 100  # TODO: tune this
-        df = pd.read_excel(
-            fname_const,
-            sheet_name=sheet_name,
-            nrows=rows_to_read,
-            skiprows=skiprows,
-            header=header,
-            # index_col=index_col,
-            comment=comment,
-            parse_dates=date_cols,
-        )
-        df_type = numba.typeof(df)
-        # always convert to nullable type since initial rows of a column could be all
-        # int for example, but later rows could have NAs
-        df_type = to_nullable_type(df_type)
+        try:
+            rows_to_read = 100  # TODO: tune this
+            df = pd.read_excel(
+                fname_const,
+                sheet_name=sheet_name,
+                nrows=rows_to_read,
+                skiprows=skiprows,
+                header=header,
+                # index_col=index_col,
+                comment=comment,
+                parse_dates=date_cols,
+            )
+            df_type_or_e = numba.typeof(df)
+            # always convert to nullable type since initial rows of a column could be all
+            # int for example, but later rows could have NAs
+            df_type_or_e = to_nullable_type(df_type_or_e)
+        except Exception as e:
+            df_type_or_e = e
 
-    df_type = comm.bcast(df_type)
-    return df_type
+    df_type_or_e = comm.bcast(df_type_or_e)
+    # raise error on all processors if found (not just rank 0 which would cause hangs)
+    if isinstance(df_type_or_e, Exception):
+        raise BodoError(df_type_or_e)
+
+    return df_type_or_e
 
 
 def _get_sql_df_type_from_db(sql_const, con_const):

@@ -15,15 +15,15 @@ such as Numba on Ubuntu Linux::
     chmod +x miniconda.sh
     ./miniconda.sh -b
     export PATH=$HOME/miniconda3/bin:$PATH
-    conda create -n DEV python=3.8 numpy scipy pandas=1.1.0 boost-cpp cmake h5py mpich mpi -c conda-forge
+    conda create -n DEV python=3.8 numpy scipy pandas='1.1.*' boost-cpp cmake h5py mpich mpi -c conda-forge
     source activate DEV
     # Linux: conda install gcc_linux-64 gxx_linux-64 gfortran_linux-64 -c conda-forge
     # Mac: conda install clang_osx-64 clangxx_osx-64 gfortran_osx-64 -c conda-forge
     # NOTE: for development/debugging purposes, it's best to install Numba from source instead
-    conda install numba=0.51.0 -c conda-forge
-    conda install -c conda-forge hdf5=*=*mpich* pyarrow=1.0.0 pymysql sqlalchemy
+    conda install numba=0.51.2 -c conda-forge
+    conda install -c conda-forge hdf5=*=*mpich* pyarrow=1.0.1 pymysql sqlalchemy
     # If you get the error "zsh: no matches found: hdf5=*=*mpich*" (typically on Mac), try the following instead:
-    # conda install -c conda-forge "hdf5=*=*mpich*" pyarrow=1.0.0 pymysql sqlalchemy
+    # conda install -c conda-forge "hdf5=*=*mpich*" pyarrow=1.0.1 pymysql sqlalchemy
     # The following is required for s3 related development and tests
     # conda install -c conda-forge boto3 botocore s3fs
     git clone https://github.com/Bodo-inc/Bodo.git
@@ -32,6 +32,20 @@ such as Numba on Ubuntu Linux::
     python setup.py develop
 
 For HDFS related development, use the :ref:`docker image <docker-images>`.
+
+Troubleshooting MacOS Build
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+* If your Mac0S sdk hasn't been configured properly, you may get a clang related error like the following::
+
+     ld: unsupported tapi file type '!tapi-tbd' in YAML file
+
+* Add the following line to your .zshrc file::
+
+    export CONDA_BUILD_SYSROOT=/opt/MacOSX10.9.sdk
+
+* Execute buildscripts/setup_osx_sdk.sh to resolve this issue.
+
 
 On Windows
 ~~~~~~~~~~
@@ -47,12 +61,12 @@ On Windows
 * Start 'Anaconda (Miniconda3) prompt'
 * Setup the Conda environment in Anaconda Prompt::
 
-    conda create -n DEV python=3.8 numpy scipy pandas=1.1.0 boost-cpp cmake h5py -c conda-forge
+    conda create -n DEV python=3.8 numpy scipy pandas="1.1.*" boost-cpp cmake h5py -c conda-forge
     source activate DEV
-    conda install numba=0.51.0 -c conda-forge
+    conda install numba=0.51.2 -c conda-forge
     conda install vc vs2015_runtime vs2015_win-64
     conda install -c defaults -c intel impi_rt impi-devel
-    conda install -c conda-forge pyarrow=1.0.0
+    conda install -c conda-forge pyarrow=1.0.1
     git clone https://github.com/Bodo-inc/Bodo.git
     cd Bodo
     # build Bodo

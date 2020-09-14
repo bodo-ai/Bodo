@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -exo pipefail
+
 source activate $CONDA_ENV
 
 # generate test data for test_io

@@ -70,6 +70,8 @@ no_side_effect_call_tuples = {
     ("get_series_data", "pd_series_ext", "hiframes", bodo),
     ("get_series_index", "pd_series_ext", "hiframes", bodo),
     ("get_series_name", "pd_series_ext", "hiframes", bodo),
+    ("get_index_data", "pd_index_ext", "hiframes", bodo),
+    ("get_index_name", "pd_index_ext", "hiframes", bodo),
     ("convert_tup_to_rec", "typing", "utils", bodo),
     ("convert_rec_to_tup", "typing", "utils", bodo),
     # Index

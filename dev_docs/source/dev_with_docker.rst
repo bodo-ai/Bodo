@@ -114,7 +114,7 @@ Setup:
     66422 NameNode
 
   Web interface is available locally at: http://localhost:9870/.
-  Test hdfs test suite with ``pytest -s -v -m "hdfs"`` .
+  Test hdfs test suite with ``pytest -s -v -m "hdfs"`` (first navigate to ``/Bodo``).
 
   To stop Hadoop, run ``sbin/stop-dfs.sh``. 
 

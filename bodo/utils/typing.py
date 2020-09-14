@@ -459,6 +459,8 @@ def parse_dtype(dtype):
             dtype = types.StringLiteral("float")
         elif dtype.key[0] == int:
             dtype = types.StringLiteral("int")
+        elif dtype.key[0] == np.bool:
+            dtype = types.StringLiteral("bool")
 
     if isinstance(dtype, types.DTypeSpec):
         return dtype.dtype
@@ -663,30 +665,6 @@ class MetaType(types.Type):
 register_model(MetaType)(models.OpaqueModel)
 
 
-# convert const tuple expressions or const list to tuple statically
-def to_const_tuple(arrs):  # pragma: no cover
-    return tuple(arrs)
-
-
-@infer_global(to_const_tuple)
-class ToConstTupleTyper(AbstractTemplate):
-    def generic(self, args, kws):
-        assert not kws
-        assert len(args) == 1
-        arr = args[0]
-        ret_typ = arr
-        # XXX: returns a dummy type that should be fixed in series_pass
-        if isinstance(arr, types.List):
-            ret_typ = types.Tuple((arr.dtype,))
-        return signature(ret_typ, arr)
-
-
-# dummy lowerer
-@lower_builtin(to_const_tuple, types.Any)
-def lower_to_const_tuple(context, builder, sig, args):
-    return context.get_constant_null(sig.return_type)
-
-
 def is_literal_type(t):
     return (
         # LiteralStrKeyDict is not always a literal since its values are not necessarily
@@ -701,6 +679,8 @@ def is_literal_type(t):
         or (isinstance(t, types.BaseTuple) and all(is_literal_type(v) for v in t.types))
         # List/Dict types preserve const initial values in Numba 0.51
         or is_initial_value_type(t)
+        # dtype literals should be treated as literals
+        or isinstance(t, types.DTypeSpec)
     )
 
 
@@ -725,6 +705,8 @@ def get_literal_value(t):
         return t
     if isinstance(t, types.InitialValue):
         return t.initial_value
+    if isinstance(t, types.DTypeSpec):
+        return t
 
 
 def can_literalize_type(t):

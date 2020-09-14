@@ -1,3 +1,6 @@
+#ifndef _JOIN_H_INCLUDED
+#define _JOIN_H_INCLUDED
+
 #include "_bodo_common.h"
 
 /** This function does the joining of the table and returns the joined
@@ -45,3 +48,4 @@ table_info* hash_join_table(table_info* in_table, int64_t n_key_t,
                             int64_t* vect_same_key, int64_t* vect_need_typechange,
                             bool is_left, bool is_right,
                             bool is_join, bool optional_col);
+#endif // _JOIN_H_INCLUDED

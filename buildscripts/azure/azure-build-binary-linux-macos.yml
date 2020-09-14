@@ -17,11 +17,13 @@ jobs:
     displayName: 'Use Python $(python.version)'
 
   - script: |
+      set -eo pipefail
       pip install astunparse
       chmod +x buildscripts/remove_docstring.py
     displayName: 'Prepare to build'
 
   - script: |
+      set -eo pipefail
       if [[ "${{ parameters.name }}" == "Linux" ]]; then
         wget https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh
       else
@@ -33,24 +35,27 @@ jobs:
     displayName: 'Setup Miniconda'
 
   - script: |
+      set -eo pipefail
       if [[ "${{ parameters.name }}" == "macOS" ]]; then
         buildscripts/setup_osx_sdk.sh
       fi
     displayName: 'Setup OSX SDK'
 
   - script: |
+      set -eo pipefail
       export PATH=$HOME/miniconda3/bin:$PATH
-      source activate bodo_build
       conda install -y flake8
       flake8 bodo
     displayName: 'Flake8'
 
   - script: |
+      set -eo pipefail
       export PATH=$HOME/miniconda3/bin:${PATH}
       conda create -y -n bodo_build conda-build anaconda-client conda-verify
     displayName: 'Create Conda Env'
     
   - script: |
+      set -eo pipefail
       export PATH=$HOME/miniconda3/bin:${PATH}
       source activate bodo_build
       if [[ $OBFUSCATE == 1 ]]; then
@@ -63,6 +68,7 @@ jobs:
     displayName: 'Obfuscation'
 
   - script: |
+      set -eo pipefail
       export PATH=$HOME/miniconda3/bin:${PATH}
       export MACOSX_DEPLOYMENT_TARGET=${MACOSX_DEPLOYMENT_TARGET:-10.9}
       export CONDA_BUILD_SYSROOT="/opt/MacOSX${MACOSX_DEPLOYMENT_TARGET}.sdk"
@@ -74,6 +80,7 @@ jobs:
     displayName: 'Conda build Bodo'
 
   - script: |
+      set -eo pipefail
       export PATH=$HOME/miniconda3/bin:${PATH}
       source activate bodo_build
       cd $(System.DefaultWorkingDirectory)

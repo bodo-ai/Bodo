@@ -1,4 +1,7 @@
 // Copyright (C) 2019 Bodo Inc. All rights reserved.
+#ifndef _ARRAY_HASH_H_INCLUDED
+#define _ARRAY_HASH_H_INCLUDED
+
 #include "_bodo_common.h"
 
 #define SEED_HASH_PARTITION           0xb0d01289
@@ -19,3 +22,5 @@ inline uint32_t* hash_keys_table(table_info* in_table, size_t num_keys, uint32_t
     std::vector<array_info*> key_arrs(in_table->columns.begin(), in_table->columns.begin() + num_keys);
     return hash_keys(key_arrs, seed);
 }
+
+#endif // _ARRAY_HASH_H_INCLUDED

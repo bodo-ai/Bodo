@@ -4,6 +4,8 @@ FROM ubuntu:latest AS env_setup
 # docker build -t bodo_dev_hdfs .
 #
 
+ENV DEBIAN_FRONTEND=noninteractive
+
 WORKDIR /root
 #
 # Ubuntu installs and Miniconda
@@ -16,12 +18,13 @@ ENV PATH /root/miniconda3/bin/:${PATH}
 #
 # Creation of the BODODEV environment
 #
-RUN conda create -n BODODEV numpy scipy pandas=1.1.0 boost-cpp cmake h5py mpich mpi gcc_linux-64 gxx_linux-64 gfortran_linux-64 -c conda-forge
-RUN conda install -n BODODEV python numba=0.51.0 -c conda-forge
+RUN conda create -n BODODEV numpy scipy pandas='1.1.*' boost-cpp cmake h5py mpich mpi gcc_linux-64 gxx_linux-64 gfortran_linux-64 -c conda-forge
+RUN conda install -n BODODEV python numba=0.51.2 -c conda-forge
 RUN conda install -n BODODEV hdf5=*=*mpich* -c conda-forge
-RUN conda install -n BODODEV python pyarrow=1.0.0 -c conda-forge
+RUN conda install -n BODODEV python pyarrow=1.0.1 -c conda-forge
 RUN conda install -n BODODEV pytest ipython
 RUN conda install -n BODODEV sqlalchemy pymysql xlrd mpi4py
+RUN conda install -n BODODEV scikit-learn -c conda-forge
 RUN conda install -n BODODEV openjdk=8
 RUN conda install -n BODODEV hdfs3 -c conda-forge
 

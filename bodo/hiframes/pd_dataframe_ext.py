@@ -642,12 +642,22 @@ ArrayAnalysis._analyze_op_call_bodo_hiframes_pd_dataframe_ext_get_dataframe_data
 
 @intrinsic
 def set_dataframe_data(typingctx, df_typ, c_ind_typ, arr_typ=None):
-    col_ind = c_ind_typ.literal_value
+    """set column data of a dataframe inplace
+    """
+    assert is_overload_constant_int(c_ind_typ)
+    col_ind = get_overload_const_int(c_ind_typ)
 
     def codegen(context, builder, signature, args):
-        # TODO: fix refcount
         df_arg, _, arr_arg = args
         dataframe_payload = get_dataframe_payload(context, builder, df_typ, df_arg)
+
+        # decref existing data column if valid (unboxed)
+        unboxed = builder.extract_value(dataframe_payload.unboxed, col_ind)
+        is_unboxed = builder.icmp_unsigned("==", unboxed, lir.Constant(unboxed.type, 1))
+        with builder.if_then(is_unboxed):
+            arr = builder.extract_value(dataframe_payload.data, col_ind)
+            context.nrt.decref(builder, df_typ.data[col_ind], arr)
+
         # assign array and set unboxed flag
         dataframe_payload.data = builder.insert_value(
             dataframe_payload.data, arr_arg, col_ind
@@ -892,7 +902,7 @@ def cast_df_to_df(context, builder, fromty, toty, val):
         new_data = dataframe_payload.data
         context.nrt.incref(builder, types.BaseTuple.from_types(fromty.data), new_data)
 
-        return construct_dataframe(
+        df = construct_dataframe(
             context,
             builder,
             toty,
@@ -901,6 +911,8 @@ def cast_df_to_df(context, builder, fromty, toty, val):
             dataframe_payload.unboxed,
             dataframe_payload.parent,
         )
+        # TODO: fix casting refcount in Numba since Numba increfs value after cast
+        return df
 
     # empty dataframe case
     assert len(fromty.data) == 0
@@ -935,7 +947,9 @@ def cast_df_to_df(context, builder, fromty, toty, val):
     gen_func = bodo.hiframes.dataframe_impl._gen_init_df(
         func_text, toty.columns, data_args, index, extra_globals
     )
-    return context.compile_internal(builder, gen_func, toty(), [])
+    df = context.compile_internal(builder, gen_func, toty(), [])
+    # TODO: fix casting refcount in Numba since Numba increfs value after cast
+    return df
 
 
 @overload(pd.DataFrame, inline="always", no_unliteral=True)
@@ -1083,9 +1097,9 @@ def _fill_null_arrays(data_dict, col_names, df_len, dtype):
 
     # object array of NaNs if dtype not specified
     if is_overload_none(dtype):
-        dtype = "bodo.string_type"
+        dtype = "bodo.string_array_type"
     else:
-        dtype = "dtype"
+        dtype = "bodo.utils.conversion.dtype_to_array_type(dtype)"
 
     # array with NaNs
     null_arr = "bodo.libs.array_kernels.gen_na_array({}, {})".format(df_len, dtype)
@@ -1979,121 +1993,188 @@ def concat_overload(
 ):
     # TODO: handle options
     # TODO: support Index
-    return lambda objs, axis=0, join="outer", join_axes=None, ignore_index=False, keys=None, levels=None, names=None, verify_integrity=False, sort=None, copy=True: bodo.hiframes.pd_dataframe_ext.concat_dummy(
-        objs, axis
+    # TODO(ehsan): proper error checking
+    axis = get_overload_const_int(axis)
+    ignore_index = is_overload_true(ignore_index)
+
+    func_text = (
+        "def impl(objs, axis=0, join='outer', join_axes=None, "
+        "ignore_index=False, keys=None, levels=None, names=None, "
+        "verify_integrity=False, sort=None, copy=True):\n"
     )
 
-
-def concat_dummy(objs):  # pragma: no cover
-    return pd.concat(objs)
-
-
-@infer_global(concat_dummy)
-class ConcatDummyTyper(AbstractTemplate):
-    def generic(self, args, kws):
-        assert not kws
-        objs = args[0]
-        axis = 0
-
-        if isinstance(args[1], types.IntegerLiteral):
-            axis = args[1].literal_value
-
-        if isinstance(objs, types.List):
-            assert axis == 0
-            assert isinstance(objs.dtype, (SeriesType, DataFrameType))
-            # TODO: support Index in append/concat
-            ret_typ = objs.dtype.copy(index=RangeIndexType(types.none))
-            if isinstance(ret_typ, DataFrameType):
-                ret_typ = ret_typ.copy(index=RangeIndexType(types.none))
-            return signature(ret_typ, *args)
-
+    # concat of columns into a dataframe
+    if axis == 1:
         if not isinstance(objs, types.BaseTuple):
-            raise ValueError("Tuple argument for pd.concat expected")
-        assert len(objs.types) > 0
+            # using raise_bodo_error() since typing pass may transform list to tuple
+            raise_bodo_error("Only tuple argument for pd.concat(axis=1) expected")
+        index = "bodo.hiframes.pd_index_ext.init_range_index(0, len(objs[0]), 1, None)"
+        col_no = 0
+        data_args = []
+        names = []
+        for i, obj in enumerate(objs.types):
+            assert isinstance(obj, (SeriesType, DataFrameType))
+            if isinstance(obj, SeriesType):
+                # TODO: use Series name if possible
+                names.append(str(col_no))
+                col_no += 1
+                data_args.append(
+                    "bodo.hiframes.pd_series_ext.get_series_data(objs[{}])".format(i)
+                )
+            else:  # DataFrameType
+                names.extend(obj.columns)
+                for j in range(len(obj.data)):
+                    data_args.append(
+                        "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(objs[{}], {})".format(
+                            i, j
+                        )
+                    )
+        return bodo.hiframes.dataframe_impl._gen_init_df(
+            func_text, names, ", ".join(data_args), index
+        )
 
-        if axis == 1:
-            data = []
-            names = []
-            col_no = 0
-            for obj in objs.types:
-                assert isinstance(obj, (SeriesType, DataFrameType))
-                if isinstance(obj, SeriesType):
-                    # TODO: handle names of SeriesTypes
-                    data.append(obj.data)
-                    names.append(str(col_no))
-                    col_no += 1
-                else:  # DataFrameType
-                    # TODO: test
-                    data.extend(obj.data)
-                    names.extend(obj.columns)
+    assert axis == 0
 
-            ret_typ = DataFrameType(
-                tuple(data), RangeIndexType(types.none), tuple(names)
-            )
-            return signature(ret_typ, *args)
+    # dataframe tuples case
+    if isinstance(objs, types.BaseTuple) and isinstance(objs.types[0], DataFrameType):
+        assert all(isinstance(t, DataFrameType) for t in objs.types)
 
-        assert axis == 0
-        # dataframe case
-        if isinstance(objs.types[0], DataFrameType):
-            assert all(isinstance(t, DataFrameType) for t in objs.types)
-            # get output column names
-            all_colnames = []
+        # get output column names
+        all_colnames = []
+        for df in objs.types:
+            all_colnames.extend(df.columns)
+
+        # remove duplicates but keep original order
+        all_colnames = list(dict.fromkeys(all_colnames).keys())
+
+        # get array types for all output columns (for NA generation for missing columns)
+        arr_types = {}
+        for col_no, c in enumerate(all_colnames):
             for df in objs.types:
-                all_colnames.extend(df.columns)
-            # TODO: verify how Pandas sorts column names
-            # remove duplicates but keep original order
-            all_colnames = list(dict.fromkeys(all_colnames).keys())
+                if c in df.columns:
+                    arr_types["arr_typ{}".format(col_no)] = df.data[df.columns.index(c)]
+                    break
+        assert len(arr_types) == len(all_colnames)
 
-            # get output data types
-            all_data = []
-            for cname in all_colnames:
-                # arguments to the generated function
-                arr_args = [
-                    df.data[df.columns.index(cname)]
-                    for df in objs.types
-                    if cname in df.columns
-                ]
-                # XXX we add arrays of float64 NaNs if an Integer column is missing
-                # so add a dummy array of float64 for accurate typing
-                # e.g. int to float conversion
-                # TODO: use nullable integer array when pandas switches
-                # TODO: fix NA column additions for other types
-                if len(arr_args) < len(objs.types) and all(
-                    isinstance(t.dtype, types.Integer) for t in arr_args
-                ):
-                    arr_args.append(types.Array(types.float64, 1, "C"))
-                # use bodo.libs.array_kernels.concat() typer
-                concat_typ = self.context.resolve_function_type(
-                    bodo.libs.array_kernels.concat, (types.Tuple(arr_args),), {}
-                ).return_type
-                all_data.append(concat_typ)
-
-            ret_typ = DataFrameType(
-                tuple(all_data), RangeIndexType(types.none), tuple(all_colnames)
+        # generate concat for each output column
+        out_data = []
+        for col_no, c in enumerate(all_colnames):
+            args = []
+            for i, df in enumerate(objs.types):
+                if c in df.columns:
+                    col_ind = df.columns.index(c)
+                    args.append(
+                        "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(objs[{}], {})".format(
+                            i, col_ind
+                        )
+                    )
+                else:
+                    args.append(
+                        "bodo.libs.array_kernels.gen_na_array(len(objs[{}]), arr_typ{})".format(
+                            i, col_no
+                        )
+                    )
+            func_text += "  A{} = bodo.libs.array_kernels.concat(({},))\n".format(
+                col_no, ", ".join(args)
             )
-            return signature(ret_typ, *args)
+        if ignore_index:
+            index = "bodo.hiframes.pd_index_ext.init_range_index(0, len(A0), 1, None)"
+        else:
+            index = "bodo.utils.conversion.index_from_array(bodo.libs.array_kernels.concat(({},)))\n".format(
+            ", ".join(
+                "bodo.utils.conversion.index_to_array(bodo.hiframes.pd_dataframe_ext.get_dataframe_index(objs[{}]))".format(i)
+                # ignore dummy string index of empty dataframes (test_append_empty_df)
+                for i in range(len(objs.types)) if len(objs[i].columns) > 0
+            ))
+        return bodo.hiframes.dataframe_impl._gen_init_df(
+            func_text,
+            all_colnames,
+            ", ".join("A{}".format(i) for i in range(len(all_colnames))),
+            index,
+            arr_types,
+        )
 
-        # series case
-        elif isinstance(objs.types[0], SeriesType):
-            assert all(isinstance(t, SeriesType) for t in objs.types)
-            arr_args = [S.data for S in objs.types]
-            concat_typ = self.context.resolve_function_type(
-                bodo.libs.array_kernels.concat, (types.Tuple(arr_args),), {}
-            ).return_type
-            ret_typ = SeriesType(concat_typ.dtype, concat_typ)
-            return signature(ret_typ, *args)
-        # TODO: handle other iterables like arrays, lists, ...
+    # series tuples case
+    if isinstance(objs, types.BaseTuple) and isinstance(objs.types[0], SeriesType):
+        assert all(isinstance(t, SeriesType) for t in objs.types)
+        # TODO: index and name
+        func_text += "  out_arr = bodo.libs.array_kernels.concat(({},))\n".format(
+            ", ".join(
+                "bodo.hiframes.pd_series_ext.get_series_data(objs[{}])".format(i)
+                for i in range(len(objs.types))
+            )
+        )
+        if ignore_index:
+            func_text += "  index = bodo.hiframes.pd_index_ext.init_range_index(0, len(out_arr), 1, None)\n"
+        else:
+            func_text += "  index = bodo.utils.conversion.index_from_array(bodo.libs.array_kernels.concat(({},)))\n".format(
+            ", ".join(
+                "bodo.utils.conversion.index_to_array(bodo.hiframes.pd_series_ext.get_series_index(objs[{}]))".format(i)
+                for i in range(len(objs.types))
+            ))
+        func_text += (
+            "  return bodo.hiframes.pd_series_ext.init_series(out_arr, index)\n"
+        )
+        loc_vars = {}
+        exec(func_text, {"bodo": bodo, "np": np, "numba": numba}, loc_vars)
+        return loc_vars["impl"]
 
+    # list of dataframes
+    if isinstance(objs, types.List) and isinstance(objs.dtype, DataFrameType):
+        # TODO(ehsan): index
+        df_type = objs.dtype
+        for col_no, c in enumerate(df_type.columns):
+            func_text += "  arrs{} = []\n".format(col_no)
+            func_text += "  for i in range(len(objs)):\n"
+            func_text += "    df = objs[i]\n"
+            func_text += "    arrs{0}.append(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {0}))\n".format(
+                col_no
+            )
+            func_text += "  out_arr{0} = bodo.libs.array_kernels.concat(arrs{0})\n".format(
+                col_no
+            )
+        if ignore_index:
+            index = (
+                "bodo.hiframes.pd_index_ext.init_range_index(0, len(out_arr0), 1, None)"
+            )
+        else:
+            func_text += "  arrs_index = []\n"
+            func_text += "  for i in range(len(objs)):\n"
+            func_text += "    df = objs[i]\n"
+            func_text += "    arrs_index.append(bodo.utils.conversion.index_to_array(bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)))\n"
+            index = "bodo.utils.conversion.index_from_array(bodo.libs.array_kernels.concat(arrs_index))\n"
+        return bodo.hiframes.dataframe_impl._gen_init_df(
+            func_text,
+            df_type.columns,
+            ", ".join("out_arr{}".format(i) for i in range(len(df_type.columns))),
+            index,
+        )
 
-ConcatDummyTyper._no_unliteral = True
+    # list of Series
+    if isinstance(objs, types.List) and isinstance(objs.dtype, SeriesType):
+        func_text += "  arrs = []\n"
+        func_text += "  for i in range(len(objs)):\n"
+        func_text += (
+            "    arrs.append(bodo.hiframes.pd_series_ext.get_series_data(objs[i]))\n"
+        )
+        func_text += "  out_arr = bodo.libs.array_kernels.concat(arrs)\n"
+        if ignore_index:
+            func_text += "  index = bodo.hiframes.pd_index_ext.init_range_index(0, len(out_arr), 1, None)\n"
+        else:
+            func_text += "  arrs_index = []\n"
+            func_text += "  for i in range(len(objs)):\n"
+            func_text += "    S = objs[i]\n"
+            func_text += "    arrs_index.append(bodo.utils.conversion.index_to_array(bodo.hiframes.pd_series_ext.get_series_index(S)))\n"
+            func_text += "  index = bodo.utils.conversion.index_from_array(bodo.libs.array_kernels.concat(arrs_index))\n"
+        func_text += (
+            "  return bodo.hiframes.pd_series_ext.init_series(out_arr, index)\n"
+        )
+        loc_vars = {}
+        exec(func_text, {"bodo": bodo, "np": np, "numba": numba}, loc_vars)
+        return loc_vars["impl"]
 
-
-# dummy lowering to avoid overload errors, remove after overload inline PR
-# is merged
-@lower_builtin(concat_dummy, types.VarArg(types.Any))
-def lower_concat_dummy(context, builder, sig, args):
-    out_obj = cgutils.create_struct_proxy(sig.return_type)(context, builder)
-    return out_obj._getvalue()
+    # TODO: handle other iterables like arrays, lists, ...
+    raise BodoError("pd.concat(): input type {} not supported yet".format(objs))
 
 
 @overload_method(DataFrameType, "sort_values", inline="always", no_unliteral=True)
@@ -2362,63 +2443,45 @@ def reset_index_overload(
             "reset_index(): 'inplace' parameter should be a constant boolean value"
         )
 
-    # TODO: avoid dummy and generate func here when inlining is possible
-    # TODO: inplace of df with parent (reflection)
-    def _impl(
-        df,
-        level=None,
-        drop=False,
-        inplace=False,
-        col_level=0,
-        col_fill="",
-        _bodo_transformed=False,
-    ):  # pragma: no cover
-        return bodo.hiframes.pd_dataframe_ext.reset_index_dummy(df, drop, inplace)
+    # impl: for each column, copy data and create a new dataframe
+    func_text = "def impl(df, level=None, drop=False, inplace=False, col_level=0, col_fill='', _bodo_transformed=False,):\n"
+    func_text += (
+        "  index = bodo.hiframes.pd_index_ext.init_range_index(0, len(df), 1, None)\n"
+    )
 
-    return _impl
-
-
-def reset_index_dummy(df, n):  # pragma: no cover
-    return df
-
-
-@infer_global(reset_index_dummy)
-class ResetIndexDummyTyper(AbstractTemplate):
-    def generic(self, args, kws):
-        df, drop, inplace = args
-        # safe to just get const values here, since error checking is done in
-        # reset_index overload
-        assert is_overload_constant_bool(drop)
-        drop = is_overload_true(drop)
-
-        # default output index is simple integer index with no name
-        # TODO: handle MultiIndex and `level` argument case
-        index = RangeIndexType(types.none)
-        data = df.data
-        columns = df.columns
-        if not drop:
-            # pandas assigns "level_0" if "index" is already used as a column name
-            # https://github.com/pandas-dev/pandas/blob/08b70d837dd017d49d2c18e02369a15272b662b2/pandas/core/frame.py#L4547
-            default_name = "index" if "index" not in columns else "level_0"
-            index_names = get_index_names(
-                df.index, "DataFrame.reset_index()", default_name
+    drop = is_overload_true(drop)
+    inplace = is_overload_true(inplace)
+    columns = df.columns
+    data_args = [
+        "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {}){}\n".format(
+            i, "" if inplace else ".copy()"
+        )
+        for i in range(len(df.columns))
+    ]
+    # add index array arguments if not dropping index
+    if not drop:
+        # pandas assigns "level_0" if "index" is already used as a column name
+        # https://github.com/pandas-dev/pandas/blob/08b70d837dd017d49d2c18e02369a15272b662b2/pandas/core/frame.py#L4547
+        default_name = "index" if "index" not in columns else "level_0"
+        index_names = get_index_names(df.index, "DataFrame.reset_index()", default_name)
+        columns = index_names + columns
+        if isinstance(df.index, MultiIndexType):
+            # MultiIndex case takes multiple arrays from MultiIndex._data
+            func_text += (
+                "  m_index = bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)\n"
             )
-            columns = index_names + columns
-            data = get_index_data_arr_types(df.index) + data
+            ind_arrs = ["m_index._data[{}]".format(i) for i in range(df.index.nlevels)]
+            data_args = ind_arrs + data_args
+        else:
+            ind_arr = "bodo.utils.conversion.index_to_array(bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df))"
+            data_args = [ind_arr] + data_args
 
-        out_df = DataFrameType(data, index, columns)
-        return signature(out_df, *args)
-
-
-ResetIndexDummyTyper._no_unliteral = True
-
-
-@lower_builtin(reset_index_dummy, types.VarArg(types.Any))
-def lower_reset_index_dummy(context, builder, sig, args):
-    if sig.return_type is types.none:
-        return context.get_dummy_value()
-    out_obj = cgutils.create_struct_proxy(sig.return_type)(context, builder)
-    return out_obj._getvalue()
+    # TODO: inplace of df with parent (reflection)
+    # return new df even for inplace case, since typing pass replaces input variable
+    # using output of the call
+    return bodo.hiframes.dataframe_impl._gen_init_df(
+        func_text, columns, ", ".join(data_args), "index"
+    )
 
 
 @overload_method(DataFrameType, "dropna", inline="always", no_unliteral=True)
@@ -2596,18 +2659,22 @@ def lower_val_isin_dummy(context, builder, sig, args):
 def append_overload(df, other, ignore_index=False, verify_integrity=False, sort=None):
     if isinstance(other, DataFrameType):
         return lambda df, other, ignore_index=False, verify_integrity=False, sort=None: pd.concat(
-            (df, other)
+            (df, other), ignore_index=ignore_index, verify_integrity=verify_integrity
         )
 
-    # TODO: tuple case
+    if isinstance(other, types.BaseTuple):
+        return lambda df, other, ignore_index=False, verify_integrity=False, sort=None: pd.concat(
+            (df,) + other, ignore_index=ignore_index, verify_integrity=verify_integrity
+        )
+
     # TODO: non-homogenous build_list case
     if isinstance(other, types.List) and isinstance(other.dtype, DataFrameType):
         return lambda df, other, ignore_index=False, verify_integrity=False, sort=None: pd.concat(
-            [df] + other
+            [df] + other, ignore_index=ignore_index, verify_integrity=verify_integrity
         )
 
-    raise ValueError(
-        "invalid df.append() input. Only dataframe and list" " of dataframes supported"
+    raise BodoError(
+        "invalid df.append() input. Only dataframe and list/tuple of dataframes supported"
     )
 
 
@@ -2714,10 +2781,9 @@ def to_parquet_overload(
     # TODO handle possible **kwargs options?
     _is_parallel=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
 ):
-    if not is_overload_none(partition_cols):
-        raise BodoError(
-            "to_parquet(): Bodo does not currently support partition_cols option"
-        )
+    unsupported_args = dict(partition_cols=partition_cols)
+    arg_defaults = dict(partition_cols=None)
+    check_unsupported_args("to_parquet", unsupported_args, arg_defaults)
 
     if not is_overload_none(compression) and get_overload_const_str(
         compression
@@ -2910,8 +2976,9 @@ def to_sql_overload(
     # Additional entry
     _is_parallel=False,
 ):
-    if not is_overload_none(chunksize):
-        raise BodoError("to_sql(): chunksize option is not supported")
+    unsupported_args = dict(chunksize=chunksize)
+    arg_defaults = dict(chunksize=None)
+    check_unsupported_args("to_sql", unsupported_args, arg_defaults)
 
     def _impl(
         df,

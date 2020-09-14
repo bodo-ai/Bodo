@@ -1,4 +1,6 @@
 // Copyright (C) 2019 Bodo Inc. All rights reserved.
+#ifndef _GROUPBY_H_INCLUDED
+#define _GROUPBY_H_INCLUDED
 #include "_bodo_common.h"
 
 const int max_global_number_groups_exscan = 1000;
@@ -64,3 +66,4 @@ table_info* groupby_and_aggregate(table_info* in_table, int64_t num_keys,
                                   bool return_key, bool return_index,
                                   void* update_cb, void* combine_cb,
                                   void* eval_cb, table_info* udf_dummy_table);
+#endif // _GROUPBY_H_INCLUDED

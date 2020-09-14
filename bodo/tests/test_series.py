@@ -90,7 +90,7 @@ def test_series_constructor(data, index, name, memory_leak_check):
         data.index = index
 
     # bypass literal as data and index = None
-    if isinstance(data, int) and index  is None:
+    if isinstance(data, int) and index is None:
         return
 
     def impl(d, i, n):
@@ -126,6 +126,7 @@ def test_series_constructor_dtype1(memory_leak_check):
     check_func(impl, (np.array([3, 4, 1, -3, 0]),))
 
 
+@pytest.mark.slow
 def test_series_constructor_dtype2(memory_leak_check):
     def impl(d):
         return pd.Series(d, dtype="int32")
@@ -483,7 +484,9 @@ def test_series_astype_int_arr(numeric_series_val, memory_leak_check):
     "S",
     [
         pd.Series([1.0, np.nan, 3.0, 2.0], dtype="float32"),
-        pd.Series([1.0, np.nan, 3.0, 2.0], dtype="float64"),
+        pytest.param(
+            pd.Series([1.0, np.nan, 3.0, 2.0], dtype="float64"), marks=pytest.mark.slow
+        ),
     ],
 )
 def test_series_astype_float_to_int_arr(S, memory_leak_check):
@@ -500,7 +503,9 @@ def test_series_astype_float_to_int_arr(S, memory_leak_check):
 @pytest.mark.parametrize(
     "S",
     [
-        pd.Series([True, False, False, True, True]),
+        pytest.param(
+            pd.Series([True, False, False, True, True]), marks=pytest.mark.slow
+        ),
         pd.Series([True, False, False, np.nan, True]),
     ],
 )
@@ -512,11 +517,23 @@ def test_series_astype_bool_arr(S, memory_leak_check):
 
     check_func(test_impl, (S,))
 
+@pytest.mark.parametrize(
+    "S",
+    [
+        pd.Series(["a", "b", "aa", "bb", "A", "a", "BB"]),
+        pd.Series([1, 2, 41, 2, 1, 4, 2, 1, 1, 25, 5, 3])
+    ]
+)
+def test_series_drop_duplicates(S):
+    def test_impl(S):
+        return S.drop_duplicates()
+    check_func(test_impl, (S,), sort_output=True)
 
 @pytest.mark.parametrize(
     "S", [pd.Series(["BB", "C", "A", None, "A", "BBB", None, "C", "BB", "A"])]
 )
-def test_series_astype_cat(S, memory_leak_check):
+# TODO: add memory_leak_check
+def test_series_astype_cat(S):
     def test_impl(S, ctype):
         return S.astype(ctype)
 
@@ -888,7 +905,7 @@ def test_series_getitem_int(series_val):
     bodo_func = bodo.jit(test_impl)
     # integer label-based indexing should raise error
     if type(series_val.index) in (pd.Int64Index, pd.UInt64Index):
-        with pytest.raises(numba.TypingError):  # TODO: ValueError
+        with pytest.raises(BodoError, match="not supported yet"):
             bodo_func(series_val)
     else:
         bodo_out = bodo_func(series_val)
@@ -914,7 +931,7 @@ def test_series_getitem_list_int(series_val, idx, memory_leak_check):
     bodo_func = bodo.jit(test_impl)
     # integer label-based indexing should raise error
     if type(series_val.index) in (pd.Int64Index, pd.UInt64Index):
-        with pytest.raises(numba.TypingError):  # TODO: ValueError
+        with pytest.raises(BodoError, match="not supported yet"):
             bodo_func(series_val, idx)
     else:
         pd.testing.assert_series_equal(
@@ -965,7 +982,7 @@ def test_series_setitem_int(series_val, memory_leak_check):
     bodo_func = bodo.jit(test_impl)
     # integer label-based indexing should raise error
     if type(series_val.index) in (pd.Int64Index, pd.UInt64Index):
-        with pytest.raises(numba.TypingError):  # TODO: ValueError
+        with pytest.raises(BodoError, match="not supported yet"):
             bodo_func(series_val, val)
     else:
         pd.testing.assert_series_equal(
@@ -1022,7 +1039,7 @@ def test_series_setitem_list_int(series_val, idx, list_val_arg, memory_leak_chec
     bodo_func = bodo.jit(test_impl)
     # integer label-based indexing should raise error
     if type(series_val.index) in (pd.Int64Index, pd.UInt64Index):
-        with pytest.raises(numba.TypingError):  # TODO: ValueError
+        with pytest.raises(BodoError, match="not supported yet"):
             bodo_func(series_val, val, idx)
     else:
         # Pandas coerces Series type to set values, so avoid low precision
@@ -1042,7 +1059,7 @@ def test_series_setitem_list_int(series_val, idx, list_val_arg, memory_leak_chec
 ############################ binary ops #############################
 
 
-def test_series_operations(memory_leak_check):
+def test_series_operations(memory_leak_check, is_slow_run):
     def f_rpow(S1, S2):
         return S1.rpow(S2)
 
@@ -1079,6 +1096,8 @@ def test_series_operations(memory_leak_check):
     S1 = pd.Series([2, 3, 4])
     S2 = pd.Series([6, 7, 8])
     check_func(f_rpow, (S1, S2))
+    if not is_slow_run:
+        return
     check_func(f_rsub, (S1, S2))
     check_func(f_rmul, (S1, S2))
     check_func(f_radd, (S1, S2))
@@ -1354,8 +1373,8 @@ def test_series_str_add(memory_leak_check):
     def test_impl(S, other):
         return S + other
 
-    S = pd.Series(["AA", "D", None, "녁은", "AA🐍"], [3, 5, 0, 7, -1])
-    S2 = pd.Series(["C🐍", "녁은", "D", None, "AA"], [3, 5, 0, 7, -1])
+    S = pd.Series(["AA", "D", None, "녁은", "AA🐍"] * 2, [3, 5, 0, 7, -1] * 2)
+    S2 = pd.Series(["C🐍", "녁은", "D", None, "AA"] * 2, [3, 5, 0, 7, -1] * 2)
     check_func(test_impl, (S, S2))
     check_func(test_impl, (S, "CC"))
     check_func(test_impl, ("CC", S))
@@ -1368,7 +1387,7 @@ def test_series_str_cmp(memory_leak_check):
     def test_impl(S):
         return S == "A"
 
-    S = pd.Series(["AA", "D", None, "녁은", "AA🐍"], [3, 5, 0, 7, -1])
+    S = pd.Series(["AA", "D", None, "녁은", "AA🐍"] * 2, [3, 5, 0, 7, -1] * 2)
     check_func(test_impl, (S,))
 
 
@@ -1458,6 +1477,7 @@ def test_series_combine_kws(memory_leak_check):
     check_func(test_impl, (S1, S2, fill))
 
 
+@pytest.mark.slow
 def test_series_combine_kws_int(memory_leak_check):
     def test_impl(S1, S2, fill_val):
         return S1.combine(other=S2, func=lambda a, b: 2 * a + b, fill_value=fill_val)
@@ -1665,6 +1685,22 @@ def test_series_map_array_item(memory_leak_check):
     check_func(test_impl, (S,))
 
 
+def test_series_map_array_item_input(memory_leak_check):
+    """test array(item) input and output in map"""
+
+    def test_impl(S):
+        return S.map(lambda a: a[1:4])
+
+    S = pd.Series(
+        [
+            np.array([1.2, 3.2, 4.2, 5.5, 6.1, 7.6]),
+            np.array([1.2, 4.4, 2.1, 2.1, 12.3, 1112.4]),
+        ]
+        * 11
+    )
+    check_func(test_impl, (S,))
+
+
 def test_series_map_dict(memory_leak_check):
     """test dict output in map"""
 
@@ -1743,7 +1779,7 @@ def test_series_map_dt_str(memory_leak_check):
     def test_impl(S):
         return S.map(lambda a: str(a.year))
 
-    S = pd.Series(pd.date_range(start="2018-04-24", end="2018-04-27", periods=3))
+    S = pd.date_range(start="2018-04-24", periods=11).to_series()
     check_func(test_impl, (S,))
 
 
@@ -1775,6 +1811,45 @@ def test_series_map_arg_fold(memory_leak_check):
     check_func(test_impl, (S,))
 
 
+@pytest.mark.skip(reason="Fails on 3 processes #1606")
+def test_autocorr():
+    def f(S, lag):
+        return S.autocorr(lag=lag)
+
+    random.seed(5)
+    n = 80
+    e_list = [random.randint(1, 10) for _ in range(n)]
+    S = pd.Series(e_list)
+    check_func(f, (S, 1))
+    check_func(f, (S, 40))
+
+
+@pytest.mark.skip(reason="Fails on 3 processes #1618")
+def test_monotonicity():
+    def f1(S):
+        return S.is_monotonic_increasing
+
+    def f2(S):
+        return S.is_monotonic_decreasing
+
+    random.seed(5)
+    n = 100
+    e_list = [random.randint(1, 10) for _ in range(n)]
+    Srand = pd.Series(e_list)
+    S_inc = Srand.cumsum()
+    S_dec = Srand.sum() - S_inc
+    #
+    e_list_fail = e_list
+    e_list[random.randint(0, n - 1)] = -1
+    Srand2 = pd.Series(e_list_fail)
+    S_inc_fail = Srand2.cumsum()
+    check_func(f1, (S_inc,))
+    check_func(f2, (S_inc,))
+    check_func(f1, (S_dec,))
+    check_func(f2, (S_dec,))
+    check_func(f1, (S_inc_fail,))
+
+
 def test_series_map_error_check(memory_leak_check):
     """make sure proper error is raised when UDF is not supported
     """
@@ -1804,6 +1879,7 @@ def test_series_rolling(S):
     check_func(test_impl, (S,))
 
 
+@pytest.mark.slow
 def test_series_rolling_kw():
     def test_impl(S):
         return S.rolling(window=3, center=True).sum()
@@ -1815,7 +1891,7 @@ def test_series_rolling_kw():
 @pytest.mark.parametrize(
     "S",
     [
-        pd.Series([1.0, 2.2, 3.1, 4.6, 5.9]),
+        pytest.param(pd.Series([1.0, 2.2, 3.1, 4.6, 5.9]), marks=pytest.mark.slow),
         pd.Series([1.0, 2.2, 3.1, 4.6, 5.9], [3, 1, 0, 2, 4], name="ABC"),
     ],
 )
@@ -1831,9 +1907,9 @@ def test_series_cumsum(S, memory_leak_check):
 @pytest.mark.parametrize(
     "S",
     [
-        pd.Series([1.0, 2.2, 3.1, 4.6, 5.9]),
-        pd.Series([2, 3, 5, 8, 7]),
-        pd.Series([7, 6, 5, 4, 1]),
+        pytest.param(pd.Series([1.0, 2.2, 3.1, 4.6, 5.9]), marks=pytest.mark.slow),
+        pytest.param(pd.Series([2, 3, 5, 8, 7]), marks=pytest.mark.slow),
+        pytest.param(pd.Series([7, 6, 5, 4, 1]), marks=pytest.mark.slow),
         pd.Series([1.0, 2.2, 3.1, 4.6, 5.9], [3, 1, 0, 2, 4], name="ABC"),
     ],
 )
@@ -2034,11 +2110,23 @@ def test_series_idxmax(series_val, memory_leak_check):
 @pytest.mark.parametrize(
     "numeric_series_median",
     [
-        pd.Series([1, 2, 3]),
-        pd.Series([1, 2, 3, 4]),
+        pytest.param(pd.Series([1, 2, 3]), marks=pytest.mark.slow),
+        pytest.param(pd.Series([1, 2, 3, 4]), marks=pytest.mark.slow),
         pd.Series([1.0, 2.0, 4.5, 5.0, np.nan]),
-        pd.Series(4 * [np.nan]),
-        pd.Series([Decimal("1"), Decimal("2"), Decimal("4.5"), Decimal("5"), np.nan]),
+        pytest.param(pd.Series(4 * [np.nan]), marks=pytest.mark.slow),
+        pytest.param(
+            pd.Series(
+                [
+                    Decimal("1"),
+                    Decimal("2"),
+                    Decimal("4.5"),
+                    Decimal("5"),
+                    np.nan,
+                    Decimal("4.9"),
+                ]
+            ),
+            marks=pytest.mark.slow,
+        ),
     ],
 )
 def test_series_median(numeric_series_median):
@@ -2054,6 +2142,7 @@ def test_series_median(numeric_series_median):
     check_func(f_noskip, (numeric_series_median,), check_dtype=False)
 
 
+@pytest.mark.slow
 def test_series_median_nullable():
     """<NA> values from pandas correspond to np.nan from bodo. So specific test"""
     S = pd.Series(pd.array([1, None, 2, 3], dtype="UInt16"))
@@ -2110,7 +2199,9 @@ def test_series_tail(series_val, memory_leak_check):
     [
         (pd.Series([3, 2, np.nan, 2, 7], [3, 4, 2, 1, 0], name="A"), [2.0, 3.0]),
         (
-            pd.Series(["aa", "b", np.nan, "ccc", "b"], [3, 4, 2, 1, 0], name="A"),
+            pd.Series(
+                ["aa", "b", "ccc", "A", np.nan, "b"], [3, 4, 2, 1, 0, -1], name="A"
+            ),
             ["aa", "b"],
         ),
         (
@@ -2126,6 +2217,7 @@ def test_series_isin(S, values):
     check_func(test_impl, (S, values))
 
 
+@pytest.mark.slow
 def test_series_isin_large_random():
     def get_random_array(n, len_siz):
         elist = []
@@ -2202,7 +2294,8 @@ def test_series_take(series_val, memory_leak_check):
     # TODO: dist support for selection with index list
 
 
-def test_series_argsort_fast(memory_leak_check):
+# TODO: add memory_leak_check
+def test_series_argsort_fast():
     def test_impl(A):
         return A.argsort()
 
@@ -2240,7 +2333,8 @@ def test_series_argsort(series_val, memory_leak_check):
     # check_func(test_impl, (series_val,))
 
 
-def test_series_sort_values(series_val, memory_leak_check):
+# TODO: add memory_leak_check
+def test_series_sort_values(series_val):
     # not supported for Datetime.date yet, TODO: support and test
     if isinstance(series_val.values[0], datetime.date):
         return
@@ -2333,7 +2427,8 @@ def test_series_quantile(numeric_series_val, memory_leak_check):
     check_func(test_impl, (numeric_series_val,))
 
 
-def test_series_nunique(series_val, memory_leak_check):
+# TODO: add memory_leak_check
+def test_series_nunique(series_val):
     # not supported for Datetime.date yet, TODO: support and test
     if isinstance(series_val.values[0], datetime.date):
         return
@@ -2360,7 +2455,8 @@ def test_series_nunique(series_val, memory_leak_check):
     check_func(test_impl, (series_val,))
 
 
-def test_series_unique(series_val, memory_leak_check):
+# TODO: add memory_leak_check
+def test_series_unique(series_val):
     # timedelta setitem not supported yet
     if series_val.dtype == np.dtype("timedelta64[ns]"):
         return
@@ -2416,7 +2512,7 @@ def test_series_describe(numeric_series_val, memory_leak_check):
             pd.Series([1.0, 2.0, np.nan, 1.0, np.nan], name="A"),
             pd.Series([2.1, 3.1, np.nan, 3.3, 1.2]),
         ),
-        (pd.Series(["aa", "b", None, "ccc"], [3, 4, 2, 1], name="A"), "dd"),
+        (pd.Series(["aa", "b", "C", None, "ccc"], [3, 4, 0, 2, 1], name="A"), "dd"),
         (
             pd.Series(["aa", "b", None, "ccc", None, "AA"] * 2, name="A"),
             pd.Series(["A", "C", None, "aa", "dd", "d"] * 2),
@@ -2438,7 +2534,7 @@ def test_series_fillna(S, value, memory_leak_check):
             pd.Series([1.0, 2.0, np.nan, 1.0, np.nan], name="A"),
             pd.Series([2.1, 3.1, np.nan, 3.3, 1.2]),
         ),
-        (pd.Series(["aa", "b", None, "ccc"], [3, 4, 2, 1], name="A"), "dd"),
+        (pd.Series(["aa", "b", "A", None, "ccc"], [3, 4, 2, 0, 1], name="A"), "dd"),
         (
             pd.Series(["aa", "b", None, "ccc", None, "AA"] * 2, name="A"),
             pd.Series(["A", "C", None, "aa", "dd", "d"] * 2),
@@ -2456,7 +2552,7 @@ def test_series_fillna_inplace(S, value, memory_leak_check):
     "S",
     [
         pd.Series([1.0, 2.0, np.nan, 1.0], [3, 4, 2, 1], name="A"),
-        pd.Series(["aa", "b", None, "ccc"], [3, 4, 2, 1], name="A"),
+        pd.Series(["aa", "b", "AA", None, "ccc"], [3, 4, -1, 2, 1], name="A"),
     ],
 )
 def test_series_dropna(S, memory_leak_check):
@@ -2580,7 +2676,8 @@ def test_series_index_cast():
     pd.testing.assert_series_equal(bodo_func(n), test_impl(n))
 
 
-def test_series_value_counts(memory_leak_check):
+# TODO: add memory_leak_check
+def test_series_value_counts():
     """simple test for value_counts(). More comprehensive testing is necessary
     """
 
@@ -2651,6 +2748,7 @@ def test_singleval_series_any(memory_leak_check):
     check_func(impl, (S,))
 
 
+@pytest.mark.slow
 def test_random_series_all(memory_leak_check):
     def impl(S):
         A = S.all()
@@ -2670,10 +2768,11 @@ def test_random_series_all(memory_leak_check):
             eList.append(val_B)
         return pd.Series(eList)
 
-    S = random_series(10)
+    S = random_series(111)
     check_func(impl, (S,))
 
 
+@pytest.mark.slow
 def test_random_series_any(memory_leak_check):
     def impl(S):
         A = S.any()
@@ -2693,7 +2792,7 @@ def test_random_series_any(memory_leak_check):
             eList.append(val_B)
         return pd.Series(eList)
 
-    S = random_series(10)
+    S = random_series(111)
     check_func(impl, (S,))
 
 
@@ -2751,12 +2850,12 @@ def test_series_where(memory_leak_check):
 @pytest.mark.parametrize(
     "value, downcast",
     [
-        (pd.Series(["1.4", "2.3333", None, "1.22", "555.1"]), "float"),
+        (pd.Series(["1.4", "2.3333", None, "1.22", "555.1"] * 2), "float"),
         (pd.Series([1, 2, 9, 11, 3]), "integer"),
-        (pd.Series(["1", "3", None, "12", "-555"]), "integer"),
+        (pd.Series(["1", "3", "12", "4", None, "-555"]), "integer"),
         # string array with invalid element
-        (pd.Series(["1", "3", None, "12", "-55ss"]), "integer"),
-        (pd.Series(["1", "3", None, "12", "555"]), "unsigned"),
+        (pd.Series(["1", "3", "12", None, "-55ss"]), "integer"),
+        (pd.Series(["1", "3", "12", None, "555"]), "unsigned"),
     ],
 )
 def test_to_numeric(value, downcast, memory_leak_check):
@@ -2834,6 +2933,7 @@ def test_series_dot(memory_leak_check):
 ############################### old tests ###############################
 
 
+@pytest.mark.slow
 def test_create_series1(memory_leak_check):
     def test_impl():
         A = pd.Series([1, 2, 3])
@@ -2843,6 +2943,7 @@ def test_create_series1(memory_leak_check):
     np.testing.assert_array_equal(bodo_func(), test_impl())
 
 
+@pytest.mark.slow
 def test_create_series_index1(memory_leak_check):
     # create and box an indexed Series
     def test_impl():
@@ -2853,6 +2954,7 @@ def test_create_series_index1(memory_leak_check):
     pd.testing.assert_series_equal(bodo_func(), test_impl())
 
 
+@pytest.mark.slow
 def test_create_series_index2(memory_leak_check):
     def test_impl():
         A = pd.Series([1, 2, 3], index=["A", "C", "B"])
@@ -2862,6 +2964,7 @@ def test_create_series_index2(memory_leak_check):
     pd.testing.assert_series_equal(bodo_func(), test_impl())
 
 
+@pytest.mark.slow
 def test_create_series_index3(memory_leak_check):
     def test_impl():
         A = pd.Series([1, 2, 3], index=["A", "C", "B"], name="A")
@@ -2871,6 +2974,7 @@ def test_create_series_index3(memory_leak_check):
     pd.testing.assert_series_equal(bodo_func(), test_impl())
 
 
+@pytest.mark.slow
 def test_create_series_index4(memory_leak_check):
     def test_impl(name):
         A = pd.Series([1, 2, 3], index=["A", "C", "B"], name=name)
@@ -2967,7 +3071,7 @@ def test_series_astype_num_constructors(memory_leak_check):
     def impl1(A):
         return A.astype(float)
 
-    S = pd.Series(["3.2", "1", np.nan, "3.2", "5.1"])
+    S = pd.Series(["3.2", "1", "3.2", np.nan, "5.1"])
     check_func(impl1, (S,))
 
     def impl2(A):
@@ -3010,6 +3114,7 @@ def test_series_unsupported_error_checking(memory_leak_check):
         bodo.jit(test_method)(pd.Series([1, 2]))
 
 
+@pytest.mark.slow
 class TestSeries(unittest.TestCase):
     def test_create1(self):
         def test_impl():
@@ -3734,9 +3839,7 @@ class TestSeries(unittest.TestCase):
         S2 = pd.Series(["1", "12", "", np.nan, "A"])
         # TODO: handle index in concat
         pd.testing.assert_series_equal(
-            bodo_func(S1, S2),
-            test_impl(S1, S2).reset_index(drop=True),
-            check_dtype=False,
+            bodo_func(S1, S2), test_impl(S1, S2), check_dtype=False,
         )
 
     def test_series_cov1(self):
@@ -3869,7 +3972,7 @@ class TestSeries(unittest.TestCase):
         def test_impl(S):
             return S.isna()
 
-        S = pd.Series(["aa", None, "c", "cccd"])
+        S = pd.Series(["aa", None, "AB", "ABC", "c", "cccd"])
         check_func(test_impl, (S,))
 
     def test_series_nlargest1(self):
