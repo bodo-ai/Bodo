@@ -904,7 +904,6 @@ series_dt_unsupported_attrs = {
     "is_year_start",
     "quarter",
     "qyear",
-    "seconds",
     "start_time",
     "time",
     "timetz",
