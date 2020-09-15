@@ -33,17 +33,17 @@ Setup:
     1. Bodo development::
 
         cd docker/bodo_dev
-        docker build -t bodo_dev . 
+        docker build -t bodo_dev .
 
     2. Bodo development with valgrind::
 
         cd docker/bodo_dev_valgrind
-        docker build -t bodo_dev_valgrind .  
-    
+        docker build -t bodo_dev_valgrind .
+
     3. Bodo development for hdfs::
 
         cd docker/bodo_dev_hdfs
-        docker build -t bodo_dev_hdfs . 
+        docker build -t bodo_dev_hdfs .
 
     `List images <https://docs.python.org/3/library/pdb.html>`_  with :code:`docker images`
     `Remove image <https://docs.docker.com/engine/reference/commandline/rmi/>`_ with :code:`docker rmi your_image_id`
@@ -67,15 +67,15 @@ Setup:
         # -p publish container port so that we can browse web interface
         # MUST replace ~/Bodo with your path to Bodo
         docker run -it -p 9870:9870 -v ~/Bodo:/Bodo bodo_dev_hdfs
-        
+
     Other useful flags & `bind mounts <https://docs.docker.com/storage/bind-mounts/>`_::
 
-        # bodo_dev is the image we are using here 
+        # bodo_dev is the image we are using here
         # -v your_path:path_in_docker, mounts directory
         # -m, memory limit
         # --oom-kill-disable, whether to disable OOM Killer for the container or no
         docker run -it -m 16000m --oom-kill-disable -v ~/Bodo:/Bodo -v ~/claims_poc:/claims_poc build bodo_dev
-        
+
 3. Build Bodo in container, not necessary for ``bodo_dev_hdfs``::
 
        cd ../Bodo
@@ -84,13 +84,13 @@ Setup:
 4. Use valgrind in Bodo development with valgrind::
 
        cd ../src
-       
+
        # run valgrind with python, replace your_python_script.py with your own
        valgrind --suppressions=valgrind-python.supp --error-limit=no --track-origins=yes python -u your_python_script.py
-       
+
        # redirect valgrind log and python stdout to out.txt
        valgrind --suppressions=valgrind-python.supp --error-limit=no --track-origins=yes python -u your_python_script.py &>out.txt
-       
+
        # valgrind with mpiexec
        valgrind --suppressions=valgrind-python.supp --error-limit=no --track-origins=yes mpiexec -n 2 python -u your_python_script.py
 
@@ -116,7 +116,7 @@ Setup:
   Web interface is available locally at: http://localhost:9870/.
   Test hdfs test suite with ``pytest -s -v -m "hdfs"`` (first navigate to ``/Bodo``).
 
-  To stop Hadoop, run ``sbin/stop-dfs.sh``. 
+  To stop Hadoop, run ``sbin/stop-dfs.sh``.
 
   If you need to restart Hadoop after, run ``rm -rf /tmp/hadoop-root`` (without removing this directory, DataNode will not restart), and then repeat above steps from formatting the filesystem. If ``jps`` output is still not as expected, run a new docker container.
 
@@ -126,7 +126,7 @@ Other useful docker commands
 To run a command in a running container: Use :code:`docker container ls` to find the running container ID::
 
     # replace d030f4d9c8ac with your container ID
-    docker exec -it d030f4d9c8ac bash    
+    docker exec -it d030f4d9c8ac bash
 
 `List <https://docs.docker.com/engine/reference/commandline/ps/>`_ all running and stopped containers: :code:`docker ps`
 
@@ -134,9 +134,9 @@ To `stop <https://docs.docker.com/engine/reference/commandline/stop/>`_ and `rem
 
     # first stop the container
     docker stop your_container_ID
-    # then remove the container 
+    # then remove the container
     docker rm your_container_ID
 
-To remove all stopped containers:: 
+To remove all stopped containers::
 
     docker rm -v $(docker ps -qa)
