@@ -2680,6 +2680,10 @@ def test_series_digitize(S, bins, memory_leak_check):
             pd.Series([1.1, 2.2, 1.3, -1.4, 3.1], name="BB"),
             np.array([6.1, 3.1, 2.2, 1.7, 9.1]),
         ),
+        (
+            np.array([6.1, 3.1, 2.2, 1.7, 9.1]),
+            pd.Series([1.1, 2.2, 1.3, -1.4, 3.1], name="BB"),
+        ),
     ],
 )
 def test_series_np_dot(S1, S2, memory_leak_check):

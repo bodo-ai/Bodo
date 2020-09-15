@@ -743,7 +743,7 @@ def test_arr_reshape(dtype):
     check_func(impl7, (A, 12))
 
 
-def test_np_dot():
+def test_np_dot(is_slow_run):
     """test np.dot() distribute transform
     """
 
@@ -757,9 +757,14 @@ def test_np_dot():
         return np.dot(X, w)
 
     # using the @ operator
-    def impl3(X, Y):
+    def impl3(X, d):
         w = np.arange(0, d, 1, np.float64)
         return X @ w
+
+    # using the @ operator
+    def impl4(Y):
+        w = np.arange(0, len(Y), 1, np.float64)
+        return w @ Y
 
     n = 11
     d = 3
@@ -769,6 +774,8 @@ def test_np_dot():
     check_func(impl1, (X, Y), is_out_distributed=False)
     check_func(impl2, (X, d))
     check_func(impl3, (X, d))
+    if is_slow_run:
+        check_func(impl4, (Y,))
 
 
 def test_dist_tuple1():
