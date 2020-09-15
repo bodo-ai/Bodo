@@ -881,7 +881,6 @@ series_dt_unsupported_methods = {
     "ceil",
     "day_name",
     "floor",
-    "isocalendar",
     "month_name",
     "normalize",
     "round",
