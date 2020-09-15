@@ -895,7 +895,6 @@ series_dt_unsupported_methods = {
 series_dt_unsupported_attrs = {
     "components",
     "days",
-    "days_in_month",
     "end_time",
     "freq",
     "is_month_end",
