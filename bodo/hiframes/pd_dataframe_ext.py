@@ -3476,7 +3476,6 @@ dataframe_unsupported = {
     "swapaxes",
     "to_pickle",
     "to_timestamp",
-    "apply",
     "interpolate",
     "eq",
     "info",
