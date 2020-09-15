@@ -889,7 +889,6 @@ series_dt_unsupported_methods = {
     "to_pydatetime",
     "to_pytimedelta",
     "to_timestamp",
-    "total_seconds",
     "tz_convert",
     "tz_localize",
 }
