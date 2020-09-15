@@ -2114,53 +2114,6 @@ def _arrays_written(arrs, blocks):
     return False
 
 
-# def get_stencil_accesses(parfor, typemap):
-#     # if a parfor has stencil pattern, see which accesses depend on loop index
-#     # XXX: assuming loop index is not used for non-stencil arrays
-#     # TODO support recursive parfor, multi-D, mutiple body blocks
-
-#     # no access if not stencil
-#     is_stencil = False
-#     for pattern in parfor.patterns:
-#         if pattern[0] == 'stencil':
-#             is_stencil = True
-#             neighborhood = pattern[1]
-#     if not is_stencil:
-#         return {}, None
-
-#     par_index_var = parfor.loop_nests[0].index_variable
-#     body = parfor.loop_body
-#     body_defs = build_definitions(body)
-
-#     stencil_accesses = {}
-
-#     for block in body.values():
-#         for stmt in block.body:
-#             if isinstance(stmt, ir.Assign) and isinstance(stmt.value, ir.Expr):
-#                 lhs = stmt.target.name
-#                 rhs = stmt.value
-#                 if (rhs.op == 'getitem' and is_array_typ(typemap[rhs.value.name])
-#                         and vars_dependent(body_defs, rhs.index, par_index_var)):
-#                     stencil_accesses[rhs.index.name] = rhs.value.name
-
-#     return stencil_accesses, neighborhood
-
-
-# def vars_dependent(defs, var1, var2):
-#     # see if var1 depends on var2 based on definitions in defs
-#     if len(defs[var1.name]) != 1:
-#         return False
-
-#     vardef = defs[var1.name][0]
-#     if isinstance(vardef, ir.Var) and vardef.name == var2.name:
-#         return True
-#     if isinstance(vardef, ir.Expr):
-#         for invar in vardef.list_vars():
-#             if invar.name == var2.name or vars_dependent(defs, invar, var2):
-#                 return True
-#     return False
-
-
 # array access code is copied from ir_utils to be able to handle specialized
 # array access calls such as get_split_view_index()
 # TODO: implement extendable version in ir_utils
