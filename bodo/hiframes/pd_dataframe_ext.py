@@ -3404,7 +3404,6 @@ dataframe_unsupported = {
     "notnull",
     "clip",
     "slice_shift",
-    "rolling",
     "tz_convert",
     "combine",
     "convert_dtypes",
