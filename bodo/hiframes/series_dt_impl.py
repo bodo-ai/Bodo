@@ -887,7 +887,6 @@ series_dt_unsupported_methods = {
     "strftime",
     "to_period",
     "to_pydatetime",
-    "to_pytimedelta",
     "to_timestamp",
     "tz_convert",
     "tz_localize",
