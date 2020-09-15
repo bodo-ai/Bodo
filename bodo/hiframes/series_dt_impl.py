@@ -902,8 +902,6 @@ series_dt_unsupported_attrs = {
     "is_quarter_start",
     "is_year_end",
     "is_year_start",
-    "microseconds",
-    "nanoseconds",
     "quarter",
     "qyear",
     "seconds",
