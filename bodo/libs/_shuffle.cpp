@@ -187,10 +187,10 @@ static void fill_send_array_inner(T* send_buff, const T* data,
                                   const uint32_t* hashes,
                                   std::vector<int> const& send_disp, int n_pes,
                                   size_t n_rows) {
-    std::vector<int> tmp_offset(send_disp);
+    std::vector<int64_t> tmp_offset(send_disp.begin(), send_disp.end());
     for (size_t i = 0; i < n_rows; i++) {
         size_t node = (size_t)hashes[i] % (size_t)n_pes;
-        int ind = tmp_offset[node];
+        int64_t ind = tmp_offset[node];
         send_buff[ind] = data[i];
         tmp_offset[node]++;
     }
@@ -200,10 +200,10 @@ static void fill_send_array_inner_decimal(uint8_t* send_buff, uint8_t* data,
                                           uint32_t* hashes,
                                           std::vector<int> const& send_disp,
                                           int n_pes, size_t n_rows) {
-    std::vector<int> tmp_offset(send_disp);
+    std::vector<int64_t> tmp_offset(send_disp.begin(), send_disp.end());
     for (size_t i = 0; i < n_rows; i++) {
         size_t node = (size_t)hashes[i] % (size_t)n_pes;
-        int ind = tmp_offset[node];
+        int64_t ind = tmp_offset[node];
         // send_buff[ind] = data[i];
         memcpy(send_buff + ind * BYTES_PER_DECIMAL,
                data + i * BYTES_PER_DECIMAL, BYTES_PER_DECIMAL);
@@ -227,17 +227,17 @@ static void fill_send_array_string_inner(
     char* send_data_buff, uint32_t* send_length_buff, char* arr_data,
     uint32_t* arr_offsets, uint32_t* hashes, std::vector<int> const& send_disp,
     std::vector<int> const& send_disp_sub, int n_pes, size_t n_rows) {
-    std::vector<int> tmp_offset(send_disp);
-    std::vector<int> tmp_offset_sub(send_disp_sub);
+    std::vector<int64_t> tmp_offset(send_disp.begin(), send_disp.end());
+    std::vector<int64_t> tmp_offset_sub(send_disp_sub.begin(), send_disp_sub.end());
     for (size_t i = 0; i < n_rows; i++) {
         size_t node = (size_t)hashes[i] % (size_t)n_pes;
         // write length
-        int ind = tmp_offset[node];
+        int64_t ind = tmp_offset[node];
         uint32_t str_len = arr_offsets[i + 1] - arr_offsets[i];
         send_length_buff[ind] = str_len;
         tmp_offset[node]++;
         // write data
-        int c_ind = tmp_offset_sub[node];
+        int64_t c_ind = tmp_offset_sub[node];
         memcpy(&send_data_buff[c_ind], &arr_data[arr_offsets[i]], str_len);
         tmp_offset_sub[node] += str_len;
     }
@@ -266,14 +266,14 @@ static void fill_send_array_list_string_inner(
     uint32_t* arr_index_offsets, uint32_t* hashes,
     std::vector<int> const& send_disp, std::vector<int> const& send_disp_sub,
     std::vector<int> const& send_disp_sub_sub, int n_pes, size_t n_rows) {
-    std::vector<int> tmp_offset(send_disp);
-    std::vector<int> tmp_offset_sub(send_disp_sub);
-    std::vector<int> tmp_offset_sub_sub(send_disp_sub_sub);
+    std::vector<int64_t> tmp_offset(send_disp.begin(), send_disp.end());
+    std::vector<int64_t> tmp_offset_sub(send_disp_sub.begin(), send_disp_sub.end());
+    std::vector<int64_t> tmp_offset_sub_sub(send_disp_sub_sub.begin(), send_disp_sub_sub.end());
     for (size_t i = 0; i < n_rows; i++) {
         size_t node = (size_t)hashes[i] % (size_t)n_pes;
         // Compute the number of strings and the number of characters that will
         // have to be sent.
-        int ind = tmp_offset[node];
+        int64_t ind = tmp_offset[node];
         uint32_t len_sub = arr_index_offsets[i + 1] - arr_index_offsets[i];
         uint32_t len_sub_sub = arr_data_offsets[arr_index_offsets[i + 1]] -
                                arr_data_offsets[arr_index_offsets[i]];
@@ -283,7 +283,7 @@ static void fill_send_array_list_string_inner(
         tmp_offset[node]++;
         // write the lengths of the strings that will be sent from this
         // processor to others.
-        int ind_sub = tmp_offset_sub[node];
+        int64_t ind_sub = tmp_offset_sub[node];
         for (uint32_t u = 0; u < len_sub; u++) {
             // size_data is the length of the strings to be sent.
             uint32_t size_data =
@@ -293,7 +293,7 @@ static void fill_send_array_list_string_inner(
         }
         tmp_offset_sub[node] += len_sub;
         // write the set of characters that corresponds to this entry.
-        int ind_sub_sub = tmp_offset_sub_sub[node];
+        int64_t ind_sub_sub = tmp_offset_sub_sub[node];
         memcpy(&send_data_buff[ind_sub_sub],
                &arr_data[arr_data_offsets[arr_index_offsets[i]]], len_sub_sub);
         tmp_offset_sub_sub[node] += len_sub_sub;
@@ -305,10 +305,10 @@ static void fill_send_array_null_inner(uint8_t* send_null_bitmask,
                                        uint32_t* hashes,
                                        std::vector<int> const& send_disp_null,
                                        int n_pes, size_t n_rows) {
-    std::vector<int> tmp_offset(n_pes, 0);
+    std::vector<int64_t> tmp_offset(n_pes, 0);
     for (size_t i = 0; i < n_rows; i++) {
         size_t node = (size_t)hashes[i] % (size_t)n_pes;
-        int ind = tmp_offset[node];
+        int64_t ind = tmp_offset[node];
         // write null bit
         bool bit = GetBit(array_null_bitmask, i);
         uint8_t* out_bitmap = &send_null_bitmask[send_disp_null[node]];
