@@ -57,6 +57,7 @@ import llvmlite.binding as ll
 
 ll.add_symbol("box_datetime_date_array", hdatetime_ext.box_datetime_date_array)
 ll.add_symbol("unbox_datetime_date_array", hdatetime_ext.unbox_datetime_date_array)
+ll.add_symbol("get_isocalendar", hdatetime_ext.get_isocalendar)
 
 
 # datetime.date implementation that uses a single int to store year/month/day
@@ -351,6 +352,38 @@ def _cmp(x, y):  # pragma: no cover
     return 0 if x == y else 1 if x > y else -1
 
 
+@intrinsic
+def get_isocalendar(typingctx, dt_year, dt_month, dt_day):
+    def codegen(context, builder, sig, args):
+        year = cgutils.alloca_once(builder, lir.IntType(64))
+        week = cgutils.alloca_once(builder, lir.IntType(64))
+        dow = cgutils.alloca_once(builder, lir.IntType(64))
+        fnty = lir.FunctionType(
+            lir.VoidType(),
+            [
+                lir.IntType(64),
+                lir.IntType(64),
+                lir.IntType(64),
+                lir.IntType(64).as_pointer(),
+                lir.IntType(64).as_pointer(),
+                lir.IntType(64).as_pointer(),
+            ],
+        )
+        fn_tp = builder.module.get_or_insert_function(fnty, name="get_isocalendar")
+        builder.call(fn_tp, [args[0], args[1], args[2], year, week, dow])
+        return cgutils.pack_array(
+            builder, [builder.load(year), builder.load(week), builder.load(dow)]
+        )
+
+    res = (
+        types.Tuple([types.int64, types.int64, types.int64])(
+            types.int64, types.int64, types.int64
+        ),
+        codegen,
+    )
+    return res
+
+
 ###############################################################################
 
 types.datetime_date_type = datetime_date_type
@@ -398,6 +431,15 @@ def weekday(date):
 
     def impl(date):  # pragma: no cover
         return (date.toordinal() + 6) % 7
+
+    return impl
+
+
+@overload_method(DatetimeDateType, "isocalendar", no_unliteral=True)
+def overload_pd_timestamp_isocalendar(date):
+    def impl(date):  # pragma: no cover
+        year, week, day_of_week = get_isocalendar(date.year, date.month, date.day)
+        return (year, week, day_of_week)
 
     return impl
 

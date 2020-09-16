@@ -923,6 +923,41 @@ def test_datetime_datetime_strptime():
     check_func(test_strptime, (datetime_str, dtformat))
 
 
+
+
+@pytest.mark.parametrize(
+    "date",
+    [
+        pytest.param(datetime.date(1800, 1, 1), marks=pytest.mark.slow),
+        pytest.param(datetime.date(1800, 6, 1), marks=pytest.mark.slow),
+        pytest.param(datetime.date(1800, 10, 1), marks=pytest.mark.slow),
+        pytest.param(datetime.date(1800, 1, 14), marks=pytest.mark.slow),
+        pytest.param(datetime.date(1800, 6, 14), marks=pytest.mark.slow),
+        pytest.param(datetime.date(1997, 1, 14), marks=pytest.mark.slow),
+        pytest.param(datetime.date(2015, 1, 1), marks=pytest.mark.slow),
+        pytest.param(datetime.date(2015, 6, 1), marks=pytest.mark.slow),
+        pytest.param(datetime.date(2015, 10, 1), marks=pytest.mark.slow),
+        pytest.param(datetime.date(2019, 1, 1), marks=pytest.mark.slow),
+        pytest.param(datetime.date(2019, 6, 1), marks=pytest.mark.slow),
+        pytest.param(datetime.date(2019, 10, 1), marks=pytest.mark.slow),
+        pytest.param(datetime.date(2020, 1, 28), marks=pytest.mark.slow),
+        pytest.param(datetime.date(2020, 6, 28), marks=pytest.mark.slow),
+        datetime.date(2020, 10, 28),
+        pytest.param(datetime.date(2025, 1, 28), marks=pytest.mark.slow),
+        pytest.param(datetime.date(2025, 6, 28), marks=pytest.mark.slow),
+        pytest.param(datetime.date(2025, 10, 28), marks=pytest.mark.slow),
+    ],
+)
+def test_datetime_date_isocalendar(date):
+    """ Test datetime.date's isocalendar() method
+    """
+
+    def test_impl(date):
+        return date.isocalendar()
+
+    check_func(test_impl, (date,))
+
+
 # -------------------------  Test series.dt  -------------------------- #
 
 
@@ -966,6 +1001,32 @@ def test_dt_extract_date(series_value):
         return S.dt.date
 
     check_func(impl, (series_value,))
+
+
+# Copy the series info for isocalendar but remove the dates broken in pandas
+@pytest.fixture(
+    params=[
+        pytest.param(
+            pd.Series(pd.date_range(start="2019-01-24", end="2019-01-29", periods=5)),
+            marks=pytest.mark.slow,
+        ),
+        # Test Series.dt.year for values less than 2000 (issue #343)
+        pd.Series(pd.date_range(start="1998-04-24", end="1998-04-29", periods=5)),
+        pd.Series(pd.date_range(start="5/20/2015", periods=5, freq="10N")),
+    ]
+)
+def series_value_no_bad_dates(request):
+    return request.param
+
+
+def test_dt_isocalendar(series_value_no_bad_dates):
+    """Test Series.dt.isocalendar()
+    """
+
+    def impl(S):
+        return S.dt.isocalendar()
+
+    check_func(impl, (series_value_no_bad_dates,))
 
 
 @pytest.mark.parametrize(
@@ -1336,3 +1397,18 @@ def test_datetime_timedelta_array_len():
         [datetime.timedelta(34), datetime.timedelta(microseconds=43000000)] * 3
     )
     check_func(test_impl, (A,))
+
+
+@pytest.mark.parametrize(
+    "dateindex",
+    [
+        pd.date_range("2004-11-12", periods=11),
+        pytest.param(pd.date_range("2019-01-14", periods=11), marks=pytest.mark.slow),
+        pytest.param(pd.date_range("2030-01-1", periods=11), marks=pytest.mark.slow),
+    ],
+)
+def test_datetime_index_isocalendar(dateindex):
+    def test_impl(I):
+        return I.isocalendar()
+
+    check_func(test_impl, (dateindex,))

@@ -13,6 +13,72 @@ static const int days_per_month_table[2][12] = {
     {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31},
     {31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31}};
 
+// Implementation of a general get_isocalendar to be reused
+// by various pandas types. Places return values inside the allocated
+// buffers. Iso calendar returns the year, week number, and day of the
+// week for a given date described by a year month and day
+static void get_isocalendar(int64_t date_year, int64_t date_month, 
+        int64_t date_day, int64_t* year_res, int64_t* week_res, int64_t* dow_res) {
+
+    /*
+     * NOTE: Pandas has weird behavior and it doesn't seem to be well defined.
+     * The documentation is sparse:
+     * https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.Timestamp.isocalendar.html
+     * Weird bugs also seem to happen with certain calendar inputs (but not all). This seems to
+     * typically occur at the start of specific years believing they are part of the previous year
+     * Example:
+     * >>> pd.Timestamp(2000, 1, 1, 1).isocalendar()
+     * (1999, 52, 6)
+     * Our implementation does not have this weird behavior/these bugs
+     * >>> pd.Timestamp(2000, 1, 1, 1).isocalendar()
+     * (2000, 1, 7)
+     * It also seems that for these years the problems will persist each day of that year.
+     * Pandas also has issues with input validation. Early years are not rejected by crash due to 
+     * storage issues.
+     */
+
+
+    /*
+     * Calculate the weekday of the day before 1601 for easy
+     * leap year calculation (but pandas won't accept 1601-1677.
+     * This year started on a Monday and we will calculate years with
+     * it. However we want to add the days so we are "starting" at the
+     * end of 1600.
+     *
+     * For now calculations assume Monday = 0 -> Sunday = 6 for calcuating weeks.
+     * Panda does -> Monday = 1, Sunday = 7, so we will add 1 to our output.
+     */
+     int64_t earliest_year = 1601;
+
+    // Start 1 day early to make the math simpler
+    int64_t start_day = 6;
+
+    int64_t year_difference = date_year - earliest_year;
+    int64_t num_leap_years = (year_difference / 4) - (year_difference / 100) + (year_difference / 400);
+
+    //  Our day offset differs form the constant value for 1601 by the number of years
+    // + number_leap years between them
+    int64_t start_offset = year_difference + num_leap_years;
+    start_day = (start_day + start_offset) % 7;
+
+    int year_type = 0;
+    if (is_leapyear(date_year)) {
+        year_type = 1;
+    }
+    for (int i = 0; i < date_month - 1; i++) {
+        start_day += days_per_month_table[year_type][i];
+    }
+
+    // Include the days from this month
+    start_day += date_day;
+
+    // Assign the calendar values to the pointers
+    *year_res = date_year;
+    // Add 1 to week and day values for 1 indexing
+    *week_res = (start_day / 7) + 1;
+    *dow_res = (start_day % 7) + 1;
+} 
+
 // copied from Arrow since not in exported APIs
 // https://github.com/apache/arrow/blob/329c9944554ddb142b0a2ac26a4abdf477636e37/cpp/src/arrow/python/datetime.cc#L58
 // Calculates the days offset from the 1970 epoch.

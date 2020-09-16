@@ -5,6 +5,7 @@ Support for Series.dt attributes and methods
 import operator
 import datetime
 import numpy as np
+import pandas as pd
 import numba
 from numba.core import types, cgutils
 from numba.extending import (
@@ -197,6 +198,40 @@ def series_dt_date_overload(S_dt):
         #        S[i] = datetime.date(ts.year, ts.month, ts.day)\n'
         #        S[i] = ts.day + (ts.month << 16) + (ts.year << 32)\n'
         return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
+
+    return impl
+
+
+@overload_method(
+    SeriesDatetimePropertiesType, "isocalendar", inline="always", no_unliteral=True
+)
+def series_dt_isocalendar_overload(S_dt):
+    if not S_dt.stype.dtype == types.NPDatetime("ns"):  # pragma: no cover
+        return
+
+    def impl(S_dt):  # pragma: no cover
+        S = S_dt._obj
+        arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+        index = bodo.hiframes.pd_series_ext.get_series_index(S)
+        numba.parfors.parfor.init_prange()
+        n = len(arr)
+        years = bodo.libs.int_arr_ext.alloc_int_array(n, np.uint32)
+        weeks = bodo.libs.int_arr_ext.alloc_int_array(n, np.uint32)
+        days = bodo.libs.int_arr_ext.alloc_int_array(n, np.uint32)
+        for i in numba.parfors.parfor.internal_prange(n):
+            if bodo.libs.array_kernels.isna(arr, i):
+                bodo.libs.array_kernels.setna(years, i)
+                bodo.libs.array_kernels.setna(weeks, i)
+                bodo.libs.array_kernels.setna(days, i)
+                continue
+            (
+                years[i],
+                weeks[i],
+                days[i],
+            ) = bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(
+                arr[i]
+            ).isocalendar()
+        return bodo.hiframes.pd_dataframe_ext.init_dataframe((years, weeks, days), index, ("year", "week", "day"))
 
     return impl
 

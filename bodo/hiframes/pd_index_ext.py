@@ -61,7 +61,7 @@ from bodo.utils.transform import (
     gen_varsize_item_sizes,
 )
 from bodo.libs.int_arr_ext import IntegerArrayType
-
+from bodo.hiframes.datetime_date_ext import get_isocalendar
 
 _dt_index_data_typ = types.Array(types.NPDatetime("ns"), 1, "C")
 _timedelta_index_data_typ = types.Array(types.NPTimedelta("ns"), 1, "C")
@@ -787,6 +787,33 @@ def pd_date_range_overload(
         return bodo.hiframes.pd_index_ext.init_datetime_index(S, name)
 
     return f
+
+
+@overload_method(DatetimeIndexType, "isocalendar", inline="always", no_unliteral=True)
+def overload_pd_timestamp_isocalendar(idx):
+    def impl(idx):  # pragma: no cover
+        A = bodo.hiframes.pd_index_ext.get_index_data(idx)
+        numba.parfors.parfor.init_prange()
+        n = len(A)
+        years = bodo.libs.int_arr_ext.alloc_int_array(n, np.uint32)
+        weeks = bodo.libs.int_arr_ext.alloc_int_array(n, np.uint32)
+        days = bodo.libs.int_arr_ext.alloc_int_array(n, np.uint32)
+        for i in numba.parfors.parfor.internal_prange(n):
+            if bodo.libs.array_kernels.isna(A, i):
+                bodo.libs.array_kernels.setna(years, i)
+                bodo.libs.array_kernels.setna(weeks, i)
+                bodo.libs.array_kernels.setna(days, i)
+                continue
+            (
+                years[i],
+                weeks[i],
+                days[i],
+            ) = bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(
+                A[i]
+            ).isocalendar()
+        return bodo.hiframes.pd_dataframe_ext.init_dataframe((years, weeks, days), idx, ("year", "week", "day"))
+
+    return impl
 
 
 # ------------------------------ Timedelta ---------------------------
