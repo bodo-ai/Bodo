@@ -292,7 +292,11 @@ class DistributedAnalysis:
             elif isinstance(inst, ir.Return):
                 self._analyze_return(inst.value, array_dists)
             else:
-                self._set_REP(inst.list_vars(), array_dists)
+                self._set_REP(
+                    inst.list_vars(),
+                    array_dists,
+                    "unsupported statement in distribution analysis",
+                )
 
     def _analyze_assign(self, inst, equiv_set, array_dists, parfor_dists):
         """analyze assignment nodes (ir.Assign)"""
@@ -384,7 +388,7 @@ class DistributedAnalysis:
             # this path is not possible since pair_first is only used in the pattern
             # above, unless if variable definitions have some issue
             else:  # pragma: no cover
-                self._set_REP(inst.list_vars(), array_dists)
+                self._set_REP(inst.list_vars(), array_dists, "invalid pair_first")
         elif isinstance(rhs, ir.Expr) and rhs.op in ("getiter", "iternext"):
             # analyze array container access in pair_first
             return
@@ -392,7 +396,11 @@ class DistributedAnalysis:
             self._analyze_arg(lhs, rhs, array_dists)
             return
         else:
-            self._set_REP(inst.list_vars(), array_dists)
+            self._set_REP(
+                inst.list_vars(),
+                array_dists,
+                "unsupported expression in distributed analysis",
+            )
 
     def _analyze_getattr(self, lhs, rhs, array_dists):
         """analyze getattr nodes (ir.Expr.getattr)"""
@@ -430,9 +438,12 @@ class DistributedAnalysis:
             self._meet_array_dists(lhs, arr, array_dists)
 
     def _analyze_parfor(self, parfor, array_dists, parfor_dists):
+        """analyze Parfor nodes for distribution. Parfor and its accessed arrays should
+        have the same distribution.
+        """
         # get reduction info for parfor if not already available.
         # can compute & save it since parfor doesn't change at this compiler stage
-        if not "redvars" in parfor._kws:
+        if "redvars" not in parfor._kws:
             parfor.redvars, parfor.reddict = get_parfor_reductions(
                 self.func_ir, parfor, parfor.params, self.calltypes
             )
@@ -459,7 +470,13 @@ class DistributedAnalysis:
             parfor.init_block, parfor.equiv_set, array_dists, parfor_dists
         )
         out_dist = Distribution.OneD
+        # nested parfors are replicated
         if self.in_parallel_parfor != -1:
+            self._add_diag_info(
+                "Parfor {} set to REP since it is inside another distributed Parfor".format(
+                    parfor.id
+                )
+            )
             out_dist = Distribution.REP
 
         parfor_arrs = set()  # arrays this parfor accesses in parallel
@@ -487,6 +504,11 @@ class DistributedAnalysis:
                     parfor_arrs.add(arr)
                     self._parallel_accesses.add((arr, index))
                 if par_index_var in index_tuple[1:]:
+                    self._add_diag_info(
+                        "Parfor {} set to REP since index is used in lower dimensions of array access".format(
+                            parfor.id
+                        )
+                    )
                     out_dist = Distribution.REP
             # TODO: check for index dependency
 
@@ -532,6 +554,11 @@ class DistributedAnalysis:
             if reduce_op == Reduce_Type.Concat:
                 # if output array is replicated, parfor should be replicated too
                 if is_REP(array_dists[reduce_varname]):
+                    self._add_diag_info(
+                        "Parfor {} set to REP since its concat reduction variable is REP".format(
+                            parfor.id
+                        )
+                    )
                     out_dist = Distribution.REP
                 else:
                     # concat reduce variables are 1D_Var since each rank can produce
@@ -539,6 +566,11 @@ class DistributedAnalysis:
                     array_dists[reduce_varname] = Distribution.OneD_Var
                 # if pafor is replicated, output array is replicated
                 if is_REP(out_dist):
+                    self._add_diag_info(
+                        "Variable {} set to REP since it is a concat reduction variable for Parfor {} which is REP".format(
+                            reduce_varname, parfor.id
+                        )
+                    )
                     array_dists[reduce_varname] = Distribution.REP
                 # keep track of concat reduce vars to handle in concat analysis and
                 # transforms properly
@@ -602,7 +634,7 @@ class DistributedAnalysis:
                 # output is always replicated, and the output can be an array
                 # if average=None so we have to set it
                 # TODO this shouldn't be done if output is float?
-                self._set_var_dist(lhs, array_dists, Distribution.REP)
+                self._set_REP(lhs, array_dists, "output of {} is REP".format(func_name))
                 dist_arg0 = is_distributable_typ(self.typemap[rhs.args[0].name])
                 dist_arg1 = is_distributable_typ(self.typemap[rhs.args[1].name])
                 if dist_arg0 and dist_arg1:
@@ -610,9 +642,17 @@ class DistributedAnalysis:
                         rhs.args[0].name, rhs.args[1].name, array_dists
                     )
                 elif not dist_arg0 and dist_arg1:
-                    self._set_var_dist(rhs.args[1].name, array_dists, Distribution.REP)
+                    self._set_REP(
+                        rhs.args[1].name,
+                        array_dists,
+                        "first input of {} is non-distributable".format(func_name),
+                    )
                 elif not dist_arg1 and dist_arg0:
-                    self._set_var_dist(rhs.args[0].name, array_dists, Distribution.REP)
+                    self._set_REP(
+                        rhs.args[0].name,
+                        array_dists,
+                        "second input of {} is non-distributable".format(func_name),
+                    )
             return
 
         if is_alloc_callname(func_name, func_mod):
@@ -674,7 +714,7 @@ class DistributedAnalysis:
             if warn_flag and is_REP(array_dists[rhs.args[0].name]):
                 # TODO: test
                 warnings.warn(BodoWarning("Input to gatherv is not distributed array"))
-            self._set_var_dist(lhs, array_dists, Distribution.REP)
+            self._set_REP(lhs, array_dists, "output of gatherv() is replicated")
             return
 
         if fdef == ("scatterv", "bodo"):
@@ -685,7 +725,9 @@ class DistributedAnalysis:
                 raise BodoError("Output of scatterv should be a distributed array")
 
             # input of scatterv should be replicated
-            self._set_var_dist(rhs.args[0].name, array_dists, Distribution.REP)
+            self._set_REP(
+                rhs.args[0].name, array_dists, "input of scatterv() is replicated"
+            )
             return
 
         if fdef == ("setna", "bodo.libs.array_kernels"):
@@ -791,7 +833,7 @@ class DistributedAnalysis:
             # data and index arrays have the same distributions
             self._meet_array_dists(rhs.args[0].name, rhs.args[1].name, array_dists)
             # output of nlargest is REP
-            self._set_var_dist(lhs, array_dists, Distribution.REP)
+            self._set_REP(lhs, array_dists, "output of nlargest is REP")
             return
 
         if fdef == ("set_df_column_with_reflect", "bodo.hiframes.pd_dataframe_ext"):
@@ -809,7 +851,7 @@ class DistributedAnalysis:
             )
             self._set_var_dist(rhs.args[0].name, array_dists, in_dist)
             self._set_var_dist(rhs.args[1].name, array_dists, in_dist)
-            self._set_var_dist(lhs, array_dists, Distribution.REP)
+            self._set_REP(lhs, array_dists, "output of sample is REP")
             return
 
         if fdef == (
@@ -899,7 +941,7 @@ class DistributedAnalysis:
             return
 
         if fdef == ("nancorr", "bodo.libs.array_kernels"):
-            array_dists[lhs] = Distribution.REP
+            self._set_REP(lhs, array_dists, "output of nancorr is REP")
             return
 
         if fdef == ("series_monotonicity", "bodo.libs.array_kernels"):
@@ -1153,7 +1195,7 @@ class DistributedAnalysis:
         # str_arr_from_sequence() applies to lists/tuples so output is REP
         # e.g. column names in df.mean()
         if fdef == ("str_arr_from_sequence", "bodo.libs.str_arr_ext"):
-            self._set_var_dist(lhs, array_dists, Distribution.REP)
+            self._set_REP(lhs, array_dists, "output of str_arr_from_sequence is REP")
             return
 
         # TODO: make sure assert_equiv is not generated unnecessarily
@@ -1185,7 +1227,9 @@ class DistributedAnalysis:
             in_arr = get_call_expr_arg("digitize", args, kws, 0, "x")
             bins = get_call_expr_arg("digitize", args, kws, 1, "bins")
             self._meet_array_dists(lhs, in_arr.name, array_dists)
-            self._set_var_dist(bins.name, array_dists, Distribution.REP)
+            self._set_REP(
+                bins.name, array_dists, "'bins' argument of 'digitize' is REP"
+            )
             return
 
         if func_name == "concatenate":
@@ -1199,7 +1243,9 @@ class DistributedAnalysis:
             if is_array_typ(self.typemap[arg.name]):  # pragma: no cover
                 self._meet_array_dists(lhs, arg.name, array_dists)
             else:
-                self._set_var_dist(lhs, array_dists, Distribution.REP)
+                self._set_REP(
+                    lhs, array_dists, "output of np.array() call on non-array is REP"
+                )
             return
 
         if func_name == "asarray":
@@ -1208,7 +1254,9 @@ class DistributedAnalysis:
             if is_array_typ(self.typemap[args[0].name]):
                 self._meet_array_dists(lhs, args[0].name, array_dists)
             else:
-                self._set_var_dist(lhs, array_dists, Distribution.REP)
+                self._set_REP(
+                    lhs, array_dists, "output of np.asarray() call on non-array is REP"
+                )
             return
 
         # handle array.sum() with axis
@@ -1217,7 +1265,9 @@ class DistributedAnalysis:
             axis = guard(find_const, self.func_ir, axis_var)
             # sum over the first axis produces REP output
             if axis == 0:
-                array_dists[lhs] = Distribution.REP
+                self._set_REP(
+                    lhs, array_dists, "sum over the first axis produces REP output"
+                )
                 return
             # sum over other axis doesn't change distribution
             if axis_var != "" and axis != 0:
@@ -1355,8 +1405,8 @@ class DistributedAnalysis:
         if is_REP(array_dists[arr.name]) or (
             lhs in array_dists and is_REP(array_dists[lhs])
         ):
-            self._set_var_dist(lhs, array_dists, Distribution.REP)
-            self._set_var_dist(arr.name, array_dists, Distribution.REP)
+            self._set_REP(lhs, array_dists, "np.reshape() input is REP")
+            self._set_REP(arr.name, array_dists, "np.reshape() output is REP")
             return
 
         # reshape to 1 dimension
@@ -1489,7 +1539,11 @@ class DistributedAnalysis:
 
         # set REP vars
         for v in rep_vars:
-            self._set_var_dist(v, array_dists, Distribution.REP)
+            self._set_REP(
+                v,
+                array_dists,
+                "input/output of another Bodo call without distributed flag",
+            )
 
     def _analyze_call_concat(self, lhs, args, array_dists):
         """analyze distribution for bodo.libs.array_kernels.concat and np.concatenate"""
@@ -1559,7 +1613,9 @@ class DistributedAnalysis:
             # special case were arg1 vector is treated as column vector
             # samples dot weights: np.dot(X,w)
             # w is always REP
-            array_dists[arg1] = Distribution.REP
+            self._set_REP(
+                arg1, array_dists, "vector multiplied by matrix rows in np.dot()"
+            )
             if lhs not in array_dists:
                 array_dists[lhs] = Distribution.OneD
             # lhs and X have same distribution
@@ -1569,7 +1625,9 @@ class DistributedAnalysis:
         if ndim0 == 1 and ndim1 == 2 and not t1:
             # reduction across samples np.dot(Y,X)
             # lhs is always REP
-            array_dists[lhs] = Distribution.REP
+            self._set_REP(
+                lhs, array_dists, "output of vector-matrix multiply in np.dot()"
+            )
             # Y and X have same distribution
             self._meet_array_dists(arg0, arg1, array_dists)
             dprint("dot case 2 YX:", arg0, arg1)
@@ -1577,7 +1635,9 @@ class DistributedAnalysis:
         if ndim0 == 2 and ndim1 == 2 and t0 and not t1:
             # reduction across samples np.dot(X.T,Y)
             # lhs is always REP
-            array_dists[lhs] = Distribution.REP
+            self._set_REP(
+                lhs, array_dists, "output of matrix-matrix multiply in np.dot()"
+            )
             # Y and X have same distribution
             self._meet_array_dists(arg0, arg1, array_dists)
             dprint("dot case 3 XtY:", arg0, arg1)
@@ -1585,7 +1645,7 @@ class DistributedAnalysis:
         if ndim0 == 2 and ndim1 == 2 and not t0 and not t1:
             # samples dot weights: np.dot(X,w)
             # w is always REP
-            array_dists[arg1] = Distribution.REP
+            self._set_REP(arg1, array_dists, "matrix multiplied by rows in np.dot()")
             self._meet_array_dists(lhs, arg0, array_dists)
             dprint("dot case 4 Xw:", arg0, arg1)
             return
@@ -1593,18 +1653,18 @@ class DistributedAnalysis:
         # set REP if no pattern matched
         self._analyze_call_set_REP(lhs, args, array_dists, "np.dot")
 
-    def _analyze_call_set_REP(self, lhs, args, array_dists, fdef=None):
+    def _analyze_call_set_REP(self, lhs, args, array_dists, fdef):
         arrs = []
         for v in args:
             typ = self.typemap[v.name]
             if is_distributable_typ(typ) or is_distributable_tuple_typ(typ):
                 dprint("dist setting call arg REP {} in {}".format(v.name, fdef))
-                self._set_var_dist(v.name, array_dists, Distribution.REP)
+                self._set_REP(v.name, array_dists)
                 arrs.append(v.name)
         typ = self.typemap[lhs]
         if is_distributable_typ(typ) or is_distributable_tuple_typ(typ):
             dprint("dist setting call out REP {} in {}".format(lhs, fdef))
-            self._set_var_dist(lhs, array_dists, Distribution.REP)
+            self._set_REP(lhs, array_dists)
             arrs.append(lhs)
         # save diagnostic info for faild analysis
         fname = fdef
@@ -1618,8 +1678,7 @@ class DistributedAnalysis:
                 "Distributed analysis set {} as replicated due "
                 "to call to function '{}' (unsupported function or usage)"
             ).format(", ".join(arrs), fname)
-            if info not in self.diag_info:
-                self.diag_info.append(info)
+            self._add_diag_info(info)
 
     def _analyze_getitem(self, inst, lhs, rhs, equiv_set, array_dists):
         """analyze getitem nodes for distribution"""
@@ -1661,12 +1720,14 @@ class DistributedAnalysis:
 
         # indexing into arrays from this point only, check for array type
         if not is_array_typ(in_typ):
-            self._set_REP(inst.list_vars(), array_dists)
+            self._set_REP(inst.list_vars(), array_dists, "getitem input not array")
             return
 
         if (rhs.value.name, index_var.name) in self._parallel_accesses:
             # XXX: is this always valid? should be done second pass?
-            self._set_REP([inst.target], array_dists)
+            self._set_REP(
+                [inst.target], array_dists, "output of distributed getitem is REP"
+            )
             return
 
         # in multi-dimensional case, we only consider first dimension
@@ -1676,7 +1737,9 @@ class DistributedAnalysis:
             index_var = tup_list[0]
             # rest of indices should be replicated if array
             other_ind_vars = tup_list[1:]
-            self._set_REP(other_ind_vars, array_dists)
+            self._set_REP(
+                other_ind_vars, array_dists, "getitem index variables are REP"
+            )
 
         assert isinstance(index_var, ir.Var)
         index_typ = self.typemap[index_var.name]
@@ -1731,20 +1794,29 @@ class DistributedAnalysis:
         # avoid parallel scalar getitem when inside a parfor
         # examples: test_np_dot, logistic_regression_rand
         if self.in_parallel_parfor != -1:
-            self._set_REP(inst.list_vars(), array_dists)
+            self._set_REP(
+                inst.list_vars(), array_dists, "getitem inside parallel loop is REP"
+            )
             return
 
         # int index of dist array
-        if isinstance(types.unliteral(index_typ), types.Integer):
+        if isinstance(index_typ, types.Integer):
             # multi-dim not supported yet, TODO: support
             if is_np_array_typ(in_typ) and in_typ.ndim > 1:
-                self._set_REP(inst.list_vars(), array_dists)
+                self._set_REP(
+                    inst.list_vars(),
+                    array_dists,
+                    "distributed getitem of multi-dimensional array with int index not supported yet",
+                )
             if is_distributable_typ(self.typemap[lhs]):
-                array_dists[lhs] = Distribution.REP
+                self._set_REP(
+                    lhs,
+                    array_dists,
+                    "output of distributed getitem with int index is REP",
+                )
             return
 
-        self._set_REP(inst.list_vars(), array_dists)
-        return
+        self._set_REP(inst.list_vars(), array_dists, "unsupported getitem distribution")
 
     def _analyze_setitem(self, inst, equiv_set, array_dists):
         """analyze setitem nodes for distribution"""
@@ -1765,14 +1837,16 @@ class DistributedAnalysis:
 
         if (arr.name, index_var.name) in self._parallel_accesses:
             # no parallel to parallel array set (TODO)
-            self._set_REP([inst.value], array_dists)
+            self._set_REP(
+                [inst.value], array_dists, "value set in distributed setitem is REP"
+            )
             return
 
         tup_list = guard(find_build_tuple, self.func_ir, index_var)
         if tup_list is not None:
             index_var = tup_list[0]
             # rest of indices should be replicated if array
-            self._set_REP(tup_list[1:], array_dists)
+            self._set_REP(tup_list[1:], array_dists, "index variables are REP")
 
         # array selection with boolean index
         if (
@@ -1784,7 +1858,11 @@ class DistributedAnalysis:
             if not is_array_typ(value_typ) or value_typ.ndim < target_typ.ndim:
                 # input array and bool index have the same distribution
                 self._meet_array_dists(arr.name, index_var.name, array_dists)
-                self._set_REP([inst.value], array_dists)
+                self._set_REP(
+                    [inst.value],
+                    array_dists,
+                    "scalar/lower-dimension value set in distributed setitem with bool array index is REP",
+                )
                 return
             # TODO: support bool index setitem across the whole first dimension, which
             # may require shuffling data to match bool index selection
@@ -1801,24 +1879,40 @@ class DistributedAnalysis:
         elif isinstance(index_typ, types.SliceType):
             # if the value is scalar/lower dimension
             if not is_array_typ(value_typ) or value_typ.ndim < target_typ.ndim:
-                self._set_REP([inst.value], array_dists)
+                self._set_REP(
+                    [inst.value],
+                    array_dists,
+                    "scalar/lower-dimension value set in distributed setitem with slice index is REP",
+                )
                 return
             # TODO: support slice index setitem across the whole first dimension, which
             # may require shuffling data to match slice index selection
 
         # avoid parallel scalar setitem when inside a parfor
         if self.in_parallel_parfor != -1:
-            self._set_REP(inst.list_vars(), array_dists)
+            self._set_REP(
+                inst.list_vars(), array_dists, "setitem inside parallel loop is REP"
+            )
             return
 
         # int index setitem of dist array
         if isinstance(index_typ, types.Integer):
-            self._set_REP([inst.value], array_dists)
+            self._set_REP(
+                [inst.value],
+                array_dists,
+                "value set in distributed array setitem is REP",
+            )
             return
 
-        self._set_REP([inst.value, arr, index_var], array_dists)
+        self._set_REP(
+            [inst.value, arr, index_var],
+            array_dists,
+            "unsupported setitem distribution",
+        )
 
     def _analyze_arg(self, lhs, rhs, array_dists):
+        """analyze ir.Arg nodes for distribution. Checks for user flags; sets to REP if
+        no user flag found"""
         if (
             rhs.name in self.metadata["distributed_block"]
             or self.flags.all_args_distributed_block
@@ -1843,11 +1937,11 @@ class DistributedAnalysis:
                     "{1}). Set distributed flag for {0} if distributed partitions "
                     "are passed (e.g. @bodo.jit(distributed=['{0}']))."
                 ).format(rhs.name, lhs)
-                if info not in self.diag_info:
-                    self.diag_info.append(info)
-                self._set_var_dist(lhs, array_dists, Distribution.REP)
+                self._set_REP(lhs, array_dists, info)
 
     def _analyze_return(self, var, array_dists):
+        """analyze ir.Return nodes for distribution. Checks for user flags; sets to REP
+        if no user flag found"""
         if self._is_dist_return_var(var):
             return
 
@@ -1863,15 +1957,12 @@ class DistributedAnalysis:
         except GuardException:
             pass
 
-        if is_distributable_typ(self.typemap[var.name]):
-            info = (
-                "Distributed analysis replicated return variable "
-                "{}. Set distributed flag for the original variable if distributed "
-                "partitions should be returned."
-            ).format(var.name)
-            if info not in self.diag_info:
-                self.diag_info.append(info)
-        self._set_REP([var], array_dists)
+        info = (
+            "Distributed analysis replicated return variable "
+            "{}. Set distributed flag for the original variable if distributed "
+            "partitions should be returned."
+        ).format(var.name)
+        self._set_REP([var], array_dists, info)
 
     def _is_dist_return_var(self, var):
         try:
@@ -1906,14 +1997,26 @@ class DistributedAnalysis:
         array_dists[arr2] = new_dist
         return new_dist
 
-    def _set_REP(self, var_list, array_dists):
+    def _set_REP(self, var_list, array_dists, info=None):
+        if isinstance(var_list, (str, ir.Var)):
+            var_list = [var_list]
         for var in var_list:
-            varname = var.name
+            varname = var.name if isinstance(var, ir.Var) else var
             # Handle SeriesType since it comes from Arg node and it could
             # have user-defined distribution
             typ = self.typemap[varname]
             if is_distributable_typ(typ) or is_distributable_tuple_typ(typ):
                 dprint("dist setting REP {}".format(varname))
+                # keep diagnostics info if the distribution is changing to REP and extra
+                # info is available
+                if (
+                    varname not in array_dists or not is_REP(array_dists[varname])
+                ) and info is not None:
+                    info = (
+                        "Setting distribution of variable '{}' to REP: ".format(varname)
+                        + info
+                    )
+                    self._add_diag_info(info)
                 self._set_var_dist(varname, array_dists, Distribution.REP)
 
     def _get_var_dist(self, varname, array_dists):
@@ -2015,6 +2118,11 @@ class DistributedAnalysis:
                 self._get_concat_reduce_vars(var_def.args[0].name, concat_reduce_vars)
 
         return concat_reduce_vars
+
+    def _add_diag_info(self, info):
+        """append diagnostics info to be displayed in distributed diagnostics output"""
+        if info not in self.diag_info:
+            self.diag_info.append(info)
 
 
 def get_reduce_op(reduce_varname, reduce_nodes, func_ir, typemap):
