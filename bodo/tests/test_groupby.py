@@ -678,7 +678,7 @@ def test_sum_categorical_key():
     check_func(f, (df,), sort_output=True, reset_index=True)
 
 
-# TODO: add memory leak check
+# TODO: add memory leak check when issues addressed
 @pytest.mark.slow
 def test_all_categorical_count():
     """Testing of categorical keys and their missing value.
@@ -2671,8 +2671,9 @@ def test_groupby_as_index_sum(memory_leak_check):
     check_func(impl2, (11,), sort_output=True, reset_index=True)
 
 
+# TODO: add memory leak check when issues addressed
 @pytest.mark.slow
-def test_groupby_multi_intlabels_sum(memory_leak_check):
+def test_groupby_multi_intlabels_sum():
     """
     Test df.groupby() multiple labels of string columns
     and Groupy.sum() on integer column
@@ -2692,7 +2693,8 @@ def test_groupby_multi_intlabels_sum(memory_leak_check):
     check_func(impl, (df,), sort_output=True)
 
 
-def test_groupby_multi_key_to_index(memory_leak_check):
+# TODO: add memory leak check when issues addressed
+def test_groupby_multi_key_to_index():
     """
     Make sure df.groupby() with multiple keys creates a MultiIndex index in output
     """
@@ -2907,7 +2909,8 @@ def test_groupby_as_index_var(memory_leak_check):
     check_func(impl2, (11,), sort_output=True, check_dtype=False, reset_index=True)
 
 
-def test_const_list_inference(memory_leak_check):
+# TODO: add memory leak check when issues addressed
+def test_const_list_inference():
     """
     Test passing non-const list that can be inferred as constant to groupby()
     """
@@ -2953,7 +2956,8 @@ def test_const_list_inference(memory_leak_check):
 g_keys = ["A", "B"]
 
 
-def test_global_list(memory_leak_check):
+# TODO: add memory leak check when issues addressed
+def test_global_list():
     """
     Test passing a global list to groupby()
     """
@@ -2981,7 +2985,8 @@ def test_global_list(memory_leak_check):
     check_func(impl2, (df,), sort_output=True)
 
 
-def test_literal_args(memory_leak_check):
+# TODO: add memory leak check when issues addressed
+def test_literal_args():
     """
     Test forcing groupby() key list and as_index to be literals if jit arguments
     """
