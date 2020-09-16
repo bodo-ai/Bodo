@@ -947,3 +947,23 @@ def nanstd_ddof1(a):
     Simple implementation for np.nanstd(arr, ddof=1)
     """
     return np.sqrt(nanvar_ddof1(a))
+
+
+@intrinsic
+def check_and_propagate_cpp_exception(typingctx):
+    """
+    Check if an error occured in C++ using the C Python API 
+    (PyErr_Occured). If it did, raise it in Python with 
+    the corresponding error message.
+    """
+
+    def codegen(context, builder, sig, args):
+
+        pyapi = context.get_python_api(builder)
+        err_flag = pyapi.err_occurred()
+        error_occured = cgutils.is_not_null(builder, err_flag)
+
+        with builder.if_then(error_occured):
+            builder.ret(numba.core.callconv.RETCODE_EXC)
+
+    return types.void(), codegen

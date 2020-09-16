@@ -123,8 +123,9 @@ ll.add_symbol("json_write", json_cpp.json_write)
 
 
 class DataFrameType(types.ArrayCompatible):  # TODO: IterableType over column names
-    """Temporary type class for DataFrame objects.
-    """
+    """Temporary type class for DataFrame objects."""
+
+    ndim = 2
 
     def __init__(self, data=None, index=None, columns=None):
         # data is tuple of Array types (not Series)
@@ -341,8 +342,7 @@ def namedtuple_getitem_overload(tup, idx):
 
 
 def decref_df_data(context, builder, payload, df_type):
-    """call decref() on all data arrays and index of dataframe
-    """
+    """call decref() on all data arrays and index of dataframe"""
     # decref all unboxed arrays
     for i in range(len(df_type.data)):
         unboxed = builder.extract_value(payload.unboxed, i)
@@ -642,8 +642,7 @@ ArrayAnalysis._analyze_op_call_bodo_hiframes_pd_dataframe_ext_get_dataframe_data
 
 @intrinsic
 def set_dataframe_data(typingctx, df_typ, c_ind_typ, arr_typ=None):
-    """set column data of a dataframe inplace
-    """
+    """set column data of a dataframe inplace"""
     assert is_overload_constant_int(c_ind_typ)
     col_ind = get_overload_const_int(c_ind_typ)
 
@@ -967,8 +966,10 @@ def pd_dataframe_overload(data=None, index=None, columns=None, dtype=None, copy=
     func_text = (
         "def _init_df(data=None, index=None, columns=None, dtype=None, copy=False):\n"
     )
-    func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe({}, {}, {})\n".format(
-        data_args, index_arg, col_var
+    func_text += (
+        "  return bodo.hiframes.pd_dataframe_ext.init_dataframe({}, {}, {})\n".format(
+            data_args, index_arg, col_var
+        )
     )
     loc_vars = {}
     exec(func_text, {"bodo": bodo, "np": np}, loc_vars)
@@ -1006,8 +1007,10 @@ def _get_df_args(data, index, columns, dtype, copy):
         if is_overload_none(index):
             for i, t in enumerate(data.types[n_cols + 1 :]):
                 if isinstance(t, SeriesType):
-                    index_arg = "bodo.hiframes.pd_series_ext.get_series_index(data[{}])".format(
-                        n_cols + 1 + i
+                    index_arg = (
+                        "bodo.hiframes.pd_series_ext.get_series_index(data[{}])".format(
+                            n_cols + 1 + i
+                        )
                     )
                     index_is_none = False
                     break
@@ -1051,8 +1054,10 @@ def _get_df_args(data, index, columns, dtype, copy):
         if is_overload_none(data):
             index_arg = "bodo.hiframes.pd_index_ext.init_string_index(bodo.libs.str_arr_ext.pre_alloc_string_array(0, 0))"
         else:
-            index_arg = "bodo.hiframes.pd_index_ext.init_range_index(0, {}, 1, None)".format(
-                df_len
+            index_arg = (
+                "bodo.hiframes.pd_index_ext.init_range_index(0, {}, 1, None)".format(
+                    df_len
+                )
             )
 
     data_args = "({},)".format(
@@ -1406,8 +1411,7 @@ def validate_merge_spec(
     indicator,
     validate,
 ):
-    """validate arguments to merge()
-    """
+    """validate arguments to merge()"""
     common_validate_merge_merge_asof_spec(
         "merge", left, right, on, left_on, right_on, left_index, right_index, suffixes
     )
@@ -2880,6 +2884,8 @@ def to_parquet_overload(
         func_text += "                            df.index.stop, df.index.step,\n"
         func_text += "                            unicode_to_utf8(name_ptr),\n"
         func_text += "                            unicode_to_utf8(bucket_region))\n"
+        # Check if there was an error in the C++ code. If so, raise it.
+        func_text += "    bodo.utils.utils.check_and_propagate_cpp_exception()\n"
     else:
         func_text += "    parquet_write_table_cpp(unicode_to_utf8(fname),\n"
         func_text += "                            table, col_names, index_col,\n"
@@ -2889,6 +2895,8 @@ def to_parquet_overload(
         func_text += "                            _is_parallel, 0, 0, 0, 0,\n"
         func_text += "                            unicode_to_utf8(name_ptr),\n"
         func_text += "                            unicode_to_utf8(bucket_region))\n"
+        # Check if there was an error in the C++ code. If so, raise it.
+        func_text += "    bodo.utils.utils.check_and_propagate_cpp_exception()\n"
 
     loc_vars = {}
     exec(
@@ -2925,7 +2933,15 @@ def to_sql_exception_guard(
     err_msg = "all_ok"
     try:
         df.to_sql(
-            name, con, schema, if_exists, index, index_label, chunksize, dtype, method,
+            name,
+            con,
+            schema,
+            if_exists,
+            index,
+            index_label,
+            chunksize,
+            dtype,
+            method,
         )
     except ValueError as e:
         err_msg = e.args[0]
@@ -3199,6 +3215,8 @@ def to_csv_overload(
             False,
             unicode_to_utf8(bucket_region),
         )
+        # Check if there was an error in the C++ code. If so, raise it.
+        bodo.utils.utils.check_and_propagate_cpp_exception()
 
     return _impl
 
@@ -3298,6 +3316,8 @@ def to_json_overload(
                 True,
                 unicode_to_utf8(bucket_region),
             )
+            # Check if there was an error in the C++ code. If so, raise it.
+            bodo.utils.utils.check_and_propagate_cpp_exception()
         else:
             bodo.hiframes.pd_dataframe_ext._json_write(
                 unicode_to_utf8(path_or_buf),
@@ -3308,6 +3328,8 @@ def to_json_overload(
                 False,
                 unicode_to_utf8(bucket_region),
             )
+            # Check if there was an error in the C++ code. If so, raise it.
+            bodo.utils.utils.check_and_propagate_cpp_exception()
 
     return _impl
 
@@ -3374,13 +3396,158 @@ pd_unsupported = (
     pd.test,
 )
 
+dataframe_unsupported = {
+    "to_latex",
+    "from_dict",
+    "reindex_like",
+    "pivot",
+    "notnull",
+    "clip",
+    "slice_shift",
+    "tz_convert",
+    "combine",
+    "convert_dtypes",
+    "floordiv",
+    "eval",
+    "applymap",
+    "nlargest",
+    "to_markdown",
+    "memory_usage",
+    "rmul",
+    "pad",
+    "sparse",
+    "filter",
+    "combine_first",
+    "kurt",
+    "at_time",
+    "mad",
+    "mask",
+    "to_html",
+    "unstack",
+    "iteritems",
+    "between_time",
+    "mod",
+    "to_gbq",
+    "rank",
+    "round",
+    "mode",
+    "multiply",
+    "value_counts",
+    "corrwith",
+    "set_axis",
+    "nsmallest",
+    "to_dict",
+    "to_feather",
+    "cummax",
+    "to_stata",
+    "ne",
+    "ewm",
+    "first",
+    "expanding",
+    "droplevel",
+    "truncate",
+    "asof",
+    "pow",
+    "reorder_levels",
+    "to_string",
+    "mul",
+    "last",
+    "agg",
+    "diff",
+    "le",
+    "any",
+    "xs",
+    "explode",
+    "equals",
+    "asfreq",
+    "pop",
+    "iterrows",
+    "rename_axis",
+    "resample",
+    "to_xarray",
+    "items",
+    "radd",
+    "tshift",
+    "rsub",
+    "align",
+    "add",
+    "squeeze",
+    "pipe",
+    "swapaxes",
+    "to_pickle",
+    "to_timestamp",
+    "interpolate",
+    "eq",
+    "info",
+    "bool",
+    "skew",
+    "rdiv",
+    "div",
+    "sem",
+    "tz_localize",
+    "lt",
+    "bfill",
+    "last_valid_index",
+    "to_records",
+    "keys",
+    "to_clipboard",
+    "transform",
+    "dot",
+    "truediv",
+    "gt",
+    "add_prefix",
+    "divide",
+    "lookup",
+    "infer_objects",
+    "melt",
+    "rmod",
+    "aggregate",
+    "from_records",
+    "rpow",
+    "to_excel",
+    "subtract",
+    "rfloordiv",
+    "ffill",
+    "to_hdf",
+    "update",
+    "sub",
+    "hist",
+    "ge",
+    "get",
+    "all",
+    "plot",
+    "insert",
+    "backfill",
+    "stack",
+    "where",
+    "transpose",
+    "rtruediv",
+    "cummin",
+    "swaplevel",
+    "first_valid_index",
+    "compare",
+    "boxplot",
+    "to_period",
+    "add_suffix",
+    "kurtosis",
+    "reindex",
+}
+
 
 def _install_pd_unsupported():
-    """install an overload that raises BodoError for unsupported functions
-    """
+    """install an overload that raises BodoError for unsupported functions"""
     for f in pd_unsupported:
         fname = "pd." + f.__name__
         overload(f, no_unliteral=True)(create_unsupported_overload(fname))
 
 
+def _install_dataframe_unsupported():
+    """install an overload that raises BodoError for unsupported Dataframe methods"""
+
+    for fname in dataframe_unsupported:
+        full_name = "Dataframe." + fname
+        overload_method(DataFrameType, fname)(create_unsupported_overload(full_name))
+
+
 _install_pd_unsupported()
+_install_dataframe_unsupported()

@@ -20,6 +20,7 @@ Bodo
    source/pandas
    source/numpy
    source/not_supported
+   source/advanced
    source/performance
    source/compilation
    source/aws

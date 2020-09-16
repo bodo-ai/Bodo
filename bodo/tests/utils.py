@@ -102,6 +102,21 @@ def check_func(
 ):
     """test bodo compilation of function 'func' on arguments using REP, 1D, and 1D_Var
     inputs/outputs
+
+    Rationale of the functionalities:
+    - is_out_distributed: By default to None and is adjusted according to the REP/1D/1D_Var
+    If the is_out_distributed is selected then it is hardcoded here.
+    - sort_output: The order of the data produced may not match pandas (e.g. groupby/join).
+    In that case, set sort_output=True
+    - reset_index: The index produced by pandas may not match the one produced by Bodo for good
+    reasons. In that case, set sort_output=True
+    - convert_columns_to_pandas: Pandas does not support well some datatype such as decimal,
+    list of strings or in general arrow data type. It typically fails at sorting. In that case
+    using convert_columns_to_pandas=True will convert the columns to a string format which may help.
+    - check_dtype: pandas may produce a column of float while bodo may produce a column of integers
+    for some operations. Using check_dtype=False ensures that comparison is still possible.
+    - py_output: Sometimes pandas has entirely lacking functionality and we need to put what output
+    we expect to obtain.
     """
     n_pes = bodo.get_size()
 

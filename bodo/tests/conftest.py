@@ -89,6 +89,10 @@ def minio_server():
     """
     spins up minio server
     """
+    # Session level environment variables used for S3 Testing.
+    os.environ["AWS_ACCESS_KEY_ID"] = "bodotest1"
+    os.environ["AWS_SECRET_ACCESS_KEY"] = "bodosecret1"
+
     host, port = "127.0.0.1", "9000"
     access_key = os.environ["AWS_ACCESS_KEY_ID"]
     secret_key = os.environ["AWS_SECRET_ACCESS_KEY"]

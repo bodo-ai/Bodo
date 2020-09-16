@@ -10,11 +10,13 @@
 
 extern "C" {
 
-#define CHECK_ARROW(expr, msg)                                         \
-    if (!(expr.ok())) {                                                \
-        std::cerr << "Error in arrow csv write " << msg << " " << expr \
-                  << std::endl;                                        \
-        return;                                                        \
+// if status of arrow::Result is not ok, form an err msg and raise a
+// runtime_error with it
+#define CHECK_ARROW(expr, msg)                                             \
+    if (!(expr.ok())) {                                                    \
+        std::string err_msg = std::string("Error in arrow write ") + msg + \
+                              " " + expr.ToString();                       \
+        throw std::runtime_error(err_msg);                                 \
     }
 
 /*
@@ -41,60 +43,62 @@ extern "C" {
 void write_buff(char *_path_name, char *buff, int64_t start, int64_t count,
                 bool is_parallel, const std::string &suffix,
                 bool is_records_lines, char *bucket_region) {
-    int myrank, num_ranks;
-    MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
-    MPI_Comm_size(MPI_COMM_WORLD, &num_ranks);
-    std::string orig_path(_path_name);  // original path passed to this function
-    std::string
-        path_name;  // original path passed to this function (excluding prefix)
-    std::string dirname;  // path and directory name to store the parquet files
-                          // (only if is_parallel=true)
-    std::string fname;    // name of parquet file to write (excludes path)
-    std::shared_ptr<::arrow::io::OutputStream> out_stream;
-    Bodo_Fs::FsEnum fs_option;
-    arrow::Status status;
-
-    extract_fs_dir_path(_path_name, is_parallel, suffix, myrank, num_ranks,
-                        &fs_option, &dirname, &fname, &orig_path, &path_name);
-    // handling posix with mpi/fwrite
-    // csv is always written into a single file
-    // json is only written to a single file
-    // when pd.to_json(orient='records', lines=True)
-    if (fs_option == Bodo_Fs::posix && is_records_lines) {
-        if (is_parallel) {
-            if (suffix == ".json") {
-                std::string buffer(buff);
-                buffer.append("\n");
-                file_write_parallel(_path_name, &buffer[0], start + myrank,
-                                    count + 1, 1);
+    try {
+        int myrank, num_ranks;
+        MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+        MPI_Comm_size(MPI_COMM_WORLD, &num_ranks);
+        std::string orig_path(
+            _path_name);        // original path passed to this function
+        std::string path_name;  // original path passed to this function
+                                // (excluding prefix)
+        std::string dirname;    // path and directory name to store the parquet
+                                // files (only if is_parallel=true)
+        std::string fname;      // name of parquet file to write (excludes path)
+        std::shared_ptr<::arrow::io::OutputStream> out_stream;
+        Bodo_Fs::FsEnum fs_option;
+        arrow::Status status;
+        extract_fs_dir_path(_path_name, is_parallel, suffix, myrank, num_ranks,
+                            &fs_option, &dirname, &fname, &orig_path,
+                            &path_name);
+        // handling posix with mpi/fwrite
+        // csv is always written into a single file
+        // json is only written to a single file
+        // when pd.to_json(orient='records', lines=True)
+        if (fs_option == Bodo_Fs::posix && is_records_lines) {
+            if (is_parallel) {
+                if (suffix == ".json") {
+                    std::string buffer(buff);
+                    buffer.append("\n");
+                    file_write_parallel(_path_name, &buffer[0], start + myrank,
+                                        count + 1, 1);
+                } else {
+                    file_write_parallel(_path_name, buff, start, count, 1);
+                }
             } else {
-                file_write_parallel(_path_name, buff, start, count, 1);
+                file_write(_path_name, buff, count);
             }
-        } else {
-            file_write(_path_name, buff, count);
+            return;
         }
-        return;
-    }
-
-    // handling s3 and hdfs with arrow
-    // & handling posix json directory outputs with boost
-    open_outstream(fs_option, is_parallel, myrank, suffix.substr(1), dirname,
-                   fname, orig_path, path_name, &out_stream, bucket_region);
-
-    status = out_stream->Write(buff, count);
-    CHECK_ARROW(status, "arrow::io::OutputStream::Write");
-
-    // writing an extra '\n' to the end of json files inside of directory
-    // because pandas.to_json(orient='records', lines=True) does not
-    // end the file with '\n' which causes incorrect format when we read the
-    // directory. (btw: spark outputs ends with '\n' always)
-    if (suffix == ".json" && is_records_lines && buff[count - 1] != '\n') {
-        status = out_stream->Write("\n", 1);
+        // handling s3 and hdfs with arrow
+        // & handling posix json directory outputs with boost
+        open_outstream(fs_option, is_parallel, myrank, suffix.substr(1),
+                       dirname, fname, orig_path, path_name, &out_stream,
+                       bucket_region);
+        status = out_stream->Write(buff, count);
         CHECK_ARROW(status, "arrow::io::OutputStream::Write");
+        // writing an extra '\n' to the end of json files inside of directory
+        // because pandas.to_json(orient='records', lines=True) does not
+        // end the file with '\n' which causes incorrect format when we read the
+        // directory. (btw: spark outputs ends with '\n' always)
+        if (suffix == ".json" && is_records_lines && buff[count - 1] != '\n') {
+            status = out_stream->Write("\n", 1);
+            CHECK_ARROW(status, "arrow::io::OutputStream::Write");
+        }
+        status = out_stream->Close();
+        CHECK_ARROW(status, "arrow::io::OutputStream::Close");
+    } catch (const std::exception &e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
     }
-
-    status = out_stream->Close();
-    CHECK_ARROW(status, "arrow::io::OutputStream::Close");
 }
 
 /*

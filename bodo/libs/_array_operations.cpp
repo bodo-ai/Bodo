@@ -1,7 +1,7 @@
 // Copyright (C) 2019 Bodo Inc. All rights reserved.
 #include <functional>
-#include <set>
 #include <random>
+#include <set>
 #include "_array_hash.h"
 #include "_array_utils.h"
 #include "_bodo_common.h"
@@ -76,7 +76,7 @@ static void array_isin_kernel(array_info* out_arr, array_info* in_arr,
         return (size_t)value;
     };
     UNORD_SET_CONTAINER<size_t, std::function<size_t(int64_t)>,
-                  std::function<bool(int64_t, int64_t)>>
+                        std::function<bool(int64_t, int64_t)>>
         eset({}, hash_fct, equal_fct);
     for (int64_t pos = 0; pos < len_values; pos++) {
         eset.insert(pos);
@@ -88,7 +88,6 @@ static void array_isin_kernel(array_info* out_arr, array_info* in_arr,
     delete[] hashes_in_arr;
     delete[] hashes_values;
 }
-
 
 void array_isin(array_info* out_arr, array_info* in_arr, array_info* in_values,
                 bool is_parallel) {
@@ -112,7 +111,8 @@ void array_isin(array_info* out_arr, array_info* in_arr, array_info* in_values,
     // Creation of the output array.
     int64_t len = shuf_table_in_arr->columns[0]->length;
     array_info* shuf_out_arr =
-        alloc_array(len, -1, -1, out_arr->arr_type, out_arr->dtype, 0, out_arr->num_categories);
+        alloc_array(len, -1, -1, out_arr->arr_type, out_arr->dtype, 0,
+                    out_arr->num_categories);
     // Calling isin on the shuffled info
     array_isin_kernel(shuf_out_arr, shuf_table_in_arr->columns[0],
                       shuf_table_in_values->columns[0]);
@@ -236,7 +236,7 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
     std::mt19937 gen(1234567890);
     std::vector<size_t> ListIdx(n_loc_sample);
     for (int64_t i = 0; i < n_loc_sample; i++) {
-        size_t pos = std::uniform_int_distribution<>(0, n_local-1)(gen);
+        size_t pos = std::uniform_int_distribution<>(0, n_local - 1)(gen);
         ListIdx[i] = pos;
     }
     table_info* samples = RetrieveTable(local_sort, ListIdx, n_key_t);
@@ -391,13 +391,14 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
  * @param num_keys : the number of keys
  * @return the table to be used.
  */
-static table_info* drop_duplicates_nonnull_keys_inner(table_info* in_table, int64_t num_keys)
-{
+static table_info* drop_duplicates_nonnull_keys_inner(table_info* in_table,
+                                                      int64_t num_keys) {
 #ifdef DEBUG_DD
     std::cout << "drop_duplicates_nonnull_keys_inner : beginning\n";
 #endif
     size_t n_rows = (size_t)in_table->nrows();
-    std::vector<array_info*> key_arrs(in_table->columns.begin(), in_table->columns.begin() + num_keys);
+    std::vector<array_info*> key_arrs(in_table->columns.begin(),
+                                      in_table->columns.begin() + num_keys);
     uint32_t seed = SEED_HASH_CONTAINER;
     uint32_t* hashes = hash_keys(key_arrs, seed);
 #ifdef DEBUG_DD
@@ -414,16 +415,15 @@ static table_info* drop_duplicates_nonnull_keys_inner(table_info* in_table, int6
         return test;
     };
     UNORD_MAP_CONTAINER<size_t, size_t, std::function<size_t(size_t)>,
-                  std::function<bool(size_t, size_t)>>
+                        std::function<bool(size_t, size_t)>>
         entSet({}, hash_fct, equal_fct);
     //
     std::vector<int64_t> ListRow;
     uint64_t next_ent = 0;
     bool has_nulls = does_keys_have_nulls(key_arrs);
-    auto is_ok=[&](size_t i_row) -> bool {
-      if (!has_nulls)
-        return true;
-      return !does_row_has_nulls(key_arrs, i_row);
+    auto is_ok = [&](size_t i_row) -> bool {
+        if (!has_nulls) return true;
+        return !does_row_has_nulls(key_arrs, i_row);
     };
     for (size_t i_row = 0; i_row < n_rows; i_row++) {
         if (is_ok(i_row)) {
@@ -437,7 +437,7 @@ static table_info* drop_duplicates_nonnull_keys_inner(table_info* in_table, int6
     }
     std::vector<size_t> ListIdx;
     for (auto& eRow : ListRow)
-      if (eRow != -1) ListIdx.push_back(eRow);
+        if (eRow != -1) ListIdx.push_back(eRow);
 #ifdef DEBUG_DD
     int nbRow = ListIdx.size();
     std::cout << "|ListPairWrite|=" << nbRow << "\n";
@@ -456,7 +456,6 @@ static table_info* drop_duplicates_nonnull_keys_inner(table_info* in_table, int6
 #endif
     return ret_table;
 }
-
 
 /** This function is the inner function for the dropping of duplicated rows.
  * This C++ code is used for the drop_duplicates.
@@ -535,7 +534,7 @@ static table_info* drop_duplicates_table_inner(table_info* in_table,
     // The entSet contains the hash of the table.
     // We address the entry by the row index.
     UNORD_MAP_CONTAINER<size_t, size_t, std::function<size_t(size_t)>,
-                  std::function<bool(size_t, size_t)>>
+                        std::function<bool(size_t, size_t)>>
         entSet({}, hash_fct, equal_fct);
     // The loop over the short table.
     // entries are stored one by one and all of them are put even if identical
@@ -566,7 +565,7 @@ static table_info* drop_duplicates_table_inner(table_info* in_table,
         std::vector<size_t> ListIdx;
         for (auto& eRow : ListRow)
             if (eRow != -1) ListIdx.push_back(eRow);
-        return std::move(ListIdx);
+        return ListIdx;
     };
     // In this case we store the pairs of values, the first and the last.
     // This allows to reach conclusions in all possible cases.
@@ -586,12 +585,10 @@ static table_info* drop_duplicates_table_inner(table_info* in_table,
         }
         std::vector<size_t> ListIdx;
         for (auto& eRowPair : ListRowPair) {
-            if (eRowPair.first != -1)
-                ListIdx.push_back(eRowPair.first);
-            if (eRowPair.second != -1)
-                ListIdx.push_back(eRowPair.second);
+            if (eRowPair.first != -1) ListIdx.push_back(eRowPair.first);
+            if (eRowPair.second != -1) ListIdx.push_back(eRowPair.second);
         }
-        return std::move(ListIdx);
+        return ListIdx;
     };
     std::vector<size_t> ListIdx;
     if (step == 1 || keep == 0 || keep == 1)
@@ -614,7 +611,6 @@ static table_info* drop_duplicates_table_inner(table_info* in_table,
     return ret_table;
 }
 
-
 /** This function is for dropping the null keys.
  * This C++ code is used for the compute_categorical_index
  * ---It keeps only the non-null keys
@@ -630,10 +626,11 @@ static table_info* drop_duplicates_table_inner(table_info* in_table,
  * @param is_parallel: whether we run in parallel or not.
  * @return the vector of pointers to be used.
  */
-table_info* drop_duplicates_nonnull_keys(table_info* in_table, int64_t num_keys, bool is_parallel)
-{
+table_info* drop_duplicates_nonnull_keys(table_info* in_table, int64_t num_keys,
+                                         bool is_parallel) {
 #ifdef DEBUG_DD
-    std::cout << "drop_duplicates_nonnull_keys : is_parallel=" << is_parallel << "\n";
+    std::cout << "drop_duplicates_nonnull_keys : is_parallel=" << is_parallel
+              << "\n";
 #endif
     // serial case
     if (!is_parallel) {
@@ -644,7 +641,8 @@ table_info* drop_duplicates_nonnull_keys(table_info* in_table, int64_t num_keys,
 #ifdef DEBUG_DD
     std::cout << "Before the drop duplicates_nonnull on the local nodes\n";
 #endif
-    table_info* red_table = drop_duplicates_nonnull_keys_inner(in_table, num_keys);
+    table_info* red_table =
+        drop_duplicates_nonnull_keys_inner(in_table, num_keys);
     // shuffling of values
 #ifdef DEBUG_DD
     std::cout << "Before the shuffling\n";
@@ -667,7 +665,6 @@ table_info* drop_duplicates_nonnull_keys(table_info* in_table, int64_t num_keys,
     // returning table
     return ret_table;
 }
-
 
 /** This function is for dropping the null keys.
  * This C++ code is used for the compute_categorical_index
@@ -753,7 +750,8 @@ table_info* sample_table(table_info* in_table, int64_t n, double frac,
         }
 #endif
     }
-    // n_total is used only on node 0. If parallel then its value is correct only on node 0
+    // n_total is used only on node 0. If parallel then its value is correct
+    // only on node 0
     int n_total;
     if (parallel)
         n_total = std::accumulate(ListSizes.begin(), ListSizes.end(), 0);
@@ -767,8 +765,8 @@ table_info* sample_table(table_info* in_table, int64_t n, double frac,
         n_samp = round(n_total * frac);
 #ifdef DEBUG_SAMPLE
     if (!parallel || myrank == 0)
-        std::cout << "sample_table : n_total=" << n_total << " n_samp=" << n_samp
-                  << "\n";
+        std::cout << "sample_table : n_total=" << n_total
+                  << " n_samp=" << n_samp << "\n";
 #endif
     std::vector<int> ListIdxChosen;
     std::vector<int> ListByProcessor;
@@ -808,10 +806,11 @@ table_info* sample_table(table_info* in_table, int64_t n, double frac,
         // small.
         std::set<int> SetIdxChosen;
         UNORD_SET_CONTAINER<int> UnordsetIdxChosen;
-        // Deterministic random number generation. See sort_values_table for rationale.
+        // Deterministic random number generation. See sort_values_table for
+        // rationale.
         std::mt19937 gen(1234567890);
-        auto get_rand=[&](int const& len) -> int {
-          return std::uniform_int_distribution<>(0, len-1)(gen);
+        auto get_rand = [&](int const& len) -> int {
+            return std::uniform_int_distribution<>(0, len - 1)(gen);
         };
         auto GetIdx_Rand = [&]() -> int64_t {
             if (replace) return get_rand(n_total);

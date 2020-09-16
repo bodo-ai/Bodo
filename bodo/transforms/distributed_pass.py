@@ -116,7 +116,8 @@ _csv_write = types.ExternalFunction(
 )
 
 _csv_output_is_dir = types.ExternalFunction(
-    "csv_output_is_dir", types.int8(types.voidptr),
+    "csv_output_is_dir",
+    types.int8(types.voidptr),
 )
 
 _json_write = types.ExternalFunction(
@@ -160,8 +161,13 @@ class DistributedPass:
 
         self._dist_analysis = None
         self._T_arrs = None  # set of transposed arrays (taken from analysis)
+        # For each 1D parfor, map index variable name for the first dimension loop to
+        # distributed start variable of the parfor
         self._1D_parfor_starts = {}
+        # same as above but for 1D_Var parfors
         self._1D_Var_parfor_starts = {}
+        # map 1D_Var arrays to index variable names for 1D_Var array accesses
+        self._1D_Var_array_accesses = defaultdict(list)
         # keep start vars for 1D dist to reuse in parfor loop array accesses
         self._start_vars = {}
 
@@ -675,10 +681,14 @@ class DistributedPass:
             self._file_open_set_parallel(file_varname)
             return nodes
 
-        if fdef == (
-            "get_split_view_index",
-            "bodo.hiframes.split_impl",
-        ) and self._dist_arr_needs_adjust(rhs.args[0].name):
+        if (
+            fdef
+            == (
+                "get_split_view_index",
+                "bodo.hiframes.split_impl",
+            )
+            and self._dist_arr_needs_adjust(rhs.args[0].name, rhs.args[1].name)
+        ):
             arr = rhs.args[0]
             index_var = self._fix_index_var(rhs.args[1])
             start_var, nodes = self._get_parallel_access_start_var(
@@ -690,10 +700,14 @@ class DistributedPass:
             out.append(assign)
             return out
 
-        if fdef == (
-            "setitem_str_arr_ptr",
-            "bodo.libs.str_arr_ext",
-        ) and self._dist_arr_needs_adjust(rhs.args[0].name):
+        if (
+            fdef
+            == (
+                "setitem_str_arr_ptr",
+                "bodo.libs.str_arr_ext",
+            )
+            and self._dist_arr_needs_adjust(rhs.args[0].name, rhs.args[1].name)
+        ):
             arr = rhs.args[0]
             index_var = self._fix_index_var(rhs.args[1])
             start_var, nodes = self._get_parallel_access_start_var(
@@ -706,11 +720,18 @@ class DistributedPass:
             return out
 
         # adjust array index variable to be within current processor's data chunk
-        if fdef in (
-            ("inplace_eq", "bodo.libs.str_arr_ext",),
-            ("str_arr_setitem_int_to_str", "bodo.libs.str_arr_ext"),
-            ("str_arr_setitem_NA_str", "bodo.libs.str_arr_ext"),
-        ) and self._dist_arr_needs_adjust(rhs.args[0].name):
+        if (
+            fdef
+            in (
+                (
+                    "inplace_eq",
+                    "bodo.libs.str_arr_ext",
+                ),
+                ("str_arr_setitem_int_to_str", "bodo.libs.str_arr_ext"),
+                ("str_arr_setitem_NA_str", "bodo.libs.str_arr_ext"),
+            )
+            and self._dist_arr_needs_adjust(rhs.args[0].name, rhs.args[1].name)
+        ):
             arr = rhs.args[0]
             index_var = self._fix_index_var(rhs.args[1])
             start_var, nodes = self._get_parallel_access_start_var(
@@ -722,10 +743,14 @@ class DistributedPass:
             out.append(assign)
             return out
 
-        if fdef == (
-            "str_arr_item_to_numeric",
-            "bodo.libs.str_arr_ext",
-        ) and self._dist_arr_needs_adjust(rhs.args[0].name):
+        if (
+            fdef
+            == (
+                "str_arr_item_to_numeric",
+                "bodo.libs.str_arr_ext",
+            )
+            and self._dist_arr_needs_adjust(rhs.args[0].name, rhs.args[1].name)
+        ):
             arr = rhs.args[0]
             index_var = self._fix_index_var(rhs.args[1])
             start_var, nodes = self._get_parallel_access_start_var(
@@ -747,7 +772,7 @@ class DistributedPass:
             return out
 
         if fdef == ("setna", "bodo.libs.array_kernels") and self._dist_arr_needs_adjust(
-            rhs.args[0].name
+            rhs.args[0].name, rhs.args[1].name
         ):
             arr = rhs.args[0]
             index_var = self._fix_index_var(rhs.args[1])
@@ -760,12 +785,16 @@ class DistributedPass:
             out.append(assign)
             return out
 
-        if fdef in (
-            ("isna", "bodo.libs.array_kernels"),
-            ("get_bit_bitmap_arr", "bodo.libs.int_arr_ext"),
-            ("set_bit_to_arr", "bodo.libs.int_arr_ext"),
-            ("get_str_arr_item_length", "bodo.libs.str_arr_ext"),
-        ) and self._dist_arr_needs_adjust(rhs.args[0].name):
+        if (
+            fdef
+            in (
+                ("isna", "bodo.libs.array_kernels"),
+                ("get_bit_bitmap_arr", "bodo.libs.int_arr_ext"),
+                ("set_bit_to_arr", "bodo.libs.int_arr_ext"),
+                ("get_str_arr_item_length", "bodo.libs.str_arr_ext"),
+            )
+            and self._dist_arr_needs_adjust(rhs.args[0].name, rhs.args[1].name)
+        ):
             # fix index in call to isna
             arr = rhs.args[0]
             ind = self._fix_index_var(rhs.args[1])
@@ -776,10 +805,14 @@ class DistributedPass:
             rhs.args[1] = out[-1].target
             out.append(assign)
 
-        if fdef == (
-            "rolling_fixed",
-            "bodo.hiframes.rolling",
-        ) and self._is_1D_or_1D_Var_arr(rhs.args[0].name):
+        if (
+            fdef
+            == (
+                "rolling_fixed",
+                "bodo.hiframes.rolling",
+            )
+            and self._is_1D_or_1D_Var_arr(rhs.args[0].name)
+        ):
             # set parallel flag to true
             true_var = ir.Var(scope, mk_unique_var("true_var"), loc)
             self.typemap[true_var.name] = BooleanLiteral(True)
@@ -795,10 +828,14 @@ class DistributedPass:
             )
             out = [ir.Assign(ir.Const(True, loc), true_var, loc), assign]
 
-        if fdef == (
-            "rolling_variable",
-            "bodo.hiframes.rolling",
-        ) and self._is_1D_or_1D_Var_arr(rhs.args[0].name):
+        if (
+            fdef
+            == (
+                "rolling_variable",
+                "bodo.hiframes.rolling",
+            )
+            and self._is_1D_or_1D_Var_arr(rhs.args[0].name)
+        ):
             # set parallel flag to true
             true_var = ir.Var(scope, mk_unique_var("true_var"), loc)
             self.typemap[true_var.name] = BooleanLiteral(True)
@@ -834,10 +871,14 @@ class DistributedPass:
             )
             return compile_func_single_block(f, rhs.args, assign.target, self)
 
-        if fdef == (
-            "quantile",
-            "bodo.libs.array_kernels",
-        ) and self._is_1D_or_1D_Var_arr(rhs.args[0].name):
+        if (
+            fdef
+            == (
+                "quantile",
+                "bodo.libs.array_kernels",
+            )
+            and self._is_1D_or_1D_Var_arr(rhs.args[0].name)
+        ):
             arr = rhs.args[0]
             nodes = []
             size_var = self._get_dist_var_len(arr, nodes, equiv_set)
@@ -860,10 +901,14 @@ class DistributedPass:
             f = lambda arr: bodo.libs.array_kernels.unique_parallel(arr)
             return compile_func_single_block(f, rhs.args, assign.target, self)
 
-        if fdef == (
-            "nlargest",
-            "bodo.libs.array_kernels",
-        ) and self._is_1D_or_1D_Var_arr(rhs.args[0].name):
+        if (
+            fdef
+            == (
+                "nlargest",
+                "bodo.libs.array_kernels",
+            )
+            and self._is_1D_or_1D_Var_arr(rhs.args[0].name)
+        ):
             f = lambda arr, I, k, i, f: bodo.libs.array_kernels.nlargest_parallel(
                 arr, I, k, i, f
             )
@@ -932,10 +977,14 @@ class DistributedPass:
                 assign.value = arg_def.args[0]
             return out
 
-        if fdef == (
-            "init_range_index",
-            "bodo.hiframes.pd_index_ext",
-        ) and self._is_1D_or_1D_Var_arr(lhs):
+        if (
+            fdef
+            == (
+                "init_range_index",
+                "bodo.hiframes.pd_index_ext",
+            )
+            and self._is_1D_or_1D_Var_arr(lhs)
+        ):
             return self._run_call_init_range_index(
                 lhs, assign, rhs.args, avail_vars, equiv_set
             )
@@ -1028,15 +1077,22 @@ class DistributedPass:
         return out
 
     def _run_call_init_range_index(self, lhs, assign, args, avail_vars, equiv_set):
-        """transform init_range_index() calls
-        """
+        """transform init_range_index() calls"""
         assert len(args) == 4, "invalid init_range_index() call"
         # parallelize init_range_index() similar to parfors
         is_simple_range = (
-            guard(get_const_value_inner, self.func_ir, args[0], typemap=self.typemap,)
+            guard(
+                get_const_value_inner,
+                self.func_ir,
+                args[0],
+                typemap=self.typemap,
+            )
             == 0
             and guard(
-                get_const_value_inner, self.func_ir, args[2], typemap=self.typemap,
+                get_const_value_inner,
+                self.func_ir,
+                args[2],
+                typemap=self.typemap,
             )
             == 1
         )
@@ -1099,8 +1155,7 @@ class DistributedPass:
             )
 
     def _run_call_np(self, lhs, func_name, assign, args, kws, equiv_set):
-        """transform np.func() calls
-        """
+        """transform np.func() calls"""
         # allocs are handled separately
         assert not (
             self._is_1D_or_1D_Var_arr(lhs)
@@ -1154,8 +1209,7 @@ class DistributedPass:
         return out
 
     def _run_call_array(self, lhs, arr, func_name, assign, args, equiv_set, avail_vars):
-        """transform distributed ndarray.func calls
-        """
+        """transform distributed ndarray.func calls"""
         out = [assign]
 
         if func_name == "reshape" and self._is_1D_or_1D_Var_arr(arr.name):
@@ -1281,6 +1335,8 @@ class DistributedPass:
                     True,
                     unicode_to_utf8(bucket_region),
                 )
+                # Check if there was an error in the C++ code. If so, raise it.
+                bodo.utils.utils.check_and_propagate_cpp_exception()
 
             return nodes + compile_func_single_block(
                 f,
@@ -1381,6 +1437,8 @@ class DistributedPass:
                     is_records_lines,
                     unicode_to_utf8(bucket_region),
                 )
+                # Check if there was an error in the C++ code. If so, raise it.
+                bodo.utils.utils.check_and_propagate_cpp_exception()
 
             return nodes + compile_func_single_block(
                 f,
@@ -1399,13 +1457,13 @@ class DistributedPass:
 
     def _gen_csv_header_node(self, cond_var, fname_var):
         """
-        cond_var is the original header node. 
+        cond_var is the original header node.
         If the original header node was true, there are two cases:
-            a) output is a directory: every rank needs to write the header, 
-               so file in the directory has header, and thus all ranks have 
+            a) output is a directory: every rank needs to write the header,
+               so file in the directory has header, and thus all ranks have
                the new header node to be true
             b) output is a single file: only rank 0 writes the header, and thus
-               only rank 0 have the new header node to be true, others are 
+               only rank 0 have the new header node to be true, others are
                false
         If the original header node was false, the new header node is always false.
         """
@@ -1418,7 +1476,10 @@ class DistributedPass:
 
         f_block = compile_to_numba_ir(
             f,
-            {"bodo": bodo, "_csv_output_is_dir": _csv_output_is_dir,},
+            {
+                "bodo": bodo,
+                "_csv_output_is_dir": _csv_output_is_dir,
+            },
             self.typingctx,
             (self.typemap[cond_var.name], self.typemap[fname_var.name]),
             self.typemap,
@@ -1583,7 +1644,7 @@ class DistributedPass:
         return out
 
     def _run_alloc(self, size_var, scope, loc):
-        """ divides array sizes and assign its sizes/starts/counts attributes
+        """divides array sizes and assign its sizes/starts/counts attributes
         returns generated nodes and the new size variable to enable update of
         the alloc call.
         """
@@ -1669,7 +1730,7 @@ class DistributedPass:
         return out, new_size_var
 
     def _fix_1D_Var_alloc(self, size_var, scope, loc, equiv_set, avail_vars):
-        """ 1D_Var allocs use global sizes of other 1D_var variables,
+        """1D_Var allocs use global sizes of other 1D_var variables,
         so find the local size of one those variables for replacement.
         Assuming 1D_Var alloc is resulting from an operation with another
         1D_Var array and cannot be standalone.
@@ -1939,13 +2000,13 @@ class DistributedPass:
         return nodes
 
     def _run_getsetitem(self, arr, index_var, node, full_node, equiv_set, avail_vars):
+        """Transform distributed getitem/setitem operations
+        """
         out = [full_node]
-        index_var = self._fix_index_var(index_var)
         full_index_var = index_var
-        in_typ = self.typemap[arr.name]
 
         # no need for transformation for getitem/setitem of distributed List/Dict
-        if isinstance(in_typ, (types.List, types.DictType)):
+        if isinstance(self.typemap[arr.name], (types.List, types.DictType)):
             return out
 
         # adjust parallel access indices (in parfors)
@@ -1953,214 +2014,37 @@ class DistributedPass:
         if (
             self._is_1D_arr(arr.name)
             or (
-                self._is_1D_Var_arr(arr.name) and arr.name in self._1D_Var_parfor_starts
+                self._is_1D_Var_arr(arr.name)
+                and arr.name in self._1D_Var_array_accesses
+                and index_var.name in self._1D_Var_array_accesses[arr.name]
             )
         ) and (arr.name, index_var.name) in self._parallel_accesses:
             return self._run_parallel_access_getsetitem(
                 arr, index_var, node, full_node, equiv_set, avail_vars
             )
-        elif self._is_1D_arr(arr.name) and isinstance(
+        # parallel access in 1D_Var case, no need to transform
+        elif (arr.name, index_var.name) in self._parallel_accesses:
+            return out
+        elif self._is_1D_or_1D_Var_arr(arr.name) and isinstance(
             node, (ir.StaticSetItem, ir.SetItem)
         ):
-            is_multi_dim = False
-            # we only consider 1st dimension for multi-dim arrays
-            inds = guard(find_build_tuple, self.func_ir, index_var)
-            if inds is not None:
-                index_var = inds[0]
-                is_multi_dim = True
-
-            # no need for transformation for whole slices
-            if guard(is_whole_slice, self.typemap, self.func_ir, index_var) or guard(
-                is_slice_equiv_arr, arr, index_var, self.func_ir, equiv_set
-            ):
-                return out
-
-            # TODO: support multi-dim slice setitem like X[a:b, c:d]
-            if is_multi_dim:  # pragma: no cover
-                raise BodoError(
-                    "multi-dimensional slicing of distributed data not supported yet"
-                )
-            nodes, start_var, count_var = self._get_dist_var_start_count(
-                arr, equiv_set, avail_vars
+            return self._run_dist_setitem(
+                node, arr, index_var, equiv_set, avail_vars, out
             )
-
-            if isinstance(types.unliteral(self.typemap[index_var.name]), types.Integer):
-
-                def f(A, val, index, chunk_start, chunk_count):  # pragma: no cover
-                    bodo.libs.distributed_api._set_if_in_range(
-                        A, val, index, chunk_start, chunk_count
-                    )
-
-                return nodes + compile_func_single_block(
-                    f, [arr, node.value, index_var, start_var, count_var], None, self
-                )
-
-            assert isinstance(
-                self.typemap[index_var.name], types.misc.SliceType
-            ), "slice index expected"
-
-            # convert setitem with global range to setitem with local range
-            # that overlaps with the local array chunk
-            def f(A, val, start, stop, chunk_start, chunk_count):  # pragma: no cover
-                loc_start, loc_stop = bodo.libs.distributed_api._get_local_range(
-                    start, stop, chunk_start, chunk_count
-                )
-                A[loc_start:loc_stop] = val
-
-            slice_call = get_definition(self.func_ir, index_var)
-            slice_start = slice_call.args[0]
-            slice_stop = slice_call.args[1]
-            return nodes + compile_func_single_block(
-                f,
-                [arr, node.value, slice_start, slice_stop, start_var, count_var],
-                None,
-                self,
-            )
-            # print_node = ir.Print([start_var, end_var], None, loc)
-            # self.calltypes[print_node] = signature(types.none, types.int64, types.int64)
-            # out.append(print_node)
-            #
-            # setitem_attr_var = ir.Var(scope, mk_unique_var("$setitem_attr"), loc)
-            # setitem_attr_call = ir.Expr.getattr(self._g_dist_var, "dist_setitem", loc)
-            # self.typemap[setitem_attr_var.name] = get_global_func_typ(
-            #                                 distributed_api.dist_setitem)
-            # setitem_assign = ir.Assign(setitem_attr_call, setitem_attr_var, loc)
-            # out = [setitem_assign]
-            # setitem_call = ir.Expr.call(setitem_attr_var,
-            #                     [arr, index_var, node.value, start, count], (), loc)
-            # self.calltypes[setitem_call] = self.typemap[setitem_attr_var.name].get_call_type(
-            #     self.typingctx, [self.typemap[arr.name],
-            #     self.typemap[index_var.name], self.typemap[node.value.name],
-            #     types.intp, types.intp], {})
-            # err_var = ir.Var(scope, mk_unique_var("$setitem_err_var"), loc)
-            # self.typemap[err_var.name] = types.int32
-            # setitem_assign = ir.Assign(setitem_call, err_var, loc)
-            # out.append(setitem_assign)
 
         elif self._is_1D_or_1D_Var_arr(arr.name) and (
             is_expr(node, "getitem") or is_expr(node, "static_getitem")
         ):
-            is_multi_dim = False
-            lhs = full_node.target
-            orig_index_var = index_var
-
-            # we only consider 1st dimension for multi-dim arrays
-            inds = guard(find_build_tuple, self.func_ir, index_var)
-            if inds is not None:
-                index_var = inds[0]
-                is_multi_dim = True
-
-            index_typ = self.typemap[index_var.name]
-
-            # no need for transformation for whole slices
-            if guard(is_whole_slice, self.typemap, self.func_ir, index_var) or guard(
-                is_slice_equiv_arr, arr, index_var, self.func_ir, equiv_set
-            ):
-                # A = X[:,3]
-                pass
-
-            # strided whole slice
-            # e.g. A = X[::2,5]
-            elif guard(
-                is_whole_slice,
-                self.typemap,
-                self.func_ir,
-                index_var,
-                accept_stride=True,
-            ) or guard(
-                is_slice_equiv_arr,
-                arr,
-                index_var,
-                self.func_ir,
-                equiv_set,
-                accept_stride=True,
-            ):
-                # on each processor, the slice has to start from an offset:
-                # |step-(start%step)|
-                in_arr = full_node.value.value
-                start_var, out = self._get_dist_start_var(in_arr, equiv_set, avail_vars)
-                step = get_slice_step(self.typemap, self.func_ir, index_var)
-
-                def f(A, start, step):  # pragma: no cover
-                    offset = abs(step - (start % step)) % step
-                    return A[offset::step]
-
-                out += compile_func_single_block(
-                    f, [in_arr, start_var, step], None, self
-                )
-                out[-1].target = lhs
-
-            # general slice access like A[3:7]
-            elif isinstance(index_typ, types.SliceType):
-                in_arr = full_node.value.value
-                start_var, nodes = self._get_dist_start_var(
-                    in_arr, equiv_set, avail_vars
-                )
-                size_var = self._get_dist_var_len(in_arr, nodes, equiv_set)
-                is_1D = self._is_1D_arr(arr.name)
-                # for multi-dim case, perform selection in other dimensions then handle
-                # the first dimension
-                if is_multi_dim:
-                    # gen index with first dimension as full slice, other dimensions as
-                    # full getitem index
-                    nodes += compile_func_single_block(
-                        lambda ind: (slice(None),) + ind[1:],
-                        [full_index_var],
-                        None,
-                        self,
-                    )
-                    other_ind = nodes[-1].target
-                    return nodes + compile_func_single_block(
-                        lambda arr, slice_index, start, tot_len, other_ind: bodo.libs.distributed_api.slice_getitem(
-                            operator.getitem(arr, other_ind),
-                            slice_index,
-                            start,
-                            tot_len,
-                            _is_1D,
-                        ),
-                        [in_arr, index_var, start_var, size_var, other_ind],
-                        lhs,
-                        self,
-                        extra_globals={"_is_1D": is_1D, "operator": operator},
-                    )
-                return nodes + compile_func_single_block(
-                    lambda arr, slice_index, start, tot_len: bodo.libs.distributed_api.slice_getitem(
-                        arr, slice_index, start, tot_len, _is_1D
-                    ),
-                    [in_arr, index_var, start_var, size_var],
-                    lhs,
-                    self,
-                    extra_globals={"_is_1D": is_1D},
-                )
-            # int index like A[11]
-            elif (
-                isinstance(index_typ, types.Integer)
-                and (arr.name, orig_index_var.name) not in self._parallel_accesses
-            ):
-                # TODO: handle multi-dim cases like A[0,:]
-                in_arr = full_node.value.value
-                start_var, nodes = self._get_dist_start_var(
-                    in_arr, equiv_set, avail_vars
-                )
-                size_var = self._get_dist_var_len(in_arr, nodes, equiv_set)
-                is_1D = self._is_1D_arr(arr.name)
-                return nodes + compile_func_single_block(
-                    lambda arr, ind, start, tot_len: bodo.libs.distributed_api.int_getitem(
-                        arr, ind, start, tot_len, _is_1D
-                    ),
-                    [in_arr, orig_index_var, start_var, size_var],
-                    lhs,
-                    self,
-                    extra_globals={"_is_1D": is_1D},
-                )
+            return self._run_dist_getitem(
+                node, full_node, arr, index_var, equiv_set, avail_vars, out
+            )
 
         return out
 
     def _run_parallel_access_getsetitem(
         self, arr, index_var, node, full_node, equiv_set, avail_vars
     ):
-        """adjust index of getitem/setitem using parfor index on dist arrays
-        """
+        """adjust index of getitem/setitem using parfor index on dist arrays"""
         start_var, nodes = self._get_parallel_access_start_var(
             arr, equiv_set, index_var, avail_vars
         )
@@ -2186,6 +2070,177 @@ class DistributedPass:
             _set_getsetitem_index(node, tuple_var)
 
         out.append(full_node)
+        return out
+
+    def _run_dist_getitem(
+        self, node, full_node, arr, index_var, equiv_set, avail_vars, out
+    ):
+        """Transform distributed getitem
+        """
+        full_index_var = index_var
+        is_multi_dim = False
+        lhs = full_node.target
+        orig_index_var = index_var
+
+        # we only consider 1st dimension for multi-dim arrays
+        inds = guard(find_build_tuple, self.func_ir, index_var)
+        if inds is not None:
+            index_var = inds[0]
+            is_multi_dim = True
+
+        index_typ = self.typemap[index_var.name]
+
+        # no need for transformation for whole slices
+        # e.g. A = X[:,3]
+        if guard(is_whole_slice, self.typemap, self.func_ir, index_var) or guard(
+            is_slice_equiv_arr, arr, index_var, self.func_ir, equiv_set
+        ):
+            pass
+
+        # strided whole slice
+        # e.g. A = X[::2,5]
+        elif guard(
+            is_whole_slice, self.typemap, self.func_ir, index_var, accept_stride=True,
+        ) or guard(
+            is_slice_equiv_arr,
+            arr,
+            index_var,
+            self.func_ir,
+            equiv_set,
+            accept_stride=True,
+        ):
+            # on each processor, the slice has to start from an offset:
+            # |step-(start%step)|
+            in_arr = full_node.value.value
+            start_var, out = self._get_dist_start_var(in_arr, equiv_set, avail_vars)
+            step = get_slice_step(self.typemap, self.func_ir, index_var)
+
+            def f(A, start, step):  # pragma: no cover
+                offset = abs(step - (start % step)) % step
+                return A[offset::step]
+
+            out += compile_func_single_block(f, [in_arr, start_var, step], None, self)
+            out[-1].target = lhs
+
+        # general slice access like A[3:7]
+        elif isinstance(index_typ, types.SliceType):
+            in_arr = full_node.value.value
+            start_var, nodes = self._get_dist_start_var(in_arr, equiv_set, avail_vars)
+            size_var = self._get_dist_var_len(in_arr, nodes, equiv_set)
+            # for multi-dim case, perform selection in other dimensions then handle
+            # the first dimension
+            if is_multi_dim:
+                # gen index with first dimension as full slice, other dimensions as
+                # full getitem index
+                nodes += compile_func_single_block(
+                    lambda ind: (slice(None),) + ind[1:], [full_index_var], None, self,
+                )
+                other_ind = nodes[-1].target
+                return nodes + compile_func_single_block(
+                    lambda arr, slice_index, start, tot_len, other_ind: bodo.libs.distributed_api.slice_getitem(
+                        operator.getitem(arr, other_ind), slice_index, start, tot_len,
+                    ),
+                    [in_arr, index_var, start_var, size_var, other_ind],
+                    lhs,
+                    self,
+                    extra_globals={"operator": operator},
+                )
+            return nodes + compile_func_single_block(
+                lambda arr, slice_index, start, tot_len: bodo.libs.distributed_api.slice_getitem(
+                    arr, slice_index, start, tot_len,
+                ),
+                [in_arr, index_var, start_var, size_var],
+                lhs,
+                self,
+            )
+        # int index like A[11]
+        elif (
+            isinstance(index_typ, types.Integer)
+            and (arr.name, orig_index_var.name) not in self._parallel_accesses
+        ):
+            # TODO: handle multi-dim cases like A[0,:]
+            in_arr = full_node.value.value
+            start_var, nodes = self._get_dist_start_var(in_arr, equiv_set, avail_vars)
+            size_var = self._get_dist_var_len(in_arr, nodes, equiv_set)
+            is_1D = self._is_1D_arr(arr.name)
+            return nodes + compile_func_single_block(
+                lambda arr, ind, start, tot_len: bodo.libs.distributed_api.int_getitem(
+                    arr, ind, start, tot_len, _is_1D
+                ),
+                [in_arr, orig_index_var, start_var, size_var],
+                lhs,
+                self,
+                extra_globals={"_is_1D": is_1D},
+            )
+
+        return out
+
+    def _run_dist_setitem(self, node, arr, index_var, equiv_set, avail_vars, out):
+        """Transform distributed setitem
+        """
+        is_multi_dim = False
+        # we only consider 1st dimension for multi-dim arrays
+        inds = guard(find_build_tuple, self.func_ir, index_var)
+        if inds is not None:
+            index_var = inds[0]
+            is_multi_dim = True
+
+        index_typ = types.unliteral(self.typemap[index_var.name])
+
+        # no need for transformation for whole slices
+        if guard(is_whole_slice, self.typemap, self.func_ir, index_var) or guard(
+            is_slice_equiv_arr, arr, index_var, self.func_ir, equiv_set
+        ):
+            return out
+
+        elif isinstance(index_typ, types.SliceType):
+
+            start_var, nodes = self._get_dist_start_var(arr, equiv_set, avail_vars)
+            arr_len = self._get_dist_var_len(arr, nodes, equiv_set)
+
+            # create a tuple varialbe for lower dimension indices
+            other_inds_var = ir.Var(arr.scope, mk_unique_var("$other_inds"), arr.loc)
+            items = [] if not is_multi_dim else inds
+            other_inds_tuple = ir.Expr.build_tuple(items, arr.loc)
+            nodes.append(ir.Assign(other_inds_tuple, other_inds_var, arr.loc))
+            self.typemap[other_inds_var.name] = types.BaseTuple.from_types(
+                [self.typemap[v.name] for v in items]
+            )
+
+            # convert setitem with global range to setitem with local range
+            # that overlaps with the local array chunk
+            def f(A, val, idx, other_inds, chunk_start, arr_len):  # pragma: no cover
+                new_slice = bodo.libs.distributed_api.get_local_slice(
+                    idx, chunk_start, arr_len
+                )
+                new_ind = (new_slice,) + other_inds
+                # avoid tuple index for cases like Series that don't support it
+                new_ind = bodo.utils.indexing.untuple_if_one_tuple(new_ind)
+                A[new_ind] = val
+
+            return nodes + compile_func_single_block(
+                f,
+                [arr, node.value, index_var, other_inds_var, start_var, arr_len],
+                None,
+                self,
+            )
+
+        elif isinstance(index_typ, types.Integer):
+            nodes, start_var, count_var = self._get_dist_var_start_count(
+                arr, equiv_set, avail_vars
+            )
+
+            def f(A, val, index, chunk_start, chunk_count):  # pragma: no cover
+                bodo.libs.distributed_api._set_if_in_range(
+                    A, val, index, chunk_start, chunk_count
+                )
+
+            return nodes + compile_func_single_block(
+                f, [arr, node.value, index_var, start_var, count_var], None, self
+            )
+
+        # no need to transform for other cases like setitem of scalar value with bool
+        # index
         return out
 
     def _run_parfor(self, parfor, equiv_set, avail_vars):
@@ -2334,10 +2389,11 @@ class DistributedPass:
             gen_getitem(l_nest.start, ret_var, 0, self.calltypes, nodes)
             gen_getitem(l_nest.stop, ret_var, 1, self.calltypes, nodes)
             prepend += nodes
+            self._1D_Var_parfor_starts[ind_varname] = l_nest.start
 
             for (arr, index, _) in array_accesses:
                 if self._index_has_par_index(index, ind_varname):
-                    self._1D_Var_parfor_starts[arr] = l_nest.start
+                    self._1D_Var_array_accesses[arr].append(index)
 
         init_reduce_nodes, reduce_nodes = self._gen_parfor_reductions(parfor)
         parfor.init_block.body += init_reduce_nodes
@@ -2345,8 +2401,7 @@ class DistributedPass:
         return out
 
     def _index_has_par_index(self, index, par_index):
-        """check if parfor index is used in 1st dimension of access index
-        """
+        """check if parfor index is used in 1st dimension of access index"""
         ind_def = self.func_ir._definitions[index]
         if len(ind_def) == 1 and isinstance(ind_def[0], ir.Var):
             index = ind_def[0].name
@@ -2416,8 +2471,13 @@ class DistributedPass:
 
     def _get_dist_var_start_count(self, arr, equiv_set, avail_vars):
         nodes = []
-        if arr.name in self._1D_Var_parfor_starts:
-            start_var = self._1D_Var_parfor_starts[arr.name]
+        if arr.name in self._1D_Var_array_accesses:
+            # using the start variable of the first parfor on this array
+            # TODO(ehsan): use avail_vars to make sure parfor start variable is valid?
+            index_name = self._get_dim1_index_name(
+                self._1D_Var_array_accesses[arr.name][0].name
+            )
+            start_var = self._1D_Var_parfor_starts[index_name]
             f_block = compile_to_numba_ir(
                 lambda A: len(A),
                 {},
@@ -2437,8 +2497,13 @@ class DistributedPass:
         return nodes, start_var, count_var
 
     def _get_dist_start_var(self, arr, equiv_set, avail_vars):
-        if arr.name in self._1D_Var_parfor_starts:
-            return self._1D_Var_parfor_starts[arr.name], []
+        if arr.name in self._1D_Var_array_accesses:
+            # using the start variable of the first parfor on this array
+            # TODO(ehsan): use avail_vars to make sure parfor start variable is valid?
+            index_name = self._get_dim1_index_name(
+                self._1D_Var_array_accesses[arr.name][0].name
+            )
+            return self._1D_Var_parfor_starts[index_name], []
 
         if self._is_1D_arr(arr.name):
             nodes = []
@@ -2491,27 +2556,31 @@ class DistributedPass:
         nodes += self._gen_1D_Var_len(var)
         return nodes[-1].target
 
-    def _dist_arr_needs_adjust(self, varname):
+    def _dist_arr_needs_adjust(self, varname, index_name):
         return self._is_1D_arr(varname) or (
-            self._is_1D_Var_arr(varname) and varname in self._1D_Var_parfor_starts
+            self._is_1D_Var_arr(varname)
+            and varname in self._1D_Var_array_accesses
+            and index_name in self._1D_Var_array_accesses[varname]
         )
 
     def _get_parallel_access_start_var(self, arr, equiv_set, index_var, avail_vars):
         """Same as _get_dist_start_var() but avoids generating reduction for
         getting global size since this is an error inside a parfor loop.
         """
-        if arr.name in self._1D_Var_parfor_starts:
-            return self._1D_Var_parfor_starts[arr.name], []
 
         # XXX we return parfors start assuming parfor and parallel accessed
         # array are equivalent in size and have equivalent distribution
         # TODO: is this always the case?
-        if isinstance(self.typemap[index_var.name], types.BaseTuple):
-            index_list = guard(find_build_tuple, self.func_ir, index_var)
-            assert index_list is not None
-            index_var = index_list[0]
-        if index_var.name in self._1D_parfor_starts:
-            return self._1D_parfor_starts[index_var.name], []
+        index_name = self._get_dim1_index_name(index_var.name)
+
+        if (
+            arr.name in self._1D_Var_array_accesses
+            and index_name in self._1D_Var_parfor_starts
+        ):
+            return self._1D_Var_parfor_starts[index_name], []
+
+        if index_name in self._1D_parfor_starts:
+            return self._1D_parfor_starts[index_name], []
 
         # use shape if parfor start not found (TODO shouldn't reach here?)
         shape = equiv_set.get_shape(arr)
@@ -2541,8 +2610,7 @@ class DistributedPass:
         return nodes
 
     def _get_1D_start(self, size_var, avail_vars, nodes):
-        """get start index of size_var in 1D_Block distribution
-        """
+        """get start index of size_var in 1D_Block distribution"""
         # reuse start var if available
         if (
             size_var.name in self._start_vars
@@ -2563,8 +2631,7 @@ class DistributedPass:
         return start_var
 
     def _get_1D_count(self, size_var, nodes):
-        """get chunk size for size_var in 1D_Block distribution
-        """
+        """get chunk size for size_var in 1D_Block distribution"""
 
         def impl(n, rank, n_pes):  # pragma: no cover
             res = n % n_pes
@@ -2582,8 +2649,7 @@ class DistributedPass:
         return count_var
 
     def _get_1D_end(self, size_var, nodes):
-        """get end index of size_var in 1D_Block distribution
-        """
+        """get end index of size_var in 1D_Block distribution"""
         nodes += compile_func_single_block(
             lambda n, rank, n_pes: (rank + 1) * (n // n_pes) + min(rank + 1, n % n_pes),
             (size_var, self.rank_var, self.n_pes_var),
@@ -2598,7 +2664,7 @@ class DistributedPass:
 
     def _get_ind_sub(self, ind_var, start_var):
         if isinstance(ind_var, slice) or isinstance(
-            self.typemap[ind_var.name], types.misc.SliceType
+            self.typemap[ind_var.name], types.SliceType
         ):
             return self._get_ind_sub_slice(ind_var, start_var)
         # gen sub
@@ -2643,8 +2709,7 @@ class DistributedPass:
         return block.body[:-2]  # ignore return nodes
 
     def _file_open_set_parallel(self, file_varname):
-        """Finds file open call (h5py.File) for file_varname and sets the parallel flag.
-        """
+        """Finds file open call (h5py.File) for file_varname and sets the parallel flag."""
         # TODO: find and handle corner cases
         var = file_varname
         while True:
@@ -2684,8 +2749,7 @@ class DistributedPass:
         )
 
     def _gen_reduce(self, reduce_var, reduce_op, scope, loc):
-        """generate distributed reduction code for after parfor's local execution
-        """
+        """generate distributed reduction code for after parfor's local execution"""
         # concat reduction variables don't need aggregation since output is distributed
         # see test_concat_reduction
         if reduce_op == Reduce_Type.Concat:
@@ -2871,8 +2935,28 @@ class DistributedPass:
 
         return index_var
 
+    def _get_dim1_index_name(self, index_name):
+        """given index variable name 'index_name', get index varibale name for the first
+        dimension if it is a tuple. Also, get the first definition of the variable name
+        if available. This helps matching the index name to first loop index name of
+        parfors.
+        """
+
+        # multi-dim case
+        tup_list = guard(find_build_tuple, self.func_ir, index_name)
+        if tup_list is not None:
+            assert len(tup_list) > 0
+            index_name = tup_list[0].name
+
+        # fix index if copy propagation didn't work
+        ind_def = self.func_ir._definitions[index_name]
+        if len(ind_def) == 1 and isinstance(ind_def[0], ir.Var):
+            index_name = ind_def[0].name
+
+        return index_name
+
     def _get_tuple_varlist(self, tup_var, out):
-        """ get the list of variables that hold values in the tuple variable.
+        """get the list of variables that hold values in the tuple variable.
         add node to out if code generation needed.
         """
         t_list = guard(find_build_tuple, self.func_ir, tup_var)
@@ -2921,11 +3005,13 @@ class DistributedPass:
         )
 
     def _is_1D_or_1D_Var_arr(self, arr_name):
-        return arr_name in self._dist_analysis.array_dists and self._dist_analysis.array_dists[
-            arr_name
-        ] in (
-            Distribution.OneD,
-            Distribution.OneD_Var,
+        return (
+            arr_name in self._dist_analysis.array_dists
+            and self._dist_analysis.array_dists[arr_name]
+            in (
+                Distribution.OneD,
+                Distribution.OneD_Var,
+            )
         )
 
     def _is_1D_Var_arr(self, arr_name):

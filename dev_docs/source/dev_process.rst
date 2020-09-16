@@ -43,7 +43,7 @@ pytest markers
 We have three customized `pytest markers <http://doc.pytest.org/en/latest/example/markers.html>`_:
 
 1. :code:`slow` defined in `pytest.ini <https://github.com/Bodo-inc/Bodo/blob/master/pytest.ini>`_::
-    
+
       pytest -s -v -m "slow"
       pytest -s -v -m "not slow"
 
@@ -53,7 +53,7 @@ We have three customized `pytest markers <http://doc.pytest.org/en/latest/exampl
    The nightly CI build & test pipeline runs the full test suite.
    Therefore, when new tests are added, if the tests take considerable amount of time
    and there are other tests for similar functionalities, it should be marked as slow.
-      
+
 2. :code:`firsthalf` dynamically defined in `bodo/tests/conftest.py <https://github.com/Bodo-inc/Bodo/blob/master/bodo/tests/conftest.py>`_::
 
       pytest -s -v -m "firsthalf"
@@ -78,7 +78,7 @@ We have three customized `pytest markers <http://doc.pytest.org/en/latest/exampl
   These tests will be skipped, if `hdfs3 <https://hdfs3.readthedocs.io/en/latest/>`_ is not installed.
 
 More than one markers can be used together::
-    
+
    pytest -s -v -m "not slow and firsthalf"
 
 
@@ -86,10 +86,10 @@ More than one markers can be used together::
 pytest fixture
 ^^^^^^^^^^^^^^
 
-The purpose of test fixtures is to provide a fixed baseline upon which tests 
+The purpose of test fixtures is to provide a fixed baseline upon which tests
 can reliably and repeatedly execute.
 For example, Pytest fixture can be used when multiple tests use same inputs::
-    
+
     @pytest.fixture(params=[pd.Series(["New_York", "Lisbon", "Tokyo", "Paris", "Munich"]),
                             pd.Series(["1234", "ABCDF", "ASDDDD", "!@#@@", "FAFFD"])])
     def test_sr(request):
@@ -146,14 +146,14 @@ Following code is an example of using `check_func`::
         # compare series(dt64) with a timestamp and a string
         check_func(test_impl, (S, timestamp))
 
-`check_func` performs 3 testings. 
+`check_func` performs 3 testings.
     - Sequential testing where inputs/outputs are replicated and there is no communication across processes.
     - distributed testing that automatically distributes data to equal chunks among processes.
-    - distributed testing with processors having different sizes of data. 
+    - distributed testing with processors having different sizes of data.
         - The second last processor will have 1 less element
         - The last processor will have 1 more element
         - Must provide large enough size of data (at least input length of 5) to make sure
-          that none of the processor end up with not having any input data. 
+          that none of the processor end up with not having any input data.
 
 Each test is independent from one another, so during development/debugging, individual tests can be commented out.
 In certain cases, distributed tests are not performed. Check the comments in `check_func <https://github.com/Bodo-inc/Bodo/blob/master/bodo/tests/utils.py>`_
@@ -162,7 +162,7 @@ In certain cases, distributed tests are not performed. Check the comments in `ch
 Other useful testing functions
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-In some cases, we do not want to perfrom distributed testing. In such cases, we can use non-Bodo testing functions. 
+In some cases, we do not want to perfrom distributed testing. In such cases, we can use non-Bodo testing functions.
 List of Non-Bodo testing functions that can also be used while testing are
 
     1. assert
@@ -232,6 +232,8 @@ Debugging the Python code
 - `pdb <https://docs.python.org/3/library/pdb.html>`_: setting breakpoints
   using :code:`import pdb; pdb.set_trace()` and inspecting variables is key
   for debugging Bodo's python code such as overloads and transformations.
+  Using :code:`c` key we can go to the next trace. Using :code:`n` key we
+  can go to the next python line. Using :code:`q` key we exit the program.
 
 - Debugging overloads: Numba's overload handling may hide errors and raise unrelated
   and misleading exceptions instead. One can debug these cases by setting a
@@ -246,7 +248,7 @@ Debugging the Python code
       export NUMBA_DEBUG_PRINT_AFTER='parfor_pass'
 
   Other common one: ``'bodo_distributed_pass', 'bodo_series_pass'``, ``bodo_dataframe_pass``
-- mpiexec redirect stdout from differet processes to different files::
+- mpiexec redirect stdout from different processes to different files::
 
     export PYTHONUNBUFFERED=1  # avoid IO buffering
     mpiexec -outfile-pattern="out_%r.log" -n 8 python small_test01.py
@@ -257,8 +259,8 @@ Debugging the Python code
     mpiexec -outfile-pattern="out_%r.log" -n 8 python -u small_test01.py
 
 
-Debugging the C++ code
-~~~~~~~~~~~~~~~~~~~~~~~~~~
+Using C++ sanitizer
+~~~~~~~~~~~~~~~~~~~
 
 Sanitizers of GCC can be used for debugging C/C++ code.
 The compilation option need to be added to `setup.py`::
@@ -271,6 +273,50 @@ In the docker, the next step is to add the library::
     export LD_PRELOAD=/root/miniconda3/envs/BODODEV/lib/libasan.so.5
 
 Then we can see running times error using sanitizers.
+We have to be careful in using this as sanitizers detect errors
+in code compiled with them. This excludes the MPI library, arrow,
+parquet and other libraries.
+
+
+C++ Linking error
+~~~~~~~~~~~~~~~~~
+
+One specificity of BODO is that the linking is done when the compilateur is run.
+This means that the linking error can occur at runtime, such as::
+
+    ImportError while loading conftest '/Bodo/bodo/tests/conftest.py'.
+    bodo/__init__.py:36: in <module>
+        import bodo.libs.distributed_api
+    bodo/libs/distributed_api.py:21: in <module>
+        from bodo.libs.str_arr_ext import (
+    bodo/libs/str_arr_ext.py:42: in <module>
+        from bodo.libs.array_item_arr_ext import ArrayItemArrayType
+    bodo/libs/array_item_arr_ext.py:39: in <module>
+        from bodo.utils.cg_helpers import (
+    bodo/utils/cg_helpers.py:10: in <module>
+        from bodo.libs import array_ext
+    E   ImportError: /Bodo/bodo/libs/array_ext.cpython-38-x86_64-linux-gnu.so: undefined symbol: _ZN10array_infoaSEOS_
+
+And so we do not know the error of :code:`_ZN10array_infoaSEOS_` which is mysterious.
+The solution to this is to use ``c++filt`` which comes with the C++ compiler::
+
+    (BODODEV) root@7f563b771442:/Bodo# /root/miniconda3/envs/BODODEV/bin/x86_64-conda_cos6-linux-gnu-c++filt _ZN10array_infoaSEOS_
+    array_info::operator=(array_info&&)
+
+And so the error is a missing move operator.
+
+
+Message Passing Interface debugging
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+MPI presents unique challenges when debugging. The asynchronous nature
+means that errors can be in unexpected ways. The following may help:
+
+- Using print statements and logs and outputing them in different files with the option ```-outfile-pattern="out_%r.log"```.
+- Running on a wide variety of number of processors. With 2, 3, 5, 10 processors is useful even on a laptop for consistency checks.
+- The asynchronous nature of the code means that running on 1 computer with :code:`-np 4` may not be the same as running on 2+2 computers connected via :code:`-f hosts`. The delay may reveal race conditions.
+- The MPI library have undefined behavior which means that behavior is dependent on the machine and libraries. Code may fail on Macintosh and work on Linux.
+
 
 .. _dev_codestyle:
 
@@ -302,7 +348,7 @@ Following command remove unused import in a file::
 
     autoflake --in-place --remove-all-unused-imports <filename>
 
-`-r` flag can be added to the above command to apply `autoflake` to all the files in a directory. 
+`-r` flag can be added to the above command to apply `autoflake` to all the files in a directory.
 More information can be found `here <https://github.com/myint/autoflake>`_.
 
 .. _dev_codecoverage:
@@ -310,7 +356,7 @@ More information can be found `here <https://github.com/myint/autoflake>`_.
 Code Coverage
 -------------
 
-We use `codecov <https://codecov.io/gh/Bodo-inc/Bodo>`_ for coverage reports. 
+We use `codecov <https://codecov.io/gh/Bodo-inc/Bodo>`_ for coverage reports.
 In `setup.cfg <https://github.com/Bodo-inc/Bodo/blob/package_config/setup.cfg>`_,
 there are two `coverage <https://coverage.readthedocs.io/en/coverage-5.0/>`_ configurations related sections.
 
@@ -363,8 +409,8 @@ Performance Benchmarking
 
 We use AWS EC2 instances for performance benchmark on Bodo.
 This is essentially to check the performance variations based on commits to master branch.
-Similar to our nightly build, benchmarking is set to run regularly. 
-To set up this infrastructure there are 3 things that should be constructed. 
+Similar to our nightly build, benchmarking is set to run regularly.
+To set up this infrastructure there are 3 things that should be constructed.
 
     1. AWS EC2 instance
     2. AWS CodePipeline
@@ -402,14 +448,14 @@ It is built with `Sphinx <http://www.sphinx-doc.org>`_ and a custom Bodo theme b
     conda install sphinx
     conda install alabaster
 
-After updating documentation, run :code:`make html` in the `docs` folder to build.  
-Open `_build/html/index.html` to view the documentation.  
+After updating documentation, run :code:`make html` in the `docs` folder to build.
+Open `_build/html/index.html` to view the documentation.
 For the user documentation only, to update, use the :code:`gh-pages.py`
 script under :code:`docs`::
 
-    python gh-pages.py [bodo version(ex:2020.02.0)]  
+    python gh-pages.py [bodo version(ex:2020.02.0)]
 
-Default tag `dev` will be used if no tag is provided. 
+Default tag `dev` will be used if no tag is provided.
 Then verify the repository under the :code:`gh-pages` directory and
 :code:`git push` to `Bodo-doc <https://github.com/Bodo-inc/Bodo-doc>`_ repo :code:`gh-pages` branch.
 
@@ -420,11 +466,11 @@ and can be built with :code:`make html` as well.
 Updating User Documentation
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 Remember to update User Documentation as new `pandas`/`numpy` functions are added, and ensure external links to `pandas` are valid.
-For each new release of Bodo version, user documentation should also be updated.  
+For each new release of Bodo version, user documentation should also be updated.
 
     1. Create a new ``Month_Year.rst``(ex. Feb_2020.rst) file for the new release under `docs/source/release_notes directory <https://github.com/Bodo-inc/Bodo/tree/master/docs/source/release_notes>`_ , fill out the contents, and request every core developer to review it.
-    2. Once the release is tagged, the new documentation version is built, and uploaded to Bodo-doc repository using commands above, update the hyper link on `Previous Documentation` category of the User Doc.  
-    3. Next, the `latest` symbolic link from gh-pages branch of Bodo-doc repository should be updated to the new version. 
+    2. Once the release is tagged, the new documentation version is built, and uploaded to Bodo-doc repository using commands above, update the hyper link on `Previous Documentation` category of the User Doc.
+    3. Next, the `latest` symbolic link from gh-pages branch of Bodo-doc repository should be updated to the new version.
 
 For more release related instruction, visit our `release checklist <https://github.com/Bodo-inc/Bodo/wiki/Release-Checklist>`_ Wiki page.
 
