@@ -3105,9 +3105,15 @@ def to_csv_overload(
     escapechar=None,
     decimal=".",
 ):
+    if not (
+        is_overload_none(path_or_buf)
+        or is_overload_constant_str(path_or_buf)
+        or path_or_buf == string_type
+    ):
+        raise BodoError("DataFrame.to_csv(): 'path_or_buf' argument should be None or string")
     # TODO: refactor when objmode() can understand global string constant
     # String output case
-    if path_or_buf is None or path_or_buf == types.none:
+    if is_overload_none(path_or_buf): 
 
         def _impl(
             df,
