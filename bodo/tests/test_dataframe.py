@@ -457,7 +457,8 @@ def test_unbox_df3(memory_leak_check):
         pd.date_range(start="2018-04-24", end="2018-04-29", periods=5),
     )
     df2 = pd.DataFrame(
-        {"A": [3, 5, 1, -1, 4]}, np.array([1, 8, 4, 0, 2], dtype=np.uint8),
+        {"A": [3, 5, 1, -1, 4]},
+        np.array([1, 8, 4, 0, 2], dtype=np.uint8),
     )
     check_func(impl, (df1,))
     check_func(impl, (df2,))
@@ -480,8 +481,7 @@ def test_unbox_df_multi(memory_leak_check):
 
 
 def test_empty_df_unbox(memory_leak_check):
-    """test boxing/unboxing of an empty df
-    """
+    """test boxing/unboxing of an empty df"""
 
     def impl(df):
         return df
@@ -491,8 +491,7 @@ def test_empty_df_unbox(memory_leak_check):
 
 
 def test_empty_df_create(memory_leak_check):
-    """test creation of an empty df
-    """
+    """test creation of an empty df"""
 
     def impl1():
         return pd.DataFrame()
@@ -510,8 +509,7 @@ def test_empty_df_create(memory_leak_check):
 
 
 def test_empty_df_set_column(memory_leak_check):
-    """test column setitem of an empty df
-    """
+    """test column setitem of an empty df"""
 
     def impl1(n):
         df = pd.DataFrame()
@@ -528,8 +526,7 @@ def test_empty_df_set_column(memory_leak_check):
 
 
 def test_empty_df_drop_column(memory_leak_check):
-    """test dropping the only column of a dataframe so it becomes empty
-    """
+    """test dropping the only column of a dataframe so it becomes empty"""
 
     def impl1(n):
         df = pd.DataFrame({"A": np.arange(n) * 2})
@@ -1078,6 +1075,7 @@ def test_df_max(numeric_df_value, memory_leak_check):
         ),
     ],
 )
+
 def test_df_reduce_axis1(df, memory_leak_check, is_slow_run):
     """test dataframe reductions across columns (axis=1)
     """
@@ -1370,8 +1368,7 @@ def test_df_set_index(df_value, memory_leak_check):
 
 
 def test_df_reset_index1(df_value, memory_leak_check):
-    """Test DataFrame.reset_index(drop=False) on various dataframe/index combinations
-    """
+    """Test DataFrame.reset_index(drop=False) on various dataframe/index combinations"""
 
     def impl(df):
         return df.reset_index()
@@ -1432,8 +1429,7 @@ def test_df_reset_index1(df_value, memory_leak_check):
     ],
 )
 def test_df_reset_index2(test_index, memory_leak_check):
-    """Test DataFrame.reset_index(drop=False) with MultiIndex and named indexes
-    """
+    """Test DataFrame.reset_index(drop=False) with MultiIndex and named indexes"""
 
     def impl(df):
         return df.reset_index()
@@ -1445,8 +1441,7 @@ def test_df_reset_index2(test_index, memory_leak_check):
 
 # TODO: add memory_leak_check when groupby leaks are resolved (#1472)
 def test_df_reset_index3():
-    """Test DataFrame.reset_index(drop=False) after groupby() which is a common pattern
-    """
+    """Test DataFrame.reset_index(drop=False) after groupby() which is a common pattern"""
 
     def impl1(df):
         return df.groupby("A").sum().reset_index()
@@ -1466,8 +1461,7 @@ def test_df_reset_index3():
 
 
 def test_df_reset_index4(memory_leak_check):
-    """Test DataFrame.reset_index(drop=False, inplace=True)
-    """
+    """Test DataFrame.reset_index(drop=False, inplace=True)"""
 
     def impl(df):
         df.reset_index(drop=False, inplace=True)
@@ -1663,8 +1657,7 @@ def test_pd_isna_getitem(memory_leak_check):
 
 
 def test_setitem_na(memory_leak_check):
-    """test support for setting NA value to array location, e.g. A[i] = None
-    """
+    """test support for setting NA value to array location, e.g. A[i] = None"""
 
     def impl(S, i):
         S.iloc[i] = None
@@ -1679,8 +1672,7 @@ def test_setitem_na(memory_leak_check):
 
 
 def test_set_column_scalar_str(memory_leak_check):
-    """set df column with a string scalar
-    """
+    """set df column with a string scalar"""
 
     def test_impl(n):
         df = pd.DataFrame({"A": np.ones(n), "B": np.arange(n)})
@@ -1699,8 +1691,7 @@ def test_set_column_scalar_str(memory_leak_check):
 
 
 def test_set_column_scalar_num(memory_leak_check):
-    """set df column with a numeric scalar
-    """
+    """set df column with a numeric scalar"""
 
     def test_impl(n):
         df = pd.DataFrame({"A": np.ones(n), "B": np.arange(n)})
@@ -1712,8 +1703,7 @@ def test_set_column_scalar_num(memory_leak_check):
 
 
 def test_set_column_scalar_timestamp(memory_leak_check):
-    """set df column with a timestamp scalar
-    """
+    """set df column with a timestamp scalar"""
 
     def test_impl(n, t):
         df = pd.DataFrame({"A": np.ones(n), "B": np.arange(n)})
@@ -1779,8 +1769,7 @@ def test_set_column_cond3(memory_leak_check):
 
 
 def test_set_column_setattr(memory_leak_check):
-    """set df column using setattr instead of setitem
-    """
+    """set df column using setattr instead of setitem"""
 
     # same type as existing column
     def impl1(n):
@@ -1851,8 +1840,7 @@ def test_create_series_input1(memory_leak_check):
 
 
 def test_df_apply_getitem(memory_leak_check):
-    """test getitem access of row value passed in df.apply()
-    """
+    """test getitem access of row value passed in df.apply()"""
 
     def test_impl(df):
         return df.apply(lambda r: r["B"] if r["A"] == "AA" else 0, axis=1)
@@ -1874,8 +1862,7 @@ def test_df_apply_bool(memory_leak_check):
 
 
 def test_df_apply_str(memory_leak_check):
-    """make sure string output can be handled in apply() properly
-    """
+    """make sure string output can be handled in apply() properly"""
 
     def test_impl(df):
         return df.apply(lambda r: r.A if r.A == "AA" else "BB", axis=1)
@@ -1885,8 +1872,7 @@ def test_df_apply_str(memory_leak_check):
 
 
 def test_df_apply_list_str(memory_leak_check):
-    """make sure list(str) output can be handled in apply() properly
-    """
+    """make sure list(str) output can be handled in apply() properly"""
 
     def test_impl(df):
         return df.apply(lambda r: [r.A] if r.A == "AA" else ["BB", r.A], axis=1)
@@ -1896,8 +1882,7 @@ def test_df_apply_list_str(memory_leak_check):
 
 
 def test_df_apply_array_item(memory_leak_check):
-    """make sure array(item) output can be handled in apply() properly
-    """
+    """make sure array(item) output can be handled in apply() properly"""
 
     def test_impl(df):
         return df.apply(lambda r: [len(r.A)] if r.A == "AA" else [3, len(r.A)], axis=1)
@@ -1907,8 +1892,7 @@ def test_df_apply_array_item(memory_leak_check):
 
 
 def test_df_apply_date(memory_leak_check):
-    """make sure datetime.date output can be handled in apply() properly
-    """
+    """make sure datetime.date output can be handled in apply() properly"""
 
     def test_impl(df):
         return df.apply(lambda r: r.A.date(), axis=1)
@@ -1934,8 +1918,7 @@ def test_df_apply_timestamp(memory_leak_check):
 
 
 def test_df_apply_decimal(memory_leak_check):
-    """make sure Decimal output can be handled in apply() properly
-    """
+    """make sure Decimal output can be handled in apply() properly"""
     # just returning input value since we don't support any Decimal creation yet
     # TODO: support Decimal(str) constructor
     # TODO: fix using freevar constants in UDFs
@@ -1959,8 +1942,7 @@ def test_df_apply_decimal(memory_leak_check):
 
 
 def test_df_apply_args(memory_leak_check):
-    """test passing extra args to apply UDF
-    """
+    """test passing extra args to apply UDF"""
 
     def test_impl(df, b):
         return df.apply(lambda r, a: r.A == a, axis=1, args=(b,))
@@ -1975,8 +1957,7 @@ def g(r):
 
 
 def test_df_apply_func_case1(memory_leak_check):
-    """make sure a global function can be used in df.apply
-    """
+    """make sure a global function can be used in df.apply"""
 
     def test_impl(df):
         return df.apply(g, axis=1)
@@ -1992,8 +1973,7 @@ def g2(r):
 
 
 def test_df_apply_func_case2(memory_leak_check):
-    """make sure a UDF calling another function doesn't fail (#964)
-    """
+    """make sure a UDF calling another function doesn't fail (#964)"""
 
     def test_impl(df):
         return df.apply(lambda x: g2(x), axis=1)
@@ -2011,8 +1991,7 @@ def test_df_apply_func_case2(memory_leak_check):
 
 
 def test_df_apply_error_check():
-    """make sure a proper error is raised when UDF is not supported (not compilable)
-    """
+    """make sure a proper error is raised when UDF is not supported (not compilable)"""
 
     def test_impl(df):
         # some UDF that cannot be supported, lambda calling a non-jit function
@@ -2059,8 +2038,7 @@ def test_df_filter_rm_index():
 
 
 def test_concat_df_columns(memory_leak_check):
-    """Test dataframe concatenation with axis=1 (add new columns)
-    """
+    """Test dataframe concatenation with axis=1 (add new columns)"""
 
     def test_impl(df, df2):
         return pd.concat([df, df2], axis=1)
@@ -2086,8 +2064,7 @@ def test_concat_typing_transform(memory_leak_check):
 
 
 def test_concat_int_float(memory_leak_check):
-    """Test dataframe concatenation when integer and float are put together
-    """
+    """Test dataframe concatenation when integer and float are put together"""
 
     def test_impl(df, df2):
         return df.append(df2, ignore_index=True)
@@ -2102,8 +2079,7 @@ def test_concat_int_float(memory_leak_check):
 
 
 def test_concat_nulls(memory_leak_check):
-    """Test dataframe concatenation when full NA arrays need to be appended
-    """
+    """Test dataframe concatenation when full NA arrays need to be appended"""
 
     def test_impl(df, df2):
         return df.append(df2, ignore_index=True)
@@ -2142,14 +2118,15 @@ def test_concat_nulls(memory_leak_check):
         ),
         # variable item size data and index
         pd.DataFrame(
-            {"A": ["ABC", None, "AA", "B", None, "AA", "CC", "G"],},
+            {
+                "A": ["ABC", None, "AA", "B", None, "AA", "CC", "G"],
+            },
             index=["AA", "C", "BB", "A", "D", "L", "K", "P"],
         ),
     ],
 )
 def test_append_empty_df(df):
-    """Test appending to an empty dataframe in a loop (common pattern)
-    """
+    """Test appending to an empty dataframe in a loop (common pattern)"""
     # TODO: fix casting refcount in Numba since Numba increfs value after cast
 
     def test_impl(df2):
@@ -2162,8 +2139,7 @@ def test_append_empty_df(df):
 
 
 def test_init_dataframe_array_analysis():
-    """make sure shape equivalence for init_dataframe() is applied correctly
-    """
+    """make sure shape equivalence for init_dataframe() is applied correctly"""
     import numba.tests.test_array_analysis
 
     def impl(n):
@@ -2180,8 +2156,7 @@ def test_init_dataframe_array_analysis():
 
 
 def test_get_dataframe_data_array_analysis():
-    """make sure shape equivalence for get_dataframe_data() is applied correctly
-    """
+    """make sure shape equivalence for get_dataframe_data() is applied correctly"""
     import numba.tests.test_array_analysis
 
     def impl(df):
@@ -2217,8 +2192,7 @@ def test_df_const_set_rm_index(memory_leak_check):
 
 
 def test_df_dropna(memory_leak_check):
-    """Test df.dropna() with various data types and arguments
-    """
+    """Test df.dropna() with various data types and arguments"""
 
     def impl1(df):
         return df.dropna(subset=["A", "B"])
@@ -2244,8 +2218,7 @@ def test_df_dropna(memory_leak_check):
 
 
 def test_df_dropna_inplace_check():
-    """make sure inplace=True is not used in df.dropna()
-    """
+    """make sure inplace=True is not used in df.dropna()"""
 
     def test_impl(df):
         df.dropna(inplace=True)
@@ -2256,8 +2229,7 @@ def test_df_dropna_inplace_check():
 
 
 def test_df_drop_inplace_instability_check():
-    """make sure df.drop(inplace=True) doesn't cause type instability
-    """
+    """make sure df.drop(inplace=True) doesn't cause type instability"""
 
     def test_impl(a):
         df = pd.DataFrame({"A": [1.0, 2.0, np.nan, 1.0], "B": [4, 5, 6, 7]})
@@ -2291,8 +2263,7 @@ def test_df_range_index_unify():
 
 
 def test_column_list_getitem1(memory_leak_check):
-    """Test df[["A", "B"]] getitem case
-    """
+    """Test df[["A", "B"]] getitem case"""
 
     def test_impl(df):
         return df[["A", "C", "B"]]
@@ -2330,8 +2301,7 @@ def test_column_list_getitem_infer(memory_leak_check):
 
 
 def test_iloc_bool_arr(memory_leak_check):
-    """test df.iloc[bool_arr]
-    """
+    """test df.iloc[bool_arr]"""
 
     def test_impl(df):
         return df.iloc[(df.A > 3).values]
@@ -2353,8 +2323,7 @@ def test_iloc_slice(memory_leak_check):
 
 
 def test_iloc_slice_col_ind(memory_leak_check):
-    """test df.iloc[slice, col_ind]
-    """
+    """test df.iloc[slice, col_ind]"""
 
     def test_impl(df):
         return df.iloc[:, 1].values
@@ -2365,8 +2334,7 @@ def test_iloc_slice_col_ind(memory_leak_check):
 
 
 def test_iloc_slice_col_slice(memory_leak_check):
-    """test df.iloc[slice, slice] which selects a set of columns
-    """
+    """test df.iloc[slice, slice] which selects a set of columns"""
 
     def test_impl1(df):
         return df.iloc[:, 1:]
@@ -2410,8 +2378,7 @@ def test_iloc_slice_col_slice(memory_leak_check):
 
 
 def test_iloc_int_col_ind(memory_leak_check):
-    """test df.iloc[int, col_ind]
-    """
+    """test df.iloc[int, col_ind]"""
 
     def test_impl(df):
         return df.iloc[3, 1]
@@ -2422,8 +2389,7 @@ def test_iloc_int_col_ind(memory_leak_check):
 
 
 def test_loc_bool_arr(memory_leak_check):
-    """test df.loc[bool_arr]
-    """
+    """test df.loc[bool_arr]"""
 
     def test_impl(df):
         return df.loc[(df.A > 3).values]
@@ -2434,8 +2400,7 @@ def test_loc_bool_arr(memory_leak_check):
 
 
 def test_loc_col_name(memory_leak_check):
-    """test df.iloc[slice, col_ind]
-    """
+    """test df.iloc[slice, col_ind]"""
 
     def test_impl(df):
         return df.loc[(df.A > 3).values, "B"].values
@@ -2446,8 +2411,7 @@ def test_loc_col_name(memory_leak_check):
 
 
 def test_loc_col_select(memory_leak_check):
-    """test df.iloc[slice, col_ind] where col_ind is a list of column names or bools
-    """
+    """test df.iloc[slice, col_ind] where col_ind is a list of column names or bools"""
 
     def impl1(df):
         return df.loc[:, ["A", "C"]]
@@ -2516,8 +2480,7 @@ def test_df_drop_column_check(memory_leak_check):
 
 
 def test_df_fillna_str_inplace(memory_leak_check):
-    """Make sure inplace fillna for string columns is reflected in output
-    """
+    """Make sure inplace fillna for string columns is reflected in output"""
 
     def test_impl(df):
         df.B.fillna("ABC", inplace=True)
@@ -2571,8 +2534,7 @@ def test_dataframe_constant_lowering():
 
 
 def test_dataframe_columns_const_passing(memory_leak_check):
-    """Test passing df.columns as a constant to another call
-    """
+    """Test passing df.columns as a constant to another call"""
 
     def impl(df):
         return df.dropna(subset=df.columns, how="any")
@@ -2629,8 +2591,7 @@ def test_dataframe_sample_sorted(memory_leak_check):
 
 @pytest.mark.slow
 def test_dataframe_sample_index(memory_leak_check):
-    """Checking that the index passed coherently to the A entry.
-    """
+    """Checking that the index passed coherently to the A entry."""
 
     def f(df):
         return df.sample(5)
@@ -2647,8 +2608,7 @@ def test_dataframe_sample_index(memory_leak_check):
 # TODO: fix leak and add memory_leak_check
 @pytest.mark.slow
 def test_dataframe_sample_nested_datastructures():
-    """The sample function relies on allgather operations that deserve to be tested
-    """
+    """The sample function relies on allgather operations that deserve to be tested"""
 
     def check_gather_operation(df):
         siz = df.size
@@ -2676,6 +2636,16 @@ def test_dataframe_sample_nested_datastructures():
     check_gather_operation(df3)
     check_gather_operation(df4)
 
+
+def test_unsupported_df_method():
+    """ Raise Bodo error for unsupported df methods"""
+
+    def test_impl():
+        df = pd.DataFrame({"A": [1, 2, 3], "B": [2, 3, 4]})
+        return df.agg(['sum', 'min'])
+
+    with pytest.raises(BodoError, match="not supported yet"):
+        bodo.jit(test_impl)()
 
 ############################# old tests ###############################
 
