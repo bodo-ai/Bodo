@@ -133,7 +133,7 @@ void array_isin(array_info* out_arr, array_info* in_arr, array_info* in_values,
                                   hashes, comm_info.send_disp, comm_info.n_pes, n_rows);
     // free temporary shuffle array
     decref_array(shuf_out_arr);
-    // release extra reference for output array
+    // release extra reference for output array (array_info wrapper's reference)
     decref_array(out_arr);
     delete table_in_arr;
     delete[] hashes;
@@ -648,6 +648,7 @@ table_info* drop_duplicates_nonnull_keys(table_info* in_table, int64_t num_keys,
     std::cout << "Before the shuffling\n";
 #endif
     table_info* shuf_table = shuffle_table(red_table, num_keys);
+    // no need to decref since shuffle_table() steals a reference
     delete_table(red_table);
     // reduction after shuffling
 #ifdef DEBUG_DD
@@ -702,6 +703,7 @@ table_info* drop_duplicates_table(table_info* in_table, bool is_parallel,
     std::cout << "Before the shuffling\n";
 #endif
     table_info* shuf_table = shuffle_table(red_table, num_keys);
+    // no need to decref since shuffle_table() steals a reference
     delete_table(red_table);
     // reduction after shuffling
 #ifdef DEBUG_DD

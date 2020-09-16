@@ -1531,4 +1531,5 @@ def array_isin(out_arr, in_arr, in_values, is_parallel):
         in_values_info,
         is_parallel,
     )
+    # no need to decref since array_isin decrefs input/output
     delete_table(dummy_table)
