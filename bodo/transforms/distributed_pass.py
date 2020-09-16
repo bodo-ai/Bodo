@@ -270,7 +270,6 @@ class DistributedPass:
                     out_nodes = self._run_parfor(inst, equiv_set, avail_vars)
                     # run dist pass recursively
                     p_blocks = wrap_parfor_blocks(inst)
-                    #
                     self._run_dist_pass(p_blocks, avail_vars)
                     unwrap_parfor_blocks(inst)
                 elif isinstance(inst, ir.Assign):
@@ -1972,7 +1971,6 @@ class DistributedPass:
         """Transform distributed getitem/setitem operations
         """
         out = [full_node]
-        full_index_var = index_var
 
         # no need for transformation for getitem/setitem of distributed List/Dict
         if isinstance(self.typemap[arr.name], (types.List, types.DictType)):
