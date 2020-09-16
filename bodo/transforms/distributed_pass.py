@@ -270,7 +270,6 @@ class DistributedPass:
                     out_nodes = self._run_parfor(inst, equiv_set, avail_vars)
                     # run dist pass recursively
                     p_blocks = wrap_parfor_blocks(inst)
-                    #
                     self._run_dist_pass(p_blocks, avail_vars)
                     unwrap_parfor_blocks(inst)
                 elif isinstance(inst, ir.Assign):
@@ -1004,9 +1003,6 @@ class DistributedPass:
             assign.value = rhs.args[0]
             return [assign]
 
-        if fdef == ("rebalance_array", "bodo.libs.distributed_api"):
-            return self._run_call_rebalance_array(lhs, assign, rhs.args)
-
         if fdef == ("file_read", "bodo.io.np_io") and self._is_1D_or_1D_Var_arr(
             rhs.args[1].name
         ):
@@ -1595,34 +1591,6 @@ class DistributedPass:
             self,
         )
 
-    def _run_call_rebalance_array(self, lhs, assign, args):
-        out = [assign]
-        if not self._is_1D_Var_arr(args[0].name):
-            if not self._is_1D_arr(args[0].name):
-                warnings.warn("array {} is not 1D_Block_Var".format(args[0].name))
-            return out
-
-        arr = args[0]
-        out = self._gen_1D_Var_len(arr)
-        total_length = out[-1].target
-        count_var = self._get_1D_count(total_length, out)
-
-        def f(arr, count):  # pragma: no cover
-            b_arr = bodo.libs.distributed_api.rebalance_array_parallel(arr, count)
-
-        f_block = compile_to_numba_ir(
-            f,
-            {"bodo": bodo},
-            self.typingctx,
-            (self.typemap[arr.name], types.intp),
-            self.typemap,
-            self.calltypes,
-        ).blocks.popitem()[1]
-        replace_arg_nodes(f_block, [arr, count_var])
-        out += f_block.body[:-3]
-        out[-1].target = assign.target
-        return out
-
     def _run_call_np_dot(self, lhs, assign, args):
         out = [assign]
         arg0 = args[0].name
@@ -2003,7 +1971,6 @@ class DistributedPass:
         """Transform distributed getitem/setitem operations
         """
         out = [full_node]
-        full_index_var = index_var
 
         # no need for transformation for getitem/setitem of distributed List/Dict
         if isinstance(self.typemap[arr.name], (types.List, types.DictType)):

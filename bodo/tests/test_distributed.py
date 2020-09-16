@@ -173,8 +173,7 @@ def test_1D_Var_parfor3():
 
 
 def test_1D_Var_parfor4():
-    """test 1D parfor inside a sequential loop
-    """
+    """test 1D parfor inside a sequential loop"""
 
     def impl1(A, B):
         C = A[B]
@@ -193,8 +192,7 @@ def test_1D_Var_parfor4():
 
 
 def test_jit_inside_prange():
-    """test calling jit functions inside a prange loop
-    """
+    """test calling jit functions inside a prange loop"""
 
     @bodo.jit(distributed=False)
     def f(df):
@@ -266,8 +264,7 @@ def test_bodo_func_dist_call1():
 
 
 def test_bodo_func_dist_call_star_arg():
-    """test calling other bodo functions with star arg set as distributed
-    """
+    """test calling other bodo functions with star arg set as distributed"""
 
     @bodo.jit(distributed=["A", "B"])
     def g(*A):
@@ -329,8 +326,7 @@ def test_dist_flag_warn1():
 
 
 def test_bodo_func_rep():
-    """test calling other bodo functions without distributed flag
-    """
+    """test calling other bodo functions without distributed flag"""
 
     @bodo.jit
     def g(A):
@@ -618,8 +614,7 @@ def test_getitem_slice_const_size():
 
 
 def test_setitem_slice_scalar(memory_leak_check):
-    """test setitem of distributed array with a scalar or lower dimention array value
-    """
+    """test setitem of distributed array with a scalar or lower dimention array value"""
 
     def impl(A, val):
         A[4:-3:2] = val
@@ -676,8 +671,7 @@ def test_setitem_bool_index_scalar(memory_leak_check):
 
 
 def test_setitem_scalar(memory_leak_check):
-    """test setitem of distributed array with a scalar
-    """
+    """test setitem of distributed array with a scalar"""
 
     def impl(A, val):
         A[1] = val
@@ -701,8 +695,7 @@ def test_setitem_scalar(memory_leak_check):
 
 @pytest.mark.parametrize("dtype", [np.float32, np.uint8, np.int64])
 def test_arr_reshape(dtype):
-    """test reshape of multi-dim distributed arrays
-    """
+    """test reshape of multi-dim distributed arrays"""
     # reshape to more dimensions
     def impl1(A, n):
         return A.reshape(3, n // 3)
@@ -744,8 +737,7 @@ def test_arr_reshape(dtype):
 
 
 def test_np_dot(is_slow_run):
-    """test np.dot() distribute transform
-    """
+    """test np.dot() distribute transform"""
 
     # reduction across rows, input: (1D dist array, 2D dist array)
     def impl1(X, Y):
@@ -812,8 +804,7 @@ def test_dist_tuple2():
 
 
 def test_dist_tuple3():
-    """Make sure passing a dist tuple with non-dist elements doesn't cause REP
-    """
+    """Make sure passing a dist tuple with non-dist elements doesn't cause REP"""
 
     def impl1(v):
         (_, df) = v
@@ -827,8 +818,7 @@ def test_dist_tuple3():
 
 
 def test_dist_list1():
-    """Test support for build_list of dist data
-    """
+    """Test support for build_list of dist data"""
 
     def impl1(df):
         v = [(1, df)]
@@ -841,8 +831,7 @@ def test_dist_list1():
 
 
 def test_dist_list_append1():
-    """Test support for list.append of dist tuple
-    """
+    """Test support for list.append of dist tuple"""
 
     def impl1(df):
         v = [(1, df)]
@@ -856,8 +845,7 @@ def test_dist_list_append1():
 
 
 def test_dist_list_append2():
-    """Test support for list.append of dist data
-    """
+    """Test support for list.append of dist data"""
 
     def impl1(df):
         v = [df]
@@ -871,8 +859,7 @@ def test_dist_list_append2():
 
 
 def test_dist_list_getitem1():
-    """Test support for getitem of distributed list
-    """
+    """Test support for getitem of distributed list"""
 
     def impl1(v):
         df = v[1]
@@ -885,9 +872,26 @@ def test_dist_list_getitem1():
     assert count_array_OneDs() > 0
 
 
+def test_dist_list_loop():
+    """Test support for loop over distributed list"""
+
+    def impl1(v):
+        s = 0
+        for df in v:
+            s += df.A.sum()
+        return s
+
+    n = 11
+    df = pd.DataFrame({"A": np.arange(n)})
+    df_chunk = _get_dist_arg(df)
+    v = [df, df]
+    v_chunks = [df_chunk, df_chunk]
+    assert bodo.jit(distributed={"v", "df"})(impl1)(v_chunks) == impl1(v)
+    assert count_array_OneD_Vars() > 0
+
+
 def test_dist_list_setitem1():
-    """Test support for setitem of distributed list
-    """
+    """Test support for setitem of distributed list"""
 
     def impl1(v, df):
         v[1] = df
@@ -900,8 +904,7 @@ def test_dist_list_setitem1():
 
 
 def test_dist_dict1():
-    """Test support for build_map of dist data
-    """
+    """Test support for build_map of dist data"""
 
     def impl1(df):
         v = {1: df}
@@ -914,8 +917,7 @@ def test_dist_dict1():
 
 
 def test_dist_dict_getitem1():
-    """Test support for getitem of dist dictionary
-    """
+    """Test support for getitem of dist dictionary"""
 
     def impl1(v):
         df = v[1]
@@ -931,8 +933,7 @@ def test_dist_dict_getitem1():
 
 
 def test_dist_dict_setitem1():
-    """Test support for setitem of dist dictionary
-    """
+    """Test support for setitem of dist dictionary"""
 
     def impl1(v, df):
         v[1] = df
@@ -947,8 +948,7 @@ def test_dist_dict_setitem1():
 
 
 def test_concat_reduction():
-    """test dataframe concat reduction, which produces distributed output
-    """
+    """test dataframe concat reduction, which produces distributed output"""
 
     def impl(n):
         df = pd.DataFrame()
@@ -1010,8 +1010,7 @@ def test_dist_warning3():
 
 
 def test_getitem_bool_REP():
-    """make sure output of array getitem with bool index can make its inputs REP
-    """
+    """make sure output of array getitem with bool index can make its inputs REP"""
 
     def test_impl(n):
         df = pd.DataFrame({"A": np.arange(n), "B": np.arange(n) + 3})
@@ -1049,8 +1048,7 @@ def test_df_filter_branch():
 
 
 def test_empty_object_array_warning():
-    """Make sure BodoWarning is thrown when there is an empty object array in input
-    """
+    """Make sure BodoWarning is thrown when there is an empty object array in input"""
 
     def impl(A):
         return A
@@ -1110,8 +1108,7 @@ def test_dist_objmode():
 
 
 def test_dist_objmode_dist():
-    """make sure output chunks from objmode are assigned 1D_Var distribution
-    """
+    """make sure output chunks from objmode are assigned 1D_Var distribution"""
 
     def impl(n):
         A = np.arange(n)
@@ -1137,9 +1134,28 @@ def test_diagnostics_not_compiled_error():
         bodo.jit(test_impl).distributed_diagnostics()
 
 
+def test_diagnostics_trace(capsys):
+    """make sure distributed diagnostics trace info is printed in diagnostics dump"""
+
+    @bodo.jit
+    def f(A):
+        return A.sum()
+
+    @bodo.jit
+    def g():
+        return f(np.arange(10))
+
+    g()
+    g.distributed_diagnostics()
+    if bodo.get_rank() == 0:
+        assert (
+            "input/output of another Bodo call without distributed flag"
+            in capsys.readouterr().out
+        )
+
+
 def test_sort_output_1D_Var_size():
-    """Test using size variable of an output 1D_Var array of a Sort node
-    """
+    """Test using size variable of an output 1D_Var array of a Sort node"""
     # RangeIndex of output Series needs size of Sort output array
     def impl(S):
         res = pd.Series(S.sort_values().values)
@@ -1150,8 +1166,7 @@ def test_sort_output_1D_Var_size():
 
 
 def _check_scatterv(data, n):
-    """check the output of scatterv() on 'data'
-    """
+    """check the output of scatterv() on 'data'"""
     recv_data = bodo.scatterv(data)
     rank = bodo.get_rank()
     n_pes = bodo.get_size()
@@ -1305,8 +1320,7 @@ def get_random_int64index(n):
     ],
 )
 def test_scatterv(data):
-    """Test bodo.scatterv() for Bodo distributed data types
-    """
+    """Test bodo.scatterv() for Bodo distributed data types"""
     if bodo.get_rank() != 0:
         data = None
 
@@ -1314,8 +1328,7 @@ def test_scatterv(data):
 
 
 def test_scatterv_jit():
-    """test using scatterv inside jit functions
-    """
+    """test using scatterv inside jit functions"""
 
     def impl(df):
         return bodo.scatterv(df)
