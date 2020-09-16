@@ -590,7 +590,10 @@ class SeriesPass:
 
         if isinstance(rhs_type, DatetimeIndexType):
             # TODO: test this inlining
-            if rhs.attr in bodo.hiframes.pd_timestamp_ext.date_fields and not rhs.attr == "is_leap_year":
+            if (
+                rhs.attr in bodo.hiframes.pd_timestamp_ext.date_fields
+                and not rhs.attr == "is_leap_year"
+            ):
                 impl = bodo.hiframes.pd_index_ext.gen_dti_field_impl(rhs.attr)
                 return replace_func(self, impl, [rhs.value])
             if rhs.attr == "date":
@@ -716,8 +719,10 @@ class SeriesPass:
                 typ1 == datetime_timedelta_array_type
                 and typ2 == datetime_timedelta_type
             ):
-                impl = bodo.hiframes.datetime_timedelta_ext.overload_datetime_date_arr_sub(
-                    typ1, typ2
+                impl = (
+                    bodo.hiframes.datetime_timedelta_ext.overload_datetime_date_arr_sub(
+                        typ1, typ2
+                    )
                 )
                 return replace_func(self, impl, [arg1, arg2])
 
@@ -874,33 +879,53 @@ class SeriesPass:
                 )
                 return replace_func(self, impl, [arg1, arg2])
 
-        if rhs.fn in numba.core.typing.npydecl.NumpyRulesArrayOperator._op_map.keys() and any(
-            isinstance(t, IntegerArrayType) for t in (typ1, typ2)
+        if (
+            rhs.fn in numba.core.typing.npydecl.NumpyRulesArrayOperator._op_map.keys()
+            and any(isinstance(t, IntegerArrayType) for t in (typ1, typ2))
         ):
             overload_func = bodo.libs.int_arr_ext.create_op_overload(rhs.fn, 2)
             impl = overload_func(typ1, typ2)
             return replace_func(self, impl, [arg1, arg2])
 
-        if rhs.fn in numba.core.typing.npydecl.NumpyRulesInplaceArrayOperator._op_map.keys() and any(
-            isinstance(t, IntegerArrayType) for t in (typ1, typ2)
+        if (
+            rhs.fn
+            in numba.core.typing.npydecl.NumpyRulesInplaceArrayOperator._op_map.keys()
+            and any(isinstance(t, IntegerArrayType) for t in (typ1, typ2))
         ):
             overload_func = bodo.libs.int_arr_ext.create_op_overload(rhs.fn, 2)
             impl = overload_func(typ1, typ2)
             return replace_func(self, impl, [arg1, arg2])
 
-        if rhs.fn in numba.core.typing.npydecl.NumpyRulesArrayOperator._op_map.keys() and any(
-            t == boolean_array for t in (typ1, typ2)
+        if (
+            rhs.fn in numba.core.typing.npydecl.NumpyRulesArrayOperator._op_map.keys()
+            and any(t == boolean_array for t in (typ1, typ2))
         ):
             overload_func = bodo.libs.bool_arr_ext.create_op_overload(rhs.fn, 2)
             impl = overload_func(typ1, typ2)
             return replace_func(self, impl, [arg1, arg2])
 
-        if rhs.fn in numba.core.typing.npydecl.NumpyRulesInplaceArrayOperator._op_map.keys() and any(
-            t == boolean_array for t in (typ1, typ2)
+        if (
+            rhs.fn
+            in numba.core.typing.npydecl.NumpyRulesInplaceArrayOperator._op_map.keys()
+            and any(t == boolean_array for t in (typ1, typ2))
         ):
             overload_func = bodo.libs.bool_arr_ext.create_op_overload(rhs.fn, 2)
             impl = overload_func(typ1, typ2)
             return replace_func(self, impl, [arg1, arg2])
+
+        # replace matmul '@' operator with np.dot
+        if rhs.fn == operator.matmul:
+            nodes = []
+            if isinstance(typ1, SeriesType):
+                arg1 = self._get_series_data(arg1, nodes)
+            if isinstance(typ2, SeriesType):
+                arg2 = self._get_series_data(arg2, nodes)
+            return nodes + compile_func_single_block(
+                lambda A, B: np.dot(A, B),
+                [arg1, arg2],
+                assign.target,
+                self,
+            )
 
         if not (isinstance(typ1, SeriesType) or isinstance(typ2, SeriesType)):
             return [assign]
@@ -1906,8 +1931,8 @@ class SeriesPass:
             arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
             kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
             op = getattr(operator, get_operator_func_name(func_name))
-            overload_func = bodo.hiframes.series_impl.create_explicit_binary_op_overload(
-                op
+            overload_func = (
+                bodo.hiframes.series_impl.create_explicit_binary_op_overload(op)
             )
             impl = overload_func(*arg_typs, **kw_typs)
             return replace_func(
@@ -1927,8 +1952,8 @@ class SeriesPass:
             arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
             kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
             op = getattr(operator, get_operator_func_name(func_name[1:]))
-            overload_func = bodo.hiframes.series_impl.create_explicit_binary_reverse_op_overload(
-                op
+            overload_func = (
+                bodo.hiframes.series_impl.create_explicit_binary_reverse_op_overload(op)
             )
             impl = overload_func(*arg_typs, **kw_typs)
             return replace_func(
@@ -2033,8 +2058,7 @@ class SeriesPass:
         return [assign]
 
     def _handle_series_map(self, assign, lhs, rhs, series_var, func_var, extra_args):
-        """translate df.A.map(lambda a:...) to prange()
-        """
+        """translate df.A.map(lambda a:...) to prange()"""
         # get the function object (ir.Expr.make_function or actual python function)
         func = get_overload_const_func(self.typemap[func_var.name])
 
@@ -2140,8 +2164,7 @@ class SeriesPass:
         return [assign]
 
     def _run_call_rolling(self, assign, lhs, rhs, func_name):
-        """inline implementation for rolling_corr/cov functions
-        """
+        """inline implementation for rolling_corr/cov functions"""
 
         if func_name == "rolling_corr":
 
@@ -2185,8 +2208,7 @@ class SeriesPass:
         return [assign]
 
     def _handle_series_combine(self, assign, lhs, rhs, series_var):
-        """translate s1.combine(s2, lambda x1,x2 :...) to prange()
-        """
+        """translate s1.combine(s2, lambda x1,x2 :...) to prange()"""
         kws = dict(rhs.kws)
         other_var = get_call_expr_arg("combine", rhs.args, kws, 0, "other")
         func_var = get_call_expr_arg("combine", rhs.args, kws, 1, "func")
@@ -2328,8 +2350,7 @@ class SeriesPass:
         )
 
     def _run_pd_DatetimeIndex(self, assign, lhs, rhs):
-        """transform pd.DatetimeIndex() call with string array argument
-        """
+        """transform pd.DatetimeIndex() call with string array argument"""
         arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
         kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
         impl = bodo.hiframes.pd_index_ext.pd_datetimeindex_overload(
@@ -2369,8 +2390,7 @@ class SeriesPass:
         return nodes
 
     def _handle_np_full(self, assign, lhs, rhs):
-        """parallelize np.full() since Numba doesn't support it
-        """
+        """parallelize np.full() since Numba doesn't support it"""
         kws = dict(rhs.kws)
         shape_var = get_call_expr_arg("full", rhs.args, kws, 0, "shape")
         fill_value_var = get_call_expr_arg("full", rhs.args, kws, 1, "fill_value")
@@ -2427,8 +2447,7 @@ class SeriesPass:
         return compile_func_single_block(_h5_write_impl, (dset, arr), None, self)
 
     def _simplify_IR(self):
-        """Simplify IR after Series pass transforms.
-        """
+        """Simplify IR after Series pass transforms."""
         self.func_ir.blocks = ir_utils.simplify_CFG(self.func_ir.blocks)
         while ir_utils.remove_dead(
             self.func_ir.blocks, self.func_ir.arg_names, self.func_ir, self.typemap
