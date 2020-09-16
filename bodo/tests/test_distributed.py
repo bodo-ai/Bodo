@@ -1147,10 +1147,11 @@ def test_diagnostics_trace(capsys):
 
     g()
     g.distributed_diagnostics()
-    assert (
-        "input/output of another Bodo call without distributed flag"
-        in capsys.readouterr().out
-    )
+    if bodo.get_rank() == 0:
+        assert (
+            "input/output of another Bodo call without distributed flag"
+            in capsys.readouterr().out
+        )
 
 
 def test_sort_output_1D_Var_size():
