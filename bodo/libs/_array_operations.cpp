@@ -118,8 +118,8 @@ void array_isin(array_info* out_arr, array_info* in_arr, array_info* in_values,
                       shuf_table_in_values->columns[0]);
 
     // Deleting the data after usage
-    delete_table_free_arrays(shuf_table_in_values);
-    delete_table_free_arrays(shuf_table_in_arr);
+    delete_table_decref_arrays(shuf_table_in_values);
+    delete_table_decref_arrays(shuf_table_in_arr);
     // Now the reverse shuffling operation. Since the array out_arr is not
     // directly handled by the comm_info, we have to get out hands dirty.
     MPI_Datatype mpi_typ = get_MPI_typ(out_arr->dtype);
@@ -130,10 +130,11 @@ void array_isin(array_info* out_arr, array_info* in_arr, array_info* in_values,
                   comm_info.send_count.data(), comm_info.send_disp.data(),
                   mpi_typ, MPI_COMM_WORLD);
     fill_recv_data_inner<uint8_t>(tmp_recv.data(), (uint8_t*)out_arr->data1,
-                                  hashes, comm_info.send_disp, comm_info.n_pes,
-                                  n_rows);
-    // freeing just before returning.
-    free_array(shuf_out_arr);
+                                  hashes, comm_info.send_disp, comm_info.n_pes, n_rows);
+    // free temporary shuffle array
+    decref_array(shuf_out_arr);
+    // release extra reference for output array (array_info wrapper's reference)
+    decref_array(out_arr);
     delete table_in_arr;
     delete[] hashes;
 }
@@ -283,18 +284,18 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
         DEBUG_PrintSetOfColumn(std::cout, pre_bounds->columns);
         DEBUG_PrintRefct(std::cout, pre_bounds->columns);
 #endif
-        delete_table_free_arrays(all_samples_sort);
+        delete_table_decref_arrays(all_samples_sort);
     }
 #ifdef DEBUG_SORT
-    std::cout << "delete_table_free_arrays operations 1\n";
+    std::cout << "delete_table_decref_arrays operations 1\n";
 #endif
-    delete_table_free_arrays(samples);
+    delete_table_decref_arrays(samples);
 #ifdef DEBUG_SORT
-    std::cout << "delete_table_free_arrays operations 2\n";
+    std::cout << "delete_table_decref_arrays operations 2\n";
 #endif
-    delete_table_free_arrays(all_samples);
+    delete_table_decref_arrays(all_samples);
 #ifdef DEBUG_SORT
-    std::cout << "delete_table_free_arrays operations 3\n";
+    std::cout << "delete_table_decref_arrays operations 3\n";
 #endif
     // broadcasting the bounds
     // The in_table is used as reference for the data type of the array.
@@ -305,7 +306,7 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
     DEBUG_PrintSetOfColumn(std::cout, bounds->columns);
     DEBUG_PrintRefct(std::cout, bounds->columns);
 #endif
-    if (myrank == mpi_root) delete_table_free_arrays(pre_bounds);
+    if (myrank == mpi_root) delete_table_decref_arrays(pre_bounds);
     // Now computing to which process it all goes.
     std::vector<uint32_t> hashes_v(n_local);
     uint32_t node_id = 0;
@@ -327,7 +328,7 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
 #ifdef DEBUG_SORT
     std::cout << "Before bounds deallocation\n";
 #endif
-    delete_table_free_arrays(bounds);
+    delete_table_decref_arrays(bounds);
 #ifdef DEBUG_SORT
     std::cout << " After bounds deallocation\n";
 #endif
@@ -350,7 +351,8 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
     DEBUG_PrintSetOfColumn(std::cout, collected_table->columns);
     DEBUG_PrintRefct(std::cout, collected_table->columns);
 #endif
-    delete_table_free_arrays(local_sort);
+    // NOTE: shuffle_table_kernel decrefs input arrays
+    delete_table(local_sort);
     // Now final local sorting from all the stuff we collected.
     table_info* ret_table = sort_values_table_local(
         collected_table, n_key_t, vect_ascending, na_position);
@@ -359,7 +361,7 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
     DEBUG_PrintSetOfColumn(std::cout, ret_table->columns);
     DEBUG_PrintRefct(std::cout, ret_table->columns);
 #endif
-    delete_table_free_arrays(collected_table);
+    delete_table_decref_arrays(collected_table);
     // If the maximum number of rows divided by its average is higher than 2.0
     // then we trigger reshuffling. If not, we do not do anything.
     // This value may be adjusted in the future as it is an heuristic constant.
@@ -369,7 +371,7 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
         std::cout << " Doing reshuffling\n";
 #endif
         table_info* table_shuffle_renorm = shuffle_renormalization(ret_table);
-        delete_table_free_arrays(ret_table);
+        delete_table_decref_arrays(ret_table);
         return table_shuffle_renorm;
     }
     return ret_table;
@@ -646,7 +648,8 @@ table_info* drop_duplicates_nonnull_keys(table_info* in_table, int64_t num_keys,
     std::cout << "Before the shuffling\n";
 #endif
     table_info* shuf_table = shuffle_table(red_table, num_keys);
-    delete_table_free_arrays(red_table);
+    // no need to decref since shuffle_table() steals a reference
+    delete_table(red_table);
     // reduction after shuffling
 #ifdef DEBUG_DD
     std::cout << "Before the second shuffling\n";
@@ -654,7 +657,7 @@ table_info* drop_duplicates_nonnull_keys(table_info* in_table, int64_t num_keys,
     int keep = 0;
     table_info* ret_table =
         drop_duplicates_table_inner(shuf_table, num_keys, keep, 1);
-    delete_table_free_arrays(shuf_table);
+    delete_table_decref_arrays(shuf_table);
 #ifdef DEBUG_DD
     std::cout << "Final returning table\n";
     DEBUG_PrintSetOfColumn(std::cout, ret_table->columns);
@@ -700,14 +703,15 @@ table_info* drop_duplicates_table(table_info* in_table, bool is_parallel,
     std::cout << "Before the shuffling\n";
 #endif
     table_info* shuf_table = shuffle_table(red_table, num_keys);
-    delete_table_free_arrays(red_table);
+    // no need to decref since shuffle_table() steals a reference
+    delete_table(red_table);
     // reduction after shuffling
 #ifdef DEBUG_DD
     std::cout << "Before the second shuffling\n";
 #endif
     table_info* ret_table =
         drop_duplicates_table_inner(shuf_table, num_keys, keep, 1);
-    delete_table_free_arrays(shuf_table);
+    delete_table_decref_arrays(shuf_table);
 #ifdef DEBUG_DD
     std::cout << "Final returning table\n";
     DEBUG_PrintSetOfColumn(std::cout, ret_table->columns);
@@ -953,7 +957,7 @@ table_info* sample_table(table_info* in_table, int64_t n, double frac,
         bool all_gather = true;
         size_t n_cols = tab_out->ncols();
         table_info* tab_ret = gather_table(tab_out, n_cols, all_gather);
-        delete_table_free_arrays(tab_out);
+        delete_table_decref_arrays(tab_out);
 #ifdef DEBUG_SAMPLE
         std::cout << "sample_table : tab_ret\n";
         DEBUG_PrintSetOfColumn(std::cout, tab_ret->columns);

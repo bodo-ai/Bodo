@@ -237,6 +237,7 @@ def _gen_df_str(n):
 # ------------------------------ merge() ------------------------------ #
 
 
+# TODO: add memory_leak_check when sort leaks of fixed
 def test_merge_key_change():
     """
     Test merge(): make sure const list typing doesn't replace const key values
@@ -262,7 +263,7 @@ def test_merge_key_change():
 
 
 @pytest.mark.slow
-def test_merge_suffixes_bracket():
+def test_merge_suffixes_bracket(memory_leak_check):
     """
     Test merge(): test the suffixes functionality for inner/left/right/outer with bracket
     """
@@ -297,7 +298,7 @@ def test_merge_suffixes_bracket():
     )
 
 
-def test_merge_suffixes_parenthesis():
+def test_merge_suffixes_parenthesis(memory_leak_check):
     """
     Test merge(): test the suffixes functionality with parenthesis
     """
@@ -311,7 +312,7 @@ def test_merge_suffixes_parenthesis():
     check_func(test_impl, (df1, df2), sort_output=True, reset_index=True)
 
 
-def test_merge_join_datetime():
+def test_merge_join_datetime(memory_leak_check):
     """
     merging with some missing datetime and date.
     ---Datetime requires its own handling.
@@ -336,7 +337,7 @@ def test_merge_join_datetime():
     check_func(test_impl, (df1_date, df2), sort_output=True, reset_index=True)
 
 
-def test_merge_decimal():
+def test_merge_decimal(memory_leak_check):
     def f(df1, df2):
         df3 = df1.merge(df2, on="A")
         return df3
@@ -352,7 +353,7 @@ def test_merge_decimal():
     check_func(f, (df1, df2), sort_output=True, reset_index=True)
 
 
-def test_merge_left_right_index():
+def test_merge_left_right_index(memory_leak_check):
     """
     Test merge(): merging on index and use of suffices on output.
     """
@@ -377,7 +378,7 @@ def test_merge_left_right_index():
     check_func(f, (df1, df2), sort_output=True)
 
 
-def test_list_string_array_type_specific():
+def test_list_string_array_type_specific(memory_leak_check):
     """Test with the column type of type  list_string_array"""
 
     def test_impl(df1, df2):
@@ -403,6 +404,7 @@ def test_list_string_array_type_specific():
 
 
 @pytest.mark.slow
+# TODO: add memory_leak_check when sub_null_bitmask can be freed properly
 def test_list_string_array_type_random():
     def test_impl(df1, df2):
         df3 = df1.merge(df2, on="A")
@@ -432,7 +434,7 @@ def test_list_string_array_type_random():
     )
 
 
-def test_merge_left_right_nontrivial_index():
+def test_merge_left_right_nontrivial_index(memory_leak_check):
     """
     Test merge(): merging on non-trivial index and use of suffices on output.
     """
@@ -448,7 +450,7 @@ def test_merge_left_right_nontrivial_index():
 
 
 @pytest.mark.slow
-def test_merge_empty_suffix_underscore():
+def test_merge_empty_suffix_underscore(memory_leak_check):
     """
     Test merge(): test the suffixes functionality with a pathological example
     """
@@ -488,7 +490,7 @@ def test_merge_empty_suffix_underscore():
         ),
     ],
 )
-def test_merge_common_cols(df1, df2):
+def test_merge_common_cols(df1, df2, memory_leak_check):
     """
     test merge() default behavior: 
     merge on common columns when key columns not provided
@@ -505,7 +507,7 @@ def test_merge_common_cols(df1, df2):
     )
 
 
-def test_merge_disjoint_keys1():
+def test_merge_disjoint_keys1(memory_leak_check):
     """
     Test merge(): 'how' = inner on specified integer column
     """
@@ -520,7 +522,7 @@ def test_merge_disjoint_keys1():
 
 
 @pytest.mark.slow
-def test_merge_disjoint_keys2():
+def test_merge_disjoint_keys2(memory_leak_check):
     """
     Test merge(): 'how' = inner on specified integer column
     """
@@ -534,7 +536,7 @@ def test_merge_disjoint_keys2():
     check_func(test_impl, (df1, df2), sort_output=True, reset_index=True)
 
 
-def test_merge_inner():
+def test_merge_inner(memory_leak_check):
     """
     Test merge(): 'how' = inner on specified integer column
     """
@@ -552,7 +554,7 @@ def test_merge_inner():
     check_func(test_impl, (df1, df2), sort_output=True, reset_index=True)
 
 
-def test_merge_left1():
+def test_merge_left1(memory_leak_check):
     """
     Test merge(): 'how' = left on specified integer column
     """
@@ -571,7 +573,7 @@ def test_merge_left1():
 
 
 @pytest.mark.slow
-def test_merge_left2():
+def test_merge_left2(memory_leak_check):
     """
     Test merge(): 'how' = left on specified integer column
     where a key is repeated on left but not right side
@@ -590,7 +592,7 @@ def test_merge_left2():
     check_func(test_impl, (df1, df2), sort_output=True, reset_index=True)
 
 
-def test_merge_right():
+def test_merge_right(memory_leak_check):
     """
     Test merge(): 'how' = right on specified integer column
     """
@@ -608,7 +610,7 @@ def test_merge_right():
     check_func(test_impl, (df1, df2), sort_output=True, reset_index=True)
 
 
-def test_merge_outer():
+def test_merge_outer(memory_leak_check):
     """
     Test merge(): 'how' = outer on specified integer column
     """
@@ -626,7 +628,7 @@ def test_merge_outer():
     check_func(test_impl, (df1, df2), sort_output=True, reset_index=True)
 
 
-def test_merge_overlap():
+def test_merge_overlap(memory_leak_check):
     """
     Test merge(): column overlapping behavior
     """
@@ -641,7 +643,7 @@ def test_merge_overlap():
 
 @pytest.mark.slow
 @pytest.mark.parametrize("n", [11, 11111])
-def test_merge_int_key(n):
+def test_merge_int_key(n, memory_leak_check):
     """
     Test merge(): key column is of type int
     """
@@ -665,7 +667,7 @@ def test_merge_int_key(n):
         pytest.param(1000, 900, 10, marks=pytest.mark.slow),
     ],
 )
-def test_merge_nullable_int_bool(n1, n2, len_siz):
+def test_merge_nullable_int_bool(n1, n2, len_siz, memory_leak_check):
     """
     Test merge(): test of nullable_int_bool for inner/left/right/outer and random input
     """
@@ -710,7 +712,7 @@ def test_merge_nullable_int_bool(n1, n2, len_siz):
     check_func(test_impl4, (df1, df2), sort_output=True, reset_index=True)
 
 
-def test_merge_multi_int_key():
+def test_merge_multi_int_key(memory_leak_check):
     """
     Test merge(): sequentially merge on more than one integer key columns
     """
@@ -743,7 +745,7 @@ def test_merge_multi_int_key():
 
 
 @pytest.mark.slow
-def test_merge_literal_arg():
+def test_merge_literal_arg(memory_leak_check):
     """
     Test forcing merge() args to be literals if jit arguments
     """
@@ -773,7 +775,7 @@ def test_merge_literal_arg():
     # check_func(test_impl2, (df1, df2.set_index("A"), "A", True, "inner"), sort_output=True)
 
 
-def test_merge_key_type_change():
+def test_merge_key_type_change(memory_leak_check):
     """
     Test merge() key type check when key type changes in the program (handled in partial
     typing pass)
@@ -795,7 +797,7 @@ def test_merge_key_type_change():
     )
 
 
-def test_merge_schema_change():
+def test_merge_schema_change(memory_leak_check):
     """
     Test merge() key check when schema changes in the program (handled in partial
     typing pass)
@@ -815,7 +817,7 @@ def test_merge_schema_change():
     )
 
 
-def test_merge_str_key():
+def test_merge_str_key(memory_leak_check):
     """
     Test merge(): sequentially merge on key column of type string
     """
@@ -831,7 +833,7 @@ def test_merge_str_key():
     assert set(bodo_func(df1, df2)) == set(test_impl(df1, df2))
 
 
-def test_merge_str_nan1():
+def test_merge_str_nan1(memory_leak_check):
     """
     test merging dataframes containing string columns with nan values
     """
@@ -856,7 +858,7 @@ def test_merge_str_nan1():
 
 
 @pytest.mark.slow
-def test_merge_str_nan2():
+def test_merge_str_nan2(memory_leak_check):
     """
     test merging dataframes containing string columns with nan values
     on larger dataframes
@@ -874,7 +876,7 @@ def test_merge_str_nan2():
     check_func(test_impl, (df1, df2), sort_output=True, reset_index=True)
 
 
-def test_merge_bool_nan():
+def test_merge_bool_nan(memory_leak_check):
     """
     test merging dataframes containing boolean columns with nan values
     """
@@ -903,7 +905,7 @@ def test_merge_bool_nan():
     )
 
 
-def test_merge_nontrivial_index():
+def test_merge_nontrivial_index(memory_leak_check):
     """
     Test merge(): merging on columns with dataframe having non-trivial indexes.
     """
@@ -922,6 +924,7 @@ def test_merge_nontrivial_index():
     check_func(test_impl, (df1, df2), sort_output=True, reset_index=True)
 
 
+# TODO: add memory_leak_check when sort leaks are fixed
 def test_merge_out_str_na():
     """
     Test merge(): setting NA in output string data column.
@@ -932,12 +935,13 @@ def test_merge_out_str_na():
     """
 
     def test_impl(df1, df2):
-        df3 = (
-            df1.merge(df2, left_on="key1", right_on="key2", how="inner")
-            .sort_values(by="B")
-            .reset_index(drop=True)
-        )
-        return df3.B
+        # df3 = (
+        #     df1.merge(df2, left_on="key1", right_on="key2", how="inner")
+        #     .sort_values(by="B")
+        #     .reset_index(drop=True)
+        # )
+        df4 = df1.merge(df2, left_on="key1", right_on="key2", how="inner").sort_values(by="B").reset_index(drop=True)
+        return df4.B
 
     df1 = pd.DataFrame({"key1": ["foo", "bar", "baz", "fab", "faz", "fay"]})
     df2 = pd.DataFrame(
@@ -950,7 +954,7 @@ def test_merge_out_str_na():
     check_func(test_impl, (df1, df2), check_typing_issues=False)
 
 
-def test_merge_datetime():
+def test_merge_datetime(memory_leak_check):
     """
     Test merge(): merge on key column of type DatetimeIndex
     """
@@ -974,7 +978,7 @@ def test_merge_datetime():
     check_func(test_impl, (df1, df2), sort_output=True, reset_index=True)
 
 
-def test_merge_datetime_parallel():
+def test_merge_datetime_parallel(memory_leak_check):
     """
     Test merge(): merge on key column of type DatetimeIndex
     ensure parallelism
@@ -1021,7 +1025,7 @@ def test_merge_datetime_parallel():
         pd.DataFrame({"A": [-1, 1, 3], "B": [-1, 0, 1], "C": [-11, 0, 4]}),
     ],
 )
-def test_merge_suffix(df1, df2):
+def test_merge_suffix(df1, df2, memory_leak_check):
     """
     test merge() default behavior: 
     column name overlaps, require adding suffix('_x', '_y') to column names
@@ -1058,7 +1062,7 @@ def test_merge_suffix(df1, df2):
         ),
     ],
 )
-def test_merge_index1(df1, df2):
+def test_merge_index1(df1, df2, memory_leak_check):
     """
     test merge(): with left_index and right_index specified, merge using index
     """
@@ -1070,7 +1074,7 @@ def test_merge_index1(df1, df2):
     check_func(impl1, (df1, df2), sort_output=True)
 
 
-def test_merge_index_left():
+def test_merge_index_left(memory_leak_check):
     """
     test merge(): with left_index and right_index specified
     with all on = left
@@ -1086,7 +1090,7 @@ def test_merge_index_left():
     check_func(impl, (df1, df2), sort_output=True, check_dtype=False)
 
 
-def test_merge_index_right():
+def test_merge_index_right(memory_leak_check):
     """
     test merge(): with left_index and right_index specified
     with all on = right
@@ -1101,7 +1105,7 @@ def test_merge_index_right():
     check_func(impl, (df1, df2), sort_output=True, check_dtype=False)
 
 
-def test_merge_index_outer():
+def test_merge_index_outer(memory_leak_check):
     """
     test merge(): with left_index and right_index specified
     with all on = outer
@@ -1111,7 +1115,6 @@ def test_merge_index_outer():
         df3 = df1.merge(df2, left_index=True, right_index=True, how="outer")
         return df3
 
-    bodo_func = bodo.jit(impl)
     df1 = pd.DataFrame({"a": [20, 10, 0]}, index=[2, 1, 0])
     df2 = pd.DataFrame({"b": [300, 100, 200]}, index=[3, 1, 2])
 
@@ -1156,7 +1159,7 @@ def test_merge_index_outer():
         ),
     ],
 )
-def test_merge_non_unique_index(df1, df2):
+def test_merge_non_unique_index(df1, df2, memory_leak_check):
     """
     test merge(): merge on left and right non-unique index
     """
@@ -1168,7 +1171,7 @@ def test_merge_non_unique_index(df1, df2):
     check_func(impl, (df1, df2), sort_output=True, check_typing_issues=False)
 
 
-def test_merge_all_nan_cols():
+def test_merge_all_nan_cols(memory_leak_check):
     """
     test merge(): all columns to merge on are null
     """
@@ -1184,7 +1187,7 @@ def test_merge_all_nan_cols():
 
 
 @pytest.mark.slow
-def test_merge_match_key_types():
+def test_merge_match_key_types(memory_leak_check):
     """
     test merge(): where key types mismatch but values can be equal
     happens especially when Pandas convert ints to float to use np.nan
@@ -1210,6 +1213,7 @@ def test_merge_match_key_types():
     check_func(test_impl2, (df2, df1), sort_output=True, reset_index=True)
 
 
+# TODO: add memory_leak_check
 def test_merge_cat_identical():
     """
     Test merge(): merge identical dataframes on categorical column
@@ -1227,6 +1231,7 @@ def test_merge_cat_identical():
 
 
 @pytest.mark.slow
+# TODO: add memory_leak_check
 def test_merge_cat_multi_cols():
     """
     Test merge(): merge dataframes containing mutilple categorical cols
@@ -1256,6 +1261,7 @@ def test_merge_cat_multi_cols():
 
 
 @pytest.mark.slow
+# TODO: add memory_leak_check
 def test_merge_cat1_inner():
     """
     Test merge(): merge dataframes containing categorical values
@@ -1276,6 +1282,7 @@ def test_merge_cat1_inner():
 
 
 @pytest.mark.slow
+# TODO: add memory_leak_check
 def test_merge_cat1_right_2cols1():
     """
     Test merge(): setting NaN in categorical array
@@ -1296,6 +1303,7 @@ def test_merge_cat1_right_2cols1():
 
 
 @pytest.mark.slow
+# TODO: add memory_leak_check
 def test_merge_cat1_right_2cols2():
     """
     Test merge(): setting NaN in categorical array
@@ -1317,6 +1325,7 @@ def test_merge_cat1_right_2cols2():
 
 
 @pytest.mark.slow
+# TODO: add memory_leak_check
 def test_merge_cat1_right():
     """
     Test merge(): setting NaN in categorical array
@@ -1338,7 +1347,7 @@ def test_merge_cat1_right():
 
 @pytest.mark.slow
 @pytest.mark.parametrize("n", [11, 11111])
-def test_merge_parallel_optimize(n):
+def test_merge_parallel_optimize(n, memory_leak_check):
     """
     Test merge(): ensure parallelism optimization
     """
@@ -1356,7 +1365,7 @@ def test_merge_parallel_optimize(n):
 
 
 @pytest.mark.slow
-def test_merge_left_parallel():
+def test_merge_left_parallel(memory_leak_check):
     """
     Test merge(): merge with only left dataframe columns distributed
     ensure parallelism
@@ -1378,7 +1387,7 @@ def test_merge_left_parallel():
     assert test_impl(df1, df2) == bodo_func(df1.iloc[start:end], df2)
 
 
-def test_join_rm_dead_data_name_overlap1():
+def test_join_rm_dead_data_name_overlap1(memory_leak_check):
     """
     Test join dead code elimination when there are matching names in data columns of
     input tables but only one of them is actually used.
@@ -1393,7 +1402,7 @@ def test_join_rm_dead_data_name_overlap1():
     assert bodo.jit(test_impl)(df1, df2) == test_impl(df1, df2)
 
 
-def test_join_rm_dead_data_name_overlap2():
+def test_join_rm_dead_data_name_overlap2(memory_leak_check):
     """
     Test join dead code elimination when there are matching names in data columns of
     input tables but only one of them is actually used.
@@ -1407,7 +1416,7 @@ def test_join_rm_dead_data_name_overlap2():
     check_func(test_impl, (df1, df2), sort_output=True, reset_index=True)
 
 
-def test_join_deadcode_cleanup():
+def test_join_deadcode_cleanup(memory_leak_check):
     """
     Test join dead code elimination when a merged dataframe is never used, 
     merge() is not executed
@@ -1477,7 +1486,7 @@ def test_join_deadcode_cleanup():
         ),
     ],
 )
-def test_join_call(df1, df2):
+def test_join_call(df1, df2, memory_leak_check):
     """
     test join() default behavior: 
     impl1(): join on index when key columns not provided
@@ -1516,7 +1525,7 @@ def test_join_call(df1, df2):
         ),
     ],
 )
-def test_join_how(df1, df2):
+def test_join_how(df1, df2, memory_leak_check):
     """
     test join() 'how'
     """
@@ -1593,7 +1602,7 @@ def test_join_how(df1, df2):
         ).set_index("Y"),
     ],
 )
-def test_merge_index_column_second(df1, df2):
+def test_merge_index_column_second(df1, df2, memory_leak_check):
     """
     Test merge(): test the merging with one key on the index and the other on the column
     This is another pattern.
@@ -1606,7 +1615,7 @@ def test_merge_index_column_second(df1, df2):
     check_func(f, (df1, df2), sort_output=True)
 
 
-def test_merge_index_column():
+def test_merge_index_column(memory_leak_check):
     """
     Test merge(): test the merging with one key on the index and the other on the column
     """
@@ -1626,7 +1635,7 @@ def test_merge_index_column():
     check_func(f2, (df1, df2), sort_output=True, check_typing_issues=False)
 
 
-def test_merge_index_column_returning_empty():
+def test_merge_index_column_returning_empty(memory_leak_check):
     """
     Test merge(): Same as first, but returning empty dataframe
     """
@@ -1645,7 +1654,7 @@ def test_merge_index_column_returning_empty():
 
 
 @pytest.mark.slow
-def test_merge_index_column_nontrivial_index():
+def test_merge_index_column_nontrivial_index(memory_leak_check):
     """
     Test merge(): Same as first but with a non-trivial index
     """
@@ -1661,7 +1670,7 @@ def test_merge_index_column_nontrivial_index():
 
 
 @pytest.mark.slow
-def test_merge_index_column_double_index():
+def test_merge_index_column_double_index(memory_leak_check):
     """
     Test merge(): Same as first but with an index being double.
     """
@@ -1677,7 +1686,7 @@ def test_merge_index_column_double_index():
 
 
 @pytest.mark.slow
-def test_merge_index_column_string_index():
+def test_merge_index_column_string_index(memory_leak_check):
     """
     Test merge(): Same as first but with a string index
     """
@@ -1692,7 +1701,7 @@ def test_merge_index_column_string_index():
     check_func(f1, (df1, df2), sort_output=True, check_typing_issues=False)
 
 
-def test_merge_index_column_how():
+def test_merge_index_column_how(memory_leak_check):
     """
     Test merge(): Same as first but with a variety of how merging.
     We need to have an index column that is made of floats since
@@ -1736,7 +1745,7 @@ def test_merge_index_column_how():
     check_func(f4, (df1, df2), sort_output=True, check_dtype=False)
 
 
-def test_merge_partial_distributed():
+def test_merge_partial_distributed(memory_leak_check):
     """Only one dataframe is distributed, the other fixed.
     In that case in principle we do not need exchanges"""
 
@@ -1784,7 +1793,7 @@ def _gen_df_rand_col_names():
     return df
 
 
-def test_merge_common_col_ordering():
+def test_merge_common_col_ordering(memory_leak_check):
     """
     Test merge() with several common column names as keys to make sure ordering of set
     operations to find key names is consistent across processors
@@ -1801,6 +1810,7 @@ def test_merge_common_col_ordering():
     check_func(impl, (df1, df2), sort_output=True, reset_index=True)
 
 
+# TODO: add test_merge_nested_arrays_non_keys
 def test_merge_nested_arrays_non_keys(nested_arrays_value):
     def test_impl(df1, df2):
         df3 = df1.merge(df2, on="A")
@@ -1825,7 +1835,7 @@ def test_merge_nested_arrays_non_keys(nested_arrays_value):
 # ------------------------------ merge_asof() ------------------------------ #
 
 
-def test_merge_asof_seq():
+def test_merge_asof_seq(memory_leak_check):
     """
     Test merge_asof(): merge_asof sequencially on key column of type DatetimeIndex
     """
@@ -1851,7 +1861,7 @@ def test_merge_asof_seq():
     pd.testing.assert_frame_equal(bodo_func(df1, df2), test_impl(df1, df2))
 
 
-def test_merge_asof_parallel(datapath):
+def test_merge_asof_parallel(datapath, memory_leak_check):
     """
     Test merge_asof(): merge_asof in parallel on key column of type DatetimeIndex
     """

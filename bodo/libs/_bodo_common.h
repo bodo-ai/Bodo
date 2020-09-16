@@ -271,19 +271,24 @@ void delete_info_decref_array(array_info* arr);
 void delete_table(table_info* table);
 
 /**
- * Free all arrays of a table and delete the table.
+ * Decref all arrays of a table and delete the table.
  */
-void delete_table_free_arrays(table_info* table);
+void delete_table_decref_arrays(table_info* table);
 
 /**
- * Free all memory of an array.
+ * decref Bodo array and free all memory if refcount is zero.
  */
-void free_array(array_info* arr);
+void decref_array(array_info* arr);
 
 /**
- * Free all memory of list of string array.
+ * incref Bodo array
  */
-void free_list_string_array(NRT_MemInfo* meminfo);
+void incref_array(array_info* arr);
+
+/**
+ * Decref list of string array and free all memory in refcount is zero.
+ */
+void decref_list_string_array(NRT_MemInfo* meminfo);
 
 extern "C" {
 

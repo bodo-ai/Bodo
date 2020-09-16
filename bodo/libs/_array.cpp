@@ -1252,8 +1252,8 @@ PyMODINIT_FUNC PyInit_array_ext(void) {
         m, "delete_info_decref_array",
         PyLong_FromVoidPtr((void*)(&delete_info_decref_array)));
     PyObject_SetAttrString(
-        m, "delete_table_free_arrays",
-        PyLong_FromVoidPtr((void*)(&delete_table_free_arrays)));
+        m, "delete_table_decref_arrays",
+        PyLong_FromVoidPtr((void*)(&delete_table_decref_arrays)));
     PyObject_SetAttrString(m, "delete_table",
                            PyLong_FromVoidPtr((void*)(&delete_table)));
     PyObject_SetAttrString(m, "shuffle_table",

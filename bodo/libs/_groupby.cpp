@@ -3290,7 +3290,7 @@ class BasicColSet {
         array_info* out_col = mycols->at(0);
         for (auto it = mycols->begin() + 1; it != mycols->end(); it++) {
             array_info* a = *it;
-            free_array(a);
+            decref_array(a);
             delete a;
         }
         return out_col;
@@ -3396,7 +3396,7 @@ class IdxMinMaxColSet : public BasicColSet {
         array_info* out_col = update_cols[0];
         *out_col = std::move(*real_out_col);
         delete real_out_col;
-        free_array(index_pos_col);
+        decref_array(index_pos_col);
         delete index_pos_col;
         update_cols.pop_back();
     }
@@ -3437,7 +3437,7 @@ class IdxMinMaxColSet : public BasicColSet {
         array_info* out_col = combine_cols[0];
         *out_col = std::move(*real_out_col);
         delete real_out_col;
-        free_array(index_pos_col);
+        decref_array(index_pos_col);
         delete index_pos_col;
         combine_cols.pop_back();
     }
@@ -3723,6 +3723,9 @@ class GroupbyPipeline {
             comm_info_ptr = new mpi_comm_info(in_table->columns);
             hashes = hash_keys_table(in_table, num_keys, SEED_HASH_PARTITION);
             comm_info_ptr->set_counts(hashes);
+            // shuffle_table_kernel steals the reference but we still need it
+            // for the code after C++ groupby
+            for (auto a : in_table->columns) incref_array(a);
             in_table = shuffle_table_kernel(in_table, hashes, *comm_info_ptr);
             if (!cumulative_op) {
                 delete hashes;
@@ -3781,7 +3784,7 @@ class GroupbyPipeline {
         if (shuffle_before_update)
             // in_table was created in C++ during shuffling and not needed
             // anymore
-            delete_table_free_arrays(in_table);
+            delete_table_decref_arrays(in_table);
         if (is_parallel && !shuffle_before_update) {
             shuffle();
 #ifdef DEBUG_GROUPBY
@@ -3905,7 +3908,8 @@ class GroupbyPipeline {
             delete hashes;
             delete comm_info_ptr;
         }
-        delete_table_free_arrays(update_table);
+        // NOTE: shuffle_table_kernel decrefs input arrays
+        delete_table(update_table);
         update_table = cur_table = shuf_table;
 
         // update column sets with columns from shuffled table
@@ -3936,7 +3940,7 @@ class GroupbyPipeline {
         if (n_udf > 0)
             udf_info.combine(update_table, combine_table,
                              grp_info.row_to_group.data());
-        delete_table_free_arrays(update_table);
+        delete_table_decref_arrays(update_table);
     }
 
     /**
@@ -3970,9 +3974,9 @@ class GroupbyPipeline {
 #ifdef DEBUG_GROUPBY
             std::cout << "After reverse_shuffle_table_kernel\n";
 #endif
-            delete_table_free_arrays(out_table);
+            delete_table_decref_arrays(out_table);
 #ifdef DEBUG_GROUPBY
-            std::cout << "After delete_table_free_arrays\n";
+            std::cout << "After delete_table_decref_arrays\n";
 #endif
             out_table = revshuf_table;
 #ifdef DEBUG_GROUPBY
@@ -4838,7 +4842,7 @@ table_info* groupby_and_aggregate(table_info* in_table, int64_t num_keys,
                       << "\n";
 #endif
             table_info* ret_table = implement_categorical_exscan(cat_column);
-            free_array(cat_column);
+            decref_array(cat_column);
             return ret_table;
         }
     }

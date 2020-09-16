@@ -69,6 +69,7 @@ from bodo.libs.array import (
     info_from_table,
     info_to_array,
     delete_table,
+    delete_table_decref_arrays,
 )
 from bodo.hiframes.pd_categorical_ext import CategoricalArray
 
@@ -424,7 +425,6 @@ def join_distributed_run(
         )
 
     # TODO: rebalance if output distributions are 1D instead of 1D_Var
-    loc = join_node.loc
     n_keys = len(join_node.left_keys)
     # get column variables
     left_key_vars = tuple(join_node.left_vars[c] for c in join_node.left_keys)
@@ -624,7 +624,7 @@ def join_distributed_run(
                 i, i, _gen_reverse_type_match(left_key_types[i], right_key_types[i])
             )
         for i in range(n_keys):
-            func_text += "    t2_keys_{} = out_t2_keys[{}]\n".format(
+            func_text += "    t2_keys_{} = out_t2_keys[{}]{}\n".format(
                 i, i, _gen_reverse_type_match(right_key_types[i], left_key_types[i])
             )
 
@@ -663,6 +663,7 @@ def join_distributed_run(
         "info_from_table": info_from_table,
         "info_to_array": info_to_array,
         "delete_table": delete_table,
+        "delete_table_decref_arrays": delete_table_decref_arrays,
     }
 
     f_block = compile_to_numba_ir(
@@ -844,7 +845,7 @@ def _gen_local_hash_join(
         is_join,
         optional_column,
     )
-    func_text += "    delete_table(table_total)\n"
+    func_text += "    delete_table_decref_arrays(table_total)\n"
     idx = 0
     if optional_column:
         func_text += "    opti_0 = info_to_array(info_from_table(out_table, {}), opti_c0)\n".format(

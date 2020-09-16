@@ -140,8 +140,7 @@ def nested_arrays_value(request):
         ),
     ],
 )
-# TODO: add memory_leak_check
-def test_df_drop_duplicates(test_df):
+def test_df_drop_duplicates(test_df, memory_leak_check):
     def impl(df):
         return df.drop_duplicates()
 
@@ -227,7 +226,8 @@ def test_drop_duplicates_2col_random_nullable_int(n, len_siz, memory_leak_check)
 
 
 @pytest.mark.slow
-def test_list_string_array_type_specific(memory_leak_check):
+# TODO: add memory_leak_check
+def test_list_string_array_type_specific():
     """Test of list_string_array_type in a specific case"""
 
     def test_impl(df1):
@@ -236,12 +236,12 @@ def test_list_string_array_type_specific(memory_leak_check):
 
     df1 = pd.DataFrame({"A": ["AB", "A,B,C", "AB,CD", "D,E", "D,F", "A,B,C", "D,E"]})
     df1.A = df1.A.str.split(",")
-    bodo_impl = bodo.jit(test_impl)
     check_func(test_impl, (df1,), sort_output=True, convert_columns_to_pandas=True)
 
 
 @pytest.mark.slow
-def test_list_string_array_type_random(memory_leak_check):
+# TODO: add memory_leak_check
+def test_list_string_array_type_random():
     """Test of list_string_array_type in parallel with a random list
     Also put a test on two columns for the combine_hash functionality
     """

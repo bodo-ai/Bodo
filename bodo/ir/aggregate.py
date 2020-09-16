@@ -100,6 +100,7 @@ from bodo.libs.array import (
     info_from_table,
     info_to_array,
     delete_table,
+    delete_table_decref_arrays,
 )
 
 
@@ -967,6 +968,7 @@ def agg_distributed_run(
             "delete_table": delete_table,
             "add_agg_cfunc_sym": add_agg_cfunc_sym,
             "get_agg_udf_addr": get_agg_udf_addr,
+            "delete_table_decref_arrays": delete_table_decref_arrays,
         }
     )
     if udf_func_struct is not None:
@@ -2154,7 +2156,8 @@ def gen_top_level_agg_func(
             )
             idx += 1
         # clean up
-        func_text += "    delete_table(table)\n"
+        func_text += "    delete_table_decref_arrays(table)\n"
+        func_text += "    delete_table_decref_arrays(udf_table_dummy)\n"
         func_text += "    delete_table(out_table)\n"
 
         ret_names = out_names
@@ -2163,62 +2166,6 @@ def gen_top_level_agg_func(
         func_text += "    return ({},{})\n".format(
             ", ".join(ret_names), " out_index_arg," if same_index else ""
         )
-
-    loc_vars = {}
-    exec(func_text, {}, loc_vars)
-    agg_top = loc_vars["agg_top"]
-    return agg_top
-
-
-def gen_top_level_transform_func(key_names, in_col_names, out_col_names, parallel):
-    """create the top level transformation function by generating text"""
-
-    # arg names
-    in_names = tuple("in_{}".format(c) for c in in_col_names)
-    out_names = tuple("out_{}".format(c) for c in out_col_names)
-    key_names = tuple("key_{}".format(sanitize_varname(c)) for c in key_names)
-    key_args = ", ".join(key_names)
-
-    in_args = ", ".join(in_names)
-    if in_args != "":
-        in_args = ", " + in_args
-
-    func_text = "def agg_top({}{}, pivot_arr):\n".format(key_args, in_args)
-    func_text += "    data_in = ({}{})\n".format(
-        ",".join(in_names), "," if len(in_names) == 1 else ""
-    )
-    func_text += "    key_in = ({}{})\n".format(
-        ",".join(key_names), "," if len(key_names) == 1 else ""
-    )
-
-    out_tup = ", ".join(out_names)
-
-    # cumsum ignores the index and returns a Series with values in the same
-    # order as original column. Therefore, we need to shuffle the data back.
-    if parallel:
-        func_text += "    i_arr_tab = arr_info_list_to_table([{}])\n".format(
-            ",".join("array_to_info({})".format(c) for c in key_names)
-        )
-        func_text += "    n_pes = bodo.libs.distributed_api.get_size()\n"
-        func_text += "    o_arr_tab = compute_node_partition_by_hash(i_arr_tab, {}, n_pes)\n".format(
-            len(key_names)
-        )
-        func_text += "    data_dummy = np.empty(1, np.int32)\n"
-        func_text += (
-            "    node_arr = info_to_array(info_from_table(o_arr_tab, 0), data_dummy)\n"
-        )
-        func_text += "    delete_table(o_arr_tab)\n"
-        func_text += "    delete_table(i_arr_tab)\n"
-        func_text += "    key_in, data_in, orig_indices, shuffle_meta = bodo.utils.shuffle.shuffle_with_index(key_in, node_arr, data_in)\n".format()
-
-    func_text += "    ({},) = group_cumsum(key_in, data_in)\n".format(out_tup)
-
-    if parallel:
-        func_text += "    ({0},) = bodo.utils.shuffle.reverse_shuffle(({0},), orig_indices, shuffle_meta)\n".format(
-            out_tup
-        )
-
-    func_text += "    return ({},)\n".format(out_tup)
 
     loc_vars = {}
     exec(func_text, {}, loc_vars)
@@ -3373,181 +3320,6 @@ def num_total_chars_set_overload(s):
 
     loc_vars = {}
     exec(func_text, {"bodo": bodo, "get_utf8_size": get_utf8_size}, loc_vars)
-    impl = loc_vars["f"]
-    return impl
-
-
-###############  transform functions like cumsum  ###########################
-
-
-# TODO: cumprod etc.
-# adapted from Pandas group_cumsum()
-@numba.njit(no_cpython_wrapper=True)
-def group_cumsum(key_arrs, data):  # pragma: no cover
-    n = len(key_arrs[0])
-    out = alloc_arr_tup(n, data)
-    if n == 0:
-        return out
-
-    acc_map = dict()
-    # extra assign to help with type inference
-    zero = get_zero_tup(data)
-    acc_map[getitem_arr_tup_single(key_arrs, 0)] = zero
-    # TODO: multiple outputs
-
-    for i in range(n):
-        if isna_tup(key_arrs, i):
-            # group_cumsum stores -1 for int arrays in location of NAs
-            bodo.libs.array_kernels.setna_tup(out, i, -1)
-            continue
-        k = getitem_arr_tup_single(key_arrs, i)
-        val = getitem_arr_tup_single(data, i)
-        # replace NAs with zero for acc calculation
-        val = set_nan_zero_tup(data, i, val)
-        if k in acc_map:
-            acc = acc_map[k]
-        else:
-            acc = zero
-        acc = add_tup(acc, val)
-        acc_map[k] = acc
-        setitem_arr_tup(out, i, acc)
-        # set NA in out if data is NA
-        setitem_arr_tup_na_match(out, data, i)
-
-    return out
-
-
-def get_zero_tup(arr_tup):  # pragma: no cover
-    zeros = []
-    for in_arr in arr_tup:
-        zeros.append(in_arr.dtype(0))
-    return tuple(zeros)
-
-
-@overload(get_zero_tup, no_unliteral=True)
-def get_zero_tup_overload(data):
-    """get a tuple of zeros matching the data types of data (tuple of arrays)
-    tuple of single array returns a single value
-    """
-    count = data.count
-    if count == 1:
-        zero = data.types[0].dtype(0)
-        return lambda data: zero
-
-    zeros = {"z{}".format(i): data.types[i].dtype(0) for i in range(count)}
-
-    func_text = "def f(data):\n"
-    func_text += "  return {}\n".format(
-        ", ".join("z{}".format(i) for i in range(count))
-    )
-
-    loc_vars = {}
-    exec(func_text, zeros, loc_vars)
-    impl = loc_vars["f"]
-    return impl
-
-
-def add_tup(val1_tup, val2_tup):
-    out = []
-    for v1, v2 in zip(val1_tup, val2_tup):
-        out.append(v1 + v2)
-    return tuple(out)
-
-
-@overload(add_tup, no_unliteral=True)
-def add_tup_overload(val1_tup, val2_tup):
-    """add two tuples element-wise"""
-    if not isinstance(val1_tup, types.BaseTuple):
-        return lambda val1_tup, val2_tup: val1_tup + val2_tup
-
-    count = val1_tup.count
-    func_text = "def f(val1_tup, val2_tup):\n"
-    func_text += "  return {}\n".format(
-        ", ".join("val1_tup[{0}] + val2_tup[{0}]".format(i) for i in range(count))
-    )
-
-    loc_vars = {}
-    exec(func_text, {}, loc_vars)
-    impl = loc_vars["f"]
-    return impl
-
-
-def isna_tup(arr_tup, ind):  # pragma: no cover
-    for arr in arr_tup:
-        if np.isnan(arr[ind]):
-            return True
-    return False
-
-
-@overload(isna_tup, no_unliteral=True)
-def isna_tup_overload(arr_tup, ind):
-    """return True if any array value is NA"""
-    if not isinstance(arr_tup, types.BaseTuple):
-        return lambda arr_tup, ind: bodo.libs.array_kernels.isna(arr_tup, ind)
-
-    count = arr_tup.count
-    func_text = "def f(arr_tup, ind):\n"
-    func_text += "  return {}\n".format(
-        " or ".join(
-            "bodo.libs.array_kernels.isna(arr_tup[{}], ind)".format(i)
-            for i in range(count)
-        )
-    )
-
-    loc_vars = {}
-    exec(func_text, {"bodo": bodo}, loc_vars)
-    impl = loc_vars["f"]
-    return impl
-
-
-def set_nan_zero_tup(arr_tup, ind, val):  # pragma: no cover
-    return tuple((0.0 if np.isnan(arr[ind]) else val[ind]) for arr in arr_tup)
-
-
-@overload(set_nan_zero_tup, no_unliteral=True)
-def set_nan_zero_tup_overload(arr_tup, ind, val):
-    """replace NAs with zero in val and return new val"""
-    if not isinstance(val, types.BaseTuple):
-        zero = val(0)
-        return (
-            lambda arr_tup, ind, val: zero
-            if bodo.libs.array_kernels.isna(arr_tup[0], ind)
-            else val
-        )
-
-    count = arr_tup.count
-    func_text = "def f(arr_tup, ind, val):\n"
-    func_text += "  return {}\n".format(
-        ", ".join(
-            "0 if bodo.libs.array_kernels.isna(arr_tup[{0}], ind) else val[{0}]".format(
-                i
-            )
-            for i in range(count)
-        )
-    )
-
-    loc_vars = {}
-    exec(func_text, {"bodo": bodo}, loc_vars)
-    impl = loc_vars["f"]
-    return impl
-
-
-def setitem_arr_tup_na_match(arr_tup1, arr_tup2, ind):  # pragma: no cover
-    pass
-
-
-@overload(setitem_arr_tup_na_match, no_unliteral=True)
-def setitem_arr_tup_na_match_overload(arr_tup1, arr_tup2, ind):
-    """set NA in arr_tup1[ind] if arr_tup2[2] is NA"""
-
-    count = arr_tup1.count
-    func_text = "def f(arr_tup1, arr_tup2, ind):\n"
-    for i in range(count):
-        func_text += "  if bodo.libs.array_kernels.isna(arr_tup2[{}], ind):\n".format(i)
-        func_text += "    setna(arr_tup1[{}], ind)\n".format(i)
-
-    loc_vars = {}
-    exec(func_text, {"bodo": bodo, "setna": bodo.libs.array_kernels.setna}, loc_vars)
     impl = loc_vars["f"]
     return impl
 

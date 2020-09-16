@@ -105,7 +105,7 @@ def test_df_int_no_null(request):
 
 
 @pytest.mark.slow
-def test_nullable_int():
+def test_nullable_int(memory_leak_check):
     def impl(df):
         A = df.groupby("A").sum()
         return A
@@ -177,6 +177,7 @@ def test_nullable_int():
         ),
     ],
 )
+# TODO: add memory leak check when cumsum leak issue resolved
 def test_return_type_nullable_cumsum_cumprod(df_null):
     """
     Test Groupby when one row is a nullable-int-bool.
@@ -202,7 +203,7 @@ def test_return_type_nullable_cumsum_cumprod(df_null):
     check_func(impl2, (df_null,), sort_output=True, check_dtype=False)
 
 
-def test_all_null_keys():
+def test_all_null_keys(memory_leak_check):
     """
     Test Groupby when all rows have null keys (returns empty dataframe)
     We use reset_index=True since the index is empty and so we have a type problem otherwise
@@ -228,7 +229,7 @@ udf_in_df = pd.DataFrame(
 )
 
 
-def test_agg():
+def test_agg(memory_leak_check):
     """
     Test Groupby.agg(): one user defined func and all cols
     """
@@ -242,7 +243,7 @@ def test_agg():
 
 
 @pytest.mark.slow
-def test_sum_string():
+def test_sum_string(memory_leak_check):
     def impl(df):
         A = df.groupby("A").sum()
         return A
@@ -256,8 +257,9 @@ def test_sum_string():
     check_func(impl, (df1,), sort_output=True)
 
 
-def test_random_decimal_sum_min_max_last(is_slow_run):
-    """We do not have decimal as index. Therefore we have to use as_index=False"""
+def test_random_decimal_sum_min_max_last(is_slow_run, memory_leak_check):
+    """We do not have decimal as index. Therefore we have to use as_index=False
+    """
 
     def impl1(df):
         df_ret = df.groupby("A", as_index=False).nunique()
@@ -351,7 +353,7 @@ def test_random_decimal_sum_min_max_last(is_slow_run):
     )
 
 
-def test_random_string_sum_min_max_first_last():
+def test_random_string_sum_min_max_first_last(memory_leak_check):
     def impl1(df):
         A = df.groupby("A").sum()
         return A
@@ -392,7 +394,7 @@ def test_random_string_sum_min_max_first_last():
     check_func(impl5, (df1,), sort_output=True)
 
 
-def test_groupby_missing_entry(is_slow_run):
+def test_groupby_missing_entry(is_slow_run, memory_leak_check):
     """The columns which cannot be processed cause special problems as they are
     sometimes dropped instead of failing
     """
@@ -426,7 +428,7 @@ def test_groupby_missing_entry(is_slow_run):
     check_func(test_drop_count, (df3,), sort_output=True, check_typing_issues=False)
 
 
-def test_agg_str_key():
+def test_agg_str_key(memory_leak_check):
     """
     Test Groupby.agg() with string keys
     """
@@ -444,7 +446,7 @@ def test_agg_str_key():
     check_func(impl, (df,), sort_output=True)
 
 
-def test_agg_series_input():
+def test_agg_series_input(memory_leak_check):
     """
     Test Groupby.agg(): make sure input to UDF is a Series, not Array
     """
@@ -458,7 +460,7 @@ def test_agg_series_input():
     check_func(impl, (udf_in_df,), sort_output=True, check_dtype=False)
 
 
-def test_agg_bool_expr():
+def test_agg_bool_expr(memory_leak_check):
     """
     Test Groupby.agg(): make sure boolean expressions work (#326)
     """
@@ -505,6 +507,7 @@ def test_agg_bool_expr():
         ),
     ],
 )
+# TODO: add memory leak check when cumsum leak issue resolved
 def test_cumsum_index_preservation(df_index):
     """For the cumsum operation, the number of rows remains the same and the index is preserved.
     ---
@@ -536,6 +539,7 @@ def test_cumsum_index_preservation(df_index):
 #    check_func(test_impl_all, (df_index,), sort_output=True, check_dtype=False)
 
 
+# TODO: add memory leak check when cumsum leak issue resolved
 @pytest.mark.slow
 def test_cumsum_random_index():
     def test_impl(df1):
@@ -590,6 +594,7 @@ def test_cumsum_random_index():
     check_func(test_impl, (df3,), sort_output=True, check_dtype=False)
 
 
+# TODO: add memory leak check when cumsum leak issue resolved
 @pytest.mark.slow
 def test_cumsum_reverse_shuffle_list_string():
     """We want to use here the classical scheme of the groupby for cumsum.
@@ -610,6 +615,7 @@ def test_cumsum_reverse_shuffle_list_string():
     check_func(f, (df,), convert_columns_to_pandas=True, py_output=df_out)
 
 
+# TODO: add memory leak check when cumsum leak issue resolved
 @pytest.mark.slow
 def test_cumsum_reverse_shuffle_string():
     """We want to use here the classical scheme of the groupby for cumsum.
@@ -633,6 +639,7 @@ def test_cumsum_reverse_shuffle_string():
     check_func(f, (df,), py_output=df_out)
 
 
+# TODO: add memory leak check when cumsum leak issue resolved
 @pytest.mark.slow
 def test_cumsum_reverse_shuffle_large_numpy():
     """We want to use here the classical scheme of the groupby for cumsum.
@@ -651,6 +658,7 @@ def test_cumsum_reverse_shuffle_large_numpy():
     check_func(f, (df,))
 
 
+# TODO: add memory leak check
 def test_sum_categorical_key():
     """Testing of categorical keys and their missing value"""
 
@@ -676,6 +684,7 @@ def test_sum_categorical_key():
     check_func(f, (df,), sort_output=True, reset_index=True)
 
 
+# TODO: add memory leak check when issues addressed
 @pytest.mark.slow
 def test_all_categorical_count():
     """Testing of categorical keys and their missing value.
@@ -703,6 +712,7 @@ def test_all_categorical_count():
     check_func(f, (df,), sort_output=True, reset_index=True)
 
 
+# TODO: add memory leak check when cumsum leak issue resolved
 def test_cumsum_exscan_categorical_random():
     """For categorical and cumsum, a special code path allows for better performance"""
 
@@ -763,6 +773,7 @@ def test_cumsum_exscan_categorical_random():
     check_func(f2, (df2,), check_dtype=False)
 
 
+# TODO: add memory leak check when cumsum leak issue resolved
 @pytest.mark.slow
 def test_cumsum_exscan_multikey_random():
     """For cumulative sum of integers, a special code that create a categorical key column
@@ -806,7 +817,7 @@ def test_cumsum_exscan_multikey_random():
 
 
 @pytest.mark.slow
-def test_sum_max_min_list_string_random():
+def test_sum_max_min_list_string_random(memory_leak_check):
     """Tests for columns being a list of strings.
     We have to use as_index=False since list of strings are mutable
     and index are immutable so cannot be an index"""
@@ -931,7 +942,7 @@ def test_sum_max_min_list_string_random():
     check_fct(test_impl8, df1, ["B"])
 
 
-def test_groupby_datetime_miss():
+def test_groupby_datetime_miss(memory_leak_check):
     """Testing the groupby with columns having datetime with missing entries
     TODO: need to support the cummin/cummax cases after pandas is corrected"""
 
@@ -990,7 +1001,7 @@ def test_groupby_datetime_miss():
     check_func(test_impl4, (df1,), sort_output=True)
 
 
-def test_agg_as_index_fast():
+def test_agg_as_index_fast(memory_leak_check):
     """
     Test Groupby.agg() on groupby() as_index=False
     for both dataframe and series returns
@@ -1012,7 +1023,7 @@ def test_agg_as_index_fast():
 
 
 @pytest.mark.slow
-def test_agg_as_index():
+def test_agg_as_index(memory_leak_check):
     """
     Test Groupby.agg() on groupby() as_index=False
     for both dataframe and series returns
@@ -1063,7 +1074,7 @@ def test_agg_as_index():
     pd.testing.assert_frame_equal(pandas_df, bodo_df)
 
 
-def test_agg_select_col_fast():
+def test_agg_select_col_fast(memory_leak_check):
     """
     Test Groupby.agg() with explicitly select one (str)column
     """
@@ -1080,7 +1091,7 @@ def test_agg_select_col_fast():
 
 
 @pytest.mark.slow
-def test_agg_select_col():
+def test_agg_select_col(memory_leak_check):
     """
     Test Groupby.agg() with explicitly select one column
     """
@@ -1106,7 +1117,7 @@ def test_agg_select_col():
     check_func(test_impl, (11,), sort_output=True, check_dtype=False)
 
 
-def test_agg_no_parfor():
+def test_agg_no_parfor(memory_leak_check):
     """
     Test Groupby.agg(): simple UDF with no parfor
     """
@@ -1123,7 +1134,7 @@ def test_agg_no_parfor():
     check_func(impl2, (udf_in_df,), sort_output=True, check_dtype=False)
 
 
-def test_agg_len_mix():
+def test_agg_len_mix(memory_leak_check):
     """
     Test Groupby.agg(): use of len() in a UDF mixed with another parfor
     """
@@ -1135,7 +1146,7 @@ def test_agg_len_mix():
     check_func(impl, (udf_in_df,), sort_output=True, check_dtype=False)
 
 
-def test_agg_multi_udf():
+def test_agg_multi_udf(memory_leak_check):
     """
     Test Groupby.agg() multiple user defined functions
     ---
@@ -1187,7 +1198,7 @@ def test_agg_multi_udf():
 
 
 @pytest.mark.slow
-def test_aggregate():
+def test_aggregate(memory_leak_check):
     """
     Test Groupby.aggregate(): one user defined func and all cols
     """
@@ -1208,7 +1219,7 @@ def test_aggregate():
 
 
 @pytest.mark.slow
-def test_aggregate_as_index():
+def test_aggregate_as_index(memory_leak_check):
     """
     Test Groupby.aggregate() on groupby() as_index=False
     for both dataframe and series returns
@@ -1229,7 +1240,7 @@ def test_aggregate_as_index():
     check_func(impl1, (df,), sort_output=True, check_dtype=False, reset_index=True)
 
 
-def test_aggregate_select_col(is_slow_run):
+def test_aggregate_select_col(is_slow_run, memory_leak_check):
     """
     Test Groupby.aggregate() with explicitly select one column
     """
@@ -1262,6 +1273,7 @@ def test_aggregate_select_col(is_slow_run):
     check_func(test_impl, (11,), sort_output=True, check_dtype=False)
 
 
+# TODO: add memory leak check when cumsum leak issue resolved
 def test_groupby_agg_const_dict():
     """
     Test groupy.agg with function spec passed as constant dictionary
@@ -1386,9 +1398,9 @@ def test_groupby_agg_const_dict():
     check_func(impl17, (df,), sort_output=True, dist_test=False)
 
 
-def test_groupby_agg_caching():
-    """Test compiling function that uses groupby.agg(udf) with cache=True
-    and loading from cache"""
+def test_groupby_agg_caching(memory_leak_check):
+    """ Test compiling function that uses groupby.agg(udf) with cache=True
+        and loading from cache """
 
     def impl(df):
         A = df.groupby("A").agg(lambda x: x.max() - x.min())
@@ -1408,7 +1420,7 @@ def g(x):
 
 
 @pytest.mark.slow
-def test_agg_global_func():
+def test_agg_global_func(memory_leak_check):
     """
     Test Groupby.agg() with a global function as UDF
     """
@@ -1424,7 +1436,7 @@ def test_agg_global_func():
     check_func(impl_str, (df_str,), sort_output=True)
 
 
-def test_count():
+def test_count(memory_leak_check):
     """
     Test Groupby.count()
     """
@@ -1470,7 +1482,7 @@ def test_count():
 
 
 @pytest.mark.slow
-def test_count_select_col():
+def test_count_select_col(memory_leak_check):
     """
     Test Groupby.count() with explicitly select one column
     TODO: after groupby.count() properly ignores nulls, adds np.nan to df_str
@@ -1530,7 +1542,7 @@ def test_count_select_col():
         ),
     ],
 )
-def test_median_simple(df_med):
+def test_median_simple(df_med, memory_leak_check):
     """
     Test Groupby.median() with a single entry.
     """
@@ -1543,7 +1555,7 @@ def test_median_simple(df_med):
 
 
 @pytest.mark.slow
-def test_median_large_random_numpy():
+def test_median_large_random_numpy(memory_leak_check):
     """
     Test Groupby.median() with a large random numpy vector
     """
@@ -1568,7 +1580,7 @@ def test_median_large_random_numpy():
 
 
 @pytest.mark.slow
-def test_median_nullable_int_bool():
+def test_median_nullable_int_bool(memory_leak_check):
     """
     Test Groupby.median() with a large random sets of nullable_int_bool
     """
@@ -1597,7 +1609,7 @@ def test_median_nullable_int_bool():
         ),
     ],
 )
-def test_nunique_select_col(df_uniq):
+def test_nunique_select_col(df_uniq, memory_leak_check):
     """
     Test Groupby.nunique() with explicitly selected one column. Boolean are broken in pandas so the
     test is removed.
@@ -1621,7 +1633,7 @@ def test_nunique_select_col(df_uniq):
     check_func(impl3, (df_uniq,), sort_output=True)
 
 
-def test_nunique_select_col_missing_keys():
+def test_nunique_select_col_missing_keys(memory_leak_check):
     """
     Test Groupby.nunique() with explicitly select one column. Some keys are missing
     for this test
@@ -1644,7 +1656,7 @@ def test_nunique_select_col_missing_keys():
     check_func(impl1, (df_str,), sort_output=True)
 
 
-def test_filtered_count():
+def test_filtered_count(memory_leak_check):
     """
     Test Groupby.count() with filtered dataframe
     """
@@ -1669,7 +1681,7 @@ def test_filtered_count():
     pd.testing.assert_frame_equal(res[1], h_res[1])
 
 
-def test_as_index_count():
+def test_as_index_count(memory_leak_check):
     """
     Test Groupby.count() on groupby() as_index=False
     for both dataframe and series returns
@@ -1694,8 +1706,9 @@ def test_as_index_count():
     check_func(impl2, (df,), sort_output=True, reset_index=True)
 
 
-def test_single_col_reset_index(test_df):
-    """We need the reset_index=True because otherwise the order is scrambled"""
+def test_single_col_reset_index(test_df, memory_leak_check):
+    """We need the reset_index=True because otherwise the order is scrambled
+    """
 
     def impl1(df):
         A = df.groupby("A")["B"].sum().reset_index()
@@ -1705,7 +1718,7 @@ def test_single_col_reset_index(test_df):
 
 
 @pytest.mark.slow
-def test_nonvar_column_names():
+def test_nonvar_column_names(memory_leak_check):
     """Test column names that cannot be variable names to make sure groupby code
     generation sanitizes variable names properly.
     """
@@ -1724,6 +1737,7 @@ def test_nonvar_column_names():
     check_func(impl1, (df,), sort_output=True)
 
 
+# TODO: add memory leak check when cumsum leak issue resolved
 @pytest.mark.slow
 def test_cumsum_large_random_numpy():
     def get_random_array(n, sizlen):
@@ -1758,6 +1772,7 @@ def test_cumsum_large_random_numpy():
     check_func(impl3, (df1,), sort_output=True)
 
 
+# TODO: add memory leak check when cumsum leak issue resolved
 @pytest.mark.slow
 def test_cummin_cummax_large_random_numpy():
     """A bunch of tests related to cummin/cummax functions.
@@ -1826,6 +1841,7 @@ def test_cummin_cummax_large_random_numpy():
     check_func(impl8, (df1,), sort_output=True, reset_index=True)
 
 
+# TODO: add memory leak check when cumsum leak issue resolved
 def test_groupby_cumsum_simple():
     """
     Test Groupby.cumsum(): a simple case
@@ -1841,6 +1857,7 @@ def test_groupby_cumsum_simple():
     check_func(impl, (df1,), sort_output=True)
 
 
+# TODO: add memory leak check when cumsum leak issue resolved
 def test_groupby_cumprod_simple():
     """
     Test Groupby.cumprod(): a simple case
@@ -1856,6 +1873,7 @@ def test_groupby_cumprod_simple():
     check_func(impl, (df1,), sort_output=True)
 
 
+# TODO: add memory leak check when cumsum leak issue resolved
 @pytest.mark.slow
 def test_groupby_cumsum():
     """
@@ -1902,6 +1920,7 @@ def test_groupby_cumsum():
     check_func(impl2, (df3,), sort_output=True)
 
 
+# TODO: add memory leak check when cumsum leak issue resolved
 @pytest.mark.slow
 def test_groupby_multi_intlabels_cumsum_int():
     """
@@ -1924,6 +1943,7 @@ def test_groupby_multi_intlabels_cumsum_int():
     check_func(impl, (df,), sort_output=True)
 
 
+# TODO: add memory leak check when cumsum leak issue resolved
 @pytest.mark.slow
 def test_groupby_multi_labels_cumsum_multi_cols():
     """
@@ -1947,6 +1967,7 @@ def test_groupby_multi_labels_cumsum_multi_cols():
     check_func(impl, (df,), sort_output=True)
 
 
+# TODO: add memory leak check when cumsum leak issue resolved
 @pytest.mark.slow
 def test_groupby_as_index_cumsum():
     """
@@ -1977,6 +1998,7 @@ def test_groupby_as_index_cumsum():
     check_func(impl2, (df,), sort_output=True)
 
 
+# TODO: add memory leak check when cumsum leak issue resolved
 @pytest.mark.slow
 def test_cumsum_all_nulls_col():
     """
@@ -2001,7 +2023,7 @@ def test_cumsum_all_nulls_col():
     check_func(impl, (df,), sort_output=True)
 
 
-def test_max(test_df):
+def test_max(test_df, memory_leak_check):
     """
     Test Groupby.max()
     """
@@ -2029,7 +2051,7 @@ def test_max(test_df):
 
 
 @pytest.mark.slow
-def test_max_one_col(test_df):
+def test_max_one_col(test_df, memory_leak_check):
     """
     Test Groupby.max() with one column selected
     """
@@ -2063,7 +2085,7 @@ def test_max_one_col(test_df):
 
 
 @pytest.mark.slow
-def test_groupby_as_index_max():
+def test_groupby_as_index_max(memory_leak_check):
     """
     Test max on groupby() as_index=False
     for both dataframe and series returns
@@ -2083,7 +2105,7 @@ def test_groupby_as_index_max():
     check_func(impl2, (11,), sort_output=True, reset_index=True)
 
 
-def test_max_date():
+def test_max_date(memory_leak_check):
     """
     Test Groupby.max() on datetime and datetime.date column
     for both dataframe and series returns
@@ -2120,7 +2142,7 @@ def test_max_date():
     check_func(impl2, (df2,), sort_output=True, reset_index=True)
 
 
-def test_mean(test_df):
+def test_mean(test_df, memory_leak_check):
     """
     Test Groupby.mean()
     """
@@ -2139,7 +2161,7 @@ def test_mean(test_df):
 
 
 @pytest.mark.slow
-def test_mean_one_col(test_df):
+def test_mean_one_col(test_df, memory_leak_check):
     """
     Test Groupby.mean() with one column selected
     """
@@ -2158,7 +2180,7 @@ def test_mean_one_col(test_df):
 
 
 @pytest.mark.slow
-def test_groupby_as_index_mean():
+def test_groupby_as_index_mean(memory_leak_check):
     """
     Test mean on groupby() as_index=False
     for both dataframe and series returns
@@ -2178,7 +2200,7 @@ def test_groupby_as_index_mean():
     check_func(impl2, (11,), sort_output=True, check_dtype=False, reset_index=True)
 
 
-def test_min(test_df):
+def test_min(test_df, memory_leak_check):
     """
     Test Groupby.min()
     """
@@ -2206,7 +2228,7 @@ def test_min(test_df):
 
 
 @pytest.mark.slow
-def test_min_one_col(test_df):
+def test_min_one_col(test_df, memory_leak_check):
     """
     Test Groupby.min() with one column selected
     """
@@ -2238,7 +2260,7 @@ def test_min_one_col(test_df):
 
 
 @pytest.mark.slow
-def test_groupby_as_index_min():
+def test_groupby_as_index_min(memory_leak_check):
     """
     Test min on groupby() as_index=False
     for both dataframe and series returns
@@ -2258,7 +2280,7 @@ def test_groupby_as_index_min():
     check_func(impl2, (11,), sort_output=True, reset_index=True)
 
 
-def test_min_datetime():
+def test_min_datetime(memory_leak_check):
     """
     Test Groupby.min() on datetime column
     for both dataframe and series returns
@@ -2279,7 +2301,7 @@ def test_min_datetime():
     check_func(impl2, (df,), sort_output=True, reset_index=True)
 
 
-def test_prod(test_df):
+def test_prod(test_df, memory_leak_check):
     """
     Test Groupby.prod()
     """
@@ -2310,7 +2332,7 @@ def test_prod(test_df):
 
 
 @pytest.mark.slow
-def test_prod_one_col(test_df):
+def test_prod_one_col(test_df, memory_leak_check):
     """
     Test Groupby.prod() with one column selected
     """
@@ -2342,7 +2364,7 @@ def test_prod_one_col(test_df):
 
 
 @pytest.mark.slow
-def test_groupby_as_index_prod():
+def test_groupby_as_index_prod(memory_leak_check):
     """
     Test prod on groupby() as_index=False
     for both dataframe and series returns
@@ -2362,7 +2384,7 @@ def test_groupby_as_index_prod():
     check_func(impl2, (11,), sort_output=True, reset_index=True)
 
 
-def test_first_last(test_df):
+def test_first_last(test_df, memory_leak_check):
     """
     Test Groupby.first() and Groupby.last()
     """
@@ -2415,7 +2437,7 @@ def test_first_last(test_df):
 
 
 @pytest.mark.slow
-def test_first_last_one_col(test_df):
+def test_first_last_one_col(test_df, memory_leak_check):
     """
     Test Groupby.first() and Groupby.last() with one column selected
     """
@@ -2473,7 +2495,7 @@ def test_first_last_one_col(test_df):
 
 
 @pytest.mark.slow
-def test_groupby_as_index_first_last():
+def test_groupby_as_index_first_last(memory_leak_check):
     """
     Test first and last on groupby() as_index=False
     for both dataframe and series returns
@@ -2505,7 +2527,7 @@ def test_groupby_as_index_first_last():
     check_func(impl4, (11,), sort_output=True, reset_index=True)
 
 
-def test_std(test_df_int_no_null):
+def test_std(test_df_int_no_null, memory_leak_check):
     """
     Test Groupby.std()
     """
@@ -2532,7 +2554,7 @@ def test_std(test_df_int_no_null):
 
 
 @pytest.mark.slow
-def test_std_one_col(test_df):
+def test_std_one_col(test_df, memory_leak_check):
     """
     Test Groupby.std() with one column selected
     ---
@@ -2559,7 +2581,7 @@ def test_std_one_col(test_df):
 
 
 @pytest.mark.slow
-def test_groupby_as_index_std():
+def test_groupby_as_index_std(memory_leak_check):
     """
     Test std on groupby() as_index=False
     for both dataframe and series returns
@@ -2579,7 +2601,7 @@ def test_groupby_as_index_std():
     check_func(impl2, (11,), sort_output=True, check_dtype=False, reset_index=True)
 
 
-def test_sum(test_df):
+def test_sum(test_df, memory_leak_check):
     """
     Test Groupby.sum()
     """
@@ -2598,7 +2620,7 @@ def test_sum(test_df):
 
 
 @pytest.mark.slow
-def test_sum_one_col(test_df):
+def test_sum_one_col(test_df, memory_leak_check):
     """
     Test Groupby.sum() with one column selected
     """
@@ -2616,7 +2638,7 @@ def test_sum_one_col(test_df):
     check_func(impl2, (11,), sort_output=True)
 
 
-def test_select_col_attr():
+def test_select_col_attr(memory_leak_check):
     """
     Test Groupby with column selected using getattr instead of getitem
     """
@@ -2636,7 +2658,7 @@ def test_select_col_attr():
 
 
 @pytest.mark.slow
-def test_groupby_as_index_sum():
+def test_groupby_as_index_sum(memory_leak_check):
     """
     Test sum on groupby() as_index=False
     for both dataframe and series returns
@@ -2656,6 +2678,7 @@ def test_groupby_as_index_sum():
     check_func(impl2, (11,), sort_output=True, reset_index=True)
 
 
+# TODO: add memory leak check when issues addressed
 @pytest.mark.slow
 def test_groupby_multi_intlabels_sum():
     """
@@ -2677,6 +2700,7 @@ def test_groupby_multi_intlabels_sum():
     check_func(impl, (df,), sort_output=True)
 
 
+# TODO: add memory leak check when issues addressed
 def test_groupby_multi_key_to_index():
     """
     Make sure df.groupby() with multiple keys creates a MultiIndex index in output
@@ -2702,7 +2726,7 @@ def test_groupby_multi_key_to_index():
     )
 
 
-def test_groupby_multi_strlabels():
+def test_groupby_multi_strlabels(memory_leak_check):
     """
     Test df.groupby() multiple labels of string columns
     with as_index=False, and Groupy.sum() on integer column
@@ -2723,7 +2747,7 @@ def test_groupby_multi_strlabels():
 
 
 @pytest.mark.slow
-def test_groupby_multiselect_sum():
+def test_groupby_multiselect_sum(memory_leak_check):
     """
     Test groupy.sum() on explicitly selected columns using a tuple and using a constant
     list (#198)
@@ -2749,7 +2773,7 @@ def test_groupby_multiselect_sum():
 
 
 @pytest.mark.slow
-def test_agg_multikey_parallel():
+def test_agg_multikey_parallel(memory_leak_check):
     """
     Test groupby multikey with distributed df
     """
@@ -2772,7 +2796,7 @@ def test_agg_multikey_parallel():
     assert h_res == p_res
 
 
-def test_var(test_df):
+def test_var(test_df, memory_leak_check):
     """
     Test Groupby.var()
     """
@@ -2791,7 +2815,7 @@ def test_var(test_df):
 
 
 @pytest.mark.slow
-def test_var_one_col(test_df):
+def test_var_one_col(test_df, memory_leak_check):
     """
     Test Groupby.var() with one column selected
     """
@@ -2809,7 +2833,7 @@ def test_var_one_col(test_df):
     check_func(impl2, (11,), sort_output=True, check_dtype=False)
 
 
-def test_idxmin_idxmax():
+def test_idxmin_idxmax(memory_leak_check):
     """
     Test Groupby.idxmin() and Groupby.idxmax()
     """
@@ -2872,7 +2896,7 @@ def test_idxmin_idxmax():
 
 
 @pytest.mark.slow
-def test_groupby_as_index_var():
+def test_groupby_as_index_var(memory_leak_check):
     """
     Test var on groupby() as_index=False
     for both dataframe and series returns
@@ -2892,6 +2916,7 @@ def test_groupby_as_index_var():
     check_func(impl2, (11,), sort_output=True, check_dtype=False, reset_index=True)
 
 
+# TODO: add memory leak check when issues addressed
 def test_const_list_inference():
     """
     Test passing non-const list that can be inferred as constant to groupby()
@@ -2938,6 +2963,7 @@ def test_const_list_inference():
 g_keys = ["A", "B"]
 
 
+# TODO: add memory leak check when issues addressed
 def test_global_list():
     """
     Test passing a global list to groupby()
@@ -2966,6 +2992,7 @@ def test_global_list():
     check_func(impl2, (df,), sort_output=True)
 
 
+# TODO: add memory leak check when issues addressed
 def test_literal_args():
     """
     Test forcing groupby() key list and as_index to be literals if jit arguments
@@ -2997,7 +3024,7 @@ def test_literal_args():
     check_func(impl3, (df, ["A"], True), sort_output=True)
 
 
-def test_schema_change():
+def test_schema_change(memory_leak_check):
     """
     Test df schema change for groupby() to make sure errors are not thrown
     """
@@ -3058,7 +3085,7 @@ _pivot_df1 = pd.DataFrame(
 )
 
 
-def test_pivot():
+def test_pivot(memory_leak_check):
     def test_impl(df):
         pt = df.pivot_table(index="A", columns="C", values="D", aggfunc="sum")
         return (pt.small.values, pt.large.values)
@@ -3089,7 +3116,7 @@ def test_pivot_parallel(datapath):
     assert bodo_func() == impl()
 
 
-def test_crosstab():
+def test_crosstab(memory_leak_check):
     def test_impl(df):
         pt = pd.crosstab(df.A, df.C)
         return (pt.small.values, pt.large.values)

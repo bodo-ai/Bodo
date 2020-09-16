@@ -1,51 +1,34 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 """Tools for handling bodo arrays, e.g. passing to C/C++ code
 """
-import numba
-from numba.core import types, cgutils
 from collections import namedtuple
-from numba.extending import (
-    typeof_impl,
-    type_callable,
-    models,
-    register_model,
-    NativeValue,
-    make_attribute_wrapper,
-    lower_builtin,
-    box,
-    unbox,
-    lower_getattr,
-    intrinsic,
-    overload_method,
-    overload,
-    overload_attribute,
-)
-from bodo.libs.str_arr_ext import string_array_type, _get_string_arr_payload
-from bodo.libs.array_item_arr_ext import (
-    ArrayItemArrayType,
-    _get_array_item_arr_payload,
-    offset_typ,
-    ArrayItemArrayPayloadType,
-    define_array_item_dtor,
-)
-from bodo.libs.struct_arr_ext import (
-    StructArrayType,
-    StructType,
-    _get_struct_arr_payload,
-    StructArrayPayloadType,
-    define_struct_arr_dtor,
-)
-from bodo.utils.utils import numba_to_c_type, CTypeEnum
-from bodo.libs.int_arr_ext import IntegerArrayType
-from bodo.libs.decimal_arr_ext import DecimalArrayType, int128_type
-from bodo.hiframes.pd_categorical_ext import CategoricalArray, get_categories_int_type
-from bodo.libs.bool_arr_ext import boolean_array
-from bodo.hiframes.datetime_date_ext import datetime_date_array_type
-from bodo.utils.transform import get_type_alloc_counts
 
-from bodo.libs import array_ext
-from llvmlite import ir as lir
 import llvmlite.binding as ll
+import numba
+from llvmlite import ir as lir
+from numba.core import cgutils, types
+from numba.extending import (NativeValue, box, intrinsic, lower_builtin,
+                             lower_getattr, make_attribute_wrapper, models,
+                             overload, overload_attribute, overload_method,
+                             register_model, type_callable, typeof_impl, unbox)
+
+from bodo.hiframes.datetime_date_ext import datetime_date_array_type
+from bodo.hiframes.pd_categorical_ext import (CategoricalArray,
+                                              get_categories_int_type)
+from bodo.libs import array_ext
+from bodo.libs.array_item_arr_ext import (ArrayItemArrayPayloadType,
+                                          ArrayItemArrayType,
+                                          _get_array_item_arr_payload,
+                                          define_array_item_dtor, offset_typ)
+from bodo.libs.bool_arr_ext import boolean_array
+from bodo.libs.decimal_arr_ext import DecimalArrayType, int128_type
+from bodo.libs.int_arr_ext import IntegerArrayType
+from bodo.libs.str_arr_ext import _get_string_arr_payload, string_array_type
+from bodo.libs.struct_arr_ext import (StructArrayPayloadType, StructArrayType,
+                                      StructType, _get_struct_arr_payload,
+                                      define_struct_arr_dtor)
+from bodo.utils.transform import get_type_alloc_counts
+from bodo.utils.utils import CTypeEnum, numba_to_c_type
 
 ll.add_symbol("list_string_array_to_info", array_ext.list_string_array_to_info)
 ll.add_symbol("nested_array_to_info", array_ext.nested_array_to_info)
@@ -64,7 +47,7 @@ ll.add_symbol("alloc_string_array", array_ext.alloc_string_array)
 ll.add_symbol("arr_info_list_to_table", array_ext.arr_info_list_to_table)
 ll.add_symbol("info_from_table", array_ext.info_from_table)
 ll.add_symbol("delete_info_decref_array", array_ext.delete_info_decref_array)
-ll.add_symbol("delete_table_free_arrays", array_ext.delete_table_free_arrays)
+ll.add_symbol("delete_table_decref_arrays", array_ext.delete_table_decref_arrays)
 ll.add_symbol("delete_table", array_ext.delete_table)
 ll.add_symbol("get_stats_alloc", array_ext.get_stats_alloc)
 ll.add_symbol("get_stats_free", array_ext.get_stats_free)
@@ -102,7 +85,7 @@ register_model(TableType)(models.OpaqueModel)
 
 
 @intrinsic
-def array_to_info(typingctx, arr_type_t):
+def array_to_info(typingctx, arr_type_t=None):
     def codegen(context, builder, sig, args):
         (in_arr,) = args
         arr_type = arr_type_t
@@ -116,18 +99,26 @@ def array_to_info(typingctx, arr_type_t):
             # map ArrayItemArrayType(StringArrayType()) to array_info of type LIST_STRING
             array_item_array = context.make_helper(builder, arr_type, in_arr)
             fnty = lir.FunctionType(
-                lir.IntType(8).as_pointer(), [lir.IntType(8).as_pointer(),],
+                lir.IntType(8).as_pointer(),
+                [
+                    lir.IntType(8).as_pointer(),
+                ],
             )
             fn_tp = builder.module.get_or_insert_function(
                 fnty, name="list_string_array_to_info"
             )
-            return builder.call(fn_tp, [array_item_array.meminfo,],)
+            return builder.call(
+                fn_tp,
+                [
+                    array_item_array.meminfo,
+                ],
+            )
 
         if isinstance(arr_type, (ArrayItemArrayType, StructArrayType)):
 
             def get_types(arr_typ):
-                """ Get list of all types (in Bodo_CTypes enum format) in the
-                    nested structure rooted at arr_typ """
+                """Get list of all types (in Bodo_CTypes enum format) in the
+                nested structure rooted at arr_typ"""
                 if isinstance(arr_typ, ArrayItemArrayType):
                     return [CTypeEnum.LIST.value] + get_types(arr_typ.dtype)
                 # TODO: add Categorical, String
@@ -242,11 +233,15 @@ def array_to_info(typingctx, arr_type_t):
                         null_bitmap_arr.data, lir.IntType(8).as_pointer()
                     )
                     buffers = cgutils.pack_array(
-                        builder, [null_bitmap_ptr] + buffs_data,
+                        builder,
+                        [null_bitmap_ptr] + buffs_data,
                     )
                 elif isinstance(
                     arr_typ, (IntegerArrayType, DecimalArrayType)
-                ) or arr_typ in (boolean_array, datetime_date_array_type,):
+                ) or arr_typ in (
+                    boolean_array,
+                    datetime_date_array_type,
+                ):
                     np_dtype = arr_typ.dtype
                     if isinstance(arr_typ, DecimalArrayType):
                         np_dtype = int128_type
@@ -581,12 +576,14 @@ def _lower_info_to_array_numpy(arr_type, context, builder, in_info):
     intp_t = context.get_value_type(types.intp)
     shape_array = cgutils.pack_array(builder, [builder.load(length_ptr)], ty=intp_t)
     itemsize = context.get_constant(
-        types.intp, context.get_abi_sizeof(context.get_data_type(arr_type.dtype)),
+        types.intp,
+        context.get_abi_sizeof(context.get_data_type(arr_type.dtype)),
     )
     strides_array = cgutils.pack_array(builder, [itemsize], ty=intp_t)
 
     data = builder.bitcast(
-        builder.load(data_ptr), context.get_data_type(arr_type.dtype).as_pointer(),
+        builder.load(data_ptr),
+        context.get_data_type(arr_type.dtype).as_pointer(),
     )
 
     numba.np.arrayobj.populate_array(
@@ -656,7 +653,10 @@ def nested_to_array(
             builder.extract_value(infos, infos_offset), ll_array_info_type
         )
         payload.offsets = _lower_info_to_array_numpy(
-            types.Array(types.uint32, 1, "C"), context, builder, offsets_info_ptr,
+            types.Array(types.uint32, 1, "C"),
+            context,
+            builder,
+            offsets_info_ptr,
         )
 
         # nulls array from array_info
@@ -752,7 +752,11 @@ def nested_to_array(
         )
         fn_tp = builder.module.get_or_insert_function(fnty, name="info_to_string_array")
         builder.call(
-            fn_tp, [info_ptr, string_array._get_ptr_by_name("meminfo"),],
+            fn_tp,
+            [
+                info_ptr,
+                string_array._get_ptr_by_name("meminfo"),
+            ],
         )
         return string_array._getvalue(), lengths_pos + 1, infos_pos + 2
 
@@ -767,7 +771,12 @@ def nested_to_array(
             builder.extract_value(infos, infos_pos + 1), ll_array_info_type
         )
         return (
-            _lower_info_to_array_numpy(arr_typ, context, builder, data_info_ptr,),
+            _lower_info_to_array_numpy(
+                arr_typ,
+                context,
+                builder,
+                data_info_ptr,
+            ),
             lengths_pos + 1,
             infos_pos + 2,
         )
@@ -799,7 +808,10 @@ def nested_to_array(
             builder.extract_value(infos, infos_pos + 1), ll_array_info_type
         )
         arr.data = _lower_info_to_array_numpy(
-            types.Array(np_dtype, 1, "C"), context, builder, data_info_ptr,
+            types.Array(np_dtype, 1, "C"),
+            context,
+            builder,
+            data_info_ptr,
         )
 
         return arr._getvalue(), lengths_pos + 1, infos_pos + 2
@@ -835,7 +847,10 @@ def info_to_array(typingctx, info_type, array_type):
             )
             builder.call(
                 fn_tp,
-                [in_info, array_item_array_from_cpp._get_ptr_by_name("meminfo"),],
+                [
+                    in_info,
+                    array_item_array_from_cpp._get_ptr_by_name("meminfo"),
+                ],
             )
 
             payload = _get_array_item_arr_payload(
@@ -884,8 +899,8 @@ def info_to_array(typingctx, info_type, array_type):
                     return 1
 
             def get_num_infos(arr_typ):
-                """ get number of array_infos that need to be returned from
-                    C++ to reconstruct this array """
+                """get number of array_infos that need to be returned from
+                C++ to reconstruct this array"""
                 if isinstance(arr_typ, ArrayItemArrayType):
                     # 1 buffer for offsets, 1 buffer for nulls + children buffer count
                     return 2 + get_num_infos(arr_typ.dtype)
@@ -964,7 +979,11 @@ def info_to_array(typingctx, info_type, array_type):
                 fnty, name="info_to_string_array"
             )
             builder.call(
-                fn_tp, [in_info, string_array._get_ptr_by_name("meminfo"),],
+                fn_tp,
+                [
+                    in_info,
+                    string_array._get_ptr_by_name("meminfo"),
+                ],
             )
             return string_array._getvalue()
 
@@ -1047,12 +1066,14 @@ def info_to_array(typingctx, info_type, array_type):
                 builder, [builder.load(length_ptr)], ty=intp_t
             )
             itemsize = context.get_constant(
-                types.intp, context.get_abi_sizeof(context.get_data_type(np_dtype)),
+                types.intp,
+                context.get_abi_sizeof(context.get_data_type(np_dtype)),
             )
             strides_array = cgutils.pack_array(builder, [itemsize], ty=intp_t)
 
             data = builder.bitcast(
-                builder.load(data_ptr), context.get_data_type(np_dtype).as_pointer(),
+                builder.load(data_ptr),
+                context.get_data_type(np_dtype).as_pointer(),
             )
 
             numba.np.arrayobj.populate_array(
@@ -1127,7 +1148,7 @@ def test_alloc_string(typingctx, len_typ, n_chars_typ):
 
 
 @intrinsic
-def arr_info_list_to_table(typingctx, list_arr_info_typ):
+def arr_info_list_to_table(typingctx, list_arr_info_typ=None):
     assert list_arr_info_typ == types.List(array_info_type)
 
     def codegen(context, builder, sig, args):
@@ -1164,19 +1185,20 @@ def info_from_table(typingctx, table_t, ind_t):
 
 
 delete_info_decref_array = types.ExternalFunction(
-    "delete_info_decref_array", types.void(array_info_type),
+    "delete_info_decref_array",
+    types.void(array_info_type),
 )
 
 
-delete_table_free_arrays = types.ExternalFunction(
-    "delete_table_free_arrays", types.void(table_type),
+delete_table_decref_arrays = types.ExternalFunction(
+    "delete_table_decref_arrays",
+    types.void(table_type),
 )
 
 
 @intrinsic
-def delete_table(typingctx, table_t):
-    """Deletes table and its array_info objects. Doesn't delete array data.
-    """
+def delete_table(typingctx, table_t=None):
+    """Deletes table and its array_info objects. Doesn't delete array data."""
     assert table_t == table_type
 
     def codegen(context, builder, sig, args):
@@ -1187,21 +1209,32 @@ def delete_table(typingctx, table_t):
     return types.void(table_t), codegen
 
 
-get_stats_alloc = types.ExternalFunction("get_stats_alloc", types.uint64(),)
+get_stats_alloc = types.ExternalFunction(
+    "get_stats_alloc",
+    types.uint64(),
+)
 
-get_stats_free = types.ExternalFunction("get_stats_free", types.uint64(),)
+get_stats_free = types.ExternalFunction(
+    "get_stats_free",
+    types.uint64(),
+)
 
-get_stats_mi_alloc = types.ExternalFunction("get_stats_mi_alloc", types.uint64(),)
+get_stats_mi_alloc = types.ExternalFunction(
+    "get_stats_mi_alloc",
+    types.uint64(),
+)
 
-get_stats_mi_free = types.ExternalFunction("get_stats_mi_free", types.uint64(),)
+get_stats_mi_free = types.ExternalFunction(
+    "get_stats_mi_free",
+    types.uint64(),
+)
 
 Mstats = namedtuple("Mstats", ["alloc", "free", "mi_alloc", "mi_free"])
 
 
 @numba.njit
 def get_allocation_stats():
-    """get allocation stats for arrays allocated in Bodo's C++ array runtime
-    """
+    """get allocation stats for arrays allocated in Bodo's C++ array runtime"""
     # TODO: get stats from other C++ modules like _parquet.cpp
     return Mstats(
         get_stats_alloc(), get_stats_free(), get_stats_mi_alloc(), get_stats_mi_free()
@@ -1210,7 +1243,8 @@ def get_allocation_stats():
 
 @intrinsic
 def shuffle_table(typingctx, table_t, n_keys_t):
-    """
+    """shuffle input table so that rows with same key are on the same process.
+    Steals a reference from the input table.
     """
     assert table_t == table_type
 
@@ -1364,7 +1398,10 @@ def shuffle_renormalization(typingctx, table_t):
 
     def codegen(context, builder, sig, args):
         fnty = lir.FunctionType(
-            lir.IntType(8).as_pointer(), [lir.IntType(8).as_pointer(),],
+            lir.IntType(8).as_pointer(),
+            [
+                lir.IntType(8).as_pointer(),
+            ],
         )
         fn_tp = builder.module.get_or_insert_function(
             fnty, name="shuffle_renormalization"
@@ -1481,9 +1518,18 @@ _array_isin = types.ExternalFunction(
 
 @numba.njit
 def array_isin(out_arr, in_arr, in_values, is_parallel):
+
+    in_arr_info = array_to_info(in_arr)
+    in_values_info = array_to_info(in_values)
+    out_arr_info = array_to_info(out_arr)
+    # NOTE: creating a dummy table to avoid Numba's bug in refcount pruning
+    dummy_table = arr_info_list_to_table([in_arr_info, in_values_info, out_arr_info])
+
     _array_isin(
-        array_to_info(out_arr),
-        array_to_info(in_arr),
-        array_to_info(in_values),
+        out_arr_info,
+        in_arr_info,
+        in_values_info,
         is_parallel,
     )
+    # no need to decref since array_isin decrefs input/output
+    delete_table(dummy_table)

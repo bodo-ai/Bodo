@@ -1126,7 +1126,7 @@ table_info* shuffle_table_kernel(table_info* in_table, uint32_t* hashes,
             std::cout << "shuffle_table_kernel i=" << i << " / " << n_cols
                       << " step 5\n";
 #endif
-            free_array(send_arr);
+            decref_array(send_arr);
             delete send_arr;
         } else {
 #ifdef DEBUG_SHUFFLE
@@ -1142,6 +1142,8 @@ table_info* shuffle_table_kernel(table_info* in_table, uint32_t* hashes,
                 bodo_array_type::ARROW, Bodo_CTypes::INT8 /*dummy*/, n_items,
                 -1, -1, NULL, NULL, NULL, NULL, NULL, meminfo, NULL, out_array);
         }
+        // release reference of input array
+        decref_array(in_arr);
         out_arrs.push_back(out_arr);
 #ifdef DEBUG_SHUFFLE
         std::cout << "shuffle_table_kernel i=" << i << " / " << n_cols
@@ -1601,6 +1603,7 @@ table_info* reverse_shuffle_table_kernel(table_info* in_table, uint32_t* hashes,
     return new table_info(out_arrs);
 }
 
+// Note: Steals a reference from the input table.
 table_info* shuffle_table(table_info* in_table, int64_t n_keys) {
     // error checking
     if (in_table->ncols() <= 0 || n_keys <= 0) {
