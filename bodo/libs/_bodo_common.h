@@ -280,6 +280,9 @@ void delete_table_decref_arrays(table_info* table);
  */
 void decref_array(array_info* arr);
 
+/**
+ * incref Bodo array
+ */
 void incref_array(array_info* arr);
 
 /**
