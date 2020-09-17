@@ -99,6 +99,9 @@ def check_func(
     py_output=None,
     dist_test=True,
     check_typing_issues=True,
+    only_seq=False,
+    only_1D=False,
+    only_1DVar=False,
 ):
     """test bodo compilation of function 'func' on arguments using REP, 1D, and 1D_Var
     inputs/outputs
@@ -118,6 +121,21 @@ def check_func(
     - py_output: Sometimes pandas has entirely lacking functionality and we need to put what output
     we expect to obtain.
     """
+    run_seq, run_1D, run_1DVar = False, False, False
+    if only_seq:
+        if only_1D or only_1DVar:
+            warnings.warn("Multiple select only options specified, running only sequential.")
+        run_seq = True
+        dist_test = False
+    elif only_1D:
+        if only_1DVar:
+            warnings.warn("Multiple select only options specified, running only 1D.")
+        run_1D = True
+    elif only_1DVar:
+        run_1DVar = True
+    else:
+        run_seq, run_1D, run_1DVar = True, True, True
+        
     n_pes = bodo.get_size()
 
     call_args = tuple(_get_arg(a, copy_input) for a in args)
@@ -136,18 +154,19 @@ def check_func(
             py_output = convert_non_pandas_columns(py_output)
 
     # sequential
-    w = check_func_seq(
-        func,
-        args,
-        py_output,
-        copy_input,
-        sort_output,
-        check_names,
-        check_dtype,
-        reset_index,
-        convert_columns_to_pandas,
-        n_pes,
-    )
+    if run_seq:
+        w = check_func_seq(
+            func,
+            args,
+            py_output,
+            copy_input,
+            sort_output,
+            check_names,
+            check_dtype,
+            reset_index,
+            convert_columns_to_pandas,
+            n_pes,
+        )
 
     # distributed test is not needed
     if not dist_test:
@@ -172,35 +191,37 @@ def check_func(
     ):
         return  # no need for distributed checks
 
-    check_func_1D(
-        func,
-        args,
-        py_output,
-        is_out_distributed,
-        copy_input,
-        sort_output,
-        check_names,
-        check_dtype,
-        reset_index,
-        check_typing_issues,
-        convert_columns_to_pandas,
-        n_pes,
-    )
+    if run_1D:
+        check_func_1D(
+            func,
+            args,
+            py_output,
+            is_out_distributed,
+            copy_input,
+            sort_output,
+            check_names,
+            check_dtype,
+            reset_index,
+            check_typing_issues,
+            convert_columns_to_pandas,
+            n_pes,
+        )
 
-    check_func_1D_var(
-        func,
-        args,
-        py_output,
-        is_out_distributed,
-        copy_input,
-        sort_output,
-        check_names,
-        check_dtype,
-        reset_index,
-        check_typing_issues,
-        convert_columns_to_pandas,
-        n_pes,
-    )
+    if run_1DVar:
+        check_func_1D_var(
+            func,
+            args,
+            py_output,
+            is_out_distributed,
+            copy_input,
+            sort_output,
+            check_names,
+            check_dtype,
+            reset_index,
+            check_typing_issues,
+            convert_columns_to_pandas,
+            n_pes,
+        )
 
 
 def check_func_seq(
