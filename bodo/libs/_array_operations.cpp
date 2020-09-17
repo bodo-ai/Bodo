@@ -371,7 +371,7 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
         std::cout << " Doing reshuffling\n";
 #endif
         table_info* table_shuffle_renorm = shuffle_renormalization(ret_table);
-        delete_table_decref_arrays(ret_table);
+        delete_table(ret_table);
         return table_shuffle_renorm;
     }
     return ret_table;
