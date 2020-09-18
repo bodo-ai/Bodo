@@ -1,0 +1,27 @@
+version: 0.2
+
+# Buildspec Reference: https://docs.aws.amazon.com/codebuild/latest/userguide/build-spec-ref.html
+
+
+env:
+    git-credential-helper: true
+    shell: /bin/bash
+    variables:
+      CONDA_ENV: BodoCodeBuild
+
+phases:
+    install:
+        commands:
+        - echo Entered the install phase...
+        - buildscripts/aws/merge_with_master.sh
+        - buildscripts/aws/sonar_installs.sh
+    build:
+        commands:
+        - echo Entered the build phase...
+        # Download the existing artifacts and merge the xml files.
+        - buildscripts/aws/prepare_coverage.sh
+    post_build:
+        commands:
+        - echo Entered the post-build phase...
+        # Run Sonar on the merged xml files
+        - buildscripts/aws/run_sonar.sh

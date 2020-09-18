@@ -2,12 +2,48 @@ import sys
 import os
 import subprocess
 import re
-
+import buildscripts.aws.select_timing_from_logs
+import json
 
 # first arg is the number of processes to run the tests with
 num_processes = int(sys.argv[1])
 # all other args go to pytest
 pytest_args = sys.argv[2:]
+
+# If in AWS Codebuild partition tests
+if "CODEBUILD_BUILD_ID" in os.environ:
+    # Load the logfile for splitting tests
+    result = subprocess.call(
+        [
+            "python",
+            "buildscripts/aws/download_s3paths_with_prefix.py",
+            "bodo-pr-testing-logs",
+            "splitting_logs/latestlog",
+        ]
+    )
+    if result != 0:
+        raise Exception(
+            "buildscripts/aws/download_s3_prefixes.py fails trying to download log file."
+        )
+    if not os.path.exists("splitting_logs/latestlog"):
+        raise Exception("Log file download unsuccessful, exiting with failure.")
+    # Select the markers that may be needed.
+    marker_groups = buildscripts.aws.select_timing_from_logs.generate_marker_groups(
+        "splitting_logs/latestlog", int(os.environ["NUMBER_GROUPS_SPLIT"])
+    )
+
+    # Generate the marker file.
+    with open("bodo/pytest.ini", "a") as f:
+        indent = " " * 4
+        for marker in set(marker_groups.values()):
+            print(
+                "{0}{1}: Group {1} for running distributed tests\n".format(
+                    indent, marker, file=f
+                )
+            )
+
+    with open("testtiming.json", "w") as f:
+        json.dump(marker_groups, f)
 
 # run pytest with --collect-only to find Python modules containing tests
 # (this doesn't execute any tests)
@@ -80,5 +116,3 @@ if tests_failed:
 if codecov:
     # combine all the coverage files
     subprocess.run(["coverage", "combine", "cov_files"])
-    # generate xml coverage report, and exclude this script from report
-    subprocess.run(["coverage", "xml", "--omit", __file__])

@@ -6,7 +6,7 @@ import bodo
 from numba.core.runtime import rtsys
 import glob
 import subprocess
-
+import json
 
 # similar to Pandas
 @pytest.fixture(scope="session")
@@ -82,6 +82,35 @@ def pytest_collection_modifyitems(items):
     n = len(items)
     for item in items[0 : n // 3]:
         item.add_marker(pytest.mark.firsthalf)
+    # Check if we should try and mark groups for AWS Codebuild
+    if "NUMBER_GROUPS_SPLIT" in os.environ:
+        num_groups = int(os.environ["NUMBER_GROUPS_SPLIT"])
+        with open("testtiming.json", "r") as f:
+            marker_groups = json.load(f)
+
+        for item in items:
+            # Gives filename + function name
+            filename = item.module.__name__.split(".")[-1] + ".py" + "::" + item.name
+            if filename in marker_groups:
+                group_marker = marker_groups[filename]
+            else:
+                group_marker = group_from_hash(filename, num_groups)
+            item.add_marker(getattr(pytest.mark, group_marker))
+
+
+"""
+    Hash function to randomly distribute tests not found in the log.
+    Keeps all s3 tests together in group 0.
+"""
+
+
+def group_from_hash(filename, num_groups):
+    if "test_s3.py" in filename:
+        return "0"
+    # TODO(Nick): Replace with a deterministic function.
+    # Python's builtin hash fails on mpiexec -n 2 because
+    # it has randomness.
+    return "0"
 
 
 @pytest.fixture(scope="session")
