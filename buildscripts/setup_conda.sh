@@ -24,7 +24,7 @@ source deactivate
 
 conda remove --all -q -y -n $CONDA_ENV
 
-conda create -n $CONDA_ENV -q -y -c conda-forge python numpy scipy boost-cpp cmake h5py mpich mpi
+conda create -n $CONDA_ENV -q -y -c conda-forge python numpy scipy boost-cpp=1.74.0 cmake h5py mpich mpi
 source activate $CONDA_ENV
 
 # install compilers

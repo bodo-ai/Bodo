@@ -24,7 +24,7 @@ requirements:
     - s3fs >=0.4.2
     - pandas 1.1.*
     - pyarrow =1.0.1
-    - boost-cpp
+    - boost-cpp =1.74.0
     - hdf5 * mpi_mpich_* # [not win]
     - h5py
     - mpich # [not win]
@@ -39,7 +39,7 @@ requirements:
     - {{ pin_compatible('numpy') }}
     - pandas 1.1.*
     - pyarrow =1.0.1
-    - boost-cpp
+    - boost-cpp =1.74.0
     - numba 0.51.2
     - openjdk =8
     - sqlalchemy

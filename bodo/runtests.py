@@ -12,7 +12,7 @@ pytest_args = sys.argv[2:]
 # If in AWS Codebuild partition tests
 if "CODEBUILD_BUILD_ID" in os.environ:
     import buildscripts.aws.select_timing_from_logs
-
+    
     # Load the logfile for splitting tests
     result = subprocess.call(
         [
