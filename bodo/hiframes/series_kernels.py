@@ -70,8 +70,7 @@ def _get_nan(val):  # pragma: no cover
 
 @overload(_get_nan, no_unliteral=True)
 def _get_nan_overload(val):
-    """get NA value with same type as val
-    """
+    """get NA value with same type as val"""
     if isinstance(val, (types.NPDatetime, types.NPTimedelta)):
         nat = val("NaT")
         return lambda val: nat  # pragma: no cover
@@ -218,3 +217,41 @@ def lt_f(a, b):  # pragma: no cover
 @numba.njit
 def gt_f(a, b):  # pragma: no cover
     return a > b
+
+
+@numba.njit
+def compute_skew(first_moment, second_moment, third_moment, count):  # pragma: no cover
+    if count < 3:
+        return np.nan
+    mu = first_moment / count
+    numerator = third_moment - 3 * second_moment * mu + 2 * count * mu ** 3
+    denominator = second_moment - mu * first_moment
+    s = (
+        (count * (count - 1) ** (1.5) / (count - 2))
+        * numerator
+        / (denominator ** (1.5))
+    )
+    s = s / (count - 1)
+    return s
+
+
+@numba.njit
+def compute_kurt(
+    first_moment, second_moment, third_moment, fourth_moment, count
+):  # pragma: no cover
+    if count < 4:
+        return np.nan
+    mu = first_moment / count
+    m4 = (
+        fourth_moment
+        - 4 * third_moment * mu
+        + 6 * second_moment * mu ** 2
+        - 3 * count * mu ** 4
+    )
+    m2 = second_moment - mu * first_moment
+    adj = 3 * (count - 1) ** 2 / ((count - 2) * (count - 3))
+    numer = count * (count + 1) * (count - 1) * m4
+    denom = (count - 2) * (count - 3) * m2 ** 2
+    s = (count - 1) * (numer / denom - adj)
+    s = s / (count - 1)
+    return s

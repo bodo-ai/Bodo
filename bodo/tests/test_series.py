@@ -2904,6 +2904,7 @@ def test_to_numeric(value, downcast, memory_leak_check):
         pd.Series([np.nan, -1.0, -1.0, 0.0, 78.0]),
         pd.Series([1.0, 2.0, 3.0, 42.3]),
         pd.Series([1, 2, 3, 42]),
+        pytest.param(pd.Series([1, 2]), marks=pytest.mark.slow,),
     ]
 )
 def series_stat(request):
@@ -2920,7 +2921,6 @@ def test_series_mad(series_stat, memory_leak_check):
     check_func(f, (series_stat,))
     check_func(f_skip, (series_stat,))
 
-
 def test_series_skew(series_stat, memory_leak_check):
     def f(S):
         return S.skew()
@@ -2931,24 +2931,22 @@ def test_series_skew(series_stat, memory_leak_check):
     check_func(f, (series_stat,))
     check_func(f_skipna, (series_stat,))
 
-
 def test_series_kurt(series_stat, memory_leak_check):
     def f(S):
-        return S.skew()
+        return S.kurt()
 
     def f_skipna(S):
-        return S.skew(skipna=False)
+        return S.kurt(skipna=False)
 
     check_func(f, (series_stat,))
     check_func(f_skipna, (series_stat,))
 
-
 def test_series_kurtosis(series_stat, memory_leak_check):
     def f(S):
-        return S.skew()
+        return S.kurtosis()
 
     def f_skipna(S):
-        return S.skew(skipna=False)
+        return S.kurtosis(skipna=False)
 
     check_func(f, (series_stat,))
     check_func(f_skipna, (series_stat,))

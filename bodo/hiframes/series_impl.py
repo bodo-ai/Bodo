@@ -512,20 +512,9 @@ def overload_series_kurt(S, skipna=True):
             third_moment += val ** 3
             fourth_moment += val ** 4
             count += count_val
-
-        mu = first_moment / count
-        m4 = (
-            fourth_moment
-            - 4 * third_moment * mu
-            + 6 * second_moment * mu ** 2
-            - 3 * count * mu ** 4
+        res = bodo.hiframes.series_kernels.compute_kurt(
+            first_moment, second_moment, third_moment, fourth_moment, count
         )
-        m2 = second_moment - mu * first_moment
-        adj = 3 * (count - 1) ** 2 / ((count - 2) * (count - 3))
-        numer = count * (count + 1) * (count - 1) * m4
-        denom = (count - 2) * (count - 3) * m2 ** 2
-        s = (count - 1) * (numer / denom - adj)
-        res = bodo.hiframes.series_kernels._handle_nan_count(s, count)
         return res
 
     return impl
@@ -553,17 +542,9 @@ def overload_series_skew(S, skipna=True):
             second_moment += val ** 2
             third_moment += val ** 3
             count += count_val
-
-        mu = first_moment / count
-        numerator = third_moment - 3 * second_moment * mu + 2 * count * mu ** 3
-        denominator = second_moment - mu * first_moment
-        alpha = count * (count - 1) ** (0.5) / (count - 2)
-        s = (
-            (count * (count - 1) ** (1.5) / (count - 2))
-            * numerator
-            / (denominator ** (1.5))
+        res = bodo.hiframes.series_kernels.compute_skew(
+            first_moment, second_moment, third_moment, count
         )
-        res = bodo.hiframes.series_kernels._handle_nan_count(s, count)
         return res
 
     return impl
