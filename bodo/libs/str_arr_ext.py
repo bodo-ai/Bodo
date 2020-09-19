@@ -51,7 +51,7 @@ from bodo.hiframes.datetime_date_ext import (
     datetime_date_array_type,
     datetime_date_type,
 )
-from bodo.libs.array_item_arr_ext import ArrayItemArrayType
+from bodo.libs.array_item_arr_ext import ArrayItemArrayType, _get_array_item_arr_payload
 from bodo.libs.decimal_arr_ext import Decimal128Type, DecimalArrayType
 from bodo.libs.str_ext import memcmp, string_type, unicode_to_utf8_and_len
 from bodo.utils.typing import (
@@ -115,6 +115,26 @@ class StringArrayModel(models.StructModel):
             ("data", array_item_data_type),
         ]
         models.StructModel.__init__(self, dmm, fe_type, members)
+
+
+make_attribute_wrapper(StringArrayType, "data", "_data")
+
+
+@intrinsic
+def init_str_arr(typingctx, data_typ=None):
+    """create a new string array from input data array(char) array data"""
+    assert isinstance(data_typ, ArrayItemArrayType) and data_typ.dtype == types.Array(
+        char_type, 1, "C"
+    )
+
+    def codegen(context, builder, sig, args):
+        (data_arr,) = args
+        str_array = context.make_helper(builder, string_array_type)
+        str_array.data = data_arr
+        context.nrt.incref(builder, data_typ, data_arr)
+        return str_array._getvalue()
+
+    return string_array_type(data_typ), codegen
 
 
 class StringDtype(types.Number):
@@ -880,7 +900,7 @@ def str_arr_len_overload(str_arr):
 
 @overload_attribute(StringArrayType, "size")
 def str_arr_size_overload(str_arr):
-    return lambda str_arr: num_strings(str_arr)  # pragma: no cover
+    return lambda str_arr: len(str_arr._data)  # pragma: no cover
 
 
 @overload_attribute(StringArrayType, "shape")
@@ -1133,11 +1153,14 @@ def set_string_array_range(
     return sig, codegen
 
 
-# box series calls this too
 @box(StringArrayType)
 def box_str_arr(typ, val, c):
-    """"""
-    payload = _get_string_arr_payload(c.context, c.builder, val)
+    """box string array into numpy object array with string values"""
+    string_array = c.context.make_helper(c.builder, string_array_type, val)
+    array_item_data_type = ArrayItemArrayType(types.Array(char_type, 1, "C"))
+    payload = _get_array_item_arr_payload(
+        c.context, c.builder, array_item_data_type, string_array.data
+    )
 
     box_fname = "np_array_from_string_array"
     if use_pd_string_array:
@@ -1153,13 +1176,22 @@ def box_str_arr(typ, val, c):
         ],
     )
     fn_get = c.builder.module.get_or_insert_function(fnty, name=box_fname)
+    offsets_ptr = c.context.make_array(types.Array(offset_type, 1, "C"))(
+        c.context, c.builder, payload.offsets
+    ).data
+    data_ptr = c.context.make_array(types.Array(char_type, 1, "C"))(
+        c.context, c.builder, payload.data
+    ).data
+    null_bitmap_ptr = c.context.make_array(types.Array(types.uint8, 1, "C"))(
+        c.context, c.builder, payload.null_bitmap
+    ).data
     arr = c.builder.call(
         fn_get,
         [
-            payload.num_strings,
-            payload.offsets,
-            payload.data,
-            payload.null_bitmap,
+            payload.n_arrays,
+            offsets_ptr,
+            data_ptr,
+            null_bitmap_ptr,
         ],
     )
 

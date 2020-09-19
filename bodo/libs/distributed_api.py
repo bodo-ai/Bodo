@@ -454,81 +454,9 @@ def gatherv(data, allgather=False, warn_if_rep=True):
         def gatherv_str_arr_impl(
             data, allgather=False, warn_if_rep=True
         ):  # pragma: no cover
-            rank = bodo.libs.distributed_api.get_rank()
-            n_loc = len(data)
-            n_all_chars = num_total_chars(data)
-
-            # allocate send lens arrays
-            send_arr_lens = np.empty(n_loc, np.uint32)  # XXX offset type is uint32
-            send_data_ptr = get_data_ptr(data)
-            send_null_bitmap_ptr = get_null_bitmap_ptr(data)
-            n_bytes = (n_loc + 7) >> 3
-
-            for i in range(n_loc):
-                send_arr_lens[i] = bodo.libs.str_arr_ext.get_str_arr_item_length(
-                    data, i
-                )
-
-            recv_counts = gather_scalar(np.int32(n_loc), allgather)
-            recv_counts_char = gather_scalar(np.int32(n_all_chars), allgather)
-            n_total = recv_counts.sum()
-            n_total_char = recv_counts_char.sum()
-
-            # displacements
-            all_data = pre_alloc_string_array(0, 0)  # dummy arrays on non-root PEs
-            displs = np.empty(1, np.int32)
-            displs_char = np.empty(1, np.int32)
-            recv_counts_nulls = np.empty(1, np.int32)
-            displs_nulls = np.empty(1, np.int32)
-            tmp_null_bytes = np.empty(1, np.uint8)
-
-            if rank == MPI_ROOT or allgather:
-                all_data = pre_alloc_string_array(n_total, n_total_char)
-                displs = bodo.ir.join.calc_disp(recv_counts)
-                displs_char = bodo.ir.join.calc_disp(recv_counts_char)
-                recv_counts_nulls = np.empty(len(recv_counts), np.int32)
-                for i in range(len(recv_counts)):
-                    recv_counts_nulls[i] = (recv_counts[i] + 7) >> 3
-                displs_nulls = bodo.ir.join.calc_disp(recv_counts_nulls)
-                tmp_null_bytes = np.empty(recv_counts_nulls.sum(), np.uint8)
-
-            offset_ptr = get_offset_ptr(all_data)
-            data_ptr = get_data_ptr(all_data)
-            null_bitmap_ptr = get_null_bitmap_ptr(all_data)
-
-            c_gatherv(
-                send_arr_lens.ctypes,
-                np.int32(n_loc),
-                offset_ptr,
-                recv_counts.ctypes,
-                displs.ctypes,
-                int32_typ_enum,
-                allgather,
-            )
-            c_gatherv(
-                send_data_ptr,
-                np.int32(n_all_chars),
-                data_ptr,
-                recv_counts_char.ctypes,
-                displs_char.ctypes,
-                char_typ_enum,
-                allgather,
-            )
-            c_gatherv(
-                send_null_bitmap_ptr,
-                np.int32(n_bytes),
-                tmp_null_bytes.ctypes,
-                recv_counts_nulls.ctypes,
-                displs_nulls.ctypes,
-                char_typ_enum,
-                allgather,
-            )
-
-            convert_len_arr_to_offset(offset_ptr, n_total)
-            copy_gathered_null_bytes(
-                null_bitmap_ptr, tmp_null_bytes, recv_counts_nulls, recv_counts
-            )
-            return all_data
+            # call gatherv() on underlying array(item) array
+            all_data = bodo.gatherv(data._data, allgather, warn_if_rep)
+            return bodo.libs.str_arr_ext.init_str_arr(all_data)
 
         return gatherv_str_arr_impl
 
