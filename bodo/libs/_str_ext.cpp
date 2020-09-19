@@ -42,7 +42,6 @@ int64_t str_to_int64(char* data, int64_t length);
 double str_to_float64(std::string* str);
 int64_t get_str_len(std::string* str);
 
-NRT_MemInfo* string_array_from_sequence(PyObject* obj);
 void* np_array_from_string_array(int64_t no_strings,
                                  const uint32_t* offset_table,
                                  const char* buffer,
@@ -127,9 +126,6 @@ PyMODINIT_FUNC PyInit_hstr_ext(void) {
                            PyLong_FromVoidPtr((void*)(&str_to_float64)));
     PyObject_SetAttrString(m, "get_str_len",
                            PyLong_FromVoidPtr((void*)(&get_str_len)));
-    PyObject_SetAttrString(
-        m, "string_array_from_sequence",
-        PyLong_FromVoidPtr((void*)(&string_array_from_sequence)));
     PyObject_SetAttrString(
         m, "pd_array_from_string_array",
         PyLong_FromVoidPtr((void*)(&pd_array_from_string_array)));
@@ -443,112 +439,6 @@ void inplace_int64_to_str(char* str, int64_t l, int64_t value) {
         value /= 10;
         i++;
     }
-}
-
-/// @brief create a concatenated string and offset table from a pandas series of
-/// strings
-/// @note strings in returned buffer will not be 0-terminated.
-/// @param[out] buffer newly allocated buffer with concatenated strings, or NULL
-/// @param[out] no_strings number of strings concatenated, value < 0 indicates
-/// an error
-/// @param[out] offset_table newly allocated array of no_strings+1 integers
-///                          first no_strings entries denote offsets, last entry
-///                          indicates size of output array
-/// @param[in]  obj Python Sequence object, intended to be a pandas series of
-/// string
-NRT_MemInfo* string_array_from_sequence(PyObject* obj) {
-#define CHECK(expr, msg)               \
-    if (!(expr)) {                     \
-        std::cerr << msg << std::endl; \
-        return NULL;                   \
-    }
-
-    CHECK(PySequence_Check(obj), "expecting a PySequence");
-
-    Py_ssize_t n = PyObject_Size(obj);
-    if (n == 0) {
-        // empty sequence, this is not an error, need to set size
-        array_info* out_arr =
-            alloc_array(0, 0, -1, bodo_array_type::arr_type_enum::ARRAY_ITEM,
-                        Bodo_CTypes::UINT8, 0, 0);
-        NRT_MemInfo* out_meminfo = out_arr->meminfo;
-        delete out_arr;
-        return out_meminfo;
-    }
-
-    // allocate null bitmap
-    // same formula as BytesForBits in Arrow
-    int64_t n_bytes = (n + 7) >> 3;
-    numpy_arr_payload null_bitmap_payload =
-        allocate_numpy_payload(n_bytes, Bodo_CTypes::UINT8);
-    uint8_t* null_bitmap = (uint8_t*)null_bitmap_payload.data;
-    memset(null_bitmap, 0, n_bytes);
-
-    // get pd.NA object to check for new NA kind
-    // simple equality check is enough since the object is a singleton
-    // example:
-    // https://github.com/pandas-dev/pandas/blob/fcadff30da9feb3edb3acda662ff6143b7cb2d9f/pandas/_libs/missing.pyx#L57
-    PyObject* pd_mod = PyImport_ImportModule("pandas");
-    CHECK(pd_mod, "importing pandas module failed");
-    PyObject* C_NA = PyObject_GetAttrString(pd_mod, "NA");
-    CHECK(C_NA, "getting pd.NA failed");
-
-    numpy_arr_payload offsets_payload =
-        allocate_numpy_payload(n + 1, Bodo_CTypes::UINT32);
-    uint32_t* offsets = (uint32_t*)offsets_payload.data;
-    std::vector<const char*> tmp_store(n);
-    size_t len = 0;
-    for (Py_ssize_t i = 0; i < n; ++i) {
-        offsets[i] = len;
-        PyObject* s = PySequence_GetItem(obj, i);
-        CHECK(s, "getting element failed");
-        // Pandas stores NA as either None, nan, or pd.NA
-        if (s == Py_None ||
-            (PyFloat_Check(s) && std::isnan(PyFloat_AsDouble(s))) ||
-            s == C_NA) {
-            // leave null bit as 0
-            tmp_store[i] = "";
-        } else {
-            // set null bit to 1 (Arrow bin-util.h)
-            null_bitmap[i / 8] |= kBitmask[i % 8];
-            // check string
-            CHECK(PyUnicode_Check(s), "expecting a string");
-            // convert to UTF-8 and get size
-            Py_ssize_t size;
-            tmp_store[i] = PyUnicode_AsUTF8AndSize(s, &size);
-            CHECK(tmp_store[i], "string conversion failed");
-            len += size;
-        }
-        Py_DECREF(s);
-    }
-    offsets[n] = len;
-
-    numpy_arr_payload outbuf_payload =
-        allocate_numpy_payload(len, Bodo_CTypes::UINT8);
-    char* outbuf = outbuf_payload.data;
-    for (Py_ssize_t i = 0; i < n; ++i) {
-        memcpy(outbuf + offsets[i], tmp_store[i], offsets[i + 1] - offsets[i]);
-    }
-
-    Py_DECREF(C_NA);
-    Py_DECREF(pd_mod);
-
-    NRT_MemInfo* meminfo_array_item = NRT_MemInfo_alloc_safe_aligned(
-        sizeof(array_item_arr_numpy_payload), ALIGNMENT);
-    array_item_arr_numpy_payload* payload =
-        (array_item_arr_numpy_payload*)(meminfo_array_item->data);
-
-    payload->n_arrays = n;
-
-    // allocate data array
-    // TODO: support non-numpy data
-    payload->data = outbuf_payload;
-    // TODO: support 64-bit offsets case
-    payload->offsets = offsets_payload;
-    payload->null_bitmap = null_bitmap_payload;
-
-    return meminfo_array_item;
-#undef CHECK
 }
 
 /// @brief  From a StringArray create a numpy array of string objects

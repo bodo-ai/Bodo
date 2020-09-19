@@ -912,6 +912,7 @@ import llvmlite.binding as ll
 from llvmlite import ir as lir
 
 from bodo.libs import hstr_ext
+from bodo.libs import array_ext
 
 ll.add_symbol("get_str_len", hstr_ext.get_str_len)
 ll.add_symbol("allocate_string_array", hstr_ext.allocate_string_array)
@@ -919,7 +920,7 @@ ll.add_symbol("setitem_string_array", hstr_ext.setitem_string_array)
 ll.add_symbol("getitem_string_array", hstr_ext.getitem_string_array)
 ll.add_symbol("getitem_string_array_std", hstr_ext.getitem_string_array_std)
 ll.add_symbol("is_na", hstr_ext.is_na)
-ll.add_symbol("string_array_from_sequence", hstr_ext.string_array_from_sequence)
+ll.add_symbol("string_array_from_sequence", array_ext.string_array_from_sequence)
 ll.add_symbol("pd_array_from_string_array", hstr_ext.pd_array_from_string_array)
 ll.add_symbol("np_array_from_string_array", hstr_ext.np_array_from_string_array)
 ll.add_symbol("convert_len_arr_to_offset", hstr_ext.convert_len_arr_to_offset)
