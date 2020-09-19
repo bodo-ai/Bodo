@@ -7,26 +7,44 @@ import llvmlite.binding as ll
 import numba
 from llvmlite import ir as lir
 from numba.core import cgutils, types
-from numba.extending import (NativeValue, box, intrinsic, lower_builtin,
-                             lower_getattr, make_attribute_wrapper, models,
-                             overload, overload_attribute, overload_method,
-                             register_model, type_callable, typeof_impl, unbox)
+from numba.extending import (
+    NativeValue,
+    box,
+    intrinsic,
+    lower_builtin,
+    lower_getattr,
+    make_attribute_wrapper,
+    models,
+    overload,
+    overload_attribute,
+    overload_method,
+    register_model,
+    type_callable,
+    typeof_impl,
+    unbox,
+)
 
 from bodo.hiframes.datetime_date_ext import datetime_date_array_type
-from bodo.hiframes.pd_categorical_ext import (CategoricalArray,
-                                              get_categories_int_type)
+from bodo.hiframes.pd_categorical_ext import CategoricalArray, get_categories_int_type
 from bodo.libs import array_ext
-from bodo.libs.array_item_arr_ext import (ArrayItemArrayPayloadType,
-                                          ArrayItemArrayType,
-                                          _get_array_item_arr_payload,
-                                          define_array_item_dtor, offset_typ)
+from bodo.libs.array_item_arr_ext import (
+    ArrayItemArrayPayloadType,
+    ArrayItemArrayType,
+    _get_array_item_arr_payload,
+    define_array_item_dtor,
+    offset_typ,
+)
 from bodo.libs.bool_arr_ext import boolean_array
 from bodo.libs.decimal_arr_ext import DecimalArrayType, int128_type
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.str_arr_ext import _get_string_arr_payload, string_array_type
-from bodo.libs.struct_arr_ext import (StructArrayPayloadType, StructArrayType,
-                                      StructType, _get_struct_arr_payload,
-                                      define_struct_arr_dtor)
+from bodo.libs.struct_arr_ext import (
+    StructArrayPayloadType,
+    StructArrayType,
+    StructType,
+    _get_struct_arr_payload,
+    define_struct_arr_dtor,
+)
 from bodo.utils.transform import get_type_alloc_counts
 from bodo.utils.utils import CTypeEnum, numba_to_c_type
 
@@ -597,6 +615,61 @@ def _lower_info_to_array_numpy(arr_type, context, builder, in_info):
     return arr._getvalue()
 
 
+def _lower_info_to_array_array_item(arr_type, context, builder, in_info):
+    array_item_array_from_cpp = context.make_helper(builder, arr_type)
+    fnty = lir.FunctionType(
+        lir.VoidType(),
+        [
+            lir.IntType(8).as_pointer(),  # info
+            lir.IntType(8).as_pointer().as_pointer(),  # meminfo
+        ],
+    )
+    fn_tp = builder.module.get_or_insert_function(
+        fnty, name="info_to_list_string_array"
+    )
+    builder.call(
+        fn_tp,
+        [
+            in_info,
+            array_item_array_from_cpp._get_ptr_by_name("meminfo"),
+        ],
+    )
+
+    payload = _get_array_item_arr_payload(
+        context, builder, arr_type, array_item_array_from_cpp._getvalue()
+    )
+
+    payload_type = ArrayItemArrayPayloadType(arr_type)
+    payload_alloc_type = context.get_data_type(payload_type)
+    payload_alloc_size = context.get_abi_sizeof(payload_alloc_type)
+
+    # define dtor
+    dtor_fn = define_array_item_dtor(context, builder, arr_type, payload_type)
+
+    # create meminfo
+    meminfo = context.nrt.meminfo_alloc_dtor(
+        builder, context.get_constant(types.uintp, payload_alloc_size), dtor_fn
+    )
+    meminfo_void_ptr = context.nrt.meminfo_data(builder, meminfo)
+    meminfo_data_ptr = builder.bitcast(
+        meminfo_void_ptr, payload_alloc_type.as_pointer()
+    )
+
+    payload_new = cgutils.create_struct_proxy(payload_type)(context, builder)
+    payload_new.n_arrays = payload.n_arrays
+    payload_new.data = payload.data
+    payload_new.offsets = payload.offsets
+    payload_new.null_bitmap = payload.null_bitmap
+
+    builder.store(payload_new._getvalue(), meminfo_data_ptr)
+    array_item_array = context.make_helper(builder, arr_type)
+    array_item_array.meminfo = meminfo
+
+    context.nrt.decref(builder, arr_type, array_item_array_from_cpp._getvalue())
+
+    return array_item_array._getvalue()
+
+
 def nested_to_array(
     context, builder, arr_typ, lengths_ptr, array_infos_ptr, lengths_pos, infos_pos
 ):
@@ -834,58 +907,7 @@ def info_to_array(typingctx, info_type, array_type):
             isinstance(arr_type, ArrayItemArrayType)
             and arr_type.dtype == string_array_type
         ):
-            array_item_array_from_cpp = context.make_helper(builder, arr_type)
-            fnty = lir.FunctionType(
-                lir.VoidType(),
-                [
-                    lir.IntType(8).as_pointer(),  # info
-                    lir.IntType(8).as_pointer().as_pointer(),  # meminfo
-                ],
-            )
-            fn_tp = builder.module.get_or_insert_function(
-                fnty, name="info_to_list_string_array"
-            )
-            builder.call(
-                fn_tp,
-                [
-                    in_info,
-                    array_item_array_from_cpp._get_ptr_by_name("meminfo"),
-                ],
-            )
-
-            payload = _get_array_item_arr_payload(
-                context, builder, arr_type, array_item_array_from_cpp._getvalue()
-            )
-
-            payload_type = ArrayItemArrayPayloadType(arr_type)
-            payload_alloc_type = context.get_data_type(payload_type)
-            payload_alloc_size = context.get_abi_sizeof(payload_alloc_type)
-
-            # define dtor
-            dtor_fn = define_array_item_dtor(context, builder, arr_type, payload_type)
-
-            # create meminfo
-            meminfo = context.nrt.meminfo_alloc_dtor(
-                builder, context.get_constant(types.uintp, payload_alloc_size), dtor_fn
-            )
-            meminfo_void_ptr = context.nrt.meminfo_data(builder, meminfo)
-            meminfo_data_ptr = builder.bitcast(
-                meminfo_void_ptr, payload_alloc_type.as_pointer()
-            )
-
-            payload_new = cgutils.create_struct_proxy(payload_type)(context, builder)
-            payload_new.n_arrays = payload.n_arrays
-            payload_new.data = payload.data
-            payload_new.offsets = payload.offsets
-            payload_new.null_bitmap = payload.null_bitmap
-
-            builder.store(payload_new._getvalue(), meminfo_data_ptr)
-            array_item_array = context.make_helper(builder, arr_type)
-            array_item_array.meminfo = meminfo
-
-            context.nrt.decref(builder, arr_type, array_item_array_from_cpp._getvalue())
-
-            return array_item_array._getvalue()
+            return _lower_info_to_array_array_item(arr_type, context, builder, in_info)
 
         if isinstance(arr_type, (ArrayItemArrayType, StructArrayType)):
 
