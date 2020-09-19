@@ -588,8 +588,7 @@ NRT_MemInfo* string_array_from_sequence(PyObject* obj) {
     Py_DECREF(C_NA);
     Py_DECREF(pd_mod);
 
-    NRT_MemInfo* meminfo_array_item = NRT_MemInfo_alloc_safe_aligned(
-        sizeof(array_item_arr_numpy_payload), ALIGNMENT);
+    NRT_MemInfo* meminfo_array_item = alloc_array_item_arr_meminfo();
     array_item_arr_numpy_payload* payload =
         (array_item_arr_numpy_payload*)(meminfo_array_item->data);
 

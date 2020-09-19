@@ -1954,7 +1954,8 @@ def unbox_str_series(typ, val, c):
     array_item_array = c.context.make_helper(c.builder, array_item_data_type)
     array_item_array.meminfo = array_item_meminfo
     string_array = c.context.make_helper(c.builder, typ)
-    string_array.data = array_item_array._getvalue()
+    data_arr = array_item_array._getvalue()
+    string_array.data = data_arr
 
     # FIXME how to check that the returned size is > 0?
     is_error = cgutils.is_not_null(c.builder, c.pyapi.err_occurred())

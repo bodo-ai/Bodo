@@ -217,6 +217,40 @@ numpy_arr_payload allocate_numpy_payload(int64_t length,
 }
 
 /**
+ * @brief destrcutor for array(item) array meminfo. Decrefs the underlying data,
+ * offsets and null_bitmap arrays.
+ *
+ * @param payload array(item) array meminfo payload
+ * @param size payload size (ignored)
+ * @param in extra info (ignored)
+ */
+void dtor_array_item_array(array_item_arr_numpy_payload* payload, int64_t size,
+                           void* in) {
+    payload->data.meminfo->refct--;
+    if (payload->data.meminfo->refct == 0)
+        NRT_MemInfo_call_dtor(payload->data.meminfo);
+
+    payload->offsets.meminfo->refct--;
+    if (payload->offsets.meminfo->refct == 0)
+        NRT_MemInfo_call_dtor(payload->offsets.meminfo);
+
+    payload->null_bitmap.meminfo->refct--;
+    if (payload->null_bitmap.meminfo->refct == 0)
+        NRT_MemInfo_call_dtor(payload->null_bitmap.meminfo);
+}
+
+/**
+ * @brief create a meminfo for array(item) array
+ *
+ * @return NRT_MemInfo*
+ */
+NRT_MemInfo* alloc_array_item_arr_meminfo() {
+    return NRT_MemInfo_alloc_dtor_safe(
+        sizeof(array_item_arr_numpy_payload),
+        (NRT_dtor_function)dtor_array_item_array);
+}
+
+/**
  * @brief allocate an array(item) array and wrap in an array_info*
  * TODO: generalize beyond Numpy arrays
  *
@@ -228,8 +262,9 @@ numpy_arr_payload allocate_numpy_payload(int64_t length,
 array_info* alloc_array_item(int64_t n_arrays, int64_t n_total_items,
                              Bodo_CTypes::CTypeEnum dtype) {
     // allocate payload
-    NRT_MemInfo* meminfo_array_item = NRT_MemInfo_alloc_safe_aligned(
-        sizeof(array_item_arr_numpy_payload), ALIGNMENT);
+    NRT_MemInfo* meminfo_array_item =
+        NRT_MemInfo_alloc_dtor_safe(sizeof(array_item_arr_numpy_payload),
+                                    (NRT_dtor_function)dtor_array_item_array);
     array_item_arr_numpy_payload* payload =
         (array_item_arr_numpy_payload*)(meminfo_array_item->data);
 
