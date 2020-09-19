@@ -69,11 +69,11 @@ from bodo.utils.typing import (
 use_pd_string_array = False
 
 
-char_typ = types.uint8
-offset_typ = types.int32
+char_type = types.uint8
+offset_type = types.int32
 
-data_ctypes_type = types.ArrayCTypes(types.Array(char_typ, 1, "C"))
-offset_ctypes_type = types.ArrayCTypes(types.Array(offset_typ, 1, "C"))
+data_ctypes_type = types.ArrayCTypes(types.Array(char_type, 1, "C"))
+offset_ctypes_type = types.ArrayCTypes(types.Array(offset_type, 1, "C"))
 
 
 # type for pd.arrays.StringArray and ndarray with string object values
@@ -105,40 +105,21 @@ def typeof_string_array(val, c):
     return string_array_type
 
 
-class StringArrayPayloadType(types.Type):
-    def __init__(self):
-        super(StringArrayPayloadType, self).__init__(name="StringArrayPayloadType()")
-
-
-str_arr_payload_type = StringArrayPayloadType()
-
-
-# XXX: C equivalent in _bodo_common.h
-@register_model(StringArrayPayloadType)
-class StringArrayPayloadModel(models.StructModel):
-    def __init__(self, dmm, fe_type):
-        members = [
-            ("num_strings", types.int64),
-            ("offsets", types.CPointer(offset_typ)),
-            ("data", types.CPointer(char_typ)),
-            ("null_bitmap", types.CPointer(char_typ)),
-        ]
-        models.StructModel.__init__(self, dmm, fe_type, members)
-
-
 @register_model(StringArrayType)
 class StringArrayModel(models.StructModel):
+    """Use array(uint8) array to store string array data"""
+
     def __init__(self, dmm, fe_type):
+        array_item_data_type = ArrayItemArrayType(types.Array(char_type, 1, "C"))
         members = [
-            ("meminfo", types.MemInfoPointer(str_arr_payload_type)),
+            ("data", array_item_data_type),
         ]
         models.StructModel.__init__(self, dmm, fe_type, members)
 
 
-# dtype object for pd.StringDtype()
 class StringDtype(types.Number):
     """
-    Type class associated with pandas String dtype pd.StringDtype()
+    dtype object for pd.StringDtype()
     """
 
     def __init__(self):
@@ -146,8 +127,6 @@ class StringDtype(types.Number):
 
 
 string_dtype = StringDtype()
-
-
 register_model(StringDtype)(models.OpaqueModel)
 
 
@@ -545,7 +524,7 @@ def getitem_str_bitmap(typingctx, in_bitmap_typ, ind_t=None):
             in_bitmap = ctinfo.data
         return builder.load(builder.gep(in_bitmap, [ind]))
 
-    return char_typ(in_bitmap_typ, ind_t), codegen
+    return char_type(in_bitmap_typ, ind_t), codegen
 
 
 @intrinsic
@@ -558,7 +537,7 @@ def setitem_str_bitmap(typingctx, in_bitmap_typ, ind_t, val_t=None):
         builder.store(val, builder.gep(in_bitmap, [ind]))
         return context.get_dummy_value()
 
-    return types.void(in_bitmap_typ, ind_t, char_typ), codegen
+    return types.void(in_bitmap_typ, ind_t, char_type), codegen
 
 
 @intrinsic
@@ -630,7 +609,7 @@ def copy_non_null_offsets(typingctx, str_arr_typ, out_str_arr_typ=None):
         out_payload = _get_string_arr_payload(context, builder, out_str_arr)
 
         n = in_payload.num_strings
-        zero = context.get_constant(offset_typ, 0)
+        zero = context.get_constant(offset_type, 0)
         curr_offset_ptr = cgutils.alloca_once_value(builder, zero)
         # XXX: assuming last offset is already set by allocate_string_array
 
@@ -645,7 +624,8 @@ def copy_non_null_offsets(typingctx, str_arr_typ, out_str_arr_typ=None):
                 builder.store(in_val, builder.gep(out_payload.offsets, [curr_offset]))
                 builder.store(
                     builder.add(
-                        curr_offset, lir.Constant(context.get_value_type(offset_typ), 1)
+                        curr_offset,
+                        lir.Constant(context.get_value_type(offset_type), 1),
                     ),
                     curr_offset_ptr,
                 )
@@ -944,8 +924,8 @@ convert_len_arr_to_offset = types.ExternalFunction(
 setitem_string_array = types.ExternalFunction(
     "setitem_string_array",
     types.void(
-        types.CPointer(offset_typ),
-        types.CPointer(char_typ),
+        types.CPointer(offset_type),
+        types.CPointer(char_type),
         types.uint64,
         types.voidptr,
         types.intp,
@@ -960,7 +940,10 @@ _get_utf8_size = types.ExternalFunction(
 _print_str_arr = types.ExternalFunction(
     "print_str_arr",
     types.void(
-        types.uint64, types.uint64, types.CPointer(offset_typ), types.CPointer(char_typ)
+        types.uint64,
+        types.uint64,
+        types.CPointer(offset_type),
+        types.CPointer(char_type),
     ),
 )
 
@@ -1911,46 +1894,35 @@ def _str_arr_item_to_numeric(typingctx, out_ptr_t, str_arr_t, ind_t, out_dtype_t
 @unbox(StringArrayType)
 def unbox_str_series(typ, val, c):
     """
-    Unbox a Pandas String Series. We just redirect to StringArray implementation.
+    Unbox a numpy object array with string object values.
     """
-    payload = cgutils.create_struct_proxy(str_arr_payload_type)(c.context, c.builder)
-    string_array = c.context.make_helper(c.builder, typ)
 
-    # function signature of string_array_from_sequence
-    # we use void* instead of PyObject*
+    # TODO: check python errors
+    # function signature: NRT_MemInfo* string_array_from_sequence(PyObject* obj)
+    # returns meminfo for underlying array(item) array
     fnty = lir.FunctionType(
-        lir.VoidType(),
+        lir.IntType(8).as_pointer(),
         [
             lir.IntType(8).as_pointer(),
-            lir.IntType(64).as_pointer(),
-            lir.IntType(32).as_pointer().as_pointer(),
-            lir.IntType(8).as_pointer().as_pointer(),
-            lir.IntType(8).as_pointer().as_pointer(),
         ],
     )
     fn = c.builder.module.get_or_insert_function(
         fnty, name="string_array_from_sequence"
     )
-    c.builder.call(
+    array_item_meminfo = c.builder.call(
         fn,
         [
             val,
-            payload._get_ptr_by_name("num_strings"),
-            payload._get_ptr_by_name("offsets"),
-            payload._get_ptr_by_name("data"),
-            payload._get_ptr_by_name("null_bitmap"),
         ],
     )
 
-    # the raw data is now copied to payload
-    # The native representation is a proxy to the payload, we need to
-    # get a proxy and attach the payload and meminfo
-    meminfo, meminfo_data_ptr = construct_string_array(c.context, c.builder)
-    c.builder.store(payload._getvalue(), meminfo_data_ptr)
+    # create array(item) array and string array structs and set meminfo
+    array_item_data_type = ArrayItemArrayType(types.Array(char_type, 1, "C"))
+    array_item_array = c.context.make_helper(c.builder, array_item_data_type)
+    array_item_array.meminfo = array_item_meminfo
+    string_array = c.context.make_helper(c.builder, typ)
+    string_array.data = array_item_array._getvalue()
 
-    string_array.meminfo = meminfo
-
-    # cgutils.printf(c.builder, "unbox done\n")
     # FIXME how to check that the returned size is > 0?
     is_error = cgutils.is_not_null(c.builder, c.pyapi.err_occurred())
     return NativeValue(string_array._getvalue(), is_error=is_error)

@@ -20,7 +20,6 @@ from bodo.hiframes.pd_series_ext import _get_series_array_type
 from bodo.libs.str_ext import string_type, unicode_to_utf8
 from bodo.libs.str_arr_ext import (
     string_array_type,
-    StringArrayPayloadType,
     construct_string_array,
 )
 from bodo.libs.array_item_arr_ext import (

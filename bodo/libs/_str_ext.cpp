@@ -42,9 +42,7 @@ int64_t str_to_int64(char* data, int64_t length);
 double str_to_float64(std::string* str);
 int64_t get_str_len(std::string* str);
 
-void string_array_from_sequence(PyObject* obj, int64_t* no_strings,
-                                uint32_t** offset_table, char** buffer,
-                                uint8_t** null_bitmap);
+NRT_MemInfo* string_array_from_sequence(PyObject* obj);
 void* np_array_from_string_array(int64_t no_strings,
                                  const uint32_t* offset_table,
                                  const char* buffer,
@@ -105,6 +103,7 @@ PyMODINIT_FUNC PyInit_hstr_ext(void) {
     import_array();
 
     bodo_common_init();
+    NRT_MemSys_init();
 
     PyObject_SetAttrString(m, "init_string_const",
                            PyLong_FromVoidPtr((void*)(&init_string_const)));
@@ -457,59 +456,33 @@ void inplace_int64_to_str(char* str, int64_t l, int64_t value) {
 ///                          indicates size of output array
 /// @param[in]  obj Python Sequence object, intended to be a pandas series of
 /// string
-void string_array_from_sequence(PyObject* obj, int64_t* no_strings,
-                                uint32_t** offset_table, char** buffer,
-                                uint8_t** null_bitmap) {
+NRT_MemInfo* string_array_from_sequence(PyObject* obj) {
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
         std::cerr << msg << std::endl; \
-        PyGILState_Release(gilstate);  \
-        if (offsets != NULL) {         \
-            delete[] offsets;          \
-        }                              \
-        return;                        \
+        return NULL;                   \
     }
-
-    uint32_t* offsets = NULL;
-
-    auto gilstate = PyGILState_Ensure();
-
-    if (no_strings == NULL || offset_table == NULL || buffer == NULL) {
-        PyGILState_Release(gilstate);
-        return;
-    }
-
-    *no_strings = -1;
-    *offset_table = NULL;
-    *buffer = NULL;
 
     CHECK(PySequence_Check(obj), "expecting a PySequence");
-    CHECK(no_strings && offset_table && buffer,
-          "output arguments must not be NULL");
 
     Py_ssize_t n = PyObject_Size(obj);
     if (n == 0) {
         // empty sequence, this is not an error, need to set size
-        PyGILState_Release(gilstate);
-        *no_strings = 0;
-        *null_bitmap = new uint8_t[0];
-        *offset_table = new uint32_t[1];
-        (*offset_table)[0] = 0;
-        *buffer = new char[0];
-        return;
+        array_info* out_arr =
+            alloc_array(0, 0, -1, bodo_array_type::arr_type_enum::ARRAY_ITEM,
+                        Bodo_CTypes::UINT8, 0, 0);
+        NRT_MemInfo* out_meminfo = out_arr->meminfo;
+        delete out_arr;
+        return out_meminfo;
     }
 
     // allocate null bitmap
     // same formula as BytesForBits in Arrow
     int64_t n_bytes = (n + 7) >> 3;
-    *null_bitmap = new uint8_t[n_bytes];
-    memset(*null_bitmap, 0, n_bytes);
-
-    // if obj is a pd.Series, get the numpy array for better performance
-    // TODO: check actual Series class
-    if (PyObject_HasAttrString(obj, "values")) {
-        obj = PyObject_GetAttrString(obj, "values");
-    }
+    numpy_arr_payload null_bitmap_payload =
+        allocate_numpy_payload(n_bytes, Bodo_CTypes::UINT8);
+    uint8_t* null_bitmap = (uint8_t*)null_bitmap_payload.data;
+    memset(null_bitmap, 0, n_bytes);
 
     // get pd.NA object to check for new NA kind
     // simple equality check is enough since the object is a singleton
@@ -520,7 +493,9 @@ void string_array_from_sequence(PyObject* obj, int64_t* no_strings,
     PyObject* C_NA = PyObject_GetAttrString(pd_mod, "NA");
     CHECK(C_NA, "getting pd.NA failed");
 
-    offsets = new uint32_t[n + 1];
+    numpy_arr_payload offsets_payload =
+        allocate_numpy_payload(n + 1, Bodo_CTypes::UINT32);
+    uint32_t* offsets = (uint32_t*)offsets_payload.data;
     std::vector<const char*> tmp_store(n);
     size_t len = 0;
     for (Py_ssize_t i = 0; i < n; ++i) {
@@ -535,7 +510,7 @@ void string_array_from_sequence(PyObject* obj, int64_t* no_strings,
             tmp_store[i] = "";
         } else {
             // set null bit to 1 (Arrow bin-util.h)
-            (*null_bitmap)[i / 8] |= kBitmask[i % 8];
+            null_bitmap[i / 8] |= kBitmask[i % 8];
             // check string
             CHECK(PyUnicode_Check(s), "expecting a string");
             // convert to UTF-8 and get size
@@ -548,7 +523,9 @@ void string_array_from_sequence(PyObject* obj, int64_t* no_strings,
     }
     offsets[n] = len;
 
-    char* outbuf = new char[len];
+    numpy_arr_payload outbuf_payload =
+        allocate_numpy_payload(len, Bodo_CTypes::UINT8);
+    char* outbuf = outbuf_payload.data;
     for (Py_ssize_t i = 0; i < n; ++i) {
         memcpy(outbuf + offsets[i], tmp_store[i], offsets[i + 1] - offsets[i]);
     }
@@ -556,13 +533,21 @@ void string_array_from_sequence(PyObject* obj, int64_t* no_strings,
     Py_DECREF(C_NA);
     Py_DECREF(pd_mod);
 
-    PyGILState_Release(gilstate);
+    NRT_MemInfo* meminfo_array_item = NRT_MemInfo_alloc_safe_aligned(
+        sizeof(array_item_arr_numpy_payload), ALIGNMENT);
+    array_item_arr_numpy_payload* payload =
+        (array_item_arr_numpy_payload*)(meminfo_array_item->data);
 
-    *offset_table = offsets;
-    *no_strings = n;
-    *buffer = outbuf;
+    payload->n_arrays = n;
 
-    return;
+    // allocate data array
+    // TODO: support non-numpy data
+    payload->data = outbuf_payload;
+    // TODO: support 64-bit offsets case
+    payload->offsets = offsets_payload;
+    payload->null_bitmap = null_bitmap_payload;
+
+    return meminfo_array_item;
 #undef CHECK
 }
 

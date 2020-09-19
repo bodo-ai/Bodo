@@ -1,7 +1,5 @@
 #include "_bodo_common.h"
 
-#define ALIGNMENT 64  // preferred alignment for AVX512
-
 #undef DEBUG_ARROW_ARRAY
 
 std::vector<size_t> numpy_item_size(Bodo_CTypes::_numtypes);
@@ -202,6 +200,56 @@ array_info* alloc_list_string_array(int64_t n_lists, int64_t n_strings,
 }
 
 /**
+ * @brief allocate a numpy array payload
+ *
+ * @param length number of elements
+ * @param typ_enum dtype of elements
+ * @return numpy_arr_payload
+ */
+numpy_arr_payload allocate_numpy_payload(int64_t length,
+                                         Bodo_CTypes::CTypeEnum typ_enum) {
+    int64_t itemsize = numpy_item_size[typ_enum];
+    int64_t size = length * itemsize;
+    NRT_MemInfo* meminfo = NRT_MemInfo_alloc_safe_aligned(size, ALIGNMENT);
+    char* data = (char*)meminfo->data;
+    return numpy_arr_payload(meminfo, NULL, length, itemsize, data, length,
+                             itemsize);
+}
+
+/**
+ * @brief allocate an array(item) array and wrap in an array_info*
+ * TODO: generalize beyond Numpy arrays
+ *
+ * @param n_arrays number of array elements
+ * @param n_total_items total number of data elements
+ * @param dtype dtype of data elements
+ * @return array_info*
+ */
+array_info* alloc_array_item(int64_t n_arrays, int64_t n_total_items,
+                             Bodo_CTypes::CTypeEnum dtype) {
+    // allocate payload
+    NRT_MemInfo* meminfo_array_item = NRT_MemInfo_alloc_safe_aligned(
+        sizeof(array_item_arr_numpy_payload), ALIGNMENT);
+    array_item_arr_numpy_payload* payload =
+        (array_item_arr_numpy_payload*)(meminfo_array_item->data);
+
+    payload->n_arrays = n_arrays;
+
+    // allocate data array
+    // TODO: support non-numpy data
+    payload->data = allocate_numpy_payload(n_total_items, dtype);
+    // TODO: support 64-bit offsets case
+    payload->offsets =
+        allocate_numpy_payload(n_arrays + 1, Bodo_CTypes::CTypeEnum::UINT32);
+    payload->null_bitmap = allocate_numpy_payload(
+        (int64_t)((n_arrays + 7) / 8), Bodo_CTypes::CTypeEnum::UINT8);
+
+    return new array_info(bodo_array_type::ARRAY_ITEM, dtype, n_arrays,
+                          n_total_items, -1, NULL, NULL, NULL, NULL, NULL,
+                          meminfo_array_item, NULL);
+}
+
+/**
  * The allocations array function for the function.
  *
  * In the case of NUMPY/CATEGORICAL or NULLABLE_INT_BOOL,
@@ -234,6 +282,9 @@ array_info* alloc_array(int64_t length, int64_t n_sub_elems,
 
     if (arr_type == bodo_array_type::CATEGORICAL)
         return alloc_categorical(length, dtype, num_categories);
+
+    if (arr_type == bodo_array_type::ARRAY_ITEM)
+        return alloc_array_item(length, n_sub_elems, dtype);
 
     Bodo_PyErr_SetString(PyExc_RuntimeError, "Type not covered in alloc_array");
     return nullptr;
