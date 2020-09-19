@@ -5,6 +5,7 @@ import numpy as np
 import pytest
 
 import bodo
+from bodo.tests.utils import check_func
 
 
 @pytest.fixture(
@@ -63,3 +64,25 @@ def test_getitem_int_arr(date_arr_value, memory_leak_check):
     np.testing.assert_array_equal(
         bodo_func(date_arr_value, ind), test_impl(date_arr_value, ind)
     )
+
+
+def test_setitem_optional_int(date_arr_value, memory_leak_check):
+    def test_impl(A, i, flag):
+        if flag:
+            x = None
+        else:
+            x = datetime.date(2020, 9, 8)
+        A[i] = x
+        return A
+
+    check_func(test_impl, (date_arr_value.copy(), 1, False), copy_input=True, dist_test=False)
+    check_func(test_impl, (date_arr_value.copy(), 0, True), copy_input=True, dist_test=False)
+
+
+def test_setitem_none_int(date_arr_value, memory_leak_check):
+    def test_impl(A, i):
+        A[i] = None
+        return A
+
+    i = 1
+    check_func(test_impl, (date_arr_value.copy(), i), copy_input=True, dist_test=False)

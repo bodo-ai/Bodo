@@ -173,6 +173,17 @@ def test_rec_setitem(memory_leak_check):
     )
 
 
+"""
+def test_setitem_none_int(struct_arr_value, memory_leak_check):
+    def test_impl(A, i):
+        A[i] = None
+        return A
+
+    i = 1
+    check_func(test_impl, (struct_arr_value.copy(), i), copy_input=True)
+"""
+
+
 def test_ndim(struct_arr_value, memory_leak_check):
     def test_impl(A):
         return A.ndim

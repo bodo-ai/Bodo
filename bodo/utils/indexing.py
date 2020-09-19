@@ -2,10 +2,11 @@
 """
 Collection of utility functions for indexing implementation (getitem/setitem)
 """
+import operator
 import numpy as np
 
 import numba
-from numba.extending import register_jitable, overload
+from numba.extending import register_jitable, overload, intrinsic
 from numba.core import types
 import bodo
 
@@ -237,3 +238,36 @@ def overload_add_nested_counts(nested_counts, arr_item):
         )  # pragma: no cover
 
     return lambda nested_counts, arr_item: ()  # pragma: no cover
+
+
+@overload(operator.setitem)
+def none_optional_setitem_overload(A, idx, val):
+    if not bodo.utils.utils.is_array_typ(A, False):
+        return # pragma: no cover
+    elif val == types.none:
+        return lambda A, idx, val: bodo.libs.array_kernels.setna(A, idx) # pragma: no cover
+    elif isinstance(val, types.optional):
+
+        def impl_optional(A, idx, val): # pragma: no cover
+
+            if val is None:
+                bodo.libs.array_kernels.setna(A, idx)
+            else:
+                A[idx] = bodo.utils.indexing.unoptional(val)
+
+        return impl_optional
+
+
+@intrinsic
+def unoptional(typingctx, val_t=None):
+    """Return value inside Optional type assuming that it is not None
+    """
+
+    def codegen(context, builder, signature, args): # pragma: no cover
+        optval = context.make_helper(builder, val_t, args[0])
+        # TODO: check optval.valid bit to be True
+        out_val = optval.data
+        context.nrt.incref(builder, val_t.type, out_val)
+        return out_val
+
+    return val_t.type(val_t), codegen

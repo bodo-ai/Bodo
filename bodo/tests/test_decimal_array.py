@@ -143,3 +143,26 @@ def test_join(decimal_arr_value):
     df1 = pd.DataFrame({"A": np.arange(n), "B": decimal_arr_value})
     df2 = pd.DataFrame({"A": np.arange(n) + 3, "C": decimal_arr_value})
     check_func(test_impl, (df1, df2), sort_output=True, reset_index=True)
+
+
+def test_setitem_none_int(decimal_arr_value, memory_leak_check):
+    def test_impl(A, i):
+        A[i] = None
+        return A
+
+    i = 0
+    check_func(test_impl, (decimal_arr_value.copy(), i), copy_input=True, dist_test=False)
+
+
+@pytest.mark.skip("Decimal type cannot be coerced to a numba type #1625")
+def test_setitem_optional_int(decimal_arr_value, memory_leak_check):
+    def test_impl(A, i, flag):
+        if flag:
+            x = None
+        else:
+            x = Decimal("5.9")
+        A[i] = x
+        return A
+
+    check_func(test_impl, (decimal_arr_value.copy(), 1, False), copy_input=True, dist_test=False)
+    check_func(test_impl, (decimal_arr_value.copy(), 0, True), copy_input=True, dist_test=False)

@@ -1,4 +1,5 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
+import bodo
 import operator
 import pandas as pd
 import numpy as np
@@ -13,6 +14,28 @@ from bodo.tests.utils import check_func
 )
 def bool_arr_value(request):
     return request.param
+
+
+def test_setitem_optional_int(bool_arr_value, memory_leak_check):
+    def test_impl(A, i, flag):
+        if flag:
+            x = None
+        else:
+            x = False
+        A[i] = x
+        return A
+
+    check_func(test_impl, (bool_arr_value.copy(), 1, False), copy_input=True, dist_test=False)
+    check_func(test_impl, (bool_arr_value.copy(), 0, True), copy_input=True, dist_test=False)
+
+
+def test_setitem_none_int(bool_arr_value, memory_leak_check):
+    def test_impl(A, i):
+        A[i] = None
+        return A
+
+    i = 1
+    check_func(test_impl, (bool_arr_value.copy(), i), copy_input=True, dist_test=False)
 
 
 def test_unbox(bool_arr_value, memory_leak_check):

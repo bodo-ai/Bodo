@@ -10,6 +10,7 @@ import numpy as np
 import pytest
 
 import bodo
+from bodo.tests.utils import check_func
 
 
 @pytest.fixture(
@@ -68,3 +69,25 @@ def test_getitem_int_arr(timedelta_arr_value, memory_leak_check):
     np.testing.assert_array_equal(
         bodo_func(timedelta_arr_value, ind), test_impl(timedelta_arr_value, ind)
     )
+
+
+def test_setitem_optional_int(timedelta_arr_value, memory_leak_check):
+    def test_impl(A, i, flag):
+        if flag:
+            x = None
+        else:
+            x = datetime.timedelta(microseconds=100000001213181, hours=5)
+        A[i] = x
+        return A
+
+    check_func(test_impl, (timedelta_arr_value.copy(), 1, False), copy_input=True, dist_test=False)
+    check_func(test_impl, (timedelta_arr_value.copy(), 0, True), copy_input=True, dist_test=False)
+
+
+def test_setitem_none_int(timedelta_arr_value, memory_leak_check):
+    def test_impl(A, i):
+        A[i] = None
+        return A
+
+    i = 0
+    check_func(test_impl, (timedelta_arr_value.copy(), i), copy_input=True, dist_test=False)

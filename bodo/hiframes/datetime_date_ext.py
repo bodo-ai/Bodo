@@ -785,41 +785,44 @@ def dt_date_arr_getitem(A, ind):
 
 
 @overload(operator.setitem, no_unliteral=True)
-def dt_date_arr_setitem(A, ind, val):
+def dt_date_arr_setitem(A, idx, val):
     if A != datetime_date_array_type:
         return
 
     # scalar case
-    if isinstance(types.unliteral(ind), types.Integer):
+    if isinstance(idx, types.Integer):
+        if val == types.none or isinstance(val, types.optional): # pragma: no cover
+            return
 
-        def impl(A, ind, val):  # pragma: no cover
-            A._data[ind] = cast_datetime_date_to_int(val)
+        def impl(A, idx, val):  # pragma: no cover
+            A._data[idx] = cast_datetime_date_to_int(val)
+            bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, idx, 1)
 
         # Covered by test_series_iat_setitem , test_series_iloc_setitem_int , test_series_setitem_int
         return impl
 
     # array of integers
-    if is_list_like_index_type(ind) and isinstance(ind.dtype, types.Integer):
+    if is_list_like_index_type(idx) and isinstance(idx.dtype, types.Integer):
 
-        def impl_arr_ind(A, ind, val):  # pragma: no cover
-            array_setitem_int_index(A, ind, val)
+        def impl_arr_ind(A, idx, val):  # pragma: no cover
+            array_setitem_int_index(A, idx, val)
 
         # covered by test_series_iloc_setitem_list_int
         return impl_arr_ind
 
     # bool array
-    if is_list_like_index_type(ind) and ind.dtype == types.bool_:
+    if is_list_like_index_type(idx) and idx.dtype == types.bool_:
 
-        def impl_bool_ind_mask(A, ind, val):  # pragma: no cover
-            array_setitem_bool_index(A, ind, val)
+        def impl_bool_ind_mask(A, idx, val):  # pragma: no cover
+            array_setitem_bool_index(A, idx, val)
 
         return impl_bool_ind_mask
 
     # slice case
-    if isinstance(ind, types.SliceType):
+    if isinstance(idx, types.SliceType):
 
-        def impl_slice_mask(A, ind, val):  # pragma: no cover
-            array_setitem_slice_index(A, ind, val)
+        def impl_slice_mask(A, idx, val):  # pragma: no cover
+            array_setitem_slice_index(A, idx, val)
 
         # covered by test_series_setitem_slice
         return impl_slice_mask

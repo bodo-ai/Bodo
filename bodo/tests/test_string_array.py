@@ -110,6 +110,39 @@ def test_setitem_int():
     )
 
 
+def test_setitem_none_int():
+    def test_impl(n, idx):
+        A = bodo.libs.str_arr_ext.pre_alloc_string_array(n, n-1)
+        for i in range(n):
+            if i == idx:
+                A[i] = None
+                continue
+            A[i] = "A"
+        return A
+
+    bodo_func = bodo.jit(test_impl)
+    pd.util.testing.assert_extension_array_equal(
+        pd.array(bodo_func(8, 1), "string"), pd.array(['A', None] + ['A'] * 6, "string")
+    )
+
+
+def test_setitem_optional_int():
+    def test_impl(n, idx):
+        A = bodo.libs.str_arr_ext.pre_alloc_string_array(n, n-1)
+        for i in range(n):
+            if i == idx:
+                value = None
+            else:
+                value = "A"
+            A[i] = value
+        return A
+
+    bodo_func = bodo.jit(test_impl)
+    pd.util.testing.assert_extension_array_equal(
+        pd.array(bodo_func(8, 1), "string"), pd.array(['A', None] + ['A'] * 6, "string")
+    )
+
+
 def test_dtype():
     def test_impl(A):
         return A.dtype

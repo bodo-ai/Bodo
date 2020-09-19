@@ -218,7 +218,9 @@ def test_multioutput_string():
 
     # TODO sklearn test does more stuff that we don't support currently
 
+
 # ---------------------- sklearn.metrics score tests ----------------------
+
 
 def gen_random(n, true_chance, return_arrays=True):
     random.seed(5)
@@ -235,6 +237,7 @@ def gen_random(n, true_chance, return_arrays=True):
     else:
         return [y_true, y_pred]
 
+
 @pytest.mark.parametrize(
     "data",
     [
@@ -246,7 +249,6 @@ def gen_random(n, true_chance, return_arrays=True):
 )
 @pytest.mark.parametrize("average", ["micro", "macro", "weighted", None])
 def test_score(data, average):
-
     def test_precision(y_true, y_pred, average):
         return precision_score(y_true, y_pred, average=average)
 

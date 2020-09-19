@@ -132,6 +132,7 @@ def setna(arr, ind, int_nan_const=0):  # pragma: no cover
 
 @overload(setna, no_unliteral=True)
 def setna_overload(arr, ind, int_nan_const=0):
+
     if isinstance(arr.dtype, types.Float):
         return setna
 
@@ -150,7 +151,6 @@ def setna_overload(arr, ind, int_nan_const=0):
     if isinstance(arr, (IntegerArrayType, DecimalArrayType)) or arr in (
         boolean_array,
         datetime_date_array_type,
-        datetime_timedelta_array_type,
     ):
         return lambda arr, ind, int_nan_const=0: bodo.libs.int_arr_ext.set_bit_to_arr(
             arr._null_bitmap, ind, 0
@@ -206,6 +206,17 @@ def setna_overload(arr, ind, int_nan_const=0):
             arr[ind] = int_nan_const
 
         return setna_int
+
+    # Add support for datetime.timedelta array
+    if arr == datetime_timedelta_array_type:
+
+        def setna_datetime_timedelta(arr, ind, int_nan_const=0): #pragma: no cover
+            bodo.libs.array_kernels.setna(arr._days_data, ind)
+            bodo.libs.array_kernels.setna(arr._seconds_data, ind)
+            bodo.libs.array_kernels.setna(arr._microseconds_data, ind)
+            bodo.libs.int_arr_ext.set_bit_to_arr(arr._null_bitmap, ind, 0)
+
+        return setna_datetime_timedelta
 
     return lambda arr, ind, int_nan_const: None  # pragma: no cover
 

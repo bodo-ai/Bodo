@@ -838,9 +838,10 @@ def dt_timedelta_arr_setitem(A, ind, val):
         return
 
     # scalar case
-    if isinstance(types.unliteral(ind), types.Integer):
+    if isinstance(ind, types.Integer):
+        if val == types.none or isinstance(val, types.optional): # pragma: no cover
+            return
 
-        # TODO: Handle the None type situation
         def impl(A, ind, val):  # pragma: no cover
             A._days_data[ind] = val._days
             A._seconds_data[ind] = val._seconds
@@ -859,11 +860,11 @@ def dt_timedelta_arr_setitem(A, ind, val):
             val = bodo.utils.conversion.coerce_to_array(val, use_nullable_array=True)
             n = len(val._days_data)
             for i in range(n):
-                A._days_data[idx[i]] = val._days_data[i]
-                A._seconds_data[idx[i]] = val._seconds_data[i]
-                A._microseconds_data[idx[i]] = val._microseconds_data[i]
+                A._days_data[ind[i]] = val._days_data[i]
+                A._seconds_data[ind[i]] = val._seconds_data[i]
+                A._microseconds_data[ind[i]] = val._microseconds_data[i]
                 bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(val._null_bitmap, i)
-                bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, idx[i], bit)
+                bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, ind[i], bit)
 
         # TODO: Confirm the coverage and if its missing add it to the test cases
         return impl_arr_ind
@@ -875,10 +876,10 @@ def dt_timedelta_arr_setitem(A, ind, val):
             # Heavily influenced by array_setitem_bool_index.
             # Just replaces calls for new data with all 3 arrays
             val = bodo.utils.conversion.coerce_to_array(val, use_nullable_array=True)
-            n = len(idx)
+            n = len(ind)
             val_ind = 0
             for i in range(n):
-                if idx[i]:
+                if ind[i]:
                     A._days_data[i] = val._days_data[val_ind]
                     A._seconds_data[i] = val._seconds_data[val_ind]
                     A._microseconds_data[i] = val._microseconds_data[val_ind]

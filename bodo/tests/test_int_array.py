@@ -34,9 +34,11 @@ def get_random_integerarray(tot_size):
             ),
             marks=pytest.mark.slow,
         ),
-        pd.arrays.IntegerArray(
-            np.array([1, -3, 2, 3, 10], np.int32),
-            np.array([False, True, True, False, False]),
+        pytest.param(
+            pd.arrays.IntegerArray(
+                np.array([1, -3, 2, 3, 10], np.int32),
+                np.array([False, True, True, False, False]),
+            ),
         ),
         pytest.param(
             pd.arrays.IntegerArray(
@@ -145,6 +147,18 @@ def test_getitem_slice(int_arr_value, memory_leak_check):
     )
 
 
+def test_getitem_int_arr(int_arr_value, memory_leak_check):
+    def test_impl(A, ind):
+        return A[ind]
+
+    bodo_func = bodo.jit(test_impl)
+    ind = np.array([1, 3])
+    # TODO: parallel test
+    pd.util.testing.assert_extension_array_equal(
+        bodo_func(int_arr_value, ind), test_impl(int_arr_value, ind)
+    )
+
+
 def test_setitem_int(int_arr_value, memory_leak_check):
     def test_impl(A, val):
         A[2] = val
@@ -157,6 +171,28 @@ def test_setitem_int(int_arr_value, memory_leak_check):
     pd.util.testing.assert_extension_array_equal(
         bodo_func(int_arr_value, val), test_impl(int_arr_value, val)
     )
+
+
+def test_setitem_none_int(int_arr_value, memory_leak_check):
+    def test_impl(A, i):
+        A[i] = None
+        return A
+
+    i = 1
+    check_func(test_impl, (int_arr_value.copy(), i), copy_input=True, dist_test=False)
+
+
+def test_setitem_optional_int(int_arr_value, memory_leak_check):
+    def test_impl(A, i, flag):
+        if flag:
+            x = None
+        else:
+            x = 42
+        A[i] = x
+        return A
+
+    check_func(test_impl, (int_arr_value.copy(), 1, False), copy_input=True, dist_test=False)
+    check_func(test_impl, (int_arr_value.copy(), 0, True), copy_input=True, dist_test=False)
 
 
 def test_setitem_arr(int_arr_value, memory_leak_check):

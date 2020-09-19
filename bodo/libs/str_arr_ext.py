@@ -1648,7 +1648,9 @@ def str_arr_setitem(A, idx, val):
         return
 
     # scalar case
-    if isinstance(types.unliteral(idx), types.Integer):
+    if isinstance(idx, types.Integer):
+        if val == types.none or isinstance(val, types.optional): # pragma: no cover
+            return
         assert val == string_type
 
         # XXX: setitem works only if value is same size as the previous value

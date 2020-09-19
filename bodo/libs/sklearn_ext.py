@@ -322,9 +322,15 @@ def precision_recall_fscore_parallel(y_true, y_pred, operation, average="binary"
             tp_sum[label] += 1
 
     # gather global tp_sum, true_sum and pred_sum on every process
-    tp_sum = bodo.libs.distributed_api.dist_reduce(tp_sum, np.int32(Reduce_Type.Sum.value))
-    true_sum = bodo.libs.distributed_api.dist_reduce(true_sum, np.int32(Reduce_Type.Sum.value))
-    pred_sum = bodo.libs.distributed_api.dist_reduce(pred_sum, np.int32(Reduce_Type.Sum.value))
+    tp_sum = bodo.libs.distributed_api.dist_reduce(
+        tp_sum, np.int32(Reduce_Type.Sum.value)
+    )
+    true_sum = bodo.libs.distributed_api.dist_reduce(
+        true_sum, np.int32(Reduce_Type.Sum.value)
+    )
+    pred_sum = bodo.libs.distributed_api.dist_reduce(
+        pred_sum, np.int32(Reduce_Type.Sum.value)
+    )
 
     # see https://github.com/scikit-learn/scikit-learn/blob/e0abd262ea3328f44ae8e612f5b2f2cece7434b6/sklearn/metrics/_classification.py#L526
     fp = pred_sum - tp_sum
