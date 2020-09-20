@@ -252,6 +252,17 @@ numpy_arr_payload allocate_numpy_payload(int64_t length,
 }
 
 /**
+ * @brief decref numpy array stored in payload and free if refcount becomes
+ * zero.
+ *
+ * @param arr
+ */
+void decref_numpy_payload(numpy_arr_payload arr) {
+    arr.meminfo->refct--;
+    if (arr.meminfo->refct == 0) NRT_MemInfo_call_dtor(arr.meminfo);
+}
+
+/**
  * @brief destrcutor for array(item) array meminfo. Decrefs the underlying data,
  * offsets and null_bitmap arrays.
  *
@@ -649,7 +660,6 @@ void nested_array_to_c(std::shared_ptr<arrow::Array> array, int64_t* lengths,
 }
 
 extern "C" {
-
 
 void allocate_list_string_array(int64_t n_lists, int64_t n_strings,
                                 int64_t n_chars, int64_t extra_null_bytes,

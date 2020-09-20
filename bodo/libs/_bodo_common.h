@@ -318,6 +318,9 @@ struct numpy_arr_payload {
           strides(_strides) {}
 };
 
+
+void decref_numpy_payload(numpy_arr_payload arr);
+
 // XXX: equivalent to payload data model in str_arr_ext.py
 struct str_arr_payload {
     int64_t num_strings;
