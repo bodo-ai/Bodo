@@ -51,7 +51,11 @@ from bodo.hiframes.datetime_date_ext import (
     datetime_date_array_type,
     datetime_date_type,
 )
-from bodo.libs.array_item_arr_ext import ArrayItemArrayType, _get_array_item_arr_payload
+from bodo.libs.array_item_arr_ext import (
+    ArrayItemArrayType,
+    _get_array_item_arr_payload,
+    ArrayItemArrayPayloadType,
+)
 from bodo.libs.decimal_arr_ext import Decimal128Type, DecimalArrayType
 from bodo.libs.str_ext import memcmp, string_type, unicode_to_utf8_and_len
 from bodo.utils.typing import (
@@ -998,30 +1002,6 @@ _print_str_arr = types.ExternalFunction(
 )
 
 
-def construct_string_array(context, builder):
-    """Creates meminfo and sets dtor."""
-    alloc_type = context.get_value_type(str_arr_payload_type)
-    alloc_size = context.get_abi_sizeof(alloc_type)
-
-    llvoidptr = context.get_value_type(types.voidptr)
-    llsize = context.get_value_type(types.uintp)
-    dtor_ftype = lir.FunctionType(lir.VoidType(), [llvoidptr, llsize, llvoidptr])
-    dtor_fn = builder.module.get_or_insert_function(
-        dtor_ftype, name="dtor_string_array"
-    )
-
-    meminfo = context.nrt.meminfo_alloc_dtor(
-        builder, context.get_constant(types.uintp, alloc_size), dtor_fn
-    )
-    meminfo_void_ptr = context.nrt.meminfo_data(builder, meminfo)
-    meminfo_data_ptr = builder.bitcast(meminfo_void_ptr, alloc_type.as_pointer())
-
-    # Nullify all data
-    # builder.store( cgutils.get_null_value(alloc_type),
-    #             meminfo_data_ptr)
-    return meminfo, meminfo_data_ptr
-
-
 @register_jitable
 def str_arr_from_sequence(in_seq):  # pragma: no cover
     n_strs = len(in_seq)
@@ -1334,6 +1314,21 @@ def set_null_bits(typingctx, str_arr_typ=None):
     return types.none(string_array_type), codegen
 
 
+def _get_str_arr_data_payload_ptr(context, builder, str_arr):
+    """get pointer to meminfo of string array's underlying data array"""
+    string_array = context.make_helper(builder, string_array_type, str_arr)
+    array_item_data_type = ArrayItemArrayType(char_arr_type)
+    array_item_array = context.make_helper(
+        builder, array_item_data_type, string_array.data
+    )
+    payload_type = ArrayItemArrayPayloadType(array_item_data_type)
+    meminfo_void_ptr = context.nrt.meminfo_data(builder, array_item_array.meminfo)
+    meminfo_data_ptr = builder.bitcast(
+        meminfo_void_ptr, context.get_value_type(payload_type).as_pointer()
+    )
+    return meminfo_data_ptr
+
+
 @intrinsic
 def move_str_arr_payload(typingctx, to_str_arr_typ, from_str_arr_typ=None):
     """Move string array payload from one array to another."""
@@ -1343,52 +1338,27 @@ def move_str_arr_payload(typingctx, to_str_arr_typ, from_str_arr_typ=None):
         (to_str_arr, from_str_arr) = args
 
         # get payload pointers
-        from_string_array = context.make_helper(
-            builder, string_array_type, from_str_arr
+        from_meminfo_data_ptr = _get_str_arr_data_payload_ptr(
+            context, builder, from_str_arr
         )
-        from_meminfo_data_ptr = context.nrt.meminfo_data(
-            builder, from_string_array.meminfo
+        to_meminfo_data_ptr = _get_str_arr_data_payload_ptr(
+            context, builder, to_str_arr
         )
-        from_meminfo_data_ptr = builder.bitcast(
-            from_meminfo_data_ptr,
-            context.get_value_type(str_arr_payload_type).as_pointer(),
-        )
+        from_payload = _get_string_arr_payload(context, builder, from_str_arr)
+        to_payload = _get_string_arr_payload(context, builder, to_str_arr)
 
-        to_string_array = context.make_helper(builder, string_array_type, to_str_arr)
-        to_meminfo_data_void_ptr = context.nrt.meminfo_data(
-            builder, to_string_array.meminfo
-        )
-        to_meminfo_data_ptr = builder.bitcast(
-            to_meminfo_data_void_ptr,
-            context.get_value_type(str_arr_payload_type).as_pointer(),
-        )
+        # incref data of from_str_arr (not the meminfo, which is not copied)
+        context.nrt.incref(builder, char_arr_type, from_payload.data)
+        context.nrt.incref(builder, offset_arr_type, from_payload.offsets)
+        context.nrt.incref(builder, null_bitmap_arr_type, from_payload.null_bitmap)
 
-        # delete existing data by calling destructor
-        llvoidptr = context.get_value_type(types.voidptr)
-        llsize = context.get_value_type(types.uintp)
-        dtor_ftype = lir.FunctionType(lir.VoidType(), [llvoidptr, llsize, llvoidptr])
-        dtor_fn = builder.module.get_or_insert_function(
-            dtor_ftype, name="dtor_string_array"
-        )
-        # NOTE: passing zero and null for second and third argument, since not needed by
-        # the destructor. This has to change if dependency to those arguments is
-        # introduced.
-        builder.call(
-            dtor_fn,
-            [
-                to_meminfo_data_void_ptr,
-                context.get_constant(types.int64, 0),
-                context.get_constant_null(types.voidptr),
-            ],
-        )
+        # decref data of to_str_arr (not the meminfo, which is still used)
+        context.nrt.decref(builder, char_arr_type, to_payload.data)
+        context.nrt.decref(builder, offset_arr_type, to_payload.offsets)
+        context.nrt.decref(builder, null_bitmap_arr_type, to_payload.null_bitmap)
 
         # copy payload
         builder.store(builder.load(from_meminfo_data_ptr), to_meminfo_data_ptr)
-
-        # clear "from" array's payload, set to nulls to disable destructor
-        builder.store(
-            context.get_constant_null(str_arr_payload_type), from_meminfo_data_ptr
-        )
 
         return context.get_dummy_value()
 
