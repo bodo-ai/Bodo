@@ -650,12 +650,6 @@ void nested_array_to_c(std::shared_ptr<arrow::Array> array, int64_t* lengths,
 
 extern "C" {
 
-void dtor_string_array(str_arr_payload* in_str_arr, int64_t size, void* in) {
-    // check for NULL since move_str_arr_payload() may set pointers to NULL
-    if (in_str_arr->offsets != nullptr) delete[] in_str_arr->offsets;
-    if (in_str_arr->data != nullptr) delete[] in_str_arr->data;
-    if (in_str_arr->null_bitmap != nullptr) delete[] in_str_arr->null_bitmap;
-}
 
 void allocate_list_string_array(int64_t n_lists, int64_t n_strings,
                                 int64_t n_chars, int64_t extra_null_bytes,

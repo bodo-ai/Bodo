@@ -106,8 +106,6 @@ PyMODINIT_FUNC PyInit_hstr_ext(void) {
 
     PyObject_SetAttrString(m, "init_string_const",
                            PyLong_FromVoidPtr((void*)(&init_string_const)));
-    PyObject_SetAttrString(m, "dtor_string_array",
-                           PyLong_FromVoidPtr((void*)(&dtor_string_array)));
     PyObject_SetAttrString(
         m, "dtor_str_arr_split_view",
         PyLong_FromVoidPtr((void*)(&dtor_str_arr_split_view)));

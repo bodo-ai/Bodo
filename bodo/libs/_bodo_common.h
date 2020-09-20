@@ -357,7 +357,6 @@ struct str_arr_split_view_payload {
 numpy_arr_payload allocate_numpy_payload(int64_t length,
                                          Bodo_CTypes::CTypeEnum typ_enum);
 
-void dtor_string_array(str_arr_payload* in_str_arr, int64_t size, void* in);
 void dtor_array_item_array(array_item_arr_numpy_payload* payload, int64_t size, void* in);
 NRT_MemInfo* alloc_array_item_arr_meminfo();
 
