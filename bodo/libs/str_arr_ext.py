@@ -948,7 +948,6 @@ from bodo.libs import hstr_ext
 from bodo.libs import array_ext
 
 ll.add_symbol("get_str_len", hstr_ext.get_str_len)
-ll.add_symbol("allocate_string_array", hstr_ext.allocate_string_array)
 ll.add_symbol("setitem_string_array", hstr_ext.setitem_string_array)
 ll.add_symbol("getitem_string_array", hstr_ext.getitem_string_array)
 ll.add_symbol("getitem_string_array_std", hstr_ext.getitem_string_array_std)
@@ -1074,6 +1073,9 @@ def set_string_array_range(
         in_offsets = context.make_helper(
             builder, offset_arr_type, in_payload.offsets
         ).data
+        out_offsets = context.make_helper(
+            builder, offset_arr_type, out_payload.offsets
+        ).data
 
         in_data = context.make_helper(builder, char_arr_type, in_payload.data).data
         out_data = context.make_helper(builder, char_arr_type, out_payload.data).data
@@ -1099,7 +1101,7 @@ def set_string_array_range(
         builder.call(
             fn_alloc,
             [
-                out_payload.offsets,
+                out_offsets,
                 out_data,
                 in_offsets,
                 in_data,

@@ -320,16 +320,17 @@ array_info* list_string_array_to_info(NRT_MemInfo* meminfo) {
     array_item_arr_payload* payload = (array_item_arr_payload*)meminfo->data;
     int64_t n_items = payload->n_arrays;
 
-    str_arr_payload* sub_payload = (str_arr_payload*)payload->data->data;
-    int64_t n_strings = sub_payload->num_strings;
-    int64_t n_chars = sub_payload->offsets[n_strings];
+    array_item_arr_numpy_payload* sub_payload =
+        (array_item_arr_numpy_payload*)payload->data->data;
+    int64_t n_strings = sub_payload->n_arrays;
+    int64_t n_chars = sub_payload->offsets.data[n_strings];
 
-    return new array_info(bodo_array_type::LIST_STRING,
-                          Bodo_CTypes::LIST_STRING, n_items, n_strings, n_chars,
-                          (char*)sub_payload->data, (char*)sub_payload->offsets,
-                          (char*)payload->offsets.data,
-                          (char*)payload->null_bitmap.data,
-                          (char*)sub_payload->null_bitmap, meminfo, nullptr);
+    return new array_info(
+        bodo_array_type::LIST_STRING, Bodo_CTypes::LIST_STRING, n_items,
+        n_strings, n_chars, (char*)sub_payload->data.data,
+        (char*)sub_payload->offsets.data, (char*)payload->offsets.data,
+        (char*)payload->null_bitmap.data, (char*)sub_payload->null_bitmap.data,
+        meminfo, nullptr);
 #endif
 }
 

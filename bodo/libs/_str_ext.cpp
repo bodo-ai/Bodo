@@ -132,8 +132,6 @@ PyMODINIT_FUNC PyInit_hstr_ext(void) {
     PyObject_SetAttrString(
         m, "np_array_from_string_array",
         PyLong_FromVoidPtr((void*)(&np_array_from_string_array)));
-    PyObject_SetAttrString(m, "allocate_string_array",
-                           PyLong_FromVoidPtr((void*)(&allocate_string_array)));
     PyObject_SetAttrString(m, "setitem_string_array",
                            PyLong_FromVoidPtr((void*)(&setitem_string_array)));
     PyObject_SetAttrString(
