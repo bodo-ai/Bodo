@@ -159,18 +159,21 @@ array_info* alloc_nullable_array(int64_t length,
 
 array_info* alloc_string_array(int64_t length, int64_t n_chars,
                                int64_t extra_null_bytes) {
-    // extra_null_bytes are necessary for communication buffers around the edges
-    NRT_MemInfo* meminfo = NRT_MemInfo_alloc_dtor_safe(
-        sizeof(str_arr_payload), (NRT_dtor_function)dtor_string_array);
-    str_arr_payload* payload = (str_arr_payload*)meminfo->data;
-    allocate_string_array(&(payload->offsets), &(payload->data),
-                          &(payload->null_bitmap), length, n_chars,
-                          extra_null_bytes);
-    payload->num_strings = length;
-    return new array_info(bodo_array_type::STRING, Bodo_CTypes::STRING, length,
-                          n_chars, -1, payload->data, (char*)payload->offsets,
-                          NULL, (char*)payload->null_bitmap, NULL, meminfo,
-                          NULL);
+    // allocate underlying array(item) data array
+    array_info* data_arr = alloc_array(
+        length, n_chars, -1, bodo_array_type::arr_type_enum::ARRAY_ITEM,
+        Bodo_CTypes::UINT8, extra_null_bytes, 0);
+
+    NRT_MemInfo* out_meminfo = data_arr->meminfo;
+    array_item_arr_numpy_payload* payload =
+        (array_item_arr_numpy_payload*)(out_meminfo->data);
+
+    array_info* out_arr = new array_info(
+        bodo_array_type::STRING, Bodo_CTypes::STRING, length, n_chars, -1,
+        payload->data.data, (char*)payload->offsets.data, NULL,
+        (char*)payload->null_bitmap.data, NULL, out_meminfo, NULL);
+    delete data_arr;
+    return out_arr;
 }
 
 array_info* alloc_list_string_array(int64_t n_lists, int64_t n_strings,
@@ -260,7 +263,8 @@ NRT_MemInfo* alloc_array_item_arr_meminfo() {
  * @return array_info*
  */
 array_info* alloc_array_item(int64_t n_arrays, int64_t n_total_items,
-                             Bodo_CTypes::CTypeEnum dtype) {
+                             Bodo_CTypes::CTypeEnum dtype,
+                             int64_t extra_null_bytes) {
     // allocate payload
     NRT_MemInfo* meminfo_array_item =
         NRT_MemInfo_alloc_dtor_safe(sizeof(array_item_arr_numpy_payload),
@@ -276,8 +280,9 @@ array_info* alloc_array_item(int64_t n_arrays, int64_t n_total_items,
     // TODO: support 64-bit offsets case
     payload->offsets =
         allocate_numpy_payload(n_arrays + 1, Bodo_CTypes::CTypeEnum::UINT32);
-    payload->null_bitmap = allocate_numpy_payload(
-        (int64_t)((n_arrays + 7) / 8), Bodo_CTypes::CTypeEnum::UINT8);
+    payload->null_bitmap =
+        allocate_numpy_payload((int64_t)((n_arrays + 7) / 8) + extra_null_bytes,
+                               Bodo_CTypes::CTypeEnum::UINT8);
 
     return new array_info(bodo_array_type::ARRAY_ITEM, dtype, n_arrays,
                           n_total_items, -1, NULL, NULL, NULL, NULL, NULL,
@@ -319,7 +324,7 @@ array_info* alloc_array(int64_t length, int64_t n_sub_elems,
         return alloc_categorical(length, dtype, num_categories);
 
     if (arr_type == bodo_array_type::ARRAY_ITEM)
-        return alloc_array_item(length, n_sub_elems, dtype);
+        return alloc_array_item(length, n_sub_elems, dtype, extra_null_bytes);
 
     Bodo_PyErr_SetString(PyExc_RuntimeError, "Type not covered in alloc_array");
     return nullptr;

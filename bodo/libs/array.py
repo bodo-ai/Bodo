@@ -37,7 +37,13 @@ from bodo.libs.array_item_arr_ext import (
 from bodo.libs.bool_arr_ext import boolean_array
 from bodo.libs.decimal_arr_ext import DecimalArrayType, int128_type
 from bodo.libs.int_arr_ext import IntegerArrayType
-from bodo.libs.str_arr_ext import _get_string_arr_payload, string_array_type
+from bodo.libs.str_arr_ext import (
+    _get_string_arr_payload,
+    string_array_type,
+    char_arr_type,
+    offset_arr_type,
+    null_bitmap_arr_type,
+)
 from bodo.libs.struct_arr_ext import (
     StructArrayPayloadType,
     StructArrayType,
@@ -379,9 +385,20 @@ def array_to_info(typingctx, arr_type_t=None):
         # StringArray
         if arr_type == string_array_type:
             string_array = context.make_helper(builder, string_array_type, in_arr)
+            array_item_data_type = ArrayItemArrayType(char_arr_type)
+            array_item_array = context.make_helper(
+                builder, array_item_data_type, string_array.data
+            )
             payload = _get_string_arr_payload(context, builder, in_arr)
+            offsets = context.make_helper(
+                builder, offset_arr_type, payload.offsets
+            ).data
+            data = context.make_helper(builder, char_arr_type, payload.data).data
+            null_bitmap = context.make_helper(
+                builder, null_bitmap_arr_type, payload.null_bitmap
+            ).data
             num_total_chars = builder.zext(
-                builder.load(builder.gep(payload.offsets, [payload.num_strings])),
+                builder.load(builder.gep(offsets, [payload.n_arrays])),
                 lir.IntType(64),
             )
             fnty = lir.FunctionType(
@@ -401,12 +418,12 @@ def array_to_info(typingctx, arr_type_t=None):
             return builder.call(
                 fn_tp,
                 [
-                    payload.num_strings,
+                    payload.n_arrays,
                     num_total_chars,
-                    payload.data,
-                    payload.offsets,
-                    payload.null_bitmap,
-                    string_array.meminfo,
+                    data,
+                    offsets,
+                    null_bitmap,
+                    array_item_array.meminfo,
                 ],
             )
 
@@ -990,6 +1007,8 @@ def info_to_array(typingctx, info_type, array_type):
         # StringArray
         if arr_type == string_array_type:
             string_array = context.make_helper(builder, string_array_type)
+            array_item_data_type = ArrayItemArrayType(char_arr_type)
+            array_item_array = context.make_helper(builder, array_item_data_type)
             fnty = lir.FunctionType(
                 lir.VoidType(),
                 [
@@ -1004,9 +1023,10 @@ def info_to_array(typingctx, info_type, array_type):
                 fn_tp,
                 [
                     in_info,
-                    string_array._get_ptr_by_name("meminfo"),
+                    array_item_array._get_ptr_by_name("meminfo"),
                 ],
             )
+            string_array.data = array_item_array._getvalue()
             return string_array._getvalue()
 
         if isinstance(arr_type, CategoricalArray):

@@ -593,10 +593,10 @@ def copy_str_arr_slice(typingctx, out_str_arr_typ, in_str_arr_typ, ind_t=None):
         out_data = context.make_helper(builder, char_arr_type, out_payload.data).data
 
         in_null_bitmap = context.make_helper(
-            builder, null_bitmap_arr_type, in_payload.data
+            builder, null_bitmap_arr_type, in_payload.null_bitmap
         ).data
         out_null_bitmap = context.make_helper(
-            builder, null_bitmap_arr_type, out_payload.data
+            builder, null_bitmap_arr_type, out_payload.null_bitmap
         ).data
 
         ind_p1 = builder.add(ind, context.get_constant(types.intp, 1))
