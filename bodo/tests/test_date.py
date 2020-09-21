@@ -19,7 +19,7 @@ from bodo.utils.typing import BodoError
 
 
 # ------------------------- Test datetime OPs ------------------------- #
-def test_datetime_operations():
+def test_datetime_operations(memory_leak_check):
     """
     Test operations of datetime module objects in Bodo
     """
@@ -159,7 +159,7 @@ def test_datetime_operations():
     check_func(test_sub, (t2, t1))
 
 
-def test_dt64_sub_output():
+def test_dt64_sub_output(memory_leak_check):
     """make sure output of Series(dt64) subtraction is Series(timedelta64) and supports
     dt.days properly (from forecast code issue)
     """
@@ -192,7 +192,7 @@ def test_dt64_sub_output():
     check_func(impl, (S1, S2), check_dtype=False)
 
 
-def test_datetime_timedelta_coerce():
+def test_datetime_timedelta_coerce(memory_leak_check):
     ts = datetime.timedelta(7, 7, 7)
 
     def f(df):
@@ -203,7 +203,7 @@ def test_datetime_timedelta_coerce():
     check_func(f, (df1,))
 
 
-def test_datetime_datetime_coerce():
+def test_datetime_datetime_coerce(memory_leak_check):
     ts = datetime.datetime(2020, 1, 20, 10, 20, 30, 40)
 
     def f(df):
@@ -214,7 +214,7 @@ def test_datetime_datetime_coerce():
     check_func(f, (df1,))
 
 
-def test_datetime_date_coerce():
+def test_datetime_date_coerce(memory_leak_check):
     ts = datetime.date(2003, 1, 1)
 
     def f(df):
@@ -225,7 +225,7 @@ def test_datetime_date_coerce():
     check_func(f, (df1,))
 
 
-def test_datetime_date_constant_lowering():
+def test_datetime_date_constant_lowering(memory_leak_check):
     date = datetime.date(2004, 1, 1)
 
     def f():
@@ -236,7 +236,7 @@ def test_datetime_date_constant_lowering():
     assert val_ret == date
 
 
-def test_timedelta_constant_lowering():
+def test_timedelta_constant_lowering(memory_leak_check):
     timedelta = datetime.timedelta(3, 3, 3)
 
     def f():
@@ -247,7 +247,7 @@ def test_timedelta_constant_lowering():
     assert val_ret == timedelta
 
 
-def test_datetime_datetime_constant_lowering():
+def test_datetime_datetime_constant_lowering(memory_leak_check):
     ts = datetime.datetime.now()
 
     def f():
@@ -258,7 +258,7 @@ def test_datetime_datetime_constant_lowering():
     assert val_ret == ts
 
 
-def test_timestamp_constant_lowering():
+def test_timestamp_constant_lowering(memory_leak_check):
     t = pd.Timestamp("2012-06-18")
 
     def f():
@@ -269,7 +269,7 @@ def test_timestamp_constant_lowering():
     assert val_ret == t
 
 
-def test_sub_add_timestamp_timedelta():
+def test_sub_add_timestamp_timedelta(memory_leak_check):
     def f_sub(date, timedelta):
         return date - timedelta
 
@@ -282,7 +282,7 @@ def test_sub_add_timestamp_timedelta():
     check_func(f_add, (date, timedelta))
 
 
-def test_datetime_comparisons_scalar(is_slow_run):
+def test_datetime_comparisons_scalar(is_slow_run, memory_leak_check):
     """
     Test comparison operators of datetime module objects in Bodo for single values
     """
@@ -349,7 +349,7 @@ def test_datetime_comparisons_scalar(is_slow_run):
         check_func(test_gt, (dt, dt2))
 
 
-def test_function_to_datetime_string_array():
+def test_function_to_datetime_string_array(memory_leak_check):
     """Test pd.to_datetime for an array of strings
     """
 
@@ -363,7 +363,7 @@ def test_function_to_datetime_string_array():
     check_func(f, (S, formatting))
 
 
-def test_function_to_datetime_scalar():
+def test_function_to_datetime_scalar(memory_leak_check):
     def f(str1, formating):
         return pd.to_datetime(str1, format=formating)
 
@@ -372,7 +372,7 @@ def test_function_to_datetime_scalar():
     check_func(f, (str1, formating))
 
 
-def test_function_to_datetime_array_int():
+def test_function_to_datetime_array_int(memory_leak_check):
     """Test pd.to_datetime for an array of int
     """
 
@@ -383,7 +383,7 @@ def test_function_to_datetime_array_int():
     check_func(f, (S,))
 
 
-def test_function_to_datetime_infer_datetime_format():
+def test_function_to_datetime_infer_datetime_format(memory_leak_check):
     """Test unix to_datetime"""
 
     def f(S):
@@ -394,7 +394,7 @@ def test_function_to_datetime_infer_datetime_format():
 
 
 @pytest.mark.slow
-def test_function_to_datetime_unix_epoch():
+def test_function_to_datetime_unix_epoch(memory_leak_check):
     """Test unix to_datetime"""
 
     def f1():
@@ -412,7 +412,7 @@ def test_function_to_datetime_unix_epoch():
     check_func(f3, ())
 
 
-def test_datetime_comparisons_datetime_datetime(is_slow_run):
+def test_datetime_comparisons_datetime_datetime(is_slow_run, memory_leak_check):
     """
     Test comparison operators of datetime module objects in Bodo.
     Comparison between array of datetime and datetime
@@ -466,7 +466,7 @@ def test_datetime_comparisons_datetime_datetime(is_slow_run):
     check_func(test_eq, (S, t))
 
 
-def test_datetime_comparisons_datetime_string(is_slow_run):
+def test_datetime_comparisons_datetime_string(is_slow_run, memory_leak_check):
     """
     Test comparison operators of datetime module objects in Bodo.
     Comparison between datetime and string
@@ -519,7 +519,7 @@ def test_datetime_comparisons_datetime_string(is_slow_run):
     check_func(test_eq, (S, t_str))
 
 
-def test_datetime_comparisons_timedelta(is_slow_run):
+def test_datetime_comparisons_timedelta(is_slow_run, memory_leak_check):
     """
     Test comparison operators of datetime module objects in Bodo.
     Comparison between Series(timedelta64) and timedelta scalar
@@ -571,7 +571,7 @@ def test_datetime_comparisons_timedelta(is_slow_run):
     check_func(test_eq, (TimeDeltas, t_timedelta))
 
 
-def test_datetime_comparisons_datetime_list(is_slow_run):
+def test_datetime_comparisons_datetime_list(is_slow_run, memory_leak_check):
     """
     Test comparison operators of datetime module objects in Bodo.
     Comparison between lists of datetime
@@ -630,7 +630,7 @@ def test_datetime_comparisons_datetime_list(is_slow_run):
     check_func(test_eq, (S1, S2))
 
 
-def test_datetime_comparisons_date(is_slow_run):
+def test_datetime_comparisons_date(is_slow_run, memory_leak_check):
     """
     Test comparison operators of datetime module objects in Bodo.
     Comparison between list of dates and a scalar of date
@@ -685,7 +685,7 @@ def test_datetime_comparisons_date(is_slow_run):
     check_func(test_eq, (S, t))
 
 
-def test_date_isin():
+def test_date_isin(memory_leak_check):
     """test Series.isin with datetime.date values
     """
 
@@ -728,7 +728,7 @@ def test_datetime_boxing(memory_leak_check):
 
 
 # ------------------------- Test datetime.timedelta ------------------------- #
-def test_datetime_timedelta_construct():
+def test_datetime_timedelta_construct(memory_leak_check):
     """
     Test construction of datetime.timedelta object in Bodo
     """
@@ -740,7 +740,7 @@ def test_datetime_timedelta_construct():
     check_func(test_impl, ())
 
 
-def test_datetime_timedelta_getattr():
+def test_datetime_timedelta_getattr(memory_leak_check):
     """
     Test getting attributes from datetime.timedelta object in Bodo
     """
@@ -760,7 +760,7 @@ def test_datetime_timedelta_getattr():
     check_func(test_microseconds, (dt_obj,))
 
 
-def test_datetime_timedelta_total_seconds():
+def test_datetime_timedelta_total_seconds(memory_leak_check):
     """
     Test total_seconds method of datetime.timedelta object in Bodo
     """
@@ -773,7 +773,7 @@ def test_datetime_timedelta_total_seconds():
 
 
 # ------------------------- Test datetime.date ------------------------- #
-def test_datetime_date_construct():
+def test_datetime_date_construct(memory_leak_check):
     """
     Test construction of datetime.date object in Bodo
     """
@@ -785,7 +785,7 @@ def test_datetime_date_construct():
     check_func(test_impl, ())
 
 
-def test_datetime_date_today():
+def test_datetime_date_today(memory_leak_check):
     """
     Test datetime.date.today() classmethod
     """
@@ -796,7 +796,7 @@ def test_datetime_date_today():
     assert bodo.jit(test_impl)() == test_impl()
 
 
-def test_datetime_date_fromordinal():
+def test_datetime_date_fromordinal(memory_leak_check):
     """
     Test datetime.date.fromordinal() classmethod
     """
@@ -809,7 +809,7 @@ def test_datetime_date_fromordinal():
     assert bodo.jit(test_impl)(n) == test_impl(n)
 
 
-def test_datetime_date_methods():
+def test_datetime_date_methods(memory_leak_check):
     """
     Test methods of datetime.date object in Bodo
     """
@@ -826,7 +826,7 @@ def test_datetime_date_methods():
 
 
 # ------------------------- Test datetime.datetime ------------------------- #
-def test_datetime_datetime_construct():
+def test_datetime_datetime_construct(memory_leak_check):
     """
     Test construction of datetime.datetime object in Bodo
     """
@@ -838,7 +838,7 @@ def test_datetime_datetime_construct():
     check_func(test_impl, ())
 
 
-def test_datetime_datetime_getattr():
+def test_datetime_datetime_getattr(memory_leak_check):
     """
     Test getting attributes from datetime.datetime object in Bodo
     """
@@ -874,7 +874,7 @@ def test_datetime_datetime_getattr():
     check_func(test_microsecond, (dt_obj,))
 
 
-def test_datetime_datetime_methods():
+def test_datetime_datetime_methods(memory_leak_check):
     """
     Test methods of datetime.date object in Bodo
     """
@@ -894,7 +894,7 @@ def test_datetime_datetime_methods():
     check_func(test_date, (dt,))
 
 
-def test_datetime_datetime_now():
+def test_datetime_datetime_now(memory_leak_check):
     """
     Test datetime.datetime classmethod 'now'
     """
@@ -910,7 +910,7 @@ def test_datetime_datetime_now():
     assert (p - b) < datetime.timedelta(seconds=5)
 
 
-def test_datetime_datetime_strptime():
+def test_datetime_datetime_strptime(memory_leak_check):
     """
     Test datetime.datetime classmethod 'strptime'
     """
@@ -948,7 +948,7 @@ def test_datetime_datetime_strptime():
         pytest.param(datetime.date(2025, 10, 28), marks=pytest.mark.slow),
     ],
 )
-def test_datetime_date_isocalendar(date):
+def test_datetime_date_isocalendar(date, memory_leak_check):
     """ Test datetime.date's isocalendar() method
     """
 
@@ -981,7 +981,7 @@ def series_value(request):
 
 
 @pytest.mark.parametrize("date_fields", bodo.hiframes.pd_timestamp_ext.date_fields)
-def test_dt_extract(series_value, date_fields):
+def test_dt_extract(series_value, date_fields, memory_leak_check):
     """Test Series.dt extraction
     """
     func_text = "def impl(S, date_fields):\n"
@@ -993,7 +993,7 @@ def test_dt_extract(series_value, date_fields):
     check_func(impl, (series_value, date_fields), check_dtype=False)
 
 
-def test_dt_extract_date(series_value):
+def test_dt_extract_date(series_value, memory_leak_check):
     """Test Series.dt.date extraction
     """
 
@@ -1019,7 +1019,7 @@ def series_value_no_bad_dates(request):
     return request.param
 
 
-def test_dt_isocalendar(series_value_no_bad_dates):
+def test_dt_isocalendar(series_value_no_bad_dates, memory_leak_check):
     """Test Series.dt.isocalendar()
     """
 
@@ -1032,7 +1032,7 @@ def test_dt_isocalendar(series_value_no_bad_dates):
 @pytest.mark.parametrize(
     "timedelta_fields", bodo.hiframes.pd_timestamp_ext.timedelta_fields
 )
-def test_dt_timedelta_fields(timedelta_fields):
+def test_dt_timedelta_fields(timedelta_fields, memory_leak_check):
     """Test Series.dt for timedelta64 fields
     """
     func_text = "def impl(S, date_fields):\n"
@@ -1048,7 +1048,7 @@ def test_dt_timedelta_fields(timedelta_fields):
 @pytest.mark.parametrize(
     "timedelta_methods", bodo.hiframes.pd_timestamp_ext.timedelta_methods
 )
-def test_dt_timedelta_methods(timedelta_methods):
+def test_dt_timedelta_methods(timedelta_methods, memory_leak_check):
     """Test Series.dt for timedelta64 methods
     """
     func_text = "def impl(S, timedelta_methods):\n"
@@ -1061,7 +1061,7 @@ def test_dt_timedelta_methods(timedelta_methods):
     check_func(impl, (S, timedelta_methods))
 
 
-def test_series_dt64_timestamp_cmp():
+def test_series_dt64_timestamp_cmp(memory_leak_check):
     """Test Series.dt comparison with pandas.timestamp scalar
     """
 
@@ -1096,7 +1096,7 @@ def test_series_dt64_timestamp_cmp():
     check_func(test_impl4, (S, t_string))
 
 
-def test_series_dt_getitem():
+def test_series_dt_getitem(memory_leak_check):
     """ Test getitem of series(dt64)
     """
 
@@ -1113,7 +1113,7 @@ def test_series_dt_getitem():
 # -------------------------  series.dt errorchecking  -------------------------- #
 
 
-def test_series_dt_type():
+def test_series_dt_type(memory_leak_check):
     """
     Test dt is called on series of type dt64
     """
@@ -1132,7 +1132,7 @@ def test_series_dt_type():
 # -----------------------------  Timestamp Test  ------------------------------ #
 
 
-def test_timestamp_constructors():
+def test_timestamp_constructors(memory_leak_check):
     """ Test pd.Timestamp's different types of constructors
     """
 
@@ -1158,7 +1158,7 @@ def test_timestamp_constructors():
     check_func(test_constructor_input, (dt_dt,))
 
 
-def test_pd_to_datetime():
+def test_pd_to_datetime(memory_leak_check):
     """Test pd.to_datetime on Bodo
     """
 
@@ -1190,7 +1190,7 @@ def test_pd_to_datetime():
     # date_str_arr = ['1991-1-1', '1992-1-1', '1993-1-1']
 
 
-def test_pd_to_timedelta():
+def test_pd_to_timedelta(memory_leak_check):
     """Test pd.to_timedelta()
     """
 
@@ -1201,7 +1201,7 @@ def test_pd_to_timedelta():
     check_func(impl, (S,))
 
 
-def test_extract():
+def test_extract(memory_leak_check):
     """ Test extracting an attribute of timestamp
     """
 
@@ -1212,7 +1212,7 @@ def test_extract():
     check_func(test_impl, (ts,))
 
 
-def test_timestamp_date():
+def test_timestamp_date(memory_leak_check):
     """ Test timestamp's date() method
     """
 
@@ -1260,7 +1260,7 @@ def test_timestamp_date():
         pytest.param(pd.Timestamp(2025, 10, 28), marks=pytest.mark.slow),
     ],
 )
-def test_timestamp_isocalendar(ts):
+def test_timestamp_isocalendar(ts, memory_leak_check):
     """ Test timestamp's isocalendar() method
     """
 
@@ -1290,7 +1290,7 @@ dt_df = _gen_str_date_df()
 dt_ser = pd.Series(pd.date_range(start="1998-04-24", end="1998-04-29", periods=10))
 
 
-def test_datetime_index_ctor():
+def test_datetime_index_ctor(memory_leak_check):
     """ Test pd.DatetimeIndex constructors
     """
 
@@ -1304,7 +1304,7 @@ def test_datetime_index_ctor():
     check_func(test_impl_kw, (dt_ser,))
 
 
-def test_ts_map():
+def test_ts_map(memory_leak_check):
     def test_impl(A):
         return A.map(lambda x: x.hour)
 
@@ -1312,7 +1312,7 @@ def test_ts_map():
 
 
 @pytest.mark.skip(reason="pending proper datetime.date() support")
-def test_ts_map_date():
+def test_ts_map_date(memory_leak_check):
     def test_impl(A):
         return A.map(lambda x: x.date())[0]
 
@@ -1321,7 +1321,7 @@ def test_ts_map_date():
     assert bodo_func(dt_ser) == test_impl(dt_ser)
 
 
-def test_ts_map_date2():
+def test_ts_map_date2(memory_leak_check):
     def test_impl(df):
         return df.apply(lambda row: row.dt_ind.date(), axis=1)[0]
 
@@ -1333,7 +1333,7 @@ def test_ts_map_date2():
 
 
 @pytest.mark.skip(reason="pending proper datetime.date() support")
-def test_ts_map_date_set():
+def test_ts_map_date_set(memory_leak_check):
     def test_impl(df):
         df["hpat_date"] = df.dt_ind.map(lambda x: x.date())
         return
@@ -1346,7 +1346,7 @@ def test_ts_map_date_set():
     np.testing.assert_array_equal(dt_df["hpat_date"], dt_df["pd_date"])
 
 
-def test_datetime_index_set():
+def test_datetime_index_set(memory_leak_check):
     def test_impl(df):
         df["bodo"] = pd.DatetimeIndex(df["str_date"]).values
         return
@@ -1358,7 +1358,7 @@ def test_datetime_index_set():
     assert allequal == True
 
 
-def test_datetimeindex_str_comp():
+def test_datetimeindex_str_comp(memory_leak_check):
     def test_impl(df):
         return (df.A >= "2011-10-23").values
 
@@ -1370,7 +1370,7 @@ def test_datetimeindex_str_comp():
     check_func(test_impl2, (df,))
 
 
-def test_datetimeindex_df():
+def test_datetimeindex_df(memory_leak_check):
     def test_impl(df):
         df = pd.DataFrame({"A": pd.DatetimeIndex(df["str_date"])})
         return df.A
@@ -1381,7 +1381,7 @@ def test_datetimeindex_df():
     # check_func(test_impl, (dt_df,))
 
 
-def test_datetime_date_array_len():
+def test_datetime_date_array_len(memory_leak_check):
     def test_impl(A):
         return len(A)
 
@@ -1389,7 +1389,7 @@ def test_datetime_date_array_len():
     check_func(test_impl, (A,))
 
 
-def test_datetime_timedelta_array_len():
+def test_datetime_timedelta_array_len(memory_leak_check):
     def test_impl(A):
         return len(A)
 
@@ -1407,7 +1407,7 @@ def test_datetime_timedelta_array_len():
         pytest.param(pd.date_range("2030-01-1", periods=11), marks=pytest.mark.slow),
     ],
 )
-def test_datetime_index_isocalendar(dateindex):
+def test_datetime_index_isocalendar(dateindex, memory_leak_check):
     def test_impl(I):
         return I.isocalendar()
 

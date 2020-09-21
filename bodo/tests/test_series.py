@@ -446,6 +446,7 @@ def test_series_astype_numeric(numeric_series_val, memory_leak_check):
     check_func(test_impl, (numeric_series_val,))
 
 
+# TODO: add memory_leak_check
 def test_series_astype_str(series_val):
     # not supported for list(string) and array(item)
     if isinstance(series_val.values[0], list):
@@ -530,7 +531,7 @@ def test_series_astype_bool_arr(S, memory_leak_check):
         pd.Series([1, 2, 41, 2, 1, 4, 2, 1, 1, 25, 5, 3]),
     ],
 )
-def test_series_drop_duplicates(S):
+def test_series_drop_duplicates(S, memory_leak_check):
     def test_impl(S):
         return S.drop_duplicates()
 
@@ -628,6 +629,7 @@ def test_series_to_numpy(numeric_series_val, memory_leak_check):
     check_func(test_impl, (numeric_series_val,))
 
 
+# TODO: add memory_leak_check (it leaks with Decimal array)
 def test_series_iat_getitem(series_val):
 
     if series_val.dtype == np.dtype("timedelta64[ns]"):
@@ -902,6 +904,7 @@ def test_series_iloc_setitem_list_int(series_val, idx, memory_leak_check):
 ####### getitem tests ###############
 
 
+# TODO: add memory_leak_check
 def test_series_getitem_int(series_val):
     # timedelta setitem not supported yet
     if series_val.dtype == np.dtype("timedelta64[ns]"):
@@ -1647,6 +1650,7 @@ def test_series_map_global_jit(memory_leak_check):
     check_func(test_impl, (S,))
 
 
+# TODO: add memory_leak_check
 def test_series_map_tup1():
     def test_impl(S):
         return S.map(lambda a: (a, 2 * a))
@@ -1820,7 +1824,7 @@ def test_series_map_arg_fold(memory_leak_check):
     check_func(test_impl, (S,))
 
 
-def test_autocorr():
+def test_autocorr(memory_leak_check):
     def f(S, lag):
         return S.autocorr(lag=lag)
 
@@ -1832,7 +1836,7 @@ def test_autocorr():
     check_func(f, (S, 40))
 
 
-def test_monotonicity():
+def test_monotonicity(memory_leak_check):
     def f1(S):
         return S.is_monotonic_increasing
 
@@ -1878,7 +1882,7 @@ def test_series_map_error_check(memory_leak_check):
         pd.Series([1.0, 2.0, 3.0, 4.0, 5.0], [3, 1, 0, 2, 4], name="ABC"),
     ],
 )
-def test_series_rolling(S):
+def test_series_rolling(S, memory_leak_check):
     def test_impl(S):
         return S.rolling(3).sum()
 
@@ -1886,7 +1890,7 @@ def test_series_rolling(S):
 
 
 @pytest.mark.slow
-def test_series_rolling_kw():
+def test_series_rolling_kw(memory_leak_check):
     def test_impl(S):
         return S.rolling(window=3, center=True).sum()
 
@@ -2133,7 +2137,7 @@ def test_series_idxmax(series_val, memory_leak_check):
         ),
     ],
 )
-def test_series_median(numeric_series_median):
+def test_series_median(numeric_series_median, memory_leak_check):
     """There is a memory leak needing to be resolved"""
 
     def f(S):
@@ -2147,7 +2151,7 @@ def test_series_median(numeric_series_median):
 
 
 @pytest.mark.slow
-def test_series_median_nullable():
+def test_series_median_nullable(memory_leak_check):
     """<NA> values from pandas correspond to np.nan from bodo. So specific test"""
     S = pd.Series(pd.array([1, None, 2, 3], dtype="UInt16"))
 
@@ -2214,7 +2218,7 @@ def test_series_tail(series_val, memory_leak_check):
         ),
     ],
 )
-def test_series_isin(S, values):
+def test_series_isin(S, values, memory_leak_check):
     def test_impl(S, values):
         return S.isin(values)
 
@@ -2222,7 +2226,7 @@ def test_series_isin(S, values):
 
 
 @pytest.mark.slow
-def test_series_isin_large_random():
+def test_series_isin_large_random(memory_leak_check):
     def get_random_array(n, len_siz):
         elist = []
         for _ in range(n):
@@ -3015,7 +3019,7 @@ def test_create_series_index4(memory_leak_check):
     pd.testing.assert_series_equal(bodo_func("A"), test_impl("A"))
 
 
-def test_series_var():
+def test_series_var(memory_leak_check):
     def f(S):
         return S.var()
 
@@ -3031,7 +3035,7 @@ def test_series_var():
     check_func(f_ddof, (S,))
 
 
-def test_series_sem():
+def test_series_sem(memory_leak_check):
     def f(S):
         return S.sem()
 
@@ -3047,7 +3051,7 @@ def test_series_sem():
     check_func(f_ddof, (S,))
 
 
-def test_series_std():
+def test_series_std(memory_leak_check):
     def f(S):
         return S.std()
 

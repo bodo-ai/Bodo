@@ -726,7 +726,7 @@ def get_month_day(typingctx, year_t, days_t=None):
 
 
 @numba.njit
-def get_day_of_year(year, month, day):
+def get_day_of_year(year, month, day):  # pragma: no cover
     """gets day offset within year"""
     # mostly copied from https://github.com/pandas-dev/pandas/blob/6b2d0260c818e62052eaf535767f3a8c4b446c69/pandas/_libs/tslibs/ccalendar.pyx#L215
     month_offset = [
@@ -766,7 +766,7 @@ def get_day_of_year(year, month, day):
 
 
 @numba.njit
-def get_day_of_week(y, m, d):
+def get_day_of_week(y, m, d):  # pragma: no cover
     """
     gets the day of the week for the date described by the year month day tuple. Assumes that the arguments are valid.
     """
@@ -779,7 +779,7 @@ def get_day_of_week(y, m, d):
 
 
 @numba.njit
-def get_days_in_month(year, month):
+def get_days_in_month(year, month):  # pragma: no cover
     """
     gets the number of days in month
     """
@@ -815,7 +815,7 @@ def get_days_in_month(year, month):
 
 
 @numba.njit
-def is_leap_year(year):
+def is_leap_year(year):  # pragma: no cover
     """returns 1 if leap year 0 otherwise"""
     # copied from https://github.com/pandas-dev/pandas/blob/6b2d0260c818e62052eaf535767f3a8c4b446c69/pandas/_libs/tslibs/ccalendar.pyx#L161
     return (year & 0x3) == 0 and ((year % 100) != 0 or (year % 400) == 0)
@@ -988,7 +988,7 @@ def pandas_string_array_to_datetime(
     infer_datetime_format,
     origin,
     cache,
-):
+):  # pragma: no cover
     with numba.objmode(result="datetime_index"):
         # pd.to_datetime(string_array) returns DatetimeIndex
         result = pd.to_datetime(

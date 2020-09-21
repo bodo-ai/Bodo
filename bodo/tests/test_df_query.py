@@ -29,6 +29,7 @@ from bodo.utils.typing import BodoError
         pytest.param("C.str.isalpha()", marks=pytest.mark.slow),
     ],
 )
+# TODO: Add memory_leak_check after bug is resolved
 def test_df_query_unicode_expr(expr):
     """Test DataFrame.query with unicode(non-constant) expr
     """
@@ -48,6 +49,7 @@ def test_df_query_unicode_expr(expr):
 
 
 @pytest.mark.slow
+# TODO: Add memory_leak_check after bug is resolved
 def test_df_query_stringliteral_expr():
     """Test DataFrame.query with StringLiteral(constant) expr
     """
@@ -61,7 +63,7 @@ def test_df_query_stringliteral_expr():
 
 
 @pytest.mark.slow
-def test_df_query_dt():
+def test_df_query_dt(memory_leak_check):
     """Test DataFrame.query with Series.dt expression (#451)
     """
 
@@ -73,7 +75,7 @@ def test_df_query_dt():
 
 
 @pytest.mark.slow
-def test_df_query_bool_expr():
+def test_df_query_bool_expr(memory_leak_check):
     """Test DataFrame.query with boolean expressions (#453)
     """
 
@@ -89,7 +91,7 @@ def test_df_query_bool_expr():
 ################### df.query() errorchecking ######################
 
 
-def test_df_query_inplace_false():
+def test_df_query_inplace_false(memory_leak_check):
     """
     Test df.query(): 'inplace' is not supported, false only
     """
@@ -113,7 +115,7 @@ def test_df_query_inplace_false():
         bodo.jit(impl3)(df, inplace)
 
 
-def test_df_query_expr_str():
+def test_df_query_expr_str(memory_leak_check):
     """
     Test df.query(): 'expr' is of type string
     """
@@ -140,7 +142,7 @@ def test_df_query_expr_str():
         bodo.jit(impl3)(df, expr2)
 
 
-def test_df_query_expr_non_empty_str():
+def test_df_query_expr_non_empty_str(memory_leak_check):
     """
     Test df.query(): 'expr' is not an empty string
     """
@@ -159,7 +161,7 @@ def test_df_query_expr_non_empty_str():
         bodo.jit(impl2)(df, expr)
 
 
-def test_df_query_multiline_expr():
+def test_df_query_multiline_expr(memory_leak_check):
     """
     Test df.query(): 'expr' cannot be multilined
     """
@@ -178,7 +180,7 @@ def test_df_query_multiline_expr():
         bodo.jit(impl2)(df, expr)
 
 
-def test_df_query_str_column():
+def test_df_query_str_column(memory_leak_check):
     """
     Test df.query(): column.str.*, column must exist in dataframe
     """
@@ -197,7 +199,7 @@ def test_df_query_str_column():
         bodo.jit(impl2)(df, expr)
 
 
-def test_df_query_expr_bool():
+def test_df_query_expr_bool(memory_leak_check):
     """
     Test df.query(): expression should evaluate to a 1D boolean array
     """
@@ -224,7 +226,7 @@ def test_df_query_expr_bool():
         bodo.jit(impl2)(df, expr)
 
 
-def test_df_query_undef_var():
+def test_df_query_undef_var(memory_leak_check):
     """
     Test df.query(): error when there is undefined variable
     """
@@ -251,7 +253,7 @@ def test_df_query_undef_var():
         bodo.jit(impl3)(df, expr2)
 
 
-def test_df_query_index_name():
+def test_df_query_index_name(memory_leak_check):
     """
     Test df.query(): Refering to named index by name is not supported
     """

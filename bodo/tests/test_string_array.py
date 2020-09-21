@@ -34,7 +34,7 @@ def str_arr_value(request):
     return request.param
 
 
-def test_unbox(str_arr_value):
+def test_unbox(str_arr_value, memory_leak_check):
     # just unbox
     def impl(arr_arg):
         return True
@@ -48,7 +48,7 @@ def test_unbox(str_arr_value):
     check_func(impl2, (str_arr_value,))
 
 
-def test_string_dtype():
+def test_string_dtype(memory_leak_check):
     # unbox and box
     def impl(d):
         return d
@@ -62,7 +62,7 @@ def test_string_dtype():
     check_func(impl2, ())
 
 
-def test_getitem_int(str_arr_value):
+def test_getitem_int(str_arr_value, memory_leak_check):
     def test_impl(A, i):
         return A[i]
 
@@ -71,7 +71,7 @@ def test_getitem_int(str_arr_value):
     assert bodo_func(str_arr_value, i) == test_impl(str_arr_value, i)
 
 
-def test_getitem_bool(str_arr_value):
+def test_getitem_bool(str_arr_value, memory_leak_check):
     def test_impl(A, ind):
         return A[ind]
 
@@ -84,7 +84,7 @@ def test_getitem_bool(str_arr_value):
     )
 
 
-def test_getitem_slice(str_arr_value):
+def test_getitem_slice(str_arr_value, memory_leak_check):
     def test_impl(A, ind):
         return A[ind]
 
@@ -96,7 +96,7 @@ def test_getitem_slice(str_arr_value):
     )
 
 
-def test_setitem_int():
+def test_setitem_int(memory_leak_check):
     def test_impl(A, idx, val):
         A[idx] = val
         return A
@@ -110,7 +110,7 @@ def test_setitem_int():
     )
 
 
-def test_setitem_none_int():
+def test_setitem_none_int(memory_leak_check):
     def test_impl(n, idx):
         A = bodo.libs.str_arr_ext.pre_alloc_string_array(n, n-1)
         for i in range(n):
@@ -126,7 +126,7 @@ def test_setitem_none_int():
     )
 
 
-def test_setitem_optional_int():
+def test_setitem_optional_int(memory_leak_check):
     def test_impl(n, idx):
         A = bodo.libs.str_arr_ext.pre_alloc_string_array(n, n-1)
         for i in range(n):
@@ -143,21 +143,21 @@ def test_setitem_optional_int():
     )
 
 
-def test_dtype():
+def test_dtype(memory_leak_check):
     def test_impl(A):
         return A.dtype
 
     check_func(test_impl, (pd.array(["AA", "B"] * 4),))
 
 
-def test_ndim():
+def test_ndim(memory_leak_check):
     def test_impl(A):
         return A.ndim
 
     check_func(test_impl, (pd.array(["AA", "B"] * 4),))
 
 
-def test_astype_str():
+def test_astype_str(memory_leak_check):
     def test_impl(A):
         return A.astype(str)
 

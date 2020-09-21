@@ -1029,7 +1029,7 @@ void compute_series_monotonicity(double *res, array_info *arr, int64_t inc_dec,
     } else {
         *res = 1.0;
     }
-    decref_array(ghost_arr);
+    delete_info_decref_array(ghost_arr);
 }
 
 void autocorr_series_computation(double *res, array_info *arr, int64_t lag,
@@ -1165,5 +1165,5 @@ void autocorr_series_computation(double *res, array_info *arr, int64_t lag,
     std::cout << "PARALLEL : autocorr=" << autocorr << "\n";
 #endif
     *res = autocorr;
-    decref_array(ghost_arr);
+    delete_info_decref_array(ghost_arr);
 }

@@ -33,7 +33,7 @@ iris.data = iris.data[perm]
 iris.target = iris.target[perm]
 
 
-def test_simple_pandas_input():
+def test_simple_pandas_input(memory_leak_check):
     """Check classification against sklearn with toy data from pandas"""
 
     def impl(X, y, T):
@@ -48,7 +48,7 @@ def test_simple_pandas_input():
     check_func(impl, (train, train_labels, predict_test))
 
 
-def test_classification_toy():
+def test_classification_toy(memory_leak_check):
     """Check classification on a toy dataset."""
 
     def impl0(X, y, T):
@@ -111,11 +111,11 @@ def check_iris_criterion(criterion):
 
 
 @pytest.mark.parametrize("criterion", ("gini", "entropy"))
-def test_iris(criterion):
+def test_iris(criterion, memory_leak_check):
     check_iris_criterion(criterion)
 
 
-def test_multioutput():
+def test_multioutput(memory_leak_check):
     # Check estimators on multi-output problems.
 
     X_train = [
@@ -166,7 +166,7 @@ def test_multioutput():
 
 
 @pytest.mark.skip(reason="TODO: predict needs to be able to return array of strings")
-def test_multioutput_string():
+def test_multioutput_string(memory_leak_check):
     # Check estimators on multi-output problems with string outputs.
 
     X_train = [
@@ -248,6 +248,7 @@ def gen_random(n, true_chance, return_arrays=True):
     ],
 )
 @pytest.mark.parametrize("average", ["micro", "macro", "weighted", None])
+# TODO: Add memory_leak when bug is solved (curently fails on data0 and data1)
 def test_score(data, average):
     def test_precision(y_true, y_pred, average):
         return precision_score(y_true, y_pred, average=average)

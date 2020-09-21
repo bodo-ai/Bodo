@@ -350,7 +350,7 @@ def overload_cat_arr_ndim(A):
 
 
 @numba.njit
-def get_label_dict_from_categories(vals):
+def get_label_dict_from_categories(vals):  # pragma: no cover
     labels = dict()
 
     curr_ind = 0

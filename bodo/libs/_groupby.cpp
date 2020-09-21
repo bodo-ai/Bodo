@@ -4842,7 +4842,7 @@ table_info* groupby_and_aggregate(table_info* in_table, int64_t num_keys,
                       << "\n";
 #endif
             table_info* ret_table = implement_categorical_exscan(cat_column);
-            decref_array(cat_column);
+            delete_info_decref_array(cat_column);
             return ret_table;
         }
     }

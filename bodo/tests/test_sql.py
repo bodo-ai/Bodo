@@ -16,7 +16,7 @@ from bodo.tests.utils import check_func, get_start_end
 sql_user_pass_and_hostname = "admin:some_pass@ec2-34-230-65-187.compute-1.amazonaws.com"
 
 
-def test_write_sql_aws():
+def test_write_sql_aws(memory_leak_check):
     """This test for a write down on a SQL database"""
 
     def test_impl_write_sql(df, table_name, conn):
@@ -53,6 +53,7 @@ def test_write_sql_aws():
     test_specific_dataframe(test_impl_write_sql, True, df1)
 
 
+# TODO: Add memory_leak_check when bug is resolved.
 def test_sql_if_exists_fail_errorchecking():
     """This test with the option if_exists="fail" (which is the default)
     The database must alredy exist (which should be ok if above test is done)
@@ -79,7 +80,7 @@ def test_sql_if_exists_fail_errorchecking():
         bodo_impl(df1, table_name, conn)
 
 
-def test_sql_hardcoded_aws():
+def test_sql_hardcoded_aws(memory_leak_check):
     """This test for an hardcoded request and connection"""
 
     def test_impl_hardcoded():
@@ -91,7 +92,7 @@ def test_sql_hardcoded_aws():
     check_func(test_impl_hardcoded, ())
 
 
-def test_read_sql_hardcoded_time_offset_aws():
+def test_read_sql_hardcoded_time_offset_aws(memory_leak_check):
     """This test does not pass because the type of dates is not supported"""
 
     def test_impl_offset():
@@ -103,7 +104,7 @@ def test_read_sql_hardcoded_time_offset_aws():
     check_func(test_impl_offset, ())
 
 
-def test_read_sql_hardcoded_twocol_aws():
+def test_read_sql_hardcoded_twocol_aws(memory_leak_check):
     """Selecting two columns without dates"""
 
     def test_impl_hardcoded_twocol():
@@ -119,7 +120,7 @@ def test_read_sql_hardcoded_twocol_aws():
 #    frame = bodo_impl()
 
 
-def test_sql_argument_passing():
+def test_sql_argument_passing(memory_leak_check):
     """Test passing SQL query and connection as arguments
     """
 

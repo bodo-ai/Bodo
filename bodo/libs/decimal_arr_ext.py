@@ -337,7 +337,7 @@ def init_decimal_array(typingctx, data, null_bitmap, precision_tp, scale_tp=None
 
 # high-level allocation function for decimal arrays
 @numba.njit(no_cpython_wrapper=True)
-def alloc_decimal_array(n, precision, scale):
+def alloc_decimal_array(n, precision, scale):  # pragma: no cover
     data_arr = np.empty(n, dtype=int128_type)
     nulls = np.empty((n + 7) >> 3, dtype=np.uint8)
     return init_decimal_array(data_arr, nulls, precision, scale)

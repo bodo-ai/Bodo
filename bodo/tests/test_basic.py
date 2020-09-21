@@ -600,6 +600,7 @@ def test_permuted_array_indexing(memory_leak_check):
         np.testing.assert_allclose(A, B)
 
 
+# TODO: Add memory_leak_check after memory leak is solved.
 def test_reversed():
     """
     test reversed on a list of floats

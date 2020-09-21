@@ -19,7 +19,7 @@ import pytest
 @pytest.mark.parametrize(
     "op", (operator.eq, operator.ne, operator.ge, operator.gt, operator.le, operator.lt)
 )
-def test_cmp_binary_op(op):
+def test_cmp_binary_op(op, memory_leak_check):
     op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
     func_text = "def test_impl(A, other):\n"
     func_text += "  return A {} other\n".format(op_str)
@@ -42,7 +42,7 @@ def test_cmp_binary_op(op):
         check_func(test_impl, ("CCD", A2))
 
 
-def test_get_list_string():
+def test_get_list_string(memory_leak_check):
     """In this test bodo returns the array [] when pandas returns NaN in that case.
     We are forced to implement things in this way since type stability is required for
     numba"""
@@ -63,7 +63,7 @@ def test_get_list_string():
         slice(1, 5),
     ],
 )
-def test_string_array_getitem_na(ind):
+def test_string_array_getitem_na(ind, memory_leak_check):
     def impl(S, index):
         return S.iloc[index]
 
@@ -78,11 +78,11 @@ def test_string_array_getitem_na(ind):
 
 
 @pytest.fixture(params=["AB", "A_B", "A_B_C"])
-def test_in_str(request):
+def test_in_str(request, memory_leak_check):
     return request.param
 
 
-def test_re_search(test_in_str):
+def test_re_search(test_in_str, memory_leak_check):
     """make sure re.search returns None or a proper re.Match
     """
 
@@ -97,7 +97,7 @@ def test_re_search(test_in_str):
     assert (py_out is None and bodo_out is None) or py_out.span() == bodo_out.span()
 
 
-def test_re_match_cast_bool(test_in_str):
+def test_re_match_cast_bool(test_in_str, memory_leak_check):
     """make sure re.search() output can behave like None in conditionals
     """
 
@@ -111,7 +111,7 @@ def test_re_match_cast_bool(test_in_str):
     assert test_impl(pat, test_in_str) == bodo.jit(test_impl)(pat, test_in_str)
 
 
-def test_re_match_check_none(test_in_str):
+def test_re_match_check_none(test_in_str, memory_leak_check):
     """make sure re.Match object can be checked for None
     """
 
@@ -125,7 +125,7 @@ def test_re_match_check_none(test_in_str):
     assert test_impl(pat, test_in_str) == bodo.jit(test_impl)(pat, test_in_str)
 
 
-def test_re_pat_search(test_in_str):
+def test_re_pat_search(test_in_str, memory_leak_check):
     """make sure Pattern.search returns None or a proper re.Match
     """
 
@@ -141,7 +141,7 @@ def test_re_pat_search(test_in_str):
 
 
 @pytest.mark.parametrize("in_str", ["AB", "A_B", "AB_C"])
-def test_re_match(in_str):
+def test_re_match(in_str, memory_leak_check):
     """make sure re.match returns None or a proper re.Match
     """
 
@@ -157,7 +157,7 @@ def test_re_match(in_str):
 
 
 @pytest.mark.parametrize("in_str", ["AB", "AB_", "A_B_C"])
-def test_re_pat_match(in_str):
+def test_re_pat_match(in_str, memory_leak_check):
     """make sure Pattern.match returns None or a proper re.Match
     """
 
@@ -173,7 +173,7 @@ def test_re_pat_match(in_str):
 
 
 @pytest.mark.parametrize("in_str", ["AB", "A_B", "AB_C"])
-def test_re_fullmatch(in_str):
+def test_re_fullmatch(in_str, memory_leak_check):
     """make sure re.fullmatch returns None or a proper re.Match
     """
 
@@ -189,7 +189,7 @@ def test_re_fullmatch(in_str):
 
 
 @pytest.mark.parametrize("in_str", ["AB", "AB_", "A_B_C"])
-def test_re_pat_fullmatch(in_str):
+def test_re_pat_fullmatch(in_str, memory_leak_check):
     """make sure Pattern.fullmatch returns None or a proper re.Match
     """
 
@@ -204,7 +204,7 @@ def test_re_pat_fullmatch(in_str):
     assert (py_out is None and bodo_out is None) or py_out.span() == bodo_out.span()
 
 
-def test_re_split():
+def test_re_split(memory_leak_check):
     """make sure re.split returns proper output (list of strings)
     """
 
@@ -218,7 +218,7 @@ def test_re_split():
     assert py_out == bodo_out
 
 
-def test_pat_split():
+def test_pat_split(memory_leak_check):
     """make sure Pattern.split returns proper output (list of strings)
     """
 
@@ -232,7 +232,7 @@ def test_pat_split():
     assert py_out == bodo_out
 
 
-def test_re_findall():
+def test_re_findall(memory_leak_check):
     """make sure re.findall returns proper output (list of strings)
     """
 
@@ -246,7 +246,7 @@ def test_re_findall():
     assert py_out == bodo_out
 
 
-def test_pat_findall():
+def test_pat_findall(memory_leak_check):
     """make sure Pattern.findall returns proper output (list of strings)
     """
 
@@ -292,7 +292,7 @@ def test_pat_findall():
     assert py_out == bodo_out
 
 
-def test_re_sub():
+def test_re_sub(memory_leak_check):
     """make sure re.sub returns proper output (a string)
     """
 
@@ -307,7 +307,7 @@ def test_re_sub():
     assert py_out == bodo_out
 
 
-def test_pat_sub():
+def test_pat_sub(memory_leak_check):
     """make sure Pattern.sub returns proper output (a string)
     """
 
@@ -322,7 +322,7 @@ def test_pat_sub():
     assert py_out == bodo_out
 
 
-def test_re_subn():
+def test_re_subn(memory_leak_check):
     """make sure re.subn returns proper output (a string and integer)
     """
 
@@ -337,7 +337,7 @@ def test_re_subn():
     assert py_out == bodo_out
 
 
-def test_pat_subn():
+def test_pat_subn(memory_leak_check):
     """make sure Pattern.subn returns proper output (a string and integer)
     """
 
@@ -352,7 +352,7 @@ def test_pat_subn():
     assert py_out == bodo_out
 
 
-def test_re_escape():
+def test_re_escape(memory_leak_check):
     """make sure re.escape returns proper output (a string)
     """
 
@@ -365,7 +365,7 @@ def test_re_escape():
     assert py_out == bodo_out
 
 
-def test_re_purge():
+def test_re_purge(memory_leak_check):
     """make sure re.purge call works (can't see internal cache of re to fully test)
     """
 
@@ -375,7 +375,7 @@ def test_re_purge():
     bodo.jit(test_impl)()
 
 
-def test_pat_flags():
+def test_pat_flags(memory_leak_check):
     """test Pattern.flags
     """
 
@@ -388,7 +388,7 @@ def test_pat_flags():
     assert py_out == bodo_out
 
 
-def test_pat_groups():
+def test_pat_groups(memory_leak_check):
     """test Pattern.groups
     """
 
@@ -401,7 +401,7 @@ def test_pat_groups():
     assert py_out == bodo_out
 
 
-def test_pat_groupindex():
+def test_pat_groupindex(memory_leak_check):
     """test Pattern.groupindex. Python returns mappingproxy object but Bodo returns
     a Numba TypedDict
     """
@@ -415,7 +415,7 @@ def test_pat_groupindex():
     assert dict(py_out) == dict(bodo_out)
 
 
-def test_pat_pattern():
+def test_pat_pattern(memory_leak_check):
     """test Pattern.pattern
     """
 
@@ -428,7 +428,7 @@ def test_pat_pattern():
     assert py_out == bodo_out
 
 
-def test_match_expand():
+def test_match_expand(memory_leak_check):
     """test Match.expand()
     """
 
@@ -442,7 +442,7 @@ def test_match_expand():
     assert py_out == bodo_out
 
 
-def test_match_group():
+def test_match_group(memory_leak_check):
     """test Match.group(), the output is a string or tuple of strings
     """
 
@@ -467,7 +467,7 @@ def test_match_group():
     assert test_impl_three(m, 2, "A", 3) == bodo.jit(test_impl_three)(m, 2, "A", 3)
 
 
-def test_match_getitem():
+def test_match_getitem(memory_leak_check):
     """test Match[g], which is shortcut for Match.group(g)
     """
 
@@ -480,7 +480,7 @@ def test_match_getitem():
     assert test_impl(m, "A") == bodo.jit(test_impl)(m, "A")
 
 
-def test_match_groups():
+def test_match_groups(memory_leak_check):
     """test Match.groups(). Python returns a tuple but we return a list since length
     of tuple is not known in advance.
     """
@@ -494,7 +494,7 @@ def test_match_groups():
     assert list(test_impl(m)) == bodo.jit(test_impl)(m)
 
 
-def test_match_groupdict():
+def test_match_groupdict(memory_leak_check):
     """test Match.groupdict(), which returns a dictionary of named groups
     """
 
@@ -507,7 +507,7 @@ def test_match_groupdict():
     assert test_impl(m) == bodo.jit(test_impl)(m)
 
 
-def test_match_start():
+def test_match_start(memory_leak_check):
     """test Match.start()
     """
 
@@ -520,7 +520,7 @@ def test_match_start():
     assert test_impl(m, g) == bodo.jit(test_impl)(m, g)
 
 
-def test_match_end():
+def test_match_end(memory_leak_check):
     """test Match.end()
     """
 
@@ -533,7 +533,7 @@ def test_match_end():
     assert test_impl(m, g) == bodo.jit(test_impl)(m, g)
 
 
-def test_match_span():
+def test_match_span(memory_leak_check):
     """test Match.span()
     """
 
@@ -546,7 +546,7 @@ def test_match_span():
     assert test_impl(m, g) == bodo.jit(test_impl)(m, g)
 
 
-def test_match_pos():
+def test_match_pos(memory_leak_check):
     """test Match.pos attribute
     """
 
@@ -559,7 +559,7 @@ def test_match_pos():
     assert test_impl(m) == bodo.jit(test_impl)(m)
 
 
-def test_match_endpos():
+def test_match_endpos(memory_leak_check):
     """test Match.endpos attribute
     """
 
@@ -572,7 +572,7 @@ def test_match_endpos():
     assert test_impl(m) == bodo.jit(test_impl)(m)
 
 
-def test_match_lastindex():
+def test_match_lastindex(memory_leak_check):
     """test Match.lastindex attribute
     """
 
@@ -585,7 +585,7 @@ def test_match_lastindex():
     assert test_impl(m) == bodo.jit(test_impl)(m)
 
 
-def test_match_lastgroup():
+def test_match_lastgroup(memory_leak_check):
     """test Match.lastgroup attribute
     """
 
@@ -598,7 +598,7 @@ def test_match_lastgroup():
     assert test_impl(m) == bodo.jit(test_impl)(m)
 
 
-def test_match_re():
+def test_match_re(memory_leak_check):
     """test Match.re attribute
     """
 
@@ -611,7 +611,7 @@ def test_match_re():
     assert test_impl(m) == bodo.jit(test_impl)(m)
 
 
-def test_match_string():
+def test_match_string(memory_leak_check):
     """test Match.string attribute
     """
 

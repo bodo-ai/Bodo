@@ -191,13 +191,14 @@ def test_unicode_no_nan(request):
     return request.param
 
 
-def test_len(test_unicode):
+def test_len(test_unicode, memory_leak_check):
     def test_impl(S):
         return S.str.len()
 
     check_func(test_impl, (test_unicode,), check_dtype=False, check_typing_issues=False)
 
 
+# TODO: Add memory_leak_check when bugs are resolved.
 def test_split(test_unicode_no_nan):
     def test_impl(S):
         return S.str.split(",")
@@ -212,7 +213,7 @@ def test_split(test_unicode_no_nan):
     )
 
 
-def test_get():
+def test_get(memory_leak_check):
     def test_impl(S):
         B = S.str.split(",")
         return B.str.get(1)
@@ -266,7 +267,7 @@ def test_get():
         # TODO: nested string test when old list(str) type is removed
     ],
 )
-def test_get_array_item(S):
+def test_get_array_item(S, memory_leak_check):
     """Tests Series.str.get() support for non-string arrays like array(item).
     """
 
@@ -276,7 +277,7 @@ def test_get_array_item(S):
     check_func(test_impl, (S,), check_dtype=False)
 
 
-def test_replace_regex(test_unicode):
+def test_replace_regex(test_unicode, memory_leak_check):
     def test_impl(S):
         return S.str.replace("AB*", "EE", regex=True)
 
@@ -287,7 +288,7 @@ def test_replace_regex(test_unicode):
     check_func(test_impl2, (test_unicode,))
 
 
-def test_replace_noregex(test_unicode):
+def test_replace_noregex(test_unicode, memory_leak_check):
     def test_impl(S):
         return S.str.replace("AB", "EE", regex=False)
 
@@ -298,7 +299,7 @@ def test_replace_noregex(test_unicode):
     check_func(test_impl2, (test_unicode,))
 
 
-def test_contains_regex(test_unicode):
+def test_contains_regex(test_unicode, memory_leak_check):
     def test_impl(S):
         return S.str.contains("AB*", regex=True)
 
@@ -309,7 +310,7 @@ def test_contains_regex(test_unicode):
     check_func(test_impl2, (test_unicode,))
 
 
-def test_contains_noregex(test_unicode):
+def test_contains_noregex(test_unicode, memory_leak_check):
     def test_impl(S):
         return S.str.contains("AB", regex=False)
 
@@ -320,7 +321,7 @@ def test_contains_noregex(test_unicode):
     check_func(test_impl2, (test_unicode,))
 
 
-def test_extract(test_unicode):
+def test_extract(test_unicode, memory_leak_check):
     def test_impl(S):
         return S.str.extract(r"(?P<BBB>[abd])(?P<C>\d+)")
 
@@ -331,7 +332,7 @@ def test_extract(test_unicode):
     check_func(test_impl2, (test_unicode,), check_typing_issues=False)
 
 
-def test_extract_noexpand(test_unicode):
+def test_extract_noexpand(test_unicode, memory_leak_check):
     def test_impl(S):
         return S.str.extract(r"(?P<BBB>[abd]+)\d+", expand=False)
 
@@ -347,6 +348,7 @@ def test_extract_noexpand(test_unicode):
     check_func(test_impl2, (test_unicode,), check_typing_issues=False)
 
 
+# TODO: Add memory_leak_check when problem are resolved.
 def test_extractall():
     """Test Series.str.extractall() with various input cases
     """
@@ -372,7 +374,7 @@ def test_extractall():
     check_func(test_impl2, (S2,))
 
 
-def test_count_noflag(test_unicode):
+def test_count_noflag(test_unicode, memory_leak_check):
     def test_impl(S):
         return S.str.count("A")
 
@@ -383,7 +385,7 @@ def test_count_noflag(test_unicode):
     check_func(test_impl2, (test_unicode,), check_dtype=False)
 
 
-def test_count_flag(test_unicode):
+def test_count_flag(test_unicode, memory_leak_check):
     import re
 
     # TODO: the flag does not work inside numba
@@ -399,7 +401,7 @@ def test_count_flag(test_unicode):
     check_func(test_impl2, (test_unicode,), check_dtype=False)
 
 
-def test_find(test_unicode):
+def test_find(test_unicode, memory_leak_check):
     def test_impl(S):
         return S.str.find("AB")
 
@@ -409,7 +411,7 @@ def test_find(test_unicode):
     check_func(test_impl, (test_unicode,), check_dtype=False)
     check_func(test_impl2, (test_unicode,), check_dtype=False)
 
-def test_find_start_end(test_unicode):
+def test_find_start_end(test_unicode, memory_leak_check):
     def test_impl(S):
         return S.str.find("AB", start=3, end=10)
 
@@ -419,7 +421,7 @@ def test_find_start_end(test_unicode):
     check_func(test_impl, (test_unicode,), check_dtype=False)
     check_func(test_impl2, (test_unicode,), check_dtype=False)
 
-def test_rfind(test_unicode):
+def test_rfind(test_unicode, memory_leak_check):
     def test_impl(S):
         return S.str.rfind("AB")
 
@@ -430,7 +432,7 @@ def test_rfind(test_unicode):
     check_func(test_impl2, (test_unicode,), check_dtype=False)
 
 
-def test_pad_fill_fast(test_unicode):
+def test_pad_fill_fast(test_unicode, memory_leak_check):
     # this function increases coverage for not slow test suite
     def test_impl1(S):
         return S.str.center(1, "필")
@@ -455,7 +457,7 @@ def test_pad_fill_fast(test_unicode):
 
 
 @pytest.mark.slow
-def test_center(test_unicode):
+def test_center(test_unicode, memory_leak_check):
     def test_impl(S):
         return S.str.center(5, "*")
 
@@ -467,7 +469,7 @@ def test_center(test_unicode):
 
 
 @pytest.mark.slow
-def test_ljust(test_unicode):
+def test_ljust(test_unicode, memory_leak_check):
     def test_impl(S):
         return S.str.ljust(5, "*")
 
@@ -479,7 +481,7 @@ def test_ljust(test_unicode):
 
 
 @pytest.mark.slow
-def test_rjust(test_unicode):
+def test_rjust(test_unicode, memory_leak_check):
     def test_impl(S):
         return S.str.rjust(5, "*")
 
@@ -491,7 +493,7 @@ def test_rjust(test_unicode):
 
 
 @pytest.mark.slow
-def test_pad(test_unicode):
+def test_pad(test_unicode, memory_leak_check):
     def test_impl_default(S):
         return S.str.pad(5)
 
@@ -515,21 +517,21 @@ def test_pad(test_unicode):
 
 
 @pytest.mark.slow
-def test_zfill(test_unicode):
+def test_zfill(test_unicode, memory_leak_check):
     def test_impl(S):
         return S.str.zfill(10)
 
     check_func(test_impl, (test_unicode,))
 
 
-def test_slice(test_unicode):
+def test_slice(test_unicode, memory_leak_check):
     def test_impl(S):
         return S.str.slice(step=2)
 
     check_func(test_impl, (test_unicode,))
 
 
-def test_startswith(test_unicode):
+def test_startswith(test_unicode, memory_leak_check):
     def test_impl(S):
         return S.str.startswith("AB")
 
@@ -540,7 +542,7 @@ def test_startswith(test_unicode):
     check_func(test_impl2, (test_unicode,))
 
 
-def test_endswith(test_unicode):
+def test_endswith(test_unicode, memory_leak_check):
     def test_impl(S):
         return S.str.endswith("AB")
 
@@ -551,7 +553,7 @@ def test_endswith(test_unicode):
     check_func(test_impl2, (test_unicode,))
 
 
-def test_isupper(test_unicode):
+def test_isupper(test_unicode, memory_leak_check):
     def test_impl(S):
         return S.str.isupper()
 
@@ -559,7 +561,7 @@ def test_isupper(test_unicode):
 
 
 @pytest.mark.parametrize("ind", [slice(2), 2])
-def test_getitem(ind, test_unicode):
+def test_getitem(ind, test_unicode, memory_leak_check):
     def test_impl(S, ind):
         return S.str[ind]
 
@@ -627,7 +629,7 @@ def test_list_str_arr_unbox(list_str_arr_value, memory_leak_check):
     check_func(impl2, (list_str_arr_value,))
 
 
-def test_getitem_int(list_str_arr_value):
+def test_getitem_int(list_str_arr_value, memory_leak_check):
     def test_impl(A, i):
         return A[i]
 
@@ -638,7 +640,7 @@ def test_getitem_int(list_str_arr_value):
     )
 
 
-def test_getitem_bool(list_str_arr_value):
+def test_getitem_bool(list_str_arr_value, memory_leak_check):
     def test_impl(A, ind):
         return A[ind]
 
@@ -649,7 +651,7 @@ def test_getitem_bool(list_str_arr_value):
     _test_equal(bodo_func(list_str_arr_value, ind), test_impl(list_str_arr_value, ind))
 
 
-def test_getitem_slice(list_str_arr_value):
+def test_getitem_slice(list_str_arr_value, memory_leak_check):
     def test_impl(A, ind):
         return A[ind]
 
@@ -659,14 +661,14 @@ def test_getitem_slice(list_str_arr_value):
     _test_equal(bodo_func(list_str_arr_value, ind), test_impl(list_str_arr_value, ind))
 
 
-def test_copy(list_str_arr_value):
+def test_copy(list_str_arr_value, memory_leak_check):
     def test_impl(A):
         return A.copy()
 
     _test_equal(bodo.jit(test_impl)(list_str_arr_value), list_str_arr_value)
 
 
-def test_flatten1(test_unicode_no_nan):
+def test_flatten1(test_unicode_no_nan, memory_leak_check):
     """tests flattening array of string lists after split call when split view
     optimization is applied
     """
@@ -678,7 +680,7 @@ def test_flatten1(test_unicode_no_nan):
     check_func(impl, (test_unicode_no_nan,))
 
 
-def test_flatten2(test_unicode_no_nan):
+def test_flatten2(test_unicode_no_nan, memory_leak_check):
     """tests flattening array of string lists after split call when split view
     optimization is not applied
     """
@@ -690,7 +692,7 @@ def test_flatten2(test_unicode_no_nan):
     check_func(impl, (test_unicode_no_nan,))
 
 
-def test_flatten3(test_unicode_no_nan):
+def test_flatten3(test_unicode_no_nan, memory_leak_check):
     """tests flattening array without the "list" call
     """
 
@@ -701,7 +703,7 @@ def test_flatten3(test_unicode_no_nan):
     check_func(impl, (test_unicode_no_nan,))
 
 
-def test_flatten4(test_unicode_no_nan):
+def test_flatten4(test_unicode_no_nan, memory_leak_check):
     """tests flattening array with "from_iterable"
     """
 
@@ -713,7 +715,7 @@ def test_flatten4(test_unicode_no_nan):
     check_func(impl, (test_unicode_no_nan,))
 
 
-def test_join():
+def test_join(memory_leak_check):
     """test the functionality of bodo's join with NaN
     """
 
@@ -744,7 +746,7 @@ def test_join():
     check_func(test_impl, (S,))
 
 
-def test_join_string(test_unicode):
+def test_join_string(test_unicode, memory_leak_check):
     """test the functionality of bodo's join with just a string
     """
 
@@ -758,7 +760,7 @@ def test_join_string(test_unicode):
     check_func(test_impl2, (test_unicode,))
 
 
-def test_join_splitview(test_unicode_no_nan):
+def test_join_splitview(test_unicode_no_nan, memory_leak_check):
     """test the functionality of bodo's join with split view type as an input
     """
 
@@ -769,7 +771,7 @@ def test_join_splitview(test_unicode_no_nan):
     check_func(test_impl, (test_unicode_no_nan,))
 
 
-def test_join_splitview_nan_entry():
+def test_join_splitview_nan_entry(memory_leak_check):
     """test the functionality of bodo's join with split view type as an input
     """
 

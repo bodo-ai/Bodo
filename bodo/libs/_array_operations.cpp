@@ -39,12 +39,12 @@ static void array_isin_kernel(array_info* out_arr, array_info* in_arr,
     uint32_t seed = SEED_HASH_CONTAINER;
 
     int64_t len_values = in_values->length;
-    uint32_t* hashes_values = new uint32_t[len_values];
-    hash_array(hashes_values, in_values, (size_t)len_values, seed);
+    std::vector<uint32_t> hashes_values(len_values);
+    hash_array(hashes_values.data(), in_values, (size_t)len_values, seed);
 
     int64_t len_in_arr = in_arr->length;
-    uint32_t* hashes_in_arr = new uint32_t[len_in_arr];
-    hash_array(hashes_in_arr, in_arr, (size_t)len_in_arr, seed);
+    std::vector<uint32_t> hashes_in_arr(len_in_arr);
+    hash_array(hashes_in_arr.data(), in_arr, (size_t)len_in_arr, seed);
 
     std::function<bool(int64_t, int64_t)> equal_fct =
         [&](int64_t const& pos1, int64_t const& pos2) -> bool {
@@ -85,14 +85,16 @@ static void array_isin_kernel(array_info* out_arr, array_info* in_arr,
         bool test = eset.count(pos + len_values) == 1;
         out_arr->at<bool>(pos) = test;
     }
-    delete[] hashes_in_arr;
-    delete[] hashes_values;
 }
 
 void array_isin(array_info* out_arr, array_info* in_arr, array_info* in_values,
                 bool is_parallel) {
     if (!is_parallel) {
-        return array_isin_kernel(out_arr, in_arr, in_values);
+        array_isin_kernel(out_arr, in_arr, in_values);
+        decref_array(out_arr);
+        decref_array(in_arr);
+        decref_array(in_values);
+        return;
     }
     std::vector<array_info*> vect_in_values = {in_values};
     table_info table_in_values = table_info(vect_in_values);
@@ -132,7 +134,7 @@ void array_isin(array_info* out_arr, array_info* in_arr, array_info* in_values,
     fill_recv_data_inner<uint8_t>(tmp_recv.data(), (uint8_t*)out_arr->data1,
                                   hashes, comm_info.send_disp, comm_info.n_pes, n_rows);
     // free temporary shuffle array
-    decref_array(shuf_out_arr);
+    delete_info_decref_array(shuf_out_arr);
     // release extra reference for output array (array_info wrapper's reference)
     decref_array(out_arr);
     delete table_in_arr;

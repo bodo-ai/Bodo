@@ -256,7 +256,7 @@ _median_series_computation = types.ExternalFunction(
 
 
 @numba.njit
-def median_series_computation(res, arr, is_parallel, skipna):
+def median_series_computation(res, arr, is_parallel, skipna):  # pragma: no cover
     arr_info = array_to_info(arr)
     _median_series_computation(res, arr_info, is_parallel, skipna)
     delete_info_decref_array(arr_info)
@@ -284,8 +284,10 @@ _autocorr_series_computation = types.ExternalFunction(
 
 
 @numba.njit
-def autocorr_series_computation(res, arr, lag, is_parallel):
-    _autocorr_series_computation(res, array_to_info(arr), lag, is_parallel)
+def autocorr_series_computation(res, arr, lag, is_parallel):  # pragma: no cover
+    arr_info = array_to_info(arr)
+    _autocorr_series_computation(res, arr_info, lag, is_parallel)
+    delete_info_decref_array(arr_info)
 
 
 @numba.njit
@@ -310,8 +312,10 @@ _compute_series_monotonicity = types.ExternalFunction(
 
 
 @numba.njit
-def series_monotonicity_call(res, arr, inc_dec, is_parallel):
-    _compute_series_monotonicity(res, array_to_info(arr), inc_dec, is_parallel)
+def series_monotonicity_call(res, arr, inc_dec, is_parallel):  # pragma: no cover
+    arr_info = array_to_info(arr)
+    _compute_series_monotonicity(res, arr_info, inc_dec, is_parallel)
+    delete_info_decref_array(arr_info)
 
 
 @numba.njit

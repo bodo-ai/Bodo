@@ -29,7 +29,7 @@ np.random.seed(1)
 
 
 @pytest.mark.parametrize("A", [np.arange(11), np.arange(33).reshape(11, 3)])
-def test_array_shape1(A):
+def test_array_shape1(A, memory_leak_check):
     # get first dimention size using array.shape for distributed arrays
     def impl1(A):
         return A.shape[0]
@@ -41,7 +41,7 @@ def test_array_shape1(A):
     assert dist_IR_contains("dist_reduce")
 
 
-def test_array_shape2():
+def test_array_shape2(memory_leak_check):
     # get first dimention size using array.shape for distributed arrays
     # transposed array case
     def impl1(A):
@@ -59,7 +59,7 @@ def test_array_shape2():
 
 
 @pytest.mark.parametrize("A", [np.arange(11), np.arange(33).reshape(11, 3)])
-def test_array_shape3(A):
+def test_array_shape3(A, memory_leak_check):
     # get first dimention size using array.shape for distributed arrays
     def impl1(A):
         return A.shape
@@ -71,7 +71,7 @@ def test_array_shape3(A):
     assert dist_IR_contains("dist_reduce")
 
 
-def test_array_shape4():
+def test_array_shape4(memory_leak_check):
     # transposed array case
     def impl1(A):
         B = A.T
@@ -86,7 +86,7 @@ def test_array_shape4():
     assert dist_IR_contains("dist_reduce")
 
 
-def test_array_len1():
+def test_array_len1(memory_leak_check):
     # get first dimention size using array.shape for distributed arrays
     def impl1(A):
         return len(A)
@@ -102,7 +102,7 @@ def test_array_len1():
 
 
 @pytest.mark.parametrize("A", [np.arange(11), np.arange(33).reshape(11, 3)])
-def test_array_size1(A):
+def test_array_size1(A, memory_leak_check):
     def impl1(A):
         return A.size
 
@@ -114,7 +114,7 @@ def test_array_size1(A):
     # TODO: tests with array created inside the function
 
 
-def test_1D_Var_parfor1():
+def test_1D_Var_parfor1(memory_leak_check):
     # 1D_Var parfor where index is used in computation
     def impl1(A, B):
         C = A[B != 0]
@@ -131,7 +131,7 @@ def test_1D_Var_parfor1():
     assert count_array_REPs() == 0
 
 
-def test_1D_Var_parfor2():
+def test_1D_Var_parfor2(memory_leak_check):
     # 1D_Var parfor where index is used in computation
     def impl1(A, B):
         C = A[B != 0]
@@ -148,7 +148,7 @@ def test_1D_Var_parfor2():
     assert count_array_REPs() == 0
 
 
-def test_1D_Var_parfor3():
+def test_1D_Var_parfor3(memory_leak_check):
     """test 1D parfor on length of an array that is assigned in an if/else block.
     Array analysis may not generate 'size_var = C.shape[0]' (keep 'len(C)').
     """
@@ -172,7 +172,7 @@ def test_1D_Var_parfor3():
     assert count_array_REPs() == 0
 
 
-def test_1D_Var_parfor4():
+def test_1D_Var_parfor4(memory_leak_check):
     """test 1D parfor inside a sequential loop"""
 
     def impl1(A, B):
@@ -191,7 +191,7 @@ def test_1D_Var_parfor4():
     assert count_array_REPs() == 0
 
 
-def test_jit_inside_prange():
+def test_jit_inside_prange(memory_leak_check):
     """test calling jit functions inside a prange loop"""
 
     @bodo.jit(distributed=False)
@@ -209,7 +209,7 @@ def test_jit_inside_prange():
     assert bodo.jit(impl)(df, n) == impl(df, n)
 
 
-def test_print1():
+def test_print1(memory_leak_check):
     # no vararg
     # TODO: capture stdout and make sure there is only one print
     def impl1(a, b):
@@ -221,7 +221,7 @@ def test_print1():
     bodo_func((3, 4), 2)
 
 
-def test_print2():
+def test_print2(memory_leak_check):
     # vararg
     # TODO: capture stdout and make sure there is only one print
     def impl1(a):
@@ -232,7 +232,7 @@ def test_print2():
     bodo_func((3, np.ones(3)))
 
 
-def test_print3():
+def test_print3(memory_leak_check):
     # arg and vararg
     # TODO: capture stdout and make sure there is only one print
     def impl1(a, b):
@@ -243,7 +243,7 @@ def test_print3():
     bodo_func(np.ones(3), (3, np.ones(3)))
 
 
-def test_bodo_func_dist_call1():
+def test_bodo_func_dist_call1(memory_leak_check):
     """make sure calling other bodo functions with their distributed flags set works as
     expected (dist info is propagated across functions).
     """
@@ -263,7 +263,7 @@ def test_bodo_func_dist_call1():
     assert count_array_REPs() == 0
 
 
-def test_bodo_func_dist_call_star_arg():
+def test_bodo_func_dist_call_star_arg(memory_leak_check):
     """test calling other bodo functions with star arg set as distributed"""
 
     @bodo.jit(distributed=["A", "B"])
@@ -281,7 +281,7 @@ def test_bodo_func_dist_call_star_arg():
     assert count_array_REPs() == 0
 
 
-def test_bodo_func_dist_call_tup():
+def test_bodo_func_dist_call_tup(memory_leak_check):
     """make sure calling other bodo functions with their distributed flags set works
     when they return tuples.
     """
@@ -302,7 +302,7 @@ def test_bodo_func_dist_call_tup():
     assert count_array_REPs() == 0
 
 
-def test_dist_flag_warn1():
+def test_dist_flag_warn1(memory_leak_check):
     """raise a warning when distributed flag is used for variables other than arguments
     and return values.
     """
@@ -325,7 +325,7 @@ def test_dist_flag_warn1():
     assert count_array_REPs() == 0
 
 
-def test_bodo_func_rep():
+def test_bodo_func_rep(memory_leak_check):
     """test calling other bodo functions without distributed flag"""
 
     @bodo.jit
@@ -343,7 +343,7 @@ def test_bodo_func_rep():
 
 
 @pytest.mark.parametrize("A", [np.arange(11), np.arange(33).reshape(11, 3)])
-def test_1D_Var_alloc_simple(A):
+def test_1D_Var_alloc_simple(A, memory_leak_check):
     # make sure 1D_Var alloc and parfor handling works for 1D/2D arrays
     def impl1(A, B):
         C = A[B]
@@ -356,7 +356,7 @@ def test_1D_Var_alloc_simple(A):
     assert count_array_REPs() == 0
 
 
-def test_1D_Var_alloc1():
+def test_1D_Var_alloc1(memory_leak_check):
     # XXX: test with different PYTHONHASHSEED values
     def impl1(A, B):
         C = A[B]
@@ -385,7 +385,7 @@ def test_1D_Var_alloc1():
     assert count_parfor_REPs() == 0
 
 
-def test_1D_Var_alloc2():
+def test_1D_Var_alloc2(memory_leak_check):
     # XXX: test with different PYTHONHASHSEED values
     # 2D case
     def impl1(A, B):
@@ -416,7 +416,7 @@ def test_1D_Var_alloc2():
     assert count_parfor_REPs() == 0
 
 
-def test_1D_Var_alloc3():
+def test_1D_Var_alloc3(memory_leak_check):
     # XXX: test with different PYTHONHASHSEED values
     # Series case
     def impl1(A, B):
@@ -446,7 +446,7 @@ def test_1D_Var_alloc3():
     assert count_parfor_REPs() == 0
 
 
-def test_1D_Var_alloc4():
+def test_1D_Var_alloc4(memory_leak_check):
     """make sure allocation can match output's distribution with other arrays with same
     size. The arrays of "CC" columns should be assigned 1D_Var even though they don't
     interact directly with other arrays of their dataframes.
@@ -469,7 +469,7 @@ def test_1D_Var_alloc4():
     assert count_array_OneD_Vars() > 0
 
 
-def test_str_alloc_equiv1():
+def test_str_alloc_equiv1(memory_leak_check):
     def impl(n):
         C = bodo.libs.str_arr_ext.pre_alloc_string_array(n, 10)
         return len(C)
@@ -481,7 +481,7 @@ def test_str_alloc_equiv1():
     assert not dist_IR_contains("dist_reduce")
 
 
-def test_series_alloc_equiv1():
+def test_series_alloc_equiv1(memory_leak_check):
     def impl(n):
         if n < 10:
             S = pd.Series(np.ones(n))
@@ -512,7 +512,7 @@ def test_series_alloc_equiv1():
 @pytest.mark.parametrize(
     "s", [slice(3), slice(1, 9), slice(7, None), slice(4, 6), slice(-3, None)]
 )
-def test_getitem_slice(A, s):
+def test_getitem_slice(A, s, memory_leak_check):
     # get a slice of 1D/1D_Var array
     def impl1(A, s):
         return A[s]
@@ -525,7 +525,7 @@ def test_getitem_slice(A, s):
     "A", [pd.Series(np.arange(11)), pd.Series(["aafa", "bbac", "cff"] * 4)]
 )
 @pytest.mark.parametrize("s", [0, 1, 3, 7, 10, -1, -2])
-def test_getitem_int_1D(A, s):
+def test_getitem_int_1D(A, s, memory_leak_check):
     # get a single value of 1D_Block array
     def impl1(A, s):
         return A.values[s]
@@ -543,7 +543,7 @@ def test_getitem_int_1D(A, s):
 @pytest.mark.parametrize("A", [pd.Series(np.arange(11))])
 #    pd.Series(['aafa', 'bbac', 'cff']*4)])
 @pytest.mark.parametrize("s", [0, 1, 3, -1, -2])
-def test_getitem_int_1D_Var(A, s):
+def test_getitem_int_1D_Var(A, s, memory_leak_check):
     # get a single value of 1D_Block array
     def impl1(A, B, s):
         C = A.values[B]
@@ -561,7 +561,7 @@ def test_getitem_int_1D_Var(A, s):
     assert count_array_OneD_Vars() > 0
 
 
-def test_getitem_const_slice_multidim():
+def test_getitem_const_slice_multidim(memory_leak_check):
     """test getitem of multi-dim distributed array with a constant slice in first
     dimension.
     """
@@ -574,7 +574,7 @@ def test_getitem_const_slice_multidim():
     check_func(impl, (A,))
 
 
-def test_getitem_slice_const_size():
+def test_getitem_slice_const_size(memory_leak_check):
     """test getitem of multi-dim distributed array with a constant slice in first
     dimension.
     """
@@ -694,7 +694,7 @@ def test_setitem_scalar(memory_leak_check):
 
 
 @pytest.mark.parametrize("dtype", [np.float32, np.uint8, np.int64])
-def test_arr_reshape(dtype):
+def test_arr_reshape(dtype, memory_leak_check):
     """test reshape of multi-dim distributed arrays"""
     # reshape to more dimensions
     def impl1(A, n):
@@ -736,7 +736,7 @@ def test_arr_reshape(dtype):
     check_func(impl7, (A, 12))
 
 
-def test_np_dot(is_slow_run):
+def test_np_dot(is_slow_run, memory_leak_check):
     """test np.dot() distribute transform"""
 
     # reduction across rows, input: (1D dist array, 2D dist array)
@@ -770,7 +770,7 @@ def test_np_dot(is_slow_run):
         check_func(impl4, (Y,))
 
 
-def test_dist_tuple1():
+def test_dist_tuple1(memory_leak_check):
     def impl1(A):
         B1, B2 = A
         return (B1 + B2).sum()
@@ -784,7 +784,7 @@ def test_dist_tuple1():
     assert count_array_OneDs() > 0
 
 
-def test_dist_tuple2():
+def test_dist_tuple2(memory_leak_check):
     # TODO: tuple getitem with variable index
     def impl1(A, B):
         C = (A, B)
@@ -803,7 +803,7 @@ def test_dist_tuple2():
     assert count_array_OneDs() > 0
 
 
-def test_dist_tuple3():
+def test_dist_tuple3(memory_leak_check):
     """Make sure passing a dist tuple with non-dist elements doesn't cause REP"""
 
     def impl1(v):
@@ -817,7 +817,7 @@ def test_dist_tuple3():
     assert count_array_OneDs() > 0
 
 
-def test_dist_list1():
+def test_dist_list1(memory_leak_check):
     """Test support for build_list of dist data"""
 
     def impl1(df):
@@ -830,7 +830,7 @@ def test_dist_list1():
     assert count_array_OneDs() > 0
 
 
-def test_dist_list_append1():
+def test_dist_list_append1(memory_leak_check):
     """Test support for list.append of dist tuple"""
 
     def impl1(df):
@@ -844,7 +844,7 @@ def test_dist_list_append1():
     assert count_array_OneDs() > 0
 
 
-def test_dist_list_append2():
+def test_dist_list_append2(memory_leak_check):
     """Test support for list.append of dist data"""
 
     def impl1(df):
@@ -858,7 +858,7 @@ def test_dist_list_append2():
     assert count_array_OneDs() > 0
 
 
-def test_dist_list_getitem1():
+def test_dist_list_getitem1(memory_leak_check):
     """Test support for getitem of distributed list"""
 
     def impl1(v):
@@ -872,7 +872,7 @@ def test_dist_list_getitem1():
     assert count_array_OneDs() > 0
 
 
-def test_dist_list_loop():
+def test_dist_list_loop(memory_leak_check):
     """Test support for loop over distributed list"""
 
     def impl1(v):
@@ -890,7 +890,7 @@ def test_dist_list_loop():
     assert count_array_OneD_Vars() > 0
 
 
-def test_dist_list_setitem1():
+def test_dist_list_setitem1(memory_leak_check):
     """Test support for setitem of distributed list"""
 
     def impl1(v, df):
@@ -903,7 +903,7 @@ def test_dist_list_setitem1():
     assert count_array_OneDs() >= 2
 
 
-def test_dist_dict1():
+def test_dist_dict1(memory_leak_check):
     """Test support for build_map of dist data"""
 
     def impl1(df):
@@ -916,7 +916,7 @@ def test_dist_dict1():
     assert count_array_OneDs() > 0
 
 
-def test_dist_dict_getitem1():
+def test_dist_dict_getitem1(memory_leak_check):
     """Test support for getitem of dist dictionary"""
 
     def impl1(v):
@@ -932,7 +932,7 @@ def test_dist_dict_getitem1():
     assert count_array_OneDs() > 0
 
 
-def test_dist_dict_setitem1():
+def test_dist_dict_setitem1(memory_leak_check):
     """Test support for setitem of dist dictionary"""
 
     def impl1(v, df):
@@ -947,6 +947,7 @@ def test_dist_dict_setitem1():
     assert count_array_OneDs() >= 2
 
 
+# TODO: Add memory_leak_check when bug is solved
 def test_concat_reduction():
     """test dataframe concat reduction, which produces distributed output"""
 
@@ -960,7 +961,7 @@ def test_concat_reduction():
     check_func(impl, (11,), reset_index=True, check_dtype=False)
 
 
-def test_dist_warning1():
+def test_dist_warning1(memory_leak_check):
     """Make sure BodoWarning is thrown when there is no parallelism discovered due
     to unsupported function
     """
@@ -978,7 +979,7 @@ def test_dist_warning1():
         bodo.jit(impl)(10)
 
 
-def test_dist_warning2():
+def test_dist_warning2(memory_leak_check):
     """Make sure BodoWarning is thrown when there is no parallelism discovered due
     to return of dataframe
     """
@@ -993,7 +994,7 @@ def test_dist_warning2():
         bodo.jit(impl)(10)
 
 
-def test_dist_warning3():
+def test_dist_warning3(memory_leak_check):
     """Make sure BodoWarning is thrown when a tuple variable with both distributable
     and non-distributable elemets is returned
     """
@@ -1009,7 +1010,7 @@ def test_dist_warning3():
         bodo.jit(impl)(10)
 
 
-def test_getitem_bool_REP():
+def test_getitem_bool_REP(memory_leak_check):
     """make sure output of array getitem with bool index can make its inputs REP"""
 
     def test_impl(n):
@@ -1025,7 +1026,7 @@ def test_getitem_bool_REP():
         bodo.jit(test_impl)(n)
 
 
-def test_df_filter_branch():
+def test_df_filter_branch(memory_leak_check):
     """branches can cause array analysis to remove size equivalences for some array
     definitions since the array analysis pass is not proper data flow yet. However,
     1D_Var size adjustment needs to find the array to get the local size so it tries
@@ -1047,7 +1048,7 @@ def test_df_filter_branch():
     check_func(test_impl, (df, True), False)
 
 
-def test_empty_object_array_warning():
+def test_empty_object_array_warning(memory_leak_check):
     """Make sure BodoWarning is thrown when there is an empty object array in input"""
 
     def impl(A):
@@ -1063,7 +1064,7 @@ def test_empty_object_array_warning():
         )
 
 
-def test_dist_flags():
+def test_dist_flags(memory_leak_check):
     """Make sure Bodo flags are preserved when the same Dispatcher that has distributed
     flags is called with different data types, triggering multiple compilations.
     See #357
@@ -1087,7 +1088,7 @@ def test_dist_flags():
         _test_equal(result_bodo, result_python)
 
 
-def test_dist_objmode():
+def test_dist_objmode(memory_leak_check):
     """Test use of objmode inside prange including a reduction.
     Tests a previous issue where deepcopy in get_parfor_reductions failed for
     ObjModeLiftedWith const.
@@ -1107,7 +1108,7 @@ def test_dist_objmode():
     np.testing.assert_allclose(bodo.jit(objmode_test)(10), objmode_test(10))
 
 
-def test_dist_objmode_dist():
+def test_dist_objmode_dist(memory_leak_check):
     """make sure output chunks from objmode are assigned 1D_Var distribution"""
 
     def impl(n):
@@ -1122,7 +1123,7 @@ def test_dist_objmode_dist():
     assert count_array_OneD_Vars() > 0
 
 
-def test_diagnostics_not_compiled_error():
+def test_diagnostics_not_compiled_error(memory_leak_check):
     """make sure error is thrown when calling diagnostics for a function that is not
     compiled yet
     """
@@ -1134,7 +1135,7 @@ def test_diagnostics_not_compiled_error():
         bodo.jit(test_impl).distributed_diagnostics()
 
 
-def test_diagnostics_trace(capsys):
+def test_diagnostics_trace(capsys, memory_leak_check):
     """make sure distributed diagnostics trace info is printed in diagnostics dump"""
 
     @bodo.jit
@@ -1154,7 +1155,7 @@ def test_diagnostics_trace(capsys):
         )
 
 
-def test_sort_output_1D_Var_size():
+def test_sort_output_1D_Var_size(memory_leak_check):
     """Test using size variable of an output 1D_Var array of a Sort node"""
     # RangeIndex of output Series needs size of Sort output array
     def impl(S):
@@ -1319,6 +1320,7 @@ def get_random_int64index(n):
         ),
     ],
 )
+# TODO: Add memory_leak_check when bug is resolved (failed on data13)
 def test_scatterv(data):
     """Test bodo.scatterv() for Bodo distributed data types"""
     if bodo.get_rank() != 0:
@@ -1327,7 +1329,7 @@ def test_scatterv(data):
     _check_scatterv(data, n)
 
 
-def test_scatterv_jit():
+def test_scatterv_jit(memory_leak_check):
     """test using scatterv inside jit functions"""
 
     def impl(df):

@@ -427,7 +427,7 @@ numba.core.ir_utils.alias_func_extensions[
 
 # high-level allocation function for boolean arrays
 @numba.njit(no_cpython_wrapper=True)
-def alloc_bool_array(n):
+def alloc_bool_array(n):  # pragma: no cover
     data_arr = np.empty(n, dtype=np.bool_)
     nulls = np.empty((n + 7) >> 3, dtype=np.uint8)
     return init_bool_array(data_arr, nulls)

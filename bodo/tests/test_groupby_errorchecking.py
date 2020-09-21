@@ -10,7 +10,7 @@ import pytest
 # ------------------------------ df.groupby() ------------------------------ #
 
 
-def test_groupby_supply_by():
+def test_groupby_supply_by(memory_leak_check):
     """
     Test groupby(): 'by' is supplied
     """
@@ -28,7 +28,7 @@ def test_groupby_supply_by():
         bodo.jit(impl2)(df)
 
 
-def test_groupby_by_const_str_or_str_list():
+def test_groupby_by_const_str_or_str_list(memory_leak_check):
     """
     Test groupby(): 'by' is of type const str or str list
 
@@ -45,7 +45,7 @@ def test_groupby_by_const_str_or_str_list():
         bodo.jit(impl)(df)
 
 
-def test_groupby_by_labels():
+def test_groupby_by_labels(memory_leak_check):
     """
     Test groupby(): 'by' is a valid label or label lists
     """
@@ -58,7 +58,7 @@ def test_groupby_by_labels():
         bodo.jit(impl)(df)
 
 
-def test_groupby_axis_default():
+def test_groupby_axis_default(memory_leak_check):
     """
     Test groupby(): 'axis' cannot be values other than integer value 0
     """
@@ -80,7 +80,7 @@ def test_groupby_axis_default():
         bodo.jit(impl2)(df)
 
 
-def test_groupby_sum_date():
+def test_groupby_sum_date(memory_leak_check):
     """dates are currently not supported"""
 
     def impl(df):
@@ -93,7 +93,7 @@ def test_groupby_sum_date():
         bodo.jit(impl)(df1)
 
 
-def test_groupby_supply_level():
+def test_groupby_supply_level(memory_leak_check):
     """
     Test groupby(): 'level' cannot be supplied
     """
@@ -108,7 +108,7 @@ def test_groupby_supply_level():
         bodo.jit(impl)(df)
 
 
-def test_groupby_as_index_bool():
+def test_groupby_as_index_bool(memory_leak_check):
     """
     Test groupby(): 'as_index' must be a constant bool
     """
@@ -121,7 +121,7 @@ def test_groupby_as_index_bool():
         bodo.jit(impl)(df)
 
 
-def test_groupby_sort_default():
+def test_groupby_sort_default(memory_leak_check):
     """
     Test groupby(): 'sort' cannot have values other than boolean value False
     """
@@ -143,7 +143,7 @@ def test_groupby_sort_default():
         bodo.jit(impl2)(df)
 
 
-def test_groupby_group_keys_true():
+def test_groupby_group_keys_true(memory_leak_check):
     """
     Test groupby(): 'group_keys' cannot have values other than boolean value True
     """
@@ -166,7 +166,7 @@ def test_groupby_group_keys_true():
         bodo.jit(impl2)(df)
 
 
-def test_groupby_squeeze_false():
+def test_groupby_squeeze_false(memory_leak_check):
     """
     Test groupby(): 'squeeze' cannot have values other than boolean value False
     """
@@ -188,7 +188,7 @@ def test_groupby_squeeze_false():
         bodo.jit(impl2)(df)
 
 
-def test_groupby_observed_false():
+def test_groupby_observed_false(memory_leak_check):
     """
     Test groupby(): 'observed' cannot have values other than boolean value False
     """
@@ -213,7 +213,7 @@ def test_groupby_observed_false():
 # ------------------------------ Groupby._() ------------------------------ #
 
 
-def test_groupby_column_selection():
+def test_groupby_column_selection(memory_leak_check):
     """
     Test Groupby[]: selected column must exist in the Dataframe
     """
@@ -226,7 +226,7 @@ def test_groupby_column_selection():
         bodo.jit(impl)(df)
 
 
-def test_groupby_column_selection_attr():
+def test_groupby_column_selection_attr(memory_leak_check):
     """
     Test Groupby.col: selected column must exist in the dataframe
     """
@@ -239,7 +239,7 @@ def test_groupby_column_selection_attr():
         bodo.jit(impl)(df)
 
 
-def test_groupby_columns_selection():
+def test_groupby_columns_selection(memory_leak_check):
     """
     Test Groupby[]: selceted column(s) must exist in the Dataframe
     """
@@ -252,7 +252,7 @@ def test_groupby_columns_selection():
         bodo.jit(impl)(df)
 
 
-def test_groupby_agg_func():
+def test_groupby_agg_func(memory_leak_check):
     """
     Test Groupby.agg(): func must be specified
     """
@@ -265,7 +265,7 @@ def test_groupby_agg_func():
         bodo.jit(impl)(df)
 
 
-def test_groupby_agg_multi_funcs():
+def test_groupby_agg_multi_funcs(memory_leak_check):
     """
     Test Groupby.agg(): when more than one functions are supplied, a column must be explictely selected
     """
@@ -281,7 +281,7 @@ def test_groupby_agg_multi_funcs():
         bodo.jit(impl)(df)
 
 
-def test_groupby_agg_func_input_type():
+def test_groupby_agg_func_input_type(memory_leak_check):
     """
     Test Groupby.agg(): error should be raised when user defined function cannot be applied
     """
@@ -297,7 +297,7 @@ def test_groupby_agg_func_input_type():
         bodo.jit(impl)(df)
 
 
-def test_groupby_agg_func_udf():
+def test_groupby_agg_func_udf(memory_leak_check):
     """
     Test Groupby.agg(): error should be raised when 'func' is not a user defined function
     """
@@ -310,7 +310,7 @@ def test_groupby_agg_func_udf():
         bodo.jit(impl)(df)
 
 
-def test_groupby_agg_funcs_udf():
+def test_groupby_agg_funcs_udf(memory_leak_check):
     """
     Test Groupby.agg(): error should be raised when 'func' tuple contains non user defined functions
     """
@@ -323,7 +323,7 @@ def test_groupby_agg_funcs_udf():
         bodo.jit(impl)(df)
 
 
-def test_groupby_aggregate_func_required_parameter():
+def test_groupby_aggregate_func_required_parameter(memory_leak_check):
     """
     Test Groupby.aggregate(): func must be specified
     """
@@ -336,7 +336,7 @@ def test_groupby_aggregate_func_required_parameter():
         bodo.jit(impl)(df)
 
 
-def test_groupby_aggregate_multi_funcs():
+def test_groupby_aggregate_multi_funcs(memory_leak_check):
     """
     Test Groupby.aggregate(): when more than one functions are supplied, a column must be explictely selected
     """
@@ -352,7 +352,7 @@ def test_groupby_aggregate_multi_funcs():
         bodo.jit(impl)(df)
 
 
-def test_groupby_aggregate_func_udf():
+def test_groupby_aggregate_func_udf(memory_leak_check):
     """
     Test Groupby.aggregate(): error should be raised when 'func' is not a user defined function
     """
@@ -365,7 +365,7 @@ def test_groupby_aggregate_func_udf():
         bodo.jit(impl)(df)
 
 
-def test_groupby_aggregate_funcs_udf():
+def test_groupby_aggregate_funcs_udf(memory_leak_check):
     """
     Test Groupby.aggregate(): error should be raised when 'func' tuple contains non user defined functions
     """
@@ -378,7 +378,7 @@ def test_groupby_aggregate_funcs_udf():
         bodo.jit(impl)(df)
 
 
-def test_groupby_built_in_col_type():
+def test_groupby_built_in_col_type(memory_leak_check):
     """
     Test Groupby.prod()
     and mean(), prod(), std(), sum(), var() should have same behaviors
@@ -396,7 +396,7 @@ def test_groupby_built_in_col_type():
         bodo.jit(impl)(df)
 
 
-def test_groupby_cumsum_col_type():
+def test_groupby_cumsum_col_type(memory_leak_check):
     """
     Test Groupby.cumsum() only accepts integers and floats
     """
@@ -412,7 +412,7 @@ def test_groupby_cumsum_col_type():
         bodo.jit(impl)(df)
 
 
-def test_groupby_median_type_check():
+def test_groupby_median_type_check(memory_leak_check):
     """
     Test Groupby.median() testing the input type argument
     """
@@ -434,7 +434,7 @@ def test_groupby_median_type_check():
         bodo.jit(impl)(df2)
 
 
-def test_groupby_cumsum_argument_check():
+def test_groupby_cumsum_argument_check(memory_leak_check):
     """
     Test Groupby.cumsum() testing for skipna argument
     """
@@ -454,7 +454,7 @@ def test_groupby_cumsum_argument_check():
         bodo.jit(impl2)(df)
 
 
-def test_groupby_cumsum_argument_duplication_check():
+def test_groupby_cumsum_argument_duplication_check(memory_leak_check):
     """
     Test Groupby.cumsum() testing for skipna argument
     """
@@ -469,7 +469,7 @@ def test_groupby_cumsum_argument_duplication_check():
         bodo.jit(impl)(df)
 
 
-def test_groupby_cumprod_argument_check():
+def test_groupby_cumprod_argument_check(memory_leak_check):
     """
     Test Groupby.cumprod() testing for skipna argument
     """
@@ -489,7 +489,7 @@ def test_groupby_cumprod_argument_check():
         bodo.jit(impl2)(df)
 
 
-def test_groupby_nunique_argument_check():
+def test_groupby_nunique_argument_check(memory_leak_check):
     """
     Test Groupby.nunique() testing for dropna argument
     """
@@ -509,7 +509,7 @@ def test_groupby_nunique_argument_check():
         bodo.jit(impl2)(df)
 
 
-def test_groupby_datetimeoperation_checks():
+def test_groupby_datetimeoperation_checks(memory_leak_check):
     """
     Testing the operations which cannot be done for date / datetime / timedelta
     """
@@ -600,7 +600,7 @@ def test_groupby_datetimeoperation_checks():
         bodo.jit(impl_cumprod)(df1_timedelta)
 
 
-def test_groupby_unsupported_error_checking():
+def test_groupby_unsupported_error_checking(memory_leak_check):
     """ Test that a Bodo error is raised for unsupported
     groupby methods
     """

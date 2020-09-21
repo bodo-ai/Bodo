@@ -35,11 +35,11 @@ if LONG_TEST:
         # pd.DataFrame({'B': [0, 1, 2, -2, 4]}, [4, 1, 3, 0, -1])
     ]
 )
-def test_df(request):
+def test_df(request, memory_leak_check):
     return request.param
 
 
-def test_fixed_index(test_df):
+def test_fixed_index(test_df, memory_leak_check):
     def impl(df):
         return df.rolling(2).mean()
 
@@ -47,7 +47,7 @@ def test_fixed_index(test_df):
     pd.testing.assert_frame_equal(bodo_func(test_df), impl(test_df))
 
 
-def test_variable_on_index():
+def test_variable_on_index(memory_leak_check):
     def impl(df):
         return df.rolling("2s").mean()
 
@@ -70,7 +70,7 @@ def g(a):
     return a.sum()
 
 
-def test_fixed_apply_nested_func():
+def test_fixed_apply_nested_func(memory_leak_check):
     """test nested UDF decorated with Bodo (make sure it doesn't hang due to barriers)
     """
     # test sequentially with manually created dfs

@@ -6,12 +6,12 @@ import pytest
 
 
 @pytest.fixture(params=[pd.Series(["New_York", "Lisbon", "Tokyo", "Paris", "Munich"])])
-def test_sr(request):
+def test_sr(request, memory_leak_check):
     return request.param
 
 
 # ------------------------------ center() ------------------------------ #
-def test_center_fillchar_nonchar(test_sr):
+def test_center_fillchar_nonchar(test_sr, memory_leak_check):
     """
     tests error for center with the argument 'fillchar' being non-char type
     """
@@ -28,7 +28,7 @@ def test_center_fillchar_nonchar(test_sr):
         bodo.jit(impl2)(test_sr)
 
 
-def test_center_width_noint(test_sr):
+def test_center_width_noint(test_sr, memory_leak_check):
     """
     tests error for center with the argument 'width' being non-integer type
     """
@@ -41,7 +41,7 @@ def test_center_width_noint(test_sr):
 
 
 # ------------------------------ ljust() ------------------------------ #
-def test_ljust_fillchar_nonchar(test_sr):
+def test_ljust_fillchar_nonchar(test_sr, memory_leak_check):
     """
     tests error for ljust with the argument 'fillchar' being non-char type
     """
@@ -58,7 +58,7 @@ def test_ljust_fillchar_nonchar(test_sr):
         bodo.jit(impl2)(test_sr)
 
 
-def test_ljust_width_noint(test_sr):
+def test_ljust_width_noint(test_sr, memory_leak_check):
     """
     tests error for ljust with the argument 'width' being non-integer type
     """
@@ -71,7 +71,7 @@ def test_ljust_width_noint(test_sr):
 
 
 # ------------------------------ rjust() ------------------------------ #
-def test_rjust_fillchar_nonchar(test_sr):
+def test_rjust_fillchar_nonchar(test_sr, memory_leak_check):
     """
     tests error for rjust with the argument 'fillchar' being non-char type
     """
@@ -88,7 +88,7 @@ def test_rjust_fillchar_nonchar(test_sr):
         bodo.jit(impl2)(test_sr)
 
 
-def test_rjust_width_noint(test_sr):
+def test_rjust_width_noint(test_sr, memory_leak_check):
     """
     tests error for rjust with the argument 'width' being non-integer type
     """
@@ -101,7 +101,7 @@ def test_rjust_width_noint(test_sr):
 
 
 # ------------------------------ zfill() ------------------------------ #
-def test_zfill_width_noint(test_sr):
+def test_zfill_width_noint(test_sr, memory_leak_check):
     """
     tests error for zfill with the argument 'width' being non-integer type
     """
@@ -114,7 +114,7 @@ def test_zfill_width_noint(test_sr):
 
 
 # ------------------------------ pad() ------------------------------ #
-def test_pad_fillchar_nonchar(test_sr):
+def test_pad_fillchar_nonchar(test_sr, memory_leak_check):
     """
     tests error for pad with the argument 'fillchar' being non-char type
     """
@@ -131,7 +131,7 @@ def test_pad_fillchar_nonchar(test_sr):
         bodo.jit(impl2)(test_sr)
 
 
-def test_pad_width_noint(test_sr):
+def test_pad_width_noint(test_sr, memory_leak_check):
     """
     tests error for pad with the argument 'width' being non-integer type
     """
@@ -143,7 +143,7 @@ def test_pad_width_noint(test_sr):
         bodo.jit(impl)(test_sr)
 
 
-def test_pad_side_invalid(test_sr):
+def test_pad_side_invalid(test_sr, memory_leak_check):
     """
     tests error for pad with the argument 'side' being invalid
     """
@@ -161,7 +161,7 @@ def test_pad_side_invalid(test_sr):
 
 
 # ------------------------------ find() ------------------------------ #
-def test_find_sub(test_sr):
+def test_find_sub(test_sr, memory_leak_check):
     """
     tests error for find with the argument 'sub' being non-str type
     """
@@ -179,7 +179,7 @@ def test_find_sub(test_sr):
 
 
 # ------------------------------ rfind() ------------------------------ #
-def test_rfind_sub(test_sr):
+def test_rfind_sub(test_sr, memory_leak_check):
     """
     tests error for rfind with the argument 'sub' being non-str type
     """
@@ -196,7 +196,7 @@ def test_rfind_sub(test_sr):
         bodo.jit(impl2)(test_sr)
 
 
-def test_rfind_start_end(test_sr):
+def test_rfind_start_end(test_sr, memory_leak_check):
     """
     tests error for rfind with the argument start/end NOT being integer or None type
     """
@@ -226,7 +226,7 @@ def test_rfind_start_end(test_sr):
         # pd.Series([(1, 2, 3), (3, 4, 5)])  # TODO: support unboxing Series of tuples
     ],
 )
-def test_get_input(input):
+def test_get_input(input, memory_leak_check):
     """
     tests error for get with the input series not being ListStringArrayType or
     StringArrayType
@@ -240,7 +240,7 @@ def test_get_input(input):
 
 
 @pytest.mark.parametrize("input", [pd.Series([["a", "b", "c"], ["aa", "bb", "cc"]])])
-def test_get_i(input):
+def test_get_i(input, memory_leak_check):
     """
     tests error for get with the argument i not being int type
     """
@@ -256,7 +256,7 @@ def test_get_i(input):
 
 
 @pytest.mark.parametrize("ind", ["3", 1.2])
-def test_getitem_ind(ind):
+def test_getitem_ind(ind, memory_leak_check):
     """
     tests error for getitem for index inputs other than slice and int
     """
@@ -280,11 +280,11 @@ def test_getitem_ind(ind):
         )
     ]
 )
-def test_sr_split(request):
+def test_sr_split(request, memory_leak_check):
     return request.param
 
 
-def test_split_args(test_sr_split):
+def test_split_args(test_sr_split, memory_leak_check):
     """
     tests error for split arguments that are not supported
     """
@@ -301,7 +301,7 @@ def test_split_args(test_sr_split):
         bodo.jit(impl2)(test_sr_split)
 
 
-def test_split_pat(test_sr_split):
+def test_split_pat(test_sr_split, memory_leak_check):
     """
     tests error for split argument pat being non-str type
     """
@@ -314,7 +314,7 @@ def test_split_pat(test_sr_split):
 
 
 # ------------------------------ replace() ------------------------------ #
-def test_replace_args(test_sr):
+def test_replace_args(test_sr, memory_leak_check):
     """
     tests error for replace arguments that are not supported
     """
@@ -331,7 +331,7 @@ def test_replace_args(test_sr):
         bodo.jit(impl2)(test_sr)
 
 
-def test_replace_pat(test_sr):
+def test_replace_pat(test_sr, memory_leak_check):
     """
     tests error for replace argument pat/repl/flags being incorrect type
     """
@@ -354,7 +354,7 @@ def test_replace_pat(test_sr):
 
 
 # ------------------------------ contains() ------------------------------ #
-def test_contains_args(test_sr):
+def test_contains_args(test_sr, memory_leak_check):
     """
     tests error for contains arguments that are not supported
     """
@@ -371,7 +371,7 @@ def test_contains_args(test_sr):
         bodo.jit(impl2)(test_sr)
 
 
-def test_contains_flags(test_sr):
+def test_contains_flags(test_sr, memory_leak_check):
     """
     tests error for contains argument flags being incorrect type
     """
@@ -384,7 +384,7 @@ def test_contains_flags(test_sr):
 
 
 # ------------------------------ count() ------------------------------ #
-def test_count_args(test_sr):
+def test_count_args(test_sr, memory_leak_check):
     """
     tests error for count argument pat, flags being incorrect type
     """
@@ -402,7 +402,7 @@ def test_count_args(test_sr):
 
 
 # ------------------------------ startswith() ------------------------------ #
-def test_startswith_args(test_sr):
+def test_startswith_args(test_sr, memory_leak_check):
     """
     tests error for startswith argument that is not supported
     """
@@ -414,7 +414,7 @@ def test_startswith_args(test_sr):
         bodo.jit(impl)(test_sr)
 
 
-def test_startswith_pat(test_sr):
+def test_startswith_pat(test_sr, memory_leak_check):
     """
     tests error for startswith argument pat being non-str type
     """
@@ -427,7 +427,7 @@ def test_startswith_pat(test_sr):
 
 
 # ------------------------------ endswith() ------------------------------ #
-def test_endswith_args(test_sr):
+def test_endswith_args(test_sr, memory_leak_check):
     """
     tests error for endswith argument that is not supported
     """
@@ -439,7 +439,7 @@ def test_endswith_args(test_sr):
         bodo.jit(impl)(test_sr)
 
 
-def test_endswith_pat(test_sr):
+def test_endswith_pat(test_sr, memory_leak_check):
     """
     tests error for endswith argument pat being non-str type
     """
@@ -452,7 +452,7 @@ def test_endswith_pat(test_sr):
 
 
 # ------------------------------ slice() ------------------------------ #
-def test_slice_args(test_sr):
+def test_slice_args(test_sr, memory_leak_check):
     """
     tests error for slice arguments being non-int type
     """
@@ -475,7 +475,7 @@ def test_slice_args(test_sr):
 
 
 # ------------------------------ extract() ------------------------------ #
-def test_extract_args(test_sr):
+def test_extract_args(test_sr, memory_leak_check):
     """
     tests error for extract arguments being non-int type
     """
@@ -502,7 +502,7 @@ def test_extract_args(test_sr):
 
 # ------------------------------ join() ------------------------------ #
 @pytest.mark.parametrize("input", [pd.Series([1, 2, 3])])
-def test_join_input(input):
+def test_join_input(input, memory_leak_check):
     """
     tests error for join with the input series not being ListStringArrayType or
     StringArrayType
@@ -518,7 +518,7 @@ def test_join_input(input):
 @pytest.mark.parametrize(
     "input", [pd.Series([["aaa", "bbb", "ccc"], ["ddd", "eee", "fff"]])]
 )
-def test_join_sep(input):
+def test_join_sep(input, memory_leak_check):
     """
     tests error for join's argument 'sep' being non-str type
     """
@@ -530,7 +530,7 @@ def test_join_sep(input):
         bodo.jit(impl)(input)
 
 
-def test_center_errorcheck():
+def test_center_errorcheck(memory_leak_check):
     def f(S):
         return S.str.center(3)
 
@@ -539,7 +539,7 @@ def test_center_errorcheck():
         bodo.jit(f)(S)
 
 
-def test_unsupported_str_method():
+def test_unsupported_str_method(memory_leak_check):
     """ Raise Bodo error for unsupported str methods"""
 
     def test_impl():

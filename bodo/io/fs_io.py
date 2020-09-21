@@ -350,7 +350,7 @@ def get_s3_bucket_region(s3_filepath):
 
 
 @numba.njit()
-def get_s3_bucket_region_njit(s3_filepath):
+def get_s3_bucket_region_njit(s3_filepath):  # pragma: no cover
     with numba.objmode(bucket_loc="unicode_type"):
         bucket_loc = ""
         if s3_filepath.startswith("s3://"):

@@ -420,7 +420,7 @@ numba.core.ir_utils.alias_func_extensions[
 
 # high-level allocation function for int arrays
 @numba.njit(no_cpython_wrapper=True)
-def alloc_int_array(n, dtype):
+def alloc_int_array(n, dtype):  # pragma: no cover
     data_arr = np.empty(n, dtype)
     nulls = np.empty((n + 7) >> 3, dtype=np.uint8)
     return init_integer_array(data_arr, nulls)

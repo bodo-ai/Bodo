@@ -292,7 +292,7 @@ def precision_recall_fscore_support_helper(MCM, average):
 
 
 @numba.njit
-def precision_recall_fscore_parallel(y_true, y_pred, operation, average="binary"):
+def precision_recall_fscore_parallel(y_true, y_pred, operation, average="binary"):  # pragma: no cover
     labels = bodo.libs.array_kernels.unique_parallel(y_true)
     labels = bodo.allgatherv(labels, False)
     labels = pd.Series(labels).sort_values().values

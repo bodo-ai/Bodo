@@ -11,7 +11,7 @@ df1 = pd.DataFrame({"A": [1, 2, 3], "C": ["aa", "b", "c"], "E": ["aa", "bb", "cc
 df2 = pd.DataFrame({"A": [1, 2, 5], "B": ["aa", "b", "c"], "C": ["aa", "bb", "cc"]})
 
 # tests left is of type dataframe
-def test_merge_asof_left_dataframe():
+def test_merge_asof_left_dataframe(memory_leak_check):
     def impl(df1):
         return pd.merge_asof("abc", df1)
 
@@ -20,7 +20,7 @@ def test_merge_asof_left_dataframe():
 
 
 # tests right is of type dataframe
-def test_merge_asof_right_dataframe():
+def test_merge_asof_right_dataframe(memory_leak_check):
     def impl(df1):
         return pd.merge_asof(df1, "abc")
 
@@ -29,7 +29,7 @@ def test_merge_asof_right_dataframe():
 
 
 # tests invalid on key in left dataframe
-def test_merge_asof_on_invalid_index_left():
+def test_merge_asof_on_invalid_index_left(memory_leak_check):
     def impl(df1, df2):
         return pd.merge_asof(df1, df2, on=["A", "B"])
 
@@ -38,7 +38,7 @@ def test_merge_asof_on_invalid_index_left():
 
 
 # tests invalid on key in right dataframe
-def test_merge_asof_on_invalid_index_right():
+def test_merge_asof_on_invalid_index_right(memory_leak_check):
     def impl(df1, df2):
         return pd.merge_asof(df1, df2, on=["A", "E"])
 
@@ -47,7 +47,7 @@ def test_merge_asof_on_invalid_index_right():
 
 
 # tests invalid on key in both dataframes
-def test_merge_asof_on_invalid_index_both():
+def test_merge_asof_on_invalid_index_both(memory_leak_check):
     def impl(df1, df2):
         return pd.merge_asof(df1, df2, on=["A", "break"])
 
@@ -56,7 +56,7 @@ def test_merge_asof_on_invalid_index_both():
 
 
 # tests on without common cols
-def test_merge_asof_on_no_comm_cols():
+def test_merge_asof_on_no_comm_cols(memory_leak_check):
     df3 = pd.DataFrame(
         {"AA": [1, 2, 3], "CC": ["aa", "b", "c"], "EE": ["aa", "bb", "cc"]}
     )
@@ -69,7 +69,7 @@ def test_merge_asof_on_no_comm_cols():
 
 
 # tests on type
-def test_merge_asof_on_str_strlist1():
+def test_merge_asof_on_str_strlist1(memory_leak_check):
     def impl(df1, df2):
         return pd.merge_asof(df1, df2, on=3)
 
@@ -78,7 +78,7 @@ def test_merge_asof_on_str_strlist1():
 
 
 # tests lefton type
-def test_merge_asof_on_str_strlist2():
+def test_merge_asof_on_str_strlist2(memory_leak_check):
     def impl(df1, df2):
         return pd.merge_asof(df1, df2, on=(1, "A"))
 
@@ -87,7 +87,7 @@ def test_merge_asof_on_str_strlist2():
 
 
 # tests both on and left_on specified
-def test_merge_asof_on_lefton():
+def test_merge_asof_on_lefton(memory_leak_check):
     def impl(df1, df2):
         return pd.merge_asof(df1, df2, on=["A"], left_on=["C"])
 
@@ -100,7 +100,7 @@ def test_merge_asof_on_lefton():
 
 
 # tests both on and lefton specified
-def test_merge_asof_on_righton():
+def test_merge_asof_on_righton(memory_leak_check):
     def impl(df1, df2):
         return pd.merge_asof(df1, df2, on=["A"], right_on=["C"])
 
@@ -113,7 +113,7 @@ def test_merge_asof_on_righton():
 
 
 # tests merging on columns with incompatible types
-def test_merge_asof_on_incompatible_dtype():
+def test_merge_asof_on_incompatible_dtype(memory_leak_check):
     def impl(df1, df2):
         return pd.merge_asof(df1, df2, left_on="C", right_on="A")
 
@@ -125,7 +125,7 @@ def test_merge_asof_on_incompatible_dtype():
 
 
 # tests only left_on specified
-def test_merge_asof_lefton_only():
+def test_merge_asof_lefton_only(memory_leak_check):
     def impl(df1, df2):
         return pd.merge_asof(df1, df2, left_on=["C"])
 
@@ -134,7 +134,7 @@ def test_merge_asof_lefton_only():
 
 
 # tests only right_on specified
-def test_merge_asof_righton_only():
+def test_merge_asof_righton_only(memory_leak_check):
     def impl(df1, df2):
         return pd.merge_asof(df1, df2, right_on=["C"])
 
@@ -143,7 +143,7 @@ def test_merge_asof_righton_only():
 
 
 # tests invalid left_on key
-def test_merge_asof_lefton_invalid():
+def test_merge_asof_lefton_invalid(memory_leak_check):
     def impl(df1, df2):
         return pd.merge_asof(df1, df2, left_on=["A", "B"], right_on=["A", "B"])
 
@@ -152,7 +152,7 @@ def test_merge_asof_lefton_invalid():
 
 
 # tests invalid right_on key
-def test_merge_asof_righton_invalid():
+def test_merge_asof_righton_invalid(memory_leak_check):
     def impl(df1, df2):
         return pd.merge_asof(df1, df2, left_on=["A", "E"], right_on=["A", "E"])
 
@@ -161,7 +161,7 @@ def test_merge_asof_righton_invalid():
 
 
 # tests lefton type
-def test_merge_asof_lefton_str_strlist1():
+def test_merge_asof_lefton_str_strlist1(memory_leak_check):
     def impl(df1, df2):
         return pd.merge_asof(df1, df2, left_on=3, right_on=["A", "B"])
 
@@ -170,7 +170,7 @@ def test_merge_asof_lefton_str_strlist1():
 
 
 # tests lefton type
-def test_merge_asof_lefton_str_strlist2():
+def test_merge_asof_lefton_str_strlist2(memory_leak_check):
     def impl(df1, df2):
         return pd.merge_asof(df1, df2, left_on=(1, "A"), right_on=["A", "B"])
 
@@ -179,7 +179,7 @@ def test_merge_asof_lefton_str_strlist2():
 
 
 # tests righton type
-def test_merge_asof_righton_str_strlist1():
+def test_merge_asof_righton_str_strlist1(memory_leak_check):
     def impl(df1, df2):
         return pd.merge_asof(df1, df2, right_on=3, left_on=["A", "C"])
 
@@ -188,7 +188,7 @@ def test_merge_asof_righton_str_strlist1():
 
 
 # tests righton type
-def test_merge_asof_righton_str_strlist2():
+def test_merge_asof_righton_str_strlist2(memory_leak_check):
     def impl(df1, df2):
         return pd.merge_asof(df1, df2, right_on=(1, "A"), left_on=["A", "C"])
 
@@ -197,7 +197,7 @@ def test_merge_asof_righton_str_strlist2():
 
 
 # tests unequal lengths of left_on and right_on
-def test_merge_asof_lefton_righton_len_unequal():
+def test_merge_asof_lefton_righton_len_unequal(memory_leak_check):
     def impl(df1, df2):
         return pd.merge_asof(df1, df2, left_on=["A"], right_on=["A", "B"])
 
@@ -206,7 +206,7 @@ def test_merge_asof_lefton_righton_len_unequal():
 
 
 # tests left_index is of type bool
-def test_merge_asof_leftindex_bool():
+def test_merge_asof_leftindex_bool(memory_leak_check):
     def impl(df1, df2):
         return pd.merge_asof(df1, df2, left_index="A", right_index=True)
 
@@ -217,7 +217,7 @@ def test_merge_asof_leftindex_bool():
 
 
 # tests right_index is of type bool
-def test_merge_asof_rightindex_bool():
+def test_merge_asof_rightindex_bool(memory_leak_check):
     def impl(df1, df2):
         return pd.merge_asof(df1, df2, left_index=True, right_index="B")
 
@@ -228,7 +228,7 @@ def test_merge_asof_rightindex_bool():
 
 
 # tests only left_on specified
-def test_merge_asof_leftindex_only():
+def test_merge_asof_leftindex_only(memory_leak_check):
     def impl(df1, df2):
         return pd.merge_asof(df1, df2, left_index=True)
 
@@ -237,7 +237,7 @@ def test_merge_asof_leftindex_only():
 
 
 # tests only right_on specified
-def test_merge_asof_rightindex_only():
+def test_merge_asof_rightindex_only(memory_leak_check):
     def impl(df1, df2):
         return pd.merge_asof(df1, df2, right_index=True)
 
@@ -246,7 +246,7 @@ def test_merge_asof_rightindex_only():
 
 
 # tests right_index=True and len(left_on)!=1
-def test_merge_asof_rightindex_lefton():
+def test_merge_asof_rightindex_lefton(memory_leak_check):
     def impl(df1, df2):
         return pd.merge_asof(df1, df2, right_index=True, left_on=["A"])
 
@@ -258,7 +258,7 @@ def test_merge_asof_rightindex_lefton():
 
 
 # tests left_index=True and len(right_on)!=1
-def test_merge_asof_leftindex_righton():
+def test_merge_asof_leftindex_righton(memory_leak_check):
     def impl(df1, df2):
         return pd.merge_asof(df1, df2, left_index=True, right_on=["A"])
 
@@ -269,7 +269,7 @@ def test_merge_asof_leftindex_righton():
         bodo.jit(impl)(df1, df2)
 
 
-def test_merge_asof_suffixes_number():
+def test_merge_asof_suffixes_number(memory_leak_check):
     def impl(df1, df2):
         return pd.merge_asof(df1, df2, suffixes=["_x", "_y", "_z"])
 
@@ -277,7 +277,7 @@ def test_merge_asof_suffixes_number():
         bodo.jit(impl)(df1, df2)
 
 
-def test_merge_asof_direction():
+def test_merge_asof_direction(memory_leak_check):
     def impl(df1, df2):
         return pd.merge_asof(df1, df2, direction="break")
 
@@ -287,7 +287,7 @@ def test_merge_asof_direction():
         bodo.jit(impl)(df1, df2)
 
 
-def test_merge_asof_by():
+def test_merge_asof_by(memory_leak_check):
     def impl(df1, df2):
         return pd.merge_asof(df1, df2, by="break")
 
@@ -297,7 +297,7 @@ def test_merge_asof_by():
         bodo.jit(impl)(df1, df2)
 
 
-def test_merge_asof_left_by():
+def test_merge_asof_left_by(memory_leak_check):
     def impl(df1, df2):
         return pd.merge_asof(df1, df2, left_by="break")
 
@@ -307,7 +307,7 @@ def test_merge_asof_left_by():
         bodo.jit(impl)(df1, df2)
 
 
-def test_merge_asof_right_by():
+def test_merge_asof_right_by(memory_leak_check):
     def impl(df1, df2):
         return pd.merge_asof(df1, df2, right_by="break")
 
@@ -317,7 +317,7 @@ def test_merge_asof_right_by():
         bodo.jit(impl)(df1, df2)
 
 
-def test_merge_asof_tolerance():
+def test_merge_asof_tolerance(memory_leak_check):
     def impl(df1, df2):
         return pd.merge_asof(df1, df2, tolerance="break")
 
@@ -327,7 +327,7 @@ def test_merge_asof_tolerance():
         bodo.jit(impl)(df1, df2)
 
 
-def test_merge_asof_allow_exact_matches():
+def test_merge_asof_allow_exact_matches(memory_leak_check):
     def impl(df1, df2):
         return pd.merge_asof(df1, df2, allow_exact_matches=False)
 

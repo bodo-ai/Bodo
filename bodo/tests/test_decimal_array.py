@@ -58,28 +58,28 @@ def test_unbox(decimal_arr_value, memory_leak_check):
     check_func(impl2, (decimal_arr_value,))
 
 
-def test_len(decimal_arr_value):
+def test_len(decimal_arr_value, memory_leak_check):
     def test_impl(A):
         return len(A)
 
     check_func(test_impl, (decimal_arr_value,))
 
 
-def test_shape(decimal_arr_value):
+def test_shape(decimal_arr_value, memory_leak_check):
     def test_impl(A):
         return A.shape
 
     check_func(test_impl, (decimal_arr_value,))
 
 
-def test_ndim(decimal_arr_value):
+def test_ndim(decimal_arr_value, memory_leak_check):
     def test_impl(A):
         return A.ndim
 
     check_func(test_impl, (decimal_arr_value,))
 
 
-def test_decimal_coerce():
+def test_decimal_coerce(memory_leak_check):
     ts = Decimal("4.5")
 
     def f(df, ts):
@@ -90,6 +90,7 @@ def test_decimal_coerce():
     check_func(f, (df1, ts))
 
 
+# TODO: Add memory_leak_check when bug is resolved.
 def test_series_astype_str(decimal_arr_value):
     """test decimal conversion to string.
     Using a checksum for checking output since Bodo's output can have extra 0 digits
@@ -120,6 +121,7 @@ def test_series_astype_str(decimal_arr_value):
         Decimal("4.5"),
     ],
 )
+# TODO: Add memory_leak_check when bug is resolved.
 def test_decimal_constant_lowering(decimal_value):
     def f():
         return decimal_value
@@ -129,7 +131,7 @@ def test_decimal_constant_lowering(decimal_value):
     assert val_ret == decimal_value
 
 
-def test_join(decimal_arr_value):
+def test_join(decimal_arr_value, memory_leak_check):
     """test joining dataframes with decimal data columns
     TODO: add decimal array to regular df tests and remove this
     """

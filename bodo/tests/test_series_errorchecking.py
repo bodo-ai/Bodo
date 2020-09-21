@@ -5,7 +5,7 @@ from bodo.utils.typing import BodoError
 import pytest
 
 
-def test_isin():
+def test_isin(memory_leak_check):
     """
     tests error for 'values' argument of Series.isin()
     """
@@ -18,7 +18,7 @@ def test_isin():
         bodo.jit(impl)(S, "3")
 
 
-def test_series_dt_not_supported():
+def test_series_dt_not_supported(memory_leak_check):
     """
     tests error for unsupported Series.dt methods
     """

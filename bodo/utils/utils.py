@@ -923,7 +923,7 @@ def list_reverse(A):
 
 
 @numba.njit()
-def count_nonnan(a):
+def count_nonnan(a):  # pragma: no cover
     """
     Count number of non-NaN elements in an array
     """
@@ -931,7 +931,7 @@ def count_nonnan(a):
 
 
 @numba.njit()
-def nanvar_ddof1(a):
+def nanvar_ddof1(a):  # pragma: no cover
     """
     Simple implementation for np.nanvar(arr, ddof=1)
     """
@@ -942,7 +942,7 @@ def nanvar_ddof1(a):
 
 
 @numba.njit()
-def nanstd_ddof1(a):
+def nanstd_ddof1(a):  # pragma: no cover
     """
     Simple implementation for np.nanstd(arr, ddof=1)
     """

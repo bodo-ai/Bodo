@@ -1233,7 +1233,7 @@ Mstats = namedtuple("Mstats", ["alloc", "free", "mi_alloc", "mi_free"])
 
 
 @numba.njit
-def get_allocation_stats():
+def get_allocation_stats():  # pragma: no cover
     """get allocation stats for arrays allocated in Bodo's C++ array runtime"""
     # TODO: get stats from other C++ modules like _parquet.cpp
     return Mstats(
@@ -1517,7 +1517,7 @@ _array_isin = types.ExternalFunction(
 
 
 @numba.njit
-def array_isin(out_arr, in_arr, in_values, is_parallel):
+def array_isin(out_arr, in_arr, in_values, is_parallel):  # pragma: no cover
 
     in_arr_info = array_to_info(in_arr)
     in_values_info = array_to_info(in_values)

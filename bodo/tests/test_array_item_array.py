@@ -186,7 +186,7 @@ def test_getitem_slice(array_item_arr_value, memory_leak_check):
     )
 
 
-def test_ndim():
+def test_ndim(memory_leak_check):
     def test_impl(A):
         return A.ndim
 
@@ -194,7 +194,7 @@ def test_ndim():
     assert bodo.jit(test_impl)(A) == test_impl(A)
 
 
-def test_shape():
+def test_shape(memory_leak_check):
     def test_impl(A):
         return A.shape
 

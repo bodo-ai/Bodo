@@ -46,7 +46,7 @@ def uncompress_dir(dir_name):
     bodo.barrier()
 
 
-def test_json_read_df(datapath):
+def test_json_read_df(datapath, memory_leak_check):
     """
     test read_json reads a dataframe containing multiple columns
     from a single file, a directory containg a single json file,
@@ -102,7 +102,7 @@ def test_json_read_df(datapath):
 
 
 @pytest.mark.slow
-def test_json_read_int_nulls(datapath):
+def test_json_read_int_nulls(datapath, memory_leak_check):
     """
     test read_json reads a dataframe containing nullable int column
     from a single file, a directory containg a single json file,
@@ -122,7 +122,7 @@ def test_json_read_int_nulls(datapath):
 
 
 @pytest.mark.slow
-def test_json_read_str_arr(datapath):
+def test_json_read_str_arr(datapath, memory_leak_check):
     """
     test read_json reads a dataframe containing str column
     from a single file, a directory containg a single json file,
@@ -153,7 +153,7 @@ def test_json_read_str_arr(datapath):
     check_func(test_impl, (fname_dir_multi,), py_output=py_out)
 
 
-def test_json_read_multiline_object(datapath):
+def test_json_read_multiline_object(datapath, memory_leak_check):
     """
     test read_json where json object is multi-lined
     from a single file 
@@ -180,7 +180,7 @@ def test_json_read_multiline_object(datapath):
     )
 
 
-def test_json_invalid_path_const():
+def test_json_invalid_path_const(memory_leak_check):
     """test error raise when file path provided as constant but is invalid.
     """
 
@@ -256,11 +256,11 @@ def json_write_test(test_impl, read_impl, df, sort_col, reset_index=False):
         )
     ]
 )
-def test_df(request):
+def test_df(request, memory_leak_check):
     return request.param
 
 
-def test_json_write_simple_df():
+def test_json_write_simple_df(memory_leak_check):
     """
     test to_json with default arguments
     """
@@ -278,7 +278,7 @@ def test_json_write_simple_df():
     json_write_test(test_impl, read_impl, df, "A")
 
 
-def test_json_write_simple_df_records(test_df):
+def test_json_write_simple_df_records(test_df, memory_leak_check):
     """
     test to_json with orient='records', lines=False
     """
@@ -292,7 +292,7 @@ def test_json_write_simple_df_records(test_df):
     json_write_test(test_impl, read_impl, test_df, "C", reset_index=True)
 
 
-def test_json_write_simple_df_records_lines():
+def test_json_write_simple_df_records_lines(memory_leak_check):
     """
     test to_json with orient='records', lines=True
     """
@@ -309,7 +309,7 @@ def test_json_write_simple_df_records_lines():
 
 
 @pytest.mark.parametrize("orient", ["split", "index", "columns", "table"])
-def test_json_write_orient(test_df, orient):
+def test_json_write_orient(test_df, orient, memory_leak_check):
     """
     test to_json with different orient options
     missing orient = "values" because only value arrays are written and 

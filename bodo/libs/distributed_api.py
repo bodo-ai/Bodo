@@ -2288,14 +2288,14 @@ def threaded_return(A):  # pragma: no cover
 # dummy function to set a distributed array without changing the index in distributed
 # pass
 @numba.njit
-def set_arr_local(arr, ind, val):
+def set_arr_local(arr, ind, val):  # pragma: no cover
     arr[ind] = val
 
 
 # dummy function to specify local allocation size, to enable bypassing distributed
 # transformations
 @numba.njit
-def local_alloc_size(n, in_arr):
+def local_alloc_size(n, in_arr):  # pragma: no cover
     return n
 
 

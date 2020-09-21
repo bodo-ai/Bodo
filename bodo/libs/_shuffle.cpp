@@ -1126,8 +1126,7 @@ table_info* shuffle_table_kernel(table_info* in_table, uint32_t* hashes,
             std::cout << "shuffle_table_kernel i=" << i << " / " << n_cols
                       << " step 5\n";
 #endif
-            decref_array(send_arr);
-            delete send_arr;
+            delete_info_decref_array(send_arr);
         } else {
 #ifdef DEBUG_SHUFFLE
             std::cout << "n_rows=" << n_rows << "\n";
@@ -1143,6 +1142,9 @@ table_info* shuffle_table_kernel(table_info* in_table, uint32_t* hashes,
                 -1, -1, NULL, NULL, NULL, NULL, NULL, meminfo, NULL, out_array);
         }
         // release reference of input array
+        // It might seem strange to put the decref exactly here. The idea is that memory release
+        // should happen as early as possible. And here we for sure will not need it anymore
+        // after the shuffle.
         decref_array(in_arr);
         out_arrs.push_back(out_arr);
 #ifdef DEBUG_SHUFFLE
