@@ -290,11 +290,6 @@ void decref_array(array_info* arr);
  */
 void incref_array(array_info* arr);
 
-/**
- * Decref list of string array and free all memory in refcount is zero.
- */
-void decref_list_string_array(NRT_MemInfo* meminfo);
-
 extern "C" {
 
 struct numpy_arr_payload {

@@ -92,10 +92,7 @@ Bodo_CTypes::CTypeEnum arrow_to_bodo_type(arrow::Type::type type) {
 array_info& array_info::operator=(array_info&& other) noexcept {
     if (this != &other) {
         // delete this array's original data
-        if (this->arr_type == bodo_array_type::LIST_STRING)
-            decref_list_string_array(this->meminfo);
-        else
-            decref_array(this);
+        decref_array(this);
 
         // copy the other array's pointers into this array_info
         this->n_sub_elems = other.n_sub_elems;
@@ -218,10 +215,12 @@ array_info* alloc_list_string_array(int64_t n_lists, int64_t n_strings,
     payload->n_arrays = n_lists;
     payload->offsets =
         allocate_numpy_payload(n_lists + 1, Bodo_CTypes::CTypeEnum::UINT32);
+    int64_t n_bytes = (int64_t)((n_lists + 7) / 8) + extra_null_bytes;
     payload->null_bitmap =
-        allocate_numpy_payload((int64_t)((n_lists + 7) / 8) + extra_null_bytes,
-                               Bodo_CTypes::CTypeEnum::UINT8);
+        allocate_numpy_payload(n_bytes, Bodo_CTypes::CTypeEnum::UINT8);
     payload->data = meminfo_string_array;
+    // setting all to non-null to avoid unexpected issues
+    memset(payload->null_bitmap.data, 0xff, n_bytes);
 
     array_item_arr_numpy_payload* sub_payload =
         (array_item_arr_numpy_payload*)(meminfo_string_array->data);
@@ -323,9 +322,11 @@ array_info* alloc_array_item(int64_t n_arrays, int64_t n_total_items,
     // TODO: support 64-bit offsets case
     payload->offsets =
         allocate_numpy_payload(n_arrays + 1, Bodo_CTypes::CTypeEnum::UINT32);
+    int64_t n_bytes = (int64_t)((n_arrays + 7) / 8) + extra_null_bytes;
     payload->null_bitmap =
-        allocate_numpy_payload((int64_t)((n_arrays + 7) / 8) + extra_null_bytes,
-                               Bodo_CTypes::CTypeEnum::UINT8);
+        allocate_numpy_payload(n_bytes, Bodo_CTypes::CTypeEnum::UINT8);
+    // setting all to non-null to avoid unexpected issues
+    memset(payload->null_bitmap.data, 0xff, n_bytes);
 
     return new array_info(bodo_array_type::ARRAY_ITEM, dtype, n_arrays,
                           n_total_items, -1, NULL, NULL, NULL, NULL, NULL,
@@ -474,25 +475,6 @@ void decref_array(array_info* arr) {
 void incref_array(array_info* arr) {
     if (arr->meminfo != NULL) arr->meminfo->refct++;
     if (arr->meminfo_bitmask != NULL) arr->meminfo_bitmask->refct++;
-}
-
-void decref_list_string_array(NRT_MemInfo* meminfo) {
-    array_item_arr_payload* payload = (array_item_arr_payload*)(meminfo->data);
-
-    // delete string array
-    payload->data->refct--;
-    if (payload->data->refct == 0) NRT_MemInfo_call_dtor(payload->data);
-
-    // delete array item array
-    payload->offsets.meminfo->refct--;
-    if (payload->offsets.meminfo->refct == 0)
-        NRT_MemInfo_call_dtor(payload->offsets.meminfo);
-    payload->null_bitmap.meminfo->refct--;
-    if (payload->null_bitmap.meminfo->refct == 0)
-        NRT_MemInfo_call_dtor(payload->null_bitmap.meminfo);
-    meminfo->refct--;
-    if (meminfo->refct == 0) NRT_MemInfo_call_dtor(meminfo);
-    // TODO: add meminfo for sub_null_bitmask in array struct and decref it here
 }
 
 // get memory alloc/free info from _meminfo.h
