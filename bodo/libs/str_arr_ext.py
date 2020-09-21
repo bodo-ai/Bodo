@@ -1019,7 +1019,7 @@ def str_arr_from_sequence(in_seq):  # pragma: no cover
 def pre_alloc_string_array(n_strs, n_chars):
     return init_str_arr(
         bodo.libs.array_item_arr_ext.pre_alloc_array_item_array(
-            n_strs, (n_chars,), char_arr_type
+            np.int64(n_strs), (np.int64(n_chars),), char_arr_type
         )
     )
 
