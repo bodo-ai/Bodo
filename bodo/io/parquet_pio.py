@@ -18,7 +18,7 @@ import numpy as np
 import bodo
 from bodo.hiframes.pd_series_ext import _get_series_array_type
 from bodo.libs.str_ext import string_type, unicode_to_utf8
-from bodo.libs.str_arr_ext import string_array_type
+from bodo.libs.str_arr_ext import string_array_type, char_arr_type
 from bodo.libs.array_item_arr_ext import (
     ArrayItemArrayType,
     _get_array_item_arr_payload,
@@ -318,8 +318,10 @@ def gen_column_read(func_text, cname, c_ind_real, c_ind, c_siz, c_type, is_paral
     elif c_type == ArrayItemArrayType(string_array_type):
         # TODO does not support null strings?
         # pass size for easier allocation and distributed analysis
-        func_text += "  {} = read_parquet_list_str(ds_reader, {}, {}, {}_size)\n".format(
-            cname, c_ind_real, c_ind, cname
+        func_text += (
+            "  {} = read_parquet_list_str(ds_reader, {}, {}, {}_size)\n".format(
+                cname, c_ind_real, c_ind, cname
+            )
         )
         # Check if there was an error in the C++ code. If so, raise it.
         func_text += "  bodo.utils.utils.check_and_propagate_cpp_exception()\n"
@@ -327,8 +329,10 @@ def gen_column_read(func_text, cname, c_ind_real, c_ind, c_siz, c_type, is_paral
         # Force generalized path for all ArrayItemArrayType(...) (see FIXME below)
         if not isinstance(c_type.dtype, types.Float):
             ret_type = "nested_type{}".format(c_ind)
-            func_text += "  {} = read_parquet_arrow_array(ds_reader, {}, {}, {}, {})\n".format(
-                cname, c_ind_real, c_ind, c_siz, ret_type
+            func_text += (
+                "  {} = read_parquet_arrow_array(ds_reader, {}, {}, {}, {})\n".format(
+                    cname, c_ind_real, c_ind, c_siz, ret_type
+                )
             )
             # Check if there was an error in the C++ code. If so, raise it.
             func_text += "  bodo.utils.utils.check_and_propagate_cpp_exception()\n"
@@ -350,16 +354,20 @@ def gen_column_read(func_text, cname, c_ind_real, c_ind, c_siz, c_type, is_paral
             func_text += "  bodo.utils.utils.check_and_propagate_cpp_exception()\n"
     elif isinstance(c_type, StructArrayType):
         ret_type = "nested_type{}".format(c_ind)
-        func_text += "  {} = read_parquet_arrow_array(ds_reader, {}, {}, {}, {})\n".format(
-            cname, c_ind_real, c_ind, c_siz, ret_type
+        func_text += (
+            "  {} = read_parquet_arrow_array(ds_reader, {}, {}, {}, {})\n".format(
+                cname, c_ind_real, c_ind, c_siz, ret_type
+            )
         )
         # Check if there was an error in the C++ code. If so, raise it.
         func_text += "  bodo.utils.utils.check_and_propagate_cpp_exception()\n"
     else:
         el_type = get_element_type(c_type.dtype)
         func_text += _gen_alloc(c_type, cname, alloc_size, el_type)
-        func_text += "  status = read_parquet(ds_reader, {}, {}, {}, np.int32({}))\n".format(
-            c_ind_real, c_ind, cname, bodo.utils.utils.numba_to_c_type(c_type.dtype)
+        func_text += (
+            "  status = read_parquet(ds_reader, {}, {}, {}, np.int32({}))\n".format(
+                c_ind_real, c_ind, cname, bodo.utils.utils.numba_to_c_type(c_type.dtype)
+            )
         )
         # Check if there was an error in the C++ code. If so, raise it.
         func_text += "  bodo.utils.utils.check_and_propagate_cpp_exception()\n"
@@ -388,8 +396,7 @@ def _gen_alloc(c_type, cname, alloc_size, el_type):
 
 
 def get_element_type(dtype):
-    """get dtype string to pass to empty() allocations
-    """
+    """get dtype string to pass to empty() allocations"""
     if dtype == types.NPDatetime("ns"):
         # NS_DTYPE has to be defined in function globals
         return "NS_DTYPE"
@@ -512,14 +519,14 @@ def _get_numba_typ_from_pa_typ(pa_typ, is_index, nullable_from_metadata):
 
 
 def merge_subdatasets(subdatasets, get_row_counts):
-    """ Merge datasets of type pyarrow.parquet.ParquetDataset into one.
-        Each dataset contains a subset of pieces (parquet files) of the same dataset.
-        This function will check that the schema of all datasets is the same.
-        If get_row_counts is True, pieces must have '_bodo_num_rows' attribute
-        to indicate the number of rows of each piece, and the total number
-        of rows will be saved to the resulting dataset in '_bodo_total_rows'
-        attribute.
-        NOTE: this will modify the first dataset in the list
+    """Merge datasets of type pyarrow.parquet.ParquetDataset into one.
+    Each dataset contains a subset of pieces (parquet files) of the same dataset.
+    This function will check that the schema of all datasets is the same.
+    If get_row_counts is True, pieces must have '_bodo_num_rows' attribute
+    to indicate the number of rows of each piece, and the total number
+    of rows will be saved to the resulting dataset in '_bodo_total_rows'
+    attribute.
+    NOTE: this will modify the first dataset in the list
     """
     dataset = None
     for subdataset in subdatasets:
@@ -547,8 +554,8 @@ def merge_subdatasets(subdatasets, get_row_counts):
 
 
 def is_directory_parallel(fpath):
-    """ Determines whether a path is a directory. Is meant to be called by
-        all ranks. Rank 0 will do the check and communicate the result. """
+    """Determines whether a path is a directory. Is meant to be called by
+    all ranks. Rank 0 will do the check and communicate the result."""
     from mpi4py import MPI
 
     comm = MPI.COMM_WORLD
@@ -571,10 +578,10 @@ def is_directory_parallel(fpath):
 
 
 def get_filenames_parallel(path, filter_func):
-    """ Get sorted list of file names in directory 'path'. Filter files based
-        on the filter function 'filter_func'.
-        Is meant to be called by all ranks. Rank 0 will get the list and
-        communicate the result. """
+    """Get sorted list of file names in directory 'path'. Filter files based
+    on the filter function 'filter_func'.
+    Is meant to be called by all ranks. Rank 0 will get the list and
+    communicate the result."""
 
     from mpi4py import MPI
 
@@ -682,8 +689,7 @@ def get_parquet_dataset(fpath, parallel, get_row_counts=True):
 
 
 def parquet_file_schema(file_name, selected_columns):
-    """get parquet schema from file using Parquet dataset and Arrow APIs
-    """
+    """get parquet schema from file using Parquet dataset and Arrow APIs"""
     col_names = []
     col_types = []
 
@@ -989,13 +995,9 @@ def pq_read_int_arr_lower(context, builder, sig, args):
 )
 def pq_read_string_lower(context, builder, sig, args):
 
-    typ = sig.return_type
-    dtype = StringArrayPayloadType()
-    meminfo, meminfo_data_ptr = construct_string_array(context, builder)
-    string_array = context.make_helper(builder, typ)
-
-    str_arr_payload = cgutils.create_struct_proxy(dtype)(context, builder)
-    str_arr_payload.num_strings = args[3]
+    string_array = context.make_helper(builder, string_array_type)
+    array_item_data_type = ArrayItemArrayType(char_arr_type)
+    array_item_array = context.make_helper(builder, array_item_data_type)
 
     fnty = lir.FunctionType(
         lir.IntType(32),
@@ -1003,30 +1005,23 @@ def pq_read_string_lower(context, builder, sig, args):
             lir.IntType(8).as_pointer(),
             lir.IntType(64),
             lir.IntType(64),
-            lir.IntType(32).as_pointer().as_pointer(),
-            lir.IntType(8).as_pointer().as_pointer(),
             lir.IntType(8).as_pointer().as_pointer(),
         ],
     )
 
     fn = builder.module.get_or_insert_function(fnty, name="pq_read_string")
-    res = builder.call(
+    builder.call(
         fn,
         [
             args[0],
             args[1],
             args[2],
-            str_arr_payload._get_ptr_by_name("offsets"),
-            str_arr_payload._get_ptr_by_name("data"),
-            str_arr_payload._get_ptr_by_name("null_bitmap"),
+            array_item_array._get_ptr_by_name("meminfo"),
         ],
     )
 
-    builder.store(str_arr_payload._getvalue(), meminfo_data_ptr)
-
-    string_array.meminfo = meminfo
-    ret = string_array._getvalue()
-    return impl_ret_new_ref(context, builder, typ, ret)
+    string_array.data = array_item_array._getvalue()
+    return string_array._getvalue()
 
 
 ############################## read list of strings ###############################
@@ -1067,42 +1062,7 @@ def pq_read_list_string_lower(context, builder, sig, args):
         ],
     )
 
-    payload = _get_array_item_arr_payload(
-        context, builder, typ, array_item_array_from_cpp._getvalue()
-    )
-
-    # create a new payload (with dtor) and set members from payload received
-    # from C++
-    payload_type = ArrayItemArrayPayloadType(typ)
-    payload_alloc_type = context.get_data_type(payload_type)
-    payload_alloc_size = context.get_abi_sizeof(payload_alloc_type)
-
-    # define dtor
-    dtor_fn = define_array_item_dtor(context, builder, typ, payload_type)
-
-    # create meminfo
-    meminfo = context.nrt.meminfo_alloc_dtor(
-        builder, context.get_constant(types.uintp, payload_alloc_size), dtor_fn
-    )
-    meminfo_void_ptr = context.nrt.meminfo_data(builder, meminfo)
-    meminfo_data_ptr = builder.bitcast(
-        meminfo_void_ptr, payload_alloc_type.as_pointer()
-    )
-
-    payload_new = cgutils.create_struct_proxy(payload_type)(context, builder)
-    payload_new.n_arrays = payload.n_arrays
-    payload_new.data = payload.data
-    payload_new.offsets = payload.offsets
-    payload_new.null_bitmap = payload.null_bitmap
-
-    builder.store(payload_new._getvalue(), meminfo_data_ptr)
-    array_item_array = context.make_helper(builder, typ)
-    array_item_array.meminfo = meminfo
-
-    context.nrt.decref(builder, typ, array_item_array_from_cpp._getvalue())
-
-    ret = array_item_array._getvalue()
-    return impl_ret_new_ref(context, builder, typ, ret)
+    return array_item_array_from_cpp._getvalue()
 
 
 ############################## read list of items ###############################
@@ -1177,7 +1137,10 @@ def pq_read_array_item_lower(context, builder, sig, args):
 
     # convert array_info to numpy arrays and set payload attributes
     payload.data = _lower_info_to_array_numpy(
-        array_item_type.dtype, context, builder, builder.load(data_info_ptr),
+        array_item_type.dtype,
+        context,
+        builder,
+        builder.load(data_info_ptr),
     )
     payload.offsets = _lower_info_to_array_numpy(
         types.Array(types.uint32, 1, "C"),
@@ -1224,8 +1187,8 @@ def pq_read_arrow_array_lower(context, builder, sig, args):
             return 1
 
     def get_num_infos(arr_typ):
-        """ get number of array_infos that need to be returned from
-            C++ to reconstruct this array """
+        """get number of array_infos that need to be returned from
+        C++ to reconstruct this array"""
         if isinstance(arr_typ, ArrayItemArrayType):
             # 1 buffer for offsets, 1 buffer for nulls + children buffer count
             return 2 + get_num_infos(arr_typ.dtype)

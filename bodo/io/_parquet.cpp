@@ -53,8 +53,7 @@ int64_t pq_read(DatasetReader *reader, int64_t real_column_idx,
                 int64_t column_idx, uint8_t *out_data, int out_dtype,
                 uint8_t *out_nulls = nullptr);
 int pq_read_string(DatasetReader *reader, int64_t real_column_idx,
-                   int64_t column_idx, uint32_t **out_offsets,
-                   uint8_t **out_data, uint8_t **out_nulls);
+                   int64_t column_idx, NRT_MemInfo **out_meminfo);
 int pq_read_list_string(DatasetReader *reader, int64_t real_column_idx,
                         int64_t column_idx, NRT_MemInfo **array_item_meminfo);
 int pq_read_array_item(DatasetReader *reader, int64_t real_column_idx,
@@ -64,7 +63,7 @@ int pq_read_array_item(DatasetReader *reader, int64_t real_column_idx,
 int pq_read_arrow_array(DatasetReader *reader, int64_t real_column_idx,
                         int64_t column_idx, int64_t column_siz,
                         int64_t *lengths, array_info **out_infos);
-void pack_null_bitmap(uint8_t **out_nulls, std::vector<bool> &null_vec,
+void pack_null_bitmap(uint8_t *out_nulls, std::vector<bool> &null_vec,
                       int64_t n_all_vals);
 void pq_write(const char *filename, const table_info *table,
               const array_info *col_names, const array_info *index,
@@ -300,8 +299,7 @@ int64_t pq_read(DatasetReader *ds_reader, int64_t real_column_idx,
 }
 
 int pq_read_string(DatasetReader *ds_reader, int64_t real_column_idx,
-                   int64_t column_idx, uint32_t **out_offsets,
-                   uint8_t **out_data, uint8_t **out_nulls) {
+                   int64_t column_idx, NRT_MemInfo **out_meminfo) {
     try {
         if (ds_reader->count == 0) return 0;
 
@@ -339,12 +337,21 @@ int pq_read_string(DatasetReader *ds_reader, int64_t real_column_idx,
         }
         offset_vec.push_back(last_offset);
 
-        *out_offsets = new uint32_t[offset_vec.size()];
-        *out_data = new uint8_t[data_vec.size()];
+        int64_t n_strs = offset_vec.size() - 1;
+        int64_t n_chars = data_vec.size();
+        array_info *out_arr =
+            alloc_array(n_strs, n_chars, -1, bodo_array_type::STRING,
+                        Bodo_CTypes::STRING, 0, 0);
 
-        memcpy(*out_offsets, offset_vec.data(),
+        uint32_t *out_offsets = (uint32_t *)out_arr->data2;
+        uint8_t *out_data = (uint8_t *)out_arr->data1;
+        uint8_t *out_nulls = (uint8_t *)out_arr->null_bitmask;
+        *out_meminfo = out_arr->meminfo;
+        delete out_arr;
+
+        memcpy(out_offsets, offset_vec.data(),
                offset_vec.size() * sizeof(uint32_t));
-        memcpy(*out_data, data_vec.data(), data_vec.size());
+        memcpy(out_data, data_vec.data(), data_vec.size());
         pack_null_bitmap(out_nulls, null_vec, n_all_vals);
         return n_all_vals;
     } catch (const std::exception &e) {
@@ -410,10 +417,11 @@ int pq_read_list_string(DatasetReader *ds_reader, int64_t real_column_idx,
             alloc_list_string_array(n_lists, n_strings, n_chars, 0);
         array_item_arr_payload *payload =
             (array_item_arr_payload *)(info->meminfo->data);
-        str_arr_payload *sub_payload = (str_arr_payload *)(payload->data->data);
-        memcpy(sub_payload->offsets, offset_vec.data(),
+        array_item_arr_numpy_payload *sub_payload =
+            (array_item_arr_numpy_payload *)(payload->data->data);
+        memcpy(sub_payload->offsets.data, offset_vec.data(),
                offset_vec.size() * sizeof(int32_t));
-        memcpy(sub_payload->data, data_vec.data(), data_vec.size());
+        memcpy(sub_payload->data.data, data_vec.data(), data_vec.size());
         memcpy(payload->offsets.data, index_offset_vec.data(),
                index_offset_vec.size() * sizeof(int32_t));
         int64_t n_bytes = (n_all_vals + 7) >> 3;

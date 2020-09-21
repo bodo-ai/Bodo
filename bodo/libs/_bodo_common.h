@@ -316,13 +316,6 @@ struct numpy_arr_payload {
 
 void decref_numpy_payload(numpy_arr_payload arr);
 
-// XXX: equivalent to payload data model in str_arr_ext.py
-struct str_arr_payload {
-    int64_t num_strings;
-    int32_t* offsets;
-    char* data;
-    uint8_t* null_bitmap;
-};
 
 struct array_item_arr_payload {
     int64_t n_arrays;
