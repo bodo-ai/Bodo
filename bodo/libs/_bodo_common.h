@@ -358,12 +358,6 @@ numpy_arr_payload allocate_numpy_payload(int64_t length,
 void dtor_array_item_array(array_item_arr_numpy_payload* payload, int64_t size, void* in);
 NRT_MemInfo* alloc_array_item_arr_meminfo();
 
-
-void allocate_list_string_array(int64_t n_lists, int64_t n_strings,
-                                int64_t n_chars, int64_t extra_null_bytes,
-                                array_item_arr_payload* payload,
-                                str_arr_payload* sub_payload);
-
 Bodo_CTypes::CTypeEnum arrow_to_bodo_type(arrow::Type::type type);
 
 void nested_array_to_c(std::shared_ptr<arrow::Array> array, int64_t* lengths,
