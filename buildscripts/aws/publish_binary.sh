@@ -9,4 +9,4 @@ pip install credstash
 USERNAME=`credstash -r us-east-2 get artifactory.ci.username`
 TOKEN=`credstash -r us-east-2 get artifactory.ci.token`
 
-curl -u${USERNAME}:${TOKEN} -T bodo-linux.zip "https://bodo.jfrog.io/artifactory/bodo-binary/bodo-linux.zip"
+curl -u${USERNAME}:${TOKEN} -T bodo-linux.zip "https://bodo.jfrog.io/artifactory/bodo-binary/bodo-linux-nightly.zip"
