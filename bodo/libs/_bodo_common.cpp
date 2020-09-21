@@ -328,6 +328,11 @@ array_info* alloc_array_item(int64_t n_arrays, int64_t n_total_items,
     // setting all to non-null to avoid unexpected issues
     memset(payload->null_bitmap.data, 0xff, n_bytes);
 
+    // set offsets for boundaries
+    uint32_t* offsets_ptr = (uint32_t*)payload->offsets.data;
+    offsets_ptr[0] = 0;
+    offsets_ptr[n_arrays] = n_total_items;
+
     return new array_info(bodo_array_type::ARRAY_ITEM, dtype, n_arrays,
                           n_total_items, -1, NULL, NULL, NULL, NULL, NULL,
                           meminfo_array_item, NULL);
