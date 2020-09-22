@@ -213,6 +213,52 @@ def test_split(test_unicode_no_nan):
     )
 
 
+def test_repeat(test_unicode_no_nan):
+    def test_impl(S):
+        return S.str.repeat(3)
+
+    check_func(test_impl, (test_unicode_no_nan,))
+
+
+def test_repeat_arr(test_unicode_no_nan):
+    def test_impl(S, arr):
+        return S.str.repeat(arr)
+
+    arr = np.array(range(len(test_unicode_no_nan)))
+    check_func(test_impl, (test_unicode_no_nan, arr))
+
+
+def test_repeat_const_list():
+    # Only test on value where the list length works
+    def test_impl(S):
+        return S.str.repeat([1, 4, 1, 7, 9, 2, 5, 2, 1, 8, 2, 1, 2, 3, 1, 4])
+
+    S = pd.Series(
+        [
+            "A",
+            " bbCD",
+            " mCDm",
+            "C,ABB, D",
+            "B,B,CC",
+            "ABBD",
+            "ABCDD,OSAJD",
+            "a1b2d314f,sdf234",
+            "C,ABB,D",
+            "¿abc¡Y tú, quién te cre\t\tes?",
+            "오늘도 피츠버그의 날씨는 매\t우, 구림",
+            "🏈,💔,𠄩,😅",
+            "🠂,🠋🢇🄐,🞧",
+            "россия очень, холодная страна",
+            " ",
+            "",
+        ],
+        [4, 3, 5, 1, 0, -3, 2, 6, 7, 8, 9, 10, 11, 12, 13, 14],
+        name="A",
+    )
+
+    check_func(test_impl, (S,), dist_test=False)
+
+
 def test_get(memory_leak_check):
     def test_impl(S):
         B = S.str.split(",")
@@ -350,8 +396,7 @@ def test_extract_noexpand(test_unicode, memory_leak_check):
 
 # TODO: Add memory_leak_check when problem are resolved.
 def test_extractall():
-    """Test Series.str.extractall() with various input cases
-    """
+    """Test Series.str.extractall() with various input cases"""
     # ascii input with non-string index, single named group
     def test_impl1(S):
         return S.str.extractall(r"(?P<BBB>[abd]+)\d+")

@@ -63,6 +63,9 @@ from bodo.utils.typing import (
     is_overload_constant_int,
     get_overload_const_int,
     create_unsupported_overload,
+    is_overload_constant_list,
+    is_iterable_type,
+    is_list_like_index_type,
 )
 
 
@@ -612,6 +615,75 @@ def overload_str_method_center(S_str, width, fillchar=" "):
         return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
     return impl
+
+
+@overload_method(SeriesStrMethodType, "repeat", inline="always", no_unliteral=True)
+def overload_str_method_repeat(S_str, repeats):
+    if isinstance(repeats, types.Integer) or is_overload_constant_int(repeats):
+
+        def impl(S_str, repeats):  # pragma: no cover
+            S = S_str._obj
+            str_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+            name = bodo.hiframes.pd_series_ext.get_series_name(S)
+            index = bodo.hiframes.pd_series_ext.get_series_index(S)
+            numba.parfors.parfor.init_prange()
+            l = len(str_arr)
+            num_chars = 0
+            for i in numba.parfors.parfor.internal_prange(l):
+                if bodo.libs.array_kernels.isna(str_arr, i):
+                    s = 0
+                else:
+                    s = bodo.libs.str_arr_ext.get_utf8_size(str_arr[i]) * repeats
+                num_chars += s
+            out_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(l, num_chars)
+            for j in numba.parfors.parfor.internal_prange(l):
+                if bodo.libs.array_kernels.isna(str_arr, j):
+                    bodo.libs.array_kernels.setna(out_arr, j)
+                else:
+                    out_arr[j] = str_arr[j] * repeats
+            return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
+
+        return impl
+    elif is_overload_constant_list(repeats):
+        list_vals = get_overload_const_list(repeats)
+        legal_array_input = all([isinstance(val, int) for val in list_vals])
+    elif is_list_like_index_type(repeats) and isinstance(repeats.dtype, types.Integer):
+        legal_array_input = True
+    else: # pragma: no cover
+        legal_array_input = False
+
+    if legal_array_input:
+
+        def impl(S_str, repeats):  # pragma: no cover
+            S = S_str._obj
+            str_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+            name = bodo.hiframes.pd_series_ext.get_series_name(S)
+            index = bodo.hiframes.pd_series_ext.get_series_index(S)
+            repeat_arr = bodo.utils.conversion.coerce_to_array(repeats)
+            numba.parfors.parfor.init_prange()
+            l = len(str_arr)
+            # TODO(Nick): Check that repeats and str_arr are the same size.
+
+            num_chars = 0
+            for i in numba.parfors.parfor.internal_prange(l):
+                if bodo.libs.array_kernels.isna(str_arr, i):
+                    s = 0
+                else:
+                    s = bodo.libs.str_arr_ext.get_utf8_size(str_arr[i]) * repeat_arr[i]
+                num_chars += s
+            out_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(l, num_chars)
+            for j in numba.parfors.parfor.internal_prange(l):
+                if bodo.libs.array_kernels.isna(str_arr, j):
+                    bodo.libs.array_kernels.setna(out_arr, j)
+                else:
+                    out_arr[j] = str_arr[j] * repeat_arr[j]
+            return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
+
+        return impl
+    else:  # pragma: no cover
+        raise BodoError(
+            "Series.str.repeat(): repeats argument must either be an integer or a sequence of integers"
+        )
 
 
 @overload_method(SeriesStrMethodType, "ljust", inline="always", no_unliteral=True)
