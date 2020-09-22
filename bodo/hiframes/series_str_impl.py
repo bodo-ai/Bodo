@@ -293,6 +293,7 @@ def overload_str_method_get(S_str, i):
                     bodo.libs.array_kernels.setna(out_arr, j)
                     ptr = get_split_view_data_ptr(arr, 0)
                 else:
+                    bodo.libs.str_arr_ext.str_arr_set_not_na(out_arr, j)
                     ptr = get_split_view_data_ptr(arr, data_start)
                 bodo.libs.str_arr_ext.setitem_str_arr_ptr(out_arr, j, ptr, length)
             return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
