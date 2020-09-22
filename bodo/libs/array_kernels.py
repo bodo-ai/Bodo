@@ -735,7 +735,6 @@ def overload_drop_duplicates(data, ind_arr, parallel=False):
     func_text += "  return ({},), out_arr_index\n".format(
         ", ".join("out_arr_{}".format(i) for i in range(count))
     )
-    #    print("array_kernels : func_text=", func_text)
     loc_vars = {}
     exec(
         func_text,

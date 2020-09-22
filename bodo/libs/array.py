@@ -287,16 +287,21 @@ def array_to_info(typingctx, arr_type_t=None):
                     buffers = cgutils.pack_array(builder, [null_bitmap_ptr, data_ptr])
                 elif arr_typ == string_array_type:
                     payload = _get_string_arr_payload(context, builder, arr)
+                    offsets = context.make_helper(
+                        builder, offset_arr_type, payload.offsets
+                    ).data
+                    data = context.make_helper(
+                        builder, char_arr_type, payload.data
+                    ).data
+                    null_bitmap = context.make_helper(
+                        builder, null_bitmap_arr_type, payload.null_bitmap
+                    ).data
                     buffers = cgutils.pack_array(
                         builder,
                         [
-                            builder.bitcast(
-                                payload.offsets, lir.IntType(8).as_pointer()
-                            ),
-                            builder.bitcast(
-                                payload.null_bitmap, lir.IntType(8).as_pointer()
-                            ),
-                            builder.bitcast(payload.data, lir.IntType(8).as_pointer()),
+                            builder.bitcast(offsets, lir.IntType(8).as_pointer()),
+                            builder.bitcast(null_bitmap, lir.IntType(8).as_pointer()),
+                            builder.bitcast(data, lir.IntType(8).as_pointer()),
                         ],
                     )
                 elif isinstance(arr_typ, types.Array):
@@ -801,6 +806,8 @@ def nested_to_array(
         )
 
         string_array = context.make_helper(builder, string_array_type)
+        array_item_data_type = ArrayItemArrayType(char_arr_type)
+        array_item_array = context.make_helper(builder, array_item_data_type)
         fnty = lir.FunctionType(
             lir.VoidType(),
             [
@@ -813,9 +820,10 @@ def nested_to_array(
             fn_tp,
             [
                 info_ptr,
-                string_array._get_ptr_by_name("meminfo"),
+                array_item_array._get_ptr_by_name("meminfo"),
             ],
         )
+        string_array.data = array_item_array._getvalue()
         return string_array._getvalue(), lengths_pos + 1, infos_pos + 2
 
     # Numpy
