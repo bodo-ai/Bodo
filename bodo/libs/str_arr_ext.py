@@ -1503,6 +1503,7 @@ def overload_str_arr_setitem_int_to_str(A, ind, val):
         inplace_int64_to_str(ptr, arr_val_len, val)
         # set end offset of string element
         setitem_str_offset(A, ind + 1, start_offset + arr_val_len)
+        str_arr_set_not_na(A, ind)
 
     return impl
 
@@ -1535,6 +1536,7 @@ def overload_str_arr_setitem_NA_str(A, ind):
     def impl(A, ind):  # pragma: no cover
         ptr = get_data_ptr_ind(A, ind)
         inplace_set_NA_str(ptr)
+        str_arr_set_not_na(A, ind)
 
     return impl
 
