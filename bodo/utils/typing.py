@@ -2,31 +2,40 @@
 """
 Helper functions to enable typing.
 """
-import operator
 import itertools
+import operator
 import types as pytypes
+
+import numba
 import numpy as np
 import pandas as pd
-import numba
-from numba.core import types, cgutils, ir_utils
+from numba.core import cgutils, ir_utils, types
+from numba.core.errors import NumbaError
+from numba.core.imputils import (
+    impl_ret_borrowed,
+    impl_ret_new_ref,
+    lower_builtin,
+)
+from numba.core.registry import CPUDispatcher
+from numba.core.typing import signature
+from numba.core.typing.templates import (
+    AbstractTemplate,
+    CallableTemplate,
+    infer_global,
+)
 from numba.extending import (
-    register_model,
+    NativeValue,
+    intrinsic,
+    lower_cast,
     models,
     overload,
     register_jitable,
-    lower_cast,
+    register_model,
     typeof_impl,
     unbox,
-    NativeValue,
-    intrinsic,
 )
-from numba.core.errors import NumbaError
-from numba.core.typing.templates import infer_global, AbstractTemplate, CallableTemplate
-from numba.core.typing import signature
-from numba.core.imputils import lower_builtin, impl_ret_borrowed, impl_ret_new_ref
-from numba.core.registry import CPUDispatcher
-import bodo
 
+import bodo
 
 # sentinel string used in typing pass that specifies a const tuple as a const dict.
 # const tuple is used since there is no literal type for dict
@@ -531,12 +540,12 @@ def get_index_names(t, func_name, default_name):
 
 def get_index_data_arr_types(t):
     from bodo.hiframes.pd_index_ext import (
+        DatetimeIndexType,
         NumericIndexType,
+        PeriodIndexType,
         RangeIndexType,
         StringIndexType,
-        DatetimeIndexType,
         TimedeltaIndexType,
-        PeriodIndexType,
     )
     from bodo.hiframes.pd_multi_index_ext import MultiIndexType
 
@@ -751,6 +760,13 @@ def get_udf_out_arr_type(f_return_type):
     """get output array type of a UDF call, give UDF's scalar output type.
     E.g. S.map(lambda a: 2) -> array(int64)
     """
+
+    # UDF output can be Optional if None is returned in a code path
+    return_nullable = False
+    if isinstance(f_return_type, types.Optional):
+        f_return_type = f_return_type.type
+        return_nullable = True
+
     # unbox Timestamp to dt64 in Series (TODO: timedelta64)
     if f_return_type == bodo.hiframes.pd_timestamp_ext.pandas_timestamp_type:
         f_return_type = types.NPDatetime("ns")
@@ -762,6 +778,7 @@ def get_udf_out_arr_type(f_return_type):
         )
 
     out_arr_type = bodo.hiframes.pd_series_ext._get_series_array_type(f_return_type)
+    out_arr_type = to_nullable_type(out_arr_type) if return_nullable else out_arr_type
     return out_arr_type
 
 
@@ -793,8 +810,8 @@ def to_nullable_type(t):
 
 def is_iterable_type(t):
     """return True if 't' is an iterable type like list, array, Series, ..."""
-    from bodo.hiframes.pd_series_ext import SeriesType
     from bodo.hiframes.pd_dataframe_ext import DataFrameType
+    from bodo.hiframes.pd_series_ext import SeriesType
 
     return (
         bodo.utils.utils.is_array_typ(t, False)

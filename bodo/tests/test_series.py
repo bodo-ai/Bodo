@@ -1,30 +1,31 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
-import unittest
-import os
+import datetime
 import operator
-import pandas as pd
-import numpy as np
+import os
 import random
+import unittest
+from decimal import Decimal
+
 import numba
 import numba.np.ufunc_db
-import bodo
-from decimal import Decimal
-import datetime
-from bodo.utils.typing import BodoError
-from bodo.tests.utils import (
-    count_array_REPs,
-    count_parfor_REPs,
-    count_parfor_OneDs,
-    count_array_OneDs,
-    dist_IR_contains,
-    get_start_end,
-    check_func,
-    is_bool_object_series,
-    _get_dist_arg,
-    _test_equal,
-)
+import numpy as np
+import pandas as pd
 import pytest
 
+import bodo
+from bodo.tests.utils import (
+    _get_dist_arg,
+    _test_equal,
+    check_func,
+    count_array_OneDs,
+    count_array_REPs,
+    count_parfor_OneDs,
+    count_parfor_REPs,
+    dist_IR_contains,
+    get_start_end,
+    is_bool_object_series,
+)
+from bodo.utils.typing import BodoError
 
 _cov_corr_series = [
     (pd.Series(x), pd.Series(y))
@@ -1574,6 +1575,32 @@ def test_series_map(S, memory_leak_check):
     check_func(test_impl, (S,))
 
 
+@pytest.mark.parametrize(
+    "S",
+    [
+        pd.Series([1.0, 2.0, 3.0, 4.0, 5.0], [3, 1, 0, 2, 4], name="ABC"),
+        pd.Series([-1, 11, 2, 3, 5]),
+    ],
+)
+def test_series_map_none(S, memory_leak_check):
+    """Test returning None from UDF"""
+
+    def test_impl(S):
+        return S.map(lambda a: 2 * a if a > 2 else None)
+
+    check_func(test_impl, (S,), check_dtype=False)
+
+
+def test_series_map_none_str(memory_leak_check):
+    """Test returning None from UDF with string output"""
+
+    def test_impl(S):
+        return S.map(lambda a: a + "2" if not pd.isna(a) else None)
+
+    S = pd.Series(["AA", "B", np.nan, "D", "CDE"] * 4)
+    check_func(test_impl, (S,), check_dtype=False, only_1DVar=True)
+
+
 def test_series_map_global1(memory_leak_check):
     def test_impl(S):
         return S.map(arg=lambda a: a + GLOBAL_VAL)
@@ -2908,7 +2935,10 @@ def test_to_numeric(value, downcast, memory_leak_check):
         pd.Series([np.nan, -1.0, -1.0, 0.0, 78.0]),
         pd.Series([1.0, 2.0, 3.0, 42.3]),
         pd.Series([1, 2, 3, 42]),
-        pytest.param(pd.Series([1, 2]), marks=pytest.mark.slow,),
+        pytest.param(
+            pd.Series([1, 2]),
+            marks=pytest.mark.slow,
+        ),
     ]
 )
 def series_stat(request):
@@ -2925,6 +2955,7 @@ def test_series_mad(series_stat, memory_leak_check):
     check_func(f, (series_stat,))
     check_func(f_skip, (series_stat,))
 
+
 def test_series_skew(series_stat, memory_leak_check):
     def f(S):
         return S.skew()
@@ -2935,6 +2966,7 @@ def test_series_skew(series_stat, memory_leak_check):
     check_func(f, (series_stat,))
     check_func(f_skipna, (series_stat,))
 
+
 def test_series_kurt(series_stat, memory_leak_check):
     def f(S):
         return S.kurt()
@@ -2944,6 +2976,7 @@ def test_series_kurt(series_stat, memory_leak_check):
 
     check_func(f, (series_stat,))
     check_func(f_skipna, (series_stat,))
+
 
 def test_series_kurtosis(series_stat, memory_leak_check):
     def f(S):

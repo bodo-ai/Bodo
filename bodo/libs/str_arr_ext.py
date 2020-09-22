@@ -6,59 +6,62 @@ value:             ['a', 'bc', '', 'abc', None, 'bb']
 data:              [a, b, c, a, b, c, b, b]
 offsets:           [0, 1, 3, 3, 6, 6, 8]
 """
-import operator
-import decimal
 import datetime
+import decimal
+import glob
+import operator
 import warnings
+
+import llvmlite.llvmpy.core as lc
+import numba
+import numba.core.typing.typeof
 import numpy as np
 import pandas as pd
-import numba
-import bodo
-from numba.core import types
+from numba.core import cgutils, types
+from numba.core.imputils import (
+    RefType,
+    impl_ret_borrowed,
+    impl_ret_new_ref,
+    iternext_impl,
+)
 from numba.core.typing.templates import (
-    infer_global,
     AbstractTemplate,
+    infer_global,
     signature,
 )
-import numba.core.typing.typeof
 from numba.extending import (
-    typeof_impl,
-    type_callable,
-    models,
-    register_model,
     NativeValue,
-    make_attribute_wrapper,
-    lower_builtin,
     box,
-    unbox,
     intrinsic,
-    overload_method,
+    lower_builtin,
+    make_attribute_wrapper,
+    models,
     overload,
     overload_attribute,
+    overload_method,
     register_jitable,
+    register_model,
+    type_callable,
+    typeof_impl,
+    unbox,
 )
-from numba.core import cgutils
-from bodo.libs.str_ext import string_type, unicode_to_utf8_and_len, memcmp
+
+import bodo
+from bodo.hiframes.datetime_date_ext import (
+    datetime_date_array_type,
+    datetime_date_type,
+)
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.decimal_arr_ext import Decimal128Type, DecimalArrayType
-from bodo.hiframes.datetime_date_ext import datetime_date_array_type, datetime_date_type
+from bodo.libs.str_ext import memcmp, string_type, unicode_to_utf8_and_len
 from bodo.utils.typing import (
+    BodoError,
     BodoWarning,
     is_list_like_index_type,
-    is_overload_true,
     is_overload_none,
+    is_overload_true,
     parse_dtype,
-    BodoError,
 )
-from numba.core.imputils import (
-    impl_ret_new_ref,
-    impl_ret_borrowed,
-    iternext_impl,
-    RefType,
-)
-import llvmlite.llvmpy.core as lc
-import glob
-
 
 # flag for creating pd.arrays.StringArray when boxing Bodo's native string array
 # Off currently since Pandas still has issues with this new type (e.g. low performance,
@@ -385,8 +388,7 @@ def iternext_str_array(context, builder, sig, args, result):
 
 
 def _get_string_arr_payload(context, builder, str_arr_value):
-    """get payload struct proxy for a string array value
-    """
+    """get payload struct proxy for a string array value"""
     string_array = context.make_helper(builder, string_array_type, str_arr_value)
     meminfo_data_ptr = context.nrt.meminfo_data(builder, string_array.meminfo)
     meminfo_data_ptr = builder.bitcast(
@@ -416,7 +418,8 @@ def _get_num_total_chars(builder, offsets, num_strings):
     the last element of its offset array
     """
     return builder.zext(
-        builder.load(builder.gep(offsets, [num_strings])), lir.IntType(64),
+        builder.load(builder.gep(offsets, [num_strings])),
+        lir.IntType(64),
     )
 
 
@@ -607,7 +610,10 @@ def copy_data(typingctx, str_arr_typ, out_str_arr_typ=None):
         )
 
         cgutils.memcpy(
-            builder, out_payload.data, in_payload.data, num_total_chars,
+            builder,
+            out_payload.data,
+            in_payload.data,
+            num_total_chars,
         )
         return context.get_dummy_value()
 
@@ -807,8 +813,8 @@ def cp_str_list_to_array_overload(str_arr, list_data, str_null_bools=None):
                 )
                 str_ind += 1
             else:
-                func_text += "  cp_str_list_to_array(str_arr[{}], list_data[{}])\n".format(
-                    i, i
+                func_text += (
+                    "  cp_str_list_to_array(str_arr[{}], list_data[{}])\n".format(i, i)
                 )
         func_text += "  return\n"
 
@@ -827,8 +833,7 @@ def str_list_to_array(str_list):
 
 @overload(str_list_to_array, no_unliteral=True)
 def str_list_to_array_overload(str_list):
-    """same as cp_str_list_to_array, except this call allocates output
-    """
+    """same as cp_str_list_to_array, except this call allocates output"""
     if str_list == types.List(string_type):
 
         def str_list_impl(str_list):  # pragma: no cover
@@ -854,8 +859,7 @@ def get_num_total_chars(A):  # pragma: no cover
 
 @overload(get_num_total_chars)
 def overload_get_num_total_chars(A):
-    """get total number of characters in a list(str) or string array
-    """
+    """get total number of characters in a list(str) or string array"""
     if isinstance(A, types.List) and A.dtype == string_type:
 
         def str_list_impl(A):  # pragma: no cover
@@ -904,8 +908,9 @@ def str_arr_shape_overload(str_arr):
     return lambda str_arr: (str_arr.size,)  # pragma: no cover
 
 
-from llvmlite import ir as lir
 import llvmlite.binding as ll
+from llvmlite import ir as lir
+
 from bodo.libs import hstr_ext
 
 ll.add_symbol("get_str_len", hstr_ext.get_str_len)
@@ -961,8 +966,7 @@ _print_str_arr = types.ExternalFunction(
 
 
 def construct_string_array(context, builder):
-    """Creates meminfo and sets dtor.
-    """
+    """Creates meminfo and sets dtor."""
     alloc_type = context.get_value_type(str_arr_payload_type)
     alloc_size = context.get_abi_sizeof(alloc_type)
 
@@ -1149,8 +1153,7 @@ def set_string_array_range(
 # box series calls this too
 @box(StringArrayType)
 def box_str_arr(typ, val, c):
-    """
-    """
+    """"""
     payload = _get_string_arr_payload(c.context, c.builder, val)
 
     box_fname = "np_array_from_string_array"
@@ -1169,7 +1172,12 @@ def box_str_arr(typ, val, c):
     fn_get = c.builder.module.get_or_insert_function(fnty, name=box_fname)
     arr = c.builder.call(
         fn_get,
-        [payload.num_strings, payload.offsets, payload.data, payload.null_bitmap,],
+        [
+            payload.num_strings,
+            payload.offsets,
+            payload.data,
+            payload.null_bitmap,
+        ],
     )
 
     c.context.nrt.decref(c.builder, typ, val)
@@ -1244,7 +1252,10 @@ def str_arr_set_na(typingctx, str_arr_typ, ind_typ=None):
             with builder.if_then(is_na_cond):
                 builder.store(
                     builder.load(builder.gep(payload.offsets, [ind])),
-                    builder.gep(payload.offsets, [ind_plus1],),
+                    builder.gep(
+                        payload.offsets,
+                        [ind_plus1],
+                    ),
                 )
         return context.get_dummy_value()
 
@@ -1302,8 +1313,7 @@ def set_null_bits(typingctx, str_arr_typ=None):
 
 @intrinsic
 def move_str_arr_payload(typingctx, to_str_arr_typ, from_str_arr_typ=None):
-    """Move string array payload from one array to another.
-    """
+    """Move string array payload from one array to another."""
     assert to_str_arr_typ == string_array_type and from_str_arr_typ == string_array_type
 
     def codegen(context, builder, sig, args):
@@ -1372,6 +1382,10 @@ def get_utf8_size(s):
         return lambda s: l  # pragma: no cover
 
     def impl(s):  # pragma: no cover
+        # s can be Optional
+        if s is None:
+            return 0
+        s = bodo.utils.indexing.unoptional(s)
         if s._is_ascii == 1:
             return len(s)
         n = _get_utf8_size(s._data, s._length, s._kind)
@@ -1649,7 +1663,7 @@ def str_arr_setitem(A, idx, val):
 
     # scalar case
     if isinstance(idx, types.Integer):
-        if val == types.none or isinstance(val, types.optional): # pragma: no cover
+        if val == types.none or isinstance(val, types.optional):  # pragma: no cover
             return
         assert val == string_type
 
@@ -1825,13 +1839,14 @@ def set_to_numeric_out_na_err(out_arr, out_ind, err_code):  # pragma: no cover
 
 @overload(set_to_numeric_out_na_err)
 def set_to_numeric_out_na_err_overload(out_arr, out_ind, err_code):
-    """set NA to output of to_numeric() based on error code from C++ code.
-    """
+    """set NA to output of to_numeric() based on error code from C++ code."""
     # nullable int array
     if isinstance(out_arr, bodo.libs.int_arr_ext.IntegerArrayType):
 
         def impl_int(out_arr, out_ind, err_code):  # pragma: no cover
-            bodo.libs.int_arr_ext.set_bit_to_arr(out_arr._null_bitmap, out_ind, 0 if err_code == -1 else 1)
+            bodo.libs.int_arr_ext.set_bit_to_arr(
+                out_arr._null_bitmap, out_ind, 0 if err_code == -1 else 1
+            )
 
         return impl_int
 
@@ -1852,7 +1867,10 @@ def set_to_numeric_out_na_err_overload(out_arr, out_ind, err_code):
 @numba.njit(no_cpython_wrapper=True)
 def str_arr_item_to_numeric(out_arr, out_ind, str_arr, ind):  # pragma: no cover
     err_code = _str_arr_item_to_numeric(
-        get_arr_data_ptr(out_arr, out_ind), str_arr, ind, out_arr.dtype,
+        get_arr_data_ptr(out_arr, out_ind),
+        str_arr,
+        ind,
+        out_arr.dtype,
     )
     set_to_numeric_out_na_err(out_arr, out_ind, err_code)
 
