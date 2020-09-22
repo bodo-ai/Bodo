@@ -845,6 +845,15 @@ def test_df_rename(memory_leak_check):
         d["C"] = "dd"
         return df.rename(columns=d)
 
+    def impl5(df,a,b):
+        df.rename(columns={"B": "bb", "C": "cc"}, inplace=(a>b))
+        return df
+
+    def impl6(df):
+        p = True
+        df.rename(columns={"B": "bb", "C": "cc"}, errors=1)
+        return df
+
     df = pd.DataFrame(
         {
             "A": [1, 8, 4, 11, -3],
@@ -864,6 +873,16 @@ def test_df_rename(memory_leak_check):
         match="argument 'columns' requires a constant value but variable 'd' is updated inplace using 'setitem'",
     ):
         bodo.jit(impl4)(df)
+    with pytest.raises(
+        BodoError,
+        match="'inplace' keyword only supports boolean constant assignment",
+    ):
+        bodo.jit(impl5)(df,2,3)
+    with pytest.raises(
+        BodoError,
+        match="'error' keyword only supports default parameter values 'None' and 'ignore'",
+    ):
+        bodo.jit(impl6)(df)
 
 
 def test_df_isna(df_value, memory_leak_check):

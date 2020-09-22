@@ -108,8 +108,16 @@ def overload_dataframe_to_numpy(df, dtype=None, copy=False):
     # (our underlying structures are fully columnar which should be copied to get a
     # matrix). This is consistent with Pandas since copy=False doesn't guarantee it
     # won't be copied.
-    if not is_overload_none(dtype):
-        raise BodoError("'dtype' argument of to_numpy() not supported yet")
+
+    args_dict = {
+        "dtype": dtype,
+    }
+
+    args_default_dict = {
+        "dtype": None,
+    }
+
+    check_unsupported_args("to_numpy", args_dict, args_default_dict)
 
     def impl(df, dtype=None, copy=False):  # pragma: no cover
         return df.values
@@ -193,16 +201,32 @@ def overload_dataframe_rename(
     handle_inplace_df_type_change(inplace, _bodo_transformed, "rename")
 
     # check unsupported arguments
+    args_dict = {
+        "index": index,
+        "axis" : axis,
+        "level" : level,
+        "mapper" : mapper,
+    }
+    args_default_dict = {
+        "index": None,
+        "axis" : None,
+        "level": None,
+        "mapper": None
+    }
+
+    check_unsupported_args("df.rename", args_dict, args_default_dict)
+
     if not (
-        is_overload_none(mapper)
-        and is_overload_none(index)
-        and is_overload_none(axis)
-        and is_overload_constant_bool(inplace)
-        and is_overload_none(level)
-        and is_overload_constant_str(errors)
+        is_overload_constant_str(errors)
         and get_overload_const_str(errors) == "ignore"
     ):
-        raise BodoError("Only 'columns' and copy arguments of df.rename() supported")
+        raise BodoError("df.rename(): 'error' keyword only supports default parameter values 'None' and 'ignore'")
+
+    if not (
+        is_overload_constant_bool(inplace)
+    ):
+        raise BodoError("df.rename(): 'inplace' keyword only supports boolean constant assignment")
+
 
     # columns should be constant dictionary
     if not is_overload_constant_dict(columns):
@@ -841,8 +865,14 @@ def overload_dataframe_shift(df, periods=1, freq=None, axis=0, fill_value=None):
 def overload_dataframe_set_index(
     df, keys, drop=True, append=False, inplace=False, verify_integrity=False
 ):
-    if not is_overload_false(inplace):
-        raise BodoError("set_index() inplace argument not supported yet")
+    args_dict = {
+        "inplace": inplace,
+    }
+    args_default_dict = {
+        "inplace": False,
+    }
+
+    check_unsupported_args("set_index", args_dict, args_default_dict)
 
     col_name = get_overload_const_str(keys)
     col_ind = df.columns.index(col_name)
@@ -869,8 +899,14 @@ def overload_dataframe_query(df, expr, inplace=False):
     Series.dt.* is not supported. issue #451
     """
     # check unsupported "inplace"
-    if not is_overload_false(inplace):
-        raise BodoError("query(): inplace argument not supported yet")
+    args_dict = {
+        "inplace": inplace,
+    }
+    args_default_dict = {
+        "inplace": False,
+    }
+
+    check_unsupported_args("query", args_dict, args_default_dict)
 
     # check expr is of type string
     if not isinstance(expr, (types.StringLiteral, types.UnicodeType)):
@@ -888,8 +924,14 @@ def overload_dataframe_query(df, expr, inplace=False):
 @overload_method(DataFrameType, "duplicated", inline="always", no_unliteral=True)
 def overload_dataframe_duplicated(df, subset=None, keep="first"):
     # TODO: support subset and first
-    if not is_overload_none(subset):
-        raise BodoError("duplicated() subset argument not supported yet")
+    args_dict = {
+        "subset": subset,
+    }
+    args_default_dict = {
+        "subset": None,
+    }
+
+    check_unsupported_args("duplicated", args_dict, args_default_dict)
 
     n_cols = len(df.columns)
 
@@ -914,11 +956,16 @@ def overload_dataframe_duplicated(df, subset=None, keep="first"):
 @overload_method(DataFrameType, "drop_duplicates", inline="always", no_unliteral=True)
 def overload_dataframe_drop_duplicates(df, subset=None, keep="first", inplace=False):
     # TODO: support inplace
-    if not is_overload_none(subset):
-        raise BodoError("drop_duplicates() subset argument not supported yet")
+    args_dict = {
+        "inplace": inplace,
+        "subset": subset,
+    }
+    args_default_dict = {
+        "inplace": False,
+        "subset": None,
+    }
 
-    if is_overload_true(inplace):
-        raise BodoError("drop_duplicates() inplace argument not supported yet")
+    check_unsupported_args("drop_duplicates", args_dict, args_default_dict)
 
     # XXX: can't reuse duplicated() here since it shuffles data and chunks
     # may not match

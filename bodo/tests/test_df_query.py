@@ -107,11 +107,11 @@ def test_df_query_inplace_false(memory_leak_check):
 
     inplace = True
     df = pd.DataFrame({"A": [1, 2, 2], "B": [2, 2, 1]})
-    with pytest.raises(BodoError, match="inplace argument not supported yet"):
+    with pytest.raises(BodoError, match="inplace parameter only supports default value False"):
         bodo.jit(impl1)(df)
-    with pytest.raises(BodoError, match="inplace argument not supported yet"):
+    with pytest.raises(BodoError, match="inplace parameter only supports default value False"):
         bodo.jit(impl2)(df)
-    with pytest.raises(BodoError, match="inplace argument not supported yet"):
+    with pytest.raises(BodoError, match="inplace parameter only supports default value False"):
         bodo.jit(impl3)(df, inplace)
 
 
