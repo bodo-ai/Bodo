@@ -37,5 +37,5 @@ fi
 echo "********** Indexing Bodo **********"
 cd $CODEBUILD_SRC_DIR
 mkdir -p bodo-inc/linux-64
-cp $(HOME)/miniconda3/envs/bodo_build/conda-bld/linux-64/bodo*.tar.bz2 bodo-inc/linux-64/
+cp $HOME/miniconda3/envs/bodo_build/conda-bld/linux-64/bodo*.tar.bz2 bodo-inc/linux-64/
 conda index bodo-inc/

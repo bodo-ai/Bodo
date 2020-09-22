@@ -26,4 +26,5 @@ phases:
 
     post_build:
         commands:
+        - bash -c "if [ /"$CODEBUILD_BUILD_SUCCEEDING/" == /"0/" ]; then exit 1; fi"
         - buildscripts/aws/publish_binary.sh
