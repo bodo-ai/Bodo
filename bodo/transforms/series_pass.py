@@ -4,110 +4,121 @@ converts Series operations to array operations as much as possible
 to provide implementation and enable optimization.
 """
 import operator
-import numpy as np
-import pandas as pd
 import warnings
 
 import numba
+import numpy as np
+import pandas as pd
 from numba.core import ir, ir_utils, types
+from numba.core.inline_closurecall import inline_closure_call
 from numba.core.ir_utils import (
-    replace_arg_nodes,
+    build_definitions,
     compile_to_numba_ir,
+    dprint_func_ir,
+    find_build_sequence,
+    find_callname,
+    find_const,
     find_topo_order,
     gen_np_call,
     get_definition,
     guard,
-    find_callname,
-    mk_alloc,
-    find_const,
-    is_setitem,
     is_getitem,
+    is_setitem,
+    mk_alloc,
     mk_unique_var,
-    dprint_func_ir,
-    build_definitions,
-    find_build_sequence,
+    replace_arg_nodes,
 )
-from numba.core.inline_closurecall import inline_closure_call
 from numba.core.typing.templates import Signature
+
 import bodo
-from bodo.utils.utils import (
-    debug_prints,
-    is_whole_slice,
-    get_getsetitem_index_var,
-    is_expr,
-    is_array_typ,
-    gen_getitem,
-)
-from bodo.libs.str_ext import string_type
-from bodo.libs.str_arr_ext import (
-    string_array_type,
-    StringArrayType,
-    pre_alloc_string_array,
-    get_utf8_size,
-)
-from bodo.libs.int_arr_ext import IntegerArrayType
-from bodo.libs.bool_arr_ext import boolean_array
-from bodo.hiframes.pd_categorical_ext import CategoricalArray
-from bodo.hiframes.pd_series_ext import (
-    SeriesType,
-    is_str_series_typ,
-    series_to_array_type,
-    is_dt64_series_typ,
-    is_timedelta64_series_typ,
-    if_series_to_array_type,
-    is_series_type,
-    SeriesRollingType,
-)
-from bodo.hiframes.pd_index_ext import (
-    DatetimeIndexType,
-    TimedeltaIndexType,
-    RangeIndexType,
-    NumericIndexType,
-    StringIndexType,
-    PeriodIndexType,
-)
-from bodo.io.h5_api import h5dataset_type
-from bodo.hiframes.rolling import get_rolling_setup_args
+import bodo.hiframes.series_dt_impl  # side effect: install Series overloads
 import bodo.hiframes.series_impl  # side effect: install Series overloads
 import bodo.hiframes.series_indexing  # side effect: install Series overloads
 import bodo.hiframes.series_str_impl  # side effect: install Series overloads
-import bodo.hiframes.series_dt_impl  # side effect: install Series overloads
-from bodo.hiframes.series_dt_impl import SeriesDatetimePropertiesType
-from bodo.hiframes.series_str_impl import SeriesStrMethodType, SeriesCatMethodType
-from bodo.hiframes.series_indexing import SeriesIatType, SeriesIlocType, SeriesLocType
-from bodo.ir.aggregate import Aggregate
 from bodo.hiframes import series_kernels
 from bodo.hiframes.datetime_date_ext import datetime_date_array_type
-from bodo.hiframes.datetime_timedelta_ext import (
-    datetime_timedelta_type,
-    datetime_timedelta_array_type,
-)
 from bodo.hiframes.datetime_datetime_ext import datetime_datetime_type
-from bodo.hiframes.pd_timestamp_ext import timedelta_methods
-from bodo.libs.decimal_arr_ext import DecimalArrayType
-from bodo.libs.struct_arr_ext import StructArrayType
-from bodo.libs.array_item_arr_ext import ArrayItemArrayType
-from bodo.hiframes.split_impl import (
-    string_array_split_view_type,
-    StringArraySplitViewType,
-    getitem_c_arr,
-    get_split_view_index,
-    get_split_view_data_ptr,
+from bodo.hiframes.datetime_timedelta_ext import (
+    datetime_timedelta_array_type,
+    datetime_timedelta_type,
 )
+from bodo.hiframes.pd_categorical_ext import CategoricalArray
+from bodo.hiframes.pd_index_ext import (
+    DatetimeIndexType,
+    NumericIndexType,
+    PeriodIndexType,
+    RangeIndexType,
+    StringIndexType,
+    TimedeltaIndexType,
+)
+from bodo.hiframes.pd_series_ext import (
+    SeriesRollingType,
+    SeriesType,
+    if_series_to_array_type,
+    is_dt64_series_typ,
+    is_series_type,
+    is_str_series_typ,
+    is_timedelta64_series_typ,
+    series_to_array_type,
+)
+from bodo.hiframes.pd_timestamp_ext import timedelta_methods
+from bodo.hiframes.rolling import get_rolling_setup_args
+from bodo.hiframes.series_dt_impl import SeriesDatetimePropertiesType
+from bodo.hiframes.series_indexing import (
+    SeriesIatType,
+    SeriesIlocType,
+    SeriesLocType,
+)
+from bodo.hiframes.series_str_impl import (
+    SeriesCatMethodType,
+    SeriesStrMethodType,
+)
+from bodo.hiframes.split_impl import (
+    StringArraySplitViewType,
+    get_split_view_data_ptr,
+    get_split_view_index,
+    getitem_c_arr,
+    string_array_split_view_type,
+)
+from bodo.io.h5_api import h5dataset_type
+from bodo.ir.aggregate import Aggregate
+from bodo.libs.array_item_arr_ext import ArrayItemArrayType
+from bodo.libs.bool_arr_ext import boolean_array
+from bodo.libs.decimal_arr_ext import DecimalArrayType
+from bodo.libs.int_arr_ext import IntegerArrayType
+from bodo.libs.str_arr_ext import (
+    StringArrayType,
+    get_utf8_size,
+    pre_alloc_string_array,
+    string_array_type,
+)
+from bodo.libs.str_ext import string_type
+from bodo.libs.struct_arr_ext import StructArrayType
 from bodo.utils.transform import (
-    compile_func_single_block,
-    update_locs,
-    get_call_expr_arg,
     ReplaceFunc,
-    replace_func,
-    is_var_size_item_array_type,
-    gen_init_varsize_alloc_sizes,
-    gen_varsize_item_sizes,
+    compile_func_single_block,
     extract_keyvals_from_struct_map,
     func_has_assertions,
+    gen_init_varsize_alloc_sizes,
+    gen_varsize_item_sizes,
+    get_call_expr_arg,
+    is_var_size_item_array_type,
+    replace_func,
+    update_locs,
 )
-from bodo.utils.typing import get_overload_const_func, is_const_func_type, BodoError
-
+from bodo.utils.typing import (
+    BodoError,
+    get_overload_const_func,
+    is_const_func_type,
+)
+from bodo.utils.utils import (
+    debug_prints,
+    gen_getitem,
+    get_getsetitem_index_var,
+    is_array_typ,
+    is_expr,
+    is_whole_slice,
+)
 
 ufunc_names = set(f.__name__ for f in numba.core.typing.npydecl.supported_ufuncs)
 
@@ -2085,10 +2096,10 @@ class SeriesPass:
             func_text += init_size_code
             func_text += "  for i in numba.parfors.parfor.internal_prange(n):\n"
             if isinstance(dtype, types.BaseTuple):
-                func_text += "    t = bodo.utils.typing.convert_rec_to_tup(A[i])\n"
+                func_text += "    t1 = bodo.utils.typing.convert_rec_to_tup(A[i])\n"
             else:
-                func_text += "    t = bodo.utils.conversion.box_if_dt64(A[i])\n"
-            func_text += "    item = map_func(t{})\n".format(extra_arg_names)
+                func_text += "    t1 = bodo.utils.conversion.box_if_dt64(A[i])\n"
+            func_text += "    item = map_func(t1{})\n".format(extra_arg_names)
             func_text += gen_varsize_item_sizes(out_arr_type, "item", size_varnames)
             func_text += "  numba.parfors.parfor.init_prange()\n"
             func_text += "  varsize_alloc_sizes = ({},)\n".format(
@@ -2101,10 +2112,10 @@ class SeriesPass:
         )
         func_text += "  for i in numba.parfors.parfor.internal_prange(n):\n"
         if isinstance(dtype, types.BaseTuple):
-            func_text += "    t = bodo.utils.typing.convert_rec_to_tup(A[i])\n"
+            func_text += "    t2 = bodo.utils.typing.convert_rec_to_tup(A[i])\n"
         else:
-            func_text += "    t = bodo.utils.conversion.box_if_dt64(A[i])\n"
-        func_text += "    v = map_func(t{})\n".format(extra_arg_names)
+            func_text += "    t2 = bodo.utils.conversion.box_if_dt64(A[i])\n"
+        func_text += "    v = map_func(t2{})\n".format(extra_arg_names)
         if isinstance(out_typ, types.BaseTuple):
             func_text += "    S[i] = bodo.utils.typing.convert_tup_to_rec(v)\n"
         else:

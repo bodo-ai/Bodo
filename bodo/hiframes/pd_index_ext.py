@@ -1,67 +1,65 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
-import operator
 import datetime
-import pandas as pd
-import numpy as np
+import operator
+
 import numba
-from numba.core import types, cgutils
-from numba.extending import (
-    models,
-    register_model,
-    lower_cast,
-    infer_getattr,
-    type_callable,
-    infer,
-    overload,
-    make_attribute_wrapper,
-    box,
-    intrinsic,
-    typeof_impl,
-    unbox,
-    NativeValue,
-    overload_attribute,
-    overload_method,
-)
+import numpy as np
+import pandas as pd
+from numba.core import cgutils, types
+from numba.core.imputils import lower_constant
 from numba.core.typing.templates import (
-    infer_global,
     AbstractTemplate,
-    signature,
     AttributeTemplate,
     bound_function,
+    infer_global,
+    signature,
+)
+from numba.extending import (
+    NativeValue,
+    box,
+    infer,
+    infer_getattr,
+    intrinsic,
+    lower_cast,
+    make_attribute_wrapper,
+    models,
+    overload,
+    overload_attribute,
+    overload_method,
+    register_model,
+    type_callable,
+    typeof_impl,
+    unbox,
 )
 from numba.parfors.array_analysis import ArrayAnalysis
-from numba.core.imputils import lower_constant
 
 import bodo
-from bodo.libs.str_ext import string_type
 import bodo.hiframes
-from bodo.hiframes.pd_series_ext import (
-    string_array_type,
-    SeriesType,
-)
-from bodo.hiframes.pd_timestamp_ext import pandas_timestamp_type
 import bodo.utils.conversion
-from bodo.utils.typing import (
-    is_overload_none,
-    is_overload_true,
-    is_overload_false,
-    is_const_func_type,
-    is_literal_type,
-    get_overload_const_str,
-    get_val_type_maybe_str_literal,
-    get_overload_const_func,
-    BodoError,
-    raise_bodo_error,
-    get_udf_out_arr_type,
-)
+from bodo.hiframes.datetime_date_ext import get_isocalendar
+from bodo.hiframes.pd_series_ext import SeriesType, string_array_type
+from bodo.hiframes.pd_timestamp_ext import pandas_timestamp_type
+from bodo.libs.int_arr_ext import IntegerArrayType
+from bodo.libs.str_ext import string_type
 from bodo.utils.transform import (
-    get_const_func_output_type,
-    is_var_size_item_array_type,
     gen_init_varsize_alloc_sizes,
     gen_varsize_item_sizes,
+    get_const_func_output_type,
+    is_var_size_item_array_type,
 )
-from bodo.libs.int_arr_ext import IntegerArrayType
-from bodo.hiframes.datetime_date_ext import get_isocalendar
+from bodo.utils.typing import (
+    BodoError,
+    get_overload_const_func,
+    get_overload_const_str,
+    get_udf_out_arr_type,
+    get_val_type_maybe_str_literal,
+    is_const_func_type,
+    is_literal_type,
+    is_overload_false,
+    is_overload_none,
+    is_overload_true,
+    raise_bodo_error,
+)
 
 _dt_index_data_typ = types.Array(types.NPDatetime("ns"), 1, "C")
 _timedelta_index_data_typ = types.Array(types.NPTimedelta("ns"), 1, "C")
@@ -536,26 +534,41 @@ def pd_index_overload(data=None, dtype=None, copy=False, name=None, tupleize_col
     # Range index:
     if isinstance(data, RangeIndexType):
 
-        def impl(data=None, dtype=None, copy=False, name=None, tupleize_cols=True): # pragma: no cover
+        def impl(
+            data=None, dtype=None, copy=False, name=None, tupleize_cols=True
+        ):  # pragma: no cover
             return pd.RangeIndex(data, name=name)
 
     # Datetime index:
     elif isinstance(data, DatetimeIndexType) or elem_type == types.NPDatetime("ns"):
-        def impl(data=None, dtype=None, copy=False, name=None, tupleize_cols=True): # pragma: no cover
+
+        def impl(
+            data=None, dtype=None, copy=False, name=None, tupleize_cols=True
+        ):  # pragma: no cover
             return pd.DatetimeIndex(data, name=name)
 
     # Timedelta index:
     elif isinstance(data, TimedeltaIndexType) or elem_type == types.NPTimedelta("ns"):
 
-        def impl(data=None, dtype=None, copy=False, name=None, tupleize_cols=True): # pragma: no cover
+        def impl(
+            data=None, dtype=None, copy=False, name=None, tupleize_cols=True
+        ):  # pragma: no cover
             return pd.TimedeltaIndex(data, name=name)
 
     # ----- Data: Array type ------
     elif isinstance(data, (SeriesType, types.Array, types.List)):
         # Numeric Indices:
-        if elem_type in (types.int64, types.int32, types.float64, types.uint32, types.uint64):
+        if elem_type in (
+            types.int64,
+            types.int32,
+            types.float64,
+            types.uint32,
+            types.uint64,
+        ):
 
-            def impl(data=None, dtype=None, copy=False, name=None, tupleize_cols=True): # pragma: no cover
+            def impl(
+                data=None, dtype=None, copy=False, name=None, tupleize_cols=True
+            ):  # pragma: no cover
                 data_arr = bodo.utils.conversion.coerce_to_ndarray(data)
                 data_coerced = bodo.utils.conversion.fix_arr_dtype(data_arr, elem_type)
                 return bodo.hiframes.pd_index_ext.init_numeric_index(data_coerced, name)
@@ -563,7 +576,9 @@ def pd_index_overload(data=None, dtype=None, copy=False, name=None, tupleize_col
         # String index:
         elif elem_type == types.string:
 
-            def impl(data=None, dtype=None, copy=False, name=None, tupleize_cols=True): # pragma: no cover
+            def impl(
+                data=None, dtype=None, copy=False, name=None, tupleize_cols=True
+            ):  # pragma: no cover
                 return bodo.hiframes.pd_index_ext.init_string_index(
                     bodo.utils.conversion.coerce_to_array(data), name
                 )
@@ -811,7 +826,9 @@ def overload_pd_timestamp_isocalendar(idx):
             ) = bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(
                 A[i]
             ).isocalendar()
-        return bodo.hiframes.pd_dataframe_ext.init_dataframe((years, weeks, days), idx, ("year", "week", "day"))
+        return bodo.hiframes.pd_dataframe_ext.init_dataframe(
+            (years, weeks, days), idx, ("year", "week", "day")
+        )
 
     return impl
 
@@ -2103,8 +2120,8 @@ def overload_index_map(I, mapper, na_action=None):
         init_size_code, size_varnames = gen_init_varsize_alloc_sizes(out_arr_type)
         func_text += init_size_code
         func_text += "  for i in numba.parfors.parfor.internal_prange(n):\n"
-        func_text += "    t = bodo.utils.conversion.box_if_dt64(A[i])\n"
-        func_text += "    item = map_func(t)\n"
+        func_text += "    t1 = bodo.utils.conversion.box_if_dt64(A[i])\n"
+        func_text += "    item = map_func(t1)\n"
         func_text += gen_varsize_item_sizes(out_arr_type, "item", size_varnames)
         func_text += "  numba.parfors.parfor.init_prange()\n"
         func_text += "  varsize_alloc_sizes = ({},)\n".format(", ".join(size_varnames))
@@ -2112,8 +2129,8 @@ def overload_index_map(I, mapper, na_action=None):
         func_text += "  varsize_alloc_sizes = None\n"
     func_text += "  S = bodo.utils.utils.alloc_type(n, _arr_typ, varsize_alloc_sizes)\n"
     func_text += "  for i in numba.parfors.parfor.internal_prange(n):\n"
-    func_text += "    t = bodo.utils.conversion.box_if_dt64(A[i])\n"
-    func_text += "    v = map_func(t)\n"
+    func_text += "    t2 = bodo.utils.conversion.box_if_dt64(A[i])\n"
+    func_text += "    v = map_func(t2)\n"
     func_text += "    S[i] = bodo.utils.conversion.unbox_if_timestamp(v)\n"
     func_text += "  return bodo.utils.conversion.index_from_array(S, name)\n"
 

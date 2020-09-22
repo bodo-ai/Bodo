@@ -5,90 +5,89 @@ as much as possible to provide implementation and enable optimization.
 Creates specialized IR nodes for complex operations like Join.
 """
 import operator
-from collections import namedtuple
-import numpy as np
-import pandas as pd
 import warnings
+from collections import namedtuple
 
 import numba
+import numpy as np
+import pandas as pd
 from numba.core import ir, ir_utils, types
-from bodo.utils.typing import is_overload_none
+from numba.core.inline_closurecall import inline_closure_call
 from numba.core.ir_utils import (
-    replace_arg_nodes,
+    GuardException,
+    build_definitions,
     compile_to_numba_ir,
+    compute_cfg_from_blocks,
+    dprint_func_ir,
+    find_build_sequence,
+    find_callname,
+    find_const,
     find_topo_order,
     get_definition,
     guard,
-    find_callname,
-    find_const,
     mk_unique_var,
-    dprint_func_ir,
-    build_definitions,
-    find_build_sequence,
-    GuardException,
-    compute_cfg_from_blocks,
+    replace_arg_nodes,
 )
-from numba.core.inline_closurecall import inline_closure_call
 
 import bodo
-from bodo.utils.typing import list_cumulative
+import bodo.hiframes.dataframe_impl  # side effect: install DataFrame overloads
+import bodo.hiframes.pd_groupby_ext
+import bodo.hiframes.pd_rolling_ext
 from bodo import hiframes
+from bodo.hiframes.dataframe_indexing import (
+    DataFrameIatType,
+    DataFrameILocType,
+    DataFrameLocType,
+    DataFrameType,
+)
+from bodo.hiframes.pd_groupby_ext import DataFrameGroupByType
+from bodo.hiframes.pd_index_ext import RangeIndexType
+from bodo.hiframes.pd_multi_index_ext import MultiIndexType
+from bodo.hiframes.pd_rolling_ext import RollingType
+from bodo.hiframes.pd_series_ext import SeriesType
+from bodo.hiframes.split_impl import string_array_split_view_type
+from bodo.ir.aggregate import get_agg_func
+from bodo.libs.bool_arr_ext import BooleanArrayType
+from bodo.libs.str_arr_ext import (
+    get_utf8_size,
+    pre_alloc_string_array,
+    string_array_type,
+)
+from bodo.utils.transform import (
+    ReplaceFunc,
+    compile_func_single_block,
+    gen_const_tup,
+    gen_init_varsize_alloc_sizes,
+    gen_varsize_item_sizes,
+    get_call_expr_arg,
+    get_const_value,
+    is_var_size_item_array_type,
+    replace_func,
+    update_locs,
+)
+from bodo.utils.typing import (
+    BodoError,
+    get_index_data_arr_types,
+    get_literal_value,
+    get_overload_const_func,
+    get_overload_const_list,
+    get_overload_const_str,
+    get_overload_constant_dict,
+    is_initial_value_list_type,
+    is_literal_type,
+    is_overload_constant_dict,
+    is_overload_constant_list,
+    is_overload_constant_str,
+    is_overload_none,
+    list_cumulative,
+)
 from bodo.utils.utils import (
     debug_prints,
+    gen_getitem,
+    get_getsetitem_index_var,
     is_array_typ,
     is_assign,
     sanitize_varname,
-    get_getsetitem_index_var,
-)
-from bodo.hiframes.dataframe_indexing import (
-    DataFrameType,
-    DataFrameLocType,
-    DataFrameILocType,
-    DataFrameIatType,
-)
-from bodo.hiframes.pd_series_ext import SeriesType
-import bodo.hiframes.dataframe_impl  # side effect: install DataFrame overloads
-import bodo.hiframes.pd_groupby_ext
-from bodo.hiframes.pd_groupby_ext import DataFrameGroupByType
-import bodo.hiframes.pd_rolling_ext
-from bodo.hiframes.pd_rolling_ext import RollingType
-from bodo.ir.aggregate import get_agg_func
-from bodo.utils.transform import (
-    compile_func_single_block,
-    update_locs,
-    get_const_value,
-    get_call_expr_arg,
-    gen_const_tup,
-    ReplaceFunc,
-    replace_func,
-    is_var_size_item_array_type,
-    gen_init_varsize_alloc_sizes,
-    gen_varsize_item_sizes,
-)
-from bodo.utils.utils import gen_getitem
-from bodo.libs.str_arr_ext import (
-    string_array_type,
-    get_utf8_size,
-    pre_alloc_string_array,
-)
-from bodo.hiframes.split_impl import string_array_split_view_type
-from bodo.libs.bool_arr_ext import BooleanArrayType
-from bodo.hiframes.pd_index_ext import RangeIndexType
-from bodo.hiframes.pd_multi_index_ext import MultiIndexType
-from bodo.utils.typing import (
-    get_index_data_arr_types,
-    is_overload_none,
-    is_overload_constant_str,
-    get_overload_const_func,
-    get_overload_const_str,
-    BodoError,
-    is_overload_constant_dict,
-    get_overload_constant_dict,
-    is_overload_constant_list,
-    get_overload_const_list,
-    is_initial_value_list_type,
-    is_literal_type,
-    get_literal_value,
 )
 
 binary_op_names = [f.__name__ for f in bodo.hiframes.pd_series_ext.series_binary_ops]
@@ -380,8 +379,8 @@ class DataFramePass:
             return replace_func(self, impl, [arg1, arg2])
 
         if rhs.fn in bodo.hiframes.pd_series_ext.series_inplace_binary_ops:
-            overload_func = bodo.hiframes.dataframe_impl.create_inplace_binary_op_overload(
-                rhs.fn
+            overload_func = (
+                bodo.hiframes.dataframe_impl.create_inplace_binary_op_overload(rhs.fn)
             )
             impl = overload_func(typ1, typ2)
             return replace_func(self, impl, [arg1, arg2])
@@ -526,8 +525,7 @@ class DataFramePass:
         return [assign]
 
     def _run_call_dataframe_apply(self, assign, lhs, rhs, df_var):
-        """generate IR nodes for df.apply() with UDFs
-        """
+        """generate IR nodes for df.apply() with UDFs"""
         df_typ = self.typemap[df_var.name]
         # get apply function
         kws = dict(rhs.kws)
@@ -568,8 +566,8 @@ class DataFramePass:
             init_size_code, size_varnames = gen_init_varsize_alloc_sizes(out_arr_type)
             func_text += init_size_code
             func_text += "  for i in numba.parfors.parfor.internal_prange(len(c0)):\n"
-            func_text += "    row = Row({})\n".format(row_args)
-            func_text += "    item = map_func(row{})\n".format(extra_arg_names)
+            func_text += "    row1 = Row({})\n".format(row_args)
+            func_text += "    item = map_func(row1{})\n".format(extra_arg_names)
             func_text += gen_varsize_item_sizes(out_arr_type, "item", size_varnames)
             func_text += "  numba.parfors.parfor.init_prange()\n"
             func_text += "  varsize_alloc_sizes = ({},)\n".format(
@@ -582,8 +580,8 @@ class DataFramePass:
         )
         func_text += "  for i in numba.parfors.parfor.internal_prange(n):\n"
         # TODO: unbox to array value if necessary (e.g. Timestamp to dt64)
-        func_text += "     row = Row({})\n".format(row_args)
-        func_text += "     S[i] = bodo.utils.conversion.unbox_if_timestamp(map_func(row{}))\n".format(
+        func_text += "     row2 = Row({})\n".format(row_args)
+        func_text += "     S[i] = bodo.utils.conversion.unbox_if_timestamp(map_func(row2{}))\n".format(
             extra_arg_names
         )
         func_text += (
@@ -746,8 +744,10 @@ class DataFramePass:
         name_consts = ", ".join(["'{}'".format(c) for c in df_typ.columns])
 
         func_text = "def f({}):\n".format(col_name_args)
-        func_text += "  return bodo.hiframes.dataframe_impl.get_itertuples({}, {})\n".format(
-            name_consts, col_name_args
+        func_text += (
+            "  return bodo.hiframes.dataframe_impl.get_itertuples({}, {})\n".format(
+                name_consts, col_name_args
+            )
         )
 
         loc_vars = {}
@@ -775,15 +775,19 @@ class DataFramePass:
             ind = "bodo.hiframes.pd_index_ext.init_range_index(0, len({}), 1, None)".format(
                 d
             )
-            func_text += "  {} = bodo.hiframes.pd_series_ext.init_series({}, {})\n".format(
-                d + "_S", d, ind
+            func_text += (
+                "  {} = bodo.hiframes.pd_series_ext.init_series({}, {})\n".format(
+                    d + "_S", d, ind
+                )
             )
             func_text += "  {} = {}.{}()\n".format(d + "_O", d + "_S", func_name)
         func_text += "  data = np.array(({},))\n".format(
             ", ".join(d + "_O" for d in data_args)
         )
-        func_text += "  index = bodo.libs.str_arr_ext.str_arr_from_sequence(({},))\n".format(
-            ", ".join("'{}'".format(c) for c in df_typ.columns)
+        func_text += (
+            "  index = bodo.libs.str_arr_ext.str_arr_from_sequence(({},))\n".format(
+                ", ".join("'{}'".format(c) for c in df_typ.columns)
+            )
         )
         func_text += "  return bodo.hiframes.pd_series_ext.init_series(data, index)\n"
         loc_vars = {}
@@ -795,8 +799,7 @@ class DataFramePass:
         return replace_func(self, _mean_impl, col_vars, pre_nodes=nodes)
 
     def _run_call_query(self, assign, lhs, rhs):
-        """Transform query expr to Numba IR using the expr parser in Pandas.
-        """
+        """Transform query expr to Numba IR using the expr parser in Pandas."""
         # FIXME: local variables could be renamed by previous passes, including initial
         # renaming of Numba (e.g. a -> a.1 in some cases).
         # we need to develop a way to preserve initial variable names
@@ -840,8 +843,10 @@ class DataFramePass:
             ind = "bodo.hiframes.pd_index_ext.init_range_index(0, len({}), 1, None)".format(
                 c_var
             )
-            func_text += "  {0} = bodo.hiframes.pd_series_ext.init_series({0}, {1})\n".format(
-                c_var, ind
+            func_text += (
+                "  {0} = bodo.hiframes.pd_series_ext.init_series({0}, {1})\n".format(
+                    c_var, ind
+                )
             )
         func_text += "  return {}".format(parsed_expr_str)
         loc_vars = {}
@@ -985,8 +990,7 @@ class DataFramePass:
 
         # handle math calls
         def math__str__(self):
-            """makes math calls compilable by adding "np." and Series functions
-            """
+            """makes math calls compilable by adding "np." and Series functions"""
             # avoid change if it is a dummy attribute call
             if self.op in new_funcs:
                 return pd.io.formats.printing.pprint_thing(
@@ -1056,9 +1060,11 @@ class DataFramePass:
             )
             pd.core.computation.expr.BaseExprVisitor.visit_Attribute = visit_Attribute
             # _maybe_downcast_constants accesses actual value which is not possible
-            pd.core.computation.expr.BaseExprVisitor._maybe_downcast_constants = lambda self, left, right: (
-                left,
-                right,
+            pd.core.computation.expr.BaseExprVisitor._maybe_downcast_constants = (
+                lambda self, left, right: (
+                    left,
+                    right,
+                )
             )
             pd.core.computation.ops.Term.__str__ = __str__
             pd.core.computation.ops.MathCall.__str__ = math__str__
