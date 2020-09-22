@@ -4,7 +4,7 @@ set -exo pipefail
 echo "********* Zipping Binary **********"
 cd $CODEBUILD_SRC_DIR
 ls bodo-inc/linux-64
-zip bodo-linux.zip bodo-inc
+zip -r bodo-linux.zip bodo-inc
 
 echo "********** Publishing to Artifactory **********"
 pip install credstash
