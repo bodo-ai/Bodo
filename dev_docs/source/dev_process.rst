@@ -331,6 +331,29 @@ Currently our :code:`.flake8` config ignores a number of files,
 so whenever you are done working on a python file, run  `black <https://github.com/psf/black>`_,
 remove the file from :code:`.flake8`, and ensure `flake8 <http://flake8.pycqa.org/en/latest/>`_ does not raise any error.
 
+Pre-commit
+~~~~~~~~~~
+
+It's required to use `pre-commit hooks <https://pre-commit.com/>`_ to run `black <https://github.com/psf/black>`_,
+`flake8 <http://flake8.pycqa.org/en/latest/>`_, and `isort <https://github.com/PyCQA/isort>`_ automatically.
+This can be done by installing pre-commit::
+
+    conda install pre-commit -c conda-forge
+
+and then running::
+
+    pre-commit install
+
+from the root of Bodo repository. Now these styling checks will run each time you commit changes. If all the checks pass, 
+the commit is made. Otherwise, the code is automatically formatted and you can review the changes using :code:`git diff`. After reviewing, commit again. 
+(Repeat the process until all styling checks are passed)
+
+Note: you can temporarily disable one or more of these checks using :code:`SKIP` enviroment like this::
+
+    SKIP=black,flake8 git commit -m "foo"
+
+To skip all the checks use :code:`git commit --no-verify`.
+
 We use the Google C++ code style guide
 and enforce with `cpplint <https://github.com/cpplint/cpplint>`_.
 We use `clang-format` as the formatter.
