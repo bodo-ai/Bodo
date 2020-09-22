@@ -314,8 +314,7 @@ def test_get(memory_leak_check):
     ],
 )
 def test_get_array_item(S, memory_leak_check):
-    """Tests Series.str.get() support for non-string arrays like array(item).
-    """
+    """Tests Series.str.get() support for non-string arrays like array(item)."""
 
     def test_impl(S):
         return S.str.get(1)
@@ -456,6 +455,7 @@ def test_find(test_unicode, memory_leak_check):
     check_func(test_impl, (test_unicode,), check_dtype=False)
     check_func(test_impl2, (test_unicode,), check_dtype=False)
 
+
 def test_find_start_end(test_unicode, memory_leak_check):
     def test_impl(S):
         return S.str.find("AB", start=3, end=10)
@@ -465,6 +465,7 @@ def test_find_start_end(test_unicode, memory_leak_check):
 
     check_func(test_impl, (test_unicode,), check_dtype=False)
     check_func(test_impl2, (test_unicode,), check_dtype=False)
+
 
 def test_rfind(test_unicode, memory_leak_check):
     def test_impl(S):
@@ -613,6 +614,44 @@ def test_getitem(ind, test_unicode, memory_leak_check):
     check_func(test_impl, (test_unicode, ind))
 
 
+def test_slice_replace(test_unicode, memory_leak_check):
+    def test_impl(S):
+        return S.str.slice_replace()
+
+    check_func(test_impl, (test_unicode,))
+
+
+@pytest.mark.slow
+def test_slice_replace_repl(test_unicode, memory_leak_check):
+    def test_impl(S, repl):
+        return S.str.slice_replace(repl=repl)
+
+    check_func(test_impl, (test_unicode, "bodo.ai"))
+
+
+@pytest.mark.slow
+def test_slice_replace_start(test_unicode, memory_leak_check):
+    def test_impl(S, start):
+        return S.str.slice_replace(start=start)
+
+    check_func(test_impl, (test_unicode, 5))
+
+
+@pytest.mark.slow
+def test_slice_replace_stop(test_unicode, memory_leak_check):
+    def test_impl(S, stop):
+        return S.str.slice_replace(stop=stop)
+
+    check_func(test_impl, (test_unicode, 3))
+
+
+def test_slice_replace_all_args(test_unicode, memory_leak_check):
+    def test_impl(S, start, stop, repl):
+        return S.str.slice_replace(start, stop, repl)
+
+    check_func(test_impl, (test_unicode, 5, 8, "피츠버그"))
+
+
 ##############  list of string array tests  #################
 
 
@@ -738,8 +777,7 @@ def test_flatten2(test_unicode_no_nan, memory_leak_check):
 
 
 def test_flatten3(test_unicode_no_nan, memory_leak_check):
-    """tests flattening array without the "list" call
-    """
+    """tests flattening array without the "list" call"""
 
     def impl(S):
         A = S.str.split(",")
@@ -749,8 +787,7 @@ def test_flatten3(test_unicode_no_nan, memory_leak_check):
 
 
 def test_flatten4(test_unicode_no_nan, memory_leak_check):
-    """tests flattening array with "from_iterable"
-    """
+    """tests flattening array with "from_iterable" """
 
     def impl(S):
         A = S.str.split(",")
@@ -761,8 +798,7 @@ def test_flatten4(test_unicode_no_nan, memory_leak_check):
 
 
 def test_join(memory_leak_check):
-    """test the functionality of bodo's join with NaN
-    """
+    """test the functionality of bodo's join with NaN"""
 
     def test_impl(S):
         return S.str.join("-")
@@ -792,8 +828,7 @@ def test_join(memory_leak_check):
 
 
 def test_join_string(test_unicode, memory_leak_check):
-    """test the functionality of bodo's join with just a string
-    """
+    """test the functionality of bodo's join with just a string"""
 
     def test_impl(test_unicode):
         return test_unicode.str.join("-")
@@ -806,8 +841,7 @@ def test_join_string(test_unicode, memory_leak_check):
 
 
 def test_join_splitview(test_unicode_no_nan, memory_leak_check):
-    """test the functionality of bodo's join with split view type as an input
-    """
+    """test the functionality of bodo's join with split view type as an input"""
 
     def test_impl(S):
         B = S.str.split(",")
@@ -817,8 +851,7 @@ def test_join_splitview(test_unicode_no_nan, memory_leak_check):
 
 
 def test_join_splitview_nan_entry(memory_leak_check):
-    """test the functionality of bodo's join with split view type as an input
-    """
+    """test the functionality of bodo's join with split view type as an input"""
 
     def test_impl(S):
         B = S.str.split(",")

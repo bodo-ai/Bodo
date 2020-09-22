@@ -617,6 +617,45 @@ def overload_str_method_center(S_str, width, fillchar=" "):
     return impl
 
 
+@overload_method(SeriesStrMethodType, "slice_replace", inline="always", no_unliteral=True)
+def overload_str_method_slice_replace(S_str, start=0, stop=None, repl=""):
+    int_arg_check("slice_replace", "start", start)
+    if not is_overload_none(stop):
+        int_arg_check("slice_replace", "stop", stop)
+    str_arg_check("slice_replace", "repl", repl)
+
+    def impl(S_str, start=0, stop=None, repl=""):  # pragma: no cover
+        S = S_str._obj
+        str_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+        name = bodo.hiframes.pd_series_ext.get_series_name(S)
+        index = bodo.hiframes.pd_series_ext.get_series_index(S)
+        numba.parfors.parfor.init_prange()
+        l = len(str_arr)
+        num_chars = 0
+        for i in numba.parfors.parfor.internal_prange(l):
+            if bodo.libs.array_kernels.isna(str_arr, i):
+                s = 0
+            else:
+                s += bodo.libs.str_arr_ext.get_utf8_size(str_arr[i][:start])
+                if stop is not None:
+                    s += bodo.libs.str_arr_ext.get_utf8_size(str_arr[i][stop:])
+                s += len(repl)
+            num_chars += s
+        out_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(l, num_chars)
+        for j in numba.parfors.parfor.internal_prange(l):
+            if bodo.libs.array_kernels.isna(str_arr, j):
+                bodo.libs.array_kernels.setna(out_arr, j)
+            else:
+                if stop is not None:
+                    ending = str_arr[j][stop:]
+                else:
+                    ending = ""
+                out_arr[j] = str_arr[j][:start] + repl + ending
+        return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
+
+    return impl
+
+ 
 @overload_method(SeriesStrMethodType, "repeat", inline="always", no_unliteral=True)
 def overload_str_method_repeat(S_str, repeats):
     if isinstance(repeats, types.Integer) or is_overload_constant_int(repeats):
