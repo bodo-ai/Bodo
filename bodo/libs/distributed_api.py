@@ -757,7 +757,7 @@ def gatherv(data, allgather=False, warn_if_rep=True):
                 tmp_null_bytes = np.empty(recv_counts_nulls.sum(), np.uint8)
 
             out_offsets_arr = np.empty(n_total + 1, np.uint32)
-            out_data_arr = bodo.gatherv(data_arr)
+            out_data_arr = bodo.gatherv(data_arr, allgather, warn_if_rep)
             out_null_bitmap_arr = np.empty((n_total + 7) >> 3, np.uint8)
 
             # index offset
