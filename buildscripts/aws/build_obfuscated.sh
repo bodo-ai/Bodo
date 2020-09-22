@@ -12,6 +12,7 @@ conda create -y -n bodo_build conda-build anaconda-client conda-verify
 
 echo "********** Obfuscating **********"
 conda install -y astor -c conda-forge
+conda install -y flake8
 cd obfuscation
 ./do_obfuscation.py
 
