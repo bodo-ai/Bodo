@@ -2119,8 +2119,8 @@ def overload_index_map(I, mapper, na_action=None):
     if is_var_size_item_array_type(out_arr_type):
         init_size_code, size_varnames = gen_init_varsize_alloc_sizes(out_arr_type)
         func_text += init_size_code
-        func_text += "  for i in numba.parfors.parfor.internal_prange(n):\n"
-        func_text += "    t1 = bodo.utils.conversion.box_if_dt64(A[i])\n"
+        func_text += "  for j in numba.parfors.parfor.internal_prange(n):\n"
+        func_text += "    t1 = bodo.utils.conversion.box_if_dt64(A[j])\n"
         func_text += "    item = map_func(t1)\n"
         func_text += gen_varsize_item_sizes(out_arr_type, "item", size_varnames)
         func_text += "  numba.parfors.parfor.init_prange()\n"

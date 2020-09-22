@@ -563,10 +563,16 @@ class DataFramePass:
         # variable size items, e.g. strings
         # TODO: avoid extra loop (e.g. builder pattern?)
         if is_var_size_item_array_type(out_arr_type):
+            row_args_j = ", ".join(
+                [
+                    "bodo.utils.conversion.box_if_dt64(c{}[j])".format(i)
+                    for i in range(len(used_cols))
+                ]
+            )
             init_size_code, size_varnames = gen_init_varsize_alloc_sizes(out_arr_type)
             func_text += init_size_code
-            func_text += "  for i in numba.parfors.parfor.internal_prange(len(c0)):\n"
-            func_text += "    row1 = Row({})\n".format(row_args)
+            func_text += "  for j in numba.parfors.parfor.internal_prange(len(c0)):\n"
+            func_text += "    row1 = Row({})\n".format(row_args_j)
             func_text += "    item = map_func(row1{})\n".format(extra_arg_names)
             func_text += gen_varsize_item_sizes(out_arr_type, "item", size_varnames)
             func_text += "  numba.parfors.parfor.init_prange()\n"
