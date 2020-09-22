@@ -4,15 +4,15 @@ set -exo pipefail
 
 export PATH=$HOME/miniconda3/bin:$PATH
 
-echo "********** Flake8-ing **********"
-flake8 bodo
-
 echo "********** Creating Conda Env **********"
 conda create -y -n bodo_build conda-build anaconda-client conda-verify
 
+echo "********** Flake8-ing **********"
+conda install -y flake8
+flake8 bodo
+
 echo "********** Obfuscating **********"
 conda install -y astor -c conda-forge
-conda install -y flake8
 cd obfuscation
 ./do_obfuscation.py
 
