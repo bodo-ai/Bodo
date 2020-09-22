@@ -1,10 +1,10 @@
-bversion: 0.2
+version: 0.2
 
 # Link to reference documentation: https://docs.aws.amazon.com/codebuild/latest/userguide/build-spec-ref.html
 
 env:
-  shell: bash
-  git-credential-helper: yes
+  shell: /bin/bash
+  git-credential-helper: true
   variables:
       CONDA_ENV: "BodoCodeBuild"
 
