@@ -7,6 +7,7 @@ env:
   git-credential-helper: true
   variables:
       CONDA_ENV: "BodoCodeBuild"
+      ENGINE_E2E_TESTS: "engine-e2e-tests"
 
 phases:
     install:
