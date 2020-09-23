@@ -15,7 +15,6 @@ phases:
         commands:
         - echo Conda Setup and Test Installs
         - buildscripts/get_miniconda.sh
-        - buildscripts/aws/test_installs.sh
 
 
     build:

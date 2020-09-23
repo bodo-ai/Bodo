@@ -11,3 +11,4 @@ source activate bodo_dev
 conda install -c https://${USERNAME}:${TOKEN}@bodo.jfrog.io/artifactory/api/conda/bodo-binary bodo-2020.09-py38hc547734_19.tar.bz2
 
 python testitout.py
+# pip install pytest
