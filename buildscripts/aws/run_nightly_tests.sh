@@ -8,7 +8,7 @@ export PATH=$HOME/miniconda3/bin:$PATH
 conda create -y -n bodo_dev
 source activate bodo_dev
 
-conda install -c https://${USERNAME}:${TOKEN}@bodo.jfrog.io/artifactory/api/conda/bodo-binary/bodo-2020.09-py38hc547734_19.tar.bz2 bodo
+conda install -c https://${USERNAME}:${TOKEN}@bodo.jfrog.io/artifactory/api/conda/bodo-binary/bodo-2020.09-py38hc547734_19.tar.bz2 -c conda-forge bodo
 
 python testitout.py
 # pip install pytest
