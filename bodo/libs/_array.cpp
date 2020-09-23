@@ -323,7 +323,7 @@ array_info* list_string_array_to_info(NRT_MemInfo* meminfo) {
     array_item_arr_numpy_payload* sub_payload =
         (array_item_arr_numpy_payload*)payload->data->data;
     int64_t n_strings = sub_payload->n_arrays;
-    int64_t n_chars = sub_payload->offsets.data[n_strings];
+    int64_t n_chars = ((uint32_t*)sub_payload->offsets.data)[n_strings];
 
     return new array_info(
         bodo_array_type::LIST_STRING, Bodo_CTypes::LIST_STRING, n_items,
