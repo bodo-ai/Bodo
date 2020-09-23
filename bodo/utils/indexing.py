@@ -3,11 +3,13 @@
 Collection of utility functions for indexing implementation (getitem/setitem)
 """
 import operator
-import numpy as np
 
 import numba
-from numba.extending import register_jitable, overload, intrinsic
+import numpy as np
 from numba.core import types
+from numba.core.imputils import impl_ret_borrowed
+from numba.extending import intrinsic, overload, register_jitable
+
 import bodo
 
 
@@ -135,8 +137,7 @@ def array_setitem_bool_index(A, idx, val):  # pragma: no cover
 
 @register_jitable
 def setitem_slice_index_null_bits(dst_bitmap, src_bitmap, idx, n):  # pragma: no cover
-    """set null bits for setitem with slice index for nullable arrays.
-    """
+    """set null bits for setitem with slice index for nullable arrays."""
     slice_idx = numba.cpython.unicode._normalize_slice(idx, n)
     val_ind = 0
     for i in range(slice_idx.start, slice_idx.stop, slice_idx.step):
@@ -169,8 +170,7 @@ def untuple_if_one_tuple(v):
 
 @overload(untuple_if_one_tuple)
 def untuple_if_one_tuple_overload(v):
-    """if 'v' is a single element tuple, return 'v[0]' to avoid unnecessary tuple value.
-    """
+    """if 'v' is a single element tuple, return 'v[0]' to avoid unnecessary tuple value."""
     if isinstance(v, types.BaseTuple) and len(v.types) == 1:
         return lambda v: v[0]
 
@@ -243,12 +243,14 @@ def overload_add_nested_counts(nested_counts, arr_item):
 @overload(operator.setitem)
 def none_optional_setitem_overload(A, idx, val):
     if not bodo.utils.utils.is_array_typ(A, False):
-        return # pragma: no cover
+        return  # pragma: no cover
     elif val == types.none:
-        return lambda A, idx, val: bodo.libs.array_kernels.setna(A, idx) # pragma: no cover
+        return lambda A, idx, val: bodo.libs.array_kernels.setna(
+            A, idx
+        )  # pragma: no cover
     elif isinstance(val, types.optional):
 
-        def impl_optional(A, idx, val): # pragma: no cover
+        def impl_optional(A, idx, val):  # pragma: no cover
 
             if val is None:
                 bodo.libs.array_kernels.setna(A, idx)
@@ -260,10 +262,14 @@ def none_optional_setitem_overload(A, idx, val):
 
 @intrinsic
 def unoptional(typingctx, val_t=None):
-    """Return value inside Optional type assuming that it is not None
-    """
+    """Return value inside Optional type assuming that it is not None"""
+    # just return input if not Optional
+    if not isinstance(val_t, types.Optional):
+        return val_t(val_t), lambda c, b, s, args: impl_ret_borrowed(
+            c, b, val_t, args[0]
+        )
 
-    def codegen(context, builder, signature, args): # pragma: no cover
+    def codegen(context, builder, signature, args):  # pragma: no cover
         optval = context.make_helper(builder, val_t, args[0])
         # TODO: check optval.valid bit to be True
         out_val = optval.data
