@@ -2,6 +2,8 @@ version: 0.2
 
 # Link to reference documentation: https://docs.aws.amazon.com/codebuild/latest/userguide/build-spec-ref.html
 
+# running on an instance of specs: 145 GB memory, 72 vCPUs
+
 env:
   shell: /bin/bash
   git-credential-helper: true
