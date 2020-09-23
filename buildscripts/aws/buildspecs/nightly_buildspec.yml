@@ -18,12 +18,16 @@ phases:
         - buildscripts/get_miniconda.sh
 
     build:
+        runtime-versions:
+            python: 3.8
         commands:
         - echo Building Obfuscated Binary
         - buildscripts/aws/build_obfuscated.sh
 
 
     post_build:
+        runtime-versions:
+            python: 3.8
         commands:
         - bash -c "if [ /"$CODEBUILD_BUILD_SUCCEEDING/" == /"0/" ]; then exit 1; fi"
         - buildscripts/aws/publish_binary.sh
