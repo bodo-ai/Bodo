@@ -21,6 +21,7 @@ Welcome to Bodo Development's documentation!
    source/conda_build
    source/testing_poc_SQL
    source/release_checklist
+   source/cpp_err_handling
 
 
 Indices and tables
