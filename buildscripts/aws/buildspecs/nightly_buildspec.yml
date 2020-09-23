@@ -7,6 +7,7 @@ env:
   git-credential-helper: true
   variables:
       CONDA_ENV: "BodoCodeBuild"
+      RUN_NIGHTLY: "yes"
       ENGINE_E2E_TESTS: "engine-e2e-tests"
 
 phases:
@@ -15,20 +16,17 @@ phases:
             python: 3.8
         commands:
         - echo Conda Setup and Test Installs
-        - buildscripts/get_miniconda.sh
+        - buildscripts/setup_conda.sh
 
     build:
-        runtime-versions:
-            python: 3.8
         commands:
         - echo Building Obfuscated Binary
         - buildscripts/aws/build_obfuscated.sh
 
 
     post_build:
-        runtime-versions:
-            python: 3.8
         commands:
         - bash -c "if [ /"$CODEBUILD_BUILD_SUCCEEDING/" == /"0/" ]; then exit 1; fi"
         - buildscripts/aws/publish_binary.sh
+        - buildscripts/aws/test_installs.sh
         - buildscripts/aws/run_nightly_tests.sh
