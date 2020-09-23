@@ -22,6 +22,7 @@ Welcome to Bodo Development's documentation!
    source/testing_poc_SQL
    source/release_checklist
    source/cpp_err_handling
+   source/aws_codebuild
 
 
 Indices and tables
