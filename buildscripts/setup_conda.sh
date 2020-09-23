@@ -26,7 +26,7 @@ if [ "$RUN_NIGHTLY" != "yes" ];
 then
     conda create -n $CONDA_ENV -q -y -c conda-forge python numpy scipy boost-cpp=1.74.0 cmake h5py mpich mpi
 else
-    conda create -n $CONDA_ENV
+    conda create -n $CONDA_ENV -q -y -c conda-forge python
 fi
 source activate $CONDA_ENV
 
