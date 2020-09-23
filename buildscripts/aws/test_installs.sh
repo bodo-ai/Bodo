@@ -8,6 +8,7 @@ source activate $CONDA_ENV
 
 conda install -y -c conda-forge boto3 botocore "s3fs>=0.4.2"
 conda install -y -c conda-forge pymysql sqlalchemy
+conda install -y -c conda-forge scikit-learn
 conda install -y flake8
 pip install pytest pytest-cov
 
