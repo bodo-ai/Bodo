@@ -1,7 +1,5 @@
 #include "_bodo_common.h"
 
-#define ALIGNMENT 64  // preferred alignment for AVX512
-
 #undef DEBUG_ARROW_ARRAY
 
 std::vector<size_t> numpy_item_size(Bodo_CTypes::_numtypes);
@@ -94,10 +92,7 @@ Bodo_CTypes::CTypeEnum arrow_to_bodo_type(arrow::Type::type type) {
 array_info& array_info::operator=(array_info&& other) noexcept {
     if (this != &other) {
         // delete this array's original data
-        if (this->arr_type == bodo_array_type::LIST_STRING)
-            decref_list_string_array(this->meminfo);
-        else
-            decref_array(this);
+        decref_array(this);
 
         // copy the other array's pointers into this array_info
         this->n_sub_elems = other.n_sub_elems;
@@ -161,44 +156,186 @@ array_info* alloc_nullable_array(int64_t length,
 
 array_info* alloc_string_array(int64_t length, int64_t n_chars,
                                int64_t extra_null_bytes) {
-    // extra_null_bytes are necessary for communication buffers around the edges
-    NRT_MemInfo* meminfo = NRT_MemInfo_alloc_dtor_safe(
-        sizeof(str_arr_payload), (NRT_dtor_function)dtor_string_array);
-    str_arr_payload* payload = (str_arr_payload*)meminfo->data;
-    allocate_string_array(&(payload->offsets), &(payload->data),
-                          &(payload->null_bitmap), length, n_chars,
-                          extra_null_bytes);
-    payload->num_strings = length;
-    return new array_info(bodo_array_type::STRING, Bodo_CTypes::STRING, length,
-                          n_chars, -1, payload->data, (char*)payload->offsets,
-                          NULL, (char*)payload->null_bitmap, NULL, meminfo,
-                          NULL);
+    // allocate underlying array(item) data array
+    array_info* data_arr = alloc_array(
+        length, n_chars, -1, bodo_array_type::arr_type_enum::ARRAY_ITEM,
+        Bodo_CTypes::UINT8, extra_null_bytes, 0);
+
+    NRT_MemInfo* out_meminfo = data_arr->meminfo;
+    array_item_arr_numpy_payload* payload =
+        (array_item_arr_numpy_payload*)(out_meminfo->data);
+
+    array_info* out_arr = new array_info(
+        bodo_array_type::STRING, Bodo_CTypes::STRING, length, n_chars, -1,
+        payload->data.data, (char*)payload->offsets.data, NULL,
+        (char*)payload->null_bitmap.data, NULL, out_meminfo, NULL);
+    delete data_arr;
+    return out_arr;
+}
+
+/**
+ * @brief destrcutor for array(item) array meminfo. Decrefs the underlying data,
+ * offsets and null_bitmap arrays.
+ *
+ * Note: duplicate of dtor_array_item_array but with array_item_arr_payload
+ * TODO: refactor
+ *
+ * @param payload array(item) array meminfo payload
+ * @param size payload size (ignored)
+ * @param in extra info (ignored)
+ */
+void dtor_array_item_arr(array_item_arr_payload* payload, int64_t size,
+                         void* in) {
+    payload->data->refct--;
+    if (payload->data->refct == 0) NRT_MemInfo_call_dtor(payload->data);
+
+    payload->offsets.meminfo->refct--;
+    if (payload->offsets.meminfo->refct == 0)
+        NRT_MemInfo_call_dtor(payload->offsets.meminfo);
+
+    payload->null_bitmap.meminfo->refct--;
+    if (payload->null_bitmap.meminfo->refct == 0)
+        NRT_MemInfo_call_dtor(payload->null_bitmap.meminfo);
 }
 
 array_info* alloc_list_string_array(int64_t n_lists, int64_t n_strings,
                                     int64_t n_chars, int64_t extra_null_bytes) {
-    // allocate payload structs for list and string arrays
-    NRT_MemInfo* meminfo_list_array = NRT_MemInfo_alloc_safe_aligned(
-        sizeof(array_item_arr_payload), ALIGNMENT);
-    NRT_MemInfo* meminfo_string_array = NRT_MemInfo_alloc_dtor_safe(
-        sizeof(str_arr_payload), (NRT_dtor_function)dtor_string_array);
+    // allocate string data array
+    array_info* data_arr = alloc_array(
+        n_strings, n_chars, -1, bodo_array_type::arr_type_enum::ARRAY_ITEM,
+        Bodo_CTypes::UINT8, extra_null_bytes, 0);
+    NRT_MemInfo* meminfo_string_array = data_arr->meminfo;
+    delete data_arr;
 
+    // allocate array(item) array payload
+    NRT_MemInfo* meminfo_array_item = NRT_MemInfo_alloc_dtor_safe(
+        sizeof(array_item_arr_payload), (NRT_dtor_function)dtor_array_item_arr);
     array_item_arr_payload* payload =
-        (array_item_arr_payload*)(meminfo_list_array->data);
+        (array_item_arr_payload*)(meminfo_array_item->data);
+    payload->n_arrays = n_lists;
+    payload->offsets =
+        allocate_numpy_payload(n_lists + 1, Bodo_CTypes::CTypeEnum::UINT32);
+    int64_t n_bytes = (int64_t)((n_lists + 7) / 8) + extra_null_bytes;
+    payload->null_bitmap =
+        allocate_numpy_payload(n_bytes, Bodo_CTypes::CTypeEnum::UINT8);
     payload->data = meminfo_string_array;
-    str_arr_payload* sub_payload =
-        (str_arr_payload*)(meminfo_string_array->data);
+    // setting all to non-null to avoid unexpected issues
+    memset(payload->null_bitmap.data, 0xff, n_bytes);
 
-    // allocate all buffers and set them in payloads
-    allocate_list_string_array(n_lists, n_strings, n_chars, extra_null_bytes,
-                               payload, sub_payload);
+    array_item_arr_numpy_payload* sub_payload =
+        (array_item_arr_numpy_payload*)(meminfo_string_array->data);
 
     return new array_info(
         bodo_array_type::LIST_STRING, Bodo_CTypes::LIST_STRING, n_lists,
-        n_strings, n_chars, (char*)sub_payload->data,
-        (char*)sub_payload->offsets, (char*)payload->offsets.data,
-        (char*)payload->null_bitmap.data, (char*)sub_payload->null_bitmap,
-        meminfo_list_array, NULL);
+        n_strings, n_chars, (char*)sub_payload->data.data,
+        (char*)sub_payload->offsets.data, (char*)payload->offsets.data,
+        (char*)payload->null_bitmap.data, (char*)sub_payload->null_bitmap.data,
+        meminfo_array_item, NULL);
+}
+
+/**
+ * @brief allocate a numpy array payload
+ *
+ * @param length number of elements
+ * @param typ_enum dtype of elements
+ * @return numpy_arr_payload
+ */
+numpy_arr_payload allocate_numpy_payload(int64_t length,
+                                         Bodo_CTypes::CTypeEnum typ_enum) {
+    int64_t itemsize = numpy_item_size[typ_enum];
+    int64_t size = length * itemsize;
+    NRT_MemInfo* meminfo = NRT_MemInfo_alloc_safe_aligned(size, ALIGNMENT);
+    char* data = (char*)meminfo->data;
+    return numpy_arr_payload(meminfo, NULL, length, itemsize, data, length,
+                             itemsize);
+}
+
+/**
+ * @brief decref numpy array stored in payload and free if refcount becomes
+ * zero.
+ *
+ * @param arr
+ */
+void decref_numpy_payload(numpy_arr_payload arr) {
+    arr.meminfo->refct--;
+    if (arr.meminfo->refct == 0) NRT_MemInfo_call_dtor(arr.meminfo);
+}
+
+/**
+ * @brief destrcutor for array(item) array meminfo. Decrefs the underlying data,
+ * offsets and null_bitmap arrays.
+ *
+ * @param payload array(item) array meminfo payload
+ * @param size payload size (ignored)
+ * @param in extra info (ignored)
+ */
+void dtor_array_item_array(array_item_arr_numpy_payload* payload, int64_t size,
+                           void* in) {
+    payload->data.meminfo->refct--;
+    if (payload->data.meminfo->refct == 0)
+        NRT_MemInfo_call_dtor(payload->data.meminfo);
+
+    payload->offsets.meminfo->refct--;
+    if (payload->offsets.meminfo->refct == 0)
+        NRT_MemInfo_call_dtor(payload->offsets.meminfo);
+
+    payload->null_bitmap.meminfo->refct--;
+    if (payload->null_bitmap.meminfo->refct == 0)
+        NRT_MemInfo_call_dtor(payload->null_bitmap.meminfo);
+}
+
+/**
+ * @brief create a meminfo for array(item) array
+ *
+ * @return NRT_MemInfo*
+ */
+NRT_MemInfo* alloc_array_item_arr_meminfo() {
+    return NRT_MemInfo_alloc_dtor_safe(
+        sizeof(array_item_arr_numpy_payload),
+        (NRT_dtor_function)dtor_array_item_array);
+}
+
+/**
+ * @brief allocate an array(item) array and wrap in an array_info*
+ * TODO: generalize beyond Numpy arrays
+ *
+ * @param n_arrays number of array elements
+ * @param n_total_items total number of data elements
+ * @param dtype dtype of data elements
+ * @return array_info*
+ */
+array_info* alloc_array_item(int64_t n_arrays, int64_t n_total_items,
+                             Bodo_CTypes::CTypeEnum dtype,
+                             int64_t extra_null_bytes) {
+    // allocate payload
+    NRT_MemInfo* meminfo_array_item =
+        NRT_MemInfo_alloc_dtor_safe(sizeof(array_item_arr_numpy_payload),
+                                    (NRT_dtor_function)dtor_array_item_array);
+    array_item_arr_numpy_payload* payload =
+        (array_item_arr_numpy_payload*)(meminfo_array_item->data);
+
+    payload->n_arrays = n_arrays;
+
+    // allocate data array
+    // TODO: support non-numpy data
+    payload->data = allocate_numpy_payload(n_total_items, dtype);
+    // TODO: support 64-bit offsets case
+    payload->offsets =
+        allocate_numpy_payload(n_arrays + 1, Bodo_CTypes::CTypeEnum::UINT32);
+    int64_t n_bytes = (int64_t)((n_arrays + 7) / 8) + extra_null_bytes;
+    payload->null_bitmap =
+        allocate_numpy_payload(n_bytes, Bodo_CTypes::CTypeEnum::UINT8);
+    // setting all to non-null to avoid unexpected issues
+    memset(payload->null_bitmap.data, 0xff, n_bytes);
+
+    // set offsets for boundaries
+    uint32_t* offsets_ptr = (uint32_t*)payload->offsets.data;
+    offsets_ptr[0] = 0;
+    offsets_ptr[n_arrays] = n_total_items;
+
+    return new array_info(bodo_array_type::ARRAY_ITEM, dtype, n_arrays,
+                          n_total_items, -1, NULL, NULL, NULL, NULL, NULL,
+                          meminfo_array_item, NULL);
 }
 
 /**
@@ -234,6 +371,9 @@ array_info* alloc_array(int64_t length, int64_t n_sub_elems,
 
     if (arr_type == bodo_array_type::CATEGORICAL)
         return alloc_categorical(length, dtype, num_categories);
+
+    if (arr_type == bodo_array_type::ARRAY_ITEM)
+        return alloc_array_item(length, n_sub_elems, dtype, extra_null_bytes);
 
     Bodo_PyErr_SetString(PyExc_RuntimeError, "Type not covered in alloc_array");
     return nullptr;
@@ -340,25 +480,6 @@ void decref_array(array_info* arr) {
 void incref_array(array_info* arr) {
     if (arr->meminfo != NULL) arr->meminfo->refct++;
     if (arr->meminfo_bitmask != NULL) arr->meminfo_bitmask->refct++;
-}
-
-void decref_list_string_array(NRT_MemInfo* meminfo) {
-    array_item_arr_payload* payload = (array_item_arr_payload*)(meminfo->data);
-
-    // delete string array
-    payload->data->refct--;
-    if (payload->data->refct == 0) NRT_MemInfo_call_dtor(payload->data);
-
-    // delete array item array
-    payload->offsets.meminfo->refct--;
-    if (payload->offsets.meminfo->refct == 0)
-        NRT_MemInfo_call_dtor(payload->offsets.meminfo);
-    payload->null_bitmap.meminfo->refct--;
-    if (payload->null_bitmap.meminfo->refct == 0)
-        NRT_MemInfo_call_dtor(payload->null_bitmap.meminfo);
-    meminfo->refct--;
-    if (meminfo->refct == 0) NRT_MemInfo_call_dtor(meminfo);
-    // TODO: add meminfo for sub_null_bitmask in array struct and decref it here
 }
 
 // get memory alloc/free info from _meminfo.h
@@ -523,81 +644,4 @@ void nested_array_to_c(std::shared_ptr<arrow::Array> array, int64_t* lengths,
         std::cout << "nested_array_to_c : PRIMITIVE case, step 8\n";
 #endif
     }
-}
-
-extern "C" {
-
-void dtor_string_array(str_arr_payload* in_str_arr, int64_t size, void* in) {
-    // check for NULL since move_str_arr_payload() may set pointers to NULL
-    if (in_str_arr->offsets != nullptr) delete[] in_str_arr->offsets;
-    if (in_str_arr->data != nullptr) delete[] in_str_arr->data;
-    if (in_str_arr->null_bitmap != nullptr) delete[] in_str_arr->null_bitmap;
-}
-
-void allocate_string_array(int32_t** offsets, char** data,
-                           uint8_t** null_bitmap, int64_t num_strings,
-                           int64_t total_size, int64_t extra_null_bytes) {
-    // std::cout << "allocating string array: " << num_strings << " " <<
-    //                                                 total_size << std::endl;
-    *offsets = new int32_t[num_strings + 1];
-    *data = new char[total_size];
-    (*offsets)[0] = 0;
-    (*offsets)[num_strings] =
-        (uint32_t)total_size;  // in case total chars is read from here
-    // allocate nulls
-    int64_t n_bytes = ((num_strings + 7) >> 3) + extra_null_bytes;
-    *null_bitmap = new uint8_t[(size_t)n_bytes];
-    // set all bits to 1 indicating non-null as default
-    memset(*null_bitmap, 0xff, n_bytes);
-    // *data = (char*) new std::string("gggg");
-}
-
-void allocate_list_string_array(int64_t n_lists, int64_t n_strings,
-                                int64_t n_chars, int64_t extra_null_bytes,
-                                array_item_arr_payload* payload,
-                                str_arr_payload* sub_payload) {
-    // string array
-    sub_payload->num_strings = n_strings;
-    sub_payload->offsets = new int32_t[n_strings + 1];
-    sub_payload->data = new char[n_chars];
-    sub_payload->offsets[0] = 0;
-    sub_payload->offsets[n_strings] =
-        (int32_t)n_chars;  // in case total chars is read from here
-    // allocate nulls
-    int64_t n_bytes = ((n_strings + 7) >> 3) + extra_null_bytes;
-    sub_payload->null_bitmap = new uint8_t[(size_t)n_bytes];
-    // set all bits to 1 indicating non-null as default
-    memset(sub_payload->null_bitmap, 0xff, n_bytes);
-
-    // list array
-    payload->n_arrays = n_lists;
-
-    // allocate offsets
-    NRT_MemInfo* meminfo_offsets_array = NRT_MemInfo_alloc_safe_aligned(
-        sizeof(int32_t) * (n_lists + 1), ALIGNMENT);
-    payload->offsets.meminfo = meminfo_offsets_array;
-    payload->offsets.parent = NULL;
-    payload->offsets.nitems = n_lists + 1;
-    payload->offsets.itemsize = sizeof(int32_t);
-    payload->offsets.data = (char*)meminfo_offsets_array->data;
-    payload->offsets.shape = n_lists + 1;
-    payload->offsets.strides = 1;
-    ((int32_t*)payload->offsets.data)[0] = 0;
-    // in case total strings is read from here
-    ((int32_t*)payload->offsets.data)[n_lists] = (int32_t)n_strings;
-
-    // allocate nulls
-    n_bytes = ((n_lists + 7) >> 3) + extra_null_bytes;
-    NRT_MemInfo* meminfo_nulls_array =
-        NRT_MemInfo_alloc_safe_aligned(n_bytes, ALIGNMENT);
-    payload->null_bitmap.meminfo = meminfo_nulls_array;
-    payload->null_bitmap.parent = NULL;
-    payload->null_bitmap.nitems = n_bytes;
-    payload->null_bitmap.itemsize = 1;
-    payload->null_bitmap.data = (char*)meminfo_nulls_array->data;
-    payload->null_bitmap.shape = n_bytes;
-    payload->null_bitmap.strides = 1;
-    // set all bits to 1 indicating non-null as default
-    memset(payload->null_bitmap.data, 0xff, n_bytes);
-}
 }

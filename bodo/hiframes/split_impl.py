@@ -45,6 +45,9 @@ from bodo.libs.str_arr_ext import (
     get_null_bitmap_ptr,
     _memcpy,
     _get_string_arr_payload,
+    offset_arr_type,
+    char_arr_type,
+    null_bitmap_arr_type,
 )
 
 from llvmlite import ir as lir
@@ -143,8 +146,7 @@ make_attribute_wrapper(StringArraySplitViewType, "null_bitmap", "_null_bitmap")
 
 
 def construct_str_arr_split_view(context, builder):
-    """Creates meminfo and sets dtor.
-    """
+    """Creates meminfo and sets dtor."""
     alloc_type = context.get_value_type(str_arr_split_view_payload_type)
     alloc_size = context.get_abi_sizeof(alloc_type)
 
@@ -194,15 +196,23 @@ def compute_split_view(typingctx, str_arr_typ, sep_typ=None):
             fnty, name="str_arr_split_view_impl"
         )
 
+        offsets = context.make_helper(
+            builder, offset_arr_type, in_str_arr_payload.offsets
+        ).data
+        data = context.make_helper(builder, char_arr_type, in_str_arr_payload.data).data
+        null_bitmap = context.make_helper(
+            builder, null_bitmap_arr_type, in_str_arr_payload.null_bitmap
+        ).data
+
         sep_val = context.get_constant(types.int8, ord(sep_typ.literal_value))
         builder.call(
             fn_impl,
             [
                 meminfo_data_ptr,
-                in_str_arr_payload.num_strings,
-                in_str_arr_payload.offsets,
-                in_str_arr_payload.data,
-                in_str_arr_payload.null_bitmap,
+                in_str_arr_payload.n_arrays,
+                offsets,
+                data,
+                null_bitmap,
                 sep_val,
             ],
         )
@@ -212,7 +222,7 @@ def compute_split_view(typingctx, str_arr_typ, sep_typ=None):
         )
 
         out_view = context.make_helper(builder, string_array_split_view_type)
-        out_view.num_items = in_str_arr_payload.num_strings
+        out_view.num_items = in_str_arr_payload.n_arrays
         out_view.index_offsets = view_payload.index_offsets
         out_view.data_offsets = view_payload.data_offsets
         # TODO: incref?

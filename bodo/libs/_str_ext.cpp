@@ -42,9 +42,6 @@ int64_t str_to_int64(char* data, int64_t length);
 double str_to_float64(std::string* str);
 int64_t get_str_len(std::string* str);
 
-void string_array_from_sequence(PyObject* obj, int64_t* no_strings,
-                                uint32_t** offset_table, char** buffer,
-                                uint8_t** null_bitmap);
 void* np_array_from_string_array(int64_t no_strings,
                                  const uint32_t* offset_table,
                                  const char* buffer,
@@ -105,11 +102,10 @@ PyMODINIT_FUNC PyInit_hstr_ext(void) {
     import_array();
 
     bodo_common_init();
+    NRT_MemSys_init();
 
     PyObject_SetAttrString(m, "init_string_const",
                            PyLong_FromVoidPtr((void*)(&init_string_const)));
-    PyObject_SetAttrString(m, "dtor_string_array",
-                           PyLong_FromVoidPtr((void*)(&dtor_string_array)));
     PyObject_SetAttrString(
         m, "dtor_str_arr_split_view",
         PyLong_FromVoidPtr((void*)(&dtor_str_arr_split_view)));
@@ -129,16 +125,11 @@ PyMODINIT_FUNC PyInit_hstr_ext(void) {
     PyObject_SetAttrString(m, "get_str_len",
                            PyLong_FromVoidPtr((void*)(&get_str_len)));
     PyObject_SetAttrString(
-        m, "string_array_from_sequence",
-        PyLong_FromVoidPtr((void*)(&string_array_from_sequence)));
-    PyObject_SetAttrString(
         m, "pd_array_from_string_array",
         PyLong_FromVoidPtr((void*)(&pd_array_from_string_array)));
     PyObject_SetAttrString(
         m, "np_array_from_string_array",
         PyLong_FromVoidPtr((void*)(&np_array_from_string_array)));
-    PyObject_SetAttrString(m, "allocate_string_array",
-                           PyLong_FromVoidPtr((void*)(&allocate_string_array)));
     PyObject_SetAttrString(m, "setitem_string_array",
                            PyLong_FromVoidPtr((void*)(&setitem_string_array)));
     PyObject_SetAttrString(
@@ -444,126 +435,6 @@ void inplace_int64_to_str(char* str, int64_t l, int64_t value) {
         value /= 10;
         i++;
     }
-}
-
-/// @brief create a concatenated string and offset table from a pandas series of
-/// strings
-/// @note strings in returned buffer will not be 0-terminated.
-/// @param[out] buffer newly allocated buffer with concatenated strings, or NULL
-/// @param[out] no_strings number of strings concatenated, value < 0 indicates
-/// an error
-/// @param[out] offset_table newly allocated array of no_strings+1 integers
-///                          first no_strings entries denote offsets, last entry
-///                          indicates size of output array
-/// @param[in]  obj Python Sequence object, intended to be a pandas series of
-/// string
-void string_array_from_sequence(PyObject* obj, int64_t* no_strings,
-                                uint32_t** offset_table, char** buffer,
-                                uint8_t** null_bitmap) {
-#define CHECK(expr, msg)               \
-    if (!(expr)) {                     \
-        std::cerr << msg << std::endl; \
-        PyGILState_Release(gilstate);  \
-        if (offsets != NULL) {         \
-            delete[] offsets;          \
-        }                              \
-        return;                        \
-    }
-
-    uint32_t* offsets = NULL;
-
-    auto gilstate = PyGILState_Ensure();
-
-    if (no_strings == NULL || offset_table == NULL || buffer == NULL) {
-        PyGILState_Release(gilstate);
-        return;
-    }
-
-    *no_strings = -1;
-    *offset_table = NULL;
-    *buffer = NULL;
-
-    CHECK(PySequence_Check(obj), "expecting a PySequence");
-    CHECK(no_strings && offset_table && buffer,
-          "output arguments must not be NULL");
-
-    Py_ssize_t n = PyObject_Size(obj);
-    if (n == 0) {
-        // empty sequence, this is not an error, need to set size
-        PyGILState_Release(gilstate);
-        *no_strings = 0;
-        *null_bitmap = new uint8_t[0];
-        *offset_table = new uint32_t[1];
-        (*offset_table)[0] = 0;
-        *buffer = new char[0];
-        return;
-    }
-
-    // allocate null bitmap
-    // same formula as BytesForBits in Arrow
-    int64_t n_bytes = (n + 7) >> 3;
-    *null_bitmap = new uint8_t[n_bytes];
-    memset(*null_bitmap, 0, n_bytes);
-
-    // if obj is a pd.Series, get the numpy array for better performance
-    // TODO: check actual Series class
-    if (PyObject_HasAttrString(obj, "values")) {
-        obj = PyObject_GetAttrString(obj, "values");
-    }
-
-    // get pd.NA object to check for new NA kind
-    // simple equality check is enough since the object is a singleton
-    // example:
-    // https://github.com/pandas-dev/pandas/blob/fcadff30da9feb3edb3acda662ff6143b7cb2d9f/pandas/_libs/missing.pyx#L57
-    PyObject* pd_mod = PyImport_ImportModule("pandas");
-    CHECK(pd_mod, "importing pandas module failed");
-    PyObject* C_NA = PyObject_GetAttrString(pd_mod, "NA");
-    CHECK(C_NA, "getting pd.NA failed");
-
-    offsets = new uint32_t[n + 1];
-    std::vector<const char*> tmp_store(n);
-    size_t len = 0;
-    for (Py_ssize_t i = 0; i < n; ++i) {
-        offsets[i] = len;
-        PyObject* s = PySequence_GetItem(obj, i);
-        CHECK(s, "getting element failed");
-        // Pandas stores NA as either None, nan, or pd.NA
-        if (s == Py_None ||
-            (PyFloat_Check(s) && std::isnan(PyFloat_AsDouble(s))) ||
-            s == C_NA) {
-            // leave null bit as 0
-            tmp_store[i] = "";
-        } else {
-            // set null bit to 1 (Arrow bin-util.h)
-            (*null_bitmap)[i / 8] |= kBitmask[i % 8];
-            // check string
-            CHECK(PyUnicode_Check(s), "expecting a string");
-            // convert to UTF-8 and get size
-            Py_ssize_t size;
-            tmp_store[i] = PyUnicode_AsUTF8AndSize(s, &size);
-            CHECK(tmp_store[i], "string conversion failed");
-            len += size;
-        }
-        Py_DECREF(s);
-    }
-    offsets[n] = len;
-
-    char* outbuf = new char[len];
-    for (Py_ssize_t i = 0; i < n; ++i) {
-        memcpy(outbuf + offsets[i], tmp_store[i], offsets[i + 1] - offsets[i]);
-    }
-
-    Py_DECREF(C_NA);
-    Py_DECREF(pd_mod);
-
-    PyGILState_Release(gilstate);
-
-    *offset_table = offsets;
-    *no_strings = n;
-    *buffer = outbuf;
-
-    return;
-#undef CHECK
 }
 
 /// @brief  From a StringArray create a numpy array of string objects

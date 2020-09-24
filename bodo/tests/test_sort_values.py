@@ -138,18 +138,22 @@ def test_sort_datetime_missing(is_slow_run, memory_leak_check):
     df1 = pd.DataFrame({"A": e_list})
 
     check_func(
-        test_impl1, (df1,),
+        test_impl1,
+        (df1,),
     )
     if not is_slow_run:
         return
     check_func(
-        test_impl2, (df1,),
+        test_impl2,
+        (df1,),
     )
     check_func(
-        test_impl3, (df1,),
+        test_impl3,
+        (df1,),
     )
     check_func(
-        test_impl4, (df1,),
+        test_impl4,
+        (df1,),
     )
 
 
@@ -170,7 +174,8 @@ def test_single_col(memory_leak_check):
     try:
         bodo.ir.sort.MIN_SAMPLES = 10
         check_func(
-            test_impl, (),
+            test_impl,
+            (),
         )
     finally:
         bodo.ir.sort.MIN_SAMPLES = save_min_samples  # restore global val
@@ -378,7 +383,8 @@ def test_sort_values_1col_np_array(dtype, memory_leak_check):
 
     n = 100
     check_func(
-        test_impl, (get_quasi_random_dtype(n, dtype),),
+        test_impl,
+        (get_quasi_random_dtype(n, dtype),),
     )
 
 
@@ -414,7 +420,8 @@ def test_sort_values_2col_np_array(dtype1, dtype2, memory_leak_check):
 
     n = 1000
     check_func(
-        test_impl, (get_quasi_random_dtype(n, dtype1, dtype2),),
+        test_impl,
+        (get_quasi_random_dtype(n, dtype1, dtype2),),
     )
 
 
@@ -440,7 +447,8 @@ def test_sort_values_strings_constant_length(n, len_str, memory_leak_check):
 
     random.seed(5)
     check_func(
-        test_impl, (get_random_strings_array(n, len_str),),
+        test_impl,
+        (get_random_strings_array(n, len_str),),
     )
 
 
@@ -552,16 +560,20 @@ def test_sort_values_two_columns_nan(n, len_siz, memory_leak_check):
     random.seed(5)
     df1 = get_random_dataframe_two_columns(n, len_siz)
     check_func(
-        test_impl1, (df1,),
+        test_impl1,
+        (df1,),
     )
     check_func(
-        test_impl2, (df1,),
+        test_impl2,
+        (df1,),
     )
     check_func(
-        test_impl3, (df1,),
+        test_impl3,
+        (df1,),
     )
     check_func(
-        test_impl4, (df1,),
+        test_impl4,
+        (df1,),
     )
 
 
@@ -707,8 +719,7 @@ def test_sort_values_force_literal(memory_leak_check):
 
 @pytest.mark.slow
 def test_list_string(memory_leak_check):
-    """Sorting values by list of strings
-    """
+    """Sorting values by list of strings"""
 
     def test_impl(df1):
         df2 = df1.sort_values(by="A", kind="mergesort")
@@ -720,10 +731,8 @@ def test_list_string(memory_leak_check):
     check_func(test_impl, (df1,))
 
 
-# TODO: add memory_leak_check
-def test_list_string_missing():
-    """Sorting values by list of strings
-    """
+def test_list_string_missing(memory_leak_check):
+    """Sorting values by list of strings"""
 
     def f(df1):
         df2 = df1.sort_values(by="A", kind="mergesort")
@@ -738,8 +747,7 @@ def test_list_string_missing():
 @pytest.mark.slow
 # TODO: add memory_leak_check
 def test_list_string_arrow():
-    """Sorting values by list of strings
-    """
+    """Sorting values by list of strings"""
 
     def f(df1):
         df2 = df1.sort_values(by="A", kind="mergesort")
@@ -987,8 +995,7 @@ def test_inplace_sort_values_series(memory_leak_check):
 
 
 def test_random_decimal():
-    """Sorting a random decimal
-    """
+    """Sorting a random decimal"""
 
     def f(df):
         return df.sort_values(by=["A"])

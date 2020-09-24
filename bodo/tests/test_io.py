@@ -289,7 +289,8 @@ def test_pq_spark_date(datapath, memory_leak_check):
     pd.testing.assert_frame_equal(bodo_func(), impl())
 
 
-def test_pq_index(datapath, memory_leak_check):
+# TODO: add memory_leak_check when tracking parquet allocs is possible
+def test_pq_index(datapath):
     def test_impl(fname):
         return pd.read_parquet(fname)
 
@@ -337,7 +338,8 @@ def test_pq_bool_with_nulls(datapath, memory_leak_check):
     check_func(test_impl, ())
 
 
-def test_pq_schema(datapath, memory_leak_check):
+# TODO: add memory_leak_check when tracking parquet allocs is possible
+def test_pq_schema(datapath):
     fname = datapath("example.parquet")
 
     def impl(f):

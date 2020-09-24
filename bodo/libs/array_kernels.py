@@ -735,7 +735,6 @@ def overload_drop_duplicates(data, ind_arr, parallel=False):
     func_text += "  return ({},), out_arr_index\n".format(
         ", ".join("out_arr_{}".format(i) for i in range(count))
     )
-    #    print("array_kernels : func_text=", func_text)
     loc_vars = {}
     exec(
         func_text,
@@ -1017,6 +1016,7 @@ def concat_overload(arr_list):
                 num_strs += len(arr)
                 num_chars += bodo.libs.str_arr_ext.num_total_chars(arr)
             out_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(num_strs, num_chars)
+            bodo.libs.str_arr_ext.set_null_bits(out_arr)
             # copy data to output
             curr_str_ind = 0
             curr_chars_ind = 0

@@ -320,16 +320,17 @@ array_info* list_string_array_to_info(NRT_MemInfo* meminfo) {
     array_item_arr_payload* payload = (array_item_arr_payload*)meminfo->data;
     int64_t n_items = payload->n_arrays;
 
-    str_arr_payload* sub_payload = (str_arr_payload*)payload->data->data;
-    int64_t n_strings = sub_payload->num_strings;
-    int64_t n_chars = sub_payload->offsets[n_strings];
+    array_item_arr_numpy_payload* sub_payload =
+        (array_item_arr_numpy_payload*)payload->data->data;
+    int64_t n_strings = sub_payload->n_arrays;
+    int64_t n_chars = ((uint32_t*)sub_payload->offsets.data)[n_strings];
 
-    return new array_info(bodo_array_type::LIST_STRING,
-                          Bodo_CTypes::LIST_STRING, n_items, n_strings, n_chars,
-                          (char*)sub_payload->data, (char*)sub_payload->offsets,
-                          (char*)payload->offsets.data,
-                          (char*)payload->null_bitmap.data,
-                          (char*)sub_payload->null_bitmap, meminfo, nullptr);
+    return new array_info(
+        bodo_array_type::LIST_STRING, Bodo_CTypes::LIST_STRING, n_items,
+        n_strings, n_chars, (char*)sub_payload->data.data,
+        (char*)sub_payload->offsets.data, (char*)payload->offsets.data,
+        (char*)payload->null_bitmap.data, (char*)sub_payload->null_bitmap.data,
+        meminfo, nullptr);
 #endif
 }
 
@@ -502,6 +503,107 @@ table_info* arr_info_list_to_table(array_info** arrs, int64_t n_arrs) {
 
 array_info* info_from_table(table_info* table, int64_t col_ind) {
     return table->columns[col_ind];
+}
+
+/**
+ * @brief create a concatenated string and offset table from a numpy array of
+ * strings
+ *
+ * @param obj numpy array of strings
+ * @return NRT_MemInfo* meminfo of array(item) array containing string data
+ */
+NRT_MemInfo* string_array_from_sequence(PyObject* obj) {
+#define CHECK(expr, msg)               \
+    if (!(expr)) {                     \
+        std::cerr << msg << std::endl; \
+        return NULL;                   \
+    }
+
+    CHECK(PySequence_Check(obj), "expecting a PySequence");
+
+    Py_ssize_t n = PyObject_Size(obj);
+    if (n == 0) {
+        // empty sequence, this is not an error, need to set size
+        array_info* out_arr =
+            alloc_array(0, 0, -1, bodo_array_type::arr_type_enum::ARRAY_ITEM,
+                        Bodo_CTypes::UINT8, 0, 0);
+        NRT_MemInfo* out_meminfo = out_arr->meminfo;
+        delete out_arr;
+        return out_meminfo;
+    }
+
+    // allocate null bitmap
+    // same formula as BytesForBits in Arrow
+    int64_t n_bytes = (n + 7) >> 3;
+    numpy_arr_payload null_bitmap_payload =
+        allocate_numpy_payload(n_bytes, Bodo_CTypes::UINT8);
+    uint8_t* null_bitmap = (uint8_t*)null_bitmap_payload.data;
+    memset(null_bitmap, 0, n_bytes);
+
+    // get pd.NA object to check for new NA kind
+    // simple equality check is enough since the object is a singleton
+    // example:
+    // https://github.com/pandas-dev/pandas/blob/fcadff30da9feb3edb3acda662ff6143b7cb2d9f/pandas/_libs/missing.pyx#L57
+    PyObject* pd_mod = PyImport_ImportModule("pandas");
+    CHECK(pd_mod, "importing pandas module failed");
+    PyObject* C_NA = PyObject_GetAttrString(pd_mod, "NA");
+    CHECK(C_NA, "getting pd.NA failed");
+
+    numpy_arr_payload offsets_payload =
+        allocate_numpy_payload(n + 1, Bodo_CTypes::UINT32);
+    uint32_t* offsets = (uint32_t*)offsets_payload.data;
+    std::vector<const char*> tmp_store(n);
+    size_t len = 0;
+    for (Py_ssize_t i = 0; i < n; ++i) {
+        offsets[i] = len;
+        PyObject* s = PySequence_GetItem(obj, i);
+        CHECK(s, "getting element failed");
+        // Pandas stores NA as either None, nan, or pd.NA
+        if (s == Py_None ||
+            (PyFloat_Check(s) && std::isnan(PyFloat_AsDouble(s))) ||
+            s == C_NA) {
+            // leave null bit as 0
+            tmp_store[i] = "";
+        } else {
+            // set null bit to 1 (Arrow bin-util.h)
+            null_bitmap[i / 8] |= kBitmask[i % 8];
+            // check string
+            CHECK(PyUnicode_Check(s), "expecting a string");
+            // convert to UTF-8 and get size
+            Py_ssize_t size;
+            tmp_store[i] = PyUnicode_AsUTF8AndSize(s, &size);
+            CHECK(tmp_store[i], "string conversion failed");
+            len += size;
+        }
+        Py_DECREF(s);
+    }
+    offsets[n] = len;
+
+    numpy_arr_payload outbuf_payload =
+        allocate_numpy_payload(len, Bodo_CTypes::UINT8);
+    char* outbuf = outbuf_payload.data;
+    for (Py_ssize_t i = 0; i < n; ++i) {
+        memcpy(outbuf + offsets[i], tmp_store[i], offsets[i + 1] - offsets[i]);
+    }
+
+    Py_DECREF(C_NA);
+    Py_DECREF(pd_mod);
+
+    NRT_MemInfo* meminfo_array_item = alloc_array_item_arr_meminfo();
+    array_item_arr_numpy_payload* payload =
+        (array_item_arr_numpy_payload*)(meminfo_array_item->data);
+
+    payload->n_arrays = n;
+
+    // allocate data array
+    // TODO: support non-numpy data
+    payload->data = outbuf_payload;
+    // TODO: support 64-bit offsets case
+    payload->offsets = offsets_payload;
+    payload->null_bitmap = null_bitmap_payload;
+
+    return meminfo_array_item;
+#undef CHECK
 }
 
 /**
@@ -1199,6 +1301,8 @@ PyMODINIT_FUNC PyInit_array_ext(void) {
     import_array();
 
     bodo_common_init();
+    // initalize memory alloc/tracking system in _meminfo.h
+    NRT_MemSys_init();
 
     // initialize decimal_mpi_type
     // TODO: free when program exits
@@ -1288,6 +1392,11 @@ PyMODINIT_FUNC PyInit_array_ext(void) {
     PyObject_SetAttrString(
         m, "map_array_from_sequence",
         PyLong_FromVoidPtr((void*)(&map_array_from_sequence)));
+
+    PyObject_SetAttrString(
+        m, "string_array_from_sequence",
+        PyLong_FromVoidPtr((void*)(&string_array_from_sequence)));
+
     PyObject_SetAttrString(
         m, "np_array_from_struct_array",
         PyLong_FromVoidPtr((void*)(&np_array_from_struct_array)));

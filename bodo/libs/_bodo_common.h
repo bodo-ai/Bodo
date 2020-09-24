@@ -13,6 +13,8 @@
 #include <vector>
 #include "_meminfo.h"
 
+#define ALIGNMENT 64  // preferred alignment for AVX512
+
 inline void Bodo_PyErr_SetString(PyObject* type, const char* message) {
     std::cerr << "BodoRuntimeCppError, setting PyErr_SetString to " << message
               << "\n";
@@ -129,6 +131,7 @@ struct bodo_array_type {
         LIST_STRING = 3,        // list_string_array_type
         ARROW = 4,              // Arrow Array
         CATEGORICAL = 5,
+        ARRAY_ITEM = 6,
         // string_array_split_view_type, etc.
     };
 };
@@ -245,6 +248,8 @@ array_info* alloc_array(int64_t length, int64_t n_sub_elems,
 
 array_info* alloc_numpy(int64_t length, Bodo_CTypes::CTypeEnum typ_enum);
 
+array_info* alloc_array_item(int64_t n_arrays, int64_t n_total_items,
+                             Bodo_CTypes::CTypeEnum dtype);
 array_info* alloc_categorical(int64_t length, Bodo_CTypes::CTypeEnum typ_enum,
                               int64_t num_categories);
 
@@ -285,11 +290,6 @@ void decref_array(array_info* arr);
  */
 void incref_array(array_info* arr);
 
-/**
- * Decref list of string array and free all memory in refcount is zero.
- */
-void decref_list_string_array(NRT_MemInfo* meminfo);
-
 extern "C" {
 
 struct numpy_arr_payload {
@@ -300,21 +300,40 @@ struct numpy_arr_payload {
     char* data;
     int64_t shape;
     int64_t strides;
+
+    numpy_arr_payload(NRT_MemInfo* _meminfo, PyObject* _parent, int64_t _nitems,
+                      int64_t _itemsize, char* _data, int64_t _shape,
+                      int64_t _strides)
+        : meminfo(_meminfo),
+          parent(_parent),
+          nitems(_nitems),
+          itemsize(_itemsize),
+          data(_data),
+          shape(_shape),
+          strides(_strides) {}
 };
 
-// XXX: equivalent to payload data model in str_arr_ext.py
-struct str_arr_payload {
-    int64_t num_strings;
-    int32_t* offsets;
-    char* data;
-    uint8_t* null_bitmap;
-};
+
+void decref_numpy_payload(numpy_arr_payload arr);
+
 
 struct array_item_arr_payload {
     int64_t n_arrays;
     // currently this is not general. this is specific for arrays whose model
     // is a meminfo (like StringArray)
     NRT_MemInfo* data;
+    numpy_arr_payload offsets;
+    numpy_arr_payload null_bitmap;
+};
+
+/**
+ * @brief array(item) array payload with numpy data
+ * TODO: create a general templated payload and avoid duplication
+ *
+ */
+struct array_item_arr_numpy_payload {
+    int64_t n_arrays;
+    numpy_arr_payload data;
     numpy_arr_payload offsets;
     numpy_arr_payload null_bitmap;
 };
@@ -326,16 +345,11 @@ struct str_arr_split_view_payload {
     uint8_t* null_bitmap;
 };
 
-void dtor_string_array(str_arr_payload* in_str_arr, int64_t size, void* in);
+numpy_arr_payload allocate_numpy_payload(int64_t length,
+                                         Bodo_CTypes::CTypeEnum typ_enum);
 
-void allocate_string_array(int32_t** offsets, char** data,
-                           uint8_t** null_bitmap, int64_t num_strings,
-                           int64_t total_size, int64_t extra_null_bytes);
-
-void allocate_list_string_array(int64_t n_lists, int64_t n_strings,
-                                int64_t n_chars, int64_t extra_null_bytes,
-                                array_item_arr_payload* payload,
-                                str_arr_payload* sub_payload);
+void dtor_array_item_array(array_item_arr_numpy_payload* payload, int64_t size, void* in);
+NRT_MemInfo* alloc_array_item_arr_meminfo();
 
 Bodo_CTypes::CTypeEnum arrow_to_bodo_type(arrow::Type::type type);
 

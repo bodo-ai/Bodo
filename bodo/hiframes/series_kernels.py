@@ -60,6 +60,7 @@ def _series_dropna_str_alloc_impl_inner(B):  # pragma: no cover
     A = bodo.libs.str_arr_ext.pre_alloc_string_array(new_len, num_chars)
     bodo.libs.str_arr_ext.copy_non_null_offsets(A, B)
     bodo.libs.str_arr_ext.copy_data(A, B)
+    bodo.libs.str_arr_ext.set_null_bits(A)
     return A
 
 

@@ -152,8 +152,7 @@ def define_array_item_dtor(context, builder, array_item_type, payload_type):
 def construct_array_item_array(
     context, builder, array_item_type, n_arrays, n_elems, c=None
 ):
-    """Creates meminfo and sets dtor, and allocates buffers for array(item) array
-    """
+    """Creates meminfo and sets dtor, and allocates buffers for array(item) array"""
     # create payload type
     payload_type = ArrayItemArrayPayloadType(array_item_type)
     alloc_type = context.get_value_type(payload_type)
@@ -210,8 +209,7 @@ def construct_array_item_array(
 
 
 def _unbox_array_item_array_copy_data(arr_typ, arr_obj, c, data_arr, item_ind, n_items):
-    """unbox 'arr_obj' and copy data to 'data_arr' at index 'item_ind'
-    """
+    """unbox 'arr_obj' and copy data to 'data_arr' at index 'item_ind'"""
     context = c.context
     builder = c.builder
 
@@ -323,7 +321,10 @@ def unbox_array_item_array(typ, val, c):
     n_arrays = bodo.utils.utils.object_length(c, val)
 
     if handle_in_c:
-        fnty = lir.FunctionType(lir.IntType(64), [lir.IntType(8).as_pointer()],)
+        fnty = lir.FunctionType(
+            lir.IntType(64),
+            [lir.IntType(8).as_pointer()],
+        )
         fn_tp = c.builder.module.get_or_insert_function(
             fnty, name="count_total_elems_list_array"
         )
@@ -386,8 +387,7 @@ def unbox_array_item_array(typ, val, c):
 
 
 def _get_array_item_arr_payload(context, builder, arr_typ, arr):
-    """get payload struct proxy for a array(item) value
-    """
+    """get payload struct proxy for a array(item) value"""
     array_item_array = context.make_helper(builder, arr_typ, arr)
     payload_type = ArrayItemArrayPayloadType(arr_typ)
     meminfo_void_ptr = context.nrt.meminfo_data(builder, array_item_array.meminfo)
@@ -469,7 +469,8 @@ def _box_array_item_array_generic(
                 [data_arr, item_ind, n_items],
             )
             builder.store(
-                builder.add(item_ind, n_items), curr_item_ind,
+                builder.add(item_ind, n_items),
+                curr_item_ind,
             )
             arr_obj = c.pyapi.from_native_value(typ.dtype, arr_slice, c.env_manager)
             pyarray_setitem(builder, context, out_arr, array_ind, arr_obj)
@@ -484,8 +485,7 @@ def _box_array_item_array_generic(
 
 @box(ArrayItemArrayType)
 def box_array_item_arr(typ, val, c):
-    """box packed native representation of array of item array into python objects
-    """
+    """box packed native representation of array of item array into python objects"""
 
     payload = _get_array_item_arr_payload(c.context, c.builder, typ, val)
     data_arr = payload.data
@@ -582,8 +582,7 @@ ArrayAnalysis._analyze_op_call_bodo_libs_array_item_arr_ext_pre_alloc_array_item
 def init_array_item_array(
     typingctx, n_arrays_typ, data_type, offsets_typ, null_bitmap_typ=None
 ):
-    """Create a ArrayItemArray with provided offsets, data and null bitmap values.
-    """
+    """Create a ArrayItemArray with provided offsets, data and null bitmap values."""
     assert null_bitmap_typ == types.Array(types.uint8, 1, "C")
 
     def codegen(context, builder, signature, args):
@@ -641,6 +640,23 @@ def get_offsets(typingctx, arr_typ=None):
         return impl_ret_borrowed(context, builder, sig.return_type, payload.offsets)
 
     return types.Array(offset_typ, 1, "C")(arr_typ), codegen
+
+
+@intrinsic
+def get_offsets_ind(typingctx, arr_typ, ind_t=None):
+    """get offsets[ind] without wrapping in Numpy array (can be ~2x faster)"""
+    assert isinstance(arr_typ, ArrayItemArrayType)
+
+    def codegen(context, builder, sig, args):
+        (arr, ind) = args
+        payload = _get_array_item_arr_payload(context, builder, arr_typ, arr)
+        data_ptr = context.make_array(types.Array(offset_typ, 1, "C"))(
+            context, builder, payload.offsets
+        ).data
+        offsets = builder.bitcast(data_ptr, lir.IntType(32).as_pointer())
+        return builder.load(builder.gep(offsets, [ind]))
+
+    return offset_typ(arr_typ, types.int64), codegen
 
 
 @intrinsic
