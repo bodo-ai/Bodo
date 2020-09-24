@@ -938,6 +938,19 @@ class SeriesPass:
                 self,
             )
 
+        # replace a +/- 0 with a (e.g. in index calc of test_loc_range_index_loop)
+        if (
+            rhs.fn in (operator.add, operator.sub)
+            and guard(find_const, self.func_ir, arg2) == 0
+        ):
+            assign.value = arg1
+            return [assign]
+
+        # replace a // 1 with a (e.g. in index calc of test_loc_range_index_loop)
+        if rhs.fn == operator.floordiv and guard(find_const, self.func_ir, arg2) == 1:
+            assign.value = arg1
+            return [assign]
+
         if not (isinstance(typ1, SeriesType) or isinstance(typ2, SeriesType)):
             return [assign]
 

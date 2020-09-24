@@ -2416,7 +2416,7 @@ def test_loc_bool_arr(memory_leak_check):
 
 
 def test_loc_col_name(memory_leak_check):
-    """test df.iloc[slice, col_ind]"""
+    """test df.loc[slice, col_ind]"""
 
     def test_impl(df):
         return df.loc[(df.A > 3).values, "B"].values
@@ -2427,7 +2427,7 @@ def test_loc_col_name(memory_leak_check):
 
 
 def test_loc_range_index(memory_leak_check):
-    """test df.iloc[int, col_ind] for RangeIndex"""
+    """test df.loc[int, col_ind] for RangeIndex"""
 
     def test_impl(df, i):
         return df.loc[i, "B"]
@@ -2436,6 +2436,20 @@ def test_loc_range_index(memory_leak_check):
     i = 4
     df = pd.DataFrame({"A": np.arange(n), "B": np.arange(n) ** 2})
     check_func(test_impl, (df, i))
+
+
+def test_loc_range_index_prange(memory_leak_check):
+    """test df.loc[int, col_ind] for RangeIndex in a parallel loop"""
+
+    def impl(n):
+        df = pd.DataFrame({"A": np.arange(n), "B": np.arange(n) ** 2})
+        s = 0
+        for i in bodo.prange(len(df)):
+            s += df.loc[i, "B"]
+        return s
+
+    n = 11
+    check_func(impl, (n,))
 
 
 def test_loc_col_select(memory_leak_check):
