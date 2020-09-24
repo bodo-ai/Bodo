@@ -26,9 +26,11 @@ from bodo.utils.typing import (
     is_overload_str,
     BodoError,
     is_overload_constant_str,
+    is_overload_constant_int,
     is_literal_type,
     get_literal_value,
     get_overload_const_str,
+    get_overload_const_int,
     check_unsupported_args,
 )
 from bodo.utils.transform import gen_const_tup, is_var_size_item_array_type
@@ -1707,6 +1709,21 @@ def overload_series_np_digitize(x, bins, right=False):
         def impl(x, bins, right=False):  # pragma: no cover
             arr = bodo.hiframes.pd_series_ext.get_series_data(x)
             return np.digitize(arr, bins, right)
+
+        return impl
+
+
+@overload(np.argmax, inline="always", no_unliteral=True)
+def argmax_overload(a, axis=None, out=None):
+    if isinstance(a, types.Array) and is_overload_constant_int(axis) and get_overload_const_int(axis) == 1:
+
+        def impl(a, axis=None, out=None): # pragma: no cover
+            argmax_arr = np.empty(len(a), a.dtype)
+            numba.parfors.parfor.init_prange()
+            n = len(a)
+            for i in numba.parfors.parfor.internal_prange(n):
+                argmax_arr[i] = np.argmax(a[i])
+            return argmax_arr
 
         return impl
 
