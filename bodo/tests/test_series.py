@@ -2702,6 +2702,12 @@ def test_series_np_dot(S1, S2, memory_leak_check):
     check_func(impl2, (S1, S2))
 
 
+def test_np_argmax(memory_leak_check):
+    def impl(A):
+        return np.argmax(A, 1)
+
+    check_func(impl, (np.random.rand(500, 50),))
+
 # TODO: fix memory leak and add memory_leak_check
 def test_series_index_cast():
     # cast range index to integer index if necessary
