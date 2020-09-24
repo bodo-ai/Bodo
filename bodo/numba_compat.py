@@ -1650,35 +1650,6 @@ if (
 numba.parfors.parfor.get_reduce_nodes = get_reduce_nodes
 
 
-cache_envs = {}
-
-
-def _rebuild_env(modname, consts, env_name):
-    env = numba.core.environment.lookup_environment(env_name)
-    if env is not None:
-        return env
-
-    mod = numba.core.serialize._rebuild_module(modname)
-    env = numba.core.environment.Environment(mod.__dict__)
-    env.consts[:] = consts
-    env.env_name = env_name
-    # Cache loaded object
-    numba.core.environment.Environment._memo[env_name] = env
-    # Bodo change
-    global cache_envs
-    cache_envs[env_name] = env
-    return env
-
-
-lines = inspect.getsource(numba.core.environment._rebuild_env)
-if (
-    hashlib.sha256(lines.encode()).hexdigest()
-    != "c6fd508f7d69bb0c7249d18c5a584dedf68fe13d5001b23321a207141f3bf2c1"
-):  # pragma: no cover
-    warnings.warn("numba.core.environment._rebuild_env has changed")
-numba.core.environment._rebuild_env = _rebuild_env
-
-
 # declare array writes in Bodo IR nodes and builtins to avoid invalid statement
 # reordering in parfor fusion
 def _can_reorder_stmts(stmt, next_stmt, func_ir, call_table, alias_map, arg_aliases):
