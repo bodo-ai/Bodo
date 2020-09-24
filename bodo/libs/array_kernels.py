@@ -2,72 +2,72 @@
 """
 Implements array kernels such as median and quantile.
 """
-import pandas as pd
-import numpy as np
 import math
 from math import sqrt
 
+import llvmlite.binding as ll
 import numba
-from numba.extending import overload
-from numba.core import types, cgutils
-from numba.core.typing import signature
-from numba.core.typing.templates import infer_global, AbstractTemplate
+import numpy as np
+import pandas as pd
+from llvmlite import ir as lir
+from numba.core import cgutils, types
 from numba.core.imputils import lower_builtin
+from numba.core.typing import signature
+from numba.core.typing.templates import AbstractTemplate, infer_global
+from numba.extending import overload
 from numba.np.arrayobj import make_array
 from numba.np.numpy_support import as_dtype
 from numba.parfors.array_analysis import ArrayAnalysis
 
 import bodo
-from bodo.utils.utils import numba_to_c_type, unliteral_all
-from bodo.libs.str_arr_ext import (
-    string_array_type,
-    pre_alloc_string_array,
-    get_str_arr_item_length,
-    str_arr_set_na,
+from bodo.hiframes.datetime_date_ext import datetime_date_array_type
+from bodo.hiframes.datetime_timedelta_ext import datetime_timedelta_array_type
+from bodo.hiframes.pd_categorical_ext import (
+    CategoricalArray,
+    init_categorical_array,
 )
-from bodo.libs.int_arr_ext import IntegerArrayType
-from bodo.libs.bool_arr_ext import BooleanArrayType, boolean_array
-from bodo.hiframes.pd_categorical_ext import CategoricalArray, init_categorical_array
-from bodo.libs.decimal_arr_ext import DecimalArrayType
-from bodo.utils.shuffle import getitem_arr_tup_single
-from bodo.utils.utils import build_set
+from bodo.hiframes.split_impl import string_array_split_view_type
 from bodo.ir.sort import (
+    alloc_pre_shuffle_metadata,
     alltoallv_tup,
     finalize_shuffle_meta,
     update_shuffle_meta,
-    alloc_pre_shuffle_metadata,
 )
-from bodo.libs.struct_arr_ext import StructArrayType
-from bodo.libs.array_item_arr_ext import ArrayItemArrayType
-from bodo.hiframes.split_impl import string_array_split_view_type
-from bodo.hiframes.datetime_date_ext import datetime_date_array_type
-from bodo.hiframes.datetime_timedelta_ext import datetime_timedelta_array_type
-from bodo.utils.indexing import init_nested_counts, add_nested_counts
-
-from llvmlite import ir as lir
 from bodo.libs import quantile_alg
-import llvmlite.binding as ll
-
 from bodo.libs.array import (
-    array_to_info,
     arr_info_list_to_table,
-    shuffle_table,
-    drop_duplicates_table,
-    sample_table,
-    info_from_table,
-    info_to_array,
+    array_to_info,
     delete_info_decref_array,
     delete_table,
     delete_table_decref_arrays,
+    drop_duplicates_table,
+    info_from_table,
+    info_to_array,
+    sample_table,
+    shuffle_table,
 )
+from bodo.libs.array_item_arr_ext import ArrayItemArrayType
+from bodo.libs.bool_arr_ext import BooleanArrayType, boolean_array
+from bodo.libs.decimal_arr_ext import DecimalArrayType
+from bodo.libs.int_arr_ext import IntegerArrayType
+from bodo.libs.str_arr_ext import (
+    get_str_arr_item_length,
+    pre_alloc_string_array,
+    str_arr_set_na,
+    string_array_type,
+)
+from bodo.libs.struct_arr_ext import StructArrayType
+from bodo.utils.indexing import add_nested_counts, init_nested_counts
+from bodo.utils.shuffle import getitem_arr_tup_single
 from bodo.utils.typing import (
     BodoError,
-    raise_bodo_error,
+    find_common_np_dtype,
     get_overload_const_list,
     get_overload_const_str,
     is_overload_none,
-    find_common_np_dtype,
+    raise_bodo_error,
 )
+from bodo.utils.utils import build_set, numba_to_c_type, unliteral_all
 
 ll.add_symbol("quantile_sequential", quantile_alg.quantile_sequential)
 ll.add_symbol("quantile_parallel", quantile_alg.quantile_parallel)
@@ -145,8 +145,13 @@ def setna_overload(arr, ind, int_nan_const=0):
         return _setnan_impl
 
     if arr == string_array_type:
-        # TODO: set offsets
-        return lambda arr, ind, int_nan_const=0: str_arr_set_na(arr, ind)
+
+        def impl(arr, ind, int_nan_const=0):
+            # set empty string to set offsets properly
+            arr[ind] = ""
+            str_arr_set_na(arr, ind)
+
+        return impl
 
     if isinstance(arr, (IntegerArrayType, DecimalArrayType)) or arr in (
         boolean_array,
@@ -210,7 +215,7 @@ def setna_overload(arr, ind, int_nan_const=0):
     # Add support for datetime.timedelta array
     if arr == datetime_timedelta_array_type:
 
-        def setna_datetime_timedelta(arr, ind, int_nan_const=0): #pragma: no cover
+        def setna_datetime_timedelta(arr, ind, int_nan_const=0):  # pragma: no cover
             bodo.libs.array_kernels.setna(arr._days_data, ind)
             bodo.libs.array_kernels.setna(arr._seconds_data, ind)
             bodo.libs.array_kernels.setna(arr._microseconds_data, ind)
@@ -660,8 +665,10 @@ def overload_sample_table_operation(data, ind_arr, n, frac, replace, parallel=Fa
         ", ".join("array_to_info(data[{}])".format(x) for x in range(count))
     )
     func_text += "  table_total = arr_info_list_to_table(info_list_total)\n"
-    func_text += "  out_table = sample_table(table_total, n, frac, replace, parallel)\n".format(
-        count
+    func_text += (
+        "  out_table = sample_table(table_total, n, frac, replace, parallel)\n".format(
+            count
+        )
     )
     for i_col in range(count):
         func_text += "  out_arr_{} = info_to_array(info_from_table(out_table, {}), data[{}])\n".format(
@@ -1052,7 +1059,10 @@ def concat_overload(arr_list):
                     bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(old_mask, j)
                     bodo.libs.int_arr_ext.set_bit_to_arr(new_mask, curr_bit, bit)
                     curr_bit += 1
-            return bodo.libs.int_arr_ext.init_integer_array(out_data, new_mask,)
+            return bodo.libs.int_arr_ext.init_integer_array(
+                out_data,
+                new_mask,
+            )
 
         return impl_int_arr_list
 
@@ -1154,8 +1164,7 @@ def astype_float_tup(arr_tup):
 
 @overload(astype_float_tup, no_unliteral=True)
 def overload_astype_float_tup(arr_tup):
-    """converts a tuple of arrays to float arrays using array.astype(np.float64)
-    """
+    """converts a tuple of arrays to float arrays using array.astype(np.float64)"""
     assert isinstance(arr_tup, types.BaseTuple)
     count = len(arr_tup.types)
 
