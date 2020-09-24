@@ -372,11 +372,13 @@ String handling:
 * :meth:`pandas.Series.str.lower`
 * :meth:`pandas.Series.str.lstrip`
 * :meth:`pandas.Series.str.pad`
+* :meth:`pandas.Series.str.repeat`
 * :meth:`pandas.Series.str.replace` regex argument supported.
 * :meth:`pandas.Series.str.rfind`
 * :meth:`pandas.Series.str.rjust`
 * :meth:`pandas.Series.str.rstrip`
 * :meth:`pandas.Series.str.slice`
+* :meth:`pandas.Series.str.slice_replace`
 * :meth:`pandas.Series.str.split`
 * :meth:`pandas.Series.str.startswith`
 * :meth:`pandas.Series.str.strip`
