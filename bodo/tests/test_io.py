@@ -1,42 +1,45 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 """Tests I/O for CSV, Parquet, HDF5, etc.
 """
-import unittest
-import pytest
 import os
-import subprocess
-import shutil
-import pandas as pd
-import numpy as np
-import h5py
-import numba
-import bodo
 import random
-from bodo.utils.typing import BodoError
-from bodo.utils.testing import ensure_clean
-from bodo.tests.utils import (
-    gen_random_arrow_array_struct_int,
-    gen_random_arrow_array_struct_list_int,
-    gen_random_arrow_list_list_int,
-    gen_random_arrow_list_list_double,
-    gen_random_arrow_struct_struct,
-    count_array_REPs,
-    count_parfor_REPs,
-    count_parfor_OneDs,
-    count_array_OneDs,
-    dist_IR_contains,
-    get_rank,
-    get_start_end,
-    check_func,
-    _get_dist_arg,
-    reduce_sum,
-    _test_equal_guard,
-    DeadcodeTestPipeline,
-)
-from bodo.utils.utils import is_call_assign
-from numba.core.ir_utils import find_callname, build_definitions
+import shutil
+import subprocess
+import sys
+import unittest
 from decimal import Decimal
 
+import h5py
+import numba
+import numpy as np
+import pandas as pd
+import pytest
+from numba.core.ir_utils import build_definitions, find_callname
+
+import bodo
+from bodo.tests.utils import (
+    DeadcodeTestPipeline,
+    _get_dist_arg,
+    _test_equal_guard,
+    check_caching,
+    check_func,
+    count_array_OneDs,
+    count_array_REPs,
+    count_parfor_OneDs,
+    count_parfor_REPs,
+    dist_IR_contains,
+    gen_random_arrow_array_struct_int,
+    gen_random_arrow_array_struct_list_int,
+    gen_random_arrow_list_list_double,
+    gen_random_arrow_list_list_int,
+    gen_random_arrow_struct_struct,
+    get_rank,
+    get_start_end,
+    reduce_sum,
+)
+from bodo.utils.testing import ensure_clean
+from bodo.utils.typing import BodoError
+from bodo.utils.utils import is_call_assign
 
 kde_file = os.path.join("bodo", "tests", "data", "kde.parquet")
 
@@ -127,7 +130,9 @@ def test_pq_RangeIndex(test_RangeIndex_input, pq_write_idx, memory_leak_check):
 
 @pytest.mark.parametrize("index_name", [None, "HELLO"])
 @pytest.mark.parametrize("pq_write_idx", [True, None, False])
-def test_pq_select_column(test_RangeIndex_input, index_name, pq_write_idx, memory_leak_check):
+def test_pq_select_column(
+    test_RangeIndex_input, index_name, pq_write_idx, memory_leak_check
+):
     def impl():
         df = pd.read_parquet("test.pq", columns=["A", "C"])
         return df
@@ -446,8 +451,7 @@ def test_pq_array_item(datapath):
 
 
 def test_pq_unsupported_types(datapath, memory_leak_check):
-    """test unsupported data types in unselected columns
-    """
+    """test unsupported data types in unselected columns"""
 
     def test_impl(fname):
         return pd.read_parquet(fname, columns=["B"])
@@ -456,8 +460,7 @@ def test_pq_unsupported_types(datapath, memory_leak_check):
 
 
 def test_pq_invalid_column_selection(datapath, memory_leak_check):
-    """test error raise when selected column is not in file schema
-    """
+    """test error raise when selected column is not in file schema"""
 
     def test_impl(fname):
         return pd.read_parquet(fname, columns=["C"])
@@ -474,8 +477,7 @@ def test_pq_decimal(datapath, memory_leak_check):
 
 
 def test_pq_date32(datapath, memory_leak_check):
-    """Test reading date32 values into datetime.date array
-    """
+    """Test reading date32 values into datetime.date array"""
 
     def test_impl(fname):
         return pd.read_parquet(fname)
@@ -519,9 +521,26 @@ def test_csv_remove_col0_used_for_len(datapath, memory_leak_check):
         check_func(impl2, ())
 
 
-def test_h5_remove_dead(datapath, memory_leak_check):
-    """make sure dead hdf5 read calls are removed properly
+def test_read_csv_cache(datapath, memory_leak_check):
     """
+    test read_csv with cache=True
+    """
+    fname = datapath("csv_data1.csv")
+
+    def impl():
+        df = pd.read_csv(fname, names=["A", "B", "C", "D"], compression=None)
+        return df.C
+
+    py_out = impl()
+    bodo_out1, bodo_out2 = check_caching(
+        sys.modules[__name__], "test_read_csv_cache", impl, ()
+    )
+    pd.testing.assert_series_equal(py_out, bodo_out1)
+    pd.testing.assert_series_equal(py_out, bodo_out2)
+
+
+def test_h5_remove_dead(datapath, memory_leak_check):
+    """make sure dead hdf5 read calls are removed properly"""
     fname = datapath("lr.hdf5")
 
     def impl():
@@ -554,6 +573,23 @@ def clean_pq_files(mode, pandas_pq_path, bodo_pq_path):
         # in parallel mode, the path is a directory containing multiple
         # parquet files (one per process)
         shutil.rmtree(bodo_pq_path, ignore_errors=True)
+
+
+def test_read_parquet_cache(datapath, memory_leak_check):
+    """
+    test read_parquet with cache=True
+    """
+
+    def impl(fname):
+        return pd.read_parquet(fname)
+
+    fname = datapath("groupby3.pq")
+    py_out = impl(fname)
+    bodo_out1, bodo_out2 = check_caching(
+        sys.modules[__name__], "test_read_parquet_cache", impl, (fname,)
+    )
+    pd.testing.assert_frame_equal(py_out, bodo_out1)
+    pd.testing.assert_frame_equal(py_out, bodo_out2)
 
 
 # TODO: Add memory_leak_check when bugs are resolved.
@@ -789,9 +825,9 @@ def test_read_write_parquet():
 
 # TODO: Add memory_leak_check when bugs are resolved.
 def test_write_parquet_empty_chunks():
-    """ Here we check that our to_parquet output in distributed mode
-        (directory of parquet files) can be read by pandas even when some
-        processes have empty chunks """
+    """Here we check that our to_parquet output in distributed mode
+    (directory of parquet files) can be read by pandas even when some
+    processes have empty chunks"""
 
     def f(n, write_filename):
         df = pd.DataFrame({"A": np.arange(n)})
@@ -811,9 +847,9 @@ def test_write_parquet_empty_chunks():
 
 # TODO: Add memory_leak_check when bugs are resolved.
 def test_write_parquet_decimal(datapath):
-    """ Here we check that we can write the data read from decimal1.pq directory
-        (has columns that use a precision and scale different from our default).
-        See test_write_parquet above for main parquet write decimal test """
+    """Here we check that we can write the data read from decimal1.pq directory
+    (has columns that use a precision and scale different from our default).
+    See test_write_parquet above for main parquet write decimal test"""
 
     def write(read_path, write_filename):
         df = pd.read_parquet(read_path)
@@ -977,8 +1013,7 @@ def test_csv_bool_na(datapath, memory_leak_check):
 
 
 def test_csv_fname_comp(datapath, memory_leak_check):
-    """Test CSV read with filename computed across Bodo functions
-    """
+    """Test CSV read with filename computed across Bodo functions"""
 
     @bodo.jit
     def test_impl(data_folder):
@@ -1397,19 +1432,32 @@ def test_csv_header_none(datapath, memory_leak_check):
 
 
 def test_csv_sep_arg(datapath, memory_leak_check):
-    """Test passing 'sep' argument as JIT argument in read_csv()
-    """
+    """Test passing 'sep' argument as JIT argument in read_csv()"""
     fname = datapath("csv_data2.csv")
 
     def test_impl(fname, sep):
         return pd.read_csv(fname, sep=sep)
 
-    check_func(test_impl, (fname, "|",), check_dtype=False)
+    check_func(
+        test_impl,
+        (
+            fname,
+            "|",
+        ),
+        check_dtype=False,
+    )
 
     compressed_names = compress_file(fname)
     try:
         for fname in compressed_names:
-            check_func(test_impl, (fname, "|",), check_dtype=False)
+            check_func(
+                test_impl,
+                (
+                    fname,
+                    "|",
+                ),
+                check_dtype=False,
+            )
     finally:
         remove_files(compressed_names)
 
@@ -1428,8 +1476,7 @@ def test_csv_int_none(datapath, memory_leak_check):
 
 
 def test_csv_spark_header(datapath, memory_leak_check):
-    """Test reading Spark csv outputs containing header & infer dtypes
-    """
+    """Test reading Spark csv outputs containing header & infer dtypes"""
     fname1 = datapath("example_single.csv")
     fname2 = datapath("example_multi.csv")
 
@@ -1468,8 +1515,7 @@ def test_csv_spark_header(datapath, memory_leak_check):
 
 
 def test_csv_header_write_read(datapath, memory_leak_check):
-    """Test writing and reading csv outputs containing headers
-    """
+    """Test writing and reading csv outputs containing headers"""
 
     df = pd.read_csv(datapath("example.csv"))
     pd_fname = "pd_csv_header_test.csv"
@@ -1527,8 +1573,7 @@ def test_csv_cat1(datapath, memory_leak_check):
 
 
 def test_csv_date_col_name(datapath, memory_leak_check):
-    """Test the use of column names in "parse_dates" of read_csv
-    """
+    """Test the use of column names in "parse_dates" of read_csv"""
     fname = datapath("csv_data_date1.csv")
 
     def test_impl(fname):
@@ -1556,7 +1601,12 @@ def test_csv_read_only_datetime1(datapath, memory_leak_check):
     fname = datapath("csv_data_only_date1.csv")
 
     def test_impl(fname):
-        return pd.read_csv(fname, names=["A"], dtype={"A": str}, parse_dates=["A"],)
+        return pd.read_csv(
+            fname,
+            names=["A"],
+            dtype={"A": str},
+            parse_dates=["A"],
+        )
 
     check_func(test_impl, (fname,))
 
@@ -1576,7 +1626,10 @@ def test_csv_read_only_datetime2(datapath, memory_leak_check):
 
     def test_impl(fname):
         return pd.read_csv(
-            fname, names=["A", "B"], dtype={"A": str, "B": str}, parse_dates=[0, 1],
+            fname,
+            names=["A", "B"],
+            dtype={"A": str, "B": str},
+            parse_dates=[0, 1],
         )
 
     check_func(test_impl, (fname,))
@@ -1643,10 +1696,16 @@ def test_csv_dir_int_nulls_multi(datapath, memory_leak_check):
     fname = datapath("int_nulls_multi.csv")
 
     def test_impl(fname):
-        return pd.read_csv(fname, names=["A"], dtype={"A": "Int32"},)
+        return pd.read_csv(
+            fname,
+            names=["A"],
+            dtype={"A": "Int32"},
+        )
 
     py_output = pd.read_csv(
-        datapath("int_nulls.csv"), names=["A"], dtype={"A": "Int32"},
+        datapath("int_nulls.csv"),
+        names=["A"],
+        dtype={"A": "Int32"},
     )
 
     check_func(test_impl, (fname,), py_output=py_output)
@@ -1690,12 +1749,16 @@ def test_csv_dir_str_arr_single(datapath, memory_leak_check):
     fname = datapath("str_arr_single.csv")
 
     def test_impl(fname):
-        return pd.read_csv(fname, names=["A", "B"], dtype={"A": str, "B": str},).fillna(
-            ""
-        )
+        return pd.read_csv(
+            fname,
+            names=["A", "B"],
+            dtype={"A": str, "B": str},
+        ).fillna("")
 
     py_output = pd.read_csv(
-        datapath("str_arr.csv"), names=["A", "B"], dtype={"A": str, "B": str},
+        datapath("str_arr.csv"),
+        names=["A", "B"],
+        dtype={"A": str, "B": str},
     ).fillna("")
 
     check_func(test_impl, (fname,), py_output=py_output)
@@ -1715,12 +1778,16 @@ def test_csv_dir_str_arr_multi(datapath, memory_leak_check):
     fname = datapath("str_arr_parts.csv")
 
     def test_impl(fname):
-        return pd.read_csv(fname, names=["A", "B"], dtype={"A": str, "B": str},).fillna(
-            ""
-        )
+        return pd.read_csv(
+            fname,
+            names=["A", "B"],
+            dtype={"A": str, "B": str},
+        ).fillna("")
 
     py_output = pd.read_csv(
-        datapath("str_arr.csv"), names=["A", "B"], dtype={"A": str, "B": str},
+        datapath("str_arr.csv"),
+        names=["A", "B"],
+        dtype={"A": str, "B": str},
     ).fillna("")
 
     check_func(test_impl, (fname,), py_output=py_output)
@@ -1733,8 +1800,7 @@ def test_csv_dir_str_arr_multi(datapath, memory_leak_check):
 
 
 def test_excel1(datapath, memory_leak_check):
-    """Test pd.read_excel()
-    """
+    """Test pd.read_excel()"""
 
     def test_impl1(fname):
         return pd.read_excel(fname, parse_dates=[2])
@@ -1770,7 +1836,10 @@ def test_excel1(datapath, memory_leak_check):
             "E": np.bool_,
         }
         return pd.read_excel(
-            fname, sheet_name="Sheet1", parse_dates=["C"], dtype=dtype,
+            fname,
+            sheet_name="Sheet1",
+            parse_dates=["C"],
+            dtype=dtype,
         )
 
     # passing file name as argument to exercise value-based dispatch
@@ -1786,8 +1855,7 @@ def test_excel1(datapath, memory_leak_check):
 
 
 def test_unsupported_error_checking(memory_leak_check):
-    """make sure BodoError is raised for unsupported call
-    """
+    """make sure BodoError is raised for unsupported call"""
     # test an example I/O call
     def test_impl():
         return pd.read_spss("data.dat")
@@ -1810,8 +1878,7 @@ def test_csv_invalid_path():
 
 
 def test_csv_invalid_path_const(memory_leak_check):
-    """test error raise when CSV file path provided as constant but is invalid.
-    """
+    """test error raise when CSV file path provided as constant but is invalid."""
 
     def test_impl():
         return pd.read_csv("in_csv.csv")
@@ -1821,8 +1888,7 @@ def test_csv_invalid_path_const(memory_leak_check):
 
 
 def test_read_parquet_invalid_path(memory_leak_check):
-    """test error raise when parquet file path is invalid in C++ code.
-    """
+    """test error raise when parquet file path is invalid in C++ code."""
 
     def test_impl():
         df = pd.read_parquet("I_dont_exist.pq")
@@ -1833,8 +1899,7 @@ def test_read_parquet_invalid_path(memory_leak_check):
 
 
 def test_read_parquet_invalid_path_const(memory_leak_check):
-    """test error raise when parquet file path provided as constant but is invalid.
-    """
+    """test error raise when parquet file path provided as constant but is invalid."""
 
     def test_impl():
         return pd.read_parquet("I_dont_exist.pq")
