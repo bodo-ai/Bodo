@@ -3,49 +3,40 @@
 Indexing support for Series objects, including loc/iloc/at/iat types.
 """
 import operator
+
 import numpy as np
-from numba.core import types, cgutils
-from numba.extending import (
-    models,
-    register_model,
-    lower_cast,
-    infer_getattr,
-    type_callable,
-    infer,
-    overload,
-    make_attribute_wrapper,
-    intrinsic,
-    overload_attribute,
-)
-from numba.extending import (
-    models,
-    register_model,
-    lower_cast,
-    infer_getattr,
-    type_callable,
-    infer,
-    overload,
-    make_attribute_wrapper,
-)
+from numba.core import cgutils, types
 from numba.core.typing.templates import (
-    infer_global,
     AbstractTemplate,
-    signature,
     AttributeTemplate,
     bound_function,
+    infer_global,
+    signature,
 )
+from numba.extending import (
+    infer,
+    infer_getattr,
+    intrinsic,
+    lower_cast,
+    make_attribute_wrapper,
+    models,
+    overload,
+    overload_attribute,
+    register_model,
+    type_callable,
+)
+
 import bodo
+from bodo.hiframes.datetime_timedelta_ext import datetime_timedelta_type
+from bodo.hiframes.pd_index_ext import NumericIndexType, RangeIndexType
 from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.hiframes.pd_timestamp_ext import (
-    pandas_timestamp_type,
     convert_datetime64_to_timestamp,
     convert_numpy_timedelta64_to_datetime_timedelta,
     integer_to_dt64,
+    pandas_timestamp_type,
 )
-from bodo.hiframes.datetime_timedelta_ext import datetime_timedelta_type
-from bodo.hiframes.pd_index_ext import NumericIndexType, RangeIndexType
-from bodo.utils.typing import is_list_like_index_type, BodoError
-
+from bodo.utils.typing import BodoError, is_list_like_index_type
 
 ##############################  iat  ######################################
 
@@ -378,6 +369,19 @@ def overload_series_loc_getitem(I, idx):
 
         return impl
 
+    # int label from RangeIndex, e.g. S.loc[3]
+    if isinstance(idx, types.Integer) and isinstance(I.stype.index, RangeIndexType):
+
+        def impl_range_index_int(I, idx):  # pragma: no cover
+            S = I._obj
+            arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+            index = bodo.hiframes.pd_series_ext.get_series_index(S)
+            # calculate array index from label value
+            arr_idx = (idx - index._start) // index._step
+            return arr[arr_idx]
+
+        return impl_range_index_int
+
     # TODO: error-checking test
     raise BodoError(
         "Series.loc[] getitem (location-based indexing) using {} not supported yet".format(
@@ -542,8 +546,7 @@ def overload_series_setitem(S, idx, val):
 
 @overload(operator.setitem, no_unliteral=True)
 def overload_array_list_setitem(A, idx, val):
-    """Support setitem of Arrays with list/Series index (since not supported by Numba)
-    """
+    """Support setitem of Arrays with list/Series index (since not supported by Numba)"""
     if isinstance(A, types.Array) and isinstance(idx, (types.List, SeriesType)):
 
         def impl(A, idx, val):  # pragma: no cover

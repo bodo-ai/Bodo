@@ -2,34 +2,36 @@
 """
 Unittests for DataFrames
 """
-import unittest
-import sys
-import pandas as pd
-import numpy as np
 import datetime
-from decimal import Decimal
-import pytest
 import random
+import sys
+import unittest
+from decimal import Decimal
 
 import numba
+import numpy as np
+import pandas as pd
+import pytest
+
 import bodo
-from bodo.utils.typing import BodoError, BodoWarning
 from bodo.tests.utils import (
-    count_array_REPs,
-    count_parfor_REPs,
-    count_parfor_OneDs,
-    count_array_OneDs,
-    dist_IR_contains,
-    get_start_end,
-    check_func,
-    is_bool_object_series,
-    _get_dist_arg,
     AnalysisTestPipeline,
+    _get_dist_arg,
+    check_func,
+    count_array_OneDs,
+    count_array_REPs,
+    count_parfor_OneDs,
+    count_parfor_REPs,
+    dist_IR_contains,
     gen_random_arrow_array_struct_int,
     gen_random_arrow_array_struct_list_int,
     gen_random_arrow_list_list_int,
     gen_random_arrow_struct_struct,
+    get_start_end,
+    is_bool_object_series,
 )
+from bodo.utils.typing import BodoError, BodoWarning
+
 
 # TODO: other possible df types like Categorical, dt64, td64, ...
 @pytest.fixture(
@@ -437,8 +439,7 @@ def test_unbox_df1(df_value, memory_leak_check):
 
 @pytest.mark.slow
 def test_unbox_df2(column_name_df_value, memory_leak_check):
-    """unbox column with name overlaps with pandas function
-    """
+    """unbox column with name overlaps with pandas function"""
 
     def impl1(df_arg):
         return df_arg["product"]
@@ -667,8 +668,7 @@ def test_df_replace(memory_leak_check):
 
 @pytest.mark.slow
 def test_box_df(memory_leak_check):
-    """box dataframe contains column with name overlaps with pandas function
-    """
+    """box dataframe contains column with name overlaps with pandas function"""
 
     def impl():
         df = pd.DataFrame({"product": ["a", "b", "c"], "keys": [1, 2, 3]})
@@ -701,8 +701,7 @@ def test_df_index(df_value, memory_leak_check):
 
 @pytest.mark.slow
 def test_df_index_range_index(memory_leak_check):
-    """test RangeIndex created inside the function
-    """
+    """test RangeIndex created inside the function"""
 
     def impl():
         df = pd.DataFrame({"A": [2, 3, 1]})
@@ -845,8 +844,8 @@ def test_df_rename(memory_leak_check):
         d["C"] = "dd"
         return df.rename(columns=d)
 
-    def impl5(df,a,b):
-        df.rename(columns={"B": "bb", "C": "cc"}, inplace=(a>b))
+    def impl5(df, a, b):
+        df.rename(columns={"B": "bb", "C": "cc"}, inplace=(a > b))
         return df
 
     def impl6(df):
@@ -877,7 +876,7 @@ def test_df_rename(memory_leak_check):
         BodoError,
         match="'inplace' keyword only supports boolean constant assignment",
     ):
-        bodo.jit(impl5)(df,2,3)
+        bodo.jit(impl5)(df, 2, 3)
     with pytest.raises(
         BodoError,
         match="'error' keyword only supports default parameter values 'None' and 'ignore'",
@@ -1094,10 +1093,8 @@ def test_df_max(numeric_df_value, memory_leak_check):
         ),
     ],
 )
-
 def test_df_reduce_axis1(df, memory_leak_check, is_slow_run):
-    """test dataframe reductions across columns (axis=1)
-    """
+    """test dataframe reductions across columns (axis=1)"""
     # TODO: support and test other reduce functions
     # TODO: Test with nullable ints
 
@@ -2419,7 +2416,7 @@ def test_loc_bool_arr(memory_leak_check):
 
 
 def test_loc_col_name(memory_leak_check):
-    """test df.iloc[slice, col_ind]"""
+    """test df.loc[slice, col_ind]"""
 
     def test_impl(df):
         return df.loc[(df.A > 3).values, "B"].values
@@ -2427,6 +2424,32 @@ def test_loc_col_name(memory_leak_check):
     n = 11
     df = pd.DataFrame({"A": np.arange(n), "B": np.arange(n) ** 2})
     check_func(test_impl, (df,))
+
+
+def test_loc_range_index(memory_leak_check):
+    """test df.loc[int, col_ind] for RangeIndex"""
+
+    def test_impl(df, i):
+        return df.loc[i, "B"]
+
+    n = 11
+    i = 4
+    df = pd.DataFrame({"A": np.arange(n), "B": np.arange(n) ** 2})
+    check_func(test_impl, (df, i))
+
+
+def test_loc_range_index_prange(memory_leak_check):
+    """test df.loc[int, col_ind] for RangeIndex in a parallel loop"""
+
+    def impl(n):
+        df = pd.DataFrame({"A": np.arange(n), "B": np.arange(n) ** 2})
+        s = 0
+        for i in bodo.prange(len(df)):
+            s += df.loc[i, "B"]
+        return s
+
+    n = 11
+    check_func(impl, (n,))
 
 
 def test_loc_col_select(memory_leak_check):
@@ -2661,10 +2684,11 @@ def test_unsupported_df_method():
 
     def test_impl():
         df = pd.DataFrame({"A": [1, 2, 3], "B": [2, 3, 4]})
-        return df.agg(['sum', 'min'])
+        return df.agg(["sum", "min"])
 
     with pytest.raises(BodoError, match="not supported yet"):
         bodo.jit(test_impl)()
+
 
 ############################# old tests ###############################
 
