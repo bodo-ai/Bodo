@@ -4,7 +4,7 @@ Give Customers Access to Binaries
 ---------------------------------
 By default, we give customers access to our ``bodo.ai`` and ``bodo.ai-dev`` conda channels on Artifactory which hold the official and engineering releases respectively.
 
-- Use the following command from your command line to generate a token for the customer username <customer_user>::
+- Use the following command from your command line to generate a token for the customer username ``<customer_user>``::
 
      curl -u<admin_username>:<admin_password> -XPOST "https://bodo.jfrog.io/artifactory/api/security/token" -d "username=<customer_username>" -d "scope=member-of-groups:Customers" -d "expires_in=0"
 
