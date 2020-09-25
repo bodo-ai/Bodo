@@ -25,7 +25,10 @@ from numba.extending import (
 )
 
 from bodo.hiframes.datetime_date_ext import datetime_date_array_type
-from bodo.hiframes.pd_categorical_ext import CategoricalArray, get_categories_int_type
+from bodo.hiframes.pd_categorical_ext import (
+    CategoricalArray,
+    get_categories_int_type,
+)
 from bodo.libs import array_ext
 from bodo.libs.array_item_arr_ext import (
     ArrayItemArrayPayloadType,
@@ -39,10 +42,10 @@ from bodo.libs.decimal_arr_ext import DecimalArrayType, int128_type
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.str_arr_ext import (
     _get_string_arr_payload,
-    string_array_type,
     char_arr_type,
-    offset_arr_type,
     null_bitmap_arr_type,
+    offset_arr_type,
+    string_array_type,
 )
 from bodo.libs.struct_arr_ext import (
     StructArrayPayloadType,
@@ -437,6 +440,9 @@ def array_to_info(typingctx, arr_type_t=None):
         # TODO: create CategoricalArray on C++ side to handle NAs (-1) properly
         is_categorical = False
         if isinstance(arr_type, CategoricalArray):
+            # undo the initial incref since the original array is not fully passed to
+            # C++ (e.g. dtype value is not passed)
+            context.nrt.decref(builder, arr_type, in_arr)
             num_categories = context.compile_internal(
                 builder,
                 lambda a: len(a.dtype.categories),
@@ -449,6 +455,8 @@ def array_to_info(typingctx, arr_type_t=None):
             int_dtype = get_categories_int_type(arr_type.dtype)
             arr_type = types.Array(int_dtype, 1, "C")
             is_categorical = True
+            # incref the actual array passed to C++
+            context.nrt.incref(builder, arr_type, in_arr)
 
         # Numpy
         if isinstance(arr_type, types.Array):

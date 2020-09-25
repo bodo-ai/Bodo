@@ -2585,7 +2585,6 @@ def test_dataframe_columns_const_passing(memory_leak_check):
     check_func(impl, (df,))
 
 
-# TODO: add memory_leak_check
 def test_dataframe_sample_number(memory_leak_check):
     """Checking the random routine is especially difficult to do.
     We can mostly only check incidental information about the code"""

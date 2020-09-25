@@ -1,30 +1,32 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
-import sys
-import random
-import string
 import datetime
+import random
 import re
-import pandas as pd
-import numpy as np
-import bodo
-from bodo.utils.typing import BodoError
+import string
+import sys
 from decimal import Decimal
-from bodo.tests.utils import (
-    count_array_REPs,
-    count_parfor_REPs,
-    count_parfor_OneDs,
-    count_array_OneDs,
-    dist_IR_contains,
-    check_parallel_coherency,
-    gen_random_decimal_array,
-    gen_random_string_array,
-    gen_random_list_string_array,
-    convert_non_pandas_columns,
-    get_start_end,
-    check_func,
-    check_caching,
-)
+
+import numpy as np
+import pandas as pd
 import pytest
+
+import bodo
+from bodo.tests.utils import (
+    check_caching,
+    check_func,
+    check_parallel_coherency,
+    convert_non_pandas_columns,
+    count_array_OneDs,
+    count_array_REPs,
+    count_parfor_OneDs,
+    count_parfor_REPs,
+    dist_IR_contains,
+    gen_random_decimal_array,
+    gen_random_list_string_array,
+    gen_random_string_array,
+    get_start_end,
+)
+from bodo.utils.typing import BodoError
 
 
 @pytest.fixture(
@@ -258,8 +260,7 @@ def test_sum_string(memory_leak_check):
 
 
 def test_random_decimal_sum_min_max_last(is_slow_run, memory_leak_check):
-    """We do not have decimal as index. Therefore we have to use as_index=False
-    """
+    """We do not have decimal as index. Therefore we have to use as_index=False"""
 
     def impl1(df):
         df_ret = df.groupby("A", as_index=False).nunique()
@@ -658,8 +659,7 @@ def test_cumsum_reverse_shuffle_large_numpy():
     check_func(f, (df,))
 
 
-# TODO: add memory leak check
-def test_sum_categorical_key():
+def test_sum_categorical_key(memory_leak_check):
     """Testing of categorical keys and their missing value"""
 
     def f(df):
@@ -684,9 +684,8 @@ def test_sum_categorical_key():
     check_func(f, (df,), sort_output=True, reset_index=True)
 
 
-# TODO: add memory leak check when issues addressed
 @pytest.mark.slow
-def test_all_categorical_count():
+def test_all_categorical_count(memory_leak_check):
     """Testing of categorical keys and their missing value.
     Also the count itself is done for a categorical column with missing value"""
 
@@ -712,8 +711,7 @@ def test_all_categorical_count():
     check_func(f, (df,), sort_output=True, reset_index=True)
 
 
-# TODO: add memory leak check when cumsum leak issue resolved
-def test_cumsum_exscan_categorical_random():
+def test_cumsum_exscan_categorical_random(memory_leak_check):
     """For categorical and cumsum, a special code path allows for better performance"""
 
     def f1(df):
@@ -1399,8 +1397,8 @@ def test_groupby_agg_const_dict():
 
 
 def test_groupby_agg_caching(memory_leak_check):
-    """ Test compiling function that uses groupby.agg(udf) with cache=True
-        and loading from cache """
+    """Test compiling function that uses groupby.agg(udf) with cache=True
+    and loading from cache"""
 
     def impl(df):
         A = df.groupby("A").agg(lambda x: x.max() - x.min())
@@ -1707,8 +1705,7 @@ def test_as_index_count(memory_leak_check):
 
 
 def test_single_col_reset_index(test_df, memory_leak_check):
-    """We need the reset_index=True because otherwise the order is scrambled
-    """
+    """We need the reset_index=True because otherwise the order is scrambled"""
 
     def impl1(df):
         A = df.groupby("A")["B"].sum().reset_index()
