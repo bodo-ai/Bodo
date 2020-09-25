@@ -1,8 +1,9 @@
-import pandas as pd
 import numpy as np
+import pandas as pd
+import pytest
+
 import bodo
 from bodo.utils.typing import BodoError
-import pytest
 
 
 @pytest.fixture(params=[pd.Series(["New_York", "Lisbon", "Tokyo", "Paris", "Munich"])])
@@ -290,15 +291,10 @@ def test_split_args(test_sr_split, memory_leak_check):
     """
 
     def impl(test_sr_split):
-        return test_sr_split.str.split(pat=None, n=2)
-
-    def impl2(test_sr_split):
         return test_sr_split.str.split(expand=True)
 
     with pytest.raises(BodoError, match="is not supported"):
         bodo.jit(impl)(test_sr_split)
-    with pytest.raises(BodoError, match="is not supported"):
-        bodo.jit(impl2)(test_sr_split)
 
 
 def test_split_pat(test_sr_split, memory_leak_check):
