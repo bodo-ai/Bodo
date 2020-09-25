@@ -25,7 +25,10 @@ from numba.extending import (
 )
 
 from bodo.hiframes.datetime_date_ext import datetime_date_array_type
-from bodo.hiframes.pd_categorical_ext import CategoricalArray, get_categories_int_type
+from bodo.hiframes.pd_categorical_ext import (
+    CategoricalArray,
+    get_categories_int_type,
+)
 from bodo.libs import array_ext
 from bodo.libs.array_item_arr_ext import (
     ArrayItemArrayPayloadType,
@@ -39,11 +42,12 @@ from bodo.libs.decimal_arr_ext import DecimalArrayType, int128_type
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.str_arr_ext import (
     _get_string_arr_payload,
-    string_array_type,
     char_arr_type,
-    offset_arr_type,
     null_bitmap_arr_type,
+    offset_arr_type,
+    string_array_type,
 )
+from bodo.libs.str_ext import Mstats
 from bodo.libs.struct_arr_ext import (
     StructArrayPayloadType,
     StructArrayType,
@@ -73,10 +77,10 @@ ll.add_symbol("info_from_table", array_ext.info_from_table)
 ll.add_symbol("delete_info_decref_array", array_ext.delete_info_decref_array)
 ll.add_symbol("delete_table_decref_arrays", array_ext.delete_table_decref_arrays)
 ll.add_symbol("delete_table", array_ext.delete_table)
-ll.add_symbol("get_stats_alloc", array_ext.get_stats_alloc)
-ll.add_symbol("get_stats_free", array_ext.get_stats_free)
-ll.add_symbol("get_stats_mi_alloc", array_ext.get_stats_mi_alloc)
-ll.add_symbol("get_stats_mi_free", array_ext.get_stats_mi_free)
+ll.add_symbol("get_stats_alloc_arr", array_ext.get_stats_alloc)
+ll.add_symbol("get_stats_free_arr", array_ext.get_stats_free)
+ll.add_symbol("get_stats_mi_alloc_arr", array_ext.get_stats_mi_alloc)
+ll.add_symbol("get_stats_mi_free_arr", array_ext.get_stats_mi_free)
 ll.add_symbol("shuffle_table", array_ext.shuffle_table)
 ll.add_symbol("hash_join_table", array_ext.hash_join_table)
 ll.add_symbol("drop_duplicates_table", array_ext.drop_duplicates_table)
@@ -1230,26 +1234,24 @@ def delete_table(typingctx, table_t=None):
 
 
 get_stats_alloc = types.ExternalFunction(
-    "get_stats_alloc",
+    "get_stats_alloc_arr",
     types.uint64(),
 )
 
 get_stats_free = types.ExternalFunction(
-    "get_stats_free",
+    "get_stats_free_arr",
     types.uint64(),
 )
 
 get_stats_mi_alloc = types.ExternalFunction(
-    "get_stats_mi_alloc",
+    "get_stats_mi_alloc_arr",
     types.uint64(),
 )
 
 get_stats_mi_free = types.ExternalFunction(
-    "get_stats_mi_free",
+    "get_stats_mi_free_arr",
     types.uint64(),
 )
-
-Mstats = namedtuple("Mstats", ["alloc", "free", "mi_alloc", "mi_free"])
 
 
 @numba.njit

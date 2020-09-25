@@ -577,7 +577,7 @@ def clean_pq_files(mode, pandas_pq_path, bodo_pq_path):
         shutil.rmtree(bodo_pq_path, ignore_errors=True)
 
 
-def test_read_parquet_cache(datapath):
+def test_read_parquet_cache(datapath, memory_leak_check):
     """
     test read_parquet with cache=True
     """

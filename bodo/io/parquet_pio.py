@@ -1,58 +1,95 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 import os
 import warnings
-import numba
-from numba.core import ir, types
-from numba.core.ir_utils import (
-    mk_unique_var,
-    find_const,
-    compile_to_numba_ir,
-    replace_arg_nodes,
-    guard,
-)
+from collections import defaultdict, namedtuple
 
-from numba.core.typing.templates import infer_global, AbstractTemplate
-from numba.core.typing import signature
-from numba.core.imputils import impl_ret_new_ref
+import llvmlite.binding as ll
+import numba
 import numpy as np
+from numba.core import ir, types
+from numba.core.imputils import impl_ret_new_ref
+from numba.core.ir_utils import (
+    compile_to_numba_ir,
+    find_const,
+    guard,
+    mk_unique_var,
+    replace_arg_nodes,
+)
+from numba.core.typing import signature
+from numba.core.typing.templates import AbstractTemplate, infer_global
+from numba.extending import intrinsic
+
 import bodo
+import bodo.ir.parquet_ext
+from bodo.hiframes.datetime_date_ext import (
+    DatetimeDateArrayType,
+    datetime_date_array_type,
+    datetime_date_type,
+)
 from bodo.hiframes.pd_series_ext import _get_series_array_type
-from bodo.libs.str_ext import string_type, unicode_to_utf8
-from bodo.libs.str_arr_ext import string_array_type, char_arr_type
+from bodo.io import parquet_cpp
+from bodo.io.fs_io import (
+    directory_of_files_common_filter,
+    get_hdfs_fs,
+    get_s3_fs,
+    hdfs_is_directory,
+    hdfs_list_dir_fnames,
+    s3_is_directory,
+    s3_list_dir_fnames,
+)
+from bodo.libs.array import _lower_info_to_array_numpy, array_info_type
 from bodo.libs.array_item_arr_ext import (
+    ArrayItemArrayPayloadType,
     ArrayItemArrayType,
     _get_array_item_arr_payload,
-    ArrayItemArrayPayloadType,
     construct_array_item_array,
     define_array_item_dtor,
 )
-from bodo.libs.struct_arr_ext import StructArrayType
-from bodo.hiframes.datetime_date_ext import (
-    datetime_date_type,
-    datetime_date_array_type,
-    DatetimeDateArrayType,
-)
+from bodo.libs.bool_arr_ext import BooleanArrayType, boolean_array
+from bodo.libs.decimal_arr_ext import Decimal128Type, DecimalArrayType
+from bodo.libs.distributed_api import get_end, get_node_portion, get_start
 from bodo.libs.int_arr_ext import IntegerArrayType
-from bodo.libs.decimal_arr_ext import DecimalArrayType, Decimal128Type
-from bodo.libs.bool_arr_ext import boolean_array, BooleanArrayType
-from bodo.libs.array import array_info_type, _lower_info_to_array_numpy
-from bodo.utils.utils import unliteral_all, sanitize_varname, is_null_pointer
-from bodo.utils.typing import BodoError, BodoWarning
-import bodo.ir.parquet_ext
+from bodo.libs.str_arr_ext import char_arr_type, string_array_type
+from bodo.libs.str_ext import Mstats, string_type, unicode_to_utf8
+from bodo.libs.struct_arr_ext import StructArrayType
 from bodo.transforms import distributed_pass
 from bodo.utils.transform import get_const_value
-from bodo.io.fs_io import (
-    get_s3_fs,
-    s3_is_directory,
-    s3_list_dir_fnames,
-    get_hdfs_fs,
-    hdfs_is_directory,
-    hdfs_list_dir_fnames,
-    directory_of_files_common_filter,
+from bodo.utils.typing import BodoError, BodoWarning
+from bodo.utils.utils import is_null_pointer, sanitize_varname, unliteral_all
+
+ll.add_symbol("get_stats_alloc_pq", parquet_cpp.get_stats_alloc)
+ll.add_symbol("get_stats_free_pq", parquet_cpp.get_stats_free)
+ll.add_symbol("get_stats_mi_alloc_pq", parquet_cpp.get_stats_mi_alloc)
+ll.add_symbol("get_stats_mi_free_pq", parquet_cpp.get_stats_mi_free)
+
+
+get_stats_alloc = types.ExternalFunction(
+    "get_stats_alloc_pq",
+    types.uint64(),
 )
-from bodo.libs.distributed_api import get_start, get_end, get_node_portion
-from numba.extending import intrinsic
-from collections import defaultdict
+
+get_stats_free = types.ExternalFunction(
+    "get_stats_free_pq",
+    types.uint64(),
+)
+
+get_stats_mi_alloc = types.ExternalFunction(
+    "get_stats_mi_alloc_pq",
+    types.uint64(),
+)
+
+get_stats_mi_free = types.ExternalFunction(
+    "get_stats_mi_free_pq",
+    types.uint64(),
+)
+
+
+@numba.njit()
+def get_allocation_stats():  # pragma: no cover
+    """get allocation stats for parquet allocated in Bodo's C++ parquet runtime"""
+    return Mstats(
+        get_stats_alloc(), get_stats_free(), get_stats_mi_alloc(), get_stats_mi_free()
+    )
 
 
 # read Arrow Int columns as nullable int array (IntegerArrayType)
@@ -846,11 +883,11 @@ class ReadParquetArrowArrayInfer(AbstractTemplate):
         return signature(args[4].instance_type, *unliteral_all(args[:4]))
 
 
+import llvmlite.binding as ll
+from llvmlite import ir as lir
 from numba.core import cgutils
 from numba.core.imputils import lower_builtin
 from numba.np.arrayobj import make_array
-from llvmlite import ir as lir
-import llvmlite.binding as ll
 
 from bodo.config import _has_pyarrow
 
