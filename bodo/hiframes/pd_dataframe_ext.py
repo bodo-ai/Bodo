@@ -2,97 +2,100 @@
 """
 Implement pd.DataFrame typing and data model handling.
 """
+import hashlib
+import inspect
+import json
 import operator
 import warnings
-import json
 from collections import namedtuple
-import inspect
-import hashlib
-import pandas as pd
-import numpy as np
+
+import llvmlite.binding as ll
 import numba
-from numba.core import types, cgutils
-from bodo.hiframes.pd_index_ext import StringIndexType
-from bodo.libs.struct_arr_ext import StructArrayType, StructType
-from bodo.libs.array_item_arr_ext import ArrayItemArrayType
-from numba.extending import (
-    models,
-    register_model,
-    lower_cast,
-    infer_getattr,
-    type_callable,
-    infer,
-    overload,
-    make_attribute_wrapper,
-    intrinsic,
-    lower_builtin,
-    overload_method,
-)
+import numpy as np
+import pandas as pd
+from llvmlite import ir as lir
+from numba.core import cgutils, types
+from numba.core.imputils import impl_ret_borrowed, lower_constant
 from numba.core.typing.templates import (
-    infer_global,
     AbstractTemplate,
-    signature,
     AttributeTemplate,
     bound_function,
+    infer_global,
+    signature,
+)
+from numba.extending import (
+    infer,
+    infer_getattr,
+    intrinsic,
+    lower_builtin,
+    lower_cast,
+    make_attribute_wrapper,
+    models,
+    overload,
+    overload_method,
+    register_model,
+    type_callable,
 )
 from numba.parfors.array_analysis import ArrayAnalysis
-from numba.core.imputils import impl_ret_borrowed, lower_constant
-from llvmlite import ir as lir
 
 import bodo
+from bodo.hiframes.datetime_date_ext import datetime_date_array_type
+from bodo.hiframes.pd_index_ext import (
+    NumericIndexType,
+    RangeIndexType,
+    StringIndexType,
+    is_pd_index_type,
+)
+from bodo.hiframes.pd_multi_index_ext import MultiIndexType
 from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.hiframes.series_indexing import SeriesIlocType
-from bodo.hiframes.pd_index_ext import RangeIndexType, NumericIndexType
+from bodo.io import csv_cpp, json_cpp
+from bodo.libs.array import arr_info_list_to_table, array_to_info
+from bodo.libs.array_item_arr_ext import ArrayItemArrayType
+from bodo.libs.bool_arr_ext import boolean_array
+from bodo.libs.decimal_arr_ext import DecimalArrayType
+from bodo.libs.distributed_api import bcast, bcast_scalar
+from bodo.libs.int_arr_ext import IntegerArrayType
+from bodo.libs.str_arr_ext import str_arr_from_sequence, string_array_type
 from bodo.libs.str_ext import string_type, unicode_to_utf8
-from bodo.utils.typing import (
-    BodoWarning,
-    BodoError,
-    is_overload_none,
-    is_overload_constant_bool,
-    is_overload_bool,
-    is_overload_constant_str,
-    is_overload_constant_list,
-    is_overload_true,
-    is_overload_false,
-    is_overload_zero,
-    is_dtype_nullable,
-    get_overload_const_str,
-    get_overload_const_list,
-    is_overload_bool_list,
-    get_index_names,
-    get_index_data_arr_types,
-    raise_const_error,
-    is_overload_constant_tuple,
-    get_overload_const_tuple,
-    get_overload_const_int,
-    is_overload_constant_int,
-    raise_bodo_error,
-    check_unsupported_args,
-    ensure_constant_arg,
-    ensure_constant_values,
-    create_unsupported_overload,
-    get_overload_const,
-    get_udf_out_arr_type,
-    is_iterable_type,
-)
+from bodo.libs.struct_arr_ext import StructArrayType, StructType
+from bodo.utils.conversion import index_to_array
 from bodo.utils.transform import (
-    get_const_func_output_type,
     gen_const_tup,
+    get_const_func_output_type,
     get_const_tup_vals,
 )
-from bodo.utils.conversion import index_to_array
-from bodo.libs.array import array_to_info, arr_info_list_to_table
-from bodo.libs.int_arr_ext import IntegerArrayType
-from bodo.libs.decimal_arr_ext import DecimalArrayType
-from bodo.hiframes.datetime_date_ext import datetime_date_array_type
-from bodo.libs.str_arr_ext import string_array_type, str_arr_from_sequence
-from bodo.libs.bool_arr_ext import boolean_array
-from bodo.libs.distributed_api import bcast_scalar, bcast
-from bodo.hiframes.pd_index_ext import is_pd_index_type
-from bodo.hiframes.pd_multi_index_ext import MultiIndexType
-from bodo.io import csv_cpp, json_cpp
-import llvmlite.binding as ll
-
+from bodo.utils.typing import (
+    BodoError,
+    BodoWarning,
+    check_unsupported_args,
+    create_unsupported_overload,
+    ensure_constant_arg,
+    ensure_constant_values,
+    get_index_data_arr_types,
+    get_index_names,
+    get_overload_const,
+    get_overload_const_int,
+    get_overload_const_list,
+    get_overload_const_str,
+    get_overload_const_tuple,
+    get_udf_out_arr_type,
+    is_dtype_nullable,
+    is_iterable_type,
+    is_overload_bool,
+    is_overload_bool_list,
+    is_overload_constant_bool,
+    is_overload_constant_int,
+    is_overload_constant_list,
+    is_overload_constant_str,
+    is_overload_constant_tuple,
+    is_overload_false,
+    is_overload_none,
+    is_overload_true,
+    is_overload_zero,
+    raise_bodo_error,
+    raise_const_error,
+)
 
 _csv_write = types.ExternalFunction(
     "csv_write",
@@ -281,7 +284,7 @@ class DataFrameAttribute(AttributeTemplate):
             ).return_type
             dtypes.append(el_typ)
 
-        row_typ = types.NamedTuple(dtypes, Row)
+        row_typ = types.BaseTuple.from_types(dtypes, Row)
         arg_typs = (row_typ,)
         if f_args is not None:
             arg_typs += tuple(f_args.types)
@@ -2085,11 +2088,15 @@ def concat_overload(
             index = "bodo.hiframes.pd_index_ext.init_range_index(0, len(A0), 1, None)"
         else:
             index = "bodo.utils.conversion.index_from_array(bodo.libs.array_kernels.concat(({},)))\n".format(
-            ", ".join(
-                "bodo.utils.conversion.index_to_array(bodo.hiframes.pd_dataframe_ext.get_dataframe_index(objs[{}]))".format(i)
-                # ignore dummy string index of empty dataframes (test_append_empty_df)
-                for i in range(len(objs.types)) if len(objs[i].columns) > 0
-            ))
+                ", ".join(
+                    "bodo.utils.conversion.index_to_array(bodo.hiframes.pd_dataframe_ext.get_dataframe_index(objs[{}]))".format(
+                        i
+                    )
+                    # ignore dummy string index of empty dataframes (test_append_empty_df)
+                    for i in range(len(objs.types))
+                    if len(objs[i].columns) > 0
+                )
+            )
         return bodo.hiframes.dataframe_impl._gen_init_df(
             func_text,
             all_colnames,
@@ -2112,10 +2119,13 @@ def concat_overload(
             func_text += "  index = bodo.hiframes.pd_index_ext.init_range_index(0, len(out_arr), 1, None)\n"
         else:
             func_text += "  index = bodo.utils.conversion.index_from_array(bodo.libs.array_kernels.concat(({},)))\n".format(
-            ", ".join(
-                "bodo.utils.conversion.index_to_array(bodo.hiframes.pd_series_ext.get_series_index(objs[{}]))".format(i)
-                for i in range(len(objs.types))
-            ))
+                ", ".join(
+                    "bodo.utils.conversion.index_to_array(bodo.hiframes.pd_series_ext.get_series_index(objs[{}]))".format(
+                        i
+                    )
+                    for i in range(len(objs.types))
+                )
+            )
         func_text += (
             "  return bodo.hiframes.pd_series_ext.init_series(out_arr, index)\n"
         )
@@ -2134,8 +2144,10 @@ def concat_overload(
             func_text += "    arrs{0}.append(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {0}))\n".format(
                 col_no
             )
-            func_text += "  out_arr{0} = bodo.libs.array_kernels.concat(arrs{0})\n".format(
-                col_no
+            func_text += (
+                "  out_arr{0} = bodo.libs.array_kernels.concat(arrs{0})\n".format(
+                    col_no
+                )
             )
         if ignore_index:
             index = (
@@ -3110,10 +3122,12 @@ def to_csv_overload(
         or is_overload_constant_str(path_or_buf)
         or path_or_buf == string_type
     ):
-        raise BodoError("DataFrame.to_csv(): 'path_or_buf' argument should be None or string")
+        raise BodoError(
+            "DataFrame.to_csv(): 'path_or_buf' argument should be None or string"
+        )
     # TODO: refactor when objmode() can understand global string constant
     # String output case
-    if is_overload_none(path_or_buf): 
+    if is_overload_none(path_or_buf):
 
         def _impl(
             df,
