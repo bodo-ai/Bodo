@@ -1965,6 +1965,22 @@ def test_series_cum_minmaxprod(S, memory_leak_check):
     check_func(f3, (S,))
 
 
+@pytest.mark.parametrize(
+    "S",
+    [
+        pytest.param(pd.Series([1.0, 2.2, 3.1, 4.6, 5.9]), marks=pytest.mark.slow),
+        pytest.param(pd.Series([2, 3, 5, 8, 7]), marks=pytest.mark.slow),
+        pytest.param(pd.Series([7, 6, 5, 4, 1]), marks=pytest.mark.slow),
+        pd.Series([1.0, 2.2, 3.1, 4.6, 5.9], [3, 1, 0, 2, 4], name="ABC"),
+    ],
+)
+def test_np_prod(S, memory_leak_check):
+    def impl(S):
+        return np.prod(S)
+
+    check_func(impl, (S,))
+
+
 def test_series_rename(memory_leak_check):
     # TODO: renaming labels, etc.
     def test_impl(A):

@@ -25,8 +25,12 @@ def test_setitem_optional_int(bool_arr_value, memory_leak_check):
         A[i] = x
         return A
 
-    check_func(test_impl, (bool_arr_value.copy(), 1, False), copy_input=True, dist_test=False)
-    check_func(test_impl, (bool_arr_value.copy(), 0, True), copy_input=True, dist_test=False)
+    check_func(
+        test_impl, (bool_arr_value.copy(), 1, False), copy_input=True, dist_test=False
+    )
+    check_func(
+        test_impl, (bool_arr_value.copy(), 0, True), copy_input=True, dist_test=False
+    )
 
 
 def test_setitem_none_int(bool_arr_value, memory_leak_check):
@@ -107,3 +111,62 @@ def test_cmp_scalar(memory_leak_check):
     A = pd.Series([False, True, True, None, True, True, False], dtype="boolean")
     check_func(test_impl1, (A,))
     check_func(test_impl2, (A,))
+
+
+def test_max(memory_leak_check):
+    def test_impl(A):
+        return max(A)
+
+    # Doesn't work with a null value in python
+    A = pd.array([True, False, True, False])
+    check_func(test_impl, (A,))
+
+
+@pytest.mark.skip("Reduce not supported in Pandas")
+def test_np_max(bool_arr_value, memory_leak_check):
+    def test_impl(A):
+        return np.max(A)
+
+    check_func(test_impl, (bool_arr_value,))
+
+
+def test_min(memory_leak_check):
+    def test_impl(A):
+        return min(A)
+
+    # Doesn't work with a null value in python
+    A = pd.array([True, False, True, False])
+    check_func(test_impl, (A,))
+
+
+@pytest.mark.skip("Reduce not supported in Pandas")
+def test_np_min(bool_arr_value, memory_leak_check):
+    def test_impl(A):
+        return np.min(A)
+
+    check_func(test_impl, (bool_arr_value,))
+
+
+def test_sum(memory_leak_check):
+    def test_impl(A):
+        return sum(A)
+
+    # Doesn't work with a null value in python
+    A = pd.array([True, False, True, False])
+    check_func(test_impl, (A,))
+
+
+@pytest.mark.skip("Reduce not supported in Pandas")
+def test_np_sum(bool_arr_value, memory_leak_check):
+    def test_impl(A):
+        return np.sum(A)
+
+    check_func(test_impl, (bool_arr_value,))
+
+
+@pytest.mark.skip("Reduce not supported in Pandas")
+def test_np_prod(bool_arr_value, memory_leak_check):
+    def test_impl(A):
+        return np.prod(A)
+
+    check_func(test_impl, (bool_arr_value,))

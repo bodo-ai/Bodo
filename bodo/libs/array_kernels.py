@@ -665,10 +665,8 @@ def overload_sample_table_operation(data, ind_arr, n, frac, replace, parallel=Fa
         ", ".join("array_to_info(data[{}])".format(x) for x in range(count))
     )
     func_text += "  table_total = arr_info_list_to_table(info_list_total)\n"
-    func_text += (
-        "  out_table = sample_table(table_total, n, frac, replace, parallel)\n".format(
-            count
-        )
+    func_text += "  out_table = sample_table(table_total, n, frac, replace, parallel)\n".format(
+        count
     )
     for i_col in range(count):
         func_text += "  out_arr_{} = info_to_array(info_from_table(out_table, {}), data[{}])\n".format(
@@ -1059,10 +1057,7 @@ def concat_overload(arr_list):
                     bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(old_mask, j)
                     bodo.libs.int_arr_ext.set_bit_to_arr(new_mask, curr_bit, bit)
                     curr_bit += 1
-            return bodo.libs.int_arr_ext.init_integer_array(
-                out_data,
-                new_mask,
-            )
+            return bodo.libs.int_arr_ext.init_integer_array(out_data, new_mask,)
 
         return impl_int_arr_list
 
@@ -1595,3 +1590,46 @@ def arange_parallel_impl(return_type, *args):
 
 
 numba.parfors.parfor.replace_functions_map[("arange", "numpy")] = arange_parallel_impl
+
+
+@overload(np.max, inline="always", no_unliteral=True)
+@overload(max, inline="always", no_unliteral=True)
+def overload_array_max(A):
+    if isinstance(A, IntegerArrayType) or A == boolean_array:
+
+        def impl(A):  # pragma: no cover
+            return pd.Series(A).max()
+
+        return impl
+
+
+@overload(np.min, inline="always", no_unliteral=True)
+@overload(min, inline="always", no_unliteral=True)
+def overload_array_min(A):
+    if isinstance(A, IntegerArrayType) or A == boolean_array:
+
+        def impl(A):  # pragma: no cover
+            return pd.Series(A).min()
+
+        return impl
+
+
+@overload(np.sum, inline="always", no_unliteral=True)
+@overload(sum, inline="always", no_unliteral=True)
+def overload_array_sum(A):
+    if isinstance(A, IntegerArrayType) or A == boolean_array:
+
+        def impl(A):  # pragma: no cover
+            return pd.Series(A).sum()
+
+    return impl
+
+
+@overload(np.prod, inline="always", no_unliteral=True)
+def overload_array_prod(A):
+    if isinstance(A, IntegerArrayType) or A == boolean_array:
+
+        def impl(A):  # pragma: no cover
+            return pd.Series(A).prod()
+
+    return impl

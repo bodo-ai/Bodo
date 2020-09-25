@@ -3,41 +3,43 @@
 Implementation of Series attributes and methods using overload.
 """
 import operator
+
+import numba
 import numpy as np
 import pandas as pd
-import numba
 from numba.core import types
+from numba.core.typing.templates import AbstractTemplate, infer_global
 from numba.extending import overload, overload_attribute, overload_method
+
 import bodo
-from bodo.libs.str_ext import string_type
+from bodo.hiframes.pd_series_ext import SeriesType, if_series_to_array_type
+from bodo.libs.array_item_arr_ext import ArrayItemArrayType
+from bodo.libs.bool_arr_ext import BooleanArrayType, boolean_array
+from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.str_arr_ext import (
     get_str_arr_item_length,
     get_utf8_size,
     pre_alloc_string_array,
     string_array_type,
 )
-from bodo.hiframes.pd_series_ext import SeriesType, if_series_to_array_type
-from bodo.utils.typing import (
-    is_overload_none,
-    is_overload_true,
-    is_overload_false,
-    is_overload_constant_bool,
-    is_overload_zero,
-    is_overload_str,
-    BodoError,
-    is_overload_constant_str,
-    is_overload_constant_int,
-    is_literal_type,
-    get_literal_value,
-    get_overload_const_str,
-    get_overload_const_int,
-    check_unsupported_args,
-)
+from bodo.libs.str_ext import string_type
 from bodo.utils.transform import gen_const_tup, is_var_size_item_array_type
-from numba.core.typing.templates import infer_global, AbstractTemplate
-from bodo.libs.bool_arr_ext import BooleanArrayType, boolean_array
-from bodo.libs.int_arr_ext import IntegerArrayType
-from bodo.libs.array_item_arr_ext import ArrayItemArrayType
+from bodo.utils.typing import (
+    BodoError,
+    check_unsupported_args,
+    get_literal_value,
+    get_overload_const_int,
+    get_overload_const_str,
+    is_literal_type,
+    is_overload_constant_bool,
+    is_overload_constant_int,
+    is_overload_constant_str,
+    is_overload_false,
+    is_overload_none,
+    is_overload_str,
+    is_overload_true,
+    is_overload_zero,
+)
 
 
 @overload_attribute(SeriesType, "index", inline="always")
@@ -827,6 +829,16 @@ def overload_series_sum(S):
 
         def impl(S):
             return S.sum()
+
+        return impl
+
+
+@overload(np.prod, inline="always", no_unliteral=True)
+def overload_series_prod(S):
+    if isinstance(S, SeriesType):
+
+        def impl(S):  # pragma: no cover
+            return S.prod()
 
         return impl
 
@@ -1715,9 +1727,13 @@ def overload_series_np_digitize(x, bins, right=False):
 
 @overload(np.argmax, inline="always", no_unliteral=True)
 def argmax_overload(a, axis=None, out=None):
-    if isinstance(a, types.Array) and is_overload_constant_int(axis) and get_overload_const_int(axis) == 1:
+    if (
+        isinstance(a, types.Array)
+        and is_overload_constant_int(axis)
+        and get_overload_const_int(axis) == 1
+    ):
 
-        def impl(a, axis=None, out=None): # pragma: no cover
+        def impl(a, axis=None, out=None):  # pragma: no cover
             argmax_arr = np.empty(len(a), a.dtype)
             numba.parfors.parfor.init_prange()
             n = len(a)

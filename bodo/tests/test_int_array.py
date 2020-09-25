@@ -76,6 +76,77 @@ def int_arr_value(request):
     return request.param
 
 
+def test_max(memory_leak_check):
+    def impl(arr):
+        return max(arr)
+
+    # Doesn't work with null values in Python
+    A = pd.arrays.IntegerArray(
+        np.array([1, -3, 2, 3, 10], np.int8),
+        np.array([False, False, False, False, False]),
+    )
+
+    check_func(impl, (A,))
+
+
+@pytest.mark.skip("Reduce not supported in Pandas")
+def test_np_max(int_arr_value, memory_leak_check):
+    def impl(arr):
+        return np.max(arr)
+
+    check_func(impl, (int_arr_value,))
+
+
+def test_min(memory_leak_check):
+    def impl(arr):
+        return min(arr)
+
+    # Doesn't work with null values in Python
+    A = pd.arrays.IntegerArray(
+        np.array([1, -3, 2, 3, 10], np.int8),
+        np.array([False, False, False, False, False]),
+    )
+
+    check_func(impl, (A,))
+
+
+@pytest.mark.skip("Reduce not supported in Pandas")
+def test_np_min(int_arr_value, memory_leak_check):
+    def impl(arr):
+        return np.min(arr)
+
+    check_func(impl, (int_arr_value,))
+
+
+def test_sum(memory_leak_check):
+    def impl(arr):
+        return sum(arr)
+
+    # Doesn't work with null values in Python
+    A = pd.arrays.IntegerArray(
+        np.array([1, -3, 2, 3, 10], np.int8),
+        np.array([False, False, False, False, False]),
+    )
+
+    check_func(impl, (A,))
+
+
+@pytest.mark.skip("Reduce not supported in Pandas")
+def test_np_sum(int_arr_value, memory_leak_check):
+    def impl(arr):
+        return np.sum(arr)
+
+    check_func(impl, (int_arr_value,))
+
+
+@pytest.mark.skip("Reduce not supported in Pandas")
+def test_np_prod(int_arr_value, memory_leak_check):
+    def impl(arr):
+        return np.prod(arr)
+
+    check_func(impl, (int_arr_value,))
+
+
 def test_unbox(int_arr_value, memory_leak_check):
     # just unbox
     def impl(arr_arg):
@@ -191,8 +262,12 @@ def test_setitem_optional_int(int_arr_value, memory_leak_check):
         A[i] = x
         return A
 
-    check_func(test_impl, (int_arr_value.copy(), 1, False), copy_input=True, dist_test=False)
-    check_func(test_impl, (int_arr_value.copy(), 0, True), copy_input=True, dist_test=False)
+    check_func(
+        test_impl, (int_arr_value.copy(), 1, False), copy_input=True, dist_test=False
+    )
+    check_func(
+        test_impl, (int_arr_value.copy(), 0, True), copy_input=True, dist_test=False
+    )
 
 
 def test_setitem_arr(int_arr_value, memory_leak_check):
@@ -266,7 +341,9 @@ def test_shape(memory_leak_check):
 )
 def test_unary_ufunc(ufunc, memory_leak_check):
     # IntegerArray is buggy as of Pandas 1.1.0 and doesn't put NA mask on output yet
-    assert re.compile(r'1.1.*').match(pd. __version__), "revisit Pandas issues for int arr"
+    assert re.compile(r"1.1.*").match(
+        pd.__version__
+    ), "revisit Pandas issues for int arr"
     # See in version 1.1.x is logical_not / isnan / isinf / isfinite / signbit will be ok
     if ufunc in (np.logical_not, np.isnan, np.isinf, np.isfinite, np.signbit):
         return
@@ -298,7 +375,9 @@ def test_unary_ufunc_explicit_np(memory_leak_check):
 )
 def test_binary_ufunc(ufunc, memory_leak_check):
     # IntegerArray is buggy as of Pandas 1.1.0 and doesn't put NA mask on output yet
-    assert re.compile(r'1.1.*').match(pd. __version__), "revisit Pandas issues for int arr"
+    assert re.compile(r"1.1.*").match(
+        pd.__version__
+    ), "revisit Pandas issues for int arr"
     # See in version 1.1.x if those issues will be resolved.
     if ufunc in (np.logical_and, np.logical_or, np.logical_xor):
         return
