@@ -2,7 +2,7 @@
 
 Give Customers Access to Binaries
 ---------------------------------
-By default, we give customers access to our `bodo.ai` and `bodo.ai-dev` conda channels on Artifactory which hold the official and engineering releases respectively.
+By default, we give customers access to our ``bodo.ai`` and ``bodo.ai-dev`` conda channels on Artifactory which hold the official and engineering releases respectively.
 
 - Use the following command from your command line to generate a token for the customer username <customer_user>::
 
