@@ -2,55 +2,58 @@
 Bodo type inference pass that performs transformations that enable typing of the IR
 according to Bodo requirements (using partial typing).
 """
-import operator
+import copy
 import itertools
-import pandas as pd
+import operator
+
 import numba
-from numba.core import types, ir, ir_utils
+import pandas as pd
+from numba.core import ir, ir_utils, types
 from numba.core.compiler_machinery import register_pass
-from numba.core.typed_passes import NopythonTypeInference, PartialTypeInference
 from numba.core.ir_utils import (
-    find_topo_order,
+    GuardException,
     build_definitions,
-    mk_unique_var,
-    guard,
-    find_callname,
-    get_definition,
-    find_const,
     compile_to_numba_ir,
     compute_cfg_from_blocks,
-    replace_arg_nodes,
     dprint_func_ir,
-    require,
-    GuardException,
+    find_callname,
+    find_const,
+    find_topo_order,
+    get_definition,
+    guard,
     is_setitem,
+    mk_unique_var,
+    replace_arg_nodes,
+    require,
 )
+from numba.core.typed_passes import NopythonTypeInference, PartialTypeInference
+
 import bodo
-from bodo.utils.typing import (
-    BodoError,
-    is_literal_type,
-    CONST_DICT_SENTINEL,
-    BodoConstUpdatedError,
-    is_list_like_index_type,
-)
-from bodo.utils.utils import (
-    is_assign,
-    is_call,
-    is_expr,
-    get_getsetitem_index_var,
-    find_build_tuple,
-)
+from bodo.hiframes.dataframe_indexing import DataFrameILocType, DataFrameLocType
+from bodo.hiframes.pd_dataframe_ext import DataFrameType
+from bodo.hiframes.pd_groupby_ext import DataFrameGroupByType
+from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.utils.transform import (
-    update_node_list_definitions,
     compile_func_single_block,
     get_call_expr_arg,
     get_const_value_inner,
     set_call_expr_arg,
+    update_node_list_definitions,
 )
-from bodo.hiframes.pd_series_ext import SeriesType
-from bodo.hiframes.pd_dataframe_ext import DataFrameType
-from bodo.hiframes.dataframe_indexing import DataFrameILocType, DataFrameLocType
-from bodo.hiframes.pd_groupby_ext import DataFrameGroupByType
+from bodo.utils.typing import (
+    CONST_DICT_SENTINEL,
+    BodoConstUpdatedError,
+    BodoError,
+    is_list_like_index_type,
+    is_literal_type,
+)
+from bodo.utils.utils import (
+    find_build_tuple,
+    get_getsetitem_index_var,
+    is_assign,
+    is_call,
+    is_expr,
+)
 
 # global flag indicating that we are in partial type inference, so that error checking
 # code can raise regular Exceptions that can potentially be handled here
@@ -66,8 +69,7 @@ class BodoTypeInference(PartialTypeInference):
     _name = "bodo_type_inference"
 
     def run_pass(self, state):
-        """run Bodo type inference pass
-        """
+        """run Bodo type inference pass"""
         # _raise_errors is a global class attribute, which can be set/unset in recursive
         # calls. It is dangerous since the output type of the function is set only if
         # _raise_errors = True for some reason (see #964 and test_df_apply_func_case2):
@@ -110,6 +112,7 @@ class BodoTypeInference(PartialTypeInference):
                 state.typemap,
                 state.calltypes,
                 state.args,
+                state.locals,
             )
             changed = typing_transforms_pass.run()
             # can't be typed if IR not changed
@@ -126,6 +129,7 @@ class BodoTypeInference(PartialTypeInference):
                 state.typemap,
                 state.calltypes,
                 state.args,
+                state.locals,
             )
             typing_transforms_pass.run()
 
@@ -145,7 +149,7 @@ class TypingTransforms:
     them to constants so that functions like groupby() can be typed properly.
     """
 
-    def __init__(self, func_ir, typingctx, typemap, calltypes, arg_types):
+    def __init__(self, func_ir, typingctx, typemap, calltypes, arg_types, _locals):
         self.func_ir = func_ir
         self.typingctx = typingctx
         self.typemap = typemap
@@ -165,6 +169,12 @@ class TypingTransforms:
         self._transformed_vars = set()
         # variables that are potentially list/set/dict and updated inplace
         self._updated_containers = {}
+        # contains variables that need to be constant (e.g. index of df getitem) but
+        # couldn't be inferred as constant, so loop unrolling is tried later for them if
+        # possible.
+        # variable (ir.Var) -> block label it is needed as constant
+        self._require_const = {}
+        self.locals = _locals
         self.changed = False
 
     def run(self):
@@ -200,6 +210,15 @@ class TypingTransforms:
                         self.rhs_labels[inst.value] = label
 
             blocks[label].body = new_body
+
+        # try loop unrolling if some const values couldn't be resolved
+        if self._require_const:
+            for var, label in self._require_const.items():
+                changed = guard(self._try_loop_unroll_for_const, var, label)
+                # perform one unroll in each transform round only since multiple cases
+                # may be covered at the same time
+                if changed:
+                    break
 
         # find transformed variables that are not used anymore so they can be removed
         # removing cases like agg dicts may be necessary since not type stable
@@ -245,11 +264,11 @@ class TypingTransforms:
             return self._run_call(assign, rhs, label)
 
         if isinstance(rhs, ir.Expr) and rhs.op in ("getitem", "static_getitem"):
-            return self._run_getitem(assign, rhs)
+            return self._run_getitem(assign, rhs, label)
 
         return [assign]
 
-    def _run_getitem(self, assign, rhs):
+    def _run_getitem(self, assign, rhs, label):
         target = rhs.value
         target_typ = self.typemap.get(target.name, None)
         nodes = []
@@ -272,6 +291,8 @@ class TypingTransforms:
                     )
                 except GuardException:
                     # couldn't find values, just return to be handled later
+                    # save for potential loop unrolling
+                    self._require_const[idx] = label
                     nodes.append(assign)
                     return nodes
             # replace index variable with a new variable holding constant
@@ -360,18 +381,27 @@ class TypingTransforms:
     def _run_setitem(self, inst, label):
         target_typ = self.typemap.get(inst.target.name, None)
         nodes = []
-        # idx = get_getsetitem_index_var(inst, self.typemap, nodes)
+        idx_var = get_getsetitem_index_var(inst, self.typemap, nodes)
         # idx_typ = self.typemap.get(idx.name, None)
 
         # df["B"] = A
         if isinstance(target_typ, DataFrameType):
-            return nodes + self._run_df_set_column(inst, inst.index, label)
+            idx_const = guard(
+                get_const_value_inner,
+                self.func_ir,
+                idx_var,
+                self.arg_types,
+                self.typemap,
+            )
+            if idx_const is None:
+                self._require_const[idx_var] = label
+            else:
+                return nodes + self._run_df_set_column(inst, idx_const, label)
 
         return nodes + [inst]
 
     def _run_setattr(self, inst, label):
-        """handle ir.SetAttr node
-        """
+        """handle ir.SetAttr node"""
         target_typ = self.typemap.get(inst.target.name, None)
 
         # df.B = A transform
@@ -419,8 +449,7 @@ class TypingTransforms:
         return [assign]
 
     def _run_call_dataframe(self, assign, rhs, df_var, func_name, label):
-        """Handle dataframe calls that need transformation to meet Bodo requirements
-        """
+        """Handle dataframe calls that need transformation to meet Bodo requirements"""
         lhs = assign.target
         nodes = []
 
@@ -446,10 +475,24 @@ class TypingTransforms:
                 (3, "inplace"),
                 (5, "na_position"),
             ],
-            "join": [(1, "on"), (2, "how"), (3, "lsuffix"), (4, "rsuffix"),],
+            "join": [
+                (1, "on"),
+                (2, "how"),
+                (3, "lsuffix"),
+                (4, "rsuffix"),
+            ],
             "rename": [(2, "columns")],
-            "drop": [(0, "labels"), (1, "axis"), (3, "columns"), (5, "inplace"),],
-            "dropna": [(0, "axis"), (1, "how"), (3, "subset"),],
+            "drop": [
+                (0, "labels"),
+                (1, "axis"),
+                (3, "columns"),
+                (5, "inplace"),
+            ],
+            "dropna": [
+                (0, "axis"),
+                (1, "how"),
+                (3, "subset"),
+            ],
             "select_dtypes": [(0, "include"), (1, "exclude")],
         }
 
@@ -543,8 +586,7 @@ class TypingTransforms:
         return nodes + [assign]
 
     def _run_call_series(self, assign, rhs, df_var, func_name, label):
-        """Handle Series calls that need transformation to meet Bodo requirements
-        """
+        """Handle Series calls that need transformation to meet Bodo requirements"""
         nodes = []
 
         # convert const list to tuple for better optimization
@@ -554,8 +596,7 @@ class TypingTransforms:
         return nodes + [assign]
 
     def _run_call_pd_top_level(self, assign, rhs, func_name):
-        """transform top-level pandas functions
-        """
+        """transform top-level pandas functions"""
         nodes = []
 
         # mapping of pandas functions to their arguments that require constant values
@@ -581,7 +622,9 @@ class TypingTransforms:
             # NOTE: this enables const replacement to avoid errors in
             # test_excel1::test_impl2 caused by Numba 0.51 literals
             # TODO: fix underlying issue in Numba
-            "read_excel": [(3, "names"),],
+            "read_excel": [
+                (3, "names"),
+            ],
         }
 
         if func_name in top_level_call_const_args:
@@ -595,8 +638,7 @@ class TypingTransforms:
         return nodes + [assign]
 
     def _call_arg_list_to_tuple(self, rhs, func_name, arg_no, arg_name, nodes):
-        """Convert call argument to tuple if it is a constant list
-        """
+        """Convert call argument to tuple if it is a constant list"""
         kws = dict(rhs.kws)
         objs_var = get_call_expr_arg(func_name, rhs.args, kws, arg_no, arg_name, "")
         objs_def = guard(get_definition, self.func_ir, objs_var)
@@ -661,8 +703,7 @@ class TypingTransforms:
         return [assign]
 
     def _label_dominates_var_defs(self, label, df_var):
-        """See if label dominates all labels of df_var's definitions
-        """
+        """See if label dominates all labels of df_var's definitions"""
         cfg = compute_cfg_from_blocks(self.func_ir.blocks)
         # there could be multiple definitions but all dominated by label
         # TODO: support multiple levels of branching?
@@ -832,10 +873,166 @@ class TypingTransforms:
         rhs.kws = list(kws.items())
         return nodes
 
+    def _try_loop_unroll_for_const(self, var, label):
+        """Try loop unrolling to make variable 'var' constant in block 'label' if:
+        1) 'label' is in a for loop body
+        2) iteration range of the loop is constant
+        3) 'var' depends on the loop index
+        raises GuardException if unrolling is not possible
+        Here is an example transformation from:
+            for c in df.columns:
+                s += df[c].sum()
+        to:
+            c = 'A'
+            s += df[c].sum()
+            c = 'B'
+            s += df[c].sum()
+            ...
+        """
+        # get loop info and make sure unrolling is possible
+        loop = self._get_enclosing_loop(label)
+        loop_index_var = self._get_loop_index_var(loop)
+        require(self._vars_dependant(var, loop_index_var))
+        iter_vals = self._get_loop_const_iter_vals(loop_index_var)
+
+        # start the unroll transform
+        # no more GuardException since we can't bail out from this point
+
+        # phis need to be transformed into regular assignments since unrolling changes
+        # control flow
+        # typemap=None to avoid PreLowerStripPhis's generator manipulation
+        numba.core.typed_passes.PreLowerStripPhis().run_pass(
+            numba.core.compiler.StateDict({"func_ir": self.func_ir, "typemap": None})
+        )
+
+        # get loop label info
+        loop_body = {l: self.func_ir.blocks[l] for l in loop.body if l != loop.header}
+        with numba.parfors.parfor.dummy_return_in_loop_body(loop_body):
+            body_labels = find_topo_order(loop_body)
+        first_label = body_labels[0]
+        last_label = body_labels[-1]
+        loop_entry = list(loop.entries)[0]
+        loop_exit = list(loop.exits)[0]
+        # previous block's jump node, to be updated after each iter body gen
+        prev_jump = self.func_ir.blocks[loop_entry].body[-1]
+
+        # generate an instance of the loop body for each iteration
+        for c in iter_vals:
+            offset = ir_utils.next_label()
+            # new unique loop body IR
+            new_body = ir_utils.add_offset_to_labels(copy.deepcopy(loop_body), offset)
+            new_first_label = first_label + offset
+            new_last_label = last_label + offset
+            nodes = []
+            # create new const value for iteration index and add it to loop body
+            _create_const_var(c, loop_index_var.name, var.scope, var.loc, nodes)
+            nodes[-1].target = loop_index_var
+            new_body[new_first_label].body = nodes + new_body[new_first_label].body
+            # adjust previous block's jump
+            prev_jump.target = new_first_label
+            prev_jump = new_body[new_last_label].body[-1]
+            self.func_ir.blocks.update(new_body)
+
+        prev_jump.target = loop_exit
+
+        # clean up original loop IR
+        self.func_ir.blocks.pop(loop.header)
+        for l in loop_body:
+            self.func_ir.blocks.pop(l)
+
+        self.func_ir.blocks = ir_utils.simplify_CFG(self.func_ir.blocks)
+
+        # call SSA reconstruction to rename variables and prepare for type inference
+        numba.core.untyped_passes.ReconstructSSA().run_pass(
+            numba.core.compiler.StateDict(
+                {"func_ir": self.func_ir, "locals": self.locals}
+            )
+        )
+
+        self.changed = True
+        return True
+
+    def _get_enclosing_loop(self, label):
+        """find enclosing loop for block 'label' if possible.
+        Otherwise, raise GuardException.
+        """
+        cfg = compute_cfg_from_blocks(self.func_ir.blocks)
+        loops = cfg.loops()
+        for loop in loops.values():
+            # consider only well-structured loops
+            if len(loop.entries) != 1 or len(loop.exits) != 1:
+                continue
+            if label in loop.body:
+                return loop
+
+        raise GuardException("enclosing loop not found")
+
+    def _get_loop_index_var(self, loop):
+        """find index variable of 'for' loop. Numba always generates 'pair_first' for
+        'for' loop indexes.
+        Example header block (from test_unroll_loop):
+        label 52:
+            s.2 = phi(incoming_values=[Var(s, test_dataframe.py:2688),
+                Var(s.1, test_dataframe.py:2690)], incoming_blocks=[0, 54])
+            $52for_iter.1 = iternext(value=$phi52.0)
+            $52for_iter.2 = pair_first(value=$52for_iter.1)
+            $52for_iter.3 = pair_second(value=$52for_iter.1)
+            $phi54.1 = $52for_iter.2
+            branch $52for_iter.3, 54, 74
+        """
+        ind_var = None
+        for stmt in self.func_ir.blocks[loop.header].body:
+            if is_assign(stmt) and is_expr(stmt.value, "pair_first"):
+                ind_var = stmt.target
+            # use latest copy of index variable which is used in loop body
+            if (
+                ind_var
+                and is_assign(stmt)
+                and isinstance(stmt.value, ir.Var)
+                and stmt.value.name == ind_var.name
+            ):
+                ind_var = stmt.target
+        require(ind_var is not None)
+        return ind_var
+
+    def _get_loop_const_iter_vals(self, ind_var):
+        """get constant iteration values for loop given its index variable.
+        Matches this call sequence generated by Numba
+        index_var = pair_first(iternext(getiter(loop_iterations)))
+        Raises GuardException if couldn't find constant values
+        """
+        pair_first_expr = get_definition(self.func_ir, ind_var)
+        require(is_expr(pair_first_expr, "pair_first"))
+        iternext_expr = get_definition(self.func_ir, pair_first_expr.value)
+        require(is_expr(iternext_expr, "iternext"))
+        getiter_expr = get_definition(self.func_ir, iternext_expr.value)
+        require(is_expr(getiter_expr, "getiter"))
+        return get_const_value_inner(
+            self.func_ir, getiter_expr.value, self.arg_types, self.typemap
+        )
+
+    def _vars_dependant(self, var1, var2):
+        """return True if 'var1' is equivalent to or depends on 'var2'"""
+        assert isinstance(var1, ir.Var) and isinstance(var2, ir.Var)
+        if var1.name == var2.name:
+            return True
+
+        var1_def = get_definition(self.func_ir, var1)
+        var2_def = get_definition(self.func_ir, var2)
+
+        if var1_def == var2_def:
+            return True
+
+        if is_expr(var1_def, "binop"):
+            return self._vars_dependant(var1_def.lhs, var2) or self._vars_dependant(
+                var1_def.rhs, var2
+            )
+
+        return False
+
 
 def _get_const_slice(func_ir, var):
-    """get constant slice value for a slice variable if possible
-    """
+    """get constant slice value for a slice variable if possible"""
     # var definition should be a slice() call
     var_def = get_definition(func_ir, var)
     require(find_callname(func_ir, var_def) == ("slice", "builtins"))

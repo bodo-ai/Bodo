@@ -2679,6 +2679,38 @@ def test_dataframe_sample_nested_datastructures():
     check_gather_operation(df4)
 
 
+def test_unroll_loop(memory_leak_check, is_slow_run):
+    """Test unrolling constant loops when necessary for typing in getitem/setitem of
+    dataframe columns.
+    """
+
+    def impl1(df):
+        s = 0
+        for c in df.columns:
+            s += df[c].sum()
+        return s
+
+    def impl2(df):
+        s = 0
+        for c in ["A", "B"]:
+            if c != "A":
+                s += df[c].sum()
+        return s
+
+    def impl3(n):
+        df = pd.DataFrame({"A": np.arange(n), "B": np.arange(n) ** 2, "C": np.ones(n)})
+        for c in df.columns:
+            df[c + "2"] = (df[c] - df[c].mean()) / df[c].std()
+        return df
+
+    n = 11
+    df = pd.DataFrame({"A": np.arange(n), "B": np.arange(n) ** 2, "C": np.ones(n)})
+    check_func(impl1, (df,))
+    check_func(impl2, (df,))
+    if is_slow_run:
+        check_func(impl3, (n,))
+
+
 def test_unsupported_df_method():
     """ Raise Bodo error for unsupported df methods"""
 
