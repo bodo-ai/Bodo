@@ -835,7 +835,7 @@ static void oneD_reshape_shuffle(char* output, char* input,
                     ((int64_t)i_send_counts[dest]) * LARGE_DTYPE_SIZE,
                 l_send_counts[dest], MPI_CHAR, dest, TAG + 1,
                 output + recv_offset[src] +
-                    ((int64_t)i_recv_counts[dest]) * LARGE_DTYPE_SIZE,
+                    ((int64_t)i_recv_counts[src]) * LARGE_DTYPE_SIZE,
                 l_recv_counts[src], MPI_CHAR, src, TAG + 1, MPI_COMM_WORLD,
                 MPI_STATUS_IGNORE);
             if (ierr != 0) std::cerr << "small sendrecv error" << '\n';

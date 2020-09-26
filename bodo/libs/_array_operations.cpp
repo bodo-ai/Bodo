@@ -129,9 +129,9 @@ void array_isin(array_info* out_arr, array_info* in_arr, array_info* in_values,
     MPI_Datatype mpi_typ = get_MPI_typ(out_arr->dtype);
     size_t n_rows = out_arr->length;
     std::vector<uint8_t> tmp_recv(n_rows);
-    MPI_Alltoallv(shuf_out_arr->data1, comm_info.recv_count.data(),
-                  comm_info.recv_disp.data(), mpi_typ, tmp_recv.data(),
-                  comm_info.send_count.data(), comm_info.send_disp.data(),
+    bodo_alltoallv(shuf_out_arr->data1, comm_info.recv_count,
+                   comm_info.recv_disp, mpi_typ, tmp_recv.data(),
+                   comm_info.send_count, comm_info.send_disp,
                   mpi_typ, MPI_COMM_WORLD);
     fill_recv_data_inner<uint8_t>(tmp_recv.data(), (uint8_t*)out_arr->data1,
                                   hashes, comm_info.send_disp, comm_info.n_pes,
