@@ -765,28 +765,37 @@ class TypingTransforms:
         # return df2
         # create var for string index
         cname_var = ir.Var(inst.value.scope, mk_unique_var("$cname_const"), inst.loc)
+        self.typemap[cname_var.name] = types.literal(col_name)
         nodes = [ir.Assign(ir.Const(col_name, inst.loc), cname_var, inst.loc)]
         inplace = not dominates
-
-        func = lambda df, cname, arr: bodo.hiframes.dataframe_impl.set_df_col(
-            df, cname, arr, _inplace
-        )  # pragma: no cover
-        f_block = compile_to_numba_ir(
-            func, {"bodo": bodo, "_inplace": inplace}
-        ).blocks.popitem()[1]
-        replace_arg_nodes(f_block, [df_var, cname_var, inst.value])
-        nodes += f_block.body[:-2]
 
         if dominates:
             # rename the dataframe variable to keep schema static
             new_df_var = ir.Var(df_var.scope, mk_unique_var(df_var.name), df_var.loc)
-            nodes[-1].target = new_df_var
+            out_var = new_df_var
             self.replace_var_dict[df_var.name] = new_df_var
         else:
             # cannot replace variable, but can set existing column with the
             # same data type
             # TODO: check data type and throw clear error
-            nodes[-1].target = df_var
+            out_var = df_var
+
+        func = lambda df, cname, arr: bodo.hiframes.dataframe_impl.set_df_col(
+            df, cname, arr, _inplace
+        )  # pragma: no cover
+        args = [df_var, cname_var, inst.value]
+
+        # assign output df type if possible to reduce typing iterations
+        if inst.value.name in self.typemap:
+            nodes += compile_func_single_block(
+                func, args, out_var, self, extra_globals={"_inplace": inplace}
+            )
+            self.typemap.pop(out_var.name, None)
+            self.typemap[out_var.name] = self.typemap[nodes[-1].value.name]
+        else:
+            nodes += compile_func_single_block(
+                func, args, out_var, extra_globals={"_inplace": inplace}
+            )
 
         return nodes
 
