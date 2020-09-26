@@ -438,9 +438,11 @@ def array_to_info(typingctx, arr_type_t=None):
 
         # get codes array from CategoricalArray to be handled similar to other Numpy
         # arrays.
-        # TODO: create CategoricalArray on C++ side to handle NAs (-1) properly
         is_categorical = False
         if isinstance(arr_type, CategoricalArray):
+            # undo the initial incref since the original array is not fully passed to
+            # C++ (e.g. dtype value is not passed)
+            context.nrt.decref(builder, arr_type, in_arr)
             num_categories = context.compile_internal(
                 builder,
                 lambda a: len(a.dtype.categories),
@@ -453,6 +455,8 @@ def array_to_info(typingctx, arr_type_t=None):
             int_dtype = get_categories_int_type(arr_type.dtype)
             arr_type = types.Array(int_dtype, 1, "C")
             is_categorical = True
+            # incref the actual array passed to C++
+            context.nrt.incref(builder, arr_type, in_arr)
 
         # Numpy
         if isinstance(arr_type, types.Array):
