@@ -437,7 +437,6 @@ def array_to_info(typingctx, arr_type_t=None):
 
         # get codes array from CategoricalArray to be handled similar to other Numpy
         # arrays.
-        # TODO: create CategoricalArray on C++ side to handle NAs (-1) properly
         is_categorical = False
         if isinstance(arr_type, CategoricalArray):
             # undo the initial incref since the original array is not fully passed to
