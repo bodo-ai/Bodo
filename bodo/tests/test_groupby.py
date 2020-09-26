@@ -541,7 +541,7 @@ def test_cumsum_index_preservation(df_index):
 
 # TODO: add memory leak check when cumsum leak issue resolved
 @pytest.mark.slow
-def test_cumsum_random_index():
+def test_cumsum_random_index(memory_leak_check):
     def test_impl(df1):
         df2 = df1.groupby("B").cumsum()
         return df2
@@ -615,9 +615,8 @@ def test_cumsum_reverse_shuffle_list_string():
     check_func(f, (df,), convert_columns_to_pandas=True, py_output=df_out)
 
 
-# TODO: add memory leak check when cumsum leak issue resolved
 @pytest.mark.slow
-def test_cumsum_reverse_shuffle_string():
+def test_cumsum_reverse_shuffle_string(memory_leak_check):
     """We want to use here the classical scheme of the groupby for cumsum.
     We trigger it by using strings which are not supported by the Exscan scheme"""
 
@@ -775,7 +774,7 @@ def test_cumsum_exscan_categorical_random():
 
 # TODO: add memory leak check when cumsum leak issue resolved
 @pytest.mark.slow
-def test_cumsum_exscan_multikey_random():
+def test_cumsum_exscan_multikey_random(memory_leak_check):
     """For cumulative sum of integers, a special code that create a categorical key column
     allows for better performance"""
 
@@ -1772,9 +1771,8 @@ def test_cumsum_large_random_numpy():
     check_func(impl3, (df1,), sort_output=True)
 
 
-# TODO: add memory leak check when cumsum leak issue resolved
 @pytest.mark.slow
-def test_cummin_cummax_large_random_numpy():
+def test_cummin_cummax_large_random_numpy(memory_leak_check):
     """A bunch of tests related to cummin/cummax functions.
     ---
     The agg(("cummin", "cummax")) is currently broken because of a bug in pandas.
@@ -1841,8 +1839,7 @@ def test_cummin_cummax_large_random_numpy():
     check_func(impl8, (df1,), sort_output=True, reset_index=True)
 
 
-# TODO: add memory leak check when cumsum leak issue resolved
-def test_groupby_cumsum_simple():
+def test_groupby_cumsum_simple(memory_leak_check):
     """
     Test Groupby.cumsum(): a simple case
     """
@@ -1857,8 +1854,7 @@ def test_groupby_cumsum_simple():
     check_func(impl, (df1,), sort_output=True)
 
 
-# TODO: add memory leak check when cumsum leak issue resolved
-def test_groupby_cumprod_simple():
+def test_groupby_cumprod_simple(memory_leak_check):
     """
     Test Groupby.cumprod(): a simple case
     """
@@ -1873,9 +1869,8 @@ def test_groupby_cumprod_simple():
     check_func(impl, (df1,), sort_output=True)
 
 
-# TODO: add memory leak check when cumsum leak issue resolved
 @pytest.mark.slow
-def test_groupby_cumsum():
+def test_groupby_cumsum(memory_leak_check):
     """
     Test Groupby.cumsum()
     """
@@ -1920,9 +1915,8 @@ def test_groupby_cumsum():
     check_func(impl2, (df3,), sort_output=True)
 
 
-# TODO: add memory leak check when cumsum leak issue resolved
 @pytest.mark.slow
-def test_groupby_multi_intlabels_cumsum_int():
+def test_groupby_multi_intlabels_cumsum_int(memory_leak_check):
     """
     Test Groupby.cumsum() on int columns
     multiple labels for 'by'
@@ -1943,9 +1937,8 @@ def test_groupby_multi_intlabels_cumsum_int():
     check_func(impl, (df,), sort_output=True)
 
 
-# TODO: add memory leak check when cumsum leak issue resolved
 @pytest.mark.slow
-def test_groupby_multi_labels_cumsum_multi_cols():
+def test_groupby_multi_labels_cumsum_multi_cols(memory_leak_check):
     """
     Test Groupby.cumsum()
     multiple labels for 'by', multiple cols to cumsum
@@ -1967,9 +1960,8 @@ def test_groupby_multi_labels_cumsum_multi_cols():
     check_func(impl, (df,), sort_output=True)
 
 
-# TODO: add memory leak check when cumsum leak issue resolved
 @pytest.mark.slow
-def test_groupby_as_index_cumsum():
+def test_groupby_as_index_cumsum(memory_leak_check):
     """
     Test Groupby.cumsum() on groupby() as_index=False
     for both dataframe and series returns
@@ -1998,9 +1990,8 @@ def test_groupby_as_index_cumsum():
     check_func(impl2, (df,), sort_output=True)
 
 
-# TODO: add memory leak check when cumsum leak issue resolved
 @pytest.mark.slow
-def test_cumsum_all_nulls_col():
+def test_cumsum_all_nulls_col(memory_leak_check):
     """
     Test Groupby.cumsum() on column with all null entries
     TODO: change by to "A" after groupby null keys are properly ignored

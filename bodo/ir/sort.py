@@ -477,5 +477,5 @@ def get_sort_cpp_section(
     else:
         func_text += "  data = ()\n"
     func_text += "  delete_table(out_table)\n"
-    func_text += "  delete_table_decref_arrays(table_total)\n"
+    func_text += "  delete_table(table_total)\n"
     return func_text

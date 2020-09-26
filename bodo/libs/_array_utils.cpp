@@ -399,13 +399,13 @@ array_info* RetrieveArray_SingleColumn_arr(array_info* in_arr,
         return nullptr;
     }
     size_t siz = idx_arr->length;
-    return RetrieveArray_SingleColumn_F(
-        in_arr,
-        [&](size_t idx) -> size_t {
-            uint64_t val = idx_arr->at<uint64_t>(idx);
-            return size_t(val);
-        },
-        siz);
+    return RetrieveArray_SingleColumn_F(in_arr,
+                                        [&](size_t idx) -> size_t {
+                                            uint64_t val =
+                                                idx_arr->at<uint64_t>(idx);
+                                            return size_t(val);
+                                        },
+                                        siz);
 }
 
 array_info* RetrieveArray_TwoColumns(
@@ -738,9 +738,13 @@ table_info* RetrieveTable(table_info* const& in_table,
         n_cols = (size_t)in_table->ncols();
     else
         n_cols = n_cols_arg;
-    for (size_t i_col = 0; i_col < n_cols; i_col++)
-        out_arrs.emplace_back(
-            RetrieveArray_SingleColumn(in_table->columns[i_col], ListIdx));
+    for (size_t i_col = 0; i_col < n_cols; i_col++) {
+        array_info* in_arr = in_table->columns[i_col];
+        out_arrs.emplace_back(RetrieveArray_SingleColumn(in_arr, ListIdx));
+        // Standard stealing of reference (see shuffle_table_kernel for
+        // discussion)
+        decref_array(in_arr);
+    }
     return new table_info(out_arrs);
 }
 

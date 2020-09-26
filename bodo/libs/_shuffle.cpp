@@ -7,6 +7,7 @@
 #include "_distributed.h"
 
 #undef DEBUG_SHUFFLE
+#undef DEBUG_REVERSE_SHUFFLE
 #undef DEBUG_GATHER
 #undef DEBUG_BROADCAST
 #undef DEBUG_BOUND_INFO
@@ -228,7 +229,8 @@ static void fill_send_array_string_inner(
     uint32_t* arr_offsets, uint32_t* hashes, std::vector<int> const& send_disp,
     std::vector<int> const& send_disp_sub, int n_pes, size_t n_rows) {
     std::vector<int64_t> tmp_offset(send_disp.begin(), send_disp.end());
-    std::vector<int64_t> tmp_offset_sub(send_disp_sub.begin(), send_disp_sub.end());
+    std::vector<int64_t> tmp_offset_sub(send_disp_sub.begin(),
+                                        send_disp_sub.end());
     for (size_t i = 0; i < n_rows; i++) {
         size_t node = (size_t)hashes[i] % (size_t)n_pes;
         // write length
@@ -267,8 +269,10 @@ static void fill_send_array_list_string_inner(
     std::vector<int> const& send_disp, std::vector<int> const& send_disp_sub,
     std::vector<int> const& send_disp_sub_sub, int n_pes, size_t n_rows) {
     std::vector<int64_t> tmp_offset(send_disp.begin(), send_disp.end());
-    std::vector<int64_t> tmp_offset_sub(send_disp_sub.begin(), send_disp_sub.end());
-    std::vector<int64_t> tmp_offset_sub_sub(send_disp_sub_sub.begin(), send_disp_sub_sub.end());
+    std::vector<int64_t> tmp_offset_sub(send_disp_sub.begin(),
+                                        send_disp_sub.end());
+    std::vector<int64_t> tmp_offset_sub_sub(send_disp_sub_sub.begin(),
+                                            send_disp_sub_sub.end());
     for (size_t i = 0; i < n_rows; i++) {
         size_t node = (size_t)hashes[i] % (size_t)n_pes;
         // Compute the number of strings and the number of characters that will
@@ -1142,9 +1146,11 @@ table_info* shuffle_table_kernel(table_info* in_table, uint32_t* hashes,
                 -1, -1, NULL, NULL, NULL, NULL, NULL, meminfo, NULL, out_array);
         }
         // release reference of input array
-        // It might seem strange to put the decref exactly here. The idea is that memory release
-        // should happen as early as possible. And here we for sure will not need it anymore
-        // after the shuffle.
+        // This a a steal reference case. The idea is to release memory as soon
+        // as possible. If this release is not wished (which is a rare case)
+        // then the incref before operation is needed. Using an optional
+        // argument (like decref_input) to the input is a false good idea since
+        // it changes the semantics to something different from Python.
         decref_array(in_arr);
         out_arrs.push_back(out_arr);
 #ifdef DEBUG_SHUFFLE
@@ -1161,7 +1167,7 @@ table_info* shuffle_table_kernel(table_info* in_table, uint32_t* hashes,
 
 array_info* reverse_shuffle_numpy_array(array_info* in_arr, uint32_t* hashes,
                                         mpi_comm_info const& comm_info) {
-#ifdef DEBUG_SHUFFLE
+#ifdef DEBUG_REVERSE_SHUFFLE
     std::cout << "Beginning of reverse_shuffle_numpy_array\n";
 #endif
     uint64_t siztype = numpy_item_size[in_arr->dtype];
@@ -1184,7 +1190,7 @@ array_info* reverse_shuffle_numpy_array(array_info* in_arr, uint32_t* hashes,
         memcpy(data1_o + siztype * i, tmp_recv.data() + siztype * ind, siztype);
         tmp_offset[node]++;
     }
-#ifdef DEBUG_SHUFFLE
+#ifdef DEBUG_REVERSE_SHUFFLE
     std::cout << "End of reverse_shuffle_numpy_array\n";
 #endif
     return out_arr;
@@ -1192,13 +1198,13 @@ array_info* reverse_shuffle_numpy_array(array_info* in_arr, uint32_t* hashes,
 
 array_info* reverse_shuffle_string_array(array_info* in_arr, uint32_t* hashes,
                                          mpi_comm_info const& comm_info) {
-#ifdef DEBUG_SHUFFLE
+#ifdef DEBUG_REVERSE_SHUFFLE
     std::cout << "Beginning of reverse_shuffle_string_array\n";
 #endif
     // 1: computing the recv_count_sub and related
     uint32_t* in_offset = (uint32_t*)in_arr->data2;
     int n_pes = comm_info.n_pes;
-#ifdef DEBUG_SHUFFLE
+#ifdef DEBUG_REVERSESHUFFLE
     std::cout << "n_pes=" << n_pes << "\n";
 #endif
     std::vector<int> recv_count_sub(n_pes),
@@ -1207,18 +1213,18 @@ array_info* reverse_shuffle_string_array(array_info* in_arr, uint32_t* hashes,
         recv_count_sub[i] =
             in_offset[comm_info.recv_disp[i] + comm_info.recv_count[i]] -
             in_offset[comm_info.recv_disp[i]];
-#ifdef DEBUG_SHUFFLE
+#ifdef DEBUG_REVERSE_SHUFFLE
     std::cout << "recv_count_sub built\n";
 #endif
     std::vector<int> send_count_sub(n_pes), send_disp_sub(n_pes);
     MPI_Alltoall(recv_count_sub.data(), 1, MPI_INT, send_count_sub.data(), 1,
                  MPI_INT, MPI_COMM_WORLD);
-#ifdef DEBUG_SHUFFLE
+#ifdef DEBUG_REVERSE_SHUFFLE
     std::cout << "After MPI_Alltoall\n";
 #endif
     calc_disp(send_disp_sub, send_count_sub);
     calc_disp(recv_disp_sub, recv_count_sub);
-#ifdef DEBUG_SHUFFLE
+#ifdef DEBUG_REVERSE_SHUFFLE
     std::cout << "reverse_shuffle_string_array, step 1 done\n";
 #endif
     // 2: allocating the array
@@ -1230,7 +1236,7 @@ array_info* reverse_shuffle_string_array(array_info* in_arr, uint32_t* hashes,
                     0, in_arr->num_categories);
     int in_len = in_arr->length;
     int out_len = out_arr->length;
-#ifdef DEBUG_SHUFFLE
+#ifdef DEBUG_REVERSE_SHUFFLE
     std::cout << "reverse_shuffle_string_array, step 2 done\n";
 #endif
     // 3: the offsets
@@ -1247,7 +1253,7 @@ array_info* reverse_shuffle_string_array(array_info* in_arr, uint32_t* hashes,
     fill_recv_data_inner(list_len_recv.data(), out_offset, hashes,
                          comm_info.send_disp, comm_info.n_pes, out_len);
     convert_len_arr_to_offset(out_offset, out_len);
-#ifdef DEBUG_SHUFFLE
+#ifdef DEBUG_REVERSE_SHUFFLE
     std::cout << "reverse_shuffle_string_array, step 3 done\n";
 #endif
     // 4: the characters themselves
@@ -1268,7 +1274,7 @@ array_info* reverse_shuffle_string_array(array_info* in_arr, uint32_t* hashes,
         memcpy(out_ptr, in_ptr, str_len);
         tmp_offset_sub[node] += str_len;
     }
-#ifdef DEBUG_SHUFFLE
+#ifdef DEBUG_REVERSE_SHUFFLE
     std::cout << "reverse_shuffle_string_array, step 4 done. END\n";
 #endif
     return out_arr;
@@ -1277,7 +1283,7 @@ array_info* reverse_shuffle_string_array(array_info* in_arr, uint32_t* hashes,
 void reverse_shuffle_null_bitmap_array(array_info* in_arr, array_info* out_arr,
                                        uint32_t* hashes,
                                        mpi_comm_info const& comm_info) {
-#ifdef DEBUG_SHUFFLE
+#ifdef DEBUG_REVERSE_SHUFFLE
     std::cout << "Beginning of reverse_shuffle_null_bitmap_array\n";
 #endif
     int n_pes = comm_info.n_pes;
@@ -1318,7 +1324,7 @@ void reverse_shuffle_null_bitmap_array(array_info* in_arr, array_info* out_arr,
         SetBitTo(null_bitmask_out, i_row, bit);
         tmp_offset[node]++;
     }
-#ifdef DEBUG_SHUFFLE
+#ifdef DEBUG_REVERSE_SHUFFLE
     std::cout << "End of reverse_shuffle_null_bitmap_array\n";
 #endif
 }
@@ -1326,7 +1332,7 @@ void reverse_shuffle_null_bitmap_array(array_info* in_arr, array_info* out_arr,
 array_info* reverse_shuffle_list_string_array(array_info* in_arr,
                                               uint32_t* hashes,
                                               mpi_comm_info const& comm_info) {
-#ifdef DEBUG_SHUFFLE
+#ifdef DEBUG_REVERSE_SHUFFLE
     std::cout << "Beginning of reverse_shuffle_list_string_array\n";
 #endif
     // 1: computing the recv_count_sub and related
@@ -1343,7 +1349,7 @@ array_info* reverse_shuffle_list_string_array(array_info* in_arr,
                  MPI_INT, MPI_COMM_WORLD);
     calc_disp(send_disp_sub, send_count_sub);
     calc_disp(recv_disp_sub, recv_count_sub);
-#ifdef DEBUG_SHUFFLE
+#ifdef DEBUG_REVERSE_SHUFFLE
     for (int i = 0; i < n_pes; i++) {
         std::cout << "i=" << i << " disp_sub : send=" << send_disp_sub[i]
                   << " recv=" << recv_disp_sub[i] << "\n";
@@ -1364,7 +1370,7 @@ array_info* reverse_shuffle_list_string_array(array_info* in_arr,
                  send_count_sub_sub.data(), 1, MPI_INT, MPI_COMM_WORLD);
     calc_disp(send_disp_sub_sub, send_count_sub_sub);
     calc_disp(recv_disp_sub_sub, recv_count_sub_sub);
-#ifdef DEBUG_SHUFFLE
+#ifdef DEBUG_REVERSE_SHUFFLE
     for (int i = 0; i < n_pes; i++) {
         std::cout << "i=" << i << " disp_sub_sub : send=" << send_disp_sub[i]
                   << " recv=" << recv_disp_sub[i] << "\n";
@@ -1384,7 +1390,7 @@ array_info* reverse_shuffle_list_string_array(array_info* in_arr,
                     in_arr->dtype, 0, in_arr->num_categories);
     int in_len = in_arr->length;
     int out_len = out_arr->length;
-#ifdef DEBUG_SHUFFLE
+#ifdef DEBUG_REVERSE_SHUFFLE
     std::cout << "in_len=" << in_len << " out_len=" << out_len << "\n";
 #endif
     // 4: the string offsets
@@ -1404,7 +1410,7 @@ array_info* reverse_shuffle_list_string_array(array_info* in_arr,
     // 5: the character offsets
     int32_t in_sub_len = in_str_offset[in_len];
     int32_t out_sub_len = out_str_offset[out_len];
-#ifdef DEBUG_SHUFFLE
+#ifdef DEBUG_REVERSE_SHUFFLE
     std::cout << "in_sub_len=" << in_sub_len << " out_sub_len=" << out_sub_len
               << "\n";
 #endif
@@ -1412,7 +1418,7 @@ array_info* reverse_shuffle_list_string_array(array_info* in_arr,
     uint32_t* out_data_offset = (uint32_t*)out_arr->data2;
     for (int i = 0; i < in_sub_len; i++)
         list_char_len_send[i] = in_data_offset[i + 1] - in_data_offset[i];
-#ifdef DEBUG_SHUFFLE
+#ifdef DEBUG_REVERSE_SHUFFLE
     for (int i = 0; i < in_sub_len; i++)
         std::cout << "i=" << i << " char_len_send=" << list_char_len_send[i]
                   << "\n";
@@ -1427,7 +1433,7 @@ array_info* reverse_shuffle_list_string_array(array_info* in_arr,
         size_t node = (size_t)hashes[i] % (size_t)n_pes;
         uint32_t nb_str = out_str_offset[i + 1] - out_str_offset[i];
         int c_ind = tmp_offset_sub[node];
-#ifdef DEBUG_SHUFFLE
+#ifdef DEBUG_REVERSE_SHUFFLE
         std::cout << "i=" << i << " node=" << node << " nb_str=" << nb_str
                   << " c_ind=" << c_ind << "\n";
 #endif
@@ -1437,7 +1443,7 @@ array_info* reverse_shuffle_list_string_array(array_info* in_arr,
         tmp_offset_sub[node] += nb_str;
     }
     convert_len_arr_to_offset(out_data_offset, out_sub_len);
-#ifdef DEBUG_SHUFFLE
+#ifdef DEBUG_REVERSE_SHUFFLE
     for (int i = 0; i < out_sub_len; i++) {
         std::cout << "i=" << i << " out_data_offset=" << out_data_offset[i]
                   << "\n";
@@ -1458,7 +1464,7 @@ array_info* reverse_shuffle_list_string_array(array_info* in_arr,
         uint32_t nb_char = out_data_offset[out_str_offset[i + 1]] -
                            out_data_offset[out_str_offset[i]];
         int c_ind = tmp_offset_sub_sub[node];
-#ifdef DEBUG_SHUFFLE
+#ifdef DEBUG_REVERSE_SHUFFLE
         std::cout << "i=" << i << " node=" << node << " nb_char=" << nb_char
                   << " c_ind=" << c_ind << " out_data_offset[i]="
                   << out_data_offset[out_str_offset[i]] << "\n";
@@ -1468,7 +1474,7 @@ array_info* reverse_shuffle_list_string_array(array_info* in_arr,
         memcpy(out_ptr, in_ptr, nb_char);
         tmp_offset_sub_sub[node] += nb_char;
     }
-#ifdef DEBUG_SHUFFLE
+#ifdef DEBUG_REVERSE_SHUFFLE
     std::cout << "End of reverse_shuffle_list_string_array\n";
 #endif
     //
@@ -1495,7 +1501,7 @@ array_info* reverse_shuffle_list_string_array(array_info* in_arr,
             bool bit = GetBit(sub_null_bitmask_in, pos);
             SetBitTo(mask_send.data(), 8 * recv_disp_sub_null[i_p] + i_str,
                      bit);
-#ifdef DEBUG_SHUFFLE
+#ifdef DEBUG_REVERSE_SHUFFLE
             std::cout << "i_p=" << i_p << " i_str=" << i_str << " bit=" << bit
                       << "\n";
 #endif
@@ -1515,7 +1521,7 @@ array_info* reverse_shuffle_list_string_array(array_info* in_arr,
         for (int i_str = 0; i_str < n_str; i_str++) {
             bool bit = GetBit(sub_out_bitmap, tmp_offset[node] + i_str);
             SetBitTo(sub_null_bitmask_out, pos_si, bit);
-#ifdef DEBUG_SHUFFLE
+#ifdef DEBUG_REVERSE_SHUFFLE
             std::cout << "i_row=" << i_row << " i_str=" << i_str
                       << " bit=" << bit << "\n";
 #endif
@@ -1541,18 +1547,18 @@ array_info* reverse_shuffle_list_string_array(array_info* in_arr,
  */
 table_info* reverse_shuffle_table_kernel(table_info* in_table, uint32_t* hashes,
                                          mpi_comm_info const& comm_info) {
-#ifdef DEBUG_SHUFFLE
+#ifdef DEBUG_REVERSE_SHUFFLE
     std::cout << "Beginning of reverse_shuffle_table_kernel. in_table:\n";
     DEBUG_PrintSetOfColumn(std::cout, in_table->columns);
     DEBUG_PrintRefct(std::cout, in_table->columns);
 #endif
     size_t n_cols = in_table->ncols();
-#ifdef DEBUG_SHUFFLE
+#ifdef DEBUG_REVERSE_SHUFFLE
     std::cout << "Processing columns in reverse_shuffle_table_kernel\n";
 #endif
     std::vector<array_info*> out_arrs;
     for (size_t i = 0; i < n_cols; i++) {
-#ifdef DEBUG_SHUFFLE
+#ifdef DEBUG_REVERSE_SHUFFLE
         std::cout << "reverse_shuffle_table_kernel i=" << i << "/" << n_cols
                   << "\n";
 #endif
@@ -1578,26 +1584,28 @@ table_info* reverse_shuffle_table_kernel(table_info* in_table, uint32_t* hashes,
             if (arr_type == bodo_array_type::LIST_STRING) {
                 out_arr = reverse_shuffle_list_string_array(in_arr, hashes,
                                                             comm_info);
-#ifdef DEBUG_SHUFFLE
+#ifdef DEBUG_REVERSE_SHUFFLE
                 std::cout << "We have out_arr\n";
 #endif
             }
-#ifdef DEBUG_SHUFFLE
+#ifdef DEBUG_REVERSE_SHUFFLE
             std::cout << "Before the null_bitmap_operation 1\n";
 #endif
             if (arr_type == bodo_array_type::STRING ||
                 arr_type == bodo_array_type::LIST_STRING ||
                 arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
-#ifdef DEBUG_SHUFFLE
+#ifdef DEBUG_REVERSE_SHUFFLE
                 std::cout << "Before the null_bitmap_operation 2\n";
 #endif
                 reverse_shuffle_null_bitmap_array(in_arr, out_arr, hashes,
                                                   comm_info);
             }
         }
+        // Reference stealing see shuffle_table_kernel for discussion
+        decref_array(in_arr);
         out_arrs.push_back(out_arr);
     }
-#ifdef DEBUG_SHUFFLE
+#ifdef DEBUG_REVERSE_SHUFFLE
     std::cout << "Ending of reverse_shuffle_table_kernel. out_arrs:\n";
     DEBUG_PrintSetOfColumn(std::cout, out_arrs);
     DEBUG_PrintRefct(std::cout, out_arrs);
@@ -1612,7 +1620,7 @@ table_info* shuffle_table(table_info* in_table, int64_t n_keys) {
         Bodo_PyErr_SetString(PyExc_RuntimeError, "Invalid input shuffle table");
         return NULL;
     }
-#ifdef DEBUG_SHUFFLE
+#ifdef DEBUG_REVERSE_SHUFFLE
     std::cout << "IN_TABLE (SHUFFLE):\n";
     DEBUG_PrintSetOfColumn(std::cout, in_table->columns);
     DEBUG_PrintRefct(std::cout, in_table->columns);
@@ -1625,10 +1633,9 @@ table_info* shuffle_table(table_info* in_table, int64_t n_keys) {
     uint32_t* hashes = hash_keys(key_arrs, seed);
 
     comm_info.set_counts(hashes);
-
     table_info* table = shuffle_table_kernel(in_table, hashes, comm_info);
     delete[] hashes;
-#ifdef DEBUG_SHUFFLE
+#ifdef DEBUG_REVERSE_SHUFFLE
     std::cout << "RET_TABLE (SHUFFLE):\n";
     DEBUG_PrintSetOfColumn(std::cout, table->columns);
     DEBUG_PrintRefct(std::cout, table->columns);
@@ -1992,13 +1999,15 @@ table_info* broadcast_table(table_info* ref_table, table_info* in_table,
     std::vector<array_info*> out_arrs;
     for (size_t i_col = 0; i_col < n_cols; i_col++) {
         int64_t arr_bcast[6];
+        array_info* in_arr = nullptr;
         if (myrank == mpi_root) {
-            arr_bcast[0] = in_table->columns[i_col]->length;
-            arr_bcast[1] = in_table->columns[i_col]->dtype;
-            arr_bcast[2] = in_table->columns[i_col]->arr_type;
-            arr_bcast[3] = in_table->columns[i_col]->n_sub_elems;
-            arr_bcast[4] = in_table->columns[i_col]->n_sub_sub_elems;
-            arr_bcast[5] = in_table->columns[i_col]->num_categories;
+            in_arr = in_table->columns[i_col];
+            arr_bcast[0] = in_arr->length;
+            arr_bcast[1] = in_arr->dtype;
+            arr_bcast[2] = in_arr->arr_type;
+            arr_bcast[3] = in_arr->n_sub_elems;
+            arr_bcast[4] = in_arr->n_sub_sub_elems;
+            arr_bcast[5] = in_arr->num_categories;
         }
         MPI_Bcast(arr_bcast, 6, MPI_LONG_LONG_INT, mpi_root, MPI_COMM_WORLD);
         int64_t n_rows = arr_bcast[0];
@@ -2024,7 +2033,7 @@ table_info* broadcast_table(table_info* ref_table, table_info* in_table,
             std::cout << "broadcast_table, arrow case, step 2\n";
 #endif
             std::shared_ptr<arrow::Array> in_array = nullptr;
-            if (myrank == mpi_root) in_array = in_table->columns[i_col]->array;
+            if (myrank == mpi_root) in_array = in_arr->array;
 #ifdef DEBUG_BROADCAST
             std::cout << "broadcast_table, arrow case, step 3\n";
 #endif
@@ -2050,7 +2059,7 @@ table_info* broadcast_table(table_info* ref_table, table_info* in_table,
             arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
             MPI_Datatype mpi_typ = get_MPI_typ(dtype);
             if (myrank == mpi_root)
-                out_arr = copy_array(in_table->columns[i_col]);
+                out_arr = copy_array(in_arr);
             else
                 out_arr = alloc_array(n_rows, -1, -1, arr_type, dtype, 0, 0);
             MPI_Bcast(out_arr->data1, n_rows, mpi_typ, mpi_root,
@@ -2060,7 +2069,7 @@ table_info* broadcast_table(table_info* ref_table, table_info* in_table,
             MPI_Datatype mpi_typ32 = get_MPI_typ(Bodo_CTypes::UINT32);
             MPI_Datatype mpi_typ8 = get_MPI_typ(Bodo_CTypes::UINT8);
             if (myrank == mpi_root)
-                out_arr = copy_array(in_table->columns[i_col]);
+                out_arr = copy_array(in_arr);
             else
                 out_arr = alloc_array(n_rows, n_sub_elems, n_sub_sub_elems,
                                       arr_type, dtype, 0, num_categories);
@@ -2073,7 +2082,7 @@ table_info* broadcast_table(table_info* ref_table, table_info* in_table,
             MPI_Datatype mpi_typ32 = get_MPI_typ(Bodo_CTypes::UINT32);
             MPI_Datatype mpi_typ8 = get_MPI_typ(Bodo_CTypes::UINT8);
             if (myrank == mpi_root)
-                out_arr = copy_array(in_table->columns[i_col]);
+                out_arr = copy_array(in_arr);
             else
                 out_arr = alloc_array(n_rows, n_sub_elems, n_sub_sub_elems,
                                       arr_type, dtype, 0, num_categories);
@@ -2097,6 +2106,9 @@ table_info* broadcast_table(table_info* ref_table, table_info* in_table,
                       MPI_COMM_WORLD);
         }
         out_arrs.push_back(out_arr);
+        // Standard stealing of reference. See shuffle_table_kernel for
+        // discussion. The table is not-null only on mpi_root.
+        if (myrank == mpi_root) decref_array(in_arr);
     }
     return new table_info(out_arrs);
 }
@@ -2508,9 +2520,10 @@ table_info* gather_table(table_info* in_table, size_t n_cols, bool all_gather) {
 #endif
     for (size_t i_col = 0; i_col < n_cols; i_col++) {
         int64_t arr_gath_s[3];
-        int64_t n_rows = in_table->columns[i_col]->length;
-        int64_t n_sub_elems = in_table->columns[i_col]->n_sub_elems;
-        int64_t n_sub_sub_elems = in_table->columns[i_col]->n_sub_sub_elems;
+        array_info* in_arr = in_table->columns[i_col];
+        int64_t n_rows = in_arr->length;
+        int64_t n_sub_elems = in_arr->n_sub_elems;
+        int64_t n_sub_sub_elems = in_arr->n_sub_sub_elems;
 #ifdef DEBUG_GATHER
         std::cout << "i_col=" << i_col << " n_rows=" << n_rows
                   << " n_sub_elems=" << n_sub_elems
@@ -2522,10 +2535,9 @@ table_info* gather_table(table_info* in_table, size_t n_cols, bool all_gather) {
         std::vector<int64_t> arr_gath_r(3 * n_pes, 0);
         MPI_Gengather(arr_gath_s, 3, MPI_LONG_LONG_INT, arr_gath_r.data(), 3,
                       MPI_LONG_LONG_INT, mpi_root, MPI_COMM_WORLD, all_gather);
-        Bodo_CTypes::CTypeEnum dtype = in_table->columns[i_col]->dtype;
-        bodo_array_type::arr_type_enum arr_type =
-            in_table->columns[i_col]->arr_type;
-        int64_t num_categories = in_table->columns[i_col]->num_categories;
+        Bodo_CTypes::CTypeEnum dtype = in_arr->dtype;
+        bodo_array_type::arr_type_enum arr_type = in_arr->arr_type;
+        int64_t num_categories = in_arr->num_categories;
 #ifdef DEBUG_GATHER
         std::cout << "  num_categories=" << num_categories << "\n";
 #endif
@@ -2547,8 +2559,7 @@ table_info* gather_table(table_info* in_table, size_t n_cols, bool all_gather) {
 #ifdef DEBUG_GATHER
             std::cout << "  gather_table, arrow case, step 1\n";
 #endif
-            std::shared_ptr<arrow::Array> array =
-                in_table->columns[i_col]->array;
+            std::shared_ptr<arrow::Array> array = in_arr->array;
 #ifdef DEBUG_GATHER
             std::cout << "  gather_table, arrow case, step 2\n";
 #endif
@@ -2590,9 +2601,9 @@ table_info* gather_table(table_info* in_table, size_t n_cols, bool all_gather) {
                                       num_categories);
                 data1_ptr = out_arr->data1;
             }
-            MPI_Gengatherv(in_table->columns[i_col]->data1, n_rows, mpi_typ,
-                           data1_ptr, rows_counts.data(), rows_disps.data(),
-                           mpi_typ, mpi_root, MPI_COMM_WORLD, all_gather);
+            MPI_Gengatherv(in_arr->data1, n_rows, mpi_typ, data1_ptr,
+                           rows_counts.data(), rows_disps.data(), mpi_typ,
+                           mpi_root, MPI_COMM_WORLD, all_gather);
 #ifdef DEBUG_GATHER
             std::cout << "  After MPI_Gengatherv\n";
 #endif
@@ -2622,13 +2633,12 @@ table_info* gather_table(table_info* in_table, size_t n_cols, bool all_gather) {
                 char_counts[i_p] = siz;
                 pos += siz;
             }
-            MPI_Gengatherv(in_table->columns[i_col]->data1, n_sub_elems,
-                           mpi_typ8, data1_ptr, char_counts.data(),
-                           char_disps.data(), mpi_typ8, mpi_root,
-                           MPI_COMM_WORLD, all_gather);
+            MPI_Gengatherv(in_arr->data1, n_sub_elems, mpi_typ8, data1_ptr,
+                           char_counts.data(), char_disps.data(), mpi_typ8,
+                           mpi_root, MPI_COMM_WORLD, all_gather);
             // Collecting the offsets data
             std::vector<uint32_t> list_count_loc(n_rows);
-            uint32_t* offsets_i = (uint32_t*)in_table->columns[i_col]->data2;
+            uint32_t* offsets_i = (uint32_t*)in_arr->data2;
             uint32_t curr_offset = 0;
             for (int64_t pos = 0; pos < n_rows; pos++) {
                 uint32_t new_offset = offsets_i[pos + 1];
@@ -2686,8 +2696,7 @@ table_info* gather_table(table_info* in_table, size_t n_cols, bool all_gather) {
             int64_t n_sub_bytes_tot = std::accumulate(
                 n_sub_bytes_count.begin(), n_sub_bytes_count.end(), 0);
             std::vector<uint8_t> V(n_sub_bytes_tot, 0);
-            uint8_t* sub_null_bitmask_i =
-                (uint8_t*)in_table->columns[i_col]->sub_null_bitmask;
+            uint8_t* sub_null_bitmask_i = (uint8_t*)in_arr->sub_null_bitmask;
             int n_bytes = (n_rows + 7) >> 3;
 #ifdef DEBUG_GATHER
             std::cout << "n_bytes=" << n_bytes << "\n";
@@ -2728,10 +2737,9 @@ table_info* gather_table(table_info* in_table, size_t n_cols, bool all_gather) {
                 char_counts[i_p] = siz;
                 pos += siz;
             }
-            MPI_Gengatherv(in_table->columns[i_col]->data1, n_sub_sub_elems,
-                           mpi_typ8, data1_ptr, char_counts.data(),
-                           char_disps.data(), mpi_typ8, mpi_root,
-                           MPI_COMM_WORLD, all_gather);
+            MPI_Gengatherv(in_arr->data1, n_sub_sub_elems, mpi_typ8, data1_ptr,
+                           char_counts.data(), char_disps.data(), mpi_typ8,
+                           mpi_root, MPI_COMM_WORLD, all_gather);
             // Sending of the data_offsets
             std::vector<int> data_offsets_disps(n_pes),
                 data_offsets_counts(n_pes);
@@ -2743,8 +2751,7 @@ table_info* gather_table(table_info* in_table, size_t n_cols, bool all_gather) {
                 pos_data += siz;
             }
             std::vector<uint32_t> len_strings_loc(n_sub_elems);
-            uint32_t* data_offsets_i =
-                (uint32_t*)in_table->columns[i_col]->data2;
+            uint32_t* data_offsets_i = (uint32_t*)in_arr->data2;
             uint32_t curr_data_offset = 0;
             for (int64_t pos = 0; pos < n_sub_elems; pos++) {
                 uint32_t new_data_offset = data_offsets_i[pos + 1];
@@ -2775,8 +2782,7 @@ table_info* gather_table(table_info* in_table, size_t n_cols, bool all_gather) {
                 pos_index += siz;
             }
             std::vector<uint32_t> n_strings_loc(n_rows);
-            uint32_t* index_offsets_i =
-                (uint32_t*)in_table->columns[i_col]->data3;
+            uint32_t* index_offsets_i = (uint32_t*)in_arr->data3;
             uint32_t curr_index_offset = 0;
             for (int64_t pos = 0; pos < n_rows; pos++) {
                 uint32_t new_index_offset = index_offsets_i[pos + 1];
@@ -2800,7 +2806,7 @@ table_info* gather_table(table_info* in_table, size_t n_cols, bool all_gather) {
         if (arr_type == bodo_array_type::STRING ||
             arr_type == bodo_array_type::LIST_STRING ||
             arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
-            char* null_bitmask_i = in_table->columns[i_col]->null_bitmask;
+            char* null_bitmask_i = in_arr->null_bitmask;
             std::vector<int> recv_count_null(n_pes), recv_disp_null(n_pes);
             for (int i_p = 0; i_p < n_pes; i_p++)
                 recv_count_null[i_p] = (rows_counts[i_p] + 7) >> 3;
@@ -2828,6 +2834,8 @@ table_info* gather_table(table_info* in_table, size_t n_cols, bool all_gather) {
 #ifdef DEBUG_GATHER
         std::cout << "  After push_back operation\n";
 #endif
+        // Reference stealing. See shuffle_table_kernel for discussion.
+        decref_array(in_arr);
     }
 #ifdef DEBUG_GATHER
     std::cout << "Exiting gather_table\n";
