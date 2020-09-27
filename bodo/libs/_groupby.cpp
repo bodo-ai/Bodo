@@ -4663,7 +4663,11 @@ array_info* compute_categorical_index(table_info* in_table, int64_t num_keys,
     std::cout << "compute_categorical_index n_rows=" << n_rows
               << " n_rows_full=" << n_rows_full << "\n";
 #endif
-    if (n_rows_full > max_global_number_groups_exscan) return nullptr;
+    if (n_rows_full > max_global_number_groups_exscan) {
+      delete_table_decref_arrays(red_table);
+      return nullptr;
+    }
+
     // We are below threshold. Now doing an allgather for determining the keys.
     bool all_gather = true;
 #ifdef DEBUG_GROUPBY

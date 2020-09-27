@@ -179,8 +179,7 @@ def test_nullable_int(memory_leak_check):
         ),
     ],
 )
-# TODO: add memory leak check when cumsum leak issue resolved
-def test_return_type_nullable_cumsum_cumprod(df_null):
+def test_return_type_nullable_cumsum_cumprod(df_null, memory_leak_check):
     """
     Test Groupby when one row is a nullable-int-bool.
     A current problem is that cumsum/cumprod with pandas return an array of float for Int64
@@ -508,8 +507,7 @@ def test_agg_bool_expr(memory_leak_check):
         ),
     ],
 )
-# TODO: add memory leak check when cumsum leak issue resolved
-def test_cumsum_index_preservation(df_index):
+def test_cumsum_index_preservation(df_index, memory_leak_check):
     """For the cumsum operation, the number of rows remains the same and the index is preserved.
     ---
     At the present time the agg(("cumsum", "cumprod")) is broken in pandas. See
@@ -597,7 +595,7 @@ def test_cumsum_random_index(memory_leak_check):
 
 # TODO: add memory leak check when cumsum leak issue resolved
 @pytest.mark.slow
-def test_cumsum_reverse_shuffle_list_string():
+def test_cumsum_reverse_shuffle_list_string(memory_leak_check):
     """We want to use here the classical scheme of the groupby for cumsum.
     We trigger it by using strings which are not supported by the Exscan scheme"""
 
@@ -639,9 +637,8 @@ def test_cumsum_reverse_shuffle_string(memory_leak_check):
     check_func(f, (df,), py_output=df_out)
 
 
-# TODO: add memory leak check when cumsum leak issue resolved
 @pytest.mark.slow
-def test_cumsum_reverse_shuffle_large_numpy():
+def test_cumsum_reverse_shuffle_large_numpy(memory_leak_check):
     """We want to use here the classical scheme of the groupby for cumsum.
     We trigger it by using strings which are not supported by the Exscan scheme"""
 
@@ -1733,9 +1730,8 @@ def test_nonvar_column_names(memory_leak_check):
     check_func(impl1, (df,), sort_output=True)
 
 
-# TODO: add memory leak check when cumsum leak issue resolved
 @pytest.mark.slow
-def test_cumsum_large_random_numpy():
+def test_cumsum_large_random_numpy(memory_leak_check):
     def get_random_array(n, sizlen):
         elist = []
         for i in range(n):
