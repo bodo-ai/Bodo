@@ -3,65 +3,64 @@
 analyzes the IR to decide parallelism of arrays and parfors
 for distributed transformation.
 """
-import operator
-from collections import namedtuple, defaultdict
 import copy
-import warnings
 import inspect
+import operator
+import warnings
+from collections import defaultdict, namedtuple
 from enum import Enum
-import numpy as np
 
 import numba
+import numpy as np
 from numba.core import ir, ir_utils, types
 from numba.core.ir_utils import (
-    find_topo_order,
-    guard,
-    get_definition,
-    require,
-    find_callname,
-    mk_unique_var,
-    compile_to_numba_ir,
-    replace_arg_nodes,
-    build_definitions,
-    find_build_sequence,
-    find_const,
     GuardException,
+    build_definitions,
+    compile_to_numba_ir,
+    find_build_sequence,
+    find_callname,
+    find_const,
+    find_topo_order,
+    get_definition,
+    guard,
+    mk_unique_var,
+    replace_arg_nodes,
+    require,
 )
 from numba.parfors.parfor import (
     Parfor,
     get_parfor_reductions,
-    wrap_parfor_blocks,
     unwrap_parfor_blocks,
+    wrap_parfor_blocks,
 )
 
 import bodo
 import bodo.io
 import bodo.io.np_io
-from bodo.utils.utils import (
-    get_constant,
-    is_alloc_callname,
-    is_whole_slice,
-    is_slice_equiv_arr,
-    is_array_typ,
-    is_np_array_typ,
-    find_build_tuple,
-    debug_prints,
-    is_expr,
-    is_distributable_typ,
-    is_distributable_tuple_typ,
-    is_static_getsetitem,
-    get_getsetitem_index_var,
-    is_call_assign,
-    is_call,
-)
+from bodo.hiframes.pd_categorical_ext import CategoricalArray
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.hiframes.pd_multi_index_ext import MultiIndexType
-from bodo.hiframes.pd_categorical_ext import CategoricalArray
-from bodo.utils.transform import get_stmt_defs, get_call_expr_arg
-from bodo.utils.typing import BodoWarning, BodoError, is_overload_false
 from bodo.libs.bool_arr_ext import boolean_array
-
 from bodo.libs.distributed_api import Reduce_Type
+from bodo.utils.transform import get_call_expr_arg, get_stmt_defs
+from bodo.utils.typing import BodoError, BodoWarning, is_overload_false
+from bodo.utils.utils import (
+    debug_prints,
+    find_build_tuple,
+    get_constant,
+    get_getsetitem_index_var,
+    is_alloc_callname,
+    is_array_typ,
+    is_call,
+    is_call_assign,
+    is_distributable_tuple_typ,
+    is_distributable_typ,
+    is_expr,
+    is_np_array_typ,
+    is_slice_equiv_arr,
+    is_static_getsetitem,
+    is_whole_slice,
+)
 
 
 class Distribution(Enum):
@@ -1157,6 +1156,9 @@ class DistributedAnalysis:
             return
 
         if fdef == ("str_arr_setitem_NA_str", "bodo.libs.str_arr_ext"):
+            return
+
+        if fdef == ("str_arr_set_not_na", "bodo.libs.str_arr_ext"):
             return
 
         if fdef == (
@@ -2284,6 +2286,8 @@ def _get_array_accesses(blocks, func_ir, typemap, accesses=None):
                         ):
                             accesses.add((rhs.args[0].name, rhs.args[1].name, False))
                         if fdef == ("str_arr_setitem_NA_str", "bodo.libs.str_arr_ext"):
+                            accesses.add((rhs.args[0].name, rhs.args[1].name, False))
+                        if fdef == ("str_arr_set_not_na", "bodo.libs.str_arr_ext"):
                             accesses.add((rhs.args[0].name, rhs.args[1].name, False))
                         if fdef == ("get_bit_bitmap_arr", "bodo.libs.int_arr_ext"):
                             accesses.add((rhs.args[0].name, rhs.args[1].name, True))
