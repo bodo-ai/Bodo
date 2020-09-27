@@ -1,61 +1,63 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
+from enum import Enum
+
 import numba
 from numba.core import types
-from numba.extending import (
-    models,
-    register_model,
-    lower_cast,
-    infer_getattr,
-    type_callable,
-    infer,
-    overload,
-    make_attribute_wrapper,
-    intrinsic,
-    lower_builtin,
-    overload_method,
-)
+from numba.core.registry import CPUDispatcher
 from numba.core.typing.templates import (
-    infer_global,
     AbstractTemplate,
-    signature,
     AttributeTemplate,
     bound_function,
+    infer_global,
+    signature,
 )
-from numba.core.registry import CPUDispatcher
-from bodo.libs.int_arr_ext import IntegerArrayType, IntDtype
-from enum import Enum
+from numba.extending import (
+    infer,
+    infer_getattr,
+    intrinsic,
+    lower_builtin,
+    lower_cast,
+    make_attribute_wrapper,
+    models,
+    overload,
+    overload_method,
+    register_model,
+    type_callable,
+)
+
 import bodo
-from bodo.hiframes.pd_series_ext import SeriesType, _get_series_array_type
-from bodo.libs.array_item_arr_ext import ArrayItemArrayType
-from bodo.libs.str_arr_ext import string_array_type
-from bodo.libs.str_ext import string_type
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.hiframes.pd_index_ext import RangeIndexType
 from bodo.hiframes.pd_multi_index_ext import MultiIndexType
+from bodo.hiframes.pd_series_ext import SeriesType, _get_series_array_type
 from bodo.ir.aggregate import get_agg_func
-from bodo.libs.decimal_arr_ext import DecimalArrayType, Decimal128Type
+from bodo.libs.array_item_arr_ext import ArrayItemArrayType
+from bodo.libs.decimal_arr_ext import Decimal128Type, DecimalArrayType
+from bodo.libs.int_arr_ext import IntDtype, IntegerArrayType
+from bodo.libs.str_arr_ext import string_array_type
+from bodo.libs.str_ext import string_type
+from bodo.utils.transform import get_call_expr_arg, get_const_func_output_type
 from bodo.utils.typing import (
-    list_cumulative,
     BodoError,
-    raise_const_error,
-    raise_bodo_error,
-    is_overload_none,
-    get_overload_const_list,
-    is_overload_true,
-    is_overload_false,
-    is_overload_zero,
-    is_overload_constant_bool,
-    is_overload_constant_str,
-    is_overload_constant_list,
-    is_dtype_nullable,
-    get_overload_const_func,
-    get_overload_const_str,
-    is_overload_constant_dict,
-    get_overload_constant_dict,
-    get_index_data_arr_types,
     create_unsupported_overload,
+    get_index_data_arr_types,
+    get_overload_const_func,
+    get_overload_const_list,
+    get_overload_const_str,
+    get_overload_constant_dict,
+    is_dtype_nullable,
+    is_overload_constant_bool,
+    is_overload_constant_dict,
+    is_overload_constant_list,
+    is_overload_constant_str,
+    is_overload_false,
+    is_overload_none,
+    is_overload_true,
+    is_overload_zero,
+    list_cumulative,
+    raise_bodo_error,
+    raise_const_error,
 )
-from bodo.utils.transform import get_const_func_output_type, get_call_expr_arg
 from bodo.utils.utils import is_expr
 
 
@@ -358,8 +360,8 @@ class DataframeGroupByAttribute(AttributeTemplate):
     def _get_keys_not_as_index(
         self, grp, out_columns, out_data, out_column_type, multi_level_names=False
     ):
-        """ Add groupby keys to output columns (to be used when
-            as_index=False) """
+        """Add groupby keys to output columns (to be used when
+        as_index=False)"""
         for k in grp.keys:
             if multi_level_names:
                 e_col = (k, "")
@@ -409,7 +411,7 @@ class DataframeGroupByAttribute(AttributeTemplate):
                     # input to UDFs is a Series
                     in_series_typ = SeriesType(data.dtype, data, None, string_type)
                     out_dtype = get_const_func_output_type(
-                        func, (in_series_typ,), self.context
+                        func, (in_series_typ,), {}, self.context
                     )
                     err_msg = "ok"
                 except:
@@ -477,9 +479,9 @@ class DataframeGroupByAttribute(AttributeTemplate):
         return signature(out_res, *args)
 
     def _get_agg_funcname_and_outtyp(self, grp, args, col, f_val):
-        """ Get function name and output type for a function used in
-            groupby.agg(), given by f_val (can be a string constant or
-            user-defined function) applied to column col """
+        """Get function name and output type for a function used in
+        groupby.agg(), given by f_val (can be a string constant or
+        user-defined function) applied to column col"""
         is_udf = True  # is user-defined function
         if isinstance(f_val, str):
             is_udf = False
