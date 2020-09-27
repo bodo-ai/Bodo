@@ -52,9 +52,9 @@ from bodo.hiframes.datetime_date_ext import (
     datetime_date_type,
 )
 from bodo.libs.array_item_arr_ext import (
+    ArrayItemArrayPayloadType,
     ArrayItemArrayType,
     _get_array_item_arr_payload,
-    ArrayItemArrayPayloadType,
 )
 from bodo.libs.decimal_arr_ext import Decimal128Type, DecimalArrayType
 from bodo.libs.str_ext import memcmp, string_type, unicode_to_utf8_and_len
@@ -944,8 +944,7 @@ def str_arr_shape_overload(str_arr):
 import llvmlite.binding as ll
 from llvmlite import ir as lir
 
-from bodo.libs import hstr_ext
-from bodo.libs import array_ext
+from bodo.libs import array_ext, hstr_ext
 
 ll.add_symbol("get_str_len", hstr_ext.get_str_len)
 ll.add_symbol("setitem_string_array", hstr_ext.setitem_string_array)
@@ -1968,3 +1967,37 @@ def overload_glob_glob(pathname, recursive=False):
         return l
 
     return _glob_glob_impl
+
+
+#### Support for np operations on arrays. ####
+@overload(np.repeat, no_unliteral=True)
+def np_repeat(A, repeats):  # pragma: no cover
+    if A != string_array_type:
+        return
+    if not isinstance(repeats, types.Integer):  # pragma: no cover
+        raise BodoError("Only integer type supported for repeats in np.repeat()")
+
+    def impl(A, repeats):  # pragma: no cover
+        # TODO(Nick): Add a check that repeats > 0
+        numba.parfors.parfor.init_prange()
+        l = len(A)
+        num_chars = 0
+        for i in numba.parfors.parfor.internal_prange(l):
+            s = 0
+            if not (bodo.libs.array_kernels.isna(A, i)):
+                s = get_str_arr_item_length(A, i)
+            num_chars += s * repeats
+
+        out_arr = pre_alloc_string_array(l * repeats, num_chars)
+        for j in numba.parfors.parfor.internal_prange(l):
+            idx = j * repeats
+            if bodo.libs.array_kernels.isna(A, j):
+                out_arr[idx : idx + repeats] = ""
+                for k in range(repeats):
+                    bodo.libs.array_kernels.setna(out_arr, idx + k)
+            else:
+                out_arr[idx : idx + repeats] = A[j]
+
+        return out_arr
+
+    return impl

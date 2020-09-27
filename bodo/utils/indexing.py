@@ -146,22 +146,43 @@ def setitem_slice_index_null_bits(dst_bitmap, src_bitmap, idx, n):  # pragma: no
         val_ind += 1
 
 
-@register_jitable
 def array_setitem_slice_index(A, idx, val):  # pragma: no cover
+    return
+
+
+@overload(array_setitem_slice_index, no_unliteral=True)
+def array_setitem_slice_index_overload(A, idx, val):  # pragma: no cover
     """implements setitem with slice index for arrays that have a '_data' attribute and
     '_null_bitmap' attribute (e.g. int/bool/decimal/date). The value is assumed to be
-    another array of same type.
+    another array of same type or a scalar.
     Covered by test_series_iloc_setitem_slice.
     """
-    val = bodo.utils.conversion.coerce_to_array(val, use_nullable_array=True)
-    n = len(A._data)
-    # using setitem directly instead of copying in loop since
-    # Array setitem checks for memory overlap and copies source
-    A._data[idx] = val._data
-    # XXX: conservative copy of bitmap in case there is overlap
-    # TODO: check for overlap and copy only if necessary
-    src_bitmap = val._null_bitmap.copy()
-    setitem_slice_index_null_bits(A._null_bitmap, src_bitmap, idx, n)
+
+    if bodo.utils.utils.is_array_typ(val) or bodo.utils.typing.is_iterable_type(val):
+
+        def impl_arr(A, idx, val):  # pragma: no cover
+            val = bodo.utils.conversion.coerce_to_array(
+                val,
+                use_nullable_array=True,
+            )
+            n = len(A._data)
+            # using setitem directly instead of copying in loop since
+            # Array setitem checks for memory overlap and copies source
+            A._data[idx] = val._data
+            # XXX: conservative copy of bitmap in case there is overlap
+            # TODO: check for overlap and copy only if necessary
+            src_bitmap = val._null_bitmap.copy()
+            setitem_slice_index_null_bits(A._null_bitmap, src_bitmap, idx, n)
+
+        return impl_arr
+    else:
+
+        def impl_scalar(A, idx, val):  # pragma: no cover
+            slice_idx = numba.cpython.unicode._normalize_slice(idx, len(A))
+            for i in range(slice_idx.start, slice_idx.stop, slice_idx.step):
+                A[i] = val
+
+        return impl_scalar
 
 
 def untuple_if_one_tuple(v):

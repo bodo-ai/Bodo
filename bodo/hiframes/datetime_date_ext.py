@@ -1,59 +1,59 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 """Numba extension support for datetime.date objects and their arrays.
 """
-import operator
-import numpy as np
 import datetime
+import operator
+
+import llvmlite.binding as ll
 import numba
-from numba.core import types
+import numpy as np
+from llvmlite import ir as lir
+from numba.core import cgutils, types
 from numba.core.imputils import lower_builtin, lower_constant
 from numba.core.typing import signature
+from numba.core.typing.templates import (
+    AbstractTemplate,
+    AttributeTemplate,
+    ConcreteTemplate,
+    bound_function,
+    infer_getattr,
+    infer_global,
+    signature,
+)
 from numba.extending import (
-    typeof_impl,
-    type_callable,
-    models,
-    register_model,
     NativeValue,
-    make_attribute_wrapper,
-    lower_builtin,
     box,
-    unbox,
+    infer_getattr,
+    intrinsic,
+    lower_builtin,
     lower_cast,
     lower_getattr,
-    infer_getattr,
-    overload_method,
+    make_attribute_wrapper,
+    models,
     overload,
-    intrinsic,
     overload_attribute,
+    overload_method,
     register_jitable,
-)
-from numba.core import cgutils
-from numba.core.typing.templates import (
-    infer_getattr,
-    AttributeTemplate,
-    bound_function,
-    signature,
-    infer_global,
-    AbstractTemplate,
-    ConcreteTemplate,
+    register_model,
+    type_callable,
+    typeof_impl,
+    unbox,
 )
 from numba.parfors.array_analysis import ArrayAnalysis
-from llvmlite import ir as lir
-from bodo.hiframes.datetime_timedelta_ext import datetime_timedelta_type
-from bodo.hiframes.datetime_datetime_ext import DatetimeDatetimeType
+
 import bodo
-from bodo.utils.typing import is_list_like_index_type
+from bodo.hiframes.datetime_datetime_ext import DatetimeDatetimeType
+from bodo.hiframes.datetime_timedelta_ext import datetime_timedelta_type
+from bodo.libs import hdatetime_ext
 from bodo.utils.indexing import (
     array_getitem_bool_index,
     array_getitem_int_index,
     array_getitem_slice_index,
-    array_setitem_int_index,
     array_setitem_bool_index,
+    array_setitem_int_index,
     array_setitem_slice_index,
 )
-from bodo.libs import hdatetime_ext
-import llvmlite.binding as ll
-
+from bodo.utils.typing import is_list_like_index_type
 
 ll.add_symbol("box_datetime_date_array", hdatetime_ext.box_datetime_date_array)
 ll.add_symbol("unbox_datetime_date_array", hdatetime_ext.unbox_datetime_date_array)
@@ -207,8 +207,7 @@ def impl_ctor_datetime_date(context, builder, sig, args):
 
 @intrinsic
 def cast_int_to_datetime_date(typingctx, val=None):
-    """Cast int value to datetime.date
-    """
+    """Cast int value to datetime.date"""
     assert val == types.int64
 
     def codegen(context, builder, signature, args):
@@ -219,8 +218,7 @@ def cast_int_to_datetime_date(typingctx, val=None):
 
 @intrinsic
 def cast_datetime_date_to_int(typingctx, val=None):
-    """Cast datetime.date value to int
-    """
+    """Cast datetime.date value to int"""
     assert val == datetime_date_type
 
     def codegen(context, builder, signature, args):
@@ -625,7 +623,8 @@ make_attribute_wrapper(DatetimeDateArrayType, "null_bitmap", "_null_bitmap")
 @overload_method(DatetimeDateArrayType, "copy", no_unliteral=True)
 def overload_datetime_date_arr_copy(A):
     return lambda A: bodo.hiframes.datetime_date_ext.init_datetime_date_array(
-        A._data.copy(), A._null_bitmap.copy(),
+        A._data.copy(),
+        A._null_bitmap.copy(),
     )  # pragma: no cover
 
 
@@ -700,8 +699,7 @@ def box_datetime_date_array(typ, val, c):
 
 @intrinsic
 def init_datetime_date_array(typingctx, data, nulls=None):
-    """Create a DatetimeDateArrayType with provided data values.
-    """
+    """Create a DatetimeDateArrayType with provided data values."""
     assert data == types.Array(types.int64, 1, "C")
     assert nulls == types.Array(types.uint8, 1, "C")
 
@@ -791,7 +789,7 @@ def dt_date_arr_setitem(A, idx, val):
 
     # scalar case
     if isinstance(idx, types.Integer):
-        if val == types.none or isinstance(val, types.optional): # pragma: no cover
+        if val == types.none or isinstance(val, types.optional):  # pragma: no cover
             return
 
         def impl(A, idx, val):  # pragma: no cover
@@ -859,8 +857,7 @@ def overload_datetime_date_arr_sub(arg1, arg2):
 
 
 def create_cmp_op_overload(op):
-    """create overload function for comparison operators with datetime_date_array
-    """
+    """create overload function for comparison operators with datetime_date_array"""
 
     def overload_date_arr_cmp(A1, A2):
         # both datetime_date_array_type
@@ -924,8 +921,7 @@ def create_cmp_op_overload(op):
 
 
 def _install_cmp_ops():
-    """install overloads for comparison operators with datetime_date_array
-    """
+    """install overloads for comparison operators with datetime_date_array"""
     for op in (
         operator.eq,
         operator.ne,

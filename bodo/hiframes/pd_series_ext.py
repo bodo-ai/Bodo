@@ -3,70 +3,73 @@
 Implement pd.Series typing and data model handling.
 """
 import operator
-import pandas as pd
-import numpy as np
+
 import numba
-from numba.core import types, cgutils
-from numba.extending import (
-    models,
-    register_model,
-    lower_cast,
-    infer_getattr,
-    type_callable,
-    infer,
-    overload,
-    make_attribute_wrapper,
-    intrinsic,
-    overload_method,
-    overload_attribute,
-)
-from numba.core.typing.templates import (
-    infer_global,
-    AbstractTemplate,
-    signature,
-    AttributeTemplate,
-    bound_function,
-)
+import numpy as np
+import pandas as pd
+from llvmlite import ir as lir
+from numba.core import cgutils, types
+from numba.core.imputils import impl_ret_borrowed
 from numba.core.typing.arraydecl import (
-    get_array_index_type,
-    _expand_integer,
     ArrayAttribute,
     SetItemBuffer,
+    _expand_integer,
+    get_array_index_type,
 )
 from numba.core.typing.npydecl import (
     Numpy_rules_ufunc,
     NumpyRulesArrayOperator,
     NumpyRulesInplaceArrayOperator,
 )
-from numba.core.imputils import impl_ret_borrowed
-from llvmlite import ir as lir
+from numba.core.typing.templates import (
+    AbstractTemplate,
+    AttributeTemplate,
+    bound_function,
+    infer_global,
+    signature,
+)
+from numba.extending import (
+    infer,
+    infer_getattr,
+    intrinsic,
+    lower_cast,
+    make_attribute_wrapper,
+    models,
+    overload,
+    overload_attribute,
+    overload_method,
+    register_model,
+    type_callable,
+)
 
 import bodo
-from bodo.libs.str_ext import string_type
-from bodo.libs.struct_arr_ext import StructType, StructArrayType
+from bodo.hiframes.datetime_date_ext import datetime_date_type
+from bodo.hiframes.pd_categorical_ext import (
+    CategoricalArray,
+    PDCategoricalDtype,
+)
+from bodo.hiframes.pd_timestamp_ext import pandas_timestamp_type
+from bodo.hiframes.rolling import supported_rolling_funcs
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
-from bodo.libs.map_arr_ext import MapArrayType
-from bodo.libs.str_arr_ext import string_array_type
-from bodo.libs.int_arr_ext import IntegerArrayType, IntDtype
 from bodo.libs.bool_arr_ext import boolean_array
 from bodo.libs.decimal_arr_ext import Decimal128Type, DecimalArrayType
-from bodo.hiframes.pd_timestamp_ext import pandas_timestamp_type
-from bodo.hiframes.datetime_date_ext import datetime_date_type
-from bodo.hiframes.pd_categorical_ext import PDCategoricalDtype, CategoricalArray
-from bodo.hiframes.rolling import supported_rolling_funcs
+from bodo.libs.int_arr_ext import IntDtype, IntegerArrayType
+from bodo.libs.map_arr_ext import MapArrayType
+from bodo.libs.str_arr_ext import string_array_type
+from bodo.libs.str_ext import string_type
+from bodo.libs.struct_arr_ext import StructArrayType, StructType
+from bodo.utils.transform import get_const_func_output_type
 from bodo.utils.typing import (
+    BodoError,
+    create_unsupported_overload,
+    get_udf_out_arr_type,
     is_overload_false,
     is_overload_none,
-    create_unsupported_overload,
-    BodoError,
-    get_udf_out_arr_type,
 )
-from bodo.utils.transform import get_const_func_output_type
 
 
 class SeriesType(types.IterableType, types.ArrayCompatible):
-    """Temporary type class for Series objects.
-    """
+    """Temporary type class for Series objects."""
 
     ndim = 1
 
@@ -151,8 +154,7 @@ class SeriesType(types.IterableType, types.ArrayCompatible):
 
 
 def _get_series_array_type(dtype):
-    """get underlying default array type of series based on its dtype
-    """
+    """get underlying default array type of series based on its dtype"""
 
     # string array
     if dtype == string_type:
@@ -175,9 +177,7 @@ def _get_series_array_type(dtype):
     if isinstance(dtype, types.BaseTuple):
         if any(not isinstance(t, types.Number) for t in dtype.types):
             # TODO: support more types. what types can be in recarrays?
-            raise BodoError(
-                "series tuple dtype {} includes non-numerics".format(dtype)
-            )
+            raise BodoError("series tuple dtype {} includes non-numerics".format(dtype))
         np_dtype = np.dtype(",".join(str(t) for t in dtype.types), align=True)
         dtype = numba.np.numpy_support.from_dtype(np_dtype)
 
@@ -320,8 +320,8 @@ def init_series(typingctx, data, index, name=None):
     data has changed, and get the array variables from init_series() args if
     not changed.
     """
-    from bodo.hiframes.pd_multi_index_ext import MultiIndexType
     from bodo.hiframes.pd_index_ext import is_pd_index_type
+    from bodo.hiframes.pd_multi_index_ext import MultiIndexType
 
     assert is_pd_index_type(index) or isinstance(index, MultiIndexType)
     name = types.none if name is None else name

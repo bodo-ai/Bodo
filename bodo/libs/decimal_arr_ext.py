@@ -8,33 +8,33 @@ The precision can be up to 38, the scale must be less or equal to precision.'
 'When infer schema from decimal.Decimal objects, it will be DecimalType(38, 18).'
 """
 import operator
-import numpy as np
-import numba
-import bodo
-from numba.core import types
-from numba.core import cgutils
-from numba.extending import (
-    typeof_impl,
-    type_callable,
-    models,
-    register_model,
-    NativeValue,
-    make_attribute_wrapper,
-    lower_builtin,
-    box,
-    unbox,
-    lower_getattr,
-    intrinsic,
-    overload_method,
-    overload,
-    overload_attribute,
-)
-from numba.parfors.array_analysis import ArrayAnalysis
-from numba.core.imputils import lower_constant
 from decimal import Decimal
 
-from llvmlite import ir as lir
 import llvmlite.binding as ll
+import numba
+import numpy as np
+from llvmlite import ir as lir
+from numba.core import cgutils, types
+from numba.core.imputils import lower_constant
+from numba.extending import (
+    NativeValue,
+    box,
+    intrinsic,
+    lower_builtin,
+    lower_getattr,
+    make_attribute_wrapper,
+    models,
+    overload,
+    overload_attribute,
+    overload_method,
+    register_model,
+    type_callable,
+    typeof_impl,
+    unbox,
+)
+from numba.parfors.array_analysis import ArrayAnalysis
+
+import bodo
 from bodo.libs import decimal_ext
 
 ll.add_symbol("box_decimal_array", decimal_ext.box_decimal_array)
@@ -42,28 +42,26 @@ ll.add_symbol("unbox_decimal", decimal_ext.unbox_decimal)
 ll.add_symbol("unbox_decimal_array", decimal_ext.unbox_decimal_array)
 ll.add_symbol("decimal_to_str", decimal_ext.decimal_to_str)
 
-from bodo.utils.typing import (
-    get_overload_const_int,
-    is_overload_constant_int,
-    is_list_like_index_type,
-    parse_dtype,
-)
 from bodo.utils.indexing import (
     array_getitem_bool_index,
     array_getitem_int_index,
     array_getitem_slice_index,
-    array_setitem_int_index,
     array_setitem_bool_index,
+    array_setitem_int_index,
     array_setitem_slice_index,
 )
-
+from bodo.utils.typing import (
+    get_overload_const_int,
+    is_list_like_index_type,
+    is_overload_constant_int,
+    parse_dtype,
+)
 
 int128_type = types.Integer("int128", 128)
 
 
 class Decimal128Type(types.Type):
-    """data type for Decimal128 values similar to Arrow's Decimal128
-    """
+    """data type for Decimal128 values similar to Arrow's Decimal128"""
 
     def __init__(self, precision, scale):
         assert isinstance(precision, int)
@@ -91,8 +89,7 @@ register_model(Decimal128Type)(models.IntegerModel)
 
 @intrinsic
 def int128_to_decimal128type(typingctx, val, precision_tp, scale_tp=None):
-    """cast int128 to decimal128
-    """
+    """cast int128 to decimal128"""
     assert val == int128_type
     assert is_overload_constant_int(precision_tp)
     assert is_overload_constant_int(scale_tp)
@@ -110,8 +107,7 @@ def int128_to_decimal128type(typingctx, val, precision_tp, scale_tp=None):
 
 @intrinsic
 def decimal128type_to_int128(typingctx, val):
-    """cast int128 to decimal128
-    """
+    """cast int128 to decimal128"""
     assert isinstance(val, Decimal128Type)
 
     def codegen(context, builder, signature, args):
@@ -161,8 +157,7 @@ def decimal_to_str_codegen(context, builder, signature, args, scale):
 
 @intrinsic
 def decimal_to_str(typingctx, val_t=None):
-    """convert decimal128 to string
-    """
+    """convert decimal128 to string"""
     assert isinstance(val_t, Decimal128Type)
 
     def codegen(context, builder, signature, args):
@@ -188,8 +183,7 @@ def overload_str_decimal(val):
 
 @intrinsic
 def decimal128type_to_int64_tuple(typingctx, val):
-    """convert decimal128type to a 2-tuple of int64 values
-    """
+    """convert decimal128type to a 2-tuple of int64 values"""
     assert isinstance(val, Decimal128Type)
 
     def codegen(context, builder, signature, args):
@@ -226,15 +220,20 @@ def unbox_decimal(typ, val, c):
     val is a Python object of type decimal.Decimal that is fed into
     the function. We need to return a Decimal128Type data type.
     Passing val as input to the function appears to be a correct move.
-    
+
     """
     fnty = lir.FunctionType(
-        lir.VoidType(), [lir.IntType(8).as_pointer(), lir.IntType(128).as_pointer(),],
+        lir.VoidType(),
+        [
+            lir.IntType(8).as_pointer(),
+            lir.IntType(128).as_pointer(),
+        ],
     )
     fn = c.builder.module.get_or_insert_function(fnty, name="unbox_decimal")
     res = cgutils.alloca_once(c.builder, c.context.get_value_type(int128_type))
     c.builder.call(
-        fn, [val, res],
+        fn,
+        [val, res],
     )
     is_error = cgutils.is_not_null(c.builder, c.pyapi.err_occurred())
     res_ret = c.builder.load(res)
@@ -306,8 +305,7 @@ make_attribute_wrapper(DecimalArrayType, "null_bitmap", "_null_bitmap")
 
 @intrinsic
 def init_decimal_array(typingctx, data, null_bitmap, precision_tp, scale_tp=None):
-    """Create a DecimalArray with provided data and null bitmap values.
-    """
+    """Create a DecimalArray with provided data and null bitmap values."""
     assert data == types.Array(int128_type, 1, "C")
     assert null_bitmap == types.Array(types.uint8, 1, "C")
     assert is_overload_constant_int(precision_tp)
@@ -385,7 +383,15 @@ def box_decimal_arr(typ, val, c):
         ],
     )
     fn_get = c.builder.module.get_or_insert_function(fnty, name="box_decimal_array")
-    obj_arr = c.builder.call(fn_get, [n, data_arr.data, bitmap_arr_data, scale,],)
+    obj_arr = c.builder.call(
+        fn_get,
+        [
+            n,
+            data_arr.data,
+            bitmap_arr_data,
+            scale,
+        ],
+    )
 
     c.context.nrt.decref(c.builder, typ, val)
     return obj_arr
@@ -426,7 +432,13 @@ def unbox_decimal_arr(typ, val, c):
     )
     fn = c.builder.module.get_or_insert_function(fnty, name="unbox_decimal_array")
     c.builder.call(
-        fn, [val, n, data_arr_struct.data, bitmap_arr_struct.data,],
+        fn,
+        [
+            val,
+            n,
+            data_arr_struct.data,
+            bitmap_arr_struct.data,
+        ],
     )
 
     decimal_arr.null_bitmap = bitmap_arr_struct._getvalue()
@@ -441,7 +453,10 @@ def overload_decimal_arr_copy(A):
     precision = A.precision
     scale = A.scale
     return lambda A: bodo.libs.decimal_arr_ext.init_decimal_array(
-        A._data.copy(), A._null_bitmap.copy(), precision, scale,
+        A._data.copy(),
+        A._null_bitmap.copy(),
+        precision,
+        scale,
     )
 
 
@@ -468,7 +483,7 @@ def decimal_arr_setitem(A, idx, val):
 
     # scalar case
     if isinstance(idx, types.Integer):
-        if val == types.none or isinstance(val, types.optional): # pragma: no cover
+        if val == types.none or isinstance(val, types.optional):  # pragma: no cover
             return
         # This is the existing type check
         assert isinstance(val, Decimal128Type)

@@ -5,8 +5,9 @@
     or test extensively against None.
 """
 import datetime
-import pandas as pd
+
 import numpy as np
+import pandas as pd
 import pytest
 
 import bodo
@@ -80,8 +81,18 @@ def test_setitem_optional_int(timedelta_arr_value, memory_leak_check):
         A[i] = x
         return A
 
-    check_func(test_impl, (timedelta_arr_value.copy(), 1, False), copy_input=True, dist_test=False)
-    check_func(test_impl, (timedelta_arr_value.copy(), 0, True), copy_input=True, dist_test=False)
+    check_func(
+        test_impl,
+        (timedelta_arr_value.copy(), 1, False),
+        copy_input=True,
+        dist_test=False,
+    )
+    check_func(
+        test_impl,
+        (timedelta_arr_value.copy(), 0, True),
+        copy_input=True,
+        dist_test=False,
+    )
 
 
 def test_setitem_none_int(timedelta_arr_value, memory_leak_check):
@@ -90,4 +101,13 @@ def test_setitem_none_int(timedelta_arr_value, memory_leak_check):
         return A
 
     i = 0
-    check_func(test_impl, (timedelta_arr_value.copy(), i), copy_input=True, dist_test=False)
+    check_func(
+        test_impl, (timedelta_arr_value.copy(), i), copy_input=True, dist_test=False
+    )
+
+
+def test_np_repeat(timedelta_arr_value, memory_leak_check):
+    def impl(arr):
+        return np.repeat(arr, 2)
+
+    check_func(impl, (timedelta_arr_value,), dist_test=False)

@@ -1,7 +1,8 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 from decimal import Decimal
-import pandas as pd
+
 import numpy as np
+import pandas as pd
 import pytest
 
 import bodo
@@ -42,6 +43,13 @@ from bodo.tests.utils import check_func
 )
 def decimal_arr_value(request):
     return request.param
+
+
+def test_np_repeat(decimal_arr_value, memory_leak_check):
+    def impl(arr):
+        return np.repeat(arr, 2)
+
+    check_func(impl, (decimal_arr_value,), dist_test=False)
 
 
 def test_unbox(decimal_arr_value, memory_leak_check):
@@ -153,7 +161,9 @@ def test_setitem_none_int(decimal_arr_value, memory_leak_check):
         return A
 
     i = 0
-    check_func(test_impl, (decimal_arr_value.copy(), i), copy_input=True, dist_test=False)
+    check_func(
+        test_impl, (decimal_arr_value.copy(), i), copy_input=True, dist_test=False
+    )
 
 
 @pytest.mark.skip("Decimal type cannot be coerced to a numba type #1625")
@@ -166,5 +176,12 @@ def test_setitem_optional_int(decimal_arr_value, memory_leak_check):
         A[i] = x
         return A
 
-    check_func(test_impl, (decimal_arr_value.copy(), 1, False), copy_input=True, dist_test=False)
-    check_func(test_impl, (decimal_arr_value.copy(), 0, True), copy_input=True, dist_test=False)
+    check_func(
+        test_impl,
+        (decimal_arr_value.copy(), 1, False),
+        copy_input=True,
+        dist_test=False,
+    )
+    check_func(
+        test_impl, (decimal_arr_value.copy(), 0, True), copy_input=True, dist_test=False
+    )

@@ -4,53 +4,54 @@ but nulls are stored in bit arrays (1 bit per value) similar to Arrow's nulls.
 Pandas converts boolean array to object when NAs are introduced.
 """
 import operator
-import pandas as pd
-import numpy as np
+
+import llvmlite.binding as ll
 import numba
-import bodo
-from numba.core import types
-from numba.core import cgutils
+import numpy as np
+import pandas as pd
+from llvmlite import ir as lir
+from numba.core import cgutils, types
+from numba.core.imputils import impl_ret_borrowed
 from numba.extending import (
-    typeof_impl,
-    type_callable,
-    models,
-    register_model,
     NativeValue,
-    make_attribute_wrapper,
-    lower_builtin,
     box,
-    unbox,
-    lower_getattr,
     intrinsic,
-    overload_method,
+    lower_builtin,
+    lower_cast,
+    lower_getattr,
+    make_attribute_wrapper,
+    models,
     overload,
     overload_attribute,
-    lower_cast,
+    overload_method,
+    register_model,
+    type_callable,
+    typeof_impl,
+    unbox,
 )
 from numba.parfors.array_analysis import ArrayAnalysis
+
+import bodo
+from bodo.libs import hstr_ext
 from bodo.libs.str_arr_ext import string_array_type
 from bodo.utils.typing import is_list_like_index_type
-from numba.core.imputils import impl_ret_borrowed
-from llvmlite import ir as lir
-import llvmlite.binding as ll
-from bodo.libs import hstr_ext
 
 ll.add_symbol("is_bool_array", hstr_ext.is_bool_array)
 ll.add_symbol("is_pd_boolean_array", hstr_ext.is_pd_boolean_array)
 ll.add_symbol("unbox_bool_array_obj", hstr_ext.unbox_bool_array_obj)
-from bodo.utils.typing import (
-    is_overload_none,
-    is_overload_true,
-    is_overload_false,
-    parse_dtype,
-)
 from bodo.utils.indexing import (
     array_getitem_bool_index,
     array_getitem_int_index,
     array_getitem_slice_index,
-    array_setitem_int_index,
     array_setitem_bool_index,
+    array_setitem_int_index,
     array_setitem_slice_index,
+)
+from bodo.utils.typing import (
+    is_overload_false,
+    is_overload_none,
+    is_overload_true,
+    parse_dtype,
 )
 
 
@@ -357,8 +358,7 @@ def lower_init_bool_array(context, builder, signature, args):
 
 @intrinsic
 def init_bool_array(typingctx, data, null_bitmap=None):
-    """Create a BooleanArray with provided data and null bitmap values.
-    """
+    """Create a BooleanArray with provided data and null bitmap values."""
     assert data == types.Array(types.bool_, 1, "C")
     assert null_bitmap == types.Array(types.uint8, 1, "C")
     sig = boolean_array(data, null_bitmap)
@@ -494,7 +494,7 @@ def bool_arr_setitem(A, idx, val):
 
     # scalar case
     if isinstance(idx, types.Integer):
-        if val == types.none or isinstance(val, types.optional): # pragma: no cover
+        if val == types.none or isinstance(val, types.optional):  # pragma: no cover
             return
 
         def impl_scalar(A, idx, val):  # pragma: no cover

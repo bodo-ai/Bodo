@@ -1,42 +1,42 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 """Numba extension support for datetime.timedelta objects and their arrays.
 """
-import operator
 import datetime
+import operator
+
+import llvmlite.binding as ll
 import numba
-from numba.core import types
+import numpy as np
+from llvmlite import ir as lir
+from numba.core import cgutils, types
+from numba.core.imputils import lower_constant
 from numba.extending import (
-    typeof_impl,
-    models,
-    register_model,
     NativeValue,
-    make_attribute_wrapper,
     box,
-    unbox,
-    lower_getattr,
-    overload,
     intrinsic,
+    lower_getattr,
+    make_attribute_wrapper,
+    models,
+    overload,
     overload_attribute,
     overload_method,
     register_jitable,
+    register_model,
+    typeof_impl,
+    unbox,
 )
-import numpy as np
-from numba.core import cgutils
-from numba.core.imputils import lower_constant
+from numba.parfors.array_analysis import ArrayAnalysis
 
 import bodo
 from bodo.hiframes.datetime_datetime_ext import datetime_datetime_type
-from numba.parfors.array_analysis import ArrayAnalysis
-from llvmlite import ir as lir
-from bodo.utils.typing import is_list_like_index_type
+from bodo.libs import hdatetime_ext
 from bodo.utils.indexing import (
     get_new_null_mask_bool_index,
     get_new_null_mask_int_index,
     get_new_null_mask_slice_index,
     setitem_slice_index_null_bits,
 )
-from bodo.libs import hdatetime_ext
-import llvmlite.binding as ll
+from bodo.utils.typing import is_list_like_index_type
 
 ll.add_symbol(
     "box_datetime_timedelta_array", hdatetime_ext.box_datetime_timedelta_array
@@ -525,8 +525,7 @@ def timedelta_abs(lhs):
 
 @intrinsic
 def cast_numpy_timedelta_to_int(typingctx, val=None):
-    """Cast timedelta64 value to int
-    """
+    """Cast timedelta64 value to int"""
     assert val in (types.NPTimedelta("ns"), types.int64)
 
     def codegen(context, builder, signature, args):
@@ -696,8 +695,7 @@ def box_datetime_timedelta_array(typ, val, c):
 def init_datetime_timedelta_array(
     typingctx, days_data, seconds_data, microseconds_data, nulls=None
 ):
-    """Create a DatetimeTimeDeltaArrayType with provided data values.
-    """
+    """Create a DatetimeTimeDeltaArrayType with provided data values."""
     assert days_data == types.Array(types.int64, 1, "C")
     assert seconds_data == types.Array(types.int64, 1, "C")
     assert microseconds_data == types.Array(types.int64, 1, "C")
@@ -839,7 +837,7 @@ def dt_timedelta_arr_setitem(A, ind, val):
 
     # scalar case
     if isinstance(ind, types.Integer):
-        if val == types.none or isinstance(val, types.optional): # pragma: no cover
+        if val == types.none or isinstance(val, types.optional):  # pragma: no cover
             return
 
         def impl(A, ind, val):  # pragma: no cover
@@ -893,25 +891,39 @@ def dt_timedelta_arr_setitem(A, ind, val):
 
     # slice case
     if isinstance(ind, types.SliceType):
+        if val == datetime_timedelta_array_type or bodo.utils.typing.is_iterable_type(
+            val
+        ):
 
-        def impl_slice_mask(A, ind, val):  # pragma: no cover
-            # Heavily influenced by array_setitem_slice_index.
-            # Just replaces calls for new data with all 3 arrays
-            val = bodo.utils.conversion.coerce_to_array(val, use_nullable_array=True)
-            n = len(A._data)
-            # using setitem directly instead of copying in loop since
-            # Array setitem checks for memory overlap and copies source
-            A._days_data[idx] = val._days_data
-            A._seconds_data[idx] = val._seconds_data
-            A._microseconds_data[idx] = val._microseconds_data
-            # XXX: conservative copy of bitmap in case there is overlap
-            # TODO: check for overlap and copy only if necessary
-            src_bitmap = val._null_bitmap.copy()
-            setitem_slice_index_null_bits(A._null_bitmap, src_bitmap, idx, n)
+            def impl_slice_mask(A, ind, val):  # pragma: no cover
+                # Heavily influenced by array_setitem_slice_index.
+                # Just replaces calls for new data with all 3 arrays
+                val = bodo.utils.conversion.coerce_to_array(
+                    val,
+                    use_nullable_array=True,
+                )
+                n = len(A._days_data)
+                # using setitem directly instead of copying in loop since
+                # Array setitem checks for memory overlap and copies source
+                A._days_data[ind] = val._days_data
+                A._seconds_data[ind] = val._seconds_data
+                A._microseconds_data[ind] = val._microseconds_data
+                # XXX: conservative copy of bitmap in case there is overlap
+                # TODO: check for overlap and copy only if necessary
+                src_bitmap = val._null_bitmap.copy()
+                setitem_slice_index_null_bits(A._null_bitmap, src_bitmap, ind, n)
 
-        # Is this still accurate???
-        # covered by test_series_setitem_slice
-        return impl_slice_mask
+            return impl_slice_mask
+
+        # If val is a scalar directly set the value
+        else:
+
+            def impl_slice_scalar(A, ind, val):  # pragma: no cover
+                slice_idx = numba.cpython.unicode._normalize_slice(ind, len(A))
+                for i in range(slice_idx.start, slice_idx.stop, slice_idx.step):
+                    A[i] = val
+
+            return impl_slice_scalar
 
 
 @overload(len, no_unliteral=True)
@@ -944,8 +956,7 @@ def overload_datetime_timedelta_arr_sub(arg1, arg2):
 
 
 def create_cmp_op_overload(op):
-    """create overload function for comparison operators with datetime_timedelta_array
-    """
+    """create overload function for comparison operators with datetime_timedelta_array"""
 
     def overload_date_arr_cmp(A1, A2):
         if op == operator.ne:
@@ -1009,8 +1020,7 @@ def create_cmp_op_overload(op):
 
 
 def _install_cmp_ops():
-    """install overloads for comparison operators with datetime_timedelta_array
-    """
+    """install overloads for comparison operators with datetime_timedelta_array"""
     for op in (
         operator.eq,
         operator.ne,
