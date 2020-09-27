@@ -1,96 +1,101 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 """IR node for the groupby, pivot and cross_tabulation"""
-import operator
-from collections import namedtuple, defaultdict
 import ctypes
+import operator
 import types as pytypes
+from collections import defaultdict, namedtuple
+
+import numba
 import numpy as np
 import pandas as pd
-import numba
-from bodo.utils.typing import BodoError
-from bodo.libs.decimal_arr_ext import DecimalArrayType, alloc_decimal_array
+from llvmlite import ir as lir
 from numba.core import compiler, ir, ir_utils, types
+from numba.core.analysis import compute_use_defs
 from numba.core.ir_utils import (
-    visit_vars_inner,
-    replace_vars_inner,
-    remove_dead,
+    build_definitions,
     compile_to_numba_ir,
-    replace_arg_nodes,
-    replace_vars_stmt,
     find_callname,
     find_const,
-    guard,
-    mk_unique_var,
     find_topo_order,
-    is_getitem,
-    build_definitions,
-    remove_dels,
-    get_ir_of_code,
     get_definition,
-    find_callname,
+    get_ir_of_code,
     get_name_var_table,
-    replace_var_names,
+    guard,
+    is_getitem,
+    mk_unique_var,
     next_label,
+    remove_dead,
+    remove_dels,
+    replace_arg_nodes,
+    replace_var_names,
+    replace_vars_inner,
+    replace_vars_stmt,
+    visit_vars_inner,
 )
-from numba.parfors.parfor import wrap_parfor_blocks, unwrap_parfor_blocks, Parfor
-from numba.core.analysis import compute_use_defs
 from numba.core.typing import signature
-from numba.core.typing.templates import infer_global, AbstractTemplate
-from numba.extending import overload, lower_builtin, intrinsic
+from numba.core.typing.templates import AbstractTemplate, infer_global
+from numba.extending import intrinsic, lower_builtin, overload
+from numba.parfors.parfor import (
+    Parfor,
+    unwrap_parfor_blocks,
+    wrap_parfor_blocks,
+)
+
 import bodo
-from llvmlite import ir as lir
-from bodo.utils.utils import (
-    is_call_assign,
-    is_var_assign,
-    is_assign,
-    is_expr,
-    debug_prints,
-    alloc_arr_tup,
-    empty_like_type,
-    sanitize_varname,
-    is_null_pointer,
-)
-from bodo.transforms import distributed_pass, distributed_analysis
-from bodo.transforms.distributed_analysis import Distribution
-from bodo.utils.utils import unliteral_all, incref
-from bodo.libs.str_ext import string_type
-from bodo.libs.int_arr_ext import IntegerArrayType, IntDtype
-from bodo.libs.bool_arr_ext import BooleanArrayType
-from bodo.utils.utils import build_set
-from bodo.libs.array_item_arr_ext import ArrayItemArrayType, pre_alloc_array_item_array
-from bodo.utils.typing import list_cumulative
-from bodo.libs.str_arr_ext import (
-    string_array_type,
-    StringArrayType,
-    pre_alloc_string_array,
-    get_offset_ptr,
-    get_data_ptr,
-    get_utf8_size,
-)
-from bodo.hiframes.pd_series_ext import SeriesType
-from bodo.hiframes.datetime_date_ext import DatetimeDateArrayType
 from bodo.hiframes import series_impl
+from bodo.hiframes.datetime_date_ext import DatetimeDateArrayType
+from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.ir.join import write_send_buff
+from bodo.libs.array import (
+    arr_info_list_to_table,
+    array_to_info,
+    compute_node_partition_by_hash,
+    delete_table,
+    delete_table_decref_arrays,
+    groupby_and_aggregate,
+    info_from_table,
+    info_to_array,
+)
+from bodo.libs.array_item_arr_ext import (
+    ArrayItemArrayType,
+    pre_alloc_array_item_array,
+)
+from bodo.libs.bool_arr_ext import BooleanArrayType
+from bodo.libs.decimal_arr_ext import DecimalArrayType, alloc_decimal_array
+from bodo.libs.int_arr_ext import IntDtype, IntegerArrayType
+from bodo.libs.str_arr_ext import (
+    StringArrayType,
+    get_data_ptr,
+    get_offset_ptr,
+    get_utf8_size,
+    pre_alloc_string_array,
+    string_array_type,
+)
+from bodo.libs.str_ext import string_type
 from bodo.libs.timsort import getitem_arr_tup, setitem_arr_tup
-from bodo.utils.transform import get_call_expr_arg
+from bodo.transforms import distributed_analysis, distributed_pass
+from bodo.transforms.distributed_analysis import Distribution
 from bodo.utils.shuffle import (
-    getitem_arr_tup_single,
-    val_to_tup,
+    _get_data_tup,
+    _get_keys_tup,
+    alloc_pre_shuffle_metadata,
     alltoallv_tup,
     finalize_shuffle_meta,
+    getitem_arr_tup_single,
     update_shuffle_meta,
-    alloc_pre_shuffle_metadata,
-    _get_keys_tup,
-    _get_data_tup,
+    val_to_tup,
 )
+from bodo.utils.transform import get_call_expr_arg
 from bodo.utils.typing import (
-    is_overload_true,
+    BodoError,
     get_overload_const_func,
     get_overload_const_list,
-    is_overload_constant_dict,
-    get_overload_constant_dict,
-    is_overload_constant_str,
     get_overload_const_str,
+    get_overload_constant_dict,
+    is_overload_constant_dict,
+    is_overload_constant_str,
+    is_overload_true,
+    list_cumulative,
 )
 from bodo.libs.array import (
     array_to_info,
@@ -104,7 +109,6 @@ from bodo.libs.array import (
     delete_table,
     delete_table_decref_arrays,
 )
-
 
 # TODO: it's probably a bad idea for these to be global. Maybe try moving them
 # to a context or dispatcher object somehow
@@ -241,12 +245,14 @@ def get_agg_func(func_ir, func_name, rhs, series_type=None, typemap=None):
     if func_name == "var":
         func = pytypes.SimpleNamespace()
         func.ftype = func_name
+        func.fname = func_name
         func.ncols_pre_shuffle = 3
         func.ncols_post_shuffle = 4
         return func
     if func_name == "std":
         func = pytypes.SimpleNamespace()
         func.ftype = func_name
+        func.fname = func_name
         func.ncols_pre_shuffle = 3
         func.ncols_post_shuffle = 4
         return func
@@ -256,18 +262,21 @@ def get_agg_func(func_ir, func_name, rhs, series_type=None, typemap=None):
         # Also NOTE: Series last and df.groupby.last() are different operations
         func = pytypes.SimpleNamespace()
         func.ftype = func_name
+        func.fname = func_name
         func.ncols_pre_shuffle = 1
         func.ncols_post_shuffle = 1
         return func
     if func_name in {"idxmin", "idxmax"}:
         func = pytypes.SimpleNamespace()
         func.ftype = func_name
+        func.fname = func_name
         func.ncols_pre_shuffle = 2
         func.ncols_post_shuffle = 2
         return func
     if func_name in supported_agg_funcs[:-7]:
         func = pytypes.SimpleNamespace()
         func.ftype = func_name
+        func.fname = func_name
         func.ncols_pre_shuffle = 1
         func.ncols_post_shuffle = 1
         skipdropna = True
@@ -322,6 +331,7 @@ def get_agg_func(func_ir, func_name, rhs, series_type=None, typemap=None):
     # multi-function tuple case
     if isinstance(agg_func_typ, types.BaseTuple):
         funcs = []
+        lambda_count = 0
         for t in agg_func_typ.types:
             if is_overload_constant_str(t):
                 func_name = get_overload_const_str(t)
@@ -332,6 +342,13 @@ def get_agg_func(func_ir, func_name, rhs, series_type=None, typemap=None):
                 assert typemap is not None, "typemap is required for agg UDF handling"
                 func = _get_const_agg_func(t)
                 func.ftype = "udf"
+                func.fname = _get_udf_name(func)
+                # similar to _resolve_agg, TODO(ehsan): refactor
+                # if tuple has lambdas they will be named <lambda_0>,
+                # <lambda_1>, ... in output
+                if func.fname == "<lambda>":
+                    func.fname = "<lambda_" + str(lambda_count) + ">"
+                    lambda_count += 1
                 funcs.append(func)
         # return a list containing one list of functions (applied to single
         # input column)
@@ -341,6 +358,7 @@ def get_agg_func(func_ir, func_name, rhs, series_type=None, typemap=None):
     assert typemap is not None, "typemap is required for agg UDF handling"
     func = _get_const_agg_func(typemap[rhs.args[0].name])
     func.ftype = "udf"
+    func.fname = _get_udf_name(func)
     return func
 
 
@@ -357,7 +375,15 @@ def get_agg_func_udf(func_ir, f_val, rhs, series_type, typemap):
         assert typemap is not None, "typemap is required for agg UDF handling"
         func = _get_const_agg_func(f_val)
         func.ftype = "udf"
+        func.fname = _get_udf_name(func)
         return func
+
+
+def _get_udf_name(func):
+    """return name of UDF func"""
+    code = func.code if hasattr(func, "code") else func.__code__
+    f_name = code.co_name
+    return f_name
 
 
 def _get_const_agg_func(func_typ):
@@ -511,19 +537,62 @@ def remove_dead_aggregate(
 ):
 
     dead_cols = []
+    in_col_names = list(aggregate_node.df_in_vars.keys())
 
     for col_name, col_var in aggregate_node.df_out_vars.items():
         if col_var.name not in lives:
             dead_cols.append(col_name)
 
+    multi_func_dead = []
     for cname in dead_cols:
         aggregate_node.df_out_vars.pop(cname)
         if aggregate_node.pivot_arr is None:
             # input/output column names don't match in multi-function case
             if cname in aggregate_node.df_in_vars:
                 aggregate_node.df_in_vars.pop(cname)
+                # remove dead agg func (corresponding to dead column) from agg_func list
+                if isinstance(aggregate_node.agg_func, list):
+                    c_ind = in_col_names.index(cname)
+                    aggregate_node.agg_func = (
+                        aggregate_node.agg_func[:c_ind]
+                        + aggregate_node.agg_func[c_ind + 1 :]
+                    )
+                in_col_names = list(aggregate_node.df_in_vars.keys())
+            # multi-func case if not index output ('as_index=False' case)
+            elif not (
+                cname in aggregate_node.key_names
+                or isinstance(cname, tuple)
+                and cname[0] in aggregate_node.key_names
+            ):
+                multi_func_dead.append(cname)
         else:
             aggregate_node.pivot_values.remove(cname)
+
+    # remove dead agg funcs in multi-func case (tuple/list of funcs)
+    for cname in multi_func_dead:
+        # output name is a tuple for list of funcs in agg dict
+        # e.g. df.groupby("A").agg({"B": ["min", "max"]})
+        if isinstance(cname, tuple):
+            c_ind = in_col_names.index(cname[0])
+            cname = cname[1]
+        else:
+            # tuple of funcs on a single input data column case
+            # e.g. df.groupby("A")["B"].agg(("min", "max"))
+            assert len(in_col_names) == 1, "invalid groupby multi-func case"
+            c_ind = 0
+
+        # remove dead agg func from list
+        func_list = aggregate_node.agg_func[c_ind]
+        fnames = [f.fname for f in func_list]
+        assert cname in fnames, "invalid groupby multi-func output name"
+        f_ind = fnames.index(cname)
+        aggregate_node.agg_func[c_ind] = func_list[:f_ind] + func_list[f_ind + 1 :]
+
+    # remove input column if all multi-func outputs are dead
+    if multi_func_dead and [] in aggregate_node.agg_func:
+        c_ind = aggregate_node.agg_func.index([])
+        aggregate_node.df_in_vars.pop(in_col_names[c_ind])
+        aggregate_node.agg_func.remove([])
 
     out_key_vars = aggregate_node.out_key_vars
     if out_key_vars is not None and all(v.name not in lives for v in out_key_vars):

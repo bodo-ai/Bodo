@@ -3038,3 +3038,45 @@ def test_groupby_empty_funcs():
 
     df = pd.DataFrame({"A": [0, 0, 0, 1, 1, 1], "B": range(6)})
     assert impl(df) == bodo.jit(impl)(df)
+
+
+def test_groupby_dead_col_multifunc():
+    """Test dead column elimination in groupbys with UDFs (issues #1724, #1732, #1750)"""
+
+    # a dict item is unused
+    def impl1(df):
+        out_df = df.groupby("C").agg({"B": lambda x: x.max() - x.min(), "A": "min"})
+        return len(out_df.iloc[:, 0])
+
+    # all output of a dict item that is a list are unused
+    def impl2(df):
+        out_df = df.groupby("C", as_index=False).agg(
+            {"B": lambda x: x.max() - x.min(), "A": ["min", lambda x: x.sum()]}
+        )
+        return len(out_df.iloc[:, 1])
+
+    # tuple item is unused
+    def impl3(df):
+        out_df = df.groupby("C")["B"].agg(
+            (lambda x: x.max() - x.min(), "min", lambda x: x.sum())
+        )
+        return len(out_df.iloc[:, 1])
+
+    # all tuple items are unused
+    def impl4(df):
+        out_df = df.groupby("C")["B"].agg(
+            (lambda x: x.max() - x.min(), "min", lambda x: x.sum())
+        )
+        return len(out_df.index)
+
+    df = pd.DataFrame(
+        {
+            "A": [0, 0, 1, 1, 0, 0, 1, 0],
+            "B": [0.3, 0.7, 0.123, 0.66, 0.7, 0.1, 0.15, 0.23],
+            "C": [3, 7, 123, 66, 7, 1, 15, 23],
+        }
+    )
+    assert impl1(df) == bodo.jit(impl1)(df)
+    assert impl2(df) == bodo.jit(impl2)(df)
+    assert impl3(df) == bodo.jit(impl3)(df)
+    assert impl4(df) == bodo.jit(impl4)(df)
