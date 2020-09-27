@@ -95,6 +95,7 @@ from bodo.utils.typing import (
     is_overload_zero,
     raise_bodo_error,
     raise_const_error,
+    get_udf_error_msg,
 )
 
 _csv_write = types.ExternalFunction(
@@ -290,8 +291,8 @@ class DataFrameAttribute(AttributeTemplate):
             arg_typs += tuple(f_args.types)
         try:
             f_return_type = get_const_func_output_type(func, arg_typs, self.context)
-        except:
-            raise_bodo_error("DataFrame.apply(): user-defined function not supported")
+        except Exception as e:
+            raise_bodo_error(get_udf_error_msg("DataFrame.apply()", e), e.loc)
 
         out_arr_type = get_udf_out_arr_type(f_return_type)
 

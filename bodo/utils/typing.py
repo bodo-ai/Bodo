@@ -56,8 +56,11 @@ class BodoError(NumbaError):
     when printing so that it only prints the error message and code location.
     """
 
-    def __init__(self, msg, is_new=True):
-        self.is_new = is_new
+    def __init__(self, msg, locs_in_msg=None):
+        if locs_in_msg is None:
+            self.locs_in_msg = []
+        else:
+            self.locs_in_msg = locs_in_msg
         highlight = numba.core.errors.termcolor().errmsg
         super(BodoError, self).__init__(highlight(msg))
 
@@ -95,7 +98,7 @@ def raise_const_error(msg):
         raise BodoError(msg)
 
 
-def raise_bodo_error(msg):
+def raise_bodo_error(msg, loc=None):
     """Raises BodoException during partial typing in case typing transforms can handle
     the issue. Otherwise, raises BodoError.
     """
@@ -103,7 +106,8 @@ def raise_bodo_error(msg):
         bodo.transforms.typing_pass.typing_transform_required = True
         raise BodoException(msg)
     else:
-        raise BodoError(msg)
+        locs = [] if loc is None else [loc]
+        raise BodoError(msg, locs_in_msg=locs)
 
 
 class BodoWarning(Warning):
@@ -111,6 +115,21 @@ class BodoWarning(Warning):
     Warning class for Bodo-related potential issues such as prevention of
     parallelization by unsupported functions.
     """
+
+
+def get_udf_error_msg(context_str, error):
+    """Return error message for UDF-related errors. Adds location of UDF error
+    to message.
+    context_str: Context for UDF error, e.g. "Dataframe.apply()"
+    error: UDF error
+    """
+    return (
+        "{}: user-defined function not supported".format(context_str)
+        + ": "
+        + str(error.msg)
+        + "\n"
+        + error.loc.strformat()
+    )
 
 
 # sentinel value representing non-constant values

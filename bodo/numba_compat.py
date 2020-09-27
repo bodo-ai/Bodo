@@ -1037,17 +1037,19 @@ def propagate(self, typeinfer):
                 errors.append(numba.core.utils.chain_exception(new_exc, e))
             # Bodo change
             except bodo.utils.typing.BodoError as e:
-                if e.is_new:
+                if loc not in e.locs_in_msg:
                     # the first time we see BodoError during type inference, we
                     # put the code location in the error message, and re-raise
-                    loc = constraint.loc
                     errors.append(
                         bodo.utils.typing.BodoError(
-                            str(e.msg) + "\n" + loc.strformat() + "\n", is_new=False
+                            str(e.msg) + "\n" + loc.strformat() + "\n",
+                            locs_in_msg=e.locs_in_msg + [loc],
                         )
                     )
                 else:
-                    errors.append(bodo.utils.typing.BodoError(e.msg, is_new=False))
+                    errors.append(
+                        bodo.utils.typing.BodoError(e.msg, locs_in_msg=e.locs_in_msg)
+                    )
             except Exception as e:
                 numba.core.typeinfer._logger.debug("captured error", exc_info=e)
                 msg = (
@@ -1770,3 +1772,23 @@ if (
 ):  # pragma: no cover
     warnings.warn("numba.core.ir_utils.get_stmt_writes has changed")
 # only used locally here, no need to replace in Numba
+
+
+def patch_message(self, new_message):
+    """
+    Change the error message to the given new message.
+    """
+    # Bodo change: Bodo needs access to updated message (which is different
+    # to str(exception) which could also include source code location) in
+    # some cases like bodo/utils/typing.py::get_udf_error_msg
+    self.msg = new_message
+    self.args = (new_message,) + self.args[1:]
+
+
+lines = inspect.getsource(numba.core.errors.NumbaError.patch_message)
+if (
+    hashlib.sha256(lines.encode()).hexdigest()
+    != "ed189a428a7305837e76573596d767b6e840e99f75c05af6941192e0214fa899"
+):  # pragma: no cover
+    warnings.warn("numba.core.errors.NumbaError.patch_message has changed")
+numba.core.errors.NumbaError.patch_message = patch_message

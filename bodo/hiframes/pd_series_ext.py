@@ -65,6 +65,7 @@ from bodo.utils.typing import (
     get_udf_out_arr_type,
     is_overload_false,
     is_overload_none,
+    get_udf_error_msg,
 )
 
 
@@ -562,8 +563,10 @@ class SeriesAttribute(AttributeTemplate):
 
         try:
             f_return_type = get_const_func_output_type(func, in_types, self.context)
-        except:
-            raise BodoError(f"Series.{fname}(): user-defined function not supported")
+        except Exception as e:
+            raise BodoError(
+                get_udf_error_msg(f"Series.{fname}()", e), locs_in_msg=[e.loc]
+            )
 
         data_arr = get_udf_out_arr_type(f_return_type)
         # Series.map codegen returns np bool array instead of boolean_array currently
