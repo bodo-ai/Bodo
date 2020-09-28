@@ -2703,12 +2703,37 @@ def test_unroll_loop(memory_leak_check, is_slow_run):
             df[c + "2"] = (df[c] - df[c].mean()) / df[c].std()
         return df
 
+    # loop with multiple exits shouldn't be transformed
+    def impl4(df):
+        s = 0
+        i = 0
+        c_list = ["A", "B"]
+        while True:
+            c = c_list[i]
+            if c not in ["B"]:
+                break
+            s += df[c].sum()
+            i += 1
+            if i == len(c_list):
+                break
+        return s
+
+    def impl5(n):
+        df = pd.DataFrame({"A1": np.arange(n), "A2": np.arange(n) ** 2})
+        s = 0
+        for i in range(2):
+            s += df["A" + str(i + 1)].sum()
+        return df
+
     n = 11
     df = pd.DataFrame({"A": np.arange(n), "B": np.arange(n) ** 2, "C": np.ones(n)})
     check_func(impl1, (df,))
     check_func(impl2, (df,))
     if is_slow_run:
         check_func(impl3, (n,))
+    with pytest.raises(BodoError, match="getitem using"):
+        bodo.jit(impl4)(df)
+    check_func(impl5, (n,))
 
 
 def test_unsupported_df_method():

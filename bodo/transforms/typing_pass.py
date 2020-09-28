@@ -1037,6 +1037,10 @@ class TypingTransforms:
                 var1_def.rhs, var2
             )
 
+        # dependant through call, e.g. df["A"+str(i)]
+        if is_call(var1_def):
+            return any(self._vars_dependant(arg, var2) for arg in var1_def.args)
+
         return False
 
 
