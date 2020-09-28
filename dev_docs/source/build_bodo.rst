@@ -5,7 +5,7 @@ Building Bodo from Source
 -------------------------
 
 On Mac/Linux
-~~~~~~~~~~~~~~
+~~~~~~~~~~~~
 We use `Anaconda <https://www.anaconda.com/download/>`_ distribution of
 Python for setting up Bodo. These commands install Bodo and its dependencies
 such as Numba on Ubuntu Linux::
@@ -37,7 +37,7 @@ such as Numba on Ubuntu Linux::
 For HDFS related development, use the :ref:`docker image <docker-images>`.
 
 Troubleshooting MacOS Build
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 * If your Mac0S sdk hasn't been configured properly, you may get a clang related error like the following::
 
@@ -85,7 +85,7 @@ Troubleshooting Windows Build
 
 
 Running Example/Test
-~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~
 A command line for running the Pi example on 4 cores::
 
     mpiexec -n 4 python examples/pi.py
@@ -113,3 +113,10 @@ To run HDFS related unit tests, use the :ref:`docker image <docker-images>`.
 Other useful packages for development::
 
     conda install pytest sphinx pylint jupyter xlrd xlsxwriter mpi4py ipyparallel matplotlib jupyterlab aws-sdk-cpp
+
+
+Cleaning Bodo
+~~~~~~~~~~~~~
+
+The script `clean.sh` is provided to clean up all the leftover files after compilation.
+It removes all C++ compiled code and the `__pycache__` directories.
