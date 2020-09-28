@@ -202,7 +202,9 @@ def init_dataframe_iloc(typingctx, obj=None):
 
 @overload_attribute(DataFrameType, "iloc")
 def overload_series_iloc(s):
-    return lambda s: bodo.hiframes.dataframe_indexing.init_dataframe_iloc(s)
+    return lambda s: bodo.hiframes.dataframe_indexing.init_dataframe_iloc(
+        s
+    )  # pragma: no cover
 
 
 # df.iloc[] getitem
@@ -256,7 +258,7 @@ def overload_iloc_getitem(I, idx):
         col_ind = get_overload_const_int(idx.types[1])
         col_name = df.columns[col_ind]
 
-        def impl_col_ind(I, idx):
+        def impl_col_ind(I, idx):  # pragma: no cover
             df = I._obj
             index = bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)
             data = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, col_ind)
@@ -323,7 +325,9 @@ def init_dataframe_loc(typingctx, obj=None):
 
 @overload_attribute(DataFrameType, "loc")
 def overload_series_loc(s):
-    return lambda s: bodo.hiframes.dataframe_indexing.init_dataframe_loc(s)
+    return lambda s: bodo.hiframes.dataframe_indexing.init_dataframe_loc(
+        s
+    )  # pragma: no cover
 
 
 # df.loc[] getitem
@@ -363,7 +367,7 @@ def overload_loc_getitem(I, idx):
             col_name = get_overload_const_str(col_idx)
             col_ind = df.columns.index(col_name)
 
-            def impl_col_name(I, idx):
+            def impl_col_name(I, idx):  # pragma: no cover
                 df = I._obj
                 index = bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)
                 data = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, col_ind)
@@ -452,7 +456,9 @@ def init_dataframe_iat(typingctx, obj=None):
 
 @overload_attribute(DataFrameType, "iat")
 def overload_series_iat(s):
-    return lambda s: bodo.hiframes.dataframe_indexing.init_dataframe_iat(s)
+    return lambda s: bodo.hiframes.dataframe_indexing.init_dataframe_iat(
+        s
+    )  # pragma: no cover
 
 
 # df.iat[] getitem
@@ -471,7 +477,7 @@ def overload_iat_getitem(I, idx):
     ):
         col_ind = get_overload_const_int(idx.types[1])
 
-        def impl_col_ind(I, idx):
+        def impl_col_ind(I, idx):  # pragma: no cover
             df = I._obj
             data = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, col_ind)
             return data[idx[0]]
@@ -500,7 +506,7 @@ def overload_iat_setitem(I, idx, val):
     ):
         col_ind = get_overload_const_int(idx.types[1])
 
-        def impl_col_ind(I, idx, val):
+        def impl_col_ind(I, idx, val):  # pragma: no cover
             df = I._obj
             data = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, col_ind)
             data[idx[0]] = val
