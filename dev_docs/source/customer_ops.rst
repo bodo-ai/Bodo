@@ -18,6 +18,8 @@ You will need your admin credentials to perform this operation. Those are stored
 
 - To install Bodo from the dev releases channel, execute the following command::
 
+
+     export BODO_TOKEN=<token>
      conda install -c https://<username>:<token>@bodo.jfrog.io/artifactory/api/conda/bodo.ai-dev -c conda-forge bodo
 
 where ``<username>`` and ``<token>`` are the customer username and tokens generated in the step above.
