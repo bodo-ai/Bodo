@@ -10,9 +10,14 @@ By default, we give customers access to our ``bodo.ai`` and ``bodo.ai-dev`` cond
 
 You will need your admin credentials to perform this operation. Those are stored in the team's 1Password shared vault.
 
-- To install Bodo, execute the following command::
+- To install Bodo from the releases channel, execute the following command::
 
      conda install -c https://<username>:<token>@bodo.jfrog.io/artifactory/api/conda/bodo.ai -c conda-forge bodo
+
+
+- To install Bodo from the dev releases channel, execute the following command::
+
+     conda install -c https://<username>:<token>@bodo.jfrog.io/artifactory/api/conda/bodo.ai-dev -c conda-forge bodo
 
 where ``<username>`` and ``<token>`` are the customer username and tokens generated in the step above.
 
