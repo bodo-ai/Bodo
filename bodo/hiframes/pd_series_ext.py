@@ -562,7 +562,7 @@ class SeriesAttribute(AttributeTemplate):
             in_types += tuple(f_args.types)
 
         try:
-            f_return_type = get_const_func_output_type(func, in_types, self.context)
+            f_return_type = get_const_func_output_type(func, in_types, {}, self.context)
         except Exception as e:
             raise BodoError(
                 get_udf_error_msg(f"Series.{fname}()", e), locs_in_msg=[e.loc]
@@ -626,7 +626,9 @@ class SeriesAttribute(AttributeTemplate):
         if dtype2 == types.NPDatetime("ns"):
             dtype2 = pandas_timestamp_type
 
-        f_return_type = get_const_func_output_type(func, (dtype1, dtype2), self.context)
+        f_return_type = get_const_func_output_type(
+            func, (dtype1, dtype2), {}, self.context
+        )
 
         # TODO: output name is always None in Pandas?
         sig = signature(

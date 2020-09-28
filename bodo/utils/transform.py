@@ -2,51 +2,48 @@
 """
 Helper functions for transformations.
 """
-import operator
-from collections import namedtuple
 import inspect
-import math
 import itertools
-import pandas as pd
-import numpy as np
 import math
+import operator
 import warnings
+from collections import namedtuple
 
 import numba
+import numpy as np
+import pandas as pd
 from numba.core import ir, ir_utils, types
-from numba.core.typing.templates import fold_arguments
 from numba.core.ir_utils import (
-    compile_to_numba_ir,
-    replace_arg_nodes,
-    find_const,
-    guard,
     GuardException,
-    get_definition,
-    require,
-    find_callname,
     build_definitions,
-    mk_unique_var,
+    compile_to_numba_ir,
     compute_cfg_from_blocks,
+    find_callname,
+    find_const,
+    get_definition,
+    guard,
+    mk_unique_var,
+    replace_arg_nodes,
+    require,
 )
 from numba.core.registry import CPUDispatcher
+from numba.core.typing.templates import fold_arguments
 
 import bodo
-from bodo.utils.utils import is_assign, is_expr
-from bodo.libs.str_ext import string_type
-from bodo.utils.typing import (
-    BodoError,
-    BodoConstUpdatedError,
-    can_literalize_type,
-    is_literal_type,
-    get_literal_value,
-    get_overload_const_list,
-)
-from bodo.utils.utils import is_call, is_array_typ
-from bodo.libs.str_arr_ext import string_array_type
-from bodo.libs.struct_arr_ext import StructArrayType, StructType
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.map_arr_ext import MapArrayType
-
+from bodo.libs.str_arr_ext import string_array_type
+from bodo.libs.str_ext import string_type
+from bodo.libs.struct_arr_ext import StructArrayType, StructType
+from bodo.utils.typing import (
+    BodoConstUpdatedError,
+    BodoError,
+    can_literalize_type,
+    get_literal_value,
+    get_overload_const_list,
+    is_literal_type,
+)
+from bodo.utils.utils import is_array_typ, is_assign, is_call, is_expr
 
 ReplaceFunc = namedtuple(
     "ReplaceFunc",
@@ -91,8 +88,18 @@ no_side_effect_call_tuples = {
     ("get_bool_arr_bitmap", "bool_arr_ext", "libs", bodo),
     ("init_bool_array", "bool_arr_ext", "libs", bodo),
     ("alloc_bool_array", "bool_arr_ext", "libs", bodo),
-    ("alloc_datetime_date_array", "datetime_date_ext", "hiframes", bodo,),
-    ("alloc_datetime_timedelta_array", "datetime_timedelta_ext", "hiframes", bodo,),
+    (
+        "alloc_datetime_date_array",
+        "datetime_date_ext",
+        "hiframes",
+        bodo,
+    ),
+    (
+        "alloc_datetime_timedelta_array",
+        "datetime_timedelta_ext",
+        "hiframes",
+        bodo,
+    ),
     ("_sum_handle_nan", "series_kernels", "hiframes", bodo),
     ("_mean_handle_nan", "series_kernels", "hiframes", bodo),
     ("_var_handle_mincount", "series_kernels", "hiframes", bodo),
@@ -264,8 +271,7 @@ def compile_func_single_block(
 
 
 def update_locs(node_list, loc):
-    """Update Loc objects for list of generated statements
-    """
+    """Update Loc objects for list of generated statements"""
     for stmt in node_list:
         stmt.loc = loc
         for v in stmt.list_vars():
@@ -490,7 +496,7 @@ def fold_argument_types(pysig, args, kws):
     return args
 
 
-def get_const_func_output_type(func, arg_types, typing_context):
+def get_const_func_output_type(func, arg_types, kw_types, typing_context):
     """Get output type of constant function 'func' when compiled with 'arg_types' as
     argument types.
     'func' can be a MakeFunctionLiteral (inline lambda) or FunctionLiteral (function)
@@ -522,7 +528,7 @@ def get_const_func_output_type(func, arg_types, typing_context):
     # fold arguments to handle cases like default values
     if py_func is not None:
         pysig = numba.core.utils.pysignature(py_func)
-        arg_types = fold_argument_types(pysig, arg_types, {})
+        arg_types = fold_argument_types(pysig, arg_types, kw_types)
 
     struct_key_names = fix_struct_return(f_ir)
     _, f_return_type, _ = numba.core.typed_passes.type_inference_stage(
@@ -643,8 +649,7 @@ NESTED_TUP_SENTINEL = "$BODO_NESTED_TUP"
 
 
 def gen_const_val_str(c):
-    """convert value 'c' to string constant
-    """
+    """convert value 'c' to string constant"""
     # const nested constant tuples are not supported in Numba yet, need special handling
     # HACK: flatten tuple values but add a sentinel value that specifies how many
     # elements are from the nested tuple. Supports only one level nesting
@@ -657,10 +662,12 @@ def gen_const_val_str(c):
 
 
 def gen_const_tup(vals):
-    """generate a constant tuple value as text
-    """
+    """generate a constant tuple value as text"""
     val_seq = ", ".join(gen_const_val_str(c) for c in vals)
-    return "({}{})".format(val_seq, "," if len(vals) == 1 else "",)
+    return "({}{})".format(
+        val_seq,
+        "," if len(vals) == 1 else "",
+    )
 
 
 def get_const_tup_vals(c_typ):
@@ -718,8 +725,7 @@ def set_call_expr_arg(var, args, kws, arg_no, arg_name):
 
 
 def func_has_assertions(py_func):
-    """return True if input function has any assertion inside
-    """
+    """return True if input function has any assertion inside"""
     f_ir = numba.core.compiler.run_frontend(py_func, inline_closures=True)
     for block in f_ir.blocks.values():
         if isinstance(block.body[-1], (ir.Raise, ir.StaticRaise)):
@@ -738,8 +744,7 @@ def replace_func(
     kws=None,
     inline_bodo_calls=False,
 ):
-    """
-    """
+    """"""
     glbls = {"numba": numba, "np": np, "bodo": bodo, "pd": pd}
     if extra_globals is not None:
         glbls.update(extra_globals)
@@ -785,8 +790,7 @@ def replace_func(
 
 
 def is_var_size_item_array_type(t):
-    """returns True if array type 't' has variable size items (e.g. strings)
-    """
+    """returns True if array type 't' has variable size items (e.g. strings)"""
     assert is_array_typ(t, False)
     return (
         t == string_array_type

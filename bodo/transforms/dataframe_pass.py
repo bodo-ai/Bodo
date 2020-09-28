@@ -539,6 +539,23 @@ class DataFramePass:
             extra_args = guard(find_build_sequence, self.func_ir, extra_args)
             extra_args = [] if extra_args is None else extra_args[0]
 
+        # find kw arguments to UDF (pop apply() args first)
+        kws.pop("func", None)
+        kws.pop("axis", None)
+        kws.pop("raw", None)
+        kws.pop("result_type", None)
+        kws.pop("args", None)
+        udf_arg_names = (
+            ", ".join("e{}".format(i) for i in range(len(extra_args)))
+            + (", " if extra_args else "")
+            + ", ".join(
+                "{}=e{}".format(a, i + len(extra_args))
+                for i, a in enumerate(kws.keys())
+            )
+        )
+        extra_args += list(kws.values())
+        extra_arg_names = ", ".join("e{}".format(i) for i in range(len(extra_args)))
+
         # find which columns are actually used if possible
         used_cols = _get_df_apply_used_cols(func, df_typ.columns)
 
@@ -551,11 +568,8 @@ class DataFramePass:
                 for i in range(len(used_cols))
             ]
         )
-        extra_arg_names = (", " if extra_args else "") + ", ".join(
-            "e{}".format(i) for i in range(len(extra_args))
-        )
 
-        func_text = "def f({}, df_index{}):\n".format(col_name_args, extra_arg_names)
+        func_text = "def f({}, df_index, {}):\n".format(col_name_args, extra_arg_names)
         func_text += "  numba.parfors.parfor.init_prange()\n"
         func_text += "  n = len(c0)\n"
 
@@ -573,7 +587,7 @@ class DataFramePass:
             func_text += init_size_code
             func_text += "  for j in numba.parfors.parfor.internal_prange(len(c0)):\n"
             func_text += "    row1 = Row({})\n".format(row_args_j)
-            func_text += "    item = map_func(row1{})\n".format(extra_arg_names)
+            func_text += "    item = map_func(row1, {})\n".format(udf_arg_names)
             func_text += gen_varsize_item_sizes(out_arr_type, "item", size_varnames)
             func_text += "  numba.parfors.parfor.init_prange()\n"
             func_text += "  varsize_alloc_sizes = ({},)\n".format(
@@ -587,8 +601,8 @@ class DataFramePass:
         func_text += "  for i in numba.parfors.parfor.internal_prange(n):\n"
         # TODO: unbox to array value if necessary (e.g. Timestamp to dt64)
         func_text += "     row2 = Row({})\n".format(row_args)
-        func_text += "     S[i] = bodo.utils.conversion.unbox_if_timestamp(map_func(row2{}))\n".format(
-            extra_arg_names
+        func_text += "     S[i] = bodo.utils.conversion.unbox_if_timestamp(map_func(row2, {}))\n".format(
+            udf_arg_names
         )
         func_text += (
             "  return bodo.hiframes.pd_series_ext.init_series(S, df_index, None)\n"
