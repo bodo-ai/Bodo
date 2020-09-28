@@ -1,57 +1,56 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
+import datetime
 import operator
+
+import llvmlite.binding as ll
+import numba
 import numpy as np
 import pandas as pd
-import numba
-from bodo.libs.str_arr_ext import string_array_type
-from numba.core import types
+from llvmlite import ir as lir
+from numba.core import cgutils, types
+from numba.core.imputils import lower_constant
+from numba.core.typing.templates import (
+    AbstractTemplate,
+    AttributeTemplate,
+    ConcreteTemplate,
+    bound_function,
+    infer_getattr,
+    infer_global,
+    signature,
+)
 from numba.extending import (
-    typeof_impl,
-    type_callable,
-    models,
-    register_model,
     NativeValue,
-    make_attribute_wrapper,
-    lower_builtin,
     box,
-    unbox,
+    infer_getattr,
+    intrinsic,
+    lower_builtin,
     lower_cast,
     lower_getattr,
-    infer_getattr,
-    overload_method,
+    make_attribute_wrapper,
+    models,
     overload,
-    intrinsic,
     overload_attribute,
+    overload_method,
     register_jitable,
+    register_model,
+    type_callable,
+    typeof_impl,
+    unbox,
 )
-from numba.core.imputils import lower_constant
-from numba.core import cgutils
-from numba.core.typing.templates import (
-    infer_getattr,
-    AttributeTemplate,
-    bound_function,
-    signature,
-    infer_global,
-    AbstractTemplate,
-    ConcreteTemplate,
-)
+
 import bodo.libs.str_ext
 import bodo.utils.utils
+from bodo.hiframes.datetime_date_ext import _ord2ymd, _ymd2ord, get_isocalendar
+from bodo.hiframes.datetime_timedelta_ext import datetime_timedelta_type
+from bodo.libs import hdatetime_ext
+from bodo.libs.str_arr_ext import string_array_type
 from bodo.utils.typing import (
-    is_overload_constant_str,
-    is_overload_constant_int,
+    BodoError,
     get_overload_const_str,
     is_list_like_index_type,
-    BodoError,
+    is_overload_constant_int,
+    is_overload_constant_str,
 )
-from bodo.hiframes.datetime_timedelta_ext import datetime_timedelta_type
-from bodo.hiframes.datetime_date_ext import _ord2ymd, _ymd2ord, get_isocalendar
-from llvmlite import ir as lir
-
-
-import datetime
-from bodo.libs import hdatetime_ext
-import llvmlite.binding as ll
 
 ll.add_symbol("extract_year_days", hdatetime_ext.extract_year_days)
 ll.add_symbol("get_month_day", hdatetime_ext.get_month_day)
@@ -82,6 +81,7 @@ date_fields = [
     "second",
     "microsecond",
     "nanosecond",
+    "quarter",
     "dayofyear",
     "dayofweek",
     "daysinmonth",
@@ -226,8 +226,7 @@ def init_timestamp(
     nanosecond,
     value=None,
 ):
-    """Create a PandasTimestampType with provided data values.
-    """
+    """Create a PandasTimestampType with provided data values."""
 
     def codegen(context, builder, sig, args):
         year, month, day, hour, minute, second, us, ns, value = args
@@ -261,8 +260,7 @@ def init_timestamp(
 
 @numba.generated_jit
 def zero_if_none(value):
-    """return zero if value is None. Otherwise, return value
-    """
+    """return zero if value is None. Otherwise, return value"""
     if value == types.none:
         return lambda value: 0
     return lambda value: value
@@ -601,6 +599,15 @@ def overload_pd_is_leap_year(ptt):
     return pd_is_leap_year
 
 
+@overload_attribute(PandasTimestampType, "quarter")
+def overload_quarter(ptt):
+    # copied implementation from https://github.com/pandas-dev/pandas/blob/4859be9cd145e3da0a7f596c3e27636a58920c1c/pandas/_libs/tslibs/timestamps.pyx#L547
+    def quarter(ptt):  # pragma: no cover
+        return ((ptt.month - 1) // 3) + 1
+
+    return quarter
+
+
 @overload_method(PandasTimestampType, "date", no_unliteral=True)
 def overload_pd_timestamp_date(ptt):
     def pd_timestamp_date_impl(ptt):  # pragma: no cover
@@ -701,8 +708,7 @@ def extract_year_days(typingctx, dt64_t=None):
 
 @intrinsic
 def get_month_day(typingctx, year_t, days_t=None):
-    """Converts number of days within a year to month and day, returned as a 2-tuple.
-    """
+    """Converts number of days within a year to month and day, returned as a 2-tuple."""
     assert year_t == types.int64
     assert days_t == types.int64
 
@@ -823,8 +829,7 @@ def is_leap_year(year):  # pragma: no cover
 
 @numba.njit
 def convert_datetime64_to_timestamp(dt64):  # pragma: no cover
-    """Converts dt64 value to pd.Timestamp
-    """
+    """Converts dt64 value to pd.Timestamp"""
     dt, year, days = extract_year_days(dt64)
     month, day = get_month_day(year, days)
 
@@ -854,8 +859,7 @@ def convert_numpy_timedelta64_to_datetime_timedelta(dt64):  # pragma: no cover
 
 @intrinsic
 def integer_to_timedelta64(typingctx, val=None):
-    """Cast an int value to timedelta64
-    """
+    """Cast an int value to timedelta64"""
 
     def codegen(context, builder, sig, args):
         return args[0]
@@ -865,8 +869,7 @@ def integer_to_timedelta64(typingctx, val=None):
 
 @intrinsic
 def integer_to_dt64(typingctx, val=None):
-    """Cast an int value to datetime64
-    """
+    """Cast an int value to datetime64"""
 
     def codegen(context, builder, sig, args):
         return args[0]
@@ -876,8 +879,7 @@ def integer_to_dt64(typingctx, val=None):
 
 @intrinsic
 def dt64_to_integer(typingctx, val=None):
-    """Cast a datetime64 value to integer
-    """
+    """Cast a datetime64 value to integer"""
 
     def codegen(context, builder, sig, args):
         return args[0]
@@ -899,8 +901,7 @@ def dt64_hash(val):
 
 @intrinsic
 def timedelta64_to_integer(typingctx, val=None):
-    """Cast a timedelta64 value to integer
-    """
+    """Cast a timedelta64 value to integer"""
 
     def codegen(context, builder, sig, args):
         return args[0]
@@ -920,8 +921,7 @@ def parse_datetime_str(val):  # pragma: no cover
 
 @numba.njit
 def datetime_timedelta_to_timedelta64(val):  # pragma: no cover
-    """convert datetime.timedelta to np.timedelta64
-    """
+    """convert datetime.timedelta to np.timedelta64"""
     with numba.objmode(res='NPTimedelta("ns")'):
         res = pd.to_timedelta(val)
         res = res.to_timedelta64()
@@ -930,8 +930,7 @@ def datetime_timedelta_to_timedelta64(val):  # pragma: no cover
 
 @numba.njit
 def datetime_datetime_to_dt64(val):  # pragma: no cover
-    """convert datetime.datetime to np.datetime64
-    """
+    """convert datetime.datetime to np.datetime64"""
     with numba.objmode(res='NPDatetime("ns")'):
         res = np.datetime64(val).astype("datetime64[ns]")
 
@@ -1021,8 +1020,7 @@ def overload_to_datetime(
     origin="unix",
     cache=True,
 ):
-    """implementation for pd.to_datetime
-    """
+    """implementation for pd.to_datetime"""
     # TODO: change 'arg_a' to 'arg' when inliner can handle it
 
     # This covers string as a literal or not
@@ -1309,8 +1307,7 @@ def create_timestamp_cmp_op_overload(op):
 
 
 def _install_timestamp_cmp_ops():
-    """install overloads for comparison operators with datetime.date and datetime64
-    """
+    """install overloads for comparison operators with datetime.date and datetime64"""
     for op in (
         operator.eq,
         operator.ne,
@@ -1358,11 +1355,25 @@ def compute_pd_timestamp(totmicrosec, nanosecond):  # pragma: no cover
     year, month, day = _ord2ymd(totday)
     #
     value = npy_datetimestruct_to_datetime(
-        year, month, day, hour, minute, second, microsecond,
+        year,
+        month,
+        day,
+        hour,
+        minute,
+        second,
+        microsecond,
     )
     value += zero_if_none(nanosecond)
     return init_timestamp(
-        year, month, day, hour, minute, second, microsecond, nanosecond, value,
+        year,
+        month,
+        day,
+        hour,
+        minute,
+        second,
+        microsecond,
+        nanosecond,
+        value,
     )
 
 
