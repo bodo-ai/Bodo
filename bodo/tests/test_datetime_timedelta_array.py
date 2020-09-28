@@ -18,7 +18,7 @@ from bodo.tests.utils import check_func
     params=[
         np.append(
             datetime.timedelta(days=5, seconds=4, weeks=4),
-            [None, datetime.timedelta(microseconds=100000001213131, hours=5)],
+            [None, datetime.timedelta(microseconds=100000001213131, hours=5)] * 5,
         )
     ]
 )
@@ -57,6 +57,19 @@ def test_getitem_slice(timedelta_arr_value, memory_leak_check):
     # TODO: parallel test
     np.testing.assert_array_equal(
         bodo_func(timedelta_arr_value, ind), test_impl(timedelta_arr_value, ind)
+    )
+
+
+def test_setitem_slice(timedelta_arr_value, memory_leak_check):
+    def test_impl(A, ind, vals):
+        A[ind] = vals
+        return A
+
+    ind = slice(3, 8)
+    vals = [datetime.timedelta(days=x, seconds=4, weeks=4) for x in range(5)]
+    # TODO: parallel test
+    check_func(
+        test_impl, (timedelta_arr_value, ind, vals), dist_test=False, copy_input=True
     )
 
 
