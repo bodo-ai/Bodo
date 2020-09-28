@@ -174,6 +174,13 @@ array_info* alloc_string_array(int64_t length, int64_t n_chars,
 }
 
 /**
+ * Allocates memory for string allocation as a NRT_MemInfo
+ */
+NRT_MemInfo* alloc_meminfo(int64_t length) {
+    return NRT_MemInfo_alloc_safe(length);
+}
+
+/**
  * @brief destrcutor for array(item) array meminfo. Decrefs the underlying data,
  * offsets and null_bitmap arrays.
  *

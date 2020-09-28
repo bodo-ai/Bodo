@@ -1,8 +1,6 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 """Tools for handling bodo arrays, e.g. passing to C/C++ code
 """
-from collections import namedtuple
-
 import llvmlite.binding as ll
 import numba
 from llvmlite import ir as lir
@@ -47,7 +45,6 @@ from bodo.libs.str_arr_ext import (
     offset_arr_type,
     string_array_type,
 )
-from bodo.libs.str_ext import Mstats
 from bodo.libs.struct_arr_ext import (
     StructArrayPayloadType,
     StructArrayType,
@@ -77,10 +74,6 @@ ll.add_symbol("info_from_table", array_ext.info_from_table)
 ll.add_symbol("delete_info_decref_array", array_ext.delete_info_decref_array)
 ll.add_symbol("delete_table_decref_arrays", array_ext.delete_table_decref_arrays)
 ll.add_symbol("delete_table", array_ext.delete_table)
-ll.add_symbol("get_stats_alloc_arr", array_ext.get_stats_alloc)
-ll.add_symbol("get_stats_free_arr", array_ext.get_stats_free)
-ll.add_symbol("get_stats_mi_alloc_arr", array_ext.get_stats_mi_alloc)
-ll.add_symbol("get_stats_mi_free_arr", array_ext.get_stats_mi_free)
 ll.add_symbol("shuffle_table", array_ext.shuffle_table)
 ll.add_symbol("hash_join_table", array_ext.hash_join_table)
 ll.add_symbol("drop_duplicates_table", array_ext.drop_duplicates_table)
@@ -1235,36 +1228,6 @@ def delete_table(typingctx, table_t=None):
         builder.call(fn_tp, args)
 
     return types.void(table_t), codegen
-
-
-get_stats_alloc = types.ExternalFunction(
-    "get_stats_alloc_arr",
-    types.uint64(),
-)
-
-get_stats_free = types.ExternalFunction(
-    "get_stats_free_arr",
-    types.uint64(),
-)
-
-get_stats_mi_alloc = types.ExternalFunction(
-    "get_stats_mi_alloc_arr",
-    types.uint64(),
-)
-
-get_stats_mi_free = types.ExternalFunction(
-    "get_stats_mi_free_arr",
-    types.uint64(),
-)
-
-
-@numba.njit
-def get_allocation_stats():  # pragma: no cover
-    """get allocation stats for arrays allocated in Bodo's C++ array runtime"""
-    # TODO: get stats from other C++ modules like _parquet.cpp
-    return Mstats(
-        get_stats_alloc(), get_stats_free(), get_stats_mi_alloc(), get_stats_mi_free()
-    )
 
 
 @intrinsic

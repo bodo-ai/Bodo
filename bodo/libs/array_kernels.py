@@ -57,7 +57,6 @@ from bodo.libs.str_arr_ext import (
     str_arr_set_na,
     string_array_type,
 )
-from bodo.libs.str_ext import Mstats
 from bodo.libs.struct_arr_ext import StructArrayType
 from bodo.utils.indexing import add_nested_counts, init_nested_counts
 from bodo.utils.shuffle import getitem_arr_tup_single
@@ -74,43 +73,8 @@ from bodo.utils.utils import build_set, numba_to_c_type, unliteral_all
 ll.add_symbol("quantile_sequential", quantile_alg.quantile_sequential)
 ll.add_symbol("quantile_parallel", quantile_alg.quantile_parallel)
 
-ll.add_symbol("get_stats_alloc_qa", quantile_alg.get_stats_alloc)
-ll.add_symbol("get_stats_free_qa", quantile_alg.get_stats_free)
-ll.add_symbol("get_stats_mi_alloc_qa", quantile_alg.get_stats_mi_alloc)
-ll.add_symbol("get_stats_mi_free_qa", quantile_alg.get_stats_mi_free)
-
 MPI_ROOT = 0
 sum_op = np.int32(bodo.libs.distributed_api.Reduce_Type.Sum.value)
-
-
-get_stats_alloc = types.ExternalFunction(
-    "get_stats_alloc_qa",
-    types.uint64(),
-)
-
-get_stats_free = types.ExternalFunction(
-    "get_stats_free_qa",
-    types.uint64(),
-)
-
-get_stats_mi_alloc = types.ExternalFunction(
-    "get_stats_mi_alloc_qa",
-    types.uint64(),
-)
-
-get_stats_mi_free = types.ExternalFunction(
-    "get_stats_mi_free_qa",
-    types.uint64(),
-)
-
-
-@numba.njit
-def get_allocation_stats():  # pragma: no cover
-    """get allocation stats for arrays allocated in Bodo's C++ array runtime"""
-    # TODO: get stats from other C++ modules like _parquet.cpp
-    return Mstats(
-        get_stats_alloc(), get_stats_free(), get_stats_mi_alloc(), get_stats_mi_free()
-    )
 
 
 def isna(arr, i):  # pragma: no cover

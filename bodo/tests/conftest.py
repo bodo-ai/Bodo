@@ -9,6 +9,7 @@ import pytest
 from numba.core.runtime import rtsys
 
 import bodo
+import bodo.utils.allocation_tracking
 
 
 # similar to Pandas
@@ -51,19 +52,13 @@ def memory_leak_check():
     """
     gc.collect()
     old = rtsys.get_allocation_stats()
-    old_bodo_arr = bodo.libs.array.get_allocation_stats()
-    old_bodo_parquet = bodo.io.parquet_pio.get_allocation_stats()
-    old_bodo_str = bodo.libs.str_ext.get_allocation_stats()
-    old_bodo_qa = bodo.libs.array_kernels.get_allocation_stats()
+    old_bodo = bodo.utils.allocation_tracking.get_allocation_stats()
     yield
     gc.collect()
     new = rtsys.get_allocation_stats()
-    new_bodo_arr = bodo.libs.array.get_allocation_stats()
-    new_bodo_parquet = bodo.io.parquet_pio.get_allocation_stats()
-    new_bodo_str = bodo.libs.str_ext.get_allocation_stats()
-    new_bodo_qa = bodo.libs.array_kernels.get_allocation_stats()
-    old_stats = [old, old_bodo_arr, old_bodo_parquet, old_bodo_str, old_bodo_qa]
-    new_stats = [new, new_bodo_arr, new_bodo_parquet, new_bodo_str, new_bodo_qa]
+    new_bodo = bodo.utils.allocation_tracking.get_allocation_stats()
+    old_stats = [old, old_bodo]
+    new_stats = [new, new_bodo]
     total_alloc = sum([m.alloc for m in new_stats]) - sum([m.alloc for m in old_stats])
     total_free = sum([m.free for m in new_stats]) - sum([m.free for m in old_stats])
     total_mi_alloc = sum([m.mi_alloc for m in new_stats]) - sum(

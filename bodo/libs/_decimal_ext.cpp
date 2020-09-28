@@ -84,8 +84,7 @@ PyMODINIT_FUNC PyInit_decimal_ext(void) {
     // init numpy
     import_array();
 
-    // initalize memory alloc/tracking system in _meminfo.h
-    NRT_MemSys_init();
+    bodo_common_init();
 
     // decimal_value should be exactly 128 bits to match Python
     if (sizeof(decimal_value) != 16)
@@ -99,6 +98,14 @@ PyMODINIT_FUNC PyInit_decimal_ext(void) {
                            PyLong_FromVoidPtr((void*)(&unbox_decimal)));
     PyObject_SetAttrString(m, "decimal_to_str",
                            PyLong_FromVoidPtr((void*)(&decimal_to_str)));
+    PyObject_SetAttrString(m, "get_stats_alloc",
+                           PyLong_FromVoidPtr((void*)(&get_stats_alloc)));
+    PyObject_SetAttrString(m, "get_stats_free",
+                           PyLong_FromVoidPtr((void*)(&get_stats_free)));
+    PyObject_SetAttrString(m, "get_stats_mi_alloc",
+                           PyLong_FromVoidPtr((void*)(&get_stats_mi_alloc)));
+    PyObject_SetAttrString(m, "get_stats_mi_free",
+                           PyLong_FromVoidPtr((void*)(&get_stats_mi_free)));
     return m;
 }
 
@@ -302,7 +309,7 @@ void decimal_to_str(decimal_value val, NRT_MemInfo** meminfo_ptr,
     std::string str = decimal_to_std_string(arrow_decimal, scale);
     // Now doing the boxing.
     int64_t l = (int64_t)str.length();
-    NRT_MemInfo* meminfo = NRT_MemInfo_alloc_safe(l + 1);
+    NRT_MemInfo* meminfo = alloc_meminfo(l + 1);
     memcpy(meminfo->data, str.c_str(), l);
     ((char*)meminfo->data)[l] = 0;
     *len_ptr = l;

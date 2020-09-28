@@ -1302,8 +1302,6 @@ PyMODINIT_FUNC PyInit_array_ext(void) {
     import_array();
 
     bodo_common_init();
-    // initalize memory alloc/tracking system in _meminfo.h
-    NRT_MemSys_init();
 
     // initialize decimal_mpi_type
     // TODO: free when program exits

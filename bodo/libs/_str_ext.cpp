@@ -102,7 +102,6 @@ PyMODINIT_FUNC PyInit_hstr_ext(void) {
     import_array();
 
     bodo_common_init();
-    NRT_MemSys_init();
 
     PyObject_SetAttrString(m, "init_string_const",
                            PyLong_FromVoidPtr((void*)(&init_string_const)));
@@ -178,14 +177,6 @@ PyMODINIT_FUNC PyInit_hstr_ext(void) {
     PyObject_SetAttrString(m, "unbox_bool_array_obj",
                            PyLong_FromVoidPtr((void*)(&unbox_bool_array_obj)));
     PyObject_SetAttrString(m, "memcmp", PyLong_FromVoidPtr((void*)(&memcmp)));
-    PyObject_SetAttrString(m, "get_stats_alloc",
-                           PyLong_FromVoidPtr((void*)(&get_stats_alloc)));
-    PyObject_SetAttrString(m, "get_stats_free",
-                           PyLong_FromVoidPtr((void*)(&get_stats_free)));
-    PyObject_SetAttrString(m, "get_stats_mi_alloc",
-                           PyLong_FromVoidPtr((void*)(&get_stats_mi_alloc)));
-    PyObject_SetAttrString(m, "get_stats_mi_free",
-                           PyLong_FromVoidPtr((void*)(&get_stats_mi_free)));
     return m;
 }
 

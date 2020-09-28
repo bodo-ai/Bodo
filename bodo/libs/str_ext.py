@@ -1,7 +1,6 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 import operator
 import re
-from collections import namedtuple
 
 import llvmlite.binding as ll
 import numba
@@ -38,43 +37,6 @@ from numba.parfors.array_analysis import ArrayAnalysis
 
 import bodo
 from bodo.libs import hstr_ext
-
-ll.add_symbol("get_stats_alloc_str", hstr_ext.get_stats_alloc)
-ll.add_symbol("get_stats_free_str", hstr_ext.get_stats_free)
-ll.add_symbol("get_stats_mi_alloc_str", hstr_ext.get_stats_mi_alloc)
-ll.add_symbol("get_stats_mi_free_str", hstr_ext.get_stats_mi_free)
-
-
-get_stats_alloc = types.ExternalFunction(
-    "get_stats_alloc_str",
-    types.uint64(),
-)
-
-get_stats_free = types.ExternalFunction(
-    "get_stats_free_str",
-    types.uint64(),
-)
-
-get_stats_mi_alloc = types.ExternalFunction(
-    "get_stats_mi_alloc_str",
-    types.uint64(),
-)
-
-get_stats_mi_free = types.ExternalFunction(
-    "get_stats_mi_free_str",
-    types.uint64(),
-)
-
-
-Mstats = namedtuple("Mstats", ["alloc", "free", "mi_alloc", "mi_free"])
-
-
-@numba.njit
-def get_allocation_stats():  # pragma: no cover
-    """get allocation stats for parquet allocated in Bodo's C++ parquet runtime"""
-    return Mstats(
-        get_stats_alloc(), get_stats_free(), get_stats_mi_alloc(), get_stats_mi_free()
-    )
 
 
 # from bodo.utils.utils import unliteral_all

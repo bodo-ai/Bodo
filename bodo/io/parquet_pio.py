@@ -1,7 +1,7 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 import os
 import warnings
-from collections import defaultdict, namedtuple
+from collections import defaultdict
 
 import llvmlite.binding as ll
 import numba
@@ -50,47 +50,12 @@ from bodo.libs.decimal_arr_ext import Decimal128Type, DecimalArrayType
 from bodo.libs.distributed_api import get_end, get_node_portion, get_start
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.str_arr_ext import char_arr_type, string_array_type
-from bodo.libs.str_ext import Mstats, string_type, unicode_to_utf8
+from bodo.libs.str_ext import string_type, unicode_to_utf8
 from bodo.libs.struct_arr_ext import StructArrayType
 from bodo.transforms import distributed_pass
 from bodo.utils.transform import get_const_value
 from bodo.utils.typing import BodoError, BodoWarning
 from bodo.utils.utils import is_null_pointer, sanitize_varname, unliteral_all
-
-ll.add_symbol("get_stats_alloc_pq", parquet_cpp.get_stats_alloc)
-ll.add_symbol("get_stats_free_pq", parquet_cpp.get_stats_free)
-ll.add_symbol("get_stats_mi_alloc_pq", parquet_cpp.get_stats_mi_alloc)
-ll.add_symbol("get_stats_mi_free_pq", parquet_cpp.get_stats_mi_free)
-
-
-get_stats_alloc = types.ExternalFunction(
-    "get_stats_alloc_pq",
-    types.uint64(),
-)
-
-get_stats_free = types.ExternalFunction(
-    "get_stats_free_pq",
-    types.uint64(),
-)
-
-get_stats_mi_alloc = types.ExternalFunction(
-    "get_stats_mi_alloc_pq",
-    types.uint64(),
-)
-
-get_stats_mi_free = types.ExternalFunction(
-    "get_stats_mi_free_pq",
-    types.uint64(),
-)
-
-
-@numba.njit()
-def get_allocation_stats():  # pragma: no cover
-    """get allocation stats for parquet allocated in Bodo's C++ parquet runtime"""
-    return Mstats(
-        get_stats_alloc(), get_stats_free(), get_stats_mi_alloc(), get_stats_mi_free()
-    )
-
 
 # read Arrow Int columns as nullable int array (IntegerArrayType)
 use_nullable_int_arr = True

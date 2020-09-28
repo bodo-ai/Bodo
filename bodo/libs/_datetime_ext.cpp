@@ -470,7 +470,7 @@ PyMODINIT_FUNC PyInit_hdatetime_ext(void) {
     import_array();
 
     // initalize memory alloc/tracking system in _meminfo.h
-    NRT_MemSys_init();
+    bodo_common_init();
 
     PyObject_SetAttrString(m, "get_isocalendar",
                            PyLong_FromVoidPtr((void*)(&get_isocalendar)));
