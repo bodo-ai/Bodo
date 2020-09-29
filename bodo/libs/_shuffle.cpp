@@ -94,9 +94,6 @@ void bodo_alltoallv(const void* sendbuf,
 mpi_comm_info::mpi_comm_info(std::vector<array_info*>& _arrays)
     : arrays(_arrays) {
     MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
-#ifdef DEBUG_SHUFFLE
-    std::cout << "mpi_comm_info constructor n_pes=" << n_pes << "\n";
-#endif
     n_rows = arrays[0]->length;
     has_nulls = false;
     for (array_info* arr_info : arrays) {
@@ -167,21 +164,9 @@ void mpi_comm_info::set_counts(uint32_t* hashes) {
         size_t node = (size_t)hashes[i] % (size_t)n_pes;
         send_count[node]++;
     }
-#ifdef DEBUG_SHUFFLE
-    for (int i_node = 0; i_node < n_pes; i_node++) {
-        std::cout << "i_node=" << i_node << " send_count=" << send_count[i_node]
-                  << "\n";
-    }
-#endif
     // get recv count
     MPI_Alltoall(send_count.data(), 1, MPI_INT64_T, recv_count.data(), 1,
                  MPI_INT64_T, MPI_COMM_WORLD);
-#ifdef DEBUG_SHUFFLE
-    for (int i_node = 0; i_node < n_pes; i_node++) {
-        std::cout << "i_node=" << i_node << " recv_count=" << recv_count[i_node]
-                  << "\n";
-    }
-#endif
 
     // get displacements
     calc_disp(send_disp, send_count);
@@ -229,22 +214,6 @@ void mpi_comm_info::set_counts(uint32_t* hashes) {
             MPI_Alltoall(sub_sub_counts.data(), 1, MPI_INT64_T,
                          recv_count_sub_sub[i].data(), 1, MPI_INT64_T,
                          MPI_COMM_WORLD);
-#ifdef DEBUG_SHUFFLE
-            for (int i_node = 0; i_node < n_pes; i_node++)
-                std::cout << "i_node=" << i_node
-                          << " send_count_sub[i]=" << send_count_sub[i][i_node]
-                          << "\n";
-            for (int i_node = 0; i_node < n_pes; i_node++)
-                std::cout << "i_node=" << i_node
-                          << " recv_count_sub[i]=" << recv_count_sub[i][i_node]
-                          << "\n";
-            for (int i_node = 0; i_node < n_pes; i_node++)
-                std::cout << "i_node=" << i_node << " send_count_sub_sub[i]="
-                          << send_count_sub_sub[i][i_node] << "\n";
-            for (int i_node = 0; i_node < n_pes; i_node++)
-                std::cout << "i_node=" << i_node << " recv_count_sub_sub[i]="
-                          << recv_count_sub_sub[i][i_node] << "\n";
-#endif
             // get displacements
             calc_disp(send_disp_sub[i], sub_counts);
             calc_disp(recv_disp_sub[i], recv_count_sub[i]);
@@ -509,26 +478,15 @@ static void copy_gathered_null_bytes(uint8_t* null_bitmask,
                                      std::vector<uint8_t> const& tmp_null_bytes,
                                      std::vector<T> const& recv_count_null,
                                      std::vector<T> const& recv_count) {
-#ifdef DEBUG_SHUFFLE
-    std::cout << "Beginning of copy_gathered_null_bytes\n";
-#endif
     size_t curr_tmp_byte = 0;  // current location in buffer with all data
     size_t curr_str = 0;       // current string in output bitmap
     // for each chunk
     for (size_t i = 0; i < recv_count.size(); i++) {
         size_t n_strs = recv_count[i];
         size_t n_bytes = recv_count_null[i];
-#ifdef DEBUG_SHUFFLE
-        std::cout << "i=" << i << " n_strs=" << n_strs << " n_bytes=" << n_bytes
-                  << "\n";
-#endif
         const uint8_t* chunk_bytes = &tmp_null_bytes[curr_tmp_byte];
         // for each string in chunk
         for (size_t j = 0; j < n_strs; j++) {
-#ifdef DEBUG_SHUFFLE
-            std::cout << "  i=" << i << " j=" << j
-                      << " bit=" << GetBit(chunk_bytes, j) << "\n";
-#endif
             SetBitTo(null_bitmask, curr_str, GetBit(chunk_bytes, j));
             curr_str += 1;
         }
@@ -540,9 +498,6 @@ static void copy_gathered_null_bytes(uint8_t* null_bitmask,
 void shuffle_list_string_null_bitmask(array_info* in_arr, array_info* out_arr,
                                       uint32_t* hashes,
                                       mpi_comm_info const& comm_info) {
-#ifdef DEBUG_SHUFFLE
-    std::cout << "Beginning of shuffle_list_string_null_bitmask\n";
-#endif
     int64_t n_rows = in_arr->length;
     int n_pes = comm_info.n_pes;
     std::vector<int64_t> send_count(n_pes), recv_count(n_pes);
@@ -557,16 +512,6 @@ void shuffle_list_string_null_bitmask(array_info* in_arr, array_info* out_arr,
     std::vector<int64_t> send_disp(n_pes), recv_disp(n_pes);
     calc_disp(send_disp, send_count);
     calc_disp(recv_disp, recv_count);
-#ifdef DEBUG_SHUFFLE
-    for (int i_p = 0; i_p < n_pes; i_p++) {
-        std::cout << "i_p=" << i_p << " send_disp=" << send_disp[i_p]
-                  << " send_count=" << send_count[i_p] << "\n";
-    }
-    for (int i_p = 0; i_p < n_pes; i_p++) {
-        std::cout << "i_p=" << i_p << " recv_disp=" << recv_disp[i_p]
-                  << " recv_count=" << recv_count[i_p] << "\n";
-    }
-#endif
     std::vector<int64_t> send_count_null(n_pes), recv_count_null(n_pes);
     for (int i_p = 0; i_p < n_pes; i_p++) {
         send_count_null[i_p] = (send_count[i_p] + 7) >> 3;
@@ -575,24 +520,10 @@ void shuffle_list_string_null_bitmask(array_info* in_arr, array_info* out_arr,
     std::vector<int64_t> send_disp_null(n_pes), recv_disp_null(n_pes);
     calc_disp(send_disp_null, send_count_null);
     calc_disp(recv_disp_null, recv_count_null);
-#ifdef DEBUG_SHUFFLE
-    for (int i_p = 0; i_p < n_pes; i_p++) {
-        std::cout << "i_p=" << i_p << " send_disp_null=" << send_disp_null[i_p]
-                  << " send_count_null=" << send_count_null[i_p] << "\n";
-    }
-    for (int i_p = 0; i_p < n_pes; i_p++) {
-        std::cout << "i_p=" << i_p << " recv_disp_null=" << recv_disp_null[i_p]
-                  << " recv_count_null=" << recv_count_null[i_p] << "\n";
-    }
-#endif
     int64_t send_count_sum =
         std::accumulate(send_count_null.begin(), send_count_null.end(), 0);
     int64_t recv_count_sum =
         std::accumulate(recv_count_null.begin(), recv_count_null.end(), 0);
-#ifdef DEBUG_SHUFFLE
-    std::cout << "send_count_sum=" << send_count_sum
-              << " recv_count_sum=" << recv_count_sum << "\n";
-#endif
     std::vector<uint8_t> Vsend(send_count_sum);
     std::vector<uint8_t> Vrecv(recv_count_sum);
     uint32_t pos_index = 0;
@@ -601,42 +532,19 @@ void shuffle_list_string_null_bitmask(array_info* in_arr, array_info* out_arr,
     for (int64_t i_row = 0; i_row < n_rows; i_row++) {
         size_t node = (size_t)hashes[i_row] % (size_t)n_pes;
         uint32_t len = index_offset[i_row + 1] - index_offset[i_row];
-#ifdef DEBUG_SHUFFLE
-        std::cout << "i_row=" << i_row << " node=" << node << " len=" << len
-                  << "\n";
-#endif
         for (uint32_t u = 0; u < len; u++) {
             bool bit = GetBit(sub_null_bitmap, pos_index + u);
-#ifdef DEBUG_SHUFFLE
-            std::cout << "  i_row=" << i_row << " u=" << u << " bit=" << bit
-                      << "\n";
-#endif
             SetBitTo(Vsend.data(), 8 * send_disp_null[node] + shift[node], bit);
             shift[node]++;
         }
         pos_index += len;
     }
     MPI_Datatype mpi_typ8 = get_MPI_typ(Bodo_CTypes::UINT8);
-#ifdef DEBUG_SHUFFLE
-    for (int i_null = 0; i_null < send_count_sum; i_null++) {
-        std::cout << "1: i_null=" << i_null << " Vsend=" << int(Vsend[i_null])
-                  << "\n";
-    }
-#endif
     bodo_alltoallv(Vsend.data(), send_count_null, send_disp_null, mpi_typ8,
                    Vrecv.data(), recv_count_null, recv_disp_null, mpi_typ8,
                    MPI_COMM_WORLD);
-#ifdef DEBUG_SHUFFLE
-    for (int i_null = 0; i_null < recv_count_sum; i_null++) {
-        std::cout << "2: i_null=" << i_null << " Vrecv=" << int(Vrecv[i_null])
-                  << "\n";
-    }
-#endif
     copy_gathered_null_bytes((uint8_t*)out_arr->sub_null_bitmask, Vrecv,
                              recv_count_null, recv_count);
-#ifdef DEBUG_SHUFFLE
-    std::cout << "End of shuffle_list_string_null_bitmask\n";
-#endif
 }
 
 static void shuffle_array(array_info* send_arr, array_info* out_arr,
@@ -725,10 +633,6 @@ std::shared_ptr<arrow::Buffer> shuffle_arrow_bitmap_buffer(
     size_t n_rows = std::accumulate(send_count.begin(), send_count.end(), 0);
     size_t n_rows_out =
         std::accumulate(recv_count.begin(), recv_count.end(), 0);
-#ifdef DEBUG_ARROW_SHUFFLE
-    std::cout << "shuffle_arrow_bitmap_buffer : n_rows=" << n_rows
-              << " n_rows_out=" << n_rows_out << "\n";
-#endif
     // Computing the null_bitmap.
     // The array support null_bitmap but we cannot test in output if it is
     // indeed nullptr. So, we have to put a null_bitmap no matter what.
@@ -742,20 +646,6 @@ std::shared_ptr<arrow::Buffer> shuffle_arrow_bitmap_buffer(
     std::vector<int64_t> recv_disp_null(n_pes);
     calc_disp(send_disp_null, send_count_null);
     calc_disp(recv_disp_null, recv_count_null);
-#ifdef DEBUG_ARROW_SHUFFLE
-    for (size_t i = 0; i < size_t(n_pes); i++) {
-        std::cout << "cntI i=" << i << " send_count=" << send_count[i]
-                  << " recv_count=" << recv_count[i] << "\n";
-    }
-    for (size_t i = 0; i < size_t(n_pes); i++) {
-        std::cout << "cntN i=" << i << " send_count_null=" << send_count_null[i]
-                  << " recv_count_null=" << recv_count_null[i] << "\n";
-    }
-    for (size_t i = 0; i < size_t(n_pes); i++) {
-        std::cout << "cntN i=" << i << " send_disp_null=" << send_disp_null[i]
-                  << " recv_disp_null=" << recv_disp_null[i] << "\n";
-    }
-#endif
     MPI_Datatype mpi_typ_null = get_MPI_typ(Bodo_CTypes::UINT8);
     std::vector<uint8_t> send_null_bitmask((n_rows + 7) >> 3, 0);
     for (size_t i_row = 0; i_row < n_rows; i_row++)
@@ -764,32 +654,15 @@ std::shared_ptr<arrow::Buffer> shuffle_arrow_bitmap_buffer(
         std::accumulate(send_count_null.begin(), send_count_null.end(), 0);
     int64_t n_row_recv_null =
         std::accumulate(recv_count_null.begin(), recv_count_null.end(), 0);
-#ifdef DEBUG_ARROW_SHUFFLE
-    for (size_t i_row = 0; i_row < n_rows; i_row++)
-        std::cout << "SEND : i_row=" << i_row << "/" << n_rows
-                  << " bit=" << GetBit(send_null_bitmask.data(), i_row) << "\n";
-    std::cout << "n_row_send_null=" << n_row_send_null
-              << " n_row_recv_null=" << n_row_recv_null << "\n";
-#endif
     std::vector<uint8_t> send_array_null_bitmask(n_row_send_null, 0);
     std::vector<uint8_t> recv_array_null_bitmask(n_row_recv_null, 0);
     fill_send_array_null_inner(send_array_null_bitmask.data(),
                                send_null_bitmask.data(), hashes, send_disp_null,
                                n_pes, n_rows);
-#ifdef DEBUG_ARROW_SHUFFLE
-    for (int i = 0; i < n_row_send_null; i++)
-        std::cout << "send_array_null_bitmask i=" << i
-                  << " val=" << (int)send_array_null_bitmask[i] << "\n";
-#endif
     bodo_alltoallv(send_array_null_bitmask.data(), send_count_null,
                    send_disp_null, mpi_typ_null, recv_array_null_bitmask.data(),
                    recv_count_null, recv_disp_null, mpi_typ_null,
                    MPI_COMM_WORLD);
-#ifdef DEBUG_ARROW_SHUFFLE
-    for (int i = 0; i < n_row_recv_null; i++)
-        std::cout << "recv_array_null_bitmask i=" << i
-                  << " val=" << (int)recv_array_null_bitmask[i] << "\n";
-#endif
     size_t siz_out = (n_rows_out + 7) >> 3;
     arrow::Result<std::unique_ptr<arrow::Buffer>> maybe_buffer =
         arrow::AllocateBuffer(siz_out);
@@ -801,11 +674,6 @@ std::shared_ptr<arrow::Buffer> shuffle_arrow_bitmap_buffer(
     uint8_t* null_bitmask_out_ptr = buffer->mutable_data();
     copy_gathered_null_bytes(null_bitmask_out_ptr, recv_array_null_bitmask,
                              recv_count_null, recv_count);
-#ifdef DEBUG_ARROW_SHUFFLE
-    for (size_t i_row = 0; i_row < n_rows_out; i_row++)
-        std::cout << "RECV : i_row=" << i_row << "/" << n_rows_out
-                  << " bit=" << GetBit(null_bitmask_out_ptr, i_row) << "\n";
-#endif
     return buffer;
 }
 
@@ -880,17 +748,11 @@ std::shared_ptr<arrow::Buffer> shuffle_arrow_primitive_buffer(
     std::vector<int64_t> const& send_count,
     std::vector<int64_t> const& recv_count, uint32_t* hashes, int const& n_pes,
     std::shared_ptr<arrow::PrimitiveArray> const& input_array) {
-#ifdef DEBUG_ARROW_SHUFFLE
-    std::cout << "Beginning of shuffle_arrow_primitive_buffer\n";
-#endif
     // Typing stuff
     arrow::Type::type typ = input_array->type()->id();
     Bodo_CTypes::CTypeEnum dtype = arrow_to_bodo_type(typ);
     uint64_t siztype = numpy_item_size[dtype];
     MPI_Datatype mpi_typ = get_MPI_typ(dtype);
-#ifdef DEBUG_ARROW_SHUFFLE
-    std::cout << "siztype=" << siztype << "\n";
-#endif
     // Setting up the arrays
     size_t n_rows = std::accumulate(send_count.begin(), send_count.end(), 0);
     size_t n_rows_out =
@@ -928,9 +790,6 @@ std::shared_ptr<arrow::Buffer> shuffle_string_buffer(
     std::vector<int64_t> const& send_count,
     std::vector<int64_t> const& recv_count, uint32_t* hashes, int const& n_pes,
     std::shared_ptr<arrow::StringArray> const& string_array) {
-#ifdef DEBUG_ARROW_SHUFFLE
-    std::cout << "shuffle_string_buffer, step 1\n";
-#endif
     size_t n_rows = std::accumulate(send_count.begin(), send_count.end(), 0);
     std::vector<int64_t> send_count_char(n_pes, 0);
     std::vector<int64_t> recv_count_char(n_pes);
@@ -940,14 +799,8 @@ std::shared_ptr<arrow::Buffer> shuffle_string_buffer(
         int64_t n_char = e_str.size();
         send_count_char[node] += n_char;
     }
-#ifdef DEBUG_ARROW_SHUFFLE
-    std::cout << "shuffle_string_buffer, step 2\n";
-#endif
     MPI_Alltoall(send_count_char.data(), 1, MPI_INT64_T, recv_count_char.data(),
                  1, MPI_INT64_T, MPI_COMM_WORLD);
-#ifdef DEBUG_ARROW_SHUFFLE
-    std::cout << "shuffle_string_buffer, step 3\n";
-#endif
     std::vector<int64_t> send_disp_char(n_pes);
     std::vector<int64_t> recv_disp_char(n_pes);
     calc_disp(send_disp_char, send_count_char);
@@ -956,9 +809,6 @@ std::shared_ptr<arrow::Buffer> shuffle_string_buffer(
         std::accumulate(send_count_char.begin(), send_count_char.end(), 0);
     int64_t n_chars_recv_tot =
         std::accumulate(recv_count_char.begin(), recv_count_char.end(), 0);
-#ifdef DEBUG_ARROW_SHUFFLE
-    std::cout << "n_chars_recv_tot=" << n_chars_recv_tot << "\n";
-#endif
     char* send_char = new char[n_chars_send_tot];
     size_t siz_out = sizeof(char) * n_chars_recv_tot;
     arrow::Result<std::unique_ptr<arrow::Buffer>> maybe_buffer =
@@ -970,9 +820,6 @@ std::shared_ptr<arrow::Buffer> shuffle_string_buffer(
     std::shared_ptr<arrow::Buffer> buffer = *std::move(maybe_buffer);
     char* recv_char = (char*)buffer->mutable_data();
     std::vector<int64_t> list_shift = send_disp_char;
-#ifdef DEBUG_ARROW_SHUFFLE
-    std::cout << "shuffle_string_buffer, step 4\n";
-#endif
     for (size_t i_row = 0; i_row < n_rows; i_row++) {
         size_t node = (size_t)hashes[i_row] % (size_t)n_pes;
         std::string e_str = string_array->GetString(i_row);
@@ -982,18 +829,10 @@ std::shared_ptr<arrow::Buffer> shuffle_string_buffer(
         }
         list_shift[node] += n_char;
     }
-#ifdef DEBUG_ARROW_SHUFFLE
-    std::cout << "shuffle_string_buffer, step 5\n";
-#endif
     MPI_Datatype mpi_typ = get_MPI_typ(Bodo_CTypes::UINT8);
     bodo_alltoallv(send_char, send_count_char, send_disp_char, mpi_typ,
                    recv_char, recv_count_char, recv_disp_char, mpi_typ,
                    MPI_COMM_WORLD);
-#ifdef DEBUG_ARROW_SHUFFLE
-    std::cout << "shuffle_string_buffer, step 6\n";
-    std::string str(recv_char, recv_char + n_chars_recv_tot);
-    std::cout << "str=" << str << "\n";
-#endif
     delete[] send_char;
     return buffer;
 }
@@ -1011,33 +850,19 @@ std::shared_ptr<arrow::Array> shuffle_arrow_array(
     // Note that the number of rows, counts and hashes varies according
     // to the array in the recursive structure
     size_t n_rows = (size_t)input_array->length();
-#ifdef DEBUG_ARROW_SHUFFLE
-    std::cout << "Beginning of shuffle_arrow_array n_rows=" << n_rows << "\n";
-#endif
     std::vector<int64_t> send_count(n_pes, 0);
     std::vector<int64_t> recv_count(n_pes);
     for (size_t i_row = 0; i_row < n_rows; i_row++) {
         size_t node = (size_t)hashes[i_row] % (size_t)n_pes;
-#ifdef DEBUG_ARROW_SHUFFLE
-        std::cout << "shuffle_arrow_array i_row=" << i_row << "/" << n_rows
-                  << " hash=" << hashes[i_row] << " node=" << node << "\n";
-#endif
         send_count[node]++;
     }
     MPI_Alltoall(send_count.data(), 1, MPI_INT64_T, recv_count.data(), 1,
                  MPI_INT64_T, MPI_COMM_WORLD);
     int64_t n_rows_out =
         std::accumulate(recv_count.begin(), recv_count.end(), 0);
-#ifdef DEBUG_ARROW_SHUFFLE
-    std::cout << "shuffle_arrow_array : n_rows=" << n_rows
-              << " n_rows_out=" << n_rows_out << "\n";
-#endif
     //
     //
     if (input_array->type_id() == arrow::Type::LIST) {
-#ifdef DEBUG_ARROW_SHUFFLE
-        std::cout << "LIST case\n";
-#endif
         // Converting the pointer
         std::shared_ptr<arrow::ListArray> list_array =
             std::dynamic_pointer_cast<arrow::ListArray>(input_array);
@@ -1060,9 +885,6 @@ std::shared_ptr<arrow::Array> shuffle_arrow_array(
                                                   child_array, null_bitmap_out);
 
     } else if (input_array->type_id() == arrow::Type::STRUCT) {
-#ifdef DEBUG_ARROW_SHUFFLE
-        std::cout << "STRUCT case\n";
-#endif
         // Converting to the right pointer type.
         auto struct_array =
             std::dynamic_pointer_cast<arrow::StructArray>(input_array);
@@ -1081,9 +903,6 @@ std::shared_ptr<arrow::Array> shuffle_arrow_array(
         return std::make_shared<arrow::StructArray>(
             struct_array->type(), n_rows_out, children, null_bitmap_out);
     } else if (input_array->type_id() == arrow::Type::STRING) {
-#ifdef DEBUG_ARROW_SHUFFLE
-        std::cout << "STRING case\n";
-#endif
         // Converting pointers
         auto string_array =
             std::dynamic_pointer_cast<arrow::StringArray>(input_array);
@@ -1102,9 +921,6 @@ std::shared_ptr<arrow::Array> shuffle_arrow_array(
         return std::make_shared<arrow::StringArray>(n_rows_out, list_offsets,
                                                     data, null_bitmap_out);
     } else {
-#ifdef DEBUG_ARROW_SHUFFLE
-        std::cout << "PRIMITIVE case\n";
-#endif
         // Converting pointers
         auto primitive_array =
             std::dynamic_pointer_cast<arrow::PrimitiveArray>(input_array);
@@ -1134,9 +950,6 @@ std::shared_ptr<arrow::Array> shuffle_arrow_array(
 table_info* shuffle_table_kernel(table_info* in_table, uint32_t* hashes,
                                  mpi_comm_info const& comm_info) {
     int n_pes = comm_info.n_pes;
-#ifdef DEBUG_SHUFFLE
-    std::cout << "Beginning of shuffle_table_kernel\n";
-#endif
     int64_t total_recv = std::accumulate(comm_info.recv_count.begin(),
                                          comm_info.recv_count.end(), 0);
     size_t n_cols = (size_t)in_table->ncols();
@@ -1150,17 +963,10 @@ table_info* shuffle_table_kernel(table_info* in_table, uint32_t* hashes,
             std::accumulate(comm_info.recv_count_sub_sub[i].begin(),
                             comm_info.recv_count_sub_sub[i].end(), 0);
 
-#ifdef DEBUG_SHUFFLE
-    std::cout << "We have n_sub_recvs / n_sub_sub_recs\n";
-#endif
     // fill send buffer and send
     std::vector<array_info*> out_arrs;
     std::vector<uint8_t> tmp_null_bytes(comm_info.n_null_bytes);
     for (size_t i = 0; i < n_cols; i++) {
-#ifdef DEBUG_SHUFFLE
-        std::cout << "shuffle_table_kernel i=" << i << " / " << n_cols
-                  << " step 1\n";
-#endif
         array_info* in_arr = in_table->columns[i];
         array_info* out_arr;
         if (in_arr->arr_type != bodo_array_type::ARROW) {
@@ -1168,25 +974,13 @@ table_info* shuffle_table_kernel(table_info* in_table, uint32_t* hashes,
                 alloc_array(in_table->nrows(), in_arr->n_sub_elems,
                             in_arr->n_sub_sub_elems, in_arr->arr_type,
                             in_arr->dtype, 2 * n_pes, in_arr->num_categories);
-#ifdef DEBUG_SHUFFLE
-            std::cout << "shuffle_table_kernel i=" << i << " / " << n_cols
-                      << " step 2\n";
-#endif
             out_arr = alloc_array(total_recv, n_sub_recvs[i],
                                   n_sub_sub_recvs[i], in_arr->arr_type,
                                   in_arr->dtype, 0, in_arr->num_categories);
-#ifdef DEBUG_SHUFFLE
-            std::cout << "shuffle_table_kernel i=" << i << " / " << n_cols
-                      << " step 3\n";
-#endif
             fill_send_array(send_arr, in_arr, hashes, comm_info.send_disp,
                             comm_info.send_disp_sub[i],
                             comm_info.send_disp_sub_sub[i],
                             comm_info.send_disp_null, n_pes);
-#ifdef DEBUG_SHUFFLE
-            std::cout << "shuffle_table_kernel i=" << i << " / " << n_cols
-                      << " step 4\n";
-#endif
 
             shuffle_array(
                 send_arr, out_arr, comm_info.send_count, comm_info.recv_count,
@@ -1201,15 +995,8 @@ table_info* shuffle_table_kernel(table_info* in_table, uint32_t* hashes,
             if (in_arr->arr_type == bodo_array_type::LIST_STRING)
                 shuffle_list_string_null_bitmask(in_arr, out_arr, hashes,
                                                  comm_info);
-#ifdef DEBUG_SHUFFLE
-            std::cout << "shuffle_table_kernel i=" << i << " / " << n_cols
-                      << " step 5\n";
-#endif
             delete_info_decref_array(send_arr);
         } else {
-#ifdef DEBUG_SHUFFLE
-            std::cout << "n_rows=" << n_rows << "\n";
-#endif
             std::shared_ptr<arrow::Array> out_array =
                 shuffle_arrow_array(in_arr->array, hashes, n_pes);
             uint64_t n_items =
@@ -1228,23 +1015,13 @@ table_info* shuffle_table_kernel(table_info* in_table, uint32_t* hashes,
         // it changes the semantics to something different from Python.
         decref_array(in_arr);
         out_arrs.push_back(out_arr);
-#ifdef DEBUG_SHUFFLE
-        std::cout << "shuffle_table_kernel i=" << i << " / " << n_cols
-                  << " step 6\n";
-#endif
     }
 
-#ifdef DEBUG_SHUFFLE
-    std::cout << "Ending of shuffle_table_kernel\n";
-#endif
     return new table_info(out_arrs);
 }
 
 array_info* reverse_shuffle_numpy_array(array_info* in_arr, uint32_t* hashes,
                                         mpi_comm_info const& comm_info) {
-#ifdef DEBUG_REVERSE_SHUFFLE
-    std::cout << "Beginning of reverse_shuffle_numpy_array\n";
-#endif
     uint64_t siztype = numpy_item_size[in_arr->dtype];
     MPI_Datatype mpi_typ = get_MPI_typ(in_arr->dtype);
     int64_t n_rows_ret = std::accumulate(comm_info.send_count.begin(),
@@ -1264,43 +1041,25 @@ array_info* reverse_shuffle_numpy_array(array_info* in_arr, uint32_t* hashes,
         memcpy(data1_o + siztype * i, tmp_recv.data() + siztype * ind, siztype);
         tmp_offset[node]++;
     }
-#ifdef DEBUG_REVERSE_SHUFFLE
-    std::cout << "End of reverse_shuffle_numpy_array\n";
-#endif
     return out_arr;
 }
 
 array_info* reverse_shuffle_string_array(array_info* in_arr, uint32_t* hashes,
                                          mpi_comm_info const& comm_info) {
-#ifdef DEBUG_REVERSE_SHUFFLE
-    std::cout << "Beginning of reverse_shuffle_string_array\n";
-#endif
     // 1: computing the recv_count_sub and related
     uint32_t* in_offset = (uint32_t*)in_arr->data2;
     int n_pes = comm_info.n_pes;
-#ifdef DEBUG_REVERSESHUFFLE
-    std::cout << "n_pes=" << n_pes << "\n";
-#endif
     std::vector<int64_t> recv_count_sub(n_pes),
         recv_disp_sub(n_pes);  // we continue using here the recv/send
     for (int i = 0; i < n_pes; i++)
         recv_count_sub[i] =
             in_offset[comm_info.recv_disp[i] + comm_info.recv_count[i]] -
             in_offset[comm_info.recv_disp[i]];
-#ifdef DEBUG_REVERSE_SHUFFLE
-    std::cout << "recv_count_sub built\n";
-#endif
     std::vector<int64_t> send_count_sub(n_pes), send_disp_sub(n_pes);
     MPI_Alltoall(recv_count_sub.data(), 1, MPI_INT64_T, send_count_sub.data(), 1,
                  MPI_INT64_T, MPI_COMM_WORLD);
-#ifdef DEBUG_REVERSE_SHUFFLE
-    std::cout << "After MPI_Alltoall\n";
-#endif
     calc_disp(send_disp_sub, send_count_sub);
     calc_disp(recv_disp_sub, recv_count_sub);
-#ifdef DEBUG_REVERSE_SHUFFLE
-    std::cout << "reverse_shuffle_string_array, step 1 done\n";
-#endif
     // 2: allocating the array
     int64_t n_count_sub = send_disp_sub[n_pes - 1] + send_count_sub[n_pes - 1];
     int64_t n_rows_ret = std::accumulate(comm_info.send_count.begin(),
@@ -1310,9 +1069,6 @@ array_info* reverse_shuffle_string_array(array_info* in_arr, uint32_t* hashes,
                     0, in_arr->num_categories);
     int64_t in_len = in_arr->length;
     int64_t out_len = out_arr->length;
-#ifdef DEBUG_REVERSE_SHUFFLE
-    std::cout << "reverse_shuffle_string_array, step 2 done\n";
-#endif
     // 3: the offsets
     std::vector<uint32_t> list_len_send(in_len);
     uint32_t* out_offset = (uint32_t*)out_arr->data2;
@@ -1327,9 +1083,6 @@ array_info* reverse_shuffle_string_array(array_info* in_arr, uint32_t* hashes,
     fill_recv_data_inner(list_len_recv.data(), out_offset, hashes,
                          comm_info.send_disp, comm_info.n_pes, out_len);
     convert_len_arr_to_offset(out_offset, out_len);
-#ifdef DEBUG_REVERSE_SHUFFLE
-    std::cout << "reverse_shuffle_string_array, step 3 done\n";
-#endif
     // 4: the characters themselves
     int64_t tot_char =
         std::accumulate(send_count_sub.begin(), send_count_sub.end(), 0);
@@ -1348,18 +1101,12 @@ array_info* reverse_shuffle_string_array(array_info* in_arr, uint32_t* hashes,
         memcpy(out_ptr, in_ptr, str_len);
         tmp_offset_sub[node] += str_len;
     }
-#ifdef DEBUG_REVERSE_SHUFFLE
-    std::cout << "reverse_shuffle_string_array, step 4 done. END\n";
-#endif
     return out_arr;
 }
 
 void reverse_shuffle_null_bitmap_array(array_info* in_arr, array_info* out_arr,
                                        uint32_t* hashes,
                                        mpi_comm_info const& comm_info) {
-#ifdef DEBUG_REVERSE_SHUFFLE
-    std::cout << "Beginning of reverse_shuffle_null_bitmap_array\n";
-#endif
     int n_pes = comm_info.n_pes;
     std::vector<int64_t> send_count_null(n_pes), recv_count_null(n_pes);
     for (int i = 0; i < n_pes; i++) {
@@ -1397,17 +1144,11 @@ void reverse_shuffle_null_bitmap_array(array_info* in_arr, array_info* out_arr,
         SetBitTo(null_bitmask_out, i_row, bit);
         tmp_offset[node]++;
     }
-#ifdef DEBUG_REVERSE_SHUFFLE
-    std::cout << "End of reverse_shuffle_null_bitmap_array\n";
-#endif
 }
 
 array_info* reverse_shuffle_list_string_array(array_info* in_arr,
                                               uint32_t* hashes,
                                               mpi_comm_info const& comm_info) {
-#ifdef DEBUG_REVERSE_SHUFFLE
-    std::cout << "Beginning of reverse_shuffle_list_string_array\n";
-#endif
     // 1: computing the recv_count_sub and related
     int n_pes = comm_info.n_pes;
     uint32_t* in_str_offset = (uint32_t*)in_arr->data3;
@@ -1422,14 +1163,6 @@ array_info* reverse_shuffle_list_string_array(array_info* in_arr,
                  1, MPI_INT64_T, MPI_COMM_WORLD);
     calc_disp(send_disp_sub, send_count_sub);
     calc_disp(recv_disp_sub, recv_count_sub);
-#ifdef DEBUG_REVERSE_SHUFFLE
-    for (int i = 0; i < n_pes; i++) {
-        std::cout << "i=" << i << " disp_sub : send=" << send_disp_sub[i]
-                  << " recv=" << recv_disp_sub[i] << "\n";
-        std::cout << "i=" << i << " count_sub : send=" << send_count_sub[i]
-                  << " recv=" << recv_count_sub[i] << "\n";
-    }
-#endif
     // 2: computing the recv_count_sub_sub and related
     uint32_t* in_data_offset = (uint32_t*)in_arr->data2;
     std::vector<int64_t> recv_count_sub_sub(n_pes),
@@ -1443,15 +1176,6 @@ array_info* reverse_shuffle_list_string_array(array_info* in_arr,
                  send_count_sub_sub.data(), 1, MPI_INT64_T, MPI_COMM_WORLD);
     calc_disp(send_disp_sub_sub, send_count_sub_sub);
     calc_disp(recv_disp_sub_sub, recv_count_sub_sub);
-#ifdef DEBUG_REVERSE_SHUFFLE
-    for (int i = 0; i < n_pes; i++) {
-        std::cout << "i=" << i << " disp_sub_sub : send=" << send_disp_sub[i]
-                  << " recv=" << recv_disp_sub[i] << "\n";
-        std::cout << "i=" << i
-                  << " count_sub_sub : send=" << send_count_sub_sub[i]
-                  << " recv=" << recv_count_sub_sub[i] << "\n";
-    }
-#endif
     // 3: Now allocating
     int64_t n_rows_ret = std::accumulate(comm_info.send_count.begin(),
                                          comm_info.send_count.end(), 0);
@@ -1463,9 +1187,6 @@ array_info* reverse_shuffle_list_string_array(array_info* in_arr,
                     in_arr->dtype, 0, in_arr->num_categories);
     int64_t in_len = in_arr->length;
     int64_t out_len = out_arr->length;
-#ifdef DEBUG_REVERSE_SHUFFLE
-    std::cout << "in_len=" << in_len << " out_len=" << out_len << "\n";
-#endif
     // 4: the string offsets
     std::vector<uint32_t> list_str_len_send(in_len);
     uint32_t* out_str_offset = (uint32_t*)out_arr->data3;
@@ -1483,19 +1204,10 @@ array_info* reverse_shuffle_list_string_array(array_info* in_arr,
     // 5: the character offsets
     int32_t in_sub_len = in_str_offset[in_len];
     int32_t out_sub_len = out_str_offset[out_len];
-#ifdef DEBUG_REVERSE_SHUFFLE
-    std::cout << "in_sub_len=" << in_sub_len << " out_sub_len=" << out_sub_len
-              << "\n";
-#endif
     std::vector<uint32_t> list_char_len_send(in_sub_len);
     uint32_t* out_data_offset = (uint32_t*)out_arr->data2;
     for (int64_t i = 0; i < in_sub_len; i++)
         list_char_len_send[i] = in_data_offset[i + 1] - in_data_offset[i];
-#ifdef DEBUG_REVERSE_SHUFFLE
-    for (int64_t i = 0; i < in_sub_len; i++)
-        std::cout << "i=" << i << " char_len_send=" << list_char_len_send[i]
-                  << "\n";
-#endif
     std::vector<uint32_t> list_char_len_recv(out_sub_len);
     bodo_alltoallv(list_char_len_send.data(), recv_count_sub, recv_disp_sub,
                    mpi_typ, list_char_len_recv.data(), send_count_sub,
@@ -1505,22 +1217,12 @@ array_info* reverse_shuffle_list_string_array(array_info* in_arr,
         size_t node = (size_t)hashes[i] % (size_t)n_pes;
         uint32_t nb_str = out_str_offset[i + 1] - out_str_offset[i];
         int64_t c_ind = tmp_offset_sub[node];
-#ifdef DEBUG_REVERSE_SHUFFLE
-        std::cout << "i=" << i << " node=" << node << " nb_str=" << nb_str
-                  << " c_ind=" << c_ind << "\n";
-#endif
         uint32_t* out_ptr = out_data_offset + out_str_offset[i];
         uint32_t* in_ptr = list_char_len_recv.data() + c_ind;
         memcpy((char*)out_ptr, (char*)in_ptr, sizeof(uint32_t) * nb_str);
         tmp_offset_sub[node] += nb_str;
     }
     convert_len_arr_to_offset(out_data_offset, out_sub_len);
-#ifdef DEBUG_REVERSE_SHUFFLE
-    for (int64_t i = 0; i < out_sub_len; i++) {
-        std::cout << "i=" << i << " out_data_offset=" << out_data_offset[i]
-                  << "\n";
-    }
-#endif
     // 6: the characters themselves
     int32_t out_sub_sub_len = out_data_offset[out_sub_len];
     char* in_char = in_arr->data1;
@@ -1536,19 +1238,11 @@ array_info* reverse_shuffle_list_string_array(array_info* in_arr,
         uint32_t nb_char = out_data_offset[out_str_offset[i + 1]] -
                            out_data_offset[out_str_offset[i]];
         int64_t c_ind = tmp_offset_sub_sub[node];
-#ifdef DEBUG_REVERSE_SHUFFLE
-        std::cout << "i=" << i << " node=" << node << " nb_char=" << nb_char
-                  << " c_ind=" << c_ind << " out_data_offset[i]="
-                  << out_data_offset[out_str_offset[i]] << "\n";
-#endif
         char* out_ptr = out_char + out_data_offset[out_str_offset[i]];
         char* in_ptr = list_char_recv.data() + c_ind;
         memcpy(out_ptr, in_ptr, nb_char);
         tmp_offset_sub_sub[node] += nb_char;
     }
-#ifdef DEBUG_REVERSE_SHUFFLE
-    std::cout << "End of reverse_shuffle_list_string_array\n";
-#endif
     //
     // Now doing the mask
     //
@@ -1573,10 +1267,6 @@ array_info* reverse_shuffle_list_string_array(array_info* in_arr,
             bool bit = GetBit(sub_null_bitmask_in, pos);
             SetBitTo(mask_send.data(), 8 * recv_disp_sub_null[i_p] + i_str,
                      bit);
-#ifdef DEBUG_REVERSE_SHUFFLE
-            std::cout << "i_p=" << i_p << " i_str=" << i_str << " bit=" << bit
-                      << "\n";
-#endif
         }
     }
     std::vector<uint8_t> mask_recv(n_send_sub_null_tot);
@@ -1592,10 +1282,6 @@ array_info* reverse_shuffle_list_string_array(array_info* in_arr,
         for (int64_t i_str = 0; i_str < n_str; i_str++) {
             bool bit = GetBit(sub_out_bitmap, tmp_offset[node] + i_str);
             SetBitTo(sub_null_bitmask_out, pos_si, bit);
-#ifdef DEBUG_REVERSE_SHUFFLE
-            std::cout << "i_row=" << i_row << " i_str=" << i_str
-                      << " bit=" << bit << "\n";
-#endif
             pos_si++;
         }
         tmp_offset[node] += n_str;
@@ -1624,15 +1310,8 @@ table_info* reverse_shuffle_table_kernel(table_info* in_table, uint32_t* hashes,
     DEBUG_PrintRefct(std::cout, in_table->columns);
 #endif
     size_t n_cols = in_table->ncols();
-#ifdef DEBUG_REVERSE_SHUFFLE
-    std::cout << "Processing columns in reverse_shuffle_table_kernel\n";
-#endif
     std::vector<array_info*> out_arrs;
     for (size_t i = 0; i < n_cols; i++) {
-#ifdef DEBUG_REVERSE_SHUFFLE
-        std::cout << "reverse_shuffle_table_kernel i=" << i << "/" << n_cols
-                  << "\n";
-#endif
         array_info* in_arr = in_table->columns[i];
         bodo_array_type::arr_type_enum arr_type = in_arr->arr_type;
         array_info* out_arr = nullptr;
@@ -1655,19 +1334,10 @@ table_info* reverse_shuffle_table_kernel(table_info* in_table, uint32_t* hashes,
             if (arr_type == bodo_array_type::LIST_STRING) {
                 out_arr = reverse_shuffle_list_string_array(in_arr, hashes,
                                                             comm_info);
-#ifdef DEBUG_REVERSE_SHUFFLE
-                std::cout << "We have out_arr\n";
-#endif
             }
-#ifdef DEBUG_REVERSE_SHUFFLE
-            std::cout << "Before the null_bitmap_operation 1\n";
-#endif
             if (arr_type == bodo_array_type::STRING ||
                 arr_type == bodo_array_type::LIST_STRING ||
                 arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
-#ifdef DEBUG_REVERSE_SHUFFLE
-                std::cout << "Before the null_bitmap_operation 2\n";
-#endif
                 reverse_shuffle_null_bitmap_array(in_arr, out_arr, hashes,
                                                   comm_info);
             }
@@ -1710,7 +1380,6 @@ table_info* shuffle_table(table_info* in_table, int64_t n_keys) {
     std::cout << "RET_TABLE (SHUFFLE):\n";
     DEBUG_PrintSetOfColumn(std::cout, table->columns);
     DEBUG_PrintRefct(std::cout, table->columns);
-    std::cout << "After the print statements\n";
 #endif
     return table;
 }
@@ -1718,9 +1387,6 @@ table_info* shuffle_table(table_info* in_table, int64_t n_keys) {
 template <typename T>
 std::shared_ptr<arrow::Buffer> broadcast_arrow_bitmap_buffer(int64_t n_rows,
                                                              T const& arr) {
-#ifdef DEBUG_BROADCAST
-    std::cout << "Beginning of broadcast_arrow_bitmap_buffer\n";
-#endif
     int myrank, mpi_root = 0;
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
     int n_bytes = (n_rows + 7) >> 3;
@@ -1739,18 +1405,12 @@ std::shared_ptr<arrow::Buffer> broadcast_arrow_bitmap_buffer(int64_t n_rows,
     }
     MPI_Datatype mpi_typ = get_MPI_typ(Bodo_CTypes::UINT8);
     MPI_Bcast(null_bitmask_out_ptr, n_bytes, mpi_typ, mpi_root, MPI_COMM_WORLD);
-#ifdef DEBUG_BROADCAST
-    std::cout << "End of broadcast_arrow_bitmap_buffer\n";
-#endif
     return buffer;
 }
 
 template <typename T>
 std::shared_ptr<arrow::Buffer> broadcast_arrow_offsets_buffer(int64_t n_rows,
                                                               T const& arr) {
-#ifdef DEBUG_BROADCAST
-    std::cout << "Beginning of broadcast_arrow_offsets_buffer\n";
-#endif
     int myrank, mpi_root = 0;
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
     size_t siz_out = sizeof(int32_t) * (n_rows + 1);
@@ -1768,22 +1428,13 @@ std::shared_ptr<arrow::Buffer> broadcast_arrow_offsets_buffer(int64_t n_rows,
     }
     MPI_Datatype mpi_typ = get_MPI_typ(Bodo_CTypes::INT32);
     MPI_Bcast(offset_out_ptr, n_rows + 1, mpi_typ, mpi_root, MPI_COMM_WORLD);
-#ifdef DEBUG_BROADCAST
-    std::cout << "End of broadcast_arrow_offsets_buffer\n";
-#endif
     return buffer;
 }
 
 std::shared_ptr<arrow::Buffer> broadcast_arrow_primitive_buffer(
     int64_t n_rows, std::shared_ptr<arrow::PrimitiveArray> const& arr) {
-#ifdef DEBUG_BROADCAST
-    std::cout << "Beginning of broadcast_arrow_primitive_buffer\n";
-#endif
     int myrank, mpi_root = 0;
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
-#ifdef DEBUG_BROADCAST
-    std::cout << "broadcast_arrow_primitive_buffer step 1\n";
-#endif
     // broadcasting type size
     int64_t siz_typ = 0;
     if (myrank == mpi_root) {
@@ -1791,16 +1442,9 @@ std::shared_ptr<arrow::Buffer> broadcast_arrow_primitive_buffer(
         Bodo_CTypes::CTypeEnum bodo_typ = arrow_to_bodo_type(typ);
         siz_typ = numpy_item_size[bodo_typ];
     }
-#ifdef DEBUG_BROADCAST
-    std::cout << "broadcast_arrow_primitive_buffer step 2\n";
-#endif
     MPI_Bcast(&siz_typ, 1, MPI_LONG_LONG_INT, mpi_root, MPI_COMM_WORLD);
     //
     size_t siz_out = siz_typ * n_rows;
-#ifdef DEBUG_BROADCAST
-    std::cout << "broadcast_arrow_primitive_buffer step 3, siz_typ=" << siz_typ
-              << " siz_out=" << siz_out << "\n";
-#endif
     arrow::Result<std::unique_ptr<arrow::Buffer>> maybe_buffer =
         arrow::AllocateBuffer(siz_out);
     if (!maybe_buffer.ok()) {
@@ -1808,37 +1452,19 @@ std::shared_ptr<arrow::Buffer> broadcast_arrow_primitive_buffer(
         return nullptr;
     }
     std::shared_ptr<arrow::Buffer> buffer = *std::move(maybe_buffer);
-#ifdef DEBUG_BROADCAST
-    std::cout << "broadcast_arrow_primitive_buffer step 4\n";
-#endif
     uint8_t* data_out_ptr = buffer->mutable_data();
-#ifdef DEBUG_BROADCAST
-    std::cout << "broadcast_arrow_primitive_buffer step 5\n";
-#endif
-#ifdef DEBUG_BROADCAST
-    std::cout << "broadcast_arrow_primitive_buffer step 6\n";
-#endif
     if (myrank == mpi_root) {
         uint8_t* data_in_ptr = (uint8_t*)arr->values()->data();
         memcpy(data_out_ptr, data_in_ptr, siz_typ * n_rows);
     }
-#ifdef DEBUG_BROADCAST
-    std::cout << "broadcast_arrow_primitive_buffer step 7\n";
-#endif
     MPI_Datatype mpi_typ = get_MPI_typ(Bodo_CTypes::UINT8);
     MPI_Bcast(data_out_ptr, siz_typ * n_rows, mpi_typ, mpi_root,
               MPI_COMM_WORLD);
-#ifdef DEBUG_BROADCAST
-    std::cout << "End of broadcast_arrow_primitive_buffer\n";
-#endif
     return buffer;
 }
 
 std::shared_ptr<arrow::Buffer> broadcast_arrow_string_buffer(
     int64_t n_rows, std::shared_ptr<arrow::StringArray> const& string_array) {
-#ifdef DEBUG_BROADCAST
-    std::cout << "Beginning of broadcast_arrow_string_buffer\n";
-#endif
     int myrank, mpi_root = 0;
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
     // broadcasting number of characters
@@ -1863,9 +1489,6 @@ std::shared_ptr<arrow::Buffer> broadcast_arrow_string_buffer(
     }
     MPI_Datatype mpi_typ = get_MPI_typ(Bodo_CTypes::UINT8);
     MPI_Bcast(data_out_ptr, n_chars, mpi_typ, mpi_root, MPI_COMM_WORLD);
-#ifdef DEBUG_BROADCAST
-    std::cout << "End of broadcast_arrow_string_buffer\n";
-#endif
     return buffer;
 }
 
@@ -1878,9 +1501,6 @@ std::shared_ptr<arrow::Buffer> broadcast_arrow_string_buffer(
 std::shared_ptr<arrow::Array> broadcast_arrow_array(
     std::shared_ptr<arrow::Array> const& ref_arr,
     std::shared_ptr<arrow::Array> const& arr) {
-#ifdef DEBUG_BROADCAST
-    std::cout << "Beginning of broadcast_arrow_array\n";
-#endif
     int myrank, mpi_root = 0;
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
     int64_t arr_bcast[2];
@@ -1889,69 +1509,33 @@ std::shared_ptr<arrow::Array> broadcast_arrow_array(
         int64_t typ = arr->type_id();
         arr_bcast[1] = typ;
     }
-#ifdef DEBUG_BROADCAST
-    std::cout << "Before MPI_Bcast\n";
-#endif
     MPI_Bcast(arr_bcast, 2, MPI_LONG_LONG_INT, mpi_root, MPI_COMM_WORLD);
-#ifdef DEBUG_BROADCAST
-    std::cout << "After MPI_Bcast\n";
-#endif
     int64_t n_rows = arr_bcast[0];
     arrow::Type::type typ_arrow = arrow::Type::type(arr_bcast[1]);
     //
     if (typ_arrow == arrow::Type::LIST) {
-#ifdef DEBUG_BROADCAST
-        std::cout << "Starting LIST case\n";
-#endif
         std::shared_ptr<arrow::ListArray> list_arr = nullptr;
-#ifdef DEBUG_BROADCAST
-        std::cout << "LIST case, step 1\n";
-#endif
         std::shared_ptr<arrow::ListArray> ref_list_arr =
             std::dynamic_pointer_cast<arrow::ListArray>(ref_arr);
         std::shared_ptr<arrow::Array> arr_values = nullptr;
-#ifdef DEBUG_BROADCAST
-        std::cout << "LIST case, step 2\n";
-#endif
         if (myrank == mpi_root) {
             list_arr = std::dynamic_pointer_cast<arrow::ListArray>(arr);
             arr_values = list_arr->values();
         }
-#ifdef DEBUG_BROADCAST
-        std::cout << "LIST case, step 3\n";
-#endif
         std::shared_ptr<arrow::Buffer> list_offsets =
             broadcast_arrow_offsets_buffer(n_rows, list_arr);
-#ifdef DEBUG_BROADCAST
-        std::cout << "LIST case, step 4\n";
-#endif
         std::shared_ptr<arrow::Buffer> null_bitmap =
             broadcast_arrow_bitmap_buffer(n_rows, list_arr);
-#ifdef DEBUG_BROADCAST
-        std::cout << "LIST case, step 5\n";
-#endif
         std::shared_ptr<arrow::Array> child_array =
             broadcast_arrow_array(ref_list_arr->values(), arr_values);
         // Now returning the broadcast array
-#ifdef DEBUG_BROADCAST
-        std::cout << "Exiting broadcast_arrow_array in LIST case\n";
-#endif
         return std::make_shared<arrow::ListArray>(ref_list_arr->type(), n_rows,
                                                   list_offsets, child_array,
                                                   null_bitmap);
     } else if (typ_arrow == arrow::Type::STRUCT) {
-#ifdef DEBUG_BROADCAST
-        std::cout << "Starting STRUCT case\n";
-#endif
         std::shared_ptr<arrow::StructArray> struct_arr = nullptr;
-#ifdef DEBUG_BROADCAST
-        std::cout << "STRUCT case, step 1\n";
-#endif
         std::shared_ptr<arrow::StructArray> ref_struct_arr =
             std::dynamic_pointer_cast<arrow::StructArray>(ref_arr);
-#ifdef DEBUG_BROADCAST
-        std::cout << "STRUCT case, step 2\n";
-#endif
         int64_t num_fields = 0;
         if (myrank == mpi_root) {
             struct_arr = std::dynamic_pointer_cast<arrow::StructArray>(arr);
@@ -1959,47 +1543,20 @@ std::shared_ptr<arrow::Array> broadcast_arrow_array(
                 struct_arr->type());
             num_fields = struct_type->num_fields();
         }
-#ifdef DEBUG_BROADCAST
-        std::cout << "STRUCT case, step 3\n";
-#endif
         MPI_Bcast(&num_fields, 1, MPI_LONG_LONG_INT, mpi_root, MPI_COMM_WORLD);
-#ifdef DEBUG_BROADCAST
-        std::cout << "STRUCT case, step 4\n";
-#endif
         std::vector<std::shared_ptr<arrow::Array>> children;
         for (int i_field = 0; i_field < int(num_fields); i_field++) {
-#ifdef DEBUG_BROADCAST
-            std::cout << "STRUCT case, step 5 i_field=" << i_field << "\n";
-#endif
             std::shared_ptr<arrow::Array> child = nullptr;
-#ifdef DEBUG_BROADCAST
-            std::cout << "STRUCT case, step 6 i_field=" << i_field << "\n";
-#endif
             std::shared_ptr<arrow::Array> ref_child =
                 ref_struct_arr->field(i_field);
-#ifdef DEBUG_BROADCAST
-            std::cout << "STRUCT case, step 7 i_field=" << i_field << "\n";
-#endif
             if (myrank == mpi_root) child = struct_arr->field(i_field);
-#ifdef DEBUG_BROADCAST
-            std::cout << "STRUCT case, step 8 i_field=" << i_field << "\n";
-#endif
             children.push_back(broadcast_arrow_array(ref_child, child));
         }
-#ifdef DEBUG_BROADCAST
-        std::cout << "STRUCT case, step 9\n";
-#endif
         std::shared_ptr<arrow::Buffer> null_bitmap =
             broadcast_arrow_bitmap_buffer(n_rows, struct_arr);
-#ifdef DEBUG_BROADCAST
-        std::cout << "Exiting broadcast_arrow_array in STRUCT case\n";
-#endif
         return std::make_shared<arrow::StructArray>(
             ref_struct_arr->type(), n_rows, children, null_bitmap);
     } else if (typ_arrow == arrow::Type::STRING) {
-#ifdef DEBUG_BROADCAST
-        std::cout << "Starting STRING case\n";
-#endif
         std::shared_ptr<arrow::StringArray> string_array = nullptr;
         if (myrank == mpi_root) {
             string_array = std::dynamic_pointer_cast<arrow::StringArray>(arr);
@@ -2010,40 +1567,19 @@ std::shared_ptr<arrow::Array> broadcast_arrow_array(
             broadcast_arrow_bitmap_buffer(n_rows, string_array);
         std::shared_ptr<arrow::Buffer> data =
             broadcast_arrow_string_buffer(n_rows, string_array);
-#ifdef DEBUG_BROADCAST
-        std::cout << "Exiting broadcast_arrow_array in STRING case\n";
-#endif
         return std::make_shared<arrow::StringArray>(n_rows, list_offsets, data,
                                                     null_bitmap);
     } else {
-#ifdef DEBUG_BROADCAST
-        std::cout << "Starting PRIMITIVE case\n";
-#endif
         std::shared_ptr<arrow::PrimitiveArray> primitive_arr = nullptr;
-#ifdef DEBUG_BROADCAST
-        std::cout << "  PRIMITIVE case, step 1\n";
-#endif
         std::shared_ptr<arrow::PrimitiveArray> ref_primitive_arr =
             std::dynamic_pointer_cast<arrow::PrimitiveArray>(ref_arr);
-#ifdef DEBUG_BROADCAST
-        std::cout << "  PRIMITIVE case, step 2\n";
-#endif
         if (myrank == mpi_root)
             primitive_arr =
                 std::dynamic_pointer_cast<arrow::PrimitiveArray>(arr);
-#ifdef DEBUG_BROADCAST
-        std::cout << "  PRIMITIVE case, step 3\n";
-#endif
         std::shared_ptr<arrow::Buffer> data =
             broadcast_arrow_primitive_buffer(n_rows, primitive_arr);
-#ifdef DEBUG_BROADCAST
-        std::cout << "  PRIMITIVE case, step 4\n";
-#endif
         std::shared_ptr<arrow::Buffer> null_bitmap =
             broadcast_arrow_bitmap_buffer(n_rows, primitive_arr);
-#ifdef DEBUG_BROADCAST
-        std::cout << "Exiting broadcast_arrow_array in PRIMITIVE case\n";
-#endif
         return std::make_shared<arrow::PrimitiveArray>(
             ref_primitive_arr->type(), n_rows, data, null_bitmap);
     }
@@ -2061,7 +1597,14 @@ std::shared_ptr<arrow::Array> broadcast_arrow_array(
 table_info* broadcast_table(table_info* ref_table, table_info* in_table,
                             size_t n_cols) {
 #ifdef DEBUG_BROADCAST
-    std::cout << "Beginning of broadcast_table\n";
+    std::cout << "INPUT of broadcast_table. ref_table=\n";
+    DEBUG_PrintRefct(std::cout, ref_table->columns);
+    DEBUG_PrintSetOfColumn(std::cout, ref_table->columns);
+    if (myrank == mpi_root) {
+        std::cout << "in_table=\n";
+        DEBUG_PrintRefct(std::cout, in_table->columns);
+        DEBUG_PrintSetOfColumn(std::cout, in_table->columns);
+    }
 #endif
     int n_pes, myrank;
     int mpi_root = 0;
@@ -2085,45 +1628,23 @@ table_info* broadcast_table(table_info* ref_table, table_info* in_table,
         Bodo_CTypes::CTypeEnum dtype = Bodo_CTypes::CTypeEnum(arr_bcast[1]);
         bodo_array_type::arr_type_enum arr_type =
             bodo_array_type::arr_type_enum(arr_bcast[2]);
-#ifdef DEBUG_BROADCAST
-        std::cout << "i_col=" << i_col << " arr_type=" << arr_type
-                  << " ARROW=" << bodo_array_type::ARROW << "\n";
-#endif
         int64_t n_sub_elems = arr_bcast[3];
         int64_t n_sub_sub_elems = arr_bcast[4];
         int64_t num_categories = arr_bcast[5];
         //
         array_info* out_arr;
         if (arr_type == bodo_array_type::ARROW) {
-#ifdef DEBUG_BROADCAST
-            std::cout << "broadcast_table, arrow case, step 1\n";
-#endif
             std::shared_ptr<arrow::Array> ref_array =
                 ref_table->columns[i_col]->array;
-#ifdef DEBUG_BROADCAST
-            std::cout << "broadcast_table, arrow case, step 2\n";
-#endif
             std::shared_ptr<arrow::Array> in_array = nullptr;
             if (myrank == mpi_root) in_array = in_arr->array;
-#ifdef DEBUG_BROADCAST
-            std::cout << "broadcast_table, arrow case, step 3\n";
-#endif
             std::shared_ptr<arrow::Array> array =
                 broadcast_arrow_array(ref_array, in_array);
-#ifdef DEBUG_BROADCAST
-            std::cout << "broadcast_table, arrow case, step 4\n";
-#endif
             uint64_t n_rows = array->length();
             NRT_MemInfo* meminfo = NULL;
-#ifdef DEBUG_BROADCAST
-            std::cout << "broadcast_table, arrow case, step 5\n";
-#endif
             out_arr = new array_info(
                 bodo_array_type::ARROW, Bodo_CTypes::INT8 /*dummy*/, n_rows, -1,
                 -1, NULL, NULL, NULL, NULL, NULL, meminfo, NULL, array);
-#ifdef DEBUG_BROADCAST
-            std::cout << "broadcast_table, arrow case, step 6\n";
-#endif
         }
         if (arr_type == bodo_array_type::NUMPY ||
             arr_type == bodo_array_type::CATEGORICAL ||
@@ -2181,6 +1702,11 @@ table_info* broadcast_table(table_info* ref_table, table_info* in_table,
         // discussion. The table is not-null only on mpi_root.
         if (myrank == mpi_root) decref_array(in_arr);
     }
+#ifdef DEBUG_BROADCAST
+    std::cout << "OUTPUT of broadcast_table. out_arrs=\n";
+    DEBUG_PrintRefct(std::cout, out_arrs);
+    DEBUG_PrintSetOfColumn(std::cout, out_arrs);
+#endif
     return new table_info(out_arrs);
 }
 
@@ -2212,29 +1738,17 @@ int MPI_Gengatherv(const void* sendbuf, int sendcount, MPI_Datatype sendtype,
 template <typename T>
 std::shared_ptr<arrow::Buffer> gather_arrow_offset_buffer(T const& arr,
                                                           bool all_gather) {
-#ifdef DEBUG_GATHER
-    std::cout << "Beginning of gather_arrow_offset_buffer\n";
-#endif
     int n_pes, myrank, mpi_root = 0;
     MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
-#ifdef DEBUG_GATHER
-    std::cout << "gather_arrow_offset_buffer, step 1\n";
-#endif
     std::vector<int> rows_count, rows_disps;
     if (myrank == mpi_root || all_gather) {
         rows_count.resize(n_pes);
         rows_disps.resize(n_pes);
     }
     int n_rows = arr->length();
-#ifdef DEBUG_GATHER
-    std::cout << "gather_arrow_offset_buffer, step 2 n_rows=" << n_rows << "\n";
-#endif
     MPI_Gengather(&n_rows, 1, MPI_INT, rows_count.data(), 1, MPI_INT, mpi_root,
                   MPI_COMM_WORLD, all_gather);
-#ifdef DEBUG_GATHER
-    std::cout << "gather_arrow_offset_buffer, step 3\n";
-#endif
     int64_t n_rows_tot =
         std::accumulate(rows_count.begin(), rows_count.end(), 0);
     if (myrank == mpi_root || all_gather) {
@@ -2244,32 +1758,16 @@ std::shared_ptr<arrow::Buffer> gather_arrow_offset_buffer(T const& arr,
             rows_pos += rows_count[i_p];
         }
     }
-#ifdef DEBUG_GATHER
-    std::cout << "gather_arrow_offset_buffer, step 4\n";
-#endif
     std::vector<int32_t> list_siz_loc(n_rows);
     for (int32_t i = 0; i < n_rows; i++)
         list_siz_loc[i] = arr->value_offset(i + 1) - arr->value_offset(i);
     MPI_Datatype mpi_typ = get_MPI_typ(Bodo_CTypes::INT32);
     std::vector<int32_t> list_siz_tot(n_rows_tot);
-#ifdef DEBUG_GATHER
-    std::cout << "gather_arrow_offset_buffer, step 5\n";
-#endif
     MPI_Gengatherv(list_siz_loc.data(), n_rows, mpi_typ, list_siz_tot.data(),
                    rows_count.data(), rows_disps.data(), mpi_typ, mpi_root,
                    MPI_COMM_WORLD, all_gather);
-#ifdef DEBUG_GATHER
-    std::cout << "gather_arrow_offset_buffer, step 6\n";
-#endif
     if (myrank == mpi_root || all_gather) {
-#ifdef DEBUG_GATHER
-        std::cout << "gather_arrow_offset_buffer, step 7\n";
-#endif
         size_t siz_out = sizeof(int32_t) * (n_rows_tot + 1);
-#ifdef DEBUG_GATHER
-        std::cout << "n_rows_tot=" << n_rows_tot << " siz_out=" << siz_out
-                  << "\n";
-#endif
         arrow::Result<std::unique_ptr<arrow::Buffer>> maybe_buffer =
             arrow::AllocateBuffer(siz_out);
         if (!maybe_buffer.ok()) {
@@ -2277,32 +1775,20 @@ std::shared_ptr<arrow::Buffer> gather_arrow_offset_buffer(T const& arr,
             return nullptr;
         }
         std::shared_ptr<arrow::Buffer> buffer = *std::move(maybe_buffer);
-#ifdef DEBUG_GATHER
-        std::cout << "gather_arrow_offset_buffer, step 8\n";
-#endif
         uint32_t* data_out_ptr = (uint32_t*)buffer->mutable_data();
         uint32_t pos = 0;
         for (int64_t i = 0; i <= n_rows_tot; i++) {
             data_out_ptr[i] = pos;
             pos += list_siz_tot[i];
         }
-#ifdef DEBUG_GATHER
-        std::cout << "End of gather_arrow_offset_buffer 1\n";
-#endif
         return buffer;
     }
-#ifdef DEBUG_GATHER
-    std::cout << "End of gather_arrow_offset_buffer 2\n";
-#endif
     return nullptr;
 }
 
 template <typename T>
 std::shared_ptr<arrow::Buffer> gather_arrow_bitmap_buffer(T const& arr,
                                                           bool all_gather) {
-#ifdef DEBUG_GATHER
-    std::cout << "Beginning of gather_arrow_bitmap_buffer\n";
-#endif
     int n_pes, myrank, mpi_root = 0;
     MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
@@ -2346,25 +1832,13 @@ std::shared_ptr<arrow::Buffer> gather_arrow_bitmap_buffer(T const& arr,
         uint8_t* data_out_ptr = buffer->mutable_data();
         copy_gathered_null_bytes(data_out_ptr, tmp_null_bytes, recv_count_null,
                                  rows_count);
-#ifdef DEBUG_GATHER
-        for (int i_row = 0; i_row < n_rows_tot; i_row++)
-            std::cout << "i_row=" << i_row << "/" << n_rows_tot
-                      << " msk=" << GetBit(data_out_ptr, i_row) << "\n";
-        std::cout << "End of gather_arrow_bitmap_buffer 1\n";
-#endif
         return buffer;
     }
-#ifdef DEBUG_GATHER
-    std::cout << "End of gather_arrow_bitmap_buffer 2\n";
-#endif
     return nullptr;
 }
 
 std::shared_ptr<arrow::Buffer> gather_arrow_string_buffer(
     std::shared_ptr<arrow::StringArray> const& arr, bool all_gather) {
-#ifdef DEBUG_GATHER
-    std::cout << "Beginning of gather_arrow_string_buffer\n";
-#endif
     int n_pes, myrank, mpi_root = 0;
     MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
@@ -2398,18 +1872,12 @@ std::shared_ptr<arrow::Buffer> gather_arrow_string_buffer(
     MPI_Gengatherv(data_in_ptr, n_char, mpi_typ, data_out_ptr,
                    char_count.data(), char_disps.data(), mpi_typ, mpi_root,
                    MPI_COMM_WORLD, all_gather);
-#ifdef DEBUG_GATHER
-    std::cout << "End of gather_arrow_string_buffer\n";
-#endif
     return buffer;
 }
 
 std::shared_ptr<arrow::Buffer> gather_arrow_primitive_buffer(
     int64_t n_rows, std::shared_ptr<arrow::PrimitiveArray> const& arr,
     bool all_gather) {
-#ifdef DEBUG_GATHER
-    std::cout << "Beginning of gather_arrow_primitive_buffer\n";
-#endif
     int n_pes, myrank, mpi_root = 0;
     MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
@@ -2426,10 +1894,6 @@ std::shared_ptr<arrow::Buffer> gather_arrow_primitive_buffer(
     MPI_Gengather(&n_char, 1, MPI_INT, char_count.data(), 1, MPI_INT, mpi_root,
                   MPI_COMM_WORLD, all_gather);
     int n_char_tot = std::accumulate(char_count.begin(), char_count.end(), 0);
-#ifdef DEBUG_GATHER
-    std::cout << "n_char=" << n_char << " n_char_tot=" << n_char_tot
-              << " siz_typ=" << siz_typ << "\n";
-#endif
     if (myrank == mpi_root || all_gather) calc_disp(char_disps, char_count);
     std::shared_ptr<arrow::Buffer> buffer = nullptr;
     uint8_t* data_out_ptr = nullptr;
@@ -2445,42 +1909,15 @@ std::shared_ptr<arrow::Buffer> gather_arrow_primitive_buffer(
         data_out_ptr = buffer->mutable_data();
     }
     uint8_t* send_data = (uint8_t*)arr->values()->data();
-#ifdef DEBUG_GATHER
-    if (bodo_typ == Bodo_CTypes::INT64) {
-        int64_t* send_data_i64 = (int64_t*)send_data;
-        for (int i_row = 0; i_row < n_rows; i_row++) {
-            int64_t val = send_data_i64[i_row];
-            std::cout << "send_data : i_row=" << i_row << " val=" << val
-                      << "\n";
-        }
-    }
-#endif
     MPI_Datatype mpi_typ = get_MPI_typ(Bodo_CTypes::UINT8);
     MPI_Gengatherv(send_data, n_char, mpi_typ, data_out_ptr, char_count.data(),
                    char_disps.data(), mpi_typ, mpi_root, MPI_COMM_WORLD,
                    all_gather);
-#ifdef DEBUG_GATHER
-    int n_rows_tot = n_char_tot / siz_typ;
-    // Most debug case use int64 as input. No need for code for other types
-    if (bodo_typ == Bodo_CTypes::INT64) {
-        int64_t* data_out_i64 = (int64_t*)data_out_ptr;
-        for (int i_row = 0; i_row < n_rows_tot; i_row++) {
-            int64_t val = data_out_i64[i_row];
-            std::cout << "data_out_ptr : i_row=" << i_row << " val=" << val
-                      << "\n";
-        }
-    }
-    std::cout << "End of gather_arrow_primitive_buffer n_rows_tot="
-              << n_rows_tot << "\n";
-#endif
     return buffer;
 }
 
 std::shared_ptr<arrow::Array> gather_arrow_array(
     std::shared_ptr<arrow::Array> const& arr, bool all_gather) {
-#ifdef DEBUG_GATHER
-    std::cout << "Beginning of gather_arrow_array\n";
-#endif
     int n_pes, myrank, mpi_root = 0;
     MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
@@ -2491,9 +1928,6 @@ std::shared_ptr<arrow::Array> gather_arrow_array(
     else
         MPI_Reduce(&n_rows, &n_rows_tot, 1, MPI_INT, MPI_SUM, mpi_root,
                    MPI_COMM_WORLD);
-#ifdef DEBUG_GATHER
-    std::cout << "n_rows=" << n_rows << " n_rows_tot=" << n_rows_tot << "\n";
-#endif
     if (arr->type_id() == arrow::Type::LIST) {
         std::shared_ptr<arrow::ListArray> list_arr =
             std::dynamic_pointer_cast<arrow::ListArray>(arr);
@@ -2504,16 +1938,10 @@ std::shared_ptr<arrow::Array> gather_arrow_array(
         std::shared_ptr<arrow::Array> child_array =
             gather_arrow_array(list_arr->values(), all_gather);
         if (myrank == mpi_root || all_gather) {
-#ifdef DEBUG_GATHER
-            std::cout << "Exiting gather_arrow_array in LIST case 1\n";
-#endif
             return std::make_shared<arrow::ListArray>(
                 list_arr->type(), n_rows_tot, list_offsets, child_array,
                 null_bitmap_out);
         }
-#ifdef DEBUG_GATHER
-        std::cout << "Exiting gather_arrow_array in LIST case 2\n";
-#endif
         return nullptr;
     } else if (arr->type_id() == arrow::Type::STRUCT) {
         std::shared_ptr<arrow::StructArray> struct_arr =
@@ -2527,17 +1955,9 @@ std::shared_ptr<arrow::Array> gather_arrow_array(
         std::shared_ptr<arrow::Buffer> null_bitmap_out =
             gather_arrow_bitmap_buffer(struct_arr, all_gather);
         if (myrank == mpi_root || all_gather) {
-#ifdef DEBUG_GATHER
-            std::cout
-                << "Exiting gather_arrow_array in STRUCT case 1 n_rows_tot="
-                << n_rows_tot << "\n";
-#endif
             return std::make_shared<arrow::StructArray>(
                 struct_arr->type(), n_rows_tot, children, null_bitmap_out);
         }
-#ifdef DEBUG_GATHER
-        std::cout << "Exiting gather_arrow_array in STRUCT case 2\n";
-#endif
         return nullptr;
     } else if (arr->type_id() == arrow::Type::STRING) {
         std::shared_ptr<arrow::StringArray> string_arr =
@@ -2549,15 +1969,9 @@ std::shared_ptr<arrow::Array> gather_arrow_array(
         std::shared_ptr<arrow::Buffer> data =
             gather_arrow_string_buffer(string_arr, all_gather);
         if (myrank == mpi_root || all_gather) {
-#ifdef DEBUG_GATHER
-            std::cout << "Exiting gather_arrow_array in STRING case 1\n";
-#endif
             return std::make_shared<arrow::StringArray>(
                 n_rows_tot, list_offsets, data, null_bitmap_out);
         }
-#ifdef DEBUG_GATHER
-        std::cout << "Exiting gather_arrow_array in STRING case 2\n";
-#endif
         return nullptr;
     } else {
         std::shared_ptr<arrow::PrimitiveArray> primitive_arr =
@@ -2567,39 +1981,30 @@ std::shared_ptr<arrow::Array> gather_arrow_array(
         std::shared_ptr<arrow::Buffer> data =
             gather_arrow_primitive_buffer(n_rows, primitive_arr, all_gather);
         if (myrank == mpi_root || all_gather) {
-#ifdef DEBUG_GATHER
-            std::cout << "Exiting gather_arrow_array in PRIMITIVE case 1\n";
-#endif
             return std::make_shared<arrow::PrimitiveArray>(
                 primitive_arr->type(), n_rows_tot, data, null_bitmap_out);
         }
-#ifdef DEBUG_GATHER
-        std::cout << "Exiting gather_arrow_array in PRIMITIVE case 2\n";
-#endif
         return nullptr;
     }
 }
 
 table_info* gather_table(table_info* in_table, size_t n_cols, bool all_gather) {
+#ifdef DEBUG_GATHER
+    std::cout << "INPUT of gather_table. in_table=\n";
+    DEBUG_PrintSetOfColumn(std::cout, in_table->columns);
+    DEBUG_PrintRefct(std::cout, in_table->columns);
+#endif
     int n_pes, myrank;
     int mpi_root = 0;
     MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
     std::vector<array_info*> out_arrs;
-#ifdef DEBUG_GATHER
-    std::cout << "GATHER : n_cols=" << n_cols << "\n";
-#endif
     for (size_t i_col = 0; i_col < n_cols; i_col++) {
         int64_t arr_gath_s[3];
         array_info* in_arr = in_table->columns[i_col];
         int64_t n_rows = in_arr->length;
         int64_t n_sub_elems = in_arr->n_sub_elems;
         int64_t n_sub_sub_elems = in_arr->n_sub_sub_elems;
-#ifdef DEBUG_GATHER
-        std::cout << "i_col=" << i_col << " n_rows=" << n_rows
-                  << " n_sub_elems=" << n_sub_elems
-                  << " n_sub_sub_elems=" << n_sub_sub_elems << "\n";
-#endif
         arr_gath_s[0] = n_rows;
         arr_gath_s[1] = n_sub_elems;
         arr_gath_s[2] = n_sub_sub_elems;
@@ -2609,9 +2014,6 @@ table_info* gather_table(table_info* in_table, size_t n_cols, bool all_gather) {
         Bodo_CTypes::CTypeEnum dtype = in_arr->dtype;
         bodo_array_type::arr_type_enum arr_type = in_arr->arr_type;
         int64_t num_categories = in_arr->num_categories;
-#ifdef DEBUG_GATHER
-        std::cout << "  num_categories=" << num_categories << "\n";
-#endif
         //
         std::vector<int> rows_disps(n_pes), rows_counts(n_pes);
         int rows_pos = 0;
@@ -2621,24 +2023,12 @@ table_info* gather_table(table_info* in_table, size_t n_cols, bool all_gather) {
             rows_disps[i_p] = rows_pos;
             rows_pos += siz;
         }
-#ifdef DEBUG_GATHER
-        std::cout << "  rows_counts / rows_disps built\n";
-#endif
         //
         array_info* out_arr = NULL;
         if (arr_type == bodo_array_type::ARROW) {
-#ifdef DEBUG_GATHER
-            std::cout << "  gather_table, arrow case, step 1\n";
-#endif
             std::shared_ptr<arrow::Array> array = in_arr->array;
-#ifdef DEBUG_GATHER
-            std::cout << "  gather_table, arrow case, step 2\n";
-#endif
             std::shared_ptr<arrow::Array> out_array =
                 gather_arrow_array(array, all_gather);
-#ifdef DEBUG_GATHER
-            std::cout << "  gather_table, arrow case, step 3\n";
-#endif
             uint64_t n_rows_tot = 0;
             NRT_MemInfo* meminfo = NULL;
             if (myrank == mpi_root || all_gather)
@@ -2646,26 +2036,16 @@ table_info* gather_table(table_info* in_table, size_t n_cols, bool all_gather) {
             out_arr = new array_info(
                 bodo_array_type::ARROW, Bodo_CTypes::INT8 /*dummy*/, n_rows_tot,
                 -1, -1, NULL, NULL, NULL, NULL, NULL, meminfo, NULL, out_array);
-#ifdef DEBUG_GATHER
-            std::cout << "  gather_table, arrow case, step 4\n";
-#endif
         }
         if (arr_type == bodo_array_type::NUMPY ||
             arr_type == bodo_array_type::CATEGORICAL ||
             arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
             MPI_Datatype mpi_typ = get_MPI_typ(dtype);
-#ifdef DEBUG_GATHER
-            std::cout << "  NUMPY/CATEGORICAL/NULLABLE dtype=" << dtype
-                      << " mpi_typ=" << mpi_typ << "\n";
-#endif
             // Computing the total number of rows.
             // On mpi_root, all rows, on others just 1 row for consistency.
             int64_t n_rows_tot = 0;
             for (int i_p = 0; i_p < n_pes; i_p++)
                 n_rows_tot += arr_gath_r[3 * i_p];
-#ifdef DEBUG_GATHER
-            std::cout << "  n_rows_tot=" << n_rows_tot << "\n";
-#endif
             char* data1_ptr = NULL;
             if (myrank == mpi_root || all_gather) {
                 out_arr = alloc_array(n_rows_tot, -1, -1, arr_type, dtype, 0,
@@ -2675,9 +2055,6 @@ table_info* gather_table(table_info* in_table, size_t n_cols, bool all_gather) {
             MPI_Gengatherv(in_arr->data1, n_rows, mpi_typ, data1_ptr,
                            rows_counts.data(), rows_disps.data(), mpi_typ,
                            mpi_root, MPI_COMM_WORLD, all_gather);
-#ifdef DEBUG_GATHER
-            std::cout << "  After MPI_Gengatherv\n";
-#endif
         }
         if (arr_type == bodo_array_type::STRING) {
             MPI_Datatype mpi_typ32 = get_MPI_typ(Bodo_CTypes::UINT32);
@@ -2740,9 +2117,6 @@ table_info* gather_table(table_info* in_table, size_t n_cols, bool all_gather) {
                 n_sub_elems_tot += arr_gath_r[3 * i_p + 1];
                 n_sub_sub_elems_tot += arr_gath_r[3 * i_p + 2];
             }
-#ifdef DEBUG_GATHER
-            std::cout << "Before n_sub_bytes\n";
-#endif
             std::vector<int> n_sub_bytes_count, n_sub_bytes_disp, string_count;
             if (myrank == mpi_root || all_gather) {
                 n_sub_bytes_count.resize(n_pes);
@@ -2753,42 +2127,15 @@ table_info* gather_table(table_info* in_table, size_t n_cols, bool all_gather) {
                     n_sub_bytes_count[i_p] = (string_count[i_p] + 7) >> 3;
                 }
                 calc_disp(n_sub_bytes_disp, n_sub_bytes_count);
-#ifdef DEBUG_GATHER
-                for (int i_p = 0; i_p < n_pes; i_p++) {
-                    std::cout << "i_p=" << i_p
-                              << " n_sub_bytes count=" << n_sub_bytes_count[i_p]
-                              << " disp=" << n_sub_bytes_disp[i_p] << "\n";
-                }
-#endif
             }
-#ifdef DEBUG_GATHER
-            std::cout << "Setting the n_sub_bytes_disp / n_sub_bytes_count\n";
-#endif
             int64_t n_sub_bytes_tot = std::accumulate(
                 n_sub_bytes_count.begin(), n_sub_bytes_count.end(), 0);
             std::vector<uint8_t> V(n_sub_bytes_tot, 0);
             uint8_t* sub_null_bitmask_i = (uint8_t*)in_arr->sub_null_bitmask;
             int n_bytes = (n_rows + 7) >> 3;
-#ifdef DEBUG_GATHER
-            std::cout << "n_bytes=" << n_bytes << "\n";
-            for (int i = 0; i < n_bytes; i++)
-                std::cout << "i=" << i << " sub_null_bitmask_i="
-                          << int64_t(sub_null_bitmask_i[i]) << "\n";
-            std::cout << "Setting the n_sub_bytes_disp / n_sub_bytes_count\n";
-#endif
             MPI_Gengatherv(sub_null_bitmask_i, n_bytes, mpi_typ8, V.data(),
                            n_sub_bytes_count.data(), n_sub_bytes_disp.data(),
                            mpi_typ8, mpi_root, MPI_COMM_WORLD, all_gather);
-#ifdef DEBUG_GATHER
-            std::cout << "n_sub_bytes_tot=" << n_sub_bytes_tot << "\n";
-            for (int idx = 0; idx < n_sub_bytes_tot; idx++)
-                std::cout << "idx=" << idx << " V[idx]=" << int64_t(V[idx])
-                          << "\n";
-            std::cout << "After MPI_Gengatherv\n";
-            std::cout << "  n_rows_tot=" << n_rows_tot
-                      << " n_sub_elems_tot=" << n_sub_elems_tot
-                      << " n_sub_sub_elems_tot=" << n_sub_sub_elems_tot << "\n";
-#endif
             char* data1_ptr = NULL;
             if (myrank == mpi_root || all_gather) {
                 out_arr = alloc_array(n_rows_tot, n_sub_elems_tot,
@@ -2898,18 +2245,14 @@ table_info* gather_table(table_info* in_table, size_t n_cols, bool all_gather) {
                                          rows_counts);
             }
         }
-#ifdef DEBUG_GATHER
-        std::cout << "  After consideration of all cases\n";
-#endif
         out_arrs.push_back(out_arr);
-#ifdef DEBUG_GATHER
-        std::cout << "  After push_back operation\n";
-#endif
         // Reference stealing. See shuffle_table_kernel for discussion.
         decref_array(in_arr);
     }
 #ifdef DEBUG_GATHER
-    std::cout << "Exiting gather_table\n";
+    std::cout << "OUTPUT of gather_table. out_arrs=\n";
+    DEBUG_PrintRefct(std::cout, out_arrs);
+    DEBUG_PrintSetOfColumn(std::cout, out_arrs);
 #endif
     return new table_info(out_arrs);
 }
@@ -2925,15 +2268,9 @@ table_info* compute_node_partition_by_hash(table_info* in_table, int64_t n_keys,
     std::vector<array_info*> out_arrs;
     array_info* out_arr = alloc_array(n_rows, -1, -1, bodo_array_type::NUMPY,
                                       Bodo_CTypes::INT32, 0, 0);
-#ifdef DEBUG_COMP_HASH
-    std::cout << "COMPUTE_HASH\n";
-#endif
     for (int64_t i_row = 0; i_row < n_rows; i_row++) {
         int32_t node_id = hashes[i_row] % n_pes;
         out_arr->at<int32_t>(i_row) = node_id;
-#ifdef DEBUG_COMP_HASH
-        std::cout << "i_row=" << i_row << " node_id=" << node_id << "\n";
-#endif
     }
     out_arrs.push_back(out_arr);
     return new table_info(out_arrs);
@@ -3001,8 +2338,8 @@ table_info* shuffle_renormalization(table_info* in_table) {
         shuffle_table_kernel(in_table, hashes.data(), comm_info);
 #ifdef DEBUG_SHUFFLE
     std::cout << "RET_TABLE (shuffle_renormalization):\n";
-    DEBUG_PrintSetOfColumn(std::cout, ret_table->columns);
     DEBUG_PrintRefct(std::cout, ret_table->columns);
+    DEBUG_PrintSetOfColumn(std::cout, ret_table->columns);
     std::cout << "Leaving now the shuffle_renormalization\n";
 #endif
     return ret_table;

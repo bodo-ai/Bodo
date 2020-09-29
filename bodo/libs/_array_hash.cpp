@@ -287,9 +287,6 @@ void hash_arrow_array(uint32_t* out_hashes,
                       std::vector<uint32_t> const& list_offsets,
                       size_t const& n_rows,
                       std::shared_ptr<arrow::Array> const& input_array) {
-#ifdef DEBUG_HASH
-    std::cout << "Beginning of hash_arrow_array\n";
-#endif
     if (input_array->type_id() == arrow::Type::LIST) {
         auto list_array =
             std::dynamic_pointer_cast<arrow::ListArray>(input_array);
@@ -322,9 +319,6 @@ void hash_arrow_array(uint32_t* out_hashes,
         apply_arrow_numeric_hash(out_hashes, list_offsets, n_rows, primitive_array);
         apply_arrow_bitmask_hash(out_hashes, list_offsets, n_rows, primitive_array);
     }
-#ifdef DEBUG_HASH
-    std::cout << "Ending of hash_arrow_array\n";
-#endif
 }
 
 /**
@@ -343,119 +337,71 @@ void hash_array(uint32_t* out_hashes, array_info* array, size_t n_rows,
     // TODO: general dispatcher
     // XXX: assumes nullable array data for nulls is always consistent
     if (array->arr_type == bodo_array_type::ARROW) {
-#ifdef DEBUG_HASH
-        std::cout << "HASH: Processing arrow column\n";
-#endif
         std::vector<uint32_t> list_offsets(n_rows + 1);
         for (uint32_t i = 0; i <= n_rows; i++) list_offsets[i] = i;
         for (uint32_t i = 0; i < n_rows; i++) out_hashes[i] = seed;
         return hash_arrow_array(out_hashes, list_offsets, n_rows, array->array);
     }
     if (array->dtype == Bodo_CTypes::_BOOL) {
-#ifdef DEBUG_HASH
-        std::cout << "HASH: Processing bool column\n";
-#endif
         return hash_array_inner<bool>(out_hashes, (bool*)array->data1, n_rows,
                                       seed);
     }
     if (array->dtype == Bodo_CTypes::INT8) {
-#ifdef DEBUG_HASH
-        std::cout << "HASH: Processing int8 column\n";
-#endif
         return hash_array_inner<int8_t>(out_hashes, (int8_t*)array->data1,
                                         n_rows, seed);
     }
     if (array->dtype == Bodo_CTypes::UINT8) {
-#ifdef DEBUG_HASH
-        std::cout << "HASH: Processing uint8 column\n";
-#endif
         return hash_array_inner<uint8_t>(out_hashes, (uint8_t*)array->data1,
                                          n_rows, seed);
     }
     if (array->dtype == Bodo_CTypes::INT16) {
-#ifdef DEBUG_HASH
-        std::cout << "HASH: Processing int16 column\n";
-#endif
         return hash_array_inner<int16_t>(out_hashes, (int16_t*)array->data1,
                                          n_rows, seed);
     }
     if (array->dtype == Bodo_CTypes::UINT16) {
-#ifdef DEBUG_HASH
-        std::cout << "HASH: Processing uint16 column\n";
-#endif
         return hash_array_inner<uint16_t>(out_hashes, (uint16_t*)array->data1,
                                           n_rows, seed);
     }
     if (array->dtype == Bodo_CTypes::INT32) {
-#ifdef DEBUG_HASH
-        std::cout << "HASH: Processing int32 column\n";
-#endif
         return hash_array_inner<int32_t>(out_hashes, (int32_t*)array->data1,
                                          n_rows, seed);
     }
     if (array->dtype == Bodo_CTypes::UINT32) {
-#ifdef DEBUG_HASH
-        std::cout << "HASH: Processing uint32 column\n";
-#endif
         return hash_array_inner<uint32_t>(out_hashes, (uint32_t*)array->data1,
                                           n_rows, seed);
     }
     if (array->dtype == Bodo_CTypes::INT64) {
-#ifdef DEBUG_HASH
-        std::cout << "HASH: Processing int64 column\n";
-#endif
         return hash_array_inner<int64_t>(out_hashes, (int64_t*)array->data1,
                                          n_rows, seed);
     }
     if (array->dtype == Bodo_CTypes::DECIMAL) {
-#ifdef DEBUG_HASH
-        std::cout << "HASH: Processing decimal column\n";
-#endif
         return hash_array_inner<decimal_value_cpp>(
             out_hashes, (decimal_value_cpp*)array->data1, n_rows, seed);
     }
     if (array->dtype == Bodo_CTypes::UINT64) {
-#ifdef DEBUG_HASH
-        std::cout << "HASH: Processing uint64 column\n";
-#endif
         return hash_array_inner<uint64_t>(out_hashes, (uint64_t*)array->data1,
                                           n_rows, seed);
     }
     if (array->dtype == Bodo_CTypes::DATE ||
         array->dtype == Bodo_CTypes::DATETIME ||
         array->dtype == Bodo_CTypes::TIMEDELTA) {
-#ifdef DEBUG_HASH
-        std::cout << "HASH: Processing date / datetime / timedelta column\n";
-#endif
         return hash_array_inner<int64_t>(out_hashes, (int64_t*)array->data1,
                                          n_rows, seed);
     }
     if (array->dtype == Bodo_CTypes::FLOAT32) {
-#ifdef DEBUG_HASH
-        std::cout << "HASH: Processing float column\n";
-#endif
         return hash_array_inner<float>(out_hashes, (float*)array->data1, n_rows,
                                        seed);
     }
     if (array->dtype == Bodo_CTypes::FLOAT64) {
-#ifdef DEBUG_HASH
-        std::cout << "HASH: Processing double column\n";
-#endif
         return hash_array_inner<double>(out_hashes, (double*)array->data1,
                                         n_rows, seed);
     }
     if (array->arr_type == bodo_array_type::STRING) {
-#ifdef DEBUG_HASH
-        std::cout << "HASH: Processing STRING column\n";
-#endif
         return hash_array_string(out_hashes, (char*)array->data1,
                                  (uint32_t*)array->data2,
                                  (uint8_t*)array->null_bitmask, n_rows, seed);
     }
     if (array->arr_type == bodo_array_type::LIST_STRING) {
-#ifdef DEBUG_HASH
-        std::cout << "HASH: Processing LIST_STRING column\n";
-#endif
         return hash_array_list_string(
             out_hashes, (char*)array->data1, (uint32_t*)array->data2,
             (uint32_t*)array->data3, (uint8_t*)array->null_bitmask,
@@ -500,115 +446,67 @@ static void hash_array_combine(uint32_t* out_hashes, array_info* array,
                                size_t n_rows, const uint32_t seed) {
     // dispatch to proper function
     // TODO: general dispatcher
-#ifdef DEBUG_HASH
-    std::cout << "Beginning of hash_array_combine\n";
-#endif
     if (array->arr_type == bodo_array_type::ARROW) {
-#ifdef DEBUG_HASH
-        std::cout << "Combine HASH: Processing arrow column\n";
-#endif
         std::vector<uint32_t> list_offsets(n_rows + 1);
         for (uint32_t i = 0; i <= n_rows; i++) list_offsets[i] = i;
         return hash_arrow_array(out_hashes, list_offsets, n_rows, array->array);
     }
     if (array->arr_type == bodo_array_type::STRING) {
-#ifdef DEBUG_HASH
-        std::cout << "Combine HASH: Processing string column\n";
-#endif
         return hash_array_combine_string(out_hashes, (char*)array->data1,
                                          (uint32_t*)array->data2, n_rows, seed);
     }
     if (array->arr_type == bodo_array_type::LIST_STRING) {
-#ifdef DEBUG_HASH
-        std::cout << "Combine HASH: Processing list(string) column\n";
-#endif
         return combine_hash_array_list_string(out_hashes, (char*)array->data1,
             (uint32_t*)array->data2, (uint32_t*)array->data3,
             (uint8_t*)array->null_bitmask,(uint8_t*)array->sub_null_bitmask, n_rows);
     }
     if (array->dtype == Bodo_CTypes::_BOOL) {
-#ifdef DEBUG_HASH
-        std::cout << "Combine HASH: Processing bool column\n";
-#endif
         return hash_array_combine_inner<bool>(out_hashes, (bool*)array->data1,
                                               n_rows, seed);
     }
     if (array->dtype == Bodo_CTypes::INT8) {
-#ifdef DEBUG_HASH
-        std::cout << "Combine HASH: Processing int8 column\n";
-#endif
         return hash_array_combine_inner<int8_t>(
             out_hashes, (int8_t*)array->data1, n_rows, seed);
     }
     if (array->dtype == Bodo_CTypes::UINT8) {
-#ifdef DEBUG_HASH
-        std::cout << "Combine HASH: Processing uint8 column\n";
-#endif
         return hash_array_combine_inner<uint8_t>(
             out_hashes, (uint8_t*)array->data1, n_rows, seed);
     }
     if (array->dtype == Bodo_CTypes::INT16) {
-#ifdef DEBUG_HASH
-        std::cout << "Combine HASH: Processing int16 column\n";
-#endif
         return hash_array_combine_inner<int16_t>(
             out_hashes, (int16_t*)array->data1, n_rows, seed);
     }
     if (array->dtype == Bodo_CTypes::UINT16) {
-#ifdef DEBUG_HASH
-        std::cout << "Combine HASH: Processing uint16 column\n";
-#endif
         return hash_array_combine_inner<uint16_t>(
             out_hashes, (uint16_t*)array->data1, n_rows, seed);
     }
     if (array->dtype == Bodo_CTypes::INT32) {
-#ifdef DEBUG_HASH
-        std::cout << "Combine HASH: Processing int32 column\n";
-#endif
         return hash_array_combine_inner<int32_t>(
             out_hashes, (int32_t*)array->data1, n_rows, seed);
     }
     if (array->dtype == Bodo_CTypes::UINT32) {
-#ifdef DEBUG_HASH
-        std::cout << "Combine HASH: Processing uint32 column\n";
-#endif
         return hash_array_combine_inner<uint32_t>(
             out_hashes, (uint32_t*)array->data1, n_rows, seed);
     }
     if (array->dtype == Bodo_CTypes::INT64) {
-#ifdef DEBUG_HASH
-        std::cout << "Combine HASH: Processing int64 column\n";
-#endif
         return hash_array_combine_inner<int64_t>(
             out_hashes, (int64_t*)array->data1, n_rows, seed);
     }
     if (array->dtype == Bodo_CTypes::UINT64) {
-#ifdef DEBUG_HASH
-        std::cout << "Combine HASH: Processing uint64 column\n";
-#endif
         return hash_array_combine_inner<uint64_t>(
             out_hashes, (uint64_t*)array->data1, n_rows, seed);
     }
     if (array->dtype == Bodo_CTypes::DATE ||
         array->dtype == Bodo_CTypes::DATETIME ||
         array->dtype == Bodo_CTypes::TIMEDELTA) {
-#ifdef DEBUG_HASH
-        std::cout << "Combine HASH: Processing date / datetime / timedelta column\n";
-#endif
         return hash_array_combine_inner<int64_t>(
             out_hashes, (int64_t*)array->data1, n_rows, seed);
     }
     if (array->dtype == Bodo_CTypes::FLOAT32) {
-#ifdef DEBUG_HASH
-        std::cout << "Combine HASH: Processing float column\n";
-#endif
         return hash_array_combine_inner<float>(out_hashes, (float*)array->data1,
                                                n_rows, seed);
     }
     if (array->dtype == Bodo_CTypes::FLOAT64) {
-#ifdef DEBUG_HASH
-        std::cout << "Combine HASH: Processing double column\n";
-#endif
         return hash_array_combine_inner<double>(
             out_hashes, (double*)array->data1, n_rows, seed);
     }
@@ -619,23 +517,14 @@ static void hash_array_combine(uint32_t* out_hashes, array_info* array,
 uint32_t* hash_keys(std::vector<array_info*> const& key_arrs,
                     const uint32_t seed) {
 #ifdef DEBUG_HASH
-    std::cout << "Beginning of hash_keys. key_arrs=\n";
-    DEBUG_PrintSetOfColumn(std::cout, key_arrs);
+    std::cout << "INPUT hash_keys. key_arrs=\n";
     DEBUG_PrintRefct(std::cout, key_arrs);
+    DEBUG_PrintSetOfColumn(std::cout, key_arrs);
 #endif
     size_t n_rows = (size_t)key_arrs[0]->length;
-#ifdef DEBUG_HASH
-    std::cout << "n_rows=" << n_rows << "\n";
-#endif
     uint32_t* hashes = new uint32_t[n_rows];
     // hash first array
-#ifdef DEBUG_HASH
-    std::cout << "Before hash_array\n";
-#endif
     hash_array(hashes, key_arrs[0], n_rows, seed);
-#ifdef DEBUG_HASH
-    std::cout << "After hash_array\n";
-#endif
     // combine other array hashes
     for (size_t i = 1; i < key_arrs.size(); i++) {
         hash_array_combine(hashes, key_arrs[i], n_rows, seed);

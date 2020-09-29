@@ -23,7 +23,6 @@ MPI_Datatype decimal_mpi_type = MPI_DATATYPE_NULL;
 MPI_Datatype a2av_large_dtype = MPI_DATATYPE_NULL;
 
 #undef USE_ARROW_FOR_LIST_STRING
-#undef DEBUG_ARROW_ARRAY
 
 struct ArrayBuildInfo {
     ArrayBuildInfo(std::shared_ptr<arrow::Array> a, int p1, int p2, int p3,
@@ -52,17 +51,9 @@ ArrayBuildInfo nested_array_from_c(const int* types, const uint8_t** buffers,
                                    const int64_t* lengths, char** field_names,
                                    int type_pos, int buf_pos, int length_pos,
                                    int name_pos) {
-#ifdef DEBUG_ARROW_ARRAY
-    std::cout << "Begin of nested_array_from_c buf_pos=" << buf_pos
-              << " type_pos=" << type_pos << "\n";
-#endif
     Bodo_CTypes::CTypeEnum type = (Bodo_CTypes::CTypeEnum)types[type_pos];
     int64_t length = lengths[length_pos];
     if (type == Bodo_CTypes::LIST) {
-#ifdef DEBUG_ARROW_ARRAY
-        std::cout << "nested_array_from_c, LIST case buf_pos=" << buf_pos
-                  << "\n";
-#endif
         const uint8_t* _offsets = buffers[buf_pos++];
         const uint8_t* _null_bitmap = buffers[buf_pos++];
 
@@ -90,10 +81,6 @@ ArrayBuildInfo nested_array_from_c(const int* types, const uint8_t** buffers,
 
         return ArrayBuildInfo(array, type_pos, buf_pos, length_pos, name_pos);
     } else if (type == Bodo_CTypes::STRUCT) {
-#ifdef DEBUG_ARROW_ARRAY
-        std::cout << "nested_array_from_c, STRUCT case buf_pos=" << buf_pos
-                  << "\n";
-#endif
         int num_fields = types[type_pos + 1];
         type_pos += 2;
         length_pos += 2;
@@ -104,9 +91,6 @@ ArrayBuildInfo nested_array_from_c(const int* types, const uint8_t** buffers,
         std::vector<std::shared_ptr<arrow::Field>> fields;
         for (int i = 0; i < num_fields; i++) {
             std::string e_name(field_names[name_pos]);
-#ifdef DEBUG_ARROW_ARRAY
-            std::cout << "Before nested_array_from_c\n";
-#endif
             ArrayBuildInfo ai = nested_array_from_c(
                 types, buffers, lengths, field_names, type_pos, buf_pos,
                 length_pos, name_pos + 1);
@@ -117,10 +101,6 @@ ArrayBuildInfo nested_array_from_c(const int* types, const uint8_t** buffers,
             buf_pos = ai.buf_pos;
             length_pos = ai.length_pos;
             name_pos = ai.name_pos;
-#ifdef DEBUG_ARROW_ARRAY
-            std::cout << "i=" << i << " / " << num_fields
-                      << " buf_pos=" << buf_pos << "\n";
-#endif
         }
 
         std::shared_ptr<arrow::StructType> struct_type =
@@ -134,9 +114,6 @@ ArrayBuildInfo nested_array_from_c(const int* types, const uint8_t** buffers,
                                                  child_arrays, null_bitmap);
         return ArrayBuildInfo(array, type_pos, buf_pos, length_pos, name_pos);
     } else if (type == Bodo_CTypes::STRING) {
-#ifdef DEBUG_ARROW_ARRAY
-        std::cout << "nested_array_from_c, STRING case\n";
-#endif
         const uint8_t* _offsets = buffers[buf_pos++];
         const uint8_t* _null_bitmap = buffers[buf_pos++];
 
@@ -159,9 +136,6 @@ ArrayBuildInfo nested_array_from_c(const int* types, const uint8_t** buffers,
         return ArrayBuildInfo(array, type_pos + 1, buf_pos, length_pos + 1,
                               name_pos);
     } else if (type == Bodo_CTypes::DECIMAL) {
-#ifdef DEBUG_ARROW_ARRAY
-        std::cout << "nested_array_from_c, DECIMAL case\n";
-#endif
         // The null bitmap
         const uint8_t* _null_bitmap = buffers[buf_pos++];
         std::shared_ptr<arrow::Buffer> null_bitmap = NULLPTR;
@@ -183,10 +157,6 @@ ArrayBuildInfo nested_array_from_c(const int* types, const uint8_t** buffers,
         // The returning array.
         int32_t precision = types[type_pos + 1];
         int32_t scale = types[type_pos + 2];
-#ifdef DEBUG_ARROW_ARRAY
-        std::cout << "nested_array_from_c, precision=" << precision
-                  << " scale=" << scale << "\n";
-#endif
         arrow::Result<std::shared_ptr<arrow::DataType>> type_res;
         type_res = arrow::Decimal128Type::Make(precision, scale);
         std::shared_ptr<arrow::DataType> type =
@@ -198,19 +168,12 @@ ArrayBuildInfo nested_array_from_c(const int* types, const uint8_t** buffers,
         return ArrayBuildInfo(array, type_pos + 3, buf_pos, length_pos + 1,
                               name_pos);
     } else {  // Case of numeric/decimal array
-#ifdef DEBUG_ARROW_ARRAY
-        std::cout << "nested_array_from_c, PRIMITIVE case buf_pos=" << buf_pos
-                  << "\n";
-#endif
         // First the null bitmap of the array
         const uint8_t* _null_bitmap = buffers[buf_pos++];
         std::shared_ptr<arrow::Buffer> null_bitmap = NULLPTR;
         if (_null_bitmap)
             null_bitmap = std::make_shared<arrow::Buffer>(_null_bitmap,
                                                           (length + 7) >> 3);
-#ifdef DEBUG_ARROW_ARRAY
-        std::cout << "We have null_bitmap\n";
-#endif
         // Second the array itself
         std::shared_ptr<arrow::Array> array;
         int64_t siz_typ = numpy_item_size[type];
@@ -254,9 +217,6 @@ ArrayBuildInfo nested_array_from_c(const int* types, const uint8_t** buffers,
             array = std::make_shared<arrow::NumericArray<arrow::DoubleType>>(
                 length, data, null_bitmap);
         } else {
-#ifdef DEBUG_ARROW_ARRAY
-            std::cout << "unsupported case\n";
-#endif
             Bodo_PyErr_SetString(PyExc_RuntimeError,
                                  "nested_array_from_c unsupported type");
             return {nullptr, 0, 0, 0, 0};
@@ -269,9 +229,6 @@ ArrayBuildInfo nested_array_from_c(const int* types, const uint8_t** buffers,
 array_info* nested_array_to_info(int* types, const uint8_t** buffers,
                                  int64_t* lengths, char** field_names,
                                  NRT_MemInfo* meminfo) {
-#ifdef DEBUG_ARROW_ARRAY
-    std::cout << "Beginning of nested_array_to_info\n";
-#endif
     int type_pos = 0;
     int buf_pos = 0;
     int length_pos = 0;
@@ -286,38 +243,6 @@ array_info* nested_array_to_info(int* types, const uint8_t** buffers,
 }
 
 array_info* list_string_array_to_info(NRT_MemInfo* meminfo) {
-#ifdef USE_ARROW_FOR_LIST_STRING
-    // compile time assert to make sure our offset type matches Arrow's
-    // TODO replace int32_t here with macro
-    static_assert(std::is_same<arrow::ListType::offset_type, int32_t>::value);
-
-    // Convert to Arrow Array to test the Arrow code path
-
-    // make arrow string array
-    std::shared_ptr<arrow::Buffer> char_buffer =
-        std::make_shared<arrow::Buffer>((uint8_t*)data, n_chars);
-    std::shared_ptr<arrow::Buffer> str_offsets =
-        std::make_shared<arrow::Buffer>((uint8_t*)data_offsets,
-                                        sizeof(int32_t) * (n_strings + 1));
-    std::shared_ptr<arrow::Array> string_array =
-        std::make_shared<arrow::StringArray>(n_strings, str_offsets,
-                                             char_buffer);
-
-    // make arrow list (of string) array
-    std::shared_ptr<arrow::Buffer> list_offsets =
-        std::make_shared<arrow::Buffer>((uint8_t*)index_offsets,
-                                        sizeof(int32_t) * (n_items + 1));
-    std::shared_ptr<arrow::Buffer> null_bitmap =
-        std::make_shared<arrow::Buffer>((uint8_t*)_null_bitmap,
-                                        (n_items + 7) >> 3);
-    std::shared_ptr<arrow::Array> array = std::make_shared<arrow::ListArray>(
-        arrow::list(arrow::utf8()), n_items, list_offsets, string_array,
-        null_bitmap);
-
-    return new array_info(bodo_array_type::ARROW, Bodo_CTypes::INT8 /*dummy*/,
-                          n_items, -1, -1, NULL, NULL, NULL, NULL, NULL,
-                          meminfo, NULL, array);
-#else
     array_item_arr_payload* payload = (array_item_arr_payload*)meminfo->data;
     int64_t n_items = payload->n_arrays;
 
@@ -332,7 +257,6 @@ array_info* list_string_array_to_info(NRT_MemInfo* meminfo) {
         (char*)sub_payload->offsets.data, (char*)payload->offsets.data,
         (char*)payload->null_bitmap.data, (char*)sub_payload->null_bitmap.data,
         meminfo, nullptr);
-#endif
 }
 
 array_info* string_array_to_info(uint64_t n_items, uint64_t n_chars, char* data,
@@ -392,51 +316,6 @@ array_info* decimal_array_to_info(uint64_t n_items, char* data, int typ_enum,
 
 void info_to_list_string_array(array_info* info,
                                NRT_MemInfo** array_item_meminfo) {
-#ifdef USE_ARROW_FOR_LIST_STRING
-    // TODO update for ArrayItemArray(StringArray)
-
-    if (info->arr_type != bodo_array_type::ARROW) {
-        Bodo_PyErr_SetString(PyExc_RuntimeError, "It has to be arrow array");
-        return;
-    }
-    if (!info->array->type()->Equals(arrow::list(arrow::utf8()))) {
-        Bodo_PyErr_SetString(
-            PyExc_RuntimeError,
-            "info_to_list_string_array requires list string input");
-        return;
-    }
-    auto list_array = std::dynamic_pointer_cast<arrow::ListArray>(info->array);
-    auto str_array =
-        std::dynamic_pointer_cast<arrow::StringArray>(list_array->values());
-    NRT_MemInfo* _meminfo =
-        NRT_MemInfo_alloc_dtor_safe(sizeof(list_str_arr_payload),
-                                    (NRT_dtor_function)dtor_list_string_array);
-    list_str_arr_payload* payload = (list_str_arr_payload*)_meminfo->data;
-    allocate_list_string_array(
-        &(payload->data), &(payload->data_offsets), &(payload->index_offsets),
-        &(payload->null_bitmap), list_array->length(), str_array->length(),
-        str_array->value_data()->size(), 0);
-
-    memcpy(payload->data, str_array->value_data()->data(),
-           str_array->value_data()->size());
-    memcpy(payload->data_offsets, str_array->value_offsets()->data(),
-           sizeof(int32_t) * (str_array->length() + 1));
-    memcpy(payload->index_offsets, list_array->value_offsets()->data(),
-           sizeof(int32_t) * (list_array->length() + 1));
-    if (list_array->null_bitmap_data())
-        memcpy(payload->null_bitmap, list_array->null_bitmap_data(),
-               (list_array->length() + 7) >> 3);
-
-    *n_items = list_array->length();
-    *n_strings = str_array->length();
-    *n_chars = str_array->value_data()->size();
-
-    *data = payload->data;
-    *data_offsets = (char*)payload->data_offsets;
-    *index_offsets = (char*)payload->index_offsets;
-    *null_bitmap = (char*)payload->null_bitmap;
-    *meminfo = _meminfo;
-#else
     if (info->arr_type != bodo_array_type::LIST_STRING) {
         Bodo_PyErr_SetString(
             PyExc_RuntimeError,
@@ -445,14 +324,10 @@ void info_to_list_string_array(array_info* info,
     }
 
     *array_item_meminfo = info->meminfo;
-#endif
 }
 
 void info_to_nested_array(array_info* info, int64_t* lengths,
                           array_info** out_infos) {
-#ifdef DEBUG_ARROW_ARRAY
-    std::cout << "Beginning of info_to_nested_array\n";
-#endif
     int64_t lengths_pos = 0;
     int64_t infos_pos = 0;
     nested_array_to_c(info->array, lengths, out_infos, lengths_pos, infos_pos);

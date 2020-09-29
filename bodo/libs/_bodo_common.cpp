@@ -1,7 +1,5 @@
 #include "_bodo_common.h"
 
-#undef DEBUG_ARROW_ARRAY
-
 std::vector<size_t> numpy_item_size(Bodo_CTypes::_numtypes);
 
 void bodo_common_init() {
@@ -513,13 +511,7 @@ size_t get_stats_mi_free() { return NRT_MemSys_get_stats_mi_free(); }
 void nested_array_to_c(std::shared_ptr<arrow::Array> array, int64_t* lengths,
                        array_info** infos, int64_t& lengths_pos,
                        int64_t& infos_pos) {
-#ifdef DEBUG_ARROW_ARRAY
-    std::cout << "nested_array_to_c : Beginning of nested_array_to_c\n";
-#endif
     if (array->type_id() == arrow::Type::LIST) {
-#ifdef DEBUG_ARROW_ARRAY
-        std::cout << "nested_array_to_c : LIST case\n";
-#endif
         std::shared_ptr<arrow::ListArray> list_array =
             std::dynamic_pointer_cast<arrow::ListArray>(array);
         lengths[lengths_pos++] = list_array->length();
@@ -546,9 +538,6 @@ void nested_array_to_c(std::shared_ptr<arrow::Array> array, int64_t* lengths,
         nested_array_to_c(list_array->values(), lengths, infos, lengths_pos,
                           infos_pos);
     } else if (array->type_id() == arrow::Type::STRUCT) {
-#ifdef DEBUG_ARROW_ARRAY
-        std::cout << "nested_array_to_c : STRUCT case\n";
-#endif
         auto struct_array =
             std::dynamic_pointer_cast<arrow::StructArray>(array);
         auto struct_type =
@@ -573,9 +562,6 @@ void nested_array_to_c(std::shared_ptr<arrow::Array> array, int64_t* lengths,
                               lengths_pos, infos_pos);
         }
     } else if (array->type_id() == arrow::Type::STRING) {
-#ifdef DEBUG_ARROW_ARRAY
-        std::cout << "nested_array_to_c : STRING case\n";
-#endif
         auto str_array = std::dynamic_pointer_cast<arrow::StringArray>(array);
         lengths[lengths_pos++] = str_array->length();
         int64_t n_strings = str_array->length();
@@ -594,21 +580,12 @@ void nested_array_to_c(std::shared_ptr<arrow::Array> array, int64_t* lengths,
         }
         infos[infos_pos++] = str_arr_info;
     } else {
-#ifdef DEBUG_ARROW_ARRAY
-        std::cout << "nested_array_to_c : PRIMITIVE case\n";
-#endif
         auto primitive_array =
             std::dynamic_pointer_cast<arrow::PrimitiveArray>(array);
         lengths[lengths_pos++] = primitive_array->length();
-#ifdef DEBUG_ARROW_ARRAY
-        std::cout << "nested_array_to_c : PRIMITIVE case, step 1\n";
-#endif
 
         Bodo_CTypes::CTypeEnum dtype =
             arrow_to_bodo_type(primitive_array->type_id());
-#ifdef DEBUG_ARROW_ARRAY
-        std::cout << "nested_array_to_c : PRIMITIVE case, step 2\n";
-#endif
 
         // allocate output arrays and copy data
         array_info* data =
@@ -618,37 +595,18 @@ void nested_array_to_c(std::shared_ptr<arrow::Array> array, int64_t* lengths,
         array_info* nulls = alloc_array(n_null_bytes, -1, -1,
                                         bodo_array_type::arr_type_enum::NUMPY,
                                         Bodo_CTypes::UINT8, 0, 0);
-#ifdef DEBUG_ARROW_ARRAY
-        std::cout << "nested_array_to_c : PRIMITIVE case, step 3\n";
-#endif
         uint64_t siztype = numpy_item_size[dtype];
         memcpy(data->data1, primitive_array->values()->data(),
                siztype * primitive_array->length());
-#ifdef DEBUG_ARROW_ARRAY
-        std::cout << "nested_array_to_c : PRIMITIVE case, step 4\n";
-#endif
         memset(nulls->data1, 0, n_null_bytes);
-#ifdef DEBUG_ARROW_ARRAY
-        std::cout << "nested_array_to_c : PRIMITIVE case, step 5\n";
-#endif
         std::vector<char> vectNaN = RetrieveNaNentry(dtype);
-#ifdef DEBUG_ARROW_ARRAY
-        std::cout << "nested_array_to_c : PRIMITIVE case, step 6 |vectNaN|="
-                  << vectNaN.size() << " siztype=" << siztype << "\n";
-#endif
         for (int64_t i = 0; i < primitive_array->length(); i++) {
             if (!primitive_array->IsNull(i))
                 SetBitTo((uint8_t*)nulls->data1, i, true);
             else
                 memcpy(data->data1 + siztype * i, vectNaN.data(), siztype);
         }
-#ifdef DEBUG_ARROW_ARRAY
-        std::cout << "nested_array_to_c : PRIMITIVE case, step 7\n";
-#endif
         infos[infos_pos++] = nulls;
         infos[infos_pos++] = data;
-#ifdef DEBUG_ARROW_ARRAY
-        std::cout << "nested_array_to_c : PRIMITIVE case, step 8\n";
-#endif
     }
 }

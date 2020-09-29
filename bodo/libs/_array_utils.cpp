@@ -4,8 +4,6 @@
 #include <string>
 #include "_decimal_ext.h"
 
-#undef DEBUG_ARROW_BUILDER
-
 /**
  * Append values from a byte buffer to a primitive array builder.
  * @param values: pointer to buffer containing data
@@ -17,9 +15,6 @@
 void append_to_primitive(const uint8_t* values, int64_t offset, int64_t length,
                          arrow::ArrayBuilder* builder,
                          const std::vector<uint8_t>& valid_elems) {
-#ifdef DEBUG_ARROW_BUILDER
-    std::cout << "Beginning of append_to_primitive\n";
-#endif
     arrow::Type::type typ = builder->type()->id();
     if (typ == arrow::Type::INT8) {
         auto typed_builder =
@@ -72,9 +67,6 @@ void append_to_primitive(const uint8_t* values, int64_t offset, int64_t length,
         (void)typed_builder->AppendValues((double*)values + offset, length,
                                           valid_elems.data());
     } else if (typ == arrow::Type::DECIMAL) {
-#ifdef DEBUG_ARROW_BUILDER
-        std::cout << "Beginning of append_to_primitive DECIMAL\n";
-#endif
         auto typed_builder = dynamic_cast<arrow::Decimal128Builder*>(builder);
         (void)typed_builder->AppendValues(
             (uint8_t*)values + BYTES_PER_DECIMAL * offset, length,
@@ -109,14 +101,8 @@ void append_to_primitive(const uint8_t* values, int64_t offset, int64_t length,
 void append_to_out_array(std::shared_ptr<arrow::Array> input_array,
                          int64_t start_offset, int64_t end_offset,
                          arrow::ArrayBuilder* builder) {
-#ifdef DEBUG_ARROW_BUILDER
-    std::cout << "Beginning of append_to_out_array\n";
-#endif
     // TODO check for nulls and append nulls
     if (input_array->type_id() == arrow::Type::LIST) {
-#ifdef DEBUG_ARROW_BUILDER
-        std::cout << "Beginning of append_to_out_array LIST\n";
-#endif
         // TODO: assert builder.type() == LIST
         std::shared_ptr<arrow::ListArray> list_array =
             std::dynamic_pointer_cast<arrow::ListArray>(input_array);
@@ -136,9 +122,6 @@ void append_to_out_array(std::shared_ptr<arrow::Array> input_array,
                                 child_builder);
         }
     } else if (input_array->type_id() == arrow::Type::STRUCT) {
-#ifdef DEBUG_ARROW_BUILDER
-        std::cout << "Beginning of append_to_out_array STRUCT\n";
-#endif
         // TODO: assert builder.type() == STRUCT
         auto struct_array =
             std::dynamic_pointer_cast<arrow::StructArray>(input_array);
@@ -161,9 +144,6 @@ void append_to_out_array(std::shared_ptr<arrow::Array> input_array,
         // finished appending (end_offset - start_offset) structs
         // struct_builder->AppendValues(end_offset - start_offset, NULLPTR);
     } else if (input_array->type_id() == arrow::Type::STRING) {
-#ifdef DEBUG_ARROW_BUILDER
-        std::cout << "Beginning of append_to_out_array STRING\n";
-#endif
         auto str_array =
             std::dynamic_pointer_cast<arrow::StringArray>(input_array);
         auto str_builder = dynamic_cast<arrow::StringBuilder*>(builder);
@@ -177,9 +157,6 @@ void append_to_out_array(std::shared_ptr<arrow::Array> input_array,
                     {str_array->GetString(start_offset + i)});
         }
     } else {
-#ifdef DEBUG_ARROW_BUILDER
-        std::cout << "Beginning of append_to_out_array PRIMITIVE\n";
-#endif
         int64_t num_elems = end_offset - start_offset;
         // assume this is array of primitive values
         // TODO: decimal, date, etc.
@@ -748,38 +725,22 @@ table_info* RetrieveTable(table_info* const& in_table,
     return new table_info(out_arrs);
 }
 
-#undef DEBUG_ARROW_COMPARISON
-
 template <typename T>
 std::pair<int, bool> process_arrow_bitmap(bool const& na_position_bis,
                                           T const& arrow1, int64_t pos1,
                                           T const& arrow2, int64_t pos2) {
     bool bit1 = !arrow1->IsNull(pos1);
     bool bit2 = !arrow2->IsNull(pos2);
-#ifdef DEBUG_ARROW_COMPARISON
-    std::cout << "    process_arrow_bitmap na_position_bis=" << na_position_bis
-              << " bit1=" << bit1 << " bit2=" << bit2 << " pos1=" << pos1
-              << " pos2=" << pos2 << "\n";
-#endif
     if (bit1 && !bit2) {
         int val = -1;
         if (na_position_bis) val = 1;
-#ifdef DEBUG_ARROW_COMPARISON
-        std::cout << "      p_a_b val=" << val << " bit=true\n";
-#endif
         return {val, true};
     }
     if (!bit1 && bit2) {
         int val = 1;
         if (na_position_bis) val = -1;
-#ifdef DEBUG_ARROW_COMPARISON
-        std::cout << "      p_a_b val=" << val << " bit=true\n";
-#endif
         return {val, true};
     }
-#ifdef DEBUG_ARROW_COMPARISON
-    std::cout << "      p_a_b val=0 bit=" << bit1 << "\n";
-#endif
     return {0, bit1};
 }
 
@@ -788,18 +749,12 @@ int ComparisonArrowColumn(std::shared_ptr<arrow::Array> const& arr1,
                           std::shared_ptr<arrow::Array> const& arr2,
                           int64_t pos2_s, int64_t pos2_e,
                           bool const& na_position_bis) {
-#ifdef DEBUG_ARROW_COMPARISON
-    std::cout << "  Beginning of ComparisonArrowColumn\n";
-#endif
     auto process_length = [](int const& len1, int const& len2) -> int {
         if (len1 > len2) return -1;
         if (len1 < len2) return 1;
         return 0;
     };
     if (arr1->type_id() == arrow::Type::LIST) {
-#ifdef DEBUG_ARROW_COMPARISON
-        std::cout << "  ComparisonArrowColumn, begin of LIST case\n";
-#endif
         std::shared_ptr<arrow::ListArray> list_array1 =
             std::dynamic_pointer_cast<arrow::ListArray>(arr1);
         std::shared_ptr<arrow::ListArray> list_array2 =
@@ -807,44 +762,24 @@ int ComparisonArrowColumn(std::shared_ptr<arrow::Array> const& arr1,
         int64_t len1 = pos1_e - pos1_s;
         int64_t len2 = pos2_e - pos2_s;
         int64_t min_len = std::min(len1, len2);
-#ifdef DEBUG_ARROW_COMPARISON
-        std::cout << "  LIST : len1=" << len1 << " len2=" << len2
-                  << " min_len=" << min_len << "\n";
-#endif
         for (int64_t idx = 0; idx < min_len; idx++) {
             std::pair<int, bool> epair =
                 process_arrow_bitmap(na_position_bis, list_array1, pos1_s + idx,
                                      list_array2, pos2_s + idx);
-#ifdef DEBUG_ARROW_COMPARISON
-            std::cout << "  LIST : idx=" << idx << " epair=" << epair.first
-                      << " / " << epair.second << "\n";
-#endif
             if (epair.first != 0) return epair.first;
             if (epair.second) {
                 int n_pos1_s = list_array1->value_offset(pos1_s + idx);
                 int n_pos1_e = list_array1->value_offset(pos1_s + idx + 1);
                 int n_pos2_s = list_array2->value_offset(pos2_s + idx);
                 int n_pos2_e = list_array2->value_offset(pos2_s + idx + 1);
-#ifdef DEBUG_ARROW_COMPARISON
-                std::cout << "  LIST : n_pos1_s=" << n_pos1_s
-                          << " n_pos1_e=" << n_pos1_e
-                          << " n_pos2_s=" << n_pos2_s
-                          << " n_pos2_e=" << n_pos2_e << "\n";
-#endif
                 int test = ComparisonArrowColumn(
                     list_array1->values(), n_pos1_s, n_pos1_e,
                     list_array2->values(), n_pos2_s, n_pos2_e, na_position_bis);
                 if (test) return test;
             }
         }
-#ifdef DEBUG_ARROW_COMPARISON
-        std::cout << "  Concluding by length\n";
-#endif
         return process_length(len1, len2);
     } else if (arr1->type_id() == arrow::Type::STRUCT) {
-#ifdef DEBUG_ARROW_COMPARISON
-        std::cout << "  ComparisonArrowColumn, begin of STRUCT case\n";
-#endif
         auto struct_array1 =
             std::dynamic_pointer_cast<arrow::StructArray>(arr1);
         auto struct_array2 =
@@ -857,19 +792,11 @@ int ComparisonArrowColumn(std::shared_ptr<arrow::Array> const& arr1,
         int64_t len1 = pos1_e - pos1_s;
         int64_t len2 = pos2_e - pos2_s;
         int64_t min_len = std::min(len1, len2);
-#ifdef DEBUG_ARROW_COMPARISON
-        std::cout << "  len1=" << len1 << " len2=" << len2
-                  << " min_len=" << min_len << "\n";
-#endif
         for (int64_t idx = 0; idx < min_len; idx++) {
             int n_pos1_s = pos1_s + idx;
             int n_pos1_e = pos1_s + idx + 1;
             int n_pos2_s = pos2_s + idx;
             int n_pos2_e = pos2_s + idx + 1;
-#ifdef DEBUG_ARROW_COMPARISON
-            std::cout << "  idx=" << idx << " n_pos1_s=" << n_pos1_s
-                      << " n_pos2_s=" << n_pos2_s << "\n";
-#endif
             std::pair<int, bool> epair =
                 process_arrow_bitmap(na_position_bis, struct_array1, n_pos1_s,
                                      struct_array2, n_pos2_s);
@@ -880,49 +807,26 @@ int ComparisonArrowColumn(std::shared_ptr<arrow::Array> const& arr1,
                         struct_array1->field(i), n_pos1_s, n_pos1_e,
                         struct_array2->field(i), n_pos2_s, n_pos2_e,
                         na_position_bis);
-#ifdef DEBUG_ARROW_COMPARISON
-                    std::cout << "  i=" << i << " / " << num_fields
-                              << " test=" << test << "\n";
-#endif
                     if (test) return test;
                 }
             }
         }
         return process_length(len1, len2);
     } else if (arr1->type_id() == arrow::Type::STRING) {
-#ifdef DEBUG_ARROW_COMPARISON
-        std::cout << "  ComparisonArrowColumn, begin of STRING case\n";
-#endif
         auto str_array1 = std::dynamic_pointer_cast<arrow::StringArray>(arr1);
         auto str_array2 = std::dynamic_pointer_cast<arrow::StringArray>(arr2);
         int64_t len1 = pos1_e - pos1_s;
         int64_t len2 = pos2_e - pos2_s;
         int64_t min_len = std::min(len1, len2);
-#ifdef DEBUG_ARROW_COMPARISON
-        std::cout << "  STRING : len1=" << len1 << " len2=" << len2
-                  << " min_len=" << min_len << "\n";
-#endif
         for (int64_t idx = 0; idx < min_len; idx++) {
             int n_pos1_s = pos1_s + idx;
             int n_pos2_s = pos2_s + idx;
-#ifdef DEBUG_ARROW_COMPARISON
-            std::cout << "  STRING : idx=" << idx << " n_pos1_s=" << n_pos1_s
-                      << " n_pos2_s=" << n_pos2_s << "\n";
-#endif
             std::pair<int, bool> epair = process_arrow_bitmap(
                 na_position_bis, str_array1, n_pos1_s, str_array2, n_pos2_s);
-#ifdef DEBUG_ARROW_COMPARISON
-            std::cout << "  STRING : epair=" << epair.first << " / "
-                      << epair.second << "\n";
-#endif
             if (epair.first != 0) return epair.first;
             if (epair.second) {
                 std::string str1 = str_array1->GetString(pos1_s + idx);
                 std::string str2 = str_array2->GetString(pos2_s + idx);
-#ifdef DEBUG_ARROW_COMPARISON
-                std::cout << "  STRING : str1=" << str1 << " str2=" << str2
-                          << "\n";
-#endif
                 uint32_t len1 = str1.size();
                 uint32_t len2 = str2.size();
                 uint32_t minlen = std::min(len1, len2);
@@ -935,9 +839,6 @@ int ComparisonArrowColumn(std::shared_ptr<arrow::Array> const& arr1,
         }
         return process_length(len1, len2);
     } else {
-#ifdef DEBUG_ARROW_COMPARISON
-        std::cout << "  ComparisonArrowColumn, begin of PrimitiveArray case\n";
-#endif
         auto primitive_array1 =
             std::dynamic_pointer_cast<arrow::PrimitiveArray>(arr1);
         auto primitive_array2 =
@@ -958,18 +859,11 @@ int ComparisonArrowColumn(std::shared_ptr<arrow::Array> const& arr1,
                 arrow::Type::type typ = primitive_array1->type()->id();
                 Bodo_CTypes::CTypeEnum bodo_typ = arrow_to_bodo_type(typ);
                 size_t siz_typ = numpy_item_size[bodo_typ];
-#ifdef DEBUG_ARROW_COMPARISON
-                std::cout << "  typ=" << typ << " bodo_typ=" << bodo_typ
-                          << " siz_typ=" << siz_typ << "\n";
-#endif
                 char* ptr1 = (char*)primitive_array1->values()->data() +
                              siz_typ * n_pos1_s;
                 char* ptr2 = (char*)primitive_array2->values()->data() +
                              siz_typ * n_pos2_s;
                 test = NumericComparison(bodo_typ, ptr1, ptr2, na_position_bis);
-#ifdef DEBUG_ARROW_COMPARISON
-                std::cout << "  test=" << test << "\n";
-#endif
                 if (test) return test;
             }
         }
@@ -988,10 +882,6 @@ bool TestEqualColumn(array_info* arr1, int64_t pos1, array_info* arr2,
         int val =
             ComparisonArrowColumn(arr1->array, pos1_s, pos1_e, arr2->array,
                                   pos2_s, pos2_e, na_position_bis);
-#ifdef DEBUG_ARROW_COMPARISON
-        std::cout << "TestEqualColumn pos1=" << pos1 << " pos2=" << pos2
-                  << " val=" << val << "\n";
-#endif
         return val == 0;
     }
     if (arr1->arr_type == bodo_array_type::NUMPY ||

@@ -158,11 +158,9 @@ table_info* sort_values_table_local(table_info* in_table, int64_t n_key_t,
     for (int64_t iKey = 0; iKey < n_key_t; iKey++)
         std::cout << "iKey=" << iKey << "/" << n_key_t
                   << "  vect_ascending=" << vect_ascending[iKey] << "\n";
-    std::cout << "INPUT (sort_values_table_local):\n";
-#ifdef DEBUG_SORT_LOCAL_FULL
-    DEBUG_PrintSetOfColumn(std::cout, in_table->columns);
-#endif
+    std::cout << "INPUT (sort_values_table):\n";
     DEBUG_PrintRefct(std::cout, in_table->columns);
+    DEBUG_PrintSetOfColumn(std::cout, in_table->columns);
     std::cout << "n_rows=" << n_rows << " n_key=" << n_key << "\n";
 #endif
     std::vector<size_t> ListIdx(n_rows);
@@ -182,10 +180,10 @@ table_info* sort_values_table_local(table_info* in_table, int64_t n_key_t,
     std::cout << "OUTPUT (sort_values_table_local) in_table:\n";
     DEBUG_PrintRefct(std::cout, in_table->columns);
     std::cout << "OUTPUT (sort_values_table_local) ret_table:\n";
+    DEBUG_PrintRefct(std::cout, ret_table->columns);
 #ifdef DEBUG_SORT_LOCAL_FULL
     DEBUG_PrintSetOfColumn(std::cout, ret_table->columns);
 #endif
-    DEBUG_PrintRefct(std::cout, ret_table->columns);
 #endif
     return ret_table;
 }
@@ -207,10 +205,8 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
         sort_values_table_local(in_table, n_key_t, vect_ascending, na_position);
 #ifdef DEBUG_SORT_SYMBOL_SYMBOL
     std::cout << "sort_values_table : local_sort:\n";
-#ifdef DEBUG_SORT_SYMBOL_SYMBOL
-    DEBUG_PrintSetOfColumn(std::cout, local_sort->columns);
-#endif
     DEBUG_PrintRefct(std::cout, local_sort->columns);
+    DEBUG_PrintSetOfColumn(std::cout, local_sort->columns);
 #endif
     if (!parallel) return local_sort;
     // preliminary definitions.
@@ -245,20 +241,11 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
     for (int64_t i_key = 0; i_key < n_key_t; i_key++)
         incref_array(local_sort->columns[i_key]);
     table_info* samples = RetrieveTable(local_sort, ListIdx, n_key_t);
+
     // Collecting all samples
     bool all_gather = false;
     table_info* all_samples = gather_table(samples, n_key_t, all_gather);
     delete_table(samples);
-#ifdef DEBUG_SORT_SYMBOL
-    if (myrank == mpi_root) {
-        std::cout << "|all_samples|=" << all_samples->nrows() << "\n";
-        std::cout << "sort_values_table : all_samples:\n";
-#ifdef DEBUG_SORT_FULL
-        DEBUG_PrintSetOfColumn(std::cout, all_samples->columns);
-#endif
-        DEBUG_PrintRefct(std::cout, all_samples->columns);
-    }
-#endif
 
     // Computing the bounds
     table_info* pre_bounds = nullptr;
@@ -336,17 +323,11 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
  */
 static table_info* drop_duplicates_nonnull_keys_inner(table_info* in_table,
                                                       int64_t num_keys) {
-#ifdef DEBUG_DD_SYMBOL
-    std::cout << "drop_duplicates_nonnull_keys_inner : beginning\n";
-#endif
     size_t n_rows = (size_t)in_table->nrows();
     std::vector<array_info*> key_arrs(in_table->columns.begin(),
                                       in_table->columns.begin() + num_keys);
     uint32_t seed = SEED_HASH_CONTAINER;
     uint32_t* hashes = hash_keys(key_arrs, seed);
-#ifdef DEBUG_DD_SYMBOL
-    std::cout << "drop_duplicates_nonnull_keys_inner : we have hashes\n";
-#endif
     std::function<size_t(size_t)> hash_fct = [&](size_t const& iRow) -> size_t {
         return size_t(hashes[iRow]);
     };
@@ -381,25 +362,14 @@ static table_info* drop_duplicates_nonnull_keys_inner(table_info* in_table,
     std::vector<size_t> ListIdx;
     for (auto& eRow : ListRow)
         if (eRow != -1) ListIdx.push_back(eRow);
-#ifdef DEBUG_DD_SYMBOL
-    int nbRow = ListIdx.size();
-    std::cout << "|ListPairWrite|=" << nbRow << "\n";
-#ifdef DEBUG_DD_FULL
-    for (int iRow = 0; iRow < nbRow; iRow++) {
-        std::cout << "iRow=" << iRow << " idx=" << ListIdx[iRow] << "\n";
-    }
-#endif
-#endif
     // Now building the out_arrs array. We select only the first num_keys.
     table_info* ret_table = RetrieveTable(in_table, ListIdx, num_keys);
     //
     delete[] hashes;
 #ifdef DEBUG_DD_SYMBOL
     std::cout << "drop_duplicates_nonnull_keys_inner : OUTPUT:\n";
-#ifdef DEBUG_DD_FULL
-    DEBUG_PrintSetOfColumn(std::cout, ret_table->columns);
-#endif
     DEBUG_PrintRefct(std::cout, ret_table->columns);
+    DEBUG_PrintSetOfColumn(std::cout, ret_table->columns);
 #endif
     return ret_table;
 }
@@ -437,19 +407,13 @@ static table_info* drop_duplicates_table_inner(table_info* in_table,
     for (size_t iKey = 0; iKey < size_t(num_keys); iKey++)
         key_arrs[iKey] = in_table->columns[iKey];
 #ifdef DEBUG_DD
-    size_t n_col = in_table->ncols();
-    std::cout << "drop_duplicates_table_inner : INPUT:\n";
-    std::cout << "n_col=" << n_col << " n_rows=" << n_rows
-              << " num_keys=" << num_keys << "\n";
-    DEBUG_PrintSetOfColumn(std::cout, in_table->columns);
+    std::cout << "drop_duplicates_table_inner num_keys=" << num_keys << " keep=" << keep << " step=" << step << " : INPUT:\n";
     DEBUG_PrintRefct(std::cout, in_table->columns);
+    DEBUG_PrintSetOfColumn(std::cout, in_table->columns);
 #endif
 
     uint32_t seed = SEED_HASH_CONTAINER;
     uint32_t* hashes = hash_keys(key_arrs, seed);
-#ifdef DEBUG_DD
-    std::cout << "drop_duplicates_table_inner : we have hashes\n";
-#endif
     /* This is a function for computing the hash (here returning computed value)
      * This is the first function passed as argument for the map function.
      *
@@ -542,18 +506,14 @@ static table_info* drop_duplicates_table_inner(table_info* in_table,
         ListIdx = RetrieveListIdx1();
     else
         ListIdx = RetrieveListIdx2();
-#ifdef DEBUG_DD
-    int nbRow = ListIdx.size();
-    std::cout << "|ListIdx|=" << nbRow << "\n";
-#endif
     // Now building the out_arrs array.
     table_info* ret_table = RetrieveTable(in_table, ListIdx, -1);
     //
     delete[] hashes;
 #ifdef DEBUG_DD
     std::cout << "drop_duplicates_table_inner : OUTPUT:\n";
-    DEBUG_PrintSetOfColumn(std::cout, ret_table->columns);
     DEBUG_PrintRefct(std::cout, ret_table->columns);
+    DEBUG_PrintSetOfColumn(std::cout, ret_table->columns);
 #endif
     return ret_table;
 }
@@ -583,32 +543,23 @@ table_info* drop_duplicates_nonnull_keys(table_info* in_table, int64_t num_keys,
     if (!is_parallel) {
         return drop_duplicates_nonnull_keys_inner(in_table, num_keys);
     }
-        // parallel case
-        // pre reduction of duplicates
-#ifdef DEBUG_DD
-    std::cout << "Before the drop duplicates_nonnull on the local nodes\n";
-#endif
+    // parallel case
+    // pre reduction of duplicates
     table_info* red_table =
         drop_duplicates_nonnull_keys_inner(in_table, num_keys);
     // shuffling of values
-#ifdef DEBUG_DD
-    std::cout << "Before the shuffling\n";
-#endif
     table_info* shuf_table = shuffle_table(red_table, num_keys);
     // no need to decref since shuffle_table() steals a reference
     delete_table(red_table);
     // reduction after shuffling
-#ifdef DEBUG_DD
-    std::cout << "Before the second shuffling\n";
-#endif
     int keep = 0;
     table_info* ret_table =
         drop_duplicates_table_inner(shuf_table, num_keys, keep, 1);
     delete_table(shuf_table);
 #ifdef DEBUG_DD
-    std::cout << "Final returning table\n";
-    DEBUG_PrintSetOfColumn(std::cout, ret_table->columns);
+    std::cout << "OUTPUT : drop_duplicates_nonnull_keys ret_table=\n";
     DEBUG_PrintRefct(std::cout, ret_table->columns);
+    DEBUG_PrintSetOfColumn(std::cout, ret_table->columns);
 #endif
     // returning table
     return ret_table;
@@ -638,31 +589,22 @@ table_info* drop_duplicates_table(table_info* in_table, bool is_parallel,
     if (!is_parallel) {
         return drop_duplicates_table_inner(in_table, num_keys, keep, 1);
     }
-        // parallel case
-        // pre reduction of duplicates
-#ifdef DEBUG_DD
-    std::cout << "Before the drop duplicates on the local nodes\n";
-#endif
+    // parallel case
+    // pre reduction of duplicates
     table_info* red_table =
         drop_duplicates_table_inner(in_table, num_keys, keep, 2);
     // shuffling of values
-#ifdef DEBUG_DD
-    std::cout << "Before the shuffling\n";
-#endif
     table_info* shuf_table = shuffle_table(red_table, num_keys);
     // no need to decref since shuffle_table() steals a reference
     delete_table(red_table);
     // reduction after shuffling
-#ifdef DEBUG_DD
-    std::cout << "Before the second shuffling\n";
-#endif
     table_info* ret_table =
         drop_duplicates_table_inner(shuf_table, num_keys, keep, 1);
     delete_table(shuf_table);
 #ifdef DEBUG_DD
-    std::cout << "Final returning table\n";
-    DEBUG_PrintSetOfColumn(std::cout, ret_table->columns);
+    std::cout << "OUTPUT drop_duplicates_table. ret_table=\n";
     DEBUG_PrintRefct(std::cout, ret_table->columns);
+    DEBUG_PrintSetOfColumn(std::cout, ret_table->columns);
 #endif
     // returning table
     return ret_table;
@@ -691,13 +633,6 @@ table_info* sample_table(table_info* in_table, int64_t n, double frac,
         if (myrank == mpi_root) ListSizes.resize(n_pes);
         MPI_Gather(&n_local, 1, MPI_INT, ListSizes.data(), 1, MPI_INT, mpi_root,
                    MPI_COMM_WORLD);
-#ifdef DEBUG_SAMPLE
-        if (myrank == mpi_root) {
-            for (int i_pes = 0; i_pes < n_pes; i_pes++)
-                std::cout << "i_pes=" << i_pes << " size=" << ListSizes[i_pes]
-                          << "\n";
-        }
-#endif
     }
     // n_total is used only on node 0. If parallel then its value is correct
     // only on node 0
@@ -712,11 +647,6 @@ table_info* sample_table(table_info* in_table, int64_t n, double frac,
         n_samp = n;
     else
         n_samp = round(n_total * frac);
-#ifdef DEBUG_SAMPLE
-    if (!parallel || myrank == 0)
-        std::cout << "sample_table : n_total=" << n_total
-                  << " n_samp=" << n_samp << "\n";
-#endif
     std::vector<int> ListIdxChosen;
     std::vector<int> ListByProcessor;
     std::vector<int> ListCounts;
@@ -781,12 +711,6 @@ table_info* sample_table(table_info* in_table, int64_t n, double frac,
                 // complicated is needed.
                 int64_t siz = SetIdxChosen.size();
                 int64_t idx_rand = get_rand(n_total - siz);
-#ifdef DEBUG_SAMPLE
-                std::cout << "  CRIT idx_rand=" << idx_rand << "\n";
-                std::cout << "    SetIdxChosen =";
-                for (auto& eVal : SetIdxChosen) std::cout << " " << eVal;
-                std::cout << "\n";
-#endif
                 auto iter = SetIdxChosen.begin();
                 while (iter != SetIdxChosen.end()) {
                     if (idx_rand < *iter) break;
@@ -799,19 +723,10 @@ table_info* sample_table(table_info* in_table, int64_t n, double frac,
         };
         for (int i_samp = 0; i_samp < n_samp; i_samp++) {
             int64_t idx_rand = GetIdx_Rand();
-#ifdef DEBUG_SAMPLE
-            std::cout << "i_samp=" << i_samp << " idx_rand=" << idx_rand
-                      << "\n";
-#endif
             if (parallel) {
                 std::pair<int, int> ePair = GetIProc_IPos(idx_rand);
                 int iProc = ePair.first;
                 int pos = ePair.second;
-#ifdef DEBUG_SAMPLE
-                std::cout << "i_samp=" << i_samp << " idx_rand=" << idx_rand
-                          << "\n";
-                std::cout << "  iProc=" << iProc << " pos=" << pos << "\n";
-#endif
                 ListByProcessor[i_samp] = iProc;
                 ListIdxChosen[i_samp] = pos;
                 ListCounts[iProc]++;
@@ -823,13 +738,6 @@ table_info* sample_table(table_info* in_table, int64_t n, double frac,
     if (!parallel && myrank != 0) {
         ListIdxChosen.resize(n_samp);
     }
-#ifdef DEBUG_SAMPLE
-    if (myrank == 0 && parallel) {
-        for (int iProc = 0; iProc < n_pes; iProc++)
-            std::cout << "iProc=" << iProc << " count=" << ListCounts[iProc]
-                      << "\n";
-    }
-#endif
     int n_samp_out;
     if (parallel) {
         MPI_Scatter(ListCounts.data(), 1, MPI_INT, &n_samp_out, 1, MPI_INT,
@@ -858,22 +766,6 @@ table_info* sample_table(table_info* in_table, int64_t n, double frac,
                 ListIdxExport[i_samp] = ListIdxChosen[i_samp];
         }
     }
-#ifdef DEBUG_SAMPLE
-    std::cout << "n_samp_out=" << n_samp_out << "\n";
-    if (myrank == 0 && parallel) {
-        std::cout << "ListIdxChosen / ListShift built\n";
-        for (int i_pes = 0; i_pes < n_pes; i_pes++)
-            std::cout << "i_pes=" << i_pes << " count=" << ListCounts[i_pes]
-                      << " disp=" << ListDisps[i_pes] << "\n";
-        for (int i_samp = 0; i_samp < n_samp; i_samp++)
-            std::cout << "i_samp=" << i_samp
-                      << " ListIdxChosen[i_samp]=" << ListIdxChosen[i_samp]
-                      << "\n";
-        for (int i_samp = 0; i_samp < n_samp; i_samp++)
-            std::cout << "i_samp=" << i_samp << " ListIdxChosenExport[i_samp]="
-                      << ListIdxChosenExport[i_samp] << "\n";
-    }
-#endif
     if (parallel) {
         // Exporting to all nodes, the data that they must extract
         MPI_Scatterv(ListIdxChosenExport.data(), ListCounts.data(),
@@ -889,16 +781,11 @@ table_info* sample_table(table_info* in_table, int64_t n, double frac,
         size_t idx_export = ListIdxExport[i_samp_out];
         ListIdx.push_back(idx_export);
     }
-#ifdef DEBUG_SAMPLE
-        //    std::cout << "sample_table : in_table\n";
-        //    DEBUG_PrintSetOfColumn(std::cout, in_table->columns);
-        //    DEBUG_PrintRefct(std::cout, in_table->columns);
-#endif
     table_info* tab_out = RetrieveTable(in_table, ListIdx, -1);
 #ifdef DEBUG_SAMPLE
     std::cout << "sample_table : tab_out\n";
-    DEBUG_PrintSetOfColumn(std::cout, tab_out->columns);
     DEBUG_PrintRefct(std::cout, tab_out->columns);
+    DEBUG_PrintSetOfColumn(std::cout, tab_out->columns);
 #endif
     if (parallel) {
         bool all_gather = true;
@@ -907,14 +794,10 @@ table_info* sample_table(table_info* in_table, int64_t n, double frac,
         delete_table(tab_out);
 #ifdef DEBUG_SAMPLE
         std::cout << "sample_table : tab_ret\n";
-        DEBUG_PrintSetOfColumn(std::cout, tab_ret->columns);
         DEBUG_PrintRefct(std::cout, tab_ret->columns);
-        std::cout << "Final exiting statement of sample_table 1\n";
+        DEBUG_PrintSetOfColumn(std::cout, tab_ret->columns);
 #endif
         return tab_ret;
     }
-#ifdef DEBUG_SAMPLE
-    std::cout << "Final exiting statement of sample_table 2\n";
-#endif
     return tab_out;
 }

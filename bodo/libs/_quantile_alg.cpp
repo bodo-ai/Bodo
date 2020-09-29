@@ -17,7 +17,6 @@
 
 MPI_Datatype decimal_mpi_type = MPI_DATATYPE_NULL;
 
-#undef DEBUG_MEDIAN
 #undef DEBUG_GHOST_CODE
 
 template <class T>
@@ -662,9 +661,6 @@ void median_series_computation_T(double *res, array_info *arr, bool parallel,
  */
 void median_series_computation(double *res, array_info *arr, bool parallel,
                                bool skipna) {
-#ifdef DEBUG_MEDIAN
-    std::cout << "Beginning of median_series_computation\n";
-#endif
     Bodo_CTypes::CTypeEnum dtype = arr->dtype;
     switch (dtype) {
         case Bodo_CTypes::INT8:
@@ -727,10 +723,6 @@ void median_series_computation(double *res, array_info *arr, bool parallel,
    ---We only return the next rows. We could also return the previous ones.
 */
 array_info *compute_ghost_rows(array_info *arr, uint64_t const &level_next) {
-#ifdef DEBUG_GHOST_CODE
-    std::cout << "Beginning of compute_ghost_rows - level_next=" << level_next
-              << "\n";
-#endif
     int myrank, n_pes;
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
     MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
@@ -748,10 +740,6 @@ array_info *compute_ghost_rows(array_info *arr, uint64_t const &level_next) {
     int k = 0;
     while (true) {
         k++;
-#ifdef DEBUG_GHOST_CODE
-        std::cout << "Beginning of while loop k=" << k
-                  << " loc_nrows=" << loc_nrows << "\n";
-#endif
         std::vector<MPI_Request> ListReq;
         //
         std::vector<T_row_typ> V(4);
@@ -761,9 +749,6 @@ array_info *compute_ghost_rows(array_info *arr, uint64_t const &level_next) {
         if (myrank >= k) {
             MPI_Request mpi_send_next;
             int pe = myrank - k;
-#ifdef DEBUG_GHOST_CODE
-            std::cout << "Isend to myrank-k : pe=" << pe << "\n";
-#endif
             V[idx] = loc_nrows;
             T_row_typ *ptr_T = V.data() + idx;
             int tag = 10000 + pe;
@@ -776,9 +761,6 @@ array_info *compute_ghost_rows(array_info *arr, uint64_t const &level_next) {
         if (myrank < n_pes - k) {
             MPI_Request mpi_send_prev;
             int pe = myrank + k;
-#ifdef DEBUG_GHOST_CODE
-            std::cout << "Isend to myrank+k : pe=" << pe << "\n";
-#endif
             int tag = 20000 + pe;
             V[idx] = loc_nrows;
             T_row_typ *ptr_T = V.data() + idx;
@@ -791,9 +773,6 @@ array_info *compute_ghost_rows(array_info *arr, uint64_t const &level_next) {
         if (myrank < n_pes - k) {
             MPI_Request mpi_recv_next;
             int pe = myrank + k;
-#ifdef DEBUG_GHOST_CODE
-            std::cout << "Irecv from myrank+k : pe=" << pe << "\n";
-#endif
             int tag = 10000 + myrank;
             T_row_typ *ptr_T = V.data() + idx;
             MPI_Irecv((void *)ptr_T, 1, mpi_row_typ, pe, tag, MPI_COMM_WORLD,
@@ -806,9 +785,6 @@ array_info *compute_ghost_rows(array_info *arr, uint64_t const &level_next) {
         if (myrank >= k) {
             MPI_Request mpi_recv_prev;
             int pe = myrank - k;
-#ifdef DEBUG_GHOST_CODE
-            std::cout << "Irecv from myrank-k: pe=" << pe << "\n";
-#endif
             int tag = 20000 + myrank;
             T_row_typ *ptr_T = V.data() + idx;
             MPI_Irecv((void *)ptr_T, 1, mpi_row_typ, pe, tag, MPI_COMM_WORLD,
@@ -817,9 +793,6 @@ array_info *compute_ghost_rows(array_info *arr, uint64_t const &level_next) {
             ListReq.push_back(mpi_recv_prev);
             idx++;
         }
-#ifdef DEBUG_GHOST_CODE
-        std::cout << "|ListReq|=" << ListReq.size() << "\n";
-#endif
         // Now doing the exchanges.
         if (ListReq.size() > 0) {
             MPI_Waitall(ListReq.size(), ListReq.data(), MPI_STATUSES_IGNORE);
@@ -831,9 +804,6 @@ array_info *compute_ghost_rows(array_info *arr, uint64_t const &level_next) {
             std::accumulate(ListPrevSizes.begin(), ListPrevSizes.end(), 0);
         size_t sumnext =
             std::accumulate(ListNextSizes.begin(), ListNextSizes.end(), 0);
-#ifdef DEBUG_GHOST_CODE
-        std::cout << "sumprev=" << sumprev << " sumnext=" << sumnext << "\n";
-#endif
         bool test_final;
         // If myrank - k > 0 we can continue.
         // If myrank + k < n_pes - 1 we can continue
@@ -847,43 +817,17 @@ array_info *compute_ghost_rows(array_info *arr, uint64_t const &level_next) {
         int value_tot, value = !test_final;
         // value=0 means all is ok. All nodes should be ok for the loop to
         // terminate
-#ifdef DEBUG_GHOST_CODE
-        std::cout << "test_final=" << test_final << " value=" << value << "\n";
-#endif
         MPI_Allreduce(&value, &value_tot, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
-#ifdef DEBUG_GHOST_CODE
-        std::cout << "value_tot=" << value_tot << "\n";
-#endif
         if (value_tot == 0) break;
     }
-#ifdef DEBUG_GHOST_CODE
-    std::cout << "AFTER the while loop\n";
-#endif
     // Now agglomerating the data
     int64_t n_next = ListNextSizes.size();
     int64_t n_prev = ListPrevSizes.size();
     size_t sumnext =
         std::accumulate(ListNextSizes.begin(), ListNextSizes.end(), 0);
-#ifdef DEBUG_GHOST_CODE
-    size_t sumprev =
-        std::accumulate(ListPrevSizes.begin(), ListPrevSizes.end(), 0);
-    std::cout << "n_next=" << n_next << " n_prev=" << n_prev << "\n";
-    std::cout << "sumprev=" << sumprev << " sumnext=" << sumnext << "\n";
-    for (int i_next = 0; i_next < n_next; i_next++)
-        std::cout << "i_next=" << i_next << " / " << n_next
-                  << " NextSize=" << ListNextSizes[i_next] << "\n";
-    for (int i_prev = 0; i_prev < n_prev; i_prev++)
-        std::cout << "i_prev=" << i_prev << " / " << n_prev
-                  << " PrevSize=" << ListPrevSizes[i_prev] << "\n";
-    std::cout << "--------------------------------------------------\n";
-#endif
     uint64_t ghost_length = std::min(sumnext, size_t(level_next));
     array_info *ghost_arr = alloc_numpy(ghost_length, arr->dtype);
     uint64_t siztype = numpy_item_size[arr->dtype];
-#ifdef DEBUG_GHOST_CODE
-    std::cout << "ghost_length=" << ghost_length << " siztype=" << siztype
-              << "\n";
-#endif
     MPI_Datatype mpi_typ = get_MPI_typ(arr->dtype);
     uint64_t pos_index = 0;
     std::vector<MPI_Request> ListReq;
@@ -894,18 +838,11 @@ array_info *compute_ghost_rows(array_info *arr, uint64_t const &level_next) {
             siz_recv = siz;
         else
             siz_recv = ghost_length - pos_index;
-#ifdef DEBUG_GHOST_CODE
-        std::cout << "i_next=" << i_next << " siz=" << siz
-                  << " siz_recv=" << siz_recv << "\n";
-#endif
         if (siz_recv > 0) {
             MPI_Request mpi_recv;
             char *ptr_recv = ghost_arr->data1 + siztype * pos_index;
             int tag = 2046 + n_pes * i_next + myrank;
             int pe = myrank + 1 + i_next;
-#ifdef DEBUG_GHOST_CODE
-            std::cout << "5: pe=" << pe << " tag=" << tag << "\n";
-#endif
             MPI_Irecv((void *)ptr_recv, siz_recv, mpi_typ, pe, tag,
                       MPI_COMM_WORLD, &mpi_recv);
             ListReq.push_back(mpi_recv);
@@ -924,20 +861,11 @@ array_info *compute_ghost_rows(array_info *arr, uint64_t const &level_next) {
             else
                 siz_send = 0;
         }
-#ifdef DEBUG_GHOST_CODE
-        std::cout << "i_prev=" << i_prev << " loc_nrows=" << loc_nrows
-                  << " siz_send=" << siz_send << "\n";
-        std::cout << "   level_next=" << level_next
-                  << " pos_already=" << pos_already << "\n";
-#endif
         if (siz_send > 0) {
             MPI_Request mpi_send;
             char *ptr_send = arr->data1;
             int pe = myrank - 1 - i_prev;
             int tag = 2046 + n_pes * i_prev + pe;
-#ifdef DEBUG_GHOST_CODE
-            std::cout << "6: pe=" << pe << " tag=" << tag << "\n";
-#endif
             MPI_Isend((void *)ptr_send, siz_send, mpi_typ, pe, tag,
                       MPI_COMM_WORLD, &mpi_send);
             ListReq.push_back(mpi_send);
@@ -963,10 +891,6 @@ array_info *compute_ghost_rows(array_info *arr, uint64_t const &level_next) {
  */
 void compute_series_monotonicity(double *res, array_info *arr, int64_t inc_dec,
                                  bool is_parallel) {
-#ifdef DEBUG_GHOST_CODE
-    std::cout << "compute_monotonicity : inc_dec=" << inc_dec
-              << " is_parallel=" << is_parallel << "\n";
-#endif
     int64_t n_rows = arr->length;
     uint64_t siztype = numpy_item_size[arr->dtype];
     // First checking monotonicity locally
@@ -986,9 +910,6 @@ void compute_series_monotonicity(double *res, array_info *arr, int64_t inc_dec,
         return 0;
     };
     int value = do_local_computation();
-#ifdef DEBUG_GHOST_CODE
-    std::cout << "compute_monotonicity : value=" << value << "\n";
-#endif
     if (!is_parallel) {
         if (value > 0)
             *res = 0.0;
@@ -998,9 +919,6 @@ void compute_series_monotonicity(double *res, array_info *arr, int64_t inc_dec,
     }
     int value_tot;
     MPI_Allreduce(&value, &value_tot, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
-#ifdef DEBUG_GHOST_CODE
-    std::cout << "compute_monotonicity : value_tot=" << value_tot << "\n";
-#endif
     if (value_tot > 0) {  // At least one node find a contradiction locally.
                           // Enough to conclude
         *res = 0.0;
@@ -1008,10 +926,6 @@ void compute_series_monotonicity(double *res, array_info *arr, int64_t inc_dec,
     }
     // We need to compute the ghost rows to conclude
     array_info *ghost_arr = compute_ghost_rows(arr, 1);
-#ifdef DEBUG_GHOST_CODE
-    std::cout << "We have ghost_arr ghost_arr->length=" << ghost_arr->length
-              << "\n";
-#endif
     int value_glob_tot, value_glob = 0;
     if (ghost_arr->length > 0 &&
         n_rows > 0) {  // It will be empty on the last node and maybe others.
@@ -1028,10 +942,6 @@ void compute_series_monotonicity(double *res, array_info *arr, int64_t inc_dec,
     }
     MPI_Allreduce(&value_glob, &value_glob_tot, 1, MPI_INT, MPI_SUM,
                   MPI_COMM_WORLD);
-#ifdef DEBUG_GHOST_CODE
-    std::cout << "value_glob=" << value_glob
-              << " value_glob_tot=" << value_glob_tot << "\n";
-#endif
     if (value_glob_tot > 0) {
         *res = 0.0;
     } else {
@@ -1042,16 +952,8 @@ void compute_series_monotonicity(double *res, array_info *arr, int64_t inc_dec,
 
 void autocorr_series_computation(double *res, array_info *arr, int64_t lag,
                                  bool is_parallel) {
-#ifdef DEBUG_GHOST_CODE
-    std::cout << "autocorr_series_computation : lag=" << lag
-              << " is_parallel=" << is_parallel << "\n";
-#endif
     uint64_t n_rows = arr->length;
     uint64_t siztype = numpy_item_size[arr->dtype];
-#ifdef DEBUG_GHOST_CODE
-    std::cout << "n_rows=" << n_rows << " dtype=" << arr->dtype
-              << " siztype=" << siztype << "\n";
-#endif
     if (!is_parallel) {
         if (uint64_t(lag) >= n_rows - 1) {
             *res = std::nan("1.0");
@@ -1063,10 +965,6 @@ void autocorr_series_computation(double *res, array_info *arr, int64_t lag,
             char *ptr2 = arr->data1 + siztype * (i_row + lag);
             double val1 = GetDoubleEntry(arr->dtype, ptr1);
             double val2 = GetDoubleEntry(arr->dtype, ptr2);
-#ifdef DEBUG_GHOST_CODE
-            std::cout << "i_row=" << i_row << " val1=" << val1
-                      << " val2=" << val2 << "\n";
-#endif
             sum1 += val1;
             sum2 += val2;
             sum12 += val1 * val2;
@@ -1079,35 +977,22 @@ void autocorr_series_computation(double *res, array_info *arr, int64_t lag,
         double avg11 = sum11 * fac;
         double avg12 = sum12 * fac;
         double avg22 = sum22 * fac;
-#ifdef DEBUG_GHOST_CODE
-        std::cout << "avg1=" << avg1 << " avg2=" << avg2 << " avg11=" << avg11
-                  << " avg12=" << avg12 << " avg22=" << avg22 << "\n";
-#endif
         double scal = avg12 - avg1 * avg2;
         double norm1 = sqrt(avg11 - avg1 * avg1);
         double norm2 = sqrt(avg22 - avg2 * avg2);
         double autocorr = scal / (norm1 * norm2);
-#ifdef DEBUG_GHOST_CODE
-        std::cout << "SERIAL : autocorr=" << autocorr << "\n";
-#endif
         *res = autocorr;
         return;
     }
     uint64_t n_rows_tot;
     MPI_Allreduce(&n_rows, &n_rows_tot, 1, MPI_UNSIGNED_LONG_LONG, MPI_SUM,
                   MPI_COMM_WORLD);
-#ifdef DEBUG_GHOST_CODE
-    std::cout << "n_rows_tot=" << n_rows_tot << "\n";
-#endif
     if (uint64_t(lag) >= n_rows_tot - 1) {
         *res = std::nan("1.0");
         return;
     }
     array_info *ghost_arr = compute_ghost_rows(arr, lag);
     uint64_t ghost_siz = ghost_arr->length;
-#ifdef DEBUG_GHOST_CODE
-    std::cout << "ghost_siz=" << ghost_siz << "\n";
-#endif
     std::vector<double> V(5, 0);
     double &sum1 = V[0];
     double &sum2 = V[1];
@@ -1118,10 +1003,6 @@ void autocorr_series_computation(double *res, array_info *arr, int64_t lag,
         uint64_t n_rows_cons =
             n_rows + ghost_siz -
             lag;  // the ghost may provide the additional rows or may not
-#ifdef DEBUG_GHOST_CODE
-        std::cout << "n_rows_cons=" << n_rows_cons << " n_rows=" << n_rows
-                  << " lag=" << lag << " ghost_siz=" << ghost_siz << "\n";
-#endif
         for (uint64_t i_row = 0; i_row < n_rows_cons; i_row++) {
             char *ptr1 = arr->data1 + siztype * i_row;
             double val1 = GetDoubleEntry(arr->dtype, ptr1);
@@ -1132,10 +1013,6 @@ void autocorr_series_computation(double *res, array_info *arr, int64_t lag,
                 ptr2 = ghost_arr->data1 + siztype * (i_row - n_rows + lag);
             }
             double val2 = GetDoubleEntry(arr->dtype, ptr2);
-#ifdef DEBUG_GHOST_CODE
-            std::cout << "i_row=" << i_row << " val1=" << val1
-                      << " val2=" << val2 << "\n";
-#endif
             sum1 += val1;
             sum2 += val2;
             sum11 += val1 * val1;
@@ -1143,35 +1020,19 @@ void autocorr_series_computation(double *res, array_info *arr, int64_t lag,
             sum22 += val2 * val2;
         }
     }
-#ifdef DEBUG_GHOST_CODE
-    std::cout << "LOC: sum1=" << sum1 << " sum2=" << sum2 << " sum11=" << sum11
-              << " sum12=" << sum12 << " sum22=" << sum22 << "\n";
-#endif
     std::vector<double> Vtot(5);
     MPI_Allreduce(V.data(), Vtot.data(), 5, MPI_DOUBLE, MPI_SUM,
                   MPI_COMM_WORLD);
-#ifdef DEBUG_GHOST_CODE
-    std::cout << "GLB: sum1=" << Vtot[0] << " sum2=" << Vtot[1]
-              << " sum11=" << Vtot[2] << " sum12=" << Vtot[3]
-              << " sum22=" << Vtot[4] << "\n";
-#endif
     double fac = double(1) / double(n_rows_tot - lag);
     double avg1 = Vtot[0] * fac;
     double avg2 = Vtot[1] * fac;
     double avg11 = Vtot[2] * fac;
     double avg12 = Vtot[3] * fac;
     double avg22 = Vtot[4] * fac;
-#ifdef DEBUG_GHOST_CODE
-    std::cout << "avg1=" << avg1 << " avg2=" << avg2 << " avg11=" << avg11
-              << " avg12=" << avg12 << " avg22=" << avg22 << "\n";
-#endif
     double scal = avg12 - avg1 * avg2;
     double norm1 = sqrt(avg11 - avg1 * avg1);
     double norm2 = sqrt(avg22 - avg2 * avg2);
     double autocorr = scal / (norm1 * norm2);
-#ifdef DEBUG_GHOST_CODE
-    std::cout << "PARALLEL : autocorr=" << autocorr << "\n";
-#endif
     *res = autocorr;
     delete_info_decref_array(ghost_arr);
 }
