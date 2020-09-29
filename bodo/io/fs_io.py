@@ -2,14 +2,15 @@
 """
 S3 & Hadoop file system supports, and file system dependent calls
 """
-import warnings
-from urllib.parse import urlparse
 import glob
 import os
-import numba
-import bodo
+import warnings
+from urllib.parse import urlparse
 
-from bodo.utils.typing import BodoWarning, BodoError
+import numba
+
+import bodo
+from bodo.utils.typing import BodoError, BodoWarning
 
 
 def get_s3_fs():
@@ -54,7 +55,7 @@ def get_hdfs_fs(path):  # pragma: no cover
     """
     initialize pyarrow.hdfs.HadoopFileSystem from path
     This function can be removed once arrow's new HadoopFileSystem is a subclass
-    of pyarrow.filesystem.FileSystem, and use the hdfs returned from 
+    of pyarrow.filesystem.FileSystem, and use the hdfs returned from
     hdfs_list_dir_fnames.
     https://issues.apache.org/jira/browse/ARROW-7957
     """
@@ -80,8 +81,8 @@ def s3_is_directory(fs, path):
     """
     Return whether s3 path is a directory or not
     """
-    import s3fs
     import botocore
+    import s3fs
 
     try:
         path_info = fs.info(path)
@@ -99,8 +100,10 @@ def s3_is_directory(fs, path):
             "Most likely cause: your S3 credentials are incorrect or do not have the "
             "correct permissions."
         )
-    except:  # pragma: no cover
+    except BodoError:  # pragma: no cover
         raise
+    except Exception as e:  # pragma: no cover
+        raise BodoError(f"error from s3fs: {type(e).__name__}: {str(e)}")
 
 
 def s3_list_dir_fnames(fs, path):
@@ -110,8 +113,8 @@ def s3_list_dir_fnames(fs, path):
     ["file_name1", "file_name2", ...]
     If path is a file, return None
     """
-    import s3fs
     import botocore
+    import s3fs
 
     file_names = None
     try:
@@ -147,8 +150,10 @@ def s3_list_dir_fnames(fs, path):
             "Most likely cause: your S3 credentials are incorrect or do not have the "
             "correct permissions."
         )
-    except:  # pragma: no cover
+    except BodoError:  # pragma: no cover
         raise
+    except Exception as e:  # pragma: no cover
+        raise BodoError(f"error from s3fs: {type(e).__name__}: {str(e)}")
 
     return file_names
 
@@ -158,7 +163,7 @@ def hdfs_is_directory(path):
     Return whether hdfs path is a directory or not
     """
     # this HadoopFileSystem is the new file system of pyarrow
-    from pyarrow.fs import HadoopFileSystem, FileType
+    from pyarrow.fs import FileType, HadoopFileSystem
 
     options = urlparse(path)
     hdfs_path = options.path  # path within hdfs(i.e. dir/file)
@@ -234,10 +239,10 @@ def find_file_name_or_handler(path, ftype):
         POSIX: file_name_or_handler = file name of the first file in sorted files
         S3 & HDFS: file_name_or_handler = handler to the first file in sorted files
 
-    Parameters: 
+    Parameters:
         path: path to the object we are reading, this can be a file or a directory
         ftype: 'csv' or 'json'
-    Returns: 
+    Returns:
         (is_handler, file_name_or_handler, f_size, fs)
         is_handler: True if file_name_or_handler is a handler,
                     False otherwise(file_name_or_handler is a file_name)
@@ -263,7 +268,9 @@ def find_file_name_or_handler(path, ftype):
 
         if all_files:
             path = path.rstrip("/")
-            all_files = [(path + "/" + f) for f in sorted(filter(filter_func, all_files))]
+            all_files = [
+                (path + "/" + f) for f in sorted(filter(filter_func, all_files))
+            ]
             all_csv_files = [f for f in all_files if fs.info(f)["size"] > 0]
             if len(all_csv_files) == 0:  # pragma: no cover
                 # TODO: test
@@ -280,7 +287,9 @@ def find_file_name_or_handler(path, ftype):
 
         if all_files:
             path = path.rstrip("/")
-            all_files = [(path + "/" + f) for f in sorted(filter(filter_func, all_files))]
+            all_files = [
+                (path + "/" + f) for f in sorted(filter(filter_func, all_files))
+            ]
             all_csv_files = [f for f in all_files if fs.get_file_info([f])[0].size > 0]
             if len(all_csv_files) == 0:  # pragma: no cover
                 # TODO: test
