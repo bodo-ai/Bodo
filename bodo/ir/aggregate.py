@@ -553,12 +553,10 @@ def remove_dead_aggregate(
                 # remove dead agg func (corresponding to dead column) from agg_func list
                 if isinstance(aggregate_node.agg_func, list):
                     c_ind = in_col_names.index(cname)
-                    aggregate_node.agg_func = (
-                        aggregate_node.agg_func[:c_ind]
-                        + aggregate_node.agg_func[c_ind + 1 :]
-                    )
+                    aggregate_node.agg_func.pop(c_ind)
                 in_col_names = list(aggregate_node.df_in_vars.keys())
-            # multi-func case if not index output ('as_index=False' case)
+            # column is multi-func case at this point if it is not output index
+            # (from 'as_index=False')
             elif not (
                 cname in aggregate_node.key_names
                 or isinstance(cname, tuple)
