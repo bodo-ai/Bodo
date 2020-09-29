@@ -95,7 +95,6 @@ inline double GetDoubleEntry(Bodo_CTypes::CTypeEnum dtype, char* ptr) {
     return 0;
 }
 
-
 /** This function uses the combinatorial information computed in the
  * "ListPairWrite" array. The other arguments shift1, shift2 and ChoiceColumn
  * are for the choice of column
@@ -129,13 +128,15 @@ array_info* RetrieveArray_TwoColumns(
     size_t const& shift1, size_t const& shift2, int const& ChoiceColumn,
     bool const& map_integer_type);
 
-/** This function returns the column with the rows with the rows given in "ListIdx"
+/** This function returns the column with the rows with the rows given in
+ * "ListIdx"
  *
  * @param array_info* : the input pointer
  * @param ListIdx is the vector of list of rows selected
  * @return one array
  */
-array_info* RetrieveArray_SingleColumn(array_info* in_arr, std::vector<size_t> const& ListIdx);
+array_info* RetrieveArray_SingleColumn(array_info* in_arr,
+                                       std::vector<size_t> const& ListIdx);
 
 /** This function uses the combinatorial information computed in the
  * "ListIdx" array and return the coulm with the selecetd rows.
@@ -144,19 +145,20 @@ array_info* RetrieveArray_SingleColumn(array_info* in_arr, std::vector<size_t> c
  * @param idx_arr : the index column
  * @return one array
  */
-array_info* RetrieveArray_SingleColumn_arr(array_info* in_arr, array_info* idx_arr);
+array_info* RetrieveArray_SingleColumn_arr(array_info* in_arr,
+                                           array_info* idx_arr);
 
 /** This function takes a table, a list of rows and returns the rows obtained
  * by selecting the rows.
  *
- * @param in_table is the input table.
- * @param ListPairWrite is the vector of list of pairs for the writing of the
- * output table
- * @param the number of columns to be selected. if equal to -1 then all columns
- * are selected.
+ * @param in_table     : the input table.
+ * @param ListIdx      : is the vector of indices to be selected.
+ * @param n_col        : The number of columns selected. If -1 then all are
+ * selected
  * @return the table output.
  */
-table_info* RetrieveTable(table_info* const& in_table, std::vector<size_t> const& ListIdx, int const& n_col);
+table_info* RetrieveTable(table_info* const& in_table,
+                          std::vector<size_t> const& ListIdx, int const& n_col);
 
 /** This code test if two keys are equal (Before that the hash should have been
  * used) It is used that way because we assume that the left key have the same
@@ -172,24 +174,22 @@ table_info* RetrieveTable(table_info* const& in_table, std::vector<size_t> const
 bool TestEqualColumn(array_info* arr1, int64_t pos1, array_info* arr2,
                      int64_t pos2);
 
-
-/* This function test if two rows of two arrow columns (which may or may not be the same)
- * are equal, greater or lower than the other.
+/* This function test if two rows of two arrow columns (which may or may not be
+ * the same) are equal, greater or lower than the other.
  *
  * @param arr1            : the first arrow array
  * @param pos1_s, pos1_e  : the starting and ending positions
  * @param arr2            : the second arrow array
  * @param pos2_s, pos2_e  : the starting and ending positions
  * @param na_position_bis : Whether the missing data is first or last
- * @return 1 is arr1[pos1_s:pos1_e] < arr2[pos2_s:pos2_e], 0 is equality, -1 if >.
+ * @return 1 is arr1[pos1_s:pos1_e] < arr2[pos2_s:pos2_e], 0 is equality, -1 if
+ * >.
  */
 int ComparisonArrowColumn(std::shared_ptr<arrow::Array> const& arr1,
                           int64_t pos1_s, int64_t pos1_e,
                           std::shared_ptr<arrow::Array> const& arr2,
                           int64_t pos2_s, int64_t pos2_e,
                           bool const& na_position_bis);
-
-
 
 /** This code test if two keys are equal (Before that the hash should have been
  * used) It is used that way because we assume that the left key have the same
@@ -532,4 +532,4 @@ inline bool does_row_has_nulls(std::vector<array_info*> const& key_cols,
     return false;
 }
 
-#endif // _ARRAY_UTILS_H_INCLUDED
+#endif  // _ARRAY_UTILS_H_INCLUDED

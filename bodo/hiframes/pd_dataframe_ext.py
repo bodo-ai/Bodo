@@ -95,6 +95,7 @@ from bodo.utils.typing import (
     is_overload_zero,
     raise_bodo_error,
     raise_const_error,
+    get_udf_error_msg,
 )
 
 _csv_write = types.ExternalFunction(
@@ -262,13 +263,20 @@ class DataFrameAttribute(AttributeTemplate):
     @bound_function("df.apply", no_unliteral=True)
     def resolve_apply(self, df, args, kws):
         kws = dict(kws)
-        func = args[0] if len(args) > 0 else kws.get("func", None)
-        axis = args[1] if len(args) > 1 else kws.get("axis", None)
-        f_args = args[4] if len(args) > 4 else kws.pop("args", None)
+        # pop apply() arguments from kws so only UDF kws remain
+        func = args[0] if len(args) > 0 else kws.pop("func", None)
+        axis = args[1] if len(args) > 1 else kws.pop("axis", types.literal(0))
+        raw = args[2] if len(args) > 2 else kws.pop("raw", types.literal(False))
+        result_type = args[3] if len(args) > 3 else kws.pop("result_type", types.none)
+        f_args = args[4] if len(args) > 4 else kws.pop("args", types.Tuple([]))
 
         # check axis
         if not (is_overload_constant_int(axis) and get_overload_const_int(axis) == 1):
             raise BodoError("only apply() with axis=1 supported")
+
+        unsupported_args = dict(raw=raw, result_type=result_type)
+        merge_defaults = dict(raw=False, result_type=None)
+        check_unsupported_args("apply", unsupported_args, merge_defaults)
 
         # using NamedTuple instead of Series, TODO: pass Series
         Row = namedtuple("R", df.columns)
@@ -289,20 +297,27 @@ class DataFrameAttribute(AttributeTemplate):
         if f_args is not None:
             arg_typs += tuple(f_args.types)
         try:
-            f_return_type = get_const_func_output_type(func, arg_typs, self.context)
-        except:
-            raise_bodo_error("DataFrame.apply(): user-defined function not supported")
+            f_return_type = get_const_func_output_type(
+                func, arg_typs, kws, self.context
+            )
+        except Exception as e:
+            raise_bodo_error(get_udf_error_msg("DataFrame.apply()", e), e.loc)
 
         out_arr_type = get_udf_out_arr_type(f_return_type)
 
-        def apply_stub(
-            func, axis=0, raw=False, result_type=None, args=()
-        ):  # pragma: no cover
-            pass
+        # add dummy default value for UDF kws to avoid errors
+        kw_names = ", ".join("{} = ''".format(a) for a in kws.keys())
+        func_text = f"def apply_stub(func, axis=0, raw=False, result_type=None, args=(), {kw_names}):\n"
+        func_text += "    pass\n"
+        loc_vars = {}
+        exec(func_text, {}, loc_vars)
+        apply_stub = loc_vars["apply_stub"]
 
         pysig = numba.core.utils.pysignature(apply_stub)
+        new_args = (func, axis, raw, result_type, f_args) + tuple(kws.values())
         return signature(
-            SeriesType(out_arr_type.dtype, out_arr_type, index=df.index), *args
+            SeriesType(out_arr_type.dtype, out_arr_type, index=df.index),
+            *new_args,
         ).replace(pysig=pysig)
 
     def generic_resolve(self, df, attr):

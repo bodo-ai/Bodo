@@ -11,6 +11,8 @@
 #include "_shuffle.h"
 
 #undef DEBUG_GROUPBY
+#undef DEBUG_GROUPBY_SYMBOL
+#undef DEBUG_GROUPBY_FULL
 
 /**
  * Enum of aggregation, combine and eval functions used by groubpy.
@@ -4002,7 +4004,7 @@ class GroupbyPipeline {
 #ifdef DEBUG_GROUPBY
             std::cout << "After reverse_shuffle_table_kernel\n";
 #endif
-            delete_table_decref_arrays(out_table);
+            delete_table(out_table);
 #ifdef DEBUG_GROUPBY
             std::cout << "After delete_table_decref_arrays\n";
 #endif
@@ -4226,7 +4228,7 @@ void mpi_exscan_computation_numpy_T(std::vector<array_info*>& out_arrs,
         std::cout << "j=" << j << " ftype=" << ftype << "\n";
 #endif
         auto apply_oper = [&](std::function<T(T, T)> oper) -> void {
-#ifdef DEBUG_GROUPBY
+#ifdef DEBUG_GROUPBY_SYMBOL
             std::cout << "Beginning of apply_oper\n";
 #endif
             for (int64_t i_row = 0; i_row < n_rows; i_row++) {
@@ -4244,13 +4246,13 @@ void mpi_exscan_computation_numpy_T(std::vector<array_info*>& out_arrs,
                         cumulative[pos] = new_val;
                     }
                 }
-#ifdef DEBUG_GROUPBY
+#ifdef DEBUG_GROUPBY_FULL
                 T out_val = work_col->at<T>(i_row);
                 std::cout << "i_row=" << i_row << " idx=" << idx
                           << " out_val=" << out_val << "\n";
 #endif
             }
-#ifdef DEBUG_GROUPBY
+#ifdef DEBUG_GROUPBY_SYMBOL
             std::cout << "Ending of apply_oper\n";
 #endif
         };
@@ -4266,7 +4268,8 @@ void mpi_exscan_computation_numpy_T(std::vector<array_info*>& out_arrs,
                 [](T val1, T val2) -> T { return std::min(val1, val2); });
     }
 #ifdef DEBUG_GROUPBY
-    std::cout << "mpi_exscan_computation_numpy_T, step 3\n";
+    std::cout << "mpi_exscan_computation_numpy_T, step 3 is_parallel="
+              << is_parallel << "\n";
 #endif
     if (!is_parallel) return;
     MPI_Datatype mpi_typ = get_MPI_typ(dtype);
@@ -4498,9 +4501,11 @@ table_info* mpi_exscan_computation_Tkey(array_info* cat_column,
                                         int* ftypes, int* func_offsets,
                                         bool is_parallel, bool skipdropna,
                                         bool return_key, bool return_index) {
-#ifdef DEBUG_GROUPBY
+#ifdef DEBUG_GROUPBY_SYMBOL
     std::cout << "mpi_exscan_computation_Tkey (in_table)\n";
+#ifdef DEBUG_GROUPBY_FULL
     DEBUG_PrintSetOfColumn(std::cout, in_table->columns);
+#endif
     DEBUG_PrintRefct(std::cout, in_table->columns);
 #endif
     std::vector<array_info*> out_arrs;
@@ -4639,6 +4644,10 @@ array_info* compute_categorical_index(table_info* in_table, int64_t num_keys,
     std::cout << "compute_categorical_index num_keys=" << num_keys
               << " is_parallel=" << is_parallel << "\n";
 #endif
+    // A rare case of incref since we are going to need the in_table after the
+    // computation of red_table.
+    for (int64_t i_key = 0; i_key < num_keys; i_key++)
+        incref_array(in_table->columns[i_key]);
     table_info* red_table =
         drop_duplicates_nonnull_keys(in_table, num_keys, is_parallel);
 #ifdef DEBUG_GROUPBY
@@ -4654,13 +4663,18 @@ array_info* compute_categorical_index(table_info* in_table, int64_t num_keys,
     std::cout << "compute_categorical_index n_rows=" << n_rows
               << " n_rows_full=" << n_rows_full << "\n";
 #endif
-    if (n_rows_full > max_global_number_groups_exscan) return nullptr;
+    if (n_rows_full > max_global_number_groups_exscan) {
+      delete_table_decref_arrays(red_table);
+      return nullptr;
+    }
+
     // We are below threshold. Now doing an allgather for determining the keys.
     bool all_gather = true;
 #ifdef DEBUG_GROUPBY
     std::cout << "Before gather_table\n";
 #endif
     table_info* full_table = gather_table(red_table, num_keys, all_gather);
+    delete_table(red_table);
 #ifdef DEBUG_GROUPBY
     std::cout << "After gather_table\n";
 #endif
@@ -4733,12 +4747,13 @@ array_info* compute_categorical_index(table_info* in_table, int64_t num_keys,
         } else {
             pos = entSet[iRow + n_rows_full];
         }
-#ifdef DEBUG_GROUPBY
+#ifdef DEBUG_GROUPBY_FULL
         std::cout << "compute_categorical_index iRow=" << iRow << " pos=" << pos
                   << "\n";
 #endif
         out_arr->at<int32_t>(iRow) = pos;
     }
+    delete_table_decref_arrays(full_table);
     return out_arr;
 }
 
@@ -4813,9 +4828,11 @@ table_info* groupby_and_aggregate(table_info* in_table, int64_t num_keys,
                                   bool return_key, bool return_index,
                                   void* update_cb, void* combine_cb,
                                   void* eval_cb, table_info* udf_dummy_table) {
-#ifdef DEBUG_GROUPBY
+#ifdef DEBUG_GROUPBY_SYMBOL
     std::cout << "IN_TABLE (groupby):\n";
+#ifdef DEBUG_GROUPBY_FULL
     DEBUG_PrintSetOfColumn(std::cout, in_table->columns);
+#endif
     DEBUG_PrintRefct(std::cout, in_table->columns);
     std::cout << "num_keys=" << num_keys << " is_parallel=" << is_parallel
               << " input_has_index=" << input_has_index << "\n";
@@ -4835,9 +4852,11 @@ table_info* groupby_and_aggregate(table_info* in_table, int64_t num_keys,
             (udf_eval_fn)eval_cb, skipdropna, return_key, return_index);
 
         table_info* ret_table = groupby.run();
-#ifdef DEBUG_GROUPBY
+#ifdef DEBUG_GROUPBY_SYMBOL
         std::cout << "RET_TABLE (groupby, classic code path):\n";
+#ifdef DEBUG_GROUPBY_FULL
         DEBUG_PrintSetOfColumn(std::cout, ret_table->columns);
+#endif
         DEBUG_PrintRefct(std::cout, ret_table->columns);
 #endif
         return ret_table;
@@ -4847,10 +4866,17 @@ table_info* groupby_and_aggregate(table_info* in_table, int64_t num_keys,
         table_info* ret_table = mpi_exscan_computation(
             cat_column, in_table, num_keys, ftypes, func_offsets, is_parallel,
             skipdropna, return_key, return_index);
-#ifdef DEBUG_GROUPBY
+#ifdef DEBUG_GROUPBY_SYMBOL
         std::cout << "RET_TABLE (groupby, categorical_exscan code path):\n";
+#ifdef DEBUG_GROUPBY_FULL
         DEBUG_PrintSetOfColumn(std::cout, ret_table->columns);
+#endif
         DEBUG_PrintRefct(std::cout, ret_table->columns);
+#endif
+#ifdef DEBUG_GROUPBY_SYMBOL
+        std::cout
+            << "IN_TABLE (groupby implement_categorical_exscan on exit):\n";
+        DEBUG_PrintRefct(std::cout, in_table->columns);
 #endif
         return ret_table;
     };

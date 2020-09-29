@@ -1,19 +1,29 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
-import bodo
 import operator
-import pandas as pd
-import numpy as np
-import pytest
 
 import numba
+import numpy as np
+import pandas as pd
+import pytest
+
+import bodo
 from bodo.tests.utils import check_func
 
 
 @pytest.fixture(
-    params=[pd.array([True, False, True, pd.NA, False]),]
+    params=[
+        pd.array([True, False, True, pd.NA, False]),
+    ]
 )
 def bool_arr_value(request):
     return request.param
+
+
+def test_np_repeat(bool_arr_value, memory_leak_check):
+    def impl(arr):
+        return np.repeat(arr, 2)
+
+    check_func(impl, (bool_arr_value,), dist_test=False)
 
 
 def test_setitem_optional_int(bool_arr_value, memory_leak_check):
@@ -84,8 +94,7 @@ def test_unary_ufunc(memory_leak_check):
 
 @pytest.mark.parametrize("op", [operator.eq, operator.ne])
 def test_cmp(op, memory_leak_check):
-    """Test comparison of two boolean arrays
-    """
+    """Test comparison of two boolean arrays"""
     op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
     func_text = "def test_impl(A1, A2):\n"
     func_text += "  return A1.values {} A2.values\n".format(op_str)
@@ -99,8 +108,7 @@ def test_cmp(op, memory_leak_check):
 
 
 def test_cmp_scalar(memory_leak_check):
-    """Test comparison of boolean array and a scalar
-    """
+    """Test comparison of boolean array and a scalar"""
 
     def test_impl1(A):
         return A.values == True

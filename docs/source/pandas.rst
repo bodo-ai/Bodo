@@ -354,6 +354,7 @@ Datetime properties:
 * :attr:`pandas.Series.dt.second`
 * :attr:`pandas.Series.dt.microsecond`
 * :attr:`pandas.Series.dt.nanosecond`
+* :attr:`pandas.Series.dt.quarter`
 
 String handling:
 
@@ -624,6 +625,7 @@ Date fields of DatetimeIndex are supported:
 * :attr:`pandas.DatetimeIndex.nanosecond`
 * :attr:`pandas.DatetimeIndex.date`
 * :attr:`pandas.DatetimeIndex.is_leap_year`
+* :attr:`pandas.DatetimeIndex.quarter`
 
 
 
@@ -680,6 +682,7 @@ Timestamp functionality is documented in `pandas.Timestamp <https://pandas.pydat
 * :attr:`pandas.Timestamp.dayofweek`
 * :attr:`pandas.Timestamp.days_in_month`
 * :attr:`pandas.Timestamp.daysinmonth`
+* :attr:`pandas.Timestamp.quarter`
 * :meth:`pandas.Timestamp.date`
 * :meth:`pandas.Timestamp.isocalendar`
 * :meth:`pandas.Timestamp.isoformat`

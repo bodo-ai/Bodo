@@ -59,6 +59,7 @@ from bodo.utils.typing import (
     is_overload_none,
     is_overload_true,
     raise_bodo_error,
+    get_udf_error_msg,
 )
 
 _dt_index_data_typ = types.Array(types.NPDatetime("ns"), 1, "C")
@@ -2100,9 +2101,9 @@ def overload_index_map(I, mapper, na_action=None):
     # get output element type
     typing_context = numba.core.registry.cpu_target.typing_context
     try:
-        f_return_type = get_const_func_output_type(mapper, (dtype,), typing_context)
-    except:
-        raise_bodo_error("Index.map(): user-defined function not supported")
+        f_return_type = get_const_func_output_type(mapper, (dtype,), {}, typing_context)
+    except Exception as e:
+        raise_bodo_error(get_udf_error_msg("Index.map()", e), e.loc)
 
     out_arr_type = get_udf_out_arr_type(f_return_type)
 

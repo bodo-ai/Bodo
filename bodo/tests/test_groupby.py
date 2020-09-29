@@ -1,30 +1,32 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
-import sys
-import random
-import string
 import datetime
+import random
 import re
-import pandas as pd
-import numpy as np
-import bodo
-from bodo.utils.typing import BodoError
+import string
+import sys
 from decimal import Decimal
-from bodo.tests.utils import (
-    count_array_REPs,
-    count_parfor_REPs,
-    count_parfor_OneDs,
-    count_array_OneDs,
-    dist_IR_contains,
-    check_parallel_coherency,
-    gen_random_decimal_array,
-    gen_random_string_array,
-    gen_random_list_string_array,
-    convert_non_pandas_columns,
-    get_start_end,
-    check_func,
-    check_caching,
-)
+
+import numpy as np
+import pandas as pd
 import pytest
+
+import bodo
+from bodo.tests.utils import (
+    check_caching,
+    check_func,
+    check_parallel_coherency,
+    convert_non_pandas_columns,
+    count_array_OneDs,
+    count_array_REPs,
+    count_parfor_OneDs,
+    count_parfor_REPs,
+    dist_IR_contains,
+    gen_random_decimal_array,
+    gen_random_list_string_array,
+    gen_random_string_array,
+    get_start_end,
+)
+from bodo.utils.typing import BodoError
 
 
 @pytest.fixture(
@@ -177,8 +179,7 @@ def test_nullable_int(memory_leak_check):
         ),
     ],
 )
-# TODO: add memory leak check when cumsum leak issue resolved
-def test_return_type_nullable_cumsum_cumprod(df_null):
+def test_return_type_nullable_cumsum_cumprod(df_null, memory_leak_check):
     """
     Test Groupby when one row is a nullable-int-bool.
     A current problem is that cumsum/cumprod with pandas return an array of float for Int64
@@ -258,8 +259,7 @@ def test_sum_string(memory_leak_check):
 
 
 def test_random_decimal_sum_min_max_last(is_slow_run, memory_leak_check):
-    """We do not have decimal as index. Therefore we have to use as_index=False
-    """
+    """We do not have decimal as index. Therefore we have to use as_index=False"""
 
     def impl1(df):
         df_ret = df.groupby("A", as_index=False).nunique()
@@ -507,8 +507,7 @@ def test_agg_bool_expr(memory_leak_check):
         ),
     ],
 )
-# TODO: add memory leak check when cumsum leak issue resolved
-def test_cumsum_index_preservation(df_index):
+def test_cumsum_index_preservation(df_index, memory_leak_check):
     """For the cumsum operation, the number of rows remains the same and the index is preserved.
     ---
     At the present time the agg(("cumsum", "cumprod")) is broken in pandas. See
@@ -541,7 +540,7 @@ def test_cumsum_index_preservation(df_index):
 
 # TODO: add memory leak check when cumsum leak issue resolved
 @pytest.mark.slow
-def test_cumsum_random_index():
+def test_cumsum_random_index(memory_leak_check):
     def test_impl(df1):
         df2 = df1.groupby("B").cumsum()
         return df2
@@ -596,7 +595,7 @@ def test_cumsum_random_index():
 
 # TODO: add memory leak check when cumsum leak issue resolved
 @pytest.mark.slow
-def test_cumsum_reverse_shuffle_list_string():
+def test_cumsum_reverse_shuffle_list_string(memory_leak_check):
     """We want to use here the classical scheme of the groupby for cumsum.
     We trigger it by using strings which are not supported by the Exscan scheme"""
 
@@ -615,9 +614,8 @@ def test_cumsum_reverse_shuffle_list_string():
     check_func(f, (df,), convert_columns_to_pandas=True, py_output=df_out)
 
 
-# TODO: add memory leak check when cumsum leak issue resolved
 @pytest.mark.slow
-def test_cumsum_reverse_shuffle_string():
+def test_cumsum_reverse_shuffle_string(memory_leak_check):
     """We want to use here the classical scheme of the groupby for cumsum.
     We trigger it by using strings which are not supported by the Exscan scheme"""
 
@@ -639,9 +637,8 @@ def test_cumsum_reverse_shuffle_string():
     check_func(f, (df,), py_output=df_out)
 
 
-# TODO: add memory leak check when cumsum leak issue resolved
 @pytest.mark.slow
-def test_cumsum_reverse_shuffle_large_numpy():
+def test_cumsum_reverse_shuffle_large_numpy(memory_leak_check):
     """We want to use here the classical scheme of the groupby for cumsum.
     We trigger it by using strings which are not supported by the Exscan scheme"""
 
@@ -658,8 +655,7 @@ def test_cumsum_reverse_shuffle_large_numpy():
     check_func(f, (df,))
 
 
-# TODO: add memory leak check
-def test_sum_categorical_key():
+def test_sum_categorical_key(memory_leak_check):
     """Testing of categorical keys and their missing value"""
 
     def f(df):
@@ -684,9 +680,8 @@ def test_sum_categorical_key():
     check_func(f, (df,), sort_output=True, reset_index=True)
 
 
-# TODO: add memory leak check when issues addressed
 @pytest.mark.slow
-def test_all_categorical_count():
+def test_all_categorical_count(memory_leak_check):
     """Testing of categorical keys and their missing value.
     Also the count itself is done for a categorical column with missing value"""
 
@@ -712,8 +707,7 @@ def test_all_categorical_count():
     check_func(f, (df,), sort_output=True, reset_index=True)
 
 
-# TODO: add memory leak check when cumsum leak issue resolved
-def test_cumsum_exscan_categorical_random():
+def test_cumsum_exscan_categorical_random(memory_leak_check):
     """For categorical and cumsum, a special code path allows for better performance"""
 
     def f1(df):
@@ -775,7 +769,7 @@ def test_cumsum_exscan_categorical_random():
 
 # TODO: add memory leak check when cumsum leak issue resolved
 @pytest.mark.slow
-def test_cumsum_exscan_multikey_random():
+def test_cumsum_exscan_multikey_random(memory_leak_check):
     """For cumulative sum of integers, a special code that create a categorical key column
     allows for better performance"""
 
@@ -1399,8 +1393,8 @@ def test_groupby_agg_const_dict():
 
 
 def test_groupby_agg_caching(memory_leak_check):
-    """ Test compiling function that uses groupby.agg(udf) with cache=True
-        and loading from cache """
+    """Test compiling function that uses groupby.agg(udf) with cache=True
+    and loading from cache"""
 
     def impl(df):
         A = df.groupby("A").agg(lambda x: x.max() - x.min())
@@ -1707,8 +1701,7 @@ def test_as_index_count(memory_leak_check):
 
 
 def test_single_col_reset_index(test_df, memory_leak_check):
-    """We need the reset_index=True because otherwise the order is scrambled
-    """
+    """We need the reset_index=True because otherwise the order is scrambled"""
 
     def impl1(df):
         A = df.groupby("A")["B"].sum().reset_index()
@@ -1737,9 +1730,8 @@ def test_nonvar_column_names(memory_leak_check):
     check_func(impl1, (df,), sort_output=True)
 
 
-# TODO: add memory leak check when cumsum leak issue resolved
 @pytest.mark.slow
-def test_cumsum_large_random_numpy():
+def test_cumsum_large_random_numpy(memory_leak_check):
     def get_random_array(n, sizlen):
         elist = []
         for i in range(n):
@@ -1772,9 +1764,8 @@ def test_cumsum_large_random_numpy():
     check_func(impl3, (df1,), sort_output=True)
 
 
-# TODO: add memory leak check when cumsum leak issue resolved
 @pytest.mark.slow
-def test_cummin_cummax_large_random_numpy():
+def test_cummin_cummax_large_random_numpy(memory_leak_check):
     """A bunch of tests related to cummin/cummax functions.
     ---
     The agg(("cummin", "cummax")) is currently broken because of a bug in pandas.
@@ -1841,8 +1832,7 @@ def test_cummin_cummax_large_random_numpy():
     check_func(impl8, (df1,), sort_output=True, reset_index=True)
 
 
-# TODO: add memory leak check when cumsum leak issue resolved
-def test_groupby_cumsum_simple():
+def test_groupby_cumsum_simple(memory_leak_check):
     """
     Test Groupby.cumsum(): a simple case
     """
@@ -1857,8 +1847,7 @@ def test_groupby_cumsum_simple():
     check_func(impl, (df1,), sort_output=True)
 
 
-# TODO: add memory leak check when cumsum leak issue resolved
-def test_groupby_cumprod_simple():
+def test_groupby_cumprod_simple(memory_leak_check):
     """
     Test Groupby.cumprod(): a simple case
     """
@@ -1873,9 +1862,8 @@ def test_groupby_cumprod_simple():
     check_func(impl, (df1,), sort_output=True)
 
 
-# TODO: add memory leak check when cumsum leak issue resolved
 @pytest.mark.slow
-def test_groupby_cumsum():
+def test_groupby_cumsum(memory_leak_check):
     """
     Test Groupby.cumsum()
     """
@@ -1920,9 +1908,8 @@ def test_groupby_cumsum():
     check_func(impl2, (df3,), sort_output=True)
 
 
-# TODO: add memory leak check when cumsum leak issue resolved
 @pytest.mark.slow
-def test_groupby_multi_intlabels_cumsum_int():
+def test_groupby_multi_intlabels_cumsum_int(memory_leak_check):
     """
     Test Groupby.cumsum() on int columns
     multiple labels for 'by'
@@ -1943,9 +1930,8 @@ def test_groupby_multi_intlabels_cumsum_int():
     check_func(impl, (df,), sort_output=True)
 
 
-# TODO: add memory leak check when cumsum leak issue resolved
 @pytest.mark.slow
-def test_groupby_multi_labels_cumsum_multi_cols():
+def test_groupby_multi_labels_cumsum_multi_cols(memory_leak_check):
     """
     Test Groupby.cumsum()
     multiple labels for 'by', multiple cols to cumsum
@@ -1967,9 +1953,8 @@ def test_groupby_multi_labels_cumsum_multi_cols():
     check_func(impl, (df,), sort_output=True)
 
 
-# TODO: add memory leak check when cumsum leak issue resolved
 @pytest.mark.slow
-def test_groupby_as_index_cumsum():
+def test_groupby_as_index_cumsum(memory_leak_check):
     """
     Test Groupby.cumsum() on groupby() as_index=False
     for both dataframe and series returns
@@ -1998,9 +1983,8 @@ def test_groupby_as_index_cumsum():
     check_func(impl2, (df,), sort_output=True)
 
 
-# TODO: add memory leak check when cumsum leak issue resolved
 @pytest.mark.slow
-def test_cumsum_all_nulls_col():
+def test_cumsum_all_nulls_col(memory_leak_check):
     """
     Test Groupby.cumsum() on column with all null entries
     TODO: change by to "A" after groupby null keys are properly ignored

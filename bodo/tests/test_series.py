@@ -2345,8 +2345,7 @@ def test_series_take(series_val, memory_leak_check):
     # TODO: dist support for selection with index list
 
 
-# TODO: add memory_leak_check
-def test_series_argsort_fast():
+def test_series_argsort_fast(memory_leak_check):
     def test_impl(A):
         return A.argsort()
 
@@ -2478,8 +2477,7 @@ def test_series_quantile(numeric_series_val, memory_leak_check):
     check_func(test_impl, (numeric_series_val,))
 
 
-# TODO: add memory_leak_check
-def test_series_nunique(series_val):
+def test_series_nunique(series_val, memory_leak_check):
     # not supported for Datetime.date yet, TODO: support and test
     if isinstance(series_val.values[0], datetime.date):
         return
@@ -2506,8 +2504,7 @@ def test_series_nunique(series_val):
     check_func(test_impl, (series_val,))
 
 
-# TODO: add memory_leak_check
-def test_series_unique(series_val):
+def test_series_unique(series_val, memory_leak_check):
     # timedelta setitem not supported yet
     if series_val.dtype == np.dtype("timedelta64[ns]"):
         return
@@ -2766,8 +2763,7 @@ def test_series_index_cast():
     pd.testing.assert_series_equal(bodo_func(n), test_impl(n))
 
 
-# TODO: add memory_leak_check
-def test_series_value_counts():
+def test_series_value_counts(memory_leak_check):
     """simple test for value_counts(). More comprehensive testing is necessary"""
 
     def test_impl(S):

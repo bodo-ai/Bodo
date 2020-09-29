@@ -9,10 +9,12 @@
 #include "_shuffle.h"
 #include "gfx/timsort.hpp"
 
-#undef DEBUG_DD
-#undef DEBUG_SORT_LOCAL
-#undef BOUND_INFO
-#undef DEBUG_SORT
+#undef DEBUG_DD_SYMBOL
+#undef DEBUG_DD_FULL
+#undef DEBUG_SORT_LOCAL_SYMBOL
+#undef DEBUG_SORT_LOCAL_FULL
+#undef DEBUG_SORT_SYMBOL
+#undef DEBUG_SORT_FULL
 #undef DEBUG_SAMPLE
 
 //
@@ -127,12 +129,13 @@ void array_isin(array_info* out_arr, array_info* in_arr, array_info* in_values,
     MPI_Datatype mpi_typ = get_MPI_typ(out_arr->dtype);
     size_t n_rows = out_arr->length;
     std::vector<uint8_t> tmp_recv(n_rows);
-    MPI_Alltoallv(shuf_out_arr->data1, comm_info.recv_count.data(),
-                  comm_info.recv_disp.data(), mpi_typ, tmp_recv.data(),
-                  comm_info.send_count.data(), comm_info.send_disp.data(),
+    bodo_alltoallv(shuf_out_arr->data1, comm_info.recv_count,
+                   comm_info.recv_disp, mpi_typ, tmp_recv.data(),
+                   comm_info.send_count, comm_info.send_disp,
                   mpi_typ, MPI_COMM_WORLD);
     fill_recv_data_inner<uint8_t>(tmp_recv.data(), (uint8_t*)out_arr->data1,
-                                  hashes, comm_info.send_disp, comm_info.n_pes, n_rows);
+                                  hashes, comm_info.send_disp, comm_info.n_pes,
+                                  n_rows);
     // free temporary shuffle array
     delete_info_decref_array(shuf_out_arr);
     // release extra reference for output array (array_info wrapper's reference)
@@ -149,14 +152,16 @@ table_info* sort_values_table_local(table_info* in_table, int64_t n_key_t,
                                     int64_t* vect_ascending, bool na_position) {
     size_t n_rows = (size_t)in_table->nrows();
     size_t n_key = size_t(n_key_t);
-#ifdef DEBUG_SORT_LOCAL
+#ifdef DEBUG_SORT_LOCAL_SYMBOL
     std::cout << "n_key_t=" << n_key_t << " na_position=" << na_position
               << "\n";
     for (int64_t iKey = 0; iKey < n_key_t; iKey++)
         std::cout << "iKey=" << iKey << "/" << n_key_t
                   << "  vect_ascending=" << vect_ascending[iKey] << "\n";
-    std::cout << "INPUT (sort_values_table):\n";
+    std::cout << "INPUT (sort_values_table_local):\n";
+#ifdef DEBUG_SORT_LOCAL_FULL
     DEBUG_PrintSetOfColumn(std::cout, in_table->columns);
+#endif
     DEBUG_PrintRefct(std::cout, in_table->columns);
     std::cout << "n_rows=" << n_rows << " n_key=" << n_key << "\n";
 #endif
@@ -165,24 +170,21 @@ table_info* sort_values_table_local(table_info* in_table, int64_t n_key_t,
     std::function<bool(size_t, size_t)> f = [&](size_t const& iRow1,
                                                 size_t const& iRow2) -> bool {
         size_t shift_key1 = 0, shift_key2 = 0;
-#ifdef DEBUG_SORT_LOCAL
-        std::cout << "Before KeyComparisonAsPython\n";
-#endif
         bool test = KeyComparisonAsPython(
             n_key, vect_ascending, in_table->columns, shift_key1, iRow1,
             in_table->columns, shift_key2, iRow2, na_position);
-#ifdef DEBUG_SORT_LOCAL
-        std::cout << "iRow1=" << iRow1 << " iRow2=" << iRow2 << " test=" << test
-                  << "\n";
-#endif
         return test;
     };
     gfx::timsort(ListIdx.begin(), ListIdx.end(), f);
     //
     table_info* ret_table = RetrieveTable(in_table, ListIdx, -1);
-#ifdef DEBUG_SORT_LOCAL
-    std::cout << "OUTPUT:\n";
+#ifdef DEBUG_SORT_LOCAL_SYMBOL
+    std::cout << "OUTPUT (sort_values_table_local) in_table:\n";
+    DEBUG_PrintRefct(std::cout, in_table->columns);
+    std::cout << "OUTPUT (sort_values_table_local) ret_table:\n";
+#ifdef DEBUG_SORT_LOCAL_FULL
     DEBUG_PrintSetOfColumn(std::cout, ret_table->columns);
+#endif
     DEBUG_PrintRefct(std::cout, ret_table->columns);
 #endif
     return ret_table;
@@ -191,16 +193,23 @@ table_info* sort_values_table_local(table_info* in_table, int64_t n_key_t,
 table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
                               int64_t* vect_ascending, bool na_position,
                               bool parallel) {
-#ifdef DEBUG_SORT
+#ifdef DEBUG_SORT_SYMBOL
+    std::cout << "parallel=" << parallel << " na_position=" << na_position
+              << "\n";
     std::cout << "sort_values_table : in_table:\n";
     DEBUG_PrintRefct(std::cout, in_table->columns);
+#ifdef DEBUG_SORT_FULL
     DEBUG_PrintSetOfColumn(std::cout, in_table->columns);
 #endif
+#endif
+    int64_t n_local = in_table->nrows();
     table_info* local_sort =
         sort_values_table_local(in_table, n_key_t, vect_ascending, na_position);
-#ifdef DEBUG_SORT
+#ifdef DEBUG_SORT_SYMBOL_SYMBOL
     std::cout << "sort_values_table : local_sort:\n";
+#ifdef DEBUG_SORT_SYMBOL_SYMBOL
     DEBUG_PrintSetOfColumn(std::cout, local_sort->columns);
+#endif
     DEBUG_PrintRefct(std::cout, local_sort->columns);
 #endif
     if (!parallel) return local_sort;
@@ -209,13 +218,9 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
     int mpi_root = 0;
     MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
-    int64_t n_local = in_table->nrows();
     int64_t n_total;
     MPI_Allreduce(&n_local, &n_total, 1, MPI_LONG_LONG_INT, MPI_SUM,
                   MPI_COMM_WORLD);
-#ifdef DEBUG_SORT
-    std::cout << "n_local=" << n_local << " n_total=" << n_total << "\n";
-#endif
     int MIN_SAMPLES = 1000000;
     int samplePointsPerPartitionHint = 20;
     int sampleSize =
@@ -223,10 +228,6 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
     double fraction = std::min(
         double(sampleSize) / double(std::max(n_total, int64_t(1))), double(1));
     int64_t n_loc_sample = std::min(n_local, int64_t(ceil(fraction * n_local)));
-#if defined DEBUG_SORT || defined BOUND_INFO
-    std::cout << "sampleSize=" << sampleSize << " fraction=" << fraction
-              << " n_loc_sample=" << n_loc_sample << "\n";
-#endif
     //
     // building the samples.
     // We use here deterministic random sampling. This is better for debugging
@@ -241,25 +242,21 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
         size_t pos = std::uniform_int_distribution<>(0, n_local - 1)(gen);
         ListIdx[i] = pos;
     }
+    for (int64_t i_key = 0; i_key < n_key_t; i_key++)
+        incref_array(local_sort->columns[i_key]);
     table_info* samples = RetrieveTable(local_sort, ListIdx, n_key_t);
-#ifdef DEBUG_SORT
-    std::cout << "sort_values_table : samples:\n";
-    DEBUG_PrintSetOfColumn(std::cout, samples->columns);
-    DEBUG_PrintRefct(std::cout, samples->columns);
-#endif
     // Collecting all samples
     bool all_gather = false;
     table_info* all_samples = gather_table(samples, n_key_t, all_gather);
-#if defined DEBUG_SORT || defined BOUND_INFO
+    delete_table(samples);
+#ifdef DEBUG_SORT_SYMBOL
     if (myrank == mpi_root) {
-#ifdef BOUND_INFO
         std::cout << "|all_samples|=" << all_samples->nrows() << "\n";
-#endif
-#ifdef DEBUG_SORT
         std::cout << "sort_values_table : all_samples:\n";
+#ifdef DEBUG_SORT_FULL
         DEBUG_PrintSetOfColumn(std::cout, all_samples->columns);
-        DEBUG_PrintRefct(std::cout, all_samples->columns);
 #endif
+        DEBUG_PrintRefct(std::cout, all_samples->columns);
     }
 #endif
 
@@ -268,11 +265,6 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
     if (myrank == mpi_root) {
         table_info* all_samples_sort = sort_values_table_local(
             all_samples, n_key_t, vect_ascending, na_position);
-#if defined DEBUG_SORT || defined BOUND_INFO
-        std::cout << "sort_values_table : all_samples_sort:\n";
-        DEBUG_PrintSetOfColumn(std::cout, all_samples_sort->columns);
-        DEBUG_PrintRefct(std::cout, all_samples_sort->columns);
-#endif
         int64_t n_samples = all_samples_sort->nrows();
         int64_t step = ceil(double(n_samples) / double(n_pes));
         std::vector<size_t> ListIdxBounds(n_pes - 1);
@@ -281,34 +273,14 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
             ListIdxBounds[i] = pos;
         }
         pre_bounds = RetrieveTable(all_samples_sort, ListIdxBounds, -1);
-#if defined DEBUG_SORT || defined BOUND_INFO
-        std::cout << "sort_values_table : pre_bounds:\n";
-        DEBUG_PrintSetOfColumn(std::cout, pre_bounds->columns);
-        DEBUG_PrintRefct(std::cout, pre_bounds->columns);
-#endif
-        delete_table_decref_arrays(all_samples_sort);
+        delete_table(all_samples_sort);
     }
-#ifdef DEBUG_SORT
-    std::cout << "delete_table_decref_arrays operations 1\n";
-#endif
-    delete_table_decref_arrays(samples);
-#ifdef DEBUG_SORT
-    std::cout << "delete_table_decref_arrays operations 2\n";
-#endif
-    delete_table_decref_arrays(all_samples);
-#ifdef DEBUG_SORT
-    std::cout << "delete_table_decref_arrays operations 3\n";
-#endif
+    delete_table(all_samples);
     // broadcasting the bounds
-    // The in_table is used as reference for the data type of the array.
+    // The local_sort is used as reference for the data type of the array.
     // This is because pre_bounds is NULL for ranks != 0
-    table_info* bounds = broadcast_table(in_table, pre_bounds, n_key_t);
-#ifdef DEBUG_SORT
-    std::cout << "sort_values_table : bounds:\n";
-    DEBUG_PrintSetOfColumn(std::cout, bounds->columns);
-    DEBUG_PrintRefct(std::cout, bounds->columns);
-#endif
-    if (myrank == mpi_root) delete_table_decref_arrays(pre_bounds);
+    table_info* bounds = broadcast_table(local_sort, pre_bounds, n_key_t);
+    if (myrank == mpi_root) delete_table(pre_bounds);
     // Now computing to which process it all goes.
     std::vector<uint32_t> hashes_v(n_local);
     uint32_t node_id = 0;
@@ -323,55 +295,24 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
             node_id++;
         }
         hashes_v[i] = node_id;
-#ifdef DEBUG_SORT
-        std::cout << "i=" << i << "  node_id=" << node_id << "\n";
-#endif
     }
-#ifdef DEBUG_SORT
-    std::cout << "Before bounds deallocation\n";
-#endif
     delete_table_decref_arrays(bounds);
-#ifdef DEBUG_SORT
-    std::cout << " After bounds deallocation\n";
-#endif
     // Now shuffling all the data
     mpi_comm_info comm_info(local_sort->columns);
-#ifdef DEBUG_SORT
-    std::cout << " We have comm_info\n";
-#endif
     comm_info.set_counts(hashes_v.data());
-#ifdef DEBUG_SORT
-    std::cout << " We have set_counts\n";
-#endif
     table_info* collected_table =
         shuffle_table_kernel(local_sort, hashes_v.data(), comm_info);
-#ifdef DEBUG_SORT
-    std::cout << " We have collected_table\n";
-#endif
-#ifdef DEBUG_SORT
-    std::cout << "sort_values_table : collected_table:\n";
-    DEBUG_PrintSetOfColumn(std::cout, collected_table->columns);
-    DEBUG_PrintRefct(std::cout, collected_table->columns);
-#endif
     // NOTE: shuffle_table_kernel decrefs input arrays
     delete_table(local_sort);
     // Now final local sorting from all the stuff we collected.
     table_info* ret_table = sort_values_table_local(
         collected_table, n_key_t, vect_ascending, na_position);
-#ifdef DEBUG_SORT
-    std::cout << "sort_values_table : ret_table:\n";
-    DEBUG_PrintSetOfColumn(std::cout, ret_table->columns);
-    DEBUG_PrintRefct(std::cout, ret_table->columns);
-#endif
-    delete_table_decref_arrays(collected_table);
+    delete_table(collected_table);
     // If the maximum number of rows divided by its average is higher than 2.0
     // then we trigger reshuffling. If not, we do not do anything.
     // This value may be adjusted in the future as it is an heuristic constant.
     const double crit_fraction = 2.0;
     if (need_reshuffling(ret_table, crit_fraction)) {
-#ifdef DEBUG_SORT
-        std::cout << " Doing reshuffling\n";
-#endif
         table_info* table_shuffle_renorm = shuffle_renormalization(ret_table);
         delete_table(ret_table);
         return table_shuffle_renorm;
@@ -395,7 +336,7 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
  */
 static table_info* drop_duplicates_nonnull_keys_inner(table_info* in_table,
                                                       int64_t num_keys) {
-#ifdef DEBUG_DD
+#ifdef DEBUG_DD_SYMBOL
     std::cout << "drop_duplicates_nonnull_keys_inner : beginning\n";
 #endif
     size_t n_rows = (size_t)in_table->nrows();
@@ -403,7 +344,7 @@ static table_info* drop_duplicates_nonnull_keys_inner(table_info* in_table,
                                       in_table->columns.begin() + num_keys);
     uint32_t seed = SEED_HASH_CONTAINER;
     uint32_t* hashes = hash_keys(key_arrs, seed);
-#ifdef DEBUG_DD
+#ifdef DEBUG_DD_SYMBOL
     std::cout << "drop_duplicates_nonnull_keys_inner : we have hashes\n";
 #endif
     std::function<size_t(size_t)> hash_fct = [&](size_t const& iRow) -> size_t {
@@ -440,20 +381,24 @@ static table_info* drop_duplicates_nonnull_keys_inner(table_info* in_table,
     std::vector<size_t> ListIdx;
     for (auto& eRow : ListRow)
         if (eRow != -1) ListIdx.push_back(eRow);
-#ifdef DEBUG_DD
+#ifdef DEBUG_DD_SYMBOL
     int nbRow = ListIdx.size();
     std::cout << "|ListPairWrite|=" << nbRow << "\n";
+#ifdef DEBUG_DD_FULL
     for (int iRow = 0; iRow < nbRow; iRow++) {
         std::cout << "iRow=" << iRow << " idx=" << ListIdx[iRow] << "\n";
     }
+#endif
 #endif
     // Now building the out_arrs array. We select only the first num_keys.
     table_info* ret_table = RetrieveTable(in_table, ListIdx, num_keys);
     //
     delete[] hashes;
-#ifdef DEBUG_DD
+#ifdef DEBUG_DD_SYMBOL
     std::cout << "drop_duplicates_nonnull_keys_inner : OUTPUT:\n";
+#ifdef DEBUG_DD_FULL
     DEBUG_PrintSetOfColumn(std::cout, ret_table->columns);
+#endif
     DEBUG_PrintRefct(std::cout, ret_table->columns);
 #endif
     return ret_table;
@@ -638,8 +583,8 @@ table_info* drop_duplicates_nonnull_keys(table_info* in_table, int64_t num_keys,
     if (!is_parallel) {
         return drop_duplicates_nonnull_keys_inner(in_table, num_keys);
     }
-    // parallel case
-    // pre reduction of duplicates
+        // parallel case
+        // pre reduction of duplicates
 #ifdef DEBUG_DD
     std::cout << "Before the drop duplicates_nonnull on the local nodes\n";
 #endif
@@ -659,7 +604,7 @@ table_info* drop_duplicates_nonnull_keys(table_info* in_table, int64_t num_keys,
     int keep = 0;
     table_info* ret_table =
         drop_duplicates_table_inner(shuf_table, num_keys, keep, 1);
-    delete_table_decref_arrays(shuf_table);
+    delete_table(shuf_table);
 #ifdef DEBUG_DD
     std::cout << "Final returning table\n";
     DEBUG_PrintSetOfColumn(std::cout, ret_table->columns);
@@ -693,8 +638,8 @@ table_info* drop_duplicates_table(table_info* in_table, bool is_parallel,
     if (!is_parallel) {
         return drop_duplicates_table_inner(in_table, num_keys, keep, 1);
     }
-    // parallel case
-    // pre reduction of duplicates
+        // parallel case
+        // pre reduction of duplicates
 #ifdef DEBUG_DD
     std::cout << "Before the drop duplicates on the local nodes\n";
 #endif
@@ -713,7 +658,7 @@ table_info* drop_duplicates_table(table_info* in_table, bool is_parallel,
 #endif
     table_info* ret_table =
         drop_duplicates_table_inner(shuf_table, num_keys, keep, 1);
-    delete_table_decref_arrays(shuf_table);
+    delete_table(shuf_table);
 #ifdef DEBUG_DD
     std::cout << "Final returning table\n";
     DEBUG_PrintSetOfColumn(std::cout, ret_table->columns);
@@ -945,9 +890,9 @@ table_info* sample_table(table_info* in_table, int64_t n, double frac,
         ListIdx.push_back(idx_export);
     }
 #ifdef DEBUG_SAMPLE
-    //    std::cout << "sample_table : in_table\n";
-    //    DEBUG_PrintSetOfColumn(std::cout, in_table->columns);
-    //    DEBUG_PrintRefct(std::cout, in_table->columns);
+        //    std::cout << "sample_table : in_table\n";
+        //    DEBUG_PrintSetOfColumn(std::cout, in_table->columns);
+        //    DEBUG_PrintRefct(std::cout, in_table->columns);
 #endif
     table_info* tab_out = RetrieveTable(in_table, ListIdx, -1);
 #ifdef DEBUG_SAMPLE
@@ -959,7 +904,7 @@ table_info* sample_table(table_info* in_table, int64_t n, double frac,
         bool all_gather = true;
         size_t n_cols = tab_out->ncols();
         table_info* tab_ret = gather_table(tab_out, n_cols, all_gather);
-        delete_table_decref_arrays(tab_out);
+        delete_table(tab_out);
 #ifdef DEBUG_SAMPLE
         std::cout << "sample_table : tab_ret\n";
         DEBUG_PrintSetOfColumn(std::cout, tab_ret->columns);

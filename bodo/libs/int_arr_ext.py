@@ -3,58 +3,55 @@
 However, nulls are stored in bit arrays similar to Arrow's arrays.
 """
 import operator
-import pandas as pd
-import numpy as np
+
+import llvmlite.binding as ll
 import numba
-import bodo
-from numba.core import types
-from numba.core import cgutils
+import numpy as np
+import pandas as pd
+from llvmlite import ir as lir
+from numba.core import cgutils, types
 from numba.extending import (
-    typeof_impl,
-    type_callable,
-    models,
-    register_model,
     NativeValue,
-    make_attribute_wrapper,
-    lower_builtin,
     box,
-    unbox,
-    lower_getattr,
     intrinsic,
-    overload_method,
+    lower_builtin,
+    lower_getattr,
+    make_attribute_wrapper,
+    models,
     overload,
     overload_attribute,
+    overload_method,
+    register_model,
+    type_callable,
+    typeof_impl,
+    unbox,
 )
 from numba.parfors.array_analysis import ArrayAnalysis
+
+import bodo
+# NOTE: importing hdist is necessary for MPI initialization before array_ext
+from bodo.libs import array_ext, hdist, hstr_ext
 from bodo.libs.str_arr_ext import kBitmask
 from bodo.utils.typing import is_list_like_index_type
-
-from llvmlite import ir as lir
-import llvmlite.binding as ll
-from bodo.libs import hstr_ext
-
-# NOTE: importing hdist is necessary for MPI initialization before array_ext
-from bodo.libs import hdist
-from bodo.libs import array_ext
 
 ll.add_symbol("mask_arr_to_bitmap", hstr_ext.mask_arr_to_bitmap)
 ll.add_symbol("is_pd_int_array", array_ext.is_pd_int_array)
 ll.add_symbol("int_array_from_sequence", array_ext.int_array_from_sequence)
 
-from bodo.utils.typing import (
-    is_overload_none,
-    is_overload_true,
-    is_overload_false,
-    parse_dtype,
-    to_nullable_type,
-)
 from bodo.utils.indexing import (
     array_getitem_bool_index,
     array_getitem_int_index,
     array_getitem_slice_index,
-    array_setitem_int_index,
     array_setitem_bool_index,
+    array_setitem_int_index,
     array_setitem_slice_index,
+)
+from bodo.utils.typing import (
+    is_overload_false,
+    is_overload_none,
+    is_overload_true,
+    parse_dtype,
+    to_nullable_type,
 )
 
 
@@ -335,8 +332,7 @@ def box_int_arr(typ, val, c):
 
 @intrinsic
 def init_integer_array(typingctx, data, null_bitmap=None):
-    """Create a IntegerArray with provided data and null bitmap values.
-    """
+    """Create a IntegerArray with provided data and null bitmap values."""
     assert isinstance(data, types.Array)
     assert null_bitmap == types.Array(types.uint8, 1, "C")
 
@@ -493,7 +489,7 @@ def int_arr_setitem(A, idx, val):
 
     # scalar case
     if isinstance(idx, types.Integer):
-        if val == types.none or isinstance(val, types.optional): #pragma: no cover
+        if val == types.none or isinstance(val, types.optional):  # pragma: no cover
             return
 
         def impl_scalar(A, idx, val):  # pragma: no cover
@@ -714,8 +710,7 @@ ufunc_aliases = {
 
 
 def create_op_overload(op, n_inputs):
-    """creates overloads for operations on Integer arrays
-    """
+    """creates overloads for operations on Integer arrays"""
     if n_inputs == 1:
 
         def overload_int_arr_op_nin_1(A):
@@ -858,8 +853,7 @@ def overload_unique(A):
 
 
 def get_nullable_array_unary_impl(op, A):
-    """generate implementation for unary operation on nullable integer or boolean array
-    """
+    """generate implementation for unary operation on nullable integer or boolean array"""
     # use type inference to get output dtype
     typing_context = numba.core.registry.cpu_target.typing_context
     ret_dtype = typing_context.resolve_function_type(
@@ -881,8 +875,7 @@ def get_nullable_array_unary_impl(op, A):
 
 
 def get_nullable_array_binary_impl(op, A1, A2):
-    """generate implementation for binary operation on nullable integer or boolean array
-    """
+    """generate implementation for binary operation on nullable integer or boolean array"""
     # TODO: 1 ** np.nan is 1. So we have to unmask those.
     inplace = (
         op in numba.core.typing.npydecl.NumpyRulesInplaceArrayOperator._op_map.keys()
@@ -931,7 +924,13 @@ def get_nullable_array_binary_impl(op, A1, A2):
     loc_vars = {}
     exec(
         func_text,
-        {"bodo": bodo, "numba": numba, "np": np, "ret_dtype": ret_dtype, "op": op,},
+        {
+            "bodo": bodo,
+            "numba": numba,
+            "np": np,
+            "ret_dtype": ret_dtype,
+            "op": op,
+        },
         loc_vars,
     )
     impl = loc_vars["impl"]

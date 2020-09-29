@@ -1,8 +1,6 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 """Tools for handling bodo arrays, e.g. passing to C/C++ code
 """
-from collections import namedtuple
-
 import llvmlite.binding as ll
 import numba
 from llvmlite import ir as lir
@@ -25,7 +23,10 @@ from numba.extending import (
 )
 
 from bodo.hiframes.datetime_date_ext import datetime_date_array_type
-from bodo.hiframes.pd_categorical_ext import CategoricalArray, get_categories_int_type
+from bodo.hiframes.pd_categorical_ext import (
+    CategoricalArray,
+    get_categories_int_type,
+)
 from bodo.libs import array_ext
 from bodo.libs.array_item_arr_ext import (
     ArrayItemArrayPayloadType,
@@ -39,10 +40,10 @@ from bodo.libs.decimal_arr_ext import DecimalArrayType, int128_type
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.str_arr_ext import (
     _get_string_arr_payload,
-    string_array_type,
     char_arr_type,
-    offset_arr_type,
     null_bitmap_arr_type,
+    offset_arr_type,
+    string_array_type,
 )
 from bodo.libs.struct_arr_ext import (
     StructArrayPayloadType,
@@ -73,10 +74,6 @@ ll.add_symbol("info_from_table", array_ext.info_from_table)
 ll.add_symbol("delete_info_decref_array", array_ext.delete_info_decref_array)
 ll.add_symbol("delete_table_decref_arrays", array_ext.delete_table_decref_arrays)
 ll.add_symbol("delete_table", array_ext.delete_table)
-ll.add_symbol("get_stats_alloc", array_ext.get_stats_alloc)
-ll.add_symbol("get_stats_free", array_ext.get_stats_free)
-ll.add_symbol("get_stats_mi_alloc", array_ext.get_stats_mi_alloc)
-ll.add_symbol("get_stats_mi_free", array_ext.get_stats_mi_free)
 ll.add_symbol("shuffle_table", array_ext.shuffle_table)
 ll.add_symbol("hash_join_table", array_ext.hash_join_table)
 ll.add_symbol("drop_duplicates_table", array_ext.drop_duplicates_table)
@@ -434,9 +431,11 @@ def array_to_info(typingctx, arr_type_t=None):
 
         # get codes array from CategoricalArray to be handled similar to other Numpy
         # arrays.
-        # TODO: create CategoricalArray on C++ side to handle NAs (-1) properly
         is_categorical = False
         if isinstance(arr_type, CategoricalArray):
+            # undo the initial incref since the original array is not fully passed to
+            # C++ (e.g. dtype value is not passed)
+            context.nrt.decref(builder, arr_type, in_arr)
             num_categories = context.compile_internal(
                 builder,
                 lambda a: len(a.dtype.categories),
@@ -449,6 +448,8 @@ def array_to_info(typingctx, arr_type_t=None):
             int_dtype = get_categories_int_type(arr_type.dtype)
             arr_type = types.Array(int_dtype, 1, "C")
             is_categorical = True
+            # incref the actual array passed to C++
+            context.nrt.incref(builder, arr_type, in_arr)
 
         # Numpy
         if isinstance(arr_type, types.Array):
@@ -1227,38 +1228,6 @@ def delete_table(typingctx, table_t=None):
         builder.call(fn_tp, args)
 
     return types.void(table_t), codegen
-
-
-get_stats_alloc = types.ExternalFunction(
-    "get_stats_alloc",
-    types.uint64(),
-)
-
-get_stats_free = types.ExternalFunction(
-    "get_stats_free",
-    types.uint64(),
-)
-
-get_stats_mi_alloc = types.ExternalFunction(
-    "get_stats_mi_alloc",
-    types.uint64(),
-)
-
-get_stats_mi_free = types.ExternalFunction(
-    "get_stats_mi_free",
-    types.uint64(),
-)
-
-Mstats = namedtuple("Mstats", ["alloc", "free", "mi_alloc", "mi_free"])
-
-
-@numba.njit
-def get_allocation_stats():  # pragma: no cover
-    """get allocation stats for arrays allocated in Bodo's C++ array runtime"""
-    # TODO: get stats from other C++ modules like _parquet.cpp
-    return Mstats(
-        get_stats_alloc(), get_stats_free(), get_stats_mi_alloc(), get_stats_mi_free()
-    )
 
 
 @intrinsic

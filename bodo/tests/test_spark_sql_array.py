@@ -7,9 +7,10 @@ column elements.
 Test names refer to the names of the spark function they map to.
 """
 
-import pytest
-import pandas as pd
 import numpy as np
+import pandas as pd
+import pytest
+
 from bodo.tests.utils import check_func
 
 
@@ -31,16 +32,53 @@ from bodo.tests.utils import check_func
                 "B": [np.array([0, -1, 2]), np.array([4, -1, -5])] * 20,
             }
         ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [
+                        np.array(["hi", "its", " me "]),
+                        np.array(["who, ", "are", " you"]),
+                    ]
+                    * 20,
+                    "B": [
+                        np.array(["hi", "iTs", " you "]),
+                        np.array(["who", "are", " you "]),
+                    ]
+                    * 20,
+                }
+            ),
+            marks=pytest.mark.skip,
+        ),
         pd.DataFrame(
             {
                 "A": [
-                    np.array(["hi", "its", " me "]),
-                    np.array(["who, ", "are", " you"]),
+                    pd.array([False, True, True, False]),
+                    pd.array([False, False, True, True]),
                 ]
                 * 20,
                 "B": [
-                    np.array(["hi", "iTs", " you "]),
-                    np.array(["who", "are", " you "]),
+                    pd.array([False, True, True]),
+                    pd.array([False, False]),
+                ]
+                * 20,
+            }
+        ),
+        pd.DataFrame(
+            {
+                "A": [pd.array([1, 2, 3]), pd.array([2, 5, -6])] * 20,
+                "B": [pd.array([0, -1, 2]), pd.array([4, -1, -5])] * 20,
+            }
+        ),
+        pd.DataFrame(
+            {
+                "A": [
+                    ["hi", "its", " me "],
+                    ["who, ", "are", " you"],
+                ]
+                * 20,
+                "B": [
+                    ["hi", "iTs", " you "],
+                    ["who", "are", " you "],
                 ]
                 * 20,
             }
@@ -184,7 +222,6 @@ def test_array_remove(dataframe_val):
     check_func(test_impl, (df,))
 
 
-@pytest.mark.skip(reason="Map operation not yet supported #1547")
 def test_array_repeat(dataframe_val):
     def test_impl(df):
         return df.A.map(lambda x: np.repeat(x, 3))

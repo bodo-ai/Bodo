@@ -1,47 +1,49 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 import operator
-import numpy as np
+import re
+
+import llvmlite.binding as ll
 import numba
-from numba.extending import (
-    box,
-    unbox,
-    typeof_impl,
-    register_model,
-    models,
-    NativeValue,
-    lower_builtin,
-    lower_cast,
-    overload,
-    type_callable,
-    overload_method,
-    intrinsic,
-    make_attribute_wrapper,
-    overload_attribute,
-)
-from numba.core import types
+import numpy as np
+from llvmlite import ir as lir
+from numba.core import cgutils, types
 from numba.core.typing.templates import (
-    signature,
     AbstractTemplate,
+    AttributeTemplate,
+    ConcreteTemplate,
+    bound_function,
     infer,
     infer_getattr,
-    ConcreteTemplate,
-    AttributeTemplate,
-    bound_function,
     infer_global,
+    signature,
 )
-from numba.core import cgutils
+from numba.extending import (
+    NativeValue,
+    box,
+    intrinsic,
+    lower_builtin,
+    lower_cast,
+    make_attribute_wrapper,
+    models,
+    overload,
+    overload_attribute,
+    overload_method,
+    register_model,
+    type_callable,
+    typeof_impl,
+    unbox,
+)
 from numba.parfors.array_analysis import ArrayAnalysis
-from llvmlite import ir as lir
-import llvmlite.binding as ll
+
 import bodo
+from bodo.libs import hstr_ext
+
 
 # from bodo.utils.utils import unliteral_all
 # TODO: resolve import conflict
 def unliteral_all(args):
     return tuple(types.unliteral(a) for a in args)
 
-
-from bodo.libs import hstr_ext
 
 ll.add_symbol("del_str", hstr_ext.del_str)
 ll.add_symbol("unicode_to_utf8", hstr_ext.unicode_to_utf8)
@@ -124,7 +126,8 @@ def unicode_to_utf8_and_len(typingctx, str_typ=None):
                 )
                 null_ptr = context.get_constant_null(types.voidptr)
                 utf8_len = builder.call(
-                    fn_encode, [null_ptr, uni_str.data, uni_str.length, uni_str.kind],
+                    fn_encode,
+                    [null_ptr, uni_str.data, uni_str.length, uni_str.kind],
                 )
                 out_tup.f1 = utf8_len
 
@@ -163,8 +166,7 @@ def overload_unicode_to_utf8(s):
 
 @intrinsic
 def memcmp(typingctx, dest_t, src_t, count_t=None):
-    """call memcmp() in C
-    """
+    """call memcmp() in C"""
 
     def codegen(context, builder, sig, args):
         fnty = lir.FunctionType(
@@ -176,7 +178,10 @@ def memcmp(typingctx, dest_t, src_t, count_t=None):
             ],
         )
         memcmp_func = builder.module.get_or_insert_function(fnty, name="memcmp")
-        return builder.call(memcmp_func, args,)
+        return builder.call(
+            memcmp_func,
+            args,
+        )
 
     return types.int32(types.voidptr, types.voidptr, types.intp), codegen
 
@@ -443,8 +448,7 @@ def overload_str_arr_shape(A):
 
 
 def alloc_random_access_str_arr_equiv(self, scope, equiv_set, loc, args, kws):
-    """Array analysis function for alloc_random_access_string_array()
-    """
+    """Array analysis function for alloc_random_access_string_array()"""
     assert len(args) == 1 and not kws
     return args[0], []
 
@@ -478,18 +482,28 @@ def cast_unicode_str_to_float64(context, builder, fromty, toty, val):
     return cast_str_to_float64(context, builder, std_str_type, toty, std_str)
 
 
-@numba.njit
+@numba.njit(cache=True)
 def str_split(arr, pat, n):  # pragma: no cover
-    """spits string array's elements into lists and creates an array of string arrays
-    """
+    """spits string array's elements into lists and creates an array of string arrays"""
     # numba.parfors.parfor.init_prange()
+    is_regex = pat is not None and len(pat) > 1
+    if is_regex:
+        compiled_pat = re.compile(pat)
+        if n == -1:
+            n = 0
+    else:
+        if n == 0:
+            n = -1
     l = len(arr)
     num_strs = 0
     num_chars = 0
     for i in numba.parfors.parfor.internal_prange(l):
         if bodo.libs.array_kernels.isna(arr, i):
             continue
-        vals = arr[i].split(pat, n)
+        if is_regex:
+            vals = compiled_pat.split(arr[i], maxsplit=n)
+        else:
+            vals = arr[i].split(pat, n)
         num_strs += len(vals)
         for s in vals:
             num_chars += bodo.libs.str_arr_ext.get_utf8_size(s)
@@ -510,7 +524,10 @@ def str_split(arr, pat, n):  # pragma: no cover
             bodo.libs.int_arr_ext.set_bit_to_arr(null_bitmap, j, 0)
             continue
         bodo.libs.int_arr_ext.set_bit_to_arr(null_bitmap, j, 1)
-        vals = arr[j].split(pat, n)
+        if is_regex:
+            vals = compiled_pat.split(arr[j], maxsplit=n)
+        else:
+            vals = arr[j].split(pat, n)
         n_str = len(vals)
         for k in range(n_str):
             s = vals[k]

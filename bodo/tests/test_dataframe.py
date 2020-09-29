@@ -1968,6 +1968,23 @@ def test_df_apply_args(memory_leak_check):
     check_func(test_impl, (df, 3))
 
 
+def test_df_apply_kws(memory_leak_check):
+    """test passing extra keyword args to apply UDF"""
+
+    # only kw args
+    def impl1(df, b):
+        return df.apply(lambda r, c=1, a=2: r.A == a + c, a=b, axis=1)
+
+    # both positional and kw args
+    def impl2(df, b, d):
+        return df.apply(lambda r, c=1, a=2: r.A == a + c, a=b, axis=1, args=(d,))
+
+    n = 121
+    df = pd.DataFrame({"A": np.arange(n)})
+    check_func(impl1, (df, 3))
+    check_func(impl2, (df, 3, 2))
+
+
 def g(r):
     return 2 * r.A
 
@@ -2585,7 +2602,6 @@ def test_dataframe_columns_const_passing(memory_leak_check):
     check_func(impl, (df,))
 
 
-# TODO: add memory_leak_check
 def test_dataframe_sample_number(memory_leak_check):
     """Checking the random routine is especially difficult to do.
     We can mostly only check incidental information about the code"""

@@ -2,61 +2,61 @@
 Numba monkey patches to fix issues related to Bodo. Should be imported before any
 other module in bodo package.
 """
-import operator
-import types as pytypes
 import functools
 import hashlib
-import sys
+import inspect
+import operator
 import os
 import re
-import inspect
-import warnings
+import sys
 import textwrap
 import traceback
-import numpy as np
+import types as pytypes
+import warnings
 
 import numba
-from numba.core import ir, ir_utils, types, analysis, errors
-from numba.core.utils import reraise
-from numba.core.typing.typeof import Purpose, typeof
+import numba.np.linalg
+import numpy as np
+from numba.core import analysis, errors, ir, ir_utils, types
+from numba.core.errors import ForceLiteralArg, LiteralTypingError, TypingError
+from numba.core.imputils import impl_ret_new_ref
 from numba.core.ir_utils import (
-    compile_to_numba_ir,
-    replace_arg_nodes,
-    find_const,
-    guard,
     GuardException,
-    get_definition,
-    require,
-    find_callname,
-    build_definitions,
-    remove_dead_extensions,
-    has_no_side_effect,
+    _create_function_from_code_obj,
     analysis,
+    build_definitions,
+    compile_to_numba_ir,
+    find_callname,
+    find_const,
+    get_definition,
+    guard,
+    has_no_side_effect,
+    remove_dead_extensions,
+    replace_arg_nodes,
+    replace_vars_inner,
+    require,
     visit_vars_extensions,
     visit_vars_inner,
-    _create_function_from_code_obj,
-    replace_vars_inner,
 )
-from numba.extending import lower_builtin
-import numba.np.linalg
-from numba.core.imputils import impl_ret_new_ref
-from numba.core.typing.templates import infer_global, signature
+from numba.core.types import literal
+from numba.core.types.functions import (
+    _bt_as_lines,
+    _ResolutionFailures,
+    _termcolor,
+    _unlit_non_poison,
+)
 from numba.core.types.misc import unliteral
 from numba.core.typing.templates import (
     AbstractTemplate,
     _OverloadAttributeTemplate,
     _OverloadMethodTemplate,
+    infer_global,
+    signature,
 )
-from numba.core.types.functions import (
-    _ResolutionFailures,
-    _termcolor,
-    _unlit_non_poison,
-    _bt_as_lines,
-)
-from numba.core.errors import LiteralTypingError, TypingError, ForceLiteralArg
-from numba.core.types import literal
+from numba.core.typing.typeof import Purpose, typeof
+from numba.core.utils import reraise
+from numba.extending import lower_builtin
 from numba.parfors.parfor import get_expr_args
-
 
 # Make sure literals are tried first for typing Bodo's intrinsics, since output type
 # may depend on literals.
@@ -189,6 +189,8 @@ if (
 numba.core.ir_utils.visit_vars_stmt = visit_vars_stmt
 
 
+import copy
+
 # The code below is copied from Numba and modified to handle aliases with tuple values.
 # https://github.com/numba/numba/blob/cc7e7c7cfa6389b54d3b5c2c95751c97eb531a96/numba/ir_utils.py#L725
 # This case happens for Bodo dataframes since init_dataframe takes a tuple of arrays as
@@ -198,8 +200,6 @@ from numba.core.ir_utils import (
     alias_analysis_extensions,
     alias_func_extensions,
 )
-import copy
-
 
 # immutable scalar types, no aliasing possible
 _immutable_type_class = (
@@ -340,7 +340,11 @@ def overload(
     prefer_literal=False,
     no_unliteral=False,
 ):
-    from numba.core.typing.templates import make_overload_template, infer_global, infer
+    from numba.core.typing.templates import (
+        infer,
+        infer_global,
+        make_overload_template,
+    )
 
     # set default options
     opts = _overload_default_jit_options.copy()
@@ -373,7 +377,10 @@ numba.extending.overload = overload
 
 
 def overload_method(typ, attr, **kwargs):
-    from numba.core.typing.templates import make_overload_method_template, infer_getattr
+    from numba.core.typing.templates import (
+        infer_getattr,
+        make_overload_method_template,
+    )
 
     def decorate(overload_func):
         template = make_overload_method_template(
@@ -986,8 +993,9 @@ def compile(self, sig):
             self._cache_hits[sig] += 1
             # XXX fold this in add_overload()? (also see compiler.py)
             if not cres.objectmode and not cres.interpmode:
-                self.targetctx.insert_user_function(cres.entry_point,
-                                                    cres.fndesc, [cres.library])
+                self.targetctx.insert_user_function(
+                    cres.entry_point, cres.fndesc, [cres.library]
+                )
             self.add_overload(cres)
             return cres.entry_point
 
@@ -995,8 +1003,10 @@ def compile(self, sig):
         try:
             cres = self._compiler.compile(args, return_type)
         except errors.ForceLiteralArg as e:
+
             def folded(args, kws):
                 return self._compiler.fold_argument_types(args, kws)[1]
+
             raise e.bind_fold_arguments(folded)
         self.add_overload(cres)
         self._cache.save_overload(sig, cres)
@@ -1009,7 +1019,9 @@ if (
     != "576d693f0138e64e0c0808a1ed812a2792ad7315c29d7a16c00074026ca7a40d"
 ):  # pragma: no cover
     warnings.warn("numba.core.dispatcher.Dispatcher.compile has changed")
-numba.core.dispatcher.Dispatcher.compile = numba.core.compiler_lock.global_compiler_lock(compile)
+numba.core.dispatcher.Dispatcher.compile = (
+    numba.core.compiler_lock.global_compiler_lock(compile)
+)
 
 
 def propagate(self, typeinfer):
@@ -1032,22 +1044,26 @@ def propagate(self, typeinfer):
             except numba.core.errors.TypingError as e:
                 numba.core.typeinfer._logger.debug("captured error", exc_info=e)
                 new_exc = numba.core.errors.TypingError(
-                    str(e), loc=constraint.loc, highlighting=False,
+                    str(e),
+                    loc=constraint.loc,
+                    highlighting=False,
                 )
                 errors.append(numba.core.utils.chain_exception(new_exc, e))
             # Bodo change
             except bodo.utils.typing.BodoError as e:
-                if e.is_new:
+                if loc not in e.locs_in_msg:
                     # the first time we see BodoError during type inference, we
                     # put the code location in the error message, and re-raise
-                    loc = constraint.loc
                     errors.append(
                         bodo.utils.typing.BodoError(
-                            str(e.msg) + "\n" + loc.strformat() + "\n", is_new=False
+                            str(e.msg) + "\n" + loc.strformat() + "\n",
+                            locs_in_msg=e.locs_in_msg + [loc],
                         )
                     )
                 else:
-                    errors.append(bodo.utils.typing.BodoError(e.msg, is_new=False))
+                    errors.append(
+                        bodo.utils.typing.BodoError(e.msg, locs_in_msg=e.locs_in_msg)
+                    )
             except Exception as e:
                 numba.core.typeinfer._logger.debug("captured error", exc_info=e)
                 msg = (
@@ -1106,8 +1122,8 @@ def bodo_remove_dead_block(
     after return of function.
     """
     import bodo
-    from bodo.utils.utils import is_array_typ, is_expr
     from bodo.transforms.distributed_pass import saved_array_analysis
+    from bodo.utils.utils import is_array_typ, is_expr
 
     # TODO: find mutable args that are not definitely assigned instead of
     # assuming all args are live after return
@@ -1282,7 +1298,10 @@ def ParforPassStates__init__(
     self.nested_fusion_info = diagnostics.nested_fusion_info
 
     self.array_analysis = numba.parfors.array_analysis.ArrayAnalysis(
-        self.typingctx, self.func_ir, self.typemap, self.calltypes,
+        self.typingctx,
+        self.func_ir,
+        self.typemap,
+        self.calltypes,
     )
 
     # bodo change: make sure _max_label is always maximum
@@ -1302,8 +1321,7 @@ numba.parfors.parfor.ParforPassStates.__init__ = ParforPassStates__init__
 
 # replace Numba's maybe_literal to avoid using our ListLiteral in type inference
 def maybe_literal(value):
-    """Get a Literal type for the value or None.
-    """
+    """Get a Literal type for the value or None."""
     # bodo change: don't use our ListLiteral for regular constant or global lists.
     # ListLiteral is only used when Bodo forces an argument to be a literal
     if isinstance(value, list):
@@ -1533,8 +1551,9 @@ def passmanager_run(self, state):
         raise RuntimeError("Cannot run non-finalised pipeline")
 
     # Bodo change
+    from numba.core.compiler_machinery import CompilerPass, _pass_registry
+
     import bodo
-    from numba.core.compiler_machinery import _pass_registry, CompilerPass
 
     # walk the passes and run them
     for idx, (pss, pass_desc) in enumerate(self.passes):
@@ -1657,7 +1676,7 @@ def _can_reorder_stmts(stmt, next_stmt, func_ir, call_table, alias_map, arg_alia
     Check dependencies to determine if a parfor can be reordered in the IR block
     with a non-parfor statement.
     """
-    from numba.parfors.parfor import Parfor, is_assert_equiv, expand_aliases
+    from numba.parfors.parfor import Parfor, expand_aliases, is_assert_equiv
 
     # swap only parfors with non-parfors
     # don't reorder calls with side effects (e.g. file close)
@@ -1755,8 +1774,12 @@ def get_stmt_writes(stmt, func_ir):
             ("setitem_str_arr_ptr", "bodo.libs.str_arr_ext"),
             ("setna", "bodo.libs.array_kernels"),
             ("str_arr_item_to_numeric", "bodo.libs.str_arr_ext"),
-            ("str_arr_setitem_int_to_str", "bodo.libs.str_arr_ext",),
+            (
+                "str_arr_setitem_int_to_str",
+                "bodo.libs.str_arr_ext",
+            ),
             ("str_arr_setitem_NA_str", "bodo.libs.str_arr_ext"),
+            ("str_arr_set_not_na", "bodo.libs.str_arr_ext"),
             ("set_bit_to_arr", "bodo.libs.int_arr_ext"),
         ):
             writes.add(stmt.value.args[0].name)
@@ -1770,3 +1793,23 @@ if (
 ):  # pragma: no cover
     warnings.warn("numba.core.ir_utils.get_stmt_writes has changed")
 # only used locally here, no need to replace in Numba
+
+
+def patch_message(self, new_message):
+    """
+    Change the error message to the given new message.
+    """
+    # Bodo change: Bodo needs access to updated message (which is different
+    # to str(exception) which could also include source code location) in
+    # some cases like bodo/utils/typing.py::get_udf_error_msg
+    self.msg = new_message
+    self.args = (new_message,) + self.args[1:]
+
+
+lines = inspect.getsource(numba.core.errors.NumbaError.patch_message)
+if (
+    hashlib.sha256(lines.encode()).hexdigest()
+    != "ed189a428a7305837e76573596d767b6e840e99f75c05af6941192e0214fa899"
+):  # pragma: no cover
+    warnings.warn("numba.core.errors.NumbaError.patch_message has changed")
+numba.core.errors.NumbaError.patch_message = patch_message

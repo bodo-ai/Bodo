@@ -3,21 +3,21 @@
 Utility functions for conversion of data such as list to array.
 Need to be inlined for better optimization.
 """
-import pandas as pd
-import numpy as np
 import numba
+import numpy as np
+import pandas as pd
 from numba.core import types
-from bodo.libs.decimal_arr_ext import Decimal128Type, DecimalArrayType
 from numba.extending import overload
+
 import bodo
+from bodo.libs.decimal_arr_ext import Decimal128Type, DecimalArrayType
 from bodo.utils.typing import (
-    is_overload_none,
-    is_overload_true,
     BodoError,
     get_overload_const_str,
     is_overload_constant_str,
+    is_overload_none,
+    is_overload_true,
 )
-
 
 NS_DTYPE = np.dtype("M8[ns]")  # similar pandas/_libs/tslibs/conversion.pyx
 TD_DTYPE = np.dtype("m8[ns]")
@@ -38,13 +38,13 @@ def overload_coerce_to_ndarray(
     """
     Coerces data to ndarray. Data should be numeric.
     """
-    from bodo.hiframes.pd_series_ext import SeriesType
     from bodo.hiframes.pd_index_ext import (
-        RangeIndexType,
-        NumericIndexType,
         DatetimeIndexType,
+        NumericIndexType,
+        RangeIndexType,
         TimedeltaIndexType,
     )
+    from bodo.hiframes.pd_series_ext import SeriesType
 
     # TODO: handle NAs?
     if isinstance(data, bodo.libs.int_arr_ext.IntegerArrayType):
@@ -198,6 +198,7 @@ def overload_coerce_to_ndarray(
 
     # convert scalar to ndarray
     # TODO: make sure scalar is a Numpy dtype
+
     if not is_overload_none(scalar_to_arr_len):
 
         if isinstance(data, Decimal128Type):
@@ -218,6 +219,25 @@ def overload_coerce_to_ndarray(
 
             return impl_ts
 
+        if data == bodo.hiframes.datetime_datetime_ext.datetime_datetime_type:
+            dt64_dtype = np.dtype("datetime64[ns]")
+
+            def impl_ts(
+                data,
+                error_on_nonarray=True,
+                use_nullable_array=None,
+                scalar_to_arr_len=None,
+            ):  # pragma: no cover
+                n = scalar_to_arr_len
+                A = np.empty(n, dt64_dtype)
+                v = bodo.hiframes.pd_timestamp_ext.datetime_datetime_to_dt64(data)
+                v_ret = bodo.hiframes.pd_timestamp_ext.integer_to_dt64(v)
+                for i in numba.parfors.parfor.internal_prange(n):
+                    A[i] = v_ret
+                return A
+
+            return impl_ts
+
         if data == bodo.hiframes.datetime_timedelta_ext.datetime_timedelta_type:
             timedelta64_dtype = np.dtype("timedelta64[ns]")
 
@@ -234,25 +254,6 @@ def overload_coerce_to_ndarray(
                 )
                 for i in numba.parfors.parfor.internal_prange(n):
                     A[i] = td64
-                return A
-
-            return impl_ts
-
-        if data == bodo.hiframes.datetime_datetime_ext.datetime_datetime_type:
-            dt64_dtype = np.dtype("datetime64[ns]")
-
-            def impl_ts(
-                data,
-                error_on_nonarray=True,
-                use_nullable_array=None,
-                scalar_to_arr_len=None,
-            ):  # pragma: no cover
-                n = scalar_to_arr_len
-                A = np.empty(n, dt64_dtype)
-                v = bodo.hiframes.pd_timestamp_ext.datetime_datetime_to_dt64(data)
-                v_ret = bodo.hiframes.pd_timestamp_ext.integer_to_dt64(v)
-                for i in numba.parfors.parfor.internal_prange(n):
-                    A[i] = v_ret
                 return A
 
             return impl_ts
@@ -293,6 +294,42 @@ def overload_coerce_to_ndarray(
             return impl_ts
 
         dtype = types.unliteral(data)
+
+        if not is_overload_none(use_nullable_array) and isinstance(
+            dtype, types.Integer
+        ):
+
+            def impl_null_integer(
+                data,
+                error_on_nonarray=True,
+                use_nullable_array=None,
+                scalar_to_arr_len=None,
+            ):  # pragma: no cover
+                numba.parfors.parfor.init_prange()
+                n = scalar_to_arr_len
+                out_arr = bodo.libs.int_arr_ext.alloc_int_array(n, dtype)
+                for i in numba.parfors.parfor.internal_prange(n):
+                    out_arr[i] = data
+                return out_arr
+
+            return impl_null_integer
+
+        if not is_overload_none(use_nullable_array) and dtype == types.bool_:
+
+            def impl_null_bool(
+                data,
+                error_on_nonarray=True,
+                use_nullable_array=None,
+                scalar_to_arr_len=None,
+            ):  # pragma: no cover
+                numba.parfors.parfor.init_prange()
+                n = scalar_to_arr_len
+                out_arr = bodo.libs.bool_arr_ext.alloc_bool_array(n)
+                for i in numba.parfors.parfor.internal_prange(n):
+                    out_arr[i] = data
+                return out_arr
+
+            return impl_null_bool
 
         def impl_num(
             data,
@@ -335,8 +372,8 @@ def overload_coerce_to_array(
     use_nullable_array=True returns nullable boolean/int arrays instead of Numpy arrays.
     """
     # TODO: support other arrays like list(str), datetime.date ...
-    from bodo.hiframes.pd_series_ext import is_str_series_typ
     from bodo.hiframes.pd_index_ext import StringIndexType
+    from bodo.hiframes.pd_series_ext import is_str_series_typ
 
     # string series
     if is_str_series_typ(data):
@@ -373,12 +410,16 @@ def overload_coerce_to_array(
             list(data)
         )  # pragma: no cover
 
-    if data in (
-        bodo.libs.bool_arr_ext.boolean_array,
-        bodo.hiframes.datetime_date_ext.datetime_date_array_type,
-        bodo.hiframes.datetime_timedelta_ext.datetime_timedelta_array_type,
-        bodo.hiframes.split_impl.string_array_split_view_type,
-    ) or isinstance(data, (bodo.libs.int_arr_ext.IntegerArrayType, DecimalArrayType)):
+    if (
+        data
+        in (
+            bodo.libs.bool_arr_ext.boolean_array,
+            bodo.hiframes.datetime_date_ext.datetime_date_array_type,
+            bodo.hiframes.datetime_timedelta_ext.datetime_timedelta_array_type,
+            bodo.hiframes.split_impl.string_array_split_view_type,
+        )
+        or isinstance(data, (bodo.libs.int_arr_ext.IntegerArrayType, DecimalArrayType))
+    ):
         return (
             lambda data, error_on_nonarray=True, use_nullable_array=None, scalar_to_arr_len=None: data
         )  # pragma: no cover
@@ -416,8 +457,7 @@ def fix_arr_dtype(data, new_dtype, copy=None):  # pragma: no cover
 
 @overload(fix_arr_dtype, no_unliteral=True)
 def overload_fix_arr_dtype(data, new_dtype, copy=None):
-    """convert data to new_dtype, copy if copy parameter is not None
-    """
+    """convert data to new_dtype, copy if copy parameter is not None"""
     # TODO: support copy=True and copy=False when literals are passed reliably
     do_copy = not is_overload_none(copy)
 
@@ -433,8 +473,10 @@ def overload_fix_arr_dtype(data, new_dtype, copy=None):
         def impl_cat_dtype(data, new_dtype, copy=None):  # pragma: no cover
             n = len(data)
             numba.parfors.parfor.init_prange()
-            label_dict = bodo.hiframes.pd_categorical_ext.get_label_dict_from_categories(
-                new_dtype.categories
+            label_dict = (
+                bodo.hiframes.pd_categorical_ext.get_label_dict_from_categories(
+                    new_dtype.categories
+                )
             )
             codes = np.empty(n, int_dtype)
             for i in numba.parfors.parfor.internal_prange(n):
@@ -522,8 +564,7 @@ def dtype_to_array_type(dtype):
 
 @overload(dtype_to_array_type)
 def overload_dtype_to_array_type(dtype):
-    """parse dtype and return corresponding array type TypeRef
-    """
+    """parse dtype and return corresponding array type TypeRef"""
     arr_type = bodo.hiframes.pd_series_ext._get_series_array_type(
         bodo.utils.typing.parse_dtype(dtype)
     )
@@ -569,8 +610,7 @@ def convert_to_dt64ns(data):  # pragma: no cover
 
 @overload(convert_to_dt64ns, no_unliteral=True)
 def overload_convert_to_dt64ns(data):
-    """Converts data formats like int64 and arrays of strings to dt64ns
-    """
+    """Converts data formats like int64 and arrays of strings to dt64ns"""
     # see pd.core.arrays.datetimes.sequence_to_dt64ns for constructor types
     # TODO: support datetime.date, datetime.datetime
     # TODO: support dayfirst, yearfirst, tz
@@ -593,8 +633,7 @@ def convert_to_td64ns(data):  # pragma: no cover
 
 @overload(convert_to_td64ns, no_unliteral=True)
 def overload_convert_to_td64ns(data):
-    """Converts data formats like int64 to timedelta64ns
-    """
+    """Converts data formats like int64 to timedelta64ns"""
     # TODO: array of strings
     # see pd.core.arrays.timedeltas.sequence_to_td64ns for constructor types
     # TODO: support datetime.timedelta
@@ -621,11 +660,11 @@ def overload_convert_to_index(data, name=None):
     convert data to Index object if necessary.
     """
     from bodo.hiframes.pd_index_ext import (
-        RangeIndexType,
-        NumericIndexType,
         DatetimeIndexType,
-        TimedeltaIndexType,
+        NumericIndexType,
+        RangeIndexType,
         StringIndexType,
+        TimedeltaIndexType,
     )
 
     # already Index
@@ -725,14 +764,13 @@ def extract_name_if_none(data, name):  # pragma: no cover
 
 @overload(extract_name_if_none, no_unliteral=True)
 def overload_extract_name_if_none(data, name):
-    """Extract name if `data` is has name (Series/Index) and `name` is None
-    """
+    """Extract name if `data` is has name (Series/Index) and `name` is None"""
     from bodo.hiframes.pd_index_ext import (
-        RangeIndexType,
-        NumericIndexType,
         DatetimeIndexType,
-        TimedeltaIndexType,
+        NumericIndexType,
         PeriodIndexType,
+        RangeIndexType,
+        TimedeltaIndexType,
     )
     from bodo.hiframes.pd_series_ext import SeriesType
 
@@ -757,8 +795,7 @@ def extract_index_if_none(data, index):  # pragma: no cover
 
 @overload(extract_index_if_none, no_unliteral=True)
 def overload_extract_index_if_none(data, index):
-    """Extract index if `data` is Series and `index` is None
-    """
+    """Extract index if `data` is Series and `index` is None"""
     from bodo.hiframes.pd_series_ext import SeriesType
 
     if not is_overload_none(index):
@@ -778,11 +815,12 @@ def box_if_dt64(val):  # pragma: no cover
 
 @overload(box_if_dt64, no_unliteral=True)
 def overload_box_if_dt64(val):
-    """If 'val' is dt64, box it to Timestamp otherwise just return 'val'
-    """
+    """If 'val' is dt64, box it to Timestamp otherwise just return 'val'"""
     if val == types.NPDatetime("ns"):
-        return lambda val: bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(
-            np.int64(val)
+        return (
+            lambda val: bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(
+                np.int64(val)
+            )
         )
 
     if val == types.NPTimedelta("ns"):
@@ -799,8 +837,7 @@ def unbox_if_timestamp(val):  # pragma: no cover
 
 @overload(unbox_if_timestamp, no_unliteral=True)
 def overload_unbox_if_timestamp(val):
-    """If 'val' is Timestamp, "unbox" it to dt64 otherwise just return 'val'
-    """
+    """If 'val' is Timestamp, "unbox" it to dt64 otherwise just return 'val'"""
     if val == bodo.hiframes.pd_timestamp_ext.pandas_timestamp_type:
         return lambda val: bodo.hiframes.pd_timestamp_ext.integer_to_dt64(val.value)
 

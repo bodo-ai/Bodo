@@ -1,11 +1,12 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 import itertools
-import pandas as pd
+
 import numpy as np
+import pandas as pd
 import pytest
 
 import bodo
-from bodo.tests.utils import check_func, _test_equal
+from bodo.tests.utils import _test_equal, check_func
 
 
 @pytest.fixture(
@@ -205,12 +206,64 @@ def test_split(test_unicode_no_nan):
 
     # TODO: more split tests similar to the ones test_hiframes
     # TODO: support and test NA
-    # TODO: support distributed
-    # check_func(test_impl, (S,))
+    check_func(test_impl, (test_unicode_no_nan,))
 
-    pd.testing.assert_series_equal(
-        bodo.jit(test_impl)(test_unicode_no_nan), test_impl(test_unicode_no_nan)
+
+# TODO: Add memory_leak_check when bugs are resolved.
+def test_split_n():
+    def test_impl(S):
+        return S.str.split(",", n=1)
+
+    S = pd.Series(
+        ["ab,cde,erfe,s,e,qrq,", "no commmas here", "Only 1 comma at the end,"] * 5
     )
+
+    # TODO: more split tests similar to the ones test_hiframes
+    # TODO: support and test NA
+    check_func(test_impl, (S,))
+
+
+# TODO: Add memory_leak_check when bugs are resolved.
+def test_split_regex():
+    def test_impl(S):
+        return S.str.split("a|b")
+
+    # Check that this will actually be interpretted as a regex
+    S = pd.Series(
+        [
+            "abababbabababba",
+            "a|ba|ba|ba|bb|aa|b",
+            "here is only an a",
+            "Only a b here",
+            "No A or B",
+        ]
+        * 5
+    )
+
+    # TODO: more split tests similar to the ones test_hiframes
+    # TODO: support and test NA
+    check_func(test_impl, (S,))
+
+
+# TODO: Add memory_leak_check when bugs are resolved.
+def test_split_no_regex():
+    def test_impl1(S):
+        # Check that . will not be viewed as a regex in splitview
+        return S.str.split(".")
+
+    def test_impl2(S, pat):
+        # Check that . will not be viewed as a regex not in splitview
+        return S.str.split(pat)
+
+    # check that . match only the . character and not any character
+    S = pd.Series(
+        ["No dots here", "...............", ",.,.,,,,.,.,.,.,.,.", "Only 1 . here"] * 5
+    )
+
+    # TODO: more split tests similar to the ones test_hiframes
+    # TODO: support and test NA
+    check_func(test_impl1, (S,))
+    check_func(test_impl2, (S, "."))
 
 
 def test_repeat(test_unicode_no_nan):

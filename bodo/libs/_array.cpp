@@ -20,6 +20,7 @@
 #include "_shuffle.h"
 
 MPI_Datatype decimal_mpi_type = MPI_DATATYPE_NULL;
+MPI_Datatype a2av_large_dtype = MPI_DATATYPE_NULL;
 
 #undef USE_ARROW_FOR_LIST_STRING
 #undef DEBUG_ARROW_ARRAY
@@ -1301,14 +1302,16 @@ PyMODINIT_FUNC PyInit_array_ext(void) {
     import_array();
 
     bodo_common_init();
-    // initalize memory alloc/tracking system in _meminfo.h
-    NRT_MemSys_init();
 
     // initialize decimal_mpi_type
     // TODO: free when program exits
     if (decimal_mpi_type == MPI_DATATYPE_NULL) {
         MPI_Type_contiguous(2, MPI_LONG_LONG_INT, &decimal_mpi_type);
         MPI_Type_commit(&decimal_mpi_type);
+    }
+    if (a2av_large_dtype == MPI_DATATYPE_NULL) {
+        MPI_Type_contiguous(A2AV_LARGE_DTYPE_SIZE, MPI_CHAR, &a2av_large_dtype);
+        MPI_Type_commit(&a2av_large_dtype);
     }
 
     groupby_init();

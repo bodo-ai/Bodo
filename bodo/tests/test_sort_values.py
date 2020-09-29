@@ -577,8 +577,7 @@ def test_sort_values_two_columns_nan(n, len_siz, memory_leak_check):
     )
 
 
-# TODO: add test_sort_values_by_index
-def test_sort_values_by_index():
+def test_sort_values_by_index(memory_leak_check):
     """Sorting with a non-trivial index"""
 
     def test_impl1(df1):
@@ -994,8 +993,9 @@ def test_inplace_sort_values_series(memory_leak_check):
         bodo.jit(impl1)(s)
 
 
-def test_random_decimal():
-    """Sorting a random decimal"""
+def test_random_decimal(memory_leak_check):
+    """Sorting a random decimal
+    """
 
     def f(df):
         return df.sort_values(by=["A"])
@@ -1006,7 +1006,7 @@ def test_random_decimal():
     check_func(f, (df1,), convert_columns_to_pandas=True)
 
 
-def test_sort_list_list():
+def test_sort_list_list(memory_leak_check):
     data = np.array(
         [
             [[[1, 2], [3]], [[2, None]]],

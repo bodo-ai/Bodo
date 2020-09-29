@@ -265,6 +265,8 @@ array_info* alloc_list_string_array(int64_t n_lists, int64_t n_strings,
 
 array_info* copy_array(array_info* arr);
 
+NRT_MemInfo* alloc_meminfo(int64_t length);
+
 /**
  * Free underlying array of array_info pointer and delete the pointer
  */

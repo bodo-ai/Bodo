@@ -2,96 +2,100 @@
 """
 Parallelizes the IR for distributed execution and inserts MPI calls.
 """
+import copy
+import math
 import operator
 import types as pytypes  # avoid confusion with numba.core.types
-import copy
 import warnings
 from collections import defaultdict
-import math
-import numpy as np
+
 import numba
+import numpy as np
 
 try:
     import sklearn
 except:
     pass
+import llvmlite.binding as ll
+import numpy as np
 from numba.core import ir, ir_utils, postproc, types
-from bodo.utils.typing import list_cumulative
 from numba.core.ir_utils import (
-    mk_unique_var,
-    replace_vars_inner,
-    find_topo_order,
+    GuardException,
+    build_definitions,
+    compile_to_numba_ir,
+    compute_cfg_from_blocks,
     dprint_func_ir,
-    remove_dead,
-    mk_alloc,
+    find_build_sequence,
+    find_callname,
+    find_const,
+    find_topo_order,
+    get_call_table,
+    get_definition,
     get_global_func_typ,
     get_name_var_table,
-    get_call_table,
     get_tuple_table,
-    remove_dels,
-    compile_to_numba_ir,
-    replace_arg_nodes,
     guard,
-    get_definition,
-    require,
-    GuardException,
-    find_callname,
-    build_definitions,
-    find_build_sequence,
-    find_const,
     is_get_setitem,
-    compute_cfg_from_blocks,
+    mk_alloc,
+    mk_unique_var,
+    remove_dead,
+    remove_dels,
     rename_labels,
+    replace_arg_nodes,
+    replace_vars_inner,
+    require,
     simplify,
 )
 from numba.parfors.parfor import (
-    get_parfor_reductions,
+    Parfor,
+    _lower_parfor_sequential_block,
     get_parfor_params,
-    wrap_parfor_blocks,
+    get_parfor_reductions,
     unwrap_parfor_blocks,
+    wrap_parfor_blocks,
 )
-from numba.parfors.parfor import Parfor, _lower_parfor_sequential_block
-import numpy as np
 
 import bodo
+import bodo.utils.utils
+from bodo.hiframes.pd_dataframe_ext import DataFrameType
+from bodo.io import csv_cpp
 from bodo.io.h5_api import h5file_type, h5group_type
-from bodo.libs.str_ext import string_type, unicode_to_utf8_and_len, unicode_to_utf8
+from bodo.libs.distributed_api import Reduce_Type
 from bodo.libs.str_arr_ext import string_array_type
+from bodo.libs.str_ext import (
+    string_type,
+    unicode_to_utf8,
+    unicode_to_utf8_and_len,
+)
 from bodo.transforms.distributed_analysis import (
-    Distribution,
     DistributedAnalysis,
+    Distribution,
     _get_array_accesses,
     get_reduce_op,
 )
-
-import bodo.utils.utils
-from bodo.utils.typing import BodoError, BooleanLiteral
 from bodo.utils.transform import (
+    ReplaceFunc,
     compile_func_single_block,
     get_call_expr_arg,
-    replace_func,
-    ReplaceFunc,
     get_const_value_inner,
+    replace_func,
 )
+from bodo.utils.typing import BodoError, BooleanLiteral, list_cumulative
 from bodo.utils.utils import (
-    is_alloc_callname,
-    is_whole_slice,
-    is_slice_equiv_arr,
-    get_slice_step,
-    is_np_array_typ,
-    find_build_tuple,
     debug_prints,
+    find_build_tuple,
     gen_getitem,
-    is_call,
-    is_assign,
-    is_expr,
-    is_call_assign,
     get_getsetitem_index_var,
+    get_slice_step,
+    is_alloc_callname,
+    is_assign,
+    is_call,
+    is_call_assign,
+    is_expr,
+    is_np_array_typ,
+    is_slice_equiv_arr,
+    is_whole_slice,
 )
-from bodo.libs.distributed_api import Reduce_Type
-from bodo.hiframes.pd_dataframe_ext import DataFrameType
-import llvmlite.binding as ll
-from bodo.io import csv_cpp
 
 ll.add_symbol("csv_output_is_dir", csv_cpp.csv_output_is_dir)
 
@@ -728,6 +732,7 @@ class DistributedPass:
                 ),
                 ("str_arr_setitem_int_to_str", "bodo.libs.str_arr_ext"),
                 ("str_arr_setitem_NA_str", "bodo.libs.str_arr_ext"),
+                ("str_arr_set_not_na", "bodo.libs.str_arr_ext"),
             )
             and self._dist_arr_needs_adjust(rhs.args[0].name, rhs.args[1].name)
         ):
@@ -1968,8 +1973,7 @@ class DistributedPass:
         return nodes
 
     def _run_getsetitem(self, arr, index_var, node, full_node, equiv_set, avail_vars):
-        """Transform distributed getitem/setitem operations
-        """
+        """Transform distributed getitem/setitem operations"""
         out = [full_node]
 
         # no need for transformation for getitem/setitem of distributed List/Dict
@@ -2042,8 +2046,7 @@ class DistributedPass:
     def _run_dist_getitem(
         self, node, full_node, arr, index_var, equiv_set, avail_vars, out
     ):
-        """Transform distributed getitem
-        """
+        """Transform distributed getitem"""
         full_index_var = index_var
         is_multi_dim = False
         lhs = full_node.target
@@ -2067,7 +2070,11 @@ class DistributedPass:
         # strided whole slice
         # e.g. A = X[::2,5]
         elif guard(
-            is_whole_slice, self.typemap, self.func_ir, index_var, accept_stride=True,
+            is_whole_slice,
+            self.typemap,
+            self.func_ir,
+            index_var,
+            accept_stride=True,
         ) or guard(
             is_slice_equiv_arr,
             arr,
@@ -2100,12 +2107,18 @@ class DistributedPass:
                 # gen index with first dimension as full slice, other dimensions as
                 # full getitem index
                 nodes += compile_func_single_block(
-                    lambda ind: (slice(None),) + ind[1:], [full_index_var], None, self,
+                    lambda ind: (slice(None),) + ind[1:],
+                    [full_index_var],
+                    None,
+                    self,
                 )
                 other_ind = nodes[-1].target
                 return nodes + compile_func_single_block(
                     lambda arr, slice_index, start, tot_len, other_ind: bodo.libs.distributed_api.slice_getitem(
-                        operator.getitem(arr, other_ind), slice_index, start, tot_len,
+                        operator.getitem(arr, other_ind),
+                        slice_index,
+                        start,
+                        tot_len,
                     ),
                     [in_arr, index_var, start_var, size_var, other_ind],
                     lhs,
@@ -2114,7 +2127,10 @@ class DistributedPass:
                 )
             return nodes + compile_func_single_block(
                 lambda arr, slice_index, start, tot_len: bodo.libs.distributed_api.slice_getitem(
-                    arr, slice_index, start, tot_len,
+                    arr,
+                    slice_index,
+                    start,
+                    tot_len,
                 ),
                 [in_arr, index_var, start_var, size_var],
                 lhs,
@@ -2143,8 +2159,7 @@ class DistributedPass:
         return out
 
     def _run_dist_setitem(self, node, arr, index_var, equiv_set, avail_vars, out):
-        """Transform distributed setitem
-        """
+        """Transform distributed setitem"""
         is_multi_dim = False
         # we only consider 1st dimension for multi-dim arrays
         inds = guard(find_build_tuple, self.func_ir, index_var)
@@ -2883,6 +2898,7 @@ class DistributedPass:
                 ("inplace_eq", "bodo.libs.str_arr_ext"),
                 ("str_arr_setitem_int_to_str", "bodo.libs.str_arr_ext"),
                 ("str_arr_setitem_NA_str", "bodo.libs.str_arr_ext"),
+                ("str_arr_set_not_na", "bodo.libs.str_arr_ext"),
                 ("get_split_view_index", "bodo.hiframes.split_impl"),
                 ("get_bit_bitmap_arr", "bodo.libs.int_arr_ext"),
                 ("set_bit_to_arr", "bodo.libs.int_arr_ext"),

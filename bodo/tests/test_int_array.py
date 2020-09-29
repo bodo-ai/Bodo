@@ -1,20 +1,21 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 import operator
-import pandas as pd
-import numpy as np
-import pytest
 import re
 
 import numba
+import numpy as np
+import pandas as pd
+import pytest
+
 import bodo
 from bodo.tests.utils import (
-    count_array_REPs,
-    count_parfor_REPs,
-    count_parfor_OneDs,
+    check_func,
     count_array_OneDs,
+    count_array_REPs,
+    count_parfor_OneDs,
+    count_parfor_REPs,
     dist_IR_contains,
     get_start_end,
-    check_func,
 )
 
 
@@ -74,6 +75,13 @@ def get_random_integerarray(tot_size):
 )
 def int_arr_value(request):
     return request.param
+
+
+def test_np_repeat(int_arr_value, memory_leak_check):
+    def impl(arr):
+        return np.repeat(arr, 2)
+
+    check_func(impl, (int_arr_value,), dist_test=False)
 
 
 def test_max(memory_leak_check):
@@ -579,5 +587,6 @@ def test_unique(int_arr_value, memory_leak_check):
     # only sequential check since not directly parallelized
     bodo_func = bodo.jit(test_impl)
     pd.util.testing.assert_extension_array_equal(
-        bodo_func(int_arr_value), test_impl(int_arr_value)
+        bodo_func(int_arr_value),
+        test_impl(int_arr_value),
     )

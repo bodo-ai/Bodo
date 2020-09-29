@@ -54,20 +54,18 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
 table_info* drop_duplicates_table(table_info* in_table, bool is_parallel,
                                   int64_t num_keys, int64_t keep);
 
-
 /** This function is the function for the dropping of duplicated keys:
  * ---only the keys are returned
  * ---non-null entries are removed from the output.
  *
- * @param in_table : the input table
- * @param num_keys: the number of keys used for the computation
- * @param is_parallel: the boolean specifying if the computation is parallel or
- * not.
+ * @param in_table     : the input table
+ * @param num_keys     : the number of keys used for the computation
+ * @param is_parallel  : the boolean specifying if the computation is parallel
+ * or not.
  * @return the table in output
  */
-table_info* drop_duplicates_nonnull_keys(table_info* in_table, int64_t num_keys, bool is_parallel);
-
-
+table_info* drop_duplicates_nonnull_keys(table_info* in_table, int64_t num_keys,
+                                         bool is_parallel);
 
 /** This function is the function for the sampling of rows in the dataframe
  *  This code uses
@@ -78,6 +76,7 @@ table_info* drop_duplicates_nonnull_keys(table_info* in_table, int64_t num_keys,
  * @param parallel: if true the array is distributed, if false it is replicated
  * @return the sampled entries in the table (in a replicated state).
  */
-table_info* sample_table(table_info* in_table, int64_t n, double frac, bool replace, bool parallel);
+table_info* sample_table(table_info* in_table, int64_t n, double frac,
+                         bool replace, bool parallel);
 
-#endif // _ARRAY_OPERATIONS_H_INCLUDED
+#endif  // _ARRAY_OPERATIONS_H_INCLUDED

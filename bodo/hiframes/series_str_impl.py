@@ -3,69 +3,69 @@
 Support for Series.str methods
 """
 import operator
-import numpy as np
 import re
+
 import numba
-from numba.core import types, cgutils
-from numba.extending import (
-    models,
-    register_model,
-    infer_getattr,
-    overload,
-    overload_method,
-    make_attribute_wrapper,
-    intrinsic,
-    overload_attribute,
-)
+import numpy as np
+from numba.core import cgutils, types
 from numba.core.typing.templates import (
-    infer_global,
     AbstractTemplate,
-    signature,
     AttributeTemplate,
     bound_function,
+    infer_global,
+    signature,
 )
+from numba.extending import (
+    infer_getattr,
+    intrinsic,
+    make_attribute_wrapper,
+    models,
+    overload,
+    overload_attribute,
+    overload_method,
+    register_model,
+)
+
 import bodo
+from bodo.hiframes.pd_index_ext import StringIndexType
 from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.hiframes.pd_timestamp_ext import (
-    pandas_timestamp_type,
     convert_datetime64_to_timestamp,
     integer_to_dt64,
+    pandas_timestamp_type,
 )
-from bodo.hiframes.pd_index_ext import StringIndexType
-from bodo.utils.typing import is_overload_false, is_overload_true
-from bodo.libs.str_ext import str_findall_count
-from bodo.libs.str_arr_ext import (
-    string_array_type,
-    pre_alloc_string_array,
-    get_utf8_size,
-)
-from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.hiframes.split_impl import (
-    string_array_split_view_type,
-    getitem_c_arr,
     get_array_ctypes_ptr,
-    get_split_view_index,
     get_split_view_data_ptr,
+    get_split_view_index,
+    getitem_c_arr,
+    string_array_split_view_type,
 )
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
+from bodo.libs.str_arr_ext import (
+    get_utf8_size,
+    pre_alloc_string_array,
+    string_array_type,
+)
+from bodo.libs.str_ext import str_findall_count
 from bodo.utils.typing import (
     BodoError,
-    raise_bodo_error,
-    is_overload_none,
+    create_unsupported_overload,
+    get_overload_const_int,
     get_overload_const_list,
-    is_overload_true,
-    is_overload_false,
-    is_overload_zero,
-    is_overload_constant_bool,
-    is_overload_constant_str,
     get_overload_const_str,
     get_overload_const_str_len,
-    is_overload_constant_int,
-    get_overload_const_int,
-    create_unsupported_overload,
-    is_overload_constant_list,
     is_iterable_type,
     is_list_like_index_type,
+    is_overload_constant_bool,
+    is_overload_constant_int,
+    is_overload_constant_list,
+    is_overload_constant_str,
+    is_overload_false,
+    is_overload_none,
+    is_overload_true,
+    is_overload_zero,
+    raise_bodo_error,
 )
 
 
@@ -212,14 +212,19 @@ def overload_str_method_split(S_str, pat=None, n=-1, expand=False):
     # TODO: support or just check n and expand arguments
     if not is_overload_none(pat):
         str_arg_check("split", "pat", pat)
-    not_supported_arg_check("split", "n", n, -1)
+    int_arg_check("split", "n", n)
     not_supported_arg_check("split", "expand", expand, False)
 
     # TODO: support distributed
     # TODO: support regex
 
-    # use split view if sep is a string of length 1
-    if isinstance(pat, types.StringLiteral) and len(pat.literal_value) == 1:
+    # use split view if sep is a string of length 1 and n == -1
+    if (
+        is_overload_constant_str(pat)
+        and len(get_overload_const_str(pat)) == 1
+        and is_overload_constant_int(n)
+        and get_overload_const_int(n) == -1
+    ):
 
         def _str_split_view_impl(
             S_str, pat=None, n=-1, expand=False
@@ -618,7 +623,9 @@ def overload_str_method_center(S_str, width, fillchar=" "):
     return impl
 
 
-@overload_method(SeriesStrMethodType, "slice_replace", inline="always", no_unliteral=True)
+@overload_method(
+    SeriesStrMethodType, "slice_replace", inline="always", no_unliteral=True
+)
 def overload_str_method_slice_replace(S_str, start=0, stop=None, repl=""):
     int_arg_check("slice_replace", "start", start)
     if not is_overload_none(stop):
@@ -656,7 +663,7 @@ def overload_str_method_slice_replace(S_str, start=0, stop=None, repl=""):
 
     return impl
 
- 
+
 @overload_method(SeriesStrMethodType, "repeat", inline="always", no_unliteral=True)
 def overload_str_method_repeat(S_str, repeats):
     if isinstance(repeats, types.Integer) or is_overload_constant_int(repeats):
@@ -689,7 +696,7 @@ def overload_str_method_repeat(S_str, repeats):
         legal_array_input = all([isinstance(val, int) for val in list_vals])
     elif is_list_like_index_type(repeats) and isinstance(repeats.dtype, types.Integer):
         legal_array_input = True
-    else: # pragma: no cover
+    else:  # pragma: no cover
         legal_array_input = False
 
     if legal_array_input:

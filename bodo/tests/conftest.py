@@ -1,12 +1,16 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
-import os
 import gc
-import pytest
-import bodo
-from numba.core.runtime import rtsys
 import glob
-import subprocess
 import json
+import os
+import subprocess
+
+import pytest
+from numba.core.runtime import rtsys
+
+import bodo
+import bodo.utils.allocation_tracking
+
 
 # similar to Pandas
 @pytest.fixture(scope="session")
@@ -48,17 +52,21 @@ def memory_leak_check():
     """
     gc.collect()
     old = rtsys.get_allocation_stats()
-    old_bodo = bodo.libs.array.get_allocation_stats()
+    old_bodo = bodo.utils.allocation_tracking.get_allocation_stats()
     yield
     gc.collect()
     new = rtsys.get_allocation_stats()
-    new_bodo = bodo.libs.array.get_allocation_stats()
-    total_alloc = (new.alloc - old.alloc) + (new_bodo.alloc - old_bodo.alloc)
-    total_free = (new.free - old.free) + (new_bodo.free - old_bodo.free)
-    total_mi_alloc = (new.mi_alloc - old.mi_alloc) + (
-        new_bodo.mi_alloc - old_bodo.mi_alloc
+    new_bodo = bodo.utils.allocation_tracking.get_allocation_stats()
+    old_stats = [old, old_bodo]
+    new_stats = [new, new_bodo]
+    total_alloc = sum([m.alloc for m in new_stats]) - sum([m.alloc for m in old_stats])
+    total_free = sum([m.free for m in new_stats]) - sum([m.free for m in old_stats])
+    total_mi_alloc = sum([m.mi_alloc for m in new_stats]) - sum(
+        [m.mi_alloc for m in old_stats]
     )
-    total_mi_free = (new.mi_free - old.mi_free) + (new_bodo.mi_free - old_bodo.mi_free)
+    total_mi_free = sum([m.mi_free for m in new_stats]) - sum(
+        [m.mi_free for m in old_stats]
+    )
     assert total_alloc == total_free
     assert total_mi_alloc == total_mi_free
 
