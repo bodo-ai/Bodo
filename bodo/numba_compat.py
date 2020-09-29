@@ -13,6 +13,9 @@ import textwrap
 import traceback
 import types as pytypes
 import warnings
+from collections import OrderedDict
+from collections.abc import Sequence
+from functools import partial, wraps
 
 import numba
 import numba.np.linalg
@@ -55,6 +58,9 @@ from numba.core.typing.templates import (
 )
 from numba.core.typing.typeof import Purpose, typeof
 from numba.core.utils import reraise
+from numba.experimental.jitclass import base as jitclass_base
+from numba.experimental.jitclass import boxing as jitclass_boxing
+from numba.experimental.jitclass import decorators as jitclass_decorators
 from numba.extending import lower_builtin
 from numba.parfors.parfor import get_expr_args
 
@@ -1813,3 +1819,245 @@ if (
 ):  # pragma: no cover
     warnings.warn("numba.core.errors.NumbaError.patch_message has changed")
 numba.core.errors.NumbaError.patch_message = patch_message
+
+
+# --------------------- jitclass support --------------------------
+
+
+def _set_init(cls):
+    """
+    Generate a wrapper for calling the constructor from pure Python.
+    Note the wrapper will only accept positional arguments.
+    """
+    import bodo
+
+    init = cls.class_type.instance_type.methods["__init__"]
+    init_sig = numba.core.utils.pysignature(init)
+    # get postitional and keyword arguments
+    # offset by one to exclude the `self` arg
+    args = jitclass_base._getargs(init_sig)[1:]
+    cls._ctor_sig = init_sig
+    ctor_source = jitclass_base._ctor_template.format(args=", ".join(args))
+    glbls = {"__numba_cls_": cls}
+    exec(ctor_source, glbls)
+    ctor = glbls["ctor"]
+    # Bodo change: replace njit with bodo.jit
+    cls._ctor = bodo.jit(ctor)
+
+
+lines = inspect.getsource(jitclass_base.JitClassType._set_init)
+if (
+    hashlib.sha256(lines.encode()).hexdigest()
+    != "a99adc9b11d4d060469f711c2433f0d64aabd515faf87b30729a0adc3471a12e"
+):  # pragma: no cover
+    warnings.warn("jitclass_base.JitClassType._set_init has changed")
+
+jitclass_base.JitClassType._set_init = _set_init
+
+
+def register_class_type(cls, spec, class_ctor, builder):
+    """
+    Internal function to create a jitclass.
+
+    Args
+    ----
+    cls: the original class object (used as the prototype)
+    spec: the structural specification contains the field types.
+    class_ctor: the numba type to represent the jitclass
+    builder: the internal jitclass builder
+    """
+    import bodo
+
+    # Normalize spec
+    if isinstance(spec, Sequence):
+        spec = OrderedDict(spec)
+    jitclass_base._validate_spec(spec)
+
+    # Fix up private attribute names
+    spec = jitclass_base._fix_up_private_attr(cls.__name__, spec)
+
+    # Copy methods from base classes
+    clsdct = {}
+    for basecls in reversed(inspect.getmro(cls)):
+        clsdct.update(basecls.__dict__)
+
+    methods, props, static_methods, others = {}, {}, {}, {}
+    for k, v in clsdct.items():
+        if isinstance(v, pytypes.FunctionType):
+            methods[k] = v
+        elif isinstance(v, property):
+            props[k] = v
+        elif isinstance(v, staticmethod):
+            static_methods[k] = v
+        else:
+            others[k] = v
+
+    # Check for name shadowing
+    shadowed = (set(methods) | set(props) | set(static_methods)) & set(spec)
+    if shadowed:
+        raise NameError("name shadowing: {0}".format(", ".join(shadowed)))
+
+    docstring = others.pop("__doc__", "")
+    jitclass_base._drop_ignored_attrs(others)
+    if others:
+        msg = "class members are not yet supported: {0}"
+        members = ", ".join(others.keys())
+        raise TypeError(msg.format(members))
+
+    for k, v in props.items():
+        if v.fdel is not None:
+            raise TypeError("deleter is not supported: {0}".format(k))
+
+    # Bodo change: replace njit with bodo.jit
+    jit_methods = {k: bodo.jit(v) for k, v in methods.items()}
+
+    jit_props = {}
+    for k, v in props.items():
+        dct = {}
+        if v.fget:
+            # Bodo change: replace njit with bodo.jit
+            dct["get"] = bodo.jit(v.fget)
+        if v.fset:
+            # Bodo change: replace njit with bodo.jit
+            dct["set"] = bodo.jit(v.fset)
+        jit_props[k] = dct
+
+    # Bodo change: replace njit with bodo.jit
+    jit_static_methods = {k: bodo.jit(v.__func__) for k, v in static_methods.items()}
+
+    # Instantiate class type
+    class_type = class_ctor(
+        cls,
+        jitclass_base.ConstructorTemplate,
+        spec,
+        jit_methods,
+        jit_props,
+        jit_static_methods,
+    )
+
+    jit_class_dct = dict(class_type=class_type, __doc__=docstring)
+    jit_class_dct.update(jit_static_methods)
+    cls = jitclass_base.JitClassType(cls.__name__, (cls,), jit_class_dct)
+
+    # Register resolution of the class object
+    typingctx = numba.core.registry.cpu_target.typing_context
+    typingctx.insert_global(cls, class_type)
+
+    # Register class
+    targetctx = numba.core.registry.cpu_target.target_context
+    builder(class_type, typingctx, targetctx).register()
+
+    return cls
+
+
+lines = inspect.getsource(jitclass_base.register_class_type)
+if (
+    hashlib.sha256(lines.encode()).hexdigest()
+    != "fb8a626bd1a548b6c905f5c281c12cf2ba431b740698de0c0f68997fa5676dea"
+):  # pragma: no cover
+    warnings.warn("jitclass_base.register_class_type has changed")
+
+
+jitclass_base.register_class_type = register_class_type
+
+
+def _generate_property(field, template, fname):
+    """
+    Generate simple function that get/set a field of the instance
+    """
+    import bodo
+
+    source = template.format(field)
+    glbls = {}
+    exec(source, glbls)
+    # Bodo change: replace njit with bodo.jit
+    return bodo.jit(glbls[fname])
+
+
+_generate_getter = partial(
+    _generate_property, template=jitclass_boxing._getter_code_template, fname="accessor"
+)
+_generate_setter = partial(
+    _generate_property, template=jitclass_boxing._setter_code_template, fname="mutator"
+)
+
+
+lines = inspect.getsource(jitclass_boxing._generate_property)
+if (
+    hashlib.sha256(lines.encode()).hexdigest()
+    != "8282efeccc3ed07b48cd992b0502be8e2e4b8fd903d753bdac2ea8e5a7d41c6c"
+):  # pragma: no cover
+    warnings.warn("jitclass_boxing._generate_property has changed")
+
+
+jitclass_boxing._generate_property = _generate_property
+jitclass_boxing._generate_getter = _generate_getter
+jitclass_boxing._generate_setter = _generate_setter
+
+
+def _generate_method(name, func):
+    """
+    Generate a wrapper for calling a method.  Note the wrapper will only
+    accept positional arguments.
+    """
+    import bodo
+
+    source = jitclass_boxing._method_code_template.format(method=name)
+    glbls = {}
+    exec(source, glbls)
+    # Bodo change: replace njit with bodo.jit
+    method = bodo.jit(glbls["method"])
+
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        return method(*args, **kwargs)
+
+    return wrapper
+
+
+lines = inspect.getsource(jitclass_boxing._generate_method)
+if (
+    hashlib.sha256(lines.encode()).hexdigest()
+    != "a1c18c3e6a823c5113b099cf2c76e461409704dece69b05e814055fd7b63af76"
+):  # pragma: no cover
+    warnings.warn("jitclass_boxing._generate_method has changed")
+
+
+jitclass_boxing._generate_method = _generate_method
+
+
+# redefine jitclass decorator with our own register_class_type()
+def jitclass(spec):
+    """
+    A decorator for creating a jitclass.
+
+    **arguments**:
+
+    - spec:
+        Specifies the types of each field on this class.
+        Must be a dictionary or a sequence.
+        With a dictionary, use collections.OrderedDict for stable ordering.
+        With a sequence, it must contain 2-tuples of (fieldname, fieldtype).
+
+    **returns**:
+
+    A callable that takes a class object, which will be compiled.
+    """
+
+    def wrap(cls):
+        if numba.core.config.DISABLE_JIT:
+            return cls
+        else:
+            return register_class_type(
+                cls, spec, types.ClassType, jitclass_base.ClassBuilder
+            )
+
+    return wrap
+
+
+lines = inspect.getsource(jitclass_decorators.jitclass)
+if (
+    hashlib.sha256(lines.encode()).hexdigest()
+    != "6c08a057e8b03754d713e55736b354323ad3816fbdb41767882e064012e2c0ab"
+):  # pragma: no cover
+    warnings.warn("jitclass_decorators.jitclass has changed")
