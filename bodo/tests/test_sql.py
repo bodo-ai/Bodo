@@ -13,7 +13,7 @@ import numba
 import bodo
 from bodo.tests.utils import check_func, get_start_end
 
-sql_user_pass_and_hostname = "admin:some_pass@ec2-34-230-65-187.compute-1.amazonaws.com"
+sql_user_pass_and_hostname = "user:pass@localhost"
 
 
 def test_write_sql_aws(memory_leak_check):

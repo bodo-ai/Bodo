@@ -70,6 +70,14 @@ test1.py through test9.py are used to `test Bodo code correctness <https://githu
 
 AWS instance for the SQL tests in the CI
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+There are 3 steps needed to setup the SQL testing for the CI:
+- Create an RDS instance and make it publicly accessible
+- Create a database for testing with some non trivial data. A good example of an SQL database is `https://github.com/datacharmer/test_db`
+  The data is inserted in the database via ``mysql -u admin -p < employees.sql``. The name will be ``employees`` in it.
+- Change the address of the database and the credentials used in the tests (currently setup in ``bodo/tests/test_sql.py``.
+  
+[DEPRECATED OLD SETUP] AWS instance for the SQL tests in the CI
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 In order to effectively test the SQL code in BODO, we need to have SQL test code in ``test_sql.py`` for
 the ``df.to.sql`` and ``pd.read_sql`` commands.
