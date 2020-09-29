@@ -1,0 +1,46 @@
+version: 0.2
+
+# Link to reference documentation: https://docs.aws.amazon.com/codebuild/latest/userguide/build-spec-ref.html
+
+env:
+  shell: bash
+  git-credential-helper: yes
+  variables:
+      CONDA_ENV: "BodoCodeBuild"
+      RUNTYPE: "bodo"
+      BENCHMARK_DEST: "/var/tmp/performance_benchmarks"
+      # TODO: Move entirely to benchmark script
+      NUM_PROCESSES_L: "1 2 4 8 16 32 36"
+
+phases:
+    install:
+        runtime-versions:
+            python: 3.8
+        commands:
+        - echo Entered the install phase...
+        # Load the performance repo
+        - buildscripts/aws/clone_io_performance_benchmarks.sh
+        - buildscripts/setup_conda.sh
+        - buildscripts/aws/test_installs.sh
+        
+
+    build:
+        commands:
+        - echo Entered the build phase...
+        - buildscripts/build.sh
+
+        
+    post_build:
+        commands:
+        - echo Entered the post-build phase...
+        # Add a script that calls the outer python file on all the s3 files we have
+        # we will keep the actual benchmark steps inside the benchmark file in the other repo
+        - buildscripts/aws/run_io_performance_benchmarks.sh
+
+# Specify output artifacts
+artifacts:
+    files:
+        - $BENCHMARK_DEST/results/*
+    # Unique name. Using the build number to give unique values
+    name: $RUNTYPE-benchmarks-$(date +%Y-%m-%d)-build$CODEBUILD_BUILD_NUMBER.csv
+    discard-paths: yes
