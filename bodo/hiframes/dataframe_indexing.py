@@ -3,56 +3,58 @@
 Indexing support for pd.DataFrame type.
 """
 import operator
-import pandas as pd
+
 import numpy as np
-from numba.core import types, cgutils
-from numba.extending import (
-    models,
-    register_model,
-    lower_cast,
-    infer_getattr,
-    type_callable,
-    infer,
-    overload,
-    make_attribute_wrapper,
-    intrinsic,
-    lower_builtin,
-    overload_method,
-    overload_attribute,
-)
+import pandas as pd
+from numba.core import cgutils, types
 from numba.core.typing.templates import (
-    infer_global,
     AbstractTemplate,
-    signature,
     AttributeTemplate,
     bound_function,
+    infer_global,
+    signature,
 )
+from numba.extending import (
+    infer,
+    infer_getattr,
+    intrinsic,
+    lower_builtin,
+    lower_cast,
+    make_attribute_wrapper,
+    models,
+    overload,
+    overload_attribute,
+    overload_method,
+    register_model,
+    type_callable,
+)
+
 import bodo
+from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.utils.typing import (
-    BodoWarning,
     BodoError,
-    raise_bodo_error,
-    is_overload_none,
-    is_overload_constant_bool,
-    is_overload_bool,
-    is_overload_constant_str,
-    is_overload_constant_list,
-    is_overload_true,
-    is_overload_false,
-    is_overload_zero,
-    is_overload_constant_int,
-    get_overload_const_str,
-    get_overload_const_list,
-    get_overload_const_int,
-    is_overload_bool_list,
-    get_index_names,
+    BodoWarning,
     get_index_data_arr_types,
-    raise_const_error,
-    is_overload_constant_tuple,
+    get_index_names,
+    get_overload_const_int,
+    get_overload_const_list,
+    get_overload_const_str,
     get_overload_const_tuple,
     is_list_like_index_type,
+    is_overload_bool,
+    is_overload_bool_list,
+    is_overload_constant_bool,
+    is_overload_constant_int,
+    is_overload_constant_list,
+    is_overload_constant_str,
+    is_overload_constant_tuple,
+    is_overload_false,
+    is_overload_none,
+    is_overload_true,
+    is_overload_zero,
+    raise_bodo_error,
+    raise_const_error,
 )
-from bodo.hiframes.pd_dataframe_ext import DataFrameType
 
 
 # DataFrame getitem
@@ -155,8 +157,7 @@ def df_setitem_overload(df, idx, val):
     # df["B"] = A
     # handle in typing pass since the dataframe type can change
     # TODO: better error checking here
-    bodo.transforms.typing_pass.typing_transform_required = True
-    raise Exception("DataFrame setitem: transform necessary")
+    raise_bodo_error("DataFrame setitem: transform necessary")
 
 
 ##################################  df.iloc  ##################################
@@ -201,7 +202,9 @@ def init_dataframe_iloc(typingctx, obj=None):
 
 @overload_attribute(DataFrameType, "iloc")
 def overload_series_iloc(s):
-    return lambda s: bodo.hiframes.dataframe_indexing.init_dataframe_iloc(s)
+    return lambda s: bodo.hiframes.dataframe_indexing.init_dataframe_iloc(
+        s
+    )  # pragma: no cover
 
 
 # df.iloc[] getitem
@@ -255,7 +258,7 @@ def overload_iloc_getitem(I, idx):
         col_ind = get_overload_const_int(idx.types[1])
         col_name = df.columns[col_ind]
 
-        def impl_col_ind(I, idx):
+        def impl_col_ind(I, idx):  # pragma: no cover
             df = I._obj
             index = bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)
             data = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, col_ind)
@@ -322,7 +325,9 @@ def init_dataframe_loc(typingctx, obj=None):
 
 @overload_attribute(DataFrameType, "loc")
 def overload_series_loc(s):
-    return lambda s: bodo.hiframes.dataframe_indexing.init_dataframe_loc(s)
+    return lambda s: bodo.hiframes.dataframe_indexing.init_dataframe_loc(
+        s
+    )  # pragma: no cover
 
 
 # df.loc[] getitem
@@ -362,7 +367,7 @@ def overload_loc_getitem(I, idx):
             col_name = get_overload_const_str(col_idx)
             col_ind = df.columns.index(col_name)
 
-            def impl_col_name(I, idx):
+            def impl_col_name(I, idx):  # pragma: no cover
                 df = I._obj
                 index = bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)
                 data = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, col_ind)
@@ -451,7 +456,9 @@ def init_dataframe_iat(typingctx, obj=None):
 
 @overload_attribute(DataFrameType, "iat")
 def overload_series_iat(s):
-    return lambda s: bodo.hiframes.dataframe_indexing.init_dataframe_iat(s)
+    return lambda s: bodo.hiframes.dataframe_indexing.init_dataframe_iat(
+        s
+    )  # pragma: no cover
 
 
 # df.iat[] getitem
@@ -470,7 +477,7 @@ def overload_iat_getitem(I, idx):
     ):
         col_ind = get_overload_const_int(idx.types[1])
 
-        def impl_col_ind(I, idx):
+        def impl_col_ind(I, idx):  # pragma: no cover
             df = I._obj
             data = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, col_ind)
             return data[idx[0]]
@@ -499,7 +506,7 @@ def overload_iat_setitem(I, idx, val):
     ):
         col_ind = get_overload_const_int(idx.types[1])
 
-        def impl_col_ind(I, idx, val):
+        def impl_col_ind(I, idx, val):  # pragma: no cover
             df = I._obj
             data = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, col_ind)
             data[idx[0]] = val

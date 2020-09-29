@@ -470,6 +470,17 @@ def get_const_value_inner(
     if call_name == ("set", "builtins"):
         return set(get_const_value_inner(func_ir, var_def.args[0], arg_types, typemap))
 
+    # range() call
+    if call_name == ("range", "builtins"):
+        return range(
+            get_const_value_inner(func_ir, var_def.args[0], arg_types, typemap)
+        )
+
+    # str() call
+    # NOTE: find_callname() currently sees str as np.str
+    if call_name == ("str", "numpy"):
+        return str(get_const_value_inner(func_ir, var_def.args[0], arg_types, typemap))
+
     raise GuardException("Constant value not found")
 
 

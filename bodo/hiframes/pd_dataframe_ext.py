@@ -591,7 +591,7 @@ def get_dataframe_data(df, i):
 # TODO: use separate index type instead of just storing array
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
 def get_dataframe_index(df):
-    return lambda df: _get_dataframe_index(df)
+    return lambda df: _get_dataframe_index(df)  # pragma: no cover
 
 
 def alias_ext_dummy_func(lhs_name, args, alias_map, arg_aliases):
@@ -1137,8 +1137,10 @@ def df_len_overload(df):
         return
 
     if len(df.columns) == 0:  # empty df
-        return lambda df: 0
-    return lambda df: len(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, 0))
+        return lambda df: 0  # pragma: no cover
+    return lambda df: len(
+        bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, 0)
+    )  # pragma: no cover
 
 
 # dummy lowering for filter (TODO: use proper overload and avoid this)
@@ -2691,18 +2693,18 @@ def append_overload(df, other, ignore_index=False, verify_integrity=False, sort=
     if isinstance(other, DataFrameType):
         return lambda df, other, ignore_index=False, verify_integrity=False, sort=None: pd.concat(
             (df, other), ignore_index=ignore_index, verify_integrity=verify_integrity
-        )
+        )  # pragma: no cover
 
     if isinstance(other, types.BaseTuple):
         return lambda df, other, ignore_index=False, verify_integrity=False, sort=None: pd.concat(
             (df,) + other, ignore_index=ignore_index, verify_integrity=verify_integrity
-        )
+        )  # pragma: no cover
 
     # TODO: non-homogenous build_list case
     if isinstance(other, types.List) and isinstance(other.dtype, DataFrameType):
         return lambda df, other, ignore_index=False, verify_integrity=False, sort=None: pd.concat(
             [df] + other, ignore_index=ignore_index, verify_integrity=verify_integrity
-        )
+        )  # pragma: no cover
 
     raise BodoError(
         "invalid df.append() input. Only dataframe and list/tuple of dataframes supported"
