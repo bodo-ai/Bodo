@@ -30,6 +30,7 @@
 #include <vector>
 #include "../libs/_bodo_common.h"
 #include "../libs/_distributed.h"
+#include "../libs/_shuffle.h"
 #include "_bodo_file_reader.h"
 #include "_fs_io.h"
 #include "arrow/filesystem/localfs.h"
@@ -1186,21 +1187,21 @@ void balance_rows(MemReader *reader) {
 
     // by default don't send or receive anything. this is changed below as
     // needed
-    std::vector<int> sendcounts(num_ranks, 0);
-    std::vector<int> recvcounts(num_ranks, 0);
-    std::vector<int> sdispls(num_ranks, 0);
-    std::vector<int> rdispls(num_ranks, 0);
+    std::vector<int64_t> sendcounts(num_ranks, 0);
+    std::vector<int64_t> recvcounts(num_ranks, 0);
+    std::vector<int64_t> sdispls(num_ranks, 0);
+    std::vector<int64_t> rdispls(num_ranks, 0);
 
     // calc send counts
     std::vector<std::pair<int, int64_t>>
         to_send;  // vector of (rank, nrows)  meaning send nrows to rank
     calc_row_transfer(num_rows_ranks, total_rows, to_send);
-    int cur_offset = 0;
+    int64_t cur_offset = 0;
     int64_t cur_row = 0;
     for (auto rank_rows : to_send) {
         int rank = rank_rows.first;
         int64_t rows = rank_rows.second;
-        int num_bytes = 0;
+        int64_t num_bytes = 0;
         for (int i = cur_row; i < cur_row + rows; i++)
             num_bytes += reader->row_offsets[i + 1] - reader->row_offsets[i];
         sendcounts[rank] = num_bytes;
@@ -1210,8 +1211,8 @@ void balance_rows(MemReader *reader) {
     }
 
     // get recv count
-    MPI_Alltoall(sendcounts.data(), 1, MPI_INT, recvcounts.data(), 1, MPI_INT,
-                 MPI_COMM_WORLD);
+    MPI_Alltoall(sendcounts.data(), 1, MPI_INT64_T, recvcounts.data(), 1,
+                 MPI_INT64_T, MPI_COMM_WORLD);
 
     // have to receive rows from other processes
     int64_t total_recv_size = 0;
@@ -1223,9 +1224,9 @@ void balance_rows(MemReader *reader) {
     }
     std::vector<char> recvbuf(total_recv_size);
     char *sendbuf = reader->data.data() + reader->start;
-    MPI_Alltoallv(sendbuf, sendcounts.data(), sdispls.data(), MPI_CHAR,
-                  recvbuf.data(), recvcounts.data(), rdispls.data(), MPI_CHAR,
-                  MPI_COMM_WORLD);
+
+    bodo_alltoallv(sendbuf, sendcounts, sdispls, MPI_CHAR, recvbuf.data(),
+                   recvcounts, rdispls, MPI_CHAR, MPI_COMM_WORLD);
 
     reader->set_data(recvbuf);  // mem reader takes ownership of the buffer
 }

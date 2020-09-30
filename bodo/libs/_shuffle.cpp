@@ -21,6 +21,7 @@ void bodo_alltoallv(const void* sendbuf,
                     const std::vector<int64_t>& recv_counts,
                     const std::vector<int64_t>& recv_disp,
                     MPI_Datatype recvtype, MPI_Comm comm) {
+    const int A2AV_LARGE_DTYPE_SIZE = 1024;
     int send_typ_size;
     int recv_typ_size;
     int n_pes;
@@ -67,6 +68,9 @@ void bodo_alltoallv(const void* sendbuf,
         const int TAG = 11;  // arbitrary
         int rank;
         MPI_Comm_rank(comm, &rank);
+        MPI_Datatype large_dtype;
+        MPI_Type_contiguous(A2AV_LARGE_DTYPE_SIZE, MPI_CHAR, &large_dtype);
+        MPI_Type_commit(&large_dtype);
         for (int i = 0; i < n_pes; i++) {
             int dest = (rank + i + n_pes) % n_pes;
             int src = (rank - i + n_pes) % n_pes;
@@ -76,8 +80,8 @@ void bodo_alltoallv(const void* sendbuf,
                 send_counts[dest] * send_typ_size / A2AV_LARGE_DTYPE_SIZE;
             int recv_count =
                 recv_counts[src] * recv_typ_size / A2AV_LARGE_DTYPE_SIZE;
-            MPI_Sendrecv(send_ptr, send_count, a2av_large_dtype, dest, TAG, recv_ptr,
-                         recv_count, a2av_large_dtype, src, TAG, MPI_COMM_WORLD,
+            MPI_Sendrecv(send_ptr, send_count, large_dtype, dest, TAG, recv_ptr,
+                         recv_count, large_dtype, src, TAG, MPI_COMM_WORLD,
                          MPI_STATUS_IGNORE);
             // send leftover
             MPI_Sendrecv(
@@ -88,6 +92,7 @@ void bodo_alltoallv(const void* sendbuf,
                 recv_counts[src] * recv_typ_size % A2AV_LARGE_DTYPE_SIZE,
                 MPI_CHAR, src, TAG + 1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
         }
+        MPI_Type_free(&large_dtype);
     }
 }
 
@@ -277,7 +282,8 @@ static void fill_send_array_inner_decimal(uint8_t* send_buff, uint8_t* data,
  */
 static void fill_send_array_string_inner(
     char* send_data_buff, uint32_t* send_length_buff, char* arr_data,
-    uint32_t* arr_offsets, uint32_t* hashes, std::vector<int64_t> const& send_disp,
+    uint32_t* arr_offsets, uint32_t* hashes,
+    std::vector<int64_t> const& send_disp,
     std::vector<int64_t> const& send_disp_sub, int n_pes, size_t n_rows) {
     std::vector<int64_t> tmp_offset(send_disp);
     std::vector<int64_t> tmp_offset_sub(send_disp_sub);
@@ -316,7 +322,8 @@ static void fill_send_array_list_string_inner(
     char* send_data_buff, uint32_t* send_length_data,
     uint32_t* send_length_index, char* arr_data, uint32_t* arr_data_offsets,
     uint32_t* arr_index_offsets, uint32_t* hashes,
-    std::vector<int64_t> const& send_disp, std::vector<int64_t> const& send_disp_sub,
+    std::vector<int64_t> const& send_disp,
+    std::vector<int64_t> const& send_disp_sub,
     std::vector<int64_t> const& send_disp_sub_sub, int n_pes, size_t n_rows) {
     std::vector<int64_t> tmp_offset(send_disp);
     std::vector<int64_t> tmp_offset_sub(send_disp_sub);
@@ -1056,8 +1063,10 @@ array_info* reverse_shuffle_string_array(array_info* in_arr, uint32_t* hashes,
             in_offset[comm_info.recv_disp[i] + comm_info.recv_count[i]] -
             in_offset[comm_info.recv_disp[i]];
     std::vector<int64_t> send_count_sub(n_pes), send_disp_sub(n_pes);
+  
     MPI_Alltoall(recv_count_sub.data(), 1, MPI_INT64_T, send_count_sub.data(), 1,
                  MPI_INT64_T, MPI_COMM_WORLD);
+
     calc_disp(send_disp_sub, send_count_sub);
     calc_disp(recv_disp_sub, recv_count_sub);
     // 2: allocating the array

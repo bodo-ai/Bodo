@@ -149,6 +149,7 @@ int8_t csv_output_is_dir(char *_path_name) {
 }
 
 PyMODINIT_FUNC PyInit_csv_cpp(void) {
+    bodo_common_init();
     PyObject *m;
     static struct PyModuleDef moduledef = {
         PyModuleDef_HEAD_INIT, "csv_cpp", "No docs", -1, NULL,

@@ -1,10 +1,12 @@
-from setuptools import setup, Extension, find_packages
-import platform, os, time
+import os
+import platform
+import time
 
 # Note we don't import Numpy at the toplevel, since setup.py
 # should be able to run without Numpy for pip to discover the
 # build dependencies
 import numpy.distutils.misc_util as np_misc
+from setuptools import Extension, find_packages, setup
 
 import versioneer
 
@@ -88,7 +90,10 @@ if not is_win:
 
 ext_io = Extension(
     name="bodo.libs.hio",
-    sources=["bodo/io/_io.cpp", "bodo/io/_fs_io.cpp",],
+    sources=[
+        "bodo/io/_io.cpp",
+        "bodo/io/_fs_io.cpp",
+    ],
     depends=[
         "bodo/libs/_bodo_common.h",
         "bodo/libs/_bodo_common.cpp",
@@ -251,7 +256,10 @@ ext_arr = Extension(
 ext_dt = Extension(
     name="bodo.libs.hdatetime_ext",
     sources=["bodo/libs/_datetime_ext.cpp", "bodo/libs/_bodo_common.cpp"],
-    depends=["bodo/libs/_bodo_common.h", "bodo/libs/_bodo_common.cpp",],
+    depends=[
+        "bodo/libs/_bodo_common.h",
+        "bodo/libs/_bodo_common.cpp",
+    ],
     libraries=MPI_LIBS + np_compile_args["libraries"] + ["arrow"],
     define_macros=np_compile_args["define_macros"],
     extra_compile_args=["-std=c++11"],
@@ -302,19 +310,23 @@ ext_csv = Extension(
         "bodo/io/_fs_io.cpp",
         "bodo/io/_csv_json_reader.cpp",
         "bodo/io/_csv_json_writer.cpp",
+        "bodo/libs/_bodo_common.cpp",
+        "bodo/libs/_array_hash.cpp",
+        "bodo/libs/_shuffle.cpp",
+        "bodo/libs/_murmurhash3.cpp",
     ],
     depends=[
         "bodo/libs/_bodo_common.h",
-        "bodo/libs/_bodo_common.cpp",
         "bodo/libs/_distributed.h",
         "bodo/libs/_import_py.h",
+        "bodo/libs/_shuffle.h",
         "bodo/io/_io.h",
         "bodo/io/_fs_io.h",
         "bodo/io/_csv_json_reader.h",
         "bodo/io/_bodo_file_reader.h",
     ],
     libraries=csv_libs,
-    include_dirs=["."] + ind,
+    include_dirs=["."] + ind + extra_hash_ind,
     define_macros=[],
     extra_compile_args=eca,
     extra_link_args=ela,
@@ -328,18 +340,22 @@ ext_json = Extension(
         "bodo/io/_fs_io.cpp",
         "bodo/io/_csv_json_reader.cpp",
         "bodo/io/_csv_json_writer.cpp",
+        "bodo/libs/_bodo_common.cpp",
+        "bodo/libs/_array_hash.cpp",
+        "bodo/libs/_shuffle.cpp",
+        "bodo/libs/_murmurhash3.cpp",
     ],
     depends=[
         "bodo/libs/_bodo_common.h",
-        "bodo/libs/_bodo_common.cpp",
         "bodo/libs/_distributed.h",
         "bodo/libs/_import_py.h",
+        "bodo/libs/_shuffle.h",
         "bodo/io/_fs_io.h",
         "bodo/io/_csv_json_reader.h",
         "bodo/io/_bodo_file_reader.h",
     ],
     libraries=csv_libs,
-    include_dirs=["."] + ind,
+    include_dirs=["."] + ind + extra_hash_ind,
     define_macros=[],
     extra_compile_args=eca,
     extra_link_args=ela,
@@ -407,7 +423,13 @@ setup(
     url="https://bodo.ai",
     author="Bodo.ai",
     packages=find_packages(),
-    package_data={"bodo.tests": ["data/*", "data/*/*",], "bodo": ["pytest.ini"]},
+    package_data={
+        "bodo.tests": [
+            "data/*",
+            "data/*/*",
+        ],
+        "bodo": ["pytest.ini"],
+    },
     install_requires=["numba"],
     extras_require={"HDF5": ["h5py"], "Parquet": ["pyarrow"]},
     cmdclass=versioneer.get_cmdclass(),
