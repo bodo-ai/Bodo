@@ -59,7 +59,7 @@ If you try to run this example on docker, there is a sample of data  inside clai
 
 `original SQL code <https://github.com/Bodo-inc/claims_poc/blob/master/iPhone_Claims.sql>`_
 
-`edited SQL code for OmniSci <https://github.com/Bodo-inc/claims_poc/blob/master/tests/omnisci/get_csv.sql>`_
+`edited SQL code for OmniSci <https://github.com/Bodo-inc/claims_poc/blob/master/tests/omnisci/get_csv.sql>`_w
 
 - Don't try to run this query with OmniSci as it requires data that was not in the repo
 - But do look at it for inspirations
@@ -70,6 +70,17 @@ test1.py through test9.py are used to `test Bodo code correctness <https://githu
 
 AWS instance for the SQL tests in the CI
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+There are 3 steps needed to setup the SQL testing for the CI:
+
+- `Create an RDS instance <https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/CHAP_Tutorials.WebServerDB.CreateDBInstance.html>`_
+- Make the RDS instance publicly accessible by ticking the publicly accessible option at creation time and setting the inbound rules for the security group of the RDS's VPC to have `0.0.0.0/0` and `::/0` in the `source` field. This makes sure that the RDS accepts traffic from any IP.
+
+- Create a database for testing with some non trivial data. A good example of an SQL database is `https://github.com/datacharmer/test_db`
+  The data is inserted in the database via ``mysql -u admin -p < employees.sql``. The name will be ``employees`` in it.
+- Change the address of the database and the credentials used in the tests (currently setup in ``bodo/tests/test_sql.py``).
+  
+[DEPRECATED OLD SETUP] AWS instance for the SQL tests in the CI
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 In order to effectively test the SQL code in BODO, we need to have SQL test code in ``test_sql.py`` for
 the ``df.to.sql`` and ``pd.read_sql`` commands.
