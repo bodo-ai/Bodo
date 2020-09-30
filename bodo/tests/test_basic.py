@@ -1,24 +1,27 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
-import pandas as pd
-import numpy as np
 import itertools
-import numba
-import bodo
 import random
+
+import numba
+import numpy as np
+import pandas as pd
+import pytest
+
+import bodo
 from bodo.tests.utils import (
-    count_array_REPs,
-    count_parfor_REPs,
-    count_parfor_OneDs,
-    count_array_OneDs,
+    DeadcodeTestPipeline,
+    check_func,
     count_array_OneD_Vars,
+    count_array_OneDs,
+    count_array_REPs,
+    count_parfor_OneDs,
+    count_parfor_REPs,
     dist_IR_contains,
     get_rank,
     get_start_end,
-    DeadcodeTestPipeline,
 )
-from bodo.utils.utils import is_expr, is_assign
-import pytest
-from bodo.tests.utils import check_func
+from bodo.utils.typing import BodoError
+from bodo.utils.utils import is_assign, is_expr
 
 
 @pytest.mark.slow
@@ -126,8 +129,7 @@ def test_strided_getitem(memory_leak_check):
 
 
 def test_array_sum_axis(memory_leak_check):
-    """test array.sum() with axis argument
-    """
+    """test array.sum() with axis argument"""
 
     def test_impl1(A):
         return A.sum(0)
@@ -281,8 +283,7 @@ def test_array_reduce(memory_leak_check):
 
 
 def _check_IR_no_getitem(test_impl, args):
-    """makes sure there is no getitem/static_getitem left in the IR after optimization
-    """
+    """makes sure there is no getitem/static_getitem left in the IR after optimization"""
     bodo_func = numba.njit(pipeline_class=DeadcodeTestPipeline, parallel=True)(
         test_impl
     )
@@ -301,8 +302,7 @@ def _check_IR_no_getitem(test_impl, args):
 
 @pytest.mark.slow
 def test_trivial_slice_getitem_opt(memory_leak_check):
-    """Make sure trivial slice getitem is optimized out, e.g. B = A[:]
-    """
+    """Make sure trivial slice getitem is optimized out, e.g. B = A[:]"""
 
     def test_impl1(df):
         return df.iloc[:, 0]
@@ -316,8 +316,7 @@ def test_trivial_slice_getitem_opt(memory_leak_check):
 
 
 def _check_IR_single_label(test_impl, args):
-    """makes sure the IR has a single label
-    """
+    """makes sure the IR has a single label"""
     bodo_func = numba.njit(pipeline_class=DeadcodeTestPipeline, parallel=True)(
         test_impl
     )
@@ -332,8 +331,7 @@ g_flag = True
 
 @pytest.mark.slow
 def test_dead_branch_remove(memory_leak_check):
-    """Make sure dead branches are removed
-    """
+    """Make sure dead branches are removed"""
 
     def test_impl1():
         if g_flag:
@@ -430,8 +428,7 @@ def test_np_array(memory_leak_check):
 
 @pytest.mark.slow
 def test_np_dot_empty_vm(memory_leak_check):
-    """test for np.dot() called on empty vector and matrix (for Numba #5539)
-    """
+    """test for np.dot() called on empty vector and matrix (for Numba #5539)"""
     X = np.array([]).reshape(0, 2)
     Y = np.array([])
     nb_res = numba.njit(lambda X, Y: np.dot(Y, X))(X, Y)
@@ -441,8 +438,7 @@ def test_np_dot_empty_vm(memory_leak_check):
 
 @pytest.mark.slow
 def test_np_full(memory_leak_check):
-    """Test np.full() support (currently in Series pass)
-    """
+    """Test np.full() support (currently in Series pass)"""
 
     def impl1(shape, fill_value, dtype):
         return np.full(shape, fill_value, dtype)
@@ -613,3 +609,89 @@ def test_reversed():
         return out
 
     check_func(test_impl, ([0.1, 0.2, 0.3, 0.4],))
+
+
+def test_jitclass(memory_leak_check):
+    """test @bodo.jitclass decorator with various attribute/method cases"""
+
+    @bodo.jitclass(
+        {
+            "df": bodo.hiframes.pd_dataframe_ext.DataFrameType(
+                (bodo.int64[::1], bodo.float64[::1]),
+                bodo.hiframes.pd_index_ext.RangeIndexType(numba.core.types.none),
+                ("A", "B"),
+            )
+        },
+        distributed=["df"],
+    )
+    class MyClass:
+        def __init__(self, n):
+            self.df = pd.DataFrame({"A": np.arange(n), "B": np.ones(n)})
+
+        def sum1(self):
+            return self.df.A.sum()
+
+        @property
+        def sum_vals(self):
+            return self.df.sum().sum()
+
+    n = 21
+    # test using jitclass out of JIT context
+    c = MyClass(n)
+    res1 = np.arange(n).sum()
+    res2 = np.arange(n).sum() + np.ones(n).sum()
+    assert c.sum1() == res1
+    assert c.sum_vals == res2
+
+    # test using jitclass inside JIT context
+    @bodo.jit
+    def f1(n):
+        c = MyClass(n)
+        return c.sum1()
+
+    @bodo.jit
+    def f2(n):
+        c = MyClass(n)
+        return c.sum_vals
+
+    assert f1(n) == res1
+    assert f2(n) == res2
+
+    # test jitclass errors
+    @bodo.jitclass(
+        {
+            "df": bodo.hiframes.pd_dataframe_ext.DataFrameType(
+                (bodo.float64[::1],),
+                bodo.hiframes.pd_index_ext.RangeIndexType(numba.core.types.none),
+                ("A",),
+            )
+        },
+        distributed=["df"],
+    )
+    class MyClass1:
+        def __init__(self):
+            self.df = pd.DataFrame({"A": [1.2, 3.3]})
+
+    with pytest.raises(BodoError, match="distribution of value is not compatible with"):
+        MyClass1()
+
+    @bodo.jitclass(
+        {
+            "df": bodo.hiframes.pd_dataframe_ext.DataFrameType(
+                (bodo.float64[::1],),
+                bodo.hiframes.pd_index_ext.RangeIndexType(numba.core.types.none),
+                ("A",),
+            )
+        },
+        distributed=["df"],
+    )
+    class MyClass2:
+        def __init__(self):
+            self.df = pd.DataFrame({"A": np.ones(10)})
+
+        def f1(self):
+            return self.df.A
+
+    with pytest.raises(BodoError, match="distribution of value is not compatible with"):
+        c = MyClass2()
+        c.f1()
