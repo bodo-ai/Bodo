@@ -1971,8 +1971,8 @@ def overload_glob_glob(pathname, recursive=False):
 
 #### Support for np operations on arrays. ####
 @overload(np.repeat, no_unliteral=True)
-def np_repeat(A, repeats):  # pragma: no cover
-    if A != string_array_type:
+def np_repeat(A, repeats):
+    if A != string_array_type:  # pragma: no cover
         return
     if not isinstance(repeats, types.Integer):  # pragma: no cover
         raise BodoError("Only integer type supported for repeats in np.repeat()")

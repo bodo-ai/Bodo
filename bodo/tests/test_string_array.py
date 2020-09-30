@@ -41,6 +41,16 @@ def test_np_repeat(str_arr_value, memory_leak_check):
     check_func(impl, (str_arr_value,), dist_test=False)
 
 
+def test_np_unique(memory_leak_check):
+    def impl(arr):
+        return np.unique(arr)
+
+    # Create an array here because np.unique fails on NA in pandas
+    arr = pd.array(["AB", "", "ABC", "abcd", "ab", "AB"])
+
+    check_func(impl, (arr,), sort_output=True)
+
+
 def test_unbox(str_arr_value, memory_leak_check):
     # just unbox
     def impl(arr_arg):

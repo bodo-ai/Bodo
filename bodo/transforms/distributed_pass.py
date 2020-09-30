@@ -902,8 +902,8 @@ class DistributedPass:
         if fdef == ("unique", "bodo.libs.array_kernels") and self._is_1D_or_1D_Var_arr(
             rhs.args[0].name
         ):
-            f = lambda arr: bodo.libs.array_kernels.unique_parallel(arr)
-            return compile_func_single_block(f, rhs.args, assign.target, self)
+            self._set_last_arg_to_true(assign.value)
+            return [assign]
 
         if (
             fdef

@@ -1240,28 +1240,15 @@ def nunique_overload_parallel(A):
     sum_op = bodo.libs.distributed_api.Reduce_Type.Sum.value
 
     def nunique_par(A):  # pragma: no cover
-        uniq_A = bodo.libs.array_kernels.unique_parallel(A)
+        uniq_A = bodo.libs.array_kernels.unique(A, parallel=True)
         loc_nuniq = len(uniq_A)
         return bodo.libs.distributed_api.dist_reduce(loc_nuniq, np.int32(sum_op))
 
     return nunique_par
 
 
-def unique(A):  # pragma: no cover
+def unique(A, parallel=False):  # pragma: no cover
     return np.array([a for a in set(A)]).astype(A.dtype)
-
-
-def unique_parallel(A):  # pragma: no cover
-    return np.array([a for a in set(A)]).astype(A.dtype)
-
-
-@overload(unique, no_unliteral=True)
-def unique_overload(A):
-    # TODO: extend to other types like datetime?
-    def unique_seq(A):
-        return bodo.utils.utils.unique(A)
-
-    return unique_seq
 
 
 def cummin(A):  # pragma no cover
@@ -1314,19 +1301,19 @@ def cummax_overload(A):
     return impl
 
 
-@overload(unique_parallel, no_unliteral=True)
-def unique_overload_parallel(A):
-    def unique_par(A):  # pragma: no cover
+@overload(unique, no_unliteral=True)
+def unique_overload(A, parallel=False):
+    def unique_impl(A, parallel=False):  # pragma: no cover
         input_table = arr_info_list_to_table([array_to_info(A)])
         n_key = 1
         keep_i = 0
-        out_table = drop_duplicates_table(input_table, True, n_key, keep_i)
+        out_table = drop_duplicates_table(input_table, parallel, n_key, keep_i)
         out_arr = info_to_array(info_from_table(out_table, 0), A)
         delete_table(input_table)
         delete_table(out_table)
-        return bodo.utils.utils.unique(out_arr)
+        return out_arr
 
-    return unique_par
+    return unique_impl
 
 
 def explode(arr, index_arr):  # pragma: no cover
@@ -1662,5 +1649,18 @@ def np_repeat(A, repeats):
             else:
                 out_arr[idx : idx + repeats] = A[i]
         return out_arr
+
+    return impl
+
+
+@overload(np.unique, inline="always", no_unliteral=True)
+def np_unique(A):
+    if not bodo.utils.utils.is_array_typ(A, False) or isinstance(
+        A, types.Array
+    ):  # pragma: no cover
+        return
+
+    def impl(A):  # pragma: no cover
+        return bodo.libs.array_kernels.unique(A)
 
     return impl

@@ -1933,7 +1933,10 @@ class SeriesPass:
         return replace_func(self, impl, args)
 
     def _run_call_series(self, assign, lhs, rhs, series_var, func_name):
-        if func_name in ("count", "fillna", "sort_values"):
+        # NOTE: some operations are used in Bodo's kernels and overload inline="always"
+        # may require inlining them eventually (since lowered impl doesn't exist)
+        # see bodo/tests/test_series.py::test_series_astype_cat"[S0]"
+        if func_name in ("count", "fillna", "sort_values", "dropna", "notna", "isna"):
             rhs.args.insert(0, series_var)
             arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
             kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}

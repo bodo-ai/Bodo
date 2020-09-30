@@ -124,3 +124,16 @@ def test_np_repeat(timedelta_arr_value, memory_leak_check):
         return np.repeat(arr, 2)
 
     check_func(impl, (timedelta_arr_value,), dist_test=False)
+
+
+@pytest.mark.skip("TODO(Nick): Add support for timedelta arrays inside array_to_info")
+def test_np_unique(memory_leak_check):
+    def impl(arr):
+        return np.unique(arr)
+
+    # Create an array here because np.unique fails on NA in pandas
+    arr = np.append(
+        datetime.timedelta(days=5, seconds=4, weeks=4),
+        [datetime.timedelta(microseconds=100000001213131, hours=5)] * 5,
+    )
+    check_func(impl, (arr,), sort_output=True)

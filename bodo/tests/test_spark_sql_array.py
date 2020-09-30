@@ -111,13 +111,13 @@ def test_array_contains(dataframe_val):
     check_func(test_impl, (df,))
 
 
-@pytest.mark.skip(reason="Map operation not yet supported #1533")
+@pytest.mark.skip(reason="sort_outputs doesn't work with array elems in series #1771")
 def test_array_distinct(dataframe_val):
     def test_impl(df):
         return df.A.map(lambda x: np.unique(x))
 
     df = dataframe_val
-    check_func(test_impl, (df,))
+    check_func(test_impl, (df,), sort_output=True)
 
 
 @pytest.mark.skip(reason="Map operation not yet supported #1534")

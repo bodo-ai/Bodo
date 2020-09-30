@@ -506,7 +506,8 @@ def overload_fix_arr_dtype(data, new_dtype, copy=None):
             # make sure categories are replicated since dtype is replicated
             cats = bodo.allgatherv(cats, False)
             # sort categories to match Pandas
-            cats = pd.Series(cats).sort_values().values
+            # TODO(ehsan): refactor to avoid long compilation time (too much inlining)
+            cats = pd.Series(cats).dropna().sort_values().values
             cat_dtype = bodo.hiframes.pd_categorical_ext.init_cat_dtype(cats, False)
             return bodo.utils.conversion.fix_arr_dtype(data, cat_dtype, copy)
 

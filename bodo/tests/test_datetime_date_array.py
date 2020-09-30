@@ -98,3 +98,15 @@ def test_np_repeat(date_arr_value, memory_leak_check):
         return np.repeat(arr, 2)
 
     check_func(impl, (date_arr_value,), dist_test=False)
+
+
+def test_np_unique(memory_leak_check):
+    def impl(arr):
+        return np.unique(arr)
+
+    # Create an array here because np.unique fails on NA in pandas
+    arr = np.append(
+        pd.date_range("2017-01-03", "2017-01-17").date,
+        [datetime.date(2019, 3, 3)] * 10,
+    )
+    check_func(impl, (arr,), sort_output=True)

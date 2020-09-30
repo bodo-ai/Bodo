@@ -84,6 +84,15 @@ def test_np_repeat(int_arr_value, memory_leak_check):
     check_func(impl, (int_arr_value,), dist_test=False)
 
 
+def test_np_unique(memory_leak_check):
+    def impl(arr):
+        return np.unique(arr)
+
+    # Create an array here because np.unique fails on NA in pandas
+    arr = pd.array(np.array([1, 4, 2, 3, 10, -4, 4], np.uint8))
+    check_func(impl, (arr,), sort_output=True)
+
+
 def test_max(memory_leak_check):
     def impl(arr):
         return max(arr)

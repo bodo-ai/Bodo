@@ -1,34 +1,34 @@
 """Support sklearn.ensemble.RandomForestClassifier using object mode of Numba
 """
+import itertools
+
+import numba
 import numpy as np
 import pandas as pd
-import numba
+import sklearn.ensemble
+import sklearn.metrics
+from mpi4py import MPI
 from numba.core import types
 from numba.extending import (
-    box,
-    unbox,
-    register_model,
-    models,
     NativeValue,
+    box,
+    models,
     overload,
     overload_method,
+    register_model,
     typeof_impl,
-)
-
-from bodo.utils.typing import (
-    is_overload_constant_str,
-    get_overload_const_str,
-    is_overload_true,
-    is_overload_false,
-    is_overload_none,
+    unbox,
 )
 
 import bodo
-from bodo.libs.distributed_api import dist_reduce, Reduce_Type, get_node_portion
-from mpi4py import MPI
-import itertools
-import sklearn.ensemble
-import sklearn.metrics
+from bodo.libs.distributed_api import Reduce_Type, dist_reduce, get_node_portion
+from bodo.utils.typing import (
+    get_overload_const_str,
+    is_overload_constant_str,
+    is_overload_false,
+    is_overload_none,
+    is_overload_true,
+)
 
 
 def model_fit(m, X, y):
@@ -292,8 +292,10 @@ def precision_recall_fscore_support_helper(MCM, average):
 
 
 @numba.njit
-def precision_recall_fscore_parallel(y_true, y_pred, operation, average="binary"):  # pragma: no cover
-    labels = bodo.libs.array_kernels.unique_parallel(y_true)
+def precision_recall_fscore_parallel(
+    y_true, y_pred, operation, average="binary"
+):  # pragma: no cover
+    labels = bodo.libs.array_kernels.unique(y_true, parallel=True)
     labels = bodo.allgatherv(labels, False)
     labels = pd.Series(labels).sort_values().values
 

@@ -52,6 +52,30 @@ def test_np_repeat(decimal_arr_value, memory_leak_check):
     check_func(impl, (decimal_arr_value,), dist_test=False)
 
 
+def test_np_unique(memory_leak_check):
+    def impl(arr):
+        return np.unique(arr)
+
+    # Create an array here because np.unique fails on NA in pandas
+    arr = np.array(
+        [
+            Decimal("1.6"),
+            Decimal("-0.222"),
+            Decimal("5.1"),
+            Decimal("1111.316"),
+            Decimal("-0.2220001"),
+            Decimal("-0.2220"),
+            Decimal("1234.00046"),
+            Decimal("5.1"),
+            Decimal("-11131.0056"),
+            Decimal("0.0"),
+            Decimal("5.11"),
+            Decimal("0.00"),
+        ]
+    )
+    check_func(impl, (arr,), sort_output=True)
+
+
 def test_unbox(decimal_arr_value, memory_leak_check):
     # just unbox
     def impl(arr_arg):
