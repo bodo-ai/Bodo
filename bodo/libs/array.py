@@ -81,6 +81,7 @@ ll.add_symbol("sort_values_table", array_ext.sort_values_table)
 ll.add_symbol("sample_table", array_ext.sample_table)
 ll.add_symbol("shuffle_renormalization", array_ext.shuffle_renormalization)
 ll.add_symbol("groupby_and_aggregate", array_ext.groupby_and_aggregate)
+ll.add_symbol("pivot_groupby_and_aggregate", array_ext.pivot_groupby_and_aggregate)
 ll.add_symbol("array_isin", array_ext.array_isin)
 ll.add_symbol(
     "compute_node_partition_by_hash", array_ext.compute_node_partition_by_hash
@@ -1436,6 +1437,88 @@ def drop_duplicates_table(typingctx, table_t, parallel_t, nkey_t, keep_t):
         return builder.call(fn_tp, args)
 
     return table_type(table_t, types.boolean, types.int64, types.int64), codegen
+
+
+@intrinsic
+def pivot_groupby_and_aggregate(
+    typingctx,
+    table_t,
+    n_keys_t,
+    dispatch_table_t,
+    dispatch_info_t,
+    input_has_index,
+    ftypes,
+    func_offsets,
+    udf_n_redvars,
+    is_parallel,
+    is_crosstab,
+    skipdropna_t,
+    return_keys,
+    return_index,
+    update_cb,
+    combine_cb,
+    eval_cb,
+    udf_table_dummy_t,
+):
+    """
+    Interface to groupby_and_aggregate function in C++ library for groupby
+    offloading.
+    """
+    assert table_t == table_type
+    assert dispatch_table_t == table_type
+    assert dispatch_info_t == table_type
+    assert udf_table_dummy_t == table_type
+
+    def codegen(context, builder, sig, args):
+        fnty = lir.FunctionType(
+            lir.IntType(8).as_pointer(),
+            [
+                lir.IntType(8).as_pointer(),
+                lir.IntType(64),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(1),
+                lir.IntType(64),
+                lir.IntType(64),
+                lir.IntType(64),
+                lir.IntType(1),
+                lir.IntType(1),
+                lir.IntType(1),
+                lir.IntType(1),
+                lir.IntType(1),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+            ],
+        )
+        fn_tp = builder.module.get_or_insert_function(
+            fnty, name="pivot_groupby_and_aggregate"
+        )
+        return builder.call(fn_tp, args)
+
+    return (
+        table_type(
+            table_t,
+            types.int64,
+            table_t,
+            table_t,
+            types.boolean,
+            types.intp,
+            types.intp,
+            types.intp,
+            types.boolean,
+            types.boolean,
+            types.boolean,
+            types.boolean,
+            types.boolean,
+            types.voidptr,
+            types.voidptr,
+            types.voidptr,
+            table_t,
+        ),
+        codegen,
+    )
 
 
 @intrinsic

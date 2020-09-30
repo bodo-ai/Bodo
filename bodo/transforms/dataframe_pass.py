@@ -1377,6 +1377,7 @@ class DataFramePass:
         df_var = self._get_df_obj_select(grp_var, "groupby")
         df_type = self.typemap[df_var.name]
         out_typ = self.typemap[lhs.name]
+
         nodes = []
         if isinstance(out_typ, SeriesType) or func_name in ("agg", "aggregate"):
             in_cols = grp_typ.selection
@@ -1469,7 +1470,6 @@ class DataFramePass:
             return_key,
             lhs.loc,
         )
-
         nodes.append(agg_node)
 
         if same_index:
@@ -1567,17 +1567,23 @@ class DataFramePass:
         out_typ = self.typemap[lhs.name]
 
         nodes = []
-        in_vars = {values: self._get_dataframe_data(df_var, values, nodes)}
+        df_in_vars = {values: self._get_dataframe_data(df_var, values, nodes)}
 
-        df_col_map = {
+        df_out_vars = {
             col: ir.Var(lhs.scope, mk_unique_var(col), lhs.loc) for col in pivot_values
         }
-        for v in df_col_map.values():
+        for v in df_out_vars.values():
             self.typemap[v.name] = out_typ.data[0]
 
         pivot_arr = self._get_dataframe_data(df_var, columns, nodes)
         index_arr = self._get_dataframe_data(df_var, index, nodes)
         agg_func = get_agg_func(self.func_ir, func_name, rhs, typemap=self.typemap)
+
+        out_key_vars = []
+        out_index_var = ir.Var(lhs.scope, mk_unique_var(index), lhs.loc)
+        ind = df_type.columns.index(index)
+        self.typemap[out_index_var.name] = df_type.data[ind]
+        out_key_vars.append(out_index_var)
 
         input_has_index = False
         same_index = False
@@ -1586,9 +1592,9 @@ class DataFramePass:
             lhs.name,
             df_var.name,
             [index],
-            None,
-            df_col_map,
-            in_vars,
+            out_key_vars,
+            df_out_vars,
+            df_in_vars,
             [index_arr],
             agg_func,
             input_has_index,
@@ -1600,12 +1606,20 @@ class DataFramePass:
         )
         nodes.append(agg_node)
 
-        _init_df = _gen_init_df(out_typ.columns)
+        nodes += compile_func_single_block(
+            lambda A: bodo.utils.conversion.index_from_array(A, _index_name),
+            (out_index_var,),
+            None,
+            self,
+            extra_globals={"_index_name": index},
+        )
+        index_var = nodes[-1].target
+
+        _init_df = _gen_init_df(out_typ.columns, "index")
 
         # XXX the order of output variables passed should match out_typ.columns
-        out_vars = []
-        for c in out_typ.columns:
-            out_vars.append(df_col_map[c])
+        out_vars = [df_out_vars[c] for c in out_typ.columns]
+        out_vars.append(index_var)
 
         return nodes + compile_func_single_block(_init_df, out_vars, lhs, self)
 
@@ -1613,6 +1627,10 @@ class DataFramePass:
         index, columns, _pivot_values = rhs.args
         pivot_values = self.typemap[_pivot_values.name].meta
         out_typ = self.typemap[lhs.name]
+
+        index_typ = out_typ.index
+        index_name_typ = index_typ.name_typ
+        index_name = index_name_typ.literal_value
 
         nodes = []
         if isinstance(self.typemap[index.name], SeriesType):
@@ -1633,18 +1651,27 @@ class DataFramePass:
             )
             columns = nodes[-1].target
 
-        in_vars = {}
+        # The index is added.
+        # TODO: Add the name of the index to the construction. Pandas does it.
+        out_key_vars = []
+        out_index_var = ir.Var(lhs.scope, mk_unique_var("index"), lhs.loc)
+        self.typemap[out_index_var.name] = self.typemap[index.name]
+        out_key_vars.append(out_index_var)
 
-        df_col_map = {
+        df_in_vars = {}
+
+        df_out_vars = {
             col: ir.Var(lhs.scope, mk_unique_var(col), lhs.loc) for col in pivot_values
         }
-        for i, v in enumerate(df_col_map.values()):
+        for i, v in enumerate(df_out_vars.values()):
             self.typemap[v.name] = out_typ.data[i]
 
         pivot_arr = columns
 
         def _agg_len_impl(in_arr):  # pragma: no cover
             return len(in_arr)
+
+        agg_func = get_agg_func(self.func_ir, "count", rhs, typemap=self.typemap)
 
         # TODO: make out_key_var an index column
         input_has_index = False
@@ -1653,12 +1680,12 @@ class DataFramePass:
         agg_node = bodo.ir.aggregate.Aggregate(
             lhs.name,
             "crosstab",
-            [index.name],
-            None,
-            df_col_map,
-            in_vars,
+            ["index"],
+            out_key_vars,
+            df_out_vars,
+            df_in_vars,
             [index],
-            _agg_len_impl,
+            agg_func,
             input_has_index,
             same_index,
             return_key,
@@ -1669,13 +1696,21 @@ class DataFramePass:
         )
         nodes.append(agg_node)
 
-        _init_df = _gen_init_df(out_typ.columns)
+        _init_df = _gen_init_df(out_typ.columns, "index")
 
         # XXX the order of output variables passed should match out_typ.columns
-        out_vars = []
-        for c in out_typ.columns:
-            out_vars.append(df_col_map[c])
+        out_vars = [df_out_vars[c] for c in out_typ.columns]
 
+        nodes += compile_func_single_block(
+            lambda A: bodo.utils.conversion.index_from_array(A, _index_name),
+            (out_index_var,),
+            None,
+            self,
+            extra_globals={"_index_name": index_name},
+        )
+        out_index = nodes[-1].target
+
+        out_vars.append(out_index)
         return nodes + compile_func_single_block(_init_df, out_vars, lhs, self)
 
     def _run_call_rolling(self, assign, lhs, rhs, rolling_var, func_name):

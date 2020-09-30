@@ -458,8 +458,7 @@ def test_unbox_df3(memory_leak_check):
         pd.date_range(start="2018-04-24", end="2018-04-29", periods=5),
     )
     df2 = pd.DataFrame(
-        {"A": [3, 5, 1, -1, 4]},
-        np.array([1, 8, 4, 0, 2], dtype=np.uint8),
+        {"A": [3, 5, 1, -1, 4]}, np.array([1, 8, 4, 0, 2], dtype=np.uint8),
     )
     check_func(impl, (df1,))
     check_func(impl, (df2,))
@@ -2151,9 +2150,7 @@ def test_concat_nulls(memory_leak_check):
         ),
         # variable item size data and index
         pd.DataFrame(
-            {
-                "A": ["ABC", None, "AA", "B", None, "AA", "CC", "G"],
-            },
+            {"A": ["ABC", None, "AA", "B", None, "AA", "CC", "G"],},
             index=["AA", "C", "BB", "A", "D", "L", "K", "P"],
         ),
     ],
@@ -2693,6 +2690,29 @@ def test_dataframe_sample_nested_datastructures():
     check_gather_operation(df2)
     check_gather_operation(df3)
     check_gather_operation(df4)
+
+
+def test_dataframe_columns_name():
+    """A little known feature of pandas dataframe is that one can attribute
+    a name to the columns. As far as I know this shows up only in pivot_table
+    and crosstab functionalities.
+    -
+    This feature is only partially supported in BODO. It is supported in
+    boxing/unboxing, but it is not in gatherv which makes this test fail
+    in distributed mode. When columns name are supported, remove the
+    dist_test=False
+    -
+    A complete support of this feature in Bodo looks like a lot of work
+    for only esthetic purposes."""
+
+    def f(df):
+        return df
+
+    data = {"Name": ["Tom", "Jack", "nick", "juli"], "marks": [99, 98, 95, 90]}
+    df = pd.DataFrame(data, index=["rank1", "rank2", "rank3", "rank4"])
+    df.columns.name = "D"
+    df.index.name = "A"
+    check_func(f, (df,), dist_test=False)
 
 
 def test_unroll_loop(memory_leak_check, is_slow_run):

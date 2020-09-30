@@ -96,9 +96,11 @@ from bodo.libs.array import (
     array_to_info,
     arr_info_list_to_table,
     groupby_and_aggregate,
+    pivot_groupby_and_aggregate,
     compute_node_partition_by_hash,
     info_from_table,
     info_to_array,
+    delete_info_decref_array,
     delete_table,
     delete_table_decref_arrays,
 )
@@ -131,18 +133,10 @@ def add_agg_cfunc_sym(typingctx, func, sym):
         sig = func.signature
         if sig == types.none(types.voidptr):
             # cfunc generated with gen_eval_cb has this signature
-            fnty = lir.FunctionType(
-                lir.VoidType(),
-                [
-                    lir.IntType(8).as_pointer(),
-                ],
-            )
+            fnty = lir.FunctionType(lir.VoidType(), [lir.IntType(8).as_pointer(),],)
             fn_tp = builder.module.get_or_insert_function(fnty, sym._literal_value)
             builder.call(
-                fn_tp,
-                [
-                    context.get_constant_null(sig.args[0]),
-                ],
+                fn_tp, [context.get_constant_null(sig.args[0]),],
             )
         else:
             # Assume signature is none(voidptr, voidptr, int64*) (see gen_update_cb
@@ -245,13 +239,13 @@ def get_agg_func(func_ir, func_name, rhs, series_type=None, typemap=None):
     # to udfs and which to builtin functions
 
     if func_name == "var":
-        func = _column_var_impl_linear
+        func = pytypes.SimpleNamespace()
         func.ftype = func_name
         func.ncols_pre_shuffle = 3
         func.ncols_post_shuffle = 4
         return func
     if func_name == "std":
-        func = _column_std_impl_linear
+        func = pytypes.SimpleNamespace()
         func.ftype = func_name
         func.ncols_pre_shuffle = 3
         func.ncols_post_shuffle = 4
@@ -272,38 +266,7 @@ def get_agg_func(func_ir, func_name, rhs, series_type=None, typemap=None):
         func.ncols_post_shuffle = 2
         return func
     if func_name in supported_agg_funcs[:-7]:
-        func = getattr(series_impl, "overload_series_" + func_name)(series_type)
-        # HACK: use simple versions of sum/prod functions without extra arguments to
-        # avoid errors in pivot
-        # TODO: remove when pivot is moved to C++ code
-        if func_name == "sum":
-            val_zero = series_type.dtype(0)
-
-            def func(S):  # pragma: no cover
-                A = bodo.hiframes.pd_series_ext.get_series_data(S)
-                numba.parfors.parfor.init_prange()
-                s = val_zero
-                for i in numba.parfors.parfor.internal_prange(len(A)):
-                    val = val_zero
-                    if not bodo.libs.array_kernels.isna(A, i):
-                        val = A[i]
-                    s += val
-                return s
-
-        if func_name == "prod":
-            val_one = series_type.dtype(1)
-
-            def func(S):  # pragma: no cover
-                A = bodo.hiframes.pd_series_ext.get_series_data(S)
-                numba.parfors.parfor.init_prange()
-                s = val_one
-                for i in numba.parfors.parfor.internal_prange(len(A)):
-                    val = val_one
-                    if not bodo.libs.array_kernels.isna(A, i):
-                        val = A[i]
-                    s *= val
-                return s
-
+        func = pytypes.SimpleNamespace()
         func.ftype = func_name
         func.ncols_pre_shuffle = 1
         func.ncols_post_shuffle = 1
@@ -453,53 +416,6 @@ class SpecialCombineTyper(AbstractTemplate):
 @lower_builtin(__special_combine, types.VarArg(types.Any))
 def lower_special_combine(context, builder, sig, args):
     return context.get_dummy_value()
-
-
-# https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance
-def _column_var_impl_linear(S):  # pragma: no cover
-    A = bodo.hiframes.pd_series_ext.get_series_data(S)
-    nobs = 0
-    mean_x = 0.0
-    ssqdm_x = 0.0
-    N = len(A)
-    for i in numba.parfors.parfor.internal_prange(N):
-        bodo.ir.aggregate.__special_combine(
-            ssqdm_x, mean_x, nobs, bodo.ir.aggregate._var_combine
-        )
-        val = A[i]
-        if not np.isnan(val):
-            nobs += 1
-            delta = val - mean_x
-            mean_x += delta / nobs
-            # TODO: Pandas formula is better or Welford?
-            # ssqdm_x += ((nobs - 1) * delta ** 2) / nobs
-            delta2 = val - mean_x
-            ssqdm_x += delta * delta2
-    return bodo.hiframes.rolling.calc_var(2, nobs, mean_x, ssqdm_x)
-
-
-# TODO: avoid code duplication
-def _column_std_impl_linear(S):  # pragma: no cover
-    A = bodo.hiframes.pd_series_ext.get_series_data(S)
-    nobs = 0
-    mean_x = 0.0
-    ssqdm_x = 0.0
-    N = len(A)
-    for i in numba.parfors.parfor.internal_prange(N):
-        bodo.ir.aggregate.__special_combine(
-            ssqdm_x, mean_x, nobs, bodo.ir.aggregate._var_combine
-        )
-        val = A[i]
-        if not np.isnan(val):
-            nobs += 1
-            delta = val - mean_x
-            mean_x += delta / nobs
-            # TODO: Pandas formula is better or Welford?
-            # ssqdm_x += ((nobs - 1) * delta ** 2) / nobs
-            delta2 = val - mean_x
-            ssqdm_x += delta * delta2
-    v = bodo.hiframes.rolling.calc_var(2, nobs, mean_x, ssqdm_x)
-    return v ** 0.5
 
 
 class Aggregate(ir.Stmt):
@@ -664,8 +580,6 @@ def apply_copies_aggregate(
             aggregate_node.pivot_arr, var_dict
         )
 
-    return
-
 
 ir_utils.apply_copy_propagate_extensions[Aggregate] = apply_copies_aggregate
 
@@ -817,8 +731,6 @@ def aggregate_distributed_analysis(aggregate_node, array_dists):
         for col_var in aggregate_node.df_in_vars.values():
             array_dists[col_var.name] = out_dist
 
-    return
-
 
 distributed_analysis.distributed_analysis_extensions[
     Aggregate
@@ -922,7 +834,7 @@ def agg_distributed_run(
 
     glbs = {"bodo": bodo, "np": np, "dt64_dtype": np.dtype("datetime64[ns]")}
 
-    offload = agg_node.pivot_arr is None
+    has_pivot_value = agg_node.pivot_arr is not None
     udf_func_struct = get_udf_func_struct(
         agg_node.agg_func,
         agg_node.input_has_index,
@@ -947,7 +859,9 @@ def agg_distributed_run(
         agg_node.input_has_index,
         agg_node.same_index,
         parallel,
-        offload,
+        has_pivot_value,
+        agg_node.is_crosstab,
+        agg_node.pivot_values,
         udf_func_struct,
     )
     glbs.update(
@@ -957,14 +871,15 @@ def agg_distributed_run(
             "pre_alloc_array_item_array": pre_alloc_array_item_array,
             "string_array_type": string_array_type,
             "alloc_decimal_array": alloc_decimal_array,
-            "agg_seq_iter": agg_seq_iter,
-            "parallel_agg": parallel_agg,
             "array_to_info": array_to_info,
             "arr_info_list_to_table": arr_info_list_to_table,
+            "coerce_to_array": bodo.utils.conversion.coerce_to_array,
             "groupby_and_aggregate": groupby_and_aggregate,
+            "pivot_groupby_and_aggregate": pivot_groupby_and_aggregate,
             "compute_node_partition_by_hash": compute_node_partition_by_hash,
             "info_from_table": info_from_table,
             "info_to_array": info_to_array,
+            "delete_info_decref_array": delete_info_decref_array,
             "delete_table": delete_table,
             "add_agg_cfunc_sym": add_agg_cfunc_sym,
             "get_agg_udf_addr": get_agg_udf_addr,
@@ -1028,267 +943,6 @@ def agg_distributed_run(
 distributed_pass.distributed_run_extensions[Aggregate] = agg_distributed_run
 
 
-@numba.njit(no_cpython_wrapper=True, cache=True)
-def par_agg_get_shuffle_meta(
-    key_arrs, node_arr, data_redvar_dummy, init_vals
-):  # pragma: no cover
-    # alloc shuffle meta
-    n_pes = bodo.libs.distributed_api.get_size()
-    pre_shuffle_meta = alloc_pre_shuffle_metadata(
-        key_arrs, data_redvar_dummy, n_pes, False
-    )
-    node_ids = np.empty(len(key_arrs[0]), np.int32)
-
-    # calc send/recv counts
-    key_set = get_key_set(key_arrs)
-    for i in range(len(key_arrs[0])):
-        val = getitem_arr_tup_single(key_arrs, i)
-        if val not in key_set:
-            # key_set.add(val)
-            key_set[val] = 0
-            node_id = node_arr[i]
-            node_ids[i] = node_id
-            # data isn't computed here yet so pass empty tuple
-            update_shuffle_meta(pre_shuffle_meta, node_id, i, key_arrs, (), False)
-
-    shuffle_meta = finalize_shuffle_meta(
-        key_arrs, data_redvar_dummy, pre_shuffle_meta, n_pes, False, init_vals
-    )
-    return shuffle_meta, node_ids
-
-
-@numba.njit(no_cpython_wrapper=True)
-def parallel_agg(
-    key_arrs,
-    node_arr,
-    data_redvar_dummy,
-    out_dummy_tup,
-    data_in,
-    init_vals,
-    __update_redvars,
-    __combine_redvars,
-    __eval_res,
-    return_key,
-    pivot_arr,
-):  # pragma: no cover
-
-    shuffle_meta, node_ids = par_agg_get_shuffle_meta(
-        key_arrs, node_arr, data_redvar_dummy, init_vals
-    )
-
-    agg_parallel_local_iter(
-        key_arrs,
-        data_in,
-        shuffle_meta,
-        data_redvar_dummy,
-        __update_redvars,
-        pivot_arr,
-        node_ids,
-    )
-
-    recvs = alltoallv_tup(key_arrs + data_redvar_dummy, shuffle_meta, key_arrs)
-    key_arrs = _get_keys_tup(recvs, key_arrs)
-    reduce_recvs = _get_data_tup(recvs, key_arrs)
-    out_arrs = agg_parallel_combine_iter(
-        key_arrs,
-        reduce_recvs,
-        out_dummy_tup,
-        init_vals,
-        __combine_redvars,
-        __eval_res,
-        return_key,
-        data_in,
-        pivot_arr,
-    )
-    return out_arrs
-
-
-@numba.njit(no_cpython_wrapper=True)
-def agg_parallel_local_iter(
-    key_arrs,
-    data_in,
-    shuffle_meta,
-    data_redvar_dummy,
-    __update_redvars,
-    pivot_arr,
-    node_ids,
-):  # pragma: no cover
-    # _init_val_0 = np.int64(0)
-    # redvar_0_arr = np.full(n_uniq_keys, _init_val_0, np.int64)
-    # _init_val_1 = np.int64(0)
-    # redvar_1_arr = np.full(n_uniq_keys, _init_val_1, np.int64)
-    # out_key = np.empty(n_uniq_keys, np.float64)
-
-    n_pes = bodo.libs.distributed_api.get_size()
-    key_write_map = get_key_dict(key_arrs)
-
-    redvar_arrs = get_shuffle_data_send_buffs(shuffle_meta, key_arrs, data_redvar_dummy)
-
-    for i in range(len(key_arrs[0])):
-        # val = key_arrs[0][i]
-        val = getitem_arr_tup_single(key_arrs, i)
-        if val not in key_write_map:
-            node_id = node_ids[i]
-            w_ind = write_send_buff(shuffle_meta, node_id, i, key_arrs, ())
-            shuffle_meta.tmp_offset[node_id] += 1
-            key_write_map[val] = w_ind
-        else:
-            w_ind = key_write_map[val]
-        __update_redvars(redvar_arrs, data_in, w_ind, i, pivot_arr)
-        # redvar_arrs[0][w_ind], redvar_arrs[1][w_ind] = __update_redvars(redvar_arrs[0][w_ind], redvar_arrs[1][w_ind], data_in[0][i])
-    return
-
-
-@numba.njit(no_cpython_wrapper=True)
-def agg_parallel_combine_iter(
-    key_arrs,
-    reduce_recvs,
-    out_dummy_tup,
-    init_vals,
-    __combine_redvars,
-    __eval_res,
-    return_key,
-    data_in,
-    pivot_arr,
-):  # pragma: no cover
-    key_set = _build_set_tup(key_arrs)
-    n_uniq_keys = len(key_set)
-    out_arrs = alloc_agg_output(n_uniq_keys, out_dummy_tup, key_set, return_key)
-    # out_arrs = alloc_arr_tup(n_uniq_keys, out_dummy_tup)
-    local_redvars = alloc_arr_tup(n_uniq_keys, reduce_recvs, init_vals)
-
-    # key_write_map = get_key_dict(key_arrs[0])
-    key_write_map = get_key_dict(key_arrs)
-    curr_write_ind = 0
-    for i in range(len(key_arrs[0])):
-        # k = key_arrs[0][i]
-        k = getitem_arr_tup_single(key_arrs, i)
-        if k not in key_write_map:
-            w_ind = curr_write_ind
-            curr_write_ind += 1
-            key_write_map[k] = w_ind
-            if return_key:
-                _set_out_keys(out_arrs, w_ind, key_arrs, i, k)
-                # setitem_array_with_str(out_arrs[-1], w_ind, k)
-                # out_arrs[-1][w_ind] = k
-        else:
-            w_ind = key_write_map[k]
-        __combine_redvars(local_redvars, reduce_recvs, w_ind, i, pivot_arr)
-    for j in range(n_uniq_keys):
-        __eval_res(local_redvars, out_arrs, j)
-
-    return out_arrs
-
-
-@numba.njit(no_cpython_wrapper=True)
-def agg_seq_iter(
-    key_arrs,
-    redvar_dummy_tup,
-    out_dummy_tup,
-    data_in,
-    init_vals,
-    __update_redvars,
-    __eval_res,
-    return_key,
-    pivot_arr,
-):  # pragma: no cover
-    key_set = _build_set_tup(key_arrs)
-    n_uniq_keys = len(key_set)
-    out_arrs = alloc_agg_output(n_uniq_keys, out_dummy_tup, key_set, return_key)
-    # out_arrs = alloc_arr_tup(n_uniq_keys, out_dummy_tup)
-    local_redvars = alloc_arr_tup(n_uniq_keys, redvar_dummy_tup, init_vals)
-
-    key_write_map = get_key_dict(key_arrs)
-    curr_write_ind = 0
-    for i in range(len(key_arrs[0])):
-        # k = key_arrs[0][i]
-        k = getitem_arr_tup_single(key_arrs, i)
-        if k not in key_write_map:
-            w_ind = curr_write_ind
-            curr_write_ind += 1
-            key_write_map[k] = w_ind
-            if return_key:
-                _set_out_keys(out_arrs, w_ind, key_arrs, i, k)
-                # setitem_array_with_str(out_arrs[-1], w_ind, k)
-                # out_arrs[-1][w_ind] = k
-        else:
-            w_ind = key_write_map[k]
-        __update_redvars(local_redvars, data_in, w_ind, i, pivot_arr)
-    for j in range(n_uniq_keys):
-        __eval_res(local_redvars, out_arrs, j)
-
-    return out_arrs
-
-
-def get_shuffle_data_send_buffs(sh, karrs, data):  # pragma: no cover
-    return ()
-
-
-@overload(get_shuffle_data_send_buffs, no_unliteral=True)
-def get_shuffle_data_send_buffs_overload(meta, key_arrs, data):
-    n_keys = len(key_arrs.types)
-    count = len(data.types)
-
-    func_text = "def send_buff_impl(meta, key_arrs, data):\n"
-    func_text += "  return ({}{})\n".format(
-        ",".join(
-            ["meta.send_buff_tup[{}]".format(i) for i in range(n_keys, count + n_keys)]
-        ),
-        "," if count == 1 else "",
-    )  # single value needs comma to become tuple
-
-    loc_vars = {}
-    exec(func_text, {}, loc_vars)
-    send_buff_impl = loc_vars["send_buff_impl"]
-    return send_buff_impl
-
-
-def get_key_dict(arr):  # pragma: no cover
-    return dict()
-
-
-@overload(get_key_dict, no_unliteral=True)
-def get_key_dict_overload(arr):
-    """returns dictionary and possibly a byte_vec for multi-key case"""
-    # get byte_vec dict for multi-key case
-    if isinstance(arr, types.BaseTuple) and len(arr.types) != 1:
-        key_typ = types.Tuple([a.dtype for a in arr.types])
-
-        def _impl(arr):  # pragma: no cover
-            return numba.typed.Dict.empty(key_type=key_typ, value_type=types.int64)
-
-        return _impl
-
-    # regular scalar keys
-    dtype = arr.types[0].dtype
-    return lambda arr: numba.typed.Dict.empty(dtype, types.int64)
-
-
-def _set_out_keys(out_arrs, w_ind, key_arrs, i, k):  # pragma: no cover
-    setitem_array_with_str(out_arrs[-1], w_ind, k)
-
-
-@overload(_set_out_keys, no_unliteral=True)
-def _set_out_keys_overload(out_arrs, w_ind, key_arrs, i, k):
-    if isinstance(key_arrs, types.BaseTuple):
-        n_keys = len(key_arrs.types)
-        n_outs = len(out_arrs.types)
-        key_start = n_outs - n_keys
-
-        func_text = "def set_keys_impl(out_arrs, w_ind, key_arrs, i, k):\n"
-        for i in range(n_keys):
-            func_text += "  setitem_array_with_str(out_arrs[{}], w_ind, key_arrs[{}][i])\n".format(
-                key_start + i, i
-            )
-
-        loc_vars = {}
-        exec(func_text, {"setitem_array_with_str": setitem_array_with_str}, loc_vars)
-        set_keys_impl = loc_vars["set_keys_impl"]
-        return set_keys_impl
-
-    return _set_out_keys
-
-
 def get_numba_set(dtype):
     pass
 
@@ -1312,123 +966,6 @@ class GetNumbaSetTyper(AbstractTemplate):
 @lower_builtin(get_numba_set, types.Any)
 def lower_get_numba_set(context, builder, sig, args):
     return numba.cpython.setobj.set_empty_constructor(context, builder, sig, args)
-
-
-def get_key_set(arr):  # pragma: no cover
-    # return set()
-    return dict()
-
-
-@overload(get_key_set, no_unliteral=True)
-def get_key_set_overload(arr):
-
-    # XXX using dict instead of set due to refcount issue
-    # return lambda arr: get_numba_set(arr)
-    dtype = (
-        types.Tuple([t.dtype for t in arr.types])
-        if isinstance(arr, types.BaseTuple)
-        else arr.dtype
-    )
-    if isinstance(arr, types.BaseTuple) and len(arr.types) == 1:
-        dtype = arr.types[0].dtype
-
-    return lambda arr: numba.typed.Dict.empty(dtype, types.int64)
-
-    # HACK below can cause crashes in case of zero-length arrays
-    # if isinstance(arr, types.BaseTuple):
-    #     def get_set_tup(arr):
-    #         s = set()
-    #         v = getitem_arr_tup_single(arr, 0)
-    #         s.add(v)
-    #         s.remove(v)
-    #         return s
-    #     return get_set_tup
-
-    # # hack to return set with specified type
-    # def get_set(arr):
-    #     s = set()
-    #     s.add(arr[0])
-    #     s.remove(arr[0])
-    #     return s
-
-    # return get_set
-
-
-def alloc_agg_output(
-    n_uniq_keys, out_dummy_tup, key_set, return_key
-):  # pragma: no cover
-    return out_dummy_tup
-
-
-@overload(alloc_agg_output, no_unliteral=True)
-def alloc_agg_output_overload(n_uniq_keys, out_dummy_tup, key_set, return_key):
-
-    # return key is either True or None
-    if is_overload_true(return_key) or return_key == types.boolean:
-        # TODO: handle pivot_table/crosstab with return key
-        # dtype = key_set.dtype
-        dtype = key_set.key_type
-        key_types = list(dtype.types) if isinstance(dtype, types.BaseTuple) else [dtype]
-        n_keys = len(key_types)
-        n_data = out_dummy_tup.count - n_keys
-
-        func_text = (
-            "def out_alloc_f(n_uniq_keys, out_dummy_tup, key_set, return_key):\n"
-        )
-        for i in range(n_data):
-            func_text += (
-                "  c_{} = empty_like_type(n_uniq_keys, out_dummy_tup[{}])\n".format(
-                    i, i
-                )
-            )
-
-        if string_type in key_types:
-            # TODO: handle unicode length
-            func_text += "  num_total_chars = num_total_chars_set(key_set)\n"
-
-        for i, key_typ in enumerate(key_types):
-            if key_typ == string_type:
-                func_text += "  out_key_{0} = pre_alloc_string_array(n_uniq_keys, num_total_chars[{0}])\n".format(
-                    i
-                )
-            else:
-                func_text += "  out_key_{} = np.empty(n_uniq_keys, np.{})\n".format(
-                    i, key_typ
-                )
-
-        func_text += "  return ({}{}{},)\n".format(
-            ", ".join(["c_{}".format(i) for i in range(n_data)]),
-            "," if n_data != 0 else "",
-            ", ".join(["out_key_{}".format(i) for i in range(n_keys)]),
-        )
-
-        loc_vars = {}
-        exec(
-            func_text,
-            {
-                "empty_like_type": empty_like_type,
-                "np": np,
-                "pre_alloc_string_array": pre_alloc_string_array,
-                "num_total_chars_set": num_total_chars_set,
-            },
-            loc_vars,
-        )
-        alloc_impl = loc_vars["out_alloc_f"]
-        return alloc_impl
-
-    assert return_key == types.none
-
-    def no_key_out_alloc(n_uniq_keys, out_dummy_tup, key_set, return_key):
-        return alloc_arr_tup(n_uniq_keys, out_dummy_tup)
-
-    return no_key_out_alloc
-
-
-# TODO: fix BaseContext.get_function() used in is_true()
-# @overload(bool, no_unliteral=True)
-# def bool_none_overload(v_t):
-#     if v_t == types.none:
-#         return lambda a: False
 
 
 @infer_global(bool)
@@ -1506,10 +1043,8 @@ def gen_update_cb(
     red_var_typs = udf_func_struct.var_typs
     n_red_vars = len(red_var_typs)
 
-    func_text = (
-        "def bodo_gb_udf_update_local{}(in_table, out_table, row_to_group):\n".format(
-            label_suffix
-        )
+    func_text = "def bodo_gb_udf_update_local{}(in_table, out_table, row_to_group):\n".format(
+        label_suffix
     )
     func_text += "    if is_null_pointer(in_table):\n"  # this is dummy call
     func_text += "        return\n"
@@ -1626,10 +1161,8 @@ def gen_combine_cb(udf_func_struct, allfuncs, n_keys, out_data_typs, label_suffi
     red_var_typs = udf_func_struct.var_typs
     n_red_vars = len(red_var_typs)
 
-    func_text = (
-        "def bodo_gb_udf_combine{}(in_table, out_table, row_to_group):\n".format(
-            label_suffix
-        )
+    func_text = "def bodo_gb_udf_combine{}(in_table, out_table, row_to_group):\n".format(
+        label_suffix
     )
     func_text += "    if is_null_pointer(in_table):\n"  # this is dummy call
     func_text += "        return\n"
@@ -1828,7 +1361,9 @@ def gen_top_level_agg_func(
     input_has_index,
     same_index,
     parallel,
-    offload,
+    has_pivot_value,
+    is_crosstab,
+    pivot_values,
     udf_func_struct,
 ):
     """create the top level aggregation function by generating text"""
@@ -1838,6 +1373,10 @@ def gen_top_level_agg_func(
     if input_has_index:
         in_col_typs = in_col_typs[0:-1]
         in_col_names = list(in_col_names)[0:-1]
+    if pivot_values is None:
+        n_pivot = 1
+    else:
+        n_pivot = len(pivot_values)
     out_typs = [t.dtype for t in out_col_typs]
 
     # arg names
@@ -1867,305 +1406,274 @@ def gen_top_level_agg_func(
     # alloc_agg_output()
     return_key_p = "True" if return_key else "None"
 
-    if not offload:
-        red_var_typs = udf_func_struct.var_typs
+    all_arrs = tuple("key_{}".format(c) for c in key_names) + in_names
+    n_keys = len(key_names)
+    # If we put the index as argument, then it is the last argument of the
+    # function.
+    func_text = "def agg_top({}{}{}, pivot_arr):\n".format(
+        key_args, in_args, ", index_arg" if input_has_index else ""
+    )
 
-        func_text = "def agg_top({}{}, pivot_arr):\n".format(key_args, in_args)
-        func_text += "    data_redvar_dummy = ({}{})\n".format(
-            ",".join(
-                ["np.empty(1, {})".format(_get_np_dtype(t)) for t in red_var_typs]
-            ),
-            "," if len(red_var_typs) == 1 else "",
-        )
-        func_text += "    out_dummy_tup = ({}{}{})\n".format(
-            ",".join(["np.empty(1, {})".format(_get_np_dtype(t)) for t in out_typs]),
-            "," if len(out_typs) != 0 else "",
-            "{},".format(key_args) if return_key else "",
-        )
-        func_text += "    data_in = ({}{})\n".format(
-            ",".join(in_names), "," if len(in_names) == 1 else ""
-        )
-        func_text += "    init_vals = __init_func()\n"
+    # convert arrays to table
+    func_text += "    info_list = [{}{}{}]\n".format(
+        ", ".join("array_to_info({})".format(a) for a in all_arrs),
+        ", array_to_info(index_arg)" if input_has_index else "",
+        ", array_to_info(pivot_arr)" if is_crosstab else "",
+    )
+    func_text += "    table = arr_info_list_to_table(info_list)\n"
 
-        out_keys = tuple("out_key_{}".format(sanitize_varname(c)) for c in key_names)
-        out_tup = ", ".join(out_names + out_keys if return_key else out_names)
-
-        if parallel:
-            func_text += "    i_arr_tab = arr_info_list_to_table([{}])\n".format(
-                ",".join(
-                    "array_to_info(key_{})".format(sanitize_varname(c))
-                    for c in key_names
-                )
+    for i in range(len(out_names)):
+        out_name = out_names[i] + "_dummy"
+        out_col_typ = out_col_typs[i]
+        if isinstance(out_col_typ, IntegerArrayType):
+            int_typ_name = IntDtype(out_typs[i]).name
+            assert int_typ_name.endswith("Dtype()")
+            int_typ_name = int_typ_name[:-7]  # remove trailing "Dtype()"
+            func_text += '    {} = pd.Series([1], dtype="{}").values\n'.format(
+                out_name, int_typ_name
             )
-            func_text += "    n_pes = bodo.libs.distributed_api.get_size()\n"
-            func_text += "    o_arr_tab = compute_node_partition_by_hash(i_arr_tab, {}, n_pes)\n".format(
-                len(key_names)
+        elif isinstance(out_col_typ, BooleanArrayType):
+            func_text += "    {} = bodo.libs.bool_arr_ext.init_bool_array(np.empty(0, np.bool_), np.empty(0, np.uint8))\n".format(
+                out_name
             )
-            func_text += "    data_dummy = np.empty(1, np.int32)\n"
-            func_text += "    node_arr = info_to_array(info_from_table(o_arr_tab, 0), data_dummy)\n"
-            func_text += "    delete_table(o_arr_tab)\n"
-            func_text += "    delete_table(i_arr_tab)\n"
-            func_text += (
-                "    ({},) = parallel_agg(({},), node_arr, data_redvar_dummy, "
-                "out_dummy_tup, data_in, init_vals, __update_redvars, "
-                "__combine_redvars, __eval_res, {}, pivot_arr)\n"
-            ).format(out_tup, key_args, return_key_p)
+        elif isinstance(out_col_typ, StringArrayType):
+            func_text += "    {} = pre_alloc_string_array(1,1)\n".format(out_name)
+        elif out_col_typ == ArrayItemArrayType(string_array_type):
+            func_text += "    {} = pre_alloc_array_item_array(1, (1, 1), string_array_type)\n".format(
+                out_name
+            )
+        elif isinstance(out_col_typ, DecimalArrayType):
+            scale = out_col_typ.scale
+            precision = out_col_typ.precision
+            func_text += "    {} = alloc_decimal_array(1, {}, {})\n".format(
+                out_name, precision, scale
+            )
+        elif isinstance(out_col_typ, DatetimeDateArrayType):
+            func_text += "    {} = bodo.hiframes.datetime_date_ext.init_datetime_date_array(np.empty(1, np.int64), np.empty(1, np.uint8))\n".format(
+                out_name
+            )
         else:
-            func_text += (
-                "    ({},) = agg_seq_iter(({},), data_redvar_dummy, "
-                "out_dummy_tup, data_in, init_vals, __update_redvars, "
-                "__eval_res, {}, pivot_arr)\n"
-            ).format(out_tup, key_args, return_key_p)
+            func_text += "    {} = np.empty(1, {})\n".format(
+                out_name, _get_np_dtype(out_typs[i])
+            )
 
-        func_text += "    return ({},)\n".format(out_tup)
+    # do_combine indicates whether GroupbyPipeline in C++ will need to do
+    # `void combine()` operation or not
+    do_combine = parallel
+    # flat list of aggregation functions, one for each (input_col, func)
+    # combination, each combination results in one output column
+    allfuncs = []
+    # index of first function (in allfuncs) of input col i
+    func_offsets = []
+    # map index of function i in allfuncs to its input col
+    func_idx_to_in_col = []
+    # number of redvars for each udf function
+    udf_ncols = []
+    if is_crosstab:
+        agg_func = [agg_func]
     else:
-        all_arrs = tuple("key_{}".format(c) for c in key_names) + in_names
-        n_keys = len(key_names)
-        # If we put the index as argument, then it is the last argument of the
-        # function.
-        func_text = "def agg_top({}{}{}, pivot_arr):\n".format(
-            key_args, in_args, ", index_arg" if input_has_index else ""
-        )
-
-        # convert arrays to table
-        func_text += "    info_list = [{}{}]\n".format(
-            ", ".join("array_to_info({})".format(a) for a in all_arrs),
-            ", array_to_info(index_arg)" if input_has_index else "",
-        )
-        func_text += "    table = arr_info_list_to_table(info_list)\n"
-
-        for i in range(len(out_names)):
-            out_name = out_names[i] + "_dummy"
-            out_col_typ = out_col_typs[i]
-            if isinstance(out_col_typ, IntegerArrayType):
-                int_typ_name = IntDtype(out_typs[i]).name
-                assert int_typ_name.endswith("Dtype()")
-                int_typ_name = int_typ_name[:-7]  # remove trailing "Dtype()"
-                func_text += '    {} = pd.Series([1], dtype="{}").values\n'.format(
-                    out_name, int_typ_name
-                )
-            elif isinstance(out_col_typ, BooleanArrayType):
-                func_text += "    {} = bodo.libs.bool_arr_ext.init_bool_array(np.empty(0, np.bool_), np.empty(0, np.uint8))\n".format(
-                    out_name
-                )
-            elif isinstance(out_col_typ, StringArrayType):
-                func_text += "    {} = pre_alloc_string_array(1,1)\n".format(out_name)
-            elif out_col_typ == ArrayItemArrayType(string_array_type):
-                func_text += "    {} = pre_alloc_array_item_array(1, (1, 1), string_array_type)\n".format(
-                    out_name
-                )
-            elif isinstance(out_col_typ, DecimalArrayType):
-                scale = out_col_typ.scale
-                precision = out_col_typ.precision
-                func_text += "    {} = alloc_decimal_array(1, {}, {})\n".format(
-                    out_name, precision, scale
-                )
-            elif isinstance(out_col_typ, DatetimeDateArrayType):
-                func_text += "    {} = bodo.hiframes.datetime_date_ext.init_datetime_date_array(np.empty(1, np.int64), np.empty(1, np.uint8))\n".format(
-                    out_name
-                )
-            else:
-                func_text += "    {} = np.empty(1, {})\n".format(
-                    out_name, _get_np_dtype(out_typs[i])
-                )
-
-        # do_combine indicates whether GroupbyPipeline in C++ will need to do
-        # `void combine()` operation or not
-        do_combine = parallel
-        # flat list of aggregation functions, one for each (input_col, func)
-        # combination, each combination results in one output column
-        allfuncs = []
-        # index of first function (in allfuncs) of input col i
-        func_offsets = []
-        # map index of function i in allfuncs to its input col
-        func_idx_to_in_col = []
-        # number of redvars for each udf function
-        udf_ncols = []
         if not isinstance(agg_func, list):
             agg_func = [agg_func] * len(in_col_typs)
-        skipdropna = False
-        num_cum_funcs = 0
-        for in_col_idx, f_val in enumerate(agg_func):
-            # for each input column, a list of functions can be applied to it
-            func_offsets.append(len(allfuncs))
-            if not isinstance(f_val, list):
-                funcs = [f_val]
-            else:
-                funcs = f_val
-            for func in funcs:
-                if func.ftype in {"median", "nunique"}:
-                    # these operations require shuffle at the beginning, so a
-                    # local aggregation followed by combine is not necessary
-                    do_combine = False
-                if func.ftype in list_cumulative:
-                    num_cum_funcs += 1
-                if hasattr(func, "skipdropna"):
-                    skipdropna = func.skipdropna
-                allfuncs.append(func)
-                func_idx_to_in_col.append(in_col_idx)
-                if func.ftype == "udf":
-                    udf_ncols.append(func.n_redvars)
+    skipdropna = False
+    num_cum_funcs = 0
+    for in_col_idx, f_val in enumerate(agg_func):
+        # for each input column, a list of functions can be applied to it
         func_offsets.append(len(allfuncs))
-        assert len(out_names) == len(allfuncs)
-        if num_cum_funcs > 0:
-            assert num_cum_funcs == len(
-                allfuncs
-            ), "Cannot mix cumulative operations with other aggregation functions"
-            do_combine = False  # same as median and nunique
-
-        if udf_func_struct is not None:
-            # there are user-defined functions
-            udf_label = next_label()
-
-            # generate update, combine and eval functions for the user-defined
-            # functions and compile them to numba cfuncs, to be called from C++
-            c_sig = types.void(
-                types.voidptr, types.voidptr, types.CPointer(types.int64)
-            )
-            cpp_cb_update = numba.cfunc(c_sig, nopython=True)(
-                gen_update_cb(
-                    udf_func_struct,
-                    allfuncs,
-                    n_keys,
-                    in_col_typs,
-                    out_col_typs,
-                    do_combine,
-                    func_idx_to_in_col,
-                    udf_label,
-                )
-            )
-            cpp_cb_combine = numba.cfunc(c_sig, nopython=True)(
-                gen_combine_cb(
-                    udf_func_struct, allfuncs, n_keys, out_col_typs, udf_label
-                )
-            )
-            cpp_cb_eval = numba.cfunc("void(voidptr)", nopython=True)(
-                gen_eval_cb(udf_func_struct, allfuncs, n_keys, out_col_typs, udf_label)
-            )
-
-            assert len(udf_func_struct.cfuncs) == 0
-            udf_func_struct.cfuncs.append(cpp_cb_update)
-            udf_func_struct.cfuncs.append(cpp_cb_combine)
-            udf_func_struct.cfuncs.append(cpp_cb_eval)
-            for cfunc in udf_func_struct.cfuncs:
-                gb_agg_cfunc[cfunc.native_name] = cfunc
-                gb_agg_cfunc_addr[cfunc.native_name] = cfunc.address
-
-            # generate a dummy (empty) table with correct type info for
-            # output columns and reduction variables corresponding to udfs,
-            # so that C++ library can allocate arrays
-            udf_names_dummy = []
-            redvar_offset = 0
-            i = 0
-            for out_name, f in zip(out_names, allfuncs):
-                if f.ftype == "udf":
-                    udf_names_dummy.append(out_name + "_dummy")
-                    for j in range(redvar_offset, redvar_offset + udf_ncols[i]):
-                        udf_names_dummy.append("data_redvar_dummy_" + str(j))
-                    redvar_offset += udf_ncols[i]
-                    i += 1
-
-            red_var_typs = udf_func_struct.var_typs
-            for i, t in enumerate(red_var_typs):
-                func_text += "    data_redvar_dummy_{} = np.empty(1, {})\n".format(
-                    i, _get_np_dtype(t)
-                )
-
-            func_text += "    out_info_list_dummy = [{}]\n".format(
-                ", ".join("array_to_info({})".format(a) for a in udf_names_dummy)
-            )
-            func_text += (
-                "    udf_table_dummy = arr_info_list_to_table(out_info_list_dummy)\n"
-            )
-            # include cfunc in library and insert a dummy call to make sure symbol
-            # is not discarded
-            func_text += "    add_agg_cfunc_sym(cpp_cb_update, '{}')\n".format(
-                cpp_cb_update.native_name
-            )
-            func_text += "    add_agg_cfunc_sym(cpp_cb_combine, '{}')\n".format(
-                cpp_cb_combine.native_name
-            )
-            func_text += "    add_agg_cfunc_sym(cpp_cb_eval, '{}')\n".format(
-                cpp_cb_eval.native_name
-            )
-            func_text += "    cpp_cb_update_addr = get_agg_udf_addr('{}')\n".format(
-                cpp_cb_update.native_name
-            )
-            func_text += "    cpp_cb_combine_addr = get_agg_udf_addr('{}')\n".format(
-                cpp_cb_combine.native_name
-            )
-            func_text += "    cpp_cb_eval_addr = get_agg_udf_addr('{}')\n".format(
-                cpp_cb_eval.native_name
-            )
-
+        if not isinstance(f_val, list):
+            funcs = [f_val]
         else:
-            # if there are no udfs we don't need udf table, so just create
-            # an empty one-column table
-            func_text += "    udf_table_dummy = arr_info_list_to_table([array_to_info(np.empty(1))])\n"
-            func_text += "    cpp_cb_update_addr = 0\n"
-            func_text += "    cpp_cb_combine_addr = 0\n"
-            func_text += "    cpp_cb_eval_addr = 0\n"
+            funcs = f_val
+        for func in funcs:
+            if func.ftype in {"median", "nunique"}:
+                # these operations require shuffle at the beginning, so a
+                # local aggregation followed by combine is not necessary
+                do_combine = False
+            if func.ftype in list_cumulative:
+                num_cum_funcs += 1
+            if hasattr(func, "skipdropna"):
+                skipdropna = func.skipdropna
+            allfuncs.append(func)
+            func_idx_to_in_col.append(in_col_idx)
+            if func.ftype == "udf":
+                udf_ncols.append(func.n_redvars)
+    func_offsets.append(len(allfuncs))
+    if is_crosstab:
+        assert len(out_names) == n_pivot
+    else:
+        assert len(out_names) == len(allfuncs) * n_pivot
+    if num_cum_funcs > 0:
+        assert num_cum_funcs == len(
+            allfuncs
+        ), "Cannot mix cumulative operations with other aggregation functions"
+        do_combine = False  # same as median and nunique
 
-        # NOTE: adding extra zero to make sure the list is never empty to avoid Numba
-        # typing issues
-        func_text += "    ftypes = np.array([{}, 0], dtype=np.int32)\n".format(
-            ", ".join(
-                [str(supported_agg_funcs.index(f.ftype)) for f in allfuncs] + ["0"]
+    if udf_func_struct is not None:
+        # there are user-defined functions
+        udf_label = next_label()
+
+        # generate update, combine and eval functions for the user-defined
+        # functions and compile them to numba cfuncs, to be called from C++
+        c_sig = types.void(types.voidptr, types.voidptr, types.CPointer(types.int64))
+        cpp_cb_update = numba.cfunc(c_sig, nopython=True)(
+            gen_update_cb(
+                udf_func_struct,
+                allfuncs,
+                n_keys,
+                in_col_typs,
+                out_col_typs,
+                do_combine,
+                func_idx_to_in_col,
+                udf_label,
             )
         )
-        func_text += "    func_offsets = np.array({}, dtype=np.int32)\n".format(
-            str(func_offsets)
+        cpp_cb_combine = numba.cfunc(c_sig, nopython=True)(
+            gen_combine_cb(udf_func_struct, allfuncs, n_keys, out_col_typs, udf_label)
         )
-        if len(udf_ncols) > 0:
-            func_text += "    udf_ncols = np.array({}, dtype=np.int32)\n".format(
-                str(udf_ncols)
-            )
-        else:
-            func_text += "    udf_ncols = np.array([0], np.int32)\n"  # dummy
-        # call C++ groupby
-        # We pass the logical arguments to the function (skipdropna, return_key, same_index, ...)
-        func_text += "    out_table = groupby_and_aggregate(table, {}, {}," " ftypes.ctypes.data, func_offsets.ctypes.data, udf_ncols.ctypes.data, {}, {}, {}, {}, cpp_cb_update_addr, cpp_cb_combine_addr, cpp_cb_eval_addr, udf_table_dummy)\n".format(
-            n_keys,
-            input_has_index,
-            parallel,
-            skipdropna,
-            return_key,
-            same_index,
+        cpp_cb_eval = numba.cfunc("void(voidptr)", nopython=True)(
+            gen_eval_cb(udf_func_struct, allfuncs, n_keys, out_col_typs, udf_label)
         )
 
-        key_names = ["key_" + name for name in key_names]
-        idx = 0
-        if return_key:
-            for i, key_name in enumerate(key_names):
-                func_text += "    {} = info_to_array(info_from_table(out_table, {}), {})\n".format(
-                    key_name, idx, key_name
-                )
-                idx += 1
-        for i in range(len(out_names)):
-            out_name = out_names[i]
-            func_text += (
-                "    {} = info_to_array(info_from_table(out_table, {}), {})\n".format(
-                    out_name, idx, out_name + "_dummy"
-                )
+        assert len(udf_func_struct.cfuncs) == 0
+        udf_func_struct.cfuncs.append(cpp_cb_update)
+        udf_func_struct.cfuncs.append(cpp_cb_combine)
+        udf_func_struct.cfuncs.append(cpp_cb_eval)
+        for cfunc in udf_func_struct.cfuncs:
+            gb_agg_cfunc[cfunc.native_name] = cfunc
+            gb_agg_cfunc_addr[cfunc.native_name] = cfunc.address
+
+        # generate a dummy (empty) table with correct type info for
+        # output columns and reduction variables corresponding to udfs,
+        # so that C++ library can allocate arrays
+        udf_names_dummy = []
+        redvar_offset = 0
+        i = 0
+        for out_name, f in zip(out_names, allfuncs):
+            if f.ftype == "udf":
+                udf_names_dummy.append(out_name + "_dummy")
+                for j in range(redvar_offset, redvar_offset + udf_ncols[i]):
+                    udf_names_dummy.append("data_redvar_dummy_" + str(j))
+                redvar_offset += udf_ncols[i]
+                i += 1
+
+        red_var_typs = udf_func_struct.var_typs
+        for i, t in enumerate(red_var_typs):
+            func_text += "    data_redvar_dummy_{} = np.empty(1, {})\n".format(
+                i, _get_np_dtype(t)
+            )
+
+        func_text += "    out_info_list_dummy = [{}]\n".format(
+            ", ".join("array_to_info({})".format(a) for a in udf_names_dummy)
+        )
+        func_text += (
+            "    udf_table_dummy = arr_info_list_to_table(out_info_list_dummy)\n"
+        )
+        # include cfunc in library and insert a dummy call to make sure symbol
+        # is not discarded
+        func_text += "    add_agg_cfunc_sym(cpp_cb_update, '{}')\n".format(
+            cpp_cb_update.native_name
+        )
+        func_text += "    add_agg_cfunc_sym(cpp_cb_combine, '{}')\n".format(
+            cpp_cb_combine.native_name
+        )
+        func_text += "    add_agg_cfunc_sym(cpp_cb_eval, '{}')\n".format(
+            cpp_cb_eval.native_name
+        )
+        func_text += "    cpp_cb_update_addr = get_agg_udf_addr('{}')\n".format(
+            cpp_cb_update.native_name
+        )
+        func_text += "    cpp_cb_combine_addr = get_agg_udf_addr('{}')\n".format(
+            cpp_cb_combine.native_name
+        )
+        func_text += "    cpp_cb_eval_addr = get_agg_udf_addr('{}')\n".format(
+            cpp_cb_eval.native_name
+        )
+
+    else:
+        # if there are no udfs we don't need udf table, so just create
+        # an empty one-column table
+        func_text += "    udf_table_dummy = arr_info_list_to_table([array_to_info(np.empty(1))])\n"
+        func_text += "    cpp_cb_update_addr = 0\n"
+        func_text += "    cpp_cb_combine_addr = 0\n"
+        func_text += "    cpp_cb_eval_addr = 0\n"
+
+    # NOTE: adding extra zero to make sure the list is never empty to avoid Numba
+    # typing issues
+    func_text += "    ftypes = np.array([{}, 0], dtype=np.int32)\n".format(
+        ", ".join([str(supported_agg_funcs.index(f.ftype)) for f in allfuncs] + ["0"])
+    )
+    func_text += "    func_offsets = np.array({}, dtype=np.int32)\n".format(
+        str(func_offsets)
+    )
+    if len(udf_ncols) > 0:
+        func_text += "    udf_ncols = np.array({}, dtype=np.int32)\n".format(
+            str(udf_ncols)
+        )
+    else:
+        func_text += "    udf_ncols = np.array([0], np.int32)\n"  # dummy
+    # call C++ groupby
+    # We pass the logical arguments to the function (skipdropna, return_key, same_index, ...)
+
+    if has_pivot_value:
+        func_text += "    arr_type = coerce_to_array({})\n".format(pivot_values)
+        func_text += "    arr_info = array_to_info(arr_type)\n"
+        func_text += "    dispatch_table = arr_info_list_to_table([arr_info])\n"
+        func_text += "    pivot_info = array_to_info(pivot_arr)\n"
+        func_text += "    dispatch_info = arr_info_list_to_table([pivot_info])\n"
+        func_text += (
+            "    out_table = pivot_groupby_and_aggregate(table, {}, dispatch_table, dispatch_info, {},"
+            " ftypes.ctypes.data, func_offsets.ctypes.data, udf_ncols.ctypes.data, {}, {}, {}, {}, {}, cpp_cb_update_addr, cpp_cb_combine_addr, cpp_cb_eval_addr, udf_table_dummy)\n".format(
+                n_keys,
+                input_has_index,
+                parallel,
+                is_crosstab,
+                skipdropna,
+                return_key,
+                same_index,
+            )
+        )
+        func_text += "    delete_info_decref_array(pivot_info)\n"
+        func_text += "    delete_info_decref_array(arr_info)\n"
+    else:
+        func_text += (
+            "    out_table = groupby_and_aggregate(table, {}, {},"
+            " ftypes.ctypes.data, func_offsets.ctypes.data, udf_ncols.ctypes.data, {}, {}, {}, {}, cpp_cb_update_addr, cpp_cb_combine_addr, cpp_cb_eval_addr, udf_table_dummy)\n".format(
+                n_keys, input_has_index, parallel, skipdropna, return_key, same_index,
+            )
+        )
+
+    key_names = ["key_" + name for name in key_names]
+    idx = 0
+    if return_key:
+        for i, key_name in enumerate(key_names):
+            func_text += "    {} = info_to_array(info_from_table(out_table, {}), {})\n".format(
+                key_name, idx, key_name
             )
             idx += 1
-        # The index as last argument in output as well.
-        if same_index:
-            func_text += "    out_index_arg = info_to_array(info_from_table(out_table, {}), index_arg)\n".format(
-                idx
-            )
-            idx += 1
-        # clean up
-        func_text += "    delete_table_decref_arrays(table)\n"
-        func_text += "    delete_table_decref_arrays(udf_table_dummy)\n"
-        func_text += "    delete_table(out_table)\n"
-
-        ret_names = out_names
-        if return_key:
-            ret_names += tuple(key_names)
-        func_text += "    return ({},{})\n".format(
-            ", ".join(ret_names), " out_index_arg," if same_index else ""
+    for i in range(len(out_names)):
+        out_name = out_names[i]
+        func_text += "    {} = info_to_array(info_from_table(out_table, {}), {})\n".format(
+            out_name, idx, out_name + "_dummy"
         )
+        idx += 1
+    # The index as last argument in output as well.
+    if same_index:
+        func_text += "    out_index_arg = info_to_array(info_from_table(out_table, {}), index_arg)\n".format(
+            idx
+        )
+        idx += 1
+    # clean up
+    func_text += "    delete_table_decref_arrays(table)\n"
+    func_text += "    delete_table_decref_arrays(udf_table_dummy)\n"
+    func_text += "    delete_table(out_table)\n"
+
+    ret_names = out_names
+    if return_key:
+        ret_names += tuple(key_names)
+    func_text += "    return ({},{})\n".format(
+        ", ".join(ret_names), " out_index_arg," if same_index else ""
+    )
+
+    #    print("func_text=", func_text)
 
     loc_vars = {}
     exec(func_text, {}, loc_vars)
@@ -2397,7 +1905,7 @@ def get_udf_func_struct(
     udf_found = False
 
     for in_col_typ, func in typ_and_func:
-        if pivot_values is None and not is_crosstab and func.ftype != "udf":
+        if func.ftype != "udf":
             # don't generate code for non-udf functions
             continue
 
@@ -2667,9 +2175,6 @@ def gen_all_update_func(
     if pivot_values is not None:
         assert in_num_cols == 1
 
-    # redvar_arrs[0][w_ind], redvar_arrs[1][w_ind] = __update_redvars(
-    #              redvar_arrs[0][w_ind], redvar_arrs[1][w_ind], data_in[0][i])
-
     func_text = "def update_all_f(redvar_arrs, data_in, w_ind, i, pivot_arr):\n"
     if pivot_values is not None:
         num_redvars = redvar_offsets[in_num_cols]
@@ -2738,11 +2243,6 @@ def gen_all_combine_func(
 
     num_cols = len(redvar_offsets) - 1
     num_redvars = redvar_offsets[num_cols]
-
-    #       redvar_0_arr[w_ind], redvar_1_arr[w_ind] = __combine_redvars_0(
-    #             redvar_0_arr[w_ind], redvar_1_arr[w_ind], in_c0[i], in_c1[i])
-    #       redvar_2_arr[w_ind], redvar_3_arr[w_ind] = __combine_redvars_1(
-    #             redvar_2_arr[w_ind], redvar_3_arr[w_ind], in_c2[i], in_c3[i])
 
     func_text = "def combine_all_f(redvar_arrs, recv_arrs, w_ind, i, pivot_arr):\n"
 
@@ -2823,9 +2323,6 @@ def gen_all_eval_func(
     out_col_typs = types.Tuple(out_col_typs)
 
     num_cols = len(redvar_offsets) - 1
-
-    #       out_c0[j] = __eval_res_0(redvar_0_arr[j], redvar_1_arr[j])
-    #       out_c1[j] = __eval_res_1(redvar_2_arr[j], redvar_3_arr[j])
 
     num_redvars = redvar_offsets[num_cols]
 
@@ -3270,58 +2767,6 @@ def get_parfor_reductions(
             reduce_varnames.append(param)
 
     return reduce_varnames, var_to_param
-
-
-def _build_set_tup(arr_tup):  # pragma: no cover
-    return build_set(arr_tup[0])
-
-
-@overload(_build_set_tup, jit_options={"cache": True}, no_unliteral=True)
-def _build_set_tup_overload(arr_tup):
-    # TODO: support string in tuple set
-    if isinstance(arr_tup, types.BaseTuple) and len(arr_tup.types) != 1:
-
-        def _impl(arr_tup):  # pragma: no cover
-            n = len(arr_tup[0])
-            s = dict()
-            for i in range(n):
-                val = getitem_arr_tup(arr_tup, i)
-                s[val] = 0
-            return s
-
-        return _impl
-    return _build_set_tup
-
-
-def num_total_chars_set(s):  # pragma: no cover
-    return (0,)
-
-
-@overload(num_total_chars_set, no_unliteral=True)
-def num_total_chars_set_overload(s):
-    # XXX assuming dict for set workaround
-    dtype = s.key_type
-    key_typs = dtype.types if isinstance(dtype, types.BaseTuple) else [dtype]
-
-    count = len(key_typs)
-    func_text = "def f(s):\n"
-    for i in range(count):
-        func_text += "  n_{} = 0\n".format(i)
-    if any(t == string_type for t in key_typs):
-        func_text += "  for v in s:\n"
-        for i in range(count):
-            if key_typs[i] == string_type:
-                func_text += "    n_{} += get_utf8_size(v{})\n".format(
-                    i, "[{}]".format(i) if isinstance(dtype, types.BaseTuple) else ""
-                )
-    func_text += "  return ({},)\n".format(
-        ", ".join("n_{}".format(i) for i in range(count))
-    )
-
-    loc_vars = {}
-    exec(func_text, {"bodo": bodo, "get_utf8_size": get_utf8_size}, loc_vars)
-    impl = loc_vars["f"]
-    return impl
 
 
 # sentinel function for the use of len (length of group) in agg UDFs, which will be

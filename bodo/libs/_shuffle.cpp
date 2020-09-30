@@ -1024,8 +1024,8 @@ array_info* reverse_shuffle_numpy_array(array_info* in_arr, uint32_t* hashes,
                                         mpi_comm_info const& comm_info) {
     uint64_t siztype = numpy_item_size[in_arr->dtype];
     MPI_Datatype mpi_typ = get_MPI_typ(in_arr->dtype);
-    int64_t n_rows_ret = std::accumulate(comm_info.send_count.begin(),
-                                         comm_info.send_count.end(), 0);
+    size_t n_rows_ret = std::accumulate(comm_info.send_count.begin(),
+                                        comm_info.send_count.end(), 0);
     array_info* out_arr = alloc_array(n_rows_ret, 0, 0, in_arr->arr_type,
                                       in_arr->dtype, 0, in_arr->num_categories);
     char* data1_i = in_arr->data1;

@@ -984,10 +984,8 @@ def pd_dataframe_overload(data=None, index=None, columns=None, dtype=None, copy=
     func_text = (
         "def _init_df(data=None, index=None, columns=None, dtype=None, copy=False):\n"
     )
-    func_text += (
-        "  return bodo.hiframes.pd_dataframe_ext.init_dataframe({}, {}, {})\n".format(
-            data_args, index_arg, col_var
-        )
+    func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe({}, {}, {})\n".format(
+        data_args, index_arg, col_var
     )
     loc_vars = {}
     exec(func_text, {"bodo": bodo, "np": np}, loc_vars)
@@ -1025,10 +1023,8 @@ def _get_df_args(data, index, columns, dtype, copy):
         if is_overload_none(index):
             for i, t in enumerate(data.types[n_cols + 1 :]):
                 if isinstance(t, SeriesType):
-                    index_arg = (
-                        "bodo.hiframes.pd_series_ext.get_series_index(data[{}])".format(
-                            n_cols + 1 + i
-                        )
+                    index_arg = "bodo.hiframes.pd_series_ext.get_series_index(data[{}])".format(
+                        n_cols + 1 + i
                     )
                     index_is_none = False
                     break
@@ -1072,10 +1068,8 @@ def _get_df_args(data, index, columns, dtype, copy):
         if is_overload_none(data):
             index_arg = "bodo.hiframes.pd_index_ext.init_string_index(bodo.libs.str_arr_ext.pre_alloc_string_array(0, 0))"
         else:
-            index_arg = (
-                "bodo.hiframes.pd_index_ext.init_range_index(0, {}, 1, None)".format(
-                    df_len
-                )
+            index_arg = "bodo.hiframes.pd_index_ext.init_range_index(0, {}, 1, None)".format(
+                df_len
             )
 
     data_args = "({},)".format(
@@ -1979,7 +1973,7 @@ def crosstab_overload(
     normalize=False,
     _pivot_values=None,
 ):
-    # TODO: hanlde multiple keys (index args)
+    # TODO: handle multiple keys (index args).
     # TODO: handle values and aggfunc options
     def _impl(
         index,
@@ -2962,15 +2956,7 @@ def to_sql_exception_guard(
     err_msg = "all_ok"
     try:
         df.to_sql(
-            name,
-            con,
-            schema,
-            if_exists,
-            index,
-            index_label,
-            chunksize,
-            dtype,
-            method,
+            name, con, schema, if_exists, index, index_label, chunksize, dtype, method,
         )
     except ValueError as e:
         err_msg = e.args[0]

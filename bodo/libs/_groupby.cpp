@@ -677,6 +677,197 @@ struct var_agg<T, dtype,
     }
 };
 
+/** Data structure used for the computation of groups.
+
+    @data row_to_group       : This takes the index and returns the group
+    @data group_to_first_row : This takes the group index and return the first
+   row index.
+    @data next_row_in_group  : for a row in the list returns the next row in the
+   list if existent. if non-existent value is -1.
+    @data list_missing       : list of rows which are missing and NaNs.
+
+    This is only one data structure but it has two use cases.
+    -- get_group_info computes only the entries row_to_group and
+   group_to_first_row. This is the data structure used for groupby operations
+   such as sum, mean, etc. for which the full group structure does not need to
+   be known.
+    -- get_group_info_iterate computes all the entries. This is needed for some
+   operations such as nunique, median, and cumulative operations. The entry
+   list_missing is computed only for cumulative operations and computed only if
+   needed.
+ */
+struct grouping_info {
+    std::vector<int64_t> row_to_group;
+    std::vector<int64_t> group_to_first_row;
+    std::vector<int64_t> next_row_in_group;
+    std::vector<int64_t> list_missing;
+    table_info* dispatch_table;
+    table_info* dispatch_info;
+    size_t num_groups;
+    size_t n_pivot;
+    int mode;  // 1: for the update, 2: for the combine
+};
+
+/*
+  The construction of the array_info from standard vectors.
+  It covers array_info and multiple_array_info.
+ */
+array_info* create_string_array_iter(
+    std::vector<uint8_t> const& V,
+    std::vector<std::string>::const_iterator& iter, size_t const& len,
+    size_t start_idx) {
+    size_t nb_char = 0;
+    std::vector<std::string>::const_iterator iter_b = iter;
+    for (size_t i_grp = 0; i_grp < len; i_grp++) {
+        if (GetBit(V.data(), i_grp)) {
+            nb_char += iter_b->size();
+        }
+        iter_b++;
+    }
+    size_t extra_bytes = 0;
+    array_info* out_col = alloc_string_array(len, nb_char, extra_bytes);
+    // update string array payload to reflect change
+    char* data_o = out_col->data1;
+    uint32_t* offsets_o = (uint32_t*)out_col->data2;
+    uint32_t pos = 0;
+    iter_b = iter;
+    for (size_t i_grp = 0; i_grp < len; i_grp++) {
+        offsets_o[i_grp] = pos;
+        bool bit = GetBit(V.data(), start_idx + i_grp);
+        if (bit) {
+            int len_str = int(iter_b->size());
+            memcpy(data_o, iter_b->data(), len_str);
+            data_o += len_str;
+            pos += len_str;
+        }
+        out_col->set_null_bit(i_grp, bit);
+        iter_b++;
+    }
+    offsets_o[len] = pos;
+    return out_col;
+}
+
+template <typename ARRAY>
+typename std::enable_if<!is_multiple_array<ARRAY>::value, ARRAY*>::type
+create_string_array(grouping_info const& grp_info,
+                    std::vector<uint8_t> const& V,
+                    std::vector<std::string> const& ListString) {
+    std::vector<std::string>::const_iterator iter = ListString.begin();
+    size_t start_idx = 0;
+    return create_string_array_iter(V, iter, ListString.size(), start_idx);
+}
+
+template <typename ARRAY>
+typename std::enable_if<is_multiple_array<ARRAY>::value, ARRAY*>::type
+create_string_array(grouping_info const& grp_info,
+                    std::vector<uint8_t> const& V,
+                    std::vector<std::string> const& ListString) {
+    size_t num_groups = grp_info.num_groups;
+    size_t len_loc = grp_info.group_to_first_row.size();
+    size_t n_block = num_groups / len_loc;
+    std::vector<array_info*> vect_arr(n_block);
+    std::vector<std::string>::const_iterator iter = ListString.begin();
+    for (size_t i_block = 0; i_block < n_block; i_block++) {
+        size_t start_idx = i_block * len_loc;
+        vect_arr[i_block] =
+            create_string_array_iter(V, iter, len_loc, start_idx);
+        iter += len_loc;
+    }
+    return new multiple_array_info(vect_arr);
+}
+
+array_info* create_list_string_array_iter(
+    std::vector<uint8_t> const& V,
+    std::vector<std::vector<pair_str_bool>>::const_iterator const& iter,
+    size_t len, size_t start_idx) {
+    // Determining the number of characters in output.
+    size_t nb_string = 0;
+    size_t nb_char = 0;
+    std::vector<std::vector<pair_str_bool>>::const_iterator iter_b = iter;
+    for (size_t i_grp = 0; i_grp < len; i_grp++) {
+        if (GetBit(V.data(), i_grp)) {
+            std::vector<pair_str_bool> e_list = *iter_b;
+            nb_string += e_list.size();
+            for (auto& e_str : e_list) nb_char += e_str.first.size();
+        }
+        iter_b++;
+    }
+    // Allocation needs to be done through
+    // alloc_list_string_array, which allocates with meminfos
+    // and same data structs that Python uses. We need to
+    // re-allocate here because number of strings and chars has
+    // been determined here (previous out_col was just an empty
+    // dummy allocation).
+
+    array_info* new_out_col =
+        alloc_list_string_array(len, nb_string, nb_char, 0);
+    uint32_t* index_offsets_o = (uint32_t*)new_out_col->data3;
+    uint32_t* data_offsets_o = (uint32_t*)new_out_col->data2;
+    uint8_t* sub_null_bitmask_o = (uint8_t*)new_out_col->sub_null_bitmask;
+    // Writing the list_strings in output
+    char* data_o = new_out_col->data1;
+    data_offsets_o[0] = 0;
+    uint32_t pos_index = 0;
+    uint32_t pos_data = 0;
+    iter_b = iter;
+    for (size_t i_grp = 0; i_grp < len; i_grp++) {
+        bool bit = GetBit(V.data(), i_grp);
+        new_out_col->set_null_bit(i_grp, bit);
+        index_offsets_o[i_grp] = pos_index;
+        if (bit) {
+            std::vector<pair_str_bool> e_list = *iter_b;
+            uint32_t n_string = e_list.size();
+            for (uint32_t i_str = 0; i_str < n_string; i_str++) {
+                std::string& estr = e_list[i_str].first;
+                uint32_t n_char = estr.size();
+                memcpy(data_o, estr.data(), n_char);
+                data_o += n_char;
+                pos_data++;
+                data_offsets_o[pos_data] =
+                    data_offsets_o[pos_data - 1] + n_char;
+                bool bit = e_list[i_str].second;
+                SetBitTo(sub_null_bitmask_o, pos_index + i_str, bit);
+            }
+            pos_index += n_string;
+        }
+        iter_b++;
+    }
+    index_offsets_o[len] = pos_index;
+    return new_out_col;
+}
+
+template <typename ARRAY>
+typename std::enable_if<!is_multiple_array<ARRAY>::value, ARRAY*>::type
+create_list_string_array(
+    grouping_info const& grp_info, std::vector<uint8_t> const& V,
+    std::vector<std::vector<pair_str_bool>> const& ListListPair) {
+    std::vector<std::vector<pair_str_bool>>::const_iterator iter =
+        ListListPair.begin();
+    size_t start_idx = 0;
+    return create_list_string_array_iter(V, iter, ListListPair.size(),
+                                         start_idx);
+}
+
+template <typename ARRAY>
+typename std::enable_if<is_multiple_array<ARRAY>::value, ARRAY*>::type
+create_list_string_array(
+    grouping_info const& grp_info, std::vector<uint8_t> const& V,
+    std::vector<std::vector<pair_str_bool>> const& ListListPair) {
+    size_t num_groups = grp_info.num_groups;
+    size_t len_loc = grp_info.group_to_first_row.size();
+    size_t n_block = num_groups / len_loc;
+    std::vector<array_info*> vect_arr(n_block);
+    std::vector<std::vector<pair_str_bool>>::const_iterator iter =
+        ListListPair.begin();
+    for (size_t i_block = 0; i_block < n_block; i_block++) {
+        size_t start_idx = i_block * len_loc;
+        vect_arr[i_block] =
+            create_list_string_array_iter(V, iter, len_loc, start_idx);
+        iter += len_loc;
+    }
+    return new multiple_array_info(vect_arr);
+}
+
 /**
  * Perform combine operation for variance, which for a set of rows belonging
  * to the same group with count (# observations), mean and m2, reduces
@@ -695,24 +886,87 @@ struct var_agg<T, dtype,
  * @param output array of m2 (one row per group)
  * @param maps row numbers in input arrays to row number in output array
  */
-static void var_combine(array_info* count_col_in, array_info* mean_col_in,
-                        array_info* m2_col_in, array_info* count_col_out,
-                        array_info* mean_col_out, array_info* m2_col_out,
-                        const std::vector<int64_t>& row_to_group) {
+template <typename ARRAY, typename F>
+void var_combine_F(ARRAY* count_col_in, ARRAY* mean_col_in, ARRAY* m2_col_in,
+                   ARRAY* count_col_out, ARRAY* mean_col_out, ARRAY* m2_col_out,
+                   F f) {
     for (int64_t i = 0; i < count_col_in->length; i++) {
-        uint64_t& count_a = count_col_out->at<uint64_t>(row_to_group[i]);
-        uint64_t& count_b = count_col_in->at<uint64_t>(i);
-        double& mean_a = mean_col_out->at<double>(row_to_group[i]);
-        double& mean_b = mean_col_in->at<double>(i);
-        double& m2_a = m2_col_out->at<double>(row_to_group[i]);
-        double& m2_b = m2_col_in->at<double>(i);
-
+        int64_t j = f(i);
+        uint64_t& count_a = getv<ARRAY, uint64_t>(count_col_out, j);
+        uint64_t& count_b = getv<ARRAY, uint64_t>(count_col_in, i);
+        double& mean_a = getv<ARRAY, double>(mean_col_out, j);
+        double& mean_b = getv<ARRAY, double>(mean_col_in, i);
+        double& m2_a = getv<ARRAY, double>(m2_col_out, j);
+        double& m2_b = getv<ARRAY, double>(m2_col_in, i);
         uint64_t count = count_a + count_b;
         double delta = mean_b - mean_a;
         mean_a = (count_a * mean_a + count_b * mean_b) / count;
         m2_a = m2_a + m2_b + delta * delta * count_a * count_b / count;
         count_a = count;
     }
+}
+
+template <typename ARRAY>
+typename std::enable_if<!is_multiple_array<ARRAY>::value, void>::type
+var_combine(ARRAY* count_col_in, ARRAY* mean_col_in, ARRAY* m2_col_in,
+            ARRAY* count_col_out, ARRAY* mean_col_out, ARRAY* m2_col_out,
+            grouping_info const& grp_info) {
+    auto f = [&](int64_t const& i_row) -> int64_t {
+        return grp_info.row_to_group[i_row];
+    };
+    return var_combine_F<ARRAY, decltype(f)>(count_col_in, mean_col_in,
+                                             m2_col_in, count_col_out,
+                                             mean_col_out, m2_col_out, f);
+}
+
+template <typename ARRAY>
+typename std::enable_if<is_multiple_array<ARRAY>::value, void>::type
+var_combine(ARRAY* count_col_in, ARRAY* mean_col_in, ARRAY* m2_col_in,
+            ARRAY* count_col_out, ARRAY* mean_col_out, ARRAY* m2_col_out,
+            grouping_info const& grp_info) {
+    table_info* dispatch_table = grp_info.dispatch_table;
+    table_info* dispatch_info = grp_info.dispatch_info;
+    int n_cols = dispatch_table->ncols();
+    int n_dis = dispatch_table->nrows();
+    size_t n_pivot = grp_info.n_pivot;
+    bool na_position_bis = true;
+    auto KeyComparisonAsPython_Table = [&](int i_info, int i_dis) -> bool {
+        for (int64_t i_col = 0; i_col < n_cols; i_col++) {
+            int test = KeyComparisonAsPython_Column(
+                na_position_bis, dispatch_table->columns[i_col], i_dis,
+                dispatch_info->columns[i_col], i_info);
+            if (test != 0) return false;
+        }
+        return true;
+    };
+    auto get_i_dis = [&](int64_t const& i_info) -> int64_t {
+        for (int64_t i_dis = 0; i_dis < n_dis; i_dis++) {
+            bool test = KeyComparisonAsPython_Table(i_info, i_dis);
+            if (test) return i_dis;
+        }
+        return -1;
+    };
+#ifdef DEBUG_GROUPBY
+    std::cout << "grp_info.mode=" << grp_info.mode << "\n";
+#endif
+    auto f = [&](int64_t const& i_row) -> int64_t {
+        if (grp_info.mode == 1) {
+            int64_t i_grp = grp_info.row_to_group[i_row];
+            int i_dis = get_i_dis(i_row);
+            if (i_dis == -1) return -1;
+            return i_dis + n_pivot * i_grp;
+        } else {
+            int i_dis = i_row % n_pivot;
+            int i_row_red = i_row / n_pivot;
+            int64_t i_grp_red = grp_info.row_to_group[i_row_red];
+            if (i_grp_red == -1) return -1;
+            int64_t i_grp = i_dis + n_pivot * i_grp_red;
+            return i_grp;
+        }
+    };
+    return var_combine_F<ARRAY, decltype(f)>(count_col_in, mean_col_in,
+                                             m2_col_in, count_col_out,
+                                             mean_col_out, m2_col_out, f);
 }
 
 /**
@@ -790,32 +1044,6 @@ struct aggfunc<
     }
 };
 
-/** Data structure used for the computation of groups.
-
-    @data row_to_group       : This takes the index and returns the group
-    @data group_to_first_row : This takes the group index and return the first
-   row index.
-    @data next_row_in_group  : for a row in the list returns the next row in the
-   list if existent. if non-existent value is -1.
-    @data list_missing       : list of rows which are missing and NaNs.
-
-    This is only one data structure but it has two use cases.
-    -- get_group_info computes only the entries row_to_group and
-   group_to_first_row. This is the data structure used for groupby operations
-   such as sum, mean, etc. for which the full group structure does not need to
-   be known.
-    -- get_group_info_iterate computes all the entries. This is needed for some
-   operations such as nunique, median, and cumulative operations. The entry
-   list_missing is computed only for cumulative operations and computed only if
-   needed.
- */
-struct grouping_info {
-    std::vector<int64_t> row_to_group;
-    std::vector<int64_t> group_to_first_row;
-    std::vector<int64_t> next_row_in_group;
-    std::vector<int64_t> list_missing;
-};
-
 /**
  * Multi column key used for hashing keys to determine group membership in
  * groupby
@@ -847,10 +1075,9 @@ struct multi_col_key {
                 }
                     continue;
                 case bodo_array_type::NULLABLE_INT_BOOL:
-                    if (GetBit((uint8_t*)c1->null_bitmask, row) !=
-                        GetBit((uint8_t*)c2->null_bitmask, other.row))
+                    if (c1->get_null_bit(row) != c2->get_null_bit(other.row))
                         return false;
-                    if (!GetBit((uint8_t*)c1->null_bitmask, row)) continue;
+                    if (!c1->get_null_bit(row)) continue;
                 case bodo_array_type::CATEGORICAL:  // Even in missing case
                                                     // (value -1) this works
                 case bodo_array_type::NUMPY:
@@ -945,18 +1172,18 @@ struct key_hash {
  * @param[out] vector that maps group number to the first row in the table
  *                that belongs to that group
  */
-void get_group_info(table_info& table, std::vector<int64_t>& row_to_group,
+void get_group_info(table_info* table, std::vector<int64_t>& row_to_group,
                     std::vector<int64_t>& group_to_first_row,
                     bool check_for_null_keys) {
 #ifdef DEBUG_GROUPBY
     std::cout << "Beginning of get_group_info\n";
 #endif
     std::vector<array_info*> key_cols = std::vector<array_info*>(
-        table.columns.begin(), table.columns.begin() + table.num_keys);
+        table->columns.begin(), table->columns.begin() + table->num_keys);
     uint32_t seed = SEED_HASH_GROUPBY_SHUFFLE;
     uint32_t* hashes = hash_keys(key_cols, seed);
 
-    row_to_group.reserve(table.nrows());
+    row_to_group.reserve(table->nrows());
     // start at 1 because I'm going to use 0 to mean nothing was inserted yet
     // in the map (but note that the group values I record in the output go from
     // 0 to num_groups - 1)
@@ -970,14 +1197,14 @@ void get_group_info(table_info& table, std::vector<int64_t>& row_to_group,
     std::cout << "check_for_null_keys=" << check_for_null_keys
               << " key_is_nullable=" << key_is_nullable << "\n";
 #endif
-    for (int64_t i = 0; i < table.nrows(); i++) {
+    for (int64_t i = 0; i < table->nrows(); i++) {
         if (key_is_nullable) {
             if (does_row_has_nulls(key_cols, i)) {
                 row_to_group.emplace_back(-1);
                 continue;
             }
         }
-        multi_col_key key(hashes[i], &table, i);
+        multi_col_key key(hashes[i], table, i);
         int64_t& group = key_to_group[key];  // this inserts 0 into the map if
                                              // key doesn't exist
         if (group == 0) {
@@ -1045,8 +1272,14 @@ grouping_info get_group_info_iterate(table_info* table, bool consider_missing) {
         row_to_group[i] = group - 1;
     }
     delete[] hashes;
-    return {std::move(row_to_group), std::move(group_to_first_row),
-            std::move(next_row_in_group), std::move(list_missing)};
+    size_t num_groups = group_to_first_row.size();
+    return {std::move(row_to_group),
+            std::move(group_to_first_row),
+            std::move(next_row_in_group),
+            std::move(list_missing),
+            nullptr,
+            nullptr,
+            num_groups};
 }
 
 /**
@@ -1060,9 +1293,9 @@ grouping_info get_group_info_iterate(table_info* table, bool consider_missing) {
  */
 template <typename T, int dtype>
 void cumulative_computation_T(array_info* arr, array_info* out_arr,
-                              grouping_info const& grp_inf,
+                              grouping_info const& grp_info,
                               int32_t const& ftype, bool const& skipna) {
-    size_t num_group = grp_inf.group_to_first_row.size();
+    size_t num_group = grp_info.group_to_first_row.size();
     if (arr->arr_type == bodo_array_type::STRING ||
         arr->arr_type == bodo_array_type::LIST_STRING) {
         Bodo_PyErr_SetString(PyExc_RuntimeError,
@@ -1075,7 +1308,7 @@ void cumulative_computation_T(array_info* arr, array_info* out_arr,
             std::function<void(int64_t, std::pair<bool, T> const&)> const&
                 set_entry) -> void {
         for (size_t igrp = 0; igrp < num_group; igrp++) {
-            int64_t i = grp_inf.group_to_first_row[igrp];
+            int64_t i = grp_info.group_to_first_row[igrp];
             T initVal;
             if (ftype == Bodo_FTypes::cumsum) initVal = 0;
             if (ftype == Bodo_FTypes::cummin)
@@ -1104,14 +1337,14 @@ void cumulative_computation_T(array_info* arr, array_info* out_arr,
                         ePair.second = std::max(ePair.second, fPair.second);
                     set_entry(i, ePair);
                 }
-                i = grp_inf.next_row_in_group[i];
+                i = grp_info.next_row_in_group[i];
                 if (i == -1) break;
             }
         }
         T eVal_nan = GetTentry<T>(
             RetrieveNaNentry((Bodo_CTypes::CTypeEnum)dtype).data());
         std::pair<bool, T> pairNaN{true, eVal_nan};
-        for (auto& idx_miss : grp_inf.list_missing)
+        for (auto& idx_miss : grp_info.list_missing)
             set_entry(idx_miss, pairNaN);
     };
 
@@ -1144,21 +1377,19 @@ void cumulative_computation_T(array_info* arr, array_info* out_arr,
         }
     }
     if (arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
-        uint8_t* null_bitmask_i = (uint8_t*)arr->null_bitmask;
-        uint8_t* null_bitmask_o = (uint8_t*)out_arr->null_bitmask;
         cum_computation(
             [=](int64_t pos) -> std::pair<bool, T> {
-                return {!GetBit(null_bitmask_i, pos), arr->at<T>(pos)};
+                return {!arr->get_null_bit(pos), arr->at<T>(pos)};
             },
             [=](int64_t pos, std::pair<bool, T> const& ePair) -> void {
-                SetBitTo(null_bitmask_o, pos, !ePair.first);
+                out_arr->set_null_bit(pos, !ePair.first);
                 out_arr->at<T>(pos) = ePair.second;
             });
     }
 }
 
 void cumulative_computation_list_string(array_info* arr, array_info* out_arr,
-                                        grouping_info const& grp_inf,
+                                        grouping_info const& grp_info,
                                         int32_t const& ftype,
                                         bool const& skipna) {
 #ifdef DEBUG_GROUPBY
@@ -1169,8 +1400,7 @@ void cumulative_computation_list_string(array_info* arr, array_info* out_arr,
                              "So far only cumulative sums for list-strings");
     }
     int64_t n = arr->length;
-    using Tbas = std::pair<bool, std::string>;
-    using T = std::pair<bool, std::vector<Tbas>>;
+    using T = std::pair<bool, std::vector<pair_str_bool>>;
     std::vector<T> V(n);
     uint8_t* null_bitmask = (uint8_t*)arr->null_bitmask;
     uint8_t* sub_null_bitmask = (uint8_t*)arr->sub_null_bitmask;
@@ -1181,24 +1411,20 @@ void cumulative_computation_list_string(array_info* arr, array_info* out_arr,
         bool isna = !GetBit(null_bitmask, i);
         uint32_t start_idx_offset = index_offsets[i];
         uint32_t end_idx_offset = index_offsets[i + 1];
-        std::vector<Tbas> LEnt;
+        std::vector<pair_str_bool> LEnt;
         for (uint32_t idx = start_idx_offset; idx < end_idx_offset; idx++) {
             uint32_t str_len = data_offsets[idx + 1] - data_offsets[idx];
             uint32_t start_data_offset = data_offsets[idx];
             bool bit = GetBit(sub_null_bitmask, idx);
-#ifdef DEBUG_GROUPBY
-            std::cout << "get_entry i=" << i << " idx=" << idx << " bit=" << bit
-                      << "\n";
-#endif
             std::string val(&data[start_data_offset], str_len);
-            Tbas eEnt = {bit, val};
+            pair_str_bool eEnt = {val, bit};
             LEnt.push_back(eEnt);
         }
         return {isna, LEnt};
     };
-    size_t num_group = grp_inf.group_to_first_row.size();
+    size_t num_group = grp_info.group_to_first_row.size();
     for (size_t igrp = 0; igrp < num_group; igrp++) {
-        int64_t i = grp_inf.group_to_first_row[igrp];
+        int64_t i = grp_info.group_to_first_row[igrp];
         T ePair{false, {}};
         while (true) {
             T fPair = get_entry(i);
@@ -1213,61 +1439,32 @@ void cumulative_computation_list_string(array_info* arr, array_info* out_arr,
                 for (auto& eStr : fPair.second) ePair.second.push_back(eStr);
                 V[i] = ePair;
             }
-            i = grp_inf.next_row_in_group[i];
+            i = grp_info.next_row_in_group[i];
             if (i == -1) break;
         }
     }
     T pairNaN{true, {}};
-    for (auto& idx_miss : grp_inf.list_missing) V[idx_miss] = pairNaN;
-    // Now writing down in the array.
-    int64_t nb_char = 0, nb_str = 0;
-    for (auto& kPair : V) {
-        nb_str += kPair.second.size();
-        for (auto& estr : kPair.second) nb_char += estr.second.size();
+    for (auto& idx_miss : grp_info.list_missing) V[idx_miss] = pairNaN;
+    //
+    size_t n_bytes = (n + 7) >> 3;
+    std::vector<uint8_t> Vmask(n_bytes, 0);
+    std::vector<std::vector<pair_str_bool>> ListListPair(n);
+    for (int i = 0; i < n; i++) {
+        SetBitTo(Vmask.data(), i, !V[i].first);
+        ListListPair[i] = V[i].second;
     }
-    // Doing the alocation trickery.
-    array_info* new_out_col = alloc_list_string_array(n, nb_str, nb_char, 0);
-    uint32_t* index_offsets_o = (uint32_t*)new_out_col->data3;
-    uint32_t* data_offsets_o = (uint32_t*)new_out_col->data2;
-    char* data_o = (char*)new_out_col->data1;
-    uint8_t* null_bitmask_o = (uint8_t*)new_out_col->null_bitmask;
-    uint8_t* sub_null_bitmask_o = (uint8_t*)new_out_col->sub_null_bitmask;
-    // Writing the strings in output
-    uint32_t pos_idx = 0;
-    uint32_t pos_char = 0;
-    for (int64_t i = 0; i < n; i++) {
-        index_offsets_o[i] = pos_idx;
-        T uPair = V[i];
-        SetBitTo(null_bitmask_o, i, !uPair.first);
-        size_t n_str = uPair.second.size();
-        for (size_t i_str = 0; i_str < n_str; i_str++) {
-            Tbas eBas = uPair.second[i_str];
-            bool bit = eBas.first;
-            std::string estr = eBas.second;
-            size_t len = estr.size();
-            memcpy(data_o, estr.data(), len);
-            data_offsets_o[pos_idx + i_str] = pos_char;
-            SetBitTo(sub_null_bitmask_o, pos_idx + i_str, bit);
-            pos_char += len;
-            data_o += len;
-        }
-        pos_idx += n_str;
-    }
-    index_offsets_o[n] = pos_idx;
-    data_offsets_o[nb_str] = pos_char;
+    array_info* new_out_col =
+        create_list_string_array<array_info>(grp_info, Vmask, ListListPair);
 #ifdef DEBUG_GROUPBY
-    std::cout << "End of cumulative_computation_list_string\n";
+    std::cout << "new_out_col : ";
+    DEBUG_PrintColumn(std::cout, new_out_col);
 #endif
     *out_arr = std::move(*new_out_col);
-#ifdef DEBUG_GROUPBY
-    std::cout << "out_arr : ";
-    DEBUG_PrintColumn(std::cout, out_arr);
-#endif
     delete new_out_col;
 }
 
 void cumulative_computation_string(array_info* arr, array_info* out_arr,
-                                   grouping_info const& grp_inf,
+                                   grouping_info const& grp_info,
                                    int32_t const& ftype, bool const& skipna) {
 #ifdef DEBUG_GROUPBY
     std::cout << "Beginning of cumulative_computation_string\n";
@@ -1290,9 +1487,9 @@ void cumulative_computation_string(array_info* arr, array_info* out_arr,
         std::string val(&data[start_offset], len);
         return {isna, val};
     };
-    size_t num_group = grp_inf.group_to_first_row.size();
+    size_t num_group = grp_info.group_to_first_row.size();
     for (size_t igrp = 0; igrp < num_group; igrp++) {
-        int64_t i = grp_inf.group_to_first_row[igrp];
+        int64_t i = grp_info.group_to_first_row[igrp];
         T ePair{false, ""};
         while (true) {
             T fPair = get_entry(i);
@@ -1307,96 +1504,93 @@ void cumulative_computation_string(array_info* arr, array_info* out_arr,
                 ePair.second += fPair.second;
                 V[i] = ePair;
             }
-            i = grp_inf.next_row_in_group[i];
+            i = grp_info.next_row_in_group[i];
             if (i == -1) break;
         }
     }
     T pairNaN{true, ""};
-    for (auto& idx_miss : grp_inf.list_missing) V[idx_miss] = pairNaN;
+    for (auto& idx_miss : grp_info.list_missing) V[idx_miss] = pairNaN;
     // Now writing down in the array.
-    int64_t nb_char = 0;
-    for (auto& kPair : V) nb_char += kPair.second.size();
-    array_info* new_out_col = alloc_string_array(n, nb_char, 0);
-    char* data_o = new_out_col->data1;
-    uint32_t* offsets_o = (uint32_t*)new_out_col->data2;
-    uint8_t* null_bitmask_o = (uint8_t*)new_out_col->null_bitmask;
-    // Writing the strings in output
-    uint32_t pos = 0;
+    size_t n_bytes = (n + 7) >> 3;
+    std::vector<uint8_t> Vmask(n_bytes, 0);
+    std::vector<std::string> ListString(n);
     for (int64_t i = 0; i < n; i++) {
-        offsets_o[i] = pos;
-        T uPair = V[i];
-        SetBitTo(null_bitmask_o, i, !uPair.first);
-        size_t len = uPair.second.size();
-        memcpy(data_o, uPair.second.data(), len);
-        data_o += len;
-        pos += len;
+        SetBitTo(Vmask.data(), i, !V[i].first);
+        ListString[i] = V[i].second;
     }
-    offsets_o[n] = pos;
-#ifdef DEBUG_GROUPBY
-    std::cout << "End of cumulative_computation_string\n";
-#endif
+    array_info* new_out_col =
+        create_string_array<array_info>(grp_info, Vmask, ListString);
     *out_arr = std::move(*new_out_col);
 #ifdef DEBUG_GROUPBY
     std::cout << "out_arr : ";
     DEBUG_PrintColumn(std::cout, out_arr);
+    std::cout << "End of cumulative_computation_string\n";
 #endif
     delete new_out_col;
 }
 
-void cumulative_computation(array_info* arr, array_info* out_arr,
-                            grouping_info const& grp_inf, int32_t const& ftype,
-                            bool const& skipna) {
+template <typename ARRAY>
+typename std::enable_if<!is_multiple_array<ARRAY>::value, void>::type
+cumulative_computation(array_info* arr, array_info* out_arr,
+                       grouping_info const& grp_info, int32_t const& ftype,
+                       bool const& skipna) {
     Bodo_CTypes::CTypeEnum dtype = arr->dtype;
     if (arr->arr_type == bodo_array_type::STRING)
-        return cumulative_computation_string(arr, out_arr, grp_inf, ftype,
+        return cumulative_computation_string(arr, out_arr, grp_info, ftype,
                                              skipna);
     if (arr->arr_type == bodo_array_type::LIST_STRING)
-        return cumulative_computation_list_string(arr, out_arr, grp_inf, ftype,
+        return cumulative_computation_list_string(arr, out_arr, grp_info, ftype,
                                                   skipna);
     if (dtype == Bodo_CTypes::INT8)
         return cumulative_computation_T<int8_t, Bodo_CTypes::INT8>(
-            arr, out_arr, grp_inf, ftype, skipna);
+            arr, out_arr, grp_info, ftype, skipna);
     if (dtype == Bodo_CTypes::UINT8)
         return cumulative_computation_T<uint8_t, Bodo_CTypes::UINT8>(
-            arr, out_arr, grp_inf, ftype, skipna);
-
+            arr, out_arr, grp_info, ftype, skipna);
     if (dtype == Bodo_CTypes::INT16)
         return cumulative_computation_T<int16_t, Bodo_CTypes::INT16>(
-            arr, out_arr, grp_inf, ftype, skipna);
+            arr, out_arr, grp_info, ftype, skipna);
     if (dtype == Bodo_CTypes::UINT16)
         return cumulative_computation_T<uint16_t, Bodo_CTypes::UINT16>(
-            arr, out_arr, grp_inf, ftype, skipna);
-
+            arr, out_arr, grp_info, ftype, skipna);
     if (dtype == Bodo_CTypes::INT32)
         return cumulative_computation_T<int32_t, Bodo_CTypes::INT32>(
-            arr, out_arr, grp_inf, ftype, skipna);
+            arr, out_arr, grp_info, ftype, skipna);
     if (dtype == Bodo_CTypes::UINT32)
         return cumulative_computation_T<uint32_t, Bodo_CTypes::UINT32>(
-            arr, out_arr, grp_inf, ftype, skipna);
-
+            arr, out_arr, grp_info, ftype, skipna);
     if (dtype == Bodo_CTypes::INT64)
         return cumulative_computation_T<int64_t, Bodo_CTypes::INT64>(
-            arr, out_arr, grp_inf, ftype, skipna);
+            arr, out_arr, grp_info, ftype, skipna);
     if (dtype == Bodo_CTypes::UINT64)
         return cumulative_computation_T<uint64_t, Bodo_CTypes::UINT64>(
-            arr, out_arr, grp_inf, ftype, skipna);
-
+            arr, out_arr, grp_info, ftype, skipna);
     if (dtype == Bodo_CTypes::FLOAT32)
         return cumulative_computation_T<float, Bodo_CTypes::FLOAT32>(
-            arr, out_arr, grp_inf, ftype, skipna);
+            arr, out_arr, grp_info, ftype, skipna);
     if (dtype == Bodo_CTypes::FLOAT64)
         return cumulative_computation_T<double, Bodo_CTypes::FLOAT64>(
-            arr, out_arr, grp_inf, ftype, skipna);
-
+            arr, out_arr, grp_info, ftype, skipna);
     if (dtype == Bodo_CTypes::DATE)
         return cumulative_computation_T<int64_t, Bodo_CTypes::DATE>(
-            arr, out_arr, grp_inf, ftype, skipna);
+            arr, out_arr, grp_info, ftype, skipna);
     if (dtype == Bodo_CTypes::DATETIME)
         return cumulative_computation_T<int64_t, Bodo_CTypes::DATETIME>(
-            arr, out_arr, grp_inf, ftype, skipna);
+            arr, out_arr, grp_info, ftype, skipna);
     if (dtype == Bodo_CTypes::TIMEDELTA)
         return cumulative_computation_T<int64_t, Bodo_CTypes::TIMEDELTA>(
-            arr, out_arr, grp_inf, ftype, skipna);
+            arr, out_arr, grp_info, ftype, skipna);
+}
+
+template <typename ARRAY>
+typename std::enable_if<is_multiple_array<ARRAY>::value, void>::type
+cumulative_computation(array_info* arr, ARRAY* out_arr,
+                       grouping_info const& grp_info, int32_t const& ftype,
+                       bool const& skipna) {
+    Bodo_PyErr_SetString(PyExc_RuntimeError,
+                         "while cumulative operation makes sense for "
+                         "pivot_table/crosstab the functionality is missing "
+                         "right now");
 }
 
 /**
@@ -1407,9 +1601,11 @@ void cumulative_computation(array_info* arr, array_info* out_arr,
  * @param The array containing information on how the rows are organized
  * @param skipna: Whether to skip NaN values or not.
  */
-void median_computation(array_info* arr, array_info* out_arr,
-                        grouping_info const& grp_inf, bool const& skipna) {
-    size_t num_group = grp_inf.group_to_first_row.size();
+template <typename ARRAY>
+typename std::enable_if<!is_multiple_array<ARRAY>::value, void>::type
+median_computation(array_info* arr, array_info* out_arr,
+                   grouping_info const& grp_info, bool const& skipna) {
+    size_t num_group = grp_info.group_to_first_row.size();
     size_t siztype = numpy_item_size[arr->dtype];
     if (arr->arr_type == bodo_array_type::STRING ||
         arr->arr_type == bodo_array_type::LIST_STRING) {
@@ -1428,7 +1624,7 @@ void median_computation(array_info* arr, array_info* out_arr,
     auto median_operation =
         [&](std::function<bool(size_t)> const& isnan_entry) -> void {
         for (size_t igrp = 0; igrp < num_group; igrp++) {
-            int64_t i = grp_inf.group_to_first_row[igrp];
+            int64_t i = grp_info.group_to_first_row[igrp];
             std::vector<double> ListValue;
             bool HasNaN = false;
             while (true) {
@@ -1442,7 +1638,7 @@ void median_computation(array_info* arr, array_info* out_arr,
                         break;
                     }
                 }
-                i = grp_inf.next_row_in_group[i];
+                i = grp_info.next_row_in_group[i];
                 if (i == -1) break;
             }
             auto GetKthValue = [&](size_t const& pos) -> double {
@@ -1480,10 +1676,18 @@ void median_computation(array_info* arr, array_info* out_arr,
         });
     }
     if (arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
-        uint8_t* null_bitmask = (uint8_t*)arr->null_bitmask;
         median_operation(
-            [=](size_t pos) -> bool { return !GetBit(null_bitmask, pos); });
+            [=](size_t pos) -> bool { return !arr->get_null_bit(pos); });
     }
+}
+
+template <typename ARRAY>
+typename std::enable_if<is_multiple_array<ARRAY>::value, void>::type
+median_computation(array_info* arr, ARRAY* out_arr,
+                   grouping_info const& grp_info, bool const& skipna) {
+    Bodo_PyErr_SetString(PyExc_RuntimeError,
+                         "while median makes sense for pivot_table/crosstab "
+                         "the functionality is missing right now");
 }
 
 /**
@@ -1495,9 +1699,11 @@ void median_computation(array_info* arr, array_info* out_arr,
  * @param The boolean dropna indicating whether we drop or not the NaN values
  * from the nunique computation.
  */
-void nunique_computation(array_info* arr, array_info* out_arr,
-                         grouping_info const& grp_inf, bool const& dropna) {
-    size_t num_group = grp_inf.group_to_first_row.size();
+template <typename ARRAY>
+typename std::enable_if<!is_multiple_array<ARRAY>::value, void>::type
+nunique_computation(array_info* arr, array_info* out_arr,
+                    grouping_info const& grp_info, bool const& dropna) {
+    size_t num_group = grp_info.group_to_first_row.size();
     if (arr->arr_type == bodo_array_type::NUMPY) {
         /**
          * Check if a pointer points to a NaN or not
@@ -1538,7 +1744,7 @@ void nunique_computation(array_info* arr, array_info* out_arr,
             UNORD_SET_CONTAINER<int64_t, std::function<size_t(int64_t)>,
                                 std::function<bool(int64_t, int64_t)>>
                 eset({}, hash_fct, equal_fct);
-            int64_t i = grp_inf.group_to_first_row[igrp];
+            int64_t i = grp_info.group_to_first_row[igrp];
             bool HasNullRow = false;
             while (true) {
                 char* ptr = arr->data1 + (i * siztype);
@@ -1547,7 +1753,7 @@ void nunique_computation(array_info* arr, array_info* out_arr,
                 } else {
                     HasNullRow = true;
                 }
-                i = grp_inf.next_row_in_group[i];
+                i = grp_info.next_row_in_group[i];
                 if (i == -1) break;
             }
             int64_t size = eset.size();
@@ -1558,7 +1764,6 @@ void nunique_computation(array_info* arr, array_info* out_arr,
     if (arr->arr_type == bodo_array_type::LIST_STRING) {
         uint32_t* in_index_offsets = (uint32_t*)arr->data3;
         uint32_t* in_data_offsets = (uint32_t*)arr->data2;
-        uint8_t* null_bitmask = (uint8_t*)arr->null_bitmask;
         uint8_t* sub_null_bitmask = (uint8_t*)arr->sub_null_bitmask;
         uint32_t seed = SEED_HASH_CONTAINER;
         for (size_t igrp = 0; igrp < num_group; igrp++) {
@@ -1575,8 +1780,8 @@ void nunique_computation(array_info* arr, array_info* out_arr,
             };
             std::function<bool(int64_t, int64_t)> equal_fct =
                 [&](int64_t i1, int64_t i2) -> bool {
-                bool bit1 = GetBit(null_bitmask, i1);
-                bool bit2 = GetBit(null_bitmask, i2);
+                bool bit1 = arr->get_null_bit(i1);
+                bool bit2 = arr->get_null_bit(i2);
                 if (bit1 != bit2)
                     return false;  // That first case, might not be necessary.
                 size_t len1 = in_index_offsets[i1 + 1] - in_index_offsets[i1];
@@ -1610,15 +1815,15 @@ void nunique_computation(array_info* arr, array_info* out_arr,
             UNORD_SET_CONTAINER<int64_t, std::function<size_t(int64_t)>,
                                 std::function<bool(int64_t, int64_t)>>
                 eset({}, hash_fct, equal_fct);
-            int64_t i = grp_inf.group_to_first_row[igrp];
+            int64_t i = grp_info.group_to_first_row[igrp];
             bool HasNullRow = false;
             while (true) {
-                if (GetBit(null_bitmask, i)) {
+                if (arr->get_null_bit(i)) {
                     eset.insert(i);
                 } else {
                     HasNullRow = true;
                 }
-                i = grp_inf.next_row_in_group[i];
+                i = grp_info.next_row_in_group[i];
                 if (i == -1) break;
             }
             int64_t size = eset.size();
@@ -1628,7 +1833,6 @@ void nunique_computation(array_info* arr, array_info* out_arr,
     }
     if (arr->arr_type == bodo_array_type::STRING) {
         uint32_t* in_offsets = (uint32_t*)arr->data2;
-        uint8_t* null_bitmask = (uint8_t*)arr->null_bitmask;
         uint32_t seed = SEED_HASH_CONTAINER;
 
         for (size_t igrp = 0; igrp < num_group; igrp++) {
@@ -1651,15 +1855,15 @@ void nunique_computation(array_info* arr, array_info* out_arr,
             UNORD_SET_CONTAINER<int64_t, std::function<size_t(int64_t)>,
                                 std::function<bool(int64_t, int64_t)>>
                 eset({}, hash_fct, equal_fct);
-            int64_t i = grp_inf.group_to_first_row[igrp];
+            int64_t i = grp_info.group_to_first_row[igrp];
             bool HasNullRow = false;
             while (true) {
-                if (GetBit(null_bitmask, i)) {
+                if (arr->get_null_bit(i)) {
                     eset.insert(i);
                 } else {
                     HasNullRow = true;
                 }
-                i = grp_inf.next_row_in_group[i];
+                i = grp_info.next_row_in_group[i];
                 if (i == -1) break;
             }
             int64_t size = eset.size();
@@ -1668,7 +1872,6 @@ void nunique_computation(array_info* arr, array_info* out_arr,
         }
     }
     if (arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
-        uint8_t* null_bitmask = (uint8_t*)arr->null_bitmask;
         size_t siztype = numpy_item_size[arr->dtype];
         for (size_t igrp = 0; igrp < num_group; igrp++) {
             std::function<size_t(int64_t)> hash_fct = [&](int64_t i) -> size_t {
@@ -1689,15 +1892,15 @@ void nunique_computation(array_info* arr, array_info* out_arr,
             UNORD_SET_CONTAINER<int64_t, std::function<size_t(int64_t)>,
                                 std::function<bool(int64_t, int64_t)>>
                 eset({}, hash_fct, equal_fct);
-            int64_t i = grp_inf.group_to_first_row[igrp];
+            int64_t i = grp_info.group_to_first_row[igrp];
             bool HasNullRow = false;
             while (true) {
-                if (GetBit(null_bitmask, i)) {
+                if (arr->get_null_bit(i)) {
                     eset.insert(i);
                 } else {
                     HasNullRow = true;
                 }
-                i = grp_inf.next_row_in_group[i];
+                i = grp_info.next_row_in_group[i];
                 if (i == -1) break;
             }
             int64_t size = eset.size();
@@ -1707,10 +1910,137 @@ void nunique_computation(array_info* arr, array_info* out_arr,
     }
 }
 
+template <typename ARRAY>
+typename std::enable_if<is_multiple_array<ARRAY>::value, void>::type
+nunique_computation(array_info* arr, ARRAY* out_arr,
+                    grouping_info const& grp_info, bool const& skipna) {
+    Bodo_PyErr_SetString(PyExc_RuntimeError,
+                         "while nunique makes sense for pivot_table/crosstab "
+                         "the functionality is missing right now");
+}
+
+template <typename ARR_I, typename ARR_O, typename F, int ftype>
+typename std::enable_if<!is_multiple_array<ARR_I>::value, ARR_O*>::type
+apply_to_column_list_string(ARR_I* in_col, ARR_O* out_col,
+                            const grouping_info& grp_info, F f) {
+    size_t num_groups = grp_info.num_groups;
+    std::vector<std::vector<pair_str_bool>> ListListPair(num_groups);
+    char* data_i = in_col->data1;
+    uint32_t* index_offsets_i = (uint32_t*)in_col->data3;
+    uint32_t* data_offsets_i = (uint32_t*)in_col->data2;
+    uint8_t* sub_null_bitmask_i = (uint8_t*)in_col->sub_null_bitmask;
+    // Computing the strings used in output.
+    uint64_t n_bytes = (num_groups + 7) >> 3;
+    std::vector<uint8_t> Vmask(n_bytes, 0);
+    for (int64_t i = 0; i < in_col->length; i++) {
+        int64_t i_grp = f(i);
+        if ((i_grp != -1) && in_col->get_null_bit(i)) {
+            bool out_bit_set = out_col->get_null_bit(i_grp);
+            if (ftype == Bodo_FTypes::first && out_bit_set) continue;
+            uint32_t start_offset = index_offsets_i[i];
+            uint32_t end_offset = index_offsets_i[i + 1];
+            uint32_t len = end_offset - start_offset;
+            std::vector<pair_str_bool> LStrB(len);
+            for (uint32_t i = 0; i < len; i++) {
+                uint32_t len_str = data_offsets_i[start_offset + i + 1] -
+                                   data_offsets_i[start_offset + i];
+                uint32_t pos_start = data_offsets_i[start_offset + i];
+                std::string val(&data_i[pos_start], len_str);
+                bool str_bit = GetBit(sub_null_bitmask_i, start_offset + i);
+                LStrB[i] = {val, str_bit};
+            }
+            if (out_bit_set) {
+                aggliststring<ftype>::apply(ListListPair[i_grp], LStrB);
+            } else {
+                ListListPair[i_grp] = LStrB;
+                out_col->set_null_bit(i_grp, true);
+            }
+        }
+    }
+    return create_list_string_array<ARR_O>(grp_info, Vmask, ListListPair);
+}
+
+template <typename ARR_I, typename ARR_O, typename F, int ftype>
+typename std::enable_if<is_multiple_array<ARR_I>::value, ARR_O*>::type
+apply_to_column_list_string(ARR_I* in_col, ARR_O* out_col,
+                            const grouping_info& grp_info, F f) {
+    Bodo_PyErr_SetString(PyExc_RuntimeError,
+                         "The code is missing for this possibility");
+    return nullptr;
+}
+
+template <typename ARR_I, typename ARR_O, typename F, int ftype>
+typename std::enable_if<!is_multiple_array<ARR_I>::value, ARR_O*>::type
+apply_to_column_string(ARR_I* in_col, ARR_O* out_col,
+                       const grouping_info& grp_info, F f) {
+#ifdef DEBUG_GROUPBY
+    std::cout << "Beginning of apply_to_column_string\n";
+#endif
+    size_t num_groups = grp_info.num_groups;
+    size_t n_bytes = (num_groups + 7) >> 3;
+    std::vector<uint8_t> V(n_bytes, 0);
+    std::vector<std::string> ListString(num_groups);
+    char* data_i = in_col->data1;
+    uint32_t* offsets_i = (uint32_t*)in_col->data2;
+    // Computing the strings used in output.
+    for (int64_t i = 0; i < in_col->length; i++) {
+        int64_t i_grp = f(i);
+        if ((i_grp != -1) && in_col->get_null_bit(i)) {
+            bool out_bit_set = GetBit(V.data(), i_grp);
+            if (ftype == Bodo_FTypes::first && out_bit_set) continue;
+            uint32_t start_offset = offsets_i[i];
+            uint32_t end_offset = offsets_i[i + 1];
+            uint32_t len = end_offset - start_offset;
+            std::string val(&data_i[start_offset], len);
+            if (out_bit_set) {
+                aggstring<ftype>::apply(ListString[i_grp], val);
+            } else {
+                ListString[i_grp] = val;
+                SetBitTo(V.data(), i_grp, true);
+            }
+        }
+    }
+    // Determining the number of characters in output.
+    return create_string_array<ARR_O>(grp_info, V, ListString);
+}
+
+template <typename ARR_I, typename ARR_O, typename F, int ftype>
+typename std::enable_if<is_multiple_array<ARR_I>::value, ARR_O*>::type
+apply_to_column_string(ARR_I* in_col, ARR_O* out_col,
+                       const grouping_info& grp_info, F f) {
+    Bodo_PyErr_SetString(PyExc_RuntimeError,
+                         "The code is missing for this possibility");
+    return nullptr;
+}
+
+template <typename ARR_I>
+typename std::enable_if<!is_multiple_array<ARR_I>::value, bool>::type
+do_computation(ARR_I* in_col, int64_t i) {
+    return true;
+}
+
+template <typename ARR_I>
+typename std::enable_if<is_multiple_array<ARR_I>::value, bool>::type
+do_computation(ARR_I* in_col, int64_t i) {
+    return in_col->get_access_bit(i);
+}
+
 /**
  * Apply a function to a column(s), save result to (possibly reduced) output
  * column(s) Semantics of this function right now vary depending on function
  * type (ftype).
+ *
+ * template parameters are:
+ * For groupby operation: ARR_I = ARR_O = array_info during the update and
+ *                        combine steps
+ * For pivot_table / crosstab:
+ * --- during update:
+ *    ARR_I = array_info   ARR_O = multiple_array_info
+ * --- during combine:
+ *    ARR_I = ARR_OI = multiple_array_info
+ * During pivot_table / crosstab the "do_computation" is used for the missing
+ * data. That is whether it was accessed or not. For groupby, this collapses to true
+ * by the template evaluation of the AST.
  *
  * @param column containing input values
  * @param output column
@@ -1718,20 +2048,21 @@ void nunique_computation(array_info* arr, array_info* out_arr,
  * @param maps row numbers in input columns to group numbers (for reduction
  * operations)
  */
-template <typename T, int ftype, int dtype>
-void apply_to_column(array_info* in_col, array_info* out_col,
-                     std::vector<array_info*>& aux_cols,
-                     const grouping_info& grp_info) {
+template <typename ARR_I, typename ARR_O, typename F, typename T, int ftype,
+          int dtype>
+void apply_to_column_F(ARR_I* in_col, ARR_O* out_col,
+                       std::vector<ARR_O*>& aux_cols,
+                       const grouping_info& grp_info, F f) {
     switch (in_col->arr_type) {
         case bodo_array_type::CATEGORICAL:
             if (ftype == Bodo_FTypes::count) {
                 for (int64_t i = 0; i < in_col->length; i++) {
-                    if (grp_info.row_to_group[i] != -1) {
-                        T& val = in_col->at<T>(i);
+                    int64_t i_grp = f(i);
+                    if (i_grp != -1) {
+                        T& val = getv<ARR_I, T>(in_col, i);
                         if (!isnan_categorical<T, dtype>(val)) {
                             count_agg<T, dtype>::apply(
-                                out_col->at<int64_t>(grp_info.row_to_group[i]),
-                                in_col->at<T>(i));
+                                getv<ARR_O, int64_t>(out_col, i_grp), val);
                         }
                     }
                 }
@@ -1739,204 +2070,117 @@ void apply_to_column(array_info* in_col, array_info* out_col,
             }
         case bodo_array_type::NUMPY:
             if (ftype == Bodo_FTypes::mean) {
-                array_info* count_col = aux_cols[0];
-                for (int64_t i = 0; i < in_col->length; i++)
-                    if (grp_info.row_to_group[i] != -1)
+                ARR_O* count_col = aux_cols[0];
+                for (int64_t i = 0; i < in_col->length; i++) {
+                    int64_t i_grp = f(i);
+                    if (i_grp != -1)
                         mean_agg<T, dtype>::apply(
-                            out_col->at<double>(grp_info.row_to_group[i]),
-                            in_col->at<T>(i),
-                            count_col->at<uint64_t>(grp_info.row_to_group[i]));
+                            getv<ARR_O, double>(out_col, i_grp),
+                            getv<ARR_I, T>(in_col, i),
+                            getv<ARR_O, uint64_t>(count_col, i_grp));
+                }
             } else if (ftype == Bodo_FTypes::mean_eval) {
                 for (int64_t i = 0; i < in_col->length; i++)
-                    mean_eval(out_col->at<double>(i), in_col->at<uint64_t>(i));
+                    mean_eval(getv<ARR_O, double>(out_col, i),
+                              getv<ARR_I, uint64_t>(in_col, i));
             } else if (ftype == Bodo_FTypes::var) {
-                array_info* count_col = aux_cols[0];
-                array_info* mean_col = aux_cols[1];
-                array_info* m2_col = aux_cols[2];
-                for (int64_t i = 0; i < in_col->length; i++)
-                    if (grp_info.row_to_group[i] != -1)
+                ARR_O* count_col = aux_cols[0];
+                ARR_O* mean_col = aux_cols[1];
+                ARR_O* m2_col = aux_cols[2];
+                for (int64_t i = 0; i < in_col->length; i++) {
+                    int64_t i_grp = f(i);
+                    if (i_grp != -1)
                         var_agg<T, dtype>::apply(
-                            in_col->at<T>(i),
-                            count_col->at<uint64_t>(grp_info.row_to_group[i]),
-                            mean_col->at<double>(grp_info.row_to_group[i]),
-                            m2_col->at<double>(grp_info.row_to_group[i]));
+                            getv<ARR_I, T>(in_col, i),
+                            getv<ARR_O, uint64_t>(count_col, i_grp),
+                            getv<ARR_O, double>(mean_col, i_grp),
+                            getv<ARR_O, double>(m2_col, i_grp));
+                }
             } else if (ftype == Bodo_FTypes::var_eval) {
-                array_info* count_col = aux_cols[0];
-                array_info* m2_col = aux_cols[2];
+                ARR_O* count_col = aux_cols[0];
+                ARR_O* m2_col = aux_cols[2];
                 for (int64_t i = 0; i < in_col->length; i++)
-                    var_eval(out_col->at<double>(i), count_col->at<uint64_t>(i),
-                             m2_col->at<double>(i));
+                    var_eval(getv<ARR_O, double>(out_col, i),
+                             getv<ARR_O, uint64_t>(count_col, i),
+                             getv<ARR_O, double>(m2_col, i));
             } else if (ftype == Bodo_FTypes::std_eval) {
-                array_info* count_col = aux_cols[0];
-                array_info* m2_col = aux_cols[2];
+                ARR_O* count_col = aux_cols[0];
+                ARR_O* m2_col = aux_cols[2];
                 for (int64_t i = 0; i < in_col->length; i++)
-                    std_eval(out_col->at<double>(i), count_col->at<uint64_t>(i),
-                             m2_col->at<double>(i));
+                    std_eval(getv<ARR_O, double>(out_col, i),
+                             getv<ARR_O, uint64_t>(count_col, i),
+                             getv<ARR_O, double>(m2_col, i));
             } else if (ftype == Bodo_FTypes::count) {
-                for (int64_t i = 0; i < in_col->length; i++)
-                    if (grp_info.row_to_group[i] != -1)
+                for (int64_t i = 0; i < in_col->length; i++) {
+                    int64_t i_grp = f(i);
+                    if (i_grp != -1)
                         count_agg<T, dtype>::apply(
-                            out_col->at<int64_t>(grp_info.row_to_group[i]),
-                            in_col->at<T>(i));
+                            getv<ARR_O, int64_t>(out_col, i_grp),
+                            getv<ARR_I, T>(in_col, i));
+                }
             } else if (ftype == Bodo_FTypes::first) {
                 // create a temporary bitmask to know if we have set a
                 // value for each row/group
                 int64_t n_bytes = ((out_col->length + 7) >> 3);
-                std::vector<char> out_col_bitmask_vec(n_bytes, 0);
-                uint8_t* out_col_bitmask = (uint8_t*)out_col_bitmask_vec.data();
+                std::vector<uint8_t> bitmask_vec(n_bytes, 0);
                 for (int64_t i = 0; i < in_col->length; i++) {
-                    const int64_t& group = grp_info.row_to_group[i];
-                    T& val = in_col->at<T>(i);
-                    if ((group != -1) && !GetBit(out_col_bitmask, group) &&
+                    int64_t i_grp = f(i);
+                    T val = getv<ARR_I, T>(in_col, i);
+                    if ((i_grp != -1) && !GetBit(bitmask_vec.data(), i_grp) &&
                         !isnan_alltype<T, dtype>(val)) {
-                        out_col->at<T>(group) = val;
-                        SetBitTo(out_col_bitmask, group, true);
+                        getv<ARR_O, T>(out_col, i_grp) = val;
+                        SetBitTo(bitmask_vec.data(), i_grp, true);
                     }
                 }
             } else if (ftype == Bodo_FTypes::idxmax) {
-                array_info* index_pos = aux_cols[0];
+                ARR_O* index_pos = aux_cols[0];
                 for (int64_t i = 0; i < in_col->length; i++) {
-                    int64_t grp = grp_info.row_to_group[i];
-                    if (grp != -1) {
+                    int64_t i_grp = f(i);
+                    if (i_grp != -1) {
                         idxmax_agg<T, dtype>::apply(
-                            out_col->at<T>(grp), in_col->at<T>(i),
-                            index_pos->at<uint64_t>(grp), i);
+                            getv<ARR_O, T>(out_col, i_grp),
+                            getv<ARR_I, T>(in_col, i),
+                            getv<ARR_O, uint64_t>(index_pos, i_grp), i);
                     }
                 }
             } else if (ftype == Bodo_FTypes::idxmin) {
-                array_info* index_pos = aux_cols[0];
+                ARR_O* index_pos = aux_cols[0];
                 for (int64_t i = 0; i < in_col->length; i++) {
-                    int64_t grp = grp_info.row_to_group[i];
-                    if (grp != -1) {
+                    int64_t i_grp = f(i);
+                    if (i_grp != -1) {
                         idxmin_agg<T, dtype>::apply(
-                            out_col->at<T>(grp), in_col->at<T>(i),
-                            index_pos->at<uint64_t>(grp), i);
+                            getv<ARR_O, T>(out_col, i_grp),
+                            getv<ARR_I, T>(in_col, i),
+                            getv<ARR_O, uint64_t>(index_pos, i_grp), i);
                     }
                 }
             } else {
-                for (int64_t i = 0; i < in_col->length; i++)
-                    if (grp_info.row_to_group[i] != -1)
+                for (int64_t i = 0; i < in_col->length; i++) {
+                    int64_t i_grp = f(i);
+                    if (i_grp != -1 && do_computation<ARR_I>(in_col, i))
                         aggfunc<T, dtype, ftype>::apply(
-                            out_col->at<T>(grp_info.row_to_group[i]),
-                            in_col->at<T>(i));
+                            getv<ARR_O, T>(out_col, i_grp),
+                            getv<ARR_I, T>(in_col, i));
+                }
             }
             return;
         // for list strings, we are supporting count, sum, max, min, first, last
         case bodo_array_type::LIST_STRING:
             switch (ftype) {
-                case Bodo_FTypes::count:
+                case Bodo_FTypes::count: {
                     for (int64_t i = 0; i < in_col->length; i++) {
-                        if ((grp_info.row_to_group[i] != -1) &&
-                            GetBit((uint8_t*)in_col->null_bitmask, i))
+                        int64_t i_grp = f(i);
+                        if ((i_grp != -1) && in_col->get_null_bit(i))
                             count_agg<T, dtype>::apply(
-                                out_col->at<int64_t>(grp_info.row_to_group[i]),
-                                in_col->at<T>(i));
+                                getv<ARR_O, int64_t>(out_col, i_grp),
+                                getv<ARR_I, T>(in_col, i));
                     }
                     return;
+                }
                 default:
-                    size_t num_groups = grp_info.group_to_first_row.size();
-                    std::vector<std::vector<pair_str_bool>> ListListPair(
-                        num_groups);
-                    char* data_i = in_col->data1;
-                    uint32_t* index_offsets_i = (uint32_t*)in_col->data3;
-                    uint32_t* data_offsets_i = (uint32_t*)in_col->data2;
-                    uint8_t* null_bitmask_i = (uint8_t*)in_col->null_bitmask;
-                    uint8_t* sub_null_bitmask_i =
-                        (uint8_t*)in_col->sub_null_bitmask;
-                    // Computing the strings used in output.
-                    uint64_t n_bytes = (num_groups + 7) >> 3;
-                    std::vector<uint8_t> Vmask(n_bytes, 0);
-                    for (int64_t i = 0; i < in_col->length; i++) {
-                        int64_t i_grp = grp_info.row_to_group[i];
-                        if ((i_grp != -1) && GetBit(null_bitmask_i, i)) {
-                            bool out_bit_set = GetBit(Vmask.data(), i_grp);
-                            if (ftype == Bodo_FTypes::first && out_bit_set)
-                                continue;
-                            uint32_t start_offset = index_offsets_i[i];
-                            uint32_t end_offset = index_offsets_i[i + 1];
-                            uint32_t len = end_offset - start_offset;
-                            std::vector<pair_str_bool> LStrB(len);
-                            for (uint32_t i = 0; i < len; i++) {
-                                uint32_t len_str =
-                                    data_offsets_i[start_offset + i + 1] -
-                                    data_offsets_i[start_offset + i];
-                                uint32_t pos_start =
-                                    data_offsets_i[start_offset + i];
-                                std::string val(&data_i[pos_start], len_str);
-                                bool str_bit = GetBit(sub_null_bitmask_i,
-                                                      start_offset + i);
-                                LStrB[i] = {val, str_bit};
-                            }
-                            if (out_bit_set) {
-                                aggliststring<ftype>::apply(ListListPair[i_grp],
-                                                            LStrB);
-                            } else {
-                                ListListPair[i_grp] = LStrB;
-                                SetBitTo(Vmask.data(), i_grp, true);
-                            }
-                        }
-                    }
-                    // Determining the number of characters in output.
-                    size_t nb_string = 0;
-                    size_t nb_char = 0;
-                    for (int64_t i_grp = 0; i_grp < int64_t(num_groups);
-                         i_grp++) {
-                        if (GetBit(Vmask.data(), i_grp)) {
-                            nb_string += ListListPair[i_grp].size();
-                            for (auto& e_str : ListListPair[i_grp])
-                                nb_char += e_str.first.size();
-                        }
-                    }
-                    // Allocation needs to be done through
-                    // alloc_list_string_array, which allocates with meminfos
-                    // and same data structs that Python uses. We need to
-                    // re-allocate here because number of strings and chars has
-                    // been determined here (previous out_col was just an empty
-                    // dummy allocation).
-
-                    array_info* new_out_col = alloc_list_string_array(
-                        out_col->length, nb_string, nb_char, 0);
-                    uint32_t* index_offsets_o = (uint32_t*)new_out_col->data3;
-                    uint32_t* data_offsets_o = (uint32_t*)new_out_col->data2;
-                    uint8_t* null_bitmask_o =
-                        (uint8_t*)new_out_col->null_bitmask;
-                    uint8_t* sub_null_bitmask_o =
-                        (uint8_t*)new_out_col->sub_null_bitmask;
-                    // Writing the list_strings in output
-                    char* data_o = new_out_col->data1;
-                    data_offsets_o[0] = 0;
-                    uint32_t pos_index = 0;
-                    uint32_t pos_data = 0;
-                    for (int64_t i_grp = 0; i_grp < int64_t(num_groups);
-                         i_grp++) {
-                        bool bit = GetBit(Vmask.data(), i_grp);
-                        SetBitTo(null_bitmask_o, i_grp, bit);
-                        index_offsets_o[i_grp] = pos_index;
-                        if (bit) {
-                            uint32_t n_string = ListListPair[i_grp].size();
-                            for (uint32_t i_str = 0; i_str < n_string;
-                                 i_str++) {
-                                std::string& estr =
-                                    ListListPair[i_grp][i_str].first;
-                                uint32_t n_char = estr.size();
-                                memcpy(data_o, estr.data(), n_char);
-                                data_o += n_char;
-                                pos_data++;
-                                data_offsets_o[pos_data] =
-                                    data_offsets_o[pos_data - 1] + n_char;
-                                bool bit = ListListPair[i_grp][i_str].second;
-                                SetBitTo(sub_null_bitmask_o, pos_index + i_str,
-                                         bit);
-                            }
-                            pos_index += n_string;
-                            SetBitTo((uint8_t*)new_out_col->null_bitmask, i_grp,
-                                     true);
-                        } else {
-                            SetBitTo((uint8_t*)new_out_col->null_bitmask, i_grp,
-                                     false);
-                        }
-                    }
-                    index_offsets_o[num_groups] = pos_index;
+                    ARR_O* new_out_col =
+                        apply_to_column_list_string<ARR_I, ARR_O, F, ftype>(
+                            in_col, out_col, grp_info, f);
                     *out_col = std::move(*new_out_col);
                     delete new_out_col;
                     return;
@@ -1945,146 +2189,156 @@ void apply_to_column(array_info* in_col, array_info* out_col,
         // For the STRING we compute the count, sum, max, min, first, last
         case bodo_array_type::STRING:
             switch (ftype) {
-                case Bodo_FTypes::count:
+                case Bodo_FTypes::count: {
                     for (int64_t i = 0; i < in_col->length; i++) {
-                        if ((grp_info.row_to_group[i] != -1) &&
-                            GetBit((uint8_t*)in_col->null_bitmask, i))
+                        int64_t i_grp = f(i);
+                        if ((i_grp != -1) && in_col->get_null_bit(i))
                             count_agg<T, dtype>::apply(
-                                out_col->at<int64_t>(grp_info.row_to_group[i]),
-                                in_col->at<T>(i));
+                                getv<ARR_O, int64_t>(out_col, i_grp),
+                                getv<ARR_I, T>(in_col, i));
                     }
                     return;
+                }
                 default:
-                    size_t num_groups = grp_info.group_to_first_row.size();
-                    std::vector<std::string> ListString(num_groups);
-                    char* data = in_col->data1;
-                    uint32_t* offsets = (uint32_t*)in_col->data2;
-                    uint8_t* null_bitmask_i = (uint8_t*)in_col->null_bitmask;
-                    uint8_t* null_bitmask_o = (uint8_t*)out_col->null_bitmask;
-                    // Computing the strings used in output.
-                    for (int64_t i = 0; i < in_col->length; i++) {
-                        int64_t i_grp = grp_info.row_to_group[i];
-                        if ((i_grp != -1) && GetBit(null_bitmask_i, i)) {
-                            bool out_bit_set = GetBit(null_bitmask_o, i_grp);
-                            if (ftype == Bodo_FTypes::first && out_bit_set)
-                                continue;
-                            uint32_t start_offset = offsets[i];
-                            uint32_t end_offset = offsets[i + 1];
-                            uint32_t len = end_offset - start_offset;
-                            std::string val(&data[start_offset], len);
-                            if (out_bit_set) {
-                                aggstring<ftype>::apply(ListString[i_grp], val);
-                            } else {
-                                ListString[i_grp] = val;
-                                SetBitTo(null_bitmask_o, i_grp, true);
-                            }
-                        }
-                    }
-                    // Determining the number of characters in output.
-                    size_t nb_char = 0;
-                    for (int64_t i_grp = 0; i_grp < int64_t(num_groups);
-                         i_grp++) {
-                        if (GetBit(null_bitmask_o, i_grp))
-                            nb_char += ListString[i_grp].size();
-                    }
-                    // resize output string array to fit result size
-                    array_item_arr_numpy_payload* payload =
-                        (array_item_arr_numpy_payload*)out_col->meminfo->data;
-
-                    // decref existing data array
-                    decref_numpy_payload(payload->data);
-
-                    // update string array payload to reflect change
-                    payload->data = allocate_numpy_payload(
-                        nb_char, Bodo_CTypes::CTypeEnum::UINT8);
-                    out_col->data1 = payload->data.data;
-                    out_col->n_sub_elems = nb_char;
-
-                    // Writing the strings in output
-                    char* data_o = out_col->data1;
-                    uint32_t* offsets_o = (uint32_t*)out_col->data2;
-                    uint32_t pos = 0;
-                    for (int64_t i_grp = 0; i_grp < int64_t(num_groups);
-                         i_grp++) {
-                        offsets_o[i_grp] = pos;
-                        if (GetBit(null_bitmask_o, i_grp)) {
-                            int len = int(ListString[i_grp].size());
-                            memcpy(data_o, ListString[i_grp].data(), len);
-                            data_o += len;
-                            pos += len;
-                        }
-                    }
-                    offsets_o[num_groups] = pos;
+                    ARR_O* new_out_col =
+                        apply_to_column_string<ARR_I, ARR_O, F, ftype>(
+                            in_col, out_col, grp_info, f);
+                    *out_col = std::move(*new_out_col);
+                    delete new_out_col;
                     return;
             }
         case bodo_array_type::NULLABLE_INT_BOOL:
             switch (ftype) {
-                case Bodo_FTypes::count:
+                case Bodo_FTypes::count: {
                     for (int64_t i = 0; i < in_col->length; i++) {
-                        if ((grp_info.row_to_group[i] != -1) &&
-                            GetBit((uint8_t*)in_col->null_bitmask, i))
+                        int64_t i_grp = f(i);
+                        if ((i_grp != -1) && in_col->get_null_bit(i))
                             count_agg<T, dtype>::apply(
-                                out_col->at<int64_t>(grp_info.row_to_group[i]),
-                                in_col->at<T>(i));
+                                getv<ARR_O, int64_t>(out_col, i_grp),
+                                getv<ARR_I, T>(in_col, i));
                     }
                     return;
+                }
                 case Bodo_FTypes::mean:
                     for (int64_t i = 0; i < in_col->length; i++) {
-                        if ((grp_info.row_to_group[i] != -1) &&
-                            GetBit((uint8_t*)in_col->null_bitmask, i)) {
+                        int64_t i_grp = f(i);
+                        if ((i_grp != -1) && in_col->get_null_bit(i))
                             mean_agg<T, dtype>::apply(
-                                out_col->at<double>(grp_info.row_to_group[i]),
-                                in_col->at<T>(i),
-                                aux_cols[0]->at<uint64_t>(
-                                    grp_info.row_to_group[i]));
-                        }
+                                getv<ARR_O, double>(out_col, i_grp),
+                                getv<ARR_I, T>(in_col, i),
+                                getv<ARR_O, uint64_t>(aux_cols[0], i_grp));
                     }
                     return;
                 case Bodo_FTypes::var:
                     for (int64_t i = 0; i < in_col->length; i++) {
-                        if ((grp_info.row_to_group[i] != -1) &&
-                            GetBit((uint8_t*)in_col->null_bitmask, i))
+                        int64_t i_grp = f(i);
+                        if ((i_grp != -1) && in_col->get_null_bit(i) &&
+                            do_computation<ARR_I>(in_col, i))
                             var_agg<T, dtype>::apply(
-                                in_col->at<T>(i),
-                                aux_cols[0]->at<uint64_t>(
-                                    grp_info.row_to_group[i]),
-                                aux_cols[1]->at<double>(
-                                    grp_info.row_to_group[i]),
-                                aux_cols[2]->at<double>(
-                                    grp_info.row_to_group[i]));
+                                getv<ARR_I, T>(in_col, i),
+                                getv<ARR_O, uint64_t>(aux_cols[0], i_grp),
+                                getv<ARR_O, double>(aux_cols[1], i_grp),
+                                getv<ARR_O, double>(aux_cols[2], i_grp));
                     }
                     return;
                 case Bodo_FTypes::first:
                     for (int64_t i = 0; i < in_col->length; i++) {
-                        uint8_t* out_col_null_bitmask =
-                            (uint8_t*)out_col->null_bitmask;
-                        const int64_t& group = grp_info.row_to_group[i];
-                        if ((group != -1) &&
-                            !GetBit(out_col_null_bitmask, group) &&
-                            GetBit((uint8_t*)in_col->null_bitmask, i)) {
-                            out_col->at<T>(group) = in_col->at<T>(i);
-                            SetBitTo(out_col_null_bitmask, group, true);
+                        int64_t i_grp = f(i);
+                        if ((i_grp != -1) && !out_col->get_null_bit(i_grp) &&
+                            in_col->get_null_bit(i) &&
+                            do_computation<ARR_I>(in_col, i)) {
+                            getv<ARR_O, T>(out_col, i_grp) =
+                                getv<ARR_I, T>(in_col, i);
+                            out_col->set_null_bit(i_grp, true);
                         }
                     }
                     return;
-                default:
+                default: {
                     for (int64_t i = 0; i < in_col->length; i++) {
-                        if ((grp_info.row_to_group[i] != -1) &&
-                            GetBit((uint8_t*)in_col->null_bitmask, i)) {
+                        int64_t i_grp = f(i);
+                        if ((i_grp != -1) && in_col->get_null_bit(i) &&
+                            do_computation<ARR_I>(in_col, i)) {
                             aggfunc<T, dtype, ftype>::apply(
-                                out_col->at<T>(grp_info.row_to_group[i]),
-                                in_col->at<T>(i));
-                            SetBitTo((uint8_t*)out_col->null_bitmask,
-                                     grp_info.row_to_group[i], true);
+                                getv<ARR_O, T>(out_col, i_grp),
+                                getv<ARR_I, T>(in_col, i));
+                            out_col->set_null_bit(i_grp, true);
                         }
                     }
                     return;
+                }
             }
         default:
             Bodo_PyErr_SetString(PyExc_RuntimeError,
                                  "apply_to_column: incorrect array type");
             return;
     }
+}
+
+template <typename ARR_I, typename ARR_O, typename T, int ftype, int dtype>
+inline typename std::enable_if<!is_multiple_array<ARR_O>::value, void>::type
+apply_to_column(ARR_I* in_col, ARR_O* out_col, std::vector<ARR_O*>& aux_cols,
+                const grouping_info& grp_info) {
+#ifdef DEBUG_GROUPBY
+    std::cout << "apply_to_column single case\n";
+#endif
+    auto f = [&](int64_t const& i_row) -> int64_t {
+        return grp_info.row_to_group[i_row];
+    };
+    return apply_to_column_F<ARR_I, ARR_O, decltype(f), T, ftype, dtype>(
+        in_col, out_col, aux_cols, grp_info, f);
+}
+
+template <typename ARR_I, typename ARR_O, typename T, int ftype, int dtype>
+inline typename std::enable_if<is_multiple_array<ARR_O>::value, void>::type
+apply_to_column(ARR_I* in_col, ARR_O* out_col, std::vector<ARR_O*>& aux_cols,
+                const grouping_info& grp_info) {
+#ifdef DEBUG_GROUPBY
+    std::cout << "apply_to_column multiple case mode=" << grp_info.mode << "\n";
+#endif
+    table_info* dispatch_table = grp_info.dispatch_table;
+    table_info* dispatch_info = grp_info.dispatch_info;
+    int n_cols = dispatch_table->ncols();
+    int n_dis = dispatch_table->nrows();
+    size_t n_pivot = grp_info.n_pivot;
+    bool na_position_bis = true;
+    auto KeyComparisonAsPython_Table = [&](int i_info, int i_dis) -> bool {
+        for (int64_t i_col = 0; i_col < n_cols; i_col++) {
+            int test = KeyComparisonAsPython_Column(
+                na_position_bis, dispatch_table->columns[i_col], i_dis,
+                dispatch_info->columns[i_col], i_info);
+            if (test != 0) return false;
+        }
+        return true;
+    };
+    auto get_i_dis = [&](int64_t const& i_info) -> int64_t {
+        for (int64_t i_dis = 0; i_dis < n_dis; i_dis++) {
+            bool test = KeyComparisonAsPython_Table(i_info, i_dis);
+            if (test) return i_dis;
+        }
+        return -1;
+    };
+    auto f = [&](int64_t const& i_row) -> int64_t {
+        if (grp_info.mode == 1) {
+            int64_t i_grp = grp_info.row_to_group[i_row];
+            int i_dis = get_i_dis(i_row);
+            // If i_dis = -1 it can be because the input was wrong.
+            // But it can be because a column has been dropped out by the
+            // compiler passes.
+            if (i_dis == -1) return -1;
+            return i_dis + n_pivot * i_grp;
+        } else {
+            int i_dis = i_row % n_pivot;
+            int i_row_red = i_row / n_pivot;
+            int64_t i_grp_red = grp_info.row_to_group[i_row_red];
+            if (i_grp_red == -1) {
+                return -1;
+            }
+            int64_t i_grp = i_dis + n_pivot * i_grp_red;
+            return i_grp;
+        }
+    };
+    return apply_to_column_F<ARR_I, ARR_O, decltype(f), T, ftype, dtype>(
+        in_col, out_col, aux_cols, grp_info, f);
 }
 
 /**
@@ -2098,35 +2352,33 @@ void apply_to_column(array_info* in_col, array_info* out_col,
  * operations)
  * @param function to apply
  */
-void do_apply_to_column(array_info* in_col, array_info* out_col,
-                        std::vector<array_info*>& aux_cols,
+template <typename ARR_I, typename ARR_O>
+void do_apply_to_column(ARR_I* in_col, ARR_O* out_col,
+                        std::vector<ARR_O*>& aux_cols,
                         const grouping_info& grp_info, int ftype) {
-#ifdef DEBUG_GROUPBY
-    std::cout << "Beginning of do_apply_to_coulm\n";
-#endif
     if (in_col->arr_type == bodo_array_type::STRING ||
         in_col->arr_type == bodo_array_type::LIST_STRING) {
         switch (ftype) {
             // NOTE: The int template argument is not used in this call to
             // apply_to_column
             case Bodo_FTypes::sum:
-                return apply_to_column<int, Bodo_FTypes::sum,
+                return apply_to_column<ARR_I, ARR_O, int, Bodo_FTypes::sum,
                                        Bodo_CTypes::STRING>(in_col, out_col,
                                                             aux_cols, grp_info);
             case Bodo_FTypes::min:
-                return apply_to_column<int, Bodo_FTypes::min,
+                return apply_to_column<ARR_I, ARR_O, int, Bodo_FTypes::min,
                                        Bodo_CTypes::STRING>(in_col, out_col,
                                                             aux_cols, grp_info);
             case Bodo_FTypes::max:
-                return apply_to_column<int, Bodo_FTypes::max,
+                return apply_to_column<ARR_I, ARR_O, int, Bodo_FTypes::max,
                                        Bodo_CTypes::STRING>(in_col, out_col,
                                                             aux_cols, grp_info);
             case Bodo_FTypes::first:
-                return apply_to_column<int, Bodo_FTypes::first,
+                return apply_to_column<ARR_I, ARR_O, int, Bodo_FTypes::first,
                                        Bodo_CTypes::STRING>(in_col, out_col,
                                                             aux_cols, grp_info);
             case Bodo_FTypes::last:
-                return apply_to_column<int, Bodo_FTypes::last,
+                return apply_to_column<ARR_I, ARR_O, int, Bodo_FTypes::last,
                                        Bodo_CTypes::STRING>(in_col, out_col,
                                                             aux_cols, grp_info);
         }
@@ -2135,17 +2387,17 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
         switch (in_col->dtype) {
             case Bodo_CTypes::FLOAT32:
                 // data will only be used to check for nans
-                return apply_to_column<float, Bodo_FTypes::count,
+                return apply_to_column<ARR_I, ARR_O, float, Bodo_FTypes::count,
                                        Bodo_CTypes::FLOAT32>(
                     in_col, out_col, aux_cols, grp_info);
             case Bodo_CTypes::FLOAT64:
                 // data will only be used to check for nans
-                return apply_to_column<double, Bodo_FTypes::count,
+                return apply_to_column<ARR_I, ARR_O, double, Bodo_FTypes::count,
                                        Bodo_CTypes::FLOAT64>(
                     in_col, out_col, aux_cols, grp_info);
             default:
                 // data will be ignored in this case, so type doesn't matter
-                return apply_to_column<int8_t, Bodo_FTypes::count,
+                return apply_to_column<ARR_I, ARR_O, int8_t, Bodo_FTypes::count,
                                        Bodo_CTypes::INT8>(in_col, out_col,
                                                           aux_cols, grp_info);
         }
@@ -2155,31 +2407,36 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
         case Bodo_CTypes::_BOOL:
             switch (ftype) {
                 case Bodo_FTypes::min:
-                    return apply_to_column<bool, Bodo_FTypes::min,
+                    return apply_to_column<ARR_I, ARR_O, bool, Bodo_FTypes::min,
                                            Bodo_CTypes::_BOOL>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::max:
-                    return apply_to_column<bool, Bodo_FTypes::max,
+                    return apply_to_column<ARR_I, ARR_O, bool, Bodo_FTypes::max,
                                            Bodo_CTypes::_BOOL>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::prod:
-                    return apply_to_column<bool, Bodo_FTypes::prod,
+                    return apply_to_column<ARR_I, ARR_O, bool,
+                                           Bodo_FTypes::prod,
                                            Bodo_CTypes::_BOOL>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::first:
-                    return apply_to_column<bool, Bodo_FTypes::first,
+                    return apply_to_column<ARR_I, ARR_O, bool,
+                                           Bodo_FTypes::first,
                                            Bodo_CTypes::_BOOL>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::last:
-                    return apply_to_column<bool, Bodo_FTypes::last,
+                    return apply_to_column<ARR_I, ARR_O, bool,
+                                           Bodo_FTypes::last,
                                            Bodo_CTypes::_BOOL>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::idxmin:
-                    return apply_to_column<bool, Bodo_FTypes::idxmin,
+                    return apply_to_column<ARR_I, ARR_O, bool,
+                                           Bodo_FTypes::idxmin,
                                            Bodo_CTypes::_BOOL>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::idxmax:
-                    return apply_to_column<bool, Bodo_FTypes::idxmax,
+                    return apply_to_column<ARR_I, ARR_O, bool,
+                                           Bodo_FTypes::idxmax,
                                            Bodo_CTypes::_BOOL>(
                         in_col, out_col, aux_cols, grp_info);
                 default:
@@ -2191,649 +2448,783 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
         case Bodo_CTypes::INT8:
             switch (ftype) {
                 case Bodo_FTypes::sum:
-                    return apply_to_column<int8_t, Bodo_FTypes::sum,
-                                           Bodo_CTypes::INT8>(
+                    return apply_to_column<ARR_I, ARR_O, int8_t,
+                                           Bodo_FTypes::sum, Bodo_CTypes::INT8>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::min:
-                    return apply_to_column<int8_t, Bodo_FTypes::min,
-                                           Bodo_CTypes::INT8>(
+                    return apply_to_column<ARR_I, ARR_O, int8_t,
+                                           Bodo_FTypes::min, Bodo_CTypes::INT8>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::max:
-                    return apply_to_column<int8_t, Bodo_FTypes::max,
-                                           Bodo_CTypes::INT8>(
+                    return apply_to_column<ARR_I, ARR_O, int8_t,
+                                           Bodo_FTypes::max, Bodo_CTypes::INT8>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::prod:
-                    return apply_to_column<int8_t, Bodo_FTypes::prod,
+                    return apply_to_column<ARR_I, ARR_O, int8_t,
+                                           Bodo_FTypes::prod,
                                            Bodo_CTypes::INT8>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::first:
-                    return apply_to_column<int8_t, Bodo_FTypes::first,
+                    return apply_to_column<ARR_I, ARR_O, int8_t,
+                                           Bodo_FTypes::first,
                                            Bodo_CTypes::INT8>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::last:
-                    return apply_to_column<int8_t, Bodo_FTypes::last,
+                    return apply_to_column<ARR_I, ARR_O, int8_t,
+                                           Bodo_FTypes::last,
                                            Bodo_CTypes::INT8>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::mean:
-                    return apply_to_column<int8_t, Bodo_FTypes::mean,
+                    return apply_to_column<ARR_I, ARR_O, int8_t,
+                                           Bodo_FTypes::mean,
                                            Bodo_CTypes::INT8>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::var:
                 case Bodo_FTypes::std:
-                    return apply_to_column<int8_t, Bodo_FTypes::var,
-                                           Bodo_CTypes::INT8>(
+                    return apply_to_column<ARR_I, ARR_O, int8_t,
+                                           Bodo_FTypes::var, Bodo_CTypes::INT8>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::idxmin:
-                    return apply_to_column<int8_t, Bodo_FTypes::idxmin,
+                    return apply_to_column<ARR_I, ARR_O, int8_t,
+                                           Bodo_FTypes::idxmin,
                                            Bodo_CTypes::INT8>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::idxmax:
-                    return apply_to_column<int8_t, Bodo_FTypes::idxmax,
+                    return apply_to_column<ARR_I, ARR_O, int8_t,
+                                           Bodo_FTypes::idxmax,
                                            Bodo_CTypes::INT8>(
                         in_col, out_col, aux_cols, grp_info);
             }
         case Bodo_CTypes::UINT8:
             switch (ftype) {
-                case Bodo_FTypes::sum:
-                    return apply_to_column<uint8_t, Bodo_FTypes::sum,
+                case Bodo_FTypes::sum: {
+                    return apply_to_column<ARR_I, ARR_O, uint8_t,
+                                           Bodo_FTypes::sum,
                                            Bodo_CTypes::UINT8>(
                         in_col, out_col, aux_cols, grp_info);
+                }
                 case Bodo_FTypes::min:
-                    return apply_to_column<uint8_t, Bodo_FTypes::min,
+                    return apply_to_column<ARR_I, ARR_O, uint8_t,
+                                           Bodo_FTypes::min,
                                            Bodo_CTypes::UINT8>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::max:
-                    return apply_to_column<uint8_t, Bodo_FTypes::max,
+                    return apply_to_column<ARR_I, ARR_O, uint8_t,
+                                           Bodo_FTypes::max,
                                            Bodo_CTypes::UINT8>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::prod:
-                    return apply_to_column<uint8_t, Bodo_FTypes::prod,
+                    return apply_to_column<ARR_I, ARR_O, uint8_t,
+                                           Bodo_FTypes::prod,
                                            Bodo_CTypes::UINT8>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::first:
-                    return apply_to_column<uint8_t, Bodo_FTypes::first,
+                    return apply_to_column<ARR_I, ARR_O, uint8_t,
+                                           Bodo_FTypes::first,
                                            Bodo_CTypes::UINT8>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::last:
-                    return apply_to_column<uint8_t, Bodo_FTypes::last,
+                    return apply_to_column<ARR_I, ARR_O, uint8_t,
+                                           Bodo_FTypes::last,
                                            Bodo_CTypes::UINT8>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::mean:
-                    return apply_to_column<uint8_t, Bodo_FTypes::mean,
+                    return apply_to_column<ARR_I, ARR_O, uint8_t,
+                                           Bodo_FTypes::mean,
                                            Bodo_CTypes::UINT8>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::var:
                 case Bodo_FTypes::std:
-                    return apply_to_column<uint8_t, Bodo_FTypes::var,
+                    return apply_to_column<ARR_I, ARR_O, uint8_t,
+                                           Bodo_FTypes::var,
                                            Bodo_CTypes::UINT8>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::idxmin:
-                    return apply_to_column<uint8_t, Bodo_FTypes::idxmin,
+                    return apply_to_column<ARR_I, ARR_O, uint8_t,
+                                           Bodo_FTypes::idxmin,
                                            Bodo_CTypes::UINT8>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::idxmax:
-                    return apply_to_column<uint8_t, Bodo_FTypes::idxmax,
+                    return apply_to_column<ARR_I, ARR_O, uint8_t,
+                                           Bodo_FTypes::idxmax,
                                            Bodo_CTypes::UINT8>(
                         in_col, out_col, aux_cols, grp_info);
             }
         case Bodo_CTypes::INT16:
             switch (ftype) {
                 case Bodo_FTypes::sum:
-                    return apply_to_column<int16_t, Bodo_FTypes::sum,
+                    return apply_to_column<ARR_I, ARR_O, int16_t,
+                                           Bodo_FTypes::sum,
                                            Bodo_CTypes::INT16>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::min:
-                    return apply_to_column<int16_t, Bodo_FTypes::min,
+                    return apply_to_column<ARR_I, ARR_O, int16_t,
+                                           Bodo_FTypes::min,
                                            Bodo_CTypes::INT16>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::max:
-                    return apply_to_column<int16_t, Bodo_FTypes::max,
+                    return apply_to_column<ARR_I, ARR_O, int16_t,
+                                           Bodo_FTypes::max,
                                            Bodo_CTypes::INT16>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::prod:
-                    return apply_to_column<int16_t, Bodo_FTypes::prod,
+                    return apply_to_column<ARR_I, ARR_O, int16_t,
+                                           Bodo_FTypes::prod,
                                            Bodo_CTypes::INT16>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::first:
-                    return apply_to_column<int16_t, Bodo_FTypes::first,
+                    return apply_to_column<ARR_I, ARR_O, int16_t,
+                                           Bodo_FTypes::first,
                                            Bodo_CTypes::INT16>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::last:
-                    return apply_to_column<int16_t, Bodo_FTypes::last,
+                    return apply_to_column<ARR_I, ARR_O, int16_t,
+                                           Bodo_FTypes::last,
                                            Bodo_CTypes::INT16>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::mean:
-                    return apply_to_column<int16_t, Bodo_FTypes::mean,
+                    return apply_to_column<ARR_I, ARR_O, int16_t,
+                                           Bodo_FTypes::mean,
                                            Bodo_CTypes::INT16>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::var:
                 case Bodo_FTypes::std:
-                    return apply_to_column<int16_t, Bodo_FTypes::var,
+                    return apply_to_column<ARR_I, ARR_O, int16_t,
+                                           Bodo_FTypes::var,
                                            Bodo_CTypes::INT16>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::idxmin:
-                    return apply_to_column<int16_t, Bodo_FTypes::idxmin,
+                    return apply_to_column<ARR_I, ARR_O, int16_t,
+                                           Bodo_FTypes::idxmin,
                                            Bodo_CTypes::INT16>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::idxmax:
-                    return apply_to_column<int16_t, Bodo_FTypes::idxmax,
+                    return apply_to_column<ARR_I, ARR_O, int16_t,
+                                           Bodo_FTypes::idxmax,
                                            Bodo_CTypes::INT16>(
                         in_col, out_col, aux_cols, grp_info);
             }
         case Bodo_CTypes::UINT16:
             switch (ftype) {
                 case Bodo_FTypes::sum:
-                    return apply_to_column<uint16_t, Bodo_FTypes::sum,
+                    return apply_to_column<ARR_I, ARR_O, uint16_t,
+                                           Bodo_FTypes::sum,
                                            Bodo_CTypes::UINT16>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::min:
-                    return apply_to_column<uint16_t, Bodo_FTypes::min,
+                    return apply_to_column<ARR_I, ARR_O, uint16_t,
+                                           Bodo_FTypes::min,
                                            Bodo_CTypes::UINT16>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::max:
-                    return apply_to_column<uint16_t, Bodo_FTypes::max,
+                    return apply_to_column<ARR_I, ARR_O, uint16_t,
+                                           Bodo_FTypes::max,
                                            Bodo_CTypes::UINT16>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::prod:
-                    return apply_to_column<uint16_t, Bodo_FTypes::prod,
+                    return apply_to_column<ARR_I, ARR_O, uint16_t,
+                                           Bodo_FTypes::prod,
                                            Bodo_CTypes::UINT16>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::first:
-                    return apply_to_column<uint16_t, Bodo_FTypes::first,
+                    return apply_to_column<ARR_I, ARR_O, uint16_t,
+                                           Bodo_FTypes::first,
                                            Bodo_CTypes::UINT16>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::last:
-                    return apply_to_column<uint16_t, Bodo_FTypes::last,
+                    return apply_to_column<ARR_I, ARR_O, uint16_t,
+                                           Bodo_FTypes::last,
                                            Bodo_CTypes::UINT16>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::mean:
-                    return apply_to_column<uint16_t, Bodo_FTypes::mean,
+                    return apply_to_column<ARR_I, ARR_O, uint16_t,
+                                           Bodo_FTypes::mean,
                                            Bodo_CTypes::UINT16>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::var:
                 case Bodo_FTypes::std:
-                    return apply_to_column<uint16_t, Bodo_FTypes::var,
+                    return apply_to_column<ARR_I, ARR_O, uint16_t,
+                                           Bodo_FTypes::var,
                                            Bodo_CTypes::UINT16>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::idxmin:
-                    return apply_to_column<uint16_t, Bodo_FTypes::idxmin,
+                    return apply_to_column<ARR_I, ARR_O, uint16_t,
+                                           Bodo_FTypes::idxmin,
                                            Bodo_CTypes::UINT16>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::idxmax:
-                    return apply_to_column<uint16_t, Bodo_FTypes::idxmax,
+                    return apply_to_column<ARR_I, ARR_O, uint16_t,
+                                           Bodo_FTypes::idxmax,
                                            Bodo_CTypes::UINT16>(
                         in_col, out_col, aux_cols, grp_info);
             }
         case Bodo_CTypes::INT32:
             switch (ftype) {
                 case Bodo_FTypes::sum:
-                    return apply_to_column<int32_t, Bodo_FTypes::sum,
+                    return apply_to_column<ARR_I, ARR_O, int32_t,
+                                           Bodo_FTypes::sum,
                                            Bodo_CTypes::INT32>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::min:
-                    return apply_to_column<int32_t, Bodo_FTypes::min,
+                    return apply_to_column<ARR_I, ARR_O, int32_t,
+                                           Bodo_FTypes::min,
                                            Bodo_CTypes::INT32>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::max:
-                    return apply_to_column<int32_t, Bodo_FTypes::max,
+                    return apply_to_column<ARR_I, ARR_O, int32_t,
+                                           Bodo_FTypes::max,
                                            Bodo_CTypes::INT32>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::prod:
-                    return apply_to_column<int32_t, Bodo_FTypes::prod,
+                    return apply_to_column<ARR_I, ARR_O, int32_t,
+                                           Bodo_FTypes::prod,
                                            Bodo_CTypes::INT32>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::first:
-                    return apply_to_column<int32_t, Bodo_FTypes::first,
+                    return apply_to_column<ARR_I, ARR_O, int32_t,
+                                           Bodo_FTypes::first,
                                            Bodo_CTypes::INT32>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::last:
-                    return apply_to_column<int32_t, Bodo_FTypes::last,
+                    return apply_to_column<ARR_I, ARR_O, int32_t,
+                                           Bodo_FTypes::last,
                                            Bodo_CTypes::INT32>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::mean:
-                    return apply_to_column<int32_t, Bodo_FTypes::mean,
+                    return apply_to_column<ARR_I, ARR_O, int32_t,
+                                           Bodo_FTypes::mean,
                                            Bodo_CTypes::INT32>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::var:
                 case Bodo_FTypes::std:
-                    return apply_to_column<int32_t, Bodo_FTypes::var,
+                    return apply_to_column<ARR_I, ARR_O, int32_t,
+                                           Bodo_FTypes::var,
                                            Bodo_CTypes::INT32>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::idxmin:
-                    return apply_to_column<int32_t, Bodo_FTypes::idxmin,
+                    return apply_to_column<ARR_I, ARR_O, int32_t,
+                                           Bodo_FTypes::idxmin,
                                            Bodo_CTypes::INT32>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::idxmax:
-                    return apply_to_column<int32_t, Bodo_FTypes::idxmax,
+                    return apply_to_column<ARR_I, ARR_O, int32_t,
+                                           Bodo_FTypes::idxmax,
                                            Bodo_CTypes::INT32>(
                         in_col, out_col, aux_cols, grp_info);
             }
         case Bodo_CTypes::UINT32:
             switch (ftype) {
                 case Bodo_FTypes::sum:
-                    return apply_to_column<uint32_t, Bodo_FTypes::sum,
+                    return apply_to_column<ARR_I, ARR_O, uint32_t,
+                                           Bodo_FTypes::sum,
                                            Bodo_CTypes::UINT32>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::min:
-                    return apply_to_column<uint32_t, Bodo_FTypes::min,
+                    return apply_to_column<ARR_I, ARR_O, uint32_t,
+                                           Bodo_FTypes::min,
                                            Bodo_CTypes::UINT32>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::max:
-                    return apply_to_column<uint32_t, Bodo_FTypes::max,
+                    return apply_to_column<ARR_I, ARR_O, uint32_t,
+                                           Bodo_FTypes::max,
                                            Bodo_CTypes::UINT32>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::prod:
-                    return apply_to_column<uint32_t, Bodo_FTypes::prod,
+                    return apply_to_column<ARR_I, ARR_O, uint32_t,
+                                           Bodo_FTypes::prod,
                                            Bodo_CTypes::UINT32>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::first:
-                    return apply_to_column<uint32_t, Bodo_FTypes::first,
+                    return apply_to_column<ARR_I, ARR_O, uint32_t,
+                                           Bodo_FTypes::first,
                                            Bodo_CTypes::UINT32>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::last:
-                    return apply_to_column<uint32_t, Bodo_FTypes::last,
+                    return apply_to_column<ARR_I, ARR_O, uint32_t,
+                                           Bodo_FTypes::last,
                                            Bodo_CTypes::UINT32>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::mean:
-                    return apply_to_column<uint32_t, Bodo_FTypes::mean,
+                    return apply_to_column<ARR_I, ARR_O, uint32_t,
+                                           Bodo_FTypes::mean,
                                            Bodo_CTypes::UINT32>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::var:
                 case Bodo_FTypes::std:
-                    return apply_to_column<uint32_t, Bodo_FTypes::var,
+                    return apply_to_column<ARR_I, ARR_O, uint32_t,
+                                           Bodo_FTypes::var,
                                            Bodo_CTypes::UINT32>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::idxmin:
-                    return apply_to_column<uint32_t, Bodo_FTypes::idxmin,
+                    return apply_to_column<ARR_I, ARR_O, uint32_t,
+                                           Bodo_FTypes::idxmin,
                                            Bodo_CTypes::UINT32>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::idxmax:
-                    return apply_to_column<uint32_t, Bodo_FTypes::idxmax,
+                    return apply_to_column<ARR_I, ARR_O, uint32_t,
+                                           Bodo_FTypes::idxmax,
                                            Bodo_CTypes::UINT32>(
                         in_col, out_col, aux_cols, grp_info);
             }
         case Bodo_CTypes::INT64:
             switch (ftype) {
                 case Bodo_FTypes::sum:
-                    return apply_to_column<int64_t, Bodo_FTypes::sum,
+                    return apply_to_column<ARR_I, ARR_O, int64_t,
+                                           Bodo_FTypes::sum,
                                            Bodo_CTypes::INT64>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::min:
-                    return apply_to_column<int64_t, Bodo_FTypes::min,
+                    return apply_to_column<ARR_I, ARR_O, int64_t,
+                                           Bodo_FTypes::min,
                                            Bodo_CTypes::INT64>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::max:
-                    return apply_to_column<int64_t, Bodo_FTypes::max,
+                    return apply_to_column<ARR_I, ARR_O, int64_t,
+                                           Bodo_FTypes::max,
                                            Bodo_CTypes::INT64>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::prod:
-                    return apply_to_column<int64_t, Bodo_FTypes::prod,
+                    return apply_to_column<ARR_I, ARR_O, int64_t,
+                                           Bodo_FTypes::prod,
                                            Bodo_CTypes::INT64>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::first:
-                    return apply_to_column<int64_t, Bodo_FTypes::first,
+                    return apply_to_column<ARR_I, ARR_O, int64_t,
+                                           Bodo_FTypes::first,
                                            Bodo_CTypes::INT64>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::last:
-                    return apply_to_column<int64_t, Bodo_FTypes::last,
+                    return apply_to_column<ARR_I, ARR_O, int64_t,
+                                           Bodo_FTypes::last,
                                            Bodo_CTypes::INT64>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::mean:
-                    return apply_to_column<int64_t, Bodo_FTypes::mean,
+                    return apply_to_column<ARR_I, ARR_O, int64_t,
+                                           Bodo_FTypes::mean,
                                            Bodo_CTypes::INT64>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::var:
                 case Bodo_FTypes::std:
-                    return apply_to_column<int64_t, Bodo_FTypes::var,
+                    return apply_to_column<ARR_I, ARR_O, int64_t,
+                                           Bodo_FTypes::var,
                                            Bodo_CTypes::INT64>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::idxmin:
-                    return apply_to_column<int64_t, Bodo_FTypes::idxmin,
+                    return apply_to_column<ARR_I, ARR_O, int64_t,
+                                           Bodo_FTypes::idxmin,
                                            Bodo_CTypes::INT64>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::idxmax:
-                    return apply_to_column<int64_t, Bodo_FTypes::idxmax,
+                    return apply_to_column<ARR_I, ARR_O, int64_t,
+                                           Bodo_FTypes::idxmax,
                                            Bodo_CTypes::INT64>(
                         in_col, out_col, aux_cols, grp_info);
             }
         case Bodo_CTypes::UINT64:
             switch (ftype) {
                 case Bodo_FTypes::sum:
-                    return apply_to_column<uint64_t, Bodo_FTypes::sum,
+                    return apply_to_column<ARR_I, ARR_O, uint64_t,
+                                           Bodo_FTypes::sum,
                                            Bodo_CTypes::UINT64>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::min:
-                    return apply_to_column<uint64_t, Bodo_FTypes::min,
+                    return apply_to_column<ARR_I, ARR_O, uint64_t,
+                                           Bodo_FTypes::min,
                                            Bodo_CTypes::UINT64>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::max:
-                    return apply_to_column<uint64_t, Bodo_FTypes::max,
+                    return apply_to_column<ARR_I, ARR_O, uint64_t,
+                                           Bodo_FTypes::max,
                                            Bodo_CTypes::UINT64>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::prod:
-                    return apply_to_column<uint64_t, Bodo_FTypes::prod,
+                    return apply_to_column<ARR_I, ARR_O, uint64_t,
+                                           Bodo_FTypes::prod,
                                            Bodo_CTypes::UINT64>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::first:
-                    return apply_to_column<uint64_t, Bodo_FTypes::first,
+                    return apply_to_column<ARR_I, ARR_O, uint64_t,
+                                           Bodo_FTypes::first,
                                            Bodo_CTypes::UINT64>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::last:
-                    return apply_to_column<uint64_t, Bodo_FTypes::last,
+                    return apply_to_column<ARR_I, ARR_O, uint64_t,
+                                           Bodo_FTypes::last,
                                            Bodo_CTypes::UINT64>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::mean:
-                    return apply_to_column<uint64_t, Bodo_FTypes::mean,
+                    return apply_to_column<ARR_I, ARR_O, uint64_t,
+                                           Bodo_FTypes::mean,
                                            Bodo_CTypes::UINT64>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::var:
                 case Bodo_FTypes::std:
-                    return apply_to_column<uint64_t, Bodo_FTypes::var,
+                    return apply_to_column<ARR_I, ARR_O, uint64_t,
+                                           Bodo_FTypes::var,
                                            Bodo_CTypes::UINT64>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::idxmin:
-                    return apply_to_column<uint64_t, Bodo_FTypes::idxmin,
+                    return apply_to_column<ARR_I, ARR_O, uint64_t,
+                                           Bodo_FTypes::idxmin,
                                            Bodo_CTypes::UINT64>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::idxmax:
-                    return apply_to_column<uint64_t, Bodo_FTypes::idxmax,
+                    return apply_to_column<ARR_I, ARR_O, uint64_t,
+                                           Bodo_FTypes::idxmax,
                                            Bodo_CTypes::UINT64>(
                         in_col, out_col, aux_cols, grp_info);
             }
         case Bodo_CTypes::DATE:
             switch (ftype) {
                 case Bodo_FTypes::sum:
-                    return apply_to_column<int64_t, Bodo_FTypes::sum,
-                                           Bodo_CTypes::DATE>(
+                    return apply_to_column<ARR_I, ARR_O, int64_t,
+                                           Bodo_FTypes::sum, Bodo_CTypes::DATE>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::min:
-                    return apply_to_column<int64_t, Bodo_FTypes::min,
-                                           Bodo_CTypes::DATE>(
+                    return apply_to_column<ARR_I, ARR_O, int64_t,
+                                           Bodo_FTypes::min, Bodo_CTypes::DATE>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::max:
-                    return apply_to_column<int64_t, Bodo_FTypes::max,
-                                           Bodo_CTypes::DATE>(
+                    return apply_to_column<ARR_I, ARR_O, int64_t,
+                                           Bodo_FTypes::max, Bodo_CTypes::DATE>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::prod:
-                    return apply_to_column<int64_t, Bodo_FTypes::prod,
+                    return apply_to_column<ARR_I, ARR_O, int64_t,
+                                           Bodo_FTypes::prod,
                                            Bodo_CTypes::DATE>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::first:
-                    return apply_to_column<int64_t, Bodo_FTypes::first,
+                    return apply_to_column<ARR_I, ARR_O, int64_t,
+                                           Bodo_FTypes::first,
                                            Bodo_CTypes::DATE>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::last:
-                    return apply_to_column<int64_t, Bodo_FTypes::last,
+                    return apply_to_column<ARR_I, ARR_O, int64_t,
+                                           Bodo_FTypes::last,
                                            Bodo_CTypes::DATE>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::mean:
-                    return apply_to_column<int64_t, Bodo_FTypes::mean,
+                    return apply_to_column<ARR_I, ARR_O, int64_t,
+                                           Bodo_FTypes::mean,
                                            Bodo_CTypes::DATE>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::var:
                 case Bodo_FTypes::std:
-                    return apply_to_column<int64_t, Bodo_FTypes::var,
-                                           Bodo_CTypes::DATE>(
+                    return apply_to_column<ARR_I, ARR_O, int64_t,
+                                           Bodo_FTypes::var, Bodo_CTypes::DATE>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::idxmin:
-                    return apply_to_column<int64_t, Bodo_FTypes::idxmin,
+                    return apply_to_column<ARR_I, ARR_O, int64_t,
+                                           Bodo_FTypes::idxmin,
                                            Bodo_CTypes::DATE>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::idxmax:
-                    return apply_to_column<int64_t, Bodo_FTypes::idxmax,
+                    return apply_to_column<ARR_I, ARR_O, int64_t,
+                                           Bodo_FTypes::idxmax,
                                            Bodo_CTypes::DATE>(
                         in_col, out_col, aux_cols, grp_info);
             }
         case Bodo_CTypes::DATETIME:
             switch (ftype) {
                 case Bodo_FTypes::sum:
-                    return apply_to_column<int64_t, Bodo_FTypes::sum,
+                    return apply_to_column<ARR_I, ARR_O, int64_t,
+                                           Bodo_FTypes::sum,
                                            Bodo_CTypes::DATETIME>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::min:
-                    return apply_to_column<int64_t, Bodo_FTypes::min,
+                    return apply_to_column<ARR_I, ARR_O, int64_t,
+                                           Bodo_FTypes::min,
                                            Bodo_CTypes::DATETIME>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::max:
-                    return apply_to_column<int64_t, Bodo_FTypes::max,
+                    return apply_to_column<ARR_I, ARR_O, int64_t,
+                                           Bodo_FTypes::max,
                                            Bodo_CTypes::DATETIME>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::prod:
-                    return apply_to_column<int64_t, Bodo_FTypes::prod,
+                    return apply_to_column<ARR_I, ARR_O, int64_t,
+                                           Bodo_FTypes::prod,
                                            Bodo_CTypes::DATETIME>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::first:
-                    return apply_to_column<int64_t, Bodo_FTypes::first,
+                    return apply_to_column<ARR_I, ARR_O, int64_t,
+                                           Bodo_FTypes::first,
                                            Bodo_CTypes::DATETIME>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::last:
-                    return apply_to_column<int64_t, Bodo_FTypes::last,
+                    return apply_to_column<ARR_I, ARR_O, int64_t,
+                                           Bodo_FTypes::last,
                                            Bodo_CTypes::DATETIME>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::mean:
-                    return apply_to_column<int64_t, Bodo_FTypes::mean,
+                    return apply_to_column<ARR_I, ARR_O, int64_t,
+                                           Bodo_FTypes::mean,
                                            Bodo_CTypes::DATETIME>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::var:
                 case Bodo_FTypes::std:
-                    return apply_to_column<int64_t, Bodo_FTypes::var,
+                    return apply_to_column<ARR_I, ARR_O, int64_t,
+                                           Bodo_FTypes::var,
                                            Bodo_CTypes::DATETIME>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::idxmin:
-                    return apply_to_column<int64_t, Bodo_FTypes::idxmin,
+                    return apply_to_column<ARR_I, ARR_O, int64_t,
+                                           Bodo_FTypes::idxmin,
                                            Bodo_CTypes::DATETIME>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::idxmax:
-                    return apply_to_column<int64_t, Bodo_FTypes::idxmax,
+                    return apply_to_column<ARR_I, ARR_O, int64_t,
+                                           Bodo_FTypes::idxmax,
                                            Bodo_CTypes::DATETIME>(
                         in_col, out_col, aux_cols, grp_info);
             }
         case Bodo_CTypes::TIMEDELTA:
             switch (ftype) {
                 case Bodo_FTypes::sum:
-                    return apply_to_column<int64_t, Bodo_FTypes::sum,
+                    return apply_to_column<ARR_I, ARR_O, int64_t,
+                                           Bodo_FTypes::sum,
                                            Bodo_CTypes::TIMEDELTA>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::min:
-                    return apply_to_column<int64_t, Bodo_FTypes::min,
+                    return apply_to_column<ARR_I, ARR_O, int64_t,
+                                           Bodo_FTypes::min,
                                            Bodo_CTypes::TIMEDELTA>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::max:
-                    return apply_to_column<int64_t, Bodo_FTypes::max,
+                    return apply_to_column<ARR_I, ARR_O, int64_t,
+                                           Bodo_FTypes::max,
                                            Bodo_CTypes::TIMEDELTA>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::prod:
-                    return apply_to_column<int64_t, Bodo_FTypes::prod,
+                    return apply_to_column<ARR_I, ARR_O, int64_t,
+                                           Bodo_FTypes::prod,
                                            Bodo_CTypes::TIMEDELTA>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::first:
-                    return apply_to_column<int64_t, Bodo_FTypes::first,
+                    return apply_to_column<ARR_I, ARR_O, int64_t,
+                                           Bodo_FTypes::first,
                                            Bodo_CTypes::TIMEDELTA>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::last:
-                    return apply_to_column<int64_t, Bodo_FTypes::last,
+                    return apply_to_column<ARR_I, ARR_O, int64_t,
+                                           Bodo_FTypes::last,
                                            Bodo_CTypes::TIMEDELTA>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::mean:
-                    return apply_to_column<int64_t, Bodo_FTypes::mean,
+                    return apply_to_column<ARR_I, ARR_O, int64_t,
+                                           Bodo_FTypes::mean,
                                            Bodo_CTypes::TIMEDELTA>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::var:
                 case Bodo_FTypes::std:
-                    return apply_to_column<int64_t, Bodo_FTypes::var,
+                    return apply_to_column<ARR_I, ARR_O, int64_t,
+                                           Bodo_FTypes::var,
                                            Bodo_CTypes::TIMEDELTA>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::idxmin:
-                    return apply_to_column<int64_t, Bodo_FTypes::idxmin,
+                    return apply_to_column<ARR_I, ARR_O, int64_t,
+                                           Bodo_FTypes::idxmin,
                                            Bodo_CTypes::TIMEDELTA>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::idxmax:
-                    return apply_to_column<int64_t, Bodo_FTypes::idxmax,
+                    return apply_to_column<ARR_I, ARR_O, int64_t,
+                                           Bodo_FTypes::idxmax,
                                            Bodo_CTypes::TIMEDELTA>(
                         in_col, out_col, aux_cols, grp_info);
             }
         case Bodo_CTypes::FLOAT32:
             switch (ftype) {
                 case Bodo_FTypes::sum:
-                    return apply_to_column<float, Bodo_FTypes::sum,
+                    return apply_to_column<ARR_I, ARR_O, float,
+                                           Bodo_FTypes::sum,
                                            Bodo_CTypes::FLOAT32>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::min:
-                    return apply_to_column<float, Bodo_FTypes::min,
+                    return apply_to_column<ARR_I, ARR_O, float,
+                                           Bodo_FTypes::min,
                                            Bodo_CTypes::FLOAT32>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::max:
-                    return apply_to_column<float, Bodo_FTypes::max,
+                    return apply_to_column<ARR_I, ARR_O, float,
+                                           Bodo_FTypes::max,
                                            Bodo_CTypes::FLOAT32>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::prod:
-                    return apply_to_column<float, Bodo_FTypes::prod,
+                    return apply_to_column<ARR_I, ARR_O, float,
+                                           Bodo_FTypes::prod,
                                            Bodo_CTypes::FLOAT32>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::first:
-                    return apply_to_column<float, Bodo_FTypes::first,
+                    return apply_to_column<ARR_I, ARR_O, float,
+                                           Bodo_FTypes::first,
                                            Bodo_CTypes::FLOAT32>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::last:
-                    return apply_to_column<float, Bodo_FTypes::last,
+                    return apply_to_column<ARR_I, ARR_O, float,
+                                           Bodo_FTypes::last,
                                            Bodo_CTypes::FLOAT32>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::mean:
-                    return apply_to_column<float, Bodo_FTypes::mean,
+                    return apply_to_column<ARR_I, ARR_O, float,
+                                           Bodo_FTypes::mean,
                                            Bodo_CTypes::FLOAT32>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::mean_eval:
-                    return apply_to_column<float, Bodo_FTypes::mean_eval,
+                    return apply_to_column<ARR_I, ARR_O, float,
+                                           Bodo_FTypes::mean_eval,
                                            Bodo_CTypes::FLOAT32>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::var:
                 case Bodo_FTypes::std:
-                    return apply_to_column<float, Bodo_FTypes::var,
+                    return apply_to_column<ARR_I, ARR_O, float,
+                                           Bodo_FTypes::var,
                                            Bodo_CTypes::FLOAT32>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::var_eval:
-                    return apply_to_column<float, Bodo_FTypes::var_eval,
+                    return apply_to_column<ARR_I, ARR_O, float,
+                                           Bodo_FTypes::var_eval,
                                            Bodo_CTypes::FLOAT32>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::std_eval:
-                    return apply_to_column<float, Bodo_FTypes::std_eval,
+                    return apply_to_column<ARR_I, ARR_O, float,
+                                           Bodo_FTypes::std_eval,
                                            Bodo_CTypes::FLOAT32>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::idxmin:
-                    return apply_to_column<float, Bodo_FTypes::idxmin,
+                    return apply_to_column<ARR_I, ARR_O, float,
+                                           Bodo_FTypes::idxmin,
                                            Bodo_CTypes::FLOAT32>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::idxmax:
-                    return apply_to_column<float, Bodo_FTypes::idxmax,
+                    return apply_to_column<ARR_I, ARR_O, float,
+                                           Bodo_FTypes::idxmax,
                                            Bodo_CTypes::FLOAT32>(
                         in_col, out_col, aux_cols, grp_info);
             }
         case Bodo_CTypes::FLOAT64:
             switch (ftype) {
                 case Bodo_FTypes::sum:
-                    return apply_to_column<double, Bodo_FTypes::sum,
+                    return apply_to_column<ARR_I, ARR_O, double,
+                                           Bodo_FTypes::sum,
                                            Bodo_CTypes::FLOAT64>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::min:
-                    return apply_to_column<double, Bodo_FTypes::min,
+                    return apply_to_column<ARR_I, ARR_O, double,
+                                           Bodo_FTypes::min,
                                            Bodo_CTypes::FLOAT64>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::max:
-                    return apply_to_column<double, Bodo_FTypes::max,
+                    return apply_to_column<ARR_I, ARR_O, double,
+                                           Bodo_FTypes::max,
                                            Bodo_CTypes::FLOAT64>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::prod:
-                    return apply_to_column<double, Bodo_FTypes::prod,
+                    return apply_to_column<ARR_I, ARR_O, double,
+                                           Bodo_FTypes::prod,
                                            Bodo_CTypes::FLOAT64>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::first:
-                    return apply_to_column<double, Bodo_FTypes::first,
+                    return apply_to_column<ARR_I, ARR_O, double,
+                                           Bodo_FTypes::first,
                                            Bodo_CTypes::FLOAT64>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::last:
-                    return apply_to_column<double, Bodo_FTypes::last,
+                    return apply_to_column<ARR_I, ARR_O, double,
+                                           Bodo_FTypes::last,
                                            Bodo_CTypes::FLOAT64>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::mean:
-                    return apply_to_column<double, Bodo_FTypes::mean,
+                    return apply_to_column<ARR_I, ARR_O, double,
+                                           Bodo_FTypes::mean,
                                            Bodo_CTypes::FLOAT64>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::mean_eval:
-                    return apply_to_column<double, Bodo_FTypes::mean_eval,
+                    return apply_to_column<ARR_I, ARR_O, double,
+                                           Bodo_FTypes::mean_eval,
                                            Bodo_CTypes::FLOAT64>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::var:
                 case Bodo_FTypes::std:
-                    return apply_to_column<double, Bodo_FTypes::var,
+                    return apply_to_column<ARR_I, ARR_O, double,
+                                           Bodo_FTypes::var,
                                            Bodo_CTypes::FLOAT64>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::var_eval:
-                    return apply_to_column<double, Bodo_FTypes::var_eval,
+                    return apply_to_column<ARR_I, ARR_O, double,
+                                           Bodo_FTypes::var_eval,
                                            Bodo_CTypes::FLOAT64>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::std_eval:
-                    return apply_to_column<double, Bodo_FTypes::std_eval,
+                    return apply_to_column<ARR_I, ARR_O, double,
+                                           Bodo_FTypes::std_eval,
                                            Bodo_CTypes::FLOAT64>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::idxmin:
-                    return apply_to_column<double, Bodo_FTypes::idxmin,
+                    return apply_to_column<ARR_I, ARR_O, double,
+                                           Bodo_FTypes::idxmin,
                                            Bodo_CTypes::FLOAT64>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::idxmax:
-                    return apply_to_column<double, Bodo_FTypes::idxmax,
+                    return apply_to_column<ARR_I, ARR_O, double,
+                                           Bodo_FTypes::idxmax,
                                            Bodo_CTypes::FLOAT64>(
                         in_col, out_col, aux_cols, grp_info);
             }
         case Bodo_CTypes::DECIMAL:
             switch (ftype) {
                 case Bodo_FTypes::first:
-                    return apply_to_column<decimal_value_cpp,
+                    return apply_to_column<ARR_I, ARR_O, decimal_value_cpp,
                                            Bodo_FTypes::first,
                                            Bodo_CTypes::DECIMAL>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::last:
-                    return apply_to_column<decimal_value_cpp, Bodo_FTypes::last,
+                    return apply_to_column<ARR_I, ARR_O, decimal_value_cpp,
+                                           Bodo_FTypes::last,
                                            Bodo_CTypes::DECIMAL>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::min:
-                    return apply_to_column<decimal_value_cpp, Bodo_FTypes::min,
+                    return apply_to_column<ARR_I, ARR_O, decimal_value_cpp,
+                                           Bodo_FTypes::min,
                                            Bodo_CTypes::DECIMAL>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::max:
-                    return apply_to_column<decimal_value_cpp, Bodo_FTypes::max,
+                    return apply_to_column<ARR_I, ARR_O, decimal_value_cpp,
+                                           Bodo_FTypes::max,
                                            Bodo_CTypes::DECIMAL>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::mean:
-                    return apply_to_column<decimal_value_cpp, Bodo_FTypes::mean,
+                    return apply_to_column<ARR_I, ARR_O, decimal_value_cpp,
+                                           Bodo_FTypes::mean,
                                            Bodo_CTypes::DECIMAL>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::mean_eval:
-                    return apply_to_column<decimal_value_cpp,
+                    return apply_to_column<ARR_I, ARR_O, decimal_value_cpp,
                                            Bodo_FTypes::mean_eval,
                                            Bodo_CTypes::DECIMAL>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::var:
                 case Bodo_FTypes::std:
-                    return apply_to_column<decimal_value_cpp, Bodo_FTypes::var,
+                    return apply_to_column<ARR_I, ARR_O, decimal_value_cpp,
+                                           Bodo_FTypes::var,
                                            Bodo_CTypes::DECIMAL>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::var_eval:
-                    return apply_to_column<decimal_value_cpp,
+                    return apply_to_column<ARR_I, ARR_O, decimal_value_cpp,
                                            Bodo_FTypes::var_eval,
                                            Bodo_CTypes::DECIMAL>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::std_eval:
-                    return apply_to_column<decimal_value_cpp,
+                    return apply_to_column<ARR_I, ARR_O, decimal_value_cpp,
                                            Bodo_FTypes::std_eval,
                                            Bodo_CTypes::DECIMAL>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::idxmin:
-                    return apply_to_column<decimal_value_cpp,
+                    return apply_to_column<ARR_I, ARR_O, decimal_value_cpp,
                                            Bodo_FTypes::idxmin,
                                            Bodo_CTypes::DECIMAL>(
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::idxmax:
-                    return apply_to_column<decimal_value_cpp,
+                    return apply_to_column<ARR_I, ARR_O, decimal_value_cpp,
                                            Bodo_FTypes::idxmax,
                                            Bodo_CTypes::DECIMAL>(
                         in_col, out_col, aux_cols, grp_info);
@@ -2856,18 +3247,24 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
  * @param output column
  * @param function identifier
  */
-void aggfunc_output_initialize(array_info* out_col, int ftype) {
+void aggfunc_output_initialize_kernel(array_info* out_col, int ftype,
+                                      bool is_groupby) {
     if (out_col->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
+        bool init_val;
         if (ftype == Bodo_FTypes::min || ftype == Bodo_FTypes::max ||
-            ftype == Bodo_FTypes::first || ftype == Bodo_FTypes::last)
+            ftype == Bodo_FTypes::first || ftype == Bodo_FTypes::last) {
             // if input is all nulls, max, min, first and last output will be
             // null
-            InitializeBitMask((uint8_t*)out_col->null_bitmask, out_col->length,
-                              false);
-        else
-            // for other functions (count, sum, etc.) output will never be null
-            InitializeBitMask((uint8_t*)out_col->null_bitmask, out_col->length,
-                              true);
+            if (is_groupby) {
+                init_val = false;
+            } else {
+                init_val = true;
+            }
+        } else {
+            init_val = true;
+        }
+        InitializeBitMask((uint8_t*)out_col->null_bitmask, out_col->length,
+                          init_val);
     }
     if (out_col->arr_type == bodo_array_type::STRING ||
         out_col->arr_type == bodo_array_type::LIST_STRING) {
@@ -3133,6 +3530,17 @@ void aggfunc_output_initialize(array_info* out_col, int ftype) {
     }
 }
 
+void aggfunc_output_initialize(array_info* out_col, int ftype) {
+    bool is_groupby = true;
+    aggfunc_output_initialize_kernel(out_col, ftype, is_groupby);
+}
+
+void aggfunc_output_initialize(multiple_array_info* out_col, int ftype) {
+    bool is_groupby = false;
+    for (array_info* eout : out_col->vect_arr)
+        aggfunc_output_initialize_kernel(eout, ftype, is_groupby);
+}
+
 /**
  * Returns the array type and dtype required for output columns based on the
  * aggregation function and input dtype.
@@ -3145,10 +3553,12 @@ void aggfunc_output_initialize(array_info* out_col, int ftype) {
  * @param true if column is key column (in this case ignore because output type
  * will be the same)
  */
-static void get_groupby_output_dtype(int ftype,
-                                     bodo_array_type::arr_type_enum& array_type,
-                                     Bodo_CTypes::CTypeEnum& dtype,
-                                     bool is_key) {
+template <typename ARRAY>
+typename std::enable_if<!is_multiple_array<ARRAY>::value, void>::type
+get_groupby_output_dtype(int ftype, bodo_array_type::arr_type_enum& array_type,
+                         Bodo_CTypes::CTypeEnum& dtype, bool is_key,
+                         bool is_combine, bool is_crosstab) {
+    if (is_combine) ftype = combine_funcs[ftype];
     if (is_key) return;
     switch (ftype) {
         case Bodo_FTypes::nunique:
@@ -3166,6 +3576,127 @@ static void get_groupby_output_dtype(int ftype,
         default:
             return;
     }
+}
+
+/**
+ * Returns the array type and dtype required for output columns based on the
+ * aggregation function and input dtype.
+ *
+ * @param function identifier
+ * @param[in,out] array type (caller sets a default, this function only changes
+ * in certain cases)
+ * @param[in,out] output dtype (caller sets a default, this function only
+ * changes in certain cases)
+ * @param true if column is key column (in this case ignore because output type
+ * will be the same)
+ */
+template <typename ARRAY>
+typename std::enable_if<is_multiple_array<ARRAY>::value, void>::type
+get_groupby_output_dtype(int ftype, bodo_array_type::arr_type_enum& array_type,
+                         Bodo_CTypes::CTypeEnum& dtype, bool is_key,
+                         bool is_combine, bool is_crosstab) {
+    int input_ftype = ftype;
+    if (is_combine) ftype = combine_funcs[ftype];
+    if (is_key) return;
+    switch (ftype) {
+        case Bodo_FTypes::nunique:
+        case Bodo_FTypes::count: {
+            if (is_crosstab) {
+                array_type = bodo_array_type::NUMPY;
+            } else {
+                array_type = bodo_array_type::NULLABLE_INT_BOOL;
+            }
+            dtype = Bodo_CTypes::INT64;
+            return;
+        }
+        case Bodo_FTypes::max:
+        case Bodo_FTypes::min:
+        case Bodo_FTypes::sum:
+        case Bodo_FTypes::prod: {
+            bool is_float =
+                dtype == Bodo_CTypes::FLOAT64 || dtype == Bodo_CTypes::FLOAT32;
+            if (ftype == input_ftype && !is_float) {
+                array_type = bodo_array_type::NULLABLE_INT_BOOL;
+            }
+            return;
+        }
+        case Bodo_FTypes::median:
+        case Bodo_FTypes::mean:
+        case Bodo_FTypes::var:
+        case Bodo_FTypes::std:
+            array_type = bodo_array_type::NUMPY;
+            dtype = Bodo_CTypes::FLOAT64;
+            return;
+        default:
+            return;
+    }
+}
+
+template <typename ARRAY>
+inline typename std::enable_if<!is_multiple_array<ARRAY>::value, ARRAY*>::type
+alloc_array_groupby(int64_t length, int64_t n_sub_elems,
+                    int64_t n_sub_sub_elems,
+                    bodo_array_type::arr_type_enum arr_type,
+                    Bodo_CTypes::CTypeEnum dtype, int64_t extra_null_bytes,
+                    int64_t num_categories, int64_t n_pivot) {
+    return alloc_array(length, n_sub_elems, n_sub_sub_elems, arr_type, dtype,
+                       extra_null_bytes, num_categories);
+}
+
+template <typename ARRAY>
+inline typename std::enable_if<is_multiple_array<ARRAY>::value, ARRAY*>::type
+alloc_array_groupby(int64_t length, int64_t n_sub_elems,
+                    int64_t n_sub_sub_elems,
+                    bodo_array_type::arr_type_enum arr_type,
+                    Bodo_CTypes::CTypeEnum dtype, int64_t extra_null_bytes,
+                    int64_t num_categories, int64_t n_pivot) {
+    std::vector<array_info*> vect_arr;
+    for (int i_pivot = 0; i_pivot < n_pivot; i_pivot++)
+        vect_arr.push_back(alloc_array(length, n_sub_elems, n_sub_sub_elems,
+                                       arr_type, dtype, extra_null_bytes,
+                                       num_categories));
+    return new multiple_array_info(vect_arr);
+}
+
+template <typename ARRAY>
+inline typename std::enable_if<is_multiple_array<ARRAY>::value, void>::type
+free_array_groupby(ARRAY* arr) {
+    for (auto& e_arr : arr->vect_arr) delete_info_decref_array(e_arr);
+    for (auto& e_arr : arr->vect_access) delete_info_decref_array(e_arr);
+    delete arr;
+}
+
+template <typename ARRAY>
+inline typename std::enable_if<!is_multiple_array<ARRAY>::value, void>::type
+free_array_groupby(ARRAY* arr) {
+    delete_info_decref_array(arr);
+}
+
+template <typename ARRAY>
+inline typename std::enable_if<is_multiple_array<ARRAY>::value, ARRAY*>::type
+get_array_from_iterator(typename std::vector<array_info*>::iterator& it,
+                        int n_pivot) {
+    std::vector<array_info*> vect_arr;
+    for (int i_pivot = 0; i_pivot < n_pivot; i_pivot++) {
+        vect_arr.push_back(*it);
+        it++;
+    }
+    int n_access = (n_pivot + 7) >> 3;
+    std::vector<array_info*> vect_access;
+    for (int i_access = 0; i_access < n_access; i_access++) {
+        vect_access.push_back(*it);
+        it++;
+    }
+    return new multiple_array_info(vect_arr, vect_access);
+}
+
+template <typename ARRAY>
+inline typename std::enable_if<!is_multiple_array<ARRAY>::value, ARRAY*>::type
+get_array_from_iterator(typename std::vector<array_info*>::iterator& it,
+                        int n_pivot) {
+    array_info* arr = *it;
+    it++;
+    return arr;
 }
 
 /*
@@ -3190,6 +3721,7 @@ static void get_groupby_output_dtype(int ftype,
  * sum, prod, count, etc.). Several subclasses also rely on some of the methods
  * of this base class.
  */
+template <typename ARRAY>
 class BasicColSet {
    public:
     /**
@@ -3203,7 +3735,8 @@ class BasicColSet {
      *        beginning of the pipeline.
      */
     BasicColSet(array_info* in_col, int ftype, bool combine_step)
-        : in_col(in_col), ftype(ftype), combine_step(combine_step) {}
+        : in_col(in_col), ftype(ftype), combine_step(combine_step) {
+    }
     virtual ~BasicColSet() {}
 
     /**
@@ -3212,21 +3745,18 @@ class BasicColSet {
      * @param[in,out] vector of columns of update table. This method adds
      *                columns to this vector.
      */
-    virtual void alloc_update_columns(size_t num_groups,
-                                      std::vector<array_info*>& out_cols) {
+    virtual void alloc_update_columns(size_t num_groups, size_t n_pivot,
+                                      bool is_crosstab,
+                                      std::vector<ARRAY*>& out_cols) {
         bodo_array_type::arr_type_enum arr_type = in_col->arr_type;
         Bodo_CTypes::CTypeEnum dtype = in_col->dtype;
         int64_t num_categories = in_col->num_categories;
         // calling this modifies arr_type and dtype
-        get_groupby_output_dtype(ftype, arr_type, dtype, false);
-#ifdef DEBUG_GROUPBY
-        std::cout << "num_groups=" << num_groups
-                  << " num_categories=" << num_categories << "\n";
-        std::cout << "arr_type=" << int(arr_type) << " dtype=" << int(dtype)
-                  << "\n";
-#endif
-        out_cols.push_back(
-            alloc_array(num_groups, 1, 1, arr_type, dtype, 0, num_categories));
+        bool is_combine = false;
+        get_groupby_output_dtype<ARRAY>(ftype, arr_type, dtype, false,
+                                        is_combine, is_crosstab);
+        out_cols.push_back(alloc_array_groupby<ARRAY>(
+            num_groups, 1, 1, arr_type, dtype, 0, num_categories, n_pivot));
         update_cols.push_back(out_cols.back());
     }
 
@@ -3236,7 +3766,7 @@ class BasicColSet {
      * @param grouping info calculated by GroupbyPipeline
      */
     virtual void update(const grouping_info& grp_info) {
-        std::vector<array_info*> aux_cols;
+        std::vector<ARRAY*> aux_cols;
         aggfunc_output_initialize(update_cols[0], ftype);
         do_apply_to_column(in_col, update_cols[0], aux_cols, grp_info, ftype);
     }
@@ -3249,10 +3779,11 @@ class BasicColSet {
      * iterator pointing to the next set of columns.
      * @param iterator pointing to the first column in this column set
      */
-    virtual std::vector<array_info*>::iterator update_after_shuffle(
-        std::vector<array_info*>::iterator& it) {
-        update_cols.assign(it, it + update_cols.size());
-        return it + update_cols.size();
+    virtual typename std::vector<array_info*>::iterator update_after_shuffle(
+        typename std::vector<array_info*>::iterator& it, int n_pivot) {
+        for (size_t i_col = 0; i_col < update_cols.size(); i_col++)
+            update_cols[i_col] = get_array_from_iterator<ARRAY>(it, n_pivot);
+        return it;
     }
 
     /**
@@ -3262,17 +3793,19 @@ class BasicColSet {
      * @param[in,out] vector of columns of combine table. This method adds
      *                columns to this vector.
      */
-    virtual void alloc_combine_columns(size_t num_groups,
-                                       std::vector<array_info*>& out_cols) {
-        Bodo_FTypes::FTypeEnum combine_ftype = combine_funcs[ftype];
+    virtual void alloc_combine_columns(size_t num_groups, size_t n_pivot,
+                                       bool is_crosstab,
+                                       std::vector<ARRAY*>& out_cols) {
         for (auto col : update_cols) {
             bodo_array_type::arr_type_enum arr_type = col->arr_type;
             Bodo_CTypes::CTypeEnum dtype = col->dtype;
             int64_t num_categories = col->num_categories;
             // calling this modifies arr_type and dtype
-            get_groupby_output_dtype(combine_ftype, arr_type, dtype, false);
-            out_cols.push_back(alloc_array(num_groups, 1, 1, arr_type, dtype, 0,
-                                           num_categories));
+            bool is_combine = true;
+            get_groupby_output_dtype<ARRAY>(ftype, arr_type, dtype, false,
+                                            is_combine, is_crosstab);
+            out_cols.push_back(alloc_array_groupby<ARRAY>(
+                num_groups, 1, 1, arr_type, dtype, 0, num_categories, n_pivot));
             combine_cols.push_back(out_cols.back());
         }
     }
@@ -3284,8 +3817,8 @@ class BasicColSet {
      */
     virtual void combine(const grouping_info& grp_info) {
         Bodo_FTypes::FTypeEnum combine_ftype = combine_funcs[ftype];
-        std::vector<array_info*> aux_cols(combine_cols.begin() + 1,
-                                          combine_cols.end());
+        std::vector<ARRAY*> aux_cols(combine_cols.begin() + 1,
+                                     combine_cols.end());
         for (auto col : combine_cols)
             aggfunc_output_initialize(col, combine_ftype);
         do_apply_to_column(update_cols[0], combine_cols[0], aux_cols, grp_info,
@@ -3305,198 +3838,239 @@ class BasicColSet {
      * this column set. This will free all other intermediate or auxiliary
      * columns (if any) used by the column set (like reduction variables).
      */
-    virtual array_info* getOutputColumn() {
-        std::vector<array_info*>* mycols;
+    virtual ARRAY* getOutputColumn() {
+        std::vector<ARRAY*>* mycols;
         if (combine_step)
             mycols = &combine_cols;
         else
             mycols = &update_cols;
-        array_info* out_col = mycols->at(0);
+        ARRAY* out_col = mycols->at(0);
         for (auto it = mycols->begin() + 1; it != mycols->end(); it++) {
-            array_info* a = *it;
-            decref_array(a);
-            delete a;
+            ARRAY* a = *it;
+            free_array_groupby(a);
         }
         return out_col;
     }
 
    protected:
-    friend class GroupbyPipeline;
     array_info* in_col;  // the input column (from groupby input table) to which
                          // this column set corresponds to
     int ftype;
     bool combine_step;  // GroupbyPipeline is going to perform a combine
                         // operation or not
-    std::vector<array_info*> update_cols;   // columns for update step
-    std::vector<array_info*> combine_cols;  // columns for combine step
+    std::vector<ARRAY*> update_cols;   // columns for update step
+    std::vector<ARRAY*> combine_cols;  // columns for combine step
 };
 
-class MeanColSet : public BasicColSet {
+template <typename ARRAY>
+class MeanColSet : public BasicColSet<ARRAY> {
    public:
     MeanColSet(array_info* in_col, bool combine_step)
-        : BasicColSet(in_col, Bodo_FTypes::mean, combine_step) {}
+        : BasicColSet<ARRAY>(in_col, Bodo_FTypes::mean, combine_step) {}
     virtual ~MeanColSet() {}
 
-    virtual void alloc_update_columns(size_t num_groups,
-                                      std::vector<array_info*>& out_cols) {
-        array_info* c1 =
-            alloc_array(num_groups, 1, 1, bodo_array_type::NUMPY,
-                        Bodo_CTypes::FLOAT64, 0, 0);  // for sum and result
-        array_info* c2 = alloc_array(num_groups, 1, 1, bodo_array_type::NUMPY,
-                                     Bodo_CTypes::UINT64, 0, 0);  // for counts
+    virtual void alloc_update_columns(size_t num_groups, size_t n_pivot,
+                                      bool is_crosstab,
+                                      std::vector<ARRAY*>& out_cols) {
+        ARRAY* c1 = alloc_array_groupby<ARRAY>(
+            num_groups, 1, 1, bodo_array_type::NUMPY, Bodo_CTypes::FLOAT64, 0,
+            0, n_pivot);  // for sum and result
+        ARRAY* c2 = alloc_array_groupby<ARRAY>(
+            num_groups, 1, 1, bodo_array_type::NUMPY, Bodo_CTypes::UINT64, 0, 0,
+            n_pivot);  // for counts
         out_cols.push_back(c1);
         out_cols.push_back(c2);
-        update_cols.push_back(c1);
-        update_cols.push_back(c2);
+        this->update_cols.push_back(c1);
+        this->update_cols.push_back(c2);
     }
 
     virtual void update(const grouping_info& grp_info) {
-        std::vector<array_info*> aux_cols = {update_cols[1]};
-        aggfunc_output_initialize(update_cols[0], ftype);
-        aggfunc_output_initialize(update_cols[1], ftype);
-        do_apply_to_column(in_col, update_cols[0], aux_cols, grp_info, ftype);
+        std::vector<ARRAY*> aux_cols = {this->update_cols[1]};
+        aggfunc_output_initialize(this->update_cols[0], this->ftype);
+        aggfunc_output_initialize(this->update_cols[1], this->ftype);
+        do_apply_to_column(this->in_col, this->update_cols[0], aux_cols,
+                           grp_info, this->ftype);
     }
 
     virtual void combine(const grouping_info& grp_info) {
-        std::vector<array_info*> aux_cols;
-        aggfunc_output_initialize(combine_cols[0], Bodo_FTypes::sum);
-        aggfunc_output_initialize(combine_cols[1], Bodo_FTypes::sum);
-        do_apply_to_column(update_cols[0], combine_cols[0], aux_cols, grp_info,
-                           Bodo_FTypes::sum);
-        do_apply_to_column(update_cols[1], combine_cols[1], aux_cols, grp_info,
-                           Bodo_FTypes::sum);
+        std::vector<ARRAY*> aux_cols;
+        aggfunc_output_initialize(this->combine_cols[0], Bodo_FTypes::sum);
+        aggfunc_output_initialize(this->combine_cols[1], Bodo_FTypes::sum);
+        do_apply_to_column(this->update_cols[0], this->combine_cols[0],
+                           aux_cols, grp_info, Bodo_FTypes::sum);
+        do_apply_to_column(this->update_cols[1], this->combine_cols[1],
+                           aux_cols, grp_info, Bodo_FTypes::sum);
     }
 
     virtual void eval(const grouping_info& grp_info) {
-        std::vector<array_info*> aux_cols;
-        if (combine_step)
-            do_apply_to_column(combine_cols[1], combine_cols[0], aux_cols,
-                               grp_info, Bodo_FTypes::mean_eval);
+        std::vector<ARRAY*> aux_cols;
+        if (this->combine_step)
+            do_apply_to_column(this->combine_cols[1], this->combine_cols[0],
+                               aux_cols, grp_info, Bodo_FTypes::mean_eval);
         else
-            do_apply_to_column(update_cols[1], update_cols[0], aux_cols,
-                               grp_info, Bodo_FTypes::mean_eval);
+            do_apply_to_column(this->update_cols[1], this->update_cols[0],
+                               aux_cols, grp_info, Bodo_FTypes::mean_eval);
     }
 };
 
-class IdxMinMaxColSet : public BasicColSet {
+template <typename ARRAY>
+typename std::enable_if<!is_multiple_array<ARRAY>::value, ARRAY*>::type
+RetrieveArray_SingleColumn_ARRAY(array_info* index_col, ARRAY* index_pos) {
+    return RetrieveArray_SingleColumn_arr(index_col, index_pos);
+}
+
+template <typename ARRAY>
+typename std::enable_if<is_multiple_array<ARRAY>::value, ARRAY*>::type
+RetrieveArray_SingleColumn_ARRAY(array_info* index_col, ARRAY* index_pos) {
+    std::vector<array_info*> vect_arr;
+    for (auto& e_arr : index_pos->vect_arr)
+        vect_arr.push_back(RetrieveArray_SingleColumn_arr(index_col, e_arr));
+    return new multiple_array_info(vect_arr);
+}
+
+template <typename ARRAY>
+typename std::enable_if<!is_multiple_array<ARRAY>::value, ARRAY*>::type
+RetrieveArray_SingleColumn_Multiple_ARRAY(ARRAY* index_col, ARRAY* index_pos) {
+    return RetrieveArray_SingleColumn_arr(index_col, index_pos);
+}
+
+template <typename ARRAY>
+typename std::enable_if<is_multiple_array<ARRAY>::value, ARRAY*>::type
+RetrieveArray_SingleColumn_Multiple_ARRAY(ARRAY* index_col, ARRAY* index_pos) {
+    Bodo_PyErr_SetString(
+        PyExc_RuntimeError,
+        "The code is missing in RetrieveArray_SingleColumn_Multiple_ARRAY");
+    return nullptr;
+}
+
+template <typename ARRAY>
+class IdxMinMaxColSet : public BasicColSet<ARRAY> {
    public:
     IdxMinMaxColSet(array_info* in_col, array_info* _index_col, int ftype,
                     bool combine_step)
-        : BasicColSet(in_col, ftype, combine_step), index_col(_index_col) {}
+        : BasicColSet<ARRAY>(in_col, ftype, combine_step),
+          index_col(_index_col) {}
     virtual ~IdxMinMaxColSet() {}
 
-    virtual void alloc_update_columns(size_t num_groups,
-                                      std::vector<array_info*>& out_cols) {
+    virtual void alloc_update_columns(size_t num_groups, size_t n_pivot,
+                                      bool is_crosstab,
+                                      std::vector<ARRAY*>& out_cols) {
         // output column containing index values. dummy for now. will be
         // assigned the real data at the end of update()
-        array_info* out_col = alloc_array(num_groups, 1, 1, index_col->arr_type,
-                                          index_col->dtype, 0, 0);
+        ARRAY* out_col =
+            alloc_array_groupby<ARRAY>(num_groups, 1, 1, index_col->arr_type,
+                                       index_col->dtype, 0, 0, n_pivot);
         // create array to store min/max value
-        array_info* max_col = alloc_array(num_groups, 1, 1, in_col->arr_type,
-                                          in_col->dtype, 0, 0);  // for min/max
+        ARRAY* max_col = alloc_array_groupby<ARRAY>(
+            num_groups, 1, 1, this->in_col->arr_type, this->in_col->dtype, 0, 0,
+            n_pivot);  // for min/max
         // create array to store index position of min/max value
-        array_info* index_pos_col =
-            alloc_array(num_groups, 1, 1, bodo_array_type::NUMPY,
-                        Bodo_CTypes::UINT64, 0, 0);
+        ARRAY* index_pos_col =
+            alloc_array_groupby<ARRAY>(num_groups, 1, 1, bodo_array_type::NUMPY,
+                                       Bodo_CTypes::UINT64, 0, 0, n_pivot);
         out_cols.push_back(out_col);
         out_cols.push_back(max_col);
-        update_cols.push_back(out_col);
-        update_cols.push_back(max_col);
-        update_cols.push_back(index_pos_col);
+        this->update_cols.push_back(out_col);
+        this->update_cols.push_back(max_col);
+        this->update_cols.push_back(index_pos_col);
     }
 
     virtual void update(const grouping_info& grp_info) {
-        array_info* index_pos_col = update_cols[2];
-        std::vector<array_info*> aux_cols = {index_pos_col};
-        if (ftype == Bodo_FTypes::idxmax)
-            aggfunc_output_initialize(update_cols[1], Bodo_FTypes::max);
-        if (ftype == Bodo_FTypes::idxmin)
-            aggfunc_output_initialize(update_cols[1], Bodo_FTypes::min);
+        ARRAY* index_pos_col = this->update_cols[2];
+        std::vector<ARRAY*> aux_cols = {index_pos_col};
+        if (this->ftype == Bodo_FTypes::idxmax)
+            aggfunc_output_initialize(this->update_cols[1], Bodo_FTypes::max);
+        if (this->ftype == Bodo_FTypes::idxmin)
+            aggfunc_output_initialize(this->update_cols[1], Bodo_FTypes::min);
         aggfunc_output_initialize(index_pos_col,
                                   Bodo_FTypes::count);  // zero init
-        do_apply_to_column(in_col, update_cols[1], aux_cols, grp_info, ftype);
+        do_apply_to_column(this->in_col, this->update_cols[1], aux_cols,
+                           grp_info, this->ftype);
 
-        array_info* real_out_col =
-            RetrieveArray_SingleColumn_arr(index_col, index_pos_col);
-        array_info* out_col = update_cols[0];
+        ARRAY* real_out_col =
+            RetrieveArray_SingleColumn_ARRAY(index_col, index_pos_col);
+        ARRAY* out_col = this->update_cols[0];
         *out_col = std::move(*real_out_col);
         delete real_out_col;
-        decref_array(index_pos_col);
-        delete index_pos_col;
-        update_cols.pop_back();
+        free_array_groupby(index_pos_col);
+        this->update_cols.pop_back();
     }
 
-    virtual void alloc_combine_columns(size_t num_groups,
-                                       std::vector<array_info*>& out_cols) {
+    virtual void alloc_combine_columns(size_t num_groups, size_t n_pivot,
+                                       bool is_crosstab,
+                                       std::vector<ARRAY*>& out_cols) {
         // output column containing index values. dummy for now. will be
         // assigned the real data at the end of combine()
-        array_info* out_col = alloc_array(num_groups, 1, 1, index_col->arr_type,
-                                          index_col->dtype, 0, 0);
+        ARRAY* out_col =
+            alloc_array_groupby<ARRAY>(num_groups, 1, 1, index_col->arr_type,
+                                       index_col->dtype, 0, 0, n_pivot);
         // create array to store min/max value
-        array_info* max_col = alloc_array(num_groups, 1, 1, in_col->arr_type,
-                                          in_col->dtype, 0, 0);  // for min/max
+        ARRAY* max_col = alloc_array_groupby<ARRAY>(
+            num_groups, 1, 1, this->in_col->arr_type, this->in_col->dtype, 0, 0,
+            n_pivot);  // for min/max
         // create array to store index position of min/max value
-        array_info* index_pos_col =
-            alloc_array(num_groups, 1, 1, bodo_array_type::NUMPY,
-                        Bodo_CTypes::UINT64, 0, 0);
+        ARRAY* index_pos_col =
+            alloc_array_groupby<ARRAY>(num_groups, 1, 1, bodo_array_type::NUMPY,
+                                       Bodo_CTypes::UINT64, 0, 0, n_pivot);
         out_cols.push_back(out_col);
         out_cols.push_back(max_col);
-        combine_cols.push_back(out_col);
-        combine_cols.push_back(max_col);
-        combine_cols.push_back(index_pos_col);
+        this->combine_cols.push_back(out_col);
+        this->combine_cols.push_back(max_col);
+        this->combine_cols.push_back(index_pos_col);
     }
 
     virtual void combine(const grouping_info& grp_info) {
-        array_info* index_pos_col = combine_cols[2];
-        std::vector<array_info*> aux_cols = {index_pos_col};
-        if (ftype == Bodo_FTypes::idxmax)
-            aggfunc_output_initialize(combine_cols[1], Bodo_FTypes::max);
-        if (ftype == Bodo_FTypes::idxmin)
-            aggfunc_output_initialize(combine_cols[1], Bodo_FTypes::min);
+        ARRAY* index_pos_col = this->combine_cols[2];
+        std::vector<ARRAY*> aux_cols = {index_pos_col};
+        if (this->ftype == Bodo_FTypes::idxmax)
+            aggfunc_output_initialize(this->combine_cols[1], Bodo_FTypes::max);
+        if (this->ftype == Bodo_FTypes::idxmin)
+            aggfunc_output_initialize(this->combine_cols[1], Bodo_FTypes::min);
         aggfunc_output_initialize(index_pos_col,
                                   Bodo_FTypes::count);  // zero init
-        do_apply_to_column(update_cols[1], combine_cols[1], aux_cols, grp_info,
-                           ftype);
+        do_apply_to_column(this->update_cols[1], this->combine_cols[1],
+                           aux_cols, grp_info, this->ftype);
 
-        array_info* real_out_col =
-            RetrieveArray_SingleColumn_arr(update_cols[0], index_pos_col);
-        array_info* out_col = combine_cols[0];
+        ARRAY* real_out_col = RetrieveArray_SingleColumn_Multiple_ARRAY(
+            this->update_cols[0], index_pos_col);
+        ARRAY* out_col = this->combine_cols[0];
         *out_col = std::move(*real_out_col);
         delete real_out_col;
-        decref_array(index_pos_col);
-        delete index_pos_col;
-        combine_cols.pop_back();
+        free_array_groupby(index_pos_col);
+        this->combine_cols.pop_back();
     }
 
    private:
     array_info* index_col;
 };
 
-class VarStdColSet : public BasicColSet {
+template <typename ARRAY>
+class VarStdColSet : public BasicColSet<ARRAY> {
    public:
     VarStdColSet(array_info* in_col, int ftype, bool combine_step)
-        : BasicColSet(in_col, ftype, combine_step) {}
+        : BasicColSet<ARRAY>(in_col, ftype, combine_step) {}
     virtual ~VarStdColSet() {}
 
-    virtual void alloc_update_columns(size_t num_groups,
-                                      std::vector<array_info*>& out_cols) {
-        if (!combine_step) {
+    virtual void alloc_update_columns(size_t num_groups, size_t n_pivot,
+                                      bool is_crosstab,
+                                      std::vector<ARRAY*>& out_cols) {
+        if (!this->combine_step) {
             // need to create output column now
-            array_info* col =
-                alloc_array(num_groups, 1, 1, bodo_array_type::NUMPY,
-                            Bodo_CTypes::FLOAT64, 0, 0);  // for result
+            ARRAY* col = alloc_array_groupby<ARRAY>(
+                num_groups, 1, 1, bodo_array_type::NUMPY, Bodo_CTypes::FLOAT64,
+                0, 0, n_pivot);  // for result
             out_cols.push_back(col);
-            update_cols.push_back(col);
+            this->update_cols.push_back(col);
         }
-        array_info* count_col =
-            alloc_array(num_groups, 1, 1, bodo_array_type::NUMPY,
-                        Bodo_CTypes::UINT64, 0, 0);
-        array_info* mean_col =
-            alloc_array(num_groups, 1, 1, bodo_array_type::NUMPY,
-                        Bodo_CTypes::FLOAT64, 0, 0);
-        array_info* m2_col =
-            alloc_array(num_groups, 1, 1, bodo_array_type::NUMPY,
-                        Bodo_CTypes::FLOAT64, 0, 0);
+        ARRAY* count_col =
+            alloc_array_groupby<ARRAY>(num_groups, 1, 1, bodo_array_type::NUMPY,
+                                       Bodo_CTypes::UINT64, 0, 0, n_pivot);
+        ARRAY* mean_col =
+            alloc_array_groupby<ARRAY>(num_groups, 1, 1, bodo_array_type::NUMPY,
+                                       Bodo_CTypes::FLOAT64, 0, 0, n_pivot);
+        ARRAY* m2_col =
+            alloc_array_groupby<ARRAY>(num_groups, 1, 1, bodo_array_type::NUMPY,
+                                       Bodo_CTypes::FLOAT64, 0, 0, n_pivot);
         aggfunc_output_initialize(count_col,
                                   Bodo_FTypes::count);  // zero initialize
         aggfunc_output_initialize(mean_col,
@@ -3506,59 +4080,63 @@ class VarStdColSet : public BasicColSet {
         out_cols.push_back(count_col);
         out_cols.push_back(mean_col);
         out_cols.push_back(m2_col);
-        update_cols.push_back(count_col);
-        update_cols.push_back(mean_col);
-        update_cols.push_back(m2_col);
+        this->update_cols.push_back(count_col);
+        this->update_cols.push_back(mean_col);
+        this->update_cols.push_back(m2_col);
     }
 
     virtual void update(const grouping_info& grp_info) {
-        if (!combine_step) {
-            std::vector<array_info*> aux_cols = {update_cols[1], update_cols[2],
-                                                 update_cols[3]};
-            do_apply_to_column(in_col, update_cols[1], aux_cols, grp_info,
-                               ftype);
+        if (!this->combine_step) {
+            std::vector<ARRAY*> aux_cols = {this->update_cols[1],
+                                            this->update_cols[2],
+                                            this->update_cols[3]};
+            do_apply_to_column(this->in_col, this->update_cols[1], aux_cols,
+                               grp_info, this->ftype);
         } else {
-            std::vector<array_info*> aux_cols = {update_cols[0], update_cols[1],
-                                                 update_cols[2]};
-            do_apply_to_column(in_col, update_cols[0], aux_cols, grp_info,
-                               ftype);
+            std::vector<ARRAY*> aux_cols = {this->update_cols[0],
+                                            this->update_cols[1],
+                                            this->update_cols[2]};
+            do_apply_to_column(this->in_col, this->update_cols[0], aux_cols,
+                               grp_info, this->ftype);
         }
     }
 
-    virtual void alloc_combine_columns(size_t num_groups,
-                                       std::vector<array_info*>& out_cols) {
-        array_info* col =
-            alloc_array(num_groups, 1, 1, bodo_array_type::NUMPY,
-                        Bodo_CTypes::FLOAT64, 0, 0);  // for result
+    virtual void alloc_combine_columns(size_t num_groups, size_t n_pivot,
+                                       bool is_crosstab,
+                                       std::vector<ARRAY*>& out_cols) {
+        ARRAY* col = alloc_array_groupby<ARRAY>(
+            num_groups, 1, 1, bodo_array_type::NUMPY, Bodo_CTypes::FLOAT64, 0,
+            0, n_pivot);  // for result
         out_cols.push_back(col);
-        combine_cols.push_back(col);
-        BasicColSet::alloc_combine_columns(num_groups, out_cols);
+        this->combine_cols.push_back(col);
+        BasicColSet<ARRAY>::alloc_combine_columns(num_groups, n_pivot,
+                                                  is_crosstab, out_cols);
     }
 
     virtual void combine(const grouping_info& grp_info) {
-        array_info* count_col_in = update_cols[0];
-        array_info* mean_col_in = update_cols[1];
-        array_info* m2_col_in = update_cols[2];
-        array_info* count_col_out = combine_cols[1];
-        array_info* mean_col_out = combine_cols[2];
-        array_info* m2_col_out = combine_cols[3];
+        ARRAY* count_col_in = this->update_cols[0];
+        ARRAY* mean_col_in = this->update_cols[1];
+        ARRAY* m2_col_in = this->update_cols[2];
+        ARRAY* count_col_out = this->combine_cols[1];
+        ARRAY* mean_col_out = this->combine_cols[2];
+        ARRAY* m2_col_out = this->combine_cols[3];
         aggfunc_output_initialize(count_col_out, Bodo_FTypes::count);
         aggfunc_output_initialize(mean_col_out, Bodo_FTypes::count);
         aggfunc_output_initialize(m2_col_out, Bodo_FTypes::count);
         var_combine(count_col_in, mean_col_in, m2_col_in, count_col_out,
-                    mean_col_out, m2_col_out, grp_info.row_to_group);
+                    mean_col_out, m2_col_out, grp_info);
     }
 
     virtual void eval(const grouping_info& grp_info) {
-        std::vector<array_info*>* mycols;
-        if (combine_step)
-            mycols = &combine_cols;
+        std::vector<ARRAY*>* mycols;
+        if (this->combine_step)
+            mycols = &this->combine_cols;
         else
-            mycols = &update_cols;
+            mycols = &this->update_cols;
 
-        std::vector<array_info*> aux_cols = {mycols->at(1), mycols->at(2),
-                                             mycols->at(3)};
-        if (ftype == Bodo_FTypes::var)
+        std::vector<ARRAY*> aux_cols = {mycols->at(1), mycols->at(2),
+                                        mycols->at(3)};
+        if (this->ftype == Bodo_FTypes::var)
             do_apply_to_column(mycols->at(0), mycols->at(0), aux_cols, grp_info,
                                Bodo_FTypes::var_eval);
         else
@@ -3567,20 +4145,22 @@ class VarStdColSet : public BasicColSet {
     }
 };
 
-class UdfColSet : public BasicColSet {
+template <typename ARRAY>
+class UdfColSet : public BasicColSet<ARRAY> {
    public:
     UdfColSet(array_info* in_col, bool combine_step, table_info* udf_table,
               int udf_table_idx, int n_redvars)
-        : BasicColSet(in_col, Bodo_FTypes::udf, combine_step),
+        : BasicColSet<ARRAY>(in_col, Bodo_FTypes::udf, combine_step),
           udf_table(udf_table),
           udf_table_idx(udf_table_idx),
           n_redvars(n_redvars) {}
     virtual ~UdfColSet() {}
 
-    virtual void alloc_update_columns(size_t num_groups,
-                                      std::vector<array_info*>& out_cols) {
+    virtual void alloc_update_columns(size_t num_groups, size_t n_pivot,
+                                      bool is_crosstab,
+                                      std::vector<ARRAY*>& out_cols) {
         int offset = 0;
-        if (combine_step) offset = 1;
+        if (this->combine_step) offset = 1;
         // for update table we only need redvars (skip first column which is
         // output column)
         for (int i = udf_table_idx + offset; i < udf_table_idx + 1 + n_redvars;
@@ -3591,9 +4171,10 @@ class UdfColSet : public BasicColSet {
                 udf_table->columns[i]->arr_type;
             Bodo_CTypes::CTypeEnum dtype = udf_table->columns[i]->dtype;
             int64_t num_categories = udf_table->columns[i]->num_categories;
-            out_cols.push_back(alloc_array(num_groups, 1, 1, arr_type, dtype, 0,
-                                           num_categories));
-            if (!combine_step) update_cols.push_back(out_cols.back());
+            out_cols.push_back(alloc_array_groupby<ARRAY>(
+                num_groups, 1, 1, arr_type, dtype, 0, num_categories, n_pivot));
+            if (!this->combine_step)
+                this->update_cols.push_back(out_cols.back());
         }
     }
 
@@ -3602,14 +4183,15 @@ class UdfColSet : public BasicColSet {
         // GroupbyPipeline once for all udf columns sets)
     }
 
-    virtual std::vector<array_info*>::iterator update_after_shuffle(
-        std::vector<array_info*>::iterator& it) {
+    virtual typename std::vector<array_info*>::iterator update_after_shuffle(
+        typename std::vector<array_info*>::iterator& it, int n_pivot) {
         // UdfColSet doesn't keep the update cols, return the updated iterator
-        return it + n_redvars;
+        return it + n_pivot * n_redvars;
     }
 
-    virtual void alloc_combine_columns(size_t num_groups,
-                                       std::vector<array_info*>& out_cols) {
+    virtual void alloc_combine_columns(size_t num_groups, size_t n_pivot,
+                                       bool is_crosstab,
+                                       std::vector<ARRAY*>& out_cols) {
         for (int i = udf_table_idx; i < udf_table_idx + 1 + n_redvars; i++) {
             // we get the type from the udf dummy table that was passed to C++
             // library
@@ -3617,9 +4199,9 @@ class UdfColSet : public BasicColSet {
                 udf_table->columns[i]->arr_type;
             Bodo_CTypes::CTypeEnum dtype = udf_table->columns[i]->dtype;
             int64_t num_categories = udf_table->columns[i]->num_categories;
-            out_cols.push_back(alloc_array(num_groups, 1, 1, arr_type, dtype, 0,
-                                           num_categories));
-            combine_cols.push_back(out_cols.back());
+            out_cols.push_back(alloc_array_groupby<ARRAY>(
+                num_groups, 1, 1, arr_type, dtype, 0, num_categories, n_pivot));
+            this->combine_cols.push_back(out_cols.back());
         }
     }
 
@@ -3639,80 +4221,170 @@ class UdfColSet : public BasicColSet {
     int n_redvars;          // number of redvar columns this UDF uses
 };
 
-class MedianColSet : public BasicColSet {
+template <typename ARRAY>
+class MedianColSet : public BasicColSet<ARRAY> {
    public:
     MedianColSet(array_info* in_col, bool _skipna)
-        : BasicColSet(in_col, Bodo_FTypes::median, false), skipna(_skipna) {}
+        : BasicColSet<ARRAY>(in_col, Bodo_FTypes::median, false),
+          skipna(_skipna) {}
     virtual ~MedianColSet() {}
 
     virtual void update(const grouping_info& grp_info) {
-        median_computation(in_col, update_cols[0], grp_info, skipna);
+        median_computation<ARRAY>(this->in_col, this->update_cols[0], grp_info,
+                                  this->skipna);
     }
 
    private:
     bool skipna;
 };
 
-class NUniqueColSet : public BasicColSet {
+template <typename ARRAY>
+class NUniqueColSet : public BasicColSet<ARRAY> {
    public:
     NUniqueColSet(array_info* in_col, bool _dropna)
-        : BasicColSet(in_col, Bodo_FTypes::nunique, false), dropna(_dropna) {}
+        : BasicColSet<ARRAY>(in_col, Bodo_FTypes::nunique, false),
+          dropna(_dropna) {}
     virtual ~NUniqueColSet() {}
 
     virtual void update(const grouping_info& grp_info) {
-        nunique_computation(in_col, update_cols[0], grp_info, dropna);
+        nunique_computation<ARRAY>(this->in_col, this->update_cols[0], grp_info,
+                                   dropna);
     }
 
    private:
     bool dropna;
 };
 
-class CumOpColSet : public BasicColSet {
+template <typename ARRAY>
+class CumOpColSet : public BasicColSet<ARRAY> {
    public:
     CumOpColSet(array_info* in_col, int ftype, bool _skipna)
-        : BasicColSet(in_col, ftype, false), skipna(_skipna) {}
+        : BasicColSet<ARRAY>(in_col, ftype, false), skipna(_skipna) {}
     virtual ~CumOpColSet() {}
 
-    virtual void alloc_update_columns(size_t num_groups,
-                                      std::vector<array_info*>& out_cols) {
+    virtual void alloc_update_columns(size_t num_groups, size_t n_pivot,
+                                      bool is_crosstab,
+                                      std::vector<ARRAY*>& out_cols) {
         // NOTE: output size of cum ops is the same as input size
         //       (NOT the number of groups)
-        out_cols.push_back(alloc_array(in_col->length, 1, 1, in_col->arr_type,
-                                       in_col->dtype, 0,
-                                       in_col->num_categories));
-        update_cols.push_back(out_cols.back());
+        out_cols.push_back(alloc_array_groupby<ARRAY>(
+            this->in_col->length, 1, 1, this->in_col->arr_type,
+            this->in_col->dtype, 0, this->in_col->num_categories, n_pivot));
+        this->update_cols.push_back(out_cols.back());
     }
 
     virtual void update(const grouping_info& grp_info) {
-        cumulative_computation(in_col, update_cols[0], grp_info, ftype, skipna);
+        cumulative_computation<ARRAY>(this->in_col, this->update_cols[0],
+                                      grp_info, this->ftype, this->skipna);
     }
 
    private:
     bool skipna;
 };
 
+
+/* When transmitting data with shuffle, we have only functionality for
+   array_info.
+   For array_info, nothing needs to be done.
+   For multiple_array_info, we need to add the vect_access entries.
+*/
+template <typename ARRAY>
+typename std::enable_if<!is_multiple_array<ARRAY>::value, void>::type
+push_back_arrays(std::vector<array_info*>& ListArr, ARRAY* arr) {
+    ListArr.push_back(arr);
+}
+
+template <typename ARRAY>
+typename std::enable_if<is_multiple_array<ARRAY>::value, void>::type
+push_back_arrays(std::vector<array_info*>& ListArr, ARRAY* arr) {
+    for (auto& earr : arr->vect_arr) ListArr.push_back(earr);
+    for (auto& earr : arr->vect_access) ListArr.push_back(earr);
+}
+
+
+/*
+  The output_list_array takes the array (whether aray_info or
+  multiple_array_info) and write them in their final form
+  for output.
+  For array_info, nothing needs to be done.
+  For multiple_array_info, the nan bits or nan values have
+  to be set if there is actually no values to be put.
+ */
+template <typename ARRAY>
+typename std::enable_if<!is_multiple_array<ARRAY>::value, void>::type
+output_list_arrays(std::vector<array_info*>& ListArr, ARRAY* arr) {
+    ListArr.push_back(arr);
+}
+
+template <typename ARRAY>
+typename std::enable_if<is_multiple_array<ARRAY>::value, void>::type
+output_list_arrays(std::vector<array_info*>& ListArr, ARRAY* arr) {
+    int64_t length_loc = arr->length_loc;
+    for (size_t i_arr = 0; i_arr < arr->vect_arr.size(); i_arr++) {
+        array_info* earr = arr->vect_arr[i_arr];
+        int64_t i_arr_access = i_arr / 8;
+        int64_t pos_arr_access = i_arr % 8;
+        array_info* earr_bitmap = arr->vect_access[i_arr_access];
+        if (arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL ||
+            arr->arr_type == bodo_array_type::STRING ||
+            arr->arr_type == bodo_array_type::LIST_STRING) {
+            uint8_t* ptr = (uint8_t*)earr_bitmap->data1;
+            for (int i_row = 0; i_row < length_loc; i_row++) {
+                uint8_t* ptr_b = ptr + i_row;
+                bool bit = GetBit(ptr_b, pos_arr_access);
+                earr->set_null_bit(i_row, bit);
+            }
+        }
+        if (arr->arr_type == bodo_array_type::NUMPY &&
+            (arr->dtype == Bodo_CTypes::FLOAT32 ||
+             arr->dtype == Bodo_CTypes::FLOAT64)) {
+            std::vector<char> vectNaN = RetrieveNaNentry(arr->dtype);
+            uint64_t siztype = numpy_item_size[arr->dtype];
+            uint8_t* ptr = (uint8_t*)earr_bitmap->data1;
+            for (int i_row = 0; i_row < length_loc; i_row++) {
+                uint8_t* ptr_b = ptr + i_row;
+                bool bit = GetBit(ptr_b, pos_arr_access);
+                if (!bit) {
+                    memcpy(earr->data1 + siztype * i_row, vectNaN.data(),
+                           siztype);
+                }
+            }
+        }
+        ListArr.push_back(earr);
+    }
+    // This is the final stage. The multiple_array_info is not going to be used
+    // in the future, therefore we can delete the vect_access data
+    for (auto& e_arr : arr->vect_access) delete_info_decref_array(e_arr);
+}
+
+template <typename ARRAY>
 class GroupbyPipeline {
    public:
     GroupbyPipeline(table_info* _in_table, int64_t _num_keys,
-                    bool input_has_index, bool _is_parallel, int* ftypes,
-                    int* func_offsets, int* _udf_nredvars,
+                    table_info* _dispatch_table, table_info* _dispatch_info,
+                    bool input_has_index, bool _is_parallel, bool _is_crosstab,
+                    int* ftypes, int* func_offsets, int* _udf_nredvars,
                     table_info* _udf_table, udf_table_op_fn update_cb,
                     udf_table_op_fn combine_cb, udf_eval_fn eval_cb,
                     bool skipna, bool _return_key, bool _return_index)
         : in_table(_in_table),
           num_keys(_num_keys),
+          dispatch_table(_dispatch_table),
+          dispatch_info(_dispatch_info),
           is_parallel(_is_parallel),
+          is_crosstab(_is_crosstab),
           return_key(_return_key),
           return_index(_return_index),
           udf_table(_udf_table),
           udf_n_redvars(_udf_nredvars) {
+        if (dispatch_table == nullptr)
+            n_pivot = 1;
+        else
+            n_pivot = dispatch_table->nrows();
         udf_info = {udf_table, update_cb, combine_cb, eval_cb};
         // if true, the last column is the index on input and output.
         // this is relevant only to cumulative operation like cumsum.
         int index_i = int(input_has_index);
-#ifdef DEBUG_GROUPBY
-        std::cout << " index_i=" << index_i << "\n";
-#endif
         // NOTE cumulative operations (cumsum, cumprod, etc.) cannot be mixed
         // with non cumulative ops. This is checked at compile time in
         // aggregate.py
@@ -3736,12 +4408,6 @@ class GroupbyPipeline {
                 break;
             }
         }
-#ifdef DEBUG_GROUPBY
-        std::cout << "cumulative_op=" << cumulative_op << "\n";
-        std::cout << "req_extended_group_info=" << req_extended_group_info
-                  << "\n";
-        std::cout << "shuffle_before_update=" << shuffle_before_update << "\n";
-#endif
         if (shuffle_before_update) {
             // Code below is equivalent to
             // table_info* shuf_table = shuffle_table(update_table, num_keys);
@@ -3759,16 +4425,10 @@ class GroupbyPipeline {
                 delete comm_info_ptr;
             }
         }
-#ifdef DEBUG_GROUPBY
-        std::cout << "After shuffle\n";
-#endif
 
         // a combine operation is only necessary when data is distributed and
         // a shuffle has not been done at the start of the groupby pipeline
         do_combine = is_parallel && !shuffle_before_update;
-#ifdef DEBUG_GROUPBY
-        std::cout << "do_combine=" << do_combine << "\n";
-#endif
 
         array_info* index_col = nullptr;
         if (input_has_index)
@@ -3778,18 +4438,20 @@ class GroupbyPipeline {
         // ftypes is an array of function types received from generated code,
         // and has one ftype for each (input_column, func) pair
         int k = 0;
+        n_udf = 0;
         for (int64_t i = num_keys; i < in_table->ncols() - index_i; i++, k++) {
             array_info* col = in_table->columns[i];
             int start = func_offsets[k];
             int end = func_offsets[k + 1];
             for (int j = start; j != end; j++) {
-                col_sets.push_back(
-                    makeColSet(col, index_col, ftypes[j], do_combine, skipna));
+                col_sets.push_back(makeColSet(col, index_col, ftypes[j],
+                                              do_combine, skipna, n_udf));
+                if (ftypes[j] == Bodo_FTypes::udf) {
+                    udf_table_idx += (1 + udf_n_redvars[n_udf]);
+                    n_udf++;
+                }
             }
         }
-#ifdef DEBUG_GROUPBY
-        std::cout << "End of constructor\n";
-#endif
     }
 
     ~GroupbyPipeline() {
@@ -3800,31 +4462,16 @@ class GroupbyPipeline {
      * This is the main control flow of the Groupby pipeline.
      */
     table_info* run() {
-#ifdef DEBUG_GROUPBY
-        std::cout << "Before update()\n";
-#endif
         update();
-#ifdef DEBUG_GROUPBY
-        std::cout << "After update()\n";
-#endif
         if (shuffle_before_update)
             // in_table was created in C++ during shuffling and not needed
             // anymore
             delete_table_decref_arrays(in_table);
         if (is_parallel && !shuffle_before_update) {
             shuffle();
-#ifdef DEBUG_GROUPBY
-            std::cout << "After shuffle()\n";
-#endif
             combine();
-#ifdef DEBUG_GROUPBY
-            std::cout << "After combine()\n";
-#endif
         }
         eval();
-#ifdef DEBUG_GROUPBY
-        std::cout << "After eval()\n";
-#endif
         return getOutputTable();
     }
 
@@ -3837,36 +4484,34 @@ class GroupbyPipeline {
      *        or not.
      * @param skipna option used for nunique, cumsum, cumprod, cummin, cummax
      */
-    BasicColSet* makeColSet(array_info* in_col, array_info* index_col,
-                            int ftype, bool do_combine, bool skipna) {
-        BasicColSet* col_set;
+    BasicColSet<ARRAY>* makeColSet(array_info* in_col, array_info* index_col,
+                                   int ftype, bool do_combine, bool skipna,
+                                   int n_udf) {
         switch (ftype) {
             case Bodo_FTypes::udf:
-                col_set = new UdfColSet(in_col, do_combine, udf_table,
-                                        udf_table_idx, udf_n_redvars[n_udf]);
-                udf_table_idx += (1 + udf_n_redvars[n_udf]);
-                n_udf++;
-                return col_set;
+                return new UdfColSet<ARRAY>(in_col, do_combine, udf_table,
+                                            udf_table_idx,
+                                            udf_n_redvars[n_udf]);
             case Bodo_FTypes::median:
-                return new MedianColSet(in_col, skipna);
+                return new MedianColSet<ARRAY>(in_col, skipna);
             case Bodo_FTypes::nunique:
-                return new NUniqueColSet(in_col, skipna);
+                return new NUniqueColSet<ARRAY>(in_col, skipna);
             case Bodo_FTypes::cumsum:
             case Bodo_FTypes::cummin:
             case Bodo_FTypes::cummax:
             case Bodo_FTypes::cumprod:
-                return new CumOpColSet(in_col, ftype, skipna);
+                return new CumOpColSet<ARRAY>(in_col, ftype, skipna);
             case Bodo_FTypes::mean:
-                return new MeanColSet(in_col, do_combine);
+                return new MeanColSet<ARRAY>(in_col, do_combine);
             case Bodo_FTypes::var:
             case Bodo_FTypes::std:
-                return new VarStdColSet(in_col, ftype, do_combine);
+                return new VarStdColSet<ARRAY>(in_col, ftype, do_combine);
             case Bodo_FTypes::idxmin:
             case Bodo_FTypes::idxmax:
-                return new IdxMinMaxColSet(in_col, index_col, ftype,
-                                           do_combine);
+                return new IdxMinMaxColSet<ARRAY>(in_col, index_col, ftype,
+                                                  do_combine);
             default:
-                return new BasicColSet(in_col, ftype, do_combine);
+                return new BasicColSet<ARRAY>(in_col, ftype, do_combine);
         }
     }
 
@@ -3876,24 +4521,19 @@ class GroupbyPipeline {
      * More specifically, it will invoke the update method of each column set.
      */
     void update() {
-#ifdef DEBUG_GROUPBY
-        std::cout << "Beginning of update()\n";
-#endif
         in_table->num_keys = num_keys;
-#ifdef DEBUG_GROUPBY
-        std::cout << "req_extended_group_info=" << req_extended_group_info
-                  << "\n";
-#endif
         if (req_extended_group_info) {
             bool consider_missing = cumulative_op;
             grp_info = get_group_info_iterate(in_table, consider_missing);
         } else
-            get_group_info(*in_table, grp_info.row_to_group,
+            get_group_info(in_table, grp_info.row_to_group,
                            grp_info.group_to_first_row, true);
+        grp_info.dispatch_table = dispatch_table;
+        grp_info.dispatch_info = dispatch_info;
+        grp_info.mode = 1;
         num_groups = grp_info.group_to_first_row.size();
-#ifdef DEBUG_GROUPBY
-        std::cout << "num_groups=" << num_groups << "\n";
-#endif
+        grp_info.num_groups = num_groups;
+        grp_info.n_pivot = n_pivot;
 
         update_table = cur_table = new table_info();
         if (cumulative_op)
@@ -3903,23 +4543,23 @@ class GroupbyPipeline {
             alloc_init_keys(in_table, update_table);
 
         for (auto col_set : col_sets) {
-            col_set->alloc_update_columns(num_groups, update_table->columns);
+            std::vector<ARRAY*> list_arr;
+            col_set->alloc_update_columns(num_groups, n_pivot, is_crosstab,
+                                          list_arr);
+            for (auto& e_arr : list_arr)
+                push_back_arrays(update_table->columns, e_arr);
             col_set->update(grp_info);
         }
-#ifdef DEBUG_GROUPBY
-        std::cout << "After alloc_update_columns\n";
-#endif
         if (return_index)
             update_table->columns.push_back(
                 copy_array(in_table->columns.back()));
-#ifdef DEBUG_GROUPBY
-        std::cout << "After return_index\n";
-#endif
         if (n_udf > 0)
             udf_info.update(in_table, update_table,
                             grp_info.row_to_group.data());
 #ifdef DEBUG_GROUPBY
-        std::cout << "After n_udf\n";
+        std::cout << "End of update(). update_table=\n";
+        DEBUG_PrintSetOfColumn(std::cout, update_table->columns);
+        DEBUG_PrintRefct(std::cout, update_table->columns);
 #endif
     }
 
@@ -3933,6 +4573,11 @@ class GroupbyPipeline {
         comm_info_ptr->set_counts(hashes);
         table_info* shuf_table =
             shuffle_table_kernel(update_table, hashes, *comm_info_ptr);
+#ifdef DEBUG_GROUPBY
+        std::cout << "After shuffle_table_kernel. shuf_table=\n";
+        DEBUG_PrintSetOfColumn(std::cout, shuf_table->columns);
+        DEBUG_PrintRefct(std::cout, shuf_table->columns);
+#endif
         if (!cumulative_op) {
             delete hashes;
             delete comm_info_ptr;
@@ -3943,7 +4588,8 @@ class GroupbyPipeline {
 
         // update column sets with columns from shuffled table
         auto it = update_table->columns.begin() + num_keys;
-        for (auto col_set : col_sets) it = col_set->update_after_shuffle(it);
+        for (auto col_set : col_sets)
+            it = col_set->update_after_shuffle(it, n_pivot);
     }
 
     /**
@@ -3956,14 +4602,22 @@ class GroupbyPipeline {
         grp_info.row_to_group.clear();
         grp_info.group_to_first_row.clear();
         update_table->num_keys = num_keys;
-        get_group_info(*update_table, grp_info.row_to_group,
+        get_group_info(update_table, grp_info.row_to_group,
                        grp_info.group_to_first_row, false);
         num_groups = grp_info.group_to_first_row.size();
+        grp_info.num_groups = num_groups;
+        grp_info.n_pivot = n_pivot;
+        grp_info.mode = 2;
 
         combine_table = cur_table = new table_info();
         alloc_init_keys(update_table, combine_table);
+        std::vector<array_info*> list_arr;
         for (auto col_set : col_sets) {
-            col_set->alloc_combine_columns(num_groups, combine_table->columns);
+            std::vector<ARRAY*> list_arr;
+            col_set->alloc_combine_columns(num_groups, n_pivot, is_crosstab,
+                                           list_arr);
+            for (auto& e_arr : list_arr)
+                push_back_arrays(combine_table->columns, e_arr);
             col_set->combine(grp_info);
         }
         if (n_udf > 0)
@@ -3989,29 +4643,17 @@ class GroupbyPipeline {
         if (return_key)
             out_table->columns.assign(cur_table->columns.begin(),
                                       cur_table->columns.begin() + num_keys);
-        for (BasicColSet* col_set : col_sets)
-            out_table->columns.push_back(col_set->getOutputColumn());
+        for (BasicColSet<ARRAY>* col_set : col_sets)
+            output_list_arrays(out_table->columns, col_set->getOutputColumn());
         if (return_index)
             out_table->columns.push_back(cur_table->columns.back());
         if (cumulative_op && is_parallel) {
-#ifdef DEBUG_GROUPBY
-            std::cout << "Before reverse_shuffle_table_kernel\n";
-#endif
             table_info* revshuf_table =
                 reverse_shuffle_table_kernel(out_table, hashes, *comm_info_ptr);
             delete hashes;
             delete comm_info_ptr;
-#ifdef DEBUG_GROUPBY
-            std::cout << "After reverse_shuffle_table_kernel\n";
-#endif
             delete_table(out_table);
-#ifdef DEBUG_GROUPBY
-            std::cout << "After delete_table_decref_arrays\n";
-#endif
             out_table = revshuf_table;
-#ifdef DEBUG_GROUPBY
-            std::cout << "After out_table assignation\n";
-#endif
         }
         delete cur_table;
         return out_table;
@@ -4022,9 +4664,6 @@ class GroupbyPipeline {
      * values of key columns from from_table to populate out_table.
      */
     void alloc_init_keys(table_info* from_table, table_info* out_table) {
-#ifdef DEBUG_GROUPBY
-        std::cout << "Beginning of alloc_init_keys\n";
-#endif
         for (int64_t i = 0; i < num_keys; i++) {
             const array_info* key_col = (*from_table)[i];
             array_info* new_key_col;
@@ -4041,13 +4680,10 @@ class GroupbyPipeline {
                                grp_info.group_to_first_row[j] * dtype_size,
                            dtype_size);
                 if (key_col->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
-                    uint8_t* in_null_bitmask = (uint8_t*)key_col->null_bitmask;
-                    uint8_t* out_null_bitmask =
-                        (uint8_t*)new_key_col->null_bitmask;
                     for (size_t j = 0; j < num_groups; j++) {
                         size_t in_row = grp_info.group_to_first_row[j];
-                        SetBitTo(out_null_bitmask, j,
-                                 GetBit(in_null_bitmask, in_row));
+                        bool bit = key_col->get_null_bit(in_row);
+                        new_key_col->set_null_bit(j, bit);
                     }
                 }
             }
@@ -4065,8 +4701,6 @@ class GroupbyPipeline {
                     alloc_array(num_groups, n_chars, 1, key_col->arr_type,
                                 key_col->dtype, 0, key_col->num_categories);
 
-                uint8_t* in_null_bitmask = (uint8_t*)key_col->null_bitmask;
-                uint8_t* out_null_bitmask = (uint8_t*)new_key_col->null_bitmask;
                 uint32_t* out_offsets = (uint32_t*)new_key_col->data2;
                 uint32_t pos = 0;
                 for (size_t j = 0; j < num_groups; j++) {
@@ -4077,8 +4711,8 @@ class GroupbyPipeline {
                     memcpy(&new_key_col->data1[pos],
                            &key_col->data1[start_offset], str_len);
                     pos += str_len;
-                    SetBitTo(out_null_bitmask, j,
-                             GetBit(in_null_bitmask, in_row));
+                    bool bit = key_col->get_null_bit(in_row);
+                    new_key_col->set_null_bit(j, bit);
                 }
                 out_offsets[num_groups] = pos;
             }
@@ -4101,8 +4735,6 @@ class GroupbyPipeline {
                 new_key_col = alloc_array(num_groups, n_strings, n_chars,
                                           key_col->arr_type, key_col->dtype, 0,
                                           key_col->num_categories);
-                uint8_t* in_null_bitmask = (uint8_t*)key_col->null_bitmask;
-                uint8_t* out_null_bitmask = (uint8_t*)new_key_col->null_bitmask;
                 uint8_t* in_sub_null_bitmask =
                     (uint8_t*)key_col->sub_null_bitmask;
                 uint8_t* out_sub_null_bitmask =
@@ -4139,27 +4771,28 @@ class GroupbyPipeline {
                     memcpy(&new_key_col->data1[pos_data],
                            &key_col->data1[in_start_offset], n_chars_o);
                     pos_data += n_chars_o;
-                    SetBitTo(out_null_bitmask, j,
-                             GetBit(in_null_bitmask, in_row));
+                    bool bit = key_col->get_null_bit(in_row);
+                    new_key_col->set_null_bit(j, bit);
                 }
             }
             out_table->columns.push_back(new_key_col);
         }
-#ifdef DEBUG_GROUPBY
-        std::cout << "End of alloc_init_keys\n";
-#endif
     }
 
     table_info* in_table;  // input table of groupby
     int64_t num_keys;
+    table_info* dispatch_table;  // input dispatching table of pivot_table
+    table_info* dispatch_info;   // input dispatching info of pivot_table
     bool is_parallel;
+    bool is_crosstab;
     bool return_key;
     bool return_index;
-    std::vector<BasicColSet*> col_sets;
+    std::vector<BasicColSet<ARRAY>*> col_sets;
     table_info* udf_table;
     int* udf_n_redvars;
     int n_udf = 0;
     int udf_table_idx = 0;
+    int n_pivot;
     // shuffling before update requires more communication and is needed
     // when one of the groupby functions is
     // median/nunique/cumsum/cumprod/cummin/cummax
@@ -4192,30 +4825,19 @@ void mpi_exscan_computation_numpy_T(std::vector<array_info*>& out_arrs,
     int end = func_offsets[k + 1];
     int n_oper = end - start;
     int64_t max_row_idx = cat_column->num_categories;
-#ifdef DEBUG_GROUPBY
-    std::cout << "Beginning of mpi_exscan_computation_numpy_T\n";
-    std::cout << "k=" << k << " max_row_idx=" << max_row_idx
-              << " n_oper=" << n_oper << " is_parallel=" << is_parallel << "\n";
-#endif
     std::vector<T> cumulative(max_row_idx * n_oper);
     for (int j = start; j != end; j++) {
         int ftype = ftypes[j];
-        T value_init = -1;  // Not correct value
+        T value_init = -1;  // Dummy value set to avoid a compiler warning
         if (ftype == Bodo_FTypes::cumsum) value_init = 0;
         if (ftype == Bodo_FTypes::cumprod) value_init = 1;
         if (ftype == Bodo_FTypes::cummax)
             value_init = std::numeric_limits<T>::min();
         if (ftype == Bodo_FTypes::cummin)
             value_init = std::numeric_limits<T>::max();
-#ifdef DEBUG_GROUPBY
-        std::cout << "j=" << j << " value_init=" << value_init << "\n";
-#endif
         for (int i_row = 0; i_row < max_row_idx; i_row++)
             cumulative[i_row + max_row_idx * (j - start)] = value_init;
     }
-#ifdef DEBUG_GROUPBY
-    std::cout << "mpi_exscan_computation_numpy_T, step 2\n";
-#endif
     std::vector<T> cumulative_recv = cumulative;
     array_info* in_col = in_table->columns[k + num_keys];
     T nan_value =
@@ -4224,13 +4846,7 @@ void mpi_exscan_computation_numpy_T(std::vector<array_info*>& out_arrs,
     for (int j = start; j != end; j++) {
         array_info* work_col = out_arrs[j];
         int ftype = ftypes[j];
-#ifdef DEBUG_GROUPBY
-        std::cout << "j=" << j << " ftype=" << ftype << "\n";
-#endif
         auto apply_oper = [&](std::function<T(T, T)> oper) -> void {
-#ifdef DEBUG_GROUPBY_SYMBOL
-            std::cout << "Beginning of apply_oper\n";
-#endif
             for (int64_t i_row = 0; i_row < n_rows; i_row++) {
                 Tkey idx = cat_column->at<Tkey>(i_row);
                 if (idx == miss_idx) {
@@ -4246,15 +4862,7 @@ void mpi_exscan_computation_numpy_T(std::vector<array_info*>& out_arrs,
                         cumulative[pos] = new_val;
                     }
                 }
-#ifdef DEBUG_GROUPBY_FULL
-                T out_val = work_col->at<T>(i_row);
-                std::cout << "i_row=" << i_row << " idx=" << idx
-                          << " out_val=" << out_val << "\n";
-#endif
             }
-#ifdef DEBUG_GROUPBY_SYMBOL
-            std::cout << "Ending of apply_oper\n";
-#endif
         };
         if (ftype == Bodo_FTypes::cumsum)
             apply_oper([](T val1, T val2) -> T { return val1 + val2; });
@@ -4267,10 +4875,6 @@ void mpi_exscan_computation_numpy_T(std::vector<array_info*>& out_arrs,
             apply_oper(
                 [](T val1, T val2) -> T { return std::min(val1, val2); });
     }
-#ifdef DEBUG_GROUPBY
-    std::cout << "mpi_exscan_computation_numpy_T, step 3 is_parallel="
-              << is_parallel << "\n";
-#endif
     if (!is_parallel) return;
     MPI_Datatype mpi_typ = get_MPI_typ(dtype);
     for (int j = start; j != end; j++) {
@@ -4290,15 +4894,9 @@ void mpi_exscan_computation_numpy_T(std::vector<array_info*>& out_arrs,
             MPI_Exscan(data_s, data_r, max_row_idx, mpi_typ, MPI_MIN,
                        MPI_COMM_WORLD);
     }
-#ifdef DEBUG_GROUPBY
-    std::cout << "mpi_exscan_computation_numpy_T, step 4\n";
-#endif
     for (int j = start; j != end; j++) {
         array_info* work_col = out_arrs[j];
         int ftype = ftypes[j];
-#ifdef DEBUG_GROUPBY
-        std::cout << "j=" << j << "\n";
-#endif
         // For skipdropna:
         //   The cumulative is never a NaN. The sum therefore works
         //   correctly whether val is a NaN or not.
@@ -4326,9 +4924,6 @@ void mpi_exscan_computation_numpy_T(std::vector<array_info*>& out_arrs,
             apply_oper(
                 [](T val1, T val2) -> T { return std::min(val1, val2); });
     }
-#ifdef DEBUG_GROUPBY
-    std::cout << "Leaving of mpi_exscan_computation_numpy_T\n";
-#endif
 }
 
 template <typename Tkey, typename T, int dtype>
@@ -4343,11 +4938,6 @@ void mpi_exscan_computation_nullable_T(std::vector<array_info*>& out_arrs,
     int end = func_offsets[k + 1];
     int n_oper = end - start;
     int64_t max_row_idx = cat_column->num_categories;
-#ifdef DEBUG_GROUPBY
-    std::cout << "Beginning of mpi_exscan_computation_nullable_T\n";
-    std::cout << "k=" << k << " max_row_idx=" << max_row_idx
-              << " n_oper=" << n_oper << "\n";
-#endif
     std::vector<T> cumulative(max_row_idx * n_oper);
     for (int j = start; j != end; j++) {
         int ftype = ftypes[j];
@@ -4358,9 +4948,6 @@ void mpi_exscan_computation_nullable_T(std::vector<array_info*>& out_arrs,
             value_init = std::numeric_limits<T>::min();
         if (ftype == Bodo_FTypes::cummin)
             value_init = std::numeric_limits<T>::max();
-#ifdef DEBUG_GROUPBY
-        std::cout << "j=" << j << " value_init=" << value_init << "\n";
-#endif
         for (int i_row = 0; i_row < max_row_idx; i_row++)
             cumulative[i_row + max_row_idx * (j - start)] = value_init;
     }
@@ -4373,21 +4960,19 @@ void mpi_exscan_computation_nullable_T(std::vector<array_info*>& out_arrs,
         cumulative_mask_recv = std::vector<uint8_t>(max_row_idx * n_oper, 0);
     }
     array_info* in_col = in_table->columns[k + num_keys];
-    uint8_t* null_bitmask_i = (uint8_t*)in_col->null_bitmask;
     Tkey miss_idx = -1;
     for (int j = start; j != end; j++) {
         array_info* work_col = out_arrs[j];
-        uint8_t* null_bitmask_o = (uint8_t*)work_col->null_bitmask;
         int ftype = ftypes[j];
         auto apply_oper = [&](std::function<T(T, T)> oper) -> void {
             for (int64_t i_row = 0; i_row < n_rows; i_row++) {
                 Tkey idx = cat_column->at<Tkey>(i_row);
                 if (idx == miss_idx) {
-                    SetBitTo(null_bitmask_o, i_row, false);
+                    work_col->set_null_bit(i_row, false);
                 } else {
                     size_t pos = idx + max_row_idx * (j - start);
                     T val = in_col->at<T>(i_row);
-                    bool bit_i = GetBit(null_bitmask_i, i_row);
+                    bool bit_i = in_col->get_null_bit(i_row);
                     T new_val = oper(val, cumulative[pos]);
                     bool bit_o = bit_i;
                     work_col->at<T>(i_row) = new_val;
@@ -4402,7 +4987,7 @@ void mpi_exscan_computation_nullable_T(std::vector<array_info*>& out_arrs,
                         } else
                             cumulative_mask[pos] = 1;
                     }
-                    SetBitTo(null_bitmask_o, i_row, bit_o);
+                    work_col->set_null_bit(i_row, bit_o);
                 }
             }
         };
@@ -4443,7 +5028,6 @@ void mpi_exscan_computation_nullable_T(std::vector<array_info*>& out_arrs,
     }
     for (int j = start; j != end; j++) {
         array_info* work_col = out_arrs[j];
-        uint8_t* null_bitmask_o = (uint8_t*)work_col->null_bitmask;
         int ftype = ftypes[j];
         auto apply_oper = [&](std::function<T(T, T)> oper) -> void {
             for (int64_t i_row = 0; i_row < n_rows; i_row++) {
@@ -4453,9 +5037,8 @@ void mpi_exscan_computation_nullable_T(std::vector<array_info*>& out_arrs,
                     T val = work_col->at<T>(i_row);
                     T new_val = oper(val, cumulative_recv[pos]);
                     work_col->at<T>(i_row) = new_val;
-                    if (!skipdropna && cumulative_mask_recv[pos] == 1) {
-                        SetBitTo(null_bitmask_o, i_row, false);
-                    }
+                    if (!skipdropna && cumulative_mask_recv[pos] == 1)
+                        work_col->set_null_bit(i_row, false);
                 }
             }
         };
@@ -4470,9 +5053,6 @@ void mpi_exscan_computation_nullable_T(std::vector<array_info*>& out_arrs,
             apply_oper(
                 [](T val1, T val2) -> T { return std::min(val1, val2); });
     }
-#ifdef DEBUG_GROUPBY
-    std::cout << "Leaving of mpi_exscan_computation_nullable_T\n";
-#endif
 }
 
 template <typename Tkey, typename T, int dtype>
@@ -4481,9 +5061,6 @@ void mpi_exscan_computation_T(std::vector<array_info*>& out_arrs,
                               int64_t num_keys, int64_t k, int* ftypes,
                               int* func_offsets, bool is_parallel,
                               bool skipdropna) {
-#ifdef DEBUG_GROUPBY
-    std::cout << "Beginning of mpi_exscan_computation_T\n";
-#endif
     array_info* in_col = in_table->columns[k + num_keys];
     if (in_col->arr_type == bodo_array_type::NUMPY)
         return mpi_exscan_computation_numpy_T<Tkey, T, dtype>(
@@ -4503,10 +5080,10 @@ table_info* mpi_exscan_computation_Tkey(array_info* cat_column,
                                         bool return_key, bool return_index) {
 #ifdef DEBUG_GROUPBY_SYMBOL
     std::cout << "mpi_exscan_computation_Tkey (in_table)\n";
+    DEBUG_PrintRefct(std::cout, in_table->columns);
 #ifdef DEBUG_GROUPBY_FULL
     DEBUG_PrintSetOfColumn(std::cout, in_table->columns);
 #endif
-    DEBUG_PrintRefct(std::cout, in_table->columns);
 #endif
     std::vector<array_info*> out_arrs;
     // We do not return the keys in output in the case of cumulative operations.
@@ -4536,10 +5113,6 @@ table_info* mpi_exscan_computation_Tkey(array_info* cat_column,
          i++, k++) {
         array_info* col = in_table->columns[i];
         const Bodo_CTypes::CTypeEnum dtype = col->dtype;
-#ifdef DEBUG_GROUPBY
-        std::cout << "MPI_EXSCAN_COMPUTATION_TKEY i=" << i
-                  << " dtype=" << int(dtype) << "\n";
-#endif
         if (dtype == Bodo_CTypes::INT8)
             mpi_exscan_computation_T<Tkey, int8_t, Bodo_CTypes::INT8>(
                 out_arrs, cat_column, in_table, num_keys, k, ftypes,
@@ -4596,11 +5169,6 @@ table_info* mpi_exscan_computation(array_info* cat_column, table_info* in_table,
                                    bool skipdropna, bool return_key,
                                    bool return_index) {
     const Bodo_CTypes::CTypeEnum dtype = cat_column->dtype;
-#ifdef DEBUG_GROUPBY
-    std::cout << "mpi_exscan_computation calling mpi_exscan_computation_Tkey "
-                 "with dtype="
-              << dtype << "\n";
-#endif
     if (dtype == Bodo_CTypes::INT8)
         return mpi_exscan_computation_Tkey<int8_t>(
             cat_column, in_table, num_keys, ftypes, func_offsets, is_parallel,
@@ -4650,9 +5218,6 @@ array_info* compute_categorical_index(table_info* in_table, int64_t num_keys,
         incref_array(in_table->columns[i_key]);
     table_info* red_table =
         drop_duplicates_nonnull_keys(in_table, num_keys, is_parallel);
-#ifdef DEBUG_GROUPBY
-    std::cout << "We have red_table\n";
-#endif
     size_t n_rows_full, n_rows = red_table->nrows();
     if (is_parallel)
         MPI_Allreduce(&n_rows, &n_rows_full, 1, MPI_LONG_LONG_INT, MPI_SUM,
@@ -4667,17 +5232,10 @@ array_info* compute_categorical_index(table_info* in_table, int64_t num_keys,
       delete_table_decref_arrays(red_table);
       return nullptr;
     }
-
     // We are below threshold. Now doing an allgather for determining the keys.
     bool all_gather = true;
-#ifdef DEBUG_GROUPBY
-    std::cout << "Before gather_table\n";
-#endif
     table_info* full_table = gather_table(red_table, num_keys, all_gather);
     delete_table(red_table);
-#ifdef DEBUG_GROUPBY
-    std::cout << "After gather_table\n";
-#endif
     // Now building the map_container.
     uint32_t* hashes_full =
         hash_keys_table(full_table, num_keys, SEED_HASH_MULTIKEY);
@@ -4687,9 +5245,6 @@ array_info* compute_categorical_index(table_info* in_table, int64_t num_keys,
         full_table->columns.begin(), full_table->columns.begin() + num_keys);
     concat_column.insert(concat_column.end(), in_table->columns.begin(),
                          in_table->columns.begin() + num_keys);
-#ifdef DEBUG_GROUPBY
-    std::cout << "concat_column has been built\n";
-#endif
     std::function<size_t(size_t)> hash_fct = [&](size_t const& iRow) -> size_t {
         if (iRow < n_rows_full)
             return size_t(hashes_full[iRow]);
@@ -4723,17 +5278,8 @@ array_info* compute_categorical_index(table_info* in_table, int64_t num_keys,
     for (size_t iRow = 0; iRow < size_t(n_rows_full); iRow++)
         entSet[iRow] = iRow;
     size_t n_rows_in = in_table->nrows();
-#ifdef DEBUG_GROUPBY
-    std::cout << "compute_categorical_index n_rows_full=" << n_rows_full
-              << "\n";
-#endif
     array_info* out_arr =
         alloc_categorical(n_rows_in, Bodo_CTypes::INT32, n_rows_full);
-#ifdef DEBUG_GROUPBY
-    std::cout << "scale=" << out_arr->scale
-              << " precision=" << out_arr->precision
-              << " num_categories=" << out_arr->num_categories << "\n";
-#endif
     std::vector<array_info*> key_cols(in_table->columns.begin(),
                                       in_table->columns.begin() + num_keys);
     bool has_nulls = does_keys_have_nulls(key_cols);
@@ -4747,10 +5293,6 @@ array_info* compute_categorical_index(table_info* in_table, int64_t num_keys,
         } else {
             pos = entSet[iRow + n_rows_full];
         }
-#ifdef DEBUG_GROUPBY_FULL
-        std::cout << "compute_categorical_index iRow=" << iRow << " pos=" << pos
-                  << "\n";
-#endif
         out_arr->at<int32_t>(iRow) = pos;
     }
     delete_table_decref_arrays(full_table);
@@ -4821,6 +5363,54 @@ int determine_groupby_strategy(table_info* in_table, int64_t num_keys,
     return 1;      // all conditions satisfied. Let's go for EXSCAN code
 }
 
+
+/*
+  The pivot_table and crosstab functionality
+  --
+  The dispatch_table contains the columns with the information.
+  The dispatch_info contains the dispatching information.
+  The rest works as for groupby.
+  We use the multiple_array_info template type to make it work
+  for pivot_table and groupby.
+ */
+table_info* pivot_groupby_and_aggregate(
+    table_info* in_table, int64_t num_keys, table_info* dispatch_table,
+    table_info* dispatch_info, bool input_has_index, int* ftypes,
+    int* func_offsets, int* udf_nredvars, bool is_parallel, bool is_crosstab,
+    bool skipdropna, bool return_key, bool return_index, void* update_cb,
+    void* combine_cb, void* eval_cb, table_info* udf_dummy_table) {
+#ifdef DEBUG_GROUPBY
+    std::cout << "------------- BEGIN : pivot_groupby_and_aggregate "
+                 "--------------------\n";
+    std::cout << "TABLE: in_table\n";
+    DEBUG_PrintRefct(std::cout, in_table->columns);
+    DEBUG_PrintSetOfColumn(std::cout, in_table->columns);
+    std::cout << "TABLE: dispatch_table\n";
+    DEBUG_PrintRefct(std::cout, dispatch_table->columns);
+    DEBUG_PrintSetOfColumn(std::cout, dispatch_table->columns);
+    std::cout << "TABLE: dispatch_info\n";
+    DEBUG_PrintRefct(std::cout, dispatch_info->columns);
+    DEBUG_PrintSetOfColumn(std::cout, dispatch_info->columns);
+#endif
+
+    GroupbyPipeline<multiple_array_info> groupby(
+        in_table, num_keys, dispatch_table, dispatch_info, input_has_index,
+        is_parallel, is_crosstab, ftypes, func_offsets, udf_nredvars,
+        udf_dummy_table, (udf_table_op_fn)update_cb,
+        (udf_table_op_fn)combine_cb, (udf_eval_fn)eval_cb, skipdropna,
+        return_key, return_index);
+
+    table_info* ret_table = groupby.run();
+#ifdef DEBUG_GROUPBY
+    std::cout << "RET_TABLE (groupby, classic code path):\n";
+    DEBUG_PrintRefct(std::cout, ret_table->columns);
+    DEBUG_PrintSetOfColumn(std::cout, ret_table->columns);
+    std::cout << "------------- END : pivot_groupby_and_aggregate "
+                 "--------------------\n";
+#endif
+    return ret_table;
+}
+
 table_info* groupby_and_aggregate(table_info* in_table, int64_t num_keys,
                                   bool input_has_index, int* ftypes,
                                   int* func_offsets, int* udf_nredvars,
@@ -4845,11 +5435,14 @@ table_info* groupby_and_aggregate(table_info* in_table, int64_t num_keys,
 #endif
 
     auto implement_strategy0 = [&]() -> table_info* {
-        GroupbyPipeline groupby(
-            in_table, num_keys, input_has_index, is_parallel, ftypes,
-            func_offsets, udf_nredvars, udf_dummy_table,
-            (udf_table_op_fn)update_cb, (udf_table_op_fn)combine_cb,
-            (udf_eval_fn)eval_cb, skipdropna, return_key, return_index);
+        table_info* dispatch_info = nullptr;
+        table_info* dispatch_table = nullptr;
+        GroupbyPipeline<array_info> groupby(
+            in_table, num_keys, dispatch_table, dispatch_info, input_has_index,
+            is_parallel, true, ftypes, func_offsets, udf_nredvars,
+            udf_dummy_table, (udf_table_op_fn)update_cb,
+            (udf_table_op_fn)combine_cb, (udf_eval_fn)eval_cb, skipdropna,
+            return_key, return_index);
 
         table_info* ret_table = groupby.run();
 #ifdef DEBUG_GROUPBY_SYMBOL

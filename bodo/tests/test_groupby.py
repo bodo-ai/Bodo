@@ -306,10 +306,7 @@ def test_random_decimal_sum_min_max_last(is_slow_run, memory_leak_check):
     random.seed(5)
     n = 10
     df1 = pd.DataFrame(
-        {
-            "A": gen_random_decimal_array(1, n),
-            "B": gen_random_decimal_array(2, n),
-        }
+        {"A": gen_random_decimal_array(1, n), "B": gen_random_decimal_array(2, n),}
     )
 
     # Direct checks for which pandas has equivalent functions.
@@ -438,10 +435,7 @@ def test_agg_str_key(memory_leak_check):
         return A
 
     df = pd.DataFrame(
-        {
-            "A": ["AA", "B", "B", "B", "AA", "AA", "B"],
-            "B": [-8, 2, 3, 1, 5, 6, 7],
-        }
+        {"A": ["AA", "B", "B", "B", "AA", "AA", "B"], "B": [-8, 2, 3, 1, 5, 6, 7],}
     )
     check_func(impl, (df,), sort_output=True)
 
@@ -3044,80 +3038,3 @@ def test_groupby_empty_funcs():
 
     df = pd.DataFrame({"A": [0, 0, 0, 1, 1, 1], "B": range(6)})
     assert impl(df) == bodo.jit(impl)(df)
-
-
-# ------------------------------ pivot, crosstab ------------------------------ #
-
-
-_pivot_df1 = pd.DataFrame(
-    {
-        "A": ["foo", "foo", "foo", "foo", "foo", "bar", "bar", "bar", "bar"],
-        "B": ["one", "one", "one", "two", "two", "one", "one", "two", "two"],
-        "C": [
-            "small",
-            "large",
-            "large",
-            "small",
-            "small",
-            "large",
-            "small",
-            "small",
-            "large",
-        ],
-        "D": [1, 2, 2, 6, 3, 4, 5, 6, 9],
-    }
-)
-
-
-def test_pivot(memory_leak_check):
-    def test_impl(df):
-        pt = df.pivot_table(index="A", columns="C", values="D", aggfunc="sum")
-        return (pt.small.values, pt.large.values)
-
-    def test_impl2(df):
-        pt = df.pivot_table(index="A", columns="C", values="D")
-        return (pt.small.values, pt.large.values)
-
-    bodo_func = bodo.jit(pivots={"pt": ["small", "large"]})(test_impl)
-    assert set(bodo_func(_pivot_df1)[0]) == set(test_impl(_pivot_df1)[0])
-    assert set(bodo_func(_pivot_df1)[1]) == set(test_impl(_pivot_df1)[1])
-
-    bodo_func = bodo.jit(pivots={"pt": ["small", "large"]})(test_impl2)
-    assert set(bodo_func(_pivot_df1)[0]) == set(test_impl2(_pivot_df1)[0])
-    assert set(bodo_func(_pivot_df1)[1]) == set(test_impl2(_pivot_df1)[1])
-
-
-def test_pivot_parallel(datapath):
-    fname = datapath("pivot2.pq")
-
-    def impl():
-        df = pd.read_parquet(fname)
-        pt = df.pivot_table(index="A", columns="C", values="D", aggfunc="sum")
-        res = pt.small.values.sum()
-        return res
-
-    bodo_func = bodo.jit(pivots={"pt": ["small", "large"]})(impl)
-    assert bodo_func() == impl()
-
-
-def test_crosstab(memory_leak_check):
-    def test_impl(df):
-        pt = pd.crosstab(df.A, df.C)
-        return (pt.small.values, pt.large.values)
-
-    bodo_func = bodo.jit(pivots={"pt": ["small", "large"]})(test_impl)
-    assert set(bodo_func(_pivot_df1)[0]) == set(test_impl(_pivot_df1)[0])
-    assert set(bodo_func(_pivot_df1)[1]) == set(test_impl(_pivot_df1)[1])
-
-
-def test_crosstab_parallel(datapath):
-    fname = datapath("pivot2.pq")
-
-    def impl():
-        df = pd.read_parquet(fname)
-        pt = pd.crosstab(df.A, df.C)
-        res = pt.small.values.sum()
-        return res
-
-    bodo_func = bodo.jit(pivots={"pt": ["small", "large"]})(impl)
-    assert bodo_func() == impl()

@@ -347,6 +347,31 @@ def get_groupby_output_dtype(arr_type, func_name, index_type=None):
         return in_dtype, "ok"  # default: return same dtype as input
 
 
+def get_pivot_output_dtype(arr_type, func_name, index_type=None):
+    """
+    Return output dtype for groupby aggregation function based on the
+    function and the input array type and dtype.
+    If the operation is not feasible (e.g. summing dates) then an error message
+    is passed upward to be decided according to the context.
+    """
+    in_dtype = arr_type.dtype
+    if func_name in {"count"}:
+        return IntDtype(types.int64)
+    if func_name in {"sum", "prod", "min", "max"}:
+        if func_name in {"sum", "prod"} and not isinstance(
+            in_dtype, (types.Integer, types.Float)
+        ):
+            raise BodoError(
+                "pivot_table(): sum and prod operations require integer or float input"
+            )
+        if isinstance(in_dtype, types.Integer):
+            return IntDtype(in_dtype)
+        return in_dtype
+    if func_name in {"mean", "var", "std"}:
+        return types.float64
+    raise BodoError("invalid pivot operation")
+
+
 class ColumnType(Enum):
     KeyColumn = 0
     NumericalColumn = 1
@@ -801,13 +826,18 @@ class PivotTyper(AbstractTemplate):
 
         # get output data type
         data = df.data[df.columns.index(values)]
-        out_dtype, err_msg = get_groupby_output_dtype(data, aggfunc.literal_value)
+        out_dtype = get_pivot_output_dtype(data, aggfunc.literal_value)
         out_arr_typ = _get_series_array_type(out_dtype)
 
         pivot_vals = _pivot_values.meta
         n_vals = len(pivot_vals)
-        df_index = RangeIndexType(types.none)
-        out_df = DataFrameType((out_arr_typ,) * n_vals, df_index, tuple(pivot_vals))
+
+        ind = df.columns.index(index)
+        index_typ = bodo.hiframes.pd_index_ext.array_typ_to_index(
+            df.data[ind], types.StringLiteral(index)
+        )
+
+        out_df = DataFrameType((out_arr_typ,) * n_vals, index_typ, tuple(pivot_vals))
 
         return signature(out_df, *args)
 
@@ -839,8 +869,10 @@ class CrossTabTyper(AbstractTemplate):
 
         pivot_vals = _pivot_values.meta
         n_vals = len(pivot_vals)
-        df_index = RangeIndexType(types.none)
-        out_df = DataFrameType((out_arr_typ,) * n_vals, df_index, tuple(pivot_vals))
+        index_typ = bodo.hiframes.pd_index_ext.array_typ_to_index(
+            index.data, types.StringLiteral("index")
+        )
+        out_df = DataFrameType((out_arr_typ,) * n_vals, index_typ, tuple(pivot_vals))
 
         return signature(out_df, *args)
 

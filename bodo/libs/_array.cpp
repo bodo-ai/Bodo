@@ -1253,6 +1253,9 @@ PyMODINIT_FUNC PyInit_array_ext(void) {
                            PyLong_FromVoidPtr((void*)(&drop_duplicates_table)));
     PyObject_SetAttrString(m, "groupby_and_aggregate",
                            PyLong_FromVoidPtr((void*)(&groupby_and_aggregate)));
+    PyObject_SetAttrString(
+        m, "pivot_groupby_and_aggregate",
+        PyLong_FromVoidPtr((void*)(&pivot_groupby_and_aggregate)));
     PyObject_SetAttrString(m, "array_isin",
                            PyLong_FromVoidPtr((void*)(&array_isin)));
     PyObject_SetAttrString(

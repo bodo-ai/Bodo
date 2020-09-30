@@ -21,6 +21,8 @@ inline void Bodo_PyErr_SetString(PyObject* type, const char* message) {
     PyErr_SetString(type, message);
 }
 
+#undef DEBUG_ARRAY_ACCESS
+
 // get memory alloc/free info from _meminfo.h
 size_t get_stats_alloc();
 size_t get_stats_free();
@@ -153,6 +155,20 @@ struct bodo_array_type {
     };
 };
 
+// copied from Arrow bit_util.h
+// Bitmask selecting the k-th bit in a byte
+static constexpr uint8_t kBitmask[] = {1, 2, 4, 8, 16, 32, 64, 128};
+
+inline bool GetBit(const uint8_t* bits, uint64_t i) {
+    return (bits[i >> 3] >> (i & 0x07)) & 1;
+}
+
+inline void SetBitTo(uint8_t* bits, int64_t i, bool bit_is_set) {
+    bits[i / 8] ^=
+        static_cast<uint8_t>(-static_cast<uint8_t>(bit_is_set) ^ bits[i / 8]) &
+        kBitmask[i % 8];
+}
+
 /**
  * @brief generic struct that holds info of Bodo arrays to enable communication.
  *
@@ -230,12 +246,170 @@ struct array_info {
 
     template <typename T>
     T& at(size_t idx) {
+#ifdef DEBUG_ARRAY_ACCESS
+        std::cout << "     at access SINGLE for idx=" << idx << "\n";
+#endif
         return ((T*)data1)[idx];
+    }
+
+    bool get_null_bit(size_t idx) const {
+        return GetBit((uint8_t*)null_bitmask, idx);
+    }
+
+    void set_null_bit(size_t idx, bool bit) {
+        SetBitTo((uint8_t*)null_bitmask, idx, bit);
     }
 
     array_info& operator=(
         array_info&& other) noexcept;  // move assignment operator
 };
+
+array_info* alloc_array(int64_t length, int64_t n_sub_elems,
+                        int64_t n_sub_sub_elems,
+                        bodo_array_type::arr_type_enum arr_type,
+                        Bodo_CTypes::CTypeEnum dtype, int64_t extra_null_bytes,
+                        int64_t num_categories);
+
+array_info* alloc_numpy(int64_t length, Bodo_CTypes::CTypeEnum typ_enum);
+
+array_info* alloc_array_item(int64_t n_arrays, int64_t n_total_items,
+                             Bodo_CTypes::CTypeEnum dtype);
+array_info* alloc_categorical(int64_t length, Bodo_CTypes::CTypeEnum typ_enum,
+                              int64_t num_categories);
+
+array_info* alloc_nullable_array(int64_t length,
+                                 Bodo_CTypes::CTypeEnum typ_enum,
+                                 int64_t extra_null_bytes);
+
+array_info* alloc_string_array(int64_t length, int64_t n_chars,
+                               int64_t extra_null_bytes);
+
+array_info* alloc_list_string_array(int64_t n_lists, int64_t n_strings,
+                                    int64_t n_chars, int64_t extra_null_bytes);
+
+/* Store several array_info in one structure and assign them
+   as required.
+   This is for pivot_table and crosstab.
+   The rows of the pivot_table / crosstab correspond to
+   the index. But the columns force us to create a multiple_array_info
+   with each column corresponding to an entry.
+   -
+   The vect_arr contains those columns.
+   the vect_access contains whether we have accessed to the entry or not.
+   It is important to keep track of this info since in contrast to the
+   groupby, some info may be missing.
+*/
+struct multiple_array_info {
+    bodo_array_type::arr_type_enum arr_type;
+    Bodo_CTypes::CTypeEnum dtype;
+    int64_t num_categories;  // for categorical arrays
+    int64_t length;
+    int64_t length_loc;
+    int64_t n_pivot;
+    std::vector<array_info*> vect_arr;
+    std::vector<array_info*> vect_access;
+    explicit multiple_array_info(std::vector<array_info*> _vect_arr)
+        : vect_arr(_vect_arr) {
+        n_pivot = vect_arr.size();
+        length_loc = vect_arr[0]->length;
+        length = length_loc * n_pivot;
+        num_categories = vect_arr[0]->num_categories;
+        arr_type = vect_arr[0]->arr_type;
+        dtype = vect_arr[0]->dtype;
+        int n_access = (n_pivot + 7) >> 3;
+        for (int i_access = 0; i_access < n_access; i_access++) {
+            array_info* arr_access =
+                alloc_numpy(length_loc, Bodo_CTypes::UINT8);
+            std::fill((uint8_t*)arr_access->data1,
+                      (uint8_t*)arr_access->data1 + length_loc, 0);
+            vect_access.push_back(arr_access);
+        }
+    }
+    explicit multiple_array_info(std::vector<array_info*> _vect_arr,
+                                 std::vector<array_info*> _vect_access)
+        : vect_arr(_vect_arr), vect_access(_vect_access) {
+        n_pivot = vect_arr.size();
+        length_loc = vect_arr[0]->length;
+        length = length_loc * n_pivot;
+        num_categories = vect_arr[0]->num_categories;
+        arr_type = vect_arr[0]->arr_type;
+        dtype = vect_arr[0]->dtype;
+    }
+    template <typename T>
+    T& at(size_t idx) {
+        // index for the value itself
+        size_t i_arr = idx % n_pivot;
+        size_t idx_loc = idx / n_pivot;
+        // setting up the access mask. If accessed the value stops to be missing
+        int64_t i_arr_access = i_arr / 8;
+        int64_t pos_arr_access = i_arr % 8;
+        uint8_t* ptr = (uint8_t*)vect_access[i_arr_access]->data1 + idx_loc;
+#ifdef DEBUG_ARRAY_ACCESS
+        std::cout << "     at access MULT for idx=" << idx << " i_arr=" << i_arr
+                  << " idx_loc=" << idx_loc << "\n";
+#endif
+        SetBitTo(ptr, pos_arr_access, true);
+        return ((T*)vect_arr[i_arr]->data1)[idx_loc];
+    }
+
+    bool get_access_bit(size_t idx) {
+        // index for the value itself
+        size_t i_arr = idx % n_pivot;
+        size_t idx_loc = idx / n_pivot;
+        // setting up the access mask. If accessed the value stops to be missing
+        int64_t i_arr_access = i_arr / 8;
+        int64_t pos_arr_access = i_arr % 8;
+        uint8_t* ptr = (uint8_t*)vect_access[i_arr_access]->data1 + idx_loc;
+        return GetBit(ptr, pos_arr_access);
+    }
+
+    bool get_null_bit(size_t idx) const {
+        size_t i_arr = idx % n_pivot;
+        size_t idx_loc = idx / n_pivot;
+        return GetBit((uint8_t*)vect_arr[i_arr]->null_bitmask, idx_loc);
+    }
+
+    void set_null_bit(size_t idx, bool bit) {
+        size_t i_arr = idx % n_pivot;
+        size_t idx_loc = idx / n_pivot;
+        SetBitTo((uint8_t*)vect_arr[i_arr]->null_bitmask, idx_loc, bit);
+    }
+
+    multiple_array_info& operator=(
+        multiple_array_info&& other) noexcept;  // move assignment operator
+};
+
+template <typename T>
+struct is_multiple_array {
+    static const bool value = false;
+};
+
+template <>
+struct is_multiple_array<multiple_array_info> {
+    static const bool value = true;
+};
+
+/* The "get-value" functionality for multiple_array_info and array_info.
+   This is the equivalent of at functionality.
+   We cannot use at(idx) statements.
+ */
+template <typename ARRAY, typename T>
+inline typename std::enable_if<is_multiple_array<ARRAY>::value, T&>::type getv(
+    ARRAY* arr, size_t idx) {
+    size_t i_arr = idx % arr->n_pivot;
+    size_t idx_loc = idx / arr->n_pivot;
+    int64_t i_arr_access = i_arr / 8;
+    int64_t pos_arr_access = i_arr % 8;
+    uint8_t* ptr = (uint8_t*)arr->vect_access[i_arr_access]->data1 + idx_loc;
+    SetBitTo(ptr, pos_arr_access, true);
+    return ((T*)arr->vect_arr[i_arr]->data1)[idx_loc];
+}
+
+template <typename ARRAY, typename T>
+inline typename std::enable_if<!is_multiple_array<ARRAY>::value, T&>::type getv(
+    ARRAY* arr, size_t idx) {
+    return ((T*)arr->data1)[idx];
+}
 
 struct table_info {
     std::vector<array_info*> columns;
@@ -254,15 +428,6 @@ struct table_info {
     const array_info* operator[](size_t idx) const { return columns[idx]; }
 };
 
-/// Initialize numpy_item_size and verify size of dtypes
-void bodo_common_init();
-
-array_info* alloc_array(int64_t length, int64_t n_sub_elems,
-                        int64_t n_sub_sub_elems,
-                        bodo_array_type::arr_type_enum arr_type,
-                        Bodo_CTypes::CTypeEnum dtype, int64_t extra_null_bytes,
-                        int64_t num_categories);
-
 /* Compute the total memory of the table accross all processors.
  *
  * @param table : The input table
@@ -270,22 +435,8 @@ array_info* alloc_array(int64_t length, int64_t n_sub_elems,
  */
 int64_t table_global_memory_size(table_info* table);
 
-array_info* alloc_numpy(int64_t length, Bodo_CTypes::CTypeEnum typ_enum);
-
-array_info* alloc_array_item(int64_t n_arrays, int64_t n_total_items,
-                             Bodo_CTypes::CTypeEnum dtype);
-array_info* alloc_categorical(int64_t length, Bodo_CTypes::CTypeEnum typ_enum,
-                              int64_t num_categories);
-
-array_info* alloc_nullable_array(int64_t length,
-                                 Bodo_CTypes::CTypeEnum typ_enum,
-                                 int64_t extra_null_bytes);
-
-array_info* alloc_string_array(int64_t length, int64_t n_chars,
-                               int64_t extra_null_bytes);
-
-array_info* alloc_list_string_array(int64_t n_lists, int64_t n_strings,
-                                    int64_t n_chars, int64_t extra_null_bytes);
+/// Initialize numpy_item_size and verify size of dtypes
+void bodo_common_init();
 
 array_info* copy_array(array_info* arr);
 
@@ -382,20 +533,6 @@ Bodo_CTypes::CTypeEnum arrow_to_bodo_type(arrow::Type::type type);
 void nested_array_to_c(std::shared_ptr<arrow::Array> array, int64_t* lengths,
                        array_info** infos, int64_t& lengths_pos,
                        int64_t& infos_pos);
-
-// copied from Arrow bit_util.h
-// Bitmask selecting the k-th bit in a byte
-static constexpr uint8_t kBitmask[] = {1, 2, 4, 8, 16, 32, 64, 128};
-
-inline bool GetBit(const uint8_t* bits, uint64_t i) {
-    return (bits[i >> 3] >> (i & 0x07)) & 1;
-}
-
-inline void SetBitTo(uint8_t* bits, int64_t i, bool bit_is_set) {
-    bits[i / 8] ^=
-        static_cast<uint8_t>(-static_cast<uint8_t>(bit_is_set) ^ bits[i / 8]) &
-        kBitmask[i % 8];
-}
 
 inline void InitializeBitMask(uint8_t* bits, size_t length, bool val) {
     size_t n_bytes = (length + 7) >> 3;

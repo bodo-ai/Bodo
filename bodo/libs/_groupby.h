@@ -5,8 +5,6 @@
 
 const int max_global_number_groups_exscan = 1000;
 
-
-
 /// Initialize C++ groupby module
 void groupby_init();
 
@@ -66,4 +64,12 @@ table_info* groupby_and_aggregate(table_info* in_table, int64_t num_keys,
                                   bool return_key, bool return_index,
                                   void* update_cb, void* combine_cb,
                                   void* eval_cb, table_info* udf_dummy_table);
-#endif // _GROUPBY_H_INCLUDED
+
+table_info* pivot_groupby_and_aggregate(
+    table_info* in_table, int64_t num_keys, table_info* dispatch_table,
+    table_info* dispatch_info, bool input_has_index, int* ftypes,
+    int* func_offsets, int* udf_nredvars, bool is_parallel, bool is_crosstab,
+    bool skipdropna, bool return_key, bool return_index, void* update_cb,
+    void* combine_cb, void* eval_cb, table_info* udf_dummy_table);
+
+#endif  // _GROUPBY_H_INCLUDED

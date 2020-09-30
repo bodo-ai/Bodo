@@ -94,6 +94,9 @@ array_info& array_info::operator=(array_info&& other) noexcept {
         decref_array(this);
 
         // copy the other array's pointers into this array_info
+        this->length = other.length;
+        this->arr_type = other.arr_type;
+        this->dtype = other.dtype;
         this->n_sub_elems = other.n_sub_elems;
         this->n_sub_sub_elems = other.n_sub_sub_elems;
         this->data1 = other.data1;
@@ -106,6 +109,7 @@ array_info& array_info::operator=(array_info&& other) noexcept {
         this->array = other.array;
         this->precision = other.precision;
         this->scale = other.scale;
+        this->num_categories = other.num_categories;
 
         // reset the other array_info's pointers
         other.data1 = nullptr;
@@ -116,6 +120,21 @@ array_info& array_info::operator=(array_info&& other) noexcept {
         other.meminfo = nullptr;
         other.meminfo_bitmask = nullptr;
         other.array = nullptr;
+    }
+    return *this;
+}
+
+multiple_array_info& multiple_array_info::operator=(
+    multiple_array_info&& other) noexcept {
+    if (this != &other) {
+        this->arr_type = other.arr_type;
+        this->dtype = other.dtype;
+        this->num_categories = other.num_categories;
+        this->length = other.length;
+        this->length_loc = other.length_loc;
+        this->n_pivot = other.n_pivot;
+        this->vect_arr = std::move(other.vect_arr);
+        this->vect_access = std::move(other.vect_access);
     }
     return *this;
 }
@@ -554,15 +573,31 @@ void delete_table_decref_arrays(table_info* table) {
   Thus we have two calls for destructors when they are not NULL.
  */
 void decref_array(array_info* arr) {
+#ifdef DEBUG_MEMORY
+    std::cout << "decref_array step 1\n";
+#endif
     if (arr->meminfo != NULL) {
         arr->meminfo->refct--;
+#ifdef DEBUG_MEMORY
+        std::cout << "decref_array 1: refct=" << arr->meminfo->refct << "\n";
+#endif
         if (arr->meminfo->refct == 0) NRT_MemInfo_call_dtor(arr->meminfo);
     }
+#ifdef DEBUG_MEMORY
+    std::cout << "decref_array step 2\n";
+#endif
     if (arr->meminfo_bitmask != NULL) {
         arr->meminfo_bitmask->refct--;
+#ifdef DEBUG_MEMORY
+        std::cout << "decref_array 2: refct=" << arr->meminfo_bitmask->refct
+                  << "\n";
+#endif
         if (arr->meminfo_bitmask->refct == 0)
             NRT_MemInfo_call_dtor(arr->meminfo_bitmask);
     }
+#ifdef DEBUG_MEMORY
+    std::cout << "decref_array step 3\n";
+#endif
 }
 
 void incref_array(array_info* arr) {

@@ -244,6 +244,8 @@ inline bool TestEqualJoin(table_info* table1, table_info* table2,
     return true;
 };
 
+// is_datetime_timedelta
+
 template <int dtype>
 struct is_datetime_timedelta {
     static const bool value = false;
@@ -258,6 +260,8 @@ template <>
 struct is_datetime_timedelta<Bodo_CTypes::TIMEDELTA> {
     static const bool value = true;
 };
+
+// is_decimal
 
 template <int dtype>
 struct is_decimal {
@@ -475,6 +479,10 @@ bool KeyComparisonAsPython(size_t const& n_key, int64_t* vect_ascending,
                            size_t const& shift_key2, size_t const& iRow2,
                            bool const& na_position);
 
+int KeyComparisonAsPython_Column(bool const& na_position_bis, array_info* arr1,
+                                 size_t const& iRow1, array_info* arr2,
+                                 size_t const& iRow2);
+
 // ----------------------- Debug functions -----------------------
 
 /* This is a function used by "DEBUG_PrintSetOfColumn"
@@ -484,6 +492,14 @@ bool KeyComparisonAsPython(size_t const& n_key, int64_t* vect_ascending,
  * @param arr is the pointer.
  */
 void DEBUG_PrintColumn(std::ostream& os, array_info* arr);
+
+/* This is a function used by "DEBUG_PrintSetOfColumn"
+ * It takes a column and returns a vector of string on output
+ *
+ * @param os is the output stream
+ * @param arr is the pointer.
+ */
+void DEBUG_PrintColumn(std::ostream& os, multiple_array_info* arr);
 
 /** The DEBUG_PrintSetOfColumn is printing the contents of the table to
  * the output stream.

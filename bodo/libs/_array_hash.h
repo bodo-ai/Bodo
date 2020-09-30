@@ -9,6 +9,7 @@
 #define SEED_HASH_DROPDUPLI 0xb0d01287
 #define SEED_HASH_JOIN 0xb0d01286
 #define SEED_HASH_GROUPBY_SHUFFLE 0xb0d01285
+#define SEED_HASH_PIVOT_SHUFFLE 0xb0d01285
 #define SEED_HASH_CONTAINER 0xb0d01284
 
 uint32_t* hash_keys(std::vector<array_info*> const& key_arrs,

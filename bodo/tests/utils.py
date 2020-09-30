@@ -99,6 +99,9 @@ def check_func(
     py_output=None,
     dist_test=True,
     check_typing_issues=True,
+    additional_compiler_arguments=None,
+    set_columns_name_to_none=False,
+    reorder_columns=False,
     only_seq=False,
     only_1D=False,
     only_1DVar=False,
@@ -120,11 +123,20 @@ def check_func(
     for some operations. Using check_dtype=False ensures that comparison is still possible.
     - py_output: Sometimes pandas has entirely lacking functionality and we need to put what output
     we expect to obtain.
+    - additional_compiler_arguments: For some operations (like pivot_table) some additional compiler
+    arguments are needed. These are keyword arguments to bodo.jit() passed as a dictionary.
+    - set_columns_name_to_none: Some operation (like pivot_table) set a name to the list of columns.
+    This is mostly for esthetic purpose and has limited support, therefore sometimes we have to set
+    the name to None.
+    - reorder_columns: The columns of the output have some degree of uncertainty sometimes (like pivot_table)
+    thus a reordering operation is needed in some cases to make the comparison meaningful.
     """
     run_seq, run_1D, run_1DVar = False, False, False
     if only_seq:
         if only_1D or only_1DVar:
-            warnings.warn("Multiple select only options specified, running only sequential.")
+            warnings.warn(
+                "Multiple select only options specified, running only sequential."
+            )
         run_seq = True
         dist_test = False
     elif only_1D:
@@ -135,7 +147,7 @@ def check_func(
         run_1DVar = True
     else:
         run_seq, run_1D, run_1DVar = True, True, True
-        
+
     n_pes = bodo.get_size()
 
     call_args = tuple(_get_arg(a, copy_input) for a in args)
@@ -152,6 +164,10 @@ def check_func(
     else:
         if convert_columns_to_pandas:
             py_output = convert_non_pandas_columns(py_output)
+    if set_columns_name_to_none:
+        py_output.columns.name = None
+    if reorder_columns:
+        py_output.sort_index(axis=1, inplace=True)
 
     # sequential
     if run_seq:
@@ -165,6 +181,9 @@ def check_func(
             check_dtype,
             reset_index,
             convert_columns_to_pandas,
+            additional_compiler_arguments,
+            set_columns_name_to_none,
+            reorder_columns,
             n_pes,
         )
 
@@ -204,6 +223,9 @@ def check_func(
             reset_index,
             check_typing_issues,
             convert_columns_to_pandas,
+            additional_compiler_arguments,
+            set_columns_name_to_none,
+            reorder_columns,
             n_pes,
         )
 
@@ -220,6 +242,9 @@ def check_func(
             reset_index,
             check_typing_issues,
             convert_columns_to_pandas,
+            additional_compiler_arguments,
+            set_columns_name_to_none,
+            reorder_columns,
             n_pes,
         )
 
@@ -234,12 +259,18 @@ def check_func_seq(
     check_dtype,
     reset_index,
     convert_columns_to_pandas,
+    additional_compiler_arguments,
+    set_columns_name_to_none,
+    reorder_columns,
     n_pes,
 ):
     """check function output against Python without manually setting inputs/outputs
     distributions (keep the function sequential)
     """
-    bodo_func = bodo.jit(func)
+    kwargs = {}
+    if additional_compiler_arguments != None:
+        kwargs = additional_compiler_arguments
+    bodo_func = bodo.jit(func, **kwargs)
     call_args = tuple(_get_arg(a, copy_input) for a in args)
     # try to catch BodoWarning if no parallelism found
     with warnings.catch_warnings(record=True) as w:
@@ -249,6 +280,10 @@ def check_func_seq(
         bodo_out = bodo_func(*call_args)
         if convert_columns_to_pandas:
             bodo_out = convert_non_pandas_columns(bodo_out)
+    if set_columns_name_to_none:
+        bodo_out.columns.name = None
+    if reorder_columns:
+        bodo_out.sort_index(axis=1, inplace=True)
 
     passed = _test_equal_guard(
         bodo_out, py_output, sort_output, check_names, check_dtype, reset_index
@@ -272,15 +307,22 @@ def check_func_1D(
     reset_index,
     check_typing_issues,
     convert_columns_to_pandas,
+    additional_compiler_arguments,
+    set_columns_name_to_none,
+    reorder_columns,
     n_pes,
 ):
     """Check function output against Python while setting the inputs/outputs as
     1D distributed
     """
     # 1D distributed
-    bodo_func = bodo.jit(
-        all_args_distributed_block=True, all_returns_distributed=is_out_distributed
-    )(func)
+    kwargs = {
+        "all_args_distributed_block": True,
+        "all_returns_distributed": is_out_distributed,
+    }
+    if additional_compiler_arguments != None:
+        kwargs.update(additional_compiler_arguments)
+    bodo_func = bodo.jit(func, **kwargs)
     dist_args = tuple(
         _get_dist_arg(a, copy_input, False, check_typing_issues) for a in args
     )
@@ -289,6 +331,11 @@ def check_func_1D(
         bodo_output = convert_non_pandas_columns(bodo_output)
     if is_out_distributed:
         bodo_output = _gather_output(bodo_output)
+    if set_columns_name_to_none:
+        bodo_output.columns.name = None
+    if reorder_columns:
+        bodo_output.sort_index(axis=1, inplace=True)
+
     # only rank 0 should check if gatherv() called on output
     passed = 1
     if not is_out_distributed or bodo.get_rank() == 0:
@@ -312,14 +359,21 @@ def check_func_1D_var(
     reset_index,
     check_typing_issues,
     convert_columns_to_pandas,
+    additional_compiler_arguments,
+    set_columns_name_to_none,
+    reorder_columns,
     n_pes,
 ):
     """Check function output against Python while setting the inputs/outputs as
     1D distributed variable length
     """
-    bodo_func = bodo.jit(
-        all_args_distributed_varlength=True, all_returns_distributed=is_out_distributed
-    )(func)
+    kwargs = {
+        "all_args_distributed_varlength": True,
+        "all_returns_distributed": is_out_distributed,
+    }
+    if additional_compiler_arguments != None:
+        kwargs.update(additional_compiler_arguments)
+    bodo_func = bodo.jit(func, **kwargs)
     dist_args = tuple(
         _get_dist_arg(a, copy_input, True, check_typing_issues) for a in args
     )
@@ -328,6 +382,10 @@ def check_func_1D_var(
         bodo_output = convert_non_pandas_columns(bodo_output)
     if is_out_distributed:
         bodo_output = _gather_output(bodo_output)
+    if set_columns_name_to_none:
+        bodo_output.columns.name = None
+    if reorder_columns:
+        bodo_output.sort_index(axis=1, inplace=True)
     passed = 1
     if not is_out_distributed or bodo.get_rank() == 0:
         passed = _test_equal_guard(
@@ -552,7 +610,6 @@ def _test_equal_struct_array(
         _test_equal_struct(
             bodo_val, py_val, sort_output, check_names, check_dtype, reset_index,
         )
-
 
 
 def _gather_output(bodo_output):
@@ -849,16 +906,21 @@ def convert_non_pandas_columns(df):
 # Were the functionality of the list-string supported in pandas, we would not need
 # any such function.
 def check_parallel_coherency(
-    func, args, sort_output=False, reset_index=False,
+    func,
+    args,
+    sort_output=False,
+    reset_index=False,
+    additional_compiler_arguments=None,
 ):
     n_pes = bodo.get_size()
 
     # Computing the output in serial mode
     copy_input = True
     call_args_serial = tuple(_get_arg(a, copy_input) for a in args)
-    bodo_func_serial = bodo.jit(
-        all_args_distributed_block=False, all_returns_distributed=False
-    )(func)
+    kwargs = {"all_args_distributed_block": False, "all_returns_distributed": False}
+    if additional_compiler_arguments != None:
+        kwargs.update(additional_compiler_arguments)
+    bodo_func_serial = bodo.jit(func, **kwargs)
     serial_output_raw = bodo_func_serial(*call_args_serial)
     serial_output_final = convert_non_pandas_columns(serial_output_raw)
 
@@ -867,9 +929,10 @@ def check_parallel_coherency(
         return
 
     # Computing the parallel input and output.
-    bodo_func_parall = bodo.jit(
-        all_args_distributed_block=True, all_returns_distributed=True
-    )(func)
+    kwargs = {"all_args_distributed_block": True, "all_returns_distributed": True}
+    if additional_compiler_arguments != None:
+        kwargs.update(additional_compiler_arguments)
+    bodo_func_parall = bodo.jit(func, **kwargs)
     call_args_parall = tuple(
         _get_dist_arg(a, copy=True, var_length=False) for a in args
     )
@@ -931,7 +994,9 @@ def gen_random_arrow_list_list_decimal(rec_lev, prob_none, n):
             return None
         else:
             if rec_lev == 0:
-                return Decimal(str(random.randint(1,10)) + "." + str(random.randint(1,10)))
+                return Decimal(
+                    str(random.randint(1, 10)) + "." + str(random.randint(1, 10))
+                )
             else:
                 return [
                     random_list_rec(rec_lev - 1) for _ in range(random.randint(1, 3))
@@ -1137,7 +1202,9 @@ def check_caching(mod, testname, impl, args):
             thisdir = os.path.dirname(mod.__file__)
             for f in glob.glob(
                 os.path.join(
-                    thisdir, "__pycache__", mod.__name__.split(".")[-1] + "." + testname + "*"
+                    thisdir,
+                    "__pycache__",
+                    mod.__name__.split(".")[-1] + "." + testname + "*",
                 )
             ):
                 os.remove(f)
