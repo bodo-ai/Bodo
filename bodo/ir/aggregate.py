@@ -50,11 +50,13 @@ from bodo.libs.array import (
     arr_info_list_to_table,
     array_to_info,
     compute_node_partition_by_hash,
+    delete_info_decref_array,
     delete_table,
     delete_table_decref_arrays,
     groupby_and_aggregate,
     info_from_table,
     info_to_array,
+    pivot_groupby_and_aggregate,
 )
 from bodo.libs.array_item_arr_ext import (
     ArrayItemArrayType,
@@ -97,17 +99,16 @@ from bodo.utils.typing import (
     is_overload_true,
     list_cumulative,
 )
-from bodo.libs.array import (
-    array_to_info,
-    arr_info_list_to_table,
-    groupby_and_aggregate,
-    pivot_groupby_and_aggregate,
-    compute_node_partition_by_hash,
-    info_from_table,
-    info_to_array,
-    delete_info_decref_array,
-    delete_table,
-    delete_table_decref_arrays,
+from bodo.utils.utils import (
+    debug_prints,
+    incref,
+    is_assign,
+    is_call_assign,
+    is_expr,
+    is_null_pointer,
+    is_var_assign,
+    sanitize_varname,
+    unliteral_all,
 )
 
 # TODO: it's probably a bad idea for these to be global. Maybe try moving them
@@ -137,10 +138,18 @@ def add_agg_cfunc_sym(typingctx, func, sym):
         sig = func.signature
         if sig == types.none(types.voidptr):
             # cfunc generated with gen_eval_cb has this signature
-            fnty = lir.FunctionType(lir.VoidType(), [lir.IntType(8).as_pointer(),],)
+            fnty = lir.FunctionType(
+                lir.VoidType(),
+                [
+                    lir.IntType(8).as_pointer(),
+                ],
+            )
             fn_tp = builder.module.get_or_insert_function(fnty, sym._literal_value)
             builder.call(
-                fn_tp, [context.get_constant_null(sig.args[0]),],
+                fn_tp,
+                [
+                    context.get_constant_null(sig.args[0]),
+                ],
             )
         else:
             # Assume signature is none(voidptr, voidptr, int64*) (see gen_update_cb
@@ -535,42 +544,48 @@ numba.core.analysis.ir_extension_usedefs[Aggregate] = aggregate_usedefs
 def remove_dead_aggregate(
     aggregate_node, lives_no_aliases, lives, arg_aliases, alias_map, func_ir, typemap
 ):
-
+    """remove dead input/output columns and agg functions"""
     dead_cols = []
     in_col_names = list(aggregate_node.df_in_vars.keys())
 
+    # find dead output columns
     for col_name, col_var in aggregate_node.df_out_vars.items():
         if col_var.name not in lives:
             dead_cols.append(col_name)
 
-    multi_func_dead = []
+    # remove dead output columns and their corresponding input columns/functions
     for cname in dead_cols:
         aggregate_node.df_out_vars.pop(cname)
-        if aggregate_node.pivot_arr is None:
-            # input/output column names don't match in multi-function case
-            if cname in aggregate_node.df_in_vars:
-                aggregate_node.df_in_vars.pop(cname)
-                # remove dead agg func (corresponding to dead column) from agg_func list
-                if isinstance(aggregate_node.agg_func, list):
-                    c_ind = in_col_names.index(cname)
-                    aggregate_node.agg_func.pop(c_ind)
-                in_col_names = list(aggregate_node.df_in_vars.keys())
-            # column is multi-func case at this point if it is not output index
-            # (from 'as_index=False')
-            elif not (
-                cname in aggregate_node.key_names
-                or isinstance(cname, tuple)
-                and cname[0] in aggregate_node.key_names
-            ):
-                multi_func_dead.append(cname)
-        else:
-            aggregate_node.pivot_values.remove(cname)
 
-    # remove dead agg funcs in multi-func case (tuple/list of funcs)
-    for cname in multi_func_dead:
+        # pivot case, output corresponds to pivot values
+        if aggregate_node.pivot_arr is not None:
+            aggregate_node.pivot_values.remove(cname)
+            continue
+
+        # output key columns (from 'as_index=False') shouldn't be removed
+        if (
+            cname in aggregate_node.key_names
+            or isinstance(cname, tuple)
+            and cname[0] in aggregate_node.key_names
+        ):
+            continue
+
+        # output corresponds to input directly
+        if cname in aggregate_node.df_in_vars:
+            aggregate_node.df_in_vars.pop(cname)
+            # remove dead agg func (corresponding to dead column) from agg_func list
+            # e.g. df.groupby("A").agg({"B": "min", "C": "max"})
+            if isinstance(aggregate_node.agg_func, list):
+                c_ind = in_col_names.index(cname)
+                aggregate_node.agg_func.pop(c_ind)
+            in_col_names = list(aggregate_node.df_in_vars.keys())
+            continue
+
+        # output of multi-func cases (dict and tuple)
+
         # output name is a tuple for list of funcs in agg dict
-        # e.g. df.groupby("A").agg({"B": ["min", "max"]})
-        if isinstance(cname, tuple):
+        # e.g. df.groupby("A").agg({"B": ["min", "max"], "C": "sum"})
+        if isinstance(cname, tuple) and len(cname) > 1:
             c_ind = in_col_names.index(cname[0])
             cname = cname[1]
         else:
@@ -579,18 +594,27 @@ def remove_dead_aggregate(
             assert len(in_col_names) == 1, "invalid groupby multi-func case"
             c_ind = 0
 
-        # remove dead agg func from list
-        func_list = aggregate_node.agg_func[c_ind]
-        fnames = [f.fname for f in func_list]
+        # remove dead agg func
+        funcs = aggregate_node.agg_func[c_ind]
+
+        # input column has a single func
+        # e.g. "C" in df.groupby("A").agg({"B": ["min", "max"], "C": "sum"})
+        if not isinstance(funcs, list):
+            assert funcs.fname == cname
+            aggregate_node.agg_func.pop(c_ind)
+            aggregate_node.df_in_vars.pop(in_col_names[c_ind])
+            in_col_names = list(aggregate_node.df_in_vars.keys())
+            continue
+
+        fnames = [f.fname for f in funcs]
         assert cname in fnames, "invalid groupby multi-func output name"
         f_ind = fnames.index(cname)
-        aggregate_node.agg_func[c_ind] = func_list[:f_ind] + func_list[f_ind + 1 :]
-
-    # remove input column if all multi-func outputs are dead
-    if multi_func_dead and [] in aggregate_node.agg_func:
-        c_ind = aggregate_node.agg_func.index([])
-        aggregate_node.df_in_vars.pop(in_col_names[c_ind])
-        aggregate_node.agg_func.remove([])
+        funcs.pop(f_ind)  # remove dead agg func
+        # input column is dead if all its agg funcs are removed
+        if funcs == []:
+            aggregate_node.agg_func.pop(c_ind)
+            aggregate_node.df_in_vars.pop(in_col_names[c_ind])
+            in_col_names = list(aggregate_node.df_in_vars.keys())
 
     out_key_vars = aggregate_node.out_key_vars
     if out_key_vars is not None and all(v.name not in lives for v in out_key_vars):
@@ -1110,8 +1134,10 @@ def gen_update_cb(
     red_var_typs = udf_func_struct.var_typs
     n_red_vars = len(red_var_typs)
 
-    func_text = "def bodo_gb_udf_update_local{}(in_table, out_table, row_to_group):\n".format(
-        label_suffix
+    func_text = (
+        "def bodo_gb_udf_update_local{}(in_table, out_table, row_to_group):\n".format(
+            label_suffix
+        )
     )
     func_text += "    if is_null_pointer(in_table):\n"  # this is dummy call
     func_text += "        return\n"
@@ -1228,8 +1254,10 @@ def gen_combine_cb(udf_func_struct, allfuncs, n_keys, out_data_typs, label_suffi
     red_var_typs = udf_func_struct.var_typs
     n_red_vars = len(red_var_typs)
 
-    func_text = "def bodo_gb_udf_combine{}(in_table, out_table, row_to_group):\n".format(
-        label_suffix
+    func_text = (
+        "def bodo_gb_udf_combine{}(in_table, out_table, row_to_group):\n".format(
+            label_suffix
+        )
     )
     func_text += "    if is_null_pointer(in_table):\n"  # this is dummy call
     func_text += "        return\n"
@@ -1686,40 +1714,43 @@ def gen_top_level_agg_func(
         func_text += "    dispatch_table = arr_info_list_to_table([arr_info])\n"
         func_text += "    pivot_info = array_to_info(pivot_arr)\n"
         func_text += "    dispatch_info = arr_info_list_to_table([pivot_info])\n"
-        func_text += (
-            "    out_table = pivot_groupby_and_aggregate(table, {}, dispatch_table, dispatch_info, {},"
-            " ftypes.ctypes.data, func_offsets.ctypes.data, udf_ncols.ctypes.data, {}, {}, {}, {}, {}, cpp_cb_update_addr, cpp_cb_combine_addr, cpp_cb_eval_addr, udf_table_dummy)\n".format(
-                n_keys,
-                input_has_index,
-                parallel,
-                is_crosstab,
-                skipdropna,
-                return_key,
-                same_index,
-            )
+        func_text += "    out_table = pivot_groupby_and_aggregate(table, {}, dispatch_table, dispatch_info, {}," " ftypes.ctypes.data, func_offsets.ctypes.data, udf_ncols.ctypes.data, {}, {}, {}, {}, {}, cpp_cb_update_addr, cpp_cb_combine_addr, cpp_cb_eval_addr, udf_table_dummy)\n".format(
+            n_keys,
+            input_has_index,
+            parallel,
+            is_crosstab,
+            skipdropna,
+            return_key,
+            same_index,
         )
         func_text += "    delete_info_decref_array(pivot_info)\n"
         func_text += "    delete_info_decref_array(arr_info)\n"
     else:
-        func_text += (
-            "    out_table = groupby_and_aggregate(table, {}, {},"
-            " ftypes.ctypes.data, func_offsets.ctypes.data, udf_ncols.ctypes.data, {}, {}, {}, {}, cpp_cb_update_addr, cpp_cb_combine_addr, cpp_cb_eval_addr, udf_table_dummy)\n".format(
-                n_keys, input_has_index, parallel, skipdropna, return_key, same_index,
-            )
+        func_text += "    out_table = groupby_and_aggregate(table, {}, {}," " ftypes.ctypes.data, func_offsets.ctypes.data, udf_ncols.ctypes.data, {}, {}, {}, {}, cpp_cb_update_addr, cpp_cb_combine_addr, cpp_cb_eval_addr, udf_table_dummy)\n".format(
+            n_keys,
+            input_has_index,
+            parallel,
+            skipdropna,
+            return_key,
+            same_index,
         )
 
     key_names = ["key_" + name for name in key_names]
     idx = 0
     if return_key:
         for i, key_name in enumerate(key_names):
-            func_text += "    {} = info_to_array(info_from_table(out_table, {}), {})\n".format(
-                key_name, idx, key_name
+            func_text += (
+                "    {} = info_to_array(info_from_table(out_table, {}), {})\n".format(
+                    key_name, idx, key_name
+                )
             )
             idx += 1
     for i in range(len(out_names)):
         out_name = out_names[i]
-        func_text += "    {} = info_to_array(info_from_table(out_table, {}), {})\n".format(
-            out_name, idx, out_name + "_dummy"
+        func_text += (
+            "    {} = info_to_array(info_from_table(out_table, {}), {})\n".format(
+                out_name, idx, out_name + "_dummy"
+            )
         )
         idx += 1
     # The index as last argument in output as well.
