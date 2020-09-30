@@ -121,9 +121,6 @@ double quantile_sequential(void *data, int64_t local_size, double quantile,
 
 double quantile_parallel(void *data, int64_t local_size, int64_t total_size,
                          double quantile, int type_enum) {
-    int myrank, n_pes;
-    MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
-    MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
     if (total_size == 0)
         MPI_Allreduce(&local_size, &total_size, 1, MPI_LONG_LONG_INT, MPI_SUM,
                       MPI_COMM_WORLD);
@@ -876,7 +873,7 @@ array_info *compute_ghost_rows(array_info *arr, uint64_t const &level_next) {
         MPI_Waitall(ListReq.size(), ListReq.data(), MPI_STATUSES_IGNORE);
     }
 #ifdef DEBUG_GHOST_CODE
-    std::cout << "ghost information\n";
+    std::cout << "ghost_length=" << ghost_length << "\n";
     DEBUG_PrintColumn(std::cout, ghost_arr);
     std::cout << "EXITING THE compute_ghost_rows\n";
 #endif
@@ -927,8 +924,7 @@ void compute_series_monotonicity(double *res, array_info *arr, int64_t inc_dec,
     // We need to compute the ghost rows to conclude
     array_info *ghost_arr = compute_ghost_rows(arr, 1);
     int value_glob_tot, value_glob = 0;
-    if (ghost_arr->length > 0 &&
-        n_rows > 0) {  // It will be empty on the last node and maybe others.
+    if (ghost_arr->length > 0 && n_rows > 0) {  // It will be empty on the last node and maybe others.
         char *ptr1 = arr->data1 + siztype * (n_rows - 1);
         char *ptr2 = ghost_arr->data1;
         bool na_position = false;

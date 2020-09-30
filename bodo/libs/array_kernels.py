@@ -28,12 +28,6 @@ from bodo.hiframes.pd_categorical_ext import (
     init_categorical_array,
 )
 from bodo.hiframes.split_impl import string_array_split_view_type
-from bodo.ir.sort import (
-    alloc_pre_shuffle_metadata,
-    alltoallv_tup,
-    finalize_shuffle_meta,
-    update_shuffle_meta,
-)
 from bodo.libs import quantile_alg
 from bodo.libs.array import (
     arr_info_list_to_table,

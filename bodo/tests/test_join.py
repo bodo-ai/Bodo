@@ -1750,10 +1750,13 @@ def test_merge_index_column_how(memory_leak_check):
 
 def test_merge_partial_distributed(memory_leak_check):
     """Only one dataframe is distributed, the other fixed.
-    In that case in principle we do not need exchanges"""
+    In that case in principle we do not need shuffle exchanges.
+    However, in case of having say left table replicated and how='left',
+    we need to handle how the rows of the left table are matched.
+    """
 
     def test_impl(df1, df2):
-        df3 = df1.merge(df2, on="A")
+        df3 = df1.merge(df2, on="A", how='outer')
         return df3
 
     np.random.seed(5)
@@ -1774,7 +1777,7 @@ def test_merge_partial_distributed(memory_leak_check):
     )
     df3_pd = test_impl(df1, df2).sort_values(by=["A", "C", "D"]).reset_index(drop=True)
     if bodo.get_rank() == 0:
-        pd.testing.assert_frame_equal(df3_bodo2, df3_pd)
+        pd.testing.assert_frame_equal(df3_bodo2, df3_pd, check_dtype=False)
 
 
 def _gen_df_rand_col_names():

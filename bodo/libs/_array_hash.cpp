@@ -1,9 +1,9 @@
 // Copyright (C) 2019 Bodo Inc. All rights reserved.
+#include "_array_hash.h"
 #include <arrow/api.h>
+#include "_array_utils.h"
 #include "_bodo_common.h"
 #include "_murmurhash3.h"
-#include "_array_utils.h"
-#include "_array_hash.h"
 
 #undef DEBUG_HASH
 
@@ -63,25 +63,23 @@ static void combine_hash_array_list_string(uint32_t* out_hashes, char* data,
         uint32_t len2 = end_index_offset - start_index_offset;
         // This vectors encodes the length of the strings
         std::vector<char> V(len2);
-        // This vector encodes the bitmask of the strings and the bitmask of the list itself
-        std::vector<char> V2(len2+1);
+        // This vector encodes the bitmask of the strings and the bitmask of the
+        // list itself
+        std::vector<char> V2(len2 + 1);
         for (size_t j = 0; j < len2; j++) {
             uint32_t n_chars = data_offsets[start_index_offset + j + 1] -
                                data_offsets[start_index_offset + j];
             V[j] = (char)n_chars;
-            V2[j+1] = GetBit(sub_null_bitmask, start_index_offset + j);
+            V2[j + 1] = GetBit(sub_null_bitmask, start_index_offset + j);
         }
         hash_string_32(V.data(), (const int)len2, hash1, &hash2);
         // Third the hash from whether it is missing or not
         V2[0] = GetBit(null_bitmask, i);
-        hash_string_32(V2.data(), len2+1, hash2, &hash3);
+        hash_string_32(V2.data(), len2 + 1, hash2, &hash3);
         out_hashes[i] = hash3;
         start_index_offset = end_index_offset;
     }
 }
-
-
-
 
 /**
  * Computation of the hashes for the case of list of strings array column.
@@ -104,8 +102,7 @@ static void hash_array_list_string(uint32_t* out_hashes, char* data,
                                    uint32_t* data_offsets,
                                    uint32_t* index_offsets,
                                    uint8_t* null_bitmask,
-                                   uint8_t* sub_null_bitmask,
-                                   size_t n_rows,
+                                   uint8_t* sub_null_bitmask, size_t n_rows,
                                    const uint32_t seed) {
     uint32_t start_index_offset = 0;
     for (size_t i = 0; i < n_rows; i++) {
@@ -122,18 +119,19 @@ static void hash_array_list_string(uint32_t* out_hashes, char* data,
         uint32_t len2 = end_index_offset - start_index_offset;
         // This vectors encodes the length of the strings
         std::vector<char> V(len2);
-        // This vector encodes the bitmask of the strings and the bitmask of the list itself
-        std::vector<char> V2(len2+1);
+        // This vector encodes the bitmask of the strings and the bitmask of the
+        // list itself
+        std::vector<char> V2(len2 + 1);
         for (size_t j = 0; j < len2; j++) {
             uint32_t n_chars = data_offsets[start_index_offset + j + 1] -
                                data_offsets[start_index_offset + j];
             V[j] = (char)n_chars;
-            V2[j+1] = GetBit(sub_null_bitmask, start_index_offset + j);
+            V2[j + 1] = GetBit(sub_null_bitmask, start_index_offset + j);
         }
         hash_string_32(V.data(), (const int)len2, hash1, &hash2);
         // Third the hash from whether it is missing or not
         V2[0] = GetBit(null_bitmask, i);
-        hash_string_32(V2.data(), len2+1, hash2, &hash3);
+        hash_string_32(V2.data(), len2 + 1, hash2, &hash3);
         out_hashes[i] = hash3;
         start_index_offset = end_index_offset;
     }
@@ -316,8 +314,10 @@ void hash_arrow_array(uint32_t* out_hashes,
     } else {
         auto primitive_array =
             std::dynamic_pointer_cast<arrow::PrimitiveArray>(input_array);
-        apply_arrow_numeric_hash(out_hashes, list_offsets, n_rows, primitive_array);
-        apply_arrow_bitmask_hash(out_hashes, list_offsets, n_rows, primitive_array);
+        apply_arrow_numeric_hash(out_hashes, list_offsets, n_rows,
+                                 primitive_array);
+        apply_arrow_bitmask_hash(out_hashes, list_offsets, n_rows,
+                                 primitive_array);
     }
 }
 
@@ -341,6 +341,17 @@ void hash_array(uint32_t* out_hashes, array_info* array, size_t n_rows,
         for (uint32_t i = 0; i <= n_rows; i++) list_offsets[i] = i;
         for (uint32_t i = 0; i < n_rows; i++) out_hashes[i] = seed;
         return hash_arrow_array(out_hashes, list_offsets, n_rows, array->array);
+    }
+    if (array->arr_type == bodo_array_type::STRING) {
+        return hash_array_string(out_hashes, (char*)array->data1,
+                                 (uint32_t*)array->data2,
+                                 (uint8_t*)array->null_bitmask, n_rows, seed);
+    }
+    if (array->arr_type == bodo_array_type::LIST_STRING) {
+        return hash_array_list_string(
+            out_hashes, (char*)array->data1, (uint32_t*)array->data2,
+            (uint32_t*)array->data3, (uint8_t*)array->null_bitmask,
+            (uint8_t*)array->sub_null_bitmask, n_rows, seed);
     }
     if (array->dtype == Bodo_CTypes::_BOOL) {
         return hash_array_inner<bool>(out_hashes, (bool*)array->data1, n_rows,
@@ -395,17 +406,6 @@ void hash_array(uint32_t* out_hashes, array_info* array, size_t n_rows,
     if (array->dtype == Bodo_CTypes::FLOAT64) {
         return hash_array_inner<double>(out_hashes, (double*)array->data1,
                                         n_rows, seed);
-    }
-    if (array->arr_type == bodo_array_type::STRING) {
-        return hash_array_string(out_hashes, (char*)array->data1,
-                                 (uint32_t*)array->data2,
-                                 (uint8_t*)array->null_bitmask, n_rows, seed);
-    }
-    if (array->arr_type == bodo_array_type::LIST_STRING) {
-        return hash_array_list_string(
-            out_hashes, (char*)array->data1, (uint32_t*)array->data2,
-            (uint32_t*)array->data3, (uint8_t*)array->null_bitmask,
-            (uint8_t*)array->sub_null_bitmask, n_rows, seed);
     }
     Bodo_PyErr_SetString(PyExc_RuntimeError, "Invalid data type for hash");
 }
@@ -514,6 +514,392 @@ static void hash_array_combine(uint32_t* out_hashes, array_info* array,
                          "Invalid data type for hash combine");
 }
 
+template <typename T>
+typename std::enable_if<std::is_floating_point<T>::value, double>::type
+get_value(T val) {
+    if (isnan(val))  // I wrote that because I am not sure nan have unique
+                     // binary representation
+        return std::nan("");
+    return val;
+}
+
+template <typename T>
+typename std::enable_if<!std::is_floating_point<T>::value, double>::type
+get_value(T val) {
+    return val;
+}
+
+template <typename T>
+void coherent_hash_array_inner_uint64(uint32_t* out_hashes, array_info* array,
+                                      size_t n_rows, const uint32_t seed) {
+    T* data = (T*)array->data1;
+    if (array->arr_type == bodo_array_type::NUMPY) {
+        for (size_t i = 0; i < n_rows; i++) {
+            uint64_t val = data[i];
+            hash_inner_32<uint64_t>(&val, seed, &out_hashes[i]);
+        }
+    } else {  // We are in NULLABLE_INT_BOOL
+        uint8_t* null_bitmask = (uint8_t*)array->null_bitmask;
+        for (size_t i = 0; i < n_rows; i++) {
+            uint64_t val = data[i];
+            hash_inner_32<uint64_t>(&val, seed, &out_hashes[i]);
+            if (!GetBit(null_bitmask, i)) out_hashes[i]++;
+        }
+    }
+}
+
+template <typename T>
+void coherent_hash_array_inner_int64(uint32_t* out_hashes, array_info* array,
+                                     size_t n_rows, const uint32_t seed) {
+    T* data = (T*)array->data1;
+    if (array->arr_type == bodo_array_type::NUMPY) {
+        for (size_t i = 0; i < n_rows; i++) {
+            int64_t val = data[i];
+            hash_inner_32<int64_t>(&val, seed, &out_hashes[i]);
+            // For numpy, all entries are true, no need to increment.
+        }
+    } else {  // We are in NULLABLE_INT_BOOL
+        uint8_t* null_bitmask = (uint8_t*)array->null_bitmask;
+        for (size_t i = 0; i < n_rows; i++) {
+            int64_t val = data[i];
+            hash_inner_32<int64_t>(&val, seed, &out_hashes[i]);
+            if (!GetBit(null_bitmask, i)) out_hashes[i]++;
+        }
+    }
+}
+
+template <typename T>
+void coherent_hash_array_inner_double(uint32_t* out_hashes, array_info* array,
+                                      size_t n_rows, const uint32_t seed) {
+    T* data = (T*)array->data1;
+    if (array->arr_type == bodo_array_type::NUMPY) {
+        for (size_t i = 0; i < n_rows; i++) {
+            double val = get_value(data[i]);
+            hash_inner_32<double>(&val, seed, &out_hashes[i]);
+        }
+    } else {  // We are in NULLABLE_INT_BOOL
+        uint8_t* null_bitmask = (uint8_t*)array->null_bitmask;
+        for (size_t i = 0; i < n_rows; i++) {
+            bool bit = GetBit(null_bitmask, i);
+            double val;
+            if (bit)
+                val = get_value(data[i]);
+            else
+                val = std::nan("");
+            hash_inner_32<double>(&val, seed, &out_hashes[i]);
+        }
+    }
+}
+
+void coherent_hash_array(uint32_t* out_hashes, array_info* array,
+                         array_info* ref_array, size_t n_rows,
+                         const uint32_t seed) {
+    // For those types, no type conversion is ever needed.
+    if (array->arr_type == bodo_array_type::ARROW ||
+        array->arr_type == bodo_array_type::STRING ||
+        array->arr_type == bodo_array_type::LIST_STRING) {
+        return hash_array(out_hashes, array, n_rows, seed);
+    }
+    // Now we are in NUMPY / NULLABLE_INT_BOOL. Getting into hot waters.
+    // For DATE / DATETIME / TIMEDELTA / DECIMAL no type conversion is allowed
+    if (array->dtype == Bodo_CTypes::DATE ||
+        array->dtype == Bodo_CTypes::DATETIME ||
+        array->dtype == Bodo_CTypes::TIMEDELTA ||
+        array->dtype == Bodo_CTypes::DECIMAL ||
+        array->dtype == Bodo_CTypes::_BOOL) {
+        return hash_array(out_hashes, array, n_rows, seed);
+    }
+    // If we have the same type on left or right then no need
+    if (array->arr_type == ref_array->arr_type ||
+        array->dtype == ref_array->dtype) {
+        return hash_array(out_hashes, array, n_rows, seed);
+    }
+    // If both are unsigned int, we convert to uint64_t
+    if (is_unsigned_integer(array->dtype) &&
+        is_unsigned_integer(ref_array->dtype)) {
+        if (array->dtype == Bodo_CTypes::UINT8)
+            return coherent_hash_array_inner_uint64<uint8_t>(out_hashes, array,
+                                                             n_rows, seed);
+        if (array->dtype == Bodo_CTypes::UINT16)
+            return coherent_hash_array_inner_uint64<uint16_t>(out_hashes, array,
+                                                              n_rows, seed);
+        if (array->dtype == Bodo_CTypes::UINT32)
+            return coherent_hash_array_inner_uint64<uint32_t>(out_hashes, array,
+                                                              n_rows, seed);
+        if (array->dtype == Bodo_CTypes::UINT64)
+            return coherent_hash_array_inner_uint64<uint64_t>(out_hashes, array,
+                                                              n_rows, seed);
+    }
+    // If both are integer (signed or unsigned), we convert to int64_t
+    if (is_integer(array->dtype) && is_integer(ref_array->dtype)) {
+        if (array->dtype == Bodo_CTypes::UINT8)
+            return coherent_hash_array_inner_int64<uint8_t>(out_hashes, array,
+                                                            n_rows, seed);
+        if (array->dtype == Bodo_CTypes::UINT16)
+            return coherent_hash_array_inner_int64<uint16_t>(out_hashes, array,
+                                                             n_rows, seed);
+        if (array->dtype == Bodo_CTypes::UINT32)
+            return coherent_hash_array_inner_int64<uint32_t>(out_hashes, array,
+                                                             n_rows, seed);
+        if (array->dtype == Bodo_CTypes::UINT64)
+            return coherent_hash_array_inner_int64<uint64_t>(out_hashes, array,
+                                                             n_rows, seed);
+        if (array->dtype == Bodo_CTypes::INT8)
+            return coherent_hash_array_inner_int64<int8_t>(out_hashes, array,
+                                                           n_rows, seed);
+        if (array->dtype == Bodo_CTypes::INT16)
+            return coherent_hash_array_inner_int64<int16_t>(out_hashes, array,
+                                                            n_rows, seed);
+        if (array->dtype == Bodo_CTypes::INT32)
+            return coherent_hash_array_inner_int64<int32_t>(out_hashes, array,
+                                                            n_rows, seed);
+        if (array->dtype == Bodo_CTypes::INT64)
+            return coherent_hash_array_inner_int64<int64_t>(out_hashes, array,
+                                                            n_rows, seed);
+    }
+    // In all other cases, we convert to double
+    if (array->dtype == Bodo_CTypes::UINT8)
+        return coherent_hash_array_inner_double<uint8_t>(out_hashes, array,
+                                                         n_rows, seed);
+    if (array->dtype == Bodo_CTypes::UINT16)
+        return coherent_hash_array_inner_double<uint16_t>(out_hashes, array,
+                                                          n_rows, seed);
+    if (array->dtype == Bodo_CTypes::UINT32)
+        return coherent_hash_array_inner_double<uint32_t>(out_hashes, array,
+                                                          n_rows, seed);
+    if (array->dtype == Bodo_CTypes::UINT64)
+        return coherent_hash_array_inner_double<uint64_t>(out_hashes, array,
+                                                          n_rows, seed);
+    if (array->dtype == Bodo_CTypes::INT8)
+        return coherent_hash_array_inner_double<int8_t>(out_hashes, array,
+                                                        n_rows, seed);
+    if (array->dtype == Bodo_CTypes::INT16)
+        return coherent_hash_array_inner_double<int16_t>(out_hashes, array,
+                                                         n_rows, seed);
+    if (array->dtype == Bodo_CTypes::INT32)
+        return coherent_hash_array_inner_double<int32_t>(out_hashes, array,
+                                                         n_rows, seed);
+    if (array->dtype == Bodo_CTypes::INT64)
+        return coherent_hash_array_inner_double<int64_t>(out_hashes, array,
+                                                         n_rows, seed);
+    if (array->dtype == Bodo_CTypes::FLOAT32)
+        return coherent_hash_array_inner_double<float>(out_hashes, array,
+                                                       n_rows, seed);
+    if (array->dtype == Bodo_CTypes::FLOAT64)
+        return coherent_hash_array_inner_double<double>(out_hashes, array,
+                                                        n_rows, seed);
+}
+
+template <typename T>
+void coherent_hash_array_combine_inner_uint64(uint32_t* out_hashes,
+                                              array_info* array, size_t n_rows,
+                                              const uint32_t seed) {
+    T* data = (T*)array->data1;
+    uint32_t out_hash;
+    if (array->arr_type == bodo_array_type::NUMPY) {
+        for (size_t i = 0; i < n_rows; i++) {
+            uint64_t val = data[i];
+            hash_inner_32<uint64_t>(&val, seed, &out_hash);
+            out_hashes[i] ^= out_hash + 0x9e3779b9 + (out_hashes[i] << 6) +
+                             (out_hashes[i] >> 2);
+        }
+    } else {  // We are in NULLABLE_INT_BOOL
+        uint8_t* null_bitmask = (uint8_t*)array->null_bitmask;
+        for (size_t i = 0; i < n_rows; i++) {
+            uint64_t val = data[i];
+            hash_inner_32<uint64_t>(&val, seed, &out_hash);
+            if (!GetBit(null_bitmask, i)) out_hash++;
+            out_hashes[i] ^= out_hash + 0x9e3779b9 + (out_hashes[i] << 6) +
+                             (out_hashes[i] >> 2);
+        }
+    }
+}
+
+template <typename T>
+void coherent_hash_array_combine_inner_int64(uint32_t* out_hashes,
+                                             array_info* array, size_t n_rows,
+                                             const uint32_t seed) {
+    T* data = (T*)array->data1;
+    uint32_t out_hash;
+    if (array->arr_type == bodo_array_type::NUMPY) {
+        for (size_t i = 0; i < n_rows; i++) {
+            int64_t val = data[i];
+            hash_inner_32<int64_t>(&val, seed, &out_hash);
+            // For numpy, all entries are true, no need to increment.
+            out_hashes[i] ^= out_hash + 0x9e3779b9 + (out_hashes[i] << 6) +
+                             (out_hashes[i] >> 2);
+        }
+    } else {  // We are in NULLABLE_INT_BOOL
+        uint8_t* null_bitmask = (uint8_t*)array->null_bitmask;
+        for (size_t i = 0; i < n_rows; i++) {
+            int64_t val = data[i];
+            hash_inner_32<int64_t>(&val, seed, &out_hash);
+            if (!GetBit(null_bitmask, i)) out_hash++;
+            out_hashes[i] ^= out_hash + 0x9e3779b9 + (out_hashes[i] << 6) +
+                             (out_hashes[i] >> 2);
+        }
+    }
+}
+
+template <typename T>
+void coherent_hash_array_combine_inner_double(uint32_t* out_hashes,
+                                              array_info* array, size_t n_rows,
+                                              const uint32_t seed) {
+    T* data = (T*)array->data1;
+    uint32_t out_hash;
+    if (array->arr_type == bodo_array_type::NUMPY) {
+        uint32_t out_hash;
+        for (size_t i = 0; i < n_rows; i++) {
+            double val = get_value(data[i]);
+            hash_inner_32<double>(&val, seed, &out_hash);
+            out_hashes[i] ^= out_hash + 0x9e3779b9 + (out_hashes[i] << 6) +
+                             (out_hashes[i] >> 2);
+        }
+    } else {  // We are in NULLABLE_INT_BOOL
+        uint8_t* null_bitmask = (uint8_t*)array->null_bitmask;
+        for (size_t i = 0; i < n_rows; i++) {
+            bool bit = GetBit(null_bitmask, i);
+            double val;
+            if (bit)
+                val = get_value(data[i]);
+            else
+                val = std::nan("");
+            hash_inner_32<double>(&val, seed, &out_hash);
+            out_hashes[i] ^= out_hash + 0x9e3779b9 + (out_hashes[i] << 6) +
+                             (out_hashes[i] >> 2);
+        }
+    }
+}
+
+void coherent_hash_array_combine(uint32_t* out_hashes, array_info* array,
+                                 array_info* ref_array, size_t n_rows,
+                                 const uint32_t seed) {
+    // For those types, no type conversion is ever needed.
+    if (array->arr_type == bodo_array_type::ARROW ||
+        array->arr_type == bodo_array_type::STRING ||
+        array->arr_type == bodo_array_type::LIST_STRING) {
+        return hash_array_combine(out_hashes, array, n_rows, seed);
+    }
+    // Now we are in NUMPY / NULLABLE_INT_BOOL. Getting into hot waters.
+    // For DATE / DATETIME / TIMEDELTA / DECIMAL no type conversion is allowed
+    if (array->dtype == Bodo_CTypes::DATE ||
+        array->dtype == Bodo_CTypes::DATETIME ||
+        array->dtype == Bodo_CTypes::TIMEDELTA ||
+        array->dtype == Bodo_CTypes::DECIMAL ||
+        array->dtype == Bodo_CTypes::_BOOL) {
+        return hash_array_combine(out_hashes, array, n_rows, seed);
+    }
+    // If we have the same type on left or right then no need
+    if (array->arr_type == ref_array->arr_type ||
+        array->dtype == ref_array->dtype) {
+        return hash_array_combine(out_hashes, array, n_rows, seed);
+    }
+    // If both are unsigned int, we convert to uint64_t
+    if (is_unsigned_integer(array->dtype) &&
+        is_unsigned_integer(ref_array->dtype)) {
+        if (array->dtype == Bodo_CTypes::UINT8)
+            return coherent_hash_array_combine_inner_uint64<uint8_t>(
+                out_hashes, array, n_rows, seed);
+        if (array->dtype == Bodo_CTypes::UINT16)
+            return coherent_hash_array_combine_inner_uint64<uint16_t>(
+                out_hashes, array, n_rows, seed);
+        if (array->dtype == Bodo_CTypes::UINT32)
+            return coherent_hash_array_combine_inner_uint64<uint32_t>(
+                out_hashes, array, n_rows, seed);
+        if (array->dtype == Bodo_CTypes::UINT64)
+            return coherent_hash_array_combine_inner_uint64<uint64_t>(
+                out_hashes, array, n_rows, seed);
+    }
+    // If both are integer (signed or unsigned), we convert to int64_t
+    if (is_integer(array->dtype) && is_integer(ref_array->dtype)) {
+        if (array->dtype == Bodo_CTypes::UINT8)
+            return coherent_hash_array_combine_inner_int64<uint8_t>(
+                out_hashes, array, n_rows, seed);
+        if (array->dtype == Bodo_CTypes::UINT16)
+            return coherent_hash_array_combine_inner_int64<uint16_t>(
+                out_hashes, array, n_rows, seed);
+        if (array->dtype == Bodo_CTypes::UINT32)
+            return coherent_hash_array_combine_inner_int64<uint32_t>(
+                out_hashes, array, n_rows, seed);
+        if (array->dtype == Bodo_CTypes::UINT64)
+            return coherent_hash_array_combine_inner_int64<uint64_t>(
+                out_hashes, array, n_rows, seed);
+        if (array->dtype == Bodo_CTypes::INT8)
+            return coherent_hash_array_combine_inner_int64<int8_t>(
+                out_hashes, array, n_rows, seed);
+        if (array->dtype == Bodo_CTypes::INT16)
+            return coherent_hash_array_combine_inner_int64<int16_t>(
+                out_hashes, array, n_rows, seed);
+        if (array->dtype == Bodo_CTypes::INT32)
+            return coherent_hash_array_combine_inner_int64<int32_t>(
+                out_hashes, array, n_rows, seed);
+        if (array->dtype == Bodo_CTypes::INT64)
+            return coherent_hash_array_combine_inner_int64<int64_t>(
+                out_hashes, array, n_rows, seed);
+    }
+    // In all other cases, we convert to double
+    if (array->dtype == Bodo_CTypes::UINT8)
+        return coherent_hash_array_combine_inner_double<uint8_t>(
+            out_hashes, array, n_rows, seed);
+    if (array->dtype == Bodo_CTypes::UINT16)
+        return coherent_hash_array_combine_inner_double<uint16_t>(
+            out_hashes, array, n_rows, seed);
+    if (array->dtype == Bodo_CTypes::UINT32)
+        return coherent_hash_array_combine_inner_double<uint32_t>(
+            out_hashes, array, n_rows, seed);
+    if (array->dtype == Bodo_CTypes::UINT64)
+        return coherent_hash_array_combine_inner_double<uint64_t>(
+            out_hashes, array, n_rows, seed);
+    if (array->dtype == Bodo_CTypes::INT8)
+        return coherent_hash_array_combine_inner_double<int8_t>(
+            out_hashes, array, n_rows, seed);
+    if (array->dtype == Bodo_CTypes::INT16)
+        return coherent_hash_array_combine_inner_double<int16_t>(
+            out_hashes, array, n_rows, seed);
+    if (array->dtype == Bodo_CTypes::INT32)
+        return coherent_hash_array_combine_inner_double<int32_t>(
+            out_hashes, array, n_rows, seed);
+    if (array->dtype == Bodo_CTypes::INT64)
+        return coherent_hash_array_combine_inner_double<int64_t>(
+            out_hashes, array, n_rows, seed);
+    if (array->dtype == Bodo_CTypes::FLOAT32)
+        return coherent_hash_array_combine_inner_double<float>(
+            out_hashes, array, n_rows, seed);
+    if (array->dtype == Bodo_CTypes::FLOAT64)
+        return coherent_hash_array_combine_inner_double<double>(
+            out_hashes, array, n_rows, seed);
+}
+
+/* The coherent_hash_keys is for computing hashes for join computation.
+   What can happen is that columns have different type but we need to have
+   coherent hash.
+   ---
+   Examples of pairs of type that we need to support
+   1) uint8_t / uint32_t
+   2) int8_t / uint32_t
+   3) int32_t / float32
+   4) nullable int16_t / double
+   and to have coherent hashes on both sides.
+   ---
+   @param key_arrs: the keys for which we want the hash
+   @param ref_key_arrs: the keys on the other side. Used only for their
+   arr_type/dtype
+   @param seed: the seed used as input
+   @return returning the list of hashes.
+ */
+uint32_t* coherent_hash_keys(std::vector<array_info*> const& key_arrs,
+                             std::vector<array_info*> const& ref_key_arrs,
+                             const uint32_t seed) {
+    size_t n_rows = (size_t)key_arrs[0]->length;
+    uint32_t* hashes = new uint32_t[n_rows];
+    coherent_hash_array(hashes, key_arrs[0], ref_key_arrs[0], n_rows, seed);
+    for (size_t i = 1; i < key_arrs.size(); i++) {
+        coherent_hash_array_combine(hashes, key_arrs[i], ref_key_arrs[i],
+                                    n_rows, seed);
+    }
+    return hashes;
+}
+
 uint32_t* hash_keys(std::vector<array_info*> const& key_arrs,
                     const uint32_t seed) {
 #ifdef DEBUG_HASH
@@ -530,8 +916,9 @@ uint32_t* hash_keys(std::vector<array_info*> const& key_arrs,
         hash_array_combine(hashes, key_arrs[i], n_rows, seed);
     }
 #ifdef DEBUG_HASH
-    for (size_t i_row=0; i_row<n_rows; i_row++)
-      std::cout << "hash_keys : i_row=" << i_row << " hash=" << hashes[i_row] << "\n";
+    for (size_t i_row = 0; i_row < n_rows; i_row++)
+        std::cout << "hash_keys : i_row=" << i_row << " hash=" << hashes[i_row]
+                  << "\n";
     std::cout << "Ending of hash_keys\n";
 #endif
     return hashes;

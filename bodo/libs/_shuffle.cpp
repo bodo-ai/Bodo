@@ -1368,11 +1368,38 @@ table_info* shuffle_table(table_info* in_table, int64_t n_keys) {
 #endif
     mpi_comm_info comm_info(in_table->columns);
     // computing the hash data structure
-    std::vector<array_info*> key_arrs = std::vector<array_info*>(
-        in_table->columns.begin(), in_table->columns.begin() + n_keys);
-    uint32_t seed = SEED_HASH_PARTITION;
-    uint32_t* hashes = hash_keys(key_arrs, seed);
+    uint32_t* hashes = hash_keys_table(in_table, n_keys, SEED_HASH_PARTITION);
+    comm_info.set_counts(hashes);
 
+    table_info* table = shuffle_table_kernel(in_table, hashes, comm_info);
+    delete[] hashes;
+#ifdef DEBUG_SHUFFLE
+    std::cout << "RET_TABLE (SHUFFLE):\n";
+    DEBUG_PrintSetOfColumn(std::cout, table->columns);
+    DEBUG_PrintRefct(std::cout, table->columns);
+    std::cout << "After the print statements\n";
+#endif
+    return table;
+}
+
+table_info* coherent_shuffle_table(table_info* in_table, table_info* ref_table,
+                                   int64_t n_keys) {
+    // error checking
+    if (in_table->ncols() <= 0 || n_keys <= 0) {
+        Bodo_PyErr_SetString(PyExc_RuntimeError, "Invalid input shuffle table");
+        return NULL;
+    }
+#ifdef DEBUG_SHUFFLE
+    std::cout << "IN_TABLE (COHERENT SHUFFLE):\n";
+    DEBUG_PrintSetOfColumn(std::cout, in_table->columns);
+    DEBUG_PrintRefct(std::cout, in_table->columns);
+    std::cout << "REF_TABLE (COHERENT SHUFFLE):\n";
+    DEBUG_PrintRefct(std::cout, ref_table->columns);
+#endif
+    mpi_comm_info comm_info(in_table->columns);
+    // computing the hash data structure
+    uint32_t* hashes = coherent_hash_keys_table(in_table, ref_table, n_keys,
+                                                SEED_HASH_PARTITION);
     comm_info.set_counts(hashes);
     table_info* table = shuffle_table_kernel(in_table, hashes, comm_info);
     delete[] hashes;
@@ -1988,7 +2015,7 @@ std::shared_ptr<arrow::Array> gather_arrow_array(
     }
 }
 
-table_info* gather_table(table_info* in_table, size_t n_cols, bool all_gather) {
+table_info* gather_table(table_info* in_table, int64_t n_cols_i, bool all_gather) {
 #ifdef DEBUG_GATHER
     std::cout << "INPUT of gather_table. in_table=\n";
     DEBUG_PrintSetOfColumn(std::cout, in_table->columns);
@@ -1999,6 +2026,11 @@ table_info* gather_table(table_info* in_table, size_t n_cols, bool all_gather) {
     MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
     std::vector<array_info*> out_arrs;
+    size_t n_cols;
+    if (n_cols_i == -1)
+        n_cols = in_table->ncols();
+    else
+        n_cols = n_cols_i;
     for (size_t i_col = 0; i_col < n_cols; i_col++) {
         int64_t arr_gath_s[3];
         array_info* in_arr = in_table->columns[i_col];
@@ -2132,7 +2164,7 @@ table_info* gather_table(table_info* in_table, size_t n_cols, bool all_gather) {
                 n_sub_bytes_count.begin(), n_sub_bytes_count.end(), 0);
             std::vector<uint8_t> V(n_sub_bytes_tot, 0);
             uint8_t* sub_null_bitmask_i = (uint8_t*)in_arr->sub_null_bitmask;
-            int n_bytes = (n_rows + 7) >> 3;
+            int n_bytes = (n_sub_elems + 7) >> 3;
             MPI_Gengatherv(sub_null_bitmask_i, n_bytes, mpi_typ8, V.data(),
                            n_sub_bytes_count.data(), n_sub_bytes_disp.data(),
                            mpi_typ8, mpi_root, MPI_COMM_WORLD, all_gather);
@@ -2260,10 +2292,7 @@ table_info* gather_table(table_info* in_table, size_t n_cols, bool all_gather) {
 table_info* compute_node_partition_by_hash(table_info* in_table, int64_t n_keys,
                                            int64_t n_pes) {
     int64_t n_rows = in_table->nrows();
-    std::vector<array_info*> key_arrs = std::vector<array_info*>(
-        in_table->columns.begin(), in_table->columns.begin() + n_keys);
-    uint32_t seed = SEED_HASH_PARTITION;
-    uint32_t* hashes = hash_keys(key_arrs, seed);
+    uint32_t* hashes = hash_keys_table(in_table, n_keys, SEED_HASH_PARTITION);
 
     std::vector<array_info*> out_arrs;
     array_info* out_arr = alloc_array(n_rows, -1, -1, bodo_array_type::NUMPY,

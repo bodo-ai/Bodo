@@ -66,6 +66,17 @@ struct mpi_comm_info {
 table_info* shuffle_table(table_info* in_table, int64_t n_keys);
 
 /** Shuffling a table from all nodes to all the other nodes.
+ *  obtained by hashes. For different tables, hashes have to be coherent
+ *
+ * @param in_table : the input table.
+ * @param ref_table : the other table with which we need coherent hashes
+ * @param n_keys   : the number of keys for comparison.
+ * @return the new table after the shuffling-
+ */
+table_info* coherent_shuffle_table(table_info* in_table, table_info* ref_table,
+                                   int64_t n_keys);
+
+/** Shuffling a table from all nodes to all the other nodes.
  *
  * @param in_table     : the input table.
  * @param hashes       : the array containing the values to be
@@ -104,11 +115,13 @@ table_info* broadcast_table(table_info* ref_table, table_info* in_table,
  *
  * @param in_table     : the input table.
  * @param n_cols       : the number of columns of the keys.
+ *     If -1 then all columns are used. Otherwise, the first n_cols_i columns are gather.
  * @param all_gather   : Whether to do all_gather or not.
  * @return the table obtained by concatenating the tables
  *         on the node 0.
  */
-table_info* gather_table(table_info* in_table, size_t n_cols, bool all_gather);
+table_info* gather_table(table_info* in_table, int64_t n_cols_i,
+                         bool all_gather);
 
 /** Getting the computing node on which a row belongs to
  *

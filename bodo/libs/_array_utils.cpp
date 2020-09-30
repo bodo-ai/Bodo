@@ -386,10 +386,9 @@ array_info* RetrieveArray_SingleColumn_arr(array_info* in_arr,
 }
 
 array_info* RetrieveArray_TwoColumns(
-    table_info* const& in_table,
+    array_info* const& arr1, array_info* const& arr2,
     std::vector<std::pair<std::ptrdiff_t, std::ptrdiff_t>> const& ListPairWrite,
-    size_t const& shift1, size_t const& shift2, int const& ChoiceColumn,
-    bool const& map_integer_type) {
+    int const& ChoiceColumn, bool const& map_integer_type) {
     size_t nRowOut = ListPairWrite.size();
 #ifdef DEBUG_RETRIEVE
     std::cout << "nRowOut=" << nRowOut << "\n";
@@ -403,23 +402,22 @@ array_info* RetrieveArray_TwoColumns(
      * @return the pair (column,row) to be used.
      */
     auto get_iRow =
-        [&](size_t const& iRowIn) -> std::pair<size_t, std::ptrdiff_t> {
+        [&](size_t const& iRowIn) -> std::pair<array_info*, std::ptrdiff_t> {
         std::pair<std::ptrdiff_t, std::ptrdiff_t> pairLRcolumn =
             ListPairWrite[iRowIn];
-        if (ChoiceColumn == 0) return {shift1, pairLRcolumn.first};
-        if (ChoiceColumn == 1) return {shift2, pairLRcolumn.second};
-        if (pairLRcolumn.first != -1) return {shift1, pairLRcolumn.first};
-        return {shift2, pairLRcolumn.second};
+        if (ChoiceColumn == 0) return {arr1, pairLRcolumn.first};
+        if (ChoiceColumn == 1) return {arr2, pairLRcolumn.second};
+        if (pairLRcolumn.first != -1) return {arr1, pairLRcolumn.first};
+        return {arr2, pairLRcolumn.second};
     };
     // eshift is the in_table index used for the determination
     // of arr_type and dtype of the returned column.
-    size_t eshift;
-    if (ChoiceColumn == 0) eshift = shift1;
-    if (ChoiceColumn == 1) eshift = shift2;
-    if (ChoiceColumn == 2) eshift = shift1;
-    bodo_array_type::arr_type_enum arr_type =
-        in_table->columns[eshift]->arr_type;
-    Bodo_CTypes::CTypeEnum dtype = in_table->columns[eshift]->dtype;
+    array_info* ref_column = nullptr;
+    if (ChoiceColumn == 0) ref_column = arr1;
+    if (ChoiceColumn == 1) ref_column = arr2;
+    if (ChoiceColumn == 2) ref_column = arr1;
+    bodo_array_type::arr_type_enum arr_type = ref_column->arr_type;
+    Bodo_CTypes::CTypeEnum dtype = ref_column->dtype;
     if (arr_type == bodo_array_type::LIST_STRING) {
 #ifdef DEBUG_RETRIEVE
         std::cout << "Case of LIST_STRING\n";
@@ -433,18 +431,14 @@ array_info* RetrieveArray_TwoColumns(
         int64_t tot_size_index = 0;
         int64_t tot_size_data = 0;
         for (size_t iRow = 0; iRow < nRowOut; iRow++) {
-            std::pair<size_t, std::ptrdiff_t> pairShiftRow = get_iRow(iRow);
+            std::pair<array_info*, std::ptrdiff_t> ArrRow = get_iRow(iRow);
             uint32_t size_index = 0;
             uint32_t size_data = 0;
-            if (pairShiftRow.second >= 0) {
-                uint32_t* index_offsets =
-                    (uint32_t*)in_table->columns[pairShiftRow.first]->data3;
-                uint32_t* data_offsets =
-                    (uint32_t*)in_table->columns[pairShiftRow.first]->data2;
-                uint32_t start_offset_index =
-                    index_offsets[pairShiftRow.second];
-                uint32_t end_offset_index =
-                    index_offsets[pairShiftRow.second + 1];
+            if (ArrRow.second >= 0) {
+                uint32_t* index_offsets = (uint32_t*)ArrRow.first->data3;
+                uint32_t* data_offsets = (uint32_t*)ArrRow.first->data2;
+                uint32_t start_offset_index = index_offsets[ArrRow.second];
+                uint32_t end_offset_index = index_offsets[ArrRow.second + 1];
                 size_index = end_offset_index - start_offset_index;
                 uint32_t start_offset_data = data_offsets[start_offset_index];
                 uint32_t end_offset_data = data_offsets[end_offset_index];
@@ -465,23 +459,20 @@ array_info* RetrieveArray_TwoColumns(
         uint32_t* out_data_offsets = (uint32_t*)out_arr->data2;
         out_data_offsets[0] = 0;
         for (size_t iRow = 0; iRow < nRowOut; iRow++) {
-            std::pair<size_t, std::ptrdiff_t> pairShiftRow = get_iRow(iRow);
+            std::pair<array_info*, std::ptrdiff_t> ArrRow = get_iRow(iRow);
             uint32_t size_index = ListSizes_index[iRow];
             uint32_t size_data = ListSizes_data[iRow];
             out_index_offsets[iRow] = pos_index;
             bool bit = false;
-            if (pairShiftRow.second >= 0) {
-                size_t i_col = pairShiftRow.first;
-                size_t i_row = pairShiftRow.second;
-                uint8_t* in_null_bitmask =
-                    (uint8_t*)in_table->columns[i_col]->null_bitmask;
+            if (ArrRow.second >= 0) {
+                array_info* e_col = ArrRow.first;
+                size_t i_row = ArrRow.second;
+                uint8_t* in_null_bitmask = (uint8_t*)e_col->null_bitmask;
                 uint8_t* in_sub_null_bitmask =
-                    (uint8_t*)in_table->columns[i_col]->sub_null_bitmask;
-                uint32_t* in_index_offsets =
-                    (uint32_t*)in_table->columns[i_col]->data3;
-                uint32_t* in_data_offsets =
-                    (uint32_t*)in_table->columns[i_col]->data2;
-                char* data1 = in_table->columns[i_col]->data1;
+                    (uint8_t*)e_col->sub_null_bitmask;
+                uint32_t* in_index_offsets = (uint32_t*)e_col->data3;
+                uint32_t* in_data_offsets = (uint32_t*)e_col->data2;
+                char* data1 = e_col->data1;
                 uint32_t start_index_offset = in_index_offsets[i_row];
                 uint32_t start_data_offset =
                     in_data_offsets[start_index_offset];
@@ -497,7 +488,7 @@ array_info* RetrieveArray_TwoColumns(
                 }
                 memcpy(&out_arr->data1[pos_data], &data1[start_data_offset],
                        size_data);
-                bit = GetBit(in_null_bitmask, pairShiftRow.second);
+                bit = GetBit(in_null_bitmask, ArrRow.second);
             }
             pos_index += size_index;
             pos_data += size_data;
@@ -516,13 +507,12 @@ array_info* RetrieveArray_TwoColumns(
         int64_t n_chars = 0;
         std::vector<uint32_t> ListSizes(nRowOut);
         for (size_t iRow = 0; iRow < nRowOut; iRow++) {
-            std::pair<size_t, std::ptrdiff_t> pairShiftRow = get_iRow(iRow);
+            std::pair<array_info*, std::ptrdiff_t> ArrRow = get_iRow(iRow);
             uint32_t size = 0;
-            if (pairShiftRow.second >= 0) {
-                uint32_t* in_offsets =
-                    (uint32_t*)in_table->columns[pairShiftRow.first]->data2;
-                uint32_t end_offset = in_offsets[pairShiftRow.second + 1];
-                uint32_t start_offset = in_offsets[pairShiftRow.second];
+            if (ArrRow.second >= 0) {
+                uint32_t* in_offsets = (uint32_t*)ArrRow.first->data2;
+                uint32_t end_offset = in_offsets[ArrRow.second + 1];
+                uint32_t start_offset = in_offsets[ArrRow.second];
                 size = end_offset - start_offset;
             }
             ListSizes[iRow] = size;
@@ -533,23 +523,19 @@ array_info* RetrieveArray_TwoColumns(
         uint32_t pos = 0;
         uint32_t* out_offsets = (uint32_t*)out_arr->data2;
         for (size_t iRow = 0; iRow < nRowOut; iRow++) {
-            std::pair<size_t, std::ptrdiff_t> pairShiftRow = get_iRow(iRow);
+            std::pair<array_info*, std::ptrdiff_t> ArrRow = get_iRow(iRow);
             uint32_t size = ListSizes[iRow];
             out_offsets[iRow] = pos;
             bool bit = false;
-            if (pairShiftRow.second >= 0) {
-                uint8_t* in_null_bitmask =
-                    (uint8_t*)in_table->columns[pairShiftRow.first]
-                        ->null_bitmask;
-                uint32_t* in_offsets =
-                    (uint32_t*)in_table->columns[pairShiftRow.first]->data2;
-                uint32_t start_offset = in_offsets[pairShiftRow.second];
+            if (ArrRow.second >= 0) {
+                uint8_t* in_null_bitmask = (uint8_t*)ArrRow.first->null_bitmask;
+                uint32_t* in_offsets = (uint32_t*)ArrRow.first->data2;
+                uint32_t start_offset = in_offsets[ArrRow.second];
                 char* out_ptr = out_arr->data1 + pos;
-                char* in_ptr =
-                    in_table->columns[pairShiftRow.first]->data1 + start_offset;
+                char* in_ptr = ArrRow.first->data1 + start_offset;
                 memcpy(out_ptr, in_ptr, size);
                 pos += size;
-                bit = GetBit(in_null_bitmask, pairShiftRow.second);
+                bit = GetBit(in_null_bitmask, ArrRow.second);
             }
             SetBitTo(out_null_bitmask, iRow, bit);
         }
@@ -569,17 +555,14 @@ array_info* RetrieveArray_TwoColumns(
         uint8_t* out_null_bitmask = (uint8_t*)out_arr->null_bitmask;
         uint64_t siztype = numpy_item_size[dtype];
         for (size_t iRow = 0; iRow < nRowOut; iRow++) {
-            std::pair<size_t, std::ptrdiff_t> pairShiftRow = get_iRow(iRow);
+            std::pair<array_info*, std::ptrdiff_t> ArrRow = get_iRow(iRow);
             bool bit = false;
-            if (pairShiftRow.second >= 0) {
-                uint8_t* in_null_bitmask =
-                    (uint8_t*)in_table->columns[pairShiftRow.first]
-                        ->null_bitmask;
+            if (ArrRow.second >= 0) {
+                uint8_t* in_null_bitmask = (uint8_t*)ArrRow.first->null_bitmask;
                 char* out_ptr = out_arr->data1 + siztype * iRow;
-                char* in_ptr = in_table->columns[pairShiftRow.first]->data1 +
-                               siztype * pairShiftRow.second;
+                char* in_ptr = ArrRow.first->data1 + siztype * ArrRow.second;
                 memcpy(out_ptr, in_ptr, siztype);
-                bit = GetBit(in_null_bitmask, pairShiftRow.second);
+                bit = GetBit(in_null_bitmask, ArrRow.second);
             }
             SetBitTo(out_null_bitmask, iRow, bit);
         }
@@ -593,16 +576,15 @@ array_info* RetrieveArray_TwoColumns(
         uint64_t siztype = numpy_item_size[dtype];
         std::vector<char> vectNaN =
             RetrieveNaNentry(dtype);  // returns a -1 for integer values.
-        int64_t num_categories = in_table->columns[eshift]->num_categories;
+        int64_t num_categories = ref_column->num_categories;
         out_arr = alloc_categorical(nRowOut, dtype, num_categories);
         for (size_t iRow = 0; iRow < nRowOut; iRow++) {
-            std::pair<size_t, std::ptrdiff_t> pairShiftRow = get_iRow(iRow);
+            std::pair<array_info*, std::ptrdiff_t> ArrRow = get_iRow(iRow);
             //
             char* out_ptr = out_arr->data1 + siztype * iRow;
             char* in_ptr;
-            if (pairShiftRow.second >= 0)
-                in_ptr = in_table->columns[pairShiftRow.first]->data1 +
-                         siztype * pairShiftRow.second;
+            if (ArrRow.second >= 0)
+                in_ptr = ArrRow.first->data1 + siztype * ArrRow.second;
             else
                 in_ptr = vectNaN.data();
             memcpy(out_ptr, in_ptr, siztype);
@@ -625,13 +607,12 @@ array_info* RetrieveArray_TwoColumns(
             std::vector<char> vectNaN = RetrieveNaNentry(dtype);
             out_arr = alloc_array(nRowOut, -1, -1, arr_type, dtype, 0, 0);
             for (size_t iRow = 0; iRow < nRowOut; iRow++) {
-                std::pair<size_t, std::ptrdiff_t> pairShiftRow = get_iRow(iRow);
+                std::pair<array_info*, std::ptrdiff_t> ArrRow = get_iRow(iRow);
                 //
                 char* out_ptr = out_arr->data1 + siztype * iRow;
                 char* in_ptr;
-                if (pairShiftRow.second >= 0)
-                    in_ptr = in_table->columns[pairShiftRow.first]->data1 +
-                             siztype * pairShiftRow.second;
+                if (ArrRow.second >= 0)
+                    in_ptr = ArrRow.first->data1 + siztype * ArrRow.second;
                 else
                     in_ptr = vectNaN.data();
                 memcpy(out_ptr, in_ptr, siztype);
@@ -642,14 +623,13 @@ array_info* RetrieveArray_TwoColumns(
             out_arr = alloc_array(nRowOut, -1, -1, arr_type_o, dtype, 0, 0);
             uint8_t* out_null_bitmask = (uint8_t*)out_arr->null_bitmask;
             for (size_t iRow = 0; iRow < nRowOut; iRow++) {
-                std::pair<size_t, std::ptrdiff_t> pairShiftRow = get_iRow(iRow);
+                std::pair<array_info*, std::ptrdiff_t> ArrRow = get_iRow(iRow);
                 //
                 bool bit = false;
-                if (pairShiftRow.second >= 0) {
+                if (ArrRow.second >= 0) {
                     char* out_ptr = out_arr->data1 + siztype * iRow;
                     char* in_ptr =
-                        in_table->columns[pairShiftRow.first]->data1 +
-                        siztype * pairShiftRow.second;
+                        ArrRow.first->data1 + siztype * ArrRow.second;
                     memcpy(out_ptr, in_ptr, siztype);
                     bit = true;
                 }
@@ -664,26 +644,15 @@ array_info* RetrieveArray_TwoColumns(
         // Arrow builder for output array. builds it dynamically (buffer
         // sizes are not known in advance)
         std::unique_ptr<arrow::ArrayBuilder> builder;
-        size_t siz = in_table->columns.size();
-        size_t ref_shift = siz;
-        if (shift1 < siz) ref_shift = shift1;
-        if (shift2 < siz) ref_shift = shift2;
-        if (ref_shift == siz) {
-            Bodo_PyErr_SetString(PyExc_RuntimeError,
-                                 "Failed to find a valid column");
-            return nullptr;
-        }
-        std::shared_ptr<arrow::Array> in_arr_typ =
-            in_table->columns[ref_shift]->array;
+        std::shared_ptr<arrow::Array> in_arr_typ = ref_column->array;
         (void)arrow::MakeBuilder(arrow::default_memory_pool(),
                                  in_arr_typ->type(), &builder);
         for (size_t iRow = 0; iRow < nRowOut; iRow++) {
-            std::pair<size_t, std::ptrdiff_t> pairShiftRow = get_iRow(iRow);
-            if (pairShiftRow.second >= 0) {
+            std::pair<array_info*, std::ptrdiff_t> ArrRow = get_iRow(iRow);
+            if (ArrRow.second >= 0) {
                 // non-null value for output
-                std::shared_ptr<arrow::Array> in_arr =
-                    in_table->columns[pairShiftRow.first]->array;
-                size_t row = pairShiftRow.second;
+                std::shared_ptr<arrow::Array> in_arr = ArrRow.first->array;
+                size_t row = ArrRow.second;
                 // append value in position 'row' of input array to builder's
                 // array (this is a recursive algorithm, can traverse nested
                 // arrays)

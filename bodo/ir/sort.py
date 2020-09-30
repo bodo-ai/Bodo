@@ -30,15 +30,6 @@ from bodo.libs.distributed_api import Reduce_Type
 from bodo.transforms.distributed_analysis import Distribution
 from bodo.utils.utils import debug_prints, empty_like_type, gen_getitem
 
-from bodo.utils.shuffle import (
-    alltoallv_tup,
-    finalize_shuffle_meta,
-    update_shuffle_meta,
-    alloc_pre_shuffle_metadata,
-    _get_keys_tup,
-    _get_data_tup,
-)
-
 from bodo.libs.str_arr_ext import (
     string_array_type,
     to_string_list,

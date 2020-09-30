@@ -112,21 +112,19 @@ inline double GetDoubleEntry(Bodo_CTypes::CTypeEnum dtype, char* ptr) {
  *
  * No error is thrown but input is assumed to be coherent.
  *
- * @param in_table is the input table.
+ * @param arr1: the first column
+ * @param arr2: the second column
  * @param ListPairWrite is the vector of list of pairs for the writing of the
  * output table
- * @param shift1 is the first shift (of the left array)
- * @param shift2 is the second shift (of the left array)
  * @param ChoiceColumn is the chosen option
  * @param map_integer_type is the choice of mapping the integer type from
  *    NUMPY to NULLABLE_INT_ARRAY if not available.
  * @return one column of the table output.
  */
 array_info* RetrieveArray_TwoColumns(
-    table_info* const& in_table,
+    array_info* const& arr1, array_info* const& arr2,
     std::vector<std::pair<std::ptrdiff_t, std::ptrdiff_t>> const& ListPairWrite,
-    size_t const& shift1, size_t const& shift2, int const& ChoiceColumn,
-    bool const& map_integer_type);
+    int const& ChoiceColumn, bool const& map_integer_type);
 
 /** This function returns the column with the rows with the rows given in
  * "ListIdx"
@@ -214,6 +212,32 @@ inline bool TestEqual(std::vector<array_info*> const& columns,
     for (size_t iKey = 0; iKey < n_key; iKey++) {
         bool test = TestEqualColumn(columns[shift_key1 + iKey], iRow1,
                                     columns[shift_key2 + iKey], iRow2);
+        if (!test) return false;
+    }
+    // If all keys are equal then we are ok and the keys are equals.
+    return true;
+};
+
+/** This code test if two keys are equal (Before that the hash should have been
+ * used) It is used that way because we assume that the left key have the same
+ * type as the right keys. Equality means that all the columns are the same.
+ * Thus the test iterates over the columns and if one is different then result
+ * is false. We consider all types of bodo_array_type
+ *
+ * @param table1: the first table
+ * @param table2: the second table
+ * @param iRow1 the row of the first key
+ * @param iRow2 the row of the second key
+ * @param n_key the number of keys considered for the comparison
+ * @return True if they are equal and false otherwise.
+ */
+inline bool TestEqualJoin(table_info* table1, table_info* table2,
+                          size_t const& iRow1, size_t const& iRow2,
+                          size_t const& n_key) {
+    // iteration over the list of key for the comparison.
+    for (size_t iKey = 0; iKey < n_key; iKey++) {
+        bool test = TestEqualColumn(table1->columns[iKey], iRow1,
+                                    table2->columns[iKey], iRow2);
         if (!test) return false;
     }
     // If all keys are equal then we are ok and the keys are equals.

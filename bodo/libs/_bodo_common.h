@@ -53,6 +53,23 @@ struct Bodo_CTypes {
     };
 };
 
+inline bool is_unsigned_integer(Bodo_CTypes::CTypeEnum typ) {
+    if (typ == Bodo_CTypes::UINT8) return true;
+    if (typ == Bodo_CTypes::UINT16) return true;
+    if (typ == Bodo_CTypes::UINT32) return true;
+    if (typ == Bodo_CTypes::UINT64) return true;
+    return false;
+}
+
+inline bool is_integer(Bodo_CTypes::CTypeEnum typ) {
+    if (is_unsigned_integer(typ)) return true;
+    if (typ == Bodo_CTypes::INT8) return true;
+    if (typ == Bodo_CTypes::INT16) return true;
+    if (typ == Bodo_CTypes::INT32) return true;
+    if (typ == Bodo_CTypes::INT64) return true;
+    return false;
+}
+
 /** Getting the expression of a T value as a vector of characters
  *
  * The template paramter is T.
@@ -245,6 +262,13 @@ array_info* alloc_array(int64_t length, int64_t n_sub_elems,
                         bodo_array_type::arr_type_enum arr_type,
                         Bodo_CTypes::CTypeEnum dtype, int64_t extra_null_bytes,
                         int64_t num_categories);
+
+/* Compute the total memory of the table accross all processors.
+ *
+ * @param table : The input table
+ * @return the total size of the table all over the processors
+ */
+int64_t table_global_memory_size(table_info* table);
 
 array_info* alloc_numpy(int64_t length, Bodo_CTypes::CTypeEnum typ_enum);
 

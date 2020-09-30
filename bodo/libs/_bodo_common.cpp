@@ -1,4 +1,5 @@
 #include "_bodo_common.h"
+#include "_distributed.h"
 
 std::vector<size_t> numpy_item_size(Bodo_CTypes::_numtypes);
 
@@ -382,6 +383,88 @@ array_info* alloc_array(int64_t length, int64_t n_sub_elems,
 
     Bodo_PyErr_SetString(PyExc_RuntimeError, "Type not covered in alloc_array");
     return nullptr;
+}
+
+int64_t arrow_array_memory_size(std::shared_ptr<arrow::Array> arr) {
+    int64_t n_rows = arr->length();
+    int64_t n_bytes = (n_rows + 7) >> 3;
+    if (arr->type_id() == arrow::Type::LIST) {
+        int64_t siz_offset = sizeof(uint32_t) * (n_rows + 1);
+        int64_t siz_null_bitmap = n_bytes;
+        std::shared_ptr<arrow::ListArray> list_arr =
+            std::dynamic_pointer_cast<arrow::ListArray>(arr);
+        std::shared_ptr<arrow::Array> arr_values = list_arr->values();
+        return siz_offset + siz_null_bitmap +
+               arrow_array_memory_size(arr_values);
+    }
+    if (arr->type_id() == arrow::Type::STRUCT) {
+        std::shared_ptr<arrow::StructArray> struct_arr =
+            std::dynamic_pointer_cast<arrow::StructArray>(arr);
+        auto struct_type =
+            std::dynamic_pointer_cast<arrow::StructType>(struct_arr->type());
+        int64_t num_fields = struct_type->num_fields();
+        int64_t total_siz = n_bytes;
+        for (int64_t i_field = 0; i_field < num_fields; i_field++)
+            total_siz += arrow_array_memory_size(struct_arr->field(i_field));
+        return total_siz;
+    }
+    if (arr->type_id() == arrow::Type::STRING) {
+        std::shared_ptr<arrow::StringArray> string_array =
+            std::dynamic_pointer_cast<arrow::StringArray>(arr);
+        int64_t siz_offset = sizeof(uint32_t) * (n_rows + 1);
+        int64_t siz_null_bitmap = n_bytes;
+        int64_t siz_character = string_array->value_offset(n_rows);
+        return siz_offset + siz_null_bitmap + siz_character;
+    } else {
+        int64_t siz_null_bitmap = n_bytes;
+        std::shared_ptr<arrow::PrimitiveArray> prim_arr =
+            std::dynamic_pointer_cast<arrow::PrimitiveArray>(arr);
+        arrow::Type::type typ = prim_arr->type()->id();
+        Bodo_CTypes::CTypeEnum bodo_typ = arrow_to_bodo_type(typ);
+        int64_t siz_typ = numpy_item_size[bodo_typ];
+        int64_t siz_primitive_data = siz_typ * n_rows;
+        return siz_null_bitmap + siz_primitive_data;
+    }
+}
+
+int64_t array_memory_size(array_info* earr) {
+    if (earr->arr_type == bodo_array_type::NUMPY ||
+        earr->arr_type == bodo_array_type::CATEGORICAL) {
+        uint64_t siztype = numpy_item_size[earr->dtype];
+        return siztype * earr->length;
+    }
+    if (earr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
+        uint64_t siztype = numpy_item_size[earr->dtype];
+        int64_t n_bytes = ((earr->length + 7) >> 3);
+        return n_bytes + siztype * earr->length;
+    }
+    if (earr->arr_type == bodo_array_type::STRING) {
+        int64_t n_bytes = ((earr->length + 7) >> 3);
+        return earr->n_sub_elems + sizeof(uint32_t) * (earr->length + 1) +
+               n_bytes;
+    }
+    if (earr->arr_type == bodo_array_type::LIST_STRING) {
+        int64_t n_bytes = ((earr->length + 7) >> 3);
+        int64_t n_sub_bytes = ((earr->n_sub_elems + 7) >> 3);
+        return earr->n_sub_sub_elems +
+               sizeof(uint32_t) * (earr->n_sub_elems + 1) +
+               sizeof(uint32_t) * (earr->length + 1) + n_bytes + n_sub_bytes;
+    }
+    if (earr->arr_type == bodo_array_type::ARROW) {
+        return arrow_array_memory_size(earr->array);
+    }
+    Bodo_PyErr_SetString(PyExc_RuntimeError,
+                         "Type not covered in array_memory_size");
+    return 0;
+}
+
+int64_t table_global_memory_size(table_info* table) {
+    int64_t local_size = 0;
+    for (auto& earr : table->columns) local_size += array_memory_size(earr);
+    int64_t global_size;
+    MPI_Allreduce(&local_size, &global_size, 1, MPI_LONG_LONG_INT, MPI_SUM,
+                  MPI_COMM_WORLD);
+    return global_size;
 }
 
 array_info* copy_array(array_info* earr) {

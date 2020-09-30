@@ -1250,7 +1250,10 @@ def shuffle_table(typingctx, table_t, n_keys_t):
 @intrinsic
 def hash_join_table(
     typingctx,
-    table_t,
+    left_table_t,
+    right_table_t,
+    left_parallel_t,
+    right_parallel_t,
     n_keys_t,
     n_data_left_t,
     n_data_right_t,
@@ -1264,13 +1267,17 @@ def hash_join_table(
     """
     Interface to the hash join of two tables.
     """
-    assert table_t == table_type
+    assert left_table_t == table_type
+    assert right_table_t == table_type
 
     def codegen(context, builder, sig, args):
         fnty = lir.FunctionType(
             lir.IntType(8).as_pointer(),
             [
                 lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(1),
+                lir.IntType(1),
                 lir.IntType(64),
                 lir.IntType(64),
                 lir.IntType(64),
@@ -1287,7 +1294,10 @@ def hash_join_table(
 
     return (
         table_type(
-            table_t,
+            left_table_t,
+            right_table_t,
+            types.boolean,
+            types.boolean,
             types.int64,
             types.int64,
             types.int64,

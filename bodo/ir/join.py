@@ -533,30 +533,6 @@ def join_distributed_run(
     func_text += "    data_right = ({}{})\n".format(
         ",".join(right_other_names), "," if len(right_other_names) != 0 else ""
     )
-    if join_node.how == "asof":
-        if left_parallel or right_parallel:
-            assert left_parallel and right_parallel
-            # only the right key needs to be aligned
-            func_text += "    t2_keys, data_right = parallel_asof_comm(t1_keys, t2_keys, data_right)\n"
-    else:
-        if left_parallel and right_parallel:
-            func_text += _gen_par_shuffle(
-                left_key_names,
-                left_other_names,
-                "t1_keys",
-                "data_left",
-                left_key_types,
-                right_key_types,
-            )
-            func_text += _gen_par_shuffle(
-                right_key_names,
-                right_other_names,
-                "t2_keys",
-                "data_right",
-                right_key_types,
-                left_key_types,
-            )
-
     out_keys = []
     for cname in join_node.left_keys:
         if cname + join_node.suffix_x in join_node.out_data_vars:
@@ -594,6 +570,10 @@ def join_distributed_run(
     out_names = ["t3_c" + str(i) for i in range(len(merge_out))]
 
     if join_node.how == "asof":
+        if left_parallel or right_parallel:
+            assert left_parallel and right_parallel
+            # only the right key needs to be aligned
+            func_text += "    t2_keys, data_right = parallel_asof_comm(t1_keys, t2_keys, data_right)\n"
         func_text += (
             "    out_t1_keys, out_t2_keys, out_data_left, out_data_right"
             " = bodo.ir.join.local_merge_asof(t1_keys, t2_keys, data_left, data_right)\n"
@@ -613,6 +593,8 @@ def join_distributed_run(
             join_node.is_left,
             join_node.is_right,
             join_node.is_join,
+            left_parallel,
+            right_parallel,
         )
     if join_node.how == "asof":
         for i in range(len(left_other_names)):
@@ -752,6 +734,8 @@ def _gen_local_hash_join(
     is_left,
     is_right,
     is_join,
+    left_parallel,
+    right_parallel,
 ):
     # In some case the column in output has a type different from the one in input.
     # TODO: Unify those type changes between all cases.
@@ -817,26 +801,33 @@ def _gen_local_hash_join(
 
     n_keys = len(left_key_names)
     func_text = "    # beginning of _gen_local_hash_join\n"
-    eList = []
+    eList_l = []
     for i in range(n_keys):
-        eList.append("t1_keys[{}]".format(i))
+        eList_l.append("t1_keys[{}]".format(i))
     for i in range(len(left_other_names)):
-        eList.append("data_left[{}]".format(i))
-    for i in range(n_keys):
-        eList.append("t2_keys[{}]".format(i))
-    for i in range(len(right_other_names)):
-        eList.append("data_right[{}]".format(i))
-    func_text += "    info_list_total = [{}]\n".format(
-        ",".join("array_to_info({})".format(a) for a in eList)
+        eList_l.append("data_left[{}]".format(i))
+    func_text += "    info_list_total_l = [{}]\n".format(
+        ",".join("array_to_info({})".format(a) for a in eList_l)
     )
-    func_text += "    table_total = arr_info_list_to_table(info_list_total)\n"
+    func_text += "    table_left = arr_info_list_to_table(info_list_total_l)\n"
+    eList_r = []
+    for i in range(n_keys):
+        eList_r.append("t2_keys[{}]".format(i))
+    for i in range(len(right_other_names)):
+        eList_r.append("data_right[{}]".format(i))
+    func_text += "    info_list_total_r = [{}]\n".format(
+        ",".join("array_to_info({})".format(a) for a in eList_r)
+    )
+    func_text += "    table_right = arr_info_list_to_table(info_list_total_r)\n"
     func_text += "    vect_same_key = np.array([{}])\n".format(
         ",".join("1" if x else "0" for x in vect_same_key)
     )
     func_text += "    vect_need_typechange = np.array([{}])\n".format(
         ",".join("1" if x else "0" for x in vect_need_typechange)
     )
-    func_text += "    out_table = hash_join_table(table_total, {}, {}, {}, vect_same_key.ctypes, vect_need_typechange.ctypes, {}, {}, {}, {})\n".format(
+    func_text += "    out_table = hash_join_table(table_left, table_right, {}, {}, {}, {}, {}, vect_same_key.ctypes, vect_need_typechange.ctypes, {}, {}, {}, {})\n".format(
+        left_parallel,
+        right_parallel,
         n_keys,
         len(left_other_names),
         len(right_other_names),
@@ -845,7 +836,8 @@ def _gen_local_hash_join(
         is_join,
         optional_column,
     )
-    func_text += "    delete_table_decref_arrays(table_total)\n"
+    func_text += "    delete_table(table_left)\n"
+    func_text += "    delete_table(table_right)\n"
     idx = 0
     if optional_column:
         func_text += "    opti_0 = info_to_array(info_from_table(out_table, {}), opti_c0)\n".format(
@@ -893,52 +885,6 @@ def _gen_local_hash_join(
         idx += 1
 
     func_text += "    delete_table(out_table)\n"
-    return func_text
-
-
-def _gen_par_shuffle(
-    key_names, data_names, key_tup_out, data_tup_out, key_types, other_key_types
-):
-    """Generates data shuffle.
-    Converts data to C arrays, creates a C table, shuffles it, and returns
-    regular arrays.
-    """
-    key_names = tuple(
-        "{}{}".format(key_names[i], _gen_type_match(key_types[i], other_key_types[i]))
-        for i in range(len(key_names))
-    )
-    all_arrs = key_names + data_names
-    n_keys = len(key_names)
-    n_data = len(data_names)
-    n_all = len(all_arrs)
-
-    # convert arrays to table
-    func_text = "    info_list = [{}]\n".format(
-        ", ".join("array_to_info({})".format(a) for a in all_arrs)
-    )
-    func_text += "    table = arr_info_list_to_table(info_list)\n"
-
-    # shuffle
-    func_text += "    out_table = shuffle_table(table, {})\n".format(n_keys)
-
-    # extract arrays from output table
-    out_keys = [
-        "info_to_array(info_from_table(out_table, {}), {})".format(i, all_arrs[i])
-        for i in range(n_keys)
-    ]
-    out_data = [
-        "info_to_array(info_from_table(out_table, {}), {})".format(i, all_arrs[i])
-        for i in range(n_keys, n_all)
-    ]
-    func_text += "    {} = ({},)\n".format(key_tup_out, ", ".join(out_keys))
-    func_text += "    {} = ({}{})\n".format(
-        data_tup_out, ", ".join(out_data), "," if n_data != 0 else ""
-    )
-
-    # clean up
-    func_text += "    delete_table(table)\n"
-    func_text += "    delete_table(out_table)\n"
-
     return func_text
 
 

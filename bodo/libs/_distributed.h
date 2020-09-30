@@ -51,6 +51,7 @@ static MPI_Op get_MPI_op(int op_enum) __UNUSED__;
 static int get_elem_size(int type_enum) __UNUSED__;
 static void dist_reduce(char* in_ptr, char* out_ptr, int op,
                         int type_enum) __UNUSED__;
+static void MPI_Allreduce_bool_or(std::vector<uint8_t> & V) __UNUSED__;
 static void dist_exscan(char* in_ptr, char* out_ptr, int op,
                         int type_enum) __UNUSED__;
 
@@ -235,6 +236,16 @@ static void dist_reduce(char* in_ptr, char* out_ptr, int op_enum,
     MPI_Allreduce(in_ptr, out_ptr, 1, mpi_typ, mpi_op, MPI_COMM_WORLD);
     return;
 }
+
+
+
+static void MPI_Allreduce_bool_or(std::vector<uint8_t> & V)
+{
+    int len=V.size();
+    MPI_Datatype mpi_typ8 = get_MPI_typ(Bodo_CTypes::UINT8);
+    MPI_Allreduce(MPI_IN_PLACE, V.data(), len, mpi_typ8, MPI_BOR, MPI_COMM_WORLD);
+}
+
 
 static void dist_arr_reduce(void* out, int64_t total_size, int op_enum,
                             int type_enum) {
