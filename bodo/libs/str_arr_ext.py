@@ -23,6 +23,7 @@ from numba.core.imputils import (
     impl_ret_borrowed,
     impl_ret_new_ref,
     iternext_impl,
+    lower_constant,
 )
 from numba.core.typing.templates import (
     AbstractTemplate,
@@ -1939,6 +1940,57 @@ def unbox_str_series(typ, val, c):
     # FIXME how to check that the returned size is > 0?
     is_error = cgutils.is_not_null(c.builder, c.pyapi.err_occurred())
     return NativeValue(string_array._getvalue(), is_error=is_error)
+
+
+@lower_constant(StringArrayType)
+def lower_constant_str_arr(context, builder, typ, pyval):
+    """embed constant string array value by getting constant values for underlying
+    array(item) data arrays.
+    """
+    # create offsets, chars, nulls arrays from Python array of string objects
+    # converts all strings to utf8 bytes and appends to a char list to create char array
+    n = len(pyval)
+    curr_offset = 0
+    offset_arr = np.empty(n + 1, np.int32)
+    char_list = []
+    nulls_arr = np.empty((n + 7) >> 3, np.uint8)
+    for i, s in enumerate(pyval):
+        offset_arr[i] = curr_offset
+        is_na = pd.isna(s)
+        bodo.libs.int_arr_ext.set_bit_to_arr(nulls_arr, i, int(not is_na))
+        if is_na:
+            continue
+        str_chars = list(s.encode())
+        char_list.extend(str_chars)
+        curr_offset += len(str_chars)
+
+    offset_arr[n] = curr_offset
+    char_arr = np.array(char_list, np.uint8)
+
+    # get lowered constants for required attributes
+    n_const = context.get_constant(types.int64, n)
+    char_const_arr = context.get_constant_generic(builder, char_arr_type, char_arr)
+    offsets_const_arr = context.get_constant_generic(
+        builder, offset_arr_type, offset_arr
+    )
+    nulls_const_arr = context.get_constant_generic(
+        builder, null_bitmap_arr_type, nulls_arr
+    )
+
+    # create array(item) data array
+    array_item_data_type = ArrayItemArrayType(char_arr_type)
+    data_arr = bodo.libs.array_item_arr_ext.init_array_item_array_codegen(
+        context,
+        builder,
+        array_item_data_type(
+            types.int64, char_arr_type, offset_arr_type, null_bitmap_arr_type
+        ),
+        [n_const, char_const_arr, offsets_const_arr, nulls_const_arr],
+    )
+
+    string_array = context.make_helper(builder, typ)
+    string_array.data = data_arr
+    return string_array._getvalue()
 
 
 # TODO: array analysis and remove call for other functions
