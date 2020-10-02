@@ -5,6 +5,7 @@ Helper functions to enable typing.
 import itertools
 import operator
 import types as pytypes
+from inspect import getfullargspec
 
 import numba
 import numpy as np
@@ -846,6 +847,43 @@ def find_common_np_dtype(arr_types):
             [numba.np.numpy_support.as_dtype(t.dtype) for t in arr_types], []
         )
     )
+
+
+def gen_objmode_func_overload(func, output_type):
+    """generate an objmode overload to support function 'func' with output type
+    'output_type'
+    """
+    func_spec = getfullargspec(func)
+
+    assert func_spec.varargs is None, "varargs not supported"
+    assert func_spec.varkw is None, "varkw not supported"
+
+    n_pos_args = len(func_spec.args) - len(func_spec.defaults)
+
+    sig = ", ".join(
+        arg + ("" if i < n_pos_args else "=" + str(func_spec.defaults[i - n_pos_args]))
+        for i, arg in enumerate(func_spec.args)
+    )
+    args = ", ".join(func_spec.args)
+
+    # workaround objmode string type name requirement by adding the type to types module
+    # TODO: fix Numba's object mode to take type refs
+    type_name = str(output_type)
+    if not hasattr(types, type_name):
+        type_name = f"objmode_type{ir_utils.next_label()}"
+        setattr(types, type_name, output_type)
+
+    func_text = f"def overload_impl({sig}):\n"
+    func_text += f"    def impl({sig}):\n"
+    func_text += f"        with numba.objmode(res='{type_name}'):\n"
+    func_text += f"            res = func({args})\n"
+    func_text += f"        return res\n"
+    func_text += f"    return impl\n"
+
+    loc_vars = {}
+    exec(func_text, {"numba": numba, "func": func}, loc_vars)
+    overload_impl = loc_vars["overload_impl"]
+    overload(func, no_unliteral=True)(overload_impl)
 
 
 # dummy empty itertools implementation to avoid typing errors for series str
