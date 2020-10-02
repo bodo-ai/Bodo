@@ -306,7 +306,10 @@ def test_random_decimal_sum_min_max_last(is_slow_run, memory_leak_check):
     random.seed(5)
     n = 10
     df1 = pd.DataFrame(
-        {"A": gen_random_decimal_array(1, n), "B": gen_random_decimal_array(2, n),}
+        {
+            "A": gen_random_decimal_array(1, n),
+            "B": gen_random_decimal_array(2, n),
+        }
     )
 
     # Direct checks for which pandas has equivalent functions.
@@ -435,7 +438,10 @@ def test_agg_str_key(memory_leak_check):
         return A
 
     df = pd.DataFrame(
-        {"A": ["AA", "B", "B", "B", "AA", "AA", "B"], "B": [-8, 2, 3, 1, 5, 6, 7],}
+        {
+            "A": ["AA", "B", "B", "B", "AA", "AA", "B"],
+            "B": [-8, 2, 3, 1, 5, 6, 7],
+        }
     )
     check_func(impl, (df,), sort_output=True)
 
@@ -3038,3 +3044,52 @@ def test_groupby_empty_funcs():
 
     df = pd.DataFrame({"A": [0, 0, 0, 1, 1, 1], "B": range(6)})
     assert impl(df) == bodo.jit(impl)(df)
+
+
+def test_groupby_dead_col_multifunc():
+    """Test dead column elimination in groupbys with UDFs (issues #1724, #1732, #1750)"""
+
+    # a dict item is unused
+    def impl1(df):
+        out_df = df.groupby("C").agg({"B": lambda x: x.max() - x.min(), "A": "min"})
+        return len(out_df.iloc[:, 0])
+
+    # all output of a dict item that is a list are unused
+    def impl2(df):
+        out_df = df.groupby("C", as_index=False).agg(
+            {"B": lambda x: x.max() - x.min(), "A": ["min", lambda x: x.sum()]}
+        )
+        return len(out_df.iloc[:, 1])
+
+    # tuple item is unused
+    def impl3(df):
+        out_df = df.groupby("C")["B"].agg(
+            (lambda x: x.max() - x.min(), "min", lambda x: x.sum())
+        )
+        return len(out_df.iloc[:, 1])
+
+    # all tuple items are unused
+    def impl4(df):
+        out_df = df.groupby("C")["B"].agg(
+            (lambda x: x.max() - x.min(), "min", lambda x: x.sum())
+        )
+        return len(out_df.index)
+
+    # dead single agg func inside a dictionary with agg func list to make output names
+    # all tuples
+    def impl5(df):
+        out_df = df.groupby("C").agg({"A": ["min", "max"], "B": "sum"})
+        return len(out_df.iloc[:, 0])
+
+    df = pd.DataFrame(
+        {
+            "A": [0, 0, 1, 1, 0, 0, 1, 0],
+            "B": [0.3, 0.7, 0.123, 0.66, 0.7, 0.1, 0.15, 0.23],
+            "C": [3, 7, 123, 66, 7, 1, 15, 23],
+        }
+    )
+    assert impl1(df) == bodo.jit(impl1)(df)
+    assert impl2(df) == bodo.jit(impl2)(df)
+    assert impl3(df) == bodo.jit(impl3)(df)
+    assert impl4(df) == bodo.jit(impl4)(df)
+    assert impl5(df) == bodo.jit(impl5)(df)
