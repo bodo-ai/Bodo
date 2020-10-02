@@ -2,26 +2,31 @@
 """
 import operator
 import re
-import numba
-from numba.core import types, cgutils
-from numba.extending import (
-    box,
-    unbox,
-    register_model,
-    models,
-    NativeValue,
-    overload,
-    overload_method,
-    overload_attribute,
-    intrinsic,
-    typeof_impl,
-    lower_cast,
-    lower_builtin,
-)
-from bodo.libs.str_ext import string_type
-from bodo.utils.typing import is_overload_constant_str, get_overload_const_str
-from numba.core.imputils import impl_ret_borrowed
 
+import numba
+from numba.core import cgutils, types
+from numba.core.imputils import impl_ret_borrowed
+from numba.extending import (
+    NativeValue,
+    box,
+    intrinsic,
+    lower_builtin,
+    lower_cast,
+    models,
+    overload,
+    overload_attribute,
+    overload_method,
+    register_model,
+    typeof_impl,
+    unbox,
+)
+
+from bodo.libs.str_ext import string_type
+from bodo.utils.typing import (
+    gen_objmode_func_overload,
+    get_overload_const_str,
+    is_overload_constant_str,
+)
 
 # re.Pattern and re.Match classes are exposed starting Python 3.7, so we get the type
 # class using type() call to support <=3.6
@@ -148,44 +153,12 @@ def lower_match_is_none(context, builder, sig, args):
     )
 
 
-@overload(re.search, no_unliteral=True)
-def overload_re_search(pattern, string, flags=0):
-    def _re_search_impl(pattern, string, flags=0):  # pragma: no cover
-        with numba.objmode(m="re_match_type"):
-            m = re.search(pattern, string, flags)
-        return m
-
-    return _re_search_impl
-
-
-@overload(re.match, no_unliteral=True)
-def overload_re_match(pattern, string, flags=0):
-    def _re_match_impl(pattern, string, flags=0):  # pragma: no cover
-        with numba.objmode(m="re_match_type"):
-            m = re.match(pattern, string, flags)
-        return m
-
-    return _re_match_impl
-
-
-@overload(re.fullmatch, no_unliteral=True)
-def overload_re_fullmatch(pattern, string, flags=0):
-    def _re_fullmatch_impl(pattern, string, flags=0):  # pragma: no cover
-        with numba.objmode(m="re_match_type"):
-            m = re.fullmatch(pattern, string, flags)
-        return m
-
-    return _re_fullmatch_impl
-
-
-@overload(re.split, no_unliteral=True)
-def overload_re_split(pattern, string, maxsplit=0, flags=0):
-    def _re_split_impl(pattern, string, maxsplit=0, flags=0):  # pragma: no cover
-        with numba.objmode(m="list_str_type"):
-            m = re.split(pattern, string, maxsplit, flags)
-        return m
-
-    return _re_split_impl
+gen_objmode_func_overload(re.search, "re_match_type")
+gen_objmode_func_overload(re.match, "re_match_type")
+gen_objmode_func_overload(re.fullmatch, "re_match_type")
+gen_objmode_func_overload(re.split, "list_str_type")
+gen_objmode_func_overload(re.sub, "unicode_type")
+gen_objmode_func_overload(re.escape, "unicode_type")
 
 
 @overload(re.findall, no_unliteral=True)
@@ -199,16 +172,6 @@ def overload_re_findall(pattern, string, flags=0):
     return _re_findall_impl
 
 
-@overload(re.sub, no_unliteral=True)
-def overload_re_sub(pattern, repl, string, count=0, flags=0):
-    def _re_sub_impl(pattern, repl, string, count=0, flags=0):  # pragma: no cover
-        with numba.objmode(m="unicode_type"):
-            m = re.sub(pattern, repl, string, count, flags)
-        return m
-
-    return _re_sub_impl
-
-
 @overload(re.subn, no_unliteral=True)
 def overload_re_subn(pattern, repl, string, count=0, flags=0):
     def _re_subn_impl(pattern, repl, string, count=0, flags=0):  # pragma: no cover
@@ -217,16 +180,6 @@ def overload_re_subn(pattern, repl, string, count=0, flags=0):
         return m, s
 
     return _re_subn_impl
-
-
-@overload(re.escape, no_unliteral=True)
-def overload_re_escape(pattern):
-    def _re_escape_impl(pattern):  # pragma: no cover
-        with numba.objmode(m="unicode_type"):
-            m = re.escape(pattern)
-        return m
-
-    return _re_escape_impl
 
 
 @overload(re.purge, no_unliteral=True)
@@ -241,8 +194,7 @@ def overload_re_purge():
 
 @intrinsic
 def init_const_pattern(typingctx, pat, pat_const=None):
-    """dummy intrinsic to add constant pattern string to Pattern data type
-    """
+    """dummy intrinsic to add constant pattern string to Pattern data type"""
     pat_const_str = get_overload_const_str(pat_const)
 
     def codegen(context, builder, sig, args):

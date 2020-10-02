@@ -858,10 +858,11 @@ def gen_objmode_func_overload(func, output_type):
     assert func_spec.varargs is None, "varargs not supported"
     assert func_spec.varkw is None, "varkw not supported"
 
-    n_pos_args = len(func_spec.args) - len(func_spec.defaults)
+    defaults = [] if func_spec.defaults is None else func_spec.defaults
+    n_pos_args = len(func_spec.args) - len(defaults)
 
     sig = ", ".join(
-        arg + ("" if i < n_pos_args else "=" + str(func_spec.defaults[i - n_pos_args]))
+        arg + ("" if i < n_pos_args else "=" + str(defaults[i - n_pos_args]))
         for i, arg in enumerate(func_spec.args)
     )
     args = ", ".join(func_spec.args)
