@@ -2,26 +2,32 @@
 """
 import operator
 import re
-import numba
-from numba.core import types, cgutils
-from numba.extending import (
-    box,
-    unbox,
-    register_model,
-    models,
-    NativeValue,
-    overload,
-    overload_method,
-    overload_attribute,
-    intrinsic,
-    typeof_impl,
-    lower_cast,
-    lower_builtin,
-)
-from bodo.libs.str_ext import string_type
-from bodo.utils.typing import is_overload_constant_str, get_overload_const_str
-from numba.core.imputils import impl_ret_borrowed
 
+import numba
+from numba.core import cgutils, types
+from numba.core.imputils import impl_ret_borrowed
+from numba.extending import (
+    NativeValue,
+    box,
+    intrinsic,
+    lower_builtin,
+    lower_cast,
+    models,
+    overload,
+    overload_attribute,
+    overload_method,
+    register_model,
+    typeof_impl,
+    unbox,
+)
+
+from bodo.libs.str_ext import string_type
+from bodo.utils.typing import (
+    gen_objmode_func_overload,
+    gen_objmode_method_overload,
+    get_overload_const_str,
+    is_overload_constant_str,
+)
 
 # re.Pattern and re.Match classes are exposed starting Python 3.7, so we get the type
 # class using type() call to support <=3.6
@@ -148,44 +154,12 @@ def lower_match_is_none(context, builder, sig, args):
     )
 
 
-@overload(re.search, no_unliteral=True)
-def overload_re_search(pattern, string, flags=0):
-    def _re_search_impl(pattern, string, flags=0):  # pragma: no cover
-        with numba.objmode(m="re_match_type"):
-            m = re.search(pattern, string, flags)
-        return m
-
-    return _re_search_impl
-
-
-@overload(re.match, no_unliteral=True)
-def overload_re_match(pattern, string, flags=0):
-    def _re_match_impl(pattern, string, flags=0):  # pragma: no cover
-        with numba.objmode(m="re_match_type"):
-            m = re.match(pattern, string, flags)
-        return m
-
-    return _re_match_impl
-
-
-@overload(re.fullmatch, no_unliteral=True)
-def overload_re_fullmatch(pattern, string, flags=0):
-    def _re_fullmatch_impl(pattern, string, flags=0):  # pragma: no cover
-        with numba.objmode(m="re_match_type"):
-            m = re.fullmatch(pattern, string, flags)
-        return m
-
-    return _re_fullmatch_impl
-
-
-@overload(re.split, no_unliteral=True)
-def overload_re_split(pattern, string, maxsplit=0, flags=0):
-    def _re_split_impl(pattern, string, maxsplit=0, flags=0):  # pragma: no cover
-        with numba.objmode(m="list_str_type"):
-            m = re.split(pattern, string, maxsplit, flags)
-        return m
-
-    return _re_split_impl
+gen_objmode_func_overload(re.search, "re_match_type")
+gen_objmode_func_overload(re.match, "re_match_type")
+gen_objmode_func_overload(re.fullmatch, "re_match_type")
+gen_objmode_func_overload(re.split, "list_str_type")
+gen_objmode_func_overload(re.sub, "unicode_type")
+gen_objmode_func_overload(re.escape, "unicode_type")
 
 
 @overload(re.findall, no_unliteral=True)
@@ -199,16 +173,6 @@ def overload_re_findall(pattern, string, flags=0):
     return _re_findall_impl
 
 
-@overload(re.sub, no_unliteral=True)
-def overload_re_sub(pattern, repl, string, count=0, flags=0):
-    def _re_sub_impl(pattern, repl, string, count=0, flags=0):  # pragma: no cover
-        with numba.objmode(m="unicode_type"):
-            m = re.sub(pattern, repl, string, count, flags)
-        return m
-
-    return _re_sub_impl
-
-
 @overload(re.subn, no_unliteral=True)
 def overload_re_subn(pattern, repl, string, count=0, flags=0):
     def _re_subn_impl(pattern, repl, string, count=0, flags=0):  # pragma: no cover
@@ -217,16 +181,6 @@ def overload_re_subn(pattern, repl, string, count=0, flags=0):
         return m, s
 
     return _re_subn_impl
-
-
-@overload(re.escape, no_unliteral=True)
-def overload_re_escape(pattern):
-    def _re_escape_impl(pattern):  # pragma: no cover
-        with numba.objmode(m="unicode_type"):
-            m = re.escape(pattern)
-        return m
-
-    return _re_escape_impl
 
 
 @overload(re.purge, no_unliteral=True)
@@ -241,8 +195,7 @@ def overload_re_purge():
 
 @intrinsic
 def init_const_pattern(typingctx, pat, pat_const=None):
-    """dummy intrinsic to add constant pattern string to Pattern data type
-    """
+    """dummy intrinsic to add constant pattern string to Pattern data type"""
     pat_const_str = get_overload_const_str(pat_const)
 
     def codegen(context, builder, sig, args):
@@ -272,50 +225,13 @@ def re_compile_overload(pattern, flags=0):
     return _re_compile_impl
 
 
-@overload_method(RePatternType, "search", no_unliteral=True)
-def overload_pat_search(p, string, pos=0, endpos=9223372036854775807):
-    def _pat_search_impl(
-        p, string, pos=0, endpos=9223372036854775807
-    ):  # pragma: no cover
-        with numba.objmode(m="re_match_type"):
-            m = p.search(string, pos, endpos)
-        return m
-
-    return _pat_search_impl
-
-
-@overload_method(RePatternType, "match", no_unliteral=True)
-def overload_pat_match(p, string, pos=0, endpos=9223372036854775807):
-    def _pat_match_impl(
-        p, string, pos=0, endpos=9223372036854775807
-    ):  # pragma: no cover
-        with numba.objmode(m="re_match_type"):
-            m = p.match(string, pos, endpos)
-        return m
-
-    return _pat_match_impl
-
-
-@overload_method(RePatternType, "fullmatch", no_unliteral=True)
-def overload_pat_fullmatch(p, string, pos=0, endpos=9223372036854775807):
-    def _pat_fullmatch_impl(
-        p, string, pos=0, endpos=9223372036854775807
-    ):  # pragma: no cover
-        with numba.objmode(m="re_match_type"):
-            m = p.fullmatch(string, pos, endpos)
-        return m
-
-    return _pat_fullmatch_impl
-
-
-@overload_method(RePatternType, "split", no_unliteral=True)
-def overload_pat_split(pattern, string, maxsplit=0):
-    def _pat_split_impl(pattern, string, maxsplit=0):  # pragma: no cover
-        with numba.objmode(m="list_str_type"):
-            m = pattern.split(string, maxsplit)
-        return m
-
-    return _pat_split_impl
+gen_objmode_method_overload(RePatternType, "search", re.Pattern.search, "re_match_type")
+gen_objmode_method_overload(RePatternType, "match", re.Pattern.match, "re_match_type")
+gen_objmode_method_overload(
+    RePatternType, "fullmatch", re.Pattern.fullmatch, "re_match_type"
+)
+gen_objmode_method_overload(RePatternType, "split", re.Pattern.split, "list_str_type")
+gen_objmode_method_overload(RePatternType, "sub", re.Pattern.split, "unicode_type")
 
 
 @overload_method(RePatternType, "findall", no_unliteral=True)
@@ -357,16 +273,6 @@ def _pat_findall_const_impl(
         return m
 
     return _pat_findall_impl
-
-
-@overload_method(RePatternType, "sub", no_unliteral=True)
-def re_sub_overload(p, repl, string, count=0):
-    def _re_sub_impl(p, repl, string, count=0):  # pragma: no cover
-        with numba.objmode(out="unicode_type"):
-            out = p.sub(repl, string, count)
-        return out
-
-    return _re_sub_impl
 
 
 @overload_method(RePatternType, "subn", no_unliteral=True)
@@ -428,14 +334,7 @@ def overload_pattern_pattern(p):
     return _pat_pattern_impl
 
 
-@overload_method(ReMatchType, "expand", no_unliteral=True)
-def overload_match_expand(m, template):
-    def _match_expand_impl(m, template):  # pragma: no cover
-        with numba.objmode(out="unicode_type"):
-            out = m.expand(template)
-        return out
-
-    return _match_expand_impl
+gen_objmode_method_overload(ReMatchType, "expand", re.Match.expand, "unicode_type")
 
 
 @overload_method(ReMatchType, "group", no_unliteral=True)
@@ -535,24 +434,8 @@ def overload_match_groupdict(m, default=None):
     return _match_groupdict_impl
 
 
-@overload_method(ReMatchType, "start", no_unliteral=True)
-def overload_match_start(m, group=0):
-    def _match_start_impl(m, group=0):  # pragma: no cover
-        with numba.objmode(out="int64"):
-            out = m.start(group)
-        return out
-
-    return _match_start_impl
-
-
-@overload_method(ReMatchType, "end", no_unliteral=True)
-def overload_match_end(m, group=0):
-    def _match_end_impl(m, group=0):  # pragma: no cover
-        with numba.objmode(out="int64"):
-            out = m.end(group)
-        return out
-
-    return _match_end_impl
+gen_objmode_method_overload(ReMatchType, "start", re.Match.start, "int64")
+gen_objmode_method_overload(ReMatchType, "end", re.Match.end, "int64")
 
 
 @overload_method(ReMatchType, "span", no_unliteral=True)
