@@ -79,6 +79,7 @@ from bodo.utils.typing import (
     get_overload_const_list,
     get_overload_const_str,
     get_overload_const_tuple,
+    get_udf_error_msg,
     get_udf_out_arr_type,
     is_dtype_nullable,
     is_iterable_type,
@@ -95,7 +96,6 @@ from bodo.utils.typing import (
     is_overload_zero,
     raise_bodo_error,
     raise_const_error,
-    get_udf_error_msg,
 )
 
 _csv_write = types.ExternalFunction(
@@ -874,7 +874,7 @@ def set_df_column_with_reflect(typingctx, df, cname, arr, inplace=None):
 
 @lower_constant(DataFrameType)
 def lower_constant_dataframe(context, builder, df_type, pyval):
-    """embed constant DataFrame value but getting constant values for data arrays and
+    """embed constant DataFrame value by getting constant values for data arrays and
     Index.
     """
     n_cols = len(pyval.columns)
@@ -984,8 +984,10 @@ def pd_dataframe_overload(data=None, index=None, columns=None, dtype=None, copy=
     func_text = (
         "def _init_df(data=None, index=None, columns=None, dtype=None, copy=False):\n"
     )
-    func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe({}, {}, {})\n".format(
-        data_args, index_arg, col_var
+    func_text += (
+        "  return bodo.hiframes.pd_dataframe_ext.init_dataframe({}, {}, {})\n".format(
+            data_args, index_arg, col_var
+        )
     )
     loc_vars = {}
     exec(func_text, {"bodo": bodo, "np": np}, loc_vars)
@@ -1023,8 +1025,10 @@ def _get_df_args(data, index, columns, dtype, copy):
         if is_overload_none(index):
             for i, t in enumerate(data.types[n_cols + 1 :]):
                 if isinstance(t, SeriesType):
-                    index_arg = "bodo.hiframes.pd_series_ext.get_series_index(data[{}])".format(
-                        n_cols + 1 + i
+                    index_arg = (
+                        "bodo.hiframes.pd_series_ext.get_series_index(data[{}])".format(
+                            n_cols + 1 + i
+                        )
                     )
                     index_is_none = False
                     break
@@ -1068,8 +1072,10 @@ def _get_df_args(data, index, columns, dtype, copy):
         if is_overload_none(data):
             index_arg = "bodo.hiframes.pd_index_ext.init_string_index(bodo.libs.str_arr_ext.pre_alloc_string_array(0, 0))"
         else:
-            index_arg = "bodo.hiframes.pd_index_ext.init_range_index(0, {}, 1, None)".format(
-                df_len
+            index_arg = (
+                "bodo.hiframes.pd_index_ext.init_range_index(0, {}, 1, None)".format(
+                    df_len
+                )
             )
 
     data_args = "({},)".format(
@@ -2956,7 +2962,15 @@ def to_sql_exception_guard(
     err_msg = "all_ok"
     try:
         df.to_sql(
-            name, con, schema, if_exists, index, index_label, chunksize, dtype, method,
+            name,
+            con,
+            schema,
+            if_exists,
+            index,
+            index_label,
+            chunksize,
+            dtype,
+            method,
         )
     except ValueError as e:
         err_msg = e.args[0]

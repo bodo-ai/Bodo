@@ -10,52 +10,49 @@ data:              [1, 2, 3, 5, 4, 6]
 offsets:           [0, 2, 3, 3, 6, 6]
 """
 import operator
-import numpy as np
-import numba
-import bodo
 
-from numba.core import types, cgutils
+import llvmlite.binding as ll
+import numba
+import numpy as np
+from llvmlite import ir as lir
+from numba.core import cgutils, types
+from numba.core.imputils import impl_ret_borrowed
 from numba.extending import (
-    typeof_impl,
-    type_callable,
-    models,
-    register_model,
     NativeValue,
-    make_attribute_wrapper,
-    lower_builtin,
     box,
-    unbox,
-    lower_getattr,
     intrinsic,
-    overload_method,
+    lower_builtin,
+    lower_getattr,
+    make_attribute_wrapper,
+    models,
     overload,
     overload_attribute,
+    overload_method,
+    register_model,
+    type_callable,
+    typeof_impl,
+    unbox,
 )
 from numba.parfors.array_analysis import ArrayAnalysis
-from numba.core.imputils import impl_ret_borrowed
 
+import bodo
 from bodo.hiframes.datetime_date_ext import datetime_date_type
-from bodo.utils.typing import is_list_like_index_type, BodoError
+# NOTE: importing hdist is necessary for MPI initialization before array_ext
+from bodo.libs import array_ext, hdist
 from bodo.utils.cg_helpers import (
-    set_bitmap_bit,
+    gen_allocate_array,
+    get_array_elem_counts,
+    get_bitmap_bit,
+    is_na_value,
+    list_check,
     pyarray_getitem,
     pyarray_setitem,
-    list_check,
-    is_na_value,
-    get_bitmap_bit,
-    get_array_elem_counts,
     seq_getitem,
-    gen_allocate_array,
+    set_bitmap_bit,
     to_arr_obj_if_list_obj,
 )
-from bodo.utils.indexing import init_nested_counts, add_nested_counts
-from llvmlite import ir as lir
-import llvmlite.binding as ll
-
-# NOTE: importing hdist is necessary for MPI initialization before array_ext
-from bodo.libs import hdist
-from bodo.libs import array_ext
-
+from bodo.utils.indexing import add_nested_counts, init_nested_counts
+from bodo.utils.typing import BodoError, is_list_like_index_type
 
 ll.add_symbol("count_total_elems_list_array", array_ext.count_total_elems_list_array)
 ll.add_symbol(
@@ -578,6 +575,47 @@ ArrayAnalysis._analyze_op_call_bodo_libs_array_item_arr_ext_pre_alloc_array_item
 )
 
 
+def init_array_item_array_codegen(context, builder, signature, args):
+    """codegen for initializing an array(item) array from individual data/offset/bitmap
+    arrays.
+    """
+    n_arrays, data, offsets, null_bitmap = args
+    array_item_type = signature.return_type
+
+    # TODO: refactor with construct_array_item_array
+    # create payload type
+    payload_type = ArrayItemArrayPayloadType(array_item_type)
+    alloc_type = context.get_value_type(payload_type)
+    alloc_size = context.get_abi_sizeof(alloc_type)
+
+    # define dtor
+    dtor_fn = define_array_item_dtor(context, builder, array_item_type, payload_type)
+
+    # create meminfo
+    meminfo = context.nrt.meminfo_alloc_dtor(
+        builder, context.get_constant(types.uintp, alloc_size), dtor_fn
+    )
+    meminfo_void_ptr = context.nrt.meminfo_data(builder, meminfo)
+    meminfo_data_ptr = builder.bitcast(meminfo_void_ptr, alloc_type.as_pointer())
+
+    # alloc values in payload
+    payload = cgutils.create_struct_proxy(payload_type)(context, builder)
+    payload.n_arrays = n_arrays
+    payload.data = data
+    payload.offsets = offsets
+    payload.null_bitmap = null_bitmap
+    builder.store(payload._getvalue(), meminfo_data_ptr)
+
+    # increase refcount of stored values
+    context.nrt.incref(builder, signature.args[1], data)
+    context.nrt.incref(builder, signature.args[2], offsets)
+    context.nrt.incref(builder, signature.args[3], null_bitmap)
+
+    array_item_array = context.make_helper(builder, array_item_type)
+    array_item_array.meminfo = meminfo
+    return array_item_array._getvalue()
+
+
 @intrinsic
 def init_array_item_array(
     typingctx, n_arrays_typ, data_type, offsets_typ, null_bitmap_typ=None
@@ -585,48 +623,9 @@ def init_array_item_array(
     """Create a ArrayItemArray with provided offsets, data and null bitmap values."""
     assert null_bitmap_typ == types.Array(types.uint8, 1, "C")
 
-    def codegen(context, builder, signature, args):
-        n_arrays, data, offsets, null_bitmap = args
-        array_item_type = signature.return_type
-
-        # TODO: refactor with construct_array_item_array
-        # create payload type
-        payload_type = ArrayItemArrayPayloadType(array_item_type)
-        alloc_type = context.get_value_type(payload_type)
-        alloc_size = context.get_abi_sizeof(alloc_type)
-
-        # define dtor
-        dtor_fn = define_array_item_dtor(
-            context, builder, array_item_type, payload_type
-        )
-
-        # create meminfo
-        meminfo = context.nrt.meminfo_alloc_dtor(
-            builder, context.get_constant(types.uintp, alloc_size), dtor_fn
-        )
-        meminfo_void_ptr = context.nrt.meminfo_data(builder, meminfo)
-        meminfo_data_ptr = builder.bitcast(meminfo_void_ptr, alloc_type.as_pointer())
-
-        # alloc values in payload
-        payload = cgutils.create_struct_proxy(payload_type)(context, builder)
-        payload.n_arrays = n_arrays
-        payload.data = data
-        payload.offsets = offsets
-        payload.null_bitmap = null_bitmap
-        builder.store(payload._getvalue(), meminfo_data_ptr)
-
-        # increase refcount of stored values
-        context.nrt.incref(builder, signature.args[1], data)
-        context.nrt.incref(builder, signature.args[2], offsets)
-        context.nrt.incref(builder, signature.args[3], null_bitmap)
-
-        array_item_array = context.make_helper(builder, array_item_type)
-        array_item_array.meminfo = meminfo
-        return array_item_array._getvalue()
-
     ret_typ = ArrayItemArrayType(data_type)
     sig = ret_typ(types.int64, data_type, offsets_typ, null_bitmap_typ)
-    return sig, codegen
+    return sig, init_array_item_array_codegen
 
 
 @intrinsic

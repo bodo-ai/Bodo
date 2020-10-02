@@ -1,4 +1,6 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
+"""Test Bodo's string array data type
+"""
 import numpy as np
 import pandas as pd
 import pytest
@@ -63,6 +65,16 @@ def test_unbox(str_arr_value, memory_leak_check):
         return arr_arg
 
     check_func(impl2, (str_arr_value,))
+
+
+# TODO: fix memory leak and add memory_leak_check
+def test_constant_lowering(str_arr_value):
+    def impl():
+        return str_arr_value
+
+    pd.testing.assert_series_equal(
+        pd.Series(bodo.jit(impl)()), pd.Series(str_arr_value), check_dtype=False
+    )
 
 
 def test_string_dtype(memory_leak_check):
