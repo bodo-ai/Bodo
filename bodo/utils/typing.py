@@ -30,6 +30,7 @@ from numba.extending import (
     lower_cast,
     models,
     overload,
+    overload_method,
     register_jitable,
     register_model,
     typeof_impl,
@@ -849,10 +850,8 @@ def find_common_np_dtype(arr_types):
     )
 
 
-def gen_objmode_func_overload(func, output_type):
-    """generate an objmode overload to support function 'func' with output type
-    'output_type'
-    """
+def _gen_objmode_overload(func, output_type, method_name=None):
+    """code gen for gen_objmode_func_overload and gen_objmode_method_overload"""
     func_spec = getfullargspec(func)
 
     assert func_spec.varargs is None, "varargs not supported"
@@ -865,7 +864,7 @@ def gen_objmode_func_overload(func, output_type):
         arg + ("" if i < n_pos_args else "=" + str(defaults[i - n_pos_args]))
         for i, arg in enumerate(func_spec.args)
     )
-    args = ", ".join(func_spec.args)
+    args = ", ".join(func_spec.args[1:]) if method_name else ", ".join(func_spec.args)
 
     # workaround objmode string type name requirement by adding the type to types module
     # TODO: fix Numba's object mode to take type refs
@@ -874,17 +873,34 @@ def gen_objmode_func_overload(func, output_type):
         type_name = f"objmode_type{ir_utils.next_label()}"
         setattr(types, type_name, output_type)
 
+    call_str = f"self.{method_name}" if method_name else f"func"
     func_text = f"def overload_impl({sig}):\n"
     func_text += f"    def impl({sig}):\n"
     func_text += f"        with numba.objmode(res='{type_name}'):\n"
-    func_text += f"            res = func({args})\n"
+    func_text += f"            res = {call_str}({args})\n"
     func_text += f"        return res\n"
     func_text += f"    return impl\n"
 
     loc_vars = {}
     exec(func_text, {"numba": numba, "func": func}, loc_vars)
     overload_impl = loc_vars["overload_impl"]
+    return overload_impl
+
+
+def gen_objmode_func_overload(func, output_type):
+    """generate an objmode overload to support function 'func' with output type
+    'output_type'
+    """
+    overload_impl = _gen_objmode_overload(func, output_type)
     overload(func, no_unliteral=True)(overload_impl)
+
+
+def gen_objmode_method_overload(obj_type, method_name, method, output_type):
+    """generate an objmode overload_method to support method 'method'
+    (named 'method_name') with output type 'output_type'.
+    """
+    overload_impl = _gen_objmode_overload(method, output_type, method_name)
+    overload_method(obj_type, method_name, no_unliteral=True)(overload_impl)
 
 
 # dummy empty itertools implementation to avoid typing errors for series str
