@@ -1984,7 +1984,7 @@ def ClassType__init__(
 lines = inspect.getsource(types.misc.ClassType.__init__)
 if (
     hashlib.sha256(lines.encode()).hexdigest()
-    != "ecd303d3c73cdc8735f6f9400178a3a36b362dc4052caf0043aab847ca6b907a"
+    != "2b848ea82946c88f540e81f93ba95dfa7cd66045d944152a337fe2fc43451c30"
 ):  # pragma: no cover
     warnings.warn("types.misc.ClassType.__init__ has changed")
 

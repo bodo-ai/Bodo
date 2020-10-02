@@ -1,5 +1,8 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
-"""Top-level init file for bodo package
+"""
+Top-level init file for bodo package
+
+isort:skip_file
 """
 # set number of threads to 1 for Numpy to avoid interference with Bodo's parallelism
 # NOTE: has to be done before importing Numpy, and for all threading backends
@@ -33,15 +36,12 @@ datetime64ns = numba.core.types.NPDatetime("ns")
 
 from numba.core.types import List
 
-import bodo.config
-import bodo.hiframes.boxing
-import bodo.hiframes.pd_timestamp_ext
-import bodo.io
-import bodo.io.np_io
 import bodo.libs
 import bodo.libs.dict_ext
 import bodo.libs.distributed_api
 import bodo.libs.timsort
+import bodo.io
+import bodo.io.np_io
 from bodo.libs.distributed_api import (
     allgatherv,
     barrier,
@@ -53,6 +53,9 @@ from bodo.libs.distributed_api import (
     rebalance,
     scatterv,
 )
+import bodo.config
+import bodo.hiframes.boxing
+import bodo.hiframes.pd_timestamp_ext
 from bodo.libs.str_arr_ext import string_array_type
 from bodo.libs.str_ext import string_type
 from bodo.utils.utils import cprint
