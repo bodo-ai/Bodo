@@ -290,6 +290,8 @@ class DistributedAnalysis:
                 f(inst, array_dists)
             elif isinstance(inst, ir.Return):
                 self._analyze_return(inst.value, array_dists)
+            elif isinstance(inst, ir.SetAttr):
+                self._analyze_setattr(inst.target, inst.attr, inst.value, array_dists)
             else:
                 self._set_REP(
                     inst.list_vars(),
@@ -408,7 +410,8 @@ class DistributedAnalysis:
         # here.
         lhs_typ = self.typemap[lhs]
         rhs_typ = self.typemap[rhs.value.name]
-        if rhs.attr == "T" and is_array_typ(lhs_typ):
+        attr = rhs.attr
+        if attr == "T" and is_array_typ(lhs_typ):
             # array and its transpose have same distributions
             arr = rhs.value.name
             self._meet_array_dists(lhs, arr, array_dists)
@@ -418,7 +421,7 @@ class DistributedAnalysis:
         elif (
             isinstance(rhs_typ, MultiIndexType)
             and len(rhs_typ.array_types) > 0
-            and rhs.attr == "_data"
+            and attr == "_data"
         ):
             # output of MultiIndex._data is a tuple, with all arrays having the same
             # distribution as input MultiIndex
@@ -431,10 +434,35 @@ class DistributedAnalysis:
             self._set_var_dist(lhs, array_dists, new_dist)
             self._set_var_dist(rhs.value.name, array_dists, new_dist)
             return
-        elif isinstance(rhs_typ, CategoricalArray) and rhs.attr == "codes":
+        elif isinstance(rhs_typ, CategoricalArray) and attr == "codes":
             # categorical array and its underlying codes array have same distributions
             arr = rhs.value.name
             self._meet_array_dists(lhs, arr, array_dists)
+        # jitclass getattr (e.g. df1 = self.df)
+        elif (
+            isinstance(rhs_typ, types.ClassInstanceType)
+            and attr in rhs_typ.class_type.dist_spec
+        ):
+            # attribute dist spec should be compatible with distribution of value
+            attr_dist = rhs_typ.class_type.dist_spec[attr]
+            assert is_distributable_typ(lhs_typ) or is_distributable_tuple_typ(
+                lhs_typ
+            ), "Variable {} is not distributable since it is of type {} (required for getting distributed class field)".format(
+                lhs, lhs_typ
+            )
+            if lhs not in array_dists:
+                array_dists[lhs] = attr_dist
+            else:
+                # value shouldn't have a more restrictive distribution than dist spec
+                # e.g. REP vs OneD
+                val_dist = array_dists[lhs]
+                if val_dist.value < attr_dist.value:
+                    raise BodoError(
+                        f"distribution of value is not compatible with the class"
+                        f" attribute distribution spec of"
+                        f" {rhs_typ.class_type.class_name} in"
+                        f" {lhs} = {rhs.value.name}.{attr}"
+                    )
 
     def _analyze_parfor(self, parfor, array_dists, parfor_dists):
         """analyze Parfor nodes for distribution. Parfor and its accessed arrays should
@@ -1941,6 +1969,37 @@ class DistributedAnalysis:
                     "are passed (e.g. @bodo.jit(distributed=['{0}']))."
                 ).format(rhs.name, lhs)
                 self._set_REP(lhs, array_dists, info)
+
+    def _analyze_setattr(self, target, attr, value, array_dists):
+        """Analyze ir.SetAttr nodes for distribution (e.g. A.b = B)"""
+        target_type = self.typemap[target.name]
+        val_type = self.typemap[value.name]
+
+        # jitclass setattr (e.g. self.df = df1)
+        if (
+            isinstance(target_type, types.ClassInstanceType)
+            and attr in target_type.class_type.dist_spec
+        ):
+            # attribute dist spec should be compatible with distribution of value
+            attr_dist = target_type.class_type.dist_spec[attr]
+            assert is_distributable_typ(val_type) or is_distributable_tuple_typ(
+                val_type
+            ), "Variable {} is not distributable since it is of type {} (required for setting class field)".format(
+                value.name, val_type
+            )
+            assert value.name in array_dists, "array distribution not found"
+            val_dist = array_dists[value.name]
+            # value shouldn't have a more restrictive distribution than the dist spec
+            # e.g. REP vs OneD
+            if val_dist.value < attr_dist.value:
+                raise BodoError(
+                    f"distribution of value is not compatible with the class attribute"
+                    f" distribution spec of {target_type.class_type.class_name} in"
+                    f" {target.name}.{attr} = {value.name}"
+                )
+            return
+
+        self._set_REP([target, value], array_dists, "unsupported SetAttr")
 
     def _analyze_return(self, var, array_dists):
         """analyze ir.Return nodes for distribution. Checks for user flags; sets to REP

@@ -13,6 +13,9 @@ import textwrap
 import traceback
 import types as pytypes
 import warnings
+from collections import OrderedDict
+from collections.abc import Sequence
+from functools import partial, wraps
 
 import numba
 import numba.np.linalg
@@ -55,6 +58,8 @@ from numba.core.typing.templates import (
 )
 from numba.core.typing.typeof import Purpose, typeof
 from numba.core.utils import reraise
+from numba.experimental.jitclass import base as jitclass_base
+from numba.experimental.jitclass import decorators as jitclass_decorators
 from numba.extending import lower_builtin
 from numba.parfors.parfor import get_expr_args
 
@@ -1813,3 +1818,211 @@ if (
 ):  # pragma: no cover
     warnings.warn("numba.core.errors.NumbaError.patch_message has changed")
 numba.core.errors.NumbaError.patch_message = patch_message
+
+
+# --------------------- jitclass support --------------------------
+
+
+def _get_dist_spec_from_options(spec, **options):
+    """get distribution spec for jitclass from options passed to @bodo.jitclass"""
+    import bodo
+    from bodo.transforms.distributed_analysis import Distribution
+
+    dist_spec = {}
+
+    if "distributed" in options:
+        for field in options["distributed"]:
+            dist_spec[field] = Distribution.OneD_Var
+
+    if "distributed_block" in options:
+        for field in options["distributed_block"]:
+            dist_spec[field] = Distribution.OneD
+
+    return dist_spec
+
+
+# Bodo change: extra **options arg
+def register_class_type(cls, spec, class_ctor, builder, **options):
+    """
+    Internal function to create a jitclass.
+
+    Args
+    ----
+    cls: the original class object (used as the prototype)
+    spec: the structural specification contains the field types.
+    class_ctor: the numba type to represent the jitclass
+    builder: the internal jitclass builder
+    """
+    import bodo
+
+    # Bodo change: get distribution spec
+    dist_spec = _get_dist_spec_from_options(spec, **options)
+
+    # Normalize spec
+    if isinstance(spec, Sequence):
+        spec = OrderedDict(spec)
+    jitclass_base._validate_spec(spec)
+
+    # Fix up private attribute names
+    spec = jitclass_base._fix_up_private_attr(cls.__name__, spec)
+
+    # Copy methods from base classes
+    clsdct = {}
+    for basecls in reversed(inspect.getmro(cls)):
+        clsdct.update(basecls.__dict__)
+
+    methods, props, static_methods, others = {}, {}, {}, {}
+    for k, v in clsdct.items():
+        if isinstance(v, pytypes.FunctionType):
+            methods[k] = v
+        elif isinstance(v, property):
+            props[k] = v
+        elif isinstance(v, staticmethod):
+            static_methods[k] = v
+        else:
+            others[k] = v
+
+    # Check for name shadowing
+    shadowed = (set(methods) | set(props) | set(static_methods)) & set(spec)
+    if shadowed:
+        raise NameError("name shadowing: {0}".format(", ".join(shadowed)))
+
+    docstring = others.pop("__doc__", "")
+    jitclass_base._drop_ignored_attrs(others)
+    if others:
+        msg = "class members are not yet supported: {0}"
+        members = ", ".join(others.keys())
+        raise TypeError(msg.format(members))
+
+    for k, v in props.items():
+        if v.fdel is not None:
+            raise TypeError("deleter is not supported: {0}".format(k))
+
+    # Bodo change: replace njit with bodo.jit
+    jit_methods = {k: bodo.jit(v) for k, v in methods.items()}
+
+    jit_props = {}
+    for k, v in props.items():
+        dct = {}
+        if v.fget:
+            # Bodo change: replace njit with bodo.jit
+            dct["get"] = bodo.jit(v.fget)
+        if v.fset:
+            # Bodo change: replace njit with bodo.jit
+            dct["set"] = bodo.jit(v.fset)
+        jit_props[k] = dct
+
+    # Bodo change: replace njit with bodo.jit
+    jit_static_methods = {k: bodo.jit(v.__func__) for k, v in static_methods.items()}
+
+    # Instantiate class type
+    class_type = class_ctor(
+        cls,
+        jitclass_base.ConstructorTemplate,
+        spec,
+        jit_methods,
+        jit_props,
+        jit_static_methods,
+        dist_spec,  # Bodo change: pass dist spec
+    )
+
+    jit_class_dct = dict(class_type=class_type, __doc__=docstring)
+    jit_class_dct.update(jit_static_methods)
+    cls = jitclass_base.JitClassType(cls.__name__, (cls,), jit_class_dct)
+
+    # Register resolution of the class object
+    typingctx = numba.core.registry.cpu_target.typing_context
+    typingctx.insert_global(cls, class_type)
+
+    # Register class
+    targetctx = numba.core.registry.cpu_target.target_context
+    builder(class_type, typingctx, targetctx).register()
+
+    return cls
+
+
+lines = inspect.getsource(jitclass_base.register_class_type)
+if (
+    hashlib.sha256(lines.encode()).hexdigest()
+    != "fb8a626bd1a548b6c905f5c281c12cf2ba431b740698de0c0f68997fa5676dea"
+):  # pragma: no cover
+    warnings.warn("jitclass_base.register_class_type has changed")
+
+
+jitclass_base.register_class_type = register_class_type
+
+
+# Bodo change: extra dist_spec arg/attribute
+def ClassType__init__(
+    self,
+    class_def,
+    ctor_template_cls,
+    struct,
+    jit_methods,
+    jit_props,
+    jit_static_methods,
+    dist_spec=None,
+):
+    if dist_spec is None:
+        dist_spec = {}
+    self.class_name = class_def.__name__
+    self.class_doc = class_def.__doc__
+    self._ctor_template_class = ctor_template_cls
+    self.jit_methods = jit_methods
+    self.jit_props = jit_props
+    self.jit_static_methods = jit_static_methods
+    self.struct = struct
+    self.dist_spec = dist_spec
+    fielddesc = ",".join("{0}:{1}".format(k, v) for k, v in struct.items())
+    distdesc = ",".join("{0}:{1}".format(k, v) for k, v in dist_spec.items())
+    name = "{0}.{1}#{2:x}<{3}><{4}>".format(
+        self.name_prefix, self.class_name, id(self), fielddesc, distdesc
+    )
+    super(types.misc.ClassType, self).__init__(name)
+
+
+lines = inspect.getsource(types.misc.ClassType.__init__)
+if (
+    hashlib.sha256(lines.encode()).hexdigest()
+    != "ecd303d3c73cdc8735f6f9400178a3a36b362dc4052caf0043aab847ca6b907a"
+):  # pragma: no cover
+    warnings.warn("types.misc.ClassType.__init__ has changed")
+
+types.misc.ClassType.__init__ = ClassType__init__
+
+
+# redefine jitclass decorator with our own register_class_type() and options
+def jitclass(spec, **options):
+    """
+    A decorator for creating a jitclass.
+
+    **arguments**:
+
+    - spec:
+        Specifies the types of each field on this class.
+        Must be a dictionary or a sequence.
+        With a dictionary, use collections.OrderedDict for stable ordering.
+        With a sequence, it must contain 2-tuples of (fieldname, fieldtype).
+
+    **returns**:
+
+    A callable that takes a class object, which will be compiled.
+    """
+
+    def wrap(cls):
+        if numba.core.config.DISABLE_JIT:
+            return cls
+        else:
+            return register_class_type(
+                cls, spec, types.ClassType, jitclass_base.ClassBuilder, **options
+            )
+
+    return wrap
+
+
+lines = inspect.getsource(jitclass_decorators.jitclass)
+if (
+    hashlib.sha256(lines.encode()).hexdigest()
+    != "6c08a057e8b03754d713e55736b354323ad3816fbdb41767882e064012e2c0ab"
+):  # pragma: no cover
+    warnings.warn("jitclass_decorators.jitclass has changed")
