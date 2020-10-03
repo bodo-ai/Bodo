@@ -19,8 +19,15 @@ such as Numba on Ubuntu Linux::
     source activate DEV
     # Linux: conda install gcc_linux-64 gxx_linux-64 gfortran_linux-64 -c conda-forge
     # Mac: conda install clang_osx-64 clangxx_osx-64 gfortran_osx-64 -c conda-forge
-    # NOTE: for development/debugging purposes, it's best to install Numba from source instead
-    conda install numba=0.51.2 -c conda-forge
+    # If you don't want to install Numba from source: conda install numba=0.51.2 -c conda-forge
+    # For development/debugging purposes, it's best to install Numba from source instead
+    git clone https://github.com/numba/numba.git
+    # make sure you checkout version 0.51.2. numba's master will not work with the code
+    cd numba; git checkout 0.51.2
+    python setup.py develop
+    cd ..
+    # if you need to remove any numba in your miniconda env before rebuilding from source try:
+    # conda remove numba=<version>
     conda install mpi4py pytest -c conda-forge
     conda install -c conda-forge hdf5=*=*mpich* pyarrow=1.0.1 pymysql sqlalchemy
     # If you get the error "zsh: no matches found: hdf5=*=*mpich*" (typically on Mac), try the following instead:
