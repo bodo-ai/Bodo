@@ -599,3 +599,13 @@ def test_unique(int_arr_value, memory_leak_check):
         bodo_func(int_arr_value),
         test_impl(int_arr_value),
     )
+
+
+# TODO: fix memory leak and add memory_leak_check
+def test_constant_lowering(int_arr_value):
+    def impl():
+        return int_arr_value
+
+    pd.testing.assert_series_equal(
+        pd.Series(bodo.jit(impl)()), pd.Series(int_arr_value), check_dtype=False
+    )

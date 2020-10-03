@@ -209,3 +209,13 @@ def test_setitem_optional_int(decimal_arr_value, memory_leak_check):
     check_func(
         test_impl, (decimal_arr_value.copy(), 0, True), copy_input=True, dist_test=False
     )
+
+
+# TODO: fix memory leak and add memory_leak_check
+def test_constant_lowering(decimal_arr_value):
+    def impl():
+        return decimal_arr_value
+
+    pd.testing.assert_series_equal(
+        pd.Series(bodo.jit(impl)()), pd.Series(decimal_arr_value), check_dtype=False
+    )

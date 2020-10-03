@@ -137,3 +137,13 @@ def test_np_unique(memory_leak_check):
         [datetime.timedelta(microseconds=100000001213131, hours=5)] * 5,
     )
     check_func(impl, (arr,), sort_output=True)
+
+
+# TODO: fix memory leak and add memory_leak_check
+def test_constant_lowering(timedelta_arr_value):
+    def impl():
+        return timedelta_arr_value
+
+    pd.testing.assert_series_equal(
+        pd.Series(bodo.jit(impl)()), pd.Series(timedelta_arr_value), check_dtype=False
+    )

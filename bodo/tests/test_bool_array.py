@@ -187,3 +187,13 @@ def test_np_prod(bool_arr_value, memory_leak_check):
         return np.prod(A)
 
     check_func(test_impl, (bool_arr_value,))
+
+
+# TODO: fix memory leak and add memory_leak_check
+def test_constant_lowering(bool_arr_value):
+    def impl():
+        return bool_arr_value
+
+    pd.testing.assert_series_equal(
+        pd.Series(bodo.jit(impl)()), pd.Series(bool_arr_value), check_dtype=False
+    )

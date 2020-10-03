@@ -110,3 +110,13 @@ def test_np_unique(memory_leak_check):
         [datetime.date(2019, 3, 3)] * 10,
     )
     check_func(impl, (arr,), sort_output=True)
+
+
+# TODO: fix memory leak and add memory_leak_check
+def test_constant_lowering(date_arr_value):
+    def impl():
+        return date_arr_value
+
+    pd.testing.assert_series_equal(
+        pd.Series(bodo.jit(impl)()), pd.Series(date_arr_value), check_dtype=False
+    )

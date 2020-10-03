@@ -7,6 +7,7 @@ import operator
 import llvmlite.binding as ll
 import numba
 import numpy as np
+import pandas as pd
 from llvmlite import ir as lir
 from numba.core import cgutils, types
 from numba.core.imputils import lower_builtin, lower_constant
@@ -605,13 +606,16 @@ class DatetimeDateArrayType(types.ArrayCompatible):
 datetime_date_array_type = DatetimeDateArrayType()
 types.datetime_date_array_type = datetime_date_array_type
 
+data_type = types.Array(types.int64, 1, "C")
+nulls_type = types.Array(types.uint8, 1, "C")
+
 # datetime.date array has only an array integers to store data
 @register_model(DatetimeDateArrayType)
 class DatetimeDateArrayModel(models.StructModel):
     def __init__(self, dmm, fe_type):
         members = [
-            ("data", types.Array(types.int64, 1, "C")),
-            ("null_bitmap", types.Array(types.uint8, 1, "C")),
+            ("data", data_type),
+            ("null_bitmap", nulls_type),
         ]
         models.StructModel.__init__(self, dmm, fe_type, members)
 
@@ -720,6 +724,27 @@ def init_datetime_date_array(typingctx, data, nulls=None):
 
     sig = datetime_date_array_type(data, nulls)
     return sig, codegen
+
+
+@lower_constant(DatetimeDateArrayType)
+def lower_constant_datetime_date_arr(context, builder, typ, pyval):
+    n = len(pyval)
+    data_arr = np.empty(n, np.int64)
+    nulls_arr = np.empty((n + 7) >> 3, np.uint8)
+
+    for i, s in enumerate(pyval):
+        is_na = pd.isna(s)
+        bodo.libs.int_arr_ext.set_bit_to_arr(nulls_arr, i, int(not is_na))
+        if not is_na:
+            data_arr[i] = (s.year << 32) + (s.month << 16) + s.day
+
+    data_const_arr = context.get_constant_generic(builder, data_type, data_arr)
+    nulls_const_arr = context.get_constant_generic(builder, nulls_type, nulls_arr)
+
+    datetime_data_arr = context.make_helper(builder, typ)
+    datetime_data_arr.data = data_const_arr
+    datetime_data_arr.null_bitmap = nulls_const_arr
+    return datetime_data_arr._getvalue()
 
 
 @numba.njit(no_cpython_wrapper=True)

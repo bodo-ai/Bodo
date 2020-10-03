@@ -7,6 +7,7 @@ import operator
 import llvmlite.binding as ll
 import numba
 import numpy as np
+import pandas as pd
 from llvmlite import ir as lir
 from numba.core import cgutils, types
 from numba.core.imputils import lower_constant
@@ -558,15 +559,20 @@ class DatetimeTimeDeltaArrayType(types.ArrayCompatible):
 datetime_timedelta_array_type = DatetimeTimeDeltaArrayType()
 types.datetime_timedelta_array_type = datetime_timedelta_array_type
 
+days_data_type = types.Array(types.int64, 1, "C")
+seconds_data_type = types.Array(types.int64, 1, "C")
+microseconds_data_type = types.Array(types.int64, 1, "C")
+nulls_type = types.Array(types.uint8, 1, "C")
+
 # datetime.timedelta has three arrays of integers to store data
 @register_model(DatetimeTimeDeltaArrayType)
 class DatetimeTimeDeltaArrayModel(models.StructModel):
     def __init__(self, dmm, fe_type):
         members = [
-            ("days_data", types.Array(types.int64, 1, "C")),
-            ("seconds_data", types.Array(types.int64, 1, "C")),
-            ("microseconds_data", types.Array(types.int64, 1, "C")),
-            ("null_bitmap", types.Array(types.uint8, 1, "C")),
+            ("days_data", days_data_type),
+            ("seconds_data", seconds_data_type),
+            ("microseconds_data", microseconds_data_type),
+            ("null_bitmap", nulls_type),
         ]
         models.StructModel.__init__(self, dmm, fe_type, members)
 
@@ -724,6 +730,43 @@ def init_datetime_timedelta_array(
         days_data, seconds_data, microseconds_data, nulls
     )
     return sig, codegen
+
+
+@lower_constant(DatetimeTimeDeltaArrayType)
+def lower_constant_datetime_timedelta_arr(context, builder, typ, pyval):
+
+    n = len(pyval)
+    days_data_arr = np.empty(n, np.int64)
+    seconds_data_arr = np.empty(n, np.int64)
+    microseconds_data_arr = np.empty(n, np.int64)
+
+    nulls_arr = np.empty((n + 7) >> 3, np.uint8)
+
+    for i, s in enumerate(pyval):
+        is_na = pd.isna(s)
+        bodo.libs.int_arr_ext.set_bit_to_arr(nulls_arr, i, int(not is_na))
+        if not is_na:
+            days_data_arr[i] = s.days
+            seconds_data_arr[i] = s.seconds
+            microseconds_data_arr[i] = s.microseconds
+
+    days_data_const_arr = context.get_constant_generic(
+        builder, days_data_type, days_data_arr
+    )
+    seconds_data_const_arr = context.get_constant_generic(
+        builder, seconds_data_type, seconds_data_arr
+    )
+    microseconds_data_const_arr = context.get_constant_generic(
+        builder, microseconds_data_type, microseconds_data_arr
+    )
+    nulls_const_arr = context.get_constant_generic(builder, nulls_type, nulls_arr)
+
+    datetime_data_arr = context.make_helper(builder, typ)
+    datetime_data_arr.days_data = days_data_const_arr
+    datetime_data_arr.seconds_data = seconds_data_const_arr
+    datetime_data_arr.microseconds_data = microseconds_data_const_arr
+    datetime_data_arr.null_bitmap = nulls_const_arr
+    return datetime_data_arr._getvalue()
 
 
 @numba.njit(no_cpython_wrapper=True)

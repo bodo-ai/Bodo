@@ -10,6 +10,7 @@ import numpy as np
 import pandas as pd
 from llvmlite import ir as lir
 from numba.core import cgutils, types
+from numba.core.imputils import lower_constant
 from numba.extending import (
     NativeValue,
     box,
@@ -352,6 +353,32 @@ def init_integer_array(typingctx, data, null_bitmap=None):
     ret_typ = IntegerArrayType(data.dtype)
     sig = ret_typ(data, null_bitmap)
     return sig, codegen
+
+
+@lower_constant(IntegerArrayType)
+def lower_constant_int_arr(context, builder, typ, pyval):
+
+    n = len(pyval)
+    data_arr = np.empty(n, pyval.dtype.type)
+    nulls_arr = np.empty((n + 7) >> 3, np.uint8)
+    for i, s in enumerate(pyval):
+        is_na = pd.isna(s)
+        bodo.libs.int_arr_ext.set_bit_to_arr(nulls_arr, i, int(not is_na))
+        if not is_na:
+            data_arr[i] = s
+
+    data_const_arr = context.get_constant_generic(
+        builder, types.Array(typ.dtype, 1, "C"), data_arr
+    )
+
+    nulls_const_arr = context.get_constant_generic(
+        builder, types.Array(types.uint8, 1, "C"), nulls_arr
+    )
+
+    int_array = context.make_helper(builder, typ)
+    int_array.data = data_const_arr
+    int_array.null_bitmap = nulls_const_arr
+    return int_array._getvalue()
 
 
 # using a function for getting data to enable extending various analysis

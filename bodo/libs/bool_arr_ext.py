@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 from llvmlite import ir as lir
 from numba.core import cgutils, types
-from numba.core.imputils import impl_ret_borrowed
+from numba.core.imputils import impl_ret_borrowed, lower_constant
 from numba.extending import (
     NativeValue,
     box,
@@ -80,6 +80,10 @@ def typeof_boolean_array(val, c):
     return boolean_array
 
 
+data_type = types.Array(types.bool_, 1, "C")
+nulls_type = types.Array(types.uint8, 1, "C")
+
+
 # store data and nulls as regular numpy arrays without payload machineray
 # since this struct is immutable (data and null_bitmap are not assigned new
 # arrays after initialization)
@@ -87,8 +91,8 @@ def typeof_boolean_array(val, c):
 class BooleanArrayModel(models.StructModel):
     def __init__(self, dmm, fe_type):
         members = [
-            ("data", types.Array(types.bool_, 1, "C")),
-            ("null_bitmap", types.Array(types.uint8, 1, "C")),
+            ("data", data_type),
+            ("null_bitmap", nulls_type),
         ]
         models.StructModel.__init__(self, dmm, fe_type, members)
 
@@ -340,6 +344,28 @@ def box_bool_arr(typ, val, c):
     c.pyapi.decref(data)
     c.pyapi.decref(mask_arr)
     return res
+
+
+@lower_constant(BooleanArrayType)
+def lower_constant_bool_arr(context, builder, typ, pyval):
+
+    n = len(pyval)
+    data_arr = np.empty(n, np.bool_)
+    nulls_arr = np.empty((n + 7) >> 3, np.uint8)
+    for i, s in enumerate(pyval):
+        is_na = pd.isna(s)
+        bodo.libs.int_arr_ext.set_bit_to_arr(nulls_arr, i, int(not is_na))
+        if not is_na:
+            data_arr[i] = s
+
+    data_const_arr = context.get_constant_generic(builder, data_type, data_arr)
+
+    nulls_const_arr = context.get_constant_generic(builder, nulls_type, nulls_arr)
+
+    bool_array = context.make_helper(builder, typ)
+    bool_array.data = data_const_arr
+    bool_array.null_bitmap = nulls_const_arr
+    return bool_array._getvalue()
 
 
 def lower_init_bool_array(context, builder, signature, args):

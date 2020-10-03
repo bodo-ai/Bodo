@@ -13,6 +13,7 @@ from decimal import Decimal
 import llvmlite.binding as ll
 import numba
 import numpy as np
+import pandas as pd
 from llvmlite import ir as lir
 from numba.core import cgutils, types
 from numba.core.imputils import lower_constant
@@ -289,12 +290,17 @@ class DecimalArrayType(types.ArrayCompatible):
 # arrays after initialization)
 # NOTE: storing data as int128 elements. struct of 8 bytes could be better depending on
 # the operations needed
+
+data_type = types.Array(int128_type, 1, "C")
+nulls_type = types.Array(types.uint8, 1, "C")
+
+
 @register_model(DecimalArrayType)
 class DecimalArrayModel(models.StructModel):
     def __init__(self, dmm, fe_type):
         members = [
-            ("data", types.Array(int128_type, 1, "C")),
-            ("null_bitmap", types.Array(types.uint8, 1, "C")),
+            ("data", data_type),
+            ("null_bitmap", nulls_type),
         ]
         models.StructModel.__init__(self, dmm, fe_type, members)
 
@@ -331,6 +337,48 @@ def init_decimal_array(typingctx, data, null_bitmap, precision_tp, scale_tp=None
     ret_typ = DecimalArrayType(precision, scale)
     sig = ret_typ(data, null_bitmap, precision_tp, scale_tp)
     return sig, codegen
+
+
+@lower_constant(DecimalArrayType)
+def lower_constant_decimal_arr(context, builder, typ, pyval):
+    n = len(pyval)
+    n_const = context.get_constant(types.int64, n)
+    data_arr_struct = bodo.utils.utils._empty_nd_impl(
+        context, builder, types.Array(int128_type, 1, "C"), [n_const]
+    )
+    nulls_arr = np.empty((n + 7) >> 3, np.uint8)
+
+    def f(arr, idx, val):
+        arr[idx] = decimal128type_to_int128(val)
+
+    # TODO: Replace with an implementation that doesn't produce IR for every element of a constant array
+    for i, s in enumerate(pyval):
+        is_na = pd.isna(s)
+        bodo.libs.int_arr_ext.set_bit_to_arr(nulls_arr, i, int(not is_na))
+        if not is_na:
+            context.compile_internal(
+                builder,
+                f,
+                types.void(
+                    types.Array(int128_type, 1, "C"),
+                    types.int64,
+                    Decimal128Type(typ.precision, typ.scale),
+                ),
+                [
+                    data_arr_struct._getvalue(),
+                    context.get_constant(types.int64, i),
+                    context.get_constant_generic(
+                        builder, Decimal128Type(typ.precision, typ.scale), s
+                    ),
+                ],
+            )
+
+    nulls_const_arr = context.get_constant_generic(builder, nulls_type, nulls_arr)
+
+    decimal_arr = context.make_helper(builder, typ)
+    decimal_arr.data = data_arr_struct._getvalue()
+    decimal_arr.null_bitmap = nulls_const_arr
+    return decimal_arr._getvalue()
 
 
 # high-level allocation function for decimal arrays
