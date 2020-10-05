@@ -1,30 +1,33 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 from collections import defaultdict
+
 import numba
+import numpy as np
+import pandas as pd
 from numba.core import ir, ir_utils, typeinfer, types
-from numba.extending import box, models, register_model, intrinsic
 from numba.core.ir_utils import (
-    visit_vars_inner,
-    replace_vars_inner,
     compile_to_numba_ir,
     replace_arg_nodes,
+    replace_vars_inner,
+    visit_vars_inner,
 )
+from numba.extending import box, intrinsic, models, register_model
+
 import bodo
-from bodo.hiframes.datetime_date_ext import datetime_date_type
-from bodo.hiframes.datetime_date_ext import DatetimeDateType
-from bodo.transforms import distributed_pass, distributed_analysis
-from bodo.utils.utils import debug_prints
-from bodo.transforms.distributed_analysis import Distribution
-from bodo.libs.str_ext import string_type
-from bodo.libs.str_arr_ext import string_array_type
-from bodo.libs.int_arr_ext import IntegerArrayType
-from bodo.libs.bool_arr_ext import boolean_array
-from bodo.utils.utils import sanitize_varname
-from bodo.ir import connector
 from bodo import objmode
-import pandas as pd
-import numpy as np
-from bodo.hiframes.pd_categorical_ext import PDCategoricalDtype, CategoricalArray
+from bodo.hiframes.datetime_date_ext import DatetimeDateType, datetime_date_type
+from bodo.hiframes.pd_categorical_ext import (
+    CategoricalArray,
+    PDCategoricalDtype,
+)
+from bodo.ir import connector
+from bodo.libs.bool_arr_ext import boolean_array
+from bodo.libs.int_arr_ext import IntegerArrayType
+from bodo.libs.str_arr_ext import string_array_type
+from bodo.libs.str_ext import string_type
+from bodo.transforms import distributed_analysis, distributed_pass
+from bodo.transforms.distributed_analysis import Distribution
+from bodo.utils.utils import debug_prints, sanitize_varname
 
 
 class CsvReader(ir.Stmt):
@@ -61,8 +64,9 @@ class CsvReader(ir.Stmt):
         )
 
 
-from bodo.io import csv_cpp
 import llvmlite.binding as ll
+
+from bodo.io import csv_cpp
 
 ll.add_symbol("csv_file_chunk_reader", csv_cpp.csv_file_chunk_reader)
 
@@ -273,10 +277,38 @@ def _gen_csv_reader_py(
             for s_cname, t in zip(sanitized_cnames, col_typs)
         ]
     )
-    pd_dtype_strs = ", ".join(
+
+    # Pandas' `read_csv` and Bodo's `read_csv` are not exactly equivalent,
+    # for instance in a column of `int64` if there is a missing entry,
+    # pandas would convert it to a `float64` column whereas Bodo would use a
+    # `Int64` type (nullable integers), etc. We discovered a performance bug with
+    # certain nullable types, notably `Int64`, in read_csv, i.e. when we
+    # specify the `Int64` dtype in `pd.read_csv`, the performance is very poor.
+    # Interestingly, if we do `pd.read_csv` without `dtype` argument and then
+    # simply do `df.astype` right after, we do not face the performance
+    # penalty. However, when reading strings, if we have missing entries,
+    # doing `df.astype` would convert those entries to literally the
+    # string values "nan". This is not desirable. Ideally we would use the
+    # nullable string type ("string") which would not have this issue, but
+    # unfortunately the performance is slow (in both `pd.read_csv` and `df.astype`).
+    # Therefore, we have the workaround below where we specify the `dtype` for strings
+    # (`str`) directly in `pd.read_csv` (there's no performance penalty, we checked),
+    # and specify the rest of the dtypes in the `df.astype` call.
+
+    # dtypes to specify directly in the `pd.read_csv` call
+    pd_read_csv_dtype_strs = ", ".join(
         [
-            "'{}':{}".format(cname, _get_pd_dtype_str(t))
-            for cname, t in zip(col_names, col_typs)
+            "{}:{}".format(idx, _get_pd_dtype_str(t))
+            for idx, t in zip(usecols, col_typs)
+            if _get_pd_dtype_str(t) == "str"
+        ]
+    )
+    # dtypes to specify in the `df.astype` call done right after the `pd.read_csv` call
+    df_astype_dtype_strs = ", ".join(
+        [
+            "{}:{}".format(idx, _get_pd_dtype_str(t))
+            for idx, t in zip(usecols, col_typs)
+            if _get_pd_dtype_str(t) != "str"
         ]
     )
     # here, header can either be:
@@ -304,16 +336,21 @@ def _gen_csv_reader_py(
     func_text += "  if bodo.utils.utils.is_null_pointer(f_reader):\n"
     func_text += "      raise FileNotFoundError('File does not exist')\n"
     func_text += "  with objmode({}):\n".format(typ_strs)
-    func_text += "    df = pd.read_csv(f_reader, names={},\n".format(col_names)
+    func_text += "    df = pd.read_csv(f_reader,\n"
     # header is always None here because header information was found in untyped pass.
     # this pd.read_csv() happens at runtime and is passing a file reader(f_reader)
     # to pandas. f_reader skips the header, so we have to tell pandas header=None.
     func_text += "       header=None,\n"
     func_text += "       parse_dates=[{}],\n".format(date_inds)
-    func_text += "       dtype={{{}}},\n".format(pd_dtype_strs)
+    # Check explanation near the declaration of `pd_read_csv_dtype_strs` for why we specify
+    # only some types here directly
+    func_text += "       dtype={{{}}},\n".format(pd_read_csv_dtype_strs)
     func_text += "       usecols={}, sep='{}', low_memory=False)\n".format(usecols, sep)
-    for s_cname, cname in zip(sanitized_cnames, col_names):
-        func_text += "    {} = df['{}'].values\n".format(s_cname, cname)
+    # Check explanation near the declaration of `df_astype_dtype_strs` for why we specify
+    # some types here rather than directly in the `pd.read_csv` call.
+    func_text += "    df = df.astype({{{}}}, copy=False)\n".format(df_astype_dtype_strs)
+    for col_idx, s_cname in zip(usecols, sanitized_cnames):
+        func_text += "    {} = df[{}].values\n".format(s_cname, col_idx)
         # func_text += "    print({})\n".format(s_cname)
     func_text += "  return ({},)\n".format(", ".join(sc for sc in sanitized_cnames))
     glbls = globals()  # TODO: fix globals after Numba's #3355 is resolved
