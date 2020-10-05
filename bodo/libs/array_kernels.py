@@ -44,6 +44,7 @@ from bodo.libs.array import (
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.bool_arr_ext import BooleanArrayType, boolean_array
 from bodo.libs.decimal_arr_ext import DecimalArrayType
+from bodo.libs.distributed_api import Reduce_Type
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.str_arr_ext import (
     get_str_arr_item_length,
@@ -1620,6 +1621,30 @@ def overload_array_prod(A):
 
         def impl(A):  # pragma: no cover
             return pd.Series(A).prod()
+
+    return impl
+
+
+def nonzero(arr):
+    return (arr,)
+
+
+@overload(nonzero, no_unliteral=True)
+def nonzero_overload(A, parallel=False):
+    if not bodo.utils.utils.is_array_typ(A, False):  # pragma: no cover
+        return
+
+    def impl(A, parallel=False):  # pragma: no cover
+        n = len(A)
+        if parallel:
+            offset = bodo.libs.distributed_api.dist_exscan(n, Reduce_Type.Sum.value)
+        else:
+            offset = 0
+        result = []
+        for i in range(n):
+            if A[i]:
+                result.append(i + offset)
+        return (np.array(result, np.int64),)
 
     return impl
 

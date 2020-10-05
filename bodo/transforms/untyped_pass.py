@@ -404,6 +404,9 @@ class UntypedPass:
         if fdef == ("where", "numpy") and len(rhs.args) == 3:
             return self._handle_np_where(assign, lhs, rhs)
 
+        if fdef == ("where", "numpy") and len(rhs.args) == 1:
+            return self._handle_np_where_one_arg(assign, lhs, rhs)
+
         return [assign]
 
     def _handle_np_where(self, assign, lhs, rhs):
@@ -412,6 +415,14 @@ class UntypedPass:
         """
         return compile_func_single_block(
             lambda c, x, y: bodo.hiframes.series_impl.where_impl(c, x, y), rhs.args, lhs
+        )
+
+    def _handle_np_where_one_arg(self, assign, lhs, rhs):
+        """replace np.where() calls with 1 arg with Bodo's version since
+        Numba's typer cannot handle our array types.
+        """
+        return compile_func_single_block(
+            lambda c: bodo.hiframes.series_impl.where_impl_one_arg(c), rhs.args, lhs
         )
 
     def _get_reverse_copies(self, body):

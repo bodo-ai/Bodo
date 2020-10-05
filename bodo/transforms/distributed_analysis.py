@@ -889,6 +889,29 @@ class DistributedAnalysis:
             self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
             return
 
+        if fdef == ("nonzero", "bodo.libs.array_kernels"):
+            # output of nonzero is variable-length even if input is 1D
+            if lhs not in array_dists:
+                self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
+
+            # arg0 is an array
+            in_dist = Distribution(array_dists[rhs.args[0].name].value)
+            # return is a tuple(array,)
+            out_dist = Distribution(
+                min(
+                    array_dists[lhs][0].value,
+                    in_dist.value,
+                )
+            )
+            self._set_var_dist(lhs, array_dists, out_dist)
+
+            # output can cause input REP
+            if out_dist != Distribution.OneD_Var:
+                in_dist = out_dist
+
+            self._set_var_dist(rhs.args[0].name, array_dists, in_dist)
+            return
+
         if fdef == ("drop_duplicates", "bodo.libs.array_kernels"):
             # output of drop_duplicates is variable-length even if input is 1D
             if lhs not in array_dists:

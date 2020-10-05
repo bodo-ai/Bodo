@@ -84,6 +84,19 @@ def test_np_repeat(int_arr_value, memory_leak_check):
     check_func(impl, (int_arr_value,), dist_test=False)
 
 
+def test_np_where(memory_leak_check):
+    def impl(arr):
+        return np.where(arr)
+
+    # Doesn't work with null values in Python
+    A = pd.arrays.IntegerArray(
+        np.array([1, 3, 0, 3, 10], np.int8),
+        np.array([False, False, False, False, False]),
+    )
+
+    check_func(impl, (A,))
+
+
 def test_np_unique(memory_leak_check):
     def impl(arr):
         return np.unique(arr)

@@ -2456,6 +2456,36 @@ class SeriesFilterBoolInfer(AbstractTemplate):
         return ret(*args)
 
 
+def where_impl_one_arg(c):  # pragma: no cover
+    return np.where(c)
+
+
+@overload(where_impl_one_arg, no_unliteral=True)
+def overload_where_unsupported_one_arg(condition):
+    if isinstance(condition, SeriesType) or bodo.utils.utils.is_array_typ(
+        condition, False
+    ):
+        return lambda condition: np.where(condition)
+
+
+@overload(where_impl_one_arg, inline="always", no_unliteral=True)
+@overload(np.where, inline="always", no_unliteral=True)
+def overload_np_where_one_arg(condition):
+    if isinstance(condition, SeriesType):
+
+        def impl_series(condition):  # pragma: no cover
+            condition = bodo.hiframes.pd_series_ext.get_series_data(condition)
+            return bodo.libs.array_kernels.nonzero(condition)
+
+        return impl_series
+    elif bodo.utils.utils.is_array_typ(condition, False):
+
+        def impl(condition):  # pragma: no cover
+            return bodo.libs.array_kernels.nonzero(condition)
+
+        return impl
+
+
 def where_impl(c, x, y):
     return np.where(c, x, y)
 

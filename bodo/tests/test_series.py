@@ -2748,6 +2748,7 @@ def test_np_argmax(memory_leak_check):
 
     check_func(impl, (np.random.rand(500, 50),))
 
+
 # TODO: fix memory leak and add memory_leak_check
 def test_series_index_cast():
     # cast range index to integer index if necessary
@@ -2927,6 +2928,19 @@ def test_series_where(memory_leak_check):
     )
     cond = S == 2.0
     check_func(test_impl, (S, cond, 12))
+
+
+def test_np_where_one_arg(memory_leak_check):
+    """basic test for np.where(cond)"""
+
+    def test_impl(cond):
+        return np.where(cond)
+
+    S = pd.Series(
+        [4.0, 2.0, 1.1, 9.1, 2.0, np.nan, 2.5], [5, 1, 2, 0, 3, 4, 9], name="AA"
+    )
+    cond = S == 2.0
+    check_func(test_impl, (cond,), dist_test=False)
 
 
 @pytest.mark.parametrize(

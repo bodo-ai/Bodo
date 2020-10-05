@@ -19,6 +19,16 @@ def bool_arr_value(request):
     return request.param
 
 
+def test_np_where(memory_leak_check):
+    def impl(arr):
+        return np.where(arr)
+
+    # Doesn't work with null values in Python
+    A = pd.array([True, True, False, True] * 10)
+
+    check_func(impl, (A,))
+
+
 def test_np_repeat(bool_arr_value, memory_leak_check):
     def impl(arr):
         return np.repeat(arr, 2)
