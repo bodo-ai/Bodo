@@ -166,34 +166,12 @@ class DataFramePass:
                         rp_func.arg_types,
                         self.typemap,
                         self.calltypes,
+                        work_list,
                     )
-                    # add blocks in reversed topo order to enable dead branch
-                    # pruning (merge example)
-                    # TODO: fix inline_closure_call()
-                    topo_order = find_topo_order(self.func_ir.blocks)
-                    for c_label in reversed(topo_order):
-                        if c_label in callee_blocks:
-                            c_block = callee_blocks[c_label]
-                            # update loc info
-                            c_block.loc = self.curr_loc
-                            update_locs(c_block.body, self.curr_loc)
-                            # include the new block created after callee used
-                            # to split the original block
-                            # find it using jumps out of callee (returns
-                            # originally) but include only once
-                            if isinstance(c_block.body[-1], ir.Jump):
-                                target_label = c_block.body[-1].target
-                                if (
-                                    target_label not in callee_blocks
-                                    and target_label not in work_list
-                                ):
-                                    work_list.append(
-                                        (
-                                            target_label,
-                                            self.func_ir.blocks[target_label],
-                                        )
-                                    )
-                            work_list.append((c_label, c_block))
+                    # update Loc objects
+                    for c_block in callee_blocks.values():
+                        c_block.loc = self.curr_loc
+                        update_locs(c_block.body, self.curr_loc)
                     replaced = True
                     break
 
