@@ -195,9 +195,6 @@ class SeriesPass:
         self.locals = _locals
         # flag to enable inplace array op optimization: A[i] == v -> inplace_eq(A, i, v)
         self.optimize_inplace_ops = optimize_inplace_ops
-        self.array_analysis = numba.parfors.array_analysis.ArrayAnalysis(
-            typingctx, func_ir, typemap, calltypes
-        )
         # Loc object of current location being translated
         self.curr_loc = self.func_ir.loc
 
