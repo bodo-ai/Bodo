@@ -47,15 +47,17 @@ void append_bits_to_vec(std::vector<bool>* null_vec, const uint8_t* null_buff,
 void set_null_buff(uint8_t** out_nulls, const uint8_t* null_buff,
                    int64_t null_size);
 
-#define CHECK(expr, msg)                                              \
-    if (!(expr)) {                                                    \
-        std::cerr << "Error in parquet reader: " << msg << std::endl; \
+#define CHECK(expr, msg)                                                      \
+    if (!(expr)) {                                                            \
+        std::string err_msg = std::string("Error in parquet reader: ") + msg; \
+        throw std::runtime_error(err_msg);                                    \
     }
 
-#define CHECK_ARROW(expr, msg)                                               \
-    if (!(expr.ok())) {                                                      \
-        std::cerr << "Error in arrow parquet reader: " << msg << " " << expr \
-                  << std::endl;                                              \
+#define CHECK_ARROW(expr, msg)                                                 \
+    if (!(expr.ok())) {                                                        \
+        std::string err_msg = std::string("Error in arrow parquet reader: ") + \
+                              msg + " " + expr.ToString();                     \
+        throw std::runtime_error(err_msg);                                     \
     }
 
 typedef void (*s3_opener_t)(const char*,
