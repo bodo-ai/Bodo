@@ -134,6 +134,59 @@ def get_udf_error_msg(context_str, error):
     )
 
 
+class FileInfo(object):
+    """This object is passed to ForceLiteralArg to convert argument
+    to FilenameType instead of Literal"""
+
+    def get_schema(self, fname):
+        raise NotImplementedError
+
+
+class FilenameType(types.StringLiteral):
+    """Arguments of Bodo functions that are a constant literal are
+    converted to this type instead of plain Literal to allow us
+    to reuse the cache for differing file names that have the
+    same schema. All FilenameType instances have the same hash
+    to allow comparison of different instances. Equality is based
+    on the schema (not the file name)."""
+
+    def __init__(self, fname, finfo):
+        self.fname = fname
+        self.schema = finfo.get_schema(fname)
+        super(FilenameType, self).__init__(self.fname)
+
+    def __hash__(self):
+        # fixed number to ensure every FilenameType hashes equally
+        return 37
+
+    def __eq__(self, other):
+        if isinstance(other, types.FilenameType):
+            assert self.schema is not None
+            assert other.schema is not None
+            return self.schema == other.schema
+        else:
+            return False
+
+
+types.FilenameType = FilenameType
+
+# Data model, unboxing and lower cast are the same as unicode to
+# allow passing different file names to compiled code (note that if
+# data model is literal the file name would be part of the binary code)
+
+# datamodel
+register_model(types.FilenameType)(numba.cpython.unicode.UnicodeModel)
+
+# unbox
+unbox(types.FilenameType)(numba.cpython.unicode.unbox_unicode_str)
+
+# lower cast
+@lower_cast(types.FilenameType, types.unicode_type)
+def cast_filename_to_unicode(context, builder, fromty, toty, val):
+    # do nothing
+    return val
+
+
 # sentinel value representing non-constant values
 class NotConstant:
     pass

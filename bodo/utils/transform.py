@@ -292,20 +292,24 @@ def get_stmt_defs(stmt):
     return set()
 
 
-def get_const_value(var, func_ir, err_msg, typemap=None, arg_types=None):
+def get_const_value(
+    var, func_ir, err_msg, typemap=None, arg_types=None, file_info=None
+):
     """Get constant value of a variable if possible, otherwise raise error.
     If the variable is argument to the function, force recompilation with literal
     typing of the argument.
     """
     try:
-        val = get_const_value_inner(func_ir, var, arg_types, typemap)
+        val = get_const_value_inner(
+            func_ir, var, arg_types, typemap, file_info=file_info
+        )
     except GuardException:
         raise BodoError(err_msg)
     return val
 
 
 def get_const_value_inner(
-    func_ir, var, arg_types=None, typemap=None, updated_containers=None
+    func_ir, var, arg_types=None, typemap=None, updated_containers=None, file_info=None
 ):
     """Check if a variable can be inferred as a constant and return the constant value.
     Otherwise, raise GuardException.
@@ -331,7 +335,11 @@ def get_const_value_inner(
 
     # argument dispatch, force literal only if argument can be literal
     if isinstance(var_def, ir.Arg) and can_literalize_type(typ):
-        raise numba.core.errors.ForceLiteralArg({var_def.index}, loc=var.loc)
+        raise numba.core.errors.ForceLiteralArg(
+            {var_def.index},
+            loc=var.loc,
+            file_infos={var_def.index: file_info} if file_info is not None else None,
+        )
 
     # binary op (s1 op s2)
     if is_expr(var_def, "binop"):

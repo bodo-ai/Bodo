@@ -594,6 +594,31 @@ def test_read_parquet_cache(datapath, memory_leak_check):
     pd.testing.assert_frame_equal(py_out, bodo_out2)
 
 
+def test_read_parquet_cache_fname_arg(datapath, memory_leak_check):
+    """
+    test read_parquet with cache=True and passing different file name as
+    argument to the Bodo function
+    """
+
+    def impl(fname):
+        return pd.read_parquet(fname)
+
+    fname1 = datapath("int_nulls_single.pq")
+    fname2 = datapath("int_nulls_multi.pq")
+
+    py_out = impl(fname1)
+    py_out = py_out.astype({"A": "Int64"})
+    bodo_out1, bodo_out2 = check_caching(
+        sys.modules[__name__],
+        "test_read_parquet_cache_fname_arg",
+        impl,
+        (fname1,),
+        (fname2,),
+    )
+    pd.testing.assert_frame_equal(py_out, bodo_out1)
+    pd.testing.assert_frame_equal(py_out, bodo_out2)
+
+
 # TODO: Add memory_leak_check when bugs are resolved.
 def test_read_write_parquet():
     def write(df, filename):

@@ -11,6 +11,7 @@ from numba.core.imputils import impl_ret_new_ref
 from numba.core.ir_utils import (
     compile_to_numba_ir,
     find_const,
+    get_definition,
     guard,
     mk_unique_var,
     replace_arg_nodes,
@@ -54,7 +55,7 @@ from bodo.libs.str_ext import string_type, unicode_to_utf8
 from bodo.libs.struct_arr_ext import StructArrayType
 from bodo.transforms import distributed_pass
 from bodo.utils.transform import get_const_value
-from bodo.utils.typing import BodoError, BodoWarning
+from bodo.utils.typing import BodoError, BodoWarning, FileInfo
 from bodo.utils.utils import is_null_pointer, sanitize_varname, unliteral_all
 
 # read Arrow Int columns as nullable int array (IntegerArrayType)
@@ -83,6 +84,17 @@ def read_parquet_arrow_array():  # pragma: no cover
 
 def get_column_size_parquet():  # pragma: no cover
     return 0
+
+
+class ParquetFileInfo(FileInfo):
+    """FileInfo object passed to ForceLiteralArg for
+    file name arguments that refer to a parquet dataset"""
+
+    def __init__(self, columns):
+        self.columns = columns  # columns to select from parquet dataset
+
+    def get_schema(self, fname):
+        return parquet_file_schema(fname, selected_columns=self.columns)
 
 
 class ParquetHandler:
@@ -125,15 +137,36 @@ class ParquetHandler:
                 "at compile time or schema should be provided."
             )
             file_name_str = get_const_value(
-                file_name, self.func_ir, msg, arg_types=self.args
+                file_name,
+                self.func_ir,
+                msg,
+                arg_types=self.args,
+                file_info=ParquetFileInfo(columns),
             )
-            (
-                col_names,
-                col_types,
-                index_col,
-                col_indices,
-                col_nb_fields,
-            ) = parquet_file_schema(file_name_str, columns)
+
+            got_schema = False
+            # get_const_value forces variable to be literal which should convert it to
+            # FilenameType. If so, the schema will be part of the type
+            var_def = guard(get_definition, self.func_ir, file_name)
+            if isinstance(var_def, ir.Arg):
+                typ = self.args[var_def.index]
+                if isinstance(typ, types.FilenameType):
+                    (
+                        col_names,
+                        col_types,
+                        index_col,
+                        col_indices,
+                        col_nb_fields,
+                    ) = typ.schema
+                    got_schema = True
+            if not got_schema:
+                (
+                    col_names,
+                    col_types,
+                    index_col,
+                    col_indices,
+                    col_nb_fields,
+                ) = parquet_file_schema(file_name_str, columns)
         else:
             col_names_total = list(table_types.keys())
             col_types_total = [t for t in table_types.values()]
@@ -179,6 +212,7 @@ class ParquetHandler:
                 loc,
             )
         ]
+
         return col_names, data_arrs, index_col, nodes
 
 

@@ -5,6 +5,7 @@ other module in bodo package.
 import functools
 import hashlib
 import inspect
+import itertools
 import operator
 import os
 import re
@@ -878,10 +879,17 @@ def _compile_for_args(self, *args, **kws):  # pragma: no cover
             )
             raise errors.CompilerError(m.format(info))
         # Convert requested arguments into a Literal.
-        args = [
-            (types.literal if i in e.requested_args else lambda x: x)(args[i])
-            for i, v in enumerate(args)
-        ]
+        # Bodo change: requested args with FileInfo object are converted to FilenameType
+        new_args = []
+        for i, v in enumerate(args):
+            if i in e.requested_args:
+                if i in e.file_infos:
+                    new_args.append(types.FilenameType(args[i], e.file_infos[i]))
+                else:
+                    new_args.append(types.literal(args[i]))
+            else:
+                new_args.append(args[i])
+        args = new_args
         # Re-enter compilation with the Literal-ized arguments
         return self._compile_for_args(*args)
 
@@ -2026,3 +2034,189 @@ if (
     != "6c08a057e8b03754d713e55736b354323ad3816fbdb41767882e064012e2c0ab"
 ):  # pragma: no cover
     warnings.warn("jitclass_decorators.jitclass has changed")
+
+
+# -------------------- ForceLiteralArg --------------------
+
+
+def CallConstraint_resolve(self, typeinfer, typevars, fnty):
+    assert fnty
+    context = typeinfer.context
+
+    r = numba.core.typeinfer.fold_arg_vars(typevars, self.args, self.vararg, self.kws)
+    if r is None:
+        # Cannot resolve call type until all argument types are known
+        return
+    pos_args, kw_args = r
+
+    # Check argument to be precise
+    for a in itertools.chain(pos_args, kw_args.values()):
+        # Forbids imprecise type except array of undefined dtype
+        if not a.is_precise() and not isinstance(a, types.Array):
+            return
+
+    # Resolve call type
+    try:
+        sig = typeinfer.resolve_call(fnty, pos_args, kw_args)
+    except ForceLiteralArg as e:
+        # Adjust for bound methods
+        folding_args = (
+            (fnty.this,) + tuple(self.args)
+            if isinstance(fnty, types.BoundFunction)
+            else self.args
+        )
+        folded = e.fold_arguments(folding_args, self.kws)
+        requested = set()
+        unsatisified = set()
+        new_file_infos = {}  # Bodo change: propagate file_infos
+        for idx in e.requested_args:
+            maybe_arg = typeinfer.func_ir.get_definition(folded[idx])
+            if isinstance(maybe_arg, ir.Arg):
+                requested.add(maybe_arg.index)
+                if maybe_arg.index in e.file_infos:
+                    new_file_infos[maybe_arg.index] = e.file_infos[maybe_arg.index]
+            else:  # pragma: no cover
+                unsatisified.add(idx)
+        if unsatisified:  # pragma: no cover
+            raise TypingError("Cannot request literal type.", loc=self.loc)
+        elif requested:
+            # Bodo change: propagate file_infos
+            raise ForceLiteralArg(requested, loc=self.loc, file_infos=new_file_infos)
+    if sig is None:
+        # Note: duplicated error checking.
+        #       See types.BaseFunction.get_call_type
+        # Arguments are invalid => explain why
+        headtemp = "Invalid use of {0} with parameters ({1})"
+        args = [str(a) for a in pos_args]
+        args += ["%s=%s" % (k, v) for k, v in sorted(kw_args.items())]
+        head = headtemp.format(fnty, ", ".join(map(str, args)))
+        desc = context.explain_function_type(fnty)
+        msg = "\n".join([head, desc])
+        raise TypingError(msg)
+
+    typeinfer.add_type(self.target, sig.return_type, loc=self.loc)
+
+    # If the function is a bound function and its receiver type
+    # was refined, propagate it.
+    if (
+        isinstance(fnty, types.BoundFunction)
+        and sig.recvr is not None
+        and sig.recvr != fnty.this
+    ):
+        refined_this = context.unify_pairs(sig.recvr, fnty.this)
+        if (
+            refined_this is None and fnty.this.is_precise() and sig.recvr.is_precise()
+        ):  # pragma: no cover
+            msg = "Cannot refine type {} to {}".format(
+                sig.recvr,
+                fnty.this,
+            )
+            raise TypingError(msg, loc=self.loc)
+        if refined_this is not None and refined_this.is_precise():
+            refined_fnty = fnty.copy(this=refined_this)
+            typeinfer.propagate_refined_type(self.func, refined_fnty)
+
+    # If the return type is imprecise but can be unified with the
+    # target variable's inferred type, use the latter.
+    # Useful for code such as::
+    #    s = set()
+    #    s.add(1)
+    # (the set() call must be typed as int64(), not undefined())
+    if not sig.return_type.is_precise():
+        target = typevars[self.target]
+        if target.defined:
+            targetty = target.getone()
+            if context.unify_pairs(targetty, sig.return_type) == targetty:
+                sig = sig.replace(return_type=targetty)
+
+    self.signature = sig
+    self._add_refine_map(typeinfer, typevars, sig)
+
+
+lines = inspect.getsource(numba.core.typeinfer.CallConstraint.resolve)
+if (
+    hashlib.sha256(lines.encode()).hexdigest()
+    != "bef85735a781f8ce98211f23227052e3abb12cb9b8120dc2a59840421af8595b"
+):  # pragma: no cover
+    warnings.warn("numba.core.typeinfer.CallConstraint.resolve has changed")
+numba.core.typeinfer.CallConstraint.resolve = CallConstraint_resolve
+
+
+def ForceLiteralArg__init__(
+    self, arg_indices, fold_arguments=None, loc=None, file_infos=None
+):
+    """
+    Parameters
+    ----------
+    arg_indices : Sequence[int]
+        requested positions of the arguments.
+    fold_arguments: callable
+        A function ``(tuple, dict) -> tuple`` that binds and flattens
+        the ``args`` and ``kwargs``.
+    loc : numba.ir.Loc or None
+    file_infos : A dict that maps arg index to FileInfo object if the
+                 argument specified by that index must be converted to
+                 FilenameType
+    """
+    super(ForceLiteralArg, self).__init__(
+        "Pseudo-exception to force literal arguments in the dispatcher",
+        loc=loc,
+    )
+    self.requested_args = frozenset(arg_indices)
+    self.fold_arguments = fold_arguments
+    # Bodo change: file info object to force FilenameType instead of Literal
+    if file_infos is None:
+        self.file_infos = {}
+    else:
+        self.file_infos = file_infos
+
+
+lines = inspect.getsource(numba.core.errors.ForceLiteralArg.__init__)
+if (
+    hashlib.sha256(lines.encode()).hexdigest()
+    != "b241d5e36a4cf7f4c73a7ad3238693612926606c7a278cad1978070b82fb55ef"
+):  # pragma: no cover
+    warnings.warn("numba.core.errors.ForceLiteralArg.__init__ has changed")
+numba.core.errors.ForceLiteralArg.__init__ = ForceLiteralArg__init__
+
+
+def ForceLiteralArg_bind_fold_arguments(self, fold_arguments):
+    """Bind the fold_arguments function"""
+    # Bodo change: propagate file_infos
+    e = ForceLiteralArg(
+        self.requested_args, fold_arguments, loc=self.loc, file_infos=self.file_infos
+    )
+    return numba.core.utils.chain_exception(e, self)
+
+
+lines = inspect.getsource(numba.core.errors.ForceLiteralArg.bind_fold_arguments)
+if (
+    hashlib.sha256(lines.encode()).hexdigest()
+    != "1e93cca558f7c604a47214a8f2ec33ee994104cb3e5051166f16d7cc9315141d"
+):  # pragma: no cover
+    warnings.warn("numba.core.errors.ForceLiteralArg.bind_fold_arguments has changed")
+numba.core.errors.ForceLiteralArg.bind_fold_arguments = (
+    ForceLiteralArg_bind_fold_arguments
+)
+
+
+def ForceLiteralArg_combine(self, other):  # pragma: no cover
+    """Returns a new instance by or'ing the requested_args."""
+    if not isinstance(other, ForceLiteralArg):
+        m = "*other* must be a {} but got a {} instead"
+        raise TypeError(m.format(ForceLiteralArg, type(other)))
+    # Bodo change: propagate file_infos
+    return ForceLiteralArg(
+        # for file infos, we merge the two dicts
+        self.requested_args | other.requested_args,
+        {**self.file_infos, **other.file_infos},
+    )
+
+
+lines = inspect.getsource(numba.core.errors.ForceLiteralArg.combine)
+if (
+    hashlib.sha256(lines.encode()).hexdigest()
+    != "49bf06612776f5d755c1c7d1c5eb91831a57665a8fed88b5651935f3bf33e899"
+):  # pragma: no cover
+    warnings.warn("numba.core.errors.ForceLiteralArg.combine has changed")
+numba.core.errors.ForceLiteralArg.combine = ForceLiteralArg_combine

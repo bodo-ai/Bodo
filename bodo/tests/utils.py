@@ -1167,18 +1167,21 @@ def _check_typing_issues(val):
             raise e
 
 
-def check_caching(mod, testname, impl, args):
-    """ Test caching by compiling a function with Bodo in sequential mode with
-        cache=True, then running it again loading from cache.
-        mod: module object where the test is defined
-        testname: name of the test function in mod
-        impl: the function to compile
-        args: arguments to pass to the function
+def check_caching(mod, testname, impl, args1, args2=None):
+    """Test caching by compiling a function with Bodo in sequential mode with
+    cache=True, then running it again loading from cache.
+    mod: module object where the test is defined
+    testname: name of the test function in mod
+    impl: the function to compile
+    args1: arguments to pass to the function the first time it's called
+    args2: arguments to pass to the function the second time it's called
     """
     try:
+        if args2 is None:
+            args2 = args1
         # compile impl in sequential mode with cache=True
         bodo_func = bodo.jit(cache=True)(impl)
-        bodo_out1 = bodo_func(*args)
+        bodo_out1 = bodo_func(*args1)
         # get signature of compiled function
         sig = bodo_func.signatures[0]
         # assert that it wasn't loaded from cache
@@ -1192,7 +1195,7 @@ def check_caching(mod, testname, impl, args):
         del engine, bodo_func
         # now get the function by loading from cache
         bodo_func = bodo.jit(cache=True)(impl)
-        bodo_out2 = bodo_func(*args)
+        bodo_out2 = bodo_func(*args2)
         # assert that it was loaded from cache
         assert bodo_func._cache_hits[sig] == 1
         assert bodo_func._cache_misses[sig] == 0
