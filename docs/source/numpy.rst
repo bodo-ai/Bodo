@@ -13,45 +13,135 @@ and parallelize.
     * Binary operators: ``+`` ``-`` ``*`` ``/`` ``/?`` ``%`` ``|`` ``>>`` ``^``
       ``<<`` ``&`` ``**`` ``//``
     * Comparison operators: ``==`` ``!=`` ``<`` ``<=`` ``>`` ``>=``
-    * data-parallel math operations: ``add``, ``subtract``, ``multiply``,
-      ``divide``, ``logaddexp``, ``logaddexp2``, ``true_divide``,
-      ``floor_divide``, ``negative``, ``power``, ``remainder``,
-      ``mod``, ``fmod``, ``abs``, ``absolute``, ``fabs``, ``rint``, ``sign``,
-      ``conj``, ``exp``, ``exp2``, ``log``, ``log2``, ``log10``, ``expm1``,
-      ``log1p``, ``sqrt``, ``square``, ``reciprocal``, ``conjugate``
-    * Trigonometric functions: ``sin``, ``cos``, ``tan``, ``arcsin``,
-      ``arccos``, ``arctan``, ``arctan2``, ``hypot``, ``sinh``, ``cosh``,
-      ``tanh``, ``arcsinh``, ``arccosh``, ``arctanh``, ``deg2rad``,
-      ``rad2deg``, ``degrees``, ``radians``
-    * Bit manipulation functions: ``bitwise_and``, ``bitwise_or``,
-      ``bitwise_xor``, ``bitwise_not``, ``invert``, ``left_shift``,
-      ``right_shift``
+    * data-parallel math operations:
 
-#. Numpy reduction functions ``sum``, ``prod``, ``min``, ``max``, ``argmin``
-   and ``argmax``. Currently, `int64` data type is not supported for
-   ``argmin`` and ``argmax``.
+      * :func:`numpy.add` 
+      * :func:`numpy.subtract`
+      * :func:`numpy.multiply`
+      * :func:`numpy.divide`
+      * :func:`numpy.logaddexp`
+      * :func:`numpy.logaddexp2`
+      * :func:`numpy.true_divide`
+      * :func:`numpy.floor_divide`
+      * :func:`numpy.negative`
+      * :func:`numpy.power`
+      * :func:`numpy.remainder`
+      * :func:`numpy.mod`
+      * :func:`numpy.fmod`
+      * :func:`numpy.abs`
+      * :func:`numpy.absolute`
+      * :func:`numpy.fabs`
+      * :func:`numpy.rint`
+      * :func:`numpy.sign`
+      * :func:`numpy.conj`
+      * :func:`numpy.exp`
+      * :func:`numpy.exp2`
+      * :func:`numpy.log`
+      * :func:`numpy.log2`
+      * :func:`numpy.log10`
+      * :func:`numpy.expm1`
+      * :func:`numpy.log1p`
+      * :func:`numpy.sqrt`
+      * :func:`numpy.square`
+      * :func:`numpy.reciprocal`
+      * :func:`numpy.conjugate`
 
-#. Numpy array creation functions ``empty``, ``zeros``, ``ones``,
-   ``empty_like``, ``zeros_like``, ``ones_like``, ``full_like``, ``copy``,
-   ``arange`` and ``linspace``.
+    * Trigonometric functions: 
+    
+      * :func:`numpy.sin`
+      * :func:`numpy.cos`
+      * :func:`numpy.tan`
+      * :func:`numpy.arcsin`
+      * :func:`numpy.arccos`
+      * :func:`numpy.arctan`
+      * :func:`numpy.arctan2`
+      * :func:`numpy.hypot`
+      * :func:`numpy.sinh`
+      * :func:`numpy.cosh`
+      * :func:`numpy.tanh`
+      * :func:`numpy.arcsinh`
+      * :func:`numpy.arccosh`
+      * :func:`numpy.arctanh`
+      * :func:`numpy.deg2rad`
+      * :func:`numpy.rad2deg`
+      * :func:`numpy.degrees`
+      * :func:`numpy.radians`     
 
-#. Numpy array ``reshape`` (shape values cannot be -1).
+    * Bit manipulation functions: 
+    
+      * :func:`numpy.bitwise_and`
+      * :func:`numpy.bitwise_or`
+      * :func:`numpy.bitwise_xor`
+      * :func:`numpy.bitwise_not`
+      * :func:`numpy.invert`
+      * :func:`numpy.left_shift`
+      * :func:`numpy.right_shift`
 
-#. Random number generator functions: ``rand``, ``randn``,
-   ``ranf``, ``random_sample``, ``sample``, ``random``,
-   ``standard_normal``, ``chisquare``, ``weibull``, ``power``, ``geometric``,
-   ``exponential``, ``poisson``, ``rayleigh``, ``normal``, ``uniform``,
-   ``beta``, ``binomial``, ``f``, ``gamma``, ``lognormal``, ``laplace``,
-   ``randint``, ``triangular``.
+#. Numpy reduction functions:
 
-#. Numpy ``dot`` function between a matrix and a vector, or two vectors.
+      * :func:`numpy.sum`
+      * :func:`numpy.prod`
+      * :func:`numpy.min`
+      * :func:`numpy.max`
+      * :func:`numpy.argmin` (int64 data type not supported)
+      * :func:`numpy.argmax` (int64 data type not supported)
+
+#. Numpy array creation functions:
+
+    * :func:`numpy.empty`
+    * :func:`numpy.zeros`
+    * :func:`numpy.ones`
+    * :func:`numpy.empty_like`
+    * :func:`numpy.zeros_like`
+    * :func:`numpy.ones_like`
+    * :func:`numpy.full_like`
+    * :func:`numpy.copy`
+    * :func:`numpy.arange`
+    * :func:`numpy.linspace`
+    * :func:`numpy.repeat` (only scalar `num_repeats`)
+
+#. :func:`numpy.reshape` (shape values cannot be -1).
+
+#. Numpy array manipulation functions:
+
+    * :func:`numpy.unique`
+    * :func:`numpy.where` (1 and 3 arguments)
+
+#. Random number generator functions:
+
+    * :func:`numpy.random.rand`
+    * :func:`numpy.random.randn`
+    * :func:`numpy.random.ranf`
+    * :func:`numpy.random.random_sample`
+    * :func:`numpy.random.sample`
+    * :func:`numpy.random.random`
+    * :func:`numpy.random.standard_normal`
+    * :func:`numpy.random.chisquare`
+    * :func:`numpy.random.weibull`
+    * :func:`numpy.random.power`
+    * :func:`numpy.random.geometric`
+    * :func:`numpy.random.exponential`
+    * :func:`numpy.random.poisson`
+    * :func:`numpy.random.rayleigh`
+    * :func:`numpy.random.normal`
+    * :func:`numpy.random.uniform`
+    * :func:`numpy.random.beta`
+    * :func:`numpy.random.binomial`
+    * :func:`numpy.random.f`
+    * :func:`numpy.random.gamma`
+    * :func:`numpy.random.lognormal`
+    * :func:`numpy.random.laplace`
+    * :func:`numpy.random.randint`
+    * :func:`numpy.random.triangular`
+
+#. :func:`numpy.dot` function between a matrix and a vector, or two vectors.
 
 #. Numpy array comprehensions, such as::
 
     A = np.array([i**2 for i in range(N)])
 
-6. Numpy I/O: ``tofile`` and ``fromfile``, 
-:ref:`example usage and more system specific instructions <numpy-binary-section>`
+#. Numpy I/O: :func:`numpy.ndarray.tofile` and :func:`numpy.fromfile`. 
+  The File I/O section contains :ref:`example usage and more system specific instructions <numpy-binary-section>`.
 
 Optional arguments are not supported unless if explicitly mentioned here.
 For operations on multi-dimensional arrays, automatic broadcast of
