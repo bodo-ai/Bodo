@@ -38,6 +38,7 @@ are supported except `MapType` and `StructType` (will be supported in the future
 * Numpy complex data types: `np.complex64` and `np.complex128`.
 * Strings (including nulls).
 * `datetime.date` values (including nulls).
+* `datetime.timedelta` values (including nulls).
 * Pandas `nullable integers <https://pandas.pydata.org/pandas-docs/stable/user_guide/integer_na.html>`_.
 * Pandas `nullable booleans <https://pandas.pydata.org/pandas-docs/stable/user_guide/boolean.html>`_.
 * Pandas `Categoricals <https://pandas.pydata.org/pandas-docs/stable/user_guide/categorical.html>`_
@@ -53,6 +54,48 @@ are supported except `MapType` and `StructType` (will be supported in the future
   the stored data is interpreted. For example, the (4, 2) case can store from -999.99 to 999.99.
   The precision can be up to 38, and the scale must be less or equal to precision.
   Arbitrary-precision Python `decimal.Decimal` values are converted with precision of 38 and scale of 18.
+
+
+In addition, it may be desirable to specify type annotations in some cases (e.g. :ref:`file I/O array input types <input-array-types>`).
+Typically these types are array types and they all can be accessed directly from the `bodo` module.
+The following table can be used to select the necessary Bodo Type based upon the desired Python, Numpy, or Pandas type. 
+
+.. list-table::
+  :header-rows: 1
+
+  * - Bodo Type Name
+    - Equivalent Python, Numpy, or Pandas type
+  * - ``np.bool_[:]``, ``np.int8[:]``, ..., ``np.int64[:]``, ``np.uint8[:]``, ..., ``np.uint64[:]``, ``np.float32[:]``, ``np.float64[:]``
+    - One-dimensional Numpy array of the given type. A full list of supported Numpy types can be found `here <https://numba.readthedocs.io/en/stable/reference/types.html#numbers>`_.
+      A multidimensional can be specified by adding additional colons (e.g. ``bodo.int32[:, :, :]`` for a three-dimensional array).
+  * - ``bodo.string_array_type``
+    - Array of nullable strings
+  * - ``bodo.IntegerArrayType(integer_type)``
+    - | Array of Pandas nullable integers of the given integer type
+      | e.g. ``bodo.IntegerArrayType(bodo.int64)``
+  * - ``bodo.boolean_array``
+    - Array of Pandas nullable booleans
+  * - ``bodo.datetime64ns[:]``
+    - Array of Numpy datetime64 values
+  * - ``bodo.timedelta64ns[:]``
+    - Array of Numpy timedelta64 values
+  * - ``bodo.datetime_date_array_type``
+    - Array of datetime.date types
+  * - ``bodo.datetime_timedelta_array_type``
+    - Array of datetime.timedelta types
+  * - ``bodo.DecimalArrayType(precision, scale)``
+    - | Array of Apache Arrow Decimal128 values with the given precision and scale
+      | e.g. ``bodo.DecimalArrayType(38, 18)``
+  * - ``bodo.StructArrayType(data_types, field_names)``
+    - | Array of a user defined struct with the given tuple of data types and field names
+      | e.g. ``bodo.StructArrayType((bodo.int32[:], bodo.datetime64ns[:]), ("a", "b"))``
+  * - ``bodo.MapArrayType(key_arr_type, value_arr_type)``
+    - | Array of Python dictionaries with the given key and value array types. 
+      | e.g. ``bodo.MapArrayType(bodo.uint16[:], bodo.string_array_type)``
+
+  
+
+
 
 
 .. _pandas-f-in:

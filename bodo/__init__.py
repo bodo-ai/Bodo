@@ -33,6 +33,7 @@ from numba.core.types import *
 from bodo.numba_compat import jitclass
 
 datetime64ns = numba.core.types.NPDatetime("ns")
+timedelta64ns = numba.core.types.NPTimedelta("ns")
 
 from numba.core.types import List
 
@@ -59,6 +60,18 @@ import bodo.hiframes.pd_timestamp_ext
 from bodo.libs.str_arr_ext import string_array_type
 from bodo.libs.str_ext import string_type
 from bodo.utils.utils import cprint
+from bodo.hiframes.datetime_date_ext import datetime_date_type, datetime_date_array_type
+from bodo.hiframes.datetime_timedelta_ext import (
+    datetime_timedelta_type,
+    datetime_timedelta_array_type,
+)
+from bodo.libs.array_item_arr_ext import ArrayItemArrayType
+from bodo.libs.bool_arr_ext import boolean_array
+from bodo.libs.decimal_arr_ext import Decimal128Type, DecimalArrayType
+from bodo.libs.int_arr_ext import IntegerArrayType
+from bodo.libs.map_arr_ext import MapArrayType
+from bodo.libs.struct_arr_ext import StructArrayType
+
 
 import bodo.compiler  # isort:skip
 

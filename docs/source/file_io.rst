@@ -289,6 +289,8 @@ For example::
         Y = f['responses'][:]
 
 
+.. _input-array-types:
+
 Input array types
 -----------------
 
