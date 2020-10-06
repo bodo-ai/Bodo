@@ -56,11 +56,9 @@ Adding `print([p[0].name() for p in pm.passes])` instead prints the pass names.
   inference cannot support such as non-uniform dictionary input of
   `pd.DataFrame({})`.
 - `BodoTypeInference`: Bodo's type inference based on Numba's type inference.
-- `BodoDataFramePass`: converts data frame operations to Series and Array
+- `BodoSeriesPass`: converts DataFrame/Series operations to Array
   operations as much as possible to provide implementation and enable
   optimization. Creates specialized IR nodes for complex operations like Join.
-- `BodoSeriesPass`: converts Series operations to array operations as much as
-  possible to provide implementation and enable optimization.
 - `ParforPass`: converts Numpy and prange operations into parfors, fuses all parfors
   if possible, and performs basic optimizations such as copy propagation and
   dead code elimination.

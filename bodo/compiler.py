@@ -4,56 +4,59 @@ Defines Bodo's compiler pipeline.
 """
 import os
 import warnings
-import bodo
-import bodo.transforms
-import bodo.transforms.untyped_pass
-import bodo.transforms.series_pass
-from bodo.transforms.untyped_pass import UntypedPass
-from bodo.transforms.series_pass import SeriesPass
-from bodo.transforms.dataframe_pass import DataFramePass
-from bodo.transforms.typing_pass import BodoTypeInference
+
 import numba
+from numba.core import ir, ir_utils, postproc
 from numba.core.compiler import DefaultPassBuilder
 from numba.core.compiler_machinery import (
-    FunctionPass,
     AnalysisPass,
-    register_pass,
+    FunctionPass,
     PassManager,
+    register_pass,
 )
-from numba.core.untyped_passes import WithLifting, ReconstructSSA
-
-from numba.core.typed_passes import (
-    NopythonTypeInference,
-    PreParforPass,
-    ParforPass,
-    DumpParforDiagnostics,
+from numba.core.inline_closurecall import (
+    InlineClosureCallPass,
+    inline_closure_call,
 )
-
-from numba.core import ir_utils, ir, postproc
+from numba.core.ir_utils import get_definition, guard
 from numba.core.registry import CPUDispatcher
-from numba.core.ir_utils import guard, get_definition
-from numba.core.inline_closurecall import inline_closure_call, InlineClosureCallPass
-from bodo import config
+from numba.core.typed_passes import (
+    DumpParforDiagnostics,
+    NopythonTypeInference,
+    ParforPass,
+    PreParforPass,
+)
+from numba.core.untyped_passes import ReconstructSSA, WithLifting
+
+import bodo
 import bodo.libs
 import bodo.libs.array_kernels  # side effect: install Numba functions
 import bodo.libs.int_arr_ext  # side effect
 import bodo.libs.re_ext  # side effect: initialize Numba extensions
+import bodo.transforms
+import bodo.transforms.series_pass
+import bodo.transforms.untyped_pass
+from bodo import config
+from bodo.transforms.dataframe_pass import DataFramePass
+from bodo.transforms.series_pass import SeriesPass
+from bodo.transforms.typing_pass import BodoTypeInference
+from bodo.transforms.untyped_pass import UntypedPass
 
 try:
     import sklearn
+
     import bodo.libs.sklearn_ext  # side effect: initialize Numba extensions
 except ImportError:
     # TODO if sklearn is not installed, trying to use sklearn inside
     # bodo functions should give more meaningful errors than:
     # Untyped global name 'RandomForestClassifier': cannot determine Numba type of <class 'abc.ABCMeta'>
     pass
-import bodo.hiframes.datetime_timedelta_ext  # side effect: initialize Numba extensions
-import bodo.hiframes.datetime_datetime_ext  # side effect: initialize Numba extensions
 import bodo.hiframes.dataframe_indexing  # side effect: initialize Numba extensions
+import bodo.hiframes.datetime_datetime_ext  # side effect: initialize Numba extensions
+import bodo.hiframes.datetime_timedelta_ext  # side effect: initialize Numba extensions
+import bodo.io
 import bodo.utils
 import bodo.utils.typing
-import bodo.io
-
 
 if config._has_h5py:
     from bodo.io import h5
@@ -80,7 +83,7 @@ inline_all_calls = False
 
 class BodoCompiler(numba.core.compiler.CompilerBase):
     """Bodo compiler pipeline which adds the following passes to Numba's pipeline:
-    InlinePass, BodoUntypedPass, BodoTypeInference, BodoDataFramePass, BodoSeriesPass,
+    InlinePass, BodoUntypedPass, BodoTypeInference, BodoSeriesPass,
     LowerParforSeq, BodoDumpDistDiagnosticsPass.
     See class docstrings for more info.
     """
@@ -91,8 +94,7 @@ class BodoCompiler(numba.core.compiler.CompilerBase):
         )
 
     def _create_bodo_pipeline(self, distributed=True, inline_calls_pass=False):
-        """create compiler pipeline for Bodo using Numba's nopython pipeline
-        """
+        """create compiler pipeline for Bodo using Numba's nopython pipeline"""
         name = "bodo" if distributed else "bodo_seq"
         name = name + "_inline" if inline_calls_pass else name
         pm = DefaultPassBuilder.define_nopython_pipeline(self.state, name)
@@ -113,8 +115,7 @@ class BodoCompiler(numba.core.compiler.CompilerBase):
         # Series pass should be before pre_parfor since
         # S.call to np.call transformation is invalid for
         # Series (e.g. S.var is not the same as np.var(S))
-        add_pass_before(pm, BodoDataFramePass, PreParforPass)
-        pm.add_pass_after(BodoSeriesPass, BodoDataFramePass)
+        add_pass_before(pm, BodoSeriesPass, PreParforPass)
 
         if distributed:
             pm.add_pass_after(BodoDistributedPass, ParforPass)
@@ -168,8 +169,7 @@ def replace_pass(pm, pass_cls, location):
 # TODO: use Numba's new inline feature
 @register_pass(mutates_CFG=True, analysis_only=False)
 class InlinePass(FunctionPass):
-    """inline other jit functions, mainly to enable automatic parallelism
-    """
+    """inline other jit functions, mainly to enable automatic parallelism"""
 
     _name = "inline_pass"
 
@@ -266,8 +266,9 @@ class BodoDistributedPass(FunctionPass):
 @register_pass(mutates_CFG=True, analysis_only=False)
 class BodoSeriesPass(FunctionPass):
     """
-    This pass converts Series operations to array operations as much as possible to
-    provide implementation and enable optimization.
+    This pass converts DataFrame/Series operations to Array operations as much as
+    possible to provide implementation and enable optimization. Creates specialized
+    IR nodes for complex operations like Join.
     """
 
     _name = "bodo_series_pass"
@@ -292,39 +293,9 @@ class BodoSeriesPass(FunctionPass):
         return True
 
 
-@register_pass(mutates_CFG=True, analysis_only=False)
-class BodoDataFramePass(FunctionPass):
-    """
-    This pass converts data frame operations to Series and Array operations as much as
-    possible to provide implementation and enable optimization. Creates specialized
-    IR nodes for complex operations like Join.
-    """
-
-    _name = "bodo_dataframe_pass"
-
-    def __init__(self):
-        FunctionPass.__init__(self)
-
-    def run_pass(self, state):
-        """
-        Convert DataFrames after typing
-        """
-        # Ensure we have an IR and type information.
-        assert state.func_ir
-        df_pass = DataFramePass(
-            state.func_ir,
-            state.typingctx,
-            state.type_annotation.typemap,
-            state.type_annotation.calltypes,
-        )
-        df_pass.run()
-        return True
-
-
 @register_pass(mutates_CFG=False, analysis_only=True)
 class BodoDumpDistDiagnosticsPass(AnalysisPass):
-    """Print Bodo's distributed diagnostics info if needed
-    """
+    """Print Bodo's distributed diagnostics info if needed"""
 
     _name = "bodo_dump_diagnostics_pass"
 
@@ -349,8 +320,7 @@ class BodoDumpDistDiagnosticsPass(AnalysisPass):
 
 
 class BodoCompilerSeq(BodoCompiler):
-    """Bodo pipeline without the distributed pass (used in rolling kernels)
-    """
+    """Bodo pipeline without the distributed pass (used in rolling kernels)"""
 
     def define_pipelines(self):
         return self._create_bodo_pipeline(
@@ -359,8 +329,7 @@ class BodoCompilerSeq(BodoCompiler):
 
 
 class BodoCompilerSeqInline(BodoCompiler):
-    """Bodo pipeline with inlining and without the distributed pass (used in df.apply)
-    """
+    """Bodo pipeline with inlining and without the distributed pass (used in df.apply)"""
 
     def define_pipelines(self):
         return self._create_bodo_pipeline(distributed=False, inline_calls_pass=True)
@@ -368,8 +337,7 @@ class BodoCompilerSeqInline(BodoCompiler):
 
 @register_pass(mutates_CFG=False, analysis_only=True)
 class LowerParforSeq(FunctionPass):
-    """Lower parfors to regular loops to avoid threading of Numba
-    """
+    """Lower parfors to regular loops to avoid threading of Numba"""
 
     _name = "bodo_lower_parfor_seq_pass"
 
@@ -385,8 +353,7 @@ class LowerParforSeq(FunctionPass):
 
 @register_pass(mutates_CFG=False, analysis_only=True)
 class LowerBodoIRExtSeq(FunctionPass):
-    """Lower Bodo IR extensions nodes to regular Numba IR
-    """
+    """Lower Bodo IR extensions nodes to regular Numba IR"""
 
     _name = "bodo_lower_ir_ext_pass"
 
@@ -503,8 +470,7 @@ def udf_jit(signature_or_function=None, **options):
 
 
 def is_udf_call(func_type):
-    """deterimines if function type is a Bodo UDF call
-    """
+    """deterimines if function type is a Bodo UDF call"""
     return (
         isinstance(func_type, numba.core.types.Dispatcher)
         and func_type.dispatcher._compiler.pipeline_class == BodoCompilerSeqInline
