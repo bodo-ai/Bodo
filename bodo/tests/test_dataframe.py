@@ -458,7 +458,8 @@ def test_unbox_df3(memory_leak_check):
         pd.date_range(start="2018-04-24", end="2018-04-29", periods=5),
     )
     df2 = pd.DataFrame(
-        {"A": [3, 5, 1, -1, 4]}, np.array([1, 8, 4, 0, 2], dtype=np.uint8),
+        {"A": [3, 5, 1, -1, 4]},
+        np.array([1, 8, 4, 0, 2], dtype=np.uint8),
     )
     check_func(impl, (df1,))
     check_func(impl, (df2,))
@@ -2150,7 +2151,9 @@ def test_concat_nulls(memory_leak_check):
         ),
         # variable item size data and index
         pd.DataFrame(
-            {"A": ["ABC", None, "AA", "B", None, "AA", "CC", "G"],},
+            {
+                "A": ["ABC", None, "AA", "B", None, "AA", "CC", "G"],
+            },
             index=["AA", "C", "BB", "A", "D", "L", "K", "P"],
         ),
     ],
@@ -2483,6 +2486,18 @@ def test_loc_col_select(memory_leak_check):
     check_func(impl1, (df,))
     check_func(impl2, (df,))
     check_func(impl3, (df,))
+
+
+def test_iat_setitem():
+    """test df.iat[] setitem (single value)"""
+
+    def impl(df, n):
+        df.iat[n - 1, 1] = n ** 2
+        return df
+
+    n = 11
+    df = pd.DataFrame({"B": np.ones(n), "A": np.arange(n) + n})
+    check_func(impl, (df, n), copy_input=True)
 
 
 def test_df_schema_change(memory_leak_check):

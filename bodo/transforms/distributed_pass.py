@@ -2214,17 +2214,13 @@ class DistributedPass:
             )
 
         elif isinstance(index_typ, types.Integer):
-            nodes, start_var, count_var = self._get_dist_var_start_count(
-                arr, equiv_set, avail_vars
-            )
+            start_var, nodes = self._get_dist_start_var(arr, equiv_set, avail_vars)
 
-            def f(A, val, index, chunk_start, chunk_count):  # pragma: no cover
-                bodo.libs.distributed_api._set_if_in_range(
-                    A, val, index, chunk_start, chunk_count
-                )
+            def f(A, val, index, chunk_start):  # pragma: no cover
+                bodo.libs.distributed_api._set_if_in_range(A, val, index, chunk_start)
 
             return nodes + compile_func_single_block(
-                f, [arr, node.value, index_var, start_var, count_var], None, self
+                f, [arr, node.value, index_var, start_var], None, self
             )
 
         # no need to transform for other cases like setitem of scalar value with bool
@@ -2458,6 +2454,7 @@ class DistributedPass:
         return compile_func_single_block(impl, args, None, self)
 
     def _get_dist_var_start_count(self, arr, equiv_set, avail_vars):
+        """get distributed chunk start/count of current rank for 1D_Block arrays"""
         nodes = []
         if arr.name in self._1D_Var_array_accesses:
             # using the start variable of the first parfor on this array
