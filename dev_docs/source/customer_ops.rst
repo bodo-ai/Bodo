@@ -4,11 +4,10 @@ Give Customers Access to Binaries
 ---------------------------------
 By default, we give customers access to our ``bodo.ai`` and ``bodo.ai-dev`` conda channels on Artifactory which hold the official and engineering releases respectively.
 
-- Use the following command from your command line to generate a token for the customer username ``<customer_user>``::
+- To generate a customer token, trigger the `codebuild pipeline <https://us-east-2.console.aws.amazon.com/codesuite/codebuild/427443013497/projects/generate-customer-token>`_ passing in the environment variable ``conda_username`` the customer username for which you would like to generate a token.
 
-     curl -u<admin_username>:<admin_password> -XPOST "https://bodo.jfrog.io/artifactory/api/security/token" -d "username=<customer_username>" -d "scope=member-of-groups:Customers" -d "expires_in=0"
+  Once the pipeline completes, you can copy to token from the end of the log.
 
-You will need your admin credentials to perform this operation. Those are stored in the team's 1Password shared vault.
 
 - To install Bodo from the releases channel, execute the following command::
 
@@ -23,6 +22,13 @@ You will need your admin credentials to perform this operation. Those are stored
      conda install -c https://<username>:<token>@bodo.jfrog.io/artifactory/api/conda/bodo.ai-dev -c conda-forge bodo
 
 where ``<username>`` and ``<token>`` are the customer username and tokens generated in the step above.
+
+The above command installs the latest dev release. Usually, we give customers the link to the subchannel that contains the specific dev release created for them. The command would be in this case::
+
+     export BODO_TOKEN=<token>
+     conda install -c https://<username>:<token>@bodo.jfrog.io/artifactory/api/conda/bodo.ai-dev/bodo-<version>.tar.bz2 -c conda-forge bodo
+
+where ``<version>`` is the full version name of the built created.
 
 Generating Customer License Keys
 --------------------------------
