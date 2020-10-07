@@ -257,3 +257,11 @@ def test_arrays_overlap(dataframe_val):
 
     df = dataframe_val
     check_func(test_impl, (df,))
+
+
+def test_size(dataframe_val):
+    def test_impl(df):
+        return df.A.map(lambda x: len(x))
+
+    df = dataframe_val
+    check_func(test_impl, (df,))

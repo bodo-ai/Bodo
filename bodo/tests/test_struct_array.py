@@ -3,11 +3,12 @@
 """
 import operator
 from collections import namedtuple
-import pandas as pd
-import numpy as np
-import pytest
 
 import numba
+import numpy as np
+import pandas as pd
+import pytest
+
 import bodo
 from bodo.tests.utils import check_func
 
@@ -203,3 +204,20 @@ def test_copy(struct_arr_value, memory_leak_check):
         return A.copy()
 
     check_func(test_impl, (struct_arr_value,))
+
+
+def test_len(struct_arr_value, memory_leak_check):
+    def test_impl(A):
+        return len(A)
+
+    check_func(test_impl, (struct_arr_value,))
+
+
+def test_struct_len(struct_arr_value, memory_leak_check):
+    def test_impl(A, i):
+        if A[i] is None:
+            return 0
+        else:
+            return len(A[i])
+
+    check_func(test_impl, (struct_arr_value, 1), dist_test=False)

@@ -8,67 +8,64 @@ A:             ["AA", "B", "C"]
 B:             [1, 2, 4]
 """
 import operator
-import numpy as np
 from collections import namedtuple
-import numba
-import bodo
 
-from numba.core import types, cgutils
+import llvmlite.binding as ll
+import numba
+import numpy as np
+from llvmlite import ir as lir
+from numba.core import cgutils, types
+from numba.core.imputils import impl_ret_borrowed
 from numba.extending import (
-    typeof_impl,
-    type_callable,
-    models,
-    register_model,
     NativeValue,
-    make_attribute_wrapper,
-    lower_builtin,
     box,
-    unbox,
-    lower_getattr,
     intrinsic,
-    overload_method,
+    lower_builtin,
+    lower_getattr,
+    make_attribute_wrapper,
+    models,
     overload,
     overload_attribute,
+    overload_method,
+    register_model,
+    type_callable,
+    typeof_impl,
+    unbox,
 )
 from numba.parfors.array_analysis import ArrayAnalysis
-from numba.core.imputils import impl_ret_borrowed
 from numba.typed.typedobjectutils import _cast
 
-from bodo.utils.typing import (
-    is_list_like_index_type,
-    BodoError,
-    get_overload_const_str,
-    get_overload_const_int,
-    is_overload_constant_str,
-    is_overload_constant_int,
-)
+import bodo
 from bodo.hiframes.datetime_date_ext import datetime_date_type
+# NOTE: importing hdist is necessary for MPI initialization before array_ext
+from bodo.libs import array_ext, hdist
 from bodo.utils.cg_helpers import (
-    set_bitmap_bit,
+    gen_allocate_array,
+    get_array_elem_counts,
+    get_bitmap_bit,
+    is_na_value,
+    list_check,
     pyarray_getitem,
     pyarray_setitem,
-    list_check,
-    is_na_value,
-    get_bitmap_bit,
-    get_array_elem_counts,
     seq_getitem,
-    gen_allocate_array,
+    set_bitmap_bit,
     to_arr_obj_if_list_obj,
 )
-from llvmlite import ir as lir
-import llvmlite.binding as ll
-
-# NOTE: importing hdist is necessary for MPI initialization before array_ext
-from bodo.libs import hdist
-from bodo.libs import array_ext
+from bodo.utils.typing import (
+    BodoError,
+    get_overload_const_int,
+    get_overload_const_str,
+    is_list_like_index_type,
+    is_overload_constant_int,
+    is_overload_constant_str,
+)
 
 ll.add_symbol("struct_array_from_sequence", array_ext.struct_array_from_sequence)
 ll.add_symbol("np_array_from_struct_array", array_ext.np_array_from_struct_array)
 
 
 class StructArrayType(types.ArrayCompatible):
-    """Data type for arrays of structs
-    """
+    """Data type for arrays of structs"""
 
     def __init__(self, data, names=None):
         # data is tuple of Array types
@@ -106,8 +103,7 @@ class StructArrayType(types.ArrayCompatible):
 
     @classmethod
     def from_dict(cls, d):
-        """create a StructArrayType from dict where keys are names and values are dtypes
-        """
+        """create a StructArrayType from dict where keys are names and values are dtypes"""
         assert isinstance(d, dict)
         names = tuple(str(a) for a in d.keys())
         data = tuple(
@@ -190,8 +186,7 @@ def define_struct_arr_dtor(context, builder, struct_arr_type, payload_type):
 def construct_struct_array(
     context, builder, struct_arr_type, n_structs, n_elems, c=None
 ):
-    """Creates meminfo and sets dtor, and allocates buffers for struct array
-    """
+    """Creates meminfo and sets dtor, and allocates buffers for struct array"""
     # create payload type
     payload_type = StructArrayPayloadType(struct_arr_type.data)
     alloc_type = context.get_value_type(payload_type)
@@ -250,8 +245,7 @@ def construct_struct_array(
 
 
 def _get_C_API_ptrs(c, data_tup, data_typ, names):
-    """convert struct array info into pointers to pass to C API
-    """
+    """convert struct array info into pointers to pass to C API"""
 
     data_ptrs = []
     assert len(data_typ) > 0
@@ -295,7 +289,13 @@ def unbox_struct_array(typ, val, c):
     # can be handled in C if all data arrays are Numpy and in handled dtypes
     handle_in_c = all(
         isinstance(t, types.Array)
-        and t.dtype in (types.int64, types.float64, types.bool_, datetime_date_type,)
+        and t.dtype
+        in (
+            types.int64,
+            types.float64,
+            types.bool_,
+            datetime_date_type,
+        )
         for t in typ.data
     )
 
@@ -442,8 +442,7 @@ def _unbox_struct_array_generic(typ, val, c, n_structs, data_tup, null_bitmap_pt
 
 
 def _get_struct_arr_payload(context, builder, arr_typ, arr):
-    """get payload struct proxy for a struct array value
-    """
+    """get payload struct proxy for a struct array value"""
     struct_array = context.make_helper(builder, arr_typ, arr)
     payload_type = StructArrayPayloadType(arr_typ.data)
     meminfo_void_ptr = context.nrt.meminfo_data(builder, struct_array.meminfo)
@@ -458,8 +457,7 @@ def _get_struct_arr_payload(context, builder, arr_typ, arr):
 
 @box(StructArrayType)
 def box_struct_arr(typ, val, c):
-    """box packed native representation of list of item array into python objects
-    """
+    """box packed native representation of list of item array into python objects"""
 
     payload = _get_struct_arr_payload(c.context, c.builder, typ, val)
     _is_error, length = c.pyapi.call_jit_code(lambda A: len(A), types.int64(typ), [val])
@@ -470,7 +468,13 @@ def box_struct_arr(typ, val, c):
     # can be handled in C if all data arrays are Numpy and in handled dtypes
     handle_in_c = all(
         isinstance(t, types.Array)
-        and t.dtype in (types.int64, types.float64, types.bool_, datetime_date_type,)
+        and t.dtype
+        in (
+            types.int64,
+            types.float64,
+            types.bool_,
+            datetime_date_type,
+        )
         for t in typ.data
     )
 
@@ -694,7 +698,8 @@ def define_struct_dtor(context, builder, struct_type, payload_type):
     # Declare dtor
     fnty = lir.FunctionType(lir.VoidType(), [cgutils.voidptr_t])
     fn = mod.get_or_insert_function(
-        fnty, name=".dtor.struct.{}.{}.".format(struct_type.data, struct_type.names),
+        fnty,
+        name=".dtor.struct.{}.{}.".format(struct_type.data, struct_type.names),
     )
 
     # End early if the dtor is already defined
@@ -729,8 +734,7 @@ def define_struct_dtor(context, builder, struct_type, payload_type):
 
 
 def _get_struct_payload(context, builder, typ, struct):
-    """get payload struct proxy for a struct value
-    """
+    """get payload struct proxy for a struct value"""
     struct = context.make_helper(builder, typ, struct)
     payload_type = StructPayloadType(typ.data)
     meminfo_void_ptr = context.nrt.meminfo_data(builder, struct.meminfo)
@@ -790,8 +794,7 @@ def unbox_struct(typ, val, c):
 
 @box(StructType)
 def box_struct(typ, val, c):
-    """box structs into python dictionary objects
-    """
+    """box structs into python dictionary objects"""
     out_dict = c.pyapi.dict_new(len(typ.data))
     payload, _ = _get_struct_payload(c.context, c.builder, typ, val)
 
@@ -818,8 +821,7 @@ def box_struct(typ, val, c):
 
 @intrinsic
 def init_struct(typingctx, data_typ, names_typ=None):
-    """create a new struct from input data tuple and names.
-    """
+    """create a new struct from input data tuple and names."""
     names = tuple(get_overload_const_str(t) for t in names_typ.types)
     struct_type = StructType(data_typ.types, names)
 
@@ -863,8 +865,7 @@ def init_struct(typingctx, data_typ, names_typ=None):
 
 @intrinsic
 def get_struct_data(typingctx, struct_typ=None):
-    """get data values of struct as tuple
-    """
+    """get data values of struct as tuple"""
     assert isinstance(struct_typ, StructType)
 
     def codegen(context, builder, sig, args):
@@ -877,8 +878,7 @@ def get_struct_data(typingctx, struct_typ=None):
 
 @intrinsic
 def get_struct_null_bitmap(typingctx, struct_typ=None):
-    """get null bitmap tuple of struct value
-    """
+    """get null bitmap tuple of struct value"""
     assert isinstance(struct_typ, StructType)
 
     def codegen(context, builder, sig, args):
@@ -892,8 +892,7 @@ def get_struct_null_bitmap(typingctx, struct_typ=None):
 
 @intrinsic
 def set_struct_data(typingctx, struct_typ, field_ind_typ, val_typ=None):
-    """set a field in struct to value. needs to replace the whole payload.
-    """
+    """set a field in struct to value. needs to replace the whole payload."""
     assert isinstance(struct_typ, StructType) and is_overload_constant_int(
         field_ind_typ
     )
@@ -940,8 +939,7 @@ def is_field_value_null(s, field_name):  # pragma: no cover
 
 @overload(is_field_value_null, no_unliteral=True)
 def overload_is_field_value_null(s, field_name):
-    """return True if struct field is NA
-    """
+    """return True if struct field is NA"""
     field_ind = _get_struct_field_ind(s, field_name, "element access (getitem)")
     return (
         lambda s, field_name: get_struct_null_bitmap(s)[field_ind] == 0
@@ -972,9 +970,15 @@ def struct_getitem(struct, ind, val):
     )  # pragma: no cover
 
 
+@overload(len, no_unliteral=True)
+def overload_struct_arr_len(struct):
+    if isinstance(struct, StructType):
+        num_fields = len(struct.data)
+        return lambda struct: num_fields  # pragma: no cover
+
+
 def construct_struct(context, builder, struct_type, values, nulls):
-    """Creates meminfo and sets dtor and data for struct
-    """
+    """Creates meminfo and sets dtor and data for struct"""
     # create payload type
     payload_type = StructPayloadType(struct_type.data)
     alloc_type = context.get_value_type(payload_type)
@@ -1099,8 +1103,7 @@ def struct_array_get_struct(typingctx, struct_arr_typ, ind_typ=None):
 
 @intrinsic
 def get_data(typingctx, arr_typ=None):
-    """get data arrays of struct array as tuple
-    """
+    """get data arrays of struct array as tuple"""
     assert isinstance(arr_typ, StructArrayType)
 
     def codegen(context, builder, sig, args):
@@ -1113,8 +1116,7 @@ def get_data(typingctx, arr_typ=None):
 
 @intrinsic
 def get_null_bitmap(typingctx, arr_typ=None):
-    """get null bitmap array of struct array
-    """
+    """get null bitmap array of struct array"""
     assert isinstance(arr_typ, StructArrayType)
 
     def codegen(context, builder, sig, args):
@@ -1127,8 +1129,7 @@ def get_null_bitmap(typingctx, arr_typ=None):
 
 @intrinsic
 def init_struct_arr(typingctx, data_typ, null_bitmap_typ, names_typ=None):
-    """create a new struct array from input data array tuple, null bitmap, and names.
-    """
+    """create a new struct array from input data array tuple, null bitmap, and names."""
     names = tuple(get_overload_const_str(t) for t in names_typ.types)
     struct_arr_type = StructArrayType(data_typ.types, names)
 
@@ -1232,8 +1233,8 @@ def struct_arr_setitem(arr, ind, val):
                 func_text += "  if is_field_value_null(val, '{}'):\n".format(
                     arr.names[i]
                 )
-                func_text += "    bodo.libs.array_kernels.setna(data[{}], ind)\n".format(
-                    i
+                func_text += (
+                    "    bodo.libs.array_kernels.setna(data[{}], ind)\n".format(i)
                 )
                 func_text += "  else:\n"
                 func_text += "    data[{}][ind] = val['{}']\n".format(i, arr.names[i])
