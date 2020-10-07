@@ -2058,17 +2058,3 @@ def _get_df_apply_used_cols(func, columns):
     # remove duplicates with set() since a column can be used multiple times
     used_cols = sorted(set(used_cols))
     return used_cols
-
-
-def _eval_const_var(func_ir, var):
-    try:
-        return find_const(func_ir, var)
-    except GuardException:
-        pass
-    var_def = guard(get_definition, func_ir, var)
-    if isinstance(var_def, ir.Expr) and var_def.op == "binop":
-        return var_def.fn(
-            _eval_const_var(func_ir, var_def.lhs), _eval_const_var(func_ir, var_def.rhs)
-        )
-
-    raise GuardException
