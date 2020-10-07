@@ -24,9 +24,9 @@ Bodo supports the following
 data types as values in Pandas Dataframe and Series data structures.
 This represents all `Pandas data types <https://pandas.pydata.org/pandas-docs/stable/reference/arrays.html>`_
 except `TZ-aware datetime`, `Period`, `Interval`, and `Sparse` (which will be supported in the future).
-Comparing to Spark (as of version 2.4.5), equivalent of all
-`Spark data types <https://spark.apache.org/docs/latest/sql-reference.html#data-types>`_
-are supported except `MapType` and `StructType` (will be supported in the future).
+Comparing to Spark, equivalent of all
+`Spark data types <http://spark.apache.org/docs/latest/sql-ref-datatypes.html>`_
+are supported.
 
 
 * Numpy booleans: `np.bool_`.
@@ -41,8 +41,7 @@ are supported except `MapType` and `StructType` (will be supported in the future
 * `datetime.timedelta` values (including nulls).
 * Pandas `nullable integers <https://pandas.pydata.org/pandas-docs/stable/user_guide/integer_na.html>`_.
 * Pandas `nullable booleans <https://pandas.pydata.org/pandas-docs/stable/user_guide/boolean.html>`_.
-* Pandas `Categoricals <https://pandas.pydata.org/pandas-docs/stable/user_guide/categorical.html>`_
-  (limited support currently, category values have to be known at compilation).
+* Pandas `Categoricals <https://pandas.pydata.org/pandas-docs/stable/user_guide/categorical.html>`_.
 * Lists of integer, float, and string values.
 * `decimal.Decimal` values (including nulls). The decimal
   values are stored as fixed-precision

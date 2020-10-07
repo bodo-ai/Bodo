@@ -83,8 +83,8 @@ and parallelize.
       * :func:`numpy.prod`
       * :func:`numpy.min`
       * :func:`numpy.max`
-      * :func:`numpy.argmin` (int64 data type not supported)
-      * :func:`numpy.argmax` (int64 data type not supported)
+      * :func:`numpy.argmin`
+      * :func:`numpy.argmax`
 
 #. Numpy array creation functions:
 
