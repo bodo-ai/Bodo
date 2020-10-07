@@ -247,7 +247,7 @@ Debugging the Python code
       # example of printing after parfor pass
       export NUMBA_DEBUG_PRINT_AFTER='parfor_pass'
 
-  Other common one: ``'bodo_distributed_pass', 'bodo_series_pass'``
+  Other common ones: ``'bodo_distributed_pass', 'bodo_series_pass'``
 - mpiexec redirect stdout from different processes to different files::
 
     export PYTHONUNBUFFERED=1  # avoid IO buffering
