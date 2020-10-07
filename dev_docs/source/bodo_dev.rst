@@ -70,7 +70,7 @@ Adding `print([p[0].name() for p in pm.passes])` instead prints the pass names.
 
 For demonstration of these passes, print the IR after main passes::
 
-    export NUMBA_DEBUG_PRINT_AFTER="ir_processing,bodo_untyped_pass,inline_overloads,bodo_dataframe_pass,bodo_series_pass,parfor_pass,bodo_distributed_pass"
+    export NUMBA_DEBUG_PRINT_AFTER="ir_processing,bodo_untyped_pass,inline_overloads,bodo_series_pass,parfor_pass,bodo_distributed_pass"
 
 and follow the compiler pipeline (input/output IRs) for a simple function like::
 
