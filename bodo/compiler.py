@@ -289,6 +289,10 @@ class BodoSeriesPass(FunctionPass):
             state.type_annotation.calltypes,
             state.locals,
         )
+        # run multiple times to make sure transformations are fully applied
+        # TODO(ehsan): run as long as IR changes
+        series_pass.run()
+        series_pass.run()
         series_pass.run()
         return True
 

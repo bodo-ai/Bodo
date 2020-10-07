@@ -94,6 +94,7 @@ from bodo.libs.str_arr_ext import (
 )
 from bodo.libs.str_ext import string_type
 from bodo.libs.struct_arr_ext import StructArrayType
+from bodo.transforms.dataframe_pass import DataFramePass
 from bodo.utils.transform import (
     ReplaceFunc,
     compile_func_single_block,
@@ -193,6 +194,8 @@ class SeriesPass:
         self.typemap = typemap
         self.calltypes = calltypes
         self.locals = _locals
+        # dataframe transformation module to try on each statement
+        self.dataframe_pass = DataFramePass(func_ir, typingctx, typemap, calltypes)
         # flag to enable inplace array op optimization: A[i] == v -> inplace_eq(A, i, v)
         self.optimize_inplace_ops = optimize_inplace_ops
         # Loc object of current location being translated
@@ -212,13 +215,20 @@ class SeriesPass:
             for i, inst in enumerate(block.body):
                 out_nodes = [inst]
                 self.curr_loc = inst.loc
+                self.dataframe_pass.curr_loc = self.curr_loc
 
                 try:
                     if isinstance(inst, ir.Assign):
                         self.func_ir._definitions[inst.target.name].remove(inst.value)
-                        out_nodes = self._run_assign(inst)
+                        # first try DataFrame transformations. If not applicable (None
+                        # return), try Series transformations
+                        out_nodes = self.dataframe_pass._run_assign(inst)
+                        if out_nodes is None:
+                            out_nodes = self._run_assign(inst)
                     elif isinstance(inst, (ir.SetItem, ir.StaticSetItem)):
-                        out_nodes = self._run_setitem(inst)
+                        out_nodes = self.dataframe_pass._run_setitem(inst)
+                        if out_nodes is None:
+                            out_nodes = self._run_setitem(inst)
                 except BodoError as e:
                     raise BodoError(self.curr_loc.strformat() + "\n" + str(e))
 
@@ -238,6 +248,10 @@ class SeriesPass:
                         (),
                         inst.loc,
                     )
+                    # replace "target" of Setitem nodes since inline_closure_call
+                    # assumes an assignment and sets "target" to return value
+                    if isinstance(inst, (ir.SetItem, ir.StaticSetItem)):
+                        inst.target = ir.Var(block.scope, "dummy", inst.loc)
                     block.body = new_body + block.body[i:]
                     # save work_list length to know how many new items are added
                     n_prev_work_items = len(work_list)
