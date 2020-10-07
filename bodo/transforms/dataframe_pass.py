@@ -108,110 +108,6 @@ class DataFramePass:
         # Loc object of current location being translated
         self.curr_loc = self.func_ir.loc
 
-    def run(self):
-        dprint_func_ir(self.func_ir, "starting dataframe pass")
-        ir_utils.remove_dels(self.func_ir.blocks)
-        blocks = self.func_ir.blocks
-        # topo_order necessary so DataFrame data replacement optimization can
-        # be performed in one pass
-        topo_order = find_topo_order(blocks)
-        work_list = list((l, blocks[l]) for l in reversed(topo_order))
-        while work_list:
-            label, block = work_list.pop()
-
-            new_body = []
-            replaced = False
-            for i, inst in enumerate(block.body):
-                out_nodes = [inst]
-                self.curr_loc = inst.loc
-
-                try:
-                    if isinstance(inst, ir.Assign):
-                        self.func_ir._definitions[inst.target.name].remove(inst.value)
-                        out_nodes = self._run_assign(inst)
-                    elif isinstance(inst, (ir.SetItem, ir.StaticSetItem)):
-                        out_nodes = self._run_setitem(inst)
-                except BodoError as e:
-                    raise BodoError(inst.loc.strformat() + "\n" + str(e))
-
-                if isinstance(out_nodes, list):
-                    # TODO: process these nodes
-                    new_body.extend(out_nodes)
-                    self._update_definitions(out_nodes)
-                if isinstance(out_nodes, ReplaceFunc):
-                    rp_func = out_nodes
-                    if rp_func.pre_nodes is not None:
-                        new_body.extend(rp_func.pre_nodes)
-                        self._update_definitions(rp_func.pre_nodes)
-                    # replace inst.value to a call with target args
-                    # as expected by inline_closure_call
-                    inst.value = ir.Expr.call(
-                        ir.Var(block.scope, "dummy", inst.loc),
-                        rp_func.args,
-                        (),
-                        inst.loc,
-                    )
-                    # replace "target" of Setitem nodes since inline_closure_call
-                    # assumes an assignment and sets "target" to return value
-                    if isinstance(inst, (ir.SetItem, ir.StaticSetItem)):
-                        inst.target = ir.Var(block.scope, "dummy", inst.loc)
-                    block.body = new_body + block.body[i:]
-                    callee_blocks, _ = inline_closure_call(
-                        self.func_ir,
-                        rp_func.glbls,
-                        block,
-                        len(new_body),
-                        rp_func.func,
-                        self.typingctx,
-                        rp_func.arg_types,
-                        self.typemap,
-                        self.calltypes,
-                    )
-                    # add blocks in reversed topo order to enable dead branch
-                    # pruning (merge example)
-                    # TODO: fix inline_closure_call()
-                    topo_order = find_topo_order(self.func_ir.blocks)
-                    for c_label in reversed(topo_order):
-                        if c_label in callee_blocks:
-                            c_block = callee_blocks[c_label]
-                            # update loc info
-                            c_block.loc = self.curr_loc
-                            update_locs(c_block.body, self.curr_loc)
-                            # include the new block created after callee used
-                            # to split the original block
-                            # find it using jumps out of callee (returns
-                            # originally) but include only once
-                            if isinstance(c_block.body[-1], ir.Jump):
-                                target_label = c_block.body[-1].target
-                                if (
-                                    target_label not in callee_blocks
-                                    and target_label not in work_list
-                                ):
-                                    work_list.append(
-                                        (
-                                            target_label,
-                                            self.func_ir.blocks[target_label],
-                                        )
-                                    )
-                            work_list.append((c_label, c_block))
-                    replaced = True
-                    break
-
-            if not replaced:
-                blocks[label].body = new_body
-
-        self.func_ir.blocks = ir_utils.simplify_CFG(self.func_ir.blocks)
-        # can't call remove dead since Series transform is not done yet and
-        # aliases like S.values are not known, see test_1D_Var_alloc3
-        # TODO: merge dist pass and series pass
-        # while ir_utils.remove_dead(self.func_ir.blocks, self.func_ir.arg_names,
-        #                            self.func_ir, self.typemap):
-        #     pass
-
-        self.func_ir._definitions = build_definitions(self.func_ir.blocks)
-        dprint_func_ir(self.func_ir, "after dataframe pass")
-        return
-
     def _run_assign(self, assign):
         lhs = assign.target
         rhs = assign.value
@@ -238,7 +134,7 @@ class DataFramePass:
             if rhs.op == "call":
                 return self._run_call(assign, lhs, rhs)
 
-        return [assign]
+        return None
 
     def _run_getitem(self, assign, rhs):
         lhs = assign.target
@@ -276,8 +172,7 @@ class DataFramePass:
             )
             return replace_func(self, impl, [target, index_var], pre_nodes=nodes)
 
-        nodes.append(assign)
-        return nodes
+        return None
 
     def _run_setitem(self, inst):
         target_typ = self.typemap[inst.target.name]
@@ -294,7 +189,7 @@ class DataFramePass:
                 self, impl, [inst.target, index_var, inst.value], pre_nodes=nodes
             )
 
-        return nodes + [inst]
+        return None
 
     def _run_getattr(self, assign, rhs):
         rhs_type = self.typemap[rhs.value.name]  # get type of rhs value "df"
@@ -362,14 +257,14 @@ class DataFramePass:
             assign.value = guard(get_definition, self.func_ir, rhs.value).value
             return [assign]
 
-        return [assign]
+        return None
 
     def _run_binop(self, assign, rhs):
 
         arg1, arg2 = rhs.lhs, rhs.rhs
         typ1, typ2 = self.typemap[arg1.name], self.typemap[arg2.name]
         if not (isinstance(typ1, DataFrameType) or isinstance(typ2, DataFrameType)):
-            return [assign]
+            return None
 
         if rhs.fn in bodo.hiframes.pd_series_ext.series_binary_ops:
             overload_func = bodo.hiframes.dataframe_impl.create_binary_op_overload(
@@ -399,7 +294,7 @@ class DataFramePass:
             impl = overload_func(typ)
             return replace_func(self, impl, (arg,))
 
-        return [assign]
+        return None
 
     def _run_call(self, assign, lhs, rhs):
         fdef = guard(find_callname, self.func_ir, rhs, self.typemap)
@@ -409,18 +304,18 @@ class DataFramePass:
             # could be make_function from list comprehension which is ok
             func_def = guard(get_definition, self.func_ir, rhs.func)
             if isinstance(func_def, ir.Expr) and func_def.op == "make_function":
-                return [assign]
+                return None
             # ignore objmode block calls
             if isinstance(func_def, ir.Const) and isinstance(
                 func_def.value, numba.core.dispatcher.ObjModeLiftedWith
             ):
-                return [assign]
+                return None
             if isinstance(func_def, ir.Global) and isinstance(
                 func_def.value, StencilFunc
             ):
-                return [assign]
+                return None
             warnings.warn("function call couldn't be found for dataframe analysis")
-            return [assign]
+            return None
         else:
             func_name, func_mod = fdef
 
@@ -482,7 +377,7 @@ class DataFramePass:
         if fdef == ("query_dummy", "bodo.hiframes.pd_dataframe_ext"):
             return self._run_call_query(assign, lhs, rhs)
 
-        return [assign]
+        return None
 
     def _run_call_dataframe(self, assign, lhs, rhs, df_var, func_name):
         if func_name in ("count", "query"):
@@ -2163,17 +2058,3 @@ def _get_df_apply_used_cols(func, columns):
     # remove duplicates with set() since a column can be used multiple times
     used_cols = sorted(set(used_cols))
     return used_cols
-
-
-def _eval_const_var(func_ir, var):
-    try:
-        return find_const(func_ir, var)
-    except GuardException:
-        pass
-    var_def = guard(get_definition, func_ir, var)
-    if isinstance(var_def, ir.Expr) and var_def.op == "binop":
-        return var_def.fn(
-            _eval_const_var(func_ir, var_def.lhs), _eval_const_var(func_ir, var_def.rhs)
-        )
-
-    raise GuardException
