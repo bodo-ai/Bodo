@@ -49,7 +49,6 @@ from numba.core.typing.templates import (
     signature,
 )
 from numba.core.typing.typeof import Purpose, typeof
-from numba.core.utils import reraise
 from numba.experimental.jitclass import base as jitclass_base
 from numba.experimental.jitclass import decorators as jitclass_decorators
 from numba.extending import lower_builtin
@@ -833,7 +832,7 @@ def _compile_for_args(self, *args, **kws):  # pragma: no cover
         if numba.core.config.FULL_TRACEBACKS:
             raise e
         else:
-            reraise(type(e), e, None)
+            raise e.with_traceback(None)
 
     argtypes = []
     for a in args:
@@ -953,7 +952,7 @@ def _compile_for_args(self, *args, **kws):  # pragma: no cover
 lines = inspect.getsource(numba.core.dispatcher._DispatcherBase._compile_for_args)
 if (
     hashlib.sha256(lines.encode()).hexdigest()
-    != "f9e54236529e4e9655d2372ceae81ad90913173f7b178a533f353b882c9b3cdf"
+    != "c85205bff102c4447e81110ee82291a2e3ff78bc73535be18e76e6f4539debb1"
 ):  # pragma: no cover
     warnings.warn("numba.core.dispatcher._DispatcherBase._compile_for_args has changed")
 # now replace the function with our own
@@ -997,7 +996,7 @@ def compile(self, sig):
             resolve_gb_agg_funcs(cres)  # Bodo change
             self._cache_hits[sig] += 1
             # XXX fold this in add_overload()? (also see compiler.py)
-            if not cres.objectmode and not cres.interpmode:
+            if not cres.objectmode:
                 self.targetctx.insert_user_function(
                     cres.entry_point, cres.fndesc, [cres.library]
                 )
@@ -1021,7 +1020,7 @@ def compile(self, sig):
 lines = inspect.getsource(numba.core.dispatcher.Dispatcher.compile)
 if (
     hashlib.sha256(lines.encode()).hexdigest()
-    != "576d693f0138e64e0c0808a1ed812a2792ad7315c29d7a16c00074026ca7a40d"
+    != "d4e9278b09bd4c71855e2930c1b409b62461602a35d5da0fde81f913a9627546"
 ):  # pragma: no cover
     warnings.warn("numba.core.dispatcher.Dispatcher.compile has changed")
 numba.core.dispatcher.Dispatcher.compile = (
