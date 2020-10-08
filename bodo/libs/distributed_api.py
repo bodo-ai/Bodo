@@ -5,6 +5,7 @@ import math
 import operator
 import sys
 import time
+from collections import defaultdict
 from decimal import Decimal
 from enum import Enum
 
@@ -13,6 +14,7 @@ import numba
 import numpy as np
 import pandas as pd
 from llvmlite import ir as lir
+from mpi4py import MPI
 from numba.core import cgutils, ir_utils, types
 from numba.core.typing import signature
 from numba.core.typing.builtins import IndexValueType
@@ -89,7 +91,6 @@ ll.add_symbol("c_allgatherv", hdist.c_allgatherv)
 ll.add_symbol("c_bcast", hdist.c_bcast)
 ll.add_symbol("c_recv", hdist.dist_recv)
 ll.add_symbol("c_send", hdist.dist_send)
-
 
 # get size dynamically from C code (mpich 3.2 is 4 bytes but openmpi 1.6 is 8)
 mpi_req_numba_type = getattr(types, "int" + str(8 * hdist.mpi_req_num_bytes))
@@ -1587,7 +1588,7 @@ def bcast_overload(data):
             typ_enum = get_type_enum(data)
             count = data.size
             assert count < INT_MAX
-            c_bcast(data.ctypes, np.int32(count), typ_enum)
+            c_bcast(data.ctypes, np.int32(count), typ_enum, np.array([-1]).ctypes, 0)
             return
 
         return bcast_impl
@@ -1597,7 +1598,13 @@ def bcast_overload(data):
         def bcast_decimal_arr(data):  # pragma: no cover
             count = data._data.size
             assert count < INT_MAX
-            c_bcast(data._data.ctypes, np.int32(count), CTypeEnum.Int128.value)
+            c_bcast(
+                data._data.ctypes,
+                np.int32(count),
+                CTypeEnum.Int128.value,
+                np.array([-1]).ctypes,
+                0,
+            )
             bcast(data._null_bitmap)
             return
 
@@ -1638,21 +1645,42 @@ def bcast_overload(data):
                         data, i
                     )
 
-                c_bcast(send_arr_lens.ctypes, np.int32(n_loc), int32_typ_enum)
+                c_bcast(
+                    send_arr_lens.ctypes,
+                    np.int32(n_loc),
+                    int32_typ_enum,
+                    np.array([-1]).ctypes,
+                    0,
+                )
             else:
-                c_bcast(offset_ptr, np.int32(n_loc), int32_typ_enum)
+                c_bcast(
+                    offset_ptr,
+                    np.int32(n_loc),
+                    int32_typ_enum,
+                    np.array([-1]).ctypes,
+                    0,
+                )
 
-            c_bcast(data_ptr, np.int32(n_all_chars), char_typ_enum)
-            c_bcast(null_bitmap_ptr, np.int32(n_bytes), char_typ_enum)
+            c_bcast(
+                data_ptr, np.int32(n_all_chars), char_typ_enum, np.array([-1]).ctypes, 0
+            )
+            c_bcast(
+                null_bitmap_ptr,
+                np.int32(n_bytes),
+                char_typ_enum,
+                np.array([-1]).ctypes,
+                0,
+            )
             if rank != MPI_ROOT:
                 convert_len_arr_to_offset(offset_ptr, n_loc)
 
         return bcast_str_impl
 
 
-# sendbuf, sendcount, dtype
+# sendbuf, sendcount, dtype, comm_ranks, nranks_in_comm
 c_bcast = types.ExternalFunction(
-    "c_bcast", types.void(types.voidptr, types.int32, types.int32)
+    "c_bcast",
+    types.void(types.voidptr, types.int32, types.int32, types.voidptr, types.int32),
 )
 
 
@@ -1693,7 +1721,7 @@ def bcast_scalar_overload(val):
                 utf8_str_arr = np.empty(n_char + 1, np.uint8)
                 utf8_str_arr[n_char] = 0
                 utf8_str = utf8_str_arr.ctypes
-            c_bcast(utf8_str, np.int32(n_char), char_typ_enum)
+            c_bcast(utf8_str, np.int32(n_char), char_typ_enum, np.array([-1]).ctypes, 0)
             return bodo.libs.str_arr_ext.decode_utf8(utf8_str, n_char)
 
         return impl_str
@@ -1705,7 +1733,7 @@ def bcast_scalar_overload(val):
         "def bcast_scalar_impl(val):\n"
         "  send = np.empty(1, dtype)\n"
         "  send[0] = val\n"
-        "  c_bcast(send.ctypes, np.int32(1), np.int32({}))\n"
+        "  c_bcast(send.ctypes, np.int32(1), np.int32({}), np.array([-1]).ctypes, 0)\n"
         "  return send[0]\n"
     ).format(typ_val)
 
@@ -1951,7 +1979,7 @@ def int_getitem_overload(arr, ind, arr_start, total_len, is_1D):
             if rank != root:
                 val = numba.cpython.unicode._empty_string(kind, l, 1)
             # TODO: unicode fix?
-            c_bcast(val._data, np.int32(l), char_typ_enum)
+            c_bcast(val._data, np.int32(l), char_typ_enum, np.array([-1]).ctypes, 0)
             return val
 
         return str_getitem_impl
@@ -2417,3 +2445,230 @@ def flush_stdout():
 atexit.register(call_finalize)
 # flush output before finalize
 atexit.register(flush_stdout)
+
+
+def bcast_comm(data, comm_ranks, nranks):  # pragma: no cover
+    """bcast() sends data from rank 0 to comm_ranks."""
+    rank = bodo.libs.distributed_api.get_rank()
+    # make sure all ranks receive proper data type as input
+    dtype = bodo.typeof(data)
+    dtype = _bcast_dtype(dtype)
+    if rank != MPI_ROOT:
+        data = get_value_for_type(dtype)
+    return bcast_comm_impl(data, comm_ranks, nranks)
+
+
+@overload(bcast_comm)
+def bcast_comm_overload(data, comm_ranks, nranks):
+    """support bcast_comm inside jit functions"""
+    return lambda data, comm_ranks, nranks: bcast_comm_impl(
+        data, comm_ranks, nranks
+    )  # pragma: no cover
+
+
+@numba.generated_jit(nopython=True)
+def bcast_comm_impl(data, comm_ranks, nranks):  # pragma: no cover
+    """nopython implementation of bcast_comm()"""
+    if isinstance(data, (types.Integer, types.Float)):
+        typ_val = numba_to_c_type(data)
+        func_text = (
+            "def bcast_scalar_impl(data, comm_ranks, nranks):\n"
+            "  send = np.empty(1, dtype)\n"
+            "  send[0] = data\n"
+            "  c_bcast(send.ctypes, np.int32(1), np.int32({}), comm_ranks,ctypes, np.int32({}))\n"
+            "  return send[0]\n"
+        ).format(typ_val, nranks)
+
+        dtype = numba.np.numpy_support.as_dtype(data)
+        loc_vars = {}
+        exec(
+            func_text,
+            {"bodo": bodo, "np": np, "c_bcast": c_bcast, "dtype": dtype},
+            loc_vars,
+        )
+        bcast_scalar_impl = loc_vars["bcast_scalar_impl"]
+        return bcast_scalar_impl
+
+    if isinstance(data, types.Array):
+        return lambda data, comm_ranks, nranks: _bcast_np(
+            data, comm_ranks, nranks
+        )  # pragma: no cover
+    if isinstance(data, bodo.hiframes.pd_dataframe_ext.DataFrameType):
+        n_cols = len(data.columns)
+        data_args = ", ".join("g_data_{}".format(i) for i in range(n_cols))
+        col_var = bodo.utils.transform.gen_const_tup(data.columns)
+
+        func_text = "def impl_df(data, comm_ranks, nranks):\n"
+        for i in range(n_cols):
+            func_text += "  data_{} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(data, {})\n".format(
+                i, i
+            )
+            func_text += "  g_data_{} = bodo.libs.distributed_api.bcast_comm_impl(data_{}, comm_ranks, nranks)\n".format(
+                i, i
+            )
+        func_text += (
+            "  index = bodo.hiframes.pd_dataframe_ext.get_dataframe_index(data)\n"
+        )
+        func_text += "  g_index = bodo.libs.distributed_api.bcast_comm_impl(index, comm_ranks, nranks)\n"
+        func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), g_index, {})\n".format(
+            data_args, col_var
+        )
+        loc_vars = {}
+        exec(func_text, {"bodo": bodo}, loc_vars)
+        impl_df = loc_vars["impl_df"]
+        return impl_df
+
+    if isinstance(data, bodo.hiframes.pd_index_ext.RangeIndexType):
+
+        def impl_range_index(data, comm_ranks, nranks):  # pragma: no cover
+            rank = bodo.libs.distributed_api.get_rank()
+            n_pes = bodo.libs.distributed_api.get_size()
+
+            start = data._start
+            stop = data._stop
+            step = data._step
+            name = data._name
+
+            name = bcast_scalar(name)
+
+            start = bcast_scalar(start)
+            stop = bcast_scalar(stop)
+            step = bcast_scalar(step)
+            n_items = bodo.libs.array_kernels.calc_nitems(start, stop, step)
+            chunk_start = bodo.libs.distributed_api.get_start(n_items, n_pes, rank)
+            chunk_count = bodo.libs.distributed_api.get_node_portion(
+                n_items, n_pes, rank
+            )
+            new_start = start + step * chunk_start
+            new_stop = start + step * (chunk_start + chunk_count)
+            new_stop = min(new_stop, stop)
+            return bodo.hiframes.pd_index_ext.init_range_index(
+                new_start, new_stop, step, name
+            )
+
+        return impl_range_index
+
+    if isinstance(data, bodo.hiframes.pd_series_ext.SeriesType):
+
+        def impl_series(data, comm_ranks, nranks):  # pragma: no cover
+            # get data and index arrays
+            arr = bodo.hiframes.pd_series_ext.get_series_data(data)
+            index = bodo.hiframes.pd_series_ext.get_series_index(data)
+            name = bodo.hiframes.pd_series_ext.get_series_name(data)
+            # bcast data
+            out_name = bodo.libs.distributed_api.bcast_comm_impl(
+                name, comm_ranks, nranks
+            )
+            out_arr = bodo.libs.distributed_api.bcast_comm_impl(arr, comm_ranks, nranks)
+            out_index = bodo.libs.distributed_api.bcast_comm_impl(
+                index, comm_ranks, nranks
+            )
+            # create output Series
+            return bodo.hiframes.pd_series_ext.init_series(out_arr, out_index, out_name)
+
+        return impl_series
+    # Tuple of data containers
+    if isinstance(data, types.BaseTuple):
+        func_text = "def impl_tuple(data, comm_ranks, nranks):\n"
+        func_text += "  return ({}{})\n".format(
+            ", ".join(
+                "bcast_comm_impl(data[{}], comm_ranks, nranks)".format(i)
+                for i in range(len(data))
+            ),
+            "," if len(data) > 0 else "",
+        )
+        loc_vars = {}
+        exec(func_text, {"bcast_comm_impl": bcast_comm_impl}, loc_vars)
+        impl_tuple = loc_vars["impl_tuple"]
+        return impl_tuple
+    if data is types.none:  # pragma: no cover
+        return lambda data, comm_ranks, nranks: None
+
+
+@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
+def _bcast_np(data, comm_ranks, nranks):
+    """bcast() implementation for numpy arrays, refactored here with
+    no_cpython_wrapper=True to enable int128 data array of decimal arrays. Otherwise,
+    Numba creates a wrapper and complains about unboxing int128.
+    """
+    typ_val = numba_to_c_type(data.dtype)
+    ndim = data.ndim
+    dtype = data.dtype
+    # using np.dtype since empty() doesn't work with typeref[datetime/timedelta]
+    if dtype == types.NPDatetime("ns"):
+        dtype = np.dtype("datetime64[ns]")
+    elif dtype == types.NPTimedelta("ns"):
+        dtype = np.dtype("timedelta64[ns]")
+    zero_shape = (0,) * ndim
+
+    def bcast_arr_impl(data, comm_ranks, nranks):  # pragma: no cover
+        rank = bodo.libs.distributed_api.get_rank()
+        data_in = np.ascontiguousarray(data)
+        data_ptr = data.ctypes
+
+        # broadcast shape to all processors
+        shape = zero_shape
+        if rank == MPI_ROOT:
+            shape = data_in.shape
+        # shape = bcast_comm_impl(shape, comm_ranks, nranks)
+        shape = bcast_tuple(shape)
+        n_elem_per_row = get_tuple_prod(shape[1:])
+        send_counts = shape[0] * n_elem_per_row
+        recv_data = np.empty(send_counts, dtype)
+        if rank == MPI_ROOT:
+            c_bcast(
+                data_ptr,
+                np.int32(send_counts),
+                np.int32(typ_val),
+                comm_ranks.ctypes,
+                np.int32(nranks),
+            )
+            return data
+        else:
+            c_bcast(
+                recv_data.ctypes,
+                np.int32(send_counts),
+                np.int32(typ_val),
+                comm_ranks.ctypes,
+                np.int32(nranks),
+            )
+            # handle multi-dim case
+            return recv_data.reshape((-1,) + shape[1:])
+
+    return bcast_arr_impl
+
+
+node_ranks = None
+
+
+def get_host_ranks():  # pragma: no cover
+    """Get dict holding hostname and its associated ranks"""
+    comm = MPI.COMM_WORLD
+    hostname = MPI.Get_processor_name()
+    rank_host = comm.allgather(hostname)
+    global node_ranks
+    if node_ranks is None:
+        node_ranks = defaultdict(list)
+        for i, host in enumerate(rank_host):
+            node_ranks[host].append(i)
+    return node_ranks
+
+
+def create_subcomm_mpi4py(comm_ranks):  # pragma: no cover
+    """Create sub-communicator from MPI.COMM_WORLD with specific ranks only"""
+    comm = MPI.COMM_WORLD
+    world_group = comm.Get_group()
+    new_group = world_group.Incl(comm_ranks)
+    new_comm = comm.Create_group(new_group)
+    return new_comm
+
+
+def get_nodes_first_ranks():  # pragma: no cover
+    """Get number of nodes"""
+    host_ranks = get_host_ranks()
+    return np.array([ranks[0] for ranks in host_ranks.values()], dtype="int32")
+
+
+def get_num_nodes():  # pragma: no cover
+    """Get number of nodes"""
+    return len(get_host_ranks())

@@ -37,7 +37,8 @@ static EVP_PKEY *get_public_key() {
  * Verifies that the license file is valid (originates from Bodo).
  * @param msg: byte array with license content
  * @param mlen: length of msg in bytes
- * @param sig: signature (obtained when signing license content with Bodo private key)
+ * @param sig: signature (obtained when signing license content with Bodo
+ * private key)
  * @param slen: length of signature in bytes
  * @return : 1 if verified correctly, 0 otherwise.
  */
@@ -285,7 +286,6 @@ PyMODINIT_FUNC PyInit_hdist(void) {
                            PyLong_FromVoidPtr((void *)(&dist_waitall)));
     PyObject_SetAttrString(m, "comm_req_dealloc",
                            PyLong_FromVoidPtr((void *)(&comm_req_dealloc)));
-
     PyObject_SetAttrString(m, "finalize",
                            PyLong_FromVoidPtr((void *)(&finalize)));
     PyObject_SetAttrString(m, "oneD_reshape_shuffle",

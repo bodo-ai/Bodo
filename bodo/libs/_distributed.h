@@ -51,7 +51,7 @@ static MPI_Op get_MPI_op(int op_enum) __UNUSED__;
 static int get_elem_size(int type_enum) __UNUSED__;
 static void dist_reduce(char* in_ptr, char* out_ptr, int op,
                         int type_enum) __UNUSED__;
-static void MPI_Allreduce_bool_or(std::vector<uint8_t> & V) __UNUSED__;
+static void MPI_Allreduce_bool_or(std::vector<uint8_t>& V) __UNUSED__;
 static void dist_exscan(char* in_ptr, char* out_ptr, int op,
                         int type_enum) __UNUSED__;
 
@@ -79,13 +79,16 @@ static void c_scatterv(void* send_data, int* sendcounts, int* displs,
 static void c_allgatherv(void* send_data, int sendcount, void* recv_data,
                          int* recv_counts, int* displs,
                          int typ_enum) __UNUSED__;
-static void c_bcast(void* send_data, int sendcount, int typ_enum) __UNUSED__;
+static void c_bcast(void* send_data, int sendcount, int typ_enum,
+                    int* comm_ranks, int nranks) __UNUSED__;
 
 static void c_alltoallv(void* send_data, void* recv_data, int* send_counts,
                         int* recv_counts, int* send_disp, int* recv_disp,
                         int typ_enum) __UNUSED__;
 static void c_alltoall(void* send_data, void* recv_data, int count,
                        int typ_enum) __UNUSED__;
+static void c_comm_create(const int* comm_ranks, int n,
+                          MPI_Comm* comm) __UNUSED__;
 static int64_t dist_get_item_pointer(int64_t ind, int64_t start,
                                      int64_t count) __UNUSED__;
 static void allgather(void* out_data, int size, void* in_data,
@@ -142,7 +145,7 @@ static int64_t dist_get_start(int64_t total, int num_pes, int node_id) {
 }
 
 static int64_t dist_get_end(int64_t total, int num_pes, int node_id) {
-    return dist_get_start(total, num_pes, node_id+1);
+    return dist_get_start(total, num_pes, node_id + 1);
 }
 
 static int64_t dist_get_node_portion(int64_t total, int num_pes, int node_id) {
@@ -157,10 +160,9 @@ static int64_t index_rank(int64_t total, int num_pes, int64_t index) {
     // In the range crit_index:total the size of the blocks is blk_size.
     int64_t crit_index = (blk_size + 1) * res;
     if (index < crit_index) {
-      return index / (blk_size+1);
-    }
-    else {
-      return res + (index - crit_index) / blk_size;
+        return index / (blk_size + 1);
+    } else {
+        return res + (index - crit_index) / blk_size;
     }
 }
 
@@ -237,15 +239,12 @@ static void dist_reduce(char* in_ptr, char* out_ptr, int op_enum,
     return;
 }
 
-
-
-static void MPI_Allreduce_bool_or(std::vector<uint8_t> & V)
-{
-    int len=V.size();
+static void MPI_Allreduce_bool_or(std::vector<uint8_t>& V) {
+    int len = V.size();
     MPI_Datatype mpi_typ8 = get_MPI_typ(Bodo_CTypes::UINT8);
-    MPI_Allreduce(MPI_IN_PLACE, V.data(), len, mpi_typ8, MPI_BOR, MPI_COMM_WORLD);
+    MPI_Allreduce(MPI_IN_PLACE, V.data(), len, mpi_typ8, MPI_BOR,
+                  MPI_COMM_WORLD);
 }
-
 
 static void dist_arr_reduce(void* out, int64_t total_size, int op_enum,
                             int type_enum) {
@@ -459,9 +458,46 @@ static void c_scatterv(void* send_data, int* sendcounts, int* displs,
                  mpi_typ, ROOT_PE, MPI_COMM_WORLD);
 }
 
-static void c_bcast(void* send_data, int sendcount, int typ_enum) {
+/**
+ * Create a sub communicator with specific ranks from MPI_COMM_WORLD
+ *
+ * @param comm_ranks pointer to ranks integer array
+ * @param comm new communicator handle
+ */
+static void c_comm_create(const int* comm_ranks, int n, MPI_Comm* comm) {
+    MPI_Group world_group;
+    int err = MPI_Comm_group(MPI_COMM_WORLD, &world_group);
+    assert(err == MPI_SUCCESS);
+    MPI_Group new_group;
+    err = MPI_Group_incl(world_group, n, comm_ranks, &new_group);
+    assert(err == MPI_SUCCESS);
+    err = MPI_Comm_create_group(MPI_COMM_WORLD, new_group, 0, comm);
+    assert(err == MPI_SUCCESS);
+}
+/**
+ * MPI_Bcast for all ranks or subset of them
+ * NOTE: broadcast root is 0 (ROOT_PE) for both MPI_COMM_WORLD or
+ * subcommunicator
+ *
+ * @param send_data pointer to data buffer to broadcast
+ * @param sendcount number of elements in the data buffer
+ * @param typ_enum datatype of buffer
+ * @param comm_ranks pointer to ranks integer array. ([-1] for MPI_COMM_WORLD)
+ * @param n number of elements in ranks array (0 for MPI_COMM_WORLD)
+ */
+static void c_bcast(void* send_data, int sendcount, int typ_enum,
+                    int* comm_ranks, int n) {
     MPI_Datatype mpi_typ = get_MPI_typ(typ_enum);
-    MPI_Bcast(send_data, sendcount, mpi_typ, ROOT_PE, MPI_COMM_WORLD);
+    if (n == 0) {
+        MPI_Bcast(send_data, sendcount, mpi_typ, ROOT_PE, MPI_COMM_WORLD);
+    } else {
+        MPI_Comm comm;
+        c_comm_create(comm_ranks, n, &comm);
+        if (MPI_COMM_NULL != comm) {
+            int err = MPI_Bcast(send_data, sendcount, mpi_typ, ROOT_PE, comm);
+            assert(err == MPI_SUCCESS);
+        }
+    }
     return;
 }
 
@@ -771,7 +807,8 @@ static void oneD_reshape_shuffle(char* output, char* input,
         i_send_disp[i] = (int)send_disp[i];
         i_recv_disp[i] = (int)recv_disp[i];
     }
-    MPI_Allreduce(MPI_IN_PLACE, &big_shuffle, 1, MPI_INT, MPI_LOR, MPI_COMM_WORLD);
+    MPI_Allreduce(MPI_IN_PLACE, &big_shuffle, 1, MPI_INT, MPI_LOR,
+                  MPI_COMM_WORLD);
 
     if (!big_shuffle) {
         int ierr =

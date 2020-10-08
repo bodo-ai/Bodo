@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 import sklearn.ensemble
 import sklearn.metrics
+import sklearn.utils
 from mpi4py import MPI
 from numba.core import types
 from numba.extending import (
@@ -21,7 +22,15 @@ from numba.extending import (
 )
 
 import bodo
-from bodo.libs.distributed_api import Reduce_Type, dist_reduce, get_node_portion
+from bodo.libs.distributed_api import (
+    Reduce_Type,
+    create_subcomm_mpi4py,
+    dist_reduce,
+    get_host_ranks,
+    get_node_portion,
+    get_nodes_first_ranks,
+    get_num_nodes,
+)
 from bodo.utils.typing import (
     get_overload_const_str,
     is_overload_constant_str,
@@ -32,22 +41,57 @@ from bodo.utils.typing import (
 
 
 def model_fit(m, X, y):
-    # TODO multi-node:
-    # Current implementation is not correct for number of nodes > 1 and
-    # should abort in that case.
     # TODO check that random_state behavior matches sklearn when
     # the training is distributed (does not apply currently)
 
-    if bodo.get_rank() == 0:
+    # Add temp var. for global number of trees.
+    n_estimators_global = m.n_estimators
+    # Split m.n_estimators across Nodes
+    hostname = MPI.Get_processor_name()
+    nodename_ranks = get_host_ranks()
+    nnodes = len(nodename_ranks)
+    my_rank = bodo.get_rank()
+    m.n_estimators = bodo.libs.distributed_api.get_node_portion(
+        n_estimators_global, nnodes, my_rank
+    )
+    # For each first rank in each node train the model
+    if my_rank == (nodename_ranks[hostname])[0]:
         # train model on rank 0
-        # TODO for multinode: n_jobs should be number of ranks on this node,
-        # NOT on MPI_COMM_WORLD
-        m.n_jobs = bodo.get_size()
+        m.n_jobs = len(nodename_ranks[hostname])
+        # To get different seed on each node. Default in MPI seed is generated on master and passed, hence random_state values are repeated.
+        if m.random_state is None:
+            m.random_state = np.random.RandomState()
+
         from sklearn.utils import parallel_backend
 
         with parallel_backend("threading"):
             m.fit(X, y)
         m.n_jobs = 1
+
+    # Gather all trees from each first rank/node to rank 0 within subcomm. Then broadcast to all
+    # Get lowest rank in each node
+    with numba.objmode(first_rank_node="int32[:]"):
+        first_rank_node = get_nodes_first_ranks()
+    # Create subcommunicator with these ranks only
+    subcomm = create_subcomm_mpi4py(first_rank_node)
+    # Gather trees in chunks to avoid reaching memory threshold for MPI.
+    if subcomm != MPI.COMM_NULL:
+        CHUNK_SIZE = 10
+        root_data_size = bodo.libs.distributed_api.get_node_portion(
+            n_estimators_global, nnodes, 0
+        )
+        num_itr = root_data_size // CHUNK_SIZE
+        if root_data_size % CHUNK_SIZE != 0:
+            num_itr += 1
+        forest = []
+        for i in range(num_itr):
+            trees = subcomm.gather(
+                m.estimators_[i * CHUNK_SIZE : i * CHUNK_SIZE + CHUNK_SIZE]
+            )
+            if my_rank == 0:
+                forest += list(itertools.chain.from_iterable(trees))
+        if my_rank == 0:
+            m.estimators_ = forest
 
     # rank 0 broadcast of forest to every rank
     comm = MPI.COMM_WORLD
@@ -59,26 +103,28 @@ def model_fit(m, X, y):
     # sklearn with joblib seems to do a task-parallel approach where
     # every worker has all the data and there are n tasks with n being the
     # number of trees
-    if bodo.get_rank() == 0:
+    if my_rank == 0:
         # Do piece-wise broadcast to avoid huge messages that can result
         # from pickling the estimators
         # TODO investigate why the pickled estimators are so large. It
         # doesn't look like the unpickled estimators have a large memory
         # footprint
-        for i in range(0, m.n_estimators, 10):
+        for i in range(0, n_estimators_global, 10):
             comm.bcast(m.estimators_[i : i + 10])
         comm.bcast(m.n_classes_)
         comm.bcast(m.n_outputs_)
         comm.bcast(m.classes_)
-    else:
+    # Add no cover becuase coverage report is done by one rank only.
+    else:  # pragma: no cover
         estimators = []
-        for i in range(0, m.n_estimators, 10):
+        for i in range(0, n_estimators_global, 10):
             estimators += comm.bcast(None)
         m.n_classes_ = comm.bcast(None)
         m.n_outputs_ = comm.bcast(None)
         m.classes_ = comm.bcast(None)
         m.estimators_ = estimators
-    assert len(m.estimators_) == m.n_estimators
+    assert len(m.estimators_) == n_estimators_global
+    m.n_estimators = n_estimators_global
 
 
 # -----------------------------------------------------------------------------
@@ -169,6 +215,9 @@ def sklearn_ensemble_RandomForestClassifier_overload(
         max_samples=None,
     ):  # pragma: no cover
         with numba.objmode(m="random_forest_classifier_type"):
+            if random_state is None and get_num_nodes() > 1:
+                print("With multinode, fixed random_state seed values are ignored.\n")
+                random_state = None
             m = sklearn.ensemble.RandomForestClassifier(
                 n_estimators=n_estimators,
                 criterion=criterion,
@@ -204,10 +253,21 @@ def overload_model_fit(
 ):
     def _model_fit_impl(m, X, y, _is_data_distributed=False):  # pragma: no cover
 
+        # Get lowest rank in each node
+        with numba.objmode(first_rank_node="int32[:]"):
+            first_rank_node = get_nodes_first_ranks()
         if _is_data_distributed:
-            # TODO for multinode: replicate on first rank of each node
+            nnodes = len(first_rank_node)
             X = bodo.gatherv(X)
             y = bodo.gatherv(y)
+            # Broadcast X, y to first rank in each node
+            if nnodes > 1:
+                X = bodo.libs.distributed_api.bcast_comm(
+                    X, comm_ranks=first_rank_node, nranks=nnodes
+                )
+                y = bodo.libs.distributed_api.bcast_comm(
+                    y, comm_ranks=first_rank_node, nranks=nnodes
+                )
 
         with numba.objmode:
             model_fit(m, X, y)  # return value is m
@@ -255,7 +315,6 @@ def overload_model_score(
                 result = np.full(len(y), result)
             else:
                 result = np.array([result])
-
         if _is_data_distributed:
             result = bodo.allgatherv(result)
         return result.mean()

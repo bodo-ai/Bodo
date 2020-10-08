@@ -1,20 +1,19 @@
 # Copied and adapted from https://github.com/scikit-learn/scikit-learn/blob/master/sklearn/ensemble/tests/test_forest.py
 
+import random
+import time
+
 import numpy as np
 import pandas as pd
-import bodo
-from bodo.tests.utils import (
-    check_func,
-    _get_dist_arg,
-)
 import pytest
-import random
-
 from sklearn import datasets
+from sklearn.datasets import make_classification
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import f1_score, precision_score, recall_score
 from sklearn.utils.validation import check_random_state
 
-from sklearn.metrics import precision_score, recall_score, f1_score
+import bodo
+from bodo.tests.utils import _get_dist_arg, check_func
 
 # ---------------------- RandomForestClassifier tests ----------------------
 
@@ -262,3 +261,57 @@ def test_score(data, average):
     check_func(test_precision, tuple(data + [average]), is_out_distributed=False)
     check_func(test_recall, tuple(data + [average]), is_out_distributed=False)
     check_func(test_f1, tuple(data + [average]), is_out_distributed=False)
+
+
+@pytest.mark.skip(reason="Run manually on multinode cluster.")
+def test_multinode_bigdata():
+    """Check classification against sklearn with big data on multinode cluster"""
+
+    # name is used for distinguishing function printing time.
+    def impl(X_train, y_train, X_test, y_test, name="BODO"):
+        # Bodo ignores n_jobs. This is set for scikit-learn (non-bodo) run. It should be set to number of cores avialable.
+        clf = RandomForestClassifier(
+            n_estimators=100, random_state=None, n_jobs=8, verbose=3
+        )
+        start_time = time.time()
+        clf.fit(X_train, y_train)
+        end_time = time.time()
+        if bodo.get_rank() == 0:
+            print(name, "Time: ", (end_time - start_time))
+        y_pred = clf.predict(X_test)
+        score = clf.score(X_test, y_test)
+        return score
+
+    splitN = 500
+    n_samples = 5000000
+    n_features = 500
+    X_train = None
+    y_train = None
+    X_test = None
+    y_test = None
+    if bodo.get_rank() == 0:
+        X, y = make_classification(
+            n_samples=n_samples,
+            n_features=n_features,
+            n_classes=3,
+            n_clusters_per_class=2,
+            n_informative=3,
+        )
+        sklearn_predict_result = impl(
+            X[:splitN], y[:splitN], X[splitN:], y[splitN:], "SK"
+        )
+        X_train = bodo.scatterv(X[:splitN])
+        y_train = bodo.scatterv(y[:splitN])
+        X_test = bodo.scatterv(X[splitN:])
+        y_test = bodo.scatterv(y[splitN:])
+    else:
+        X_train = bodo.scatterv(None)
+        y_train = bodo.scatterv(None)
+        X_test = bodo.scatterv(None)
+        y_test = bodo.scatterv(None)
+
+    bodo_predict_result = bodo.jit(
+        distributed=["X_train", "y_train", "X_test", "y_test"]
+    )(impl)(X_train, y_train, X_test, y_test)
+    if bodo.get_rank() == 0:
+        assert np.allclose(sklearn_predict_result, bodo_predict_result, atol=0.1)
