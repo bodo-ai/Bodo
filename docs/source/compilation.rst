@@ -6,24 +6,18 @@ Compilation Tips and Troubleshooting
 Compilation Tips
 -----------------
 
-Numba's `What to compile <https://numba.pydata.org/numba-doc/dev/user/troubleshoot.html#what-to-compile>`_ section states:
-
-    "The general recommendation is that you should only try to **compile the critical paths in your code**. 
-    If you have a piece of performance-critical computational code amongst some higher-level code, you may factor out the performance-critical code in a separate function and compile the separate function with Numba. 
-    Letting Numba focus on that small piece of performance-critical code has several advantages:
-
-        * it reduces the risk of hitting unsupported features;
-        * it reduces the compilation times;
-        * it allows you to evolve the higher-level code which is outside of the compiled function much easier."
-
-Most of the above statements apply to Bodo, too. However, because Bodo not only improves performance but also enables scaling, our general recommendation is that: you should only try to use Bodo to **compile the code that is performance critical or requires scaling**. 
+The general recommendation is that you should only try to use Bodo to
+**compile the code that is performance critical or requires scaling**.
 In other words:
-    
-    1. Don't use Bodo for scripts that set up infrastucture or do initializations. 
-    2. Only use Bodo for data processing and analytics code.
 
+    * Only use Bodo for data processing and analytics code.
+    * Don't use Bodo for scripts that set up infrastucture or do initializations.
+
+This reduces the risk of hitting unsupported features and reduces compilation time.
 To do so, simply factor out the code that needs to be compiled by Bodo and pass data into
 `Bodo compiled functions <user_guide.html#jit-just-in-time-compilation-workflow>`__.
+This recommendation is similar to Numba's `What to compile <https://numba.pydata.org/numba-doc/dev/user/troubleshoot.html#what-to-compile>`_.
+
 
 Compilation Error
 -----------------------
@@ -108,4 +102,10 @@ Zero-length dataframe arguments to Bodo functions can cause compilation errors d
                             'B': bodo.int64[:],
                       }})
     def f(df):
+
+Sometimes standard output prints may not appear when the program fails, due to
+Python's I/O buffering. Therefore, setting ``PYTHONUNBUFFERED`` environment variable
+is recommended for debugging::
+
+    export PYTHONUNBUFFERED=1
 
