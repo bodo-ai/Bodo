@@ -354,6 +354,8 @@ Note: you can temporarily disable one or more of these checks using :code:`SKIP`
 
 To skip all the checks use :code:`git commit --no-verify`.
 
+To make :code:`isort` skip an entire file you can add the filename (fullpath) to the :code:`skip` flag in :code:`.isort.cfg` or add :code:`isort::skip_file` to the module's docstring.
+
 We use the Google C++ code style guide
 and enforce with `cpplint <https://github.com/cpplint/cpplint>`_.
 We use `clang-format` as the formatter.
