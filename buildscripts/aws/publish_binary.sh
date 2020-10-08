@@ -15,3 +15,8 @@ for package in `ls $HOME/miniconda3/envs/bodo_build/conda-bld/${OS_DIR}/bodo*.ta
     curl -u${USERNAME}:${TOKEN} -T $package "https://bodo.jfrog.io/artifactory/${CHANNEL_NAME}/${OS_DIR}/$package_name"
     echo "$package_name" > $CODEBUILD_SRC_DIR/bodo_subchannel
 done
+
+# reindex conda
+ADMIN_USERNAME=`credstash -r us-east-2 get artifactory.admin.username`
+ADMIN_TOKEN=`credstash -r us-east-2 get artifactory.admin.token`
+curl -X POST https://$ADMIN_USERNAME:$ADMIN_TOKEN@bodo.jfrog.io/artifactory/api/conda/$CHANNEL_NAME/reindex
