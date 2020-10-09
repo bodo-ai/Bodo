@@ -2548,6 +2548,16 @@ def bcast_comm_impl(data, comm_ranks, nranks):  # pragma: no cover
 
         return impl_range_index
 
+    if bodo.hiframes.pd_index_ext.is_pd_index_type(data):
+
+        def impl_pd_index(data, comm_ranks, nranks):  # pragma: no cover
+            data_in = data._data
+            name = data._name
+            arr = bodo.libs.distributed_api.bcast_comm_impl(data_in, comm_ranks, nranks)
+            return bodo.utils.conversion.index_from_array(arr, name)
+
+        return impl_pd_index
+
     if isinstance(data, bodo.hiframes.pd_series_ext.SeriesType):
 
         def impl_series(data, comm_ranks, nranks):  # pragma: no cover
