@@ -587,10 +587,10 @@ make_attribute_wrapper(DatetimeTimeDeltaArrayType, "null_bitmap", "_null_bitmap"
 
 @overload_method(DatetimeTimeDeltaArrayType, "copy", no_unliteral=True)
 def overload_datetime_timedelta_arr_copy(A):
-    return lambda A: bodo.hiframes.datetime_date_ext.init_datetime_timedelta_array(
+    return lambda A: bodo.hiframes.datetime_timedelta_ext.init_datetime_timedelta_array(
         A._days_data.copy(),
         A._seconds_data.copy(),
-        A._microseconds_data(),
+        A._microseconds_data.copy(),
         A._null_bitmap.copy(),
     )  # pragma: no cover
 

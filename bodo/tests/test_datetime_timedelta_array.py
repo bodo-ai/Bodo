@@ -147,3 +147,16 @@ def test_constant_lowering(timedelta_arr_value):
     pd.testing.assert_series_equal(
         pd.Series(bodo.jit(impl)()), pd.Series(timedelta_arr_value), check_dtype=False
     )
+
+
+@pytest.mark.skip("TODO(Nick): Add support for timedelta arrays inside C++ code")
+def test_np_sort(memory_leak_check):
+    def impl(arr):
+        return np.sort(arr)
+
+    A = np.append(
+        datetime.timedelta(days=5, seconds=4, weeks=4),
+        [datetime.timedelta(microseconds=100000001213131, hours=5)] * 20,
+    )
+
+    check_func(impl, (A,))

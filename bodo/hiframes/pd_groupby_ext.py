@@ -251,6 +251,12 @@ def lower_groupby_dummy(context, builder, sig, args):
     return context.get_constant_null(sig.return_type)
 
 
+# dummy lowering for groupby.count since it is used in Series.value_counts()
+@lower_builtin("groupby.count", types.VarArg(types.Any))
+def lower_groupby_count_dummy(context, builder, sig, args):
+    return context.get_constant_null(sig.return_type)
+
+
 @infer
 class GetItemDataFrameGroupBy(AbstractTemplate):
     key = "static_getitem"

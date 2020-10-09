@@ -29,6 +29,15 @@ def test_np_where(memory_leak_check):
     check_func(impl, (A,))
 
 
+def test_np_sort(memory_leak_check):
+    def impl(arr):
+        return np.sort(arr)
+
+    A = pd.array([True, False, True, False] * 20)
+
+    check_func(impl, (A,))
+
+
 def test_np_repeat(bool_arr_value, memory_leak_check):
     def impl(arr):
         return np.repeat(arr, 2)

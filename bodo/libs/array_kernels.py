@@ -40,6 +40,7 @@ from bodo.libs.array import (
     info_to_array,
     sample_table,
     shuffle_table,
+    sort_values_table,
 )
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.bool_arr_ext import BooleanArrayType, boolean_array
@@ -57,6 +58,7 @@ from bodo.utils.indexing import add_nested_counts, init_nested_counts
 from bodo.utils.shuffle import getitem_arr_tup_single
 from bodo.utils.typing import (
     BodoError,
+    check_unsupported_args,
     find_common_np_dtype,
     get_overload_const_list,
     get_overload_const_str,
@@ -1579,6 +1581,34 @@ def arange_parallel_impl(return_type, *args):
 
 numba.parfors.parfor.replace_functions_map[("arange", "numpy")] = arange_parallel_impl
 
+
+def sort(arr, ascending, inplace):  # pragma: no cover
+    return np.sort(arr)
+
+
+# Our sort implementation for series and dataframe relies on the inclusion
+# of a sort IR node. This sort kernel is for use when that is not appropriate.
+# For example: Inside of sklearn functions.
+@overload(sort, no_unliteral=True)
+def overload_sort(arr, ascending, inplace):
+    def impl(arr, ascending, inplace):  # pragma: no cover
+        n = len(arr)
+        data = (np.arange(n),)
+        key_arrs = (arr,)
+        if not inplace:
+            key_arrs = (arr.copy(),)
+
+        l_key_arrs = bodo.libs.str_arr_ext.to_string_list(key_arrs)
+        l_data = bodo.libs.str_arr_ext.to_string_list(data, True)
+        bodo.libs.timsort.sort(l_key_arrs, 0, n, l_data)
+        if not ascending:
+            bodo.libs.timsort.reverseRange(l_key_arrs, 0, n, l_data)
+        bodo.libs.str_arr_ext.cp_str_list_to_array(key_arrs, l_key_arrs)
+        return key_arrs[0]
+
+    return impl
+
+
 ###### Overloads of np array operations on our array types. ######
 
 
@@ -1645,6 +1675,31 @@ def nonzero_overload(A, parallel=False):
             if A[i]:
                 result.append(i + offset)
         return (np.array(result, np.int64),)
+
+    return impl
+
+
+@overload(np.sort, inline="always", no_unliteral=True)
+def np_sort(A, axis=-1, kind=None, order=None):
+    if not bodo.utils.utils.is_array_typ(A, False) or isinstance(
+        A, types.Array
+    ):  # pragma: no cover
+        return
+    args_dict = {
+        "axis": axis,
+        "kind": kind,
+        "order": order,
+    }
+    args_default_dict = {
+        "axis": -1,
+        "kind": None,
+        "order": None,
+    }
+    check_unsupported_args("np.sort", args_dict, args_default_dict)
+
+    def impl(A, axis=-1, kind=None, order=None):  # pragma: no cover
+
+        return pd.Series(A).sort_values().values
 
     return impl
 

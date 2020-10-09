@@ -104,6 +104,7 @@ and parallelize.
 
 #. Numpy array manipulation functions:
 
+    * :func:`numpy.sort`
     * :func:`numpy.unique`
     * :func:`numpy.where` (1 and 3 arguments)
 

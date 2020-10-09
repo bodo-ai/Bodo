@@ -2030,48 +2030,6 @@ class SeriesPass:
                 assign, lhs, rhs, series_var, func_var, extra_args
             )
 
-        if func_name == "value_counts":
-            nodes = []
-            data = self._get_series_data(series_var, nodes)
-            name = self._get_series_name(series_var, nodes)
-            # reusing aggregate/count
-            # TODO: write optimized implementation
-            # data of input becomes both key and data for aggregate input
-            # data of output is the counts
-            out_key_var = ir.Var(lhs.scope, mk_unique_var(lhs.name + "_index"), lhs.loc)
-            self.typemap[out_key_var.name] = self.typemap[data.name]
-            out_data_var = ir.Var(lhs.scope, mk_unique_var(lhs.name + "_data"), lhs.loc)
-            self.typemap[out_data_var.name] = self.typemap[lhs.name].data
-            agg_func = bodo.hiframes.series_impl.overload_series_count(
-                self.typemap[series_var.name]
-            )
-            agg_func.ftype = "count"
-            input_has_index = False
-            same_index = False
-            return_key = True
-            agg_node = bodo.ir.aggregate.Aggregate(
-                lhs.name,
-                "series",
-                ["series"],
-                [out_key_var],
-                {"data": out_data_var},
-                {"data": data},
-                [data],
-                agg_func,
-                input_has_index,
-                same_index,
-                return_key,
-                lhs.loc,
-            )
-            nodes.append(agg_node)
-            # TODO: handle args like sort=False
-            func = lambda A, B, name: bodo.hiframes.pd_series_ext.init_series(
-                A, bodo.utils.conversion.convert_to_index(B), name
-            ).sort_values(ascending=False)
-            return replace_func(
-                self, func, [out_data_var, out_key_var, name], pre_nodes=nodes
-            )
-
         # astype with string output
         if func_name == "astype":
             # just return input if both input/output are strings

@@ -13,6 +13,14 @@ from numba.extending import overload, overload_attribute, overload_method
 
 import bodo
 from bodo.hiframes.pd_series_ext import SeriesType, if_series_to_array_type
+from bodo.libs.array import (
+    arr_info_list_to_table,
+    array_to_info,
+    delete_table,
+    info_from_table,
+    info_to_array,
+    sort_values_table,
+)
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.bool_arr_ext import BooleanArrayType, boolean_array
 from bodo.libs.int_arr_ext import IntegerArrayType
@@ -1179,7 +1187,7 @@ def overload_series_argsort(S, axis=0, kind="quicksort", order=None):
     return impl
 
 
-@overload_method(SeriesType, "sort_values", no_unliteral=True)
+@overload_method(SeriesType, "sort_values", inline="always", no_unliteral=True)
 def overload_series_sort_values(
     S, axis=0, ascending=True, inplace=False, kind="quicksort", na_position="last"
 ):
@@ -1195,13 +1203,55 @@ def overload_series_sort_values(
     ):  # pragma: no cover
         arr = bodo.hiframes.pd_series_ext.get_series_data(S)
         index = bodo.hiframes.pd_series_ext.get_series_index(S)
-        index_arr = bodo.utils.conversion.coerce_to_array(index)
         name = bodo.hiframes.pd_series_ext.get_series_name(S)
-
-        out_arr, out_ind_arr = sort(arr, index_arr, ascending, inplace)
-
-        out_index = bodo.utils.conversion.convert_to_index(out_ind_arr)
+        df = bodo.hiframes.pd_dataframe_ext.init_dataframe((arr,), index, ("A",))
+        sorted_df = df.sort_values(
+            ["A"], ascending=ascending, inplace=inplace, na_position=na_position
+        )
+        out_arr = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(sorted_df, 0)
+        out_index = bodo.hiframes.pd_dataframe_ext.get_dataframe_index(sorted_df)
         return bodo.hiframes.pd_series_ext.init_series(out_arr, out_index, name)
+
+    return impl
+
+
+@overload_method(SeriesType, "value_counts", inline="always", no_unliteral=True)
+def overload_series_value_counts(
+    S,
+    normalize=False,
+    sort=True,
+    ascending=False,
+    bins=None,
+    dropna=True,
+):
+    unsupported_args = dict(normalize=normalize, sort=sort, bins=bins, dropna=dropna)
+    arg_defaults = dict(normalize=False, sort=True, bins=None, dropna=True)
+    check_unsupported_args("Series.value_counts", unsupported_args, arg_defaults)
+
+    # reusing aggregate/count
+    # TODO(ehsan): write optimized implementation
+    def impl(
+        S,
+        normalize=False,
+        sort=True,
+        ascending=False,
+        bins=None,
+        dropna=True,
+    ):  # pragma: no cover
+        # create a dummy dataframe to use groupby/count and sort_values
+        arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+        dummy_index = bodo.hiframes.pd_index_ext.init_range_index(0, len(arr), 1, None)
+        in_df = bodo.hiframes.pd_dataframe_ext.init_dataframe(
+            (arr, arr), dummy_index, ("A", "B")
+        )
+        count_df = in_df.groupby("A").count().sort_values("B", ascending=ascending)
+        # create the output Series and remove "A"/"B" labels from index/column
+        ind_arr = bodo.hiframes.pd_index_ext.get_index_data(
+            bodo.hiframes.pd_dataframe_ext.get_dataframe_index(count_df)
+        )
+        index = bodo.utils.conversion.index_from_array(ind_arr)
+        count_arr = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(count_df, 0)
+        return bodo.hiframes.pd_series_ext.init_series(count_arr, index, None)
 
     return impl
 
@@ -2325,32 +2375,6 @@ def overload_argsort(A):
         data = (np.arange(n),)
         bodo.libs.timsort.sort(l_key_arrs, 0, n, data)
         return data[0]
-
-    return impl
-
-
-def sort(arr, index_arr, ascending, inplace):  # pragma: no cover
-    return np.sort(arr), index_arr
-
-
-@overload(sort, no_unliteral=True)
-def overload_sort(arr, index_arr, ascending, inplace):
-    def impl(arr, index_arr, ascending, inplace):  # pragma: no cover
-        n = len(arr)
-        key_arrs = (arr,)
-        data = (index_arr,)
-        if not inplace:
-            key_arrs = (arr.copy(),)
-            data = (index_arr.copy(),)
-
-        l_key_arrs = bodo.libs.str_arr_ext.to_string_list(key_arrs)
-        l_data = bodo.libs.str_arr_ext.to_string_list(data, True)
-        bodo.libs.timsort.sort(l_key_arrs, 0, n, l_data)
-        if not ascending:
-            bodo.libs.timsort.reverseRange(l_key_arrs, 0, n, l_data)
-        bodo.libs.str_arr_ext.cp_str_list_to_array(key_arrs, l_key_arrs)
-        bodo.libs.str_arr_ext.cp_str_list_to_array(data, l_data, True)
-        return key_arrs[0], data[0]
 
     return impl
 

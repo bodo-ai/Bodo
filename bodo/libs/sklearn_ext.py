@@ -356,7 +356,7 @@ def precision_recall_fscore_parallel(
 ):  # pragma: no cover
     labels = bodo.libs.array_kernels.unique(y_true, parallel=True)
     labels = bodo.allgatherv(labels, False)
-    labels = pd.Series(labels).sort_values().values
+    labels = bodo.libs.array_kernels.sort(labels, ascending=True, inplace=False)
 
     nlabels = len(labels)
     # true positive for each label

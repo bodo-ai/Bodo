@@ -781,7 +781,11 @@ def replace_func(
 
         def default_handler(index, param, default):
             d_var = ir.Var(scope, mk_unique_var("defaults"), loc)
-            pass_info.typemap[d_var.name] = numba.typeof(default)
+            # try to use a literal type if possible (as required by some overloads)
+            try:
+                pass_info.typemap[d_var.name] = types.literal(default)
+            except:
+                pass_info.typemap[d_var.name] = numba.typeof(default)
             node = ir.Assign(ir.Const(default, loc), d_var, loc)
             pre_nodes.append(node)
             return d_var

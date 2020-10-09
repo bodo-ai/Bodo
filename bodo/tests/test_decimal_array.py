@@ -45,6 +45,26 @@ def decimal_arr_value(request):
     return request.param
 
 
+def test_np_sort(memory_leak_check):
+    def impl(arr):
+        return np.sort(arr)
+
+    A = np.array(
+        [
+            Decimal("1.6"),
+            Decimal("-0.222"),
+            Decimal("1111.316"),
+            Decimal("1234.00046"),
+            Decimal("5.1"),
+            Decimal("-11131.0056"),
+            Decimal("0.0"),
+        ]
+        * 20
+    )
+
+    check_func(impl, (A,))
+
+
 def test_np_repeat(decimal_arr_value, memory_leak_check):
     def impl(arr):
         return np.repeat(arr, 2)

@@ -120,3 +120,15 @@ def test_constant_lowering(date_arr_value):
     pd.testing.assert_series_equal(
         pd.Series(bodo.jit(impl)()), pd.Series(date_arr_value), check_dtype=False
     )
+
+
+def test_np_sort(memory_leak_check):
+    def impl(arr):
+        return np.sort(arr)
+
+    A = np.append(
+        pd.date_range("2017-01-03", "2017-07-17").date,
+        [datetime.date(2016, 3, 3)],
+    )
+
+    check_func(impl, (A,))

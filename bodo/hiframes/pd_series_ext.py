@@ -62,10 +62,10 @@ from bodo.utils.transform import get_const_func_output_type
 from bodo.utils.typing import (
     BodoError,
     create_unsupported_overload,
+    get_udf_error_msg,
     get_udf_out_arr_type,
     is_overload_false,
     is_overload_none,
-    get_udf_error_msg,
 )
 
 
@@ -640,16 +640,6 @@ class SeriesAttribute(AttributeTemplate):
     @bound_function("series.combine", no_unliteral=True)
     def resolve_combine(self, ary, args, kws):
         return self._resolve_combine_func(ary, args, kws)
-
-    # TODO: use overload when Series.aggregate is supported
-    @bound_function("series.value_counts", no_unliteral=True)
-    def resolve_value_counts(self, ary, args, kws):
-        # output is int series with original data as index
-        index_typ = bodo.hiframes.pd_index_ext.array_typ_to_index(ary.data)
-        out = SeriesType(
-            types.int64, types.Array(types.int64, 1, "C"), index_typ, ary.name_typ
-        )
-        return signature(out, *args)
 
 
 # pd.Series supports all operators except << and >>

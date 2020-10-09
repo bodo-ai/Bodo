@@ -396,6 +396,22 @@ class DataFramePass:
                 kws=dict(rhs.kws),
             )
 
+        if func_name == "sort_values":
+            rhs.args.insert(0, df_var)
+            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
+            kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
+
+            impl = bodo.hiframes.pd_dataframe_ext.sort_values_overload(
+                *arg_typs, **kw_typs
+            )
+            return replace_func(
+                self,
+                impl,
+                rhs.args,
+                pysig=numba.core.utils.pysignature(impl),
+                kws=dict(rhs.kws),
+            )
+
         if func_name == "pivot_table":
             rhs.args.insert(0, df_var)
             arg_typs = tuple(self.typemap[v.name] for v in rhs.args)

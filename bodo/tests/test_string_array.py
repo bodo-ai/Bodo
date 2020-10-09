@@ -36,6 +36,15 @@ def str_arr_value(request):
     return request.param
 
 
+def test_np_sort(memory_leak_check):
+    def impl(arr):
+        return np.sort(arr)
+
+    A = pd.array(["AB", "", "ABC", "abcd"] * 8)
+
+    check_func(impl, (A,))
+
+
 def test_np_repeat(str_arr_value, memory_leak_check):
     def impl(arr):
         return np.repeat(arr, 2)

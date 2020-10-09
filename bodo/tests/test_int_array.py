@@ -106,6 +106,19 @@ def test_np_unique(memory_leak_check):
     check_func(impl, (arr,), sort_output=True)
 
 
+def test_np_sort(memory_leak_check):
+    def impl(arr):
+        return np.sort(arr)
+
+    # Doesn't work with null values in Numpy
+    A = pd.arrays.IntegerArray(
+        np.array([1, -3, 2, 3, 10] * 10, np.int8),
+        np.array([False, False, False, False, False] * 10),
+    )
+
+    check_func(impl, (A,))
+
+
 def test_max(memory_leak_check):
     def impl(arr):
         return max(arr)
