@@ -24,7 +24,7 @@ jobs:
 
   - script: |
       set -eo pipefail
-      if [[ "${{ parameters.name }}" == "Linux" ]]; then
+      if [[ "${{ parameters.name }}" = Linux* ]]; then
         wget https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh
       else
         wget https://repo.continuum.io/miniconda/Miniconda3-latest-MacOSX-x86_64.sh -O miniconda.sh
@@ -100,20 +100,15 @@ jobs:
       sudo chmod a+r $(secret_file.secureFilePath)
       sudo cp $(secret_file.secureFilePath) $HOME/secret_file
       cd $(System.DefaultWorkingDirectory)
+      mkdir bodo-inc
       IS_RELEASE=`git tag --points-at HEAD`
-      if [[ $CHECK_LICENSE_EXPIRED  == 1 ]] && [[ $OBFUSCATE == 1 ]]; then
-        # if it's not a release, publish to the dev channel
-        if [[ -z $IS_RELEASE ]]; then
-          artifactory_channel="bodo.ai-dev"
-        else
-          artifactory_channel="bodo.ai"
-        fi
-      elif [[ $CHECK_LICENSE_EXPIRED  == 0 ]] && [[ $OBFUSCATE == 1 ]] && [[ ! -z "$IS_RELEASE" ]]; then
-        artifactory_channel="bodo.ai-platform"
-      else
-        artifactory_channel="bodo-binary"
+      export CHECK_LICENSE_EXPIRED=$(CHECK_LICENSE_EXPIRED)
+      export OBFUSCATE=$(OBFUSCATE)
+      if [[ "${{ parameters.platformBuild }}" == "true" ]]; then
+        export CHECK_LICENSE_EXPIRED="0"
       fi
-      if [[ "${{ parameters.name }}" == "Linux" ]]; then
+      artifactory_channel=`./buildscripts/azure/get_channel.sh`
+      if [[ "${{ parameters.name }}" = Linux* ]]; then
         artifactory_os_dir="linux-64"
       else
         artifactory_os_dir="osx-64"
@@ -121,3 +116,19 @@ jobs:
       ./buildscripts/azure/publish_binary.sh $artifactory_channel $artifactory_os_dir $IS_RELEASE
 
     displayName: 'publish bodo binary to Artifactory'
+
+  - task: ArchiveFiles@2
+    condition: eq('${{ parameters.platformBuild }}', 'false')
+    inputs:
+      rootFolderOrFile: '$(System.DefaultWorkingDirectory)/bodo-inc'
+      includeRootFolder: false
+      archiveFile: $(Build.ArtifactStagingDirectory)/${{ parameters.name }}-bodo-inc-$(suffix).zip
+      replaceExistingArchive: true
+    displayName: "Archive file containing the conda subchannel"
+
+  - task: PublishBuildArtifacts@1
+    condition: eq('${{ parameters.platformBuild }}', 'false')
+    inputs:
+      pathtoPublish: $(Build.ArtifactStagingDirectory)/${{ parameters.name }}-bodo-inc-$(suffix).zip
+      artifactName: bodo-inc
+    displayName: "Publish Artifact"

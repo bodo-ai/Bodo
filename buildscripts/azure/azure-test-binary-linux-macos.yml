@@ -57,16 +57,22 @@ jobs:
       fi
     displayName: 'Install Numba-Dev'
 
+  - task: DownloadSecureFile@1
+    name: secret_file
+    displayName: 'Download secrets file'
+    inputs:
+      secureFile: 'publish_binary_secrets'
+
   - script: |
       set -eo pipefail
+      sudo chmod a+r $(secret_file.secureFilePath)
+      sudo cp $(secret_file.secureFilePath) $HOME/secret_file
       export PATH=$HOME/miniconda3/bin:${PATH}
       source activate $CONDA_ENV
-      if [[ "${{ parameters.useNumbaDev }}" == "true" ]]; then
-        conda install -y h5py scipy bodo -c file://$(HOME)/bodo-inc/bodo-inc/ -c numba/label/dev -c conda-forge
-        echo "Using Numba-Dev"
-      else
-        conda install -y h5py scipy bodo -c file://$(HOME)/bodo-inc/bodo-inc/ -c conda-forge
-      fi
+      export CHECK_LICENSE_EXPIRED=$(CHECK_LICENSE_EXPIRED)
+      export OBFUSCATE=$(OBFUSCATE)
+      cd $(System.DefaultWorkingDirectory)
+      ./buildscripts/azure/install_bodo.sh "${{ parameters.useNumbaDev }}"
     displayName: 'Install Bodo from conda'
 
   - script: |
