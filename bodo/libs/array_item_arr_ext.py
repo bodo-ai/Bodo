@@ -818,7 +818,7 @@ def array_item_arr_setitem(A, idx, val):
     # scalar case
     # NOTE: assuming that the array is being built and all previous elements are set
     # TODO: make sure array is being build
-    if isinstance(types.unliteral(idx), types.Integer):
+    if isinstance(idx, types.Integer):
 
         def impl_scalar(A, idx, val):  # pragma: no cover
             offsets = get_offsets(A)

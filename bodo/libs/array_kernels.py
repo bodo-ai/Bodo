@@ -221,7 +221,7 @@ def setna_overload(arr, ind, int_nan_const=0):
 
         return setna_datetime_timedelta
 
-    return lambda arr, ind, int_nan_const: None  # pragma: no cover
+    return lambda arr, ind, int_nan_const=0: None  # pragma: no cover
 
 
 def setna_tup(arr_tup, ind, int_nan_const=0):  # pragma: no cover

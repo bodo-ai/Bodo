@@ -1,21 +1,22 @@
 # Copyright (C) 2020 Bodo Inc. All rights reserved.
 """Tests for array of list of fixed size items.
 """
-import operator
 import datetime
+import operator
 from decimal import Decimal
-import pandas as pd
-import numpy as np
-import pytest
 
 import numba
+import numpy as np
+import pandas as pd
+import pytest
+
 import bodo
 from bodo.tests.utils import check_func
 
 
 @pytest.fixture(
     params=[
-        np.array([[1, 3, None], [2], None, [4, None, 5, 6], [], [1, 1]] * 2),
+        np.array([[1, 3, None], [2], None, [4, None, 5, 6], [], [1, 1], None] * 2),
         pytest.param(
             np.array(
                 [[2.0, -3.2], [2.2, 1.3], None, [4.1, np.nan, 6.3], [], [1.1, 1.2]] * 2

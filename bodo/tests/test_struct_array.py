@@ -221,3 +221,50 @@ def test_struct_len(struct_arr_value, memory_leak_check):
             return len(A[i])
 
     check_func(test_impl, (struct_arr_value, 1), dist_test=False)
+
+
+def test_setitem_optional_int(memory_leak_check):
+    def test_impl(A, i, flag):
+        if flag:
+            x = None
+        else:
+            x = A[0]
+        A[i] = x
+        return A
+
+    A = np.array(
+        [
+            {"X": 1, "Y": 3.1},
+            {"X": 2, "Y": 1.1},
+            None,
+            {"X": -1, "Y": 7.8},
+            {"X": 3, "Y": 4.0},
+            {"X": -3, "Y": -1.2},
+            {"X": None, "Y": 9.0},
+        ]
+    )
+
+    i = 1
+    check_func(test_impl, (A, i, False), copy_input=True, dist_test=False)
+    check_func(test_impl, (A, i, True), copy_input=True, dist_test=False)
+
+
+def test_setitem_none_int(memory_leak_check):
+    def test_impl(A, i):
+        A[i] = None
+        return A
+
+    A = np.array(
+        [
+            {"X": 1, "Y": 3.1},
+            {"X": 2, "Y": 1.1},
+            None,
+            {"X": -1, "Y": 7.8},
+            {"X": 3, "Y": 4.0},
+            {"X": -3, "Y": -1.2},
+            {"X": None, "Y": 9.0},
+        ]
+    )
+
+    i = 1
+    check_func(test_impl, (A, i), copy_input=True, dist_test=False)

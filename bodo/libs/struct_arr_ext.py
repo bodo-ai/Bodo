@@ -957,7 +957,7 @@ def struct_getitem(struct, ind):
 
 
 @overload(operator.setitem, no_unliteral=True)
-def struct_getitem(struct, ind, val):
+def struct_setitem(struct, ind, val):
     if not isinstance(struct, StructType):
         return
 
@@ -1223,6 +1223,10 @@ def struct_arr_setitem(arr, ind, val):
         return
 
     if isinstance(ind, types.Integer):
+
+        if val == types.none or isinstance(val, types.optional):  # pragma: no cover
+            return
+
         n_fields = len(arr.data)
         func_text = "def impl(arr, ind, val):\n"
         func_text += "  data = get_data(arr)\n"

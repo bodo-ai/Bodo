@@ -210,24 +210,26 @@ def test_setitem_none_int(decimal_arr_value, memory_leak_check):
     )
 
 
-@pytest.mark.skip("Decimal type cannot be coerced to a numba type #1625")
 def test_setitem_optional_int(decimal_arr_value, memory_leak_check):
-    def test_impl(A, i, flag):
+    def test_impl(A, i, flag, val):
         if flag:
             x = None
         else:
-            x = Decimal("5.9")
+            x = val
         A[i] = x
         return A
 
     check_func(
         test_impl,
-        (decimal_arr_value.copy(), 1, False),
+        (decimal_arr_value.copy(), 1, False, Decimal("5.9")),
         copy_input=True,
         dist_test=False,
     )
     check_func(
-        test_impl, (decimal_arr_value.copy(), 0, True), copy_input=True, dist_test=False
+        test_impl,
+        (decimal_arr_value.copy(), 0, True, Decimal("5.9")),
+        copy_input=True,
+        dist_test=False,
     )
 
 
