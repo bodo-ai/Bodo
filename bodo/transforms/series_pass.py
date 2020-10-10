@@ -122,7 +122,7 @@ from bodo.utils.utils import (
 )
 
 # import bodosql's BodoSQLContextType if installed
-try:
+try:  # pragma: no cover
     from bodosql.context_ext import BodoSQLContextType
 except:
     # workaround: something that makes isinstance(type, BodoSQLContextType) always false
@@ -681,7 +681,9 @@ class SeriesPass:
 
         # optimize away bodo_sql_context.dataframes if
         # init_sql_context(names, dataframes) can be found
-        if isinstance(rhs_type, BodoSQLContextType) and rhs.attr == "dataframes":
+        if (
+            isinstance(rhs_type, BodoSQLContextType) and rhs.attr == "dataframes"
+        ):  # pragma: no cover
             sql_ctx_def = guard(get_definition, self.func_ir, rhs.value)
             if find_callname(self.func_ir, sql_ctx_def) == (
                 "init_sql_context",

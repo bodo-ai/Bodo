@@ -407,7 +407,7 @@ class UntypedPass:
         if fdef == ("where", "numpy") and len(rhs.args) == 1:
             return self._handle_np_where_one_arg(assign, lhs, rhs)
 
-        if fdef == ("BodoSQLContext", "bodosql"):
+        if fdef == ("BodoSQLContext", "bodosql"):  # pragma: no cover
             return self._handle_bodosql_BodoSQLContext(assign, lhs, rhs, label)
 
         return [assign]
@@ -522,7 +522,9 @@ class UntypedPass:
         new_nodes.append(ir.Assign(ir.Expr.build_tuple(tup_items, loc), tup_var, loc))
         return tup_var, new_nodes
 
-    def _handle_bodosql_BodoSQLContext(self, assign, lhs, rhs, label):
+    def _handle_bodosql_BodoSQLContext(
+        self, assign, lhs, rhs, label
+    ):  # pragma: no cover
         """
         Enable typing for dictionary data arg to bodosql.BodoSQLContext({'table1': df}).
         Converts constant dictionary to tuple with sentinel.
