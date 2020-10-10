@@ -91,6 +91,10 @@ def test_np_unique(memory_leak_check):
             Decimal("0.0"),
             Decimal("5.11"),
             Decimal("0.00"),
+            Decimal("0.01"),
+            Decimal("0.03"),
+            Decimal("0.113"),
+            Decimal("1.113"),
         ]
     )
     check_func(impl, (arr,), sort_output=True)
