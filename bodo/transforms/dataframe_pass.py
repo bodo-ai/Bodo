@@ -314,6 +314,26 @@ class DataFramePass:
                 func_def.value, StencilFunc
             ):
                 return None
+            # Numba generates const function calls for some operators sometimes instead
+            # of expressions. This normalizes them to regular unary/binop expressions
+            # so that Bodo transforms handle them properly.
+            if (
+                isinstance(func_def, ir.Const)
+                and func_def.value in numba.core.utils.OPERATORS_TO_BUILTINS
+            ):  # pragma: no cover
+                old_calltype = self.calltypes[rhs]
+                if len(rhs.args) == 1:
+                    rhs = ir.Expr.unary(func_def.value, rhs.args[0], rhs.loc)
+                    self.calltypes[rhs] = old_calltype
+                    assign.value = rhs
+                    return self._run_unary(assign, rhs)
+                # arguments for contains() are reversed in operator
+                if func_def.value == operator.contains:
+                    rhs.args = [rhs.args[1], rhs.args[0]]
+                rhs = ir.Expr.binop(func_def.value, rhs.args[0], rhs.args[1], rhs.loc)
+                self.calltypes[rhs] = old_calltype
+                assign.value = rhs
+                return self._run_binop(assign, rhs)
             warnings.warn("function call couldn't be found for dataframe analysis")
             return None
         else:
