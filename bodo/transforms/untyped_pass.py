@@ -65,6 +65,7 @@ from bodo.utils.transform import (
     get_call_expr_arg,
     gen_const_tup,
     fix_struct_return,
+    set_call_expr_arg,
 )
 from bodo.utils.typing import BodoError, BodoWarning, to_nullable_type
 
@@ -326,8 +327,7 @@ class UntypedPass:
         return [assign]
 
     def _run_call(self, assign, label):
-        """handle calls and return new nodes if needed
-        """
+        """handle calls and return new nodes if needed"""
         lhs = assign.target
         rhs = assign.value
 
@@ -407,6 +407,9 @@ class UntypedPass:
         if fdef == ("where", "numpy") and len(rhs.args) == 1:
             return self._handle_np_where_one_arg(assign, lhs, rhs)
 
+        if fdef == ("BodoSQLContext", "bodosql"):  # pragma: no cover
+            return self._handle_bodosql_BodoSQLContext(assign, lhs, rhs, label)
+
         return [assign]
 
     def _handle_np_where(self, assign, lhs, rhs):
@@ -445,33 +448,9 @@ class UntypedPass:
 
         if isinstance(arg_def, ir.Expr) and arg_def.op == "build_map":
             msg = "DataFrame column names should be constant strings or ints"
-            # check column names to be string
-            try:
-                col_names = tuple(
-                    get_const_value_inner(self.func_ir, t[0], self.args,)
-                    for t in arg_def.items
-                )
-            except GuardException:
-                raise BodoError(msg)
-
-            if not all(isinstance(c, (str, int)) for c in col_names):
-                raise BodoError(msg)
-
-            # create tuple with sentinel
-            sentinel_var = ir.Var(lhs.scope, mk_unique_var("sentinel"), lhs.loc)
-            tup_var = ir.Var(lhs.scope, mk_unique_var("dict_tup"), lhs.loc)
-            new_nodes = [
-                ir.Assign(ir.Const("__bodo_tup", lhs.loc), sentinel_var, lhs.loc)
-            ]
-            tup_items = (
-                [sentinel_var]
-                + [t[0] for t in arg_def.items]
-                + [t[1] for t in arg_def.items]
+            tup_var, new_nodes = self._convert_const_key_dict(
+                arg_def, msg, lhs.scope, lhs.loc
             )
-            new_nodes.append(
-                ir.Assign(ir.Expr.build_tuple(tup_items, lhs.loc), tup_var, lhs.loc)
-            )
-
             # replace data arg with dict tuple
             if "data" in kws:
                 kws["data"] = tup_var
@@ -510,6 +489,61 @@ class UntypedPass:
             nodes = new_nodes + nodes
 
         return nodes
+
+    def _convert_const_key_dict(self, build_map, err_msg, scope, loc):
+        """converts a constant key dictionary build_map to a tuple with sentinel as a
+        workaround to extract key/values in overloads
+        """
+        # check keys to be string/int
+        try:
+            keys = tuple(
+                get_const_value_inner(
+                    self.func_ir,
+                    t[0],
+                    self.args,
+                )
+                for t in build_map.items
+            )
+        except GuardException:
+            raise BodoError(err_msg)
+
+        if not all(isinstance(c, (str, int)) for c in keys):
+            raise BodoError(err_msg)
+
+        # create tuple with sentinel
+        sentinel_var = ir.Var(scope, mk_unique_var("sentinel"), loc)
+        tup_var = ir.Var(scope, mk_unique_var("dict_tup"), loc)
+        new_nodes = [ir.Assign(ir.Const("__bodo_tup", loc), sentinel_var, loc)]
+        tup_items = (
+            [sentinel_var]
+            + [t[0] for t in build_map.items]
+            + [t[1] for t in build_map.items]
+        )
+        new_nodes.append(ir.Assign(ir.Expr.build_tuple(tup_items, loc), tup_var, loc))
+        return tup_var, new_nodes
+
+    def _handle_bodosql_BodoSQLContext(
+        self, assign, lhs, rhs, label
+    ):  # pragma: no cover
+        """
+        Enable typing for dictionary data arg to bodosql.BodoSQLContext({'table1': df}).
+        Converts constant dictionary to tuple with sentinel.
+        """
+        kws = dict(rhs.kws)
+        data_arg = get_call_expr_arg(
+            "bodosql.BodoSQLContext", rhs.args, kws, 0, "tables"
+        )
+        arg_def = guard(get_definition, self.func_ir, data_arg)
+        msg = "bodosql.BodoSQLContext(): 'tables' argument should be a dictionary with constant string keys"
+        if not is_expr(arg_def, "build_map"):
+            raise BodoError(msg)
+
+        tup_var, new_nodes = self._convert_const_key_dict(
+            arg_def, msg, lhs.scope, lhs.loc
+        )
+        set_call_expr_arg(tup_var, rhs.args, kws, 0, "tables")
+        new_nodes.append(assign)
+        return new_nodes
 
     def _handle_pd_read_sql(self, assign, lhs, rhs, label):
         """transform pd.read_sql calls"""
@@ -578,7 +612,13 @@ class UntypedPass:
 
         nodes = [
             sql_ext.SqlReader(
-                sql_const, con_const, lhs.name, columns, data_arrs, out_types, lhs.loc,
+                sql_const,
+                con_const,
+                lhs.name,
+                columns,
+                data_arrs,
+                out_types,
+                lhs.loc,
             )
         ]
 
@@ -631,10 +671,22 @@ class UntypedPass:
         kws = dict(rhs.kws)
         fname_var = get_call_expr_arg("read_excel", rhs.args, kws, 0, "io")
         sheet_name = self._get_const_arg(
-            "read_excel", rhs.args, kws, 1, "sheet_name", 0, typ="str or int",
+            "read_excel",
+            rhs.args,
+            kws,
+            1,
+            "sheet_name",
+            0,
+            typ="str or int",
         )
         header = self._get_const_arg(
-            "read_excel", rhs.args, kws, 2, "header", 0, typ="int",
+            "read_excel",
+            rhs.args,
+            kws,
+            2,
+            "header",
+            0,
+            typ="int",
         )
         col_names = self._get_const_arg("read_excel", rhs.args, kws, 3, "names", 0)
         # index_col = self._get_const_arg("read_excel", rhs.args, kws, 4, "index_col", -1)
@@ -644,7 +696,13 @@ class UntypedPass:
         )
         dtype_var = get_call_expr_arg("read_excel", rhs.args, kws, 7, "dtype", "")
         skiprows = self._get_const_arg(
-            "read_excel", rhs.args, kws, 12, "skiprows", 0, typ="int",
+            "read_excel",
+            rhs.args,
+            kws,
+            12,
+            "skiprows",
+            0,
+            typ="int",
         )
 
         # replace "" placeholder with default None (can't use None in _get_const_arg)
@@ -732,8 +790,7 @@ class UntypedPass:
         return [typ_assign, assign]
 
     def _handle_pd_read_csv(self, assign, lhs, rhs, label):
-        """transform pd.read_csv(names=[A], dtype={'A': np.int32}) call
-        """
+        """transform pd.read_csv(names=[A], dtype={'A': np.int32}) call"""
         # schema: pd.read_csv(filepath_or_buffer, sep=',', delimiter=None,
         # header='infer', names=None, index_col=None, usecols=None,
         # squeeze=False, prefix=None, mangle_dupe_cols=True, dtype=None,
@@ -918,11 +975,11 @@ class UntypedPass:
         return nodes
 
     def _handle_pd_read_json(self, assign, lhs, rhs, label):
-        """transform pd.read_json() call, 
+        """transform pd.read_json() call,
         where default orient = 'records'
 
-        schema: pandas.read_json(path_or_buf=None, orient=None, typ='frame', 
-        dtype=None, convert_axes=None, convert_dates=True, 
+        schema: pandas.read_json(path_or_buf=None, orient=None, typ='frame',
+        dtype=None, convert_axes=None, convert_dates=True,
         keep_default_dates=True, numpy=False, precise_float=False,
         date_unit=None, encoding=None, lines=False, chunksize=None,
         compression='infer')
@@ -1074,8 +1131,10 @@ class UntypedPass:
 
         # initialize range index
         assert len(data_args) > 0
-        index_arg = "bodo.hiframes.pd_index_ext.init_range_index(0, len({}), 1, None)".format(
-            data_args[0]
+        index_arg = (
+            "bodo.hiframes.pd_index_ext.init_range_index(0, len({}), 1, None)".format(
+                data_args[0]
+            )
         )
 
         # Below we assume that the columns are strings
@@ -1199,8 +1258,7 @@ class UntypedPass:
         return typ
 
     def _handle_pd_Series(self, assign, lhs, rhs):
-        """transform pd.Series(A) call for flatmap case
-        """
+        """transform pd.Series(A) call for flatmap case"""
         kws = dict(rhs.kws)
         data = get_call_expr_arg("pd.Series", rhs.args, kws, 0, "data")
 
@@ -1285,19 +1343,28 @@ class UntypedPass:
                 index_col_name = None
             else:
                 index_col_name = "'{}'".format(index_col["name"])
-            index_arg = "bodo.hiframes.pd_index_ext.init_range_index({}, {}, {}, {})".format(
-                index_col["start"], index_col["stop"], index_col["step"], index_col_name
+            index_arg = (
+                "bodo.hiframes.pd_index_ext.init_range_index({}, {}, {}, {})".format(
+                    index_col["start"],
+                    index_col["stop"],
+                    index_col["step"],
+                    index_col_name,
+                )
             )
         else:
             # if the index_col is __index_level_0_, it means it has no name.
             # Thus we do not write the name instead of writing '__index_level_0_' as the name
             if "__index_level_" in index_col:
-                index_arg = "bodo.utils.conversion.convert_to_index(data{}, None)".format(
-                    columns.index(index_col)
+                index_arg = (
+                    "bodo.utils.conversion.convert_to_index(data{}, None)".format(
+                        columns.index(index_col)
+                    )
                 )
             else:
-                index_arg = "bodo.utils.conversion.convert_to_index(data{}, '{}')".format(
-                    columns.index(index_col), index_col
+                index_arg = (
+                    "bodo.utils.conversion.convert_to_index(data{}, '{}')".format(
+                        columns.index(index_col), index_col
+                    )
                 )
 
         col_args = tuple(
@@ -1331,7 +1398,15 @@ class UntypedPass:
         return self._gen_parquet_read(fname, lhs, columns)
 
     def _get_const_arg(
-        self, f_name, args, kws, arg_no, arg_name, default=None, err_msg=None, typ=None,
+        self,
+        f_name,
+        args,
+        kws,
+        arg_no,
+        arg_name,
+        default=None,
+        err_msg=None,
+        typ=None,
     ):
         """Get constant value for a function call argument. Raise error if the value is
         not constant.
@@ -1359,8 +1434,7 @@ class UntypedPass:
         return arg
 
     def _handle_metadata(self):
-        """remove distributed input annotation from locals and add to metadata
-        """
+        """remove distributed input annotation from locals and add to metadata"""
         if "distributed" not in self.metadata:
             # TODO: keep updated in variable renaming?
             self.metadata["distributed"] = self.flags.distributed.copy()
@@ -1702,8 +1776,8 @@ def _get_csv_df_type_from_file(fname_const, sep, skiprows, header, compression):
     """get dataframe type for read_csv() using file path constant or raise error if not
     possible (e.g. file doesn't exist).
     If fname_const points to a directory, find a non-empty csv file from
-    the directory. 
-    For posix, pass the file name directly to pandas. For s3 & hdfs, open the 
+    the directory.
+    For posix, pass the file name directly to pandas. For s3 & hdfs, open the
     file reader, and pass it to pandas.
     Only rank 0 looks at the file to infer df type, then broadcasts.
     """
@@ -1762,8 +1836,7 @@ def _get_csv_df_type_from_file(fname_const, sep, skiprows, header, compression):
 
 
 def _check_type(val, typ):
-    """check whether "val" is of type "typ", or any type in "typ" if "typ" is a list
-    """
+    """check whether "val" is of type "typ", or any type in "typ" if "typ" is a list"""
     if isinstance(typ, list):
         return any(isinstance(val, t) for t in typ)
     return isinstance(val, typ)

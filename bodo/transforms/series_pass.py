@@ -121,6 +121,14 @@ from bodo.utils.utils import (
     is_whole_slice,
 )
 
+# import bodosql's BodoSQLContextType if installed
+try:  # pragma: no cover
+    from bodosql.context_ext import BodoSQLContextType
+except:
+    # workaround: something that makes isinstance(type, BodoSQLContextType) always false
+    BodoSQLContextType = int
+
+
 ufunc_names = set(f.__name__ for f in numba.core.typing.npydecl.supported_ufuncs)
 
 
@@ -670,6 +678,19 @@ class SeriesPass:
             if is_expr(named_tup_def, "call") and not named_tup_def.kws:
                 arg_no = rhs_type.instance_class._fields.index(rhs.attr)
                 assign.value = named_tup_def.args[arg_no]
+
+        # optimize away bodo_sql_context.dataframes if
+        # init_sql_context(names, dataframes) can be found
+        if (
+            isinstance(rhs_type, BodoSQLContextType) and rhs.attr == "dataframes"
+        ):  # pragma: no cover
+            sql_ctx_def = guard(get_definition, self.func_ir, rhs.value)
+            if find_callname(self.func_ir, sql_ctx_def) == (
+                "init_sql_context",
+                "bodosql.context_ext",
+            ):
+                assign.value = sql_ctx_def.args[1]
+                return [assign]
 
         return [assign]
 
