@@ -533,32 +533,35 @@ def get_const_func_output_type(func, arg_types, kw_types, typing_context):
             _globals = func.literal_value.globals
 
         f_ir = numba.core.ir_utils.get_ir_of_code(_globals, code)
+        fix_struct_return(f_ir)
+        typemap, f_return_type, _ = numba.core.typed_passes.type_inference_stage(
+            typing_context, f_ir, arg_types, None
+        )
     elif isinstance(func, bodo.utils.typing.FunctionLiteral):
         py_func = func.literal_value
-        f_ir = numba.core.compiler.run_frontend(py_func, inline_closures=True)
+        f_ir, typemap, _, f_return_type = bodo.compiler.get_func_type_info(
+            py_func, arg_types, kw_types
+        )
     elif isinstance(func, CPUDispatcher):
         py_func = func.py_func
-        f_ir = numba.core.compiler.run_frontend(py_func, inline_closures=True)
+        f_ir, typemap, _, f_return_type = bodo.compiler.get_func_type_info(
+            py_func, arg_types, kw_types
+        )
     else:
         assert isinstance(func, types.Dispatcher)
         py_func = func.dispatcher.py_func
-        f_ir = numba.core.compiler.run_frontend(py_func, inline_closures=True)
+        f_ir, typemap, _, f_return_type = bodo.compiler.get_func_type_info(
+            py_func, arg_types, kw_types
+        )
 
-    # fold arguments to handle cases like default values
-    if py_func is not None:
-        pysig = numba.core.utils.pysignature(py_func)
-        arg_types = fold_argument_types(pysig, arg_types, kw_types)
-
-    struct_key_names = fix_struct_return(f_ir)
-    _, f_return_type, _ = numba.core.typed_passes.type_inference_stage(
-        typing_context, f_ir, arg_types, None
-    )
     # replace returned dictionary with a StructType to enabling typing for
     # StructArrayType later
-    if isinstance(f_return_type, types.DictType) and struct_key_names:
-        f_return_type = StructType(
-            (f_return_type.value_type,) * len(struct_key_names), struct_key_names
-        )
+    if isinstance(f_return_type, types.DictType):
+        struct_key_names = guard(get_struct_keynames, f_ir, typemap)
+        if struct_key_names is not None:
+            f_return_type = StructType(
+                (f_return_type.value_type,) * len(struct_key_names), struct_key_names
+            )
     return f_return_type
 
 
@@ -640,6 +643,26 @@ def _replace_const_map_return(f_ir, block, label):
         + block.body[-2:]
     )
     return tuple(key_strs)
+
+
+def get_struct_keynames(f_ir, typemap):
+    """returns the key names if output of f_ir is a struct created by
+    struct_if_heter_dict(), otherwise None.
+    """
+    cfg = compute_cfg_from_blocks(f_ir.blocks)
+    exit_label = list(cfg.exit_points())[0]
+    block = f_ir.blocks[exit_label]
+    require(isinstance(block.body[-1], ir.Return))
+    return_val = block.body[-1].value
+    cast_def = guard(get_definition, f_ir, return_val)
+    require(is_expr(cast_def, "cast"))
+    ret_def = guard(get_definition, f_ir, cast_def.value)
+    require(
+        is_call(ret_def)
+        and find_callname(f_ir, ret_def)
+        == ("struct_if_heter_dict", "bodo.utils.conversion")
+    )
+    return get_overload_const_list(typemap[ret_def.args[1].name])
 
 
 def fix_struct_return(f_ir):
