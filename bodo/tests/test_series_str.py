@@ -245,6 +245,16 @@ def test_split_regex():
     check_func(test_impl, (S,))
 
 
+def test_series_str_split_explode(memory_leak_check):
+    def test_impl(df):
+        return df.A.str.split().explode()
+
+    df = pd.DataFrame(
+        {"A": pd.array(["A B C", "A", "D E", "A N C E Q  R#R##R#RR F", np.nan] * 5)}
+    )
+    check_func(test_impl, (df,))
+
+
 # TODO: Add memory_leak_check when bugs are resolved.
 def test_split_no_regex():
     def test_impl1(S):

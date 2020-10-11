@@ -3,6 +3,7 @@
 Implements array kernels such as median and quantile.
 """
 import math
+import re
 from collections import namedtuple
 from math import sqrt
 
@@ -1377,6 +1378,76 @@ def overload_explode(arr, index_arr):
             out_arr[curr_item : curr_item + n_items] = arr_item
             out_index_arr[curr_item : curr_item + n_items] = index_arr[i]
             curr_item += n_items
+
+        return out_arr, out_index_arr
+
+    return impl
+
+
+def explode_str_split(arr, pat, n, index_arr):  # pragma: no cover
+    return pd.Series(arr, index_arr).str.split(pat, n).explode()
+
+
+@overload(explode_str_split, no_unliteral=True)
+def overload_explode_str_split(arr, pat, n, index_arr):
+    """
+    Internal kernel for optimizing Series.str.split().explode(). Splits
+    each string and assigns each portion to its own row, replicating the
+    index values for a given split.
+    """
+    assert arr == string_array_type
+    index_arr_type = index_arr
+    index_dtype = index_arr_type.dtype
+
+    def impl(arr, pat, n, index_arr):  # pragma: no cover
+        is_regex = pat is not None and len(pat) > 1
+        if is_regex:
+            compiled_pat = re.compile(pat)
+            if n == -1:
+                n = 0
+        else:
+            if n == 0:
+                n = -1
+        l = len(arr)
+        num_strs = 0
+        num_chars = 0
+        nested_index_counts = init_nested_counts(index_dtype)
+        for i in range(l):
+            ind_val = index_arr[i]
+            if bodo.libs.array_kernels.isna(arr, i):
+                num_strs += 1
+                nested_index_counts = add_nested_counts(nested_index_counts, ind_val)
+                continue
+            if is_regex:
+                vals = compiled_pat.split(arr[i], maxsplit=n)
+            else:
+                vals = arr[i].split(pat, n)
+            num_strs += len(vals)
+            for s in vals:
+                nested_index_counts = add_nested_counts(nested_index_counts, ind_val)
+                num_chars += bodo.libs.str_arr_ext.get_utf8_size(s)
+        out_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(num_strs, num_chars)
+        out_index_arr = bodo.utils.utils.alloc_type(
+            num_strs, index_arr_type, nested_index_counts
+        )
+
+        # Calculate the index offset from j
+        idx = 0
+        for j in range(l):
+            if isna(arr, j):
+                out_arr[idx] = ""
+                bodo.libs.array_kernels.setna(out_arr, idx)
+                out_index_arr[idx] = index_arr[j]
+                idx += 1
+                continue
+            if is_regex:
+                vals = compiled_pat.split(arr[j], maxsplit=n)
+            else:
+                vals = arr[j].split(pat, n)
+            n_str = len(vals)
+            out_arr[idx : idx + n_str] = vals
+            out_index_arr[idx : idx + n_str] = index_arr[j]
+            idx += n_str
 
         return out_arr, out_index_arr
 

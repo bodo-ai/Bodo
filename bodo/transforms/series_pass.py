@@ -12,6 +12,7 @@ import pandas as pd
 from numba.core import ir, ir_utils, types
 from numba.core.inline_closurecall import inline_closure_call
 from numba.core.ir_utils import (
+    GuardException,
     build_definitions,
     compile_to_numba_ir,
     dprint_func_ir,
@@ -1849,6 +1850,26 @@ class SeriesPass:
             isinstance(self.typemap[arg.name], SeriesType) for arg in rhs.args
         ):
             return self._fix_unhandled_calls(assign, lhs, rhs)
+
+        # If we encounter the explode kernel see if we can replace it
+        if fdef == ("explode", "bodo.libs.array_kernels"):
+            assert len(rhs.args) == 2
+
+            array_src = guard(get_definition, self.func_ir, rhs.args[0].name)
+            if guard(find_callname, self.func_ir, array_src) == (
+                "str_split",
+                "bodo.libs.str_ext",
+            ):
+                # Replace the function only if we inherited directly from str_split
+                args = array_src.args + [rhs.args[1]]
+
+                return replace_func(
+                    self,
+                    lambda arr, pat, n, index_arr: bodo.libs.array_kernels.explode_str_split(
+                        arr, pat, n, index_arr
+                    ),
+                    args,
+                )
 
         return [assign]
 

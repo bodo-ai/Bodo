@@ -117,6 +117,7 @@ no_side_effect_call_tuples = {
     ("unique", "array_kernels", "libs", bodo),
     ("nunique", "array_kernels", "libs", bodo),
     ("quantile", "array_kernels", "libs", bodo),
+    ("explode", "array_kernels", "libs", bodo),
     ("str_arr_from_sequence", "str_arr_ext", "libs", bodo),
     ("parse_datetime_str", "pd_timestamp_ext", "hiframes", bodo),
     ("integer_to_dt64", "pd_timestamp_ext", "hiframes", bodo),
