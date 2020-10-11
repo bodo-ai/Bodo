@@ -24,6 +24,7 @@ Bodo
    source/performance
    source/compilation
    source/aws
+   source/spark
    source/jupyter
    source/e3
    source/releases

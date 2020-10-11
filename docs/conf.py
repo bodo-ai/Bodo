@@ -21,10 +21,12 @@
 # import sys
 # sys.path.insert(0, os.path.abspath('.'))
 
-import sys
 import os
-import bodo
+import sys
+
 import alabaster
+
+import bodo
 
 # -- General configuration ------------------------------------------------
 
@@ -131,7 +133,12 @@ html_show_sourcelink = False
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
 html_static_path = ["_static"]
-html_sidebars = {"**": ["searchbox.html", "navigation.html",]}
+html_sidebars = {
+    "**": [
+        "searchbox.html",
+        "navigation.html",
+    ]
+}
 
 # -- Options for HTMLHelp output ------------------------------------------
 
@@ -194,4 +201,5 @@ intersphinx_mapping = {
     "llvmlite": ("http://llvmlite.pydata.org/en/latest/", None),
     "numba": ("http://numba.pydata.org/numba-doc/latest/", None),
     "pandas": ("https://pandas.pydata.org/pandas-docs/stable/", None),
+    "pyspark": ("https://spark.apache.org/docs/latest/api/python/", None),
 }
