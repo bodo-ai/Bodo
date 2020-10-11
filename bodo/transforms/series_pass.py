@@ -263,6 +263,23 @@ class SeriesPass:
                     block.body = new_body + block.body[i:]
                     # save work_list length to know how many new items are added
                     n_prev_work_items = len(work_list)
+                    # workaround: inline_closure_call doesn't run the full pipeline to
+                    # generate callee's IR, which can cause problems for UDFs (e.g. may
+                    # require untyped pass).
+                    # so we use its callee_validator mechanism to
+                    # replace the IR with the proper one
+                    # see: test_series_map_full_pipeline
+                    # TODO(ehsan): update inline_closure_call() to run full pipeline
+                    callee_validator = None
+                    if rp_func.inline_bodo_calls:
+                        f_ir, _, _, _ = bodo.compiler.get_func_type_info(
+                            rp_func.func, rp_func.arg_types, {}
+                        )
+
+                        def replace_blocks(new_ir):
+                            new_ir.blocks = f_ir.blocks
+
+                        callee_validator = replace_blocks
                     callee_blocks, _ = inline_closure_call(
                         self.func_ir,
                         rp_func.glbls,
@@ -274,6 +291,7 @@ class SeriesPass:
                         self.typemap,
                         self.calltypes,
                         work_list,
+                        callee_validator,
                     )
                     # recursively inline Bodo functions if necessary (UDF case)
                     if rp_func.inline_bodo_calls:

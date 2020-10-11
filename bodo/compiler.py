@@ -479,3 +479,93 @@ def is_udf_call(func_type):
         isinstance(func_type, numba.core.types.Dispatcher)
         and func_type.dispatcher._compiler.pipeline_class == BodoCompilerSeqInline
     )
+
+
+@register_pass(mutates_CFG=False, analysis_only=True)
+class DummyCR(FunctionPass):
+    """Dummy pass to add "cr" to compiler state to avoid errors in TyperCompiler since
+    it doesn't have lowering.
+    """
+
+    _name = "bodo_dummy_cr"
+
+    def __init__(self):
+        FunctionPass.__init__(self)
+
+    def run_pass(self, state):
+        state.cr = 1  # arbitrary non-None value
+        return True
+
+
+def remove_passes_after(pm, location):
+    """
+    Remove all passes after `location` in PassManager's compilation pipeline
+    """
+    assert pm.passes
+    pm._validate_pass(location)
+    for idx, (x, _) in enumerate(pm.passes):
+        if x == location:
+            break
+    else:  # pragma: no cover
+        raise bodo.utils.typing.BodoError("Could not find pass %s" % location)
+    pm.passes = pm.passes[: idx + 1]
+    # if a pass has been added, it's not finalized
+    pm._finalized = False
+
+
+class TyperCompiler(BodoCompiler):
+    """A compiler pipeline that skips passes after typing (provides typing info but not
+    lowering).
+    """
+
+    def define_pipelines(self):
+        [pm] = self._create_bodo_pipeline()
+        remove_passes_after(pm, BodoTypeInference)
+        pm.add_pass_after(DummyCR, BodoTypeInference)
+        pm.finalize()
+        return [pm]
+
+
+def get_func_type_info(func, arg_types, kw_types):
+    """
+    Get IR and typing info for function 'func'. It creates a pipeline that runs all
+    untyped passes as well as type inference.
+    """
+    # replicates Numba's pipeline initialization in these functions:
+    # numba.core.dispatcher.Dispatcher.__init__ -> _compile_for_args -> compile
+    # numba.core.dispatcher._FunctionCompiler.compile -> _compile_cached -> _compile_core
+    # numba.core.compiler.compile_extra
+    typingctx = numba.core.registry.cpu_target.typing_context
+    targetctx = numba.core.registry.cpu_target.target_context
+    library = None
+    return_type = None
+    _locals = {}
+    pysig = numba.core.utils.pysignature(func)
+    args = bodo.utils.transform.fold_argument_types(pysig, arg_types, kw_types)
+    flags = numba.core.compiler.Flags()
+    parallel_options = {
+        "comprehension": True,
+        "setitem": False,
+        "inplace_binop": False,
+        "reduction": True,
+        "numpy": True,
+        "stencil": True,
+        "fusion": True,
+    }
+    targetoptions = {
+        "nopython": True,
+        "boundscheck": False,
+        "parallel": parallel_options,
+    }
+    numba.core.registry.cpu_target.options.parse_as_flags(flags, targetoptions)
+
+    pipeline = TyperCompiler(
+        typingctx, targetctx, library, args, return_type, flags, _locals
+    )
+    pipeline.compile_extra(func)
+    return (
+        pipeline.state.func_ir,
+        pipeline.state.typemap,
+        pipeline.state.calltypes,
+        pipeline.state.return_type,
+    )

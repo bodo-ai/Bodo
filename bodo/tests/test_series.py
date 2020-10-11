@@ -1780,6 +1780,17 @@ def test_series_map_date(memory_leak_check):
     check_func(test_impl, (S,))
 
 
+def test_series_map_full_pipeline(memory_leak_check):
+    """make sure full Bodo pipeline is run on UDFs, including untyped pass."""
+
+    # datetime.date.today() requires untyped pass
+    def test_impl(S):
+        return S.map(lambda a: datetime.date.today())
+
+    S = pd.Series(pd.date_range(start="2018-04-24", end="2019-04-29", periods=5))
+    check_func(test_impl, (S,))
+
+
 def test_series_map_timestamp(memory_leak_check):
     """make sure Timestamp (converted to datetime64) output can be handled in map()
     properly
