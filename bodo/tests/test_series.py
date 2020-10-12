@@ -338,6 +338,17 @@ def test_series_notna(series_val, memory_leak_check):
         check_func(test_impl, (series_val,))
 
 
+def test_series_notnull(series_val, memory_leak_check):
+    def test_impl(S):
+        return S.notna()
+
+    # categories to be handled separately
+    if isinstance(series_val.dtype, pd.CategoricalDtype):
+        return
+    else:
+        check_func(test_impl, (series_val,))
+
+
 def test_box(series_val, memory_leak_check):
     # unbox and box
     def impl(S):

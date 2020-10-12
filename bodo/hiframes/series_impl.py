@@ -1057,6 +1057,7 @@ def overload_series_nsmallest(S, n=5, keep="first"):
     return impl
 
 
+@overload_method(SeriesType, "notnull", inline="always", no_unliteral=True)
 @overload_method(SeriesType, "notna", inline="always", no_unliteral=True)
 def overload_series_notna(S):
     # TODO: make sure this is fused and optimized properly
