@@ -1267,8 +1267,7 @@ def test_aggregate_select_col(is_slow_run, memory_leak_check):
     check_func(test_impl, (11,), sort_output=True, check_dtype=False)
 
 
-# TODO: add memory leak check when cumsum leak issue resolved
-def test_groupby_agg_const_dict():
+def test_groupby_agg_const_dict(memory_leak_check):
     """
     Test groupy.agg with function spec passed as constant dictionary
     """
@@ -3035,7 +3034,7 @@ def test_schema_change(memory_leak_check):
     check_func(impl2, (df,), sort_output=True)
 
 
-def test_groupby_empty_funcs():
+def test_groupby_empty_funcs(memory_leak_check):
     """Test groupby that has no function to execute (issue #1590)"""
 
     def impl(df):
@@ -3046,7 +3045,7 @@ def test_groupby_empty_funcs():
     assert impl(df) == bodo.jit(impl)(df)
 
 
-def test_groupby_dead_col_multifunc():
+def test_groupby_dead_col_multifunc(memory_leak_check):
     """Test dead column elimination in groupbys with UDFs (issues #1724, #1732, #1750)"""
 
     # a dict item is unused
