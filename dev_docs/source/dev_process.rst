@@ -509,6 +509,6 @@ this makes just a loss of time for all involved. Packages pyarrow, pandas and nu
 
     1. The Dockerfiles in `docker/*/Dockerfile`.
     2. The script `buildscripts/setup_conda.sh`
-    3. The CI script `buildscripts/bodo-conda-recipe/meta.yaml`
+    3. The CI script `buildscripts/bodo-conda-recipe/meta.yaml` and `buildscripts/bodo-numba-dev-conda-recipe/meta.yaml`
     4. The documentation file `dev_docs/source/build_bodo.rst`
     5. The file `requirements.txt`
