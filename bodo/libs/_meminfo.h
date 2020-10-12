@@ -37,6 +37,8 @@
 #include <iostream>
 
 // ******** copied from Numba
+// NRT = NumbaRunTime
+// Related to managing memory between Numba and C++.
 // TODO: make Numba C library
 
 typedef void (*NRT_dtor_function)(void *ptr, size_t size, void *info);

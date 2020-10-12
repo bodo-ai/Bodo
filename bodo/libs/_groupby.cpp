@@ -61,8 +61,8 @@ void groupby_init() {
     }
     initialized = true;
 
-    // this mapping is used by BasicColSet operations to know what combine
-    // function to use for a given aggregation function
+    // this mapping is used by BasicColSet operations to know what combine (i.e.
+    // step (c)) function to use for a given aggregation function
     combine_funcs[Bodo_FTypes::sum] = Bodo_FTypes::sum;
     combine_funcs[Bodo_FTypes::count] = Bodo_FTypes::sum;
     combine_funcs[Bodo_FTypes::mean] =
@@ -541,6 +541,7 @@ struct count_agg<
     static void apply(int64_t& v1, T& v2) { v1 += 1; }
 };
 
+// isnan makes sense only for floating point.
 template <typename T, int dtype>
 struct count_agg<
     T, dtype, typename std::enable_if<std::is_floating_point<T>::value>::type> {
@@ -620,7 +621,7 @@ struct var_agg {
      * https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Welford's_online_algorithm
      * for more information.
      *
-     * @param[in] observed value
+     * @param[in] v2: observed value
      * @param[in,out] count: current number of observations
      * @param[in,out] mean_x: current mean
      * @param[in,out] m2: sum of squares of differences from the current mean
@@ -2039,8 +2040,8 @@ do_computation(ARR_I* in_col, int64_t i) {
  * --- during combine:
  *    ARR_I = ARR_OI = multiple_array_info
  * During pivot_table / crosstab the "do_computation" is used for the missing
- * data. That is whether it was accessed or not. For groupby, this collapses to true
- * by the template evaluation of the AST.
+ * data. That is whether it was accessed or not. For groupby, this collapses to
+ * true by the template evaluation of the AST.
  *
  * @param column containing input values
  * @param output column
@@ -3735,8 +3736,7 @@ class BasicColSet {
      *        beginning of the pipeline.
      */
     BasicColSet(array_info* in_col, int ftype, bool combine_step)
-        : in_col(in_col), ftype(ftype), combine_step(combine_step) {
-    }
+        : in_col(in_col), ftype(ftype), combine_step(combine_step) {}
     virtual ~BasicColSet() {}
 
     /**
@@ -4282,7 +4282,6 @@ class CumOpColSet : public BasicColSet<ARRAY> {
     bool skipna;
 };
 
-
 /* When transmitting data with shuffle, we have only functionality for
    array_info.
    For array_info, nothing needs to be done.
@@ -4300,7 +4299,6 @@ push_back_arrays(std::vector<array_info*>& ListArr, ARRAY* arr) {
     for (auto& earr : arr->vect_arr) ListArr.push_back(earr);
     for (auto& earr : arr->vect_access) ListArr.push_back(earr);
 }
-
 
 /*
   The output_list_array takes the array (whether aray_info or
@@ -4721,8 +4719,8 @@ class GroupbyPipeline {
                 // list string for each group
                 int64_t n_strings = 0;  // total number of strings of all keys
                                         // for this column
-                int64_t n_chars = 0;  // total number of chars of all keys for
-                                      // this column
+                int64_t n_chars = 0;    // total number of chars of all keys for
+                                        // this column
                 uint32_t* in_index_offsets = (uint32_t*)key_col->data3;
                 uint32_t* in_data_offsets = (uint32_t*)key_col->data2;
                 for (size_t j = 0; j < num_groups; j++) {
@@ -4813,6 +4811,12 @@ class GroupbyPipeline {
     uint32_t* hashes;
     mpi_comm_info* comm_info_ptr = nullptr;
 };
+
+// MPI_Exscan: https://www.mpich.org/static/docs/v3.1.x/www3/MPI_Exscan.html
+// Useful for cumulative functions. Instead of doing shuffling, we compute the
+// groups in advance without doing shuffling using MPI_Exscan. We do the
+// cumulative operation first locally on each processor, and we use step
+// functions on each processor (sum, min, etc.)
 
 template <typename Tkey, typename T, int dtype>
 void mpi_exscan_computation_numpy_T(std::vector<array_info*>& out_arrs,
@@ -5206,6 +5210,7 @@ table_info* mpi_exscan_computation(array_info* cat_column, table_info* in_table,
     return nullptr;
 }
 
+// Basically assign index to each unique category
 array_info* compute_categorical_index(table_info* in_table, int64_t num_keys,
                                       bool is_parallel) {
 #ifdef DEBUG_GROUPBY
@@ -5228,9 +5233,12 @@ array_info* compute_categorical_index(table_info* in_table, int64_t num_keys,
     std::cout << "compute_categorical_index n_rows=" << n_rows
               << " n_rows_full=" << n_rows_full << "\n";
 #endif
+    // Two approaches for cumulative operations : shuffle (then reshuffle) or
+    // use exscan. Preferable to do shuffle when we have too many unique values.
+    // This is a heuristic to decide approach.
     if (n_rows_full > max_global_number_groups_exscan) {
-      delete_table_decref_arrays(red_table);
-      return nullptr;
+        delete_table_decref_arrays(red_table);
+        return nullptr;
     }
     // We are below threshold. Now doing an allgather for determining the keys.
     bool all_gather = true;
@@ -5362,7 +5370,6 @@ int determine_groupby_strategy(table_info* in_table, int64_t num_keys,
         return 0;  // For too many categories the hash partition will be better
     return 1;      // all conditions satisfied. Let's go for EXSCAN code
 }
-
 
 /*
   The pivot_table and crosstab functionality

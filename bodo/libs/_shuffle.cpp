@@ -1027,6 +1027,12 @@ table_info* shuffle_table_kernel(table_info* in_table, uint32_t* hashes,
     return new table_info(out_arrs);
 }
 
+// Shuffle is basically to send data to other processes for operations like
+// drop_duplicates, etc. Usually though you want to know the indices in the
+// original DF (usually the first occurring ones). Reverse shuffle is basically
+// tranferring the shuffled data back to the original DF. Useful for things like
+// cumulative operations, array_isin, etc.
+
 array_info* reverse_shuffle_numpy_array(array_info* in_arr, uint32_t* hashes,
                                         mpi_comm_info const& comm_info) {
     uint64_t siztype = numpy_item_size[in_arr->dtype];
@@ -1063,9 +1069,9 @@ array_info* reverse_shuffle_string_array(array_info* in_arr, uint32_t* hashes,
             in_offset[comm_info.recv_disp[i] + comm_info.recv_count[i]] -
             in_offset[comm_info.recv_disp[i]];
     std::vector<int64_t> send_count_sub(n_pes), send_disp_sub(n_pes);
-  
-    MPI_Alltoall(recv_count_sub.data(), 1, MPI_INT64_T, send_count_sub.data(), 1,
-                 MPI_INT64_T, MPI_COMM_WORLD);
+
+    MPI_Alltoall(recv_count_sub.data(), 1, MPI_INT64_T, send_count_sub.data(),
+                 1, MPI_INT64_T, MPI_COMM_WORLD);
 
     calc_disp(send_disp_sub, send_count_sub);
     calc_disp(recv_disp_sub, recv_count_sub);
@@ -1409,7 +1415,7 @@ table_info* coherent_shuffle_table(table_info* in_table, table_info* ref_table,
     // computing the hash data structure
     uint32_t* hashes = coherent_hash_keys_table(in_table, ref_table, n_keys,
                                                 SEED_HASH_PARTITION);
-    comm_info.set_counts(hashes);
+    comm_info.set_counts(hashes);  // Prereq to calling shuffle_table_kernel
     table_info* table = shuffle_table_kernel(in_table, hashes, comm_info);
     delete[] hashes;
 #ifdef DEBUG_REVERSE_SHUFFLE
@@ -2024,7 +2030,8 @@ std::shared_ptr<arrow::Array> gather_arrow_array(
     }
 }
 
-table_info* gather_table(table_info* in_table, int64_t n_cols_i, bool all_gather) {
+table_info* gather_table(table_info* in_table, int64_t n_cols_i,
+                         bool all_gather) {
 #ifdef DEBUG_GATHER
     std::cout << "INPUT of gather_table. in_table=\n";
     DEBUG_PrintSetOfColumn(std::cout, in_table->columns);
