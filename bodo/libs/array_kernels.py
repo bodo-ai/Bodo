@@ -1775,31 +1775,67 @@ def np_sort(A, axis=-1, kind=None, order=None):
     return impl
 
 
-@overload(np.repeat, no_unliteral=True)
+def repeat_scalar_kernel(A, repeats):
+    return A
+
+
+@overload(repeat_scalar_kernel, no_unliteral=True)
+def repeat_scalar_kernel_overload(A, repeats):
+    if A == string_array_type:
+
+        def str_impl(A, repeats):  # pragma: no cover
+            # TODO(Nick): Add a check that repeats > 0
+            l = len(A)
+            num_chars = 0
+            for i in range(l):
+                s = 0
+                if not (bodo.libs.array_kernels.isna(A, i)):
+                    s = get_str_arr_item_length(A, i)
+                num_chars += s * repeats
+
+            out_arr = pre_alloc_string_array(l * repeats, num_chars)
+            for j in range(l):
+                idx = j * repeats
+                if bodo.libs.array_kernels.isna(A, j):
+                    out_arr[idx : idx + repeats] = ""
+                    for k in range(repeats):
+                        bodo.libs.array_kernels.setna(out_arr, idx + k)
+                else:
+                    out_arr[idx : idx + repeats] = A[j]
+
+            return out_arr
+
+        return str_impl
+    else:
+        _dtype = A
+
+        def impl(A, repeats):  # pragma: no cover
+            # TODO(Nick): Add a check that repeats > 0
+            l = len(A)
+            out_arr = bodo.utils.utils.alloc_type(l * repeats, _dtype)
+            for i in range(l):
+                idx = i * repeats
+                if bodo.libs.array_kernels.isna(A, i):
+                    for j in range(repeats):
+                        bodo.libs.array_kernels.setna(out_arr, idx + j)
+                else:
+                    out_arr[idx : idx + repeats] = A[i]
+            return out_arr
+
+        return impl
+
+
+@overload(np.repeat, inline="always", no_unliteral=True)
 def np_repeat(A, repeats):
-    if not isinstance(A, (IntegerArrayType, DecimalArrayType)) and A not in (
-        boolean_array,
-        datetime_timedelta_array_type,
-        datetime_date_array_type,
+    if not bodo.utils.utils.is_array_typ(A, False) or isinstance(
+        A, types.Array
     ):  # pragma: no cover
         return
     if not isinstance(repeats, types.Integer):  # pragma: no cover
         raise BodoError("Only integer type supported for repeats in np.repeat()")
-    _dtype = A
 
     def impl(A, repeats):  # pragma: no cover
-        # TODO(Nick): Add a check that repeats > 0
-        numba.parfors.parfor.init_prange()
-        l = len(A)
-        out_arr = bodo.utils.utils.alloc_type(l * repeats, _dtype)
-        for i in numba.parfors.parfor.internal_prange(l):
-            idx = i * repeats
-            if bodo.libs.array_kernels.isna(A, i):
-                for j in range(repeats):
-                    bodo.libs.array_kernels.setna(out_arr, idx + j)
-            else:
-                out_arr[idx : idx + repeats] = A[i]
-        return out_arr
+        return bodo.libs.array_kernels.repeat_scalar_kernel(A, repeats)
 
     return impl
 

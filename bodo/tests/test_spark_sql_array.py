@@ -72,13 +72,13 @@ from bodo.tests.utils import check_func
         pd.DataFrame(
             {
                 "A": [
-                    ["hi", "its", " me "],
-                    ["who, ", "are", " you"],
+                    pd.array(["hi", "its", " me "]),
+                    pd.array(["who, ", "are", " you"]),
                 ]
                 * 20,
                 "B": [
-                    ["hi", "iTs", " you "],
-                    ["who", "are", " you "],
+                    pd.array(["hi", "iTs", " you "]),
+                    pd.array(["who", "are", " you "]),
                 ]
                 * 20,
             }
@@ -178,7 +178,6 @@ def test_array_min(dataframe_val):
         check_func(test_impl, (df,))
 
 
-@pytest.mark.skip(reason="Map operation not yet supported #1570")
 def test_array_position(dataframe_val):
     def test_impl_float(df):
         return df.A.map(lambda x: np.append(np.where(x == 3.31111)[0], -1)[0])
@@ -189,6 +188,9 @@ def test_array_position(dataframe_val):
     def test_impl_str(df):
         return df.A.map(lambda x: np.append(np.where(x == "are")[0], -1)[0])
 
+    def test_impl_bool(df):
+        return df.A.map(lambda x: np.append(np.where(x == True)[0], -1)[0])
+
     df = dataframe_val
     if isinstance(df.A[0][0], np.float64):
         test_impl = test_impl_float
@@ -196,6 +198,8 @@ def test_array_position(dataframe_val):
         test_impl = test_impl_int
     elif isinstance(df.A[0][0], str):
         test_impl = test_impl_str
+    elif isinstance(df.A[0][0], (bool, np.bool_)):
+        test_impl = test_impl_bool
 
     check_func(test_impl, (df,))
 
@@ -230,7 +234,6 @@ def test_array_repeat(dataframe_val):
     check_func(test_impl, (df,))
 
 
-@pytest.mark.skip(reason="Map operation not yet supported #1548")
 def test_array_sort(dataframe_val):
     def test_impl(df):
         return df.A.map(lambda x: np.sort(x))

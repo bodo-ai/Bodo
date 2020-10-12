@@ -22,6 +22,7 @@ from numba.core.ir_utils import get_definition, guard
 from numba.core.registry import CPUDispatcher
 from numba.core.typed_passes import (
     DumpParforDiagnostics,
+    InlineOverloads,
     NopythonTypeInference,
     ParforPass,
     PreParforPass,
@@ -520,8 +521,11 @@ class TyperCompiler(BodoCompiler):
 
     def define_pipelines(self):
         [pm] = self._create_bodo_pipeline()
-        remove_passes_after(pm, BodoTypeInference)
-        pm.add_pass_after(DummyCR, BodoTypeInference)
+        # overload inlining is necessary since UDFs are inlined in series pass using
+        # this pipeline
+        # see test_spark_sql_array.py::test_array_repeat"[dataframe_val3]"
+        remove_passes_after(pm, InlineOverloads)
+        pm.add_pass_after(DummyCR, InlineOverloads)
         pm.finalize()
         return [pm]
 

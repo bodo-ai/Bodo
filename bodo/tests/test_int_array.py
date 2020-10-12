@@ -81,7 +81,7 @@ def test_np_repeat(int_arr_value, memory_leak_check):
     def impl(arr):
         return np.repeat(arr, 2)
 
-    check_func(impl, (int_arr_value,), dist_test=False)
+    check_func(impl, (int_arr_value,))
 
 
 def test_np_where(memory_leak_check):

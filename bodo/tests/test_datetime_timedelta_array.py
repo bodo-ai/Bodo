@@ -123,7 +123,7 @@ def test_np_repeat(timedelta_arr_value, memory_leak_check):
     def impl(arr):
         return np.repeat(arr, 2)
 
-    check_func(impl, (timedelta_arr_value,), dist_test=False)
+    check_func(impl, (timedelta_arr_value,))
 
 
 @pytest.mark.skip("TODO(Nick): Add support for timedelta arrays inside array_to_info")

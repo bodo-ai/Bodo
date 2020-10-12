@@ -2019,37 +2019,3 @@ def overload_glob_glob(pathname, recursive=False):
         return l
 
     return _glob_glob_impl
-
-
-#### Support for np operations on arrays. ####
-@overload(np.repeat, no_unliteral=True)
-def np_repeat(A, repeats):
-    if A != string_array_type:  # pragma: no cover
-        return
-    if not isinstance(repeats, types.Integer):  # pragma: no cover
-        raise BodoError("Only integer type supported for repeats in np.repeat()")
-
-    def impl(A, repeats):  # pragma: no cover
-        # TODO(Nick): Add a check that repeats > 0
-        numba.parfors.parfor.init_prange()
-        l = len(A)
-        num_chars = 0
-        for i in numba.parfors.parfor.internal_prange(l):
-            s = 0
-            if not (bodo.libs.array_kernels.isna(A, i)):
-                s = get_str_arr_item_length(A, i)
-            num_chars += s * repeats
-
-        out_arr = pre_alloc_string_array(l * repeats, num_chars)
-        for j in numba.parfors.parfor.internal_prange(l):
-            idx = j * repeats
-            if bodo.libs.array_kernels.isna(A, j):
-                out_arr[idx : idx + repeats] = ""
-                for k in range(repeats):
-                    bodo.libs.array_kernels.setna(out_arr, idx + k)
-            else:
-                out_arr[idx : idx + repeats] = A[j]
-
-        return out_arr
-
-    return impl
