@@ -87,6 +87,7 @@ from bodo.utils.utils import (
     get_getsetitem_index_var,
     is_array_typ,
     is_assign,
+    is_expr,
     sanitize_varname,
 )
 
@@ -1071,6 +1072,9 @@ class DataFramePass:
         return parsed_expr, parsed_expr_str, used_cols
 
     def _run_call_set_df_column(self, assign, lhs, rhs):
+        """transform set_df_column() to handle reflection/inplace cases properly if
+        needed. Otherwise, just create a new dataframe with the new column.
+        """
 
         df_var = rhs.args[0]
         cname = guard(find_const, self.func_ir, rhs.args[1])
@@ -1080,14 +1084,18 @@ class DataFramePass:
         df_typ = self.typemap[df_var.name]
         nodes = []
 
-        # find df['col2'] = df['col1'][arr]
+        # transform df['col2'] = df['col1'][arr] since we don't support index alignment
         # since columns should have the same size, output is filled with NaNs
         # TODO: make sure col1 and col2 are in the same df
         # TODO: compare df index and Series index and match them in setitem
         arr_def = guard(get_definition, self.func_ir, new_arr)
+        if guard(find_callname, self.func_ir, arr_def) == (
+            "init_series",
+            "bodo.hiframes.pd_series_ext",
+        ):  # pragma: no cover
+            arr_def = guard(get_definition, self.func_ir, arr_def.args[0])
         if (
-            isinstance(arr_def, ir.Expr)
-            and arr_def.op == "getitem"
+            is_expr(arr_def, "getitem")
             and is_array_typ(self.typemap[arr_def.value.name])
             and self.is_bool_arr(arr_def.index.name)
         ):
@@ -1096,7 +1104,7 @@ class DataFramePass:
             nodes += compile_func_single_block(
                 lambda arr, bool_arr: bodo.hiframes.series_impl.series_filter_bool(
                     arr, bool_arr
-                ),
+                ),  # pragma: no cover
                 (orig_arr, bool_arr),
                 None,
                 self,
