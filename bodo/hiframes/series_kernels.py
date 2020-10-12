@@ -2,9 +2,8 @@
 """Some kernels for Series related functions. This is a legacy file that needs to be
 refactored.
 """
-import numpy as np
-
 import numba
+import numpy as np
 from numba.core import types
 from numba.extending import overload
 
@@ -60,7 +59,7 @@ def _series_dropna_str_alloc_impl_inner(B):  # pragma: no cover
     A = bodo.libs.str_arr_ext.pre_alloc_string_array(new_len, num_chars)
     bodo.libs.str_arr_ext.copy_non_null_offsets(A, B)
     bodo.libs.str_arr_ext.copy_data(A, B)
-    bodo.libs.str_arr_ext.set_null_bits(A)
+    bodo.libs.str_arr_ext.set_null_bits_to_value(A, -1)
     return A
 
 

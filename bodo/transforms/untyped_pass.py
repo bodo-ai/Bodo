@@ -1318,9 +1318,12 @@ class UntypedPass:
         if not config._has_pyarrow:
             raise RuntimeError("pyarrow is required for Parquet support")
 
-        columns, data_arrs, index_col, nodes = self.pq_handler.gen_parquet_read(
-            fname, lhs, columns
-        )
+        (
+            columns,
+            data_arrs,
+            index_col,
+            nodes,
+        ) = self.pq_handler.gen_parquet_read(fname, lhs, columns)
         n_cols = len(columns)
         args = ", ".join("data{}".format(i) for i in range(n_cols))
         data_args = ", ".join(

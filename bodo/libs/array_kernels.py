@@ -1015,7 +1015,7 @@ def concat_overload(arr_list):
                 num_strs += len(arr)
                 num_chars += bodo.libs.str_arr_ext.num_total_chars(arr)
             out_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(num_strs, num_chars)
-            bodo.libs.str_arr_ext.set_null_bits(out_arr)
+            bodo.libs.str_arr_ext.set_null_bits_to_value(out_arr, -1)
             # copy data to output
             curr_str_ind = 0
             curr_chars_ind = 0

@@ -63,6 +63,7 @@ from bodo.utils.typing import (
     BodoError,
     BodoWarning,
     is_list_like_index_type,
+    is_overload_constant_int,
     is_overload_none,
     is_overload_true,
     parse_dtype,
@@ -1015,13 +1016,52 @@ def str_arr_from_sequence(in_seq):  # pragma: no cover
     return A
 
 
+@intrinsic
+def set_all_offsets_to_0(typingctx, str_arr_typ=None):
+    """
+    Set all the offsets of a string array to 0. Useful for
+    all null columns.
+    """
+    assert str_arr_typ == string_array_type
+
+    def codegen(context, builder, sig, args):
+        (in_str_arr,) = args
+        payload = _get_string_arr_payload(context, builder, in_str_arr)
+        n_arrays_plus_1 = builder.add(
+            payload.n_arrays, lir.Constant(lir.IntType(64), 1)
+        )
+        # 1byte = 8bits. So >> 3. Should be "4" since we use Int32s.
+        bytes_per_offset_entry = builder.lshr(
+            lir.Constant(lir.IntType(64), offset_type.bitwidth),
+            lir.Constant(lir.IntType(64), 3),
+        )
+        # n_bytes = number of entries in offset table * bytes_per_offset_entry
+        n_bytes = builder.mul(
+            n_arrays_plus_1,
+            bytes_per_offset_entry,
+        )
+        null_offsets_ptr = context.make_array(offset_arr_type)(
+            context, builder, payload.offsets
+        ).data
+        cgutils.memset(builder, null_offsets_ptr, n_bytes, 0)
+        return context.get_dummy_value()
+
+    return types.none(string_array_type), codegen
+
+
 @numba.njit
-def pre_alloc_string_array(n_strs, n_chars):
-    return init_str_arr(
+def pre_alloc_string_array(n_strs, n_chars):  # pragma: no cover
+    str_arr = init_str_arr(
         bodo.libs.array_item_arr_ext.pre_alloc_array_item_array(
             np.int64(n_strs), (np.int64(n_chars),), char_arr_type
         )
     )
+    # The call above only sets offsets[0] and offset[n_strs]
+    # But in case of n_chars == 0, we need to set the whole
+    # offset array to 0s.
+    if n_chars <= 0:
+        set_all_offsets_to_0(str_arr)
+    return str_arr
 
 
 kBitmask = np.array([1, 2, 4, 8, 16, 32, 64, 128], dtype=np.uint8)
@@ -1294,11 +1334,20 @@ def str_arr_set_not_na(typingctx, str_arr_typ, ind_typ=None):
 
 
 @intrinsic
-def set_null_bits(typingctx, str_arr_typ=None):
-    assert str_arr_typ == string_array_type
+def set_null_bits_to_value(typingctx, str_arr_typ, value_typ=None):
+    """
+    Sets all the bits in the null bitmap of the string array
+    to the specified value.
+    Setting them to 0 sets them to null and setting them
+    to -1 sets them to not null.
+    """
+    assert str_arr_typ == string_array_type and is_overload_constant_int(value_typ)
 
     def codegen(context, builder, sig, args):
-        (in_str_arr,) = args
+        (
+            in_str_arr,
+            value,
+        ) = args
         payload = _get_string_arr_payload(context, builder, in_str_arr)
 
         # n_bytes = (num_strings + 7) // 8;
@@ -1309,10 +1358,10 @@ def set_null_bits(typingctx, str_arr_typ=None):
         null_bitmap_ptr = context.make_array(null_bitmap_arr_type)(
             context, builder, payload.null_bitmap
         ).data
-        cgutils.memset(builder, null_bitmap_ptr, n_bytes, -1)
+        cgutils.memset(builder, null_bitmap_ptr, n_bytes, value)
         return context.get_dummy_value()
 
-    return types.none(string_array_type), codegen
+    return types.none(string_array_type, types.int8), codegen
 
 
 def _get_str_arr_data_payload_ptr(context, builder, str_arr):

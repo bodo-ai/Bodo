@@ -2,42 +2,45 @@
 """
 Collection of utility functions. Needs to be refactored in separate files.
 """
-from collections import namedtuple
+import hashlib
+import inspect
 import keyword
-import inspect, hashlib, warnings
-import numba
-from numba.core import ir_utils, ir, types, cgutils
-from numba.core.ir_utils import (
-    guard,
-    get_definition,
-    find_callname,
-    require,
-    add_offset_to_labels,
-    find_topo_order,
-    find_const,
-    mk_unique_var,
-)
-from numba.core.typing import signature
-from numba.core.typing.templates import infer_global, AbstractTemplate
-from numba.core.imputils import lower_builtin
-from numba.extending import overload, intrinsic
-from numba.np.arrayobj import populate_array, get_itemsize, make_array
-from llvmlite import ir as lir
-import numpy as np
-import bodo
-from bodo.libs.str_ext import string_type
-from bodo.libs.str_arr_ext import (
-    string_array_type,
-    num_total_chars,
-    pre_alloc_string_array,
-    get_utf8_size,
-)
-from bodo.libs.int_arr_ext import IntegerArrayType
-from bodo.libs.decimal_arr_ext import DecimalArrayType
-from bodo.libs.bool_arr_ext import boolean_array
-from bodo.utils.typing import NOT_CONSTANT, is_overload_none
+import warnings
+from collections import namedtuple
 from enum import Enum
 
+import numba
+import numpy as np
+from llvmlite import ir as lir
+from numba.core import cgutils, ir, ir_utils, types
+from numba.core.imputils import lower_builtin
+from numba.core.ir_utils import (
+    add_offset_to_labels,
+    find_callname,
+    find_const,
+    find_topo_order,
+    get_definition,
+    guard,
+    mk_unique_var,
+    require,
+)
+from numba.core.typing import signature
+from numba.core.typing.templates import AbstractTemplate, infer_global
+from numba.extending import intrinsic, overload
+from numba.np.arrayobj import get_itemsize, make_array, populate_array
+
+import bodo
+from bodo.libs.bool_arr_ext import boolean_array
+from bodo.libs.decimal_arr_ext import DecimalArrayType
+from bodo.libs.int_arr_ext import IntegerArrayType
+from bodo.libs.str_arr_ext import (
+    get_utf8_size,
+    num_total_chars,
+    pre_alloc_string_array,
+    string_array_type,
+)
+from bodo.libs.str_ext import string_type
+from bodo.utils.typing import NOT_CONSTANT, is_overload_none
 
 int128_type = types.Integer("int128", 128)
 
@@ -655,8 +658,7 @@ def alloc_arr_tup_overload(n, data, init_vals=()):
 
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
 def tuple_to_scalar(n):
-    """Convert to scalar if 1-tuple, otherwise return original value
-    """
+    """Convert to scalar if 1-tuple, otherwise return original value"""
     if isinstance(n, types.BaseTuple) and len(n.types) == 1:
         return lambda n: n[0]  # pragma: no cover
     return lambda n: n  # pragma: no cover
@@ -778,8 +780,7 @@ def get_ctypes_ptr(typingctx, ctypes_typ=None):
 
 @intrinsic
 def is_null_pointer(typingctx, ptr_typ=None):
-    """check whether the pointer type is NULL or not
-    """
+    """check whether the pointer type is NULL or not"""
 
     def codegen(context, builder, signature, args):
         (ptr,) = args
@@ -811,8 +812,7 @@ def sequence_getitem(c, obj, ind):  # pragma: no cover
 
 @intrinsic
 def incref(typingctx, data=None):
-    """manual incref of data to workaround bugs. Should be avoided if possible.
-    """
+    """manual incref of data to workaround bugs. Should be avoided if possible."""
 
     def codegen(context, builder, signature, args):
         (data_val,) = args
@@ -952,8 +952,8 @@ def nanstd_ddof1(a):  # pragma: no cover
 @intrinsic
 def check_and_propagate_cpp_exception(typingctx):
     """
-    Check if an error occured in C++ using the C Python API 
-    (PyErr_Occured). If it did, raise it in Python with 
+    Check if an error occured in C++ using the C Python API
+    (PyErr_Occured). If it did, raise it in Python with
     the corresponding error message.
     """
 

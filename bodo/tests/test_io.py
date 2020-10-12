@@ -1935,6 +1935,48 @@ def test_read_parquet_invalid_path_const(memory_leak_check):
         bodo.jit(test_impl)()
 
 
+@pytest.mark.parametrize(
+    "fname",
+    [
+        "all_null_col_eg1.pq",
+        "all_null_col_eg2.pq",
+    ],
+)
+def test_read_parquet_all_null_col(fname, memory_leak_check, datapath):
+    """test that columns with all nulls can be read successfully"""
+
+    fname_ = datapath(fname)
+
+    def test_impl(_fname_):
+        df = pd.read_parquet(_fname_)
+        return df
+
+    py_output = pd.read_parquet(fname_)
+
+    check_func(test_impl, (fname_,), py_output=py_output)
+
+
+@pytest.mark.parametrize(
+    "col_subset",
+    [
+        ["A", "A2", "C"],
+        ["C", "B", "A2"],
+        ["B"],
+    ],
+)
+def test_read_parquet_all_null_col_subsets(col_subset, memory_leak_check, datapath):
+    """test that columns with all nulls can be read successfully"""
+    fname = datapath("all_null_col_eg2.pq")
+
+    def test_impl(fname):
+        df = pd.read_parquet(fname, columns=col_subset)
+        return df
+
+    py_output = pd.read_parquet(fname, columns=col_subset)
+
+    check_func(test_impl, (fname,), py_output=py_output)
+
+
 class TestIO(unittest.TestCase):
     def test_h5_write_parallel(self):
         fname = "lr_w.hdf5"

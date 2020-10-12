@@ -19,6 +19,7 @@ from numba.core.ir_utils import (
 from numba.core.typing import signature
 from numba.core.typing.templates import AbstractTemplate, infer_global
 from numba.extending import intrinsic
+from pyarrow import null
 
 import bodo
 import bodo.ir.parquet_ext
@@ -157,6 +158,7 @@ class ParquetHandler:
                         index_col,
                         col_indices,
                         col_nb_fields,
+                        null_col_map,
                     ) = typ.schema
                     got_schema = True
             if not got_schema:
@@ -166,6 +168,7 @@ class ParquetHandler:
                     index_col,
                     col_indices,
                     col_nb_fields,
+                    null_col_map,
                 ) = parquet_file_schema(file_name_str, columns)
         else:
             col_names_total = list(table_types.keys())
@@ -193,6 +196,8 @@ class ParquetHandler:
             ]
             col_names = selected_columns
             index_col = index_col if index_col in col_names else None
+            # Initialize null_col_map. See parquet_file_schema for definition.
+            null_col_map = [False] * len(col_names)
 
         # HACK convert types using decorator for int columns with NaN
         for i, c in enumerate(col_names):
@@ -200,6 +205,7 @@ class ParquetHandler:
                 col_types[i] = convert_types[c]
 
         data_arrs = [ir.Var(scope, mk_unique_var(c), loc) for c in col_names]
+
         nodes = [
             bodo.ir.parquet_ext.ParquetReader(
                 file_name,
@@ -210,6 +216,7 @@ class ParquetHandler:
                 col_types,
                 data_arrs,
                 loc,
+                null_col_map,
             )
         ]
 
@@ -246,6 +253,7 @@ def pq_distributed_run(pq_node, array_dists, typemap, calltypes, typingctx, targ
         pq_node.col_indices,
         pq_node.col_nb_fields,
         pq_node.out_types,
+        pq_node.null_col_map,
         typingctx,
         targetctx,
         parallel,
@@ -273,7 +281,14 @@ distributed_pass.distributed_run_extensions[
 
 
 def _gen_pq_reader_py(
-    col_names, col_indices, col_nb_fields, out_types, typingctx, targetctx, parallel
+    col_names,
+    col_indices,
+    col_nb_fields,
+    out_types,
+    null_col_map,
+    typingctx,
+    targetctx,
+    parallel,
 ):
     if len(parallel) > 0:
         # in parallel read, we assume all columns are parallel
@@ -292,11 +307,18 @@ def _gen_pq_reader_py(
     func_text += "    raise ValueError('Error reading Parquet dataset')\n"
 
     local_types = {}
-    for c_name, (real_col_ind, col_ind), col_siz, c_typ in zip(
-        col_names, col_indices, col_nb_fields, out_types
+    for c_name, (real_col_ind, col_ind), col_siz, c_typ, is_all_null in zip(
+        col_names, col_indices, col_nb_fields, out_types, null_col_map
     ):
         ret_type, func_text = gen_column_read(
-            func_text, c_name, real_col_ind, col_ind, col_siz, c_typ, c_name in parallel
+            func_text,
+            c_name,
+            real_col_ind,
+            col_ind,
+            col_siz,
+            c_typ,
+            c_name in parallel,
+            is_all_null,
         )
         if ret_type != None:
             local_types[ret_type] = c_typ
@@ -305,7 +327,6 @@ def _gen_pq_reader_py(
     func_text += "  return ({},)\n".format(
         ", ".join("{0}, {0}_size".format(sanitize_varname(c)) for c in col_names)
     )
-
     loc_vars = {}
     glbs = {
         "get_dataset_reader": _get_dataset_reader,
@@ -331,7 +352,9 @@ def _gen_pq_reader_py(
     return jit_func
 
 
-def gen_column_read(func_text, cname, c_ind_real, c_ind, c_siz, c_type, is_parallel):
+def gen_column_read(
+    func_text, cname, c_ind_real, c_ind, c_siz, c_type, is_parallel, is_all_null
+):
     cname = sanitize_varname(cname)
     # handle size variables
     # get_column_size_parquet returns local size of column (number of rows
@@ -344,7 +367,15 @@ def gen_column_read(func_text, cname, c_ind_real, c_ind, c_siz, c_type, is_paral
     alloc_size = "{}_size".format(cname)
 
     ret_type = None
-    if c_type == string_array_type:
+    if is_all_null:
+        # if the column is made up of all nulls, initialize it as a string array of NaNs.
+        func_text += "  {0} = bodo.libs.str_arr_ext.pre_alloc_string_array({0}_size, 0)\n".format(
+            cname
+        )
+        func_text += "  bodo.libs.str_arr_ext.set_null_bits_to_value({}, 0)\n".format(
+            cname
+        )
+    elif c_type == string_array_type:
         # pass size for easier allocation and distributed analysis
         func_text += "  {} = read_parquet_str(ds_reader, {}, {}, {}_size)\n".format(
             cname, c_ind_real, c_ind, cname
@@ -402,7 +433,10 @@ def gen_column_read(func_text, cname, c_ind_real, c_ind, c_siz, c_type, is_paral
         func_text += _gen_alloc(c_type, cname, alloc_size, el_type)
         func_text += (
             "  status = read_parquet(ds_reader, {}, {}, {}, np.int32({}))\n".format(
-                c_ind_real, c_ind, cname, bodo.utils.utils.numba_to_c_type(c_type.dtype)
+                c_ind_real,
+                c_ind,
+                cname,
+                bodo.utils.utils.numba_to_c_type(c_type.dtype),
             )
         )
         # Check if there was an error in the C++ code. If so, raise it.
@@ -522,6 +556,8 @@ def _get_numba_typ_from_pa_typ(pa_typ, is_index, nullable_from_metadata):
         pa.timestamp("us"): types.NPDatetime("ns"),
         pa.timestamp("ms"): types.NPDatetime("ns"),
         pa.timestamp("s"): types.NPDatetime("ns"),
+        # all null column
+        null(): string_type,  # map it to string_type, handle differently at runtime
     }
 
     if pa_typ.type not in _typ_map:
@@ -743,6 +779,12 @@ def parquet_file_schema(file_name, selected_columns):
     # If there is no index at all, col_names will not include anything.
     col_names = pa_schema.names
 
+    # Create a bit map specifying if a column is made up of all nulls.
+    # We use the string type for such columns.
+    # But this case is handled separately later on (using a pre-allocated string array),
+    # so we need to know which columns need to be handled this way.
+    null_col_map = [pa_schema.field(c).type == null() for c in range(len(col_names))]
+
     # find pandas index column if any
     # TODO: other pandas metadata like dtypes needed?
     # https://pandas.pydata.org/pandas-docs/stable/development/developer.html
@@ -814,9 +856,10 @@ def parquet_file_schema(file_name, selected_columns):
         col_indices.append((real_col_idx, col_indices_total[real_col_idx]))
     col_types = [col_types_total[col_names.index(c)] for c in selected_columns]
     col_nb_fields = [col_nb_fields_total[col_names.index(c)] for c in selected_columns]
+    null_col_map = [null_col_map[col_names.index(c)] for c in selected_columns]
     col_names = selected_columns
     # TODO: close file?
-    return col_names, col_types, index_col, col_indices, col_nb_fields
+    return col_names, col_types, index_col, col_indices, col_nb_fields, null_col_map
 
 
 _get_dataset_reader = types.ExternalFunction(

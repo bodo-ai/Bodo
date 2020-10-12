@@ -1636,8 +1636,8 @@ def overload_series_fillna(
         if S.dtype == bodo.string_type:
             # optimization: just set null bit if fill is empty
             if is_overload_constant_str(value) and get_overload_const_str(value) == "":
-                return lambda S, value=None, method=None, axis=None, inplace=False, limit=None, downcast=None: bodo.libs.str_arr_ext.set_null_bits(
-                    bodo.hiframes.pd_series_ext.get_series_data(S)
+                return lambda S, value=None, method=None, axis=None, inplace=False, limit=None, downcast=None: bodo.libs.str_arr_ext.set_null_bits_to_value(
+                    bodo.hiframes.pd_series_ext.get_series_data(S), -1
                 )
 
             # value is a Series
