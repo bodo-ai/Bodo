@@ -1099,13 +1099,26 @@ def setitem_array_with_str_overload(arr, i, val):
     return setitem_impl
 
 
+# TODO: Use `bodo.utils.utils.alloc_type` instead if possible
 def _gen_dummy_alloc(t):
     """generate dummy allocation text for type `t`, used for creating dummy arrays that
     just pass data type to functions.
     """
-    # TODO: support other types
-    if t == string_array_type:
+    if isinstance(t, IntegerArrayType):
+        int_typ_name = IntDtype(t.dtype).name
+        assert int_typ_name.endswith("Dtype()")
+        int_typ_name = int_typ_name[:-7]  # remove trailing "Dtype()"
+        return "pd.Series([1], dtype='{}').values".format(int_typ_name)
+    elif isinstance(t, BooleanArrayType):
+        return "bodo.libs.bool_arr_ext.init_bool_array(np.empty(0, np.bool_), np.empty(0, np.uint8))"
+    elif isinstance(t, StringArrayType):
         return "pre_alloc_string_array(1, 1)"
+    elif t == ArrayItemArrayType(string_array_type):
+        return "pre_alloc_array_item_array(1, (1, 1), string_array_type)"
+    elif isinstance(t, DecimalArrayType):
+        return "alloc_decimal_array(1, {}, {})".format(t.precision, t.scale)
+    elif isinstance(t, DatetimeDateArrayType):
+        return "bodo.hiframes.datetime_date_ext.init_datetime_date_array(np.empty(1, np.int64), np.empty(1, np.uint8))"
     else:
         return "np.empty(1, {})".format(_get_np_dtype(t.dtype))
 
@@ -1231,6 +1244,7 @@ def gen_update_cb(
         func_text,
         {
             "np": np,
+            "pd": pd,
             "info_to_array": info_to_array,
             "info_from_table": info_from_table,
             "incref": incref,
@@ -1520,37 +1534,7 @@ def gen_top_level_agg_func(
     for i in range(len(out_names)):
         out_name = out_names[i] + "_dummy"
         out_col_typ = out_col_typs[i]
-        if isinstance(out_col_typ, IntegerArrayType):
-            int_typ_name = IntDtype(out_typs[i]).name
-            assert int_typ_name.endswith("Dtype()")
-            int_typ_name = int_typ_name[:-7]  # remove trailing "Dtype()"
-            func_text += '    {} = pd.Series([1], dtype="{}").values\n'.format(
-                out_name, int_typ_name
-            )
-        elif isinstance(out_col_typ, BooleanArrayType):
-            func_text += "    {} = bodo.libs.bool_arr_ext.init_bool_array(np.empty(0, np.bool_), np.empty(0, np.uint8))\n".format(
-                out_name
-            )
-        elif isinstance(out_col_typ, StringArrayType):
-            func_text += "    {} = pre_alloc_string_array(1,1)\n".format(out_name)
-        elif out_col_typ == ArrayItemArrayType(string_array_type):
-            func_text += "    {} = pre_alloc_array_item_array(1, (1, 1), string_array_type)\n".format(
-                out_name
-            )
-        elif isinstance(out_col_typ, DecimalArrayType):
-            scale = out_col_typ.scale
-            precision = out_col_typ.precision
-            func_text += "    {} = alloc_decimal_array(1, {}, {})\n".format(
-                out_name, precision, scale
-            )
-        elif isinstance(out_col_typ, DatetimeDateArrayType):
-            func_text += "    {} = bodo.hiframes.datetime_date_ext.init_datetime_date_array(np.empty(1, np.int64), np.empty(1, np.uint8))\n".format(
-                out_name
-            )
-        else:
-            func_text += "    {} = np.empty(1, {})\n".format(
-                out_name, _get_np_dtype(out_typs[i])
-            )
+        func_text += "    {} = {}\n".format(out_name, _gen_dummy_alloc(out_col_typ))
 
     # do_combine indicates whether GroupbyPipeline in C++ will need to do
     # `void combine()` operation or not
