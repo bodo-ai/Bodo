@@ -3,7 +3,9 @@
 PYTEST_DONT_REWRITE
 """
 import unittest
+
 import pandas as pd
+
 import bodo
 from bodo.tests.utils import check_func
 
@@ -26,7 +28,7 @@ class AssertTest(unittest.TestCase):
         hpat_f()
 
 
-def test_df_apply_assertion():
+def test_df_apply_assertion(memory_leak_check):
     """test assertion in UDF passed to df.apply().
     Bodo shouldn't inline the UDF since Numba's prange doesn't support assertions
     (multiple loop exit points in general).

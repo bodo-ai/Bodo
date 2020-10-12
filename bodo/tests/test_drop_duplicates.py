@@ -1,13 +1,15 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 """Test drop_duplicate opration as called as df.drop_duplicates()
 """
-import pandas as pd
-import numpy as np
 import random
+from decimal import Decimal
+
+import numpy as np
+import pandas as pd
 import pytest
+
 import bodo
 from bodo.tests.utils import check_func, gen_random_list_string_array
-from decimal import Decimal
 
 
 @pytest.fixture(
@@ -226,8 +228,7 @@ def test_drop_duplicates_2col_random_nullable_int(n, len_siz, memory_leak_check)
 
 
 @pytest.mark.slow
-# TODO: add memory_leak_check
-def test_list_string_array_type_specific():
+def test_list_string_array_type_specific(memory_leak_check):
     """Test of list_string_array_type in a specific case"""
 
     def test_impl(df1):
@@ -240,8 +241,7 @@ def test_list_string_array_type_specific():
 
 
 @pytest.mark.slow
-# TODO: add memory_leak_check
-def test_list_string_array_type_random():
+def test_list_string_array_type_random(memory_leak_check):
     """Test of list_string_array_type in parallel with a random list
     Also put a test on two columns for the combine_hash functionality
     """

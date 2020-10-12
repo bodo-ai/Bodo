@@ -146,8 +146,7 @@ def test_decimal_coerce(memory_leak_check):
     check_func(f, (df1, ts))
 
 
-# TODO: Add memory_leak_check when bug is resolved.
-def test_series_astype_str(decimal_arr_value):
+def test_series_astype_str(decimal_arr_value, memory_leak_check):
     """test decimal conversion to string.
     Using a checksum for checking output since Bodo's output can have extra 0 digits
     """
