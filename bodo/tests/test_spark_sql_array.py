@@ -89,16 +89,19 @@ def dataframe_val(request):
     return request.param
 
 
-@pytest.mark.skip(reason="known int array bug #1511")
+@pytest.mark.skip(reason="Missing support for np.isin #1851")
 def test_array_contains(dataframe_val):
     def test_impl_float(df):
-        return df.A.map(lambda a: 5.1 in list(a))
+        return df.A.map(lambda a: np.isin(5.1, a))
 
     def test_impl_int(df):
-        return df.A.map(lambda a: 1 in list(a))
+        return df.A.map(lambda a: np.isin(1, a))
 
     def test_impl_str(df):
-        return df.A.map(lambda a: "you" in list(a))
+        return df.A.map(lambda a: np.isin("you", a))
+
+    def test_impl_bool(df):
+        return df.A.map(lambda a: np.isin(True, a))
 
     df = dataframe_val
     if isinstance(df.A[0][0], np.float64):
@@ -107,6 +110,8 @@ def test_array_contains(dataframe_val):
         test_impl = test_impl_int
     elif isinstance(df.A[0][0], str):
         test_impl = test_impl_str
+    elif isinstance(df.A[0][0], (bool, np.bool_)):
+        test_impl = test_impl_bool
 
     check_func(test_impl, (df,))
 
@@ -138,7 +143,6 @@ def test_array_intersect(dataframe_val):
     check_func(test_impl, (df,))
 
 
-@pytest.mark.skip(reason="Numba bug with no support for str.join(numpy_array) #1571")
 def test_array_join(dataframe_val):
     def test_impl_comma(df):
         return df.A.map(lambda x: ",".join(x))
@@ -158,23 +162,27 @@ def test_array_join(dataframe_val):
         check_func(test_impl_space, (df,))
 
 
-@pytest.mark.skip(reason="Map operation not yet supported #1569")
 def test_array_max(dataframe_val):
     def test_impl(df):
-        return df.A.map(lambda x: np.max(x))
+        return df.A.map(lambda x: np.nanmax(x))
 
     df = dataframe_val
-    if not isinstance(df.A[0][0], str):
+    # np.max is not supported on pd.array in pandas
+    if not isinstance(df.A[0][0], str) and not isinstance(
+        df.A[0], (pd.arrays.BooleanArray, pd.arrays.IntegerArray)
+    ):
         check_func(test_impl, (df,))
 
 
-@pytest.mark.skip(reason="Map operation not yet supported #1569")
 def test_array_min(dataframe_val):
     def test_impl(df):
-        return df.A.map(lambda x: np.min(x))
+        return df.A.map(lambda x: np.nanmin(x))
 
     df = dataframe_val
-    if not isinstance(df.A[0][0], str):
+    # np.min is not supported on pd.array in pandas
+    if not isinstance(df.A[0][0], str) and not isinstance(
+        df.A[0], (pd.arrays.BooleanArray, pd.arrays.IntegerArray)
+    ):
         check_func(test_impl, (df,))
 
 

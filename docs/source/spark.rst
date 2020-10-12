@@ -28,9 +28,9 @@ which are supported by Bodo.
   * - :func:`pyspark.sql.functions.array_distinct`
     - ``df.col.map(lambda x: np.unique(x))``
   * - :func:`pyspark.sql.functions.array_max`
-    - ``df.col.map(lambda x: np.max(x))``
+    - ``df.col.map(lambda x: np.nanmax(x))``
   * - :func:`pyspark.sql.functions.array_min`
-    - ``df.col.map(lambda x: np.min(x))``
+    - ``df.col.map(lambda x: np.nanmin(x))``
   * - :func:`pyspark.sql.functions.array_repeat`
     - ``df.col.map(lambda x: np.repeat(x, count))``
   * - :func:`pyspark.sql.functions.asc`
