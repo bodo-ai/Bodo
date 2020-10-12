@@ -2518,6 +2518,47 @@ def test_df_schema_change(memory_leak_check):
     pd.testing.assert_frame_equal(bodo_func(df), test_impl(df))
 
 
+def test_set_df_column_names(memory_leak_check):
+    """test setting dataframe column names using df.columns"""
+
+    def impl1(df):
+        df.columns = ["a", "b"]
+        return df
+
+    # invalid length
+    def impl2(df):
+        df.columns = ["a", "b", "c"]
+        return df
+
+    # type instability due to control flow
+    def impl3(df, flag):
+        if flag:
+            df.columns = ["a", "b"]
+        return df
+
+    # non-constant column names
+    def impl4(df, a):
+        df.columns = a[1:]
+        return df
+
+    df = pd.DataFrame({"A": [1.0, 2.0, np.nan, 1.0], "B": [1.2, np.nan, 1.1, 3.1]})
+    check_func(impl1, (df,), copy_input=True)
+    with pytest.raises(
+        BodoError,
+        match="DataFrame.columns: number of new column names does not match number of existing columns",
+    ):
+        bodo.jit(impl2)(df)
+    with pytest.raises(
+        BodoError,
+        match="DataFrame.columns: setting dataframe column names inside conditionals and loops not supported yet",
+    ):
+        bodo.jit(impl3)(df, False)
+    with pytest.raises(
+        BodoError, match="DataFrame.columns: new column names should be a constant list"
+    ):
+        bodo.jit(impl4)(df, ["a", "b", "c"])
+
+
 def test_df_multi_schema_change(memory_leak_check):
     """Test multiple df schema changes while also calling other Bodo functions.
     Makes sure global state variables in typing pass are saved properly and are not
