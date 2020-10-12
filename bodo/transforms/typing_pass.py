@@ -405,7 +405,8 @@ class TypingTransforms:
         target_typ = self.typemap.get(inst.target.name, None)
 
         # df.B = A transform
-        if isinstance(target_typ, DataFrameType):
+        # Pandas only allows setting existing columns using setattr
+        if isinstance(target_typ, DataFrameType) and inst.attr in target_typ.columns:
             return self._run_df_set_column(inst, inst.attr, label)
 
         return [inst]
