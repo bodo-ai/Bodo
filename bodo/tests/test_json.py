@@ -4,11 +4,18 @@ Test I/O for JSON files using pd.read_json()
 """
 import os
 import subprocess
-import pytest
-import pandas as pd
+
 import numpy as np
+import pandas as pd
+import pytest
+
 import bodo
-from bodo.tests.utils import check_func, _get_dist_arg, _test_equal_guard, reduce_sum
+from bodo.tests.utils import (
+    _get_dist_arg,
+    _test_equal_guard,
+    check_func,
+    reduce_sum,
+)
 from bodo.utils.testing import ensure_clean, ensure_clean_dir
 
 
@@ -156,7 +163,7 @@ def test_json_read_str_arr(datapath, memory_leak_check):
 def test_json_read_multiline_object(datapath, memory_leak_check):
     """
     test read_json where json object is multi-lined
-    from a single file 
+    from a single file
     TODO: read a directory
     """
     fname = datapath("multiline_obj.json")
@@ -176,13 +183,13 @@ def test_json_read_multiline_object(datapath, memory_leak_check):
         )
 
     check_func(
-        test_impl, (),
+        test_impl,
+        (),
     )
 
 
 def test_json_invalid_path_const(memory_leak_check):
-    """test error raise when file path provided as constant but is invalid.
-    """
+    """test error raise when file path provided as constant but is invalid."""
 
     def test_impl():
         return pd.read_json("in_data_invalid.json")
@@ -273,7 +280,11 @@ def test_json_write_simple_df(memory_leak_check):
 
     n = 10
     df = pd.DataFrame(
-        {"A": np.arange(n), "B": np.arange(n) % 2,}, index=np.arange(n) * 2
+        {
+            "A": np.arange(n),
+            "B": np.arange(n) % 2,
+        },
+        index=np.arange(n) * 2,
     )
     json_write_test(test_impl, read_impl, df, "A")
 
@@ -312,7 +323,7 @@ def test_json_write_simple_df_records_lines(memory_leak_check):
 def test_json_write_orient(test_df, orient, memory_leak_check):
     """
     test to_json with different orient options
-    missing orient = "values" because only value arrays are written and 
+    missing orient = "values" because only value arrays are written and
     thus difficult to test when we write to a directory
     """
 

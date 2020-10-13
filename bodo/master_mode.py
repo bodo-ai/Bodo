@@ -1,17 +1,17 @@
-import sys
-import inspect
 import gc
+import inspect
+import sys
 import types as pytypes
-import bodo
 
+import bodo
 
 master_mode_on = False
 MASTER_RANK = 0
 
 
 class MasterModeDispatcher(object):
-    """ Encapsulates a numba dispatcher but is not a dispatcher itself
-        currently """
+    """Encapsulates a numba dispatcher but is not a dispatcher itself
+    currently"""
 
     def __init__(self, dispatcher):  # pragma: no cover
         self.dispatcher = dispatcher
@@ -115,8 +115,8 @@ def worker_loop():  # pragma: no cover
 
 
 def master_wrapper(func, *args, **kwargs):  # pragma: no cover
-    """ wrapper for bodo functions in master mode (only on MASTER)
-        func is a numba dispatcher """
+    """wrapper for bodo functions in master mode (only on MASTER)
+    func is a numba dispatcher"""
 
     # NOTE: this code cannot be inside the bodo compiled function because a
     # bodo function might call other bodo functions and only the top-level one
@@ -235,8 +235,8 @@ def init_master_mode():  # pragma: no cover
     globals()["MPI"] = MPI
 
     def master_exit():
-        """ this is called at exit on MASTER to tell workers to exit. this
-            function is meant to be registered with atexit """
+        """this is called at exit on MASTER to tell workers to exit. this
+        function is meant to be registered with atexit"""
         MPI.COMM_WORLD.bcast(["exit"])
 
     if bodo.get_rank() == MASTER_RANK:

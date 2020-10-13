@@ -7,19 +7,18 @@ import types as pytypes  # avoid confusion with numba.core.types
 import numba
 from numba.core import ir, types
 from numba.core.ir_utils import (
-    mk_unique_var,
-    replace_vars_inner,
-    find_topo_order,
-    find_callname,
-    guard,
-    require,
-    get_definition,
     build_definitions,
-    find_const,
     compile_to_numba_ir,
+    find_callname,
+    find_const,
+    find_topo_order,
+    get_definition,
+    guard,
+    mk_unique_var,
     replace_arg_nodes,
+    replace_vars_inner,
+    require,
 )
-
 
 import bodo
 import bodo.io
@@ -42,8 +41,10 @@ class H5_IO:
             dtype_str = str(tp.dtype)
             func_text = "def _h5_read_impl(dset, index):\n"
             # TODO: index arg?
-            func_text += "  arr = bodo.io.h5_api.h5_read_dummy(dset, {}, '{}', index)\n".format(
-                tp.ndim, dtype_str
+            func_text += (
+                "  arr = bodo.io.h5_api.h5_read_dummy(dset, {}, '{}', index)\n".format(
+                    tp.ndim, dtype_str
+                )
             )
             loc_vars = {}
             exec(func_text, {}, loc_vars)

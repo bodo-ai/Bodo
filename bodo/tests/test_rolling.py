@@ -1,21 +1,22 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
-import unittest
 import itertools
 import os
-import pandas as pd
+import unittest
+
 import numpy as np
-import bodo
-from bodo.tests.utils import (
-    count_array_REPs,
-    count_parfor_REPs,
-    count_parfor_OneDs,
-    count_array_OneDs,
-    dist_IR_contains,
-    _get_dist_arg,
-)
-from bodo.hiframes.rolling import supported_rolling_funcs
+import pandas as pd
 import pytest
 
+import bodo
+from bodo.hiframes.rolling import supported_rolling_funcs
+from bodo.tests.utils import (
+    _get_dist_arg,
+    count_array_OneDs,
+    count_array_REPs,
+    count_parfor_OneDs,
+    count_parfor_REPs,
+    dist_IR_contains,
+)
 
 LONG_TEST = (
     int(os.environ["HPAT_LONG_ROLLING_TEST"]) != 0
@@ -71,8 +72,7 @@ def g(a):
 
 
 def test_fixed_apply_nested_func(memory_leak_check):
-    """test nested UDF decorated with Bodo (make sure it doesn't hang due to barriers)
-    """
+    """test nested UDF decorated with Bodo (make sure it doesn't hang due to barriers)"""
     # test sequentially with manually created dfs
     def test_impl(df):
         return df.rolling(2).apply(lambda a: g(a))
@@ -376,8 +376,10 @@ class TestRolling(unittest.TestCase):
             func_text = "def test_impl(n):\n"
             func_text += "  df = pd.DataFrame({'B': np.arange(n), 'time': "
             func_text += "    pd.DatetimeIndex(np.arange(n) * 1000000000)})\n"
-            func_text += "  res = df.rolling('{}', on='time').apply(lambda a: a.sum())\n".format(
-                w
+            func_text += (
+                "  res = df.rolling('{}', on='time').apply(lambda a: a.sum())\n".format(
+                    w
+                )
             )
             func_text += "  return res.B.sum()\n"
             loc_vars = {}

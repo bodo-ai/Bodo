@@ -1,20 +1,22 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
-import pandas as pd
-import numpy as np
-import bodo
-from bodo.tests.utils import (
-    count_array_REPs,
-    count_parfor_REPs,
-    count_parfor_OneDs,
-    count_array_OneDs,
-    count_parfor_OneD_Vars,
-    count_array_OneD_Vars,
-    dist_IR_contains,
-    check_func,
-)
 import datetime
 import random
+
+import numpy as np
+import pandas as pd
 import pytest
+
+import bodo
+from bodo.tests.utils import (
+    check_func,
+    count_array_OneD_Vars,
+    count_array_OneDs,
+    count_array_REPs,
+    count_parfor_OneD_Vars,
+    count_parfor_OneDs,
+    count_parfor_REPs,
+    dist_IR_contains,
+)
 from bodo.utils.typing import BodoError
 
 
@@ -350,8 +352,7 @@ def test_datetime_comparisons_scalar(is_slow_run, memory_leak_check):
 
 
 def test_function_to_datetime_string_array(memory_leak_check):
-    """Test pd.to_datetime for an array of strings
-    """
+    """Test pd.to_datetime for an array of strings"""
 
     def f(S, formatting):
         return pd.to_datetime(S, format=formatting)
@@ -373,8 +374,7 @@ def test_function_to_datetime_scalar(memory_leak_check):
 
 
 def test_function_to_datetime_array_int(memory_leak_check):
-    """Test pd.to_datetime for an array of int
-    """
+    """Test pd.to_datetime for an array of int"""
 
     def f(S):
         return pd.to_datetime(S, unit="D", origin=pd.Timestamp("1960-01-01"))
@@ -686,8 +686,7 @@ def test_datetime_comparisons_date(is_slow_run, memory_leak_check):
 
 
 def test_date_isin(memory_leak_check):
-    """test Series.isin with datetime.date values
-    """
+    """test Series.isin with datetime.date values"""
 
     def test_isin(S, vals):
         return S.isin(vals)
@@ -923,8 +922,6 @@ def test_datetime_datetime_strptime(memory_leak_check):
     check_func(test_strptime, (datetime_str, dtformat))
 
 
-
-
 @pytest.mark.parametrize(
     "date",
     [
@@ -949,8 +946,7 @@ def test_datetime_datetime_strptime(memory_leak_check):
     ],
 )
 def test_datetime_date_isocalendar(date, memory_leak_check):
-    """ Test datetime.date's isocalendar() method
-    """
+    """Test datetime.date's isocalendar() method"""
 
     def test_impl(date):
         return date.isocalendar()
@@ -982,8 +978,7 @@ def series_value(request):
 
 @pytest.mark.parametrize("date_fields", bodo.hiframes.pd_timestamp_ext.date_fields)
 def test_dt_extract(series_value, date_fields, memory_leak_check):
-    """Test Series.dt extraction
-    """
+    """Test Series.dt extraction"""
     func_text = "def impl(S, date_fields):\n"
     func_text += "  return S.dt.{}\n".format(date_fields)
     loc_vars = {}
@@ -994,8 +989,7 @@ def test_dt_extract(series_value, date_fields, memory_leak_check):
 
 
 def test_dt_extract_date(series_value, memory_leak_check):
-    """Test Series.dt.date extraction
-    """
+    """Test Series.dt.date extraction"""
 
     def impl(S):
         return S.dt.date
@@ -1020,8 +1014,7 @@ def series_value_no_bad_dates(request):
 
 
 def test_dt_isocalendar(series_value_no_bad_dates, memory_leak_check):
-    """Test Series.dt.isocalendar()
-    """
+    """Test Series.dt.isocalendar()"""
 
     def impl(S):
         return S.dt.isocalendar()
@@ -1033,8 +1026,7 @@ def test_dt_isocalendar(series_value_no_bad_dates, memory_leak_check):
     "timedelta_fields", bodo.hiframes.pd_timestamp_ext.timedelta_fields
 )
 def test_dt_timedelta_fields(timedelta_fields, memory_leak_check):
-    """Test Series.dt for timedelta64 fields
-    """
+    """Test Series.dt for timedelta64 fields"""
     func_text = "def impl(S, date_fields):\n"
     func_text += "  return S.dt.{}\n".format(timedelta_fields)
     loc_vars = {}
@@ -1049,8 +1041,7 @@ def test_dt_timedelta_fields(timedelta_fields, memory_leak_check):
     "timedelta_methods", bodo.hiframes.pd_timestamp_ext.timedelta_methods
 )
 def test_dt_timedelta_methods(timedelta_methods, memory_leak_check):
-    """Test Series.dt for timedelta64 methods
-    """
+    """Test Series.dt for timedelta64 methods"""
     func_text = "def impl(S, timedelta_methods):\n"
     func_text += "  return S.dt.{}()\n".format(timedelta_methods)
     loc_vars = {}
@@ -1062,8 +1053,7 @@ def test_dt_timedelta_methods(timedelta_methods, memory_leak_check):
 
 
 def test_series_dt64_timestamp_cmp(memory_leak_check):
-    """Test Series.dt comparison with pandas.timestamp scalar
-    """
+    """Test Series.dt comparison with pandas.timestamp scalar"""
 
     def test_impl(S, t):
         return S == t
@@ -1097,8 +1087,7 @@ def test_series_dt64_timestamp_cmp(memory_leak_check):
 
 
 def test_series_dt_getitem(memory_leak_check):
-    """ Test getitem of series(dt64)
-    """
+    """Test getitem of series(dt64)"""
 
     def test_impl(S):
         return S[0]
@@ -1133,8 +1122,7 @@ def test_series_dt_type(memory_leak_check):
 
 
 def test_timestamp_constructors(memory_leak_check):
-    """ Test pd.Timestamp's different types of constructors
-    """
+    """Test pd.Timestamp's different types of constructors"""
 
     def test_constructor_kw():
         # Test constructor with year/month/day passed as keyword arguments
@@ -1159,8 +1147,7 @@ def test_timestamp_constructors(memory_leak_check):
 
 
 def test_pd_to_datetime(memory_leak_check):
-    """Test pd.to_datetime on Bodo
-    """
+    """Test pd.to_datetime on Bodo"""
 
     def test_scalar():
         return pd.to_datetime("2020-1-12")
@@ -1191,8 +1178,7 @@ def test_pd_to_datetime(memory_leak_check):
 
 
 def test_pd_to_timedelta(memory_leak_check):
-    """Test pd.to_timedelta()
-    """
+    """Test pd.to_timedelta()"""
 
     def impl(a):
         return pd.to_timedelta(a, "D")
@@ -1202,8 +1188,7 @@ def test_pd_to_timedelta(memory_leak_check):
 
 
 def test_extract(memory_leak_check):
-    """ Test extracting an attribute of timestamp
-    """
+    """Test extracting an attribute of timestamp"""
 
     def test_impl(s):
         return s.month
@@ -1213,8 +1198,7 @@ def test_extract(memory_leak_check):
 
 
 def test_timestamp_date(memory_leak_check):
-    """ Test timestamp's date() method
-    """
+    """Test timestamp's date() method"""
 
     def test_impl(s):
         return s.date()
@@ -1261,8 +1245,7 @@ def test_timestamp_date(memory_leak_check):
     ],
 )
 def test_timestamp_isocalendar(ts, memory_leak_check):
-    """ Test timestamp's isocalendar() method
-    """
+    """Test timestamp's isocalendar() method"""
 
     def test_impl(ts):
         return ts.isocalendar()
@@ -1291,8 +1274,7 @@ dt_ser = pd.Series(pd.date_range(start="1998-04-24", end="1998-04-29", periods=1
 
 
 def test_datetime_index_ctor(memory_leak_check):
-    """ Test pd.DatetimeIndex constructors
-    """
+    """Test pd.DatetimeIndex constructors"""
 
     def test_impl_pos(S):
         return pd.DatetimeIndex(S)

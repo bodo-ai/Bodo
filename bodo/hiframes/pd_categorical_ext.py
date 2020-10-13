@@ -1,32 +1,34 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 import operator
+
+import numba
 import numpy as np
 import pandas as pd
-import numba
+from llvmlite import ir as lir
+from numba.core import cgutils, types
 from numba.extending import (
-    box,
-    unbox,
-    typeof_impl,
-    register_model,
-    make_attribute_wrapper,
-    models,
     NativeValue,
+    box,
+    intrinsic,
     lower_builtin,
     lower_cast,
+    make_attribute_wrapper,
+    models,
     overload,
-    type_callable,
-    overload_method,
     overload_attribute,
-    intrinsic,
+    overload_method,
+    register_model,
+    type_callable,
+    typeof_impl,
+    unbox,
 )
-from numba.core import cgutils, types
 from numba.parfors.array_analysis import ArrayAnalysis
-from llvmlite import ir as lir
+
 import bodo
 from bodo.utils.typing import (
+    is_list_like_index_type,
     is_overload_constant_bool,
     is_overload_true,
-    is_list_like_index_type,
 )
 
 
@@ -54,8 +56,7 @@ def _typeof_pd_cat_dtype(val, c):
 
 
 def _get_cat_arr_type(elem_type):
-    """return the array type that holds "categories" values give the element type
-    """
+    """return the array type that holds "categories" values give the element type"""
     # NOTE assuming data type is string if unknown (TODO: test this possibility)
     return (
         bodo.string_array_type
@@ -86,8 +87,7 @@ make_attribute_wrapper(PDCategoricalDtype, "categories", "categories")
 
 @intrinsic
 def init_cat_dtype(typingctx, categories_typ, ordered_typ=None):
-    """Create a CategoricalDtype from categories array and ordered flag
-    """
+    """Create a CategoricalDtype from categories array and ordered flag"""
     assert bodo.utils.utils.is_array_typ(categories_typ, False)
     assert is_overload_constant_bool(ordered_typ)
 
@@ -132,8 +132,7 @@ def unbox_cat_dtype(typ, obj, c):
 
 @box(PDCategoricalDtype)
 def box_cat_dtype(typ, val, c):
-    """Box PDCategoricalDtype into pandas CategoricalDtype object.
-    """
+    """Box PDCategoricalDtype into pandas CategoricalDtype object."""
     cat_dtype = cgutils.create_struct_proxy(typ)(c.context, c.builder, val)
 
     # box ordered flag
@@ -194,8 +193,7 @@ make_attribute_wrapper(CategoricalArray, "dtype", "dtype")
 
 @unbox(CategoricalArray)
 def unbox_categorical_array(typ, val, c):
-    """unbox pd.Categorical array to native value
-    """
+    """unbox pd.Categorical array to native value"""
     arr_obj = c.pyapi.object_getattr_string(val, "codes")
     dtype = get_categories_int_type(typ.dtype)
     codes = c.pyapi.to_native_value(types.Array(dtype, 1, "C"), arr_obj).value
@@ -229,8 +227,7 @@ def get_categories_int_type(cat_dtype):
 
 @box(CategoricalArray)
 def box_categorical_array(typ, val, c):
-    """box native CategoricalArray to pd.Categorical array object
-    """
+    """box native CategoricalArray to pd.Categorical array object"""
     dtype = typ.dtype
     mod_name = c.context.insert_const_string(c.builder.module, "pandas")
     pd_class_obj = c.pyapi.import_module_noblock(mod_name)
@@ -279,8 +276,7 @@ def cat_overload_dummy(val_list):
 
 @intrinsic
 def init_categorical_array(typingctx, codes, cat_dtype=None):
-    """Create a CategoricalArray with codes array (integers) and categories dtype
-    """
+    """Create a CategoricalArray with codes array (integers) and categories dtype"""
     assert isinstance(codes, types.Array) and isinstance(codes.dtype, types.Integer)
 
     def codegen(context, builder, signature, args):
@@ -302,8 +298,7 @@ def init_categorical_array(typingctx, codes, cat_dtype=None):
 
 
 def init_categorical_array_equiv(self, scope, equiv_set, loc, args, kws):
-    """out array of init_categorical_array has the same shape as input codes array
-    """
+    """out array of init_categorical_array has the same shape as input codes array"""
     assert len(args) == 2 and not kws
     var = args[0]
     if equiv_set.has_shape(var):
@@ -317,8 +312,7 @@ ArrayAnalysis._analyze_op_call_bodo_hiframes_pd_categorical_ext_init_categorical
 
 
 def alias_ext_dummy_func(lhs_name, args, alias_map, arg_aliases):
-    """the codes array is kept inside Categorical array so it aliases
-    """
+    """the codes array is kept inside Categorical array so it aliases"""
     assert len(args) >= 1
     numba.core.ir_utils._add_alias(lhs_name, args[0].name, alias_map, arg_aliases)
 

@@ -1,9 +1,15 @@
 # Copyright (C) 2019 Bodo Inc.
-import pytest
-import pandas as pd
 import numpy as np
+import pandas as pd
+import pytest
+
 import bodo
-from bodo.tests.utils import check_func, _get_dist_arg, _test_equal_guard, reduce_sum
+from bodo.tests.utils import (
+    _get_dist_arg,
+    _test_equal_guard,
+    check_func,
+    reduce_sum,
+)
 from bodo.utils.testing import ensure_clean
 
 pytestmark = pytest.mark.s3
@@ -11,7 +17,10 @@ pytestmark = pytest.mark.s3
 
 @pytest.mark.parametrize(
     "bucket_fixture,bucket_name",
-    [("s3_bucket", "bodo-test"), ("s3_bucket_us_west_2", "bodo-test-2"),],
+    [
+        ("s3_bucket", "bodo-test"),
+        ("s3_bucket_us_west_2", "bodo-test-2"),
+    ],
 )
 def test_s3_csv_data1(minio_server, bucket_fixture, datapath, bucket_name, request):
     """
@@ -231,7 +240,9 @@ def test_s3_csv_write_seq(minio_server, bucket_fixture, test_df, bucket_name, re
 
     def test_write(test_df, fpath):
         test_df.to_csv(
-            fpath, index=False, header=False,
+            fpath,
+            index=False,
+            header=False,
         )
 
     bodo_write = bodo.jit(test_write)
@@ -316,7 +327,9 @@ def test_s3_json_write_records_lines_seq(
 
     def test_write(test_df, fpath):
         test_df.to_json(
-            fpath, orient="records", lines=True,
+            fpath,
+            orient="records",
+            lines=True,
         )
 
     bodo_write = bodo.jit(test_write)
@@ -389,7 +402,7 @@ def test_s3_parquet_read_1D_var(minio_server, s3_bucket, test_df):
 
 def test_s3_csv_read_seq(minio_server, s3_bucket, test_df):
     """
-    read_csv 
+    read_csv
     test the csv file we just wrote sequentially
     """
 
@@ -405,7 +418,7 @@ def test_s3_csv_read_seq(minio_server, s3_bucket, test_df):
 
 def test_s3_csv_read_1D(minio_server, s3_bucket, test_df):
     """
-    read_csv 
+    read_csv
     test the csv file we just wrote in 1D
     """
 
@@ -421,7 +434,7 @@ def test_s3_csv_read_1D(minio_server, s3_bucket, test_df):
 
 def test_s3_csv_read_1D_var(minio_server, s3_bucket, test_df):
     """
-    read_csv 
+    read_csv
     test the csv file we just wrote in 1D Var
     """
 
@@ -442,7 +455,9 @@ def test_s3_csv_read_header_seq(minio_server, s3_bucket, test_df):
     """
 
     def test_read():
-        return pd.read_csv("s3://bodo-test/test_df_bodo_header_seq.csv",)
+        return pd.read_csv(
+            "s3://bodo-test/test_df_bodo_header_seq.csv",
+        )
 
     check_func(test_read, (), py_output=test_df)
 
@@ -454,7 +469,9 @@ def test_s3_csv_read_header_1D(minio_server, s3_bucket, test_df):
     """
 
     def test_read():
-        return pd.read_csv("s3://bodo-test/test_df_bodo_header_1D.csv",)
+        return pd.read_csv(
+            "s3://bodo-test/test_df_bodo_header_1D.csv",
+        )
 
     check_func(test_read, (), py_output=test_df)
 
@@ -466,7 +483,9 @@ def test_s3_csv_read_1D_header_var(minio_server, s3_bucket, test_df):
     """
 
     def test_read():
-        return pd.read_csv("s3://bodo-test/test_df_bodo_header_1D_var.csv",)
+        return pd.read_csv(
+            "s3://bodo-test/test_df_bodo_header_1D_var.csv",
+        )
 
     check_func(test_read, (), py_output=test_df)
 
@@ -559,7 +578,9 @@ def test_s3_json_read_records_lines_seq(minio_server, s3_bucket, test_df):
 
     def test_read():
         return pd.read_json(
-            "s3://bodo-test/df_records_lines_seq.json", orient="records", lines=True,
+            "s3://bodo-test/df_records_lines_seq.json",
+            orient="records",
+            lines=True,
         )
 
     def test_read_infer_dtype():
@@ -576,18 +597,22 @@ def test_s3_json_read_records_lines_seq(minio_server, s3_bucket, test_df):
 
 def test_s3_json_read_records_lines_1D(minio_server, s3_bucket, test_df):
     """
-    read_json(orient="records", lines=True) 
+    read_json(orient="records", lines=True)
     test the json file we just wrote in 1D
     """
 
     def test_read():
         return pd.read_json(
-            "s3://bodo-test/df_records_lines_1D.json", orient="records", lines=True,
+            "s3://bodo-test/df_records_lines_1D.json",
+            orient="records",
+            lines=True,
         )
 
     def test_read_infer_dtype():
         return pd.read_json(
-            "s3://bodo-test/df_records_lines_1D.json", orient="records", lines=True,
+            "s3://bodo-test/df_records_lines_1D.json",
+            orient="records",
+            lines=True,
         )
 
     check_func(test_read, (), py_output=test_df)
@@ -596,13 +621,15 @@ def test_s3_json_read_records_lines_1D(minio_server, s3_bucket, test_df):
 
 def test_s3_json_read_recoreds_lines_1D_var(minio_server, s3_bucket, test_df):
     """
-    read_json(orient="records", lines=True) 
+    read_json(orient="records", lines=True)
     test the json file we just wrote in 1D Var
     """
 
     def test_read():
         return pd.read_json(
-            "s3://bodo-test/df_records_lines_1D_var.json", orient="records", lines=True,
+            "s3://bodo-test/df_records_lines_1D_var.json",
+            orient="records",
+            lines=True,
         )
 
     def test_read_infer_dtype():

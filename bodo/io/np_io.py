@@ -1,17 +1,15 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
-import numpy as np
-import bodo
-import numba
-from numba.core import types, ir
-from numba.extending import overload, intrinsic, overload_method
-from bodo.libs.str_ext import string_type, unicode_to_utf8
-
-from numba.core.ir_utils import compile_to_numba_ir, replace_arg_nodes
-
-from bodo.utils.transform import get_call_expr_arg
-
-from bodo.libs import hio
 import llvmlite.binding as ll
+import numba
+import numpy as np
+from numba.core import ir, types
+from numba.core.ir_utils import compile_to_numba_ir, replace_arg_nodes
+from numba.extending import intrinsic, overload, overload_method
+
+import bodo
+from bodo.libs import hio
+from bodo.libs.str_ext import string_type, unicode_to_utf8
+from bodo.utils.transform import get_call_expr_arg
 
 ll.add_symbol("get_file_size", hio.get_file_size)
 ll.add_symbol("file_read", hio.file_read)
@@ -63,8 +61,7 @@ _file_write_parallel = types.ExternalFunction(
 
 
 def _handle_np_fromfile(assign, lhs, rhs):
-    """translate np.fromfile() to native
-    """
+    """translate np.fromfile() to native"""
     # TODO: dtype in kws
     if len(rhs.args) != 2:  # pragma: no cover
         raise bodo.utils.typing.BodoError("np.fromfile(): file name and dtype expected")
@@ -76,8 +73,12 @@ def _handle_np_fromfile(assign, lhs, rhs):
     count_default = ir.Const(-1, lhs.loc)
     offset_default = ir.Const(0, lhs.loc)
 
-    _count = get_call_expr_arg("np.fromfile", rhs.args, kws, 2, "count", default=count_default) 
-    _offset = get_call_expr_arg("np.fromfile", rhs.args, kws, 3, "offset", default=offset_default)
+    _count = get_call_expr_arg(
+        "np.fromfile", rhs.args, kws, 2, "count", default=count_default
+    )
+    _offset = get_call_expr_arg(
+        "np.fromfile", rhs.args, kws, 3, "offset", default=offset_default
+    )
 
     def fromfile_impl(fname, dtype, count, offset):  # pragma: no cover
         dtype_size = get_dtype_size(dtype)
@@ -176,7 +177,7 @@ def file_read_parallel_overload(fname, arr, start, count, offset):
             _file_read_parallel(
                 unicode_to_utf8(fname),
                 arr.ctypes,
-                (start * dtype_size) + offset, # Offset is given in bytes
+                (start * dtype_size) + offset,  # Offset is given in bytes
                 count * dtype_size,
             )
 

@@ -1,77 +1,76 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 """IR node for the join and merge"""
 from collections import defaultdict
+
+import numba
 import numpy as np
 import pandas as pd
-
-from bodo.utils.typing import BodoError, is_dtype_nullable
-import numba
 from numba import generated_jit
 from numba.core import ir, ir_utils, typeinfer, types
-from bodo.libs.int_arr_ext import IntegerArrayType, IntDtype
-from numba.extending import overload
 from numba.core.ir_utils import (
-    visit_vars_inner,
-    replace_vars_inner,
     compile_to_numba_ir,
-    replace_arg_nodes,
     mk_unique_var,
+    replace_arg_nodes,
+    replace_vars_inner,
+    visit_vars_inner,
 )
+from numba.extending import overload
+
 import bodo
 from bodo import objmode
-from bodo.transforms import distributed_pass, distributed_analysis
-from bodo.utils.utils import debug_prints, alloc_arr_tup
-from bodo.transforms.distributed_analysis import Distribution
-
-from bodo.libs.str_arr_ext import (
-    string_array_type,
-    to_string_list,
-    cp_str_list_to_array,
-    get_bit_bitmap,
-    num_total_chars,
-    get_offset_ptr,
-    get_data_ptr,
-    get_null_bitmap_ptr,
-    pre_alloc_string_array,
-    getitem_str_offset,
-    copy_str_arr_slice,
-    str_copy_ptr,
-    setitem_str_offset,
-    str_arr_set_na,
-    set_bit_to,
-    print_str_arr,
-    get_str_arr_item_ptr,
-    get_str_arr_item_length,
-    get_utf8_size,
-)
-from bodo.libs.str_ext import string_type
-from bodo.libs.int_arr_ext import IntegerArrayType
-from bodo.libs.bool_arr_ext import boolean_array
 from bodo.hiframes.datetime_date_ext import datetime_date_array_type
-from bodo.libs.decimal_arr_ext import DecimalArrayType
-from bodo.libs.timsort import getitem_arr_tup, setitem_arr_tup
-from bodo.utils.shuffle import (
-    getitem_arr_tup_single,
-    val_to_tup,
-    alltoallv_tup,
-    finalize_shuffle_meta,
-    update_shuffle_meta,
-    alloc_pre_shuffle_metadata,
-    _get_keys_tup,
-    _get_data_tup,
-)
+from bodo.hiframes.pd_categorical_ext import CategoricalArray
 from bodo.libs.array import (
-    array_to_info,
     arr_info_list_to_table,
-    shuffle_table,
+    array_to_info,
     compute_node_partition_by_hash,
+    delete_table,
+    delete_table_decref_arrays,
     hash_join_table,
     info_from_table,
     info_to_array,
-    delete_table,
-    delete_table_decref_arrays,
+    shuffle_table,
 )
-from bodo.hiframes.pd_categorical_ext import CategoricalArray
+from bodo.libs.bool_arr_ext import boolean_array
+from bodo.libs.decimal_arr_ext import DecimalArrayType
+from bodo.libs.int_arr_ext import IntDtype, IntegerArrayType
+from bodo.libs.str_arr_ext import (
+    copy_str_arr_slice,
+    cp_str_list_to_array,
+    get_bit_bitmap,
+    get_data_ptr,
+    get_null_bitmap_ptr,
+    get_offset_ptr,
+    get_str_arr_item_length,
+    get_str_arr_item_ptr,
+    get_utf8_size,
+    getitem_str_offset,
+    num_total_chars,
+    pre_alloc_string_array,
+    print_str_arr,
+    set_bit_to,
+    setitem_str_offset,
+    str_arr_set_na,
+    str_copy_ptr,
+    string_array_type,
+    to_string_list,
+)
+from bodo.libs.str_ext import string_type
+from bodo.libs.timsort import getitem_arr_tup, setitem_arr_tup
+from bodo.transforms import distributed_analysis, distributed_pass
+from bodo.transforms.distributed_analysis import Distribution
+from bodo.utils.shuffle import (
+    _get_data_tup,
+    _get_keys_tup,
+    alloc_pre_shuffle_metadata,
+    alltoallv_tup,
+    finalize_shuffle_meta,
+    getitem_arr_tup_single,
+    update_shuffle_meta,
+    val_to_tup,
+)
+from bodo.utils.typing import BodoError, is_dtype_nullable
+from bodo.utils.utils import alloc_arr_tup, debug_prints
 
 
 class Join(ir.Stmt):
@@ -679,8 +678,7 @@ def _gen_type_match(t1, t2):
 
 
 def _gen_reverse_type_match(t1, t2):
-    """Reverse of the operation above.
-    """
+    """Reverse of the operation above."""
     if (
         isinstance(t1, types.Array)
         and isinstance(t2, types.Array)
@@ -859,8 +857,10 @@ def _gen_local_hash_join(
     for i, t in enumerate(left_other_names):
         rec_typ = get_out_type(idx, left_other_types[i], t, is_right, False)
         func_text += rec_typ[0]
-        func_text += "    left_{} = info_to_array(info_from_table(out_table, {}), {})\n".format(
-            i, idx, rec_typ[1]
+        func_text += (
+            "    left_{} = info_to_array(info_from_table(out_table, {}), {})\n".format(
+                i, idx, rec_typ[1]
+            )
         )
         idx += 1
     for i, t in enumerate(right_key_names):
@@ -879,8 +879,10 @@ def _gen_local_hash_join(
     for i, t in enumerate(right_other_names):
         rec_typ = get_out_type(idx, right_other_types[i], t, is_left, False)
         func_text += rec_typ[0]
-        func_text += "    right_{} = info_to_array(info_from_table(out_table, {}), {})\n".format(
-            i, idx, rec_typ[1]
+        func_text += (
+            "    right_{} = info_to_array(info_from_table(out_table, {}), {})\n".format(
+                i, idx, rec_typ[1]
+            )
         )
         idx += 1
 
@@ -1039,8 +1041,8 @@ def write_data_buff_overload(meta, node_id, i, key_arrs, data):
             func_text += "  str_copy_ptr(meta.send_arr_chars_tup[{}], indc_{}, item_ptr_{}, n_chars_{})\n".format(
                 i, i, i, i
             )
-            func_text += "  meta.tmp_offset_char_tup[{}][node_id] += n_chars_{}\n".format(
-                i, i
+            func_text += (
+                "  meta.tmp_offset_char_tup[{}][node_id] += n_chars_{}\n".format(i, i)
             )
 
     func_text += "  return w_ind\n"
@@ -1063,6 +1065,7 @@ def write_data_buff_overload(meta, node_id, i, key_arrs, data):
 
 
 import llvmlite.binding as ll
+
 from bodo.libs import hdist
 
 ll.add_symbol("c_alltoallv", hdist.c_alltoallv)
@@ -1360,8 +1363,7 @@ def get_nan_bits(arr, ind):  # pragma: no cover
 
 @overload(get_nan_bits, no_unliteral=True)
 def overload_get_nan_bits(arr, ind):
-    """Get nan bit for types that have null bitmap
-    """
+    """Get nan bit for types that have null bitmap"""
     if arr == string_array_type:
 
         def impl_str(arr, ind):  # pragma: no cover
@@ -1406,8 +1408,7 @@ def set_nan_bits(arr, ind, na_val):  # pragma: no cover
 
 @overload(set_nan_bits, no_unliteral=True)
 def overload_set_nan_bits(arr, ind, na_val):
-    """Set nan bit for types that have null bitmap, currently just string array
-    """
+    """Set nan bit for types that have null bitmap, currently just string array"""
     if arr == string_array_type:
 
         def impl_str(arr, ind, na_val):  # pragma: no cover

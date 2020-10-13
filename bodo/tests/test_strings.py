@@ -1,19 +1,21 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 # -*- coding: utf-8 -*-
 
-import unittest
-import os
-import numba
+import gc
+import glob
 import operator
-import bodo
+import os
+import re
+import unittest
+
+import numba
 import numpy as np
 import pandas as pd
-import glob
-import gc
-import re
+import pytest
+
+import bodo
 from bodo.libs.str_arr_ext import str_arr_from_sequence
 from bodo.tests.utils import check_func
-import pytest
 
 
 @pytest.mark.parametrize(
@@ -83,8 +85,7 @@ def test_in_str(request, memory_leak_check):
 
 
 def test_re_search(test_in_str, memory_leak_check):
-    """make sure re.search returns None or a proper re.Match
-    """
+    """make sure re.search returns None or a proper re.Match"""
 
     def test_impl(pat, in_str):
         return re.search(pat, in_str)
@@ -98,8 +99,7 @@ def test_re_search(test_in_str, memory_leak_check):
 
 
 def test_re_match_cast_bool(test_in_str, memory_leak_check):
-    """make sure re.search() output can behave like None in conditionals
-    """
+    """make sure re.search() output can behave like None in conditionals"""
 
     def test_impl(pat, in_str):
         m = re.search(pat, in_str)
@@ -112,8 +112,7 @@ def test_re_match_cast_bool(test_in_str, memory_leak_check):
 
 
 def test_re_match_check_none(test_in_str, memory_leak_check):
-    """make sure re.Match object can be checked for None
-    """
+    """make sure re.Match object can be checked for None"""
 
     def test_impl(pat, in_str):
         m = re.search(pat, in_str)
@@ -126,8 +125,7 @@ def test_re_match_check_none(test_in_str, memory_leak_check):
 
 
 def test_re_pat_search(test_in_str, memory_leak_check):
-    """make sure Pattern.search returns None or a proper re.Match
-    """
+    """make sure Pattern.search returns None or a proper re.Match"""
 
     def test_impl(pat, in_str):
         return pat.search(in_str)
@@ -142,8 +140,7 @@ def test_re_pat_search(test_in_str, memory_leak_check):
 
 @pytest.mark.parametrize("in_str", ["AB", "A_B", "AB_C"])
 def test_re_match(in_str, memory_leak_check):
-    """make sure re.match returns None or a proper re.Match
-    """
+    """make sure re.match returns None or a proper re.Match"""
 
     def test_impl(pat, in_str):
         return re.match(pat, in_str)
@@ -158,8 +155,7 @@ def test_re_match(in_str, memory_leak_check):
 
 @pytest.mark.parametrize("in_str", ["AB", "AB_", "A_B_C"])
 def test_re_pat_match(in_str, memory_leak_check):
-    """make sure Pattern.match returns None or a proper re.Match
-    """
+    """make sure Pattern.match returns None or a proper re.Match"""
 
     def test_impl(pat, in_str):
         return pat.match(in_str)
@@ -174,8 +170,7 @@ def test_re_pat_match(in_str, memory_leak_check):
 
 @pytest.mark.parametrize("in_str", ["AB", "A_B", "AB_C"])
 def test_re_fullmatch(in_str, memory_leak_check):
-    """make sure re.fullmatch returns None or a proper re.Match
-    """
+    """make sure re.fullmatch returns None or a proper re.Match"""
 
     def test_impl(pat, in_str):
         return re.fullmatch(pat, in_str)
@@ -190,8 +185,7 @@ def test_re_fullmatch(in_str, memory_leak_check):
 
 @pytest.mark.parametrize("in_str", ["AB", "AB_", "A_B_C"])
 def test_re_pat_fullmatch(in_str, memory_leak_check):
-    """make sure Pattern.fullmatch returns None or a proper re.Match
-    """
+    """make sure Pattern.fullmatch returns None or a proper re.Match"""
 
     def test_impl(pat, in_str):
         return pat.fullmatch(in_str)
@@ -205,8 +199,7 @@ def test_re_pat_fullmatch(in_str, memory_leak_check):
 
 
 def test_re_split(memory_leak_check):
-    """make sure re.split returns proper output (list of strings)
-    """
+    """make sure re.split returns proper output (list of strings)"""
 
     def test_impl(pat, in_str):
         return re.split(pat, in_str)
@@ -219,8 +212,7 @@ def test_re_split(memory_leak_check):
 
 
 def test_pat_split(memory_leak_check):
-    """make sure Pattern.split returns proper output (list of strings)
-    """
+    """make sure Pattern.split returns proper output (list of strings)"""
 
     def test_impl(pat, in_str):
         return re.split(pat, in_str)
@@ -233,8 +225,7 @@ def test_pat_split(memory_leak_check):
 
 
 def test_re_findall(memory_leak_check):
-    """make sure re.findall returns proper output (list of strings)
-    """
+    """make sure re.findall returns proper output (list of strings)"""
 
     def test_impl(pat, in_str):
         return re.findall(pat, in_str)
@@ -247,8 +238,7 @@ def test_re_findall(memory_leak_check):
 
 
 def test_pat_findall(memory_leak_check):
-    """make sure Pattern.findall returns proper output (list of strings)
-    """
+    """make sure Pattern.findall returns proper output (list of strings)"""
 
     def test_impl(pat, in_str):
         return pat.findall(in_str)
@@ -293,8 +283,7 @@ def test_pat_findall(memory_leak_check):
 
 
 def test_re_sub(memory_leak_check):
-    """make sure re.sub returns proper output (a string)
-    """
+    """make sure re.sub returns proper output (a string)"""
 
     def test_impl(pat, repl, in_str):
         return re.sub(pat, repl, in_str)
@@ -308,8 +297,7 @@ def test_re_sub(memory_leak_check):
 
 
 def test_pat_sub(memory_leak_check):
-    """make sure Pattern.sub returns proper output (a string)
-    """
+    """make sure Pattern.sub returns proper output (a string)"""
 
     def test_impl(pat, repl, in_str):
         return pat.sub(repl, in_str)
@@ -323,8 +311,7 @@ def test_pat_sub(memory_leak_check):
 
 
 def test_re_subn(memory_leak_check):
-    """make sure re.subn returns proper output (a string and integer)
-    """
+    """make sure re.subn returns proper output (a string and integer)"""
 
     def test_impl(pat, repl, in_str):
         return re.subn(pat, repl, in_str)
@@ -338,8 +325,7 @@ def test_re_subn(memory_leak_check):
 
 
 def test_pat_subn(memory_leak_check):
-    """make sure Pattern.subn returns proper output (a string and integer)
-    """
+    """make sure Pattern.subn returns proper output (a string and integer)"""
 
     def test_impl(pat, repl, in_str):
         return pat.subn(repl, in_str)
@@ -353,8 +339,7 @@ def test_pat_subn(memory_leak_check):
 
 
 def test_re_escape(memory_leak_check):
-    """make sure re.escape returns proper output (a string)
-    """
+    """make sure re.escape returns proper output (a string)"""
 
     def test_impl(pat):
         return re.escape(pat)
@@ -366,8 +351,7 @@ def test_re_escape(memory_leak_check):
 
 
 def test_re_purge(memory_leak_check):
-    """make sure re.purge call works (can't see internal cache of re to fully test)
-    """
+    """make sure re.purge call works (can't see internal cache of re to fully test)"""
 
     def test_impl():
         return re.purge()
@@ -376,8 +360,7 @@ def test_re_purge(memory_leak_check):
 
 
 def test_pat_flags(memory_leak_check):
-    """test Pattern.flags
-    """
+    """test Pattern.flags"""
 
     def test_impl(pat):
         return pat.flags
@@ -389,8 +372,7 @@ def test_pat_flags(memory_leak_check):
 
 
 def test_pat_groups(memory_leak_check):
-    """test Pattern.groups
-    """
+    """test Pattern.groups"""
 
     def test_impl(pat):
         return pat.groups
@@ -416,8 +398,7 @@ def test_pat_groupindex(memory_leak_check):
 
 
 def test_pat_pattern(memory_leak_check):
-    """test Pattern.pattern
-    """
+    """test Pattern.pattern"""
 
     def test_impl(pat):
         return pat.pattern
@@ -429,8 +410,7 @@ def test_pat_pattern(memory_leak_check):
 
 
 def test_match_expand(memory_leak_check):
-    """test Match.expand()
-    """
+    """test Match.expand()"""
 
     def test_impl(m):
         return m.expand(r"\1 WW \2")
@@ -443,8 +423,7 @@ def test_match_expand(memory_leak_check):
 
 
 def test_match_group(memory_leak_check):
-    """test Match.group(), the output is a string or tuple of strings
-    """
+    """test Match.group(), the output is a string or tuple of strings"""
 
     def test_impl_zero(m):
         return m.group()
@@ -468,8 +447,7 @@ def test_match_group(memory_leak_check):
 
 
 def test_match_getitem(memory_leak_check):
-    """test Match[g], which is shortcut for Match.group(g)
-    """
+    """test Match[g], which is shortcut for Match.group(g)"""
 
     def test_impl(m, a):
         return m[a]
@@ -495,8 +473,7 @@ def test_match_groups(memory_leak_check):
 
 
 def test_match_groupdict(memory_leak_check):
-    """test Match.groupdict(), which returns a dictionary of named groups
-    """
+    """test Match.groupdict(), which returns a dictionary of named groups"""
 
     def test_impl(m):
         return m.groupdict()
@@ -508,8 +485,7 @@ def test_match_groupdict(memory_leak_check):
 
 
 def test_match_start(memory_leak_check):
-    """test Match.start()
-    """
+    """test Match.start()"""
 
     def test_impl(m, g):
         return m.start(g)
@@ -521,8 +497,7 @@ def test_match_start(memory_leak_check):
 
 
 def test_match_end(memory_leak_check):
-    """test Match.end()
-    """
+    """test Match.end()"""
 
     def test_impl(m, g):
         return m.end(g)
@@ -534,8 +509,7 @@ def test_match_end(memory_leak_check):
 
 
 def test_match_span(memory_leak_check):
-    """test Match.span()
-    """
+    """test Match.span()"""
 
     def test_impl(m, g):
         return m.span(g)
@@ -547,8 +521,7 @@ def test_match_span(memory_leak_check):
 
 
 def test_match_pos(memory_leak_check):
-    """test Match.pos attribute
-    """
+    """test Match.pos attribute"""
 
     def test_impl(m):
         return m.pos
@@ -560,8 +533,7 @@ def test_match_pos(memory_leak_check):
 
 
 def test_match_endpos(memory_leak_check):
-    """test Match.endpos attribute
-    """
+    """test Match.endpos attribute"""
 
     def test_impl(m):
         return m.endpos
@@ -573,8 +545,7 @@ def test_match_endpos(memory_leak_check):
 
 
 def test_match_lastindex(memory_leak_check):
-    """test Match.lastindex attribute
-    """
+    """test Match.lastindex attribute"""
 
     def test_impl(m):
         return m.lastindex
@@ -586,8 +557,7 @@ def test_match_lastindex(memory_leak_check):
 
 
 def test_match_lastgroup(memory_leak_check):
-    """test Match.lastgroup attribute
-    """
+    """test Match.lastgroup attribute"""
 
     def test_impl(m):
         return m.lastgroup
@@ -599,8 +569,7 @@ def test_match_lastgroup(memory_leak_check):
 
 
 def test_match_re(memory_leak_check):
-    """test Match.re attribute
-    """
+    """test Match.re attribute"""
 
     def test_impl(m):
         return m.re
@@ -612,8 +581,7 @@ def test_match_re(memory_leak_check):
 
 
 def test_match_string(memory_leak_check):
-    """test Match.string attribute
-    """
+    """test Match.string attribute"""
 
     def test_impl(m):
         return m.string
@@ -895,8 +863,7 @@ class TestString(unittest.TestCase):
         pd.testing.assert_series_equal(bodo_func(), test_impl(), check_dtype=False)
 
     def test_unicode_decode_2byte_kind(self):
-        """Test decoding element from string array in UTF8 to 2-byte kind Unicode
-        """
+        """Test decoding element from string array in UTF8 to 2-byte kind Unicode"""
 
         def test_impl(A):
             return bodo.libs.str_arr_ext.get_utf8_size(A[0])

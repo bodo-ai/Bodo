@@ -1,9 +1,8 @@
 #!/usr/bin/env python
-import subprocess
-import sys
 import os
 import shutil
-
+import subprocess
+import sys
 
 list_test_files = []
 
@@ -15,6 +14,7 @@ for e_file in content_dir:
 
 # Now treating the files one by one.
 
+
 def get_func_text(e_file):
     f = open(e_file, "r")
     list_lines = f.readlines()
@@ -23,6 +23,7 @@ def get_func_text(e_file):
     for e_line in list_lines:
         func_text += e_line
     return func_text
+
 
 def get_variable_expression(func_text, var_name):
     loc_vars = {}
@@ -37,7 +38,7 @@ for e_file in list_test_files:
     shutil.copy(e_test_file, TmpFile)
     list_command_args = [sys.executable, "./obfuscate.py", "file", TmpFile]
     returncode = subprocess.run(list_command_args).returncode
-    if returncode!=0:
+    if returncode != 0:
         print("obfuscate.py code failed, returncode=", returncode)
         exit(0)
     # Reading the python programs
@@ -52,7 +53,7 @@ for e_file in list_test_files:
     # Loading the data
     l_split = e_file.split("_")
     prefix = l_split[0]
-    input_file = os.path.join(complete_dir, 'input' + prefix[4:])
+    input_file = os.path.join(complete_dir, "input" + prefix[4:])
     data_text = get_func_text(input_file)
     kwargs = get_variable_expression(data_text, "data")
     # Running them

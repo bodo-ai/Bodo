@@ -1,23 +1,25 @@
 """Utility functions for testing such as check_func() that tests a function.
 """
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
-import os
 import glob
-import pandas as pd
-import numpy as np
+import os
 import random
 import string
-import numba
-from decimal import Decimal
-from numba.core.untyped_passes import PreserveIR
-from numba.core.typed_passes import NopythonRewrites
-import bodo
-from numba.core import types
-from bodo.utils.typing import BodoWarning
-import warnings
 import time
+import warnings
+from decimal import Decimal
+
+import numba
+import numpy as np
+import pandas as pd
 from mpi4py import MPI
-from bodo.utils.utils import is_distributable_typ, is_distributable_tuple_typ
+from numba.core import types
+from numba.core.typed_passes import NopythonRewrites
+from numba.core.untyped_passes import PreserveIR
+
+import bodo
+from bodo.utils.typing import BodoWarning
+from bodo.utils.utils import is_distributable_tuple_typ, is_distributable_typ
 
 
 def count_array_REPs():
@@ -565,7 +567,12 @@ def _test_equal(
             _test_equal(b, p, sort_output, check_names, check_dtype)
     elif isinstance(py_out, dict):
         _test_equal_struct(
-            bodo_out, py_out, sort_output, check_names, check_dtype, reset_index,
+            bodo_out,
+            py_out,
+            sort_output,
+            check_names,
+            check_dtype,
+            reset_index,
         )
     else:
         assert bodo_out == py_out
@@ -585,7 +592,12 @@ def _test_equal_struct(
     assert py_out.keys() == bodo_out.keys()
     for py_field, bodo_field in zip(py_out, bodo_out):
         _test_equal(
-            bodo_field, py_field, sort_output, check_names, check_dtype, reset_index,
+            bodo_field,
+            py_field,
+            sort_output,
+            check_names,
+            check_dtype,
+            reset_index,
         )
 
 
@@ -608,7 +620,12 @@ def _test_equal_struct_array(
             assert pd.isna(bodo_val)
             continue
         _test_equal_struct(
-            bodo_val, py_val, sort_output, check_names, check_dtype, reset_index,
+            bodo_val,
+            py_val,
+            sort_output,
+            check_names,
+            check_dtype,
+            reset_index,
         )
 
 
