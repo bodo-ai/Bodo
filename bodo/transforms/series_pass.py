@@ -44,6 +44,7 @@ from bodo.hiframes.datetime_timedelta_ext import (
     datetime_timedelta_type,
 )
 from bodo.hiframes.pd_categorical_ext import CategoricalArray
+from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.hiframes.pd_index_ext import (
     DatetimeIndexType,
     NumericIndexType,
@@ -238,6 +239,17 @@ class SeriesPass:
                         out_nodes = self.dataframe_pass._run_setitem(inst)
                         if out_nodes is None:
                             out_nodes = self._run_setitem(inst)
+                    # raise error if df.columns is still in the IR at this point, since
+                    # typing pass should have replaced it, unless if new column names
+                    # are not constant
+                    elif (
+                        isinstance(inst, ir.SetAttr)
+                        and isinstance(self.typemap[inst.target.name], DataFrameType)
+                        and inst.attr == "columns"
+                    ):
+                        raise BodoError(
+                            "DataFrame.columns: new column names should be a constant list"
+                        )
                 except BodoError as e:
                     raise BodoError(self.curr_loc.strformat() + "\n" + str(e))
 
