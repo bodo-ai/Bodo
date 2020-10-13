@@ -1,13 +1,13 @@
 """helper functions for code generation with llvmlite
 """
-from numba.core import types, cgutils
-import bodo
-from llvmlite import ir as lir
 import llvmlite.binding as ll
+from llvmlite import ir as lir
+from numba.core import cgutils, types
+
+import bodo
 
 # NOTE: importing hdist is necessary for MPI initialization before array_ext
-from bodo.libs import hdist
-from bodo.libs import array_ext
+from bodo.libs import array_ext, hdist  # isort:skip
 
 ll.add_symbol("array_getitem", array_ext.array_getitem)
 ll.add_symbol("seq_getitem", array_ext.seq_getitem)
@@ -19,8 +19,7 @@ ll.add_symbol("is_na_value", array_ext.is_na_value)
 
 
 def set_bitmap_bit(builder, null_bitmap_ptr, ind, val):
-    """set bit number 'ind' of bitmap array 'null_bitmap_ptr' to val
-    """
+    """set bit number 'ind' of bitmap array 'null_bitmap_ptr' to val"""
     byte_ind = builder.lshr(ind, lir.Constant(lir.IntType(64), 3))
     bit_ind = builder.urem(ind, lir.Constant(lir.IntType(64), 8))
     byte_ptr = builder.gep(null_bitmap_ptr, [byte_ind], inbounds=True)
@@ -45,8 +44,7 @@ def set_bitmap_bit(builder, null_bitmap_ptr, ind, val):
 
 
 def get_bitmap_bit(builder, null_bitmap_ptr, ind):
-    """get bit number 'ind' of bitmap array 'null_bitmap_ptr'
-    """
+    """get bit number 'ind' of bitmap array 'null_bitmap_ptr'"""
     # (null_bitmap[i / 8] & kBitmask[i % 8])
     byte_ind = builder.lshr(ind, lir.Constant(lir.IntType(64), 3))
     bit_ind = builder.urem(ind, lir.Constant(lir.IntType(64), 8))
@@ -64,8 +62,7 @@ def get_bitmap_bit(builder, null_bitmap_ptr, ind):
 
 
 def pyarray_getitem(builder, context, arr_obj, ind):
-    """getitem of 1D Numpy array
-    """
+    """getitem of 1D Numpy array"""
     pyobj = context.get_argument_type(types.pyobject)
     py_ssize_t = context.get_value_type(types.intp)
     arr_get_fnty = lir.FunctionType(lir.IntType(8).as_pointer(), [pyobj, py_ssize_t])
@@ -81,8 +78,7 @@ def pyarray_getitem(builder, context, arr_obj, ind):
 
 
 def pyarray_setitem(builder, context, arr_obj, ind, val_obj):
-    """setitem of 1D Numpy array
-    """
+    """setitem of 1D Numpy array"""
     pyobj = context.get_argument_type(types.pyobject)
     py_ssize_t = context.get_value_type(types.intp)
     arr_get_fnty = lir.FunctionType(lir.IntType(8).as_pointer(), [pyobj, py_ssize_t])
@@ -100,8 +96,7 @@ def pyarray_setitem(builder, context, arr_obj, ind, val_obj):
 
 
 def seq_getitem(builder, context, obj, ind):
-    """getitem for a sequence object (e.g. list/array)
-    """
+    """getitem for a sequence object (e.g. list/array)"""
     pyobj = context.get_argument_type(types.pyobject)
     py_ssize_t = context.get_value_type(types.intp)
     getitem_fnty = lir.FunctionType(pyobj, [pyobj, py_ssize_t])
@@ -122,8 +117,7 @@ def is_na_value(builder, context, val, C_NA):
 
 
 def list_check(builder, context, obj):
-    """check if Python object 'obj' is a list
-    """
+    """check if Python object 'obj' is a list"""
     pyobj = context.get_argument_type(types.pyobject)
     int32_type = context.get_value_type(types.int32)
     fnty = lir.FunctionType(int32_type, [pyobj])
@@ -132,8 +126,7 @@ def list_check(builder, context, obj):
 
 
 def dict_keys(builder, context, obj):
-    """call PyDict_Keys
-    """
+    """call PyDict_Keys"""
     pyobj = context.get_argument_type(types.pyobject)
     fnty = lir.FunctionType(pyobj, [pyobj])
     fn = builder.module.get_or_insert_function(fnty, name="dict_keys")
@@ -141,8 +134,7 @@ def dict_keys(builder, context, obj):
 
 
 def dict_values(builder, context, obj):
-    """call PyDict_Values
-    """
+    """call PyDict_Values"""
     pyobj = context.get_argument_type(types.pyobject)
     fnty = lir.FunctionType(pyobj, [pyobj])
     fn = builder.module.get_or_insert_function(fnty, name="dict_values")
@@ -150,8 +142,7 @@ def dict_values(builder, context, obj):
 
 
 def dict_merge_from_seq2(builder, context, dict_obj, seq2_obj):
-    """call PyDict_MergeFromSeq2()
-    """
+    """call PyDict_MergeFromSeq2()"""
     pyobj = context.get_argument_type(types.pyobject)
     fnty = lir.FunctionType(lir.VoidType(), [pyobj, pyobj])
     fn = builder.module.get_or_insert_function(fnty, name="dict_merge_from_seq2")
@@ -159,8 +150,7 @@ def dict_merge_from_seq2(builder, context, dict_obj, seq2_obj):
 
 
 def to_arr_obj_if_list_obj(c, context, builder, val, typ):
-    """convert object 'val' to array if it is a list to enable proper unboxing
-    """
+    """convert object 'val' to array if it is a list to enable proper unboxing"""
     if not (isinstance(typ, types.List) or bodo.utils.utils.is_array_typ(typ, False)):
         return val
 
@@ -203,9 +193,9 @@ def get_array_elem_counts(c, builder, context, arr_obj, typ):
     returns (4, 5, 10).
     """
     from bodo.libs.array_item_arr_ext import ArrayItemArrayType
-    from bodo.libs.struct_arr_ext import StructArrayType, StructType
     from bodo.libs.map_arr_ext import MapArrayType
-    from bodo.libs.str_arr_ext import string_array_type, get_utf8_size
+    from bodo.libs.str_arr_ext import get_utf8_size, string_array_type
+    from bodo.libs.struct_arr_ext import StructArrayType, StructType
 
     # get utf8 character count for strings
     if typ == bodo.string_type:

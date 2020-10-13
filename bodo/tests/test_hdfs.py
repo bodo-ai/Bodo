@@ -1,9 +1,15 @@
 # Copyright (C) 2019 Bodo Inc.
-import pytest
-import pandas as pd
 import numpy as np
+import pandas as pd
+import pytest
+
 import bodo
-from bodo.tests.utils import check_func, _get_dist_arg, _test_equal_guard, reduce_sum
+from bodo.tests.utils import (
+    _get_dist_arg,
+    _test_equal_guard,
+    check_func,
+    reduce_sum,
+)
 
 pytestmark = pytest.mark.hdfs
 
@@ -325,7 +331,7 @@ def test_hdfs_json_write_records_lines_1D_var(hdfs_datapath, test_df):
 
 def test_hdfs_parquet_read_seq(hdfs_datapath, test_df):
     """
-    read_parquet 
+    read_parquet
     test the parquet file we just wrote sequentially
     """
 
@@ -339,7 +345,7 @@ def test_hdfs_parquet_read_seq(hdfs_datapath, test_df):
 
 def test_hdfs_parquet_read_1D(hdfs_datapath, test_df):
     """
-    read_parquet 
+    read_parquet
     test the parquet file we just wrote in 1D
     """
 
@@ -353,7 +359,7 @@ def test_hdfs_parquet_read_1D(hdfs_datapath, test_df):
 
 def test_hdfs_parquet_read_1D_var(hdfs_datapath, test_df):
     """
-    read_parquet 
+    read_parquet
     test the parquet file we just wrote in 1D Var
     """
 
@@ -367,7 +373,7 @@ def test_hdfs_parquet_read_1D_var(hdfs_datapath, test_df):
 
 def test_hdfs_csv_read_seq(hdfs_datapath, test_df):
     """
-    read_csv 
+    read_csv
     test the csv file we just wrote sequentially
     """
 
@@ -385,7 +391,7 @@ def test_hdfs_csv_read_seq(hdfs_datapath, test_df):
 
 def test_hdfs_csv_read_1D(hdfs_datapath, test_df):
     """
-    read_csv 
+    read_csv
     test the csv file we just wrote in 1D
     """
 
@@ -403,7 +409,7 @@ def test_hdfs_csv_read_1D(hdfs_datapath, test_df):
 
 def test_hdfs_csv_read_1D_var(hdfs_datapath, test_df):
     """
-    read_csv 
+    read_csv
     test the csv file we just wrote in 1D Var
     """
 
@@ -551,7 +557,11 @@ def test_hdfs_json_read_records_lines_seq(hdfs_datapath, test_df):
     """
 
     def test_read(hdfs_fname):
-        return pd.read_json(hdfs_fname, orient="records", lines=True,)
+        return pd.read_json(
+            hdfs_fname,
+            orient="records",
+            lines=True,
+        )
 
     def test_read_infer_dtype(hdfs_fname):
         return pd.read_json(
@@ -568,12 +578,16 @@ def test_hdfs_json_read_records_lines_seq(hdfs_datapath, test_df):
 
 def test_hdfs_json_read_records_lines_1D(hdfs_datapath, test_df):
     """
-    read_json(orient="records", lines=True) 
+    read_json(orient="records", lines=True)
     test the json file we just wrote in 1D
     """
 
     def test_read(hdfs_fname):
-        return pd.read_json(hdfs_fname, orient="records", lines=True,)
+        return pd.read_json(
+            hdfs_fname,
+            orient="records",
+            lines=True,
+        )
 
     def test_read_infer_dtype(hdfs_fname):
         return pd.read_json(
@@ -590,12 +604,16 @@ def test_hdfs_json_read_records_lines_1D(hdfs_datapath, test_df):
 
 def test_hdfs_json_read_records_lines_1D_var(hdfs_datapath, test_df):
     """
-    read_json(orient="records", lines=True) 
+    read_json(orient="records", lines=True)
     test the json file we just wrote in 1D Var
     """
 
     def test_read(hdfs_fname):
-        return pd.read_json(hdfs_fname, orient="records", lines=True,)
+        return pd.read_json(
+            hdfs_fname,
+            orient="records",
+            lines=True,
+        )
 
     def test_read_infer_dtype(hdfs_fname):
         return pd.read_json(

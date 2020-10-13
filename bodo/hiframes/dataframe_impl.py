@@ -2,62 +2,74 @@
 """
 Implementation of DataFrame attributes and methods using overload.
 """
-from collections import namedtuple
 import operator
+from collections import namedtuple
+
+import llvmlite.llvmpy.core as lc
+import numba
 import numpy as np
 import pandas as pd
-import numba
-from numba.core import types, cgutils
-from numba.extending import overload, overload_attribute, overload_method
-from numba.core.typing.templates import infer_global, AbstractTemplate
-from numba.core.typing import signature
+from numba.core import cgutils, ir, types
 from numba.core.imputils import (
-    impl_ret_new_ref,
-    impl_ret_borrowed,
-    iternext_impl,
     RefType,
+    impl_ret_borrowed,
+    impl_ret_new_ref,
+    iternext_impl,
+    lower_builtin,
 )
-from numba.core import ir
 from numba.core.ir_utils import mk_unique_var, next_label
-import bodo
-from bodo.hiframes.pd_dataframe_ext import DataFrameType, handle_inplace_df_type_change
-from bodo.hiframes.pd_series_ext import SeriesType, _get_series_array_type
-from bodo.utils.typing import (
-    is_overload_none,
-    is_overload_true,
-    is_overload_false,
-    is_overload_zero,
-    get_overload_const_str,
-    is_overload_constant_str,
-    is_overload_constant_bool,
-    BodoError,
-    scalar_to_array_type,
-    raise_bodo_error,
-    is_overload_constant_dict,
-    get_overload_constant_dict,
-    is_overload_constant_list,
-    get_overload_const_list,
-    unliteral_val,
-    get_overload_const_int,
-    check_unsupported_args,
-    parse_dtype,
+from numba.core.typing import signature
+from numba.core.typing.templates import AbstractTemplate, infer_global
+from numba.extending import (
+    models,
+    overload,
+    overload_attribute,
+    overload_method,
+    register_model,
 )
-from bodo.utils.transform import gen_const_tup
-from bodo.utils.utils import is_array_typ
-from bodo.libs.int_arr_ext import IntegerArrayType
-from bodo.libs.bool_arr_ext import boolean_array
+
+import bodo
+from bodo.hiframes.pd_dataframe_ext import (
+    DataFrameType,
+    handle_inplace_df_type_change,
+)
+from bodo.hiframes.pd_series_ext import (
+    SeriesType,
+    _get_series_array_type,
+    if_series_to_array_type,
+)
 from bodo.hiframes.pd_timestamp_ext import pandas_timestamp_type
-from numba.core.imputils import lower_builtin
-from bodo.hiframes.pd_series_ext import if_series_to_array_type
-from numba.extending import register_model, models
-import llvmlite.llvmpy.core as lc
 from bodo.libs.array import (
-    array_to_info,
     arr_info_list_to_table,
+    array_to_info,
+    delete_table,
     info_from_table,
     info_to_array,
-    delete_table,
 )
+from bodo.libs.bool_arr_ext import boolean_array
+from bodo.libs.int_arr_ext import IntegerArrayType
+from bodo.utils.transform import gen_const_tup
+from bodo.utils.typing import (
+    BodoError,
+    check_unsupported_args,
+    get_overload_const_int,
+    get_overload_const_list,
+    get_overload_const_str,
+    get_overload_constant_dict,
+    is_overload_constant_bool,
+    is_overload_constant_dict,
+    is_overload_constant_list,
+    is_overload_constant_str,
+    is_overload_false,
+    is_overload_none,
+    is_overload_true,
+    is_overload_zero,
+    parse_dtype,
+    raise_bodo_error,
+    scalar_to_array_type,
+    unliteral_val,
+)
+from bodo.utils.utils import is_array_typ
 
 
 @overload_attribute(DataFrameType, "index", inline="always")
@@ -203,30 +215,25 @@ def overload_dataframe_rename(
     # check unsupported arguments
     args_dict = {
         "index": index,
-        "axis" : axis,
-        "level" : level,
-        "mapper" : mapper,
+        "axis": axis,
+        "level": level,
+        "mapper": mapper,
     }
-    args_default_dict = {
-        "index": None,
-        "axis" : None,
-        "level": None,
-        "mapper": None
-    }
+    args_default_dict = {"index": None, "axis": None, "level": None, "mapper": None}
 
     check_unsupported_args("df.rename", args_dict, args_default_dict)
 
     if not (
-        is_overload_constant_str(errors)
-        and get_overload_const_str(errors) == "ignore"
+        is_overload_constant_str(errors) and get_overload_const_str(errors) == "ignore"
     ):
-        raise BodoError("df.rename(): 'error' keyword only supports default parameter values 'None' and 'ignore'")
+        raise BodoError(
+            "df.rename(): 'error' keyword only supports default parameter values 'None' and 'ignore'"
+        )
 
-    if not (
-        is_overload_constant_bool(inplace)
-    ):
-        raise BodoError("df.rename(): 'inplace' keyword only supports boolean constant assignment")
-
+    if not (is_overload_constant_bool(inplace)):
+        raise BodoError(
+            "df.rename(): 'inplace' keyword only supports boolean constant assignment"
+        )
 
     # columns should be constant dictionary
     if not is_overload_constant_dict(columns):
@@ -390,8 +397,10 @@ def overload_dataframe_isin(df, values):
     data = []
     for i in range(len(df.columns)):
         v_name = "data{}".format(i)
-        func_text += "  {} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {})\n".format(
-            v_name, i
+        func_text += (
+            "  {} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {})\n".format(
+                v_name, i
+            )
         )
         data.append(v_name)
 
@@ -641,8 +650,7 @@ def overload_dataframe_idxmin(df, axis=0, skipna=True):
 
 
 def _gen_reduce_impl(df, func_name, args=None, axis=None):
-    """generate implementation for dataframe reduction functions like min, max, sum, ...
-    """
+    """generate implementation for dataframe reduction functions like min, max, sum, ..."""
     args = "" if is_overload_none(args) else args
 
     # axis is 0 by default. Some reduce functions have None as the default value.
@@ -702,8 +710,7 @@ def _gen_reduce_impl(df, func_name, args=None, axis=None):
 
 
 def _gen_reduce_impl_axis0(func_name, out_colnames, comm_dtype, args):
-    """generate function body for dataframe reduction across rows
-    """
+    """generate function body for dataframe reduction across rows"""
     # XXX: use common type for min/max to avoid float for ints due to NaN
     # TODO: handle NaN for ints better
     typ_cast = ""
@@ -747,8 +754,7 @@ def _gen_reduce_impl_axis0(func_name, out_colnames, comm_dtype, args):
 
 
 def _gen_reduce_impl_axis1(func_name, out_colnames, comm_dtype, df_type):
-    """generate function body for dataframe reduction across columns
-    """
+    """generate function body for dataframe reduction across columns"""
     col_inds = [df_type.columns.index(c) for c in out_colnames]
     index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)"
     data_args = "\n    ".join(
@@ -894,7 +900,7 @@ def overload_dataframe_set_index(
 @overload_method(DataFrameType, "query", no_unliteral=True)
 def overload_dataframe_query(df, expr, inplace=False):
     """Support query only for the case where expr is a constant string and expr output
-    is a 1D boolean array. 
+    is a 1D boolean array.
     Refering to named index by name is not supported.
     Series.dt.* is not supported. issue #451
     """
@@ -997,8 +1003,10 @@ def _gen_init_df(header, columns, data_args, index=None, extra_globals=None):
     col_var = gen_const_tup(columns)
     data_args = "({}{})".format(data_args, "," if len(columns) == 1 else "")
 
-    func_text = "{}  return bodo.hiframes.pd_dataframe_ext.init_dataframe({}, {}, {})\n".format(
-        header, data_args, index, col_var
+    func_text = (
+        "{}  return bodo.hiframes.pd_dataframe_ext.init_dataframe({}, {}, {})\n".format(
+            header, data_args, index, col_var
+        )
     )
     loc_vars = {}
     _global = {"bodo": bodo, "np": np, "numba": numba}

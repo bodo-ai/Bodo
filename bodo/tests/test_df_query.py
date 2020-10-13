@@ -1,14 +1,13 @@
 # Copyright (C) 2019 Bodo Inc.
 """Test df.query()
 """
-import pandas as pd
 import numpy as np
+import pandas as pd
 import pytest
 
 import bodo
 from bodo.tests.utils import check_func
 from bodo.utils.typing import BodoError
-
 
 ##################### df.query() ###############################
 
@@ -31,8 +30,7 @@ from bodo.utils.typing import BodoError
 )
 # TODO: Add memory_leak_check after bug is resolved
 def test_df_query_unicode_expr(expr):
-    """Test DataFrame.query with unicode(non-constant) expr
-    """
+    """Test DataFrame.query with unicode(non-constant) expr"""
 
     def impl(df, expr, a):
         return df.query(expr)
@@ -51,8 +49,7 @@ def test_df_query_unicode_expr(expr):
 @pytest.mark.slow
 # TODO: Add memory_leak_check after bug is resolved
 def test_df_query_stringliteral_expr():
-    """Test DataFrame.query with StringLiteral(constant) expr
-    """
+    """Test DataFrame.query with StringLiteral(constant) expr"""
 
     def impl(df):
         return df.query("a > b")
@@ -64,8 +61,7 @@ def test_df_query_stringliteral_expr():
 
 @pytest.mark.slow
 def test_df_query_dt(memory_leak_check):
-    """Test DataFrame.query with Series.dt expression (#451)
-    """
+    """Test DataFrame.query with Series.dt expression (#451)"""
 
     def impl(df):
         return df.query("A.dt.year == 2012")
@@ -76,14 +72,16 @@ def test_df_query_dt(memory_leak_check):
 
 @pytest.mark.slow
 def test_df_query_bool_expr(memory_leak_check):
-    """Test DataFrame.query with boolean expressions (#453)
-    """
+    """Test DataFrame.query with boolean expressions (#453)"""
 
     def impl(df):
         return df.query("A | B")
 
     df = pd.DataFrame(
-        {"A": [True, False, True, False, True], "B": [False, True, True, False, False],}
+        {
+            "A": [True, False, True, False, True],
+            "B": [False, True, True, False, False],
+        }
     )
     check_func(impl, (df,))
 
@@ -107,11 +105,17 @@ def test_df_query_inplace_false(memory_leak_check):
 
     inplace = True
     df = pd.DataFrame({"A": [1, 2, 2], "B": [2, 2, 1]})
-    with pytest.raises(BodoError, match="inplace parameter only supports default value False"):
+    with pytest.raises(
+        BodoError, match="inplace parameter only supports default value False"
+    ):
         bodo.jit(impl1)(df)
-    with pytest.raises(BodoError, match="inplace parameter only supports default value False"):
+    with pytest.raises(
+        BodoError, match="inplace parameter only supports default value False"
+    ):
         bodo.jit(impl2)(df)
-    with pytest.raises(BodoError, match="inplace parameter only supports default value False"):
+    with pytest.raises(
+        BodoError, match="inplace parameter only supports default value False"
+    ):
         bodo.jit(impl3)(df, inplace)
 
 
@@ -266,7 +270,10 @@ def test_df_query_index_name(memory_leak_check):
 
     expr = "index_name<3"
     df = pd.DataFrame(
-        {"A": [True, False, True, False, True], "B": [False, True, True, False, False],}
+        {
+            "A": [True, False, True, False, True],
+            "B": [False, True, True, False, False],
+        }
     )
     df.index.name = "index_name"
 

@@ -1,8 +1,8 @@
-import sys
-import os
-import subprocess
-import re
 import json
+import os
+import re
+import subprocess
+import sys
 
 # first arg is the number of processes to run the tests with
 num_processes = int(sys.argv[1])
@@ -12,7 +12,7 @@ pytest_args = sys.argv[2:]
 # If in AWS Codebuild partition tests
 if "CODEBUILD_BUILD_ID" in os.environ:
     import buildscripts.aws.select_timing_from_logs
-    
+
     # Load the logfile for splitting tests
     result = subprocess.call(
         [

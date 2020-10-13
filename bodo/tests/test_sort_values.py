@@ -9,25 +9,29 @@
    would be eliminated.
 """
 
-import pandas as pd
-import numpy as np
-import bodo
+import os
 import random
 import string
-import pytest
 from decimal import Decimal
-from bodo.tests.utils import check_func, is_bool_object_series, gen_random_decimal_array
+
+import numpy as np
+import pandas as pd
+import pytest
+
+import bodo
 from bodo.tests.utils import (
+    check_func,
+    check_parallel_coherency,
     gen_random_arrow_array_struct_int,
     gen_random_arrow_array_struct_list_int,
+    gen_random_arrow_list_list_decimal,
     gen_random_arrow_list_list_int,
     gen_random_arrow_struct_struct,
+    gen_random_decimal_array,
     gen_random_list_string_array,
-    gen_random_arrow_list_list_decimal,
-    check_parallel_coherency,
+    is_bool_object_series,
 )
-from bodo.utils.typing import BodoWarning, BodoError
-import os
+from bodo.utils.typing import BodoError, BodoWarning
 
 
 @pytest.fixture(
@@ -994,8 +998,7 @@ def test_inplace_sort_values_series(memory_leak_check):
 
 
 def test_random_decimal(memory_leak_check):
-    """Sorting a random decimal
-    """
+    """Sorting a random decimal"""
 
     def f(df):
         return df.sort_values(by=["A"])

@@ -1,27 +1,26 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 """implementations of rolling window functions (sequential and parallel)
 """
+import numba
 import numpy as np
 import pandas as pd
-import bodo
-import numba
 from numba.core import types
-from numba.extending import lower_builtin, overload, register_jitable
 from numba.core.imputils import impl_ret_borrowed
+from numba.core.ir_utils import find_const, guard
 from numba.core.typing import signature
-from numba.core.typing.templates import infer_global, AbstractTemplate
-from numba.core.ir_utils import guard, find_const
+from numba.core.typing.templates import AbstractTemplate, infer_global
+from numba.extending import lower_builtin, overload, register_jitable
 
+import bodo
 from bodo.libs.distributed_api import Reduce_Type
-from bodo.utils.utils import unliteral_all
 from bodo.utils.typing import (
     BodoError,
-    get_overload_const_str,
-    is_overload_constant_str,
-    is_const_func_type,
     get_overload_const_func,
+    get_overload_const_str,
+    is_const_func_type,
+    is_overload_constant_str,
 )
-
+from bodo.utils.utils import unliteral_all
 
 supported_rolling_funcs = (
     "sum",
@@ -1017,8 +1016,7 @@ def pct_change_impl(in_arr, shift, parallel):  # pragma: no cover
 
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
 def get_first_non_na(arr):
-    """get first non-NA value of numeric array.
-    """
+    """get first non-NA value of numeric array."""
     # just return 0 for non-floats
     if isinstance(arr.dtype, (types.Integer, types.Boolean)):
         zero = arr.dtype(0)
@@ -1043,8 +1041,7 @@ def get_first_non_na(arr):
 
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
 def get_last_non_na(arr):
-    """get last non-NA value of numeric array.
-    """
+    """get last non-NA value of numeric array."""
     # just return 0 for non-floats
     if isinstance(arr.dtype, (types.Integer, types.Boolean)):
         zero = arr.dtype(0)

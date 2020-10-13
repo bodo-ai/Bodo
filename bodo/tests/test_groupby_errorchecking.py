@@ -1,11 +1,12 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
-import pandas as pd
-import numpy as np
-import bodo
 import datetime
-from bodo.utils.typing import BodoError
+
+import numpy as np
+import pandas as pd
 import pytest
 
+import bodo
+from bodo.utils.typing import BodoError
 
 # ------------------------------ df.groupby() ------------------------------ #
 
@@ -601,7 +602,7 @@ def test_groupby_datetimeoperation_checks(memory_leak_check):
 
 
 def test_groupby_unsupported_error_checking(memory_leak_check):
-    """ Test that a Bodo error is raised for unsupported
+    """Test that a Bodo error is raised for unsupported
     groupby methods
     """
 

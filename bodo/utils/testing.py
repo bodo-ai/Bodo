@@ -2,6 +2,7 @@
 import os
 import shutil
 from contextlib import contextmanager
+
 import bodo
 
 
@@ -17,8 +18,7 @@ def barrier():  # pragma: no cover
 
 @contextmanager
 def ensure_clean(filename):
-    """deletes filename if exists after test is done.
-    """
+    """deletes filename if exists after test is done."""
     try:
         yield
     finally:
@@ -38,8 +38,7 @@ def ensure_clean(filename):
 
 @contextmanager
 def ensure_clean_dir(dirname):
-    """deletes filename if exists after test is done.
-    """
+    """deletes filename if exists after test is done."""
     try:
         yield
     finally:

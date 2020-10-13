@@ -3,43 +3,42 @@
 helper data structures and functions for shuffle (alltoall).
 """
 
-from collections import namedtuple
 import os
-import numpy as np
+from collections import namedtuple
 
 import numba
+import numpy as np
 from numba import generated_jit
 from numba.core import types
 from numba.extending import overload
 
 import bodo
-from bodo.utils.utils import get_ctypes_ptr, numba_to_c_type, alloc_arr_tup
-from bodo.libs.timsort import getitem_arr_tup, setitem_arr_tup
-from bodo.libs.timsort import getitem_arr_tup
-from bodo.libs.str_ext import string_type
-from bodo.libs.str_arr_ext import (
-    string_array_type,
-    to_string_list,
-    get_offset_ptr,
-    get_data_ptr,
-    convert_len_arr_to_offset,
-    set_bit_to,
-    pre_alloc_string_array,
-    num_total_chars,
-    get_null_bitmap_ptr,
-    get_bit_bitmap,
-    print_str_arr,
-    get_str_arr_item_length,
-)
-from bodo.libs.int_arr_ext import IntegerArrayType
-from bodo.libs.bool_arr_ext import BooleanArrayType, boolean_array
 from bodo.libs.array import (
     arr_info_list_to_table,
     array_to_info,
-    info_to_array,
-    info_from_table,
     delete_table,
+    info_from_table,
+    info_to_array,
 )
+from bodo.libs.bool_arr_ext import BooleanArrayType, boolean_array
+from bodo.libs.int_arr_ext import IntegerArrayType
+from bodo.libs.str_arr_ext import (
+    convert_len_arr_to_offset,
+    get_bit_bitmap,
+    get_data_ptr,
+    get_null_bitmap_ptr,
+    get_offset_ptr,
+    get_str_arr_item_length,
+    num_total_chars,
+    pre_alloc_string_array,
+    print_str_arr,
+    set_bit_to,
+    string_array_type,
+    to_string_list,
+)
+from bodo.libs.str_ext import string_type
+from bodo.libs.timsort import getitem_arr_tup, setitem_arr_tup
+from bodo.utils.utils import alloc_arr_tup, get_ctypes_ptr, numba_to_c_type
 
 ########## metadata required for shuffle
 # send_counts -> pre, single
@@ -112,8 +111,8 @@ def alloc_pre_shuffle_metadata_overload(key_arrs, data, n_pes, is_contig):
             func_text += "  send_arr_lens_{} = np.empty(0, np.uint32)\n".format(i)
             # needs allocation since written in update before finalize
             func_text += "  if is_contig:\n"
-            func_text += "    send_arr_lens_{} = np.empty(len(arr), np.uint32)\n".format(
-                i
+            func_text += (
+                "    send_arr_lens_{} = np.empty(len(arr), np.uint32)\n".format(i)
             )
         else:
             func_text += "  send_counts_char_{} = None\n".format(i)
@@ -137,8 +136,10 @@ def alloc_pre_shuffle_metadata_overload(key_arrs, data, n_pes, is_contig):
     lens_tup = ", ".join("send_arr_lens_{}".format(i) for i in range(n_all))
     nulls_tup = ", ".join("send_arr_nulls_{}".format(i) for i in range(n_all))
     extra_comma = "," if n_all == 1 else ""
-    func_text += "  return PreShuffleMeta(send_counts, ({}{}), ({}{}), ({}{}))\n".format(
-        count_char_tup, extra_comma, lens_tup, extra_comma, nulls_tup, extra_comma
+    func_text += (
+        "  return PreShuffleMeta(send_counts, ({}{}), ({}{}), ({}{}))\n".format(
+            count_char_tup, extra_comma, lens_tup, extra_comma, nulls_tup, extra_comma
+        )
     )
 
     # print(func_text)
@@ -192,8 +193,8 @@ def update_shuffle_meta_overload(
                 )
                 func_text += "    print('large shuffle error')\n"
             func_text += "  if is_contig:\n"
-            func_text += "    pre_shuffle_meta.send_arr_lens_tup[{}][ind] = n_chars\n".format(
-                i
+            func_text += (
+                "    pre_shuffle_meta.send_arr_lens_tup[{}][ind] = n_chars\n".format(i)
             )
 
         if is_null_masked_type(typ):
@@ -286,8 +287,8 @@ def finalize_shuffle_meta_overload(
             ).format(i, i)
             # alloc output
             func_text += "  n_all_chars = recv_counts_char_{}.sum()\n".format(i)
-            func_text += "  out_arr_{} = pre_alloc_string_array(n_out, n_all_chars)\n".format(
-                i
+            func_text += (
+                "  out_arr_{} = pre_alloc_string_array(n_out, n_all_chars)\n".format(i)
             )
             # send/recv disp
             func_text += (
@@ -299,14 +300,16 @@ def finalize_shuffle_meta_overload(
 
             # tmp_offset_char, send_arr_lens
             func_text += "  tmp_offset_char_{} = np.zeros(n_pes, np.int32)\n".format(i)
-            func_text += "  send_arr_lens_{} = pre_shuffle_meta.send_arr_lens_tup[{}]\n".format(
-                i, i
+            func_text += (
+                "  send_arr_lens_{} = pre_shuffle_meta.send_arr_lens_tup[{}]\n".format(
+                    i, i
+                )
             )
             # send char arr
             # TODO: arr refcount if arr is not stored somewhere?
             func_text += "  send_arr_chars_arr_{} = np.empty(0, np.uint8)\n".format(i)
-            func_text += "  send_arr_chars_{} = get_ctypes_ptr(get_data_ptr(arr))\n".format(
-                i
+            func_text += (
+                "  send_arr_chars_{} = get_ctypes_ptr(get_data_ptr(arr))\n".format(i)
             )
             func_text += "  if not is_contig:\n"
             func_text += "    send_arr_lens_{} = np.empty(n_send, np.uint32)\n".format(
@@ -321,8 +324,8 @@ def finalize_shuffle_meta_overload(
             )
         else:
             assert isinstance(typ, (types.Array, IntegerArrayType, BooleanArrayType))
-            func_text += "  out_arr_{} = bodo.utils.utils.alloc_type(n_out, arr)\n".format(
-                i
+            func_text += (
+                "  out_arr_{} = bodo.utils.utils.alloc_type(n_out, arr)\n".format(i)
             )
             func_text += "  send_buff_{} = arr\n".format(i)
             func_text += "  if not is_contig:\n"
@@ -450,8 +453,8 @@ def alltoallv_tup_overload(arrs, meta, key_arrs):
             ).format(i, i)
         else:
             assert typ == string_array_type
-            func_text += "  offset_ptr_{} = get_offset_ptr(meta.out_arr_tup[{}])\n".format(
-                i, i
+            func_text += (
+                "  offset_ptr_{} = get_offset_ptr(meta.out_arr_tup[{}])\n".format(i, i)
             )
 
             func_text += (
@@ -468,8 +471,8 @@ def alltoallv_tup_overload(arrs, meta, key_arrs):
                 "meta.recv_disp_char_tup[{}].ctypes, char_typ_enum)\n"
             ).format(i, i, i, i, i, i)
 
-            func_text += "  convert_len_arr_to_offset(offset_ptr_{}, meta.n_out)\n".format(
-                i
+            func_text += (
+                "  convert_len_arr_to_offset(offset_ptr_{}, meta.n_out)\n".format(i)
             )
 
         if is_null_masked_type(typ):
@@ -551,8 +554,7 @@ def shuffle_with_index_impl(key_arrs, node_arr, data):  # pragma: no cover
 
 @generated_jit(nopython=True, cache=True)
 def shuffle_with_index(key_arrs, node_arr, data):
-    """shuffle the data but preserve index of data elements to reverse later
-    """
+    """shuffle the data but preserve index of data elements to reverse later"""
     return shuffle_with_index_impl
 
 

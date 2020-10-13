@@ -1756,7 +1756,7 @@ def test_merge_partial_distributed(memory_leak_check):
     """
 
     def test_impl(df1, df2):
-        df3 = df1.merge(df2, on="A", how='outer')
+        df3 = df1.merge(df2, on="A", how="outer")
         return df3
 
     np.random.seed(5)

@@ -2,11 +2,12 @@
 """
 Tests for pd.Index functionality
 """
-import pandas as pd
 import numpy as np
-import bodo
+import pandas as pd
 import pytest
-from bodo.tests.utils import check_func, AnalysisTestPipeline
+
+import bodo
+from bodo.tests.utils import AnalysisTestPipeline, check_func
 
 
 def test_range_index_constructor(memory_leak_check, is_slow_run):
@@ -62,9 +63,11 @@ def test_range_index_constructor(memory_leak_check, is_slow_run):
         pd.date_range(
             start="2018-04-24", end="2018-04-27", periods=3
         ),  # datetime range
-        pd.timedelta_range(start="1D", end="3D"), # deltatime range
+        pd.timedelta_range(start="1D", end="3D"),  # deltatime range
         pd.date_range(start="2018-04-10", end="2018-04-27", periods=3),
-        pd.date_range(start="2018-04-10", end="2018-04-27", periods=3).to_series(),  # deltatime series
+        pd.date_range(
+            start="2018-04-10", end="2018-04-27", periods=3
+        ).to_series(),  # deltatime series
     ],
 )
 def test_generic_index_constructor(data):
@@ -84,9 +87,10 @@ def test_generic_index_constructor(data):
     [
         (np.ones(3, dtype=np.int32), np.float64),
         (np.arange(10), np.dtype("datetime64[ns]")),
-        (pd.Series(["2020-9-1", "2019-10-11", "2018-1-4", "2015-8-3", "1990-11-21"]),
-            np.dtype("datetime64[ns]")
-         ),
+        (
+            pd.Series(["2020-9-1", "2019-10-11", "2018-1-4", "2015-8-3", "1990-11-21"]),
+            np.dtype("datetime64[ns]"),
+        ),
         (np.arange(10), np.dtype("timedelta64[ns]")),
         (pd.Series(np.arange(10)), np.dtype("timedelta64[ns]")),
     ],

@@ -66,10 +66,10 @@ For each type of the AST, we need to have a corresponding entry in the function.
 """
 
 import ast
-import astor
 import random
 import sys
 
+import astor
 
 list_reserved_keywords = {
     "False",
@@ -415,7 +415,7 @@ class Obfuscator(ast.NodeTransformer):
 
     # This is for treating the arguments to the function.
     def visit_arg(self, node):
-        node.arg =self.mapping_var(True, node.arg)
+        node.arg = self.mapping_var(True, node.arg)
         return node
 
     # The code is numba specific and that is bad.
@@ -507,7 +507,9 @@ def process_file(efile, stdoutput):
 
     if stdoutput:
         sys.stderr.write("------------------------------------------------\n")
-        sys.stderr.write("After preprocessing, the Abstract Syntax Tree : " + ast.dump(root) + "\n")
+        sys.stderr.write(
+            "After preprocessing, the Abstract Syntax Tree : " + ast.dump(root) + "\n"
+        )
         sys.stderr.write("------------------------------------------------\n")
         sys.stdout.write(astor.to_source(root))
     else:

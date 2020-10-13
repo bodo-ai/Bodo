@@ -2,45 +2,46 @@
 """
 Support for Series.dt attributes and methods
 """
-import operator
 import datetime
+import operator
+
+import numba
 import numpy as np
 import pandas as pd
-import numba
-from numba.core import types, cgutils
-from numba.extending import (
-    models,
-    register_model,
-    infer_getattr,
-    overload,
-    overload_method,
-    make_attribute_wrapper,
-    intrinsic,
-    overload_attribute,
-)
+from numba.core import cgutils, types
 from numba.core.typing.templates import (
-    infer_global,
     AbstractTemplate,
-    signature,
     AttributeTemplate,
     bound_function,
+    infer_global,
+    signature,
 )
+from numba.extending import (
+    infer_getattr,
+    intrinsic,
+    make_attribute_wrapper,
+    models,
+    overload,
+    overload_attribute,
+    overload_method,
+    register_model,
+)
+
 import bodo
 from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.hiframes.pd_timestamp_ext import (
-    pandas_timestamp_type,
     convert_datetime64_to_timestamp,
     integer_to_dt64,
+    pandas_timestamp_type,
 )
 from bodo.utils.typing import (
     BodoError,
-    raise_bodo_error,
+    create_unsupported_overload,
     is_list_like_index_type,
     is_overload_false,
     is_overload_true,
-    create_unsupported_overload,
+    raise_bodo_error,
 )
-
 
 # global dtypes to use in allocations throughout this file
 dt64_dtype = np.dtype("datetime64[ns]")
@@ -231,7 +232,9 @@ def series_dt_isocalendar_overload(S_dt):
             ) = bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(
                 arr[i]
             ).isocalendar()
-        return bodo.hiframes.pd_dataframe_ext.init_dataframe((years, weeks, days), index, ("year", "week", "day"))
+        return bodo.hiframes.pd_dataframe_ext.init_dataframe(
+            (years, weeks, days), index, ("year", "week", "day")
+        )
 
     return impl
 

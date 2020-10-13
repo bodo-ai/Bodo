@@ -2,62 +2,65 @@
 """
 Boxing and unboxing support for DataFrame, Series, etc.
 """
-import decimal
-import pandas as pd
-import numpy as np
 import datetime
-import warnings
-import numba
+import decimal
 import math
+import warnings
+
+import llvmlite.binding as ll
+import numba
+import numpy as np
+import pandas as pd
+from llvmlite import ir as lir
+from numba.core import cgutils, types
+from numba.core.typing import signature
 from numba.extending import (
-    typeof_impl,
-    unbox,
-    register_model,
-    models,
     NativeValue,
     box,
     intrinsic,
+    models,
+    register_model,
+    typeof_impl,
+    unbox,
 )
-from numba.core import types, cgutils
 from numba.np import numpy_support
-from numba.core.typing import signature
 from numba.typed.typeddict import Dict
 
 import bodo
+from bodo.hiframes.datetime_date_ext import (
+    datetime_date_array_type,
+    datetime_date_type,
+)
+from bodo.hiframes.datetime_timedelta_ext import (
+    datetime_timedelta_array_type,
+    datetime_timedelta_type,
+)
+from bodo.hiframes.pd_categorical_ext import PDCategoricalDtype
 from bodo.hiframes.pd_dataframe_ext import (
+    DataFramePayloadType,
     DataFrameType,
     construct_dataframe,
-    DataFramePayloadType,
 )
-from bodo.hiframes.datetime_date_ext import datetime_date_type, datetime_date_array_type
-from bodo.hiframes.datetime_timedelta_ext import (
-    datetime_timedelta_type,
-    datetime_timedelta_array_type,
-)
-from bodo.libs.str_ext import string_type
-from bodo.libs.str_arr_ext import string_array_type
-from bodo.libs.struct_arr_ext import StructArrayType, StructType
-from bodo.libs.array_item_arr_ext import ArrayItemArrayType
-from bodo.libs.map_arr_ext import MapArrayType
-from bodo.libs.int_arr_ext import typeof_pd_int_dtype
-from bodo.libs.decimal_arr_ext import Decimal128Type, DecimalArrayType
-from bodo.hiframes.pd_categorical_ext import PDCategoricalDtype
 from bodo.hiframes.pd_series_ext import SeriesType, _get_series_array_type
 from bodo.hiframes.split_impl import (
-    string_array_split_view_type,
     box_str_arr_split_view,
+    string_array_split_view_type,
 )
-from bodo.utils.typing import (
-    BodoWarning,
-    BodoError,
-    to_nullable_type,
-    is_overload_constant_int,
-    get_overload_const_int,
-)
-
 from bodo.libs import hstr_ext
-from llvmlite import ir as lir
-import llvmlite.binding as ll
+from bodo.libs.array_item_arr_ext import ArrayItemArrayType
+from bodo.libs.decimal_arr_ext import Decimal128Type, DecimalArrayType
+from bodo.libs.int_arr_ext import typeof_pd_int_dtype
+from bodo.libs.map_arr_ext import MapArrayType
+from bodo.libs.str_arr_ext import string_array_type
+from bodo.libs.str_ext import string_type
+from bodo.libs.struct_arr_ext import StructArrayType, StructType
+from bodo.utils.typing import (
+    BodoError,
+    BodoWarning,
+    get_overload_const_int,
+    is_overload_constant_int,
+    to_nullable_type,
+)
 
 ll.add_symbol("array_size", hstr_ext.array_size)
 ll.add_symbol("array_getptr1", hstr_ext.array_getptr1)
@@ -115,8 +118,7 @@ def unbox_dataframe(typ, val, c):
 
 
 def get_hiframes_dtypes(df):
-    """get hiframe data types for a pandas dataframe
-    """
+    """get hiframe data types for a pandas dataframe"""
     col_names = df.columns.tolist()
     # TODO: remove pd int dtype hack
     hi_typs = [
@@ -360,8 +362,7 @@ def _unbox_series_data(dtype, data_typ, arr_obj, c):
 
 @box(SeriesType)
 def box_series(typ, val, c):
-    """
-    """
+    """"""
     mod_name = c.context.insert_const_string(c.builder.module, "pandas")
     pd_class_obj = c.pyapi.import_module_noblock(mod_name)
     dtype = typ.dtype
@@ -511,8 +512,7 @@ def _infer_ndarray_obj_dtype(val):
 
 
 def _value_to_array(val):
-    """convert list or dict value to object array for typing purposes
-    """
+    """convert list or dict value to object array for typing purposes"""
     assert isinstance(val, (list, dict, Dict))
     if isinstance(val, (dict, Dict)):
         val = dict(val)
@@ -526,8 +526,7 @@ def _value_to_array(val):
 
 
 def _get_struct_value_arr_type(v):
-    """get data array type for a field value of a struct array
-    """
+    """get data array type for a field value of a struct array"""
     if isinstance(v, (dict, Dict)):
         return numba.typeof(_value_to_array(v))
 

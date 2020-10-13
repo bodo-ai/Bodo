@@ -8,6 +8,7 @@
 
 import argparse
 from itertools import product
+
 import yaml
 
 CI_BUILDSPEC_FILENAME = "buildspec.yml"
@@ -100,7 +101,11 @@ def generate_CI_buildspec(num_groups):
     pytest_options = [
         pytest_starting_marker + " and " + str(i) for i in range(num_groups)
     ]
-    env_vars = {"NP": [1, 2], "PYTEST_MARKER": pytest_options, "NUMBER_GROUPS_SPLIT": [num_groups]}
+    env_vars = {
+        "NP": [1, 2],
+        "PYTEST_MARKER": pytest_options,
+        "NUMBER_GROUPS_SPLIT": [num_groups],
+    }
     return construct_batch_field(env_vars, images)
 
 

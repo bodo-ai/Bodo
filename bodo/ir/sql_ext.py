@@ -5,41 +5,50 @@ We piggyback on the pandas implementation. Future plan is to have a faster
 version for this task.
 """
 from collections import defaultdict
+
 import numba
-from numba.core import typeinfer, ir, ir_utils, config, types, cgutils
-from bodo.hiframes.datetime_date_ext import datetime_date_array_type
-from numba.core.typing.templates import signature
-from numba.extending import overload, intrinsic, register_model, models, box
+import numpy as np
+import pandas as pd
+from numba.core import cgutils, config, ir, ir_utils, typeinfer, types
 from numba.core.ir_utils import (
-    visit_vars_inner,
-    replace_vars_inner,
     compile_to_numba_ir,
     replace_arg_nodes,
+    replace_vars_inner,
+    visit_vars_inner,
 )
-import bodo
-from bodo.transforms import distributed_pass, distributed_analysis
-from bodo.hiframes.datetime_date_ext import DatetimeDateType
-from bodo.utils.utils import debug_prints
-from bodo.transforms.distributed_analysis import Distribution
-from bodo.libs.str_ext import string_type
-from bodo.libs.str_arr_ext import string_array_type
-from bodo.libs.int_arr_ext import IntegerArrayType
-from bodo.libs.bool_arr_ext import boolean_array
-from bodo.libs.timsort import copyElement_tup, getitem_arr_tup
-from bodo.utils.utils import sanitize_varname
-from bodo.ir.csv_ext import _get_dtype_str
-from bodo.libs.distributed_api import bcast_scalar, bcast
-from bodo import objmode
-import pandas as pd
-import numpy as np
+from numba.core.typing.templates import signature
+from numba.extending import box, intrinsic, models, overload, register_model
 
+import bodo
+from bodo import objmode
+from bodo.hiframes.datetime_date_ext import (
+    DatetimeDateType,
+    datetime_date_array_type,
+)
+from bodo.ir.csv_ext import _get_dtype_str
+from bodo.libs.bool_arr_ext import boolean_array
+from bodo.libs.distributed_api import bcast, bcast_scalar
+from bodo.libs.int_arr_ext import IntegerArrayType
+from bodo.libs.str_arr_ext import string_array_type
+from bodo.libs.str_ext import string_type
+from bodo.libs.timsort import copyElement_tup, getitem_arr_tup
+from bodo.transforms import distributed_analysis, distributed_pass
+from bodo.transforms.distributed_analysis import Distribution
+from bodo.utils.utils import debug_prints, sanitize_varname
 
 MPI_ROOT = 0
 
 
 class SqlReader(ir.Stmt):
     def __init__(
-        self, sql_request, connection, df_out, df_colnames, out_vars, out_types, loc,
+        self,
+        sql_request,
+        connection,
+        df_out,
+        df_colnames,
+        out_vars,
+        out_types,
+        loc,
     ):
         self.connector_typ = "sql"
         self.sql_request = sql_request
@@ -107,7 +116,11 @@ def sql_distributed_run(
     sql_impl = loc_vars["sql_impl"]
 
     sql_reader_py = _gen_sql_reader_py(
-        sql_node.df_colnames, sql_node.out_types, typingctx, targetctx, parallel,
+        sql_node.df_colnames,
+        sql_node.out_types,
+        typingctx,
+        targetctx,
+        parallel,
     )
 
     f_block = compile_to_numba_ir(

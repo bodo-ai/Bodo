@@ -1,42 +1,45 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 import operator
-import numpy as np
+
 import numba
-from numba.core import types, cgutils
+import numpy as np
+from llvmlite import ir as lir
+from numba.core import cgutils, types
+from numba.core.typing import signature
 from numba.core.typing.templates import (
-    infer_global,
     AbstractTemplate,
     AttributeTemplate,
     bound_function,
+    infer_global,
 )
-from numba.core.typing import signature
-from llvmlite import ir as lir
 from numba.extending import (
-    register_model,
-    models,
-    infer_getattr,
     infer,
+    infer_getattr,
     intrinsic,
+    models,
     overload,
     overload_method,
+    register_model,
 )
+
+import bodo
+import bodo.io
 from bodo.libs.str_ext import (
+    std_str_to_unicode,
+    std_str_type,
     string_type,
     unicode_to_utf8,
-    std_str_type,
-    std_str_to_unicode,
 )
-import bodo
+from bodo.utils.typing import is_overload_none, parse_dtype
 from bodo.utils.utils import numba_to_c_type
-from bodo.utils.typing import parse_dtype, is_overload_none
-import bodo.io
 
 if bodo.config._has_h5py:
     import h5py
 
     assert h5py.version.hdf5_version_tuple[1] == 10, "only hdf5 1.10 supported"
-    from bodo.io import _hdf5
     import llvmlite.binding as ll
+
+    from bodo.io import _hdf5
 
     ll.add_symbol("h5_open", _hdf5.h5_open)
     ll.add_symbol("h5_open_dset_or_group_obj", _hdf5.h5_open_dset_or_group_obj)
@@ -126,8 +129,7 @@ def unify_h5_id(typingctx, tp=None):
 
 @intrinsic
 def cast_to_h5_dset(typingctx, tp=None):
-    """converts h5dataset_or_group_type to h5dataset_type
-    """
+    """converts h5dataset_or_group_type to h5dataset_type"""
     assert tp in (h5dataset_type, h5dataset_or_group_type)
 
     def codegen(context, builder, sig, args):

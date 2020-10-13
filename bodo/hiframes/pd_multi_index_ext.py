@@ -1,19 +1,20 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 """Support for MultiIndex type of Pandas
 """
-import pandas as pd
 import numba
-from numba.core import types, cgutils
+import pandas as pd
+from numba.core import cgutils, types
 from numba.extending import (
+    NativeValue,
+    box,
+    intrinsic,
+    make_attribute_wrapper,
     models,
     register_model,
-    make_attribute_wrapper,
-    box,
     typeof_impl,
     unbox,
-    NativeValue,
-    intrinsic,
 )
+
 from bodo.utils.typing import get_val_type_maybe_str_literal
 
 
@@ -21,8 +22,7 @@ from bodo.utils.typing import get_val_type_maybe_str_literal
 # the data into `levels` and `codes`
 # TODO: support factorizing similar to pd.core.algorithms._factorize_array
 class MultiIndexType(types.Type):
-    """type class for pd.MultiIndex object
-    """
+    """type class for pd.MultiIndex object"""
 
     def __init__(self, array_types, names_typ=None, name_typ=None):
         # NOTE: store array types instead of just dtypes since we currently store whole
@@ -163,8 +163,7 @@ def unbox_multi_index(typ, val, c):
 
 @intrinsic
 def init_multi_index(typingctx, data, names, name=None):
-    """Create a MultiIndex with provided data, names and name values.
-    """
+    """Create a MultiIndex with provided data, names and name values."""
     name = types.none if name is None else name
     # recreate Tuple type to make sure UniTuple is created if types are homogeneous
     # instead of regular Tuple

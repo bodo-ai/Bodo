@@ -8,69 +8,67 @@ For example: [{1: 2.1, 3: 1.1}, {5: -1.0}]
 [[{"key": 1, "value" 2.1}, {"key": 3, "value": 1.1}], [{"key": 5, "value": -1.0}]]
 """
 import operator
-import numpy as np
 from collections import namedtuple
-import numba
-import bodo
 
-from numba.core import types, cgutils
+import llvmlite.binding as ll
+import numba
+import numpy as np
+from llvmlite import ir as lir
+from numba.core import cgutils, types
+from numba.core.imputils import impl_ret_borrowed
 from numba.extending import (
-    typeof_impl,
-    type_callable,
-    models,
-    register_model,
     NativeValue,
-    make_attribute_wrapper,
-    lower_builtin,
     box,
-    unbox,
-    lower_getattr,
     intrinsic,
-    overload_method,
+    lower_builtin,
+    lower_getattr,
+    make_attribute_wrapper,
+    models,
     overload,
     overload_attribute,
+    overload_method,
+    register_model,
+    type_callable,
+    typeof_impl,
+    unbox,
 )
 from numba.parfors.array_analysis import ArrayAnalysis
-from numba.core.imputils import impl_ret_borrowed
 from numba.typed.typedobjectutils import _cast
 
+import bodo
+from bodo.hiframes.datetime_date_ext import datetime_date_type
 from bodo.libs.array_item_arr_ext import (
     ArrayItemArrayType,
     _get_array_item_arr_payload,
     offset_typ,
 )
 from bodo.libs.struct_arr_ext import StructArrayType, _get_struct_arr_payload
-from bodo.utils.typing import (
-    is_list_like_index_type,
-    BodoError,
-    get_overload_const_str,
-    get_overload_const_int,
-    is_overload_constant_str,
-    is_overload_constant_int,
-)
-from bodo.hiframes.datetime_date_ext import datetime_date_type
 from bodo.utils.cg_helpers import (
-    set_bitmap_bit,
+    dict_keys,
+    dict_merge_from_seq2,
+    dict_values,
+    gen_allocate_array,
+    get_array_elem_counts,
+    get_bitmap_bit,
+    is_na_value,
+    list_check,
     pyarray_getitem,
     pyarray_setitem,
-    list_check,
-    is_na_value,
-    get_bitmap_bit,
-    get_array_elem_counts,
     seq_getitem,
-    gen_allocate_array,
+    set_bitmap_bit,
     to_arr_obj_if_list_obj,
-    dict_keys,
-    dict_values,
-    dict_merge_from_seq2,
 )
-from llvmlite import ir as lir
-import llvmlite.binding as ll
+from bodo.utils.typing import (
+    BodoError,
+    get_overload_const_int,
+    get_overload_const_str,
+    is_list_like_index_type,
+    is_overload_constant_int,
+    is_overload_constant_str,
+)
 
 # NOTE: importing hdist is necessary for MPI initialization before array_ext
-from bodo.libs import hdist
-from bodo.libs import array_ext
-
+from bodo.libs import array_ext, hdist  # isort:skip
 
 ll.add_symbol("count_total_elems_list_array", array_ext.count_total_elems_list_array)
 ll.add_symbol("map_array_from_sequence", array_ext.map_array_from_sequence)
@@ -78,8 +76,7 @@ ll.add_symbol("np_array_from_map_array", array_ext.np_array_from_map_array)
 
 
 class MapArrayType(types.ArrayCompatible):
-    """Data type for arrays of maps
-    """
+    """Data type for arrays of maps"""
 
     def __init__(self, key_arr_type, value_arr_type):
         self.key_arr_type = key_arr_type
@@ -101,8 +98,7 @@ class MapArrayType(types.ArrayCompatible):
 
 
 def _get_map_arr_data_type(map_type):
-    """get array(struct) array data type for underlying data array of map type
-    """
+    """get array(struct) array data type for underlying data array of map type"""
     struct_arr_type = StructArrayType(
         (map_type.key_arr_type, map_type.value_arr_type), ("key", "value")
     )
@@ -135,7 +131,13 @@ def unbox_map_array(typ, val, c):
     # can be handled in C if key/value arrays are Numpy and in handled dtypes
     handle_in_c = all(
         isinstance(t, types.Array)
-        and t.dtype in (types.int64, types.float64, types.bool_, datetime_date_type,)
+        and t.dtype
+        in (
+            types.int64,
+            types.float64,
+            types.bool_,
+            datetime_date_type,
+        )
         for t in (typ.key_arr_type, typ.value_arr_type)
     )
 
@@ -318,8 +320,7 @@ def _unbox_map_array_generic(
 
 @box(MapArrayType)
 def box_map_arr(typ, val, c):
-    """box packed native representation of map array into python objects
-    """
+    """box packed native representation of map array into python objects"""
     map_array = c.context.make_helper(c.builder, typ, val)
     data_arr = map_array.data
 
@@ -517,8 +518,7 @@ def _box_map_array_generic(
 
 @intrinsic
 def init_map_arr(typingctx, data_typ=None):
-    """create a new map array from input data list(struct) array data
-    """
+    """create a new map array from input data list(struct) array data"""
     assert isinstance(data_typ, ArrayItemArrayType) and isinstance(
         data_typ.dtype, StructArrayType
     )

@@ -1,6 +1,5 @@
-import sys
 import re
-
+import sys
 
 getting_started_intro = """
 This section provides a short tutorial that covers the basics of using
@@ -25,10 +24,10 @@ def is_section_header(l):
 
 
 def process_html_block(l, infile, outfile):
-    """ Process `.. raw:: html` blocks in the rst file. This must be called
-        when such a block is reached. It will then check if the block contains
-        <div class="alert alert-block .../> blocks that are used in the notebook
-        and substitute them with the equivalent native rst ones """
+    """Process `.. raw:: html` blocks in the rst file. This must be called
+    when such a block is reached. It will then check if the block contains
+    <div class="alert alert-block .../> blocks that are used in the notebook
+    and substitute them with the equivalent native rst ones"""
     block = []
     assert l.startswith(".. raw:: html")
     block.append(l)
@@ -62,11 +61,11 @@ def process_html_block(l, infile, outfile):
 
 
 def process(infile_name, outfile_name):
-    """ Process the rst file generated with nbconvert to do:
-        - minor content adjustment to beginning
-        - remove "Environment setup" sections
-        - Remove %%px magic lines from code blocks
-        - Substitute colored warning/note/etc boxes with native rst ones that sphinx recognizes
+    """Process the rst file generated with nbconvert to do:
+    - minor content adjustment to beginning
+    - remove "Environment setup" sections
+    - Remove %%px magic lines from code blocks
+    - Substitute colored warning/note/etc boxes with native rst ones that sphinx recognizes
     """
     infile = open(infile_name, "r")
     outfile = open(outfile_name, "w")

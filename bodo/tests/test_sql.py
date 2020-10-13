@@ -1,19 +1,20 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
-from bodo.hiframes.datetime_date_ext import datetime_date_array_type
-import pymysql
-import pandas as pd
-
 import operator
-import pandas as pd
-import numpy as np
 import random
-import pytest
 
 import numba
+import numpy as np
+import pandas as pd
+import pymysql
+import pytest
+
 import bodo
+from bodo.hiframes.datetime_date_ext import datetime_date_array_type
 from bodo.tests.utils import check_func, get_start_end
 
-sql_user_pass_and_hostname = "user:pass@localhost"
+sql_user_pass_and_hostname = (
+    "user:pass@localhost"
+)
 
 
 def test_write_sql_aws(memory_leak_check):
@@ -121,8 +122,7 @@ def test_read_sql_hardcoded_twocol_aws(memory_leak_check):
 
 
 def test_sql_argument_passing(memory_leak_check):
-    """Test passing SQL query and connection as arguments
-    """
+    """Test passing SQL query and connection as arguments"""
 
     def test_impl_arg_passing(sql_request, conn):
         df = pd.read_sql(sql_request, conn)
