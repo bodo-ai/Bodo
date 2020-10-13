@@ -331,7 +331,22 @@ class DataFramePass:
                 # arguments for contains() are reversed in operator
                 if func_def.value == operator.contains:
                     rhs.args = [rhs.args[1], rhs.args[0]]
-                rhs = ir.Expr.binop(func_def.value, rhs.args[0], rhs.args[1], rhs.loc)
+                # inplace binop case
+                if (
+                    func_def.value
+                    in numba.core.utils.INPLACE_BINOPS_TO_OPERATORS.values()
+                ):
+                    # get non-inplace version to pass to inplace_binop()
+                    op_str = numba.core.utils.OPERATORS_TO_BUILTINS[func_def.value]
+                    assert op_str.endswith("=")
+                    immuop = numba.core.utils.BINOPS_TO_OPERATORS[op_str[:-1]]
+                    rhs = ir.Expr.inplace_binop(
+                        func_def.value, immuop, rhs.args[0], rhs.args[1], rhs.loc
+                    )
+                else:
+                    rhs = ir.Expr.binop(
+                        func_def.value, rhs.args[0], rhs.args[1], rhs.loc
+                    )
                 self.calltypes[rhs] = old_calltype
                 assign.value = rhs
                 return self._run_binop(assign, rhs)
