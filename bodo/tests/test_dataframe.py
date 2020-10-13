@@ -2559,6 +2559,33 @@ def test_set_df_column_names(memory_leak_check):
         bodo.jit(impl4)(df, ["a", "b", "c"])
 
 
+def test_set_df_index(memory_leak_check):
+    """test setting dataframe index using df.index"""
+
+    def impl1(df):
+        df.index = ["AA", "BB", "CC", "DD"]
+        return df
+
+    def impl2(df):
+        df.index = pd.Int64Index([3, 1, 2, 0])
+        return df
+
+    # type instability due to control flow
+    def impl3(df, flag):
+        if flag:
+            df.index = ["AA", "BB", "CC", "DD"]
+        return df
+
+    df = pd.DataFrame({"A": [1.0, 2.0, np.nan, 1.0], "B": [1.2, np.nan, 1.1, 3.1]})
+    check_func(impl1, (df,), copy_input=True, dist_test=False)
+    check_func(impl2, (df,), copy_input=True, dist_test=False)
+    with pytest.raises(
+        BodoError,
+        match="DataFrame.index: setting dataframe index inside conditionals and loops not supported yet",
+    ):
+        bodo.jit(impl3)(df, True)
+
+
 def test_df_multi_schema_change(memory_leak_check):
     """Test multiple df schema changes while also calling other Bodo functions.
     Makes sure global state variables in typing pass are saved properly and are not

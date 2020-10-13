@@ -430,17 +430,9 @@ class TypingTransforms:
                     )
 
                 # check control flow error
-                cfg = compute_cfg_from_blocks(self.func_ir.blocks)
                 df_var = inst.target
-                df_def = guard(get_definition, self.func_ir, df_var)
-                dominates = (
-                    df_def in self.rhs_labels
-                    and label in cfg.post_dominators()[self.rhs_labels[df_def]]
-                )
-                if not dominates:
-                    raise BodoError(
-                        "DataFrame.columns: setting dataframe column names inside conditionals and loops not supported yet"
-                    )
+                err_msg = "DataFrame.columns: setting dataframe column names"
+                self._error_on_df_control_flow(df_var, label, err_msg)
 
                 # create output df
                 self.changed = True
@@ -453,6 +445,39 @@ class TypingTransforms:
                     header, columns, data_outs
                 )
                 nodes = compile_func_single_block(impl, [df_var], None, self)
+                self.replace_var_dict[df_var.name] = nodes[-1].target
+                return nodes
+
+            # transform df.index = new_index
+            # creates a new dataframe and replaces the old variable, only possible if
+            # df.index dominates the df creation due to type stability
+            if inst.attr == "index":
+
+                # check control flow error
+                df_var = inst.target
+                err_msg = "DataFrame.index: setting dataframe index"
+                self._error_on_df_control_flow(df_var, label, err_msg)
+
+                # create output df
+                self.changed = True
+                data_outs = ", ".join(
+                    f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i})"
+                    for i in range(len(target_typ.columns))
+                )
+                header = "def impl(df, new_index):\n"
+                # convert to Index type if necessary
+                if bodo.hiframes.pd_index_ext.is_index_type(
+                    self.typemap.get(inst.value.name, None)
+                ):
+                    index = "new_index"
+                else:
+                    index = "bodo.utils.conversion.index_from_array(bodo.utils.conversion.coerce_to_array(new_index, scalar_to_arr_len=len(df)))"
+                impl = bodo.hiframes.dataframe_impl._gen_init_df(
+                    header, target_typ.columns, data_outs, index
+                )
+                nodes = compile_func_single_block(
+                    impl, [df_var, inst.value], None, self
+                )
                 self.replace_var_dict[df_var.name] = nodes[-1].target
                 return nodes
 
@@ -846,6 +871,19 @@ class TypingTransforms:
             )
 
         return nodes
+
+    def _error_on_df_control_flow(self, df_var, label, err_msg):
+        """raise BodoError if 'label' does not dominate definition of 'df_var'"""
+        cfg = compute_cfg_from_blocks(self.func_ir.blocks)
+        df_def = guard(get_definition, self.func_ir, df_var)
+        dominates = (
+            df_def in self.rhs_labels
+            and label in cfg.post_dominators()[self.rhs_labels[df_def]]
+        )
+        if not dominates:
+            raise BodoError(
+                err_msg + " inside conditionals and loops not supported yet"
+            )
 
     def _replace_vars(self, inst):
         # variable replacement can affect definitions so handling assignment
