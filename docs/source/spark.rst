@@ -33,7 +33,7 @@ which are supported by Bodo.
   * - :meth:`pyspark.sql.DataFrame.cov`
     - ``df[['A', 'B']].cov()``
   * - :meth:`pyspark.sql.DataFrame.crossJoin`
-    - ``df1.join(df2, how="outer")``
+    - ``df1.assign(key=1).merge(df2.assign(key=1), on="key").drop("key", axis=1)``
   * - :meth:`pyspark.sql.DataFrame.describe`
     - ``df.describe()``
   * - :meth:`pyspark.sql.DataFrame.distinct`
