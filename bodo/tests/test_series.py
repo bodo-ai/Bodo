@@ -340,7 +340,7 @@ def test_series_notna(series_val, memory_leak_check):
 
 def test_series_notnull(series_val, memory_leak_check):
     def test_impl(S):
-        return S.notna()
+        return S.notnull()
 
     # categories to be handled separately
     if isinstance(series_val.dtype, pd.CategoricalDtype):
