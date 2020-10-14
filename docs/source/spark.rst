@@ -18,12 +18,10 @@ which are supported by Bodo.
 
   * - Pyspark Method
     - Python Equivalent
-  * - :meth:`pyspark.sql.DataFrame.agg`
-    - ``df.groupby("col").agg("type")``
   * - :meth:`pyspark.sql.DataFrame.alias`
     - ``alias = df``
   * - :meth:`pyspark.sql.DataFrame.approxQuantile`
-    - ``df[['A', 'B', 'C']].quantile(q, axis=1)``
+    - ``df[['A', 'B', 'C']].quantile(q)``
   * - :attr:`pyspark.sql.DataFrame.columns`
     - ``df.columns``
   * - :meth:`pyspark.sql.DataFrame.corr`
@@ -39,7 +37,7 @@ which are supported by Bodo.
   * - :meth:`pyspark.sql.DataFrame.distinct`
     - ``df.distinct()``
   * - :meth:`pyspark.sql.DataFrame.drop`
-    - ``df.loc[:, df.columns != 'A']``
+    - ``df.drop(col, axis=1)``
   * - :meth:`pyspark.sql.DataFrame.dropDuplicates`
     - ``df.drop_duplicates()``
   * - :meth:`pyspark.sql.DataFrame.drop_duplicates`
