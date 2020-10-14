@@ -23,6 +23,7 @@ Welcome to Bodo Development's documentation!
    source/release_checklist
    source/cpp_err_handling
    source/aws_codebuild
+   source/customer_faq
 
 
 Indices and tables
