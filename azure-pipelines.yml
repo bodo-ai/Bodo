@@ -20,14 +20,6 @@ jobs:
         CONDA_ENV: 'bodo'
         PYTEST_MARKER: not slow
         NP: 1
-      py37_np2_firsthalf:
-        CONDA_ENV: 'bodo'
-        PYTEST_MARKER: not slow and firsthalf
-        NP: 2
-      py37_np2_secondhalf:
-        CONDA_ENV: 'bodo'
-        PYTEST_MARKER: not slow and not firsthalf
-        NP: 2
 
 - template: buildscripts/azure/azure-test-build-windows.yml
   parameters:
