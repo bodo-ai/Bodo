@@ -8,6 +8,72 @@ orders of magnitude performance improvement, as well as simplicity and maintaina
 Spark APIs are usually equivalent to simpler Python/Pandas APIs, which are automatically parallelized by Bodo.
 
 
+pyspark.sql.DataFrame
+~~~~~~~~~~~~~~~~~~~~~
+The table below is a reference of Spark DataFrame methods and their equivalents in Python, 
+which are supported by Bodo.
+
+.. list-table::
+  :header-rows: 1
+
+  * - Pyspark Method
+    - Python Equivalent
+  * - :meth:`pyspark.sql.DataFrame.agg`
+    - ``df.groupby("col").agg("type")``
+  * - :meth:`pyspark.sql.DataFrame.alias`
+    - ``alias = df``
+  * - :meth:`pyspark.sql.DataFrame.approxQuantile`
+    - ``df[['A', 'B', 'C']].quantile(q, axis=1)``
+  * - :attr:`pyspark.sql.DataFrame.columns`
+    - ``df.columns``
+  * - :meth:`pyspark.sql.DataFrame.corr`
+    - ``df[['A', 'B']].corr()``
+  * - :meth:`pyspark.sql.DataFrame.count`
+    - ``df.count()``
+  * - :meth:`pyspark.sql.DataFrame.cov`
+    - ``df[['A', 'B']].cov()``
+  * - :meth:`pyspark.sql.DataFrame.crossJoin`
+    - ``df1.assign(key=1).merge(df2.assign(key=1), on="key").drop("key", axis=1)``
+  * - :meth:`pyspark.sql.DataFrame.describe`
+    - ``df.describe()``
+  * - :meth:`pyspark.sql.DataFrame.distinct`
+    - ``df.distinct()``
+  * - :meth:`pyspark.sql.DataFrame.drop`
+    - ``df.loc[:, df.columns != 'A']``
+  * - :meth:`pyspark.sql.DataFrame.dropDuplicates`
+    - ``df.drop_duplicates()``
+  * - :meth:`pyspark.sql.DataFrame.drop_duplicates`
+    - ``df.drop_duplicates()``
+  * - :meth:`pyspark.sql.DataFrame.dropna`
+    - ``df.dropna()``
+  * - :meth:`pyspark.sql.DataFrame.fillna`
+    - ``df.fillna(value)``
+  * - :meth:`pyspark.sql.DataFrame.filter`
+    - ``df[cond]``
+  * - :meth:`pyspark.sql.DataFrame.first`
+    - ``df.head(1)``
+  * - :meth:`pyspark.sql.DataFrame.foreach`
+    - ``df.apply(f, axis=1)``
+  * - :meth:`pyspark.sql.DataFrame.groupBy`
+    - ``df.groupby("col")``
+  * - :meth:`pyspark.sql.DataFrame.groupby`
+    - ``df.groupby("col")``
+  * - :meth:`pyspark.sql.DataFrame.head`
+    - ``df.head(n)``
+  * - :meth:`pyspark.sql.DataFrame.intersect`
+    - ``pd.merge(df1[['col1', 'col2']].drop_duplicates(), df2[['col1', 'col2']].drop_duplicates(), on =['col1', 'col2'])``
+  * - :meth:`pyspark.sql.DataFrame.intersectAll`
+    - ``pd.merge(df1[['col1', 'col2']], df2[['col1', 'col2']].drop_duplicates(), on =['col1', 'col2'])``
+  * - :meth:`pyspark.sql.DataFrame.join`
+    - ``df1.join(df2)``
+  * - :meth:`pyspark.sql.DataFrame.orderBy`
+    - ``df.sort_values('colname')``
+  * - :meth:`pyspark.sql.DataFrame.show`
+    - ``print(df.head(n))``
+  * - :meth:`pyspark.sql.DataFrame.sort`
+    - ``df.sort_values('colname')``
+
+
 pyspark.sql.functions
 ~~~~~~~~~~~~~~~~~~~~~
 
