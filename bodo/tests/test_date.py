@@ -260,6 +260,36 @@ def test_datetime_datetime_constant_lowering(memory_leak_check):
     assert val_ret == ts
 
 
+def test_datetime_date_hash(memory_leak_check):
+    date1 = datetime.date(2004, 1, 1)
+    date2 = datetime.date(2004, 1, 2)
+    date3 = datetime.date(2004, 1, 1)
+
+    def impl(date1, date2, date3):
+        d = dict()
+        d[date1] = 1
+        d[date2] = 2
+        d[date3] = 3
+        return d
+
+    check_func(impl, (date1, date2, date3), dist_test=False)
+
+
+def test_datetime_timedelta_hash(memory_leak_check):
+    td1 = datetime.timedelta(1)
+    td2 = datetime.timedelta(2)
+    td3 = datetime.timedelta(1)
+
+    def impl(td1, td2, td3):
+        d = dict()
+        d[td1] = 1
+        d[td2] = 2
+        d[td3] = 3
+        return d
+
+    check_func(impl, (td1, td2, td3), dist_test=False)
+
+
 def test_timestamp_constant_lowering(memory_leak_check):
     t = pd.Timestamp("2012-06-18")
 

@@ -220,6 +220,16 @@ def total_seconds(td):
     return impl
 
 
+@overload_method(DatetimeTimeDeltaType, "__hash__", no_unliteral=True)
+def __hash__(td):
+    """Hashcode for datetimed.timedelta types. Copies the CPython implementation"""
+
+    def impl(td):  # pragma: no cover
+        return hash((td._days, td._seconds, td._microseconds))
+
+    return impl
+
+
 @register_jitable
 def _to_nanoseconds(td):  # pragma: no cover
     return np.int64(

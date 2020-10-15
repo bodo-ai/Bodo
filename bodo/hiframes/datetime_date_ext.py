@@ -584,6 +584,21 @@ def date_max(lhs, rhs):
         return impl
 
 
+@overload_method(DatetimeDateType, "__hash__", no_unliteral=True)
+def __hash__(td):
+    """Hashcode for datetime.date types. Copies the CPython implementation"""
+
+    def impl(td):  # pragma: no cover
+        yhi = (np.uint8)(td.year // 256)
+        ylo = (np.uint8)(td.year % 256)
+        month = (np.uint8)(td.month)
+        day = (np.uint8)(td.day)
+        state = (yhi, ylo, month, day)
+        return hash(state)
+
+    return impl
+
+
 ##################### Array of datetime.date objects ##########################
 
 
