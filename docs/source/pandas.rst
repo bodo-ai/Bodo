@@ -91,6 +91,31 @@ The following table can be used to select the necessary Bodo Type based upon the
   * - ``bodo.MapArrayType(key_arr_type, value_arr_type)``
     - | Array of Python dictionaries with the given key and value array types. 
       | e.g. ``bodo.MapArrayType(bodo.uint16[:], bodo.string_array_type)``
+  * - ``bodo.DatetimeIndexType(name_type)``
+    - | Index of datetime64 values with a given name type.
+      | e.g. ``bodo.DatetimeIndexType(bodo.string_type)``
+  * - ``bodo.NumericIndexType(data_type, name_type)``
+    - | Index of pd.Int64, pd.Uint64, or Float64 objects,
+        based upon the given data_type and name type.
+      | e.g. ``bodo.NumericIndexType(bodo.float64, bodo.string_type)``
+  * - ``bodo.PeriodIndexType(freq, name_type)``
+    - | pd.PeriodIndex with a given frequency and name type.
+      | e.g. ``bodo.PeriodIndexType('A', bodo.string_type)`` 
+  * - ``bodo.RangeIndexType(name_type)``
+    - | RangeIndex with a given name type.
+      | e.g. ``bodo.RangeIndexType(bodo.string_type)``  
+  * - ``bodo.StringIndexType(name_type)``
+    - | Index of strings with a given name type.
+      | e.g. ``bodo.StringIndexType(bodo.string_type)``
+  * - ``bodo.TimedeltaIndexType(name_type)``
+    - | Index of timedelta64 values with a given name type.
+      | e.g. ``bodo.TimedeltaIndexType(bodo.string_type)``
+  * - ``bodo.SeriesType(dtype=data_type, index=index_type, name_typ=name_type)``
+    - | Series with a given data type, index type, and name type.
+      | e.g. ``bodo.SeriesType(bodo.float32, bodo.DatetimeIndexType(bodo.string_type), bodo.string_type)``
+  * - ``bodo.DataFrameType(data_types_tuple, index_type, column_names)``
+    - | DataFrame with a tuple of data types, an index type, and the names of the columns.
+      | e.g. ``bodo.DataFrameType((bodo.int64[::1], bodo.float64[::1]), bodo.RangeIndexType(bodo.none), ("A", "B"))``
 
   
 
