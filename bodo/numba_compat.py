@@ -1403,11 +1403,33 @@ numba.core.caching._CacheImpl.__init__ = CacheImpl__init__
 # get_shape throws GuardException which is wrong.
 # Numba 0.48 exposed this error with test_linear_regression since array analysis is
 # more restrictive and assumes more variables as redefined
-def _analyze_broadcast(self, scope, equiv_set, loc, args):
+def _analyze_broadcast(self, scope, equiv_set, loc, args, fn):
     """Infer shape equivalence of arguments based on Numpy broadcast rules
     and return shape of output
     https://docs.scipy.org/doc/numpy/user/basics.broadcasting.html
     """
+    tups = list(filter(lambda a: self._istuple(a.name), args))
+    # Here we have a tuple concatenation.
+    if len(tups) == 2 and fn.__name__ == "add":
+        # If either of the tuples is empty then the resulting shape
+        # is just the other tuple.
+        tup0typ = self.typemap[tups[0].name]
+        tup1typ = self.typemap[tups[1].name]
+        if tup0typ.count == 0:
+            return (equiv_set.get_shape(tups[1]), [])
+        if tup1typ.count == 0:
+            return (equiv_set.get_shape(tups[0]), [])
+
+        try:
+            shapes = [equiv_set.get_shape(x) for x in tups]
+            if None in shapes:
+                return None
+            concat_shapes = sum(shapes, ())
+            return (concat_shapes, [])
+        except GuardException:
+            return None
+
+    # else arrays
     arrs = list(filter(lambda a: self._isarray(a.name), args))
     require(len(arrs) > 0)
     names = [x.name for x in arrs]
@@ -1428,7 +1450,7 @@ def _analyze_broadcast(self, scope, equiv_set, loc, args):
 lines = inspect.getsource(numba.parfors.array_analysis.ArrayAnalysis._analyze_broadcast)
 if (
     hashlib.sha256(lines.encode()).hexdigest()
-    != "7dd54560e6af49661182672532f711e3eb643b99a12ed847b0ed580ffe60f702"
+    != "98f8942836d8430b4496dbc284f6919300485d11fa6600c4c92627cca998bbb7"
 ):  # pragma: no cover
     warnings.warn(
         "numba.parfors.array_analysis.ArrayAnalysis._analyze_broadcast has changed"
