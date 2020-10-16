@@ -13,4 +13,4 @@ conda install -c https://${USERNAME}:${TOKEN}@bodo.jfrog.io/artifactory/api/cond
 # ------ Run Tests -----------
 git clone https://github.com/Bodo-inc/engine-e2e-tests.git $ENGINE_E2E_TESTS
 cd $ENGINE_E2E_TESTS
-pytest
+pytest -s -v --durations=0
