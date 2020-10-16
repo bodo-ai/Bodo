@@ -16,7 +16,7 @@ from numba.core import cgutils, types
 from numba.core.imputils import lower_builtin
 from numba.core.typing import signature
 from numba.core.typing.templates import AbstractTemplate, infer_global
-from numba.extending import overload
+from numba.extending import overload, register_jitable
 from numba.np.arrayobj import make_array
 from numba.np.numpy_support import as_dtype
 from numba.parfors.array_analysis import ArrayAnalysis
@@ -1788,10 +1788,8 @@ def repeat_scalar_kernel_overload(A, repeats):
             l = len(A)
             num_chars = 0
             for i in range(l):
-                s = 0
                 if not (bodo.libs.array_kernels.isna(A, i)):
-                    s = get_str_arr_item_length(A, i)
-                num_chars += s * repeats
+                    num_chars += get_str_arr_item_length(A, i) * repeats
 
             out_arr = pre_alloc_string_array(l * repeats, num_chars)
             for j in range(l):
@@ -1851,3 +1849,114 @@ def np_unique(A):
         return bodo.libs.array_kernels.unique(A)
 
     return impl
+
+
+@overload(np.union1d, inline="always", no_unliteral=True)
+def overload_union1d(A1, A2):
+    if not bodo.utils.utils.is_array_typ(
+        A1, False
+    ) or not bodo.utils.utils.is_array_typ(
+        A2, False
+    ):  # pragma: no cover
+        return
+
+    # TODO(Nick): Fix this to be proper typechecking.
+    # For example Union(IntArray(32) and IntArray(64)) should be ok
+    if A1 != A2:  # pragma: no cover
+        raise BodoError("Both arrays must be the same type in np.union1d()")
+
+    def impl(A1, A2):  # pragma: no cover
+        merged_array = bodo.libs.array_kernels.concat([A1, A2])
+        unique_array = bodo.libs.array_kernels.unique(merged_array)
+        return pd.Series(unique_array).sort_values().values
+
+    return impl
+
+
+# TODO(Nick): Add support for a parallel implementation
+@overload(np.intersect1d, inline="always", no_unliteral=True)
+def overload_intersect1d(A1, A2, assume_unique=False, return_indices=False):
+    if not bodo.utils.utils.is_array_typ(
+        A1, False
+    ) or not bodo.utils.utils.is_array_typ(
+        A2, False
+    ):  # pragma: no cover
+        return
+
+    args_dict = {
+        "assume_unique": assume_unique,
+        "return_indices": return_indices,
+    }
+    args_default_dict = {
+        "assume_unique": False,
+        "return_indices": False,
+    }
+    check_unsupported_args("np.intersect1d", args_dict, args_default_dict)
+
+    # TODO(Nick): Fix this to be proper typechecking.
+    # For example Intersect(IntArray(32) and IntArray(64)) should be ok
+    if A1 != A2:  # pragma: no cover
+        raise BodoError("Both arrays must be the same type in np.intersect1d()")
+    if A1.ndim != 1 or A2.ndim != 1:
+        raise BodoError("Only 1D arrays supported in np.intersect1d()")
+
+    def impl(A1, A2, assume_unique=False, return_indices=False):  # pragma: no cover
+        unique_A1 = bodo.libs.array_kernels.unique(A1)
+        unique_A2 = bodo.libs.array_kernels.unique(A2)
+        merged_array = bodo.libs.array_kernels.concat([unique_A1, unique_A2])
+        sorted_array = pd.Series(merged_array).sort_values().values
+        # Compare each element to the element in front of it. Duplicates means
+        # that element is in both A1 and A2
+        # TODO(Nick): check for nulls (errors in numpy due to equality)
+        return slice_array_intersect1d(sorted_array)
+
+    return impl
+
+
+@register_jitable
+def slice_array_intersect1d(arr):  # pragma: no cover
+    mask = arr[1:] == arr[:-1]
+    return arr[:-1][mask]
+
+
+@overload(np.setdiff1d, inline="always", no_unliteral=True)
+def overload_setdiff1d(A1, A2, assume_unique=False):
+    if not bodo.utils.utils.is_array_typ(
+        A1, False
+    ) or not bodo.utils.utils.is_array_typ(
+        A2, False
+    ):  # pragma: no cover
+        return
+
+    args_dict = {
+        "assume_unique": assume_unique,
+    }
+    args_default_dict = {
+        "assume_unique": False,
+    }
+    check_unsupported_args("np.setdiff1d", args_dict, args_default_dict)
+
+    # TODO(Nick): Fix this to be proper typechecking.
+    # For example Intersect(IntArray(32) and IntArray(64)) should be ok
+    if A1 != A2:  # pragma: no cover
+        raise BodoError("Both arrays must be the same type in np.setdiff1d()")
+    if A1.ndim != 1 or A2.ndim != 1:
+        raise BodoError("Only 1D arrays supported in np.setdiff1d()")
+
+    def impl(A1, A2, assume_unique=False):  # pragma: no cover
+        unique_A1 = bodo.libs.array_kernels.unique(A1)
+        unique_A2 = bodo.libs.array_kernels.unique(A2)
+        # TODO(Nick): Add a sorting option to match numpy, which
+        # only does the sequential search if a heuristic is met.
+        mask = calculate_mask_setdiff1d(unique_A1, unique_A2)
+        return pd.Series(unique_A1[mask]).sort_values().values
+
+    return impl
+
+
+@register_jitable
+def calculate_mask_setdiff1d(A1, A2):  # pragma: no cover
+    mask = np.ones(len(A1), np.bool_)
+    for i in range(len(A2)):
+        mask &= A1 != A2[i]
+    return mask

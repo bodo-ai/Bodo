@@ -107,6 +107,10 @@ and parallelize.
     * :func:`numpy.sort`
     * :func:`numpy.unique`
     * :func:`numpy.where` (1 and 3 arguments)
+    * :func:`numpy.union1d`
+    * :func:`numpy.intersect1d` (no distributed support yet)
+    * :func:`numpy.setdiff1d` (no distributed support yet)
+
 
 #. Random number generator functions:
 
