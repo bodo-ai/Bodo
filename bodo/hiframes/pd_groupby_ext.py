@@ -234,7 +234,7 @@ class GroupbyTyper(AbstractTemplate):
         for k in keys:
             selection.remove(k)
 
-        if isinstance(as_index, bodo.utils.typing.BooleanLiteral):
+        if is_overload_constant_bool(as_index):
             as_index = is_overload_true(as_index)
         else:
             # XXX as_index type is just bool when value not passed. Therefore,

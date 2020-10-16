@@ -772,9 +772,9 @@ def set_df_column_with_reflect(typingctx, df, cname, arr, inplace=None):
     """Set df column and reflect to parent Python object
     return a new df.
     """
-    assert isinstance(inplace, bodo.utils.typing.BooleanLiteral)
-    is_inplace = inplace.literal_value
-    col_name = cname.literal_value
+    assert is_overload_constant_bool(inplace) and is_overload_constant_str(cname)
+    is_inplace = is_overload_true(inplace)
+    col_name = get_overload_const_str(cname)
     n_cols = len(df.columns)
     new_n_cols = n_cols
     data_typs = df.data
