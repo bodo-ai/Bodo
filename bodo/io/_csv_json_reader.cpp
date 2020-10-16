@@ -1183,7 +1183,7 @@ void balance_rows(MemReader *reader) {
 
     // get total number of rows in global dataset
     int64_t total_rows =
-        std::accumulate(num_rows_ranks.begin(), num_rows_ranks.end(), 0);
+        std::accumulate(num_rows_ranks.begin(), num_rows_ranks.end(), int64_t(0));
 
     // by default don't send or receive anything. this is changed below as
     // needed

@@ -798,9 +798,9 @@ array_info *compute_ghost_rows(array_info *arr, uint64_t const &level_next) {
             if (idx_recv_next != -1) ListNextSizes.push_back(V[idx_recv_next]);
         }
         size_t sumprev =
-            std::accumulate(ListPrevSizes.begin(), ListPrevSizes.end(), 0);
+            std::accumulate(ListPrevSizes.begin(), ListPrevSizes.end(), size_t(0));
         size_t sumnext =
-            std::accumulate(ListNextSizes.begin(), ListNextSizes.end(), 0);
+            std::accumulate(ListNextSizes.begin(), ListNextSizes.end(), size_t(0));
         bool test_final;
         // If myrank - k > 0 we can continue.
         // If myrank + k < n_pes - 1 we can continue
@@ -821,7 +821,7 @@ array_info *compute_ghost_rows(array_info *arr, uint64_t const &level_next) {
     int64_t n_next = ListNextSizes.size();
     int64_t n_prev = ListPrevSizes.size();
     size_t sumnext =
-        std::accumulate(ListNextSizes.begin(), ListNextSizes.end(), 0);
+        std::accumulate(ListNextSizes.begin(), ListNextSizes.end(), size_t(0));
     uint64_t ghost_length = std::min(sumnext, size_t(level_next));
     array_info *ghost_arr = alloc_numpy(ghost_length, arr->dtype);
     uint64_t siztype = numpy_item_size[arr->dtype];
