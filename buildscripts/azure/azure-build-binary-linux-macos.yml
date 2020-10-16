@@ -118,7 +118,6 @@ jobs:
     displayName: 'publish bodo binary to Artifactory'
 
   - task: ArchiveFiles@2
-    condition: eq('${{ parameters.platformBuild }}', 'false')
     inputs:
       rootFolderOrFile: '$(System.DefaultWorkingDirectory)/bodo-inc'
       includeRootFolder: false
@@ -127,7 +126,6 @@ jobs:
     displayName: "Archive file containing the conda subchannel"
 
   - task: PublishBuildArtifacts@1
-    condition: eq('${{ parameters.platformBuild }}', 'false')
     inputs:
       pathtoPublish: $(Build.ArtifactStagingDirectory)/${{ parameters.name }}-bodo-inc-$(suffix).zip
       artifactName: bodo-inc
