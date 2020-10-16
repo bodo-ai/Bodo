@@ -1875,14 +1875,26 @@ def register_class_type(cls, spec, class_ctor, builder, **options):
     class_ctor: the numba type to represent the jitclass
     builder: the internal jitclass builder
     """
+    import typing as pt
+
+    from numba.core.typing.asnumbatype import as_numba_type
+
     import bodo
 
     # Bodo change: get distribution spec
     dist_spec = _get_dist_spec_from_options(spec, **options)
 
     # Normalize spec
-    if isinstance(spec, Sequence):
+    if spec is None:
+        spec = OrderedDict()
+    elif isinstance(spec, Sequence):
         spec = OrderedDict(spec)
+
+    # Extend spec with class annotations.
+    for attr, py_type in pt.get_type_hints(cls).items():
+        if attr not in spec:
+            spec[attr] = as_numba_type(py_type)
+
     jitclass_base._validate_spec(spec)
 
     # Fix up private attribute names
@@ -1959,6 +1971,7 @@ def register_class_type(cls, spec, class_ctor, builder, **options):
     # Register class
     targetctx = numba.core.registry.cpu_target.target_context
     builder(class_type, typingctx, targetctx).register()
+    as_numba_type.register(cls, class_type.instance_type)
 
     return cls
 
@@ -1966,7 +1979,7 @@ def register_class_type(cls, spec, class_ctor, builder, **options):
 lines = inspect.getsource(jitclass_base.register_class_type)
 if (
     hashlib.sha256(lines.encode()).hexdigest()
-    != "fb8a626bd1a548b6c905f5c281c12cf2ba431b740698de0c0f68997fa5676dea"
+    != "005e6e2e89a47f77a19ba86305565050d4dbc2412fc4717395adf2da348671a9"
 ):  # pragma: no cover
     warnings.warn("jitclass_base.register_class_type has changed")
 
@@ -2013,23 +2026,71 @@ if (
 types.misc.ClassType.__init__ = ClassType__init__
 
 
-# redefine jitclass decorator with our own register_class_type() and options
-def jitclass(spec, **options):
+# redefine jitclass decorator with our own register_class_type() and add '**options'
+def jitclass(cls_or_spec=None, spec=None, **options):
     """
-    A decorator for creating a jitclass.
+    A function for creating a jitclass.
+    Can be used as a decorator or function.
 
-    **arguments**:
+    Different use cases will cause different arguments to be set.
 
-    - spec:
-        Specifies the types of each field on this class.
-        Must be a dictionary or a sequence.
-        With a dictionary, use collections.OrderedDict for stable ordering.
-        With a sequence, it must contain 2-tuples of (fieldname, fieldtype).
+    If specified, ``spec`` gives the types of class fields.
+    It must be a dictionary or sequence.
+    With a dictionary, use collections.OrderedDict for stable ordering.
+    With a sequence, it must contain 2-tuples of (fieldname, fieldtype).
 
-    **returns**:
+    Any class annotations for field names not listed in spec will be added.
+    For class annotation `x: T` we will append ``("x", as_numba_type(T))`` to
+    the spec if ``x`` is not already a key in spec.
 
-    A callable that takes a class object, which will be compiled.
+
+    Examples
+    --------
+
+    1) ``cls_or_spec = None``, ``spec = None``
+
+    >>> @jitclass()
+    ... class Foo:
+    ...     ...
+
+    2) ``cls_or_spec = None``, ``spec = spec``
+
+    >>> @jitclass(spec=spec)
+    ... class Foo:
+    ...     ...
+
+    3) ``cls_or_spec = Foo``, ``spec = None``
+
+    >>> @jitclass
+    ... class Foo:
+    ...     ...
+
+    4) ``cls_or_spec = spec``, ``spec = None``
+    In this case we update ``cls_or_spec, spec = None, cls_or_spec``.
+
+    >>> @jitclass(spec)
+    ... class Foo:
+    ...     ...
+
+    5) ``cls_or_spec = Foo``, ``spec = spec``
+
+    >>> JitFoo = jitclass(Foo, spec)
+
+    Returns
+    -------
+    If used as a decorator, returns a callable that takes a class object and
+    returns a compiled version.
+    If used as a function, returns the compiled class (an instance of
+    ``JitClassType``).
     """
+
+    if cls_or_spec is not None and spec is None and not isinstance(cls_or_spec, type):
+        # Used like
+        # @jitclass([("x", intp)])
+        # class Foo:
+        #     ...
+        spec = cls_or_spec
+        cls_or_spec = None
 
     def wrap(cls):
         if numba.core.config.DISABLE_JIT:
@@ -2039,13 +2100,16 @@ def jitclass(spec, **options):
                 cls, spec, types.ClassType, jitclass_base.ClassBuilder, **options
             )
 
-    return wrap
+    if cls_or_spec is None:
+        return wrap
+    else:
+        return wrap(cls_or_spec)
 
 
 lines = inspect.getsource(jitclass_decorators.jitclass)
 if (
     hashlib.sha256(lines.encode()).hexdigest()
-    != "6c08a057e8b03754d713e55736b354323ad3816fbdb41767882e064012e2c0ab"
+    != "f6ad843b4d553d18f6f0028fa231e38b7861f23533d7f3a8274a18fc17423d9e"
 ):  # pragma: no cover
     warnings.warn("jitclass_decorators.jitclass has changed")
 
