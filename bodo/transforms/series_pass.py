@@ -1396,6 +1396,7 @@ class SeriesPass:
             )
 
         if fdef == ("Series", "pandas"):
+
             arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
             kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
 

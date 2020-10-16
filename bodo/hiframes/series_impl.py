@@ -12,6 +12,7 @@ from numba.core.typing.templates import AbstractTemplate, infer_global
 from numba.extending import overload, overload_attribute, overload_method
 
 import bodo
+from bodo.hiframes.pd_categorical_ext import CategoricalArray
 from bodo.hiframes.pd_series_ext import SeriesType, if_series_to_array_type
 from bodo.libs.array import (
     arr_info_list_to_table,
@@ -1682,6 +1683,46 @@ def overload_series_replace(
     merge_defaults = dict(inplace=False, limit=None, regex=False, method="pad")
     check_unsupported_args("series.replace", unsupported_args, merge_defaults)
 
+    ret_dtype = S.data
+
+    # TODO: replace with an array builder so we can avoid preprocessing
+    if ret_dtype == string_array_type:
+
+        def impl_str(
+            S,
+            to_replace=None,
+            value=None,
+            inplace=False,
+            limit=None,
+            regex=False,
+            method="pad",
+        ):  # pragma: no cover
+            in_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+            index = bodo.hiframes.pd_series_ext.get_series_index(S)
+            name = bodo.hiframes.pd_series_ext.get_series_name(S)
+            n = len(in_arr)
+            replace_dict = build_replace_dict(to_replace, value)
+            num_chars = 0
+            for i in numba.parfors.parfor.internal_prange(n):
+                if bodo.libs.array_kernels.isna(in_arr, i):
+                    continue
+                s1 = in_arr[i]
+                if s1 in replace_dict:
+                    s1 = replace_dict[s1]
+                num_chars += bodo.libs.str_arr_ext.get_utf8_size(s1)
+            out_arr = pre_alloc_string_array(n, num_chars)
+            for i in numba.parfors.parfor.internal_prange(n):
+                if bodo.libs.array_kernels.isna(in_arr, i):
+                    bodo.libs.array_kernels.setna(out_arr, i)
+                    continue
+                s2 = in_arr[i]
+                if s2 in replace_dict:
+                    s2 = replace_dict[s2]
+                out_arr[i] = s2
+            return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
+
+        return impl_str
+
     def impl(
         S,
         to_replace=None,
@@ -1696,13 +1737,12 @@ def overload_series_replace(
         index = bodo.hiframes.pd_series_ext.get_series_index(S)
         name = bodo.hiframes.pd_series_ext.get_series_name(S)
         n = len(in_arr)
-        out_arr = np.empty(n, in_arr.dtype)
+        out_arr = bodo.utils.utils.alloc_type(n, ret_dtype, None)
         replace_dict = build_replace_dict(to_replace, value)
         for i in numba.parfors.parfor.internal_prange(n):
             if bodo.libs.array_kernels.isna(in_arr, i):
-                if bodo.libs.array_kernels.isna(in_arr, i):
-                    bodo.libs.array_kernels.setna(out_arr, i)
-                    continue
+                bodo.libs.array_kernels.setna(out_arr, i)
+                continue
             s = in_arr[i]
             if s in replace_dict:
                 s = replace_dict[s]
@@ -1724,7 +1764,7 @@ def _build_replace_dict(to_replace, value):
 
     # Scalar case
     # TODO: replace with something that captures all scalars
-    if isinstance(to_replace, types.Number):
+    if isinstance(to_replace, types.Number) or to_replace == bodo.string_type:
 
         def impl(to_replace, value):
             replace_dict = {}

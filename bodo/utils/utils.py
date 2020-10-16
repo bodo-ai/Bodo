@@ -680,7 +680,6 @@ def overload_alloc_type(n, t, s=None):
         or is_overload_none(s)
         or s == types.Tuple([])
     )
-    # TODO: decimal arrays
 
     if typ == string_array_type:
         return lambda n, t, s=None: bodo.libs.str_arr_ext.pre_alloc_string_array(

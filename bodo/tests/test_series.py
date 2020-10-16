@@ -2651,8 +2651,28 @@ def test_series_drop_inplace_check(memory_leak_check):
             2.0,
             5.0,
         ),
-        # TODO: support strings
-        # (pd.Series(["aa", "bc", None, "ccc", "bc", "A", ""], [3, 4, 2, 1, -3, -2, 6], name="A"), "bc", "abdd"),
+        pytest.param(
+            pd.Series(pd.Categorical([1, 2, 3, 1, 2, 3, 4, 1, 2, 1, 3, 4])),
+            1,
+            2,
+            marks=pytest.mark.skip("Categorical not yet supported."),
+        ),
+        pytest.param(
+            pd.Series(
+                ["aa", "bc", None, "ccc", "bc", "A", ""],
+                [3, 4, 2, 1, -3, -2, 6],
+                name="A",
+            ),
+            "bc",
+            "abdd",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.Series(pd.array([1, 2, 3, 1, 2, 3, 4, 1, 2, 1, 3, 4])),
+            1,
+            2,
+            marks=pytest.mark.slow,
+        ),
     ],
 )
 def test_series_replace_scalar(S, to_replace, value, memory_leak_check):
@@ -2670,8 +2690,54 @@ def test_series_replace_scalar(S, to_replace, value, memory_leak_check):
             [2.0, 1.3],
             5.0,
         ),
-        # TODO: support strings
-        # (pd.Series(["aa", "bc", None, "ccc", "bc", "A", ""], [3, 4, 2, 1, -3, -2, 6], name="A"), "bc", "abdd"),
+        pytest.param(
+            pd.Series(
+                ["aa", "bc", None, "ccc", "bc", "A", ""],
+                [3, 4, 2, 1, -3, -2, 6],
+                name="A",
+            ),
+            ["bc", "A"],
+            "abdd",
+        ),
+        pytest.param(
+            pd.Series(pd.array([1, 2, 3, 1, 2, 3, 4, 1, 2, 1, 3, 4])),
+            [1, 4],
+            2,
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.Series(pd.Categorical([1, 2, 3, 1, 2, 3, 4, 1, 2, 1, 3, 4])),
+            [1, 3],
+            2,
+            marks=pytest.mark.skip("Categorical not yet supported."),
+        ),
+        pytest.param(
+            pd.Series(
+                np.array(
+                    [
+                        Decimal("1.6"),
+                        Decimal("-0.222"),
+                        Decimal("5.1"),
+                        Decimal("1111.316"),
+                        Decimal("-0.2220001"),
+                        Decimal("-0.2220"),
+                        Decimal("1234.00046"),
+                        Decimal("5.1"),
+                        Decimal("-11131.0056"),
+                        Decimal("0.0"),
+                        Decimal("5.11"),
+                        Decimal("0.00"),
+                        Decimal("0.01"),
+                        Decimal("0.03"),
+                        Decimal("0.113"),
+                        Decimal("1.113"),
+                    ]
+                )
+            ),
+            [Decimal("5.1"), Decimal("0.0")],
+            Decimal("0.001"),
+            marks=pytest.mark.slow,
+        ),
     ],
 )
 def test_series_replace_list(S, to_replace_list, value, memory_leak_check):
