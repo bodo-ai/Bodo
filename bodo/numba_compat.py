@@ -267,6 +267,7 @@ def find_potential_aliases(
                 if (
                     isinstance(expr, ir.Expr)
                     and expr.op == "getattr"
+                    and expr.attr not in ["shape"]
                     and expr.value.name in arg_aliases
                 ):
                     _add_alias(lhs, expr.value.name, alias_map, arg_aliases)
@@ -312,7 +313,7 @@ def find_potential_aliases(
 lines = inspect.getsource(ir_utils.find_potential_aliases)
 if (
     hashlib.sha256(lines.encode()).hexdigest()
-    != "ea2b49b83066d0dca57c8e62202fa6b438b429668b010fc1e9580e7bedfb1a70"
+    != "2b17b56512a6b9c95e7c6c072bb2e16f681fe2e8e4b8cb7b9fc7ac83133361a1"
 ):  # pragma: no cover
     warnings.warn("ir_utils.find_potential_aliases has changed")
 
