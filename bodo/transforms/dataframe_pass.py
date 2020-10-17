@@ -259,6 +259,7 @@ class DataFramePass:
         return None
 
     def _run_binop(self, assign, rhs):
+        """transform ir.Expr.binop nodes"""
 
         arg1, arg2 = rhs.lhs, rhs.rhs
         typ1, typ2 = self.typemap[arg1.name], self.typemap[arg2.name]
@@ -317,37 +318,10 @@ class DataFramePass:
             # of expressions. This normalizes them to regular unary/binop expressions
             # so that Bodo transforms handle them properly.
             if (
-                isinstance(func_def, ir.Const)
+                isinstance(func_def, (ir.Const, ir.FreeVar, ir.Global))
                 and func_def.value in numba.core.utils.OPERATORS_TO_BUILTINS
             ):  # pragma: no cover
-                old_calltype = self.calltypes[rhs]
-                if len(rhs.args) == 1:
-                    rhs = ir.Expr.unary(func_def.value, rhs.args[0], rhs.loc)
-                    self.calltypes[rhs] = old_calltype
-                    assign.value = rhs
-                    return self._run_unary(assign, rhs)
-                # arguments for contains() are reversed in operator
-                if func_def.value == operator.contains:
-                    rhs.args = [rhs.args[1], rhs.args[0]]
-                # inplace binop case
-                if (
-                    func_def.value
-                    in numba.core.utils.INPLACE_BINOPS_TO_OPERATORS.values()
-                ):
-                    # get non-inplace version to pass to inplace_binop()
-                    op_str = numba.core.utils.OPERATORS_TO_BUILTINS[func_def.value]
-                    assert op_str.endswith("=")
-                    immuop = numba.core.utils.BINOPS_TO_OPERATORS[op_str[:-1]]
-                    rhs = ir.Expr.inplace_binop(
-                        func_def.value, immuop, rhs.args[0], rhs.args[1], rhs.loc
-                    )
-                else:
-                    rhs = ir.Expr.binop(
-                        func_def.value, rhs.args[0], rhs.args[1], rhs.loc
-                    )
-                self.calltypes[rhs] = old_calltype
-                assign.value = rhs
-                return self._run_binop(assign, rhs)
+                return self._convert_op_call_to_expr(assign, rhs, func_def.value)
             warnings.warn("function call couldn't be found for dataframe analysis")
             return None
         else:
@@ -410,6 +384,12 @@ class DataFramePass:
 
         if fdef == ("query_dummy", "bodo.hiframes.pd_dataframe_ext"):
             return self._run_call_query(assign, lhs, rhs)
+
+        # Numba generates operator calls instead of binop nodes so needs normalized
+        if len(fdef) == 2 and fdef[1] == "_operator":
+            op = getattr(operator, fdef[0], None)
+            if op in numba.core.utils.OPERATORS_TO_BUILTINS:
+                return self._convert_op_call_to_expr(assign, rhs, op)
 
         return None
 
@@ -696,6 +676,32 @@ class DataFramePass:
         # return new df even for inplace case, since typing pass replaces input variable
         # using output of the call
         return nodes + compile_func_single_block(_init_df, out_arrs, lhs, self)
+
+    def _convert_op_call_to_expr(self, assign, rhs, op):
+        """converts calls to operators (e.g. operator.add) to equivalent Expr nodes such
+        as binop to be handled properly later.
+        """
+        old_calltype = self.calltypes[rhs]
+        if len(rhs.args) == 1:
+            rhs = ir.Expr.unary(op, rhs.args[0], rhs.loc)
+            self.calltypes[rhs] = old_calltype
+            assign.value = rhs
+            return self._run_unary(assign, rhs)
+        # arguments for contains() are reversed in operator
+        if op == operator.contains:
+            rhs.args = [rhs.args[1], rhs.args[0]]
+        # inplace binop case
+        if op in numba.core.utils.INPLACE_BINOPS_TO_OPERATORS.values():
+            # get non-inplace version to pass to inplace_binop()
+            op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
+            assert op_str.endswith("=")
+            immuop = numba.core.utils.BINOPS_TO_OPERATORS[op_str[:-1]]
+            rhs = ir.Expr.inplace_binop(op, immuop, rhs.args[0], rhs.args[1], rhs.loc)
+        else:
+            rhs = ir.Expr.binop(op, rhs.args[0], rhs.args[1], rhs.loc)
+        self.calltypes[rhs] = old_calltype
+        assign.value = rhs
+        return self._run_binop(assign, rhs)
 
     def _gen_array_from_index(self, df_var, nodes):
         def _get_index(df):  # pragma: no cover

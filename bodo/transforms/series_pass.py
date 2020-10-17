@@ -1087,11 +1087,6 @@ class SeriesPass:
         if not (isinstance(typ1, SeriesType) or isinstance(typ2, SeriesType)):
             return [assign]
 
-        if rhs.fn in bodo.hiframes.pd_series_ext.series_binary_ops:
-            overload_func = bodo.hiframes.series_impl.create_binary_op_overload(rhs.fn)
-            impl = overload_func(typ1, typ2)
-            return replace_func(self, impl, [arg1, arg2])
-
         if rhs.fn in bodo.hiframes.pd_series_ext.series_inplace_binary_ops:
             overload_func = bodo.hiframes.series_impl.create_inplace_binary_op_overload(
                 rhs.fn
