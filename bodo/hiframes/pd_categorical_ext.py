@@ -380,3 +380,141 @@ def categorical_array_getitem(arr, ind):
             return init_categorical_array(arr.codes[ind], arr.dtype)
 
         return impl_bool
+
+
+@overload(operator.setitem, no_unliteral=True)
+def categorical_array_setitem(arr, ind, val):
+    if not isinstance(arr, CategoricalArray):
+        return
+
+    # scalar case
+    if isinstance(ind, types.Integer):
+        if val == types.none or isinstance(val, types.optional):  # pragma: no cover
+            return
+
+        def impl_scalar(arr, ind, val):  # pragma: no cover
+            for i in range(len(arr.dtype.categories)):
+                if arr.dtype.categories[i] == val:
+                    arr.codes[ind] = i
+                    return
+            raise ValueError(
+                "Cannot setitem on a Categorical with a new category, set the categories first"
+            )
+
+        return impl_scalar
+
+    # array of int indices
+    if is_list_like_index_type(ind) and isinstance(ind.dtype, types.Integer):
+
+        # TODO: Check categories match
+        if isinstance(val, CategoricalArray):
+
+            def impl_arr_ind_mask(arr, ind, val):  # pragma: no cover
+                n = len(val.codes)
+                for i in range(n):
+                    arr.codes[ind[i]] = val.codes[i]
+
+            return impl_arr_ind_mask
+
+        if val.dtype == arr.dtype.elem_type:
+
+            def impl_arr_ind_mask_cat_values(arr, ind, val):  # pragma: no cover
+                n = len(val)
+                categories = arr.dtype.categories
+                cat_len = len(categories)
+                cats_dict = {}
+                for i in range(cat_len):
+                    cats_dict[categories[i]] = i
+                for j in range(n):
+                    new_val = val[j]
+                    if new_val in cats_dict:
+                        code = cats_dict[new_val]
+                    else:
+                        raise ValueError(
+                            "Cannot setitem on a Categorical with a new category, set the categories first"
+                        )
+                    arr.codes[ind[j]] = code
+
+            return impl_arr_ind_mask_cat_values
+
+    # bool array
+    if is_list_like_index_type(ind) and ind.dtype == types.bool_:
+
+        # TODO: Check categories match
+        if isinstance(val, CategoricalArray):
+
+            def impl_bool_ind_mask(arr, ind, val):  # pragma: no cover
+                n = len(ind)
+                val_ind = 0
+                for i in range(n):
+                    if ind[i]:
+                        arr.codes[i] = val.codes[val_ind]
+                        val_ind += 1
+
+            return impl_bool_ind_mask
+
+        if val.dtype == arr.dtype.elem_type:
+
+            def impl_bool_ind_mask_cat_values(arr, ind, val):  # pragma: no cover
+                n = len(ind)
+                val_ind = 0
+                categories = arr.dtype.categories
+                cat_len = len(categories)
+                cats_dict = {}
+                for i in range(cat_len):
+                    cats_dict[categories[i]] = i
+                for j in range(n):
+                    if ind[j]:
+                        new_val = val[val_ind]
+                        if new_val in cats_dict:
+                            code = cats_dict[new_val]
+                        else:
+                            raise ValueError(
+                                "Cannot setitem on a Categorical with a new category, set the categories first"
+                            )
+                        arr.codes[j] = code
+                        val_ind += 1
+
+            return impl_bool_ind_mask_cat_values
+
+    # slice case
+    if isinstance(ind, types.SliceType):
+        if val == arr.dtype.elem_type:
+
+            def impl_scalar(arr, ind, val):  # pragma: no cover
+                slice_ind = numba.cpython.unicode._normalize_slice(ind, len(arr))
+                for i in range(slice_ind.start, slice_ind.stop, slice_ind.step):
+                    arr[i] = val
+
+            return impl_scalar
+
+        # TODO: Check categories match
+        if isinstance(val, CategoricalArray):
+
+            def impl_arr(arr, ind, val):  # pragma: no cover
+                arr.codes[ind] = val.codes
+
+            return impl_arr
+
+        if val.dtype == arr.dtype.elem_type:
+
+            def impl_slice_cat_values(arr, ind, val):  # pragma: no cover
+                categories = arr.dtype.categories
+                cat_len = len(categories)
+                cats_dict = {}
+                for i in range(cat_len):
+                    cats_dict[categories[i]] = i
+                slice_ind = numba.cpython.unicode._normalize_slice(ind, len(arr))
+                val_ind = 0
+                for j in range(slice_ind.start, slice_ind.stop, slice_ind.step):
+                    new_val = val[val_ind]
+                    if new_val in cats_dict:
+                        code = cats_dict[new_val]
+                    else:
+                        raise ValueError(
+                            "Cannot setitem on a Categorical with a new category, set the categories first"
+                        )
+                    arr.codes[j] = code
+                    val_ind += 1
+
+            return impl_slice_cat_values

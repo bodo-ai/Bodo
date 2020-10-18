@@ -2,10 +2,11 @@
 """
 Tests for pd.CategoricalDtype/pd.Categorical  functionality
 """
-import pandas as pd
 import numpy as np
-import bodo
+import pandas as pd
 import pytest
+
+import bodo
 from bodo.tests.utils import check_func
 
 
@@ -63,6 +64,94 @@ def test_unbox_cat_arr(cat_arr_value, memory_leak_check):
         return arr
 
     check_func(impl2, (cat_arr_value,))
+
+
+def test_setitem_int(cat_arr_value, memory_leak_check):
+    def test_impl(A, i, val):
+        A[i] = val
+        return A
+
+    i = 1
+    val = cat_arr_value[0]
+    check_func(test_impl, (cat_arr_value, i, val), dist_test=False)
+
+
+def test_setitem_list(cat_arr_value, memory_leak_check):
+    def test_impl(A, i, val):
+        A[i] = val
+        return A
+
+    i = [0, 1, 4]
+    val = cat_arr_value[: len(i)]
+    check_func(test_impl, (cat_arr_value, i, val), dist_test=False)
+
+
+def test_setitem_list_cats(cat_arr_value, memory_leak_check):
+    def test_impl(A, i, val):
+        A[i] = val
+        return A
+
+    i = [0, 1, 4]
+    val = cat_arr_value.categories.values[:3]
+    check_func(test_impl, (cat_arr_value, i, val), dist_test=False)
+
+
+def test_setitem_bool(cat_arr_value, memory_leak_check):
+    def test_impl(A, i, val):
+        A[i] = val
+        return A
+
+    np.random.seed(1)
+    i = np.random.ranf(len(cat_arr_value)) < 0.2
+    # Change at least 1 value
+    i[0] = True
+    num_trues = sum(i)
+    val = cat_arr_value[:num_trues]
+    val[0] = val[1]
+    check_func(test_impl, (cat_arr_value, i, val), dist_test=False)
+
+
+def test_setitem_bool_cats(cat_arr_value, memory_leak_check):
+    def test_impl(A, i, val):
+        A[i] = val
+        return A
+
+    i = np.zeros(len(cat_arr_value), np.bool_)
+    i[0] = True
+    i[1] = True
+    i[len(cat_arr_value) - 1] = True
+    val = cat_arr_value.categories.values[:3]
+    check_func(test_impl, (cat_arr_value, i, val), dist_test=False)
+
+
+def test_setitem_slice_scalar(cat_arr_value, memory_leak_check):
+    def test_impl(A, i, val):
+        A[i] = val
+        return A
+
+    i = slice(1, 4)
+    val = cat_arr_value[0]
+    check_func(test_impl, (cat_arr_value, i, val), dist_test=False)
+
+
+def test_setitem_slice_list(cat_arr_value, memory_leak_check):
+    def test_impl(A, i, val):
+        A[i] = val
+        return A
+
+    i = slice(1, 4)
+    val = cat_arr_value[:3]
+    check_func(test_impl, (cat_arr_value, i, val), dist_test=False)
+
+
+def test_setitem_slice_cats(cat_arr_value, memory_leak_check):
+    def test_impl(A, i, val):
+        A[i] = val
+        return A
+
+    i = slice(1, 4)
+    val = cat_arr_value.categories.values[:3]
+    check_func(test_impl, (cat_arr_value, i, val), dist_test=False)
 
 
 def test_getitem_int(cat_arr_value, memory_leak_check):
