@@ -494,8 +494,7 @@ static void c_bcast(void* send_data, int sendcount, int typ_enum,
         MPI_Comm comm;
         c_comm_create(comm_ranks, n, &comm);
         if (MPI_COMM_NULL != comm) {
-            int err = MPI_Bcast(send_data, sendcount, mpi_typ, ROOT_PE, comm);
-            assert(err == MPI_SUCCESS);
+            MPI_Bcast(send_data, sendcount, mpi_typ, ROOT_PE, comm);
         }
     }
     return;
