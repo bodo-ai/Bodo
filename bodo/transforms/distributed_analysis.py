@@ -674,6 +674,19 @@ class DistributedAnalysis:
                 self._meet_array_dists(rhs.args[0].name, rhs.args[1].name, array_dists)
             return
 
+        if (
+            func_name in {"fit", "predict", "score", "transform"}
+            and isinstance(func_mod, numba.core.ir.Var)
+            and isinstance(
+                self.typemap[func_mod.name],
+                bodo.libs.sklearn_ext.BodoKMeansClusteringType,
+            )
+        ):
+            self._analyze_call_sklearn_cluster_kmeans(
+                lhs, func_name, rhs, kws, array_dists
+            )
+            return
+
         if func_mod == "sklearn.metrics._classification":
             if func_name in {"precision_score", "recall_score", "f1_score"}:
                 # output is always replicated, and the output can be an array
@@ -1329,6 +1342,57 @@ class DistributedAnalysis:
 
         # set REP if not found
         self._analyze_call_set_REP(lhs, args, array_dists, fdef)
+
+    def _analyze_call_sklearn_cluster_kmeans(
+        self, lhs, func_name, rhs, kws, array_dists
+    ):
+        """analyze distribution of sklearn cluster kmeans
+        functions (sklearn.cluster.kmeans.func_name"""
+        if func_name == "fit":
+            # match dist of X and sample_weight (if provided)
+            X_arg_name = rhs.args[0].name
+            if len(rhs.args) >= 3:
+                sample_weight_arg_name = rhs.args[2].name
+            elif "sample_weight" in kws:
+                sample_weight_arg_name = kws["sample_weight"].name
+            else:
+                sample_weight_arg_name = None
+
+            if sample_weight_arg_name:
+                self._meet_array_dists(X_arg_name, sample_weight_arg_name, array_dists)
+
+        elif func_name == "predict":
+            # match dist of X and sample_weight (if provided)
+            X_arg_name = rhs.args[0].name
+            if len(rhs.args) >= 2:
+                sample_weight_arg_name = rhs.args[1].name
+            elif "sample_weight" in kws:
+                sample_weight_arg_name = kws["sample_weight"].name
+            else:
+                sample_weight_arg_name = None
+            if sample_weight_arg_name:
+                self._meet_array_dists(X_arg_name, sample_weight_arg_name, array_dists)
+
+            # match input and output distributions
+            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+
+        elif func_name == "score":
+            # match dist of X and sample_weight (if provided)
+            X_arg_name = rhs.args[0].name
+            if len(rhs.args) >= 3:
+                sample_weight_arg_name = rhs.args[2].name
+            elif "sample_weight" in kws:
+                sample_weight_arg_name = kws["sample_weight"].name
+            else:
+                sample_weight_arg_name = None
+            if sample_weight_arg_name:
+                self._meet_array_dists(X_arg_name, sample_weight_arg_name, array_dists)
+
+        elif func_name == "transform":
+            # match input (X) and output (X_new) distributions
+            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+
+        return
 
     def _analyze_call_np(self, lhs, func_name, args, kws, array_dists):
         """analyze distributions of numpy functions (np.func_name)"""

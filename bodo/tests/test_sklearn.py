@@ -7,10 +7,12 @@ import numpy as np
 import pandas as pd
 import pytest
 from sklearn import datasets
+from sklearn.cluster import KMeans
 from sklearn.datasets import make_classification
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import SGDClassifier
 from sklearn.metrics import f1_score, precision_score, recall_score
+from sklearn.utils._testing import assert_allclose, assert_array_equal
 from sklearn.utils.validation import check_random_state
 
 import bodo
@@ -462,3 +464,129 @@ def test_sgdc_lr_bigdata():
     )(impl)(X_train, y_train, X_test, y_test)
     if bodo.get_rank() == 0:
         assert np.allclose(sklearn_predict_result, bodo_predict_result, atol=0.1)
+
+
+# --------------------KMeans Clustering Tests-----------------#
+
+
+def test_kmeans(memory_leak_check):
+    """
+    Shamelessly copied from the sklearn tests:
+    https://github.com/scikit-learn/scikit-learn/blob/0fb307bf39bbdacd6ed713c00724f8f871d60370/sklearn/cluster/tests/test_k_means.py#L57
+    """
+
+    X = np.array([[0, 0], [0.5, 0], [0.5, 1], [1, 1]], dtype=np.float64)
+    sample_weight = np.array([3, 1, 1, 3])
+    init_centers = np.array([[0, 0], [1, 1]], dtype=np.float64)
+
+    expected_labels = [0, 0, 1, 1]
+    expected_inertia = 0.375
+    expected_centers = np.array([[0.125, 0], [0.875, 1]], dtype=np.float64)
+    expected_n_iter = 2
+
+    def impl_fit(X_, sample_weight_, init_centers_):
+        kmeans = KMeans(n_clusters=2, n_init=1, init=init_centers_)
+        kmeans.fit(X_, sample_weight=sample_weight_)
+        return kmeans
+
+    clf = bodo.jit(distributed=["X_", "sample_weight_"])(impl_fit)(
+        _get_dist_arg(np.array(X)),
+        _get_dist_arg(np.array(sample_weight)),
+        np.array(init_centers),
+    )
+
+    dist_expected_labels = _get_dist_arg(np.array(expected_labels))
+
+    assert_array_equal(clf.labels_, dist_expected_labels)
+    assert_allclose(clf.inertia_, expected_inertia)
+    assert_allclose(clf.cluster_centers_, expected_centers)
+    assert clf.n_iter_ == expected_n_iter
+
+    def impl_predict0(X_, sample_weight_):
+        kmeans = KMeans(n_clusters=2, n_init=1, init=init_centers)
+        kmeans.fit(X_, None, sample_weight_)
+        return kmeans.predict(X_, sample_weight_)
+
+    check_func(
+        impl_predict0,
+        (
+            X,
+            sample_weight,
+        ),
+        is_out_distributed=True,
+    )
+
+    def impl_predict1(X_):
+        kmeans = KMeans(n_clusters=2, n_init=1, init=init_centers)
+        kmeans.fit(X_)
+        return kmeans.predict(X_)
+
+    check_func(
+        impl_predict1,
+        (X,),
+        is_out_distributed=True,
+    )
+
+    def impl_predict2(X_, sample_weight_):
+        kmeans = KMeans(n_clusters=2, n_init=1, init=init_centers)
+        kmeans.fit(X_)
+        return kmeans.predict(X_, sample_weight=sample_weight_)
+
+    check_func(
+        impl_predict2,
+        (
+            X,
+            sample_weight,
+        ),
+        is_out_distributed=True,
+    )
+
+    def impl_score0(X_, sample_weight_):
+        kmeans = KMeans(n_clusters=2, n_init=1, init=init_centers)
+        kmeans.fit(X_, sample_weight=sample_weight_)
+        return kmeans.score(X_, sample_weight=sample_weight_)
+
+    check_func(
+        impl_score0,
+        (
+            X,
+            sample_weight,
+        ),
+    )
+
+    def impl_score1(X_, sample_weight_):
+        kmeans = KMeans(n_clusters=2, n_init=1, init=init_centers)
+        kmeans.fit(X_, sample_weight=sample_weight_)
+        return kmeans.score(X_, None, sample_weight_)
+
+    check_func(
+        impl_score1,
+        (
+            X,
+            sample_weight,
+        ),
+    )
+
+    def impl_score2(X_):
+        kmeans = KMeans(n_clusters=2, n_init=1, init=init_centers)
+        kmeans.fit(X_)
+        return kmeans.score(X_)
+
+    check_func(
+        impl_score2,
+        (X,),
+    )
+
+    def impl_transform(X_, sample_weight_):
+        kmeans = KMeans(n_clusters=2, n_init=1, init=init_centers)
+        kmeans.fit(X_, sample_weight=sample_weight_)
+        return kmeans.transform(X_)
+
+    check_func(
+        impl_transform,
+        (
+            X,
+            sample_weight,
+        ),
+        is_out_distributed=True,
+    )
