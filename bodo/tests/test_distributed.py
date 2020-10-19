@@ -1,28 +1,28 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
-import pandas as pd
-import numpy as np
-import pytest
 import random
 from decimal import Decimal
 
+import numpy as np
+import pandas as pd
+import pytest
+
 import bodo
-from bodo.utils.typing import BodoWarning, BodoError
 from bodo.tests.utils import (
-    count_array_REPs,
-    count_parfor_REPs,
-    count_parfor_OneDs,
-    count_array_OneDs,
-    dist_IR_contains,
-    get_start_end,
-    count_array_OneD_Vars,
     _get_dist_arg,
     _test_equal,
-    check_func,
-    reduce_sum,
     _test_equal_guard,
+    check_func,
+    count_array_OneD_Vars,
+    count_array_OneDs,
+    count_array_REPs,
+    count_parfor_OneDs,
+    count_parfor_REPs,
+    dist_IR_contains,
     gen_random_string_array,
+    get_start_end,
+    reduce_sum,
 )
-
+from bodo.utils.typing import BodoError, BodoWarning
 
 random.seed(4)
 np.random.seed(1)
@@ -957,6 +957,19 @@ def test_concat_reduction():
             df = df.append(pd.DataFrame({"A": np.arange(i)}))
 
         return df
+
+    check_func(impl, (11,), reset_index=True, check_dtype=False)
+
+
+def test_series_concat_reduction():
+    """test Series concat reduction, which produces distributed output"""
+
+    def impl(n):
+        S = pd.Series(np.empty(0, np.int64))
+        for i in bodo.prange(n):
+            S = S.append(pd.Series(np.arange(i)))
+
+        return S
 
     check_func(impl, (11,), reset_index=True, check_dtype=False)
 
