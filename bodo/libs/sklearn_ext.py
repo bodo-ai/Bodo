@@ -20,6 +20,7 @@ from numba.extending import (
     typeof_impl,
     unbox,
 )
+from sklearn.metrics import hinge_loss, log_loss
 
 import bodo
 from bodo.libs.distributed_api import (
@@ -599,3 +600,232 @@ def overload_f1_score(y_true, y_pred, average="binary", _is_data_distributed=Fal
                 return score[0]
 
             return _f1_score_impl
+
+
+# -------------------------------------SGDClassifier----------------------------------------
+# Support sklearn.linear_model.SGDClassifier using object mode of Numba
+# The model it fits can be controlled with the loss parameter; by default, it fits a linear support vector machine (SVM).
+# Logistic regression (loss='log')
+# -----------------------------------------------------------------------------
+
+# Typing and overloads to use SGDClassifier inside Bodo functions
+# directly via sklearn's API
+class BodoSGDClassifierType(types.Opaque):
+    def __init__(self):
+        super(BodoSGDClassifierType, self).__init__(name="BodoSGDClassifierType")
+
+
+sgd_classifier_type = BodoSGDClassifierType()
+types.sgd_classifier_type = sgd_classifier_type
+
+register_model(BodoSGDClassifierType)(models.OpaqueModel)
+
+
+@typeof_impl.register(sklearn.linear_model.SGDClassifier)
+def typeof_sgd_classifier(val, c):
+    return sgd_classifier_type
+
+
+@box(BodoSGDClassifierType)
+def box_sgd_classifier(typ, val, c):
+    # NOTE: we can't just let Python steal a reference since boxing can happen
+    # at any point and even in a loop, which can make refcount invalid.
+    # see implementation of str.contains and test_contains_regex
+    # TODO: investigate refcount semantics of boxing in Numba when variable is returned
+    # from function versus not returned
+    c.pyapi.incref(val)
+    return val
+
+
+@unbox(BodoSGDClassifierType)
+def unbox_sgd_classifier(typ, obj, c):
+    # borrow a reference from Python
+    c.pyapi.incref(obj)
+    return NativeValue(obj)
+
+
+@overload(sklearn.linear_model.SGDClassifier, no_unliteral=True)
+def sklearn_linear_model_SGDClassifier_overload(
+    loss="hinge",
+    penalty="l2",
+    alpha=0.0001,
+    l1_ratio=0.15,
+    fit_intercept=True,
+    max_iter=1000,
+    tol=0.001,
+    shuffle=True,
+    verbose=0,
+    epsilon=0.1,
+    n_jobs=None,
+    random_state=None,
+    learning_rate="optimal",
+    eta0=0.0,
+    power_t=0.5,
+    early_stopping=False,
+    validation_fraction=0.1,
+    n_iter_no_change=5,
+    class_weight=None,
+    warm_start=False,
+    average=False,
+):
+    def _sklearn_linear_model_SGDClassifier_impl(
+        loss="hinge",
+        penalty="l2",
+        alpha=0.0001,
+        l1_ratio=0.15,
+        fit_intercept=True,
+        max_iter=1000,
+        tol=0.001,
+        shuffle=True,
+        verbose=0,
+        epsilon=0.1,
+        n_jobs=None,
+        random_state=None,
+        learning_rate="optimal",
+        eta0=0.0,
+        power_t=0.5,
+        early_stopping=False,
+        validation_fraction=0.1,
+        n_iter_no_change=5,
+        class_weight=None,
+        warm_start=False,
+        average=False,
+    ):  # pragma: no cover
+        with numba.objmode(m="sgd_classifier_type"):
+            m = sklearn.linear_model.SGDClassifier(
+                loss=loss,
+                penalty=penalty,
+                alpha=alpha,
+                l1_ratio=l1_ratio,
+                fit_intercept=fit_intercept,
+                max_iter=max_iter,
+                tol=tol,
+                shuffle=shuffle,
+                verbose=verbose,
+                epsilon=epsilon,
+                n_jobs=n_jobs,
+                random_state=random_state,
+                learning_rate=learning_rate,
+                eta0=eta0,
+                power_t=power_t,
+                early_stopping=early_stopping,
+                validation_fraction=validation_fraction,
+                n_iter_no_change=n_iter_no_change,
+                class_weight=class_weight,
+                warm_start=warm_start,
+                average=average,
+            )
+        return m
+
+    return _sklearn_linear_model_SGDClassifier_impl
+
+
+def fit_sgdc(m, X, y, y_classes, _is_data_distributed=False):
+    """Fit a linear model classifier using SGD (parallel version)"""
+    comm = MPI.COMM_WORLD
+    # Get size of data on each rank
+    total_datasize = comm.allreduce(len(X), op=MPI.SUM)
+    rank_weight = len(X) / total_datasize
+    nranks = comm.Get_size()
+    m.n_jobs = 1
+    # Currently early_stopping must be False.
+    m.early_stopping = False
+    best_loss = np.inf
+    no_improvement_count = 0
+    # TODO: Add other loss cases
+    if m.loss == "hinge":
+        loss_func = hinge_loss
+    elif m.loss == "log":
+        loss_func = log_loss
+    for _ in range(m.max_iter):
+        m.partial_fit(X, y, classes=y_classes)
+        # Can be removed when rebalancing is done. Now, we have to give more weight to ranks with more data
+        m.coef_ = m.coef_ * rank_weight
+        m.coef_ = comm.allreduce(m.coef_, op=MPI.SUM)
+        m.intercept_ = m.intercept_ * rank_weight
+        m.intercept_ = comm.allreduce(m.intercept_, op=MPI.SUM)
+        y_pred = m.decision_function(X)
+        cur_loss = loss_func(y, y_pred, labels=y_classes)
+        cur_loss_sum = comm.allreduce(cur_loss, op=MPI.SUM)
+        cur_loss = cur_loss_sum / nranks
+        # https://github.com/scikit-learn/scikit-learn/blob/master/sklearn/linear_model/_sgd_fast.pyx#L620
+        if m.tol > np.NINF and cur_loss > best_loss - m.tol * len(X):
+            no_improvement_count += 1
+        else:
+            no_improvement_count = 0
+        if cur_loss < best_loss:
+            best_loss = cur_loss
+        if no_improvement_count >= m.n_iter_no_change:
+            break
+
+    return m
+
+
+@overload_method(BodoSGDClassifierType, "fit", no_unliteral=True)
+def overload_sgdc_model_fit(
+    m,
+    X,
+    y,
+    _is_data_distributed=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
+):
+    def _model_sgdc_fit_impl(m, X, y, _is_data_distributed=False):  # pragma: no cover
+
+        # TODO: Rebalance the data X and y to be the same size on every rank
+        # y has to be an array
+        y_classes = bodo.libs.array_kernels.unique(y)
+
+        if _is_data_distributed:
+            y_classes = bodo.allgatherv(y_classes, False)
+
+        with numba.objmode(m="sgd_classifier_type"):
+            m = fit_sgdc(m, X, y, y_classes, _is_data_distributed)
+
+        bodo.barrier()
+
+        return m
+
+    return _model_sgdc_fit_impl
+
+
+@overload_method(BodoSGDClassifierType, "predict", no_unliteral=True)
+def overload_sgdc_model_predict(m, X):
+    def _model_predict_impl(m, X):  # pragma: no cover
+
+        with numba.objmode(result="int64[:]"):
+            # currently we do data-parallel prediction
+            m.n_jobs = 1
+            if len(X) == 0:
+                # TODO If X is replicated this should be an error (same as sklearn)
+                result = np.empty(0, dtype=np.int64)
+            else:
+                result = m.predict(X).astype(np.int64).flatten()
+        return result
+
+    return _model_predict_impl
+
+
+@overload_method(BodoSGDClassifierType, "score", no_unliteral=True)
+def overload_sgdc_model_score(
+    m,
+    X,
+    y,
+    sample_weight=None,
+    _is_data_distributed=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
+):
+    def _model_score_impl(
+        m, X, y, sample_weight=None, _is_data_distributed=False
+    ):  # pragma: no cover
+
+        with numba.objmode(result="float64[:]"):
+            result = m.score(X, y, sample_weight=sample_weight)
+            if _is_data_distributed:
+                # replicate result so that the average is weighted based on
+                # the data size on each rank
+                result = np.full(len(y), result)
+            else:
+                result = np.array([result])
+        if _is_data_distributed:
+            result = bodo.allgatherv(result)
+        return result.mean()
+
+    return _model_score_impl

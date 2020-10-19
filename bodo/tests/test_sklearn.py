@@ -9,6 +9,7 @@ import pytest
 from sklearn import datasets
 from sklearn.datasets import make_classification
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.linear_model import SGDClassifier
 from sklearn.metrics import f1_score, precision_score, recall_score
 from sklearn.utils.validation import check_random_state
 
@@ -278,7 +279,6 @@ def test_multinode_bigdata():
         end_time = time.time()
         if bodo.get_rank() == 0:
             print(name, "Time: ", (end_time - start_time))
-        y_pred = clf.predict(X_test)
         score = clf.score(X_test, y_test)
         return score
 
@@ -299,6 +299,153 @@ def test_multinode_bigdata():
         )
         sklearn_predict_result = impl(
             X[:splitN], y[:splitN], X[splitN:], y[splitN:], "SK"
+        )
+        X_train = bodo.scatterv(X[:splitN])
+        y_train = bodo.scatterv(y[:splitN])
+        X_test = bodo.scatterv(X[splitN:])
+        y_test = bodo.scatterv(y[splitN:])
+    else:
+        X_train = bodo.scatterv(None)
+        y_train = bodo.scatterv(None)
+        X_test = bodo.scatterv(None)
+        y_test = bodo.scatterv(None)
+
+    bodo_predict_result = bodo.jit(
+        distributed=["X_train", "y_train", "X_test", "y_test"]
+    )(impl)(X_train, y_train, X_test, y_test)
+    if bodo.get_rank() == 0:
+        assert np.allclose(sklearn_predict_result, bodo_predict_result, atol=0.1)
+
+
+# ---------------------- SGDClassifer tests ----------------------
+def test_sgdc_classification_toy():
+    """Check classification on a toy dataset."""
+
+    X = np.array([[-2, -1], [-1, -1], [-1, -2], [1, 1], [1, 2], [2, 1]])
+    y = np.array([-1, -1, -1, 1, 1, 1])
+    T = np.array([[-1, -1], [2, 2], [3, 2]] * 3)
+    true_result = np.array([-1, 1, 1] * 3)
+
+    def impl0(X, y, T):
+        clf = SGDClassifier()
+        clf.fit(X, y)
+        return clf
+
+    clf = bodo.jit(distributed=["X", "y", "T"])(impl0)(
+        _get_dist_arg(np.array(X)),
+        _get_dist_arg(np.array(y)),
+        _get_dist_arg(np.array(T)),
+    )
+    np.testing.assert_array_equal(clf.predict(T), true_result)
+
+    def impl1(X, y, T):
+        clf = SGDClassifier()
+        clf.fit(X, y)
+        return clf.predict(T)
+
+    check_func(impl1, (np.array(X), np.array(y), np.array(T)))
+
+
+def test_sgdc_svm_bigdata():
+    """Check SGDClassifier SVM against sklearn with big data on multinode cluster"""
+
+    # name is used for distinguishing function printing time.
+    def impl(X_train, y_train, X_test, y_test, name="SVM BODO"):
+        # Bodo ignores n_jobs. This is set for scikit-learn (non-bodo) run. It should be set to number of cores avialable.
+        # Currently disabling any iteration breaks for fair comparison with partial_fit. Loop for max_iter
+        clf = SGDClassifier(
+            n_jobs=8,
+            max_iter=10,
+            early_stopping=False,
+            verbose=0,
+        )
+        start_time = time.time()
+        clf.fit(X_train, y_train)
+        end_time = time.time()
+        if bodo.get_rank() == 0:
+            print("\n", name, "Time: ", (end_time - start_time), "\n")
+        score = clf.score(X_test, y_test)
+        return score
+
+    splitN = 500
+    n_samples = 10000
+    n_features = 50
+    X_train = None
+    y_train = None
+    X_test = None
+    y_test = None
+    if bodo.get_rank() == 0:
+        X, y = make_classification(
+            n_samples=n_samples,
+            n_features=n_features,
+            n_classes=3,
+            n_clusters_per_class=2,
+            n_informative=3,
+        )
+        sklearn_predict_result = impl(
+            X[:splitN], y[:splitN], X[splitN:], y[splitN:], "SVM SK"
+        )
+        X_train = bodo.scatterv(X[:splitN])
+        y_train = bodo.scatterv(y[:splitN])
+        X_test = bodo.scatterv(X[splitN:])
+        y_test = bodo.scatterv(y[splitN:])
+    else:
+        X_train = bodo.scatterv(None)
+        y_train = bodo.scatterv(None)
+        X_test = bodo.scatterv(None)
+        y_test = bodo.scatterv(None)
+
+    bodo_predict_result = bodo.jit(
+        distributed=["X_train", "y_train", "X_test", "y_test"]
+    )(impl)(X_train, y_train, X_test, y_test)
+    if bodo.get_rank() == 0:
+        assert np.allclose(sklearn_predict_result, bodo_predict_result, atol=0.1)
+
+
+def test_sgdc_lr_bigdata():
+    """Check SGDClassifier Logistic Regression against sklearn with big data on multinode cluster"""
+
+    # name is used for distinguishing function printing time.
+    def impl(X_train, y_train, X_test, y_test, name="Logistic Regression BODO"):
+        # Bodo ignores n_jobs. This is set for scikit-learn (non-bodo) run. It should be set to number of cores avialable.
+        clf = SGDClassifier(
+            n_jobs=8,
+            loss="log",
+            max_iter=10,
+            early_stopping=False,
+        )
+        start_time = time.time()
+        clf.fit(X_train, y_train)
+        end_time = time.time()
+        # score = clf.score(X_test, y_test)
+        y_pred = clf.predict(X_test)
+        score = precision_score(y_test, y_pred, average="micro")
+        if bodo.get_rank() == 0:
+            print(
+                "\n", name, "Time: ", (end_time - start_time), "\tScore: ", score, "\n"
+            )
+        return score
+
+    splitN = 60
+    n_samples = 1000
+    n_features = 10
+    X_train = None
+    y_train = None
+    X_test = None
+    y_test = None
+    if bodo.get_rank() == 0:
+        X, y = make_classification(
+            n_samples=n_samples,
+            n_features=n_features,
+            n_classes=2,
+            n_clusters_per_class=1,
+            flip_y=0.03,
+            n_informative=5,
+            n_redundant=0,
+            n_repeated=0,
+        )
+        sklearn_predict_result = impl(
+            X[:splitN], y[:splitN], X[splitN:], y[splitN:], "Logistic Regression SK"
         )
         X_train = bodo.scatterv(X[:splitN])
         y_train = bodo.scatterv(y[:splitN])
