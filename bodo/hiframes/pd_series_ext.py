@@ -61,6 +61,7 @@ from bodo.libs.struct_arr_ext import StructArrayType, StructType
 from bodo.utils.transform import get_const_func_output_type
 from bodo.utils.typing import (
     BodoError,
+    check_unsupported_args,
     create_unsupported_overload,
     get_udf_error_msg,
     get_udf_out_arr_type,
@@ -543,13 +544,14 @@ class SeriesAttribute(AttributeTemplate):
         pysig = numba.core.utils.pysignature(rolling_stub)
         return signature(SeriesRollingType(ary), *args).replace(pysig=pysig)
 
-    def _resolve_map_func(self, ary, func, pysig, fname, f_args=None):
+    def _resolve_map_func(self, ary, func, pysig, fname, f_args=None, kws=None):
         """Find type signature of Series.map/apply method.
         ary: Series type (TODO: rename)
         func: user-defined function
         pysig: python signature of the map/apply method
         fname: method name ("map" or "apply")
         f_args: arguments to UDF (only "apply" supports it)
+        kws: kwargs to UDF (only "apply" supports it)
         """
 
         dtype = ary.dtype
@@ -560,9 +562,12 @@ class SeriesAttribute(AttributeTemplate):
         in_types = (dtype,)
         if f_args is not None:
             in_types += tuple(f_args.types)
-
+        if kws is None:
+            kws = {}
         try:
-            f_return_type = get_const_func_output_type(func, in_types, {}, self.context)
+            f_return_type = get_const_func_output_type(
+                func, in_types, kws, self.context
+            )
         except Exception as e:
             raise BodoError(
                 get_udf_error_msg(f"Series.{fname}()", e), locs_in_msg=[e.loc]
@@ -579,8 +584,18 @@ class SeriesAttribute(AttributeTemplate):
 
     @bound_function("series.map", no_unliteral=True)
     def resolve_map(self, ary, args, kws):
-        kwargs = dict(kws)
-        func = args[0] if len(args) > 0 else kwargs["arg"]
+        kws = dict(kws)
+        func = args[0] if len(args) > 0 else kws["arg"]
+        kws.pop("arg", None)
+        na_action = args[1] if len(args) > 1 else kws.pop("na_action", types.none)
+
+        unsupported_args = dict(
+            na_action=na_action,
+        )
+        map_defaults = dict(
+            na_action=None,
+        )
+        check_unsupported_args("map", unsupported_args, map_defaults)
 
         def map_stub(arg, na_action=None):  # pragma: no cover
             pass
@@ -590,16 +605,34 @@ class SeriesAttribute(AttributeTemplate):
 
     @bound_function("series.apply", no_unliteral=True)
     def resolve_apply(self, ary, args, kws):
-        kwargs = dict(kws)
-        func = args[0] if len(args) > 0 else kwargs["func"]
-        f_args = args[2] if len(args) > 2 else kwargs.pop("args", None)
+        kws = dict(kws)
+        func = args[0] if len(args) > 0 else kws["func"]
+        kws.pop("func", None)
+        convert_dtype = (
+            args[1] if len(args) > 1 else kws.pop("convert_dtype", types.literal(True))
+        )
+        f_args = args[2] if len(args) > 2 else kws.pop("args", None)
 
-        def apply_stub(func, convert_dtype=True, args=()):  # pragma: no cover
-            pass
+        unsupported_args = dict(
+            convert_dtype=convert_dtype,
+        )
+        apply_defaults = dict(
+            convert_dtype=True,
+        )
+        check_unsupported_args("apply", unsupported_args, apply_defaults)
+
+        # add dummy default value for UDF kws to avoid errors
+        kw_names = ", ".join("{} = ''".format(a) for a in kws.keys())
+        func_text = f"def apply_stub(func, convert_dtype=True, args=(), {kw_names}):\n"
+        func_text += "    pass\n"
+        loc_vars = {}
+        exec(func_text, {}, loc_vars)
+        apply_stub = loc_vars["apply_stub"]
 
         pysig = numba.core.utils.pysignature(apply_stub)
+
         # TODO: handle apply differences: extra args, np ufuncs etc.
-        return self._resolve_map_func(ary, func, pysig, "apply", f_args)
+        return self._resolve_map_func(ary, func, pysig, "apply", f_args, kws)
 
     def _resolve_combine_func(self, ary, args, kws):
         # handle kwargs

@@ -1572,6 +1572,25 @@ def test_series_apply_extra_arg(memory_leak_check):
     check_func(test_impl, (S, d))
 
 
+@pytest.mark.slow
+def test_series_apply_kwargs(memory_leak_check):
+    def test_impl(S, D):
+        return S.apply(lambda a, d: a not in d, d=D)
+
+    d = ("A", "B")
+    S = pd.Series(["A", "C", "FF", "AA", "CC", "B", "DD", "ABC", "A"])
+    check_func(test_impl, (S, d))
+
+
+def test_series_apply_args_and_kwargs(memory_leak_check):
+    def test_impl(S, b, d):
+        return S.apply(lambda x, c=1, a=2: x == a + c, a=b, args=(d,))
+
+    n = 121
+    S = pd.Series(np.arange(n))
+    check_func(test_impl, (S, 3, 2))
+
+
 @pytest.mark.parametrize(
     "S",
     [

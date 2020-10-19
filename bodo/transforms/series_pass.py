@@ -2099,8 +2099,13 @@ class SeriesPass:
                     extra_args = [] if extra_args is None else extra_args[0]
             else:
                 func_var = get_call_expr_arg("map", rhs.args, kws, 0, "arg")
+            if func_name == "map":
+                kws.pop("arg", None)
+            else:
+                kws.pop("func", None)
+            kws.pop("args", None)
             return self._handle_series_map(
-                assign, lhs, rhs, series_var, func_var, extra_args
+                assign, lhs, rhs, series_var, func_var, extra_args, kws
             )
 
         # astype with string output
@@ -2131,7 +2136,9 @@ class SeriesPass:
 
         return [assign]
 
-    def _handle_series_map(self, assign, lhs, rhs, series_var, func_var, extra_args):
+    def _handle_series_map(
+        self, assign, lhs, rhs, series_var, func_var, extra_args, kws
+    ):
         """translate df.A.map(lambda a:...) to prange()"""
         # get the function object (ir.Expr.make_function or actual python function)
         func = get_overload_const_func(self.typemap[func_var.name])
@@ -2143,6 +2150,15 @@ class SeriesPass:
         name = self._get_series_name(series_var, nodes)
         out_typ = self.typemap[lhs.name].dtype
         out_arr_type = self.typemap[lhs.name].data
+        udf_arg_names = (
+            ", ".join("e{}".format(i) for i in range(len(extra_args)))
+            + (", " if extra_args else "")
+            + ", ".join(
+                "{}=e{}".format(a, i + len(extra_args))
+                for i, a in enumerate(kws.keys())
+            )
+        )
+        extra_args += list(kws.values())
         extra_arg_names = (", " if extra_args else "") + ", ".join(
             "e{}".format(i) for i in range(len(extra_args))
         )
@@ -2162,7 +2178,7 @@ class SeriesPass:
                 func_text += "    t1 = bodo.utils.typing.convert_rec_to_tup(A[j])\n"
             else:
                 func_text += "    t1 = bodo.utils.conversion.box_if_dt64(A[j])\n"
-            func_text += "    item = map_func(t1{})\n".format(extra_arg_names)
+            func_text += "    item = map_func(t1, {})\n".format(udf_arg_names)
             func_text += gen_varsize_item_sizes(out_arr_type, "item", size_varnames)
             func_text += "  numba.parfors.parfor.init_prange()\n"
             func_text += "  varsize_alloc_sizes = ({},)\n".format(
@@ -2178,7 +2194,7 @@ class SeriesPass:
             func_text += "    t2 = bodo.utils.typing.convert_rec_to_tup(A[i])\n"
         else:
             func_text += "    t2 = bodo.utils.conversion.box_if_dt64(A[i])\n"
-        func_text += "    v = map_func(t2{})\n".format(extra_arg_names)
+        func_text += "    v = map_func(t2, {})\n".format(udf_arg_names)
         if isinstance(out_typ, types.BaseTuple):
             func_text += "    S[i] = bodo.utils.typing.convert_tup_to_rec(v)\n"
         else:
