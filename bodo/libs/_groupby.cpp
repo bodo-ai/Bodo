@@ -42,6 +42,7 @@ struct Bodo_FTypes {
         var,
         std,
         udf,
+        gen_udf,
         num_funcs,  // num_funcs is used to know how many functions up to this
                     // point
         mean_eval,
@@ -93,6 +94,20 @@ typedef void (*udf_table_op_fn)(table_info* in_table, table_info* out_table,
  */
 typedef void (*udf_eval_fn)(table_info*);
 
+/**
+ * Function pointer for general UDFs executed in JIT-compiled code (see
+ * also udfinfo_t).
+ *
+ * @param num_groups Number of groups in input data
+ * @param in_table Input table only for columns with general UDFs. This is in
+ *        *non-conventional* format. Given n groups, for each input column
+ *        of groupby, this table contains n columns (containing the input
+ *        data for group 0,1,...,n-1).
+ * @param out_table Groupby output table. Has columns for *all* output,
+ *        including for columns with no general UDFs.
+ */
+typedef void (*udf_general_fn)(int64_t num_groups, table_info* in_table,
+                               table_info* out_table);
 /*
  * This struct stores info that is used when groupby.agg() has JIT-compiled
  * user-defined functions. Such JIT-compiled code will be invoked by the C++
@@ -119,6 +134,13 @@ struct udfinfo_t {
      * sets the final output value for each group.
      */
     udf_eval_fn eval;
+
+    /*
+     * Function pointer to general UDF code (takes input data -by groups-
+     * for all input columns with general UDF and fills in the corresponding
+     * columns in the output table).
+     */
+    udf_general_fn general_udf;
 };
 
 /**
@@ -4222,6 +4244,36 @@ class UdfColSet : public BasicColSet<ARRAY> {
 };
 
 template <typename ARRAY>
+class GeneralUdfColSet : public UdfColSet<ARRAY> {
+   public:
+    GeneralUdfColSet(array_info* in_col, table_info* udf_table,
+                     int udf_table_idx)
+        : UdfColSet<ARRAY>(in_col, false, udf_table, udf_table_idx, 0) {}
+    virtual ~GeneralUdfColSet() {}
+
+    /**
+     * Fill in the input table for general UDF cfunc. See udf_general_fn
+     * and aggregate.py::gen_general_udf_cb for more information.
+     */
+    void fill_in_columns(table_info* general_in_table,
+                         const grouping_info& grp_info) const {
+        array_info* in_col = this->in_col;
+        std::vector<std::vector<size_t>> group_rows(grp_info.num_groups);
+        // get the rows in each group
+        for (size_t i = 0; i < in_col->length; i++) {
+            int64_t i_grp = grp_info.row_to_group[i];
+            group_rows[i_grp].push_back(i);
+        }
+        // retrieve one column per group from the input column, add it to the
+        // general UDF input table
+        for (int64_t i = 0; i < grp_info.num_groups; i++) {
+            array_info* col = RetrieveArray_SingleColumn(in_col, group_rows[i]);
+            general_in_table->columns.push_back(col);
+        }
+    }
+};
+
+template <typename ARRAY>
 class MedianColSet : public BasicColSet<ARRAY> {
    public:
     MedianColSet(array_info* in_col, bool _skipna)
@@ -4364,7 +4416,8 @@ class GroupbyPipeline {
                     int* ftypes, int* func_offsets, int* _udf_nredvars,
                     table_info* _udf_table, udf_table_op_fn update_cb,
                     udf_table_op_fn combine_cb, udf_eval_fn eval_cb,
-                    bool skipna, bool _return_key, bool _return_index)
+                    udf_general_fn general_udfs_cb, bool skipna,
+                    bool _return_key, bool _return_index)
         : in_table(_in_table),
           num_keys(_num_keys),
           dispatch_table(_dispatch_table),
@@ -4379,7 +4432,7 @@ class GroupbyPipeline {
             n_pivot = 1;
         else
             n_pivot = dispatch_table->nrows();
-        udf_info = {udf_table, update_cb, combine_cb, eval_cb};
+        udf_info = {udf_table, update_cb, combine_cb, eval_cb, general_udfs_cb};
         // if true, the last column is the index on input and output.
         // this is relevant only to cumulative operation like cumsum.
         int index_i = int(input_has_index);
@@ -4390,6 +4443,8 @@ class GroupbyPipeline {
         for (int i = 0;
              i < func_offsets[in_table->ncols() - num_keys - index_i]; i++) {
             int ftype = ftypes[i];
+            if (ftype == Bodo_FTypes::gen_udf && is_parallel)
+                shuffle_before_update = true;
             if (ftype == Bodo_FTypes::nunique || ftype == Bodo_FTypes::median ||
                 ftype == Bodo_FTypes::cumsum || ftype == Bodo_FTypes::cumprod ||
                 ftype == Bodo_FTypes::cummin || ftype == Bodo_FTypes::cummax) {
@@ -4444,9 +4499,15 @@ class GroupbyPipeline {
             for (int j = start; j != end; j++) {
                 col_sets.push_back(makeColSet(col, index_col, ftypes[j],
                                               do_combine, skipna, n_udf));
-                if (ftypes[j] == Bodo_FTypes::udf) {
+                if (ftypes[j] == Bodo_FTypes::udf ||
+                    ftypes[j] == Bodo_FTypes::gen_udf) {
                     udf_table_idx += (1 + udf_n_redvars[n_udf]);
                     n_udf++;
+                    if (ftypes[j] == Bodo_FTypes::gen_udf) {
+                        gen_udf_col_sets.push_back(
+                            dynamic_cast<GeneralUdfColSet<ARRAY>*>(
+                                col_sets.back()));
+                    }
                 }
             }
         }
@@ -4490,6 +4551,9 @@ class GroupbyPipeline {
                 return new UdfColSet<ARRAY>(in_col, do_combine, udf_table,
                                             udf_table_idx,
                                             udf_n_redvars[n_udf]);
+            case Bodo_FTypes::gen_udf:
+                return new GeneralUdfColSet<ARRAY>(in_col, udf_table,
+                                                   udf_table_idx);
             case Bodo_FTypes::median:
                 return new MedianColSet<ARRAY>(in_col, skipna);
             case Bodo_FTypes::nunique:
@@ -4551,14 +4615,21 @@ class GroupbyPipeline {
         if (return_index)
             update_table->columns.push_back(
                 copy_array(in_table->columns.back()));
-        if (n_udf > 0)
-            udf_info.update(in_table, update_table,
-                            grp_info.row_to_group.data());
-#ifdef DEBUG_GROUPBY
-        std::cout << "End of update(). update_table=\n";
-        DEBUG_PrintSetOfColumn(std::cout, update_table->columns);
-        DEBUG_PrintRefct(std::cout, update_table->columns);
-#endif
+        if (n_udf > 0) {
+            int n_gen_udf = gen_udf_col_sets.size();
+            if (n_udf > n_gen_udf)
+                // regular UDFs
+                udf_info.update(in_table, update_table,
+                                grp_info.row_to_group.data());
+            if (n_gen_udf > 0) {
+                table_info* general_in_table = new table_info();
+                for (auto udf_col_set : gen_udf_col_sets)
+                    udf_col_set->fill_in_columns(general_in_table, grp_info);
+                udf_info.general_udf(grp_info.num_groups, general_in_table,
+                                     update_table);
+                delete_table_decref_arrays(general_in_table);
+            }
+        }
     }
 
     /**
@@ -4630,7 +4701,8 @@ class GroupbyPipeline {
      */
     void eval() {
         for (auto col_set : col_sets) col_set->eval(grp_info);
-        if (n_udf > 0) udf_info.eval(cur_table);
+        // only regular UDFs need eval step
+        if (n_udf - gen_udf_col_sets.size() > 0) udf_info.eval(cur_table);
     }
 
     /**
@@ -4786,8 +4858,11 @@ class GroupbyPipeline {
     bool return_key;
     bool return_index;
     std::vector<BasicColSet<ARRAY>*> col_sets;
+    std::vector<GeneralUdfColSet<ARRAY>*> gen_udf_col_sets;
     table_info* udf_table;
     int* udf_n_redvars;
+    // total number of UDFs applied to input columns (includes regular and
+    // general UDFs)
     int n_udf = 0;
     int udf_table_idx = 0;
     int n_pivot;
@@ -5386,60 +5461,25 @@ table_info* pivot_groupby_and_aggregate(
     int* func_offsets, int* udf_nredvars, bool is_parallel, bool is_crosstab,
     bool skipdropna, bool return_key, bool return_index, void* update_cb,
     void* combine_cb, void* eval_cb, table_info* udf_dummy_table) {
-#ifdef DEBUG_GROUPBY
-    std::cout << "------------- BEGIN : pivot_groupby_and_aggregate "
-                 "--------------------\n";
-    std::cout << "TABLE: in_table\n";
-    DEBUG_PrintRefct(std::cout, in_table->columns);
-    DEBUG_PrintSetOfColumn(std::cout, in_table->columns);
-    std::cout << "TABLE: dispatch_table\n";
-    DEBUG_PrintRefct(std::cout, dispatch_table->columns);
-    DEBUG_PrintSetOfColumn(std::cout, dispatch_table->columns);
-    std::cout << "TABLE: dispatch_info\n";
-    DEBUG_PrintRefct(std::cout, dispatch_info->columns);
-    DEBUG_PrintSetOfColumn(std::cout, dispatch_info->columns);
-#endif
-
     GroupbyPipeline<multiple_array_info> groupby(
         in_table, num_keys, dispatch_table, dispatch_info, input_has_index,
         is_parallel, is_crosstab, ftypes, func_offsets, udf_nredvars,
         udf_dummy_table, (udf_table_op_fn)update_cb,
-        (udf_table_op_fn)combine_cb, (udf_eval_fn)eval_cb, skipdropna,
+        // TODO: general UDFs
+        (udf_table_op_fn)combine_cb, (udf_eval_fn)eval_cb, 0, skipdropna,
         return_key, return_index);
 
     table_info* ret_table = groupby.run();
-#ifdef DEBUG_GROUPBY
-    std::cout << "RET_TABLE (groupby, classic code path):\n";
-    DEBUG_PrintRefct(std::cout, ret_table->columns);
-    DEBUG_PrintSetOfColumn(std::cout, ret_table->columns);
-    std::cout << "------------- END : pivot_groupby_and_aggregate "
-                 "--------------------\n";
-#endif
     return ret_table;
 }
 
-table_info* groupby_and_aggregate(table_info* in_table, int64_t num_keys,
-                                  bool input_has_index, int* ftypes,
-                                  int* func_offsets, int* udf_nredvars,
-                                  bool is_parallel, bool skipdropna,
-                                  bool return_key, bool return_index,
-                                  void* update_cb, void* combine_cb,
-                                  void* eval_cb, table_info* udf_dummy_table) {
-#ifdef DEBUG_GROUPBY_SYMBOL
-    std::cout << "IN_TABLE (groupby):\n";
-#ifdef DEBUG_GROUPBY_FULL
-    DEBUG_PrintSetOfColumn(std::cout, in_table->columns);
-#endif
-    DEBUG_PrintRefct(std::cout, in_table->columns);
-    std::cout << "num_keys=" << num_keys << " is_parallel=" << is_parallel
-              << " input_has_index=" << input_has_index << "\n";
-#endif
-
+table_info* groupby_and_aggregate(
+    table_info* in_table, int64_t num_keys, bool input_has_index, int* ftypes,
+    int* func_offsets, int* udf_nredvars, bool is_parallel, bool skipdropna,
+    bool return_key, bool return_index, void* update_cb, void* combine_cb,
+    void* eval_cb, void* general_udfs_cb, table_info* udf_dummy_table) {
     int strategy = determine_groupby_strategy(
         in_table, num_keys, ftypes, func_offsets, is_parallel, input_has_index);
-#ifdef DEBUG_GROUPBY
-    std::cout << "groupby : strategy = " << strategy << "\n";
-#endif
 
     auto implement_strategy0 = [&]() -> table_info* {
         table_info* dispatch_info = nullptr;
@@ -5448,17 +5488,11 @@ table_info* groupby_and_aggregate(table_info* in_table, int64_t num_keys,
             in_table, num_keys, dispatch_table, dispatch_info, input_has_index,
             is_parallel, true, ftypes, func_offsets, udf_nredvars,
             udf_dummy_table, (udf_table_op_fn)update_cb,
-            (udf_table_op_fn)combine_cb, (udf_eval_fn)eval_cb, skipdropna,
-            return_key, return_index);
+            (udf_table_op_fn)combine_cb, (udf_eval_fn)eval_cb,
+            (udf_general_fn)general_udfs_cb, skipdropna, return_key,
+            return_index);
 
         table_info* ret_table = groupby.run();
-#ifdef DEBUG_GROUPBY_SYMBOL
-        std::cout << "RET_TABLE (groupby, classic code path):\n";
-#ifdef DEBUG_GROUPBY_FULL
-        DEBUG_PrintSetOfColumn(std::cout, ret_table->columns);
-#endif
-        DEBUG_PrintRefct(std::cout, ret_table->columns);
-#endif
         return ret_table;
     };
     auto implement_categorical_exscan =
@@ -5466,18 +5500,6 @@ table_info* groupby_and_aggregate(table_info* in_table, int64_t num_keys,
         table_info* ret_table = mpi_exscan_computation(
             cat_column, in_table, num_keys, ftypes, func_offsets, is_parallel,
             skipdropna, return_key, return_index);
-#ifdef DEBUG_GROUPBY_SYMBOL
-        std::cout << "RET_TABLE (groupby, categorical_exscan code path):\n";
-#ifdef DEBUG_GROUPBY_FULL
-        DEBUG_PrintSetOfColumn(std::cout, ret_table->columns);
-#endif
-        DEBUG_PrintRefct(std::cout, ret_table->columns);
-#endif
-#ifdef DEBUG_GROUPBY_SYMBOL
-        std::cout
-            << "IN_TABLE (groupby implement_categorical_exscan on exit):\n";
-        DEBUG_PrintRefct(std::cout, in_table->columns);
-#endif
         return ret_table;
     };
     if (strategy == 0) return implement_strategy0();
@@ -5492,11 +5514,6 @@ table_info* groupby_and_aggregate(table_info* in_table, int64_t num_keys,
                                       // different keys for exscan to be ok.
             return implement_strategy0();
         } else {
-#ifdef DEBUG_GROUPBY
-            std::cout << "Before the implement_categorical_exscan\n";
-            std::cout << "num_categories=" << cat_column->num_categories
-                      << "\n";
-#endif
             table_info* ret_table = implement_categorical_exscan(cat_column);
             delete_info_decref_array(cat_column);
             return ret_table;

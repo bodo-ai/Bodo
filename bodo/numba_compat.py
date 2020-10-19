@@ -984,6 +984,7 @@ def resolve_gb_agg_funcs(cres):
                 "bodo_gb_udf_update_local" in sym
                 or "bodo_gb_udf_combine" in sym
                 or "bodo_gb_udf_eval" in sym
+                or "bodo_gb_apply_general_udfs" in sym
             )
         ):
             gb_agg_cfunc_addr[sym] = cres.library.get_pointer_to_function(sym)

@@ -1267,6 +1267,41 @@ def test_aggregate_select_col(is_slow_run, memory_leak_check):
     check_func(test_impl, (11,), sort_output=True, check_dtype=False)
 
 
+def test_groupby_agg_general_udf(memory_leak_check):
+    """
+    Test groupy.agg with mix of general UDFs, regular UDF and builtin aggregation functions
+    """
+
+    def impl(df):
+        def f(x):  # regular UDF
+            return sum(x) ** 2
+
+        def g(x):  # general UDF
+            z = x.iloc[1]
+            z += x.iloc[0] + x.iloc[2]
+            return x.iloc[0] + z
+
+        def h(x):  # general UDF
+            return sum(x / len(x))
+
+        def i(x):  # general UDF
+            res = 0
+            for i in range(len(x)):
+                if x.iloc[i] < 5:
+                    res += 1
+                elif x.iloc[i] < 8:
+                    res += 2
+                else:
+                    res += 3
+            return res
+
+        res = df.groupby("A")["B"].agg(("var", h, f, i, "sum", g))
+        return res
+
+    df = pd.DataFrame({"A": [0, 0, 1, 1, 1, 0], "B": [3, 10, 20, 4, 5, 1]})
+    check_func(impl, (df,), sort_output=True)
+
+
 def test_groupby_agg_const_dict(memory_leak_check):
     """
     Test groupy.agg with function spec passed as constant dictionary
@@ -1399,10 +1434,28 @@ def test_groupby_agg_caching(memory_leak_check):
         A = df.groupby("A").agg(lambda x: x.max() - x.min())
         return A
 
-    df = pd.DataFrame({"A": [0, 0, 1, 1, 0], "B": range(5)})
+    def impl2(df):
+        def g(X):
+            z = X.iloc[0] + X.iloc[2]
+            return X.iloc[0] + z
+
+        A = df.groupby("A").agg(g)
+        return A
+
+    df = pd.DataFrame({"A": [0, 0, 1, 1, 1, 0], "B": range(6)})
+
+    # test impl (regular UDF)
     py_out = impl(df)
     bodo_out1, bodo_out2 = check_caching(
         sys.modules[__name__], "test_groupby_agg_caching", impl, (df,)
+    )
+    pd.testing.assert_frame_equal(py_out, bodo_out1)
+    pd.testing.assert_frame_equal(py_out, bodo_out2)
+
+    # test impl2 (general UDF)
+    py_out = impl2(df)
+    bodo_out1, bodo_out2 = check_caching(
+        sys.modules[__name__], "test_groupby_agg_caching", impl2, (df,)
     )
     pd.testing.assert_frame_equal(py_out, bodo_out1)
     pd.testing.assert_frame_equal(py_out, bodo_out2)

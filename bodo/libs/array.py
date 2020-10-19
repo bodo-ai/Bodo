@@ -1537,6 +1537,7 @@ def groupby_and_aggregate(
     update_cb,
     combine_cb,
     eval_cb,
+    general_udfs_cb,
     udf_table_dummy_t,
 ):
     """
@@ -1564,6 +1565,7 @@ def groupby_and_aggregate(
                 lir.IntType(8).as_pointer(),
                 lir.IntType(8).as_pointer(),
                 lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
             ],
         )
         fn_tp = builder.module.get_or_insert_function(
@@ -1583,6 +1585,7 @@ def groupby_and_aggregate(
             types.boolean,
             types.boolean,
             types.boolean,
+            types.voidptr,
             types.voidptr,
             types.voidptr,
             types.voidptr,

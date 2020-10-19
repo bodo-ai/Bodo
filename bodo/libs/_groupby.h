@@ -54,16 +54,16 @@ void groupby_init();
  *        function to current table)
  * @param external 'eval' function (a function pointer).
  *        For ftype=udf, external code does the eval step.
+ * @param external function (function pointer) for general UDFs. Does the UDF
+ *        for all input columns with ftype=gen_udf
  * @param dummy table containing type info for output and redvars columns for
  *        udfs
  */
-table_info* groupby_and_aggregate(table_info* in_table, int64_t num_keys,
-                                  bool input_has_index, int* ftypes,
-                                  int* func_offsets, int* udf_nredvars,
-                                  bool is_parallel, bool skipdropna,
-                                  bool return_key, bool return_index,
-                                  void* update_cb, void* combine_cb,
-                                  void* eval_cb, table_info* udf_dummy_table);
+table_info* groupby_and_aggregate(
+    table_info* in_table, int64_t num_keys, bool input_has_index, int* ftypes,
+    int* func_offsets, int* udf_nredvars, bool is_parallel, bool skipdropna,
+    bool return_key, bool return_index, void* update_cb, void* combine_cb,
+    void* eval_cb, void* general_udfs_cb, table_info* udf_dummy_table);
 
 table_info* pivot_groupby_and_aggregate(
     table_info* in_table, int64_t num_keys, table_info* dispatch_table,
