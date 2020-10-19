@@ -2243,6 +2243,12 @@ class DistributedAnalysis:
                 # TODO(ehsan): is the index variable name actually needed
                 concat_reduce_vars.add(index_varname)
                 self._get_concat_reduce_vars(index_varname, concat_reduce_vars)
+            # data and index variables of Series are created from concat()
+            if fdef == ("init_series", "bodo.hiframes.pd_series_ext"):
+                self._get_concat_reduce_vars(var_def.args[0].name, concat_reduce_vars)
+                index_varname = var_def.args[1].name
+                concat_reduce_vars.add(index_varname)
+                self._get_concat_reduce_vars(index_varname, concat_reduce_vars)
             if fdef == ("concat", "bodo.libs.array_kernels"):
                 concat_reduce_vars.add(varname)
             # Index is created from concat(), TODO(ehsan): other index init calls
@@ -2324,6 +2330,9 @@ def _is_concat_reduce(reduce_varname, reduce_nodes, func_ir, typemap):
         require(is_expr(arg_def, "build_tuple"))
         require(len(arg_def.items) > 0)
         reduce_func_call = get_definition(func_ir, arg_def.items[0])
+
+    if fdef == ("init_series", "bodo.hiframes.pd_series_ext"):
+        reduce_func_call = get_definition(func_ir, reduce_func_call.args[0])
 
     require(
         find_callname(func_ir, reduce_func_call)
