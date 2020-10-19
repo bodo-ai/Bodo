@@ -48,3 +48,6 @@ tutorial/test_bodo.py
 # Coverage report
 coverage.xml
 .coverage
+
+# Logs
+algebra.log
