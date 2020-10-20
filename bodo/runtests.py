@@ -60,7 +60,7 @@ except subprocess.CalledProcessError as e:
         raise e
 
 # get the list of test modules (test file names) to run
-pytest_module_regexp = re.compile("<Module (\S+.py)>")
+pytest_module_regexp = re.compile(r"<Module (\S+.py)>")
 modules = []
 for l in output.decode().split("\n"):
     m = pytest_module_regexp.search(l)

@@ -14,8 +14,8 @@ additional Bodo features and discuss more advanced topics.
 """
 
 
-px_regexp = re.compile("\s*%%px")
-section_header_regexp = re.compile("^[=\-~]+\s*$")
+px_regexp = re.compile(r"\s*%%px")
+section_header_regexp = re.compile(r"^[=\-~]+\s*$")
 
 
 def is_section_header(l):
