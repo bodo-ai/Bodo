@@ -470,8 +470,7 @@ The `user (or dev) documentation <https://docs.bodo.ai>`_ is under the `docs (or
 the reStructuredText format.
 It is built with `Sphinx <http://www.sphinx-doc.org>`_ and a custom Bodo theme based on alabaster::
 
-    conda install sphinx
-    conda install alabaster
+    conda install sphinx alabaster -c conda-forge
 
 After updating documentation, run :code:`make html` in the `docs` folder to build.
 Open `_build/html/index.html` to view the documentation.
