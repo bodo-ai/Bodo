@@ -8,7 +8,7 @@ Bodo
 
 .. toctree::
    :maxdepth: 2
-   :caption: Version 2020.09
+   :caption: Version 2020.10
    :numbered:
 
    source/overview

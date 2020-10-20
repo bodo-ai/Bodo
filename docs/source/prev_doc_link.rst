@@ -4,6 +4,8 @@ Previous Release Documentation
 ================================
 `Latest <../_static/redirect/latest.html>`_  
 
+`Bodo 2020.09 Release <../_static/redirect/2020_09.html>`_
+
 `Bodo 2020.08 Release <../_static/redirect/2020_08.html>`_
 
 `Bodo 2020.07 Release <../_static/redirect/2020_07.html>`_
