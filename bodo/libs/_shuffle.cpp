@@ -2356,7 +2356,8 @@ bool need_reshuffling(table_info* in_table, double crit_fraction) {
 /* Apply a renormalization shuffling
    After the operation, all nodes will have a standard size
  */
-table_info* shuffle_renormalization(table_info* in_table) {
+table_info* shuffle_renormalization(table_info* in_table, bool parallel) {
+    if (!parallel) return in_table;
     int64_t n_rows = in_table->nrows();
     int n_pes, myrank;
     MPI_Comm_size(MPI_COMM_WORLD, &n_pes);

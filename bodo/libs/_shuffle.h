@@ -157,7 +157,7 @@ bool need_reshuffling(table_info* in_table, double crit_fraction);
    @param in_table : the input partitioned table
    @return the reshuffled table
  */
-table_info* shuffle_renormalization(table_info* in_table);
+table_info* shuffle_renormalization(table_info* in_table, bool parallel);
 
 /* This function is used for the reverse shuffling of numpy data.
  *

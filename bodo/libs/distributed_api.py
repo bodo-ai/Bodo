@@ -874,33 +874,34 @@ def gatherv(data, allgather=False, warn_if_rep=True):
 
 
 @numba.generated_jit(nopython=True)
-def rebalance_kernel(df):
+def rebalance(df, parallel=False):
     n_cols = len(df.columns)
-    func_text = "def impl(df):\n"
+    func_text = "def impl(df, parallel=False):\n"
     for i in range(n_cols):
-        func_text += "  data_{0} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {0})\n".format(
+        func_text += "    data_{0} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {0})\n".format(
             i
         )
-    func_text += "  ind_arr = bodo.utils.conversion.index_to_array(bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df))\n"
+    func_text += "    ind_arr = bodo.utils.conversion.index_to_array(bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df))\n"
     data_args = ", ".join("data_{}".format(i) for i in range(n_cols))
-    func_text += "  info_list_total = [{}, array_to_info(ind_arr)]\n".format(
+    func_text += "    info_list_total = [{}, array_to_info(ind_arr)]\n".format(
         ", ".join("array_to_info(data_{})".format(x) for x in range(n_cols))
     )
-    func_text += "  table_total = arr_info_list_to_table(info_list_total)\n"
-    func_text += "  out_table = shuffle_renormalization(table_total)\n"
+    func_text += "    table_total = arr_info_list_to_table(info_list_total)\n"
+    func_text += "    out_table = shuffle_renormalization(table_total, parallel)\n"
     for i_col in range(n_cols):
-        func_text += "  out_arr_{0} = info_to_array(info_from_table(out_table, {0}), data_{0})\n".format(
+        func_text += "    out_arr_{0} = info_to_array(info_from_table(out_table, {0}), data_{0})\n".format(
             i_col
         )
-    func_text += "  out_arr_index = info_to_array(info_from_table(out_table, {}), ind_arr)\n".format(
+    func_text += "    out_arr_index = info_to_array(info_from_table(out_table, {}), ind_arr)\n".format(
         n_cols
     )
-    func_text += "  delete_table(out_table)\n"
-    func_text += "  delete_table(table_total)\n"
+    func_text += "    delete_table(out_table)\n"
+    func_text += "    if parallel:\n"
+    func_text += "        delete_table(table_total)\n"
     data_args = ", ".join("out_arr_{}".format(i) for i in range(n_cols))
     col_var = bodo.utils.transform.gen_const_tup(df.columns)
     index = "bodo.utils.conversion.index_from_array(out_arr_index)"
-    func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), {}, {})\n".format(
+    func_text += "    return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), {}, {})\n".format(
         data_args, index, col_var
     )
     loc_vars = {}
@@ -919,14 +920,6 @@ def rebalance_kernel(df):
         loc_vars,
     )
     impl = loc_vars["impl"]
-    return impl
-
-
-@numba.generated_jit(nopython=True)
-def rebalance(df):
-    def impl(df):
-        return df.copy()
-
     return impl
 
 

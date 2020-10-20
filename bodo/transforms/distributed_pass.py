@@ -1011,8 +1011,8 @@ class DistributedPass:
             "bodo",
         }:
             if self._is_1D_or_1D_Var_arr(rhs.args[0].name):
-                f = lambda df: bodo.libs.distributed_api.rebalance_kernel(df)
-                return compile_func_single_block(f, rhs.args, assign.target, self)
+                self._set_last_arg_to_true(assign.value)
+                return [assign]
             else:
                 warnings.warn("Invoking rebalance on a replicated array has no effect")
 

@@ -611,6 +611,14 @@ def test_df_multi_get_level(memory_leak_check):
     check_func(impl3, (df,))
 
 
+def test_rebalance_simple(memory_leak_check):
+    def impl(df):
+        return bodo.rebalance(df)
+
+    df = pd.DataFrame({"A": range(10)})
+    check_func(impl, (df,), py_output=df)
+
+
 def test_rebalance():
     """The bodo.rebalance function. It takes a dataframe which is unbalanced and
     returns a balanced one"""
@@ -626,7 +634,7 @@ def test_rebalance():
     df_in = pd.DataFrame({"A": elist}, index=flist)
     df_in_merge = bodo.gatherv(df_in)
     # Direct calling the function
-    df_out = bodo.libs.distributed_api.rebalance_kernel(df_in)
+    df_out = bodo.libs.distributed_api.rebalance(df_in)
     df_out_merge = bodo.gatherv(df_out)
     pd.testing.assert_frame_equal(df_in_merge, df_out_merge)
     # The distributed case
