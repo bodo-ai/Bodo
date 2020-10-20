@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 import sklearn.cluster
 import sklearn.ensemble
+import sklearn.linear_model
 import sklearn.metrics
 import sklearn.utils
 from mpi4py import MPI
@@ -21,7 +22,7 @@ from numba.extending import (
     typeof_impl,
     unbox,
 )
-from sklearn.metrics import hinge_loss, log_loss
+from sklearn.metrics import hinge_loss, log_loss, mean_squared_error
 
 import bodo
 from bodo.libs.distributed_api import (
@@ -603,6 +604,181 @@ def overload_f1_score(y_true, y_pred, average="binary", _is_data_distributed=Fal
             return _f1_score_impl
 
 
+# -------------------------------------SGDRegressor----------------------------------------
+# Support sklearn.linear_model.SGDRegressorusing object mode of Numba
+# Linear regression: sklearn.linear_model.SGDRegressor(loss="squared_loss", penalty=None)
+# Ridge regression: sklearn.linear_model.SGDRegressor(loss="squared_loss", penalty='l2')
+# Lasso: sklearn.linear_model.SGDRegressor(loss="squared_loss", penalty='l1')
+
+# -----------------------------------------------------------------------------
+# Typing and overloads to use SGDRegressor inside Bodo functions
+# directly via sklearn's API
+
+
+class BodoSGDRegressorType(types.Opaque):
+    def __init__(self):
+        super(BodoSGDRegressorType, self).__init__(name="BodoSGDRegressorType")
+
+
+sgd_regressor_type = BodoSGDRegressorType()
+types.sgd_regressor_type = sgd_regressor_type
+
+register_model(BodoSGDRegressorType)(models.OpaqueModel)
+
+
+@typeof_impl.register(sklearn.linear_model.SGDRegressor)
+def typeof_sgd_regressor(val, c):
+    return sgd_regressor_type
+
+
+@box(BodoSGDRegressorType)
+def box_sgd_regressor(typ, val, c):
+    # See note in box_random_forest_classifier
+    c.pyapi.incref(val)
+    return val
+
+
+@unbox(BodoSGDRegressorType)
+def unbox_sgd_regressor(typ, obj, c):
+    # borrow a reference from Python
+    c.pyapi.incref(obj)
+    return NativeValue(obj)
+
+
+@overload(sklearn.linear_model.SGDRegressor, no_unliteral=True)
+def sklearn_linear_model_SGDRegressor_overload(
+    loss="squared_loss",
+    penalty="l2",
+    alpha=0.0001,
+    l1_ratio=0.15,
+    fit_intercept=True,
+    max_iter=1000,
+    tol=0.001,
+    shuffle=True,
+    verbose=0,
+    epsilon=0.1,
+    random_state=None,
+    learning_rate="invscaling",
+    eta0=0.01,
+    power_t=0.25,
+    early_stopping=False,
+    validation_fraction=0.1,
+    n_iter_no_change=5,
+    warm_start=False,
+    average=False,
+):
+    def _sklearn_linear_model_SGDRegressor_impl(
+        loss="squared_loss",
+        penalty="l2",
+        alpha=0.0001,
+        l1_ratio=0.15,
+        fit_intercept=True,
+        max_iter=1000,
+        tol=0.001,
+        shuffle=True,
+        verbose=0,
+        epsilon=0.1,
+        random_state=None,
+        learning_rate="invscaling",
+        eta0=0.01,
+        power_t=0.25,
+        early_stopping=False,
+        validation_fraction=0.1,
+        n_iter_no_change=5,
+        warm_start=False,
+        average=False,
+    ):  # pragma: no cover
+        with numba.objmode(m="sgd_regressor_type"):
+            m = sklearn.linear_model.SGDRegressor(
+                loss=loss,
+                penalty=penalty,
+                alpha=alpha,
+                l1_ratio=l1_ratio,
+                fit_intercept=fit_intercept,
+                max_iter=max_iter,
+                tol=tol,
+                shuffle=shuffle,
+                verbose=verbose,
+                epsilon=epsilon,
+                random_state=random_state,
+                learning_rate=learning_rate,
+                eta0=eta0,
+                power_t=power_t,
+                early_stopping=early_stopping,
+                validation_fraction=validation_fraction,
+                n_iter_no_change=n_iter_no_change,
+                warm_start=warm_start,
+                average=average,
+            )
+        return m
+
+    return _sklearn_linear_model_SGDRegressor_impl
+
+
+@overload_method(BodoSGDRegressorType, "fit", no_unliteral=True)
+def overload_sgdr_model_fit(
+    m,
+    X,
+    y,
+    _is_data_distributed=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
+):
+    def _model_sgdr_fit_impl(m, X, y, _is_data_distributed=False):  # pragma: no cover
+
+        # TODO: Rebalance the data X and y to be the same size on every rank
+        with numba.objmode(m="sgd_regressor_type"):
+            m = fit_sgd(m, X, y, _is_data_distributed)
+
+        bodo.barrier()
+
+        return m
+
+    return _model_sgdr_fit_impl
+
+
+@overload_method(BodoSGDRegressorType, "predict", no_unliteral=True)
+def overload_sgdr_model_predict(m, X):
+    def _model_predict_impl(m, X):  # pragma: no cover
+
+        with numba.objmode(result="int64[:]"):
+            # currently we do data-parallel prediction
+            m.n_jobs = 1
+            if len(X) == 0:
+                # TODO If X is replicated this should be an error (same as sklearn)
+                result = np.empty(0, dtype=np.int64)
+            else:
+                result = m.predict(X).astype(np.int64).flatten()
+        return result
+
+    return _model_predict_impl
+
+
+@overload_method(BodoSGDRegressorType, "score", no_unliteral=True)
+def overload_sgdr_model_score(
+    m,
+    X,
+    y,
+    sample_weight=None,
+    _is_data_distributed=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
+):
+    def _model_score_impl(
+        m, X, y, sample_weight=None, _is_data_distributed=False
+    ):  # pragma: no cover
+
+        with numba.objmode(result="float64[:]"):
+            result = m.score(X, y, sample_weight=sample_weight)
+            if _is_data_distributed:
+                # replicate result so that the average is weighted based on
+                # the data size on each rank
+                result = np.full(len(y), result)
+            else:
+                result = np.array([result])
+        if _is_data_distributed:
+            result = bodo.allgatherv(result)
+        return result.mean()
+
+    return _model_score_impl
+
+
 # -------------------------------------SGDClassifier----------------------------------------
 # Support sklearn.linear_model.SGDClassifier using object mode of Numba
 # The model it fits can be controlled with the loss parameter; by default, it fits a linear support vector machine (SVM).
@@ -721,7 +897,7 @@ def sklearn_linear_model_SGDClassifier_overload(
     return _sklearn_linear_model_SGDClassifier_impl
 
 
-def fit_sgdc(m, X, y, y_classes, _is_data_distributed=False):
+def fit_sgd(m, X, y, y_classes=None, _is_data_distributed=False):
     """Fit a linear model classifier using SGD (parallel version)"""
     comm = MPI.COMM_WORLD
     # Get size of data on each rank
@@ -738,15 +914,30 @@ def fit_sgdc(m, X, y, y_classes, _is_data_distributed=False):
         loss_func = hinge_loss
     elif m.loss == "log":
         loss_func = log_loss
+    elif m.loss == "squared_loss":
+        loss_func = mean_squared_error
+    else:
+        raise ValueError("loss {} not supported".format(m.loss))
+
+    regC = False
+    if isinstance(m, sklearn.linear_model.SGDRegressor):
+        regC = True
     for _ in range(m.max_iter):
-        m.partial_fit(X, y, classes=y_classes)
+        if regC:
+            m.partial_fit(X, y)
+        else:
+            m.partial_fit(X, y, classes=y_classes)
         # Can be removed when rebalancing is done. Now, we have to give more weight to ranks with more data
         m.coef_ = m.coef_ * rank_weight
         m.coef_ = comm.allreduce(m.coef_, op=MPI.SUM)
         m.intercept_ = m.intercept_ * rank_weight
         m.intercept_ = comm.allreduce(m.intercept_, op=MPI.SUM)
-        y_pred = m.decision_function(X)
-        cur_loss = loss_func(y, y_pred, labels=y_classes)
+        if regC:
+            y_pred = m.predict(X)
+            cur_loss = loss_func(y, y_pred)
+        else:
+            y_pred = m.decision_function(X)
+            cur_loss = loss_func(y, y_pred, labels=y_classes)
         cur_loss_sum = comm.allreduce(cur_loss, op=MPI.SUM)
         cur_loss = cur_loss_sum / nranks
         # https://github.com/scikit-learn/scikit-learn/blob/master/sklearn/linear_model/_sgd_fast.pyx#L620
@@ -779,7 +970,7 @@ def overload_sgdc_model_fit(
             y_classes = bodo.allgatherv(y_classes, False)
 
         with numba.objmode(m="sgd_classifier_type"):
-            m = fit_sgdc(m, X, y, y_classes, _is_data_distributed)
+            m = fit_sgd(m, X, y, y_classes, _is_data_distributed)
 
         bodo.barrier()
 

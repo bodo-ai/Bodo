@@ -8,10 +8,11 @@ import pandas as pd
 import pytest
 from sklearn import datasets
 from sklearn.cluster import KMeans
-from sklearn.datasets import make_classification
+from sklearn.datasets import make_classification, make_regression
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.linear_model import SGDClassifier
+from sklearn.linear_model import SGDClassifier, SGDRegressor
 from sklearn.metrics import f1_score, precision_score, recall_score
+from sklearn.preprocessing import StandardScaler
 from sklearn.utils._testing import assert_allclose, assert_array_equal
 from sklearn.utils.validation import check_random_state
 
@@ -320,35 +321,7 @@ def test_multinode_bigdata():
 
 
 # ---------------------- SGDClassifer tests ----------------------
-def test_sgdc_classification_toy():
-    """Check classification on a toy dataset."""
-
-    X = np.array([[-2, -1], [-1, -1], [-1, -2], [1, 1], [1, 2], [2, 1]])
-    y = np.array([-1, -1, -1, 1, 1, 1])
-    T = np.array([[-1, -1], [2, 2], [3, 2]] * 3)
-    true_result = np.array([-1, 1, 1] * 3)
-
-    def impl0(X, y, T):
-        clf = SGDClassifier()
-        clf.fit(X, y)
-        return clf
-
-    clf = bodo.jit(distributed=["X", "y", "T"])(impl0)(
-        _get_dist_arg(np.array(X)),
-        _get_dist_arg(np.array(y)),
-        _get_dist_arg(np.array(T)),
-    )
-    np.testing.assert_array_equal(clf.predict(T), true_result)
-
-    def impl1(X, y, T):
-        clf = SGDClassifier()
-        clf.fit(X, y)
-        return clf.predict(T)
-
-    check_func(impl1, (np.array(X), np.array(y), np.array(T)))
-
-
-def test_sgdc_svm_bigdata():
+def test_sgdc_svm():
     """Check SGDClassifier SVM against sklearn with big data on multinode cluster"""
 
     # name is used for distinguishing function printing time.
@@ -404,7 +377,7 @@ def test_sgdc_svm_bigdata():
         assert np.allclose(sklearn_predict_result, bodo_predict_result, atol=0.1)
 
 
-def test_sgdc_lr_bigdata():
+def test_sgdc_lr():
     """Check SGDClassifier Logistic Regression against sklearn with big data on multinode cluster"""
 
     # name is used for distinguishing function printing time.
@@ -453,6 +426,68 @@ def test_sgdc_lr_bigdata():
         y_train = bodo.scatterv(y[:splitN])
         X_test = bodo.scatterv(X[splitN:])
         y_test = bodo.scatterv(y[splitN:])
+    else:
+        X_train = bodo.scatterv(None)
+        y_train = bodo.scatterv(None)
+        X_test = bodo.scatterv(None)
+        y_test = bodo.scatterv(None)
+
+    bodo_predict_result = bodo.jit(
+        distributed=["X_train", "y_train", "X_test", "y_test"]
+    )(impl)(X_train, y_train, X_test, y_test)
+    if bodo.get_rank() == 0:
+        assert np.allclose(sklearn_predict_result, bodo_predict_result, atol=0.1)
+
+
+# ---------------------- SGDRegressor tests ----------------------
+@pytest.mark.parametrize("penalty", ["l1", "l2", None])
+def test_sgdr(penalty):
+    """Check SGDRegressor against sklearn
+    penalty identifies type of regression
+    None:Linear, l1: Ridge, l2: Lasso"""
+    # name is used for distinguishing function printing time.
+    def impl(X_train, y_train, X_test, y_test, name="BODO"):
+        # Bodo ignores n_jobs. This is set for scikit-learn (non-bodo) run. It should be set to number of cores avialable.
+        # Currently disabling any iteration breaks for fair comparison with partial_fit. Loop for max_iter
+        clf = SGDRegressor(
+            penalty=penalty,
+            early_stopping=False,
+            verbose=0,
+        )
+        start_time = time.time()
+        clf.fit(X_train, y_train)
+        end_time = time.time()
+        if bodo.get_rank() == 0:
+            print("\n", name, "Time: ", (end_time - start_time), "\n")
+        score = clf.score(X_test, y_test)
+        return score
+
+    splitN = 500
+    n_samples = 10000
+    n_features = 100
+    X_train = None
+    y_train = None
+    X_test = None
+    y_test = None
+    if bodo.get_rank() == 0:
+        X, y = make_regression(
+            n_samples=n_samples,
+            n_features=n_features,
+            n_informative=n_features,
+        )
+        X_train = X[:splitN]
+        y_train = y[:splitN]
+        X_test = X[splitN:]
+        y_test = y[splitN:]
+        scaler = StandardScaler().fit(X_train)
+        X_train = scaler.transform(X_train)
+        X_test = scaler.transform(X_test)
+
+        sklearn_predict_result = impl(X_train, y_train, X_test, y_test, "SK")
+        X_train = bodo.scatterv(X_train)
+        y_train = bodo.scatterv(y_train)
+        X_test = bodo.scatterv(X_test)
+        y_test = bodo.scatterv(y_test)
     else:
         X_train = bodo.scatterv(None)
         y_train = bodo.scatterv(None)
