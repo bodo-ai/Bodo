@@ -202,4 +202,5 @@ intersphinx_mapping = {
     "numba": ("http://numba.pydata.org/numba-doc/latest/", None),
     "pandas": ("https://pandas.pydata.org/pandas-docs/stable/", None),
     "pyspark": ("https://spark.apache.org/docs/latest/api/python/", None),
+    "sklearn": ("https://scikit-learn.org/stable/", None),
 }

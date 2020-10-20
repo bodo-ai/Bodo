@@ -19,6 +19,7 @@ Bodo
    source/file_io
    source/pandas
    source/numpy
+   source/sklearn
    source/not_supported
    source/advanced
    source/performance

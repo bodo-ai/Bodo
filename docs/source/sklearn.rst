@@ -1,0 +1,85 @@
+.. _sklearn:
+
+Supported Scikit-learn
+----------------------
+
+Below is the list of scikit-learn classes and functions that Bodo supports natively inside JIT functions.
+This list will expand regularly as we add support for more APIs.
+Optional arguments are not supported unless specified.
+
+Linear Classifiers
+~~~~~~~~~~~~~~~~~~
+
+:class:`sklearn.linear_model.SGDClassifier`
+
+  This class provides linear classification models with SGD optimization which allows distributed large-scale learning.
+
+  ``SGDClassifier(loss='hinge')`` is equivalent to SVM linear classifer. 
+
+  ``SGDClassifier(loss='log')`` is equivalent to logistic regression classifer. 
+
+    * Supported loss functions ``hinge`` and ``log``.
+    * ``early_stopping`` is not supported yet.
+
+
+Methods:
+
+  * :any:`sklearn.linear_model.SGDClassifier.fit`
+  * :any:`sklearn.linear_model.SGDClassifier.predict`
+  * :any:`sklearn.linear_model.SGDClassifier.score`
+
+Linear Regressors 
+~~~~~~~~~~~~~~~~~
+
+:class:`sklearn.linear_model.SGDRegressor`
+
+  This class provides linear regression models with SGD optimization which allows distributed large-scale learning.
+
+  ``SGDRegressor(loss='squared_loss', penalty='None')`` is equivalent to linear regression. 
+
+  ``SGDRegressor(loss='squared_loss', penalty='l2')`` is equivalent to Ridge regression. 
+
+  ``SGDRegressor(loss='squared_loss', penalty='l1')`` is equivalent to Lasso regression. 
+
+    * Supported loss function is ``squared_loss``
+    * ``early_stopping`` is not supported yet.
+
+Methods:
+
+  * :any:`sklearn.linear_model.SGDRegressor.fit`
+  * :any:`sklearn.linear_model.SGDRegressor.predict`
+  * :any:`sklearn.linear_model.SGDRegressor.score`
+
+Clustering
+~~~~~~~~~~
+
+:class:`sklearn.cluster.KMeans`
+
+  This class provides K-Means clustering models which allows distributed large-scale unsupervised learning.
+
+Methods:
+
+  * :any:`sklearn.cluster.KMeans.fit`
+  * :any:`sklearn.cluster.KMeans.predict`
+  * :any:`sklearn.cluster.KMeans.score`
+  * :any:`sklearn.cluster.KMeans.transform`
+
+Ensemble Methods
+~~~~~~~~~~~~~~~~
+
+:class:`sklearn.ensemble.RandomForestClassifier`
+
+  This class provides Random Forest Classifier, an ensemble learning model, for distributed large-scale learning.
+
+Methods:
+
+  * :any:`sklearn.ensemble.RandomForestClassifier.fit`
+  * :any:`sklearn.ensemble.RandomForestClassifier.predict`
+  * :any:`sklearn.ensemble.RandomForestClassifier.score`
+
+Classification metrics
+~~~~~~~~~~~~~~~~~~~~~~
+
+* :func:`sklearn.metrics.f1_score`
+* :func:`sklearn.metrics.precision_score`
+* :func:`sklearn.metrics.recall_score`
