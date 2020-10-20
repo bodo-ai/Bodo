@@ -111,6 +111,10 @@ def overload_isna(arr, i):
             bodo.libs.struct_arr_ext.get_null_bitmap(arr), i
         )  # pragma: no cover
 
+    # Categorical Array
+    if isinstance(arr, bodo.hiframes.pd_categorical_ext.CategoricalArray):
+        return lambda arr, i: arr.codes[i] == -1
+
     # TODO: extend to other types (which ones are missing?)
     assert isinstance(arr, types.Array)
     dtype = arr.dtype

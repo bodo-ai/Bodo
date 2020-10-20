@@ -40,6 +40,7 @@ from numba.parfors.array_analysis import ArrayAnalysis
 
 import bodo
 from bodo.hiframes.datetime_date_ext import datetime_date_array_type
+from bodo.hiframes.pd_categorical_ext import CategoricalArray
 from bodo.hiframes.pd_index_ext import (
     NumericIndexType,
     RangeIndexType,
@@ -3371,6 +3372,87 @@ def to_json_overload(
     return _impl
 
 
+@overload(pd.get_dummies, inline="always", no_unliteral=True)
+def get_dummies(
+    data,
+    prefix=None,
+    prefix_sep="_",
+    dummy_na=False,
+    columns=None,
+    sparse=False,
+    drop_first=False,
+    dtype=None,
+):
+    args_dict = {
+        "prefix": prefix,
+        "prefix_sep": prefix_sep,
+        "dummy_na": dummy_na,
+        "columns": columns,
+        "sparse": sparse,
+        "drop_first": drop_first,
+        "dtype": dtype,
+    }
+    args_default_dict = {
+        "prefix": None,
+        "prefix_sep": "_",
+        "dummy_na": False,
+        "columns": None,
+        "sparse": False,
+        "drop_first": False,
+        "dtype": None,
+    }
+    check_unsupported_args("pd.get_dummies", args_dict, args_default_dict)
+    if not categorical_can_construct_dataframe(data):
+        raise BodoError(
+            "pd.get_dummies() only support categorical data types with explicitly known categories"
+        )
+
+    func_text = "def impl(data, prefix=None, prefix_sep='_', dummy_na=False, columns=None, sparse=False, drop_first=False, dtype=None,):\n"
+    if isinstance(data, SeriesType):
+        categories = data.data.dtype.categories
+        func_text += (
+            "  data_values = bodo.hiframes.pd_series_ext.get_series_data(data)\n"
+        )
+    else:
+        categories = data.dtype.categories
+        func_text += "  data_values = data\n"
+
+    n_cols = len(categories)
+
+    # Pandas implementation:
+    func_text += "  numba.parfors.parfor.init_prange()\n"
+    func_text += "  n = len(data_values)\n"
+    for i in range(n_cols):
+        func_text += "  data_arr_{} = np.empty(n, np.uint8)\n".format(i)
+    func_text += "  for i in numba.parfors.parfor.internal_prange(n):\n"
+    func_text += "      if bodo.libs.array_kernels.isna(data_values, i):\n"
+    for j in range(n_cols):
+        func_text += "          data_arr_{}[i] = 0\n".format(j)
+    func_text += "      else:\n"
+    for k in range(n_cols):
+        func_text += "          data_arr_{0}[i] = data_values.codes[i] == {0}\n".format(
+            k
+        )
+    data_args = ", ".join(f"data_arr_{i}" for i in range(n_cols))
+    index = "bodo.hiframes.pd_index_ext.init_range_index(0, n, 1, None)"
+
+    # TODO(Nick): Replace categories with categorical index type
+    return bodo.hiframes.dataframe_impl._gen_init_df(
+        func_text, categories, data_args, index
+    )
+
+
+def categorical_can_construct_dataframe(val):
+    """Helper function that returns if a datatype is categorical and has constant
+    values that can be used as column names for dataframes
+    """
+    if isinstance(val, CategoricalArray):
+        return val.dtype.categories is not None
+    elif isinstance(val, SeriesType) and isinstance(val.data, CategoricalArray):
+        return val.data.dtype.categories is not None
+    return False
+
+
 def handle_inplace_df_type_change(inplace, _bodo_transformed, func_name):
     """df type can change for functions like drop, rename, etc. if inplace is set, so
     variable replacement in typing pass is necessary for type stability.
@@ -3414,7 +3496,6 @@ pd_unsupported = (
     pd.cut,
     pd.qcut,
     pd.merge_ordered,
-    pd.get_dummies,
     pd.factorize,
     pd.wide_to_long,
     ## Top-level dealing with datetimelike

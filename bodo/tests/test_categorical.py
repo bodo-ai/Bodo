@@ -182,3 +182,18 @@ def test_getitem_slice(cat_arr_value, memory_leak_check):
     bodo_out = bodo.jit(test_impl)(cat_arr_value, ind)
     py_out = test_impl(cat_arr_value, ind)
     pd.testing.assert_extension_array_equal(py_out, bodo_out)
+
+
+def test_pd_get_dummies(cat_arr_value, memory_leak_check):
+    def test_impl(A):
+        return pd.get_dummies(A)
+
+    check_func(test_impl, (cat_arr_value,), check_categorical=False)
+
+
+def test_pd_get_dummies_series(cat_arr_value, memory_leak_check):
+    def test_impl(S):
+        return pd.get_dummies(S)
+
+    S = pd.Series(cat_arr_value)
+    check_func(test_impl, (S,), check_categorical=False)

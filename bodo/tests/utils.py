@@ -107,6 +107,7 @@ def check_func(
     only_seq=False,
     only_1D=False,
     only_1DVar=False,
+    check_categorical=True,
 ):
     """test bodo compilation of function 'func' on arguments using REP, 1D, and 1D_Var
     inputs/outputs
@@ -187,6 +188,7 @@ def check_func(
             set_columns_name_to_none,
             reorder_columns,
             n_pes,
+            check_categorical,
         )
 
     # distributed test is not needed
@@ -229,6 +231,7 @@ def check_func(
             set_columns_name_to_none,
             reorder_columns,
             n_pes,
+            check_categorical,
         )
 
     if run_1DVar:
@@ -248,6 +251,7 @@ def check_func(
             set_columns_name_to_none,
             reorder_columns,
             n_pes,
+            check_categorical,
         )
 
 
@@ -265,6 +269,7 @@ def check_func_seq(
     set_columns_name_to_none,
     reorder_columns,
     n_pes,
+    check_categorical,
 ):
     """check function output against Python without manually setting inputs/outputs
     distributions (keep the function sequential)
@@ -288,7 +293,13 @@ def check_func_seq(
         bodo_out.sort_index(axis=1, inplace=True)
 
     passed = _test_equal_guard(
-        bodo_out, py_output, sort_output, check_names, check_dtype, reset_index
+        bodo_out,
+        py_output,
+        sort_output,
+        check_names,
+        check_dtype,
+        reset_index,
+        check_categorical,
     )
     # count how many pes passed the test, since throwing exceptions directly
     # can lead to inconsistency across pes and hangs
@@ -313,6 +324,7 @@ def check_func_1D(
     set_columns_name_to_none,
     reorder_columns,
     n_pes,
+    check_categorical,
 ):
     """Check function output against Python while setting the inputs/outputs as
     1D distributed
@@ -342,7 +354,13 @@ def check_func_1D(
     passed = 1
     if not is_out_distributed or bodo.get_rank() == 0:
         passed = _test_equal_guard(
-            bodo_output, py_output, sort_output, check_names, check_dtype, reset_index
+            bodo_output,
+            py_output,
+            sort_output,
+            check_names,
+            check_dtype,
+            reset_index,
+            check_categorical,
         )
 
     n_passed = reduce_sum(passed)
@@ -365,6 +383,7 @@ def check_func_1D_var(
     set_columns_name_to_none,
     reorder_columns,
     n_pes,
+    check_categorical,
 ):
     """Check function output against Python while setting the inputs/outputs as
     1D distributed variable length
@@ -391,7 +410,13 @@ def check_func_1D_var(
     passed = 1
     if not is_out_distributed or bodo.get_rank() == 0:
         passed = _test_equal_guard(
-            bodo_output, py_output, sort_output, check_names, check_dtype, reset_index
+            bodo_output,
+            py_output,
+            sort_output,
+            check_names,
+            check_dtype,
+            reset_index,
+            check_categorical,
         )
     n_passed = reduce_sum(passed)
     assert n_passed == n_pes
@@ -437,11 +462,18 @@ def _test_equal_guard(
     check_names=True,
     check_dtype=True,
     reset_index=False,
+    check_categorical=True,
 ):
     passed = 1
     try:
         _test_equal(
-            bodo_out, py_out, sort_output, check_names, check_dtype, reset_index
+            bodo_out,
+            py_out,
+            sort_output,
+            check_names,
+            check_dtype,
+            reset_index,
+            check_categorical,
         )
     except Exception as e:
         print(e)
@@ -474,6 +506,7 @@ def _test_equal(
     check_names=True,
     check_dtype=True,
     reset_index=False,
+    check_categorical=True,
 ):
     # Bodo converts lists to array in array(item) array cases
     if isinstance(py_out, list) and isinstance(bodo_out, np.ndarray):
@@ -522,7 +555,9 @@ def _test_equal(
             py_out,
             check_names=check_names,
             check_dtype=check_dtype,
+            check_column_type=False,
             check_freq=False,
+            check_categorical=check_categorical,
         )
     elif isinstance(py_out, np.ndarray):
         if sort_output:
