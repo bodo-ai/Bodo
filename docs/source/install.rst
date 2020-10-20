@@ -21,12 +21,15 @@ On macOS::
     ./miniconda.sh -b
     export PATH=$HOME/miniconda3/bin:$PATH
 
-Unpack the Bodo installation package and install Bodo and its
-dependencies (replace "{full-path-to-bodo-package-directory}")::
+Bodo is distributed using a private Conda channel. Install Bodo and its
+dependencies as shown below (replace "<username>" and "<token>" with the username
+and token for Bodo's Conda channel provided by a Bodo associate)::
 
     conda create -n Bodo python
     source activate Bodo
-    conda install bodo -c file://{full-path-to-bodo-package-directory} -c conda-forge
+    export BODO_CONDA_USERNAME=<username>
+    export BODO_CONDA_TOKEN=<token>
+    conda install bodo -c https://"$BODO_CONDA_USERNAME":"$BODO_CONDA_TOKEN"@bodo.jfrog.io/artifactory/api/conda/bodo.ai -c conda-forge
 
 Bodo uses `MPI <https://en.wikipedia.org/wiki/Message_Passing_Interface>`_ for parallelization,
 which is automatically installed as part of
