@@ -45,4 +45,8 @@ stages:
           NP: 1
           CONDA_ENV: 'bodo'
           PYTEST_MARKER: slow
+        TEST_1P_NOT_SLOW:
+          NP: 1
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER: not slow
 
