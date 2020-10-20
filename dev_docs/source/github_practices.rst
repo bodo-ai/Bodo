@@ -43,7 +43,7 @@ When opening a PR:
     4. Complicated algorithms are explained at a high-level
     5. Try to keep the PR focused (for example, don't address several unrelated issues in the same PR) and _small_ to facilitate review
     6. PR should not modify parts that are unrelated to the PR, especially any large amounts of code since that will waste reviewers' time and increases the chances of code conflicts with work-in-progress PRs of others.
-    7. Run code formatters (black and clang-format) on new/modified code.
+    7. All items on PR checklist can be checked off.
 7. Assign reviewers when the PR is ready for review.
 8. When merging PRs:
     1. Note that it is better to keep commits in the master branch atomic (as in the commit passes CI). One good reason is because "git bisect" (which is very useful to find the commit that introduced a bug that was detected days after a commit is merged) relies on this to be effective.
