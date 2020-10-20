@@ -618,6 +618,17 @@ def test_rebalance_simple(memory_leak_check):
     df = pd.DataFrame({"A": range(10)})
     check_func(impl, (df,), py_output=df)
 
+    if bodo.get_size() == 2:
+        if bodo.get_rank() == 0:
+            df_chunk = df.iloc[:9]
+        else:
+            df_chunk = df.iloc[9:]
+        res = bodo.jit(distributed=["df"], all_returns_distributed=True)(impl)(df_chunk)
+        assert len(res) == 5
+        res = bodo.gatherv(res)
+        if bodo.get_rank() == 0:
+            pd.testing.assert_frame_equal(df, res)
+
 
 def test_rebalance():
     """The bodo.rebalance function. It takes a dataframe which is unbalanced and
