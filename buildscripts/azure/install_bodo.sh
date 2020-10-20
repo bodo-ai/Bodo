@@ -12,7 +12,8 @@ artifactory_channel=`./buildscripts/azure/get_channel.sh`
 sub_channel=`cat $HOME/bodo-inc/bodo-inc/bodo_subchannel`
 numba_channel_flag=""
 
-if {{ "$USE_NUMBA_DEV" == "true" ]]; then
+if [[ "$USE_NUMBA_DEV" == "true" ]]; then
+    echo "Init numba_channel_flag variable"
     numba_channel_flag="-c numba/label/dev"
 fi
 
