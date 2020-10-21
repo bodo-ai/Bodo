@@ -3239,6 +3239,44 @@ def test_series_std(memory_leak_check):
     check_func(f_ddof, (S,))
 
 
+def test_add_datetime_series_timedelta(memory_leak_check):
+    def test_impl(S1, S2):
+        return S1.add(S2)
+
+    datatime_arr = [datetime.datetime(year=2020, month=10, day=x) for x in range(1, 32)]
+    S = pd.Series(datatime_arr)
+    S2 = pd.Series([datetime.timedelta(days=x, minutes=13) for x in range(-15, 16)])
+    check_func(test_impl, (S, S2))
+
+
+@pytest.mark.slow
+def test_add_timedelta_series_timedelta(memory_leak_check):
+    def test_impl(S1, S2):
+        return S1.add(S2)
+
+    td_arr = [
+        datetime.timedelta(seconds=21, minutes=45, hours=17, days=x)
+        for x in range(1, 32)
+    ]
+    S = pd.Series(td_arr)
+    S2 = pd.Series([datetime.timedelta(days=x, minutes=13) for x in range(-15, 16)])
+    check_func(test_impl, (S, S2))
+
+
+@pytest.mark.slow
+def test_add_timedelta_series_timestamp(memory_leak_check):
+    def test_impl(S1, S2):
+        return S1.add(S2)
+
+    td_arr = [
+        datetime.timedelta(seconds=21, minutes=45, hours=17, days=x)
+        for x in range(1, 32)
+    ]
+    S = pd.Series(td_arr)
+    S2 = pd.Series([pd.Timestamp(year=2020, month=10, day=x) for x in range(1, 32)])
+    check_func(test_impl, (S, S2))
+
+
 @pytest.mark.parametrize(
     "S",
     [

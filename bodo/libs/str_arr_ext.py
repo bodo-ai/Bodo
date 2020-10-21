@@ -263,8 +263,19 @@ _install_binary_ops()
 
 @overload(operator.add, no_unliteral=True)
 def overload_string_array_add(A, B):
-    # both string array
-    if A == string_array_type and B == string_array_type:
+    a_is_unicode_or_string_array = A == string_array_type or (
+        isinstance(A, types.Array) and A.dtype == string_type
+    )
+    b_is_unicode_or_string_array = B == string_array_type or (
+        isinstance(B, types.Array) and B.dtype == string_type
+    )
+
+    # both string arrays
+    # Check that at least 1 arg is an actual string_array_type to avoid
+    # conflict with Numba's overload.
+    if (A == string_array_type and b_is_unicode_or_string_array) or (
+        a_is_unicode_or_string_array and B == string_array_type
+    ):
 
         def impl_both(A, B):  # pragma: no cover
             numba.parfors.parfor.init_prange()
@@ -342,6 +353,42 @@ def overload_string_array_add(A, B):
             return out_arr
 
         return impl_right
+
+
+@overload(operator.mul, no_unliteral=True)
+def overload_string_array_mul(A, B):
+    # B is an integer
+    if A == string_array_type and isinstance(B, types.Integer):
+
+        def impl(A, B):  # pragma: no cover
+            numba.parfors.parfor.init_prange()
+            l = len(A)
+            num_chars = 0
+            for i in numba.parfors.parfor.internal_prange(l):
+                s = 0
+                if not (bodo.libs.array_kernels.isna(A, i)):
+                    s = bodo.libs.str_arr_ext.get_utf8_size(A[i] * B)
+                num_chars += s
+
+            out_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(l, num_chars)
+            for j in numba.parfors.parfor.internal_prange(l):
+                if bodo.libs.array_kernels.isna(A, j):
+                    out_arr[j] = ""
+                    bodo.libs.array_kernels.setna(out_arr, j)
+                else:
+                    out_arr[j] = A[j] * B
+
+            return out_arr
+
+        return impl
+
+    # A is an integer
+    if isinstance(A, types.Integer) and B == string_array_type:
+
+        def impl(A, B):  # pragma: no cover
+            return B * A
+
+        return impl
 
 
 class StringArrayIterator(types.SimpleIteratorType):

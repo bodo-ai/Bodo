@@ -1,22 +1,23 @@
-import operator
 import datetime
+import operator
+
 import numba
-from numba.core import types, cgutils
+from numba.core import cgutils, types
+from numba.core.imputils import lower_constant
 from numba.extending import (
-    typeof_impl,
-    models,
-    register_model,
     NativeValue,
-    make_attribute_wrapper,
     box,
-    unbox,
-    overload,
     intrinsic,
+    make_attribute_wrapper,
+    models,
+    overload,
     overload_attribute,
     overload_method,
     register_jitable,
+    register_model,
+    typeof_impl,
+    unbox,
 )
-from numba.core.imputils import lower_constant
 
 """
 Implementation is based on

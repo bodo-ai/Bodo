@@ -12,8 +12,11 @@ from numba.core.typing.templates import AbstractTemplate, infer_global
 from numba.extending import overload, overload_attribute, overload_method
 
 import bodo
+from bodo.hiframes.datetime_datetime_ext import datetime_datetime_type
+from bodo.hiframes.datetime_timedelta_ext import datetime_timedelta_type
 from bodo.hiframes.pd_categorical_ext import CategoricalArray
 from bodo.hiframes.pd_series_ext import SeriesType, if_series_to_array_type
+from bodo.hiframes.pd_timestamp_ext import pandas_timestamp_type
 from bodo.libs.array import (
     arr_info_list_to_table,
     array_to_info,
@@ -39,6 +42,7 @@ from bodo.utils.typing import (
     get_literal_value,
     get_overload_const_int,
     get_overload_const_str,
+    is_iterable_type,
     is_literal_type,
     is_overload_constant_bool,
     is_overload_constant_int,
@@ -1972,19 +1976,47 @@ def create_explicit_binary_op_overload(op):
     def overload_series_explicit_binary_op(
         S, other, level=None, fill_value=None, axis=0
     ):
-        if not is_overload_none(level):
-            raise BodoError("level argument not supported")
+        unsupported_args = dict(level=level, axis=axis)
+        arg_defaults = dict(level=None, axis=0)
+        check_unsupported_args(
+            "series.{}".format(op.__name__), unsupported_args, arg_defaults
+        )
 
-        if not is_overload_zero(axis):
-            raise BodoError("axis argument not supported")
+        is_str_scalar_other = other == string_type or is_overload_constant_str(other)
+        is_str_iterable_other = is_iterable_type(other) and other.dtype == string_type
+        is_legal_string_type = S.dtype == string_type and (
+            (op == operator.add and (is_str_scalar_other or is_str_iterable_other))
+            or (op == operator.mul and isinstance(other, types.Integer))
+        )
+
+        # TODO: Add pd.Timedelta
+        is_series_timedelta = S.dtype == bodo.timedelta64ns
+        is_series_datetime = S.dtype == bodo.datetime64ns
+        is_other_timedelta_iter = is_iterable_type(other) and (
+            other.dtype == datetime_timedelta_type or other.dtype == bodo.timedelta64ns
+        )
+        is_other_datetime_iter = is_iterable_type(other) and (
+            other.dtype == datetime_datetime_type
+            or other.dtype == pandas_timestamp_type
+            or other.dtype == bodo.datetime64ns
+        )
+
+        is_legal_timedelta = (
+            is_series_timedelta and (is_other_timedelta_iter or is_other_datetime_iter)
+        ) or (is_series_datetime and is_other_timedelta_iter)
+        is_legal_timedelta = is_legal_timedelta and op == operator.add
 
         # TODO: string array, datetimeindex/timedeltaindex
-        if not isinstance(S.dtype, types.Number):
-            raise TypeError("only numeric values supported")
+        if not (
+            isinstance(S.dtype, types.Number)
+            or is_legal_string_type
+            or is_legal_timedelta
+        ):  # pragma: no cover
+            raise TypeError("Unsupported types for Series.{}".format(op.__name__))
 
         typing_context = numba.core.registry.cpu_target.typing_context
         # scalar case
-        if isinstance(other, types.Number):
+        if isinstance(other, types.Number) or is_str_scalar_other:
             args = (S.data, other)
             ret_dtype = typing_context.resolve_function_type(op, args, {}).return_type
             # Pandas 1.0 returns nullable bool array for nullable int array
@@ -1992,6 +2024,43 @@ def create_explicit_binary_op_overload(op):
                 types.bool_, 1, "C"
             ):
                 ret_dtype = boolean_array
+
+            # Handle string array separately until we have an array builder
+            if is_str_scalar_other or S.dtype == string_type:
+
+                def impl_str(
+                    S, other, level=None, fill_value=None, axis=0
+                ):  # pragma: no cover
+                    arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+                    index = bodo.hiframes.pd_series_ext.get_series_index(S)
+                    name = bodo.hiframes.pd_series_ext.get_series_name(S)
+                    numba.parfors.parfor.init_prange()
+                    n = len(arr)
+                    num_chars = 0
+                    for i in numba.parfors.parfor.internal_prange(n):
+                        left_nan = bodo.libs.array_kernels.isna(arr, i)
+                        if left_nan:
+                            if fill_value is None:
+                                continue
+                            else:
+                                out_val = op(fill_value, other)
+                        else:
+                            out_val = op(arr[i], other)
+                        num_chars += bodo.libs.str_arr_ext.get_utf8_size(out_val)
+                    out_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(n, num_chars)
+                    for j in numba.parfors.parfor.internal_prange(n):
+                        left_nan = bodo.libs.array_kernels.isna(arr, j)
+                        if left_nan:
+                            if fill_value is None:
+                                bodo.libs.array_kernels.setna(out_arr, j)
+                            else:
+                                out_arr[j] = op(fill_value, other)
+                        else:
+                            out_arr[j] = op(arr[j], other)
+
+                    return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
+
+                return impl_str
 
             def impl_scalar(
                 S, other, level=None, fill_value=None, axis=0
@@ -2024,6 +2093,68 @@ def create_explicit_binary_op_overload(op):
             types.bool_, 1, "C"
         ):
             ret_dtype = boolean_array
+
+        # Addition of NPDatetime("ns") and NPTimedelta("ns") seems to give
+        # an incorrect ret_dtype for our always ns requirement,
+        # so it fails in setitem
+        if ret_dtype == types.Array(types.NPDatetime(""), 1, "C"):
+            ret_dtype = types.Array(types.NPDatetime("ns"), 1, "C")
+
+        # Handle string array separately until we have an array builder
+        if ret_dtype == string_array_type:
+
+            def impl_str(
+                S, other, level=None, fill_value=None, axis=0
+            ):  # pragma: no cover
+                arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+                index = bodo.hiframes.pd_series_ext.get_series_index(S)
+                name = bodo.hiframes.pd_series_ext.get_series_name(S)
+                # other could be tuple, list, array, Index, or Series
+                other_arr = bodo.hiframes.pd_series_ext.get_series_data(other)
+                numba.parfors.parfor.init_prange()
+                n = len(arr)
+                num_chars = 0
+                for i in numba.parfors.parfor.internal_prange(n):
+                    left_nan = bodo.libs.array_kernels.isna(arr, i)
+                    right_nan = bodo.libs.array_kernels.isna(other_arr, i)
+                    out_val = ""
+                    if left_nan and right_nan:
+                        continue
+                    elif left_nan:
+                        if fill_value is None:
+                            continue
+                        else:
+                            out_val = op(fill_value, other_arr[i])
+                    elif right_nan:
+                        if fill_value is None:
+                            continue
+                        else:
+                            out_val = op(arr[i], fill_value)
+                    else:
+                        out_val = op(arr[i], other_arr[i])
+                    num_chars += bodo.libs.str_arr_ext.get_utf8_size(out_val)
+                out_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(n, num_chars)
+                for j in numba.parfors.parfor.internal_prange(n):
+                    left_nan = bodo.libs.array_kernels.isna(arr, j)
+                    right_nan = bodo.libs.array_kernels.isna(other_arr, j)
+                    if left_nan and right_nan:
+                        bodo.libs.array_kernels.setna(out_arr, j)
+                    elif left_nan:
+                        if fill_value is None:
+                            bodo.libs.array_kernels.setna(out_arr, j)
+                        else:
+                            out_arr[j] = op(fill_value, other_arr[j])
+                    elif right_nan:
+                        if fill_value is None:
+                            bodo.libs.array_kernels.setna(out_arr, j)
+                        else:
+                            out_arr[j] = op(arr[j], fill_value)
+                    else:
+                        out_arr[j] = op(arr[j], other_arr[j])
+
+                return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
+
+            return impl_str
 
         def impl(S, other, level=None, fill_value=None, axis=0):  # pragma: no cover
             arr = bodo.hiframes.pd_series_ext.get_series_data(S)

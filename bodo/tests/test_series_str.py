@@ -715,6 +715,28 @@ def test_slice_replace_all_args(test_unicode, memory_leak_check):
     check_func(test_impl, (test_unicode, 5, 8, "피츠버그"))
 
 
+def test_add_series(test_unicode, memory_leak_check):
+    def test_impl(S1, S2):
+        return S1.add(S2)
+
+    S2 = test_unicode.map(lambda x: x if pd.isna(x) else x[::-1])
+    check_func(test_impl, (test_unicode, S2))
+
+
+def test_add_scalar(test_unicode, memory_leak_check):
+    def test_impl(S):
+        return S.add("hello")
+
+    check_func(test_impl, (test_unicode,))
+
+
+def test_mul_scalar(test_unicode, memory_leak_check):
+    def test_impl(S):
+        return S.mul(4)
+
+    check_func(test_impl, (test_unicode,))
+
+
 ##############  list of string array tests  #################
 
 
