@@ -88,7 +88,7 @@ def _get_type_max_value(dtype):  # pragma: no cover
     return 0
 
 
-@overload(_get_type_max_value, no_unliteral=True)
+@overload(_get_type_max_value, inline="always", no_unliteral=True)
 def _get_type_max_value_overload(dtype):
     # pd.Int64Dtype(), etc.
     if isinstance(dtype, IntDtype):
@@ -111,7 +111,7 @@ def _get_type_min_value(dtype):  # pragma: no cover
     return 0
 
 
-@overload(_get_type_min_value, no_unliteral=True)
+@overload(_get_type_min_value, inline="always", no_unliteral=True)
 def _get_type_min_value_overload(dtype):
     # pd.Int64Dtype(), etc.
     if isinstance(dtype, IntDtype):

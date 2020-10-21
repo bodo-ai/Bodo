@@ -241,6 +241,13 @@ def test_agg(memory_leak_check):
 
     # check_dtype=False since Bodo returns float for Series.min/max. TODO: fix min/max
     check_func(impl, (udf_in_df,), sort_output=True, check_dtype=False)
+    udf_in_df2 = pd.DataFrame(
+        {
+            "A": [2, 1, 1, 1, 2, 2, 1],
+            "B": pd.array([-8, 2, 3, 1, 5, 6, 7], "Int64"),
+        }
+    )
+    check_func(impl, (udf_in_df2,), sort_output=True, check_dtype=False)
 
 
 @pytest.mark.slow
