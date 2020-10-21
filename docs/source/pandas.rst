@@ -216,6 +216,9 @@ Data manipulations:
 * :func:`pandas.concat`
   Input list or tuple of dataframes or series is supported.
 
+* :func:`pandas.get_dummies` 
+  Input must be a categorical array with categories that are known at compile time (for type stability).
+
 
 Top-level missing data:
 
@@ -233,6 +236,7 @@ Top-level conversions:
   and does not downcast to the smallest numerical type.
   `downcast` parameter should be used for type annotation of output.
   The `errors` argument is not supported currently (errors will be coerced by default).
+
 
 
 Top-level dealing with datetime like:
