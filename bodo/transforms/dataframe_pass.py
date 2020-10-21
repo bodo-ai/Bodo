@@ -385,6 +385,23 @@ class DataFramePass:
         if fdef == ("query_dummy", "bodo.hiframes.pd_dataframe_ext"):
             return self._run_call_query(assign, lhs, rhs)
 
+        # match dummy function created in _run_call_query and raise error if output of
+        # expression in df.query() is not a boolean Series
+        if fdef == ("_check_query_series_bool", "bodo.transforms.dataframe_pass"):
+            if (
+                not isinstance(
+                    self.typemap[lhs.name],
+                    bodo.hiframes.pd_series_ext.SeriesType,
+                )
+                or self.typemap[lhs.name].dtype != types.bool_
+            ):
+                raise BodoError(
+                    "query(): expr does not evaluate to a 1D boolean array."
+                    " Only 1D boolean array is supported right now."
+                )
+            assign.value = rhs.args[0]
+            return [assign]
+
         # Numba generates operator calls instead of binop nodes so needs normalized
         if len(fdef) == 2 and fdef[1] == "_operator":
             op = getattr(operator, fdef[0], None)
@@ -835,9 +852,12 @@ class DataFramePass:
                     c_var, ind
                 )
             )
-        func_text += "  return {}".format(parsed_expr_str)
+        # use dummy function to catch data type error
+        func_text += "  return _check_query_series_bool({})".format(parsed_expr_str)
         loc_vars = {}
-        exec(func_text, {}, loc_vars)
+        exec(
+            func_text, {"_check_query_series_bool": _check_query_series_bool}, loc_vars
+        )
         _query_impl = loc_vars["_query_impl"]
 
         # data frame column inputs
@@ -847,22 +867,9 @@ class DataFramePass:
         # local referenced variables
         args += [ir.Var(lhs.scope, v, lhs.loc) for v in loc_ref_vars.values()]
 
-        nodes += compile_func_single_block(_query_impl, args, lhs, self)
-
-        # check whether the output of generated function is a boolean array
-        if (
-            not isinstance(
-                self.typemap[nodes[-1].value.name],
-                bodo.hiframes.pd_series_ext.SeriesType,
-            )
-            or self.typemap[nodes[-1].value.name].dtype != types.bool_
-        ):
-            raise BodoError(
-                "query(): expr does not evaluate to a 1D boolean array."
-                " Only 1D boolean array is supported right now."
-            )
-
-        return nodes
+        return replace_func(
+            self, _query_impl, args, pre_nodes=nodes, run_full_pipeline=True
+        )
 
     def _parse_query_expr(self, expr, columns):
         """Parses query expression using Pandas parser but avoids issues such as
@@ -2059,6 +2066,14 @@ class DataFramePass:
             raise BodoError(err_msg)
         key_colnames = (by_arg_def,) * n_key
         return key_colnames
+
+
+@numba.extending.register_jitable
+def _check_query_series_bool(S):
+    """a dummy function used in _run_call_query to catch data type error later in the
+    pipeline (S should be a Series(bool)).
+    """
+    return S
 
 
 def _gen_init_df(columns, index=None):

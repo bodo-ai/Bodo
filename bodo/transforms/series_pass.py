@@ -269,7 +269,7 @@ class SeriesPass:
                     # see: test_series_map_full_pipeline
                     # TODO(ehsan): update inline_closure_call() to run full pipeline
                     callee_validator = None
-                    if rp_func.inline_bodo_calls:
+                    if rp_func.run_full_pipeline:
                         f_ir, _, _, _ = bodo.compiler.get_func_type_info(
                             rp_func.func, rp_func.arg_types, {}
                         )
@@ -1153,6 +1153,7 @@ class SeriesPass:
                 kws=rhs.kws,
                 pysig=func_type.dispatcher._compiler.pysig,
                 inline_bodo_calls=True,
+                run_full_pipeline=True,
             )
 
         # support call ufuncs on Series
