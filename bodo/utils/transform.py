@@ -508,8 +508,7 @@ def get_const_value_inner(
         )
 
     # str() call
-    # NOTE: find_callname() currently sees str as np.str
-    if call_name == ("str", "numpy"):
+    if call_name == ("str", "builtins"):
         return str(get_const_value_inner(func_ir, var_def.args[0], arg_types, typemap))
 
     if call_name in (
