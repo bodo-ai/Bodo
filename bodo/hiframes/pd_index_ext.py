@@ -37,6 +37,7 @@ import bodo
 import bodo.hiframes
 import bodo.utils.conversion
 from bodo.hiframes.datetime_date_ext import get_isocalendar
+from bodo.hiframes.datetime_timedelta_ext import pd_timedelta_type
 from bodo.hiframes.pd_series_ext import SeriesType, string_array_type
 from bodo.hiframes.pd_timestamp_ext import pandas_timestamp_type
 from bodo.libs.int_arr_ext import IntegerArrayType
@@ -51,6 +52,7 @@ from bodo.utils.typing import (
     BodoError,
     get_overload_const_func,
     get_overload_const_str,
+    get_udf_error_msg,
     get_udf_out_arr_type,
     get_val_type_maybe_str_literal,
     is_const_func_type,
@@ -59,7 +61,6 @@ from bodo.utils.typing import (
     is_overload_none,
     is_overload_true,
     raise_bodo_error,
-    get_udf_error_msg,
 )
 
 _dt_index_data_typ = types.Array(types.NPDatetime("ns"), 1, "C")
@@ -2097,6 +2098,8 @@ def overload_index_map(I, mapper, na_action=None):
     # getitem returns Timestamp for dt_index (TODO: pd.Timedelta when available)
     if dtype == types.NPDatetime("ns"):
         dtype = pandas_timestamp_type
+    if dtype == types.NPTimedelta("ns"):
+        dtype = pd_timedelta_type
 
     # get output element type
     typing_context = numba.core.registry.cpu_target.typing_context

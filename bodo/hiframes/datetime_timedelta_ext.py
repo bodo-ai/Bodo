@@ -3,6 +3,7 @@
 """
 import datetime
 import operator
+from collections import namedtuple
 
 import llvmlite.binding as ll
 import numba
@@ -46,6 +47,556 @@ ll.add_symbol(
     "unbox_datetime_timedelta_array", hdatetime_ext.unbox_datetime_timedelta_array
 )
 
+# sentinel type representing no first input to pd.Timestamp() constructor
+# similar to _no_input object of Pandas in timestamps.pyx
+# https://github.com/pandas-dev/pandas/blob/8806ed7120fed863b3cd7d3d5f377ec4c81739d0/pandas/_libs/tslibs/timestamps.pyx#L38
+# Also used by pd.Timedelta
+class NoInput:
+    pass
+
+
+_no_input = NoInput()
+
+
+class NoInputType(types.Type):
+    def __init__(self):
+        super(NoInputType, self).__init__(name="NoInput")
+
+
+register_model(NoInputType)(models.OpaqueModel)
+
+
+@typeof_impl.register(NoInput)
+def _typ_no_input(val, c):
+    return NoInputType()
+
+
+@lower_constant(NoInputType)
+def constant_no_input(context, builder, ty, pyval):
+    return context.get_dummy_value()
+
+
+# 1.Define a new Numba type class by subclassing the Type class
+#   Define a singleton Numba type instance for a non-parametric type
+class PDTimeDeltaType(types.Type):
+    def __init__(self):
+        super(PDTimeDeltaType, self).__init__(name="PDTimeDeltaType()")
+
+
+pd_timedelta_type = PDTimeDeltaType()
+
+# 2.Teach Numba how to infer the Numba type of Python values of a certain class,
+# using typeof_impl.register
+@typeof_impl.register(pd.Timedelta)
+def typeof_pd_timedelta(val, c):
+    return pd_timedelta_type
+
+
+# 3.Define the data model for a Numba type using StructModel and register_model
+@register_model(PDTimeDeltaType)
+class PDTimeDeltaModel(models.StructModel):
+    def __init__(self, dmm, fe_type):
+        members = [
+            ("value", types.int64),
+        ]
+        super(PDTimeDeltaModel, self).__init__(dmm, fe_type, members)
+
+
+# 4.Implementing a boxing function for a Numba type using the @box decorator
+@box(PDTimeDeltaType)
+def box_pd_timedelta(typ, val, c):
+    time_delta = cgutils.create_struct_proxy(typ)(c.context, c.builder, value=val)
+    value_obj = c.pyapi.long_from_longlong(time_delta.value)
+
+    timedelta_obj = c.pyapi.unserialize(c.pyapi.serialize_object(pd.Timedelta))
+    res = c.pyapi.call_function_objargs(timedelta_obj, (value_obj,))
+    c.pyapi.decref(value_obj)
+    c.pyapi.decref(timedelta_obj)
+    return res
+
+
+# 5.Implementing an unboxing function for a Numba type
+# using the @unbox decorator and the NativeValue class
+@unbox(PDTimeDeltaType)
+def unbox_pd_timedelta(typ, val, c):
+
+    value_obj = c.pyapi.object_getattr_string(val, "value")
+
+    valuell = c.pyapi.long_as_longlong(value_obj)
+
+    time_delta = cgutils.create_struct_proxy(typ)(c.context, c.builder)
+    time_delta.value = valuell
+
+    c.pyapi.decref(value_obj)
+
+    is_error = cgutils.is_not_null(c.builder, c.pyapi.err_occurred())
+
+    # _getvalue(): Load and return the value of the underlying LLVM structure.
+    return NativeValue(time_delta._getvalue(), is_error=is_error)
+
+
+@lower_constant(PDTimeDeltaType)
+def lower_constant_pd_timedelta(context, builder, ty, pyval):
+    value = context.get_constant(types.int64, pyval.value)
+    pd_timedelta = cgutils.create_struct_proxy(ty)(context, builder)
+    pd_timedelta.value = value
+    return pd_timedelta._getvalue()
+
+
+# 6. Implement the constructor
+@overload(pd.Timedelta, no_unliteral=True)
+def pd_timedelta(
+    value=_no_input,
+    unit="ns",
+    days=0,
+    seconds=0,
+    microseconds=0,
+    milliseconds=0,
+    minutes=0,
+    hours=0,
+    weeks=0,
+):
+    if value == _no_input:
+
+        def impl_timedelta_kw(
+            value=_no_input,
+            unit="ns",
+            days=0,
+            seconds=0,
+            microseconds=0,
+            milliseconds=0,
+            minutes=0,
+            hours=0,
+            weeks=0,
+        ):
+            days += weeks * 7
+            hours += days * 24
+            minutes += 60 * hours
+            seconds += 60 * minutes
+            milliseconds += 1000 * seconds
+            microseconds += 1000 * milliseconds
+            ns = 1000 * microseconds
+            return init_pd_timedelta(ns)
+
+        return impl_timedelta_kw
+    # Check that unit is always in ns
+    def impl_timedelta(
+        value=_no_input,
+        unit="ns",
+        days=0,
+        seconds=0,
+        microseconds=0,
+        milliseconds=0,
+        minutes=0,
+        hours=0,
+        weeks=0,
+    ):
+        return init_pd_timedelta(value)
+
+    return impl_timedelta
+
+
+@intrinsic
+def init_pd_timedelta(typingctx, value):
+    def codegen(context, builder, signature, args):
+        typ = signature.return_type
+        timedelta = cgutils.create_struct_proxy(typ)(context, builder)
+        timedelta.value = args[0]
+        return timedelta._getvalue()
+
+    return PDTimeDeltaType()(value), codegen
+
+
+# 2nd arg is used in LLVM level, 3rd arg is used in python level
+make_attribute_wrapper(PDTimeDeltaType, "value", "_value")
+
+
+# Implement the getters
+@overload_attribute(PDTimeDeltaType, "value")
+@overload_attribute(PDTimeDeltaType, "delta")
+def pd_timedelta_get_value(td):
+    def impl(td):  # pragma: no cover
+        return td._value
+
+    return impl
+
+
+@overload_attribute(PDTimeDeltaType, "days")
+def pd_timedelta_get_days(td):
+    def impl(td):  # pragma: no cover
+        return td._value // (1000 * 1000 * 1000 * 60 * 60 * 24)
+
+    return impl
+
+
+@overload_attribute(PDTimeDeltaType, "seconds")
+def pd_timedelta_get_seconds(td):
+    def impl(td):  # pragma: no cover
+        return (td._value // (1000 * 1000 * 1000)) % (60 * 60 * 24)
+
+    return impl
+
+
+@overload_attribute(PDTimeDeltaType, "microseconds")
+def pd_timedelta_get_microseconds(td):
+    def impl(td):  # pragma: no cover
+        return (td._value // 1000) % 1000000
+
+    return impl
+
+
+@overload_attribute(PDTimeDeltaType, "nanoseconds")
+def pd_timedelta_get_nanoseconds(td):
+    def impl(td):  # pragma: no cover
+        return td._value % 1000
+
+    return impl
+
+
+@register_jitable
+def _to_hours_pd_td(td):  # pragma: no cover
+    return (td._value // (1000 * 1000 * 1000 * 60 * 60)) % 24
+
+
+@register_jitable
+def _to_minutes_pd_td(td):  # pragma: no cover
+    return (td._value // (1000 * 1000 * 1000 * 60)) % 60
+
+
+@register_jitable
+def _to_seconds_pd_td(td):  # pragma: no cover
+    return (td._value // (1000 * 1000 * 1000)) % 60
+
+
+@register_jitable
+def _to_milliseconds_pd_td(td):  # pragma: no cover
+    return (td._value // (1000 * 1000)) % 1000
+
+
+@register_jitable
+def _to_microseconds_pd_td(td):  # pragma: no cover
+    return (td._value // (1000)) % 1000
+
+
+Components = namedtuple(
+    "Components",
+    [
+        "days",
+        "hours",
+        "minutes",
+        "seconds",
+        "milliseconds",
+        "microseconds",
+        "nanoseconds",
+    ],
+    defaults=[
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+    ],
+)
+
+
+@overload_attribute(PDTimeDeltaType, "components", no_unliteral=True)
+def pd_timedelta_get_components(td):
+    def impl(td):  # pragma: no cover
+        a = Components(
+            td.days,
+            _to_hours_pd_td(td),
+            _to_minutes_pd_td(td),
+            _to_seconds_pd_td(td),
+            _to_milliseconds_pd_td(td),
+            _to_microseconds_pd_td(td),
+            td.nanoseconds,
+        )
+        return a
+
+    return impl
+
+
+@overload_method(PDTimeDeltaType, "__hash__", no_unliteral=True)
+def pd_td___hash__(td):
+    """Hashcode for pd.Timedelta types."""
+
+    def impl(td):  # pragma: no cover
+        return hash(td._value)
+
+    return impl
+
+
+@overload_method(PDTimeDeltaType, "to_numpy", no_unliteral=True)
+@overload_method(PDTimeDeltaType, "to_timedelta64", no_unliteral=True)
+def pd_td_to_numpy(td):
+    """Convert to NP.timedelta64[ns]."""
+    # TODO: Fix imports
+    from bodo.hiframes.pd_timestamp_ext import integer_to_timedelta64
+
+    def impl(td):  # pragma: no cover
+        return integer_to_timedelta64(td.value)
+
+    return impl
+
+
+@overload_method(PDTimeDeltaType, "to_pytimedelta", no_unliteral=True)
+def pd_td_to_pytimedelta(td):
+    """Convert to datetime.timedelta."""
+
+    def impl(td):  # pragma: no cover
+        return datetime.timedelta(microseconds=np.int64(td._value / 1000))
+
+    return impl
+
+
+@overload_method(PDTimeDeltaType, "total_seconds", no_unliteral=True)
+def pd_td_total_seconds(td):
+    """Total seconds in the duration. Pandas drops nanoseconds from this result"""
+
+    def impl(td):  # pragma: no cover
+        return (td._value // 1000) / 10 ** 6
+
+    return impl
+
+
+@overload(operator.add, no_unliteral=True)
+def pd_timedelta_add(lhs, rhs):
+    if lhs == pd_timedelta_type and rhs == pd_timedelta_type:
+
+        def impl(lhs, rhs):  # pragma: no cover
+            val = lhs.value + rhs.value
+            return pd.Timedelta(val)
+
+        return impl
+
+    if lhs == pd_timedelta_type and rhs == datetime_timedelta_type:
+
+        def impl(lhs, rhs):  # pragma: no cover
+            rhs_value = (
+                rhs.microseconds
+                + ((rhs.seconds + (rhs.days * 60 * 60 * 24)) * 1000 * 1000)
+            ) * 1000
+            val = lhs.value + rhs_value
+            return pd.Timedelta(val)
+
+        return impl
+
+    if lhs == datetime_timedelta_type and rhs == pd_timedelta_type:
+
+        def impl(lhs, rhs):  # pragma: no cover
+            lhs_value = (
+                lhs.microseconds
+                + ((lhs.seconds + (lhs.days * 60 * 60 * 24)) * 1000 * 1000)
+            ) * 1000
+            val = lhs_value + rhs.value
+            return pd.Timedelta(val)
+
+        return impl
+
+    if lhs == pd_timedelta_type and rhs == datetime_datetime_type:
+        # Import here to avoid circular import error. Perhaps this
+        # should be moved to a utils file.
+        from bodo.hiframes.pd_timestamp_ext import compute_pd_timestamp
+
+        def impl(lhs, rhs):  # pragma: no cover
+            # The time itself
+            days1 = rhs.toordinal()
+            secs1 = rhs.second + rhs.minute * 60 + rhs.hour * 3600
+            msec1 = rhs.microsecond
+            # The timedelta
+            msec2 = lhs.value // 1000
+            nanosec2 = lhs.nanoseconds
+            # Computing the difference
+            msecF = msec1 + msec2
+            # Getting total microsecond
+            totmicrosec = 1000000 * (days1 * 86400 + secs1) + msecF
+            # Getting total nano_seconds
+            totnanosec = nanosec2
+            return compute_pd_timestamp(totmicrosec, totnanosec)
+
+        return impl
+
+    if lhs == datetime_datetime_type and rhs == pd_timedelta_type:
+        # In Python this becomes a datetime instead
+        # of a timestamp
+
+        def impl(lhs, rhs):  # pragma: no cover
+            return lhs + rhs.to_pytimedelta()
+
+        return impl
+
+
+@overload(operator.sub, no_unliteral=True)
+def pd_timedelta_sub(lhs, rhs):
+    if lhs == pd_timedelta_type and rhs == pd_timedelta_type:
+
+        def impl(lhs, rhs):  # pragma: no cover
+            new_val = lhs.value - rhs.value
+            return pd.Timedelta(new_val)
+
+        return impl
+
+    if lhs == pd_timedelta_type and rhs == datetime_timedelta_type:
+
+        def impl(lhs, rhs):  # pragma: no cover
+            return lhs + -rhs
+
+        return impl
+
+    if lhs == datetime_timedelta_type and rhs == pd_timedelta_type:
+
+        def impl(lhs, rhs):  # pragma: no cover
+            return lhs + -rhs
+
+        return impl
+
+    if lhs == datetime_datetime_type and rhs == pd_timedelta_type:
+
+        def impl(lhs, rhs):  # pragma: no cover
+            return lhs + -rhs
+
+        return impl
+
+
+@overload(operator.mul, no_unliteral=True)
+def pd_timedelta_mul(lhs, rhs):
+    if lhs == pd_timedelta_type and rhs == types.int64:
+
+        def impl(lhs, rhs):  # pragma: no cover
+            return pd.Timedelta(lhs.value * rhs)
+
+        return impl
+
+    elif lhs == types.int64 and rhs == pd_timedelta_type:
+
+        def impl(lhs, rhs):  # pragma: no cover
+            return pd.Timedelta(rhs.value * lhs)
+
+        return impl
+
+
+@overload(operator.floordiv, no_unliteral=True)
+def pd_timedelta_floordiv(lhs, rhs):
+    if lhs == pd_timedelta_type and rhs == pd_timedelta_type:
+
+        def impl(lhs, rhs):  # pragma: no cover
+            return lhs.value // rhs.value
+
+        return impl
+
+    elif lhs == pd_timedelta_type and rhs == types.int64:
+
+        def impl(lhs, rhs):  # pragma: no cover
+            return pd.Timedelta(lhs.value // rhs)
+
+        return impl
+
+
+@overload(operator.truediv, no_unliteral=True)
+def pd_timedelta_truediv(lhs, rhs):
+    if lhs == pd_timedelta_type and rhs == pd_timedelta_type:
+
+        def impl(lhs, rhs):  # pragma: no cover
+            return lhs.value / rhs.value
+
+        return impl
+
+    elif lhs == pd_timedelta_type and rhs == types.int64:
+
+        def impl(lhs, rhs):  # pragma: no cover
+            return pd.Timedelta(int(lhs.value / rhs))
+
+        # TODO: float division: rhs=float64 type
+
+        return impl
+
+
+@overload(operator.mod, no_unliteral=True)
+def pd_timedelta_mod(lhs, rhs):
+    if lhs == pd_timedelta_type and rhs == pd_timedelta_type:
+
+        def impl(lhs, rhs):  # pragma: no cover
+            return pd.Timedelta(lhs.value % rhs.value)
+
+        return impl
+
+
+def pd_create_cmp_op_overload(op):
+    """create overload function for comparison operators with datetime_date_array"""
+
+    def overload_pd_timedelta_cmp(A1, A2):
+        if A1 == pd_timedelta_type and A2 == pd_timedelta_type:
+
+            def impl(A1, A2):  # pragma: no cover
+                return op(A1.value, A2.value)
+
+            return impl
+
+    return overload_pd_timedelta_cmp
+
+
+def _pd_install_cmp_ops():
+    """install overloads for comparison operators with pd_timedelta_type"""
+    for op in (
+        operator.eq,
+        operator.ne,
+        operator.ge,
+        operator.gt,
+        operator.le,
+        operator.lt,
+    ):
+        overload_impl = pd_create_cmp_op_overload(op)
+        overload(op, no_unliteral=True)(overload_impl)
+
+
+_pd_install_cmp_ops()
+
+
+@overload(operator.neg, no_unliteral=True)
+def pd_timedelta_neg(lhs):
+    if lhs == pd_timedelta_type:
+
+        def impl(lhs):  # pragma: no cover
+            return pd.Timedelta(-lhs.value)
+
+        return impl
+
+
+@overload(operator.pos, no_unliteral=True)
+def pd_timedelta_pos(lhs):
+    if lhs == pd_timedelta_type:
+
+        def impl(lhs):  # pragma: no cover
+            return lhs
+
+        return impl
+
+
+@overload(divmod, no_unliteral=True)
+def pd_timedelta_divmod(lhs, rhs):
+    if lhs == pd_timedelta_type and rhs == pd_timedelta_type:
+
+        def impl(lhs, rhs):  # pragma: no cover
+            q, r = divmod(lhs.value, rhs.value)
+            return q, pd.Timedelta(r)
+
+        return impl
+
+
+@overload(abs, no_unliteral=True)
+def pd_timedelta_abs(lhs):
+    if lhs == pd_timedelta_type:
+
+        def impl(lhs):  # pragma: no cover
+            if lhs.value < 0:
+                return -lhs
+            else:
+                return lhs
+
+        return impl
+
 
 # 1.Define a new Numba type class by subclassing the Type class
 #   Define a singleton Numba type instance for a non-parametric type
@@ -77,7 +628,7 @@ class DatetimeTimeDeltaModel(models.StructModel):
 
 # 4.Implementing a boxing function for a Numba type using the @box decorator
 @box(DatetimeTimeDeltaType)
-def box_datetime_date(typ, val, c):
+def box_datetime_timedelta(typ, val, c):
     time_delta = cgutils.create_struct_proxy(typ)(c.context, c.builder, value=val)
     days_obj = c.pyapi.long_from_longlong(time_delta.days)
     seconds_obj = c.pyapi.long_from_longlong(time_delta.seconds)

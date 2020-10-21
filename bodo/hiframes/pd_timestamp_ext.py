@@ -41,7 +41,11 @@ from numba.extending import (
 import bodo.libs.str_ext
 import bodo.utils.utils
 from bodo.hiframes.datetime_date_ext import _ord2ymd, _ymd2ord, get_isocalendar
-from bodo.hiframes.datetime_timedelta_ext import datetime_timedelta_type
+from bodo.hiframes.datetime_timedelta_ext import (
+    _no_input,
+    datetime_timedelta_type,
+    pd_timedelta_type,
+)
 from bodo.libs import hdatetime_ext
 from bodo.libs.str_arr_ext import string_array_type
 from bodo.utils.typing import (
@@ -264,34 +268,6 @@ def zero_if_none(value):
     if value == types.none:
         return lambda value: 0
     return lambda value: value
-
-
-# sentinel type representing no first input to pd.Timestamp() constructor
-# similar to _no_input object of Pandas in timestamps.pyx
-# https://github.com/pandas-dev/pandas/blob/8806ed7120fed863b3cd7d3d5f377ec4c81739d0/pandas/_libs/tslibs/timestamps.pyx#L38
-class NoInput:
-    pass
-
-
-_no_input = NoInput()
-
-
-class NoInputType(types.Type):
-    def __init__(self):
-        super(NoInputType, self).__init__(name="NoInput")
-
-
-register_model(NoInputType)(models.OpaqueModel)
-
-
-@typeof_impl.register(NoInput)
-def _typ_no_input(val, c):
-    return NoInputType()
-
-
-@lower_constant(NoInputType)
-def constant_no_input(context, builder, ty, pyval):
-    return context.get_dummy_value()
 
 
 @lower_constant(PandasTimestampType)
@@ -857,6 +833,13 @@ def convert_numpy_timedelta64_to_datetime_timedelta(dt64):  # pragma: no cover
     return datetime.timedelta(n_day, n_sec, n_microsec)
 
 
+@numba.njit
+def convert_numpy_timedelta64_to_pd_timedelta(dt64):  # pragma: no cover
+    """Convertes numpy.timedelta64 to datetime.timedelta"""
+    n_int64 = bodo.hiframes.datetime_timedelta_ext.cast_numpy_timedelta_to_int(dt64)
+    return pd.Timedelta(n_int64)
+
+
 @intrinsic
 def integer_to_timedelta64(typingctx, val=None):
     """Cast an int value to timedelta64"""
@@ -1412,6 +1395,13 @@ def timestamp_sub(lhs, rhs):
 
         return impl_timestamp
 
+    if lhs == pandas_timestamp_type and rhs == pd_timedelta_type:
+
+        def impl(lhs, rhs):  # pragma: no cover
+            return lhs + -rhs
+
+        return impl
+
 
 @overload(operator.add, no_unliteral=True)
 def timestamp_add(lhs, rhs):
@@ -1436,6 +1426,48 @@ def timestamp_add(lhs, rhs):
             # Getting total microsecond
             totmicrosec = 1000000 * (daysF * 86400 + secsF) + msecF
             return compute_pd_timestamp(totmicrosec, nanosecond)
+
+        return impl
+
+    if lhs == pandas_timestamp_type and rhs == pd_timedelta_type:
+
+        def impl(lhs, rhs):  # pragma: no cover
+            # The time itself
+            days1 = lhs.toordinal()
+            secs1 = lhs.second + lhs.minute * 60 + lhs.hour * 3600
+            msec1 = lhs.microsecond
+            nanosec1 = lhs.nanosecond
+            # The timedelta
+            msec2 = rhs.value // 1000
+            nanosec2 = rhs.nanoseconds
+            # Computing the difference
+            msecF = msec1 + msec2
+            # Getting total microsecond
+            totmicrosec = 1000000 * (days1 * 86400 + secs1) + msecF
+            # Getting total nano_seconds
+            totnanosec = nanosec1 + nanosec2
+            return compute_pd_timestamp(totmicrosec, totnanosec)
+
+        return impl
+
+    if lhs == pd_timedelta_type and rhs == pandas_timestamp_type:
+
+        def impl(lhs, rhs):  # pragma: no cover
+            # The time itself
+            days1 = rhs.toordinal()
+            secs1 = rhs.second + rhs.minute * 60 + rhs.hour * 3600
+            msec1 = rhs.microsecond
+            nanosec1 = rhs.nanosecond
+            # The timedelta
+            msec2 = lhs.value // 1000
+            nanosec2 = lhs.nanoseconds
+            # Computing the difference
+            msecF = msec1 + msec2
+            # Getting total microsecond
+            totmicrosec = 1000000 * (days1 * 86400 + secs1) + msecF
+            # Getting total nano_seconds
+            totnanosec = nanosec1 + nanosec2
+            return compute_pd_timestamp(totmicrosec, totnanosec)
 
         return impl
 

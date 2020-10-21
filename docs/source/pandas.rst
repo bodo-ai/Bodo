@@ -756,6 +756,31 @@ Timestamp functionality is documented in `pandas.Timestamp <https://pandas.pydat
 * :meth:`pandas.Timestamp.toordinal`
 
 
+Timedelta
+~~~~~~~~~
+Timedelta functionality is documented in `pandas.Timedelta <https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.Timedelta.html>`_.
+
+* :class:`pandas.Timedelta`
+
+  * The unit argument is not supported and all Timedeltas 
+    are represented in nanosecond precision.
+
+Datetime related fields are supported:
+
+* :attr:`pandas.Timedelta.components`
+* :attr:`pandas.Timedelta.days`
+* :attr:`pandas.Timedelta.delta`
+* :attr:`pandas.Timedelta.microseconds`
+* :attr:`pandas.Timedelta.nanoseconds`
+* :attr:`pandas.Timedelta.seconds`
+* :attr:`pandas.Timedelta.value`
+* :meth:`pandas.Timedelta.to_numpy`
+* :meth:`pandas.Timedelta.to_pytimedelta`
+* :meth:`pandas.Timedelta.to_timedelta64`
+* :meth:`pandas.Timedelta.total_seconds`
+
+
+
 Window
 ~~~~~~
 
