@@ -79,8 +79,13 @@ jobs:
       else
         cd buildscripts/bodo-conda-recipe/
       fi
-      export CHECK_LICENSE_EXPIRED=$(CHECK_LICENSE_EXPIRED)
-      export CHECK_LICENSE_CORE_COUNT=$(CHECK_LICENSE_CORE_COUNT)
+      if [[ "${{ parameters.platformBuild }}" == "true" ]]; then
+        export CHECK_LICENSE_EXPIRED="0"
+        export CHECK_LICENSE_CORE_COUNT="0"
+      else
+        export CHECK_LICENSE_EXPIRED=$(CHECK_LICENSE_EXPIRED)
+        export CHECK_LICENSE_CORE_COUNT=$(CHECK_LICENSE_CORE_COUNT)
+      fi
       if [[ "${{ parameters.useNumbaDev }}" == "true" ]]; then
         conda-build . -c numba/label/dev -c conda-forge --no-test
         echo "Using numba/label/dev channel"

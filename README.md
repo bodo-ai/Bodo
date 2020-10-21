@@ -26,6 +26,6 @@ alternatives like [Apache Spark](http://spark.apache.org).
 
 - [Customer Ops](https://github.com/Bodo-inc/Bodo/blob/master/dev_docs/source/customer_ops.rst)
 	
-To build the Development guide locally and view it with your browser, follow instructions [here](https://github.com/Bodo-inc/Bodo/blob/master/dev_docs/source/dev_process.rst#building-documentation)
+To build the Development guide locally and view it with your browser, follow instructions [here](https://github.com/Bodo-inc/Bodo/blob/master/dev_docs/source/dev_process.rst#building-documentation).
 
 Bodo Documentation: https://docs.bodo.ai
