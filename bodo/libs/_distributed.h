@@ -153,6 +153,12 @@ static int64_t dist_get_node_portion(int64_t total, int num_pes, int node_id) {
            dist_get_start(total, num_pes, node_id);
 }
 
+/**
+ * @param total: global number of elements
+ * @param num_pes: number of ranks among to divide the elements
+ * @param index: element index
+ * @return rank that should have the element specified by index
+ */
 static int64_t index_rank(int64_t total, int num_pes, int64_t index) {
     int64_t res = total % num_pes;
     int64_t blk_size = (total - res) / num_pes;

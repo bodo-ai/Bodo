@@ -2353,40 +2353,50 @@ bool need_reshuffling(table_info* in_table, double crit_fraction) {
     return result;
 }
 
-/* Apply a renormalization shuffling
-   After the operation, all nodes will have a standard size
- */
-table_info* shuffle_renormalization(table_info* in_table, bool parallel) {
+table_info* shuffle_renormalization_group(table_info* in_table, bool parallel, int64_t n_dest_ranks, int* dest_ranks) {
     if (!parallel) return in_table;
     int64_t n_rows = in_table->nrows();
-    int n_pes, myrank;
-    MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
+    int n_src_pes, myrank;
+    MPI_Comm_size(MPI_COMM_WORLD, &n_src_pes);
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
-    std::vector<int64_t> AllSizes(n_pes);
-    MPI_Allgather(&n_rows, 1, MPI_LONG_LONG_INT, AllSizes.data(), 1,
-                  MPI_LONG_LONG_INT, MPI_COMM_WORLD);
+    std::vector<int64_t> AllSizes(n_src_pes);
+    MPI_Allgather(&n_rows, 1, MPI_INT64_T, AllSizes.data(), 1,
+                  MPI_INT64_T, MPI_COMM_WORLD);
     int64_t n_rows_tot = std::accumulate(AllSizes.begin(), AllSizes.end(), int64_t(0));
     int64_t shift = 0;
     for (int i_p = 0; i_p < myrank; i_p++) shift += AllSizes[i_p];
     // We use the word "hashes" as they are used all over the shuffle code.
     // However, in that case, it does not mean literally "hash". What it means
-    // is the index to which the row is going to be sent.
+    // is the global rank to which the row is going to be sent.
     std::vector<uint32_t> hashes(n_rows);
-    for (int64_t i_row = 0; i_row < n_rows; i_row++) {
-        int64_t glob_row = shift + i_row;
-        int64_t rnk = index_rank(n_rows_tot, n_pes, glob_row);
-        hashes[i_row] = rnk;
+    if (n_dest_ranks > 0) {
+        // take data from all ranks and distribute to a subset of ranks
+        for (int64_t i_row = 0; i_row < n_rows; i_row++) {
+            int64_t global_row = shift + i_row;
+            int64_t rank = dest_ranks[index_rank(n_rows_tot, n_dest_ranks, global_row)];
+            hashes[i_row] = rank;
+        }
+    } else {
+        // distributed data among all ranks
+        n_dest_ranks = n_src_pes;
+        for (int64_t i_row = 0; i_row < n_rows; i_row++) {
+            int64_t global_row = shift + i_row;
+            int64_t rank = index_rank(n_rows_tot, n_dest_ranks, global_row);
+            hashes[i_row] = rank;
+        }
     }
     //
     mpi_comm_info comm_info(in_table->columns);
     comm_info.set_counts(hashes.data());
     table_info* ret_table =
         shuffle_table_kernel(in_table, hashes.data(), comm_info);
-#ifdef DEBUG_SHUFFLE
-    std::cout << "RET_TABLE (shuffle_renormalization):\n";
-    DEBUG_PrintRefct(std::cout, ret_table->columns);
-    DEBUG_PrintSetOfColumn(std::cout, ret_table->columns);
-    std::cout << "Leaving now the shuffle_renormalization\n";
-#endif
     return ret_table;
+}
+
+/* Apply a renormalization shuffling
+   After the operation, all nodes will have a standard size
+ */
+table_info* shuffle_renormalization(table_info* in_table, bool parallel) {
+    if (!parallel) return in_table;
+    return shuffle_renormalization_group(in_table, true, 0, nullptr);
 }

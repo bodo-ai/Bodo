@@ -874,9 +874,9 @@ def gatherv(data, allgather=False, warn_if_rep=True):
 
 
 @numba.generated_jit(nopython=True)
-def rebalance(df, parallel=False):
+def rebalance(df, dests=None, parallel=False):
     n_cols = len(df.columns)
-    func_text = "def impl(df, parallel=False):\n"
+    func_text = "def impl(df, dests=None, parallel=False):\n"
     for i in range(n_cols):
         func_text += "    data_{0} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {0})\n".format(
             i
@@ -887,7 +887,10 @@ def rebalance(df, parallel=False):
         ", ".join("array_to_info(data_{})".format(x) for x in range(n_cols))
     )
     func_text += "    table_total = arr_info_list_to_table(info_list_total)\n"
-    func_text += "    out_table = shuffle_renormalization(table_total, parallel)\n"
+    func_text += "    if dests is None:\n"
+    func_text += "        out_table = shuffle_renormalization(table_total, parallel)\n"
+    func_text += "    else:\n"
+    func_text += "        out_table = shuffle_renormalization_group(table_total, parallel, len(dests), np.array(dests, dtype=np.int32).ctypes)\n"
     for i_col in range(n_cols):
         func_text += "    out_arr_{0} = info_to_array(info_from_table(out_table, {0}), data_{0})\n".format(
             i_col
@@ -912,6 +915,7 @@ def rebalance(df, parallel=False):
             "bodo": bodo,
             "array_to_info": bodo.libs.array.array_to_info,
             "shuffle_renormalization": bodo.libs.array.shuffle_renormalization,
+            "shuffle_renormalization_group": bodo.libs.array.shuffle_renormalization_group,
             "arr_info_list_to_table": bodo.libs.array.arr_info_list_to_table,
             "info_from_table": bodo.libs.array.info_from_table,
             "info_to_array": bodo.libs.array.info_to_array,

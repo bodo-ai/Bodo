@@ -80,6 +80,7 @@ ll.add_symbol("drop_duplicates_table", array_ext.drop_duplicates_table)
 ll.add_symbol("sort_values_table", array_ext.sort_values_table)
 ll.add_symbol("sample_table", array_ext.sample_table)
 ll.add_symbol("shuffle_renormalization", array_ext.shuffle_renormalization)
+ll.add_symbol("shuffle_renormalization_group", array_ext.shuffle_renormalization_group)
 ll.add_symbol("groupby_and_aggregate", array_ext.groupby_and_aggregate)
 ll.add_symbol("pivot_groupby_and_aggregate", array_ext.pivot_groupby_and_aggregate)
 ll.add_symbol("array_isin", array_ext.array_isin)
@@ -1408,6 +1409,36 @@ def shuffle_renormalization(typingctx, table_t, is_parallel_t):
 
     return (
         table_type(table_t, types.boolean),
+        codegen,
+    )
+
+
+@intrinsic
+def shuffle_renormalization_group(
+    typingctx, table_t, is_parallel_t, num_ranks_t, ranks_t
+):
+    """
+    Interface to the rebalancing of the table
+    """
+    assert table_t == table_type
+
+    def codegen(context, builder, sig, args):
+        fnty = lir.FunctionType(
+            lir.IntType(8).as_pointer(),
+            [
+                lir.IntType(8).as_pointer(),
+                lir.IntType(1),
+                lir.IntType(64),
+                lir.IntType(8).as_pointer(),
+            ],
+        )
+        fn_tp = builder.module.get_or_insert_function(
+            fnty, name="shuffle_renormalization_group"
+        )
+        return builder.call(fn_tp, args)
+
+    return (
+        table_type(table_t, types.boolean, types.int64, types.voidptr),
         codegen,
     )
 

@@ -155,9 +155,23 @@ bool need_reshuffling(table_info* in_table, double crit_fraction);
    After the operation, all nodes will have a standard size.
 
    @param in_table : the input partitioned table
+   @param parallel : whether data is distributed or not. This is a nop if parallel=false
    @return the reshuffled table
  */
 table_info* shuffle_renormalization(table_info* in_table, bool parallel);
+
+/* Apply a renormalization shuffling getting data from all the ranks
+   and sending to only a given subset of ranks.
+   After the operation, all specified destination ranks will have
+   same or similar data size.
+
+   @param in_table : the input partitioned table
+   @param parallel : whether data is distributed or not. This is a nop if parallel=false
+   @param n_dest_ranks: number of destination ranks
+   @param dest_ranks: array of destination ranks
+   @return the reshuffled table
+ */
+table_info* shuffle_renormalization_group(table_info* in_table, bool parallel, int64_t n_dest_ranks, int* dest_ranks);
 
 /* This function is used for the reverse shuffling of numpy data.
  *

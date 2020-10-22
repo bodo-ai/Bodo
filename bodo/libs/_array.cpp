@@ -1238,6 +1238,9 @@ PyMODINIT_FUNC PyInit_array_ext(void) {
     PyObject_SetAttrString(
         m, "shuffle_renormalization",
         PyLong_FromVoidPtr((void*)(&shuffle_renormalization)));
+    PyObject_SetAttrString(
+        m, "shuffle_renormalization_group",
+        PyLong_FromVoidPtr((void*)(&shuffle_renormalization_group)));
     PyObject_SetAttrString(m, "hash_join_table",
                            PyLong_FromVoidPtr((void*)(&hash_join_table)));
     PyObject_SetAttrString(m, "sample_table",
