@@ -1621,7 +1621,7 @@ def gen_top_level_agg_func(
             # TODO lambdas inside tuple (depends on a TODO in pd_groupby_ext.py)
             out_names.append("out_{}".format("__".join(v for v in c)))
     out_names = tuple(sanitize_varname(c) for c in out_names)
-    key_args = ", ".join("key_{}".format(sanitize_varname(c)) for c in key_names)
+    key_args = ", ".join("key_{}".format(c) for c in key_names)
 
     in_args = ", ".join(in_names)
     if in_args != "":

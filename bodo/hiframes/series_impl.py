@@ -1262,6 +1262,60 @@ def overload_series_value_counts(
     return impl
 
 
+@overload_method(SeriesType, "groupby", inline="always", no_unliteral=True)
+def overload_series_groupby(
+    S,
+    by=None,
+    axis=0,
+    level=None,
+    as_index=True,
+    sort=True,
+    group_keys=True,
+    squeeze=False,
+    observed=False,
+    dropna=True,
+):
+    unsupported_args = dict(
+        axis=axis,
+        group_keys=group_keys,
+        squeeze=squeeze,
+        observed=observed,
+        dropna=dropna,
+    )
+    arg_defaults = dict(
+        axis=0, group_keys=True, squeeze=False, observed=False, dropna=True
+    )
+    check_unsupported_args("Series.groupby", unsupported_args, arg_defaults)
+
+    if not is_overload_true(as_index):  # pragma: no cover
+        raise BodoError("as_index=False only valid with DataFrame")
+
+    def impl(
+        S,
+        by=None,
+        axis=0,
+        level=None,
+        as_index=True,
+        sort=True,
+        group_keys=True,
+        squeeze=False,
+        observed=False,
+        dropna=True,
+    ):  # pragma: no cover
+        keys = bodo.utils.conversion.coerce_to_array(by)
+        arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+        index = bodo.hiframes.pd_series_ext.get_series_index(S)
+        # reuse DataFrame.groupby
+        # Pandas assigns name=None to output Series/index, but not straightforward here.
+        # we use empty/single-space to simplify
+        df = bodo.hiframes.pd_dataframe_ext.init_dataframe(
+            (keys, arr), index, (" ", "")
+        )
+        return df.groupby(" ")[""]
+
+    return impl
+
+
 @overload_method(SeriesType, "append", inline="always", no_unliteral=True)
 def overload_series_append(S, to_append, ignore_index=False, verify_integrity=False):
     unsupported_args = dict(verify_integrity=verify_integrity)

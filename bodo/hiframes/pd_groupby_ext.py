@@ -1,4 +1,7 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
+"""Support for Pandas Groupby operations
+"""
+import operator
 from enum import Enum
 
 import numba
@@ -286,6 +289,12 @@ class GetItemDataFrameGroupBy(AbstractTemplate):
                 grpby.df_type, grpby.keys, selection, grpby.as_index, True
             )
             return signature(ret_grp, *args)
+
+
+# dummpy lowering for groupby getitem to avoid errors (e.g. test_series_groupby_arr)
+@lower_builtin("static_getitem", DataFrameGroupByType, types.Any)
+def static_getitem_df_groupby(context, builder, sig, args):
+    return context.get_constant_null(sig.return_type)
 
 
 def get_groupby_output_dtype(arr_type, func_name, index_type=None):
