@@ -95,8 +95,13 @@ which are supported by Bodo.
     - ``df.col.map(lambda x: np.nanmax(x))``
   * - :func:`pyspark.sql.functions.array_min`
     - ``df.col.map(lambda x: np.nanmin(x))``
+  * - :func:`pyspark.sql.functions.array_position`
+    - | ``df.col.apply(lambda x, value: np.append(np.where(x == value)[0], -1)[0], value=value)``
+      | (Note, Python uses 0 indexing)
   * - :func:`pyspark.sql.functions.array_repeat`
-    - ``df.col.map(lambda x: np.repeat(x, count))``
+    - ``df.col.apply(lambda x, count: np.repeat(x, count), count=count)``
+  * - :func:`pyspark.sql.functions.array_union`
+    - ``df[['col1', 'col2']].apply(lambda x: np.union1d(x[0], x[1]), axis=1)``
   * - :func:`pyspark.sql.functions.asc`
     - ``df.sort_values('col')``
   * - :func:`pyspark.sql.functions.asc_nulls_first`
@@ -128,7 +133,7 @@ which are supported by Bodo.
   * - :func:`pyspark.sql.functions.column`
     - ``df.col``
   * - :func:`pyspark.sql.functions.concat_ws`
-    - ``df[['col1', 'col2', 'col3']].apply(lambda x: sep.join(x), axis=1)``
+    - ``df[['col1', 'col2', 'col3']].apply(lambda x, sep: sep.join(x), axis=1, sep=sep)``
   * - :func:`pyspark.sql.functions.cos`
     - ``np.cos(df.col)``
   * - :func:`pyspark.sql.functions.cosh`
@@ -226,10 +231,10 @@ which are supported by Bodo.
   * - :func:`pyspark.sql.functions.randn`
     - ``pd.Series(np.random.randn(num_cols))``
   * - :func:`pyspark.sql.functions.regexp_extract`
-    - | ``def f(x):``
+    - | ``def f(x, pat):``
       |     ``res = re.search(pat, x)``
       |     ``return "" if res is None else res[0]``
-      | ``df.col.map(f)``
+      | ``df.col.apply(f, pat=pat)``
   * - :func:`pyspark.sql.functions.regexp_replace`
     - ``df.col.str.replace(pattern, repl_string)``
   * - :func:`pyspark.sql.functions.repeat`
@@ -239,7 +244,7 @@ which are supported by Bodo.
   * - :func:`pyspark.sql.functions.rint`
     - ``df.col.map(lambda x: int(np.round(x, 0)))``
   * - :func:`pyspark.sql.functions.round`
-    - ``df.col.map(lambda x: np.round(x, decimal_places))``
+    - ``df.col.apply(lambda x, decimal_places: np.round(x, decimal_places), decimal_places=decimal_places)``
   * - :func:`pyspark.sql.functions.rpad`
     - ``df.col.str.pad(len, side='right', flllchar=char)``
   * - :func:`pyspark.sql.functions.rtrim`
@@ -280,7 +285,7 @@ which are supported by Bodo.
   * - :func:`pyspark.sql.functions.substring`
     - ``df.col.str.slice(start, start+len)``
   * - :func:`pyspark.sql.functions.substring_index`
-    - ``df.col.map(lambda x: sep.join(x.split(sep)[:count]))``
+    - ``df.col.apply(lambda x, sep, count: sep.join(x.split(sep)[:count]), sep=sep, count=count)``
   * - :func:`pyspark.sql.functions.sum`
     - ``df.col.sum()``
   * - :func:`pyspark.sql.functions.sumDistinct`
@@ -304,6 +309,6 @@ which are supported by Bodo.
   * - :func:`pyspark.sql.functions.weekofyear`
     - ``df.col.dt.isocalendar().week``
   * - :func:`pyspark.sql.functions.when`
-    - ``df.col.apply(lambda a: value if cond(a) else othervalue))``
+    - ``df.A.apply(lambda a, cond, val, other: val if cond(a) else other, cond=cond, val=val, other=other)``
   * - :func:`pyspark.sql.functions.year`
     - ``df.col.dt.year``

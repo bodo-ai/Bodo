@@ -877,3 +877,30 @@ For example, this code reads column `A` into a nullable integer array
         dtype=dtype,
     )
     ...
+    
+User-Defined Functions (UDFs)
+~~~~~~~~~~~~~~~~~~~~~~~
+
+User-defined functions (UDFs) can be applied to dataframes with ``DataFrame.apply()`` and to
+series with ``Series.apply()`` or ``Series.map()``. Bodo offers support for UDFs without the 
+significant runtime penalty generally incurred in Pandas. 
+
+It is recommended to pass additional variables to UDFs explicitly, instead of directly using 
+values in the main function. The latter results in the "captured" variables case, which is 
+often error-prone and may result in compilation errors. Therefore, arguments should be passed 
+directly to either ``Series.apply()`` or ``DataFrame.apply()``.
+
+For example, consider a UDF that appends a variable suffix to each string
+in a Series of strings. The proper way to write this function through ``Series.apply()`` is::
+
+    @bodo.jit
+    def add_suffix(S, suffix):
+        return S.apply(lambda x, suf: x + suf, args=(suffix,))
+
+Alternatively, arguments can be passed as named arguments like::
+
+    @bodo.jit
+    def add_suffix(S, suffix):
+        return S.apply(lambda x, suf: x + suf, suf=suffix)
+
+The same process can be applied in the Dataframe case using ``DataFrame.apply()``.

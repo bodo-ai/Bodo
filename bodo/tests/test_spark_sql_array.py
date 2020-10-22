@@ -125,22 +125,22 @@ def test_array_distinct(dataframe_val):
     check_func(test_impl, (df,), sort_output=True)
 
 
-@pytest.mark.skip(reason="Map operation not yet supported #1534")
+@pytest.mark.skip("Issue with our string array #1925")
 def test_array_except(dataframe_val):
     def test_impl(df):
         return df[["A", "B"]].apply(lambda x: np.setdiff1d(x[0], x[1]), axis=1)
 
     df = dataframe_val
-    check_func(test_impl, (df,))
+    check_func(test_impl, (df,), dist_test=False)
 
 
-@pytest.mark.skip(reason="Map operation not yet supported #1534")
+@pytest.mark.skip("Issue with our string array #1925")
 def test_array_intersect(dataframe_val):
     def test_impl(df):
         return df[["A", "B"]].apply(lambda x: np.intersect1d(x[0], x[1]), axis=1)
 
     df = dataframe_val
-    check_func(test_impl, (df,))
+    check_func(test_impl, (df,), dist_test=False)
 
 
 def test_array_join(dataframe_val):
@@ -212,26 +212,24 @@ def test_array_position(dataframe_val):
     check_func(test_impl, (df,))
 
 
-@pytest.mark.skip(reason="Map operation not yet supported #1534")
+@pytest.mark.skip("Issue with our string array #1925")
 def test_array_remove(dataframe_val):
-    def test_impl_float(df):
-        return df.A.map(lambda x: np.setdiff1d(x, np.array([5.1])))
-
-    def test_impl_int(df):
-        return df.A.map(lambda x: np.setdiff1d(x, np.array([3])))
-
-    def test_impl_str(df):
-        return df.A.map(lambda x: np.setdiff1d(x, np.array(["hi"])))
+    def test_impl(df, arr):
+        return df.A.apply(lambda x, arr: np.setdiff1d(x, arr), arr=arr)
 
     df = dataframe_val
     if isinstance(df.A[0][0], np.float64):
-        test_impl = test_impl_float
+        arr = np.array([5.1])
+    elif isinstance(df.A.values, pd.arrays.IntegerArray):
+        arr = pd.array([3])
     elif isinstance(df.A[0][0], np.int64):
-        test_impl = test_impl_int
+        arr = np.array([3])
     elif isinstance(df.A[0][0], str):
-        test_impl = test_impl_str
+        arr = np.array(["hi"], dtype=np.object)
+    elif isinstance(df.A[0][0], (bool, np.bool_)):
+        arr = pd.array([True])
 
-    check_func(test_impl, (df,))
+    check_func(test_impl, (df, arr), dist_test=False)
 
 
 def test_array_repeat(dataframe_val):
@@ -250,7 +248,6 @@ def test_array_sort(dataframe_val):
     check_func(test_impl, (df,))
 
 
-@pytest.mark.skip(reason="Map operation not yet supported #1534")
 def test_array_union(dataframe_val):
     def test_impl(df):
         return df[["A", "B"]].apply(lambda x: np.union1d(x[0], x[1]), axis=1)
@@ -259,7 +256,7 @@ def test_array_union(dataframe_val):
     check_func(test_impl, (df,))
 
 
-@pytest.mark.skip(reason="Map operation not yet supported #1534")
+@pytest.mark.skip("Issue with our string array #1925")
 def test_arrays_overlap(dataframe_val):
     def test_impl(df):
         return df[["A", "B"]].apply(
@@ -267,7 +264,7 @@ def test_arrays_overlap(dataframe_val):
         )
 
     df = dataframe_val
-    check_func(test_impl, (df,))
+    check_func(test_impl, (df,), dist_test=False)
 
 
 def test_size(dataframe_val):
