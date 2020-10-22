@@ -1319,6 +1319,53 @@ def toordinal(date):
     return impl
 
 
+@overload_method(PandasTimestampType, "floor", no_unliteral=True)
+def timestamp_floor(ts, freq):
+    def impl(ts, freq):  # pragma: no cover
+        if freq == "D":
+            return pd.Timestamp(year=ts.year, month=ts.month, day=ts.day)
+        if freq == "H":
+            return pd.Timestamp(year=ts.year, month=ts.month, day=ts.day, hour=ts.hour)
+        if freq == "min" or freq == "T":
+            return pd.Timestamp(
+                year=ts.year, month=ts.month, day=ts.day, hour=ts.hour, minute=ts.minute
+            )
+        if freq == "S":
+            return pd.Timestamp(
+                year=ts.year,
+                month=ts.month,
+                day=ts.day,
+                hour=ts.hour,
+                minute=ts.minute,
+                second=ts.second,
+            )
+        if freq == "ms" or freq == "L":
+            return pd.Timestamp(
+                year=ts.year,
+                month=ts.month,
+                day=ts.day,
+                hour=ts.hour,
+                minute=ts.minute,
+                second=ts.second,
+                microsecond=ts.microsecond - (ts.microsecond % 1000),
+            )
+        if freq == "U" or freq == "us":
+            return pd.Timestamp(
+                year=ts.year,
+                month=ts.month,
+                day=ts.day,
+                hour=ts.hour,
+                minute=ts.minute,
+                second=ts.second,
+                microsecond=ts.microsecond,
+            )
+        if freq == "N":
+            return ts
+        raise ValueError("Incorrect Frequency specification")
+
+    return impl
+
+
 # @intrinsic
 @register_jitable
 def compute_pd_timestamp(totmicrosec, nanosecond):  # pragma: no cover

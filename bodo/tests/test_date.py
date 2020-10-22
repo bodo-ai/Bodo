@@ -1052,6 +1052,26 @@ def test_dt_isocalendar(series_value_no_bad_dates, memory_leak_check):
     check_func(impl, (series_value_no_bad_dates,))
 
 
+def test_dt_floor_timestamp_min(series_value_no_bad_dates, memory_leak_check):
+    def impl(S, freq):
+        return S.dt.floor(freq)
+
+    freq = "min"
+    check_func(impl, (series_value_no_bad_dates, freq))
+
+
+@pytest.mark.slow
+def test_dt_floor_timestamp_others(series_value_no_bad_dates, memory_leak_check):
+    """Test Series.dt.floor()"""
+
+    def impl(S, freq):
+        return S.dt.floor(freq)
+
+    freqs = ["D", "H", "T", "S", "ms", "L", "U", "us", "N"]
+    for freq in freqs:
+        check_func(impl, (series_value_no_bad_dates, freq))
+
+
 @pytest.mark.parametrize(
     "timedelta_fields", bodo.hiframes.pd_timestamp_ext.timedelta_fields
 )
@@ -1281,6 +1301,29 @@ def test_timestamp_isocalendar(ts, memory_leak_check):
         return ts.isocalendar()
 
     check_func(test_impl, (ts,))
+
+
+def test_dt_floor_timedelta_min(memory_leak_check):
+    def impl(S, freq):
+        return S.dt.floor(freq)
+
+    S = pd.timedelta_range(start="1 day", end="2 days", periods=100).to_series()
+
+    freq = "min"
+    check_func(impl, (S, freq))
+
+
+@pytest.mark.slow
+def test_dt_floor_timedelta_others(memory_leak_check):
+    """Test Series.dt.floor()"""
+
+    def impl(S, freq):
+        return S.dt.floor(freq)
+
+    S = pd.timedelta_range(start="1 day", end="2 days", periods=100).to_series()
+    freqs = ["D", "H", "T", "S", "ms", "L", "U", "us", "N"]
+    for freq in freqs:
+        check_func(impl, (S, freq))
 
 
 # ------------------------- DatetimeIndex Testing  -------------------------- #
