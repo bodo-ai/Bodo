@@ -234,8 +234,11 @@ class DistributedAnalysis:
         # warn when there is no parallel array or parfor
         # only warn for parfor when there is no parallel array since there could be
         # parallel functionality other than parfors
-        if all(is_REP(d) for d in array_dists.values()) and all(
-            d == Distribution.REP for d in parfor_dists.values()
+        # avoid warning if there is no array or parfor since not useful.
+        if (
+            (array_dists or parfor_dists)
+            and all(is_REP(d) for d in array_dists.values())
+            and all(d == Distribution.REP for d in parfor_dists.values())
         ):
             if bodo.get_rank() == 0:
                 warnings.warn(

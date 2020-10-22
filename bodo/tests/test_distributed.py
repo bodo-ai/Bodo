@@ -325,6 +325,16 @@ def test_dist_flag_warn1(memory_leak_check):
     assert count_array_REPs() == 0
 
 
+@pytest.mark.filterwarnings("error:No parallelism")
+def test_dist_flag_no_warn(memory_leak_check):
+    """make sure there is no parallelism warning when there is no array or parfor"""
+
+    def impl():
+        return 0
+
+    bodo.jit(impl)()
+
+
 def test_bodo_func_rep(memory_leak_check):
     """test calling other bodo functions without distributed flag"""
 
