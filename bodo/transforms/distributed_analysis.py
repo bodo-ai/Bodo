@@ -859,6 +859,11 @@ class DistributedAnalysis:
             # nunique doesn't affect input's distribution
             return
 
+        if fdef == ("cat_replace", "bodo.hiframes.pd_categorical_ext"):
+            # LHS should match RHS
+            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            return
+
         if fdef == ("unique", "bodo.libs.array_kernels"):
             # doesn't affect distribution of input since input can stay 1D
             if lhs not in array_dists:

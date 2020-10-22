@@ -1727,6 +1727,26 @@ def overload_series_replace(
 
         return impl_str
 
+    if isinstance(ret_dtype, CategoricalArray):
+
+        def cat_impl(
+            S,
+            to_replace=None,
+            value=None,
+            inplace=False,
+            limit=None,
+            regex=False,
+            method="pad",
+        ):  # pragma: no cover
+            in_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+            index = bodo.hiframes.pd_series_ext.get_series_index(S)
+            name = bodo.hiframes.pd_series_ext.get_series_name(S)
+            return bodo.hiframes.pd_series_ext.init_series(
+                in_arr.replace(to_replace, value), index, name
+            )
+
+        return cat_impl
+
     def impl(
         S,
         to_replace=None,
@@ -1770,7 +1790,7 @@ def _build_replace_dict(to_replace, value):
     # TODO: replace with something that captures all scalars
     if isinstance(to_replace, types.Number) or to_replace == bodo.string_type:
 
-        def impl(to_replace, value):
+        def impl(to_replace, value):  # pragma: no cover
             replace_dict = {}
             replace_dict[to_replace] = value
             return replace_dict
@@ -1781,7 +1801,7 @@ def _build_replace_dict(to_replace, value):
     # TODO: replace with explicit checking for to_replace types that are/aren't supported
     else:
 
-        def impl(to_replace, value):
+        def impl(to_replace, value):  # pragma: no cover
             replace_dict = {}
             for r in to_replace:
                 replace_dict[r] = value

@@ -2674,7 +2674,6 @@ def test_series_drop_inplace_check(memory_leak_check):
             pd.Series(pd.Categorical([1, 2, 3, 1, 2, 3, 4, 1, 2, 1, 3, 4])),
             1,
             2,
-            marks=pytest.mark.skip("Categorical not yet supported."),
         ),
         pytest.param(
             pd.Series(
@@ -2728,7 +2727,7 @@ def test_series_replace_scalar(S, to_replace, value, memory_leak_check):
             pd.Series(pd.Categorical([1, 2, 3, 1, 2, 3, 4, 1, 2, 1, 3, 4])),
             [1, 3],
             2,
-            marks=pytest.mark.skip("Categorical not yet supported."),
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             pd.Series(

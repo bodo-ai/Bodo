@@ -197,3 +197,140 @@ def test_pd_get_dummies_series(cat_arr_value, memory_leak_check):
 
     S = pd.Series(cat_arr_value)
     check_func(test_impl, (S,), check_categorical=False)
+
+
+def test_replace(memory_leak_check):
+    def test_impl(A, to_replace, value):
+        return A.replace(to_replace, value)
+
+    A = pd.Categorical(["CC", "AA", "B", "D", "AA", None, "B", "CC"])
+    to_replace = "CC"
+    value = "ZZZZ"
+    check_func(test_impl, (A, to_replace, value))
+    A = pd.Categorical([3, 1, 2, -1, 4, 1, 3, 2, 7, 8, 12] * 10, ordered=True)
+    to_replace = 2
+    value = 5
+    check_func(test_impl, (A, to_replace, value))
+
+
+@pytest.mark.slow
+def test_replace_list(memory_leak_check):
+    def test_impl(A, to_replace, value):
+        return A.replace(to_replace, value)
+
+    A = pd.Categorical(["CC", "AA", "B", "D", "AA", None, "B", "CC"])
+    to_replace = ["CC", "AA"]
+    value = "ZZZZ"
+    check_func(test_impl, (A, to_replace, value))
+    A = pd.Categorical([3, 1, 2, -1, 4, 1, 3, 2, 7, 8, 12] * 10, ordered=True)
+    to_replace = [2, 3, 7]
+    value = 5
+    check_func(test_impl, (A, to_replace, value), dist_test=False)
+
+
+def test_replace_const_string():
+    def test_impl(A):
+        return A.replace("CC", "ZZZZ")
+
+    A = pd.Categorical(["CC", "AA", "B", "D", "AA", None, "B", "CC"])
+    check_func(test_impl, (A,))
+
+
+def test_replace_const(memory_leak_check):
+    def test_impl(A):
+        return A.replace(2, 5)
+
+    A = pd.Categorical([3, 1, 2, -1, 4, 1, 3, 2, 7, 8, 12], ordered=True)
+    check_func(test_impl, (A,))
+
+
+def test_replace_const_list(memory_leak_check):
+    def test_impl(A):
+        return A.replace([2, 3, 7], 5)
+
+    A = pd.Categorical([3, 1, 2, -1, 4, 1, 3, 2, 7, 8, 12], ordered=True)
+    check_func(test_impl, (A,))
+
+
+def test_replace_delete(memory_leak_check):
+    def test_impl(A, to_replace, value):
+        return A.replace(to_replace, value)
+
+    A = pd.Categorical(["CC", "AA", "B", "D", "AA", None, "B", "CC"])
+    to_replace = "CC"
+    value = "D"
+    check_func(test_impl, (A, to_replace, value))
+    A = pd.Categorical([3, 1, 2, -1, 4, 1, 3, 2, 7, 8, 12], ordered=True)
+    to_replace = 2
+    value = 1
+    check_func(test_impl, (A, to_replace, value))
+
+
+@pytest.mark.slow
+def test_replace_delete_list(memory_leak_check):
+    def test_impl(A, to_replace, value):
+        return A.replace(to_replace, value)
+
+    A = pd.Categorical(["CC", "AA", "B", "D", "AA", None, "B", "CC"])
+    to_replace = ["CC", "AA"]
+    value = "D"
+    check_func(test_impl, (A, to_replace, value))
+    A = pd.Categorical([3, 1, 2, -1, 4, 1, 3, 2, 7, 8, 12], ordered=True)
+    to_replace = [2, 3]
+    value = 1
+    check_func(test_impl, (A, to_replace, value))
+
+
+def test_replace_delete_const(memory_leak_check):
+    def test_impl(A):
+        return A.replace(2, 1)
+
+    A = pd.Categorical([3, 1, 2, -1, 4, 1, 3, 2, 7, 8, 12], ordered=True)
+    check_func(test_impl, (A,))
+
+
+@pytest.mark.slow
+def test_replace_same(memory_leak_check):
+    def test_impl(A, to_replace, value):
+        return A.replace(to_replace, value)
+
+    A = pd.Categorical(["CC", "AA", "B", "D", "AA", None, "B", "CC"])
+    to_replace = "CC"
+    value = "CC"
+    check_func(test_impl, (A, to_replace, value))
+    A = pd.Categorical([3, 1, 2, -1, 4, 1, 3, 2, 7, 8, 12] * 10, ordered=True)
+    to_replace = 2
+    value = 2
+    check_func(test_impl, (A, to_replace, value))
+
+
+def test_replace_same_const(memory_leak_check):
+    def test_impl(A):
+        return A.replace("CC", "CC")
+
+    A = pd.Categorical(["CC", "AA", "B", "D", "AA", None, "B", "CC"])
+    check_func(test_impl, (A,))
+
+
+@pytest.mark.slow
+def test_replace_missing(memory_leak_check):
+    def test_impl(A, to_replace, value):
+        return A.replace(to_replace, value)
+
+    A = pd.Categorical(["CC", "AA", "B", "D", "AA", None, "B", "CC"])
+    to_replace = "ZZ"
+    value = "CC"
+    check_func(test_impl, (A, to_replace, value))
+    A = pd.Categorical([3, 1, 2, -1, 4, 1, 3, 2, 7, 8, 12] * 10, ordered=True)
+    to_replace = 5
+    value = 2
+    check_func(test_impl, (A, to_replace, value))
+
+
+@pytest.mark.slow
+def test_replace_missing_const(memory_leak_check):
+    def test_impl(A):
+        return A.replace("ZZ", "CC")
+
+    A = pd.Categorical(["CC", "AA", "B", "D", "AA", None, "B", "CC"])
+    check_func(test_impl, (A,))

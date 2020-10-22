@@ -1,11 +1,13 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 import operator
+from collections.abc import Iterable
 
 import numba
 import numpy as np
 import pandas as pd
 from llvmlite import ir as lir
 from numba.core import cgutils, types
+from numba.core.imputils import lower_constant
 from numba.extending import (
     NativeValue,
     box,
@@ -17,6 +19,7 @@ from numba.extending import (
     overload,
     overload_attribute,
     overload_method,
+    register_jitable,
     register_model,
     type_callable,
     typeof_impl,
@@ -25,7 +28,16 @@ from numba.extending import (
 from numba.parfors.array_analysis import ArrayAnalysis
 
 import bodo
+from bodo.libs.array_item_arr_ext import ArrayItemArrayType
+from bodo.libs.str_arr_ext import (
+    char_arr_type,
+    null_bitmap_arr_type,
+    offset_arr_type,
+)
 from bodo.utils.typing import (
+    NOT_CONSTANT,
+    BodoError,
+    get_overload_const,
     is_list_like_index_type,
     is_overload_constant_bool,
     is_overload_true,
@@ -63,6 +75,18 @@ def _get_cat_arr_type(elem_type):
         if elem_type is None
         else bodo.hiframes.pd_series_ext._get_series_array_type(elem_type)
     )
+
+
+@lower_constant(PDCategoricalDtype)
+def lower_constant_categorical_type(context, builder, typ, pyval):
+
+    categorical_dtype = context.make_helper(builder, typ)
+    categorical_dtype.categories = context.get_constant_generic(
+        builder, bodo.typeof(pyval.categories.values), pyval.categories.values
+    )
+    categorical_dtype.ordered = context.get_constant(types.bool_, pyval.ordered)
+
+    return categorical_dtype._getvalue()
 
 
 # store data and nulls as regular arrays without payload machineray
@@ -325,6 +349,247 @@ numba.core.ir_utils.alias_func_extensions[
 @overload_method(CategoricalArray, "copy", no_unliteral=True)
 def cat_arr_copy_overload(arr):
     return lambda arr: init_categorical_array(arr.codes.copy(), arr.dtype)
+
+
+def build_replace_dicts(to_replace, value, categories):
+    """Helper functions to build arrays used by the replace method. Should support
+    the same set of cases as those provided for Series.replace. However for categories
+    we need the following 4 things to perform the swaps:
+    1. Mappings that will be replaced, for updating categories.
+    2. Mappings that will be deleted, for updating categories.
+    3. Code mapping updates. When categories are deleted code values may drop and change.
+    4. Number of categories deleted.
+    We can group 1 and 2 together by filtering out Map[a] -> a and letting
+    mapping to yourself serve as a deletion. This results in 3 return values:
+    category_dict, codes_dict, num_deleted
+    """
+    return dict(), dict(), 0
+
+
+@overload(build_replace_dicts, no_unliteral=True)
+def _build_replace_dicts(to_replace, value, categories):
+    # Scalar case
+    # TODO: replace with something that captures all scalars
+    if isinstance(to_replace, types.Number) or to_replace == bodo.string_type:
+
+        def impl(to_replace, value, categories):  # pragma: no cover
+            return build_replace_dicts([to_replace], value, categories)
+
+        return impl
+
+    # List case with scalar value
+    # TODO: replace with explicit checking for to_replace types that are/aren't supported
+    else:
+
+        def impl(to_replace, value, categories):  # pragma: no cover
+            # map (old category) -> (new category), Only changed categories will be mapped.
+            # Deleted categories will map to themselves (to avoid a second map).
+            categories_dict = {}
+            # map (old codes) -> (new codes)
+            # TODO: Allow replacing na
+            codes_dict = {-1: -1}
+            # map (replaced codes) -> (new code in categories) This is before remapping
+            # codes to decrement by removed codes.
+            replace_codes_dict = {}
+            # List of codes that will be deleted. Used for updating code mappings
+            delete_codes_list = []
+            # map(category) -> (old code value)
+            cat_to_code = {}
+            n = len(categories)
+            for i in range(n):
+                cat_to_code[categories[i]] = i
+            # Determine which categories are getting remapped/deleted
+            for replace_cat in to_replace:
+                # Skip replaces with themselves because they won't change
+                # the code.
+                if replace_cat != value:
+                    if replace_cat in cat_to_code:
+                        # For deletions update the categories
+                        if value in cat_to_code:
+                            categories_dict[replace_cat] = replace_cat
+                            code_replacee = cat_to_code[replace_cat]
+                            replace_codes_dict[code_replacee] = cat_to_code[value]
+                            delete_codes_list.append(code_replacee)
+                        else:
+                            categories_dict[replace_cat] = value
+                            cat_to_code[value] = cat_to_code[replace_cat]
+            delete_codes = np.sort(np.array(delete_codes_list))
+            # Determine how much easy code must decrease before constructing
+            # final codes_dict
+            decr_value = 0
+            decr_counts = []
+            for j in range(n):
+                while decr_value < len(delete_codes) and j > delete_codes[decr_value]:
+                    decr_value += 1
+                decr_counts.append(decr_value)
+            for k in range(n):
+                search_location = k
+                if k in replace_codes_dict:
+                    search_location = replace_codes_dict[k]
+                codes_dict[k] = search_location - decr_counts[search_location]
+            return categories_dict, codes_dict, len(delete_codes)
+
+        return impl
+
+
+@numba.njit
+def python_build_replace_dicts(to_replace, value, categories):
+    """Jit wrapper to call build_replace_dicts from Python"""
+    return build_replace_dicts(to_replace, value, categories)
+
+
+@register_jitable
+def reassign_codes(codes_arr, codes_dict):  # pragma: no cover
+    """Helper function to remap codes in replace."""
+    for i in range(len(codes_arr)):
+        codes_arr[i] = codes_dict[codes_arr[i]]
+
+
+@overload_method(CategoricalArray, "replace", inline="always", no_unliteral=True)
+def overload_replace(arr, to_replace, value):
+    def impl(arr, to_replace, value):  # pragma: no cover
+        return bodo.hiframes.pd_categorical_ext.cat_replace(arr, to_replace, value)
+
+    return impl
+
+
+def cat_replace(arr, to_replace, value):  # pragma: no cover
+    # Dummy function for creating a builtin
+    return
+
+
+@overload(cat_replace, no_unliteral=True)
+def cat_replace_overload(arr, to_replace, value):
+    _ordered = arr.dtype.ordered
+    _elem_type = arr.dtype.elem_type
+
+    to_replace_constant = get_overload_const(to_replace)
+    value_constant = get_overload_const(value)
+
+    # If we have known categories and constant inputs we can construct a known dtype.
+    if (
+        arr.dtype.categories is not None
+        and to_replace_constant is not NOT_CONSTANT
+        and value_constant is not NOT_CONSTANT
+    ):
+        cats_dict, _, _ = python_build_replace_dicts(
+            to_replace_constant, value_constant, arr.dtype.categories
+        )
+        # If nothing is being changed we can just return a copy of the aray
+        if len(cats_dict) == 0:
+            return lambda arr, to_replace, value: arr.copy()
+        # Otherwise create a new dtype
+        cats_list = []
+        for cat in arr.dtype.categories:
+            if cat in cats_dict:
+                new_cat = cats_dict[cat]
+                # If it maps to itself this is a deletion. This is because we filtered out
+                # all actual attempts to map to itself
+                if new_cat != cat:
+                    cats_list.append(new_cat)
+
+            else:
+                cats_list.append(cat)
+        _new_dtype = pd.CategoricalDtype(cats_list, _ordered)
+
+        # Implementation avoids changing the actual categories and knows the
+        # categories must change
+        def impl_dtype(arr, to_replace, value):  # pragma: no cover
+            new_codes = arr.codes.copy()
+            categories = arr.dtype.categories
+            _, codes_dict, _ = build_replace_dicts(to_replace, value, categories)
+            # Update all of the codes
+            # TODO: Use codes_dict from compile time (lowering issue)
+            reassign_codes(new_codes, codes_dict)
+            return init_categorical_array(new_codes, _new_dtype)
+
+        return impl_dtype
+
+    _elem_type = arr.dtype.elem_type
+    # Handle strings differently until we get an array builder
+    if _elem_type == types.unicode_type:
+
+        def impl_str(arr, to_replace, value):  # pragma: no cover
+            new_codes = arr.codes.copy().astype(np.int64)
+            categories = arr.dtype.categories
+            categories_dict, codes_dict, num_deleted = build_replace_dicts(
+                to_replace, value, categories
+            )
+            if len(categories_dict) == 0:
+                return init_categorical_array(
+                    new_codes, init_cat_dtype(categories.copy(), _ordered)
+                )
+            # If we must edit the categories we need to preallocate a new
+            # string array
+            n = len(categories)
+            num_chars = 0
+            for i in range(n):
+                old_cat_val = categories[i]
+                if old_cat_val in categories_dict:
+                    new_cat_val = categories_dict[old_cat_val]
+                    # if new == old, its a deletion, used to avoid a second dict
+                    if new_cat_val != old_cat_val:
+                        num_chars += bodo.libs.str_arr_ext.get_utf8_size(new_cat_val)
+                else:
+                    num_chars += bodo.libs.str_arr_ext.get_utf8_size(old_cat_val)
+            new_categories = bodo.libs.str_arr_ext.pre_alloc_string_array(
+                n - num_deleted, num_chars
+            )
+            # Fill in all the categories in the new array
+            new_idx = 0
+            for j in range(n):
+                old_cat_val = categories[j]
+                if old_cat_val in categories_dict:
+                    new_cat_val = categories_dict[old_cat_val]
+                    # if new == old, its a deletion, used to avoid a second dict
+                    if new_cat_val != old_cat_val:
+                        new_categories[new_idx] = new_cat_val
+                        new_idx += 1
+                else:
+                    new_categories[new_idx] = old_cat_val
+                    new_idx += 1
+            # Update all of the codes
+            reassign_codes(new_codes, codes_dict)
+            return init_categorical_array(
+                new_codes, init_cat_dtype(new_categories, _ordered)
+            )
+
+        return impl_str
+
+    _arr_type = bodo.utils.typing.scalar_to_array_type(_elem_type)
+
+    def impl(arr, to_replace, value):  # pragma: no cover
+        new_codes = arr.codes.copy().astype(np.int64)
+        categories = arr.dtype.categories
+        categories_dict, codes_dict, num_deleted = build_replace_dicts(
+            to_replace, value, categories
+        )
+        if len(categories_dict) == 0:
+            return init_categorical_array(
+                new_codes, init_cat_dtype(categories.copy(), _ordered)
+            )
+        n = len(categories)
+        new_categories = bodo.utils.utils.alloc_type(n - num_deleted, _arr_type, None)
+        # Fill in all the categories in the new array
+        new_idx = 0
+        for i in range(n):
+            old_cat_val = categories[i]
+            if old_cat_val in categories_dict:
+                new_cat_val = categories_dict[old_cat_val]
+                # if new == old, its a deletion, used to avoid a second dict
+                if new_cat_val != old_cat_val:
+                    new_categories[new_idx] = new_cat_val
+                    new_idx += 1
+            else:
+                new_categories[new_idx] = old_cat_val
+                new_idx += 1
+        # Update all of the codes
+        reassign_codes(new_codes, codes_dict)
+        return init_categorical_array(
+            new_codes, init_cat_dtype(new_categories, _ordered)
+        )
+
+    return impl
 
 
 @overload(len, no_unliteral=True)
