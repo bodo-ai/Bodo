@@ -839,6 +839,18 @@ The operations are documented on `pandas.DataFrame.groupby <https://pandas.pydat
 * :meth:`pandas.core.groupby.GroupBy.median`
 
 
+Offsets
+~~~~~~~
+
+Bodo supports a subset of the offset types from within ``pandas.tseries.offsets``. 
+For the offsets supported, the currently supported operations are the constructor 
+and addition and subtraction with a scalar `datetime.date`, `datetime.datetime` 
+or `pandas.Timestamp`. These can also be mapped across Series or DataFrame of 
+dates using UDFs. The offsets currently supported are:
+
+* :func:`pandas.tseries.offsets.MonthEnd`
+
+
 Integer NA issue in Pandas
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 

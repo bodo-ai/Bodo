@@ -83,6 +83,7 @@ from bodo.hiframes.pd_index_ext import (
     StringIndexType,
     TimedeltaIndexType,
 )
+from bodo.hiframes.pd_offsets_ext import month_end_type
 
 
 import bodo.compiler  # isort:skip

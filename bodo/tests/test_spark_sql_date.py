@@ -1,0 +1,59 @@
+# Copyright (C) 2020 Bodo Inc. All rights reserved.
+"""
+Tests of series.map/apply and dataframe.apply used for parity
+with pyspark.sql.functions that operation on columns of dates.
+
+Test names refer to the names of the spark function they map to.
+"""
+
+import numpy as np
+import pandas as pd
+import pytest
+
+from bodo.tests.utils import check_func
+
+
+@pytest.fixture(
+    params=[
+        pd.DataFrame(
+            {"A": pd.date_range(start="2018-04-24", end="2020-04-29", periods=5)}
+        ),
+        pd.DataFrame(
+            {"A": pd.date_range(start="2018-04-24", end="2020-04-29", periods=5).date}
+        ),
+    ]
+)
+def dataframe_val(request):
+    return request.param
+
+
+@pytest.mark.skip("No Support for DateOffset")
+def test_add_months(dataframe_val, memory_leak_check):
+    def test_impl(df, num_months):
+        return df.A.apply(
+            lambda x: x + pd.DateOffset(months=num_months), num_months=num_months
+        )
+
+    check_func(test_impl, (dataframe_val, 3))
+    check_func(test_impl, (dataframe_val, 0))
+    check_func(test_impl, (dataframe_val, -2))
+
+
+def test_last_day(dataframe_val, memory_leak_check):
+    def test_impl(df):
+        return df.A.map(lambda x: x + pd.tseries.offsets.MonthEnd())
+
+    check_func(test_impl, (dataframe_val,))
+
+
+@pytest.mark.skip("No Support for Week")
+def test_next_day(dataframe_val, memory_leak_check):
+    def test_impl(df, dayOfWeek):
+        return df.A.apply(
+            lambda x: x + pd.tseries.offsets.Week(0, weekday=dayOfWeek),
+            dayOfWeek=dayOfWeek,
+        )
+
+    check_func(test_impl, (dataframe_val, 3))
+    check_func(test_impl, (dataframe_val, 0))
+    check_func(test_impl, (dataframe_val, 6))

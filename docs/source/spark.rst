@@ -177,6 +177,8 @@ which are supported by Bodo.
     - ``df.col.isna()``
   * - :func:`pyspark.sql.functions.kurtosis`
     - ``df.col.kurtosis()``
+  * - :func:`pyspark.sql.functions.last_day`
+    - ``df.col.apply(lambda x: x + pd.DateOffset(months=num_months), num_months=num_months)``
   * - :func:`pyspark.sql.functions.least`
     - ``df.min(axis=1)``
   * - :func:`pyspark.sql.functions.locate`
