@@ -1290,6 +1290,52 @@ def overload_series_groupby(
     if not is_overload_true(as_index):  # pragma: no cover
         raise BodoError("as_index=False only valid with DataFrame")
 
+    if is_overload_none(by) and is_overload_none(level):  # pragma: no cover
+        raise BodoError("You have to supply one of 'by' and 'level'")
+
+    if not is_overload_none(level):
+        # NOTE: pandas seems to ignore the 'by' argument if level is provided
+
+        # TODO: support MultiIndex case
+        if not (
+            is_overload_constant_int(level) and get_overload_const_int(level) == 0
+        ) or isinstance(
+            S.index, bodo.hiframes.pd_multi_index_ext.MultiIndexType
+        ):  # pragma: no cover
+            raise BodoError(
+                "Series.groupby(): MultiIndex case or 'level' other than 0 not supported yet"
+            )
+
+        def impl_index(
+            S,
+            by=None,
+            axis=0,
+            level=None,
+            as_index=True,
+            sort=True,
+            group_keys=True,
+            squeeze=False,
+            observed=False,
+            dropna=True,
+        ):  # pragma: no cover
+            arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+            index = bodo.hiframes.pd_series_ext.get_series_index(S)
+            keys = bodo.utils.conversion.coerce_to_array(index)
+            # reuse DataFrame.groupby
+            # Pandas assigns name=None to output Series/index, but not straightforward here.
+            # we use empty/single-space to simplify
+            df = bodo.hiframes.pd_dataframe_ext.init_dataframe(
+                (keys, arr), index, (" ", "")
+            )
+            return df.groupby(" ")[""]
+
+        return impl_index
+
+    if not is_overload_none(level):  # pragma: no cover
+        raise BodoError(
+            "Series.groupby(): 'level' argument should be None if 'by' is not None"
+        )
+
     def impl(
         S,
         by=None,
