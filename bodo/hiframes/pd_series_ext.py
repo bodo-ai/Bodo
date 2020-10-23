@@ -877,7 +877,6 @@ series_unsupported_methods = (
     "agg",
     "aggregate",
     "transform",
-    "groupby",
     "expanding",
     "ewm",
     "pipe",

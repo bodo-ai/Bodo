@@ -332,6 +332,7 @@ Function application, GroupBy & Window:
 
 * :meth:`pandas.Series.apply` (only the `func` argument)
 * :meth:`pandas.Series.map` (only the `arg` argument, which should be a function)
+* :meth:`pandas.Series.groupby` (pass array to `by` argument, or level=0 with regular Index)
 * :meth:`pandas.Series.rolling` (`window` and `center` arguments supported)
 
 

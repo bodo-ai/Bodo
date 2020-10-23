@@ -5,6 +5,7 @@ Collection of utility functions. Needs to be refactored in separate files.
 import hashlib
 import inspect
 import keyword
+import re
 import warnings
 from collections import namedtuple
 from enum import Enum
@@ -886,10 +887,9 @@ def is_expr(val, op):
 
 
 def sanitize_varname(varname):
-    new_name = (
-        varname.replace("$", "_").replace(".", "_").replace(":", "_").replace(" ", "_")
-    )
-    if not new_name[0].isalpha():
+    """convert variable name to be identifier compatible (e.g. remove whitespace)"""
+    new_name = re.sub(r"\W+", "_", varname)
+    if not new_name or not new_name[0].isalpha():
         new_name = "_" + new_name
     if not new_name.isidentifier() or keyword.iskeyword(new_name):
         new_name = mk_unique_var("new_name").replace(".", "_")

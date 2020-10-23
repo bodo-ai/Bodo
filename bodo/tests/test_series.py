@@ -2988,6 +2988,25 @@ def test_random_series_any(memory_leak_check):
     check_func(impl, (S,))
 
 
+def test_series_groupby_arr(memory_leak_check):
+    """test Series.groupby() with input array as keys"""
+
+    def impl(S, A):
+        return S.groupby(A).sum()
+
+    S = pd.Series([1, 2, 3, 4, 5, 6])
+    A = np.array([1, 2, 1, 1, 2, 3])
+    check_func(impl, (S, A), check_names=False)
+
+
+def test_series_groupby_index(memory_leak_check):
+    def impl(S):
+        return S.groupby(level=0).sum()
+
+    S = pd.Series([1, 2, 3, 4, 5, 6], [1, 2, 1, 1, 2, 3])
+    check_func(impl, (S,), check_names=False)
+
+
 def test_series_np_where_str(memory_leak_check):
     """Tests np.where() called on Series with string input (#223)."""
 
