@@ -37,8 +37,7 @@ from numba.typed.typedobjectutils import _cast
 
 import bodo
 from bodo.hiframes.datetime_date_ext import datetime_date_type
-# NOTE: importing hdist is necessary for MPI initialization before array_ext
-from bodo.libs import array_ext, hdist
+from bodo.libs import array_ext
 from bodo.utils.cg_helpers import (
     gen_allocate_array,
     get_array_elem_counts,
@@ -279,7 +278,7 @@ def _get_C_API_ptrs(c, data_tup, data_typ, names):
 
 
 @unbox(StructArrayType)
-def unbox_struct_array(typ, val, c):
+def unbox_struct_array(typ, val, c, is_tuple_array=False):
     """
     Unbox a numpy array with list of data values.
     """
@@ -333,6 +332,7 @@ def unbox_struct_array(typ, val, c):
                 lir.IntType(8).as_pointer(),  # null_bitmap
                 lir.IntType(8).as_pointer(),  # c types
                 lir.IntType(8).as_pointer(),  # field names
+                lir.IntType(1),  # is_tuple_array
             ],
         )
         fn = c.builder.module.get_or_insert_function(
@@ -348,6 +348,7 @@ def unbox_struct_array(typ, val, c):
                 null_bitmap_ptr,
                 c.builder.bitcast(c_types_ptr, lir.IntType(8).as_pointer()),
                 c.builder.bitcast(field_names_ptr, lir.IntType(8).as_pointer()),
+                c.context.get_constant(types.bool_, is_tuple_array),
             ],
         )
     else:

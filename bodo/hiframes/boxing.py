@@ -54,6 +54,7 @@ from bodo.libs.map_arr_ext import MapArrayType
 from bodo.libs.str_arr_ext import string_array_type
 from bodo.libs.str_ext import string_type
 from bodo.libs.struct_arr_ext import StructArrayType, StructType
+from bodo.libs.tuple_arr_ext import TupleArrayType
 from bodo.utils.typing import (
     BodoError,
     BodoWarning,
@@ -483,6 +484,9 @@ def _infer_ndarray_obj_dtype(val):
         value_arr_type = numba.typeof(_value_to_array(list(first_val.values())))
         # TODO: handle 2D ndarray case
         return MapArrayType(key_arr_type, value_arr_type)
+    elif isinstance(first_val, tuple):
+        data_types = tuple(_get_struct_value_arr_type(v) for v in first_val)
+        return TupleArrayType(data_types)
     if isinstance(
         first_val,
         (
