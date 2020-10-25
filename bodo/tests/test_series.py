@@ -2758,13 +2758,76 @@ def test_series_replace_scalar(S, to_replace, value, memory_leak_check):
         ),
     ],
 )
-def test_series_replace_list(S, to_replace_list, value, memory_leak_check):
+def test_series_replace_list_scalar(S, to_replace_list, value, memory_leak_check):
     def test_impl(A, to_replace, val):
         return A.replace(to_replace, val)
 
-    # NOTE: Lists are not distributable. As a result, check_func will not
-    # distribute it (not even in 1D or 1Dvar cases).
     check_func(test_impl, (S, to_replace_list, value))
+
+
+@pytest.mark.parametrize(
+    "S,to_replace_list,value_list",
+    [
+        (
+            pd.Series([1.0, 2.0, np.nan, 1.0, 2.0, 1.3], [3, 4, 2, 1, -3, 6], name="A"),
+            [2.0, 1.3],
+            [5.0, 5.0],
+        ),
+        pytest.param(
+            pd.Series(
+                ["aa", "bc", None, "ccc", "bc", "A", ""],
+                [3, 4, 2, 1, -3, -2, 6],
+                name="A",
+            ),
+            ["bc", "A"],
+            ["abdd", ""],
+        ),
+        pytest.param(
+            pd.Series(pd.array([1, 2, 3, 1, 2, 3, 4, 1, 2, 1, 3, 4])),
+            [1, 4],
+            [2, 1],
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.Series(pd.Categorical([1, 2, 3, 1, 2, 3, 4, 1, 2, 1, 3, 4])),
+            [1, 3],
+            [2, 7],
+            marks=pytest.mark.skip("Not support for categorical"),
+        ),
+        pytest.param(
+            pd.Series(
+                np.array(
+                    [
+                        Decimal("1.6"),
+                        Decimal("-0.222"),
+                        Decimal("5.1"),
+                        Decimal("1111.316"),
+                        Decimal("-0.2220001"),
+                        Decimal("-0.2220"),
+                        Decimal("1234.00046"),
+                        Decimal("5.1"),
+                        Decimal("-11131.0056"),
+                        Decimal("0.0"),
+                        Decimal("5.11"),
+                        Decimal("0.00"),
+                        Decimal("0.01"),
+                        Decimal("0.03"),
+                        Decimal("0.113"),
+                        Decimal("1.113"),
+                    ]
+                )
+            ),
+            [Decimal("5.1"), Decimal("0.0")],
+            [Decimal("0.001"), Decimal("5.1")],
+            marks=pytest.mark.slow,
+        ),
+    ],
+)
+def test_series_replace_list_list(S, to_replace_list, value_list, memory_leak_check):
+    def test_impl(A, to_replace, val):
+        return A.replace(to_replace, val)
+
+    check_func(test_impl, (S, to_replace_list, value_list), check_dtype=False)
 
 
 @pytest.mark.parametrize(

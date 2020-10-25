@@ -298,6 +298,8 @@ which are supported by Bodo.
     - ``np.tan(df.col)``
   * - :func:`pyspark.sql.functions.tanh`
     - ``np.tanh(df.col)`` 
+  * - :func:`pyspark.sql.functions.translate`
+    - ``df.col.str.split("").apply(lambda x: "".join(pd.Series(x).replace(to_replace, values).tolist()), to_replace=to_replace, values=values)``
   * - :func:`pyspark.sql.functions.trim`
     - ``df.col.str.strip()``
   * - :func:`pyspark.sql.functions.udf`

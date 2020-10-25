@@ -47,3 +47,18 @@ def test_concat_strings(dataframe_val):
         return df[["A", "B", "C"]].apply(lambda x: ",".join(x), axis=1)
 
     check_func(test_impl, (dataframe_val,))
+
+
+def test_translate(dataframe_val):
+    def test_impl(df, to_replace, values):
+        return df.A.str.split("").apply(
+            lambda x, to_replace, values: "".join(
+                pd.Series(x).replace(to_replace, values).tolist()
+            ),
+            to_replace=to_replace,
+            values=values,
+        )
+
+    to_replace = ["a", "o", "l"]
+    values = ["o", "z", "q"]
+    check_func(test_impl, (dataframe_val, to_replace, values))

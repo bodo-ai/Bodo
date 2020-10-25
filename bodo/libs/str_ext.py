@@ -502,6 +502,9 @@ def str_split(arr, pat, n):  # pragma: no cover
             continue
         if is_regex:
             vals = compiled_pat.split(arr[i], maxsplit=n)
+        # For usage in Series.str.split(). Behavior differs from split
+        elif pat == "":
+            vals = [""] + list(arr[i]) + [""]
         else:
             vals = arr[i].split(pat, n)
         num_strs += len(vals)
@@ -526,6 +529,9 @@ def str_split(arr, pat, n):  # pragma: no cover
         bodo.libs.int_arr_ext.set_bit_to_arr(null_bitmap, j, 1)
         if is_regex:
             vals = compiled_pat.split(arr[j], maxsplit=n)
+        # For usage in Series.str.split(). Behavior differs from split
+        elif pat == "":
+            vals = [""] + list(arr[j]) + [""]
         else:
             vals = arr[j].split(pat, n)
         n_str = len(vals)

@@ -210,6 +210,16 @@ def test_split(test_unicode_no_nan):
 
 
 # TODO: Add memory_leak_check when bugs are resolved.
+def test_split_empty(test_unicode_no_nan):
+    def test_impl(S):
+        return S.str.split("")
+
+    # TODO: more split tests similar to the ones test_hiframes
+    # TODO: support and test NA
+    check_func(test_impl, (test_unicode_no_nan,))
+
+
+# TODO: Add memory_leak_check when bugs are resolved.
 def test_split_n():
     def test_impl(S):
         return S.str.split(",", n=1)

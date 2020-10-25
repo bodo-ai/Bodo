@@ -28,6 +28,7 @@ from bodo.libs.array import (
 )
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.bool_arr_ext import BooleanArrayType, boolean_array
+from bodo.libs.decimal_arr_ext import Decimal128Type
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.str_arr_ext import (
     get_str_arr_item_length,
@@ -1886,10 +1887,20 @@ def build_replace_dict(to_replace, value):
 
 @overload(build_replace_dict)
 def _build_replace_dict(to_replace, value):
-
-    # Scalar case
     # TODO: replace with something that captures all scalars
-    if isinstance(to_replace, types.Number) or to_replace == bodo.string_type:
+    is_scalar_replace = isinstance(
+        to_replace, (types.Number, Decimal128Type)
+    ) or to_replace in [bodo.string_type, types.boolean]
+    is_iterable_replace = is_iterable_type(to_replace)
+
+    is_scalar_value = isinstance(value, (types.Number, Decimal128Type)) or value in [
+        bodo.string_type,
+        types.boolean,
+    ]
+    is_iterable_value = is_iterable_type(value)
+
+    # Scalar, Scalar case
+    if is_scalar_replace and is_scalar_value:
 
         def impl(to_replace, value):  # pragma: no cover
             replace_dict = {}
@@ -1898,9 +1909,8 @@ def _build_replace_dict(to_replace, value):
 
         return impl
 
-    # List case
-    # TODO: replace with explicit checking for to_replace types that are/aren't supported
-    else:
+    # List, Scalar case
+    if is_iterable_replace and is_scalar_value:
 
         def impl(to_replace, value):  # pragma: no cover
             replace_dict = {}
@@ -1909,6 +1919,24 @@ def _build_replace_dict(to_replace, value):
             return replace_dict
 
         return impl
+
+    if is_iterable_replace and is_iterable_value:
+
+        def impl(to_replace, value):  # pragma: no cover
+            replace_dict = {}
+            assert len(to_replace) == len(value), "To_replace and value lengths must be the same"
+            for i in range(len(to_replace)):
+                replace_dict[to_replace[i]] = value[i]
+            return replace_dict
+
+        return impl
+
+    raise BodoError(
+        "Series.replace() Not support for types to_replace={} and value={}".format(
+            to_replace, value
+        )
+    )
+    # List, List case
 
 
 @overload_method(SeriesType, "explode", inline="always", no_unliteral=True)
