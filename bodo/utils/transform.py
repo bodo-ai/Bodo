@@ -35,6 +35,7 @@ from bodo.libs.map_arr_ext import MapArrayType
 from bodo.libs.str_arr_ext import string_array_type
 from bodo.libs.str_ext import string_type
 from bodo.libs.struct_arr_ext import StructArrayType, StructType
+from bodo.libs.tuple_arr_ext import TupleArrayType
 from bodo.utils.typing import (
     BodoConstUpdatedError,
     BodoError,
@@ -897,7 +898,7 @@ def get_type_alloc_counts(t):
     """get the number of counts needed for upfront allocation of array of type 't'.
     For example, ArrayItemArrayType(ArrayItemArrayType(array(int64))) returns 3.
     """
-    if isinstance(t, StructArrayType):
+    if isinstance(t, (StructArrayType, TupleArrayType)):
         return 1 + sum(get_type_alloc_counts(d.dtype) for d in t.data)
 
     if isinstance(t, ArrayItemArrayType) or t == string_array_type:
@@ -915,5 +916,8 @@ def get_type_alloc_counts(t):
 
     if isinstance(t, StructType):
         return sum(get_type_alloc_counts(d) for d in t.data)
+
+    if isinstance(t, types.BaseTuple):
+        return sum(get_type_alloc_counts(d) for d in t.types)
 
     return 0

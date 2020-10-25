@@ -281,7 +281,10 @@ def _get_C_API_ptrs(c, data_tup, data_typ, names):
 def unbox_struct_array(typ, val, c, is_tuple_array=False):
     """
     Unbox a numpy array with list of data values.
+    'is_tuple_array' enables reusing this code for unboxing tuple arrays.
     """
+    from bodo.libs.tuple_arr_ext import TupleArrayType
+
     # get length
     n_structs = bodo.utils.utils.object_length(c, val)
 
@@ -301,7 +304,13 @@ def unbox_struct_array(typ, val, c, is_tuple_array=False):
     if handle_in_c:
         n_elems = cgutils.pack_array(c.builder, [], lir.IntType(64))
     else:
-        n_elems_all = get_array_elem_counts(c, c.builder, c.context, val, typ)
+        n_elems_all = get_array_elem_counts(
+            c,
+            c.builder,
+            c.context,
+            val,
+            TupleArrayType(typ.data) if is_tuple_array else typ,
+        )
         # ignore first value in tuple which is array length
         n_elems = cgutils.pack_array(
             c.builder,
@@ -352,7 +361,9 @@ def unbox_struct_array(typ, val, c, is_tuple_array=False):
             ],
         )
     else:
-        _unbox_struct_array_generic(typ, val, c, n_structs, data_tup, null_bitmap_ptr)
+        _unbox_struct_array_generic(
+            typ, val, c, n_structs, data_tup, null_bitmap_ptr, is_tuple_array
+        )
 
     struct_array = c.context.make_helper(c.builder, typ)
     struct_array.meminfo = meminfo
@@ -361,7 +372,9 @@ def unbox_struct_array(typ, val, c, is_tuple_array=False):
     return NativeValue(struct_array._getvalue(), is_error=is_error)
 
 
-def _unbox_struct_array_generic(typ, val, c, n_structs, data_tup, null_bitmap_ptr):
+def _unbox_struct_array_generic(
+    typ, val, c, n_structs, data_tup, null_bitmap_ptr, is_tuple_array=False
+):
     """unbox struct array using generic Numba unboxing to handle all item types
     that can be unboxed.
     """
@@ -414,7 +427,10 @@ def _unbox_struct_array_generic(typ, val, c, n_structs, data_tup, null_bitmap_pt
             set_bitmap_bit(builder, null_bitmap_ptr, struct_ind, 1)
             for j in range(len(typ.data)):
                 arr_typ = typ.data[j]
-                val_obj = c.pyapi.dict_getitem_string(dict_obj, typ.names[j])
+                if is_tuple_array:
+                    val_obj = c.pyapi.tuple_getitem(dict_obj, j)
+                else:
+                    val_obj = c.pyapi.dict_getitem_string(dict_obj, typ.names[j])
                 # check for NA
                 is_na = is_na_value(builder, context, val_obj, C_NA)
                 is_na_cond = builder.icmp_unsigned(
