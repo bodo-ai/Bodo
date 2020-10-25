@@ -1539,6 +1539,16 @@ def timestamp_max(lhs, rhs):
         return impl
 
 
+@overload_method(PandasTimestampType, "strftime", no_unliteral=True)
+def strftime(ts, format_str):
+    def impl(ts, format_str):  # pragma: no cover
+        with numba.objmode(res="unicode_type"):
+            res = ts.strftime(format_str)
+        return res
+
+    return impl
+
+
 # -- builtin operators for dt64 ----------------------------------------------
 # TODO: move to Numba
 

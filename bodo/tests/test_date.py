@@ -301,6 +301,26 @@ def test_timestamp_constant_lowering(memory_leak_check):
     assert val_ret == t
 
 
+def test_timestamp_strftime(memory_leak_check):
+    def test_impl(ts, fmt_string):
+        return ts.strftime(fmt_string)
+
+    ts = pd.Timestamp("2012-06-18")
+
+    check_func(test_impl, (ts, "%m/%d/%Y, %H:%M:%S"))
+    check_func(test_impl, (ts, "%Y"))
+
+
+def test_timestamp_dt_strftime(memory_leak_check):
+    def test_impl(S, fmt_string):
+        return S.dt.strftime(fmt_string)
+
+    S = pd.date_range("2020-01-03", "2020-02-04").to_series()
+
+    check_func(test_impl, (S, "%m/%d/%Y, %H:%M:%S"))
+    check_func(test_impl, (S, "%Y"))
+
+
 def test_sub_add_timestamp_timedelta(memory_leak_check):
     def f_sub(date, timedelta):
         return date - timedelta

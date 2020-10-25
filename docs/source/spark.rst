@@ -143,7 +143,11 @@ which are supported by Bodo.
   * - :func:`pyspark.sql.functions.countDistinct`
     - ``df.col.drop_duplicates().count()``
   * - :func:`pyspark.sql.functions.current_date`
+    - ``datetime.datetime.now().date()``
+  * - :func:`pyspark.sql.functions.current_timestamp`
     - ``datetime.datetime.now()``
+  * - :func:`pyspark.sql.functions.date_format`
+    - ``df.col.dt.strftime(format_str)``
   * - :func:`pyspark.sql.functions.date_trunc`
     - | For frequencies day and below ``df.col.dt.floor(freq=trunc_val)``
       | For month: ``df.col.map(lambda x: pd.Timestamp(year=x.year, month=x.month, day=1))``

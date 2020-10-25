@@ -356,6 +356,42 @@ _install_S_dt_timedelta_methods()
 
 
 @overload_method(
+    SeriesDatetimePropertiesType, "strftime", inline="always", no_unliteral=True
+)
+def dt_strftime(S_dt, format_str):
+    if S_dt.stype.dtype != types.NPDatetime("ns"):  # pragma: no cover
+        return
+
+    def impl(S_dt, format_str):  # pragma: no cover
+        S = S_dt._obj
+        A = bodo.hiframes.pd_series_ext.get_series_data(S)
+        index = bodo.hiframes.pd_series_ext.get_series_index(S)
+        name = bodo.hiframes.pd_series_ext.get_series_name(S)
+        numba.parfors.parfor.init_prange()
+        n = len(A)
+        num_chars = 0
+        for i in numba.parfors.parfor.internal_prange(n):
+            if bodo.libs.array_kernels.isna(A, i):
+                continue
+            num_chars += len(
+                bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(
+                    A[i]
+                ).strftime(format_str)
+            )
+        B = bodo.libs.str_arr_ext.pre_alloc_string_array(n, num_chars)
+        for j in numba.parfors.parfor.internal_prange(n):
+            if bodo.libs.array_kernels.isna(A, j):
+                bodo.libs.array_kernels.setna(B, j)
+                continue
+            B[j] = bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(
+                A[j]
+            ).strftime(format_str)
+        return bodo.hiframes.pd_series_ext.init_series(B, index, name)
+
+    return impl
+
+
+@overload_method(
     SeriesDatetimePropertiesType, "floor", inline="always", no_unliteral=True
 )
 def dt_floor_overload(S_dt, freq, ambiguous="raise", nonexistent="raise"):
@@ -972,7 +1008,6 @@ series_dt_unsupported_methods = {
     "month_name",
     "normalize",
     "round",
-    "strftime",
     "to_period",
     "to_pydatetime",
     "to_timestamp",
