@@ -473,9 +473,10 @@ def _get_struct_arr_payload(context, builder, arr_typ, arr):
 
 
 @box(StructArrayType)
-def box_struct_arr(typ, val, c):
-    """box packed native representation of list of item array into python objects"""
-
+def box_struct_arr(typ, val, c, is_tuple_array=False):
+    """box struct array into python objects.
+    'is_tuple_array' enables reusing this code for boxing tuple arrays.
+    """
     payload = _get_struct_arr_payload(c.context, c.builder, typ, val)
     _is_error, length = c.pyapi.call_jit_code(lambda A: len(A), types.int64(typ), [val])
     null_bitmap_ptr = c.context.make_helper(
@@ -509,6 +510,7 @@ def box_struct_arr(typ, val, c):
                 lir.IntType(8).as_pointer(),  # null_bitmap
                 lir.IntType(8).as_pointer(),  # c types
                 lir.IntType(8).as_pointer(),  # field names
+                lir.IntType(1),  # is_tuple_array
             ],
         )
         fn_get = c.builder.module.get_or_insert_function(
@@ -524,16 +526,21 @@ def box_struct_arr(typ, val, c):
                 null_bitmap_ptr,
                 c.builder.bitcast(c_types_ptr, lir.IntType(8).as_pointer()),
                 c.builder.bitcast(field_names_ptr, lir.IntType(8).as_pointer()),
+                c.context.get_constant(types.bool_, is_tuple_array),
             ],
         )
     else:
-        arr = _box_struct_array_generic(typ, c, length, payload.data, null_bitmap_ptr)
+        arr = _box_struct_array_generic(
+            typ, c, length, payload.data, null_bitmap_ptr, is_tuple_array
+        )
 
     c.context.nrt.decref(c.builder, typ, val)
     return arr
 
 
-def _box_struct_array_generic(typ, c, length, data_arrs_tup, null_bitmap_ptr):
+def _box_struct_array_generic(
+    typ, c, length, data_arrs_tup, null_bitmap_ptr, is_tuple_array=False
+):
     """box struct array using generic Numba boxing to handle all item types
     that can be boxed.
     """
@@ -572,12 +579,19 @@ def _box_struct_array_generic(typ, c, length, data_arrs_tup, null_bitmap_ptr):
         )
         with builder.if_then(not_na_cond):
             # create dict obj
-            dict_obj = c.pyapi.dict_new(len(typ.data))
+            if is_tuple_array:
+                dict_obj = c.pyapi.tuple_new(len(typ.data))
+            else:
+                dict_obj = c.pyapi.dict_new(len(typ.data))
 
             # set field values
             for i, arr_typ in enumerate(typ.data):
                 # set NA as default
-                c.pyapi.dict_setitem_string(dict_obj, typ.names[i], nan_obj)
+                if is_tuple_array:
+                    c.pyapi.incref(nan_obj)  # tuple_setitem steals a reference
+                    c.pyapi.tuple_setitem(dict_obj, i, nan_obj)
+                else:
+                    c.pyapi.dict_setitem_string(dict_obj, typ.names[i], nan_obj)
 
                 # is_not_na_val = not isna(data_arr, struct_ind)
                 data_arr = c.builder.extract_value(data_arrs_tup, i)
@@ -602,8 +616,13 @@ def _box_struct_array_generic(typ, c, length, data_arrs_tup, null_bitmap_ptr):
                     field_val_obj = c.pyapi.from_native_value(
                         arr_typ.dtype, field_val, c.env_manager
                     )
-                    c.pyapi.dict_setitem_string(dict_obj, typ.names[i], field_val_obj)
-                    c.pyapi.decref(field_val_obj)
+                    if is_tuple_array:
+                        c.pyapi.tuple_setitem(dict_obj, i, field_val_obj)
+                    else:
+                        c.pyapi.dict_setitem_string(
+                            dict_obj, typ.names[i], field_val_obj
+                        )
+                        c.pyapi.decref(field_val_obj)
             pyarray_setitem(builder, context, out_arr, struct_ind, dict_obj)
             c.pyapi.decref(dict_obj)
 
