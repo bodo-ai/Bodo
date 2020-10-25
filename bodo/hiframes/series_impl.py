@@ -15,6 +15,7 @@ import bodo
 from bodo.hiframes.datetime_datetime_ext import datetime_datetime_type
 from bodo.hiframes.datetime_timedelta_ext import datetime_timedelta_type
 from bodo.hiframes.pd_categorical_ext import CategoricalArray
+from bodo.hiframes.pd_offsets_ext import month_end_type
 from bodo.hiframes.pd_series_ext import SeriesType, if_series_to_array_type
 from bodo.hiframes.pd_timestamp_ext import pandas_timestamp_type
 from bodo.libs.array import (
@@ -2471,9 +2472,52 @@ def create_binary_op_overload(op):
 
             return impl_dt64
 
-        if isinstance(S, SeriesType):
+        # Handle Offsets separation because addition is not defined on the array or scalar datetime64
+        if (
+            isinstance(S, SeriesType)
+            and S.dtype == types.NPDatetime("ns")
+            and other == month_end_type
+        ):
+
+            def impl_offsets(S, other):  # pragma: no cover
+                arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+                index = bodo.hiframes.pd_series_ext.get_series_index(S)
+                name = bodo.hiframes.pd_series_ext.get_series_name(S)
+                numba.parfors.parfor.init_prange()
+                n = len(S)
+                out_arr = np.empty(n, np.dtype("datetime64[ns]"))
+                for i in numba.parfors.parfor.internal_prange(n):
+                    if bodo.libs.array_kernels.isna(arr, i):
+                        bodo.libs.array_kernels.setna(out_arr, i)
+                    timestamp_val = (
+                        bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(
+                            arr[i]
+                        )
+                    )
+                    new_timestamp = op(timestamp_val, other)
+                    out_arr[i] = bodo.hiframes.pd_timestamp_ext.integer_to_dt64(
+                        new_timestamp.value
+                    )
+                return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
+
+            return impl_offsets
+
+        if (
+            op == operator.add
+            and S == month_end_type
+            and isinstance(other, SeriesType)
+            and other.dtype == types.NPDatetime("ns")
+        ):
 
             def impl(S, other):  # pragma: no cover
+                return op(other, S)
+
+            return impl
+
+        # left arg is Series
+        if isinstance(S, SeriesType):
+
+            def impl2(S, other):  # pragma: no cover
                 arr = bodo.hiframes.pd_series_ext.get_series_data(S)
                 index = bodo.hiframes.pd_series_ext.get_series_index(S)
                 name = bodo.hiframes.pd_series_ext.get_series_name(S)
@@ -2481,7 +2525,7 @@ def create_binary_op_overload(op):
                 out_arr = op(arr, other_arr)
                 return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
-            return impl
+            return impl2
 
         # right arg is Series
         if isinstance(other, SeriesType):

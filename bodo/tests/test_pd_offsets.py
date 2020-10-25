@@ -167,6 +167,15 @@ def test_month_end_add_date_boundary(month_end_value, memory_leak_check):
     check_func(test_impl, (date_val, month_end_value))
 
 
+def test_month_end_add_series(month_end_value, memory_leak_check):
+    def test_impl(val1, val2):
+        return val1 + val2
+
+    S = pd.Series(pd.date_range(start="2018-04-24", end="2020-04-29", periods=5))
+    check_func(test_impl, (month_end_value, S))
+    check_func(test_impl, (S, month_end_value))
+
+
 def test_month_end_sub_datetime(month_end_value, memory_leak_check):
     def test_impl(val1, val2):
         return val1 - val2
@@ -246,6 +255,14 @@ def test_month_end_sub_date_boundary(month_end_value, memory_leak_check):
         day=31,
     )
     check_func(test_impl, (date_val, month_end_value))
+
+
+def test_month_end_sub_series(month_end_value, memory_leak_check):
+    def test_impl(S, val):
+        return S - val
+
+    S = pd.Series(pd.date_range(start="2018-04-24", end="2020-04-29", periods=5))
+    check_func(test_impl, (S, month_end_value))
 
 
 def test_month_end_neg(month_end_value, memory_leak_check):

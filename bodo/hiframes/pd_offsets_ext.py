@@ -4,6 +4,8 @@ Implement support for the various classes in pd.tseries.offsets.
 """
 import operator
 
+import numba
+import numpy as np
 import pandas as pd
 from numba.core import cgutils, types
 from numba.core.imputils import lower_constant
@@ -24,6 +26,7 @@ from numba.extending import (
 import bodo
 from bodo.hiframes.datetime_date_ext import datetime_date_type
 from bodo.hiframes.datetime_datetime_ext import datetime_datetime_type
+from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.hiframes.pd_timestamp_ext import (
     convert_datetime64_to_timestamp,
     get_days_in_month,
