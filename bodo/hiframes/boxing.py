@@ -54,6 +54,7 @@ from bodo.libs.map_arr_ext import MapArrayType
 from bodo.libs.str_arr_ext import string_array_type
 from bodo.libs.str_ext import string_type
 from bodo.libs.struct_arr_ext import StructArrayType, StructType
+from bodo.libs.tuple_arr_ext import TupleArrayType
 from bodo.utils.typing import (
     BodoError,
     BodoWarning,
@@ -377,7 +378,7 @@ def box_series(typ, val, c):
     c.context.nrt.incref(c.builder, typ.data, series_payload.data)
     c.context.nrt.incref(c.builder, typ.index, series_payload.index)
     c.context.nrt.incref(c.builder, typ.name_typ, series_payload.name)
-    arr_obj = _box_series_data(dtype, typ.data, series_payload.data, c)
+    arr_obj = c.pyapi.from_native_value(typ.data, series_payload.data, c.env_manager)
     index_obj = c.pyapi.from_native_value(
         typ.index, series_payload.index, c.env_manager
     )
@@ -397,22 +398,6 @@ def box_series(typ, val, c):
     c.pyapi.decref(pd_class_obj)
     c.context.nrt.decref(c.builder, typ, val)
     return res
-
-
-def _box_series_data(dtype, data_typ, val, c):
-
-    if isinstance(dtype, types.BaseTuple):
-        np_dtype = np.dtype(",".join(str(t) for t in dtype.types), align=True)
-        dtype = numpy_support.from_dtype(np_dtype)
-
-    arr = c.pyapi.from_native_value(data_typ, val, c.env_manager)
-
-    if isinstance(dtype, types.Record):
-        o_str = c.context.insert_const_string(c.builder.module, "O")
-        o_str = c.pyapi.string_from_string(o_str)
-        arr = c.pyapi.call_method(arr, "astype", (o_str,))
-
-    return arr
 
 
 # --------------- typeof support for object arrays --------------------
@@ -483,6 +468,9 @@ def _infer_ndarray_obj_dtype(val):
         value_arr_type = numba.typeof(_value_to_array(list(first_val.values())))
         # TODO: handle 2D ndarray case
         return MapArrayType(key_arr_type, value_arr_type)
+    elif isinstance(first_val, tuple):
+        data_types = tuple(_get_struct_value_arr_type(v) for v in first_val)
+        return TupleArrayType(data_types)
     if isinstance(
         first_val,
         (
@@ -517,7 +505,12 @@ def _value_to_array(val):
     if isinstance(val, (dict, Dict)):
         val = dict(val)
         return np.array([val], np.object_)
-    arr = np.array(val, np.object_)
+
+    # add None to list to avoid Numpy's automatic conversion to 2D arrays
+    val_infer = val.copy()
+    val_infer.append(None)
+    arr = np.array(val_infer, np.object_)
+
     # assume float lists can be regular np.float64 arrays
     # TODO handle corener cases where None could be used as NA instead of np.nan
     if len(val) and isinstance(val[0], float):

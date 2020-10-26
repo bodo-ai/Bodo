@@ -55,6 +55,7 @@ from bodo.libs.str_arr_ext import (
     string_array_type,
 )
 from bodo.libs.struct_arr_ext import StructArrayType
+from bodo.libs.tuple_arr_ext import TupleArrayType
 from bodo.utils.indexing import add_nested_counts, init_nested_counts
 from bodo.utils.shuffle import getitem_arr_tup_single
 from bodo.utils.typing import (
@@ -109,6 +110,12 @@ def overload_isna(arr, i):
     if isinstance(arr, StructArrayType):
         return lambda arr, i: not bodo.libs.int_arr_ext.get_bit_bitmap_arr(
             bodo.libs.struct_arr_ext.get_null_bitmap(arr), i
+        )  # pragma: no cover
+
+    # tuple array
+    if isinstance(arr, TupleArrayType):
+        return lambda arr, i: bodo.libs.array_kernels.isna(
+            arr._data, i
         )  # pragma: no cover
 
     # Categorical Array
@@ -186,6 +193,14 @@ def setna_overload(arr, ind, int_nan_const=0):
             # set all data values to NA for this index
             data = bodo.libs.struct_arr_ext.get_data(arr)
             setna_tup(data, ind)
+
+        return impl
+
+    # tuple array
+    if isinstance(arr, TupleArrayType):
+
+        def impl(arr, ind, int_nan_const=0):  # pragma: no cover
+            bodo.libs.array_kernels.setna(arr._data, ind)
 
         return impl
 

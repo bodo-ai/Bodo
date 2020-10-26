@@ -846,7 +846,7 @@ def set_df_column_with_reflect(typingctx, df, cname, arr, inplace=None):
             # call boxing for array data
             # TODO: check complex data types possible for Series for dataframes set column here
             c = numba.core.pythonapi._BoxContext(context, builder, pyapi, env_manager)
-            py_arr = bodo.hiframes.boxing._box_series_data(arr.dtype, arr, arr_arg, c)
+            py_arr = c.pyapi.from_native_value(arr, arr_arg, c.env_manager)
 
             # get column as string or int obj
             if isinstance(col_name, str):

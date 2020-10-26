@@ -804,7 +804,7 @@ void* np_array_from_map_array(int64_t num_maps, const char* key_data,
  */
 void struct_array_from_sequence(PyObject* struct_arr_obj, int n_fields,
                                 char** data, uint8_t* null_bitmap,
-                                int32_t* dtypes, char** field_names) {
+                                int32_t* dtypes, char** field_names, bool is_tuple_array) {
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
         std::cerr << msg << std::endl; \
@@ -835,11 +835,19 @@ void struct_array_from_sequence(PyObject* struct_arr_obj, int n_fields,
         } else {
             // set null bit to 1
             null_bitmap[i / 8] |= kBitmask[i % 8];
-            CHECK(PyDict_Check(s), "invalid non-dict element in struct array");
+            if (is_tuple_array) {
+                CHECK(PyTuple_Check(s), "invalid non-tuple element in tuple array");
+            } else {
+                CHECK(PyDict_Check(s), "invalid non-dict element in struct array");
+            }
             // set field data values
             for (Py_ssize_t j = 0; j < n_fields; j++) {
-                PyObject* v = PyDict_GetItemString(
-                    s, field_names[j]);  // returns borrowed reference
+                PyObject* v;
+                if (is_tuple_array)
+                    v = PyTuple_GET_ITEM(s, j);  // returns borrowed reference
+                else
+                    v = PyDict_GetItemString(
+                        s, field_names[j]);  // returns borrowed reference
                 copy_item_to_buffer(data[j], i, v,
                                     (Bodo_CTypes::CTypeEnum)dtypes[j]);
             }
@@ -980,7 +988,7 @@ PyObject* seq_getitem(PyObject* obj, Py_ssize_t i) {
  */
 void* np_array_from_struct_array(int64_t num_structs, int n_fields, char** data,
                                  uint8_t* null_bitmap, int32_t* dtypes,
-                                 char** field_names) {
+                                 char** field_names, bool is_tuple_array) {
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
         std::cerr << msg << std::endl; \
@@ -1009,14 +1017,22 @@ void* np_array_from_struct_array(int64_t num_structs, int n_fields, char** data,
         }
 
         // alloc dictionary
-        PyObject* d = PyDict_New();
+        PyObject* d;
+        if (is_tuple_array)
+            d = PyTuple_New(n_fields);
+        else
+            d = PyDict_New();
 
         for (Py_ssize_t j = 0; j < n_fields; j++) {
             PyObject* s = value_to_pyobject(data[j], i,
                                             (Bodo_CTypes::CTypeEnum)dtypes[j]);
             CHECK(s, "creating Python int/float object failed");
-            PyDict_SetItemString(d, field_names[j], s);
-            Py_DECREF(s);
+            if (is_tuple_array) {
+                PyTuple_SET_ITEM(d, j, s);  // steals s reference
+            } else {
+                PyDict_SetItemString(d, field_names[j], s);
+                Py_DECREF(s);
+            }
         }
 
         err = PyArray_SETITEM((PyArrayObject*)ret, (char*)p, d);

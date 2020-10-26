@@ -37,8 +37,7 @@ from numba.typed.typedobjectutils import _cast
 
 import bodo
 from bodo.hiframes.datetime_date_ext import datetime_date_type
-# NOTE: importing hdist is necessary for MPI initialization before array_ext
-from bodo.libs import array_ext, hdist
+from bodo.libs import array_ext
 from bodo.utils.cg_helpers import (
     gen_allocate_array,
     get_array_elem_counts,
@@ -58,6 +57,7 @@ from bodo.utils.typing import (
     is_list_like_index_type,
     is_overload_constant_int,
     is_overload_constant_str,
+    is_overload_none,
 )
 
 ll.add_symbol("struct_array_from_sequence", array_ext.struct_array_from_sequence)
@@ -279,10 +279,13 @@ def _get_C_API_ptrs(c, data_tup, data_typ, names):
 
 
 @unbox(StructArrayType)
-def unbox_struct_array(typ, val, c):
+def unbox_struct_array(typ, val, c, is_tuple_array=False):
     """
     Unbox a numpy array with list of data values.
+    'is_tuple_array' enables reusing this code for unboxing tuple arrays.
     """
+    from bodo.libs.tuple_arr_ext import TupleArrayType
+
     # get length
     n_structs = bodo.utils.utils.object_length(c, val)
 
@@ -302,7 +305,13 @@ def unbox_struct_array(typ, val, c):
     if handle_in_c:
         n_elems = cgutils.pack_array(c.builder, [], lir.IntType(64))
     else:
-        n_elems_all = get_array_elem_counts(c, c.builder, c.context, val, typ)
+        n_elems_all = get_array_elem_counts(
+            c,
+            c.builder,
+            c.context,
+            val,
+            TupleArrayType(typ.data) if is_tuple_array else typ,
+        )
         # ignore first value in tuple which is array length
         n_elems = cgutils.pack_array(
             c.builder,
@@ -333,6 +342,7 @@ def unbox_struct_array(typ, val, c):
                 lir.IntType(8).as_pointer(),  # null_bitmap
                 lir.IntType(8).as_pointer(),  # c types
                 lir.IntType(8).as_pointer(),  # field names
+                lir.IntType(1),  # is_tuple_array
             ],
         )
         fn = c.builder.module.get_or_insert_function(
@@ -348,10 +358,13 @@ def unbox_struct_array(typ, val, c):
                 null_bitmap_ptr,
                 c.builder.bitcast(c_types_ptr, lir.IntType(8).as_pointer()),
                 c.builder.bitcast(field_names_ptr, lir.IntType(8).as_pointer()),
+                c.context.get_constant(types.bool_, is_tuple_array),
             ],
         )
     else:
-        _unbox_struct_array_generic(typ, val, c, n_structs, data_tup, null_bitmap_ptr)
+        _unbox_struct_array_generic(
+            typ, val, c, n_structs, data_tup, null_bitmap_ptr, is_tuple_array
+        )
 
     struct_array = c.context.make_helper(c.builder, typ)
     struct_array.meminfo = meminfo
@@ -360,7 +373,9 @@ def unbox_struct_array(typ, val, c):
     return NativeValue(struct_array._getvalue(), is_error=is_error)
 
 
-def _unbox_struct_array_generic(typ, val, c, n_structs, data_tup, null_bitmap_ptr):
+def _unbox_struct_array_generic(
+    typ, val, c, n_structs, data_tup, null_bitmap_ptr, is_tuple_array=False
+):
     """unbox struct array using generic Numba unboxing to handle all item types
     that can be unboxed.
     """
@@ -413,7 +428,10 @@ def _unbox_struct_array_generic(typ, val, c, n_structs, data_tup, null_bitmap_pt
             set_bitmap_bit(builder, null_bitmap_ptr, struct_ind, 1)
             for j in range(len(typ.data)):
                 arr_typ = typ.data[j]
-                val_obj = c.pyapi.dict_getitem_string(dict_obj, typ.names[j])
+                if is_tuple_array:
+                    val_obj = c.pyapi.tuple_getitem(dict_obj, j)
+                else:
+                    val_obj = c.pyapi.dict_getitem_string(dict_obj, typ.names[j])
                 # check for NA
                 is_na = is_na_value(builder, context, val_obj, C_NA)
                 is_na_cond = builder.icmp_unsigned(
@@ -456,9 +474,10 @@ def _get_struct_arr_payload(context, builder, arr_typ, arr):
 
 
 @box(StructArrayType)
-def box_struct_arr(typ, val, c):
-    """box packed native representation of list of item array into python objects"""
-
+def box_struct_arr(typ, val, c, is_tuple_array=False):
+    """box struct array into python objects.
+    'is_tuple_array' enables reusing this code for boxing tuple arrays.
+    """
     payload = _get_struct_arr_payload(c.context, c.builder, typ, val)
     _is_error, length = c.pyapi.call_jit_code(lambda A: len(A), types.int64(typ), [val])
     null_bitmap_ptr = c.context.make_helper(
@@ -492,6 +511,7 @@ def box_struct_arr(typ, val, c):
                 lir.IntType(8).as_pointer(),  # null_bitmap
                 lir.IntType(8).as_pointer(),  # c types
                 lir.IntType(8).as_pointer(),  # field names
+                lir.IntType(1),  # is_tuple_array
             ],
         )
         fn_get = c.builder.module.get_or_insert_function(
@@ -507,16 +527,21 @@ def box_struct_arr(typ, val, c):
                 null_bitmap_ptr,
                 c.builder.bitcast(c_types_ptr, lir.IntType(8).as_pointer()),
                 c.builder.bitcast(field_names_ptr, lir.IntType(8).as_pointer()),
+                c.context.get_constant(types.bool_, is_tuple_array),
             ],
         )
     else:
-        arr = _box_struct_array_generic(typ, c, length, payload.data, null_bitmap_ptr)
+        arr = _box_struct_array_generic(
+            typ, c, length, payload.data, null_bitmap_ptr, is_tuple_array
+        )
 
     c.context.nrt.decref(c.builder, typ, val)
     return arr
 
 
-def _box_struct_array_generic(typ, c, length, data_arrs_tup, null_bitmap_ptr):
+def _box_struct_array_generic(
+    typ, c, length, data_arrs_tup, null_bitmap_ptr, is_tuple_array=False
+):
     """box struct array using generic Numba boxing to handle all item types
     that can be boxed.
     """
@@ -555,12 +580,19 @@ def _box_struct_array_generic(typ, c, length, data_arrs_tup, null_bitmap_ptr):
         )
         with builder.if_then(not_na_cond):
             # create dict obj
-            dict_obj = c.pyapi.dict_new(len(typ.data))
+            if is_tuple_array:
+                dict_obj = c.pyapi.tuple_new(len(typ.data))
+            else:
+                dict_obj = c.pyapi.dict_new(len(typ.data))
 
             # set field values
             for i, arr_typ in enumerate(typ.data):
                 # set NA as default
-                c.pyapi.dict_setitem_string(dict_obj, typ.names[i], nan_obj)
+                if is_tuple_array:
+                    c.pyapi.incref(nan_obj)  # tuple_setitem steals a reference
+                    c.pyapi.tuple_setitem(dict_obj, i, nan_obj)
+                else:
+                    c.pyapi.dict_setitem_string(dict_obj, typ.names[i], nan_obj)
 
                 # is_not_na_val = not isna(data_arr, struct_ind)
                 data_arr = c.builder.extract_value(data_arrs_tup, i)
@@ -585,8 +617,13 @@ def _box_struct_array_generic(typ, c, length, data_arrs_tup, null_bitmap_ptr):
                     field_val_obj = c.pyapi.from_native_value(
                         arr_typ.dtype, field_val, c.env_manager
                     )
-                    c.pyapi.dict_setitem_string(dict_obj, typ.names[i], field_val_obj)
-                    c.pyapi.decref(field_val_obj)
+                    if is_tuple_array:
+                        c.pyapi.tuple_setitem(dict_obj, i, field_val_obj)
+                    else:
+                        c.pyapi.dict_setitem_string(
+                            dict_obj, typ.names[i], field_val_obj
+                        )
+                        c.pyapi.decref(field_val_obj)
             pyarray_setitem(builder, context, out_arr, struct_ind, dict_obj)
             c.pyapi.decref(dict_obj)
 
@@ -604,7 +641,10 @@ def pre_alloc_struct_array(
     assert isinstance(num_structs_typ, types.Integer) and isinstance(
         dtypes_typ, types.BaseTuple
     )
-    names = tuple(get_overload_const_str(t) for t in names_typ.types)
+    if is_overload_none(names_typ):
+        names = tuple(f"f{i}" for i in range(len(dtypes_typ)))
+    else:
+        names = tuple(get_overload_const_str(t) for t in names_typ.types)
     arr_typs = tuple(t.instance_type for t in dtypes_typ.types)
     struct_arr_type = StructArrayType(arr_typs, names)
 

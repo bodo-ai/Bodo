@@ -96,6 +96,7 @@ from bodo.libs.str_arr_ext import (
 )
 from bodo.libs.str_ext import string_type
 from bodo.libs.struct_arr_ext import StructArrayType
+from bodo.libs.tuple_arr_ext import TupleArrayType
 from bodo.transforms.dataframe_pass import DataFramePass
 from bodo.utils.transform import (
     ReplaceFunc,
@@ -1659,8 +1660,6 @@ class SeriesPass:
                 # avoid dt64 errors in np.empty, TODO: fix Numba
                 if dtype == types.NPDatetime("ns"):
                     dtype = np.dtype("datetime64[ns]")
-                if isinstance(dtype, types.Record):
-                    dtype = numba.np.numpy_support.as_dtype(dtype)
                 impl = lambda n, t, s=None: np.empty(n, _dtype)  # pragma: no cover
             elif isinstance(typ, ArrayItemArrayType):
                 dtype = typ.dtype
@@ -1678,6 +1677,17 @@ class SeriesPass:
                     assign.target,
                     self,
                     extra_globals={"_dtypes": dtypes, "_names": names},
+                )
+            elif isinstance(typ, TupleArrayType):
+                dtypes = typ.data
+                return compile_func_single_block(
+                    lambda n, t, s=None: bodo.libs.tuple_arr_ext.pre_alloc_tuple_array(
+                        n, s, _dtypes
+                    ),
+                    rhs.args,
+                    assign.target,
+                    self,
+                    extra_globals={"_dtypes": dtypes},
                 )
             elif isinstance(typ, DecimalArrayType):
                 precision = typ.dtype.precision
@@ -2174,10 +2184,7 @@ class SeriesPass:
             init_size_code, size_varnames = gen_init_varsize_alloc_sizes(out_arr_type)
             func_text += init_size_code
             func_text += "  for j in numba.parfors.parfor.internal_prange(n):\n"
-            if isinstance(dtype, types.BaseTuple):
-                func_text += "    t1 = bodo.utils.typing.convert_rec_to_tup(A[j])\n"
-            else:
-                func_text += "    t1 = bodo.utils.conversion.box_if_dt64(A[j])\n"
+            func_text += "    t1 = bodo.utils.conversion.box_if_dt64(A[j])\n"
             func_text += "    item = map_func(t1, {})\n".format(udf_arg_names)
             func_text += gen_varsize_item_sizes(out_arr_type, "item", size_varnames)
             func_text += "  numba.parfors.parfor.init_prange()\n"
@@ -2190,15 +2197,9 @@ class SeriesPass:
             "  S = bodo.utils.utils.alloc_type(n, _arr_typ, varsize_alloc_sizes)\n"
         )
         func_text += "  for i in numba.parfors.parfor.internal_prange(n):\n"
-        if isinstance(dtype, types.BaseTuple):
-            func_text += "    t2 = bodo.utils.typing.convert_rec_to_tup(A[i])\n"
-        else:
-            func_text += "    t2 = bodo.utils.conversion.box_if_dt64(A[i])\n"
+        func_text += "    t2 = bodo.utils.conversion.box_if_dt64(A[i])\n"
         func_text += "    v = map_func(t2, {})\n".format(udf_arg_names)
-        if isinstance(out_typ, types.BaseTuple):
-            func_text += "    S[i] = bodo.utils.typing.convert_tup_to_rec(v)\n"
-        else:
-            func_text += "    S[i] = bodo.utils.conversion.unbox_if_timestamp(v)\n"
+        func_text += "    S[i] = bodo.utils.conversion.unbox_if_timestamp(v)\n"
         func_text += (
             "  return bodo.hiframes.pd_series_ext.init_series(S, index, name)\n"
         )
@@ -2208,8 +2209,6 @@ class SeriesPass:
         f = loc_vars["f"]
 
         out_dtype = self.typemap[lhs.name].dtype
-        if isinstance(out_dtype, types.BaseTuple):
-            out_dtype = np.dtype(",".join(str(t) for t in out_dtype.types), align=True)
 
         map_func = bodo.compiler.udf_jit(func)
 
@@ -2697,6 +2696,7 @@ def _fix_typ_undefs(new_typ, old_typ):
                 StringArrayType,
                 ArrayItemArrayType,
                 StructArrayType,
+                TupleArrayType,
                 types.List,
                 StringArraySplitViewType,
             ),

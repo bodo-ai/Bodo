@@ -196,6 +196,7 @@ def get_array_elem_counts(c, builder, context, arr_obj, typ):
     from bodo.libs.map_arr_ext import MapArrayType
     from bodo.libs.str_arr_ext import get_utf8_size, string_array_type
     from bodo.libs.struct_arr_ext import StructArrayType, StructType
+    from bodo.libs.tuple_arr_ext import TupleArrayType
 
     # get utf8 character count for strings
     if typ == bodo.string_type:
@@ -207,7 +208,7 @@ def get_array_elem_counts(c, builder, context, arr_obj, typ):
         return cgutils.pack_array(builder, [n_chars])
 
     # get counts for struct value (e.g. counts for strings or array items in struct)
-    if isinstance(typ, StructType):
+    if isinstance(typ, (StructType, types.BaseTuple)):
 
         # get pd.NA object to check for new NA kind
         mod_name = context.insert_const_string(builder.module, "pandas")
@@ -222,11 +223,15 @@ def get_array_elem_counts(c, builder, context, arr_obj, typ):
         )
         counts = cgutils.alloca_once_value(builder, counts_val)
         curr_count_ind = 0
-        for i, t in enumerate(typ.data):
+        data_types = typ.data if isinstance(typ, StructType) else typ.types
+        for i, t in enumerate(data_types):
             n_nested_count_t = bodo.utils.transform.get_type_alloc_counts(t)
             if n_nested_count_t == 0:
                 continue
-            val_obj = c.pyapi.dict_getitem_string(arr_obj, typ.names[i])
+            if isinstance(typ, StructType):
+                val_obj = c.pyapi.dict_getitem_string(arr_obj, typ.names[i])
+            else:
+                val_obj = c.pyapi.tuple_getitem(arr_obj, i)
             # check for NA
             is_na = is_na_value(builder, context, val_obj, C_NA)
             not_na_cond = builder.icmp_unsigned(
@@ -259,7 +264,9 @@ def get_array_elem_counts(c, builder, context, arr_obj, typ):
 
     # return (n,) for non-nested arrays
     if not (
-        isinstance(typ, (ArrayItemArrayType, StructArrayType, MapArrayType))
+        isinstance(
+            typ, (ArrayItemArrayType, StructArrayType, TupleArrayType, MapArrayType)
+        )
         or typ == string_array_type
     ):
         return cgutils.pack_array(builder, [n])
@@ -308,7 +315,7 @@ def get_array_elem_counts(c, builder, context, arr_obj, typ):
                         counts_val, builder.add(total_count, curr_count), i + 1
                     )
                 builder.store(counts_val, counts)
-            elif isinstance(typ, StructArrayType):
+            elif isinstance(typ, (StructArrayType, TupleArrayType)):
                 curr_count_ind = 1  # skip total array length
                 for i, t in enumerate(typ.data):
                     n_nested_count_t = bodo.utils.transform.get_type_alloc_counts(
@@ -316,7 +323,12 @@ def get_array_elem_counts(c, builder, context, arr_obj, typ):
                     )
                     if n_nested_count_t == 0:
                         continue
-                    val_obj = c.pyapi.dict_getitem_string(arr_item_obj, typ.names[i])
+                    if isinstance(typ, TupleArrayType):
+                        val_obj = c.pyapi.tuple_getitem(arr_item_obj, i)
+                    else:
+                        val_obj = c.pyapi.dict_getitem_string(
+                            arr_item_obj, typ.names[i]
+                        )
                     # check for NA
                     is_na = is_na_value(builder, context, val_obj, C_NA)
                     not_na_cond = builder.icmp_unsigned(

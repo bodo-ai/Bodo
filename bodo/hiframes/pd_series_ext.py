@@ -58,6 +58,7 @@ from bodo.libs.map_arr_ext import MapArrayType
 from bodo.libs.str_arr_ext import string_array_type
 from bodo.libs.str_ext import string_type
 from bodo.libs.struct_arr_ext import StructArrayType, StructType
+from bodo.libs.tuple_arr_ext import TupleArrayType
 from bodo.utils.transform import get_const_func_output_type
 from bodo.utils.typing import (
     BodoError,
@@ -84,13 +85,6 @@ class SeriesType(types.IterableType, types.ArrayCompatible):
         data = _get_series_array_type(dtype) if data is None else data
         # store regular dtype instead of IntDtype to avoid errors
         dtype = dtype.dtype if isinstance(dtype, IntDtype) else dtype
-        # convert Record to tuple (for tuple output of map)
-        # TODO: handle actual Record objects in Series?
-        dtype = (
-            types.Tuple(list(dict(dtype.members).values()))
-            if isinstance(dtype, types.Record)
-            else dtype
-        )
         self.dtype = dtype
         self.data = data
         name_typ = types.none if name_typ is None else name_typ
@@ -175,14 +169,6 @@ def _get_series_array_type(dtype):
     if dtype == types.bool_:
         return boolean_array
 
-    # use recarray data layout for series of tuples
-    if isinstance(dtype, types.BaseTuple):
-        if any(not isinstance(t, types.Number) for t in dtype.types):
-            # TODO: support more types. what types can be in recarrays?
-            raise BodoError("series tuple dtype {} includes non-numerics".format(dtype))
-        np_dtype = np.dtype(",".join(str(t) for t in dtype.types), align=True)
-        dtype = numba.np.numpy_support.from_dtype(np_dtype)
-
     if dtype == datetime_date_type:
         return bodo.hiframes.datetime_date_ext.datetime_date_array_type
 
@@ -193,6 +179,9 @@ def _get_series_array_type(dtype):
         return StructArrayType(
             tuple(_get_series_array_type(t) for t in dtype.data), dtype.names
         )
+
+    if isinstance(dtype, types.BaseTuple):
+        return TupleArrayType(tuple(_get_series_array_type(t) for t in dtype.types))
 
     if isinstance(dtype, types.DictType):
         return MapArrayType(

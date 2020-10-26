@@ -88,6 +88,9 @@ The following table can be used to select the necessary Bodo Type based upon the
   * - ``bodo.StructArrayType(data_types, field_names)``
     - | Array of a user defined struct with the given tuple of data types and field names
       | e.g. ``bodo.StructArrayType((bodo.int32[:], bodo.datetime64ns[:]), ("a", "b"))``
+  * - ``bodo.TupleArrayType(data_types)``
+    - | Array of a user defined tuple with the given tuple of data types
+      | e.g. ``bodo.TupleArrayType((bodo.int32[:], bodo.datetime64ns[:]))``
   * - ``bodo.MapArrayType(key_arr_type, value_arr_type)``
     - | Array of Python dictionaries with the given key and value array types. 
       | e.g. ``bodo.MapArrayType(bodo.uint16[:], bodo.string_array_type)``

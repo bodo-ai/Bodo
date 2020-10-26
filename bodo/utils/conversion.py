@@ -381,6 +381,7 @@ def overload_coerce_to_array(
             data
         )  # pragma: no cover
 
+    # string Index
     if isinstance(data, StringIndexType):
         return lambda data, error_on_nonarray=True, use_nullable_array=None, scalar_to_arr_len=None: bodo.hiframes.pd_index_ext.get_index_data(
             data
@@ -410,19 +411,45 @@ def overload_coerce_to_array(
             list(data)
         )  # pragma: no cover
 
-    if (
-        data
-        in (
-            bodo.libs.bool_arr_ext.boolean_array,
-            bodo.hiframes.datetime_date_ext.datetime_date_array_type,
-            bodo.hiframes.datetime_timedelta_ext.datetime_timedelta_array_type,
-            bodo.hiframes.split_impl.string_array_split_view_type,
-        )
-        or isinstance(data, (bodo.libs.int_arr_ext.IntegerArrayType, DecimalArrayType))
+    if data in (
+        bodo.libs.bool_arr_ext.boolean_array,
+        bodo.hiframes.datetime_date_ext.datetime_date_array_type,
+        bodo.hiframes.datetime_timedelta_ext.datetime_timedelta_array_type,
+        bodo.hiframes.split_impl.string_array_split_view_type,
+    ) or isinstance(
+        data,
+        (
+            bodo.libs.int_arr_ext.IntegerArrayType,
+            DecimalArrayType,
+            bodo.libs.tuple_arr_ext.TupleArrayType,
+            bodo.libs.struct_arr_ext.StructArrayType,
+        ),
     ):
         return (
             lambda data, error_on_nonarray=True, use_nullable_array=None, scalar_to_arr_len=None: data
         )  # pragma: no cover
+
+    # list of tuples
+    if isinstance(data, types.List) and isinstance(data.dtype, types.BaseTuple):
+        # TODO: support variable length data (e.g strings) in tuples
+        data_types = tuple(
+            bodo.hiframes.pd_series_ext._get_series_array_type(t)
+            for t in data.dtype.types
+        )
+
+        def impl_tuple_list(
+            data,
+            error_on_nonarray=True,
+            use_nullable_array=None,
+            scalar_to_arr_len=None,
+        ):  # pragma: no cover
+            n = len(data)
+            arr = bodo.libs.tuple_arr_ext.pre_alloc_tuple_array(n, (), data_types)
+            for i in range(n):
+                arr[i] = data[i]
+            return arr
+
+        return impl_tuple_list
 
     # string scalars to array
     if not is_overload_none(scalar_to_arr_len) and isinstance(
