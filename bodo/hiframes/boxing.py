@@ -505,7 +505,12 @@ def _value_to_array(val):
     if isinstance(val, (dict, Dict)):
         val = dict(val)
         return np.array([val], np.object_)
-    arr = np.array(val, np.object_)
+
+    # add None to list to avoid Numpy's automatic conversion to 2D arrays
+    val_infer = val.copy()
+    val_infer.append(None)
+    arr = np.array(val_infer, np.object_)
+
     # assume float lists can be regular np.float64 arrays
     # TODO handle corener cases where None could be used as NA instead of np.nan
     if len(val) and isinstance(val[0], float):
