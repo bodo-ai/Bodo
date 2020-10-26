@@ -56,3 +56,58 @@ def test_unbox(tuple_arr_value, memory_leak_check):
 
     check_func(impl, (tuple_arr_value,))
     check_func(impl2, (tuple_arr_value,))
+
+
+def test_getitem_int(tuple_arr_value, memory_leak_check):
+    def test_impl(A, i):
+        return A[i]
+
+    i = 1
+    check_func(test_impl, (tuple_arr_value, i), dist_test=False)
+
+
+def test_getitem_bool(tuple_arr_value, memory_leak_check):
+    def test_impl(A, ind):
+        return A[ind]
+
+    np.random.seed(0)
+    ind = np.random.ranf(len(tuple_arr_value)) < 0.2
+    check_func(test_impl, (tuple_arr_value, ind), dist_test=False)
+
+
+def test_getitem_slice(tuple_arr_value, memory_leak_check):
+    def test_impl(A, ind):
+        return A[ind]
+
+    ind = slice(1, 4)
+    check_func(test_impl, (tuple_arr_value, ind), dist_test=False)
+
+
+def test_setitem_int(tuple_arr_value, memory_leak_check):
+    def test_impl(A, i, val):
+        A[i] = val
+        return A
+
+    i = 1
+    val = tuple_arr_value[0]
+    check_func(test_impl, (tuple_arr_value, i, val), copy_input=True, dist_test=False)
+
+
+def test_setitem_slice(memory_leak_check):
+    def test_impl(A, i, val):
+        A[i] = val
+        return A
+
+    A = np.array(
+        [
+            (1, 3.1),
+            (2, 1.1),
+            None,
+            (-1, 7.8),
+            (3, 4.0),
+            (-3, -1.2),
+        ]
+    )
+    i = slice(1, 3)
+    val = A[:2]
+    check_func(test_impl, (A, i, val), copy_input=True, dist_test=False)

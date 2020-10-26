@@ -144,3 +144,73 @@ def box_tuple_arr(typ, val, c):
     arr = box_struct_arr(data_typ, tuple_array.data, c, is_tuple_array=True)
     # NOTE: no need to decref since box_struct_arr decrefs all data
     return arr
+
+
+@overload(operator.getitem, no_unliteral=True)
+def tuple_arr_getitem(arr, ind):
+    if not isinstance(arr, TupleArrayType):
+        return
+
+    if isinstance(ind, types.Integer):
+        # TODO: warning if value is NA?
+        func_text = "def impl(arr, ind):\n"
+        tup_data = ",".join(
+            f"get_data(arr._data)[{i}][ind]" for i in range(len(arr.data))
+        )
+        func_text += f"  return ({tup_data})\n"
+        loc_vars = {}
+        exec(
+            func_text,
+            {
+                "get_data": bodo.libs.struct_arr_ext.get_data,
+            },
+            loc_vars,
+        )
+        impl = loc_vars["impl"]
+        return impl
+
+    # other getitem cases return an array, so just call getitem on underlying data array
+    def impl_arr(arr, ind):
+        return init_tuple_arr(arr._data[ind])
+
+    return impl_arr
+
+
+@overload(operator.setitem, no_unliteral=True)
+def tuple_arr_setitem(arr, ind, val):
+    if not isinstance(arr, TupleArrayType):
+        return
+
+    if isinstance(ind, types.Integer):
+
+        if val == types.none or isinstance(val, types.optional):  # pragma: no cover
+            return
+
+        n_fields = len(arr.data)
+        func_text = "def impl(arr, ind, val):\n"
+        func_text += "  data = get_data(arr._data)\n"
+        func_text += "  null_bitmap = get_null_bitmap(arr._data)\n"
+        func_text += "  set_bit_to_arr(null_bitmap, ind, 1)\n"
+        for i in range(n_fields):
+            func_text += f"  data[{i}][ind] = val[{i}]\n"
+
+        loc_vars = {}
+        exec(
+            func_text,
+            {
+                "get_data": bodo.libs.struct_arr_ext.get_data,
+                "get_null_bitmap": bodo.libs.struct_arr_ext.get_null_bitmap,
+                "set_bit_to_arr": bodo.libs.int_arr_ext.set_bit_to_arr,
+            },
+            loc_vars,
+        )
+        impl = loc_vars["impl"]
+        return impl
+
+    # other setitem cases set an array, so just call setitem on underlying data array
+    def impl_arr(arr, ind, val):
+        # TODO: set scalar_to_arr_len
+        val = bodo.utils.conversion.coerce_to_array(val, use_nullable_array=True)
+        arr._data[ind] = val._data
+
+    return impl_arr
