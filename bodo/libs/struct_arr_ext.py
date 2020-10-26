@@ -57,6 +57,7 @@ from bodo.utils.typing import (
     is_list_like_index_type,
     is_overload_constant_int,
     is_overload_constant_str,
+    is_overload_none,
 )
 
 ll.add_symbol("struct_array_from_sequence", array_ext.struct_array_from_sequence)
@@ -640,7 +641,10 @@ def pre_alloc_struct_array(
     assert isinstance(num_structs_typ, types.Integer) and isinstance(
         dtypes_typ, types.BaseTuple
     )
-    names = tuple(get_overload_const_str(t) for t in names_typ.types)
+    if is_overload_none(names_typ):
+        names = tuple(f"f{i}" for i in range(len(dtypes_typ)))
+    else:
+        names = tuple(get_overload_const_str(t) for t in names_typ.types)
     arr_typs = tuple(t.instance_type for t in dtypes_typ.types)
     struct_arr_type = StructArrayType(arr_typs, names)
 

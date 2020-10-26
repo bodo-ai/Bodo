@@ -70,8 +70,6 @@ no_side_effect_call_tuples = {
     ("get_series_name", "pd_series_ext", "hiframes", bodo),
     ("get_index_data", "pd_index_ext", "hiframes", bodo),
     ("get_index_name", "pd_index_ext", "hiframes", bodo),
-    ("convert_tup_to_rec", "typing", "utils", bodo),
-    ("convert_rec_to_tup", "typing", "utils", bodo),
     # Index
     ("init_string_index", "pd_index_ext", "hiframes", bodo),
     ("init_numeric_index", "pd_index_ext", "hiframes", bodo),
@@ -154,6 +152,8 @@ no_side_effect_call_tuples = {
     ("h5size", "h5_api", "io", bodo),
     ("pre_alloc_struct_array", "struct_arr_ext", "libs", bodo),
     (bodo.libs.struct_arr_ext.pre_alloc_struct_array,),
+    ("pre_alloc_tuple_array", "tuple_arr_ext", "libs", bodo),
+    (bodo.libs.tuple_arr_ext.pre_alloc_tuple_array,),
     ("pre_alloc_array_item_array", "array_item_arr_ext", "libs", bodo),
     (bodo.libs.array_item_arr_ext.pre_alloc_array_item_array,),
     ("dist_reduce", "distributed_api", "libs", bodo),

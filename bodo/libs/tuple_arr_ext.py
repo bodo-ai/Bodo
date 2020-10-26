@@ -3,6 +3,7 @@
 """
 import operator
 
+import numba
 from numba.core import types
 from numba.core.imputils import (
     RefType,
@@ -32,6 +33,7 @@ from numba.extending import (
     typeof_impl,
     unbox,
 )
+from numba.parfors.array_analysis import ArrayAnalysis
 
 import bodo
 from bodo.hiframes.datetime_date_ext import (
@@ -134,6 +136,29 @@ def box_tuple_arr(typ, val, c):
     arr = box_struct_arr(data_typ, tuple_array.data, c, is_tuple_array=True)
     # NOTE: no need to decref since box_struct_arr decrefs all data
     return arr
+
+
+@numba.njit
+def pre_alloc_tuple_array(n, nested_counts, dtypes):  # pragma: no cover
+    return init_tuple_arr(
+        bodo.libs.struct_arr_ext.pre_alloc_struct_array(n, nested_counts, dtypes, None)
+    )
+
+
+def pre_alloc_tuple_array_equiv(
+    self, scope, equiv_set, loc, args, kws
+):  # pragma: no cover
+    """Array analysis function for pre_alloc_tuple_array() passed to Numba's array
+    analysis extension. Assigns output array's size as equivalent to the input size
+    variable.
+    """
+    assert len(args) == 3 and not kws
+    return args[0], []
+
+
+ArrayAnalysis._analyze_op_call_bodo_libs_tuple_arr_ext_pre_alloc_tuple_array = (
+    pre_alloc_tuple_array_equiv
+)
 
 
 @overload(operator.getitem, no_unliteral=True)
