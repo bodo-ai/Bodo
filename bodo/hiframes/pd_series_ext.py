@@ -58,6 +58,7 @@ from bodo.libs.map_arr_ext import MapArrayType
 from bodo.libs.str_arr_ext import string_array_type
 from bodo.libs.str_ext import string_type
 from bodo.libs.struct_arr_ext import StructArrayType, StructType
+from bodo.libs.tuple_arr_ext import TupleArrayType
 from bodo.utils.transform import get_const_func_output_type
 from bodo.utils.typing import (
     BodoError,
@@ -193,6 +194,9 @@ def _get_series_array_type(dtype):
         return StructArrayType(
             tuple(_get_series_array_type(t) for t in dtype.data), dtype.names
         )
+
+    if isinstance(dtype, types.BaseTuple):
+        return TupleArrayType(tuple(_get_series_array_type(t) for t in dtype.data))
 
     if isinstance(dtype, types.DictType):
         return MapArrayType(

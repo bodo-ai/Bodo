@@ -52,6 +52,7 @@ from bodo.libs.str_arr_ext import (
     string_array_type,
 )
 from bodo.libs.struct_arr_ext import StructArrayType
+from bodo.libs.tuple_arr_ext import TupleArrayType
 from bodo.utils.typing import BodoError, is_overload_none
 from bodo.utils.utils import (
     CTypeEnum,
@@ -843,6 +844,14 @@ def gatherv(data, allgather=False, warn_if_rep=True):
             )
 
         return impl_struct_arr
+
+    if isinstance(data, TupleArrayType):
+        # gather the data array
+        def impl_tuple_arr(data, allgather=False, warn_if_rep=True):  # pragma: no cover
+            all_data = bodo.gatherv(data._data, allgather, warn_if_rep)
+            return bodo.libs.tuple_arr_ext.init_tuple_arr(all_data)
+
+        return impl_tuple_arr
 
     if isinstance(data, MapArrayType):
         # gather the data array

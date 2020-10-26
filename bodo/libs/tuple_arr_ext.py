@@ -1,18 +1,9 @@
 # Copyright (C) 2020 Bodo Inc. All rights reserved.
 """Array of tuple values, implemented by reusing array of structs implementation.
 """
-import datetime
-import decimal
-import glob
 import operator
-import warnings
 
-import llvmlite.llvmpy.core as lc
-import numba
-import numba.core.typing.typeof
-import numpy as np
-import pandas as pd
-from numba.core import cgutils, types
+from numba.core import types
 from numba.core.imputils import (
     RefType,
     impl_ret_borrowed,
@@ -52,7 +43,6 @@ from bodo.libs.array_item_arr_ext import (
     ArrayItemArrayType,
     _get_array_item_arr_payload,
 )
-from bodo.libs.decimal_arr_ext import Decimal128Type, DecimalArrayType
 from bodo.libs.struct_arr_ext import (
     StructArrayType,
     box_struct_arr,
@@ -214,3 +204,27 @@ def tuple_arr_setitem(arr, ind, val):
         arr._data[ind] = val._data
 
     return impl_arr
+
+
+@overload(len, no_unliteral=True)
+def overload_tuple_arr_len(A):
+    if isinstance(A, TupleArrayType):
+        return lambda A: len(A._data)
+
+
+@overload_attribute(TupleArrayType, "shape")
+def overload_tuple_arr_shape(A):
+    return lambda A: (len(A._data),)
+
+
+@overload_attribute(TupleArrayType, "ndim")
+def overload_tuple_arr_ndim(A):
+    return lambda A: 1
+
+
+@overload_method(TupleArrayType, "copy", no_unliteral=True)
+def overload_tuple_arr_copy(A):
+    def copy_impl(A):  # pragma: no cover
+        return init_tuple_arr(A._data.copy())
+
+    return copy_impl

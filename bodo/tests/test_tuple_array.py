@@ -28,16 +28,19 @@ from bodo.tests.utils import check_func
             ]
         ),
         # homogeneous values
-        np.array(
-            [
-                (1.1, 3.1),
-                (2.1, 1.1),
-                None,
-                (-1.1, -1.1),
-                (3.1, 4.1),
-                (-3.1, -1.1),
-                (5.1, 9.1),
-            ]
+        pytest.param(
+            np.array(
+                [
+                    (1.1, 3.1),
+                    (2.1, 1.1),
+                    None,
+                    (-1.1, -1.1),
+                    (3.1, 4.1),
+                    (-3.1, -1.1),
+                    (5.1, 9.1),
+                ]
+            ),
+            marks=pytest.mark.slow,
         ),
     ]
 )
@@ -111,3 +114,31 @@ def test_setitem_slice(memory_leak_check):
     i = slice(1, 3)
     val = A[:2]
     check_func(test_impl, (A, i, val), copy_input=True, dist_test=False)
+
+
+def test_ndim(tuple_arr_value, memory_leak_check):
+    def test_impl(A):
+        return A.ndim
+
+    assert bodo.jit(test_impl)(tuple_arr_value) == test_impl(tuple_arr_value)
+
+
+def test_shape(tuple_arr_value, memory_leak_check):
+    def test_impl(A):
+        return A.shape
+
+    assert bodo.jit(test_impl)(tuple_arr_value) == test_impl(tuple_arr_value)
+
+
+def test_copy(tuple_arr_value, memory_leak_check):
+    def test_impl(A):
+        return A.copy()
+
+    check_func(test_impl, (tuple_arr_value,))
+
+
+def test_len(tuple_arr_value, memory_leak_check):
+    def test_impl(A):
+        return len(A)
+
+    check_func(test_impl, (tuple_arr_value,))

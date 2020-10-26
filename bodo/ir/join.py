@@ -18,7 +18,6 @@ from numba.extending import overload
 
 import bodo
 from bodo import objmode
-from bodo.hiframes.datetime_date_ext import datetime_date_array_type
 from bodo.hiframes.pd_categorical_ext import CategoricalArray
 from bodo.libs.array import (
     arr_info_list_to_table,

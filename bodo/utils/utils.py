@@ -313,6 +313,7 @@ def is_array_typ(var_typ, include_index_series=True):
         or var_typ == bodo.libs.str_ext.random_access_string_array
         or isinstance(var_typ, bodo.libs.array_item_arr_ext.ArrayItemArrayType)
         or isinstance(var_typ, bodo.libs.struct_arr_ext.StructArrayType)
+        or isinstance(var_typ, bodo.libs.tuple_arr_ext.TupleArrayType)
         or isinstance(var_typ, bodo.libs.map_arr_ext.MapArrayType)
         or (
             include_index_series
