@@ -4,6 +4,7 @@ set -exo pipefail
 
 export PATH=$HOME/miniconda3/bin:$PATH
 source activate $CONDA_ENV
+export BODO_VERSION=` python -c "import versioneer; print(versioneer.get_version())"`
 
 # # install Numba in a directory to avoid import conflict
 # mkdir req_install

@@ -1,6 +1,6 @@
 package:
   name: bodo
-  version: {{ GIT_DESCRIBE_TAG }}
+  version: {{ BODO_VERSION }}
 
 source:
    path: ../..

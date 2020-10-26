@@ -38,6 +38,7 @@ jobs:
   - bash: |
       set -eo pipefail
       source activate bodo_build
+      export BODO_VERSION=`python -c "import versioneer; print(versioneer.get_version())"`
       cd buildscripts/bodo-conda-recipe/
       conda build . -c bodo.ai -c conda-forge -c intel --no-test --output-folder ../../
     displayName: 'Conda build Bodo'

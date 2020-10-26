@@ -53,6 +53,7 @@ jobs:
   - bash: |
       set -eo pipefail
       source activate bodo_build
+      export BODO_VERSION=`python -c "import versioneer; print(versioneer.get_version())"`
       if [[ "${{ parameters.useNumbaDev }}" == "true" ]]; then
         cd buildscripts/bodo-numba-dev-conda-recipe/
         echo "Using Numba-Dev Conda Recipe"
