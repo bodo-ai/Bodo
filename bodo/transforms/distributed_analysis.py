@@ -2405,6 +2405,11 @@ def get_reduce_op(reduce_varname, reduce_nodes, func_ir, typemap):
                 return Reduce_Type.Argmax
             return Reduce_Type.Max
 
+        # add_nested_counts is internal and only local result is needed later, so reduce
+        # is not necessary
+        if func == ("add_nested_counts", "bodo.utils.indexing"):
+            return Reduce_Type.No_Op
+
     raise GuardException  # pragma: no cover
 
 

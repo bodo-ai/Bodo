@@ -109,6 +109,7 @@ class Reduce_Type(Enum):
     Argmax = 5
     Or = 6
     Concat = 7
+    No_Op = 8
 
 
 _get_rank = types.ExternalFunction("c_get_rank", types.int32())
