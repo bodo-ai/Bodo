@@ -11,6 +11,7 @@ from numba.extending import overload
 
 import bodo
 from bodo.libs.decimal_arr_ext import Decimal128Type, DecimalArrayType
+from bodo.utils.indexing import add_nested_counts, init_nested_counts
 from bodo.utils.typing import (
     BodoError,
     get_overload_const_str,
@@ -47,16 +48,23 @@ def overload_coerce_to_ndarray(
     from bodo.hiframes.pd_series_ext import SeriesType
 
     # TODO: handle NAs?
-    if isinstance(data, bodo.libs.int_arr_ext.IntegerArrayType):
+    # nullable int array
+    if isinstance(
+        data, bodo.libs.int_arr_ext.IntegerArrayType
+    ) and not is_overload_none(use_nullable_array):
         return lambda data, error_on_nonarray=True, use_nullable_array=None, scalar_to_arr_len=None: bodo.libs.int_arr_ext.get_int_arr_data(
             data
         )  # pragma: no cover
 
-    if data == bodo.libs.bool_arr_ext.boolean_array:
+    # nullable boolean array
+    if data == bodo.libs.bool_arr_ext.boolean_array and not is_overload_none(
+        use_nullable_array
+    ):
         return lambda data, error_on_nonarray=True, use_nullable_array=None, scalar_to_arr_len=None: bodo.libs.bool_arr_ext.get_bool_arr_data(
             data
         )  # pragma: no cover
 
+    # numpy array
     if isinstance(data, types.Array):
         if not is_overload_none(use_nullable_array) and isinstance(
             data.dtype, (types.Boolean, types.Integer)
@@ -89,6 +97,7 @@ def overload_coerce_to_ndarray(
             lambda data, error_on_nonarray=True, use_nullable_array=None, scalar_to_arr_len=None: data
         )  # pragma: no cover
 
+    # list/UniTuple
     if isinstance(data, (types.List, types.UniTuple)):
 
         if not is_overload_none(use_nullable_array) and isinstance(
@@ -180,6 +189,7 @@ def overload_coerce_to_ndarray(
             data
         )  # pragma: no cover
 
+    # series
     if isinstance(data, SeriesType):
         return lambda data, error_on_nonarray=True, use_nullable_array=None, scalar_to_arr_len=None: bodo.hiframes.pd_series_ext.get_series_data(
             data
@@ -191,6 +201,7 @@ def overload_coerce_to_ndarray(
             data
         )  # pragma: no cover
 
+    # RangeIndex
     if isinstance(data, RangeIndexType):
         return lambda data, error_on_nonarray=True, use_nullable_array=None, scalar_to_arr_len=None: np.arange(
             data._start, data._stop, data._step
@@ -348,6 +359,12 @@ def overload_coerce_to_ndarray(
 
         return impl_num
 
+    # data is already an array
+    if bodo.utils.utils.is_array_typ(data, False):
+        return (
+            lambda data, error_on_nonarray=True, use_nullable_array=None, scalar_to_arr_len=None: data
+        )  # pragma: no cover
+
     if is_overload_true(error_on_nonarray):
         raise BodoError("cannot coerce {} to array".format(data))
 
@@ -373,10 +390,10 @@ def overload_coerce_to_array(
     """
     # TODO: support other arrays like list(str), datetime.date ...
     from bodo.hiframes.pd_index_ext import StringIndexType
-    from bodo.hiframes.pd_series_ext import is_str_series_typ
+    from bodo.hiframes.pd_series_ext import SeriesType
 
-    # string series
-    if is_str_series_typ(data):
+    # series
+    if isinstance(data, SeriesType):
         return lambda data, error_on_nonarray=True, use_nullable_array=None, scalar_to_arr_len=None: bodo.hiframes.pd_series_ext.get_series_data(
             data
         )  # pragma: no cover
@@ -450,6 +467,47 @@ def overload_coerce_to_array(
             return arr
 
         return impl_tuple_list
+
+    # list(list/array) to array(array)
+    if isinstance(data, types.List) and (
+        bodo.utils.utils.is_array_typ(data.dtype, False)
+        or isinstance(data.dtype, types.List)
+    ):
+        data_arr_type = bodo.hiframes.pd_series_ext._get_series_array_type(
+            data.dtype.dtype
+        )
+
+        def impl_array_item_arr(
+            data,
+            error_on_nonarray=True,
+            use_nullable_array=None,
+            scalar_to_arr_len=None,
+        ):  # pragma: no cover
+            n = len(data)
+            nested_counts = init_nested_counts(data_arr_type)
+            for i in range(n):
+                arr_item = bodo.utils.conversion.coerce_to_array(
+                    data[i], use_nullable_array=True
+                )
+                nested_counts = add_nested_counts(nested_counts, arr_item)
+
+            out_arr = bodo.libs.array_item_arr_ext.pre_alloc_array_item_array(
+                n, nested_counts, data_arr_type
+            )
+            out_null_bitmap = bodo.libs.array_item_arr_ext.get_null_bitmap(out_arr)
+
+            # write output
+            for ii in range(n):
+                arr_item = bodo.utils.conversion.coerce_to_array(
+                    data[ii], use_nullable_array=True
+                )
+                out_arr[ii] = arr_item
+                # set NA
+                bodo.libs.int_arr_ext.set_bit_to_arr(out_null_bitmap, ii, 1)
+
+            return out_arr
+
+        return impl_array_item_arr
 
     # string scalars to array
     if not is_overload_none(scalar_to_arr_len) and isinstance(

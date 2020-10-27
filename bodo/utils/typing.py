@@ -849,12 +849,6 @@ def get_udf_out_arr_type(f_return_type):
     if f_return_type == bodo.hiframes.pd_timestamp_ext.pandas_timestamp_type:
         f_return_type = types.NPDatetime("ns")
 
-    # convert list output type to array for ArrayItemArrayType (TODO: add str case)
-    if isinstance(f_return_type, types.List):
-        f_return_type = bodo.hiframes.pd_series_ext._get_series_array_type(
-            f_return_type.dtype
-        )
-
     out_arr_type = bodo.hiframes.pd_series_ext._get_series_array_type(f_return_type)
     out_arr_type = to_nullable_type(out_arr_type) if return_nullable else out_arr_type
     return out_arr_type

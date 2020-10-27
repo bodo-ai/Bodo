@@ -1546,12 +1546,18 @@ def unbox_period_index(typ, val, c):
 class NumericIndexType(types.IterableType, types.ArrayCompatible):
     """type class for pd.Int64Index/UInt64Index/Float64Index objects."""
 
-    def __init__(self, dtype, name_typ=None):
+    def __init__(self, dtype, name_typ=None, data=None):
         name_typ = types.none if name_typ is None else name_typ
         self.dtype = dtype
         self.name_typ = name_typ
+        data = (
+            bodo.hiframes.pd_series_ext._get_series_array_type(dtype)
+            if data is None
+            else data
+        )
+        self.data = data
         super(NumericIndexType, self).__init__(
-            name="NumericIndexType({}, {})".format(dtype, name_typ)
+            name=f"NumericIndexType({dtype}, {name_typ}, {data})"
         )
 
     ndim = 1
@@ -1603,7 +1609,7 @@ class NumericIndexModel(models.StructModel):
     def __init__(self, dmm, fe_type):
         # TODO: nullable integer array (e.g. to hold DatetimeIndex.year)
         members = [
-            ("data", types.Array(fe_type.dtype, 1, "C")),
+            ("data", fe_type.data),
             ("name", fe_type.name_typ),
         ]
         super(NumericIndexModel, self).__init__(dmm, fe_type, members)
@@ -1633,9 +1639,7 @@ def box_numeric_index(typ, val, c):
     mod_name = c.context.insert_const_string(c.builder.module, "pandas")
     class_obj = c.pyapi.import_module_noblock(mod_name)
     index_val = cgutils.create_struct_proxy(typ)(c.context, c.builder, val)
-    data_obj = c.pyapi.from_native_value(
-        types.Array(typ.dtype, 1, "C"), index_val.data, c.env_manager
-    )
+    data_obj = c.pyapi.from_native_value(typ.data, index_val.data, c.env_manager)
     name_obj = c.pyapi.from_native_value(typ.name_typ, index_val.name, c.env_manager)
 
     assert typ.dtype in (types.int64, types.uint64, types.float64)
@@ -1674,12 +1678,11 @@ def init_numeric_index(typingctx, data, name=None):
         index_val.data = args[0]
         index_val.name = args[1]
         # increase refcount of stored values
-        arr_typ = types.Array(index_typ.dtype, 1, "C")
-        context.nrt.incref(builder, arr_typ, args[0])
+        context.nrt.incref(builder, index_typ.data, args[0])
         context.nrt.incref(builder, index_typ.name_typ, args[1])
         return index_val._getvalue()
 
-    return NumericIndexType(data.dtype, name)(data, name), codegen
+    return NumericIndexType(data.dtype, name, data)(data, name), codegen
 
 
 ArrayAnalysis._analyze_op_call_bodo_hiframes_pd_index_ext_init_numeric_index = (
@@ -1691,9 +1694,8 @@ ArrayAnalysis._analyze_op_call_bodo_hiframes_pd_index_ext_init_numeric_index = (
 def unbox_numeric_index(typ, val, c):
     # get data and name attributes
     # TODO: use to_numpy()
-    arr_typ = types.Array(typ.dtype, 1, "C")
     values_obj = c.pyapi.object_getattr_string(val, "values")
-    data = c.pyapi.to_native_value(arr_typ, values_obj).value
+    data = c.pyapi.to_native_value(typ.data, values_obj).value
     name_obj = c.pyapi.object_getattr_string(val, "name")
     name = c.pyapi.to_native_value(typ.name_typ, name_obj).value
     c.pyapi.decref(values_obj)
@@ -1925,9 +1927,9 @@ def array_typ_to_index(arr_typ, name_typ=None):
 
     if isinstance(arr_typ.dtype, types.Integer):
         if not arr_typ.dtype.signed:
-            return NumericIndexType(types.uint64, name_typ)
+            return NumericIndexType(types.uint64, name_typ, arr_typ)
         else:
-            return NumericIndexType(types.int64, name_typ)
+            return NumericIndexType(types.int64, name_typ, arr_typ)
 
     if isinstance(arr_typ.dtype, types.Float):
         return NumericIndexType(types.float64, name_typ)
@@ -2121,17 +2123,15 @@ def overload_index_map(I, mapper, na_action=None):
     # variable size items, e.g. strings
     # TODO: avoid extra loop (e.g. builder pattern?)
     if is_var_size_item_array_type(out_arr_type):
-        init_size_code, size_varnames = gen_init_varsize_alloc_sizes(out_arr_type)
-        func_text += init_size_code
+        func_text += "  nested_counts = init_nested_counts(data_arr_type)\n"
         func_text += "  for j in numba.parfors.parfor.internal_prange(n):\n"
         func_text += "    t1 = bodo.utils.conversion.box_if_dt64(A[j])\n"
         func_text += "    item = map_func(t1)\n"
-        func_text += gen_varsize_item_sizes(out_arr_type, "item", size_varnames)
+        func_text += "    nested_counts = add_nested_counts(nested_counts, item)\n"
         func_text += "  numba.parfors.parfor.init_prange()\n"
-        func_text += "  varsize_alloc_sizes = ({},)\n".format(", ".join(size_varnames))
     else:
-        func_text += "  varsize_alloc_sizes = None\n"
-    func_text += "  S = bodo.utils.utils.alloc_type(n, _arr_typ, varsize_alloc_sizes)\n"
+        func_text += "  nested_counts = None\n"
+    func_text += "  S = bodo.utils.utils.alloc_type(n, _arr_typ, nested_counts)\n"
     func_text += "  for i in numba.parfors.parfor.internal_prange(n):\n"
     func_text += "    t2 = bodo.utils.conversion.box_if_dt64(A[i])\n"
     func_text += "    v = map_func(t2)\n"
@@ -2150,6 +2150,9 @@ def overload_index_map(I, mapper, na_action=None):
             "bodo": bodo,
             "map_func": map_func,
             "_arr_typ": out_arr_type,
+            "init_nested_counts": bodo.utils.indexing.init_nested_counts,
+            "add_nested_counts": bodo.utils.indexing.add_nested_counts,
+            "data_arr_type": out_arr_type.dtype,
         },
         loc_vars,
     )

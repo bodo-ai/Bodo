@@ -530,21 +530,15 @@ class DataFramePass:
                     for i in range(len(used_cols))
                 ]
             )
-            init_size_code, size_varnames = gen_init_varsize_alloc_sizes(out_arr_type)
-            func_text += init_size_code
+            func_text += "  nested_counts = init_nested_counts(data_arr_type)\n"
             func_text += "  for j in numba.parfors.parfor.internal_prange(len(c0)):\n"
             func_text += "    row1 = Row({})\n".format(row_args_j)
             func_text += "    item = map_func(row1, {})\n".format(udf_arg_names)
-            func_text += gen_varsize_item_sizes(out_arr_type, "item", size_varnames)
+            func_text += "    nested_counts = add_nested_counts(nested_counts, item)\n"
             func_text += "  numba.parfors.parfor.init_prange()\n"
-            func_text += "  varsize_alloc_sizes = ({},)\n".format(
-                ", ".join(size_varnames)
-            )
         else:
-            func_text += "  varsize_alloc_sizes = None\n"
-        func_text += (
-            "  S = bodo.utils.utils.alloc_type(n, _arr_typ, varsize_alloc_sizes)\n"
-        )
+            func_text += "  nested_counts = None\n"
+        func_text += "  S = bodo.utils.utils.alloc_type(n, _arr_typ, nested_counts)\n"
         func_text += "  for i in numba.parfors.parfor.internal_prange(n):\n"
         # TODO: unbox to array value if necessary (e.g. Timestamp to dt64)
         func_text += "     row2 = Row({})\n".format(row_args)
@@ -578,6 +572,9 @@ class DataFramePass:
                 "get_utf8_size": get_utf8_size,
                 "pre_alloc_string_array": pre_alloc_string_array,
                 "map_func": map_func,
+                "init_nested_counts": bodo.utils.indexing.init_nested_counts,
+                "add_nested_counts": bodo.utils.indexing.add_nested_counts,
+                "data_arr_type": out_arr_type.dtype,
             },
             pre_nodes=nodes,
         )

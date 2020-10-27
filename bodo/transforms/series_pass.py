@@ -2153,12 +2153,10 @@ class SeriesPass:
         # get the function object (ir.Expr.make_function or actual python function)
         func = get_overload_const_func(self.typemap[func_var.name])
 
-        dtype = self.typemap[series_var.name].dtype
         nodes = []
         data = self._get_series_data(series_var, nodes)
         index = self._get_series_index(series_var, nodes)
         name = self._get_series_name(series_var, nodes)
-        out_typ = self.typemap[lhs.name].dtype
         out_arr_type = self.typemap[lhs.name].data
         udf_arg_names = (
             ", ".join("e{}".format(i) for i in range(len(extra_args)))
@@ -2181,21 +2179,15 @@ class SeriesPass:
         # variable size items, e.g. strings
         # TODO: avoid extra loop (e.g. builder pattern?)
         if is_var_size_item_array_type(out_arr_type):
-            init_size_code, size_varnames = gen_init_varsize_alloc_sizes(out_arr_type)
-            func_text += init_size_code
+            func_text += "  nested_counts = init_nested_counts(data_arr_type)\n"
             func_text += "  for j in numba.parfors.parfor.internal_prange(n):\n"
             func_text += "    t1 = bodo.utils.conversion.box_if_dt64(A[j])\n"
             func_text += "    item = map_func(t1, {})\n".format(udf_arg_names)
-            func_text += gen_varsize_item_sizes(out_arr_type, "item", size_varnames)
+            func_text += "    nested_counts = add_nested_counts(nested_counts, item)\n"
             func_text += "  numba.parfors.parfor.init_prange()\n"
-            func_text += "  varsize_alloc_sizes = ({},)\n".format(
-                ", ".join(size_varnames)
-            )
         else:
-            func_text += "  varsize_alloc_sizes = None\n"
-        func_text += (
-            "  S = bodo.utils.utils.alloc_type(n, _arr_typ, varsize_alloc_sizes)\n"
-        )
+            func_text += "  nested_counts = None\n"
+        func_text += "  S = bodo.utils.utils.alloc_type(n, _arr_typ, nested_counts)\n"
         func_text += "  for i in numba.parfors.parfor.internal_prange(n):\n"
         func_text += "    t2 = bodo.utils.conversion.box_if_dt64(A[i])\n"
         func_text += "    v = map_func(t2, {})\n".format(udf_arg_names)
@@ -2227,6 +2219,9 @@ class SeriesPass:
                 "pre_alloc_string_array": pre_alloc_string_array,
                 "map_func": map_func,
                 "_arr_typ": out_arr_type,
+                "init_nested_counts": bodo.utils.indexing.init_nested_counts,
+                "add_nested_counts": bodo.utils.indexing.add_nested_counts,
+                "data_arr_type": out_arr_type.dtype,
             },
             pre_nodes=nodes,
         )

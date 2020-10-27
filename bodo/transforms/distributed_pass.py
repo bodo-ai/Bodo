@@ -2795,7 +2795,7 @@ class DistributedPass:
         """generate distributed reduction code for after parfor's local execution"""
         # concat reduction variables don't need aggregation since output is distributed
         # see test_concat_reduction
-        if reduce_op == Reduce_Type.Concat:
+        if reduce_op in (Reduce_Type.Concat, Reduce_Type.No_Op):
             return []
 
         op_var = ir.Var(scope, mk_unique_var("$reduce_op"), loc)
@@ -2825,7 +2825,7 @@ class DistributedPass:
         processors.
         """
         # TODO: support initialization for concat reductions
-        if reduce_op == Reduce_Type.Concat:
+        if reduce_op in (Reduce_Type.Concat, Reduce_Type.No_Op):
             return []
 
         red_var_typ = self.typemap[reduce_var.name]
