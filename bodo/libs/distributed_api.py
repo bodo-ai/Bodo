@@ -2659,11 +2659,11 @@ node_ranks = None
 
 def get_host_ranks():  # pragma: no cover
     """Get dict holding hostname and its associated ranks"""
-    comm = MPI.COMM_WORLD
-    hostname = MPI.Get_processor_name()
-    rank_host = comm.allgather(hostname)
     global node_ranks
     if node_ranks is None:
+        comm = MPI.COMM_WORLD
+        hostname = MPI.Get_processor_name()
+        rank_host = comm.allgather(hostname)
         node_ranks = defaultdict(list)
         for i, host in enumerate(rank_host):
             node_ranks[host].append(i)
