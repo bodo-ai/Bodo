@@ -19,7 +19,7 @@ phases:
         commands:
         - echo Entered the build phase...
         # Download the existing artifacts and merge the xml files.
-        - buildscripts/aws/prepare_coverage.sh
+        - python buildscripts/aws/CI_if_changes.py buildscripts/aws/prepare_coverage.sh
     post_build:
         commands:
         - echo Entered the post-build phase...
