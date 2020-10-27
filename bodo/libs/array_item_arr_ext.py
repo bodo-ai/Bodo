@@ -37,7 +37,6 @@ from numba.parfors.array_analysis import ArrayAnalysis
 
 import bodo
 from bodo.hiframes.datetime_date_ext import datetime_date_type
-# NOTE: importing hdist is necessary for MPI initialization before array_ext
 from bodo.libs import array_ext, hdist
 from bodo.utils.cg_helpers import (
     gen_allocate_array,
@@ -553,6 +552,7 @@ def lower_pre_alloc_array_item_array(context, builder, sig, args):
 def pre_alloc_array_item_array(typingctx, num_arrs_typ, num_values_typ, dtype_typ=None):
     assert isinstance(num_arrs_typ, types.Integer)
     array_item_type = ArrayItemArrayType(dtype_typ.instance_type)
+    num_values_typ = types.unliteral(num_values_typ)  # avoid e.g. (int64, literal(0))
     return (
         array_item_type(types.int64, num_values_typ, dtype_typ),
         lower_pre_alloc_array_item_array,
@@ -838,6 +838,8 @@ def array_item_arr_setitem(A, idx, val):
     if isinstance(idx, types.SliceType):
 
         def impl_slice(A, idx, val):  # pragma: no cover
+            # TODO: set scalar_to_arr_len
+            val = bodo.utils.conversion.coerce_to_array(val, use_nullable_array=True)
             # get output arrays
             offsets = get_offsets(A)
             data = get_data(A)

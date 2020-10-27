@@ -152,6 +152,10 @@ class SeriesType(types.IterableType, types.ArrayCompatible):
 def _get_series_array_type(dtype):
     """get underlying default array type of series based on its dtype"""
 
+    # UDFs may return lists, but we store array of array for output
+    if isinstance(dtype, types.List):
+        dtype = _get_series_array_type(dtype.dtype)
+
     # string array
     if dtype == string_type:
         return string_array_type

@@ -1739,6 +1739,19 @@ def test_series_map_tup_list1(memory_leak_check):
     check_func(test_impl, (S,))
 
 
+def test_series_map_tup_list2(memory_leak_check):
+    """test returning a list of list of tuples from UDF"""
+
+    def test_impl(S):
+        A = S.map(
+            lambda a: [[(a, 2 * a), (a + 1, 3 * a)], [(3 * a, 4 * a), (a + 2, 7 * a)]]
+        )
+        return A
+
+    S = pd.Series([1.0, 2.0, 3.0, 4.0, 5.0])
+    check_func(test_impl, (S,))
+
+
 def test_series_map_str(memory_leak_check):
     """test string output in map"""
 
