@@ -1361,3 +1361,14 @@ def test_scatterv_jit(memory_leak_check):
     df = pd.DataFrame({"A": [3, 1, 4, 2, 11], "B": [1.1, 2.2, 5.5, 1.3, -1.1]})
     df_scattered = bodo.jit(all_returns_distributed=True)(impl)(df)
     pd.testing.assert_frame_equal(df, bodo.allgatherv(df_scattered))
+
+
+def test_gatherv_empty_df(memory_leak_check):
+    """test using gatherv inside jit functions"""
+
+    def impl(df):
+        return bodo.gatherv(df)
+
+    df = pd.DataFrame()
+    df_gathered = bodo.jit()(impl)(df)
+    pd.testing.assert_frame_equal(df, df_gathered)

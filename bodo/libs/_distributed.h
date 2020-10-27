@@ -69,10 +69,10 @@ static void dist_wait(MPI_Request req, bool cond) __UNUSED__;
 static void dist_waitall(int size, MPI_Request* req) __UNUSED__;
 
 static void c_gather_scalar(void* send_data, void* recv_data, int typ_enum,
-                            bool allgather) __UNUSED__;
+                            bool allgather, int root) __UNUSED__;
 static void c_gatherv(void* send_data, int sendcount, void* recv_data,
                       int* recv_counts, int* displs, int typ_enum,
-                      bool allgather) __UNUSED__;
+                      bool allgather, int root) __UNUSED__;
 static void c_scatterv(void* send_data, int* sendcounts, int* displs,
                        void* recv_data, int recv_count,
                        int typ_enum) __UNUSED__;
@@ -425,27 +425,27 @@ static int64_t dist_get_item_pointer(int64_t ind, int64_t start,
 }
 
 static void c_gather_scalar(void* send_data, void* recv_data, int typ_enum,
-                            bool allgather) {
+                            bool allgather, int root) {
     MPI_Datatype mpi_typ = get_MPI_typ(typ_enum);
     if (allgather)
         MPI_Allgather(send_data, 1, mpi_typ, recv_data, 1, mpi_typ,
                       MPI_COMM_WORLD);
     else
-        MPI_Gather(send_data, 1, mpi_typ, recv_data, 1, mpi_typ, ROOT_PE,
+        MPI_Gather(send_data, 1, mpi_typ, recv_data, 1, mpi_typ, root,
                    MPI_COMM_WORLD);
     return;
 }
 
 static void c_gatherv(void* send_data, int sendcount, void* recv_data,
                       int* recv_counts, int* displs, int typ_enum,
-                      bool allgather) {
+                      bool allgather, int root) {
     MPI_Datatype mpi_typ = get_MPI_typ(typ_enum);
     if (allgather)
         MPI_Allgatherv(send_data, sendcount, mpi_typ, recv_data, recv_counts,
                        displs, mpi_typ, MPI_COMM_WORLD);
     else
         MPI_Gatherv(send_data, sendcount, mpi_typ, recv_data, recv_counts,
-                    displs, mpi_typ, ROOT_PE, MPI_COMM_WORLD);
+                    displs, mpi_typ, root, MPI_COMM_WORLD);
     return;
 }
 
