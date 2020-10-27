@@ -2121,17 +2121,15 @@ def overload_index_map(I, mapper, na_action=None):
     # variable size items, e.g. strings
     # TODO: avoid extra loop (e.g. builder pattern?)
     if is_var_size_item_array_type(out_arr_type):
-        init_size_code, size_varnames = gen_init_varsize_alloc_sizes(out_arr_type)
-        func_text += init_size_code
+        func_text += "  nested_counts = init_nested_counts(data_arr_type)\n"
         func_text += "  for j in numba.parfors.parfor.internal_prange(n):\n"
         func_text += "    t1 = bodo.utils.conversion.box_if_dt64(A[j])\n"
         func_text += "    item = map_func(t1)\n"
-        func_text += gen_varsize_item_sizes(out_arr_type, "item", size_varnames)
+        func_text += "    nested_counts = add_nested_counts(nested_counts, item)\n"
         func_text += "  numba.parfors.parfor.init_prange()\n"
-        func_text += "  varsize_alloc_sizes = ({},)\n".format(", ".join(size_varnames))
     else:
-        func_text += "  varsize_alloc_sizes = None\n"
-    func_text += "  S = bodo.utils.utils.alloc_type(n, _arr_typ, varsize_alloc_sizes)\n"
+        func_text += "  nested_counts = None\n"
+    func_text += "  S = bodo.utils.utils.alloc_type(n, _arr_typ, nested_counts)\n"
     func_text += "  for i in numba.parfors.parfor.internal_prange(n):\n"
     func_text += "    t2 = bodo.utils.conversion.box_if_dt64(A[i])\n"
     func_text += "    v = map_func(t2)\n"
@@ -2150,6 +2148,9 @@ def overload_index_map(I, mapper, na_action=None):
             "bodo": bodo,
             "map_func": map_func,
             "_arr_typ": out_arr_type,
+            "init_nested_counts": bodo.utils.indexing.init_nested_counts,
+            "add_nested_counts": bodo.utils.indexing.add_nested_counts,
+            "data_arr_type": out_arr_type.dtype,
         },
         loc_vars,
     )
