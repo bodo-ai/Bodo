@@ -10,7 +10,7 @@ def run_commands(commands):
     else:
         # If we are suppose to run unittests we need to generate an empty artifact
         if "buildscripts/aws/run_unittests.sh" in commands:
-            f = open("./coverage", "w")
+            f = open(".coverage", "w")
             f.close()
 
 
