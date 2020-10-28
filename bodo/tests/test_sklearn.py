@@ -681,6 +681,12 @@ def test_multinomial_nb():
     feature_prob = np.array([[2 / 5, 2 / 5, 1 / 5], [1 / 3, 1 / 2, 1 / 6]])
     np.testing.assert_array_almost_equal(nb.feature_log_prob_, np.log(feature_prob))
 
+    # Test dataframe.
+    # train = pd.DataFrame({"A": range(20), "B": range(100, 120)})
+    # train_labels = pd.Series(range(20))
+
+    # check_func(impl_predict, (train, train_labels))
+
 
 def test_multinomial_nb_score():
     rng = np.random.RandomState(0)

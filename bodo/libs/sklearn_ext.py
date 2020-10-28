@@ -1395,7 +1395,11 @@ def overload_multinomial_nb_model_fit(
     sample_weight=None,
     _is_data_distributed=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
 ):
-    # HA: TODO checktype if dataframe or numpy array
+    X = bodo.utils.conversion.coerce_to_ndarray(X)
+    y = bodo.utils.conversion.coerce_to_ndarray(y)
+    # HA: TODO change dataframe to numpy array
+    # if isinstance(X, bodo.hiframes.pd_dataframe_ext.DataFrameType):
+    #    X = X.to_numpy()
     # else raise BodoError
     # TODO: What to do if data is replicated?
     # TODO: sample_weight
@@ -1415,6 +1419,8 @@ def overload_multinomial_nb_model_fit(
             end = bodo.libs.distributed_api.get_end(total_cols, nranks, i)
             # Overriden. Need to only write when its your columns
             if i == my_rank:
+                # X_train = bodo.gatherv(X.iloc[:, start:end:1], root=i)
+                # else:
                 X_train = bodo.gatherv(X[:, start:end:1], root=i)
             else:
                 bodo.gatherv(X[:, start:end:1], root=i)
