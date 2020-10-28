@@ -152,7 +152,7 @@ class SeriesType(types.IterableType, types.ArrayCompatible):
 
 class HeterogeneousSeriesType(types.Type):
     """
-    Type class for Series objects with heterogeneous values (e.g. pd.Series([1, "A]))
+    Type class for Series objects with heterogeneous values (e.g. pd.Series([1, 'A']))
     """
 
     ndim = 1
@@ -163,6 +163,7 @@ class HeterogeneousSeriesType(types.Type):
         self.data = data
         name_typ = types.none if name_typ is None else name_typ
         index = RangeIndexType(types.none) if index is None else index
+        # TODO(ehsan): add check for index type
         self.index = index  # index should be an Index type (not Array)
         self.name_typ = name_typ
         super(HeterogeneousSeriesType, self).__init__(

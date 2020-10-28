@@ -2225,7 +2225,7 @@ class SeriesPass:
             func_text += f"  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({data_arrs},), index, {col_names})\n"
         else:
             func_text += (
-                "  return bodo.hiframes.pd_series_ext.init_series(S, index, name)\n"
+                "  return bodo.hiframes.pd_series_ext.init_series(S0, index, name)\n"
             )
 
         loc_vars = {}
