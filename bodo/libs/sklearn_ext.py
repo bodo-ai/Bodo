@@ -1,6 +1,7 @@
 """Support sklearn.ensemble.RandomForestClassifier using object mode of Numba
 """
 import itertools
+import warnings
 
 import numba
 import numpy as np
@@ -23,6 +24,8 @@ from numba.extending import (
     unbox,
 )
 from sklearn.metrics import hinge_loss, log_loss, mean_squared_error
+from sklearn.naive_bayes import MultinomialNB
+from sklearn.preprocessing import LabelBinarizer
 
 import bodo
 from bodo.libs.distributed_api import (
@@ -1321,3 +1324,63 @@ def overload_kmeans_clustering_transform(m, X):
         return X_new
 
     return _cluster_kmeans_transform
+
+
+# -------------------------------------MultinomialNB----------------------------------------
+# Support sklearn.naive_bayes.MultinomialNB using object mode of Numba
+# -----------------------------------------------------------------------------
+# Typing and overloads to use MultinomialNB inside Bodo functions
+# directly via sklearn's API
+
+
+class BodoMultinomialNBType(types.Opaque):
+    def __init__(self):
+        super(BodoMultinomialNBType, self).__init__(name="BodoMultinomialNBType")
+
+
+multinomial_nb_type = BodoMultinomialNBType()
+types.multinomial_nb_type = multinomial_nb_type
+
+register_model(BodoMultinomialNBType)(models.OpaqueModel)
+
+
+@typeof_impl.register(sklearn.naive_bayes.MultinomialNB)
+def typeof_multinomial_nb(val, c):
+    return multinomial_nb_type
+
+
+@box(BodoMultinomialNBType)
+def box_multinomial_nb(typ, val, c):
+    # See note in box_random_forest_classifier
+    c.pyapi.incref(val)
+    return val
+
+
+@unbox(BodoMultinomialNBType)
+def unbox_multinomial_nb(typ, obj, c):
+    # borrow a reference from Python
+    c.pyapi.incref(obj)
+    return NativeValue(obj)
+
+
+@overload(sklearn.naive_bayes.MultinomialNB, no_unliteral=True)
+def sklearn_naive_bayes_multinomialnb_overload(
+    alpha=1.0,
+    fit_prior=True,
+    class_prior=None,
+):
+    def _sklearn_naive_bayes_multinomialnb_impl(
+        alpha=1.0,
+        fit_prior=True,
+        class_prior=None,
+    ):  # pragma: no cover
+        with numba.objmode(m="multinomial_nb_type"):
+            m = sklearn.naive_bayes.MultinomialNB(
+                alpha=alpha,
+                fit_prior=fit_prior,
+                class_prior=class_prior,
+            )
+
+        return m
+
+    return _sklearn_naive_bayes_multinomialnb_impl
