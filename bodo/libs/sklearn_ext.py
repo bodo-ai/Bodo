@@ -1397,14 +1397,35 @@ def overload_multinomial_nb_model_fit(
 ):
     # HA: TODO checktype if dataframe or numpy array
     # else raise BodoError
+    # TODO: What to do if data is replicated?
+    # TODO: sample_weight
     def _model_multinomial_nb_fit_impl(
         m, X, y, sample_weight=None, _is_data_distributed=False
     ):  # pragma: no cover
 
-        # TODO: Rebalance the data X and y to be the same size on every rank
-        # HA: TODO Move gather columns here outside of objmode
+        # if _is_data_distributed:
+        # 1. Gather columns by rank
+        # Change to bodo equivalent
+        my_rank = bodo.get_rank()
+        nranks = bodo.get_size()
+        total_cols = X.shape[1]
+        # Gather specific columns to each rank. Each rank will have n consecutive columns
+        for i in range(nranks):
+            start = bodo.libs.distributed_api.get_start(total_cols, nranks, i)
+            end = bodo.libs.distributed_api.get_end(total_cols, nranks, i)
+            # Overriden. Need to only write when its your columns
+            if i == my_rank:
+                X_train = bodo.gatherv(X[:, start:end:1], root=i)
+            else:
+                bodo.gatherv(X[:, start:end:1], root=i)
+        # 2. Replicate y. Allgather
+        y_train = bodo.allgatherv(y, False)
+        # y_train = y_train.values.ravel()
+        # y_train = y_train.astype("int")
         with numba.objmode(m="multinomial_nb_type"):
-            m = fit_multinomial_nb(m, X, y, sample_weight, _is_data_distributed)
+            m = fit_multinomial_nb(
+                m, X_train, y_train, sample_weight, _is_data_distributed
+            )
 
         bodo.barrier()
 
@@ -1413,30 +1434,11 @@ def overload_multinomial_nb_model_fit(
     return _model_multinomial_nb_fit_impl
 
 
-def fit_multinomial_nb(m, X, y, sample_weight=None, _is_data_distributed=False):
+def fit_multinomial_nb(
+    m, X_train, y_train, sample_weight=None, _is_data_distributed=False
+):
     """Fit naive bayes Multinomial(parallel version)
     Since this model depends on having lots of columns, we do parallelization by columns"""
-    # TODO: check type of X and y
-    comm = MPI.COMM_WORLD
-    my_rank = comm.Get_rank()
-    nranks = comm.Get_size()
-    total_cols = X.shape[1]
-    # TODO: Check if data is replicated??
-    # 1. Find how many columns each rank should have
-    # ncols = bodo.libs.distributed_api.get_node_portion(total_cols, nranks, my_rank)
-    # 2. Gather specific columns to each rank. Each rank will have n consecutive columns
-    for i in range(nranks):
-        start = bodo.libs.distributed_api.get_start(total_cols, nranks, i)
-        end = bodo.libs.distributed_api.get_end(total_cols, nranks, i)
-        # Overriden. Need to only write when its your columns
-        if i == my_rank:
-            X_train = np.array(bodo.gatherv(X[:, start:end:1], root=i))
-        else:
-            bodo.gatherv(X[:, start:end:1], root=i)
-    # 3. Replicate y. Allgather
-    y_train = bodo.allgatherv(y, False)
-    # y_train = y_train.values.ravel()
-    y_train = y_train.astype("int")
     # 4. Create sklearn instance This is already created as m
     # Taken as it's from sklearn https://github.com/scikit-learn/scikit-learn/blob/0fb307bf3/sklearn/naive_bayes.py#L596
     # Except computation for feature probabilities
@@ -1449,19 +1451,13 @@ def fit_multinomial_nb(m, X, y, sample_weight=None, _is_data_distributed=False):
     if Y.shape[1] == 1:
         Y = np.concatenate((1 - Y, Y), axis=1)
 
-    print("-----------------------------------------------------")
-    # print("RANK: ", my_rank, "y_train:\n", y_train, "\nY:\n", Y)
-    # print(sample_weight)
-    print("RANK: ", my_rank, ", ", n_features, "\t", m.alpha)
-    print("-----------------------------------------------------")
-
     # LabelBinarizer().fit_transform() returns arrays with dtype=np.int64.
     # We convert it to np.float64 to support sample_weight consistently;
     # this means we also don't have to cast X to floating point
     # This is also part of it arguments
     if sample_weight is not None:
         Y = Y.astype(np.float64, copy=False)
-        sample_weight = _check_sample_weight(sample_weight, X)
+        sample_weight = _check_sample_weight(sample_weight, X_train)
         sample_weight = np.atleast_2d(sample_weight)
         Y *= sample_weight.T
     class_prior = m.class_prior
