@@ -1489,3 +1489,47 @@ def fit_multinomial_nb(m, X, y, y_classes=None, _is_data_distributed=False):
     # clf.feature_count_ = feature_count_T.T
 
     return m
+
+
+@overload_method(BodoMultinomialNBType, "predict", no_unliteral=True)
+def overload_multinomial_nb_model_predict(m, X):
+    def _model_predict_impl(m, X):  # pragma: no cover
+        # HA: TODO Move this part to new function and call it here
+        with numba.objmode(result="int64[:]"):
+            # currently we do data-parallel prediction
+            m.n_jobs = 1
+            if len(X) == 0:
+                # TODO If X is replicated this should be an error (same as sklearn)
+                result = np.empty(0, dtype=np.int64)
+            else:
+                result = m.predict(X).astype(np.int64).flatten()
+        return result
+
+    return _model_predict_impl
+
+
+@overload_method(BodoMultinomialNBType, "score", no_unliteral=True)
+def overload_multinomial_nb_model_score(
+    m,
+    X,
+    y,
+    sample_weight=None,
+    _is_data_distributed=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
+):
+    def _model_score_impl(
+        m, X, y, sample_weight=None, _is_data_distributed=False
+    ):  # pragma: no cover
+        # HA: TODO Move this part to new function and call it here
+        with numba.objmode(result="float64[:]"):
+            result = m.score(X, y, sample_weight=sample_weight)
+            if _is_data_distributed:
+                # replicate result so that the average is weighted based on
+                # the data size on each rank
+                result = np.full(len(y), result)
+            else:
+                result = np.array([result])
+        if _is_data_distributed:
+            result = bodo.allgatherv(result)
+        return result.mean()
+
+    return _model_score_impl
