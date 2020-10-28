@@ -1392,18 +1392,19 @@ def overload_multinomial_nb_model_fit(
     m,
     X,
     y,
+    sample_weight=None,
     _is_data_distributed=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
 ):
     # HA: TODO checktype if dataframe or numpy array
     # else raise BodoError
     def _model_multinomial_nb_fit_impl(
-        m, X, y, _is_data_distributed=False
+        m, X, y, sample_weight=None, _is_data_distributed=False
     ):  # pragma: no cover
 
         # TODO: Rebalance the data X and y to be the same size on every rank
         # HA: TODO Move gather columns here outside of objmode
         with numba.objmode(m="multinomial_nb_type"):
-            m = fit_multinomial_nb(m, X, y, _is_data_distributed)
+            m = fit_multinomial_nb(m, X, y, sample_weight, _is_data_distributed)
 
         bodo.barrier()
 
@@ -1420,6 +1421,7 @@ def fit_multinomial_nb(m, X, y, sample_weight=None, _is_data_distributed=False):
     my_rank = comm.Get_rank()
     nranks = comm.Get_size()
     total_cols = X.shape[1]
+    # TODO: Check if data is replicated??
     # 1. Find how many columns each rank should have
     # ncols = bodo.libs.distributed_api.get_node_portion(total_cols, nranks, my_rank)
     # 2. Gather specific columns to each rank. Each rank will have n consecutive columns
@@ -1446,6 +1448,12 @@ def fit_multinomial_nb(m, X, y, sample_weight=None, _is_data_distributed=False):
     m.classes_ = labelbin.classes_
     if Y.shape[1] == 1:
         Y = np.concatenate((1 - Y, Y), axis=1)
+
+    print("-----------------------------------------------------")
+    # print("RANK: ", my_rank, "y_train:\n", y_train, "\nY:\n", Y)
+    # print(sample_weight)
+    print("RANK: ", my_rank, ", ", n_features, "\t", m.alpha)
+    print("-----------------------------------------------------")
 
     # LabelBinarizer().fit_transform() returns arrays with dtype=np.int64.
     # We convert it to np.float64 to support sample_weight consistently;

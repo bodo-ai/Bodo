@@ -630,10 +630,9 @@ def test_kmeans(memory_leak_check):
 
 # --------------------Multinomial Naive Bayes Tests-----------------#
 def test_multinomial_nb():
-    # Test whether class priors are properly set.
-    # clf = MultinomialNB().fit(X2, y2)
-    # assert_array_almost_equal(np.log(np.array([2, 2, 2]) / 6.0),
-    #                          clf.class_log_prior_, 8)
+    """Test Multinomial Naive Bayes
+    Taken from https://github.com/scikit-learn/scikit-learn/blob/master/sklearn/tests/test_naive_bayes.py#L442
+    """
     X = rng.randint(5, size=(6, 100))
     y = np.array([1, 1, 2, 2, 3, 3])
 
@@ -655,20 +654,20 @@ def test_multinomial_nb():
         y_pred = clf.fit(X, y).predict(X)
         return y_pred
 
-    # check_func(
-    #    impl_predict,
-    #    (X, y),
-    #    py_output=y,
-    #    is_out_distributed=True,
-    # )
+    check_func(
+        impl_predict,
+        (X, y),
+        py_output=y,
+        is_out_distributed=True,
+    )
 
-    X = np.array([[1, 0], [1, 1]])
+    X = np.array([[1, 0, 0], [1, 1, 0]])
     y = np.array([0, 1])
 
     def test_alpha_vector(X, y):
         # Setting alpha=np.array with same length
         # as number of features should be fine
-        alpha = np.array([1, 2])
+        alpha = np.array([1, 2, 1])
         nb = MultinomialNB(alpha=alpha)
         nb.fit(X, y)
         return nb
@@ -678,5 +677,5 @@ def test_multinomial_nb():
         _get_dist_arg(np.array(X)),
         _get_dist_arg(np.array(y)),
     )
-    feature_prob = np.array([[1 / 2, 1 / 2], [2 / 5, 3 / 5]])
+    feature_prob = np.array([[2 / 5, 2 / 5, 1 / 5], [1 / 3, 1 / 2, 1 / 6]])
     np.testing.assert_array_almost_equal(nb.feature_log_prob_, np.log(feature_prob))
