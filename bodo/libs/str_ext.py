@@ -285,6 +285,7 @@ ll.add_symbol("init_string_const", hstr_ext.init_string_const)
 ll.add_symbol("get_c_str", hstr_ext.get_c_str)
 ll.add_symbol("str_to_int64", hstr_ext.str_to_int64)
 ll.add_symbol("str_to_float64", hstr_ext.str_to_float64)
+ll.add_symbol("str_to_float32", hstr_ext.str_to_float32)
 ll.add_symbol("get_str_len", hstr_ext.get_str_len)
 ll.add_symbol("str_from_float32", hstr_ext.str_from_float32)
 ll.add_symbol("str_from_float64", hstr_ext.str_from_float64)
@@ -475,11 +476,25 @@ def cast_str_to_float64(context, builder, fromty, toty, val):
     return builder.call(fn, (val,))
 
 
+@lower_cast(StdStringType, types.float32)
+def cast_str_to_float32(context, builder, fromty, toty, val):
+    fnty = lir.FunctionType(lir.FloatType(), [lir.IntType(8).as_pointer()])
+    fn = builder.module.get_or_insert_function(fnty, name="str_to_float32")
+    return builder.call(fn, (val,))
+
+
 # XXX handle unicode until Numba supports float(str)
 @lower_cast(string_type, types.float64)
 def cast_unicode_str_to_float64(context, builder, fromty, toty, val):
     std_str = gen_unicode_to_std_str(context, builder, val)
     return cast_str_to_float64(context, builder, std_str_type, toty, std_str)
+
+
+# XXX handle unicode until Numba supports float(str)
+@lower_cast(string_type, types.float32)
+def cast_unicode_str_to_float32(context, builder, fromty, toty, val):
+    std_str = gen_unicode_to_std_str(context, builder, val)
+    return cast_str_to_float32(context, builder, std_str_type, toty, std_str)
 
 
 @numba.njit(cache=True)
