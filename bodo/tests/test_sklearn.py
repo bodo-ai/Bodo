@@ -633,6 +633,7 @@ def test_multinomial_nb():
     """Test Multinomial Naive Bayes
     Taken from https://github.com/scikit-learn/scikit-learn/blob/master/sklearn/tests/test_naive_bayes.py#L442
     """
+    rng = np.random.RandomState(0)
     X = rng.randint(5, size=(6, 100))
     y = np.array([1, 1, 2, 2, 3, 3])
 
@@ -679,3 +680,17 @@ def test_multinomial_nb():
     )
     feature_prob = np.array([[2 / 5, 2 / 5, 1 / 5], [1 / 3, 1 / 2, 1 / 6]])
     np.testing.assert_array_almost_equal(nb.feature_log_prob_, np.log(feature_prob))
+
+
+def test_multinomial_nb_score():
+    rng = np.random.RandomState(0)
+    X = rng.randint(5, size=(6, 100))
+    y = np.array([1, 1, 2, 2, 3, 3])
+
+    def impl(X, y):
+        clf = MultinomialNB()
+        clf.fit(X, y)
+        score = clf.score(X, y)
+        return score
+
+    check_func(impl, (X, y))
