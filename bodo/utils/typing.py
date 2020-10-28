@@ -534,7 +534,11 @@ def get_overload_const_func(val):
 def is_heterogeneous_tuple_type(t):
     """check if 't' is a heterogeneous tuple type (or similar, e.g. constant list)"""
     if is_overload_constant_list(t):
-        t = bodo.typeof(tuple(get_overload_const_list(t)))
+        # LiteralList values may be non-constant
+        if isinstance(t, types.LiteralList):
+            t = types.BaseTuple.from_types(t.types)
+        else:
+            t = bodo.typeof(tuple(get_overload_const_list(t)))
 
     return isinstance(t, types.BaseTuple) and not isinstance(t, types.UniTuple)
 

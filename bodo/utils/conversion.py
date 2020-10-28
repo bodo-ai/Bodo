@@ -940,7 +940,12 @@ def to_tuple(val):  # pragma: no cover
 def overload_to_tuple(val):
     """convert tuple-like 'val' (e.g. constant list) to a tuple"""
     if not isinstance(val, types.BaseTuple) and is_overload_constant_list(val):
-        n_values = len(get_overload_const_list(val))
+        # LiteralList values may be non-constant
+        n_values = len(
+            val.types
+            if isinstance(val, types.LiteralList)
+            else get_overload_const_list(val)
+        )
         func_text = "def f(val):\n"
         res = ",".join(f"val[{i}]" for i in range(n_values))
         func_text += f"  return ({res},)\n"

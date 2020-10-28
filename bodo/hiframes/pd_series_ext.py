@@ -181,6 +181,7 @@ class HeterogeneousSeriesType(types.Type):
 
 def _get_series_array_type(dtype):
     """get underlying default array type of series based on its dtype"""
+    dtype = types.unliteral(dtype)
 
     # UDFs may return lists, but we store array of array for output
     if isinstance(dtype, types.List):
@@ -604,14 +605,19 @@ class SeriesAttribute(AttributeTemplate):
                 get_udf_error_msg(f"Series.{fname}()", e), locs_in_msg=[e.loc]
             )
 
-        data_arr = get_udf_out_arr_type(f_return_type)
-        # Series.map codegen returns np bool array instead of boolean_array currently
-        # TODO: return nullable boolean_array
-        if f_return_type == types.bool_:
-            data_arr = types.Array(types.bool_, 1, "C")
-        return signature(
-            SeriesType(f_return_type, data_arr, ary.index, ary.name_typ), (func,)
-        ).replace(pysig=pysig)
+        # output is dataframe if UDF returns a Series
+        if isinstance(f_return_type, HeterogeneousSeriesType):
+            arrs = tuple(_get_series_array_type(t) for t in f_return_type.data.types)
+            ret_type = bodo.DataFrameType(arrs, ary.index, tuple(range(len(arrs))))
+        else:
+            data_arr = get_udf_out_arr_type(f_return_type)
+            # Series.map codegen returns np bool array instead of boolean_array currently
+            # TODO: return nullable boolean_array
+            if f_return_type == types.bool_:
+                data_arr = types.Array(types.bool_, 1, "C")
+            ret_type = SeriesType(f_return_type, data_arr, ary.index, ary.name_typ)
+
+        return signature(ret_type, (func,)).replace(pysig=pysig)
 
     @bound_function("series.map", no_unliteral=True)
     def resolve_map(self, ary, args, kws):

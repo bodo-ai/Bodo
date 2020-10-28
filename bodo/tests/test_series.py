@@ -1573,6 +1573,16 @@ def test_series_heter_constructor(memory_leak_check):
     check_func(impl1, (), dist_test=False)
 
 
+def test_series_apply_df_output(memory_leak_check):
+    """test Series.apply() with dataframe output"""
+
+    def impl1(S):
+        return S.apply(lambda a: pd.Series([a, "AA"]))
+
+    S = pd.Series([1.0, 2.0, 3.0, 4.0, 5.0])
+    check_func(impl1, (S,))
+
+
 @pytest.mark.slow
 def test_series_apply_extra_arg(memory_leak_check):
     def test_impl(S, D):
