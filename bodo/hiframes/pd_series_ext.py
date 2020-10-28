@@ -607,8 +607,17 @@ class SeriesAttribute(AttributeTemplate):
 
         # output is dataframe if UDF returns a Series
         if isinstance(f_return_type, HeterogeneousSeriesType):
+            # NOTE: get_const_func_output_type() adds const_info attribute for Series
+            # output
+            _, index_vals = f_return_type.const_info
             arrs = tuple(_get_series_array_type(t) for t in f_return_type.data.types)
-            ret_type = bodo.DataFrameType(arrs, ary.index, tuple(range(len(arrs))))
+            ret_type = bodo.DataFrameType(arrs, ary.index, index_vals)
+        elif isinstance(f_return_type, SeriesType):
+            n_cols, index_vals = f_return_type.const_info
+            arrs = tuple(
+                _get_series_array_type(f_return_type.dtype) for _ in range(n_cols)
+            )
+            ret_type = bodo.DataFrameType(arrs, ary.index, index_vals)
         else:
             data_arr = get_udf_out_arr_type(f_return_type)
             # Series.map codegen returns np bool array instead of boolean_array currently

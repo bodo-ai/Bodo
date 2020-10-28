@@ -103,6 +103,7 @@ from bodo.utils.transform import (
     compile_func_single_block,
     extract_keyvals_from_struct_map,
     func_has_assertions,
+    gen_const_tup,
     gen_init_varsize_alloc_sizes,
     gen_varsize_item_sizes,
     get_call_expr_arg,
@@ -2220,8 +2221,8 @@ class SeriesPass:
             )
         if is_df_output:
             data_arrs = ", ".join(f"S{i}" for i in range(n_out_cols))
-            col_names = ", ".join(f"{i}" for i in range(n_out_cols))
-            func_text += f"  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({data_arrs},), index, ({col_names},))\n"
+            col_names = gen_const_tup(self.typemap[lhs.name].columns)
+            func_text += f"  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({data_arrs},), index, {col_names})\n"
         else:
             func_text += (
                 "  return bodo.hiframes.pd_series_ext.init_series(S, index, name)\n"
