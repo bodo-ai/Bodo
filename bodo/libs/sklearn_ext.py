@@ -1395,49 +1395,55 @@ def overload_multinomial_nb_model_fit(
     sample_weight=None,
     _is_data_distributed=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
 ):
-    X = bodo.utils.conversion.coerce_to_ndarray(X)
-    y = bodo.utils.conversion.coerce_to_ndarray(y)
-    # HA: TODO change dataframe to numpy array
-    # if isinstance(X, bodo.hiframes.pd_dataframe_ext.DataFrameType):
-    #    X = X.to_numpy()
-    # else raise BodoError
-    # TODO: What to do if data is replicated?
-    # TODO: sample_weight
-    def _model_multinomial_nb_fit_impl(
-        m, X, y, sample_weight=None, _is_data_distributed=False
-    ):  # pragma: no cover
+    """ MultinomialNB fit overload """
+    # If data is replicated, run scikit-learn directly
+    if is_overload_false(_is_data_distributed):
 
-        # if _is_data_distributed:
-        # 1. Gather columns by rank
-        # Change to bodo equivalent
-        my_rank = bodo.get_rank()
-        nranks = bodo.get_size()
-        total_cols = X.shape[1]
-        # Gather specific columns to each rank. Each rank will have n consecutive columns
-        for i in range(nranks):
-            start = bodo.libs.distributed_api.get_start(total_cols, nranks, i)
-            end = bodo.libs.distributed_api.get_end(total_cols, nranks, i)
-            # Overriden. Need to only write when its your columns
-            if i == my_rank:
-                # X_train = bodo.gatherv(X.iloc[:, start:end:1], root=i)
-                # else:
-                X_train = bodo.gatherv(X[:, start:end:1], root=i)
-            else:
-                bodo.gatherv(X[:, start:end:1], root=i)
-        # 2. Replicate y. Allgather
-        y_train = bodo.allgatherv(y, False)
-        # y_train = y_train.values.ravel()
-        # y_train = y_train.astype("int")
-        with numba.objmode(m="multinomial_nb_type"):
-            m = fit_multinomial_nb(
-                m, X_train, y_train, sample_weight, _is_data_distributed
-            )
+        def _naive_bayes_multinomial_impl(
+            m, X, y, sample_weight=None, _is_data_distributed=False
+        ):  # pragma no cover
+            with numba.objmode():
+                m.fit(X, y, sample_weight)
+            return m
 
-        bodo.barrier()
+        return _naive_bayes_multinomial_impl
+    else:
+        # Attempt to change data to numpy array. Any data that fails means, we don't support
+        X = bodo.utils.conversion.coerce_to_ndarray(X)
+        y = bodo.utils.conversion.coerce_to_ndarray(y)
+        # HA: TODO change dataframe to numpy array
+        # This complains about to_numpy being not attribute for DataFrameType
+        # if isinstance(X, bodo.hiframes.pd_dataframe_ext.DataFrameType):
+        #    X = X.to_numpy()
+        # TODO: sample_weight (future enhancement)
+        def _model_multinomial_nb_fit_impl(
+            m, X, y, sample_weight=None, _is_data_distributed=False
+        ):  # pragma: no cover
 
-        return m
+            my_rank = bodo.get_rank()
+            nranks = bodo.get_size()
+            total_cols = X.shape[1]
+            # Gather specific columns to each rank. Each rank will have n consecutive columns
+            for i in range(nranks):
+                start = bodo.libs.distributed_api.get_start(total_cols, nranks, i)
+                end = bodo.libs.distributed_api.get_end(total_cols, nranks, i)
+                # Only write when its your columns
+                if i == my_rank:
+                    X_train = bodo.gatherv(X[:, start:end:1], root=i)
+                else:
+                    bodo.gatherv(X[:, start:end:1], root=i)
+            # Replicate y in all ranks
+            y_train = bodo.allgatherv(y, False)
+            with numba.objmode(m="multinomial_nb_type"):
+                m = fit_multinomial_nb(
+                    m, X_train, y_train, sample_weight, _is_data_distributed
+                )
 
-    return _model_multinomial_nb_fit_impl
+            bodo.barrier()
+
+            return m
+
+        return _model_multinomial_nb_fit_impl
 
 
 def fit_multinomial_nb(
@@ -1445,9 +1451,8 @@ def fit_multinomial_nb(
 ):
     """Fit naive bayes Multinomial(parallel version)
     Since this model depends on having lots of columns, we do parallelization by columns"""
-    # 4. Create sklearn instance This is already created as m
+    # 1. Compute class log probabilities
     # Taken as it's from sklearn https://github.com/scikit-learn/scikit-learn/blob/0fb307bf3/sklearn/naive_bayes.py#L596
-    # Except computation for feature probabilities
     m._check_X_y(X_train, y_train)
     _, n_features = X_train.shape
     m.n_features_ = n_features
@@ -1472,21 +1477,22 @@ def fit_multinomial_nb(
     m._count(X_train.astype(np.float64), Y)
     alpha = m._check_alpha()
     m._update_class_log_prior(class_prior=class_prior)
+    # 2. Computation for feature probabilities
     # Our own implementation for _update_feature_log_prob
     # Probability cannot be computed in parallel as we need total number of all features per class.
     # P(Feature | class) = #feature in class / #all features in class
 
-    # 5. Compute feature probability
-    # 5a. Add alpha and compute sum of all features each rank has per class
+    # 3. Compute feature probability
+    # 3a. Add alpha and compute sum of all features each rank has per class
     smoothed_fc = m.feature_count_ + alpha
     smoothed_cc = smoothed_fc.sum(axis=1)
-    # 5b. Allreduce to get sum of all features / class
+    # 3b. Allreduce to get sum of all features / class
     sum_op = bodo.libs.distributed_api.Reduce_Type.Sum.value
     # (classes, )
     smoothed_cc = bodo.libs.distributed_api.dist_reduce(smoothed_cc, np.int32(sum_op))
-    # 5c. Each rank compute log probability for its own set of features.
+    # 3c. Each rank compute log probability for its own set of features.
     sub_feature_log_prob_ = np.log(smoothed_fc) - np.log(smoothed_cc.reshape(-1, 1))
-    # 6. Allgather the log features so each rank has full model. This is the one used in predict
+    # 4. Allgather the log features so each rank has full model. This is the one used in predict
     # Allgather combines by rows. Therefore, transpose before sending and after receiving
     sub_log_feature_T = sub_feature_log_prob_.T
     full_log_feature_T = bodo.allgatherv(sub_log_feature_T, False)
@@ -1504,6 +1510,8 @@ def fit_multinomial_nb(
 
 @overload_method(BodoMultinomialNBType, "predict", no_unliteral=True)
 def overload_multinomial_nb_model_predict(m, X):
+    """Overload Multinomial predict. (Data parallelization)"""
+
     def _model_predict_impl(m, X):  # pragma: no cover
         # HA: TODO Move this part to new function and call it here
         with numba.objmode(result="int64[:]"):
@@ -1527,6 +1535,8 @@ def overload_multinomial_nb_model_score(
     sample_weight=None,
     _is_data_distributed=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
 ):
+    """Overload Multinomial score."""
+
     def _model_score_impl(
         m, X, y, sample_weight=None, _is_data_distributed=False
     ):  # pragma: no cover

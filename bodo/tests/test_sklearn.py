@@ -662,6 +662,14 @@ def test_multinomial_nb():
         is_out_distributed=True,
     )
 
+    check_func(
+        impl_predict,
+        (X, y),
+        py_output=y,
+        is_out_distributed=False,
+        only_seq=True,
+    )
+
     X = np.array([[1, 0, 0], [1, 1, 0]])
     y = np.array([0, 1])
 
