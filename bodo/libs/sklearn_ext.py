@@ -1384,3 +1384,108 @@ def sklearn_naive_bayes_multinomialnb_overload(
         return m
 
     return _sklearn_naive_bayes_multinomialnb_impl
+
+
+@overload_method(BodoMultinomialNBType, "fit", no_unliteral=True)
+def overload_multinomial_nb_model_fit(
+    m,
+    X,
+    y,
+    _is_data_distributed=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
+):
+    # HA: TODO checktype if dataframe or numpy array
+    # else raise BodoError
+    def _model_multinomial_nb_fit_impl(
+        m, X, y, _is_data_distributed=False
+    ):  # pragma: no cover
+
+        # TODO: Rebalance the data X and y to be the same size on every rank
+        # HA: TODO Move gather columns here outside of objmode
+        with numba.objmode(m="multinomial_nb_type"):
+            m = fit_multinomial_nb(m, X, y, _is_data_distributed)
+
+        bodo.barrier()
+
+        return m
+
+    return _model_multinomial_nb_fit_impl
+
+
+def fit_multinomial_nb(m, X, y, y_classes=None, _is_data_distributed=False):
+    """Fit naive bayes Multinomial(parallel version)
+    Since this model depends on having lots of columns, we do parallelization by columns"""
+    # TODO: check type of X and y
+    comm = MPI.COMM_WORLD
+    my_rank = comm.Get_rank()
+    nranks = comm.Get_size()
+    total_cols = X.shape[1]
+    # 1. Find how many columns each rank should have
+    # ncols = bodo.libs.distributed_api.get_node_portion(total_cols, nranks, my_rank)
+    # 2. Gather specific columns to each rank. Each rank will have n consecutive columns
+    for i in range(nranks):
+        start = bodo.libs.distributed_api.get_start(total_cols, nranks, i)
+        end = bodo.libs.distributed_api.get_end(total_cols, nranks, i)
+        # Overriden. Need to only write when its your columns
+        if i == my_rank:
+            X_train = np.array(bodo.gatherv(X[:, start:end:1], root=i))
+        else:
+            bodo.gatherv(X[:, start:end:1], root=i)
+    # 3. Replicate y. Allgather
+    y_train = bodo.allgatherv(y, False)
+    # y_train = y_train.values.ravel()
+    y_train = y_train.astype("int")
+    # 4. Create sklearn instance This is already created as m
+    # Taken as it's from sklearn https://github.com/scikit-learn/scikit-learn/blob/0fb307bf3/sklearn/naive_bayes.py#L596
+    # Except computation for feature probabilities
+    m._check_X_y(X_train, y_train)
+    _, n_features = X_train.shape
+    m.n_features_ = n_features
+    labelbin = LabelBinarizer()
+    Y = labelbin.fit_transform(y_train)
+    m.classes_ = labelbin.classes_
+    if Y.shape[1] == 1:
+        Y = np.concatenate((1 - Y, Y), axis=1)
+
+    # LabelBinarizer().fit_transform() returns arrays with dtype=np.int64.
+    # We convert it to np.float64 to support sample_weight consistently;
+    # this means we also don't have to cast X to floating point
+    # This is also part of it arguments
+    if m.sample_weight is not None:
+        Y = Y.astype(np.float64, copy=False)
+        sample_weight = m._check_sample_weight(m.sample_weight, X)
+        sample_weight = np.atleast_2d(sample_weight)
+        Y *= sample_weight.T
+    class_prior = m.class_prior
+    n_effective_classes = Y.shape[1]
+    m._init_counters(n_effective_classes, n_features)
+    m._count(X_train.astype(np.float64), Y)
+    alpha = m._check_alpha()
+    m._update_class_log_prior(class_prior=class_prior)
+    # Our own implementation for _update_feature_log_prob
+    # Probability cannot be computed in parallel as we need total number of all features per class.
+    # P(Feature | class) = #feature in class / #all features in class
+
+    # 5. Compute feature probability
+    # 5a. Add alpha and compute sum of all features each rank has per class
+    smoothed_fc = m.feature_count_ + alpha
+    smoothed_cc = smoothed_fc.sum(axis=1)
+    # 5b. Allreduce to get sum of all features / class
+    sum_op = bodo.libs.distributed_api.Reduce_Type.Sum.value
+    # (classes, )
+    smoothed_cc = bodo.libs.distributed_api.dist_reduce(smoothed_cc, np.int32(sum_op))
+    # 5c. Each rank compute log probability for its own set of features.
+    sub_feature_log_prob_ = np.log(smoothed_fc) - np.log(smoothed_cc.reshape(-1, 1))
+    # 6. Allgather the log features so each rank has full model. This is the one used in predict
+    # Allgather combines by rows. Therefore, transpose before sending and after receiving
+    sub_log_feature_T = sub_feature_log_prob_.T
+    full_log_feature_T = bodo.allgatherv(sub_log_feature_T, False)
+    # Final shape (n_classes, n_features)
+    m.feature_log_prob_ = full_log_feature_T.T
+    m.n_features_ = m.feature_log_prob_.shape[1]
+
+    # Replicate feature_count. Not now. will see if users need it.
+    # feature_count_T = (clf.feature_count_).T
+    # feature_count_T = bodo.allgatherv(feature_count_T, False)
+    # clf.feature_count_ = feature_count_T.T
+
+    return m
