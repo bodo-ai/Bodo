@@ -1562,6 +1562,17 @@ def test_series_apply_kw(memory_leak_check):
     check_func(test_impl, (S,))
 
 
+def test_series_heter_constructor(memory_leak_check):
+    """
+    test creating Series with heterogeneous values
+    """
+
+    def impl1():
+        return pd.Series([1, "A"], ["B", "C"])
+
+    check_func(impl1, (), dist_test=False)
+
+
 @pytest.mark.slow
 def test_series_apply_extra_arg(memory_leak_check):
     def test_impl(S, D):
