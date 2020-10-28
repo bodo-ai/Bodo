@@ -12,6 +12,7 @@ from sklearn.datasets import make_classification, make_regression
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import SGDClassifier, SGDRegressor
 from sklearn.metrics import f1_score, precision_score, recall_score
+from sklearn.naive_bayes import MultinomialNB
 from sklearn.preprocessing import StandardScaler
 from sklearn.utils._testing import assert_allclose, assert_array_equal
 from sklearn.utils.validation import check_random_state
@@ -625,3 +626,57 @@ def test_kmeans(memory_leak_check):
         ),
         is_out_distributed=True,
     )
+
+
+# --------------------Multinomial Naive Bayes Tests-----------------#
+def test_multinomial_nb():
+    # Test whether class priors are properly set.
+    # clf = MultinomialNB().fit(X2, y2)
+    # assert_array_almost_equal(np.log(np.array([2, 2, 2]) / 6.0),
+    #                          clf.class_log_prior_, 8)
+    X = rng.randint(5, size=(6, 100))
+    y = np.array([1, 1, 2, 2, 3, 3])
+
+    def impl_fit(X, y):
+        clf = MultinomialNB()
+        clf.fit(X, y)
+        return clf
+
+    clf = bodo.jit(distributed=["X", "y"])(impl_fit)(
+        _get_dist_arg(np.array(X)),
+        _get_dist_arg(np.array(y)),
+    )
+    np.testing.assert_array_almost_equal(
+        np.log(np.array([2, 2, 2]) / 6.0), clf.class_log_prior_, 8
+    )
+
+    def impl_predict(X, y):
+        clf = MultinomialNB()
+        y_pred = clf.fit(X, y).predict(X)
+        return y_pred
+
+    # check_func(
+    #    impl_predict,
+    #    (X, y),
+    #    py_output=y,
+    #    is_out_distributed=True,
+    # )
+
+    X = np.array([[1, 0], [1, 1]])
+    y = np.array([0, 1])
+
+    def test_alpha_vector(X, y):
+        # Setting alpha=np.array with same length
+        # as number of features should be fine
+        alpha = np.array([1, 2])
+        nb = MultinomialNB(alpha=alpha)
+        nb.fit(X, y)
+        return nb
+
+    # Test feature probabilities uses pseudo-counts (alpha)
+    nb = bodo.jit(distributed=["X", "y"])(test_alpha_vector)(
+        _get_dist_arg(np.array(X)),
+        _get_dist_arg(np.array(y)),
+    )
+    feature_prob = np.array([[1 / 2, 1 / 2], [2 / 5, 3 / 5]])
+    np.testing.assert_array_almost_equal(nb.feature_log_prob_, np.log(feature_prob))

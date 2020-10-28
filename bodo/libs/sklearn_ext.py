@@ -26,6 +26,7 @@ from numba.extending import (
 from sklearn.metrics import hinge_loss, log_loss, mean_squared_error
 from sklearn.naive_bayes import MultinomialNB
 from sklearn.preprocessing import LabelBinarizer
+from sklearn.utils.validation import _check_sample_weight
 
 import bodo
 from bodo.libs.distributed_api import (
@@ -1411,7 +1412,7 @@ def overload_multinomial_nb_model_fit(
     return _model_multinomial_nb_fit_impl
 
 
-def fit_multinomial_nb(m, X, y, y_classes=None, _is_data_distributed=False):
+def fit_multinomial_nb(m, X, y, sample_weight=None, _is_data_distributed=False):
     """Fit naive bayes Multinomial(parallel version)
     Since this model depends on having lots of columns, we do parallelization by columns"""
     # TODO: check type of X and y
@@ -1450,9 +1451,9 @@ def fit_multinomial_nb(m, X, y, y_classes=None, _is_data_distributed=False):
     # We convert it to np.float64 to support sample_weight consistently;
     # this means we also don't have to cast X to floating point
     # This is also part of it arguments
-    if m.sample_weight is not None:
+    if sample_weight is not None:
         Y = Y.astype(np.float64, copy=False)
-        sample_weight = m._check_sample_weight(m.sample_weight, X)
+        sample_weight = _check_sample_weight(sample_weight, X)
         sample_weight = np.atleast_2d(sample_weight)
         Y *= sample_weight.T
     class_prior = m.class_prior
