@@ -598,36 +598,6 @@ def pd_timedelta_abs(lhs):
         return impl
 
 
-@overload_method(PDTimeDeltaType, "floor", no_unliteral=True)
-def pd_timedelta_floor(td, freq):
-    def impl(td, freq):  # pragma: no cover
-        if freq == "D":
-            return pd.Timedelta(days=td.days)
-        if freq == "H":
-            return pd.Timedelta(
-                days=td.days, seconds=td.seconds - (td.seconds % (60 * 60))
-            )
-        if freq == "min" or freq == "T":
-            return pd.Timedelta(days=td.days, seconds=td.seconds - (td.seconds % (60)))
-        if freq == "S":
-            return pd.Timedelta(days=td.days, seconds=td.seconds)
-        if freq == "ms" or freq == "L":
-            return pd.Timedelta(
-                days=td.days,
-                seconds=td.seconds,
-                microseconds=td.microseconds - (td.microseconds % 1000),
-            )
-        if freq == "U" or freq == "us":
-            return pd.Timedelta(
-                days=td.days, seconds=td.seconds, microseconds=td.microseconds
-            )
-        if freq == "N":
-            return td
-        raise ValueError("Incorrect Frequency specification")
-
-    return impl
-
-
 # 1.Define a new Numba type class by subclassing the Type class
 #   Define a singleton Numba type instance for a non-parametric type
 class DatetimeTimeDeltaType(types.Type):

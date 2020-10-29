@@ -42,6 +42,7 @@ import bodo.libs.str_ext
 import bodo.utils.utils
 from bodo.hiframes.datetime_date_ext import _ord2ymd, _ymd2ord, get_isocalendar
 from bodo.hiframes.datetime_timedelta_ext import (
+    PDTimeDeltaType,
     _no_input,
     datetime_timedelta_type,
     pd_timedelta_type,
@@ -1319,51 +1320,87 @@ def toordinal(date):
     return impl
 
 
-@overload_method(PandasTimestampType, "floor", no_unliteral=True)
-def timestamp_floor(ts, freq):
-    def impl(ts, freq):  # pragma: no cover
-        if freq == "D":
-            return pd.Timestamp(year=ts.year, month=ts.month, day=ts.day)
-        if freq == "H":
-            return pd.Timestamp(year=ts.year, month=ts.month, day=ts.day, hour=ts.hour)
-        if freq == "min" or freq == "T":
-            return pd.Timestamp(
-                year=ts.year, month=ts.month, day=ts.day, hour=ts.hour, minute=ts.minute
+# Relevant Pandas code
+# https://github.com/pandas-dev/pandas/blob/009ffa8d2c019ffb757fb0a4b53cc7a9a948afdd/pandas/_libs/tslibs/timestamps.pyx#L1228
+# https://github.com/pandas-dev/pandas/blob/009ffa8d2c019ffb757fb0a4b53cc7a9a948afdd/pandas/_libs/tslibs/timestamps.pyx#L1189
+# https://github.com/pandas-dev/pandas/blob/009ffa8d2c019ffb757fb0a4b53cc7a9a948afdd/pandas/_libs/tslibs/timestamps.pyx#L1149
+# https://github.com/pandas-dev/pandas/blob/009ffa8d2c019ffb757fb0a4b53cc7a9a948afdd/pandas/_libs/tslibs/timedeltas.pyx#L1219
+def overload_freq_methods(method):
+    def freq_overload(td, freq):
+        freq_conditions = [
+            "freq == 'D'",
+            "freq == 'H'",
+            "freq == 'min' or freq == 'T'",
+            "freq == 'S'",
+            "freq == 'ms' or freq == 'L'",
+            "freq == 'U' or freq == 'us'",
+            "freq == 'N'",
+        ]
+        unit_values = [
+            24 * 60 * 60 * 1000000 * 1000,
+            60 * 60 * 1000000 * 1000,
+            60 * 1000000 * 1000,
+            1000000 * 1000,
+            1000 * 1000,
+            1000,
+            1,
+        ]
+        func_text = "def impl(td, freq):\n"
+        for i, cond in enumerate(freq_conditions):
+            cond_label = "if" if i == 0 else "elif"
+            func_text += "    {} {}:\n".format(cond_label, cond)
+            func_text += "        unit_value = {}\n".format(unit_values[i])
+        func_text += "    else:\n"
+        func_text += "        raise ValueError('Incorrect Frequency specification')\n"
+        if td == pd_timedelta_type:
+            func_text += "    return pd.Timedelta(unit_value * np.int64(np.{}(td.value / unit_value)))\n".format(
+                method
             )
-        if freq == "S":
-            return pd.Timestamp(
-                year=ts.year,
-                month=ts.month,
-                day=ts.day,
-                hour=ts.hour,
-                minute=ts.minute,
-                second=ts.second,
+        elif td == pandas_timestamp_type:
+            if method == "ceil":
+                func_text += (
+                    "    value = td.value + np.remainder(-td.value, unit_value)\n"
+                )
+            if method == "floor":
+                func_text += (
+                    "    value = td.value - np.remainder(td.value, unit_value)\n"
+                )
+            if method == "round":
+                # Unit value is always even except value = 1
+                func_text += "    if unit_value == 1:\n"
+                func_text += "        value = td.value\n"
+                func_text += "    else:\n"
+                func_text += (
+                    "        quotient, remainder = np.divmod(td.value, unit_value)\n"
+                )
+                func_text += "        mask = np.logical_or(remainder > (unit_value // 2), np.logical_and(remainder == (unit_value // 2), quotient % 2))\n"
+                func_text += "        if mask:\n"
+                func_text += "            quotient = quotient + 1\n"
+                func_text += "        value = quotient * unit_value\n"
+            func_text += (
+                "    return pd.Timestamp(year=1970, month=1, day=1, nanosecond=value)\n"
             )
-        if freq == "ms" or freq == "L":
-            return pd.Timestamp(
-                year=ts.year,
-                month=ts.month,
-                day=ts.day,
-                hour=ts.hour,
-                minute=ts.minute,
-                second=ts.second,
-                microsecond=ts.microsecond - (ts.microsecond % 1000),
-            )
-        if freq == "U" or freq == "us":
-            return pd.Timestamp(
-                year=ts.year,
-                month=ts.month,
-                day=ts.day,
-                hour=ts.hour,
-                minute=ts.minute,
-                second=ts.second,
-                microsecond=ts.microsecond,
-            )
-        if freq == "N":
-            return ts
-        raise ValueError("Incorrect Frequency specification")
+        loc_vars = {}
+        exec(
+            func_text,
+            {"np": np, "pd": pd},
+            loc_vars,
+        )
+        impl = loc_vars["impl"]
+        return impl
 
-    return impl
+    return freq_overload
+
+
+def _install_freq_methods():
+    freq_methods = ["ceil", "floor", "round"]
+    for method in freq_methods:
+        overload_impl = overload_freq_methods(method)
+        overload_method(PDTimeDeltaType, method, no_unliteral=True)(overload_impl)
+        overload_method(PandasTimestampType, method, no_unliteral=True)(overload_impl)
+
+
+_install_freq_methods()
 
 
 # @intrinsic

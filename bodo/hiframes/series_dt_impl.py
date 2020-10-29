@@ -391,54 +391,68 @@ def dt_strftime(S_dt, format_str):
     return impl
 
 
-@overload_method(
-    SeriesDatetimePropertiesType, "floor", inline="always", no_unliteral=True
-)
-def dt_floor_overload(S_dt, freq, ambiguous="raise", nonexistent="raise"):
-    if S_dt.stype.dtype != types.NPTimedelta(
-        "ns"
-    ) and S_dt.stype.dtype != types.NPDatetime(
-        "ns"
-    ):  # pragma: no cover
-        return
-    unsupported_args = dict(ambiguous=ambiguous, nonexistent=nonexistent)
-    floor_defaults = dict(ambiguous="raise", nonexistent="raise")
-    check_unsupported_args("floor", unsupported_args, floor_defaults)
-    func_text = "def impl(S_dt, freq, ambiguous='raise', nonexistent='raise'):\n"
-    func_text += "    S = S_dt._obj\n"
-    func_text += "    A = bodo.hiframes.pd_series_ext.get_series_data(S)\n"
-    func_text += "    index = bodo.hiframes.pd_series_ext.get_series_index(S)\n"
-    func_text += "    name = bodo.hiframes.pd_series_ext.get_series_name(S)\n"
-    func_text += "    numba.parfors.parfor.init_prange()\n"
-    func_text += "    n = len(A)\n"
-    if S_dt.stype.dtype == types.NPTimedelta("ns"):
-        func_text += "    B = np.empty(n, np.dtype('timedelta64[ns]'))\n"
-    else:
-        func_text += "    B = np.empty(n, np.dtype('datetime64[ns]'))\n"
-    func_text += "    for i in numba.parfors.parfor.internal_prange(n):\n"
-    func_text += "        if bodo.libs.array_kernels.isna(A, i):\n"
-    func_text += "            bodo.libs.array_kernels.setna(B, i)\n"
-    func_text += "            continue\n"
-    if S_dt.stype.dtype == types.NPTimedelta("ns"):
-        front_convert = (
-            "bodo.hiframes.pd_timestamp_ext.convert_numpy_timedelta64_to_pd_timedelta"
+def create_timedelta_freq_overload(method):
+    def freq_overload(S_dt, freq, ambiguous="raise", nonexistent="raise"):
+        if S_dt.stype.dtype != types.NPTimedelta(
+            "ns"
+        ) and S_dt.stype.dtype != types.NPDatetime(
+            "ns"
+        ):  # pragma: no cover
+            return
+        unsupported_args = dict(ambiguous=ambiguous, nonexistent=nonexistent)
+        floor_defaults = dict(ambiguous="raise", nonexistent="raise")
+        check_unsupported_args("floor", unsupported_args, floor_defaults)
+        func_text = "def impl(S_dt, freq, ambiguous='raise', nonexistent='raise'):\n"
+        func_text += "    S = S_dt._obj\n"
+        func_text += "    A = bodo.hiframes.pd_series_ext.get_series_data(S)\n"
+        func_text += "    index = bodo.hiframes.pd_series_ext.get_series_index(S)\n"
+        func_text += "    name = bodo.hiframes.pd_series_ext.get_series_name(S)\n"
+        func_text += "    numba.parfors.parfor.init_prange()\n"
+        func_text += "    n = len(A)\n"
+        if S_dt.stype.dtype == types.NPTimedelta("ns"):
+            func_text += "    B = np.empty(n, np.dtype('timedelta64[ns]'))\n"
+        else:
+            func_text += "    B = np.empty(n, np.dtype('datetime64[ns]'))\n"
+        func_text += "    for i in numba.parfors.parfor.internal_prange(n):\n"
+        func_text += "        if bodo.libs.array_kernels.isna(A, i):\n"
+        func_text += "            bodo.libs.array_kernels.setna(B, i)\n"
+        func_text += "            continue\n"
+        if S_dt.stype.dtype == types.NPTimedelta("ns"):
+            front_convert = "bodo.hiframes.pd_timestamp_ext.convert_numpy_timedelta64_to_pd_timedelta"
+            back_convert = "bodo.hiframes.pd_timestamp_ext.integer_to_timedelta64"
+        else:
+            front_convert = (
+                "bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp"
+            )
+            back_convert = "bodo.hiframes.pd_timestamp_ext.integer_to_dt64"
+        func_text += "        B[i] = {}({}(A[i]).{}(freq).value)\n".format(
+            back_convert, front_convert, method
         )
-        back_convert = "bodo.hiframes.pd_timestamp_ext.integer_to_timedelta64"
-    else:
-        front_convert = "bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp"
-        back_convert = "bodo.hiframes.pd_timestamp_ext.integer_to_dt64"
-    func_text += "        B[i] = {}({}(A[i]).floor(freq).value)\n".format(
-        back_convert, front_convert
-    )
-    func_text += "    return bodo.hiframes.pd_series_ext.init_series(B, index, name)\n"
-    loc_vars = {}
-    exec(
-        func_text,
-        {"numba": numba, "np": np, "bodo": bodo},
-        loc_vars,
-    )
-    impl = loc_vars["impl"]
-    return impl
+        func_text += (
+            "    return bodo.hiframes.pd_series_ext.init_series(B, index, name)\n"
+        )
+        loc_vars = {}
+        exec(
+            func_text,
+            {"numba": numba, "np": np, "bodo": bodo},
+            loc_vars,
+        )
+        impl = loc_vars["impl"]
+        return impl
+
+    return freq_overload
+
+
+def _install_S_dt_timedelta_freq_methods():
+    freq_methods = ["ceil", "floor", "round"]
+    for method in freq_methods:
+        overload_impl = create_timedelta_freq_overload(method)
+        overload_method(SeriesDatetimePropertiesType, method, inline="always")(
+            overload_impl
+        )
+
+
+_install_S_dt_timedelta_freq_methods()
 
 
 def create_bin_op_overload(op):
