@@ -2098,6 +2098,59 @@ def test_df_apply_error_check():
         bodo.jit(test_impl)(df)
 
 
+def test_df_apply_df_output(memory_leak_check):
+    """test DataFrame.apply() with dataframe output 1 column"""
+
+    def impl1(df):
+        return df.apply(lambda a: pd.Series([a[0], "AA"]), axis=1)
+
+    def impl2(df):
+        def g(a):
+            # TODO: support assert in UDFs properly
+            # assert a > 0.0
+            if a[0] > 3:
+                return pd.Series([a[0], 2 * a[0]], ["A", "B"])
+            return pd.Series([a[0], 3 * a[0]], ["A", "B"])
+
+        return df.apply(g, axis=1)
+
+    df = pd.DataFrame({"A": [1.0, 2.0, 3.0, 4.0, 5.0]})
+    check_func(impl1, (df,))
+    check_func(impl2, (df,))
+
+
+def test_df_apply_df_output_multicolumn(memory_leak_check):
+    """test DataFrame.apply() with dataframe output with multiple columns"""
+
+    def test_impl(df):
+        return df.apply(lambda a: pd.Series([a[0], a[1]]), axis=1)
+
+    df = pd.DataFrame({"A": np.arange(20), "B": ["hi", "there"] * 10})
+    check_func(test_impl, (df,))
+
+
+@pytest.mark.slow
+def test_df_apply_df_output_multistring(memory_leak_check):
+    def test_impl(df):
+        def f(row):
+            s1 = ""
+            s2 = ""
+            s3 = ""
+            s4 = ""
+            if row[1] == 0:
+                s3 = str(row[0]) + ","
+                s4 = str(row[2]) + ","
+            elif row[1] == 1:
+                s1 = str(row[0]) + ","
+                s2 = str(row[2]) + ","
+            return pd.Series([s1, s2, s3, s4], index=["s1", "s2", "s3", "s4"])
+
+        return df.apply(f, axis=1)
+
+    df = pd.DataFrame({"A": np.arange(40), "B": [0, 1] * 20, "C": np.arange(40)})
+    check_func(test_impl, (df,))
+
+
 def test_df_drop_inplace_branch(memory_leak_check):
     def test_impl(cond):
         if cond:

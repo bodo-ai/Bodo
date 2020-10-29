@@ -2197,7 +2197,7 @@ class SeriesPass:
                 for i in range(n_out_cols):
                     func_text += f"    u{i} = vals[{i}]\n"
             else:
-                func_text += f"    u{i} = item\n"
+                func_text += f"    u0 = item\n"
             for i in range(n_out_cols):
                 func_text += f"    nested_counts{i} = add_nested_counts(nested_counts{i}, u{i})\n"
             func_text += "  numba.parfors.parfor.init_prange()\n"
@@ -2214,7 +2214,7 @@ class SeriesPass:
             for i in range(n_out_cols):
                 func_text += f"    v{i} = v_vals[{i}]\n"
         else:
-            func_text += f"    v{i} = v\n"
+            func_text += f"    v0 = v\n"
         for i in range(n_out_cols):
             func_text += (
                 f"    S{i}[i] = bodo.utils.conversion.unbox_if_timestamp(v{i})\n"

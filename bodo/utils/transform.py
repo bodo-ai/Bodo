@@ -509,6 +509,7 @@ def get_const_value_inner(
             get_const_value_inner(func_ir, var_def.args[2], arg_types, typemap),
         )
 
+    # TODO: Support getting tuple len for if someone does df.apply(lambda x: pd.Series((x[0], x[1])), axis=1)
     raise GuardException("Constant value not found")
 
 
@@ -646,7 +647,10 @@ def _get_const_series_info(block, f_ir, typemap):
     data_var = ret_def.args[0]
     data_def = get_definition(f_ir, data_var)
 
-    if is_call(data_def) and find_callname(f_ir, data_def) == ("asarray", "numpy"):
+    if is_call(data_def) and find_callname(f_ir, data_def) in [
+        ("asarray", "numpy"),
+        ("str_arr_from_sequence", "bodo.libs.str_arr_ext"),
+    ]:
         data_var = data_def.args[0]
         data_def = get_definition(f_ir, data_var)
 

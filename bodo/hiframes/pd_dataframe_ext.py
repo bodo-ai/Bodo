@@ -48,7 +48,11 @@ from bodo.hiframes.pd_index_ext import (
     is_pd_index_type,
 )
 from bodo.hiframes.pd_multi_index_ext import MultiIndexType
-from bodo.hiframes.pd_series_ext import SeriesType
+from bodo.hiframes.pd_series_ext import (
+    HeterogeneousSeriesType,
+    SeriesType,
+    _get_series_array_type,
+)
 from bodo.hiframes.series_indexing import SeriesIlocType
 from bodo.io import csv_cpp, json_cpp
 from bodo.libs.array import arr_info_list_to_table, array_to_info
@@ -304,7 +308,22 @@ class DataFrameAttribute(AttributeTemplate):
         except Exception as e:
             raise_bodo_error(get_udf_error_msg("DataFrame.apply()", e), e.loc)
 
-        out_arr_type = get_udf_out_arr_type(f_return_type)
+        # output is dataframe if UDF returns a Series
+        if isinstance(f_return_type, HeterogeneousSeriesType):
+            # NOTE: get_const_func_output_type() adds const_info attribute for Series
+            # output
+            _, index_vals = f_return_type.const_info
+            arrs = tuple(_get_series_array_type(t) for t in f_return_type.data.types)
+            ret_type = bodo.DataFrameType(arrs, df.index, index_vals)
+        elif isinstance(f_return_type, SeriesType):
+            n_cols, index_vals = f_return_type.const_info
+            arrs = tuple(
+                _get_series_array_type(f_return_type.dtype) for _ in range(n_cols)
+            )
+            ret_type = bodo.DataFrameType(arrs, df.index, index_vals)
+        else:
+            data_arr = get_udf_out_arr_type(f_return_type)
+            ret_type = SeriesType(data_arr.dtype, data_arr, df.index, None)
 
         # add dummy default value for UDF kws to avoid errors
         kw_names = ", ".join("{} = ''".format(a) for a in kws.keys())
@@ -316,10 +335,7 @@ class DataFrameAttribute(AttributeTemplate):
 
         pysig = numba.core.utils.pysignature(apply_stub)
         new_args = (func, axis, raw, result_type, f_args) + tuple(kws.values())
-        return signature(
-            SeriesType(out_arr_type.dtype, out_arr_type, index=df.index),
-            *new_args,
-        ).replace(pysig=pysig)
+        return signature(ret_type, *new_args).replace(pysig=pysig)
 
     def generic_resolve(self, df, attr):
         # column selection

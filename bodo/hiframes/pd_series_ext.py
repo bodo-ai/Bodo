@@ -621,11 +621,7 @@ class SeriesAttribute(AttributeTemplate):
             ret_type = bodo.DataFrameType(arrs, ary.index, index_vals)
         else:
             data_arr = get_udf_out_arr_type(f_return_type)
-            # Series.map codegen returns np bool array instead of boolean_array currently
-            # TODO: return nullable boolean_array
-            if f_return_type == types.bool_:
-                data_arr = types.Array(types.bool_, 1, "C")
-            ret_type = SeriesType(f_return_type, data_arr, ary.index, ary.name_typ)
+            ret_type = SeriesType(data_arr.dtype, data_arr, ary.index, ary.name_typ)
 
         return signature(ret_type, (func,)).replace(pysig=pysig)
 
