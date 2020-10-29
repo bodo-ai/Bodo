@@ -1417,3 +1417,28 @@ def sklearn_linear_model_logistic_regression_overload(
         return m
 
     return _sklearn_linear_model_logistic_regression_impl
+
+
+@overload_method(BodoLogisticRegressionType, "fit", no_unliteral=True)
+def overload_logistic_regression_fit(
+    m,
+    X,
+    y,
+    sample_weight=None,
+    _is_data_distributed=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
+):
+    """ Logistic Regression fit overload """
+    # If data is replicated, run scikit-learn directly
+    if is_overload_false(_is_data_distributed):
+
+        def _logistic_regression_fit_impl(
+            m, X, y, sample_weight=None, _is_data_distributed=False
+        ):  # pragma no cover
+            with numba.objmode():
+                m.fit(X, y, sample_weight)
+            return m
+
+        return _logistic_regression_fit_impl
+    else:
+        # Run create and run SGDClassifier(loss='log')
+        pass
