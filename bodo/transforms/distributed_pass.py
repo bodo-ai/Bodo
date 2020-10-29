@@ -174,6 +174,9 @@ class DistributedPass:
         self._1D_Var_array_accesses = defaultdict(list)
         # keep start vars for 1D dist to reuse in parfor loop array accesses
         self._start_vars = {}
+        # keep local versions of reduce variables to enable converting variable size
+        # string allocations to local chunk size
+        self._local_reduce_vars = {}
 
     def run(self):
         remove_dels(self.func_ir.blocks)
@@ -616,6 +619,13 @@ class DistributedPass:
         if self._is_1D_arr(lhs) and is_alloc_callname(func_name, func_mod):
             # XXX for pre_alloc_string_array(n, nc), we assume nc is local
             # value (updated only in parfor like _str_replace_regex_impl)
+            # get local number of characters for string allocation if there is a
+            # reduction
+            if fdef == ("pre_alloc_string_array", "bodo.libs.str_arr_ext"):
+                n_char_var = rhs.args[1]
+                if n_char_var.name in self._local_reduce_vars:
+                    rhs.args[1] = self._local_reduce_vars[n_char_var.name]
+
             size_var = rhs.args[0]
             out, new_size_var = self._run_alloc(size_var, scope, loc)
             # empty_inferred is tuple for some reason
@@ -626,6 +636,13 @@ class DistributedPass:
 
         # fix 1D_Var allocs in case global len of another 1DVar is used
         if self._is_1D_Var_arr(lhs) and is_alloc_callname(func_name, func_mod):
+            # get local number of characters for string allocation if there is a
+            # reduction
+            if fdef == ("pre_alloc_string_array", "bodo.libs.str_arr_ext"):
+                n_char_var = rhs.args[1]
+                if n_char_var.name in self._local_reduce_vars:
+                    rhs.args[1] = self._local_reduce_vars[n_char_var.name]
+
             size_var = rhs.args[0]
             size_def = guard(get_definition, self.func_ir, size_var)
             # local 1D_Var arrays don't need transformation
@@ -2801,23 +2818,20 @@ class DistributedPass:
         op_var = ir.Var(scope, mk_unique_var("$reduce_op"), loc)
         self.typemap[op_var.name] = types.int32
         op_assign = ir.Assign(ir.Const(reduce_op.value, loc), op_var, loc)
+        # keep local versions of reduce variables to enable converting variable size
+        # string allocations to local chunk size
+        local_reduce_var = ir.Var(scope, mk_unique_var(reduce_var.name), loc)
+        self.typemap[local_reduce_var.name] = self.typemap[reduce_var.name]
+        local_assign = ir.Assign(reduce_var, local_reduce_var, loc)
+        self._local_reduce_vars[reduce_var.name] = local_reduce_var
 
-        def f(val, op):  # pragma: no cover
-            bodo.libs.distributed_api.dist_reduce(val, op)
-
-        f_ir = compile_to_numba_ir(
-            f,
-            {"bodo": bodo},
-            self.typingctx,
-            (self.typemap[reduce_var.name], types.int32),
-            self.typemap,
-            self.calltypes,
+        dist_reduce_nodes = [local_assign, op_assign] + compile_func_single_block(
+            lambda val, op: bodo.libs.distributed_api.dist_reduce(val, op),
+            [reduce_var, op_var],
+            reduce_var,
+            self,
         )
-        _, block = f_ir.blocks.popitem()
 
-        replace_arg_nodes(block, [reduce_var, op_var])
-        dist_reduce_nodes = [op_assign] + block.body[:-3]
-        dist_reduce_nodes[-1].target = reduce_var
         return dist_reduce_nodes
 
     def _gen_init_reduce(self, reduce_var, reduce_op):
