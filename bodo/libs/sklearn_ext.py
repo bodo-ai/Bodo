@@ -1,5 +1,4 @@
-"""Support sklearn.ensemble.RandomForestClassifier using object mode of Numba
-"""
+"""Support scikit-learn using object mode of Numba """
 import itertools
 
 import numba
@@ -1321,3 +1320,100 @@ def overload_kmeans_clustering_transform(m, X):
         return X_new
 
     return _cluster_kmeans_transform
+
+
+# -------------------------------------Logisitic Regression--------------------
+# Support sklearn.linear_model.LogisticRegression object mode of Numba
+# -----------------------------------------------------------------------------
+# Typing and overloads to use LogisticRegression inside Bodo functions
+# directly via sklearn's API
+
+
+class BodoLogisticRegressionType(types.Opaque):
+    def __init__(self):
+        super(BodoLogisticRegressionType, self).__init__(
+            name="BodoLogisticRegressionType"
+        )
+
+
+logistic_regression_type = BodoLogisticRegressionType()
+types.logistic_regression_type = logistic_regression_type
+
+register_model(BodoLogisticRegressionType)(models.OpaqueModel)
+
+
+@typeof_impl.register(sklearn.linear_model.LogisticRegression)
+def typeof_logistic_regression(val, c):
+    return logistic_regression_type
+
+
+@box(BodoLogisticRegressionType)
+def box_logistic_regression(typ, val, c):
+    # See note in box_random_forest_classifier
+    c.pyapi.incref(val)
+    return val
+
+
+@unbox(BodoLogisticRegressionType)
+def unbox_logistic_regression(typ, obj, c):
+    # borrow a reference from Python
+    c.pyapi.incref(obj)
+    return NativeValue(obj)
+
+
+@overload(sklearn.linear_model.LogisticRegression, no_unliteral=True)
+def sklearn_linear_model_logistic_regression_overload(
+    penalty="l2",
+    dual=False,
+    tol=0.0001,
+    C=1.0,
+    fit_intercept=True,
+    intercept_scaling=1,
+    class_weight=None,
+    random_state=None,
+    solver="lbfgs",
+    max_iter=100,
+    multi_class="auto",
+    verbose=0,
+    warm_start=False,
+    n_jobs=None,
+    l1_ratio=None,
+):
+    def _sklearn_linear_model_logistic_regression_impl(
+        penalty="l2",
+        dual=False,
+        tol=0.0001,
+        C=1.0,
+        fit_intercept=True,
+        intercept_scaling=1,
+        class_weight=None,
+        random_state=None,
+        solver="lbfgs",
+        max_iter=100,
+        multi_class="auto",
+        verbose=0,
+        warm_start=False,
+        n_jobs=None,
+        l1_ratio=None,
+    ):  # pragma: no cover
+        with numba.objmode(m="logistic_regression_type"):
+            m = sklearn.linear_model.LogisticRegression(
+                penalty=penalty,
+                dual=dual,
+                tol=tol,
+                C=C,
+                fit_intercept=fit_intercept,
+                intercept_scaling=intercept_scaling,
+                class_weight=class_weight,
+                random_state=random_state,
+                solver=solver,
+                max_iter=max_iter,
+                multi_class=multi_class,
+                verbose=verbose,
+                warm_start=warm_start,
+                n_jobs=n_jobs,
+                l1_ratio=l1_ratio,
+            )
+        return m
+
+    return _sklearn_linear_model_logistic_regression_impl
