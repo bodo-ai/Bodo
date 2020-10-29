@@ -10,7 +10,7 @@ from sklearn import datasets
 from sklearn.cluster import KMeans
 from sklearn.datasets import make_classification, make_regression
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.linear_model import SGDClassifier, SGDRegressor
+from sklearn.linear_model import LinearRegression, SGDClassifier, SGDRegressor
 from sklearn.metrics import f1_score, precision_score, recall_score
 from sklearn.preprocessing import StandardScaler
 from sklearn.utils._testing import assert_allclose, assert_array_equal
@@ -624,4 +624,47 @@ def test_kmeans(memory_leak_check):
             sample_weight,
         ),
         is_out_distributed=True,
+    )
+
+
+# --------------------KMeans Clustering Tests-----------------#
+
+
+def test_linear_regression(memory_leak_check):
+    """
+    Shamelessly copied from the sklearn tests:
+    https://github.com/scikit-learn/scikit-learn/blob/0fb307bf39bbdacd6ed713c00724f8f871d60370/sklearn/tests/test_multiclass.py#L214
+    """
+    # Toy dataset where features correspond directly to labels.
+    X = np.array([[0, 0, 5], [0, 5, 0], [3, 0, 0], [0, 0, 6], [6, 0, 0]])
+    y = ["eggs", "spam", "ham", "eggs", "ham"]
+    Y = np.array([[0, 0, 1], [0, 1, 0], [1, 0, 0], [0, 0, 1], [1, 0, 0]])
+
+    classes = set("ham eggs spam".split())
+
+    # def impl_fit(X, y):
+    #    clf = LinearRegression()
+    #    clf.fit(X, y)
+    #    return clf
+
+    # clf = bodo.jit(distributed=["X", "y"])(impl_fit)(
+    #    _get_dist_arg(np.array(X)),
+    #    _get_dist_arg(np.array(y)),
+    # )
+    # assert set(clf.classes_) == classes
+
+    def impl_pred(X, y):
+        clf = LinearRegression()
+        clf.fit(X, y)
+        y_pred = clf.predict(np.array([[0, 0, 4]]))[0]
+        return y_pred
+
+    check_func(
+        impl_pred,
+        (
+            X,
+            y,
+        ),
+        py_output=["eggs"],
+        only_seq=True,
     )
