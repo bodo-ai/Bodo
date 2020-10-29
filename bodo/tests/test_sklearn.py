@@ -639,31 +639,28 @@ def test_logistic_regression(memory_leak_check):
     X = np.array([[0, 0, 5], [0, 5, 0], [3, 0, 0], [0, 0, 6], [6, 0, 0]])
     y = np.array(["eggs", "spam", "spam", "eggs", "spam"])
     # Y = np.array([[0, 1, 1, 0, 1]]).T
-    # classes = set("eggs spam".split())
+    classes = np.array(["eggs", "spam"])
 
-    # def impl_fit(X, y):
-    #    clf = LinearRegression()
-    #    clf.fit(X, y)
-    #    return clf
-
-    # clf = bodo.jit(distributed=["X", "y"])(impl_fit)(
-    #    _get_dist_arg(np.array(X)),
-    #    _get_dist_arg(np.array(y)),
-    # )
-    # assert set(clf.classes_) == classes
-
-    def impl_pred(X, y):
+    def impl_fit(X, y):
         clf = LogisticRegression()
         clf.fit(X, y)
-        y_pred = clf.predict(np.array([[0, 0, 4]]))[0]
-        return y_pred
+        return clf
 
-    check_func(
-        impl_pred,
-        (
-            X,
-            y,
-        ),
-        py_output=["eggs"],
-        only_seq=True,
-    )
+    clf = bodo.jit(impl_fit)(X, y)
+    np.testing.assert_array_equal(clf.classes_, classes)
+
+    # def impl_pred(X, y):
+    #    clf = LogisticRegression()
+    #    clf.fit(X, y)
+    #    y_pred = clf.predict(np.array([[0, 0, 4]]))[0]
+    #    return y_pred
+
+    # check_func(
+    #    impl_pred,
+    #    (
+    #        X,
+    #        y,
+    #    ),
+    #    py_output=["eggs"],
+    #    only_seq=True,
+    # )
