@@ -29,6 +29,7 @@ from sklearn.preprocessing import LabelBinarizer
 from sklearn.utils.validation import _check_sample_weight
 
 import bodo
+from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.libs.distributed_api import (
     Reduce_Type,
     create_subcomm_mpi4py,
@@ -1387,6 +1388,22 @@ def sklearn_naive_bayes_multinomialnb_overload(
     return _sklearn_naive_bayes_multinomialnb_impl
 
 
+def get_columns(X):
+    my_rank = bodo.get_rank()
+    nranks = bodo.get_size()
+    total_cols = X.shape[1]
+    # Gather specific columns to each rank. Each rank will have n consecutive columns
+    for i in range(nranks):
+        start = bodo.libs.distributed_api.get_start(total_cols, nranks, i)
+        end = bodo.libs.distributed_api.get_end(total_cols, nranks, i)
+        # Only write when its your columns
+        if i == my_rank:
+            X_train = bodo.gatherv(X.iloc[:, start:end:1], root=i)
+        else:
+            bodo.gatherv(X.iloc[:, start:end:1], root=i)
+    return X_train
+
+
 @overload_method(BodoMultinomialNBType, "fit", no_unliteral=True)
 def overload_multinomial_nb_model_fit(
     m,
@@ -1411,39 +1428,52 @@ def overload_multinomial_nb_model_fit(
         # Attempt to change data to numpy array. Any data that fails means, we don't support
         X = bodo.utils.conversion.coerce_to_ndarray(X)
         y = bodo.utils.conversion.coerce_to_ndarray(y)
-        # HA: TODO change dataframe to numpy array
-        # This complains about to_numpy being not attribute for DataFrameType
-        # if isinstance(X, bodo.hiframes.pd_dataframe_ext.DataFrameType):
-        #    X = X.to_numpy()
         # TODO: sample_weight (future enhancement)
-        def _model_multinomial_nb_fit_impl(
-            m, X, y, sample_weight=None, _is_data_distributed=False
-        ):  # pragma: no cover
+        # If it's a dataframe gather columns in objmode. (This is because Bodo doesn't allow slicing with variables)
+        if isinstance(X, DataFrameType):
 
-            my_rank = bodo.get_rank()
-            nranks = bodo.get_size()
-            total_cols = X.shape[1]
-            # Gather specific columns to each rank. Each rank will have n consecutive columns
-            for i in range(nranks):
-                start = bodo.libs.distributed_api.get_start(total_cols, nranks, i)
-                end = bodo.libs.distributed_api.get_end(total_cols, nranks, i)
-                # Only write when its your columns
-                if i == my_rank:
-                    X_train = bodo.gatherv(X[:, start:end:1], root=i)
-                else:
-                    bodo.gatherv(X[:, start:end:1], root=i)
-            # Replicate y in all ranks
-            y_train = bodo.allgatherv(y, False)
-            with numba.objmode(m="multinomial_nb_type"):
-                m = fit_multinomial_nb(
-                    m, X_train, y_train, sample_weight, _is_data_distributed
-                )
+            def _model_multinomial_nb_fit_impl_df(
+                m, X, y, sample_weight=None, _is_data_distributed=False
+            ):  # pragma no cover
+                with numba.objmode(m="multinomial_nb_type"):
+                    X_train = get_columns(X)
+                    # Replicate y in all ranks
+                    y_train = bodo.allgatherv(y, False)
+                    m = fit_multinomial_nb(
+                        m, X_train, y_train, sample_weight, _is_data_distributed
+                    )
+                bodo.barrier()
+                return m
 
-            bodo.barrier()
+            return _model_multinomial_nb_fit_impl_df
+        else:
 
-            return m
+            def _model_multinomial_nb_fit_impl(
+                m, X, y, sample_weight=None, _is_data_distributed=False
+            ):  # pragma: no cover
 
-        return _model_multinomial_nb_fit_impl
+                my_rank = bodo.get_rank()
+                nranks = bodo.get_size()
+                total_cols = X.shape[1]
+                # Gather specific columns to each rank. Each rank will have n consecutive columns
+                for i in range(nranks):
+                    start = bodo.libs.distributed_api.get_start(total_cols, nranks, i)
+                    end = bodo.libs.distributed_api.get_end(total_cols, nranks, i)
+                    # Only write when its your columns
+                    if i == my_rank:
+                        X_train = bodo.gatherv(X[:, start:end:1], root=i)
+                    else:
+                        bodo.gatherv(X[:, start:end:1], root=i)
+                # Replicate y in all ranks
+                y_train = bodo.allgatherv(y, False)
+                with numba.objmode(m="multinomial_nb_type"):
+                    m = fit_multinomial_nb(
+                        m, X_train, y_train, sample_weight, _is_data_distributed
+                    )
+                bodo.barrier()
+                return m
+
+            return _model_multinomial_nb_fit_impl
 
 
 def fit_multinomial_nb(
@@ -1474,7 +1504,9 @@ def fit_multinomial_nb(
     class_prior = m.class_prior
     n_effective_classes = Y.shape[1]
     m._init_counters(n_effective_classes, n_features)
-    m._count(X_train.astype(np.float64), Y)
+    if isinstance(X_train, pd.DataFrame):
+        X_train = X_train.to_numpy()
+    m._count(X_train.astype("float64"), Y)
     alpha = m._check_alpha()
     m._update_class_log_prior(class_prior=class_prior)
     # 2. Computation for feature probabilities

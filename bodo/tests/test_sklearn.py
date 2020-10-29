@@ -690,10 +690,12 @@ def test_multinomial_nb():
     np.testing.assert_array_almost_equal(nb.feature_log_prob_, np.log(feature_prob))
 
     # Test dataframe.
-    # train = pd.DataFrame({"A": range(20), "B": range(100, 120)})
-    # train_labels = pd.Series(range(20))
+    train = pd.DataFrame(
+        {"A": range(20), "B": range(100, 120), "C": range(20, 40), "D": range(40, 60)}
+    )
+    train_labels = pd.Series(range(20))
 
-    # check_func(impl_predict, (train, train_labels))
+    check_func(impl_predict, (train, train_labels))
 
 
 def test_multinomial_nb_score():
