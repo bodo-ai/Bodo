@@ -41,7 +41,11 @@ from bodo.hiframes.pd_dataframe_ext import (
     DataFrameType,
     construct_dataframe,
 )
-from bodo.hiframes.pd_series_ext import SeriesType, _get_series_array_type
+from bodo.hiframes.pd_series_ext import (
+    HeterogeneousSeriesType,
+    SeriesType,
+    _get_series_array_type,
+)
 from bodo.hiframes.split_impl import (
     box_str_arr_split_view,
     string_array_split_view_type,
@@ -361,12 +365,12 @@ def _unbox_series_data(dtype, data_typ, arr_obj, c):
     return c.pyapi.to_native_value(data_typ, arr_obj)
 
 
+@box(HeterogeneousSeriesType)
 @box(SeriesType)
 def box_series(typ, val, c):
     """"""
     mod_name = c.context.insert_const_string(c.builder.module, "pandas")
     pd_class_obj = c.pyapi.import_module_noblock(mod_name)
-    dtype = typ.dtype
 
     # TODO: handle parent
     series_payload = bodo.hiframes.pd_series_ext.get_series_payload(

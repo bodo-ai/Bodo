@@ -1562,6 +1562,38 @@ def test_series_apply_kw(memory_leak_check):
     check_func(test_impl, (S,))
 
 
+def test_series_heter_constructor(memory_leak_check):
+    """
+    test creating Series with heterogeneous values
+    """
+
+    def impl1():
+        return pd.Series([1, "A"], ["B", "C"])
+
+    check_func(impl1, (), dist_test=False)
+
+
+def test_series_apply_df_output(memory_leak_check):
+    """test Series.apply() with dataframe output"""
+
+    def impl1(S):
+        return S.apply(lambda a: pd.Series([a, "AA"]))
+
+    def impl2(S):
+        def g(a):
+            # TODO: support assert in UDFs properly
+            # assert a > 0.0
+            if a > 3:
+                return pd.Series([a, 2 * a], ["A", "B"])
+            return pd.Series([a, 3 * a], ["A", "B"])
+
+        return S.apply(g)
+
+    S = pd.Series([1.0, 2.0, 3.0, 4.0, 5.0])
+    check_func(impl1, (S,))
+    check_func(impl2, (S,))
+
+
 @pytest.mark.slow
 def test_series_apply_extra_arg(memory_leak_check):
     def test_impl(S, D):
