@@ -98,11 +98,27 @@ static void comm_req_dealloc(MPI_Request* req_arr) __UNUSED__;
 static void req_array_setitem(MPI_Request* req_arr, int64_t ind,
                               MPI_Request req) __UNUSED__;
 
+/**
+ * This is a wrapper around MPI_Alltoallv that supports int64 counts and
+ * displacements. The API is practically the same as MPI_Alltoallv.
+ * If any count or displacement value is greater than INT_MAX, it will do a
+ * manually implemented version of alltoallv that will first send most of the
+ * data using a custom large-sized MPI type and then send the remainder.
+ */
+static void bodo_alltoallv(const void* sendbuf,
+                           const std::vector<int64_t>& send_counts,
+                           const std::vector<int64_t>& send_disp,
+                           MPI_Datatype sendtype, void* recvbuf,
+                           const std::vector<int64_t>& recv_counts,
+                           const std::vector<int64_t>& recv_disp,
+                           MPI_Datatype recvtype, MPI_Comm comm);
+
 static void oneD_reshape_shuffle(char* output, char* input,
                                  int64_t new_dim0_global_len,
                                  int64_t old_dim0_local_len,
                                  int64_t out_lower_dims_size,
-                                 int64_t in_lower_dims_size) __UNUSED__;
+                                 int64_t in_lower_dims_size, int n_dest_ranks,
+                                 int* dest_ranks) __UNUSED__;
 
 static void permutation_int(int64_t* output, int n) __UNUSED__;
 static void permutation_array_index(unsigned char* lhs, int64_t len,
@@ -707,6 +723,88 @@ static void permutation_array_index(unsigned char* lhs, int64_t len,
     MPI_Type_free(&element_t);
 }
 
+static void bodo_alltoallv(const void* sendbuf,
+                           const std::vector<int64_t>& send_counts,
+                           const std::vector<int64_t>& send_disp,
+                           MPI_Datatype sendtype, void* recvbuf,
+                           const std::vector<int64_t>& recv_counts,
+                           const std::vector<int64_t>& recv_disp,
+                           MPI_Datatype recvtype, MPI_Comm comm) {
+    const int A2AV_LARGE_DTYPE_SIZE = 1024;
+    int send_typ_size;
+    int recv_typ_size;
+    int n_pes;
+    MPI_Comm_size(comm, &n_pes);
+    MPI_Type_size(sendtype, &send_typ_size);
+    MPI_Type_size(recvtype, &recv_typ_size);
+    int big_shuffle = 0;
+    for (int i = 0; i < n_pes; i++) {
+        if (big_shuffle > 1) break;  // error
+        // if any count or displacement doesn't fit in int we have to do big
+        // shuffle
+        if (send_counts[i] >= (int64_t)INT_MAX ||
+            recv_counts[i] >= (int64_t)INT_MAX ||
+            send_disp[i] >= (int64_t)INT_MAX ||
+            recv_disp[i] >= (int64_t)INT_MAX) {
+            big_shuffle = 1;
+        }
+        if (big_shuffle == 1) {
+            if (send_counts[i] * send_typ_size / A2AV_LARGE_DTYPE_SIZE >=
+                INT_MAX)
+                big_shuffle = 2;
+            if (recv_counts[i] * recv_typ_size / A2AV_LARGE_DTYPE_SIZE >=
+                INT_MAX)
+                big_shuffle = 2;
+        }
+    }
+    MPI_Allreduce(MPI_IN_PLACE, &big_shuffle, 1, MPI_INT, MPI_MAX,
+                  MPI_COMM_WORLD);
+    if (big_shuffle == 2)
+        // very improbable but not impossible
+        throw std::runtime_error("Data is too big to shuffle");
+
+    if (big_shuffle == 0) {
+        std::vector<int> send_counts_int(send_counts.begin(),
+                                         send_counts.end());
+        std::vector<int> recv_counts_int(recv_counts.begin(),
+                                         recv_counts.end());
+        std::vector<int> send_disp_int(send_disp.begin(), send_disp.end());
+        std::vector<int> recv_disp_int(recv_disp.begin(), recv_disp.end());
+        MPI_Alltoallv(sendbuf, send_counts_int.data(), send_disp_int.data(),
+                      sendtype, recvbuf, recv_counts_int.data(),
+                      recv_disp_int.data(), recvtype, comm);
+    } else {
+        const int TAG = 11;  // arbitrary
+        int rank;
+        MPI_Comm_rank(comm, &rank);
+        MPI_Datatype large_dtype;
+        MPI_Type_contiguous(A2AV_LARGE_DTYPE_SIZE, MPI_CHAR, &large_dtype);
+        MPI_Type_commit(&large_dtype);
+        for (int i = 0; i < n_pes; i++) {
+            int dest = (rank + i + n_pes) % n_pes;
+            int src = (rank - i + n_pes) % n_pes;
+            char* send_ptr = (char*)sendbuf + send_disp[dest] * send_typ_size;
+            char* recv_ptr = (char*)recvbuf + recv_disp[src] * recv_typ_size;
+            int send_count =
+                send_counts[dest] * send_typ_size / A2AV_LARGE_DTYPE_SIZE;
+            int recv_count =
+                recv_counts[src] * recv_typ_size / A2AV_LARGE_DTYPE_SIZE;
+            MPI_Sendrecv(send_ptr, send_count, large_dtype, dest, TAG, recv_ptr,
+                         recv_count, large_dtype, src, TAG, MPI_COMM_WORLD,
+                         MPI_STATUS_IGNORE);
+            // send leftover
+            MPI_Sendrecv(
+                send_ptr + int64_t(send_count) * A2AV_LARGE_DTYPE_SIZE,
+                send_counts[dest] * send_typ_size % A2AV_LARGE_DTYPE_SIZE,
+                MPI_CHAR, dest, TAG + 1,
+                recv_ptr + int64_t(recv_count) * A2AV_LARGE_DTYPE_SIZE,
+                recv_counts[src] * recv_typ_size % A2AV_LARGE_DTYPE_SIZE,
+                MPI_CHAR, src, TAG + 1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        }
+        MPI_Type_free(&large_dtype);
+    }
+}
+
 /**
  * @brief Shuffles the data to fill the output array properly for reshape.
  * Finds global byte offsets for data in each rank and calls alltoallv.
@@ -717,19 +815,23 @@ static void permutation_array_index(unsigned char* lhs, int64_t len,
  * @param old_dim0_local_len local size of 1st array dimension in input
  * @param out_lower_dims_size total size of lower output dimensions in bytes
  * @param in_lower_dims_size total size of lower input dimensions in bytes
+ * @param n_dest_ranks: number of destination ranks (if <=0 data is distributed
+ *                      across all ranks, otherwise only to specified ranks)
+ * @param dest_ranks: destination ranks
  */
 static void oneD_reshape_shuffle(char* output, char* input,
                                  int64_t new_dim0_global_len,
                                  int64_t old_dim0_local_len,
                                  int64_t out_lower_dims_size,
-                                 int64_t in_lower_dims_size) {
+                                 int64_t in_lower_dims_size, int n_dest_ranks,
+                                 int* dest_ranks) {
     int num_pes = dist_get_size();
     int rank = dist_get_rank();
 
     // local sizes on all ranks
     std::vector<int64_t> all_old_dim0_local_sizes(num_pes);
-    MPI_Allgather(&old_dim0_local_len, 1, MPI_LONG_LONG_INT,
-                  all_old_dim0_local_sizes.data(), 1, MPI_LONG_LONG_INT,
+    MPI_Allgather(&old_dim0_local_len, 1, MPI_INT64_T,
+                  all_old_dim0_local_sizes.data(), 1, MPI_INT64_T,
                   MPI_COMM_WORLD);
     // dim0 start offset (not byte offset) on all pes
     std::vector<int64_t> all_old_starts(num_pes);
@@ -738,19 +840,35 @@ static void oneD_reshape_shuffle(char* output, char* input,
         all_old_starts[i] =
             all_old_starts[i - 1] + all_old_dim0_local_sizes[i - 1];
 
+    // map rank in COMM_WORLD to rank in destination group
+    std::vector<int> group_rank(num_pes, -1);
+    if (n_dest_ranks <= 0) {
+        // using all ranks in COMM_WORLD
+        n_dest_ranks = num_pes;
+        for (int i = 0; i < num_pes; i++) group_rank[i] = i;
+    } else {
+        for (int i = 0; i < n_dest_ranks; i++) group_rank[dest_ranks[i]] = i;
+    }
+
     // get my old and new data interval and convert to byte offsets
     int64_t my_old_start = all_old_starts[rank] * in_lower_dims_size;
-    int64_t my_new_start = dist_get_start(new_dim0_global_len, num_pes, rank) *
-                           out_lower_dims_size;
+    int64_t my_new_start = 0;
+    if (group_rank[rank] >= 0)
+        my_new_start = dist_get_start(new_dim0_global_len, n_dest_ranks,
+                                      group_rank[rank]) *
+                       out_lower_dims_size;
     int64_t my_old_end =
         (all_old_starts[rank] + old_dim0_local_len) * in_lower_dims_size;
-    int64_t my_new_end =
-        dist_get_end(new_dim0_global_len, num_pes, rank) * out_lower_dims_size;
+    int64_t my_new_end = 0;
+    if (group_rank[rank] >= 0)
+        my_new_end =
+            dist_get_end(new_dim0_global_len, n_dest_ranks, group_rank[rank]) *
+            out_lower_dims_size;
 
-    int64_t* send_counts = new int64_t[num_pes];
-    int64_t* recv_counts = new int64_t[num_pes];
-    int64_t* send_disp = new int64_t[num_pes];
-    int64_t* recv_disp = new int64_t[num_pes];
+    std::vector<int64_t> send_counts(num_pes);
+    std::vector<int64_t> recv_counts(num_pes);
+    std::vector<int64_t> send_disp(num_pes);
+    std::vector<int64_t> recv_disp(num_pes);
 
     int64_t curr_send_offset = 0;
     int64_t curr_recv_offset = 0;
@@ -761,12 +879,18 @@ static void oneD_reshape_shuffle(char* output, char* input,
 
         // get pe's old and new data interval and convert to byte offsets
         int64_t pe_old_start = all_old_starts[i] * in_lower_dims_size;
-        int64_t pe_new_start = dist_get_start(new_dim0_global_len, num_pes, i) *
-                               out_lower_dims_size;
+        int64_t pe_new_start = 0;
+        if (group_rank[i] >= 0)
+            pe_new_start = dist_get_start(new_dim0_global_len, n_dest_ranks,
+                                          group_rank[i]) *
+                           out_lower_dims_size;
         int64_t pe_old_end = (all_old_starts[i] + all_old_dim0_local_sizes[i]) *
                              in_lower_dims_size;
-        int64_t pe_new_end =
-            dist_get_end(new_dim0_global_len, num_pes, i) * out_lower_dims_size;
+        int64_t pe_new_end = 0;
+        if (group_rank[i] >= 0)
+            pe_new_end =
+                dist_get_end(new_dim0_global_len, n_dest_ranks, group_rank[i]) *
+                out_lower_dims_size;
 
         send_counts[i] = 0;
         recv_counts[i] = 0;
@@ -785,134 +909,9 @@ static void oneD_reshape_shuffle(char* output, char* input,
             curr_recv_offset += recv_counts[i];
         }
     }
-    // printf("rank:%d send %lld %lld recv %lld %lld\n", rank, send_counts[0],
-    // send_counts[1], recv_counts[0], recv_counts[1]);
-    // printf("send %d recv %d send_disp %d recv_disp %d\n", send_counts[0],
-    // recv_counts[0], send_disp[0], recv_disp[0]);
-    // printf("data %lld %lld\n", ((int64_t*)input)[0], ((int64_t*)input)[1]);
 
-    // workaround MPI int limit if necessary
-    int* i_send_counts = new int[num_pes];
-    int* i_recv_counts = new int[num_pes];
-    int* i_send_disp = new int[num_pes];
-    int* i_recv_disp = new int[num_pes];
-    int big_shuffle = 0;
-
-    for (int i = 0; i < num_pes; i++) {
-        // any value doesn't fit in int
-        if (send_counts[i] >= (int64_t)INT_MAX ||
-            recv_counts[i] >= (int64_t)INT_MAX ||
-            send_disp[i] >= (int64_t)INT_MAX ||
-            recv_disp[i] >= (int64_t)INT_MAX) {
-            big_shuffle = 1;
-            break;
-        }
-        i_send_counts[i] = (int)send_counts[i];
-        i_recv_counts[i] = (int)recv_counts[i];
-        i_send_disp[i] = (int)send_disp[i];
-        i_recv_disp[i] = (int)recv_disp[i];
-    }
-    MPI_Allreduce(MPI_IN_PLACE, &big_shuffle, 1, MPI_INT, MPI_LOR,
-                  MPI_COMM_WORLD);
-
-    if (!big_shuffle) {
-        int ierr =
-            MPI_Alltoallv(input, i_send_counts, i_send_disp, MPI_CHAR, output,
-                          i_recv_counts, i_recv_disp, MPI_CHAR, MPI_COMM_WORLD);
-        if (ierr != 0) std::cerr << "small shuffle error: " << '\n';
-    } else {
-        // char err_string[MPI_MAX_ERROR_STRING];
-        // err_string[MPI_MAX_ERROR_STRING-1] = '\0';
-        // int err_len, err_class;
-        // MPI_Errhandler_set(MPI_COMM_WORLD, MPI_ERRORS_RETURN);
-
-        int* l_send_counts = new int[num_pes];
-        int* l_recv_counts = new int[num_pes];
-        int* l_send_disp = new int[num_pes];
-        int* l_recv_disp = new int[num_pes];
-
-        int64_t* send_offset = new int64_t[num_pes];
-        int64_t* recv_offset = new int64_t[num_pes];
-
-#define LARGE_DTYPE_SIZE 1024
-        MPI_Datatype large_dtype;
-        MPI_Type_contiguous(LARGE_DTYPE_SIZE, MPI_CHAR, &large_dtype);
-        MPI_Type_commit(&large_dtype);
-
-        for (int i = 0; i < num_pes; i++) {
-            // large values
-            i_send_counts[i] = (int)(send_counts[i] / LARGE_DTYPE_SIZE);
-            i_recv_counts[i] = (int)(recv_counts[i] / LARGE_DTYPE_SIZE);
-            i_send_disp[i] = (int)(send_disp[i] / LARGE_DTYPE_SIZE);
-            i_recv_disp[i] = (int)(recv_disp[i] / LARGE_DTYPE_SIZE);
-            // leftover values
-            l_send_counts[i] = (int)(send_counts[i] % LARGE_DTYPE_SIZE);
-            l_recv_counts[i] = (int)(recv_counts[i] % LARGE_DTYPE_SIZE);
-            l_send_disp[i] = (int)(send_disp[i] % LARGE_DTYPE_SIZE);
-            l_recv_disp[i] = (int)(recv_disp[i] % LARGE_DTYPE_SIZE);
-            // printf("pe %d rank %d send %d recv %d sdisp %d rdisp %d lsend %d
-            // lrecv %d lsdisp %d lrdisp %d\n", i, rank,
-            //         i_send_counts[i], i_recv_counts[i], i_send_disp[i],
-            //         i_recv_disp[i],
-            //         l_send_counts[i], l_recv_counts[i], l_send_disp[i],
-            //         l_recv_disp[i]);
-        }
-
-        int64_t curr_send_buff_offset = 0;
-        int64_t curr_recv_buff_offset = 0;
-        // compute buffer offsets
-        for (int i = 0; i < num_pes; i++) {
-            send_offset[i] = curr_send_buff_offset;
-            recv_offset[i] = curr_recv_buff_offset;
-            curr_send_buff_offset += send_counts[i];
-            curr_recv_buff_offset += recv_counts[i];
-            // printf("pe %d rank %d send offset %lld recv offset %lld\n", i,
-            // rank, send_offset[i], recv_offset[i]);
-        }
-
-        // XXX implement alltoallv manually
-        for (int i = 0; i < num_pes; i++) {
-            int TAG = 11;  // arbitrary
-            int dest = (rank + i + num_pes) % num_pes;
-            int src = (rank - i + num_pes) % num_pes;
-            // printf("rank %d src %d dest %d\n", rank, src, dest);
-            // send big type
-            int ierr = MPI_Sendrecv(
-                input + send_offset[dest], i_send_counts[dest], large_dtype,
-                dest, TAG, output + recv_offset[src], i_recv_counts[src],
-                large_dtype, src, TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-            if (ierr != 0) std::cerr << "large sendrecv error" << '\n';
-            // send leftover
-            ierr = MPI_Sendrecv(
-                input + send_offset[dest] +
-                    ((int64_t)i_send_counts[dest]) * LARGE_DTYPE_SIZE,
-                l_send_counts[dest], MPI_CHAR, dest, TAG + 1,
-                output + recv_offset[src] +
-                    ((int64_t)i_recv_counts[src]) * LARGE_DTYPE_SIZE,
-                l_recv_counts[src], MPI_CHAR, src, TAG + 1, MPI_COMM_WORLD,
-                MPI_STATUS_IGNORE);
-            if (ierr != 0) std::cerr << "small sendrecv error" << '\n';
-        }
-
-        // cleanup
-        MPI_Type_free(&large_dtype);
-        delete[] l_send_counts;
-        delete[] l_recv_counts;
-        delete[] l_send_disp;
-        delete[] l_recv_disp;
-        delete[] send_offset;
-        delete[] recv_offset;
-    }
-
-    // cleanup
-    delete[] i_send_counts;
-    delete[] i_recv_counts;
-    delete[] i_send_disp;
-    delete[] i_recv_disp;
-    delete[] send_counts;
-    delete[] recv_counts;
-    delete[] send_disp;
-    delete[] recv_disp;
+    bodo_alltoallv(input, send_counts, send_disp, MPI_CHAR, output, recv_counts,
+                   recv_disp, MPI_CHAR, MPI_COMM_WORLD);
 }
 
 #endif  // _DISTRIBUTED_H_INCLUDED

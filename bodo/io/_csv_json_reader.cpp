@@ -30,7 +30,6 @@
 #include <vector>
 #include "../libs/_bodo_common.h"
 #include "../libs/_distributed.h"
-#include "../libs/_shuffle.h"
 #include "_bodo_file_reader.h"
 #include "_fs_io.h"
 #include "arrow/filesystem/localfs.h"
