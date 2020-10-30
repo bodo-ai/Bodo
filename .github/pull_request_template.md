@@ -8,6 +8,11 @@
 
   - Issue checklist:
     - [ ] Closes Issue #XXXX. 
+ 
+  - Testing:
+    - [ ] Tested any newly added tests with np3 
+    
+    ( Example: `mpiexec -n 3 pytest -s -v -W ignore bodo/tests/test_dataframe.py::my_new_test` )
 
   - Formatting:
     - [ ] Ran pre-commit hooks.
