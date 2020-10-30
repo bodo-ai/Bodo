@@ -646,6 +646,8 @@ def test_multinomial_nb():
         _get_dist_arg(np.array(X)),
         _get_dist_arg(np.array(y)),
     )
+    # class_log_prior_: Smoothed empirical log probability for each class.
+    # It's computation is replicated by all ranks
     np.testing.assert_array_almost_equal(
         np.log(np.array([2, 2, 2]) / 6.0), clf.class_log_prior_, 8
     )
@@ -660,14 +662,6 @@ def test_multinomial_nb():
         (X, y),
         py_output=y,
         is_out_distributed=True,
-    )
-
-    check_func(
-        impl_predict,
-        (X, y),
-        py_output=y,
-        is_out_distributed=False,
-        only_seq=True,
     )
 
     X = np.array([[1, 0, 0], [1, 1, 0]])
@@ -687,6 +681,8 @@ def test_multinomial_nb():
         _get_dist_arg(np.array(y)),
     )
     feature_prob = np.array([[2 / 5, 2 / 5, 1 / 5], [1 / 3, 1 / 2, 1 / 6]])
+    # feature_log_prob_: Empirical log probability of features given a class, P(x_i|y).
+    # Computation is distributed and then gathered and replicated in all ranks.
     np.testing.assert_array_almost_equal(nb.feature_log_prob_, np.log(feature_prob))
 
     # Test dataframe.

@@ -1,7 +1,6 @@
 """Support sklearn.ensemble.RandomForestClassifier using object mode of Numba
 """
 import itertools
-import warnings
 
 import numba
 import numpy as np
@@ -1388,22 +1387,6 @@ def sklearn_naive_bayes_multinomialnb_overload(
     return _sklearn_naive_bayes_multinomialnb_impl
 
 
-def get_columns(X):
-    my_rank = bodo.get_rank()
-    nranks = bodo.get_size()
-    total_cols = X.shape[1]
-    # Gather specific columns to each rank. Each rank will have n consecutive columns
-    for i in range(nranks):
-        start = bodo.libs.distributed_api.get_start(total_cols, nranks, i)
-        end = bodo.libs.distributed_api.get_end(total_cols, nranks, i)
-        # Only write when its your columns
-        if i == my_rank:
-            X_train = bodo.gatherv(X.iloc[:, start:end:1], root=i)
-        else:
-            bodo.gatherv(X.iloc[:, start:end:1], root=i)
-    return X_train
-
-
 @overload_method(BodoMultinomialNBType, "fit", no_unliteral=True)
 def overload_multinomial_nb_model_fit(
     m,
@@ -1425,55 +1408,55 @@ def overload_multinomial_nb_model_fit(
 
         return _naive_bayes_multinomial_impl
     else:
-        # Attempt to change data to numpy array. Any data that fails means, we don't support
-        X = bodo.utils.conversion.coerce_to_ndarray(X)
-        y = bodo.utils.conversion.coerce_to_ndarray(y)
         # TODO: sample_weight (future enhancement)
         # If it's a dataframe gather columns in objmode. (This is because Bodo doesn't allow slicing with variables)
+        func_text = "def _model_multinomial_nb_fit_impl(\n"
+        func_text += "    m, X, y, sample_weight=None, _is_data_distributed=False\n"
+        func_text += "):  # pragma no cover\n"
+        # Attempt to change data to numpy array. Any data that fails means, we don't support
+        func_text += "    y = bodo.utils.conversion.coerce_to_ndarray(y)\n"
         if isinstance(X, DataFrameType):
-
-            def _model_multinomial_nb_fit_impl_df(
-                m, X, y, sample_weight=None, _is_data_distributed=False
-            ):  # pragma no cover
-                with numba.objmode(m="multinomial_nb_type"):
-                    X_train = get_columns(X)
-                    # Replicate y in all ranks
-                    y_train = bodo.allgatherv(y, False)
-                    m = fit_multinomial_nb(
-                        m, X_train, y_train, sample_weight, _is_data_distributed
-                    )
-                bodo.barrier()
-                return m
-
-            return _model_multinomial_nb_fit_impl_df
+            func_text += "    X = X.to_numpy()\n"
         else:
-
-            def _model_multinomial_nb_fit_impl(
-                m, X, y, sample_weight=None, _is_data_distributed=False
-            ):  # pragma: no cover
-
-                my_rank = bodo.get_rank()
-                nranks = bodo.get_size()
-                total_cols = X.shape[1]
-                # Gather specific columns to each rank. Each rank will have n consecutive columns
-                for i in range(nranks):
-                    start = bodo.libs.distributed_api.get_start(total_cols, nranks, i)
-                    end = bodo.libs.distributed_api.get_end(total_cols, nranks, i)
-                    # Only write when its your columns
-                    if i == my_rank:
-                        X_train = bodo.gatherv(X[:, start:end:1], root=i)
-                    else:
-                        bodo.gatherv(X[:, start:end:1], root=i)
-                # Replicate y in all ranks
-                y_train = bodo.allgatherv(y, False)
-                with numba.objmode(m="multinomial_nb_type"):
-                    m = fit_multinomial_nb(
-                        m, X_train, y_train, sample_weight, _is_data_distributed
-                    )
-                bodo.barrier()
-                return m
-
-            return _model_multinomial_nb_fit_impl
+            func_text += "    X = bodo.utils.conversion.coerce_to_ndarray(X)\n"
+        func_text += "    my_rank = bodo.get_rank()\n"
+        func_text += "    nranks = bodo.get_size()\n"
+        func_text += "    total_cols = X.shape[1]\n"
+        # Gather specific columns to each rank. Each rank will have n consecutive columns
+        func_text += "    for i in range(nranks):\n"
+        func_text += "        start = bodo.libs.distributed_api.get_start(total_cols, nranks, i)\n"
+        func_text += (
+            "        end = bodo.libs.distributed_api.get_end(total_cols, nranks, i)\n"
+        )
+        # Only write when its your columns
+        func_text += "        if i == my_rank:\n"
+        func_text += "            X_train = bodo.gatherv(X[:, start:end:1], root=i)\n"
+        func_text += "        else:\n"
+        func_text += "            bodo.gatherv(X[:, start:end:1], root=i)\n"
+        # Replicate y in all ranks
+        func_text += "    y_train = bodo.allgatherv(y, False)\n"
+        func_text += '    with numba.objmode(m="multinomial_nb_type"):\n'
+        func_text += "        m = fit_multinomial_nb(\n"
+        func_text += (
+            "            m, X_train, y_train, sample_weight, _is_data_distributed\n"
+        )
+        func_text += "        )\n"
+        func_text += "    bodo.barrier()\n"
+        func_text += "    return m\n"
+        loc_vars = {}
+        exec(
+            func_text,
+            {
+                "bodo": bodo,
+                "np": np,
+                "numba": numba,
+                "fit_multinomial_nb": fit_multinomial_nb,
+            },
+            loc_vars,
+        )
+        # print(func_text)
+        _model_multinomial_nb_fit_impl = loc_vars["_model_multinomial_nb_fit_impl"]
+        return _model_multinomial_nb_fit_impl
 
 
 def fit_multinomial_nb(
@@ -1504,8 +1487,6 @@ def fit_multinomial_nb(
     class_prior = m.class_prior
     n_effective_classes = Y.shape[1]
     m._init_counters(n_effective_classes, n_features)
-    if isinstance(X_train, pd.DataFrame):
-        X_train = X_train.to_numpy()
     m._count(X_train.astype("float64"), Y)
     alpha = m._check_alpha()
     m._update_class_log_prior(class_prior=class_prior)
