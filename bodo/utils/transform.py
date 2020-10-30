@@ -133,6 +133,7 @@ no_side_effect_call_tuples = {
     ("rolling",),
     (pd.CategoricalDtype,),
     # Numpy
+    ("asarray", np),
     ("int32", np),
     ("int64", np),
     ("float64", np),
@@ -509,7 +510,14 @@ def get_const_value_inner(
             get_const_value_inner(func_ir, var_def.args[2], arg_types, typemap),
         )
 
-    # TODO: Support getting tuple len for if someone does df.apply(lambda x: pd.Series((x[0], x[1])), axis=1)
+    # len(tuple)
+    if (
+        call_name == ("len", "builtins")
+        and typemap
+        and isinstance(typemap.get(var_def.args[0].name, None), types.BaseTuple)
+    ):
+        return len(typemap[var_def.args[0].name])
+
     raise GuardException("Constant value not found")
 
 
@@ -607,11 +615,13 @@ def get_const_func_output_type(func, arg_types, kw_types, typing_context):
         # get const info from all exit points and make sure they are consistent
         # checking for ir.Return since exit point could be for exception
         series_info = [
-            _get_const_series_info(f_ir.blocks[l], f_ir, typemap)
+            guard(_get_const_series_info, f_ir.blocks[l], f_ir, typemap)
             for l in cfg.exit_points()
             if isinstance(f_ir.blocks[l].body[-1], ir.Return)
         ]
-        if len(pd.Series(series_info).unique()) != 1:  # pragma: no cover
+        if (
+            None in series_info or len(pd.Series(series_info).unique()) != 1
+        ):  # pragma: no cover
             raise BodoError(
                 "Invalid Series output in UDF (Series with constant length and constant Index value expected)"
             )
