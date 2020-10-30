@@ -472,12 +472,17 @@ class SeriesPass:
         # for example: r = Row(a, b); c = r["R1"] -> c = a
         # used for df.apply() UDF optimization
         if isinstance(rhs_type, types.BaseNamedTuple) and isinstance(
-            idx_typ, types.StringLiteral
+            idx_typ, (types.StringLiteral, types.IntegerLiteral)
         ):
             named_tup_def = guard(get_definition, self.func_ir, rhs.value)
             # TODO: support kws
             if is_expr(named_tup_def, "call") and not named_tup_def.kws:
-                arg_no = rhs_type.instance_class._fields.index(idx_typ.literal_value)
+                if isinstance(idx_typ, types.StringLiteral):
+                    arg_no = rhs_type.instance_class._fields.index(
+                        idx_typ.literal_value
+                    )
+                else:
+                    arg_no = idx_typ.literal_value
                 assign.value = named_tup_def.args[arg_no]
 
         nodes.append(assign)
