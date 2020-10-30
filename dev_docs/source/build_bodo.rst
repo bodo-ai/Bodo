@@ -21,6 +21,7 @@ such as Numba on Ubuntu Linux::
     # Mac: conda install clang_osx-64 clangxx_osx-64 -c conda-forge
     # If you don't want to install Numba from source: conda install numba=0.51.2 -c conda-forge
     # For development/debugging purposes, it's best to install Numba from source instead
+    # START OF BUILD NUMBA FROM SOURCE
     git clone https://github.com/numba/numba.git
     # make sure you checkout version 0.51.2. numba's master may not work with Bodo master
     # if you need to remove any numba in your miniconda env before rebuilding from source try:
@@ -28,10 +29,11 @@ such as Numba on Ubuntu Linux::
     cd numba; git checkout 0.51.2
     python setup.py develop
     cd ..
+    # END OF BUILD NUMBA FROM SOURCE
     conda install mpi4py pytest -c conda-forge
     conda install -c conda-forge hdf5='*=*mpich*' pyarrow=1.0.1 pymysql sqlalchemy
     # The following is required for s3 related development and tests
-    # conda install -c conda-forge boto3 botocore s3fs
+    # conda install -c conda-forge boto3 botocore s3fs>=0.4.2
     git clone https://github.com/Bodo-inc/Bodo.git
     cd Bodo
     # build Bodo
