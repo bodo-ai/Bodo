@@ -429,10 +429,6 @@ struct aggstring {
     static void apply(std::string& v1, std::string& v2) {}
 };
 
-template <>
-struct aggstring<Bodo_FTypes::sum> {
-    static void apply(std::string& v1, std::string& v2) { v1 += v2; }
-};
 
 template <>
 struct aggstring<Bodo_FTypes::min> {
