@@ -2036,6 +2036,65 @@ apply_to_column_string(ARR_I* in_col, ARR_O* out_col,
     return nullptr;
 }
 
+template <typename ARR_I, typename ARR_O, typename F, int ftype>
+typename std::enable_if<!(is_multiple_array<ARR_I>::value ||
+                          is_multiple_array<ARR_O>::value),
+                        ARR_O*>::type
+apply_sum_to_column_string(ARR_I* in_col, ARR_O* out_col,
+                           const grouping_info& grp_info, F f) {
+#ifdef DEBUG_GROUPBY
+    std::cout << "Beginning of apply_to_column_string\n";
+#endif
+
+    // allocate output array (length is number of groups, number of chars same
+    // as input)
+    size_t num_groups = grp_info.num_groups;
+    int64_t n_chars = in_col->n_sub_elems;
+    array_info* out_arr = alloc_string_array(num_groups, n_chars, 0);
+    size_t n_bytes = (num_groups + 7) >> 3;
+    memset(out_arr->null_bitmask, 0xff, n_bytes);  // null not possible
+
+    // find offsets for each output string
+    std::vector<uint32_t> str_offsets(num_groups + 1, 0);
+    char* data_i = in_col->data1;
+    uint32_t* offsets_i = (uint32_t*)in_col->data2;
+    char* data_o = out_arr->data1;
+    uint32_t* offsets_o = (uint32_t*)out_arr->data2;
+
+    for (int64_t i = 0; i < in_col->length; i++) {
+        int64_t i_grp = f(i);
+        if ((i_grp != -1) && in_col->get_null_bit(i)) {
+            uint32_t len = offsets_i[i + 1] - offsets_i[i];
+            str_offsets[i_grp + 1] += len;
+        }
+    }
+    std::partial_sum(str_offsets.begin(), str_offsets.end(),
+                     str_offsets.begin());
+    memcpy(offsets_o, str_offsets.data(), (num_groups + 1) * sizeof(uint32_t));
+
+    // copy characters to output
+    for (int64_t i = 0; i < in_col->length; i++) {
+        int64_t i_grp = f(i);
+        if ((i_grp != -1) && in_col->get_null_bit(i)) {
+            uint32_t len = offsets_i[i + 1] - offsets_i[i];
+            memcpy(&data_o[str_offsets[i_grp]], data_i + offsets_i[i], len);
+            str_offsets[i_grp] += len;
+        }
+    }
+    return out_arr;
+}
+
+template <typename ARR_I, typename ARR_O, typename F, int ftype>
+typename std::enable_if<(is_multiple_array<ARR_I>::value ||
+                         is_multiple_array<ARR_O>::value),
+                        ARR_O*>::type
+apply_sum_to_column_string(ARR_I* in_col, ARR_O* out_col,
+                           const grouping_info& grp_info, F f) {
+    Bodo_PyErr_SetString(PyExc_RuntimeError,
+                         "Invalid/unsupported groupyby string sum case");
+    return nullptr;
+}
+
 template <typename ARR_I>
 typename std::enable_if<!is_multiple_array<ARR_I>::value, bool>::type
 do_computation(ARR_I* in_col, int64_t i) {
@@ -2220,6 +2279,15 @@ void apply_to_column_F(ARR_I* in_col, ARR_O* out_col,
                                 getv<ARR_O, int64_t>(out_col, i_grp),
                                 getv<ARR_I, T>(in_col, i));
                     }
+                    return;
+                }
+                // optimized groupby sum for strings (concatenation)
+                case Bodo_FTypes::sum: {
+                    ARR_O* new_out_col =
+                        apply_sum_to_column_string<ARR_I, ARR_O, F, ftype>(
+                            in_col, out_col, grp_info, f);
+                    *out_col = std::move(*new_out_col);
+                    delete new_out_col;
                     return;
                 }
                 default:
