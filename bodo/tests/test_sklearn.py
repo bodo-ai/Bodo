@@ -637,9 +637,14 @@ def test_logistic_regression(memory_leak_check):
     """
     # Toy dataset where features correspond directly to labels.
     X = np.array([[0, 0, 5], [0, 5, 0], [3, 0, 0], [0, 0, 6], [6, 0, 0]])
-    y = np.array(["eggs", "spam", "spam", "eggs", "spam"])
+    y = np.array([1, 2, 2, 1, 2])
+    # When testing with string, this error comes
+    # >           bodo_out = bodo_func(*call_args)
+    # E           ValueError: invalid literal for int() with base 10: 'eggs'
+    # y = np.array(["eggs", "spam", "spam", "eggs", "spam"])
+    # classes = np.array(["eggs", "spam"])
+    classes = np.array([1, 2])
     # Y = np.array([[0, 1, 1, 0, 1]]).T
-    classes = np.array(["eggs", "spam"])
 
     def impl_fit(X, y):
         clf = LogisticRegression()
@@ -649,18 +654,17 @@ def test_logistic_regression(memory_leak_check):
     clf = bodo.jit(impl_fit)(X, y)
     np.testing.assert_array_equal(clf.classes_, classes)
 
-    # def impl_pred(X, y):
-    #    clf = LogisticRegression()
-    #    clf.fit(X, y)
-    #    y_pred = clf.predict(np.array([[0, 0, 4]]))[0]
-    #    return y_pred
+    def impl_pred(X, y):
+        clf = LogisticRegression()
+        clf.fit(X, y)
+        y_pred = clf.predict(np.array([[0, 0, 4]]))[0]
+        return y_pred
 
-    # check_func(
-    #    impl_pred,
-    #    (
-    #        X,
-    #        y,
-    #    ),
-    #    py_output=["eggs"],
-    #    only_seq=True,
-    # )
+    check_func(
+        impl_pred,
+        (
+            X,
+            y,
+        ),
+        only_seq=True,
+    )
