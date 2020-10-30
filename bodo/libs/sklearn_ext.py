@@ -1498,11 +1498,14 @@ def fit_multinomial_nb(
     # 3. Compute feature probability
     # 3a. Add alpha and compute sum of all features each rank has per class
     smoothed_fc = m.feature_count_ + alpha
-    smoothed_cc = smoothed_fc.sum(axis=1)
+    sub_smoothed_cc = smoothed_fc.sum(axis=1)
     # 3b. Allreduce to get sum of all features / class
-    sum_op = bodo.libs.distributed_api.Reduce_Type.Sum.value
+    # sum_op = bodo.libs.distributed_api.Reduce_Type.Sum.value
     # (classes, )
-    smoothed_cc = bodo.libs.distributed_api.dist_reduce(smoothed_cc, np.int32(sum_op))
+    # smoothed_cc = bodo.libs.distributed_api.dist_reduce(smoothed_cc, np.int32(sum_op))
+    comm = MPI.COMM_WORLD
+    smoothed_cc = np.zeros(sub_smoothed_cc.shape)
+    comm.Allreduce(sub_smoothed_cc, smoothed_cc, op=MPI.SUM)
     # 3c. Each rank compute log probability for its own set of features.
     sub_feature_log_prob_ = np.log(smoothed_fc) - np.log(smoothed_cc.reshape(-1, 1))
     # 4. Allgather the log features so each rank has full model. This is the one used in predict
