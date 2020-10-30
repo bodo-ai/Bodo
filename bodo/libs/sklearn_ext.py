@@ -1442,3 +1442,20 @@ def overload_logistic_regression_fit(
     else:
         # Run create and run SGDClassifier(loss='log')
         pass
+
+
+@overload_method(BodoLogisticRegressionType, "predict", no_unliteral=True)
+def overload_logistic_regression_predict(m, X):
+    def _logistic_regression_predict_impl(m, X):  # pragma: no cover
+
+        with numba.objmode(result="int64[:]"):
+            # currently we do data-parallel prediction
+            m.n_jobs = 1
+            if len(X) == 0:
+                # TODO If X is replicated this should be an error (same as sklearn)
+                result = np.empty(0, dtype=np.int64)
+            else:
+                result = m.predict(X).astype(np.int64).flatten()
+        return result
+
+    return _logistic_regression_predict_impl
