@@ -427,7 +427,7 @@ def overload_coerce_to_array(
         and all(isinstance(t, types.StringLiteral) for t in data.types)
     ):
         return lambda data, error_on_nonarray=True, use_nullable_array=None, scalar_to_arr_len=None: bodo.libs.str_arr_ext.str_arr_from_sequence(
-            list(data)
+            data
         )  # pragma: no cover
 
     if data in (
