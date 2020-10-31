@@ -11,7 +11,7 @@ from sklearn.cluster import KMeans
 from sklearn.datasets import make_classification, make_regression
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import SGDClassifier, SGDRegressor
-from sklearn.metrics import f1_score, precision_score, recall_score
+from sklearn.metrics import f1_score, precision_score, recall_score, accuracy_score
 from sklearn.preprocessing import StandardScaler
 from sklearn.utils._testing import assert_allclose, assert_array_equal
 from sklearn.utils.validation import check_random_state
@@ -241,6 +241,20 @@ def gen_random(n, true_chance, return_arrays=True):
         return [y_true, y_pred]
 
 
+def gen_random_with_sample_weight(n, true_chance, return_arrays=True):
+    """
+    Wrapper around the gen_random function. This one also has a third
+    array/list for sample_weight, each element of which is in (0,1).
+    Returns np arrays if return_arrays==True, else python lists.
+    """
+    [y_true, y_pred] = gen_random(n, true_chance, return_arrays)
+    np.random.seed(5)
+    sample_weight = np.random.random_sample(size=n)
+    if not return_arrays:
+        sample_weight = list(sample_weight)
+    return [y_true, y_pred, sample_weight]
+
+
 @pytest.mark.parametrize(
     "data",
     [
@@ -265,6 +279,56 @@ def test_score(data, average):
     check_func(test_precision, tuple(data + [average]), is_out_distributed=False)
     check_func(test_recall, tuple(data + [average]), is_out_distributed=False)
     check_func(test_f1, tuple(data + [average]), is_out_distributed=False)
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        gen_random_with_sample_weight(10, 0.5, return_arrays=True),
+        gen_random_with_sample_weight(50, 0.7, return_arrays=True),
+        gen_random_with_sample_weight(76, 0.3, return_arrays=False),
+        gen_random_with_sample_weight(11, 0.43, return_arrays=False),
+    ],
+)
+@pytest.mark.parametrize("normalize", [True, False])
+# TODO: Add memory_leak when bug is solved (curently fails on data0 and data1)
+def test_accuracy_score(data, normalize):
+    """
+    Tests for the sklearn.metrics.accuracy_score implementation in Bodo.
+    """
+
+    def test_accuracy_score_0(y_true, y_pred):
+        return accuracy_score(y_true, y_pred)
+
+    def test_accuracy_score_1(y_true, y_pred):
+        return accuracy_score(y_true, y_pred, normalize=normalize)
+
+    def test_accuracy_score_2(y_true, y_pred, sample_weight_):
+        return accuracy_score(y_true, y_pred, sample_weight=sample_weight_)
+
+    def test_accuracy_score_3(y_true, y_pred, sample_weight_):
+        return accuracy_score(
+            y_true, y_pred, normalize=normalize, sample_weight=sample_weight_
+        )
+
+    def test_accuracy_score_4(y_true, y_pred, sample_weight_):
+        return accuracy_score(
+            y_true, y_pred, sample_weight=sample_weight_, normalize=normalize
+        )
+
+    check_func(test_accuracy_score_0, tuple(data[0:2]), is_out_distributed=False)
+    check_func(test_accuracy_score_1, tuple(data[0:2]), is_out_distributed=False)
+    check_func(test_accuracy_score_2, tuple(data), is_out_distributed=False)
+    check_func(
+        test_accuracy_score_3,
+        tuple(data),
+        is_out_distributed=False,
+    )
+    check_func(
+        test_accuracy_score_4,
+        tuple(data),
+        is_out_distributed=False,
+    )
 
 
 @pytest.mark.skip(reason="Run manually on multinode cluster.")
