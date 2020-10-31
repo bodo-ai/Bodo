@@ -582,7 +582,6 @@ class DataFramePass:
         exec(func_text, {}, loc_vars)
         f = loc_vars["f"]
 
-        arr_typ = self.typemap[lhs.name].data
         nodes = []
         col_vars = [self._get_dataframe_data(df_var, c, nodes) for c in used_cols]
         df_index_var = self._get_dataframe_index(df_var, nodes)
@@ -2142,5 +2141,7 @@ def _get_df_apply_used_cols(func, columns):
             break
 
     # remove duplicates with set() since a column can be used multiple times
-    used_cols = sorted(set(used_cols))
+    # keep the order the same as original columns to avoid errors with int getitem on
+    # Row namedtuple
+    used_cols = [c for (_, c) in sorted((columns.index(v), v) for v in set(used_cols))]
     return used_cols
