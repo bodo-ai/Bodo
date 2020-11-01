@@ -168,6 +168,22 @@ def construct_array_item_array(
     payload = cgutils.create_struct_proxy(payload_type)(context, builder)
     payload.n_arrays = n_arrays
 
+    # if number of data elements is unknown (-1), use same length as array for now
+    # i.e: if n_elems[0] == -1: n_elems[0] = n_arrays
+    n_counts = n_elems.type.count
+    data_len = builder.extract_value(n_elems, 0)
+    len_ptr = cgutils.alloca_once_value(builder, data_len)
+    is_unknown_len = builder.icmp_signed(
+        "==", data_len, lir.Constant(data_len.type, -1)
+    )
+    with builder.if_then(is_unknown_len):
+        builder.store(n_arrays, len_ptr)
+    n_elems = cgutils.pack_array(
+        builder,
+        [builder.load(len_ptr)]
+        + [builder.extract_value(n_elems, i) for i in range(1, n_counts)],
+    )
+
     # alloc data
     payload.data = gen_allocate_array(
         context, builder, array_item_type.dtype, n_elems, c
@@ -692,6 +708,45 @@ def get_n_arrays(typingctx, arr_typ=None):
         return payload.n_arrays
 
     return types.int64(arr_typ), codegen
+
+
+@intrinsic
+def replace_data_arr(typingctx, arr_typ, data_typ=None):
+    """replace the underlying data array of array(item) array"""
+    assert isinstance(arr_typ, ArrayItemArrayType) and data_typ == arr_typ.dtype
+
+    def codegen(context, builder, sig, args):
+        (arr, new_data) = args
+        # replace data array in payload
+        array_item_array = context.make_helper(builder, arr_typ, arr)
+        payload_type = ArrayItemArrayPayloadType(arr_typ)
+        meminfo_void_ptr = context.nrt.meminfo_data(builder, array_item_array.meminfo)
+        meminfo_data_ptr = builder.bitcast(
+            meminfo_void_ptr, context.get_value_type(payload_type).as_pointer()
+        )
+        payload = cgutils.create_struct_proxy(payload_type)(
+            context, builder, builder.load(meminfo_data_ptr)
+        )
+        context.nrt.decref(builder, data_typ, payload.data)
+        payload.data = new_data
+        context.nrt.incref(builder, data_typ, new_data)
+        builder.store(payload._getvalue(), meminfo_data_ptr)
+
+    return types.none(arr_typ, data_typ), codegen
+
+
+@numba.njit(no_cpython_wrapper=True)
+def ensure_data_capacity(arr, new_size):  # pragma: no cover
+    """
+    make sure the internal data array has enough space for 'new_size' number of elements
+    """
+    data = get_data(arr)
+    old_len = len(data)
+    if old_len < new_size:
+        # double the capacity similar to std::vector
+        new_len = max(2 * old_len, new_size)
+        new_data = bodo.libs.array_kernels.resize_and_copy(data, old_len, new_len)
+        replace_data_arr(arr, new_data)
 
 
 @overload(len, no_unliteral=True)
