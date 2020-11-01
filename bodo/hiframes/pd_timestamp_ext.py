@@ -92,7 +92,17 @@ date_fields = [
     "daysinmonth",
     "days_in_month",
     "is_leap_year",
+    "is_month_start",
+    "is_month_end",
+    "is_quarter_start",
+    "is_quarter_end",
+    "is_year_start",
+    "is_year_end",
+    "week",
+    "weekofyear",
+    "weekday",
 ]
+date_methods = ["normalize"]
 
 # Timedelta fields separated by return type
 timedelta_fields = ["days", "seconds", "microseconds", "nanoseconds"]
@@ -545,35 +555,125 @@ def overload_pd_timestamp(
 
 @overload_attribute(PandasTimestampType, "dayofyear")
 def overload_pd_dayofyear(ptt):
-    def pd_dayofyear(ptt):
+    def pd_dayofyear(ptt):  # pragma: no cover
         return get_day_of_year(ptt.year, ptt.month, ptt.day)
 
     return pd_dayofyear
 
 
+@overload_method(PandasTimestampType, "weekday")
 @overload_attribute(PandasTimestampType, "dayofweek")
 def overload_pd_dayofweek(ptt):
-    def pd_dayofweek(ptt):
+    def pd_dayofweek(ptt):  # pragma: no cover
         return get_day_of_week(ptt.year, ptt.month, ptt.day)
 
     return pd_dayofweek
 
 
+# Pandas Implementation:
+# https://github.com/pandas-dev/pandas/blob/e088ea31a897929848caa4b5ce3db9d308c604db/pandas/_libs/tslibs/ccalendar.pyx#L138
+@overload_attribute(PandasTimestampType, "week")
+@overload_attribute(PandasTimestampType, "weekofyear")
+def overload_week_number(ptt):
+    def pd_week_number(ptt):
+        # Offset the day of the year by the (day of the week of jan 1st) and add 1 week because 1 indexed
+        # Year starting on a Monday should be 7
+        return (
+            get_day_of_year(ptt.year, ptt.month, ptt.day)
+            + get_day_of_week(ptt.year, 1, 1)
+            + 6
+        ) // 7
+
+    return pd_week_number
+
+
+# Pandas Implementation:
+# https://github.com/pandas-dev/pandas/blob/e088ea31a897929848caa4b5ce3db9d308c604db/pandas/_libs/tslibs/ccalendar.pyx#L59
 @overload_attribute(PandasTimestampType, "days_in_month")
 @overload_attribute(PandasTimestampType, "daysinmonth")
 def overload_pd_daysinmonth(ptt):
-    def pd_daysinmonth(ptt):
+    def pd_daysinmonth(ptt):  # pragma: no cover
         return get_days_in_month(ptt.year, ptt.month)
 
     return pd_daysinmonth
 
 
+# Pandas Implementation:
+# https://github.com/pandas-dev/pandas/blob/e088ea31a897929848caa4b5ce3db9d308c604db/pandas/_libs/tslibs/ccalendar.pyx#L132
 @overload_attribute(PandasTimestampType, "is_leap_year")
 def overload_pd_is_leap_year(ptt):
-    def pd_is_leap_year(ptt):
+    def pd_is_leap_year(ptt):  # pragma: no cover
         return is_leap_year(ptt.year)
 
     return pd_is_leap_year
+
+
+# Pandas Implementation:
+# https://github.com/pandas-dev/pandas/blob/e088ea31a897929848caa4b5ce3db9d308c604db/pandas/_libs/tslibs/timestamps.pyx#L425
+# Note we don't support business frequencies
+@overload_attribute(PandasTimestampType, "is_month_start")
+def overload_pd_is_month_start(ptt):
+    def pd_is_month_start(ptt):  # pragma: no cover
+        return ptt.day == 1
+
+    return pd_is_month_start
+
+
+# Pandas Implementation:
+# https://github.com/pandas-dev/pandas/blob/e088ea31a897929848caa4b5ce3db9d308c604db/pandas/_libs/tslibs/timestamps.pyx#L436
+# Note we don't support business frequencies
+@overload_attribute(PandasTimestampType, "is_month_end")
+def overload_pd_is_month_end(ptt):
+    def pd_is_month_end(ptt):  # pragma: no cover
+        return ptt.day == get_days_in_month(ptt.year, ptt.month)
+
+    return pd_is_month_end
+
+
+# Pandas Implementation:
+# https://github.com/pandas-dev/pandas/blob/e088ea31a897929848caa4b5ce3db9d308c604db/pandas/_libs/tslibs/timestamps.pyx#L445
+# Note we don't support business frequencies
+@overload_attribute(PandasTimestampType, "is_quarter_start")
+def overload_pd_is_quarter_start(ptt):
+    def pd_is_quarter_start(ptt):  # pragma: no cover
+        return ptt.day == 1 and (ptt.month % 3) == 1
+
+    return pd_is_quarter_start
+
+
+# Pandas Implementation:
+# https://github.com/pandas-dev/pandas/blob/e088ea31a897929848caa4b5ce3db9d308c604db/pandas/_libs/tslibs/timestamps.pyx#L456
+# Note we don't support business frequencies
+@overload_attribute(PandasTimestampType, "is_quarter_end")
+def overload_pd_is_quarter_end(ptt):
+    def pd_is_quarter_end(ptt):  # pragma: no cover
+        return (ptt.month % 3) == 0 and ptt.day == get_days_in_month(
+            ptt.year, ptt.month
+        )
+
+    return pd_is_quarter_end
+
+
+# Pandas Implementation:
+# https://github.com/pandas-dev/pandas/blob/e088ea31a897929848caa4b5ce3db9d308c604db/pandas/_libs/tslibs/timestamps.pyx#L466
+# Note we don't support business frequencies
+@overload_attribute(PandasTimestampType, "is_year_start")
+def overload_pd_is_year_start(ptt):
+    def pd_is_year_start(ptt):  # pragma: no cover
+        return ptt.day == 1 and ptt.month == 1
+
+    return pd_is_year_start
+
+
+# Pandas Implementation:
+# https://github.com/pandas-dev/pandas/blob/e088ea31a897929848caa4b5ce3db9d308c604db/pandas/_libs/tslibs/timestamps.pyx#L476
+# Note we don't support business frequencies
+@overload_attribute(PandasTimestampType, "is_year_end")
+def overload_pd_is_year_end(ptt):
+    def pd_is_year_end(ptt):  # pragma: no cover
+        return ptt.day == 31 and ptt.month == 12
+
+    return pd_is_year_end
 
 
 @overload_attribute(PandasTimestampType, "quarter")
@@ -637,6 +737,14 @@ def overload_pd_timestamp_isoformat(ts_typ, sep=None):
             return res
 
     return timestamp_isoformat_impl
+
+
+@overload_method(PandasTimestampType, "normalize", no_unliteral=True)
+def overload_pd_timestamp_normalize(ptt):
+    def impl(ptt):  # pragma: no cover
+        return pd.Timestamp(year=ptt.year, month=ptt.month, day=ptt.day)
+
+    return impl
 
 
 # TODO: support general string formatting
@@ -836,7 +944,7 @@ def convert_numpy_timedelta64_to_datetime_timedelta(dt64):  # pragma: no cover
 
 @numba.njit
 def convert_numpy_timedelta64_to_pd_timedelta(dt64):  # pragma: no cover
-    """Convertes numpy.timedelta64 to datetime.timedelta"""
+    """Convertes numpy.timedelta64 to pd.Timedelta"""
     n_int64 = bodo.hiframes.datetime_timedelta_ext.cast_numpy_timedelta_to_int(dt64)
     return pd.Timedelta(n_int64)
 

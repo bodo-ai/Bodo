@@ -301,6 +301,15 @@ def test_timestamp_constant_lowering(memory_leak_check):
     assert val_ret == t
 
 
+def test_timestamp_weekday(memory_leak_check):
+    def test_impl(ts):
+        return ts.weekday()
+
+    for i in range(1, 21):
+        ts = pd.Timestamp("2012-06-" + ("0" + str(i) if i < 10 else str(i)))
+        check_func(test_impl, (ts,))
+
+
 def test_timestamp_strftime(memory_leak_check):
     def test_impl(ts, fmt_string):
         return ts.strftime(fmt_string)
@@ -1034,8 +1043,25 @@ def test_dt_extract(series_value, date_fields, memory_leak_check):
     loc_vars = {}
     exec(func_text, {}, loc_vars)
     impl = loc_vars["impl"]
+    if date_fields in ["week", "weekofyear"]:
+        # Pandas has bugs returning the correct week at the end of some years,
+        # so skip those values
+        if len(np.nonzero(series_value.dt.dayofyear.values > 360)) > 0:
+            return
 
     check_func(impl, (series_value, date_fields), check_dtype=False)
+
+
+@pytest.mark.parametrize("date_methods", bodo.hiframes.pd_timestamp_ext.date_methods)
+def test_dt_date_methods(series_value, date_methods, memory_leak_check):
+    """Test Series.dt datetime methods"""
+    func_text = "def impl(S, date_methods):\n"
+    func_text += "  return S.dt.{}()\n".format(date_methods)
+    loc_vars = {}
+    exec(func_text, {}, loc_vars)
+    impl = loc_vars["impl"]
+
+    check_func(impl, (series_value, date_methods))
 
 
 def test_dt_extract_date(series_value, memory_leak_check):
@@ -1361,6 +1387,15 @@ def test_timestamp_isocalendar(ts, memory_leak_check):
         return ts.isocalendar()
 
     check_func(test_impl, (ts,))
+
+
+def test_dt_components(memory_leak_check):
+    def impl(S):
+        return S.dt.components
+
+    S = pd.timedelta_range(start="1 day", end="2 days", periods=100).to_series()
+
+    check_func(impl, (S,))
 
 
 def test_dt_ceil_timedelta_min(memory_leak_check):
