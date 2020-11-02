@@ -638,7 +638,7 @@ def test_logistic_regression(memory_leak_check):
     # Toy dataset where features correspond directly to labels.
     X = np.array([[0, 0, 5], [0, 5, 0], [3, 0, 0], [0, 0, 6], [6, 0, 0]])
     y = np.array([1, 2, 2, 1, 2])
-    # When testing with string, this error comes
+    # When testing with string, with predict this error comes
     # >           bodo_out = bodo_func(*call_args)
     # E           ValueError: invalid literal for int() with base 10: 'eggs'
     # y = np.array(["eggs", "spam", "spam", "eggs", "spam"])
@@ -666,5 +666,4 @@ def test_logistic_regression(memory_leak_check):
             X,
             y,
         ),
-        only_seq=True,
     )
