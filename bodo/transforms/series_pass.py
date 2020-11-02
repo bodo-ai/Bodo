@@ -107,6 +107,7 @@ from bodo.utils.transform import (
     gen_init_varsize_alloc_sizes,
     gen_varsize_item_sizes,
     get_call_expr_arg,
+    get_type_alloc_counts,
     is_var_size_item_array_type,
     replace_func,
     update_locs,
@@ -2201,9 +2202,12 @@ class SeriesPass:
         func_text += "  n = len(A)\n"
 
         # an extra loop is currently necessary to get alloc sizes for arrays with
-        # variable size items, e.g. strings
+        # variable size items, e.g. nested arrays
         # TODO: avoid extra loop (e.g. builder pattern?)
-        if any(is_var_size_item_array_type(t) for t in out_arr_types):
+        if any(
+            is_var_size_item_array_type(t) and not t == string_array_type
+            for t in out_arr_types
+        ):
             for i in range(n_out_cols):
                 func_text += (
                     f"  nested_counts{i} = init_nested_counts(data_arr_type{i})\n"
@@ -2222,6 +2226,15 @@ class SeriesPass:
             for i in range(n_out_cols):
                 func_text += f"    nested_counts{i} = add_nested_counts(nested_counts{i}, u{i})\n"
             func_text += "  numba.parfors.parfor.init_prange()\n"
+        elif any(t == string_array_type for t in out_arr_types):
+            for i in range(n_out_cols):
+                # TODO: use this path for all nested array types when supported
+                # n_nested_counts = get_type_alloc_counts(out_arr_types[i])
+                # nested_counts = f"({','.join('-1' for _ in range(n_nested_counts))},)" if n_nested_counts else "None"
+                if out_arr_types[i] == string_array_type:
+                    func_text += f"  nested_counts{i} = (-1,)\n"
+                else:
+                    func_text += f"  nested_counts{i} = None\n"
         else:
             for i in range(n_out_cols):
                 func_text += f"  nested_counts{i} = None\n"
