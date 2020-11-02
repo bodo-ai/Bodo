@@ -667,3 +667,71 @@ def test_logistic_regression(memory_leak_check):
             y,
         ),
     )
+
+    def impl_score(X, y):
+        clf = LogisticRegression(n_jobs=8)
+        clf.fit(X, y)
+        return clf.score(X, y)
+
+    check_func(
+        impl_score,
+        (
+            X,
+            y,
+        ),
+    )
+
+    def impl(X_train, y_train, X_test, y_test, name="Logistic Regression BODO"):
+        # Bodo ignores n_jobs. This is set for scikit-learn (non-bodo) run. It should be set to number of cores avialable.
+        clf = LogisticRegression(n_jobs=8)
+        start_time = time.time()
+        clf.fit(X_train, y_train)
+        end_time = time.time()
+        y_pred = clf.predict(X_test)
+        score = precision_score(y_test, y_pred, average="weighted")
+        if bodo.get_rank() == 0:
+            print(
+                "\n", name, "Time: ", (end_time - start_time), "\tScore: ", score, "\n"
+            )
+        return score
+
+    splitN = 60
+    n_samples = 1000
+    n_features = 10
+    X_train = None
+    y_train = None
+    X_test = None
+    y_test = None
+    if bodo.get_rank() == 0:
+        X, y = make_classification(
+            n_samples=n_samples,
+            n_features=n_features,
+            n_classes=2,
+            n_clusters_per_class=1,
+            flip_y=0.03,
+            n_informative=5,
+            n_redundant=0,
+            n_repeated=0,
+        )
+        sklearn_predict_result = impl(
+            X[:splitN],
+            y[:splitN],
+            X[splitN:],
+            y[splitN:],
+            "Real Logistic Regression SK",
+        )
+        X_train = bodo.scatterv(X[:splitN])
+        y_train = bodo.scatterv(y[:splitN])
+        X_test = bodo.scatterv(X[splitN:])
+        y_test = bodo.scatterv(y[splitN:])
+    else:
+        X_train = bodo.scatterv(None)
+        y_train = bodo.scatterv(None)
+        X_test = bodo.scatterv(None)
+        y_test = bodo.scatterv(None)
+
+    bodo_predict_result = bodo.jit(
+        distributed=["X_train", "y_train", "X_test", "y_test"]
+    )(impl)(X_train, y_train, X_test, y_test)
+    if bodo.get_rank() == 0:
+        assert np.allclose(sklearn_predict_result, bodo_predict_result, atol=0.1)
