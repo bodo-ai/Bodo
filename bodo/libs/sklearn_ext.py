@@ -1440,8 +1440,31 @@ def overload_logistic_regression_fit(
 
         return _logistic_regression_fit_impl
     else:
-        # Run create and run SGDClassifier(loss='log')
-        pass
+        # Create and run SGDClassifier(loss='log')
+        def _sgdc_logistic_regression_fit_impl(
+            m, X, y, sample_weight=None, _is_data_distributed=False
+        ):  # pragma no cover
+            clf = sklearn.linear_model.SGDClassifer(
+                loss="log",
+                penalty=m.penalty,
+                tol=m.tol,
+                fit_intercept=m.fit_intercept,
+                class_weight=m.class_weight,
+                random_state=m.random_state,
+                max_iter=m.max_iter,
+                verbose=m.verbose,
+                warm_start=m.warm_start,
+                n_jobs=m.n_jobs,
+                l1_ratio=m.l1_ratio,
+            )
+            clf.fit(X, y)
+            m.coef_ = clf.coef_
+            m.intercept_ = clf.intercept_
+            m.n_iter = clf.n_iter
+            m.classes_ = clf.classes_
+            return m
+
+        return _sgdc_logistic_regression_fit_impl
 
 
 @overload_method(BodoLogisticRegressionType, "predict", no_unliteral=True)
