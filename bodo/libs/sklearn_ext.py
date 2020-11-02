@@ -1409,7 +1409,6 @@ def overload_multinomial_nb_model_fit(
         return _naive_bayes_multinomial_impl
     else:
         # TODO: sample_weight (future enhancement)
-        # If it's a dataframe gather columns in objmode. (This is because Bodo doesn't allow slicing with variables)
         func_text = "def _model_multinomial_nb_fit_impl(\n"
         func_text += "    m, X, y, sample_weight=None, _is_data_distributed=False\n"
         func_text += "):  # pragma no cover\n"
@@ -1437,9 +1436,7 @@ def overload_multinomial_nb_model_fit(
         func_text += "    y_train = bodo.allgatherv(y, False)\n"
         func_text += '    with numba.objmode(m="multinomial_nb_type"):\n'
         func_text += "        m = fit_multinomial_nb(\n"
-        func_text += (
-            "            m, X_train, y_train, sample_weight, _is_data_distributed\n"
-        )
+        func_text += "            m, X_train, y_train, sample_weight, total_cols, _is_data_distributed\n"
         func_text += "        )\n"
         func_text += "    bodo.barrier()\n"
         func_text += "    return m\n"
@@ -1460,7 +1457,7 @@ def overload_multinomial_nb_model_fit(
 
 
 def fit_multinomial_nb(
-    m, X_train, y_train, sample_weight=None, _is_data_distributed=False
+    m, X_train, y_train, sample_weight=None, total_cols=0, _is_data_distributed=False
 ):
     """Fit naive bayes Multinomial(parallel version)
     Since this model depends on having lots of columns, we do parallelization by columns"""
@@ -1500,19 +1497,34 @@ def fit_multinomial_nb(
     smoothed_fc = m.feature_count_ + alpha
     sub_smoothed_cc = smoothed_fc.sum(axis=1)
     # 3b. Allreduce to get sum of all features / class
-    # sum_op = bodo.libs.distributed_api.Reduce_Type.Sum.value
-    # (classes, )
-    # smoothed_cc = bodo.libs.distributed_api.dist_reduce(smoothed_cc, np.int32(sum_op))
     comm = MPI.COMM_WORLD
-    smoothed_cc = np.zeros(sub_smoothed_cc.shape)
+    nranks = comm.Get_size()
+    # (classes, )
+    smoothed_cc = np.zeros(n_effective_classes)
     comm.Allreduce(sub_smoothed_cc, smoothed_cc, op=MPI.SUM)
     # 3c. Each rank compute log probability for its own set of features.
+    # (classes, sub_features)
     sub_feature_log_prob_ = np.log(smoothed_fc) - np.log(smoothed_cc.reshape(-1, 1))
+
     # 4. Allgather the log features so each rank has full model. This is the one used in predict
     # Allgather combines by rows. Therefore, transpose before sending and after receiving
-    sub_log_feature_T = sub_feature_log_prob_.T
-    full_log_feature_T = bodo.allgatherv(sub_log_feature_T, False)
-    # Final shape (n_classes, n_features)
+    # Reshape as 1D after transposing (This is needed so numpy actually changes data layout to be transposed)
+    sub_log_feature_T = sub_feature_log_prob_.T.reshape(
+        n_features * n_effective_classes
+    )
+    # Get count of elements and displacements for each rank.
+    sizes = np.ones(nranks) * (total_cols // nranks)
+    remainder_cols = total_cols % nranks
+    for rank in range(remainder_cols):
+        sizes[rank] += 1
+    sizes *= n_effective_classes
+    offsets = np.zeros(nranks, dtype=np.int32)
+    offsets[1:] = np.cumsum(sizes)[:-1]
+    full_log_feature_T = np.zeros((total_cols, n_effective_classes), dtype=np.float64)
+    comm.Allgatherv(
+        sub_log_feature_T, [full_log_feature_T, sizes, offsets, MPI.DOUBLE_PRECISION]
+    )
+    # Retranspose to get final shape (n_classes, total_n_features)
     m.feature_log_prob_ = full_log_feature_T.T
     m.n_features_ = m.feature_log_prob_.shape[1]
 
