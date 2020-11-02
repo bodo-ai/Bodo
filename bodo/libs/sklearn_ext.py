@@ -1433,7 +1433,7 @@ def overload_logistic_regression_fit(
 
         def _logistic_regression_fit_impl(
             m, X, y, sample_weight=None, _is_data_distributed=False
-        ):  # pragma no cover
+        ):  # pragma: no cover
             with numba.objmode():
                 m.fit(X, y, sample_weight)
             return m
@@ -1443,40 +1443,27 @@ def overload_logistic_regression_fit(
         # Create and run SGDClassifier(loss='log')
         def _sgdc_logistic_regression_fit_impl(
             m, X, y, sample_weight=None, _is_data_distributed=False
-        ):  # pragma no cover
-            with numba.objmode(
-                penalty="unicode_type",
-                tol="float64",
-                fit_intercept="boolean",
-                max_iter="int64",
-                verbose="int32",
-                warm_start="boolean",
-            ):
-                penalty = m.penalty
-                tol = m.tol
-                fit_intercept = m.fit_intercept
-                max_iter = m.max_iter
-                verbose = m.verbose
-                warm_start = m.warm_start
-            clf = sklearn.linear_model.SGDClassifier(
-                loss="log",
-                # string
-                penalty=penalty,
-                tol=tol,
-                fit_intercept=fit_intercept,
-                # dict
-                # class_weight=class_weight,
-                # int or None
-                # random_state=random_state,
-                max_iter=max_iter,
-                verbose=verbose,
-                warm_start=warm_start,
-                # int or None
-                # n_jobs=n_jobs,
-                # float or None
-                # l1_ratio=l1_ratio,
-            )
-            clf.fit(X, y)
+        ):  # pragma: no cover
+            with numba.objmode(clf="sgd_classifier_type"):
+                # SGDClassifier doesn't allow l1_ratio to be None. default=0.15
+                if m.l1_ratio is None:
+                    l1_ratio = 0.15
+                else:
+                    l1_ratio = m.l1_ratio
+                clf = sklearn.linear_model.SGDClassifier(
+                    loss="log",
+                    penalty=m.penalty,
+                    tol=m.tol,
+                    fit_intercept=m.fit_intercept,
+                    class_weight=m.class_weight,
+                    random_state=m.random_state,
+                    max_iter=m.max_iter,
+                    verbose=m.verbose,
+                    warm_start=m.warm_start,
+                    n_jobs=m.n_jobs,
+                    l1_ratio=l1_ratio,
+                )
+            clf.fit(X, y, _is_data_distributed=True)
             with numba.objmode():
                 m.coef_ = clf.coef_
                 m.intercept_ = clf.intercept_
@@ -1489,8 +1476,9 @@ def overload_logistic_regression_fit(
 
 @overload_method(BodoLogisticRegressionType, "predict", no_unliteral=True)
 def overload_logistic_regression_predict(m, X):
-    def _logistic_regression_predict_impl(m, X):  # pragma: no cover
+    """Overload Logistic Regression predict. (Data parallelization)"""
 
+    def _logistic_regression_predict_impl(m, X):  # pragma: no cover
         with numba.objmode(result="int64[:]"):
             # currently we do data-parallel prediction
             m.n_jobs = 1
@@ -1502,3 +1490,31 @@ def overload_logistic_regression_predict(m, X):
         return result
 
     return _logistic_regression_predict_impl
+
+
+@overload_method(BodoLogisticRegressionType, "score", no_unliteral=True)
+def overload_logistic_regression_score(
+    m,
+    X,
+    y,
+    sample_weight=None,
+    _is_data_distributed=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
+):
+    """Overload Logistic Regression score."""
+
+    def _model_score_impl(
+        m, X, y, sample_weight=None, _is_data_distributed=False
+    ):  # pragma: no cover
+        with numba.objmode(result="float64[:]"):
+            result = m.score(X, y, sample_weight=sample_weight)
+            if _is_data_distributed:
+                # replicate result so that the average is weighted based on
+                # the data size on each rank
+                result = np.full(len(y), result)
+            else:
+                result = np.array([result])
+        if _is_data_distributed:
+            result = bodo.allgatherv(result)
+        return result.mean()
+
+    return _model_score_impl
