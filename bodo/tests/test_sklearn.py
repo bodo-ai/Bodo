@@ -11,7 +11,12 @@ from sklearn.cluster import KMeans
 from sklearn.datasets import make_classification, make_regression
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression, SGDClassifier, SGDRegressor
-from sklearn.metrics import f1_score, precision_score, recall_score, accuracy_score
+from sklearn.metrics import (
+    accuracy_score,
+    f1_score,
+    precision_score,
+    recall_score,
+)
 from sklearn.preprocessing import StandardScaler
 from sklearn.utils._testing import assert_allclose, assert_array_equal
 from sklearn.utils.validation import check_random_state
@@ -691,7 +696,7 @@ def test_kmeans(memory_leak_check):
     )
 
 
-# --------------------KMeans Clustering Tests-----------------#
+# --------------------Logistic Regression Tests-----------------#
 
 
 def test_logistic_regression(memory_leak_check):
