@@ -87,9 +87,9 @@ Naive Bayes
 
 Methods:
 
-  * :any:`sklearn.ensemble.RandomForestClassifier.fit`
-  * :any:`sklearn.ensemble.RandomForestClassifier.predict`
-  * :any:`sklearn.ensemble.RandomForestClassifier.score`
+  * :any:`sklearn.naive_bayes.MultinomialNB.fit`
+  * :any:`sklearn.naive_bayes.MultinomialNB.predict`
+  * :any:`sklearn.naive_bayes.MultinomialNB.score`
 
 Classification metrics
 ~~~~~~~~~~~~~~~~~~~~~~
