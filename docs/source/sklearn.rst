@@ -77,6 +77,20 @@ Methods:
   * :any:`sklearn.ensemble.RandomForestClassifier.predict`
   * :any:`sklearn.ensemble.RandomForestClassifier.score`
 
+
+Naive Bayes
+~~~~~~~~~~~~~~~~
+
+:class:`sklearn.naive_bayes.MultinomialNB`
+
+  This class provides Naive Bayes classifier for multinomial models with distributed large-scale learning.
+
+Methods:
+
+  * :any:`sklearn.ensemble.RandomForestClassifier.fit`
+  * :any:`sklearn.ensemble.RandomForestClassifier.predict`
+  * :any:`sklearn.ensemble.RandomForestClassifier.score`
+
 Classification metrics
 ~~~~~~~~~~~~~~~~~~~~~~
 
