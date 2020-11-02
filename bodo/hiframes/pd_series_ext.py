@@ -66,13 +66,14 @@ from bodo.utils.typing import (
     create_unsupported_overload,
     get_udf_error_msg,
     get_udf_out_arr_type,
+    is_heterogeneous_tuple_type,
     is_overload_false,
     is_overload_none,
 )
 
 
 class SeriesType(types.IterableType, types.ArrayCompatible):
-    """Temporary type class for Series objects."""
+    """Type class for Series objects"""
 
     ndim = 1
 
@@ -149,8 +150,39 @@ class SeriesType(types.IterableType, types.ArrayCompatible):
         return types.iterators.ArrayIterator(self.data)
 
 
+class HeterogeneousSeriesType(types.Type):
+    """
+    Type class for Series objects with heterogeneous values (e.g. pd.Series([1, 'A']))
+    """
+
+    ndim = 1
+
+    def __init__(self, data=None, index=None, name_typ=None):
+        from bodo.hiframes.pd_index_ext import RangeIndexType
+
+        self.data = data
+        name_typ = types.none if name_typ is None else name_typ
+        index = RangeIndexType(types.none) if index is None else index
+        # TODO(ehsan): add check for index type
+        self.index = index  # index should be an Index type (not Array)
+        self.name_typ = name_typ
+        super(HeterogeneousSeriesType, self).__init__(
+            name="heter_series({}, {}, {})".format(data, index, name_typ)
+        )
+
+    def copy(self, index=None):
+        if index is None:
+            index = self.index.copy()
+        return HeterogeneousSeriesType(self.data, index, self.name_typ)
+
+    @property
+    def key(self):
+        return self.data, self.index, self.name_typ
+
+
 def _get_series_array_type(dtype):
     """get underlying default array type of series based on its dtype"""
+    dtype = types.unliteral(dtype)
 
     # UDFs may return lists, but we store array of array for output
     if isinstance(dtype, types.List):
@@ -234,6 +266,7 @@ class SeriesPayloadModel(models.StructModel):
         super(SeriesPayloadModel, self).__init__(dmm, fe_type, members)
 
 
+@register_model(HeterogeneousSeriesType)
 @register_model(SeriesType)
 class SeriesModel(models.StructModel):
     def __init__(self, dmm, fe_type):
@@ -337,10 +370,14 @@ def init_series(typingctx, data, index, name=None):
 
         return series_val
 
-    dtype = data.dtype
-    # XXX pd.DataFrame() calls init_series for even Series since it's untyped
-    data = if_series_to_array_type(data)
-    ret_typ = SeriesType(dtype, data, index, name)
+    if is_heterogeneous_tuple_type(data):
+        ret_typ = HeterogeneousSeriesType(data, index, name)
+    else:
+        dtype = data.dtype
+        # XXX pd.DataFrame() calls init_series for even Series since it's untyped
+        data = if_series_to_array_type(data)
+        ret_typ = SeriesType(dtype, data, index, name)
+
     sig = signature(ret_typ, data, index, name)
     return sig, codegen
 
@@ -349,6 +386,9 @@ def init_series_equiv(self, scope, equiv_set, loc, args, kws):
     assert len(args) >= 1 and not kws
     # TODO: add shape for index
     var = args[0]
+    # avoid returning shape for HeterogeneousSeriesType (results in errors)
+    if is_heterogeneous_tuple_type(self.typemap[var.name]):
+        return None
     if equiv_set.has_shape(var):
         return var, []
     return None
@@ -566,14 +606,24 @@ class SeriesAttribute(AttributeTemplate):
                 get_udf_error_msg(f"Series.{fname}()", e), locs_in_msg=[e.loc]
             )
 
-        data_arr = get_udf_out_arr_type(f_return_type)
-        # Series.map codegen returns np bool array instead of boolean_array currently
-        # TODO: return nullable boolean_array
-        if f_return_type == types.bool_:
-            data_arr = types.Array(types.bool_, 1, "C")
-        return signature(
-            SeriesType(f_return_type, data_arr, ary.index, ary.name_typ), (func,)
-        ).replace(pysig=pysig)
+        # output is dataframe if UDF returns a Series
+        if isinstance(f_return_type, HeterogeneousSeriesType):
+            # NOTE: get_const_func_output_type() adds const_info attribute for Series
+            # output
+            _, index_vals = f_return_type.const_info
+            arrs = tuple(_get_series_array_type(t) for t in f_return_type.data.types)
+            ret_type = bodo.DataFrameType(arrs, ary.index, index_vals)
+        elif isinstance(f_return_type, SeriesType):
+            n_cols, index_vals = f_return_type.const_info
+            arrs = tuple(
+                _get_series_array_type(f_return_type.dtype) for _ in range(n_cols)
+            )
+            ret_type = bodo.DataFrameType(arrs, ary.index, index_vals)
+        else:
+            data_arr = get_udf_out_arr_type(f_return_type)
+            ret_type = SeriesType(data_arr.dtype, data_arr, ary.index, ary.name_typ)
+
+        return signature(ret_type, (func,)).replace(pysig=pysig)
 
     @bound_function("series.map", no_unliteral=True)
     def resolve_map(self, ary, args, kws):
@@ -803,6 +853,21 @@ def pd_series_overload(
     # fastpath not supported
     if not is_overload_false(fastpath):
         raise BodoError("pd.Series(): 'fastpath' argument not supported.")
+
+    # heterogeneous tuple input case
+    if is_heterogeneous_tuple_type(data) and is_overload_none(dtype):
+
+        def impl_heter(
+            data=None, index=None, dtype=None, name=None, copy=False, fastpath=False
+        ):  # pragma: no cover
+            index_t = bodo.utils.conversion.extract_index_if_none(data, index)
+            data_t = bodo.utils.conversion.to_tuple(data)
+
+            return bodo.hiframes.pd_series_ext.init_series(
+                data_t, bodo.utils.conversion.convert_to_index(index_t), name
+            )
+
+        return impl_heter
 
     def impl(
         data=None, index=None, dtype=None, name=None, copy=False, fastpath=False

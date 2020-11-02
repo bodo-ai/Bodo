@@ -325,6 +325,28 @@ For example, ``get_series_data`` does not have side effects and can be removed
 if output is not live. In addition, the output is aliased with the input,
 and both have the same parallel distribution.
 
+
+.. _dev_inline:
+
+When to Inline Overloads
+--------------
+When implementing support for new APIs (usually using overloads), you need to decide
+if the implementation should be inlined (e.g. `inline="always"`).
+Inlining can increase the size and complexity of the IR, resulting in longer
+compilation time and potential problems in optimizations.
+On the other hand, it may necessary for parallelization and useful for optimization. 
+In general, inlining is necessary when:
+
+- The implementation needs to be parallelized (as mentioned previously,
+  distributed analysis should "see" parfors and builtins to be able to parallelize the program).
+  Usually, operations across DataFrame/Series/Array elements need to be parallelized.
+- Implementations can be optimized further if inlined (e.g. exposing the implementation 
+  may enable some pattern matching for optimization in the whole program).
+
+If the implementation is too complex for automatic parallelization (e.g. has a lot of
+control flow), it may be necessary to wrap it in a Bodo builtin.
+
+
 .. _dev_ir_extensions:
 
 IR Extensions

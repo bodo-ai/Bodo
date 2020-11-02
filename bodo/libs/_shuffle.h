@@ -5,21 +5,6 @@
 #include <mpi.h>
 #include "_bodo_common.h"
 
-/**
- * This is a wrapper around MPI_Alltoallv that supports int64 counts and
- * displacements. The API is practically the same as MPI_Alltoallv.
- * If any count or displacement value is greater than INT_MAX, it will do a
- * manually implemented version of alltoallv that will first send most of the
- * data using a custom large-sized MPI type and then send the remainder.
- */
-void bodo_alltoallv(const void* sendbuf,
-                    const std::vector<int64_t>& send_counts,
-                    const std::vector<int64_t>& send_disp,
-                    MPI_Datatype sendtype, void* recvbuf,
-                    const std::vector<int64_t>& recv_counts,
-                    const std::vector<int64_t>& recv_disp,
-                    MPI_Datatype recvtype, MPI_Comm comm);
-
 struct mpi_comm_info {
     int n_pes;
     std::vector<array_info*> arrays;

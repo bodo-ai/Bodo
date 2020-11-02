@@ -40,6 +40,7 @@ const char* get_c_str(std::string* s);
 
 int64_t str_to_int64(char* data, int64_t length);
 double str_to_float64(std::string* str);
+float str_to_float32(std::string* str);
 int64_t get_str_len(std::string* str);
 
 void* np_array_from_string_array(int64_t no_strings,
@@ -69,8 +70,8 @@ int str_arr_to_int64(int64_t* out, uint32_t* offsets, char* data,
 int str_arr_to_float64(double* out, uint32_t* offsets, char* data,
                        int64_t index);
 
-void* str_from_float32(float in);
-void* str_from_float64(double in);
+void str_from_float32(char* s, float in);
+void str_from_float64(char* s, double in);
 void inplace_int64_to_str(char* str, int64_t l, int64_t value);
 
 void del_str(std::string* in_str);
@@ -121,6 +122,8 @@ PyMODINIT_FUNC PyInit_hstr_ext(void) {
                            PyLong_FromVoidPtr((void*)(&str_to_int64)));
     PyObject_SetAttrString(m, "str_to_float64",
                            PyLong_FromVoidPtr((void*)(&str_to_float64)));
+    PyObject_SetAttrString(m, "str_to_float32",
+                           PyLong_FromVoidPtr((void*)(&str_to_float32)));
     PyObject_SetAttrString(m, "get_str_len",
                            PyLong_FromVoidPtr((void*)(&get_str_len)));
     PyObject_SetAttrString(
@@ -279,6 +282,9 @@ const char* get_c_str(std::string* s) {
 
 double str_to_float64(std::string* str) { return std::stod(*str); }
 
+float str_to_float32(std::string* str) { return std::stof(*str); }
+
+
 int64_t get_str_len(std::string* str) {
     // std::cout << "str len called: " << *str << " " <<
     // str->length()<<std::endl;
@@ -406,10 +412,13 @@ int64_t str_to_int64(char* data, int64_t length) {
     return -1;
 }
 
-void* str_from_float32(float in) { return new std::string(std::to_string(in)); }
+void str_from_float32(char* s, float in) {
+    sprintf(s, "%f", in);
+}
 
-void* str_from_float64(double in) {
-    return new std::string(std::to_string(in));
+
+void str_from_float64(char* s, double in) {
+    sprintf(s, "%f", in);
 }
 
 /**

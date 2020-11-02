@@ -531,6 +531,18 @@ def get_overload_const_func(val):
     raise BodoError("'{}' not a constant function type".format(val))
 
 
+def is_heterogeneous_tuple_type(t):
+    """check if 't' is a heterogeneous tuple type (or similar, e.g. constant list)"""
+    if is_overload_constant_list(t):
+        # LiteralList values may be non-constant
+        if isinstance(t, types.LiteralList):
+            t = types.BaseTuple.from_types(t.types)
+        else:
+            t = bodo.typeof(tuple(get_overload_const_list(t)))
+
+    return isinstance(t, types.BaseTuple) and not isinstance(t, types.UniTuple)
+
+
 def parse_dtype(dtype):
     """Parse dtype type specified in various forms into actual numba type
     (e.g. StringLiteral("int32") to types.int32)

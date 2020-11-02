@@ -18,6 +18,20 @@ from bodo.libs.str_arr_ext import str_arr_from_sequence
 from bodo.tests.utils import check_func
 
 
+def test_string_float64_cast(memory_leak_check):
+    def test_impl(_str):
+        return np.float64(_str)
+
+    check_func(test_impl, ("12.2",))
+
+
+def test_string_float32_cast(memory_leak_check):
+    def test_impl(_str):
+        return np.float32(_str)
+
+    check_func(test_impl, ("12.2",))
+
+
 @pytest.mark.parametrize(
     "op", (operator.eq, operator.ne, operator.ge, operator.gt, operator.le, operator.lt)
 )

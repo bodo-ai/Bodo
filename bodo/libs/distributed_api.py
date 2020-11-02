@@ -925,39 +925,59 @@ def gatherv(data, allgather=False, warn_if_rep=True, root=MPI_ROOT):
 
 
 @numba.generated_jit(nopython=True)
-def rebalance(df, dests=None, parallel=False):
-    n_cols = len(df.columns)
-    func_text = "def impl(df, dests=None, parallel=False):\n"
-    for i in range(n_cols):
-        func_text += "    data_{0} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {0})\n".format(
-            i
+def rebalance(data, dests=None, parallel=False):
+    if isinstance(data, bodo.hiframes.pd_dataframe_ext.DataFrameType):
+        df = data
+        n_cols = len(df.columns)
+        func_text = "def impl(data, dests=None, parallel=False):\n"
+        for i in range(n_cols):
+            func_text += "    data_{0} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(data, {0})\n".format(
+                i
+            )
+        func_text += "    ind_arr = bodo.utils.conversion.index_to_array(bodo.hiframes.pd_dataframe_ext.get_dataframe_index(data))\n"
+        data_args = ", ".join("data_{}".format(i) for i in range(n_cols))
+        func_text += "    info_list_total = [{}, array_to_info(ind_arr)]\n".format(
+            ", ".join("array_to_info(data_{})".format(x) for x in range(n_cols))
         )
-    func_text += "    ind_arr = bodo.utils.conversion.index_to_array(bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df))\n"
-    data_args = ", ".join("data_{}".format(i) for i in range(n_cols))
-    func_text += "    info_list_total = [{}, array_to_info(ind_arr)]\n".format(
-        ", ".join("array_to_info(data_{})".format(x) for x in range(n_cols))
-    )
-    func_text += "    table_total = arr_info_list_to_table(info_list_total)\n"
-    func_text += "    if dests is None:\n"
-    func_text += "        out_table = shuffle_renormalization(table_total, parallel)\n"
-    func_text += "    else:\n"
-    func_text += "        out_table = shuffle_renormalization_group(table_total, parallel, len(dests), np.array(dests, dtype=np.int32).ctypes)\n"
-    for i_col in range(n_cols):
-        func_text += "    out_arr_{0} = info_to_array(info_from_table(out_table, {0}), data_{0})\n".format(
-            i_col
+        func_text += "    table_total = arr_info_list_to_table(info_list_total)\n"
+        func_text += "    if dests is None:\n"
+        func_text += (
+            "        out_table = shuffle_renormalization(table_total, parallel)\n"
         )
-    func_text += "    out_arr_index = info_to_array(info_from_table(out_table, {}), ind_arr)\n".format(
-        n_cols
-    )
-    func_text += "    delete_table(out_table)\n"
-    func_text += "    if parallel:\n"
-    func_text += "        delete_table(table_total)\n"
-    data_args = ", ".join("out_arr_{}".format(i) for i in range(n_cols))
-    col_var = bodo.utils.transform.gen_const_tup(df.columns)
-    index = "bodo.utils.conversion.index_from_array(out_arr_index)"
-    func_text += "    return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), {}, {})\n".format(
-        data_args, index, col_var
-    )
+        func_text += "    else:\n"
+        func_text += "        out_table = shuffle_renormalization_group(table_total, parallel, len(dests), np.array(dests, dtype=np.int32).ctypes)\n"
+        for i_col in range(n_cols):
+            func_text += "    out_arr_{0} = info_to_array(info_from_table(out_table, {0}), data_{0})\n".format(
+                i_col
+            )
+        func_text += "    out_arr_index = info_to_array(info_from_table(out_table, {}), ind_arr)\n".format(
+            n_cols
+        )
+        func_text += "    delete_table(out_table)\n"
+        func_text += "    if parallel:\n"
+        func_text += "        delete_table(table_total)\n"
+        data_args = ", ".join("out_arr_{}".format(i) for i in range(n_cols))
+        col_var = bodo.utils.transform.gen_const_tup(df.columns)
+        index = "bodo.utils.conversion.index_from_array(out_arr_index)"
+        func_text += "    return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), {}, {})\n".format(
+            data_args, index, col_var
+        )
+    elif isinstance(data, types.Array):
+        func_text = "def impl(data, dests=None, parallel=False):\n"
+        func_text += "    if not parallel:\n"
+        func_text += "        return data\n"
+        func_text += "    dim0_global_size = bodo.libs.distributed_api.dist_reduce(data.shape[0], np.int32(bodo.libs.distributed_api.Reduce_Type.Sum.value))\n"
+        func_text += "    if dests is None:\n"
+        func_text += "        dim0_local_size = bodo.libs.distributed_api.get_node_portion(dim0_global_size, bodo.get_size(), bodo.get_rank())\n"
+        func_text += "    elif bodo.get_rank() not in dests:\n"
+        func_text += "        dim0_local_size = 0\n"
+        func_text += "    else:\n"
+        func_text += "        dim0_local_size = bodo.libs.distributed_api.get_node_portion(dim0_global_size, len(dests), dests.index(bodo.get_rank()))\n"
+        func_text += "    out = np.empty((dim0_local_size,) + tuple(data.shape[1:]), dtype=data.dtype)\n"
+        func_text += "    bodo.libs.distributed_api.dist_oneD_reshape_shuffle(out, data, dim0_global_size, dests)\n"
+        func_text += "    return out\n"
+    else:
+        raise BodoError("Type {} not supported for bodo.rebalance".format(data))
     loc_vars = {}
     exec(
         func_text,
@@ -2410,17 +2430,27 @@ sig = types.void(
     types.intp,  # new_len
     types.intp,  # input lower_dim size in bytes
     types.intp,  # output lower_dim size in bytes
+    types.int32,
+    types.voidptr,
 )
 
 oneD_reshape_shuffle = types.ExternalFunction("oneD_reshape_shuffle", sig)
 
 
 @numba.njit(no_cpython_wrapper=True, cache=True)
-def dist_oneD_reshape_shuffle(lhs, in_arr, new_dim0_global_len):  # pragma: no cover
-    """shuffles the data for ndarray reshape to fill the output array properly"""
+def dist_oneD_reshape_shuffle(
+    lhs, in_arr, new_dim0_global_len, dest_ranks=None
+):  # pragma: no cover
+    """shuffles the data for ndarray reshape to fill the output array properly.
+    if dest_ranks != None the data will be sent only to the specified ranks"""
     c_in_arr = np.ascontiguousarray(in_arr)
     in_lower_dims_size = get_tuple_prod(c_in_arr.shape[1:])
     out_lower_dims_size = get_tuple_prod(lhs.shape[1:])
+
+    if dest_ranks is not None:
+        dest_ranks_arr = np.array(dest_ranks, dtype=np.int32)
+    else:
+        dest_ranks_arr = np.empty(0, dtype=np.int32)
 
     dtype_size = bodo.io.np_io.get_dtype_size(in_arr.dtype)
     oneD_reshape_shuffle(
@@ -2430,6 +2460,8 @@ def dist_oneD_reshape_shuffle(lhs, in_arr, new_dim0_global_len):  # pragma: no c
         len(in_arr),
         dtype_size * out_lower_dims_size,
         dtype_size * in_lower_dims_size,
+        len(dest_ranks_arr),
+        dest_ranks_arr.ctypes,
     )
 
 

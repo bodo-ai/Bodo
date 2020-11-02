@@ -133,6 +133,7 @@ no_side_effect_call_tuples = {
     ("rolling",),
     (pd.CategoricalDtype,),
     # Numpy
+    ("asarray", np),
     ("int32", np),
     ("int64", np),
     ("float64", np),
@@ -492,6 +493,31 @@ def get_const_value_inner(
     if call_name == ("str", "numpy"):
         return str(get_const_value_inner(func_ir, var_def.args[0], arg_types, typemap))
 
+    if call_name == ("init_string_index", "bodo.hiframes.pd_index_ext"):
+        return pd.Index(
+            get_const_value_inner(func_ir, var_def.args[0], arg_types, typemap)
+        )
+
+    if call_name == ("str_arr_from_sequence", "bodo.libs.str_arr_ext"):
+        return np.array(
+            get_const_value_inner(func_ir, var_def.args[0], arg_types, typemap)
+        )
+
+    if call_name == ("init_range_index", "bodo.hiframes.pd_index_ext"):
+        return pd.RangeIndex(
+            get_const_value_inner(func_ir, var_def.args[0], arg_types, typemap),
+            get_const_value_inner(func_ir, var_def.args[1], arg_types, typemap),
+            get_const_value_inner(func_ir, var_def.args[2], arg_types, typemap),
+        )
+
+    # len(tuple)
+    if (
+        call_name == ("len", "builtins")
+        and typemap
+        and isinstance(typemap.get(var_def.args[0].name, None), types.BaseTuple)
+    ):
+        return len(typemap[var_def.args[0].name])
+
     raise GuardException("Constant value not found")
 
 
@@ -523,6 +549,7 @@ def get_const_func_output_type(func, arg_types, kw_types, typing_context):
     argument types.
     'func' can be a MakeFunctionLiteral (inline lambda) or FunctionLiteral (function)
     """
+    from bodo.hiframes.pd_series_ext import HeterogeneousSeriesType, SeriesType
 
     py_func = None
     # MakeFunctionLiteral is not possible currently due to Numba's
@@ -537,23 +564,27 @@ def get_const_func_output_type(func, arg_types, kw_types, typing_context):
 
         f_ir = numba.core.ir_utils.get_ir_of_code(_globals, code)
         fix_struct_return(f_ir)
-        typemap, f_return_type, _ = numba.core.typed_passes.type_inference_stage(
+        (
+            typemap,
+            f_return_type,
+            calltypes,
+        ) = numba.core.typed_passes.type_inference_stage(
             typing_context, f_ir, arg_types, None
         )
     elif isinstance(func, bodo.utils.typing.FunctionLiteral):
         py_func = func.literal_value
-        f_ir, typemap, _, f_return_type = bodo.compiler.get_func_type_info(
+        f_ir, typemap, calltypes, f_return_type = bodo.compiler.get_func_type_info(
             py_func, arg_types, kw_types
         )
     elif isinstance(func, CPUDispatcher):
         py_func = func.py_func
-        f_ir, typemap, _, f_return_type = bodo.compiler.get_func_type_info(
+        f_ir, typemap, calltypes, f_return_type = bodo.compiler.get_func_type_info(
             py_func, arg_types, kw_types
         )
     else:
         assert isinstance(func, types.Dispatcher)
         py_func = func.dispatcher.py_func
-        f_ir, typemap, _, f_return_type = bodo.compiler.get_func_type_info(
+        f_ir, typemap, calltypes, f_return_type = bodo.compiler.get_func_type_info(
             py_func, arg_types, kw_types
         )
 
@@ -565,7 +596,76 @@ def get_const_func_output_type(func, arg_types, kw_types, typing_context):
             f_return_type = StructType(
                 (f_return_type.value_type,) * len(struct_key_names), struct_key_names
             )
+
+    # add length/index info for constant Series output (required for output typing)
+    if isinstance(f_return_type, (SeriesType, HeterogeneousSeriesType)):
+        # run SeriesPass to simplify Series calls (e.g. pd.Series)
+        typingctx = numba.core.registry.cpu_target.typing_context
+        series_pass = bodo.transforms.series_pass.SeriesPass(
+            f_ir,
+            typingctx,
+            typemap,
+            calltypes,
+            {},
+        )
+        series_pass.run()
+        series_pass.run()
+        series_pass.run()
+        cfg = compute_cfg_from_blocks(f_ir.blocks)
+        # get const info from all exit points and make sure they are consistent
+        # checking for ir.Return since exit point could be for exception
+        series_info = [
+            guard(_get_const_series_info, f_ir.blocks[l], f_ir, typemap)
+            for l in cfg.exit_points()
+            if isinstance(f_ir.blocks[l].body[-1], ir.Return)
+        ]
+        if (
+            None in series_info or len(pd.Series(series_info).unique()) != 1
+        ):  # pragma: no cover
+            raise BodoError(
+                "Invalid Series output in UDF (Series with constant length and constant Index value expected)"
+            )
+        f_return_type.const_info = series_info[0]
+
     return f_return_type
+
+
+def _get_const_series_info(block, f_ir, typemap):
+    """get length and Index info for Series with constant length (homogeneous or heterogeneous values)"""
+    from bodo.hiframes.pd_series_ext import HeterogeneousSeriesType
+
+    assert isinstance(block.body[-1], ir.Return)
+    return_var = block.body[-1].value
+    ret_def = get_definition(f_ir, return_var)
+    require(is_expr(ret_def, "cast"))
+    ret_def = get_definition(f_ir, ret_def.value)
+
+    require(
+        is_call(ret_def)
+        and find_callname(f_ir, ret_def)
+        == ("init_series", "bodo.hiframes.pd_series_ext")
+    )
+
+    index_var = ret_def.args[1]
+    index_vals = tuple(get_const_value_inner(f_ir, index_var, typemap=typemap))
+
+    # length is known in type for heterogeneous Series
+    if isinstance(typemap[return_var.name], HeterogeneousSeriesType):
+        return len(typemap[return_var.name].data), index_vals
+
+    # get length for homogeneous Series
+    data_var = ret_def.args[0]
+    data_def = get_definition(f_ir, data_var)
+
+    if is_call(data_def) and find_callname(f_ir, data_def) in [
+        ("asarray", "numpy"),
+        ("str_arr_from_sequence", "bodo.libs.str_arr_ext"),
+    ]:
+        data_var = data_def.args[0]
+        data_def = get_definition(f_ir, data_var)
+
+    require(is_expr(data_def, "build_tuple") or is_expr(data_def, "build_list"))
+    return len(data_def.items), index_vals
 
 
 def extract_keyvals_from_struct_map(f_ir, build_map, loc, scope, typemap=None):

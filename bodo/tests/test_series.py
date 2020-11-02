@@ -11,9 +11,11 @@ import numba.np.ufunc_db
 import numpy as np
 import pandas as pd
 import pytest
+from numba.core.ir_utils import find_callname, guard
 
 import bodo
 from bodo.tests.utils import (
+    SeriesOptTestPipeline,
     _get_dist_arg,
     _test_equal,
     check_func,
@@ -26,6 +28,7 @@ from bodo.tests.utils import (
     is_bool_object_series,
 )
 from bodo.utils.typing import BodoError
+from bodo.utils.utils import is_call_assign
 
 _cov_corr_series = [
     (pd.Series(x), pd.Series(y))
@@ -1560,6 +1563,68 @@ def test_series_apply_kw(memory_leak_check):
 
     S = pd.Series([1.0, 2.0, 3.0, 4.0, 5.0])
     check_func(test_impl, (S,))
+
+
+def test_series_heter_constructor(memory_leak_check):
+    """
+    test creating Series with heterogeneous values
+    """
+
+    def impl1():
+        return pd.Series([1, "A"], ["B", "C"])
+
+    check_func(impl1, (), dist_test=False)
+
+
+def test_series_apply_df_output(memory_leak_check):
+    """test Series.apply() with dataframe output"""
+
+    def impl1(S):
+        return S.apply(lambda a: pd.Series([a, "AA"]))
+
+    def impl2(S):
+        def g(a):
+            # TODO: support assert in UDFs properly
+            # assert a > 0.0
+            if a > 3:
+                return pd.Series([a, 2 * a], ["A", "B"])
+            return pd.Series([a, 3 * a], ["A", "B"])
+
+        return S.apply(g)
+
+    def impl3(S):
+        return S.apply(lambda a: pd.Series((str(a), str(a + 1.2))))
+
+    def impl4(S):
+        return S.apply(lambda a: pd.Series((a, a + 1.2)))
+
+    S = pd.Series([1.0, 2.0, 3.0, 4.0, 5.0])
+    check_func(impl1, (S,))
+    check_func(impl2, (S,))
+    _check_IR_no_const_arr(impl3, (S,))
+    _check_IR_no_const_arr(impl4, (S,))
+
+
+def _check_IR_no_const_arr(test_impl, args):
+    """makes sure there is no const array call left in the IR after optimization"""
+    bodo_func = numba.njit(pipeline_class=SeriesOptTestPipeline, parallel=True)(
+        test_impl
+    )
+    bodo_func(*args)  # calling the function to get function IR
+    fir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
+    # make sure there is no const call in IR
+    for block in fir.blocks.values():
+        for stmt in block.body:
+            assert not (
+                is_call_assign(stmt)
+                and (
+                    guard(find_callname, fir, stmt.value)
+                    in (
+                        ("str_arr_from_sequence", "bodo.libs.str_arr_ext"),
+                        ("asarray", "numpy"),
+                    )
+                )
+            )
 
 
 @pytest.mark.slow

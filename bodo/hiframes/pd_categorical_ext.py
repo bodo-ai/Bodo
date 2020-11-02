@@ -351,19 +351,20 @@ def cat_arr_copy_overload(arr):
     return lambda arr: init_categorical_array(arr.codes.copy(), arr.dtype)
 
 
-def build_replace_dicts(to_replace, value, categories):
+def build_replace_dicts(to_replace, value, categories):  # pragma: no cover
     """Helper functions to build arrays used by the replace method. Should support
     the same set of cases as those provided for Series.replace. However for categories
     we need the following 4 things to perform the swaps:
     1. Mappings that will be replaced, for updating categories.
     2. Mappings that will be deleted, for updating categories.
-    3. Code mapping updates. When categories are deleted code values may drop and change.
+    3. Code mapping updates. When categories are deleted code values may drop and change. This
+    value can be an array because the keys are always range(-1, n)
     4. Number of categories deleted.
     We can group 1 and 2 together by filtering out Map[a] -> a and letting
     mapping to yourself serve as a deletion. This results in 3 return values:
-    category_dict, codes_dict, num_deleted
+    category_dict, codes_arr, num_deleted
     """
-    return dict(), dict(), 0
+    return dict(), np.empty(len(categories) + 1), 0
 
 
 @overload(build_replace_dicts, no_unliteral=True)
@@ -382,12 +383,13 @@ def _build_replace_dicts(to_replace, value, categories):
     else:
 
         def impl(to_replace, value, categories):  # pragma: no cover
+            n = len(categories)
             # map (old category) -> (new category), Only changed categories will be mapped.
             # Deleted categories will map to themselves (to avoid a second map).
             categories_dict = {}
             # map (old codes) -> (new codes)
             # TODO: Allow replacing na
-            codes_dict = {-1: -1}
+            codes_arr = np.empty(n + 1, np.int64)
             # map (replaced codes) -> (new code in categories) This is before remapping
             # codes to decrement by removed codes.
             replace_codes_dict = {}
@@ -395,7 +397,6 @@ def _build_replace_dicts(to_replace, value, categories):
             delete_codes_list = []
             # map(category) -> (old code value)
             cat_to_code = {}
-            n = len(categories)
             for i in range(n):
                 cat_to_code[categories[i]] = i
             # Determine which categories are getting remapped/deleted
@@ -414,20 +415,20 @@ def _build_replace_dicts(to_replace, value, categories):
                             categories_dict[replace_cat] = value
                             cat_to_code[value] = cat_to_code[replace_cat]
             delete_codes = np.sort(np.array(delete_codes_list))
-            # Determine how much easy code must decrease before constructing
-            # final codes_dict
+            # Determine how much each code must decrease before constructing
+            # final mapping
             decr_value = 0
             decr_counts = []
-            for j in range(n):
+            for j in range(-1, n):
                 while decr_value < len(delete_codes) and j > delete_codes[decr_value]:
                     decr_value += 1
                 decr_counts.append(decr_value)
-            for k in range(n):
+            for k in range(-1, n):
                 search_location = k
                 if k in replace_codes_dict:
                     search_location = replace_codes_dict[k]
-                codes_dict[k] = search_location - decr_counts[search_location]
-            return categories_dict, codes_dict, len(delete_codes)
+                codes_arr[k + 1] = search_location - decr_counts[search_location + 1]
+            return categories_dict, codes_arr, len(delete_codes)
 
         return impl
 
@@ -439,10 +440,10 @@ def python_build_replace_dicts(to_replace, value, categories):
 
 
 @register_jitable
-def reassign_codes(codes_arr, codes_dict):  # pragma: no cover
+def reassign_codes(codes_arr, codes_map_arr):  # pragma: no cover
     """Helper function to remap codes in replace."""
     for i in range(len(codes_arr)):
-        codes_arr[i] = codes_dict[codes_arr[i]]
+        codes_arr[i] = codes_map_arr[codes_arr[i] + 1]
 
 
 @overload_method(CategoricalArray, "replace", inline="always", no_unliteral=True)
@@ -472,7 +473,7 @@ def cat_replace_overload(arr, to_replace, value):
         and to_replace_constant is not NOT_CONSTANT
         and value_constant is not NOT_CONSTANT
     ):
-        cats_dict, _, _ = python_build_replace_dicts(
+        cats_dict, codes_map_arr, _ = python_build_replace_dicts(
             to_replace_constant, value_constant, arr.dtype.categories
         )
         # If nothing is being changed we can just return a copy of the aray
@@ -496,11 +497,8 @@ def cat_replace_overload(arr, to_replace, value):
         # categories must change
         def impl_dtype(arr, to_replace, value):  # pragma: no cover
             new_codes = arr.codes.copy()
-            categories = arr.dtype.categories
-            _, codes_dict, _ = build_replace_dicts(to_replace, value, categories)
-            # Update all of the codes
-            # TODO: Use codes_dict from compile time (lowering issue)
-            reassign_codes(new_codes, codes_dict)
+            # Use codes_map_arr from compile time
+            reassign_codes(new_codes, codes_map_arr)
             return init_categorical_array(new_codes, _new_dtype)
 
         return impl_dtype
@@ -512,7 +510,7 @@ def cat_replace_overload(arr, to_replace, value):
         def impl_str(arr, to_replace, value):  # pragma: no cover
             new_codes = arr.codes.copy().astype(np.int64)
             categories = arr.dtype.categories
-            categories_dict, codes_dict, num_deleted = build_replace_dicts(
+            categories_dict, codes_map_arr, num_deleted = build_replace_dicts(
                 to_replace, value, categories
             )
             if len(categories_dict) == 0:
@@ -549,7 +547,7 @@ def cat_replace_overload(arr, to_replace, value):
                     new_categories[new_idx] = old_cat_val
                     new_idx += 1
             # Update all of the codes
-            reassign_codes(new_codes, codes_dict)
+            reassign_codes(new_codes, codes_map_arr)
             return init_categorical_array(
                 new_codes, init_cat_dtype(new_categories, _ordered)
             )
@@ -561,7 +559,7 @@ def cat_replace_overload(arr, to_replace, value):
     def impl(arr, to_replace, value):  # pragma: no cover
         new_codes = arr.codes.copy().astype(np.int64)
         categories = arr.dtype.categories
-        categories_dict, codes_dict, num_deleted = build_replace_dicts(
+        categories_dict, codes_map_arr, num_deleted = build_replace_dicts(
             to_replace, value, categories
         )
         if len(categories_dict) == 0:
@@ -584,7 +582,7 @@ def cat_replace_overload(arr, to_replace, value):
                 new_categories[new_idx] = old_cat_val
                 new_idx += 1
         # Update all of the codes
-        reassign_codes(new_codes, codes_dict)
+        reassign_codes(new_codes, codes_map_arr)
         return init_categorical_array(
             new_codes, init_cat_dtype(new_categories, _ordered)
         )

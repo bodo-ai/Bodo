@@ -611,50 +611,54 @@ def test_df_multi_get_level(memory_leak_check):
     check_func(impl3, (df,))
 
 
-def test_rebalance_simple(memory_leak_check):
-    def impl(df):
-        return bodo.rebalance(df)
+@pytest.mark.parametrize("data", [pd.DataFrame({"A": range(10)}), np.arange(10)])
+def test_rebalance_simple(data, memory_leak_check):
+    def impl(data):
+        return bodo.rebalance(data)
 
-    df = pd.DataFrame({"A": range(10)})
-    check_func(impl, (df,), py_output=df)
+    check_func(impl, (data,), py_output=data)
 
     if bodo.get_size() == 2:
         if bodo.get_rank() == 0:
-            df_chunk = df.iloc[:9]
+            data_chunk = data[:9]
         else:
-            df_chunk = df.iloc[9:]
-        res = bodo.jit(distributed=["df"], all_returns_distributed=True)(impl)(df_chunk)
+            data_chunk = data[9:]
+        res = bodo.jit(distributed=["data"], all_returns_distributed=True)(impl)(
+            data_chunk
+        )
         assert len(res) == 5
         res = bodo.gatherv(res)
         if bodo.get_rank() == 0:
-            pd.testing.assert_frame_equal(df, res)
+            if isinstance(data, pd.DataFrame):
+                pd.testing.assert_frame_equal(data, res)
+            else:
+                np.testing.assert_array_equal(data, res)
 
 
-def test_rebalance_group(memory_leak_check):
-    """Test the bodo.rebalance(df, dests=[...]) functionality which gets
+@pytest.mark.parametrize("data", [pd.DataFrame({"A": range(10)}), np.arange(10)])
+def test_rebalance_group(data, memory_leak_check):
+    """Test the bodo.rebalance(data, dests=[...]) functionality which gets
     data from all the ranks and distributes to only a given subset of ranks"""
 
-    def impl0(df):  # this test is only for coverage purposes
-        return bodo.rebalance(df, dests=[0])
+    def impl0(data):  # this test is only for coverage purposes
+        return bodo.rebalance(data, dests=[0])
 
-    def impl1(df):
-        return bodo.rebalance(df, dests=[0, 2])
+    def impl1(data):
+        return bodo.rebalance(data, dests=[0, 2])
 
-    df = pd.DataFrame({"A": range(10)})
-    check_func(impl0, (df,), py_output=df)
+    check_func(impl0, (data,), py_output=data)
 
     if bodo.get_size() == 3:  # run this only with 3 processes
-        df = pd.DataFrame({"A": range(10)})
         # give a different chunk size for each of the 3 processes
         if bodo.get_rank() == 0:
-            df_chunk = df.iloc[0:2]
+            data_chunk = data[0:2]
         elif bodo.get_rank() == 1:
-            df_chunk = df.iloc[2:7]
+            data_chunk = data[2:7]
         else:
-            df_chunk = df.iloc[7:]
+            data_chunk = data[7:]
         # rebalance and send to process 0 and 2
-        res = bodo.jit(distributed=["df"], all_returns_distributed=True)(impl1)(
-            df_chunk
+        res = bodo.jit(distributed=["data"], all_returns_distributed=True)(impl1)(
+            data_chunk
         )
         if bodo.get_rank() in {0, 2}:
             assert len(res) == 5
@@ -662,7 +666,10 @@ def test_rebalance_group(memory_leak_check):
             assert len(res) == 0
         res = bodo.gatherv(res)
         if bodo.get_rank() == 0:
-            pd.testing.assert_frame_equal(df, res)
+            if isinstance(data, pd.DataFrame):
+                pd.testing.assert_frame_equal(data, res)
+            else:
+                np.testing.assert_array_equal(data, res)
 
 
 def test_rebalance():
@@ -1921,6 +1928,21 @@ def test_df_apply_getitem(memory_leak_check):
     check_func(test_impl, (df,))
 
 
+def test_df_apply_int_getitem_unsorted_columns(memory_leak_check):
+    """
+    test int getitem access of row passed in df.apply() where column names are not in
+    sorted order (issue #2019)
+    """
+
+    def impl(df):
+        return df.apply(lambda x: (x[0], x[2], x[1]), axis=1)
+
+    df = pd.DataFrame(
+        {"A": np.arange(10), "C": np.arange(10, 20), "B": np.arange(20, 30)}
+    )
+    check_func(impl, (df,))
+
+
 def test_df_apply_bool(memory_leak_check):
     # check bool output of UDF for BooleanArray use
     def test_impl(df):
@@ -2089,6 +2111,59 @@ def test_df_apply_error_check():
         BodoError, match="DataFrame.apply.*: user-defined function not supported"
     ):
         bodo.jit(test_impl)(df)
+
+
+def test_df_apply_df_output(memory_leak_check):
+    """test DataFrame.apply() with dataframe output 1 column"""
+
+    def impl1(df):
+        return df.apply(lambda a: pd.Series([a[0], "AA"]), axis=1)
+
+    def impl2(df):
+        def g(a):
+            # TODO: support assert in UDFs properly
+            # assert a > 0.0
+            if a[0] > 3:
+                return pd.Series([a[0], 2 * a[0]], ["A", "B"])
+            return pd.Series([a[0], 3 * a[0]], ["A", "B"])
+
+        return df.apply(g, axis=1)
+
+    df = pd.DataFrame({"A": [1.0, 2.0, 3.0, 4.0, 5.0]})
+    check_func(impl1, (df,))
+    check_func(impl2, (df,))
+
+
+def test_df_apply_df_output_multicolumn(memory_leak_check):
+    """test DataFrame.apply() with dataframe output with multiple columns"""
+
+    def test_impl(df):
+        return df.apply(lambda a: pd.Series([a[0], a[1]]), axis=1)
+
+    df = pd.DataFrame({"A": np.arange(20), "B": ["hi", "there"] * 10})
+    check_func(test_impl, (df,))
+
+
+@pytest.mark.slow
+def test_df_apply_df_output_multistring(memory_leak_check):
+    def test_impl(df):
+        def f(row):
+            s1 = ""
+            s2 = ""
+            s3 = ""
+            s4 = ""
+            if row[1] == 0:
+                s3 = str(row[0]) + ","
+                s4 = str(row[2]) + ","
+            elif row[1] == 1:
+                s1 = str(row[0]) + ","
+                s2 = str(row[2]) + ","
+            return pd.Series([s1, s2, s3, s4], index=["s1", "s2", "s3", "s4"])
+
+        return df.apply(f, axis=1)
+
+    df = pd.DataFrame({"A": np.arange(40), "B": [0, 1] * 20, "C": np.arange(40)})
+    check_func(test_impl, (df,))
 
 
 def test_df_drop_inplace_branch(memory_leak_check):

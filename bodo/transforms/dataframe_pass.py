@@ -479,8 +479,10 @@ class DataFramePass:
         func_var = get_call_expr_arg("apply", rhs.args, kws, 0, "func")
         func = get_overload_const_func(self.typemap[func_var.name])
         out_typ = self.typemap[lhs.name]
-        out_arr_type = out_typ.data
-
+        is_df_output = isinstance(out_typ, DataFrameType)
+        out_arr_types = out_typ.data
+        out_arr_types = out_arr_types if is_df_output else [out_arr_types]
+        n_out_cols = len(out_arr_types)
         extra_args = get_call_expr_arg("apply", rhs.args, kws, 4, "args", [])
         if extra_args:
             extra_args = guard(find_build_sequence, self.func_ir, extra_args)
@@ -523,59 +525,86 @@ class DataFramePass:
         # an extra loop is currently necessary to get alloc sizes for arrays with
         # variable size items, e.g. strings
         # TODO: avoid extra loop (e.g. builder pattern?)
-        if is_var_size_item_array_type(out_arr_type):
+        if any(is_var_size_item_array_type(t) for t in out_arr_types):
             row_args_j = ", ".join(
                 [
                     "bodo.utils.conversion.box_if_dt64(c{}[j])".format(i)
                     for i in range(len(used_cols))
                 ]
             )
-            func_text += "  nested_counts = init_nested_counts(data_arr_type)\n"
+            for i in range(n_out_cols):
+                func_text += (
+                    f"  nested_counts{i} = init_nested_counts(data_arr_type{i})\n"
+                )
             func_text += "  for j in numba.parfors.parfor.internal_prange(len(c0)):\n"
             func_text += "    row1 = Row({})\n".format(row_args_j)
             func_text += "    item = map_func(row1, {})\n".format(udf_arg_names)
-            func_text += "    nested_counts = add_nested_counts(nested_counts, item)\n"
+            if is_df_output:
+                func_text += (
+                    "    vals = bodo.hiframes.pd_series_ext.get_series_data(item)\n"
+                )
+                for i in range(n_out_cols):
+                    func_text += f"    u{i} = vals[{i}]\n"
+            else:
+                func_text += f"    u0 = item\n"
+            for i in range(n_out_cols):
+                func_text += f"    nested_counts{i} = add_nested_counts(nested_counts{i}, u{i})\n"
             func_text += "  numba.parfors.parfor.init_prange()\n"
         else:
-            func_text += "  nested_counts = None\n"
-        func_text += "  S = bodo.utils.utils.alloc_type(n, _arr_typ, nested_counts)\n"
+            for i in range(n_out_cols):
+                func_text += f"  nested_counts{i} = None\n"
+        for i in range(n_out_cols):
+            func_text += f"  S{i} = bodo.utils.utils.alloc_type(n, _arr_typ{i}, nested_counts{i})\n"
         func_text += "  for i in numba.parfors.parfor.internal_prange(n):\n"
         # TODO: unbox to array value if necessary (e.g. Timestamp to dt64)
-        func_text += "     row2 = Row({})\n".format(row_args)
-        func_text += "     S[i] = bodo.utils.conversion.unbox_if_timestamp(map_func(row2, {}))\n".format(
-            udf_arg_names
-        )
-        func_text += (
-            "  return bodo.hiframes.pd_series_ext.init_series(S, df_index, None)\n"
-        )
+        func_text += "    row2 = Row({})\n".format(row_args)
+        func_text += "    v = map_func(row2, {})\n".format(udf_arg_names)
+        if is_df_output:
+            func_text += "    v_vals = bodo.hiframes.pd_series_ext.get_series_data(v)\n"
+            for i in range(n_out_cols):
+                func_text += f"    v{i} = v_vals[{i}]\n"
+        else:
+            func_text += f"    v0 = v\n"
+        for i in range(n_out_cols):
+            func_text += (
+                f"    S{i}[i] = bodo.utils.conversion.unbox_if_timestamp(v{i})\n"
+            )
+        if is_df_output:
+            data_arrs = ", ".join(f"S{i}" for i in range(n_out_cols))
+            col_names = gen_const_tup(self.typemap[lhs.name].columns)
+            func_text += f"  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({data_arrs},), df_index, {col_names})\n"
+        else:
+            func_text += (
+                "  return bodo.hiframes.pd_series_ext.init_series(S0, df_index, None)\n"
+            )
 
         loc_vars = {}
         exec(func_text, {}, loc_vars)
         f = loc_vars["f"]
 
-        arr_typ = self.typemap[lhs.name].data
         nodes = []
         col_vars = [self._get_dataframe_data(df_var, c, nodes) for c in used_cols]
         df_index_var = self._get_dataframe_index(df_var, nodes)
         map_func = bodo.compiler.udf_jit(func)
 
+        glbs = {
+            "numba": numba,
+            "np": np,
+            "Row": Row,
+            "bodo": bodo,
+            "map_func": map_func,
+            "init_nested_counts": bodo.utils.indexing.init_nested_counts,
+            "add_nested_counts": bodo.utils.indexing.add_nested_counts,
+        }
+        for i in range(n_out_cols):
+            glbs[f"_arr_typ{i}"] = out_arr_types[i]
+            glbs[f"data_arr_type{i}"] = out_arr_types[i].dtype
+
         return replace_func(
             self,
             f,
             col_vars + [df_index_var] + extra_args,
-            extra_globals={
-                "numba": numba,
-                "np": np,
-                "Row": Row,
-                "bodo": bodo,
-                "_arr_typ": arr_typ,
-                "get_utf8_size": get_utf8_size,
-                "pre_alloc_string_array": pre_alloc_string_array,
-                "map_func": map_func,
-                "init_nested_counts": bodo.utils.indexing.init_nested_counts,
-                "add_nested_counts": bodo.utils.indexing.add_nested_counts,
-                "data_arr_type": out_arr_type.dtype,
-            },
+            extra_globals=glbs,
             pre_nodes=nodes,
         )
 
@@ -2112,5 +2141,7 @@ def _get_df_apply_used_cols(func, columns):
             break
 
     # remove duplicates with set() since a column can be used multiple times
-    used_cols = sorted(set(used_cols))
+    # keep the order the same as original columns to avoid errors with int getitem on
+    # Row namedtuple
+    used_cols = [c for (_, c) in sorted((columns.index(v), v) for v in set(used_cols))]
     return used_cols

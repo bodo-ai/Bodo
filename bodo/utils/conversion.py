@@ -14,7 +14,9 @@ from bodo.libs.decimal_arr_ext import Decimal128Type, DecimalArrayType
 from bodo.utils.indexing import add_nested_counts, init_nested_counts
 from bodo.utils.typing import (
     BodoError,
+    get_overload_const_list,
     get_overload_const_str,
+    is_overload_constant_list,
     is_overload_constant_str,
     is_overload_none,
     is_overload_true,
@@ -425,7 +427,7 @@ def overload_coerce_to_array(
         and all(isinstance(t, types.StringLiteral) for t in data.types)
     ):
         return lambda data, error_on_nonarray=True, use_nullable_array=None, scalar_to_arr_len=None: bodo.libs.str_arr_ext.str_arr_from_sequence(
-            list(data)
+            data
         )  # pragma: no cover
 
     if data in (
@@ -928,6 +930,32 @@ def overload_unbox_if_timestamp(val):
         return lambda val: bodo.hiframes.pd_timestamp_ext.integer_to_dt64(val.value)
 
     return lambda val: val
+
+
+def to_tuple(val):  # pragma: no cover
+    return val
+
+
+@overload(to_tuple, no_unliteral=True)
+def overload_to_tuple(val):
+    """convert tuple-like 'val' (e.g. constant list) to a tuple"""
+    if not isinstance(val, types.BaseTuple) and is_overload_constant_list(val):
+        # LiteralList values may be non-constant
+        n_values = len(
+            val.types
+            if isinstance(val, types.LiteralList)
+            else get_overload_const_list(val)
+        )
+        func_text = "def f(val):\n"
+        res = ",".join(f"val[{i}]" for i in range(n_values))
+        func_text += f"  return ({res},)\n"
+        loc_vars = {}
+        exec(func_text, {}, loc_vars)
+        impl = loc_vars["f"]
+        return impl
+
+    assert isinstance(val, types.BaseTuple), "tuple type expected"
+    return lambda val: val  # pragma: no cover
 
 
 def get_array_if_series_or_index(data):  # pragma: no cover

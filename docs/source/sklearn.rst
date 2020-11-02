@@ -94,6 +94,8 @@ Methods:
 Classification metrics
 ~~~~~~~~~~~~~~~~~~~~~~
 
+* :func:`sklearn.metrics.accuracy_score`
 * :func:`sklearn.metrics.f1_score`
 * :func:`sklearn.metrics.precision_score`
 * :func:`sklearn.metrics.recall_score`
+

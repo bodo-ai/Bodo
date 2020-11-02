@@ -261,7 +261,10 @@ def gen_dti_field_impl(field):
     # func_text += "            continue\n"
     func_text += "        dt64 = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(A[i])\n"
     func_text += "        ts = bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(dt64)\n"
-    func_text += "        S[i] = ts." + field + "\n"
+    if field in ["weekday",]:
+        func_text += "        S[i] = ts." + field + "()\n"
+    else:
+        func_text += "        S[i] = ts." + field + "\n"
     func_text += "    return bodo.hiframes.pd_index_ext.init_numeric_index(S, name)\n"
     loc_vars = {}
     # print(func_text)
@@ -272,7 +275,9 @@ def gen_dti_field_impl(field):
 
 def _install_dti_date_fields():
     for field in bodo.hiframes.pd_timestamp_ext.date_fields:
-        if field == "is_leap_year":
+        if field in [
+            "is_leap_year",
+        ]:
             continue
         impl = gen_dti_field_impl(field)
         overload_attribute(DatetimeIndexType, field)(lambda dti: impl)

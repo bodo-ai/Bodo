@@ -42,6 +42,7 @@ import bodo.libs.str_ext
 import bodo.utils.utils
 from bodo.hiframes.datetime_date_ext import _ord2ymd, _ymd2ord, get_isocalendar
 from bodo.hiframes.datetime_timedelta_ext import (
+    PDTimeDeltaType,
     _no_input,
     datetime_timedelta_type,
     pd_timedelta_type,
@@ -91,7 +92,17 @@ date_fields = [
     "daysinmonth",
     "days_in_month",
     "is_leap_year",
+    "is_month_start",
+    "is_month_end",
+    "is_quarter_start",
+    "is_quarter_end",
+    "is_year_start",
+    "is_year_end",
+    "week",
+    "weekofyear",
+    "weekday",
 ]
+date_methods = ["normalize"]
 
 # Timedelta fields separated by return type
 timedelta_fields = ["days", "seconds", "microseconds", "nanoseconds"]
@@ -544,35 +555,125 @@ def overload_pd_timestamp(
 
 @overload_attribute(PandasTimestampType, "dayofyear")
 def overload_pd_dayofyear(ptt):
-    def pd_dayofyear(ptt):
+    def pd_dayofyear(ptt):  # pragma: no cover
         return get_day_of_year(ptt.year, ptt.month, ptt.day)
 
     return pd_dayofyear
 
 
+@overload_method(PandasTimestampType, "weekday")
 @overload_attribute(PandasTimestampType, "dayofweek")
 def overload_pd_dayofweek(ptt):
-    def pd_dayofweek(ptt):
+    def pd_dayofweek(ptt):  # pragma: no cover
         return get_day_of_week(ptt.year, ptt.month, ptt.day)
 
     return pd_dayofweek
 
 
+# Pandas Implementation:
+# https://github.com/pandas-dev/pandas/blob/e088ea31a897929848caa4b5ce3db9d308c604db/pandas/_libs/tslibs/ccalendar.pyx#L138
+@overload_attribute(PandasTimestampType, "week")
+@overload_attribute(PandasTimestampType, "weekofyear")
+def overload_week_number(ptt):
+    def pd_week_number(ptt):
+        # Offset the day of the year by the (day of the week of jan 1st) and add 1 week because 1 indexed
+        # Year starting on a Monday should be 7
+        return (
+            get_day_of_year(ptt.year, ptt.month, ptt.day)
+            + get_day_of_week(ptt.year, 1, 1)
+            + 6
+        ) // 7
+
+    return pd_week_number
+
+
+# Pandas Implementation:
+# https://github.com/pandas-dev/pandas/blob/e088ea31a897929848caa4b5ce3db9d308c604db/pandas/_libs/tslibs/ccalendar.pyx#L59
 @overload_attribute(PandasTimestampType, "days_in_month")
 @overload_attribute(PandasTimestampType, "daysinmonth")
 def overload_pd_daysinmonth(ptt):
-    def pd_daysinmonth(ptt):
+    def pd_daysinmonth(ptt):  # pragma: no cover
         return get_days_in_month(ptt.year, ptt.month)
 
     return pd_daysinmonth
 
 
+# Pandas Implementation:
+# https://github.com/pandas-dev/pandas/blob/e088ea31a897929848caa4b5ce3db9d308c604db/pandas/_libs/tslibs/ccalendar.pyx#L132
 @overload_attribute(PandasTimestampType, "is_leap_year")
 def overload_pd_is_leap_year(ptt):
-    def pd_is_leap_year(ptt):
+    def pd_is_leap_year(ptt):  # pragma: no cover
         return is_leap_year(ptt.year)
 
     return pd_is_leap_year
+
+
+# Pandas Implementation:
+# https://github.com/pandas-dev/pandas/blob/e088ea31a897929848caa4b5ce3db9d308c604db/pandas/_libs/tslibs/timestamps.pyx#L425
+# Note we don't support business frequencies
+@overload_attribute(PandasTimestampType, "is_month_start")
+def overload_pd_is_month_start(ptt):
+    def pd_is_month_start(ptt):  # pragma: no cover
+        return ptt.day == 1
+
+    return pd_is_month_start
+
+
+# Pandas Implementation:
+# https://github.com/pandas-dev/pandas/blob/e088ea31a897929848caa4b5ce3db9d308c604db/pandas/_libs/tslibs/timestamps.pyx#L436
+# Note we don't support business frequencies
+@overload_attribute(PandasTimestampType, "is_month_end")
+def overload_pd_is_month_end(ptt):
+    def pd_is_month_end(ptt):  # pragma: no cover
+        return ptt.day == get_days_in_month(ptt.year, ptt.month)
+
+    return pd_is_month_end
+
+
+# Pandas Implementation:
+# https://github.com/pandas-dev/pandas/blob/e088ea31a897929848caa4b5ce3db9d308c604db/pandas/_libs/tslibs/timestamps.pyx#L445
+# Note we don't support business frequencies
+@overload_attribute(PandasTimestampType, "is_quarter_start")
+def overload_pd_is_quarter_start(ptt):
+    def pd_is_quarter_start(ptt):  # pragma: no cover
+        return ptt.day == 1 and (ptt.month % 3) == 1
+
+    return pd_is_quarter_start
+
+
+# Pandas Implementation:
+# https://github.com/pandas-dev/pandas/blob/e088ea31a897929848caa4b5ce3db9d308c604db/pandas/_libs/tslibs/timestamps.pyx#L456
+# Note we don't support business frequencies
+@overload_attribute(PandasTimestampType, "is_quarter_end")
+def overload_pd_is_quarter_end(ptt):
+    def pd_is_quarter_end(ptt):  # pragma: no cover
+        return (ptt.month % 3) == 0 and ptt.day == get_days_in_month(
+            ptt.year, ptt.month
+        )
+
+    return pd_is_quarter_end
+
+
+# Pandas Implementation:
+# https://github.com/pandas-dev/pandas/blob/e088ea31a897929848caa4b5ce3db9d308c604db/pandas/_libs/tslibs/timestamps.pyx#L466
+# Note we don't support business frequencies
+@overload_attribute(PandasTimestampType, "is_year_start")
+def overload_pd_is_year_start(ptt):
+    def pd_is_year_start(ptt):  # pragma: no cover
+        return ptt.day == 1 and ptt.month == 1
+
+    return pd_is_year_start
+
+
+# Pandas Implementation:
+# https://github.com/pandas-dev/pandas/blob/e088ea31a897929848caa4b5ce3db9d308c604db/pandas/_libs/tslibs/timestamps.pyx#L476
+# Note we don't support business frequencies
+@overload_attribute(PandasTimestampType, "is_year_end")
+def overload_pd_is_year_end(ptt):
+    def pd_is_year_end(ptt):  # pragma: no cover
+        return ptt.day == 31 and ptt.month == 12
+
+    return pd_is_year_end
 
 
 @overload_attribute(PandasTimestampType, "quarter")
@@ -636,6 +737,14 @@ def overload_pd_timestamp_isoformat(ts_typ, sep=None):
             return res
 
     return timestamp_isoformat_impl
+
+
+@overload_method(PandasTimestampType, "normalize", no_unliteral=True)
+def overload_pd_timestamp_normalize(ptt):
+    def impl(ptt):  # pragma: no cover
+        return pd.Timestamp(year=ptt.year, month=ptt.month, day=ptt.day)
+
+    return impl
 
 
 # TODO: support general string formatting
@@ -835,7 +944,7 @@ def convert_numpy_timedelta64_to_datetime_timedelta(dt64):  # pragma: no cover
 
 @numba.njit
 def convert_numpy_timedelta64_to_pd_timedelta(dt64):  # pragma: no cover
-    """Convertes numpy.timedelta64 to datetime.timedelta"""
+    """Convertes numpy.timedelta64 to pd.Timedelta"""
     n_int64 = bodo.hiframes.datetime_timedelta_ext.cast_numpy_timedelta_to_int(dt64)
     return pd.Timedelta(n_int64)
 
@@ -1319,51 +1428,87 @@ def toordinal(date):
     return impl
 
 
-@overload_method(PandasTimestampType, "floor", no_unliteral=True)
-def timestamp_floor(ts, freq):
-    def impl(ts, freq):  # pragma: no cover
-        if freq == "D":
-            return pd.Timestamp(year=ts.year, month=ts.month, day=ts.day)
-        if freq == "H":
-            return pd.Timestamp(year=ts.year, month=ts.month, day=ts.day, hour=ts.hour)
-        if freq == "min" or freq == "T":
-            return pd.Timestamp(
-                year=ts.year, month=ts.month, day=ts.day, hour=ts.hour, minute=ts.minute
+# Relevant Pandas code
+# https://github.com/pandas-dev/pandas/blob/009ffa8d2c019ffb757fb0a4b53cc7a9a948afdd/pandas/_libs/tslibs/timestamps.pyx#L1228
+# https://github.com/pandas-dev/pandas/blob/009ffa8d2c019ffb757fb0a4b53cc7a9a948afdd/pandas/_libs/tslibs/timestamps.pyx#L1189
+# https://github.com/pandas-dev/pandas/blob/009ffa8d2c019ffb757fb0a4b53cc7a9a948afdd/pandas/_libs/tslibs/timestamps.pyx#L1149
+# https://github.com/pandas-dev/pandas/blob/009ffa8d2c019ffb757fb0a4b53cc7a9a948afdd/pandas/_libs/tslibs/timedeltas.pyx#L1219
+def overload_freq_methods(method):
+    def freq_overload(td, freq):
+        freq_conditions = [
+            "freq == 'D'",
+            "freq == 'H'",
+            "freq == 'min' or freq == 'T'",
+            "freq == 'S'",
+            "freq == 'ms' or freq == 'L'",
+            "freq == 'U' or freq == 'us'",
+            "freq == 'N'",
+        ]
+        unit_values = [
+            24 * 60 * 60 * 1000000 * 1000,
+            60 * 60 * 1000000 * 1000,
+            60 * 1000000 * 1000,
+            1000000 * 1000,
+            1000 * 1000,
+            1000,
+            1,
+        ]
+        func_text = "def impl(td, freq):\n"
+        for i, cond in enumerate(freq_conditions):
+            cond_label = "if" if i == 0 else "elif"
+            func_text += "    {} {}:\n".format(cond_label, cond)
+            func_text += "        unit_value = {}\n".format(unit_values[i])
+        func_text += "    else:\n"
+        func_text += "        raise ValueError('Incorrect Frequency specification')\n"
+        if td == pd_timedelta_type:
+            func_text += "    return pd.Timedelta(unit_value * np.int64(np.{}(td.value / unit_value)))\n".format(
+                method
             )
-        if freq == "S":
-            return pd.Timestamp(
-                year=ts.year,
-                month=ts.month,
-                day=ts.day,
-                hour=ts.hour,
-                minute=ts.minute,
-                second=ts.second,
+        elif td == pandas_timestamp_type:
+            if method == "ceil":
+                func_text += (
+                    "    value = td.value + np.remainder(-td.value, unit_value)\n"
+                )
+            if method == "floor":
+                func_text += (
+                    "    value = td.value - np.remainder(td.value, unit_value)\n"
+                )
+            if method == "round":
+                # Unit value is always even except value = 1
+                func_text += "    if unit_value == 1:\n"
+                func_text += "        value = td.value\n"
+                func_text += "    else:\n"
+                func_text += (
+                    "        quotient, remainder = np.divmod(td.value, unit_value)\n"
+                )
+                func_text += "        mask = np.logical_or(remainder > (unit_value // 2), np.logical_and(remainder == (unit_value // 2), quotient % 2))\n"
+                func_text += "        if mask:\n"
+                func_text += "            quotient = quotient + 1\n"
+                func_text += "        value = quotient * unit_value\n"
+            func_text += (
+                "    return pd.Timestamp(year=1970, month=1, day=1, nanosecond=value)\n"
             )
-        if freq == "ms" or freq == "L":
-            return pd.Timestamp(
-                year=ts.year,
-                month=ts.month,
-                day=ts.day,
-                hour=ts.hour,
-                minute=ts.minute,
-                second=ts.second,
-                microsecond=ts.microsecond - (ts.microsecond % 1000),
-            )
-        if freq == "U" or freq == "us":
-            return pd.Timestamp(
-                year=ts.year,
-                month=ts.month,
-                day=ts.day,
-                hour=ts.hour,
-                minute=ts.minute,
-                second=ts.second,
-                microsecond=ts.microsecond,
-            )
-        if freq == "N":
-            return ts
-        raise ValueError("Incorrect Frequency specification")
+        loc_vars = {}
+        exec(
+            func_text,
+            {"np": np, "pd": pd},
+            loc_vars,
+        )
+        impl = loc_vars["impl"]
+        return impl
 
-    return impl
+    return freq_overload
+
+
+def _install_freq_methods():
+    freq_methods = ["ceil", "floor", "round"]
+    for method in freq_methods:
+        overload_impl = overload_freq_methods(method)
+        overload_method(PDTimeDeltaType, method, no_unliteral=True)(overload_impl)
+        overload_method(PandasTimestampType, method, no_unliteral=True)(overload_impl)
+
+
+_install_freq_methods()
 
 
 # @intrinsic

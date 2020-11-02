@@ -430,7 +430,23 @@ Datetime properties:
 * :attr:`pandas.Series.dt.microsecond`
 * :attr:`pandas.Series.dt.nanosecond`
 * :attr:`pandas.Series.dt.quarter`
+* :attr:`pandas.Series.dt.dayofweek`
+* :attr:`pandas.Series.dt.dayofyear`
+* :attr:`pandas.Series.dt.daysinmonth`
+* :attr:`pandas.Series.dt.days_in_month`
+* :attr:`pandas.Series.dt.is_month_start`
+* :attr:`pandas.Series.dt.is_month_end`
+* :attr:`pandas.Series.dt.is_quarter_start`
+* :attr:`pandas.Series.dt.is_quarter_end`
+* :attr:`pandas.Series.dt.is_year_start`
+* :attr:`pandas.Series.dt.is_year_end`
+* :attr:`pandas.Series.dt.week`
+* :attr:`pandas.Series.dt.weekday`
+* :attr:`pandas.Series.dt.weekofyear`
+* :meth:`pandas.Series.dt.ceil`
 * :meth:`pandas.Series.dt.floor`
+* :meth:`pandas.Series.dt.normalize`
+* :meth:`pandas.Series.dt.round`
 * :meth:`pandas.Series.dt.strftime`
 
 String handling:
@@ -702,6 +718,15 @@ Date fields of DatetimeIndex are supported:
 * :attr:`pandas.DatetimeIndex.nanosecond`
 * :attr:`pandas.DatetimeIndex.date`
 * :attr:`pandas.DatetimeIndex.is_leap_year`
+* :attr:`pandas.DatetimeIndex.is_month_start`
+* :attr:`pandas.DatetimeIndex.is_month_end`
+* :attr:`pandas.DatetimeIndex.is_quarter_start`
+* :attr:`pandas.DatetimeIndex.is_quarter_end`
+* :attr:`pandas.DatetimeIndex.is_year_start`
+* :attr:`pandas.DatetimeIndex.is_year_end`
+* :attr:`pandas.DatetimeIndex.week`
+* :attr:`pandas.DatetimeIndex.weekday`
+* :attr:`pandas.DatetimeIndex.weekofyear`
 * :attr:`pandas.DatetimeIndex.quarter`
 
 
@@ -754,18 +779,31 @@ Timestamp functionality is documented in `pandas.Timestamp <https://pandas.pydat
 * :attr:`pandas.Timestamp.nanosecond`
 * :attr:`pandas.Timestamp.second`
 * :attr:`pandas.Timestamp.year`
-* :attr:`pandas.Timestamp.is_leap_year`
+* :attr:`pandas.Timestamp.components`
 * :attr:`pandas.Timestamp.dayofyear`
 * :attr:`pandas.Timestamp.dayofweek`
 * :attr:`pandas.Timestamp.days_in_month`
 * :attr:`pandas.Timestamp.daysinmonth`
+* :attr:`pandas.Timestamp.is_leap_year`
+* :attr:`pandas.Timestamp.is_month_start`
+* :attr:`pandas.Timestamp.is_month_end`
+* :attr:`pandas.Timestamp.is_quarter_start`
+* :attr:`pandas.Timestamp.is_quarter_end`
+* :attr:`pandas.Timestamp.is_year_start`
+* :attr:`pandas.Timestamp.is_year_end`
 * :attr:`pandas.Timestamp.quarter`
+* :attr:`pandas.Timestamp.week`
+* :attr:`pandas.Timestamp.weekofyear`
+* :meth:`pandas.Timestamp.ceil`
 * :meth:`pandas.Timestamp.date`
 * :meth:`pandas.Timestamp.floor`
 * :meth:`pandas.Timestamp.isocalendar`
 * :meth:`pandas.Timestamp.isoformat`
+* :meth:`pandas.Timestamp.normalize`
+* :meth:`pandas.Timestamp.round`
 * :meth:`pandas.Timestamp.strftime`
 * :meth:`pandas.Timestamp.toordinal`
+* :meth:`pandas.Timestamp.weekday`
 
 
 Timedelta
@@ -786,7 +824,9 @@ Datetime related fields are supported:
 * :attr:`pandas.Timedelta.nanoseconds`
 * :attr:`pandas.Timedelta.seconds`
 * :attr:`pandas.Timedelta.value`
+* :meth:`pandas.Timedelta.ceil`
 * :meth:`pandas.Timedelta.floor`
+* :meth:`pandas.Timedelta.round`
 * :meth:`pandas.Timedelta.to_numpy`
 * :meth:`pandas.Timedelta.to_pytimedelta`
 * :meth:`pandas.Timedelta.to_timedelta64`
