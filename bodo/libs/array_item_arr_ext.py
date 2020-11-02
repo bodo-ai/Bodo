@@ -95,6 +95,9 @@ class ArrayItemArrayPayloadModel(models.StructModel):
     def __init__(self, dmm, fe_type):
         members = [
             ("n_arrays", types.int64),
+            # NOTE: data array may have more capacity than necessary
+            # (similar to std::vector).
+            # Use offsets[n] to get total number of elements instead of len(data_arr).
             ("data", fe_type.array_type.dtype),
             ("offsets", types.Array(offset_typ, 1, "C")),
             ("null_bitmap", types.Array(types.uint8, 1, "C")),
@@ -676,6 +679,10 @@ def get_offsets_ind(typingctx, arr_typ, ind_t=None):
 
 @intrinsic
 def get_data(typingctx, arr_typ=None):
+    """get underlying array used for storing data elements.
+    NOTE: May have more capacity than necessary (similar to std::vector).
+    Use offsets[n] to get total number of elements instead of len(data_arr).
+    """
     assert isinstance(arr_typ, ArrayItemArrayType)
 
     def codegen(context, builder, sig, args):
@@ -741,11 +748,13 @@ def ensure_data_capacity(arr, new_size):  # pragma: no cover
     make sure the internal data array has enough space for 'new_size' number of elements
     """
     data = get_data(arr)
-    old_len = len(data)
-    if old_len < new_size:
+    old_capacity = len(data)
+    if old_capacity < new_size:
         # double the capacity similar to std::vector
-        new_len = max(2 * old_len, new_size)
-        new_data = bodo.libs.array_kernels.resize_and_copy(data, old_len, new_len)
+        new_capacity = max(2 * old_capacity, new_size)
+        new_data = bodo.libs.array_kernels.resize_and_copy(
+            data, old_capacity, new_capacity
+        )
         replace_data_arr(arr, new_data)
 
 
