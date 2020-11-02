@@ -563,6 +563,7 @@ def overload_pd_dayofyear(ptt):
 
 @overload_method(PandasTimestampType, "weekday")
 @overload_attribute(PandasTimestampType, "dayofweek")
+@overload_method(PandasTimestampType, "weekday")
 def overload_pd_dayofweek(ptt):
     def pd_dayofweek(ptt):  # pragma: no cover
         return get_day_of_week(ptt.year, ptt.month, ptt.day)

@@ -458,6 +458,48 @@ void unbox_datetime_timedelta_array(PyObject* obj, int64_t n,
 #undef CHECK
 }
 
+
+/**
+ * @brief unbox a date_offset object. Missing fields should get their null value.
+ * @return boolean for if the obj has any kws
+ * @param obj pd.tseries.offsets.DateOffset object
+ * @param fields_arr Array of fields that must be initialized
+ */
+bool unbox_date_offset(PyObject* obj, int64_t fields_arr[18]) {
+    auto gilstate = PyGILState_Ensure();
+
+    // set of fields, split by default value if missing
+    const char* fields[2][9] = {{"years", "months", "weeks", "days", "hours", "minutes", "seconds", "microseconds", "nanoseconds"}, 
+    {"year", "month", "day", "weekday", "hour", "minute", "second", "microsecond", "nanosecond"}};
+
+    int64_t default_values[2] = {0, -1};
+    bool has_kws = false;
+
+    for (int64_t i = 0; i < 2; ++i) {
+        int64_t default_value = default_values[i];
+        for (int64_t j = 0; j < 9; ++j) {
+            const char* field_name = fields[i][j];
+            int64_t field_value = default_value;
+
+            if (PyObject_HasAttrString(obj, field_name)) {
+                if (strcmp(field_name, "nanosecond") && strcmp(field_name, "nanoseconds")) {
+                    has_kws = true;
+                }
+                PyObject* field_obj = PyObject_GetAttrString(obj, field_name);
+                field_value = PyLong_AsLongLong(field_obj);
+                Py_DECREF(field_obj);
+            }
+            fields_arr[(i * 9) + j] = field_value;
+        }
+    }
+    PyGILState_Release(gilstate);
+
+    return has_kws;
+#undef CHECK
+}
+
+
+
 PyMODINIT_FUNC PyInit_hdatetime_ext(void) {
     PyObject* m;
     static struct PyModuleDef moduledef = {
@@ -499,6 +541,10 @@ PyMODINIT_FUNC PyInit_hdatetime_ext(void) {
     PyObject_SetAttrString(
         m, "unbox_datetime_timedelta_array",
         PyLong_FromVoidPtr((void*)(&unbox_datetime_timedelta_array)));
+
+    PyObject_SetAttrString(
+        m, "unbox_date_offset",
+        PyLong_FromVoidPtr((void*)(&unbox_date_offset)));
 
     return m;
 }
