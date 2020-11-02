@@ -1531,7 +1531,7 @@ def overload_multinomial_nb_model_fit(
 
         def _naive_bayes_multinomial_impl(
             m, X, y, sample_weight=None, _is_data_distributed=False
-        ):  # pragma no cover
+        ):  # pragma: no cover
             with numba.objmode():
                 m.fit(X, y, sample_weight)
             return m
@@ -1541,7 +1541,7 @@ def overload_multinomial_nb_model_fit(
         # TODO: sample_weight (future enhancement)
         func_text = "def _model_multinomial_nb_fit_impl(\n"
         func_text += "    m, X, y, sample_weight=None, _is_data_distributed=False\n"
-        func_text += "):  # pragma no cover\n"
+        func_text += "):  # pragma: no cover\n"
         # Attempt to change data to numpy array. Any data that fails means, we don't support
         func_text += "    y = bodo.utils.conversion.coerce_to_ndarray(y)\n"
         if isinstance(X, DataFrameType):
