@@ -589,7 +589,7 @@ class DistributedPass:
                     rhs.loc,
                 )
                 nodes.append(ir.Assign(ir.Const(True, rhs.loc), normalize_var, rhs.loc))
-                self.typemap[normalize_var.name] = BooleanLiteral(True)
+                self.typemap[normalize_var.name] = types.BooleanLiteral(True)
                 # normalize cannot be specified positionally
                 normalize = get_call_expr_arg(
                     "accuracy_score", rhs.args, kws, 1e6, "normalize", normalize_var
