@@ -4,9 +4,11 @@ Implement support for the various classes in pd.tseries.offsets.
 """
 import operator
 
+import llvmlite.binding as ll
 import numba
 import numpy as np
 import pandas as pd
+from llvmlite import ir as lir
 from numba.core import cgutils, types
 from numba.core.imputils import lower_constant
 from numba.extending import (
@@ -32,11 +34,16 @@ from bodo.hiframes.pd_timestamp_ext import (
     get_days_in_month,
     pandas_timestamp_type,
 )
+from bodo.libs import hdatetime_ext
+
+ll.add_symbol("unbox_date_offset", hdatetime_ext.unbox_date_offset)
 
 
 # 1.Define a new Numba type class by subclassing the Type class
 #   Define a singleton Numba type instance for a non-parametric type
 class MonthEndType(types.Type):
+    """Class for pd.tseries.offset.MonthEnd"""
+
     def __init__(self):
         super(MonthEndType, self).__init__(name="MonthEndType()")
 
@@ -60,6 +67,8 @@ class MonthEndModel(models.StructModel):
 
 
 # 4.Implementing a boxing function for a Numba type using the @box decorator
+
+
 @box(MonthEndType)
 def box_month_end(typ, val, c):
     month_end = cgutils.create_struct_proxy(typ)(c.context, c.builder, value=val)
@@ -217,14 +226,6 @@ def month_end_add_scalar(lhs, rhs):
 
         return impl
 
-    # lhs is a datetime
-    if lhs == datetime_datetime_type and rhs == month_end_type:
-
-        def impl(lhs, rhs):  # pragma: no cover
-            return rhs + lhs
-
-        return impl
-
     # rhs is a timestamp
     if lhs == month_end_type and rhs == pandas_timestamp_type:
 
@@ -248,14 +249,6 @@ def month_end_add_scalar(lhs, rhs):
 
         return impl
 
-    # lhs is a timestamp
-    if lhs == pandas_timestamp_type and rhs == month_end_type:
-
-        def impl(lhs, rhs):  # pragma: no cover
-            return rhs + lhs
-
-        return impl
-
     # rhs is a datetime.date
     if lhs == month_end_type and rhs == datetime_date_type:
         # No need to consider normalize because datetime only goes down to day.
@@ -267,8 +260,11 @@ def month_end_add_scalar(lhs, rhs):
 
         return impl
 
-    # lhs is a datetime.date
-    if lhs == datetime_date_type and rhs == month_end_type:
+    # rhs is the offset
+    if (
+        lhs in [datetime_datetime_type, pandas_timestamp_type, datetime_date_type]
+        and rhs == month_end_type
+    ):
 
         def impl(lhs, rhs):  # pragma: no cover
             return rhs + lhs
@@ -303,5 +299,258 @@ def month_end_neg(lhs):
 
         def impl(lhs):  # pragma: no cover
             return pd.tseries.offsets.MonthEnd(-lhs.n, lhs.normalize)
+
+        return impl
+
+
+class DateOffsetType(types.Type):
+    """Class for pd.tseries.offset.DateOffset"""
+
+    def __init__(self):
+        super(DateOffsetType, self).__init__(name="DateOffsetType()")
+
+
+date_offset_type = DateOffsetType()
+
+
+@typeof_impl.register(pd.tseries.offsets.DateOffset)
+def type_of_date_offset(val, c):
+    return date_offset_type
+
+
+@register_model(DateOffsetType)
+class DateOffsetModel(models.StructModel):
+    """Date offsets support the use of n, but this argument is discouraged.
+    Functionality is mostly implemented between kwargs that replace and those
+    that add. Replace have no s (i.e. year) whereas add have an s (i.e. years).
+    The proper behavior is that fields are first replaced and then addition occurs.
+    """
+
+    def __init__(self, dmm, fe_type):
+        members = [
+            ("n", types.int64),
+            ("normalize", types.boolean),
+            # Fields that add to offset value
+            ("years", types.int64),
+            ("months", types.int64),
+            ("weeks", types.int64),
+            ("days", types.int64),
+            ("hours", types.int64),
+            ("minutes", types.int64),
+            ("seconds", types.int64),
+            ("microseconds", types.int64),
+            ("nanoseconds", types.int64),
+            # Fields that replace offset value
+            ("year", types.int64),
+            ("month", types.int64),
+            ("day", types.int64),
+            ("weekday", types.int64),
+            ("hour", types.int64),
+            ("minute", types.int64),
+            ("second", types.int64),
+            ("microsecond", types.int64),
+            ("nanosecond", types.int64),
+            # Keyword to distinguish if any fields were passed in.
+            # No kwds has different behavior
+            ("has_kws", types.boolean),
+        ]
+        super(DateOffsetModel, self).__init__(dmm, fe_type, members)
+
+
+@unbox(DateOffsetType)
+def unbox_date_offset(typ, val, c):
+
+    n_obj = c.pyapi.object_getattr_string(val, "n")
+    normalize_obj = c.pyapi.object_getattr_string(val, "normalize")
+    n = c.pyapi.long_as_longlong(n_obj)
+    normalize = c.pyapi.to_native_value(types.bool_, normalize_obj).value
+
+    # Allocate stack array for extracting C++ values
+    fields_arr = c.builder.alloca(
+        lir.IntType(64), size=lir.Constant(lir.IntType(64), 18)
+    )
+
+    # function signature of unbox_date_offset
+    fnty = lir.FunctionType(
+        lir.IntType(1),
+        [
+            lir.IntType(8).as_pointer(),
+            lir.IntType(64).as_pointer(),
+        ],
+    )
+    fn = c.builder.module.get_or_insert_function(fnty, name="unbox_date_offset")
+    has_kws = c.builder.call(
+        fn,
+        [
+            val,
+            fields_arr,
+        ],
+    )
+
+    date_offset = cgutils.create_struct_proxy(typ)(c.context, c.builder)
+    date_offset.n = n
+    date_offset.normalize = normalize
+    # Manually load the fields from the array in LLVM
+    fields = [
+        "years",
+        "months",
+        "weeks",
+        "days",
+        "hours",
+        "minutes",
+        "seconds",
+        "microseconds",
+        "nanoseconds",
+        "year",
+        "month",
+        "day",
+        "weekday",
+        "hour",
+        "minute",
+        "second",
+        "microsecond",
+        "nanosecond",
+    ]
+    for i, field in enumerate(fields):
+        setattr(
+            date_offset,
+            field,
+            c.builder.load(
+                c.builder.inttoptr(
+                    c.builder.add(
+                        c.builder.ptrtoint(fields_arr, lir.IntType(64)),
+                        lir.Constant(lir.IntType(64), 8 * i),
+                    ),
+                    lir.IntType(64).as_pointer(),
+                )
+            ),
+        )
+    date_offset.has_kws = has_kws
+
+    c.pyapi.decref(n_obj)
+    c.pyapi.decref(normalize_obj)
+
+    is_error = cgutils.is_not_null(c.builder, c.pyapi.err_occurred())
+
+    # _getvalue(): Load and return the value of the underlying LLVM structure.
+    return NativeValue(date_offset._getvalue(), is_error=is_error)
+
+
+make_attribute_wrapper(DateOffsetType, "n", "_n")
+make_attribute_wrapper(DateOffsetType, "normalize", "_normalize")
+make_attribute_wrapper(DateOffsetType, "years", "_years")
+make_attribute_wrapper(DateOffsetType, "months", "_months")
+make_attribute_wrapper(DateOffsetType, "weeks", "_weeks")
+make_attribute_wrapper(DateOffsetType, "days", "_days")
+make_attribute_wrapper(DateOffsetType, "hours", "_hours")
+make_attribute_wrapper(DateOffsetType, "minutes", "_minutes")
+make_attribute_wrapper(DateOffsetType, "seconds", "_seconds")
+make_attribute_wrapper(DateOffsetType, "microseconds", "_microseconds")
+make_attribute_wrapper(DateOffsetType, "nanoseconds", "_nanoseconds")
+make_attribute_wrapper(DateOffsetType, "year", "_year")
+make_attribute_wrapper(DateOffsetType, "month", "_month")
+make_attribute_wrapper(DateOffsetType, "weekday", "_weekday")
+make_attribute_wrapper(DateOffsetType, "day", "_day")
+make_attribute_wrapper(DateOffsetType, "hour", "_hour")
+make_attribute_wrapper(DateOffsetType, "minute", "_minute")
+make_attribute_wrapper(DateOffsetType, "second", "_second")
+make_attribute_wrapper(DateOffsetType, "microsecond", "_microsecond")
+make_attribute_wrapper(DateOffsetType, "nanosecond", "_nanosecond")
+make_attribute_wrapper(DateOffsetType, "has_kws", "_has_kws")
+
+
+# Add implementation derived from https://dateutil.readthedocs.io/en/stable/relativedelta.html
+@overload(operator.add, no_unliteral=True)
+def date_offset_add_scalar(lhs, rhs):
+    """Implement all of the relevant scalar types additions.
+    These will be reused to implement arrays.
+    """
+    # rhs is a timestamp
+    if lhs == date_offset_type and rhs == pandas_timestamp_type:
+
+        def impl(lhs, rhs):  # pragma: no cover
+            if lhs._has_kws:
+                sign = -1 if lhs._n < 0 else 1
+                timestamp = rhs
+
+                # TODO: Move this to a new function
+                for _ in range(np.abs(lhs._n)):
+                    year = timestamp.year
+                    month = timestamp.month
+                    day = timestamp.day
+                    hour = timestamp.hour
+                    minute = timestamp.minute
+                    second = timestamp.second
+                    microsecond = timestamp.microsecond
+                    nanosecond = timestamp.nanosecond
+
+                    if lhs._year != -1:
+                        year = lhs._year
+                    year += sign * lhs._years
+                    if lhs._month != -1:
+                        month = lhs._month
+                    month += sign * lhs._months
+
+                    year, month, new_day = calculate_month_end_date(year, month, day, 0)
+                    # If the day is out of bounds roll back to a legal date
+                    if day > new_day:
+                        day = new_day
+
+                    # Remaining values can be handled with a timedelta to give the same
+                    # effect as happening 1 at a time
+                    if lhs._day != -1:
+                        day = lhs._day
+                    if lhs._hour != -1:
+                        hour = lhs._hour
+                    if lhs._minute != -1:
+                        minute = lhs._minute
+                    if lhs._second != -1:
+                        second = lhs._second
+                    if lhs._microsecond != -1:
+                        microsecond = lhs._microsecond
+
+                    timestamp = pd.Timestamp(
+                        year=year,
+                        month=month,
+                        day=day,
+                        hour=hour,
+                        minute=minute,
+                        second=second,
+                        microsecond=microsecond,
+                        nanosecond=nanosecond,
+                    )
+
+                    # Pandas ignores nanosecond/nanoseconds because it uses relative delta
+                    timedelta = pd.Timedelta(
+                        days=lhs._days + 7 * lhs._weeks,
+                        hours=lhs._hours,
+                        minutes=lhs._minutes,
+                        seconds=lhs._seconds,
+                        microseconds=lhs._microseconds,
+                    )
+                    if sign == -1:
+                        timedelta = -timedelta
+
+                    timestamp = timestamp + timedelta
+
+                    if lhs._weekday != -1:
+                        # roll foward by determining the difference in day of the week
+                        # We only accept labeling a day of the week 0..6
+                        curr_weekday = timestamp.weekday()
+                        days_forward = (lhs._weekday - curr_weekday) % 7
+                        timestamp = timestamp + pd.Timedelta(days=days_forward)
+            else:
+                timestamp = pd.Timedelta(days=lhs._n) + rhs
+            if lhs._normalize:
+                return timestamp.normalize()
+            return timestamp
+
+        return impl
+
+    # offset is the rhs
+    if lhs in [pandas_timestamp_type] and rhs == date_offset_type:
+
+        def impl(lhs, rhs):  # pragma: no cover
+            return rhs + lhs
 
         return impl

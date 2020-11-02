@@ -718,8 +718,8 @@ def is_list_str_object_series(S):
 
 class DeadcodeTestPipeline(bodo.compiler.BodoCompiler):
     """
-    pipeleine used in test_join_deadcode_cleanup and test_csv_remove_col0_used_for_len
-    additional PreserveIR pass then bodo_pipeline
+    pipeline used in test_join_deadcode_cleanup and test_csv_remove_col0_used_for_len
+    with an additional PreserveIR pass then bodo_pipeline
     """
 
     def define_pipelines(self):
@@ -728,6 +728,22 @@ class DeadcodeTestPipeline(bodo.compiler.BodoCompiler):
         )
         pipeline._finalized = False
         pipeline.add_pass_after(PreserveIR, NopythonRewrites)
+        pipeline.finalize()
+        return [pipeline]
+
+
+class SeriesOptTestPipeline(bodo.compiler.BodoCompiler):
+    """
+    pipeline used in test_series_apply_df_output with an additional PreserveIR pass
+    after SeriesPass
+    """
+
+    def define_pipelines(self):
+        [pipeline] = self._create_bodo_pipeline(
+            distributed=True, inline_calls_pass=False
+        )
+        pipeline._finalized = False
+        pipeline.add_pass_after(PreserveIR, bodo.compiler.BodoSeriesPass)
         pipeline.finalize()
         return [pipeline]
 

@@ -1760,11 +1760,25 @@ def str_arr_setitem(A, idx, val):
         assert val == string_type
 
         # XXX: setitem works only if value is same size as the previous value
+        # maximum number of bytes possible in UTF-8 is 4
+        MAX_UTF8_BYTES = 4
+
         def impl_scalar(A, idx, val):  # pragma: no cover
+            # make sure data array has enough space for new characters to be stored
+            # if string value is not ASCII, assume maximum possible UTF-8 characters
+            max_val_len = val._length if val._is_ascii else MAX_UTF8_BYTES * val._length
+            data_arr = A._data
+            required_capacity = (
+                bodo.libs.array_item_arr_ext.get_offsets_ind(data_arr, idx)
+                + max_val_len
+            )
+            bodo.libs.array_item_arr_ext.ensure_data_capacity(
+                data_arr, required_capacity
+            )
             setitem_string_array(
                 get_offset_ptr(A),
                 get_data_ptr(A),
-                num_total_chars(A),
+                required_capacity,
                 val._data,
                 val._length,
                 val._kind,
@@ -1772,6 +1786,7 @@ def str_arr_setitem(A, idx, val):
                 idx,
             )
             str_arr_set_not_na(A, idx)
+            # TODO(ehsan): trim data array if done writing all values?
             # dummy use function to avoid decref of A
             # TODO: refcounting support for _offsets, ... to avoid this workaround
             dummy_use(A)

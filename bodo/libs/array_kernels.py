@@ -58,6 +58,7 @@ from bodo.libs.struct_arr_ext import StructArrayType
 from bodo.libs.tuple_arr_ext import TupleArrayType
 from bodo.utils.indexing import add_nested_counts, init_nested_counts
 from bodo.utils.shuffle import getitem_arr_tup_single
+from bodo.utils.transform import is_var_size_item_array_type
 from bodo.utils.typing import (
     BodoError,
     check_unsupported_args,
@@ -1610,6 +1611,31 @@ def gen_na_array_equiv(self, scope, equiv_set, loc, args, kws):  # pragma: no co
 
 
 ArrayAnalysis._analyze_op_call_bodo_libs_array_kernels_gen_na_array = gen_na_array_equiv
+
+
+def resize_and_copy(A, new_len):  # pragma: no cover
+    return A
+
+
+@overload(resize_and_copy, no_unliteral=True)
+def overload_resize_and_copy(A, old_len, new_len):
+    """allocate a new array (same type as 'A') and copy data of array 'A'"""
+    # TODO: support nested arrays
+    assert not is_var_size_item_array_type(A)
+
+    # only for char array of string arrays for now
+    # TODO(ehsan): support all arrays
+    assert A == types.Array(types.uint8, 1, "C")
+    _dtype = A
+
+    def impl(A, old_len, new_len):  # pragma: no cover
+        out_arr = bodo.utils.utils.alloc_type(new_len, _dtype)
+        # NOTE: direct memcpy using str_copy_ptr is slightly faster than slice copy
+        # out_arr[:old_len] = A
+        bodo.libs.str_arr_ext.str_copy_ptr(out_arr.ctypes, 0, A.ctypes, old_len)
+        return out_arr
+
+    return impl
 
 
 # np.arange implementation is copied from parfor.py and range length

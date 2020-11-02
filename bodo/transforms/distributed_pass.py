@@ -637,6 +637,70 @@ class DistributedPass:
                     extra_globals={"sklearn": sklearn},
                 )
 
+        if (
+            func_mod == "sklearn.metrics._classification"
+            and func_name == "accuracy_score"
+        ):
+            if self._is_1D_or_1D_Var_arr(rhs.args[0].name):
+                rhs = assign.value
+                kws = dict(rhs.kws)
+                nodes = []
+
+                y_true = get_call_expr_arg(
+                    "sklearn.metrics.accuracy_score", rhs.args, kws, 0, "y_true"
+                )
+                y_pred = get_call_expr_arg(
+                    "sklearn.metrics.accuracy_score", rhs.args, kws, 1, "y_pred"
+                )
+
+                ## normalize argument
+                normalize_var = ir.Var(
+                    assign.target.scope,
+                    mk_unique_var("accuracy_score_normalize"),
+                    rhs.loc,
+                )
+                nodes.append(ir.Assign(ir.Const(True, rhs.loc), normalize_var, rhs.loc))
+                self.typemap[normalize_var.name] = BooleanLiteral(True)
+                # normalize cannot be specified positionally
+                normalize = get_call_expr_arg(
+                    "accuracy_score", rhs.args, kws, 1e6, "normalize", normalize_var
+                )
+
+                # sample_weight argument
+                sample_weight_var = ir.Var(
+                    assign.target.scope,
+                    mk_unique_var("accuracy_score_sample_weight"),
+                    rhs.loc,
+                )
+                nodes.append(
+                    ir.Assign(ir.Const(None, rhs.loc), sample_weight_var, rhs.loc)
+                )
+                self.typemap[sample_weight_var.name] = types.none
+                # sample_weight cannot be specified positionally
+                sample_weight = get_call_expr_arg(
+                    "accuracy_score",
+                    rhs.args,
+                    kws,
+                    1e6,
+                    "sample_weight",
+                    sample_weight_var,
+                )
+
+                f = lambda y_true, y_pred, normalize, sample_weight: sklearn.metrics.accuracy_score(
+                    y_true,
+                    y_pred,
+                    normalize=normalize,
+                    sample_weight=sample_weight,
+                    _is_data_distributed=True,
+                )  # pragma: no cover
+                return nodes + compile_func_single_block(
+                    f,
+                    [y_true, y_pred, normalize, sample_weight],
+                    assign.target,
+                    self,
+                    extra_globals={"sklearn": sklearn},
+                )
+
         # divide 1D alloc
         # XXX allocs should be matched before going to _run_call_np
         if self._is_1D_arr(lhs) and is_alloc_callname(func_name, func_mod):

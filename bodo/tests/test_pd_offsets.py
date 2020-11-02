@@ -270,3 +270,241 @@ def test_month_end_neg(month_end_value, memory_leak_check):
         return -me
 
     check_func(test_impl, (month_end_value,))
+
+
+@pytest.fixture(
+    params=[
+        pytest.param(
+            pd.tseries.offsets.DateOffset(),
+        ),
+        pytest.param(
+            pd.tseries.offsets.DateOffset(
+                normalize=False,
+                year=2020,
+                month=10,
+                day=5,
+                weekday=0,
+                hour=23,
+                minute=55,
+                second=10,
+                microsecond=41423,
+                nanosecond=121,
+            ),
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.tseries.offsets.DateOffset(
+                normalize=True,
+                year=2020,
+                month=10,
+                day=5,
+                hour=23,
+                minute=55,
+                second=10,
+                microsecond=41423,
+                nanosecond=121,
+            ),
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.tseries.offsets.DateOffset(
+                normalize=False,
+                year=2020,
+                month=10,
+                day=5,
+                hour=23,
+                minute=55,
+                second=10,
+                microsecond=41423,
+                nanosecond=121,
+            ),
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.tseries.offsets.DateOffset(
+                normalize=False,
+                years=-3,
+                months=4,
+                weeks=2,
+                days=4,
+                hours=23,
+                minutes=55,
+                seconds=10,
+                microseconds=41423,
+                nanoseconds=121,
+            ),
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.tseries.offsets.DateOffset(
+                normalize=True,
+                years=-3,
+                months=4,
+                weeks=2,
+                days=4,
+                hours=23,
+                minutes=55,
+                seconds=10,
+                microseconds=41423,
+                nanoseconds=121,
+            ),
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.tseries.offsets.DateOffset(
+                normalize=False,
+                years=-3,
+                months=4,
+                weeks=2,
+                days=4,
+                hours=23,
+                minutes=55,
+                seconds=10,
+                microseconds=41423,
+                nanoseconds=121,
+                year=2020,
+                month=10,
+                day=17,
+                hour=23,
+                minute=55,
+                second=10,
+                microsecond=41423,
+                nanosecond=121,
+            ),
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.tseries.offsets.DateOffset(
+                normalize=True,
+                years=-3,
+                months=4,
+                weeks=2,
+                days=4,
+                hours=23,
+                minutes=55,
+                seconds=10,
+                microseconds=41423,
+                nanoseconds=121,
+                year=2020,
+                month=10,
+                day=2,
+                weekday=5,
+                hour=23,
+                minute=55,
+                second=10,
+                microsecond=41423,
+                nanosecond=121,
+            ),
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.tseries.offsets.DateOffset(
+                n=2,
+                years=-3,
+                months=4,
+                weeks=2,
+                days=4,
+                hours=23,
+                minutes=55,
+                seconds=10,
+                microseconds=41423,
+                nanoseconds=121,
+                year=2020,
+                month=10,
+                day=2,
+                weekday=0,
+                hour=23,
+                minute=55,
+                second=10,
+                microsecond=41423,
+                nanosecond=121,
+            ),
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.tseries.offsets.DateOffset(
+                n=-3,
+                years=-3,
+                months=4,
+                weeks=2,
+                days=4,
+                hours=23,
+                minutes=55,
+                seconds=10,
+                microseconds=41423,
+                nanoseconds=121,
+                year=2020,
+                month=10,
+                day=5,
+                hour=23,
+                minute=55,
+                second=10,
+                microsecond=41423,
+                nanosecond=121,
+            ),
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.tseries.offsets.DateOffset(
+                n=6,
+                normalize=True,
+                years=-3,
+                months=4,
+                weeks=2,
+                days=4,
+                hours=23,
+                minutes=55,
+                seconds=10,
+                microseconds=41423,
+                nanoseconds=121,
+            ),
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.tseries.offsets.DateOffset(
+                n=6,
+                nanoseconds=121,
+            ),
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.tseries.offsets.DateOffset(
+                n=6,
+                nanosecond=121,
+            ),
+            marks=pytest.mark.slow,
+        ),
+    ]
+)
+def date_offset_value(request):
+    return request.param
+
+
+@pytest.mark.skip("implement boxing")
+def test_date_offset_boxing(date_offset_value, memory_leak_check):
+    """
+    Test boxing and unboxing of pd.tseries.offsets.DateOffset()
+    """
+
+    def test_impl(do_obj):
+        return do_obj
+
+    check_func(test_impl, (date_offset_value,))
+
+
+def test_date_offset_add_timestamp(date_offset_value, memory_leak_check):
+    def test_impl(val1, val2):
+        return val1 + val2
+
+    timestamp_val = pd.Timestamp(
+        year=2020,
+        month=10,
+        day=30,
+        hour=22,
+        minute=12,
+        second=45,
+        microsecond=99320,
+        nanosecond=891,
+    )
+    check_func(test_impl, (date_offset_value, timestamp_val))
+    check_func(test_impl, (timestamp_val, date_offset_value))

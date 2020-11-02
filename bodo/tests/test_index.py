@@ -279,7 +279,16 @@ def test_datetime_field(dti_val, field, memory_leak_check):
     impl = loc_vars["impl"]
 
     bodo_func = bodo.jit(impl)
-    if field not in ("is_leap_year",):
+    if field not in [
+        "is_leap_year",
+        "is_month_start",
+        "is_month_end",
+        "is_quarter_start",
+        "is_quarter_end",
+        "is_year_start",
+        "is_year_end",
+        "week",
+    ]:
         pd.testing.assert_index_equal(bodo_func(dti_val), impl(dti_val))
     else:
         np.testing.assert_array_equal(bodo_func(dti_val), impl(dti_val))

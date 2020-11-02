@@ -268,19 +268,6 @@ class StrToFloat(AbstractTemplate):
             return signature(types.float64, arg)
 
 
-# TODO: handle str() in Numba
-@infer_global(str)
-class StrConstInfer(AbstractTemplate):
-    def generic(self, args, kws):
-        assert not kws
-        assert len(args) == 1
-        assert args[0] in [
-            types.float32,
-            types.float64,
-        ]
-        return signature(string_type, *args)
-
-
 ll.add_symbol("init_string_const", hstr_ext.init_string_const)
 ll.add_symbol("get_c_str", hstr_ext.get_c_str)
 ll.add_symbol("str_to_int64", hstr_ext.str_to_int64)
@@ -459,14 +446,43 @@ ArrayAnalysis._analyze_op_call_bodo_libs_str_ext_alloc_random_access_string_arra
 )
 
 
-@lower_builtin(str, types.Float)
-def string_from_impl(context, builder, sig, args):
-    in_typ = sig.args[0]
-    ll_in_typ = context.get_value_type(sig.args[0])
-    fnty = lir.FunctionType(lir.IntType(8).as_pointer(), [ll_in_typ])
-    fn = builder.module.get_or_insert_function(fnty, name="str_from_" + str(in_typ))
-    std_str = builder.call(fn, args)
-    return gen_std_str_to_unicode(context, builder, std_str)
+str_from_float32 = types.ExternalFunction(
+    "str_from_float32", types.void(types.voidptr, types.float32)
+)
+str_from_float64 = types.ExternalFunction(
+    "str_from_float64", types.void(types.voidptr, types.float64)
+)
+
+
+def float_to_str(s, v):  # pragma: no cover
+    pass
+
+
+@overload(float_to_str)
+def float_to_str_overload(s, v):
+    assert isinstance(v, types.Float)
+    if v == types.float32:
+        return lambda s, v: str_from_float32(s._data, v)  # pragma: no cover
+    return lambda s, v: str_from_float64(s._data, v)  # pragma: no cover
+
+
+@overload(str)
+def float_str_overload(v):
+    """support str(float) by preallocating the output string and calling sprintf() in C"""
+    # TODO(ehsan): handle in Numba similar to str(int)
+    if isinstance(v, types.Float):
+        kind = numba.cpython.unicode.PY_UNICODE_1BYTE_KIND
+
+        def impl(v):  # pragma: no cover
+            # same formula as str(int) in Numba, plus 1 char for decimal and 6 precision
+            # chars (default precision in C)
+            # https://github.com/numba/numba/blob/0db8a2bcd0f53c0d0ad8a798432fb3f37f14af27/numba/cpython/unicode.py#L2391
+            length = (v < 0) + 1 + int(np.floor(np.log10(v))) + 1 + 6
+            s = numba.cpython.unicode._malloc_string(kind, 1, length, True)
+            float_to_str(s, v)
+            return s
+
+        return impl
 
 
 @lower_cast(StdStringType, types.float64)

@@ -70,8 +70,8 @@ int str_arr_to_int64(int64_t* out, uint32_t* offsets, char* data,
 int str_arr_to_float64(double* out, uint32_t* offsets, char* data,
                        int64_t index);
 
-void* str_from_float32(float in);
-void* str_from_float64(double in);
+void str_from_float32(char* s, float in);
+void str_from_float64(char* s, double in);
 void inplace_int64_to_str(char* str, int64_t l, int64_t value);
 
 void del_str(std::string* in_str);
@@ -412,10 +412,13 @@ int64_t str_to_int64(char* data, int64_t length) {
     return -1;
 }
 
-void* str_from_float32(float in) { return new std::string(std::to_string(in)); }
+void str_from_float32(char* s, float in) {
+    sprintf(s, "%f", in);
+}
 
-void* str_from_float64(double in) {
-    return new std::string(std::to_string(in));
+
+void str_from_float64(char* s, double in) {
+    sprintf(s, "%f", in);
 }
 
 /**

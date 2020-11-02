@@ -603,6 +603,136 @@ def overload_f1_score(y_true, y_pred, average="binary", _is_data_distributed=Fal
             return _f1_score_impl
 
 
+def accuracy_score_dist_helper(y_true, y_pred, normalize, sample_weight):
+    """
+    Helper for distributed accuracy_score computation.
+    Call sklearn on each rank with normalize=False to get
+    counts (i.e. sum(accuracy_bits))
+    (or sample_weight.T @ accuracy_bits) when sample_weight != None
+    """
+    score = sklearn.metrics.accuracy_score(
+        y_true, y_pred, normalize=False, sample_weight=sample_weight
+    )
+    comm = MPI.COMM_WORLD
+    score = comm.allreduce(score, op=MPI.SUM)
+    if normalize:
+        sum_of_weights = (
+            np.sum(sample_weight) if (sample_weight is not None) else len(y_true)
+        )
+        sum_of_weights = comm.allreduce(sum_of_weights, op=MPI.SUM)
+        score = score / sum_of_weights
+
+    return score
+
+
+@overload(sklearn.metrics.accuracy_score, no_unliteral=True)
+def overload_accuracy_score(
+    y_true, y_pred, normalize=True, sample_weight=None, _is_data_distributed=False
+):
+    """
+    Provide implementations for the accuracy_score computation.
+    If data is not distributed, we simply call sklearn on each rank.
+    Else we compute in a distributed way.
+    Provide separate impl for case where sample_weight is provided
+    vs not provided for type unification purposes.
+    """
+
+    if is_overload_false(_is_data_distributed):
+
+        if is_overload_none(sample_weight):
+
+            def _accuracy_score_impl(
+                y_true,
+                y_pred,
+                normalize=True,
+                sample_weight=None,
+                _is_data_distributed=False,
+            ):  # pragma: no cover
+                # user could pass lists and numba throws error if passing lists
+                # to object mode, so we convert to arrays
+                y_true = bodo.utils.conversion.coerce_to_array(y_true)
+                y_pred = bodo.utils.conversion.coerce_to_array(y_pred)
+
+                with numba.objmode(score="float64"):
+                    score = sklearn.metrics.accuracy_score(
+                        y_true, y_pred, normalize=normalize, sample_weight=sample_weight
+                    )
+                return score
+
+            return _accuracy_score_impl
+        else:
+
+            def _accuracy_score_impl(
+                y_true,
+                y_pred,
+                normalize=True,
+                sample_weight=None,
+                _is_data_distributed=False,
+            ):  # pragma: no cover
+                # user could pass lists and numba throws error if passing lists
+                # to object mode, so we convert to arrays
+                y_true = bodo.utils.conversion.coerce_to_array(y_true)
+                y_pred = bodo.utils.conversion.coerce_to_array(y_pred)
+                sample_weight = bodo.utils.conversion.coerce_to_array(sample_weight)
+                with numba.objmode(score="float64"):
+                    score = sklearn.metrics.accuracy_score(
+                        y_true, y_pred, normalize=normalize, sample_weight=sample_weight
+                    )
+                return score
+
+            return _accuracy_score_impl
+
+    else:
+
+        if is_overload_none(sample_weight):
+
+            def _accuracy_score_impl(
+                y_true,
+                y_pred,
+                normalize=True,
+                sample_weight=None,
+                _is_data_distributed=False,
+            ):  # pragma: no cover
+                # user could pass lists and numba throws error if passing lists
+                # to object mode, so we convert to arrays
+                y_true = bodo.utils.conversion.coerce_to_array(y_true)
+                y_pred = bodo.utils.conversion.coerce_to_array(y_pred)
+                with numba.objmode(score="float64"):
+                    score = accuracy_score_dist_helper(
+                        y_true,
+                        y_pred,
+                        normalize=normalize,
+                        sample_weight=sample_weight,
+                    )
+                return score
+
+            return _accuracy_score_impl
+        else:
+
+            def _accuracy_score_impl(
+                y_true,
+                y_pred,
+                normalize=True,
+                sample_weight=None,
+                _is_data_distributed=False,
+            ):  # pragma: no cover
+                # user could pass lists and numba throws error if passing lists
+                # to object mode, so we convert to arrays
+                y_true = bodo.utils.conversion.coerce_to_array(y_true)
+                y_pred = bodo.utils.conversion.coerce_to_array(y_pred)
+                sample_weight = bodo.utils.conversion.coerce_to_array(sample_weight)
+                with numba.objmode(score="float64"):
+                    score = accuracy_score_dist_helper(
+                        y_true,
+                        y_pred,
+                        normalize=normalize,
+                        sample_weight=sample_weight,
+                    )
+                return score
+
+            return _accuracy_score_impl
+
+
 # -------------------------------------SGDRegressor----------------------------------------
 # Support sklearn.linear_model.SGDRegressorusing object mode of Numba
 # Linear regression: sklearn.linear_model.SGDRegressor(loss="squared_loss", penalty=None)

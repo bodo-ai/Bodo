@@ -1928,6 +1928,21 @@ def test_df_apply_getitem(memory_leak_check):
     check_func(test_impl, (df,))
 
 
+def test_df_apply_int_getitem_unsorted_columns(memory_leak_check):
+    """
+    test int getitem access of row passed in df.apply() where column names are not in
+    sorted order (issue #2019)
+    """
+
+    def impl(df):
+        return df.apply(lambda x: (x[0], x[2], x[1]), axis=1)
+
+    df = pd.DataFrame(
+        {"A": np.arange(10), "C": np.arange(10, 20), "B": np.arange(20, 30)}
+    )
+    check_func(impl, (df,))
+
+
 def test_df_apply_bool(memory_leak_check):
     # check bool output of UDF for BooleanArray use
     def test_impl(df):
