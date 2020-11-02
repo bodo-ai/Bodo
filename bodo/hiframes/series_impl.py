@@ -62,7 +62,7 @@ def overload_series_index(s):
     return lambda s: bodo.hiframes.pd_series_ext.get_series_index(s)
 
 
-@overload_attribute(SeriesType, "values")
+@overload_attribute(SeriesType, "values", inline="always")
 def overload_series_values(s):
     return lambda s: bodo.hiframes.pd_series_ext.get_series_data(s)
 
