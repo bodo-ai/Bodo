@@ -1444,24 +1444,44 @@ def overload_logistic_regression_fit(
         def _sgdc_logistic_regression_fit_impl(
             m, X, y, sample_weight=None, _is_data_distributed=False
         ):  # pragma no cover
-            clf = sklearn.linear_model.SGDClassifer(
+            with numba.objmode(
+                penalty="unicode_type",
+                tol="float64",
+                fit_intercept="boolean",
+                max_iter="int64",
+                verbose="int32",
+                warm_start="boolean",
+            ):
+                penalty = m.penalty
+                tol = m.tol
+                fit_intercept = m.fit_intercept
+                max_iter = m.max_iter
+                verbose = m.verbose
+                warm_start = m.warm_start
+            clf = sklearn.linear_model.SGDClassifier(
                 loss="log",
-                penalty=m.penalty,
-                tol=m.tol,
-                fit_intercept=m.fit_intercept,
-                class_weight=m.class_weight,
-                random_state=m.random_state,
-                max_iter=m.max_iter,
-                verbose=m.verbose,
-                warm_start=m.warm_start,
-                n_jobs=m.n_jobs,
-                l1_ratio=m.l1_ratio,
+                # string
+                penalty=penalty,
+                tol=tol,
+                fit_intercept=fit_intercept,
+                # dict
+                # class_weight=class_weight,
+                # int or None
+                # random_state=random_state,
+                max_iter=max_iter,
+                verbose=verbose,
+                warm_start=warm_start,
+                # int or None
+                # n_jobs=n_jobs,
+                # float or None
+                # l1_ratio=l1_ratio,
             )
             clf.fit(X, y)
-            m.coef_ = clf.coef_
-            m.intercept_ = clf.intercept_
-            m.n_iter = clf.n_iter
-            m.classes_ = clf.classes_
+            with numba.objmode():
+                m.coef_ = clf.coef_
+                m.intercept_ = clf.intercept_
+                m.n_iter_ = clf.n_iter_
+                m.classes_ = clf.classes_
             return m
 
         return _sgdc_logistic_regression_fit_impl
