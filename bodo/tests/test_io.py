@@ -619,6 +619,56 @@ def test_read_parquet_cache_fname_arg(datapath, memory_leak_check):
     pd.testing.assert_frame_equal(py_out, bodo_out2)
 
 
+def test_read_csv_cache_fname_arg(datapath, memory_leak_check):
+    """
+    test read_csv with cache=True and passing different file name as
+    argument to the Bodo function
+    """
+
+    def impl(fname):
+        return pd.read_csv(fname)
+
+    fname1 = datapath("example.csv")
+    fname2 = datapath("example_multi.csv")  # directory of csv files
+
+    py_out = impl(fname1)
+    py_out = py_out.astype({"three": "boolean"})
+    bodo_out1, bodo_out2 = check_caching(
+        sys.modules[__name__],
+        "test_read_csv_cache_fname_arg",
+        impl,
+        (fname1,),
+        (fname2,),
+    )
+    pd.testing.assert_frame_equal(py_out, bodo_out1)
+    pd.testing.assert_frame_equal(py_out, bodo_out2)
+
+
+def test_read_json_cache_fname_arg(datapath, memory_leak_check):
+    """
+    test read_json with cache=True and passing different file name as
+    argument to the Bodo function
+    """
+
+    def impl(fname):
+        return pd.read_json(fname, orient="records", lines=True)
+
+    fname1 = datapath("example.json")
+    fname2 = datapath("example_single.json")  # directory with one json file
+
+    py_out = impl(fname1)
+    py_out = py_out.astype({"three": "boolean"})
+    bodo_out1, bodo_out2 = check_caching(
+        sys.modules[__name__],
+        "test_read_json_cache_fname_arg",
+        impl,
+        (fname1,),
+        (fname2,),
+    )
+    pd.testing.assert_frame_equal(py_out, bodo_out1)
+    pd.testing.assert_frame_equal(py_out, bodo_out2)
+
+
 # TODO: Add memory_leak_check when bugs are resolved.
 def test_read_write_parquet():
     def write(df, filename):

@@ -67,7 +67,7 @@ from bodo.utils.transform import (
     fix_struct_return,
     set_call_expr_arg,
 )
-from bodo.utils.typing import BodoError, BodoWarning, to_nullable_type
+from bodo.utils.typing import BodoError, BodoWarning, to_nullable_type, FileInfo
 
 
 # dummy sentinel singleton to designate constant value not found for variable
@@ -873,10 +873,27 @@ class UntypedPass:
                 "pd.read_csv() requires explicit type "
                 "annotation using 'dtype' if filename is not constant"
             )
-            fname_const = get_const_value(fname, self.func_ir, msg, arg_types=self.args)
-            df_type = _get_csv_df_type_from_file(
-                fname_const, sep, skiprows, header, compression
+            fname_const = get_const_value(
+                fname,
+                self.func_ir,
+                msg,
+                arg_types=self.args,
+                file_info=CSVFileInfo(sep, skiprows, header, compression),
             )
+
+            got_schema = False
+            # get_const_value forces variable to be literal which should convert it to
+            # FilenameType. If so, the schema will be part of the type
+            var_def = guard(get_definition, self.func_ir, fname)
+            if isinstance(var_def, ir.Arg):
+                typ = self.args[var_def.index]
+                if isinstance(typ, types.FilenameType):
+                    df_type = typ.schema
+                    got_schema = True
+            if not got_schema:
+                df_type = _get_csv_df_type_from_file(
+                    fname_const, sep, skiprows, header, compression
+                )
             dtypes = df_type.data
             usecols = list(range(len(dtypes))) if usecols == "" else usecols
             # convert Pandas generated integer names if any
@@ -1061,7 +1078,15 @@ class UntypedPass:
             "pd.read_json() requires explicit type "
             "annotation using 'dtype' if filename is not constant"
         )
-        fname_const = get_const_value(fname, self.func_ir, msg, arg_types=self.args)
+        fname_const = get_const_value(
+            fname,
+            self.func_ir,
+            msg,
+            arg_types=self.args,
+            file_info=JSONFileInfo(
+                orient, convert_dates, precise_float, lines, compression
+            ),
+        )
         import os
 
         if dtype_var == "":
@@ -1074,10 +1099,24 @@ class UntypedPass:
                 )
             # TODO: more error checking needed
 
-            df_type = _get_json_df_type_from_file(
-                fname_const, orient, convert_dates, precise_float, lines, compression
-            )
-
+            got_schema = False
+            # get_const_value forces variable to be literal which should convert it to
+            # FilenameType. If so, the schema will be part of the type
+            var_def = guard(get_definition, self.func_ir, fname)
+            if isinstance(var_def, ir.Arg):
+                typ = self.args[var_def.index]
+                if isinstance(typ, types.FilenameType):
+                    df_type = typ.schema
+                    got_schema = True
+            if not got_schema:
+                df_type = _get_json_df_type_from_file(
+                    fname_const,
+                    orient,
+                    convert_dates,
+                    precise_float,
+                    lines,
+                    compression,
+                )
             dtypes = df_type.data
             # convert Pandas generated integer names if any
             col_names = [str(df_type.columns[i]) for i in range(len(dtypes))]
@@ -1626,6 +1665,28 @@ def remove_dead_branches(func_ir):
         del func_ir.blocks[dead]
 
 
+class JSONFileInfo(FileInfo):
+    """FileInfo object passed to ForceLiteralArg for
+    file name arguments that refer to a JSON dataset"""
+
+    def __init__(self, orient, convert_dates, precise_float, lines, compression):
+        self.orient = orient
+        self.convert_dates = convert_dates
+        self.precise_float = precise_float
+        self.lines = lines
+        self.compression = compression
+
+    def get_schema(self, fname):
+        return _get_json_df_type_from_file(
+            fname,
+            self.orient,
+            self.convert_dates,
+            self.precise_float,
+            self.lines,
+            self.compression,
+        )
+
+
 def _get_json_df_type_from_file(
     fname_const, orient, convert_dates, precise_float, lines, compression
 ):
@@ -1773,6 +1834,22 @@ def _get_sql_df_type_from_db(sql_const, con_const):
 
     df_type = comm.bcast(df_type)
     return df_type
+
+
+class CSVFileInfo(FileInfo):
+    """FileInfo object passed to ForceLiteralArg for
+    file name arguments that refer to a CSV dataset"""
+
+    def __init__(self, sep, skiprows, header, compression):
+        self.sep = sep
+        self.skiprows = skiprows
+        self.header = header
+        self.compression = compression
+
+    def get_schema(self, fname):
+        return _get_csv_df_type_from_file(
+            fname, self.sep, self.skiprows, self.header, self.compression
+        )
 
 
 def _get_csv_df_type_from_file(fname_const, sep, skiprows, header, compression):
