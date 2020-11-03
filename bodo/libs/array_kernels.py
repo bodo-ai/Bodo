@@ -1275,7 +1275,7 @@ def unique(A, parallel=False):  # pragma: no cover
     return np.array([a for a in set(A)]).astype(A.dtype)
 
 
-def cummin(A):  # pragma no cover
+def cummin(A):  # pragma: no cover
     return A
 
 
@@ -1300,7 +1300,7 @@ def cummin_overload(A):
     return impl
 
 
-def cummax(A):  # pragma no cover
+def cummax(A):  # pragma: no cover
     return A
 
 
