@@ -7,6 +7,7 @@ import pytest
 
 import bodo
 from bodo.tests.utils import check_func
+from bodo.utils.typing import BodoError
 
 
 @pytest.fixture(
@@ -202,6 +203,21 @@ def test_join(decimal_arr_value, memory_leak_check):
     check_func(test_impl, (df1, df2), sort_output=True, reset_index=True)
 
 
+def test_constructor(memory_leak_check):
+    def test_impl1():
+        return Decimal("1.1")
+
+    def test_impl2():
+        return Decimal()
+
+    def test_impl3():
+        return Decimal(1)
+
+    check_func(test_impl1, ())
+    check_func(test_impl2, ())
+    check_func(test_impl3, ())
+
+
 def test_setitem_none_int(decimal_arr_value, memory_leak_check):
     def test_impl(A, i):
         A[i] = None
@@ -244,3 +260,13 @@ def test_constant_lowering(decimal_arr_value):
     pd.testing.assert_series_equal(
         pd.Series(bodo.jit(impl)()), pd.Series(decimal_arr_value), check_dtype=False
     )
+
+
+def test_constructor_error(memory_leak_check):
+    """Test that an invalid constructor throws a BodoError"""
+
+    def impl():
+        return Decimal([1.1, 2.2, 3.2])
+
+    with pytest.raises(BodoError, match=r"decimal.Decimal\(\) value type must be"):
+        bodo.jit(impl)()

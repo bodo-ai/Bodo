@@ -29,7 +29,6 @@ from numba.extending import (
     overload_attribute,
     overload_method,
     register_model,
-    type_callable,
     typeof_impl,
     unbox,
 )
@@ -42,6 +41,8 @@ ll.add_symbol("box_decimal_array", decimal_ext.box_decimal_array)
 ll.add_symbol("unbox_decimal", decimal_ext.unbox_decimal)
 ll.add_symbol("unbox_decimal_array", decimal_ext.unbox_decimal_array)
 ll.add_symbol("decimal_to_str", decimal_ext.decimal_to_str)
+ll.add_symbol("str_to_decimal", decimal_ext.str_to_decimal)
+
 
 from bodo.utils.indexing import (
     array_getitem_bool_index,
@@ -52,9 +53,12 @@ from bodo.utils.indexing import (
     array_setitem_slice_index,
 )
 from bodo.utils.typing import (
+    BodoError,
     get_overload_const_int,
     is_list_like_index_type,
     is_overload_constant_int,
+    is_overload_constant_str,
+    is_overload_none,
     parse_dtype,
 )
 
@@ -167,6 +171,43 @@ def decimal_to_str(typingctx, val_t=None):
     return bodo.string_type(val_t), codegen
 
 
+def str_to_decimal_codegen(context, builder, signature, args):
+    val, _, _ = args
+    val = bodo.libs.str_ext.gen_unicode_to_std_str(context, builder, val)
+    fnty = lir.FunctionType(
+        lir.IntType(128),
+        [
+            lir.IntType(8).as_pointer(),
+        ],
+    )
+    fn = builder.module.get_or_insert_function(fnty, name="str_to_decimal")
+    decimal_val = builder.call(
+        fn,
+        [
+            val,
+        ],
+    )
+    return decimal_val
+
+
+@intrinsic
+def str_to_decimal(typingctx, val, precision_tp, scale_tp=None):
+    """convert string ot decimal128"""
+    assert val == bodo.string_type or is_overload_constant_str(val)
+    assert is_overload_constant_int(precision_tp)
+    assert is_overload_constant_int(scale_tp)
+
+    def codegen(context, builder, signature, args):
+        return str_to_decimal_codegen(context, builder, signature, args)
+
+    precision = get_overload_const_int(precision_tp)
+    scale = get_overload_const_int(scale_tp)
+    return (
+        Decimal128Type(precision, scale)(val, precision_tp, scale_tp),
+        codegen,
+    )
+
+
 # We cannot have exact matching between Python and Bodo
 # regarding the strings between decimal.
 # If you write Decimal("4.0"), Decimal("4.00"), or Decimal("4")
@@ -211,6 +252,29 @@ def lower_constant_decimal(context, builder, ty, pyval):
         t, builder.bitcast(res, lir.ArrayType(lir.IntType(64), 2).as_pointer())
     )
     return builder.load(res)
+
+
+@overload(Decimal, no_unliteral=True)
+def decimal_constructor_overload(value="0", context=None):
+
+    if not is_overload_none(context):  # pragma: no cover
+        raise BodoError("decimal.Decimal() context argument not supported yet")
+
+    # TODO: Handle Floats. These currently don't match exactly with Python because
+    # a value like 3.3 is not exactly 3.3 in floating point
+    if (
+        isinstance(value, (types.Integer,))
+        or is_overload_constant_str(value)
+        or value == bodo.string_type
+    ):
+
+        def impl(value="0", context=None):  # pragma: no cover
+            return str_to_decimal(str(value), 38, 18)
+
+        return impl
+    # TODO: Add support for the float, tuple, and Decimal arguments
+    else:
+        raise BodoError("decimal.Decimal() value type must be an integer or string")
 
 
 @unbox(Decimal128Type)

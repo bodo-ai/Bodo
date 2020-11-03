@@ -11,6 +11,8 @@
 // using scale 18 when converting from Python Decimal objects (same as Spark)
 #define PY_DECIMAL_SCALE 18
 
+
+
 std::string decimal_to_std_string(arrow::Decimal128 const& arrow_decimal, int const& scale) {
     std::string str = arrow_decimal.ToString(scale);
     // str may be of the form 0.45000000000 or 4.000000000
@@ -73,6 +75,8 @@ struct decimal_value {
 void decimal_to_str(decimal_value val, NRT_MemInfo** meminfo_ptr,
                     int64_t* len_ptr, int scale);
 
+arrow::Decimal128 str_to_decimal(const std::string &str_val);
+
 PyMODINIT_FUNC PyInit_decimal_ext(void) {
     PyObject* m;
     static struct PyModuleDef moduledef = {
@@ -98,6 +102,8 @@ PyMODINIT_FUNC PyInit_decimal_ext(void) {
                            PyLong_FromVoidPtr((void*)(&unbox_decimal)));
     PyObject_SetAttrString(m, "decimal_to_str",
                            PyLong_FromVoidPtr((void*)(&decimal_to_str)));
+    PyObject_SetAttrString(m, "str_to_decimal",
+                           PyLong_FromVoidPtr((void*)(&str_to_decimal)));
     PyObject_SetAttrString(m, "get_stats_alloc",
                            PyLong_FromVoidPtr((void*)(&get_stats_alloc)));
     PyObject_SetAttrString(m, "get_stats_free",
@@ -314,6 +320,39 @@ void decimal_to_str(decimal_value val, NRT_MemInfo** meminfo_ptr,
     ((char*)meminfo->data)[l] = 0;
     *len_ptr = l;
     *meminfo_ptr = meminfo;
+}
+
+arrow::Decimal128 str_to_decimal(const std::string &str_val) {
+    /*
+        str_to_decimal ignores a scale and precision value from
+        Python code because the user cannot specify them directly. Precision
+        currently matches the arrow default value of 38 and scale is set in
+        the global variable. If this should ever change this function will need
+        to be adjusted.
+    */ 
+#define CHECK(expr, msg)               \
+    if (!(expr)) {                     \
+        std::cerr << msg << std::endl; \
+        PyGILState_Release(gilstate);  \
+        return -1;                        \
+    }
+#define CHECK_ARROW_AND_ASSIGN(res, msg, lhs) \
+    CHECK(res.status().ok(), msg)             \
+    lhs = std::move(res).ValueOrDie();
+
+    auto gilstate = PyGILState_Ensure();
+    // Create the decimal array value from a string, precision, and scale
+    arrow::Decimal128 decimal;
+    int32_t precision;
+    int32_t scale;
+    arrow::Status status = arrow::Decimal128::FromString(
+        str_val, &decimal, &precision,
+        &scale);
+    CHECK(status.ok(), "decimal rescale faild");
+    // rescale decimal to 18 (default scale converting from Python)
+    CHECK_ARROW_AND_ASSIGN(decimal.Rescale(scale, PY_DECIMAL_SCALE),
+                           "decimal rescale error", decimal);
+    return decimal;
 }
 
 }  // extern "C"
