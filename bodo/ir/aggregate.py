@@ -1128,7 +1128,7 @@ def _gen_dummy_alloc(t):
         int_typ_name = IntDtype(t.dtype).name
         assert int_typ_name.endswith("Dtype()")
         int_typ_name = int_typ_name[:-7]  # remove trailing "Dtype()"
-        return "pd.Series([1], dtype='{}').values".format(int_typ_name)
+        return f"bodo.hiframes.pd_series_ext.get_series_data(pd.Series([1], dtype='{int_typ_name}'))"
     elif isinstance(t, BooleanArrayType):
         return "bodo.libs.bool_arr_ext.init_bool_array(np.empty(0, np.bool_), np.empty(0, np.uint8))"
     elif isinstance(t, StringArrayType):
