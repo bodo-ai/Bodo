@@ -1455,7 +1455,7 @@ def overload_kmeans_clustering_transform(m, X):
 
     return _cluster_kmeans_transform
 
-  
+
 # -------------------------------------MultinomialNB----------------------------------------
 # Support sklearn.naive_bayes.MultinomialNB using object mode of Numba
 # -----------------------------------------------------------------------------
@@ -1485,12 +1485,14 @@ def box_multinomial_nb(typ, val, c):
     c.pyapi.incref(val)
     return val
 
+
 @unbox(BodoMultinomialNBType)
 def unbox_multinomial_nb(typ, obj, c):
     # borrow a reference from Python
     c.pyapi.incref(obj)
     return NativeValue(obj)
-  
+
+
 @overload(sklearn.naive_bayes.MultinomialNB, no_unliteral=True)
 def sklearn_naive_bayes_multinomialnb_overload(
     alpha=1.0,
@@ -1528,11 +1530,12 @@ def overload_multinomial_nb_model_fit(
     if is_overload_false(_is_data_distributed):
 
         def _naive_bayes_multinomial_impl(
-           m, X, y, sample_weight=None, _is_data_distributed=False
+            m, X, y, sample_weight=None, _is_data_distributed=False
         ):  # pragma: no cover
             with numba.objmode():
                 m.fit(X, y, sample_weight)
             return m
+
         return _naive_bayes_multinomial_impl
     else:
         # TODO: sample_weight (future enhancement)
@@ -1691,6 +1694,7 @@ def overload_multinomial_nb_model_score(
     _is_data_distributed=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
 ):
     """Overload Multinomial score."""
+
     def _model_score_impl(
         m, X, y, sample_weight=None, _is_data_distributed=False
     ):  # pragma: no cover
@@ -1708,6 +1712,7 @@ def overload_multinomial_nb_model_score(
         return result.mean()
 
     return _model_score_impl
+
 
 # -------------------------------------Logisitic Regression--------------------
 # Support sklearn.linear_model.LogisticRegression object mode of Numba
@@ -1740,12 +1745,12 @@ def box_logistic_regression(typ, val, c):
     c.pyapi.incref(val)
     return val
 
+
 @unbox(BodoLogisticRegressionType)
 def unbox_logistic_regression(typ, obj, c):
     # borrow a reference from Python
     c.pyapi.incref(obj)
     return NativeValue(obj)
-
 
 
 @overload(sklearn.linear_model.LogisticRegression, no_unliteral=True)
@@ -1817,6 +1822,7 @@ def overload_logistic_regression_fit(
     """ Logistic Regression fit overload """
     # If data is replicated, run scikit-learn directly
     if is_overload_false(_is_data_distributed):
+
         def _logistic_regression_fit_impl(
             m, X, y, sample_weight=None, _is_data_distributed=False
         ):  # pragma: no cover
@@ -1884,12 +1890,6 @@ def overload_logistic_regression_predict(m, X):
 
 @overload_method(BodoLogisticRegressionType, "score", no_unliteral=True)
 def overload_logistic_regression_score(
-
-    return _model_predict_impl
-
-
-@overload_method(BodoMultinomialNBType, "score", no_unliteral=True)
-def overload_multinomial_nb_model_score(
     m,
     X,
     y,
@@ -1897,6 +1897,7 @@ def overload_multinomial_nb_model_score(
     _is_data_distributed=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
 ):
     """Overload Logistic Regression score."""
+
     def _model_score_impl(
         m, X, y, sample_weight=None, _is_data_distributed=False
     ):  # pragma: no cover
