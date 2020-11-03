@@ -611,7 +611,9 @@ def test_df_multi_get_level(memory_leak_check):
     check_func(impl3, (df,))
 
 
-@pytest.mark.parametrize("data", [pd.DataFrame({"A": range(10)}), np.arange(10)])
+@pytest.mark.parametrize(
+    "data", [pd.DataFrame({"A": range(10)}), np.arange(10), pd.Series(np.arange(10))]
+)
 def test_rebalance_simple(data, memory_leak_check):
     def impl(data):
         return bodo.rebalance(data)
@@ -635,7 +637,9 @@ def test_rebalance_simple(data, memory_leak_check):
                 np.testing.assert_array_equal(data, res)
 
 
-@pytest.mark.parametrize("data", [pd.DataFrame({"A": range(10)}), np.arange(10)])
+@pytest.mark.parametrize(
+    "data", [pd.DataFrame({"A": range(10)}), np.arange(10), pd.Series(np.arange(10))]
+)
 def test_rebalance_group(data, memory_leak_check):
     """Test the bodo.rebalance(data, dests=[...]) functionality which gets
     data from all the ranks and distributes to only a given subset of ranks"""
