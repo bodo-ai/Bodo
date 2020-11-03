@@ -10,8 +10,13 @@ from sklearn import datasets
 from sklearn.cluster import KMeans
 from sklearn.datasets import make_classification, make_regression
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.linear_model import SGDClassifier, SGDRegressor
-from sklearn.metrics import f1_score, precision_score, recall_score, accuracy_score
+from sklearn.linear_model import LogisticRegression, SGDClassifier, SGDRegressor
+from sklearn.metrics import (
+    accuracy_score,
+    f1_score,
+    precision_score,
+    recall_score,
+)
 from sklearn.naive_bayes import MultinomialNB
 from sklearn.preprocessing import StandardScaler
 from sklearn.utils._testing import assert_allclose, assert_array_equal
@@ -691,6 +696,114 @@ def test_kmeans(memory_leak_check):
         is_out_distributed=True,
     )
 
+# --------------------Logistic Regression Tests-----------------#
+
+
+def test_logistic_regression(memory_leak_check):
+    """
+    Shamelessly copied from the sklearn tests:
+    https://github.com/scikit-learn/scikit-learn/blob/0fb307bf39bbdacd6ed713c00724f8f871d60370/sklearn/tests/test_multiclass.py#L240
+    """
+    # Toy dataset where features correspond directly to labels.
+    X = np.array([[0, 0, 5], [0, 5, 0], [3, 0, 0], [0, 0, 6], [6, 0, 0]])
+    y = np.array([1, 2, 2, 1, 2])
+    # When testing with string, with predict this error comes
+    # >           bodo_out = bodo_func(*call_args)
+    # E           ValueError: invalid literal for int() with base 10: 'eggs'
+    # y = np.array(["eggs", "spam", "spam", "eggs", "spam"])
+    # classes = np.array(["eggs", "spam"])
+    classes = np.array([1, 2])
+    # Y = np.array([[0, 1, 1, 0, 1]]).T
+
+    def impl_fit(X, y):
+        clf = LogisticRegression()
+        clf.fit(X, y)
+        return clf
+
+    clf = bodo.jit(impl_fit)(X, y)
+    np.testing.assert_array_equal(clf.classes_, classes)
+
+    def impl_pred(X, y):
+        clf = LogisticRegression()
+        clf.fit(X, y)
+        y_pred = clf.predict(np.array([[0, 0, 4]]))[0]
+        return y_pred
+
+    check_func(
+        impl_pred,
+        (
+            X,
+            y,
+        ),
+    )
+
+    def impl_score(X, y):
+        clf = LogisticRegression(n_jobs=8)
+        clf.fit(X, y)
+        return clf.score(X, y)
+
+    check_func(
+        impl_score,
+        (
+            X,
+            y,
+        ),
+    )
+
+    def impl(X_train, y_train, X_test, y_test, name="Logistic Regression BODO"):
+        # Bodo ignores n_jobs. This is set for scikit-learn (non-bodo) run. It should be set to number of cores avialable.
+        clf = LogisticRegression(n_jobs=8)
+        start_time = time.time()
+        clf.fit(X_train, y_train)
+        end_time = time.time()
+        y_pred = clf.predict(X_test)
+        score = precision_score(y_test, y_pred, average="weighted")
+        if bodo.get_rank() == 0:
+            print(
+                "\n", name, "Time: ", (end_time - start_time), "\tScore: ", score, "\n"
+            )
+        return score
+
+    splitN = 60
+    n_samples = 1000
+    n_features = 10
+    X_train = None
+    y_train = None
+    X_test = None
+    y_test = None
+    if bodo.get_rank() == 0:
+        X, y = make_classification(
+            n_samples=n_samples,
+            n_features=n_features,
+            n_classes=2,
+            n_clusters_per_class=1,
+            flip_y=0.03,
+            n_informative=5,
+            n_redundant=0,
+            n_repeated=0,
+        )
+        sklearn_predict_result = impl(
+            X[:splitN],
+            y[:splitN],
+            X[splitN:],
+            y[splitN:],
+            "Real Logistic Regression SK",
+        )
+        X_train = bodo.scatterv(X[:splitN])
+        y_train = bodo.scatterv(y[:splitN])
+        X_test = bodo.scatterv(X[splitN:])
+        y_test = bodo.scatterv(y[splitN:])
+    else:
+        X_train = bodo.scatterv(None)
+        y_train = bodo.scatterv(None)
+        X_test = bodo.scatterv(None)
+        y_test = bodo.scatterv(None)
+
+    bodo_predict_result = bodo.jit(
+        distributed=["X_train", "y_train", "X_test", "y_test"]
+    )(impl)(X_train, y_train, X_test, y_test)
+    if bodo.get_rank() == 0:
+        assert np.allclose(sklearn_predict_result, bodo_predict_result, atol=0.1)
 
 # --------------------Multinomial Naive Bayes Tests-----------------#
 def test_multinomial_nb():

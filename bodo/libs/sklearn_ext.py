@@ -1,5 +1,4 @@
-"""Support sklearn.ensemble.RandomForestClassifier using object mode of Numba
-"""
+"""Support scikit-learn using object mode of Numba """
 import itertools
 
 import numba
@@ -1525,6 +1524,7 @@ def overload_multinomial_nb_model_fit(
     sample_weight=None,
     _is_data_distributed=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
 ):
+
     """ MultinomialNB fit overload """
     # If data is replicated, run scikit-learn directly
     if is_overload_false(_is_data_distributed):
@@ -1694,6 +1694,209 @@ def overload_multinomial_nb_model_score(
     _is_data_distributed=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
 ):
     """Overload Multinomial score."""
+
+    def _model_score_impl(
+        m, X, y, sample_weight=None, _is_data_distributed=False
+    ):  # pragma: no cover
+        # HA: TODO Move this part to new function and call it here
+        with numba.objmode(result="float64[:]"):
+            result = m.score(X, y, sample_weight=sample_weight)
+            if _is_data_distributed:
+                # replicate result so that the average is weighted based on
+                # the data size on each rank
+                result = np.full(len(y), result)
+            else:
+                result = np.array([result])
+        if _is_data_distributed:
+            result = bodo.allgatherv(result)
+        return result.mean()
+
+    return _model_score_impl
+
+
+# -------------------------------------Logisitic Regression--------------------
+# Support sklearn.linear_model.LogisticRegression object mode of Numba
+# -----------------------------------------------------------------------------
+# Typing and overloads to use LogisticRegression inside Bodo functions
+# directly via sklearn's API
+
+
+class BodoLogisticRegressionType(types.Opaque):
+    def __init__(self):
+        super(BodoLogisticRegressionType, self).__init__(
+            name="BodoLogisticRegressionType"
+        )
+
+
+logistic_regression_type = BodoLogisticRegressionType()
+types.logistic_regression_type = logistic_regression_type
+
+register_model(BodoLogisticRegressionType)(models.OpaqueModel)
+
+
+@typeof_impl.register(sklearn.linear_model.LogisticRegression)
+def typeof_logistic_regression(val, c):
+    return logistic_regression_type
+
+
+@box(BodoLogisticRegressionType)
+def box_logistic_regression(typ, val, c):
+    # See note in box_random_forest_classifier
+    c.pyapi.incref(val)
+    return val
+
+
+@unbox(BodoLogisticRegressionType)
+def unbox_logistic_regression(typ, obj, c):
+    # borrow a reference from Python
+    c.pyapi.incref(obj)
+    return NativeValue(obj)
+
+
+@overload(sklearn.linear_model.LogisticRegression, no_unliteral=True)
+def sklearn_linear_model_logistic_regression_overload(
+    penalty="l2",
+    dual=False,
+    tol=0.0001,
+    C=1.0,
+    fit_intercept=True,
+    intercept_scaling=1,
+    class_weight=None,
+    random_state=None,
+    solver="lbfgs",
+    max_iter=100,
+    multi_class="auto",
+    verbose=0,
+    warm_start=False,
+    n_jobs=None,
+    l1_ratio=None,
+):
+    def _sklearn_linear_model_logistic_regression_impl(
+        penalty="l2",
+        dual=False,
+        tol=0.0001,
+        C=1.0,
+        fit_intercept=True,
+        intercept_scaling=1,
+        class_weight=None,
+        random_state=None,
+        solver="lbfgs",
+        max_iter=100,
+        multi_class="auto",
+        verbose=0,
+        warm_start=False,
+        n_jobs=None,
+        l1_ratio=None,
+    ):  # pragma: no cover
+        with numba.objmode(m="logistic_regression_type"):
+            m = sklearn.linear_model.LogisticRegression(
+                penalty=penalty,
+                dual=dual,
+                tol=tol,
+                C=C,
+                fit_intercept=fit_intercept,
+                intercept_scaling=intercept_scaling,
+                class_weight=class_weight,
+                random_state=random_state,
+                solver=solver,
+                max_iter=max_iter,
+                multi_class=multi_class,
+                verbose=verbose,
+                warm_start=warm_start,
+                n_jobs=n_jobs,
+                l1_ratio=l1_ratio,
+            )
+        return m
+
+    return _sklearn_linear_model_logistic_regression_impl
+
+
+@overload_method(BodoLogisticRegressionType, "fit", no_unliteral=True)
+def overload_logistic_regression_fit(
+    m,
+    X,
+    y,
+    sample_weight=None,
+    _is_data_distributed=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
+):
+    """ Logistic Regression fit overload """
+    # If data is replicated, run scikit-learn directly
+    if is_overload_false(_is_data_distributed):
+
+        def _logistic_regression_fit_impl(
+            m, X, y, sample_weight=None, _is_data_distributed=False
+        ):  # pragma: no cover
+            with numba.objmode():
+                m.fit(X, y, sample_weight)
+            return m
+
+        return _logistic_regression_fit_impl
+    else:
+        # Create and run SGDClassifier(loss='log')
+        def _sgdc_logistic_regression_fit_impl(
+            m, X, y, sample_weight=None, _is_data_distributed=False
+        ):  # pragma: no cover
+            if bodo.get_rank() == 0:
+                print(
+                    "WARNING: Data is distributed so Bodo will fit model with SGD solver optimization (SGDClassifier)"
+                )
+            with numba.objmode(clf="sgd_classifier_type"):
+                # SGDClassifier doesn't allow l1_ratio to be None. default=0.15
+                if m.l1_ratio is None:
+                    l1_ratio = 0.15
+                else:
+                    l1_ratio = m.l1_ratio
+                clf = sklearn.linear_model.SGDClassifier(
+                    loss="log",
+                    penalty=m.penalty,
+                    tol=m.tol,
+                    fit_intercept=m.fit_intercept,
+                    class_weight=m.class_weight,
+                    random_state=m.random_state,
+                    max_iter=m.max_iter,
+                    verbose=m.verbose,
+                    warm_start=m.warm_start,
+                    n_jobs=m.n_jobs,
+                    l1_ratio=l1_ratio,
+                )
+            clf.fit(X, y, _is_data_distributed=True)
+            with numba.objmode():
+                m.coef_ = clf.coef_
+                m.intercept_ = clf.intercept_
+                m.n_iter_ = clf.n_iter_
+                m.classes_ = clf.classes_
+            return m
+
+        return _sgdc_logistic_regression_fit_impl
+
+
+@overload_method(BodoLogisticRegressionType, "predict", no_unliteral=True)
+def overload_logistic_regression_predict(m, X):
+    """Overload Logistic Regression predict. (Data parallelization)"""
+
+    def _logistic_regression_predict_impl(m, X):  # pragma: no cover
+        with numba.objmode(result="int64[:]"):
+            # currently we do data-parallel prediction
+            m.n_jobs = 1
+            if len(X) == 0:
+                # TODO If X is replicated this should be an error (same as sklearn)
+                result = np.empty(0, dtype=np.int64)
+            else:
+                result = m.predict(X).astype(np.int64).flatten()
+        return result
+
+    return _logistic_regression_predict_impl
+
+
+@overload_method(BodoLogisticRegressionType, "score", no_unliteral=True)
+def overload_logistic_regression_score(
+    m,
+    X,
+    y,
+    sample_weight=None,
+    _is_data_distributed=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
+):
+    """Overload Logistic Regression score."""
 
     def _model_score_impl(
         m, X, y, sample_weight=None, _is_data_distributed=False

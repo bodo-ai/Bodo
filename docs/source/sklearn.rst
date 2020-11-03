@@ -10,6 +10,16 @@ Optional arguments are not supported unless specified.
 Linear Classifiers
 ~~~~~~~~~~~~~~~~~~
 
+:class:`sklearn.linear_model.LogisticRegression`
+
+  This class provides logistic regression classifier.
+
+Methods:
+
+  * :any:`sklearn.linear_model.LogisticRegression.fit`
+  * :any:`sklearn.linear_model.LogisticRegression.predict`
+  * :any:`sklearn.linear_model.LogisticRegression.score`
+
 :class:`sklearn.linear_model.SGDClassifier`
 
   This class provides linear classification models with SGD optimization which allows distributed large-scale learning.
