@@ -109,6 +109,18 @@ from bodo.tests.utils import check_func, gen_random_list_string_array
             ]
             * 2
         ),
+        pd.Series(
+            [
+                (123, 1000, np.int8(1), np.float32(6.5)),
+                (75, 2000, np.int8(12), np.float32(1.5)),
+                (12, 3000, np.int8(120), np.float32(33.3)),
+                (788, 4000, np.int8(22), np.float32(6.2)),
+                (62, 5000, np.int8(67), np.float32(7.1)),
+                (1, 6000, np.int8(100), np.float32(50.56)),
+                (33, 7000, np.int8(250), np.float32(67.5)),
+            ]
+            * 2
+        ),
     ]
 )
 def nested_arrays_value(request):

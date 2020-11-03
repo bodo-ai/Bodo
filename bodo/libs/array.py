@@ -52,6 +52,7 @@ from bodo.libs.struct_arr_ext import (
     _get_struct_arr_payload,
     define_struct_arr_dtor,
 )
+from bodo.libs.tuple_arr_ext import TupleArrayType, init_tuple_arr
 from bodo.utils.transform import get_type_alloc_counts
 from bodo.utils.utils import CTypeEnum, numba_to_c_type
 
@@ -112,6 +113,12 @@ def array_to_info(typingctx, arr_type_t=None):
     def codegen(context, builder, sig, args):
         (in_arr,) = args
         arr_type = arr_type_t
+        if isinstance(arr_type, TupleArrayType):
+            # TupleArray uses same model as StructArray so we just use a
+            # StructArrayType to generate LLVM
+            tuple_array = context.make_helper(builder, arr_type, in_arr)
+            in_arr = tuple_array.data
+            arr_type = StructArrayType(arr_type.data, ("dummy",) * len(arr_type.data))
         # arr_info struct keeps a reference
         context.nrt.incref(builder, arr_type, in_arr)
 
@@ -907,7 +914,7 @@ def info_to_array(typingctx, info_type, array_type):
                 arr_type, context, builder, in_info
             )
 
-        if isinstance(arr_type, (ArrayItemArrayType, StructArrayType)):
+        if isinstance(arr_type, (ArrayItemArrayType, StructArrayType, TupleArrayType)):
 
             def get_num_arrays(arr_typ):
                 """ get total number of arrays in nested array """
@@ -938,7 +945,16 @@ def info_to_array(typingctx, info_type, array_type):
                     # (all Arrow arrays are nullable)
                     return 2
 
-            n = get_num_arrays(arr_type)
+            if isinstance(arr_type, TupleArrayType):
+                # TupleArray uses same model as StructArray so we just use a
+                # StructArrayType to generate LLVM
+                cpp_arr_type = StructArrayType(
+                    arr_type.data, ("dummy",) * len(arr_type.data)
+                )
+            else:
+                cpp_arr_type = arr_type
+
+            n = get_num_arrays(cpp_arr_type)
             # allocate zero-initialized array of lengths for each array in
             # nested datastructure (to be filled out by C++)
             lengths = cgutils.pack_array(
@@ -949,7 +965,7 @@ def info_to_array(typingctx, info_type, array_type):
             # nested datastructure (to be filled out by C++ as pointers to array_info)
             nullptr = lir.Constant(lir.IntType(8).as_pointer(), None)
             array_infos = cgutils.pack_array(
-                builder, [nullptr for _ in range(get_num_infos(arr_type))]
+                builder, [nullptr for _ in range(get_num_infos(cpp_arr_type))]
             )
             array_infos_ptr = cgutils.alloca_once_value(builder, array_infos)
 
@@ -981,8 +997,15 @@ def info_to_array(typingctx, info_type, array_type):
             # generate code recursively to construct nested arrays from buffers
             # returned from C++
             arr, _, _ = nested_to_array(
-                context, builder, arr_type, lengths_ptr, array_infos_ptr, 0, 0
+                context, builder, cpp_arr_type, lengths_ptr, array_infos_ptr, 0, 0
             )
+            if isinstance(arr_type, TupleArrayType):
+                # nested_to_array returns StructArray, not TupleArray so we
+                # have to return one here
+                tuple_array = context.make_helper(builder, arr_type)
+                tuple_array.data = arr
+                context.nrt.incref(builder, cpp_arr_type, arr)
+                arr = tuple_array._getvalue()
             return arr
 
         # StringArray

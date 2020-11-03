@@ -962,6 +962,29 @@ def rebalance(data, dests=None, parallel=False):
         func_text += "    return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), {}, {})\n".format(
             data_args, index, col_var
         )
+    elif isinstance(data, bodo.hiframes.pd_series_ext.SeriesType):
+        func_text = "def impl(data, dests=None, parallel=False):\n"
+        func_text += "    data_0 = bodo.hiframes.pd_series_ext.get_series_data(data)\n"
+        func_text += "    ind_arr = bodo.utils.conversion.index_to_array(bodo.hiframes.pd_series_ext.get_series_index(data))\n"
+        func_text += "    name = bodo.hiframes.pd_series_ext.get_series_name(data)\n"
+        func_text += "    table_total = arr_info_list_to_table([array_to_info(data_0), array_to_info(ind_arr)])\n"
+        func_text += "    if dests is None:\n"
+        func_text += (
+            "        out_table = shuffle_renormalization(table_total, parallel)\n"
+        )
+        func_text += "    else:\n"
+        func_text += "        out_table = shuffle_renormalization_group(table_total, parallel, len(dests), np.array(dests, dtype=np.int32).ctypes)\n"
+        func_text += (
+            "    out_arr_0 = info_to_array(info_from_table(out_table, 0), data_0)\n"
+        )
+        func_text += "    out_arr_index = info_to_array(info_from_table(out_table, 1), ind_arr)\n"
+        func_text += "    delete_table(out_table)\n"
+        func_text += "    if parallel:\n"
+        func_text += "        delete_table(table_total)\n"
+        index = "bodo.utils.conversion.index_from_array(out_arr_index)"
+        func_text += "    return bodo.hiframes.pd_series_ext.init_series(out_arr_0, {}, name)\n".format(
+            index
+        )
     elif isinstance(data, types.Array):
         func_text = "def impl(data, dests=None, parallel=False):\n"
         func_text += "    if not parallel:\n"
