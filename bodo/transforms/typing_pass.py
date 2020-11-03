@@ -1153,10 +1153,12 @@ def _create_const_var(val, name, scope, loc, nodes):
     if isinstance(val, pd.Index):
         val = list(val)
     new_var = ir.Var(scope, mk_unique_var(name), loc)
-    # NOTE: create a tuple for both list/tuple, assuming that all functions accept both
-    # equally (e.g. passing a tuple instead of a list is not an error).
-    if isinstance(val, (tuple, list)):
+    if isinstance(val, tuple):
         const_node = ir.Expr.build_tuple(
+            [_create_const_var(v, name, scope, loc, nodes) for v in val], loc
+        )
+    if isinstance(val, list):
+        const_node = ir.Expr.build_list(
             [_create_const_var(v, name, scope, loc, nodes) for v in val], loc
         )
     # create a tuple with sentinel for dict case since there is no dict literal
