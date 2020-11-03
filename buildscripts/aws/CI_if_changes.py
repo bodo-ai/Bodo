@@ -5,8 +5,9 @@ import subprocess
 def run_commands(commands):
     # Runs commands (all with no arguments) if CI should run
     if run_ci():
+        # TODO: Support commands with arguments (none exist yet)
         for command in commands:
-            subprocess.run([command])
+            subprocess.run([command], check=True)
     else:
         # If we are suppose to run unittests we need to generate an empty artifact
         if "buildscripts/aws/run_unittests.sh" in commands:
