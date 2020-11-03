@@ -199,6 +199,25 @@ def test_sort_values_val(memory_leak_check):
     check_func(impl, (df,))
 
 
+def test_sort_values_tuple_keys(memory_leak_check):
+    """
+    Test sort_values() where column names are tuples
+    """
+
+    def impl1(df):
+        df2 = df.groupby("A", as_index=False).agg({"B": ["sum", "mean"]})
+        return df2.sort_values(by="A")
+
+    def impl2(df):
+        df2 = df.groupby("A", as_index=False).agg({"B": ["sum", "mean"]})
+        return df2.sort_values(by=("A", ""))
+
+    n = 10
+    df = pd.DataFrame({"A": np.arange(n) + 1.0, "B": np.arange(n) + 1})
+    check_func(impl1, (df,), check_dtype=False, dist_test=False)
+    check_func(impl2, (df,), check_dtype=False, dist_test=False)
+
+
 def test_sort_values_1col(df_value, memory_leak_check):
     """
     Test sort_values(): with just 1 column

@@ -243,8 +243,13 @@ def is_overload_constant_list(val):
 
 
 def is_overload_constant_tuple(val):
-    return isinstance(val, tuple) or (
-        isinstance(val, types.Omitted) and isinstance(val.value, tuple)
+    return (
+        isinstance(val, tuple)
+        or (isinstance(val, types.Omitted) and isinstance(val.value, tuple))
+        or (
+            isinstance(val, types.BaseTuple)
+            and all(get_overload_const(t) is not NOT_CONSTANT for t in val.types)
+        )
     )
 
 
@@ -424,6 +429,8 @@ def get_overload_const_tuple(val):
     if isinstance(val, types.Omitted):
         assert isinstance(val.value, tuple)
         return val.value
+    if isinstance(val, types.BaseTuple):
+        return tuple(get_overload_const(t) for t in val.types)
 
 
 def get_overload_constant_dict(val):
