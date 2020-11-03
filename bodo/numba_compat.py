@@ -1029,6 +1029,64 @@ numba.core.dispatcher.Dispatcher.compile = (
 )
 
 
+def _get_module_for_linking(self):
+    """
+    Internal: get a LLVM module suitable for linking multiple times
+    into another library.  Exported functions are made "linkonce_odr"
+    to allow for multiple definitions, inlining, and removal of
+    unused exports.
+
+    See discussion in https://github.com/numba/numba/pull/890
+    """
+    import llvmlite.binding as ll  # Bodo change
+
+    self._ensure_finalized()
+    if self._shared_module is not None:
+        return self._shared_module
+    mod = self._final_module
+    to_fix = []
+    nfuncs = 0
+    for fn in mod.functions:
+        nfuncs += 1
+        if not fn.is_declaration and fn.linkage == ll.Linkage.external:
+            # Bodo change: skip groupby agg udf cfuncs, to avoid turning them
+            # into weak symbols that are discarded
+            if "get_agg_udf_addr" not in fn.name:
+                if "bodo_gb_udf_update_local" in fn.name:
+                    continue
+                if "bodo_gb_udf_combine" in fn.name:
+                    continue
+                if "bodo_gb_udf_eval" in fn.name:
+                    continue
+                if "bodo_gb_apply_general_udfs" in fn.name:
+                    continue
+            to_fix.append(fn.name)
+    if nfuncs == 0:
+        # This is an issue which can occur if loading a module
+        # from an object file and trying to link with it, so detect it
+        # here to make debugging easier.
+        raise RuntimeError(
+            "library unfit for linking: " "no available functions in %s" % (self,)
+        )
+    if to_fix:
+        mod = mod.clone()
+        for name in to_fix:
+            # NOTE: this will mark the symbol WEAK if serialized
+            # to an ELF file
+            mod.get_function(name).linkage = "linkonce_odr"
+    self._shared_module = mod
+    return mod
+
+
+lines = inspect.getsource(numba.core.codegen.CodeLibrary._get_module_for_linking)
+if (
+    hashlib.sha256(lines.encode()).hexdigest()
+    != "56dde0e0555b5ec85b93b97c81821bce60784515a1fbf99e4542e92d02ff0a73"
+):  # pragma: no cover
+    warnings.warn("numba.core.codegen.CodeLibrary._get_module_for_linking has changed")
+numba.core.codegen.CodeLibrary._get_module_for_linking = _get_module_for_linking
+
+
 def propagate(self, typeinfer):
     """
     Execute all constraints.  Errors are caught and returned as a list.
