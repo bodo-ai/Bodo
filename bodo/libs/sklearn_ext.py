@@ -1574,6 +1574,10 @@ def overload_logistic_regression_fit(
         def _sgdc_logistic_regression_fit_impl(
             m, X, y, sample_weight=None, _is_data_distributed=False
         ):  # pragma: no cover
+            if bodo.get_rank() == 0:
+                print(
+                    "WARNING: Data is distributed so Bodo will fit model with SGD solver optimization (SGDClassifier)"
+                )
             with numba.objmode(clf="sgd_classifier_type"):
                 # SGDClassifier doesn't allow l1_ratio to be None. default=0.15
                 if m.l1_ratio is None:
