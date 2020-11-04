@@ -88,6 +88,7 @@ from bodo.hiframes.pd_offsets_ext import month_end_type
 
 
 import bodo.compiler  # isort:skip
+import bodo.dl
 
 use_pandas_join = False
 use_cpp_drop_duplicates = True

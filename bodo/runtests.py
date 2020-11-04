@@ -54,6 +54,7 @@ except subprocess.CalledProcessError as e:
     if e.returncode == 5:  # pytest returns error code 5 when no tests found
         exit()  # nothing to do
     else:
+        print(e.output.decode())
         raise e
 
 # get the list of test modules (test file names) to run
