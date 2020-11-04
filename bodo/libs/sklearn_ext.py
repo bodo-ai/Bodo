@@ -284,12 +284,33 @@ def overload_model_fit(
     return _model_fit_impl
 
 
+def parallel_predict_regression(m, X):
+    """
+    Implement the regression prediction operation in parallel.
+    Each rank has its own copy of the model and predicts for its
+    own set of data.
+    """
+
+    def _model_predict_impl(m, X):  # pragma: no cover
+        with numba.objmode(result="float64[:]"):
+            # currently we do data-parallel prediction
+            m.n_jobs = 1
+            if len(X) == 0:
+                # TODO If X is replicated this should be an error (same as sklearn)
+                result = np.empty(0, dtype=np.float64)
+            else:
+                result = m.predict(X).astype(np.float64).flatten()
+        return result
+
+    return _model_predict_impl
+
+
 def parallel_predict(m, X):
     """
     Implement the prediction operation in parallel.
     Each rank has its own copy of the model and predicts for its
     own set of data.
-    This strategy is the same for a lot of estimators.
+    This strategy is the same for a lot of classifier estimators.
     """
 
     def _model_predict_impl(m, X):  # pragma: no cover
@@ -901,7 +922,7 @@ def overload_sgdr_model_fit(
 @overload_method(BodoSGDRegressorType, "predict", no_unliteral=True)
 def overload_sgdr_model_predict(m, X):
     """Overload SGDRegressor predict. (Data parallelization)"""
-    return parallel_predict(m, X)
+    return parallel_predict_regression(m, X)
 
 
 @overload_method(BodoSGDRegressorType, "score", no_unliteral=True)
