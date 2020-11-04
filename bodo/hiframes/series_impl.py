@@ -172,22 +172,27 @@ def overload_series_to_list(S):
 
 
 @overload_method(SeriesType, "to_numpy", inline="always", no_unliteral=True)
-def overload_series_to_numpy(S, dtype=None, copy=False):
-    if not is_overload_none(dtype) or not is_overload_false(copy):
-        raise BodoError("'dtype' and 'copy' arguments of to_numpy() not supported yet")
+def overload_series_to_numpy(S, dtype=None, copy=False, na_value=None):
 
-    def impl(S, dtype=None, copy=False):  # pragma: no cover
+    unsupported_args = dict(dtype=dtype, copy=copy, na_value=na_value)
+    arg_defaults = dict(dtype=None, copy=False, na_value=None)
+    check_unsupported_args("Series.to_numpy", unsupported_args, arg_defaults)
+
+    def impl(S, dtype=None, copy=False, na_value=None):  # pragma: no cover
         return S.values
 
     return impl
 
 
 @overload_method(SeriesType, "reset_index", inline="always", no_unliteral=True)
-def overload_series_reset_index(S):
+def overload_series_reset_index(S, level=None, drop=False, name=None, inplace=False):
     """overload for Series.reset_index(). Note that it requires the series'
     name and index name to be literal values, and so will only currently
     work in very specific cases where these are known at compile time
     (e.g. groupby("A")["B"].sum().reset_index())"""
+    unsupported_args = dict(level=level, drop=drop, name=name, inplace=inplace)
+    arg_defaults = dict(level=None, drop=False, name=None, inplace=False)
+    check_unsupported_args("Series.reset_index()", unsupported_args, arg_defaults)
 
     def get_name_literal(name_typ):
         """ return literal value or throw error in non-literal type """
@@ -200,7 +205,7 @@ def overload_series_reset_index(S):
 
     columns = [get_name_literal(S.index.name_typ), get_name_literal(S.name_typ)]
 
-    func_text = "def _impl(S):\n"
+    func_text = "def _impl(S, level=None, drop=False, name=None, inplace=False):\n"
     func_text += "    arr = bodo.hiframes.pd_series_ext.get_series_data(S)\n"
     func_text += "    index = bodo.hiframes.pd_series_ext.get_series_index(S)\n"
     func_text += "    df_index = bodo.hiframes.pd_index_ext.init_range_index(0, len(S), 1, None)\n"
@@ -256,7 +261,17 @@ def overload_series_round(S, decimals=0):
 
 
 @overload_method(SeriesType, "sum", inline="always", no_unliteral=True)
-def overload_series_sum(S, skipna=True, min_count=0):
+def overload_series_sum(
+    S, axis=None, skipna=True, level=None, numeric_only=None, min_count=0
+):
+
+    unsupported_args = dict(level=level, numeric_only=numeric_only)
+    arg_defaults = dict(level=None, numeric_only=None)
+    check_unsupported_args("Series.sum", unsupported_args, arg_defaults)
+
+    if not (is_overload_none(axis) or is_overload_zero(axis)):  # pragma: no cover
+        raise BodoError("Series.sum(): axis argument not supported")
+
     # TODO: series that have different underlying data type than dtype
     # like records/tuples
     if isinstance(S.dtype, types.Integer):
@@ -273,7 +288,9 @@ def overload_series_sum(S, skipna=True, min_count=0):
         not is_overload_true(skipna) or not is_overload_zero(min_count)
     ):
 
-        def impl(S, skipna=True, min_count=0):  # pragma: no cover
+        def impl(
+            S, axis=None, skipna=True, level=None, numeric_only=None, min_count=0
+        ):  # pragma: no cover
             A = bodo.hiframes.pd_series_ext.get_series_data(S)
             numba.parfors.parfor.init_prange()
             s = val_zero
@@ -291,7 +308,9 @@ def overload_series_sum(S, skipna=True, min_count=0):
 
     else:
 
-        def impl(S, skipna=True, min_count=0):  # pragma: no cover
+        def impl(
+            S, axis=None, skipna=True, level=None, numeric_only=None, min_count=0
+        ):  # pragma: no cover
             A = bodo.hiframes.pd_series_ext.get_series_data(S)
             numba.parfors.parfor.init_prange()
             s = val_zero
@@ -307,14 +326,28 @@ def overload_series_sum(S, skipna=True, min_count=0):
 
 @overload_method(SeriesType, "prod", inline="always", no_unliteral=True)
 @overload_method(SeriesType, "product", inline="always", no_unliteral=True)
-def overload_series_prod(S, skipna=True, min_count=0):
+def overload_series_prod(
+    S, axis=None, skipna=True, level=None, numeric_only=None, min_count=0
+):
+
+    unsupported_args = dict(level=level, numeric_only=numeric_only)
+    arg_defaults = dict(level=None, numeric_only=None)
+    check_unsupported_args(
+        "Series.prod()/Series.product()", unsupported_args, arg_defaults
+    )
+
+    if not (is_overload_none(axis) or is_overload_zero(axis)):  # pragma: no cover
+        raise BodoError("Series.prod()/Series.product(): axis argument not supported")
+
     val_one = S.dtype(1)
 
     # For integer array we cannot handle the missing values because
     # we cannot mix np.nan with integers
     if isinstance(S.dtype, types.Float):
 
-        def impl(S, skipna=True, min_count=0):  # pragma: no cover
+        def impl(
+            S, axis=None, skipna=True, level=None, numeric_only=None, min_count=0
+        ):  # pragma: no cover
             A = bodo.hiframes.pd_series_ext.get_series_data(S)
             numba.parfors.parfor.init_prange()
             s = val_one
@@ -332,7 +365,9 @@ def overload_series_prod(S, skipna=True, min_count=0):
 
     else:
 
-        def impl(S, skipna=True, min_count=0):  # pragma: no cover
+        def impl(
+            S, axis=None, skipna=True, level=None, numeric_only=None, min_count=0
+        ):  # pragma: no cover
             A = bodo.hiframes.pd_series_ext.get_series_data(S)
             numba.parfors.parfor.init_prange()
             s = val_one
@@ -680,12 +715,22 @@ def overload_series_cummax(S):
 
 
 @overload_method(SeriesType, "rename", inline="always", no_unliteral=True)
-def overload_series_rename(S, index=None):
+def overload_series_rename(
+    S, index=None, axis=None, copy=True, inplace=False, level=None, errors="ignore"
+):
     if not (index == bodo.string_type or isinstance(index, types.StringLiteral)):
         raise BodoError("Series.rename() 'index' can only be a string")
 
+    unsupported_args = dict(copy=copy, inplace=inplace, level=level, errors=errors)
+    arg_defaults = dict(copy=True, inplace=False, level=None, errors="ignore")
+    check_unsupported_args("Series.rename", unsupported_args, arg_defaults)
+    if not (is_overload_none(axis) or is_overload_zero(axis)):  # pragma: no cover
+        raise BodoError("Series.where(): axis argument not supported")
+
     # TODO: support index rename, kws
-    def impl(S, index=None):  # pragma: no cover
+    def impl(
+        S, index=None, axis=None, copy=True, inplace=False, level=None, errors="ignore"
+    ):  # pragma: no cover
         A = bodo.hiframes.pd_series_ext.get_series_data(S)
         s_index = bodo.hiframes.pd_series_ext.get_series_index(S)
         return bodo.hiframes.pd_series_ext.init_series(A, s_index, index)
@@ -2020,12 +2065,9 @@ def overload_series_np_dot(a, b, out=None):
 @overload_method(SeriesType, "dropna", inline="always", no_unliteral=True)
 def overload_series_dropna(S, axis=0, inplace=False):
 
-    unsupported_args = dict(axis=axis)
-    merge_defaults = dict(axis=0)
+    unsupported_args = dict(axis=axis, inplace=inplace)
+    merge_defaults = dict(axis=0, inplace=False)
     check_unsupported_args("series.dropna", unsupported_args, merge_defaults)
-
-    if not is_overload_false(inplace):
-        raise BodoError("Series.dropna(): inplace=True is not supported")
 
     if S.dtype == bodo.string_type:
 
@@ -2101,6 +2143,14 @@ def overload_series_where(
 ):
     # TODO: handle other cases
     # TODO: error-checking for input
+    unsupported_args = dict(
+        inplace=inplace, level=level, errors=errors, try_cast=try_cast
+    )
+    arg_defaults = dict(inplace=False, level=None, errors="raise", try_cast=False)
+    check_unsupported_args("Series.where", unsupported_args, arg_defaults)
+    if not (is_overload_none(axis) or is_overload_zero(axis)):  # pragma: no cover
+        raise BodoError("Series.where(): axis argument not supported")
+
     def impl(
         S,
         cond,

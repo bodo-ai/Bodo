@@ -2747,7 +2747,9 @@ def test_series_drop_inplace_check(memory_leak_check):
         S.dropna(inplace=True)
 
     S = pd.Series([1.0, 2.0, np.nan, 1.0], [3, 4, 2, 1], name="A")
-    with pytest.raises(BodoError, match="inplace=True is not supported"):
+    with pytest.raises(
+        BodoError, match="inplace parameter only supports default value False"
+    ):
         bodo.jit(test_impl)(S)
 
 

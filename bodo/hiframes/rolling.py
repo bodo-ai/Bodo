@@ -15,10 +15,13 @@ import bodo
 from bodo.libs.distributed_api import Reduce_Type
 from bodo.utils.typing import (
     BodoError,
+    check_unsupported_args,
     get_overload_const_func,
     get_overload_const_str,
     is_const_func_type,
     is_overload_constant_str,
+    is_overload_none,
+    is_overload_zero,
 )
 from bodo.utils.utils import unliteral_all
 
@@ -44,6 +47,7 @@ def get_rolling_setup_args(func_ir, rhs, get_consts=True):
     """
     center = False
     on = None
+
     kws = dict(rhs.kws)
     if rhs.args:
         window = rhs.args[0]
@@ -51,6 +55,19 @@ def get_rolling_setup_args(func_ir, rhs, get_consts=True):
         window = kws["window"]
     else:  # pragma: no cover
         raise BodoError("window argument to rolling() required")
+
+    min_periods = kws.pop("min_periods", None)
+    win_type = kws.pop("win_type", None)
+    closed = kws.pop("closed", None)
+    axis = kws.pop("axis", None)
+
+    unsupported_args = dict(min_periods=min_periods, win_type=win_type, closed=closed)
+    arg_defaults = dict(min_periods=None, win_type=None, closed=None)
+    check_unsupported_args("Series.rolling", unsupported_args, arg_defaults)
+
+    if not (is_overload_none(axis) or is_overload_zero(axis)):  # pragma: no cover
+        raise BodoError("Series.rolling(): axis argument not supported")
+
     if get_consts:
         window_const = guard(find_const, func_ir, window)
         window = window_const if window_const is not None else window

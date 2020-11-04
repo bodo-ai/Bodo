@@ -904,7 +904,11 @@ def pd_series_overload(
 # Raise Bodo Error for unsupported attributes and methods of Series
 series_unsupported_attrs = (
     "array",  # TODO: support
+    "at",
+    "attrs",
+    "axes",
     "nbytes",
+    "is_monotonic",  # TODO: It's the same as is_montonic_increasing which is supported.
     "is_unique",
     "sparse",
 )
@@ -963,7 +967,11 @@ series_unsupported_methods = (
     "add_suffix",
     "filter",
     # Missing data handling
+    "backfill",
+    "bfill",
+    "ffill",
     "interpolate",
+    "pad",
     # Reshaping, sorting
     "argmin",
     "argmax",
@@ -977,6 +985,7 @@ series_unsupported_methods = (
     "squeeze",
     "view",
     # Combining / joining / merging
+    "compare",
     "update",
     # Time series-related
     "asfreq",
