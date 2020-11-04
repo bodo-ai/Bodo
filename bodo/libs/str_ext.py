@@ -37,6 +37,7 @@ from numba.parfors.array_analysis import ArrayAnalysis
 
 import bodo
 from bodo.libs import hstr_ext
+from bodo.utils.typing import get_overload_const_int, is_overload_constant_int
 
 
 # from bodo.utils.utils import unliteral_all
@@ -232,16 +233,16 @@ get_c_str = types.ExternalFunction("get_c_str", types.voidptr(std_str_type))
 dummy_use = numba.njit(lambda a: None)
 
 
-@overload(int)
-def int_str_overload(in_str):
+@overload(int, no_unliteral=True)
+def int_str_overload(in_str, base=10):
     if in_str == string_type:
 
-        def _str_to_int_impl(in_str):  # pragma: no cover
-            val = _str_to_int64(in_str._data, in_str._length)
+        def _str_to_int_base_impl(in_str, base=10):  # pragma: no cover
+            val = _str_to_int64(in_str._data, base)
             dummy_use(in_str)
             return val
 
-        return _str_to_int_impl
+        return _str_to_int_base_impl
 
 
 # @infer_global(int)
@@ -285,7 +286,7 @@ init_string_from_chars = types.ExternalFunction(
 )
 
 _str_to_int64 = types.ExternalFunction(
-    "str_to_int64", signature(types.intp, types.voidptr, types.intp)
+    "str_to_int64", signature(types.int64, types.voidptr, types.int64)
 )
 
 

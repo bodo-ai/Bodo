@@ -32,6 +32,27 @@ def test_string_float32_cast(memory_leak_check):
     check_func(test_impl, ("12.2",))
 
 
+def test_string_base10_cast(memory_leak_check):
+    def test_impl(_str):
+        return int(_str, base=10)
+
+    check_func(test_impl, ("12",))
+
+
+def test_string_base2_cast(memory_leak_check):
+    def test_impl(_str):
+        return int(_str, base=2)
+
+    check_func(test_impl, ("10",))
+
+
+def test_string_base16_cast(memory_leak_check):
+    def test_impl(_str):
+        return int(_str, base=16)
+
+    check_func(test_impl, ("a2432c",))
+
+
 @pytest.mark.parametrize(
     "op", (operator.eq, operator.ne, operator.ge, operator.gt, operator.le, operator.lt)
 )
