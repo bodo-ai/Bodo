@@ -1924,7 +1924,9 @@ def _build_replace_dict(to_replace, value):
 
         def impl(to_replace, value):  # pragma: no cover
             replace_dict = {}
-            assert len(to_replace) == len(value), "To_replace and value lengths must be the same"
+            assert len(to_replace) == len(
+                value
+            ), "To_replace and value lengths must be the same"
             for i in range(len(to_replace)):
                 replace_dict[to_replace[i]] = value[i]
             return replace_dict
@@ -2916,7 +2918,7 @@ def overload_np_where(condition, x, y):
     func_text += "  n = len(condition)\n"
     out_dtype = None
 
-    # output is string if any input is string, and requires extra pass for allocation
+    # output is string if any input is string
     if (
         is_overload_constant_str(x)
         or x == string_type
@@ -2925,15 +2927,7 @@ def overload_np_where(condition, x, y):
         or (isinstance(x, (SeriesType, types.Array)) and x.dtype == string_type)
         or (isinstance(y, (SeriesType, types.Array)) and y.dtype == string_type)
     ):
-
-        func_text += "  n_chars = 0\n"
-        func_text += "  for i in numba.parfors.parfor.internal_prange(n):\n"
-        func_text += "    if condition[i]:\n"
-        func_text += "      l = get_utf8_size({})\n".format("x[i]" if is_x_arr else "x")
-        func_text += "    else:\n"
-        func_text += "      l = get_utf8_size({})\n".format("y[i]" if is_y_arr else "y")
-        func_text += "    n_chars += l\n"
-        func_text += "  out_arr = pre_alloc_string_array(n, n_chars)\n"
+        out_dtype = bodo.string_array_type
     else:
         # similar to np.where typer of Numba
         out_dtype = numba.from_dtype(
@@ -2942,8 +2936,8 @@ def overload_np_where(condition, x, y):
                 numba.np.numpy_support.as_dtype(getattr(y, "dtype", y)),
             )
         )
-        func_text += "  out_arr = np.empty(n, out_dtype)\n"
-
+        out_dtype = types.Array(out_dtype, 1, "C")
+    func_text += "  out_arr = bodo.utils.utils.alloc_type(n, out_dtype, (-1,))\n"
     func_text += "  for j in numba.parfors.parfor.internal_prange(n):\n"
     func_text += "    if condition[j]:\n"
     func_text += "      out_arr[j] = {}\n".format("x[j]" if is_x_arr else "x")
@@ -2960,8 +2954,6 @@ def overload_np_where(condition, x, y):
         {
             "bodo": bodo,
             "numba": numba,
-            "get_utf8_size": get_utf8_size,
-            "pre_alloc_string_array": pre_alloc_string_array,
             "setna": bodo.libs.array_kernels.setna,
             "np": np,
             "out_dtype": out_dtype,

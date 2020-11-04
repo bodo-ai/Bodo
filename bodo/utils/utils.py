@@ -428,25 +428,10 @@ def to_array_overload(A):
     # handle dict for set replacement workaround
     if isinstance(A, types.DictType):
         dtype = A.key_type
-        if dtype == string_type:
-
-            def impl_str(A):  # pragma: no cover
-                n = len(A)
-                n_char = 0
-                for v in A.keys():
-                    n_char += get_utf8_size(v)
-                arr = pre_alloc_string_array(n, n_char)
-                i = 0
-                for v in A.keys():
-                    arr[i] = v
-                    i += 1
-                return arr
-
-            return impl_str
 
         def impl(A):  # pragma: no cover
             n = len(A)
-            arr = np.empty(n, dtype)
+            arr = alloc_type(n, dtype, (-1,))
             i = 0
             for v in A.keys():
                 arr[i] = v
@@ -683,11 +668,6 @@ def overload_alloc_type(n, t, s=None):
     needed for allocation.
     """
     typ = t.instance_type if isinstance(t, types.TypeRef) else t
-    assert (
-        bodo.utils.transform.is_var_size_item_array_type(typ)
-        or is_overload_none(s)
-        or s == types.Tuple([])
-    )
 
     if typ == string_array_type:
         return lambda n, t, s=None: bodo.libs.str_arr_ext.pre_alloc_string_array(

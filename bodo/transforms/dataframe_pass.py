@@ -48,11 +48,7 @@ from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.hiframes.split_impl import string_array_split_view_type
 from bodo.ir.aggregate import get_agg_func
 from bodo.libs.bool_arr_ext import BooleanArrayType
-from bodo.libs.str_arr_ext import (
-    get_utf8_size,
-    pre_alloc_string_array,
-    string_array_type,
-)
+from bodo.libs.str_arr_ext import get_utf8_size, string_array_type
 from bodo.utils.transform import (
     ReplaceFunc,
     compile_func_single_block,
