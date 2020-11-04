@@ -460,6 +460,112 @@ void unbox_datetime_timedelta_array(PyObject* obj, int64_t n,
 
 
 /**
+ * @brief box a date_offset object. Null fields should be omitted. 0 is included if has_kws.
+ * @return DateOffset PyObject
+ * @param n n value for DateOffset
+ * @param normalize normalize value for Dateoffset
+ * @param fields_arr Array of fields that may be initialized
+ * @param has_kws Bool for if any non-nano fields are initialized. This impacts behavior
+ */
+PyObject* box_date_offset(int64_t n, bool normalize, int64_t fields_arr[18], bool has_kws) {
+#define CHECK(expr, msg)               \
+    if (!(expr)) {                     \
+        std::cerr << msg << std::endl; \
+        PyGILState_Release(gilstate);  \
+        return nullptr;                \
+    }
+    auto gilstate = PyGILState_Ensure();
+
+    // set of fields names for the array. They are divided into 2 groups based upon
+    // if their default value can be used to determine if the value was/wasn't included.
+    // Those ending with s cannot be distinguished so they will always be added if has_kws
+    // This is fine because 0 is the same behavior as not being included, so long as 1 field
+    // is included.
+    const char* fields[2][9] = {{"years", "months", "weeks", "days", "hours", "minutes", "seconds", "microseconds", "nanoseconds"}, 
+    {"year", "month", "day", "weekday", "hour", "minute", "second", "microsecond", "nanosecond"}};
+
+    int64_t default_values[2] = {0, -1};
+    bool keep_if_default[2] = {true, false};
+    // Vector of pyobjs for tracking decref
+    std::vector<PyObject *> pyobjs;
+    
+    // Create a kwargs dict
+    PyObject* kwargs = PyDict_New();
+    CHECK(kwargs, "Creating kwargs dict failed");
+    pyobjs.push_back(kwargs);
+    if (has_kws) {
+        // If has_kws all fields that are non-null or cannot be distinguished 
+        // need to be added to the Python dictionary. We split by default value,
+        // those that default to -1 should be omitted if they match the default/missing
+        // value.
+        for (int64_t i = 0; i < 2; ++i) {
+            int64_t default_value = default_values[i];
+            bool keep = keep_if_default[i];
+            for (int64_t j = 0; j < 9; ++j) {
+                int64_t field_value = fields_arr[i * 9 + j];
+                const char* field_name = fields[i][j];
+                if (keep || field_value != default_value) {
+                    PyObject* field_obj = Py_BuildValue("s", field_name);
+                    CHECK(field_obj, "Creating name obj for kwargs failed");
+                    PyObject* value_obj = Py_BuildValue("l", field_value);
+                    CHECK(value_obj, "Creating value obj for kwargs failed");
+                    CHECK(PyDict_SetItem(kwargs, field_obj, value_obj) != -1, "Dict setitem failed");
+                    pyobjs.push_back(field_obj);
+                    pyobjs.push_back(value_obj);
+                }
+            }
+        }
+    } else {
+        // has_kws only checks for non-nanosecond keyword as those currently determine
+        // behavior in Pandas. As a result we have no way of knowing if nanoseconds should be
+        // included. We opt to provide a 0 nanoseconds value rather than fail to pass a user
+        // provided nanosecond value. Nanosecond has a null value so we check against -1.
+        PyObject* nanoseconds_obj_key = Py_BuildValue("s", "nanoseconds");
+        CHECK(nanoseconds_obj_key, "Creating nanoseconds object key failed");
+        PyObject* nanoseconds_obj_val = Py_BuildValue("l", fields_arr[8]);
+        CHECK(nanoseconds_obj_val, "Creating nanoseconds object value failed");
+        CHECK(PyDict_SetItem(kwargs, nanoseconds_obj_key, nanoseconds_obj_val) != -1, "Dict setitem failed");
+        pyobjs.push_back(nanoseconds_obj_key);
+        pyobjs.push_back(nanoseconds_obj_val);
+        if (fields_arr[17] != -1) {
+            PyObject* nanosecond_obj_key = Py_BuildValue("s", "nanosecond");
+            CHECK(nanosecond_obj_key, "Creating nanosecond object key failed");
+            PyObject* nanosecond_obj_val = Py_BuildValue("l", fields_arr[17]);
+            CHECK(nanosecond_obj_val, "Creating nanosecond object value failed");
+            CHECK(PyDict_SetItem(kwargs, nanosecond_obj_key, nanosecond_obj_val) != -1, "Dict setitem failed");
+            pyobjs.push_back(nanosecond_obj_key);
+            pyobjs.push_back(nanosecond_obj_val);
+        }
+        
+    }
+    PyObject* n_obj = Py_BuildValue("l", n);
+    CHECK(n_obj, "Creating n object failed");
+    PyObject* normalize_obj = PyBool_FromLong(normalize);
+    CHECK(normalize_obj, "Creating normalize object failed");
+    PyObject *args = PyTuple_Pack(2, n_obj, normalize_obj);
+    CHECK(args, "Creating *args failed");
+    pyobjs.push_back(n_obj);
+    pyobjs.push_back(normalize_obj);
+    pyobjs.push_back(args);
+    PyObject* module = PyImport_ImportModule("pandas.tseries.offsets");
+    CHECK(module, "importing pandas.tseries.offsets module failed");
+    PyObject *function = PyObject_GetAttrString(module, "DateOffset");
+    pyobjs.push_back(module);
+    pyobjs.push_back(function);
+    PyObject* date_offset_obj = PyObject_Call(function, args, kwargs);
+    CHECK(date_offset_obj, "DateOffset constructor failed");
+    // Make sure to update reference counting
+    for (auto& obj: pyobjs) {
+        Py_DECREF(obj);
+    }
+    PyGILState_Release(gilstate);
+
+    return date_offset_obj;
+#undef CHECK
+}
+
+
+/**
  * @brief unbox a date_offset object. Missing fields should get their null value.
  * @return boolean for if the obj has any kws
  * @param obj pd.tseries.offsets.DateOffset object
@@ -545,6 +651,10 @@ PyMODINIT_FUNC PyInit_hdatetime_ext(void) {
     PyObject_SetAttrString(
         m, "unbox_date_offset",
         PyLong_FromVoidPtr((void*)(&unbox_date_offset)));
+
+    PyObject_SetAttrString(
+        m, "box_date_offset",
+        PyLong_FromVoidPtr((void*)(&box_date_offset)));
 
     return m;
 }

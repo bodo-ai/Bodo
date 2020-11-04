@@ -480,16 +480,50 @@ def date_offset_value(request):
     return request.param
 
 
-@pytest.mark.skip("implement boxing")
+def test_constant_lowering_date_offset(date_offset_value, memory_leak_check):
+    # Objects won't match exactly, so test boxing by checking that addition in Python
+    # has the same result
+    def test_impl():
+        return date_offset_value
+
+    py_output = test_impl()
+    bodo_output = bodo.jit(test_impl)()
+    timestamp_val = pd.Timestamp(
+        year=2020,
+        month=10,
+        day=30,
+        hour=22,
+        minute=12,
+        second=45,
+        microsecond=99320,
+        nanosecond=891,
+    )
+    assert timestamp_val + py_output == timestamp_val + bodo_output
+
+
 def test_date_offset_boxing(date_offset_value, memory_leak_check):
     """
     Test boxing and unboxing of pd.tseries.offsets.DateOffset()
     """
 
+    # Objects won't match exactly, so test boxing by checking that addition in Python
+    # has the same result
     def test_impl(do_obj):
         return do_obj
 
-    check_func(test_impl, (date_offset_value,))
+    py_output = test_impl(date_offset_value)
+    bodo_output = bodo.jit(test_impl)(date_offset_value)
+    timestamp_val = pd.Timestamp(
+        year=2020,
+        month=10,
+        day=30,
+        hour=22,
+        minute=12,
+        second=45,
+        microsecond=99320,
+        nanosecond=891,
+    )
+    assert timestamp_val + py_output == timestamp_val + bodo_output
 
 
 def test_date_offset_add_timestamp(date_offset_value, memory_leak_check):

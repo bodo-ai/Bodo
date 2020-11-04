@@ -36,6 +36,7 @@ from bodo.hiframes.pd_timestamp_ext import (
 )
 from bodo.libs import hdatetime_ext
 
+ll.add_symbol("box_date_offset", hdatetime_ext.box_date_offset)
 ll.add_symbol("unbox_date_offset", hdatetime_ext.unbox_date_offset)
 
 
@@ -312,6 +313,27 @@ class DateOffsetType(types.Type):
 
 date_offset_type = DateOffsetType()
 
+date_offset_fields = [
+    "years",
+    "months",
+    "weeks",
+    "days",
+    "hours",
+    "minutes",
+    "seconds",
+    "microseconds",
+    "nanoseconds",
+    "year",
+    "month",
+    "day",
+    "weekday",
+    "hour",
+    "minute",
+    "second",
+    "microsecond",
+    "nanosecond",
+]
+
 
 @typeof_impl.register(pd.tseries.offsets.DateOffset)
 def type_of_date_offset(val, c):
@@ -357,6 +379,53 @@ class DateOffsetModel(models.StructModel):
         super(DateOffsetModel, self).__init__(dmm, fe_type, members)
 
 
+@box(DateOffsetType)
+def box_date_offset(typ, val, c):
+    """Boxes a native date offset as a Python DateOffset object. The has_kws field
+    is used to determine if fields should be transferred (except the nano values).
+    This is because there is different behavior on add/sub when there is a non_nano
+    keyword. Nano values are transferred anyways because they do not impact correctness.
+    """
+    date_offset = cgutils.create_struct_proxy(typ)(c.context, c.builder, value=val)
+    # Allocate stack array for extracting C++ values
+    fields_arr = c.builder.alloca(
+        lir.IntType(64), size=lir.Constant(lir.IntType(64), 18)
+    )
+    for i, field in enumerate(date_offset_fields):
+        c.builder.store(
+            getattr(date_offset, field),
+            c.builder.inttoptr(
+                c.builder.add(
+                    c.builder.ptrtoint(fields_arr, lir.IntType(64)),
+                    lir.Constant(lir.IntType(64), 8 * i),
+                ),
+                lir.IntType(64).as_pointer(),
+            ),
+        )
+    fnty = lir.FunctionType(
+        c.pyapi.pyobj,
+        [
+            lir.IntType(64),
+            lir.IntType(1),
+            lir.IntType(64).as_pointer(),
+            lir.IntType(1),
+        ],
+    )
+    fn_get = c.builder.module.get_or_insert_function(fnty, name="box_date_offset")
+    date_offset_obj = c.builder.call(
+        fn_get,
+        [
+            date_offset.n,
+            date_offset.normalize,
+            fields_arr,
+            date_offset.has_kws,
+        ],
+    )
+
+    c.context.nrt.decref(c.builder, typ, val)
+    return date_offset_obj
+
+
 @unbox(DateOffsetType)
 def unbox_date_offset(typ, val, c):
 
@@ -391,27 +460,7 @@ def unbox_date_offset(typ, val, c):
     date_offset.n = n
     date_offset.normalize = normalize
     # Manually load the fields from the array in LLVM
-    fields = [
-        "years",
-        "months",
-        "weeks",
-        "days",
-        "hours",
-        "minutes",
-        "seconds",
-        "microseconds",
-        "nanoseconds",
-        "year",
-        "month",
-        "day",
-        "weekday",
-        "hour",
-        "minute",
-        "second",
-        "microsecond",
-        "nanosecond",
-    ]
-    for i, field in enumerate(fields):
+    for i, field in enumerate(date_offset_fields):
         setattr(
             date_offset,
             field,
@@ -434,6 +483,37 @@ def unbox_date_offset(typ, val, c):
 
     # _getvalue(): Load and return the value of the underlying LLVM structure.
     return NativeValue(date_offset._getvalue(), is_error=is_error)
+
+
+@lower_constant(DateOffsetType)
+def lower_constant_date_offset(context, builder, ty, pyval):
+    """Lowers a constant DateOffset python type to a native type.
+    has_kws is determined by checking if any of the non_nanos attributes
+    exist.
+    """
+    n = context.get_constant(types.int64, pyval.n)
+    normalize = context.get_constant(types.boolean, pyval.normalize)
+    date_offset = cgutils.create_struct_proxy(ty)(context, builder)
+    date_offset.n = n
+    date_offset.normalize = normalize
+    has_kws = False
+    # Default value if the value doesn't exist
+    default_values = [0] * 9 + [-1] * 9
+    for i, field in enumerate(date_offset_fields):
+        if hasattr(pyval, field):
+            setattr(
+                date_offset,
+                field,
+                context.get_constant(types.int64, getattr(pyval, field)),
+            )
+            if field != "nanoseconds" and field != "nanosecond":
+                has_kws = True
+        else:
+            setattr(
+                date_offset, field, context.get_constant(types.int64, default_values[i])
+            )
+    date_offset.has_kws = context.get_constant(types.boolean, has_kws)
+    return date_offset._getvalue()
 
 
 make_attribute_wrapper(DateOffsetType, "n", "_n")
