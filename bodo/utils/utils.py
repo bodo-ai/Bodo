@@ -179,6 +179,10 @@ def is_alloc_callname(func_name, mod_name):
             func_name == "alloc_decimal_array"
             and mod_name == "bodo.libs.decimal_arr_ext"
         )
+        or (
+            func_name == "alloc_categorical_array"
+            and mod_name == "bodo.hiframes.pd_categorical_ext"
+        )
         or (func_name == "gen_na_array" and mod_name == "bodo.libs.array_kernels")
     )
 
@@ -478,10 +482,8 @@ def empty_like_type(n, arr):  # pragma: no cover
 def empty_like_type_overload(n, arr):
     # categorical
     if isinstance(arr, bodo.hiframes.pd_categorical_ext.CategoricalArray):
-        from bodo.hiframes.pd_categorical_ext import init_categorical_array
-
-        return lambda n, arr: init_categorical_array(
-            np.empty(n, arr.codes.dtype), arr.dtype
+        return lambda n, arr: bodo.hiframes.pd_categorical_ext.alloc_categorical_array(
+            n, arr.dtype
         )  # pragma: no cover
 
     if isinstance(arr, types.Array):
@@ -713,8 +715,8 @@ def overload_alloc_type(n, t, s=None):
 
     if isinstance(typ, bodo.hiframes.pd_categorical_ext.CategoricalArray):
 
-        return lambda n, t, s=None: bodo.hiframes.pd_categorical_ext.init_categorical_array(
-            np.empty(n, t.codes.dtype), t.dtype
+        return lambda n, t, s=None: bodo.hiframes.pd_categorical_ext.alloc_categorical_array(
+            n, t.dtype
         )  # pragma: no cover
 
     if typ.dtype == bodo.hiframes.datetime_date_ext.datetime_date_type:

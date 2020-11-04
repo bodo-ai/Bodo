@@ -335,6 +335,44 @@ ArrayAnalysis._analyze_op_call_bodo_hiframes_pd_categorical_ext_init_categorical
 )
 
 
+def alloc_categorical_array(n, cat_dtype):  # pragma: no cover
+    """Wrapper to the allocator so the int type
+    for the codes can be extracted via an overload.
+    """
+    pass
+
+
+# high-level allocation function for categorical arrays
+@overload(alloc_categorical_array, no_unliteral=True)
+def _alloc_categorical_array(n, cat_dtype):
+    int_dtype = get_categories_int_type(cat_dtype)
+
+    def impl(n, cat_dtype):  # pragma: no cover
+        codes = np.empty(n, int_dtype)
+        return init_categorical_array(codes, cat_dtype)
+
+    return impl
+
+
+def alloc_categorical_array_equiv(self, scope, equiv_set, loc, args, kws):
+    """Array analysis function for alloc_int_array() passed to Numba's array analysis
+    extension. Assigns output array's size as equivalent to the input size variable.
+    """
+    assert len(args) == 2 and not kws
+    return args[0], []
+
+
+ArrayAnalysis._analyze_op_call_bodo_hiframes_pd_categorical_ext_alloc_categorical_array = (
+    alloc_categorical_array_equiv
+)
+
+
+# using a function for getting data to enable extending various analysis
+@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
+def get_categorical_arr_codes(A):
+    return lambda A: A.codes
+
+
 def alias_ext_dummy_func(lhs_name, args, alias_map, arg_aliases):
     """the codes array is kept inside Categorical array so it aliases"""
     assert len(args) >= 1
@@ -343,6 +381,9 @@ def alias_ext_dummy_func(lhs_name, args, alias_map, arg_aliases):
 
 numba.core.ir_utils.alias_func_extensions[
     ("init_categorical_array", "bodo.hiframes.pd_categorical_ext")
+] = alias_ext_dummy_func
+numba.core.ir_utils.alias_func_extensions[
+    ("get_categorical_arr_codes", "bodo.hiframes.pd_categorical_ext")
 ] = alias_ext_dummy_func
 
 
@@ -434,16 +475,16 @@ def _build_replace_dicts(to_replace, value, categories):
 
 
 @numba.njit
-def python_build_replace_dicts(to_replace, value, categories):
+def python_build_replace_dicts(to_replace, value, categories):  # pragma: no cover
     """Jit wrapper to call build_replace_dicts from Python"""
     return build_replace_dicts(to_replace, value, categories)
 
 
 @register_jitable
-def reassign_codes(codes_arr, codes_map_arr):  # pragma: no cover
+def reassign_codes(new_codes_arr, old_codes_arr, codes_map_arr):  # pragma: no cover
     """Helper function to remap codes in replace."""
-    for i in range(len(codes_arr)):
-        codes_arr[i] = codes_map_arr[codes_arr[i] + 1]
+    for i in range(len(new_codes_arr)):
+        new_codes_arr[i] = codes_map_arr[old_codes_arr[i] + 1]
 
 
 @overload_method(CategoricalArray, "replace", inline="always", no_unliteral=True)
@@ -496,10 +537,10 @@ def cat_replace_overload(arr, to_replace, value):
         # Implementation avoids changing the actual categories and knows the
         # categories must change
         def impl_dtype(arr, to_replace, value):  # pragma: no cover
-            new_codes = arr.codes.copy()
+            cat_arr = alloc_categorical_array(len(arr.codes), _new_dtype)
             # Use codes_map_arr from compile time
-            reassign_codes(new_codes, codes_map_arr)
-            return init_categorical_array(new_codes, _new_dtype)
+            reassign_codes(cat_arr.codes, arr.codes, codes_map_arr)
+            return cat_arr
 
         return impl_dtype
 
@@ -508,14 +549,14 @@ def cat_replace_overload(arr, to_replace, value):
     if _elem_type == types.unicode_type:
 
         def impl_str(arr, to_replace, value):  # pragma: no cover
-            new_codes = arr.codes.copy().astype(np.int64)
             categories = arr.dtype.categories
             categories_dict, codes_map_arr, num_deleted = build_replace_dicts(
                 to_replace, value, categories
             )
             if len(categories_dict) == 0:
                 return init_categorical_array(
-                    new_codes, init_cat_dtype(categories.copy(), _ordered)
+                    arr.codes.copy().astype(np.int64),
+                    init_cat_dtype(categories.copy(), _ordered),
                 )
             # If we must edit the categories we need to preallocate a new
             # string array
@@ -546,25 +587,26 @@ def cat_replace_overload(arr, to_replace, value):
                 else:
                     new_categories[new_idx] = old_cat_val
                     new_idx += 1
-            # Update all of the codes
-            reassign_codes(new_codes, codes_map_arr)
-            return init_categorical_array(
-                new_codes, init_cat_dtype(new_categories, _ordered)
+            cat_arr = alloc_categorical_array(
+                len(arr.codes), init_cat_dtype(new_categories, _ordered)
             )
+            # Update all of the codes
+            reassign_codes(cat_arr.codes, arr.codes, codes_map_arr)
+            return cat_arr
 
         return impl_str
 
     _arr_type = bodo.utils.typing.scalar_to_array_type(_elem_type)
 
     def impl(arr, to_replace, value):  # pragma: no cover
-        new_codes = arr.codes.copy().astype(np.int64)
         categories = arr.dtype.categories
         categories_dict, codes_map_arr, num_deleted = build_replace_dicts(
             to_replace, value, categories
         )
         if len(categories_dict) == 0:
             return init_categorical_array(
-                new_codes, init_cat_dtype(categories.copy(), _ordered)
+                arr.codes.copy().astype(np.int64),
+                init_cat_dtype(categories.copy(), _ordered),
             )
         n = len(categories)
         new_categories = bodo.utils.utils.alloc_type(n - num_deleted, _arr_type, None)
@@ -582,10 +624,11 @@ def cat_replace_overload(arr, to_replace, value):
                 new_categories[new_idx] = old_cat_val
                 new_idx += 1
         # Update all of the codes
-        reassign_codes(new_codes, codes_map_arr)
-        return init_categorical_array(
-            new_codes, init_cat_dtype(new_categories, _ordered)
+        cat_arr = alloc_categorical_array(
+            len(arr.codes), init_cat_dtype(new_categories, _ordered)
         )
+        reassign_codes(cat_arr.codes, arr.codes, codes_map_arr)
+        return cat_arr
 
     return impl
 

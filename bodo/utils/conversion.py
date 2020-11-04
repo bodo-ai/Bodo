@@ -555,7 +555,6 @@ def overload_fix_arr_dtype(data, new_dtype, copy=None):
 
     # convert to Categorical with predefined CategoricalDtype
     if isinstance(new_dtype, bodo.hiframes.pd_categorical_ext.PDCategoricalDtype):
-        int_dtype = bodo.hiframes.pd_categorical_ext.get_categories_int_type(new_dtype)
 
         def impl_cat_dtype(data, new_dtype, copy=None):  # pragma: no cover
             n = len(data)
@@ -565,19 +564,17 @@ def overload_fix_arr_dtype(data, new_dtype, copy=None):
                     new_dtype.categories
                 )
             )
-            codes = np.empty(n, int_dtype)
+            A = bodo.hiframes.pd_categorical_ext.alloc_categorical_array(n, new_dtype)
+            codes = bodo.hiframes.pd_categorical_ext.get_categorical_arr_codes(A)
             for i in numba.parfors.parfor.internal_prange(n):
                 if bodo.libs.array_kernels.isna(data, i):
-                    codes[i] = -1
+                    bodo.libs.array_kernels.setna(A, i)
                     continue
                 val = data[i]
                 if val not in label_dict:
-                    codes[i] = -1
+                    bodo.libs.array_kernels.setna(A, i)
                     continue
                 codes[i] = label_dict[val]
-            A = bodo.hiframes.pd_categorical_ext.init_categorical_array(
-                codes, new_dtype
-            )
             return A
 
         return impl_cat_dtype

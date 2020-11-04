@@ -1208,6 +1208,12 @@ class DistributedAnalysis:
             self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
             return
 
+        if func_mod == "bodo.hiframes.pd_categorical_ext" and func_name in (
+            "get_categorical_arr_codes",
+        ):
+            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            return
+
         if fdef == ("get_bit_bitmap_arr", "bodo.libs.int_arr_ext"):
             return
 
