@@ -118,6 +118,8 @@ which are supported by Bodo.
     - ``df[['col1', 'col2']].apply(lambda x: np.arctan2(x[0], x[1]), axis=1)``
   * - :func:`pyspark.sql.functions.avg`
     - ``df.col.mean()``
+  * - :func:`pyspark.sql.functions.bin`
+    - ``df.col.map(lambda x: "{0:b}".format(x))``
   * - :func:`pyspark.sql.functions.bitwiseNOT`
     - ``np.invert(df.col)``
   * - :func:`pyspark.sql.functions.bround`
@@ -134,6 +136,10 @@ which are supported by Bodo.
     - ``df.col``
   * - :func:`pyspark.sql.functions.concat_ws`
     - ``df[['col1', 'col2', 'col3']].apply(lambda x, sep: sep.join(x), axis=1, sep=sep)``
+  * - :func:`pyspark.sql.functions.conv`
+    - | ``base_map = {2: "{0:b}", 8: "{0:o}", 10: "{0:d}", 16: "{0:x}"}``
+      | ``new_format = base_map[new_base]``
+      | ``df.col.apply(lambda x, old_base, new_format: new_format.format(int(x, old_base)), old_base=old_base, new_format=new_format)``
   * - :func:`pyspark.sql.functions.cos`
     - ``np.cos(df.col)``
   * - :func:`pyspark.sql.functions.cosh`
@@ -174,6 +180,10 @@ which are supported by Bodo.
     - ``np.exp(df.col) - 1``
   * - :func:`pyspark.sql.functions.floor`
     - ``np.floor(df.col)``
+  * - :func:`pyspark.sql.functions.format_number`
+    - ``df.col.apply(lambda x,d : ("{:,." + str(d) + "f}").format(np.round(x, d)), d=d)``
+  * - :func:`pyspark.sql.functions.format_string`
+    - ``df.col.apply(lambda x, format_str : format_str.format(x), format_str=format_str)``
   * - :func:`pyspark.sql.functions.hash`
     - ``df.col.map(lambda x: hash(x))``
   * - :func:`pyspark.sql.functions.hour`

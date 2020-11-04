@@ -514,6 +514,28 @@ def cast_unicode_str_to_float32(context, builder, fromty, toty, val):
     return cast_str_to_float32(context, builder, std_str_type, toty, std_str)
 
 
+@infer_getattr
+class StringAttribute(AttributeTemplate):
+    key = types.UnicodeType
+
+    @bound_function("str.format", no_unliteral=True)
+    def resolve_format(self, string_typ, args, kws):
+        kws = dict(kws)
+        # add dummy default value for kws to avoid errors
+        arg_names = ", ".join("e{}".format(i) for i in range(len(args)))
+        if arg_names:
+            arg_names += ", "
+        kw_names = ", ".join("{} = ''".format(a) for a in kws.keys())
+        func_text = f"def format_stub(string, {arg_names} {kw_names}):\n"
+        func_text += "    pass\n"
+        loc_vars = {}
+        exec(func_text, {}, loc_vars)
+        format_stub = loc_vars["format_stub"]
+        pysig = numba.core.utils.pysignature(format_stub)
+        arg_types = (string_typ,) + args + tuple(kws.values())
+        return signature(string_typ, arg_types).replace(pysig=pysig)
+
+
 @numba.njit(cache=True)
 def str_split(arr, pat, n):  # pragma: no cover
     """spits string array's elements into lists and creates an array of string arrays"""

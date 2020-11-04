@@ -627,6 +627,64 @@ def test_match_string(memory_leak_check):
     assert test_impl(m) == bodo.jit(test_impl)(m)
 
 
+def test_binary_format(memory_leak_check):
+    """tests format string on binary strings"""
+
+    def test_impl(string, val):
+        return string.format(val)
+
+    check_func(test_impl, ("{0:b}", 121311))
+    check_func(
+        test_impl,
+        (
+            "{0:b}",
+            -1,
+        ),
+    )
+
+
+@pytest.mark.slow
+def test_binary_format_literal(memory_leak_check):
+    """tests format string on binary strings"""
+
+    def test_impl(val):
+        return "{0:b}".format(val)
+
+    check_func(test_impl, (121311,))
+    check_func(test_impl, (-1,))
+
+
+@pytest.mark.slow
+def test_format_numbered_args(memory_leak_check):
+    """tests format string with numbered args"""
+
+    def test_impl():
+        return "I like {1} and {0}".format("Java", "Python")
+
+    check_func(test_impl, ())
+
+
+def test_format_kwargs(memory_leak_check):
+    """tests format string with kwargs"""
+
+    def test_impl():
+        return "{name} is the {job} of {company}".format(
+            name="Ehsan", job="CTO", company="Bodo.ai"
+        )
+
+    check_func(test_impl, ())
+
+
+@pytest.mark.slow
+def test_format_args_kwargs(memory_leak_check):
+    """tests format string with args and kwargs"""
+
+    def test_impl():
+        return "{1} is the {job} of {0}".format("Bodo.ai", "Ehsan", job="CTO")
+
+    check_func(test_impl, ())
+
+
 @pytest.mark.slow
 class TestString(unittest.TestCase):
     def test_pass_return(self):
