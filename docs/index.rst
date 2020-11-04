@@ -28,6 +28,7 @@ Bodo
    source/aws
    source/spark
    source/jupyter
+   source/ipyparallel
    source/e3
    source/releases
    source/eula
