@@ -900,7 +900,7 @@ def overload_sgdr_model_fit(
 
 @overload_method(BodoSGDRegressorType, "predict", no_unliteral=True)
 def overload_sgdr_model_predict(m, X):
-    """Overload SGDClassifier predict. (Data parallelization)"""
+    """Overload SGDRegressor predict. (Data parallelization)"""
     return parallel_predict(m, X)
 
 
@@ -912,7 +912,7 @@ def overload_sgdr_model_score(
     sample_weight=None,
     _is_data_distributed=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
 ):
-    """Overload SGDClassifier score."""
+    """Overload SGDRegressor score."""
     return parallel_score(m, X, y, sample_weight, _is_data_distributed)
 
 
@@ -1118,7 +1118,7 @@ def overload_sgdc_model_fit(
 
 @overload_method(BodoSGDClassifierType, "predict", no_unliteral=True)
 def overload_sgdc_model_predict(m, X):
-    """Overload SGDRegressor predict. (Data parallelization)"""
+    """Overload SGDClassifier predict. (Data parallelization)"""
     return parallel_predict(m, X)
 
 
@@ -1130,7 +1130,7 @@ def overload_sgdc_model_score(
     sample_weight=None,
     _is_data_distributed=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
 ):
-    """Overload SGDRegressor score."""
+    """Overload SGDClassifier score."""
     return parallel_score(m, X, y, sample_weight, _is_data_distributed)
 
 
