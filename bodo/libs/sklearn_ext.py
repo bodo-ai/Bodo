@@ -284,10 +284,15 @@ def overload_model_fit(
     return _model_fit_impl
 
 
-@overload_method(BodoRandomForestClassifierType, "predict", no_unliteral=True)
-def overload_model_predict(m, X):
-    def _model_predict_impl(m, X):  # pragma: no cover
+def parallel_predict(m, X):
+    """
+    Implement the prediction operation in parallel.
+    Each rank has its own copy of the model and predicts for its
+    own set of data.
+    This strategy is the same for a lot of estimators.
+    """
 
+    def _model_predict_impl(m, X):  # pragma: no cover
         with numba.objmode(result="int64[:]"):
             # currently we do data-parallel prediction
             m.n_jobs = 1
@@ -301,14 +306,21 @@ def overload_model_predict(m, X):
     return _model_predict_impl
 
 
-@overload_method(BodoRandomForestClassifierType, "score", no_unliteral=True)
-def overload_model_score(
+def parallel_score(
     m,
     X,
     y,
     sample_weight=None,
     _is_data_distributed=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
 ):
+    """
+    Implement the score operation in parallel.
+    Each rank has its own copy of the model and
+    calculates the score for its own set of data.
+    Then, gather and get mean of all scores.
+    This strategy is the same for a lot of estimators.
+    """
+
     def _model_score_impl(
         m, X, y, sample_weight=None, _is_data_distributed=False
     ):  # pragma: no cover
@@ -326,6 +338,24 @@ def overload_model_score(
         return result.mean()
 
     return _model_score_impl
+
+
+@overload_method(BodoRandomForestClassifierType, "predict", no_unliteral=True)
+def overload_model_predict(m, X):
+    """Overload Random Forest Classifier predict. (Data parallelization)"""
+    return parallel_predict(m, X)
+
+
+@overload_method(BodoRandomForestClassifierType, "score", no_unliteral=True)
+def overload_model_score(
+    m,
+    X,
+    y,
+    sample_weight=None,
+    _is_data_distributed=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
+):
+    """Overload Random Forest Classifier score."""
+    return parallel_score(m, X, y, sample_weight, _is_data_distributed)
 
 
 def precision_recall_fscore_support_helper(MCM, average):
@@ -870,19 +900,8 @@ def overload_sgdr_model_fit(
 
 @overload_method(BodoSGDRegressorType, "predict", no_unliteral=True)
 def overload_sgdr_model_predict(m, X):
-    def _model_predict_impl(m, X):  # pragma: no cover
-
-        with numba.objmode(result="int64[:]"):
-            # currently we do data-parallel prediction
-            m.n_jobs = 1
-            if len(X) == 0:
-                # TODO If X is replicated this should be an error (same as sklearn)
-                result = np.empty(0, dtype=np.int64)
-            else:
-                result = m.predict(X).astype(np.int64).flatten()
-        return result
-
-    return _model_predict_impl
+    """Overload SGDClassifier predict. (Data parallelization)"""
+    return parallel_predict(m, X)
 
 
 @overload_method(BodoSGDRegressorType, "score", no_unliteral=True)
@@ -893,23 +912,8 @@ def overload_sgdr_model_score(
     sample_weight=None,
     _is_data_distributed=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
 ):
-    def _model_score_impl(
-        m, X, y, sample_weight=None, _is_data_distributed=False
-    ):  # pragma: no cover
-
-        with numba.objmode(result="float64[:]"):
-            result = m.score(X, y, sample_weight=sample_weight)
-            if _is_data_distributed:
-                # replicate result so that the average is weighted based on
-                # the data size on each rank
-                result = np.full(len(y), result)
-            else:
-                result = np.array([result])
-        if _is_data_distributed:
-            result = bodo.allgatherv(result)
-        return result.mean()
-
-    return _model_score_impl
+    """Overload SGDClassifier score."""
+    return parallel_score(m, X, y, sample_weight, _is_data_distributed)
 
 
 # -------------------------------------SGDClassifier----------------------------------------
@@ -1114,19 +1118,8 @@ def overload_sgdc_model_fit(
 
 @overload_method(BodoSGDClassifierType, "predict", no_unliteral=True)
 def overload_sgdc_model_predict(m, X):
-    def _model_predict_impl(m, X):  # pragma: no cover
-
-        with numba.objmode(result="int64[:]"):
-            # currently we do data-parallel prediction
-            m.n_jobs = 1
-            if len(X) == 0:
-                # TODO If X is replicated this should be an error (same as sklearn)
-                result = np.empty(0, dtype=np.int64)
-            else:
-                result = m.predict(X).astype(np.int64).flatten()
-        return result
-
-    return _model_predict_impl
+    """Overload SGDRegressor predict. (Data parallelization)"""
+    return parallel_predict(m, X)
 
 
 @overload_method(BodoSGDClassifierType, "score", no_unliteral=True)
@@ -1137,23 +1130,8 @@ def overload_sgdc_model_score(
     sample_weight=None,
     _is_data_distributed=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
 ):
-    def _model_score_impl(
-        m, X, y, sample_weight=None, _is_data_distributed=False
-    ):  # pragma: no cover
-
-        with numba.objmode(result="float64[:]"):
-            result = m.score(X, y, sample_weight=sample_weight)
-            if _is_data_distributed:
-                # replicate result so that the average is weighted based on
-                # the data size on each rank
-                result = np.full(len(y), result)
-            else:
-                result = np.array([result])
-        if _is_data_distributed:
-            result = bodo.allgatherv(result)
-        return result.mean()
-
-    return _model_score_impl
+    """Overload SGDRegressor score."""
+    return parallel_score(m, X, y, sample_weight, _is_data_distributed)
 
 
 # --------------------------------------------------------------------------------------------------#
@@ -1669,20 +1647,7 @@ def fit_multinomial_nb(
 @overload_method(BodoMultinomialNBType, "predict", no_unliteral=True)
 def overload_multinomial_nb_model_predict(m, X):
     """Overload Multinomial predict. (Data parallelization)"""
-
-    def _model_predict_impl(m, X):  # pragma: no cover
-        # HA: TODO Move this part to new function and call it here
-        with numba.objmode(result="int64[:]"):
-            # currently we do data-parallel prediction
-            m.n_jobs = 1
-            if len(X) == 0:
-                # TODO If X is replicated this should be an error (same as sklearn)
-                result = np.empty(0, dtype=np.int64)
-            else:
-                result = m.predict(X).astype(np.int64).flatten()
-        return result
-
-    return _model_predict_impl
+    return parallel_predict(m, X)
 
 
 @overload_method(BodoMultinomialNBType, "score", no_unliteral=True)
@@ -1694,24 +1659,7 @@ def overload_multinomial_nb_model_score(
     _is_data_distributed=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
 ):
     """Overload Multinomial score."""
-
-    def _model_score_impl(
-        m, X, y, sample_weight=None, _is_data_distributed=False
-    ):  # pragma: no cover
-        # HA: TODO Move this part to new function and call it here
-        with numba.objmode(result="float64[:]"):
-            result = m.score(X, y, sample_weight=sample_weight)
-            if _is_data_distributed:
-                # replicate result so that the average is weighted based on
-                # the data size on each rank
-                result = np.full(len(y), result)
-            else:
-                result = np.array([result])
-        if _is_data_distributed:
-            result = bodo.allgatherv(result)
-        return result.mean()
-
-    return _model_score_impl
+    return parallel_score(m, X, y, sample_weight, _is_data_distributed)
 
 
 # -------------------------------------Logisitic Regression--------------------
@@ -1873,19 +1821,7 @@ def overload_logistic_regression_fit(
 @overload_method(BodoLogisticRegressionType, "predict", no_unliteral=True)
 def overload_logistic_regression_predict(m, X):
     """Overload Logistic Regression predict. (Data parallelization)"""
-
-    def _logistic_regression_predict_impl(m, X):  # pragma: no cover
-        with numba.objmode(result="int64[:]"):
-            # currently we do data-parallel prediction
-            m.n_jobs = 1
-            if len(X) == 0:
-                # TODO If X is replicated this should be an error (same as sklearn)
-                result = np.empty(0, dtype=np.int64)
-            else:
-                result = m.predict(X).astype(np.int64).flatten()
-        return result
-
-    return _logistic_regression_predict_impl
+    return parallel_predict(m, X)
 
 
 @overload_method(BodoLogisticRegressionType, "score", no_unliteral=True)
@@ -1897,21 +1833,4 @@ def overload_logistic_regression_score(
     _is_data_distributed=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
 ):
     """Overload Logistic Regression score."""
-
-    def _model_score_impl(
-        m, X, y, sample_weight=None, _is_data_distributed=False
-    ):  # pragma: no cover
-        # HA: TODO Move this part to new function and call it here
-        with numba.objmode(result="float64[:]"):
-            result = m.score(X, y, sample_weight=sample_weight)
-            if _is_data_distributed:
-                # replicate result so that the average is weighted based on
-                # the data size on each rank
-                result = np.full(len(y), result)
-            else:
-                result = np.array([result])
-        if _is_data_distributed:
-            result = bodo.allgatherv(result)
-        return result.mean()
-
-    return _model_score_impl
+    return parallel_score(m, X, y, sample_weight, _is_data_distributed)
