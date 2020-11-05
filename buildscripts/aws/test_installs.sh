@@ -9,7 +9,7 @@ source activate $CONDA_ENV
 conda install -y -c conda-forge boto3 botocore "s3fs>=0.4.2"
 conda install -y -c conda-forge pymysql sqlalchemy
 conda install -y -c conda-forge scikit-learn
-conda install -c pytorch -c conda-forge -c defaults bokeh pytorch=1.5 torchvision=0.6
+conda install -y -c pytorch -c conda-forge -c defaults bokeh pytorch=1.5 torchvision=0.6
 pip install horovod[pytorch]
 conda install -y flake8
 pip install pytest pytest-cov
