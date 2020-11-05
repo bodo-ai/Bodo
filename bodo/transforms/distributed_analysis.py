@@ -624,8 +624,8 @@ class DistributedAnalysis:
                 # if pafor is replicated, output array is replicated
                 if is_REP(out_dist):
                     self._add_diag_info(
-                        "Variable {} set to REP since it is a concat reduction variable for Parfor {} which is REP".format(
-                            reduce_varname, parfor.id
+                        "Variable '{}' set to REP since it is a concat reduction variable for Parfor {} which is REP".format(
+                            self._get_user_varname(reduce_varname), parfor.id
                         )
                     )
                     array_dists[reduce_varname] = Distribution.REP
@@ -2230,7 +2230,7 @@ class DistributedAnalysis:
             info = (
                 "Distributed analysis set {} as replicated due "
                 "to call to function '{}' (unsupported function or usage)"
-            ).format(", ".join(arrs), fname)
+            ).format(", ".join(f"'{self._get_user_varname(a)}'" for a in arrs), fname)
             self._add_diag_info(info)
 
     def _analyze_getitem(self, inst, lhs, rhs, equiv_set, array_dists):
@@ -2611,7 +2611,9 @@ class DistributedAnalysis:
                     varname not in array_dists or not is_REP(array_dists[varname])
                 ) and info is not None:
                     info = (
-                        "Setting distribution of variable '{}' to REP: ".format(varname)
+                        "Setting distribution of variable '{}' to REP: ".format(
+                            self._get_user_varname(varname)
+                        )
                         + info
                     )
                     self._add_diag_info(info)
@@ -2732,6 +2734,12 @@ class DistributedAnalysis:
         """append diagnostics info to be displayed in distributed diagnostics output"""
         if info not in self.diag_info:
             self.diag_info.append(info)
+
+    def _get_user_varname(self, v):
+        """get original variable name by user for diagnostics info if possible"""
+        if v in self.metadata["var_rename_map"]:
+            return self.metadata["var_rename_map"][v]
+        return v
 
 
 def get_reduce_op(reduce_varname, reduce_nodes, func_ir, typemap):
