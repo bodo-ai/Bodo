@@ -475,10 +475,25 @@ def float_str_overload(v):
         kind = numba.cpython.unicode.PY_UNICODE_1BYTE_KIND
 
         def impl(v):  # pragma: no cover
+            # Shortcut for 0
+            if v == 0:
+                return "0.0"
             # same formula as str(int) in Numba, plus 1 char for decimal and 6 precision
             # chars (default precision in C)
             # https://github.com/numba/numba/blob/0db8a2bcd0f53c0d0ad8a798432fb3f37f14af27/numba/cpython/unicode.py#L2391
-            length = (v < 0) + 1 + int(np.floor(np.log10(v))) + 1 + 6
+            flag = 0
+            inner_v = v
+            if inner_v < 0:
+                flag = 1
+                inner_v = -inner_v
+            if inner_v < 1:
+                # Less than 1 produces a negative np.log value, so skip computation
+                digits_len = 1
+            else:
+                digits_len = 1 + int(np.floor(np.log10(inner_v)))
+            # Values are possible - sign, number of digits before decimal place, decimal point,
+            # 6 digits after decimal, 1 character for null terminator.
+            length = flag + digits_len + 1 + 6 + 1
             s = numba.cpython.unicode._malloc_string(kind, 1, length, True)
             float_to_str(s, v)
             return s

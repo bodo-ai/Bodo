@@ -25,6 +25,34 @@ def test_string_float64_cast(memory_leak_check):
     check_func(test_impl, ("12.2",))
 
 
+@pytest.mark.slow
+def test_float_str_0_cast(memory_leak_check):
+    def test_impl(_float):
+        return str(_float)
+
+    check_func(test_impl, (0.0,))
+
+
+@pytest.mark.slow
+def test_float_str_lt1_cast(memory_leak_check):
+    def test_impl(_float):
+        return str(_float)
+
+    # Always choose 6 decimal places because decimal places will differ
+    # in Python
+    check_func(test_impl, (0.013952,))
+
+
+@pytest.mark.slow
+def test_float_str_abslt1_cast(memory_leak_check):
+    def test_impl(_float):
+        return str(_float)
+
+    # Always choose 6 decimal places because decimal places will differ
+    # in Python
+    check_func(test_impl, (-0.035312,))
+
+
 def test_string_float32_cast(memory_leak_check):
     def test_impl(_str):
         return np.float32(_str)
