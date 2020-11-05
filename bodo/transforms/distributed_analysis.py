@@ -110,12 +110,20 @@ class DistributedDiagnostics:
         self.diag_info = diag_info
         self.func_ir = func_ir
 
-    def _print_dists(self):
+    def _print_dists(self, level, metadata):
         print("Data distributions:")
         if len(self.array_dists) > 0:
             arrname_width = max(len(a) for a in self.array_dists.keys())
             arrname_width = max(arrname_width + 3, 20)
+            printed_vars = set()
             for arr, dist in self.array_dists.items():
+                # only show original user variable names in level=1
+                # avoid variable repetition (possible with renaming)
+                if level < 2 and arr in metadata["var_rename_map"]:
+                    arr = metadata["var_rename_map"][arr]
+                if level < 2 and (arr in printed_vars or arr.startswith("$")):
+                    continue
+                printed_vars.add(arr)
                 print("   {0:{1}} {2}".format(arr, arrname_width, dist))
         else:
             print("No distributable data structures to distribute.")
@@ -128,12 +136,14 @@ class DistributedDiagnostics:
             print("No parfors to distribute.")
         return
 
-    def dump(self, level=1):
+    # NOTE: adding metadata as input instead of attribute to avoid circular dependency
+    # since DistributedDiagnostics object is inside metadata
+    def dump(self, level, metadata):
         name = self.func_ir.func_id.func_qualname
         line = self.func_ir.loc
 
         print("Distributed diagnostics for function {}, {}\n".format(name, line))
-        self._print_dists()
+        self._print_dists(level, metadata)
 
         # similar to ParforDiagnostics.dump()
         func_name = self.func_ir.func_id.func
@@ -147,7 +157,7 @@ class DistributedDiagnostics:
             return
 
         print("\nDistributed listing for function {}, {}".format(name, line))
-        self._print_src_dists(lines)
+        self._print_src_dists(lines, level, metadata)
 
         # trace diag info
         print()
@@ -155,7 +165,7 @@ class DistributedDiagnostics:
             print(l)
         print()
 
-    def _print_src_dists(self, lines):
+    def _print_src_dists(self, lines, level, metadata):
         filename = self.func_ir.loc.filename
         src_width = max(len(x) for x in lines)
 
@@ -167,12 +177,20 @@ class DistributedDiagnostics:
                 l_no = max(0, loc.line - 1)
                 map_line_to_info[l_no].append("#{}: {}".format(p_id, p_dist))
 
+        printed_vars = set()
         for arr, a_dist in self.array_dists.items():
             if not arr in self.array_locs:
                 continue
             loc = self.array_locs[arr]
             if loc.filename == filename:
                 l_no = max(0, loc.line - 1)
+                # only show original user variable names in level=1
+                # avoid variable repetition (possible with renaming)
+                if level < 2 and arr in metadata["var_rename_map"]:
+                    arr = metadata["var_rename_map"][arr]
+                if level < 2 and (arr in printed_vars or arr.startswith("$")):
+                    continue
+                printed_vars.add(arr)
                 map_line_to_info[l_no].append("{}: {}".format(arr, a_dist))
 
         width = src_width + 4

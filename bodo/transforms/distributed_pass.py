@@ -214,7 +214,7 @@ class DistributedPass:
             pass
         dprint_func_ir(self.func_ir, "after distributed pass")
         lower_parfor_sequential(
-            self.typingctx, self.func_ir, self.typemap, self.calltypes
+            self.typingctx, self.func_ir, self.typemap, self.calltypes, self.metadata
         )
         if bodo.multithread_mode:
             # parfor params need to be updated for multithread_mode since some
@@ -3673,7 +3673,7 @@ def find_available_vars(blocks, cfg, init_avail=None):
 
 # copied from Numba and modified to avoid ir.Del generation, which is invalid in 0.49
 # https://github.com/numba/numba/blob/1ea770564cb3c0c6cb9d8ab92e7faf23cd4c4c19/numba/parfors/parfor.py#L3050
-def lower_parfor_sequential(typingctx, func_ir, typemap, calltypes):
+def lower_parfor_sequential(typingctx, func_ir, typemap, calltypes, metadata):
     ir_utils._max_label = max(
         ir_utils._max_label, ir_utils.find_max_label(func_ir.blocks)
     )
@@ -3690,7 +3690,7 @@ def lower_parfor_sequential(typingctx, func_ir, typemap, calltypes):
     if parfor_found:
         func_ir.blocks = rename_labels(func_ir.blocks)
     dprint_func_ir(func_ir, "after parfor sequential lowering")
-    simplify(func_ir, typemap, calltypes)
+    simplify(func_ir, typemap, calltypes, metadata)
     dprint_func_ir(func_ir, "after parfor sequential simplify")
     # changed from Numba code: comment out id.Del generation that causes errors in 0.49
     # # add dels since simplify removes dels

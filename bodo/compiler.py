@@ -324,7 +324,7 @@ class BodoDumpDistDiagnosticsPass(AnalysisPass):
             pass
 
         if diag_level > 0 and "distributed_diagnostics" in state.metadata:
-            state.metadata["distributed_diagnostics"].dump(diag_level)
+            state.metadata["distributed_diagnostics"].dump(diag_level, state.metadata)
         return True
 
 

@@ -1442,6 +1442,7 @@ def ParforPassStates__init__(
     typingctx,
     options,
     flags,
+    metadata,
     diagnostics=numba.parfors.parfor.ParforDiagnostics(),
 ):
     self.func_ir = func_ir
@@ -1465,6 +1466,7 @@ def ParforPassStates__init__(
     # bodo change: make sure _max_label is always maximum
     ir_utils._max_label = max(ir_utils._max_label, max(func_ir.blocks.keys()))
     self.flags = flags
+    self.metadata = metadata
 
 
 lines = inspect.getsource(numba.parfors.parfor.ParforPassStates.__init__)
