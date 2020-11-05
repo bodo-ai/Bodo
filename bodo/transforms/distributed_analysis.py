@@ -654,6 +654,7 @@ class DistributedAnalysis:
                     bodo.libs.sklearn_ext.BodoSGDRegressorType,
                     bodo.libs.sklearn_ext.BodoLogisticRegressionType,
                     bodo.libs.sklearn_ext.BodoMultinomialNBType,
+                    bodo.libs.sklearn_ext.BodoLinearRegressionType,
                 ),
             )
         ):

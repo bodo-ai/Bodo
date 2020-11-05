@@ -511,7 +511,7 @@ class DistributedPass:
             and isinstance(func_mod, numba.core.ir.Var)
             and isinstance(
                 self.typemap[func_mod.name],
-                bodo.libs.sklearn_ext.BodoLogisticRegressionType,              
+                bodo.libs.sklearn_ext.BodoLogisticRegressionType,
             )
         ):
             if self._is_1D_or_1D_Var_arr(rhs.args[0].name):
@@ -522,7 +522,30 @@ class DistributedPass:
             func_name == "fit"
             and isinstance(func_mod, numba.core.ir.Var)
             and isinstance(
-                self.typemap[func_mod.name],              
+                self.typemap[func_mod.name],
+                bodo.libs.sklearn_ext.BodoLinearRegressionType,
+            )
+        ):
+            if self._is_1D_or_1D_Var_arr(rhs.args[0].name):
+                self._set_last_arg_to_true(assign.value)
+                return [assign]
+        if (
+            func_name == "score"
+            and isinstance(func_mod, numba.core.ir.Var)
+            and isinstance(
+                self.typemap[func_mod.name],
+                bodo.libs.sklearn_ext.BodoLinearRegressionType,
+            )
+        ):
+            if self._is_1D_or_1D_Var_arr(rhs.args[0].name):
+                self._set_last_arg_to_true(assign.value)
+                return [assign]
+
+        if (
+            func_name == "fit"
+            and isinstance(func_mod, numba.core.ir.Var)
+            and isinstance(
+                self.typemap[func_mod.name],
                 bodo.libs.sklearn_ext.BodoMultinomialNBType,
             )
         ):

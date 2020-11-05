@@ -10,11 +10,17 @@ from sklearn import datasets
 from sklearn.cluster import KMeans
 from sklearn.datasets import make_classification, make_regression
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.linear_model import LogisticRegression, SGDClassifier, SGDRegressor
+from sklearn.linear_model import (
+    LinearRegression,
+    LogisticRegression,
+    SGDClassifier,
+    SGDRegressor,
+)
 from sklearn.metrics import (
     accuracy_score,
     f1_score,
     precision_score,
+    r2_score,
     recall_score,
 )
 from sklearn.naive_bayes import MultinomialNB
@@ -904,3 +910,96 @@ def test_multinomial_nb_score():
         return score
 
     check_func(impl, (X, y))
+
+
+# --------------------Linear Regression Tests-----------------#
+
+
+def test_linear_regression():
+    """Test Linear Regression wrappers"""
+
+    def impl(X_train, y_train, X_test, y_test):
+        clf = LinearRegression()
+        clf.fit(X_train, y_train)
+        score = clf.score(X_test, y_test)
+        return score
+
+    def impl_pred(X_train, y_train, X_test, y_test, name="BODO"):
+        clf = LinearRegression()
+        clf.fit(X_train, y_train)
+        y_pred = clf.predict(X_test)
+        return y_pred
+
+    splitN = 500
+    n_samples = 10000
+    n_features = 100
+    X_train = None
+    y_train = None
+    X_test = None
+    y_test = None
+    if bodo.get_rank() == 0:
+        X, y = make_regression(
+            n_samples=n_samples,
+            n_features=n_features,
+            n_informative=n_features,
+        )
+        X_train = X[:splitN]
+        y_train = y[:splitN]
+        X_test = X[splitN:]
+        y_test = y[splitN:]
+        scaler = StandardScaler().fit(X_train)
+        X_train = scaler.transform(X_train)
+        X_test = scaler.transform(X_test)
+
+        sklearn_score_result = impl(X_train, y_train, X_test, y_test)
+        sklearn_predict_result = impl_pred(X_train, y_train, X_test, y_test)
+        X_train = bodo.scatterv(X_train)
+        y_train = bodo.scatterv(y_train)
+        X_test = bodo.scatterv(X_test)
+        y_test = bodo.scatterv(y_test)
+    else:
+        X_train = bodo.scatterv(None)
+        y_train = bodo.scatterv(None)
+        X_test = bodo.scatterv(None)
+        y_test = bodo.scatterv(None)
+
+    bodo_score_result = bodo.jit(
+        distributed=["X_train", "y_train", "X_test", "y_test"]
+    )(impl)(X_train, y_train, X_test, y_test)
+    bodo_predict_result = bodo.jit(
+        distributed=["X_train", "y_train", "X_test", "y_test"]
+    )(impl_pred)(X_train, y_train, X_test, y_test)
+    # Can't compare y_pred of bodo vs sklearn
+    # So, we need to use a score metrics. However, current supported scores are
+    # classification metrics only.
+    # Gather output in rank 0. This can go away when r2_score is supported
+    # TODO: return r2_score directly once it's supported.
+    total_predict_result = bodo.gatherv(bodo_predict_result, root=0)
+    total_y_test = bodo.gatherv(y_test, root=0)
+    if bodo.get_rank() == 0:
+        assert np.allclose(sklearn_score_result, bodo_score_result, atol=0.1)
+        b_score = r2_score(total_y_test, total_predict_result)
+        sk_score = r2_score(total_y_test, sklearn_predict_result)
+        assert np.allclose(b_score, sk_score, atol=0.1)
+
+
+@pytest.mark.skip(
+    reason="TODO: support Multivariate Regression (SGDRegressor doesn't support it yet"
+)
+def test_lr_multivariate(memory_leak_check):
+    """Test Multivariate Linear Regression
+    Taken from sklearn tests
+    https://github.com/scikit-learn/scikit-learn/blob/0fb307bf39bbdacd6ed713c00724f8f871d60370/sklearn/tests/test_multiclass.py#L278
+    """
+
+    def test_pred(X_train, y_train):
+        clf = LinearRegression()
+        clf.fit(X_train, y_train)
+        y_pred = clf.predict([[0, 4, 4], [0, 1, 1], [3, 3, 3]])  # [0]
+        print(y_pred)
+        return y_pred
+
+    # Toy dataset where features correspond directly to labels.
+    X = np.array([[0, 4, 5], [0, 5, 0], [3, 3, 3], [4, 0, 6], [6, 0, 0]])
+    y = np.array([[0, 1, 1], [0, 1, 0], [1, 1, 1], [1, 0, 1], [1, 0, 0]])
+    check_func(test_pred, (X, y))  # , only_seq=True)

@@ -41,6 +41,17 @@ Methods:
 Linear Regressors 
 ~~~~~~~~~~~~~~~~~
 
+:class:`sklearn.linear_model.LinearRegression`
+
+  This class provides linear regression support.
+  Note: Multilabel targets are not currently supported.
+
+Methods:
+
+  * :any:`sklearn.linear_model.LinearRegression.fit`
+  * :any:`sklearn.linear_model.LinearRegression.predict`
+  * :any:`sklearn.linear_model.LinearRegression.score`
+
 :class:`sklearn.linear_model.SGDRegressor`
 
   This class provides linear regression models with SGD optimization which allows distributed large-scale learning.
