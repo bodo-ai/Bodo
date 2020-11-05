@@ -22,6 +22,10 @@ CONDA_INSTALL="conda install -q -y"
 source deactivate
 conda remove --all -q -y -n $CONDA_ENV
 
+# Set 5 retries with 1 minute in between to try avoid HTTP errors
+conda config --set remote_max_retries 5
+conda config --set remote_backoff_factor 60
+
 if [ "$RUN_NIGHTLY" != "yes" ];
 then
     conda create -n $CONDA_ENV -q -y -c conda-forge python=3.8 numpy scipy boost-cpp=1.74.0 cmake h5py mpich mpi
