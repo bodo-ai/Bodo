@@ -68,12 +68,14 @@ from bodo.utils.typing import (
     get_overload_const_func,
     get_overload_const_list,
     get_overload_const_str,
+    get_overload_const_tuple,
     get_overload_constant_dict,
     is_initial_value_list_type,
     is_literal_type,
     is_overload_constant_dict,
     is_overload_constant_list,
     is_overload_constant_str,
+    is_overload_constant_tuple,
     is_overload_none,
     list_cumulative,
 )
@@ -617,32 +619,43 @@ class DataFramePass:
         )
 
     def _run_call_df_sort_values(self, assign, lhs, rhs):
+        """Implements support for df.sort_values().
+        Translates sort_values_dummy() to a Sort IR node.
+        """
         df_var, by_var, ascending_var, inplace_var, na_position_var = rhs.args
         df_typ = self.typemap[df_var.name]
         inplace = guard(find_const, self.func_ir, inplace_var)
         na_position = guard(find_const, self.func_ir, na_position_var)
 
         # find key array for sort ('by' arg)
-        key_names = self._get_const_or_list(by_var)
-        set_possible_keys = set(df_typ.columns)
+        by_type = self.typemap[by_var.name]
+        if is_overload_constant_tuple(by_type):
+            key_names = [get_overload_const_tuple(by_type)]
+        else:
+            key_names = get_overload_const_list(by_type)
+        valid_keys_set = set(df_typ.columns)
         index_is_key = False
         index_name = "unset"
         if not is_overload_none(df_typ.index.name_typ):
             index_name = df_typ.index.name_typ.literal_value
-            set_possible_keys.add(index_name)
+            valid_keys_set.add(index_name)
             if index_name in key_names:
                 index_is_key = True
         if "$_bodo_index_" in key_names:
             index_is_key = True
             index_name = "$_bodo_index_"
-            set_possible_keys.add(index_name)
+            valid_keys_set.add(index_name)
+        # "A" is equivalent to ("A", "")
+        key_names = [(k, "") if (k, "") in valid_keys_set else k for k in key_names]
         ascending_list = self._get_list_value_spec_length(
             ascending_var,
             len(key_names),
             err_msg="ascending should be bool or a list of bool of the number of keys",
         )
-        if not all(k in set_possible_keys for k in key_names):
-            raise BodoError("invalid sort keys {}".format(key_names))
+        # already checked in validate_sort_values_spec() so assertion is enough
+        assert all(
+            k in valid_keys_set for k in key_names
+        ), f"invalid sort keys {key_names}"
 
         nodes = []
         in_vars = {
@@ -665,7 +678,7 @@ class DataFramePass:
         else:
             out_vars = {}
             for k in df_typ.columns:
-                out_var = ir.Var(lhs.scope, mk_unique_var(k), lhs.loc)
+                out_var = ir.Var(lhs.scope, mk_unique_var(sanitize_varname(k)), lhs.loc)
                 ind = df_typ.columns.index(k)
                 self.typemap[out_var.name] = df_typ.data[ind]
                 out_vars[k] = out_var

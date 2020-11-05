@@ -2274,13 +2274,19 @@ def validate_sort_values_spec(df, by, axis, ascending, inplace, kind, na_positio
             "a constant column label or column labels. by={}".format(by)
         )
     # make sure by has valid label(s)
-    set_possible_keys = set(df.columns)
+    valid_keys_set = set(df.columns)
     if is_overload_constant_str(df.index.name_typ):
-        set_possible_keys.add(get_overload_const_str(df.index.name_typ))
-    if len(set(get_overload_const_list(by)).difference(set_possible_keys)) > 0:
+        valid_keys_set.add(get_overload_const_str(df.index.name_typ))
+    if is_overload_constant_tuple(by):
+        key_names = [get_overload_const_tuple(by)]
+    else:
+        key_names = get_overload_const_list(by)
+    # "A" is equivalent to ("A", "")
+    key_names = set((k, "") if (k, "") in valid_keys_set else k for k in key_names)
+    if len(key_names.difference(valid_keys_set)) > 0:
         raise_bodo_error(
             "sort_values(): invalid key {} for by.".format(
-                set_possible_keys.difference(set(get_overload_const_list(by)))
+                valid_keys_set.difference(set(get_overload_const_list(by)))
             )
         )
 

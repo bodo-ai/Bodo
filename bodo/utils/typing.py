@@ -243,8 +243,13 @@ def is_overload_constant_list(val):
 
 
 def is_overload_constant_tuple(val):
-    return isinstance(val, tuple) or (
-        isinstance(val, types.Omitted) and isinstance(val.value, tuple)
+    return (
+        isinstance(val, tuple)
+        or (isinstance(val, types.Omitted) and isinstance(val.value, tuple))
+        or (
+            isinstance(val, types.BaseTuple)
+            and all(get_overload_const(t) is not NOT_CONSTANT for t in val.types)
+        )
     )
 
 
@@ -339,6 +344,7 @@ def is_overload_str(val, const):
     )
 
 
+# TODO: refactor with get_literal_value()
 def get_overload_const(val):
     """Get constant value for overload input. Returns NOT_CONSTANT if not constant.
     'val' can be a python value, an Omitted type, a literal type, or other Numba type
@@ -351,18 +357,24 @@ def get_overload_const(val):
     if val == types.none:
         return None
     # actual value
-    if val is None or isinstance(val, (bool, int, str, tuple)):
+    if val is None or isinstance(val, (bool, int, str, tuple, types.Dispatcher)):
         return val
     # Omitted case
     if isinstance(val, types.Omitted):
         return val.value
     # Literal value
+    # LiteralList needs special handling since it may store literal values instead of
+    # actual constants, see test_groupby_dead_col_multifunc
+    if isinstance(val, types.LiteralList):
+        return [get_overload_const(v) for v in val.literal_value]
     if isinstance(val, types.Literal):
         return val.literal_value
     if isinstance(val, types.Dispatcher):
         return val
     if isinstance(val, types.BaseTuple):
         return [get_overload_const(v) for v in val.types]
+    if is_initial_value_list_type(val):
+        return val.initial_value
     return NOT_CONSTANT
 
 
@@ -424,6 +436,8 @@ def get_overload_const_tuple(val):
     if isinstance(val, types.Omitted):
         assert isinstance(val.value, tuple)
         return val.value
+    if isinstance(val, types.BaseTuple):
+        return tuple(get_overload_const(t) for t in val.types)
 
 
 def get_overload_constant_dict(val):
@@ -798,7 +812,7 @@ def get_literal_value(t):
         return tuple(get_literal_value(v) for v in t.types)
     if isinstance(t, types.Dispatcher):
         return t
-    if isinstance(t, types.InitialValue):
+    if is_initial_value_type(t):
         return t.initial_value
     if isinstance(t, types.DTypeSpec):
         return t
