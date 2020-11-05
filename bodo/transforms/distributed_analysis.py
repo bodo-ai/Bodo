@@ -648,40 +648,13 @@ class DistributedAnalysis:
             and isinstance(func_mod, numba.core.ir.Var)
             and isinstance(
                 self.typemap[func_mod.name],
-                bodo.libs.sklearn_ext.BodoRandomForestClassifierType,
-            )
-        ):
-            if func_name == "fit":
-                self._meet_array_dists(rhs.args[0].name, rhs.args[1].name, array_dists)
-            elif func_name == "predict":
-                # match input and output distributions
-                self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
-            elif func_name == "score":
-                self._meet_array_dists(rhs.args[0].name, rhs.args[1].name, array_dists)
-            return
-
-        if (
-            func_name in {"fit", "predict", "score"}
-            and isinstance(func_mod, numba.core.ir.Var)
-            and isinstance(
-                self.typemap[func_mod.name],
-                bodo.libs.sklearn_ext.BodoSGDClassifierType,
-            )
-        ):
-            if func_name == "fit":
-                self._meet_array_dists(rhs.args[0].name, rhs.args[1].name, array_dists)
-            elif func_name == "predict":
-                # match input and output distributions
-                self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
-            elif func_name == "score":
-                self._meet_array_dists(rhs.args[0].name, rhs.args[1].name, array_dists)
-            return
-        if (
-            func_name in {"fit", "predict", "score"}
-            and isinstance(func_mod, numba.core.ir.Var)
-            and isinstance(
-                self.typemap[func_mod.name],
-                bodo.libs.sklearn_ext.BodoSGDRegressorType,
+                (
+                    bodo.libs.sklearn_ext.BodoRandomForestClassifierType,
+                    bodo.libs.sklearn_ext.BodoSGDClassifierType,
+                    bodo.libs.sklearn_ext.BodoSGDRegressorType,
+                    bodo.libs.sklearn_ext.BodoLogisticRegressionType,
+                    bodo.libs.sklearn_ext.BodoMultinomialNBType,
+                ),
             )
         ):
             if func_name == "fit":
@@ -704,40 +677,6 @@ class DistributedAnalysis:
             self._analyze_call_sklearn_cluster_kmeans(
                 lhs, func_name, rhs, kws, array_dists
             )
-            return
-
-        if (
-            func_name in {"fit", "predict", "score"}
-            and isinstance(func_mod, numba.core.ir.Var)
-            and isinstance(
-                self.typemap[func_mod.name],
-                bodo.libs.sklearn_ext.BodoLogisticRegressionType,
-            )
-        ):
-            if func_name == "fit":
-                self._meet_array_dists(rhs.args[0].name, rhs.args[1].name, array_dists)
-            elif func_name == "predict":
-                # match input and output distributions
-                self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
-            elif func_name == "score":
-                self._meet_array_dists(rhs.args[0].name, rhs.args[1].name, array_dists)
-            return
-              
-        if (              
-            func_name in {"fit", "predict", "score", "transform"}
-            and isinstance(func_mod, numba.core.ir.Var)
-            and isinstance(
-                self.typemap[func_mod.name],
-                bodo.libs.sklearn_ext.BodoMultinomialNBType,
-            )
-        ):
-            if func_name == "fit":
-                self._meet_array_dists(rhs.args[0].name, rhs.args[1].name, array_dists)
-            elif func_name == "predict":
-                # match input and output distributions
-                self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
-            elif func_name == "score":
-                self._meet_array_dists(rhs.args[0].name, rhs.args[1].name, array_dists)
             return
 
         if func_mod == "sklearn.metrics._classification":

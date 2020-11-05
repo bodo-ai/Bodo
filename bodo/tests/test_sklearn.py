@@ -515,6 +515,25 @@ def test_sgdr(penalty):
     """Check SGDRegressor against sklearn
     penalty identifies type of regression
     None:Linear, l1: Ridge, l2: Lasso"""
+
+    def impl_predict(X_train, y_train, X_test):
+        clf = SGDRegressor(
+            alpha=0.01, max_iter=2, eta0=0.01, learning_rate="adaptive", shuffle=False
+        )
+        clf.fit(X_train, y_train)
+        y_pred = clf.predict(X_test)
+        return y_pred
+
+    X = np.array([[-2, -1], [-1, -1], [-1, -2], [1, 1], [1, 2], [2, 1]])
+    y = np.array([1, 1, 1, 2, 2, 2])
+    T = np.array([[-1, -1], [2, 2], [3, 2]])
+    sklearn_predict_result = impl_predict(X, y, T)
+    bodo_predict_result = bodo.jit(distributed=["X", "y", "T"])(impl_predict)(X, y, T)
+    if bodo.get_rank() == 0:
+        np.testing.assert_array_almost_equal(
+            bodo_predict_result, sklearn_predict_result, decimal=2
+        )
+
     # name is used for distinguishing function printing time.
     def impl(X_train, y_train, X_test, y_test, name="BODO"):
         # Bodo ignores n_jobs. This is set for scikit-learn (non-bodo) run. It should be set to number of cores avialable.
@@ -696,6 +715,7 @@ def test_kmeans(memory_leak_check):
         is_out_distributed=True,
     )
 
+
 # --------------------Logistic Regression Tests-----------------#
 
 
@@ -804,6 +824,7 @@ def test_logistic_regression(memory_leak_check):
     )(impl)(X_train, y_train, X_test, y_test)
     if bodo.get_rank() == 0:
         assert np.allclose(sklearn_predict_result, bodo_predict_result, atol=0.1)
+
 
 # --------------------Multinomial Naive Bayes Tests-----------------#
 def test_multinomial_nb():
