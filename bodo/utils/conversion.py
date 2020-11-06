@@ -463,7 +463,7 @@ def overload_coerce_to_array(
             scalar_to_arr_len=None,
         ):  # pragma: no cover
             n = len(data)
-            arr = bodo.libs.tuple_arr_ext.pre_alloc_tuple_array(n, (), data_types)
+            arr = bodo.libs.tuple_arr_ext.pre_alloc_tuple_array(n, (-1,), data_types)
             for i in range(n):
                 arr[i] = data[i]
             return arr

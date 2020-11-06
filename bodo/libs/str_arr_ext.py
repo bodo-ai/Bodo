@@ -901,7 +901,6 @@ def cp_str_list_to_array_overload(str_arr, list_data, str_null_bools=None):
         func_text += "  return\n"
 
         loc_vars = {}
-        # print(func_text)
         exec(func_text, {"cp_str_list_to_array": cp_str_list_to_array}, loc_vars)
         cp_str_impl = loc_vars["f"]
         return cp_str_impl
@@ -1098,6 +1097,8 @@ def set_all_offsets_to_0(typingctx, str_arr_typ=None):
 
 @numba.njit
 def pre_alloc_string_array(n_strs, n_chars):  # pragma: no cover
+    if n_chars is None:
+        n_chars = -1
     str_arr = init_str_arr(
         bodo.libs.array_item_arr_ext.pre_alloc_array_item_array(
             np.int64(n_strs), (np.int64(n_chars),), char_arr_type
@@ -1106,7 +1107,7 @@ def pre_alloc_string_array(n_strs, n_chars):  # pragma: no cover
     # The call above only sets offsets[0] and offset[n_strs]
     # But in case of n_chars == 0, we need to set the whole
     # offset array to 0s.
-    if n_chars <= 0:
+    if n_chars == 0:
         set_all_offsets_to_0(str_arr)
     return str_arr
 
@@ -1768,12 +1769,10 @@ def str_arr_setitem(A, idx, val):
             # if string value is not ASCII, assume maximum possible UTF-8 characters
             max_val_len = val._length if val._is_ascii else MAX_UTF8_BYTES * val._length
             data_arr = A._data
-            required_capacity = (
-                bodo.libs.array_item_arr_ext.get_offsets_ind(data_arr, idx)
-                + max_val_len
-            )
+            start_offset = np.int64(getitem_str_offset(A, idx))
+            required_capacity = start_offset + max_val_len
             bodo.libs.array_item_arr_ext.ensure_data_capacity(
-                data_arr, required_capacity
+                data_arr, start_offset, required_capacity
             )
             setitem_string_array(
                 get_offset_ptr(A),
@@ -1800,9 +1799,13 @@ def str_arr_setitem(A, idx, val):
         def impl_slice(A, idx, val):  # pragma: no cover
             slice_idx = numba.cpython.unicode._normalize_slice(idx, len(A))
             start = slice_idx.start
-            set_string_array_range(
-                A, val, start, np.int64(getitem_str_offset(A, start))
+            data_arr = A._data
+            start_offset = np.int64(getitem_str_offset(A, start))
+            required_capacity = start_offset + np.int64(num_total_chars(val))
+            bodo.libs.array_item_arr_ext.ensure_data_capacity(
+                data_arr, start_offset, required_capacity
             )
+            set_string_array_range(A, val, start, start_offset)
             # nulls of input and output arrays should match
             curr = 0
             for i in range(slice_idx.start, slice_idx.stop, slice_idx.step):

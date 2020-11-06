@@ -50,6 +50,7 @@ from bodo.libs.distributed_api import Reduce_Type
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.str_arr_ext import (
     get_str_arr_item_length,
+    num_total_chars,
     pre_alloc_string_array,
     str_arr_set_na,
     string_array_type,
@@ -1618,21 +1619,27 @@ def resize_and_copy(A, new_len):  # pragma: no cover
 
 
 @overload(resize_and_copy, no_unliteral=True)
-def overload_resize_and_copy(A, old_len, new_len):
+def overload_resize_and_copy(A, old_size, new_len):
     """allocate a new array (same type as 'A') and copy data of array 'A'"""
-    # TODO: support nested arrays
-    assert not is_var_size_item_array_type(A)
 
-    # only for char array of string arrays for now
-    # TODO(ehsan): support all arrays
-    assert A == types.Array(types.uint8, 1, "C")
     _dtype = A
 
-    def impl(A, old_len, new_len):  # pragma: no cover
-        out_arr = bodo.utils.utils.alloc_type(new_len, _dtype)
-        # NOTE: direct memcpy using str_copy_ptr is slightly faster than slice copy
-        # out_arr[:old_len] = A
-        bodo.libs.str_arr_ext.str_copy_ptr(out_arr.ctypes, 0, A.ctypes, old_len)
+    # faster version for characters of string arrays
+    if A == types.Array(types.uint8, 1, "C"):
+
+        def impl_char(A, old_size, new_len):  # pragma: no cover
+            out_arr = bodo.utils.utils.alloc_type(new_len, _dtype)
+            # NOTE: direct memcpy using str_copy_ptr is slightly faster than slice copy
+            # out_arr[:old_size] = A[:old_size]
+            bodo.libs.str_arr_ext.str_copy_ptr(out_arr.ctypes, 0, A.ctypes, old_size)
+            return out_arr
+
+        return impl_char
+
+    # generic copy for const sized arrays
+    def impl(A, old_size, new_len):  # pragma: no cover
+        out_arr = bodo.utils.utils.alloc_type(new_len, _dtype, (-1,))
+        out_arr[:old_size] = A[:old_size]
         return out_arr
 
     return impl

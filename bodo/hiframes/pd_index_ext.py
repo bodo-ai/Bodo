@@ -261,7 +261,9 @@ def gen_dti_field_impl(field):
     # func_text += "            continue\n"
     func_text += "        dt64 = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(A[i])\n"
     func_text += "        ts = bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(dt64)\n"
-    if field in ["weekday",]:
+    if field in [
+        "weekday",
+    ]:
         func_text += "        S[i] = ts." + field + "()\n"
     else:
         func_text += "        S[i] = ts." + field + "\n"
@@ -2123,20 +2125,7 @@ def overload_index_map(I, mapper, na_action=None):
     func_text += "  A = bodo.utils.conversion.coerce_to_array(I)\n"
     func_text += "  numba.parfors.parfor.init_prange()\n"
     func_text += "  n = len(A)\n"
-
-    # an extra loop is currently necessary to get alloc sizes for arrays with
-    # variable size items, e.g. strings
-    # TODO: avoid extra loop (e.g. builder pattern?)
-    if is_var_size_item_array_type(out_arr_type):
-        func_text += "  nested_counts = init_nested_counts(data_arr_type)\n"
-        func_text += "  for j in numba.parfors.parfor.internal_prange(n):\n"
-        func_text += "    t1 = bodo.utils.conversion.box_if_dt64(A[j])\n"
-        func_text += "    item = map_func(t1)\n"
-        func_text += "    nested_counts = add_nested_counts(nested_counts, item)\n"
-        func_text += "  numba.parfors.parfor.init_prange()\n"
-    else:
-        func_text += "  nested_counts = None\n"
-    func_text += "  S = bodo.utils.utils.alloc_type(n, _arr_typ, nested_counts)\n"
+    func_text += "  S = bodo.utils.utils.alloc_type(n, _arr_typ, (-1,))\n"
     func_text += "  for i in numba.parfors.parfor.internal_prange(n):\n"
     func_text += "    t2 = bodo.utils.conversion.box_if_dt64(A[i])\n"
     func_text += "    v = map_func(t2)\n"

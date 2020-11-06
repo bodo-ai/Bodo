@@ -559,6 +559,25 @@ def box_array_item_arr(typ, val, c):
 def lower_pre_alloc_array_item_array(context, builder, sig, args):
     array_item_type = sig.return_type
     num_arrs, num_values, _ = args
+    # make sure 'num_values' has -1 for all unknown alloc counts
+    n_elem_alloc_counts = bodo.utils.transform.get_type_alloc_counts(
+        array_item_type.dtype
+    )
+    n_elems_type = sig.args[1]
+    if not isinstance(n_elems_type, types.UniTuple):
+        num_values = cgutils.pack_array(
+            builder,
+            [lir.Constant(lir.IntType(64), -1) for _ in range(n_elem_alloc_counts)],
+        )
+    elif n_elems_type.count < n_elem_alloc_counts:
+        num_values = cgutils.pack_array(
+            builder,
+            [builder.extract_value(num_values, i) for i in range(n_elems_type.count)]
+            + [
+                lir.Constant(lir.IntType(64), -1)
+                for _ in range(n_elem_alloc_counts - n_elems_type.count)
+            ],
+        )
     meminfo, _, _, _ = construct_array_item_array(
         context, builder, array_item_type, num_arrs, num_values
     )
@@ -743,18 +762,17 @@ def replace_data_arr(typingctx, arr_typ, data_typ=None):
 
 
 @numba.njit(no_cpython_wrapper=True)
-def ensure_data_capacity(arr, new_size):  # pragma: no cover
+def ensure_data_capacity(arr, old_size, new_size):  # pragma: no cover
     """
     make sure the internal data array has enough space for 'new_size' number of elements
+    'old_size' is the current number of valid elements (to enable data copy)
     """
     data = get_data(arr)
     old_capacity = len(data)
     if old_capacity < new_size:
         # double the capacity similar to std::vector
         new_capacity = max(2 * old_capacity, new_size)
-        new_data = bodo.libs.array_kernels.resize_and_copy(
-            data, old_capacity, new_capacity
-        )
+        new_data = bodo.libs.array_kernels.resize_and_copy(data, old_size, new_capacity)
         replace_data_arr(arr, new_data)
 
 
@@ -886,12 +904,14 @@ def array_item_arr_setitem(A, idx, val):
 
         def impl_scalar(A, idx, val):  # pragma: no cover
             offsets = get_offsets(A)
-            data = get_data(A)
             null_bitmap = get_null_bitmap(A)
             if idx == 0:
                 offsets[0] = 0
 
             n_items = len(val)
+            required_capacity = offsets[idx] + n_items
+            ensure_data_capacity(A, offsets[idx], required_capacity)
+            data = get_data(A)
             offsets[idx + 1] = offsets[idx] + n_items
             data[offsets[idx] : offsets[idx + 1]] = val
             bodo.libs.int_arr_ext.set_bit_to_arr(null_bitmap, idx, 1)
@@ -906,7 +926,6 @@ def array_item_arr_setitem(A, idx, val):
             val = bodo.utils.conversion.coerce_to_array(val, use_nullable_array=True)
             # get output arrays
             offsets = get_offsets(A)
-            data = get_data(A)
             null_bitmap = get_null_bitmap(A)
 
             # get input arrays
@@ -923,6 +942,9 @@ def array_item_arr_setitem(A, idx, val):
             if start == 0:
                 offsets[start] = 0
             start_offset = offsets[start]
+            required_capacity = start_offset + len(val_data)
+            ensure_data_capacity(A, start_offset, required_capacity)
+            data = get_data(A)
             data[start_offset : start_offset + len(val_data)] = val_data
 
             # copy offsets (n+1 elements)
