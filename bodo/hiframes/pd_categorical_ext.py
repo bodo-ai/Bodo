@@ -561,18 +561,8 @@ def cat_replace_overload(arr, to_replace, value):
             # If we must edit the categories we need to preallocate a new
             # string array
             n = len(categories)
-            num_chars = 0
-            for i in range(n):
-                old_cat_val = categories[i]
-                if old_cat_val in categories_dict:
-                    new_cat_val = categories_dict[old_cat_val]
-                    # if new == old, its a deletion, used to avoid a second dict
-                    if new_cat_val != old_cat_val:
-                        num_chars += bodo.libs.str_arr_ext.get_utf8_size(new_cat_val)
-                else:
-                    num_chars += bodo.libs.str_arr_ext.get_utf8_size(old_cat_val)
             new_categories = bodo.libs.str_arr_ext.pre_alloc_string_array(
-                n - num_deleted, num_chars
+                n - num_deleted, -1
             )
             # Fill in all the categories in the new array
             new_idx = 0

@@ -1,50 +1,47 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 """IR node for the data sorting"""
-import numpy as np
 import math
 from collections import defaultdict
+
 import numba
+import numpy as np
 from numba.core import ir, ir_utils, typeinfer, types
 from numba.core.ir_utils import (
-    visit_vars_inner,
-    replace_vars_inner,
     compile_to_numba_ir,
-    replace_arg_nodes,
     mk_unique_var,
+    replace_arg_nodes,
+    replace_vars_inner,
+    visit_vars_inner,
 )
-from bodo.libs.array import (
-    array_to_info,
-    arr_info_list_to_table,
-    sort_values_table,
-    info_from_table,
-    info_to_array,
-    delete_table,
-    delete_table_decref_arrays,
-)
-
 
 import bodo
 import bodo.libs.timsort
-from bodo.transforms import distributed_pass, distributed_analysis
+from bodo.hiframes.datetime_date_ext import datetime_date_array_type
+from bodo.libs.array import (
+    arr_info_list_to_table,
+    array_to_info,
+    delete_table,
+    delete_table_decref_arrays,
+    info_from_table,
+    info_to_array,
+    sort_values_table,
+)
+from bodo.libs.bool_arr_ext import boolean_array
+from bodo.libs.decimal_arr_ext import DecimalArrayType
 from bodo.libs.distributed_api import Reduce_Type
-from bodo.transforms.distributed_analysis import Distribution
-from bodo.utils.utils import debug_prints, empty_like_type, gen_getitem
-
+from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.str_arr_ext import (
+    cp_str_list_to_array,
+    get_data_ptr,
+    get_offset_ptr,
+    num_total_chars,
+    str_list_to_array,
     string_array_type,
     to_string_list,
-    cp_str_list_to_array,
-    str_list_to_array,
-    get_offset_ptr,
-    get_data_ptr,
-    pre_alloc_string_array,
-    num_total_chars,
 )
-from bodo.libs.int_arr_ext import IntegerArrayType
-from bodo.libs.decimal_arr_ext import DecimalArrayType
-from bodo.libs.bool_arr_ext import boolean_array
-from bodo.hiframes.datetime_date_ext import datetime_date_array_type
-
+from bodo.transforms import distributed_analysis, distributed_pass
+from bodo.transforms.distributed_analysis import Distribution
+from bodo.utils.utils import debug_prints, empty_like_type, gen_getitem
 
 MIN_SAMPLES = 1000000
 # MIN_SAMPLES = 100

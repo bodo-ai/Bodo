@@ -91,7 +91,6 @@ from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.str_arr_ext import (
     StringArrayType,
     get_utf8_size,
-    pre_alloc_string_array,
     string_array_type,
 )
 from bodo.libs.str_ext import string_type

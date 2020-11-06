@@ -449,16 +449,7 @@ def dt_strftime(S_dt, format_str):
         name = bodo.hiframes.pd_series_ext.get_series_name(S)
         numba.parfors.parfor.init_prange()
         n = len(A)
-        num_chars = 0
-        for i in numba.parfors.parfor.internal_prange(n):
-            if bodo.libs.array_kernels.isna(A, i):
-                continue
-            num_chars += len(
-                bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(
-                    A[i]
-                ).strftime(format_str)
-            )
-        B = bodo.libs.str_arr_ext.pre_alloc_string_array(n, num_chars)
+        B = bodo.libs.str_arr_ext.pre_alloc_string_array(n, -1)
         for j in numba.parfors.parfor.internal_prange(n):
             if bodo.libs.array_kernels.isna(A, j):
                 bodo.libs.array_kernels.setna(B, j)

@@ -280,17 +280,8 @@ def overload_string_array_add(A, B):
         def impl_both(A, B):  # pragma: no cover
             numba.parfors.parfor.init_prange()
             l = len(A)
-            num_chars = 0
-            for i in numba.parfors.parfor.internal_prange(l):
-                s = 0
-                if not (
-                    bodo.libs.array_kernels.isna(A, i)
-                    or bodo.libs.array_kernels.isna(B, i)
-                ):
-                    s = bodo.libs.str_arr_ext.get_utf8_size(A[i] + B[i])
-                num_chars += s
 
-            out_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(l, num_chars)
+            out_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(l, -1)
             for j in numba.parfors.parfor.internal_prange(l):
                 if bodo.libs.array_kernels.isna(A, j) or bodo.libs.array_kernels.isna(
                     B, j
@@ -310,14 +301,8 @@ def overload_string_array_add(A, B):
         def impl_left(A, B):  # pragma: no cover
             numba.parfors.parfor.init_prange()
             l = len(A)
-            num_chars = 0
-            for i in numba.parfors.parfor.internal_prange(l):
-                s = 0
-                if not bodo.libs.array_kernels.isna(A, i):
-                    s = bodo.libs.str_arr_ext.get_utf8_size(A[i] + B)
-                num_chars += s
 
-            out_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(l, num_chars)
+            out_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(l, -1)
             for j in numba.parfors.parfor.internal_prange(l):
                 if bodo.libs.array_kernels.isna(A, j):
                     out_arr[j] = ""
@@ -335,14 +320,8 @@ def overload_string_array_add(A, B):
         def impl_right(A, B):  # pragma: no cover
             numba.parfors.parfor.init_prange()
             l = len(B)
-            num_chars = 0
-            for i in numba.parfors.parfor.internal_prange(l):
-                s = 0
-                if not bodo.libs.array_kernels.isna(B, i):
-                    s = bodo.libs.str_arr_ext.get_utf8_size(A + B[i])
-                num_chars += s
 
-            out_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(l, num_chars)
+            out_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(l, -1)
             for j in numba.parfors.parfor.internal_prange(l):
                 if bodo.libs.array_kernels.isna(B, j):
                     out_arr[j] = ""
@@ -363,14 +342,8 @@ def overload_string_array_mul(A, B):
         def impl(A, B):  # pragma: no cover
             numba.parfors.parfor.init_prange()
             l = len(A)
-            num_chars = 0
-            for i in numba.parfors.parfor.internal_prange(l):
-                s = 0
-                if not (bodo.libs.array_kernels.isna(A, i)):
-                    s = bodo.libs.str_arr_ext.get_utf8_size(A[i] * B)
-                num_chars += s
 
-            out_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(l, num_chars)
+            out_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(l, -1)
             for j in numba.parfors.parfor.internal_prange(l):
                 if bodo.libs.array_kernels.isna(A, j):
                     out_arr[j] = ""
@@ -920,11 +893,7 @@ def str_list_to_array_overload(str_list):
 
         def str_list_impl(str_list):  # pragma: no cover
             n = len(str_list)
-            n_char = 0
-            for i in range(n):
-                _str = str_list[i]
-                n_char += get_utf8_size(_str)
-            str_arr = pre_alloc_string_array(n, n_char)
+            str_arr = pre_alloc_string_array(n, -1)
             for i in range(n):
                 _str = str_list[i]
                 str_arr[i] = _str
@@ -1051,12 +1020,8 @@ _print_str_arr = types.ExternalFunction(
 @register_jitable
 def str_arr_from_sequence(in_seq):  # pragma: no cover
     n_strs = len(in_seq)
-    total_chars = 0
-    # get total number of chars
-    for s in in_seq:
-        total_chars += get_utf8_size(s)
 
-    A = pre_alloc_string_array(n_strs, total_chars)
+    A = pre_alloc_string_array(n_strs, -1)
     for i in range(n_strs):
         A[i] = in_seq[i]
 
@@ -1686,14 +1651,7 @@ def str_arr_getitem_int(A, ind):
 
         def str_arr_arr_impl(A, ind):  # pragma: no cover
             n = len(ind)
-            # get lengths
-            n_strs = 0
-            n_chars = 0
-            for i in range(n):
-                n_strs += 1
-                n_chars += get_str_arr_item_length(A, ind[i])
-
-            out_arr = pre_alloc_string_array(n_strs, n_chars)
+            out_arr = pre_alloc_string_array(n, -1)
             str_ind = 0
             for i in range(n):
                 _str = A[ind[i]]
@@ -1728,10 +1686,7 @@ def str_arr_getitem_int(A, ind):
                 return new_arr
             else:  # TODO: test
                 # get number of chars
-                n_chars = 0
-                for i in range(slice_idx.start, slice_idx.stop, slice_idx.step):
-                    n_chars += get_str_arr_item_length(A, i)
-                new_arr = pre_alloc_string_array(span, np.int64(n_chars))
+                new_arr = pre_alloc_string_array(span, -1)
                 # TODO: more efficient copy
                 for i in range(span):
                     new_arr[i] = A[slice_idx.start + i * slice_idx.step]
