@@ -594,6 +594,9 @@ def is_list_like_index_type(t):
     """Types that can be similar to list for indexing Arrays, Series, etc.
     Tuples are excluded due to indexing semantics.
     """
+    from bodo.hiframes.datetime_timedelta_ext import (
+        datetime_timedelta_array_type,
+    )
     from bodo.hiframes.pd_index_ext import NumericIndexType, RangeIndexType
     from bodo.hiframes.pd_series_ext import SeriesType
     from bodo.libs.bool_arr_ext import boolean_array

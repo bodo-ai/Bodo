@@ -242,13 +242,21 @@ Top-level conversions:
 
 
 
-Top-level dealing with datetime like:
+Top-level dealing with datetime and timedelta like:
 
 
 * :func:`pandas.date_range`
 
   * ``start``, ``end``, ``periods``, ``freq``, ``name`` and ``closed``
     arguments are supported. This function is not parallelized yet.
+
+* :func:`pandas.to_datetime`
+
+  * All arguments are supported.
+
+* :func:`pandas.to_timedelta`
+
+  * ``arg_a`` and ``unit`` arguments are supported.
 
 
 Series

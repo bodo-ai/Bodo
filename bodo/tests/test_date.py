@@ -1323,6 +1323,131 @@ def test_pd_to_timedelta(memory_leak_check):
     check_func(impl, (S,))
 
 
+def test_pd_to_timedelta_td64(memory_leak_check):
+    """Test pd.to_timedelta()"""
+
+    def impl(S):
+        return pd.to_timedelta(S)
+
+    S = pd.timedelta_range(start="1 day", end="2 days", periods=100).to_series()
+    check_func(impl, (S,))
+
+
+def test_pd_to_timedelta_datetime_td_arr(memory_leak_check):
+    """Test pd.to_timedelta()"""
+
+    def impl(a):
+        return pd.to_timedelta(a)
+
+    arr = np.append(
+        datetime.timedelta(days=5, seconds=4, weeks=4),
+        [None, datetime.timedelta(microseconds=100000001213131, hours=5)] * 10,
+    )
+    check_func(impl, (arr,))
+
+
+def test_pd_to_timedelta_float_arr(memory_leak_check):
+    """Test pd.to_timedelta()"""
+
+    def impl(a):
+        return pd.to_timedelta(a, "D")
+
+    arr = np.array([1.0, 2.2, np.nan, 4.2] * 5)
+    check_func(impl, (arr,))
+
+
+def test_pd_to_timedelta_int_arr(memory_leak_check):
+    """Test pd.to_timedelta()"""
+
+    def impl(a):
+        return pd.to_timedelta(a, "U")
+
+    arr1 = pd.arrays.IntegerArray(
+        np.array([115, 314, 0, 410214, 15] * 5, np.int64),
+        np.array([False, False, False, False, True] * 5),
+    )
+
+    arr2 = np.array([115, 314, 0, 410214, 15] * 5)
+    check_func(impl, (arr1,))
+    check_func(impl, (arr2,))
+
+
+def test_pd_to_timedelta_string_arr(memory_leak_check):
+    """Test pd.to_timedelta()"""
+
+    def impl(a):
+        return pd.to_timedelta(a)
+
+    arr1 = np.array(
+        [
+            "1 days 06:05:01.00003",
+            "-2 days 23:15:31.4",
+            "00:15:00.150015001",
+            "00:00:00.000000001",
+        ]
+        * 5
+    )
+    arr2 = pd.array(
+        [
+            "1 days 06:05:01.00003",
+            "-2 days 23:15:31.4",
+            "00:15:00.150015001",
+            "00:00:00.000000001",
+        ]
+        * 5
+    )
+    check_func(impl, (arr1,))
+    check_func(impl, (arr2,))
+
+
+def test_pd_to_timedelta_float_scalar(memory_leak_check):
+    """Test pd.to_timedelta()"""
+
+    def impl(a):
+        return pd.to_timedelta(a, "D")
+
+    check_func(impl, (2.2,))
+
+
+def test_pd_to_timedelta_int_scalar(memory_leak_check):
+    """Test pd.to_timedelta()"""
+
+    def impl(a):
+        return pd.to_timedelta(a, "L")
+
+    check_func(impl, (100,))
+
+
+def test_pd_to_timedelta_str(memory_leak_check):
+    """Test pd.to_timedelta()"""
+
+    def impl(string):
+        return pd.to_timedelta(string)
+
+    string = "1 days 06:05:01.00003"
+    check_func(impl, (string,))
+
+
+def test_pd_to_timedelta_td(memory_leak_check):
+    """Test pd.to_timedelta()"""
+
+    def impl(td):
+        return pd.to_timedelta(td)
+
+    td = pd.Timedelta(days=7, hours=7, nanoseconds=7)
+    check_func(impl, (td,))
+
+
+def test_pd_to_timedelta_datetime(memory_leak_check):
+    """Test pd.to_timedelta()"""
+
+    def impl(td):
+        return pd.to_timedelta(td)
+
+    td = datetime.timedelta(days=7, hours=7, seconds=7, microseconds=90110)
+    check_func(impl, (td,))
+
+
 def test_extract(memory_leak_check):
     """Test extracting an attribute of timestamp"""
 

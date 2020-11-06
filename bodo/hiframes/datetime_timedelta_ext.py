@@ -38,7 +38,7 @@ from bodo.utils.indexing import (
     get_new_null_mask_slice_index,
     setitem_slice_index_null_bits,
 )
-from bodo.utils.typing import is_list_like_index_type
+from bodo.utils.typing import is_list_like_index_type, is_overload_constant_str
 
 ll.add_symbol(
     "box_datetime_timedelta_array", hdatetime_ext.box_datetime_timedelta_array
@@ -84,6 +84,7 @@ class PDTimeDeltaType(types.Type):
 
 
 pd_timedelta_type = PDTimeDeltaType()
+types.pd_timedelta_type = pd_timedelta_type
 
 # 2.Teach Numba how to infer the Numba type of Python values of a certain class,
 # using typeof_impl.register
@@ -168,7 +169,7 @@ def pd_timedelta(
             minutes=0,
             hours=0,
             weeks=0,
-        ):
+        ):  # pragma: no cover
             days += weeks * 7
             hours += days * 24
             minutes += 60 * hours
@@ -179,6 +180,56 @@ def pd_timedelta(
             return init_pd_timedelta(ns)
 
         return impl_timedelta_kw
+
+    # parse string input
+    if value == bodo.string_type or is_overload_constant_str(value):
+        # just call Pandas in this case since the string parsing code is complex and
+        # handles several possible cases
+        def impl_str(
+            value=_no_input,
+            unit="ns",
+            days=0,
+            seconds=0,
+            microseconds=0,
+            milliseconds=0,
+            minutes=0,
+            hours=0,
+            weeks=0,
+        ):  # pragma: no cover
+            with numba.objmode(res="pd_timedelta_type"):
+                res = pd.Timedelta(value)
+            return res
+
+        return impl_str
+
+    # Timedelta type, just return value
+    if value == pd_timedelta_type:
+        return (
+            lambda value=_no_input, unit="ns", days=0, seconds=0, microseconds=0, milliseconds=0, minutes=0, hours=0, weeks=0: value
+        )  # pragma: no cover
+
+    if value == datetime_timedelta_type:
+
+        def impl_timedelta_datetime(
+            value=_no_input,
+            unit="ns",
+            days=0,
+            seconds=0,
+            microseconds=0,
+            milliseconds=0,
+            minutes=0,
+            hours=0,
+            weeks=0,
+        ):  # pragma: no cover
+
+            days = value.days
+            seconds = 60 * 60 * 24 * days + value.seconds
+            microseconds = 1000 * 1000 * seconds + value.microseconds
+            ns = 1000 * microseconds
+            return init_pd_timedelta(ns)
+
+        return impl_timedelta_datetime
+
     # Check that unit is always in ns
     def impl_timedelta(
         value=_no_input,
@@ -190,7 +241,7 @@ def pd_timedelta(
         minutes=0,
         hours=0,
         weeks=0,
-    ):
+    ):  # pragma: no cover
         return init_pd_timedelta(value)
 
     return impl_timedelta

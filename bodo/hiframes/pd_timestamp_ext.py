@@ -52,7 +52,7 @@ from bodo.libs.str_arr_ext import string_array_type
 from bodo.utils.typing import (
     BodoError,
     get_overload_const_str,
-    is_list_like_index_type,
+    is_iterable_type,
     is_overload_constant_int,
     is_overload_constant_str,
 )
@@ -1331,34 +1331,122 @@ def overload_to_timedelta(arg_a, unit="ns", errors="raise"):
             name = bodo.hiframes.pd_series_ext.get_series_name(arg_a)
             # calls to_timedelta() recursively to pick up the array implementation
             # such as the one for float arrays below. Inlined recursively in series pass
-            A = pd.to_timedelta(arr, unit, errors)
+            A = bodo.utils.conversion.coerce_to_ndarray(pd.to_timedelta(arr, unit, errors))
             return bodo.hiframes.pd_series_ext.init_series(A, index, name)
 
         return impl_series
 
-    # float input
-    # from Pandas implementation:
-    # https://github.com/pandas-dev/pandas/blob/2e0e013703390377faad57ee97f2cfaf98ba039e/pandas/core/arrays/timedeltas.py#L956
-    if is_list_like_index_type(arg_a) and isinstance(arg_a.dtype, types.Float):
+    # Timedelta, Datetime, or String input, just create a Timedelta value
+    if arg_a in [pd_timedelta_type, datetime_timedelta_type, bodo.string_type] or is_overload_constant_str(arg_a):
+
+        def impl_string(arg_a, unit="ns", errors="raise"):  # pragma: no cover
+            return pd.Timedelta(arg_a)
+
+        return impl_string
+
+    # Float scalar
+    if isinstance(arg_a, types.Float):
+        m, p = pd._libs.tslibs.conversion.precision_from_unit(unit)
+        def impl_float_scalar(arg_a, unit="ns", errors="raise"):  # pragma: no cover
+            val = float_to_timedelta_val(arg_a, p, m)
+            return pd.Timedelta(val)
+
+        return impl_float_scalar
+    
+    # Integer scalar
+    if isinstance(arg_a, types.Integer):
+        m, _ = pd._libs.tslibs.conversion.precision_from_unit(unit)
+        def impl_integer_scalar(arg_a, unit="ns", errors="raise"):  # pragma: no cover
+            return pd.Timedelta(arg_a * m)
+
+        return impl_integer_scalar
+
+
+    # TODO: Add tuple support. These require separate kernels becasue we cannot check isna for tuples
+    if is_iterable_type(arg_a) and not isinstance(arg_a, types.BaseTuple):
         m, p = pd._libs.tslibs.conversion.precision_from_unit(unit)
         td64_dtype = np.dtype("timedelta64[ns]")
+        if isinstance(arg_a.dtype, types.Float):
+            # float input
+            # from Pandas implementation:
+            # https://github.com/pandas-dev/pandas/blob/2e0e013703390377faad57ee97f2cfaf98ba039e/pandas/core/arrays/timedeltas.py#L956
+            def impl_float(arg_a, unit="ns", errors="raise"):  # pragma: no cover
+                n = len(arg_a)
+                B = np.empty(n, td64_dtype)
+                for i in numba.parfors.parfor.internal_prange(n):
+                    val = iNaT
+                    if not bodo.libs.array_kernels.isna(arg_a, i):
+                        val = float_to_timedelta_val(arg_a[i], p, m)
+                    B[i] = bodo.hiframes.pd_timestamp_ext.integer_to_timedelta64(val)
+                return bodo.hiframes.pd_index_ext.init_timedelta_index(B, None)
 
-        def impl_float(arg_a, unit="ns", errors="raise"):  # pragma: no cover
-            n = len(arg_a)
-            B = np.empty(n, td64_dtype)
-            for i in numba.parfors.parfor.internal_prange(n):
-                val = iNaT
-                if not bodo.libs.array_kernels.isna(arg_a, i):
-                    data = arg_a[i]
-                    base = np.int64(data)
-                    frac = data - base
-                    if p:
-                        frac = np.round(frac, p)
-                    val = base * m + np.int64(frac * m)
-                B[i] = bodo.hiframes.pd_timestamp_ext.integer_to_timedelta64(val)
-            return B
+            return impl_float
 
-        return impl_float
+        if isinstance(arg_a.dtype, types.Integer):
+            def impl_int(arg_a, unit="ns", errors="raise"):  # pragma: no cover
+                n = len(arg_a)
+                B = np.empty(n, td64_dtype)
+                for i in numba.parfors.parfor.internal_prange(n):
+                    val = iNaT
+                    if not bodo.libs.array_kernels.isna(arg_a, i):
+                        val = arg_a[i] * m
+                    B[i] = bodo.hiframes.pd_timestamp_ext.integer_to_timedelta64(val)
+                return bodo.hiframes.pd_index_ext.init_timedelta_index(B, None)
+
+            return impl_int
+
+        if arg_a.dtype == bodo.timedelta64ns:
+            def impl_td64(arg_a, unit="ns", errors="raise"):  # pragma: no cover
+                arr = bodo.utils.conversion.coerce_to_ndarray(arg_a)
+                return bodo.hiframes.pd_index_ext.init_timedelta_index(arr, None)
+
+            return impl_td64
+
+        # Either a string array or numpy unichr array
+        if arg_a.dtype == bodo.string_type or isinstance(arg_a.dtype, types.UnicodeCharSeq):
+            # Call a kernel that enters objmode once for all conversion to avoid overhead
+            def impl_str(arg_a, unit="ns", errors="raise"):  # pragma: no cover
+                return pandas_string_array_to_timedelta(arg_a, unit, errors)
+
+            return impl_str
+
+        if arg_a.dtype == datetime_timedelta_type:
+            def impl_datetime_timedelta(arg_a, unit="ns", errors="raise"):  # pragma: no cover
+                n = len(arg_a)
+                B = np.empty(n, td64_dtype)
+                for i in numba.parfors.parfor.internal_prange(n):
+                    val = iNaT
+                    if not bodo.libs.array_kernels.isna(arg_a, i):
+                        datetime_val = arg_a[i]
+                        val = (datetime_val.microseconds + 1000 * 1000 * (datetime_val.seconds  + (24 * 60 * 60 * datetime_val.days))) * 1000
+                    B[i] = bodo.hiframes.pd_timestamp_ext.integer_to_timedelta64(val)
+                return bodo.hiframes.pd_index_ext.init_timedelta_index(B, None)
+
+            return impl_datetime_timedelta
+
+
+@register_jitable
+def float_to_timedelta_val(data, precision, multiplier): # pragma: no cover
+    """ Helper function to convert floating point data to an integer
+    representing a timedelta val with the given precision and multplier.
+    The multiplier increase the integer component of the float the rescale
+    the original unit to ns, while precision rounds the decimal component.
+    """
+    base = np.int64(data)
+    frac = data - base
+    if precision:
+        frac = np.round(frac, precision)
+    return base * multiplier + np.int64(frac * multiplier)
+
+
+
+@numba.njit
+def pandas_string_array_to_timedelta(arg_a, unit="ns", errors="raise"):  # pragma: no cover
+    with numba.objmode(result="timedelta_index"):
+        # pd.to_timedelta(string_array) returns TimedeltaIndex
+        # Cannot pass in a unit if args are strings
+        result = pd.to_timedelta(arg_a, errors=errors)
+    return result
 
 
 # comparison of Timestamp and datetime.date

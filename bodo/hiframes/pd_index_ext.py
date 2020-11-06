@@ -261,7 +261,9 @@ def gen_dti_field_impl(field):
     # func_text += "            continue\n"
     func_text += "        dt64 = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(A[i])\n"
     func_text += "        ts = bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(dt64)\n"
-    if field in ["weekday",]:
+    if field in [
+        "weekday",
+    ]:
         func_text += "        S[i] = ts." + field + "()\n"
     else:
         func_text += "        S[i] = ts." + field + "\n"
@@ -879,6 +881,10 @@ class TimedeltaIndexType(types.IterableType, types.ArrayCompatible):
         # same as Buffer
         # TODO: fix timedelta
         return types.iterators.ArrayIterator(_timedelta_index_data_typ)
+
+
+timedelta_index = TimedeltaIndexType()
+types.timedelta_index = timedelta_index
 
 
 @register_model(TimedeltaIndexType)
