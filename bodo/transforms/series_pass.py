@@ -2257,46 +2257,10 @@ class SeriesPass:
         func_text = "def f(A, index, name{}):\n".format(extra_arg_names)
         func_text += "  numba.parfors.parfor.init_prange()\n"
         func_text += "  n = len(A)\n"
-
-        # an extra loop is currently necessary to get alloc sizes for arrays with
-        # variable size items, e.g. nested arrays
-        # TODO: avoid extra loop (e.g. builder pattern?)
-        if any(
-            is_var_size_item_array_type(t) and not t == string_array_type
-            for t in out_arr_types
-        ):
-            for i in range(n_out_cols):
-                func_text += (
-                    f"  nested_counts{i} = init_nested_counts(data_arr_type{i})\n"
-                )
-            func_text += "  for j in numba.parfors.parfor.internal_prange(n):\n"
-            func_text += "    t1 = bodo.utils.conversion.box_if_dt64(A[j])\n"
-            func_text += "    item = map_func(t1, {})\n".format(udf_arg_names)
-            if is_df_output:
-                func_text += (
-                    "    vals = bodo.hiframes.pd_series_ext.get_series_data(item)\n"
-                )
-                for i in range(n_out_cols):
-                    func_text += f"    u{i} = vals[{i}]\n"
-            else:
-                func_text += f"    u0 = item\n"
-            for i in range(n_out_cols):
-                func_text += f"    nested_counts{i} = add_nested_counts(nested_counts{i}, u{i})\n"
-            func_text += "  numba.parfors.parfor.init_prange()\n"
-        elif any(t == string_array_type for t in out_arr_types):
-            for i in range(n_out_cols):
-                # TODO: use this path for all nested array types when supported
-                # n_nested_counts = get_type_alloc_counts(out_arr_types[i])
-                # nested_counts = f"({','.join('-1' for _ in range(n_nested_counts))},)" if n_nested_counts else "None"
-                if out_arr_types[i] == string_array_type:
-                    func_text += f"  nested_counts{i} = (-1,)\n"
-                else:
-                    func_text += f"  nested_counts{i} = None\n"
-        else:
-            for i in range(n_out_cols):
-                func_text += f"  nested_counts{i} = None\n"
         for i in range(n_out_cols):
-            func_text += f"  S{i} = bodo.utils.utils.alloc_type(n, _arr_typ{i}, nested_counts{i})\n"
+            func_text += (
+                f"  S{i} = bodo.utils.utils.alloc_type(n, _arr_typ{i}, (-1,))\n"
+            )
         func_text += "  for i in numba.parfors.parfor.internal_prange(n):\n"
         func_text += "    t2 = bodo.utils.conversion.box_if_dt64(A[i])\n"
         func_text += "    v = map_func(t2, {})\n".format(udf_arg_names)
