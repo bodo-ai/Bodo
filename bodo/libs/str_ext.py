@@ -237,8 +237,17 @@ dummy_use = numba.njit(lambda a: None)
 def int_str_overload(in_str, base=10):
     if in_str == string_type:
 
+        if is_overload_constant_int(base) and get_overload_const_int(base) == 10:
+
+            def _str_to_int_impl(in_str, base=10):  # pragma: no cover
+                val = _str_to_int64(in_str._data, in_str._length)
+                dummy_use(in_str)
+                return val
+
+            return _str_to_int_impl
+
         def _str_to_int_base_impl(in_str, base=10):  # pragma: no cover
-            val = _str_to_int64(in_str._data, base)
+            val = _str_to_int64_base(in_str._data, in_str._length, base)
             dummy_use(in_str)
             return val
 
@@ -272,6 +281,7 @@ class StrToFloat(AbstractTemplate):
 ll.add_symbol("init_string_const", hstr_ext.init_string_const)
 ll.add_symbol("get_c_str", hstr_ext.get_c_str)
 ll.add_symbol("str_to_int64", hstr_ext.str_to_int64)
+ll.add_symbol("str_to_int64_base", hstr_ext.str_to_int64_base)
 ll.add_symbol("str_to_float64", hstr_ext.str_to_float64)
 ll.add_symbol("str_to_float32", hstr_ext.str_to_float32)
 ll.add_symbol("get_str_len", hstr_ext.get_str_len)
@@ -287,6 +297,9 @@ init_string_from_chars = types.ExternalFunction(
 
 _str_to_int64 = types.ExternalFunction(
     "str_to_int64", signature(types.int64, types.voidptr, types.int64)
+)
+_str_to_int64_base = types.ExternalFunction(
+    "str_to_int64_base", signature(types.int64, types.voidptr, types.int64, types.int64)
 )
 
 

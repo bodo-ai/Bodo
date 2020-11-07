@@ -38,7 +38,8 @@ void str_arr_split_view_impl(str_arr_split_view_payload* out_view,
                              char* null_bitmap, char sep);
 const char* get_c_str(std::string* s);
 
-int64_t str_to_int64(char* data, int64_t base);
+int64_t str_to_int64(char* data, int64_t length);
+int64_t str_to_int64_base(char* data, int64_t length, int64_t base);
 double str_to_float64(std::string* str);
 float str_to_float32(std::string* str);
 int64_t get_str_len(std::string* str);
@@ -120,6 +121,8 @@ PyMODINIT_FUNC PyInit_hstr_ext(void) {
 
     PyObject_SetAttrString(m, "str_to_int64",
                            PyLong_FromVoidPtr((void*)(&str_to_int64)));
+    PyObject_SetAttrString(m, "str_to_int64_base",
+                           PyLong_FromVoidPtr((void*)(&str_to_int64_base)));
     PyObject_SetAttrString(m, "str_to_float64",
                            PyLong_FromVoidPtr((void*)(&str_to_float64)));
     PyObject_SetAttrString(m, "str_to_float32",
@@ -402,7 +405,17 @@ int str_arr_to_float64(double* out, uint32_t* offsets, char* data,
     return -1;
 }
 
-int64_t str_to_int64(char* data, int64_t base) {
+int64_t str_to_int64(char* data, int64_t length) {
+    try {
+        return boost::lexical_cast<int64_t>(data, (std::size_t)length);
+    } catch (const boost::bad_lexical_cast&) {
+        std::cerr << "invalid string to int conversion" << std::endl;
+        return -1;
+    }
+    return -1;
+}
+
+int64_t str_to_int64_base(char* data, int64_t length, int64_t base) {
     /* Influenced by stack overflow: 
        https://stackoverflow.com/questions/194465/how-to-parse-a-string-to-an-int-in-c
        Base is at most 36 per strtlon requirements.
@@ -411,12 +424,21 @@ int64_t str_to_int64(char* data, int64_t base) {
     char *end;
     int64_t l;
     errno = 0;
+    char* buffer = (char *) malloc(length + 1);
+    if (!buffer) {
+        std::cerr << "Failed to allocate space for string to int conversion" << std::endl;
+        return -1;
+    }
+    buffer[length] = '\0';
+    strncpy(buffer, data, length);
     // This assumes data is null terminated. Is that safe?
-    l = strtol(data, &end, base);
-    if (errno || *data == '\0' || *end != '\0') {
+    l = strtol(buffer, &end, base);
+    if (errno || *buffer == '\0' || *end != '\0') {
+        free(buffer);
         std::cerr << "invalid string to int conversion" << std::endl;
         return -1;
     }
+    free(buffer);
     return l;
 }
 
