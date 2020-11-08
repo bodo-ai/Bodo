@@ -492,7 +492,7 @@ class TypingTransforms:
         func_name, func_mod = fdef
 
         if func_mod == "pandas":
-            return self._run_call_pd_top_level(assign, rhs, func_name)
+            return self._run_call_pd_top_level(assign, rhs, func_name, label)
 
         # handle df.method() calls
         if isinstance(func_mod, ir.Var) and isinstance(
@@ -510,7 +510,7 @@ class TypingTransforms:
         if isinstance(func_mod, ir.Var) and isinstance(
             self._get_method_obj_type(func_mod, rhs.func), DataFrameGroupByType
         ):
-            return self._run_call_df_groupby(assign, rhs, func_mod, func_name)
+            return self._run_call_df_groupby(assign, rhs, func_mod, func_name, label)
 
         return [assign]
 
@@ -571,7 +571,7 @@ class TypingTransforms:
 
         if func_name in df_call_const_args:
             func_args = df_call_const_args[func_name]
-            nodes += self._replace_arg_with_literal(func_name, rhs, func_args)
+            nodes += self._replace_arg_with_literal(func_name, rhs, func_args, label)
 
         # transform df.assign() here since (**kwargs) is not supported in overload
         if func_name == "assign":
@@ -640,7 +640,7 @@ class TypingTransforms:
         )
         return compile_func_single_block(impl, [df_var] + list(kws.values()), lhs, self)
 
-    def _run_call_df_groupby(self, assign, rhs, groupby_var, func_name):
+    def _run_call_df_groupby(self, assign, rhs, groupby_var, func_name, label):
         """Handle dataframe groupby calls that need transformation to meet Bodo
         requirements
         """
@@ -654,7 +654,7 @@ class TypingTransforms:
 
         if func_name in groupby_call_const_args:
             func_args = groupby_call_const_args[func_name]
-            nodes += self._replace_arg_with_literal(func_name, rhs, func_args)
+            nodes += self._replace_arg_with_literal(func_name, rhs, func_args, label)
 
         return nodes + [assign]
 
@@ -668,7 +668,7 @@ class TypingTransforms:
 
         return nodes + [assign]
 
-    def _run_call_pd_top_level(self, assign, rhs, func_name):
+    def _run_call_pd_top_level(self, assign, rhs, func_name, label):
         """transform top-level pandas functions"""
         nodes = []
 
@@ -702,7 +702,7 @@ class TypingTransforms:
 
         if func_name in top_level_call_const_args:
             func_args = top_level_call_const_args[func_name]
-            nodes += self._replace_arg_with_literal(func_name, rhs, func_args)
+            nodes += self._replace_arg_with_literal(func_name, rhs, func_args, label)
 
         # convert const list to tuple for better optimization
         if func_name == "concat":
@@ -913,7 +913,7 @@ class TypingTransforms:
         if func_var.name in self.typemap:
             return self.typemap[func_var.name].this
 
-    def _replace_arg_with_literal(self, func_name, rhs, func_args):
+    def _replace_arg_with_literal(self, func_name, rhs, func_args, label):
         """replace a function argument that needs to be constant with a literal to
         enable constant access in overload. This may force JIT arguments to be literals
         if needed to satify constant requirements.
@@ -955,6 +955,8 @@ class TypingTransforms:
                     )
                 )
             except GuardException:
+                # save for potential loop unrolling
+                self._require_const[var] = label
                 continue
             # replace argument variable with a new variable holding constant
             new_var = _create_const_var(val, var.name, var.scope, rhs.loc, nodes)
