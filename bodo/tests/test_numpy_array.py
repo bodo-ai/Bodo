@@ -415,3 +415,43 @@ def test_np_setdiff1d(arr_tuple_val, memory_leak_check):
 
     # TODO(Nick): Add parallel test when there is parallel support.
     check_func(impl, (A1, A2), dist_test=False)
+
+
+def test_np_linspace(memory_leak_check):
+    def test_impl(start, stop, num):
+        return np.linspace(start, stop, num=num)
+
+    check_func(test_impl, (0, 1000, 100000))
+    check_func(test_impl, (-2000, -4000, 100000))
+    check_func(test_impl, (-5, 4.5252, 1000))
+
+
+def test_np_linspace_int(memory_leak_check):
+    def test_impl(start, stop, num, dtype):
+        return np.linspace(start, stop, num=num, dtype=dtype)
+
+    check_func(test_impl, (0, 1000, 100000, np.int32))
+    check_func(test_impl, (-2000, -4000, 100000, np.int32))
+    check_func(test_impl, (-5, 4.5252, 1000, np.int32))
+
+
+@pytest.mark.slow
+def test_np_linspace_float(memory_leak_check):
+    def test_impl(start, stop, num, dtype):
+        return np.linspace(start, stop, num=num, dtype=dtype)
+
+    check_func(test_impl, (0, 1000, 100000, np.float32))
+    check_func(test_impl, (-2000, -4000, 100000, np.float32))
+    check_func(test_impl, (-5, 4.5252, 1000, np.float32))
+
+
+@pytest.mark.slow
+def test_np_linspace_kwargs(memory_leak_check):
+    def test_impl(start, stop, num, dtype, endpoint):
+        return np.linspace(
+            start, stop, num=num, dtype=dtype, endpoint=endpoint, retstep=False, axis=0
+        )
+
+    check_func(test_impl, (0, 1000, 100000, np.int64, False))
+    check_func(test_impl, (-2000, -4000, 100000, np.int64, False))
+    check_func(test_impl, (-5, 4.5252, 100000, np.int64, False))

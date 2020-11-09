@@ -1988,3 +1988,58 @@ def calculate_mask_setdiff1d(A1, A2):  # pragma: no cover
     for i in range(len(A2)):
         mask &= A1 != A2[i]
     return mask
+
+
+@overload(np.linspace, inline="always", no_unliteral=True)
+def np_linspace(start, stop, num=50, endpoint=True, retstep=False, dtype=None, axis=0):
+    # This kernel is also supported in Numba but without kwargs. Based on our tests,
+    # whenever any kwargs are passed in this kernel is selected. This kernel also seems to
+    # be selected when only start, stop, and num are included, but that may not be reliable.
+
+    args_dict = {"retstep": retstep, "axis": axis}
+    args_default_dict = {"retstep": False, "axis": 0}
+    check_unsupported_args("np.linspace", args_dict, args_default_dict)
+    # Numpy infers the dtype if one isn't provided. We perform the same check here.
+    # https://github.com/numpy/numpy/blob/92ebe1e9a6aeb47a881a1226b08218175776f9ea/numpy/core/function_base.py#L123
+    if is_overload_none(dtype):
+        # Check start, stop types and compare to float64 type for step
+        _dtype = np.promote_types(
+            np.promote_types(
+                numba.np.numpy_support.as_dtype(start),
+                numba.np.numpy_support.as_dtype(stop),
+            ),
+            numba.np.numpy_support.as_dtype(types.float64),
+        ).type
+    else:
+        _dtype = numba.np.numpy_support.as_dtype(dtype).type
+
+    def impl(
+        start, stop, num=50, endpoint=True, retstep=False, dtype=None, axis=0
+    ):  # pragma: no cover
+        step_size = np_linspace_get_stepsize(start, stop, num, endpoint)
+        numba.parfors.parfor.init_prange()
+        out_arr = np.empty(num, _dtype)
+        for i in numba.parfors.parfor.internal_prange(num):
+            out_arr[i] = _dtype(start + i * step_size)
+        return out_arr
+
+    return impl
+
+
+def np_linspace_get_stepsize(start, stop, num, endpoint):  # pragma: no cover
+    """Helper kernel to keep the if statements from inlining"""
+    return 0
+
+
+@overload(np_linspace_get_stepsize, no_unliteral=True)
+def overload_np_linspace_get_stepsize(start, stop, num, endpoint):
+    def impl(start, stop, num, endpoint):  # pragma: no cover
+        if num < 0:
+            raise ValueError("np.linspace() Num must be >= 0")
+        if endpoint:
+            num -= 1
+        if num > 1:
+            return (stop - start) / num
+        return 0
+
+    return impl
