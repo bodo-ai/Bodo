@@ -2977,6 +2977,13 @@ def test_const_list_inference():
         df["D"] = 4
         return df.groupby("D").sum()
 
+    # groupby in a loop to trigger loop unrolling
+    def impl_unroll(df):
+        s = 0
+        for c in df.columns:
+            s += df.groupby(c).count().iloc[:, 0].max()
+        return s
+
     # make sure const list is not updated inplace
     def impl4(df):
         l = ["A"]
@@ -2995,6 +3002,7 @@ def test_const_list_inference():
     check_func(impl1, (df,), sort_output=True)
     check_func(impl2, (df,), sort_output=True)
     check_func(impl3, (11,), sort_output=True)
+    check_func(impl_unroll, (df,))
     with pytest.raises(
         BodoError,
         match="argument 'by' requires a constant value but variable 'l' is updated inplace using 'append'",
