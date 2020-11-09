@@ -55,6 +55,7 @@ from bodo.utils.typing import (
     is_iterable_type,
     is_overload_constant_int,
     is_overload_constant_str,
+    is_overload_none,
 )
 
 ll.add_symbol("extract_year_days", hdatetime_ext.extract_year_days)
@@ -422,6 +423,65 @@ def overload_pd_timestamp(
             )
 
         return impl_pos
+
+    # Pandas converts to dt64 and then back to a timestamp
+    # https://github.com/pandas-dev/pandas/blob/4aa0783d65dc20dc450ef3f58defda14ebab5f6f/pandas/_libs/tslibs/conversion.pyx#L406
+    if isinstance(ts_input, types.Number):
+        if is_overload_none(unit):
+            unit = "ns"
+        if not is_overload_constant_str(unit):
+            raise BodoError("pd.Timedelta(): unit argument must be a constant str")
+        unit = pd._libs.tslibs.timedeltas.parse_timedelta_unit(
+            get_overload_const_str(unit)
+        )
+        nanoseconds, precision = pd._libs.tslibs.conversion.precision_from_unit(unit)
+        if isinstance(ts_input, types.Integer):
+
+            def impl_int(
+                ts_input=_no_input,
+                freq=None,
+                tz=None,
+                unit=None,
+                year=None,
+                month=None,
+                day=None,
+                hour=None,
+                minute=None,
+                second=None,
+                microsecond=None,
+                nanosecond=None,
+                tzinfo=None,
+            ):  # pragma: no cover
+                # Create nanosecond value for dt64
+                value = ts_input * nanoseconds
+                return convert_datetime64_to_timestamp(integer_to_dt64(value))
+
+            return impl_int
+
+        def impl_float(
+            ts_input=_no_input,
+            freq=None,
+            tz=None,
+            unit=None,
+            year=None,
+            month=None,
+            day=None,
+            hour=None,
+            minute=None,
+            second=None,
+            microsecond=None,
+            nanosecond=None,
+            tzinfo=None,
+        ):  # pragma: no cover
+            # Create nanosecond value for td64
+            base = np.int64(ts_input)
+            frac = ts_input - base
+            if precision:
+                frac = np.round(frac, precision)
+            value = base * nanoseconds + np.int64(frac * nanoseconds)
+            return convert_datetime64_to_timestamp(integer_to_dt64(value))
+
+        return impl_float
 
     # parse string input
     if ts_input == bodo.string_type or is_overload_constant_str(ts_input):

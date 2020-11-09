@@ -184,6 +184,8 @@ which are supported by Bodo.
     - ``df.col.apply(lambda x,d : ("{:,." + str(d) + "f}").format(np.round(x, d)), d=d)``
   * - :func:`pyspark.sql.functions.format_string`
     - ``df.col.apply(lambda x, format_str : format_str.format(x), format_str=format_str)``
+  * - :func:`pyspark.sql.functions.from_unixtime`
+    - ``df.col.map(lambda x: pd.Timestamp(x, 's')).dt.strftime(format_str)``
   * - :func:`pyspark.sql.functions.hash`
     - ``df.col.map(lambda x: hash(x))``
   * - :func:`pyspark.sql.functions.hour`

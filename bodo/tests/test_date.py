@@ -1282,6 +1282,70 @@ def test_timestamp_constructors(memory_leak_check):
     check_func(test_constructor_input, (dt_dt,))
 
 
+@pytest.mark.parametrize(
+    "time_num",
+    [
+        10210420,
+        10210420.0,
+    ],
+)
+def test_timestamp_number(time_num, memory_leak_check):
+    def test_impl(time_num):
+        return pd.Timestamp(time_num)
+
+    check_func(test_impl, (10210420,))
+
+
+def test_timestamp_unit_constructor_error(memory_leak_check):
+    def test_impl(time_int, unit):
+        return pd.Timestamp(time_int, unit=unit)
+
+    unit = "s"
+    with pytest.raises(
+        BodoError, match=r"pd\.Timedelta\(\): unit argument must be a constant str"
+    ):
+        bodo.jit(test_impl)(10210420, unit)
+
+
+@pytest.mark.slow
+def test_timestamp_number_constructor_units(memory_leak_check):
+    def test_impl1(time_val):
+        return pd.Timestamp(time_val, unit="ns")
+
+    def test_impl2(time_val):
+        return pd.Timestamp(time_val, unit="us")
+
+    def test_impl3(time_val):
+        return pd.Timestamp(time_val, unit="ms")
+
+    def test_impl4(time_val):
+        return pd.Timestamp(time_val, unit="s")
+
+    def test_impl5(time_val):
+        return pd.Timestamp(time_val, unit="m")
+
+    def test_impl6(time_val):
+        return pd.Timestamp(time_val, unit="h")
+
+    def test_impl7(time_val):
+        return pd.Timestamp(time_val, unit="D")
+
+    check_func(test_impl1, (10210420,))
+    check_func(test_impl2, (10210420,))
+    check_func(test_impl3, (10210420,))
+    check_func(test_impl4, (10210420,))
+    check_func(test_impl5, (10210420,))
+    check_func(test_impl6, (102420,))
+    check_func(test_impl7, (1020,))
+    check_func(test_impl1, (10210420.0,))
+    check_func(test_impl2, (1021042.20,))
+    check_func(test_impl3, (1021032.420,))
+    check_func(test_impl4, (102121.0420,))
+    check_func(test_impl5, (121210.210420,))
+    check_func(test_impl6, (1024.202020,))
+    check_func(test_impl7, (1020.678,))
+
+
 def test_pd_to_datetime(memory_leak_check):
     """Test pd.to_datetime on Bodo"""
 

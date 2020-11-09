@@ -39,6 +39,18 @@ def test_add_months(dataframe_val, memory_leak_check):
     check_func(test_impl, (dataframe_val, -2))
 
 
+def test_from_unixtime(memory_leak_check):
+    def test_impl(S, format_str):
+        return S.map(lambda x: pd.Timestamp(x, "s")).dt.strftime(format_str)
+
+    S = (
+        pd.date_range(start="1/1/2018", end="1/08/2018", freq="h")
+        .to_series()
+        .map(lambda x: int(x.value / (1000 * 1000 * 1000)))
+    )
+    check_func(test_impl, (S, "%B %d, %Y, %r"))
+
+
 def test_last_day(dataframe_val, memory_leak_check):
     def test_impl(df):
         return df.A.map(lambda x: x + pd.tseries.offsets.MonthEnd())
