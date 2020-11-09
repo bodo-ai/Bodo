@@ -2614,11 +2614,17 @@ def test_loc_col_select(memory_leak_check):
     def impl3(df):
         return df.loc[:, df.columns != "B"]
 
+    def impl4(n):
+        df = pd.DataFrame({"A": np.ones(n), "B": np.arange(n), "C": np.ones(n)})
+        df.columns = ["AB", "CD", "EF"]
+        return df.loc[:, ["AB", "EF"]]
+
     n = 11
     df = pd.DataFrame({"A": np.arange(n), "B": np.arange(n) ** 2, "C": np.ones(n)})
     check_func(impl1, (df,))
     check_func(impl2, (df,))
     check_func(impl3, (df,))
+    check_func(impl4, (n,))
 
 
 def test_iat_setitem():

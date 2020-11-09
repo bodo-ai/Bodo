@@ -7,6 +7,7 @@ import itertools
 import operator
 
 import numba
+import numpy as np
 import pandas as pd
 from numba.core import ir, ir_utils, types
 from numba.core.compiler_machinery import register_pass
@@ -365,6 +366,16 @@ class TypingTransforms:
                 )
             except GuardException:
                 # couldn't find values, just return to be handled later
+                nodes.append(assign)
+                return nodes
+
+            # avoid transform if selected columns not all in dataframe schema
+            # may require schema change, see test_loc_col_select (impl4)
+            if (
+                len(val) > 0
+                and not isinstance(val[0], (bool, np.bool_))
+                and not all(c in target_typ.df_type.columns for c in val)
+            ):
                 nodes.append(assign)
                 return nodes
 
