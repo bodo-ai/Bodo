@@ -228,6 +228,7 @@ ArrayBuildInfo nested_array_from_c(const int* types, const uint8_t** buffers,
 array_info* nested_array_to_info(int* types, const uint8_t** buffers,
                                  int64_t* lengths, char** field_names,
                                  NRT_MemInfo* meminfo) {
+    try{
     int type_pos = 0;
     int buf_pos = 0;
     int length_pos = 0;
@@ -239,6 +240,10 @@ array_info* nested_array_to_info(int* types, const uint8_t** buffers,
     return new array_info(bodo_array_type::ARROW, Bodo_CTypes::INT8 /*dummy*/,
                           lengths[0], -1, -1, NULL, NULL, NULL, NULL, NULL,
                           meminfo, NULL, ai.array);
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return NULL;
+    }
 }
 
 array_info* list_string_array_to_info(NRT_MemInfo* meminfo) {
@@ -316,9 +321,7 @@ array_info* decimal_array_to_info(uint64_t n_items, char* data, int typ_enum,
 void info_to_list_string_array(array_info* info,
                                NRT_MemInfo** array_item_meminfo) {
     if (info->arr_type != bodo_array_type::LIST_STRING) {
-        Bodo_PyErr_SetString(
-            PyExc_RuntimeError,
-            "info_to_list_string_array requires list string input");
+        PyErr_SetString(PyExc_RuntimeError, "_array.cpp::info_to_list_string_array: info_to_list_string_array requires list string input.");
         return;
     }
 
@@ -327,15 +330,19 @@ void info_to_list_string_array(array_info* info,
 
 void info_to_nested_array(array_info* info, int64_t* lengths,
                           array_info** out_infos) {
+    try {
     int64_t lengths_pos = 0;
     int64_t infos_pos = 0;
     nested_array_to_c(info->array, lengths, out_infos, lengths_pos, infos_pos);
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return;
+    }
 }
 
 void info_to_string_array(array_info* info, NRT_MemInfo** meminfo) {
     if (info->arr_type != bodo_array_type::STRING) {
-        Bodo_PyErr_SetString(PyExc_RuntimeError,
-                             "info_to_string_array requires string input");
+        PyErr_SetString(PyExc_RuntimeError,"_array.cpp::info_to_string_array: info_to_string_array requires string input.");
         return;
     }
     *meminfo = info->meminfo;
@@ -345,8 +352,8 @@ void info_to_numpy_array(array_info* info, uint64_t* n_items, char** data,
                          NRT_MemInfo** meminfo) {
     if ((info->arr_type != bodo_array_type::NUMPY) &&
         (info->arr_type != bodo_array_type::CATEGORICAL)) {
-        Bodo_PyErr_SetString(PyExc_RuntimeError,
-                             "info_to_numpy_array requires numpy input");
+        // TODO: print array type in the error
+        PyErr_SetString(PyExc_RuntimeError, "_array.cpp::info_to_numpy_array: info_to_numpy_array requires numpy input.");
         return;
     }
     *n_items = info->length;
@@ -359,8 +366,7 @@ void info_to_nullable_array(array_info* info, uint64_t* n_items,
                             NRT_MemInfo** meminfo,
                             NRT_MemInfo** meminfo_bitmask) {
     if (info->arr_type != bodo_array_type::NULLABLE_INT_BOOL) {
-        Bodo_PyErr_SetString(PyExc_RuntimeError,
-                             "info_to_nullable_array requires nullable input");
+        PyErr_SetString(PyExc_RuntimeError, "_array.cpp::info_to_nullable_array: info_to_nullable_array requires nullable input");
         return;
     }
     *n_items = info->length;
@@ -1208,16 +1214,21 @@ PyMODINIT_FUNC PyInit_array_ext(void) {
         PyLong_FromVoidPtr((void*)(&list_string_array_to_info)));
     PyObject_SetAttrString(m, "nested_array_to_info",
                            PyLong_FromVoidPtr((void*)(&nested_array_to_info)));
+    // Not covered by error handler
     PyObject_SetAttrString(m, "string_array_to_info",
                            PyLong_FromVoidPtr((void*)(&string_array_to_info)));
+    // Not covered by error handler
     PyObject_SetAttrString(m, "numpy_array_to_info",
                            PyLong_FromVoidPtr((void*)(&numpy_array_to_info)));
+    // Not covered by error handler
     PyObject_SetAttrString(
         m, "categorical_array_to_info",
         PyLong_FromVoidPtr((void*)(&categorical_array_to_info)));
+    // Not covered by error handler
     PyObject_SetAttrString(
         m, "nullable_array_to_info",
         PyLong_FromVoidPtr((void*)(&nullable_array_to_info)));
+    // Not covered by error handler
     PyObject_SetAttrString(m, "decimal_array_to_info",
                            PyLong_FromVoidPtr((void*)(&decimal_array_to_info)));
     PyObject_SetAttrString(m, "info_to_string_array",
@@ -1239,21 +1250,25 @@ PyMODINIT_FUNC PyInit_array_ext(void) {
     PyObject_SetAttrString(
         m, "arr_info_list_to_table",
         PyLong_FromVoidPtr((void*)(&arr_info_list_to_table)));
+    // Not covered by error handler
     PyObject_SetAttrString(m, "info_from_table",
                            PyLong_FromVoidPtr((void*)(&info_from_table)));
+    // Not covered by error handler
     PyObject_SetAttrString(
         m, "delete_info_decref_array",
         PyLong_FromVoidPtr((void*)(&delete_info_decref_array)));
+    // Not covered by error handler
     PyObject_SetAttrString(
         m, "delete_table_decref_arrays",
         PyLong_FromVoidPtr((void*)(&delete_table_decref_arrays)));
+    // Not covered by error handler
     PyObject_SetAttrString(m, "delete_table",
                            PyLong_FromVoidPtr((void*)(&delete_table)));
     PyObject_SetAttrString(m, "shuffle_table",
-                           PyLong_FromVoidPtr((void*)(&shuffle_table)));
+                           PyLong_FromVoidPtr((void*)(&shuffle_table_py_entrypt)));
     PyObject_SetAttrString(
         m, "shuffle_renormalization",
-        PyLong_FromVoidPtr((void*)(&shuffle_renormalization)));
+        PyLong_FromVoidPtr((void*)(&shuffle_renormalization_py_entrypt)));
     PyObject_SetAttrString(
         m, "shuffle_renormalization_group",
         PyLong_FromVoidPtr((void*)(&shuffle_renormalization_group)));

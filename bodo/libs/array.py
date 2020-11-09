@@ -54,7 +54,11 @@ from bodo.libs.struct_arr_ext import (
 )
 from bodo.libs.tuple_arr_ext import TupleArrayType, init_tuple_arr
 from bodo.utils.transform import get_type_alloc_counts
-from bodo.utils.utils import CTypeEnum, numba_to_c_type
+from bodo.utils.utils import (
+    CTypeEnum,
+    check_and_propagate_cpp_exception,
+    numba_to_c_type,
+)
 
 ll.add_symbol("list_string_array_to_info", array_ext.list_string_array_to_info)
 ll.add_symbol("nested_array_to_info", array_ext.nested_array_to_info)
@@ -380,7 +384,7 @@ def array_to_info(typingctx, arr_type_t=None):
             fn_tp = builder.module.get_or_insert_function(
                 fnty, name="nested_array_to_info"
             )
-            return builder.call(
+            ret = builder.call(
                 fn_tp,
                 [
                     builder.bitcast(types_array_ptr, lir.IntType(32).as_pointer()),
@@ -392,6 +396,10 @@ def array_to_info(typingctx, arr_type_t=None):
                     nested_array.meminfo,
                 ],
             )
+            context.compile_internal(
+                builder, lambda: check_and_propagate_cpp_exception(), types.none(), []
+            )  # pragma: no cover
+            return ret
 
         # StringArray
         if arr_type == string_array_type:
@@ -622,6 +630,9 @@ def _lower_info_to_array_numpy(arr_type, context, builder, in_info):
     )  # meminfo
     fn_tp = builder.module.get_or_insert_function(fnty, name="info_to_numpy_array")
     builder.call(fn_tp, [in_info, length_ptr, data_ptr, meminfo_ptr])
+    context.compile_internal(
+        builder, lambda: check_and_propagate_cpp_exception(), types.none(), []
+    )  # pragma: no cover
 
     intp_t = context.get_value_type(types.intp)
     shape_array = cgutils.pack_array(builder, [builder.load(length_ptr)], ty=intp_t)
@@ -666,6 +677,9 @@ def _lower_info_to_array_list_string_array(arr_type, context, builder, in_info):
             array_item_array_from_cpp._get_ptr_by_name("meminfo"),
         ],
     )
+    context.compile_internal(
+        builder, lambda: check_and_propagate_cpp_exception(), types.none(), []
+    )  # pragma: no cover
 
     return array_item_array_from_cpp._getvalue()
 
@@ -833,6 +847,9 @@ def nested_to_array(
                 array_item_array._get_ptr_by_name("meminfo"),
             ],
         )
+        context.compile_internal(
+            builder, lambda: check_and_propagate_cpp_exception(), types.none(), []
+        )  # pragma: no cover
         string_array.data = array_item_array._getvalue()
         return string_array._getvalue(), lengths_pos + 1, infos_pos + 2
 
@@ -993,6 +1010,9 @@ def info_to_array(typingctx, info_type, array_type):
                     ),
                 ],
             )
+            context.compile_internal(
+                builder, lambda: check_and_propagate_cpp_exception(), types.none(), []
+            )  # pragma: no cover
 
             # generate code recursively to construct nested arrays from buffers
             # returned from C++
@@ -1030,6 +1050,9 @@ def info_to_array(typingctx, info_type, array_type):
                     array_item_array._get_ptr_by_name("meminfo"),
                 ],
             )
+            context.compile_internal(
+                builder, lambda: check_and_propagate_cpp_exception(), types.none(), []
+            )  # pragma: no cover
             string_array.data = array_item_array._getvalue()
             return string_array._getvalue()
 
@@ -1104,6 +1127,9 @@ def info_to_array(typingctx, info_type, array_type):
                     meminfo_nulls_ptr,
                 ],
             )
+            context.compile_internal(
+                builder, lambda: check_and_propagate_cpp_exception(), types.none(), []
+            )  # pragma: no cover
 
             intp_t = context.get_value_type(types.intp)
 
@@ -1255,19 +1281,24 @@ def delete_table(typingctx, table_t=None):
     return types.void(table_t), codegen
 
 
+# TODO Add a test for this
 @intrinsic
-def shuffle_table(typingctx, table_t, n_keys_t):
+def shuffle_table(typingctx, table_t, n_keys_t):  # pragma: no cover
     """shuffle input table so that rows with same key are on the same process.
     Steals a reference from the input table.
     """
     assert table_t == table_type
 
-    def codegen(context, builder, sig, args):
+    def codegen(context, builder, sig, args):  # pragma: no cover
         fnty = lir.FunctionType(
             lir.IntType(8).as_pointer(), [lir.IntType(8).as_pointer(), lir.IntType(64)]
         )
         fn_tp = builder.module.get_or_insert_function(fnty, name="shuffle_table")
-        return builder.call(fn_tp, args)
+        ret = builder.call(fn_tp, args)
+        context.compile_internal(
+            builder, lambda: check_and_propagate_cpp_exception(), types.none(), []
+        )  # pragma: no cover
+        return ret
 
     return table_type(table_t, types.int64), codegen
 
@@ -1428,7 +1459,11 @@ def shuffle_renormalization(typingctx, table_t, is_parallel_t):
         fn_tp = builder.module.get_or_insert_function(
             fnty, name="shuffle_renormalization"
         )
-        return builder.call(fn_tp, args)
+        ret = builder.call(fn_tp, args)
+        context.compile_internal(
+            builder, lambda: check_and_propagate_cpp_exception(), types.none(), []
+        )  # pragma: no cover
+        return ret
 
     return (
         table_type(table_t, types.boolean),
@@ -1530,9 +1565,9 @@ def pivot_groupby_and_aggregate(
                 lir.IntType(8).as_pointer(),
                 lir.IntType(8).as_pointer(),
                 lir.IntType(1),
-                lir.IntType(64),
-                lir.IntType(64),
-                lir.IntType(64),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
                 lir.IntType(1),
                 lir.IntType(1),
                 lir.IntType(1),
@@ -1556,9 +1591,9 @@ def pivot_groupby_and_aggregate(
             table_t,
             table_t,
             types.boolean,
-            types.intp,
-            types.intp,
-            types.intp,
+            types.voidptr,
+            types.voidptr,
+            types.voidptr,
             types.boolean,
             types.boolean,
             types.boolean,
@@ -1606,9 +1641,9 @@ def groupby_and_aggregate(
                 lir.IntType(8).as_pointer(),
                 lir.IntType(64),
                 lir.IntType(1),
-                lir.IntType(64),
-                lir.IntType(64),
-                lir.IntType(64),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
                 lir.IntType(1),
                 lir.IntType(1),
                 lir.IntType(1),
@@ -1630,9 +1665,9 @@ def groupby_and_aggregate(
             table_t,
             types.int64,
             types.boolean,
-            types.intp,
-            types.intp,
-            types.intp,
+            types.voidptr,
+            types.voidptr,
+            types.voidptr,
             types.boolean,
             types.boolean,
             types.boolean,

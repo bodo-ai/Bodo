@@ -1854,7 +1854,7 @@ def gen_top_level_agg_func(
         func_text += "    dispatch_table = arr_info_list_to_table([arr_info])\n"
         func_text += "    pivot_info = array_to_info(pivot_arr)\n"
         func_text += "    dispatch_info = arr_info_list_to_table([pivot_info])\n"
-        func_text += "    out_table = pivot_groupby_and_aggregate(table, {}, dispatch_table, dispatch_info, {}," " ftypes.ctypes.data, func_offsets.ctypes.data, udf_ncols.ctypes.data, {}, {}, {}, {}, {}, cpp_cb_update_addr, cpp_cb_combine_addr, cpp_cb_eval_addr, udf_table_dummy)\n".format(
+        func_text += "    out_table = pivot_groupby_and_aggregate(table, {}, dispatch_table, dispatch_info, {}," " ftypes.ctypes, func_offsets.ctypes, udf_ncols.ctypes, {}, {}, {}, {}, {}, cpp_cb_update_addr, cpp_cb_combine_addr, cpp_cb_eval_addr, udf_table_dummy)\n".format(
             n_keys,
             input_has_index,
             parallel,
@@ -1866,7 +1866,7 @@ def gen_top_level_agg_func(
         func_text += "    delete_info_decref_array(pivot_info)\n"
         func_text += "    delete_info_decref_array(arr_info)\n"
     else:
-        func_text += "    out_table = groupby_and_aggregate(table, {}, {}," " ftypes.ctypes.data, func_offsets.ctypes.data, udf_ncols.ctypes.data, {}, {}, {}, {}, cpp_cb_update_addr, cpp_cb_combine_addr, cpp_cb_eval_addr, cpp_cb_general_addr, udf_table_dummy)\n".format(
+        func_text += "    out_table = groupby_and_aggregate(table, {}, {}," " ftypes.ctypes, func_offsets.ctypes, udf_ncols.ctypes, {}, {}, {}, {}, cpp_cb_update_addr, cpp_cb_combine_addr, cpp_cb_eval_addr, cpp_cb_general_addr, udf_table_dummy)\n".format(
             n_keys,
             input_has_index,
             parallel,

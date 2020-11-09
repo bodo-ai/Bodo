@@ -46,6 +46,8 @@ struct mpi_comm_info {
  */
 table_info* shuffle_table(table_info* in_table, int64_t n_keys);
 
+table_info* shuffle_table_py_entrypt(table_info* in_table, int64_t n_keys);
+
 /** Shuffling a table from all nodes to all the other nodes.
  *  obtained by hashes. For different tables, hashes have to be coherent
  *
@@ -144,6 +146,9 @@ bool need_reshuffling(table_info* in_table, double crit_fraction);
    @return the reshuffled table
  */
 table_info* shuffle_renormalization(table_info* in_table, bool parallel);
+
+table_info* shuffle_renormalization_py_entrypt(table_info* in_table,
+                                               bool parallel);
 
 /* Apply a renormalization shuffling getting data from all the ranks
    and sending to only a given subset of ranks.

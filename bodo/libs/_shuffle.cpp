@@ -1315,6 +1315,15 @@ table_info* shuffle_table(table_info* in_table, int64_t n_keys) {
     return table;
 }
 
+table_info* shuffle_table_py_entrypt(table_info* in_table, int64_t n_keys) {
+    try {
+        return shuffle_table(in_table, n_keys);
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return NULL;
+    }
+}
+
 table_info* coherent_shuffle_table(table_info* in_table, table_info* ref_table,
                                    int64_t n_keys) {
     // error checking
@@ -2317,4 +2326,14 @@ table_info* shuffle_renormalization_group(table_info* in_table, bool parallel, i
 table_info* shuffle_renormalization(table_info* in_table, bool parallel) {
     if (!parallel) return in_table;
     return shuffle_renormalization_group(in_table, true, 0, nullptr);
+}
+
+table_info* shuffle_renormalization_py_entrypt(table_info* in_table,
+                                               bool parallel) {
+    try {
+        return shuffle_renormalization(in_table, parallel);
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return NULL;
+    }
 }
