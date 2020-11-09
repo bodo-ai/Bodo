@@ -416,6 +416,7 @@ class DistributedPass:
                     bodo.libs.sklearn_ext.BodoLogisticRegressionType,
                     bodo.libs.sklearn_ext.BodoLinearRegressionType,
                     bodo.libs.sklearn_ext.BodoMultinomialNBType,
+                    bodo.libs.sklearn_ext.BodoLinearSVCType,
                 ),
             )
         ):
@@ -435,6 +436,7 @@ class DistributedPass:
                     bodo.libs.sklearn_ext.BodoLogisticRegressionType,
                     bodo.libs.sklearn_ext.BodoLinearRegressionType,
                     bodo.libs.sklearn_ext.BodoMultinomialNBType,
+                    bodo.libs.sklearn_ext.BodoLinearSVCType,
                 ),
             )
         ):

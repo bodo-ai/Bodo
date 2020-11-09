@@ -38,6 +38,16 @@ Methods:
   * :any:`sklearn.linear_model.SGDClassifier.predict`
   * :any:`sklearn.linear_model.SGDClassifier.score`
 
+:class:`sklearn.svm.LinearSVC`
+
+  This class provides Linear Support Vector Classification.
+
+Methods:
+
+  * :any:`sklearn.svm.LinearSVC.fit`
+  * :any:`sklearn.svm.LinearSVC.predict`
+  * :any:`sklearn.svm.LinearSVC.score`
+
 Linear Regressors 
 ~~~~~~~~~~~~~~~~~
 

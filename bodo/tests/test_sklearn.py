@@ -25,6 +25,7 @@ from sklearn.metrics import (
 )
 from sklearn.naive_bayes import MultinomialNB
 from sklearn.preprocessing import StandardScaler
+from sklearn.svm import LinearSVC
 from sklearn.utils._testing import assert_allclose, assert_array_equal
 from sklearn.utils.validation import check_random_state
 
@@ -1003,3 +1004,53 @@ def test_lr_multivariate(memory_leak_check):
     X = np.array([[0, 4, 5], [0, 5, 0], [3, 3, 3], [4, 0, 6], [6, 0, 0]])
     y = np.array([[0, 1, 1], [0, 1, 0], [1, 1, 1], [1, 0, 1], [1, 0, 0]])
     check_func(test_pred, (X, y))  # , only_seq=True)
+
+
+# --------------------Linear SVC -----------------#
+def test_svm_linear_svc(memory_leak_check):
+    """
+    Test LinearSVC
+    """
+    # Toy dataset where features correspond directly to labels.
+    X = iris.data
+    y = iris.target
+    classes = [0, 1, 2]
+
+    def impl_fit(X, y):
+        clf = LinearSVC()
+        clf.fit(X, y)
+        return clf
+
+    clf = bodo.jit(distributed=["X", "y"])(impl_fit)(
+        _get_dist_arg(X),
+        _get_dist_arg(y),
+    )
+    np.testing.assert_array_equal(clf.classes_, classes)
+
+    def impl_pred(X, y):
+        clf = LinearSVC()
+        clf.fit(X, y)
+        y_pred = clf.predict(X)
+        score = precision_score(y, y_pred, average="micro")
+        return score
+
+    bodo_score_result = bodo.jit(distributed=["X", "y"])(impl_pred)(
+        _get_dist_arg(X),
+        _get_dist_arg(y),
+    )
+
+    sklearn_score_result = impl_pred(X, y)
+    np.allclose(sklearn_score_result, bodo_score_result, atol=0.1)
+
+    def impl_score(X, y):
+        clf = LinearSVC()
+        clf.fit(X, y)
+        return clf.score(X, y)
+
+    bodo_score_result = bodo.jit(distributed=["X", "y"])(impl_score)(
+        _get_dist_arg(X),
+        _get_dist_arg(y),
+    )
+
+    sklearn_score_result = impl_score(X, y)
+    np.allclose(sklearn_score_result, bodo_score_result, atol=0.1)

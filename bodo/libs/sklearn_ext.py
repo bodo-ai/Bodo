@@ -8,6 +8,7 @@ import sklearn.cluster
 import sklearn.ensemble
 import sklearn.linear_model
 import sklearn.metrics
+import sklearn.svm
 import sklearn.utils
 from mpi4py import MPI
 from numba.core import types
@@ -1980,4 +1981,159 @@ def overload_linear_regression_score(
     _is_data_distributed=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
 ):
     """Overload Linear Regression score."""
+    return parallel_score(m, X, y, sample_weight, _is_data_distributed)
+
+
+# ------------------------Linear Support Vector Classification-----------------
+# Support sklearn.svm.LinearSVC object mode of Numba
+# -----------------------------------------------------------------------------
+# Typing and overloads to use LinearSVC inside Bodo functions
+# directly via sklearn's API
+
+
+class BodoLinearSVCType(types.Opaque):
+    def __init__(self):
+        super(BodoLinearSVCType, self).__init__(name="BodoLinearSVCType")
+
+
+linear_svc_type = BodoLinearSVCType()
+types.linear_svc_type = linear_svc_type
+
+register_model(BodoLinearSVCType)(models.OpaqueModel)
+
+
+@typeof_impl.register(sklearn.svm.LinearSVC)
+def typeof_linear_svc(val, c):
+    return linear_svc_type
+
+
+@box(BodoLinearSVCType)
+def box_linear_svc(typ, val, c):
+    # See note in box_random_forest_classifier
+    c.pyapi.incref(val)
+    return val
+
+
+@unbox(BodoLinearSVCType)
+def unbox_linear_svc(typ, obj, c):
+    # borrow a reference from Python
+    c.pyapi.incref(obj)
+    return NativeValue(obj)
+
+
+@overload(sklearn.svm.LinearSVC, no_unliteral=True)
+def sklearn_svm_linear_svc_overload(
+    penalty="l2",
+    loss="squared_hinge",
+    dual=True,
+    tol=0.0001,
+    C=1.0,
+    multi_class="ovr",
+    fit_intercept=True,
+    intercept_scaling=1,
+    class_weight=None,
+    verbose=0,
+    random_state=None,
+    max_iter=1000,
+):
+    def _sklearn_svm_linear_svc_impl(
+        penalty="l2",
+        loss="squared_hinge",
+        dual=True,
+        tol=0.0001,
+        C=1.0,
+        multi_class="ovr",
+        fit_intercept=True,
+        intercept_scaling=1,
+        class_weight=None,
+        verbose=0,
+        random_state=None,
+        max_iter=1000,
+    ):  # pragma: no cover
+        with numba.objmode(m="linear_svc_type"):
+            m = sklearn.svm.LinearSVC(
+                penalty=penalty,
+                loss=loss,
+                dual=dual,
+                tol=tol,
+                C=C,
+                multi_class=multi_class,
+                fit_intercept=fit_intercept,
+                intercept_scaling=intercept_scaling,
+                class_weight=class_weight,
+                verbose=verbose,
+                random_state=random_state,
+                max_iter=max_iter,
+            )
+        return m
+
+    return _sklearn_svm_linear_svc_impl
+
+
+@overload_method(BodoLinearSVCType, "fit", no_unliteral=True)
+def overload_linear_svc_fit(
+    m,
+    X,
+    y,
+    sample_weight=None,
+    _is_data_distributed=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
+):
+    """ Linear SVC fit overload """
+    # If data is replicated, run scikit-learn directly
+    if is_overload_false(_is_data_distributed):
+
+        def _svm_linear_svc_fit_impl(
+            m, X, y, sample_weight=None, _is_data_distributed=False
+        ):  # pragma: no cover
+            with numba.objmode():
+                m.fit(X, y, sample_weight)
+            return m
+
+        return _svm_linear_svc_fit_impl
+    else:
+        # Create and run SGDClassifier(loss='log')
+        def _svm_linear_svc_fit_impl(
+            m, X, y, sample_weight=None, _is_data_distributed=False
+        ):  # pragma: no cover
+            if bodo.get_rank() == 0:
+                print(
+                    "WARNING: Data is distributed so Bodo will fit model with SGD solver optimization (SGDClassifier)"
+                )
+            with numba.objmode(clf="sgd_classifier_type"):
+                clf = sklearn.linear_model.SGDClassifier(
+                    loss="hinge",
+                    penalty=m.penalty,
+                    tol=m.tol,
+                    fit_intercept=m.fit_intercept,
+                    class_weight=m.class_weight,
+                    random_state=m.random_state,
+                    max_iter=m.max_iter,
+                    verbose=m.verbose,
+                )
+            clf.fit(X, y, _is_data_distributed=True)
+            with numba.objmode():
+                m.coef_ = clf.coef_
+                m.intercept_ = clf.intercept_
+                m.n_iter_ = clf.n_iter_
+                m.classes_ = clf.classes_
+            return m
+
+        return _svm_linear_svc_fit_impl
+
+
+@overload_method(BodoLinearSVCType, "predict", no_unliteral=True)
+def overload_svm_linear_svc_predict(m, X):
+    """Overload LinearSVC predict. (Data parallelization)"""
+    return parallel_predict(m, X)
+
+
+@overload_method(BodoLinearSVCType, "score", no_unliteral=True)
+def overload_svm_linear_svc_score(
+    m,
+    X,
+    y,
+    sample_weight=None,
+    _is_data_distributed=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
+):
+    """Overload LinearSVC score."""
     return parallel_score(m, X, y, sample_weight, _is_data_distributed)
