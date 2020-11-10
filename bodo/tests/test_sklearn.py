@@ -13,6 +13,7 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import (
     LinearRegression,
     LogisticRegression,
+    Ridge,
     SGDClassifier,
     SGDRegressor,
 )
@@ -521,7 +522,7 @@ def test_sgdc_lr():
 def test_sgdr(penalty):
     """Check SGDRegressor against sklearn
     penalty identifies type of regression
-    None:Linear, l1: Ridge, l2: Lasso"""
+    None:Linear, l2: Ridge, l1: Lasso"""
 
     def impl_predict(X_train, y_train, X_test):
         clf = SGDRegressor(
@@ -1004,6 +1005,75 @@ def test_lr_multivariate(memory_leak_check):
     X = np.array([[0, 4, 5], [0, 5, 0], [3, 3, 3], [4, 0, 6], [6, 0, 0]])
     y = np.array([[0, 1, 1], [0, 1, 0], [1, 1, 1], [1, 0, 1], [1, 0, 0]])
     check_func(test_pred, (X, y))  # , only_seq=True)
+
+
+# --------------------Ridge Regression Tests-----------------#
+def test_ridge_regression():
+    """Test Ridge Regression wrappers"""
+
+    def impl(X_train, y_train, X_test, y_test):
+        clf = Ridge()
+        clf.fit(X_train, y_train)
+        score = clf.score(X_test, y_test)
+        return score
+
+    def impl_pred(X_train, y_train, X_test, y_test):
+        clf = Ridge()
+        clf.fit(X_train, y_train)
+        y_pred = clf.predict(X_test)
+        return y_pred
+
+    splitN = 500
+    n_samples = 10000
+    n_features = 100
+    X_train = None
+    y_train = None
+    X_test = None
+    y_test = None
+    if bodo.get_rank() == 0:
+        X, y = make_regression(
+            n_samples=n_samples,
+            n_features=n_features,
+            n_informative=n_features,
+        )
+        X_train = X[:splitN]
+        y_train = y[:splitN]
+        X_test = X[splitN:]
+        y_test = y[splitN:]
+        scaler = StandardScaler().fit(X_train)
+        X_train = scaler.transform(X_train)
+        X_test = scaler.transform(X_test)
+
+        sklearn_score_result = impl(X_train, y_train, X_test, y_test)
+        sklearn_predict_result = impl_pred(X_train, y_train, X_test, y_test)
+        X_train = bodo.scatterv(X_train)
+        y_train = bodo.scatterv(y_train)
+        X_test = bodo.scatterv(X_test)
+        y_test = bodo.scatterv(y_test)
+    else:
+        X_train = bodo.scatterv(None)
+        y_train = bodo.scatterv(None)
+        X_test = bodo.scatterv(None)
+        y_test = bodo.scatterv(None)
+
+    bodo_score_result = bodo.jit(
+        distributed=["X_train", "y_train", "X_test", "y_test"]
+    )(impl)(X_train, y_train, X_test, y_test)
+    bodo_predict_result = bodo.jit(
+        distributed=["X_train", "y_train", "X_test", "y_test"]
+    )(impl_pred)(X_train, y_train, X_test, y_test)
+    # Can't compare y_pred of bodo vs sklearn
+    # So, we need to use a score metrics. However, current supported scores are
+    # classification metrics only.
+    # Gather output in rank 0. This can go away when r2_score is supported
+    # TODO: return r2_score directly once it's supported.
+    total_predict_result = bodo.gatherv(bodo_predict_result, root=0)
+    total_y_test = bodo.gatherv(y_test, root=0)
+    if bodo.get_rank() == 0:
+        assert np.allclose(sklearn_score_result, bodo_score_result, atol=0.1)
+        b_score = r2_score(total_y_test, total_predict_result)
+        sk_score = r2_score(total_y_test, sklearn_predict_result)
+        assert np.allclose(b_score, sk_score, atol=0.1)
 
 
 # --------------------Linear SVC -----------------#

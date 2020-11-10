@@ -1984,6 +1984,151 @@ def overload_linear_regression_score(
     return parallel_score(m, X, y, sample_weight, _is_data_distributed)
 
 
+# -------------------------------------Ridge Regression--------------------
+# Support sklearn.linear_model.Ridge object mode of Numba
+# -----------------------------------------------------------------------------
+# Typing and overloads to use Ridge inside Bodo functions
+# directly via sklearn's API
+
+
+class BodoRidgeType(types.Opaque):
+    def __init__(self):
+        super(BodoRidgeType, self).__init__(name="BodoRidgeType")
+
+
+ridge_type = BodoRidgeType()
+types.ridge_type = ridge_type
+
+register_model(BodoRidgeType)(models.OpaqueModel)
+
+
+@typeof_impl.register(sklearn.linear_model.Ridge)
+def typeof_ridge(val, c):
+    return ridge_type
+
+
+@box(BodoRidgeType)
+def box_ridge(typ, val, c):
+    # See note in box_random_forest_classifier
+    c.pyapi.incref(val)
+    return val
+
+
+@unbox(BodoRidgeType)
+def unbox_ridge(typ, obj, c):
+    # borrow a reference from Python
+    c.pyapi.incref(obj)
+    return NativeValue(obj)
+
+
+@overload(sklearn.linear_model.Ridge, no_unliteral=True)
+def sklearn_linear_model_ridge_overload(
+    alpha=1.0,
+    fit_intercept=True,
+    normalize=False,
+    copy_X=True,
+    max_iter=None,
+    tol=0.001,
+    solver="auto",
+    random_state=None,
+):
+    def _sklearn_linear_model_ridge_impl(
+        alpha=1.0,
+        fit_intercept=True,
+        normalize=False,
+        copy_X=True,
+        max_iter=None,
+        tol=0.001,
+        solver="auto",
+        random_state=None,
+    ):  # pragma: no cover
+        with numba.objmode(m="ridge_type"):
+            m = sklearn.linear_model.Ridge(
+                alpha=alpha,
+                fit_intercept=fit_intercept,
+                normalize=normalize,
+                copy_X=copy_X,
+                max_iter=max_iter,
+                tol=tol,
+                solver=solver,
+                random_state=random_state,
+            )
+        return m
+
+    return _sklearn_linear_model_ridge_impl
+
+
+@overload_method(BodoRidgeType, "fit", no_unliteral=True)
+def overload_ridge_fit(
+    m,
+    X,
+    y,
+    sample_weight=None,
+    _is_data_distributed=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
+):
+    """ Ridge Regression fit overload """
+    # If data is replicated, run scikit-learn directly
+    if is_overload_false(_is_data_distributed):
+
+        def _ridge_fit_impl(
+            m, X, y, sample_weight=None, _is_data_distributed=False
+        ):  # pragma: no cover
+            with numba.objmode():
+                m.fit(X, y, sample_weight)
+            return m
+
+        return _ridge_fit_impl
+    else:
+        # Create and run SGDRegressor(loss="squared_loss", penalty='l2')
+        def _ridge_fit_impl(
+            m, X, y, sample_weight=None, _is_data_distributed=False
+        ):  # pragma: no cover
+            if bodo.get_rank() == 0:
+                print(
+                    "WARNING: Data is distributed so Bodo will fit model with SGD solver optimization (SGDRegressor)"
+                )
+            with numba.objmode(clf="sgd_regressor_type"):
+                if m.max_iter is None:
+                    max_iter = 1000
+                else:
+                    max_iter = m.max_iter
+                clf = sklearn.linear_model.SGDRegressor(
+                    loss="squared_loss",
+                    penalty="l2",
+                    alpha=0.001,
+                    fit_intercept=m.fit_intercept,
+                    max_iter=max_iter,
+                    tol=m.tol,
+                    random_state=m.random_state,
+                )
+            clf.fit(X, y, _is_data_distributed=True)
+            with numba.objmode():
+                m.coef_ = clf.coef_
+                m.intercept_ = clf.intercept_
+                m.n_iter_ = clf.n_iter_
+            return m
+
+        return _ridge_fit_impl
+
+
+@overload_method(BodoRidgeType, "predict", no_unliteral=True)
+def overload_linear_regression_predict(m, X):
+    """Overload Ridge Regression predict. (Data parallelization)"""
+    return parallel_predict_regression(m, X)
+
+
+@overload_method(BodoRidgeType, "score", no_unliteral=True)
+def overload_linear_regression_score(
+    m,
+    X,
+    y,
+    sample_weight=None,
+    _is_data_distributed=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
+):
+    """Overload Ridge Regression score."""
+    return parallel_score(m, X, y, sample_weight, _is_data_distributed)
+
+
 # ------------------------Linear Support Vector Classification-----------------
 # Support sklearn.svm.LinearSVC object mode of Numba
 # -----------------------------------------------------------------------------
@@ -2078,6 +2223,7 @@ def overload_linear_svc_fit(
     sample_weight=None,
     _is_data_distributed=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
 ):
+
     """ Linear SVC fit overload """
     # If data is replicated, run scikit-learn directly
     if is_overload_false(_is_data_distributed):

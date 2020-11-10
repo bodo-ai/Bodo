@@ -31,7 +31,6 @@ Methods:
     * Supported loss functions ``hinge`` and ``log``.
     * ``early_stopping`` is not supported yet.
 
-
 Methods:
 
   * :any:`sklearn.linear_model.SGDClassifier.fit`
@@ -61,6 +60,16 @@ Methods:
   * :any:`sklearn.linear_model.LinearRegression.fit`
   * :any:`sklearn.linear_model.LinearRegression.predict`
   * :any:`sklearn.linear_model.LinearRegression.score`
+
+:class:`sklearn.linear_model.Ridge`
+
+  This class provides ridge regression support.
+
+Methods:
+
+  * :any:`sklearn.linear_model.Ridge.fit`
+  * :any:`sklearn.linear_model.Ridge.predict`
+  * :any:`sklearn.linear_model.Ridge.score`
 
 :class:`sklearn.linear_model.SGDRegressor`
 
