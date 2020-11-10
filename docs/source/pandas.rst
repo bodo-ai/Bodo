@@ -905,6 +905,7 @@ and addition and subtraction with a scalar `datetime.date`, `datetime.datetime`
 or `pandas.Timestamp`. These can also be mapped across Series or DataFrame of 
 dates using UDFs. The offsets currently supported are:
 
+* :func:`pandas.tseries.offsets.DateOffset`
 * :func:`pandas.tseries.offsets.MonthEnd`
 
 

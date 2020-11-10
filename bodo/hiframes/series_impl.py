@@ -15,7 +15,7 @@ import bodo
 from bodo.hiframes.datetime_datetime_ext import datetime_datetime_type
 from bodo.hiframes.datetime_timedelta_ext import datetime_timedelta_type
 from bodo.hiframes.pd_categorical_ext import CategoricalArray
-from bodo.hiframes.pd_offsets_ext import month_end_type
+from bodo.hiframes.pd_offsets_ext import is_offsets_type
 from bodo.hiframes.pd_series_ext import SeriesType, if_series_to_array_type
 from bodo.hiframes.pd_timestamp_ext import pandas_timestamp_type
 from bodo.libs.array import (
@@ -2362,7 +2362,7 @@ def create_binary_op_overload(op):
         if (
             isinstance(S, SeriesType)
             and S.dtype == types.NPDatetime("ns")
-            and other == month_end_type
+            and is_offsets_type(other)
         ):
 
             def impl_offsets(S, other):  # pragma: no cover
@@ -2390,7 +2390,7 @@ def create_binary_op_overload(op):
 
         if (
             op == operator.add
-            and S == month_end_type
+            and is_offsets_type(S)
             and isinstance(other, SeriesType)
             and other.dtype == types.NPDatetime("ns")
         ):

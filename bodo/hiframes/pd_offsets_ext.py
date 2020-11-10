@@ -35,6 +35,8 @@ from bodo.hiframes.pd_timestamp_ext import (
     pandas_timestamp_type,
 )
 from bodo.libs import hdatetime_ext
+from bodo.utils.indexing import unoptional
+from bodo.utils.typing import is_overload_none
 
 ll.add_symbol("box_date_offset", hdatetime_ext.box_date_offset)
 ll.add_symbol("unbox_date_offset", hdatetime_ext.unbox_date_offset)
@@ -280,9 +282,7 @@ def month_end_sub(lhs, rhs):
     """
     # lhs date/datetime/timestamp and rhs month_end
     if (
-        lhs == datetime_datetime_type
-        or lhs == pandas_timestamp_type
-        or lhs == datetime_date_type
+        lhs in [datetime_datetime_type, pandas_timestamp_type, datetime_date_type]
     ) and rhs == month_end_type:
 
         def impl(lhs, rhs):  # pragma: no cover
@@ -516,6 +516,202 @@ def lower_constant_date_offset(context, builder, ty, pyval):
     return date_offset._getvalue()
 
 
+@overload(pd.tseries.offsets.DateOffset, no_unliteral=True)
+def DateOffset(
+    n=1,
+    normalize=False,
+    years=None,
+    months=None,
+    weeks=None,
+    days=None,
+    hours=None,
+    minutes=None,
+    seconds=None,
+    microseconds=None,
+    nanoseconds=None,
+    year=None,
+    month=None,
+    day=None,
+    weekday=None,
+    hour=None,
+    minute=None,
+    second=None,
+    microsecond=None,
+    nanosecond=None,
+):
+    # has_kws is true if any value that is not n, normalize, nanoseconds, or nanosecond is passed in
+    # Set kws to None to allow checking for if kws were passed in
+    has_kws = False
+    kws_args = [
+        years,
+        months,
+        weeks,
+        days,
+        hours,
+        minutes,
+        seconds,
+        microseconds,
+        year,
+        month,
+        day,
+        weekday,
+        hour,
+        minute,
+        second,
+        microsecond,
+    ]
+    for kws_arg in kws_args:
+        if not is_overload_none(kws_arg):
+            has_kws = True
+            break
+
+    def impl(
+        n=1,
+        normalize=False,
+        years=None,
+        months=None,
+        weeks=None,
+        days=None,
+        hours=None,
+        minutes=None,
+        seconds=None,
+        microseconds=None,
+        nanoseconds=None,
+        year=None,
+        month=None,
+        day=None,
+        weekday=None,
+        hour=None,
+        minute=None,
+        second=None,
+        microsecond=None,
+        nanosecond=None,
+    ):  # pragma: no cover
+        # Convert any none values to default int values
+        years = 0 if years is None else years
+        months = 0 if months is None else months
+        weeks = 0 if weeks is None else weeks
+        days = 0 if days is None else days
+        hours = 0 if hours is None else hours
+        minutes = 0 if minutes is None else minutes
+        seconds = 0 if seconds is None else seconds
+        microseconds = 0 if microseconds is None else microseconds
+        nanoseconds = 0 if nanoseconds is None else nanoseconds
+        year = -1 if year is None else year
+        month = -1 if month is None else month
+        weekday = -1 if weekday is None else weekday
+        day = -1 if day is None else day
+        hour = -1 if hour is None else hour
+        minute = -1 if minute is None else minute
+        second = -1 if second is None else second
+        microsecond = -1 if microsecond is None else microsecond
+        nanosecond = -1 if nanosecond is None else nanosecond
+        return init_date_offset(
+            n,
+            normalize,
+            unoptional(years),
+            unoptional(months),
+            unoptional(weeks),
+            unoptional(days),
+            unoptional(hours),
+            unoptional(minutes),
+            unoptional(seconds),
+            unoptional(microseconds),
+            unoptional(nanoseconds),
+            unoptional(year),
+            unoptional(month),
+            unoptional(day),
+            unoptional(weekday),
+            unoptional(hour),
+            unoptional(minute),
+            unoptional(second),
+            unoptional(microsecond),
+            unoptional(nanosecond),
+            has_kws,
+        )
+
+    return impl
+
+
+@intrinsic
+def init_date_offset(
+    typingctx,
+    n,
+    normalize,
+    years,
+    months,
+    weeks,
+    days,
+    hours,
+    minutes,
+    seconds,
+    microseconds,
+    nanoseconds,
+    year,
+    month,
+    day,
+    weekday,
+    hour,
+    minute,
+    second,
+    microsecond,
+    nanosecond,
+    has_kws,
+):
+    def codegen(context, builder, signature, args):  # pragma: no cover
+        typ = signature.return_type
+        date_offset = cgutils.create_struct_proxy(typ)(context, builder)
+        date_offset.n = args[0]
+        date_offset.normalize = args[1]
+        date_offset.years = args[2]
+        date_offset.months = args[3]
+        date_offset.weeks = args[4]
+        date_offset.days = args[5]
+        date_offset.hours = args[6]
+        date_offset.minutes = args[7]
+        date_offset.seconds = args[8]
+        date_offset.microseconds = args[9]
+        date_offset.nanoseconds = args[10]
+        date_offset.year = args[11]
+        date_offset.month = args[12]
+        date_offset.day = args[13]
+        date_offset.weekday = args[14]
+        date_offset.hour = args[15]
+        date_offset.minute = args[16]
+        date_offset.second = args[17]
+        date_offset.microsecond = args[18]
+        date_offset.nanosecond = args[19]
+        date_offset.has_kws = args[20]
+        return date_offset._getvalue()
+
+    return (
+        DateOffsetType()(
+            n,
+            normalize,
+            years,
+            months,
+            weeks,
+            days,
+            hours,
+            minutes,
+            seconds,
+            microseconds,
+            nanoseconds,
+            year,
+            month,
+            day,
+            weekday,
+            hour,
+            minute,
+            second,
+            microsecond,
+            nanosecond,
+            has_kws,
+        ),
+        codegen,
+    )
+
+
 make_attribute_wrapper(DateOffsetType, "n", "_n")
 make_attribute_wrapper(DateOffsetType, "normalize", "_normalize")
 make_attribute_wrapper(DateOffsetType, "years", "_years")
@@ -540,6 +736,83 @@ make_attribute_wrapper(DateOffsetType, "has_kws", "_has_kws")
 
 
 # Add implementation derived from https://dateutil.readthedocs.io/en/stable/relativedelta.html
+@register_jitable
+def relative_delta_addition(dateoffset, ts):  # pragma: no cover
+    """Performs the general addition performed by relative delta according to the
+    passed in DateOffset
+    """
+    if dateoffset._has_kws:
+        sign = -1 if dateoffset._n < 0 else 1
+        for _ in range(np.abs(dateoffset._n)):
+            year = ts.year
+            month = ts.month
+            day = ts.day
+            hour = ts.hour
+            minute = ts.minute
+            second = ts.second
+            microsecond = ts.microsecond
+            nanosecond = ts.nanosecond
+
+            if dateoffset._year != -1:
+                year = dateoffset._year
+            year += sign * dateoffset._years
+            if dateoffset._month != -1:
+                month = dateoffset._month
+            month += sign * dateoffset._months
+
+            year, month, new_day = calculate_month_end_date(year, month, day, 0)
+            # If the day is out of bounds roll back to a legal date
+            if day > new_day:
+                day = new_day
+
+            # Remaining values can be handled with a timedelta to give the same
+            # effect as happening 1 at a time
+            if dateoffset._day != -1:
+                day = dateoffset._day
+            if dateoffset._hour != -1:
+                hour = dateoffset._hour
+            if dateoffset._minute != -1:
+                minute = dateoffset._minute
+            if dateoffset._second != -1:
+                second = dateoffset._second
+            if dateoffset._microsecond != -1:
+                microsecond = dateoffset._microsecond
+
+            ts = pd.Timestamp(
+                year=year,
+                month=month,
+                day=day,
+                hour=hour,
+                minute=minute,
+                second=second,
+                microsecond=microsecond,
+                nanosecond=nanosecond,
+            )
+
+            # Pandas ignores nanosecond/nanoseconds because it uses relative delta
+            td = pd.Timedelta(
+                days=dateoffset._days + 7 * dateoffset._weeks,
+                hours=dateoffset._hours,
+                minutes=dateoffset._minutes,
+                seconds=dateoffset._seconds,
+                microseconds=dateoffset._microseconds,
+            )
+            if sign == -1:
+                td = -td
+
+            ts = ts + td
+
+            if dateoffset._weekday != -1:
+                # roll foward by determining the difference in day of the week
+                # We only accept labeling a day of the week 0..6
+                curr_weekday = ts.weekday()
+                days_forward = (dateoffset._weekday - curr_weekday) % 7
+                ts = ts + pd.Timedelta(days=days_forward)
+        return ts
+    else:
+        return pd.Timedelta(days=dateoffset._n) + ts
+
+
 @overload(operator.add, no_unliteral=True)
 def date_offset_add_scalar(lhs, rhs):
     """Implement all of the relevant scalar types additions.
@@ -549,88 +822,110 @@ def date_offset_add_scalar(lhs, rhs):
     if lhs == date_offset_type and rhs == pandas_timestamp_type:
 
         def impl(lhs, rhs):  # pragma: no cover
-            if lhs._has_kws:
-                sign = -1 if lhs._n < 0 else 1
-                timestamp = rhs
-
-                # TODO: Move this to a new function
-                for _ in range(np.abs(lhs._n)):
-                    year = timestamp.year
-                    month = timestamp.month
-                    day = timestamp.day
-                    hour = timestamp.hour
-                    minute = timestamp.minute
-                    second = timestamp.second
-                    microsecond = timestamp.microsecond
-                    nanosecond = timestamp.nanosecond
-
-                    if lhs._year != -1:
-                        year = lhs._year
-                    year += sign * lhs._years
-                    if lhs._month != -1:
-                        month = lhs._month
-                    month += sign * lhs._months
-
-                    year, month, new_day = calculate_month_end_date(year, month, day, 0)
-                    # If the day is out of bounds roll back to a legal date
-                    if day > new_day:
-                        day = new_day
-
-                    # Remaining values can be handled with a timedelta to give the same
-                    # effect as happening 1 at a time
-                    if lhs._day != -1:
-                        day = lhs._day
-                    if lhs._hour != -1:
-                        hour = lhs._hour
-                    if lhs._minute != -1:
-                        minute = lhs._minute
-                    if lhs._second != -1:
-                        second = lhs._second
-                    if lhs._microsecond != -1:
-                        microsecond = lhs._microsecond
-
-                    timestamp = pd.Timestamp(
-                        year=year,
-                        month=month,
-                        day=day,
-                        hour=hour,
-                        minute=minute,
-                        second=second,
-                        microsecond=microsecond,
-                        nanosecond=nanosecond,
-                    )
-
-                    # Pandas ignores nanosecond/nanoseconds because it uses relative delta
-                    timedelta = pd.Timedelta(
-                        days=lhs._days + 7 * lhs._weeks,
-                        hours=lhs._hours,
-                        minutes=lhs._minutes,
-                        seconds=lhs._seconds,
-                        microseconds=lhs._microseconds,
-                    )
-                    if sign == -1:
-                        timedelta = -timedelta
-
-                    timestamp = timestamp + timedelta
-
-                    if lhs._weekday != -1:
-                        # roll foward by determining the difference in day of the week
-                        # We only accept labeling a day of the week 0..6
-                        curr_weekday = timestamp.weekday()
-                        days_forward = (lhs._weekday - curr_weekday) % 7
-                        timestamp = timestamp + pd.Timedelta(days=days_forward)
-            else:
-                timestamp = pd.Timedelta(days=lhs._n) + rhs
+            ts = relative_delta_addition(lhs, rhs)
             if lhs._normalize:
-                return timestamp.normalize()
-            return timestamp
+                return ts.normalize()
+            return ts
+
+        return impl
+
+    # rhs is a date or datetime
+    if lhs == date_offset_type and rhs in [datetime_date_type, datetime_datetime_type]:
+
+        def impl(lhs, rhs):  # pragma: no cover
+            ts = relative_delta_addition(lhs, pd.Timestamp(rhs))
+            if lhs._normalize:
+                return ts.normalize()
+            return ts
 
         return impl
 
     # offset is the rhs
-    if lhs in [pandas_timestamp_type] and rhs == date_offset_type:
+    if (
+        lhs in [datetime_datetime_type, pandas_timestamp_type, datetime_date_type]
+        and rhs == date_offset_type
+    ):
 
         def impl(lhs, rhs):  # pragma: no cover
             return rhs + lhs
 
         return impl
+
+
+@overload(operator.sub, no_unliteral=True)
+def month_end_sub(lhs, rhs):
+    """Implement all of the relevant scalar types subtractions.
+    These will be reused to implement arrays.
+    """
+    # lhs date/datetime/timestamp and rhs date_offset
+    if (
+        lhs in [datetime_datetime_type, pandas_timestamp_type, datetime_date_type]
+    ) and rhs == date_offset_type:
+
+        def impl(lhs, rhs):  # pragma: no cover
+            return lhs + -rhs
+
+        return impl
+
+
+@overload(operator.neg, no_unliteral=True)
+def date_offset_neg(lhs):
+    if lhs == date_offset_type:
+
+        def impl(lhs):  # pragma: no cover
+            # Negate only n
+            n = -lhs._n
+            normalize = lhs._normalize
+            nanoseconds = lhs._nanoseconds
+            nanosecond = lhs._nanosecond
+            # Make sure has_kws behavior doesn't change
+            if lhs._has_kws:
+                years = lhs._years
+                months = lhs._months
+                weeks = lhs._weeks
+                days = lhs._days
+                hours = lhs._hours
+                minutes = lhs._minutes
+                seconds = lhs._seconds
+                microseconds = lhs._microseconds
+                year = lhs._year
+                month = lhs._month
+                day = lhs._day
+                weekday = lhs._weekday
+                hour = lhs._hour
+                minute = lhs._minute
+                second = lhs._second
+                microsecond = lhs._microsecond
+                return pd.tseries.offsets.DateOffset(
+                    n,
+                    normalize,
+                    years,
+                    months,
+                    weeks,
+                    days,
+                    hours,
+                    minutes,
+                    seconds,
+                    microseconds,
+                    nanoseconds,
+                    year,
+                    month,
+                    day,
+                    weekday,
+                    hour,
+                    minute,
+                    second,
+                    microsecond,
+                    nanosecond,
+                )
+            else:
+                return pd.tseries.offsets.DateOffset(
+                    n, normalize, nanoseconds=nanoseconds, nanosecond=nanosecond
+                )
+
+        return impl
+
+
+def is_offsets_type(val):
+    """Function containing all the support offset types"""
+    return val in [date_offset_type, month_end_type]

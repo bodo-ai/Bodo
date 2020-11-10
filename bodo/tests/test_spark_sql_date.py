@@ -27,11 +27,35 @@ def dataframe_val(request):
     return request.param
 
 
-@pytest.mark.skip("No Support for DateOffset")
 def test_add_months(dataframe_val, memory_leak_check):
     def test_impl(df, num_months):
         return df.A.apply(
-            lambda x: x + pd.DateOffset(months=num_months), num_months=num_months
+            lambda x, num_months: x + pd.DateOffset(months=num_months),
+            num_months=num_months,
+        )
+
+    check_func(test_impl, (dataframe_val, 3))
+    check_func(test_impl, (dataframe_val, 0))
+    check_func(test_impl, (dataframe_val, -2))
+
+
+def test_date_add(dataframe_val, memory_leak_check):
+    def test_impl(df, num_days):
+        return df.A.apply(
+            lambda x, num_days: x + pd.DateOffset(num_days),
+            num_days=num_days,
+        )
+
+    check_func(test_impl, (dataframe_val, 3))
+    check_func(test_impl, (dataframe_val, 0))
+    check_func(test_impl, (dataframe_val, -2))
+
+
+def test_date_sub(dataframe_val, memory_leak_check):
+    def test_impl(df, num_days):
+        return df.A.apply(
+            lambda x, num_days: x - pd.DateOffset(num_days),
+            num_days=num_days,
         )
 
     check_func(test_impl, (dataframe_val, 3))
@@ -62,7 +86,7 @@ def test_last_day(dataframe_val, memory_leak_check):
 def test_next_day(dataframe_val, memory_leak_check):
     def test_impl(df, dayOfWeek):
         return df.A.apply(
-            lambda x: x + pd.tseries.offsets.Week(0, weekday=dayOfWeek),
+            lambda x, dayOfWeek: x + pd.tseries.offsets.Week(0, weekday=dayOfWeek),
             dayOfWeek=dayOfWeek,
         )
 

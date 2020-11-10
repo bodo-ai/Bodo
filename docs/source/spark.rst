@@ -87,6 +87,8 @@ which are supported by Bodo.
     - ``df.col.abs()``
   * - :func:`pyspark.sql.functions.acos`
     - ``np.arccos(df.col)``
+  * - :func:`pyspark.sql.functions.add_months`
+    - ``df.col + pd.DateOffset(months=num_months)``
   * - :func:`pyspark.sql.functions.approx_count_distinct`
     - ``df.col.nunique()``
   * - :func:`pyspark.sql.functions.array_distinct`
@@ -152,8 +154,12 @@ which are supported by Bodo.
     - ``datetime.datetime.now().date()``
   * - :func:`pyspark.sql.functions.current_timestamp`
     - ``datetime.datetime.now()``
+  * - :func:`pyspark.sql.functions.date_add`
+    - ``df.col + pd.tseries.offsets.DateOffset(num_days)``
   * - :func:`pyspark.sql.functions.date_format`
     - ``df.col.dt.strftime(format_str)``
+  * - :func:`pyspark.sql.functions.date_sub`
+    - ``df.col - pd.tseries.offsets.DateOffset(num_days)``
   * - :func:`pyspark.sql.functions.date_trunc`
     - | For frequencies day and below ``df.col.dt.floor(freq=trunc_val)``
       | For month: ``df.col.map(lambda x: pd.Timestamp(year=x.year, month=x.month, day=1))``

@@ -526,6 +526,52 @@ def test_date_offset_boxing(date_offset_value, memory_leak_check):
     assert timestamp_val + py_output == timestamp_val + bodo_output
 
 
+def test_date_offset_constructor(memory_leak_check):
+    # Objects won't match exactly, so test boxing by checking that addition in Python
+    # has the same result
+    def test_impl1(n, normalize, years, year):
+        return pd.tseries.offsets.DateOffset(n, normalize, years=years, year=year)
+
+    def test_impl2(years, year):
+        return pd.tseries.offsets.DateOffset(years=years, year=year)
+
+    def test_impl3(n, nanosecond, nanoseconds):
+        return pd.tseries.offsets.DateOffset(
+            n, nanosecond=nanosecond, nanoseconds=nanoseconds
+        )
+
+    def test_impl4(normalize, year):
+        return pd.tseries.offsets.DateOffset(normalize=normalize, year=year)
+
+    def test_impl5(n, years):
+        return pd.tseries.offsets.DateOffset(n, years=years)
+
+    py_outputs = []
+    bodo_outputs = []
+    py_outputs.append(test_impl1(1, False, 5, 2000))
+    bodo_outputs.append(bodo.jit(test_impl1)(1, False, 5, 2000))
+    py_outputs.append(test_impl2(-1, 2018))
+    bodo_outputs.append(bodo.jit(test_impl2)(-1, 2018))
+    py_outputs.append(test_impl3(0, 969, -922))
+    bodo_outputs.append(bodo.jit(test_impl3)(0, 969, -922))
+    py_outputs.append(test_impl4(True, 2020))
+    bodo_outputs.append(bodo.jit(test_impl4)(True, 2020))
+    py_outputs.append(test_impl5(2, -4))
+    bodo_outputs.append(bodo.jit(test_impl5)(2, -4))
+    timestamp_val = pd.Timestamp(
+        year=2020,
+        month=10,
+        day=30,
+        hour=22,
+        minute=12,
+        second=45,
+        microsecond=99320,
+        nanosecond=891,
+    )
+    for i in range(len(py_outputs)):
+        assert timestamp_val + py_outputs[i] == timestamp_val + bodo_outputs[i]
+
+
 def test_date_offset_add_timestamp(date_offset_value, memory_leak_check):
     def test_impl(val1, val2):
         return val1 + val2
@@ -542,3 +588,104 @@ def test_date_offset_add_timestamp(date_offset_value, memory_leak_check):
     )
     check_func(test_impl, (date_offset_value, timestamp_val))
     check_func(test_impl, (timestamp_val, date_offset_value))
+
+
+def test_date_offset_add_datetime(date_offset_value, memory_leak_check):
+    def test_impl(val1, val2):
+        return val1 + val2
+
+    datetime_val = datetime.datetime(
+        year=2020, month=10, day=30, hour=22, minute=12, second=45, microsecond=99320
+    )
+    check_func(test_impl, (date_offset_value, datetime_val))
+    check_func(test_impl, (datetime_val, date_offset_value))
+
+
+def test_date_offset_add_date(date_offset_value, memory_leak_check):
+    def test_impl(val1, val2):
+        return val1 + val2
+
+    date_val = datetime.date(
+        year=2020,
+        month=10,
+        day=31,
+    )
+    check_func(test_impl, (date_offset_value, date_val))
+    check_func(test_impl, (date_val, date_offset_value))
+
+
+def test_date_offset_add_series(date_offset_value, memory_leak_check):
+    def test_impl(val1, val2):
+        return val1 + val2
+
+    S = pd.Series(pd.date_range(start="2018-04-24", end="2020-04-29", periods=5))
+    check_func(test_impl, (date_offset_value, S))
+    check_func(test_impl, (S, date_offset_value))
+
+
+def test_date_offset_sub_timestamp(date_offset_value, memory_leak_check):
+    def test_impl(val1, val2):
+        return val1 - val2
+
+    timestamp_val = pd.Timestamp(
+        year=2020,
+        month=10,
+        day=30,
+        hour=22,
+        minute=12,
+        second=45,
+        microsecond=99320,
+        nanosecond=891,
+    )
+    check_func(test_impl, (timestamp_val, date_offset_value))
+
+
+def test_date_offset_sub_datetime(date_offset_value, memory_leak_check):
+    def test_impl(val1, val2):
+        return val1 - val2
+
+    datetime_val = datetime.datetime(
+        year=2020, month=10, day=30, hour=22, minute=12, second=45, microsecond=99320
+    )
+    check_func(test_impl, (datetime_val, date_offset_value))
+
+
+def test_date_offset_sub_date(date_offset_value, memory_leak_check):
+    def test_impl(val1, val2):
+        return val1 - val2
+
+    date_val = datetime.date(
+        year=2020,
+        month=10,
+        day=31,
+    )
+    check_func(test_impl, (date_val, date_offset_value))
+
+
+def test_date_offset_sub_series(date_offset_value, memory_leak_check):
+    def test_impl(S, val):
+        return S - val
+
+    S = pd.Series(pd.date_range(start="2018-04-24", end="2020-04-29", periods=5))
+    check_func(test_impl, (S, date_offset_value))
+
+
+def test_date_offset_neg(date_offset_value, memory_leak_check):
+    # Objects won't match exactly, so test boxing by checking that addition in Python
+    # has the same result
+    def test_impl(do_obj):
+        return -do_obj
+
+    py_output = test_impl(date_offset_value)
+    bodo_output = bodo.jit(test_impl)(date_offset_value)
+    timestamp_val = pd.Timestamp(
+        year=2020,
+        month=10,
+        day=30,
+        hour=22,
+        minute=12,
+        second=45,
+        microsecond=99320,
+        nanosecond=891,
+    )
+    assert timestamp_val + py_output == timestamp_val + bodo_output

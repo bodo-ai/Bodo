@@ -572,6 +572,12 @@ PyObject* box_date_offset(int64_t n, bool normalize, int64_t fields_arr[18], boo
  * @param fields_arr Array of fields that must be initialized
  */
 bool unbox_date_offset(PyObject* obj, int64_t fields_arr[18]) {
+#define CHECK(expr, msg)               \
+    if (!(expr)) {                     \
+        std::cerr << msg << std::endl; \
+        PyGILState_Release(gilstate);  \
+        return false;                \
+    }
     auto gilstate = PyGILState_Ensure();
 
     // set of fields, split by default value if missing
@@ -592,6 +598,7 @@ bool unbox_date_offset(PyObject* obj, int64_t fields_arr[18]) {
                     has_kws = true;
                 }
                 PyObject* field_obj = PyObject_GetAttrString(obj, field_name);
+                CHECK(field_obj, "Selecting field from DateOffset Obj failed")
                 field_value = PyLong_AsLongLong(field_obj);
                 Py_DECREF(field_obj);
             }
