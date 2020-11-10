@@ -47,6 +47,7 @@ from bodo.hiframes.pd_categorical_ext import CategoricalArray
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.hiframes.pd_index_ext import (
     DatetimeIndexType,
+    HeterogeneousIndexType,
     NumericIndexType,
     PeriodIndexType,
     RangeIndexType,
@@ -54,6 +55,7 @@ from bodo.hiframes.pd_index_ext import (
     TimedeltaIndexType,
 )
 from bodo.hiframes.pd_series_ext import (
+    HeterogeneousSeriesType,
     SeriesRollingType,
     SeriesType,
     if_series_to_array_type,
@@ -113,9 +115,13 @@ from bodo.utils.transform import (
 )
 from bodo.utils.typing import (
     BodoError,
+    get_literal_value,
     get_overload_const_func,
+    get_overload_const_tuple,
     is_const_func_type,
+    is_literal_type,
     is_overload_constant_str,
+    is_overload_constant_tuple,
 )
 from bodo.utils.utils import (
     debug_prints,
@@ -486,6 +492,39 @@ class SeriesPass:
                     arg_no = idx_typ.literal_value
                 assign.value = named_tup_def.args[arg_no]
 
+        # simplify geitem on Series with constant Index values
+        # used for df.apply() UDF optimization
+        if (
+            isinstance(rhs_type, (SeriesType, HeterogeneousSeriesType))
+            and isinstance(rhs_type.index, HeterogeneousIndexType)
+            and is_overload_constant_tuple(rhs_type.index.data)
+        ):
+            indices = get_overload_const_tuple(rhs_type.index.data)
+            # Pandas falls back to positional indexing for int keys if index has no ints
+            if isinstance(idx_typ, types.Integer) and not any(
+                isinstance(a, int) for a in indices
+            ):
+                return compile_func_single_block(
+                    lambda S, idx: bodo.hiframes.pd_series_ext.get_series_data(S)[idx],
+                    [rhs.value, idx],
+                    assign.target,
+                    self,
+                )  # pragma: no cover
+
+            if is_literal_type(idx_typ):
+                idx_val = get_literal_value(idx_typ)
+                if idx_val in indices:
+                    arr_ind = indices.index(idx_val)
+                    return compile_func_single_block(
+                        lambda S: bodo.hiframes.pd_series_ext.get_series_data(S)[
+                            _arr_ind
+                        ],
+                        [rhs.value],
+                        assign.target,
+                        self,
+                        extra_globals={"_arr_ind": arr_ind},
+                    )  # pragma: no cover
+
         nodes.append(assign)
         return nodes
 
@@ -733,6 +772,25 @@ class SeriesPass:
             if is_expr(named_tup_def, "call") and not named_tup_def.kws:
                 arg_no = rhs_type.instance_class._fields.index(rhs.attr)
                 assign.value = named_tup_def.args[arg_no]
+
+        # simplify getattr access on Series with constant Index values
+        # used for df.apply() UDF optimization
+        if (
+            isinstance(rhs_type, (SeriesType, HeterogeneousSeriesType))
+            and isinstance(rhs_type.index, HeterogeneousIndexType)
+            and is_overload_constant_tuple(rhs_type.index.data)
+        ):
+            indices = get_overload_const_tuple(rhs_type.index.data)
+            if rhs.attr in indices:
+                arr_ind = indices.index(rhs.attr)
+                nodes = compile_func_single_block(
+                    lambda S: bodo.hiframes.pd_series_ext.get_series_data(S)[_arr_ind],
+                    [rhs.value],
+                    assign.target,
+                    self,
+                    extra_globals={"_arr_ind": arr_ind},
+                )
+                return nodes
 
         # optimize away bodo_sql_context.dataframes if
         # init_sql_context(names, dataframes) can be found
@@ -1603,6 +1661,7 @@ class SeriesPass:
                 ("init_timedelta_index", "bodo.hiframes.pd_index_ext"),
                 ("init_string_index", "bodo.hiframes.pd_index_ext"),
                 ("init_numeric_index", "bodo.hiframes.pd_index_ext"),
+                ("init_heter_index", "bodo.hiframes.pd_index_ext"),
             ):
                 assign.value = var_def.args[0]
             return [assign]
@@ -1617,6 +1676,7 @@ class SeriesPass:
                     ("init_timedelta_index", "bodo.hiframes.pd_index_ext"),
                     ("init_string_index", "bodo.hiframes.pd_index_ext"),
                     ("init_numeric_index", "bodo.hiframes.pd_index_ext"),
+                    ("init_heter_index", "bodo.hiframes.pd_index_ext"),
                 )
                 and len(var_def.args) > 1
             ):
@@ -2648,6 +2708,7 @@ class SeriesPass:
             ("init_timedelta_index", "bodo.hiframes.pd_index_ext"),
             ("init_string_index", "bodo.hiframes.pd_index_ext"),
             ("init_numeric_index", "bodo.hiframes.pd_index_ext"),
+            ("init_heter_index", "bodo.hiframes.pd_index_ext"),
         ):
             return var_def.args[0]
 

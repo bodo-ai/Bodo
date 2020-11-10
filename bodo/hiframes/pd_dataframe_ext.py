@@ -42,6 +42,7 @@ import bodo
 from bodo.hiframes.datetime_date_ext import datetime_date_array_type
 from bodo.hiframes.pd_categorical_ext import CategoricalArray
 from bodo.hiframes.pd_index_ext import (
+    HeterogeneousIndexType,
     NumericIndexType,
     RangeIndexType,
     StringIndexType,
@@ -283,9 +284,6 @@ class DataFrameAttribute(AttributeTemplate):
         merge_defaults = dict(raw=False, result_type=None)
         check_unsupported_args("apply", unsupported_args, merge_defaults)
 
-        # using NamedTuple instead of Series, TODO: pass Series
-        Row = namedtuple("R", df.columns)
-
         # the data elements come from getitem of Series to perform conversion
         # e.g. dt64 to timestamp in TestDate.test_ts_map_date2
         dtypes = []
@@ -297,7 +295,19 @@ class DataFrameAttribute(AttributeTemplate):
             ).return_type
             dtypes.append(el_typ)
 
-        row_typ = types.BaseTuple.from_types(dtypes, Row)
+        # each row is passed as a Series to UDF
+        # name of the Series is the dataframe index value of the row
+        name_type = self.context.resolve_function_type(
+            operator.getitem, (df.index, types.int64), {}
+        ).return_type
+        # the Index has constant column name values
+        index_type = HeterogeneousIndexType(
+            types.BaseTuple.from_types(tuple(types.literal(c) for c in df.columns)),
+            None,
+        )
+        row_typ = HeterogeneousSeriesType(
+            types.BaseTuple.from_types(dtypes), index_type, name_type
+        )
         arg_typs = (row_typ,)
         if f_args is not None:
             arg_typs += tuple(f_args.types)

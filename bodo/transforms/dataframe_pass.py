@@ -505,8 +505,10 @@ class DataFramePass:
 
         # find which columns are actually used if possible
         used_cols = _get_df_apply_used_cols(func, df_typ.columns)
+        # avoid empty data which results in errors
+        if not used_cols:
+            used_cols = [df_typ.columns[0]]
 
-        Row = namedtuple(sanitize_varname(df_var.name), used_cols)
         # prange func to inline
         col_name_args = ", ".join(["c" + str(i) for i in range(len(used_cols))])
         row_args = ", ".join(
@@ -526,8 +528,13 @@ class DataFramePass:
             )
         func_text += "  for i in numba.parfors.parfor.internal_prange(n):\n"
         # TODO: unbox to array value if necessary (e.g. Timestamp to dt64)
-        func_text += "    row2 = Row({})\n".format(row_args)
-        func_text += "    v = map_func(row2, {})\n".format(udf_arg_names)
+        func_text += "    row_idx = bodo.hiframes.pd_index_ext.init_heter_index({}, None)\n".format(
+            gen_const_tup(used_cols)
+        )
+        func_text += "    row = bodo.hiframes.pd_series_ext.init_series(({},), row_idx, df_index[i])\n".format(
+            row_args
+        )
+        func_text += "    v = map_func(row, {})\n".format(udf_arg_names)
         if is_df_output:
             func_text += "    v_vals = bodo.hiframes.pd_series_ext.get_series_data(v)\n"
             for i in range(n_out_cols):
@@ -559,7 +566,6 @@ class DataFramePass:
         glbs = {
             "numba": numba,
             "np": np,
-            "Row": Row,
             "bodo": bodo,
             "map_func": map_func,
             "init_nested_counts": bodo.utils.indexing.init_nested_counts,
@@ -1961,6 +1967,7 @@ class DataFramePass:
                 ("init_timedelta_index", "bodo.hiframes.pd_index_ext"),
                 ("init_string_index", "bodo.hiframes.pd_index_ext"),
                 ("init_numeric_index", "bodo.hiframes.pd_index_ext"),
+                ("init_heter_index", "bodo.hiframes.pd_index_ext"),
             )
             and len(var_def.args) == 2
         ):
@@ -1982,27 +1989,6 @@ class DataFramePass:
             isinstance(typ, (SeriesType, types.Array, BooleanArrayType))
             and typ.dtype == types.bool_
         )
-
-    def is_int_list_or_arr(self, varname):
-        typ = self.typemap[varname]
-        return isinstance(typ, (SeriesType, types.Array, types.List)) and isinstance(
-            typ.dtype, types.Integer
-        )
-
-    def _is_const_none(self, var):
-        var_def = guard(get_definition, self.func_ir, var)
-        return isinstance(var_def, ir.Const) and var_def.value is None
-
-    def _update_definitions(self, node_list):
-        loc = ir.Loc("", 0)
-        dumm_block = ir.Block(ir.Scope(None, loc), loc)
-        dumm_block.body = node_list
-        build_definitions({0: dumm_block}, self.func_ir._definitions)
-        return
-
-    def _gen_arr_copy(self, in_arr, nodes):
-        nodes += compile_func_single_block(lambda A: A.copy(), (in_arr,), None, self)
-        return nodes[-1].target
 
     def _get_const_or_list(
         self, by_arg, list_only=False, default=None, err_msg=None, typ=None
@@ -2122,6 +2108,6 @@ def _get_df_apply_used_cols(func, columns):
 
     # remove duplicates with set() since a column can be used multiple times
     # keep the order the same as original columns to avoid errors with int getitem on
-    # Row namedtuple
+    # rows
     used_cols = [c for (_, c) in sorted((columns.index(v), v) for v in set(used_cols))]
     return used_cols

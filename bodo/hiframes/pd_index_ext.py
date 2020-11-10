@@ -1958,6 +1958,7 @@ def is_pd_index_type(t):
             PeriodIndexType,
             StringIndexType,
             RangeIndexType,
+            HeterogeneousIndexType,
         ),
     )
 
@@ -2221,3 +2222,117 @@ def cast_range_index_to_int_index(context, builder, fromty, toty, val):
     """cast RangeIndex to equivalent Int64Index"""
     f = lambda I: init_numeric_index(np.arange(I._start, I._stop, I._step))
     return context.compile_internal(builder, f, toty(fromty), [val])
+
+
+class HeterogeneousIndexType(types.Type):
+    """
+    Type class for Index objects with potentially heterogeneous but limited number of
+    values (e.g. pd.Index([1, 'A']))
+    """
+
+    ndim = 1
+
+    def __init__(self, data=None, name_type=None):
+
+        self.data = data
+        name_type = types.none if name_type is None else name_type
+        self.name_type = name_type
+        super(HeterogeneousIndexType, self).__init__(
+            name=f"heter_index({data}, {name_type})"
+        )
+
+    def copy(self):
+        return HeterogeneousIndexType(self.data, self.name_type)
+
+    @property
+    def key(self):
+        return self.data, self.name_type
+
+
+# even though name attribute is mutable, we don't handle it for now
+# TODO: create refcounted payload to handle mutable name
+@register_model(HeterogeneousIndexType)
+class HeterogeneousIndexModel(models.StructModel):
+    def __init__(self, dmm, fe_type):
+        members = [("data", fe_type.data), ("name", fe_type.name_type)]
+        super(HeterogeneousIndexModel, self).__init__(dmm, fe_type, members)
+
+
+make_attribute_wrapper(HeterogeneousIndexType, "data", "_data")
+make_attribute_wrapper(HeterogeneousIndexType, "name", "_name")
+
+
+@overload_method(HeterogeneousIndexType, "copy", no_unliteral=True)
+def overload_heter_index_copy(A):
+    # NOTE: assuming data is immutable
+    return lambda A: bodo.hiframes.pd_index_ext.init_heter_index(
+        A._data, A._name
+    )  # pragma: no cover
+
+
+@box(HeterogeneousIndexType)
+def box_heter_index(typ, val, c):
+    mod_name = c.context.insert_const_string(c.builder.module, "pandas")
+    class_obj = c.pyapi.import_module_noblock(mod_name)
+
+    index_val = cgutils.create_struct_proxy(typ)(c.context, c.builder, val)
+    data_obj = c.pyapi.from_native_value(typ.data, index_val.data, c.env_manager)
+    name_obj = c.pyapi.from_native_value(typ.name_type, index_val.name, c.env_manager)
+
+    dtype_obj = c.pyapi.make_none()
+    copy_obj = c.pyapi.bool_from_bool(c.context.get_constant(types.bool_, False))
+
+    # call pd.Index(data, dtype, copy, name)
+    index_obj = c.pyapi.call_method(
+        class_obj, "Index", (data_obj, dtype_obj, copy_obj, name_obj)
+    )
+
+    c.pyapi.decref(data_obj)
+    c.pyapi.decref(dtype_obj)
+    c.pyapi.decref(copy_obj)
+    c.pyapi.decref(name_obj)
+    c.pyapi.decref(class_obj)
+    return index_obj
+
+
+@intrinsic
+def init_heter_index(typingctx, data, name=None):
+    """Create HeterogeneousIndex object"""
+    name = types.none if name is None else name
+
+    def codegen(context, builder, signature, args):
+        assert len(args) == 2
+        index_typ = signature.return_type
+        index_val = cgutils.create_struct_proxy(index_typ)(context, builder)
+        index_val.data = args[0]
+        index_val.name = args[1]
+        # increase refcount of stored values
+        context.nrt.incref(builder, index_typ.data, args[0])
+        context.nrt.incref(builder, index_typ.name_type, args[1])
+        return index_val._getvalue()
+
+    return HeterogeneousIndexType(data, name)(data, name), codegen
+
+
+@overload_attribute(HeterogeneousIndexType, "name")
+def heter_index_get_name(si):
+    def impl(si):  # pragma: no cover
+        return si._name
+
+    return impl
+
+
+@overload(operator.getitem, no_unliteral=True)
+def overload_heter_index_getitem(I, ind):
+    if not isinstance(I, HeterogeneousIndexType):
+        return
+
+    # output of integer indexing is scalar value
+    if isinstance(ind, types.Integer):
+        return lambda I, ind: bodo.hiframes.pd_index_ext.get_index_data(I)[ind]
+
+    # output of slice, bool array ... indexing is pd.Index
+    if isinstance(I, HeterogeneousIndexType):
+        return lambda I, ind: bodo.hiframes.pd_index_ext.init_heter_index(
+            bodo.hiframes.pd_index_ext.get_index_data(I)[ind]
+        )

@@ -43,7 +43,12 @@ from bodo.hiframes.pd_multi_index_ext import MultiIndexType
 from bodo.libs.bool_arr_ext import boolean_array
 from bodo.libs.distributed_api import Reduce_Type
 from bodo.utils.transform import get_call_expr_arg, get_stmt_defs
-from bodo.utils.typing import BodoError, BodoWarning, is_overload_false
+from bodo.utils.typing import (
+    BodoError,
+    BodoWarning,
+    is_heterogeneous_tuple_type,
+    is_overload_false,
+)
 from bodo.utils.utils import (
     debug_prints,
     find_build_tuple,
@@ -1163,6 +1168,11 @@ class DistributedAnalysis:
             "get_series_data",
             "get_series_index",
         ):
+            # NOTE: constant sizes Series/Index is not distributed
+            if _is_tuple_like_type(self.typemap[lhs]):
+                self._analyze_call_set_REP(lhs, args, array_dists, fdef)
+                return
+
             self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
             return
 
@@ -1281,6 +1291,11 @@ class DistributedAnalysis:
             return
 
         if fdef == ("init_series", "bodo.hiframes.pd_series_ext"):
+            # NOTE: constant sizes Series/Index is not distributed
+            if _is_tuple_like_type(self.typemap[rhs.args[0].name]):
+                self._analyze_call_set_REP(lhs, args, array_dists, fdef)
+                return
+
             # lhs, in_arr, and index should have the same distribution
             new_dist = self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
             new_dist = self._meet_array_dists(
@@ -2617,6 +2632,17 @@ def is_REP(d):
     return d == Distribution.REP
 
 
-def dprint(*s):
+def _is_tuple_like_type(t):
+    """return True of 't' is a tuple-like type such as tuples or literal list that
+    could be used in constant sized Series and Index.
+    """
+    return (
+        isinstance(t, types.BaseTuple)
+        or is_heterogeneous_tuple_type(t)
+        or isinstance(t, bodo.hiframes.pd_index_ext.HeterogeneousIndexType)
+    )
+
+
+def dprint(*s):  # pragma: no cover
     if debug_prints():
         print(*s)

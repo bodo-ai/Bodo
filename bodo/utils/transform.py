@@ -77,6 +77,7 @@ no_side_effect_call_tuples = {
     ("init_datetime_index", "pd_index_ext", "hiframes", bodo),
     ("init_timedelta_index", "pd_index_ext", "hiframes", bodo),
     ("init_range_index", "pd_index_ext", "hiframes", bodo),
+    ("init_heter_index", "pd_index_ext", "hiframes", bodo),
     # Int array
     ("get_int_arr_data", "int_arr_ext", "libs", bodo),
     ("get_int_arr_bitmap", "int_arr_ext", "libs", bodo),
@@ -496,7 +497,13 @@ def get_const_value_inner(
     if call_name == ("str", "numpy"):
         return str(get_const_value_inner(func_ir, var_def.args[0], arg_types, typemap))
 
-    if call_name == ("init_string_index", "bodo.hiframes.pd_index_ext"):
+    if call_name in (
+        ("init_string_index", "bodo.hiframes.pd_index_ext"),
+        ("init_numeric_index", "bodo.hiframes.pd_index_ext"),
+        ("init_datetime_index", "bodo.hiframes.pd_index_ext"),
+        ("init_timedelta_index", "bodo.hiframes.pd_index_ext"),
+        ("init_heter_index", "bodo.hiframes.pd_index_ext"),
+    ):
         return pd.Index(
             get_const_value_inner(func_ir, var_def.args[0], arg_types, typemap)
         )
