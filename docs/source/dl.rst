@@ -4,7 +4,7 @@ Deep Learning
 =============
 
 Bodo works seamlessly with Horovod to support large-scale distributed deep
-learning with PyTorch, and soon with TensorFlow, Keras and Apache MXNet as well.
+learning with PyTorch and TensorFlow.
 
 Prerequisites
 -------------
@@ -42,8 +42,28 @@ training.
     initialize Horovod with these workers, and distribute data for deep learning
     to these workers.
 
-The only requirement to ensure that Bodo automatically handles all of the above
-is to call ``bodo.dl.prepare_data(X, y)`` before starting training.
+To ensure that Bodo automatically handles all of the above call
+``bodo.dl.start()`` before starting training and ``bodo.dl.prepare_data(X, y)``
+to distribute the data.
+
+API
+---
+
+* **bodo.dl.start(framework)**
+
+  * ``framework`` is a string specifying the DL framework to use ("torch" or "tensorflow").
+    Note that this must be called before starting deep learning. It initializes
+    Horovod and pins workers to GPUs.
+
+* **bodo.dl.prepare_data(X, y)**
+
+  * Redistributes the given data to DL workers.
+
+* **bodo.dl.end()**
+
+  * On calling this function, non-DL workers will wait for DL workers. They will
+    become idle to free up computational resources for DL workers. This has
+    to be called by every process.
 
 Example
 -------
@@ -64,16 +84,18 @@ application:
             ...
         else:
             # this rank does not participate in DL (not pinned to GPU)
-        bodo.barrier()
+            pass
 
     @bodo.jit
     def main()
         ...
         X = ... # distributed NumPy array generated with Bodo
         y = ... # distributed NumPy array generated with Bodo
+        bodo.dl.start("torch")  # Initialize Horovod with PyTorch
         X, y = bodo.dl.prepare_data(X, y)
         with bodo.objmode:
             deep_learning()  # DL user code
+        bodo.dl.end()
 
 As we can see, the deep learning code is not compiled by Bodo. It runs in
 Python (in ``objmode`` or outside Bodo jitted functions) and must use Horovod.
