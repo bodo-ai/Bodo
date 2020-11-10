@@ -184,6 +184,8 @@ which are supported by Bodo.
     - ``np.exp(df.col)``
   * - :func:`pyspark.sql.functions.expm1`
     - ``np.exp(df.col) - 1``
+  * - :func:`pyspark.sql.functions.factorial`
+    - ``df.col.map(lambda x: math.factorial(x))``
   * - :func:`pyspark.sql.functions.floor`
     - ``np.floor(df.col)``
   * - :func:`pyspark.sql.functions.format_number`
