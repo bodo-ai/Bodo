@@ -381,13 +381,21 @@ def overload_loc_getitem(I, idx):
         if is_overload_constant_list(col_idx):
             # get column list (could be list of strings or bools)
             col_idx_list = get_overload_const_list(col_idx)
+            # check selected columns to be in dataframe schema
+            # may require schema change, see test_loc_col_select (impl4)
+            if (
+                len(col_idx_list) > 0
+                and not isinstance(col_idx_list[0], (bool, np.bool_))
+                and not all(c in df.columns for c in col_idx_list)
+            ):
+                raise_bodo_error(
+                    f"DataFrame.loc[]: invalid column list {col_idx_list}; not all in dataframe columns {df.columns}"
+                )
             return gen_df_loc_col_select_impl(df, col_idx_list)
 
     # TODO: error-checking test
     raise_bodo_error(
-        "DataFrame.loc[] getitem (location-based indexing) using {} not supported yet.".format(
-            idx
-        )
+        f"DataFrame.loc[] getitem (location-based indexing) using {idx} not supported yet."
     )  # pragma: no cover
 
 
