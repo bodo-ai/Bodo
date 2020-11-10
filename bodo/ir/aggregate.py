@@ -1602,34 +1602,19 @@ def gen_top_level_agg_func(
         n_pivot = 1
     else:
         n_pivot = len(pivot_values)
-    out_typs = [t.dtype for t in out_col_typs]
 
     # arg names
     key_names = tuple(sanitize_varname(c) for c in key_names)
     in_names = tuple("in_{}".format(sanitize_varname(c)) for c in in_col_names)
     out_names = []
     for c in out_col_names:
-        if not isinstance(c, (tuple, list)):
-            if c.startswith("<lambda"):
-                # remove brackets from "<lambda>" to avoid syntax errors
-                out_names.append("out_" + c[1:-1])
-            else:
-                out_names.append("out_" + c)
-        else:
-            # convert multi-level names into something that won't give syntax
-            # errors
-            # TODO lambdas inside tuple (depends on a TODO in pd_groupby_ext.py)
-            out_names.append("out_{}".format("__".join(v for v in c)))
+        out_names.append("out_" + sanitize_varname(c))
     out_names = tuple(sanitize_varname(c) for c in out_names)
     key_args = ", ".join("key_{}".format(c) for c in key_names)
 
     in_args = ", ".join(in_names)
     if in_args != "":
         in_args = ", " + in_args
-
-    # pass None instead of False to enable static specialization in
-    # alloc_agg_output()
-    return_key_p = "True" if return_key else "None"
 
     all_arrs = tuple("key_{}".format(c) for c in key_names) + in_names
     n_keys = len(key_names)

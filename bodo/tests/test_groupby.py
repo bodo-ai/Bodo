@@ -224,7 +224,7 @@ def test_all_null_keys(memory_leak_check):
 udf_in_df = pd.DataFrame(
     {
         "A": [2, 1, 1, 1, 2, 2, 1],
-        "B": [-8, 2, 3, 1, 5, 6, 7],
+        2: [-8, 2, 3, 1, 5, 6, 7],
         "C": [1.2, 2.4, np.nan, 2.2, 5.3, 3.3, 7.2],
     }
 )
@@ -418,7 +418,7 @@ def test_groupby_missing_entry(is_slow_run, memory_leak_check):
     df2 = pd.DataFrame(
         {
             "A": [3, 2, 3, 1, 11] * 3,
-            "B": ["aa", "bb", "cc", "", "L"] * 3,
+            2: ["aa", "bb", "cc", "", "L"] * 3,
             "C": [3, 1, 2, 0, -3] * 3,
         }
     )
