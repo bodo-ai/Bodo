@@ -455,3 +455,75 @@ def test_np_linspace_kwargs(memory_leak_check):
     check_func(test_impl, (0, 1000, 100000, np.int64, False))
     check_func(test_impl, (-2000, -4000, 100000, np.int64, False))
     check_func(test_impl, (-5, 4.5252, 100000, np.int64, False))
+
+
+@pytest.mark.parametrize(
+    "arr",
+    [
+        pd.array(
+            [
+                "¿abc¡Y tú, quién te crees?",
+                "ÕÕÕú¡úú,úũ¿ééé",
+                "россия очень, холодная страна",
+                "مرحبا, العالم ، هذا هو بودو",
+                "Γειά σου ,Κόσμε",
+                "Español es agra,dable escuchar",
+                "한국,가,고싶다ㅠ",
+                "🢇🄐,🏈𠆶💑😅",
+            ],
+        ),
+        np.array(
+            [
+                Decimal("0.0"),
+                Decimal("-0.222"),
+                Decimal("1111.316"),
+                Decimal("1"),
+                Decimal("5.1"),
+                Decimal("-1"),
+                Decimal("-1"),
+            ]
+        ),
+        np.array(
+            [
+                datetime.timedelta(days=5, seconds=4, weeks=4),
+                datetime.timedelta(days=5, seconds=5, weeks=4),
+                datetime.timedelta(days=11, seconds=4, weeks=4),
+                datetime.timedelta(days=5, seconds=4, weeks=4),
+                datetime.timedelta(days=5, seconds=4, weeks=4),
+                datetime.timedelta(days=5, seconds=4, weeks=4),
+                datetime.timedelta(days=5, seconds=64, weeks=4),
+                datetime.timedelta(days=11, seconds=4, weeks=4),
+                datetime.timedelta(days=42, seconds=11, weeks=4),
+                datetime.timedelta(days=5, seconds=123, weeks=4),
+            ]
+        ),
+        np.append(
+            pd.date_range("2017-07-03", "2017-07-17").date,
+            [datetime.date(2016, 3, 3)],
+        ),
+        pd.array(
+            [
+                True,
+                False,
+                True,
+                True,
+                False,
+                False,
+                True,
+            ]
+        ),
+        pd.arrays.IntegerArray(
+            np.array([1, -3, 2, 3, 10] * 10, np.int8),
+            np.array([False, False, False, False, False] * 10),
+        ),
+    ],
+)
+def test_in(arr, memory_leak_check):
+    def test_impl(A, val):
+        return val in A
+
+    init_val = arr[1]
+    check_func(test_impl, (arr, init_val))
+    # Remove all locations of init_val. In all arrays elements 0 and 1 are distinct
+    np.where(arr == init_val, arr[0], arr)
+    check_func(test_impl, (arr, init_val))

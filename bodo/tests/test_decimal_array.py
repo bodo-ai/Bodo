@@ -270,3 +270,40 @@ def test_constructor_error(memory_leak_check):
 
     with pytest.raises(BodoError, match=r"decimal.Decimal\(\) value type must be"):
         bodo.jit(impl)()
+
+
+def test_decimal_ops(memory_leak_check):
+    def test_impl_eq(d1, d2):
+        return d1 == d2
+
+    def test_impl_ne(d1, d2):
+        return d1 != d2
+
+    def test_impl_gt(d1, d2):
+        return d1 > d2
+
+    def test_impl_ge(d1, d2):
+        return d1 >= d2
+
+    def test_impl_lt(d1, d2):
+        return d1 < d2
+
+    def test_impl_le(d1, d2):
+        return d1 <= d2
+
+    test_funcs = [
+        test_impl_eq,
+        test_impl_ne,
+        test_impl_gt,
+        test_impl_ge,
+        test_impl_lt,
+        test_impl_le,
+    ]
+
+    d1 = Decimal("-1.1")
+    d2 = Decimal("100.2")
+
+    for func in test_funcs:
+        check_func(func, (d1, d1))
+        check_func(func, (d1, d2))
+        check_func(func, (d2, d1))

@@ -3,6 +3,7 @@
 Implements array kernels such as median and quantile.
 """
 import math
+import operator
 import re
 from collections import namedtuple
 from math import sqrt
@@ -2041,5 +2042,25 @@ def overload_np_linspace_get_stepsize(start, stop, num, endpoint):
         if num > 1:
             return (stop - start) / num
         return 0
+
+    return impl
+
+
+@overload(operator.contains, no_unliteral=True)
+def arr_contains(A, val):
+    # TODO: Add support for types with different width. i.e. int64 and int16
+    if not (
+        bodo.utils.utils.is_array_typ(A, False) and A.dtype == val
+    ):  # pragma: no cover
+        return
+
+    def impl(A, val):  # pragma: no cover
+        numba.parfors.parfor.init_prange()
+        count = 0
+        n = len(A)
+        for i in numba.parfors.parfor.internal_prange(n):
+            if not bodo.libs.array_kernels.isna(A, i):
+                count += A[i] == val
+        return count > 0
 
     return impl
