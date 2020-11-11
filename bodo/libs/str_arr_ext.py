@@ -1560,6 +1560,10 @@ def overload_str_arr_setitem_int_to_str(A, ind, val):
         # get pointer to string position and its length
         start_offset = getitem_str_offset(A, ind)
         arr_val_len = bodo.libs.str_ext.int_to_str_len(val)
+        required_capacity = start_offset + arr_val_len
+        bodo.libs.array_item_arr_ext.ensure_data_capacity(
+            A._data, start_offset, required_capacity
+        )
         ptr = get_data_ptr_ind(A, start_offset)
         # convert integer to string and write to output string position inplace
         inplace_int64_to_str(ptr, arr_val_len, val)
@@ -1594,10 +1598,18 @@ def overload_str_arr_setitem_NA_str(A, ind):
     """
     Set string array element to "<NA>" (string representation of pd.NA)
     """
+    na_len = len("<NA>")
 
     def impl(A, ind):  # pragma: no cover
-        ptr = get_data_ptr_ind(A, ind)
+        start_offset = getitem_str_offset(A, ind)
+        required_capacity = start_offset + na_len
+        bodo.libs.array_item_arr_ext.ensure_data_capacity(
+            A._data, start_offset, required_capacity
+        )
+        ptr = get_data_ptr_ind(A, start_offset)
         inplace_set_NA_str(ptr)
+        # set end offset of string element
+        setitem_str_offset(A, ind + 1, start_offset + na_len)
         str_arr_set_not_na(A, ind)
 
     return impl

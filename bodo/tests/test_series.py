@@ -491,6 +491,19 @@ def test_series_astype_str(series_val):
     check_func(test_impl, (series_val,))
 
 
+@pytest.mark.slow
+def test_series_int_astype_str_long(memory_leak_check):
+    """test a Series with a lot of int/NA values to make sure string array capacity is
+    adjusted properly.
+    """
+
+    def impl(S):
+        return S.astype(str)
+
+    S = pd.Series([11111, 22, None, -3222222, None, 445] * 1000, dtype="Int64")
+    check_func(impl, (S,))
+
+
 def test_series_astype_int_arr(numeric_series_val, memory_leak_check):
     # only integers can be converted safely
     if not pd.api.types.is_integer_dtype(numeric_series_val):
