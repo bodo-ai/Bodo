@@ -202,12 +202,10 @@ def _gen_json_reader_py(
         ]
     )
 
-    if compression in {"gzip", "bz2"}:
-        compression = compression.upper()  # Arrow's representation
-    elif compression is None:
-        compression = "UNCOMPRESSED"  # Arrow's representation
-    else:
-        compression = compression
+    # With Arrow 2.0.0, gzip and bz2 map to gzip and bz2 directly
+    # and not GZIP and BZ2 like they used to.
+    if compression is None:
+        compression = "uncompressed"  # Arrow's representation
 
     func_text = "def json_reader_py(fname):\n"
     # if it's an s3 url, get the region and pass it into the c++ code

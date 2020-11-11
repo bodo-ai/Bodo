@@ -316,12 +316,10 @@ def _gen_csv_reader_py(
     #  None meaning the file(s) does not contain header
     has_header = header == 0
 
-    if compression in {"gzip", "bz2"}:
-        compression = compression.upper()  # Arrow's representation
-    elif compression is None:
-        compression = "UNCOMPRESSED"  # Arrow's representation
-    else:
-        compression = compression
+    # With Arrow 2.0.0, gzip and bz2 map to gzip and bz2 directly
+    # and not GZIP and BZ2 like they used to.
+    if compression is None:
+        compression = "uncompressed"  # Arrow's representation
 
     func_text = "def csv_reader_py(fname):\n"
     func_text += "  skiprows = {}\n".format(skiprows)

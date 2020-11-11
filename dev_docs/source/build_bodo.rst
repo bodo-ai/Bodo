@@ -31,7 +31,7 @@ such as Numba on Ubuntu Linux::
     cd ..
     # END OF BUILD NUMBA FROM SOURCE
     conda install mpi4py pytest -c conda-forge
-    conda install -c conda-forge hdf5='*=*mpich*' pyarrow=1.0.1 pymysql sqlalchemy
+    conda install -c conda-forge hdf5='*=*mpich*' pyarrow=2.0.0 pymysql sqlalchemy
     # The following is required for s3 related development and tests
     # conda install -c conda-forge boto3 botocore s3fs>=0.4.2
     git clone https://github.com/Bodo-inc/Bodo.git
@@ -74,7 +74,7 @@ On Windows
     conda install numba=0.51.2 -c conda-forge
     conda install vc vs2015_runtime vs2015_win-64
     conda install -c defaults -c intel impi_rt impi-devel
-    conda install -c conda-forge pyarrow=1.0.1
+    conda install -c conda-forge pyarrow=2.0.0
     git clone https://github.com/Bodo-inc/Bodo.git
     cd Bodo
     # build Bodo

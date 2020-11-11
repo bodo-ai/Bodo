@@ -683,13 +683,13 @@ class PathInfo {
                     // infer compression scheme from the name of the first file
                     fname = get_first_file();
                 if (boost::ends_with(fname, ".gz"))
-                    compression = "GZIP";  // using arrow-cpp's representation
+                    compression = "gzip";  // using arrow-cpp's representation
                 else if (boost::ends_with(fname, ".bz2"))
-                    compression = "BZ2";  // using arrow-cpp's representation
+                    compression = "bz2";  // using arrow-cpp's representation
                 // ... TODO: more compression formats
                 else
                     compression =
-                        "UNCOMPRESSED";  // using arrow-cpp's representation
+                        "uncompressed";  // using arrow-cpp's representation
             }
         }
     }
@@ -1273,7 +1273,7 @@ extern "C" PyObject *file_chunk_reader(const char *fname, const char *suffix,
         }
         const std::string compression = path_info.get_compression_scheme();
 
-        if (compression == "UNCOMPRESSED") {
+        if (compression == "uncompressed") {
             const std::vector<std::string> &file_names =
                 path_info.get_file_names();
             const std::vector<int64_t> &file_sizes = path_info.get_file_sizes();

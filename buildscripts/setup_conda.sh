@@ -48,7 +48,7 @@ fi
 # ---- Conda installs for source build ----
 if [ "$RUN_NIGHTLY" != "yes" ];
 then
-   $CONDA_INSTALL -c conda-forge pyarrow=1.0.1
+   $CONDA_INSTALL -c conda-forge pyarrow=2.0.0
    $CONDA_INSTALL pandas='1.1.*' -c conda-forge
    $CONDA_INSTALL numba=0.51.2 -c conda-forge
    $CONDA_INSTALL mpi4py -c conda-forge

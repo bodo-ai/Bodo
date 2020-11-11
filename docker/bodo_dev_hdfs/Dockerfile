@@ -21,7 +21,7 @@ ENV PATH /root/miniconda3/bin/:${PATH}
 RUN conda create -n BODODEV numpy scipy pandas='1.1.*' boost-cpp=1.74.0 cmake h5py mpich mpi gcc_linux-64 gxx_linux-64 -c conda-forge
 RUN conda install -n BODODEV python numba=0.51.2 -c conda-forge
 RUN conda install -n BODODEV hdf5=*=*mpich* -c conda-forge
-RUN conda install -n BODODEV python pyarrow=1.0.1 -c conda-forge
+RUN conda install -n BODODEV python pyarrow=2.0.0 -c conda-forge
 RUN conda install -n BODODEV pytest ipython
 RUN conda install -n BODODEV sqlalchemy pymysql xlrd mpi4py
 RUN conda install -n BODODEV scikit-learn -c conda-forge
