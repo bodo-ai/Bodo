@@ -222,6 +222,30 @@ Once error checking is implemented for a function, we should test whether the er
             bodo.jit(impl)(input)
 
 
+End-to-end tests
+----------------
+
+We have a suite of end-to-end tests that run nightly on CodeBuild. They
+run automatically at 2am but can also be triggered manually.
+The suite is mainly based on customer codes, and *we should add customer
+codes that we work on to this suite as much as possible*.
+
+End-to-end tests are designed to test realistic workloads (e.g. involving
+sequence of data processing operations), but can also be used for testing
+processing of large data samples, or when large number of cores and/or memory
+is required (currently the tests run on an EC2 instance with 145 GB memory and
+72 vCPUs).
+
+The data used by these tests is located in the ``bodotest-customer-data`` S3
+bucket on our testing AWS account (account ID 427443013497). The data can be
+dummy data (to avoid storing customer data), or in other cases it is based
+on the samples that we were given from customers.
+
+**Links**:
+    - End-to-end tests repository: https://github.com/Bodo-inc/engine-e2e-tests
+    - CodeBuild pipeline: https://us-east-2.console.aws.amazon.com/codesuite/codebuild/427443013497/projects/Bodo-Engine-Nightly
+
+
 .. _dev_debugging:
 
 Debugging
