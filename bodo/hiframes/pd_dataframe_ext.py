@@ -296,10 +296,13 @@ class DataFrameAttribute(AttributeTemplate):
             dtypes.append(el_typ)
 
         # each row is passed as a Series to UDF
-        # name of the Series is the dataframe index value of the row
-        name_type = self.context.resolve_function_type(
-            operator.getitem, (df.index, types.int64), {}
-        ).return_type
+        # TODO: pass df_index[i] as row name (after issue with RangeIndex getitem in
+        # test_df_apply_assertion is resolved)
+        # # name of the Series is the dataframe index value of the row
+        # name_type = self.context.resolve_function_type(
+        #     operator.getitem, (df.index, types.int64), {}
+        # ).return_type
+        name_type = types.none
         # the Index has constant column name values
         index_type = HeterogeneousIndexType(
             types.BaseTuple.from_types(tuple(types.literal(c) for c in df.columns)),

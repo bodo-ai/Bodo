@@ -531,7 +531,9 @@ class DataFramePass:
         func_text += "    row_idx = bodo.hiframes.pd_index_ext.init_heter_index({}, None)\n".format(
             gen_const_tup(used_cols)
         )
-        func_text += "    row = bodo.hiframes.pd_series_ext.init_series(({},), row_idx, df_index[i])\n".format(
+        # TODO: pass df_index[i] as row name (after issue with RangeIndex getitem in
+        # test_df_apply_assertion is resolved)
+        func_text += "    row = bodo.hiframes.pd_series_ext.init_series(({},), row_idx, None)\n".format(
             row_args
         )
         func_text += "    v = map_func(row, {})\n".format(udf_arg_names)
