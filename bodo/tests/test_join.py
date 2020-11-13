@@ -40,7 +40,8 @@ from bodo.tests.utils import (
                     [[[4, 5, 6], []], [[1]], [[1, 2]]],
                     [],
                     [[[], [1]], None, [[1, 4]], []],
-                ]
+                ],
+                object,
             ),
             np.array(
                 [
@@ -50,7 +51,8 @@ from bodo.tests.utils import (
                     [[[1, 2, 3, 4], [1]], [[]], []],
                     [[[1]], None, [[500, 4]], [[33]]],
                     [],
-                ]
+                ],
+                object,
             ),
         ),
         # TODO None value fields in structs is not supported in typing.
@@ -69,7 +71,8 @@ from bodo.tests.utils import (
                             {"A": 500, "B": 600},
                             {"A": 5000, "B": 6000},
                         ],
-                    ]
+                    ],
+                    object,
                 ),
                 np.array(
                     [
@@ -84,7 +87,8 @@ from bodo.tests.utils import (
                         [{"A": 10, "B": 20}, {"A": 5, "B": -1}],
                         [{"A": 3, "B": 4}, {"A": 10, "B": 20}],
                         [{"A": 1, "B": 7}],
-                    ]
+                    ],
+                    object,
                 ),
             ),
             marks=pytest.mark.slow,
