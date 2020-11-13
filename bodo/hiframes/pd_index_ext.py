@@ -691,7 +691,7 @@ def _dummy_convert_none_to_int(val):
             return 0
 
         return impl
-    return lambda val: val
+    return lambda val: val  # pragma: no cover
 
 
 @overload(pd.date_range, no_unliteral=True)
@@ -1383,7 +1383,7 @@ def overload_range_index_getitem(I, idx):
         if isinstance(types.unliteral(idx), types.Integer):
             # TODO: test
             # TODO: check valid
-            return lambda I, idx: (idx * I._step) + I._start
+            return lambda I, idx: (idx * I._step) + I._start  # pragma: no cover
 
         if isinstance(idx, types.SliceType):
             # TODO: test
@@ -1401,14 +1401,14 @@ def overload_range_index_getitem(I, idx):
         # delegate to integer index, TODO: test
         return lambda I, idx: bodo.hiframes.pd_index_ext.init_numeric_index(
             np.arange(I._start, I._stop, I._step, np.int64)[idx]
-        )
+        )  # pragma: no cover
 
 
 @overload(len, no_unliteral=True)
 def overload_range_len(r):
     if isinstance(r, RangeIndexType):
         # TODO: test
-        return lambda r: max(0, -(-(r._stop - r._start) // r._step))
+        return lambda r: max(0, -(-(r._stop - r._start) // r._step))  # pragma: no cover
 
 
 # ---------------- PeriodIndex -------------------
@@ -1910,18 +1910,20 @@ def overload_index_getitem(I, ind):
     if isinstance(I, (NumericIndexType, StringIndexType)) and isinstance(
         ind, types.Integer
     ):
-        return lambda I, ind: bodo.hiframes.pd_index_ext.get_index_data(I)[ind]
+        return lambda I, ind: bodo.hiframes.pd_index_ext.get_index_data(I)[
+            ind
+        ]  # pragma: no cover
 
     # output of slice, bool array ... indexing is pd.Index
     if isinstance(I, NumericIndexType):
         return lambda I, ind: bodo.hiframes.pd_index_ext.init_numeric_index(
             bodo.hiframes.pd_index_ext.get_index_data(I)[ind]
-        )
+        )  # pragma: no cover
 
     if isinstance(I, StringIndexType):
         return lambda I, ind: bodo.hiframes.pd_index_ext.init_string_index(
             bodo.hiframes.pd_index_ext.get_index_data(I)[ind]
-        )
+        )  # pragma: no cover
 
 
 # similar to index_from_array()
@@ -1958,6 +1960,7 @@ def is_pd_index_type(t):
             PeriodIndexType,
             StringIndexType,
             RangeIndexType,
+            HeterogeneousIndexType,
         ),
     )
 
@@ -1970,7 +1973,7 @@ def is_pd_index_type(t):
 @overload_method(DatetimeIndexType, "take", no_unliteral=True)
 @overload_method(TimedeltaIndexType, "take", no_unliteral=True)
 def overload_index_take(I, indices):
-    return lambda I, indices: I[indices]
+    return lambda I, indices: I[indices]  # pragma: no cover
 
 
 @overload_method(RangeIndexType, "isna", no_unliteral=True)
@@ -2018,7 +2021,7 @@ def overload_index_isna(I):
 @overload_attribute(DatetimeIndexType, "values")
 @overload_attribute(TimedeltaIndexType, "values")
 def overload_values(I):
-    return lambda I: bodo.utils.conversion.coerce_to_array(I)
+    return lambda I: bodo.utils.conversion.coerce_to_array(I)  # pragma: no cover
 
 
 @overload(len, no_unliteral=True)
@@ -2034,7 +2037,9 @@ def overload_index_len(I):
         ),
     ):
         # TODO: test
-        return lambda I: len(bodo.hiframes.pd_index_ext.get_index_data(I))
+        return lambda I: len(
+            bodo.hiframes.pd_index_ext.get_index_data(I)
+        )  # pragma: no cover
 
 
 @overload_attribute(DatetimeIndexType, "shape")
@@ -2043,22 +2048,24 @@ def overload_index_len(I):
 @overload_attribute(PeriodIndexType, "shape")
 @overload_attribute(TimedeltaIndexType, "shape")
 def overload_index_shape(s):
-    return lambda s: (len(bodo.hiframes.pd_index_ext.get_index_data(s)),)
+    return lambda s: (
+        len(bodo.hiframes.pd_index_ext.get_index_data(s)),
+    )  # pragma: no cover
 
 
 @overload_attribute(RangeIndexType, "shape")
 def overload_range_index_shape(s):
-    return lambda s: (len(s),)
+    return lambda s: (len(s),)  # pragma: no cover
 
 
 @numba.generated_jit(nopython=True)
 def get_index_data(S):
-    return lambda S: S._data
+    return lambda S: S._data  # pragma: no cover
 
 
 @numba.generated_jit(nopython=True)
 def get_index_name(S):
-    return lambda S: S._name
+    return lambda S: S._name  # pragma: no cover
 
 
 def alias_ext_dummy_func(lhs_name, args, alias_map, arg_aliases):
@@ -2219,5 +2226,125 @@ def is_index_type(t):
 @lower_cast(RangeIndexType, NumericIndexType)
 def cast_range_index_to_int_index(context, builder, fromty, toty, val):
     """cast RangeIndex to equivalent Int64Index"""
-    f = lambda I: init_numeric_index(np.arange(I._start, I._stop, I._step))
+    f = lambda I: init_numeric_index(
+        np.arange(I._start, I._stop, I._step)
+    )  # pragma: no cover
     return context.compile_internal(builder, f, toty(fromty), [val])
+
+
+class HeterogeneousIndexType(types.Type):
+    """
+    Type class for Index objects with potentially heterogeneous but limited number of
+    values (e.g. pd.Index([1, 'A']))
+    """
+
+    ndim = 1
+
+    def __init__(self, data=None, name_type=None):
+
+        self.data = data
+        name_type = types.none if name_type is None else name_type
+        self.name_type = name_type
+        super(HeterogeneousIndexType, self).__init__(
+            name=f"heter_index({data}, {name_type})"
+        )
+
+    def copy(self):
+        return HeterogeneousIndexType(self.data, self.name_type)
+
+    @property
+    def key(self):
+        return self.data, self.name_type
+
+
+# even though name attribute is mutable, we don't handle it for now
+# TODO: create refcounted payload to handle mutable name
+@register_model(HeterogeneousIndexType)
+class HeterogeneousIndexModel(models.StructModel):
+    def __init__(self, dmm, fe_type):
+        members = [("data", fe_type.data), ("name", fe_type.name_type)]
+        super(HeterogeneousIndexModel, self).__init__(dmm, fe_type, members)
+
+
+make_attribute_wrapper(HeterogeneousIndexType, "data", "_data")
+make_attribute_wrapper(HeterogeneousIndexType, "name", "_name")
+
+
+@overload_method(HeterogeneousIndexType, "copy", no_unliteral=True)
+def overload_heter_index_copy(A):
+    # NOTE: assuming data is immutable
+    return lambda A: bodo.hiframes.pd_index_ext.init_heter_index(
+        A._data, A._name
+    )  # pragma: no cover
+
+
+# TODO(ehsan): test
+@box(HeterogeneousIndexType)
+def box_heter_index(typ, val, c):  # pragma: no cover
+    mod_name = c.context.insert_const_string(c.builder.module, "pandas")
+    class_obj = c.pyapi.import_module_noblock(mod_name)
+
+    index_val = cgutils.create_struct_proxy(typ)(c.context, c.builder, val)
+    data_obj = c.pyapi.from_native_value(typ.data, index_val.data, c.env_manager)
+    name_obj = c.pyapi.from_native_value(typ.name_type, index_val.name, c.env_manager)
+
+    dtype_obj = c.pyapi.make_none()
+    copy_obj = c.pyapi.bool_from_bool(c.context.get_constant(types.bool_, False))
+
+    # call pd.Index(data, dtype, copy, name)
+    index_obj = c.pyapi.call_method(
+        class_obj, "Index", (data_obj, dtype_obj, copy_obj, name_obj)
+    )
+
+    c.pyapi.decref(data_obj)
+    c.pyapi.decref(dtype_obj)
+    c.pyapi.decref(copy_obj)
+    c.pyapi.decref(name_obj)
+    c.pyapi.decref(class_obj)
+    return index_obj
+
+
+@intrinsic
+def init_heter_index(typingctx, data, name=None):
+    """Create HeterogeneousIndex object"""
+    name = types.none if name is None else name
+
+    def codegen(context, builder, signature, args):
+        assert len(args) == 2
+        index_typ = signature.return_type
+        index_val = cgutils.create_struct_proxy(index_typ)(context, builder)
+        index_val.data = args[0]
+        index_val.name = args[1]
+        # increase refcount of stored values
+        context.nrt.incref(builder, index_typ.data, args[0])
+        context.nrt.incref(builder, index_typ.name_type, args[1])
+        return index_val._getvalue()
+
+    return HeterogeneousIndexType(data, name)(data, name), codegen
+
+
+@overload_attribute(HeterogeneousIndexType, "name")
+def heter_index_get_name(si):
+    def impl(si):  # pragma: no cover
+        return si._name
+
+    return impl
+
+
+# TODO(ehsan): test
+@overload(operator.getitem, no_unliteral=True)
+def overload_heter_index_getitem(I, ind):  # pragma: no cover
+    if not isinstance(I, HeterogeneousIndexType):
+        return
+
+    # output of integer indexing is scalar value
+    if isinstance(ind, types.Integer):
+        return lambda I, ind: bodo.hiframes.pd_index_ext.get_index_data(I)[
+            ind
+        ]  # pragma: no cover
+
+    # output of slice, bool array ... indexing is pd.Index
+    if isinstance(I, HeterogeneousIndexType):
+        return lambda I, ind: bodo.hiframes.pd_index_ext.init_heter_index(
+            bodo.hiframes.pd_index_ext.get_index_data(I)[ind]
+        )  # pragma: no cover

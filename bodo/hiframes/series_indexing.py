@@ -31,8 +31,12 @@ from bodo.hiframes.datetime_timedelta_ext import (
     datetime_timedelta_type,
     pd_timedelta_type,
 )
-from bodo.hiframes.pd_index_ext import NumericIndexType, RangeIndexType
-from bodo.hiframes.pd_series_ext import SeriesType
+from bodo.hiframes.pd_index_ext import (
+    HeterogeneousIndexType,
+    NumericIndexType,
+    RangeIndexType,
+)
+from bodo.hiframes.pd_series_ext import HeterogeneousSeriesType, SeriesType
 from bodo.hiframes.pd_timestamp_ext import (
     convert_datetime64_to_timestamp,
     convert_numpy_timedelta64_to_datetime_timedelta,
@@ -40,7 +44,15 @@ from bodo.hiframes.pd_timestamp_ext import (
     integer_to_dt64,
     pandas_timestamp_type,
 )
-from bodo.utils.typing import BodoError, is_list_like_index_type
+from bodo.utils.typing import (
+    BodoError,
+    get_literal_value,
+    get_overload_const_tuple,
+    is_list_like_index_type,
+    is_literal_type,
+    is_overload_constant_tuple,
+    raise_bodo_error,
+)
 
 ##############################  iat  ######################################
 
@@ -584,3 +596,38 @@ def overload_array_list_setitem(A, idx, val):
             A[bodo.utils.conversion.coerce_to_array(idx)] = val
 
         return impl
+
+
+@overload(operator.getitem, no_unliteral=True)
+def overload_const_index_series_getitem(S, idx):
+    """handles label-based getitem on Series with constant Index values such as row
+    input to df.apply() UDFs.
+    """
+    if (
+        isinstance(S, (SeriesType, HeterogeneousSeriesType))
+        and isinstance(S.index, HeterogeneousIndexType)
+        and is_overload_constant_tuple(S.index.data)
+    ):
+        indices = get_overload_const_tuple(S.index.data)
+        # Pandas falls back to positional indexing for int keys if index has no ints
+        if isinstance(idx, types.Integer) and not any(
+            isinstance(a, int) for a in indices
+        ):
+            return lambda S, idx: bodo.hiframes.pd_series_ext.get_series_data(S)[
+                idx
+            ]  # pragma: no cover
+
+        # TODO(ehsan): support non-constant idx (rare but possible)
+        if is_literal_type(idx):
+            idx_val = get_literal_value(idx)
+
+            if idx_val not in indices:  # pragma: no cover
+                raise_bodo_error(
+                    f"Series label-based getitem: '{idx_val}' not in {indices}"
+                )
+
+            arr_ind = indices.index(idx_val)
+
+            return lambda S, idx: bodo.hiframes.pd_series_ext.get_series_data(S)[
+                arr_ind
+            ]  # pragma: no cover

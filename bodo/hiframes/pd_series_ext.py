@@ -64,9 +64,11 @@ from bodo.utils.typing import (
     BodoError,
     check_unsupported_args,
     create_unsupported_overload,
+    get_overload_const_tuple,
     get_udf_error_msg,
     get_udf_out_arr_type,
     is_heterogeneous_tuple_type,
+    is_overload_constant_tuple,
     is_overload_false,
     is_overload_none,
 )
@@ -178,6 +180,23 @@ class HeterogeneousSeriesType(types.Type):
     @property
     def key(self):
         return self.data, self.index, self.name_typ
+
+
+@infer_getattr
+class HeterSeriesAttribute(AttributeTemplate):
+    key = HeterogeneousSeriesType
+
+    def generic_resolve(self, S, attr):
+        """Handle getattr on row Series values pass to df.apply() UDFs."""
+        from bodo.hiframes.pd_index_ext import HeterogeneousIndexType
+
+        if isinstance(S.index, HeterogeneousIndexType) and is_overload_constant_tuple(
+            S.index.data
+        ):
+            indices = get_overload_const_tuple(S.index.data)
+            if attr in indices:
+                arr_ind = indices.index(attr)
+                return S.data[arr_ind]
 
 
 def _get_series_array_type(dtype):
@@ -386,8 +405,9 @@ def init_series_equiv(self, scope, equiv_set, loc, args, kws):
     assert len(args) >= 1 and not kws
     # TODO: add shape for index
     var = args[0]
-    # avoid returning shape for HeterogeneousSeriesType (results in errors)
-    if is_heterogeneous_tuple_type(self.typemap[var.name]):
+    # avoid returning shape for tuple input (results in dimension mismatch error)
+    data_type = self.typemap[var.name]
+    if is_heterogeneous_tuple_type(data_type) or isinstance(data_type, types.BaseTuple):
         return None
     if equiv_set.has_shape(var):
         return var, []
@@ -475,6 +495,10 @@ def get_series_name(S):
 def get_series_data_equiv(self, scope, equiv_set, loc, args, kws):
     assert len(args) == 1 and not kws
     var = args[0]
+    data_type = self.typemap[var.name].data
+    # avoid returning shape for tuple input (results in dimension mismatch error)
+    if is_heterogeneous_tuple_type(data_type) or isinstance(data_type, types.BaseTuple):
+        return None
     if equiv_set.has_shape(var):
         return var, []
     return None
@@ -716,6 +740,18 @@ class SeriesAttribute(AttributeTemplate):
     @bound_function("series.combine", no_unliteral=True)
     def resolve_combine(self, ary, args, kws):
         return self._resolve_combine_func(ary, args, kws)
+
+    def generic_resolve(self, S, attr):
+        """Handle getattr on row Series values pass to df.apply() UDFs."""
+        from bodo.hiframes.pd_index_ext import HeterogeneousIndexType
+
+        if isinstance(S.index, HeterogeneousIndexType) and is_overload_constant_tuple(
+            S.index.data
+        ):
+            indices = get_overload_const_tuple(S.index.data)
+            if attr in indices:
+                arr_ind = indices.index(attr)
+                return S.data[arr_ind]
 
 
 # pd.Series supports all operators except << and >>

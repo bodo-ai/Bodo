@@ -2013,6 +2013,31 @@ def test_df_apply_timestamp(memory_leak_check):
     check_func(test_impl, (df,))
 
 
+def test_df_apply_general_colnames(memory_leak_check):
+    """make sure all column names (e.g. not string, not identifier-compatible string) can be handled in apply() properly"""
+
+    def impl1(df):
+        return df.apply(lambda r: r["C C"], axis=1)
+
+    def impl2(df):
+        return df.apply(lambda r: r[2], axis=1)
+
+    def impl3(df):
+        return df.apply(lambda r: r.A, axis=1)
+
+    df = pd.DataFrame(
+        {
+            "A": ["AA", "B", "CC", "C", "AA"],
+            2: [3, 1, 4, 2, 6],
+            "C C": [1.1, 2.2, 3.3, 4.4, 5.5],
+        },
+        index=[3, 1, 4, 6, 0],
+    )
+    check_func(impl1, (df,))
+    check_func(impl2, (df,))
+    check_func(impl3, (df,))
+
+
 def test_df_apply_decimal(memory_leak_check):
     """make sure Decimal output can be handled in apply() properly"""
     # just returning input value since we don't support any Decimal creation yet
