@@ -506,6 +506,7 @@ def float_str_overload(v):
                 digits_len = 1 + int(np.floor(np.log10(inner_v)))
             # possible values: - sign, digits before decimal place, decimal point,
             # 6 digits after decimal
+            # NOTE: null character is added automatically by _malloc_string()
             length = flag + digits_len + 1 + 6
             s = numba.cpython.unicode._malloc_string(kind, 1, length, True)
             float_to_str(s, v)
