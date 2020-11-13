@@ -9,6 +9,8 @@ num_processes = int(sys.argv[1])
 # all other args go to pytest
 pytest_args = sys.argv[2:]
 
+logfile_name = "splitting_logs/logfile-11-11-20.txt"
+
 # If in AWS Codebuild partition tests
 if "CODEBUILD_BUILD_ID" in os.environ:
     import buildscripts.aws.select_timing_from_logs
@@ -19,18 +21,18 @@ if "CODEBUILD_BUILD_ID" in os.environ:
             "python",
             "buildscripts/aws/download_s3paths_with_prefix.py",
             "bodo-pr-testing-logs",
-            "splitting_logs/latestlog",
+            logfile_name,
         ]
     )
     if result != 0:
         raise Exception(
             "buildscripts/aws/download_s3_prefixes.py fails trying to download log file."
         )
-    if not os.path.exists("splitting_logs/latestlog"):
+    if not os.path.exists(logfile_name):
         raise Exception("Log file download unsuccessful, exiting with failure.")
     # Select the markers that may be needed.
     marker_groups = buildscripts.aws.select_timing_from_logs.generate_marker_groups(
-        "splitting_logs/latestlog", int(os.environ["NUMBER_GROUPS_SPLIT"])
+        logfile_name, int(os.environ["NUMBER_GROUPS_SPLIT"])
     )
 
     # Generate the marker file.
