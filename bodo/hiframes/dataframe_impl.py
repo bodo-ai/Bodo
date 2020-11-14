@@ -80,7 +80,19 @@ def overload_dataframe_index(df):
 @overload_attribute(DataFrameType, "columns", inline="always")
 def overload_dataframe_columns(df):
     func_text = "def impl(df):\n"
-    func_text += f"  return bodo.hiframes.pd_index_ext.init_heter_index({df.columns})\n"
+    if all(isinstance(a, str) for a in df.columns):
+        str_arr = f"bodo.utils.conversion.coerce_to_array({df.columns})"
+        func_text += (
+            f"  return bodo.hiframes.pd_index_ext.init_string_index({str_arr})\n"
+        )
+    elif all(isinstance(a, (int, float)) for a in df.columns):  # pragma: no cover
+        # TODO(ehsan): test
+        arr = f"bodo.utils.conversion.coerce_to_array({df.columns})"
+        func_text += f"  return bodo.hiframes.pd_index_ext.init_numeric_index({arr})\n"
+    else:
+        func_text += (
+            f"  return bodo.hiframes.pd_index_ext.init_heter_index({df.columns})\n"
+        )
     loc_vars = {}
     exec(func_text, {"bodo": bodo}, loc_vars)
     impl = loc_vars["impl"]
