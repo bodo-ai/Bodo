@@ -793,6 +793,21 @@ def test_df_columns(df_value, memory_leak_check):
 
 
 @pytest.mark.slow
+def test_df_columns_nested(memory_leak_check):
+    """make sure nested df column names can be returned properly"""
+
+    def impl(df):
+        df1 = df.groupby(["A"], as_index=False)
+        df2 = df1.agg({"B": ["sum", "count"], "C": ["sum", "count"]})
+        return df2.columns
+
+    df = pd.DataFrame(
+        {"A": [1.0, 2.0, np.nan, 1.0], "B": [1.2, np.nan, 1.1, 3.1], "C": [2, 3, 1, 5]}
+    )
+    check_func(impl, (df,), is_out_distributed=False)
+
+
+@pytest.mark.slow
 def test_df_values(numeric_df_value, memory_leak_check):
     def impl(df):
         return df.values

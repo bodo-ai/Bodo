@@ -79,14 +79,10 @@ def overload_dataframe_index(df):
 
 @overload_attribute(DataFrameType, "columns", inline="always")
 def overload_dataframe_columns(df):
-    str_arr = "bodo.utils.conversion.coerce_to_array({})".format(df.columns)
     func_text = "def impl(df):\n"
-    func_text += "  return bodo.hiframes.pd_index_ext.init_string_index({})\n".format(
-        str_arr
-    )
+    func_text += f"  return bodo.hiframes.pd_index_ext.init_heter_index({df.columns})\n"
     loc_vars = {}
     exec(func_text, {"bodo": bodo}, loc_vars)
-    # print(func_text)
     impl = loc_vars["impl"]
     return impl
 
@@ -554,7 +550,6 @@ def overload_dataframe_count(df, axis=0, level=None, numeric_only=False):
     func_text += "  return bodo.hiframes.pd_series_ext.init_series(data, {})\n".format(
         index
     )
-    # print(func_text)
     loc_vars = {}
     exec(func_text, {"bodo": bodo, "np": np}, loc_vars)
     impl = loc_vars["impl"]
@@ -573,7 +568,6 @@ def overload_dataframe_nunique(df, axis=0, dropna=True):
     func_text += "  return bodo.hiframes.pd_series_ext.init_series(data, {})\n".format(
         index
     )
-    # print(func_text)
     loc_vars = {}
     exec(func_text, {"bodo": bodo, "np": np}, loc_vars)
     impl = loc_vars["impl"]
@@ -952,7 +946,6 @@ def overload_dataframe_duplicated(df, subset=None, keep="first"):
     )
     func_text += "  index = bodo.utils.conversion.index_from_array(index_arr)\n"
     func_text += "  return bodo.hiframes.pd_series_ext.init_series(duplicated, index)\n"
-    # print(func_text)
     loc_vars = {}
     exec(func_text, {"bodo": bodo}, loc_vars)
     impl = loc_vars["impl"]
@@ -1107,7 +1100,6 @@ def create_inplace_binary_op_overload(op):
                     func_text += "  df_arr{0} {1} bodo.hiframes.pd_dataframe_ext.get_dataframe_data(right, {0})\n".format(
                         i, op_str
                     )
-                # print(func_text)
                 data_args = ", ".join(
                     ("df_arr{}").format(i) for i in range(len(left.columns))
                 )
