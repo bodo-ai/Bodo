@@ -649,3 +649,23 @@ def test_map(index, memory_leak_check):
         return I.map(lambda a: a)
 
     check_func(test_impl, (index,))
+
+
+def test_heter_index_binop():
+    """test binary operations on heterogeneous Index values"""
+    # TODO(ehsan): fix Numba bugs for passing list literal to pd.Index
+    def impl1():
+        A = pd.Index(("A", 2))
+        return A == 2
+
+    def impl2():
+        A = pd.Index(("A", 2))
+        return A == pd.Index(("A", 3))
+
+    def impl3():
+        A = pd.Index(("A", 2))
+        return "A" == A
+
+    check_func(impl1, (), dist_test=False)
+    check_func(impl2, (), dist_test=False)
+    check_func(impl3, (), dist_test=False)

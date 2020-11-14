@@ -56,6 +56,8 @@ from bodo.utils.typing import (
     get_udf_out_arr_type,
     get_val_type_maybe_str_literal,
     is_const_func_type,
+    is_heterogeneous_tuple_type,
+    is_iterable_type,
     is_literal_type,
     is_overload_false,
     is_overload_none,
@@ -563,6 +565,16 @@ def pd_index_overload(data=None, dtype=None, copy=False, name=None, tupleize_col
             data=None, dtype=None, copy=False, name=None, tupleize_cols=True
         ):  # pragma: no cover
             return pd.TimedeltaIndex(data, name=name)
+
+    elif is_heterogeneous_tuple_type(data):
+        # TODO(ehsan): handle 'dtype' argument if possible
+
+        def impl(
+            data=None, dtype=None, copy=False, name=None, tupleize_cols=True
+        ):  # pragma: no cover
+            return bodo.hiframes.pd_index_ext.init_heter_index(data, name)
+
+        return impl
 
     # ----- Data: Array type ------
     elif isinstance(data, (SeriesType, types.Array, types.List)):
@@ -2194,6 +2206,66 @@ def create_binary_op_overload(op):
                 return out_arr
 
             return impl2
+
+        if isinstance(S, HeterogeneousIndexType):
+            # handle as regular array data if not actually heterogeneous
+            if not is_heterogeneous_tuple_type(S.data):
+
+                def impl3(S, other):  # pragma: no cover
+                    data = bodo.hiframes.pd_index_ext.get_index_data(S)
+                    arr = bodo.utils.conversion.coerce_to_array(data)
+                    other_arr = bodo.utils.conversion.get_array_if_series_or_index(
+                        other
+                    )
+                    out_arr = op(arr, other_arr)
+                    return out_arr
+
+                return impl3
+
+            count = len(S.data.types)
+            # TODO(ehsan): return Numpy array (fix Numba errors)
+            func_text = "def f(S, other):\n"
+            func_text += "  return [{}]\n".format(
+                ",".join(
+                    "op(S[{}], other{})".format(
+                        i, f"[{i}]" if is_iterable_type(other) else ""
+                    )
+                    for i in range(count)
+                ),
+            )
+            loc_vars = {}
+            exec(func_text, {"op": op, "np": np}, loc_vars)
+            impl = loc_vars["f"]
+            return impl
+
+        if isinstance(other, HeterogeneousIndexType):
+            # handle as regular array data if not actually heterogeneous
+            if not is_heterogeneous_tuple_type(other.data):
+
+                def impl4(S, other):  # pragma: no cover
+                    data = bodo.hiframes.pd_index_ext.get_index_data(other)
+                    arr = bodo.utils.conversion.coerce_to_array(data)
+                    other_arr = bodo.utils.conversion.get_array_if_series_or_index(S)
+                    out_arr = op(other_arr, arr)
+                    return out_arr
+
+                return impl4
+
+            count = len(other.data.types)
+            # TODO(ehsan): return Numpy array (fix Numba errors)
+            func_text = "def f(S, other):\n"
+            func_text += "  return [{}]\n".format(
+                ",".join(
+                    "op(S{}, other[{}])".format(
+                        f"[{i}]" if is_iterable_type(S) else "", i
+                    )
+                    for i in range(count)
+                ),
+            )
+            loc_vars = {}
+            exec(func_text, {"op": op, "np": np}, loc_vars)
+            impl = loc_vars["f"]
+            return impl
 
     return overload_index_binary_op
 
