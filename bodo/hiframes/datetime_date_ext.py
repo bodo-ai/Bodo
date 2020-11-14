@@ -599,6 +599,18 @@ def __hash__(td):
     return impl
 
 
+@overload(bool, inline="always", no_unliteral=True)
+def date_to_bool(date):
+    """All dates evaluate to True"""
+    if date != datetime_date_type:  # pragma: no cover
+        return
+
+    def impl(date):  # pragma: no cover
+        return True
+
+    return impl
+
+
 ##################### Array of datetime.date objects ##########################
 
 

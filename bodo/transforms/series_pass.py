@@ -1210,6 +1210,40 @@ class SeriesPass:
         ):
             return self._handle_ufuncs_bool_arr(func_name, rhs.args)
 
+        # Handle inlining 1D Numpy arrays
+        if fdef == ("any", "numpy"):
+            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
+            kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
+
+            impl = bodo.libs.array_kernels.np_any(*arg_typs, **kw_typs)
+            if impl is not None:
+                # This section is never entered by current code. It is a safety
+                # net if a 1D array Numba implementation is taken
+                return replace_func(
+                    self,
+                    impl,
+                    rhs.args,
+                    pysig=numba.core.utils.pysignature(impl),
+                    kws=dict(rhs.kws),
+                )  # pragma: no cover
+
+        # Handle inlining 1D Numpy arrays
+        if fdef == ("all", "numpy"):
+            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
+            kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
+
+            impl = bodo.libs.array_kernels.np_all(*arg_typs, **kw_typs)
+            if impl is not None:
+                # This section is never entered by current code. It is a safety
+                # net if a 1D array Numba implementation is taken
+                return replace_func(
+                    self,
+                    impl,
+                    rhs.args,
+                    pysig=numba.core.utils.pysignature(impl),
+                    kws=dict(rhs.kws),
+                )  # pragma: no cover
+
         if fdef == ("apply_null_mask", "bodo.libs.int_arr_ext"):
             in_typs = tuple(self.typemap[a.name] for a in rhs.args)
             impl = bodo.libs.int_arr_ext.apply_null_mask.py_func(*in_typs)

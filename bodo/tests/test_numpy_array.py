@@ -457,9 +457,8 @@ def test_np_linspace_kwargs(memory_leak_check):
     check_func(test_impl, (-5, 4.5252, 100000, np.int64, False))
 
 
-@pytest.mark.parametrize(
-    "arr",
-    [
+@pytest.fixture(
+    params=[
         pd.array(
             [
                 "¿abc¡Y tú, quién te crees?",
@@ -518,12 +517,61 @@ def test_np_linspace_kwargs(memory_leak_check):
         ),
     ],
 )
-def test_in(arr, memory_leak_check):
+def bodo_arr_val(request):
+    return request.param
+
+
+def test_in(bodo_arr_val, memory_leak_check):
     def test_impl(A, val):
         return val in A
 
-    init_val = arr[1]
-    check_func(test_impl, (arr, init_val))
+    init_val = bodo_arr_val[1]
+    check_func(test_impl, (bodo_arr_val, init_val))
     # Remove all locations of init_val. In all arrays elements 0 and 1 are distinct
-    np.where(arr == init_val, arr[0], arr)
-    check_func(test_impl, (arr, init_val))
+    np.where(bodo_arr_val == init_val, bodo_arr_val[0], bodo_arr_val)
+    check_func(test_impl, (bodo_arr_val, init_val))
+
+
+# TODO: Move to slow in another PR once Sonar passes
+def test_any(bodo_arr_val, memory_leak_check):
+    def test_impl(A):
+        # Python's logical or won't return a bool so set to bool
+        return bool(np.any(A))
+
+    if isinstance(bodo_arr_val, pd.arrays.IntegerArray):
+        # Reduce op is not supported on integer arrays
+        # This tests that there is a parallel version for a Numpy Array type
+        bodo_arr_val = np.array(bodo_arr_val)
+
+    check_func(test_impl, (bodo_arr_val,))
+
+
+# TODO: Move to slow in another PR once Sonar passes
+def test_all(bodo_arr_val, memory_leak_check):
+    def test_impl(A):
+        # Python's logical and won't return a bool so set to bool
+        return bool(np.all(A))
+
+    if isinstance(bodo_arr_val, pd.arrays.IntegerArray):
+        # Reduce op is not supported on integer arrays
+        # This tests that there is a parallel version for a Numpy Array type
+        bodo_arr_val = np.array(bodo_arr_val)
+
+    check_func(test_impl, (bodo_arr_val,))
+
+
+# TODO: Move to slow in another PR once Sonar passes
+def test_any_all_numpy_2d(memory_leak_check):
+    """Check that a multidimensional Numpy array outputs the
+    correct result for a 2D array. This shouldn't use our kernel.
+    """
+
+    def test_impl_any(A):
+        return bool(np.any(A))
+
+    def test_impl_all(A):
+        return bool(np.all(A))
+
+    arr = np.array([[False, False, True], [False, False, False], [True, True, True]])
+    assert test_impl_any(arr) == bodo.jit(test_impl_any)(arr)
+    assert test_impl_all(arr) == bodo.jit(test_impl_all)(arr)

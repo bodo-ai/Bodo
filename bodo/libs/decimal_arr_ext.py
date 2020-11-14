@@ -336,6 +336,20 @@ def decimal_constructor_overload(value="0", context=None):
         raise BodoError("decimal.Decimal() value type must be an integer or string")
 
 
+@overload(bool, no_unliteral=True)
+def decimal_to_bool(dec):
+    """
+    Check if the underlying interger value is 0
+    """
+    if not isinstance(dec, Decimal128Type):  # pragma: no cover
+        return
+
+    def impl(dec):  # pragma: no cover
+        return bool(decimal128type_to_int128(dec))
+
+    return impl
+
+
 @unbox(Decimal128Type)
 def unbox_decimal(typ, val, c):
     """

@@ -85,6 +85,8 @@ and parallelize.
       * :func:`numpy.max`
       * :func:`numpy.argmin`
       * :func:`numpy.argmax`
+      * :func:`numpy.all`
+      * :func:`numpy.any`
 
 #. Numpy array creation functions:
 

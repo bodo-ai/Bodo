@@ -2064,3 +2064,49 @@ def arr_contains(A, val):
         return count > 0
 
     return impl
+
+
+@overload(np.any, inline="always", no_unliteral=True)
+def np_any(A, axis=None, out=None, keepdims=None):
+    if not (
+        bodo.utils.utils.is_array_typ(A, False) and A.ndim == 1
+    ):  # pragma: no cover
+        return
+
+    args_dict = {"axis": axis, "out": out, "keepdims": keepdims}
+    args_default_dict = {"axis": None, "out": None, "keepdims": None}
+    check_unsupported_args("np.any", args_dict, args_default_dict)
+
+    def impl(A, axis=None, out=None, keepdims=None):  # pragma: no cover
+        numba.parfors.parfor.init_prange()
+        count = 0
+        n = len(A)
+        for i in numba.parfors.parfor.internal_prange(n):
+            if not bodo.libs.array_kernels.isna(A, i):
+                count += int(bool(A[i]))
+        return count > 0
+
+    return impl
+
+
+@overload(np.all, inline="always", no_unliteral=True)
+def np_all(A, axis=None, out=None, keepdims=None):
+    if not (
+        bodo.utils.utils.is_array_typ(A, False) and A.ndim == 1
+    ):  # pragma: no cover
+        return
+
+    args_dict = {"axis": axis, "out": out, "keepdims": keepdims}
+    args_default_dict = {"axis": None, "out": None, "keepdims": None}
+    check_unsupported_args("np.any", args_dict, args_default_dict)
+
+    def impl(A, axis=None, out=None, keepdims=None):  # pragma: no cover
+        numba.parfors.parfor.init_prange()
+        count = 0
+        n = len(A)
+        for i in numba.parfors.parfor.internal_prange(n):
+            if not bodo.libs.array_kernels.isna(A, i):
+                count += int(bool(A[i]))
+        return count == n
+
+    return impl

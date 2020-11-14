@@ -1147,6 +1147,19 @@ def cast_numpy_timedelta_to_int(typingctx, val=None):
     return types.int64(val), codegen
 
 
+@overload(bool, no_unliteral=True)
+def timedelta_to_bool(timedelta):
+    if timedelta != datetime_timedelta_type:  # pragma: no cover
+        return
+
+    zero_timedelta = datetime.timedelta(0)
+
+    def impl(timedelta):  # pragma: no cover
+        return timedelta != zero_timedelta
+
+    return impl
+
+
 ##################### Array of datetime.timedelta objects ##########################
 
 
