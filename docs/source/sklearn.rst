@@ -90,6 +90,17 @@ Methods:
   * :any:`sklearn.linear_model.SGDRegressor.predict`
   * :any:`sklearn.linear_model.SGDRegressor.score`
 
+
+:class:`sklearn.linear_model.Lasso`
+
+  This class provides Lasso regression support.
+
+Methods:
+
+  * :any:`sklearn.linear_model.Lasso.fit`
+  * :any:`sklearn.linear_model.Lasso.predict`
+  * :any:`sklearn.linear_model.Lasso.score`
+
 Clustering
 ~~~~~~~~~~
 

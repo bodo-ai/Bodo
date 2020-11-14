@@ -61,6 +61,7 @@ def model_fit(m, X, y):
     m.n_estimators = bodo.libs.distributed_api.get_node_portion(
         n_estimators_global, nnodes, my_rank
     )
+
     # For each first rank in each node train the model
     if my_rank == (nodename_ranks[hostname])[0]:
         # train model on rank 0
@@ -1892,6 +1893,7 @@ def box_linear_regression(typ, val, c):
 
 @unbox(BodoLinearRegressionType)
 def unbox_linear_regression(typ, obj, c):
+
     # borrow a reference from Python
     c.pyapi.incref(obj)
     return NativeValue(obj)
@@ -1981,6 +1983,158 @@ def overload_linear_regression_score(
     _is_data_distributed=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
 ):
     """Overload Linear Regression score."""
+    return parallel_score(m, X, y, sample_weight, _is_data_distributed)
+
+
+# -------------------------------------Lasso Regression--------------------
+# Support sklearn.linear_model.Lasso object mode of Numba
+# -----------------------------------------------------------------------------
+# Typing and overloads to use Lasso inside Bodo functions
+# directly via sklearn's API
+
+
+class BodoLassoType(types.Opaque):
+    def __init__(self):
+        super(BodoLassoType, self).__init__(name="BodoLassoType")
+
+
+lasso_type = BodoLassoType()
+types.lasso_type = lasso_type
+
+register_model(BodoLassoType)(models.OpaqueModel)
+
+
+@typeof_impl.register(sklearn.linear_model.Lasso)
+def typeof_lasso(val, c):
+    return lasso_type
+
+
+@box(BodoLassoType)
+def box_lasso(typ, val, c):
+    # See note in box_random_forest_classifier
+    c.pyapi.incref(val)
+    return val
+
+
+@unbox(BodoLassoType)
+def unbox_lasso(typ, obj, c):
+    # borrow a reference from Python
+    c.pyapi.incref(obj)
+    return NativeValue(obj)
+
+
+@overload(sklearn.linear_model.Lasso, no_unliteral=True)
+def sklearn_linear_model_lasso_overload(
+    alpha=1.0,
+    fit_intercept=True,
+    normalize=False,
+    precompute=False,
+    copy_X=True,
+    max_iter=1000,
+    tol=0.0001,
+    warm_start=False,
+    positive=False,
+    random_state=None,
+    selection="cyclic",
+):
+    def _sklearn_linear_model_lasso_impl(
+        alpha=1.0,
+        fit_intercept=True,
+        normalize=False,
+        precompute=False,
+        copy_X=True,
+        max_iter=1000,
+        tol=0.0001,
+        warm_start=False,
+        positive=False,
+        random_state=None,
+        selection="cyclic",
+    ):  # pragma: no cover
+        with numba.objmode(m="lasso_type"):
+            m = sklearn.linear_model.Lasso(
+                alpha=alpha,
+                fit_intercept=fit_intercept,
+                normalize=normalize,
+                precompute=precompute,
+                copy_X=copy_X,
+                max_iter=max_iter,
+                tol=tol,
+                warm_start=warm_start,
+                positive=positive,
+                random_state=random_state,
+                selection=selection,
+            )
+        return m
+
+    return _sklearn_linear_model_lasso_impl
+
+
+@overload_method(BodoLassoType, "fit", no_unliteral=True)
+def overload_lasso_fit(
+    m,
+    X,
+    y,
+    sample_weight=None,
+    check_input=True,
+    _is_data_distributed=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
+):
+    """ Lasso fit overload """
+    # If data is replicated, run scikit-learn directly
+    if is_overload_false(_is_data_distributed):
+
+        def _lasso_fit_impl(
+            m, X, y, sample_weight=None, check_input=True, _is_data_distributed=False
+        ):  # pragma: no cover
+            with numba.objmode():
+                m.fit(X, y, sample_weight, check_input)
+            return m
+
+        return _lasso_fit_impl
+    else:
+        # Create and run SGDRegressor(loss="squared_loss", penalty='l1')
+        def _sgdc_lasso_fit_impl(
+            m, X, y, sample_weight=None, check_input=True, _is_data_distributed=False
+        ):  # pragma: no cover
+            if bodo.get_rank() == 0:
+                print(
+                    "WARNING: Data is distributed so Bodo will fit model with SGD solver optimization (SGDRegressor)"
+                )
+            with numba.objmode(clf="sgd_regressor_type"):
+                clf = sklearn.linear_model.SGDRegressor(
+                    loss="squared_loss",
+                    penalty="l1",
+                    alpha=m.alpha,
+                    fit_intercept=m.fit_intercept,
+                    max_iter=m.max_iter,
+                    tol=m.tol,
+                    warm_start=m.warm_start,
+                    random_state=m.random_state,
+                )
+            clf.fit(X, y, _is_data_distributed=True)
+            with numba.objmode():
+                m.coef_ = clf.coef_
+                m.intercept_ = clf.intercept_
+                m.n_iter_ = clf.n_iter_
+            return m
+
+        return _sgdc_lasso_fit_impl
+
+
+@overload_method(BodoLassoType, "predict", no_unliteral=True)
+def overload_lass_predict(m, X):
+    """Overload Lasso Regression predict. (Data parallelization)"""
+    return parallel_predict_regression(m, X)
+
+
+@overload_method(BodoLassoType, "score", no_unliteral=True)
+def overload_lasso_score(
+    m,
+    X,
+    y,
+    sample_weight=None,
+    _is_data_distributed=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
+):
+    """Overload Lasso Regression score."""
     return parallel_score(m, X, y, sample_weight, _is_data_distributed)
 
 
