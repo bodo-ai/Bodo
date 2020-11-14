@@ -448,8 +448,10 @@ def overload_coerce_to_array(
             lambda data, error_on_nonarray=True, use_nullable_array=None, scalar_to_arr_len=None: data
         )  # pragma: no cover
 
-    # list of tuples
-    if isinstance(data, types.List) and isinstance(data.dtype, types.BaseTuple):
+    # list/tuple of tuples
+    if isinstance(data, (types.List, types.UniTuple)) and isinstance(
+        data.dtype, types.BaseTuple
+    ):
         # TODO: support variable length data (e.g strings) in tuples
         data_types = tuple(
             bodo.hiframes.pd_series_ext._get_series_array_type(t)

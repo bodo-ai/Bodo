@@ -149,3 +149,15 @@ def test_len(tuple_arr_value, memory_leak_check):
         return len(A)
 
     check_func(test_impl, (tuple_arr_value,))
+
+
+@pytest.mark.slow
+def test_nested_str_tuples(memory_leak_check):
+    """make sure nested tuples with variable size data can be converted to tuple array
+    properly
+    """
+
+    def impl():
+        return bodo.utils.conversion.coerce_to_array((("AA", "B"), ("C", "ABC")))
+
+    check_func(impl, ())

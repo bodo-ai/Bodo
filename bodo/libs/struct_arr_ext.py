@@ -650,6 +650,31 @@ def pre_alloc_struct_array(
 
     def codegen(context, builder, sig, args):
         num_structs, nested_counts, _, _ = args
+
+        # make sure 'nested_counts' has -1 for all unknown alloc counts
+        # subtracting one to account for the number of rows of the struct array itself
+        n_elem_alloc_counts = (
+            bodo.utils.transform.get_type_alloc_counts(struct_arr_type) - 1
+        )
+        nested_counts_type = sig.args[1]
+        if not isinstance(nested_counts_type, types.UniTuple):  # pragma: no cover
+            nested_counts = cgutils.pack_array(
+                builder,
+                [lir.Constant(lir.IntType(64), -1) for _ in range(n_elem_alloc_counts)],
+            )
+        elif nested_counts_type.count < n_elem_alloc_counts:
+            nested_counts = cgutils.pack_array(
+                builder,
+                [
+                    builder.extract_value(nested_counts, i)
+                    for i in range(nested_counts_type.count)
+                ]
+                + [
+                    lir.Constant(lir.IntType(64), -1)
+                    for _ in range(n_elem_alloc_counts - nested_counts_type.count)
+                ],
+            )
+
         meminfo, _, _ = construct_struct_array(
             context, builder, struct_arr_type, num_structs, nested_counts
         )
