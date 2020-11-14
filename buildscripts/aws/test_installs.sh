@@ -3,6 +3,9 @@
 # Installations needed to run unittests. All placed in 1 file for the AWS Codebuild install step.
 
 set -eo pipefail
+# Deactivate env in case this was called by another file that
+# activated the env
+source deactivate || true
 export PATH=$HOME/miniconda3/bin:$PATH
 source activate $CONDA_ENV
 

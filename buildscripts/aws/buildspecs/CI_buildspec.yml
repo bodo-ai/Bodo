@@ -15,18 +15,15 @@ phases:
     install:
         commands:
         - echo Entered the install phase...
-        - python buildscripts/aws/CI_if_changes.py buildscripts/aws/merge_with_master.sh
-        - python buildscripts/aws/CI_if_changes.py buildscripts/setup_conda.sh
-        - python buildscripts/aws/CI_if_changes.py buildscripts/aws/setup_minio.sh
-        - python buildscripts/aws/CI_if_changes.py buildscripts/aws/test_installs.sh
+        - ./buildscripts/aws/CI_if_changes.sh buildscripts/aws/merge_with_master.sh
     build:
         commands:
         - echo Entered the build phase...
-        - python buildscripts/aws/CI_if_changes.py buildscripts/build.sh
+        - ./buildscripts/aws/CI_if_changes.sh buildscripts/build.sh
     post_build:
         commands:
         - echo Entered the post-build phase...
-        - python buildscripts/aws/CI_if_changes.py buildscripts/aws/run_unittests.sh
+        - ./buildscripts/aws/CI_if_changes.sh buildscripts/aws/run_unittests.sh
 
 artifacts:
   files:
