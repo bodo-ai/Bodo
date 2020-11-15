@@ -536,6 +536,10 @@ def pd_index_overload(data=None, dtype=None, copy=False, name=None, tupleize_col
     # Todo: support Categorical dtype, Interval dtype, Period dtype, MultiIndex (?)
     # Todo: Extension dtype (?)
 
+    # unliteral e.g. Tuple(Literal[int](3), Literal[int](1)) to UniTuple(int64 x 2)
+    # NOTE: unliteral of LiteralList is Poison type in Numba
+    data = types.unliteral(data) if not isinstance(data, types.LiteralList) else data
+
     data_dtype = getattr(data, "dtype", None)
     if not is_overload_none(dtype):
         elem_type = dtype.dtype
@@ -577,7 +581,7 @@ def pd_index_overload(data=None, dtype=None, copy=False, name=None, tupleize_col
         return impl
 
     # ----- Data: Array type ------
-    elif isinstance(data, (SeriesType, types.Array, types.List)):
+    elif isinstance(data, (SeriesType, types.Array, types.List, types.UniTuple)):
         # Numeric Indices:
         if elem_type in (
             types.int64,
@@ -609,11 +613,13 @@ def pd_index_overload(data=None, dtype=None, copy=False, name=None, tupleize_col
 
     # raise error for data being None or scalar
     elif is_overload_none(data):
-        raise ValueError(
+        raise BodoError(
             "data argument in pd.Index() is invalid: None or scalar is not acceptable"
         )
     else:
-        raise BodoError("pd.Index(): the provided argument type is not supported")
+        raise BodoError(
+            f"pd.Index(): the provided argument type {data} is not supported"
+        )
 
     return impl
 

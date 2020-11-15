@@ -321,9 +321,9 @@ def overload_dataframe_select_dtypes(df, include=None, exclude=None):
         # TODO(Nick): Add more general support for type rules:
         # ex. np.number for all numeric types, np.object for all obj types,
         # "string" for all string types
-        chosen_columns = [
+        chosen_columns = tuple(
             c for i, c in enumerate(df.columns) if df.data[i] in include_types
-        ]
+        )
     else:
         chosen_columns = df.columns
     if not exclude_none:
@@ -344,9 +344,9 @@ def overload_dataframe_select_dtypes(df, include=None, exclude=None):
         # TODO(Nick): Add more general support for type rules:
         # ex. np.number for all numeric types, np.object for all obj types,
         # "string" for all string types
-        chosen_columns = [
+        chosen_columns = tuple(
             c for i, c in enumerate(chosen_columns) if df.data[i] not in exclude_types
-        ]
+        )
 
     data_args = ", ".join(
         f"df.iloc[:, {df.columns.index(c)}].values" for c in chosen_columns
@@ -510,9 +510,7 @@ def overload_dataframe_corr(df, method="pearson", min_periods=1):
     mat = "np.stack(({},), 1){}".format(arr_args, typ_conv)
 
     data_args = ", ".join("res[:,{}]".format(i) for i in range(len(numeric_cols)))
-
-    str_arr = "bodo.utils.conversion.coerce_to_array({})".format(numeric_cols)
-    index = "bodo.hiframes.pd_index_ext.init_string_index({})\n".format(str_arr)
+    index = f"pd.Index({numeric_cols})\n"
 
     header = "def impl(df, method='pearson', min_periods=1):\n"
     header += "  mat = {}\n".format(mat)
@@ -551,9 +549,7 @@ def overload_dataframe_cov(df, min_periods=None):
     mat = "np.stack(({},), 1){}".format(arr_args, typ_conv)
 
     data_args = ", ".join("res[:,{}]".format(i) for i in range(len(numeric_cols)))
-
-    str_arr = "bodo.utils.conversion.coerce_to_array({})".format(numeric_cols)
-    index = "bodo.hiframes.pd_index_ext.init_string_index({})\n".format(str_arr)
+    index = f"pd.Index({numeric_cols})\n"
 
     header = "def impl(df, min_periods=None):\n"
     header += "  mat = {}\n".format(mat)
@@ -561,19 +557,14 @@ def overload_dataframe_cov(df, min_periods=None):
     return _gen_init_df(header, numeric_cols, data_args, index)
 
 
-@overload_method(DataFrameType, "count", no_unliteral=True)
+@overload_method(DataFrameType, "count", inline="always", no_unliteral=True)
 def overload_dataframe_count(df, axis=0, level=None, numeric_only=False):
     # TODO: numeric_only flag
     data_args = ", ".join(f"df.iloc[:, {i}].count()" for i in range(len(df.columns)))
 
-    str_arr = "bodo.utils.conversion.coerce_to_array({})".format(df.columns)
-    index = "bodo.hiframes.pd_index_ext.init_string_index({})\n".format(str_arr)
-
     func_text = "def impl(df, axis=0, level=None, numeric_only=False):\n"
     func_text += "  data = np.array([{}])\n".format(data_args)
-    func_text += "  return bodo.hiframes.pd_series_ext.init_series(data, {})\n".format(
-        index
-    )
+    func_text += "  return bodo.hiframes.pd_series_ext.init_series(data, df.columns)\n"
     loc_vars = {}
     exec(func_text, {"bodo": bodo, "np": np}, loc_vars)
     impl = loc_vars["impl"]
@@ -584,14 +575,9 @@ def overload_dataframe_count(df, axis=0, level=None, numeric_only=False):
 def overload_dataframe_nunique(df, axis=0, dropna=True):
     data_args = ", ".join(f"df.iloc[:, {i}].nunique()" for i in range(len(df.columns)))
 
-    str_arr = "bodo.utils.conversion.coerce_to_array({})".format(df.columns)
-    index = "bodo.hiframes.pd_index_ext.init_string_index({})\n".format(str_arr)
-
     func_text = "def impl(df, axis=0, dropna=True):\n"
     func_text += "  data = np.asarray(({},))\n".format(data_args)
-    func_text += "  return bodo.hiframes.pd_series_ext.init_series(data, {})\n".format(
-        index
-    )
+    func_text += "  return bodo.hiframes.pd_series_ext.init_series(data, df.columns)\n"
     loc_vars = {}
     exec(func_text, {"bodo": bodo, "np": np}, loc_vars)
     impl = loc_vars["impl"]
@@ -683,9 +669,9 @@ def _gen_reduce_impl(df, func_name, args=None, axis=None):
         out_colnames = df.columns
     else:
         # TODO: numeric_only=None tries its best: core/frame.py/DataFrame/_reduce
-        numeric_cols = [
+        numeric_cols = tuple(
             c for c, d in zip(df.columns, df.data) if _is_numeric_dtype(d.dtype)
-        ]
+        )
         out_colnames = numeric_cols
 
     # TODO: support empty dataframe
@@ -724,7 +710,7 @@ def _gen_reduce_impl(df, func_name, args=None, axis=None):
         func_text += _gen_reduce_impl_axis1(func_name, out_colnames, comm_dtype, df)
 
     loc_vars = {}
-    exec(func_text, {"bodo": bodo, "np": np, "numba": numba}, loc_vars)
+    exec(func_text, {"bodo": bodo, "np": np, "pd": pd, "numba": numba}, loc_vars)
     impl = loc_vars["impl"]
     return impl
 
@@ -753,9 +739,6 @@ def _gen_reduce_impl_axis0(df, func_name, out_colnames, comm_dtype, args):
         f"df.iloc[:, {df.columns.index(c)}].{func_name}({args})" for c in out_colnames
     )
 
-    str_arr = "bodo.utils.conversion.coerce_to_array({})".format(out_colnames)
-    index = "bodo.hiframes.pd_index_ext.init_string_index({})\n".format(str_arr)
-
     func_text = ""
     # data conversion
     if func_name in ("idxmax", "idxmin"):
@@ -767,9 +750,7 @@ def _gen_reduce_impl_axis0(df, func_name, out_colnames, comm_dtype, args):
         )
     else:
         func_text += "  data = np.asarray(({},){})\n".format(data_args, typ_cast)
-    func_text += "  return bodo.hiframes.pd_series_ext.init_series(data, {})\n".format(
-        index
-    )
+    func_text += f"  return bodo.hiframes.pd_series_ext.init_series(data, pd.Index({out_colnames}))\n"
     return func_text
 
 
@@ -1034,7 +1015,7 @@ def _gen_init_df(header, columns, data_args, index=None, extra_globals=None):
         )
     )
     loc_vars = {}
-    _global = {"bodo": bodo, "np": np, "numba": numba}
+    _global = {"bodo": bodo, "np": np, "pd": pd, "numba": numba}
     _global.update(extra_globals)
     exec(func_text, _global, loc_vars)
     impl = loc_vars["impl"]
