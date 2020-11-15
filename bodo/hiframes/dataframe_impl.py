@@ -52,6 +52,7 @@ from bodo.utils.transform import gen_const_tup
 from bodo.utils.typing import (
     BodoError,
     check_unsupported_args,
+    get_overload_const,
     get_overload_const_int,
     get_overload_const_list,
     get_overload_const_str,
@@ -887,7 +888,7 @@ def overload_dataframe_set_index(
 
     check_unsupported_args("set_index", args_dict, args_default_dict)
 
-    col_name = get_overload_const_str(keys)
+    col_name = get_overload_const(keys)
     col_ind = df.columns.index(col_name)
 
     data_args = ", ".join(
@@ -899,8 +900,8 @@ def overload_dataframe_set_index(
     columns = tuple(c for c in df.columns if c != col_name)
     index = (
         "bodo.utils.conversion.index_from_array("
-        "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {}), '{}')"
-    ).format(col_ind, col_name)
+        "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {}), {})"
+    ).format(col_ind, f"'{col_name}'" if isinstance(col_name, str) else col_name)
     return _gen_init_df(header, columns, data_args, index)
 
 

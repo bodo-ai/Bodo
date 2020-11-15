@@ -50,7 +50,7 @@ from bodo.utils.typing import BodoError, BodoWarning
         pd.DataFrame(
             {
                 "A": pd.Series([1, 8, 4, 10, 3], dtype="Int32"),
-                "B": [1.1, np.nan, 4.2, 3.1, -1.3],
+                2: [1.1, np.nan, 4.2, 3.1, -1.3],
                 "C": [True, False, False, np.nan, True],
             },
             ["A", "BA", "", "DD", "C"],
@@ -59,8 +59,8 @@ from bodo.utils.typing import BodoError, BodoWarning
         pytest.param(
             pd.DataFrame(
                 {
-                    "A": np.array([1, 8, 4, 0, 3], dtype=np.uint8),
-                    "B": np.array([1.1, np.nan, 4.2, 3.1, -1.1], dtype=np.float32),
+                    3: np.array([1, 8, 4, 0, 3], dtype=np.uint8),
+                    1: np.array([1.1, np.nan, 4.2, 3.1, -1.1], dtype=np.float32),
                 }
             ),
             marks=pytest.mark.slow,
@@ -117,14 +117,14 @@ def df_value(request):
         pytest.param(pd.DataFrame({"A": [1, 8, 4, 11, -3]}), marks=pytest.mark.slow),
         # int and float columns
         pytest.param(
-            pd.DataFrame({"A": [1, 8, 4, 11, -3], "B": [1.1, np.nan, 4.2, 3.1, -1.1]}),
+            pd.DataFrame({"A": [1, 8, 4, 11, -3], 2: [1.1, np.nan, 4.2, 3.1, -1.1]}),
             marks=pytest.mark.slow,
         ),
         # uint8, float32 dtypes
         pd.DataFrame(
             {
-                "A": np.array([1, 8, 4, 0, 2], dtype=np.uint8),
-                "B": np.array([1.1, np.nan, 4.2, 3.1, -1.1], dtype=np.float32),
+                55: np.array([1, 8, 4, 0, 2], dtype=np.uint8),
+                -3: np.array([1.1, np.nan, 4.2, 3.1, -1.1], dtype=np.float32),
             }
         ),
         # pd.DataFrame({'A': np.array([1, 8, 4, 0], dtype=np.uint8),
@@ -436,7 +436,7 @@ def test_unbox_df1(df_value, memory_leak_check):
     # unbox and return Series data with index
     # (previous test can box Index unintentionally)
     def impl3(df_arg):
-        return df_arg.A
+        return df_arg.iloc[:, 0]
 
     check_func(impl3, (df_value,))
 
@@ -1299,7 +1299,7 @@ def test_df_quantile(df_value, memory_leak_check):
         return
 
     # pandas returns object Series for some reason when input has IntegerArray
-    if isinstance(df_value.A.dtype, pd.core.arrays.integer._IntegerDtype):
+    if isinstance(df_value.iloc[:, 0].dtype, pd.core.arrays.integer._IntegerDtype):
         return
 
     def impl(df):
@@ -1472,7 +1472,12 @@ def test_df_set_index(df_value, memory_leak_check):
         return
 
     # TODO: fix nullable int
-    if isinstance(df_value.A.dtype, pd.core.arrays.integer._IntegerDtype):
+    if isinstance(df_value.iloc[:, 0].dtype, pd.core.arrays.integer._IntegerDtype):
+        return
+
+    # TODO(ehsan): test non-str columns using 'df_value.columns[0]' instead of 'A" when
+    # Numba can convert freevars to literals
+    if "A" not in df_value.columns:
         return
 
     def impl(df):
