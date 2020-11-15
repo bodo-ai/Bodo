@@ -252,7 +252,9 @@ def test_series_concat_categorical(memory_leak_check):
 #    check_func(f, (S1, S2), reset_index=True)
 
 
-def test_dataframe_concat(series_val, memory_leak_check):
+# TODO: readd memory leak check when PDCategorical type constant lowering
+# no longer leaks memory
+def test_dataframe_concat(series_val):
     """This is actually a dataframe test that adds empty
     column when missing
     """
@@ -261,17 +263,19 @@ def test_dataframe_concat(series_val, memory_leak_check):
     if isinstance(series_val.dtype, pd.core.arrays.integer._IntegerDtype):
         return
 
-    # categories to be handled separately
-    if isinstance(series_val.dtype, pd.CategoricalDtype):
-        return
-
-    def f(S1, S2):
-        return pd.concat([S1, S2])
+    def f(df1, df2):
+        return pd.concat([df1, df2])
 
     S1 = series_val.copy()
     S2 = series_val.copy()
     df1 = pd.DataFrame({"A": S1.values})
     df2 = pd.DataFrame({"B": S2.values})
+    # Categorical data seems to revert to object arrays when concat in Python
+    # As a result we will compute the output directly and do the comparison
+    if isinstance(series_val.dtype, pd.CategoricalDtype):
+        py_output = f(df1, df2).astype("category")
+    else:
+        py_output = None
     if isinstance(series_val.values[0], list):
         check_func(
             f,
@@ -279,9 +283,44 @@ def test_dataframe_concat(series_val, memory_leak_check):
             sort_output=True,
             reset_index=True,
             convert_columns_to_pandas=True,
+            py_output=py_output,
         )
     else:
-        check_func(f, (df1, df2), sort_output=True, reset_index=True)
+        check_func(
+            f, (df1, df2), sort_output=True, reset_index=True, py_output=py_output
+        )
+
+
+# TODO: readd memory leak check when PDCategorical type constant lowering
+# no longer leaks memory
+@pytest.mark.slow
+def test_dataframe_concat_cat_dynamic():
+    """This is actually a dataframe test that adds empty
+    column when missing if categories change dynamically
+    """
+
+    def f(df1, df2, to_replace, value):
+        df1.replace(to_replace, value)
+        df2.replace(to_replace, value)
+        return pd.concat([df1, df2])
+
+    S = pd.Series(["AA", "BB", "", "AA", None, "AA"], dtype="category")
+    S1 = S.copy()
+    S2 = S.copy()
+    df1 = pd.DataFrame({"A": S1.values})
+    df2 = pd.DataFrame({"B": S2.values})
+    to_replace = "AA"
+    value = "AAAA"
+    # Categorical data seems to revert to object arrays when concat in Python
+    # As a result we will compute the output directly and do the comparison
+    py_output = f(df1, df2, to_replace, value).astype("category")
+    check_func(
+        f,
+        (df1, df2, to_replace, value),
+        sort_output=True,
+        reset_index=True,
+        py_output=py_output,
+    )
 
 
 def test_series_concat_convert_to_nullable(memory_leak_check):

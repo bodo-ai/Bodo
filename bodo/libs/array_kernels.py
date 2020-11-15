@@ -1492,68 +1492,6 @@ def overload_gen_na_array(n, arr):
 
     dtype = arr.dtype
 
-    if isinstance(arr, ArrayItemArrayType):
-        data_arr_type = arr.dtype
-        nested_counts = bodo.utils.transform.get_type_alloc_counts(data_arr_type)
-        n_items = (0,) * nested_counts
-
-        def array_item_impl(n, arr):  # pragma: no cover
-            # preallocate the output
-            out_arr = bodo.libs.array_item_arr_ext.pre_alloc_array_item_array(
-                n, n_items, data_arr_type
-            )
-            out_offsets = bodo.libs.array_item_arr_ext.get_offsets(out_arr)
-            out_null_bitmap = bodo.libs.array_item_arr_ext.get_null_bitmap(out_arr)
-            for i in range(n + 1):
-                out_offsets[i] = 0
-            for i in range(n):
-                bodo.libs.int_arr_ext.set_bit_to_arr(out_null_bitmap, i, 0)
-            return out_arr
-
-        return array_item_impl
-
-    if arr == datetime_date_array_type:
-
-        def impl_datetime_date(n, arr):  # pragma: no cover
-            A = bodo.hiframes.datetime_date_ext.alloc_datetime_date_array(n)
-            for i in range(n):
-                bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, i, 0)
-            return A
-
-        return impl_datetime_date
-
-    if arr == datetime_timedelta_array_type:
-
-        def impl_datetime_timedelta(n, arr):  # pragma: no cover
-            A = bodo.hiframes.datetime_timedelta_ext.alloc_datetime_timedelta_array(n)
-            for i in range(n):
-                bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, i, 0)
-            return A
-
-        return impl_datetime_timedelta
-
-    if arr == boolean_array:
-
-        def impl_boolean(n, arr):  # pragma: no cover
-            A = bodo.libs.bool_arr_ext.alloc_bool_array(n)
-            for i in range(n):
-                bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, i, 0)
-            return A
-
-        return impl_boolean
-
-    if isinstance(arr, DecimalArrayType):
-        precision = arr.dtype.precision
-        scale = arr.dtype.scale
-
-        def impl_decimal(n, arr):  # pragma: no cover
-            A = bodo.libs.decimal_arr_ext.alloc_decimal_array(n, precision, scale)
-            for i in range(n):
-                bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, i, 0)
-            return A
-
-        return impl_decimal
-
     # array of np.nan values if 'arr' is float or int Numpy array
     # TODO: use nullable int array
     if isinstance(dtype, (types.Integer, types.Float)):
@@ -1568,39 +1506,14 @@ def overload_gen_na_array(n, arr):
 
         return impl_float
 
-    if isinstance(dtype, (types.NPDatetime, types.NPTimedelta)):
-        nat = dtype("NaT")
-        if dtype == types.NPDatetime("ns"):
-            dtype = np.dtype("datetime64[ns]")
-        elif dtype == types.NPTimedelta("ns"):
-            dtype = np.dtype("timedelta64[ns]")
+    def impl(n, arr):  # pragma: no cover
+        numba.parfors.parfor.init_prange()
+        out_arr = bodo.utils.utils.alloc_type(n, arr, (0,))
+        for i in numba.parfors.parfor.internal_prange(n):
+            setna(out_arr, i)
+        return out_arr
 
-        def impl_dt64(n, arr):  # pragma: no cover
-            numba.parfors.parfor.init_prange()
-            out_arr = np.empty(n, dtype)
-            for i in numba.parfors.parfor.internal_prange(n):
-                out_arr[i] = nat
-            return out_arr
-
-        return impl_dt64
-
-    if dtype == bodo.string_type:
-
-        def impl_str(n, arr):  # pragma: no cover
-            out_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(n, 0)
-            for j in numba.parfors.parfor.internal_prange(n):
-                out_arr[j] = ""
-                setna(out_arr, j)
-            return out_arr
-
-        return impl_str
-
-    # TODO: support all array types
-    raise BodoError(
-        "array type {} not supported for all NA generation in gen_na_array() yet".format(
-            arr
-        )
-    )  # pragma: no cover
+    return impl
 
 
 def gen_na_array_equiv(self, scope, equiv_set, loc, args, kws):  # pragma: no cover
