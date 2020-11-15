@@ -88,6 +88,7 @@ from bodo.utils.typing import (
     get_udf_error_msg,
     get_udf_out_arr_type,
     is_dtype_nullable,
+    is_heterogeneous_tuple_type,
     is_iterable_type,
     is_overload_bool,
     is_overload_bool_list,
@@ -308,9 +309,11 @@ class DataFrameAttribute(AttributeTemplate):
             types.BaseTuple.from_types(tuple(types.literal(c) for c in df.columns)),
             None,
         )
-        row_typ = HeterogeneousSeriesType(
-            types.BaseTuple.from_types(dtypes), index_type, name_type
-        )
+        data_type = types.BaseTuple.from_types(dtypes)
+        if is_heterogeneous_tuple_type(data_type):
+            row_typ = HeterogeneousSeriesType(data_type, index_type, name_type)
+        else:
+            row_typ = SeriesType(data_type.dtype, data_type, index_type, name_type)
         arg_typs = (row_typ,)
         if f_args is not None:
             arg_typs += tuple(f_args.types)
