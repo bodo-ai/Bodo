@@ -1388,7 +1388,9 @@ class DataFramePass:
         if return_key and (grp_typ.as_index is False or out_typ.index != types.none):
             out_key_vars = []
             for k in grp_typ.keys:
-                out_key_var = ir.Var(lhs.scope, mk_unique_var(k), lhs.loc)
+                out_key_var = ir.Var(
+                    lhs.scope, mk_unique_var(sanitize_varname(k)), lhs.loc
+                )
                 ind = df_type.columns.index(k)
                 self.typemap[out_key_var.name] = df_type.data[ind]
                 out_key_vars.append(out_key_var)

@@ -44,11 +44,13 @@ from bodo.utils.typing import (
     BodoError,
     create_unsupported_overload,
     get_index_data_arr_types,
+    get_literal_value,
     get_overload_const_func,
     get_overload_const_list,
     get_overload_const_str,
     get_overload_constant_dict,
     is_dtype_nullable,
+    is_literal_type,
     is_overload_constant_bool,
     is_overload_constant_dict,
     is_overload_constant_list,
@@ -153,9 +155,9 @@ def validate_groupby_spec(
         )
 
     # make sure by is a const str list
-    if not is_overload_constant_str(by) and not is_overload_constant_list(by):
+    if not is_literal_type(by) and not is_overload_constant_list(by):
         raise_const_error(
-            "groupby(): 'by' parameter only supports a constant column label or column labels."
+            f"groupby(): 'by' parameter only supports a constant column label or column labels, not {by}."
         )
 
     # make sure by has valid label(s)
@@ -223,10 +225,10 @@ class GroupbyTyper(AbstractTemplate):
         assert not kws
         df, by, as_index = args
 
-        if is_overload_constant_str(by):
-            keys = (get_overload_const_str(by),)
-        elif is_overload_constant_list(by):
+        if is_overload_constant_list(by):
             keys = tuple(get_overload_const_list(by))
+        elif is_literal_type(by):
+            keys = (get_literal_value(by),)
 
         selection = list(df.columns)
         for k in keys:
@@ -269,7 +271,6 @@ class GetItemDataFrameGroupBy(AbstractTemplate):
         # df.groupby('A')['B', 'C']
         if isinstance(grpby, DataFrameGroupByType):
             if isinstance(idx, (tuple, list)):
-                assert all(isinstance(c, str) for c in idx)
                 if len(set(idx).difference(set(grpby.df_type.columns))) > 0:
                     raise_const_error(
                         "groupby: selected column {} not found in dataframe".format(
@@ -277,14 +278,12 @@ class GetItemDataFrameGroupBy(AbstractTemplate):
                         )
                     )
                 selection = idx
-            elif isinstance(idx, str):
+            else:
                 if idx not in grpby.df_type.columns:
                     raise_const_error(
                         "groupby: selected column {} not found in dataframe".format(idx)
                     )
                 selection = (idx,)
-            else:
-                raise BodoError("invalid groupby selection {}".format(idx))
             ret_grp = DataFrameGroupByType(
                 grpby.df_type, grpby.keys, selection, grpby.as_index, True
             )

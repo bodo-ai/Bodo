@@ -2710,13 +2710,13 @@ def test_groupby_as_index_sum(memory_leak_check):
     """
 
     def impl1(n):
-        df = pd.DataFrame({"A": np.ones(n, np.int64), "B": np.arange(n)})
-        df2 = df.groupby("A", as_index=False).sum()
+        df = pd.DataFrame({1: np.ones(n, np.int64), 2: np.arange(n)})
+        df2 = df.groupby(1, as_index=False).sum()
         return df2
 
     def impl2(n):
-        df = pd.DataFrame({"A": np.ones(n, np.int64), "B": np.arange(n)})
-        df2 = df.groupby("A", as_index=False)["B"].sum()
+        df = pd.DataFrame({3: np.ones(n, np.int64), -3: np.arange(n)})
+        df2 = df.groupby(3, as_index=False)[-3].sum()
         return df2
 
     check_func(impl1, (11,), sort_output=True, reset_index=True)
@@ -2948,13 +2948,13 @@ def test_groupby_as_index_var(memory_leak_check):
     """
 
     def impl1(n):
-        df = pd.DataFrame({"A": np.ones(n, np.int64), "B": np.arange(n)})
+        df = pd.DataFrame({"A": np.ones(n, np.int64), 11: np.arange(n)})
         df2 = df.groupby("A", as_index=False).var()
         return df2
 
     def impl2(n):
-        df = pd.DataFrame({"A": np.ones(n, np.int64), "B": np.arange(n)})
-        df2 = df.groupby("A", as_index=False)["B"].var()
+        df = pd.DataFrame({4: np.ones(n, np.int64), "B": np.arange(n)})
+        df2 = df.groupby(4, as_index=False)["B"].var()
         return df2
 
     check_func(impl1, (11,), sort_output=True, check_dtype=False, reset_index=True)
