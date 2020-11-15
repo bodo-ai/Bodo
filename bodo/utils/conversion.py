@@ -50,6 +50,9 @@ def overload_coerce_to_ndarray(
     )
     from bodo.hiframes.pd_series_ext import SeriesType
 
+    # unliteral e.g. Tuple(Literal[int](3), Literal[int](1)) to UniTuple(int64 x 2)
+    data = types.unliteral(data)
+
     # TODO: handle NAs?
     # nullable int array
     if isinstance(
@@ -394,6 +397,9 @@ def overload_coerce_to_array(
     # TODO: support other arrays like list(str), datetime.date ...
     from bodo.hiframes.pd_index_ext import StringIndexType
     from bodo.hiframes.pd_series_ext import SeriesType
+
+    # unliteral e.g. Tuple(Literal[int](3), Literal[int](1)) to UniTuple(int64 x 2)
+    data = types.unliteral(data)
 
     # series
     if isinstance(data, SeriesType):
