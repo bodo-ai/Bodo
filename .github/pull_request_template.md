@@ -7,7 +7,7 @@
    - [ ] added `#pragma no cover` for jitted functions
 
   - Issue checklist:
-    - [ ] Closes Issue #XXXX. 
+    - [ ] Closes #XXXX. 
  
   - Testing:
     - [ ] Tested any newly added tests with np3 
