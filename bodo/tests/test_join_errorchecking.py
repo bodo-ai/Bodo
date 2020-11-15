@@ -1,8 +1,8 @@
 import pandas as pd
-import bodo
-from bodo.utils.typing import BodoError
 import pytest
 
+import bodo
+from bodo.utils.typing import BodoError
 
 # ------------------------------ merge() ------------------------------ #
 

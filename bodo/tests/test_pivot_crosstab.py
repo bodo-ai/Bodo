@@ -1,31 +1,32 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
-import sys
-import random
-import string
 import datetime
+import random
 import re
-import pandas as pd
-import numpy as np
-import bodo
-from bodo.utils.typing import BodoError
+import string
+import sys
 from decimal import Decimal
-from bodo.tests.utils import (
-    count_array_REPs,
-    count_parfor_REPs,
-    count_parfor_OneDs,
-    count_array_OneDs,
-    dist_IR_contains,
-    check_parallel_coherency,
-    gen_random_decimal_array,
-    gen_random_string_array,
-    gen_random_list_string_array,
-    convert_non_pandas_columns,
-    get_start_end,
-    check_func,
-    check_caching,
-)
+
+import numpy as np
+import pandas as pd
 import pytest
 
+import bodo
+from bodo.tests.utils import (
+    check_caching,
+    check_func,
+    check_parallel_coherency,
+    convert_non_pandas_columns,
+    count_array_OneDs,
+    count_array_REPs,
+    count_parfor_OneDs,
+    count_parfor_REPs,
+    dist_IR_contains,
+    gen_random_decimal_array,
+    gen_random_list_string_array,
+    gen_random_string_array,
+    get_start_end,
+)
+from bodo.utils.typing import BodoError
 
 _pivot_df1 = pd.DataFrame(
     {
@@ -221,6 +222,7 @@ def test_pivot_random_int_mean_var_std(memory_leak_check):
     )
 
 
+@pytest.mark.smoke
 def test_pivot(memory_leak_check):
     def test_impl(df):
         pt = df.pivot_table(index="A", columns="C", values="D", aggfunc="sum")
@@ -258,6 +260,7 @@ def test_pivot_drop_column(datapath, memory_leak_check):
     check_func(impl, (), additional_compiler_arguments=add_args)
 
 
+@pytest.mark.smoke
 def test_crosstab(memory_leak_check):
     def test_impl(df):
         pt = pd.crosstab(df.A, df.C)

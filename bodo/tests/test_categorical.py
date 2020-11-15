@@ -10,6 +10,7 @@ import bodo
 from bodo.tests.utils import check_func
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "dtype",
     [
@@ -52,6 +53,7 @@ def cat_arr_value(request):
     return request.param
 
 
+@pytest.mark.slow
 def test_unbox_cat_arr(cat_arr_value, memory_leak_check):
     # just unbox
     def impl(arr):
@@ -66,6 +68,7 @@ def test_unbox_cat_arr(cat_arr_value, memory_leak_check):
     check_func(impl2, (cat_arr_value,))
 
 
+@pytest.mark.smoke
 def test_setitem_int(cat_arr_value, memory_leak_check):
     def test_impl(A, i, val):
         A[i] = val
@@ -154,6 +157,7 @@ def test_setitem_slice_cats(cat_arr_value, memory_leak_check):
     check_func(test_impl, (cat_arr_value, i, val), dist_test=False)
 
 
+@pytest.mark.smoke
 def test_getitem_int(cat_arr_value, memory_leak_check):
     def test_impl(A, i):
         return A[i]
@@ -184,6 +188,7 @@ def test_getitem_slice(cat_arr_value, memory_leak_check):
     pd.testing.assert_extension_array_equal(py_out, bodo_out)
 
 
+@pytest.mark.slow
 def test_pd_get_dummies(cat_arr_value, memory_leak_check):
     def test_impl(A):
         return pd.get_dummies(A)
@@ -229,6 +234,7 @@ def test_replace_list(memory_leak_check):
 
 
 # Readd memory_leak_check when lowering memory leak is handled
+@pytest.mark.slow
 def test_replace_const_string():
     def test_impl(A):
         return A.replace("CC", "ZZZZ")
@@ -247,6 +253,7 @@ def test_replace_const():
 
 
 # Readd memory_leak_check when lowering memory leak is handled
+@pytest.mark.slow
 def test_replace_const_list():
     def test_impl(A):
         return A.replace([2, 3, 7], 5)
@@ -285,6 +292,7 @@ def test_replace_delete_list(memory_leak_check):
 
 
 # Readd memory_leak_check when lowering memory leak is handled
+@pytest.mark.slow
 def test_replace_delete_const():
     def test_impl(A):
         return A.replace(2, 1)
@@ -309,6 +317,7 @@ def test_replace_same(memory_leak_check):
 
 
 # Readd memory_leak_check when lowering memory leak is handled
+@pytest.mark.slow
 def test_replace_same_const():
     def test_impl(A):
         return A.replace("CC", "CC")

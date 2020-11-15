@@ -14,192 +14,116 @@ batch:
       image: 427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:1.0
       variables:
         NP: 1
-        NUMBER_GROUPS_SPLIT: 10
+        NUMBER_GROUPS_SPLIT: 6
         PYTEST_MARKER: not slow and 0
-    identifier: linux_NP_1_NUMBER_GROUPS_SPLIT_10_PYTEST_MARKER_not_slow_and_0
+    identifier: linux_NP_1_NUMBER_GROUPS_SPLIT_6_PYTEST_MARKER_not_slow_and_0
   - buildspec: buildscripts/aws/buildspecs/CI_buildspec.yml
     env:
       compute-type: BUILD_GENERAL1_MEDIUM
       image: 427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:1.0
       variables:
         NP: 1
-        NUMBER_GROUPS_SPLIT: 10
+        NUMBER_GROUPS_SPLIT: 6
         PYTEST_MARKER: not slow and 1
-    identifier: linux_NP_1_NUMBER_GROUPS_SPLIT_10_PYTEST_MARKER_not_slow_and_1
+    identifier: linux_NP_1_NUMBER_GROUPS_SPLIT_6_PYTEST_MARKER_not_slow_and_1
   - buildspec: buildscripts/aws/buildspecs/CI_buildspec.yml
     env:
       compute-type: BUILD_GENERAL1_MEDIUM
       image: 427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:1.0
       variables:
         NP: 1
-        NUMBER_GROUPS_SPLIT: 10
+        NUMBER_GROUPS_SPLIT: 6
         PYTEST_MARKER: not slow and 2
-    identifier: linux_NP_1_NUMBER_GROUPS_SPLIT_10_PYTEST_MARKER_not_slow_and_2
+    identifier: linux_NP_1_NUMBER_GROUPS_SPLIT_6_PYTEST_MARKER_not_slow_and_2
   - buildspec: buildscripts/aws/buildspecs/CI_buildspec.yml
     env:
       compute-type: BUILD_GENERAL1_MEDIUM
       image: 427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:1.0
       variables:
         NP: 1
-        NUMBER_GROUPS_SPLIT: 10
+        NUMBER_GROUPS_SPLIT: 6
         PYTEST_MARKER: not slow and 3
-    identifier: linux_NP_1_NUMBER_GROUPS_SPLIT_10_PYTEST_MARKER_not_slow_and_3
+    identifier: linux_NP_1_NUMBER_GROUPS_SPLIT_6_PYTEST_MARKER_not_slow_and_3
   - buildspec: buildscripts/aws/buildspecs/CI_buildspec.yml
     env:
       compute-type: BUILD_GENERAL1_MEDIUM
       image: 427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:1.0
       variables:
         NP: 1
-        NUMBER_GROUPS_SPLIT: 10
+        NUMBER_GROUPS_SPLIT: 6
         PYTEST_MARKER: not slow and 4
-    identifier: linux_NP_1_NUMBER_GROUPS_SPLIT_10_PYTEST_MARKER_not_slow_and_4
+    identifier: linux_NP_1_NUMBER_GROUPS_SPLIT_6_PYTEST_MARKER_not_slow_and_4
   - buildspec: buildscripts/aws/buildspecs/CI_buildspec.yml
     env:
       compute-type: BUILD_GENERAL1_MEDIUM
       image: 427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:1.0
       variables:
         NP: 1
-        NUMBER_GROUPS_SPLIT: 10
+        NUMBER_GROUPS_SPLIT: 6
         PYTEST_MARKER: not slow and 5
-    identifier: linux_NP_1_NUMBER_GROUPS_SPLIT_10_PYTEST_MARKER_not_slow_and_5
-  - buildspec: buildscripts/aws/buildspecs/CI_buildspec.yml
-    env:
-      compute-type: BUILD_GENERAL1_MEDIUM
-      image: 427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:1.0
-      variables:
-        NP: 1
-        NUMBER_GROUPS_SPLIT: 10
-        PYTEST_MARKER: not slow and 6
-    identifier: linux_NP_1_NUMBER_GROUPS_SPLIT_10_PYTEST_MARKER_not_slow_and_6
-  - buildspec: buildscripts/aws/buildspecs/CI_buildspec.yml
-    env:
-      compute-type: BUILD_GENERAL1_MEDIUM
-      image: 427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:1.0
-      variables:
-        NP: 1
-        NUMBER_GROUPS_SPLIT: 10
-        PYTEST_MARKER: not slow and 7
-    identifier: linux_NP_1_NUMBER_GROUPS_SPLIT_10_PYTEST_MARKER_not_slow_and_7
-  - buildspec: buildscripts/aws/buildspecs/CI_buildspec.yml
-    env:
-      compute-type: BUILD_GENERAL1_MEDIUM
-      image: 427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:1.0
-      variables:
-        NP: 1
-        NUMBER_GROUPS_SPLIT: 10
-        PYTEST_MARKER: not slow and 8
-    identifier: linux_NP_1_NUMBER_GROUPS_SPLIT_10_PYTEST_MARKER_not_slow_and_8
-  - buildspec: buildscripts/aws/buildspecs/CI_buildspec.yml
-    env:
-      compute-type: BUILD_GENERAL1_MEDIUM
-      image: 427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:1.0
-      variables:
-        NP: 1
-        NUMBER_GROUPS_SPLIT: 10
-        PYTEST_MARKER: not slow and 9
-    identifier: linux_NP_1_NUMBER_GROUPS_SPLIT_10_PYTEST_MARKER_not_slow_and_9
+    identifier: linux_NP_1_NUMBER_GROUPS_SPLIT_6_PYTEST_MARKER_not_slow_and_5
   - buildspec: buildscripts/aws/buildspecs/CI_buildspec.yml
     env:
       compute-type: BUILD_GENERAL1_MEDIUM
       image: 427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:1.0
       variables:
         NP: 2
-        NUMBER_GROUPS_SPLIT: 10
+        NUMBER_GROUPS_SPLIT: 6
         PYTEST_MARKER: not slow and 0
-    identifier: linux_NP_2_NUMBER_GROUPS_SPLIT_10_PYTEST_MARKER_not_slow_and_0
+    identifier: linux_NP_2_NUMBER_GROUPS_SPLIT_6_PYTEST_MARKER_not_slow_and_0
   - buildspec: buildscripts/aws/buildspecs/CI_buildspec.yml
     env:
       compute-type: BUILD_GENERAL1_MEDIUM
       image: 427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:1.0
       variables:
         NP: 2
-        NUMBER_GROUPS_SPLIT: 10
+        NUMBER_GROUPS_SPLIT: 6
         PYTEST_MARKER: not slow and 1
-    identifier: linux_NP_2_NUMBER_GROUPS_SPLIT_10_PYTEST_MARKER_not_slow_and_1
+    identifier: linux_NP_2_NUMBER_GROUPS_SPLIT_6_PYTEST_MARKER_not_slow_and_1
   - buildspec: buildscripts/aws/buildspecs/CI_buildspec.yml
     env:
       compute-type: BUILD_GENERAL1_MEDIUM
       image: 427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:1.0
       variables:
         NP: 2
-        NUMBER_GROUPS_SPLIT: 10
+        NUMBER_GROUPS_SPLIT: 6
         PYTEST_MARKER: not slow and 2
-    identifier: linux_NP_2_NUMBER_GROUPS_SPLIT_10_PYTEST_MARKER_not_slow_and_2
+    identifier: linux_NP_2_NUMBER_GROUPS_SPLIT_6_PYTEST_MARKER_not_slow_and_2
   - buildspec: buildscripts/aws/buildspecs/CI_buildspec.yml
     env:
       compute-type: BUILD_GENERAL1_MEDIUM
       image: 427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:1.0
       variables:
         NP: 2
-        NUMBER_GROUPS_SPLIT: 10
+        NUMBER_GROUPS_SPLIT: 6
         PYTEST_MARKER: not slow and 3
-    identifier: linux_NP_2_NUMBER_GROUPS_SPLIT_10_PYTEST_MARKER_not_slow_and_3
+    identifier: linux_NP_2_NUMBER_GROUPS_SPLIT_6_PYTEST_MARKER_not_slow_and_3
   - buildspec: buildscripts/aws/buildspecs/CI_buildspec.yml
     env:
       compute-type: BUILD_GENERAL1_MEDIUM
       image: 427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:1.0
       variables:
         NP: 2
-        NUMBER_GROUPS_SPLIT: 10
+        NUMBER_GROUPS_SPLIT: 6
         PYTEST_MARKER: not slow and 4
-    identifier: linux_NP_2_NUMBER_GROUPS_SPLIT_10_PYTEST_MARKER_not_slow_and_4
+    identifier: linux_NP_2_NUMBER_GROUPS_SPLIT_6_PYTEST_MARKER_not_slow_and_4
   - buildspec: buildscripts/aws/buildspecs/CI_buildspec.yml
     env:
       compute-type: BUILD_GENERAL1_MEDIUM
       image: 427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:1.0
       variables:
         NP: 2
-        NUMBER_GROUPS_SPLIT: 10
+        NUMBER_GROUPS_SPLIT: 6
         PYTEST_MARKER: not slow and 5
-    identifier: linux_NP_2_NUMBER_GROUPS_SPLIT_10_PYTEST_MARKER_not_slow_and_5
-  - buildspec: buildscripts/aws/buildspecs/CI_buildspec.yml
-    env:
-      compute-type: BUILD_GENERAL1_MEDIUM
-      image: 427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:1.0
-      variables:
-        NP: 2
-        NUMBER_GROUPS_SPLIT: 10
-        PYTEST_MARKER: not slow and 6
-    identifier: linux_NP_2_NUMBER_GROUPS_SPLIT_10_PYTEST_MARKER_not_slow_and_6
-  - buildspec: buildscripts/aws/buildspecs/CI_buildspec.yml
-    env:
-      compute-type: BUILD_GENERAL1_MEDIUM
-      image: 427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:1.0
-      variables:
-        NP: 2
-        NUMBER_GROUPS_SPLIT: 10
-        PYTEST_MARKER: not slow and 7
-    identifier: linux_NP_2_NUMBER_GROUPS_SPLIT_10_PYTEST_MARKER_not_slow_and_7
-  - buildspec: buildscripts/aws/buildspecs/CI_buildspec.yml
-    env:
-      compute-type: BUILD_GENERAL1_MEDIUM
-      image: 427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:1.0
-      variables:
-        NP: 2
-        NUMBER_GROUPS_SPLIT: 10
-        PYTEST_MARKER: not slow and 8
-    identifier: linux_NP_2_NUMBER_GROUPS_SPLIT_10_PYTEST_MARKER_not_slow_and_8
-  - buildspec: buildscripts/aws/buildspecs/CI_buildspec.yml
-    env:
-      compute-type: BUILD_GENERAL1_MEDIUM
-      image: 427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:1.0
-      variables:
-        NP: 2
-        NUMBER_GROUPS_SPLIT: 10
-        PYTEST_MARKER: not slow and 9
-    identifier: linux_NP_2_NUMBER_GROUPS_SPLIT_10_PYTEST_MARKER_not_slow_and_9
+    identifier: linux_NP_2_NUMBER_GROUPS_SPLIT_6_PYTEST_MARKER_not_slow_and_5
   - buildspec: buildscripts/aws/buildspecs/sonar_buildspec.yml
     depend-on:
-    - linux_NP_1_NUMBER_GROUPS_SPLIT_10_PYTEST_MARKER_not_slow_and_0
-    - linux_NP_1_NUMBER_GROUPS_SPLIT_10_PYTEST_MARKER_not_slow_and_1
-    - linux_NP_1_NUMBER_GROUPS_SPLIT_10_PYTEST_MARKER_not_slow_and_2
-    - linux_NP_1_NUMBER_GROUPS_SPLIT_10_PYTEST_MARKER_not_slow_and_3
-    - linux_NP_1_NUMBER_GROUPS_SPLIT_10_PYTEST_MARKER_not_slow_and_4
-    - linux_NP_1_NUMBER_GROUPS_SPLIT_10_PYTEST_MARKER_not_slow_and_5
-    - linux_NP_1_NUMBER_GROUPS_SPLIT_10_PYTEST_MARKER_not_slow_and_6
-    - linux_NP_1_NUMBER_GROUPS_SPLIT_10_PYTEST_MARKER_not_slow_and_7
-    - linux_NP_1_NUMBER_GROUPS_SPLIT_10_PYTEST_MARKER_not_slow_and_8
-    - linux_NP_1_NUMBER_GROUPS_SPLIT_10_PYTEST_MARKER_not_slow_and_9
+    - linux_NP_1_NUMBER_GROUPS_SPLIT_6_PYTEST_MARKER_not_slow_and_0
+    - linux_NP_1_NUMBER_GROUPS_SPLIT_6_PYTEST_MARKER_not_slow_and_1
+    - linux_NP_1_NUMBER_GROUPS_SPLIT_6_PYTEST_MARKER_not_slow_and_2
+    - linux_NP_1_NUMBER_GROUPS_SPLIT_6_PYTEST_MARKER_not_slow_and_3
+    - linux_NP_1_NUMBER_GROUPS_SPLIT_6_PYTEST_MARKER_not_slow_and_4
+    - linux_NP_1_NUMBER_GROUPS_SPLIT_6_PYTEST_MARKER_not_slow_and_5
     env:
       compute-type: BUILD_GENERAL1_SMALL
       image: aws/codebuild/standard:4.0

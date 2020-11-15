@@ -33,6 +33,7 @@ def dataframe_val(request):
     return request.param
 
 
+@pytest.mark.slow
 def test_factorial(dataframe_val):
     """Factorial limit for a 64 bit integer is 20"""
 

@@ -18,6 +18,7 @@ from bodo.libs.str_arr_ext import str_arr_from_sequence
 from bodo.tests.utils import check_func
 
 
+@pytest.mark.slow
 def test_string_float64_cast(memory_leak_check):
     def test_impl(_str):
         return np.float64(_str)
@@ -53,6 +54,7 @@ def test_float_str_abslt1_cast(memory_leak_check):
     check_func(test_impl, (-0.035312,))
 
 
+@pytest.mark.slow
 def test_string_float32_cast(memory_leak_check):
     def test_impl(_str):
         return np.float32(_str)
@@ -60,6 +62,7 @@ def test_string_float32_cast(memory_leak_check):
     check_func(test_impl, ("12.2",))
 
 
+@pytest.mark.slow
 def test_string_base10_cast(memory_leak_check):
     def test_impl(_str):
         return int(_str, base=10)
@@ -67,6 +70,7 @@ def test_string_base10_cast(memory_leak_check):
     check_func(test_impl, ("12",))
 
 
+@pytest.mark.slow
 def test_string_base2_cast(memory_leak_check):
     def test_impl(_str):
         return int(_str, base=2)
@@ -74,6 +78,7 @@ def test_string_base2_cast(memory_leak_check):
     check_func(test_impl, ("10",))
 
 
+@pytest.mark.slow
 def test_string_base16_cast(memory_leak_check):
     def test_impl(_str):
         return int(_str, base=16)

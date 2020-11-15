@@ -194,6 +194,7 @@ def test_dt64_sub_output(memory_leak_check):
     check_func(impl, (S1, S2), check_dtype=False)
 
 
+@pytest.mark.slow
 def test_datetime_timedelta_coerce(memory_leak_check):
     ts = datetime.timedelta(7, 7, 7)
 
@@ -205,6 +206,7 @@ def test_datetime_timedelta_coerce(memory_leak_check):
     check_func(f, (df1,))
 
 
+@pytest.mark.slow
 def test_datetime_datetime_coerce(memory_leak_check):
     ts = datetime.datetime(2020, 1, 20, 10, 20, 30, 40)
 
@@ -216,6 +218,7 @@ def test_datetime_datetime_coerce(memory_leak_check):
     check_func(f, (df1,))
 
 
+@pytest.mark.slow
 def test_datetime_date_coerce(memory_leak_check):
     ts = datetime.date(2003, 1, 1)
 
@@ -227,6 +230,7 @@ def test_datetime_date_coerce(memory_leak_check):
     check_func(f, (df1,))
 
 
+@pytest.mark.slow
 def test_datetime_date_constant_lowering(memory_leak_check):
     date = datetime.date(2004, 1, 1)
 
@@ -238,6 +242,7 @@ def test_datetime_date_constant_lowering(memory_leak_check):
     assert val_ret == date
 
 
+@pytest.mark.slow
 def test_timedelta_constant_lowering(memory_leak_check):
     timedelta = datetime.timedelta(3, 3, 3)
 
@@ -249,6 +254,7 @@ def test_timedelta_constant_lowering(memory_leak_check):
     assert val_ret == timedelta
 
 
+@pytest.mark.slow
 def test_datetime_datetime_constant_lowering(memory_leak_check):
     ts = datetime.datetime.now()
 
@@ -260,6 +266,7 @@ def test_datetime_datetime_constant_lowering(memory_leak_check):
     assert val_ret == ts
 
 
+@pytest.mark.slow
 def test_datetime_date_hash(memory_leak_check):
     date1 = datetime.date(2004, 1, 1)
     date2 = datetime.date(2004, 1, 2)
@@ -275,6 +282,7 @@ def test_datetime_date_hash(memory_leak_check):
     check_func(impl, (date1, date2, date3), dist_test=False)
 
 
+@pytest.mark.slow
 def test_datetime_timedelta_hash(memory_leak_check):
     td1 = datetime.timedelta(1)
     td2 = datetime.timedelta(2)
@@ -290,6 +298,7 @@ def test_datetime_timedelta_hash(memory_leak_check):
     check_func(impl, (td1, td2, td3), dist_test=False)
 
 
+@pytest.mark.slow
 def test_timestamp_constant_lowering(memory_leak_check):
     t = pd.Timestamp("2012-06-18")
 
@@ -310,6 +319,7 @@ def test_timestamp_weekday(memory_leak_check):
         check_func(test_impl, (ts,))
 
 
+@pytest.mark.slow
 def test_timestamp_strftime(memory_leak_check):
     def test_impl(ts, fmt_string):
         return ts.strftime(fmt_string)
@@ -759,6 +769,7 @@ def test_date_isin(memory_leak_check):
     check_func(test_isin, (S, v))
 
 
+@pytest.mark.slow
 def test_datetime_boxing(memory_leak_check):
     """
     Test boxing and unboxing of datetime module object in Bodo
@@ -786,6 +797,7 @@ def test_datetime_boxing(memory_leak_check):
 
 
 # ------------------------- Test datetime.timedelta ------------------------- #
+@pytest.mark.slow
 def test_datetime_timedelta_construct(memory_leak_check):
     """
     Test construction of datetime.timedelta object in Bodo
@@ -831,6 +843,7 @@ def test_datetime_timedelta_total_seconds(memory_leak_check):
 
 
 # ------------------------- Test datetime.date ------------------------- #
+@pytest.mark.slow
 def test_datetime_date_construct(memory_leak_check):
     """
     Test construction of datetime.date object in Bodo
@@ -884,6 +897,7 @@ def test_datetime_date_methods(memory_leak_check):
 
 
 # ------------------------- Test datetime.datetime ------------------------- #
+@pytest.mark.slow
 def test_datetime_datetime_construct(memory_leak_check):
     """
     Test construction of datetime.datetime object in Bodo
@@ -1082,7 +1096,10 @@ def test_dt_extract_date(series_value, memory_leak_check):
         ),
         # Test Series.dt.year for values less than 2000 (issue #343)
         pd.Series(pd.date_range(start="1998-04-24", end="1998-04-29", periods=5)),
-        pd.Series(pd.date_range(start="5/20/2015", periods=5, freq="10N")),
+        pytest.param(
+            pd.Series(pd.date_range(start="5/20/2015", periods=5, freq="10N")),
+            marks=pytest.mark.slow,
+        ),
     ]
 )
 def series_value_no_bad_dates(request):
@@ -1222,6 +1239,7 @@ def test_series_dt64_timestamp_cmp(memory_leak_check):
     check_func(test_impl4, (S, t_string))
 
 
+@pytest.mark.smoke
 def test_series_dt_getitem(memory_leak_check):
     """Test getitem of series(dt64)"""
 
@@ -1257,6 +1275,7 @@ def test_series_dt_type(memory_leak_check):
 # -----------------------------  Timestamp Test  ------------------------------ #
 
 
+@pytest.mark.slow
 def test_timestamp_constructors(memory_leak_check):
     """Test pd.Timestamp's different types of constructors"""
 
@@ -1282,6 +1301,7 @@ def test_timestamp_constructors(memory_leak_check):
     check_func(test_constructor_input, (dt_dt,))
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "time_num",
     [
@@ -1293,9 +1313,10 @@ def test_timestamp_number(time_num, memory_leak_check):
     def test_impl(time_num):
         return pd.Timestamp(time_num)
 
-    check_func(test_impl, (10210420,))
+    check_func(test_impl, (time_num,))
 
 
+@pytest.mark.slow
 def test_timestamp_unit_constructor_error(memory_leak_check):
     def test_impl(time_int, unit):
         return pd.Timestamp(time_int, unit=unit)
@@ -1387,6 +1408,7 @@ def test_pd_to_timedelta(memory_leak_check):
     check_func(impl, (S,))
 
 
+@pytest.mark.slow
 def test_pd_to_timedelta_td64(memory_leak_check):
     """Test pd.to_timedelta()"""
 
@@ -1397,6 +1419,7 @@ def test_pd_to_timedelta_td64(memory_leak_check):
     check_func(impl, (S,))
 
 
+@pytest.mark.slow
 def test_pd_to_timedelta_datetime_td_arr(memory_leak_check):
     """Test pd.to_timedelta()"""
 
@@ -1410,6 +1433,7 @@ def test_pd_to_timedelta_datetime_td_arr(memory_leak_check):
     check_func(impl, (arr,))
 
 
+@pytest.mark.slow
 def test_pd_to_timedelta_float_arr(memory_leak_check):
     """Test pd.to_timedelta()"""
 
@@ -1420,6 +1444,7 @@ def test_pd_to_timedelta_float_arr(memory_leak_check):
     check_func(impl, (arr,))
 
 
+@pytest.mark.slow
 def test_pd_to_timedelta_int_arr(memory_leak_check):
     """Test pd.to_timedelta()"""
 
@@ -1436,6 +1461,7 @@ def test_pd_to_timedelta_int_arr(memory_leak_check):
     check_func(impl, (arr2,))
 
 
+@pytest.mark.slow
 def test_pd_to_timedelta_string_arr(memory_leak_check):
     """Test pd.to_timedelta()"""
 
@@ -1464,6 +1490,7 @@ def test_pd_to_timedelta_string_arr(memory_leak_check):
     check_func(impl, (arr2,))
 
 
+@pytest.mark.slow
 def test_pd_to_timedelta_float_scalar(memory_leak_check):
     """Test pd.to_timedelta()"""
 
@@ -1473,6 +1500,7 @@ def test_pd_to_timedelta_float_scalar(memory_leak_check):
     check_func(impl, (2.2,))
 
 
+@pytest.mark.slow
 def test_pd_to_timedelta_int_scalar(memory_leak_check):
     """Test pd.to_timedelta()"""
 
@@ -1482,6 +1510,7 @@ def test_pd_to_timedelta_int_scalar(memory_leak_check):
     check_func(impl, (100,))
 
 
+@pytest.mark.slow
 def test_pd_to_timedelta_str(memory_leak_check):
     """Test pd.to_timedelta()"""
 
@@ -1492,6 +1521,7 @@ def test_pd_to_timedelta_str(memory_leak_check):
     check_func(impl, (string,))
 
 
+@pytest.mark.slow
 def test_pd_to_timedelta_td(memory_leak_check):
     """Test pd.to_timedelta()"""
 
@@ -1502,6 +1532,7 @@ def test_pd_to_timedelta_td(memory_leak_check):
     check_func(impl, (td,))
 
 
+@pytest.mark.slow
 def test_pd_to_timedelta_datetime(memory_leak_check):
     """Test pd.to_timedelta()"""
 
@@ -1535,7 +1566,7 @@ def test_timestamp_date(memory_leak_check):
 @pytest.mark.parametrize(
     "ts",
     [
-        pd.Timestamp(1800, 1, 1),
+        pytest.param(pd.Timestamp(1800, 1, 1), marks=pytest.mark.slow),
         pytest.param(pd.Timestamp(1800, 6, 1), marks=pytest.mark.slow),
         pytest.param(pd.Timestamp(1800, 10, 1), marks=pytest.mark.slow),
         pytest.param(pd.Timestamp(1800, 1, 14), marks=pytest.mark.slow),
@@ -1544,26 +1575,26 @@ def test_timestamp_date(memory_leak_check):
         pytest.param(pd.Timestamp(1800, 1, 28), marks=pytest.mark.slow),
         pytest.param(pd.Timestamp(1800, 6, 28), marks=pytest.mark.slow),
         pytest.param(pd.Timestamp(1800, 10, 28), marks=pytest.mark.slow),
-        pd.Timestamp(1920, 1, 1),
+        pytest.param(pd.Timestamp(1920, 1, 1), marks=pytest.mark.slow),
         pytest.param(pd.Timestamp(1920, 6, 1), marks=pytest.mark.slow),
         pytest.param(pd.Timestamp(1920, 10, 1), marks=pytest.mark.slow),
         pytest.param(pd.Timestamp(1920, 6, 28), marks=pytest.mark.slow),
         pytest.param(pd.Timestamp(1920, 10, 28), marks=pytest.mark.slow),
-        pd.Timestamp(1952, 6, 14),
+        pytest.param(pd.Timestamp(1952, 6, 14), marks=pytest.mark.slow),
         pytest.param(pd.Timestamp(1952, 10, 14), marks=pytest.mark.slow),
-        pd.Timestamp(1997, 1, 1),
+        pytest.param(pd.Timestamp(1997, 1, 1), marks=pytest.mark.slow),
         pytest.param(pd.Timestamp(1997, 6, 1), marks=pytest.mark.slow),
         pytest.param(pd.Timestamp(1997, 10, 1), marks=pytest.mark.slow),
         pytest.param(pd.Timestamp(1997, 1, 14), marks=pytest.mark.slow),
         pytest.param(pd.Timestamp(2015, 1, 1), marks=pytest.mark.slow),
-        pd.Timestamp(2015, 6, 1),
-        pd.Timestamp(2015, 10, 1),
+        pytest.param(pd.Timestamp(2015, 6, 1), marks=pytest.mark.slow),
+        pytest.param(pd.Timestamp(2015, 10, 1), marks=pytest.mark.slow),
         pytest.param(pd.Timestamp(2019, 1, 1), marks=pytest.mark.slow),
-        pd.Timestamp(2019, 6, 1),
-        pd.Timestamp(2019, 10, 1),
-        pd.Timestamp(2020, 1, 28),
-        pd.Timestamp(2020, 6, 28),
-        pytest.param(pd.Timestamp(2020, 10, 28), marks=pytest.mark.slow),
+        pytest.param(pd.Timestamp(2019, 6, 1), marks=pytest.mark.slow),
+        pytest.param(pd.Timestamp(2019, 10, 1), marks=pytest.mark.slow),
+        pytest.param(pd.Timestamp(2020, 1, 28), marks=pytest.mark.slow),
+        pytest.param(pd.Timestamp(2020, 6, 28), marks=pytest.mark.slow),
+        pd.Timestamp(2020, 10, 28),
         pytest.param(pd.Timestamp(2025, 1, 28), marks=pytest.mark.slow),
         pytest.param(pd.Timestamp(2025, 6, 28), marks=pytest.mark.slow),
         pytest.param(pd.Timestamp(2025, 10, 28), marks=pytest.mark.slow),
@@ -1706,6 +1737,7 @@ def test_ts_map_date(memory_leak_check):
     assert bodo_func(dt_ser) == test_impl(dt_ser)
 
 
+@pytest.mark.slow
 def test_ts_map_date2(memory_leak_check):
     def test_impl(df):
         return df.apply(lambda row: row.dt_ind.date(), axis=1)[0]
@@ -1766,6 +1798,7 @@ def test_datetimeindex_df(memory_leak_check):
     # check_func(test_impl, (dt_df,))
 
 
+@pytest.mark.slow
 def test_datetime_date_array_len(memory_leak_check):
     def test_impl(A):
         return len(A)
@@ -1774,6 +1807,7 @@ def test_datetime_date_array_len(memory_leak_check):
     check_func(test_impl, (A,))
 
 
+@pytest.mark.slow
 def test_datetime_timedelta_array_len(memory_leak_check):
     def test_impl(A):
         return len(A)

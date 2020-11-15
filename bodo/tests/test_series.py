@@ -106,6 +106,7 @@ def test_series_constructor(data, index, name, memory_leak_check):
     )
 
 
+@pytest.mark.slow
 def test_series_constructor2(memory_leak_check):
     def impl(d, i, n):
         return pd.Series(d, i, name=n)
@@ -122,6 +123,7 @@ def test_series_constructor2(memory_leak_check):
     )
 
 
+@pytest.mark.slow
 def test_series_constructor_dtype1(memory_leak_check):
     def impl(d):
         return pd.Series(d, dtype=np.int32)
@@ -139,6 +141,7 @@ def test_series_constructor_dtype2(memory_leak_check):
     check_func(impl, (np.array([3, 4, 1, -3, 0]),))
 
 
+@pytest.mark.slow
 def test_series_constructor_int_arr(memory_leak_check):
     def impl(d):
         return pd.Series(d, dtype="Int32")
@@ -391,6 +394,7 @@ def test_series_notnull(series_val, memory_leak_check):
         check_func(test_impl, (series_val,))
 
 
+@pytest.mark.slow
 def test_box(series_val, memory_leak_check):
     # unbox and box
     def impl(S):
@@ -399,6 +403,7 @@ def test_box(series_val, memory_leak_check):
     check_func(impl, (series_val,))
 
 
+@pytest.mark.slow
 def test_series_index(series_val, memory_leak_check):
     def test_impl(S):
         return S.index
@@ -415,6 +420,7 @@ def test_series_index_none(memory_leak_check):
     pd.testing.assert_index_equal(bodo_func(), test_impl())
 
 
+@pytest.mark.slow
 def test_series_values(series_val, memory_leak_check):
     def test_impl(S):
         return S.values
@@ -422,6 +428,7 @@ def test_series_values(series_val, memory_leak_check):
     check_func(test_impl, (series_val,))
 
 
+@pytest.mark.slow
 def test_series_dtype(numeric_series_val, memory_leak_check):
     def test_impl(S):
         return S.dtype
@@ -429,6 +436,7 @@ def test_series_dtype(numeric_series_val, memory_leak_check):
     check_func(test_impl, (numeric_series_val,))
 
 
+@pytest.mark.slow
 def test_series_shape(series_val, memory_leak_check):
     def test_impl(S):
         return S.shape
@@ -436,6 +444,7 @@ def test_series_shape(series_val, memory_leak_check):
     check_func(test_impl, (series_val,))
 
 
+@pytest.mark.slow
 def test_series_ndim(series_val, memory_leak_check):
     def test_impl(S):
         return S.ndim
@@ -443,6 +452,7 @@ def test_series_ndim(series_val, memory_leak_check):
     check_func(test_impl, (series_val,))
 
 
+@pytest.mark.slow
 def test_series_size(series_val, memory_leak_check):
     def test_impl(S):
         return S.size
@@ -450,6 +460,7 @@ def test_series_size(series_val, memory_leak_check):
     check_func(test_impl, (series_val,))
 
 
+@pytest.mark.slow
 def test_series_T(series_val, memory_leak_check):
     def test_impl(S):
         return S.T
@@ -482,6 +493,7 @@ def test_series_dtypes(numeric_series_val, memory_leak_check):
     check_func(test_impl, (numeric_series_val,))
 
 
+@pytest.mark.slow
 def test_series_name(series_val, memory_leak_check):
     def test_impl(S):
         return S.name
@@ -628,6 +640,7 @@ def test_series_astype_cat(S):
     check_func(test_impl2, (S,))
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "S", [pd.Series(["A", "BB", "A", "BBB", "BB", "A"]).astype("category")]
 )
@@ -697,6 +710,7 @@ def test_series_to_numpy(numeric_series_val, memory_leak_check):
 
 
 # TODO: add memory_leak_check (it leaks with Decimal array)
+@pytest.mark.smoke
 def test_series_iat_getitem(series_val):
 
     if series_val.dtype == np.dtype("timedelta64[ns]"):
@@ -713,6 +727,7 @@ def test_series_iat_getitem(series_val):
     # check_func(test_impl, (series_val,))
 
 
+@pytest.mark.smoke
 def test_series_iat_setitem(series_val, memory_leak_check):
     # not supported for list(string) and array(item)
     if isinstance(series_val.values[0], list):
@@ -736,6 +751,7 @@ def test_series_iat_setitem(series_val, memory_leak_check):
     )
 
 
+@pytest.mark.smoke
 def test_series_iloc_getitem_int(series_val):
     # timedelta setitem not supported yet
     if series_val.dtype == np.dtype("timedelta64[ns]"):
@@ -787,6 +803,7 @@ def test_series_iloc_getitem_array_bool(series_val, memory_leak_check):
     )
 
 
+@pytest.mark.smoke
 def test_series_iloc_setitem_int(series_val, memory_leak_check):
     # not supported for list(string) and array(item)
     if isinstance(series_val.values[0], list):
@@ -972,6 +989,7 @@ def test_series_iloc_setitem_list_int(series_val, idx, memory_leak_check):
 
 
 # TODO: add memory_leak_check
+@pytest.mark.smoke
 def test_series_getitem_int(series_val):
     # timedelta setitem not supported yet
     if series_val.dtype == np.dtype("timedelta64[ns]"):
@@ -1043,6 +1061,7 @@ def test_series_getitem_array_bool(series_val, memory_leak_check):
 ############### setitem tests #################
 
 
+@pytest.mark.smoke
 def test_series_setitem_int(series_val, memory_leak_check):
     # not supported for list(string) and array(item)
     if isinstance(series_val.values[0], list):
@@ -1722,6 +1741,7 @@ def test_series_map(S, memory_leak_check):
     check_func(test_impl, (S,))
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "S",
     [
@@ -1962,6 +1982,7 @@ def test_series_map_date(memory_leak_check):
     check_func(test_impl, (S,))
 
 
+@pytest.mark.smoke
 def test_series_map_full_pipeline(memory_leak_check):
     """make sure full Bodo pipeline is run on UDFs, including untyped pass."""
 
@@ -2095,6 +2116,7 @@ def test_series_map_error_check(memory_leak_check):
         bodo.jit(test_impl)(S)
 
 
+@pytest.mark.smoke
 @pytest.mark.parametrize(
     "S",
     [
@@ -2249,7 +2271,7 @@ def test_min_max_sum_series(memory_leak_check):
     """Another syntax for computing the maximum"""
 
     def f1(S):
-        return max(S)
+        return min(S)
 
     def f2(S):
         return max(S)
@@ -3474,6 +3496,7 @@ def test_series_std(memory_leak_check):
     check_func(f_ddof, (S,))
 
 
+@pytest.mark.slow
 def test_add_datetime_series_timedelta(memory_leak_check):
     def test_impl(S1, S2):
         return S1.add(S2)
@@ -3576,6 +3599,7 @@ def test_series_round(S, d, memory_leak_check):
     check_func(test_impl, (S, d))
 
 
+@pytest.mark.slow
 def test_series_unsupported_error_checking(memory_leak_check):
     """make sure BodoError is raised for unsupported Series attributes and methods"""
     # test an example attribute

@@ -379,6 +379,7 @@ def arr_tuple_val(request):
     return request.param
 
 
+@pytest.mark.slow
 def test_np_union1d(arr_tuple_val, memory_leak_check):
     def impl(A1, A2):
         return np.union1d(A1, A2)
@@ -391,6 +392,7 @@ def test_np_union1d(arr_tuple_val, memory_leak_check):
     check_func(impl, (A1, A2))
 
 
+@pytest.mark.slow
 def test_np_intersect1d(arr_tuple_val, memory_leak_check):
     def impl(A1, A2):
         return np.intersect1d(A1, A2)
@@ -404,6 +406,7 @@ def test_np_intersect1d(arr_tuple_val, memory_leak_check):
     check_func(impl, (A1, A2), dist_test=False)
 
 
+@pytest.mark.slow
 def test_np_setdiff1d(arr_tuple_val, memory_leak_check):
     def impl(A1, A2):
         return np.setdiff1d(A1, A2)
@@ -426,6 +429,7 @@ def test_np_linspace(memory_leak_check):
     check_func(test_impl, (-5, 4.5252, 1000))
 
 
+@pytest.mark.slow
 def test_np_linspace_int(memory_leak_check):
     def test_impl(start, stop, num, dtype):
         return np.linspace(start, stop, num=num, dtype=dtype)
@@ -521,6 +525,7 @@ def bodo_arr_val(request):
     return request.param
 
 
+@pytest.mark.slow
 def test_in(bodo_arr_val, memory_leak_check):
     def test_impl(A, val):
         return val in A
@@ -532,7 +537,7 @@ def test_in(bodo_arr_val, memory_leak_check):
     check_func(test_impl, (bodo_arr_val, init_val))
 
 
-# TODO: Move to slow in another PR once Sonar passes
+@pytest.mark.slow
 def test_any(bodo_arr_val, memory_leak_check):
     def test_impl(A):
         # Python's logical or won't return a bool so set to bool
@@ -546,7 +551,7 @@ def test_any(bodo_arr_val, memory_leak_check):
     check_func(test_impl, (bodo_arr_val,))
 
 
-# TODO: Move to slow in another PR once Sonar passes
+@pytest.mark.slow
 def test_all(bodo_arr_val, memory_leak_check):
     def test_impl(A):
         # Python's logical and won't return a bool so set to bool
@@ -560,7 +565,7 @@ def test_all(bodo_arr_val, memory_leak_check):
     check_func(test_impl, (bodo_arr_val,))
 
 
-# TODO: Move to slow in another PR once Sonar passes
+@pytest.mark.slow
 def test_any_all_numpy_2d(memory_leak_check):
     """Check that a multidimensional Numpy array outputs the
     correct result for a 2D array. This shouldn't use our kernel.

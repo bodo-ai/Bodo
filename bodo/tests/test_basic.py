@@ -39,6 +39,7 @@ def test_membership(memory_leak_check):
     check_func(test_impl, (d,))
 
 
+@pytest.mark.smoke
 def test_getitem(memory_leak_check):
     def test_impl(N):
         A = np.ones(N)
@@ -50,6 +51,7 @@ def test_getitem(memory_leak_check):
     check_func(test_impl, (n,))
 
 
+@pytest.mark.smoke
 def test_setitem1(memory_leak_check):
     def test_impl(N):
         A = np.arange(10) + 1.0
@@ -78,6 +80,7 @@ def test_astype(memory_leak_check):
     check_func(test_impl, (n,))
 
 
+@pytest.mark.slow
 def test_shape(memory_leak_check):
     def test_impl(N):
         return np.ones(N).shape[0]
@@ -86,6 +89,7 @@ def test_shape(memory_leak_check):
     check_func(test_impl, (n,))
 
 
+@pytest.mark.smoke
 def test_inplace_binop(memory_leak_check):
     def test_impl(N):
         A = np.ones(N)
@@ -170,6 +174,7 @@ def test_funcs_input(request, memory_leak_check):
     return request.param
 
 
+@pytest.mark.smoke
 def test_reduce(test_dtypes_input, test_funcs_input, memory_leak_check):
     import sys
 
@@ -195,6 +200,7 @@ def test_reduce(test_dtypes_input, test_funcs_input, memory_leak_check):
         check_func(test_impl, (n,))
 
 
+@pytest.mark.slow
 def test_reduce2(test_dtypes_input, test_funcs_input, memory_leak_check):
     import sys
 
@@ -223,6 +229,7 @@ def test_reduce2(test_dtypes_input, test_funcs_input, memory_leak_check):
         check_func(test_impl, (A,))
 
 
+@pytest.mark.smoke
 def test_reduce_filter1(test_dtypes_input, test_funcs_input, memory_leak_check):
     import sys
 
@@ -357,6 +364,7 @@ def test_is_jit_execution(memory_leak_check):
     assert bodo.jit(lambda: bodo.is_jit_execution())() == True
 
 
+@pytest.mark.slow
 def test_return(memory_leak_check):
     def test_impl(N):
         A = np.arange(N)
@@ -366,6 +374,7 @@ def test_return(memory_leak_check):
     check_func(test_impl, (n,))
 
 
+@pytest.mark.slow
 def test_return_tuple(memory_leak_check):
     def test_impl(N):
         A = np.arange(N)
@@ -376,6 +385,7 @@ def test_return_tuple(memory_leak_check):
     check_func(test_impl, (n,))
 
 
+@pytest.mark.slow
 def test_input(memory_leak_check):
     def test_impl(A):
         return len(A)
@@ -385,6 +395,7 @@ def test_input(memory_leak_check):
     check_func(test_impl, (arr,))
 
 
+@pytest.mark.slow
 def test_transpose(memory_leak_check):
     def test_impl(n):
         A = np.ones((30, 40, 50))
@@ -396,6 +407,7 @@ def test_transpose(memory_leak_check):
     check_func(test_impl, (n,))
 
 
+@pytest.mark.slow
 def test_np_dot(memory_leak_check):
     def test_impl(n, k):
         A = np.ones((n, k))
@@ -408,6 +420,7 @@ def test_np_dot(memory_leak_check):
     check_func(test_impl, (n, k))
 
 
+@pytest.mark.smoke
 def test_np_array(memory_leak_check):
     """test distribution of np.array() and np.asarray().
     array input can be distributed but not list input.
@@ -597,6 +610,7 @@ def test_permuted_array_indexing(memory_leak_check):
 
 
 # TODO: Add memory_leak_check after memory leak is solved.
+@pytest.mark.slow
 def test_reversed():
     """
     test reversed on a list of floats
@@ -611,6 +625,7 @@ def test_reversed():
     check_func(test_impl, ([0.1, 0.2, 0.3, 0.4],))
 
 
+@pytest.mark.smoke
 def test_jitclass(memory_leak_check):
     """test @bodo.jitclass decorator with various attribute/method cases"""
 

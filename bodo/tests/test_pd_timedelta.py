@@ -35,6 +35,7 @@ def timedelta_value(request):
     return request.param
 
 
+@pytest.mark.slow
 def test_constant_lowering(timedelta_value, memory_leak_check):
     def test_impl():
         return timedelta_value
@@ -42,6 +43,7 @@ def test_constant_lowering(timedelta_value, memory_leak_check):
     check_func(test_impl, ())
 
 
+@pytest.mark.slow
 def test_timedelta_boxing(timedelta_value, memory_leak_check):
     """
     Test boxing and unboxing of pd.Timedelta
@@ -53,6 +55,7 @@ def test_timedelta_boxing(timedelta_value, memory_leak_check):
     check_func(test_impl, (timedelta_value,))
 
 
+@pytest.mark.slow
 def test_constructor(memory_leak_check):
     def test_impl1():
         return pd.Timedelta(232142)
@@ -149,6 +152,7 @@ def test_total_seconds(timedelta_value, memory_leak_check):
     check_func(test_impl, (timedelta_value,))
 
 
+@pytest.mark.slow
 def test_hash(memory_leak_check):
     td1 = pd.Timedelta(1)
     td2 = pd.Timedelta(2)
@@ -458,6 +462,7 @@ def test_pd_timedelta_gt(memory_leak_check):
     check_func(test_impl, (val1, -val1))
 
 
+@pytest.mark.slow
 def test_pd_timedelta_neg(timedelta_value, memory_leak_check):
     def test_impl(a):
         return -a

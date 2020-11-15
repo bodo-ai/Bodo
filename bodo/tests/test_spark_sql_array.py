@@ -143,6 +143,7 @@ def test_array_intersect(dataframe_val):
     check_func(test_impl, (df,), dist_test=False)
 
 
+@pytest.mark.slow
 def test_array_join(dataframe_val):
     def test_impl_comma(df):
         return df.A.map(lambda x: ",".join(x))
@@ -162,6 +163,7 @@ def test_array_join(dataframe_val):
         check_func(test_impl_space, (df,))
 
 
+@pytest.mark.slow
 def test_array_max(dataframe_val):
     def test_impl(df):
         return df.A.map(lambda x: np.nanmax(x))
@@ -174,6 +176,7 @@ def test_array_max(dataframe_val):
         check_func(test_impl, (df,))
 
 
+@pytest.mark.slow
 def test_array_min(dataframe_val):
     def test_impl(df):
         return df.A.map(lambda x: np.nanmin(x))
@@ -186,6 +189,7 @@ def test_array_min(dataframe_val):
         check_func(test_impl, (df,))
 
 
+@pytest.mark.slow
 def test_array_position(dataframe_val):
     def test_impl_float(df):
         return df.A.map(lambda x: np.append(np.where(x == 3.31111)[0], -1)[0])
@@ -232,6 +236,7 @@ def test_array_remove(dataframe_val):
     check_func(test_impl, (df, arr), dist_test=False)
 
 
+@pytest.mark.slow
 def test_array_repeat(dataframe_val):
     def test_impl(df):
         return df.A.map(lambda x: np.repeat(x, 3))
@@ -240,6 +245,7 @@ def test_array_repeat(dataframe_val):
     check_func(test_impl, (df,))
 
 
+@pytest.mark.slow
 def test_array_sort(dataframe_val):
     def test_impl(df):
         return df.A.map(lambda x: np.sort(x))
@@ -248,6 +254,7 @@ def test_array_sort(dataframe_val):
     check_func(test_impl, (df,))
 
 
+@pytest.mark.slow
 def test_array_union(dataframe_val):
     def test_impl(df):
         return df[["A", "B"]].apply(lambda x: np.union1d(x[0], x[1]), axis=1)
@@ -267,6 +274,7 @@ def test_arrays_overlap(dataframe_val):
     check_func(test_impl, (df,), dist_test=False)
 
 
+@pytest.mark.slow
 def test_size(dataframe_val):
     def test_impl(df):
         return df.A.map(lambda x: len(x))

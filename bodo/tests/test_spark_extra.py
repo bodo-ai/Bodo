@@ -7,6 +7,7 @@ import bodo
 from bodo.tests.utils import check_func
 
 
+@pytest.mark.slow
 def test_zlib_crc32():
     """Test zlib.crc32"""
 

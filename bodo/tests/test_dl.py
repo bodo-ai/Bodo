@@ -5,6 +5,7 @@ import bodo
 from bodo.utils.typing import BodoError
 
 
+@pytest.mark.slow
 def test_error_checking():
     """ Test that bodo.prepare_data() throws error with replicated data """
 

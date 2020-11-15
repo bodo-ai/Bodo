@@ -5,12 +5,14 @@ PYTEST_DONT_REWRITE
 import unittest
 
 import pandas as pd
+import pytest
 
 import bodo
 from bodo.tests.utils import check_func
 
 
 # using separate file for assert tests to avoid pytest rewrite errors
+@pytest.mark.slow
 class AssertTest(unittest.TestCase):
     @unittest.skip("TODO: fix static raise issue")
     def test_assert(self):

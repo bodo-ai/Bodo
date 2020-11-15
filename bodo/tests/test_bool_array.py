@@ -54,6 +54,7 @@ def test_np_unique(memory_leak_check):
     check_func(impl, (arr,), sort_output=True)
 
 
+@pytest.mark.slow
 def test_setitem_optional_int(bool_arr_value, memory_leak_check):
     def test_impl(A, i, flag):
         if flag:
@@ -71,6 +72,7 @@ def test_setitem_optional_int(bool_arr_value, memory_leak_check):
     )
 
 
+@pytest.mark.slow
 def test_setitem_none_int(bool_arr_value, memory_leak_check):
     def test_impl(A, i):
         A[i] = None
@@ -80,6 +82,7 @@ def test_setitem_none_int(bool_arr_value, memory_leak_check):
     check_func(test_impl, (bool_arr_value.copy(), i), copy_input=True, dist_test=False)
 
 
+@pytest.mark.slow
 def test_unbox(bool_arr_value, memory_leak_check):
     # just unbox
     def impl(arr_arg):
@@ -209,6 +212,7 @@ def test_np_prod(bool_arr_value, memory_leak_check):
 
 
 # TODO: fix memory leak and add memory_leak_check
+@pytest.mark.slow
 def test_constant_lowering(bool_arr_value):
     def impl():
         return bool_arr_value

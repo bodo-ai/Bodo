@@ -48,6 +48,7 @@ def tuple_arr_value(request):
     return request.param
 
 
+@pytest.mark.slow
 def test_unbox(tuple_arr_value, memory_leak_check):
     # just unbox
     def impl(arr_arg):
@@ -61,6 +62,7 @@ def test_unbox(tuple_arr_value, memory_leak_check):
     check_func(impl2, (tuple_arr_value,))
 
 
+@pytest.mark.smoke
 def test_getitem_int(tuple_arr_value, memory_leak_check):
     def test_impl(A, i):
         return A[i]
@@ -86,6 +88,7 @@ def test_getitem_slice(tuple_arr_value, memory_leak_check):
     check_func(test_impl, (tuple_arr_value, ind), dist_test=False)
 
 
+@pytest.mark.smoke
 def test_setitem_int(tuple_arr_value, memory_leak_check):
     def test_impl(A, i, val):
         A[i] = val
@@ -116,6 +119,7 @@ def test_setitem_slice(memory_leak_check):
     check_func(test_impl, (A, i, val), copy_input=True, dist_test=False)
 
 
+@pytest.mark.slow
 def test_ndim(tuple_arr_value, memory_leak_check):
     def test_impl(A):
         return A.ndim
@@ -123,6 +127,7 @@ def test_ndim(tuple_arr_value, memory_leak_check):
     assert bodo.jit(test_impl)(tuple_arr_value) == test_impl(tuple_arr_value)
 
 
+@pytest.mark.slow
 def test_shape(tuple_arr_value, memory_leak_check):
     def test_impl(A):
         return A.shape
@@ -130,6 +135,7 @@ def test_shape(tuple_arr_value, memory_leak_check):
     assert bodo.jit(test_impl)(tuple_arr_value) == test_impl(tuple_arr_value)
 
 
+@pytest.mark.slow
 def test_copy(tuple_arr_value, memory_leak_check):
     def test_impl(A):
         return A.copy()
@@ -137,6 +143,7 @@ def test_copy(tuple_arr_value, memory_leak_check):
     check_func(test_impl, (tuple_arr_value,))
 
 
+@pytest.mark.slow
 def test_len(tuple_arr_value, memory_leak_check):
     def test_impl(A):
         return len(A)

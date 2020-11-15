@@ -1,19 +1,23 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 import unittest
-import numpy as np
 from math import sqrt
+
+import numpy as np
+import pytest
+
 import bodo
 from bodo.tests.utils import (
-    count_array_REPs,
-    count_parfor_REPs,
-    count_parfor_OneDs,
-    count_array_OneDs,
-    count_parfor_OneD_Vars,
     count_array_OneD_Vars,
+    count_array_OneDs,
+    count_array_REPs,
+    count_parfor_OneD_Vars,
+    count_parfor_OneDs,
+    count_parfor_REPs,
     dist_IR_contains,
 )
 
 
+@pytest.mark.slow
 class TestML(unittest.TestCase):
     def test_logistic_regression(self):
         def test_impl(n, d):

@@ -146,6 +146,7 @@ def test_format_string(dataframe_val, memory_leak_check):
     check_func(test_impl, (dataframe_val, "Welcome to the {} time."))
 
 
+@pytest.mark.slow
 def test_translate(dataframe_val, memory_leak_check):
     def test_impl(df, to_replace, values):
         return df.A.str.split("").apply(

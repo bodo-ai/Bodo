@@ -127,6 +127,7 @@ def nested_arrays_value(request):
     return request.param
 
 
+@pytest.mark.smoke
 @pytest.mark.parametrize(
     "test_df",
     [

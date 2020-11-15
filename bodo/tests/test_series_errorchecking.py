@@ -1,8 +1,9 @@
-import pandas as pd
 import numpy as np
+import pandas as pd
+import pytest
+
 import bodo
 from bodo.utils.typing import BodoError
-import pytest
 
 
 def test_isin(memory_leak_check):
@@ -18,6 +19,7 @@ def test_isin(memory_leak_check):
         bodo.jit(impl)(S, "3")
 
 
+@pytest.mark.slow
 def test_series_dt_not_supported(memory_leak_check):
     """
     tests error for unsupported Series.dt methods

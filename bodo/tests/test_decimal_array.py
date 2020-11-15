@@ -101,6 +101,7 @@ def test_np_unique(memory_leak_check):
     check_func(impl, (arr,), sort_output=True)
 
 
+@pytest.mark.slow
 def test_unbox(decimal_arr_value, memory_leak_check):
     # just unbox
     def impl(arr_arg):
@@ -115,6 +116,7 @@ def test_unbox(decimal_arr_value, memory_leak_check):
     check_func(impl2, (decimal_arr_value,))
 
 
+@pytest.mark.slow
 def test_len(decimal_arr_value, memory_leak_check):
     def test_impl(A):
         return len(A)
@@ -122,6 +124,7 @@ def test_len(decimal_arr_value, memory_leak_check):
     check_func(test_impl, (decimal_arr_value,))
 
 
+@pytest.mark.slow
 def test_shape(decimal_arr_value, memory_leak_check):
     def test_impl(A):
         return A.shape
@@ -129,6 +132,7 @@ def test_shape(decimal_arr_value, memory_leak_check):
     check_func(test_impl, (decimal_arr_value,))
 
 
+@pytest.mark.slow
 def test_ndim(decimal_arr_value, memory_leak_check):
     def test_impl(A):
         return A.ndim
@@ -136,6 +140,7 @@ def test_ndim(decimal_arr_value, memory_leak_check):
     check_func(test_impl, (decimal_arr_value,))
 
 
+@pytest.mark.slow
 def test_decimal_coerce(memory_leak_check):
     ts = Decimal("4.5")
 
@@ -168,6 +173,7 @@ def test_series_astype_str(decimal_arr_value, memory_leak_check):
     check_func(test_impl, (S,))
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "decimal_value",
     [
@@ -203,6 +209,7 @@ def test_join(decimal_arr_value, memory_leak_check):
     check_func(test_impl, (df1, df2), sort_output=True, reset_index=True)
 
 
+@pytest.mark.slow
 def test_constructor(memory_leak_check):
     def test_impl1():
         return Decimal("1.1")
@@ -218,6 +225,7 @@ def test_constructor(memory_leak_check):
     check_func(test_impl3, ())
 
 
+@pytest.mark.slow
 def test_setitem_none_int(decimal_arr_value, memory_leak_check):
     def test_impl(A, i):
         A[i] = None
@@ -229,6 +237,7 @@ def test_setitem_none_int(decimal_arr_value, memory_leak_check):
     )
 
 
+@pytest.mark.slow
 def test_setitem_optional_int(decimal_arr_value, memory_leak_check):
     def test_impl(A, i, flag, val):
         if flag:
@@ -253,6 +262,7 @@ def test_setitem_optional_int(decimal_arr_value, memory_leak_check):
 
 
 # TODO: fix memory leak and add memory_leak_check
+@pytest.mark.slow
 def test_constant_lowering(decimal_arr_value):
     def impl():
         return decimal_arr_value
@@ -262,6 +272,7 @@ def test_constant_lowering(decimal_arr_value):
     )
 
 
+@pytest.mark.slow
 def test_constructor_error(memory_leak_check):
     """Test that an invalid constructor throws a BodoError"""
 

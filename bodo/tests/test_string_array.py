@@ -62,6 +62,7 @@ def test_np_unique(memory_leak_check):
     check_func(impl, (arr,), sort_output=True)
 
 
+@pytest.mark.slow
 def test_unbox(str_arr_value, memory_leak_check):
     # just unbox
     def impl(arr_arg):
@@ -77,6 +78,7 @@ def test_unbox(str_arr_value, memory_leak_check):
 
 
 # TODO: fix memory leak and add memory_leak_check
+@pytest.mark.slow
 def test_constant_lowering(str_arr_value):
     def impl():
         return str_arr_value
@@ -86,6 +88,7 @@ def test_constant_lowering(str_arr_value):
     )
 
 
+@pytest.mark.slow
 def test_string_dtype(memory_leak_check):
     # unbox and box
     def impl(d):
@@ -100,6 +103,7 @@ def test_string_dtype(memory_leak_check):
     check_func(impl2, ())
 
 
+@pytest.mark.smoke
 def test_getitem_int(str_arr_value, memory_leak_check):
     def test_impl(A, i):
         return A[i]
@@ -134,6 +138,7 @@ def test_getitem_slice(str_arr_value, memory_leak_check):
     )
 
 
+@pytest.mark.smoke
 def test_setitem_int(memory_leak_check):
     def test_impl(A, idx, val):
         A[idx] = val
@@ -148,6 +153,7 @@ def test_setitem_int(memory_leak_check):
     )
 
 
+@pytest.mark.slow
 def test_setitem_none_int(memory_leak_check):
     def test_impl(n, idx):
         A = bodo.libs.str_arr_ext.pre_alloc_string_array(n, n - 1)
@@ -164,6 +170,7 @@ def test_setitem_none_int(memory_leak_check):
     )
 
 
+@pytest.mark.slow
 def test_setitem_optional_int(memory_leak_check):
     def test_impl(n, idx):
         A = bodo.libs.str_arr_ext.pre_alloc_string_array(n, n - 1)
@@ -181,6 +188,7 @@ def test_setitem_optional_int(memory_leak_check):
     )
 
 
+@pytest.mark.slow
 def test_dtype(memory_leak_check):
     def test_impl(A):
         return A.dtype
@@ -188,6 +196,7 @@ def test_dtype(memory_leak_check):
     check_func(test_impl, (pd.array(["AA", "B"] * 4),))
 
 
+@pytest.mark.slow
 def test_ndim(memory_leak_check):
     def test_impl(A):
         return A.ndim

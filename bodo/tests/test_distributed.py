@@ -28,6 +28,7 @@ random.seed(4)
 np.random.seed(1)
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("A", [np.arange(11), np.arange(33).reshape(11, 3)])
 def test_array_shape1(A, memory_leak_check):
     # get first dimention size using array.shape for distributed arrays
@@ -41,6 +42,7 @@ def test_array_shape1(A, memory_leak_check):
     assert dist_IR_contains("dist_reduce")
 
 
+@pytest.mark.slow
 def test_array_shape2(memory_leak_check):
     # get first dimention size using array.shape for distributed arrays
     # transposed array case
@@ -58,6 +60,7 @@ def test_array_shape2(memory_leak_check):
     # TODO: test Array.ctypes.shape[0] cases
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("A", [np.arange(11), np.arange(33).reshape(11, 3)])
 def test_array_shape3(A, memory_leak_check):
     # get first dimention size using array.shape for distributed arrays
@@ -71,6 +74,7 @@ def test_array_shape3(A, memory_leak_check):
     assert dist_IR_contains("dist_reduce")
 
 
+@pytest.mark.slow
 def test_array_shape4(memory_leak_check):
     # transposed array case
     def impl1(A):
@@ -86,6 +90,7 @@ def test_array_shape4(memory_leak_check):
     assert dist_IR_contains("dist_reduce")
 
 
+@pytest.mark.slow
 def test_array_len1(memory_leak_check):
     # get first dimention size using array.shape for distributed arrays
     def impl1(A):
@@ -101,6 +106,7 @@ def test_array_len1(memory_leak_check):
     # TODO: tests with array created inside the function
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("A", [np.arange(11), np.arange(33).reshape(11, 3)])
 def test_array_size1(A, memory_leak_check):
     def impl1(A):
@@ -221,6 +227,7 @@ def test_print1(memory_leak_check):
     bodo_func((3, 4), 2)
 
 
+@pytest.mark.slow
 def test_print2(memory_leak_check):
     # vararg
     # TODO: capture stdout and make sure there is only one print
@@ -232,6 +239,7 @@ def test_print2(memory_leak_check):
     bodo_func((3, np.ones(3)))
 
 
+@pytest.mark.slow
 def test_print3(memory_leak_check):
     # arg and vararg
     # TODO: capture stdout and make sure there is only one print
@@ -325,6 +333,7 @@ def test_dist_flag_warn1(memory_leak_check):
     assert count_array_REPs() == 0
 
 
+@pytest.mark.slow
 @pytest.mark.filterwarnings("error:No parallelism")
 def test_dist_flag_no_warn(memory_leak_check):
     """make sure there is no parallelism warning when there is no array or parfor"""
@@ -352,6 +361,7 @@ def test_bodo_func_rep(memory_leak_check):
     assert count_array_REPs() > 0
 
 
+@pytest.mark.smoke
 @pytest.mark.parametrize("A", [np.arange(11), np.arange(33).reshape(11, 3)])
 def test_1D_Var_alloc_simple(A, memory_leak_check):
     # make sure 1D_Var alloc and parfor handling works for 1D/2D arrays
@@ -680,6 +690,7 @@ def test_setitem_bool_index_scalar(memory_leak_check):
     check_func(impl2, (A, I, val))
 
 
+@pytest.mark.smoke
 def test_setitem_scalar(memory_leak_check):
     """test setitem of distributed array with a scalar"""
 
@@ -1002,6 +1013,7 @@ def test_dist_warning1(memory_leak_check):
         bodo.jit(impl)(10)
 
 
+@pytest.mark.slow
 def test_dist_warning2(memory_leak_check):
     """Make sure BodoWarning is thrown when there is no parallelism discovered due
     to return of dataframe
@@ -1017,6 +1029,7 @@ def test_dist_warning2(memory_leak_check):
         bodo.jit(impl)(10)
 
 
+@pytest.mark.slow
 def test_dist_warning3(memory_leak_check):
     """Make sure BodoWarning is thrown when a tuple variable with both distributable
     and non-distributable elemets is returned
@@ -1111,6 +1124,7 @@ def test_dist_flags(memory_leak_check):
         _test_equal(result_bodo, result_python)
 
 
+@pytest.mark.slow
 def test_dist_objmode(memory_leak_check):
     """Test use of objmode inside prange including a reduction.
     Tests a previous issue where deepcopy in get_parfor_reductions failed for
@@ -1146,6 +1160,7 @@ def test_dist_objmode_dist(memory_leak_check):
     assert count_array_OneD_Vars() > 0
 
 
+@pytest.mark.slow
 def test_diagnostics_not_compiled_error(memory_leak_check):
     """make sure error is thrown when calling diagnostics for a function that is not
     compiled yet
@@ -1158,6 +1173,7 @@ def test_diagnostics_not_compiled_error(memory_leak_check):
         bodo.jit(test_impl).distributed_diagnostics()
 
 
+@pytest.mark.slow
 def test_diagnostics_trace(capsys, memory_leak_check):
     """make sure distributed diagnostics trace info is printed in diagnostics dump"""
 

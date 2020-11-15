@@ -40,6 +40,7 @@ def test_df(request, memory_leak_check):
     return request.param
 
 
+@pytest.mark.smoke
 def test_fixed_index(test_df, memory_leak_check):
     def impl(df):
         return df.rolling(2).mean()
@@ -88,6 +89,7 @@ def test_fixed_apply_nested_func(memory_leak_check):
     pd.testing.assert_frame_equal(res, py_res)
 
 
+@pytest.mark.slow
 class TestRolling(unittest.TestCase):
     def test_fixed1(self):
         # test sequentially with manually created dfs

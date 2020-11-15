@@ -104,6 +104,7 @@ def struct_arr_value(request):
     return request.param
 
 
+@pytest.mark.slow
 def test_unbox(struct_arr_value, memory_leak_check):
     # just unbox
     def impl(arr_arg):
@@ -142,6 +143,7 @@ def test_getitem_slice(struct_arr_value, memory_leak_check):
     check_func(test_impl, (struct_arr_value, ind), dist_test=False)
 
 
+@pytest.mark.smoke
 def test_rec_getitem(struct_arr_value, memory_leak_check):
     def test_impl(A, i):
         return A[i]["Y"]
@@ -150,6 +152,7 @@ def test_rec_getitem(struct_arr_value, memory_leak_check):
     check_func(test_impl, (struct_arr_value, i), dist_test=False)
 
 
+@pytest.mark.smoke
 def test_rec_setitem(memory_leak_check):
     def test_impl(A, i, val):
         r = A[i]
@@ -185,6 +188,7 @@ def test_setitem_none_int(struct_arr_value, memory_leak_check):
 """
 
 
+@pytest.mark.slow
 def test_ndim(struct_arr_value, memory_leak_check):
     def test_impl(A):
         return A.ndim
@@ -192,6 +196,7 @@ def test_ndim(struct_arr_value, memory_leak_check):
     assert bodo.jit(test_impl)(struct_arr_value) == test_impl(struct_arr_value)
 
 
+@pytest.mark.slow
 def test_shape(struct_arr_value, memory_leak_check):
     def test_impl(A):
         return A.shape
@@ -199,6 +204,7 @@ def test_shape(struct_arr_value, memory_leak_check):
     assert bodo.jit(test_impl)(struct_arr_value) == test_impl(struct_arr_value)
 
 
+@pytest.mark.slow
 def test_copy(struct_arr_value, memory_leak_check):
     def test_impl(A):
         return A.copy()
@@ -206,6 +212,7 @@ def test_copy(struct_arr_value, memory_leak_check):
     check_func(test_impl, (struct_arr_value,))
 
 
+@pytest.mark.slow
 def test_len(struct_arr_value, memory_leak_check):
     def test_impl(A):
         return len(A)
@@ -213,6 +220,7 @@ def test_len(struct_arr_value, memory_leak_check):
     check_func(test_impl, (struct_arr_value,))
 
 
+@pytest.mark.slow
 def test_struct_len(struct_arr_value, memory_leak_check):
     def test_impl(A, i):
         if A[i] is None:
@@ -223,6 +231,7 @@ def test_struct_len(struct_arr_value, memory_leak_check):
     check_func(test_impl, (struct_arr_value, 1), dist_test=False)
 
 
+@pytest.mark.slow
 def test_setitem_optional_int(memory_leak_check):
     def test_impl(A, i, flag):
         if flag:
@@ -249,6 +258,7 @@ def test_setitem_optional_int(memory_leak_check):
     check_func(test_impl, (A, i, True), copy_input=True, dist_test=False)
 
 
+@pytest.mark.slow
 def test_setitem_none_int(memory_leak_check):
     def test_impl(A, i):
         A[i] = None

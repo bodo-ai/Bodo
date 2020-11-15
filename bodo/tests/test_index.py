@@ -10,6 +10,7 @@ import bodo
 from bodo.tests.utils import AnalysisTestPipeline, check_func
 
 
+@pytest.mark.slow
 def test_range_index_constructor(memory_leak_check, is_slow_run):
     """
     Test pd.RangeIndex()
@@ -82,6 +83,7 @@ def test_generic_index_constructor(data):
     check_func(impl, (data,))
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "data,dtype",
     [
@@ -102,6 +104,7 @@ def test_generic_index_constructor_with_dtype(data, dtype):
     check_func(impl, (data, dtype))
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "data",
     [
@@ -116,6 +119,7 @@ def test_generic_index_constructor_sequential(data):
     check_func(impl, (data,), dist_test=False)
 
 
+@pytest.mark.slow
 def test_numeric_index_constructor(memory_leak_check, is_slow_run):
     """
     Test pd.Int64Index/UInt64Index/Float64Index objects
@@ -181,6 +185,7 @@ def test_init_numeric_index_array_analysis(memory_leak_check):
     assert eq_set._get_ind("I#0") == eq_set._get_ind("d#0")
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "index",
     [
@@ -261,6 +266,7 @@ def dti_val(request):
     return request.param
 
 
+@pytest.mark.slow
 def test_datetime_index_unbox(dti_val, memory_leak_check):
     def test_impl(dti):
         return dti
@@ -335,6 +341,7 @@ def test_datetime_sub(dti_val, memory_leak_check):
     pd.testing.assert_index_equal(bodo_func(dti_val, t), impl2(dti_val, t))
 
 
+@pytest.mark.smoke
 def test_datetime_getitem(dti_val, memory_leak_check):
     # constant integer index
     def impl(A):
@@ -391,6 +398,7 @@ def test_datetime_str_comp(dti_val, comp, memory_leak_check):
     np.testing.assert_array_equal(bodo_func(dti_val, s), impl(dti_val, s))
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "data",
     [
@@ -463,6 +471,7 @@ def timedelta_index_val(request):
     return request.param
 
 
+@pytest.mark.slow
 def test_timedelta_index_unbox(timedelta_index_val, memory_leak_check):
     def test_impl(timedelta_index):
         return timedelta_index
@@ -473,6 +482,7 @@ def test_timedelta_index_unbox(timedelta_index_val, memory_leak_check):
     )
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "data",
     [
@@ -523,6 +533,7 @@ def test_timedelta_field(timedelta_index_val, field, memory_leak_check):
     )
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "period_index",
     [
@@ -540,6 +551,7 @@ def test_period_index_box(period_index, memory_leak_check):
     pd.testing.assert_index_equal(bodo.jit(impl)(period_index), impl(period_index))
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "m_ind",
     [

@@ -3,11 +3,12 @@
 """
 import operator
 from collections import namedtuple
-import pandas as pd
-import numpy as np
-import pytest
 
 import numba
+import numpy as np
+import pandas as pd
+import pytest
+
 import bodo
 from bodo.tests.utils import check_func
 
@@ -49,6 +50,7 @@ def map_arr_value(request):
 # there is a memory leak probably due to the decref issue in to_arr_obj_if_list_obj()
 # TODO: fix leak and enable test
 # def test_unbox(map_arr_value, memory_leak_check):
+@pytest.mark.slow
 def test_unbox(map_arr_value):
     # just unbox
     def impl(arr_arg):

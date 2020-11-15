@@ -1759,6 +1759,7 @@ def test_as_index_count(memory_leak_check):
     check_func(impl2, (df,), sort_output=True, reset_index=True)
 
 
+@pytest.mark.slow
 def test_single_col_reset_index(test_df, memory_leak_check):
     """We need the reset_index=True because otherwise the order is scrambled"""
 
@@ -2185,6 +2186,7 @@ def test_max_date(memory_leak_check):
     check_func(impl2, (df2,), sort_output=True, reset_index=True)
 
 
+@pytest.mark.smoke
 def test_mean(test_df, memory_leak_check):
     """
     Test Groupby.mean()

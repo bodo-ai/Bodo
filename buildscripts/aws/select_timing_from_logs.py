@@ -107,6 +107,7 @@ def group_timings(function_dicts, groups):
         group_selected = min(timing_dict, key=timing_dict.get)
         groups_dict[func_name] = group_selected
         timing_dict[group_selected] += time_taken
+    print(timing_dict)
     return groups_dict
 
 

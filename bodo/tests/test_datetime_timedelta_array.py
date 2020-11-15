@@ -26,6 +26,7 @@ def timedelta_arr_value(request):
     return request.param
 
 
+@pytest.mark.smoke
 def test_getitem_int(timedelta_arr_value, memory_leak_check):
     def test_impl(A, i):
         return A[i]
@@ -85,6 +86,7 @@ def test_getitem_int_arr(timedelta_arr_value, memory_leak_check):
     )
 
 
+@pytest.mark.slow
 def test_setitem_optional_int(timedelta_arr_value, memory_leak_check):
     def test_impl(A, i, flag):
         if flag:
@@ -108,6 +110,7 @@ def test_setitem_optional_int(timedelta_arr_value, memory_leak_check):
     )
 
 
+@pytest.mark.slow
 def test_setitem_none_int(timedelta_arr_value, memory_leak_check):
     def test_impl(A, i):
         A[i] = None
@@ -140,6 +143,7 @@ def test_np_unique(memory_leak_check):
 
 
 # TODO: fix memory leak and add memory_leak_check
+@pytest.mark.slow
 def test_constant_lowering(timedelta_arr_value):
     def impl():
         return timedelta_arr_value

@@ -132,6 +132,7 @@ def array_item_arr_value(request):
     return request.param
 
 
+@pytest.mark.slow
 def test_unbox(array_item_arr_value, memory_leak_check):
     # just unbox
     def impl(arr_arg):
@@ -145,6 +146,7 @@ def test_unbox(array_item_arr_value, memory_leak_check):
     check_func(impl2, (array_item_arr_value,))
 
 
+@pytest.mark.smoke
 def test_getitem_int(array_item_arr_value, memory_leak_check):
     def test_impl(A, i):
         return A[i]
@@ -187,6 +189,7 @@ def test_getitem_slice(array_item_arr_value, memory_leak_check):
     )
 
 
+@pytest.mark.slow
 def test_ndim(memory_leak_check):
     def test_impl(A):
         return A.ndim
@@ -195,6 +198,7 @@ def test_ndim(memory_leak_check):
     assert bodo.jit(test_impl)(A) == test_impl(A)
 
 
+@pytest.mark.slow
 def test_shape(memory_leak_check):
     def test_impl(A):
         return A.shape
@@ -203,6 +207,7 @@ def test_shape(memory_leak_check):
     assert bodo.jit(test_impl)(A) == test_impl(A)
 
 
+@pytest.mark.slow
 def test_copy(array_item_arr_value, memory_leak_check):
     def test_impl(A):
         return A.copy()

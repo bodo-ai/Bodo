@@ -452,6 +452,7 @@ def test_pq_array_item(datapath):
         check_func(test_impl, ("test_pq_list_item.pq",))
 
 
+@pytest.mark.slow
 def test_pq_unsupported_types(datapath, memory_leak_check):
     """test unsupported data types in unselected columns"""
 
@@ -523,6 +524,7 @@ def test_csv_remove_col0_used_for_len(datapath, memory_leak_check):
         check_func(impl2, ())
 
 
+@pytest.mark.smoke
 def test_read_csv_cache(datapath, memory_leak_check):
     """
     test read_csv with cache=True
@@ -577,6 +579,7 @@ def clean_pq_files(mode, pandas_pq_path, bodo_pq_path):
         shutil.rmtree(bodo_pq_path, ignore_errors=True)
 
 
+@pytest.mark.smoke
 def test_read_parquet_cache(datapath, memory_leak_check):
     """
     test read_parquet with cache=True
@@ -1126,6 +1129,7 @@ def test_write_csv_parallel_unicode(memory_leak_check):
             pd.testing.assert_frame_equal(pd.read_csv(hp_fname), pd.read_csv(pd_fname))
 
 
+@pytest.mark.smoke
 def test_h5_read_seq(datapath, memory_leak_check):
     def test_impl(fname):
         f = h5py.File(fname, "r")
@@ -1266,6 +1270,7 @@ def test_h5_group_keys(datapath, memory_leak_check):
     assert bodo_func() == test_impl()
 
 
+@pytest.mark.smoke
 def test_h5_write(memory_leak_check):
     # run only on 1 processor
     if bodo.get_size() != 1:
@@ -1312,6 +1317,7 @@ def test_h5_group_write(memory_leak_check):
         np.testing.assert_array_equal(A, A2)
 
 
+@pytest.mark.smoke
 def test_np_io1(datapath, memory_leak_check):
     fname = datapath("np_file1.dat")
 
@@ -1876,6 +1882,7 @@ def test_csv_dir_str_arr_multi(datapath, memory_leak_check):
         uncompress_dir(fname)
 
 
+@pytest.mark.smoke
 def test_excel1(datapath, memory_leak_check):
     """Test pd.read_excel()"""
 
@@ -2027,6 +2034,7 @@ def test_read_parquet_all_null_col_subsets(col_subset, memory_leak_check, datapa
     check_func(test_impl, (fname,), py_output=py_output)
 
 
+@pytest.mark.slow
 class TestIO(unittest.TestCase):
     def test_h5_write_parallel(self):
         fname = "lr_w.hdf5"

@@ -220,6 +220,7 @@ def test_split_empty(test_unicode_no_nan):
 
 
 # TODO: Add memory_leak_check when bugs are resolved.
+@pytest.mark.slow
 def test_split_n():
     def test_impl(S):
         return S.str.split(",", n=1)
@@ -234,6 +235,7 @@ def test_split_n():
 
 
 # TODO: Add memory_leak_check when bugs are resolved.
+@pytest.mark.slow
 def test_split_regex():
     def test_impl(S):
         return S.str.split("a|b")
@@ -266,6 +268,7 @@ def test_series_str_split_explode(memory_leak_check):
 
 
 # TODO: Add memory_leak_check when bugs are resolved.
+@pytest.mark.slow
 def test_split_no_regex():
     def test_impl1(S):
         # Check that . will not be viewed as a regex in splitview
@@ -293,6 +296,7 @@ def test_repeat(test_unicode_no_nan):
     check_func(test_impl, (test_unicode_no_nan,))
 
 
+@pytest.mark.slow
 def test_repeat_arr(test_unicode_no_nan):
     def test_impl(S, arr):
         return S.str.repeat(arr)
@@ -301,6 +305,7 @@ def test_repeat_arr(test_unicode_no_nan):
     check_func(test_impl, (test_unicode_no_nan, arr))
 
 
+@pytest.mark.slow
 def test_repeat_const_list():
     # Only test on value where the list length works
     def test_impl(S):
@@ -518,6 +523,7 @@ def test_count_flag(test_unicode, memory_leak_check):
     check_func(test_impl2, (test_unicode,), check_dtype=False)
 
 
+@pytest.mark.smoke
 def test_find(test_unicode, memory_leak_check):
     def test_impl(S):
         return S.str.find("AB")
@@ -529,6 +535,7 @@ def test_find(test_unicode, memory_leak_check):
     check_func(test_impl2, (test_unicode,), check_dtype=False)
 
 
+@pytest.mark.slow
 def test_find_start_end(test_unicode, memory_leak_check):
     def test_impl(S):
         return S.str.find("AB", start=3, end=10)
@@ -794,6 +801,7 @@ def list_str_arr_value(request):
     return request.param
 
 
+@pytest.mark.slow
 def test_list_str_arr_unbox(list_str_arr_value, memory_leak_check):
     # just unbox
     def impl(arr_arg):
@@ -808,6 +816,7 @@ def test_list_str_arr_unbox(list_str_arr_value, memory_leak_check):
     check_func(impl2, (list_str_arr_value,))
 
 
+@pytest.mark.smoke
 def test_getitem_int(list_str_arr_value, memory_leak_check):
     def test_impl(A, i):
         return A[i]
@@ -840,6 +849,7 @@ def test_getitem_slice(list_str_arr_value, memory_leak_check):
     _test_equal(bodo_func(list_str_arr_value, ind), test_impl(list_str_arr_value, ind))
 
 
+@pytest.mark.slow
 def test_copy(list_str_arr_value, memory_leak_check):
     def test_impl(A):
         return A.copy()
@@ -871,6 +881,7 @@ def test_flatten2(test_unicode_no_nan, memory_leak_check):
     check_func(impl, (test_unicode_no_nan,))
 
 
+@pytest.mark.slow
 def test_flatten3(test_unicode_no_nan, memory_leak_check):
     """tests flattening array without the "list" call"""
 

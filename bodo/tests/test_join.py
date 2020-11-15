@@ -546,6 +546,7 @@ def test_merge_disjoint_keys2(memory_leak_check):
     check_func(test_impl, (df1, df2), sort_output=True, reset_index=True)
 
 
+@pytest.mark.smoke
 def test_merge_inner(memory_leak_check):
     """
     Test merge(): 'how' = inner on specified integer column
@@ -1469,6 +1470,7 @@ def test_join_deadcode_cleanup(memory_leak_check):
 # ------------------------------ join() ------------------------------ #
 
 
+@pytest.mark.smoke
 @pytest.mark.parametrize(
     "df1",
     [
@@ -1871,6 +1873,7 @@ def test_merge_asof_seq(memory_leak_check):
     pd.testing.assert_frame_equal(bodo_func(df1, df2), test_impl(df1, df2))
 
 
+@pytest.mark.smoke
 def test_merge_asof_parallel(datapath, memory_leak_check):
     """
     Test merge_asof(): merge_asof in parallel on key column of type DatetimeIndex

@@ -21,6 +21,7 @@ def date_arr_value(request):
     return request.param
 
 
+@pytest.mark.smoke
 def test_getitem_int(date_arr_value, memory_leak_check):
     def test_impl(A, i):
         return A[i]
@@ -67,6 +68,7 @@ def test_getitem_int_arr(date_arr_value, memory_leak_check):
     )
 
 
+@pytest.mark.slow
 def test_setitem_optional_int(date_arr_value, memory_leak_check):
     def test_impl(A, i, flag):
         if flag:
@@ -84,6 +86,7 @@ def test_setitem_optional_int(date_arr_value, memory_leak_check):
     )
 
 
+@pytest.mark.slow
 def test_setitem_none_int(date_arr_value, memory_leak_check):
     def test_impl(A, i):
         A[i] = None
@@ -113,6 +116,7 @@ def test_np_unique(memory_leak_check):
 
 
 # TODO: fix memory leak and add memory_leak_check
+@pytest.mark.slow
 def test_constant_lowering(date_arr_value):
     def impl():
         return date_arr_value

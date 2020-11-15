@@ -160,6 +160,7 @@ def test_json_read_str_arr(datapath, memory_leak_check):
     check_func(test_impl, (fname_dir_multi,), py_output=py_out)
 
 
+@pytest.mark.smoke
 def test_json_read_multiline_object(datapath, memory_leak_check):
     """
     test read_json where json object is multi-lined
@@ -267,6 +268,7 @@ def test_df(request, memory_leak_check):
     return request.param
 
 
+@pytest.mark.smoke
 def test_json_write_simple_df(memory_leak_check):
     """
     test to_json with default arguments

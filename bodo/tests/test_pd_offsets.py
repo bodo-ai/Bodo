@@ -33,6 +33,7 @@ def month_end_value(request):
     return request.param
 
 
+@pytest.mark.slow
 def test_constant_lowering_month_end(month_end_value, memory_leak_check):
     def test_impl():
         return month_end_value
@@ -40,6 +41,7 @@ def test_constant_lowering_month_end(month_end_value, memory_leak_check):
     check_func(test_impl, ())
 
 
+@pytest.mark.slow
 def test_month_end_boxing(month_end_value, memory_leak_check):
     """
     Test boxing and unboxing of pd.tseries.offsets.MonthEnd()
@@ -51,6 +53,7 @@ def test_month_end_boxing(month_end_value, memory_leak_check):
     check_func(test_impl, (month_end_value,))
 
 
+@pytest.mark.slow
 def test_month_end_constructor(memory_leak_check):
     def test_impl1():
         return pd.tseries.offsets.MonthEnd()
@@ -197,6 +200,7 @@ def test_month_end_sub_datetime_boundary(month_end_value, memory_leak_check):
     check_func(test_impl, (datetime_val, month_end_value))
 
 
+@pytest.mark.smoke
 def test_month_end_sub_timestamp(month_end_value, memory_leak_check):
     def test_impl(val1, val2):
         return val1 - val2
@@ -265,6 +269,7 @@ def test_month_end_sub_series(month_end_value, memory_leak_check):
     check_func(test_impl, (S, month_end_value))
 
 
+@pytest.mark.slow
 def test_month_end_neg(month_end_value, memory_leak_check):
     def test_impl(me):
         return -me
@@ -480,6 +485,7 @@ def date_offset_value(request):
     return request.param
 
 
+@pytest.mark.slow
 def test_constant_lowering_date_offset(date_offset_value, memory_leak_check):
     # Objects won't match exactly, so test boxing by checking that addition in Python
     # has the same result
@@ -501,6 +507,7 @@ def test_constant_lowering_date_offset(date_offset_value, memory_leak_check):
     assert timestamp_val + py_output == timestamp_val + bodo_output
 
 
+@pytest.mark.slow
 def test_date_offset_boxing(date_offset_value, memory_leak_check):
     """
     Test boxing and unboxing of pd.tseries.offsets.DateOffset()
@@ -526,6 +533,7 @@ def test_date_offset_boxing(date_offset_value, memory_leak_check):
     assert timestamp_val + py_output == timestamp_val + bodo_output
 
 
+@pytest.mark.slow
 def test_date_offset_constructor(memory_leak_check):
     # Objects won't match exactly, so test boxing by checking that addition in Python
     # has the same result
@@ -623,6 +631,7 @@ def test_date_offset_add_series(date_offset_value, memory_leak_check):
     check_func(test_impl, (S, date_offset_value))
 
 
+@pytest.mark.smoke
 def test_date_offset_sub_timestamp(date_offset_value, memory_leak_check):
     def test_impl(val1, val2):
         return val1 - val2
@@ -670,6 +679,7 @@ def test_date_offset_sub_series(date_offset_value, memory_leak_check):
     check_func(test_impl, (S, date_offset_value))
 
 
+@pytest.mark.slow
 def test_date_offset_neg(date_offset_value, memory_leak_check):
     # Objects won't match exactly, so test boxing by checking that addition in Python
     # has the same result

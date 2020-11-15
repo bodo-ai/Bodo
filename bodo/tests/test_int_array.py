@@ -190,6 +190,7 @@ def test_np_prod(int_arr_value, memory_leak_check):
     check_func(impl, (int_arr_value,))
 
 
+@pytest.mark.slow
 def test_unbox(int_arr_value, memory_leak_check):
     # just unbox
     def impl(arr_arg):
@@ -204,6 +205,7 @@ def test_unbox(int_arr_value, memory_leak_check):
     check_func(impl2, (int_arr_value,))
 
 
+@pytest.mark.slow
 def test_int_dtype(memory_leak_check):
     # unbox and box
     def impl(d):
@@ -225,6 +227,7 @@ def test_int_dtype(memory_leak_check):
     check_func(impl3, ())
 
 
+@pytest.mark.smoke
 def test_getitem_int(int_arr_value, memory_leak_check):
     def test_impl(A, i):
         return A[i]
@@ -273,6 +276,7 @@ def test_getitem_int_arr(int_arr_value, memory_leak_check):
     )
 
 
+@pytest.mark.smoke
 def test_setitem_int(int_arr_value, memory_leak_check):
     def test_impl(A, val):
         A[2] = val
@@ -287,6 +291,7 @@ def test_setitem_int(int_arr_value, memory_leak_check):
     )
 
 
+@pytest.mark.slow
 def test_setitem_none_int(int_arr_value, memory_leak_check):
     def test_impl(A, i):
         A[i] = None
@@ -296,6 +301,7 @@ def test_setitem_none_int(int_arr_value, memory_leak_check):
     check_func(test_impl, (int_arr_value.copy(), i), copy_input=True, dist_test=False)
 
 
+@pytest.mark.slow
 def test_setitem_optional_int(int_arr_value, memory_leak_check):
     def test_impl(A, i, flag):
         if flag:
@@ -354,6 +360,7 @@ def test_setitem_arr(int_arr_value, memory_leak_check):
     )
 
 
+@pytest.mark.slow
 def test_len(memory_leak_check):
     def test_impl(A):
         return len(A)
@@ -365,6 +372,7 @@ def test_len(memory_leak_check):
     check_func(test_impl, (A,))
 
 
+@pytest.mark.slow
 def test_shape(memory_leak_check):
     def test_impl(A):
         return A.shape
@@ -563,6 +571,7 @@ def test_unary_op(op, memory_leak_check):
     check_func(test_impl, (A,))
 
 
+@pytest.mark.slow
 def test_dtype(int_arr_value, memory_leak_check):
     def test_impl(A):
         return A.dtype
@@ -570,6 +579,7 @@ def test_dtype(int_arr_value, memory_leak_check):
     check_func(test_impl, (int_arr_value,))
 
 
+@pytest.mark.slow
 def test_ndim(memory_leak_check):
     def test_impl(A):
         return A.ndim
@@ -581,6 +591,7 @@ def test_ndim(memory_leak_check):
     check_func(test_impl, (A,))
 
 
+@pytest.mark.slow
 def test_copy(int_arr_value, memory_leak_check):
     def test_impl(A):
         return A.copy()
@@ -628,6 +639,7 @@ def test_unique(int_arr_value, memory_leak_check):
 
 
 # TODO: fix memory leak and add memory_leak_check
+@pytest.mark.slow
 def test_constant_lowering(int_arr_value):
     def impl():
         return int_arr_value

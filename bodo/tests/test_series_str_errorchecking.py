@@ -535,6 +535,7 @@ def test_center_errorcheck(memory_leak_check):
         bodo.jit(f)(S)
 
 
+@pytest.mark.slow
 def test_unsupported_str_method(memory_leak_check):
     """ Raise Bodo error for unsupported str methods"""
 

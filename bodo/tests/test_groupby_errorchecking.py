@@ -601,6 +601,7 @@ def test_groupby_datetimeoperation_checks(memory_leak_check):
         bodo.jit(impl_cumprod)(df1_timedelta)
 
 
+@pytest.mark.slow
 def test_groupby_unsupported_error_checking(memory_leak_check):
     """Test that a Bodo error is raised for unsupported
     groupby methods

@@ -266,6 +266,7 @@ def test_df_select_dtypes_list_one_elem_include(select_dtypes_df):
     check_func(test_impl2, (df,))
 
 
+@pytest.mark.slow
 def test_df_select_dtypes_list_multi_elem_include(select_dtypes_df):
     df = select_dtypes_df
 
@@ -303,6 +304,7 @@ def test_df_select_dtypes_list_one_elem_exclude(select_dtypes_df):
     check_func(test_impl2, (df,))
 
 
+@pytest.mark.slow
 def test_df_select_dtypes_list_multi_elem_exclude(select_dtypes_df):
     df = select_dtypes_df
 
@@ -386,6 +388,7 @@ def test_df_select_dtypes_missing_list_exclude(select_dtypes_df):
     check_func(test_impl, (df,))
 
 
+@pytest.mark.smoke
 def test_assign(memory_leak_check, is_slow_run):
     """Assign statements"""
 
@@ -416,6 +419,7 @@ def test_assign(memory_leak_check, is_slow_run):
     check_func(test_impl5, (df_twocol,))
 
 
+@pytest.mark.slow
 def test_unbox_df1(df_value, memory_leak_check):
     # just unbox
     def impl(df_arg):
@@ -465,6 +469,7 @@ def test_unbox_df3(memory_leak_check):
     check_func(impl, (df2,))
 
 
+@pytest.mark.slow
 def test_unbox_df_multi(memory_leak_check):
     """
     box/unbox dataframe with MultiIndex columns structure (sometimes created in groupby,
@@ -481,6 +486,7 @@ def test_unbox_df_multi(memory_leak_check):
     check_func(impl, (df,))
 
 
+@pytest.mark.slow
 def test_empty_df_unbox(memory_leak_check):
     """test boxing/unboxing of an empty df"""
 
@@ -491,6 +497,7 @@ def test_empty_df_unbox(memory_leak_check):
     check_func(impl, (df,))
 
 
+@pytest.mark.slow
 def test_empty_df_create(memory_leak_check):
     """test creation of an empty df"""
 
@@ -509,6 +516,7 @@ def test_empty_df_create(memory_leak_check):
     check_func(impl3, ())
 
 
+@pytest.mark.smoke
 def test_empty_df_set_column(memory_leak_check):
     """test column setitem of an empty df"""
 
@@ -776,6 +784,7 @@ def test_df_index_range_index(memory_leak_check):
     pd.testing.assert_index_equal(bodo_func(), impl())
 
 
+@pytest.mark.slow
 def test_df_columns(df_value, memory_leak_check):
     def impl(df):
         return df.columns
@@ -783,6 +792,7 @@ def test_df_columns(df_value, memory_leak_check):
     check_func(impl, (df_value,), is_out_distributed=False)
 
 
+@pytest.mark.slow
 def test_df_values(numeric_df_value, memory_leak_check):
     def impl(df):
         return df.values
@@ -790,6 +800,7 @@ def test_df_values(numeric_df_value, memory_leak_check):
     check_func(impl, (numeric_df_value,))
 
 
+@pytest.mark.slow
 def test_df_values_nullable_int(memory_leak_check):
     def impl(df):
         return df.values
@@ -838,6 +849,7 @@ def test_df_shape(df_value, memory_leak_check):
 
 
 # TODO: empty df: pd.DataFrame()
+@pytest.mark.slow
 @pytest.mark.parametrize("df", [pd.DataFrame({"A": [1, 3]}), pd.DataFrame({"A": []})])
 def test_df_empty(df, memory_leak_check):
     def impl(df):
@@ -876,6 +888,7 @@ def test_df_astype_str(numeric_df_value, memory_leak_check):
     check_func(impl, (numeric_df_value,))
 
 
+@pytest.mark.slow
 def test_df_copy_deep(df_value, memory_leak_check):
     def impl(df):
         return df.copy()
@@ -883,6 +896,7 @@ def test_df_copy_deep(df_value, memory_leak_check):
     check_func(impl, (df_value,))
 
 
+@pytest.mark.slow
 def test_df_copy_shallow(df_value, memory_leak_check):
     def impl(df):
         return df.copy(deep=False)
@@ -949,6 +963,7 @@ def test_df_rename(memory_leak_check):
         bodo.jit(impl6)(df)
 
 
+@pytest.mark.smoke
 def test_df_isna(df_value, memory_leak_check):
     # TODO: test dt64 NAT, categorical, etc.
     def impl(df):
@@ -957,6 +972,7 @@ def test_df_isna(df_value, memory_leak_check):
     check_func(impl, (df_value,))
 
 
+@pytest.mark.smoke
 def test_df_notna(df_value, memory_leak_check):
     # TODO: test dt64 NAT, categorical, etc.
     def impl(df):
@@ -1012,6 +1028,7 @@ def test_df_abs2(numeric_df_value, memory_leak_check):
     check_func(impl, (numeric_df_value,))
 
 
+@pytest.mark.slow
 def test_df_corr(df_value, memory_leak_check):
     # empty dataframe output not supported yet
     if len(df_value._get_numeric_data().columns) == 0:
@@ -1199,6 +1216,7 @@ def test_df_reduce_axis1(df, memory_leak_check, is_slow_run):
     check_func(impl_std, (df,))
 
 
+@pytest.mark.smoke
 def test_df_mean(numeric_df_value, memory_leak_check):
     # empty dataframe output not supported yet
     if len(numeric_df_value._get_numeric_data().columns) == 0:
@@ -1571,6 +1589,7 @@ def test_df_duplicated():
 ##################### binary ops ###############################
 
 
+@pytest.mark.smoke
 def test_dataframe_binary_add(memory_leak_check):
     def test_impl(df, other):
         return df + other
@@ -2038,6 +2057,7 @@ def test_df_apply_general_colnames(memory_leak_check):
     check_func(impl3, (df,))
 
 
+@pytest.mark.slow
 def test_df_apply_decimal(memory_leak_check):
     """make sure Decimal output can be handled in apply() properly"""
     # just returning input value since we don't support any Decimal creation yet
@@ -2062,6 +2082,7 @@ def test_df_apply_decimal(memory_leak_check):
     check_func(test_impl, (df,))
 
 
+@pytest.mark.slow
 def test_df_apply_args(memory_leak_check):
     """test passing extra args to apply UDF"""
 
@@ -2110,6 +2131,7 @@ def g2(r):
     return 2 * r[0]
 
 
+@pytest.mark.slow
 def test_df_apply_func_case2(memory_leak_check):
     """make sure a UDF calling another function doesn't fail (#964)"""
 
@@ -2142,6 +2164,7 @@ def test_df_apply_error_check():
         bodo.jit(test_impl)(df)
 
 
+@pytest.mark.slow
 def test_df_apply_df_output(memory_leak_check):
     """test DataFrame.apply() with dataframe output 1 column"""
 
@@ -2453,6 +2476,7 @@ def test_df_range_index_unify():
 ################################## indexing  #################################
 
 
+@pytest.mark.smoke
 def test_column_list_getitem1(memory_leak_check):
     """Test df[["A", "B"]] getitem case"""
 
@@ -2652,6 +2676,7 @@ def test_loc_col_select(memory_leak_check):
     check_func(impl4, (n,))
 
 
+@pytest.mark.smoke
 def test_iat_setitem():
     """test df.iat[] setitem (single value)"""
 
@@ -2827,6 +2852,7 @@ def test_df_type_unify_error():
 
 
 # TODO: fix memory leak and add memory_leak_check
+@pytest.mark.slow
 def test_dataframe_constant_lowering():
     df = pd.DataFrame({"A": [2, 1], "B": [1.2, 3.3]})
 
@@ -2939,6 +2965,7 @@ def test_dataframe_sample_nested_datastructures():
     check_gather_operation(df4)
 
 
+@pytest.mark.slow
 def test_dataframe_columns_name():
     """A little known feature of pandas dataframe is that one can attribute
     a name to the columns. As far as I know this shows up only in pivot_table
@@ -3019,6 +3046,7 @@ def test_unroll_loop(memory_leak_check, is_slow_run):
     check_func(impl5, (n,))
 
 
+@pytest.mark.slow
 def test_unsupported_df_method():
     """ Raise Bodo error for unsupported df methods"""
 

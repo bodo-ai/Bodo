@@ -161,6 +161,7 @@ def test_sort_datetime_missing(is_slow_run, memory_leak_check):
     )
 
 
+@pytest.mark.smoke
 def test_single_col(memory_leak_check):
     """
     sorts a dataframe that has only one column
@@ -387,7 +388,6 @@ def test_sort_values_2col_long_np(memory_leak_check):
         np.float64,
     ],
 )
-@pytest.mark.slow
 def test_sort_values_1col_np_array(dtype, memory_leak_check):
     """
     Test sort_values(): with just one column

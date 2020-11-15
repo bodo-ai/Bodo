@@ -27,6 +27,7 @@ def dataframe_val(request):
     return request.param
 
 
+@pytest.mark.slow
 def test_add_months(dataframe_val, memory_leak_check):
     def test_impl(df, num_months):
         return df.A.apply(
@@ -39,6 +40,7 @@ def test_add_months(dataframe_val, memory_leak_check):
     check_func(test_impl, (dataframe_val, -2))
 
 
+@pytest.mark.slow
 def test_date_add(dataframe_val, memory_leak_check):
     def test_impl(df, num_days):
         return df.A.apply(
@@ -51,6 +53,7 @@ def test_date_add(dataframe_val, memory_leak_check):
     check_func(test_impl, (dataframe_val, -2))
 
 
+@pytest.mark.slow
 def test_date_sub(dataframe_val, memory_leak_check):
     def test_impl(df, num_days):
         return df.A.apply(
@@ -63,6 +66,7 @@ def test_date_sub(dataframe_val, memory_leak_check):
     check_func(test_impl, (dataframe_val, -2))
 
 
+@pytest.mark.slow
 def test_from_unixtime(memory_leak_check):
     def test_impl(S, format_str):
         return S.map(lambda x: pd.Timestamp(x, "s")).dt.strftime(format_str)
@@ -75,6 +79,7 @@ def test_from_unixtime(memory_leak_check):
     check_func(test_impl, (S, "%B %d, %Y, %r"))
 
 
+@pytest.mark.slow
 def test_last_day(dataframe_val, memory_leak_check):
     def test_impl(df):
         return df.A.map(lambda x: x + pd.tseries.offsets.MonthEnd())
