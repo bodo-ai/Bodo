@@ -182,7 +182,9 @@ def overload_dataframe_astype(df, dtype, copy=True, errors="raise"):
     # just call astype() on all column Series
     # TODO: support categorical, dt64, etc.
 
-    data_args = ", ".join("df['{}'].astype(dtype).values".format(c) for c in df.columns)
+    data_args = ", ".join(
+        f"df.iloc[:, {i}].astype(dtype).values" for i in range(len(df.columns))
+    )
     header = "def impl(df, dtype, copy=True, errors='raise'):\n"
     return _gen_init_df(header, df.columns, data_args)
 
@@ -275,7 +277,9 @@ def overload_dataframe_rename(
 @overload_method(DataFrameType, "isnull", inline="always", no_unliteral=True)
 def overload_dataframe_isna(df):
     # call isna() on column Series
-    data_args = ", ".join("df['{}'].isna().values".format(c) for c in df.columns)
+    data_args = ", ".join(
+        f"df.iloc[:, {i}].isna().values" for i in range(len(df.columns))
+    )
     header = "def impl(df):\n"
     return _gen_init_df(header, df.columns, data_args)
 
@@ -344,7 +348,9 @@ def overload_dataframe_select_dtypes(df, include=None, exclude=None):
             c for i, c in enumerate(chosen_columns) if df.data[i] not in exclude_types
         ]
 
-    data_args = ", ".join("df['{}'].values".format(c) for c in chosen_columns)
+    data_args = ", ".join(
+        f"df.iloc[:, {df.columns.index(c)}].values" for c in chosen_columns
+    )
     # Define our function
     header = "def impl(df, include=None, exclude=None):\n"
 
@@ -354,7 +360,9 @@ def overload_dataframe_select_dtypes(df, include=None, exclude=None):
 @overload_method(DataFrameType, "notna", inline="always", no_unliteral=True)
 def overload_dataframe_notna(df):
     # call notna() on column Series
-    data_args = ", ".join("df['{}'].notna().values".format(c) for c in df.columns)
+    data_args = ", ".join(
+        f"df.iloc[:, {i}].notna().values" for i in range(len(df.columns))
+    )
     header = "def impl(df):\n"
     return _gen_init_df(header, df.columns, data_args)
 
@@ -362,7 +370,9 @@ def overload_dataframe_notna(df):
 @overload_method(DataFrameType, "head", inline="always", no_unliteral=True)
 def overload_dataframe_head(df, n=5):
     # call head() on column Series
-    data_args = ", ".join("df['{}'].head(n).values".format(c) for c in df.columns)
+    data_args = ", ".join(
+        f"df.iloc[:, {i}].head(n).values" for i in range(len(df.columns))
+    )
     header = "def impl(df, n=5):\n"
     index = "bodo.allgatherv(bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)[:n], False)"
     return _gen_init_df(header, df.columns, data_args, index)
@@ -371,7 +381,9 @@ def overload_dataframe_head(df, n=5):
 @overload_method(DataFrameType, "tail", inline="always", no_unliteral=True)
 def overload_dataframe_tail(df, n=5):
     # call tail() on column Series
-    data_args = ", ".join("df['{}'].tail(n).values".format(c) for c in df.columns)
+    data_args = ", ".join(
+        f"df.iloc[:, {i}].tail(n).values" for i in range(len(df.columns))
+    )
     header = "def impl(df, n=5):\n"
     index = "bodo.allgatherv(bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)[-n:], False)"
     return _gen_init_df(header, df.columns, data_args, index)
@@ -552,7 +564,7 @@ def overload_dataframe_cov(df, min_periods=None):
 @overload_method(DataFrameType, "count", no_unliteral=True)
 def overload_dataframe_count(df, axis=0, level=None, numeric_only=False):
     # TODO: numeric_only flag
-    data_args = ", ".join("df['{}'].count()".format(c) for c in df.columns)
+    data_args = ", ".join(f"df.iloc[:, {i}].count()" for i in range(len(df.columns)))
 
     str_arr = "bodo.utils.conversion.coerce_to_array({})".format(df.columns)
     index = "bodo.hiframes.pd_index_ext.init_string_index({})\n".format(str_arr)
@@ -570,7 +582,7 @@ def overload_dataframe_count(df, axis=0, level=None, numeric_only=False):
 
 @overload_method(DataFrameType, "nunique", inline="always", no_unliteral=True)
 def overload_dataframe_nunique(df, axis=0, dropna=True):
-    data_args = ", ".join("df['{}'].nunique()".format(c) for c in df.columns)
+    data_args = ", ".join(f"df.iloc[:, {i}].nunique()" for i in range(len(df.columns)))
 
     str_arr = "bodo.utils.conversion.coerce_to_array({})".format(df.columns)
     index = "bodo.hiframes.pd_index_ext.init_string_index({})\n".format(str_arr)
@@ -705,7 +717,9 @@ def _gen_reduce_impl(df, func_name, args=None, axis=None):
         func_text = "def impl(df, axis=0, skipna=True):\n"
 
     if axis == 0:
-        func_text += _gen_reduce_impl_axis0(func_name, out_colnames, comm_dtype, args)
+        func_text += _gen_reduce_impl_axis0(
+            df, func_name, out_colnames, comm_dtype, args
+        )
     else:
         func_text += _gen_reduce_impl_axis1(func_name, out_colnames, comm_dtype, df)
 
@@ -715,7 +729,7 @@ def _gen_reduce_impl(df, func_name, args=None, axis=None):
     return impl
 
 
-def _gen_reduce_impl_axis0(func_name, out_colnames, comm_dtype, args):
+def _gen_reduce_impl_axis0(df, func_name, out_colnames, comm_dtype, args):
     """generate function body for dataframe reduction across rows"""
     # XXX: use common type for min/max to avoid float for ints due to NaN
     # TODO: handle NaN for ints better
@@ -736,7 +750,7 @@ def _gen_reduce_impl_axis0(func_name, out_colnames, comm_dtype, args):
         typ_cast = ", dtype=np.float32"
 
     data_args = ", ".join(
-        "df['{}'].{}({})".format(c, func_name, args) for c in out_colnames
+        f"df.iloc[:, {df.columns.index(c)}].{func_name}({args})" for c in out_colnames
     )
 
     str_arr = "bodo.utils.conversion.coerce_to_array({})".format(out_colnames)
@@ -817,7 +831,7 @@ def overload_dataframe_pct_change(
     df, periods=1, fill_method="pad", limit=None, freq=None
 ):
     data_args = ", ".join(
-        "df['{}'].pct_change(periods).values".format(c) for c in df.columns
+        f"df.iloc[:, {i}].pct_change(periods).values" for i in range(len(df.columns))
     )
     header = "def impl(df, periods=1, fill_method='pad', limit=None, freq=None):\n"
     return _gen_init_df(header, df.columns, data_args)
@@ -825,21 +839,27 @@ def overload_dataframe_pct_change(
 
 @overload_method(DataFrameType, "cumprod", inline="always", no_unliteral=True)
 def overload_dataframe_cumprod(df, axis=None, skipna=True):
-    data_args = ", ".join("df['{}'].values.cumprod()".format(c) for c in df.columns)
+    data_args = ", ".join(
+        f"df.iloc[:, {i}].values.cumprod()" for i in range(len(df.columns))
+    )
     header = "def impl(df, axis=None, skipna=True):\n"
     return _gen_init_df(header, df.columns, data_args)
 
 
 @overload_method(DataFrameType, "cumsum", inline="always", no_unliteral=True)
 def overload_dataframe_cumsum(df, axis=None, skipna=True):
-    data_args = ", ".join("df['{}'].values.cumsum()".format(c) for c in df.columns)
+    data_args = ", ".join(
+        f"df.iloc[:, {i}].values.cumsum()" for i in range(len(df.columns))
+    )
     header = "def impl(df, axis=None, skipna=True):\n"
     return _gen_init_df(header, df.columns, data_args)
 
 
 @overload_method(DataFrameType, "describe", inline="always", no_unliteral=True)
 def overload_dataframe_describe(df, percentiles=None, include=None, exclude=None):
-    data_args = ", ".join("df['{}'].describe().values".format(c) for c in df.columns)
+    data_args = ", ".join(
+        f"df.iloc[:, {i}].describe().values" for i in range(len(df.columns))
+    )
     header = "def impl(df, percentiles=None, include=None, exclude=None):\n"
     index = (
         "bodo.utils.conversion.convert_to_index(['count', 'mean', 'std', "
@@ -1318,7 +1338,8 @@ def replace_overload(
     check_unsupported_args("replace", args_dict, args_default_dict)
 
     data_args = ", ".join(
-        "df['{}'].replace(to_replace, value).values".format(c) for c in df.columns
+        f"df.iloc[:, {i}].replace(to_replace, value).values"
+        for i in range(len(df.columns))
     )
     header = "def impl(df, to_replace=None, value=None, inplace=False, limit=None, regex=False, method='pad'):\n"
     return _gen_init_df(header, df.columns, data_args)
