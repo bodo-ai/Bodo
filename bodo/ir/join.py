@@ -130,12 +130,12 @@ class Join(ir.Stmt):
         self.vect_same_key = vect_same_key
         #
         self.column_origins = {
-            (c + suffix_x if c in add_suffix else c): ("left", c)
+            (str(c) + suffix_x if c in add_suffix else c): ("left", c)
             for c in left_vars.keys()
         }
         self.column_origins.update(
             {
-                (c + suffix_y if c in add_suffix else c): ("right", c)
+                (str(c) + suffix_y if c in add_suffix else c): ("right", c)
                 for c in right_vars.keys()
             }
         )
@@ -466,12 +466,12 @@ def join_distributed_run(
     )
     left_other_col_vars = tuple(
         v
-        for (n, v) in sorted(join_node.left_vars.items())
+        for (n, v) in sorted(join_node.left_vars.items(), key=lambda a: str(a[0]))
         if n not in join_node.left_keys
     )
     right_other_col_vars = tuple(
         v
-        for (n, v) in sorted(join_node.right_vars.items())
+        for (n, v) in sorted(join_node.right_vars.items(), key=lambda a: str(a[0]))
         if n not in join_node.right_keys
     )
     # get column types
@@ -533,36 +533,36 @@ def join_distributed_run(
     )
     out_keys = []
     for cname in join_node.left_keys:
-        if cname + join_node.suffix_x in join_node.out_data_vars:
-            cname_work = cname + join_node.suffix_x
+        if str(cname) + join_node.suffix_x in join_node.out_data_vars:
+            cname_work = str(cname) + join_node.suffix_x
         else:
             cname_work = cname
         out_keys.append(join_node.out_data_vars[cname_work])
     for i, cname in enumerate(join_node.right_keys):
         if not join_node.vect_same_key[i] and not join_node.is_join:
-            cname_work = cname + join_node.suffix_y
+            cname_work = str(cname) + join_node.suffix_y
             if not cname_work in join_node.out_data_vars:
                 cname_work = cname
             assert cname_work in join_node.out_data_vars
             out_keys.append(join_node.out_data_vars[cname_work])
 
     def _get_out_col_var(cname, is_left):
-        if is_left and cname + join_node.suffix_x in join_node.out_data_vars:
-            return join_node.out_data_vars[cname + join_node.suffix_x]
-        if not is_left and cname + join_node.suffix_y in join_node.out_data_vars:
-            return join_node.out_data_vars[cname + join_node.suffix_y]
+        if is_left and str(cname) + join_node.suffix_x in join_node.out_data_vars:
+            return join_node.out_data_vars[str(cname) + join_node.suffix_x]
+        if not is_left and str(cname) + join_node.suffix_y in join_node.out_data_vars:
+            return join_node.out_data_vars[str(cname) + join_node.suffix_y]
 
         return join_node.out_data_vars[cname]
 
     merge_out = out_optional_key_vars + tuple(out_keys)
     merge_out += tuple(
         _get_out_col_var(n, True)
-        for (n, v) in sorted(join_node.left_vars.items())
+        for (n, v) in sorted(join_node.left_vars.items(), key=lambda a: str(a[0]))
         if n not in join_node.left_keys
     )
     merge_out += tuple(
         _get_out_col_var(n, False)
-        for (n, v) in sorted(join_node.right_vars.items())
+        for (n, v) in sorted(join_node.right_vars.items(), key=lambda a: str(a[0]))
         if n not in join_node.right_keys
     )
     out_names = ["t3_c" + str(i) for i in range(len(merge_out))]

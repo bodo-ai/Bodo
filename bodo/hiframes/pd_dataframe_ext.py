@@ -1251,8 +1251,8 @@ def validate_unicity_output_column_names(
         insertOutColumn(eVar)
 
     for eVar in add_suffix:
-        eVarX = eVar + suffix_x
-        eVarY = eVar + suffix_y
+        eVarX = str(eVar) + suffix_x
+        eVarY = str(eVar) + suffix_y
         insertOutColumn(eVarX)
         insertOutColumn(eVarY)
 
@@ -1298,7 +1298,10 @@ def merge_overload(
 
     how = get_overload_const_str(how)
     # NOTE: using sorted to avoid inconsistent ordering across processors
-    comm_cols = tuple(sorted(set(left.columns) & set(right.columns)))
+    # passing sort lambda to avoid errors when str and non-str column names are mixed
+    comm_cols = tuple(
+        sorted(set(left.columns) & set(right.columns), key=lambda k: str(k))
+    )
 
     if not is_overload_none(on):
         left_on = right_on = on
@@ -1371,26 +1374,6 @@ def common_validate_merge_merge_asof_spec(
     # make sure left and right are dataframes
     if not isinstance(left, DataFrameType) or not isinstance(right, DataFrameType):
         raise BodoError(name_func + "() requires dataframe inputs")
-    if (
-        (not is_overload_none(on))
-        and (not is_overload_constant_list(on))
-        and (not is_overload_constant_str(on))
-    ):
-        raise_const_error(name_func + "(): 'on' must be of type str or str list")
-    # make sure left_on is of type str or strlist
-    if (
-        (not is_overload_none(left_on))
-        and (not is_overload_constant_list(left_on))
-        and (not is_overload_constant_str(left_on))
-    ):
-        raise_const_error(name_func + "(): left_on must be of type str or str list")
-    # make sure right_on is of type str or strlist
-    if (
-        (not is_overload_none(right_on))
-        and (not is_overload_constant_list(right_on))
-        and (not is_overload_constant_str(right_on))
-    ):
-        raise_const_error(name_func + "(): right_on must be of type str or str list")
 
     # make sure leftindex is of type bool
     ensure_constant_arg(name_func, "left_index", left_index, bool)
@@ -1694,13 +1677,6 @@ def validate_join_spec(left, other, on, how, lsuffix, rsuffix, sort):
     # make sure how is constant and one of ("left", "right", "outer", "inner")
     ensure_constant_values("merge", "how", how, ("left", "right", "outer", "inner"))
 
-    # make sure on is of type str or strlist
-    if (
-        (not is_overload_none(on))
-        and (not is_overload_constant_list(on))
-        and (not is_overload_constant_str(on))
-    ):
-        raise_const_error("join(): 'on' must be of type str or str list")
     # make sure 'on' has length 1 since we don't support Multiindex
     if not is_overload_none(on) and len(get_overload_const_list(on)) != 1:
         raise BodoError("join(): len(on) must equals to 1 when specified.")
@@ -1791,7 +1767,9 @@ class JoinTyper(AbstractTemplate):
 
         # The left side. All of it got included.
         for in_type, col in zip(left_df.data, left_df.columns):
-            columns.append(col + suffix_x.literal_value if col in add_suffix else col)
+            columns.append(
+                str(col) + suffix_x.literal_value if col in add_suffix else col
+            )
             if col in comm_keys:
                 # For a common key we take either from left or right, so no additional NaN occurs.
                 data.append(in_type)
@@ -1805,7 +1783,7 @@ class JoinTyper(AbstractTemplate):
                 # a key column that is not common needs to plan for NaN.
                 # Same for a data column of course.
                 columns.append(
-                    col + suffix_y.literal_value if col in add_suffix else col
+                    str(col) + suffix_y.literal_value if col in add_suffix else col
                 )
                 data.append(map_data_type(in_type, is_left))
         # In the case of merging with left_index=True or right_index=True then
@@ -1882,7 +1860,9 @@ def merge_asof_overload(
         raise TypeError("merge_asof() requires dataframe inputs")
 
     # NOTE: using sorted to avoid inconsistent ordering across processors
-    comm_cols = tuple(sorted(set(left.columns) & set(right.columns)))
+    comm_cols = tuple(
+        sorted(set(left.columns) & set(right.columns), key=lambda k: str(k))
+    )
 
     if not is_overload_none(on):
         left_on = right_on = on

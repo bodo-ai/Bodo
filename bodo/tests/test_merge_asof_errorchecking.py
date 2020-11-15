@@ -68,15 +68,6 @@ def test_merge_asof_on_no_comm_cols(memory_leak_check):
         bodo.jit(impl)(df1, df3)
 
 
-# tests on type
-def test_merge_asof_on_str_strlist1(memory_leak_check):
-    def impl(df1, df2):
-        return pd.merge_asof(df1, df2, on=3)
-
-    with pytest.raises(BodoError, match="'on' must be of type str or str list"):
-        bodo.jit(impl)(df1, df2)
-
-
 # tests lefton type
 def test_merge_asof_on_str_strlist2(memory_leak_check):
     def impl(df1, df2):

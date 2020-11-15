@@ -102,15 +102,6 @@ def test_merge_on_no_comm_cols(memory_leak_check):
         bodo.jit(impl)(df1, df3)
 
 
-# tests on type
-def test_merge_on_str_strlist1(memory_leak_check):
-    def impl(df1, df2):
-        return df1.merge(df2, on=3)
-
-    with pytest.raises(BodoError, match="'on' must be of type str or str list"):
-        bodo.jit(impl)(df1, df2)
-
-
 # tests lefton type
 def test_merge_on_str_strlist2(memory_leak_check):
     def impl(df1, df2):
@@ -447,15 +438,6 @@ def test_join_how_invalid(memory_leak_check):
         return df3.join(df4, how="break")
 
     with pytest.raises(BodoError, match="argument 'how' should be a constant value in"):
-        bodo.jit(impl)(df3, df4)
-
-
-# tests on type
-def test_join_on_str_strlist1(memory_leak_check):
-    def impl(df3, df4):
-        return df3.join(df4, on=3)
-
-    with pytest.raises(BodoError, match="'on' must be of type str or str list"):
         bodo.jit(impl)(df3, df4)
 
 
