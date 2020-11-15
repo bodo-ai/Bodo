@@ -90,6 +90,7 @@ from bodo.utils.typing import (
     is_dtype_nullable,
     is_heterogeneous_tuple_type,
     is_iterable_type,
+    is_literal_type,
     is_overload_bool,
     is_overload_bool_list,
     is_overload_constant_bool,
@@ -2264,7 +2265,7 @@ def validate_sort_values_spec(df, by, axis, ascending, inplace, kind, na_positio
 
     # whether 'by' is supplied is checked by numba
     # make sure 'by' is a const str or str list
-    if not is_overload_constant_str(by) and not is_overload_constant_list(by):
+    if not is_literal_type(by) and not is_overload_constant_list(by):
         raise_const_error(
             "sort_values(): 'by' parameter only supports "
             "a constant column label or column labels. by={}".format(by)
