@@ -89,6 +89,9 @@ class BodoTypeInference(PartialTypeInference):
         curr_typing_pass_required = False
         # flag indicating that transformation has run at least once
         ran_transform = False
+        # flag for when another transformation pass is needed (to avoid break before
+        # next transform)
+        needs_transform = False
         while True:
             try:
                 # set global partial typing flag, see comment above
@@ -104,6 +107,7 @@ class BodoTypeInference(PartialTypeInference):
             if (
                 types.unknown not in state.typemap.values()
                 and not curr_typing_pass_required
+                and not needs_transform
             ):
                 break
             ran_transform = True
@@ -115,9 +119,9 @@ class BodoTypeInference(PartialTypeInference):
                 state.args,
                 state.locals,
             )
-            changed = typing_transforms_pass.run()
+            changed, needs_transform = typing_transforms_pass.run()
             # can't be typed if IR not changed
-            if not changed:
+            if not changed and not needs_transform:
                 # error will be raised below if there are still unknown types
                 break
 
@@ -177,6 +181,8 @@ class TypingTransforms:
         self._require_const = {}
         self.locals = _locals
         self.changed = False
+        # whether another transformation pass is needed (see _run_setattr)
+        self.needs_transform = False
 
     def run(self):
         # XXX: the block structure shouldn't change in this pass since labels
@@ -253,7 +259,7 @@ class TypingTransforms:
             if is_expr(rhs, "build_list"):
                 rhs.items = [zero_var]
 
-        return self.changed
+        return self.changed, self.needs_transform
 
     def _run_assign(self, assign, label):
         rhs = assign.value
@@ -414,6 +420,11 @@ class TypingTransforms:
     def _run_setattr(self, inst, label):
         """handle ir.SetAttr node"""
         target_typ = self.typemap.get(inst.target.name, None)
+
+        # another transformation pass is necessary to avoid errors since there is no
+        # overload for setattr to catch errors (see test_set_df_column_names::impl5)
+        if target_typ == types.unknown:
+            self.needs_transform = True
 
         # DataFrame.attr = val
         if isinstance(target_typ, DataFrameType):

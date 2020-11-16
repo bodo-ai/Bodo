@@ -16,6 +16,7 @@ from bodo.utils.typing import (
     BodoError,
     get_overload_const_list,
     get_overload_const_str,
+    is_heterogeneous_tuple_type,
     is_overload_constant_list,
     is_overload_constant_str,
     is_overload_none,
@@ -448,8 +449,10 @@ def overload_coerce_to_array(
             lambda data, error_on_nonarray=True, use_nullable_array=None, scalar_to_arr_len=None: data
         )  # pragma: no cover
 
-    # list of tuples
-    if isinstance(data, types.List) and isinstance(data.dtype, types.BaseTuple):
+    # list/tuple of tuples
+    if isinstance(data, (types.List, types.UniTuple)) and isinstance(
+        data.dtype, types.BaseTuple
+    ):
         # TODO: support variable length data (e.g strings) in tuples
         data_types = tuple(
             bodo.hiframes.pd_series_ext._get_series_array_type(t)
@@ -964,12 +967,32 @@ def overload_get_array_if_series_or_index(data):
     from bodo.hiframes.pd_series_ext import SeriesType
 
     if isinstance(data, SeriesType):
-        return lambda data: bodo.hiframes.pd_series_ext.get_series_data(data)
+        return lambda data: bodo.hiframes.pd_series_ext.get_series_data(
+            data
+        )  # pragma: no cover
 
     if bodo.hiframes.pd_index_ext.is_pd_index_type(data):
-        return lambda data: bodo.hiframes.pd_index_ext.get_index_data(data)
+        return lambda data: bodo.hiframes.pd_index_ext.get_index_data(
+            data
+        )  # pragma: no cover
 
-    return lambda data: data
+    if isinstance(data, bodo.hiframes.pd_index_ext.HeterogeneousIndexType):
+        # handle as regular array data if not actually heterogeneous
+        if not is_heterogeneous_tuple_type(data.data):
+
+            def impl(data):  # pragma: no cover
+                in_data = bodo.hiframes.pd_index_ext.get_index_data(data)
+                return bodo.utils.conversion.coerce_to_array(in_data)
+
+            return impl
+
+        # just pass the data and let downstream handle possible errors
+        def impl(data):  # pragma: no cover
+            return bodo.hiframes.pd_index_ext.get_index_data(data)
+
+        return impl
+
+    return lambda data: data  # pragma: no cover
 
 
 def extract_index_array(A):  # pragma: no cover

@@ -916,8 +916,12 @@ def is_iterable_type(t):
 
     return (
         bodo.utils.utils.is_array_typ(t, False)
-        or isinstance(t, (SeriesType, DataFrameType, types.List, types.BaseTuple))
+        or isinstance(
+            t,
+            (SeriesType, DataFrameType, types.List, types.BaseTuple, types.LiteralList),
+        )
         or bodo.hiframes.pd_index_ext.is_index_type(t)
+        or isinstance(t, bodo.hiframes.pd_index_ext.HeterogeneousIndexType)
     )
 
 

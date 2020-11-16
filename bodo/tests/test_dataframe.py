@@ -793,6 +793,21 @@ def test_df_columns(df_value, memory_leak_check):
 
 
 @pytest.mark.slow
+def test_df_columns_nested(memory_leak_check):
+    """make sure nested df column names can be returned properly"""
+
+    def impl(df):
+        df1 = df.groupby(["A"], as_index=False)
+        df2 = df1.agg({"B": ["sum", "count"], "C": ["sum", "count"]})
+        return df2.columns
+
+    df = pd.DataFrame(
+        {"A": [1.0, 2.0, np.nan, 1.0], "B": [1.2, np.nan, 1.1, 3.1], "C": [2, 3, 1, 5]}
+    )
+    check_func(impl, (df,), is_out_distributed=False)
+
+
+@pytest.mark.slow
 def test_df_values(numeric_df_value, memory_leak_check):
     def impl(df):
         return df.values
@@ -2730,6 +2745,13 @@ def test_set_df_column_names(memory_leak_check):
         df.columns = a[1:]
         return df
 
+    # test setattr on df with nested names (#2126)
+    def impl5(df):
+        df1 = df.groupby(["A"], as_index=False)
+        df2 = df1.agg({"B": ["sum", "count"], "C": ["sum", "count"]})
+        df2.columns = ["A", "testCol1", "count(B)", "testCol2", "count(C)"]
+        return df2
+
     df = pd.DataFrame({"A": [1.0, 2.0, np.nan, 1.0], "B": [1.2, np.nan, 1.1, 3.1]})
     check_func(impl1, (df,), copy_input=True)
     with pytest.raises(
@@ -2746,6 +2768,10 @@ def test_set_df_column_names(memory_leak_check):
         BodoError, match="DataFrame.columns: new column names should be a constant list"
     ):
         bodo.jit(impl4)(df, ["a", "b", "c"])
+    df = pd.DataFrame(
+        {"A": [1.0, 2.0, np.nan, 1.0], "B": [1.2, np.nan, 1.1, 3.1], "C": [2, 3, 1, 5]}
+    )
+    check_func(impl5, (df,))
 
 
 def test_set_df_index(memory_leak_check):
