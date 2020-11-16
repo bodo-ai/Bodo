@@ -91,6 +91,7 @@ static void array_isin_kernel(array_info* out_arr, array_info* in_arr,
 
 void array_isin(array_info* out_arr, array_info* in_arr, array_info* in_values,
                 bool is_parallel) {
+    try {
     if (!is_parallel) {
         array_isin_kernel(out_arr, in_arr, in_values);
         decref_array(out_arr);
@@ -142,6 +143,10 @@ void array_isin(array_info* out_arr, array_info* in_arr, array_info* in_values,
     decref_array(out_arr);
     delete table_in_arr;
     delete[] hashes;
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return;
+    }
 }
 
 //
@@ -191,6 +196,7 @@ table_info* sort_values_table_local(table_info* in_table, int64_t n_key_t,
 table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
                               int64_t* vect_ascending, bool na_position,
                               bool parallel) {
+    try {
 #ifdef DEBUG_SORT_SYMBOL
     std::cout << "parallel=" << parallel << " na_position=" << na_position
               << "\n";
@@ -305,6 +311,10 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
         return table_shuffle_renorm;
     }
     return ret_table;
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return NULL;
+    }
 }
 
 //
@@ -582,6 +592,7 @@ table_info* drop_duplicates_nonnull_keys(table_info* in_table, int64_t num_keys,
  */
 table_info* drop_duplicates_table(table_info* in_table, bool is_parallel,
                                   int64_t num_keys, int64_t keep) {
+    try {
 #ifdef DEBUG_DD
     std::cout << "drop_duplicates_table : is_parallel=" << is_parallel << "\n";
 #endif
@@ -608,6 +619,10 @@ table_info* drop_duplicates_table(table_info* in_table, bool is_parallel,
 #endif
     // returning table
     return ret_table;
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return NULL;
+    }
 }
 
 //
@@ -616,6 +631,7 @@ table_info* drop_duplicates_table(table_info* in_table, bool is_parallel,
 
 table_info* sample_table(table_info* in_table, int64_t n, double frac,
                          bool replace, bool parallel) {
+    try {
 #ifdef DEBUG_SAMPLE
     std::cout << "sample_table : in_table\n";
     DEBUG_PrintSetOfColumn(std::cout, in_table->columns);
@@ -800,4 +816,8 @@ table_info* sample_table(table_info* in_table, int64_t n, double frac,
         return tab_ret;
     }
     return tab_out;
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return NULL;
+    }
 }

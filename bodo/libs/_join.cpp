@@ -30,6 +30,7 @@ table_info* hash_join_table(table_info* left_table, table_info* right_table,
                             int64_t n_data_right_t, int64_t* vect_same_key,
                             int64_t* vect_need_typechange, bool is_left,
                             bool is_right, bool is_join, bool optional_col) {
+    try {
     // Reading the MPI settings
     int n_pes, myrank;
     MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
@@ -60,14 +61,14 @@ table_info* hash_join_table(table_info* left_table, table_info* right_table,
                                right_table->columns[iKey]);
 #ifdef DEBUG_JOIN_SYMBOL
     if (size_t(left_table->ncols()) != n_tot_left) {
-        Bodo_PyErr_SetString(PyExc_RuntimeError,
-                             "incoherent dimensions for left tabče");
-        return NULL;
+        throw std::runtime_error(
+                "Error in join.cpp::hash_join_table: incoherent dimensions for "
+                "left tabče.");
     }
     if (size_t(right_table->ncols()) != n_tot_right) {
-        Bodo_PyErr_SetString(PyExc_RuntimeError,
-                             "incoherent dimensions for right tabče");
-        return NULL;
+        throw std::runtime_error(
+                "Error in join.cpp::hash_join_table: incoherent dimensions for "
+                "right tabče.");
     }
     std::cout << "n_key_t=" << n_key_t << "\n";
     for (size_t iKey = 0; iKey < n_key; iKey++) {
@@ -84,10 +85,9 @@ table_info* hash_join_table(table_info* left_table, table_info* right_table,
 #endif
     // in the case of merging on index and one column, it can only be one column
     if (n_key_t > 1 && optional_col) {
-        Bodo_PyErr_SetString(
-            PyExc_RuntimeError,
-            "if optional_col=true then we must have n_key_t=1");
-        return nullptr;
+        throw std::runtime_error(
+                "Error in join.cpp::hash_join_table: if optional_col=true then "
+                "we must have n_key_t=1.");
     }
     //
     // Now deciding how we handle the parallelization of the tables
@@ -689,4 +689,8 @@ table_info* hash_join_table(table_info* left_table, table_info* right_table,
     delete[] hashes_left;
     delete[] hashes_right;
     return new table_info(out_arrs);
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return NULL;
+    }
 }

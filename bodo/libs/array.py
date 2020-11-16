@@ -1346,7 +1346,11 @@ def hash_join_table(
             ],
         )
         fn_tp = builder.module.get_or_insert_function(fnty, name="hash_join_table")
-        return builder.call(fn_tp, args)
+        ret = builder.call(fn_tp, args)
+        context.compile_internal(
+            builder, lambda: check_and_propagate_cpp_exception(), types.none(), []
+        )  # pragma: no cover
+        return ret
 
     return (
         table_type(
@@ -1383,7 +1387,11 @@ def compute_node_partition_by_hash(typingctx, table_t, n_keys_t, n_pes_t):
         fn_tp = builder.module.get_or_insert_function(
             fnty, name="compute_node_partition_by_hash"
         )
-        return builder.call(fn_tp, args)
+        ret = builder.call(fn_tp, args)
+        context.compile_internal(
+            builder, lambda: check_and_propagate_cpp_exception(), types.none(), []
+        )  # pragma: no cover
+        return ret
 
     return table_type(table_t, types.int64, types.int64), codegen
 
@@ -1409,7 +1417,11 @@ def sort_values_table(
             ],
         )
         fn_tp = builder.module.get_or_insert_function(fnty, name="sort_values_table")
-        return builder.call(fn_tp, args)
+        ret = builder.call(fn_tp, args)
+        context.compile_internal(
+            builder, lambda: check_and_propagate_cpp_exception(), types.none(), []
+        )  # pragma: no cover
+        return ret
 
     return (
         table_type(table_t, types.int64, types.voidptr, types.boolean, types.boolean),
@@ -1436,7 +1448,11 @@ def sample_table(typingctx, table_t, n_keys_t, frac_t, replace_t, parallel_t):
             ],
         )
         fn_tp = builder.module.get_or_insert_function(fnty, name="sample_table")
-        return builder.call(fn_tp, args)
+        ret = builder.call(fn_tp, args)
+        context.compile_internal(
+            builder, lambda: check_and_propagate_cpp_exception(), types.none(), []
+        )  # pragma: no cover
+        return ret
 
     return (
         table_type(table_t, types.int64, types.float64, types.boolean, types.boolean),
@@ -1493,7 +1509,11 @@ def shuffle_renormalization_group(
         fn_tp = builder.module.get_or_insert_function(
             fnty, name="shuffle_renormalization_group"
         )
-        return builder.call(fn_tp, args)
+        ret = builder.call(fn_tp, args)
+        context.compile_internal(
+            builder, lambda: check_and_propagate_cpp_exception(), types.none(), []
+        )  # pragma: no cover
+        return ret
 
     return (
         table_type(table_t, types.boolean, types.int64, types.voidptr),
@@ -1521,7 +1541,11 @@ def drop_duplicates_table(typingctx, table_t, parallel_t, nkey_t, keep_t):
         fn_tp = builder.module.get_or_insert_function(
             fnty, name="drop_duplicates_table"
         )
-        return builder.call(fn_tp, args)
+        ret = builder.call(fn_tp, args)
+        context.compile_internal(
+            builder, lambda: check_and_propagate_cpp_exception(), types.none(), []
+        )  # pragma: no cover
+        return ret
 
     return table_type(table_t, types.boolean, types.int64, types.int64), codegen
 
@@ -1582,7 +1606,11 @@ def pivot_groupby_and_aggregate(
         fn_tp = builder.module.get_or_insert_function(
             fnty, name="pivot_groupby_and_aggregate"
         )
-        return builder.call(fn_tp, args)
+        ret = builder.call(fn_tp, args)
+        context.compile_internal(
+            builder, lambda: check_and_propagate_cpp_exception(), types.none(), []
+        )  # pragma: no cover
+        return ret
 
     return (
         table_type(
@@ -1658,7 +1686,11 @@ def groupby_and_aggregate(
         fn_tp = builder.module.get_or_insert_function(
             fnty, name="groupby_and_aggregate"
         )
-        return builder.call(fn_tp, args)
+        ret = builder.call(fn_tp, args)
+        context.compile_internal(
+            builder, lambda: check_and_propagate_cpp_exception(), types.none(), []
+        )  # pragma: no cover
+        return ret
 
     return (
         table_type(
@@ -1703,5 +1735,6 @@ def array_isin(out_arr, in_arr, in_values, is_parallel):  # pragma: no cover
         in_values_info,
         is_parallel,
     )
+    check_and_propagate_cpp_exception()
     # no need to decref since array_isin decrefs input/output
     delete_table(dummy_table)

@@ -163,6 +163,11 @@ table_info* shuffle_renormalization_py_entrypt(table_info* in_table,
  */
 table_info* shuffle_renormalization_group(table_info* in_table, bool parallel, int64_t n_dest_ranks, int* dest_ranks);
 
+table_info* shuffle_renormalization_group_py_entrypt(table_info* in_table,
+                                                     bool parallel,
+                                                     int64_t n_dest_ranks,
+                                                     int* dest_ranks);
+
 /* This function is used for the reverse shuffling of numpy data.
  *
  * It takes the rows after the MPI_alltoall and put them at their right position

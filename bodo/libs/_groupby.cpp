@@ -5525,6 +5525,7 @@ table_info* pivot_groupby_and_aggregate(
     int* func_offsets, int* udf_nredvars, bool is_parallel, bool is_crosstab,
     bool skipdropna, bool return_key, bool return_index, void* update_cb,
     void* combine_cb, void* eval_cb, table_info* udf_dummy_table) {
+    try {
     GroupbyPipeline<multiple_array_info> groupby(
         in_table, num_keys, dispatch_table, dispatch_info, input_has_index,
         is_parallel, is_crosstab, ftypes, func_offsets, udf_nredvars,
@@ -5535,6 +5536,10 @@ table_info* pivot_groupby_and_aggregate(
 
     table_info* ret_table = groupby.run();
     return ret_table;
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return NULL;
+    }
 }
 
 table_info* groupby_and_aggregate(
@@ -5542,6 +5547,7 @@ table_info* groupby_and_aggregate(
     int* func_offsets, int* udf_nredvars, bool is_parallel, bool skipdropna,
     bool return_key, bool return_index, void* update_cb, void* combine_cb,
     void* eval_cb, void* general_udfs_cb, table_info* udf_dummy_table) {
+    try {
     int strategy = determine_groupby_strategy(
         in_table, num_keys, ftypes, func_offsets, is_parallel, input_has_index);
 
@@ -5584,4 +5590,8 @@ table_info* groupby_and_aggregate(
         }
     }
     return nullptr;
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return NULL;
+    }
 }

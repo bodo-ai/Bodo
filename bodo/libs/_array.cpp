@@ -1271,7 +1271,7 @@ PyMODINIT_FUNC PyInit_array_ext(void) {
         PyLong_FromVoidPtr((void*)(&shuffle_renormalization_py_entrypt)));
     PyObject_SetAttrString(
         m, "shuffle_renormalization_group",
-        PyLong_FromVoidPtr((void*)(&shuffle_renormalization_group)));
+        PyLong_FromVoidPtr((void*)(&shuffle_renormalization_group_py_entrypt)));
     PyObject_SetAttrString(m, "hash_join_table",
                            PyLong_FromVoidPtr((void*)(&hash_join_table)));
     PyObject_SetAttrString(m, "sample_table",
@@ -1290,57 +1290,108 @@ PyMODINIT_FUNC PyInit_array_ext(void) {
     PyObject_SetAttrString(
         m, "compute_node_partition_by_hash",
         PyLong_FromVoidPtr((void*)(&compute_node_partition_by_hash)));
+    // Only uses C which cannot throw exceptions, so typical exception
+    // handling is not required
     PyObject_SetAttrString(
         m, "count_total_elems_list_array",
         PyLong_FromVoidPtr((void*)(&count_total_elems_list_array)));
+    // Only uses C which cannot throw exceptions, so typical exception
+    // handling is not required
     PyObject_SetAttrString(
         m, "array_item_array_from_sequence",
         PyLong_FromVoidPtr((void*)(&array_item_array_from_sequence)));
+    // Only uses C which cannot throw exceptions, so typical exception
+    // handling is not required
     PyObject_SetAttrString(
         m, "struct_array_from_sequence",
         PyLong_FromVoidPtr((void*)(&struct_array_from_sequence)));
+    // Only uses C which cannot throw exceptions, so typical exception
+    // handling is not required
     PyObject_SetAttrString(
         m, "map_array_from_sequence",
         PyLong_FromVoidPtr((void*)(&map_array_from_sequence)));
-
+    // Only uses C which cannot throw exceptions, so typical exception
+    // handling is not required
     PyObject_SetAttrString(
         m, "string_array_from_sequence",
         PyLong_FromVoidPtr((void*)(&string_array_from_sequence)));
-
+    // Only uses C which cannot throw exceptions, so typical exception
+    // handling is not required
     PyObject_SetAttrString(
         m, "np_array_from_struct_array",
         PyLong_FromVoidPtr((void*)(&np_array_from_struct_array)));
+    // Only uses C which cannot throw exceptions, so typical exception
+    // handling is not required
     PyObject_SetAttrString(
         m, "np_array_from_array_item_array",
         PyLong_FromVoidPtr((void*)(&np_array_from_array_item_array)));
+    // Only uses C which cannot throw exceptions, so typical exception
+    // handling is not required
     PyObject_SetAttrString(
         m, "np_array_from_map_array",
         PyLong_FromVoidPtr((void*)(&np_array_from_map_array)));
+    // Only uses C which cannot throw exceptions, so typical exception
+    // handling is not required
     PyObject_SetAttrString(m, "array_getitem",
                            PyLong_FromVoidPtr((void*)(&array_getitem)));
+    // Only uses C which cannot throw exceptions, so typical exception
+    // handling is not required
     PyObject_SetAttrString(m, "list_check",
                            PyLong_FromVoidPtr((void*)(&list_check)));
+    // Only uses C which cannot throw exceptions, so typical exception
+    // handling is not required
     PyObject_SetAttrString(m, "dict_keys",
                            PyLong_FromVoidPtr((void*)(&dict_keys)));
+    // Only uses C which cannot throw exceptions, so typical exception
+    // handling is not required
     PyObject_SetAttrString(m, "dict_values",
                            PyLong_FromVoidPtr((void*)(&dict_values)));
+    // This function calls PyErr_Set_String, but the function is called inside
+    // box/unbox functions in Python, where we don't yet know how best to
+    // detect and raise errors. Once we do, we should raise an error in Python
+    // if this function calls PyErr_Set_String. TODO
     PyObject_SetAttrString(m, "dict_merge_from_seq2",
                            PyLong_FromVoidPtr((void*)(&dict_merge_from_seq2)));
+    // This function is C, but it has components that can fail, in which case
+    // we should call PyErr_Set_String and detect this and raise it in Python.
+    // We currently don't know the best way to detect and raise exceptions
+    // in box/unbox functions which is where this function is called.
+    // Once we do, we should handle this appropriately. TODO
     PyObject_SetAttrString(m, "seq_getitem",
                            PyLong_FromVoidPtr((void*)(&seq_getitem)));
+    // Only uses C which cannot throw exceptions, so typical exception
+    // handling is not required
     PyObject_SetAttrString(m, "is_na_value",
                            PyLong_FromVoidPtr((void*)(&is_na_value)));
+    // This function is C, but it has components that can fail, in which case
+    // we should call PyErr_Set_String and detect this and raise an exception in Python.
+    // We currently don't know the best way to detect and raise exceptions
+    // in box/unbox functions which is where this function is called.
+    // Once we do, we should handle this appropriately. TODO
     PyObject_SetAttrString(m, "is_pd_int_array",
                            PyLong_FromVoidPtr((void*)(&is_pd_int_array)));
+    // This function is C, but it has components that can fail, in which case
+    // we should call PyErr_Set_String and detect this and raise an exception in Python.
+    // We currently don't know the best way to detect and raise exceptions
+    // in box/unbox functions which is where this function is called.
+    // Once we do, we should handle this appropriately. TODO
     PyObject_SetAttrString(
         m, "int_array_from_sequence",
         PyLong_FromVoidPtr((void*)(&int_array_from_sequence)));
+    // Only uses C which cannot throw exceptions, so typical exception
+    // handling is not required
     PyObject_SetAttrString(m, "get_stats_alloc",
                            PyLong_FromVoidPtr((void*)(&get_stats_alloc)));
+    // Only uses C which cannot throw exceptions, so typical exception
+    // handling is not required
     PyObject_SetAttrString(m, "get_stats_free",
                            PyLong_FromVoidPtr((void*)(&get_stats_free)));
+    // Only uses C which cannot throw exceptions, so typical exception
+    // handling is not required
     PyObject_SetAttrString(m, "get_stats_mi_alloc",
                            PyLong_FromVoidPtr((void*)(&get_stats_mi_alloc)));
+    // Only uses C which cannot throw exceptions, so typical exception
+    // handling is not required
     PyObject_SetAttrString(m, "get_stats_mi_free",
                            PyLong_FromVoidPtr((void*)(&get_stats_mi_free)));
     return m;

@@ -2234,6 +2234,7 @@ table_info* gather_table(table_info* in_table, int64_t n_cols_i,
 
 table_info* compute_node_partition_by_hash(table_info* in_table, int64_t n_keys,
                                            int64_t n_pes) {
+    try {
     int64_t n_rows = in_table->nrows();
     uint32_t* hashes = hash_keys_table(in_table, n_keys, SEED_HASH_PARTITION);
 
@@ -2246,6 +2247,10 @@ table_info* compute_node_partition_by_hash(table_info* in_table, int64_t n_keys,
     }
     out_arrs.push_back(out_arr);
     return new table_info(out_arrs);
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return NULL;
+    }
 }
 
 /* Whether or not a reshuffling is needed.
@@ -2318,6 +2323,19 @@ table_info* shuffle_renormalization_group(table_info* in_table, bool parallel, i
     table_info* ret_table =
         shuffle_table_kernel(in_table, hashes.data(), comm_info);
     return ret_table;
+}
+
+table_info* shuffle_renormalization_group_py_entrypt(table_info* in_table,
+                                                     bool parallel,
+                                                     int64_t n_dest_ranks,
+                                                     int* dest_ranks) {
+    try {
+        return shuffle_renormalization_group(in_table, parallel, n_dest_ranks,
+                                             dest_ranks);
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return NULL;
+    }
 }
 
 /* Apply a renormalization shuffling
