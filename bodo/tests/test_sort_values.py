@@ -821,7 +821,7 @@ def test_sort_values_by_const_str_or_str_list(memory_leak_check):
         bodo.jit(impl1)(df)
     with pytest.raises(
         BodoError,
-        match="'by' parameter only supports a constant column label or column labels",
+        match=" invalid key .* for by",
     ):
         bodo.jit(impl2)(df)
 

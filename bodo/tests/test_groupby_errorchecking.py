@@ -29,23 +29,6 @@ def test_groupby_supply_by(memory_leak_check):
         bodo.jit(impl2)(df)
 
 
-def test_groupby_by_const_str_or_str_list(memory_leak_check):
-    """
-    Test groupby(): 'by' is of type const str or str list
-
-    """
-
-    def impl(df):
-        return df.groupby(by=1)
-
-    df = pd.DataFrame({"A": [1, 2, 2], "C": ["aa", "b", "c"], "E": ["aa", "bb", "cc"]})
-    with pytest.raises(
-        BodoError,
-        match="'by' parameter only supports a constant column label or column labels",
-    ):
-        bodo.jit(impl)(df)
-
-
 def test_groupby_by_labels(memory_leak_check):
     """
     Test groupby(): 'by' is a valid label or label lists

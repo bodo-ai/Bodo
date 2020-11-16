@@ -2265,7 +2265,9 @@ def validate_sort_values_spec(df, by, axis, ascending, inplace, kind, na_positio
 
     # whether 'by' is supplied is checked by numba
     # make sure 'by' is a const str or str list
-    if not is_literal_type(by) and not is_overload_constant_list(by):
+    if is_overload_none(by) or (
+        not is_literal_type(by) and not is_overload_constant_list(by)
+    ):
         raise_const_error(
             "sort_values(): 'by' parameter only supports "
             "a constant column label or column labels. by={}".format(by)
