@@ -1192,6 +1192,21 @@ class SeriesPass:
         ):
             return self._handle_ufuncs(func_name, rhs.args)
 
+        # inline builtin calls on Series
+        if (
+            func_mod == "builtins"
+            and func_name in ("min", "max", "sum")
+            and len(rhs.args) == 1
+            and isinstance(self.typemap[rhs.args[0].name], SeriesType)
+        ):
+
+            impl = getattr(bodo.hiframes.series_impl, "overload_series_" + func_name)(
+                self.typemap[rhs.args[0].name]
+            )
+            return replace_func(
+                self, impl, rhs.args, pysig=numba.core.utils.pysignature(impl), kws=()
+            )
+
         # inline ufuncs on IntegerArray
         if (
             func_mod in ("numpy", "ufunc")
@@ -1357,7 +1372,10 @@ class SeriesPass:
         # replace _get_type_max_value(arr.dtype) since parfors
         # arr.dtype transformation produces invalid code for dt64
         # TODO: min
-        if fdef == ("_get_type_max_value", "bodo.transforms.series_pass"):
+        if fdef in (
+            ("_get_type_max_value", "bodo.transforms.series_pass"),
+            ("_get_type_max_value", "bodo.hiframes.series_kernels"),
+        ):
             if self.typemap[rhs.args[0].name] == types.DType(types.NPDatetime("ns")):
                 return replace_func(
                     self,
@@ -1370,6 +1388,24 @@ class SeriesPass:
                 )
             return replace_func(
                 self, lambda d: numba.cpython.builtins.get_type_max_value(d), rhs.args
+            )
+
+        if fdef in (
+            ("_get_type_min_value", "bodo.transforms.series_pass"),
+            ("_get_type_min_value", "bodo.hiframes.series_kernels"),
+        ):
+            if self.typemap[rhs.args[0].name] == types.DType(types.NPDatetime("ns")):
+                return replace_func(
+                    self,
+                    lambda: bodo.hiframes.pd_timestamp_ext.integer_to_dt64(
+                        numba.cpython.builtins.get_type_min_value(
+                            numba.core.types.uint64
+                        )
+                    ),
+                    [],
+                )
+            return replace_func(
+                self, lambda d: numba.cpython.builtins.get_type_min_value(d), rhs.args
             )
 
         if fdef == ("h5_read_dummy", "bodo.io.h5_api"):
