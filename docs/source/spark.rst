@@ -125,7 +125,9 @@ which are supported by Bodo.
   * - :func:`pyspark.sql.functions.bitwiseNOT`
     - ``np.invert(df.col)``
   * - :func:`pyspark.sql.functions.bround`
-    - ``df.col.map(lambda x: np.round(x, scale))``
+    - ``df.col.apply(lambda x, scale: np.round(x, scale), scale=scale)``
+  * - :func:`pyspark.sql.functions.cbrt`
+    - ``df.col.map(lambda x: np.cbrt(x))``
   * - :func:`pyspark.sql.functions.ceil`
     - ``np.ceil(df.col)``
   * - :func:`pyspark.sql.functions.col`

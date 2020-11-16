@@ -108,6 +108,8 @@ def check_func(
     only_1D=False,
     only_1DVar=False,
     check_categorical=True,
+    atol=1e-08,
+    rtol=1e-05,
 ):
     """test bodo compilation of function 'func' on arguments using REP, 1D, and 1D_Var
     inputs/outputs
@@ -133,6 +135,15 @@ def check_func(
     the name to None.
     - reorder_columns: The columns of the output have some degree of uncertainty sometimes (like pivot_table)
     thus a reordering operation is needed in some cases to make the comparison meaningful.
+    - only_seq: Run just the sequential check.
+    - only_1D: Run just the check on a 1D Distributed input.
+    - only_1DVar: Run just the check on a 1DVar Distributed input.
+    - check_categorical: Argument to pass to Pandas assert_frame_equals. We use this if we want to disable
+    the check_dtype with a categorical input (as otherwise it will still raise an error).
+    - atol: Argument to pass to Pandas assert equals functions. This argument will be used if
+    floating point percision can vary due to differences in underlying floating point libraries.
+    - rtol: Argument to pass to Pandas assert equals functions. This argument will be used if
+    floating point percision can vary due to differences in underlying floating point libraries.
     """
     run_seq, run_1D, run_1DVar = False, False, False
     if only_seq:
@@ -189,6 +200,8 @@ def check_func(
             reorder_columns,
             n_pes,
             check_categorical,
+            atol,
+            rtol,
         )
 
     # distributed test is not needed
@@ -232,6 +245,8 @@ def check_func(
             reorder_columns,
             n_pes,
             check_categorical,
+            atol,
+            rtol,
         )
 
     if run_1DVar:
@@ -252,6 +267,8 @@ def check_func(
             reorder_columns,
             n_pes,
             check_categorical,
+            atol,
+            rtol,
         )
 
 
@@ -270,6 +287,8 @@ def check_func_seq(
     reorder_columns,
     n_pes,
     check_categorical,
+    atol,
+    rtol,
 ):
     """check function output against Python without manually setting inputs/outputs
     distributions (keep the function sequential)
@@ -300,6 +319,8 @@ def check_func_seq(
         check_dtype,
         reset_index,
         check_categorical,
+        atol,
+        rtol,
     )
     # count how many pes passed the test, since throwing exceptions directly
     # can lead to inconsistency across pes and hangs
@@ -325,6 +346,8 @@ def check_func_1D(
     reorder_columns,
     n_pes,
     check_categorical,
+    atol,
+    rtol,
 ):
     """Check function output against Python while setting the inputs/outputs as
     1D distributed
@@ -361,6 +384,8 @@ def check_func_1D(
             check_dtype,
             reset_index,
             check_categorical,
+            atol,
+            rtol,
         )
 
     n_passed = reduce_sum(passed)
@@ -384,6 +409,8 @@ def check_func_1D_var(
     reorder_columns,
     n_pes,
     check_categorical,
+    atol,
+    rtol,
 ):
     """Check function output against Python while setting the inputs/outputs as
     1D distributed variable length
@@ -417,6 +444,8 @@ def check_func_1D_var(
             check_dtype,
             reset_index,
             check_categorical,
+            atol,
+            rtol,
         )
     n_passed = reduce_sum(passed)
     assert n_passed == n_pes
@@ -463,6 +492,8 @@ def _test_equal_guard(
     check_dtype=True,
     reset_index=False,
     check_categorical=True,
+    atol=1e-08,
+    rtol=1e-05,
 ):
     passed = 1
     try:
@@ -474,6 +505,8 @@ def _test_equal_guard(
             check_dtype,
             reset_index,
             check_categorical,
+            atol,
+            rtol,
         )
     except Exception as e:
         print(e)
@@ -507,6 +540,8 @@ def _test_equal(
     check_dtype=True,
     reset_index=False,
     check_categorical=True,
+    atol=1e-08,
+    rtol=1e-05,
 ):
     # Bodo converts lists to array in array(item) array cases
     if isinstance(py_out, list) and isinstance(bodo_out, np.ndarray):
@@ -530,6 +565,8 @@ def _test_equal(
             check_names=check_names,
             check_dtype=check_dtype,
             check_freq=False,
+            atol=atol,
+            rtol=rtol,
         )
     elif isinstance(py_out, pd.Index):
         if sort_output:
@@ -558,6 +595,8 @@ def _test_equal(
             check_column_type=False,
             check_freq=False,
             check_categorical=check_categorical,
+            atol=atol,
+            rtol=rtol,
         )
     elif isinstance(py_out, np.ndarray):
         if sort_output:
@@ -574,12 +613,16 @@ def _test_equal(
                 _test_equal_struct_array(bodo_out, py_out)
             else:
                 pd.testing.assert_series_equal(
-                    pd.Series(py_out), pd.Series(bodo_out), check_dtype=False
+                    pd.Series(py_out),
+                    pd.Series(bodo_out),
+                    check_dtype=False,
+                    atol=atol,
+                    rtol=rtol,
                 )
         else:
             # parallel reduction can result in floating point differences
             if py_out.dtype in (np.float32, np.float64):
-                np.testing.assert_allclose(bodo_out, py_out)
+                np.testing.assert_allclose(bodo_out, py_out, atol=atol, rtol=rtol)
             else:
                 np.testing.assert_array_equal(bodo_out, py_out)
     # check for array since is_extension_array_dtype() matches dtypes also

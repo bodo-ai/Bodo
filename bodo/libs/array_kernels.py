@@ -2023,3 +2023,102 @@ def np_all(A, axis=None, out=None, keepdims=None):
         return count == n
 
     return impl
+
+
+@overload(np.cbrt, inline="always", no_unliteral=True)
+def np_cbrt(
+    A, out=None, where=True, casting="same_kind", order="K", dtype=None, subok=True
+):
+    """cbrt implementation on 1D Numeric arrays and our Integer Array."""
+    # TODO: Remove when Numba ufunc gets merged https://github.com/numba/numba/pull/6075
+    # This kernel should no longer be necessary because it should come with ufunc support
+
+    if not (
+        isinstance(A, types.Number)
+        or (
+            bodo.utils.utils.is_array_typ(A, False)
+            and A.ndim == 1
+            and isinstance(A.dtype, types.Number)
+        )
+    ):  # pragma: no cover
+        return
+
+    args_dict = {
+        "out": out,
+        "where": where,
+        "casting": casting,
+        "order": order,
+        "dtype": dtype,
+        "subok": subok,
+    }
+    args_default_dict = {
+        "out": None,
+        "where": True,
+        "casting": "same_kind",
+        "order": "K",
+        "dtype": None,
+        "subok": True,
+    }
+    check_unsupported_args("np.cbrt", args_dict, args_default_dict)
+
+    if bodo.utils.utils.is_array_typ(A, False):
+        # Reuse scalar implementation on each element
+
+        # TODO: Small integer types are not currently correct, because Numpy will use a smaller
+        # float type (float16) when possible
+        _out_dtype = np.promote_types(
+            numba.np.numpy_support.as_dtype(A.dtype),
+            numba.np.numpy_support.as_dtype(types.float32),
+        ).type
+
+        def impl_arr(
+            A,
+            out=None,
+            where=True,
+            casting="same_kind",
+            order="K",
+            dtype=None,
+            subok=True,
+        ):  # pragma: no cover
+            numba.parfors.parfor.init_prange()
+            n = len(A)
+            out_arr = np.empty(n, _out_dtype)
+            for i in numba.parfors.parfor.internal_prange(n):
+                if bodo.libs.array_kernels.isna(A, i):
+                    bodo.libs.array_kernels.setna(out_arr, i)
+                    continue
+                out_arr[i] = np_cbrt_scalar(A[i], _out_dtype)
+            return out_arr
+
+        return impl_arr
+
+    # TODO: Small integer types are not currently correct, because Numpy will use a smaller
+    # float type (float16) when possible
+    _out_dtype = np.promote_types(
+        numba.np.numpy_support.as_dtype(A),
+        numba.np.numpy_support.as_dtype(types.float32),
+    ).type
+
+    def impl_scalar(
+        A, out=None, where=True, casting="same_kind", order="K", dtype=None, subok=True
+    ):  # pragma: no cover
+        # Call a helper function to avoid inlining control flow
+        return np_cbrt_scalar(A, _out_dtype)
+
+    return impl_scalar
+
+
+# TODO: Remove when Numba ufunc gets merged https://github.com/numba/numba/pull/6075
+# Numpy implementation
+# https://github.com/numpy/numpy/blob/31ffdecf07d18ed4dbb66b171cb0f998d4b190fa/numpy/core/src/npymath/npy_math_internal.h.src#L513
+@register_jitable
+def np_cbrt_scalar(x, float_dtype):  # pragma: no cover
+    if np.isnan(x):
+        return np.nan
+    flag = x < 0
+    if flag:
+        x = -x
+    res = np.power(float_dtype(x), 1.0 / 3.0)
+    if flag:
+        return -res
+    return res

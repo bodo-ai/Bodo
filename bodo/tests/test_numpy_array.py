@@ -461,6 +461,55 @@ def test_np_linspace_kwargs(memory_leak_check):
     check_func(test_impl, (-5, 4.5252, 100000, np.int64, False))
 
 
+# TODO: Move test to slow after merge
+@pytest.mark.parametrize(
+    "num_arr",
+    [
+        pd.arrays.IntegerArray(
+            np.array([1, -3, 2, 3, 10] * 10, np.int64),
+            np.array([False, False, False, False, True] * 10),
+        ),
+        np.array(
+            [
+                -3,
+                -5,
+                -123,
+                24,
+                -42,
+                24,
+                -123,
+                1254,
+            ]
+            * 2,
+            dtype=np.int64,
+        ),
+        np.array(
+            [
+                1.121,
+                0.0,
+                35.13431,
+                -2414.4242,
+                23211.22,
+                1.111,
+                232.2,
+                0.0,
+                232.2,
+            ]
+            * 2,
+            dtype=np.float32,
+        ),
+    ],
+)
+def test_cbrt(num_arr):
+    def test_impl(A):
+        return np.cbrt(A)
+
+    # Numpy uses different floating point libaries in
+    # different platforms so precision may vary. This
+    # should be fixed when numba adds support for it.
+    check_func(test_impl, (num_arr,), atol=2e-06, rtol=2e-07)
+
+
 @pytest.fixture(
     params=[
         pd.array(

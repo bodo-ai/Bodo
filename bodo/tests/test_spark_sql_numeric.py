@@ -33,6 +33,17 @@ def dataframe_val(request):
     return request.param
 
 
+# TODO: Move test to slow after merge
+def test_cbrt(dataframe_val):
+    def test_impl(df):
+        return df.A.map(lambda x: np.cbrt(x))
+
+    # Numpy uses different floating point libaries in
+    # different platforms so precision may vary. This
+    # should be fixed when numba adds support for it.
+    check_func(test_impl, (dataframe_val,), atol=2e-06)
+
+
 @pytest.mark.slow
 def test_factorial(dataframe_val):
     """Factorial limit for a 64 bit integer is 20"""
