@@ -863,8 +863,10 @@ def overload_series_min(S, axis=None, skipna=None, level=None, numeric_only=None
     return impl
 
 
-@overload(max, inline="always", no_unliteral=True)
-def overload_series_max(S):
+# inlining manually instead of inline="always" since Numba's max overload for iterables
+# causes confusion for the inliner. TODO(ehsan): fix Numba's bug
+@overload(max, no_unliteral=True)
+def overload_series_builtins_max(S):
     if isinstance(S, SeriesType):
 
         def impl(S):
@@ -873,8 +875,8 @@ def overload_series_max(S):
         return impl
 
 
-@overload(min, inline="always", no_unliteral=True)
-def overload_series_min(S):
+@overload(min, no_unliteral=True)
+def overload_series_builtins_min(S):
     if isinstance(S, SeriesType):
 
         def impl(S):
@@ -883,8 +885,8 @@ def overload_series_min(S):
         return impl
 
 
-@overload(sum, inline="always", no_unliteral=True)
-def overload_series_sum(S):
+@overload(sum, no_unliteral=True)
+def overload_series_builtins_sum(S):
     if isinstance(S, SeriesType):
 
         def impl(S):

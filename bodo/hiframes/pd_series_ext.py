@@ -32,6 +32,7 @@ from numba.extending import (
     infer,
     infer_getattr,
     intrinsic,
+    lower_builtin,
     lower_cast,
     make_attribute_wrapper,
     models,
@@ -149,7 +150,7 @@ class SeriesType(types.IterableType, types.ArrayCompatible):
     def iterator_type(self):
         # same as Buffer
         # TODO: fix timestamp
-        return types.iterators.ArrayIterator(self.data)
+        return self.data.iterator_type
 
 
 class HeterogeneousSeriesType(types.Type):
@@ -180,6 +181,16 @@ class HeterogeneousSeriesType(types.Type):
     @property
     def key(self):
         return self.data, self.index, self.name_typ
+
+
+@lower_builtin("getiter", SeriesType)
+def series_getiter(context, builder, sig, args):
+    """support getting an iterator object for Series by calling 'getiter' on the
+    underlying array.
+    """
+    series_payload = get_series_payload(context, builder, sig.args[0], args[0])
+    impl = context.get_function("getiter", sig.return_type(sig.args[0].data))
+    return impl(builder, (series_payload.data,))
 
 
 @infer_getattr
