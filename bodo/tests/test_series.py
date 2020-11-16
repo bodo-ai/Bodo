@@ -376,22 +376,14 @@ def test_series_notna(series_val, memory_leak_check):
     def test_impl(S):
         return S.notna()
 
-    # categories to be handled separately
-    if isinstance(series_val.dtype, pd.CategoricalDtype):
-        return
-    else:
-        check_func(test_impl, (series_val,))
+    check_func(test_impl, (series_val,))
 
 
 def test_series_notnull(series_val, memory_leak_check):
     def test_impl(S):
         return S.notnull()
 
-    # categories to be handled separately
-    if isinstance(series_val.dtype, pd.CategoricalDtype):
-        return
-    else:
-        check_func(test_impl, (series_val,))
+    check_func(test_impl, (series_val,))
 
 
 @pytest.mark.slow
@@ -472,11 +464,7 @@ def test_series_hasnans(series_val, memory_leak_check):
     def test_impl(S):
         return S.hasnans
 
-    # categories to be handled separately
-    if isinstance(series_val.dtype, pd.CategoricalDtype):
-        return
-    else:
-        check_func(test_impl, (series_val,))
+    check_func(test_impl, (series_val,))
 
 
 def test_series_empty(series_val, memory_leak_check):
@@ -530,10 +518,6 @@ def test_series_astype_str(series_val):
         return
 
     if series_val.dtype == np.dtype("timedelta64[ns]"):
-        return
-
-    # categories to be handled separately
-    if isinstance(series_val.dtype, pd.CategoricalDtype):
         return
 
     def test_impl(S):
@@ -794,9 +778,10 @@ def test_series_iloc_getitem_array_bool(series_val, memory_leak_check):
     def test_impl(S):
         return S.iloc[[True, True, False, True, False]]
 
-    # categories to be handled separately
-    if isinstance(series_val.dtype, pd.CategoricalDtype):
-        return
+    # Make sure cond always matches length
+    if len(series_val) > 5:
+        series_val = series_val[:5]
+
     bodo_func = bodo.jit(test_impl)
     pd.testing.assert_series_equal(
         bodo_func(series_val), test_impl(series_val), check_dtype=False
@@ -1043,9 +1028,9 @@ def test_series_getitem_array_bool(series_val, memory_leak_check):
         # using .values to test boolean_array
         return S[cond.values]
 
-    # categories to be handled separately
-    if isinstance(series_val.dtype, pd.CategoricalDtype):
-        return
+    # Make sure cond always matches length
+    if len(series_val) > 5:
+        series_val = series_val[:5]
 
     bodo_func = bodo.jit(test_impl)
     pd.testing.assert_series_equal(
@@ -2436,9 +2421,6 @@ def test_series_head(series_val, memory_leak_check):
     # not supported for list(string) and array(item)
     if isinstance(series_val.values[0], list):
         return
-    # categories to be handled separately
-    if isinstance(series_val.dtype, pd.CategoricalDtype):
-        return
 
     def test_impl(S):
         return S.head(3)
@@ -2449,9 +2431,6 @@ def test_series_head(series_val, memory_leak_check):
 def test_series_tail(series_val, memory_leak_check):
     # not supported for list(string) and array(item)
     if isinstance(series_val.values[0], list):
-        return
-    # categories to be handled separately
-    if isinstance(series_val.dtype, pd.CategoricalDtype):
         return
 
     def test_impl(S):
@@ -2583,10 +2562,6 @@ def test_series_argsort(series_val, memory_leak_check):
 
     # not supported for Decimal yet, TODO: support and test
     if isinstance(series_val.values[0], Decimal):
-        return
-
-    # categories to be handled separately
-    if isinstance(series_val.dtype, pd.CategoricalDtype):
         return
 
     def test_impl(A):
@@ -2742,6 +2717,8 @@ def test_series_unique(series_val, memory_leak_check):
         return
 
     # categories to be handled separately
+    # Unique seems to fail now because na is placed at the front in Bodo
+    # and at the end in Pandas for categorical
     if isinstance(series_val.dtype, pd.CategoricalDtype):
         return
 
