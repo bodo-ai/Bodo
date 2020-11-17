@@ -13,13 +13,6 @@ env:
       ENGINE_E2E_TESTS: "engine-e2e-tests"
 
 phases:
-    install:
-        runtime-versions:
-            python: 3.8
-        commands:
-        - echo Conda Setup and Test Installs
-        - buildscripts/setup_conda.sh
-
     build:
         commands:
         - echo Building Obfuscated Binary
@@ -30,5 +23,4 @@ phases:
         commands:
         - bash -c "if [ /"$CODEBUILD_BUILD_SUCCEEDING/" == /"0/" ]; then exit 1; fi"
         - buildscripts/aws/publish_binary.sh
-        - buildscripts/aws/test_installs.sh
         - buildscripts/aws/run_nightly_tests.sh

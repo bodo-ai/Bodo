@@ -1,10 +1,12 @@
 #!/bin/bash
 set -exo pipefail
 
-USERNAME=`credstash -r us-east-2 get artifactory.ci.username`
-TOKEN=`credstash -r us-east-2 get artifactory.ci.token`
+# Load the env first because credstash is installed on conda
 export PATH=$HOME/miniconda3/bin:$PATH
 source activate $CONDA_ENV
+
+USERNAME=`credstash -r us-east-2 get artifactory.ci.username`
+TOKEN=`credstash -r us-east-2 get artifactory.ci.token`
 
 # ------ Install Bodo -----------
 sub_channel=`cat $CODEBUILD_SRC_DIR/bodo_subchannel`

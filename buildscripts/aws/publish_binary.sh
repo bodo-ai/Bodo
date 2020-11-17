@@ -1,12 +1,17 @@
 #!/bin/bash
 set -exo pipefail
 
+# Deactivate env in case this was called by another file that
+# activated the env
+source deactivate || true
+export PATH=$HOME/miniconda3/bin:$PATH
+source activate $CONDA_ENV
+
 CHANNEL_NAME=${1:-bodo-binary}
 OS_DIR=${2:-linux-64}
 IS_RELEASE=${3:-}
 
 echo "********** Publishing to Artifactory **********"
-pip install credstash
 USERNAME=`credstash -r us-east-2 get artifactory.ci.username`
 TOKEN=`credstash -r us-east-2 get artifactory.ci.token`
 

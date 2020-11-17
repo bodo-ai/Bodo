@@ -30,7 +30,7 @@ if [ "$RUN_NIGHTLY" != "yes" ];
 then
     conda create -n $CONDA_ENV -q -y -c conda-forge python=3.8 numpy scipy boost-cpp=1.74.0 cmake h5py=2.10 mpich mpi
 else
-    conda create -n $CONDA_ENV -q -y -c conda-forge python=3.8 cmake
+    conda create -n $CONDA_ENV -q -y -c conda-forge python=3.8 cmake make
 fi
 source activate $CONDA_ENV
 
@@ -60,4 +60,5 @@ else
    $CONDA_INSTALL -c pytorch -c conda-forge -c defaults bokeh pytorch=1.5 torchvision=0.6
    $CONDA_INSTALL -c conda-forge tensorflow
    pip install horovod[pytorch,tensorflow]
+   pip install credstash
 fi
