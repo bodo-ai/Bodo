@@ -635,6 +635,11 @@ def _test_equal(
         if sort_output:
             py_out = py_out[py_out.argsort()]
             bodo_out = bodo_out[bodo_out.argsort()]
+        # We don't care about category order so sort always.
+        if isinstance(py_out, pd.Categorical):
+            py_out.categories = py_out.categories.sort_values()
+        if isinstance(bodo_out, pd.Categorical):
+            bodo_out.categories = bodo_out.categories.sort_values()
         pd.testing.assert_extension_array_equal(bodo_out, py_out)
     elif isinstance(py_out, float):
         # avoid equality check since paralellism can affect floating point operations

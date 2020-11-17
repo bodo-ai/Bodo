@@ -2716,12 +2716,6 @@ def test_series_unique(series_val, memory_leak_check):
     if series_val.dtype == np.dtype("O") and series_val.hasnans:
         return
 
-    # categories to be handled separately
-    # Unique seems to fail now because na is placed at the front in Bodo
-    # and at the end in Pandas for categorical
-    if isinstance(series_val.dtype, pd.CategoricalDtype):
-        return
-
     # BooleanArray can't be key in shuffle, TODO: handle
     if series_val.dtype == np.bool_:
         return
