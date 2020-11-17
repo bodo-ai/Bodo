@@ -91,7 +91,13 @@ def get_buildspec_file(env_var_dict, image_path):
 # TODO(Nick): Update this function when different build variations need
 # different compute types. Most likely this will be buildspec dependent.
 def get_compute_type(env_var_dict, image_path, buildspec):
-    return "BUILD_GENERAL1_MEDIUM"
+    np_val = env_var_dict["NP"]
+    if np_val == 1:
+        return "BUILD_GENERAL1_SMALL"
+    elif np_val == 2:
+        return "BUILD_GENERAL1_MEDIUM"
+    else:
+        raise ValueError("Unsupported NP value used in buildspec")
 
 
 # Function to generate the batch portion for the CI build

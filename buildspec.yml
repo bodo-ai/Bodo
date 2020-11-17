@@ -10,7 +10,7 @@ batch:
   build-graph:
   - buildspec: buildscripts/aws/buildspecs/CI_buildspec.yml
     env:
-      compute-type: BUILD_GENERAL1_MEDIUM
+      compute-type: BUILD_GENERAL1_SMALL
       image: 427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:1.0
       variables:
         NP: 1
@@ -19,7 +19,7 @@ batch:
     identifier: linux_NP_1_NUMBER_GROUPS_SPLIT_6_PYTEST_MARKER_not_slow_and_0
   - buildspec: buildscripts/aws/buildspecs/CI_buildspec.yml
     env:
-      compute-type: BUILD_GENERAL1_MEDIUM
+      compute-type: BUILD_GENERAL1_SMALL
       image: 427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:1.0
       variables:
         NP: 1
@@ -28,7 +28,7 @@ batch:
     identifier: linux_NP_1_NUMBER_GROUPS_SPLIT_6_PYTEST_MARKER_not_slow_and_1
   - buildspec: buildscripts/aws/buildspecs/CI_buildspec.yml
     env:
-      compute-type: BUILD_GENERAL1_MEDIUM
+      compute-type: BUILD_GENERAL1_SMALL
       image: 427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:1.0
       variables:
         NP: 1
@@ -37,7 +37,7 @@ batch:
     identifier: linux_NP_1_NUMBER_GROUPS_SPLIT_6_PYTEST_MARKER_not_slow_and_2
   - buildspec: buildscripts/aws/buildspecs/CI_buildspec.yml
     env:
-      compute-type: BUILD_GENERAL1_MEDIUM
+      compute-type: BUILD_GENERAL1_SMALL
       image: 427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:1.0
       variables:
         NP: 1
@@ -46,7 +46,7 @@ batch:
     identifier: linux_NP_1_NUMBER_GROUPS_SPLIT_6_PYTEST_MARKER_not_slow_and_3
   - buildspec: buildscripts/aws/buildspecs/CI_buildspec.yml
     env:
-      compute-type: BUILD_GENERAL1_MEDIUM
+      compute-type: BUILD_GENERAL1_SMALL
       image: 427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:1.0
       variables:
         NP: 1
@@ -55,7 +55,7 @@ batch:
     identifier: linux_NP_1_NUMBER_GROUPS_SPLIT_6_PYTEST_MARKER_not_slow_and_4
   - buildspec: buildscripts/aws/buildspecs/CI_buildspec.yml
     env:
-      compute-type: BUILD_GENERAL1_MEDIUM
+      compute-type: BUILD_GENERAL1_SMALL
       image: 427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:1.0
       variables:
         NP: 1
