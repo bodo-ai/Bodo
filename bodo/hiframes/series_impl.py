@@ -1936,6 +1936,25 @@ def argmax_overload(a, axis=None, out=None):
         return impl
 
 
+@overload(np.argmin, inline="always", no_unliteral=True)
+def argmin_overload(a, axis=None, out=None):
+    if (
+        isinstance(a, types.Array)
+        and is_overload_constant_int(axis)
+        and get_overload_const_int(axis) == 1
+    ):
+
+        def impl(a, axis=None, out=None):  # pragma: no cover
+            argmin_arr = np.empty(len(a), a.dtype)
+            numba.parfors.parfor.init_prange()
+            n = len(a)
+            for i in numba.parfors.parfor.internal_prange(n):
+                argmin_arr[i] = np.argmin(a[i])
+            return argmin_arr
+
+        return impl
+
+
 @overload(np.dot, inline="always", no_unliteral=True)
 @overload(operator.matmul, inline="always", no_unliteral=True)
 def overload_series_np_dot(a, b, out=None):

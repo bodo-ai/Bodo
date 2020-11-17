@@ -3071,6 +3071,13 @@ def test_np_argmax(memory_leak_check):
     check_func(impl, (np.random.rand(500, 50),))
 
 
+def test_np_argmin(memory_leak_check):
+    def impl(A):
+        return np.argmin(A, 1)
+
+    check_func(impl, (np.random.rand(500, 50),))
+
+
 # TODO: fix memory leak and add memory_leak_check
 def test_series_index_cast():
     # cast range index to integer index if necessary
