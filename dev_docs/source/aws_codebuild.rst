@@ -196,7 +196,49 @@ Updating Dependencies
 
 CI runs on custom docker images to avoid undergoing installation time on every build. As a result,
 if you every need to upgrade a dependencies to a newer version, you also need to update the docker
-image on ECR. To do so:
+image on ECR. 
+
+There are currently 4 different docker images that are used for various codebuild projects.
+Two of these run in a batch and have their images specified within the ``buildspec.yml`` file.
+The other two have their images specified through the Codebuild UI. The table below indicates
+which files build the appropriate docker images, where to upload them, and whether or not they 
+need to be updated through the Codebuild UI.
+
+.. list-table::
+  :header-rows: 1
+
+  * - Codebuild Project
+    - Dockerfile path
+    - ECR Repo
+    - Update with CodeBuild UI
+  * - ``Bodo-PR-Testing (CI)``
+    - ``$BODO_PATH/buildscripts/aws/docker/CI-Dockerfile``
+    - `bodo-codebuild <https://us-east-2.console.aws.amazon.com/ecr/repositories/bodo-codebuild/?region=us-east-2>`_
+    - No
+  * - ``Bodo-PR-Testing (Sonar)``
+    - ``$BODO_PATH/buildscripts/aws/docker/Sonar-Dockerfile``
+    - `bodo-sonar <https://us-east-2.console.aws.amazon.com/ecr/repositories/bodo-sonar/?region=us-east-2>`_
+    - No
+  * - ``Bodo-Engine-Nightly``
+    - ``$BODO_PATH/buildscripts/aws/docker/Nightly-Dockerfile``
+    - `bodo-nightly <https://us-east-2.console.aws.amazon.com/ecr/repositories/bodo-codebuild/?region=us-east-2>`_
+    - Yes
+  * - ``bodosql-pr``
+    - ``$BODOSQL_PATH/buildscripts/docker/Dockerfile``
+    - `bodosql-codebuild <https://us-east-2.console.aws.amazon.com/ecr/repositories/bodosql-codebuild/?region=us-east-2>`_
+    - Yes
+
+For each image you must update, there are a series of steps to undergo, which for the most part
+are the same for all images. The one notable difference is that for images that must be updated
+with the Codebuild UI, you do not need to update a buildspec file and instead should manually swap
+the image on Codebuild. However, unlike changes that arise to the buildspec, these will propagate
+to all other builds attempting to use this project **immediately** (even before the PR merges into master).
+As a result, if any of your new dependencies require additional changes to incorporate, 
+you should notify everyone that they will need to approve your PR quickly and then
+rebase all other branches off it.
+
+To demonstrate the steps needed to update the docker image, here are the steps to update the 
+``Bodo-PR-Testing (CI)`` image.
 
 1. Update the installation in the necessary buildscripts. This should either modify ``buildscripts/setup_conda.sh``
    or ``buildscripts/aws/test_installs.sh``.
@@ -220,3 +262,6 @@ image on ECR. To do so:
 
 7. Delete the previous ECR image as all builds now need the newest build. This will allow for quicker failure
    if someone hasn't rebased their PR and avoids any lingering resources.
+
+Remember you will need to do this for every image that the installation change
+impacts (most likely at least CI and Nightly).
