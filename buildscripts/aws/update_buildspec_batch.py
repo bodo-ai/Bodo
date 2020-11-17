@@ -22,10 +22,23 @@ def dict_product(dict_to_merge):
     )
 
 
+def generate_np2_vars(env_vars):
+    """Helper function that creates the env vars for NP=2 tests."""
+    output_dict = dict()
+    for key, value in env_vars.items():
+        if key == "NP":
+            output_dict[key] = [2]
+        elif key == "PYTEST_MARKER":
+            output_dict[key] = ["smoke"]
+        elif key == "NUMBER_GROUPS_SPLIT":
+            output_dict[key] = [1]
+        else:
+            output_dict[key] = value
+    return dict_product(output_dict)
+
+
 # TODO(Nick): Change the batch construction to produce a graph
 # and use the build as a shared step across builds with the same image.
-# TODO(Nick): Update the batch to allow running SonarQube across the results
-# of all the divided tests as a final step.
 # Inputs:
 # env_vars: List of dictionarys mapping env variables -> list(values)
 # images: dict[imagename used for batch naming] -> image path for each docker image.
@@ -35,6 +48,8 @@ def dict_product(dict_to_merge):
 def construct_batch_field(env_vars, images):
     build_graph = []
     merged_env_vars = dict_product(env_vars)
+    # Add np=2 separately because we only want one build
+    merged_env_vars.extend(generate_np2_vars(env_vars))
     for env_var_group in merged_env_vars:
         for image_name, image_path in images.items():
             buildspec = get_buildspec_file(env_var_group, image_path)
@@ -110,7 +125,7 @@ def generate_CI_buildspec(num_groups):
         pytest_starting_marker + " and " + str(i) for i in range(num_groups)
     ]
     env_vars = {
-        "NP": [1, 2],
+        "NP": [1],
         "PYTEST_MARKER": pytest_options,
         "NUMBER_GROUPS_SPLIT": [num_groups],
     }
