@@ -14,12 +14,11 @@ phases:
         commands:
         - echo Entered the install phase...
         - buildscripts/aws/merge_with_master.sh
-        - buildscripts/aws/sonar_installs.sh
     build:
         commands:
         - echo Entered the build phase...
         # Download the existing artifacts and merge the xml files.
-        - python buildscripts/aws/CI_if_changes.py buildscripts/aws/prepare_coverage.sh
+        - ./buildscripts/aws/CI_if_changes.sh buildscripts/aws/prepare_coverage.sh
     post_build:
         commands:
         - echo Entered the post-build phase...

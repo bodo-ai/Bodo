@@ -70,7 +70,7 @@ def add_sonar(build_graph):
     buildspec = "buildscripts/aws/buildspecs/sonar_buildspec.yml"
     env_dict = {
         "compute-type": "BUILD_GENERAL1_SMALL",
-        "image": "aws/codebuild/standard:4.0",
+        "image": "427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-sonar:1.0",
     }
     build_graph.append(
         {

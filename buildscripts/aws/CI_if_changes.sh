@@ -7,6 +7,8 @@ set -eo pipefail
 # activated the env
 source deactivate || true
 export PATH=$HOME/miniconda3/bin:$PATH
-source activate $CONDA_ENV
+# Run with || true in case this is called by a CI build that doesn't
+# use conda (Sonar)
+source activate $CONDA_ENV || true
 
-python buildscripts/aws/CI_if_changes.py $@
+python3 buildscripts/aws/CI_if_changes.py $@

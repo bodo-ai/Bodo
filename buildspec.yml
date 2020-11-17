@@ -126,6 +126,6 @@ batch:
     - linux_NP_1_NUMBER_GROUPS_SPLIT_6_PYTEST_MARKER_not_slow_and_5
     env:
       compute-type: BUILD_GENERAL1_SMALL
-      image: aws/codebuild/standard:4.0
+      image: 427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-sonar:1.0
     identifier: Sonar
 version: 0.2

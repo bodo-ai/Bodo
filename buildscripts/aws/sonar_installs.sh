@@ -4,12 +4,12 @@
 set -eo pipefail
 
 # Install boto3 so we can read the coverage files from S3
-pip install boto3 
-pip install botocore
+pip3 install boto3 
+pip3 install botocore
 
 # Install coverage and credstash
-pip install coverage
-pip install credstash
+pip3 install coverage
+pip3 install credstash
 
 # sonar download and setup
 wget https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-4.4.0.2170-linux.zip
