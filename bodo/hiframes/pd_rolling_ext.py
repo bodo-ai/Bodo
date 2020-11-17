@@ -2,21 +2,22 @@
 """typing for rolling window functions
 """
 from numba.core import types
-from numba.extending import (
-    models,
-    register_model,
-    infer_getattr,
-    infer,
-    overload,
-    lower_builtin,
-    overload_method,
-)
 from numba.core.typing.templates import (
-    infer_global,
     AbstractTemplate,
-    signature,
     AttributeTemplate,
+    infer_global,
+    signature,
 )
+from numba.extending import (
+    infer,
+    infer_getattr,
+    lower_builtin,
+    models,
+    overload,
+    overload_method,
+    register_model,
+)
+
 import bodo
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.hiframes.rolling import supported_rolling_funcs
@@ -189,7 +190,9 @@ class DataframeRollingAttribute(AttributeTemplate):
                     # df on df cov/corr returns common columns only (without
                     # pairwise flag)
                     # TODO: support pairwise arg
-                    out_cols = tuple(sorted(set(columns) | set(other.columns)))
+                    out_cols = tuple(
+                        sorted(set(columns) | set(other.columns), key=lambda k: str(k))
+                    )
                     return signature(
                         DataFrameType((out_arr,) * len(out_cols), index, out_cols),
                         *args

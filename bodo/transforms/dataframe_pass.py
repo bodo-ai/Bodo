@@ -1257,7 +1257,8 @@ class DataFramePass:
 
         nodes = []
         out_data_vars = {
-            c: ir.Var(lhs.scope, mk_unique_var(c), lhs.loc) for c in out_typ.columns
+            c: ir.Var(lhs.scope, mk_unique_var(sanitize_varname(c)), lhs.loc)
+            for c in out_typ.columns
         }
         for v, t in zip(out_data_vars.values(), out_typ.data):
             self.typemap[v.name] = t
@@ -1388,7 +1389,9 @@ class DataFramePass:
         if return_key and (grp_typ.as_index is False or out_typ.index != types.none):
             out_key_vars = []
             for k in grp_typ.keys:
-                out_key_var = ir.Var(lhs.scope, mk_unique_var(k), lhs.loc)
+                out_key_var = ir.Var(
+                    lhs.scope, mk_unique_var(sanitize_varname(k)), lhs.loc
+                )
                 ind = df_type.columns.index(k)
                 self.typemap[out_key_var.name] = df_type.data[ind]
                 out_key_vars.append(out_key_var)
@@ -1762,7 +1765,10 @@ class DataFramePass:
         # in corr/cov case, Pandas makes non-common columns NaNs
         if func_name in ("cov", "corr"):
             nan_cols = list(
-                sorted(set(self.typemap[other.name].columns) ^ set(df_type.columns))
+                sorted(
+                    set(self.typemap[other.name].columns) ^ set(df_type.columns),
+                    key=lambda k: str(k),
+                )
             )
             len_arr = list(in_vars.values())[0]
             for cname in nan_cols:

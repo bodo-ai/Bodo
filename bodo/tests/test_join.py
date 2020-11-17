@@ -309,11 +309,11 @@ def test_merge_suffixes_parenthesis(memory_leak_check):
     """
 
     def test_impl(df1, df2):
-        o1 = df1.merge(df2, on="key", how="inner", suffixes=("_a", "_b"))
+        o1 = df1.merge(df2, on=3, how="inner", suffixes=("_a", "_b"))
         return o1
 
-    df1 = pd.DataFrame({"key": [0, 1, 2, 0], "value": [1, 2, 3, 5]})
-    df2 = pd.DataFrame({"key": [0, 1, 2, 0], "value": [5, 6, 7, 8]})
+    df1 = pd.DataFrame({3: [0, 1, 2, 0], "value": [1, 2, 3, 5]})
+    df2 = pd.DataFrame({3: [0, 1, 2, 0], "value": [5, 6, 7, 8]})
     check_func(test_impl, (df1, df2), sort_output=True, reset_index=True)
 
 
@@ -1149,11 +1149,9 @@ def test_merge_index_outer(memory_leak_check):
             ),
         ),
         (
+            pd.DataFrame({1: ["foo", "bar", "baz"], "B": [3, 4, 5]}, index=[0, -1, 2]),
             pd.DataFrame(
-                {"A": ["foo", "bar", "baz"], "B": [3, 4, 5]}, index=[0, -1, 2]
-            ),
-            pd.DataFrame(
-                {"A": ["baz", "baz", "foo", "foo", "bar"], "B": [1, 3, 2, 3, 4]},
+                {1: ["baz", "baz", "foo", "foo", "bar"], "B": [1, 3, 2, 3, 4]},
                 index=[-1, 2, 2, 0, 0],
             ),
         ),
@@ -1366,7 +1364,6 @@ def test_merge_parallel_optimize(n, memory_leak_check):
         df3 = pd.merge(df1, df2, left_on="key1", right_on="key2")
         return df3.B.sum()
 
-    bodo_func = bodo.jit(test_impl)
     check_func(test_impl, (n,))
     assert count_array_REPs() == 0  # assert parallelism
     assert count_parfor_REPs() == 0  # assert parallelism

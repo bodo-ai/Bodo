@@ -193,10 +193,10 @@ def test_sort_values_val(memory_leak_check):
     """
 
     def impl(df):
-        return df.sort_values(by="A", kind="mergesort").A.values
+        return df.sort_values(by=3, kind="mergesort")[3].values
 
     n = 10
-    df = pd.DataFrame({"A": np.arange(n) + 1.0, "B": np.arange(n) + 1})
+    df = pd.DataFrame({3: np.arange(n) + 1.0, "B": np.arange(n) + 1})
     check_func(impl, (df,))
 
 
@@ -772,7 +772,7 @@ def test_list_string_arrow():
     """Sorting values by list of strings"""
 
     def f(df1):
-        df2 = df1.sort_values(by="A", kind="mergesort")
+        df2 = df1.sort_values(by=3, kind="mergesort")
         return df2
 
     def rand_col_l_str(n):
@@ -792,7 +792,7 @@ def test_list_string_arrow():
     random.seed(5)
     n = 1000
     list_rand = [random.randint(1, 30) for _ in range(n)]
-    df1 = pd.DataFrame({"A": list_rand, "B": rand_col_l_str(n)})
+    df1 = pd.DataFrame({3: list_rand, 6: rand_col_l_str(n)})
 
     check_func(f, (df1,))
 
@@ -821,7 +821,7 @@ def test_sort_values_by_const_str_or_str_list(memory_leak_check):
         bodo.jit(impl1)(df)
     with pytest.raises(
         BodoError,
-        match="'by' parameter only supports a constant column label or column labels",
+        match=" invalid key .* for by",
     ):
         bodo.jit(impl2)(df)
 
