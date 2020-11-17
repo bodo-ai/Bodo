@@ -1475,13 +1475,10 @@ def test_df_set_index(df_value, memory_leak_check):
     if isinstance(df_value.iloc[:, 0].dtype, pd.core.arrays.integer._IntegerDtype):
         return
 
-    # TODO(ehsan): test non-str columns using 'df_value.columns[0]' instead of 'A" when
-    # Numba can convert freevars to literals
-    if "A" not in df_value.columns:
-        return
+    index_col = df_value.columns[0]
 
     def impl(df):
-        return df.set_index("A")
+        return df.set_index(index_col)
 
     check_func(impl, (df_value,))
 
