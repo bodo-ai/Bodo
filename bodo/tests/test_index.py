@@ -7,6 +7,7 @@ import pandas as pd
 import pytest
 
 import bodo
+from bodo.utils.typing import BodoError
 from bodo.tests.utils import AnalysisTestPipeline, check_func
 
 
@@ -106,11 +107,7 @@ def test_generic_index_constructor_with_dtype(data, dtype):
 
 @pytest.mark.slow
 @pytest.mark.parametrize(
-    "data",
-    [
-        [1, 3, 4],
-        ["A", "B", "C"],
-    ],
+    "data", [[1, 3, 4], ["A", "B", "C"],],
 )
 def test_generic_index_constructor_sequential(data):
     def impl(data):
@@ -650,6 +647,490 @@ def test_map(index, memory_leak_check):
 
     check_func(test_impl, (index,))
 
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        np.array([1, 3, 4]),  # Int array
+        np.ones(3, dtype=np.int64),  # Int64Index: array of int64
+        pd.date_range(
+            start="2018-04-24", end="2018-04-27", periods=3
+        ),  # datetime range
+        pd.timedelta_range(start="1D", end="3D"),  # deltatime range
+    ],
+)
+def test_index_unsupported(data):
+    """ Test that a Bodo error is raised for unsupported
+    Index methods
+    """
+
+    def test_all(idx):
+        return idx.all()
+
+    with pytest.raises(BodoError, match="not supported yet"):
+        bodo.jit(test_all)(idx=pd.Index(data))
+
+    def test_any(idx):
+        return idx.any()
+
+    with pytest.raises(BodoError, match="not supported yet"):
+        bodo.jit(test_any)(idx=pd.Index(data))
+
+    def test_append(idx):
+        return idx.append()
+
+    with pytest.raises(BodoError, match="not supported yet"):
+        bodo.jit(test_append)(idx=pd.Index(data))
+
+    def test_argmax(idx):
+        return idx.argmax()
+
+    with pytest.raises(BodoError, match="not supported yet"):
+        bodo.jit(test_argmax)(idx=pd.Index(data))
+
+    def test_argmin(idx):
+        return idx.argmin()
+
+    with pytest.raises(BodoError, match="not supported yet"):
+        bodo.jit(test_argmin)(idx=pd.Index(data))
+
+    def test_argsort(idx):
+        return idx.argsort()
+
+    with pytest.raises(BodoError, match="not supported yet"):
+        bodo.jit(test_argsort)(idx=pd.Index(data))
+
+    def test_asof(idx):
+        return idx.asof()
+
+    with pytest.raises(BodoError, match="not supported yet"):
+        bodo.jit(test_asof)(idx=pd.Index(data))
+
+    def test_asof_locs(idx):
+        return idx.asof_locs()
+
+    with pytest.raises(BodoError, match="not supported yet"):
+        bodo.jit(test_asof_locs)(idx=pd.Index(data))
+
+    def test_astype(idx):
+        return idx.astype()
+
+    with pytest.raises(BodoError, match="not supported yet"):
+        bodo.jit(test_astype)(idx=pd.Index(data))
+
+    def test_delete(idx):
+        return idx.delete()
+
+    with pytest.raises(BodoError, match="not supported yet"):
+        bodo.jit(test_delete)(idx=pd.Index(data))
+
+    def test_difference(idx):
+        return idx.difference()
+
+    with pytest.raises(BodoError, match="not supported yet"):
+        bodo.jit(test_difference)(idx=pd.Index(data))
+
+    def test_drop(idx):
+        return idx.drop()
+
+    with pytest.raises(BodoError, match="not supported yet"):
+        bodo.jit(test_drop)(idx=pd.Index(data))
+
+    def test_drop_duplicates(idx):
+        return idx.drop_duplicates()
+
+    with pytest.raises(BodoError, match="not supported yet"):
+        bodo.jit(test_drop_duplicates)(idx=pd.Index(data))
+
+    def test_droplevel(idx):
+        return idx.droplevel()
+
+    with pytest.raises(BodoError, match="not supported yet"):
+        bodo.jit(test_droplevel)(idx=pd.Index(data))
+
+    def test_dropna(idx):
+        return idx.dropna()
+
+    with pytest.raises(BodoError, match="not supported yet"):
+        bodo.jit(test_dropna)(idx=pd.Index(data))
+
+    def test_duplicated(idx):
+        return idx.duplicated()
+
+    with pytest.raises(BodoError, match="not supported yet"):
+        bodo.jit(test_duplicated)(idx=pd.Index(data))
+
+    def test_equals(idx):
+        return idx.equals()
+
+    with pytest.raises(BodoError, match="not supported yet"):
+        bodo.jit(test_equals)(idx=pd.Index(data))
+
+    def test_factorize(idx):
+        return idx.factorize()
+
+    with pytest.raises(BodoError, match="not supported yet"):
+        bodo.jit(test_factorize)(idx=pd.Index(data))
+
+    def test_fillna(idx):
+        return idx.fillna()
+
+    with pytest.raises(BodoError, match="not supported yet"):
+        bodo.jit(test_fillna)(idx=pd.Index(data))
+
+    def test_format(idx):
+        return idx.format()
+
+    with pytest.raises(BodoError, match="not supported yet"):
+        bodo.jit(test_format)(idx=pd.Index(data))
+
+    def test_get_indexer(idx):
+        return idx.get_indexer()
+
+    with pytest.raises(BodoError, match="not supported yet"):
+        bodo.jit(test_get_indexer)(idx=pd.Index(data))
+
+    def test_get_indexer_for(idx):
+        return idx.get_indexer_for()
+
+    with pytest.raises(BodoError, match="not supported yet"):
+        bodo.jit(test_get_indexer_for)(idx=pd.Index(data))
+
+    def test_get_indexer_non_unique(idx):
+        return idx.get_indexer_non_unique()
+
+    with pytest.raises(BodoError, match="not supported yet"):
+        bodo.jit(test_get_indexer_non_unique)(idx=pd.Index(data))
+
+    def test_get_level_values(idx):
+        return idx.get_level_values()
+
+    with pytest.raises(BodoError, match="not supported yet"):
+        bodo.jit(test_get_level_values)(idx=pd.Index(data))
+
+    def test_get_loc(idx):
+        return idx.get_loc()
+
+    with pytest.raises(BodoError, match="not supported yet"):
+        bodo.jit(test_get_loc)(idx=pd.Index(data))
+
+    def test_get_slice_bound(idx):
+        return idx.get_slice_bound()
+
+    with pytest.raises(BodoError, match="not supported yet"):
+        bodo.jit(test_get_slice_bound)(idx=pd.Index(data))
+
+    def test_get_value(idx):
+        return idx.get_value()
+
+    with pytest.raises(BodoError, match="not supported yet"):
+        bodo.jit(test_get_value)(idx=pd.Index(data))
+
+    def test_groupby(idx):
+        return idx.groupby()
+
+    with pytest.raises(BodoError, match="not supported yet"):
+        bodo.jit(test_groupby)(idx=pd.Index(data))
+
+    def test_holds_integer(idx):
+        return idx.holds_integer()
+
+    with pytest.raises(BodoError, match="not supported yet"):
+        bodo.jit(test_holds_integer)(idx=pd.Index(data))
+
+    def test_identical(idx):
+        return idx.identical()
+
+    with pytest.raises(BodoError, match="not supported yet"):
+        bodo.jit(test_identical)(idx=pd.Index(data))
+
+    def test_insert(idx):
+        return idx.insert()
+
+    with pytest.raises(BodoError, match="not supported yet"):
+        bodo.jit(test_insert)(idx=pd.Index(data))
+
+    def test_intersection(idx):
+        return idx.intersection()
+
+    with pytest.raises(BodoError, match="not supported yet"):
+        bodo.jit(test_intersection)(idx=pd.Index(data))
+
+    def test_is_(idx):
+        return idx.is_()
+
+    with pytest.raises(BodoError, match="not supported yet"):
+        bodo.jit(test_is_)(idx=pd.Index(data))
+
+    def test_is_boolean(idx):
+        return idx.is_boolean()
+
+    with pytest.raises(BodoError, match="not supported yet"):
+        bodo.jit(test_is_boolean)(idx=pd.Index(data))
+
+    def test_is_categorical(idx):
+        return idx.is_categorical()
+
+    with pytest.raises(BodoError, match="not supported yet"):
+        bodo.jit(test_is_categorical)(idx=pd.Index(data))
+
+    def test_is_floating(idx):
+        return idx.is_floating()
+
+    with pytest.raises(BodoError, match="not supported yet"):
+        bodo.jit(test_is_floating)(idx=pd.Index(data))
+
+    def test_is_integer(idx):
+        return idx.is_integer()
+
+    with pytest.raises(BodoError, match="not supported yet"):
+        bodo.jit(test_is_integer)(idx=pd.Index(data))
+
+    def test_is_interval(idx):
+        return idx.is_interval()
+
+    with pytest.raises(BodoError, match="not supported yet"):
+        bodo.jit(test_is_interval)(idx=pd.Index(data))
+
+    def test_is_mixed(idx):
+        return idx.is_mixed()
+
+    with pytest.raises(BodoError, match="not supported yet"):
+        bodo.jit(test_is_mixed)(idx=pd.Index(data))
+
+    def test_is_numeric(idx):
+        return idx.is_numeric()
+
+    with pytest.raises(BodoError, match="not supported yet"):
+        bodo.jit(test_is_numeric)(idx=pd.Index(data))
+
+    def test_is_object(idx):
+        return idx.is_object()
+
+    with pytest.raises(BodoError, match="not supported yet"):
+        bodo.jit(test_is_object)(idx=pd.Index(data))
+
+    def test_is_type_compatible(idx):
+        return idx.is_type_compatible()
+
+    with pytest.raises(BodoError, match="not supported yet"):
+        bodo.jit(test_is_type_compatible)(idx=pd.Index(data))
+
+    def test_isin(idx):
+        return idx.isin()
+
+    with pytest.raises(BodoError, match="not supported yet"):
+        bodo.jit(test_isin)(idx=pd.Index(data))
+
+    def test_item(idx):
+        return idx.item()
+
+    with pytest.raises(BodoError, match="not supported yet"):
+        bodo.jit(test_item)(idx=pd.Index(data))
+
+    def test_join(idx):
+        return idx.join()
+
+    with pytest.raises(BodoError, match="not supported yet"):
+        bodo.jit(test_join)(idx=pd.Index(data))
+
+    def test_memory_usage(idx):
+        return idx.memory_usage()
+
+    with pytest.raises(BodoError, match="not supported yet"):
+        bodo.jit(test_memory_usage)(idx=pd.Index(data))
+
+    def test_notna(idx):
+        return idx.notna()
+
+    with pytest.raises(BodoError, match="not supported yet"):
+        bodo.jit(test_notna)(idx=pd.Index(data))
+
+    def test_notnull(idx):
+        return idx.notnull()
+
+    with pytest.raises(BodoError, match="not supported yet"):
+        bodo.jit(test_notnull)(idx=pd.Index(data))
+
+    def test_nunique(idx):
+        return idx.nunique()
+
+    with pytest.raises(BodoError, match="not supported yet"):
+        bodo.jit(test_nunique)(idx=pd.Index(data))
+
+    def test_putmask(idx):
+        return idx.putmask()
+
+    with pytest.raises(BodoError, match="not supported yet"):
+        bodo.jit(test_putmask)(idx=pd.Index(data))
+
+    def test_ravel(idx):
+        return idx.ravel()
+
+    with pytest.raises(BodoError, match="not supported yet"):
+        bodo.jit(test_ravel)(idx=pd.Index(data))
+
+    def test_reindex(idx):
+        return idx.reindex()
+
+    with pytest.raises(BodoError, match="not supported yet"):
+        bodo.jit(test_reindex)(idx=pd.Index(data))
+
+    def test_rename(idx):
+        return idx.rename()
+
+    with pytest.raises(BodoError, match="not supported yet"):
+        bodo.jit(test_rename)(idx=pd.Index(data))
+
+    def test_repeat(idx):
+        return idx.repeat()
+
+    with pytest.raises(BodoError, match="not supported yet"):
+        bodo.jit(test_repeat)(idx=pd.Index(data))
+
+    def test_searchsorted(idx):
+        return idx.searchsorted()
+
+    with pytest.raises(BodoError, match="not supported yet"):
+        bodo.jit(test_searchsorted)(idx=pd.Index(data))
+
+    def test_set_names(idx):
+        return idx.set_names()
+
+    with pytest.raises(BodoError, match="not supported yet"):
+        bodo.jit(test_set_names)(idx=pd.Index(data))
+
+    def test_set_value(idx):
+        return idx.set_value()
+
+    with pytest.raises(BodoError, match="not supported yet"):
+        bodo.jit(test_set_value)(idx=pd.Index(data))
+
+    def test_shift(idx):
+        return idx.shift()
+
+    with pytest.raises(BodoError, match="not supported yet"):
+        bodo.jit(test_shift)(idx=pd.Index(data))
+
+    def test_slice_indexer(idx):
+        return idx.slice_indexer()
+
+    with pytest.raises(BodoError, match="not supported yet"):
+        bodo.jit(test_slice_indexer)(idx=pd.Index(data))
+
+    def test_slice_locs(idx):
+        return idx.slice_locs()
+
+    with pytest.raises(BodoError, match="not supported yet"):
+        bodo.jit(test_slice_locs)(idx=pd.Index(data))
+
+    def test_sort(idx):
+        return idx.sort()
+
+    with pytest.raises(BodoError, match="not supported yet"):
+        bodo.jit(test_sort)(idx=pd.Index(data))
+
+    def test_sort_values(idx):
+        return idx.sort_values()
+
+    with pytest.raises(BodoError, match="not supported yet"):
+        bodo.jit(test_sort_values)(idx=pd.Index(data))
+
+    def test_sortlevel(idx):
+        return idx.sortlevel()
+
+    with pytest.raises(BodoError, match="not supported yet"):
+        bodo.jit(test_sortlevel)(idx=pd.Index(data))
+
+    def test_str(idx):
+        return idx.str()
+
+    with pytest.raises(BodoError, match="not supported yet"):
+        bodo.jit(test_str)(idx=pd.Index(data))
+
+    def test_symmetric_difference(idx):
+        return idx.symmetric_difference()
+
+    with pytest.raises(BodoError, match="not supported yet"):
+        bodo.jit(test_symmetric_difference)(idx=pd.Index(data))
+
+    def test_to_flat_index(idx):
+        return idx.to_flat_index()
+
+    with pytest.raises(BodoError, match="not supported yet"):
+        bodo.jit(test_to_flat_index)(idx=pd.Index(data))
+
+    def test_to_frame(idx):
+        return idx.to_frame()
+
+    with pytest.raises(BodoError, match="not supported yet"):
+        bodo.jit(test_to_frame)(idx=pd.Index(data))
+
+    def test_to_list(idx):
+        return idx.to_list()
+
+    with pytest.raises(BodoError, match="not supported yet"):
+        bodo.jit(test_to_list)(idx=pd.Index(data))
+
+    def test_to_native_types(idx):
+        return idx.to_native_types()
+
+    with pytest.raises(BodoError, match="not supported yet"):
+        bodo.jit(test_to_native_types)(idx=pd.Index(data))
+
+    def test_to_numpy(idx):
+        return idx.to_numpy()
+
+    with pytest.raises(BodoError, match="not supported yet"):
+        bodo.jit(test_to_numpy)(idx=pd.Index(data))
+
+    def test_to_series(idx):
+        return idx.to_series()
+
+    with pytest.raises(BodoError, match="not supported yet"):
+        bodo.jit(test_to_series)(idx=pd.Index(data))
+
+    def test_tolist(idx):
+        return idx.tolist()
+
+    with pytest.raises(BodoError, match="not supported yet"):
+        bodo.jit(test_tolist)(idx=pd.Index(data))
+
+    def test_transpose(idx):
+        return idx.transpose()
+
+    with pytest.raises(BodoError, match="not supported yet"):
+        bodo.jit(test_transpose)(idx=pd.Index(data))
+
+    def test_union(idx):
+        return idx.union()
+
+    with pytest.raises(BodoError, match="not supported yet"):
+        bodo.jit(test_union)(idx=pd.Index(data))
+
+    def test_unique(idx):
+        return idx.unique()
+
+    with pytest.raises(BodoError, match="not supported yet"):
+        bodo.jit(test_unique)(idx=pd.Index(data))
+
+    def test_value_counts(idx):
+        return idx.value_counts()
+
+    with pytest.raises(BodoError, match="not supported yet"):
+        bodo.jit(test_value_counts)(idx=pd.Index(data))
+
+    def test_view(idx):
+        return idx.view()
+
+    with pytest.raises(BodoError, match="not supported yet"):
+        bodo.jit(test_view)(idx=pd.Index(data))
+
+    def test_where(idx):
+        return idx.where()
+
+    with pytest.raises(BodoError, match="not supported yet"):
+        bodo.jit(test_where)(idx=pd.Index(data))
 
 def test_heter_index_binop():
     """test binary operations on heterogeneous Index values"""

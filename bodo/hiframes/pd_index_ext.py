@@ -62,6 +62,7 @@ from bodo.utils.typing import (
     is_overload_false,
     is_overload_none,
     is_overload_true,
+    create_unsupported_overload,
     raise_bodo_error,
 )
 
@@ -2420,3 +2421,103 @@ def overload_heter_index_getitem(I, ind):  # pragma: no cover
         return lambda I, ind: bodo.hiframes.pd_index_ext.init_heter_index(
             bodo.hiframes.pd_index_ext.get_index_data(I)[ind]
         )  # pragma: no cover
+
+index_unsupported = [
+    "all",
+    "any",
+    "append",
+    "argmax",
+    "argmin",
+    "argsort",
+    "asof",
+    "asof_locs",
+    "astype",
+    "delete",
+    "difference",
+    "drop",
+    "drop_duplicates",
+    "droplevel",
+    "dropna",
+    "duplicated",
+    "equals",
+    "factorize",
+    "fillna",
+    "format",
+    "get_indexer",
+    "get_indexer_for",
+    "get_indexer_non_unique",
+    "get_level_values",
+    "get_loc",
+    "get_slice_bound",
+    "get_value",
+    "groupby",
+    "holds_integer",
+    "identical",
+    "insert",
+    "intersection",
+    "is_",
+    "is_boolean",
+    "is_categorical",
+    "is_floating",
+    "is_integer",
+    "is_interval",
+    "is_mixed",
+    "is_numeric",
+    "is_object",
+    "is_type_compatible",
+    "isin",
+    "item",
+    "join",
+    "memory_usage",
+    "notna",
+    "notnull",
+    "nunique",
+    "putmask",
+    "ravel",
+    "reindex",
+    "rename",
+    "repeat",
+    "searchsorted",
+    "set_names",
+    "set_value",
+    "shift",
+    "slice_indexer",
+    "slice_locs",
+    "sort",
+    "sort_values",
+    "sortlevel",
+    "str",
+    "symmetric_difference",
+    "to_flat_index",
+    "to_frame",
+    "to_list",
+    "to_native_types",
+    "to_numpy",
+    "to_series",
+    "tolist",
+    "transpose",
+    "union",
+    "unique",
+    "value_counts",
+    "view",
+    "where",
+]
+
+
+def _install_index_unsupported():
+    """install an overload that raises BodoError for unsupported methods of pd.Index
+    """
+    index_types = [
+        ("NumericIndexType.", NumericIndexType),
+        ("StringIndexType.", StringIndexType),
+        ("TimedeltaIndexType.", TimedeltaIndexType),
+        ("PeriodIndexType.", PeriodIndexType),
+        ("DatetimeIndexType.", DatetimeIndexType),
+    ]
+
+    for fname in index_unsupported:
+        for t_name, typ in index_types:
+            overload_method(typ, fname, no_unliteral=True)(
+                create_unsupported_overload(t_name + fname)
+            )
+_install_index_unsupported()
