@@ -2285,18 +2285,45 @@ bool need_reshuffling(table_info* in_table, double crit_fraction) {
     return result;
 }
 
-table_info* shuffle_renormalization_group(table_info* in_table, bool parallel, int64_t n_dest_ranks, int* dest_ranks) {
-    if (!parallel) return in_table;
+table_info* shuffle_renormalization_group(table_info* in_table,
+                                          const int random, int64_t random_seed,
+                                          bool parallel, int64_t n_dest_ranks,
+                                          int* dest_ranks) {
+    if (!parallel && !random) return in_table;
     int64_t n_rows = in_table->nrows();
     int n_src_pes, myrank;
     MPI_Comm_size(MPI_COMM_WORLD, &n_src_pes);
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
-    std::vector<int64_t> AllSizes(n_src_pes);
-    MPI_Allgather(&n_rows, 1, MPI_INT64_T, AllSizes.data(), 1,
-                  MPI_INT64_T, MPI_COMM_WORLD);
-    int64_t n_rows_tot = std::accumulate(AllSizes.begin(), AllSizes.end(), int64_t(0));
+    int64_t n_rows_tot;
     int64_t shift = 0;
-    for (int i_p = 0; i_p < myrank; i_p++) shift += AllSizes[i_p];
+    if (parallel) {
+        std::vector<int64_t> AllSizes(n_src_pes);
+        MPI_Allgather(&n_rows, 1, MPI_INT64_T, AllSizes.data(), 1, MPI_INT64_T,
+                      MPI_COMM_WORLD);
+        n_rows_tot =
+            std::accumulate(AllSizes.begin(), AllSizes.end(), int64_t(0));
+        for (int i_p = 0; i_p < myrank; i_p++) shift += AllSizes[i_p];
+    } else {
+        n_rows_tot = n_rows;
+    }
+
+    std::vector<size_t> random_order;
+    std::mt19937 g;  // rng
+    if (random) {
+        if (random == 1) {  // seed not provided
+            if (dist_get_rank() == 0) {
+                std::random_device rd;
+                random_seed = rd();
+            }
+            MPI_Bcast(&random_seed, 1, MPI_INT64_T, 0, MPI_COMM_WORLD);
+        }
+        random_order.resize(n_rows_tot);
+        for (int64_t i = 0; i < n_rows_tot; i++) random_order[i] = i;
+        g.seed(random_seed);
+        std::shuffle(random_order.begin(), random_order.end(), g);
+        if (!parallel) return RetrieveTable(in_table, random_order, -1);
+    }
+
     // We use the word "hashes" as they are used all over the shuffle code.
     // However, in that case, it does not mean literally "hash". What it means
     // is the global rank to which the row is going to be sent.
@@ -2305,7 +2332,9 @@ table_info* shuffle_renormalization_group(table_info* in_table, bool parallel, i
         // take data from all ranks and distribute to a subset of ranks
         for (int64_t i_row = 0; i_row < n_rows; i_row++) {
             int64_t global_row = shift + i_row;
-            int64_t rank = dest_ranks[index_rank(n_rows_tot, n_dest_ranks, global_row)];
+            if (random) global_row = random_order[global_row];
+            int64_t rank =
+                dest_ranks[index_rank(n_rows_tot, n_dest_ranks, global_row)];
             hashes[i_row] = rank;
         }
     } else {
@@ -2313,6 +2342,7 @@ table_info* shuffle_renormalization_group(table_info* in_table, bool parallel, i
         n_dest_ranks = n_src_pes;
         for (int64_t i_row = 0; i_row < n_rows; i_row++) {
             int64_t global_row = shift + i_row;
+            if (random) global_row = random_order[global_row];
             int64_t rank = index_rank(n_rows_tot, n_dest_ranks, global_row);
             hashes[i_row] = rank;
         }
@@ -2322,16 +2352,26 @@ table_info* shuffle_renormalization_group(table_info* in_table, bool parallel, i
     comm_info.set_counts(hashes.data());
     table_info* ret_table =
         shuffle_table_kernel(in_table, hashes.data(), comm_info);
+    if (random) {
+        // data arrives ordered by source and for each source in its original
+        // (not random) order, so we need to do a local random shuffle
+        n_rows = ret_table->nrows();
+        random_order.resize(n_rows);
+        for (int64_t i = 0; i < n_rows; i++) random_order[i] = i;
+        std::shuffle(random_order.begin(), random_order.end(), g);
+        table_info* shuffled_table = RetrieveTable(ret_table, random_order, -1);
+        delete_table(ret_table);
+        ret_table = shuffled_table;
+    }
     return ret_table;
 }
 
-table_info* shuffle_renormalization_group_py_entrypt(table_info* in_table,
-                                                     bool parallel,
-                                                     int64_t n_dest_ranks,
-                                                     int* dest_ranks) {
+table_info* shuffle_renormalization_group_py_entrypt(
+    table_info* in_table, int random, int64_t random_seed, bool parallel,
+    int64_t n_dest_ranks, int* dest_ranks) {
     try {
-        return shuffle_renormalization_group(in_table, parallel, n_dest_ranks,
-                                             dest_ranks);
+        return shuffle_renormalization_group(
+            in_table, random, random_seed, parallel, n_dest_ranks, dest_ranks);
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
         return NULL;
@@ -2341,15 +2381,17 @@ table_info* shuffle_renormalization_group_py_entrypt(table_info* in_table,
 /* Apply a renormalization shuffling
    After the operation, all nodes will have a standard size
  */
-table_info* shuffle_renormalization(table_info* in_table, bool parallel) {
-    if (!parallel) return in_table;
-    return shuffle_renormalization_group(in_table, true, 0, nullptr);
+table_info* shuffle_renormalization(table_info* in_table, int random,
+                                    int64_t random_seed, bool parallel) {
+    return shuffle_renormalization_group(in_table, random, random_seed,
+                                         parallel, 0, nullptr);
 }
 
-table_info* shuffle_renormalization_py_entrypt(table_info* in_table,
+table_info* shuffle_renormalization_py_entrypt(table_info* in_table, int random,
+                                               int64_t random_seed,
                                                bool parallel) {
     try {
-        return shuffle_renormalization(in_table, parallel);
+        return shuffle_renormalization(in_table, random, random_seed, parallel);
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
         return NULL;

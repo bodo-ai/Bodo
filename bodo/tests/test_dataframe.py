@@ -17,6 +17,7 @@ import bodo
 from bodo.tests.utils import (
     AnalysisTestPipeline,
     _get_dist_arg,
+    _test_equal,
     check_func,
     count_array_OneDs,
     count_array_REPs,
@@ -643,6 +644,48 @@ def test_rebalance_simple(data, memory_leak_check):
                 pd.testing.assert_frame_equal(data, res)
             else:
                 np.testing.assert_array_equal(data, res)
+
+
+@pytest.mark.parametrize("seed", [None, 151397])
+@pytest.mark.parametrize(
+    "data", [pd.DataFrame({"A": range(100)}), np.arange(100), pd.Series(np.arange(100))]
+)
+def test_random_shuffle(seed, data, memory_leak_check):
+    def impl(data):
+        return bodo.random_shuffle(data, seed=seed)
+
+    try:
+        check_func(impl, (data,), py_output=data, sort_output=False)
+    except AssertionError:
+        # this is correct, shuffled output should not match original data
+        pass
+    else:
+        raise AssertionError
+
+    check_func(impl, (data,), py_output=data, sort_output=True)
+
+    if bodo.get_size() == 2:
+        if bodo.get_rank() == 0:
+            data_chunk = data[:70]
+        else:
+            data_chunk = data[70:]
+        res = bodo.jit(distributed=["data"], all_returns_distributed=True)(impl)(
+            data_chunk
+        )
+        # assert that data has been balanced across ranks
+        assert len(res) == 50
+
+        res = bodo.gatherv(res)
+        if bodo.get_rank() == 0:
+            try:
+                _test_equal(res, data, sort_output=False)
+            except AssertionError:
+                # this is correct, shuffled output should not match original data
+                pass
+            else:
+                raise AssertionError
+
+            _test_equal(res, data, sort_output=True)
 
 
 @pytest.mark.parametrize(

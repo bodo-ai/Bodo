@@ -123,7 +123,8 @@ static void oneD_reshape_shuffle(char* output, char* input,
 static void permutation_int(int64_t* output, int n) __UNUSED__;
 static void permutation_array_index(unsigned char* lhs, int64_t len,
                                     int64_t elem_size, unsigned char* rhs,
-                                    int64_t* p, int64_t p_len) __UNUSED__;
+                                    int64_t n_elems_rhs, int64_t* p,
+                                    int64_t p_len) __UNUSED__;
 static int finalize() __UNUSED__;
 static int hpat_dummy_ptr[64] __UNUSED__;
 
@@ -584,15 +585,22 @@ static void permutation_int(int64_t* output, int n) {
 // example, if |rank| is 1, |num_ranks| is 3, |p_len| is 12, and |p| is the
 // following array [ 9, 8, 6, 4, 11, 7, 2, 3, 5, 0, 1, 10], the function returns
 // [0, 2, 0, 1].
-static std::vector<int64_t> find_dest_ranks(int64_t rank, int64_t num_ranks,
-                                            int64_t* p, int64_t p_len) {
-    auto chunk_size = dist_get_node_portion(p_len, num_ranks, rank);
-    auto begin = dist_get_start(p_len, num_ranks, rank);
-    std::vector<int64_t> dest_ranks(chunk_size);
+static std::vector<int64_t> find_dest_ranks(int64_t rank, int64_t n_elems_local,
+                                            int64_t num_ranks, int64_t* p,
+                                            int64_t p_len) {
+    // find global start offset of my current chunk of data
+    int64_t my_chunk_start = 0;
+    // get current chunk sizes of all ranks
+    std::vector<int64_t> AllSizes(num_ranks);
+    MPI_Allgather(&n_elems_local, 1, MPI_INT64_T, AllSizes.data(), 1,
+                  MPI_INT64_T, MPI_COMM_WORLD);
+    for (int i = 0; i < rank; i++) my_chunk_start += AllSizes[i];
 
-    for (auto i = 0; i < p_len; ++i)
-        if (rank == index_rank(p_len, num_ranks, p[i]))
-            dest_ranks[p[i] - begin] = index_rank(p_len, num_ranks, i);
+    std::vector<int64_t> dest_ranks(n_elems_local);
+    // find destination of every element in my chunk based on the permutation
+    for (int64_t i = 0; i < n_elems_local; i++) {
+        dest_ranks[i] = index_rank(p_len, num_ranks, p[my_chunk_start + i]);
+    }
     return dest_ranks;
 }
 
@@ -604,20 +612,17 @@ static std::vector<int> find_send_counts(const std::vector<int64_t>& dest_ranks,
 }
 
 static std::vector<int> find_disps(const std::vector<int>& counts) {
-    std::vector<int> disps(counts.size());
+    std::vector<int> disps(counts.size(), 0);
     for (size_t i = 1; i < disps.size(); ++i)
         disps[i] = disps[i - 1] + counts[i - 1];
     return disps;
 }
 
-static std::vector<int> find_recv_counts(int64_t rank, int64_t num_ranks,
-                                         int64_t* p, int64_t p_len,
-                                         int64_t elem_size) {
-    auto begin = dist_get_start(p_len, num_ranks, rank);
-    auto end = dist_get_end(p_len, num_ranks, rank);
+static std::vector<int> find_recv_counts(int64_t num_ranks,
+                                         const std::vector<int>& send_counts) {
     std::vector<int> recv_counts(num_ranks);
-    for (auto i = begin; i < end; ++i)
-        ++recv_counts[index_rank(p_len, num_ranks, p[i])];
+    MPI_Alltoall(send_counts.data(), 1, MPI_INT, recv_counts.data(), 1, MPI_INT,
+                 MPI_COMM_WORLD);
     return recv_counts;
 }
 
@@ -665,7 +670,8 @@ static void apply_permutation(unsigned char* v, int64_t elem_size,
 // of elements of size |elem_size| and stores the result in |lhs|.
 static void permutation_array_index(unsigned char* lhs, int64_t len,
                                     int64_t elem_size, unsigned char* rhs,
-                                    int64_t* p, int64_t p_len) {
+                                    int64_t n_elems_rhs, int64_t* p,
+                                    int64_t p_len) {
     if (len != p_len) {
         std::cerr
             << "Array length and permutation index length should match!\n";
@@ -678,10 +684,11 @@ static void permutation_array_index(unsigned char* lhs, int64_t len,
 
     auto num_ranks = dist_get_size();
     auto rank = dist_get_rank();
-    auto dest_ranks = find_dest_ranks(rank, num_ranks, p, p_len);
+    // dest_ranks contains the destination rank for each element i in rhs
+    auto dest_ranks = find_dest_ranks(rank, n_elems_rhs, num_ranks, p, p_len);
     auto send_counts = find_send_counts(dest_ranks, num_ranks, elem_size);
     auto send_disps = find_disps(send_counts);
-    auto recv_counts = find_recv_counts(rank, num_ranks, p, p_len, elem_size);
+    auto recv_counts = find_recv_counts(num_ranks, send_counts);
     auto recv_disps = find_disps(recv_counts);
 
     auto offsets = send_disps;
@@ -706,7 +713,8 @@ static void permutation_array_index(unsigned char* lhs, int64_t len,
     // In order to recover the positions of [c f g h] in the target permutation
     // we first argsort our chunk of permutation array:
     auto begin = p + dist_get_start(p_len, num_ranks, rank);
-    auto p1 = arg_sort(begin, dest_ranks.size());
+    int64_t size_after_shuffle = dist_get_node_portion(p_len, num_ranks, rank);
+    auto p1 = arg_sort(begin, size_after_shuffle);
 
     // The result of the argsort, stored in p1, is [0 2 3 1].  This tells us how
     // the chunk we have received is different from the target permutation we
@@ -714,7 +722,7 @@ static void permutation_array_index(unsigned char* lhs, int64_t len,
     // sort our data chunk based on p1.  One way of sorting array A based on the
     // values of array B, is to argsort array B and apply the permutation to
     // array A.  Therefore, we argsort p1:
-    auto p2 = arg_sort(p1.data(), dest_ranks.size());
+    auto p2 = arg_sort(p1.data(), size_after_shuffle);
 
     // which gives us [0 3 1 2], and apply the resultant permutation to our data
     // chunk to obtain the target permutation.

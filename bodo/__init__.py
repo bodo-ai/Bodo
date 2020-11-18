@@ -52,6 +52,7 @@ from bodo.libs.distributed_api import (
     get_size,
     parallel_print,
     rebalance,
+    random_shuffle,
     scatterv,
 )
 import bodo.config

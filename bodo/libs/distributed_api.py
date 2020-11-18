@@ -53,7 +53,7 @@ from bodo.libs.str_arr_ext import (
 )
 from bodo.libs.struct_arr_ext import StructArrayType
 from bodo.libs.tuple_arr_ext import TupleArrayType
-from bodo.utils.typing import BodoError, is_overload_none
+from bodo.utils.typing import BodoError, is_overload_false, is_overload_none
 from bodo.utils.utils import (
     CTypeEnum,
     debug_prints,
@@ -925,11 +925,20 @@ def gatherv(data, allgather=False, warn_if_rep=True, root=MPI_ROOT):
 
 
 @numba.generated_jit(nopython=True)
-def rebalance(data, dests=None, parallel=False):
+def rebalance(data, dests=None, random=False, random_seed=None, parallel=False):
+    func_text = (
+        "def impl(data, dests=None, random=False, random_seed=None, parallel=False):\n"
+    )
+    func_text += "    if random:\n"
+    func_text += "        if random_seed is None:\n"
+    func_text += "            random = 1\n"
+    func_text += "        else:\n"
+    func_text += "            random = 2\n"
+    func_text += "    if random_seed is None:\n"
+    func_text += "        random_seed = -1\n"
     if isinstance(data, bodo.hiframes.pd_dataframe_ext.DataFrameType):
         df = data
         n_cols = len(df.columns)
-        func_text = "def impl(data, dests=None, parallel=False):\n"
         for i in range(n_cols):
             func_text += "    data_{0} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(data, {0})\n".format(
                 i
@@ -941,11 +950,9 @@ def rebalance(data, dests=None, parallel=False):
         )
         func_text += "    table_total = arr_info_list_to_table(info_list_total)\n"
         func_text += "    if dests is None:\n"
-        func_text += (
-            "        out_table = shuffle_renormalization(table_total, parallel)\n"
-        )
+        func_text += "        out_table = shuffle_renormalization(table_total, random, random_seed, parallel)\n"
         func_text += "    else:\n"
-        func_text += "        out_table = shuffle_renormalization_group(table_total, parallel, len(dests), np.array(dests, dtype=np.int32).ctypes)\n"
+        func_text += "        out_table = shuffle_renormalization_group(table_total, random, random_seed, parallel, len(dests), np.array(dests, dtype=np.int32).ctypes)\n"
         for i_col in range(n_cols):
             func_text += "    out_arr_{0} = info_to_array(info_from_table(out_table, {0}), data_{0})\n".format(
                 i_col
@@ -963,17 +970,14 @@ def rebalance(data, dests=None, parallel=False):
             data_args, index, col_var
         )
     elif isinstance(data, bodo.hiframes.pd_series_ext.SeriesType):
-        func_text = "def impl(data, dests=None, parallel=False):\n"
         func_text += "    data_0 = bodo.hiframes.pd_series_ext.get_series_data(data)\n"
         func_text += "    ind_arr = bodo.utils.conversion.index_to_array(bodo.hiframes.pd_series_ext.get_series_index(data))\n"
         func_text += "    name = bodo.hiframes.pd_series_ext.get_series_name(data)\n"
         func_text += "    table_total = arr_info_list_to_table([array_to_info(data_0), array_to_info(ind_arr)])\n"
         func_text += "    if dests is None:\n"
-        func_text += (
-            "        out_table = shuffle_renormalization(table_total, parallel)\n"
-        )
+        func_text += "        out_table = shuffle_renormalization(table_total, random, random_seed, parallel)\n"
         func_text += "    else:\n"
-        func_text += "        out_table = shuffle_renormalization_group(table_total, parallel, len(dests), np.array(dests, dtype=np.int32).ctypes)\n"
+        func_text += "        out_table = shuffle_renormalization_group(table_total, random, random_seed, parallel, len(dests), np.array(dests, dtype=np.int32).ctypes)\n"
         func_text += (
             "    out_arr_0 = info_to_array(info_from_table(out_table, 0), data_0)\n"
         )
@@ -986,7 +990,7 @@ def rebalance(data, dests=None, parallel=False):
             index
         )
     elif isinstance(data, types.Array):
-        func_text = "def impl(data, dests=None, parallel=False):\n"
+        assert is_overload_false(random), "Call random_shuffle instead of rebalance"
         func_text += "    if not parallel:\n"
         func_text += "        return data\n"
         func_text += "    dim0_global_size = bodo.libs.distributed_api.dist_reduce(data.shape[0], np.int32(bodo.libs.distributed_api.Reduce_Type.Sum.value))\n"
@@ -1014,6 +1018,43 @@ def rebalance(data, dests=None, parallel=False):
             "info_from_table": bodo.libs.array.info_from_table,
             "info_to_array": bodo.libs.array.info_to_array,
             "delete_table": bodo.libs.array.delete_table,
+        },
+        loc_vars,
+    )
+    impl = loc_vars["impl"]
+    return impl
+
+
+@numba.generated_jit(nopython=True)
+def random_shuffle(data, seed=None, dests=None, parallel=False):
+    func_text = "def impl(data, seed=None, dests=None, parallel=False):\n"
+    if isinstance(data, types.Array):
+        if not is_overload_none(dests):
+            raise BodoError("not supported")
+        func_text += "    if seed is None:\n"
+        func_text += "        seed = bodo.libs.distributed_api.bcast_scalar(np.random.randint(0, 2**31))\n"
+        func_text += "    np.random.seed(seed)\n"
+        func_text += "    if not parallel:\n"
+        func_text += "        data = data.copy()\n"
+        func_text += "        np.random.shuffle(data)\n"
+        func_text += "        return data\n"
+        func_text += "    else:\n"
+        func_text += "        dim0_global_size = bodo.libs.distributed_api.dist_reduce(data.shape[0], np.int32(bodo.libs.distributed_api.Reduce_Type.Sum.value))\n"
+        func_text += "        permutation = np.arange(dim0_global_size)\n"
+        func_text += "        np.random.shuffle(permutation)\n"
+        func_text += "        dim0_local_size = bodo.libs.distributed_api.get_node_portion(dim0_global_size, bodo.get_size(), bodo.get_rank())\n"
+        func_text += "        output = np.empty((dim0_local_size,) + tuple(data.shape[1:]), dtype=data.dtype)\n"
+        func_text += "        dtype_size = bodo.io.np_io.get_dtype_size(data.dtype)\n"
+        func_text += "        bodo.libs.distributed_api.dist_permutation_array_index(output, dim0_global_size, dtype_size, data, permutation, len(permutation))\n"
+        func_text += "        return output\n"
+    else:
+        func_text += "    return bodo.libs.distributed_api.rebalance(data, dests=dests, random=True, random_seed=seed, parallel=parallel)\n"
+    loc_vars = {}
+    exec(
+        func_text,
+        {
+            "np": np,
+            "bodo": bodo,
         },
         loc_vars,
     )
@@ -2501,7 +2542,13 @@ def dist_permutation_int(lhs, n):  # pragma: no cover
 permutation_array_index = types.ExternalFunction(
     "permutation_array_index",
     types.void(
-        types.voidptr, types.intp, types.intp, types.voidptr, types.voidptr, types.intp
+        types.voidptr,
+        types.intp,
+        types.intp,
+        types.voidptr,
+        types.int64,
+        types.voidptr,
+        types.intp,
     ),
 )
 
@@ -2514,7 +2561,7 @@ def dist_permutation_array_index(
     lower_dims_size = get_tuple_prod(c_rhs.shape[1:])
     elem_size = dtype_size * lower_dims_size
     permutation_array_index(
-        lhs.ctypes, lhs_len, elem_size, c_rhs.ctypes, p.ctypes, p_len
+        lhs.ctypes, lhs_len, elem_size, c_rhs.ctypes, c_rhs.shape[0], p.ctypes, p_len
     )
 
 

@@ -1461,7 +1461,7 @@ def sample_table(typingctx, table_t, n_keys_t, frac_t, replace_t, parallel_t):
 
 
 @intrinsic
-def shuffle_renormalization(typingctx, table_t, is_parallel_t):
+def shuffle_renormalization(typingctx, table_t, random_t, random_seed_t, is_parallel_t):
     """
     Interface to the rebalancing of the table
     """
@@ -1470,7 +1470,12 @@ def shuffle_renormalization(typingctx, table_t, is_parallel_t):
     def codegen(context, builder, sig, args):
         fnty = lir.FunctionType(
             lir.IntType(8).as_pointer(),
-            [lir.IntType(8).as_pointer(), lir.IntType(1)],
+            [
+                lir.IntType(8).as_pointer(),
+                lir.IntType(32),
+                lir.IntType(64),
+                lir.IntType(1),
+            ],
         )
         fn_tp = builder.module.get_or_insert_function(
             fnty, name="shuffle_renormalization"
@@ -1482,14 +1487,14 @@ def shuffle_renormalization(typingctx, table_t, is_parallel_t):
         return ret
 
     return (
-        table_type(table_t, types.boolean),
+        table_type(table_t, types.int32, types.int64, types.boolean),
         codegen,
     )
 
 
 @intrinsic
 def shuffle_renormalization_group(
-    typingctx, table_t, is_parallel_t, num_ranks_t, ranks_t
+    typingctx, table_t, random_t, random_seed_t, is_parallel_t, num_ranks_t, ranks_t
 ):
     """
     Interface to the rebalancing of the table
@@ -1501,6 +1506,8 @@ def shuffle_renormalization_group(
             lir.IntType(8).as_pointer(),
             [
                 lir.IntType(8).as_pointer(),
+                lir.IntType(32),
+                lir.IntType(64),
                 lir.IntType(1),
                 lir.IntType(64),
                 lir.IntType(8).as_pointer(),
@@ -1516,7 +1523,9 @@ def shuffle_renormalization_group(
         return ret
 
     return (
-        table_type(table_t, types.boolean, types.int64, types.voidptr),
+        table_type(
+            table_t, types.int32, types.int64, types.boolean, types.int64, types.voidptr
+        ),
         codegen,
     )
 

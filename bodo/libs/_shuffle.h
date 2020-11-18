@@ -98,7 +98,8 @@ table_info* broadcast_table(table_info* ref_table, table_info* in_table,
  *
  * @param in_table     : the input table.
  * @param n_cols       : the number of columns of the keys.
- *     If -1 then all columns are used. Otherwise, the first n_cols_i columns are gather.
+ *     If -1 then all columns are used. Otherwise, the first n_cols_i columns
+ * are gather.
  * @param all_gather   : Whether to do all_gather or not.
  * @return the table obtained by concatenating the tables
  *         on the node 0.
@@ -142,12 +143,17 @@ bool need_reshuffling(table_info* in_table, double crit_fraction);
    After the operation, all nodes will have a standard size.
 
    @param in_table : the input partitioned table
-   @param parallel : whether data is distributed or not. This is a nop if parallel=false
+   @param random : if random > 0 also do a random shuffle of the data
+   @param random_seed : seed to use for random shuffling if random=2
+   @param parallel : whether data is distributed or not. This is a nop if
+   parallel=false
    @return the reshuffled table
  */
-table_info* shuffle_renormalization(table_info* in_table, bool parallel);
+table_info* shuffle_renormalization(table_info* in_table, int random,
+                                    int64_t random_seed, bool parallel);
 
-table_info* shuffle_renormalization_py_entrypt(table_info* in_table,
+table_info* shuffle_renormalization_py_entrypt(table_info* in_table, int random,
+                                               int64_t random_seed,
                                                bool parallel);
 
 /* Apply a renormalization shuffling getting data from all the ranks
@@ -156,17 +162,22 @@ table_info* shuffle_renormalization_py_entrypt(table_info* in_table,
    same or similar data size.
 
    @param in_table : the input partitioned table
-   @param parallel : whether data is distributed or not. This is a nop if parallel=false
+   @param random : if random > 0 also do a random shuffle of the data
+   @param random_seed : seed to use for random shuffling if random=2
+   @param parallel : whether data is distributed or not. This is a nop if
+   parallel=false
    @param n_dest_ranks: number of destination ranks
    @param dest_ranks: array of destination ranks
    @return the reshuffled table
  */
-table_info* shuffle_renormalization_group(table_info* in_table, bool parallel, int64_t n_dest_ranks, int* dest_ranks);
+table_info* shuffle_renormalization_group(table_info* in_table, int random,
+                                          int64_t random_seed, bool parallel,
+                                          int64_t n_dest_ranks,
+                                          int* dest_ranks);
 
-table_info* shuffle_renormalization_group_py_entrypt(table_info* in_table,
-                                                     bool parallel,
-                                                     int64_t n_dest_ranks,
-                                                     int* dest_ranks);
+table_info* shuffle_renormalization_group_py_entrypt(
+    table_info* in_table, int random, int64_t random_seed, bool parallel,
+    int64_t n_dest_ranks, int* dest_ranks);
 
 /* This function is used for the reverse shuffling of numpy data.
  *

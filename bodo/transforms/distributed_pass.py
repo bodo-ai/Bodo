@@ -1073,6 +1073,14 @@ class DistributedPass:
             else:
                 warnings.warn("Invoking rebalance on a replicated array has no effect")
 
+        if func_name == "random_shuffle" and func_mod in {
+            "bodo.libs.distributed_api",
+            "bodo",
+        }:
+            if self._is_1D_or_1D_Var_arr(rhs.args[0].name):
+                self._set_last_arg_to_true(assign.value)
+                return [assign]
+
         if fdef == ("sample_table_operation", "bodo.libs.array_kernels") and (
             self._is_1D_tup(rhs.args[0].name) or self._is_1D_Var_tup(rhs.args[0].name)
         ):
