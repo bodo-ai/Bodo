@@ -662,6 +662,217 @@ def overload_f1_score(y_true, y_pred, average="binary", _is_data_distributed=Fal
             return _f1_score_impl
 
 
+def mse_dist_helper(y_true, y_pred, sample_weight, multioutput, squared):
+    """
+    Helper for distributed mse calculation.
+    """
+
+    # This is basically `np.average((y_true-y_pred)**2, axis=0, weights=sample_weight)`
+    # except we get some type-checking like length matching for free from sklearn
+    local_squared_raw_values_mse = sklearn.metrics.mean_squared_error(
+        y_true,
+        y_pred,
+        sample_weight=sample_weight,
+        multioutput="raw_values",
+        squared=True,
+    )
+
+    comm = MPI.COMM_WORLD
+    num_pes = comm.Get_size()
+
+    # Calculate sum of sample weights on each rank
+    if sample_weight is not None:
+        local_weights_sum = np.sum(sample_weight)
+    else:
+        local_weights_sum = np.float64(y_true.shape[0])
+
+    # Do an all-gather of all the sample weight sums
+    rank_weights = np.zeros(num_pes, dtype=type(local_weights_sum))
+    comm.Allgather(local_weights_sum, rank_weights)
+
+    # Do an all-gather of the local mse values
+    local_squared_raw_values_mse_by_rank = np.zeros(
+        (num_pes, *local_squared_raw_values_mse.shape),
+        dtype=local_squared_raw_values_mse.dtype,
+    )
+    comm.Allgather(local_squared_raw_values_mse, local_squared_raw_values_mse_by_rank)
+
+    # Calculate global mse by doing a weighted average using rank_weights
+    global_squared_raw_values_mse = np.average(
+        local_squared_raw_values_mse_by_rank, weights=rank_weights, axis=0
+    )
+
+    # Element-wise sqrt if squared=False
+    if not squared:
+        global_squared_raw_values_mse = np.sqrt(global_squared_raw_values_mse)
+
+    if isinstance(multioutput, str) and multioutput == "raw_values":
+        return global_squared_raw_values_mse
+    elif isinstance(multioutput, str) and multioutput == "uniform_average":
+        return np.average(global_squared_raw_values_mse)
+    else:  # multioutput must be weights
+        return np.average(global_squared_raw_values_mse, weights=multioutput)
+
+
+@overload(sklearn.metrics.mean_squared_error, no_unliteral=True)
+def overload_mean_squared_error(
+    y_true,
+    y_pred,
+    sample_weight=None,
+    multioutput="uniform_average",
+    squared=True,
+    _is_data_distributed=False,
+):
+    """
+    Provide implementations for the mean_squared_error computation.
+    If data is not distributed, we simply call sklearn on each rank.
+    Else we compute in a distributed way.
+    Provide separate impl for case where sample_weight is provided
+    vs not provided for type unification purposes.
+    """
+
+    if (
+        is_overload_constant_str(multioutput)
+        and get_overload_const_str(multioutput) == "raw_values"
+    ):
+        # this case returns an array of floats (one for each dimension)
+
+        if is_overload_none(sample_weight):
+
+            def _mse_impl(
+                y_true,
+                y_pred,
+                sample_weight=None,
+                multioutput="uniform_average",
+                squared=True,
+                _is_data_distributed=False,
+            ):  # pragma: no cover
+                y_true = bodo.utils.conversion.coerce_to_array(y_true)
+                y_pred = bodo.utils.conversion.coerce_to_array(y_pred)
+                with numba.objmode(err="float64[:]"):
+                    if _is_data_distributed:
+                        err = mse_dist_helper(
+                            y_true,
+                            y_pred,
+                            sample_weight=sample_weight,
+                            multioutput=multioutput,
+                            squared=squared,
+                        )
+                    else:
+                        err = sklearn.metrics.mean_squared_error(
+                            y_true,
+                            y_pred,
+                            sample_weight=sample_weight,
+                            multioutput=multioutput,
+                            squared=squared,
+                        )
+                return err
+
+            return _mse_impl
+        else:
+
+            def _mse_impl(
+                y_true,
+                y_pred,
+                sample_weight=None,
+                multioutput="uniform_average",
+                squared=True,
+                _is_data_distributed=False,
+            ):  # pragma: no cover
+                y_true = bodo.utils.conversion.coerce_to_array(y_true)
+                y_pred = bodo.utils.conversion.coerce_to_array(y_pred)
+                sample_weight = bodo.utils.conversion.coerce_to_array(sample_weight)
+                with numba.objmode(err="float64[:]"):
+                    if _is_data_distributed:
+                        err = mse_dist_helper(
+                            y_true,
+                            y_pred,
+                            sample_weight=sample_weight,
+                            multioutput=multioutput,
+                            squared=squared,
+                        )
+                    else:
+                        err = sklearn.metrics.mean_squared_error(
+                            y_true,
+                            y_pred,
+                            sample_weight=sample_weight,
+                            multioutput=multioutput,
+                            squared=squared,
+                        )
+                return err
+
+            return _mse_impl
+
+    else:
+        # this case returns a single float value
+
+        if is_overload_none(sample_weight):
+
+            def _mse_impl(
+                y_true,
+                y_pred,
+                sample_weight=None,
+                multioutput="uniform_average",
+                squared=True,
+                _is_data_distributed=False,
+            ):  # pragma: no cover
+                y_true = bodo.utils.conversion.coerce_to_array(y_true)
+                y_pred = bodo.utils.conversion.coerce_to_array(y_pred)
+                with numba.objmode(err="float64"):
+                    if _is_data_distributed:
+                        err = mse_dist_helper(
+                            y_true,
+                            y_pred,
+                            sample_weight=sample_weight,
+                            multioutput=multioutput,
+                            squared=squared,
+                        )
+                    else:
+                        err = sklearn.metrics.mean_squared_error(
+                            y_true,
+                            y_pred,
+                            sample_weight=sample_weight,
+                            multioutput=multioutput,
+                            squared=squared,
+                        )
+                return err
+
+            return _mse_impl
+        else:
+
+            def _mse_impl(
+                y_true,
+                y_pred,
+                sample_weight=None,
+                multioutput="uniform_average",
+                squared=True,
+                _is_data_distributed=False,
+            ):  # pragma: no cover
+                y_true = bodo.utils.conversion.coerce_to_array(y_true)
+                y_pred = bodo.utils.conversion.coerce_to_array(y_pred)
+                sample_weight = bodo.utils.conversion.coerce_to_array(sample_weight)
+                with numba.objmode(err="float64"):
+                    if _is_data_distributed:
+                        err = mse_dist_helper(
+                            y_true,
+                            y_pred,
+                            sample_weight=sample_weight,
+                            multioutput=multioutput,
+                            squared=squared,
+                        )
+                    else:
+                        err = sklearn.metrics.mean_squared_error(
+                            y_true,
+                            y_pred,
+                            sample_weight=sample_weight,
+                            multioutput=multioutput,
+                            squared=squared,
+                        )
+                return err
+
+            return _mse_impl
+
+
 def accuracy_score_dist_helper(y_true, y_pred, normalize, sample_weight):
     """
     Helper for distributed accuracy_score computation.

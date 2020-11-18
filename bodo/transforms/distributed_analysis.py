@@ -714,51 +714,20 @@ class DistributedAnalysis:
                     )
 
             if func_name == "accuracy_score":
-                # sample_weight is an optional kw arg, so check if it is provided.
-                # if it is provided and it is not none (because if it is none it's
-                # as good as not being provided), then get the "name"
-                sample_weight_arg_name = None
-                if "sample_weight" in kws and (
-                    self.typemap[kws["sample_weight"].name] != types.none
-                ):
-                    sample_weight_arg_name = kws["sample_weight"].name
-
-                # check if all 3 (y_true, y_pred, sample_weight) are distributable types
-                dist_y_true = is_distributable_typ(self.typemap[rhs.args[0].name])
-                dist_y_pred = is_distributable_typ(self.typemap[rhs.args[1].name])
-                # if sample_weight is not provided, we can act as if it is distributable
-                dist_sample_weight = (
-                    is_distributable_typ(self.typemap[sample_weight_arg_name])
-                    if sample_weight_arg_name
-                    else True
+                self._analyze_sklearn_score_err_ytrue_ypred_optional_sample_weight(
+                    lhs, func_name, rhs, kws, array_dists
                 )
 
-                # if any of the 3 are not distributable, set top_dist to REP
-                top_dist = Distribution.OneD
-                if not (dist_y_true and dist_y_pred and dist_sample_weight):
-                    top_dist = Distribution.REP
+            return
 
-                # Match distribution of y_true and y_pred, with top dist as
-                # computed above, i.e. set to REP if any of the types
-                # are not distributable
-                self._meet_array_dists(
-                    rhs.args[0].name, rhs.args[1].name, array_dists, top_dist=top_dist
+        if func_mod == "sklearn.metrics._regression":
+
+            if func_name == "mean_squared_error":
+
+                self._set_REP(lhs, array_dists, "output of {} is REP".format(func_name))
+                self._analyze_sklearn_score_err_ytrue_ypred_optional_sample_weight(
+                    lhs, func_name, rhs, kws, array_dists
                 )
-                if sample_weight_arg_name:
-                    # Match distribution of y_true and sample_weight
-                    self._meet_array_dists(
-                        rhs.args[0].name,
-                        sample_weight_arg_name,
-                        array_dists,
-                        top_dist=top_dist,
-                    )
-                    # Match distribution of y_pred and sample_weight
-                    self._meet_array_dists(
-                        rhs.args[1].name,
-                        sample_weight_arg_name,
-                        array_dists,
-                        top_dist=top_dist,
-                    )
 
             return
 
@@ -1482,6 +1451,62 @@ class DistributedAnalysis:
             # match input (X) and output (X_new) distributions
             self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
 
+        return
+
+    def _analyze_sklearn_score_err_ytrue_ypred_optional_sample_weight(
+        self, lhs, func_name, rhs, kws, array_dists
+    ):
+        """
+        Analyze for sklearn functions like accuracy_score and mean_squared_error.
+        In these we have a y_true, y_pred and optionally a sample_weight.
+        Distribution of all 3 should match.
+        """
+
+        # sample_weight is an optional kw arg, so check if it is provided.
+        # if it is provided and it is not none (because if it is none it's
+        # as good as not being provided), then get the "name"
+        sample_weight_arg_name = None
+        if "sample_weight" in kws and (
+            self.typemap[kws["sample_weight"].name] != types.none
+        ):
+            sample_weight_arg_name = kws["sample_weight"].name
+
+        # check if all 3 (y_true, y_pred, sample_weight) are distributable types
+        dist_y_true = is_distributable_typ(self.typemap[rhs.args[0].name])
+        dist_y_pred = is_distributable_typ(self.typemap[rhs.args[1].name])
+        # if sample_weight is not provided, we can act as if it is distributable
+        dist_sample_weight = (
+            is_distributable_typ(self.typemap[sample_weight_arg_name])
+            if sample_weight_arg_name
+            else True
+        )
+
+        # if any of the 3 are not distributable, set top_dist to REP
+        top_dist = Distribution.OneD
+        if not (dist_y_true and dist_y_pred and dist_sample_weight):
+            top_dist = Distribution.REP
+
+        # Match distribution of y_true and y_pred, with top dist as
+        # computed above, i.e. set to REP if any of the types
+        # are not distributable
+        self._meet_array_dists(
+            rhs.args[0].name, rhs.args[1].name, array_dists, top_dist=top_dist
+        )
+        if sample_weight_arg_name:
+            # Match distribution of y_true and sample_weight
+            self._meet_array_dists(
+                rhs.args[0].name,
+                sample_weight_arg_name,
+                array_dists,
+                top_dist=top_dist,
+            )
+            # Match distribution of y_pred and sample_weight
+            self._meet_array_dists(
+                rhs.args[1].name,
+                sample_weight_arg_name,
+                array_dists,
+                top_dist=top_dist,
+            )
         return
 
     def _analyze_call_np(self, lhs, func_name, args, kws, array_dists):

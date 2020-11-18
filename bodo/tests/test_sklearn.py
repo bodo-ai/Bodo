@@ -21,6 +21,7 @@ from sklearn.linear_model import (
 from sklearn.metrics import (
     accuracy_score,
     f1_score,
+    mean_squared_error,
     precision_score,
     r2_score,
     recall_score,
@@ -256,6 +257,26 @@ def gen_random(n, true_chance, return_arrays=True):
         return [y_true, y_pred]
 
 
+def gen_random_k_dims(n, k):
+    """
+    Generate a random array of shape (n, k).
+    Each element is in [0,1).
+    If k == 1, then it returns an array of shape (n,)
+    """
+    random.seed(5)
+    if k > 1:
+        y_true = np.random.rand(n, k)
+        y_pred = np.random.rand(n, k)
+    elif k == 1:
+        y_true = np.random.random_sample(size=n)
+        y_pred = np.random.random_sample(size=n)
+    else:
+        raise RuntimeError("k must be >=1")
+
+    sample_weight = np.random.random_sample(size=n)
+    return [y_true, y_pred, sample_weight]
+
+
 def gen_random_with_sample_weight(n, true_chance, return_arrays=True):
     """
     Wrapper around the gen_random function. This one also has a third
@@ -344,6 +365,44 @@ def test_accuracy_score(data, normalize):
         tuple(data),
         is_out_distributed=False,
     )
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        gen_random_k_dims(20, 1),
+        gen_random_k_dims(20, 3),
+    ],
+)
+@pytest.mark.parametrize("squared", [True, False])
+@pytest.mark.parametrize("multioutput", ["uniform_average", "raw_values", "array"])
+def test_mse(data, squared, multioutput, memory_leak_check):
+    """
+    Tests for the sklearn.metrics.mean_squared_error implementation in Bodo.
+    """
+
+    if multioutput == "array":
+        if len(data[0].shape) > 1:
+            multioutput = np.random.random_sample(size=data[0].shape[1])
+        else:
+            return
+
+    def test_mse_0(y_true, y_pred):
+        return mean_squared_error(
+            y_true, y_pred, squared=squared, multioutput=multioutput
+        )
+
+    def test_mse_1(y_true, y_pred, sample_weight_):
+        return mean_squared_error(
+            y_true,
+            y_pred,
+            sample_weight=sample_weight_,
+            squared=squared,
+            multioutput=multioutput,
+        )
+
+    check_func(test_mse_0, tuple(data[0:2]), is_out_distributed=False)
+    check_func(test_mse_1, tuple(data), is_out_distributed=False)
 
 
 @pytest.mark.skip(reason="Run manually on multinode cluster.")

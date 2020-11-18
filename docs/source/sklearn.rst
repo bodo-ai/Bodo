@@ -150,3 +150,7 @@ Classification metrics
 * :func:`sklearn.metrics.precision_score`
 * :func:`sklearn.metrics.recall_score`
 
+Regression metrics
+~~~~~~~~~~~~~~~~~~
+
+* :func:`sklearn.metrics.mean_squared_error`
