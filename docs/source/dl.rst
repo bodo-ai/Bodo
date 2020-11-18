@@ -43,7 +43,7 @@ training.
     to these workers.
 
 To ensure that Bodo automatically handles all of the above call
-``bodo.dl.start()`` before starting training and ``bodo.dl.prepare_data(X, y)``
+``bodo.dl.start()`` before starting training and ``bodo.dl.prepare_data(X)``
 to distribute the data.
 
 API
@@ -55,7 +55,7 @@ API
     Note that this must be called before starting deep learning. It initializes
     Horovod and pins workers to GPUs.
 
-* **bodo.dl.prepare_data(X, y)**
+* **bodo.dl.prepare_data(X)**
 
   * Redistributes the given data to DL workers.
 
@@ -92,7 +92,8 @@ application:
         X = ... # distributed NumPy array generated with Bodo
         y = ... # distributed NumPy array generated with Bodo
         bodo.dl.start("torch")  # Initialize Horovod with PyTorch
-        X, y = bodo.dl.prepare_data(X, y)
+        X = bodo.dl.prepare_data(X)
+        y = bodo.dl.prepare_data(y)
         with bodo.objmode:
             deep_learning()  # DL user code
         bodo.dl.end()

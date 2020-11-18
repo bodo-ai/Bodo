@@ -208,16 +208,14 @@ def _prepare_data_get_gpu_ranks():  # pragma: no cover
 
 
 @numba.njit
-def prepare_data(X_train, y_train):  # pragma: no cover
+def prepare_data(data):  # pragma: no cover
     """This function is called by the user to redistribute the data to
     GPU ranks and initialize horovod"""
     with numba.objmode(gpu_ranks="int32[:]"):
         gpu_ranks = _prepare_data_get_gpu_ranks()
 
     if len(gpu_ranks) > 0:
-        X_train = bodo.rebalance(X_train, dests=list(gpu_ranks), parallel=True)
-        y_train = bodo.rebalance(y_train, dests=list(gpu_ranks), parallel=True)
+        data = bodo.rebalance(data, dests=list(gpu_ranks), parallel=True)
     else:
-        X_train = bodo.rebalance(X_train, parallel=True)
-        y_train = bodo.rebalance(y_train, parallel=True)
-    return X_train, y_train
+        data = bodo.rebalance(data, parallel=True)
+    return data

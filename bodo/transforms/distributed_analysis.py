@@ -763,26 +763,10 @@ class DistributedAnalysis:
             return
 
         if fdef == ("prepare_data", "bodo.dl"):
-            arg0 = rhs.args[0].name
-            arg1 = rhs.args[1].name
-            if lhs not in array_dists:
-                self._set_var_dist(lhs, array_dists, Distribution.OneD, True)
-            # Note that for arg0 and arg1 bodo.rebalance() called inside
-            # bodo.dl.prepare_data() will throw error if the type is not
-            # distributable, so there is no need to set the initial distribution
-            # of arg0 and arg1 here
-
-            min_dist = self._min_dist(array_dists[lhs][0], array_dists[lhs][1])
-            min_dist = self._min_dist(min_dist, array_dists[arg0])
-            min_dist = self._min_dist(min_dist, array_dists[arg1])
-            self._set_var_dist(lhs, array_dists, min_dist)
-            array_dists[arg0] = min_dist
-            array_dists[arg1] = min_dist
-            if min_dist == Distribution.REP:
+            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            if array_dists[rhs.args[0].name] == Distribution.REP:
                 # TODO: more informative error and suggestion
-                raise BodoError(
-                    f"Arguments of bodo.dl.prepare_data are not distributed"
-                )
+                raise BodoError(f"Argument of bodo.dl.prepare_data is not distributed")
             return
 
         if is_alloc_callname(func_name, func_mod):
