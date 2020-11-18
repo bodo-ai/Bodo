@@ -1281,6 +1281,12 @@ def merge_overload(
     indicator=False,
     validate=None,
 ):
+    unsupported_args = dict(
+        sort=sort, copy=copy, indicator=indicator, validate=validate
+    )
+    arg_defaults = dict(sort=False, copy=True, indicator=False, validate=None)
+    check_unsupported_args("DataFrame.merge", unsupported_args, arg_defaults)
+
     validate_merge_spec(
         left,
         right,
@@ -1643,6 +1649,11 @@ def validate_keys(keys, columns):
 
 @overload_method(DataFrameType, "join", inline="always", no_unliteral=True)
 def join_overload(left, other, on=None, how="left", lsuffix="", rsuffix="", sort=False):
+
+    unsupported_args = dict(lsuffix=lsuffix, rsuffix=rsuffix)
+    arg_defaults = dict(lsuffix="", rsuffix="")
+    check_unsupported_args("DataFrame.join", unsupported_args, arg_defaults)
+
     validate_join_spec(left, other, on, how, lsuffix, rsuffix, sort)
 
     how = get_overload_const_str(how)
@@ -2233,8 +2244,14 @@ def sort_values_overload(
     inplace=False,
     kind="quicksort",
     na_position="last",
+    ignore_index=False,
+    key=None,
     _bodo_transformed=False,
 ):
+    unsupported_args = dict(ignore_index=ignore_index, key=key)
+    arg_defaults = dict(ignore_index=False, key=None)
+    check_unsupported_args("DataFrame.sort_values", unsupported_args, arg_defaults)
+
     # df type can change if inplace is set (e.g. RangeIndex to Int64Index)
     handle_inplace_df_type_change(inplace, _bodo_transformed, "sort_values")
 
@@ -2248,6 +2265,8 @@ def sort_values_overload(
         inplace=False,
         kind="quicksort",
         na_position="last",
+        ignore_index=False,
+        key=None,
         _bodo_transformed=False,
     ):  # pragma: no cover
 
@@ -2373,8 +2392,28 @@ def sort_index_overload(
     kind="quicksort",
     na_position="last",
     sort_remaining=True,
+    ignore_index=False,
+    key=None,
     by=None,
 ):
+    unsupported_args = dict(
+        axis=axis,
+        level=level,
+        kind=kind,
+        sort_remaining=sort_remaining,
+        ignore_index=ignore_index,
+        key=key,
+    )
+    arg_defaults = dict(
+        axis=0,
+        level=None,
+        kind="quicksort",
+        sort_remaining=True,
+        ignore_index=False,
+        key=None,
+    )
+    check_unsupported_args("DataFrame.sort_index", unsupported_args, arg_defaults)
+
     def _impl(
         df,
         axis=0,
@@ -2384,6 +2423,8 @@ def sort_index_overload(
         kind="quicksort",
         na_position="last",
         sort_remaining=True,
+        ignore_index=False,
+        key=None,
         by=None,
     ):  # pragma: no cover
 
@@ -3660,6 +3701,7 @@ dataframe_unsupported = {
     "stack",
     "where",
     "transpose",
+    "T",
     "rtruediv",
     "cummin",
     "swaplevel",

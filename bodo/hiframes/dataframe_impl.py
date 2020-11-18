@@ -865,6 +865,10 @@ def overload_dataframe_take(df, indices, axis=0, convert=None, is_copy=True):
 @overload_method(DataFrameType, "shift", inline="always", no_unliteral=True)
 def overload_dataframe_shift(df, periods=1, freq=None, axis=0, fill_value=None):
     # TODO: handle fill_value, freq, int NA
+    unsupported_args = dict(freq=freq, axis=axis, fill_value=fill_value)
+    arg_defaults = dict(freq=None, axis=0, fill_value=None)
+    check_unsupported_args("DataFrame.shift", unsupported_args, arg_defaults)
+
     data_args = ", ".join(
         "bodo.hiframes.rolling.shift(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {}), periods, False)".format(
             i
