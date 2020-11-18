@@ -210,9 +210,8 @@ def box_dataframe(typ, val, c):
         )
 
         with builder.if_then(box_array):
-            # df[c] = boxed_arr
+            # df[i] = boxed_arr
             c_ind_obj = pyapi.long_from_longlong(context.get_constant(types.int64, i))
-            col_name_obj = c.pyapi.object_getitem(columns_obj, c_ind_obj)
 
             # NOTE: adding extra incref() since boxing could be called twice on
             # a dataframe and not having incref can cause crashes.
@@ -221,10 +220,9 @@ def box_dataframe(typ, val, c):
             context.nrt.incref(builder, arr_typ, arr)
             arr_obj = pyapi.from_native_value(arr_typ, arr, c.env_manager)
             df_obj = builder.load(res)
-            pyapi.object_setitem(df_obj, col_name_obj, arr_obj)
+            pyapi.object_setitem(df_obj, c_ind_obj, arr_obj)
             pyapi.decref(arr_obj)
             pyapi.decref(c_ind_obj)
-            pyapi.decref(col_name_obj)
 
     # set index if doesn't have parent
     with builder.if_then(builder.not_(has_parent)):
@@ -236,15 +234,16 @@ def box_dataframe(typ, val, c):
         df_obj = builder.load(res)
         pyapi.object_setattr_string(df_obj, "index", arr_obj)
         pyapi.decref(arr_obj)
-        # set df columns again to fix potential multi-index issues
-        # see test_dataframe.py::test_unbox_df_multi
-        pyapi.object_setattr_string(df_obj, "columns", columns_obj)
 
+    df_obj = builder.load(res)
+    # set df columns separately to support repeated names and fix potential multi-index
+    # issues, see test_dataframe.py::test_unbox_df_multi, test_box_repeated_names
+    pyapi.object_setattr_string(df_obj, "columns", columns_obj)
     pyapi.decref(columns_obj)
     # decref() should be called on native value
     # see https://github.com/numba/numba/blob/13ece9b97e6f01f750e870347f231282325f60c3/numba/core/boxing.py#L389
     c.context.nrt.decref(c.builder, typ, val)
-    return c.builder.load(res)
+    return df_obj
 
 
 @intrinsic
