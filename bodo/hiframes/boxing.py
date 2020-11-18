@@ -124,10 +124,9 @@ def unbox_dataframe(typ, val, c):
 
 def get_hiframes_dtypes(df):
     """get hiframe data types for a pandas dataframe"""
-    col_names = df.columns.tolist()
-    # TODO: remove pd int dtype hack
     hi_typs = [
-        _get_series_array_type(_infer_series_dtype(df[cname])) for cname in col_names
+        _get_series_array_type(_infer_series_dtype(df.iloc[:, i]))
+        for i in range(len(df.columns))
     ]
     return tuple(hi_typs)
 
