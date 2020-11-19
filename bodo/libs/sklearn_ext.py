@@ -662,20 +662,36 @@ def overload_f1_score(y_true, y_pred, average="binary", _is_data_distributed=Fal
             return _f1_score_impl
 
 
-def mse_dist_helper(y_true, y_pred, sample_weight, multioutput, squared):
+def mse_mae_dist_helper(y_true, y_pred, sample_weight, multioutput, squared, metric):
     """
     Helper for distributed mse calculation.
+    metric must be one of ['mse', 'mae']
+    squared: only for mse
     """
 
-    # This is basically `np.average((y_true-y_pred)**2, axis=0, weights=sample_weight)`
-    # except we get some type-checking like length matching for free from sklearn
-    local_squared_raw_values_mse = sklearn.metrics.mean_squared_error(
-        y_true,
-        y_pred,
-        sample_weight=sample_weight,
-        multioutput="raw_values",
-        squared=True,
-    )
+    if metric == "mse":
+        # This is basically `np.average((y_true-y_pred)**2, axis=0, weights=sample_weight)`
+        # except we get some type-checking like length matching for free from sklearn
+        local_raw_values_metric = sklearn.metrics.mean_squared_error(
+            y_true,
+            y_pred,
+            sample_weight=sample_weight,
+            multioutput="raw_values",
+            squared=True,
+        )
+    elif metric == "mae":
+        # This is basically `np.average(np.abs(y_true-y_pred), axis=0, weights=sample_weight)`
+        # except we get some type-checking like length matching for free from sklearn
+        local_raw_values_metric = sklearn.metrics.mean_absolute_error(
+            y_true,
+            y_pred,
+            sample_weight=sample_weight,
+            multioutput="raw_values",
+        )
+    else:  # pragma: no cover
+        raise RuntimeError(
+            f"Unrecognized metric {metric}. Must be one of 'mae' and 'mse'"
+        )
 
     comm = MPI.COMM_WORLD
     num_pes = comm.Get_size()
@@ -690,28 +706,28 @@ def mse_dist_helper(y_true, y_pred, sample_weight, multioutput, squared):
     rank_weights = np.zeros(num_pes, dtype=type(local_weights_sum))
     comm.Allgather(local_weights_sum, rank_weights)
 
-    # Do an all-gather of the local mse values
-    local_squared_raw_values_mse_by_rank = np.zeros(
-        (num_pes, *local_squared_raw_values_mse.shape),
-        dtype=local_squared_raw_values_mse.dtype,
+    # Do an all-gather of the local metric values
+    local_raw_values_metric_by_rank = np.zeros(
+        (num_pes, *local_raw_values_metric.shape),
+        dtype=local_raw_values_metric.dtype,
     )
-    comm.Allgather(local_squared_raw_values_mse, local_squared_raw_values_mse_by_rank)
+    comm.Allgather(local_raw_values_metric, local_raw_values_metric_by_rank)
 
-    # Calculate global mse by doing a weighted average using rank_weights
-    global_squared_raw_values_mse = np.average(
-        local_squared_raw_values_mse_by_rank, weights=rank_weights, axis=0
+    # Calculate global metric by doing a weighted average using rank_weights
+    global_raw_values_metric = np.average(
+        local_raw_values_metric_by_rank, weights=rank_weights, axis=0
     )
 
-    # Element-wise sqrt if squared=False
-    if not squared:
-        global_squared_raw_values_mse = np.sqrt(global_squared_raw_values_mse)
+    # Element-wise sqrt if squared=False in case of mse
+    if metric == "mse" and (not squared):
+        global_raw_values_metric = np.sqrt(global_raw_values_metric)
 
     if isinstance(multioutput, str) and multioutput == "raw_values":
-        return global_squared_raw_values_mse
+        return global_raw_values_metric
     elif isinstance(multioutput, str) and multioutput == "uniform_average":
-        return np.average(global_squared_raw_values_mse)
+        return np.average(global_raw_values_metric)
     else:  # multioutput must be weights
-        return np.average(global_squared_raw_values_mse, weights=multioutput)
+        return np.average(global_raw_values_metric, weights=multioutput)
 
 
 @overload(sklearn.metrics.mean_squared_error, no_unliteral=True)
@@ -751,12 +767,13 @@ def overload_mean_squared_error(
                 y_pred = bodo.utils.conversion.coerce_to_array(y_pred)
                 with numba.objmode(err="float64[:]"):
                     if _is_data_distributed:
-                        err = mse_dist_helper(
+                        err = mse_mae_dist_helper(
                             y_true,
                             y_pred,
                             sample_weight=sample_weight,
                             multioutput=multioutput,
                             squared=squared,
+                            metric="mse",
                         )
                     else:
                         err = sklearn.metrics.mean_squared_error(
@@ -784,12 +801,13 @@ def overload_mean_squared_error(
                 sample_weight = bodo.utils.conversion.coerce_to_array(sample_weight)
                 with numba.objmode(err="float64[:]"):
                     if _is_data_distributed:
-                        err = mse_dist_helper(
+                        err = mse_mae_dist_helper(
                             y_true,
                             y_pred,
                             sample_weight=sample_weight,
                             multioutput=multioutput,
                             squared=squared,
+                            metric="mse",
                         )
                     else:
                         err = sklearn.metrics.mean_squared_error(
@@ -820,12 +838,13 @@ def overload_mean_squared_error(
                 y_pred = bodo.utils.conversion.coerce_to_array(y_pred)
                 with numba.objmode(err="float64"):
                     if _is_data_distributed:
-                        err = mse_dist_helper(
+                        err = mse_mae_dist_helper(
                             y_true,
                             y_pred,
                             sample_weight=sample_weight,
                             multioutput=multioutput,
                             squared=squared,
+                            metric="mse",
                         )
                     else:
                         err = sklearn.metrics.mean_squared_error(
@@ -853,12 +872,13 @@ def overload_mean_squared_error(
                 sample_weight = bodo.utils.conversion.coerce_to_array(sample_weight)
                 with numba.objmode(err="float64"):
                     if _is_data_distributed:
-                        err = mse_dist_helper(
+                        err = mse_mae_dist_helper(
                             y_true,
                             y_pred,
                             sample_weight=sample_weight,
                             multioutput=multioutput,
                             squared=squared,
+                            metric="mse",
                         )
                     else:
                         err = sklearn.metrics.mean_squared_error(
@@ -871,6 +891,160 @@ def overload_mean_squared_error(
                 return err
 
             return _mse_impl
+
+
+@overload(sklearn.metrics.mean_absolute_error, no_unliteral=True)
+def overload_mean_absolute_error(
+    y_true,
+    y_pred,
+    sample_weight=None,
+    multioutput="uniform_average",
+    _is_data_distributed=False,
+):
+    """
+    Provide implementations for the mean_absolute_error computation.
+    If data is not distributed, we simply call sklearn on each rank.
+    Else we compute in a distributed way.
+    Provide separate impl for case where sample_weight is provided
+    vs not provided for type unification purposes.
+    """
+
+    if (
+        is_overload_constant_str(multioutput)
+        and get_overload_const_str(multioutput) == "raw_values"
+    ):
+        # this case returns an array of floats (one for each dimension)
+
+        if is_overload_none(sample_weight):
+
+            def _mae_impl(
+                y_true,
+                y_pred,
+                sample_weight=None,
+                multioutput="uniform_average",
+                _is_data_distributed=False,
+            ):  # pragma: no cover
+                y_true = bodo.utils.conversion.coerce_to_array(y_true)
+                y_pred = bodo.utils.conversion.coerce_to_array(y_pred)
+                with numba.objmode(err="float64[:]"):
+                    if _is_data_distributed:
+                        err = mse_mae_dist_helper(
+                            y_true,
+                            y_pred,
+                            sample_weight=sample_weight,
+                            multioutput=multioutput,
+                            squared=True,  # Is ignored when metric = mae
+                            metric="mae",
+                        )
+                    else:
+                        err = sklearn.metrics.mean_absolute_error(
+                            y_true,
+                            y_pred,
+                            sample_weight=sample_weight,
+                            multioutput=multioutput,
+                        )
+                return err
+
+            return _mae_impl
+        else:
+
+            def _mae_impl(
+                y_true,
+                y_pred,
+                sample_weight=None,
+                multioutput="uniform_average",
+                _is_data_distributed=False,
+            ):  # pragma: no cover
+                y_true = bodo.utils.conversion.coerce_to_array(y_true)
+                y_pred = bodo.utils.conversion.coerce_to_array(y_pred)
+                sample_weight = bodo.utils.conversion.coerce_to_array(sample_weight)
+                with numba.objmode(err="float64[:]"):
+                    if _is_data_distributed:
+                        err = mse_mae_dist_helper(
+                            y_true,
+                            y_pred,
+                            sample_weight=sample_weight,
+                            multioutput=multioutput,
+                            squared=True,  # Is ignored when metric = mae
+                            metric="mae",
+                        )
+                    else:
+                        err = sklearn.metrics.mean_absolute_error(
+                            y_true,
+                            y_pred,
+                            sample_weight=sample_weight,
+                            multioutput=multioutput,
+                        )
+                return err
+
+            return _mae_impl
+
+    else:
+        # this case returns a single float value
+
+        if is_overload_none(sample_weight):
+
+            def _mae_impl(
+                y_true,
+                y_pred,
+                sample_weight=None,
+                multioutput="uniform_average",
+                _is_data_distributed=False,
+            ):  # pragma: no cover
+                y_true = bodo.utils.conversion.coerce_to_array(y_true)
+                y_pred = bodo.utils.conversion.coerce_to_array(y_pred)
+                with numba.objmode(err="float64"):
+                    if _is_data_distributed:
+                        err = mse_mae_dist_helper(
+                            y_true,
+                            y_pred,
+                            sample_weight=sample_weight,
+                            multioutput=multioutput,
+                            squared=True,  # Is ignored when metric = mae
+                            metric="mae",
+                        )
+                    else:
+                        err = sklearn.metrics.mean_absolute_error(
+                            y_true,
+                            y_pred,
+                            sample_weight=sample_weight,
+                            multioutput=multioutput,
+                        )
+                return err
+
+            return _mae_impl
+        else:
+
+            def _mae_impl(
+                y_true,
+                y_pred,
+                sample_weight=None,
+                multioutput="uniform_average",
+                _is_data_distributed=False,
+            ):  # pragma: no cover
+                y_true = bodo.utils.conversion.coerce_to_array(y_true)
+                y_pred = bodo.utils.conversion.coerce_to_array(y_pred)
+                sample_weight = bodo.utils.conversion.coerce_to_array(sample_weight)
+                with numba.objmode(err="float64"):
+                    if _is_data_distributed:
+                        err = mse_mae_dist_helper(
+                            y_true,
+                            y_pred,
+                            sample_weight=sample_weight,
+                            multioutput=multioutput,
+                            squared=True,  # Is ignored when metric = mae
+                            metric="mae",
+                        )
+                    else:
+                        err = sklearn.metrics.mean_absolute_error(
+                            y_true,
+                            y_pred,
+                            sample_weight=sample_weight,
+                            multioutput=multioutput,
+                        )
+                return err
+
+            return _mae_impl
 
 
 def accuracy_score_dist_helper(y_true, y_pred, normalize, sample_weight):

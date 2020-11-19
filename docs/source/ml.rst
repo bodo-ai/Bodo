@@ -157,6 +157,7 @@ Classification metrics
 Regression metrics
 ~~~~~~~~~~~~~~~~~~
 
+* :func:`sklearn.metrics.mean_absolute_error`
 * :func:`sklearn.metrics.mean_squared_error`
 
 Supported XGBoost

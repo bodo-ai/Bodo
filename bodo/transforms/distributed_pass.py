@@ -737,6 +737,80 @@ class DistributedPass:
                     extra_globals={"sklearn": sklearn},
                 )
 
+        if (
+            func_mod == "sklearn.metrics._regression"
+            and func_name == "mean_absolute_error"
+        ):
+
+            if self._is_1D_or_1D_Var_arr(rhs.args[0].name):
+                rhs = assign.value
+                kws = dict(rhs.kws)
+                nodes = []
+
+                y_true = get_call_expr_arg(
+                    "sklearn.metrics.mean_absolute_error", rhs.args, kws, 0, "y_true"
+                )
+                y_pred = get_call_expr_arg(
+                    "sklearn.metrics.mean_absolute_error", rhs.args, kws, 1, "y_pred"
+                )
+
+                # sample_weight argument; since it cannot be specified positionally
+                sample_weight_var = ir.Var(
+                    assign.target.scope,
+                    mk_unique_var("mean_absolute_error_sample_weight"),
+                    rhs.loc,
+                )
+                nodes.append(
+                    ir.Assign(ir.Const(None, rhs.loc), sample_weight_var, rhs.loc)
+                )
+                self.typemap[sample_weight_var.name] = types.none
+                sample_weight = get_call_expr_arg(
+                    "mean_absolute_error",
+                    rhs.args,
+                    kws,
+                    1e6,
+                    "sample_weight",
+                    sample_weight_var,
+                )
+
+                # multioutput argument; since it cannot be specified positionally
+                multioutput_var = ir.Var(
+                    assign.target.scope,
+                    mk_unique_var("mean_absolute_error_multioutput"),
+                    rhs.loc,
+                )
+                nodes.append(
+                    ir.Assign(
+                        ir.Const("uniform_average", rhs.loc), multioutput_var, rhs.loc
+                    )
+                )
+                self.typemap[multioutput_var.name] = types.StringLiteral(
+                    "uniform_average"
+                )
+                multioutput = get_call_expr_arg(
+                    "mean_absolute_error",
+                    rhs.args,
+                    kws,
+                    1e6,
+                    "multioutput",
+                    multioutput_var,
+                )
+
+                f = lambda y_true, y_pred, sample_weight, multioutput: sklearn.metrics.mean_absolute_error(
+                    y_true,
+                    y_pred,
+                    sample_weight=sample_weight,
+                    multioutput=multioutput,
+                    _is_data_distributed=True,
+                )  # pragma: no cover
+                return nodes + compile_func_single_block(
+                    f,
+                    [y_true, y_pred, sample_weight, multioutput],
+                    assign.target,
+                    self,
+                    extra_globals={"sklearn": sklearn},
+                )
+
         # divide 1D alloc
         # XXX allocs should be matched before going to _run_call_np
         if self._is_1D_arr(lhs) and is_alloc_callname(func_name, func_mod):

@@ -21,6 +21,7 @@ from sklearn.linear_model import (
 from sklearn.metrics import (
     accuracy_score,
     f1_score,
+    mean_absolute_error,
     mean_squared_error,
     precision_score,
     r2_score,
@@ -403,6 +404,40 @@ def test_mse(data, squared, multioutput, memory_leak_check):
 
     check_func(test_mse_0, tuple(data[0:2]), is_out_distributed=False)
     check_func(test_mse_1, tuple(data), is_out_distributed=False)
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        gen_random_k_dims(20, 1),
+        gen_random_k_dims(20, 3),
+    ],
+)
+@pytest.mark.parametrize("multioutput", ["uniform_average", "raw_values", "array"])
+def test_mae(data, multioutput, memory_leak_check):
+    """
+    Tests for the sklearn.metrics.mean_absolute_error implementation in Bodo.
+    """
+
+    if multioutput == "array":
+        if len(data[0].shape) > 1:
+            multioutput = np.random.random_sample(size=data[0].shape[1])
+        else:
+            return
+
+    def test_mae_0(y_true, y_pred):
+        return mean_absolute_error(y_true, y_pred, multioutput=multioutput)
+
+    def test_mae_1(y_true, y_pred, sample_weight_):
+        return mean_absolute_error(
+            y_true,
+            y_pred,
+            sample_weight=sample_weight_,
+            multioutput=multioutput,
+        )
+
+    check_func(test_mae_0, tuple(data[0:2]), is_out_distributed=False)
+    check_func(test_mae_1, tuple(data), is_out_distributed=False)
 
 
 @pytest.mark.skip(reason="Run manually on multinode cluster.")
