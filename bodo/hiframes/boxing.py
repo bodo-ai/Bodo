@@ -187,6 +187,18 @@ def box_dataframe(typ, val, c):
     with c.builder.if_else(has_parent) as (use_parent, otherwise):
         with use_parent:
             pyapi.incref(obj)
+            # set parent dataframe column names to numbers for robust setting of columns
+            # df.columns = np.arange(len(df.columns))
+            mod_name = context.insert_const_string(c.builder.module, "numpy")
+            class_obj = pyapi.import_module_noblock(mod_name)
+            n_cols_obj = pyapi.long_from_longlong(
+                lir.Constant(lir.IntType(64), len(typ.columns))
+            )
+            col_nums_arr_obj = pyapi.call_method(class_obj, "arange", (n_cols_obj,))
+            pyapi.object_setattr_string(obj, "columns", col_nums_arr_obj)
+            pyapi.decref(class_obj)
+            pyapi.decref(col_nums_arr_obj)
+            pyapi.decref(n_cols_obj)
         with otherwise:
             # df_obj = pd.DataFrame()
             mod_name = context.insert_const_string(c.builder.module, "pandas")
@@ -212,10 +224,6 @@ def box_dataframe(typ, val, c):
             # df[i] = boxed_arr
             c_ind_obj = pyapi.long_from_longlong(context.get_constant(types.int64, i))
 
-            # NOTE: adding extra incref() since boxing could be called twice on
-            # a dataframe and not having incref can cause crashes.
-            # see test_csv_double_box.
-            # TODO: Find the right solution to refcounting in @box functions
             context.nrt.incref(builder, arr_typ, arr)
             arr_obj = pyapi.from_native_value(arr_typ, arr, c.env_manager)
             df_obj = builder.load(res)
