@@ -727,12 +727,6 @@ def unbox_list_literal(typ, obj, c):
     return NativeValue(c.context.get_dummy_value())
 
 
-# Support np.int64 literals the same as regular ints (see test_df_set_index[df_value2])
-# NOTE: Numba's typing system treats np.int64 and int exactly the same currently, even
-# though they can be different in regular Python
-types.Literal.ctor_map[np.int64] = types.IntegerLiteral
-
-
 # literal type for functions (to handle function arguments to map/apply methods)
 # TODO: update when Numba's #4967 is merged
 # similar to MakeFunctionLiteral
