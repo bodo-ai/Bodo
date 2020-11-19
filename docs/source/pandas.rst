@@ -908,6 +908,7 @@ dates using UDFs. The offsets currently supported are:
 * :func:`pandas.tseries.offsets.DateOffset`
 * :func:`pandas.tseries.offsets.MonthEnd`
 
+.. _integer-na-issue-pandas:
 
 Integer NA issue in Pandas
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
