@@ -2122,3 +2122,43 @@ def np_cbrt_scalar(x, float_dtype):  # pragma: no cover
     if flag:
         return -res
     return res
+
+
+# inlining manually instead of inline="always" since Numba's
+# np.hstack overload for tuples fails.
+# TODO(Ehsan): Fix in Numba
+@overload(np.hstack, no_unliteral=True)
+def np_hstack(tup):
+    # Verify that arr_iter is a tuple, list of arrays, or Series of Arrays
+    is_sequence = isinstance(tup, (types.BaseTuple, types.List))
+    is_series = isinstance(
+        tup, (bodo.SeriesType, bodo.hiframes.pd_series_ext.HeterogeneousSeriesType)
+    ) and isinstance(tup.data, (types.BaseTuple, types.List))
+    if isinstance(tup, types.BaseTuple):
+        # Determine that each type is an array type
+        for typ in tup.types:
+            # TODO: Add proper checking for if the arrays can be merged
+            is_sequence = is_sequence and bodo.utils.utils.is_array_typ(typ, False)
+    elif isinstance(tup, types.List):
+        is_sequence = bodo.utils.utils.is_array_typ(tup.dtype, False)
+    elif is_series:
+        for typ in tup.data.types:
+            # TODO: Add proper checking for if the arrays can be merged
+            is_series = is_series and bodo.utils.utils.is_array_typ(typ, False)
+
+    if not (is_sequence or is_series):  # pragma: no cover
+        return
+
+    # If its a series return the implementation on the data
+    if is_series:
+
+        def impl_series(tup):  # pragma: no cover
+            arr_tup = bodo.hiframes.pd_series_ext.get_series_data(tup)
+            return bodo.libs.array_kernels.concat(arr_tup)
+
+        return impl_series
+
+    def impl(tup):  # pragma: no cover
+        return bodo.libs.array_kernels.concat(tup)
+
+    return impl

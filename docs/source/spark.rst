@@ -138,6 +138,9 @@ which are supported by Bodo.
     - ``np.unique(df.col.to_numpy())``
   * - :func:`pyspark.sql.functions.column`
     - ``df.col``
+  * - :func:`pyspark.sql.functions.concat`
+    - | # Arrays ``df[['col1', 'col2', 'col3']].apply(lambda x: np.hstack(x), axis=1)``
+      | # Strings ``df[['col1', 'col2', 'col3']].apply(lambda x: "".join(x), axis=1)``
   * - :func:`pyspark.sql.functions.concat_ws`
     - ``df[['col1', 'col2', 'col3']].apply(lambda x, sep: sep.join(x), axis=1, sep=sep)``
   * - :func:`pyspark.sql.functions.conv`

@@ -112,6 +112,7 @@ and parallelize.
     * :func:`numpy.union1d`
     * :func:`numpy.intersect1d` (no distributed support yet)
     * :func:`numpy.setdiff1d` (no distributed support yet)
+    * :func:`numpy.hstack` (concatenates elements on each rank without maintaining order) 
 
 
 #. Random number generator functions:

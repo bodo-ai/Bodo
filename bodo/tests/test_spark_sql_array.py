@@ -89,19 +89,19 @@ def dataframe_val(request):
     return request.param
 
 
-@pytest.mark.skip(reason="Missing support for np.isin #1851")
-def test_array_contains(dataframe_val):
+@pytest.mark.skip(reason="Missing support for in #1851")
+def test_array_contains(dataframe_val, memory_leak_check):
     def test_impl_float(df):
-        return df.A.map(lambda a: np.isin(5.1, a))
+        return df.A.map(lambda a: 5.1 in a)
 
     def test_impl_int(df):
-        return df.A.map(lambda a: np.isin(1, a))
+        return df.A.map(lambda a: 1 in a)
 
     def test_impl_str(df):
-        return df.A.map(lambda a: np.isin("you", a))
+        return df.A.map(lambda a: "you" in a)
 
     def test_impl_bool(df):
-        return df.A.map(lambda a: np.isin(True, a))
+        return df.A.map(lambda a: True in a)
 
     df = dataframe_val
     if isinstance(df.A[0][0], np.float64):
@@ -117,7 +117,7 @@ def test_array_contains(dataframe_val):
 
 
 @pytest.mark.skip(reason="sort_outputs doesn't work with array elems in series #1771")
-def test_array_distinct(dataframe_val):
+def test_array_distinct(dataframe_val, memory_leak_check):
     def test_impl(df):
         return df.A.map(lambda x: np.unique(x))
 
@@ -126,7 +126,7 @@ def test_array_distinct(dataframe_val):
 
 
 @pytest.mark.skip("Issue with our string array #1925")
-def test_array_except(dataframe_val):
+def test_array_except(dataframe_val, memory_leak_check):
     def test_impl(df):
         return df[["A", "B"]].apply(lambda x: np.setdiff1d(x[0], x[1]), axis=1)
 
@@ -135,7 +135,7 @@ def test_array_except(dataframe_val):
 
 
 @pytest.mark.skip("Issue with our string array #1925")
-def test_array_intersect(dataframe_val):
+def test_array_intersect(dataframe_val, memory_leak_check):
     def test_impl(df):
         return df[["A", "B"]].apply(lambda x: np.intersect1d(x[0], x[1]), axis=1)
 
@@ -144,7 +144,7 @@ def test_array_intersect(dataframe_val):
 
 
 @pytest.mark.slow
-def test_array_join(dataframe_val):
+def test_array_join(dataframe_val, memory_leak_check):
     def test_impl_comma(df):
         return df.A.map(lambda x: ",".join(x))
 
@@ -164,7 +164,7 @@ def test_array_join(dataframe_val):
 
 
 @pytest.mark.slow
-def test_array_max(dataframe_val):
+def test_array_max(dataframe_val, memory_leak_check):
     def test_impl(df):
         return df.A.map(lambda x: np.nanmax(x))
 
@@ -177,7 +177,7 @@ def test_array_max(dataframe_val):
 
 
 @pytest.mark.slow
-def test_array_min(dataframe_val):
+def test_array_min(dataframe_val, memory_leak_check):
     def test_impl(df):
         return df.A.map(lambda x: np.nanmin(x))
 
@@ -190,7 +190,7 @@ def test_array_min(dataframe_val):
 
 
 @pytest.mark.slow
-def test_array_position(dataframe_val):
+def test_array_position(dataframe_val, memory_leak_check):
     def test_impl_float(df):
         return df.A.map(lambda x: np.append(np.where(x == 3.31111)[0], -1)[0])
 
@@ -217,7 +217,7 @@ def test_array_position(dataframe_val):
 
 
 @pytest.mark.skip("Issue with our string array #1925")
-def test_array_remove(dataframe_val):
+def test_array_remove(dataframe_val, memory_leak_check):
     def test_impl(df, arr):
         return df.A.apply(lambda x, arr: np.setdiff1d(x, arr), arr=arr)
 
@@ -237,7 +237,7 @@ def test_array_remove(dataframe_val):
 
 
 @pytest.mark.slow
-def test_array_repeat(dataframe_val):
+def test_array_repeat(dataframe_val, memory_leak_check):
     def test_impl(df):
         return df.A.map(lambda x: np.repeat(x, 3))
 
@@ -246,7 +246,7 @@ def test_array_repeat(dataframe_val):
 
 
 @pytest.mark.slow
-def test_array_sort(dataframe_val):
+def test_array_sort(dataframe_val, memory_leak_check):
     def test_impl(df):
         return df.A.map(lambda x: np.sort(x))
 
@@ -255,7 +255,7 @@ def test_array_sort(dataframe_val):
 
 
 @pytest.mark.slow
-def test_array_union(dataframe_val):
+def test_array_union(dataframe_val, memory_leak_check):
     def test_impl(df):
         return df[["A", "B"]].apply(lambda x: np.union1d(x[0], x[1]), axis=1)
 
@@ -264,7 +264,7 @@ def test_array_union(dataframe_val):
 
 
 @pytest.mark.skip("Issue with our string array #1925")
-def test_arrays_overlap(dataframe_val):
+def test_arrays_overlap(dataframe_val, memory_leak_check):
     def test_impl(df):
         return df[["A", "B"]].apply(
             lambda x: len(np.intersect1d(x[0], x[1])) > 0, axis=1
@@ -275,9 +275,38 @@ def test_arrays_overlap(dataframe_val):
 
 
 @pytest.mark.slow
-def test_size(dataframe_val):
+def test_size(dataframe_val, memory_leak_check):
     def test_impl(df):
         return df.A.map(lambda x: len(x))
 
     df = dataframe_val
+    check_func(test_impl, (df,))
+
+
+# TODO: Mark as slow in a future PR (needed for Sonar)
+def test_concat_arrays(dataframe_val, memory_leak_check):
+    def test_impl(df):
+        return df[["A", "B"]].apply(lambda x: np.hstack(x), axis=1)
+
+    df = dataframe_val
+    check_func(test_impl, (df,))
+
+
+@pytest.mark.slow
+def test_concat_arrays_heterogenous(memory_leak_check):
+    """Tests that columns with different array types that can be merged succeed."""
+
+    def test_impl(df):
+        return df[["A", "B"]].apply(lambda x: np.hstack(x), axis=1)
+
+    df = pd.DataFrame(
+        {
+            "A": [
+                np.array([1.1234, np.nan, 3.31111]),
+                np.array([2.1334, 5.1, -6.3]),
+            ]
+            * 20,
+            "B": [np.array([0, -1, 2]), np.array([4, -1, -5])] * 20,
+        }
+    )
     check_func(test_impl, (df,))

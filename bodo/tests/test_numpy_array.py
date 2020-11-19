@@ -420,6 +420,59 @@ def test_np_setdiff1d(arr_tuple_val, memory_leak_check):
     check_func(impl, (A1, A2), dist_test=False)
 
 
+@pytest.mark.slow
+def test_np_hstack_list(arr_tuple_val, memory_leak_check):
+    def impl(A1, A2):
+        # Sort values because np.hstack order won't match.
+        # This uses Series because types.Array don't have a parallel
+        # implementation of np.sort
+        return pd.Series(data=np.hstack([A1, A2])).sort_values().values
+
+    check_func(impl, (*arr_tuple_val,))
+
+
+# TODO: Mark as slow in a future PR (needed for Sonar)
+def test_np_hstack_tuple(arr_tuple_val, memory_leak_check):
+    def impl(A1, A2):
+        # Sort values because np.hstack order won't match.
+        # This uses Series because types.Array don't have a parallel
+        # implementation of np.sort
+        return pd.Series(data=np.hstack((A1, A2))).sort_values().values
+
+    check_func(impl, (*arr_tuple_val,))
+
+
+@pytest.mark.slow
+def test_np_hstack_tuple_heterogenous(memory_leak_check):
+    """Test to merge float and int arrays. These can legally merge, and as
+    a result should pass the type checking.
+    """
+
+    def impl(A1, A2):
+        # Sort values because np.hstack order won't match.
+        # This uses Series because types.Array don't have a parallel
+        # implementation of np.sort
+        return pd.Series(data=np.hstack((A1, A2))).sort_values().values
+
+    A1 = np.array(
+        [
+            3,
+            5,
+            123,
+            24,
+            42,
+            24,
+            123,
+            254,
+        ]
+        * 8,
+        dtype=np.int32,
+    )
+    A2 = np.array([1.121, 0.0, 35.13431, -2414.4242, 23211.22] * 8, dtype=np.float64)
+
+    check_func(impl, (A1, A2))
+
+
 def test_np_linspace(memory_leak_check):
     def test_impl(start, stop, num):
         return np.linspace(start, stop, num=num)

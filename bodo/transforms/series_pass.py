@@ -1225,6 +1225,20 @@ class SeriesPass:
         ):
             return self._handle_ufuncs_bool_arr(func_name, rhs.args)
 
+        # Handle inlining to avoid conflict with Numba np.hstack definition
+        if fdef == ("hstack", "numpy"):
+            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
+            kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
+
+            impl = bodo.libs.array_kernels.np_hstack(*arg_typs, **kw_typs)
+            return replace_func(
+                self,
+                impl,
+                rhs.args,
+                pysig=numba.core.utils.pysignature(impl),
+                kws=dict(rhs.kws),
+            )
+
         # Handle inlining 1D Numpy arrays
         if fdef == ("any", "numpy"):
             arg_typs = tuple(self.typemap[v.name] for v in rhs.args)

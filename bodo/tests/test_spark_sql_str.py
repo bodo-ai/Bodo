@@ -63,9 +63,18 @@ def test_bin(memory_leak_check):
 @pytest.mark.slow
 def test_concat_strings(dataframe_val, memory_leak_check):
     def test_impl(df):
-        return df[["A", "B", "C"]].apply(lambda x: ",".join(x), axis=1)
+        return df[["A", "B", "C"]].apply(lambda x: "".join(x), axis=1)
 
     check_func(test_impl, (dataframe_val,))
+
+
+@pytest.mark.slow
+def test_concat_ws(dataframe_val, memory_leak_check):
+    def test_impl(df, sep):
+        return df[["A", "B", "C"]].apply(lambda x, sep: sep.join(x), sep=sep, axis=1)
+
+    sep = "..."
+    check_func(test_impl, (dataframe_val, sep))
 
 
 @pytest.mark.slow
