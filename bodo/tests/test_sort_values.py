@@ -1012,7 +1012,9 @@ def test_inplace_sort_values_series(memory_leak_check):
 
     s = pd.Series([1, 8, 4, 10, 3])
 
-    with pytest.raises(BodoError, match="'inplace' is not supported yet"):
+    with pytest.raises(
+        BodoError, match="inplace parameter only supports default value False"
+    ):
         bodo.jit(impl1)(s)
 
 
