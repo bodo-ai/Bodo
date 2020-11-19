@@ -203,4 +203,5 @@ intersphinx_mapping = {
     "pandas": ("https://pandas.pydata.org/pandas-docs/stable/", None),
     "pyspark": ("https://spark.apache.org/docs/latest/api/python/", None),
     "sklearn": ("https://scikit-learn.org/stable/", None),
+    "xgboost": ("http://xgboost.readthedocs.io/en/latest", None),
 }

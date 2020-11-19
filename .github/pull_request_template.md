@@ -22,4 +22,4 @@
   
    (Pandas docs : https://github.com/Bodo-inc/Bodo/blob/master/docs/source/pandas.rst)
    (Numpy docs: https://github.com/Bodo-inc/Bodo/blob/master/docs/source/numpy.rst)
-   (Sklearn docs: https://github.com/Bodo-inc/Bodo/blob/master/docs/source/sklearn.rst)
+   (ML docs: https://github.com/Bodo-inc/Bodo/blob/master/docs/source/ml.rst)

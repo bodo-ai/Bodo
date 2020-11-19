@@ -53,6 +53,13 @@ except ImportError:
     # bodo functions should give more meaningful errors than:
     # Untyped global name 'RandomForestClassifier': cannot determine Numba type of <class 'abc.ABCMeta'>
     pass
+try:  # pragma: no cover
+    import xgboost
+
+    import bodo.libs.xgb_ext  # side effect: initialize Numba extensions
+except ImportError:
+    pass
+
 import bodo.hiframes.dataframe_indexing  # side effect: initialize Numba extensions
 import bodo.hiframes.datetime_datetime_ext  # side effect: initialize Numba extensions
 import bodo.hiframes.datetime_timedelta_ext  # side effect: initialize Numba extensions

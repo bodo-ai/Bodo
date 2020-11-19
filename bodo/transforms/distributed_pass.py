@@ -5,6 +5,7 @@ Parallelizes the IR for distributed execution and inserts MPI calls.
 import copy
 import math
 import operator
+import sys
 import types as pytypes  # avoid confusion with numba.core.types
 import warnings
 from collections import defaultdict
@@ -405,6 +406,23 @@ class DistributedPass:
 
         if (
             func_name == "fit"
+            and "bodo.libs.xgb_ext" in sys.modules
+            and isinstance(func_mod, numba.core.ir.Var)
+            and isinstance(
+                self.typemap[func_mod.name],
+                (
+                    bodo.libs.xgb_ext.BodoXGBClassifierType,
+                    bodo.libs.xgb_ext.BodoXGBRegressorType,
+                ),
+            )
+        ):  # pragma: no cover
+            if self._is_1D_or_1D_Var_arr(rhs.args[0].name):
+                self._set_last_arg_to_true(assign.value)
+                return [assign]
+
+        if (
+            func_name == "fit"
+            and "bodo.libs.sklearn_ext" in sys.modules
             and isinstance(func_mod, numba.core.ir.Var)
             and isinstance(
                 self.typemap[func_mod.name],
@@ -427,6 +445,7 @@ class DistributedPass:
                 return [assign]
         if (
             func_name == "score"
+            and "bodo.libs.sklearn_ext" in sys.modules
             and isinstance(func_mod, numba.core.ir.Var)
             and isinstance(
                 self.typemap[func_mod.name],

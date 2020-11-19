@@ -1,14 +1,17 @@
-.. _sklearn:
+.. _ml:
+
+Supported Machine Learning 
+--------------------------
 
 Supported Scikit-learn
-----------------------
+~~~~~~~~~~~~~~~~~~~~~~
 
 Below is the list of scikit-learn classes and functions that Bodo supports natively inside JIT functions.
 This list will expand regularly as we add support for more APIs.
 Optional arguments are not supported unless specified.
 
 Linear Classifiers
-~~~~~~~~~~~~~~~~~~
+******************
 
 :class:`sklearn.linear_model.LogisticRegression`
 
@@ -48,7 +51,7 @@ Methods:
   * :any:`sklearn.svm.LinearSVC.score`
 
 Linear Regressors 
-~~~~~~~~~~~~~~~~~
+*****************
 
 :class:`sklearn.linear_model.LinearRegression`
 
@@ -102,7 +105,7 @@ Methods:
   * :any:`sklearn.linear_model.Lasso.score`
 
 Clustering
-~~~~~~~~~~
+**********
 
 :class:`sklearn.cluster.KMeans`
 
@@ -116,7 +119,7 @@ Methods:
   * :any:`sklearn.cluster.KMeans.transform`
 
 Ensemble Methods
-~~~~~~~~~~~~~~~~
+****************
 
 :class:`sklearn.ensemble.RandomForestClassifier`
 
@@ -130,7 +133,7 @@ Methods:
 
 
 Naive Bayes
-~~~~~~~~~~~~~~~~
+***********
 
 :class:`sklearn.naive_bayes.MultinomialNB`
 
@@ -143,14 +146,45 @@ Methods:
   * :any:`sklearn.naive_bayes.MultinomialNB.score`
 
 Classification metrics
-~~~~~~~~~~~~~~~~~~~~~~
+**********************
 
 * :func:`sklearn.metrics.accuracy_score`
 * :func:`sklearn.metrics.f1_score`
 * :func:`sklearn.metrics.precision_score`
 * :func:`sklearn.metrics.recall_score`
 
+
 Regression metrics
 ~~~~~~~~~~~~~~~~~~
 
 * :func:`sklearn.metrics.mean_squared_error`
+
+Supported XGBoost
+~~~~~~~~~~~~~~~~~
+
+Below is the list of XGBoost (using the Scikit-Learn-like API) classes and functions that Bodo supports natively inside JIT functions.
+This list will expand regularly as we add support for more APIs.
+
+XGBClassifier
+*****************
+
+:class:`xgboost.XGBClassifier`
+
+  This class provides implementation of the scikit-learn API for XGBoost classification with distributed large-scale learning.
+
+Methods:
+
+  * :any:`xgboost.XGBClassifier.fit`
+  * :any:`xgboost.XGBClassifier.predict`
+
+XGBRegressor
+*****************
+
+:class:`xgboost.XGBRegressor`
+
+  This class provides implementation of the scikit-learn API for XGBoost regression with distributed large-scale learning.
+
+Methods:
+
+  * :any:`xgboost.XGBRegressor.fit`
+  * :any:`xgboost.XGBRegressor.predict`

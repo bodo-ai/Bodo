@@ -19,7 +19,7 @@ Bodo
    source/file_io
    source/pandas
    source/numpy
-   source/sklearn
+   source/ml
    source/dl
    source/not_supported
    source/advanced

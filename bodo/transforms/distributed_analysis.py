@@ -6,6 +6,7 @@ for distributed transformation.
 import copy
 import inspect
 import operator
+import sys
 import warnings
 from collections import defaultdict, namedtuple
 from enum import Enum
@@ -649,7 +650,33 @@ class DistributedAnalysis:
             func_name, func_mod = fdef
 
         if (
+            func_name in {"fit", "predict"}
+            and "bodo.libs.xgb_ext" in sys.modules
+            and isinstance(func_mod, numba.core.ir.Var)
+            and isinstance(
+                self.typemap[func_mod.name],
+                (
+                    bodo.libs.xgb_ext.BodoXGBClassifierType,
+                    bodo.libs.xgb_ext.BodoXGBRegressorType,
+                ),
+            )
+        ):  # pragma: no cover
+            if func_name == "fit":
+                arg0 = rhs.args[0].name
+                arg1 = rhs.args[1].name
+                self._meet_array_dists(arg0, arg1, array_dists)
+                if array_dists[arg0] == Distribution.REP:
+                    raise BodoError(
+                        f"Arguments of xgboost.fit are not distributed"
+                    )
+            elif func_name == "predict":
+                # match input and output distributions
+                self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            return
+
+        if (
             func_name in {"fit", "predict", "score"}
+            and "bodo.libs.sklearn_ext" in sys.modules
             and isinstance(func_mod, numba.core.ir.Var)
             and isinstance(
                 self.typemap[func_mod.name],
@@ -677,6 +704,7 @@ class DistributedAnalysis:
 
         if (
             func_name in {"fit", "predict", "score", "transform"}
+            and "bodo.libs.sklearn_ext" in sys.modules
             and isinstance(func_mod, numba.core.ir.Var)
             and isinstance(
                 self.typemap[func_mod.name],
