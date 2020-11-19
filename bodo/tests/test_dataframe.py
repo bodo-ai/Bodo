@@ -453,6 +453,17 @@ def test_unbox_df2(column_name_df_value, memory_leak_check):
 
 
 @pytest.mark.slow
+def test_box_repeated_names(memory_leak_check):
+    """test dataframe boxing where column names repeat"""
+
+    def impl1(df):
+        return pd.concat([df, df], axis=1)
+
+    df = pd.DataFrame({"A": [3, 2, 1, -4, 7]})
+    check_func(impl1, (df,))
+
+
+@pytest.mark.slow
 def test_unbox_df3(memory_leak_check):
     # unbox dataframe datetime and unsigned int indices
     def impl(df):

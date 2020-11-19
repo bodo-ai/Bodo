@@ -124,10 +124,9 @@ def unbox_dataframe(typ, val, c):
 
 def get_hiframes_dtypes(df):
     """get hiframe data types for a pandas dataframe"""
-    col_names = df.columns.tolist()
-    # TODO: remove pd int dtype hack
     hi_typs = [
-        _get_series_array_type(_infer_series_dtype(df[cname])) for cname in col_names
+        _get_series_array_type(_infer_series_dtype(df.iloc[:, i]))
+        for i in range(len(df.columns))
     ]
     return tuple(hi_typs)
 
@@ -188,6 +187,18 @@ def box_dataframe(typ, val, c):
     with c.builder.if_else(has_parent) as (use_parent, otherwise):
         with use_parent:
             pyapi.incref(obj)
+            # set parent dataframe column names to numbers for robust setting of columns
+            # df.columns = np.arange(len(df.columns))
+            mod_name = context.insert_const_string(c.builder.module, "numpy")
+            class_obj = pyapi.import_module_noblock(mod_name)
+            n_cols_obj = pyapi.long_from_longlong(
+                lir.Constant(lir.IntType(64), len(typ.columns))
+            )
+            col_nums_arr_obj = pyapi.call_method(class_obj, "arange", (n_cols_obj,))
+            pyapi.object_setattr_string(obj, "columns", col_nums_arr_obj)
+            pyapi.decref(class_obj)
+            pyapi.decref(col_nums_arr_obj)
+            pyapi.decref(n_cols_obj)
         with otherwise:
             # df_obj = pd.DataFrame()
             mod_name = context.insert_const_string(c.builder.module, "pandas")
@@ -210,21 +221,15 @@ def box_dataframe(typ, val, c):
         )
 
         with builder.if_then(box_array):
-            # df[c] = boxed_arr
+            # df[i] = boxed_arr
             c_ind_obj = pyapi.long_from_longlong(context.get_constant(types.int64, i))
-            col_name_obj = c.pyapi.object_getitem(columns_obj, c_ind_obj)
 
-            # NOTE: adding extra incref() since boxing could be called twice on
-            # a dataframe and not having incref can cause crashes.
-            # see test_csv_double_box.
-            # TODO: Find the right solution to refcounting in @box functions
             context.nrt.incref(builder, arr_typ, arr)
             arr_obj = pyapi.from_native_value(arr_typ, arr, c.env_manager)
             df_obj = builder.load(res)
-            pyapi.object_setitem(df_obj, col_name_obj, arr_obj)
+            pyapi.object_setitem(df_obj, c_ind_obj, arr_obj)
             pyapi.decref(arr_obj)
             pyapi.decref(c_ind_obj)
-            pyapi.decref(col_name_obj)
 
     # set index if doesn't have parent
     with builder.if_then(builder.not_(has_parent)):
@@ -236,15 +241,16 @@ def box_dataframe(typ, val, c):
         df_obj = builder.load(res)
         pyapi.object_setattr_string(df_obj, "index", arr_obj)
         pyapi.decref(arr_obj)
-        # set df columns again to fix potential multi-index issues
-        # see test_dataframe.py::test_unbox_df_multi
-        pyapi.object_setattr_string(df_obj, "columns", columns_obj)
 
+    df_obj = builder.load(res)
+    # set df columns separately to support repeated names and fix potential multi-index
+    # issues, see test_dataframe.py::test_unbox_df_multi, test_box_repeated_names
+    pyapi.object_setattr_string(df_obj, "columns", columns_obj)
     pyapi.decref(columns_obj)
     # decref() should be called on native value
     # see https://github.com/numba/numba/blob/13ece9b97e6f01f750e870347f231282325f60c3/numba/core/boxing.py#L389
     c.context.nrt.decref(c.builder, typ, val)
-    return c.builder.load(res)
+    return df_obj
 
 
 @intrinsic
