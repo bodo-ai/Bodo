@@ -71,8 +71,9 @@ jobs:
       source activate $CONDA_ENV
       export CHECK_LICENSE_EXPIRED=$(CHECK_LICENSE_EXPIRED)
       export OBFUSCATE=$(OBFUSCATE)
+      export BODO_VERSION=`python -c "import versioneer; print(versioneer.get_version())"`
       cd $(System.DefaultWorkingDirectory)
-      ./buildscripts/azure/install_bodo.sh "${{ parameters.useNumbaDev }}"
+      ./buildscripts/azure/install_bodo.sh "${{ parameters.useNumbaDev }}" $BODO_VERSION
     displayName: 'Install Bodo from conda'
 
   - script: |

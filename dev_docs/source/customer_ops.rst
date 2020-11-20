@@ -35,10 +35,10 @@ By default, we give customers access to our ``bodo.ai`` and ``bodo.ai-dev`` cond
 
 where ``<username>`` and ``<token>`` are the customer username and tokens generated in the step above.
 
-The above command installs the latest dev release. Usually, we give customers the link to the subchannel that contains the specific dev release created for them. The command would be in this case::
+The above command installs the latest dev release. Usually, to point the customer to the specific dev release you created for them, specify the bodo version. The command would be in this case::
 
      export BODO_TOKEN=<token>
-     conda install -c https://<username>:<token>@bodo.jfrog.io/artifactory/api/conda/bodo.ai-dev/bodo-<version>.tar.bz2 -c conda-forge bodo
+     conda install -c https://<username>:<token>@bodo.jfrog.io/artifactory/api/conda/bodo.ai-dev -c conda-forge bodo=<DEV_VERSION>
 
 where ``<version>`` is the full version name of the built created.
 

@@ -19,6 +19,7 @@ cd $CODEBUILD_SRC_DIR/obfuscation
 
 echo "********** Building Bodo **********"
 source activate bodo_build
+cd $CODEBUILD_SRC_DIR
 export BODO_VERSION=`python -c "import versioneer; print(versioneer.get_version())"`
 if [[ "$UseNumbaDev" == "true" ]]; then
     cd $CODEBUILD_SRC_DIR/buildscripts/bodo-numba-dev-conda-recipe/

@@ -18,9 +18,6 @@ TOKEN=`credstash -r us-east-2 get artifactory.ci.token`
 for package in `ls $HOME/miniconda3/envs/bodo_build/conda-bld/${OS_DIR}/bodo*.tar.bz2`; do
     package_name=`basename $package`
     curl -u${USERNAME}:${TOKEN} -T $package "https://bodo.jfrog.io/artifactory/${CHANNEL_NAME}/${OS_DIR}/$package_name"
-    # We need to save the subchannel so that subsequent stages can read this
-    # and install that specific version of Bodo for testing
-    echo "$package_name" > $CODEBUILD_SRC_DIR/bodo_subchannel
 done
 
 # reindex conda
