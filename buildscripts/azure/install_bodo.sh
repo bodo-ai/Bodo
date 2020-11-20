@@ -17,4 +17,4 @@ if [[ "$USE_NUMBA_DEV" == "true" ]]; then
     numba_channel_flag="-c numba/label/dev"
 fi
 
-conda install -y h5py=2.10 scipy bodo=$BODO_VERSION -c https://${USERNAME}:${TOKEN}@bodo.jfrog.io/artifactory/api/conda/$artifactory_channel $numba_channel_flag -c conda-forge 
+conda install -y h5py=2.10 scipy numba=0.52.0rc3 bodo=$BODO_VERSION $numba_channel_flag -c https://${USERNAME}:${TOKEN}@bodo.jfrog.io/artifactory/api/conda/$artifactory_channel/$sub_channel -c conda-forge 
