@@ -85,7 +85,7 @@ Unlike Pandas' ``read_csv``, Bodo can read a directory that contains multiple pa
 .. note::
 
    
-   Output of Bodo's ``read_csv`` function may differ from that of Pandas' in the datatype of some columns such as integers where Bodo uses Pandas' nullable integer type (checkout :ref:`Integer NA issue in Pandas <integer-na-issue-pandas>` for more details). Therefore, for accurate comparisons between performance of Bodo's and Pandas' ``read_csv`` functions, datatypes must be explicitly specified.
+   Bodo uses nullable integer types of Pandas to ensure type stability (see :ref:`Integer NA issue in Pandas <integer-na-issue-pandas>` for more details). Therefore, data types must be specified explicitly for accurate performance comparisons of Bodo and Pandas for ``read_csv``.
 
 
 ``to_csv(name)`` has different behaviors for different file systems:
