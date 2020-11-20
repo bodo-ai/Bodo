@@ -3,7 +3,6 @@ import math
 import zlib
 
 import numpy as np
-import scipy
 
 from bodo.utils.typing import gen_objmode_func_overload
 
@@ -19,4 +18,12 @@ gen_objmode_func_overload(zlib.crc32, "uint32")
 # All of these alias for math.factorial
 gen_objmode_func_overload(math.factorial, "int64")
 gen_objmode_func_overload(np.math.factorial, "int64")
-gen_objmode_func_overload(scipy.math.factorial, "int64")
+
+
+# support scipy.math.factorial if scipy package is installed
+try:
+    import scipy
+
+    gen_objmode_func_overload(scipy.math.factorial, "int64")
+except:
+    pass
