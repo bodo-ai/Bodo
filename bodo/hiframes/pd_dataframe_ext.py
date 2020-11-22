@@ -32,6 +32,7 @@ from numba.extending import (
     make_attribute_wrapper,
     models,
     overload,
+    overload_attribute,
     overload_method,
     register_model,
     type_callable,
@@ -1947,8 +1948,21 @@ def pivot_table_overload(
     margins=False,
     dropna=True,
     margins_name="All",
-    _pivot_values=None,
+    observed=False,
+    _pivot_values=None,  # bodo argument
 ):
+    unsupported_args = dict(
+        fill_value=fill_value,
+        margins=margins,
+        dropna=dropna,
+        margins_name=margins_name,
+        observed=observed,
+    )
+    arg_defaults = dict(
+        fill_value=None, margins=False, dropna=True, margins_name="All", observed=False
+    )
+    check_unsupported_args("DataFrame.pivot_table", unsupported_args, arg_defaults)
+
     if aggfunc == "mean":
 
         def _impl(
@@ -1961,6 +1975,7 @@ def pivot_table_overload(
             margins=False,
             dropna=True,
             margins_name="All",
+            observed=False,
             _pivot_values=None,
         ):  # pragma: no cover
 
@@ -1980,6 +1995,7 @@ def pivot_table_overload(
         margins=False,
         dropna=True,
         margins_name="All",
+        observed=False,
         _pivot_values=None,
     ):  # pragma: no cover
 
@@ -2459,6 +2475,11 @@ def lower_set_parent_dummy(context, builder, sig, args):
 # (no_cpython_wrapper to avoid error for iterator object)
 @overload_method(DataFrameType, "itertuples", inline="always", no_unliteral=True)
 def itertuples_overload(df, index=True, name="Pandas"):
+
+    unsupported_args = dict(index=index, name=name)
+    arg_defaults = dict(index=True, name="Pandas")
+    check_unsupported_args("DataFrame.itertuples", unsupported_args, arg_defaults)
+
     def _impl(df, index=True, name="Pandas"):  # pragma: no cover
         return bodo.hiframes.pd_dataframe_ext.itertuples_dummy(df)
 
@@ -2494,6 +2515,13 @@ def lower_itertuples_dummy(context, builder, sig, args):
 def fillna_overload(
     df, value=None, method=None, axis=None, inplace=False, limit=None, downcast=None
 ):
+    unsupported_args = dict(method=method, limit=limit, downcast=downcast)
+    arg_defaults = dict(method=None, limit=None, downcast=None)
+    check_unsupported_args("DataFrame.fillna", unsupported_args, arg_defaults)
+
+    if not (is_overload_none(axis) or is_overload_zero(axis)):  # pragma: no cover
+        raise BodoError("DataFrame.fillna: axis argument not supported")
+
     # TODO: handle possible **kwargs options?
 
     # TODO: inplace of df with parent that has a string column (reflection)
@@ -2524,6 +2552,10 @@ def reset_index_overload(
     col_fill="",
     _bodo_transformed=False,
 ):
+
+    unsupported_args = dict(level=level, col_level=col_level, col_fill=col_fill)
+    arg_defaults = dict(level=None, col_level=0, col_fill="")
+    check_unsupported_args("DataFrame.reset_index", unsupported_args, arg_defaults)
 
     handle_inplace_df_type_change(inplace, _bodo_transformed, "reset_index")
 
@@ -2642,6 +2674,9 @@ def drop_overload(
     errors="raise",
     _bodo_transformed=False,
 ):
+    unsupported_args = dict(level=level, errors=errors)
+    arg_defaults = dict(level=None, errors="raise")
+    check_unsupported_args("DataFrame.drop", unsupported_args, arg_defaults)
 
     handle_inplace_df_type_change(inplace, _bodo_transformed, "drop")
 
@@ -3712,7 +3747,18 @@ dataframe_unsupported = {
     "add_suffix",
     "kurtosis",
     "reindex",
+    # Indexing, iteration
+    "at",
+    "__iter__",
 }
+
+
+dataframe_unsupported_attrs = (
+    "dtypes",
+    "axes",
+    "at",
+    "attrs",
+)
 
 
 def _install_pd_unsupported():
@@ -3725,6 +3771,11 @@ def _install_pd_unsupported():
 def _install_dataframe_unsupported():
     """install an overload that raises BodoError for unsupported Dataframe methods"""
 
+    for attr_name in dataframe_unsupported_attrs:
+        full_name = "DataFrame." + attr_name
+        overload_attribute(DataFrameType, attr_name)(
+            create_unsupported_overload(full_name)
+        )
     for fname in dataframe_unsupported:
         full_name = "Dataframe." + fname
         overload_method(DataFrameType, fname)(create_unsupported_overload(full_name))

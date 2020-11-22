@@ -485,6 +485,10 @@ def overload_dataframe_abs(df):
 @overload_method(DataFrameType, "corr", inline="always", no_unliteral=True)
 def overload_dataframe_corr(df, method="pearson", min_periods=1):
 
+    unsupported_args = dict(method=method)
+    arg_defaults = dict(method="pearson")
+    check_unsupported_args("DataFrame.corr", unsupported_args, arg_defaults)
+
     numeric_cols = [
         c for c, d in zip(df.columns, df.data) if _is_numeric_dtype(d.dtype)
     ]
@@ -520,7 +524,12 @@ def overload_dataframe_corr(df, method="pearson", min_periods=1):
 
 
 @overload_method(DataFrameType, "cov", inline="always", no_unliteral=True)
-def overload_dataframe_cov(df, min_periods=None):
+def overload_dataframe_cov(df, min_periods=None, ddof=1):
+
+    unsupported_args = dict(ddof=ddof)
+    arg_defaults = dict(ddof=1)
+    check_unsupported_args("DataFrame.cov", unsupported_args, arg_defaults)
+
     # TODO: support calling np.cov() when there is no NA
     minpv = "1" if is_overload_none(min_periods) else "min_periods"
 
@@ -552,7 +561,7 @@ def overload_dataframe_cov(df, min_periods=None):
     data_args = ", ".join("res[:,{}]".format(i) for i in range(len(numeric_cols)))
     index = f"pd.Index({numeric_cols})\n"
 
-    header = "def impl(df, min_periods=None):\n"
+    header = "def impl(df, min_periods=None, ddof=1):\n"
     header += "  mat = {}\n".format(mat)
     header += "  res = bodo.libs.array_kernels.nancorr(mat, 1, {})\n".format(minpv)
     return _gen_init_df(header, numeric_cols, data_args, index)
@@ -574,8 +583,10 @@ def overload_dataframe_count(df, axis=0, level=None, numeric_only=False):
 
 @overload_method(DataFrameType, "nunique", inline="always", no_unliteral=True)
 def overload_dataframe_nunique(df, axis=0, dropna=True):
+    unsupported_args = dict(axis=0, dropna=dropna)
+    arg_defaults = dict(axis=0, dropna=True)
+    check_unsupported_args("DataFrame.nunique", unsupported_args, arg_defaults)
     data_args = ", ".join(f"df.iloc[:, {i}].nunique()" for i in range(len(df.columns)))
-
     func_text = "def impl(df, axis=0, dropna=True):\n"
     func_text += "  data = np.asarray(({},))\n".format(data_args)
     func_text += "  return bodo.hiframes.pd_series_ext.init_series(data, df.columns)\n"
@@ -590,6 +601,13 @@ def overload_dataframe_nunique(df, axis=0, dropna=True):
 def overload_dataframe_prod(
     df, axis=None, skipna=None, level=None, numeric_only=None, min_count=0
 ):
+
+    unsupported_args = dict(
+        skipna=skipna, level=level, numeric_only=numeric_only, min_count=min_count
+    )
+    arg_defaults = dict(skipna=None, level=None, numeric_only=None, min_count=0)
+    check_unsupported_args("DataFrame.prod/product", unsupported_args, arg_defaults)
+
     return _gen_reduce_impl(df, "prod", axis=axis)
 
 
@@ -597,21 +615,43 @@ def overload_dataframe_prod(
 def overload_dataframe_sum(
     df, axis=None, skipna=None, level=None, numeric_only=None, min_count=0
 ):
+
+    unsupported_args = dict(
+        skipna=skipna, level=level, numeric_only=numeric_only, min_count=min_count
+    )
+    arg_defaults = dict(skipna=None, level=None, numeric_only=None, min_count=0)
+    check_unsupported_args("DataFrame.sum", unsupported_args, arg_defaults)
+
     return _gen_reduce_impl(df, "sum", axis=axis)
 
 
 @overload_method(DataFrameType, "max", inline="always", no_unliteral=True)
 def overload_dataframe_max(df, axis=None, skipna=None, level=None, numeric_only=None):
+
+    unsupported_args = dict(skipna=skipna, level=level, numeric_only=numeric_only)
+    arg_defaults = dict(skipna=None, level=None, numeric_only=None)
+    check_unsupported_args("DataFrame.max", unsupported_args, arg_defaults)
+
     return _gen_reduce_impl(df, "max", axis=axis)
 
 
 @overload_method(DataFrameType, "min", inline="always", no_unliteral=True)
 def overload_dataframe_min(df, axis=None, skipna=None, level=None, numeric_only=None):
+
+    unsupported_args = dict(skipna=skipna, level=level, numeric_only=numeric_only)
+    arg_defaults = dict(skipna=None, level=None, numeric_only=None)
+    check_unsupported_args("DataFrame.min", unsupported_args, arg_defaults)
+
     return _gen_reduce_impl(df, "min", axis=axis)
 
 
 @overload_method(DataFrameType, "mean", inline="always", no_unliteral=True)
 def overload_dataframe_mean(df, axis=None, skipna=None, level=None, numeric_only=None):
+
+    unsupported_args = dict(skipna=skipna, level=level, numeric_only=numeric_only)
+    arg_defaults = dict(skipna=None, level=None, numeric_only=None)
+    check_unsupported_args("DataFrame.mean", unsupported_args, arg_defaults)
+
     return _gen_reduce_impl(df, "mean", axis=axis)
 
 
@@ -619,6 +659,13 @@ def overload_dataframe_mean(df, axis=None, skipna=None, level=None, numeric_only
 def overload_dataframe_var(
     df, axis=None, skipna=None, level=None, ddof=1, numeric_only=None
 ):
+
+    unsupported_args = dict(
+        skipna=skipna, level=level, ddof=ddof, numeric_only=numeric_only
+    )
+    arg_defaults = dict(skipna=None, level=None, ddof=1, numeric_only=None)
+    check_unsupported_args("DataFrame.mean", unsupported_args, arg_defaults)
+
     return _gen_reduce_impl(df, "var", axis=axis)
 
 
@@ -626,6 +673,13 @@ def overload_dataframe_var(
 def overload_dataframe_std(
     df, axis=None, skipna=None, level=None, ddof=1, numeric_only=None
 ):
+
+    unsupported_args = dict(
+        skipna=skipna, level=level, ddof=ddof, numeric_only=numeric_only
+    )
+    arg_defaults = dict(skipna=None, level=None, ddof=1, numeric_only=None)
+    check_unsupported_args("DataFrame.std", unsupported_args, arg_defaults)
+
     return _gen_reduce_impl(df, "std", axis=axis)
 
 
@@ -633,6 +687,11 @@ def overload_dataframe_std(
 def overload_dataframe_median(
     df, axis=None, skipna=None, level=None, numeric_only=None
 ):
+
+    unsupported_args = dict(skipna=skipna, level=level, numeric_only=numeric_only)
+    arg_defaults = dict(skipna=None, level=None, numeric_only=None)
+    check_unsupported_args("DataFrame.median", unsupported_args, arg_defaults)
+
     return _gen_reduce_impl(df, "median", axis=axis)
 
 
@@ -640,17 +699,32 @@ def overload_dataframe_median(
 def overload_dataframe_quantile(
     df, q=0.5, axis=0, numeric_only=True, interpolation="linear"
 ):
+
+    unsupported_args = dict(numeric_only=numeric_only, interpolation=interpolation)
+    arg_defaults = dict(numeric_only=True, interpolation="linear")
+    check_unsupported_args("DataFrame.quantile", unsupported_args, arg_defaults)
+
     # TODO: name is str(q)
     return _gen_reduce_impl(df, "quantile", "q", axis=axis)
 
 
 @overload_method(DataFrameType, "idxmax", inline="always", no_unliteral=True)
 def overload_dataframe_idxmax(df, axis=0, skipna=True):
+
+    unsupported_args = dict(skipna=skipna)
+    arg_defaults = dict(skipna=True)
+    check_unsupported_args("DataFrame.idxmax", unsupported_args, arg_defaults)
+
     return _gen_reduce_impl(df, "idxmax", axis=axis)
 
 
 @overload_method(DataFrameType, "idxmin", inline="always", no_unliteral=True)
 def overload_dataframe_idxmin(df, axis=0, skipna=True):
+
+    unsupported_args = dict(skipna=skipna)
+    arg_defaults = dict(skipna=True)
+    check_unsupported_args("DataFrame.idxmin", unsupported_args, arg_defaults)
+
     return _gen_reduce_impl(df, "idxmin", axis=axis)
 
 
@@ -812,6 +886,11 @@ def _gen_reduce_impl_axis1(func_name, out_colnames, comm_dtype, df_type):
 def overload_dataframe_pct_change(
     df, periods=1, fill_method="pad", limit=None, freq=None
 ):
+
+    unsupported_args = dict(fill_method=fill_method, limit=limit, freq=freq)
+    arg_defaults = dict(fill_method="pad", limit=None, freq=None)
+    check_unsupported_args("DataFrame.pct_change", unsupported_args, arg_defaults)
+
     data_args = ", ".join(
         f"df.iloc[:, {i}].pct_change(periods).values" for i in range(len(df.columns))
     )
@@ -821,6 +900,10 @@ def overload_dataframe_pct_change(
 
 @overload_method(DataFrameType, "cumprod", inline="always", no_unliteral=True)
 def overload_dataframe_cumprod(df, axis=None, skipna=True):
+    unsupported_args = dict(skipna=skipna)
+    arg_defaults = dict(skipna=True)
+    check_unsupported_args("DataFrame.cumprod", unsupported_args, arg_defaults)
+
     data_args = ", ".join(
         f"df.iloc[:, {i}].values.cumprod()" for i in range(len(df.columns))
     )
@@ -830,19 +913,38 @@ def overload_dataframe_cumprod(df, axis=None, skipna=True):
 
 @overload_method(DataFrameType, "cumsum", inline="always", no_unliteral=True)
 def overload_dataframe_cumsum(df, axis=None, skipna=True):
+    unsupported_args = dict(skipna=skipna)
+    arg_defaults = dict(skipna=True)
+    check_unsupported_args("DataFrame.cumsum", unsupported_args, arg_defaults)
+
     data_args = ", ".join(
         f"df.iloc[:, {i}].values.cumsum()" for i in range(len(df.columns))
     )
+
     header = "def impl(df, axis=None, skipna=True):\n"
     return _gen_init_df(header, df.columns, data_args)
 
 
 @overload_method(DataFrameType, "describe", inline="always", no_unliteral=True)
-def overload_dataframe_describe(df, percentiles=None, include=None, exclude=None):
+def overload_dataframe_describe(
+    df, percentiles=None, include=None, exclude=None, datetime_is_numeric=False
+):
+
+    unsupported_args = dict(
+        percentiles=percentiles,
+        include=include,
+        exclude=exclude,
+        datatime_is_numeric=False,
+    )
+    arg_defaults = dict(
+        percentiles=None, include=None, exclude=None, datetime_is_numerice=False
+    )
+    check_unsupported_args("DataFrame.describe", unsupported_args, arg_defaults)
+
+    header = "def impl(df, percentiles=None, include=None, exclude=None, datetime_is_numeric=False):\n"
     data_args = ", ".join(
         f"df.iloc[:, {i}].describe().values" for i in range(len(df.columns))
     )
-    header = "def impl(df, percentiles=None, include=None, exclude=None):\n"
     index = (
         "bodo.utils.conversion.convert_to_index(['count', 'mean', 'std', "
         "'min', '25%', '50%', '75%', 'max'])"
@@ -852,6 +954,11 @@ def overload_dataframe_describe(df, percentiles=None, include=None, exclude=None
 
 @overload_method(DataFrameType, "take", inline="always", no_unliteral=True)
 def overload_dataframe_take(df, indices, axis=0, convert=None, is_copy=True):
+
+    unsupported_args = dict(axis=axis, convert=convert, is_copy=is_copy)
+    arg_defaults = dict(axis=0, convert=None, is_copy=True)
+    check_unsupported_args("DataFrame.take", unsupported_args, arg_defaults)
+
     data_args = ", ".join(
         "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {})[indices_t]".format(i)
         for i in range(len(df.columns))
@@ -885,10 +992,10 @@ def overload_dataframe_set_index(
 ):
     args_dict = {
         "inplace": inplace,
+        "append": append,
+        "verify_integrity": verify_integrity,
     }
-    args_default_dict = {
-        "inplace": False,
-    }
+    args_default_dict = {"inplace": False, "append": False, "verify_integrity": False}
 
     check_unsupported_args("set_index", args_dict, args_default_dict)
 
@@ -971,15 +1078,19 @@ def overload_dataframe_duplicated(df, subset=None, keep="first"):
 
 
 @overload_method(DataFrameType, "drop_duplicates", inline="always", no_unliteral=True)
-def overload_dataframe_drop_duplicates(df, subset=None, keep="first", inplace=False):
+def overload_dataframe_drop_duplicates(
+    df, subset=None, keep="first", inplace=False, ignore_index=False
+):
     # TODO: support inplace
     args_dict = {
         "inplace": inplace,
         "subset": subset,
+        "ignore_index": ignore_index,
     }
     args_default_dict = {
         "inplace": False,
         "subset": None,
+        "ignore_index": False,
     }
 
     check_unsupported_args("drop_duplicates", args_dict, args_default_dict)
@@ -991,7 +1102,9 @@ def overload_dataframe_drop_duplicates(df, subset=None, keep="first", inplace=Fa
 
     data_args = ", ".join("data_{}".format(i) for i in range(n_cols))
 
-    func_text = "def impl(df, subset=None, keep='first', inplace=False):\n"
+    func_text = (
+        "def impl(df, subset=None, keep='first', inplace=False, ignore_index=False):\n"
+    )
     for i in range(n_cols):
         func_text += "  data_{0} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {0})\n".format(
             i
