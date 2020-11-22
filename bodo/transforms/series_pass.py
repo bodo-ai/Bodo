@@ -32,10 +32,10 @@ from numba.core.ir_utils import (
 from numba.core.typing.templates import Signature
 
 import bodo
-import bodo.hiframes.series_dt_impl  # side effect: install Series overloads
-import bodo.hiframes.series_impl  # side effect: install Series overloads
-import bodo.hiframes.series_indexing  # side effect: install Series overloads
-import bodo.hiframes.series_str_impl  # side effect: install Series overloads
+import bodo.hiframes.series_dt_impl  # noqa # side effect: install Series overloads
+import bodo.hiframes.series_impl  # noqa # side effect: install Series overloads
+import bodo.hiframes.series_indexing  # noqa # side effect: install Series overloads
+import bodo.hiframes.series_str_impl  # noqa # side effect: install Series overloads
 from bodo.hiframes import series_kernels
 from bodo.hiframes.datetime_date_ext import datetime_date_array_type
 from bodo.hiframes.datetime_datetime_ext import datetime_datetime_type

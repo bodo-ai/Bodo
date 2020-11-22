@@ -31,9 +31,9 @@ from numba.core.untyped_passes import ReconstructSSA, WithLifting
 
 import bodo
 import bodo.libs
-import bodo.libs.array_kernels  # side effect: install Numba functions
-import bodo.libs.int_arr_ext  # side effect
-import bodo.libs.re_ext  # side effect: initialize Numba extensions
+import bodo.libs.array_kernels  # noqa # side effect: install Numba functions
+import bodo.libs.int_arr_ext  # noqa # side effect
+import bodo.libs.re_ext  # noqa # side effect: initialize Numba extensions
 import bodo.libs.spark_extra
 import bodo.transforms
 import bodo.transforms.series_pass
@@ -45,30 +45,30 @@ from bodo.transforms.typing_pass import BodoTypeInference
 from bodo.transforms.untyped_pass import UntypedPass
 
 try:
-    import sklearn
+    import sklearn # noqa
 
-    import bodo.libs.sklearn_ext  # side effect: initialize Numba extensions
+    import bodo.libs.sklearn_ext  # noqa  # side effect: initialize Numba extensions
 except ImportError:
     # TODO if sklearn is not installed, trying to use sklearn inside
     # bodo functions should give more meaningful errors than:
     # Untyped global name 'RandomForestClassifier': cannot determine Numba type of <class 'abc.ABCMeta'>
     pass
+import bodo.hiframes.dataframe_indexing  # noqa # side effect: initialize Numba extensions
+import bodo.hiframes.datetime_datetime_ext  # noqa # side effect: initialize Numba extensions
+import bodo.hiframes.datetime_timedelta_ext  # noqa # side effect: initialize Numba extensions
 try:  # pragma: no cover
-    import xgboost
+    import xgboost # noqa
 
     import bodo.libs.xgb_ext  # side effect: initialize Numba extensions
 except ImportError:
     pass
 
-import bodo.hiframes.dataframe_indexing  # side effect: initialize Numba extensions
-import bodo.hiframes.datetime_datetime_ext  # side effect: initialize Numba extensions
-import bodo.hiframes.datetime_timedelta_ext  # side effect: initialize Numba extensions
 import bodo.io
 import bodo.utils
 import bodo.utils.typing
 
 if config._has_h5py:
-    from bodo.io import h5
+    from bodo.io import h5 # noqa
 
 
 # avoid Numba warning when there is no Parfor in the IR

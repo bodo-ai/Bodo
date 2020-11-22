@@ -30,7 +30,7 @@ from numba.core.ir_utils import (
 )
 
 import bodo
-import bodo.hiframes.dataframe_impl  # side effect: install DataFrame overloads
+import bodo.hiframes.dataframe_impl  # noqa # side effect: install DataFrame overloads
 import bodo.hiframes.pd_groupby_ext
 import bodo.hiframes.pd_rolling_ext
 from bodo import hiframes
