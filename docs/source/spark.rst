@@ -287,7 +287,18 @@ which are supported by Bodo.
   * - :func:`pyspark.sql.functions.sequence`
     - ``df[['col1', 'col2', 'col3']].apply(lambda x: np.arange(x[0], x[1], x[2]), axis=1)`` 
   * - :func:`pyspark.sql.functions.shiftLeft`
-    - ``np.left_shift(df.col, numbits)``
+    - | # If the type is uint64 ``np.left_shift(df.col.astype(np.int64), numbits).astype(np.uint64))``
+      | # Other integer types: ``np.left_shift(df.col, numbits)``
+  * - :func:`pyspark.sql.functions.shiftRight`
+    - | # If the type is uint64 use ``shiftRightUnsigned``
+      | # Other integer types: ``np.right_shift(df.col, numbits)``
+  * - :func:`pyspark.sql.functions.shiftRightUnsigned`
+    - | ``def shiftRightUnsigned(col, num_bits):``
+      |   ``bits_minus_1 = max((num_bits - 1), 0)``
+      |   ``mask_bits = (np.int64(1) << bits_minus_1) - 1``
+      |   ``mask = ~(mask_bits << (63 - bits_minus_1))``
+      |   ``return np.right_shift(col.astype(np.int64), num_bits) & mask).astype(np.uint64)``
+      | ``shiftRightUnsigned(df.col, numbits)``
   * - :func:`pyspark.sql.functions.shuffle`
     - ``df.col.map(lambda x: np.random.permutation(x))`` 
   * - :func:`pyspark.sql.functions.signum`

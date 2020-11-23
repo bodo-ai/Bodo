@@ -431,7 +431,7 @@ def test_np_hstack_list(arr_tuple_val, memory_leak_check):
     check_func(impl, (*arr_tuple_val,))
 
 
-# TODO: Mark as slow in a future PR (needed for Sonar)
+@pytest.mark.slow
 def test_np_hstack_tuple(arr_tuple_val, memory_leak_check):
     def impl(A1, A2):
         # Sort values because np.hstack order won't match.
