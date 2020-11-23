@@ -27,6 +27,7 @@ Bodo
    source/compilation
    source/aws
    source/spark
+   source/BodoSQL
    source/jupyter
    source/ipyparallel
    source/e3
