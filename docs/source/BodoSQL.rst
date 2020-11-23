@@ -47,7 +47,8 @@ Bodo SQL can generate Pandas code from SQL queries automatically. For example::
 
 returns::
 
-    df1 = table1[["A","B",]][(table1["B"] > 1)]
+    df1 = table1[["A","B",]][(table1["B"] > 4)]
+
     df2 = pd.DataFrame({"A": df1["A"], })
     return df2
 
