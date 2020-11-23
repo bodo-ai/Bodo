@@ -913,6 +913,12 @@ void var_combine_F(ARRAY* count_col_in, ARRAY* mean_col_in, ARRAY* m2_col_in,
         int64_t j = f(i);
         uint64_t& count_a = getv<ARRAY, uint64_t>(count_col_out, j);
         uint64_t& count_b = getv<ARRAY, uint64_t>(count_col_in, i);
+        // in the pivot case we can receive dummy values from other ranks
+        // when combining the results (in this case with count == 0). This is
+        // because the pivot case groups on index and creates n_pivot columns,
+        // and so for each of its index values a rank will have n_pivot fields,
+        // even if a rank does not have a particular (index, pivot_value) pair
+        if (count_b == 0) continue;
         double& mean_a = getv<ARRAY, double>(mean_col_out, j);
         double& mean_b = getv<ARRAY, double>(mean_col_in, i);
         double& m2_a = getv<ARRAY, double>(m2_col_out, j);
