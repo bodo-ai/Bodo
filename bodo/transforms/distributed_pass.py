@@ -696,7 +696,7 @@ class DistributedPass:
                     rhs.loc,
                 )
                 nodes.append(ir.Assign(ir.Const(True, rhs.loc), squared_var, rhs.loc))
-                self.typemap[squared_var.name] = BooleanLiteral(True)
+                self.typemap[squared_var.name] = types.BooleanLiteral(True)
                 squared = get_call_expr_arg(
                     "mean_squared_error", rhs.args, kws, 1e6, "squared", squared_var
                 )
