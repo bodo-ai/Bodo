@@ -957,7 +957,12 @@ def _gen_objmode_overload(func, output_type, method_name=None):
         type_name = f"objmode_type{ir_utils.next_label()}"
         setattr(types, type_name, output_type)
 
-    call_str = f"self.{method_name}" if method_name else f"func"
+    if not method_name:
+        # This Python function is going to be set at the global scope of this
+        # module (bodo.utils.typing) so we need a name that won't clash
+        func_name = func.__module__.replace(".", "_") + "_" + func.__name__ + "_func"
+
+    call_str = f"self.{method_name}" if method_name else f"{func_name}"
     func_text = f"def overload_impl({sig}):\n"
     func_text += f"    def impl({sig}):\n"
     func_text += f"        with numba.objmode(res='{type_name}'):\n"
@@ -966,7 +971,12 @@ def _gen_objmode_overload(func, output_type, method_name=None):
     func_text += f"    return impl\n"
 
     loc_vars = {}
-    exec(func_text, {"numba": numba, "func": func}, loc_vars)
+    # XXX For some reason numba needs a reference to the module or caching
+    # won't work (and seems related to objmode).
+    glbls = globals()
+    if not method_name:
+        glbls[func_name] = func
+    exec(func_text, glbls, loc_vars)
     overload_impl = loc_vars["overload_impl"]
     return overload_impl
 
