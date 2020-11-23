@@ -1263,6 +1263,7 @@ def gen_update_cb(
     exec(
         func_text,
         {
+            "bodo": bodo,
             "np": np,
             "pd": pd,
             "info_to_array": info_to_array,
