@@ -39,13 +39,6 @@ from bodo.hiframes.pd_series_ext import (
     if_series_to_array_type,
 )
 from bodo.hiframes.pd_timestamp_ext import pandas_timestamp_type
-from bodo.libs.array import (
-    arr_info_list_to_table,
-    array_to_info,
-    delete_table,
-    info_from_table,
-    info_to_array,
-)
 from bodo.libs.bool_arr_ext import boolean_array
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.utils.transform import gen_const_tup
@@ -64,7 +57,6 @@ from bodo.utils.typing import (
     is_overload_false,
     is_overload_none,
     is_overload_true,
-    is_overload_zero,
     parse_dtype,
     raise_bodo_error,
     scalar_to_array_type,
@@ -934,10 +926,10 @@ def overload_dataframe_describe(
         percentiles=percentiles,
         include=include,
         exclude=exclude,
-        datatime_is_numeric=False,
+        datetime_is_numeric=datetime_is_numeric,
     )
     arg_defaults = dict(
-        percentiles=None, include=None, exclude=None, datetime_is_numerice=False
+        percentiles=None, include=None, exclude=None, datetime_is_numeric=False
     )
     check_unsupported_args("DataFrame.describe", unsupported_args, arg_defaults)
 
