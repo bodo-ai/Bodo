@@ -4,7 +4,6 @@ according to Bodo requirements (using partial typing).
 """
 import copy
 import itertools
-import operator
 
 import numba
 import numpy as np
@@ -13,8 +12,6 @@ from numba.core import ir, ir_utils, types
 from numba.core.compiler_machinery import register_pass
 from numba.core.ir_utils import (
     GuardException,
-    build_definitions,
-    compile_to_numba_ir,
     compute_cfg_from_blocks,
     dprint_func_ir,
     find_callname,
@@ -24,7 +21,6 @@ from numba.core.ir_utils import (
     guard,
     is_setitem,
     mk_unique_var,
-    replace_arg_nodes,
     require,
 )
 from numba.core.typed_passes import NopythonTypeInference, PartialTypeInference
@@ -55,6 +51,14 @@ from bodo.utils.utils import (
     is_call,
     is_expr,
 )
+
+# import bodosql's BodoSQLContextType if installed
+try:  # pragma: no cover
+    from bodosql.context_ext import BodoSQLContextType
+except:
+    # workaround: something that makes isinstance(type, BodoSQLContextType) always false
+    BodoSQLContextType = int
+
 
 # global flag indicating that we are in partial type inference, so that error checking
 # code can raise regular Exceptions that can potentially be handled here
@@ -118,6 +122,7 @@ class BodoTypeInference(PartialTypeInference):
                 state.calltypes,
                 state.args,
                 state.locals,
+                state.flags,
             )
             changed, needs_transform = typing_transforms_pass.run()
             # can't be typed if IR not changed
@@ -135,6 +140,7 @@ class BodoTypeInference(PartialTypeInference):
                 state.calltypes,
                 state.args,
                 state.locals,
+                state.flags,
             )
             typing_transforms_pass.run()
 
@@ -154,7 +160,9 @@ class TypingTransforms:
     them to constants so that functions like groupby() can be typed properly.
     """
 
-    def __init__(self, func_ir, typingctx, typemap, calltypes, arg_types, _locals):
+    def __init__(
+        self, func_ir, typingctx, typemap, calltypes, arg_types, _locals, flags
+    ):
         self.func_ir = func_ir
         self.typingctx = typingctx
         self.typemap = typemap
@@ -180,6 +188,7 @@ class TypingTransforms:
         # variable (ir.Var) -> block label it is needed as constant
         self._require_const = {}
         self.locals = _locals
+        self.flags = flags
         self.changed = False
         # whether another transformation pass is needed (see _run_setattr)
         self.needs_transform = False
@@ -534,6 +543,17 @@ class TypingTransforms:
         ):
             return self._run_call_df_groupby(assign, rhs, func_mod, func_name, label)
 
+        # handle BodoSQLContextType.sql() calls here since the generated code cannot
+        # be handled in regular overloads (requires Bodo's untyped pass, typing pass)
+        if (
+            isinstance(func_mod, ir.Var)
+            and isinstance(
+                self._get_method_obj_type(func_mod, rhs.func), BodoSQLContextType
+            )
+            and func_name == "sql"
+        ):  # pragma: no cover
+            return self._run_call_bodosql_sql(assign, rhs, func_mod, func_name, label)
+
         return [assign]
 
     def _run_binop(self, assign, rhs):
@@ -731,6 +751,50 @@ class TypingTransforms:
             self._call_arg_list_to_tuple(rhs, "concat", 0, "objs", nodes)
 
         return nodes + [assign]
+
+    def _run_call_bodosql_sql(
+        self, assign, rhs, sql_context_var, func_name, label
+    ):  # pragma: no cover
+        """inline BodoSQLContextType.sql() calls since the generated code cannot
+        be handled in regular overloads (requires Bodo's untyped pass, typing pass)
+        """
+        import bodosql
+
+        sql_context_type = self.typemap.get(sql_context_var.name, None)
+        # cannot transform yet if type is not available yet
+        if sql_context_type is None:
+            return [assign]
+
+        kws = dict(rhs.kws)
+        sql_var = get_call_expr_arg("BodoSQLContextType.sql", rhs.args, kws, 0, "sql")
+
+        # get constant value for variable if possible.
+        # Otherwise, just skip, assuming that the issue may be fixed later or
+        # overload will raise an error if necessary.
+        try:
+            sql_str = get_const_value_inner(
+                self.func_ir,
+                sql_var,
+                self.arg_types,
+                self.typemap,
+                self._updated_containers,
+            )
+        except GuardException:
+            # save for potential loop unrolling
+            self._require_const[sql_var] = label
+            return [assign]
+
+        impl = bodosql.context_ext._gen_pd_func_for_query(sql_context_type, sql_str)
+        self.changed = True
+        return compile_func_single_block(
+            impl,
+            [sql_context_var],
+            assign.target,
+            self,
+            infer_types=False,
+            run_untyped_pass=True,
+            flags=self.flags,
+        )
 
     def _call_arg_list_to_tuple(self, rhs, func_name, arg_no, arg_name, nodes):
         """Convert call argument to tuple if it is a constant list"""
