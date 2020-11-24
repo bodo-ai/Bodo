@@ -2,11 +2,8 @@
 """
 Helper functions for transformations.
 """
-import inspect
 import itertools
 import math
-import operator
-import warnings
 from collections import namedtuple
 
 import numba
@@ -33,7 +30,6 @@ import bodo
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.map_arr_ext import MapArrayType
 from bodo.libs.str_arr_ext import string_array_type
-from bodo.libs.str_ext import string_type
 from bodo.libs.struct_arr_ext import StructArrayType, StructType
 from bodo.libs.tuple_arr_ext import TupleArrayType
 from bodo.utils.typing import (
@@ -231,7 +227,14 @@ numba.core.ir_utils.remove_call_handlers.append(remove_hiframes)
 
 
 def compile_func_single_block(
-    func, args, ret_var, typing_info=None, extra_globals=None
+    func,
+    args,
+    ret_var,
+    typing_info=None,
+    extra_globals=None,
+    infer_types=True,
+    run_untyped_pass=False,
+    flags=None,
 ):
     """compiles functions that are just a single basic block.
     Does not handle defaults, freevars etc.
@@ -245,7 +248,7 @@ def compile_func_single_block(
     loc = ir.Loc("", 0)
     if ret_var:
         loc = ret_var.loc
-    if typing_info:
+    if typing_info and infer_types:
         loc = typing_info.curr_loc
         f_ir = compile_to_numba_ir(
             func,
@@ -260,6 +263,12 @@ def compile_func_single_block(
     assert (
         len(f_ir.blocks) == 1
     ), "only single block functions supported in compile_func_single_block()"
+    if run_untyped_pass:
+        arg_typs = tuple(typing_info.typemap[arg.name] for arg in args)
+        untyped_pass = bodo.transforms.untyped_pass.UntypedPass(
+            f_ir, typing_info.typingctx, arg_typs, {}, {}, flags
+        )
+        untyped_pass.run()
     f_block = f_ir.blocks.popitem()[1]
     replace_arg_nodes(f_block, args)
     nodes = f_block.body[:-2]

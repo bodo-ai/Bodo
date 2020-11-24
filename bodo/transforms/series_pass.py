@@ -12,7 +12,6 @@ import pandas as pd
 from numba.core import ir, ir_utils, types
 from numba.core.inline_closurecall import inline_closure_call
 from numba.core.ir_utils import (
-    GuardException,
     build_definitions,
     compile_to_numba_ir,
     dprint_func_ir,
@@ -20,12 +19,8 @@ from numba.core.ir_utils import (
     find_callname,
     find_const,
     find_topo_order,
-    gen_np_call,
     get_definition,
     guard,
-    is_getitem,
-    is_setitem,
-    mk_alloc,
     mk_unique_var,
     replace_arg_nodes,
 )
@@ -63,7 +58,6 @@ from bodo.hiframes.pd_series_ext import (
     is_series_type,
     is_str_series_typ,
     is_timedelta64_series_typ,
-    series_to_array_type,
 )
 from bodo.hiframes.pd_timestamp_ext import timedelta_methods
 from bodo.hiframes.rolling import get_rolling_setup_args
@@ -77,24 +71,13 @@ from bodo.hiframes.series_str_impl import (
     SeriesCatMethodType,
     SeriesStrMethodType,
 )
-from bodo.hiframes.split_impl import (
-    StringArraySplitViewType,
-    get_split_view_data_ptr,
-    get_split_view_index,
-    getitem_c_arr,
-    string_array_split_view_type,
-)
+from bodo.hiframes.split_impl import StringArraySplitViewType
 from bodo.io.h5_api import h5dataset_type
-from bodo.ir.aggregate import Aggregate
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.bool_arr_ext import boolean_array
 from bodo.libs.decimal_arr_ext import DecimalArrayType
 from bodo.libs.int_arr_ext import IntegerArrayType
-from bodo.libs.str_arr_ext import (
-    StringArrayType,
-    get_utf8_size,
-    string_array_type,
-)
+from bodo.libs.str_arr_ext import StringArrayType, string_array_type
 from bodo.libs.str_ext import string_type
 from bodo.libs.struct_arr_ext import StructArrayType
 from bodo.libs.tuple_arr_ext import TupleArrayType
@@ -105,11 +88,7 @@ from bodo.utils.transform import (
     extract_keyvals_from_struct_map,
     func_has_assertions,
     gen_const_tup,
-    gen_init_varsize_alloc_sizes,
-    gen_varsize_item_sizes,
     get_call_expr_arg,
-    get_type_alloc_counts,
-    is_var_size_item_array_type,
     replace_func,
     update_locs,
 )
@@ -118,13 +97,11 @@ from bodo.utils.typing import (
     get_literal_value,
     get_overload_const_func,
     get_overload_const_tuple,
-    is_const_func_type,
     is_literal_type,
     is_overload_constant_str,
     is_overload_constant_tuple,
 )
 from bodo.utils.utils import (
-    debug_prints,
     gen_getitem,
     get_getsetitem_index_var,
     is_array_typ,
@@ -798,7 +775,7 @@ class SeriesPass:
             isinstance(rhs_type, BodoSQLContextType) and rhs.attr == "dataframes"
         ):  # pragma: no cover
             sql_ctx_def = guard(get_definition, self.func_ir, rhs.value)
-            if find_callname(self.func_ir, sql_ctx_def) == (
+            if guard(find_callname, self.func_ir, sql_ctx_def) == (
                 "init_sql_context",
                 "bodosql.context_ext",
             ):
