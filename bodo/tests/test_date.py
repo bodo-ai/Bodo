@@ -7,16 +7,7 @@ import pandas as pd
 import pytest
 
 import bodo
-from bodo.tests.utils import (
-    check_func,
-    count_array_OneD_Vars,
-    count_array_OneDs,
-    count_array_REPs,
-    count_parfor_OneD_Vars,
-    count_parfor_OneDs,
-    count_parfor_REPs,
-    dist_IR_contains,
-)
+from bodo.tests.utils import check_func
 from bodo.utils.typing import BodoError
 
 
