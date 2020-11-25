@@ -24,12 +24,10 @@ from numba.core.ir_utils import (
     is_getitem,
     mk_unique_var,
     next_label,
-    remove_dead,
     remove_dels,
     replace_arg_nodes,
     replace_var_names,
     replace_vars_inner,
-    replace_vars_stmt,
     visit_vars_inner,
 )
 from numba.core.typing import signature
@@ -42,10 +40,8 @@ from numba.parfors.parfor import (
 )
 
 import bodo
-from bodo.hiframes import series_impl
 from bodo.hiframes.datetime_date_ext import DatetimeDateArrayType
 from bodo.hiframes.pd_series_ext import SeriesType
-from bodo.ir.join import write_send_buff
 from bodo.libs.array import (
     arr_info_list_to_table,
     array_to_info,
@@ -67,35 +63,20 @@ from bodo.libs.decimal_arr_ext import DecimalArrayType, alloc_decimal_array
 from bodo.libs.int_arr_ext import IntDtype, IntegerArrayType
 from bodo.libs.str_arr_ext import (
     StringArrayType,
-    get_data_ptr,
-    get_offset_ptr,
-    get_utf8_size,
     pre_alloc_string_array,
     string_array_type,
 )
 from bodo.libs.str_ext import string_type
-from bodo.libs.timsort import getitem_arr_tup, setitem_arr_tup
 from bodo.transforms import distributed_analysis, distributed_pass
 from bodo.transforms.distributed_analysis import Distribution
-from bodo.utils.shuffle import (
-    _get_data_tup,
-    _get_keys_tup,
-    alloc_pre_shuffle_metadata,
-    finalize_shuffle_meta,
-    getitem_arr_tup_single,
-    update_shuffle_meta,
-    val_to_tup,
-)
 from bodo.utils.transform import get_call_expr_arg
 from bodo.utils.typing import (
     BodoError,
     get_overload_const_func,
-    get_overload_const_list,
     get_overload_const_str,
     get_overload_constant_dict,
     is_overload_constant_dict,
     is_overload_constant_str,
-    is_overload_true,
     list_cumulative,
 )
 from bodo.utils.utils import (
@@ -2051,6 +2032,8 @@ def compile_to_optimized_ir(func, arg_typs, typingctx):
         f_ir, typemap, calltypes, return_type, typingctx, options, flags
     )
     parfor_pass.run()
+    # TODO(ehsan): remove when this PR is merged and released in Numba:
+    # https://github.com/numba/numba/pull/6519
     remove_dels(f_ir.blocks)
     # make sure eval nodes are after the parfor for easier extraction
     # TODO: extract an eval func more robustly
@@ -2128,6 +2111,8 @@ class RegularUDFGenerator(object):
         parfor = None
         if parfor_ind != -1:
             parfor = block_body[parfor_ind]
+            # TODO(ehsan): remove when this PR is merged and released in Numba:
+            # https://github.com/numba/numba/pull/6519
             remove_dels(parfor.loop_body)
             remove_dels({0: parfor.init_block})
 
