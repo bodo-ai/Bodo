@@ -21,9 +21,7 @@ from bodo.tests.utils import (
     check_func,
     count_array_OneDs,
     count_array_REPs,
-    count_parfor_OneDs,
     count_parfor_REPs,
-    dist_IR_contains,
     get_start_end,
     is_bool_object_series,
 )
@@ -3213,7 +3211,7 @@ def test_series_groupby_arr(memory_leak_check):
 
     S = pd.Series([1, 2, 3, 4, 5, 6])
     A = np.array([1, 2, 1, 1, 2, 3])
-    check_func(impl, (S, A), check_names=False)
+    check_func(impl, (S, A), check_names=False, sort_output=True)
 
 
 def test_series_groupby_index(memory_leak_check):
@@ -3221,7 +3219,7 @@ def test_series_groupby_index(memory_leak_check):
         return S.groupby(level=0).sum()
 
     S = pd.Series([1, 2, 3, 4, 5, 6], [1, 2, 1, 1, 2, 3])
-    check_func(impl, (S,), check_names=False)
+    check_func(impl, (S,), check_names=False, sort_output=True)
 
 
 def test_series_np_where_str(memory_leak_check):
