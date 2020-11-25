@@ -17,20 +17,14 @@ from numba.core.ir_utils import (
     mk_unique_var,
     find_topo_order,
     dprint_func_ir,
-    remove_dead,
-    remove_dels,
-    replace_var_names,
     find_const,
     GuardException,
     compile_to_numba_ir,
     replace_arg_nodes,
     find_callname,
     guard,
-    require,
     get_definition,
     build_definitions,
-    replace_vars_stmt,
-    find_build_sequence,
     compute_cfg_from_blocks,
 )
 
@@ -57,7 +51,6 @@ from bodo.hiframes.pd_categorical_ext import PDCategoricalDtype, CategoricalArra
 import bodo.hiframes.pd_dataframe_ext
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.utils.transform import (
-    update_locs,
     get_const_value,
     get_const_value_inner,
     update_node_list_definitions,
@@ -108,8 +101,7 @@ class UntypedPass:
         self._return_varnames = set()
 
     def run(self):
-        # FIXME: see why this breaks test_kmeans
-        # remove_dels(self.func_ir.blocks)
+        """run untyped pass transform"""
         dprint_func_ir(self.func_ir, "starting untyped pass")
         self._handle_metadata()
         blocks = self.func_ir.blocks
@@ -1087,7 +1079,6 @@ class UntypedPass:
                 orient, convert_dates, precise_float, lines, compression
             ),
         )
-        import os
 
         if dtype_var == "":
             # can only read partial of the json file

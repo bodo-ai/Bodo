@@ -3,7 +3,6 @@
 Parallelizes the IR for distributed execution and inserts MPI calls.
 """
 import copy
-import math
 import operator
 import sys
 import types as pytypes  # avoid confusion with numba.core.types
@@ -19,31 +18,23 @@ except:
     pass
 import llvmlite.binding as ll
 import numpy as np
-from numba.core import ir, ir_utils, postproc, types
+from numba.core import ir, ir_utils, types
 from numba.core.ir_utils import (
-    GuardException,
     build_definitions,
     compile_to_numba_ir,
     compute_cfg_from_blocks,
     dprint_func_ir,
-    find_build_sequence,
     find_callname,
     find_const,
     find_topo_order,
-    get_call_table,
     get_definition,
-    get_global_func_typ,
-    get_name_var_table,
-    get_tuple_table,
     guard,
     is_get_setitem,
     mk_alloc,
     mk_unique_var,
     remove_dead,
-    remove_dels,
     rename_labels,
     replace_arg_nodes,
-    replace_vars_inner,
     require,
     simplify,
 )
@@ -51,7 +42,6 @@ from numba.parfors.parfor import (
     Parfor,
     _lower_parfor_sequential_block,
     get_parfor_params,
-    get_parfor_reductions,
     unwrap_parfor_blocks,
     wrap_parfor_blocks,
 )
@@ -75,11 +65,9 @@ from bodo.transforms.distributed_analysis import (
     get_reduce_op,
 )
 from bodo.utils.transform import (
-    ReplaceFunc,
     compile_func_single_block,
     get_call_expr_arg,
     get_const_value_inner,
-    replace_func,
 )
 from bodo.utils.typing import BodoError, BooleanLiteral, list_cumulative
 from bodo.utils.utils import (
@@ -180,7 +168,7 @@ class DistributedPass:
         self._local_reduce_vars = {}
 
     def run(self):
-        remove_dels(self.func_ir.blocks)
+        """Run distributed pass transforms"""
         dprint_func_ir(self.func_ir, "starting distributed pass")
         self.func_ir._definitions = build_definitions(self.func_ir.blocks)
         self.arr_analysis.run(self.func_ir.blocks)
@@ -208,7 +196,6 @@ class DistributedPass:
             self.arr_analysis,
         )
         self._dist_analysis = dist_analysis_pass.run()
-        # dprint_func_ir(self.func_ir, "after analysis distributed")
 
         self._T_arrs = dist_analysis_pass._T_arrs
         self._parallel_accesses = dist_analysis_pass._parallel_accesses

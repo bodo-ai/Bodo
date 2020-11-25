@@ -199,7 +199,6 @@ class SeriesPass:
 
     def run(self):
         blocks = self.func_ir.blocks
-        ir_utils.remove_dels(blocks)
         # topo_order necessary so Series data replacement optimization can be
         # performed in one pass
         topo_order = find_topo_order(blocks)
