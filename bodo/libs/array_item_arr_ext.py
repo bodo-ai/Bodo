@@ -63,7 +63,8 @@ ll.add_symbol(
 
 
 # offset index types
-offset_typ = types.int32
+offset_type = types.uint64
+np_offset_type = numba.np.numpy_support.as_dtype(offset_type)
 
 
 class ArrayItemArrayType(types.ArrayCompatible):
@@ -99,7 +100,7 @@ class ArrayItemArrayPayloadModel(models.StructModel):
             # (similar to std::vector).
             # Use offsets[n] to get total number of elements instead of len(data_arr).
             ("data", fe_type.array_type.dtype),
-            ("offsets", types.Array(offset_typ, 1, "C")),
+            ("offsets", types.Array(offset_type, 1, "C")),
             ("null_bitmap", types.Array(types.uint8, 1, "C")),
         ]
         models.StructModel.__init__(self, dmm, fe_type, members)
@@ -141,7 +142,7 @@ def define_array_item_dtor(context, builder, array_item_type, payload_type):
     payload = context.make_helper(builder, payload_type, ref=payload_ptr)
 
     context.nrt.decref(builder, array_item_type.dtype, payload.data)
-    context.nrt.decref(builder, types.Array(offset_typ, 1, "C"), payload.offsets)
+    context.nrt.decref(builder, types.Array(offset_type, 1, "C"), payload.offsets)
     context.nrt.decref(builder, types.Array(types.uint8, 1, "C"), payload.null_bitmap)
 
     builder.ret_void()
@@ -195,14 +196,16 @@ def construct_array_item_array(
     # alloc offsets
     n_arrays_plus_1 = builder.add(n_arrays, lir.Constant(lir.IntType(64), 1))
     offsets = bodo.utils.utils._empty_nd_impl(
-        context, builder, types.Array(offset_typ, 1, "C"), [n_arrays_plus_1]
+        context, builder, types.Array(offset_type, 1, "C"), [n_arrays_plus_1]
     )
     offsets_ptr = offsets.data
     # offsets[0] = 0
-    builder.store(context.get_constant(types.int32, 0), offsets_ptr)
+    builder.store(context.get_constant(offset_type, 0), offsets_ptr)
     # offsets[n] = n_elems
     builder.store(
-        builder.trunc(builder.extract_value(n_elems, 0), lir.IntType(32)),
+        builder.trunc(
+            builder.extract_value(n_elems, 0), lir.IntType(offset_type.bitwidth)
+        ),
         builder.gep(offsets_ptr, [n_arrays]),
     )
     payload.offsets = offsets._getvalue()
@@ -257,8 +260,8 @@ def _unbox_array_item_array_generic(
     pd_mod_obj = c.pyapi.import_module_noblock(mod_name)
     C_NA = c.pyapi.object_getattr_string(pd_mod_obj, "NA")
 
-    zero32 = c.context.get_constant(types.int32, 0)
-    builder.store(zero32, offsets_ptr)
+    zero_offset = c.context.get_constant(offset_type, 0)
+    builder.store(zero_offset, offsets_ptr)
 
     # pseudocode for code generation:
     # curr_item_ind = 0
@@ -289,7 +292,7 @@ def _unbox_array_item_array_generic(
 
         # offsets[i] = curr_item_ind
         builder.store(
-            builder.trunc(item_ind, lir.IntType(32)),
+            builder.trunc(item_ind, lir.IntType(offset_type.bitwidth)),
             builder.gep(offsets_ptr, [array_ind]),
         )
         # arr_obj = A[i]
@@ -313,7 +316,7 @@ def _unbox_array_item_array_generic(
 
     # offsets[n] = curr_item_ind;
     builder.store(
-        builder.trunc(builder.load(curr_item_ind), lir.IntType(32)),
+        builder.trunc(builder.load(curr_item_ind), lir.IntType(offset_type.bitwidth)),
         builder.gep(offsets_ptr, [n_arrays]),
     )
 
@@ -370,7 +373,7 @@ def unbox_array_item_array(typ, val, c):
             [
                 lir.IntType(8).as_pointer(),  # obj
                 lir.IntType(8).as_pointer(),  # data
-                lir.IntType(32).as_pointer(),  # offsets
+                lir.IntType(offset_type.bitwidth).as_pointer(),  # offsets
                 lir.IntType(8).as_pointer(),  # null_bitmap
                 lir.IntType(32),  # ctype
             ],
@@ -505,7 +508,7 @@ def box_array_item_arr(typ, val, c):
     payload = _get_array_item_arr_payload(c.context, c.builder, typ, val)
     data_arr = payload.data
     offsets_ptr = c.context.make_helper(
-        c.builder, types.Array(offset_typ, 1, "C"), payload.offsets
+        c.builder, types.Array(offset_type, 1, "C"), payload.offsets
     ).data
     null_bitmap_ptr = c.context.make_helper(
         c.builder, types.Array(types.uint8, 1, "C"), payload.null_bitmap
@@ -527,7 +530,7 @@ def box_array_item_arr(typ, val, c):
             [
                 lir.IntType(64),  # num_lists
                 lir.IntType(8).as_pointer(),  # data
-                lir.IntType(32).as_pointer(),  # offsets
+                lir.IntType(offset_type.bitwidth).as_pointer(),  # offsets
                 lir.IntType(8).as_pointer(),  # null_bitmap
                 lir.IntType(32),  # ctype
             ],
@@ -676,7 +679,7 @@ def get_offsets(typingctx, arr_typ=None):
         payload = _get_array_item_arr_payload(context, builder, arr_typ, arr)
         return impl_ret_borrowed(context, builder, sig.return_type, payload.offsets)
 
-    return types.Array(offset_typ, 1, "C")(arr_typ), codegen
+    return types.Array(offset_type, 1, "C")(arr_typ), codegen
 
 
 @intrinsic
@@ -687,13 +690,15 @@ def get_offsets_ind(typingctx, arr_typ, ind_t=None):
     def codegen(context, builder, sig, args):
         (arr, ind) = args
         payload = _get_array_item_arr_payload(context, builder, arr_typ, arr)
-        data_ptr = context.make_array(types.Array(offset_typ, 1, "C"))(
+        data_ptr = context.make_array(types.Array(offset_type, 1, "C"))(
             context, builder, payload.offsets
         ).data
-        offsets = builder.bitcast(data_ptr, lir.IntType(32).as_pointer())
+        offsets = builder.bitcast(
+            data_ptr, lir.IntType(offset_type.bitwidth).as_pointer()
+        )
         return builder.load(builder.gep(offsets, [ind]))
 
-    return offset_typ(arr_typ, types.int64), codegen
+    return offset_type(arr_typ, types.int64), codegen
 
 
 @intrinsic

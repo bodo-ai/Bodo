@@ -29,11 +29,6 @@ from numba.parfors.array_analysis import ArrayAnalysis
 
 import bodo
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
-from bodo.libs.str_arr_ext import (
-    char_arr_type,
-    null_bitmap_arr_type,
-    offset_arr_type,
-)
 from bodo.utils.typing import (
     NOT_CONSTANT,
     BodoError,

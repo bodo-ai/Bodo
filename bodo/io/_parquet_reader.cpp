@@ -361,7 +361,7 @@ inline void copy_data(uint8_t* out_data, const uint8_t* buff,
 int pq_read_string_single_file(
     std::shared_ptr<parquet::arrow::FileReader> arrow_reader,
     int64_t real_column_idx, int64_t column_idx, int64_t start, int64_t count,
-    std::vector<uint32_t>* offset_vec, std::vector<uint8_t>* data_vec,
+    std::vector<offset_t>* offset_vec, std::vector<uint8_t>* data_vec,
     std::vector<bool>* null_vec) {
     std::shared_ptr<arrow::DataType> arrow_type =
         get_arrow_type(arrow_reader, real_column_idx);
@@ -390,7 +390,7 @@ int pq_read_string_single_file(
         nrows_in_group = rg_metadata->ColumnChunk(column_idx)->num_values();
     }
 
-    uint32_t curr_offset = 0;
+    offset_t curr_offset = 0;
 
     /* ------- read offsets and data ------ */
     while (read_rows < count) {
@@ -412,6 +412,7 @@ int pq_read_string_single_file(
 
         int64_t null_size = -1;
         if (buffers[0]) null_size = buffers[0]->size();
+        // TODO check type of Arrow offsets buffer
         const uint32_t* offsets_buff = (const uint32_t*)buffers[1]->data();
         const uint8_t* data_buff = buffers[2]->data();
         const uint8_t* null_buff = arr->null_bitmap_data();
@@ -475,7 +476,7 @@ int pq_read_string_single_file(
 int64_t pq_read_list_string_single_file(
     std::shared_ptr<parquet::arrow::FileReader> arrow_reader,
     int64_t real_column_idx, int64_t column_idx, int64_t start, int64_t count,
-    std::vector<uint32_t>* offset_vec, std::vector<uint32_t>* index_offset_vec,
+    std::vector<offset_t>* offset_vec, std::vector<offset_t>* index_offset_vec,
     std::vector<uint8_t>* data_vec, std::vector<bool>* null_vec) {
     std::shared_ptr<arrow::DataType> arrow_type =
         get_arrow_type(arrow_reader, real_column_idx);
@@ -504,8 +505,8 @@ int64_t pq_read_list_string_single_file(
         nrows_in_group = rg_metadata->ColumnChunk(column_idx)->num_values();
     }
 
-    uint32_t curr_offset = 0;
-    uint32_t curr_index_offset = 0;
+    offset_t curr_offset = 0;
+    offset_t curr_index_offset = 0;
     int64_t num_strings = 0;
 
     /* ------- read offsets and data ------ */
@@ -619,7 +620,7 @@ int64_t pq_read_list_string_single_file(
 int64_t pq_read_array_item_single_file(
     std::shared_ptr<parquet::arrow::FileReader> arrow_reader,
     int64_t real_column_idx, int64_t column_idx, int out_dtype, int64_t start,
-    int64_t count, std::vector<uint32_t>* offset_vec,
+    int64_t count, std::vector<offset_t>* offset_vec,
     std::vector<uint8_t>* data_vec, std::vector<bool>* null_vec) {
     Bodo_CTypes::CTypeEnum out_dtype_ct = Bodo_CTypes::CTypeEnum(out_dtype);
     std::shared_ptr<arrow::DataType> arrow_type =
@@ -650,7 +651,7 @@ int64_t pq_read_array_item_single_file(
         nrows_in_group = rg_metadata->ColumnChunk(column_idx)->num_values();
     }
 
-    uint32_t curr_offset = 0;
+    offset_t curr_offset = 0;
     int64_t num_items = 0;
 
     /* ------- read offsets and data ------ */

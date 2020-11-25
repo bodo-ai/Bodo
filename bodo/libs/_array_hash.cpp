@@ -42,17 +42,17 @@ static void hash_array_inner(uint32_t* out_hashes, T* data, size_t n_rows,
  * 3) The hash of the bitmask
  */
 static void combine_hash_array_list_string(uint32_t* out_hashes, char* data,
-                                           uint32_t* data_offsets,
-                                           uint32_t* index_offsets,
+                                           offset_t* data_offsets,
+                                           offset_t* index_offsets,
                                            uint8_t* null_bitmask,
                                            uint8_t* sub_null_bitmask,
                                            size_t n_rows) {
-    uint32_t start_index_offset = 0;
+    offset_t start_index_offset = 0;
     for (size_t i = 0; i < n_rows; i++) {
         uint32_t hash1, hash2, hash3;
         // First the hash from the strings.
-        uint32_t end_index_offset = index_offsets[i + 1];
-        uint32_t len1 =
+        offset_t end_index_offset = index_offsets[i + 1];
+        offset_t len1 =
             data_offsets[end_index_offset] - data_offsets[start_index_offset];
         std::string val(&data[data_offsets[start_index_offset]], len1);
         const char* val_chars1 = val.c_str();
@@ -60,14 +60,14 @@ static void combine_hash_array_list_string(uint32_t* out_hashes, char* data,
         hash_string_32(val_chars1, (const int)len1, seed, &hash1);
         // Second the hash from the length of strings (approx that most strings
         // have less than 256 characters)
-        uint32_t len2 = end_index_offset - start_index_offset;
+        offset_t len2 = end_index_offset - start_index_offset;
         // This vectors encodes the length of the strings
         std::vector<char> V(len2);
         // This vector encodes the bitmask of the strings and the bitmask of the
         // list itself
         std::vector<char> V2(len2 + 1);
         for (size_t j = 0; j < len2; j++) {
-            uint32_t n_chars = data_offsets[start_index_offset + j + 1] -
+            offset_t n_chars = data_offsets[start_index_offset + j + 1] -
                                data_offsets[start_index_offset + j];
             V[j] = (char)n_chars;
             V2[j + 1] = GetBit(sub_null_bitmask, start_index_offset + j);
@@ -99,31 +99,31 @@ static void combine_hash_array_list_string(uint32_t* out_hashes, char* data,
  * 3) The hash of the bitmask
  */
 static void hash_array_list_string(uint32_t* out_hashes, char* data,
-                                   uint32_t* data_offsets,
-                                   uint32_t* index_offsets,
+                                   offset_t* data_offsets,
+                                   offset_t* index_offsets,
                                    uint8_t* null_bitmask,
                                    uint8_t* sub_null_bitmask, size_t n_rows,
                                    const uint32_t seed) {
-    uint32_t start_index_offset = 0;
+    offset_t start_index_offset = 0;
     for (size_t i = 0; i < n_rows; i++) {
         uint32_t hash1, hash2, hash3;
         // First the hash from the strings.
-        uint32_t end_index_offset = index_offsets[i + 1];
-        uint32_t len1 =
+        offset_t end_index_offset = index_offsets[i + 1];
+        offset_t len1 =
             data_offsets[end_index_offset] - data_offsets[start_index_offset];
         std::string val(&data[data_offsets[start_index_offset]], len1);
         const char* val_chars1 = val.c_str();
         hash_string_32(val_chars1, (const int)len1, seed, &hash1);
         // Second the hash from the length of strings (approx that most strings
         // have less than 256 characters)
-        uint32_t len2 = end_index_offset - start_index_offset;
+        offset_t len2 = end_index_offset - start_index_offset;
         // This vectors encodes the length of the strings
         std::vector<char> V(len2);
         // This vector encodes the bitmask of the strings and the bitmask of the
         // list itself
         std::vector<char> V2(len2 + 1);
         for (size_t j = 0; j < len2; j++) {
-            uint32_t n_chars = data_offsets[start_index_offset + j + 1] -
+            offset_t n_chars = data_offsets[start_index_offset + j + 1] -
                                data_offsets[start_index_offset + j];
             V[j] = (char)n_chars;
             V2[j + 1] = GetBit(sub_null_bitmask, start_index_offset + j);
@@ -151,12 +151,12 @@ static void hash_array_list_string(uint32_t* out_hashes, char* data,
  * may be a problem to consider later on.
  */
 static void hash_array_string(uint32_t* out_hashes, char* data,
-                              uint32_t* offsets, uint8_t* null_bitmask,
+                              offset_t* offsets, uint8_t* null_bitmask,
                               size_t n_rows, const uint32_t seed) {
-    uint32_t start_offset = 0;
+    offset_t start_offset = 0;
     for (size_t i = 0; i < n_rows; i++) {
-        uint32_t end_offset = offsets[i + 1];
-        uint32_t len = end_offset - start_offset;
+        offset_t end_offset = offsets[i + 1];
+        offset_t len = end_offset - start_offset;
         std::string val(&data[start_offset], len);
         const char* val_chars = val.c_str();
         hash_string_32(val_chars, (const int)len, seed, &out_hashes[i]);
@@ -176,7 +176,7 @@ static void hash_array_string(uint32_t* out_hashes, char* data,
  */
 template <typename T>
 void apply_arrow_offset_hash(uint32_t* out_hashes,
-                             std::vector<uint32_t> const& list_offsets,
+                             std::vector<offset_t> const& list_offsets,
                              size_t n_rows, T const& input_array) {
     for (size_t i_row = 0; i_row < n_rows; i_row++) {
         int64_t off1 = input_array->value_offset(list_offsets[i_row]);
@@ -199,12 +199,12 @@ void apply_arrow_offset_hash(uint32_t* out_hashes,
  */
 template <typename T>
 void apply_arrow_bitmask_hash(uint32_t* out_hashes,
-                              std::vector<uint32_t> const& list_offsets,
+                              std::vector<offset_t> const& list_offsets,
                               size_t n_rows, T const& input_array) {
     for (size_t i_row = 0; i_row < n_rows; i_row++) {
         uint8_t val = 0;
         uint8_t pow = 1;
-        for (uint32_t idx = list_offsets[i_row]; idx < list_offsets[i_row + 1];
+        for (offset_t idx = list_offsets[i_row]; idx < list_offsets[i_row + 1];
              idx++) {
             int val_i = (int)input_array->IsNull(idx);
             val += pow * val_i;
@@ -225,11 +225,15 @@ void apply_arrow_bitmask_hash(uint32_t* out_hashes,
  *
  */
 void apply_arrow_string_hashes(
-    uint32_t* out_hashes, std::vector<uint32_t> const& list_offsets,
+    uint32_t* out_hashes, std::vector<offset_t> const& list_offsets,
     size_t const& n_rows,
+#if OFFSET_BITWIDTH == 32
     std::shared_ptr<arrow::StringArray> const& input_array) {
+#else
+    std::shared_ptr<arrow::LargeStringArray> const& input_array) {
+#endif
     for (size_t i_row = 0; i_row < n_rows; i_row++) {
-        for (uint32_t idx = list_offsets[i_row]; idx < list_offsets[i_row + 1];
+        for (offset_t idx = list_offsets[i_row]; idx < list_offsets[i_row + 1];
              idx++) {
             if (input_array->IsNull(idx)) {
                 char val_c = 1;
@@ -254,7 +258,7 @@ void apply_arrow_string_hashes(
  * @param input_array: the array in input.
  */
 void apply_arrow_numeric_hash(
-    uint32_t* out_hashes, std::vector<uint32_t> const& list_offsets,
+    uint32_t* out_hashes, std::vector<offset_t> const& list_offsets,
     size_t const& n_rows,
     std::shared_ptr<arrow::PrimitiveArray> const& primitive_array) {
     arrow::Type::type typ = primitive_array->type()->id();
@@ -262,7 +266,7 @@ void apply_arrow_numeric_hash(
     uint64_t siztype = numpy_item_size[bodo_typ];
     char* value_ptr = (char*)primitive_array->values()->data();
     for (size_t i_row = 0; i_row < n_rows; i_row++) {
-        for (uint32_t idx = list_offsets[i_row]; idx < list_offsets[i_row + 1];
+        for (offset_t idx = list_offsets[i_row]; idx < list_offsets[i_row + 1];
              idx++) {
             char* value_ptr_shift = value_ptr + siztype * idx;
             hash_string_32(value_ptr_shift, siztype, out_hashes[i_row],
@@ -282,14 +286,20 @@ void apply_arrow_numeric_hash(
  * @param : input_array, the input array put in argument.
  */
 void hash_arrow_array(uint32_t* out_hashes,
-                      std::vector<uint32_t> const& list_offsets,
+                      std::vector<offset_t> const& list_offsets,
                       size_t const& n_rows,
                       std::shared_ptr<arrow::Array> const& input_array) {
+#if OFFSET_BITWIDTH == 32
     if (input_array->type_id() == arrow::Type::LIST) {
         auto list_array =
             std::dynamic_pointer_cast<arrow::ListArray>(input_array);
+#else
+    if (input_array->type_id() == arrow::Type::LARGE_LIST) {
+        auto list_array =
+            std::dynamic_pointer_cast<arrow::LargeListArray>(input_array);
+#endif
         apply_arrow_offset_hash(out_hashes, list_offsets, n_rows, list_array);
-        std::vector<uint32_t> list_offsets_out(n_rows + 1);
+        std::vector<offset_t> list_offsets_out(n_rows + 1);
         for (size_t i_row = 0; i_row <= n_rows; i_row++)
             list_offsets_out[i_row] =
                 list_array->value_offset(list_offsets[i_row]);
@@ -305,9 +315,15 @@ void hash_arrow_array(uint32_t* out_hashes,
             hash_arrow_array(out_hashes, list_offsets, n_rows,
                              struct_array->field(i_field));
         apply_arrow_bitmask_hash(out_hashes, list_offsets, n_rows, input_array);
+#if OFFSET_BITWIDTH == 32
     } else if (input_array->type_id() == arrow::Type::STRING) {
         auto str_array =
             std::dynamic_pointer_cast<arrow::StringArray>(input_array);
+#else
+    } else if (input_array->type_id() == arrow::Type::LARGE_STRING) {
+        auto str_array =
+            std::dynamic_pointer_cast<arrow::LargeStringArray>(input_array);
+#endif
         apply_arrow_offset_hash(out_hashes, list_offsets, n_rows, str_array);
         apply_arrow_string_hashes(out_hashes, list_offsets, n_rows, str_array);
         apply_arrow_bitmask_hash(out_hashes, list_offsets, n_rows, str_array);
@@ -337,20 +353,20 @@ void hash_array(uint32_t* out_hashes, array_info* array, size_t n_rows,
     // TODO: general dispatcher
     // XXX: assumes nullable array data for nulls is always consistent
     if (array->arr_type == bodo_array_type::ARROW) {
-        std::vector<uint32_t> list_offsets(n_rows + 1);
-        for (uint32_t i = 0; i <= n_rows; i++) list_offsets[i] = i;
-        for (uint32_t i = 0; i < n_rows; i++) out_hashes[i] = seed;
+        std::vector<offset_t> list_offsets(n_rows + 1);
+        for (offset_t i = 0; i <= n_rows; i++) list_offsets[i] = i;
+        for (offset_t i = 0; i < n_rows; i++) out_hashes[i] = seed;
         return hash_arrow_array(out_hashes, list_offsets, n_rows, array->array);
     }
     if (array->arr_type == bodo_array_type::STRING) {
         return hash_array_string(out_hashes, (char*)array->data1,
-                                 (uint32_t*)array->data2,
+                                 (offset_t*)array->data2,
                                  (uint8_t*)array->null_bitmask, n_rows, seed);
     }
     if (array->arr_type == bodo_array_type::LIST_STRING) {
         return hash_array_list_string(
-            out_hashes, (char*)array->data1, (uint32_t*)array->data2,
-            (uint32_t*)array->data3, (uint8_t*)array->null_bitmask,
+            out_hashes, (char*)array->data1, (offset_t*)array->data2,
+            (offset_t*)array->data3, (uint8_t*)array->null_bitmask,
             (uint8_t*)array->sub_null_bitmask, n_rows, seed);
     }
     if (array->dtype == Bodo_CTypes::_BOOL) {
@@ -424,12 +440,12 @@ static void hash_array_combine_inner(uint32_t* out_hashes, T* data,
 }
 
 static void hash_array_combine_string(uint32_t* out_hashes, char* data,
-                                      uint32_t* offsets, size_t n_rows,
+                                      offset_t* offsets, size_t n_rows,
                                       const uint32_t seed) {
-    uint32_t start_offset = 0;
+    offset_t start_offset = 0;
     for (size_t i = 0; i < n_rows; i++) {
-        uint32_t end_offset = offsets[i + 1];
-        uint32_t len = end_offset - start_offset;
+        offset_t end_offset = offsets[i + 1];
+        offset_t len = end_offset - start_offset;
         std::string val(&data[start_offset], len);
 
         uint32_t out_hash = 0;
@@ -447,17 +463,17 @@ static void hash_array_combine(uint32_t* out_hashes, array_info* array,
     // dispatch to proper function
     // TODO: general dispatcher
     if (array->arr_type == bodo_array_type::ARROW) {
-        std::vector<uint32_t> list_offsets(n_rows + 1);
-        for (uint32_t i = 0; i <= n_rows; i++) list_offsets[i] = i;
+        std::vector<offset_t> list_offsets(n_rows + 1);
+        for (offset_t i = 0; i <= n_rows; i++) list_offsets[i] = i;
         return hash_arrow_array(out_hashes, list_offsets, n_rows, array->array);
     }
     if (array->arr_type == bodo_array_type::STRING) {
         return hash_array_combine_string(out_hashes, (char*)array->data1,
-                                         (uint32_t*)array->data2, n_rows, seed);
+                                         (offset_t*)array->data2, n_rows, seed);
     }
     if (array->arr_type == bodo_array_type::LIST_STRING) {
         return combine_hash_array_list_string(out_hashes, (char*)array->data1,
-            (uint32_t*)array->data2, (uint32_t*)array->data3,
+            (offset_t*)array->data2, (offset_t*)array->data3,
             (uint8_t*)array->null_bitmask,(uint8_t*)array->sub_null_bitmask, n_rows);
     }
     if (array->dtype == Bodo_CTypes::_BOOL) {

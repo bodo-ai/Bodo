@@ -20,10 +20,12 @@ from bodo.libs.array import (
     info_from_table,
     info_to_array,
 )
+from bodo.libs.array_item_arr_ext import offset_type
 from bodo.libs.bool_arr_ext import BooleanArrayType, boolean_array
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.str_arr_ext import (
     convert_len_arr_to_offset,
+    convert_len_arr_to_offset32,
     get_bit_bitmap,
     get_data_ptr,
     get_null_bitmap_ptr,
@@ -444,6 +446,7 @@ def alltoallv_tup_overload(arrs, meta, key_arrs):
         func_text += "    recv_counts_nulls[i] = (meta.recv_counts[i] + 7) >> 3\n"
         func_text += "  tmp_null_bytes = np.empty(recv_counts_nulls.sum(), np.uint8)\n"
 
+    func_text += "  lens = np.empty(meta.n_out, np.uint32)\n"
     for i, typ in enumerate(arrs.types):
         if isinstance(typ, (types.Array, IntegerArrayType, BooleanArrayType)):
             func_text += (
@@ -457,12 +460,20 @@ def alltoallv_tup_overload(arrs, meta, key_arrs):
                 "  offset_ptr_{} = get_offset_ptr(meta.out_arr_tup[{}])\n".format(i, i)
             )
 
-            func_text += (
-                "  bodo.libs.distributed_api.c_alltoallv("
-                "meta.send_arr_lens_tup[{}].ctypes, offset_ptr_{}, meta.send_counts.ctypes, "
-                "meta.recv_counts.ctypes, meta.send_disp.ctypes, "
-                "meta.recv_disp.ctypes, int32_typ_enum)\n"
-            ).format(i, i)
+            if offset_type.bitwidth == 32:  # pragma: no cover
+                func_text += (
+                    "  bodo.libs.distributed_api.c_alltoallv("
+                    "meta.send_arr_lens_tup[{}].ctypes, offset_ptr_{}, meta.send_counts.ctypes, "
+                    "meta.recv_counts.ctypes, meta.send_disp.ctypes, "
+                    "meta.recv_disp.ctypes, int32_typ_enum)\n"
+                ).format(i, i)
+            else:
+                func_text += (
+                    "  bodo.libs.distributed_api.c_alltoallv("
+                    "meta.send_arr_lens_tup[{}].ctypes, lens.ctypes, meta.send_counts.ctypes, "
+                    "meta.recv_counts.ctypes, meta.send_disp.ctypes, "
+                    "meta.recv_disp.ctypes, int32_typ_enum)\n"
+                ).format(i)
 
             func_text += (
                 "  bodo.libs.distributed_api.c_alltoallv("
@@ -471,9 +482,16 @@ def alltoallv_tup_overload(arrs, meta, key_arrs):
                 "meta.recv_disp_char_tup[{}].ctypes, char_typ_enum)\n"
             ).format(i, i, i, i, i, i)
 
-            func_text += (
-                "  convert_len_arr_to_offset(offset_ptr_{}, meta.n_out)\n".format(i)
-            )
+            if offset_type.bitwidth == 32:  # pragma: no cover
+                func_text += (
+                    "  convert_len_arr_to_offset32(offset_ptr_{}, meta.n_out)\n".format(
+                        i
+                    )
+                )
+            else:
+                func_text += "  convert_len_arr_to_offset(lens.ctypes, offset_ptr_{}, meta.n_out)\n".format(
+                    i
+                )
 
         if is_null_masked_type(typ):
             func_text += "  null_bitmap_ptr_{} = get_arr_null_ptr(meta.out_arr_tup[{}])\n".format(
@@ -509,6 +527,7 @@ def alltoallv_tup_overload(arrs, meta, key_arrs):
             "int32_typ_enum": int32_typ_enum,
             "char_typ_enum": char_typ_enum,
             "convert_len_arr_to_offset": convert_len_arr_to_offset,
+            "convert_len_arr_to_offset32": convert_len_arr_to_offset32,
             "copy_gathered_null_bytes": bodo.libs.distributed_api.copy_gathered_null_bytes,
             "get_arr_null_ptr": get_arr_null_ptr,
             "print_str_arr": print_str_arr,

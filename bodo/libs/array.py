@@ -33,7 +33,7 @@ from bodo.libs.array_item_arr_ext import (
     ArrayItemArrayType,
     _get_array_item_arr_payload,
     define_array_item_dtor,
-    offset_typ,
+    offset_type,
 )
 from bodo.libs.bool_arr_ext import boolean_array
 from bodo.libs.decimal_arr_ext import DecimalArrayType, int128_type
@@ -229,7 +229,7 @@ def array_to_info(typingctx, arr_type_t=None):
                         context, builder, arr_typ, arr
                     )
                     buffs_data = get_buffers(arr_typ.dtype, payload.data)
-                    offsets_arr = context.make_array(types.Array(offset_typ, 1, "C"))(
+                    offsets_arr = context.make_array(types.Array(offset_type, 1, "C"))(
                         context, builder, payload.offsets
                     )
                     offsets_ptr = builder.bitcast(
@@ -426,7 +426,7 @@ def array_to_info(typingctx, arr_type_t=None):
                     lir.IntType(64),
                     lir.IntType(64),
                     lir.IntType(8).as_pointer(),
-                    lir.IntType(32).as_pointer(),
+                    lir.IntType(offset_type.bitwidth).as_pointer(),
                     lir.IntType(8).as_pointer(),
                     lir.IntType(8).as_pointer(),
                 ],
@@ -740,7 +740,7 @@ def nested_to_array(
             builder.extract_value(infos, infos_offset), ll_array_info_type
         )
         payload.offsets = _lower_info_to_array_numpy(
-            types.Array(types.uint32, 1, "C"),
+            types.Array(offset_type, 1, "C"),
             context,
             builder,
             offsets_info_ptr,

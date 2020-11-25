@@ -1,59 +1,60 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 import operator
-import numpy as np
+
+import llvmlite.binding as ll
 import numba
-import bodo
-from numba.core import types
-from numba.core.typing.templates import (
-    infer_global,
-    AbstractTemplate,
-    infer,
-    signature,
-    AttributeTemplate,
-    infer_getattr,
-    bound_function,
-)
 import numba.core.typing.typeof
+import numpy as np
+from llvmlite import ir as lir
+from llvmlite.llvmpy.core import Type as LLType
+from numba.core import cgutils, types
+from numba.core.imputils import (
+    RefType,
+    impl_ret_borrowed,
+    impl_ret_new_ref,
+    iternext_impl,
+)
+from numba.core.typing.templates import (
+    AbstractTemplate,
+    AttributeTemplate,
+    bound_function,
+    infer,
+    infer_getattr,
+    infer_global,
+    signature,
+)
 from numba.extending import (
-    typeof_impl,
-    type_callable,
-    models,
-    register_model,
     NativeValue,
-    make_attribute_wrapper,
-    lower_builtin,
     box,
-    unbox,
-    lower_getattr,
     intrinsic,
-    overload_method,
+    lower_builtin,
+    lower_getattr,
+    make_attribute_wrapper,
+    models,
     overload,
     overload_attribute,
-)
-from numba.core import cgutils
-from bodo.libs.str_ext import string_type
-from numba.core.imputils import (
-    impl_ret_new_ref,
-    impl_ret_borrowed,
-    iternext_impl,
-    RefType,
-)
-from bodo.libs.str_arr_ext import (
-    string_array_type,
-    get_data_ptr,
-    get_bit_bitmap,
-    get_null_bitmap_ptr,
-    _memcpy,
-    _get_string_arr_payload,
-    offset_arr_type,
-    char_arr_type,
-    null_bitmap_arr_type,
+    overload_method,
+    register_model,
+    type_callable,
+    typeof_impl,
+    unbox,
 )
 
-from llvmlite import ir as lir
-import llvmlite.binding as ll
-from llvmlite.llvmpy.core import Type as LLType
+import bodo
 from bodo.libs import hstr_ext
+from bodo.libs.array_item_arr_ext import offset_type
+from bodo.libs.str_arr_ext import (
+    _get_string_arr_payload,
+    _memcpy,
+    char_arr_type,
+    get_bit_bitmap,
+    get_data_ptr,
+    get_null_bitmap_ptr,
+    null_bitmap_arr_type,
+    offset_arr_type,
+    string_array_type,
+)
+from bodo.libs.str_ext import string_type
 
 ll.add_symbol("array_setitem", hstr_ext.array_setitem)
 ll.add_symbol("array_getptr1", hstr_ext.array_getptr1)
@@ -62,10 +63,9 @@ ll.add_symbol("str_arr_split_view_impl", hstr_ext.str_arr_split_view_impl)
 ll.add_symbol("str_arr_split_view_alloc", hstr_ext.str_arr_split_view_alloc)
 
 char_typ = types.uint8
-offset_typ = types.int32
 
 data_ctypes_type = types.ArrayCTypes(types.Array(char_typ, 1, "C"))
-offset_ctypes_type = types.ArrayCTypes(types.Array(offset_typ, 1, "C"))
+offset_ctypes_type = types.ArrayCTypes(types.Array(offset_type, 1, "C"))
 
 
 # nested offset structure to represent S.str.split()
@@ -112,8 +112,8 @@ class StringArrayPayloadModel(models.StructModel):
         # null_bitmap cannot be taken from the original data set since
         # a new null_bitmap array is built in str_arr_split_view_getitem_overload.
         members = [
-            ("index_offsets", types.CPointer(offset_typ)),
-            ("data_offsets", types.CPointer(offset_typ)),
+            ("index_offsets", types.CPointer(offset_type)),
+            ("data_offsets", types.CPointer(offset_type)),
             ("null_bitmap", types.CPointer(char_typ)),
         ]
         models.StructModel.__init__(self, dmm, fe_type, members)
@@ -123,8 +123,8 @@ str_arr_model_members = [
     ("num_items", types.uint64),  # number of lists
     # ('num_total_strs', types.uint64),  # number of strings total
     # ('num_total_chars', types.uint64),
-    ("index_offsets", types.CPointer(offset_typ)),
-    ("data_offsets", types.CPointer(offset_typ)),
+    ("index_offsets", types.CPointer(offset_type)),
+    ("data_offsets", types.CPointer(offset_type)),
     ("data", data_ctypes_type),
     ("null_bitmap", types.CPointer(char_typ)),
     ("meminfo", types.MemInfoPointer(str_arr_split_view_payload_type)),
@@ -180,13 +180,13 @@ def compute_split_view(typingctx, str_arr_typ, sep_typ=None):
         in_str_arr_payload = _get_string_arr_payload(context, builder, str_arr)
 
         # (str_arr_split_view_payload* out_view, int64_t n_strs,
-        #  uint32_t* offsets, char* data, char sep)
+        #  offset_t* offsets, char* data, char sep)
         fnty = lir.FunctionType(
             lir.VoidType(),
             [
                 meminfo_data_ptr.type,
                 lir.IntType(64),
-                lir.IntType(32).as_pointer(),
+                lir.IntType(offset_type.bitwidth).as_pointer(),
                 lir.IntType(8).as_pointer(),
                 lir.IntType(8).as_pointer(),
                 lir.IntType(8),
@@ -549,7 +549,7 @@ def str_arr_split_view_getitem_overload(A, ind):
                     setitem_c_arr(out_arr._index_offsets, item_ind, offset_ind)
                     ptr = get_c_arr_ptr(A._data_offsets, start_index)
                     out_ptr = get_c_arr_ptr(out_arr._data_offsets, offset_ind)
-                    _memcpy(out_ptr, ptr, n_offsets, 4)
+                    _memcpy(out_ptr, ptr, n_offsets, offset_type.bitwidth // 8)
                     bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(A._null_bitmap, i)
                     bodo.libs.int_arr_ext.set_bit_to_arr(
                         out_arr._null_bitmap, item_ind, bit

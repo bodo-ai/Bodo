@@ -66,7 +66,7 @@ ArrayBuildInfo nested_array_from_c(const int* types, const uint8_t** buffers,
 
         std::shared_ptr<arrow::Buffer> list_offsets =
             std::make_shared<arrow::Buffer>(_offsets,
-                                            sizeof(int32_t) * (length + 1));
+                                            sizeof(offset_t) * (length + 1));
         std::shared_ptr<arrow::Buffer> null_bitmap = NULLPTR;
         if (_null_bitmap)
             null_bitmap = std::make_shared<arrow::Buffer>(_null_bitmap,
@@ -74,7 +74,11 @@ ArrayBuildInfo nested_array_from_c(const int* types, const uint8_t** buffers,
         std::shared_ptr<arrow::Field> field =
             std::make_shared<arrow::Field>("field0", ai.array->type());
         std::shared_ptr<arrow::Array> array =
+#if OFFSET_BITWIDTH == 32
             std::make_shared<arrow::ListArray>(arrow::list(field), length,
+#else
+            std::make_shared<arrow::LargeListArray>(arrow::large_list(field), length,
+#endif
                                                list_offsets, ai.array,
                                                null_bitmap);
 
@@ -118,19 +122,23 @@ ArrayBuildInfo nested_array_from_c(const int* types, const uint8_t** buffers,
 
         std::shared_ptr<arrow::Buffer> str_offsets =
             std::make_shared<arrow::Buffer>(_offsets,
-                                            sizeof(int32_t) * (length + 1));
+                                            sizeof(offset_t) * (length + 1));
 
         std::shared_ptr<arrow::Buffer> null_bitmap = NULLPTR;
         if (_null_bitmap)
             null_bitmap = std::make_shared<arrow::Buffer>(_null_bitmap,
                                                           (length + 7) >> 3);
 
-        int64_t num_chars = ((int32_t*)_offsets)[length];
+        int64_t num_chars = ((offset_t*)_offsets)[length];
         std::shared_ptr<arrow::Buffer> data = std::make_shared<arrow::Buffer>(
             buffers[buf_pos++], num_chars * sizeof(char));
 
         std::shared_ptr<arrow::Array> array =
+#if OFFSET_BITWIDTH == 32
             std::make_shared<arrow::StringArray>(length, str_offsets, data,
+#else
+            std::make_shared<arrow::LargeStringArray>(length, str_offsets, data,
+#endif
                                                  null_bitmap);
         return ArrayBuildInfo(array, type_pos + 1, buf_pos, length_pos + 1,
                               name_pos);
@@ -253,7 +261,7 @@ array_info* list_string_array_to_info(NRT_MemInfo* meminfo) {
     array_item_arr_numpy_payload* sub_payload =
         (array_item_arr_numpy_payload*)payload->data->data;
     int64_t n_strings = sub_payload->n_arrays;
-    int64_t n_chars = ((uint32_t*)sub_payload->offsets.data)[n_strings];
+    int64_t n_chars = ((offset_t*)sub_payload->offsets.data)[n_strings];
 
     return new array_info(
         bodo_array_type::LIST_STRING, Bodo_CTypes::LIST_STRING, n_items,
@@ -431,8 +439,8 @@ NRT_MemInfo* string_array_from_sequence(PyObject* obj) {
     CHECK(C_NA, "getting pd.NA failed");
 
     numpy_arr_payload offsets_payload =
-        allocate_numpy_payload(n + 1, Bodo_CTypes::UINT32);
-    uint32_t* offsets = (uint32_t*)offsets_payload.data;
+        allocate_numpy_payload(n + 1, Bodo_CType_offset);
+    offset_t* offsets = (offset_t*)offsets_payload.data;
     std::vector<const char*> tmp_store(n);
     size_t len = 0;
     for (Py_ssize_t i = 0; i < n; ++i) {
@@ -572,7 +580,7 @@ inline void copy_item_to_buffer(char* data, Py_ssize_t ind, PyObject* item,
  * @param dtype data type of values, currently only float64 and int64 supported.
  */
 void array_item_array_from_sequence(PyObject* list_arr_obj, char* data,
-                                    uint32_t* offsets, uint8_t* null_bitmap,
+                                    offset_t* offsets, uint8_t* null_bitmap,
                                     Bodo_CTypes::CTypeEnum dtype) {
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
@@ -669,7 +677,7 @@ inline PyObject* value_to_pyobject(const char* data, int64_t ind,
  * @return numpy array of list of item objects
  */
 void* np_array_from_array_item_array(int64_t num_lists, const char* buffer,
-                                     const uint32_t* offsets,
+                                     const offset_t* offsets,
                                      const uint8_t* null_bitmap,
                                      Bodo_CTypes::CTypeEnum dtype) {
 #define CHECK(expr, msg)               \
@@ -735,7 +743,7 @@ void* np_array_from_array_item_array(int64_t num_lists, const char* buffer,
  * @return numpy array of dict objects
  */
 void* np_array_from_map_array(int64_t num_maps, const char* key_data,
-                              const char* value_data, const uint32_t* offsets,
+                              const char* value_data, const offset_t* offsets,
                               const uint8_t* null_bitmap,
                               Bodo_CTypes::CTypeEnum key_dtype,
                               Bodo_CTypes::CTypeEnum value_dtype) {
@@ -880,7 +888,7 @@ void struct_array_from_sequence(PyObject* struct_arr_obj, int n_fields,
  * @param value_dtype data types of values
  */
 void map_array_from_sequence(PyObject* map_arr_obj, char* key_data,
-                             char* value_data, uint32_t* offsets,
+                             char* value_data, offset_t* offsets,
                              uint8_t* null_bitmap,
                              Bodo_CTypes::CTypeEnum key_dtype,
                              Bodo_CTypes::CTypeEnum value_dtype) {

@@ -55,6 +55,11 @@ struct Bodo_CTypes {
     };
 };
 
+// use 64-bit offsets for string and nested arrays
+typedef uint64_t offset_t;
+#define OFFSET_BITWIDTH 64
+#define Bodo_CType_offset Bodo_CTypes::CTypeEnum::UINT64
+
 inline bool is_unsigned_integer(Bodo_CTypes::CTypeEnum typ) {
     if (typ == Bodo_CTypes::UINT8) return true;
     if (typ == Bodo_CTypes::UINT16) return true;
@@ -517,8 +522,8 @@ struct array_item_arr_numpy_payload {
 
 // XXX: equivalent to payload data model in split_impl.py
 struct str_arr_split_view_payload {
-    uint32_t* index_offsets;
-    uint32_t* data_offsets;
+    offset_t* index_offsets;
+    offset_t* data_offsets;
     uint8_t* null_bitmap;
 };
 

@@ -101,9 +101,9 @@ void mpi_comm_info::set_counts(uint32_t* hashes) {
         if (arr_info->arr_type == bodo_array_type::STRING) {
             // send counts
             std::vector<int64_t>& sub_counts = send_count_sub[i];
-            uint32_t* offsets = (uint32_t*)arr_info->data2;
+            offset_t* offsets = (offset_t*)arr_info->data2;
             for (size_t i = 0; i < n_rows; i++) {
-                uint32_t str_len = offsets[i + 1] - offsets[i];
+                offset_t str_len = offsets[i + 1] - offsets[i];
                 size_t node = (size_t)hashes[i] % (size_t)n_pes;
                 sub_counts[node] += str_len;
             }
@@ -119,12 +119,12 @@ void mpi_comm_info::set_counts(uint32_t* hashes) {
             // send counts
             std::vector<int64_t>& sub_counts = send_count_sub[i];
             std::vector<int64_t>& sub_sub_counts = send_count_sub_sub[i];
-            uint32_t* index_offsets = (uint32_t*)arr_info->data3;
-            uint32_t* data_offsets = (uint32_t*)arr_info->data2;
+            offset_t* index_offsets = (offset_t*)arr_info->data3;
+            offset_t* data_offsets = (offset_t*)arr_info->data2;
             for (size_t i = 0; i < n_rows; i++) {
                 size_t node = (size_t)hashes[i] % (size_t)n_pes;
-                uint32_t len_sub = index_offsets[i + 1] - index_offsets[i];
-                uint32_t len_sub_sub = data_offsets[index_offsets[i + 1]] -
+                offset_t len_sub = index_offsets[i + 1] - index_offsets[i];
+                offset_t len_sub_sub = data_offsets[index_offsets[i + 1]] -
                                        data_offsets[index_offsets[i]];
                 sub_counts[node] += len_sub;
                 sub_sub_counts[node] += len_sub_sub;
@@ -199,8 +199,9 @@ static void fill_send_array_inner_decimal(uint8_t* send_buff, uint8_t* data,
   @param n_rows           : the number of rows.
  */
 static void fill_send_array_string_inner(
+    // XXX send_length_buff was allocated as offset_t but treating as uint32
     char* send_data_buff, uint32_t* send_length_buff, char* arr_data,
-    uint32_t* arr_offsets, uint32_t* hashes,
+    offset_t* arr_offsets, uint32_t* hashes,
     std::vector<int64_t> const& send_disp,
     std::vector<int64_t> const& send_disp_sub, int n_pes, size_t n_rows) {
     std::vector<int64_t> tmp_offset(send_disp);
@@ -237,9 +238,10 @@ static void fill_send_array_string_inner(
   @param n_rows            : the number of rows.
  */
 static void fill_send_array_list_string_inner(
+    // XXX send_length_xxx was allocated as offset_t but treating as uint32
     char* send_data_buff, uint32_t* send_length_data,
-    uint32_t* send_length_index, char* arr_data, uint32_t* arr_data_offsets,
-    uint32_t* arr_index_offsets, uint32_t* hashes,
+    uint32_t* send_length_index, char* arr_data, offset_t* arr_data_offsets,
+    offset_t* arr_index_offsets, uint32_t* hashes,
     std::vector<int64_t> const& send_disp,
     std::vector<int64_t> const& send_disp_sub,
     std::vector<int64_t> const& send_disp_sub_sub, int n_pes, size_t n_rows) {
@@ -363,8 +365,9 @@ static void fill_send_array(array_info* send_arr, array_info* in_arr,
                                              send_disp, n_pes, n_rows);
     if (in_arr->arr_type == bodo_array_type::STRING) {
         fill_send_array_string_inner(
+            /// XXX casting data2 offset_t to uint32
             (char*)send_arr->data1, (uint32_t*)send_arr->data2,
-            (char*)in_arr->data1, (uint32_t*)in_arr->data2, hashes, send_disp,
+            (char*)in_arr->data1, (offset_t*)in_arr->data2, hashes, send_disp,
             send_disp_sub, n_pes, n_rows);
         fill_send_array_null_inner((uint8_t*)send_arr->null_bitmask,
                                    (uint8_t*)in_arr->null_bitmask, hashes,
@@ -373,9 +376,10 @@ static void fill_send_array(array_info* send_arr, array_info* in_arr,
     }
     if (in_arr->arr_type == bodo_array_type::LIST_STRING) {
         fill_send_array_list_string_inner(
+            /// XXX casting data2 and data3 offset_t to uint32
             (char*)send_arr->data1, (uint32_t*)send_arr->data2,
             (uint32_t*)send_arr->data3, (char*)in_arr->data1,
-            (uint32_t*)in_arr->data2, (uint32_t*)in_arr->data3, hashes,
+            (offset_t*)in_arr->data2, (offset_t*)in_arr->data3, hashes,
             send_disp, send_disp_sub, send_disp_sub_sub, n_pes, n_rows);
         fill_send_array_null_inner((uint8_t*)send_arr->null_bitmask,
                                    (uint8_t*)in_arr->null_bitmask, hashes,
@@ -387,13 +391,23 @@ static void fill_send_array(array_info* send_arr, array_info* in_arr,
 
 /* Internal function. Convert counts to displacements
  */
-static void convert_len_arr_to_offset(uint32_t* offsets,
-                                      size_t const& num_strs) {
+static void convert_len_arr_to_offset32(uint32_t* offsets,
+                                        size_t const& num_strs) {
     uint32_t curr_offset = 0;
     for (size_t i = 0; i < num_strs; i++) {
         uint32_t val = offsets[i];
         offsets[i] = curr_offset;
         curr_offset += val;
+    }
+    offsets[num_strs] = curr_offset;
+}
+
+static void convert_len_arr_to_offset(uint32_t* lens, offset_t* offsets, int64_t num_strs) {
+    offset_t curr_offset = 0;
+    for (size_t i = 0; i < num_strs; i++) {
+        uint32_t length = lens[i];
+        offsets[i] = curr_offset;
+        curr_offset += length;
     }
     offsets[num_strs] = curr_offset;
 }
@@ -426,10 +440,10 @@ void shuffle_list_string_null_bitmask(array_info* in_arr, array_info* out_arr,
     int64_t n_rows = in_arr->length;
     int n_pes = comm_info.n_pes;
     std::vector<int64_t> send_count(n_pes), recv_count(n_pes);
-    uint32_t* index_offset = (uint32_t*)in_arr->data3;
+    offset_t* index_offset = (offset_t*)in_arr->data3;
     for (int64_t i_row = 0; i_row < n_rows; i_row++) {
         size_t node = (size_t)hashes[i_row] % (size_t)n_pes;
-        uint32_t len = index_offset[i_row + 1] - index_offset[i_row];
+        offset_t len = index_offset[i_row + 1] - index_offset[i_row];
         send_count[node] += len;
     }
     MPI_Alltoall(send_count.data(), 1, MPI_INT64_T, recv_count.data(), 1,
@@ -451,13 +465,13 @@ void shuffle_list_string_null_bitmask(array_info* in_arr, array_info* out_arr,
         std::accumulate(recv_count_null.begin(), recv_count_null.end(), int64_t(0));
     std::vector<uint8_t> Vsend(send_count_sum);
     std::vector<uint8_t> Vrecv(recv_count_sum);
-    uint32_t pos_index = 0;
+    offset_t pos_index = 0;
     uint8_t* sub_null_bitmap = (uint8_t*)in_arr->sub_null_bitmask;
     std::vector<int64_t> shift(n_pes, 0);
     for (int64_t i_row = 0; i_row < n_rows; i_row++) {
         size_t node = (size_t)hashes[i_row] % (size_t)n_pes;
-        uint32_t len = index_offset[i_row + 1] - index_offset[i_row];
-        for (uint32_t u = 0; u < len; u++) {
+        offset_t len = index_offset[i_row + 1] - index_offset[i_row];
+        for (offset_t u = 0; u < len; u++) {
             bool bit = GetBit(sub_null_bitmap, pos_index + u);
             SetBitTo(Vsend.data(), 8 * send_disp_null[node] + shift[node], bit);
             shift[node]++;
@@ -493,18 +507,35 @@ static void shuffle_array(array_info* send_arr, array_info* out_arr,
     if (send_arr->arr_type == bodo_array_type::LIST_STRING) {
         // index_offsets
         MPI_Datatype mpi_typ = get_MPI_typ(Bodo_CTypes::UINT32);
+#if OFFSET_BITWIDTH == 32
         bodo_alltoallv(send_arr->data3, send_count, send_disp, mpi_typ,
                        out_arr->data3, recv_count, recv_disp, mpi_typ,
                        MPI_COMM_WORLD);
-        convert_len_arr_to_offset((uint32_t*)out_arr->data3,
-                                  (size_t)out_arr->length);
+        convert_len_arr_to_offset32((uint32_t*)out_arr->data3,
+                                    (size_t)out_arr->length);
         // data_offsets
         bodo_alltoallv(send_arr->data2, send_count_sub, send_disp_sub, mpi_typ,
                        out_arr->data2, recv_count_sub, recv_disp_sub, mpi_typ,
                        MPI_COMM_WORLD);
-        uint32_t* data3_uint32 = (uint32_t*)out_arr->data3;
-        size_t len = data3_uint32[out_arr->length];
-        convert_len_arr_to_offset((uint32_t*)out_arr->data2, len);
+        offset_t* data3_offset_t = (offset_t*)out_arr->data3;
+        size_t len = data3_offset_t[out_arr->length];
+        convert_len_arr_to_offset32((offset_t*)out_arr->data2, len);
+#else
+        std::vector<uint32_t> lens(out_arr->length);
+        bodo_alltoallv(send_arr->data3, send_count, send_disp, mpi_typ,
+                       lens.data(), recv_count, recv_disp, mpi_typ,
+                       MPI_COMM_WORLD);
+        convert_len_arr_to_offset(lens.data(), (offset_t*)out_arr->data3,
+                                  (size_t)out_arr->length);
+        lens.resize(out_arr->n_sub_elems);
+        // data_offsets
+        bodo_alltoallv(send_arr->data2, send_count_sub, send_disp_sub, mpi_typ,
+                       lens.data(), recv_count_sub, recv_disp_sub, mpi_typ,
+                       MPI_COMM_WORLD);
+        offset_t* data3_offset_t = (offset_t*)out_arr->data3;
+        size_t len = data3_offset_t[out_arr->length];
+        convert_len_arr_to_offset(lens.data(), (offset_t*)out_arr->data2, len);
+#endif
         // data
         mpi_typ = get_MPI_typ(Bodo_CTypes::UINT8);
         bodo_alltoallv(send_arr->data1, send_count_sub_sub, send_disp_sub_sub,
@@ -514,11 +545,20 @@ static void shuffle_array(array_info* send_arr, array_info* out_arr,
     if (send_arr->arr_type == bodo_array_type::STRING) {
         // string lengths
         MPI_Datatype mpi_typ = get_MPI_typ(Bodo_CTypes::UINT32);
+#if OFFSET_BITWIDTH == 32
         bodo_alltoallv(send_arr->data2, send_count, send_disp, mpi_typ,
                        out_arr->data2, recv_count, recv_disp, mpi_typ,
                        MPI_COMM_WORLD);
-        convert_len_arr_to_offset((uint32_t*)out_arr->data2,
+        convert_len_arr_to_offset32((uint32_t*)out_arr->data2,
                                   (size_t)out_arr->length);
+#else
+        std::vector<uint32_t> lens(out_arr->length);
+        bodo_alltoallv(send_arr->data2, send_count, send_disp, mpi_typ,
+                       lens.data(), recv_count, recv_disp, mpi_typ,
+                       MPI_COMM_WORLD);
+        convert_len_arr_to_offset(lens.data(), (offset_t*)out_arr->data2,
+                                   (size_t)out_arr->length);
+#endif
         // string data
         mpi_typ = get_MPI_typ(Bodo_CTypes::UINT8);
         bodo_alltoallv(send_arr->data1, send_count_sub, send_disp_sub, mpi_typ,
@@ -624,7 +664,7 @@ std::shared_ptr<arrow::Buffer> shuffle_arrow_offset_buffer(
         size_t node = (size_t)hashes[i_row] % (size_t)n_pes;
         int64_t off1 = input_array->value_offset(i_row);
         int64_t off2 = input_array->value_offset(i_row + 1);
-        int32_t e_len = off2 - off1;
+        offset_t e_len = off2 - off1;
         send_len[list_shift[node]] = e_len;
         list_shift[node]++;
     }
@@ -633,7 +673,7 @@ std::shared_ptr<arrow::Buffer> shuffle_arrow_offset_buffer(
     bodo_alltoallv(send_len.data(), send_count, send_disp, mpi_typ,
                    recv_len.data(), recv_count, recv_disp, mpi_typ,
                    MPI_COMM_WORLD);
-    size_t siz_out = sizeof(int32_t) * (n_rows_out + 1);
+    size_t siz_out = sizeof(offset_t) * (n_rows_out + 1);
     arrow::Result<std::unique_ptr<arrow::Buffer>> maybe_buffer =
         arrow::AllocateBuffer(siz_out);
     if (!maybe_buffer.ok()) {
@@ -642,8 +682,8 @@ std::shared_ptr<arrow::Buffer> shuffle_arrow_offset_buffer(
     }
     std::shared_ptr<arrow::Buffer> buffer = *std::move(maybe_buffer);
     uint8_t* list_offsets_ptr_ui8 = buffer->mutable_data();
-    int32_t* list_offsets_ptr = (int32_t*)list_offsets_ptr_ui8;
-    int32_t pos = 0;
+    offset_t* list_offsets_ptr = (offset_t*)list_offsets_ptr_ui8;
+    offset_t pos = 0;
     list_offsets_ptr[0] = 0;
     for (size_t i_row = 0; i_row < n_rows_out; i_row++) {
         pos += recv_len[i_row];
@@ -714,7 +754,11 @@ std::shared_ptr<arrow::Buffer> shuffle_arrow_primitive_buffer(
 std::shared_ptr<arrow::Buffer> shuffle_string_buffer(
     std::vector<int64_t> const& send_count,
     std::vector<int64_t> const& recv_count, uint32_t* hashes, int const& n_pes,
+#if OFFSET_BITWIDTH == 32
     std::shared_ptr<arrow::StringArray> const& string_array) {
+#else
+    std::shared_ptr<arrow::LargeStringArray> const& string_array) {
+#endif
     size_t n_rows = std::accumulate(send_count.begin(), send_count.end(), size_t(0));
     std::vector<int64_t> send_count_char(n_pes, 0);
     std::vector<int64_t> recv_count_char(n_pes);
@@ -787,10 +831,15 @@ std::shared_ptr<arrow::Array> shuffle_arrow_array(
         std::accumulate(recv_count.begin(), recv_count.end(), int64_t(0));
     //
     //
+#if OFFSET_BITWIDTH == 32
     if (input_array->type_id() == arrow::Type::LIST) {
-        // Converting the pointer
         std::shared_ptr<arrow::ListArray> list_array =
             std::dynamic_pointer_cast<arrow::ListArray>(input_array);
+#else
+    if (input_array->type_id() == arrow::Type::LARGE_LIST) {
+        std::shared_ptr<arrow::LargeListArray> list_array =
+            std::dynamic_pointer_cast<arrow::LargeListArray>(input_array);
+#endif
         // Computing the offsets, hashes
         std::shared_ptr<arrow::Buffer> list_offsets =
             shuffle_arrow_offset_buffer(send_count, recv_count, hashes, n_pes,
@@ -805,7 +854,11 @@ std::shared_ptr<arrow::Array> shuffle_arrow_array(
         std::shared_ptr<arrow::Array> child_array =
             shuffle_arrow_array(list_array->values(), hashes_out.data(), n_pes);
         // Now returning the shuffled array
+#if OFFSET_BITWIDTH == 32
         return std::make_shared<arrow::ListArray>(list_array->type(),
+#else
+        return std::make_shared<arrow::LargeListArray>(list_array->type(),
+#endif
                                                   n_rows_out, list_offsets,
                                                   child_array, null_bitmap_out);
 
@@ -827,10 +880,15 @@ std::shared_ptr<arrow::Array> shuffle_arrow_array(
         // Now returning the arrays
         return std::make_shared<arrow::StructArray>(
             struct_array->type(), n_rows_out, children, null_bitmap_out);
+#if OFFSET_BITWIDTH == 32
     } else if (input_array->type_id() == arrow::Type::STRING) {
-        // Converting pointers
         auto string_array =
             std::dynamic_pointer_cast<arrow::StringArray>(input_array);
+#else
+    } else if (input_array->type_id() == arrow::Type::LARGE_STRING) {
+        auto string_array =
+            std::dynamic_pointer_cast<arrow::LargeStringArray>(input_array);
+#endif
         // Now computing the offsets
         std::shared_ptr<arrow::Buffer> list_offsets =
             shuffle_arrow_offset_buffer(send_count, recv_count, hashes, n_pes,
@@ -843,7 +901,11 @@ std::shared_ptr<arrow::Array> shuffle_arrow_array(
         std::shared_ptr<arrow::Buffer> data = shuffle_string_buffer(
             send_count, recv_count, hashes, n_pes, string_array);
         // Now returning the array
+#if OFFSET_BITWIDTH == 32
         return std::make_shared<arrow::StringArray>(n_rows_out, list_offsets,
+#else
+        return std::make_shared<arrow::LargeStringArray>(n_rows_out, list_offsets,
+#endif
                                                     data, null_bitmap_out);
     } else {
         // Converting pointers
@@ -978,7 +1040,7 @@ array_info* reverse_shuffle_numpy_array(array_info* in_arr, uint32_t* hashes,
 array_info* reverse_shuffle_string_array(array_info* in_arr, uint32_t* hashes,
                                          mpi_comm_info const& comm_info) {
     // 1: computing the recv_count_sub and related
-    uint32_t* in_offset = (uint32_t*)in_arr->data2;
+    offset_t* in_offset = (offset_t*)in_arr->data2;
     int n_pes = comm_info.n_pes;
     std::vector<int64_t> recv_count_sub(n_pes),
         recv_disp_sub(n_pes);  // we continue using here the recv/send
@@ -1004,7 +1066,7 @@ array_info* reverse_shuffle_string_array(array_info* in_arr, uint32_t* hashes,
     int64_t out_len = out_arr->length;
     // 3: the offsets
     std::vector<uint32_t> list_len_send(in_len);
-    uint32_t* out_offset = (uint32_t*)out_arr->data2;
+    offset_t* out_offset = (offset_t*)out_arr->data2;
     for (int64_t i = 0; i < in_len; i++)
         list_len_send[i] = in_offset[i + 1] - in_offset[i];
     MPI_Datatype mpi_typ = get_MPI_typ(Bodo_CTypes::UINT32);
@@ -1013,9 +1075,16 @@ array_info* reverse_shuffle_string_array(array_info* in_arr, uint32_t* hashes,
                    comm_info.recv_disp, mpi_typ, list_len_recv.data(),
                    comm_info.send_count, comm_info.send_disp, mpi_typ,
                    MPI_COMM_WORLD);
+#if OFFSET_BITWIDTH == 32
     fill_recv_data_inner(list_len_recv.data(), out_offset, hashes,
                          comm_info.send_disp, comm_info.n_pes, out_len);
-    convert_len_arr_to_offset(out_offset, out_len);
+    convert_len_arr_to_offset32(out_offset, out_len);
+#else
+    std::vector<uint32_t> out_lens(out_arr->length);
+    fill_recv_data_inner(list_len_recv.data(), out_lens.data(), hashes,
+                         comm_info.send_disp, comm_info.n_pes, out_len);
+    convert_len_arr_to_offset(out_lens.data(), out_offset, out_len);
+#endif
     // 4: the characters themselves
     int64_t tot_char =
         std::accumulate(send_count_sub.begin(), send_count_sub.end(), int64_t(0));
@@ -1027,7 +1096,7 @@ array_info* reverse_shuffle_string_array(array_info* in_arr, uint32_t* hashes,
     std::vector<int64_t> tmp_offset_sub(send_disp_sub);
     for (int64_t i = 0; i < out_len; i++) {
         size_t node = (size_t)hashes[i] % (size_t)n_pes;
-        uint32_t str_len = out_offset[i + 1] - out_offset[i];
+        offset_t str_len = out_offset[i + 1] - out_offset[i];
         int64_t c_ind = tmp_offset_sub[node];
         char* out_ptr = out_arr->data1 + out_offset[i];
         char* in_ptr = (char*)tmp_recv.data() + c_ind;
@@ -1084,7 +1153,7 @@ array_info* reverse_shuffle_list_string_array(array_info* in_arr,
                                               mpi_comm_info const& comm_info) {
     // 1: computing the recv_count_sub and related
     int n_pes = comm_info.n_pes;
-    uint32_t* in_str_offset = (uint32_t*)in_arr->data3;
+    offset_t* in_str_offset = (offset_t*)in_arr->data3;
     std::vector<int64_t> recv_count_sub(n_pes),
         recv_disp_sub(n_pes);  // we continue using here the recv/send
     for (int i = 0; i < n_pes; i++)
@@ -1097,7 +1166,7 @@ array_info* reverse_shuffle_list_string_array(array_info* in_arr,
     calc_disp(send_disp_sub, send_count_sub);
     calc_disp(recv_disp_sub, recv_count_sub);
     // 2: computing the recv_count_sub_sub and related
-    uint32_t* in_data_offset = (uint32_t*)in_arr->data2;
+    offset_t* in_data_offset = (offset_t*)in_arr->data2;
     std::vector<int64_t> recv_count_sub_sub(n_pes),
         recv_disp_sub_sub(n_pes);  // we continue using here the recv/send
     for (int i = 0; i < n_pes; i++)
@@ -1122,7 +1191,7 @@ array_info* reverse_shuffle_list_string_array(array_info* in_arr,
     int64_t out_len = out_arr->length;
     // 4: the string offsets
     std::vector<uint32_t> list_str_len_send(in_len);
-    uint32_t* out_str_offset = (uint32_t*)out_arr->data3;
+    offset_t* out_str_offset = (offset_t*)out_arr->data3;
     for (int64_t i = 0; i < in_len; i++)
         list_str_len_send[i] = in_str_offset[i + 1] - in_str_offset[i];
     MPI_Datatype mpi_typ = get_MPI_typ(Bodo_CTypes::UINT32);
@@ -1131,14 +1200,21 @@ array_info* reverse_shuffle_list_string_array(array_info* in_arr,
                    comm_info.recv_disp, mpi_typ, list_str_len_recv.data(),
                    comm_info.send_count, comm_info.send_disp, mpi_typ,
                    MPI_COMM_WORLD);
+#if OFFSET_BITWIDTH == 32
     fill_recv_data_inner(list_str_len_recv.data(), out_str_offset, hashes,
                          comm_info.send_disp, comm_info.n_pes, out_len);
-    convert_len_arr_to_offset(out_str_offset, out_len);
+    convert_len_arr_to_offset32(out_str_offset, out_len);
+#else
+    std::vector<uint32_t> out_lens(out_len);
+    fill_recv_data_inner(list_str_len_recv.data(), out_lens.data(), hashes,
+                         comm_info.send_disp, comm_info.n_pes, out_len);
+    convert_len_arr_to_offset(out_lens.data(), out_str_offset, out_len);
+#endif
     // 5: the character offsets
     int32_t in_sub_len = in_str_offset[in_len];
     int32_t out_sub_len = out_str_offset[out_len];
     std::vector<uint32_t> list_char_len_send(in_sub_len);
-    uint32_t* out_data_offset = (uint32_t*)out_arr->data2;
+    offset_t* out_data_offset = (offset_t*)out_arr->data2;
     for (int64_t i = 0; i < in_sub_len; i++)
         list_char_len_send[i] = in_data_offset[i + 1] - in_data_offset[i];
     std::vector<uint32_t> list_char_len_recv(out_sub_len);
@@ -1146,16 +1222,27 @@ array_info* reverse_shuffle_list_string_array(array_info* in_arr,
                    mpi_typ, list_char_len_recv.data(), send_count_sub,
                    send_disp_sub, mpi_typ, MPI_COMM_WORLD);
     std::vector<int64_t> tmp_offset_sub(send_disp_sub);
+#if OFFSET_BITWIDTH != 32
+    out_lens.resize(out_sub_len);
+#endif
     for (int64_t i = 0; i < out_len; i++) {
         size_t node = (size_t)hashes[i] % (size_t)n_pes;
         uint32_t nb_str = out_str_offset[i + 1] - out_str_offset[i];
         int64_t c_ind = tmp_offset_sub[node];
+#if OFFSET_BITWIDTH == 32
         uint32_t* out_ptr = out_data_offset + out_str_offset[i];
+#else
+        uint32_t* out_ptr = out_lens.data() + out_str_offset[i];
+#endif
         uint32_t* in_ptr = list_char_len_recv.data() + c_ind;
         memcpy((char*)out_ptr, (char*)in_ptr, sizeof(uint32_t) * nb_str);
         tmp_offset_sub[node] += nb_str;
     }
-    convert_len_arr_to_offset(out_data_offset, out_sub_len);
+#if OFFSET_BITWIDTH == 32
+    convert_len_arr_to_offset32(out_data_offset, out_sub_len);
+#else
+    convert_len_arr_to_offset(out_lens.data(), out_data_offset, out_sub_len);
+#endif
     // 6: the characters themselves
     int32_t out_sub_sub_len = out_data_offset[out_sub_len];
     char* in_char = in_arr->data1;
@@ -1382,7 +1469,7 @@ std::shared_ptr<arrow::Buffer> broadcast_arrow_offsets_buffer(int64_t n_rows,
                                                               T const& arr) {
     int myrank, mpi_root = 0;
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
-    size_t siz_out = sizeof(int32_t) * (n_rows + 1);
+    size_t siz_out = sizeof(offset_t) * (n_rows + 1);
     arrow::Result<std::unique_ptr<arrow::Buffer>> maybe_buffer =
         arrow::AllocateBuffer(siz_out);
     if (!maybe_buffer.ok()) {
@@ -1390,12 +1477,12 @@ std::shared_ptr<arrow::Buffer> broadcast_arrow_offsets_buffer(int64_t n_rows,
         return nullptr;
     }
     std::shared_ptr<arrow::Buffer> buffer = *std::move(maybe_buffer);
-    uint32_t* offset_out_ptr = (uint32_t*)buffer->mutable_data();
+    offset_t* offset_out_ptr = (offset_t*)buffer->mutable_data();
     if (myrank == mpi_root) {
         for (int i_row = 0; i_row <= n_rows; i_row++)
             offset_out_ptr[i_row] = arr->value_offset(i_row);
     }
-    MPI_Datatype mpi_typ = get_MPI_typ(Bodo_CTypes::INT32);
+    MPI_Datatype mpi_typ = get_MPI_typ(Bodo_CType_offset);
     MPI_Bcast(offset_out_ptr, n_rows + 1, mpi_typ, mpi_root, MPI_COMM_WORLD);
     return buffer;
 }
@@ -1433,7 +1520,11 @@ std::shared_ptr<arrow::Buffer> broadcast_arrow_primitive_buffer(
 }
 
 std::shared_ptr<arrow::Buffer> broadcast_arrow_string_buffer(
+#if OFFSET_BITWIDTH == 32
     int64_t n_rows, std::shared_ptr<arrow::StringArray> const& string_array) {
+#else
+    int64_t n_rows, std::shared_ptr<arrow::LargeStringArray> const& string_array) {
+#endif
     int myrank, mpi_root = 0;
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
     // broadcasting number of characters
@@ -1482,13 +1573,24 @@ std::shared_ptr<arrow::Array> broadcast_arrow_array(
     int64_t n_rows = arr_bcast[0];
     arrow::Type::type typ_arrow = arrow::Type::type(arr_bcast[1]);
     //
+#if OFFSET_BITWIDTH == 32
     if (typ_arrow == arrow::Type::LIST) {
         std::shared_ptr<arrow::ListArray> list_arr = nullptr;
         std::shared_ptr<arrow::ListArray> ref_list_arr =
             std::dynamic_pointer_cast<arrow::ListArray>(ref_arr);
+#else
+    if (typ_arrow == arrow::Type::LARGE_LIST) {
+        std::shared_ptr<arrow::LargeListArray> list_arr = nullptr;
+        std::shared_ptr<arrow::LargeListArray> ref_list_arr =
+            std::dynamic_pointer_cast<arrow::LargeListArray>(ref_arr);
+#endif
         std::shared_ptr<arrow::Array> arr_values = nullptr;
         if (myrank == mpi_root) {
+#if OFFSET_BITWIDTH == 32
             list_arr = std::dynamic_pointer_cast<arrow::ListArray>(arr);
+#else
+            list_arr = std::dynamic_pointer_cast<arrow::LargeListArray>(arr);
+#endif
             arr_values = list_arr->values();
         }
         std::shared_ptr<arrow::Buffer> list_offsets =
@@ -1498,7 +1600,11 @@ std::shared_ptr<arrow::Array> broadcast_arrow_array(
         std::shared_ptr<arrow::Array> child_array =
             broadcast_arrow_array(ref_list_arr->values(), arr_values);
         // Now returning the broadcast array
+#if OFFSET_BITWIDTH == 32
         return std::make_shared<arrow::ListArray>(ref_list_arr->type(), n_rows,
+#else
+        return std::make_shared<arrow::LargeListArray>(ref_list_arr->type(), n_rows,
+#endif
                                                   list_offsets, child_array,
                                                   null_bitmap);
     } else if (typ_arrow == arrow::Type::STRUCT) {
@@ -1525,10 +1631,19 @@ std::shared_ptr<arrow::Array> broadcast_arrow_array(
             broadcast_arrow_bitmap_buffer(n_rows, struct_arr);
         return std::make_shared<arrow::StructArray>(
             ref_struct_arr->type(), n_rows, children, null_bitmap);
+#if OFFSET_BITWIDTH == 32
     } else if (typ_arrow == arrow::Type::STRING) {
         std::shared_ptr<arrow::StringArray> string_array = nullptr;
+#else
+    } else if (typ_arrow == arrow::Type::LARGE_STRING) {
+        std::shared_ptr<arrow::LargeStringArray> string_array = nullptr;
+#endif
         if (myrank == mpi_root) {
+#if OFFSET_BITWIDTH == 32
             string_array = std::dynamic_pointer_cast<arrow::StringArray>(arr);
+#else
+            string_array = std::dynamic_pointer_cast<arrow::LargeStringArray>(arr);
+#endif
         }
         std::shared_ptr<arrow::Buffer> list_offsets =
             broadcast_arrow_offsets_buffer(n_rows, string_array);
@@ -1536,7 +1651,11 @@ std::shared_ptr<arrow::Array> broadcast_arrow_array(
             broadcast_arrow_bitmap_buffer(n_rows, string_array);
         std::shared_ptr<arrow::Buffer> data =
             broadcast_arrow_string_buffer(n_rows, string_array);
+#if OFFSET_BITWIDTH == 32
         return std::make_shared<arrow::StringArray>(n_rows, list_offsets, data,
+#else
+        return std::make_shared<arrow::LargeStringArray>(n_rows, list_offsets, data,
+#endif
                                                     null_bitmap);
     } else {
         std::shared_ptr<arrow::PrimitiveArray> primitive_arr = nullptr;
@@ -1627,7 +1746,7 @@ table_info* broadcast_table(table_info* ref_table, table_info* in_table,
                       MPI_COMM_WORLD);
         }
         if (arr_type == bodo_array_type::STRING) {
-            MPI_Datatype mpi_typ32 = get_MPI_typ(Bodo_CTypes::UINT32);
+            MPI_Datatype mpi_typ_offset = get_MPI_typ(Bodo_CType_offset);
             MPI_Datatype mpi_typ8 = get_MPI_typ(Bodo_CTypes::UINT8);
             if (myrank == mpi_root)
                 out_arr = copy_array(in_arr);
@@ -1636,11 +1755,11 @@ table_info* broadcast_table(table_info* ref_table, table_info* in_table,
                                       arr_type, dtype, 0, num_categories);
             MPI_Bcast(out_arr->data1, n_sub_elems, mpi_typ8, mpi_root,
                       MPI_COMM_WORLD);
-            MPI_Bcast(out_arr->data2, n_rows, mpi_typ32, mpi_root,
+            MPI_Bcast(out_arr->data2, n_rows, mpi_typ_offset, mpi_root,
                       MPI_COMM_WORLD);
         }
         if (arr_type == bodo_array_type::LIST_STRING) {
-            MPI_Datatype mpi_typ32 = get_MPI_typ(Bodo_CTypes::UINT32);
+            MPI_Datatype mpi_typ_offset = get_MPI_typ(Bodo_CType_offset);
             MPI_Datatype mpi_typ8 = get_MPI_typ(Bodo_CTypes::UINT8);
             if (myrank == mpi_root)
                 out_arr = copy_array(in_arr);
@@ -1649,9 +1768,9 @@ table_info* broadcast_table(table_info* ref_table, table_info* in_table,
                                       arr_type, dtype, 0, num_categories);
             MPI_Bcast(out_arr->data1, n_sub_sub_elems, mpi_typ8, mpi_root,
                       MPI_COMM_WORLD);
-            MPI_Bcast(out_arr->data2, n_sub_elems, mpi_typ32, mpi_root,
+            MPI_Bcast(out_arr->data2, n_sub_elems, mpi_typ_offset, mpi_root,
                       MPI_COMM_WORLD);
-            MPI_Bcast(out_arr->data3, n_rows, mpi_typ32, mpi_root,
+            MPI_Bcast(out_arr->data3, n_rows, mpi_typ_offset, mpi_root,
                       MPI_COMM_WORLD);
             MPI_Datatype mpi_typ = get_MPI_typ(Bodo_CTypes::UINT8);
             int n_sub_bytes = (n_sub_elems + 7) >> 3;
@@ -1727,16 +1846,16 @@ std::shared_ptr<arrow::Buffer> gather_arrow_offset_buffer(T const& arr,
             rows_pos += rows_count[i_p];
         }
     }
-    std::vector<int32_t> list_siz_loc(n_rows);
-    for (int32_t i = 0; i < n_rows; i++)
+    std::vector<offset_t> list_siz_loc(n_rows);
+    for (offset_t i = 0; i < n_rows; i++)
         list_siz_loc[i] = arr->value_offset(i + 1) - arr->value_offset(i);
-    MPI_Datatype mpi_typ = get_MPI_typ(Bodo_CTypes::INT32);
-    std::vector<int32_t> list_siz_tot(n_rows_tot);
+    MPI_Datatype mpi_typ = get_MPI_typ(Bodo_CType_offset);
+    std::vector<offset_t> list_siz_tot(n_rows_tot);
     MPI_Gengatherv(list_siz_loc.data(), n_rows, mpi_typ, list_siz_tot.data(),
                    rows_count.data(), rows_disps.data(), mpi_typ, mpi_root,
                    MPI_COMM_WORLD, all_gather);
     if (myrank == mpi_root || all_gather) {
-        size_t siz_out = sizeof(int32_t) * (n_rows_tot + 1);
+        size_t siz_out = sizeof(offset_t) * (n_rows_tot + 1);
         arrow::Result<std::unique_ptr<arrow::Buffer>> maybe_buffer =
             arrow::AllocateBuffer(siz_out);
         if (!maybe_buffer.ok()) {
@@ -1744,8 +1863,8 @@ std::shared_ptr<arrow::Buffer> gather_arrow_offset_buffer(T const& arr,
             return nullptr;
         }
         std::shared_ptr<arrow::Buffer> buffer = *std::move(maybe_buffer);
-        uint32_t* data_out_ptr = (uint32_t*)buffer->mutable_data();
-        uint32_t pos = 0;
+        offset_t* data_out_ptr = (offset_t*)buffer->mutable_data();
+        offset_t pos = 0;
         for (int64_t i = 0; i <= n_rows_tot; i++) {
             data_out_ptr[i] = pos;
             pos += list_siz_tot[i];
@@ -1807,7 +1926,11 @@ std::shared_ptr<arrow::Buffer> gather_arrow_bitmap_buffer(T const& arr,
 }
 
 std::shared_ptr<arrow::Buffer> gather_arrow_string_buffer(
+#if OFFSET_BITWIDTH == 32
     std::shared_ptr<arrow::StringArray> const& arr, bool all_gather) {
+#else
+    std::shared_ptr<arrow::LargeStringArray> const& arr, bool all_gather) {
+#endif
     int n_pes, myrank, mpi_root = 0;
     MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
@@ -1897,9 +2020,15 @@ std::shared_ptr<arrow::Array> gather_arrow_array(
     else
         MPI_Reduce(&n_rows, &n_rows_tot, 1, MPI_INT, MPI_SUM, mpi_root,
                    MPI_COMM_WORLD);
+#if OFFSET_BITWIDTH == 32
     if (arr->type_id() == arrow::Type::LIST) {
         std::shared_ptr<arrow::ListArray> list_arr =
             std::dynamic_pointer_cast<arrow::ListArray>(arr);
+#else
+    if (arr->type_id() == arrow::Type::LARGE_LIST) {
+        std::shared_ptr<arrow::LargeListArray> list_arr =
+            std::dynamic_pointer_cast<arrow::LargeListArray>(arr);
+#endif
         std::shared_ptr<arrow::Buffer> list_offsets =
             gather_arrow_offset_buffer(list_arr, all_gather);
         std::shared_ptr<arrow::Buffer> null_bitmap_out =
@@ -1907,7 +2036,11 @@ std::shared_ptr<arrow::Array> gather_arrow_array(
         std::shared_ptr<arrow::Array> child_array =
             gather_arrow_array(list_arr->values(), all_gather);
         if (myrank == mpi_root || all_gather) {
+#if OFFSET_BITWIDTH == 32
             return std::make_shared<arrow::ListArray>(
+#else
+            return std::make_shared<arrow::LargeListArray>(
+#endif
                 list_arr->type(), n_rows_tot, list_offsets, child_array,
                 null_bitmap_out);
         }
@@ -1928,9 +2061,15 @@ std::shared_ptr<arrow::Array> gather_arrow_array(
                 struct_arr->type(), n_rows_tot, children, null_bitmap_out);
         }
         return nullptr;
+#if OFFSET_BITWIDTH == 32
     } else if (arr->type_id() == arrow::Type::STRING) {
         std::shared_ptr<arrow::StringArray> string_arr =
             std::dynamic_pointer_cast<arrow::StringArray>(arr);
+#else
+    } else if (arr->type_id() == arrow::Type::LARGE_STRING) {
+        std::shared_ptr<arrow::LargeStringArray> string_arr =
+            std::dynamic_pointer_cast<arrow::LargeStringArray>(arr);
+#endif
         std::shared_ptr<arrow::Buffer> list_offsets =
             gather_arrow_offset_buffer(string_arr, all_gather);
         std::shared_ptr<arrow::Buffer> null_bitmap_out =
@@ -1938,7 +2077,11 @@ std::shared_ptr<arrow::Array> gather_arrow_array(
         std::shared_ptr<arrow::Buffer> data =
             gather_arrow_string_buffer(string_arr, all_gather);
         if (myrank == mpi_root || all_gather) {
+#if OFFSET_BITWIDTH == 32
             return std::make_shared<arrow::StringArray>(
+#else
+            return std::make_shared<arrow::LargeStringArray>(
+#endif
                 n_rows_tot, list_offsets, data, null_bitmap_out);
         }
         return nullptr;
@@ -2061,10 +2204,10 @@ table_info* gather_table(table_info* in_table, int64_t n_cols_i,
                            mpi_root, MPI_COMM_WORLD, all_gather);
             // Collecting the offsets data
             std::vector<uint32_t> list_count_loc(n_rows);
-            uint32_t* offsets_i = (uint32_t*)in_arr->data2;
-            uint32_t curr_offset = 0;
+            offset_t* offsets_i = (offset_t*)in_arr->data2;
+            offset_t curr_offset = 0;
             for (int64_t pos = 0; pos < n_rows; pos++) {
-                uint32_t new_offset = offsets_i[pos + 1];
+                offset_t new_offset = offsets_i[pos + 1];
                 list_count_loc[pos] = new_offset - curr_offset;
                 curr_offset = new_offset;
             }
@@ -2074,7 +2217,7 @@ table_info* gather_table(table_info* in_table, int64_t n_cols_i,
                            rows_disps.data(), mpi_typ32, mpi_root,
                            MPI_COMM_WORLD, all_gather);
             if (myrank == mpi_root || all_gather) {
-                uint32_t* offsets_o = (uint32_t*)out_arr->data2;
+                offset_t* offsets_o = (offset_t*)out_arr->data2;
                 offsets_o[0] = 0;
                 for (int64_t pos = 0; pos < n_rows_tot; pos++)
                     offsets_o[pos + 1] = offsets_o[pos] + list_count_tot[pos];
@@ -2144,10 +2287,10 @@ table_info* gather_table(table_info* in_table, int64_t n_cols_i,
                 pos_data += siz;
             }
             std::vector<uint32_t> len_strings_loc(n_sub_elems);
-            uint32_t* data_offsets_i = (uint32_t*)in_arr->data2;
-            uint32_t curr_data_offset = 0;
+            offset_t* data_offsets_i = (offset_t*)in_arr->data2;
+            offset_t curr_data_offset = 0;
             for (int64_t pos = 0; pos < n_sub_elems; pos++) {
-                uint32_t new_data_offset = data_offsets_i[pos + 1];
+                offset_t new_data_offset = data_offsets_i[pos + 1];
                 uint32_t len_str = new_data_offset - curr_data_offset;
                 len_strings_loc[pos] = len_str;
                 curr_data_offset = new_data_offset;
@@ -2158,7 +2301,7 @@ table_info* gather_table(table_info* in_table, int64_t n_cols_i,
                            data_offsets_disps.data(), mpi_typ32, mpi_root,
                            MPI_COMM_WORLD, all_gather);
             if (myrank == mpi_root || all_gather) {
-                uint32_t* data_offsets_o = (uint32_t*)out_arr->data2;
+                offset_t* data_offsets_o = (offset_t*)out_arr->data2;
                 data_offsets_o[0] = 0;
                 for (int64_t pos = 0; pos < n_sub_elems_tot; pos++)
                     data_offsets_o[pos + 1] =
@@ -2175,10 +2318,10 @@ table_info* gather_table(table_info* in_table, int64_t n_cols_i,
                 pos_index += siz;
             }
             std::vector<uint32_t> n_strings_loc(n_rows);
-            uint32_t* index_offsets_i = (uint32_t*)in_arr->data3;
-            uint32_t curr_index_offset = 0;
+            offset_t* index_offsets_i = (offset_t*)in_arr->data3;
+            offset_t curr_index_offset = 0;
             for (int64_t pos = 0; pos < n_rows; pos++) {
-                uint32_t new_index_offset = index_offsets_i[pos + 1];
+                offset_t new_index_offset = index_offsets_i[pos + 1];
                 uint32_t n_str = new_index_offset - curr_index_offset;
                 n_strings_loc[pos] = n_str;
                 curr_index_offset = new_index_offset;
@@ -2189,7 +2332,7 @@ table_info* gather_table(table_info* in_table, int64_t n_cols_i,
                            index_offsets_disps.data(), mpi_typ32, mpi_root,
                            MPI_COMM_WORLD, all_gather);
             if (myrank == mpi_root || all_gather) {
-                uint32_t* index_offsets_o = (uint32_t*)out_arr->data3;
+                offset_t* index_offsets_o = (offset_t*)out_arr->data3;
                 index_offsets_o[0] = 0;
                 for (int64_t pos = 0; pos < n_rows_tot; pos++)
                     index_offsets_o[pos + 1] =

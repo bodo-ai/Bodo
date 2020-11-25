@@ -44,7 +44,7 @@ from bodo.libs.array import (
     shuffle_table,
     sort_values_table,
 )
-from bodo.libs.array_item_arr_ext import ArrayItemArrayType
+from bodo.libs.array_item_arr_ext import ArrayItemArrayType, offset_type
 from bodo.libs.bool_arr_ext import BooleanArrayType, boolean_array
 from bodo.libs.decimal_arr_ext import DecimalArrayType
 from bodo.libs.distributed_api import Reduce_Type
@@ -910,7 +910,7 @@ def concat_overload(arr_list):
                 n_lists = len(A)
                 data_arrs.append(bodo.libs.array_item_arr_ext.get_data(A))
                 num_lists += n_lists
-            out_offsets = np.empty(num_lists + 1, np.uint32)
+            out_offsets = np.empty(num_lists + 1, offset_type)
             out_data = bodo.libs.array_kernels.concat(data_arrs)
             out_null_bitmap = np.empty((num_lists + 7) >> 3, np.uint8)
             # copy data to output

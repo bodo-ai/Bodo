@@ -40,7 +40,7 @@ from bodo.hiframes.datetime_date_ext import datetime_date_type
 from bodo.libs.array_item_arr_ext import (
     ArrayItemArrayType,
     _get_array_item_arr_payload,
-    offset_typ,
+    offset_type,
 )
 from bodo.libs.struct_arr_ext import StructArrayType, _get_struct_arr_payload
 from bodo.utils.cg_helpers import (
@@ -163,7 +163,7 @@ def unbox_map_array(typ, val, c):
     null_bitmap_ptr = c.context.make_array(types.Array(types.uint8, 1, "C"))(
         c.context, c.builder, data_payload.null_bitmap
     ).data
-    offsets_ptr = c.context.make_array(types.Array(offset_typ, 1, "C"))(
+    offsets_ptr = c.context.make_array(types.Array(offset_type, 1, "C"))(
         c.context, c.builder, data_payload.offsets
     ).data
 
@@ -195,7 +195,7 @@ def unbox_map_array(typ, val, c):
                 lir.IntType(8).as_pointer(),  # obj
                 lir.IntType(8).as_pointer(),  # key data
                 lir.IntType(8).as_pointer(),  # value data
-                lir.IntType(32).as_pointer(),  # offsets
+                lir.IntType(offset_type.bitwidth).as_pointer(),  # offsets
                 lir.IntType(8).as_pointer(),  # null_bitmap
                 lir.IntType(32),  # key ctype
                 lir.IntType(32),  # value ctype
@@ -248,8 +248,8 @@ def _unbox_map_array_generic(
     pd_mod_obj = c.pyapi.import_module_noblock(mod_name)
     C_NA = c.pyapi.object_getattr_string(pd_mod_obj, "NA")
 
-    zero32 = c.context.get_constant(types.int32, 0)
-    builder.store(zero32, offsets_ptr)
+    zero_offset = c.context.get_constant(offset_type, 0)
+    builder.store(zero_offset, offsets_ptr)
 
     # pseudocode for code generation:
     # curr_item_ind = 0
@@ -279,7 +279,7 @@ def _unbox_map_array_generic(
 
         # offsets[i] = curr_item_ind
         builder.store(
-            builder.trunc(item_ind, lir.IntType(32)),
+            builder.trunc(item_ind, lir.IntType(offset_type.bitwidth)),
             builder.gep(offsets_ptr, [dict_ind]),
         )
         # dict_obj = A[i]
@@ -310,7 +310,7 @@ def _unbox_map_array_generic(
 
     # offsets[n] = curr_item_ind;
     builder.store(
-        builder.trunc(builder.load(curr_item_ind), lir.IntType(32)),
+        builder.trunc(builder.load(curr_item_ind), lir.IntType(offset_type.bitwidth)),
         builder.gep(offsets_ptr, [n_maps]),
     )
 
@@ -334,7 +334,7 @@ def box_map_arr(typ, val, c):
     null_bitmap_ptr = c.context.make_array(types.Array(types.uint8, 1, "C"))(
         c.context, c.builder, data_payload.null_bitmap
     ).data
-    offsets_ptr = c.context.make_array(types.Array(offset_typ, 1, "C"))(
+    offsets_ptr = c.context.make_array(types.Array(offset_type, 1, "C"))(
         c.context, c.builder, data_payload.offsets
     ).data
 
@@ -366,7 +366,7 @@ def box_map_arr(typ, val, c):
                 lir.IntType(64),  # num_maps
                 lir.IntType(8).as_pointer(),  # key data
                 lir.IntType(8).as_pointer(),  # value data
-                lir.IntType(32).as_pointer(),  # offsets
+                lir.IntType(offset_type.bitwidth).as_pointer(),  # offsets
                 lir.IntType(8).as_pointer(),  # null_bitmap
                 lir.IntType(32),  # key ctype
                 lir.IntType(32),  # value ctype

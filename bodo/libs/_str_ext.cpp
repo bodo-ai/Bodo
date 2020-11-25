@@ -34,7 +34,7 @@ void dtor_str_arr_split_view(str_arr_split_view_payload* in_str_arr,
 void str_arr_split_view_alloc(str_arr_split_view_payload* out_view,
                               int64_t num_items, int64_t num_offsets);
 void str_arr_split_view_impl(str_arr_split_view_payload* out_view,
-                             int64_t n_strs, uint32_t* offsets, char* data,
+                             int64_t n_strs, offset_t* offsets, char* data,
                              char* null_bitmap, char sep);
 const char* get_c_str(std::string* s);
 
@@ -45,30 +45,31 @@ float str_to_float32(std::string* str);
 int64_t get_str_len(std::string* str);
 
 void* np_array_from_string_array(int64_t no_strings,
-                                 const uint32_t* offset_table,
+                                 const offset_t* offset_table,
                                  const char* buffer,
                                  const uint8_t* null_bitmap);
 void* pd_array_from_string_array(int64_t no_strings,
-                                 const uint32_t* offset_table,
+                                 const offset_t* offset_table,
                                  const char* buffer,
                                  const uint8_t* null_bitmap);
 
-void setitem_string_array(uint32_t* offsets, char* data, int64_t n_bytes,
+void setitem_string_array(offset_t* offsets, char* data, int64_t n_bytes,
                           char* str, int64_t len, int kind, int is_ascii,
                           int64_t index);
 int64_t get_utf8_size(char* str, int64_t len, int kind);
 
-void set_string_array_range(uint32_t* out_offsets, char* out_data,
-                            uint32_t* in_offsets, char* in_data,
+void set_string_array_range(offset_t* out_offsets, char* out_data,
+                            offset_t* in_offsets, char* in_data,
                             int64_t start_str_ind, int64_t start_chars_ind,
                             int64_t num_strs, int64_t num_chars);
-void convert_len_arr_to_offset(uint32_t* offsets, int64_t num_strs);
-char* getitem_string_array(uint32_t* offsets, char* data, int64_t index);
-void* getitem_string_array_std(uint32_t* offsets, char* data, int64_t index);
+void convert_len_arr_to_offset32(uint32_t* offsets, int64_t num_strs);
+void convert_len_arr_to_offset(uint32_t* lens, offset_t* offsets, int64_t num_strs);
+char* getitem_string_array(offset_t* offsets, char* data, int64_t index);
+void* getitem_string_array_std(offset_t* offsets, char* data, int64_t index);
 
-int str_arr_to_int64(int64_t* out, uint32_t* offsets, char* data,
+int str_arr_to_int64(int64_t* out, offset_t* offsets, char* data,
                      int64_t index);
-int str_arr_to_float64(double* out, uint32_t* offsets, char* data,
+int str_arr_to_float64(double* out, offset_t* offsets, char* data,
                        int64_t index);
 
 void str_from_float32(char* s, float in);
@@ -85,11 +86,11 @@ int is_bool_array(PyArrayObject* arr);
 int is_pd_boolean_array(PyObject* arr);
 void unbox_bool_array_obj(PyArrayObject* arr, uint8_t* data, uint8_t* bitmap,
                           int64_t n);
-void print_str_arr(uint64_t n, uint64_t n_chars, uint32_t* offsets,
+void print_str_arr(uint64_t n, uint64_t n_chars, offset_t* offsets,
                    uint8_t* data);
 void print_list_str_arr(uint64_t n, const char* data,
-                        const uint32_t* data_offsets,
-                        const uint32_t* index_offsets,
+                        const offset_t* data_offsets,
+                        const offset_t* index_offsets,
                         const uint8_t* null_bitmap);
 
 PyMODINIT_FUNC PyInit_hstr_ext(void) {
@@ -140,6 +141,9 @@ PyMODINIT_FUNC PyInit_hstr_ext(void) {
     PyObject_SetAttrString(
         m, "set_string_array_range",
         PyLong_FromVoidPtr((void*)(&set_string_array_range)));
+    PyObject_SetAttrString(
+        m, "convert_len_arr_to_offset32",
+        PyLong_FromVoidPtr((void*)(&convert_len_arr_to_offset32)));
     PyObject_SetAttrString(
         m, "convert_len_arr_to_offset",
         PyLong_FromVoidPtr((void*)(&convert_len_arr_to_offset)));
@@ -214,8 +218,8 @@ void dtor_str_arr_split_view(str_arr_split_view_payload* in_str_arr,
 
 void str_arr_split_view_alloc(str_arr_split_view_payload* out_view,
                               int64_t num_items, int64_t num_offsets) {
-    out_view->index_offsets = new uint32_t[num_items + 1];
-    out_view->data_offsets = new uint32_t[num_offsets];
+    out_view->index_offsets = new offset_t[num_items + 1];
+    out_view->data_offsets = new offset_t[num_offsets];
     int64_t n_bytes = (num_items + 7) >> 3;
     out_view->null_bitmap = new uint8_t[n_bytes];
 }
@@ -225,18 +229,18 @@ void str_arr_split_view_alloc(str_arr_split_view_payload* out_view,
 // data_offsets [-1, 2, 5,   4, 6, 10, 12,  11, 13,   12, 13,   12, 14, 16]
 // index_offsets [0, 3, 7, 9, 11, 14]
 void str_arr_split_view_impl(str_arr_split_view_payload* out_view,
-                             int64_t n_strs, uint32_t* offsets, char* data,
+                             int64_t n_strs, offset_t* offsets, char* data,
                              char* null_bitmap, char sep) {
-    uint32_t total_chars = offsets[n_strs];
+    offset_t total_chars = offsets[n_strs];
     // printf("n_strs %d sep %c total chars:%d\n", n_strs, sep, total_chars);
-    uint32_t* index_offsets = new uint32_t[n_strs + 1];
-    std::vector<uint32_t> data_offs;
+    offset_t* index_offsets = new offset_t[n_strs + 1];
+    std::vector<offset_t> data_offs;
 
     data_offs.push_back(-1);
     index_offsets[0] = 0;
     // uint32_t curr_data_off = 0;
 
-    uint32_t data_ind = offsets[0];
+    offset_t data_ind = offsets[0];
     int str_ind = 0;
     // while there are chars to consume, equal since the first if will consume
     // it
@@ -257,7 +261,7 @@ void str_arr_split_view_impl(str_arr_split_view_payload* out_view,
         data_ind++;
     }
     out_view->index_offsets = index_offsets;
-    out_view->data_offsets = new uint32_t[data_offs.size()];
+    out_view->data_offsets = new offset_t[data_offs.size()];
     // TODO: avoid copy
     std::copy(data_offs.cbegin(), data_offs.cend(), out_view->data_offsets);
 
@@ -294,7 +298,7 @@ int64_t get_str_len(std::string* str) {
     return str->length();
 }
 
-void setitem_string_array(uint32_t* offsets, char* data, int64_t n_bytes,
+void setitem_string_array(offset_t* offsets, char* data, int64_t n_bytes,
                           char* str, int64_t len, int kind, int is_ascii,
                           int64_t index) {
 #define CHECK(expr, msg)               \
@@ -304,7 +308,7 @@ void setitem_string_array(uint32_t* offsets, char* data, int64_t n_bytes,
     }
     // std::cout << "setitem str: " << *str << " " << index << std::endl;
     if (index == 0) offsets[index] = 0;
-    uint32_t start = offsets[index];
+    offset_t start = offsets[index];
     int64_t utf8_len = -1;
     // std::cout << "start " << start << " len " << len << std::endl;
 
@@ -315,10 +319,10 @@ void setitem_string_array(uint32_t* offsets, char* data, int64_t n_bytes,
         utf8_len = unicode_to_utf8(&data[start], str, len, kind);
     }
 
-    CHECK(utf8_len < std::numeric_limits<uint32_t>::max(),
+    CHECK(utf8_len < std::numeric_limits<offset_t>::max(),
           "string array too large");
     CHECK(start + utf8_len <= n_bytes, "out of bounds string array setitem");
-    offsets[index + 1] = start + (uint32_t)utf8_len;
+    offsets[index + 1] = start + (offset_t)utf8_len;
     return;
 #undef CHECK
 }
@@ -327,18 +331,18 @@ int64_t get_utf8_size(char* str, int64_t len, int kind) {
     return unicode_to_utf8(NULL, str, len, kind);
 }
 
-void set_string_array_range(uint32_t* out_offsets, char* out_data,
-                            uint32_t* in_offsets, char* in_data,
+void set_string_array_range(offset_t* out_offsets, char* out_data,
+                            offset_t* in_offsets, char* in_data,
                             int64_t start_str_ind, int64_t start_chars_ind,
                             int64_t num_strs, int64_t num_chars) {
     // printf("%d %d\n", start_str_ind, start_chars_ind); fflush(stdout);
-    uint32_t curr_offset = 0;
+    offset_t curr_offset = 0;
     if (start_str_ind != 0) curr_offset = out_offsets[start_str_ind];
 
     // set offsets
     for (size_t i = 0; i < (size_t)num_strs; i++) {
         out_offsets[start_str_ind + i] = curr_offset;
-        int32_t len = in_offsets[i + 1] - in_offsets[i];
+        offset_t len = in_offsets[i + 1] - in_offsets[i];
         curr_offset += len;
     }
     out_offsets[start_str_ind + num_strs] = curr_offset;
@@ -347,7 +351,7 @@ void set_string_array_range(uint32_t* out_offsets, char* out_data,
     return;
 }
 
-void convert_len_arr_to_offset(uint32_t* offsets, int64_t num_strs) {
+void convert_len_arr_to_offset32(uint32_t* offsets, int64_t num_strs) {
     uint32_t curr_offset = 0;
     for (int64_t i = 0; i < num_strs; i++) {
         uint32_t val = offsets[i];
@@ -357,11 +361,21 @@ void convert_len_arr_to_offset(uint32_t* offsets, int64_t num_strs) {
     offsets[num_strs] = curr_offset;
 }
 
-char* getitem_string_array(uint32_t* offsets, char* data, int64_t index) {
+void convert_len_arr_to_offset(uint32_t* lens, uint64_t* offsets, int64_t num_strs) {
+    uint64_t curr_offset = 0;
+    for (int64_t i = 0; i < num_strs; i++) {
+        uint32_t length = lens[i];
+        offsets[i] = curr_offset;
+        curr_offset += length;
+    }
+    offsets[num_strs] = curr_offset;
+}
+
+char* getitem_string_array(offset_t* offsets, char* data, int64_t index) {
     // printf("getitem string arr index: %d offsets: %d %d", index,
     //                                  offsets[index], offsets[index+1]);
-    uint32_t size = offsets[index + 1] - offsets[index] + 1;
-    uint32_t start = offsets[index];
+    offset_t size = offsets[index + 1] - offsets[index] + 1;
+    offset_t start = offsets[index];
     char* res = new char[size];
     res[size - 1] = '\0';
     memcpy(res, &data[start], size - 1);
@@ -369,18 +383,18 @@ char* getitem_string_array(uint32_t* offsets, char* data, int64_t index) {
     return res;
 }
 
-void* getitem_string_array_std(uint32_t* offsets, char* data, int64_t index) {
+void* getitem_string_array_std(offset_t* offsets, char* data, int64_t index) {
     // printf("getitem string arr index: %d offsets: %d %d", index,
     //                                  offsets[index], offsets[index+1]);
-    uint32_t size = offsets[index + 1] - offsets[index];
-    uint32_t start = offsets[index];
+    offset_t size = offsets[index + 1] - offsets[index];
+    offset_t start = offsets[index];
     return new std::string(&data[start], size);
 }
 
-int str_arr_to_int64(int64_t* out, uint32_t* offsets, char* data,
+int str_arr_to_int64(int64_t* out, offset_t* offsets, char* data,
                      int64_t index) {
-    uint32_t size = offsets[index + 1] - offsets[index];
-    uint32_t start = offsets[index];
+    offset_t size = offsets[index + 1] - offsets[index];
+    offset_t start = offsets[index];
     try {
         *out = boost::lexical_cast<int64_t>(data + start, (std::size_t)size);
         return 0;
@@ -391,10 +405,10 @@ int str_arr_to_int64(int64_t* out, uint32_t* offsets, char* data,
     return -1;
 }
 
-int str_arr_to_float64(double* out, uint32_t* offsets, char* data,
+int str_arr_to_float64(double* out, offset_t* offsets, char* data,
                        int64_t index) {
-    uint32_t size = offsets[index + 1] - offsets[index];
-    uint32_t start = offsets[index];
+    offset_t size = offsets[index + 1] - offsets[index];
+    offset_t start = offsets[index];
     try {
         *out = boost::lexical_cast<double>(data + start, (std::size_t)size);
         return 0;
@@ -481,7 +495,7 @@ void inplace_int64_to_str(char* str, int64_t l, int64_t value) {
 /// @param[in] offset_table offsets for strings in buffer
 /// @param[in] buffer with concatenated strings (from StringArray)
 void* np_array_from_string_array(int64_t no_strings,
-                                 const uint32_t* offset_table,
+                                 const offset_t* offset_table,
                                  const char* buffer,
                                  const uint8_t* null_bitmap) {
 #define CHECK(expr, msg)               \
@@ -528,7 +542,7 @@ void* np_array_from_string_array(int64_t no_strings,
 /// @param[in] offset_table offsets for strings in buffer
 /// @param[in] buffer with concatenated strings (from StringArray)
 void* pd_array_from_string_array(int64_t no_strings,
-                                 const uint32_t* offset_table,
+                                 const offset_t* offset_table,
                                  const char* buffer,
                                  const uint8_t* null_bitmap) {
 #define CHECK(expr, msg)               \
@@ -704,7 +718,7 @@ void unbox_bool_array_obj(PyArrayObject* arr, uint8_t* data, uint8_t* bitmap,
 #undef CHECK
 }
 
-void print_str_arr(uint64_t n, uint64_t n_chars, uint32_t* offsets,
+void print_str_arr(uint64_t n, uint64_t n_chars, offset_t* offsets,
                    uint8_t* data) {
     std::cout << "n: " << n << " n_chars: " << n_chars << "\n";
     for (uint64_t i = 0; i < n; i++) {
@@ -718,8 +732,8 @@ void print_str_arr(uint64_t n, uint64_t n_chars, uint32_t* offsets,
 }
 
 void print_list_str_arr(uint64_t n, const char* data,
-                        const uint32_t* data_offsets,
-                        const uint32_t* index_offsets,
+                        const offset_t* data_offsets,
+                        const offset_t* index_offsets,
                         const uint8_t* null_bitmap) {
     uint64_t n_strs = index_offsets[n];
     uint64_t n_chars = data_offsets[n_strs];

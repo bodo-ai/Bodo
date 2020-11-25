@@ -102,11 +102,19 @@ void append_to_out_array(std::shared_ptr<arrow::Array> input_array,
                          int64_t start_offset, int64_t end_offset,
                          arrow::ArrayBuilder* builder) {
     // TODO check for nulls and append nulls
+#if OFFSET_BITWIDTH == 32
     if (input_array->type_id() == arrow::Type::LIST) {
         // TODO: assert builder.type() == LIST
         std::shared_ptr<arrow::ListArray> list_array =
             std::dynamic_pointer_cast<arrow::ListArray>(input_array);
         auto list_builder = dynamic_cast<arrow::ListBuilder*>(builder);
+#else
+    if (input_array->type_id() == arrow::Type::LARGE_LIST) {
+        // TODO: assert builder.type() == LARGE_LIST
+        std::shared_ptr<arrow::LargeListArray> list_array =
+            std::dynamic_pointer_cast<arrow::LargeListArray>(input_array);
+        auto list_builder = dynamic_cast<arrow::LargeListBuilder*>(builder);
+#endif
         arrow::ArrayBuilder* child_builder = list_builder->value_builder();
 
         for (int64_t idx = start_offset; idx < end_offset; idx++) {
@@ -143,10 +151,17 @@ void append_to_out_array(std::shared_ptr<arrow::Array> input_array,
         }
         // finished appending (end_offset - start_offset) structs
         // struct_builder->AppendValues(end_offset - start_offset, NULLPTR);
+#if OFFSET_BITWIDTH == 32
     } else if (input_array->type_id() == arrow::Type::STRING) {
         auto str_array =
             std::dynamic_pointer_cast<arrow::StringArray>(input_array);
         auto str_builder = dynamic_cast<arrow::StringBuilder*>(builder);
+#else
+    } else if (input_array->type_id() == arrow::Type::LARGE_STRING) {
+        auto str_array =
+            std::dynamic_pointer_cast<arrow::LargeStringArray>(input_array);
+        auto str_builder = dynamic_cast<arrow::LargeStringBuilder*>(builder);
+#endif
         int64_t num_elems = end_offset - start_offset;
         // TODO: optimize
         for (int64_t i = 0; i < num_elems; i++) {
@@ -185,21 +200,21 @@ array_info* RetrieveArray_SingleColumn_F(array_info* in_arr, F f,
         // need one first loop to determine the needed length. In the second
         // loop, the assignation is made. If the entries are missing then the
         // bitmask is set to false.
-        std::vector<uint32_t> ListSizes_index(nRowOut);
-        std::vector<uint32_t> ListSizes_data(nRowOut);
+        std::vector<offset_t> ListSizes_index(nRowOut);
+        std::vector<offset_t> ListSizes_data(nRowOut);
         int64_t tot_size_index = 0;
         int64_t tot_size_data = 0;
-        uint32_t* index_offsets = (uint32_t*)in_arr->data3;
-        uint32_t* data_offsets = (uint32_t*)in_arr->data2;
+        offset_t* index_offsets = (offset_t*)in_arr->data3;
+        offset_t* data_offsets = (offset_t*)in_arr->data2;
         for (size_t iRow = 0; iRow < nRowOut; iRow++) {
             size_t idx = f(iRow);
-            uint32_t size_index = 0;
-            uint32_t size_data = 0;
-            uint32_t start_offset_index = index_offsets[idx];
-            uint32_t end_offset_index = index_offsets[idx + 1];
+            offset_t size_index = 0;
+            offset_t size_data = 0;
+            offset_t start_offset_index = index_offsets[idx];
+            offset_t end_offset_index = index_offsets[idx + 1];
             size_index = end_offset_index - start_offset_index;
-            uint32_t start_offset_data = data_offsets[start_offset_index];
-            uint32_t end_offset_data = data_offsets[end_offset_index];
+            offset_t start_offset_data = data_offsets[start_offset_index];
+            offset_t end_offset_data = data_offsets[end_offset_index];
             size_data = end_offset_data - start_offset_data;
             ListSizes_index[iRow] = size_index;
             ListSizes_data[iRow] = size_data;
@@ -209,25 +224,25 @@ array_info* RetrieveArray_SingleColumn_F(array_info* in_arr, F f,
         out_arr = alloc_array(nRowOut, tot_size_index, tot_size_data, arr_type,
                               dtype, 0, 0);
         uint8_t* out_sub_null_bitmask = (uint8_t*)out_arr->sub_null_bitmask;
-        uint32_t pos_index = 0;
-        uint32_t pos_data = 0;
-        uint32_t* out_index_offsets = (uint32_t*)out_arr->data3;
-        uint32_t* out_data_offsets = (uint32_t*)out_arr->data2;
+        offset_t pos_index = 0;
+        offset_t pos_data = 0;
+        offset_t* out_index_offsets = (offset_t*)out_arr->data3;
+        offset_t* out_data_offsets = (offset_t*)out_arr->data2;
         char* out_data1 = out_arr->data1;
         out_data_offsets[0] = 0;
         uint8_t* in_sub_null_bitmask = (uint8_t*)in_arr->sub_null_bitmask;
-        uint32_t* in_index_offsets = (uint32_t*)in_arr->data3;
-        uint32_t* in_data_offsets = (uint32_t*)in_arr->data2;
+        offset_t* in_index_offsets = (offset_t*)in_arr->data3;
+        offset_t* in_data_offsets = (offset_t*)in_arr->data2;
         char* in_data1 = in_arr->data1;
         for (size_t iRow = 0; iRow < nRowOut; iRow++) {
             size_t idx = f(iRow);
-            uint32_t size_index = ListSizes_index[iRow];
-            uint32_t size_data = ListSizes_data[iRow];
+            offset_t size_index = ListSizes_index[iRow];
+            offset_t size_data = ListSizes_data[iRow];
             out_index_offsets[iRow] = pos_index;
-            uint32_t start_index_offset = in_index_offsets[idx];
-            uint32_t start_data_offset = in_data_offsets[start_index_offset];
-            for (uint32_t u = 0; u < size_index; u++) {
-                uint32_t len_str = in_data_offsets[start_index_offset + u + 1] -
+            offset_t start_index_offset = in_index_offsets[idx];
+            offset_t start_data_offset = in_data_offsets[start_index_offset];
+            for (offset_t u = 0; u < size_index; u++) {
+                offset_t len_str = in_data_offsets[start_index_offset + u + 1] -
                                    in_data_offsets[start_index_offset + u];
                 out_data_offsets[pos_index + u + 1] =
                     out_data_offsets[pos_index + u] + len_str;
@@ -249,27 +264,27 @@ array_info* RetrieveArray_SingleColumn_F(array_info* in_arr, F f,
         // loop, the assignation is made. If the entries are missing then the
         // bitmask is set to false.
         int64_t n_chars = 0;
-        std::vector<uint32_t> ListSizes(nRowOut);
-        uint32_t* in_offsets = (uint32_t*)in_arr->data2;
+        std::vector<offset_t> ListSizes(nRowOut);
+        offset_t* in_offsets = (offset_t*)in_arr->data2;
         char* in_data1 = in_arr->data1;
         for (size_t iRow = 0; iRow < nRowOut; iRow++) {
             size_t idx = f(iRow);
-            uint32_t size = 0;
-            uint32_t start_offset = in_offsets[idx];
-            uint32_t end_offset = in_offsets[idx + 1];
+            offset_t size = 0;
+            offset_t start_offset = in_offsets[idx];
+            offset_t end_offset = in_offsets[idx + 1];
             size = end_offset - start_offset;
             ListSizes[iRow] = size;
             n_chars += size;
         }
         out_arr = alloc_array(nRowOut, n_chars, -1, arr_type, dtype, 0, 0);
-        uint32_t* out_offsets = (uint32_t*)out_arr->data2;
+        offset_t* out_offsets = (offset_t*)out_arr->data2;
         char* out_data1 = out_arr->data1;
-        uint32_t pos = 0;
+        offset_t pos = 0;
         for (size_t iRow = 0; iRow < nRowOut; iRow++) {
             size_t idx = f(iRow);
-            uint32_t size = ListSizes[iRow];
+            offset_t size = ListSizes[iRow];
             out_offsets[iRow] = pos;
-            uint32_t start_offset = in_offsets[idx];
+            offset_t start_offset = in_offsets[idx];
             char* out_ptr = out_data1 + pos;
             char* in_ptr = in_data1 + start_offset;
             memcpy(out_ptr, in_ptr, size);
@@ -420,22 +435,22 @@ array_info* RetrieveArray_TwoColumns(
         // need one first loop to determine the needed length. In the second
         // loop, the assignation is made. If the entries are missing then the
         // bitmask is set to false.
-        std::vector<uint32_t> ListSizes_index(nRowOut);
-        std::vector<uint32_t> ListSizes_data(nRowOut);
+        std::vector<offset_t> ListSizes_index(nRowOut);
+        std::vector<offset_t> ListSizes_data(nRowOut);
         int64_t tot_size_index = 0;
         int64_t tot_size_data = 0;
         for (size_t iRow = 0; iRow < nRowOut; iRow++) {
             std::pair<array_info*, std::ptrdiff_t> ArrRow = get_iRow(iRow);
-            uint32_t size_index = 0;
-            uint32_t size_data = 0;
+            offset_t size_index = 0;
+            offset_t size_data = 0;
             if (ArrRow.second >= 0) {
-                uint32_t* index_offsets = (uint32_t*)ArrRow.first->data3;
-                uint32_t* data_offsets = (uint32_t*)ArrRow.first->data2;
-                uint32_t start_offset_index = index_offsets[ArrRow.second];
-                uint32_t end_offset_index = index_offsets[ArrRow.second + 1];
+                offset_t* index_offsets = (offset_t*)ArrRow.first->data3;
+                offset_t* data_offsets = (offset_t*)ArrRow.first->data2;
+                offset_t start_offset_index = index_offsets[ArrRow.second];
+                offset_t end_offset_index = index_offsets[ArrRow.second + 1];
                 size_index = end_offset_index - start_offset_index;
-                uint32_t start_offset_data = data_offsets[start_offset_index];
-                uint32_t end_offset_data = data_offsets[end_offset_index];
+                offset_t start_offset_data = data_offsets[start_offset_index];
+                offset_t end_offset_data = data_offsets[end_offset_index];
                 size_data = end_offset_data - start_offset_data;
             }
             ListSizes_index[iRow] = size_index;
@@ -446,30 +461,30 @@ array_info* RetrieveArray_TwoColumns(
         out_arr = alloc_array(nRowOut, tot_size_index, tot_size_data, arr_type,
                               dtype, 0, 0);
         uint8_t* out_sub_null_bitmask = (uint8_t*)out_arr->sub_null_bitmask;
-        uint32_t pos_index = 0;
-        uint32_t pos_data = 0;
-        uint32_t* out_index_offsets = (uint32_t*)out_arr->data3;
-        uint32_t* out_data_offsets = (uint32_t*)out_arr->data2;
+        offset_t pos_index = 0;
+        offset_t pos_data = 0;
+        offset_t* out_index_offsets = (offset_t*)out_arr->data3;
+        offset_t* out_data_offsets = (offset_t*)out_arr->data2;
         out_data_offsets[0] = 0;
         for (size_t iRow = 0; iRow < nRowOut; iRow++) {
             std::pair<array_info*, std::ptrdiff_t> ArrRow = get_iRow(iRow);
-            uint32_t size_index = ListSizes_index[iRow];
-            uint32_t size_data = ListSizes_data[iRow];
+            offset_t size_index = ListSizes_index[iRow];
+            offset_t size_data = ListSizes_data[iRow];
             out_index_offsets[iRow] = pos_index;
             bool bit = false;
             if (ArrRow.second >= 0) {
                 array_info* e_col = ArrRow.first;
                 size_t i_row = ArrRow.second;
-                uint32_t* in_index_offsets = (uint32_t*)e_col->data3;
-                uint32_t* in_data_offsets = (uint32_t*)e_col->data2;
+                offset_t* in_index_offsets = (offset_t*)e_col->data3;
+                offset_t* in_data_offsets = (offset_t*)e_col->data2;
                 char* data1 = e_col->data1;
                 uint8_t* in_sub_null_bitmask =
                     (uint8_t*)e_col->sub_null_bitmask;
-                uint32_t start_index_offset = in_index_offsets[i_row];
-                uint32_t start_data_offset =
+                offset_t start_index_offset = in_index_offsets[i_row];
+                offset_t start_data_offset =
                     in_data_offsets[start_index_offset];
-                for (uint32_t u = 0; u < size_index; u++) {
-                    uint32_t len_str =
+                for (offset_t u = 0; u < size_index; u++) {
+                    offset_t len_str =
                         in_data_offsets[start_index_offset + u + 1] -
                         in_data_offsets[start_index_offset + u];
                     out_data_offsets[pos_index + u + 1] =
@@ -497,31 +512,31 @@ array_info* RetrieveArray_TwoColumns(
         // loop, the assignation is made. If the entries are missing then the
         // bitmask is set to false.
         int64_t n_chars = 0;
-        std::vector<uint32_t> ListSizes(nRowOut);
+        std::vector<offset_t> ListSizes(nRowOut);
         for (size_t iRow = 0; iRow < nRowOut; iRow++) {
             std::pair<array_info*, std::ptrdiff_t> ArrRow = get_iRow(iRow);
-            uint32_t size = 0;
+            offset_t size = 0;
             if (ArrRow.second >= 0) {
-                uint32_t* in_offsets = (uint32_t*)ArrRow.first->data2;
-                uint32_t end_offset = in_offsets[ArrRow.second + 1];
-                uint32_t start_offset = in_offsets[ArrRow.second];
+                offset_t* in_offsets = (offset_t*)ArrRow.first->data2;
+                offset_t end_offset = in_offsets[ArrRow.second + 1];
+                offset_t start_offset = in_offsets[ArrRow.second];
                 size = end_offset - start_offset;
             }
             ListSizes[iRow] = size;
             n_chars += size;
         }
         out_arr = alloc_array(nRowOut, n_chars, -1, arr_type, dtype, 0, 0);
-        uint32_t pos = 0;
-        uint32_t* out_offsets = (uint32_t*)out_arr->data2;
+        offset_t pos = 0;
+        offset_t* out_offsets = (offset_t*)out_arr->data2;
         for (size_t iRow = 0; iRow < nRowOut; iRow++) {
             std::pair<array_info*, std::ptrdiff_t> ArrRow = get_iRow(iRow);
-            uint32_t size = ListSizes[iRow];
+            offset_t size = ListSizes[iRow];
             out_offsets[iRow] = pos;
             bool bit = false;
             if (ArrRow.second >= 0) {
                 array_info* e_col = ArrRow.first;
-                uint32_t* in_offsets = (uint32_t*)e_col->data2;
-                uint32_t start_offset = in_offsets[ArrRow.second];
+                offset_t* in_offsets = (offset_t*)e_col->data2;
+                offset_t start_offset = in_offsets[ArrRow.second];
                 char* out_ptr = out_arr->data1 + pos;
                 char* in_ptr = e_col->data1 + start_offset;
                 memcpy(out_ptr, in_ptr, size);
@@ -712,11 +727,19 @@ int ComparisonArrowColumn(std::shared_ptr<arrow::Array> const& arr1,
         if (len1 < len2) return 1;
         return 0;
     };
+#if OFFSET_BITWIDTH == 32
     if (arr1->type_id() == arrow::Type::LIST) {
         std::shared_ptr<arrow::ListArray> list_array1 =
             std::dynamic_pointer_cast<arrow::ListArray>(arr1);
         std::shared_ptr<arrow::ListArray> list_array2 =
             std::dynamic_pointer_cast<arrow::ListArray>(arr2);
+#else
+    if (arr1->type_id() == arrow::Type::LARGE_LIST) {
+        std::shared_ptr<arrow::LargeListArray> list_array1 =
+            std::dynamic_pointer_cast<arrow::LargeListArray>(arr1);
+        std::shared_ptr<arrow::LargeListArray> list_array2 =
+            std::dynamic_pointer_cast<arrow::LargeListArray>(arr2);
+#endif
         int64_t len1 = pos1_e - pos1_s;
         int64_t len2 = pos2_e - pos2_s;
         int64_t min_len = std::min(len1, len2);
@@ -770,9 +793,15 @@ int ComparisonArrowColumn(std::shared_ptr<arrow::Array> const& arr1,
             }
         }
         return process_length(len1, len2);
+#if OFFSET_BITWIDTH == 32
     } else if (arr1->type_id() == arrow::Type::STRING) {
         auto str_array1 = std::dynamic_pointer_cast<arrow::StringArray>(arr1);
         auto str_array2 = std::dynamic_pointer_cast<arrow::StringArray>(arr2);
+#else
+    } else if (arr1->type_id() == arrow::Type::LARGE_STRING) {
+        auto str_array1 = std::dynamic_pointer_cast<arrow::LargeStringArray>(arr1);
+        auto str_array2 = std::dynamic_pointer_cast<arrow::LargeStringArray>(arr2);
+#endif
         int64_t len1 = pos1_e - pos1_s;
         int64_t len2 = pos2_e - pos2_s;
         int64_t min_len = std::min(len1, len2);
@@ -785,9 +814,9 @@ int ComparisonArrowColumn(std::shared_ptr<arrow::Array> const& arr1,
             if (epair.second) {
                 std::string str1 = str_array1->GetString(pos1_s + idx);
                 std::string str2 = str_array2->GetString(pos2_s + idx);
-                uint32_t len1 = str1.size();
-                uint32_t len2 = str2.size();
-                uint32_t minlen = std::min(len1, len2);
+                size_t len1 = str1.size();
+                size_t len2 = str2.size();
+                size_t minlen = std::min(len1, len2);
                 int test = std::strncmp(str2.c_str(), str1.c_str(), minlen);
                 if (test) return test;
                 // If not, we may be able to conclude via the string length.
@@ -878,32 +907,32 @@ bool TestEqualColumn(array_info* arr1, int64_t pos1, array_info* arr2,
         // values.
         if (bit1) {
             // Here we consider the shifts in data2 for the comparison.
-            uint32_t* data3_1 = (uint32_t*)arr1->data3;
-            uint32_t* data3_2 = (uint32_t*)arr2->data3;
-            uint32_t len1 = data3_1[pos1 + 1] - data3_1[pos1];
-            uint32_t len2 = data3_2[pos2 + 1] - data3_2[pos2];
+            offset_t* data3_1 = (offset_t*)arr1->data3;
+            offset_t* data3_2 = (offset_t*)arr2->data3;
+            offset_t len1 = data3_1[pos1 + 1] - data3_1[pos1];
+            offset_t len2 = data3_2[pos2 + 1] - data3_2[pos2];
             // (2): If number of strings are different the they are different
             if (len1 != len2) return false;
             // (3): Checking that the string lengths are the same
-            uint32_t* data2_1 = (uint32_t*)arr1->data2;
-            uint32_t* data2_2 = (uint32_t*)arr2->data2;
-            uint32_t pos1_prev = data3_1[pos1];
-            uint32_t pos2_prev = data3_2[pos2];
-            for (uint32_t u = 0; u < len1; u++) {
-                uint32_t len1_str =
+            offset_t* data2_1 = (offset_t*)arr1->data2;
+            offset_t* data2_2 = (offset_t*)arr2->data2;
+            offset_t pos1_prev = data3_1[pos1];
+            offset_t pos2_prev = data3_2[pos2];
+            for (offset_t u = 0; u < len1; u++) {
+                offset_t len1_str =
                     data2_1[pos1_prev + u + 1] - data2_1[pos1_prev + u];
-                uint32_t len2_str =
+                offset_t len2_str =
                     data2_2[pos2_prev + u + 1] - data2_2[pos2_prev + u];
                 if (len1_str != len2_str) return false;
                 bool str_bit1 = GetBit(sub_null_bitmask1, pos1_prev + u);
                 bool str_bit2 = GetBit(sub_null_bitmask2, pos2_prev + u);
                 if (str_bit1 != str_bit2) return false;
             }
-            uint32_t tot_nb_char =
+            offset_t tot_nb_char =
                 data2_1[data3_1[pos1 + 1]] - data2_1[data3_1[pos1]];
             // (4): Checking the data1 array
-            uint32_t pos1_B = data2_1[data3_1[pos1]];
-            uint32_t pos2_B = data2_2[data3_2[pos2]];
+            offset_t pos1_B = data2_1[data3_1[pos1]];
+            offset_t pos2_B = data2_2[data3_2[pos2]];
             char* data1_1_comp = arr1->data1 + pos1_B;
             char* data1_2_comp = arr2->data1 + pos2_B;
             if (memcmp(data1_1_comp, data1_2_comp, tot_nb_char) != 0)
@@ -920,15 +949,15 @@ bool TestEqualColumn(array_info* arr1, int64_t pos1, array_info* arr2,
         // values.
         if (bit1) {
             // Here we consider the shifts in data2 for the comparison.
-            uint32_t* data2_1 = (uint32_t*)arr1->data2;
-            uint32_t* data2_2 = (uint32_t*)arr2->data2;
-            uint32_t len1 = data2_1[pos1 + 1] - data2_1[pos1];
-            uint32_t len2 = data2_2[pos2 + 1] - data2_2[pos2];
+            offset_t* data2_1 = (offset_t*)arr1->data2;
+            offset_t* data2_2 = (offset_t*)arr2->data2;
+            offset_t len1 = data2_1[pos1 + 1] - data2_1[pos1];
+            offset_t len2 = data2_2[pos2 + 1] - data2_2[pos2];
             // If string lengths are different then they are different.
             if (len1 != len2) return false;
             // Now we iterate over the characters for the comparison.
-            uint32_t pos1_prev = data2_1[pos1];
-            uint32_t pos2_prev = data2_2[pos2];
+            offset_t pos1_prev = data2_1[pos1];
+            offset_t pos2_prev = data2_2[pos2];
             char* data1_1 = arr1->data1 + pos1_prev;
             char* data1_2 = arr2->data1 + pos2_prev;
             if (memcmp(data1_1, data1_2, len1) != 0) return false;
@@ -998,14 +1027,14 @@ int KeyComparisonAsPython_Column(bool const& na_position_bis, array_info* arr1,
         int reply = process_bits(bit1, bit2);
         if (reply != 0) return reply;
         if (bit1) {  // here bit1 = bit2
-            uint32_t* data3_1 = (uint32_t*)arr1->data3;
-            uint32_t* data3_2 = (uint32_t*)arr2->data3;
-            uint32_t* data2_1 = (uint32_t*)arr1->data2;
-            uint32_t* data2_2 = (uint32_t*)arr2->data2;
+            offset_t* data3_1 = (offset_t*)arr1->data3;
+            offset_t* data3_2 = (offset_t*)arr2->data3;
+            offset_t* data2_1 = (offset_t*)arr1->data2;
+            offset_t* data2_2 = (offset_t*)arr2->data2;
             // Computing the number of strings and their minimum
-            uint32_t nb_string1 = data3_1[iRow1 + 1] - data3_1[iRow1];
-            uint32_t nb_string2 = data3_2[iRow2 + 1] - data3_2[iRow2];
-            uint32_t min_nb_string = nb_string1;
+            offset_t nb_string1 = data3_1[iRow1 + 1] - data3_1[iRow1];
+            offset_t nb_string2 = data3_2[iRow2 + 1] - data3_2[iRow2];
+            offset_t min_nb_string = nb_string1;
             if (nb_string2 < nb_string1) min_nb_string = nb_string2;
             // Iterating over the number of strings.
             for (size_t istr = 0; istr < min_nb_string; istr++) {
@@ -1022,7 +1051,7 @@ int KeyComparisonAsPython_Column(bool const& na_position_bis, array_info* arr1,
                 int reply_str = process_bits(str_bit1, str_bit2);
                 if (reply_str != 0) return reply_str;
                 if (str_bit1) {  // here str_bit1 = str_bit2
-                    uint32_t minlen = len1;
+                    offset_t minlen = len1;
                     if (len2 < len1) minlen = len2;
                     char* data1_1 = arr1->data1 + pos1_prev;
                     char* data1_2 = arr2->data1 + pos2_prev;
@@ -1051,16 +1080,16 @@ int KeyComparisonAsPython_Column(bool const& na_position_bis, array_info* arr1,
         // values.
         if (bit1) {
             // Here we consider the shifts in data2 for the comparison.
-            uint32_t* data2_1 = (uint32_t*)arr1->data2;
-            uint32_t* data2_2 = (uint32_t*)arr2->data2;
-            uint32_t len1 = data2_1[iRow1 + 1] - data2_1[iRow1];
-            uint32_t len2 = data2_2[iRow2 + 1] - data2_2[iRow2];
+            offset_t* data2_1 = (offset_t*)arr1->data2;
+            offset_t* data2_2 = (offset_t*)arr2->data2;
+            offset_t len1 = data2_1[iRow1 + 1] - data2_1[iRow1];
+            offset_t len2 = data2_2[iRow2 + 1] - data2_2[iRow2];
             // Compute minimal length
-            uint32_t minlen = len1;
+            offset_t minlen = len1;
             if (len2 < len1) minlen = len2;
             // From the common characters, we may be able to conclude.
-            uint32_t pos1_prev = data2_1[iRow1];
-            uint32_t pos2_prev = data2_2[iRow2];
+            offset_t pos1_prev = data2_1[iRow1];
+            offset_t pos2_prev = data2_2[iRow2];
             char* data1_1 = (char*)arr1->data1 + pos1_prev;
             char* data1_2 = (char*)arr2->data1 + pos2_prev;
             int test = std::strncmp(data1_2, data1_1, minlen);
@@ -1242,9 +1271,15 @@ void DEBUG_append_to_out_array(std::shared_ptr<arrow::Array> input_array,
                                int64_t start_offset, int64_t end_offset,
                                std::string& string_builder) {
     // TODO check for nulls and append nulls
+#if OFFSET_BITWIDTH == 32
     if (input_array->type_id() == arrow::Type::LIST) {
         std::shared_ptr<arrow::ListArray> list_array =
             std::dynamic_pointer_cast<arrow::ListArray>(input_array);
+#else
+    if (input_array->type_id() == arrow::Type::LARGE_LIST) {
+        std::shared_ptr<arrow::LargeListArray> list_array =
+            std::dynamic_pointer_cast<arrow::LargeListArray>(input_array);
+#endif
 
         string_builder += "[";
         for (int64_t idx = start_offset; idx < end_offset; idx++) {
@@ -1281,9 +1316,15 @@ void DEBUG_append_to_out_array(std::shared_ptr<arrow::Array> input_array,
             }
             string_builder += "}";
         }
+#if OFFSET_BITWIDTH == 32
     } else if (input_array->type_id() == arrow::Type::STRING) {
         auto str_array =
             std::dynamic_pointer_cast<arrow::StringArray>(input_array);
+#else
+    } else if (input_array->type_id() == arrow::Type::LARGE_STRING) {
+        auto str_array =
+            std::dynamic_pointer_cast<arrow::LargeStringArray>(input_array);
+#endif
         string_builder += "[";
         for (int64_t i = start_offset; i < end_offset; i++) {
             if (i > 0) string_builder += ", ";
@@ -1348,7 +1389,7 @@ std::vector<std::string> GetColumn_as_ListString(array_info* arr) {
 #ifdef DEBUG_DEBUG
         std::cout << "DEBUG, Case STRING\n";
 #endif
-        uint32_t* data2 = (uint32_t*)arr->data2;
+        offset_t* data2 = (offset_t*)arr->data2;
         char* data1 = arr->data1;
 #ifdef DEBUG_DEBUG
         std::cout << "DEBUG, We have the pointers\n";
@@ -1356,16 +1397,16 @@ std::vector<std::string> GetColumn_as_ListString(array_info* arr) {
         for (size_t iRow = 0; iRow < nRow; iRow++) {
             bool bit = arr->get_null_bit(iRow);
             if (bit) {
-                uint32_t start_pos = data2[iRow];
-                uint32_t end_pos = data2[iRow + 1];
-                uint32_t len = end_pos - start_pos;
+                offset_t start_pos = data2[iRow];
+                offset_t end_pos = data2[iRow + 1];
+                offset_t len = end_pos - start_pos;
 #ifdef DEBUG_DEBUG
                 std::cout << "start_pos=" << start_pos << " end_pos=" << end_pos
                           << " len=" << len << "\n";
 #endif
                 char* strname;
                 strname = new char[len + 1];
-                for (uint32_t i = 0; i < len; i++) {
+                for (offset_t i = 0; i < len; i++) {
                     strname[i] = data1[start_pos + i];
                 }
                 strname[len] = '\0';
@@ -1381,28 +1422,28 @@ std::vector<std::string> GetColumn_as_ListString(array_info* arr) {
 #ifdef DEBUG_DEBUG
         std::cout << "DEBUG, Case LIST_STRING\n";
 #endif
-        uint32_t* index_offset = (uint32_t*)arr->data3;
-        uint32_t* data_offset = (uint32_t*)arr->data2;
+        offset_t* index_offset = (offset_t*)arr->data3;
+        offset_t* data_offset = (offset_t*)arr->data2;
         uint8_t* sub_null_bitmask = (uint8_t*)arr->sub_null_bitmask;
         char* data1 = arr->data1;
         for (size_t iRow = 0; iRow < nRow; iRow++) {
             bool bit = arr->get_null_bit(iRow);
             if (bit) {
                 strOut = "[";
-                uint32_t len = index_offset[iRow + 1] - index_offset[iRow];
-                for (uint32_t u = 0; u < len; u++) {
+                offset_t len = index_offset[iRow + 1] - index_offset[iRow];
+                for (offset_t u = 0; u < len; u++) {
                     bool str_bit =
                         GetBit(sub_null_bitmask, index_offset[iRow] + u);
                     if (u > 0) strOut += ",";
                     if (str_bit) {
-                        uint32_t start_pos =
+                        offset_t start_pos =
                             data_offset[index_offset[iRow] + u];
-                        uint32_t end_pos =
+                        offset_t end_pos =
                             data_offset[index_offset[iRow] + u + 1];
-                        uint32_t lenB = end_pos - start_pos;
+                        offset_t lenB = end_pos - start_pos;
                         char* strname;
                         strname = new char[lenB + 1];
-                        for (uint32_t i = 0; i < lenB; i++)
+                        for (offset_t i = 0; i < lenB; i++)
                             strname[i] = data1[start_pos + i];
                         strname[lenB] = '\0';
                         strOut += strname;

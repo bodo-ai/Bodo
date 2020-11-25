@@ -28,6 +28,8 @@ from bodo.hiframes.pd_categorical_ext import CategoricalArray
 from bodo.libs import hdist
 from bodo.libs.array_item_arr_ext import (
     ArrayItemArrayType,
+    np_offset_type,
+    offset_type,
     pre_alloc_array_item_array,
 )
 from bodo.libs.bool_arr_ext import boolean_array
@@ -40,6 +42,7 @@ from bodo.libs.int_arr_ext import IntegerArrayType, set_bit_to_arr
 from bodo.libs.map_arr_ext import MapArrayType
 from bodo.libs.str_arr_ext import (
     convert_len_arr_to_offset,
+    convert_len_arr_to_offset32,
     get_bit_bitmap,
     get_data_ptr,
     get_null_bitmap_ptr,
@@ -789,7 +792,7 @@ def gatherv(data, allgather=False, warn_if_rep=True, root=MPI_ROOT):
                 displs_nulls = bodo.ir.join.calc_disp(recv_counts_nulls)
                 tmp_null_bytes = np.empty(recv_counts_nulls.sum(), np.uint8)
 
-            out_offsets_arr = np.empty(n_total + 1, np.uint32)
+            out_lens_arr = np.empty(n_total + 1, np.uint32)
             out_data_arr = bodo.gatherv(data_arr, allgather, warn_if_rep, root)
             out_null_bitmap_arr = np.empty((n_total + 7) >> 3, np.uint8)
 
@@ -797,7 +800,7 @@ def gatherv(data, allgather=False, warn_if_rep=True, root=MPI_ROOT):
             c_gatherv(
                 send_list_lens.ctypes,
                 np.int32(n_loc),
-                out_offsets_arr.ctypes,
+                out_lens_arr.ctypes,
                 recv_counts.ctypes,
                 displs.ctypes,
                 int32_typ_enum,
@@ -817,7 +820,12 @@ def gatherv(data, allgather=False, warn_if_rep=True, root=MPI_ROOT):
             )
             dummy_use(data)  # needed?
 
-            convert_len_arr_to_offset(out_offsets_arr.ctypes, n_total)
+            # TODO: don't hardcode offset type. Also, if offset is 32 bit we can
+            # use the same buffer
+            out_offsets_arr = np.empty(n_total + 1, np.uint64)
+            convert_len_arr_to_offset(
+                out_lens_arr.ctypes, out_offsets_arr.ctypes, n_total
+            )
             copy_gathered_null_bytes(
                 out_null_bitmap_arr.ctypes,
                 tmp_null_bytes,
@@ -1327,7 +1335,9 @@ def scatterv_impl(data, send_counts=None):
             n_all = bcast_scalar(len(data))
 
             # convert offsets to lengths of strings
-            send_arr_lens = np.empty(len(data), np.uint32)  # XXX offset type is uint32
+            send_arr_lens = np.empty(
+                len(data), np.uint32
+            )  # XXX offset type is offset_type, lengths for comm are uint32
             for i in range(len(data)):
                 send_arr_lens[i] = bodo.libs.str_arr_ext.get_str_arr_item_length(
                     data, i
@@ -1371,16 +1381,19 @@ def scatterv_impl(data, send_counts=None):
 
             # ----- string lengths -----------
 
+            recv_lens = np.empty(n_loc, np.uint32)
             c_scatterv(
                 send_arr_lens.ctypes,
                 send_counts.ctypes,
                 displs.ctypes,
-                get_offset_ptr(recv_arr),
+                recv_lens.ctypes,
                 np.int32(n_loc),
                 int32_typ_enum,
             )
 
-            convert_len_arr_to_offset(get_offset_ptr(recv_arr), n_loc)
+            # TODO: don't hardcode offset type. Also, if offset is 32 bit we can
+            # use the same buffer
+            convert_len_arr_to_offset(recv_lens.ctypes, get_offset_ptr(recv_arr), n_loc)
 
             # ----- string characters -----------
 
@@ -1430,7 +1443,9 @@ def scatterv_impl(data, send_counts=None):
             n_all = bcast_scalar(len(data))
 
             # convert offsets to lengths of lists
-            send_arr_lens = np.empty(len(data), np.uint32)  # XXX offset type is uint32
+            send_arr_lens = np.empty(
+                len(data), np.uint32
+            )  # XXX offset type is offset_type
             for i in range(len(data)):
                 send_arr_lens[i] = in_offsets_arr[i + 1] - in_offsets_arr[i]
 
@@ -1464,7 +1479,7 @@ def scatterv_impl(data, send_counts=None):
 
             # alloc output array
             n_loc = send_counts[rank]  # total number of elements on this PE
-            recv_offsets_arr = np.empty(n_loc + 1, np.uint32)
+            recv_offsets_arr = np.empty(n_loc + 1, np_offset_type)
 
             recv_data_arr = bodo.libs.distributed_api.scatterv_impl(
                 in_data_arr, send_counts_item
@@ -1474,16 +1489,19 @@ def scatterv_impl(data, send_counts=None):
 
             # ----- list of item lengths -----------
 
+            recv_lens = np.empty(n_loc, np.uint32)
             c_scatterv(
                 send_arr_lens.ctypes,
                 send_counts.ctypes,
                 displs.ctypes,
-                recv_offsets_arr.ctypes,
+                recv_lens.ctypes,
                 np.int32(n_loc),
                 int32_typ_enum,
             )
 
-            convert_len_arr_to_offset(recv_offsets_arr.ctypes, n_loc)
+            # TODO: don't hardcode offset type. Also, if offset is 32 bit we can
+            # use the same buffer
+            convert_len_arr_to_offset(recv_lens.ctypes, recv_offsets_arr.ctypes, n_loc)
 
             # ----------- null bitmap -------------
 
@@ -1806,7 +1824,8 @@ def bcast_overload(data):
                 0,
             )
             if rank != MPI_ROOT:
-                convert_len_arr_to_offset(offset_ptr, n_loc)
+                # XXX why is this needed?
+                convert_len_arr_to_offset32(offset_ptr, n_loc)
 
         return bcast_str_impl
 

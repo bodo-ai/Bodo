@@ -46,6 +46,7 @@ from bodo.libs.array_item_arr_ext import (
     _get_array_item_arr_payload,
     construct_array_item_array,
     define_array_item_dtor,
+    offset_type,
 )
 from bodo.libs.bool_arr_ext import BooleanArrayType, boolean_array
 from bodo.libs.decimal_arr_ext import Decimal128Type, DecimalArrayType
@@ -1222,7 +1223,7 @@ def pq_read_array_item_lower(context, builder, sig, args):
         builder.load(data_info_ptr),
     )
     payload.offsets = _lower_info_to_array_numpy(
-        types.Array(types.uint32, 1, "C"),
+        types.Array(offset_type, 1, "C"),
         context,
         builder,
         builder.load(offsets_info_ptr),

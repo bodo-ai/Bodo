@@ -314,10 +314,10 @@ int pq_read_string(DatasetReader *ds_reader, int64_t real_column_idx,
         int64_t start = ds_reader->start_row_first_file;
 
         int64_t n_all_vals = 0;
-        std::vector<uint32_t> offset_vec;
+        std::vector<offset_t> offset_vec;
         std::vector<uint8_t> data_vec;
         std::vector<bool> null_vec;
-        int64_t last_offset = 0;
+        offset_t last_offset = 0;
         int64_t read_rows = 0;  // rows read so far
         for (auto filepath : ds_reader->filepaths) {
             std::shared_ptr<parquet::arrow::FileReader> file_reader;
@@ -351,14 +351,14 @@ int pq_read_string(DatasetReader *ds_reader, int64_t real_column_idx,
             alloc_array(n_strs, n_chars, -1, bodo_array_type::STRING,
                         Bodo_CTypes::STRING, 0, 0);
 
-        uint32_t *out_offsets = (uint32_t *)out_arr->data2;
+        offset_t *out_offsets = (offset_t *)out_arr->data2;
         uint8_t *out_data = (uint8_t *)out_arr->data1;
         uint8_t *out_nulls = (uint8_t *)out_arr->null_bitmask;
         *out_meminfo = out_arr->meminfo;
         delete out_arr;
 
         memcpy(out_offsets, offset_vec.data(),
-               offset_vec.size() * sizeof(uint32_t));
+               offset_vec.size() * sizeof(offset_t));
         memcpy(out_data, data_vec.data(), data_vec.size());
         pack_null_bitmap(out_nulls, null_vec, n_all_vals);
         return n_all_vals;
@@ -377,8 +377,8 @@ int pq_read_list_string(DatasetReader *ds_reader, int64_t real_column_idx,
 
         // TODO get nulls for strings too (not just lists)
         int64_t n_all_vals = 0;
-        std::vector<uint32_t> index_offset_vec;
-        std::vector<uint32_t> offset_vec;
+        std::vector<offset_t> index_offset_vec;
+        std::vector<offset_t> offset_vec;
         std::vector<uint8_t> data_vec;
         std::vector<bool> null_vec;
         int64_t last_str_offset = 0;
@@ -428,10 +428,10 @@ int pq_read_list_string(DatasetReader *ds_reader, int64_t real_column_idx,
         array_item_arr_numpy_payload *sub_payload =
             (array_item_arr_numpy_payload *)(payload->data->data);
         memcpy(sub_payload->offsets.data, offset_vec.data(),
-               offset_vec.size() * sizeof(int32_t));
+               offset_vec.size() * sizeof(offset_t));
         memcpy(sub_payload->data.data, data_vec.data(), data_vec.size());
         memcpy(payload->offsets.data, index_offset_vec.data(),
-               index_offset_vec.size() * sizeof(int32_t));
+               index_offset_vec.size() * sizeof(offset_t));
         int64_t n_bytes = (n_all_vals + 7) >> 3;
         memset(payload->null_bitmap.data, 0, n_bytes);
         for (int64_t i = 0; i < n_all_vals; i++) {
@@ -503,7 +503,7 @@ int pq_read_array_item(DatasetReader *ds_reader, int64_t real_column_idx,
         int64_t start = ds_reader->start_row_first_file;
 
         int64_t n_all_vals = 0;
-        std::vector<uint32_t> offset_vec;
+        std::vector<offset_t> offset_vec;
         std::vector<uint8_t> data_vec;
         std::vector<bool> null_vec;
         int64_t last_offset = 0;
@@ -537,7 +537,7 @@ int pq_read_array_item(DatasetReader *ds_reader, int64_t real_column_idx,
         // allocate output arrays and copy data
         *out_offsets = alloc_array(offset_vec.size(), 1, 1,
                                    bodo_array_type::arr_type_enum::NUMPY,
-                                   Bodo_CTypes::UINT32, 0, 0);
+                                   Bodo_CType_offset, 0, 0);
         *out_data = alloc_array(data_vec.size(), 1, 1,
                                 bodo_array_type::arr_type_enum::NUMPY,
                                 (Bodo_CTypes::CTypeEnum)out_dtype, 0, 0);
@@ -547,7 +547,7 @@ int pq_read_array_item(DatasetReader *ds_reader, int64_t real_column_idx,
                                  Bodo_CTypes::UINT8, 0, 0);
 
         memcpy((*out_offsets)->data1, offset_vec.data(),
-               offset_vec.size() * sizeof(uint32_t));
+               offset_vec.size() * sizeof(offset_t));
         memcpy((*out_data)->data1, data_vec.data(), data_vec.size());
 
         memset((*out_nulls)->data1, 0, n_null_bytes);
@@ -733,7 +733,7 @@ void bodo_array_to_arrow(
         constexpr int32_t kBinaryChunksize = 1 << 24;
         ::arrow::internal::ChunkedStringBuilder builder(kBinaryChunksize, pool);
         char *cur_str = array->data1;
-        uint32_t *offsets = (uint32_t *)array->data2;
+        offset_t *offsets = (offset_t *)array->data2;
         for (int64_t i = 0; i < array->length; i++) {
             if (!GetBit((uint8_t *)array->null_bitmask, i)) {
                 status = builder.AppendNull();
@@ -837,7 +837,7 @@ void pq_write(const char *_path_name, const table_info *table,
         // copy column names to a std::vector<string>
         std::vector<std::string> col_names;
         char *cur_str = col_names_arr->data1;
-        uint32_t *offsets = (uint32_t *)col_names_arr->data2;
+        offset_t *offsets = (offset_t *)col_names_arr->data2;
         for (int64_t i = 0; i < col_names_arr->length; i++) {
             size_t len = offsets[i + 1] - offsets[i];
             col_names.emplace_back(cur_str, len);

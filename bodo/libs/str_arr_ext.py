@@ -56,6 +56,8 @@ from bodo.libs.array_item_arr_ext import (
     ArrayItemArrayPayloadType,
     ArrayItemArrayType,
     _get_array_item_arr_payload,
+    np_offset_type,
+    offset_type,
 )
 from bodo.libs.decimal_arr_ext import Decimal128Type, DecimalArrayType
 from bodo.libs.str_ext import memcmp, string_type, unicode_to_utf8_and_len
@@ -76,7 +78,6 @@ use_pd_string_array = False
 
 
 char_type = types.uint8
-offset_type = types.int32
 char_arr_type = types.Array(char_type, 1, "C")
 offset_arr_type = types.Array(offset_type, 1, "C")
 null_bitmap_arr_type = types.Array(types.uint8, 1, "C")
@@ -474,7 +475,9 @@ def get_offset_ptr(typingctx, str_arr_typ=None):
         offsets_arr = context.make_helper(builder, offset_arr_type, payload.offsets)
         # # Create new ArrayCType structure
         ctinfo = context.make_helper(builder, offset_ctypes_type)
-        ctinfo.data = builder.bitcast(offsets_arr.data, lir.IntType(32).as_pointer())
+        ctinfo.data = builder.bitcast(
+            offsets_arr.data, lir.IntType(offset_type.bitwidth).as_pointer()
+        )
         ctinfo.meminfo = offsets_arr.meminfo
         res = ctinfo._getvalue()
         return impl_ret_borrowed(context, builder, offset_ctypes_type, res)
@@ -549,7 +552,7 @@ def getitem_str_offset(typingctx, str_arr_typ, ind_t=None):
         ).data
         return builder.load(builder.gep(offsets_ptr, [ind]))
 
-    return types.uint32(string_array_type, ind_t), codegen
+    return offset_type(string_array_type, ind_t), codegen
 
 
 # TODO: fix this for join
@@ -563,7 +566,7 @@ def setitem_str_offset(typingctx, str_arr_typ, ind_t, val_t=None):
         builder.store(val, builder.gep(offsets, [ind]))
         return context.get_dummy_value()
 
-    return types.void(string_array_type, ind_t, types.uint32), codegen
+    return types.void(string_array_type, ind_t, offset_type), codegen
 
 
 @intrinsic
@@ -971,6 +974,7 @@ ll.add_symbol("is_na", hstr_ext.is_na)
 ll.add_symbol("string_array_from_sequence", array_ext.string_array_from_sequence)
 ll.add_symbol("pd_array_from_string_array", hstr_ext.pd_array_from_string_array)
 ll.add_symbol("np_array_from_string_array", hstr_ext.np_array_from_string_array)
+ll.add_symbol("convert_len_arr_to_offset32", hstr_ext.convert_len_arr_to_offset32)
 ll.add_symbol("convert_len_arr_to_offset", hstr_ext.convert_len_arr_to_offset)
 ll.add_symbol("set_string_array_range", hstr_ext.set_string_array_range)
 ll.add_symbol("str_arr_to_int64", hstr_ext.str_arr_to_int64)
@@ -984,10 +988,13 @@ inplace_int64_to_str = types.ExternalFunction(
     "inplace_int64_to_str", types.void(types.voidptr, types.int64, types.int64)
 )
 
-convert_len_arr_to_offset = types.ExternalFunction(
-    "convert_len_arr_to_offset", types.void(types.voidptr, types.intp)
+convert_len_arr_to_offset32 = types.ExternalFunction(
+    "convert_len_arr_to_offset32", types.void(types.voidptr, types.intp)
 )
 
+convert_len_arr_to_offset = types.ExternalFunction(
+    "convert_len_arr_to_offset", types.void(types.voidptr, types.voidptr, types.intp)
+)
 
 setitem_string_array = types.ExternalFunction(
     "setitem_string_array",
@@ -997,13 +1004,13 @@ setitem_string_array = types.ExternalFunction(
         types.uint64,
         types.voidptr,
         types.intp,
-        types.int32,
-        types.int32,
+        offset_type,
+        offset_type,
         types.intp,
     ),
 )
 _get_utf8_size = types.ExternalFunction(
-    "get_utf8_size", types.intp(types.voidptr, types.intp, types.int32)
+    "get_utf8_size", types.intp(types.voidptr, types.intp, offset_type)
 )
 _print_str_arr = types.ExternalFunction(
     "print_str_arr",
@@ -1137,9 +1144,9 @@ def set_string_array_range(
         fnty = lir.FunctionType(
             lir.VoidType(),
             [
-                lir.IntType(32).as_pointer(),
+                lir.IntType(offset_type.bitwidth).as_pointer(),
                 lir.IntType(8).as_pointer(),
-                lir.IntType(32).as_pointer(),
+                lir.IntType(offset_type.bitwidth).as_pointer(),
                 lir.IntType(8).as_pointer(),
                 lir.IntType(64),
                 lir.IntType(64),
@@ -1197,7 +1204,7 @@ def box_str_arr(typ, val, c):
         c.context.get_argument_type(types.pyobject),
         [
             lir.IntType(64),
-            lir.IntType(32).as_pointer(),
+            lir.IntType(offset_type.bitwidth).as_pointer(),
             lir.IntType(8).as_pointer(),
             lir.IntType(8).as_pointer(),
         ],
@@ -1461,7 +1468,7 @@ def setitem_str_arr_ptr(typingctx, str_arr_t, ind_t, ptr_t, len_t=None):
         fnty = lir.FunctionType(
             lir.VoidType(),
             [
-                lir.IntType(32).as_pointer(),
+                lir.IntType(offset_type.bitwidth).as_pointer(),
                 lir.IntType(8).as_pointer(),
                 lir.IntType(64),
                 lir.IntType(8).as_pointer(),
@@ -1968,7 +1975,7 @@ def _str_arr_item_to_numeric(typingctx, out_ptr_t, str_arr_t, ind_t, out_dtype_t
             lir.IntType(32),
             [
                 out_ptr.type,
-                lir.IntType(32).as_pointer(),
+                lir.IntType(offset_type.bitwidth).as_pointer(),
                 lir.IntType(8).as_pointer(),
                 lir.IntType(64),
             ],
@@ -2032,7 +2039,7 @@ def lower_constant_str_arr(context, builder, typ, pyval):
     # converts all strings to utf8 bytes and appends to a char list to create char array
     n = len(pyval)
     curr_offset = 0
-    offset_arr = np.empty(n + 1, np.int32)
+    offset_arr = np.empty(n + 1, np_offset_type)
     char_list = []
     nulls_arr = np.empty((n + 7) >> 3, np.uint8)
     for i, s in enumerate(pyval):

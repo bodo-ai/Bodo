@@ -81,7 +81,6 @@ from bodo.utils.shuffle import (
     _get_data_tup,
     _get_keys_tup,
     alloc_pre_shuffle_metadata,
-    alltoallv_tup,
     finalize_shuffle_meta,
     getitem_arr_tup_single,
     update_shuffle_meta,
