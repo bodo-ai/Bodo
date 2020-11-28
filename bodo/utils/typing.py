@@ -46,13 +46,13 @@ class BodoError(NumbaError):
     when printing so that it only prints the error message and code location.
     """
 
-    def __init__(self, msg, locs_in_msg=None):
+    def __init__(self, msg, loc=None, locs_in_msg=None):
         if locs_in_msg is None:
             self.locs_in_msg = []
         else:
             self.locs_in_msg = locs_in_msg
         highlight = numba.core.errors.termcolor().errmsg
-        super(BodoError, self).__init__(highlight(msg))
+        super(BodoError, self).__init__(highlight(msg), loc)
 
 
 class BodoException(Exception):

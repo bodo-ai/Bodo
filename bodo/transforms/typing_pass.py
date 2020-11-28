@@ -564,7 +564,8 @@ class TypingTransforms:
             except:  # pragma: no cover
                 pass
             raise BodoError(
-                f"Cannot call non-JIT function '{func_name}' from JIT function (convert to JIT or use objmode)."
+                f"Cannot call non-JIT function '{func_name}' from JIT function (convert to JIT or use objmode).",
+                rhs.loc,
             )
 
         return [assign]
