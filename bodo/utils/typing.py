@@ -3,6 +3,7 @@
 Helper functions to enable typing.
 """
 import itertools
+import types as pytypes
 from inspect import getfullargspec
 
 import numba
@@ -715,6 +716,7 @@ class FunctionLiteral(types.Literal, types.Opaque):
     """Literal type for function objects (i.e. pytypes.FunctionType)"""
 
 
+types.Literal.ctor_map[pytypes.FunctionType] = FunctionLiteral
 register_model(FunctionLiteral)(models.OpaqueModel)
 
 
@@ -795,12 +797,10 @@ def get_literal_value(t):
         return t
 
 
-def can_literalize_type(t, literalize_pyobject=False):
+def can_literalize_type(t):
     """return True if type 't' can have literal values"""
-    return (
-        t in (bodo.string_type, types.bool_)
-        or isinstance(t, (types.Integer, types.List, types.SliceType))
-        or (literalize_pyobject and t == types.pyobject)
+    return t in (bodo.string_type, types.bool_) or isinstance(
+        t, (types.Integer, types.List, types.SliceType)
     )
 
 

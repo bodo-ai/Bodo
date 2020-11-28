@@ -34,7 +34,6 @@ from numba.core.ir_utils import (
     visit_vars_extensions,
     visit_vars_inner,
 )
-from numba.core.typeinfer import _temporary_dispatcher_map
 from numba.core.types import literal
 from numba.core.types.functions import (
     _bt_as_lines,
@@ -1329,7 +1328,9 @@ def maybe_literal(value):
     """Get a Literal type for the value or None."""
     # bodo change: don't use our ListLiteral for regular constant or global lists.
     # ListLiteral is only used when Bodo forces an argument to be a literal
-    if isinstance(value, list):
+    # FunctionLiteral shouldn't be used for all globals to avoid interference with
+    # overloads
+    if isinstance(value, (list, pytypes.FunctionType)):
         return
     try:
         return literal(value)
@@ -2213,91 +2214,24 @@ if (
 numba.core.errors.ForceLiteralArg.combine = ForceLiteralArg_combine
 
 
-# Bodo change: support function literals in global values (e.g. for Series.map)
-def typeof_global(self, inst, target, gvar):
-    import types as pytypes
-
+def _get_global_type(self, gv):
     from bodo.utils.typing import FunctionLiteral
 
-    try:
-        typ = self.resolve_value_type(inst, gvar.value)
-    except TypingError as e:
-        if (
-            gvar.name == self.func_id.func_name
-            and gvar.name in _temporary_dispatcher_map
-        ):
-            # Self-recursion case where the dispatcher is not (yet?) known
-            # as a global variable
-            typ = types.Dispatcher(_temporary_dispatcher_map[gvar.name])
-        # Bodo change: handle function values
-        elif isinstance(gvar.value, pytypes.FunctionType):
-            typ = FunctionLiteral(gvar.value)
-        else:
-            from numba.misc import special
+    ty = self._lookup_global(gv)
+    if ty is not None:
+        return ty
+    if isinstance(gv, pytypes.ModuleType):
+        return types.Module(gv)
 
-            nm = gvar.name
-            # check if the problem is actually a name error
-            func_glbls = self.func_id.func.__globals__
-            if (
-                nm not in func_glbls.keys()
-                and nm not in special.__all__
-                and nm not in __builtins__.keys()
-                and nm not in self.func_id.code.co_freevars
-            ):
-                errstr = "NameError: name '%s' is not defined"
-                msg = _termcolor.errmsg(errstr % nm)
-                e.patch_message(msg)
-                raise
-            else:
-                msg = _termcolor.errmsg("Untyped global name '%s':" % nm)
-            msg += " %s"  # interps the actual error
-
-            # if the untyped global is a numba internal function then add
-            # to the error message asking if it's been imported.
-
-            if nm in special.__all__:
-                tmp = (
-                    "\n'%s' looks like a Numba internal function, has "
-                    "it been imported (i.e. 'from numba import %s')?\n" % (nm, nm)
-                )
-                msg += _termcolor.errmsg(tmp)
-            e.patch_message(msg % e)
-            raise
-
-    if isinstance(typ, types.Dispatcher) and typ.dispatcher.is_compiling:
-        # Recursive call
-        callstack = self.context.callstack
-        callframe = callstack.findfirst(typ.dispatcher.py_func)
-        if callframe is not None:
-            typ = types.RecursiveCall(typ)
-        else:
-            raise NotImplementedError(
-                "call to %s: unsupported recursion" % typ.dispatcher
-            )
-
-    if isinstance(typ, types.Array):
-        # Global array in nopython mode is constant
-        typ = typ.copy(readonly=True)
-
-    if isinstance(typ, types.BaseAnonymousTuple):
-        # if it's a tuple of literal types, swap the type for the more
-        # specific literal version
-        literaled = [types.maybe_literal(x) for x in gvar.value]
-        if all(literaled):
-            typ = types.Tuple(literaled)
-
-    self.sentry_modified_builtin(inst, gvar)
-    # Setting literal_value for globals because they are handled
-    # like const value in numba
-    lit = types.maybe_literal(gvar.value)
-    self.lock_type(target.name, lit or typ, loc=inst.loc)
-    self.assumed_immutables.add(inst)
+    # Bodo change: use FunctionLiteral for function value if it's not overloaded
+    if isinstance(gv, pytypes.FunctionType):
+        return FunctionLiteral(gv)
 
 
-lines = inspect.getsource(numba.core.typeinfer.TypeInferer.typeof_global)
+lines = inspect.getsource(numba.core.typing.context.BaseContext._get_global_type)
 if (
     hashlib.sha256(lines.encode()).hexdigest()
-    != "2409509e4413b8de95ac77cbb2a9b3148417f5e1e370ef59a091e72ba5e4e09a"
+    != "8ffe6b81175d1eecd62a37639b5005514b4477d88f35f5b5395041ac8c945a4a"
 ):  # pragma: no cover
-    warnings.warn("numba.core.typeinfer.TypeInferer.typeof_global has changed")
-numba.core.typeinfer.TypeInferer.typeof_global = typeof_global
+    warnings.warn("numba.core.typing.context.BaseContext._get_global_type has changed")
+numba.core.typing.context.BaseContext._get_global_type = _get_global_type

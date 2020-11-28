@@ -627,14 +627,11 @@ class TypingTransforms:
 
         if func_name in df_call_const_args:
             func_args = df_call_const_args[func_name]
-            # function arguments are initially typed as pyobject so need extra flag
-            literalize_pyobject = func_name == "apply"
             nodes += self._replace_arg_with_literal(
                 func_name,
                 rhs,
                 func_args,
                 label,
-                literalize_pyobject=literalize_pyobject,
             )
 
         # transform df.assign() here since (**kwargs) is not supported in overload
@@ -738,11 +735,7 @@ class TypingTransforms:
 
         if func_name in series_call_const_args:
             func_args = series_call_const_args[func_name]
-            # function arguments are initially typed as pyobject so need extra flag
-            literalize_pyobject = func_name in ("map", "apply")
-            nodes += self._replace_arg_with_literal(
-                func_name, rhs, func_args, label, literalize_pyobject
-            )
+            nodes += self._replace_arg_with_literal(func_name, rhs, func_args, label)
 
         return nodes + [assign]
 
@@ -1035,9 +1028,7 @@ class TypingTransforms:
         if func_var.name in self.typemap:
             return self.typemap[func_var.name].this
 
-    def _replace_arg_with_literal(
-        self, func_name, rhs, func_args, label, literalize_pyobject=False
-    ):
+    def _replace_arg_with_literal(self, func_name, rhs, func_args, label):
         """replace a function argument that needs to be constant with a literal to
         enable constant access in overload. This may force JIT arguments to be literals
         if needed to satify constant requirements.
@@ -1071,7 +1062,6 @@ class TypingTransforms:
                     self.arg_types,
                     self.typemap,
                     self._updated_containers,
-                    literalize_pyobject=literalize_pyobject,
                 )
             except BodoConstUpdatedError as e:
                 raise BodoError(
