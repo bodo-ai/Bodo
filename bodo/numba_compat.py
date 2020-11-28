@@ -16,32 +16,25 @@ import types as pytypes
 import warnings
 from collections import OrderedDict
 from collections.abc import Sequence
-from functools import partial, wraps
 
 import numba
 import numba.np.linalg
-import numpy as np
 from numba.core import analysis, errors, ir, ir_utils, types
 from numba.core.errors import ForceLiteralArg, LiteralTypingError, TypingError
-from numba.core.imputils import impl_ret_new_ref
 from numba.core.ir_utils import (
-    GuardException,
     _create_function_from_code_obj,
     analysis,
     build_definitions,
-    compile_to_numba_ir,
     find_callname,
-    find_const,
-    get_definition,
     guard,
     has_no_side_effect,
     remove_dead_extensions,
-    replace_arg_nodes,
     replace_vars_inner,
     require,
     visit_vars_extensions,
     visit_vars_inner,
 )
+from numba.core.typeinfer import _temporary_dispatcher_map
 from numba.core.types import literal
 from numba.core.types.functions import (
     _bt_as_lines,
@@ -49,7 +42,6 @@ from numba.core.types.functions import (
     _termcolor,
     _unlit_non_poison,
 )
-from numba.core.types.misc import unliteral
 from numba.core.typing.templates import (
     AbstractTemplate,
     _OverloadAttributeTemplate,
@@ -1135,7 +1127,6 @@ def bodo_remove_dead_block(
     Mutable arguments (e.g. arrays) that are not definitely assigned are live
     after return of function.
     """
-    import bodo
     from bodo.transforms.distributed_pass import saved_array_analysis
     from bodo.utils.utils import is_array_typ, is_expr
 
@@ -1834,7 +1825,6 @@ numba.core.errors.NumbaError.patch_message = patch_message
 
 def _get_dist_spec_from_options(spec, **options):
     """get distribution spec for jitclass from options passed to @bodo.jitclass"""
-    import bodo
     from bodo.transforms.distributed_analysis import Distribution
 
     dist_spec = {}
@@ -2221,3 +2211,93 @@ if (
 ):  # pragma: no cover
     warnings.warn("numba.core.errors.ForceLiteralArg.combine has changed")
 numba.core.errors.ForceLiteralArg.combine = ForceLiteralArg_combine
+
+
+# Bodo change: support function literals in global values (e.g. for Series.map)
+def typeof_global(self, inst, target, gvar):
+    import types as pytypes
+
+    from bodo.utils.typing import FunctionLiteral
+
+    try:
+        typ = self.resolve_value_type(inst, gvar.value)
+    except TypingError as e:
+        if (
+            gvar.name == self.func_id.func_name
+            and gvar.name in _temporary_dispatcher_map
+        ):
+            # Self-recursion case where the dispatcher is not (yet?) known
+            # as a global variable
+            typ = types.Dispatcher(_temporary_dispatcher_map[gvar.name])
+        # Bodo change: handle function values
+        elif isinstance(gvar.value, pytypes.FunctionType):
+            typ = FunctionLiteral(gvar.value)
+        else:
+            from numba.misc import special
+
+            nm = gvar.name
+            # check if the problem is actually a name error
+            func_glbls = self.func_id.func.__globals__
+            if (
+                nm not in func_glbls.keys()
+                and nm not in special.__all__
+                and nm not in __builtins__.keys()
+                and nm not in self.func_id.code.co_freevars
+            ):
+                errstr = "NameError: name '%s' is not defined"
+                msg = _termcolor.errmsg(errstr % nm)
+                e.patch_message(msg)
+                raise
+            else:
+                msg = _termcolor.errmsg("Untyped global name '%s':" % nm)
+            msg += " %s"  # interps the actual error
+
+            # if the untyped global is a numba internal function then add
+            # to the error message asking if it's been imported.
+
+            if nm in special.__all__:
+                tmp = (
+                    "\n'%s' looks like a Numba internal function, has "
+                    "it been imported (i.e. 'from numba import %s')?\n" % (nm, nm)
+                )
+                msg += _termcolor.errmsg(tmp)
+            e.patch_message(msg % e)
+            raise
+
+    if isinstance(typ, types.Dispatcher) and typ.dispatcher.is_compiling:
+        # Recursive call
+        callstack = self.context.callstack
+        callframe = callstack.findfirst(typ.dispatcher.py_func)
+        if callframe is not None:
+            typ = types.RecursiveCall(typ)
+        else:
+            raise NotImplementedError(
+                "call to %s: unsupported recursion" % typ.dispatcher
+            )
+
+    if isinstance(typ, types.Array):
+        # Global array in nopython mode is constant
+        typ = typ.copy(readonly=True)
+
+    if isinstance(typ, types.BaseAnonymousTuple):
+        # if it's a tuple of literal types, swap the type for the more
+        # specific literal version
+        literaled = [types.maybe_literal(x) for x in gvar.value]
+        if all(literaled):
+            typ = types.Tuple(literaled)
+
+    self.sentry_modified_builtin(inst, gvar)
+    # Setting literal_value for globals because they are handled
+    # like const value in numba
+    lit = types.maybe_literal(gvar.value)
+    self.lock_type(target.name, lit or typ, loc=inst.loc)
+    self.assumed_immutables.add(inst)
+
+
+lines = inspect.getsource(numba.core.typeinfer.TypeInferer.typeof_global)
+if (
+    hashlib.sha256(lines.encode()).hexdigest()
+    != "2409509e4413b8de95ac77cbb2a9b3148417f5e1e370ef59a091e72ba5e4e09a"
+):  # pragma: no cover
+    warnings.warn("numba.core.typeinfer.TypeInferer.typeof_global has changed")
+numba.core.typeinfer.TypeInferer.typeof_global = typeof_global

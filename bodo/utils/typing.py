@@ -3,27 +3,15 @@
 Helper functions to enable typing.
 """
 import itertools
-import operator
-import types as pytypes
 from inspect import getfullargspec
 
 import numba
 import numpy as np
 import pandas as pd
-from numba.core import cgutils, ir_utils, types
+from numba.core import ir_utils, types
 from numba.core.errors import NumbaError
-from numba.core.imputils import (
-    impl_ret_borrowed,
-    impl_ret_new_ref,
-    lower_builtin,
-)
+from numba.core.imputils import lower_builtin
 from numba.core.registry import CPUDispatcher
-from numba.core.typing import signature
-from numba.core.typing.templates import (
-    AbstractTemplate,
-    CallableTemplate,
-    infer_global,
-)
 from numba.extending import (
     NativeValue,
     intrinsic,
@@ -33,7 +21,6 @@ from numba.extending import (
     overload_method,
     register_jitable,
     register_model,
-    typeof_impl,
     unbox,
 )
 
@@ -71,8 +58,6 @@ class BodoException(Exception):
     """Bodo exception that inherits from Exception to allow typing pass to catch it
     and potentially transform the IR.
     """
-
-    pass
 
 
 class BodoNotConstError(Exception):
@@ -594,9 +579,6 @@ def is_list_like_index_type(t):
     """Types that can be similar to list for indexing Arrays, Series, etc.
     Tuples are excluded due to indexing semantics.
     """
-    from bodo.hiframes.datetime_timedelta_ext import (
-        datetime_timedelta_array_type,
-    )
     from bodo.hiframes.pd_index_ext import NumericIndexType, RangeIndexType
     from bodo.hiframes.pd_series_ext import SeriesType
     from bodo.libs.bool_arr_ext import boolean_array
@@ -728,17 +710,9 @@ def unbox_list_literal(typ, obj, c):
 
 
 # literal type for functions (to handle function arguments to map/apply methods)
-# TODO: update when Numba's #4967 is merged
 # similar to MakeFunctionLiteral
 class FunctionLiteral(types.Literal, types.Opaque):
     """Literal type for function objects (i.e. pytypes.FunctionType)"""
-
-
-@typeof_impl.register(pytypes.FunctionType)
-def typeof_function(val, c):
-    """Assign literal type to constant functions that are not overloaded in numba."""
-    if not numba.core.registry.cpu_target.typing_context._get_global_type(val):
-        return FunctionLiteral(val)
 
 
 register_model(FunctionLiteral)(models.OpaqueModel)
@@ -821,10 +795,12 @@ def get_literal_value(t):
         return t
 
 
-def can_literalize_type(t):
+def can_literalize_type(t, literalize_pyobject=False):
     """return True if type 't' can have literal values"""
-    return t in (bodo.string_type, types.bool_) or isinstance(
-        t, (types.Integer, types.List, types.SliceType)
+    return (
+        t in (bodo.string_type, types.bool_)
+        or isinstance(t, (types.Integer, types.List, types.SliceType))
+        or (literalize_pyobject and t == types.pyobject)
     )
 
 

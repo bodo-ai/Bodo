@@ -6,6 +6,7 @@ import os
 import random
 import string
 import time
+import types as pytypes
 import warnings
 from decimal import Decimal
 
@@ -461,8 +462,7 @@ def _get_dist_arg(a, copy=False, var_length=False, check_typing_issues=True):
     if copy and hasattr(a, "copy"):
         a = a.copy()
 
-    arg_typ = bodo.typeof(a)
-    if not is_distributable_typ(arg_typ):
+    if isinstance(a, pytypes.FunctionType) or not is_distributable_typ(bodo.typeof(a)):
         return a
 
     start, end = get_start_end(len(a))

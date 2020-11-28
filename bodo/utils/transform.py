@@ -326,7 +326,13 @@ def get_const_value(
 
 
 def get_const_value_inner(
-    func_ir, var, arg_types=None, typemap=None, updated_containers=None, file_info=None
+    func_ir,
+    var,
+    arg_types=None,
+    typemap=None,
+    updated_containers=None,
+    file_info=None,
+    literalize_pyobject=False,
 ):
     """Check if a variable can be inferred as a constant and return the constant value.
     Otherwise, raise GuardException.
@@ -351,7 +357,7 @@ def get_const_value_inner(
         return val
 
     # argument dispatch, force literal only if argument can be literal
-    if isinstance(var_def, ir.Arg) and can_literalize_type(typ):
+    if isinstance(var_def, ir.Arg) and can_literalize_type(typ, literalize_pyobject):
         raise numba.core.errors.ForceLiteralArg(
             {var_def.index},
             loc=var.loc,

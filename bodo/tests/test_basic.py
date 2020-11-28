@@ -1,5 +1,4 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
-import itertools
 import random
 
 import numba
@@ -11,14 +10,8 @@ import bodo
 from bodo.tests.utils import (
     DeadcodeTestPipeline,
     check_func,
-    count_array_OneD_Vars,
     count_array_OneDs,
-    count_array_REPs,
     count_parfor_OneDs,
-    count_parfor_REPs,
-    dist_IR_contains,
-    get_rank,
-    get_start_end,
 )
 from bodo.utils.typing import BodoError
 from bodo.utils.utils import is_assign, is_expr
@@ -607,6 +600,21 @@ def test_permuted_array_indexing(memory_leak_check):
     for arr_len in [15, 23, 26]:
         A, B, _ = hpat_func3(arr_len)
         np.testing.assert_allclose(A, B)
+
+
+def test_func_non_jit_error(memory_leak_check):
+    """make sure proper error is thrown when calling a non-JIT function"""
+
+    def f():
+        return 1
+
+    def test_impl():
+        return f()
+
+    with pytest.raises(
+        BodoError, match="Cannot call non-JIT function 'f' from JIT function"
+    ):
+        bodo.jit(test_impl)()
 
 
 # TODO: Add memory_leak_check after memory leak is solved.

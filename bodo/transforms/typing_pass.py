@@ -554,6 +554,19 @@ class TypingTransforms:
         ):  # pragma: no cover
             return self._run_call_bodosql_sql(assign, rhs, func_mod, func_name, label)
 
+        # throw proper error when calling a non-JIT function
+        if isinstance(
+            self.typemap.get(rhs.func.name, None), bodo.utils.typing.FunctionLiteral
+        ):
+            func_name = "unknown"
+            try:
+                func_name = self.typemap[rhs.func.name].literal_value.__name__
+            except:  # pragma: no cover
+                pass
+            raise BodoError(
+                f"Cannot call non-JIT function '{func_name}' from JIT function (convert to JIT or use objmode)."
+            )
+
         return [assign]
 
     def _run_binop(self, assign, rhs):
@@ -609,11 +622,20 @@ class TypingTransforms:
                 (3, "subset"),
             ],
             "select_dtypes": [(0, "include"), (1, "exclude")],
+            "apply": [(0, "func"), (1, "axis")],
         }
 
         if func_name in df_call_const_args:
             func_args = df_call_const_args[func_name]
-            nodes += self._replace_arg_with_literal(func_name, rhs, func_args, label)
+            # function arguments are initially typed as pyobject so need extra flag
+            literalize_pyobject = func_name == "apply"
+            nodes += self._replace_arg_with_literal(
+                func_name,
+                rhs,
+                func_args,
+                label,
+                literalize_pyobject=literalize_pyobject,
+            )
 
         # transform df.assign() here since (**kwargs) is not supported in overload
         if func_name == "assign":
@@ -700,13 +722,27 @@ class TypingTransforms:
 
         return nodes + [assign]
 
-    def _run_call_series(self, assign, rhs, df_var, func_name, label):
+    def _run_call_series(self, assign, rhs, series_var, func_name, label):
         """Handle Series calls that need transformation to meet Bodo requirements"""
         nodes = []
 
         # convert const list to tuple for better optimization
         if func_name == "append":
             self._call_arg_list_to_tuple(rhs, "append", 0, "to_append", nodes)
+
+        # mapping of Series functions to their arguments that require constant values
+        series_call_const_args = {
+            "map": [(0, "arg")],
+            "apply": [(0, "func")],
+        }
+
+        if func_name in series_call_const_args:
+            func_args = series_call_const_args[func_name]
+            # function arguments are initially typed as pyobject so need extra flag
+            literalize_pyobject = func_name in ("map", "apply")
+            nodes += self._replace_arg_with_literal(
+                func_name, rhs, func_args, label, literalize_pyobject
+            )
 
         return nodes + [assign]
 
@@ -999,7 +1035,9 @@ class TypingTransforms:
         if func_var.name in self.typemap:
             return self.typemap[func_var.name].this
 
-    def _replace_arg_with_literal(self, func_name, rhs, func_args, label):
+    def _replace_arg_with_literal(
+        self, func_name, rhs, func_args, label, literalize_pyobject=False
+    ):
         """replace a function argument that needs to be constant with a literal to
         enable constant access in overload. This may force JIT arguments to be literals
         if needed to satify constant requirements.
@@ -1033,6 +1071,7 @@ class TypingTransforms:
                     self.arg_types,
                     self.typemap,
                     self._updated_containers,
+                    literalize_pyobject=literalize_pyobject,
                 )
             except BodoConstUpdatedError as e:
                 raise BodoError(
