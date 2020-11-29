@@ -8,36 +8,15 @@ import numpy as np
 from llvmlite import ir as lir
 from llvmlite.llvmpy.core import Type as LLType
 from numba.core import cgutils, types
-from numba.core.imputils import (
-    RefType,
-    impl_ret_borrowed,
-    impl_ret_new_ref,
-    iternext_impl,
-)
-from numba.core.typing.templates import (
-    AbstractTemplate,
-    AttributeTemplate,
-    bound_function,
-    infer,
-    infer_getattr,
-    infer_global,
-    signature,
-)
+from numba.core.imputils import impl_ret_borrowed, impl_ret_new_ref
 from numba.extending import (
-    NativeValue,
     box,
     intrinsic,
-    lower_builtin,
-    lower_getattr,
     make_attribute_wrapper,
     models,
     overload,
     overload_attribute,
-    overload_method,
     register_model,
-    type_callable,
-    typeof_impl,
-    unbox,
 )
 
 import bodo
@@ -47,9 +26,7 @@ from bodo.libs.str_arr_ext import (
     _get_string_arr_payload,
     _memcpy,
     char_arr_type,
-    get_bit_bitmap,
     get_data_ptr,
-    get_null_bitmap_ptr,
     null_bitmap_arr_type,
     offset_arr_type,
     string_array_type,
@@ -520,6 +497,7 @@ def str_arr_split_view_getitem_overload(A, ind):
         return _impl
 
     if A == string_array_split_view_type and ind == types.Array(types.bool_, 1, "C"):
+        n_bytes_per_offset = offset_type.bitwidth // 8
 
         def _impl(A, ind):  # pragma: no cover
             n = len(A)
@@ -549,7 +527,7 @@ def str_arr_split_view_getitem_overload(A, ind):
                     setitem_c_arr(out_arr._index_offsets, item_ind, offset_ind)
                     ptr = get_c_arr_ptr(A._data_offsets, start_index)
                     out_ptr = get_c_arr_ptr(out_arr._data_offsets, offset_ind)
-                    _memcpy(out_ptr, ptr, n_offsets, offset_type.bitwidth // 8)
+                    _memcpy(out_ptr, ptr, n_offsets, n_bytes_per_offset)
                     bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(A._null_bitmap, i)
                     bodo.libs.int_arr_ext.set_bit_to_arr(
                         out_arr._null_bitmap, item_ind, bit
