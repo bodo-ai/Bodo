@@ -38,6 +38,15 @@ The cluster nodes need to have passwordless SSH enabled between them,
 and there should be a host file listing their addresses
 (example tutorial `here <https://mpitutorial.com/tutorials/running-an-mpi-cluster-within-a-lan/>`_).
 
+For best performance, MPI usually needs to be configured to launch one process per physical core.
+This avoids potential resource contention between processes (due to high efficiency of MPI).
+For example, a cluster of four nodes, each with 16 physical cores, would use 64 MPI processes::
+
+    $ mpiexec -n 64 python example.py
+
+For cloud instances, one physical core usually corresponds to two vCPUs.
+For example, an instance with 32 vCPUs has 16 physical cores.
+
 
 License key
 -----------
