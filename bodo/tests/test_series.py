@@ -1751,6 +1751,18 @@ def test_series_map_none_str(memory_leak_check):
     check_func(test_impl, (S,), check_dtype=False, only_1DVar=True)
 
 
+def test_series_map_none_timestamp(memory_leak_check):
+    """Test returning Optional(timestamp) from UDF"""
+
+    def impl(S):
+        return S.map(
+            lambda a: a + datetime.timedelta(days=1) if a.year < 2019 else None
+        )
+
+    S = pd.Series(pd.date_range(start="2018-04-24", end="2019-04-29", periods=5))
+    check_func(impl, (S,))
+
+
 def test_series_map_global1(memory_leak_check):
     def test_impl(S):
         return S.map(arg=lambda a: a + GLOBAL_VAL)
