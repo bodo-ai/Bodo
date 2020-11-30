@@ -23,7 +23,6 @@ from bodo.tests.utils import (
     count_array_REPs,
     count_parfor_OneDs,
     count_parfor_REPs,
-    dist_IR_contains,
     gen_random_arrow_array_struct_int,
     gen_random_arrow_array_struct_list_int,
     gen_random_arrow_list_list_int,

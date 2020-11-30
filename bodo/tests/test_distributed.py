@@ -8,6 +8,7 @@ import pytest
 
 import bodo
 from bodo.tests.utils import (
+    DistTestPipeline,
     _get_dist_arg,
     _test_equal,
     _test_equal_guard,
@@ -15,7 +16,6 @@ from bodo.tests.utils import (
     count_array_OneD_Vars,
     count_array_OneDs,
     count_array_REPs,
-    count_parfor_OneDs,
     count_parfor_REPs,
     dist_IR_contains,
     gen_random_string_array,
@@ -35,11 +35,14 @@ def test_array_shape1(A, memory_leak_check):
     def impl1(A):
         return A.shape[0]
 
-    bodo_func = bodo.jit(distributed_block={"A"})(impl1)
+    bodo_func = bodo.jit(distributed_block={"A"}, pipeline_class=DistTestPipeline)(
+        impl1
+    )
     start, end = get_start_end(len(A))
     assert bodo_func(A[start:end]) == impl1(A)
     assert count_array_REPs() == 0
-    assert dist_IR_contains("dist_reduce")
+    f_ir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
+    assert dist_IR_contains(f_ir, "dist_reduce")
 
 
 @pytest.mark.slow
@@ -50,13 +53,16 @@ def test_array_shape2(memory_leak_check):
         B = A.T
         return B.shape[1]
 
-    bodo_func = bodo.jit(distributed_block={"A"})(impl1)
+    bodo_func = bodo.jit(distributed_block={"A"}, pipeline_class=DistTestPipeline)(
+        impl1
+    )
     n = 11
     A = np.arange(n * 3).reshape(n, 3)
     start, end = get_start_end(n)
     assert bodo_func(A[start:end]) == impl1(A)
     assert count_array_REPs() == 0
-    assert dist_IR_contains("dist_reduce")
+    f_ir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
+    assert dist_IR_contains(f_ir, "dist_reduce")
     # TODO: test Array.ctypes.shape[0] cases
 
 
@@ -67,11 +73,14 @@ def test_array_shape3(A, memory_leak_check):
     def impl1(A):
         return A.shape
 
-    bodo_func = bodo.jit(distributed_block={"A"})(impl1)
+    bodo_func = bodo.jit(distributed_block={"A"}, pipeline_class=DistTestPipeline)(
+        impl1
+    )
     start, end = get_start_end(len(A))
     assert bodo_func(A[start:end]) == impl1(A)
     assert count_array_REPs() == 0
-    assert dist_IR_contains("dist_reduce")
+    f_ir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
+    assert dist_IR_contains(f_ir, "dist_reduce")
 
 
 @pytest.mark.slow
@@ -81,13 +90,16 @@ def test_array_shape4(memory_leak_check):
         B = A.T
         return B.shape
 
-    bodo_func = bodo.jit(distributed_block={"A"})(impl1)
+    bodo_func = bodo.jit(distributed_block={"A"}, pipeline_class=DistTestPipeline)(
+        impl1
+    )
     n = 11
     A = np.arange(n * 3).reshape(n, 3)
     start, end = get_start_end(n)
     assert bodo_func(A[start:end]) == impl1(A)
     assert count_array_REPs() == 0
-    assert dist_IR_contains("dist_reduce")
+    f_ir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
+    assert dist_IR_contains(f_ir, "dist_reduce")
 
 
 @pytest.mark.slow
@@ -96,13 +108,16 @@ def test_array_len1(memory_leak_check):
     def impl1(A):
         return len(A)
 
-    bodo_func = bodo.jit(distributed_block={"A"})(impl1)
+    bodo_func = bodo.jit(distributed_block={"A"}, pipeline_class=DistTestPipeline)(
+        impl1
+    )
     n = 11
     A = np.arange(n * 3).reshape(n, 3)
     start, end = get_start_end(n)
     assert bodo_func(A[start:end]) == impl1(A)
     assert count_array_REPs() == 0
-    assert dist_IR_contains("dist_reduce")
+    f_ir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
+    assert dist_IR_contains(f_ir, "dist_reduce")
     # TODO: tests with array created inside the function
 
 
@@ -112,11 +127,14 @@ def test_array_size1(A, memory_leak_check):
     def impl1(A):
         return A.size
 
-    bodo_func = bodo.jit(distributed_block={"A"})(impl1)
+    bodo_func = bodo.jit(distributed_block={"A"}, pipeline_class=DistTestPipeline)(
+        impl1
+    )
     start, end = get_start_end(len(A))
     assert bodo_func(A[start:end]) == impl1(A)
     assert count_array_REPs() == 0
-    assert dist_IR_contains("dist_reduce")
+    f_ir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
+    assert dist_IR_contains(f_ir, "dist_reduce")
     # TODO: tests with array created inside the function
 
 
@@ -494,11 +512,12 @@ def test_str_alloc_equiv1(memory_leak_check):
         C = bodo.libs.str_arr_ext.pre_alloc_string_array(n, 10)
         return len(C)
 
-    bodo_func = bodo.jit()(impl)
+    bodo_func = bodo.jit(pipeline_class=DistTestPipeline)(impl)
     n = 11
     assert bodo_func(n) == n
     assert count_array_REPs() == 0
-    assert not dist_IR_contains("dist_reduce")
+    f_ir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
+    assert not dist_IR_contains(f_ir, "dist_reduce")
 
 
 def test_series_alloc_equiv1(memory_leak_check):
@@ -511,11 +530,12 @@ def test_series_alloc_equiv1(memory_leak_check):
         B = np.empty(len(S))
         return B
 
-    bodo_func = bodo.jit(distributed_block={"B"})(impl)
+    bodo_func = bodo.jit(distributed_block={"B"}, pipeline_class=DistTestPipeline)(impl)
     n = 11
     bodo_func(n)
     assert count_parfor_REPs() == 0
-    assert not dist_IR_contains("dist_reduce")
+    f_ir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
+    assert not dist_IR_contains(f_ir, "dist_reduce")
 
 
 # TODO: test other array types

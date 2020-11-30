@@ -93,7 +93,6 @@ distributed_run_extensions = {}
 
 # analysis data for debugging
 dist_analysis = None
-fir_text = None
 saved_array_analysis = None
 
 _csv_write = types.ExternalFunction(
@@ -225,14 +224,8 @@ class DistributedPass:
             )
 
         # save data for debug and test
-        global dist_analysis, fir_text
+        global dist_analysis
         dist_analysis = self._dist_analysis
-        import io
-
-        str_io = io.StringIO()
-        self.func_ir.dump(str_io)
-        fir_text = str_io.getvalue()
-        str_io.close()
 
     def _run_dist_pass(self, blocks, init_avail=None):
         # init liveness info

@@ -1,18 +1,21 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 """Old dataframe/series tests
 """
-import unittest
-import pytest
 import os
-import pandas as pd
+import unittest
+
 import numpy as np
+import pandas as pd
+import pytest
+
 import bodo
 from bodo.libs.str_arr_ext import str_arr_from_sequence
 from bodo.tests.utils import (
-    count_array_REPs,
-    count_parfor_REPs,
-    count_parfor_OneDs,
+    DistTestPipeline,
     count_array_OneDs,
+    count_array_REPs,
+    count_parfor_OneDs,
+    count_parfor_REPs,
     dist_IR_contains,
     get_start_end,
 )
@@ -141,14 +144,15 @@ class TestHiFrames(unittest.TestCase):
             return Ac.sum()
 
         np.random.seed(5)
-        bodo_func = bodo.jit(test_impl)
+        bodo_func = bodo.jit(test_impl, pipeline_class=DistTestPipeline)
         n = 11
         self.assertEqual(bodo_func(n), test_impl(n))
         self.assertEqual(count_array_REPs(), 0)
         self.assertEqual(count_array_OneDs(), 2)
         self.assertEqual(count_parfor_REPs(), 0)
         self.assertEqual(count_parfor_OneDs(), 2)
-        self.assertTrue(dist_IR_contains("dist_cumsum"))
+        f_ir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
+        self.assertTrue(dist_IR_contains(f_ir, "dist_cumsum"))
 
     def test_column_distribution(self):
         # make sure all column calls are distributed
@@ -164,12 +168,13 @@ class TestHiFrames(unittest.TestCase):
             return Ac.sum() + s + m + v + t
 
         np.random.seed(5)
-        bodo_func = bodo.jit(test_impl)
+        bodo_func = bodo.jit(test_impl, pipeline_class=DistTestPipeline)
         n = 11
         self.assertEqual(bodo_func(n), test_impl(n))
         self.assertEqual(count_array_REPs(), 0)
         self.assertEqual(count_parfor_REPs(), 0)
-        self.assertTrue(dist_IR_contains("dist_cumsum"))
+        f_ir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
+        self.assertTrue(dist_IR_contains(f_ir, "dist_cumsum"))
 
     def test_quantile_parallel(self):
         def test_impl(n):

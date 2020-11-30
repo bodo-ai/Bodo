@@ -8,15 +8,7 @@ import pandas as pd
 import pytest
 
 import bodo
-from bodo.tests.utils import (
-    check_func,
-    count_array_OneDs,
-    count_array_REPs,
-    count_parfor_OneDs,
-    count_parfor_REPs,
-    dist_IR_contains,
-    get_start_end,
-)
+from bodo.tests.utils import check_func
 
 
 def get_random_integerarray(tot_size):

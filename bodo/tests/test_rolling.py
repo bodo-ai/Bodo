@@ -9,14 +9,7 @@ import pytest
 
 import bodo
 from bodo.hiframes.rolling import supported_rolling_funcs
-from bodo.tests.utils import (
-    _get_dist_arg,
-    count_array_OneDs,
-    count_array_REPs,
-    count_parfor_OneDs,
-    count_parfor_REPs,
-    dist_IR_contains,
-)
+from bodo.tests.utils import _get_dist_arg, count_array_REPs, count_parfor_REPs
 
 LONG_TEST = (
     int(os.environ["HPAT_LONG_ROLLING_TEST"]) != 0

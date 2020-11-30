@@ -2,6 +2,7 @@
 """
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 import glob
+import io
 import os
 import random
 import string
@@ -13,7 +14,7 @@ import numba
 import numpy as np
 import pandas as pd
 from mpi4py import MPI
-from numba.core import types
+from numba.core.compiler_machinery import FunctionPass, register_pass
 from numba.core.typed_passes import NopythonRewrites
 from numba.core.untyped_passes import PreserveIR
 
@@ -64,8 +65,12 @@ def count_array_OneD_Vars():
     return sum([v == Distribution.OneD_Var for v in vals])
 
 
-def dist_IR_contains(*args):
-    return sum([(s in bodo.transforms.distributed_pass.fir_text) for s in args])
+def dist_IR_contains(f_ir, *args):
+    """check if strings 'args' are in function IR 'f_ir'"""
+    with io.StringIO() as str_io:
+        f_ir.dump(str_io)
+        f_ir_text = str_io.getvalue()
+    return sum([(s in f_ir_text) for s in args])
 
 
 @bodo.jit
@@ -796,7 +801,20 @@ class SeriesOptTestPipeline(bodo.compiler.BodoCompiler):
         return [pipeline]
 
 
-from numba.core.compiler_machinery import FunctionPass, register_pass
+class DistTestPipeline(bodo.compiler.BodoCompiler):
+    """
+    pipeline with an additional PreserveIR pass
+    after DistributedPass
+    """
+
+    def define_pipelines(self):
+        [pipeline] = self._create_bodo_pipeline(
+            distributed=True, inline_calls_pass=False
+        )
+        pipeline._finalized = False
+        pipeline.add_pass_after(PreserveIR, bodo.compiler.BodoDistributedPass)
+        pipeline.finalize()
+        return [pipeline]
 
 
 @register_pass(analysis_only=False, mutates_CFG=True)

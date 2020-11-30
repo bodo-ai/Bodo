@@ -3,9 +3,9 @@
 Defines decorators of Bodo. Currently just @jit.
 """
 import numba
+
 import bodo
 from bodo import master_mode
-
 
 # Add Bodo's options to Numba's allowed options/flags
 numba.core.cpu.CPUTargetOptions.OPTIONS["all_args_distributed_block"] = bool
@@ -127,7 +127,7 @@ def is_jit_execution_overload():
     return lambda: True  # pragma: no cover
 
 
-def jit(signature_or_function=None, **options):
+def jit(signature_or_function=None, pipeline_class=None, **options):
     # set nopython by default
     if "nopython" not in options:
         options["nopython"] = True
@@ -145,7 +145,9 @@ def jit(signature_or_function=None, **options):
         "fusion": True,
     }
 
-    pipeline_class = bodo.compiler.BodoCompiler
+    pipeline_class = (
+        bodo.compiler.BodoCompiler if pipeline_class is None else pipeline_class
+    )
     if "distributed" in options and isinstance(options["distributed"], bool):
         dist = options.pop("distributed")
         pipeline_class = pipeline_class if dist else bodo.compiler.BodoCompilerSeq
