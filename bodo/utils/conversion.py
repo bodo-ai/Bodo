@@ -863,7 +863,6 @@ def overload_extract_name_if_none(data, name):
         DatetimeIndexType,
         NumericIndexType,
         PeriodIndexType,
-        RangeIndexType,
         TimedeltaIndexType,
     )
     from bodo.hiframes.pd_series_ext import SeriesType
@@ -933,9 +932,25 @@ def unbox_if_timestamp(val):  # pragma: no cover
 def overload_unbox_if_timestamp(val):
     """If 'val' is Timestamp, "unbox" it to dt64 otherwise just return 'val'"""
     if val == bodo.hiframes.pd_timestamp_ext.pandas_timestamp_type:
-        return lambda val: bodo.hiframes.pd_timestamp_ext.integer_to_dt64(val.value)
+        return lambda val: bodo.hiframes.pd_timestamp_ext.integer_to_dt64(
+            val.value
+        )  # pragma: no cover
 
-    return lambda val: val
+    # Optional(timestamp)
+    if val == types.Optional(bodo.hiframes.pd_timestamp_ext.pandas_timestamp_type):
+
+        def impl_optional(val):  # pragma: no cover
+            if val is None:
+                out = None
+            else:
+                out = bodo.hiframes.pd_timestamp_ext.integer_to_dt64(
+                    bodo.utils.indexing.unoptional(val).value
+                )
+            return out
+
+        return impl_optional
+
+    return lambda val: val  # pragma: no cover
 
 
 def to_tuple(val):  # pragma: no cover
