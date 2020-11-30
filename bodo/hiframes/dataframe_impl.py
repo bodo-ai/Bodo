@@ -1341,18 +1341,26 @@ def overload_isna_scalar(obj):
     # this call in Series pass with array_kernels.isna()
     obj = types.unliteral(obj)
     if obj == bodo.string_type:
-        return lambda obj: unliteral_val(False)
+        return lambda obj: unliteral_val(False)  # pragma: no cover
     if isinstance(obj, types.Integer):
-        return lambda obj: unliteral_val(False)
+        return lambda obj: unliteral_val(False)  # pragma: no cover
     if isinstance(obj, types.Float):
-        return lambda obj: np.isnan(obj)
+        return lambda obj: np.isnan(obj)  # pragma: no cover
     if isinstance(obj, (types.NPDatetime, types.NPTimedelta)):
-        return lambda obj: np.isnat(obj)
+        return lambda obj: np.isnat(obj)  # pragma: no cover
     if obj == types.none:
         return lambda obj: unliteral_val(True)
+    if obj == bodo.hiframes.pd_timestamp_ext.pandas_timestamp_type:
+        return lambda obj: np.isnat(
+            bodo.hiframes.pd_timestamp_ext.integer_to_dt64(obj.value)
+        )  # pragma: no cover
+    if obj == bodo.hiframes.datetime_timedelta_ext.pd_timedelta_type:
+        return lambda obj: np.isnat(
+            bodo.hiframes.pd_timestamp_ext.integer_to_timedelta64(obj.value)
+        )  # pragma: no cover
 
     # TODO: catch other cases
-    return lambda obj: unliteral_val(False)
+    return lambda obj: unliteral_val(False)  # pragma: no cover
 
 
 # support A[i] = None array setitem using our array NA setting function
@@ -1360,7 +1368,9 @@ def overload_isna_scalar(obj):
 @overload(operator.setitem, no_unliteral=True)
 def overload_setitem_arr_none(A, idx, val):
     if is_array_typ(A, False) and isinstance(idx, types.Integer) and val == types.none:
-        return lambda A, idx, val: bodo.libs.array_kernels.setna(A, idx)
+        return lambda A, idx, val: bodo.libs.array_kernels.setna(
+            A, idx
+        )  # pragma: no cover
 
 
 @overload(pd.notna, inline="always", no_unliteral=True)
@@ -1370,16 +1380,16 @@ def overload_notna(obj):
     # TODO: ~pd.isna(obj) implementation fails for some reason in
     # test_dataframe.py::test_pd_notna[na_test_obj7] with 1D_Var input
     if isinstance(obj, DataFrameType):
-        return lambda obj: obj.notna()
+        return lambda obj: obj.notna()  # pragma: no cover
     if (
         isinstance(obj, (SeriesType, types.Array, types.List, types.UniTuple))
         or bodo.hiframes.pd_index_ext.is_pd_index_type(obj)
         or obj == bodo.string_array_type
     ):
-        return lambda obj: ~pd.isna(obj)
+        return lambda obj: ~pd.isna(obj)  # pragma: no cover
 
     # scalars
-    return lambda obj: not pd.isna(obj)
+    return lambda obj: not pd.isna(obj)  # pragma: no cover
 
 
 def _get_pd_dtype_str(t):
