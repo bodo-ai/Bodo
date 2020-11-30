@@ -3,27 +3,16 @@
 Helper functions to enable typing.
 """
 import itertools
-import operator
 import types as pytypes
 from inspect import getfullargspec
 
 import numba
 import numpy as np
 import pandas as pd
-from numba.core import cgutils, ir_utils, types
+from numba.core import ir_utils, types
 from numba.core.errors import NumbaError
-from numba.core.imputils import (
-    impl_ret_borrowed,
-    impl_ret_new_ref,
-    lower_builtin,
-)
+from numba.core.imputils import lower_builtin
 from numba.core.registry import CPUDispatcher
-from numba.core.typing import signature
-from numba.core.typing.templates import (
-    AbstractTemplate,
-    CallableTemplate,
-    infer_global,
-)
 from numba.extending import (
     NativeValue,
     intrinsic,
@@ -71,8 +60,6 @@ class BodoException(Exception):
     """Bodo exception that inherits from Exception to allow typing pass to catch it
     and potentially transform the IR.
     """
-
-    pass
 
 
 class BodoNotConstError(Exception):
@@ -594,9 +581,6 @@ def is_list_like_index_type(t):
     """Types that can be similar to list for indexing Arrays, Series, etc.
     Tuples are excluded due to indexing semantics.
     """
-    from bodo.hiframes.datetime_timedelta_ext import (
-        datetime_timedelta_array_type,
-    )
     from bodo.hiframes.pd_index_ext import NumericIndexType, RangeIndexType
     from bodo.hiframes.pd_series_ext import SeriesType
     from bodo.libs.bool_arr_ext import boolean_array
@@ -874,9 +858,13 @@ def get_udf_out_arr_type(f_return_type):
         f_return_type = f_return_type.type
         return_nullable = True
 
-    # unbox Timestamp to dt64 in Series (TODO: timedelta64)
+    # unbox Timestamp to dt64 in Series
     if f_return_type == bodo.hiframes.pd_timestamp_ext.pandas_timestamp_type:
         f_return_type = types.NPDatetime("ns")
+
+    # unbox Timedelta to timedelta64 in Series
+    if f_return_type == bodo.hiframes.datetime_timedelta_ext.pd_timedelta_type:
+        f_return_type = types.NPTimedelta("ns")
 
     out_arr_type = bodo.hiframes.pd_series_ext._get_series_array_type(f_return_type)
     out_arr_type = to_nullable_type(out_arr_type) if return_nullable else out_arr_type

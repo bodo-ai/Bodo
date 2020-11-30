@@ -1763,6 +1763,29 @@ def test_series_map_none_timestamp(memory_leak_check):
     check_func(impl, (S,))
 
 
+def test_series_map_isna_check(memory_leak_check):
+    """Test checking for NA input values in UDF"""
+
+    def impl1(S):
+        return S.map(
+            lambda a: pd.Timestamp("2019-01-01")
+            if pd.isna(a)
+            else a + datetime.timedelta(days=1)
+        )
+
+    def impl2(S):
+        return S.map(
+            lambda a: pd.Timedelta(days=3) if pd.isna(a) else a + pd.Timedelta(days=1)
+        )
+
+    S = pd.date_range(start="2018-04-24", end="2019-04-29", periods=5).to_series()
+    S.iloc[2:4] = None
+    check_func(impl1, (S,))
+    S = pd.timedelta_range(start="1 day", end="2 days", periods=5).to_series()
+    S.iloc[2:4] = None
+    check_func(impl2, (S,))
+
+
 def test_series_map_global1(memory_leak_check):
     def test_impl(S):
         return S.map(arg=lambda a: a + GLOBAL_VAL)

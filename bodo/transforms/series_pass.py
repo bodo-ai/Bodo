@@ -1558,6 +1558,15 @@ class SeriesPass:
         if fdef in (("isna", "pandas"), ("isnull", "pandas")):
             obj = get_call_expr_arg(fdef[0], rhs.args, dict(rhs.kws), 0, "obj")
             obj_def = guard(get_definition, self.func_ir, obj)
+            # Timestamp/Timedelta values are boxed before passing to UDF
+            if guard(find_callname, self.func_ir, obj_def) in (
+                ("convert_datetime64_to_timestamp", "bodo.hiframes.pd_timestamp_ext"),
+                (
+                    "convert_numpy_timedelta64_to_pd_timedelta",
+                    "bodo.hiframes.pd_timestamp_ext",
+                ),
+            ):
+                obj_def = guard(get_definition, self.func_ir, obj_def.args[0])
             if is_expr(obj_def, "getitem") and is_array_typ(
                 self.typemap[obj_def.value.name], False
             ):

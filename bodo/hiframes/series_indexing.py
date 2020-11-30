@@ -6,24 +6,13 @@ import operator
 
 import numpy as np
 from numba.core import cgutils, types
-from numba.core.typing.templates import (
-    AbstractTemplate,
-    AttributeTemplate,
-    bound_function,
-    infer_global,
-    signature,
-)
 from numba.extending import (
-    infer,
-    infer_getattr,
     intrinsic,
-    lower_cast,
     make_attribute_wrapper,
     models,
     overload,
     overload_attribute,
     register_model,
-    type_callable,
 )
 
 import bodo
@@ -39,7 +28,6 @@ from bodo.hiframes.pd_index_ext import (
 from bodo.hiframes.pd_series_ext import HeterogeneousSeriesType, SeriesType
 from bodo.hiframes.pd_timestamp_ext import (
     convert_datetime64_to_timestamp,
-    convert_numpy_timedelta64_to_datetime_timedelta,
     convert_numpy_timedelta64_to_pd_timedelta,
     integer_to_dt64,
     pandas_timestamp_type,
@@ -211,9 +199,9 @@ def overload_series_iloc(s):
 def overload_series_iloc_getitem(I, idx):
     if isinstance(I, SeriesIlocType):
 
-        # convert dt64 to datetime.timedelta
+        # convert dt64 to pd.timedelta
         if I.stype.dtype == types.NPTimedelta("ns") and isinstance(idx, types.Integer):
-            return lambda I, idx: convert_numpy_timedelta64_to_datetime_timedelta(
+            return lambda I, idx: convert_numpy_timedelta64_to_pd_timedelta(
                 bodo.hiframes.pd_series_ext.get_series_data(I._obj)[idx]
             )
 
