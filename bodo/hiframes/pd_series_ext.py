@@ -613,6 +613,7 @@ class SeriesAttribute(AttributeTemplate):
         if dtype == types.NPDatetime("ns"):
             dtype = pandas_timestamp_type
         # getitem returns Timedelta for td_index and series(td64)
+        # TODO(ehsan): simpler to use timedelta64ns instead of types.NPTimedelta("ns")
         if dtype == types.NPTimedelta("ns"):
             dtype = pd_timedelta_type
 
