@@ -621,7 +621,12 @@ def test_sgdr(penalty):
 
     def impl_predict(X_train, y_train, X_test):
         clf = SGDRegressor(
-            alpha=0.01, max_iter=2, eta0=0.01, learning_rate="adaptive", shuffle=False
+            alpha=0.01,
+            max_iter=2,
+            eta0=0.01,
+            learning_rate="adaptive",
+            shuffle=False,
+            penalty=penalty,
         )
         clf.fit(X_train, y_train)
         y_pred = clf.predict(X_test)
@@ -631,7 +636,9 @@ def test_sgdr(penalty):
     y = np.array([1, 1, 1, 2, 2, 2])
     T = np.array([[-1, -1], [2, 2], [3, 2]])
     sklearn_predict_result = impl_predict(X, y, T)
-    bodo_predict_result = bodo.jit(distributed=["X", "y", "T"])(impl_predict)(X, y, T)
+    bodo_predict_result = bodo.jit(distributed=["X_train", "y_train", "X_test"])(
+        impl_predict
+    )(X, y, T)
     if bodo.get_rank() == 0:
         np.testing.assert_array_almost_equal(
             bodo_predict_result, sklearn_predict_result, decimal=2
@@ -674,7 +681,6 @@ def test_sgdr(penalty):
         scaler = StandardScaler().fit(X_train)
         X_train = scaler.transform(X_train)
         X_test = scaler.transform(X_test)
-
         sklearn_predict_result = impl(X_train, y_train, X_test, y_test, "SK")
         X_train = bodo.scatterv(X_train)
         y_train = bodo.scatterv(y_train)

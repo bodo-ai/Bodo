@@ -3,11 +3,11 @@ import itertools
 
 import numba
 import numpy as np
-import pandas as pd
 import sklearn.cluster
 import sklearn.ensemble
 import sklearn.linear_model
 import sklearn.metrics
+import sklearn.naive_bayes
 import sklearn.svm
 import sklearn.utils
 from mpi4py import MPI
@@ -23,7 +23,6 @@ from numba.extending import (
     unbox,
 )
 from sklearn.metrics import hinge_loss, log_loss, mean_squared_error
-from sklearn.naive_bayes import MultinomialNB
 from sklearn.preprocessing import LabelBinarizer
 from sklearn.utils.validation import _check_sample_weight
 
@@ -32,9 +31,7 @@ from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.libs.distributed_api import (
     Reduce_Type,
     create_subcomm_mpi4py,
-    dist_reduce,
     get_host_ranks,
-    get_node_portion,
     get_nodes_first_ranks,
     get_num_nodes,
 )
@@ -43,7 +40,6 @@ from bodo.utils.typing import (
     is_overload_constant_str,
     is_overload_false,
     is_overload_none,
-    is_overload_true,
 )
 
 
@@ -1488,7 +1484,7 @@ def fit_sgd(m, X, y, y_classes=None, _is_data_distributed=False):
         cur_loss_sum = comm.allreduce(cur_loss, op=MPI.SUM)
         cur_loss = cur_loss_sum / nranks
         # https://github.com/scikit-learn/scikit-learn/blob/master/sklearn/linear_model/_sgd_fast.pyx#L620
-        if m.tol > np.NINF and cur_loss > best_loss - m.tol * len(X):
+        if m.tol > np.NINF and cur_loss > best_loss - m.tol * total_datasize:
             no_improvement_count += 1
         else:
             no_improvement_count = 0
