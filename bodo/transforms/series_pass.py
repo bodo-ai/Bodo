@@ -49,9 +49,9 @@ from bodo.hiframes.pd_index_ext import (
     StringIndexType,
     TimedeltaIndexType,
 )
+from bodo.hiframes.pd_rolling_ext import SeriesRollingType
 from bodo.hiframes.pd_series_ext import (
     HeterogeneousSeriesType,
-    SeriesRollingType,
     SeriesType,
     if_series_to_array_type,
     is_dt64_series_typ,
