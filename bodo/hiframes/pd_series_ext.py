@@ -5,46 +5,31 @@ Implement pd.Series typing and data model handling.
 import operator
 
 import numba
-import numpy as np
 import pandas as pd
 from llvmlite import ir as lir
 from numba.core import cgutils, types
 from numba.core.imputils import impl_ret_borrowed
-from numba.core.typing.arraydecl import (
-    ArrayAttribute,
-    SetItemBuffer,
-    _expand_integer,
-    get_array_index_type,
-)
-from numba.core.typing.npydecl import (
-    Numpy_rules_ufunc,
-    NumpyRulesArrayOperator,
-    NumpyRulesInplaceArrayOperator,
-)
 from numba.core.typing.templates import (
     AbstractTemplate,
     AttributeTemplate,
     bound_function,
-    infer_global,
     signature,
 )
 from numba.extending import (
-    infer,
     infer_getattr,
     intrinsic,
     lower_builtin,
     lower_cast,
-    make_attribute_wrapper,
     models,
     overload,
     overload_attribute,
     overload_method,
     register_model,
-    type_callable,
 )
 
 import bodo
 from bodo.hiframes.datetime_date_ext import datetime_date_type
+from bodo.hiframes.datetime_timedelta_ext import pd_timedelta_type
 from bodo.hiframes.pd_categorical_ext import (
     CategoricalArray,
     PDCategoricalDtype,
@@ -623,9 +608,14 @@ class SeriesAttribute(AttributeTemplate):
         """
 
         dtype = ary.dtype
+        # TODO(ehsan): use getitem resolve similar to df.apply?
         # getitem returns Timestamp for dt_index and series(dt64)
         if dtype == types.NPDatetime("ns"):
             dtype = pandas_timestamp_type
+        # getitem returns Timedelta for td_index and series(td64)
+        # TODO(ehsan): simpler to use timedelta64ns instead of types.NPTimedelta("ns")
+        if dtype == types.NPTimedelta("ns"):
+            dtype = pd_timedelta_type
 
         in_types = (dtype,)
         if f_args is not None:

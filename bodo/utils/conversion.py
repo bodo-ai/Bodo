@@ -912,16 +912,16 @@ def overload_box_if_dt64(val):
     if val == types.NPDatetime("ns"):
         return (
             lambda val: bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(
-                np.int64(val)
+                val
             )
-        )
+        )  # pragma: no cover
 
     if val == types.NPTimedelta("ns"):
-        return lambda val: bodo.hiframes.pd_timestamp_ext.convert_numpy_timedelta64_to_datetime_timedelta(
+        return lambda val: bodo.hiframes.pd_timestamp_ext.convert_numpy_timedelta64_to_pd_timedelta(
             val
-        )
+        )  # pragma: no cover
 
-    return lambda val: val
+    return lambda val: val  # pragma: no cover
 
 
 def unbox_if_timestamp(val):  # pragma: no cover
@@ -931,8 +931,15 @@ def unbox_if_timestamp(val):  # pragma: no cover
 @overload(unbox_if_timestamp, no_unliteral=True)
 def overload_unbox_if_timestamp(val):
     """If 'val' is Timestamp, "unbox" it to dt64 otherwise just return 'val'"""
+    # unbox Timestamp to dt64
     if val == bodo.hiframes.pd_timestamp_ext.pandas_timestamp_type:
         return lambda val: bodo.hiframes.pd_timestamp_ext.integer_to_dt64(
+            val.value
+        )  # pragma: no cover
+
+    # unbox Timedelta to timedelta64
+    if val == bodo.hiframes.datetime_timedelta_ext.pd_timedelta_type:
+        return lambda val: bodo.hiframes.pd_timestamp_ext.integer_to_timedelta64(
             val.value
         )  # pragma: no cover
 
@@ -949,6 +956,20 @@ def overload_unbox_if_timestamp(val):
             return out
 
         return impl_optional
+
+    # Optional(Timedelta)
+    if val == types.Optional(bodo.hiframes.datetime_timedelta_ext.pd_timedelta_type):
+
+        def impl_optional_td(val):  # pragma: no cover
+            if val is None:
+                out = None
+            else:
+                out = bodo.hiframes.pd_timestamp_ext.integer_to_timedelta64(
+                    bodo.utils.indexing.unoptional(val).value
+                )
+            return out
+
+        return impl_optional_td
 
     return lambda val: val  # pragma: no cover
 
