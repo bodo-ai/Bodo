@@ -963,3 +963,16 @@ def check_and_propagate_cpp_exception(typingctx):
             builder.ret(numba.core.callconv.RETCODE_EXC)
 
     return types.void(), codegen
+
+
+def inlined_check_and_propagate_cpp_exception(context, builder):
+    """
+    Inlined version of the check_and_propagate_cpp_exception intrinsic
+    defined above. Can be used in lower_builtin functions, etc.
+    """
+    pyapi = context.get_python_api(builder)
+    err_flag = pyapi.err_occurred()
+    error_occured = cgutils.is_not_null(builder, err_flag)
+
+    with builder.if_then(error_occured):
+        builder.ret(numba.core.callconv.RETCODE_EXC)

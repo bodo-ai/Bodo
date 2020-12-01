@@ -3011,8 +3011,6 @@ def to_parquet_overload(
         func_text += "                            df.index.stop, df.index.step,\n"
         func_text += "                            unicode_to_utf8(name_ptr),\n"
         func_text += "                            unicode_to_utf8(bucket_region))\n"
-        # Check if there was an error in the C++ code. If so, raise it.
-        func_text += "    bodo.utils.utils.check_and_propagate_cpp_exception()\n"
     else:
         func_text += "    parquet_write_table_cpp(unicode_to_utf8(fname),\n"
         func_text += "                            table, col_names, index_col,\n"
@@ -3022,8 +3020,6 @@ def to_parquet_overload(
         func_text += "                            _is_parallel, 0, 0, 0, 0,\n"
         func_text += "                            unicode_to_utf8(name_ptr),\n"
         func_text += "                            unicode_to_utf8(bucket_region))\n"
-        # Check if there was an error in the C++ code. If so, raise it.
-        func_text += "    bodo.utils.utils.check_and_propagate_cpp_exception()\n"
 
     loc_vars = {}
     exec(

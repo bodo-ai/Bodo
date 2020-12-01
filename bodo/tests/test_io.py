@@ -1974,7 +1974,7 @@ def test_read_parquet_invalid_path(memory_leak_check):
         df = pd.read_parquet("I_dont_exist.pq")
         return df
 
-    with pytest.raises(ValueError, match="Error reading Parquet dataset"):
+    with pytest.raises(OSError, match="Passed non-file path"):
         bodo.jit(locals={"df": {"A": bodo.int64[:]}})(test_impl)()
 
 

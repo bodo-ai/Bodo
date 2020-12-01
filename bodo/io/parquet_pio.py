@@ -1,6 +1,5 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 import os
-import warnings
 from collections import defaultdict
 
 import llvmlite.binding as ll
@@ -10,7 +9,6 @@ from numba.core import ir, types
 from numba.core.imputils import impl_ret_new_ref
 from numba.core.ir_utils import (
     compile_to_numba_ir,
-    find_const,
     get_definition,
     guard,
     mk_unique_var,
@@ -24,7 +22,6 @@ from pyarrow import null
 import bodo
 import bodo.ir.parquet_ext
 from bodo.hiframes.datetime_date_ext import (
-    DatetimeDateArrayType,
     datetime_date_array_type,
     datetime_date_type,
 )
@@ -43,22 +40,25 @@ from bodo.libs.array import _lower_info_to_array_numpy, array_info_type
 from bodo.libs.array_item_arr_ext import (
     ArrayItemArrayPayloadType,
     ArrayItemArrayType,
-    _get_array_item_arr_payload,
-    construct_array_item_array,
     define_array_item_dtor,
     offset_type,
 )
 from bodo.libs.bool_arr_ext import BooleanArrayType, boolean_array
 from bodo.libs.decimal_arr_ext import Decimal128Type, DecimalArrayType
-from bodo.libs.distributed_api import get_end, get_node_portion, get_start
+from bodo.libs.distributed_api import get_end, get_start
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.str_arr_ext import char_arr_type, string_array_type
 from bodo.libs.str_ext import string_type, unicode_to_utf8
 from bodo.libs.struct_arr_ext import StructArrayType
 from bodo.transforms import distributed_pass
 from bodo.utils.transform import get_const_value
-from bodo.utils.typing import BodoError, BodoWarning, FileInfo
-from bodo.utils.utils import is_null_pointer, sanitize_varname, unliteral_all
+from bodo.utils.typing import BodoError, FileInfo
+from bodo.utils.utils import (
+    is_null_pointer,
+    sanitize_varname,
+    unliteral_all,
+    check_and_propagate_cpp_exception,
+)
 
 # read Arrow Int columns as nullable int array (IntegerArrayType)
 use_nullable_int_arr = True
@@ -304,6 +304,8 @@ def _gen_pq_reader_py(
     func_text += "  ds_reader = get_dataset_reader(unicode_to_utf8(fname), {}, unicode_to_utf8(bucket_region) )\n".format(
         is_parallel
     )
+    # Check if there was an error in the C++ code. If so, raise it.
+    func_text += "  check_and_propagate_cpp_exception()\n"
     func_text += "  if is_null_pointer(ds_reader):\n"
     func_text += "    raise ValueError('Error reading Parquet dataset')\n"
 
@@ -331,6 +333,7 @@ def _gen_pq_reader_py(
     loc_vars = {}
     glbs = {
         "get_dataset_reader": _get_dataset_reader,
+        "check_and_propagate_cpp_exception": check_and_propagate_cpp_exception,
         "is_null_pointer": is_null_pointer,
         "del_dataset_reader": _del_dataset_reader,
         "get_column_size_parquet": get_column_size_parquet,
@@ -381,8 +384,6 @@ def gen_column_read(
         func_text += "  {} = read_parquet_str(ds_reader, {}, {}, {}_size)\n".format(
             cname, c_ind_real, c_ind, cname
         )
-        # Check if there was an error in the C++ code. If so, raise it.
-        func_text += "  bodo.utils.utils.check_and_propagate_cpp_exception()\n"
     elif c_type == ArrayItemArrayType(string_array_type):
         # TODO does not support null strings?
         # pass size for easier allocation and distributed analysis
@@ -391,8 +392,6 @@ def gen_column_read(
                 cname, c_ind_real, c_ind, cname
             )
         )
-        # Check if there was an error in the C++ code. If so, raise it.
-        func_text += "  bodo.utils.utils.check_and_propagate_cpp_exception()\n"
     elif isinstance(c_type, ArrayItemArrayType):
         # Force generalized path for all ArrayItemArrayType(...) (see FIXME below)
         if not isinstance(c_type.dtype, types.Float):
@@ -402,8 +401,6 @@ def gen_column_read(
                     cname, c_ind_real, c_ind, c_siz, ret_type
                 )
             )
-            # Check if there was an error in the C++ code. If so, raise it.
-            func_text += "  bodo.utils.utils.check_and_propagate_cpp_exception()\n"
         else:
             # FIXME This code path does not support nullable items,
             # for example: ArrayItemArray(IntegerArray(int64))
@@ -418,8 +415,6 @@ def gen_column_read(
                 bodo.utils.utils.numba_to_c_type(elem_typ),
                 get_element_type(elem_typ),
             )
-            # Check if there was an error in the C++ code. If so, raise it.
-            func_text += "  bodo.utils.utils.check_and_propagate_cpp_exception()\n"
     elif isinstance(c_type, StructArrayType):
         ret_type = "nested_type{}".format(c_ind)
         func_text += (
@@ -427,8 +422,6 @@ def gen_column_read(
                 cname, c_ind_real, c_ind, c_siz, ret_type
             )
         )
-        # Check if there was an error in the C++ code. If so, raise it.
-        func_text += "  bodo.utils.utils.check_and_propagate_cpp_exception()\n"
     else:
         el_type = get_element_type(c_type.dtype)
         func_text += _gen_alloc(c_type, cname, alloc_size, el_type)
@@ -440,8 +433,6 @@ def gen_column_read(
                 bodo.utils.utils.numba_to_c_type(c_type.dtype),
             )
         )
-        # Check if there was an error in the C++ code. If so, raise it.
-        func_text += "  bodo.utils.utils.check_and_propagate_cpp_exception()\n"
 
     return ret_type, func_text
 
@@ -981,7 +972,7 @@ def pq_read_lower(context, builder, sig, args):
     zero_ptr = context.get_constant_null(types.voidptr)
 
     fn = builder.module.get_or_insert_function(fnty, name="pq_read")
-    return builder.call(
+    ret = builder.call(
         fn,
         [
             args[0],
@@ -992,6 +983,8 @@ def pq_read_lower(context, builder, sig, args):
             zero_ptr,
         ],
     )
+    bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+    return ret
 
 
 ########################## read nullable int array ###########################
@@ -1054,7 +1047,7 @@ def pq_read_int_arr_lower(context, builder, sig, args):
     bitmap = make_array(null_arr_typ)(context, builder, int_arr.null_bitmap)
 
     fn = builder.module.get_or_insert_function(fnty, name="pq_read")
-    return builder.call(
+    ret = builder.call(
         fn,
         [
             args[0],
@@ -1065,6 +1058,8 @@ def pq_read_int_arr_lower(context, builder, sig, args):
             builder.bitcast(bitmap.data, lir.IntType(8).as_pointer()),
         ],
     )
+    bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+    return ret
 
 
 ############################## read strings ###############################
@@ -1099,6 +1094,7 @@ def pq_read_string_lower(context, builder, sig, args):
             array_item_array._get_ptr_by_name("meminfo"),
         ],
     )
+    bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
 
     string_array.data = array_item_array._getvalue()
     return string_array._getvalue()
@@ -1141,6 +1137,7 @@ def pq_read_list_string_lower(context, builder, sig, args):
             array_item_array_from_cpp._get_ptr_by_name("meminfo"),
         ],
     )
+    bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
 
     return array_item_array_from_cpp._getvalue()
 
@@ -1214,6 +1211,7 @@ def pq_read_array_item_lower(context, builder, sig, args):
             nulls_info_ptr,  # null array info pointer
         ],
     )
+    bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
 
     # convert array_info to numpy arrays and set payload attributes
     payload.data = _lower_info_to_array_numpy(
@@ -1327,6 +1325,7 @@ def pq_read_arrow_array_lower(context, builder, sig, args):
             builder.bitcast(array_infos_ptr, lir.IntType(8).as_pointer().as_pointer()),
         ],
     )
+    bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
 
     # generate code recursively to construct nested arrays from buffers
     # returned from C++
@@ -1383,6 +1382,7 @@ def parquet_write_table_cpp(
         )
         fn_tp = builder.module.get_or_insert_function(fnty, name="pq_write")
         builder.call(fn_tp, args)
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
 
     return (
         types.void(

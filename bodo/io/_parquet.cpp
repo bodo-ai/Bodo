@@ -138,6 +138,7 @@ PyMODINIT_FUNC PyInit_parquet_cpp(void) {
 
 DatasetReader *get_dataset_reader(char *file_name, bool parallel,
                                   char *bucket_region) {
+    try {
 #ifdef DEBUG_NESTED_PARQUET
     std::cout << "GET_DATASET_READER, beginning\n";
 #endif
@@ -263,6 +264,10 @@ DatasetReader *get_dataset_reader(char *file_name, bool parallel,
     if (PyErr_Occurred()) return NULL;
     PyGILState_Release(gilstate);
     return ds_reader;
+    } catch (const std::exception &e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return NULL;
+    }
 }
 
 void del_dataset_reader(DatasetReader *reader) { delete reader; }
