@@ -2,14 +2,36 @@ import array
 import subprocess
 import sys
 
+REGULAR_LIC_TYPE = 0
+PLATFORM_LIC_TYPE = 1
+HEADER_LEN_MASK = 0xFFFF  # license file length is in second half of header
+# AWS instance id is 19 characters:
+# https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/resource-ids.html
+EC2_INSTANCE_ID_LEN = 19
+
 
 def read_license(license_fname):
-    """Return license info (max cores and expiration date) from the given
-    license"""
+    """Return license info"""
     b64_decode_cmd = ["openssl", "base64", "-A", "-d", "-in", license_fname]
     msg = subprocess.check_output(b64_decode_cmd)
-    max_cores, year, month, day = array.array("i", msg)[1:5]
-    print("License for", max_cores, "cores. Expires {}-{}-{}".format(year, month, day))
+
+    header_arr = array.array("i", msg[:4])  # read header as integer
+    header = header_arr[0]
+    total_len = header & HEADER_LEN_MASK
+    license_type = header >> 16
+
+    if license_type == REGULAR_LIC_TYPE:
+        max_cores, year, month, day = array.array("i", msg)[1:5]
+        print(
+            "License for", max_cores, "cores. Expires {}-{}-{}".format(year, month, day)
+        )
+    elif license_type == PLATFORM_LIC_TYPE:
+        license_id = msg[
+            header_arr.itemsize : header_arr.itemsize + EC2_INSTANCE_ID_LEN
+        ]
+        print("License for EC2 instance", license_id.decode())
+    else:
+        print("License type {} not recognized".format(license_type))
 
 
 read_license(sys.argv[1])

@@ -25,6 +25,7 @@ requirements:
     - pandas 1.1.*
     - pyarrow =2.0.0
     - boost-cpp =1.74.0
+    - libcurl
     - hdf5 * mpi_mpich_* # [not win]
     - h5py
     - mpich # [not win]
@@ -40,6 +41,7 @@ requirements:
     - pandas 1.1.*
     - pyarrow =2.0.0
     - boost-cpp =1.74.0
+    - libcurl
     - numba 0.51.2
     - openjdk =8
     - sqlalchemy

@@ -7,9 +7,29 @@
 #include <fstream>
 #include <vector>
 
-MPI_Datatype decimal_mpi_type = MPI_DATATYPE_NULL;
+#if defined(CHECK_LICENSE_EXPIRED) || defined(CHECK_LICENSE_CORE_COUNT) || \
+    defined(CHECK_LICENSE_PLATFORM_AWS)
 
-#if defined(CHECK_LICENSE_EXPIRED) || defined(CHECK_LICENSE_CORE_COUNT)
+/*
+ * A license consists of a header, content and signature.
+ * The header is one 32-bit integer. The first 16 bits currently specify
+ * the license type (note that we don't need 16 bits for the type and can use
+ * some of these in the future for other purposes). The second 16 bits specify
+ * the total length (in bytes) of the license.
+ * The license content varies by license type.
+ * - Type 1 (regular):
+ *   The content is four 32-bit ints: max core count, expiration year,
+ *   expiration month, expiration day
+ * - Type 2 (Bodo Platform on AWS):
+ *   The content is the EC2 Instance ID (19 ASCII characters) licensed to run Bodo
+ * The signature is obtained by getting a SHA-256 digest of the license content
+ * and signing with a private key using RSA.
+ * The license that is provided to customers is encoded in Base64
+ */
+
+#define HEADER_LEN_MASK \
+    0xffff  // mask to get the total license length from license header
+#define EC2_INSTANCE_ID_LEN 19  // number of characters in a EC2 instance ID
 
 // public key to verify signature of license file
 const char *pubkey =
@@ -22,6 +42,49 @@ const char *pubkey =
     "zk2rTVKWc5IJaYCNG9XiFt71CLosb+sSA6PVVPLz4AKjoUkslhYSzjSkn6uP9ebj\n"
     "lQIDAQAB\n"
     "-----END PUBLIC KEY-----";
+
+/**
+ * Read license from environment variable BODO_LICENSE or from license file.
+ * @param[out] data: all the license data including signature
+ * @param[in] b64_encoded: true if license is Base64 encoded
+ */
+static int read_license_common(std::vector<char> &data, bool b64_encoded) {
+    // first check if license is in environment variable
+    char *license_text = std::getenv("BODO_LICENSE");
+    if (license_text != NULL && strlen(license_text) > 0) {
+        data.assign(license_text, license_text + strlen(license_text));
+    } else {
+        // read from "bodo.lic" file in: 1) cwd or 2) /etc
+        // TODO: check HOME directory or some other directory?
+        std::ifstream f("bodo.lic", std::ios::binary);
+        if (f.fail()) {
+            f = std::ifstream("/etc/bodo.lic", std::ios::binary);
+            if (f.fail()) {
+                fprintf(stderr, "Bodo license not found\n");
+                return 0;
+            }
+        }
+        data.assign(std::istreambuf_iterator<char>{f}, {});
+    }
+
+    if (b64_encoded) {
+        // decode from Base64 to binary
+        // decoded data is smaller than encoded
+        std::vector<char> decoded_data(data.size());
+        int dlen = EVP_DecodeBlock((unsigned char *)decoded_data.data(),
+                                   (unsigned char *)data.data(), data.size());
+        if (dlen == -1) {
+            // ERR_print_errors_fp(stderr);  // print ssl errors
+            fprintf(stderr, "Invalid license\n");
+            return 0;
+        }
+        int header = ((int *)decoded_data.data())[0];
+        int actual_size = header & HEADER_LEN_MASK;
+        decoded_data.resize(actual_size);
+        data = std::move(decoded_data);
+    }
+    return 1;
+}
 
 /**
  * Return public key in `const char *pubkey` global as openssl data structure.
@@ -42,7 +105,7 @@ static EVP_PKEY *get_public_key() {
  * @param slen: length of signature in bytes
  * @return : 1 if verified correctly, 0 otherwise.
  */
-static int verify_license(EVP_PKEY *key, void *msg, const size_t mlen,
+static int verify_license(EVP_PKEY *key, const void *msg, const size_t mlen,
                           const unsigned char *sig, size_t slen) {
     EVP_MD_CTX *mdctx = NULL;
 
@@ -66,61 +129,160 @@ static int verify_license(EVP_PKEY *key, void *msg, const size_t mlen,
     return 1;  // verified correctly
 }
 
+#endif
+
+#if defined(CHECK_LICENSE_PLATFORM_AWS)
+
+#include <curl/curl.h>
+#include "gason.h"  // lightweight JSON parser: https://github.com/vivkin/gason
+
+// license checking error codes
+#define LICENSE_ERR_DOWNLOAD \
+    100  // could not download Instance Identity Document
+#define LICENSE_ERR_JSON_PARSE 101  // Error parsing Identity Document
+#define LICENSE_ERR_INSTANCE_ID_NOT_FOUND \
+    102  // Instance ID not found in Identity Document
+#define LICENSE_ERR_INVALID_INSTANCE \
+    103  // License is not for this EC2 instance
+#define LICENSE_ERR_INVALID_LICENSE \
+    104  // Invalid license (for example tampered license, invalid/no signature,
+         // etc.)
+#define LICENSE_ERR_INVALID_LICENSE_TYPE 105  // Invalid license type
+
 /**
- * Read license from environment variable BODO_LICENSE or from license file.
- * The license contains max cores and expiration date followed by digital
- * signature (of max cores and expiration date).
- * Note that the first int of the decoded license is the total number of bytes
- * of everything in the decoded license.
- * @param[out] num_cores: max cores in the license
- * @param[out] year: expiration year
- * @param[out] month: expiration month
- * @param[out] day: expiration day
- * @param[out] signature: binary digital signature
- * @param[in] b64_encoded: true if license is Base64 encoded
+ * Reads the license file, verifies the signature and makes sure that
+ * the instance ID in the license matches the instance ID that is passed.
+ * @param cur_instance_id: The Instance ID of the EC2 instance on which Bodo
+ *                         is running.
  */
-static void read_license(int &num_cores, int &year, int &month, int &day,
-                         std::vector<char> &signature, bool b64_encoded) {
-    std::vector<char> data;  // store license
+static int read_verify_license(const char *cur_instance_id) {
+    std::vector<char> data;   // store license
+    bool b64_encoded = true;  // license encoded in Base64
+    int read_license = read_license_common(data, b64_encoded);
+    if (!read_license) return 0;
 
-    // first check if license is in environment variable
-    char *license_text = std::getenv("BODO_LICENSE");
-    if (license_text != NULL && strlen(license_text) > 0) {
-        data.assign(license_text, license_text + strlen(license_text));
-    } else {
-        // read from "bodo.lic" file in cwd
-        // TODO: check HOME directory or some other directory?
-        std::ifstream f("bodo.lic", std::ios::binary);
-        if (f.fail()) {
-            Bodo_PyErr_SetString(PyExc_RuntimeError, "Bodo license not found");
-            return;
-        }
-        data.assign(std::istreambuf_iterator<char>{f}, {});
+    int license_type = ((int *)data.data())[0] >> 16;
+    if (license_type != 1) {
+        fprintf(stderr, "Could not verify license. Code %d\n",
+                LICENSE_ERR_INVALID_LICENSE_TYPE);
+        return 0;
     }
 
-    if (b64_encoded) {
-        // decode from Base64 to binary
-        // decoded data is smaller than encoded
-        std::vector<char> decoded_data(data.size());
-        int dlen = EVP_DecodeBlock((unsigned char *)decoded_data.data(),
-                                   (unsigned char *)data.data(), data.size());
-        if (dlen == -1) {
-            // ERR_print_errors_fp(stderr);  // print ssl errors
-            Bodo_PyErr_SetString(PyExc_RuntimeError, "Invalid license");
-            return;
-        }
-        int actual_size = ((int *)decoded_data.data())[0];
-        decoded_data.resize(actual_size);
-        data = std::move(decoded_data);
+    std::string lic_instance_id(
+        data.begin() + sizeof(int),
+        data.begin() + sizeof(int) + EC2_INSTANCE_ID_LEN);
+    std::vector<char> signature;  // to store signature contained in license
+    signature.assign(data.begin() + sizeof(int) + EC2_INSTANCE_ID_LEN,
+                     data.end());
+
+    EVP_PKEY *key = get_public_key();
+    if (!key) {
+        // ERR_print_errors_fp(stderr);  // print ssl errors
+        fprintf(stderr, "Error obtaining public key\n");
+        return 0;
     }
 
-    const int *msg = (int *)data.data();
-    num_cores = msg[1];
-    year = msg[2];
-    month = msg[3];
-    day = msg[4];
-    signature.assign(data.begin() + sizeof(int) * 5, data.end());
+    if (!verify_license(key, lic_instance_id.c_str(), EC2_INSTANCE_ID_LEN,
+                        (unsigned char *)signature.data(), signature.size())) {
+        // ERR_print_errors_fp(stderr);  // print ssl errors
+        fprintf(stderr, "Could not verify license. Code %d\n",
+                LICENSE_ERR_INVALID_LICENSE);
+        return 0;
+    }
+    EVP_PKEY_free(key);
+
+    if (strcmp(cur_instance_id, lic_instance_id.c_str()) != 0) {
+        fprintf(stderr, "Could not verify license. Code %d\n",
+                LICENSE_ERR_INVALID_INSTANCE);
+        return 0;
+    }
+    return 1;
 }
+
+namespace {
+/**
+ * Callback used by CURL to store the result of a HTTP GET operation.
+ * @param[in] in: data obtained by CURL
+ * @param[in] size: size of elements
+ * @param[in] num: number of elements
+ * @param[in,out]: container where we are adding the data read by CURL.
+ */
+std::size_t callback(const char *in, std::size_t size, std::size_t num,
+                     std::string *out) {
+    const std::size_t totalBytes(size * num);
+    out->append(in, totalBytes);
+    return totalBytes;
+}
+}  // namespace
+
+/**
+ * Verify license for this EC2 instance. Will obtain the instance ID of the
+ * instance that is running this. Then it will read the license file, verify
+ * the signature on the license and make sure that the instance ID in the
+ * license matches.
+ */
+static int verify_license_ec2() {
+    const std::string url(
+        "http://169.254.169.254/latest/dynamic/instance-identity/document");
+
+    CURL *curl = curl_easy_init();
+
+    // Set remote URL
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+
+    // Don't use IPv6, which would increase DNS resolution time
+    curl_easy_setopt(curl, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4);
+
+    // Time out after 10 seconds
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 10);
+
+    // Response information
+    int http_code = 0;
+    std::string http_data;
+
+    // Set data handling function
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, callback);
+
+    // Set data container (will be passed as the last parameter to the
+    // callback handling function)
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &http_data);
+
+    // Run HTTP GET command, capture HTTP response code, and clean up
+    curl_easy_perform(curl);
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+    curl_easy_cleanup(curl);
+
+    if (http_code == 200) {
+        char *endptr;
+        JsonValue value;
+        JsonAllocator allocator;
+        int status =
+            jsonParse((char *)http_data.c_str(), &endptr, &value, allocator);
+        if (status != JSON_OK) {
+            fprintf(stderr, "Could not verify license. Code %d\n",
+                    LICENSE_ERR_JSON_PARSE);
+            return 0;
+        }
+        for (auto i : value) {
+            if (strcmp(i->key, "instanceId") == 0) {
+                return read_verify_license(i->value.toString());
+            }
+        }
+        fprintf(stderr, "Could not verify license. Code %d\n",
+                LICENSE_ERR_INSTANCE_ID_NOT_FOUND);
+        return 0;
+    } else {
+        fprintf(stderr, "Could not verify license. Code %d\n",
+                LICENSE_ERR_DOWNLOAD);
+        return 0;
+    }
+}
+
+#endif
+
+MPI_Datatype decimal_mpi_type = MPI_DATATYPE_NULL;
+
+#if defined(CHECK_LICENSE_EXPIRED) || defined(CHECK_LICENSE_CORE_COUNT)
 
 /**
  * Determine if current date is greater than expiration date.
@@ -154,30 +316,49 @@ PyMODINIT_FUNC PyInit_hdist(void) {
     m = PyModule_Create(&moduledef);
     if (m == NULL) return NULL;
 
+#if defined(CHECK_LICENSE_PLATFORM_AWS)
+    if (!verify_license_ec2()) {
+        PyErr_SetString(PyExc_RuntimeError, "Invalid license\n");
+        return NULL;
+    }
+#endif
+
 #if defined(CHECK_LICENSE_EXPIRED) || defined(CHECK_LICENSE_CORE_COUNT)
     // get max cores and expiration date from license, and verify license
     // using digital signature with asymmetric cryptography
-    int max_cores = -1;
-    int year, month, day;
-    std::vector<char> signature;  // to store signature contained in license
 
     bool b64_encoded = true;  // license encoded in Base64
-    read_license(max_cores, year, month, day, signature, b64_encoded);
-    if (max_cores == -1)
-        return NULL;  // error has been set in read_license function
+    std::vector<char> data;   // store license
+    int read_license = read_license_common(data, b64_encoded);
+    if (!read_license) {
+        PyErr_SetString(PyExc_RuntimeError, "Error reading license");
+        return NULL;
+    }
+    const int *_data = (int *)data.data();
+    int license_type = _data[0] >> 16;
+    if (license_type != 0) {
+        fprintf(stderr, "Invalid license type\n");
+        return NULL;
+    }
+    int max_cores = _data[1];
+    int year = _data[2];
+    int month = _data[3];
+    int day = _data[4];
+    std::vector<char> signature;  // to store signature contained in license
+    signature.assign(data.begin() + sizeof(int) * 5, data.end());
     std::vector<int> msg = {max_cores, year, month, day};
 
     EVP_PKEY *key = get_public_key();
     if (!key) {
         // ERR_print_errors_fp(stderr);  // print ssl errors
-        Bodo_PyErr_SetString(PyExc_RuntimeError, "Error obtaining public key");
+        PyErr_SetString(PyExc_RuntimeError, "Error obtaining public key");
         return NULL;
     }
 
     if (!verify_license(key, msg.data(), msg.size() * sizeof(int),
                         (unsigned char *)signature.data(), signature.size())) {
         // ERR_print_errors_fp(stderr);  // print ssl errors
-        Bodo_PyErr_SetString(PyExc_RuntimeError, "Invalid license\n");
+        PyErr_SetString(PyExc_RuntimeError, "Invalid license\n");
         return NULL;
     }
     EVP_PKEY_free(key);
@@ -186,8 +367,7 @@ PyMODINIT_FUNC PyInit_hdist(void) {
 #ifdef CHECK_LICENSE_EXPIRED
     // check expiration date
     if (is_expired(year, month, day)) {
-        Bodo_PyErr_SetString(PyExc_RuntimeError,
-                             "Bodo trial period has expired!");
+        PyErr_SetString(PyExc_RuntimeError, "Bodo trial period has expired!");
         return NULL;
     }
 #endif
@@ -205,7 +385,7 @@ PyMODINIT_FUNC PyInit_hdist(void) {
         char error_msg[100];
         sprintf(error_msg, "License is for %d cores. Max core count exceeded.",
                 max_cores);
-        Bodo_PyErr_SetString(PyExc_RuntimeError, error_msg);
+        PyErr_SetString(PyExc_RuntimeError, error_msg);
         return NULL;
     }
 #endif

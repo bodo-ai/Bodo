@@ -1,6 +1,5 @@
 import os
 import platform
-import time
 
 # Note we don't import Numpy at the toplevel, since setup.py
 # should be able to run without Numpy for pip to discover the
@@ -156,13 +155,23 @@ ext_hdf5 = Extension(
 # TODO Windows build fails because ssl.lib not found. Disabling licensing
 # check on windows for now
 dist_macros = []
+dist_includes = []
+dist_sources = []
+dist_libs = []
 if os.environ.get("CHECK_LICENSE_EXPIRED", None) == "1" and not is_win:
     dist_macros.append(("CHECK_LICENSE_EXPIRED", "1"))
 
 if os.environ.get("CHECK_LICENSE_CORE_COUNT", None) == "1" and not is_win:
     dist_macros.append(("CHECK_LICENSE_CORE_COUNT", "1"))
 
-dist_libs = []
+if os.environ.get("CHECK_LICENSE_PLATFORM_AWS", None) == "1":
+    assert os.environ.get("CHECK_LICENSE_EXPIRED", None) != "1"
+    assert os.environ.get("CHECK_LICENSE_CORE_COUNT", None) != "1"
+    dist_macros.append(("CHECK_LICENSE_PLATFORM_AWS", "1"))
+    dist_includes += ["bodo/libs/gason"]
+    dist_sources += ["bodo/libs/gason/gason.cpp"]
+    dist_libs += ["curl"]
+
 if not is_win and (
     os.environ.get("CHECK_LICENSE_EXPIRED", None) == "1"
     or os.environ.get("CHECK_LICENSE_CORE_COUNT", None) == "1"
@@ -171,7 +180,7 @@ if not is_win and (
 
 ext_hdist = Extension(
     name="bodo.libs.hdist",
-    sources=["bodo/libs/_distributed.cpp"],
+    sources=["bodo/libs/_distributed.cpp"] + dist_sources,
     depends=[
         "bodo/libs/_bodo_common.h",
         "bodo/libs/_bodo_common.cpp",
@@ -181,7 +190,7 @@ ext_hdist = Extension(
     define_macros=dist_macros,
     extra_compile_args=eca,
     extra_link_args=ela,
-    include_dirs=ind,
+    include_dirs=ind + dist_includes,
     library_dirs=lid,
 )
 
