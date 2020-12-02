@@ -6,19 +6,12 @@ Creates specialized IR nodes for complex operations like Join.
 """
 import operator
 import warnings
-from collections import namedtuple
 
 import numba
 import numpy as np
 import pandas as pd
-from numba.core import ir, ir_utils, types
-from numba.core.inline_closurecall import inline_closure_call
+from numba.core import ir, types
 from numba.core.ir_utils import (
-    GuardException,
-    build_definitions,
-    compile_to_numba_ir,
-    compute_cfg_from_blocks,
-    dprint_func_ir,
     find_build_sequence,
     find_callname,
     find_const,
@@ -26,14 +19,12 @@ from numba.core.ir_utils import (
     get_definition,
     guard,
     mk_unique_var,
-    replace_arg_nodes,
 )
 
 import bodo
 import bodo.hiframes.dataframe_impl  # noqa # side effect: install DataFrame overloads
 import bodo.hiframes.pd_groupby_ext
 import bodo.hiframes.pd_rolling_ext
-from bodo import hiframes
 from bodo.hiframes.dataframe_indexing import (
     DataFrameIatType,
     DataFrameILocType,
@@ -43,48 +34,34 @@ from bodo.hiframes.dataframe_indexing import (
 from bodo.hiframes.pd_groupby_ext import DataFrameGroupByType
 from bodo.hiframes.pd_index_ext import RangeIndexType
 from bodo.hiframes.pd_multi_index_ext import MultiIndexType
-from bodo.hiframes.pd_rolling_ext import RollingType
 from bodo.hiframes.pd_series_ext import SeriesType
-from bodo.hiframes.split_impl import string_array_split_view_type
 from bodo.ir.aggregate import get_agg_func
 from bodo.libs.bool_arr_ext import BooleanArrayType
-from bodo.libs.str_arr_ext import get_utf8_size, string_array_type
 from bodo.utils.transform import (
-    ReplaceFunc,
     compile_func_single_block,
     gen_const_tup,
-    gen_init_varsize_alloc_sizes,
-    gen_varsize_item_sizes,
     get_call_expr_arg,
     get_const_value,
-    is_var_size_item_array_type,
     replace_func,
-    update_locs,
 )
 from bodo.utils.typing import (
     BodoError,
-    get_index_data_arr_types,
     get_literal_value,
     get_overload_const_func,
     get_overload_const_list,
     get_overload_const_str,
     get_overload_const_tuple,
     get_overload_constant_dict,
-    is_initial_value_list_type,
     is_literal_type,
     is_overload_constant_dict,
     is_overload_constant_list,
-    is_overload_constant_str,
     is_overload_constant_tuple,
     is_overload_none,
     list_cumulative,
 )
 from bodo.utils.utils import (
-    debug_prints,
-    gen_getitem,
     get_getsetitem_index_var,
     is_array_typ,
-    is_assign,
     is_expr,
     sanitize_varname,
 )
@@ -386,13 +363,6 @@ class DataFramePass:
             self.typemap[func_mod.name], DataFrameGroupByType
         ):
             return self._run_call_groupby(
-                assign, assign.target, rhs, func_mod, func_name
-            )
-
-        if isinstance(func_mod, ir.Var) and isinstance(
-            self.typemap[func_mod.name], RollingType
-        ):
-            return self._run_call_rolling(
                 assign, assign.target, rhs, func_mod, func_name
             )
 
@@ -1683,202 +1653,6 @@ class DataFramePass:
 
         out_vars.append(out_index)
         return nodes + compile_func_single_block(_init_df, out_vars, lhs, self)
-
-    def _run_call_rolling(self, assign, lhs, rhs, rolling_var, func_name):
-        rolling_typ = self.typemap[rolling_var.name]
-        dummy_call = guard(get_definition, self.func_ir, rolling_var)
-        df_var, window, center, on = dummy_call.args
-        df_type = self.typemap[df_var.name]
-        out_typ = self.typemap[lhs.name]
-
-        # handle 'on' arg
-        if self.typemap[on.name] == types.none:
-            on = None
-        else:
-            assert isinstance(self.typemap[on.name], types.StringLiteral)
-            on = self.typemap[on.name].literal_value
-
-        nodes = []
-        window_const = guard(find_const, self.func_ir, window)
-        # convert string offset window statically to nanos
-        # TODO: support dynamic conversion
-        # TODO: support other offsets types (time delta, etc.)
-        if on is not None and not isinstance(window_const, str):
-            raise BodoError(
-                "window argument to rolling should be constant"
-                "string in the offset case (variable window)"
-            )
-
-        if isinstance(window_const, str):
-            window = pd.tseries.frequencies.to_offset(window_const).nanos
-            window_var = ir.Var(lhs.scope, mk_unique_var("window"), lhs.loc)
-            self.typemap[window_var.name] = types.int64
-            nodes.append(ir.Assign(ir.Const(window, lhs.loc), window_var, lhs.loc))
-            window = window_var
-
-        in_vars = {
-            c: self._get_dataframe_data(df_var, c, nodes) for c in rolling_typ.selection
-        }
-
-        on_arr = self._get_dataframe_data(df_var, on, nodes) if on is not None else None
-        out_index_var = self._get_dataframe_index(df_var, nodes)
-        on_index_arr = on_arr
-        if isinstance(window_const, str) and on_arr is None:
-            on_index_arr = self._gen_array_from_index(df_var, nodes)
-
-        df_col_map = {}
-        for c in rolling_typ.selection:
-            var = ir.Var(lhs.scope, mk_unique_var(c), lhs.loc)
-            self.typemap[var.name] = (
-                out_typ.data
-                if isinstance(out_typ, SeriesType)
-                else out_typ.data[out_typ.columns.index(c)]
-            )
-            df_col_map[c] = var
-
-        if on is not None:
-            df_col_map[on] = on_arr  # TODO: copy array?
-
-        other = None
-        if func_name in ("cov", "corr"):
-            other = rhs.args[0]
-
-        for cname, out_col_var in df_col_map.items():
-            if cname == on:
-                continue
-            in_col_var = in_vars[cname]
-            if func_name in ("cov", "corr"):
-                # TODO: Series as other
-                if cname not in self.typemap[other.name].columns:
-                    continue  # nan column handled below
-                rhs.args[0] = self._get_dataframe_data(other, cname, nodes)
-            nodes += self._gen_rolling_call(
-                in_col_var,
-                out_col_var,
-                window,
-                center,
-                rhs.args,
-                func_name,
-                on_index_arr,
-            )
-
-        # in corr/cov case, Pandas makes non-common columns NaNs
-        if func_name in ("cov", "corr"):
-            nan_cols = list(
-                sorted(
-                    set(self.typemap[other.name].columns) ^ set(df_type.columns),
-                    key=lambda k: str(k),
-                )
-            )
-            len_arr = list(in_vars.values())[0]
-            for cname in nan_cols:
-
-                def f(arr):  # pragma: no cover
-                    return np.full(len(arr), np.nan)
-
-                nodes += compile_func_single_block(f, [len_arr], None, self)
-                df_col_map[cname] = nodes[-1].target
-
-        # XXX output becomes series if single output and explicitly selected
-        if isinstance(out_typ, SeriesType):
-            # TODO: test (needs support in typing?)
-            assert (
-                len(rolling_typ.selection) == 1
-                and rolling_typ.explicit_select
-                and rolling_typ.as_index
-            )
-            return replace_func(
-                self,
-                lambda A, I: bodo.hiframes.pd_series_ext.init_series(A, I, _name),
-                list(df_col_map.values()) + [out_index_var],
-                pre_nodes=nodes,
-                extra_globals={"_name": list(df_col_map.keys())[0]},
-            )
-
-        _init_df = _gen_init_df(out_typ.columns, "index")
-
-        # XXX the order of output variables passed should match out_typ.columns
-        out_vars = []
-        for c in out_typ.columns:
-            out_vars.append(df_col_map[c])
-        out_vars.append(out_index_var)
-
-        return nodes + compile_func_single_block(_init_df, out_vars, lhs, self)
-
-    def _gen_rolling_call(
-        self, in_col_var, out_col_var, window, center, args, func_name, on_arr
-    ):
-        nodes = []
-        if func_name in ("cov", "corr"):
-            other = args[0]
-            if on_arr is not None:
-                if func_name == "cov":
-
-                    def f(arr, other, on_arr, w, center):  # pragma: no cover
-                        return bodo.hiframes.rolling.rolling_cov(
-                            arr, other, on_arr, w, center
-                        )
-
-                if func_name == "corr":
-
-                    def f(arr, other, on_arr, w, center):  # pragma: no cover
-                        return bodo.hiframes.rolling.rolling_corr(
-                            arr, other, on_arr, w, center
-                        )
-
-                args = [in_col_var, other, on_arr, window, center]
-            else:
-                if func_name == "cov":
-
-                    def f(arr, other, w, center):  # pragma: no cover
-                        return bodo.hiframes.rolling.rolling_cov(arr, other, w, center)
-
-                if func_name == "corr":
-
-                    def f(arr, other, w, center):  # pragma: no cover
-                        return bodo.hiframes.rolling.rolling_corr(arr, other, w, center)
-
-                args = [in_col_var, other, window, center]
-        # variable window case
-        elif on_arr is not None:
-            if func_name == "apply":
-
-                def f(arr, on_arr, w, center, func):  # pragma: no cover
-                    return bodo.hiframes.rolling.rolling_variable(
-                        arr, on_arr, w, center, False, func
-                    )
-
-                args = [in_col_var, on_arr, window, center, args[0]]
-            else:
-
-                def f(arr, on_arr, w, center):  # pragma: no cover
-                    return bodo.hiframes.rolling.rolling_variable(
-                        arr, on_arr, w, center, False, _func_name
-                    )
-
-                args = [in_col_var, on_arr, window, center]
-        else:  # fixed window
-            # apply case takes the passed function instead of just name
-            if func_name == "apply":
-
-                def f(arr, w, center, func):  # pragma: no cover
-                    return bodo.hiframes.rolling.rolling_fixed(
-                        arr, w, center, False, func
-                    )
-
-                args = [in_col_var, window, center, args[0]]
-            else:
-
-                def f(arr, w, center):  # pragma: no cover
-                    return bodo.hiframes.rolling.rolling_fixed(
-                        arr, w, center, False, _func_name
-                    )
-
-                args = [in_col_var, window, center]
-
-        return nodes + compile_func_single_block(
-            f, args, out_col_var, self, extra_globals={"_func_name": func_name}
-        )
 
     def _get_df_obj_select(self, obj_var, obj_name):
         """get df object for groupby() or rolling()

@@ -105,6 +105,7 @@ from bodo.utils.utils import (
     gen_getitem,
     get_getsetitem_index_var,
     is_array_typ,
+    is_call,
     is_expr,
     is_whole_slice,
 )
@@ -628,6 +629,18 @@ class SeriesPass:
                     rhs.attr
                 )(rhs_type)
                 return replace_func(self, impl, [rhs.value])
+
+        # inline rolling.attr access
+        if isinstance(rhs_type, bodo.hiframes.pd_rolling_ext.RollingType):
+            # get init_rolling() call
+            rhs_def = guard(get_definition, self.func_ir, rhs.value)
+            if rhs_def is not None:
+                assert is_call(rhs_def), "invalid rolling object creation"
+                attr_ind = {"obj": 0, "window": 1, "center": 2}
+                assert rhs.attr in attr_ind, "invalid rolling attr"
+                arg_ind = attr_ind[rhs.attr]
+                assign.value = rhs_def.args[arg_ind]
+                return [assign]
 
         # replace arr.dtype for dt64 since PA replaces with
         # np.datetime64[ns] which invalid, TODO: fix PA

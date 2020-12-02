@@ -120,6 +120,12 @@ class RollingCovType(AbstractTemplate):
         return signature(ret_typ, *unliteral_all(args))
 
 
+@lower_builtin(rolling_corr, types.VarArg(types.Any))
+@lower_builtin(rolling_cov, types.VarArg(types.Any))
+def lower_rolling_corr_dummy(context, builder, sig, args):
+    return context.get_constant_null(sig.return_type)
+
+
 @overload(rolling_fixed, no_unliteral=True)
 def overload_rolling_fixed(a, w, c, p, fname):
 
@@ -406,10 +412,29 @@ def roll_fixed_apply_seq(in_arr, win, center, kernel_func):  # pragma: no cover
 # variable window
 
 
+def offset_to_nanos(w):  # pragma: no cover
+    return w
+
+
+@overload(offset_to_nanos)
+def overload_offset_to_nanos(w):
+    """convert offset value to nanos"""
+    if isinstance(w, types.Integer):
+        return lambda w: w  # pragma: no cover
+
+    def impl(w):  # pragma: no cover
+        with numba.objmode(out="int64"):
+            out = pd.tseries.frequencies.to_offset(w).nanos
+        return out
+
+    return impl
+
+
 @register_jitable
 def roll_var_linear_generic(
     in_arr, on_arr_dt, win, center, parallel, init_data, add_obs, remove_obs, calc_out
 ):  # pragma: no cover
+    win = offset_to_nanos(win)
     rank = bodo.libs.distributed_api.get_rank()
     n_pes = bodo.libs.distributed_api.get_size()
     on_arr = cast_dt64_arr_to_int(on_arr_dt)
@@ -570,6 +595,7 @@ def roll_var_linear_generic_seq(
 def roll_variable_apply(
     in_arr, on_arr_dt, win, center, parallel, kernel_func
 ):  # pragma: no cover
+    win = offset_to_nanos(win)
     rank = bodo.libs.distributed_api.get_rank()
     n_pes = bodo.libs.distributed_api.get_size()
     on_arr = cast_dt64_arr_to_int(on_arr_dt)
