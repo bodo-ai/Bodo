@@ -9,7 +9,12 @@ import pytest
 
 import bodo
 from bodo.hiframes.rolling import supported_rolling_funcs
-from bodo.tests.utils import _get_dist_arg, count_array_REPs, count_parfor_REPs
+from bodo.tests.utils import (
+    _get_dist_arg,
+    check_func,
+    count_array_REPs,
+    count_parfor_REPs,
+)
 
 LONG_TEST = (
     int(os.environ["BODO_LONG_ROLLING_TEST"]) != 0
@@ -58,6 +63,40 @@ def test_variable_on_index(memory_leak_check):
         ],
     )
     pd.testing.assert_frame_equal(bodo_func(df), impl(df))
+
+
+def test_column_select(memory_leak_check):
+    """test selecting columns explicitly in rolling calls"""
+
+    def impl1(df):
+        return df.rolling("2s", on="C")["B"].mean()
+
+    def impl2(df):
+        return df.rolling("2s", on="C")["A", "B"].mean()
+
+    def impl3(df):
+        return df.rolling(2)["B"].mean()
+
+    def impl4(df):
+        return df.rolling(3)["A", "B"].mean()
+
+    df = pd.DataFrame(
+        {
+            "A": [5, 12, 21, np.nan, 3],
+            "B": [0, 1, 2, np.nan, 4],
+            "C": [
+                pd.Timestamp("20130101 09:00:00"),
+                pd.Timestamp("20130101 09:00:02"),
+                pd.Timestamp("20130101 09:00:03"),
+                pd.Timestamp("20130101 09:00:05"),
+                pd.Timestamp("20130101 09:00:06"),
+            ],
+        }
+    )
+    check_func(impl1, (df,))
+    check_func(impl2, (df,))
+    check_func(impl3, (df,))
+    check_func(impl4, (df,))
 
 
 @bodo.jit(distributed=False)

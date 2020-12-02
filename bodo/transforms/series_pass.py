@@ -632,6 +632,9 @@ class SeriesPass:
         if isinstance(rhs_type, bodo.hiframes.pd_rolling_ext.RollingType):
             # get init_rolling() call
             rhs_def = guard(get_definition, self.func_ir, rhs.value)
+            # handle explicit column selection case
+            if is_expr(rhs_def, "static_getitem"):
+                rhs_def = guard(get_definition, self.func_ir, rhs_def.value)
             if rhs_def is not None:
                 assert is_call(rhs_def), "invalid rolling object creation"
                 attr_ind = {"obj": 0, "window": 1, "center": 2}

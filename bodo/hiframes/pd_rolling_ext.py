@@ -2,10 +2,12 @@
 """typing for rolling window functions
 """
 from numba.core import cgutils, types
+from numba.core.imputils import impl_ret_borrowed
 from numba.core.typing.templates import AbstractTemplate, signature
 from numba.extending import (
     infer,
     intrinsic,
+    lower_builtin,
     make_attribute_wrapper,
     models,
     overload_method,
@@ -20,6 +22,7 @@ from bodo.utils.typing import (
     BodoError,
     check_unsupported_args,
     get_literal_value,
+    raise_const_error,
 )
 
 
@@ -177,6 +180,9 @@ def _gen_df_rolling_out_data(rolling):
     for c in rolling.selection:
         c_ind = rolling.obj_type.columns.index(c)
         if c == rolling.on:
+            # avoid adding 'on' column if output will be Series (just ignored in Pandas)
+            if len(rolling.selection) == 2 and rolling.explicit_select:
+                continue
             out = f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {c_ind})"
         else:
             out = f"bodo.hiframes.rolling.rolling_{ftype}(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {c_ind}), {on_arr_arg}window, center, False, func)"
@@ -206,6 +212,12 @@ def _gen_rolling_impl(rolling, fname, other=None):
         out_cols = rolling.selection
         data_args, on_arr = _gen_df_rolling_out_data(rolling)
 
+    # NOTE: 'on' column is discarded and output is a Series if there is only one data
+    # column with explicit column selection
+    is_out_series = is_series or (
+        len(out_cols) == (1 if rolling.on is None else 2) and rolling.explicit_select
+    )
+
     if fname == "apply":
         header = "def impl(rolling, func, raw=False, engine=None, engine_kwargs=None, args=None, kwargs=None):\n"
     elif fname == "corr":
@@ -220,15 +232,21 @@ def _gen_rolling_impl(rolling, fname, other=None):
         if is_series
         else "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)"
     )
-    header += "  name = {}\n".format(
-        "bodo.hiframes.pd_series_ext.get_series_name(df)" if is_series else None
-    )
+    name = "None"
+    if is_series:
+        name = "bodo.hiframes.pd_series_ext.get_series_name(df)"
+    elif is_out_series:
+        # name of the only output column (excluding 'on' column)
+        c = (set(out_cols) - set([rolling.on])).pop()
+        name = f"'{c}'" if isinstance(c, str) else str(c)
+    header += f"  name = {name}\n"
     header += "  window = rolling.window\n"
     header += "  center = rolling.center\n"
     header += f"  on_arr = {on_arr}\n"
     if fname != "apply":
         header += f"  func = '{fname}'\n"
-    if is_series or (len(out_cols) == 1 and rolling.explicit_select):
+
+    if is_out_series:
         header += f"  return bodo.hiframes.pd_series_ext.init_series({data_args}, index, name)"
         loc_vars = {}
         _global = {"bodo": bodo}
@@ -323,12 +341,34 @@ class GetItemDataFrameRolling2(AbstractTemplate):
         rolling, idx = args
         # df.rolling('A')['B', 'C']
         if isinstance(rolling, RollingType):
-            if isinstance(idx, tuple):
-                assert all(isinstance(c, str) for c in idx)
-                selection = idx
-            elif isinstance(idx, str):
-                selection = (idx,)
+            if isinstance(idx, (tuple, list)):
+                if (
+                    len(set(idx).difference(set(rolling.obj_type.columns))) > 0
+                ):  # pragma: no cover
+                    raise_const_error(
+                        "rolling: selected column {} not found in dataframe".format(
+                            set(idx).difference(set(rolling.obj_type.columns))
+                        )
+                    )
+                selection = list(idx)
             else:
-                raise BodoError("invalid rolling selection {}".format(idx))
-            ret_rolling = RollingType(rolling.df_type, rolling.on, selection, True)
+                if idx not in rolling.obj_type.columns:  # pragma: no cover
+                    raise_const_error(
+                        "rolling: selected column {} not found in dataframe".format(idx)
+                    )
+                selection = [idx]
+            if rolling.on is not None:
+                selection.append(rolling.on)
+            ret_rolling = RollingType(
+                rolling.obj_type,
+                rolling.window_type,
+                rolling.on,
+                tuple(selection),
+                True,
+            )
             return signature(ret_rolling, *args)
+
+
+@lower_builtin("static_getitem", RollingType, types.Any)
+def static_getitem_df_groupby(context, builder, sig, args):
+    return impl_ret_borrowed(context, builder, sig.return_type, args[0])
