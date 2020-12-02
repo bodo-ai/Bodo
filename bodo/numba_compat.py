@@ -16,27 +16,19 @@ import types as pytypes
 import warnings
 from collections import OrderedDict
 from collections.abc import Sequence
-from functools import partial, wraps
 
 import numba
 import numba.np.linalg
-import numpy as np
 from numba.core import analysis, errors, ir, ir_utils, types
 from numba.core.errors import ForceLiteralArg, LiteralTypingError, TypingError
-from numba.core.imputils import impl_ret_new_ref
 from numba.core.ir_utils import (
-    GuardException,
     _create_function_from_code_obj,
     analysis,
     build_definitions,
-    compile_to_numba_ir,
     find_callname,
-    find_const,
-    get_definition,
     guard,
     has_no_side_effect,
     remove_dead_extensions,
-    replace_arg_nodes,
     replace_vars_inner,
     require,
     visit_vars_extensions,
@@ -49,7 +41,6 @@ from numba.core.types.functions import (
     _termcolor,
     _unlit_non_poison,
 )
-from numba.core.types.misc import unliteral
 from numba.core.typing.templates import (
     AbstractTemplate,
     _OverloadAttributeTemplate,
@@ -1135,7 +1126,6 @@ def bodo_remove_dead_block(
     Mutable arguments (e.g. arrays) that are not definitely assigned are live
     after return of function.
     """
-    import bodo
     from bodo.transforms.distributed_pass import saved_array_analysis
     from bodo.utils.utils import is_array_typ, is_expr
 
@@ -1338,7 +1328,9 @@ def maybe_literal(value):
     """Get a Literal type for the value or None."""
     # bodo change: don't use our ListLiteral for regular constant or global lists.
     # ListLiteral is only used when Bodo forces an argument to be a literal
-    if isinstance(value, list):
+    # FunctionLiteral shouldn't be used for all globals to avoid interference with
+    # overloads
+    if isinstance(value, (list, pytypes.FunctionType)):
         return
     try:
         return literal(value)
@@ -1834,7 +1826,6 @@ numba.core.errors.NumbaError.patch_message = patch_message
 
 def _get_dist_spec_from_options(spec, **options):
     """get distribution spec for jitclass from options passed to @bodo.jitclass"""
-    import bodo
     from bodo.transforms.distributed_analysis import Distribution
 
     dist_spec = {}
@@ -2221,3 +2212,26 @@ if (
 ):  # pragma: no cover
     warnings.warn("numba.core.errors.ForceLiteralArg.combine has changed")
 numba.core.errors.ForceLiteralArg.combine = ForceLiteralArg_combine
+
+
+def _get_global_type(self, gv):
+    from bodo.utils.typing import FunctionLiteral
+
+    ty = self._lookup_global(gv)
+    if ty is not None:
+        return ty
+    if isinstance(gv, pytypes.ModuleType):
+        return types.Module(gv)
+
+    # Bodo change: use FunctionLiteral for function value if it's not overloaded
+    if isinstance(gv, pytypes.FunctionType):
+        return FunctionLiteral(gv)
+
+
+lines = inspect.getsource(numba.core.typing.context.BaseContext._get_global_type)
+if (
+    hashlib.sha256(lines.encode()).hexdigest()
+    != "8ffe6b81175d1eecd62a37639b5005514b4477d88f35f5b5395041ac8c945a4a"
+):  # pragma: no cover
+    warnings.warn("numba.core.typing.context.BaseContext._get_global_type has changed")
+numba.core.typing.context.BaseContext._get_global_type = _get_global_type

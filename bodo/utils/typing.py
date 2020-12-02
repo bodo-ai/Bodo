@@ -22,7 +22,6 @@ from numba.extending import (
     overload_method,
     register_jitable,
     register_model,
-    typeof_impl,
     unbox,
 )
 
@@ -47,13 +46,13 @@ class BodoError(NumbaError):
     when printing so that it only prints the error message and code location.
     """
 
-    def __init__(self, msg, locs_in_msg=None):
+    def __init__(self, msg, loc=None, locs_in_msg=None):
         if locs_in_msg is None:
             self.locs_in_msg = []
         else:
             self.locs_in_msg = locs_in_msg
         highlight = numba.core.errors.termcolor().errmsg
-        super(BodoError, self).__init__(highlight(msg))
+        super(BodoError, self).__init__(highlight(msg), loc)
 
 
 class BodoException(Exception):
@@ -712,19 +711,12 @@ def unbox_list_literal(typ, obj, c):
 
 
 # literal type for functions (to handle function arguments to map/apply methods)
-# TODO: update when Numba's #4967 is merged
 # similar to MakeFunctionLiteral
 class FunctionLiteral(types.Literal, types.Opaque):
     """Literal type for function objects (i.e. pytypes.FunctionType)"""
 
 
-@typeof_impl.register(pytypes.FunctionType)
-def typeof_function(val, c):
-    """Assign literal type to constant functions that are not overloaded in numba."""
-    if not numba.core.registry.cpu_target.typing_context._get_global_type(val):
-        return FunctionLiteral(val)
-
-
+types.Literal.ctor_map[pytypes.FunctionType] = FunctionLiteral
 register_model(FunctionLiteral)(models.OpaqueModel)
 
 

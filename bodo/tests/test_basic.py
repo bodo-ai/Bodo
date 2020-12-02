@@ -602,6 +602,21 @@ def test_permuted_array_indexing(memory_leak_check):
         np.testing.assert_allclose(A, B)
 
 
+def test_func_non_jit_error(memory_leak_check):
+    """make sure proper error is thrown when calling a non-JIT function"""
+
+    def f():
+        return 1
+
+    def test_impl():
+        return f()
+
+    with pytest.raises(
+        BodoError, match="Cannot call non-JIT function 'f' from JIT function"
+    ):
+        bodo.jit(test_impl)()
+
+
 # TODO: Add memory_leak_check after memory leak is solved.
 @pytest.mark.slow
 def test_reversed():

@@ -326,7 +326,12 @@ def get_const_value(
 
 
 def get_const_value_inner(
-    func_ir, var, arg_types=None, typemap=None, updated_containers=None, file_info=None
+    func_ir,
+    var,
+    arg_types=None,
+    typemap=None,
+    updated_containers=None,
+    file_info=None,
 ):
     """Check if a variable can be inferred as a constant and return the constant value.
     Otherwise, raise GuardException.
