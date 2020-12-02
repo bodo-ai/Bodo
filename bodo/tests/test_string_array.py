@@ -40,7 +40,7 @@ def test_np_sort(memory_leak_check):
     def impl(arr):
         return np.sort(arr)
 
-    A = pd.array(["AB", "", "ABC", "abcd"] * 8)
+    A = pd.array(["AB", "", "ABC", "abcd", "PQ"] * 8)
 
     check_func(impl, (A,))
 
