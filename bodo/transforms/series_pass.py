@@ -49,7 +49,6 @@ from bodo.hiframes.pd_index_ext import (
     StringIndexType,
     TimedeltaIndexType,
 )
-from bodo.hiframes.pd_rolling_ext import SeriesRollingType
 from bodo.hiframes.pd_series_ext import (
     HeterogeneousSeriesType,
     SeriesType,
@@ -60,7 +59,6 @@ from bodo.hiframes.pd_series_ext import (
     is_timedelta64_series_typ,
 )
 from bodo.hiframes.pd_timestamp_ext import timedelta_methods
-from bodo.hiframes.rolling import get_rolling_setup_args
 from bodo.hiframes.series_dt_impl import SeriesDatetimePropertiesType
 from bodo.hiframes.series_indexing import (
     SeriesIatType,
@@ -1887,13 +1885,6 @@ class SeriesPass:
                 assign, assign.target, rhs, func_mod, func_name
             )
 
-        if isinstance(func_mod, ir.Var) and isinstance(
-            self.typemap[func_mod.name], SeriesRollingType
-        ):
-            return self._run_call_series_rolling(
-                assign, assign.target, rhs, func_mod, func_name
-            )
-
         if (
             isinstance(func_mod, ir.Var)
             and isinstance(self.typemap[func_mod.name], DatetimeIndexType)
@@ -2319,11 +2310,6 @@ class SeriesPass:
                 kws=dict(rhs.kws),
             )
 
-        if func_name == "rolling":
-            # XXX: remove rolling setup call, assuming still available in definitions
-            self.func_ir._definitions[lhs.name].append(rhs)
-            return []
-
         if func_name == "combine":
             return self._handle_series_combine(assign, lhs, rhs, series_var)
 
@@ -2606,62 +2592,6 @@ class SeriesPass:
                 "map_func": numba.njit(func),
             },
             pre_nodes=nodes,
-        )
-
-    def _run_call_series_rolling(self, assign, lhs, rhs, rolling_var, func_name):
-        """
-        Handle Series rolling calls like:
-          A = df.column.rolling(3).sum()
-        """
-        rolling_call = guard(get_definition, self.func_ir, rolling_var)
-        assert isinstance(rolling_call, ir.Expr) and rolling_call.op == "call"
-        call_def = guard(get_definition, self.func_ir, rolling_call.func)
-        assert isinstance(call_def, ir.Expr) and call_def.op == "getattr"
-        series_var = call_def.value
-        nodes = []
-        data = self._get_series_data(series_var, nodes)
-        index = self._get_series_index(series_var, nodes)
-        name = self._get_series_name(series_var, nodes)
-
-        window, center, _on = get_rolling_setup_args(self.func_ir, rolling_call, False)
-        if not isinstance(center, ir.Var):
-            center_var = ir.Var(lhs.scope, mk_unique_var("center"), lhs.loc)
-            self.typemap[center_var.name] = types.bool_
-            nodes.append(ir.Assign(ir.Const(center, lhs.loc), center_var, lhs.loc))
-            center = center_var
-
-        if func_name in ("cov", "corr"):
-            # TODO: variable window
-            if len(rhs.args) == 1:
-                other = self._get_series_data(rhs.args[0], nodes)
-            else:
-                other = data
-            if func_name == "cov":
-                f = lambda a, b, w, c, i, n: bodo.hiframes.pd_series_ext.init_series(
-                    bodo.hiframes.rolling.rolling_cov(a, b, w, c), i, n
-                )
-            if func_name == "corr":
-                f = lambda a, b, w, c, i, n: bodo.hiframes.pd_series_ext.init_series(
-                    bodo.hiframes.rolling.rolling_corr(a, b, w, c), i, n
-                )
-            return replace_func(
-                self, f, [data, other, window, center, index, name], pre_nodes=nodes
-            )
-        elif func_name == "apply":
-            func_global = get_overload_const_func(self.typemap[rhs.args[0].name])
-        else:
-            func_global = func_name
-
-        def f(arr, w, center, index, name):  # pragma: no cover
-            return bodo.hiframes.pd_series_ext.init_series(
-                bodo.hiframes.rolling.rolling_fixed(arr, w, center, False, _func),
-                index,
-                name,
-            )
-
-        args = [data, window, center, index, name]
-        return replace_func(
-            self, f, args, pre_nodes=nodes, extra_globals={"_func": func_global}
         )
 
     def _run_pd_DatetimeIndex(self, assign, lhs, rhs):

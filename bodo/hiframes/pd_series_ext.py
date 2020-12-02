@@ -579,24 +579,6 @@ def cast_series(context, builder, fromty, toty, val):
 class SeriesAttribute(AttributeTemplate):
     key = SeriesType
 
-    @bound_function("series.rolling", no_unliteral=True)
-    def resolve_rolling(self, ary, args, kws):
-        from bodo.hiframes.pd_rolling_ext import SeriesRollingType
-
-        def rolling_stub(
-            window,
-            min_periods=None,
-            center=False,
-            win_type=None,
-            on=None,
-            axis=0,
-            closed=None,
-        ):  # pragma: no cover
-            pass
-
-        pysig = numba.core.utils.pysignature(rolling_stub)
-        return signature(SeriesRollingType(ary), *args).replace(pysig=pysig)
-
     def _resolve_map_func(self, ary, func, pysig, fname, f_args=None, kws=None):
         """Find type signature of Series.map/apply method.
         ary: Series type (TODO: rename)

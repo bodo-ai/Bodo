@@ -2,15 +2,9 @@
 """typing for rolling window functions
 """
 from numba.core import cgutils, types
-from numba.core.typing.templates import (
-    AbstractTemplate,
-    AttributeTemplate,
-    bound_function,
-    signature,
-)
+from numba.core.typing.templates import AbstractTemplate, signature
 from numba.extending import (
     infer,
-    infer_getattr,
     intrinsic,
     make_attribute_wrapper,
     models,
@@ -92,6 +86,32 @@ def df_rolling_overload(
     return _impl
 
 
+@overload_method(SeriesType, "rolling", inline="always", no_unliteral=True)
+def overload_series_rolling(
+    df,
+    window,
+    min_periods=None,
+    center=False,
+    win_type=None,
+    on=None,
+    axis=0,
+    closed=None,
+):
+    def impl(
+        df,
+        window,
+        min_periods=None,
+        center=False,
+        win_type=None,
+        on=None,
+        axis=0,
+        closed=None,
+    ):  # pragma: no cover
+        return bodo.hiframes.pd_rolling_ext.init_rolling(df, window, center, on)
+
+    return impl
+
+
 @intrinsic
 def init_rolling(typingctx, obj_type, window_type, center_type, on_type=None):
     """initialize rolling object"""
@@ -113,8 +133,8 @@ def init_rolling(typingctx, obj_type, window_type, center_type, on_type=None):
         return rolling_val._getvalue()
 
     on = get_literal_value(on_type)
-    selection = None if isinstance(obj_type, SeriesType) else list(obj_type.columns)
-    rolling_type = RollingType(obj_type, window_type, on, tuple(selection), False)
+    selection = None if isinstance(obj_type, SeriesType) else obj_type.columns
+    rolling_type = RollingType(obj_type, window_type, on, selection, False)
     return rolling_type(obj_type, window_type, center_type, on_type), codegen
 
 
@@ -125,12 +145,19 @@ def _gen_df_rolling_out_data(rolling):
     on_arr = "None"
     if is_variable_win:
         on_arr = (
-            "bodo.utils.conversion.index_to_array(bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df))"
+            "bodo.utils.conversion.index_to_array(index)"
             if rolling.on is None
             else f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {rolling.obj_type.columns.index(rolling.on)})"
         )
     data_args = []
     on_arr_arg = "on_arr, " if is_variable_win else ""
+
+    if isinstance(rolling.obj_type, SeriesType):
+        return (
+            f"bodo.hiframes.rolling.rolling_{ftype}(bodo.hiframes.pd_series_ext.get_series_data(df), {on_arr_arg}window, center, False, func)",
+            on_arr,
+        )
+
     for c in rolling.selection:
         c_ind = rolling.obj_type.columns.index(c)
         if c == rolling.on:
@@ -146,32 +173,60 @@ def _gen_df_rolling_out_data(rolling):
 def overload_rolling_apply(
     rolling, func, raw=False, engine=None, engine_kwargs=None, args=None, kwargs=None
 ):
-    data_args, on_arr = _gen_df_rolling_out_data(rolling)
-    header = "def impl(rolling, func, raw=False, engine=None, engine_kwargs=None, args=None, kwargs=None):\n"
+    return _gen_rolling_impl(rolling, "apply")
+
+
+def _gen_rolling_impl(rolling, fname, other=None):
+    """generates an implementation function for rolling overloads"""
+    is_series = isinstance(rolling.obj_type, SeriesType)
+    if fname in ("corr", "cov"):
+        out_cols = None if is_series else _get_corr_cov_out_cols(rolling, other, fname)
+        df_cols = None if is_series else rolling.obj_type.columns
+        other_cols = None if is_series else other.columns
+        data_args, on_arr = _gen_corr_cov_out_data(
+            out_cols, df_cols, other_cols, rolling.window_type, fname
+        )
+    else:
+        out_cols = rolling.selection
+        data_args, on_arr = _gen_df_rolling_out_data(rolling)
+
+    if fname == "apply":
+        header = "def impl(rolling, func, raw=False, engine=None, engine_kwargs=None, args=None, kwargs=None):\n"
+    elif fname == "corr":
+        header = "def impl(rolling, other=None, pairwise=None):\n"
+    elif fname == "cov":
+        header = "def impl(rolling, other=None, pairwise=None, ddof=1):\n"
+    else:
+        header = "def impl(rolling):\n"
     header += "  df = rolling.obj\n"
+    header += "  index = {}\n".format(
+        "bodo.hiframes.pd_series_ext.get_series_index(df)"
+        if is_series
+        else "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)"
+    )
+    header += "  name = {}\n".format(
+        "bodo.hiframes.pd_series_ext.get_series_name(df)" if is_series else None
+    )
     header += "  window = rolling.window\n"
     header += "  center = rolling.center\n"
     header += f"  on_arr = {on_arr}\n"
-    return bodo.hiframes.dataframe_impl._gen_init_df(
-        header, rolling.selection, data_args
-    )
+    if fname != "apply":
+        header += f"  func = '{fname}'\n"
+    if is_series or (len(out_cols) == 1 and rolling.explicit_select):
+        header += f"  return bodo.hiframes.pd_series_ext.init_series({data_args}, index, name)"
+        loc_vars = {}
+        _global = {"bodo": bodo}
+        exec(header, _global, loc_vars)
+        impl = loc_vars["impl"]
+        return impl
+    return bodo.hiframes.dataframe_impl._gen_init_df(header, out_cols, data_args)
 
 
 def create_rolling_overload(fname):
     """creates overloads for simple rolling functions (e.g. sum)"""
 
     def overload_rolling_func(rolling):
-        data_args, on_arr = _gen_df_rolling_out_data(rolling)
-
-        header = "def impl(rolling):\n"
-        header += "  df = rolling.obj\n"
-        header += "  window = rolling.window\n"
-        header += "  center = rolling.center\n"
-        header += f"  on_arr = {on_arr}\n"
-        header += f"  func = '{fname}'\n"
-        return bodo.hiframes.dataframe_impl._gen_init_df(
-            header, rolling.selection, data_args
-        )
+        return _gen_rolling_impl(rolling, fname)
 
     return overload_rolling_func
 
@@ -210,9 +265,17 @@ def _gen_corr_cov_out_data(out_cols, df_cols, other_cols, window_type, func_name
     is_variable_win = not isinstance(window_type, types.Integer)
     on_arr = "None"
     if is_variable_win:
-        on_arr = "bodo.utils.conversion.index_to_array(bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df))"
+        on_arr = "bodo.utils.conversion.index_to_array(index)"
     on_arr_arg = "on_arr, " if is_variable_win else ""
     data_args = []
+
+    # Series case
+    if out_cols is None:
+        return (
+            f"bodo.hiframes.rolling.rolling_{func_name}(bodo.hiframes.pd_series_ext.get_series_data(df), bodo.hiframes.pd_series_ext.get_series_data(other), {on_arr_arg}window, center)",
+            on_arr,
+        )
+
     for c in out_cols:
         # non-common columns are just NaN values
         if c in df_cols and c in other_cols:
@@ -228,30 +291,12 @@ def _gen_corr_cov_out_data(out_cols, df_cols, other_cols, window_type, func_name
 
 @overload_method(RollingType, "corr", inline="always", no_unliteral=True)
 def overload_rolling_corr(rolling, other=None, pairwise=None):
-    out_cols = _get_corr_cov_out_cols(rolling, other, "corr")
-    data_args, on_arr = _gen_corr_cov_out_data(
-        out_cols, rolling.obj_type.columns, other.columns, rolling.window_type, "corr"
-    )
-    header = "def impl(rolling, other=None, pairwise=None):\n"
-    header += "  df = rolling.obj\n"
-    header += "  window = rolling.window\n"
-    header += "  center = rolling.center\n"
-    header += f"  on_arr = {on_arr}\n"
-    return bodo.hiframes.dataframe_impl._gen_init_df(header, out_cols, data_args)
+    return _gen_rolling_impl(rolling, "corr", other)
 
 
 @overload_method(RollingType, "cov", inline="always", no_unliteral=True)
 def overload_rolling_cov(rolling, other=None, pairwise=None, ddof=1):
-    out_cols = _get_corr_cov_out_cols(rolling, other, "cov")
-    data_args, on_arr = _gen_corr_cov_out_data(
-        out_cols, rolling.obj_type.columns, other.columns, rolling.window_type, "cov"
-    )
-    header = "def impl(rolling, other=None, pairwise=None, ddof=1):\n"
-    header += "  df = rolling.obj\n"
-    header += "  window = rolling.window\n"
-    header += "  center = rolling.center\n"
-    header += f"  on_arr = {on_arr}\n"
-    return bodo.hiframes.dataframe_impl._gen_init_df(header, out_cols, data_args)
+    return _gen_rolling_impl(rolling, "cov", other)
 
 
 @infer
@@ -271,66 +316,3 @@ class GetItemDataFrameRolling2(AbstractTemplate):
                 raise BodoError("invalid rolling selection {}".format(idx))
             ret_rolling = RollingType(rolling.df_type, rolling.on, selection, True)
             return signature(ret_rolling, *args)
-
-
-class SeriesRollingType(types.Type):
-    def __init__(self, stype):
-        self.stype = stype
-        name = "SeriesRollingType({})".format(stype)
-        super(SeriesRollingType, self).__init__(name)
-
-
-@infer_getattr
-class SeriesRollingAttribute(AttributeTemplate):
-    key = SeriesRollingType
-
-    @bound_function("rolling.apply", no_unliteral=True)
-    def resolve_apply(self, ary, args, kws):
-        # result is always float64 (see Pandas window.pyx:roll_generic)
-        return signature(
-            SeriesType(
-                types.float64, index=ary.stype.index, name_typ=ary.stype.name_typ
-            ),
-            *args,
-        )
-
-    @bound_function("rolling.cov", no_unliteral=True)
-    def resolve_cov(self, ary, args, kws):
-        return signature(
-            SeriesType(
-                types.float64, index=ary.stype.index, name_typ=ary.stype.name_typ
-            ),
-            *args,
-        )
-
-    @bound_function("rolling.corr", no_unliteral=True)
-    def resolve_corr(self, ary, args, kws):
-        return signature(
-            SeriesType(
-                types.float64, index=ary.stype.index, name_typ=ary.stype.name_typ
-            ),
-            *args,
-        )
-
-
-# similar to install_array_method in arraydecl.py
-def install_rolling_method(name):
-    def rolling_attribute_attachment(self, ary):
-        def rolling_generic(self, args, kws):
-            # output is always float64
-            return signature(
-                SeriesType(
-                    types.float64, index=ary.stype.index, name_typ=ary.stype.name_typ
-                ),
-                *args,
-            )
-
-        my_attr = {"key": "rolling." + name, "generic": rolling_generic}
-        temp_class = type("Rolling_" + name, (AbstractTemplate,), my_attr)
-        return types.BoundFunction(temp_class, ary)
-
-    setattr(SeriesRollingAttribute, "resolve_" + name, rolling_attribute_attachment)
-
-
-for fname in supported_rolling_funcs:
-    install_rolling_method(fname)
