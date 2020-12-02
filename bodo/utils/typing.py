@@ -797,10 +797,12 @@ def get_literal_value(t):
         return t
 
 
-def can_literalize_type(t):
+def can_literalize_type(t, pyobject_to_literal=False):
     """return True if type 't' can have literal values"""
-    return t in (bodo.string_type, types.bool_) or isinstance(
-        t, (types.Integer, types.List, types.SliceType)
+    return (
+        t in (bodo.string_type, types.bool_)
+        or isinstance(t, (types.Integer, types.List, types.SliceType))
+        or (pyobject_to_literal and t == types.pyobject)
     )
 
 
