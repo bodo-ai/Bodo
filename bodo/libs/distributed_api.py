@@ -1,7 +1,6 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 import atexit
 import datetime
-import math
 import operator
 import sys
 import time
@@ -26,18 +25,9 @@ from bodo.hiframes.datetime_date_ext import datetime_date_array_type
 from bodo.hiframes.datetime_timedelta_ext import datetime_timedelta_array_type
 from bodo.hiframes.pd_categorical_ext import CategoricalArray
 from bodo.libs import hdist
-from bodo.libs.array_item_arr_ext import (
-    ArrayItemArrayType,
-    np_offset_type,
-    offset_type,
-    pre_alloc_array_item_array,
-)
+from bodo.libs.array_item_arr_ext import ArrayItemArrayType, np_offset_type
 from bodo.libs.bool_arr_ext import boolean_array
-from bodo.libs.decimal_arr_ext import (
-    Decimal128Type,
-    DecimalArrayType,
-    int128_type,
-)
+from bodo.libs.decimal_arr_ext import Decimal128Type, DecimalArrayType
 from bodo.libs.int_arr_ext import IntegerArrayType, set_bit_to_arr
 from bodo.libs.map_arr_ext import MapArrayType
 from bodo.libs.str_arr_ext import (
@@ -47,11 +37,9 @@ from bodo.libs.str_arr_ext import (
     get_data_ptr,
     get_null_bitmap_ptr,
     get_offset_ptr,
-    getitem_str_bitmap,
     num_total_chars,
     pre_alloc_string_array,
     set_bit_to,
-    setitem_str_bitmap,
     string_array_type,
 )
 from bodo.libs.struct_arr_ext import StructArrayType
@@ -59,11 +47,9 @@ from bodo.libs.tuple_arr_ext import TupleArrayType
 from bodo.utils.typing import BodoError, is_overload_false, is_overload_none
 from bodo.utils.utils import (
     CTypeEnum,
-    debug_prints,
     empty_like_type,
     numba_to_c_type,
     tuple_to_scalar,
-    unliteral_all,
 )
 
 ll.add_symbol("dist_get_time", hdist.dist_get_time)
@@ -927,7 +913,9 @@ def gatherv(data, allgather=False, warn_if_rep=True, root=MPI_ROOT):
         return impl_tuple
 
     if data is types.none:
-        return lambda data: None
+        return (
+            lambda data, allgather=False, warn_if_rep=True, root=MPI_ROOT: None
+        )  # pragma: no cover
 
     raise BodoError("gatherv() not available for {}".format(data))  # pragma: no cover
 
