@@ -105,6 +105,9 @@ def test_apply_raw_false(memory_leak_check):
     def impl1(df):
         return df.rolling(2)["B"].apply(lambda a: a.idxmin())
 
+    def impl2(df):
+        return df.rolling("2s", on="C").apply(lambda a: a.idxmin())
+
     df = pd.DataFrame(
         {
             "A": [5, 12, 21, 3.2, 3],
@@ -120,6 +123,7 @@ def test_apply_raw_false(memory_leak_check):
         index=[3, 1, 5, 11, 3],
     )
     check_func(impl1, (df,))
+    check_func(impl2, (df,))
 
 
 @bodo.jit(distributed=False)

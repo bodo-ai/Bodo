@@ -938,7 +938,13 @@ class DistributedAnalysis:
             new_dist = self._meet_array_dists(
                 lhs, rhs.args[1].name, array_dists, new_dist
             )
+            # index array is passed for apply(raw=False) case
+            if self.typemap[rhs.args[2].name] != types.none:
+                new_dist = self._meet_array_dists(
+                    lhs, rhs.args[2].name, array_dists, new_dist
+                )
             array_dists[rhs.args[0].name] = new_dist
+            array_dists[rhs.args[1].name] = new_dist
             return
 
         if fdef == ("shift", "bodo.hiframes.rolling"):

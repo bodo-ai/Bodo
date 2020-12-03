@@ -109,13 +109,15 @@ def overload_rolling_fixed(
 
 
 @overload(rolling_variable, no_unliteral=True)
-def overload_rolling_variable(a, o, w, c, p, fname):
-
+def overload_rolling_variable(
+    arr, on_arr, index_arr, win, center, fname, raw=True, parallel=False
+):
+    assert is_overload_constant_bool(raw)
     # UDF case
     if is_const_func_type(fname):
         func = _get_apply_func(fname)
-        return lambda a, o, w, c, p, fname: roll_variable_apply(
-            a, o, w, c, p, func
+        return lambda arr, on_arr, index_arr, win, center, fname, raw=True, parallel=False: roll_variable_apply(
+            arr, on_arr, index_arr, win, center, parallel, func, raw
         )  # pragma: no cover
 
     assert is_overload_constant_str(fname)
@@ -137,13 +139,21 @@ def overload_rolling_variable(a, o, w, c, p, fname):
         exec(func_text, {"np": np, "dropna": _dropna}, loc_vars)
         kernel_func = numba.njit(loc_vars["kernel_func"])
 
-        return lambda a, o, w, c, p, fname: roll_variable_apply(
-            a, o, w, c, p, kernel_func
+        return lambda arr, on_arr, index_arr, win, center, fname, raw=True, parallel=False: roll_variable_apply(
+            arr, on_arr, index_arr, win, center, parallel, kernel_func
         )  # pragma: no cover
 
     init_kernel, add_kernel, remove_kernel, calc_kernel = linear_kernels[func_name]
-    return lambda a, o, w, c, p, fname: roll_var_linear_generic(
-        a, o, w, c, p, init_kernel, add_kernel, remove_kernel, calc_kernel
+    return lambda arr, on_arr, index_arr, win, center, fname, raw=True, parallel=False: roll_var_linear_generic(
+        arr,
+        on_arr,
+        win,
+        center,
+        parallel,
+        init_kernel,
+        add_kernel,
+        remove_kernel,
+        calc_kernel,
     )  # pragma: no cover
 
 
@@ -782,9 +792,22 @@ def roll_var_linear_generic_seq(
     return output
 
 
-@register_jitable
 def roll_variable_apply(
-    in_arr, on_arr_dt, win, center, parallel, kernel_func
+    in_arr, on_arr_dt, index_arr, win, center, parallel, kernel_func, raw=True
+):  # pragma: no cover
+    pass
+
+
+@overload(roll_variable_apply, no_unliteral=True)
+def overload_roll_variable_apply(
+    in_arr, on_arr_dt, index_arr, win, center, parallel, kernel_func, raw=True
+):
+    assert is_overload_constant_bool(raw)
+    return roll_variable_apply_impl
+
+
+def roll_variable_apply_impl(
+    in_arr, on_arr_dt, index_arr, win, center, parallel, kernel_func, raw=True
 ):  # pragma: no cover
     win = offset_to_nanos(win)
     rank = bodo.libs.distributed_api.get_rank()
@@ -800,7 +823,7 @@ def roll_variable_apply(
     if parallel:
         if _is_small_for_parallel_variable(on_arr, win):
             return _handle_small_data_variable_apply(
-                in_arr, on_arr, win, rank, n_pes, kernel_func
+                in_arr, on_arr, index_arr, win, rank, n_pes, kernel_func, raw
             )
 
         comm_data = _border_icomm_var(in_arr, on_arr, rank, n_pes, win, in_arr.dtype)
@@ -812,18 +835,40 @@ def roll_variable_apply(
             l_recv_req,
             l_recv_t_req,
         ) = comm_data
+        if raw == False:
+            comm_data_idx = _border_icomm_var(
+                index_arr, on_arr, rank, n_pes, win, index_arr.dtype
+            )
+            (
+                l_recv_buff_idx,
+                l_recv_t_buff_idx,
+                r_send_req_idx,
+                r_send_t_req_idx,
+                l_recv_req_idx,
+                l_recv_t_req_idx,
+            ) = comm_data_idx
 
     start, end = _build_indexer(on_arr, N, win, left_closed, right_closed)
-    output = roll_variable_apply_seq(in_arr, on_arr, win, start, end, kernel_func)
+    output = roll_variable_apply_seq(
+        in_arr, on_arr, index_arr, win, start, end, kernel_func, raw
+    )
 
     if parallel:
         _border_send_wait(r_send_req, r_send_req, rank, n_pes, True, False)
         _border_send_wait(r_send_t_req, r_send_t_req, rank, n_pes, True, False)
+        if raw == False:
+            _border_send_wait(r_send_req_idx, r_send_req_idx, rank, n_pes, True, False)
+            _border_send_wait(
+                r_send_t_req_idx, r_send_t_req_idx, rank, n_pes, True, False
+            )
 
         # recv left
         if rank != 0:
             bodo.libs.distributed_api.wait(l_recv_req, True)
             bodo.libs.distributed_api.wait(l_recv_t_req, True)
+            if raw == False:
+                bodo.libs.distributed_api.wait(l_recv_req_idx, True)
+                bodo.libs.distributed_api.wait(l_recv_t_req_idx, True)
 
             # values with start == 0 could potentially have left halo starts
             num_zero_starts = 0
@@ -838,6 +883,65 @@ def roll_variable_apply(
             recv_starts = _get_var_recv_starts(
                 on_arr, l_recv_t_buff, num_zero_starts, win
             )
+            recv_left_var_compute(
+                output,
+                in_arr,
+                index_arr,
+                num_zero_starts,
+                recv_starts,
+                l_recv_buff,
+                l_recv_buff_idx,
+                minp,
+                kernel_func,
+                raw,
+            )
+
+    return output
+
+
+def recv_left_var_compute(
+    output,
+    in_arr,
+    index_arr,
+    num_zero_starts,
+    recv_starts,
+    l_recv_buff,
+    l_recv_buff_idx,
+    minp,
+    kernel_func,
+    raw,
+):  # pragma: no cover
+    pass
+
+
+@overload(recv_left_var_compute)
+def overload_recv_left_var_compute(
+    output,
+    in_arr,
+    index_arr,
+    num_zero_starts,
+    recv_starts,
+    l_recv_buff,
+    l_recv_buff_idx,
+    minp,
+    kernel_func,
+    raw,
+):
+    assert is_overload_constant_bool(raw)
+    if is_overload_true(raw):
+
+        def impl(
+            output,
+            in_arr,
+            index_arr,
+            num_zero_starts,
+            recv_starts,
+            l_recv_buff,
+            l_recv_buff_idx,
+            minp,
+            kernel_func,
+            raw,
+        ):  # pragma: no cover
             for i in range(0, num_zero_starts):
                 halo_ind = recv_starts[i]
                 sub_arr = np.concatenate((l_recv_buff[halo_ind:], in_arr[: i + 1]))
@@ -846,12 +950,53 @@ def roll_variable_apply(
                 else:
                     output[i] = np.nan
 
-    return output
+        return impl
+
+    def impl_series(
+        output,
+        in_arr,
+        index_arr,
+        num_zero_starts,
+        recv_starts,
+        l_recv_buff,
+        l_recv_buff_idx,
+        minp,
+        kernel_func,
+        raw,
+    ):  # pragma: no cover
+        for i in range(0, num_zero_starts):
+            halo_ind = recv_starts[i]
+            sub_arr = np.concatenate((l_recv_buff[halo_ind:], in_arr[: i + 1]))
+            sub_idx_arr = np.concatenate(
+                (l_recv_buff_idx[halo_ind:], index_arr[: i + 1])
+            )
+            if len(sub_arr) >= minp:
+                output[i] = kernel_func(pd.Series(sub_arr, sub_idx_arr))
+            else:
+                output[i] = np.nan
+
+    return impl_series
 
 
-@register_jitable
 def roll_variable_apply_seq(
-    in_arr, on_arr, win, start, end, kernel_func
+    in_arr, on_arr, index_arr, win, start, end, kernel_func, raw
+):  # pragma: no cover
+    pass
+
+
+@overload(roll_variable_apply_seq)
+def overload_roll_variable_apply_seq(
+    in_arr, on_arr, index_arr, win, start, end, kernel_func, raw
+):
+    assert is_overload_constant_bool(raw)
+    if is_overload_true(raw):
+        return roll_variable_apply_seq_impl
+
+    return roll_variable_apply_seq_impl_series
+
+
+def roll_variable_apply_seq_impl(
+    in_arr, on_arr, index_arr, win, start, end, kernel_func, raw
 ):  # pragma: no cover
     # TODO
     N = len(in_arr)
@@ -864,6 +1009,27 @@ def roll_variable_apply_seq(
         e = end[i]
         if e - s >= minp:
             output[i] = kernel_func(in_arr[s:e])
+        else:
+            output[i] = np.nan
+
+    return output
+
+
+# TODO(ehsan): avoid code duplication
+def roll_variable_apply_seq_impl_series(
+    in_arr, on_arr, index_arr, win, start, end, kernel_func, raw
+):  # pragma: no cover
+    # TODO
+    N = len(in_arr)
+    minp = 1
+    output = np.empty(N, dtype=np.float64)
+
+    # TODO: handle count and minp
+    for i in range(0, N):
+        s = start[i]
+        e = end[i]
+        if e - s >= minp:
+            output[i] = kernel_func(pd.Series(in_arr[s:e], index_arr[s:e]))
         else:
             output[i] = np.nan
 
@@ -1576,12 +1742,14 @@ def lower_cast_dt64_arr_to_int(context, builder, sig, args):
 def _is_small_for_parallel_variable(on_arr, win_size):  # pragma: no cover
     # assume small if current processor's whole range is smaller than win_size
     if len(on_arr) < 2:
-        return True
-    start = on_arr[0]
-    end = on_arr[-1]
-    pe_range = end - start
+        is_small = 1
+    else:
+        start = on_arr[0]
+        end = on_arr[-1]
+        pe_range = end - start
+        is_small = int(pe_range <= win_size)
     num_small = bodo.libs.distributed_api.dist_reduce(
-        int(pe_range <= win_size), np.int32(Reduce_Type.Sum.value)
+        is_small, np.int32(Reduce_Type.Sum.value)
     )
     return num_small != 0
 
@@ -1620,16 +1788,17 @@ def _handle_small_data_variable(
 
 @register_jitable
 def _handle_small_data_variable_apply(
-    in_arr, on_arr, win, rank, n_pes, kernel_func
+    in_arr, on_arr, index_arr, win, rank, n_pes, kernel_func, raw
 ):  # pragma: no cover
     N = len(in_arr)
     all_N = bodo.libs.distributed_api.dist_reduce(N, np.int32(Reduce_Type.Sum.value))
     all_in_arr = bodo.libs.distributed_api.gatherv(in_arr)
     all_on_arr = bodo.libs.distributed_api.gatherv(on_arr)
+    all_index_arr = bodo.libs.distributed_api.gatherv(index_arr)
     if rank == 0:
         start, end = _build_indexer(all_on_arr, all_N, win, False, True)
         all_out = roll_variable_apply_seq(
-            all_in_arr, all_on_arr, win, start, end, kernel_func
+            all_in_arr, all_on_arr, all_index_arr, win, start, end, kernel_func, raw
         )
     else:
         all_out = np.empty(all_N, np.float64)
