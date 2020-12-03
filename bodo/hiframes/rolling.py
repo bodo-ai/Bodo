@@ -322,7 +322,7 @@ def roll_fixed_apply_impl(
         halo_size = np.int32(win // 2) if center else np.int32(win - 1)
         if _is_small_for_parallel(N, halo_size):
             return _handle_small_data_apply(
-                in_arr, index_arr, win, center, rank, n_pes, kernel_func, raw
+                in_arr, index_arr, win, minp, center, rank, n_pes, kernel_func, raw
             )
 
         comm_data = _border_icomm(
@@ -350,7 +350,9 @@ def roll_fixed_apply_impl(
                 r_recv_req_idx,
             ) = comm_data_idx
 
-    output = roll_fixed_apply_seq(in_arr, index_arr, win, center, kernel_func, raw)
+    output = roll_fixed_apply_seq(
+        in_arr, index_arr, win, minp, center, kernel_func, raw
+    )
 
     if parallel:
         _border_send_wait(r_send_req, l_send_req, rank, n_pes, True, center)
@@ -369,6 +371,7 @@ def roll_fixed_apply_impl(
                 index_arr,
                 N,
                 win,
+                minp,
                 offset,
                 r_recv_buff,
                 r_recv_buff_idx,
@@ -387,6 +390,7 @@ def roll_fixed_apply_impl(
                 in_arr,
                 index_arr,
                 win,
+                minp,
                 offset,
                 l_recv_buff,
                 l_recv_buff_idx,
@@ -403,6 +407,7 @@ def recv_right_compute(
     index_arr,
     N,
     win,
+    minp,
     offset,
     r_recv_buff,
     r_recv_buff_idx,
@@ -419,6 +424,7 @@ def overload_recv_right_compute(
     index_arr,
     N,
     win,
+    minp,
     offset,
     r_recv_buff,
     r_recv_buff_idx,
@@ -434,6 +440,7 @@ def overload_recv_right_compute(
             index_arr,
             N,
             win,
+            minp,
             offset,
             r_recv_buff,
             r_recv_buff_idx,
@@ -443,7 +450,11 @@ def overload_recv_right_compute(
             border_data = np.concatenate((in_arr[N - win + 1 :], r_recv_buff))
             ind = 0
             for i in range(max(N - offset, 0), N):
-                output[i] = kernel_func(border_data[ind : ind + win])
+                data = border_data[ind : ind + win]
+                if win - np.isnan(data).sum() < minp:
+                    output[i] = np.nan
+                else:
+                    output[i] = kernel_func(data)
                 ind += 1
 
         return impl
@@ -454,6 +465,7 @@ def overload_recv_right_compute(
         index_arr,
         N,
         win,
+        minp,
         offset,
         r_recv_buff,
         r_recv_buff_idx,
@@ -464,11 +476,13 @@ def overload_recv_right_compute(
         border_data_idx = np.concatenate((index_arr[N - win + 1 :], r_recv_buff_idx))
         ind = 0
         for i in range(max(N - offset, 0), N):
-            output[i] = kernel_func(
-                pd.Series(
-                    border_data[ind : ind + win], border_data_idx[ind : ind + win]
+            data = border_data[ind : ind + win]
+            if win - np.isnan(data).sum() < minp:
+                output[i] = np.nan
+            else:
+                output[i] = kernel_func(
+                    pd.Series(data, border_data_idx[ind : ind + win])
                 )
-            )
             ind += 1
 
     return impl_series
@@ -479,6 +493,7 @@ def recv_left_compute(
     in_arr,
     index_arr,
     win,
+    minp,
     offset,
     l_recv_buff,
     l_recv_buff_idx,
@@ -494,6 +509,7 @@ def overload_recv_left_compute(
     in_arr,
     index_arr,
     win,
+    minp,
     offset,
     l_recv_buff,
     l_recv_buff_idx,
@@ -508,6 +524,7 @@ def overload_recv_left_compute(
             in_arr,
             index_arr,
             win,
+            minp,
             offset,
             l_recv_buff,
             l_recv_buff_idx,
@@ -516,7 +533,11 @@ def overload_recv_left_compute(
         ):
             border_data = np.concatenate((l_recv_buff, in_arr[: win - 1]))
             for i in range(0, win - offset - 1):
-                output[i] = kernel_func(border_data[i : i + win])
+                data = border_data[i : i + win]
+                if win - np.isnan(data).sum() < minp:
+                    output[i] = np.nan
+                else:
+                    output[i] = kernel_func(data)
 
         return impl
 
@@ -525,6 +546,7 @@ def overload_recv_left_compute(
         in_arr,
         index_arr,
         win,
+        minp,
         offset,
         l_recv_buff,
         l_recv_buff_idx,
@@ -534,65 +556,73 @@ def overload_recv_left_compute(
         border_data = np.concatenate((l_recv_buff, in_arr[: win - 1]))
         border_data_idx = np.concatenate((l_recv_buff_idx, index_arr[: win - 1]))
         for i in range(0, win - offset - 1):
-            output[i] = kernel_func(
-                pd.Series(border_data[i : i + win], border_data_idx[i : i + win])
-            )
+            data = border_data[i : i + win]
+            if win - np.isnan(data).sum() < minp:
+                output[i] = np.nan
+            else:
+                output[i] = kernel_func(pd.Series(data, border_data_idx[i : i + win]))
 
     return impl_series
 
 
 def roll_fixed_apply_seq_compute(
-    output, N, win, offset, in_arr, index_arr, kernel_func, raw=True
+    output, N, win, minp, offset, in_arr, index_arr, kernel_func, raw=True
 ):
     pass
 
 
 @overload(roll_fixed_apply_seq_compute, no_unliteral=True)
 def overload_roll_fixed_apply_seq_compute(
-    output, N, win, offset, in_arr, index_arr, kernel_func, raw=True
+    output, N, win, minp, offset, in_arr, index_arr, kernel_func, raw=True
 ):
     assert is_overload_constant_bool(raw)
     if is_overload_true(raw):
 
         def impl(
-            output, N, win, offset, in_arr, index_arr, kernel_func, raw=True
+            output, N, win, minp, offset, in_arr, index_arr, kernel_func, raw=True
         ):  # pragma: no cover
             ind = 0
             for i in range(win - 1 - offset, N - offset):
-                output[i] = kernel_func(in_arr[ind : ind + win])
+                data = in_arr[ind : ind + win]
+                if win - np.isnan(data).sum() < minp:
+                    output[i] = np.nan
+                else:
+                    output[i] = kernel_func(data)
                 ind += 1
 
         return impl
 
     def impl_series(
-        output, N, win, offset, in_arr, index_arr, kernel_func, raw=True
+        output, N, win, minp, offset, in_arr, index_arr, kernel_func, raw=True
     ):  # pragma: no cover
         ind = 0
         for i in range(win - 1 - offset, N - offset):
-            output[i] = kernel_func(
-                pd.Series(in_arr[ind : ind + win], index_arr[ind : ind + win])
-            )
+            data = in_arr[ind : ind + win]
+            if win - np.isnan(data).sum() < minp:
+                output[i] = np.nan
+            else:
+                output[i] = kernel_func(pd.Series(data, index_arr[ind : ind + win]))
             ind += 1
 
     return impl_series
 
 
 def roll_fixed_apply_seq(
-    in_arr, index_arr, win, center, kernel_func, raw=True
+    in_arr, index_arr, win, minp, center, kernel_func, raw=True
 ):  # pragma: no cover
     pass
 
 
 @overload(roll_fixed_apply_seq, no_unliteral=True)
 def overload_roll_fixed_apply_seq(
-    in_arr, index_arr, win, center, kernel_func, raw=True
+    in_arr, index_arr, win, minp, center, kernel_func, raw=True
 ):
     assert is_overload_constant_bool(raw)
     return roll_fixed_apply_seq_impl
 
 
 def roll_fixed_apply_seq_impl(
-    in_arr, index_arr, win, center, kernel_func, raw=True
+    in_arr, index_arr, win, minp, center, kernel_func, raw=True
 ):  # pragma: no cover
     N = len(in_arr)
     output = np.empty(N, dtype=np.float64)
@@ -604,7 +634,7 @@ def roll_fixed_apply_seq_impl(
         output[i] = np.nan
 
     roll_fixed_apply_seq_compute(
-        output, N, win, offset, in_arr, index_arr, kernel_func, raw
+        output, N, win, minp, offset, in_arr, index_arr, kernel_func, raw
     )
 
     for i in range(max(N - offset, 0), N):
@@ -1671,7 +1701,7 @@ def _handle_small_data(
 
 @register_jitable
 def _handle_small_data_apply(
-    in_arr, index_arr, win, center, rank, n_pes, kernel_func, raw=True
+    in_arr, index_arr, win, minp, center, rank, n_pes, kernel_func, raw=True
 ):  # pragma: no cover
     N = len(in_arr)
     all_N = bodo.libs.distributed_api.dist_reduce(
@@ -1681,7 +1711,7 @@ def _handle_small_data_apply(
     all_index_arr = bodo.libs.distributed_api.gatherv(index_arr)
     if rank == 0:
         all_out = roll_fixed_apply_seq(
-            all_in_arr, all_index_arr, win, center, kernel_func, raw
+            all_in_arr, all_index_arr, win, minp, center, kernel_func, raw
         )
     else:
         all_out = np.empty(all_N, np.float64)
