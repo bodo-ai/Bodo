@@ -19,6 +19,7 @@ from bodo.utils.typing import (
     is_const_func_type,
     is_overload_constant_bool,
     is_overload_constant_str,
+    is_overload_none,
     is_overload_true,
 )
 from bodo.utils.utils import unliteral_all
@@ -312,6 +313,9 @@ def roll_fixed_apply_impl(
     # TODO: support minp arg end_range etc.
     minp = win
     offset = (win - 1) // 2 if center else 0
+    # replace index_arr=None argument (passed when index_arr is not needed) with dummy
+    # array to avoid errors
+    index_arr = fix_index_arr(index_arr)
 
     if parallel:
         # halo length is w/2 to handle even w such as w=4
@@ -609,6 +613,18 @@ def roll_fixed_apply_seq_impl(
     return output
 
 
+def fix_index_arr(A):  # pragma: no cover
+    return A
+
+
+@overload(fix_index_arr)
+def overload_fix_index_arr(A):
+    """return dummy array if A is None, else A"""
+    if is_overload_none(A):
+        return lambda A: np.zeros(3)  # pragma: no cover
+    return lambda A: A  # pragma: no cover
+
+
 # -----------------------------
 # variable window
 
@@ -813,6 +829,9 @@ def roll_variable_apply_impl(
     rank = bodo.libs.distributed_api.get_rank()
     n_pes = bodo.libs.distributed_api.get_size()
     on_arr = cast_dt64_arr_to_int(on_arr_dt)
+    # replace index_arr=None argument (passed when index_arr is not needed) with dummy
+    # array to avoid errors
+    index_arr = fix_index_arr(index_arr)
     N = len(in_arr)
     # TODO: support minp arg end_range etc.
     minp = 1
