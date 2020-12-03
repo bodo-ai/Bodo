@@ -99,6 +99,29 @@ def test_column_select(memory_leak_check):
     check_func(impl4, (df,))
 
 
+def test_apply_raw_false(memory_leak_check):
+    """make sure raw=False argument of apply() works (which is the default)"""
+
+    def impl1(df):
+        return df.rolling(2)["B"].apply(lambda a: a.idxmin())
+
+    df = pd.DataFrame(
+        {
+            "A": [5, 12, 21, 3.2, 3],
+            "B": [0, 1, 2, 1.9, 4],
+            "C": [
+                pd.Timestamp("20130101 09:00:00"),
+                pd.Timestamp("20130101 09:00:02"),
+                pd.Timestamp("20130101 09:00:03"),
+                pd.Timestamp("20130101 09:00:05"),
+                pd.Timestamp("20130101 09:00:06"),
+            ],
+        },
+        index=[3, 1, 5, 11, 3],
+    )
+    check_func(impl1, (df,))
+
+
 @bodo.jit(distributed=False)
 def g(a):
     return a.sum()

@@ -17,15 +17,12 @@ from numba.core import ir, ir_utils, types
 from numba.core.ir_utils import (
     GuardException,
     build_definitions,
-    compile_to_numba_ir,
     find_build_sequence,
     find_callname,
     find_const,
     find_topo_order,
     get_definition,
     guard,
-    mk_unique_var,
-    replace_arg_nodes,
     require,
 )
 from numba.parfors.parfor import (
@@ -64,7 +61,6 @@ from bodo.utils.utils import (
     is_expr,
     is_np_array_typ,
     is_slice_equiv_arr,
-    is_static_getsetitem,
     is_whole_slice,
 )
 
@@ -666,9 +662,7 @@ class DistributedAnalysis:
                 arg1 = rhs.args[1].name
                 self._meet_array_dists(arg0, arg1, array_dists)
                 if array_dists[arg0] == Distribution.REP:
-                    raise BodoError(
-                        f"Arguments of xgboost.fit are not distributed"
-                    )
+                    raise BodoError(f"Arguments of xgboost.fit are not distributed")
             elif func_name == "predict":
                 # match input and output distributions
                 self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
@@ -932,6 +926,10 @@ class DistributedAnalysis:
 
         if fdef == ("rolling_fixed", "bodo.hiframes.rolling"):
             self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            # index array is passed for apply(raw=False) case
+            if self.typemap[rhs.args[1].name] != types.none:
+                self._meet_array_dists(lhs, rhs.args[1].name, array_dists)
+                self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
             return
 
         if fdef == ("rolling_variable", "bodo.hiframes.rolling"):

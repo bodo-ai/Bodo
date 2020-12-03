@@ -17,7 +17,9 @@ from bodo.utils.typing import (
     get_overload_const_func,
     get_overload_const_str,
     is_const_func_type,
+    is_overload_constant_bool,
     is_overload_constant_str,
+    is_overload_true,
 )
 from bodo.utils.utils import unliteral_all
 
@@ -69,13 +71,15 @@ def lower_rolling_corr_dummy(context, builder, sig, args):
 
 
 @overload(rolling_fixed, no_unliteral=True)
-def overload_rolling_fixed(a, w, c, p, fname):
-
+def overload_rolling_fixed(
+    arr, index_arr, win, center, fname, raw=True, parallel=False
+):
+    assert is_overload_constant_bool(raw)
     # UDF case
     if is_const_func_type(fname):
         func = _get_apply_func(fname)
-        return lambda a, w, c, p, fname: roll_fixed_apply(
-            a, w, c, p, func
+        return lambda arr, index_arr, win, center, fname, raw=True, parallel=False: roll_fixed_apply(
+            arr, index_arr, win, center, parallel, func, raw
         )  # pragma: no cover
 
     assert is_overload_constant_str(fname)
@@ -94,13 +98,13 @@ def overload_rolling_fixed(a, w, c, p, fname):
         exec(func_text, {"np": np}, loc_vars)
         kernel_func = numba.njit(loc_vars["kernel_func"])
 
-        return lambda a, w, c, p, fname: roll_fixed_apply(
-            a, w, c, p, kernel_func
+        return lambda arr, index_arr, win, center, fname, raw=True, parallel=False: roll_fixed_apply(
+            arr, index_arr, win, center, parallel, kernel_func
         )  # pragma: no cover
 
     init_kernel, add_kernel, remove_kernel, calc_kernel = linear_kernels[func_name]
-    return lambda a, w, c, p, fname: roll_fixed_linear_generic(
-        a, w, c, p, init_kernel, add_kernel, remove_kernel, calc_kernel
+    return lambda arr, index_arr, win, center, fname, raw=True, parallel=False: roll_fixed_linear_generic(
+        arr, win, center, parallel, init_kernel, add_kernel, remove_kernel, calc_kernel
     )  # pragma: no cover
 
 
@@ -275,8 +279,23 @@ def roll_fixed_linear_generic_seq(
     return output, border_data
 
 
-@register_jitable
-def roll_fixed_apply(in_arr, win, center, parallel, kernel_func):  # pragma: no cover
+def roll_fixed_apply(
+    in_arr, index_arr, win, center, parallel, kernel_func, raw=True
+):  # pragma: no cover
+    pass
+
+
+@overload(roll_fixed_apply, no_unliteral=True)
+def overload_roll_fixed_apply(
+    in_arr, index_arr, win, center, parallel, kernel_func, raw=True
+):
+    assert is_overload_constant_bool(raw)
+    return roll_fixed_apply_impl
+
+
+def roll_fixed_apply_impl(
+    in_arr, index_arr, win, center, parallel, kernel_func, raw=True
+):  # pragma: no cover
     rank = bodo.libs.distributed_api.get_rank()
     n_pes = bodo.libs.distributed_api.get_size()
     N = len(in_arr)
@@ -289,7 +308,7 @@ def roll_fixed_apply(in_arr, win, center, parallel, kernel_func):  # pragma: no 
         halo_size = np.int32(win // 2) if center else np.int32(win - 1)
         if _is_small_for_parallel(N, halo_size):
             return _handle_small_data_apply(
-                in_arr, win, center, rank, n_pes, kernel_func
+                in_arr, index_arr, win, center, rank, n_pes, kernel_func, raw
             )
 
         comm_data = _border_icomm(
@@ -304,46 +323,276 @@ def roll_fixed_apply(in_arr, win, center, parallel, kernel_func):  # pragma: no 
             r_recv_req,
         ) = comm_data
 
-    output = roll_fixed_apply_seq(in_arr, win, center, kernel_func)
+        if raw == False:
+            comm_data_idx = _border_icomm(
+                index_arr, rank, n_pes, halo_size, index_arr.dtype, True, center
+            )
+            (
+                l_recv_buff_idx,
+                r_recv_buff_idx,
+                l_send_req_idx,
+                r_send_req_idx,
+                l_recv_req_idx,
+                r_recv_req_idx,
+            ) = comm_data_idx
+
+    output = roll_fixed_apply_seq(in_arr, index_arr, win, center, kernel_func, raw)
 
     if parallel:
         _border_send_wait(r_send_req, l_send_req, rank, n_pes, True, center)
+        if raw == False:
+            _border_send_wait(r_send_req_idx, l_send_req_idx, rank, n_pes, True, center)
 
         # recv right
         if center and rank != n_pes - 1:
             bodo.libs.distributed_api.wait(r_recv_req, True)
+            if raw == False:
+                bodo.libs.distributed_api.wait(r_recv_req_idx, True)
+
+            recv_right_compute(
+                output,
+                in_arr,
+                index_arr,
+                N,
+                win,
+                offset,
+                r_recv_buff,
+                r_recv_buff_idx,
+                kernel_func,
+                raw,
+            )
+
+        # recv left
+        if rank != 0:
+            bodo.libs.distributed_api.wait(l_recv_req, True)
+            if raw == False:
+                bodo.libs.distributed_api.wait(l_recv_req_idx, True)
+
+            recv_left_compute(
+                output,
+                in_arr,
+                index_arr,
+                win,
+                offset,
+                l_recv_buff,
+                l_recv_buff_idx,
+                kernel_func,
+                raw,
+            )
+
+    return output
+
+
+def recv_right_compute(
+    output,
+    in_arr,
+    index_arr,
+    N,
+    win,
+    offset,
+    r_recv_buff,
+    r_recv_buff_idx,
+    kernel_func,
+    raw,
+):
+    pass
+
+
+@overload(recv_right_compute, no_unliteral=True)
+def overload_recv_right_compute(
+    output,
+    in_arr,
+    index_arr,
+    N,
+    win,
+    offset,
+    r_recv_buff,
+    r_recv_buff_idx,
+    kernel_func,
+    raw,
+):
+    assert is_overload_constant_bool(raw)
+    if is_overload_true(raw):
+
+        def impl(
+            output,
+            in_arr,
+            index_arr,
+            N,
+            win,
+            offset,
+            r_recv_buff,
+            r_recv_buff_idx,
+            kernel_func,
+            raw,
+        ):
             border_data = np.concatenate((in_arr[N - win + 1 :], r_recv_buff))
             ind = 0
             for i in range(max(N - offset, 0), N):
                 output[i] = kernel_func(border_data[ind : ind + win])
                 ind += 1
 
-        # recv left
-        if rank != 0:
-            bodo.libs.distributed_api.wait(l_recv_req, True)
+        return impl
+
+    def impl_series(
+        output,
+        in_arr,
+        index_arr,
+        N,
+        win,
+        offset,
+        r_recv_buff,
+        r_recv_buff_idx,
+        kernel_func,
+        raw,
+    ):
+        border_data = np.concatenate((in_arr[N - win + 1 :], r_recv_buff))
+        border_data_idx = np.concatenate((index_arr[N - win + 1 :], r_recv_buff_idx))
+        ind = 0
+        for i in range(max(N - offset, 0), N):
+            output[i] = kernel_func(
+                pd.Series(
+                    border_data[ind : ind + win], border_data_idx[ind : ind + win]
+                )
+            )
+            ind += 1
+
+    return impl_series
+
+
+def recv_left_compute(
+    output,
+    in_arr,
+    index_arr,
+    win,
+    offset,
+    l_recv_buff,
+    l_recv_buff_idx,
+    kernel_func,
+    raw,
+):
+    pass
+
+
+@overload(recv_left_compute, no_unliteral=True)
+def overload_recv_left_compute(
+    output,
+    in_arr,
+    index_arr,
+    win,
+    offset,
+    l_recv_buff,
+    l_recv_buff_idx,
+    kernel_func,
+    raw,
+):
+    assert is_overload_constant_bool(raw)
+    if is_overload_true(raw):
+
+        def impl(
+            output,
+            in_arr,
+            index_arr,
+            win,
+            offset,
+            l_recv_buff,
+            l_recv_buff_idx,
+            kernel_func,
+            raw,
+        ):
             border_data = np.concatenate((l_recv_buff, in_arr[: win - 1]))
             for i in range(0, win - offset - 1):
                 output[i] = kernel_func(border_data[i : i + win])
 
-    return output
+        return impl
+
+    def impl_series(
+        output,
+        in_arr,
+        index_arr,
+        win,
+        offset,
+        l_recv_buff,
+        l_recv_buff_idx,
+        kernel_func,
+        raw,
+    ):
+        border_data = np.concatenate((l_recv_buff, in_arr[: win - 1]))
+        border_data_idx = np.concatenate((l_recv_buff_idx, index_arr[: win - 1]))
+        for i in range(0, win - offset - 1):
+            output[i] = kernel_func(
+                pd.Series(border_data[i : i + win], border_data_idx[i : i + win])
+            )
+
+    return impl_series
 
 
-@register_jitable
-def roll_fixed_apply_seq(in_arr, win, center, kernel_func):  # pragma: no cover
-    # TODO
+def roll_fixed_apply_seq_compute(
+    output, N, win, offset, in_arr, index_arr, kernel_func, raw=True
+):
+    pass
+
+
+@overload(roll_fixed_apply_seq_compute, no_unliteral=True)
+def overload_roll_fixed_apply_seq_compute(
+    output, N, win, offset, in_arr, index_arr, kernel_func, raw=True
+):
+    assert is_overload_constant_bool(raw)
+    if is_overload_true(raw):
+
+        def impl(
+            output, N, win, offset, in_arr, index_arr, kernel_func, raw=True
+        ):  # pragma: no cover
+            ind = 0
+            for i in range(win - 1 - offset, N - offset):
+                output[i] = kernel_func(in_arr[ind : ind + win])
+                ind += 1
+
+        return impl
+
+    def impl_series(
+        output, N, win, offset, in_arr, index_arr, kernel_func, raw=True
+    ):  # pragma: no cover
+        ind = 0
+        for i in range(win - 1 - offset, N - offset):
+            output[i] = kernel_func(
+                pd.Series(in_arr[ind : ind + win], index_arr[ind : ind + win])
+            )
+            ind += 1
+
+    return impl_series
+
+
+def roll_fixed_apply_seq(
+    in_arr, index_arr, win, center, kernel_func, raw=True
+):  # pragma: no cover
+    pass
+
+
+@overload(roll_fixed_apply_seq, no_unliteral=True)
+def overload_roll_fixed_apply_seq(
+    in_arr, index_arr, win, center, kernel_func, raw=True
+):
+    assert is_overload_constant_bool(raw)
+    return roll_fixed_apply_seq_impl
+
+
+def roll_fixed_apply_seq_impl(
+    in_arr, index_arr, win, center, kernel_func, raw=True
+):  # pragma: no cover
     N = len(in_arr)
     output = np.empty(N, dtype=np.float64)
     # minp = win
     offset = (win - 1) // 2 if center else 0
-    output = np.empty(N, dtype=np.float64)
 
     # TODO: handle count and minp
     for i in range(0, min(win - 1, N) - offset):
         output[i] = np.nan
-    ind = 0
-    for i in range(win - 1 - offset, N - offset):
-        output[i] = kernel_func(in_arr[ind : ind + win])
-        ind += 1
+
+    roll_fixed_apply_seq_compute(
+        output, N, win, offset, in_arr, index_arr, kernel_func, raw
+    )
+
     for i in range(max(N - offset, 0), N):
         output[i] = np.nan
 
@@ -1237,15 +1486,18 @@ def _handle_small_data(
 
 @register_jitable
 def _handle_small_data_apply(
-    in_arr, win, center, rank, n_pes, kernel_func
+    in_arr, index_arr, win, center, rank, n_pes, kernel_func, raw=True
 ):  # pragma: no cover
     N = len(in_arr)
     all_N = bodo.libs.distributed_api.dist_reduce(
         len(in_arr), np.int32(Reduce_Type.Sum.value)
     )
     all_in_arr = bodo.libs.distributed_api.gatherv(in_arr)
+    all_index_arr = bodo.libs.distributed_api.gatherv(index_arr)
     if rank == 0:
-        all_out = roll_fixed_apply_seq(all_in_arr, win, center, kernel_func)
+        all_out = roll_fixed_apply_seq(
+            all_in_arr, all_index_arr, win, center, kernel_func, raw
+        )
     else:
         all_out = np.empty(all_N, np.float64)
     bodo.libs.distributed_api.bcast(all_out)
