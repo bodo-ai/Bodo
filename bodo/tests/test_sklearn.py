@@ -910,6 +910,7 @@ def test_logistic_regression(memory_leak_check):
             n_informative=5,
             n_redundant=0,
             n_repeated=0,
+            random_state=42,
         )
         sklearn_predict_result = impl(
             X[:splitN],
