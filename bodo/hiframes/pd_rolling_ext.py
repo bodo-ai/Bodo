@@ -16,7 +16,11 @@ import bodo
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.hiframes.rolling import supported_rolling_funcs
-from bodo.utils.typing import BodoError, get_literal_value
+from bodo.utils.typing import (
+    BodoError,
+    check_unsupported_args,
+    get_literal_value,
+)
 
 
 class RollingType(types.Type):
@@ -71,6 +75,12 @@ def df_rolling_overload(
     axis=0,
     closed=None,
 ):
+    unsupported_args = dict(
+        min_periods=min_periods, win_type=win_type, axis=axis, closed=closed
+    )
+    arg_defaults = dict(min_periods=None, win_type=None, axis=0, closed=None)
+    check_unsupported_args("DataFrame.rolling", unsupported_args, arg_defaults)
+
     def _impl(
         df,
         window,
@@ -97,6 +107,12 @@ def overload_series_rolling(
     axis=0,
     closed=None,
 ):
+    unsupported_args = dict(
+        min_periods=min_periods, win_type=win_type, axis=axis, closed=closed
+    )
+    arg_defaults = dict(min_periods=None, win_type=None, axis=0, closed=None)
+    check_unsupported_args("Series.rolling", unsupported_args, arg_defaults)
+
     def impl(
         df,
         window,
