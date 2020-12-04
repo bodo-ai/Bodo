@@ -3405,6 +3405,20 @@ def test_series_dot(memory_leak_check):
     check_func(test_impl, (S1, S2))
 
 
+@pytest.mark.slow
+@pytest.mark.filterwarnings("error:function call couldn't")
+def test_astype_call_warn(memory_leak_check):
+    """
+    Sometimes Numba converts binop exprs to a call with a Const node, which is not
+    handled properly in Bodo and throws a warning (see #1838).
+    """
+
+    def impl(S):
+        return S.astype("category").cat.codes
+
+    bodo.jit(distributed=False)(impl)(pd.Series(["A", "B"]))
+
+
 ############################### old tests ###############################
 
 

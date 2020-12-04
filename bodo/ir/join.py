@@ -787,7 +787,7 @@ def _gen_local_hash_join(
             int_typ_name = IntDtype(in_type.dtype).name
             assert int_typ_name.endswith("Dtype()")
             int_typ_name = int_typ_name[:-7]
-            ins_text = '    typ_{} = pd.Series([1], dtype="{}").values\n'.format(
+            ins_text = '    typ_{} = bodo.hiframes.pd_series_ext.get_series_data(pd.Series([1], dtype="{}"))\n'.format(
                 idx, int_typ_name
             )
             out_type = "typ_{}".format(idx)

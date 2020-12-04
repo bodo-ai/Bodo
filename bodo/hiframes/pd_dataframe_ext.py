@@ -2,12 +2,9 @@
 """
 Implement pd.DataFrame typing and data model handling.
 """
-import hashlib
-import inspect
 import json
 import operator
 import warnings
-from collections import namedtuple
 
 import llvmlite.binding as ll
 import numba
@@ -24,18 +21,15 @@ from numba.core.typing.templates import (
     signature,
 )
 from numba.extending import (
-    infer,
     infer_getattr,
     intrinsic,
     lower_builtin,
     lower_cast,
-    make_attribute_wrapper,
     models,
     overload,
     overload_attribute,
     overload_method,
     register_model,
-    type_callable,
 )
 from numba.parfors.array_analysis import ArrayAnalysis
 
@@ -61,11 +55,11 @@ from bodo.libs.array import arr_info_list_to_table, array_to_info
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.bool_arr_ext import boolean_array
 from bodo.libs.decimal_arr_ext import DecimalArrayType
-from bodo.libs.distributed_api import bcast, bcast_scalar
+from bodo.libs.distributed_api import bcast_scalar
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.str_arr_ext import str_arr_from_sequence, string_array_type
 from bodo.libs.str_ext import string_type, unicode_to_utf8
-from bodo.libs.struct_arr_ext import StructArrayType, StructType
+from bodo.libs.struct_arr_ext import StructArrayType
 from bodo.utils.conversion import index_to_array
 from bodo.utils.transform import (
     gen_const_tup,
@@ -81,6 +75,7 @@ from bodo.utils.typing import (
     ensure_constant_values,
     get_index_data_arr_types,
     get_index_names,
+    get_literal_value,
     get_overload_const,
     get_overload_const_int,
     get_overload_const_list,
@@ -772,9 +767,9 @@ def set_df_column_with_reflect(typingctx, df, cname, arr, inplace=None):
     """Set df column and reflect to parent Python object
     return a new df.
     """
-    assert isinstance(inplace, bodo.utils.typing.BooleanLiteral)
-    is_inplace = inplace.literal_value
-    col_name = cname.literal_value
+    assert is_overload_constant_bool(inplace) and is_literal_type(cname)
+    is_inplace = is_overload_true(inplace)
+    col_name = get_literal_value(cname)
     n_cols = len(df.columns)
     new_n_cols = n_cols
     data_typs = df.data

@@ -49,7 +49,6 @@ from numba.core.typing.templates import (
     signature,
 )
 from numba.core.typing.typeof import Purpose, typeof
-from numba.core.utils import reraise
 from numba.experimental.jitclass import base as jitclass_base
 from numba.experimental.jitclass import decorators as jitclass_decorators
 from numba.extending import lower_builtin
@@ -268,6 +267,7 @@ def find_potential_aliases(
                 if (
                     isinstance(expr, ir.Expr)
                     and expr.op == "getattr"
+                    and expr.attr not in ["shape"]
                     and expr.value.name in arg_aliases
                 ):
                     _add_alias(lhs, expr.value.name, alias_map, arg_aliases)
@@ -313,7 +313,7 @@ def find_potential_aliases(
 lines = inspect.getsource(ir_utils.find_potential_aliases)
 if (
     hashlib.sha256(lines.encode()).hexdigest()
-    != "ea2b49b83066d0dca57c8e62202fa6b438b429668b010fc1e9580e7bedfb1a70"
+    != "2b17b56512a6b9c95e7c6c072bb2e16f681fe2e8e4b8cb7b9fc7ac83133361a1"
 ):  # pragma: no cover
     warnings.warn("ir_utils.find_potential_aliases has changed")
 
@@ -833,7 +833,7 @@ def _compile_for_args(self, *args, **kws):  # pragma: no cover
         if numba.core.config.FULL_TRACEBACKS:
             raise e
         else:
-            reraise(type(e), e, None)
+            raise e.with_traceback(None)
 
     argtypes = []
     for a in args:
@@ -953,7 +953,7 @@ def _compile_for_args(self, *args, **kws):  # pragma: no cover
 lines = inspect.getsource(numba.core.dispatcher._DispatcherBase._compile_for_args)
 if (
     hashlib.sha256(lines.encode()).hexdigest()
-    != "f9e54236529e4e9655d2372ceae81ad90913173f7b178a533f353b882c9b3cdf"
+    != "c85205bff102c4447e81110ee82291a2e3ff78bc73535be18e76e6f4539debb1"
 ):  # pragma: no cover
     warnings.warn("numba.core.dispatcher._DispatcherBase._compile_for_args has changed")
 # now replace the function with our own
@@ -997,7 +997,7 @@ def compile(self, sig):
             resolve_gb_agg_funcs(cres)  # Bodo change
             self._cache_hits[sig] += 1
             # XXX fold this in add_overload()? (also see compiler.py)
-            if not cres.objectmode and not cres.interpmode:
+            if not cres.objectmode:
                 self.targetctx.insert_user_function(
                     cres.entry_point, cres.fndesc, [cres.library]
                 )
@@ -1021,12 +1021,70 @@ def compile(self, sig):
 lines = inspect.getsource(numba.core.dispatcher.Dispatcher.compile)
 if (
     hashlib.sha256(lines.encode()).hexdigest()
-    != "576d693f0138e64e0c0808a1ed812a2792ad7315c29d7a16c00074026ca7a40d"
+    != "d4e9278b09bd4c71855e2930c1b409b62461602a35d5da0fde81f913a9627546"
 ):  # pragma: no cover
     warnings.warn("numba.core.dispatcher.Dispatcher.compile has changed")
 numba.core.dispatcher.Dispatcher.compile = (
     numba.core.compiler_lock.global_compiler_lock(compile)
 )
+
+
+def _get_module_for_linking(self):
+    """
+    Internal: get a LLVM module suitable for linking multiple times
+    into another library.  Exported functions are made "linkonce_odr"
+    to allow for multiple definitions, inlining, and removal of
+    unused exports.
+
+    See discussion in https://github.com/numba/numba/pull/890
+    """
+    import llvmlite.binding as ll  # Bodo change
+
+    self._ensure_finalized()
+    if self._shared_module is not None:
+        return self._shared_module
+    mod = self._final_module
+    to_fix = []
+    nfuncs = 0
+    for fn in mod.functions:
+        nfuncs += 1
+        if not fn.is_declaration and fn.linkage == ll.Linkage.external:
+            # Bodo change: skip groupby agg udf cfuncs, to avoid turning them
+            # into weak symbols that are discarded
+            if "get_agg_udf_addr" not in fn.name:
+                if "bodo_gb_udf_update_local" in fn.name:
+                    continue
+                if "bodo_gb_udf_combine" in fn.name:
+                    continue
+                if "bodo_gb_udf_eval" in fn.name:
+                    continue
+                if "bodo_gb_apply_general_udfs" in fn.name:
+                    continue
+            to_fix.append(fn.name)
+    if nfuncs == 0:
+        # This is an issue which can occur if loading a module
+        # from an object file and trying to link with it, so detect it
+        # here to make debugging easier.
+        raise RuntimeError(
+            "library unfit for linking: " "no available functions in %s" % (self,)
+        )
+    if to_fix:
+        mod = mod.clone()
+        for name in to_fix:
+            # NOTE: this will mark the symbol WEAK if serialized
+            # to an ELF file
+            mod.get_function(name).linkage = "linkonce_odr"
+    self._shared_module = mod
+    return mod
+
+
+lines = inspect.getsource(numba.core.codegen.CodeLibrary._get_module_for_linking)
+if (
+    hashlib.sha256(lines.encode()).hexdigest()
+    != "56dde0e0555b5ec85b93b97c81821bce60784515a1fbf99e4542e92d02ff0a73"
+):  # pragma: no cover
+    warnings.warn("numba.core.codegen.CodeLibrary._get_module_for_linking has changed")
+numba.core.codegen.CodeLibrary._get_module_for_linking = _get_module_for_linking
 
 
 def propagate(self, typeinfer):
@@ -1404,11 +1462,33 @@ numba.core.caching._CacheImpl.__init__ = CacheImpl__init__
 # get_shape throws GuardException which is wrong.
 # Numba 0.48 exposed this error with test_linear_regression since array analysis is
 # more restrictive and assumes more variables as redefined
-def _analyze_broadcast(self, scope, equiv_set, loc, args):
+def _analyze_broadcast(self, scope, equiv_set, loc, args, fn):
     """Infer shape equivalence of arguments based on Numpy broadcast rules
     and return shape of output
     https://docs.scipy.org/doc/numpy/user/basics.broadcasting.html
     """
+    tups = list(filter(lambda a: self._istuple(a.name), args))
+    # Here we have a tuple concatenation.
+    if len(tups) == 2 and fn.__name__ == "add":
+        # If either of the tuples is empty then the resulting shape
+        # is just the other tuple.
+        tup0typ = self.typemap[tups[0].name]
+        tup1typ = self.typemap[tups[1].name]
+        if tup0typ.count == 0:
+            return (equiv_set.get_shape(tups[1]), [])
+        if tup1typ.count == 0:
+            return (equiv_set.get_shape(tups[0]), [])
+
+        try:
+            shapes = [equiv_set.get_shape(x) for x in tups]
+            if None in shapes:
+                return None
+            concat_shapes = sum(shapes, ())
+            return (concat_shapes, [])
+        except GuardException:
+            return None
+
+    # else arrays
     arrs = list(filter(lambda a: self._isarray(a.name), args))
     require(len(arrs) > 0)
     names = [x.name for x in arrs]
@@ -1429,7 +1509,7 @@ def _analyze_broadcast(self, scope, equiv_set, loc, args):
 lines = inspect.getsource(numba.parfors.array_analysis.ArrayAnalysis._analyze_broadcast)
 if (
     hashlib.sha256(lines.encode()).hexdigest()
-    != "7dd54560e6af49661182672532f711e3eb643b99a12ed847b0ed580ffe60f702"
+    != "98f8942836d8430b4496dbc284f6919300485d11fa6600c4c92627cca998bbb7"
 ):  # pragma: no cover
     warnings.warn(
         "numba.parfors.array_analysis.ArrayAnalysis._analyze_broadcast has changed"
@@ -1853,14 +1933,26 @@ def register_class_type(cls, spec, class_ctor, builder, **options):
     class_ctor: the numba type to represent the jitclass
     builder: the internal jitclass builder
     """
+    import typing as pt
+
+    from numba.core.typing.asnumbatype import as_numba_type
+
     import bodo
 
     # Bodo change: get distribution spec
     dist_spec = _get_dist_spec_from_options(spec, **options)
 
     # Normalize spec
-    if isinstance(spec, Sequence):
+    if spec is None:
+        spec = OrderedDict()
+    elif isinstance(spec, Sequence):
         spec = OrderedDict(spec)
+
+    # Extend spec with class annotations.
+    for attr, py_type in pt.get_type_hints(cls).items():
+        if attr not in spec:
+            spec[attr] = as_numba_type(py_type)
+
     jitclass_base._validate_spec(spec)
 
     # Fix up private attribute names
@@ -1937,6 +2029,7 @@ def register_class_type(cls, spec, class_ctor, builder, **options):
     # Register class
     targetctx = numba.core.registry.cpu_target.target_context
     builder(class_type, typingctx, targetctx).register()
+    as_numba_type.register(cls, class_type.instance_type)
 
     return cls
 
@@ -1944,7 +2037,7 @@ def register_class_type(cls, spec, class_ctor, builder, **options):
 lines = inspect.getsource(jitclass_base.register_class_type)
 if (
     hashlib.sha256(lines.encode()).hexdigest()
-    != "fb8a626bd1a548b6c905f5c281c12cf2ba431b740698de0c0f68997fa5676dea"
+    != "005e6e2e89a47f77a19ba86305565050d4dbc2412fc4717395adf2da348671a9"
 ):  # pragma: no cover
     warnings.warn("jitclass_base.register_class_type has changed")
 
@@ -1991,23 +2084,71 @@ if (
 types.misc.ClassType.__init__ = ClassType__init__
 
 
-# redefine jitclass decorator with our own register_class_type() and options
-def jitclass(spec, **options):
+# redefine jitclass decorator with our own register_class_type() and add '**options'
+def jitclass(cls_or_spec=None, spec=None, **options):
     """
-    A decorator for creating a jitclass.
+    A function for creating a jitclass.
+    Can be used as a decorator or function.
 
-    **arguments**:
+    Different use cases will cause different arguments to be set.
 
-    - spec:
-        Specifies the types of each field on this class.
-        Must be a dictionary or a sequence.
-        With a dictionary, use collections.OrderedDict for stable ordering.
-        With a sequence, it must contain 2-tuples of (fieldname, fieldtype).
+    If specified, ``spec`` gives the types of class fields.
+    It must be a dictionary or sequence.
+    With a dictionary, use collections.OrderedDict for stable ordering.
+    With a sequence, it must contain 2-tuples of (fieldname, fieldtype).
 
-    **returns**:
+    Any class annotations for field names not listed in spec will be added.
+    For class annotation `x: T` we will append ``("x", as_numba_type(T))`` to
+    the spec if ``x`` is not already a key in spec.
 
-    A callable that takes a class object, which will be compiled.
+
+    Examples
+    --------
+
+    1) ``cls_or_spec = None``, ``spec = None``
+
+    >>> @jitclass()
+    ... class Foo:
+    ...     ...
+
+    2) ``cls_or_spec = None``, ``spec = spec``
+
+    >>> @jitclass(spec=spec)
+    ... class Foo:
+    ...     ...
+
+    3) ``cls_or_spec = Foo``, ``spec = None``
+
+    >>> @jitclass
+    ... class Foo:
+    ...     ...
+
+    4) ``cls_or_spec = spec``, ``spec = None``
+    In this case we update ``cls_or_spec, spec = None, cls_or_spec``.
+
+    >>> @jitclass(spec)
+    ... class Foo:
+    ...     ...
+
+    5) ``cls_or_spec = Foo``, ``spec = spec``
+
+    >>> JitFoo = jitclass(Foo, spec)
+
+    Returns
+    -------
+    If used as a decorator, returns a callable that takes a class object and
+    returns a compiled version.
+    If used as a function, returns the compiled class (an instance of
+    ``JitClassType``).
     """
+
+    if cls_or_spec is not None and spec is None and not isinstance(cls_or_spec, type):
+        # Used like
+        # @jitclass([("x", intp)])
+        # class Foo:
+        #     ...
+        spec = cls_or_spec
+        cls_or_spec = None
 
     def wrap(cls):
         if numba.core.config.DISABLE_JIT:
@@ -2017,13 +2158,16 @@ def jitclass(spec, **options):
                 cls, spec, types.ClassType, jitclass_base.ClassBuilder, **options
             )
 
-    return wrap
+    if cls_or_spec is None:
+        return wrap
+    else:
+        return wrap(cls_or_spec)
 
 
 lines = inspect.getsource(jitclass_decorators.jitclass)
 if (
     hashlib.sha256(lines.encode()).hexdigest()
-    != "6c08a057e8b03754d713e55736b354323ad3816fbdb41767882e064012e2c0ab"
+    != "f6ad843b4d553d18f6f0028fa231e38b7861f23533d7f3a8274a18fc17423d9e"
 ):  # pragma: no cover
     warnings.warn("jitclass_decorators.jitclass has changed")
 

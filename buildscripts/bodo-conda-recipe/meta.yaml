@@ -19,7 +19,7 @@ requirements:
   host:
     - python =3.8
     - setuptools
-    - numba 0.51.2
+    - numba 0.52.0
     - numpy
     - s3fs >=0.4.2
     - pandas 1.1.*
@@ -42,7 +42,7 @@ requirements:
     - pyarrow =2.0.0
     - boost-cpp =1.74.0
     - libcurl
-    - numba 0.51.2
+    - numba 0.52.0
     - openjdk =8
     - sqlalchemy
     - s3fs >=0.4.2

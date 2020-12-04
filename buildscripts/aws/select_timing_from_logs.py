@@ -12,13 +12,13 @@ import re
 
 # Example that matches timing_start from a log:
 # ============================== slowest durations ===============================
-timing_start = re.compile("^\s*=+\s*slowest durations\s*=+\s*$")
+timing_start = re.compile(r"^\s*=+\s*slowest durations\s*=+\s*$")
 # Example that matches timing_end from a log:
 # ============== 62 passed, 4579 deselected, 78 warnings in 46.29s ===============
-timing_end = re.compile("^\s*=+")
+timing_end = re.compile(r"^\s*=+")
 # Example that matches time_regex from a log:
 # 1.42s call     tests/test_strings.py::test_cmp_binary_op[ge]
-time_regex = re.compile("^\s*((\d+\.\d+)|(\d+))s\s*$")
+time_regex = re.compile(r"^\s*((\d+\.\d+)|(\d+))s\s*$")
 
 """
     Input: File path corresponding to the log file

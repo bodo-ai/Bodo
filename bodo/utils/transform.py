@@ -44,7 +44,15 @@ from bodo.utils.utils import is_array_typ, is_assign, is_call, is_expr
 
 ReplaceFunc = namedtuple(
     "ReplaceFunc",
-    ["func", "arg_types", "args", "glbls", "inline_bodo_calls", "pre_nodes"],
+    [
+        "func",
+        "arg_types",
+        "args",
+        "glbls",
+        "inline_bodo_calls",
+        "run_full_pipeline",
+        "pre_nodes",
+    ],
 )
 
 
@@ -508,8 +516,7 @@ def get_const_value_inner(
         )
 
     # str() call
-    # NOTE: find_callname() currently sees str as np.str
-    if call_name == ("str", "numpy"):
+    if call_name == ("str", "builtins"):
         return str(get_const_value_inner(func_ir, var_def.args[0], arg_types, typemap))
 
     if call_name in (
@@ -913,6 +920,7 @@ def replace_func(
     pysig=None,
     kws=None,
     inline_bodo_calls=False,
+    run_full_pipeline=False,
 ):
     """"""
     glbls = {"numba": numba, "np": np, "bodo": bodo, "pd": pd}
@@ -957,7 +965,9 @@ def replace_func(
             else:
                 new_args.append(arg_typs[i])
         arg_typs = tuple(new_args)
-    return ReplaceFunc(func, arg_typs, args, glbls, inline_bodo_calls, pre_nodes)
+    return ReplaceFunc(
+        func, arg_typs, args, glbls, inline_bodo_calls, run_full_pipeline, pre_nodes
+    )
 
 
 ############################# UDF utils ############################

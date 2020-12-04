@@ -269,7 +269,7 @@ class SeriesPass:
                     # see: test_series_map_full_pipeline
                     # TODO(ehsan): update inline_closure_call() to run full pipeline
                     callee_validator = None
-                    if rp_func.inline_bodo_calls:
+                    if rp_func.run_full_pipeline:
                         f_ir, _, _, _ = bodo.compiler.get_func_type_info(
                             rp_func.func, rp_func.arg_types, {}
                         )
@@ -1087,11 +1087,6 @@ class SeriesPass:
         if not (isinstance(typ1, SeriesType) or isinstance(typ2, SeriesType)):
             return [assign]
 
-        if rhs.fn in bodo.hiframes.pd_series_ext.series_binary_ops:
-            overload_func = bodo.hiframes.series_impl.create_binary_op_overload(rhs.fn)
-            impl = overload_func(typ1, typ2)
-            return replace_func(self, impl, [arg1, arg2])
-
         if rhs.fn in bodo.hiframes.pd_series_ext.series_inplace_binary_ops:
             overload_func = bodo.hiframes.series_impl.create_inplace_binary_op_overload(
                 rhs.fn
@@ -1158,6 +1153,7 @@ class SeriesPass:
                 kws=rhs.kws,
                 pysig=func_type.dispatcher._compiler.pysig,
                 inline_bodo_calls=True,
+                run_full_pipeline=True,
             )
 
         # support call ufuncs on Series

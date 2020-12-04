@@ -259,6 +259,7 @@ class DataFramePass:
         return None
 
     def _run_binop(self, assign, rhs):
+        """transform ir.Expr.binop nodes"""
 
         arg1, arg2 = rhs.lhs, rhs.rhs
         typ1, typ2 = self.typemap[arg1.name], self.typemap[arg2.name]
@@ -317,37 +318,10 @@ class DataFramePass:
             # of expressions. This normalizes them to regular unary/binop expressions
             # so that Bodo transforms handle them properly.
             if (
-                isinstance(func_def, ir.Const)
+                isinstance(func_def, (ir.Const, ir.FreeVar, ir.Global))
                 and func_def.value in numba.core.utils.OPERATORS_TO_BUILTINS
             ):  # pragma: no cover
-                old_calltype = self.calltypes[rhs]
-                if len(rhs.args) == 1:
-                    rhs = ir.Expr.unary(func_def.value, rhs.args[0], rhs.loc)
-                    self.calltypes[rhs] = old_calltype
-                    assign.value = rhs
-                    return self._run_unary(assign, rhs)
-                # arguments for contains() are reversed in operator
-                if func_def.value == operator.contains:
-                    rhs.args = [rhs.args[1], rhs.args[0]]
-                # inplace binop case
-                if (
-                    func_def.value
-                    in numba.core.utils.INPLACE_BINOPS_TO_OPERATORS.values()
-                ):
-                    # get non-inplace version to pass to inplace_binop()
-                    op_str = numba.core.utils.OPERATORS_TO_BUILTINS[func_def.value]
-                    assert op_str.endswith("=")
-                    immuop = numba.core.utils.BINOPS_TO_OPERATORS[op_str[:-1]]
-                    rhs = ir.Expr.inplace_binop(
-                        func_def.value, immuop, rhs.args[0], rhs.args[1], rhs.loc
-                    )
-                else:
-                    rhs = ir.Expr.binop(
-                        func_def.value, rhs.args[0], rhs.args[1], rhs.loc
-                    )
-                self.calltypes[rhs] = old_calltype
-                assign.value = rhs
-                return self._run_binop(assign, rhs)
+                return self._convert_op_call_to_expr(assign, rhs, func_def.value)
             warnings.warn("function call couldn't be found for dataframe analysis")
             return None
         else:
@@ -410,6 +384,29 @@ class DataFramePass:
 
         if fdef == ("query_dummy", "bodo.hiframes.pd_dataframe_ext"):
             return self._run_call_query(assign, lhs, rhs)
+
+        # match dummy function created in _run_call_query and raise error if output of
+        # expression in df.query() is not a boolean Series
+        if fdef == ("_check_query_series_bool", "bodo.transforms.dataframe_pass"):
+            if (
+                not isinstance(
+                    self.typemap[lhs.name],
+                    bodo.hiframes.pd_series_ext.SeriesType,
+                )
+                or self.typemap[lhs.name].dtype != types.bool_
+            ):
+                raise BodoError(
+                    "query(): expr does not evaluate to a 1D boolean array."
+                    " Only 1D boolean array is supported right now."
+                )
+            assign.value = rhs.args[0]
+            return [assign]
+
+        # Numba generates operator calls instead of binop nodes so needs normalized
+        if len(fdef) == 2 and fdef[1] == "_operator":
+            op = getattr(operator, fdef[0], None)
+            if op in numba.core.utils.OPERATORS_TO_BUILTINS:
+                return self._convert_op_call_to_expr(assign, rhs, op)
 
         return None
 
@@ -697,6 +694,32 @@ class DataFramePass:
         # using output of the call
         return nodes + compile_func_single_block(_init_df, out_arrs, lhs, self)
 
+    def _convert_op_call_to_expr(self, assign, rhs, op):
+        """converts calls to operators (e.g. operator.add) to equivalent Expr nodes such
+        as binop to be handled properly later.
+        """
+        old_calltype = self.calltypes[rhs]
+        if len(rhs.args) == 1:
+            rhs = ir.Expr.unary(op, rhs.args[0], rhs.loc)
+            self.calltypes[rhs] = old_calltype
+            assign.value = rhs
+            return self._run_unary(assign, rhs)
+        # arguments for contains() are reversed in operator
+        if op == operator.contains:
+            rhs.args = [rhs.args[1], rhs.args[0]]
+        # inplace binop case
+        if op in numba.core.utils.INPLACE_BINOPS_TO_OPERATORS.values():
+            # get non-inplace version to pass to inplace_binop()
+            op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
+            assert op_str.endswith("=")
+            immuop = numba.core.utils.BINOPS_TO_OPERATORS[op_str[:-1]]
+            rhs = ir.Expr.inplace_binop(op, immuop, rhs.args[0], rhs.args[1], rhs.loc)
+        else:
+            rhs = ir.Expr.binop(op, rhs.args[0], rhs.args[1], rhs.loc)
+        self.calltypes[rhs] = old_calltype
+        assign.value = rhs
+        return self._run_binop(assign, rhs)
+
     def _gen_array_from_index(self, df_var, nodes):
         def _get_index(df):  # pragma: no cover
             return bodo.utils.conversion.index_to_array(
@@ -829,9 +852,12 @@ class DataFramePass:
                     c_var, ind
                 )
             )
-        func_text += "  return {}".format(parsed_expr_str)
+        # use dummy function to catch data type error
+        func_text += "  return _check_query_series_bool({})".format(parsed_expr_str)
         loc_vars = {}
-        exec(func_text, {}, loc_vars)
+        exec(
+            func_text, {"_check_query_series_bool": _check_query_series_bool}, loc_vars
+        )
         _query_impl = loc_vars["_query_impl"]
 
         # data frame column inputs
@@ -841,22 +867,9 @@ class DataFramePass:
         # local referenced variables
         args += [ir.Var(lhs.scope, v, lhs.loc) for v in loc_ref_vars.values()]
 
-        nodes += compile_func_single_block(_query_impl, args, lhs, self)
-
-        # check whether the output of generated function is a boolean array
-        if (
-            not isinstance(
-                self.typemap[nodes[-1].value.name],
-                bodo.hiframes.pd_series_ext.SeriesType,
-            )
-            or self.typemap[nodes[-1].value.name].dtype != types.bool_
-        ):
-            raise BodoError(
-                "query(): expr does not evaluate to a 1D boolean array."
-                " Only 1D boolean array is supported right now."
-            )
-
-        return nodes
+        return replace_func(
+            self, _query_impl, args, pre_nodes=nodes, run_full_pipeline=True
+        )
 
     def _parse_query_expr(self, expr, columns):
         """Parses query expression using Pandas parser but avoids issues such as
@@ -2053,6 +2066,14 @@ class DataFramePass:
             raise BodoError(err_msg)
         key_colnames = (by_arg_def,) * n_key
         return key_colnames
+
+
+@numba.extending.register_jitable
+def _check_query_series_bool(S):
+    """a dummy function used in _run_call_query to catch data type error later in the
+    pipeline (S should be a Series(bool)).
+    """
+    return S
 
 
 def _gen_init_df(columns, index=None):

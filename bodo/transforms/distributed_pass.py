@@ -69,7 +69,7 @@ from bodo.utils.transform import (
     get_call_expr_arg,
     get_const_value_inner,
 )
-from bodo.utils.typing import BodoError, BooleanLiteral, list_cumulative
+from bodo.utils.typing import BodoError, list_cumulative
 from bodo.utils.utils import (
     debug_prints,
     find_build_tuple,
@@ -589,7 +589,7 @@ class DistributedPass:
                     rhs.loc,
                 )
                 nodes.append(ir.Assign(ir.Const(True, rhs.loc), normalize_var, rhs.loc))
-                self.typemap[normalize_var.name] = BooleanLiteral(True)
+                self.typemap[normalize_var.name] = types.BooleanLiteral(True)
                 # normalize cannot be specified positionally
                 normalize = get_call_expr_arg(
                     "accuracy_score", rhs.args, kws, 1e6, "normalize", normalize_var
@@ -696,7 +696,7 @@ class DistributedPass:
                     rhs.loc,
                 )
                 nodes.append(ir.Assign(ir.Const(True, rhs.loc), squared_var, rhs.loc))
-                self.typemap[squared_var.name] = BooleanLiteral(True)
+                self.typemap[squared_var.name] = types.BooleanLiteral(True)
                 squared = get_call_expr_arg(
                     "mean_squared_error", rhs.args, kws, 1e6, "squared", squared_var
                 )
@@ -1082,12 +1082,12 @@ class DistributedPass:
         ):
             # set parallel flag to true
             true_var = ir.Var(scope, mk_unique_var("true_var"), loc)
-            self.typemap[true_var.name] = BooleanLiteral(True)
+            self.typemap[true_var.name] = types.BooleanLiteral(True)
             rhs.args[3] = true_var
             # fix parallel arg type in calltype
             call_type = self.calltypes.pop(rhs)
             arg_typs = tuple(
-                BooleanLiteral(True) if i == 3 else call_type.args[i]
+                types.BooleanLiteral(True) if i == 3 else call_type.args[i]
                 for i in range(len(call_type.args))
             )
             self.calltypes[rhs] = self.typemap[rhs.func.name].get_call_type(
@@ -1105,12 +1105,12 @@ class DistributedPass:
         ):
             # set parallel flag to true
             true_var = ir.Var(scope, mk_unique_var("true_var"), loc)
-            self.typemap[true_var.name] = BooleanLiteral(True)
+            self.typemap[true_var.name] = types.BooleanLiteral(True)
             rhs.args[4] = true_var
             # fix parallel arg type in calltype
             call_type = self.calltypes.pop(rhs)
             arg_typs = tuple(
-                BooleanLiteral(True) if i == 4 else call_type.args[i]
+                types.BooleanLiteral(True) if i == 4 else call_type.args[i]
                 for i in range(len(call_type.args))
             )
             self.calltypes[rhs] = self.typemap[rhs.func.name].get_call_type(

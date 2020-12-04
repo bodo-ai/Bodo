@@ -1,11 +1,12 @@
+# isort: skip_file
 import os
 import platform
+from setuptools import Extension, find_packages, setup
 
 # Note we don't import Numpy at the toplevel, since setup.py
 # should be able to run without Numpy for pip to discover the
 # build dependencies
 import numpy.distutils.misc_util as np_misc
-from setuptools import Extension, find_packages, setup
 
 import versioneer
 

@@ -62,7 +62,7 @@ def overload_series_index(s):
     return lambda s: bodo.hiframes.pd_series_ext.get_series_index(s)
 
 
-@overload_attribute(SeriesType, "values")
+@overload_attribute(SeriesType, "values", inline="always")
 def overload_series_values(s):
     return lambda s: bodo.hiframes.pd_series_ext.get_series_data(s)
 
@@ -2614,7 +2614,7 @@ def _install_binary_ops():
     # install binary ops such as add, sub, pow, eq, ...
     for op in bodo.hiframes.pd_series_ext.series_binary_ops:
         overload_impl = create_binary_op_overload(op)
-        overload(op, no_unliteral=True)(overload_impl)
+        overload(op, inline="always", no_unliteral=True)(overload_impl)
 
 
 _install_binary_ops()

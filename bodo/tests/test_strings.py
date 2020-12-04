@@ -198,7 +198,7 @@ def test_re_pat_search(test_in_str, memory_leak_check):
     def test_impl(pat, in_str):
         return pat.search(in_str)
 
-    pat = re.compile("_")
+    pat = re.compile(r"_")
     py_out = test_impl(pat, test_in_str)
     bodo_out = bodo.jit(test_impl)(pat, test_in_str)
     # output is None or re.Match
@@ -228,7 +228,7 @@ def test_re_pat_match(in_str, memory_leak_check):
     def test_impl(pat, in_str):
         return pat.match(in_str)
 
-    pat = re.compile("AB")
+    pat = re.compile(r"AB")
     py_out = test_impl(pat, in_str)
     bodo_out = bodo.jit(test_impl)(pat, in_str)
     # output is None or re.Match
@@ -258,7 +258,7 @@ def test_re_pat_fullmatch(in_str, memory_leak_check):
     def test_impl(pat, in_str):
         return pat.fullmatch(in_str)
 
-    pat = re.compile("AB")
+    pat = re.compile(r"AB")
     py_out = test_impl(pat, in_str)
     bodo_out = bodo.jit(test_impl)(pat, in_str)
     # output is None or re.Match
@@ -433,7 +433,7 @@ def test_pat_flags(memory_leak_check):
     def test_impl(pat):
         return pat.flags
 
-    pat = re.compile("AA", flags=re.IGNORECASE)
+    pat = re.compile(r"AA", flags=re.IGNORECASE)
     py_out = test_impl(pat)
     bodo_out = bodo.jit(test_impl)(pat)
     assert py_out == bodo_out
@@ -445,7 +445,7 @@ def test_pat_groups(memory_leak_check):
     def test_impl(pat):
         return pat.groups
 
-    pat = re.compile("(AA) (\w+)")
+    pat = re.compile(r"(AA) (\w+)")
     py_out = test_impl(pat)
     bodo_out = bodo.jit(test_impl)(pat)
     assert py_out == bodo_out
@@ -471,7 +471,7 @@ def test_pat_pattern(memory_leak_check):
     def test_impl(pat):
         return pat.pattern
 
-    pat = re.compile("(AA) (\w+)")
+    pat = re.compile(r"(AA) (\w+)")
     py_out = test_impl(pat)
     bodo_out = bodo.jit(test_impl)(pat)
     assert py_out == bodo_out
@@ -483,7 +483,7 @@ def test_match_expand(memory_leak_check):
     def test_impl(m):
         return m.expand(r"\1 WW \2")
 
-    pat = re.compile("(\w+) (\w+)")
+    pat = re.compile(r"(\w+) (\w+)")
     m = pat.search("words words etc")
     py_out = test_impl(m)
     bodo_out = bodo.jit(test_impl)(m)
@@ -505,7 +505,7 @@ def test_match_group(memory_leak_check):
     def test_impl_three(m, a, b, c):
         return m.group(a, b, c)
 
-    pat = re.compile("(?P<A>\w+) (\w+) (\w+)")
+    pat = re.compile(r"(?P<A>\w+) (\w+) (\w+)")
     m = pat.search("words words etc")
 
     assert test_impl_zero(m) == bodo.jit(test_impl_zero)(m)
@@ -520,7 +520,7 @@ def test_match_getitem(memory_leak_check):
     def test_impl(m, a):
         return m[a]
 
-    pat = re.compile("(?P<A>\w+) (\w+) (\w+)")
+    pat = re.compile(r"(?P<A>\w+) (\w+) (\w+)")
     m = pat.search("words words etc")
 
     assert test_impl(m, "A") == bodo.jit(test_impl)(m, "A")
@@ -534,7 +534,7 @@ def test_match_groups(memory_leak_check):
     def test_impl(m):
         return m.groups()
 
-    pat = re.compile("(?P<A>\w+) (\w+) (\w+)")
+    pat = re.compile(r"(?P<A>\w+) (\w+) (\w+)")
     m = pat.search("words words etc")
 
     assert list(test_impl(m)) == bodo.jit(test_impl)(m)
@@ -546,7 +546,7 @@ def test_match_groupdict(memory_leak_check):
     def test_impl(m):
         return m.groupdict()
 
-    pat = re.compile("(?P<A>\w+) (\w+) (\w+)")
+    pat = re.compile(r"(?P<A>\w+) (\w+) (\w+)")
     m = pat.search("words words etc")
 
     assert test_impl(m) == bodo.jit(test_impl)(m)
@@ -558,7 +558,7 @@ def test_match_start(memory_leak_check):
     def test_impl(m, g):
         return m.start(g)
 
-    m = re.search("(?P<A>\w+) (\w+) (\w+)", "words words etc")
+    m = re.search(r"(?P<A>\w+) (\w+) (\w+)", "words words etc")
     g = 2
 
     assert test_impl(m, g) == bodo.jit(test_impl)(m, g)
@@ -570,7 +570,7 @@ def test_match_end(memory_leak_check):
     def test_impl(m, g):
         return m.end(g)
 
-    m = re.search("(?P<A>\w+) (\w+) (\w+)", "words words etc")
+    m = re.search(r"(?P<A>\w+) (\w+) (\w+)", "words words etc")
     g = 2
 
     assert test_impl(m, g) == bodo.jit(test_impl)(m, g)
@@ -582,7 +582,7 @@ def test_match_span(memory_leak_check):
     def test_impl(m, g):
         return m.span(g)
 
-    m = re.search("(?P<A>\w+) (\w+) (\w+)", "words words etc")
+    m = re.search(r"(?P<A>\w+) (\w+) (\w+)", "words words etc")
     g = 2
 
     assert test_impl(m, g) == bodo.jit(test_impl)(m, g)
@@ -594,7 +594,7 @@ def test_match_pos(memory_leak_check):
     def test_impl(m):
         return m.pos
 
-    pat = re.compile("(?P<A>\w+) (\w+) (\w+)")
+    pat = re.compile(r"(?P<A>\w+) (\w+) (\w+)")
     m = pat.search("  words words etc", 2)
 
     assert test_impl(m) == bodo.jit(test_impl)(m)
@@ -606,7 +606,7 @@ def test_match_endpos(memory_leak_check):
     def test_impl(m):
         return m.endpos
 
-    pat = re.compile("(?P<A>\w+) (\w+)")
+    pat = re.compile(r"(?P<A>\w+) (\w+)")
     m = pat.search("  words words etc bcd bcd", 2, 14)
 
     assert test_impl(m) == bodo.jit(test_impl)(m)
@@ -618,7 +618,7 @@ def test_match_lastindex(memory_leak_check):
     def test_impl(m):
         return m.lastindex
 
-    pat = re.compile("(?P<A>\w+) (\w+)")
+    pat = re.compile(r"(?P<A>\w+) (\w+)")
     m = pat.search("  words words etc bcd bcd")
 
     assert test_impl(m) == bodo.jit(test_impl)(m)
@@ -630,7 +630,7 @@ def test_match_lastgroup(memory_leak_check):
     def test_impl(m):
         return m.lastgroup
 
-    pat = re.compile("(?P<A>\w+) (?P<BB>\w+)")
+    pat = re.compile(r"(?P<A>\w+) (?P<BB>\w+)")
     m = pat.search("  words words etc bcd bcd")
 
     assert test_impl(m) == bodo.jit(test_impl)(m)
@@ -642,7 +642,7 @@ def test_match_re(memory_leak_check):
     def test_impl(m):
         return m.re
 
-    pat = re.compile("(?P<A>\w+) (?P<BB>\w+)")
+    pat = re.compile(r"(?P<A>\w+) (?P<BB>\w+)")
     m = pat.search("  words words etc bcd bcd")
 
     assert test_impl(m) == bodo.jit(test_impl)(m)
@@ -654,7 +654,7 @@ def test_match_string(memory_leak_check):
     def test_impl(m):
         return m.string
 
-    pat = re.compile("(?P<A>\w+) (?P<BB>\w+)")
+    pat = re.compile(r"(?P<A>\w+) (?P<BB>\w+)")
     m = pat.search("  words words etc bcd bcd")
 
     assert test_impl(m) == bodo.jit(test_impl)(m)
