@@ -6,7 +6,6 @@ import numpy as np
 import pandas as pd
 from numba.core import types
 from numba.core.imputils import impl_ret_borrowed
-from numba.core.ir_utils import find_const, guard
 from numba.core.typing import signature
 from numba.core.typing.templates import AbstractTemplate, infer_global
 from numba.extending import lower_builtin, overload, register_jitable
@@ -15,13 +14,10 @@ import bodo
 from bodo.libs.distributed_api import Reduce_Type
 from bodo.utils.typing import (
     BodoError,
-    check_unsupported_args,
     get_overload_const_func,
     get_overload_const_str,
     is_const_func_type,
     is_overload_constant_str,
-    is_overload_none,
-    is_overload_zero,
 )
 from bodo.utils.utils import unliteral_all
 
@@ -38,60 +34,6 @@ supported_rolling_funcs = (
     "corr",
     "apply",
 )
-
-
-def get_rolling_setup_args(func_ir, rhs, get_consts=True):
-    """
-    Handle Series rolling calls like:
-        r = df.column.rolling(3)
-    """
-    center = False
-    on = None
-
-    kws = dict(rhs.kws)
-    if rhs.args:
-        window = rhs.args[0]
-    elif "window" in kws:
-        window = kws["window"]
-    else:  # pragma: no cover
-        raise BodoError("window argument to rolling() required")
-
-    min_periods = kws.pop("min_periods", None)
-    win_type = kws.pop("win_type", None)
-    closed = kws.pop("closed", None)
-    axis = kws.pop("axis", None)
-
-    unsupported_args = dict(min_periods=min_periods, win_type=win_type, closed=closed)
-    arg_defaults = dict(min_periods=None, win_type=None, closed=None)
-    check_unsupported_args("Series.rolling", unsupported_args, arg_defaults)
-
-    if not (is_overload_none(axis) or is_overload_zero(axis)):  # pragma: no cover
-        raise BodoError("Series.rolling(): axis argument not supported")
-
-    if get_consts:
-        window_const = guard(find_const, func_ir, window)
-        window = window_const if window_const is not None else window
-    if "center" in kws:
-        center = kws["center"]
-        if get_consts:
-            center_const = guard(find_const, func_ir, center)
-            center = center_const if center_const is not None else center
-    if "on" in kws:
-        on = guard(find_const, func_ir, kws["on"])
-        if on is None:
-            raise BodoError("'on' argument to rolling() should be constant string")
-    # convert string offset window statically to nanos
-    # TODO: support dynamic conversion
-    # TODO: support other offsets types (time delta, etc.)
-    if on is not None:
-        window = guard(find_const, func_ir, window)
-        if not isinstance(window, str):
-            raise BodoError(
-                "window argument to rolling should be constant"
-                "string in the offset case (variable window)"
-            )
-        window = pd.tseries.frequencies.to_offset(window).nanos
-    return window, center, on
 
 
 def rolling_fixed(arr, win):  # pragma: no cover
@@ -118,6 +60,12 @@ class RollingCovType(AbstractTemplate):
 
         ret_typ = arr.copy(dtype=types.float64)
         return signature(ret_typ, *unliteral_all(args))
+
+
+@lower_builtin(rolling_corr, types.VarArg(types.Any))
+@lower_builtin(rolling_cov, types.VarArg(types.Any))
+def lower_rolling_corr_dummy(context, builder, sig, args):
+    return context.get_constant_null(sig.return_type)
 
 
 @overload(rolling_fixed, no_unliteral=True)
@@ -406,10 +354,29 @@ def roll_fixed_apply_seq(in_arr, win, center, kernel_func):  # pragma: no cover
 # variable window
 
 
+def offset_to_nanos(w):  # pragma: no cover
+    return w
+
+
+@overload(offset_to_nanos)
+def overload_offset_to_nanos(w):
+    """convert offset value to nanos"""
+    if isinstance(w, types.Integer):
+        return lambda w: w  # pragma: no cover
+
+    def impl(w):  # pragma: no cover
+        with numba.objmode(out="int64"):
+            out = pd.tseries.frequencies.to_offset(w).nanos
+        return out
+
+    return impl
+
+
 @register_jitable
 def roll_var_linear_generic(
     in_arr, on_arr_dt, win, center, parallel, init_data, add_obs, remove_obs, calc_out
 ):  # pragma: no cover
+    win = offset_to_nanos(win)
     rank = bodo.libs.distributed_api.get_rank()
     n_pes = bodo.libs.distributed_api.get_size()
     on_arr = cast_dt64_arr_to_int(on_arr_dt)
@@ -570,6 +537,7 @@ def roll_var_linear_generic_seq(
 def roll_variable_apply(
     in_arr, on_arr_dt, win, center, parallel, kernel_func
 ):  # pragma: no cover
+    win = offset_to_nanos(win)
     rank = bodo.libs.distributed_api.get_rank()
     n_pes = bodo.libs.distributed_api.get_size()
     on_arr = cast_dt64_arr_to_int(on_arr_dt)

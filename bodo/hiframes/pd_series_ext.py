@@ -10,7 +10,6 @@ from llvmlite import ir as lir
 from numba.core import cgutils, types
 from numba.core.imputils import impl_ret_borrowed
 from numba.core.typing.templates import (
-    AbstractTemplate,
     AttributeTemplate,
     bound_function,
     signature,
@@ -35,7 +34,6 @@ from bodo.hiframes.pd_categorical_ext import (
     PDCategoricalDtype,
 )
 from bodo.hiframes.pd_timestamp_ext import pandas_timestamp_type
-from bodo.hiframes.rolling import supported_rolling_funcs
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.bool_arr_ext import boolean_array
 from bodo.libs.decimal_arr_ext import Decimal128Type, DecimalArrayType
@@ -581,22 +579,6 @@ def cast_series(context, builder, fromty, toty, val):
 class SeriesAttribute(AttributeTemplate):
     key = SeriesType
 
-    @bound_function("series.rolling", no_unliteral=True)
-    def resolve_rolling(self, ary, args, kws):
-        def rolling_stub(
-            window,
-            min_periods=None,
-            center=False,
-            win_type=None,
-            on=None,
-            axis=0,
-            closed=None,
-        ):  # pragma: no cover
-            pass
-
-        pysig = numba.core.utils.pysignature(rolling_stub)
-        return signature(SeriesRollingType(ary), *args).replace(pysig=pysig)
-
     def _resolve_map_func(self, ary, func, pysig, fname, f_args=None, kws=None):
         """Find type signature of Series.map/apply method.
         ary: Series type (TODO: rename)
@@ -810,69 +792,6 @@ str2bool_methods = (
     "isnumeric",
     "isdecimal",
 )
-
-
-class SeriesRollingType(types.Type):
-    def __init__(self, stype):
-        self.stype = stype
-        name = "SeriesRollingType({})".format(stype)
-        super(SeriesRollingType, self).__init__(name)
-
-
-@infer_getattr
-class SeriesRollingAttribute(AttributeTemplate):
-    key = SeriesRollingType
-
-    @bound_function("rolling.apply", no_unliteral=True)
-    def resolve_apply(self, ary, args, kws):
-        # result is always float64 (see Pandas window.pyx:roll_generic)
-        return signature(
-            SeriesType(
-                types.float64, index=ary.stype.index, name_typ=ary.stype.name_typ
-            ),
-            *args,
-        )
-
-    @bound_function("rolling.cov", no_unliteral=True)
-    def resolve_cov(self, ary, args, kws):
-        return signature(
-            SeriesType(
-                types.float64, index=ary.stype.index, name_typ=ary.stype.name_typ
-            ),
-            *args,
-        )
-
-    @bound_function("rolling.corr", no_unliteral=True)
-    def resolve_corr(self, ary, args, kws):
-        return signature(
-            SeriesType(
-                types.float64, index=ary.stype.index, name_typ=ary.stype.name_typ
-            ),
-            *args,
-        )
-
-
-# similar to install_array_method in arraydecl.py
-def install_rolling_method(name):
-    def rolling_attribute_attachment(self, ary):
-        def rolling_generic(self, args, kws):
-            # output is always float64
-            return signature(
-                SeriesType(
-                    types.float64, index=ary.stype.index, name_typ=ary.stype.name_typ
-                ),
-                *args,
-            )
-
-        my_attr = {"key": "rolling." + name, "generic": rolling_generic}
-        temp_class = type("Rolling_" + name, (AbstractTemplate,), my_attr)
-        return types.BoundFunction(temp_class, ary)
-
-    setattr(SeriesRollingAttribute, "resolve_" + name, rolling_attribute_attachment)
-
-
-for fname in supported_rolling_funcs:
-    install_rolling_method(fname)
 
 
 @overload(pd.Series, no_unliteral=True)

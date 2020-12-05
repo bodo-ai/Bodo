@@ -12,8 +12,8 @@ from bodo.hiframes.rolling import supported_rolling_funcs
 from bodo.tests.utils import _get_dist_arg, count_array_REPs, count_parfor_REPs
 
 LONG_TEST = (
-    int(os.environ["HPAT_LONG_ROLLING_TEST"]) != 0
-    if "HPAT_LONG_ROLLING_TEST" in os.environ
+    int(os.environ["BODO_LONG_ROLLING_TEST"]) != 0
+    if "BODO_LONG_ROLLING_TEST" in os.environ
     else False
 )
 
@@ -60,7 +60,7 @@ def test_variable_on_index(memory_leak_check):
     pd.testing.assert_frame_equal(bodo_func(df), impl(df))
 
 
-@bodo.jit
+@bodo.jit(distributed=False)
 def g(a):
     return a.sum()
 
