@@ -482,7 +482,7 @@ class Aggregate(ir.Stmt):
         df_in,
         key_names,
         out_key_vars,
-        df_out_vars,
+        df_out_vars,  # NOTE: does not include output key vars (stored in out_key_vars)
         df_in_vars,
         key_arrs,
         agg_func,

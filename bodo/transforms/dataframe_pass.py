@@ -1395,6 +1395,12 @@ class DataFramePass:
             grp_typ.selection if isinstance(out_typ, SeriesType) else out_typ.columns
         )
         for c in out_colnames:
+            # output key columns are stored in out_key_vars and shouldn't be duplicated
+            if isinstance(c, tuple) and len(c) > 1 and c[1] == "":
+                if c[0] in grp_typ.keys:
+                    continue
+            elif c in grp_typ.keys:
+                continue
             # output column name can be a string or tuple of strings. the
             # latter case occurs when doing this:
             # df.groupby(...).agg({"A": [f1, f2]})
@@ -1407,7 +1413,7 @@ class DataFramePass:
             )
             df_out_vars[c] = var
 
-        if len(out_colnames) != len(df_out_vars):
+        if len(out_colnames) != len(set(out_colnames)):
             raise BodoError("aggregate with duplication in output is not allowed")
 
         agg_node = bodo.ir.aggregate.Aggregate(
