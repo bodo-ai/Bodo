@@ -1074,49 +1074,20 @@ class DistributedPass:
 
         if (
             fdef
-            == (
-                "rolling_fixed",
-                "bodo.hiframes.rolling",
+            in (
+                (
+                    "rolling_fixed",
+                    "bodo.hiframes.rolling",
+                ),
+                (
+                    "rolling_variable",
+                    "bodo.hiframes.rolling",
+                ),
             )
             and self._is_1D_or_1D_Var_arr(rhs.args[0].name)
         ):
-            # set parallel flag to true
-            true_var = ir.Var(scope, mk_unique_var("true_var"), loc)
-            self.typemap[true_var.name] = types.BooleanLiteral(True)
-            rhs.args[3] = true_var
-            # fix parallel arg type in calltype
-            call_type = self.calltypes.pop(rhs)
-            arg_typs = tuple(
-                types.BooleanLiteral(True) if i == 3 else call_type.args[i]
-                for i in range(len(call_type.args))
-            )
-            self.calltypes[rhs] = self.typemap[rhs.func.name].get_call_type(
-                self.typingctx, arg_typs, {}
-            )
-            out = [ir.Assign(ir.Const(True, loc), true_var, loc), assign]
-
-        if (
-            fdef
-            == (
-                "rolling_variable",
-                "bodo.hiframes.rolling",
-            )
-            and self._is_1D_or_1D_Var_arr(rhs.args[0].name)
-        ):
-            # set parallel flag to true
-            true_var = ir.Var(scope, mk_unique_var("true_var"), loc)
-            self.typemap[true_var.name] = types.BooleanLiteral(True)
-            rhs.args[4] = true_var
-            # fix parallel arg type in calltype
-            call_type = self.calltypes.pop(rhs)
-            arg_typs = tuple(
-                types.BooleanLiteral(True) if i == 4 else call_type.args[i]
-                for i in range(len(call_type.args))
-            )
-            self.calltypes[rhs] = self.typemap[rhs.func.name].get_call_type(
-                self.typingctx, arg_typs, {}
-            )
-            out = [ir.Assign(ir.Const(True, loc), true_var, loc), assign]
+            self._set_last_arg_to_true(assign.value)
+            return [assign]
 
         if (
             func_mod == "bodo.hiframes.rolling"

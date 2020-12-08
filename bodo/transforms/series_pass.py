@@ -2471,10 +2471,10 @@ class SeriesPass:
             def rolling_corr_impl(arr, other, win, center):  # pragma: no cover
                 cov = bodo.hiframes.rolling.rolling_cov(arr, other, win, center)
                 a_std = bodo.hiframes.rolling.rolling_fixed(
-                    arr, win, center, False, "std"
+                    arr, None, win, center, "std"
                 )
                 b_std = bodo.hiframes.rolling.rolling_fixed(
-                    other, win, center, False, "std"
+                    other, None, win, center, "std"
                 )
                 return cov / (a_std * b_std)
 
@@ -2489,17 +2489,13 @@ class SeriesPass:
                 XpY = X + Y
                 XtY = X * Y
                 count = bodo.hiframes.rolling.rolling_fixed(
-                    XpY, w, center, False, "count"
+                    XpY, None, w, center, "count"
                 )
                 mean_XtY = bodo.hiframes.rolling.rolling_fixed(
-                    XtY, w, center, False, "mean"
+                    XtY, None, w, center, "mean"
                 )
-                mean_X = bodo.hiframes.rolling.rolling_fixed(
-                    X, w, center, False, "mean"
-                )
-                mean_Y = bodo.hiframes.rolling.rolling_fixed(
-                    Y, w, center, False, "mean"
-                )
+                mean_X = bodo.hiframes.rolling.rolling_fixed(X, None, w, center, "mean")
+                mean_Y = bodo.hiframes.rolling.rolling_fixed(Y, None, w, center, "mean")
                 bias_adj = count / (count - ddof)
                 return (mean_XtY - mean_X * mean_Y) * bias_adj
 

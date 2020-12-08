@@ -173,7 +173,7 @@ def _gen_df_rolling_out_data(rolling):
 
     if isinstance(rolling.obj_type, SeriesType):
         return (
-            f"bodo.hiframes.rolling.rolling_{ftype}(bodo.hiframes.pd_series_ext.get_series_data(df), {on_arr_arg}window, center, False, func)",
+            f"bodo.hiframes.rolling.rolling_{ftype}(bodo.hiframes.pd_series_ext.get_series_data(df), {on_arr_arg}index_arr, window, center, func, raw)",
             on_arr,
         )
 
@@ -185,7 +185,7 @@ def _gen_df_rolling_out_data(rolling):
                 continue
             out = f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {c_ind})"
         else:
-            out = f"bodo.hiframes.rolling.rolling_{ftype}(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {c_ind}), {on_arr_arg}window, center, False, func)"
+            out = f"bodo.hiframes.rolling.rolling_{ftype}(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {c_ind}), {on_arr_arg}index_arr, window, center, func, raw)"
         data_args.append(out)
 
     return ", ".join(data_args), on_arr
@@ -243,8 +243,13 @@ def _gen_rolling_impl(rolling, fname, other=None):
     header += "  window = rolling.window\n"
     header += "  center = rolling.center\n"
     header += f"  on_arr = {on_arr}\n"
-    if fname != "apply":
+    if fname == "apply":
+        header += f"  index_arr = bodo.utils.conversion.index_to_array(index)\n"
+    else:
         header += f"  func = '{fname}'\n"
+        # no need to pass index array
+        header += f"  index_arr = None\n"
+        header += f"  raw = False\n"
 
     if is_out_series:
         header += f"  return bodo.hiframes.pd_series_ext.init_series({data_args}, index, name)"
