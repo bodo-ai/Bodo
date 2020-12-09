@@ -1632,16 +1632,28 @@ def test_csv_header_write_read(datapath, memory_leak_check):
         os.remove(pd_fname)
 
 
+cat_csv_dtypes = {
+    "C1": pd.Int64Dtype(),
+    "C2": pd.CategoricalDtype(["A", "B", "C"]),
+    "C3": str,
+}
+
+
 def test_csv_cat1(datapath, memory_leak_check):
     fname = datapath("csv_data_cat1.csv")
 
     def test_impl(fname):
         ct_dtype = pd.CategoricalDtype(["A", "B", "C"])
-        dtypes = {"C1": np.int, "C2": ct_dtype, "C3": str}
+        dtypes = {"C1": np.dtype("int32"), "C2": ct_dtype, "C3": str}
         df = pd.read_csv(fname, names=["C1", "C2", "C3"], dtype=dtypes)
         return df
 
+    def test_impl2(fname):
+        df = pd.read_csv(fname, names=["C1", "C2", "C3"], dtype=cat_csv_dtypes)
+        return df
+
     check_func(test_impl, (fname,))
+    check_func(test_impl2, (fname,))
 
     compressed_names = compress_file(fname)
     try:

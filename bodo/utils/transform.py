@@ -440,6 +440,12 @@ def get_const_value_inner(
                     require(val == 1)
                 return val
 
+    if is_expr(var_def, "getattr"):
+        return getattr(
+            get_const_value_inner(func_ir, var_def.value, arg_types, typemap),
+            var_def.attr,
+        )
+
     # list/set/dict cases
 
     # try dict.keys()
@@ -549,6 +555,47 @@ def get_const_value_inner(
         and isinstance(typemap.get(var_def.args[0].name, None), types.BaseTuple)
     ):
         return len(typemap[var_def.args[0].name])
+
+    # pd.CategoricalDtype() calls
+    if call_name == ("CategoricalDtype", "pandas"):
+        kws = dict(var_def.kws)
+        cats = get_call_expr_arg(
+            "CategoricalDtype", var_def.args, kws, 0, "categories", ""
+        )
+        ordered = get_call_expr_arg(
+            "CategoricalDtype", var_def.args, kws, 1, "ordered", False
+        )
+        if ordered is not False:
+            ordered = get_const_value_inner(func_ir, ordered, arg_types, typemap)
+        if cats == "":
+            cats = None
+        else:
+            cats = get_const_value_inner(func_ir, cats, arg_types, typemap)
+        return pd.CategoricalDtype(cats, ordered)
+
+    # np.dtype() calls
+    if call_name == ("dtype", "numpy"):
+        return np.dtype(
+            get_const_value_inner(func_ir, var_def.args[0], arg_types, typemap)
+        )
+
+    # pd.Int64Dtype(), ...
+    if (
+        len(call_name) == 2
+        and call_name[1] == "pandas"
+        and call_name[0]
+        in (
+            "Int8Dtype",
+            "Int16Dtype",
+            "Int32Dtype",
+            "Int64Dtype",
+            "UInt8Dtype",
+            "UInt16Dtype",
+            "UInt32Dtype",
+            "UInt64Dtype",
+        )
+    ):
+        return getattr(pd, call_name[0])()
 
     raise GuardException("Constant value not found")
 

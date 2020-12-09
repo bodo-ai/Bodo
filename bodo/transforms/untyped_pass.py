@@ -900,26 +900,20 @@ class UntypedPass:
 
         # handle dtype arg if provided
         if dtype_var != "":
-            dtype_map = guard(get_definition, self.func_ir, dtype_var)
 
-            if (
-                not isinstance(dtype_map, ir.Expr) or dtype_map.op != "build_map"
-            ):  # pragma: no cover
-                # try single type for all columns case
-                dtype_map = self._get_const_dtype(dtype_var)
+            dtype_map_const = get_const_value(
+                dtype_var,
+                self.func_ir,
+                "pd.read_csv(): 'dtype' argument should be a constant value",
+                arg_types=self.args,
+            )
+            if isinstance(dtype_map_const, dict):
+                self._fix_dict_typing(dtype_var)
+                dtype_map = {
+                    c: _dtype_val_to_arr_type(t) for c, t in dtype_map_const.items()
+                }
             else:
-                new_dtype_map = {}
-                for n_var, t_var in dtype_map.items:
-                    # find constant column name
-                    c = guard(find_const, self.func_ir, n_var)
-                    if c is None:  # pragma: no cover
-                        raise BodoError("dtype column names should be constant")
-                    new_dtype_map[c] = self._get_const_dtype(t_var)
-
-                # HACK replace build_map to avoid inference errors
-                dtype_map.op = "build_list"
-                dtype_map.items = [v[0] for v in dtype_map.items]
-                dtype_map = new_dtype_map
+                dtype_map = _dtype_val_to_arr_type(dtype_map_const)
 
         if col_names == 0:
             raise BodoError("pd.read_csv() names should be constant list")
@@ -1624,6 +1618,18 @@ class UntypedPass:
         replace_arg_nodes(f_block, [var])
         return f_block.body[:-3]  # remove none return
 
+    def _fix_dict_typing(self, var):
+        """replace dict variable's definition to be non-dict to avoid Numba's typing
+        issues for heterogenous dictionaries. E.g. {"A": int, "B": "str"}
+        TODO(ehsan): fix in Numba and avoid this workaround
+        """
+        var_def = guard(get_definition, self.func_ir, var)
+        if is_expr(var_def, "build_map"):
+            var_def.op = "build_list"
+            var_def.items = [v[0] for v in var_def.items]
+        elif isinstance(var_def, (ir.Global, ir.FreeVar, ir.Const)):
+            var_def.value = 11
+
 
 def remove_dead_branches(func_ir):
     """
@@ -1654,6 +1660,66 @@ def remove_dead_branches(func_ir):
     cfg = compute_cfg_from_blocks(func_ir.blocks)
     for dead in cfg.dead_nodes():
         del func_ir.blocks[dead]
+
+
+def _dtype_val_to_arr_type(t):
+    """get array type from type value 't' specified in calls like read_csv()
+    e.g. "str" -> string_array_type
+    """
+
+    if t in ("str", str):
+        return string_array_type
+
+    if isinstance(t, str):
+        if t.startswith("Int") or t.startswith("UInt"):
+            dtype = bodo.libs.int_arr_ext.typeof_pd_int_dtype(
+                pd.api.types.pandas_dtype(t), None
+            )
+            return IntegerArrayType(dtype.dtype)
+
+        # datetime64 case
+        if t == "datetime64[ns]":
+            return types.Array(types.NPDatetime("ns"), 1, "C")
+
+        t = "int64" if t == "int" else t
+        t = "float64" if t == "float" else t
+        t = "bool_" if t == "bool" else t
+        # XXX: bool with NA needs to be object, TODO: fix somehow? doc.
+        t = "bool_" if t == "O" else t
+
+        if t == "bool_":
+            return boolean_array
+
+        typ = getattr(types, t)
+        typ = types.Array(typ, 1, "C")
+        return typ
+
+    if t == int:
+        return types.Array(types.int64, 1, "C")
+
+    if t == float:
+        return types.Array(types.float64, 1, "C")
+
+    # categorical type
+    if isinstance(t, pd.CategoricalDtype):
+        cats = tuple(t.categories)
+        elem_typ = bodo.string_type if len(cats) == 0 else bodo.typeof(cats[0])
+        typ = PDCategoricalDtype(cats, elem_typ, t.ordered)
+        return CategoricalArray(typ)
+
+    # nullable int types
+    if isinstance(t, pd.core.arrays.integer._IntegerDtype):
+        dtype = bodo.libs.int_arr_ext.typeof_pd_int_dtype(t, None)
+        return IntegerArrayType(dtype.dtype)
+
+    # try numpy dtypes
+    try:
+        dtype = numba.np.numpy_support.from_dtype(t)
+        return types.Array(dtype, 1, "C")
+    except:
+        pass
+
+    raise BodoError(f"invalid dtype value {t}")
 
 
 class JSONFileInfo(FileInfo):
