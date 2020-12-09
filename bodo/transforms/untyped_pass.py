@@ -745,26 +745,19 @@ class UntypedPass:
             )
 
         else:
-            dtype_map = guard(get_definition, self.func_ir, dtype_var)
-
-            if (
-                not isinstance(dtype_map, ir.Expr) or dtype_map.op != "build_map"
-            ):  # pragma: no cover
-                # try single type for all columns case
-                dtype_map = self._get_const_dtype(dtype_var)
+            dtype_map_const = get_const_value(
+                dtype_var,
+                self.func_ir,
+                "pd.read_excel(): 'dtype' argument should be a constant value",
+                arg_types=self.args,
+            )
+            if isinstance(dtype_map_const, dict):
+                self._fix_dict_typing(dtype_var)
+                dtype_map = {
+                    c: _dtype_val_to_arr_type(t) for c, t in dtype_map_const.items()
+                }
             else:
-                new_dtype_map = {}
-                for n_var, t_var in dtype_map.items:
-                    # find constant column name
-                    c = guard(find_const, self.func_ir, n_var)
-                    if c is None:  # pragma: no cover
-                        raise BodoError("dtype column names should be constant")
-                    new_dtype_map[c] = self._get_const_dtype(t_var)
-
-                # HACK replace build_map to avoid inference errors
-                dtype_map.op = "build_list"
-                dtype_map.items = [v[0] for v in dtype_map.items]
-                dtype_map = new_dtype_map
+                dtype_map = _dtype_val_to_arr_type(dtype_map_const)
 
             index = RangeIndexType(types.none)
             # TODO: support index_col
@@ -1107,26 +1100,19 @@ class UntypedPass:
             col_names = [str(df_type.columns[i]) for i in range(len(dtypes))]
             dtype_map = {c: dtypes[i] for i, c in enumerate(col_names)}
         else:  # handle dtype arg if provided
-            dtype_map = guard(get_definition, self.func_ir, dtype_var)
-
-            if (
-                not isinstance(dtype_map, ir.Expr) or dtype_map.op != "build_map"
-            ):  # pragma: no cover
-                # try single type for all columns case
-                dtype_map = self._get_const_dtype(dtype_var)
+            dtype_map_const = get_const_value(
+                dtype_var,
+                self.func_ir,
+                "pd.read_json(): 'dtype' argument should be a constant value",
+                arg_types=self.args,
+            )
+            if isinstance(dtype_map_const, dict):
+                self._fix_dict_typing(dtype_var)
+                dtype_map = {
+                    c: _dtype_val_to_arr_type(t) for c, t in dtype_map_const.items()
+                }
             else:
-                new_dtype_map = {}
-                for n_var, t_var in dtype_map.items:
-                    # find constant column name
-                    c = guard(find_const, self.func_ir, n_var)
-                    if c is None:  # pragma: no cover
-                        raise BodoError("dtype column names should be constant")
-                    new_dtype_map[c] = self._get_const_dtype(t_var)
-
-                # HACK replace build_map to avoid inference errors
-                dtype_map.op = "build_list"
-                dtype_map.items = [v[0] for v in dtype_map.items]
-                dtype_map = new_dtype_map
+                dtype_map = _dtype_val_to_arr_type(dtype_map_const)
 
         columns, data_arrs, out_types = self._get_read_file_col_info(
             dtype_map, date_cols, col_names, lhs
