@@ -186,7 +186,10 @@ that the Bodo Platform creates in your account to enable clusters and notebooks.
     - Cluster/notebook workers
   * - `EFS <https://aws.amazon.com/efs/>`_
     - Shared file system for clusters
-  * - `VPC <https://aws.amazon.com/vpc/>`_/network resources
+  * - `VPC <https://aws.amazon.com/vpc/>`_, `Subnets <https://docs.aws.amazon.com/vpc/latest/userguide/VPC_Subnets.html>`_,
+      `NAT Gateway <https://docs.aws.amazon.com/vpc/latest/userguide/vpc-nat-gateway.html>`_,
+      `Elastic IP <https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/elastic-ip-addresses-eip.html>`_,
+      `ENI <https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/using-eni.html>`_, ...
     - Secure networking for clusters/notebooks
   * - `S3 <https://aws.amazon.com/s3/>`_ and `Dynamo DB <https://aws.amazon.com/dynamodb/>`_
     - Resource states
