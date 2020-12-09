@@ -2,13 +2,15 @@
 """
 Tests for pd.Index functionality
 """
+import datetime
+
 import numpy as np
 import pandas as pd
 import pytest
 
 import bodo
-from bodo.utils.typing import BodoError
 from bodo.tests.utils import AnalysisTestPipeline, check_func
+from bodo.utils.typing import BodoError
 
 
 @pytest.mark.slow
@@ -107,7 +109,11 @@ def test_generic_index_constructor_with_dtype(data, dtype):
 
 @pytest.mark.slow
 @pytest.mark.parametrize(
-    "data", [[1, 3, 4], ["A", "B", "C"],],
+    "data",
+    [
+        [1, 3, 4],
+        ["A", "B", "C"],
+    ],
 )
 def test_generic_index_constructor_sequential(data):
     def impl(data):
@@ -408,6 +414,7 @@ def test_datetime_str_comp(dti_val, comp, memory_leak_check):
         ["2015-8-3", "NaT", "", "1990-11-21"],  # NaT cases
         pd.Series(["2015-8-3", "1990-11-21"]),
         pd.DatetimeIndex(["2015-8-3", "1990-11-21"]),
+        np.array([datetime.date(2020, 1, 1) + datetime.timedelta(i) for i in range(7)]),
     ],
 )
 def test_datetime_index_constructor(data, memory_leak_check):
@@ -660,7 +667,7 @@ def test_map(index, memory_leak_check):
     ],
 )
 def test_index_unsupported(data):
-    """ Test that a Bodo error is raised for unsupported
+    """Test that a Bodo error is raised for unsupported
     Index methods
     """
 
@@ -1131,6 +1138,7 @@ def test_index_unsupported(data):
 
     with pytest.raises(BodoError, match="not supported yet"):
         bodo.jit(test_where)(idx=pd.Index(data))
+
 
 def test_heter_index_binop():
     """test binary operations on heterogeneous Index values"""

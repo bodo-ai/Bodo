@@ -1,6 +1,8 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
+import datetime
 import random
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -104,6 +106,40 @@ def test_pivot_random_int_count_sum_prod_min_max(memory_leak_check):
         check_dtype=False,
         set_columns_name_to_none=True,
         reorder_columns=True,
+    )
+
+
+@pytest.mark.slow
+def test_pivot_table_count_date_index(memory_leak_check):
+    """Check that DatetimeDateArray can be used as an index.
+    See #2238."""
+
+    def f1(df):
+        pt = df.pivot_table(index="date_only", columns="C", values="D", aggfunc="count")
+        return pt
+
+    random.seed(5)
+    n = 20
+    n_keyA = 10
+    list_A = [str(random.randint(10, 10 + n_keyA)) for _ in range(n)]
+    list_C = [random.choice(["small", "large"]) for _ in range(n)]
+    list_D = [random.randint(1, 1000) + 0.4 for _ in range(n)]
+    df = pd.DataFrame({"A": list_A, "C": list_C, "D": list_D})
+    df["date_only"] = np.array(
+        [datetime.date(2020, 1, 1) + datetime.timedelta(i) for i in range(n)]
+    )
+    pivot_values = {"pt": ["small", "large"]}
+    add_args = {"pivots": pivot_values}
+    check_func(
+        f1,
+        (df,),
+        additional_compiler_arguments=add_args,
+        sort_output=True,
+        check_dtype=False,
+        set_columns_name_to_none=True,
+        reorder_columns=True,
+        # TODO: Remove reset_index when exact index types match.
+        reset_index=True,
     )
 
 

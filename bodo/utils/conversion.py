@@ -706,16 +706,26 @@ def convert_to_dt64ns(data):  # pragma: no cover
 def overload_convert_to_dt64ns(data):
     """Converts data formats like int64 and arrays of strings to dt64ns"""
     # see pd.core.arrays.datetimes.sequence_to_dt64ns for constructor types
-    # TODO: support datetime.date, datetime.datetime
     # TODO: support dayfirst, yearfirst, tz
+    if data == bodo.hiframes.datetime_date_ext.datetime_date_array_type:
+        return (
+            lambda data: bodo.hiframes.pd_timestamp_ext.datetime_date_arr_to_dt64_arr(
+                data
+            )  # pragma: no cover
+        )
+
     if data == types.Array(types.int64, 1, "C"):
-        return lambda data: data.view(bodo.utils.conversion.NS_DTYPE)
+        return lambda data: data.view(
+            bodo.utils.conversion.NS_DTYPE
+        )  # pragma: no cover
 
     if data == types.Array(types.NPDatetime("ns"), 1, "C"):
-        return lambda data: data
+        return lambda data: data  # pragma: no cover
 
     if data == bodo.string_array_type:
-        return lambda data: bodo.utils.conversion.parse_datetimes_from_strings(data)
+        return lambda data: bodo.utils.conversion.parse_datetimes_from_strings(
+            data
+        )  # pragma: no cover
 
     raise TypeError("invalid data type {} for dt64 conversion".format(data))
 
@@ -813,22 +823,38 @@ def overload_index_from_array(data, name=None):
             data, name
         )
 
-    assert isinstance(data, (types.Array, bodo.libs.int_arr_ext.IntegerArrayType))
+    assert (
+        isinstance(data, (types.Array, bodo.libs.int_arr_ext.IntegerArrayType))
+        or data == bodo.hiframes.datetime_date_ext.datetime_date_array_type
+    )
 
-    if data.dtype == types.NPDatetime("ns"):
-        return lambda data, name=None: pd.DatetimeIndex(data, name=name)
+    if (
+        data == bodo.hiframes.datetime_date_ext.datetime_date_array_type
+        or data.dtype == types.NPDatetime("ns")
+    ):
+        return lambda data, name=None: pd.DatetimeIndex(
+            data, name=name
+        )  # pragma: no cover
 
     if data.dtype == types.NPTimedelta("ns"):
-        return lambda data, name=None: pd.TimedeltaIndex(data, name=name)
+        return lambda data, name=None: pd.TimedeltaIndex(
+            data, name=name
+        )  # pragma: no cover
 
     if isinstance(data.dtype, types.Integer):
         if not data.dtype.signed:
-            return lambda data, name=None: pd.UInt64Index(data, name=name)
+            return lambda data, name=None: pd.UInt64Index(
+                data, name=name
+            )  # pragma: no cover
         else:
-            return lambda data, name=None: pd.Int64Index(data, name=name)
+            return lambda data, name=None: pd.Int64Index(
+                data, name=name
+            )  # pragma: no cover
 
     if isinstance(data.dtype, types.Float):
-        return lambda data, name=None: pd.Float64Index(data, name=name)
+        return lambda data, name=None: pd.Float64Index(
+            data, name=name
+        )  # pragma: no cover
 
     # TODO: timedelta, period
     raise TypeError("invalid index type {}".format(data))
@@ -846,10 +872,10 @@ def overload_index_to_array(I):
     from bodo.hiframes.pd_index_ext import RangeIndexType
 
     if isinstance(I, RangeIndexType):
-        return lambda I: np.arange(I._start, I._stop, I._step)
+        return lambda I: np.arange(I._start, I._stop, I._step)  # pragma: no cover
 
     # other indices have data
-    return lambda I: bodo.hiframes.pd_index_ext.get_index_data(I)
+    return lambda I: bodo.hiframes.pd_index_ext.get_index_data(I)  # pragma: no cover
 
 
 def extract_name_if_none(data, name):  # pragma: no cover
@@ -892,13 +918,15 @@ def overload_extract_index_if_none(data, index):
     from bodo.hiframes.pd_series_ext import SeriesType
 
     if not is_overload_none(index):
-        return lambda data, index: index
+        return lambda data, index: index  # pragma: no cover
 
     if isinstance(data, SeriesType):
-        return lambda data, index: bodo.hiframes.pd_series_ext.get_series_index(data)
+        return lambda data, index: bodo.hiframes.pd_series_ext.get_series_index(
+            data
+        )  # pragma: no cover
 
     return lambda data, index: bodo.hiframes.pd_index_ext.init_range_index(
-        0, len(data), 1, None
+        0, len(data), 1, None  # pragma: no cover
     )
 
 

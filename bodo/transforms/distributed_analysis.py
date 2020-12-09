@@ -760,6 +760,11 @@ class DistributedAnalysis:
                 raise BodoError(f"Argument of bodo.dl.prepare_data is not distributed")
             return
 
+        if fdef == ("datetime_date_arr_to_dt64_arr", "bodo.hiframes.pd_timestamp_ext"):
+            # LHS should match RHS
+            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            return
+
         if is_alloc_callname(func_name, func_mod):
             if lhs not in array_dists:
                 array_dists[lhs] = Distribution.OneD

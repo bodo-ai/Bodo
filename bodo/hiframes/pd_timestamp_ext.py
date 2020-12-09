@@ -1082,6 +1082,14 @@ def datetime_datetime_to_dt64(val):  # pragma: no cover
     return res
 
 
+@register_jitable
+def datetime_date_arr_to_dt64_arr(arr):  # pragma: no cover
+    """convert array of datetime.date to np.datetime64"""
+    with numba.objmode(res='NPDatetime("ns")[:]'):
+        res = np.array(arr, dtype="datetime64[ns]")
+    return res
+
+
 types.pandas_timestamp_type = pandas_timestamp_type
 
 

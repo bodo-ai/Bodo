@@ -7,17 +7,10 @@ import numpy as np
 import pandas as pd
 from numba.core import cgutils, types
 from numba.core.imputils import lower_constant
-from numba.core.typing.templates import (
-    AbstractTemplate,
-    AttributeTemplate,
-    bound_function,
-    infer_global,
-    signature,
-)
+from numba.core.typing.templates import AttributeTemplate, signature
 from numba.extending import (
     NativeValue,
     box,
-    infer,
     infer_getattr,
     intrinsic,
     lower_cast,
@@ -27,7 +20,6 @@ from numba.extending import (
     overload_attribute,
     overload_method,
     register_model,
-    type_callable,
     typeof_impl,
     unbox,
 )
@@ -36,20 +28,15 @@ from numba.parfors.array_analysis import ArrayAnalysis
 import bodo
 import bodo.hiframes
 import bodo.utils.conversion
-from bodo.hiframes.datetime_date_ext import get_isocalendar
 from bodo.hiframes.datetime_timedelta_ext import pd_timedelta_type
 from bodo.hiframes.pd_series_ext import SeriesType, string_array_type
 from bodo.hiframes.pd_timestamp_ext import pandas_timestamp_type
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.str_ext import string_type
-from bodo.utils.transform import (
-    gen_init_varsize_alloc_sizes,
-    gen_varsize_item_sizes,
-    get_const_func_output_type,
-    is_var_size_item_array_type,
-)
+from bodo.utils.transform import get_const_func_output_type
 from bodo.utils.typing import (
     BodoError,
+    create_unsupported_overload,
     get_overload_const_func,
     get_overload_const_str,
     get_udf_error_msg,
@@ -58,11 +45,9 @@ from bodo.utils.typing import (
     is_const_func_type,
     is_heterogeneous_tuple_type,
     is_iterable_type,
-    is_literal_type,
     is_overload_false,
     is_overload_none,
     is_overload_true,
-    create_unsupported_overload,
     raise_bodo_error,
 )
 
@@ -82,6 +67,10 @@ def typeof_pd_index(val, c):
     # XXX: assume string data type for empty Index with object dtype
     if val.equals(pd.Index([])):
         return StringIndexType(get_val_type_maybe_str_literal(val.name))
+
+    # TODO: Replace with a specific type for DateIndex, so these can be boxed
+    if val.inferred_type == "date":
+        return DatetimeIndexType(get_val_type_maybe_str_literal(val.name))
 
     # catch-all for non-supported Index types
     # RangeIndex is directly supported (TODO: make sure this is not called)
@@ -1950,8 +1939,16 @@ def array_typ_to_index(arr_typ, name_typ=None):
     if arr_typ == bodo.string_array_type:
         return StringIndexType(name_typ)
 
-    assert isinstance(arr_typ, types.Array) or isinstance(arr_typ, IntegerArrayType)
-    if arr_typ.dtype == types.NPDatetime("ns"):
+    assert (
+        isinstance(arr_typ, (types.Array, IntegerArrayType))
+        or arr_typ == bodo.datetime_date_array_type
+    )
+
+    # TODO: Pandas keeps datetime_date Index as a generic Index(, dtype=object)
+    # Fix this implementation to match.
+    if arr_typ == bodo.datetime_date_array_type or arr_typ.dtype == types.NPDatetime(
+        "ns"
+    ):
         return DatetimeIndexType(name_typ)
 
     if arr_typ.dtype == types.NPTimedelta("ns"):
@@ -2428,6 +2425,7 @@ def overload_heter_index_getitem(I, ind):  # pragma: no cover
             bodo.hiframes.pd_index_ext.get_index_data(I)[ind]
         )  # pragma: no cover
 
+
 index_unsupported = [
     "all",
     "any",
@@ -2511,8 +2509,7 @@ index_unsupported = [
 
 
 def _install_index_unsupported():
-    """install an overload that raises BodoError for unsupported methods of pd.Index
-    """
+    """install an overload that raises BodoError for unsupported methods of pd.Index"""
     index_types = [
         ("NumericIndexType.", NumericIndexType),
         ("StringIndexType.", StringIndexType),
@@ -2526,4 +2523,6 @@ def _install_index_unsupported():
             overload_method(typ, fname, no_unliteral=True)(
                 create_unsupported_overload(t_name + fname)
             )
+
+
 _install_index_unsupported()
