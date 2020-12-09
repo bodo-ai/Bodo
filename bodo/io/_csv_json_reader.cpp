@@ -470,7 +470,9 @@ class PathInfo {
      */
     std::shared_ptr<arrow::fs::FileSystem> get_fs() {
         if (!fs) {
-            bool is_hdfs = boost::starts_with(file_path, "hdfs://");
+            bool is_hdfs = boost::starts_with(file_path, "hdfs://") ||
+                           boost::starts_with(file_path, "abfs://") ||
+                           boost::starts_with(file_path, "abfss://");
             bool is_s3 = boost::starts_with(file_path, "s3://");
             if (is_s3 || is_hdfs) {
                 arrow::internal::Uri uri;

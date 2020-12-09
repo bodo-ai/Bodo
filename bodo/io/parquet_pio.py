@@ -28,6 +28,8 @@ from bodo.hiframes.datetime_date_ext import (
 from bodo.hiframes.pd_series_ext import _get_series_array_type
 from bodo.io import parquet_cpp
 from bodo.io.fs_io import (
+    abfs_is_directory,
+    abfs_list_dir_fnames,
     directory_of_files_common_filter,
     get_hdfs_fs,
     get_s3_fs,
@@ -54,10 +56,10 @@ from bodo.transforms import distributed_pass
 from bodo.utils.transform import get_const_value
 from bodo.utils.typing import BodoError, FileInfo
 from bodo.utils.utils import (
+    check_and_propagate_cpp_exception,
     is_null_pointer,
     sanitize_varname,
     unliteral_all,
-    check_and_propagate_cpp_exception,
 )
 
 # read Arrow Int columns as nullable int array (IntegerArrayType)
@@ -630,6 +632,11 @@ def is_directory_parallel(fpath):
                 isdir = s3_is_directory(get_s3_fs(), fpath)
             elif fpath.startswith("hdfs://"):  # pragma: no cover
                 _, isdir = hdfs_is_directory(fpath)
+            # TODO merge with hdfs when new pyarrow API works with abfs
+            elif fpath.startswith("abfs://") or fpath.startswith(
+                "abfss://"
+            ):  # pragma: no cover
+                _, isdir = abfs_is_directory(fpath)
             else:
                 isdir = os.path.isdir(fpath)
         except Exception as e:
@@ -658,6 +665,11 @@ def get_filenames_parallel(path, filter_func):
                 file_names = s3_list_dir_fnames(get_s3_fs(), path)
             elif path.startswith("hdfs://"):  # pragma: no cover
                 _, file_names = hdfs_list_dir_fnames(path)
+            # TODO merge with hdfs when new pyarrow API works with abfs
+            elif path.startswith("abfs://") or path.startswith(
+                "abfss://"
+            ):  # pragma: no cover
+                _, file_names = abfs_list_dir_fnames(path)
             else:
                 file_names = os.listdir(path)
             # pq.ParquetDataset() needs the full path for each file
@@ -687,7 +699,11 @@ def get_parquet_dataset(fpath, parallel, get_row_counts=True):
             return fs[0]
         if fpath.startswith("s3://"):
             fs.append(get_s3_fs())
-        elif fpath.startswith("hdfs://"):  # pragma: no cover
+        elif (
+            fpath.startswith("hdfs://")
+            or fpath.startswith("abfs://")
+            or fpath.startswith("abfss://")
+        ):  # pragma: no cover
             fs.append(get_hdfs_fs(fpath))
         else:
             fs.append(None)

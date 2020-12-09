@@ -837,7 +837,8 @@ void pq_init_reader(const char* file_name,
     arrow::Status status;
 
     // HDFS if starts with hdfs://
-    if (f_name.find("hdfs://") == 0) {
+    if (f_name.find("hdfs://") == 0 || f_name.find("abfs://") == 0 ||
+        f_name.find("abfss://") == 0) {
         std::unique_ptr<parquet::arrow::FileReader> arrow_reader;
         std::shared_ptr<::arrow::io::HdfsReadableFile> file;
         // get hdfs opener function

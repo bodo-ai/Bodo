@@ -359,12 +359,13 @@ Bodo uses `Apache Arrow <https://arrow.apache.org/>`_ internally for read and wr
 
 .. _HDFS:
 
-Hadoop Distributed File System (HDFS)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Hadoop Distributed File System (HDFS) and Azure Data Lake Storage (ADLS) Gen2
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Reading and writing :ref:`CSV <csv-section>`, :ref:`Parquet <parquet-section>`, :ref:`JSON <json-section>`, and :ref:`Numpy binary <numpy-binary-section>` files from and to Hadoop Distributed File System (HDFS) is supported.  
+Reading and writing :ref:`CSV <csv-section>`, :ref:`Parquet <parquet-section>`, :ref:`JSON <json-section>`, and :ref:`Numpy binary <numpy-binary-section>` files from and to Hadoop Distributed File System (HDFS) is supported.
+Note that Azure Data Lake Storage Gen2 can be accessed through HDFS.
 
-The file path should start with ``hdfs://``::
+The file path should start with ``hdfs://`` or ``abfs[s]://``::
 
     @bodo.jit
     def example_hdfs_parquet():
@@ -377,4 +378,4 @@ These environment variables are used for File I/O with HDFS:
 
         export CLASSPATH=`$HADOOP_HOME/bin/hdfs classpath --glob`
 
-Bodo uses `Apache Arrow <https://arrow.apache.org/>`_ internally for read and write of data on HDFS. ``$HADOOP_HOME/etc/hadoop/hdfs-site.xml`` provides default behaviors for the HDFS client used by Bodo. Inconsistent configurations(e.g. ``dfs.replication``) could potentially cause errors in Bodo programs.
+Bodo uses `Apache Arrow <https://arrow.apache.org/>`_ internally for read and write of data on HDFS. ``$HADOOP_HOME/etc/hadoop/hdfs-site.xml`` provides default behaviors for the HDFS client used by Bodo. Inconsistent configurations (e.g. ``dfs.replication``) could potentially cause errors in Bodo programs.

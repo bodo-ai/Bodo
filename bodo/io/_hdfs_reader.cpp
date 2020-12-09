@@ -70,6 +70,9 @@ std::shared_ptr<::arrow::fs::HadoopFileSystem> get_hdfs_fs(
             return hdfs_fs;
         }
     }
+    if (boost::starts_with(uri_string, "abfs://") || boost::starts_with(uri_string, "abfss://"))
+        // need to pass whole URI as host to libhdfs
+        options.ConfigureEndPoint(uri_string, 0);
     // connect to hdfs
     options.ConfigureReplication(0);
     options.ConfigureBufferSize(0);
@@ -225,7 +228,11 @@ void hdfs_open_file(const char *fname,
     arrow::Result<std::shared_ptr<arrow::fs::FileSystem>> tempfs =
         ::arrow::fs::FileSystemFromUri(f_name, &path);
     arrow::Result<std::shared_ptr<::arrow::io::RandomAccessFile>> result;
-    result = fs->OpenInputFile(path);
+    if (boost::starts_with(f_name, "abfs://") || boost::starts_with(f_name, "abfss://"))
+        // need to pass whole URI to libhdfs
+        result = fs->OpenInputFile(f_name);
+    else
+        result = fs->OpenInputFile(path);
     CHECK_ARROW_AND_ASSIGN(result, "fs->OpenInputFile", *file)
 }
 

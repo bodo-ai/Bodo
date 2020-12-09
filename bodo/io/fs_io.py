@@ -67,10 +67,21 @@ def get_hdfs_fs(path):  # pragma: no cover
     from pyarrow.hdfs import HadoopFileSystem as HdFS
 
     options = urlparse(path)
-    path = options.path
+    if options.scheme in ("abfs", "abfss"):
+        # need to pass the full URI as host to libhdfs
+        host = path
+        if options.port is None:
+            port = 0
+        else:
+            port = options.port
+        user = None
+    else:
+        host = options.hostname
+        port = options.port
+        user = options.username
     # creates a new Hadoop file system from uri
     try:
-        fs = HdFS(host=options.hostname, port=options.port, user=options.username)
+        fs = HdFS(host=host, port=port, user=user)
     except Exception as e:
         raise BodoError("Hadoop file system cannot be created: {}".format(e))
 
@@ -172,8 +183,6 @@ def hdfs_is_directory(path):
         hdfs = HadoopFileSystem.from_uri(path)
     except Exception as e:
         raise BodoError(" Hadoop file system cannot be created: {}".format(e))
-    # prefix in form of hdfs://host:port
-    prefix = path[: len(path) - len(hdfs_path)]
     # target stat of the path: file or just the directory itself
     target_stat = hdfs.get_file_info([path])
 
@@ -212,6 +221,54 @@ def hdfs_list_dir_fnames(path):  # pragma: no cover
                 "Exception on getting directory info " "of {}: {}".format(hdfs_path, e)
             )
         file_names = [file_stat.base_name for file_stat in file_stats]
+
+    return (hdfs, file_names)
+
+
+def abfs_is_directory(path):  # pragma: no cover
+    """
+    Return whether abfs path is a directory or not
+    """
+    import pyarrow as pa
+
+    hdfs = get_hdfs_fs(path)
+    try:
+        # target stat of the path: file or just the directory itself
+        target_stat = hdfs.info(path)
+    except OSError:
+        raise BodoError("{} is a " "non-existing or unreachable file".format(path))
+
+    if (target_stat["size"] == 0) and target_stat["kind"].lower() == "directory":
+        return hdfs, True
+
+    return hdfs, False
+
+
+def abfs_list_dir_fnames(path):  # pragma: no cover
+    """
+    initialize pyarrow.fs.HadoopFileSystem from path
+    If path is a directory, return all file names in the directory.
+    This returns the base name without the path:
+    ["file_name1", "file_name2", ...]
+    If path is a file, return None
+    return (pyarrow.fs.HadoopFileSystem, file_names)
+    """
+
+    from pyarrow.fs import FileSelector
+
+    file_names = None
+    hdfs, isdir = abfs_is_directory(path)
+    if isdir:
+        options = urlparse(path)
+        hdfs_path = options.path  # path within hdfs(i.e. dir/file)
+
+        try:
+            files = hdfs.ls(hdfs_path)
+        except Exception as e:
+            raise BodoError(
+                "Exception on getting directory info " "of {}: {}".format(hdfs_path, e)
+            )
+        file_names = [fname[fname.rindex("/") + 1 :] for fname in files]
 
     return (hdfs, file_names)
 
@@ -299,6 +356,27 @@ def find_file_name_or_handler(path, ftype):
             fname = urlparse(fname).path  # strip off hdfs://port:host/
 
         file_name_or_handler = fs.open_input_file(fname)
+    # TODO: this can be merged with hdfs path above when pyarrow's new
+    # HadoopFileSystem wrapper supports abfs scheme
+    elif parsed_url.scheme in ("abfs", "abfss"):  # pragma: no cover
+        is_handler = True
+        (fs, all_files) = abfs_list_dir_fnames(path)
+        f_size = fs.info(fname)["size"]
+
+        if all_files:
+            path = path.rstrip("/")
+            all_files = [
+                (path + "/" + f) for f in sorted(filter(filter_func, all_files))
+            ]
+            all_csv_files = [f for f in all_files if fs.info(f)["size"] > 0]
+            if len(all_csv_files) == 0:  # pragma: no cover
+                # TODO: test
+                raise BodoError(err_msg)
+            fname = all_csv_files[0]
+            f_size = fs.info(fname)["size"]
+            fname = urlparse(fname).path  # strip off abfs[s]://port:host/
+
+        file_name_or_handler = fs.open(fname, "rb")
     else:
         assert parsed_url.scheme == ""
         is_handler = False
