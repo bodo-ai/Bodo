@@ -581,7 +581,8 @@ def get_const_value_inner(
 
     # pd.Int64Dtype(), ...
     if (
-        len(call_name) == 2
+        call_name is not None
+        and len(call_name) == 2
         and call_name[1] == "pandas"
         and call_name[0]
         in (
