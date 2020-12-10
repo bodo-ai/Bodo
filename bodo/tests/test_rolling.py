@@ -121,6 +121,14 @@ def test_apply_raw_false(memory_leak_check):
     check_func(impl2, (df,))
 
 
+def test_nullable_int(memory_leak_check):
+    def impl(S):
+        return S.rolling(2).sum()
+
+    S = pd.Series([4, 1, 2, 11, 33, -12], dtype="Int64")
+    check_func(impl, (S,))
+
+
 @bodo.jit(distributed=False)
 def g(a):
     return a.sum()
@@ -450,9 +458,7 @@ class TestRolling(unittest.TestCase):
             wins = (2, 3, 5)
         centers = (False, True)
         for func_name in test_funcs:
-            func_text = "def test_impl(S, w, c):\n  return S.rolling(w, center=c).{}()\n".format(
-                func_name
-            )
+            func_text = f"def test_impl(S, w, c):\n  return S.rolling(w, center=c).{func_name}()\n"
             loc_vars = {}
             exec(func_text, {}, loc_vars)
             test_impl = loc_vars["test_impl"]

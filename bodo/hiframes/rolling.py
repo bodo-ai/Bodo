@@ -175,6 +175,7 @@ comm_border_tag = 22  # arbitrary, TODO: revisit comm tags
 def roll_fixed_linear_generic(
     in_arr, win, center, parallel, init_data, add_obs, remove_obs, calc_out
 ):  # pragma: no cover
+    in_arr = prep_values(in_arr)
     rank = bodo.libs.distributed_api.get_rank()
     n_pes = bodo.libs.distributed_api.get_size()
     N = len(in_arr)
@@ -307,6 +308,7 @@ def overload_roll_fixed_apply(
 def roll_fixed_apply_impl(
     in_arr, index_arr, win, center, parallel, kernel_func, raw=True
 ):  # pragma: no cover
+    in_arr = prep_values(in_arr)
     rank = bodo.libs.distributed_api.get_rank()
     n_pes = bodo.libs.distributed_api.get_size()
     N = len(in_arr)
@@ -681,6 +683,7 @@ def overload_offset_to_nanos(w):
 def roll_var_linear_generic(
     in_arr, on_arr_dt, win, center, parallel, init_data, add_obs, remove_obs, calc_out
 ):  # pragma: no cover
+    in_arr = prep_values(in_arr)
     win = offset_to_nanos(win)
     rank = bodo.libs.distributed_api.get_rank()
     n_pes = bodo.libs.distributed_api.get_size()
@@ -855,6 +858,7 @@ def overload_roll_variable_apply(
 def roll_variable_apply_impl(
     in_arr, on_arr_dt, index_arr, win, center, parallel, kernel_func, raw=True
 ):  # pragma: no cover
+    in_arr = prep_values(in_arr)
     win = offset_to_nanos(win)
     rank = bodo.libs.distributed_api.get_rank()
     n_pes = bodo.libs.distributed_api.get_size()
@@ -1896,3 +1900,19 @@ def shift_dtype_overload(a):
         return lambda a: np.float64  # pragma: no cover
     else:
         return lambda a: a  # pragma: no cover
+
+
+def prep_values(A):  # pragma: no cover
+    return A.astype("float64")
+
+
+@overload(prep_values, no_unliteral=True)
+def prep_values_overload(A):
+    # Pandas converts rolling input to float64
+    # https://github.com/pandas-dev/pandas/blob/6d0dab4c0914031517be4a3d1aff999e25cc2649/pandas/core/window/rolling.py#L265
+
+    # NOTE: A.astype("float64", copy=False) doesn't work in Numba (TODO: fix)
+    if A == types.Array(types.float64, 1, "C"):
+        return lambda A: A  # pragma: no cover
+
+    return lambda A: A.astype(np.float64)  # pragma: no cover
