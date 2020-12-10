@@ -11,7 +11,6 @@ import numpy as np
 import pandas as pd
 from numba.core import ir_utils, types
 from numba.core.errors import NumbaError
-from numba.core.imputils import lower_builtin
 from numba.core.registry import CPUDispatcher
 from numba.extending import (
     NativeValue,
@@ -739,6 +738,9 @@ def is_literal_type(t):
         or is_initial_value_type(t)
         # dtype literals should be treated as literals
         or isinstance(t, types.DTypeSpec)
+        # values like np.sum could be passed as UDFs and are technically literals
+        # See test_groupby_agg_func_udf
+        or isinstance(t, types.Function)
     )
 
 
