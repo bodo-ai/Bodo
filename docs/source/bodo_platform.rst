@@ -166,3 +166,37 @@ while the dropdown allows opening the notebook in a new tab.
 .. image:: platform_onboarding_screenshots/nb-status-done.png
     :align: center
     :alt: Notebook-Status-Finished
+
+
+Resources Created in Your AWS Environment
+-----------------------------------------
+
+Bodo deploys cluster/notebook resources in your own AWS environment to ensure
+security of your data.
+Below is a list of AWS resources
+that the Bodo Platform creates in your account to enable clusters and notebooks.
+
+
+.. list-table::
+  :header-rows: 1
+
+  * - AWS Service
+    - Purpose
+  * - `EC2 Instances <https://aws.amazon.com/ec2/>`_
+    - Cluster/notebook workers
+  * - `EFS <https://aws.amazon.com/efs/>`_
+    - Shared file system for clusters
+  * - `VPC <https://aws.amazon.com/vpc/>`_, `Subnets <https://docs.aws.amazon.com/vpc/latest/userguide/VPC_Subnets.html>`_,
+      `NAT Gateway <https://docs.aws.amazon.com/vpc/latest/userguide/vpc-nat-gateway.html>`_,
+      `Elastic IP <https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/elastic-ip-addresses-eip.html>`_,
+      `ENI <https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/using-eni.html>`_,
+      `Security Groups <https://docs.aws.amazon.com/vpc/latest/userguide/VPC_SecurityGroups.html>`_, ...
+    - Secure networking for clusters/notebooks
+  * - `S3 <https://aws.amazon.com/s3/>`_ and `Dynamo DB <https://aws.amazon.com/dynamodb/>`_
+    - Resource states
+  * - `AWS Systems Manager <https://aws.amazon.com/systems-manager/>`_
+    - Managing EC2 instances
+  * - `KMS <https://aws.amazon.com/kms/>`_
+    - Cluster secrets (e.g. SSH keys)
+  * - `IAM Role <https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles.html>`_ for Clusters
+    - Allow cluster workers to access resources above
