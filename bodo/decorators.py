@@ -141,7 +141,8 @@ def jit(signature_or_function=None, pipeline_class=None, **options):
         "inplace_binop": False,
         "reduction": True,
         "numpy": True,
-        "stencil": True,
+        # parallelizing stencils is not supported yet
+        "stencil": False,
         "fusion": True,
     }
 

@@ -6,18 +6,14 @@ import os
 import warnings
 
 import numba
-from numba.core import ir, ir_utils, postproc
+from numba.core import ir, ir_utils
 from numba.core.compiler import DefaultPassBuilder
 from numba.core.compiler_machinery import (
     AnalysisPass,
     FunctionPass,
-    PassManager,
     register_pass,
 )
-from numba.core.inline_closurecall import (
-    InlineClosureCallPass,
-    inline_closure_call,
-)
+from numba.core.inline_closurecall import inline_closure_call
 from numba.core.ir_utils import get_definition, guard
 from numba.core.registry import CPUDispatcher
 from numba.core.typed_passes import (
@@ -39,13 +35,12 @@ import bodo.transforms
 import bodo.transforms.series_pass
 import bodo.transforms.untyped_pass
 from bodo import config
-from bodo.transforms.dataframe_pass import DataFramePass
 from bodo.transforms.series_pass import SeriesPass
 from bodo.transforms.typing_pass import BodoTypeInference
 from bodo.transforms.untyped_pass import UntypedPass
 
 try:
-    import sklearn # noqa
+    import sklearn  # noqa
 
     import bodo.libs.sklearn_ext  # noqa  # side effect: initialize Numba extensions
 except ImportError:
@@ -56,8 +51,9 @@ except ImportError:
 import bodo.hiframes.dataframe_indexing  # noqa # side effect: initialize Numba extensions
 import bodo.hiframes.datetime_datetime_ext  # noqa # side effect: initialize Numba extensions
 import bodo.hiframes.datetime_timedelta_ext  # noqa # side effect: initialize Numba extensions
+
 try:  # pragma: no cover
-    import xgboost # noqa
+    import xgboost  # noqa
 
     import bodo.libs.xgb_ext  # side effect: initialize Numba extensions
 except ImportError:
@@ -68,7 +64,7 @@ import bodo.utils
 import bodo.utils.typing
 
 if config._has_h5py:
-    from bodo.io import h5 # noqa
+    from bodo.io import h5  # noqa
 
 
 # avoid Numba warning when there is no Parfor in the IR
@@ -471,7 +467,8 @@ def udf_jit(signature_or_function=None, **options):
         "inplace_binop": False,
         "reduction": True,
         "numpy": True,
-        "stencil": True,
+        # parallelizing stencils is not supported yet
+        "stencil": False,
         "fusion": True,
     }
     return numba.njit(
@@ -561,7 +558,8 @@ def get_func_type_info(func, arg_types, kw_types):
         "inplace_binop": False,
         "reduction": True,
         "numpy": True,
-        "stencil": True,
+        # parallelizing stencils is not supported yet
+        "stencil": False,
         "fusion": True,
     }
     targetoptions = {
