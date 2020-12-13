@@ -119,8 +119,8 @@ class DistributedDiagnostics:
             for arr, dist in self.array_dists.items():
                 # only show original user variable names in level=1
                 # avoid variable repetition (possible with renaming)
-                if level < 2 and arr in metadata["var_rename_map"]:
-                    arr = metadata["var_rename_map"][arr]
+                if level < 2 and arr in metadata["parfors"]["var_rename_map"]:
+                    arr = metadata["parfors"]["var_rename_map"][arr]
                 if level < 2 and (arr in printed_vars or arr.startswith("$")):
                     continue
                 printed_vars.add(arr)
@@ -186,8 +186,8 @@ class DistributedDiagnostics:
                 l_no = max(0, loc.line - 1)
                 # only show original user variable names in level=1
                 # avoid variable repetition (possible with renaming)
-                if level < 2 and arr in metadata["var_rename_map"]:
-                    arr = metadata["var_rename_map"][arr]
+                if level < 2 and arr in metadata["parfors"]["var_rename_map"]:
+                    arr = metadata["parfors"]["var_rename_map"][arr]
                 if level < 2 and (arr in printed_vars or arr.startswith("$")):
                     continue
                 printed_vars.add(arr)
@@ -2737,8 +2737,8 @@ class DistributedAnalysis:
 
     def _get_user_varname(self, v):
         """get original variable name by user for diagnostics info if possible"""
-        if v in self.metadata["var_rename_map"]:
-            return self.metadata["var_rename_map"][v]
+        if v in self.metadata["parfors"]["var_rename_map"]:
+            return self.metadata["parfors"]["var_rename_map"][v]
         return v
 
 
