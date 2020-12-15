@@ -745,26 +745,19 @@ class UntypedPass:
             )
 
         else:
-            dtype_map = guard(get_definition, self.func_ir, dtype_var)
-
-            if (
-                not isinstance(dtype_map, ir.Expr) or dtype_map.op != "build_map"
-            ):  # pragma: no cover
-                # try single type for all columns case
-                dtype_map = self._get_const_dtype(dtype_var)
+            dtype_map_const = get_const_value(
+                dtype_var,
+                self.func_ir,
+                "pd.read_excel(): 'dtype' argument should be a constant value",
+                arg_types=self.args,
+            )
+            if isinstance(dtype_map_const, dict):
+                self._fix_dict_typing(dtype_var)
+                dtype_map = {
+                    c: _dtype_val_to_arr_type(t) for c, t in dtype_map_const.items()
+                }
             else:
-                new_dtype_map = {}
-                for n_var, t_var in dtype_map.items:
-                    # find constant column name
-                    c = guard(find_const, self.func_ir, n_var)
-                    if c is None:  # pragma: no cover
-                        raise BodoError("dtype column names should be constant")
-                    new_dtype_map[c] = self._get_const_dtype(t_var)
-
-                # HACK replace build_map to avoid inference errors
-                dtype_map.op = "build_list"
-                dtype_map.items = [v[0] for v in dtype_map.items]
-                dtype_map = new_dtype_map
+                dtype_map = _dtype_val_to_arr_type(dtype_map_const)
 
             index = RangeIndexType(types.none)
             # TODO: support index_col
@@ -900,26 +893,20 @@ class UntypedPass:
 
         # handle dtype arg if provided
         if dtype_var != "":
-            dtype_map = guard(get_definition, self.func_ir, dtype_var)
 
-            if (
-                not isinstance(dtype_map, ir.Expr) or dtype_map.op != "build_map"
-            ):  # pragma: no cover
-                # try single type for all columns case
-                dtype_map = self._get_const_dtype(dtype_var)
+            dtype_map_const = get_const_value(
+                dtype_var,
+                self.func_ir,
+                "pd.read_csv(): 'dtype' argument should be a constant value",
+                arg_types=self.args,
+            )
+            if isinstance(dtype_map_const, dict):
+                self._fix_dict_typing(dtype_var)
+                dtype_map = {
+                    c: _dtype_val_to_arr_type(t) for c, t in dtype_map_const.items()
+                }
             else:
-                new_dtype_map = {}
-                for n_var, t_var in dtype_map.items:
-                    # find constant column name
-                    c = guard(find_const, self.func_ir, n_var)
-                    if c is None:  # pragma: no cover
-                        raise BodoError("dtype column names should be constant")
-                    new_dtype_map[c] = self._get_const_dtype(t_var)
-
-                # HACK replace build_map to avoid inference errors
-                dtype_map.op = "build_list"
-                dtype_map.items = [v[0] for v in dtype_map.items]
-                dtype_map = new_dtype_map
+                dtype_map = _dtype_val_to_arr_type(dtype_map_const)
 
         if col_names == 0:
             raise BodoError("pd.read_csv() names should be constant list")
@@ -1113,26 +1100,19 @@ class UntypedPass:
             col_names = [str(df_type.columns[i]) for i in range(len(dtypes))]
             dtype_map = {c: dtypes[i] for i, c in enumerate(col_names)}
         else:  # handle dtype arg if provided
-            dtype_map = guard(get_definition, self.func_ir, dtype_var)
-
-            if (
-                not isinstance(dtype_map, ir.Expr) or dtype_map.op != "build_map"
-            ):  # pragma: no cover
-                # try single type for all columns case
-                dtype_map = self._get_const_dtype(dtype_var)
+            dtype_map_const = get_const_value(
+                dtype_var,
+                self.func_ir,
+                "pd.read_json(): 'dtype' argument should be a constant value",
+                arg_types=self.args,
+            )
+            if isinstance(dtype_map_const, dict):
+                self._fix_dict_typing(dtype_var)
+                dtype_map = {
+                    c: _dtype_val_to_arr_type(t) for c, t in dtype_map_const.items()
+                }
             else:
-                new_dtype_map = {}
-                for n_var, t_var in dtype_map.items:
-                    # find constant column name
-                    c = guard(find_const, self.func_ir, n_var)
-                    if c is None:  # pragma: no cover
-                        raise BodoError("dtype column names should be constant")
-                    new_dtype_map[c] = self._get_const_dtype(t_var)
-
-                # HACK replace build_map to avoid inference errors
-                dtype_map.op = "build_list"
-                dtype_map.items = [v[0] for v in dtype_map.items]
-                dtype_map = new_dtype_map
+                dtype_map = _dtype_val_to_arr_type(dtype_map_const)
 
         columns, data_arrs, out_types = self._get_read_file_col_info(
             dtype_map, date_cols, col_names, lhs
@@ -1202,90 +1182,6 @@ class UntypedPass:
             data_arrs.append(ir.Var(lhs.scope, mk_unique_var(col_name), lhs.loc))
 
         return columns, data_arrs, out_types
-
-    def _get_const_dtype(self, dtype_var):
-        dtype_def = guard(get_definition, self.func_ir, dtype_var)
-        if isinstance(dtype_def, ir.Const) and isinstance(dtype_def.value, str):
-            typ_name = dtype_def.value
-            if typ_name == "str":
-                return string_array_type
-
-            if typ_name.startswith("Int") or typ_name.startswith("UInt"):
-                dtype = bodo.libs.int_arr_ext.typeof_pd_int_dtype(
-                    pd.api.types.pandas_dtype(typ_name), None
-                )
-                return IntegerArrayType(dtype.dtype)
-
-            # datetime64 case
-            if typ_name == "datetime64[ns]":
-                return types.Array(types.NPDatetime("ns"), 1, "C")
-
-            typ_name = "int64" if typ_name == "int" else typ_name
-            typ_name = "float64" if typ_name == "float" else typ_name
-            typ_name = "bool_" if typ_name == "bool" else typ_name
-            # XXX: bool with NA needs to be object, TODO: fix somehow? doc.
-            typ_name = "bool_" if typ_name == "O" else typ_name
-
-            if typ_name == "bool_":
-                return boolean_array
-
-            typ = getattr(types, typ_name)
-            typ = types.Array(typ, 1, "C")
-            return typ
-
-        # str case
-        if isinstance(dtype_def, ir.Global) and dtype_def.value == str:
-            return string_array_type
-
-        # cases that involve a function call like Int, Categorical, np.dtype()
-        if isinstance(dtype_def, ir.Expr) and dtype_def.op == "call":
-            fdef = guard(find_callname, self.func_ir, dtype_def)
-            if (
-                fdef is not None
-                and len(fdef) == 2
-                and fdef[1] == "pandas"
-                and (fdef[0].startswith("Int") or fdef[0].startswith("UInt"))
-            ):
-                pd_dtype = getattr(pd, fdef[0])()
-                dtype = bodo.libs.int_arr_ext.typeof_pd_int_dtype(pd_dtype, None)
-                return IntegerArrayType(dtype.dtype)
-
-            # np.dtype() case
-            if fdef == ("dtype", "numpy"):
-                assert len(dtype_def.args) == 1
-                return self._get_const_dtype(dtype_def.args[0])
-
-            if not fdef == ("CategoricalDtype", "pandas"):
-                raise BodoError(
-                    "pd.read_csv() invalid dtype "
-                    "(built using a call but not Int or Categorical)"
-                )
-            err_msg = "categories should be constant list"
-            cats = self._get_const_arg(
-                "CategoricalDtype",
-                dtype_def.args,
-                dict(dtype_def.kws),
-                0,
-                "categories",
-                err_msg=err_msg,
-            )
-            elem_typ = bodo.string_type if len(cats) == 0 else bodo.typeof(cats[0])
-            # TODO: support other possible CategoricalDtype() calls
-            typ = PDCategoricalDtype(cats, elem_typ, False)
-            return CategoricalArray(typ)
-
-        if not isinstance(dtype_def, ir.Expr) or dtype_def.op != "getattr":
-            raise BodoError("pd.read_csv() invalid dtype")
-        glob_def = guard(get_definition, self.func_ir, dtype_def.value)
-        if not isinstance(glob_def, ir.Global) or glob_def.value != np:
-            raise BodoError("pd.read_csv() invalid dtype")
-        # TODO: extend to other types like string and date, check error
-        typ_name = dtype_def.attr
-        typ_name = "int64" if typ_name == "int" else typ_name
-        typ_name = "float64" if typ_name == "float" else typ_name
-        typ = getattr(types, typ_name)
-        typ = types.Array(typ, 1, "C")
-        return typ
 
     def _handle_pd_Series(self, assign, lhs, rhs):
         """transform pd.Series(A) call for flatmap case"""
@@ -1624,6 +1520,18 @@ class UntypedPass:
         replace_arg_nodes(f_block, [var])
         return f_block.body[:-3]  # remove none return
 
+    def _fix_dict_typing(self, var):
+        """replace dict variable's definition to be non-dict to avoid Numba's typing
+        issues for heterogenous dictionaries. E.g. {"A": int, "B": "str"}
+        TODO(ehsan): fix in Numba and avoid this workaround
+        """
+        var_def = guard(get_definition, self.func_ir, var)
+        if is_expr(var_def, "build_map"):
+            var_def.op = "build_list"
+            var_def.items = [v[0] for v in var_def.items]
+        elif isinstance(var_def, (ir.Global, ir.FreeVar, ir.Const)):
+            var_def.value = 11  # arbitrary value that can be typed
+
 
 def remove_dead_branches(func_ir):
     """
@@ -1654,6 +1562,66 @@ def remove_dead_branches(func_ir):
     cfg = compute_cfg_from_blocks(func_ir.blocks)
     for dead in cfg.dead_nodes():
         del func_ir.blocks[dead]
+
+
+def _dtype_val_to_arr_type(t):
+    """get array type from type value 't' specified in calls like read_csv()
+    e.g. "str" -> string_array_type
+    """
+
+    if t in ("str", str):
+        return string_array_type
+
+    if isinstance(t, str):
+        if t.startswith("Int") or t.startswith("UInt"):
+            dtype = bodo.libs.int_arr_ext.typeof_pd_int_dtype(
+                pd.api.types.pandas_dtype(t), None
+            )
+            return IntegerArrayType(dtype.dtype)
+
+        # datetime64 case
+        if t == "datetime64[ns]":
+            return types.Array(types.NPDatetime("ns"), 1, "C")
+
+        t = "int64" if t == "int" else t
+        t = "float64" if t == "float" else t
+        t = "bool_" if t == "bool" else t
+        # XXX: bool with NA needs to be object, TODO: fix somehow? doc.
+        t = "bool_" if t == "O" else t
+
+        if t == "bool_":
+            return boolean_array
+
+        typ = getattr(types, t)
+        typ = types.Array(typ, 1, "C")
+        return typ
+
+    if t == int:
+        return types.Array(types.int64, 1, "C")
+
+    if t == float:
+        return types.Array(types.float64, 1, "C")
+
+    # categorical type
+    if isinstance(t, pd.CategoricalDtype):
+        cats = tuple(t.categories)
+        elem_typ = bodo.string_type if len(cats) == 0 else bodo.typeof(cats[0])
+        typ = PDCategoricalDtype(cats, elem_typ, t.ordered)
+        return CategoricalArray(typ)
+
+    # nullable int types
+    if isinstance(t, pd.core.arrays.integer._IntegerDtype):
+        dtype = bodo.libs.int_arr_ext.typeof_pd_int_dtype(t, None)
+        return IntegerArrayType(dtype.dtype)
+
+    # try numpy dtypes
+    try:
+        dtype = numba.np.numpy_support.from_dtype(t)
+        return types.Array(dtype, 1, "C")
+    except:
+        pass
+
+    raise BodoError(f"invalid dtype value {t}")
 
 
 class JSONFileInfo(FileInfo):
