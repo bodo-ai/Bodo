@@ -440,6 +440,94 @@ def test_mae(data, multioutput, memory_leak_check):
     check_func(test_mae_1, tuple(data), is_out_distributed=False)
 
 
+def gen_ss_random_data(num_samples, num_features, frac_Nans=0.0, scale=1.0):
+    """
+    Generate random data of shape (num_samples, num_features), where each number
+    is in the range (-scale, scale), and frac_Nans fraction of entries are np.nan.
+    """
+    random.seed(5)
+    np.random.seed(5)
+    X = np.random.rand(num_samples, num_features)
+    X = 2 * X - 1
+    X = X * scale
+    mask = np.random.choice([1, 0], X.shape, p=[frac_Nans, 1 - frac_Nans]).astype(bool)
+    X[mask] = np.nan
+    return X
+
+
+def gen_ss_edge_case(num_samples, num_features, frac_Nans=0.0, scale=1.0, dim_to_nan=0):
+    """
+    Helper function to generate random data for testing an edge case of standard scaler.
+    In this edge case, along a specified dimension (dim_to_nan), all but one entry is
+    set to np.nan.
+    """
+    X = gen_ss_random_data(num_samples, num_features, frac_Nans=frac_Nans, scale=scale)
+    X[1:, dim_to_nan] = np.nan
+    return X
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        (gen_ss_random_data(20, 3), gen_ss_random_data(100, 3)),
+        (gen_ss_random_data(15, 5, 0.2, 4), gen_ss_random_data(60, 5, 0.5, 2)),
+        (gen_ss_random_data(20, 1, 0, 2), gen_ss_random_data(50, 1, 0.1, 1)),
+        (gen_ss_random_data(20, 1, 0.2, 5), gen_ss_random_data(50, 1, 0.1, 2)),
+        (gen_ss_edge_case(20, 5, 0, 4, 2), gen_ss_random_data(40, 5, 0.1, 3)),
+    ],
+)
+@pytest.mark.parametrize("copy", [True, False])
+@pytest.mark.parametrize("with_mean", [True, False])
+@pytest.mark.parametrize("with_std", [True, False])
+def test_standard_scaler(data, copy, with_mean, with_std, memory_leak_check):
+    """
+    Tests for sklearn.preprocessing.StandardScaler implementation in Bodo.
+    """
+
+    def test_fit(X):
+        m = StandardScaler(with_mean=with_mean, with_std=with_std, copy=copy)
+        m = m.fit(X)
+        return m
+
+    py_output = test_fit(data[0])
+    bodo_output = bodo.jit(distributed=["X"])(test_fit)(_get_dist_arg(data[0]))
+
+    assert np.array_equal(py_output.n_samples_seen_, bodo_output.n_samples_seen_)
+    if with_mean or with_std:
+        assert np.allclose(
+            py_output.mean_, bodo_output.mean_, atol=1e-4, equal_nan=True
+        )
+    if with_std:
+        assert np.allclose(py_output.var_, bodo_output.var_, atol=1e-4, equal_nan=True)
+        assert np.allclose(
+            py_output.scale_, bodo_output.scale_, atol=1e-4, equal_nan=True
+        )
+
+    def test_transform(X, X1):
+        m = StandardScaler(with_mean=with_mean, with_std=with_std, copy=copy)
+        m = m.fit(X)
+        X1_transformed = m.transform(X1)
+        return X1_transformed
+
+    check_func(
+        test_transform, data, is_out_distributed=True, atol=1e-4, copy_input=True
+    )
+
+    def test_inverse_transform(X, X1):
+        m = StandardScaler(with_mean=with_mean, with_std=with_std, copy=copy)
+        m = m.fit(X)
+        X1_inverse_transformed = m.inverse_transform(X1)
+        return X1_inverse_transformed
+
+    check_func(
+        test_inverse_transform,
+        data,
+        is_out_distributed=True,
+        atol=1e-4,
+        copy_input=True,
+    )
+
+
 @pytest.mark.skip(reason="Run manually on multinode cluster.")
 def test_multinode_bigdata():
     """Check classification against sklearn with big data on multinode cluster"""

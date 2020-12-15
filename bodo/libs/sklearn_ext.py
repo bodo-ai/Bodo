@@ -1,5 +1,6 @@
 """Support scikit-learn using object mode of Numba """
 import itertools
+import numbers
 
 import numba
 import numpy as np
@@ -24,6 +25,12 @@ from numba.extending import (
 )
 from sklearn.metrics import hinge_loss, log_loss, mean_squared_error
 from sklearn.preprocessing import LabelBinarizer
+from sklearn.preprocessing._data import (
+    _handle_zeros_in_scale as sklearn_handle_zeros_in_scale,
+)
+from sklearn.utils.extmath import (
+    _safe_accumulator_op as sklearn_safe_accumulator_op,
+)
 from sklearn.utils.validation import _check_sample_weight
 
 import bodo
@@ -2818,3 +2825,240 @@ def overload_svm_linear_svc_score(
 ):
     """Overload LinearSVC score."""
     return parallel_score(m, X, y, sample_weight, _is_data_distributed)
+
+
+# ----------------------------------------------------------------------------------------
+# ----------------------------------- Standard-Scaler ------------------------------------
+# Support for sklearn.preprocessing.StandardScaler.
+# Currently only fit, transform and inverse_transform functions are supported.
+# Support for partial_fit will be added in the future since that will require a
+# more native implementation. We use sklearn's transform and inverse_transform directly
+# in their Bodo implementation. For fit, we use a combination of sklearn's fit function
+# and a native implementation. We compute the mean and num_samples_seen on each rank
+# using sklearn's fit implementation, then we compute the global values for these using
+# MPI operations, and then calculate the variance using a native implementation.
+# ----------------------------------------------------------------------------------------
+
+
+class BodoPreprocessingStandardScalerType(types.Opaque):
+    def __init__(self):
+        super(BodoPreprocessingStandardScalerType, self).__init__(
+            name="BodoPreprocessingStandardScalerType"
+        )
+
+
+preprocessing_standard_scaler_type = BodoPreprocessingStandardScalerType()
+types.preprocessing_standard_scaler_type = preprocessing_standard_scaler_type
+
+register_model(BodoPreprocessingStandardScalerType)(models.OpaqueModel)
+
+
+@typeof_impl.register(sklearn.preprocessing.StandardScaler)
+def typeof_preprocessing_standard_scaler(val, c):
+    return preprocessing_standard_scaler_type
+
+
+@box(BodoPreprocessingStandardScalerType)
+def box_preprocessing_standard_scaler(typ, val, c):
+    # See note in box_random_forest_classifier
+    c.pyapi.incref(val)
+    return val
+
+
+@unbox(BodoPreprocessingStandardScalerType)
+def unbox_preprocessing_standard_scaler(typ, obj, c):
+    # borrow reference from Python
+    c.pyapi.incref(obj)
+    return NativeValue(obj)
+
+
+@overload(sklearn.preprocessing.StandardScaler, no_unliteral=True)
+def sklearn_preprocessing_standard_scaler_overload(
+    copy=True, with_mean=True, with_std=True
+):
+    """
+    Provide implementation for __init__ functions of StandardScaler.
+    We simply call sklearn in objmode.
+    """
+
+    def _sklearn_preprocessing_standard_scaler_impl(
+        copy=True, with_mean=True, with_std=True
+    ):  # pragma: no cover
+
+        with numba.objmode(m="preprocessing_standard_scaler_type"):
+            m = sklearn.preprocessing.StandardScaler(
+                copy=copy,
+                with_mean=with_mean,
+                with_std=with_std,
+            )
+        return m
+
+    return _sklearn_preprocessing_standard_scaler_impl
+
+
+def sklearn_preprocessing_standard_scaler_fit_dist_helper(m, X):
+    """
+    Distributed calculation of mean and variance for standard scaler.
+    We use sklearn to calculate mean and n_samples_seen, combine the
+    results appropriately to get the global mean and n_samples_seen.
+    We then use these to calculate the variance (and std-dev i.e. scale)
+    ourselves (using standard formulae for variance and some helper
+    functions from sklearn)
+    """
+
+    comm = MPI.COMM_WORLD
+    num_pes = comm.Get_size()
+
+    # Get original value of with_std, with_mean
+    original_with_std = m.with_std
+    original_with_mean = m.with_mean
+
+    # Call with with_std = False to get the mean and n_samples_seen
+    m.with_std = False
+    if original_with_std:
+        m.with_mean = True  # Force set to True, since we'll need it for std calculation
+    m = m.fit(X)
+
+    # Restore with_std, with_mean
+    m.with_std = original_with_std
+    m.with_mean = original_with_mean
+
+    # Handle n_samples_seen:
+    # Sklearn returns an int if the same number of samples were found for all dimensions
+    # and returns an array if different number of elements were found on different dimensions.
+    # For ease of computation in upcoming steps, we convert them to arrays if it is currently an int.
+    # We also check if it's an int on all the ranks, if it is, then we will convert it to int at the end
+    # on all the ranks to be consistent with sklearn behavior.
+
+    # From: https://github.com/scikit-learn/scikit-learn/blob/0fb307bf39bbdacd6ed713c00724f8f871d60370/sklearn/preprocessing/_data.py#L708
+    if not isinstance(m.n_samples_seen_, numbers.Integral):
+        n_samples_seen_ints_on_all_ranks = False
+    else:
+        n_samples_seen_ints_on_all_ranks = True
+        # Convert to array if it is currently an integer
+        # From: https://github.com/scikit-learn/scikit-learn/blob/0fb307bf39bbdacd6ed713c00724f8f871d60370/sklearn/preprocessing/_data.py#L709
+        m.n_samples_seen_ = np.repeat(m.n_samples_seen_, X.shape[1]).astype(
+            np.int64, copy=False
+        )
+
+    # And then AllGather on n_samples_seen_ to get the sum (and weights for later)
+    n_samples_seen_by_rank = np.zeros(
+        (num_pes, *m.n_samples_seen_.shape), dtype=m.n_samples_seen_.dtype
+    )
+    comm.Allgather(m.n_samples_seen_, n_samples_seen_by_rank)
+    global_n_samples_seen = np.sum(n_samples_seen_by_rank, axis=0)
+
+    # Set n_samples_seen as the sum
+    m.n_samples_seen_ = global_n_samples_seen
+
+    if m.with_mean or m.with_std:
+        # AllGather on the mean, and then recompute using np.average and n_samples_seen_rank as weight
+        mean_by_rank = np.zeros((num_pes, *m.mean_.shape), dtype=m.mean_.dtype)
+        comm.Allgather(m.mean_, mean_by_rank)
+        # Replace NaNs with 0 since np.average doesn't have NaN handling
+        mean_by_rank[np.isnan(mean_by_rank)] = 0
+        global_mean = np.average(mean_by_rank, axis=0, weights=n_samples_seen_by_rank)
+        m.mean_ = global_mean
+
+    # If with_std, then calculate (for each dim), np.nansum((X - mean)**2)/total_n_samples_seen on each rank
+    if m.with_std:
+        # Using _safe_accumulator_op (like in https://github.com/scikit-learn/scikit-learn/blob/0fb307bf39bbdacd6ed713c00724f8f871d60370/sklearn/utils/extmath.py#L776)
+        local_variance_calc = (
+            sklearn_safe_accumulator_op(np.nansum, (X - global_mean) ** 2, axis=0)
+            / global_n_samples_seen
+        )
+        # Then AllReduce(op.SUM) these values, to get the global variance on each rank.
+        global_variance = np.zeros_like(local_variance_calc)
+        comm.Allreduce(local_variance_calc, global_variance, op=MPI.SUM)
+        m.var_ = global_variance
+        # Calculate scale_ from var_
+        # From: https://github.com/scikit-learn/scikit-learn/blob/0fb307bf39bbdacd6ed713c00724f8f871d60370/sklearn/preprocessing/_data.py#L772
+        m.scale_ = sklearn_handle_zeros_in_scale(np.sqrt(m.var_))
+
+    # Logical AND across ranks on n_samples_seen_ints_on_all_ranks
+    n_samples_seen_ints_on_all_ranks = comm.allreduce(
+        n_samples_seen_ints_on_all_ranks, op=MPI.LAND
+    )
+    # If all are ints, then convert to int on all ranks, else let them be arrays
+    if n_samples_seen_ints_on_all_ranks:
+        m.n_samples_seen_ = m.n_samples_seen_[0]
+
+    return m
+
+
+@overload_method(BodoPreprocessingStandardScalerType, "fit", no_unliteral=True)
+def overload_preprocessing_standard_scaler_fit(
+    m,
+    X,
+    y=None,
+    _is_data_distributed=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position)
+):
+    """
+    Provide implementations for the fit function.
+    In case input is replicated, we simply call sklearn,
+    else we use our native implementation.
+    """
+
+    def _preprocessing_standard_scaler_fit_impl(
+        m, X, y=None, _is_data_distributed=False
+    ):  # pragma: no cover
+
+        with numba.objmode(m="preprocessing_standard_scaler_type"):
+            if _is_data_distributed:
+                # If distributed, then use native implementation
+                m = sklearn_preprocessing_standard_scaler_fit_dist_helper(m, X)
+            else:
+                # If replicated, then just call sklearn
+                m = m.fit(X, y)
+
+        return m
+
+    return _preprocessing_standard_scaler_fit_impl
+
+
+@overload_method(BodoPreprocessingStandardScalerType, "transform", no_unliteral=True)
+def overload_preprocessing_standard_scaler_transform(
+    m,
+    X,
+    copy=None,
+):
+    """
+    Provide implementation for the transform function.
+    We simply call sklearn's transform on each rank.
+    """
+
+    def _preprocessing_standard_scaler_transform_impl(
+        m,
+        X,
+        copy=None,
+    ):  # pragma: no cover
+        with numba.objmode(transformed_X="float64[:,:]"):
+            transformed_X = m.transform(X, copy=copy)
+        return transformed_X
+
+    return _preprocessing_standard_scaler_transform_impl
+
+
+@overload_method(
+    BodoPreprocessingStandardScalerType, "inverse_transform", no_unliteral=True
+)
+def overload_preprocessing_standard_scaler_inverse_transform(
+    m,
+    X,
+    copy=None,
+):
+    """
+    Provide implementation for the inverse_transform function.
+    We simply call sklearn's inverse_transform on each rank.
+    """
+
+    def _preprocessing_standard_scaler_inverse_transform_impl(
+        m,
+        X,
+        copy=None,
+    ):  # pragma: no cover
+        with numba.objmode(inverse_transformed_X="float64[:,:]"):
+            inverse_transformed_X = m.inverse_transform(X, copy=copy)
+        return inverse_transformed_X
+
+    return _preprocessing_standard_scaler_inverse_transform_impl

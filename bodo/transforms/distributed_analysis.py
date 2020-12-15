@@ -710,6 +710,20 @@ class DistributedAnalysis:
             )
             return
 
+        if (
+            func_name in {"fit", "transform", "inverse_transform"}
+            and "bodo.libs.sklearn_ext" in sys.modules
+            and isinstance(func_mod, numba.core.ir.Var)
+            and isinstance(
+                self.typemap[func_mod.name],
+                bodo.libs.sklearn_ext.BodoPreprocessingStandardScalerType,
+            )
+        ):
+            self._analyze_call_sklearn_preprocessing_standard_scaler(
+                lhs, func_name, rhs, kws, array_dists
+            )
+            return
+
         if func_mod == "sklearn.metrics._classification":
             if func_name in {"precision_score", "recall_score", "f1_score"}:
                 # output is always replicated, and the output can be an array
@@ -1438,6 +1452,25 @@ class DistributedAnalysis:
 
         # set REP if not found
         self._analyze_call_set_REP(lhs, args, array_dists, fdef)
+
+    def _analyze_call_sklearn_preprocessing_standard_scaler(
+        self,
+        lhs,
+        func_name,
+        rhs,
+        kws,
+        array_dists,
+    ):
+        """
+        Analyze distribution of sklearn.preprocessing.StandardScaler functions
+        Only need to handle transform and inverse_transform. fit is handled automatically.
+        """
+
+        if func_name in {"transform", "inverse_transform"}:
+            # match input (X) and output (X_new) distributions
+            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+
+        return
 
     def _analyze_call_sklearn_cluster_kmeans(
         self, lhs, func_name, rhs, kws, array_dists

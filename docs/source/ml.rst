@@ -155,10 +155,25 @@ Classification metrics
 
 
 Regression metrics
-~~~~~~~~~~~~~~~~~~
+******************
 
 * :func:`sklearn.metrics.mean_absolute_error`
 * :func:`sklearn.metrics.mean_squared_error`
+
+
+Data Preprocessing
+******************
+
+:class:`sklearn.preprocessing.StandardScaler`
+
+  This class provides Standard Scaler support to center your data and to scale it to achieve unit variance.
+
+Methods:
+
+  * :any:`sklearn.preprocessing.StandardScaler.fit`
+  * :any:`sklearn.preprocessing.StandardScaler.transform`
+  * :any:`sklearn.preprocessing.StandardScaler.inverse_transform`
+
 
 Supported XGBoost
 ~~~~~~~~~~~~~~~~~
