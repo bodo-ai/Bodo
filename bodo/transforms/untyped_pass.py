@@ -1530,7 +1530,7 @@ class UntypedPass:
             var_def.op = "build_list"
             var_def.items = [v[0] for v in var_def.items]
         elif isinstance(var_def, (ir.Global, ir.FreeVar, ir.Const)):
-            var_def.value = 11
+            var_def.value = 11  # arbitrary value that can be typed
 
 
 def remove_dead_branches(func_ir):
