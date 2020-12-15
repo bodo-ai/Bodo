@@ -741,6 +741,7 @@ def get_const_func_output_type(func, arg_types, kw_types, typing_context):
             typemap,
             f_return_type,
             calltypes,
+            _,
         ) = numba.core.typed_passes.type_inference_stage(
             typing_context, f_ir, arg_types, None
         )

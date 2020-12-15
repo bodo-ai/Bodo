@@ -2021,7 +2021,7 @@ def compile_to_optimized_ir(func, arg_typs, typingctx):
     )
     untyped_pass.run()
     f_ir._definitions = build_definitions(f_ir.blocks)
-    typemap, return_type, calltypes = numba.core.typed_passes.type_inference_stage(
+    typemap, return_type, calltypes, _ = numba.core.typed_passes.type_inference_stage(
         typingctx, f_ir, arg_typs, None
     )
 

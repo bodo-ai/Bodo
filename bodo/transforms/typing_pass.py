@@ -114,7 +114,8 @@ class BodoTypeInference(PartialTypeInference):
 
             # done if all types are available and transform not required
             if (
-                self._all_types_available(state)
+                not state.typing_errors
+                and self._all_types_available(state)
                 and not curr_typing_pass_required
                 and not needs_transform
             ):
@@ -201,7 +202,8 @@ class BodoTypeInference(PartialTypeInference):
                 return_type = None
 
         if (
-            curr_typing_pass_required
+            state.typing_errors
+            or curr_typing_pass_required
             or types.unknown in state.typemap.values()
             or state.calltypes is None
             or return_type is None
