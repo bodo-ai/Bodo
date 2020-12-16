@@ -14,17 +14,6 @@ jobs:
       ${{ insert }}: ${{ parameters.matrix }}
 
   steps:
-  - task: DownloadBuildArtifacts@0
-    inputs:
-      artifactName: bodo-inc
-      downloadPath: '$(HOME)'
-    displayName: 'Download Bodo'
-
-  - task: ExtractFiles@1
-    inputs:
-      archiveFilePatterns: '$(HOME)/bodo-inc/${{ parameters.name }}-bodo-inc*.zip'
-      destinationFolder: '$(HOME)/bodo-inc/bodo-inc'
-    displayName: 'Extract Bodo'
 
   - task: UsePythonVersion@0
     inputs:
@@ -85,6 +74,7 @@ jobs:
 
   - script: |
       set -eo pipefail
+      mkdir -p $HOME/bodo-inc
       cd $HOME/bodo-inc
       mkdir bodo
       mkdir bodo/tests
