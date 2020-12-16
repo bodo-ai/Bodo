@@ -111,6 +111,8 @@ jobs:
   - script: |
       set -eo pipefail
       echo "BODO_VERSION: $BODO_VERSION"
+      export NUMBA_DEV="${{ parameters.useNumbaDev }}"
+      echo "NUMBA_DEV: $NUMBA_DEV"
       sudo chmod a+r $(secret_file.secureFilePath)
       sudo cp $(secret_file.secureFilePath) $HOME/secret_file
       cd $(System.DefaultWorkingDirectory)
@@ -127,7 +129,7 @@ jobs:
         export CHECK_LICENSE_EXPIRED=$(CHECK_LICENSE_EXPIRED)
         export CHECK_LICENSE_CORE_COUNT=$(CHECK_LICENSE_CORE_COUNT)
       fi
-      artifactory_channel=`./buildscripts/azure/get_channel.sh`
+      artifactory_channel=`./buildscripts/azure/get_channel.sh $NUMBA_DEV`
       if [[ "${{ parameters.name }}" = Linux* ]]; then
         artifactory_os_dir="linux-64"
       else

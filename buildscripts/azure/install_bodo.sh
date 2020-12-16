@@ -9,7 +9,7 @@ TOKEN=`cat $HOME/secret_file | grep artifactory.ci.token | cut -f 2 -d' '`
 source activate $CONDA_ENV
 
 # ------ Install Bodo -----------
-artifactory_channel=`./buildscripts/azure/get_channel.sh`
+artifactory_channel=`./buildscripts/azure/get_channel.sh $USE_NUMBA_DEV`
 numba_channel_flag=""
 
 if [[ "$USE_NUMBA_DEV" == "true" ]]; then
