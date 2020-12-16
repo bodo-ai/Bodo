@@ -58,6 +58,7 @@ jobs:
       sudo cp $(secret_file.secureFilePath) $HOME/secret_file
       export PATH=$HOME/miniconda3/bin:${PATH}
       source activate $CONDA_ENV
+      export CHECK_LICENSE_PLATFORM_AWS=$(CHECK_LICENSE_PLATFORM_AWS)
       export CHECK_LICENSE_EXPIRED=$(CHECK_LICENSE_EXPIRED)
       export OBFUSCATE=$(OBFUSCATE)
       export BODO_VERSION=`python -c "import versioneer; print(versioneer.get_version())"`
