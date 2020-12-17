@@ -190,21 +190,21 @@ def overload_iloc_getitem(I, idx):
     df = I.df_type
 
     # Integer case returns row value as Series
-    if isinstance(idx, types.Integer):  # pragma: no cover
-        func_text = "def impl(I, idx):\n"
-        func_text += "  df = I._obj\n"
-        row_args = ", ".join(
-            f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {df.columns.index(c)})[idx]"
-            for c in df.columns
-        )
-        func_text += f"  row_idx = bodo.hiframes.pd_index_ext.init_heter_index({gen_const_tup(df.columns)}, None)\n"
-        # TODO: pass df_index[i] as row name (after issue with RangeIndex getitem in
-        # test_df_apply_assertion is resolved)
-        func_text += f"  return bodo.hiframes.pd_series_ext.init_series(({row_args},), row_idx, None)\n"
-        loc_vars = {}
-        exec(func_text, {"bodo": bodo}, loc_vars)
-        impl = loc_vars["impl"]
-        return impl
+    if isinstance(idx, types.Integer):
+        return _gen_iloc_getitem_row_impl(df, df.columns, "idx")
+
+    if (
+        isinstance(idx, types.BaseTuple)
+        and len(idx) == 2
+        and is_overload_constant_list(idx.types[1])
+    ):
+        col_inds = get_overload_const_list(idx.types[1])
+        # TODO: check invalid column indices
+        col_names = tuple(np.array(df.columns)[col_inds])
+        if isinstance(idx.types[0], types.Integer):
+            return _gen_iloc_getitem_row_impl(df, col_names, "idx[0]")
+
+    # import pdb; pdb.set_trace()
 
     # df.iloc[idx]
     # array of bools/ints, or slice
@@ -261,6 +261,23 @@ def overload_iloc_getitem(I, idx):
 
     # TODO: error-checking test
     raise BodoError(f"df.iloc[] getitem using {idx} not supported")  # pragma: no cover
+
+
+def _gen_iloc_getitem_row_impl(df, col_names, idx):
+    func_text = "def impl(I, idx):\n"
+    func_text += "  df = I._obj\n"
+    row_args = ", ".join(
+        f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {df.columns.index(c)})[{idx}]"
+        for c in col_names
+    )
+    func_text += f"  row_idx = bodo.hiframes.pd_index_ext.init_heter_index({gen_const_tup(col_names)}, None)\n"
+    # TODO: pass df_index[i] as row name (after issue with RangeIndex getitem in
+    # test_df_apply_assertion is resolved)
+    func_text += f"  return bodo.hiframes.pd_series_ext.init_series(({row_args},), row_idx, None)\n"
+    loc_vars = {}
+    exec(func_text, {"bodo": bodo}, loc_vars)
+    impl = loc_vars["impl"]
+    return impl
 
 
 ##################################  df.loc  ##################################
