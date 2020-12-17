@@ -2594,9 +2594,13 @@ def test_iloc_bool_arr(memory_leak_check):
     def test_impl(df):
         return df.iloc[(df.A > 3).values]
 
+    def test_impl2(df):
+        return df.iloc[(df.A > 3).values, [1, 2]]
+
     n = 11
-    df = pd.DataFrame({"A": np.arange(n), "B": np.arange(n) ** 2})
+    df = pd.DataFrame({"A": np.arange(n), "B": np.arange(n) ** 2, "C": np.ones(n)})
     check_func(test_impl, (df,))
+    check_func(test_impl2, (df,))
 
 
 def test_iloc_slice(memory_leak_check):
