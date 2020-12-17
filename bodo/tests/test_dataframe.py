@@ -2815,6 +2815,22 @@ def test_loc_setitem(memory_leak_check):
     check_func(impl9, (n,))
 
 
+def test_loc_setitem_str(memory_leak_check):
+    """test df.iloc[idx, col_ind] setitem for string array"""
+
+    def impl(df):
+        df.loc[df.A > 3, "B"] = "CCD"
+        return df
+
+    df = pd.DataFrame(
+        {
+            "A": [11, 4, 2, 5, 6, 1, 1, 4, 9],
+            "B": ["AA", None, "ABC", "DD", None, "AAA", "", "EFG", None],
+        }
+    )
+    check_func(impl, (df,), copy_input=True, only_1D=True)
+
+
 @pytest.mark.smoke
 def test_iat_setitem():
     """test df.iat[] setitem (single value)"""
