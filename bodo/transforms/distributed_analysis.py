@@ -981,7 +981,10 @@ class DistributedAnalysis:
             self._set_REP(lhs, array_dists, "output of nlargest is REP")
             return
 
-        if fdef == ("set_df_column_with_reflect", "bodo.hiframes.pd_dataframe_ext"):
+        if fdef in (
+            ("set_df_column_with_reflect", "bodo.hiframes.pd_dataframe_ext"),
+            ("set_dataframe_data", "bodo.hiframes.pd_dataframe_ext"),
+        ):
             self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
             self._meet_array_dists(lhs, rhs.args[2].name, array_dists)
             self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
@@ -2273,6 +2276,16 @@ class DistributedAnalysis:
                 array_dists,
                 "value set in distributed array setitem is REP",
             )
+            return
+
+        # Array boolean idx setitem with scalar value, e.g. A[cond] = val
+        if (
+            is_array_typ(target_typ)
+            and is_array_typ(index_typ)
+            and index_typ.dtype == types.bool_
+            and not is_array_typ(value_typ)
+        ):
+            self._meet_array_dists(arr.name, index_var.name, array_dists)
             return
 
         self._set_REP(

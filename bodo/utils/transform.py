@@ -381,7 +381,10 @@ def get_const_value_inner(
     # df.columns case
     if is_expr(var_def, "getattr") and typemap:
         obj_typ = typemap.get(var_def.value.name, None)
-        if isinstance(obj_typ, bodo.hiframes.pd_dataframe_ext.DataFrameType):
+        if (
+            isinstance(obj_typ, bodo.hiframes.pd_dataframe_ext.DataFrameType)
+            and var_def.attr == "columns"
+        ):
             # pandas columns are Index objects (accurate object is needed for const
             # computations, see test_loc_col_select::impl3)
             return pd.Index(obj_typ.columns)
@@ -519,6 +522,15 @@ def get_const_value_inner(
     if call_name == ("range", "builtins"):
         return range(
             get_const_value_inner(func_ir, var_def.args[0], arg_types, typemap)
+        )
+
+    # slice() call
+    if call_name == ("slice", "builtins"):
+        return slice(
+            *tuple(
+                get_const_value_inner(func_ir, v, arg_types, typemap)
+                for v in var_def.args
+            )
         )
 
     # str() call

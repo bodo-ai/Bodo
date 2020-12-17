@@ -2749,6 +2749,72 @@ def test_loc_col_select(memory_leak_check):
     check_func(impl4, (n,))
 
 
+def test_loc_setitem(memory_leak_check):
+    """test df.iloc[idx, col_ind]  setitem where col_ind is a list of column names or bools"""
+
+    # set existing column with full slice
+    def impl1(df):
+        df.loc[:, "B"] = 11
+        return df
+
+    # set new columns with full slice
+    def impl2(df):
+        df.loc[:, ["D", "E"]] = 11
+        return df
+
+    # set values with bool index
+    def impl3(df):
+        df.loc[df.A > 4, "B"] = 11
+        return df
+
+    # boolean column selection
+    def impl4(df):
+        df.loc[:, [True, False, True]] = 11
+        return df
+
+    # dynamic column selection
+    def impl5(df):
+        df.loc[:, df.columns != "B"] = 11
+        return df
+
+    # schema change
+    def impl6(n):
+        df = pd.DataFrame({"A": np.ones(n), "B": np.arange(n), "C": np.ones(n)})
+        df.columns = ["AB", "CD", "EF"]
+        df.loc[:, ["AB", "EF"]] = 11
+        return df
+
+    # boolean column selection
+    def impl7(df):
+        df.loc[df.A > 4, [True, False, True]] = 11
+        return df
+
+    # dynamic column selection
+    def impl8(df):
+        df.loc[df.A > 4, df.columns != "B"] = 11
+        return df
+
+    # schema change
+    def impl9(n):
+        df = pd.DataFrame({"A": np.ones(n), "B": np.arange(n), "C": np.ones(n)})
+        cond = df.A > 4
+        df.columns = ["AB", "CD", "EF"]
+        df.loc[cond, ["AB", "EF"]] = 11
+        return df
+
+    n = 11
+    df = pd.DataFrame({"A": np.arange(n), "B": np.arange(n) ** 2, "C": np.ones(n)})
+    check_func(impl1, (df,), copy_input=True)
+    check_func(impl2, (df,), copy_input=True)
+    check_func(impl3, (df,), copy_input=True)
+    check_func(impl4, (df,), copy_input=True)
+    check_func(impl5, (df,), copy_input=True)
+    check_func(impl6, (n,))
+    check_func(impl7, (df,), copy_input=True)
+    check_func(impl8, (df,), copy_input=True)
+    check_func(impl9, (n,))
+
+
 @pytest.mark.smoke
 def test_iat_setitem():
     """test df.iat[] setitem (single value)"""
