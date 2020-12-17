@@ -17,6 +17,7 @@ from numba.extending import (
 
 import bodo
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
+from bodo.utils.transform import gen_const_tup
 from bodo.utils.typing import (
     BodoError,
     get_overload_const_int,
@@ -188,14 +189,22 @@ def overload_iloc_getitem(I, idx):
 
     df = I.df_type
 
-    # Integer case returns Series(object) which is not supported
-    # TODO: error checking test
-    if isinstance(types.unliteral(idx), types.Integer):  # pragma: no cover
-        # TODO: support cases that can be typed, e.g. all float64
-        # TODO: return namedtuple instead of Series?
-        raise BodoError(
-            "df.iloc[] with integer index is not supported since output Series cannot be typed"
+    # Integer case returns row value as Series
+    if isinstance(idx, types.Integer):  # pragma: no cover
+        func_text = "def impl(I, idx):\n"
+        func_text += "  df = I._obj\n"
+        row_args = ", ".join(
+            f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {df.columns.index(c)})[idx]"
+            for c in df.columns
         )
+        func_text += f"  row_idx = bodo.hiframes.pd_index_ext.init_heter_index({gen_const_tup(df.columns)}, None)\n"
+        # TODO: pass df_index[i] as row name (after issue with RangeIndex getitem in
+        # test_df_apply_assertion is resolved)
+        func_text += f"  return bodo.hiframes.pd_series_ext.init_series(({row_args},), row_idx, None)\n"
+        loc_vars = {}
+        exec(func_text, {"bodo": bodo}, loc_vars)
+        impl = loc_vars["impl"]
+        return impl
 
     # df.iloc[idx]
     # array of bools/ints, or slice
@@ -251,9 +260,7 @@ def overload_iloc_getitem(I, idx):
         raise_bodo_error("Invalid df.iloc[] getitem using (slice, slice)")
 
     # TODO: error-checking test
-    raise BodoError(
-        "df.iloc[] getitem using {} not supported".format(idx)
-    )  # pragma: no cover
+    raise BodoError(f"df.iloc[] getitem using {idx} not supported")  # pragma: no cover
 
 
 ##################################  df.loc  ##################################

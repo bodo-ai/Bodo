@@ -2610,6 +2610,17 @@ def test_iloc_slice(memory_leak_check):
     pd.testing.assert_frame_equal(bodo_func(df, n), test_impl(df, n))
 
 
+def test_iloc_getitem_row(memory_leak_check):
+    """test getitem of a single row with iloc"""
+
+    def test_impl(df):
+        return df.iloc[1]
+
+    df1 = pd.DataFrame({"A": [1, 4, 6, 11, 4], "B": ["AB", "DD", "E", "A", "GG"]})
+    bodo_func = bodo.jit(test_impl)
+    pd.testing.assert_series_equal(bodo_func(df1), test_impl(df1), check_names=False)
+
+
 def test_iloc_slice_col_ind(memory_leak_check):
     """test df.iloc[slice, col_ind]"""
 
