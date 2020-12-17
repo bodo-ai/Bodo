@@ -204,8 +204,6 @@ def overload_iloc_getitem(I, idx):
         if isinstance(idx.types[0], types.Integer):
             return _gen_iloc_getitem_row_impl(df, col_names, "idx[0]")
 
-    # import pdb; pdb.set_trace()
-
     # df.iloc[idx]
     # array of bools/ints, or slice
     if (
