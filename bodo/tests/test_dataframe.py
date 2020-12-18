@@ -2588,6 +2588,19 @@ def test_column_list_getitem_infer(memory_leak_check):
     check_func(test_impl, (df,))
 
 
+def test_df_slice(memory_leak_check):
+    """test slice getitem directly on dataframe object"""
+
+    def impl(df, n):
+        return df[1:n]
+
+    n = 11
+    df = pd.DataFrame({"A": np.arange(n), "B": np.arange(n) ** 2, "C": np.ones(n)})
+    bodo_func = bodo.jit(impl)
+    # TODO: proper distributed support for slicing
+    pd.testing.assert_frame_equal(bodo_func(df, n), impl(df, n))
+
+
 def test_iloc_bool_arr(memory_leak_check):
     """test df.iloc[bool_arr]"""
 

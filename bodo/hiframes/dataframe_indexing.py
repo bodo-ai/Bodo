@@ -101,14 +101,17 @@ def df_getitem_overload(df, ind):
         )
 
     # df1 = df[df.A > .5]
-    if is_list_like_index_type(ind) and ind.dtype == types.bool_:
+    if (is_list_like_index_type(ind) and ind.dtype == types.bool_) or isinstance(
+        ind, types.SliceType
+    ):
         # implement using array filtering (not using the old Filter node)
         # TODO: create an IR node for enforcing same dist for all columns and ind array
         func_text = "def impl(df, ind):\n"
-        func_text += "  idx = bodo.utils.conversion.coerce_to_ndarray(ind)\n"
-        index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)[idx]"
+        if not isinstance(ind, types.SliceType):
+            func_text += "  ind = bodo.utils.conversion.coerce_to_ndarray(ind)\n"
+        index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)[ind]"
         new_data = ", ".join(
-            "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {})[idx]".format(
+            "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {})[ind]".format(
                 df.columns.index(c)
             )
             for c in df.columns
