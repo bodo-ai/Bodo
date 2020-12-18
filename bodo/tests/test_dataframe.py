@@ -2597,21 +2597,30 @@ def test_iloc_bool_arr(memory_leak_check):
     def test_impl2(df):
         return df.iloc[(df.A > 3).values, [1, 2]]
 
+    def test_impl3(df):
+        return df.iloc[(df.A > 3).values, 1]
+
     n = 11
     df = pd.DataFrame({"A": np.arange(n), "B": np.arange(n) ** 2, "C": np.ones(n)})
     check_func(test_impl, (df,))
     check_func(test_impl2, (df,))
+    check_func(test_impl3, (df,))
 
 
 def test_iloc_slice(memory_leak_check):
     def test_impl(df, n):
         return df.iloc[1:n]
 
+    def test_impl2(df, n):
+        return df.iloc[1:n, [1, 2]]
+
     n = 11
-    df = pd.DataFrame({"A": np.arange(n), "B": np.arange(n) ** 2})
+    df = pd.DataFrame({"A": np.arange(n), "B": np.arange(n) ** 2, "C": np.ones(n)})
     bodo_func = bodo.jit(test_impl)
     # TODO: proper distributed support for slicing
     pd.testing.assert_frame_equal(bodo_func(df, n), test_impl(df, n))
+    bodo_func = bodo.jit(test_impl2)
+    pd.testing.assert_frame_equal(bodo_func(df, n), test_impl2(df, n))
 
 
 def test_iloc_getitem_row(memory_leak_check):
