@@ -210,8 +210,20 @@ def overload_iloc_getitem(I, idx):
             col_inds = get_overload_const_list(idx.types[1])
 
         # TODO: check invalid column indices
-        col_names = tuple(np.array(df.columns)[col_inds])
+        col_names = tuple(np.array(df.columns, dtype=object)[col_inds])
         if isinstance(idx.types[0], types.Integer):
+            # df.iloc[3, 1] case, ouput is a scalar value
+            if isinstance(idx.types[1], types.Integer):
+                col_ind = col_inds[0]
+
+                def impl(I, idx):
+                    df = I._obj
+                    return bodo.hiframes.pd_dataframe_ext.get_dataframe_data(
+                        df, col_ind
+                    )[idx[0]]
+
+                return impl
+
             return _gen_iloc_getitem_row_impl(df, col_names, "idx[0]")
 
         if (
@@ -230,17 +242,10 @@ def overload_iloc_getitem(I, idx):
     ) or isinstance(idx, types.SliceType):
         return _gen_iloc_getitem_bool_slice_impl(df, df.columns, idx, "idx", False)
 
+    # TODO: error-checking test
     # df.iloc[:,1:] case requires typing pass transform since slice info not available
     # here. TODO: refactor when SliceLiteral of Numba has all the info.
-    if (
-        isinstance(idx, types.BaseTuple)
-        and len(idx.types) == 2
-        and isinstance(idx.types[1], types.SliceType)
-    ):
-        raise_bodo_error("Invalid df.iloc[] getitem using (slice, slice)")
-
-    # TODO: error-checking test
-    raise BodoError(f"df.iloc[] getitem using {idx} not supported")  # pragma: no cover
+    raise_bodo_error(f"df.iloc[] getitem using {idx} not supported")  # pragma: no cover
 
 
 def _gen_iloc_getitem_bool_slice_impl(df, col_names, idx_typ, idx, is_out_series):
@@ -412,7 +417,7 @@ def gen_df_loc_col_select_impl(df, col_idx_list):
     """
     # get column names if bool list
     if len(col_idx_list) > 0 and isinstance(col_idx_list[0], (bool, np.bool_)):
-        col_idx_list = list(np.array(df.columns)[col_idx_list])
+        col_idx_list = list(np.array(df.columns, dtype=object)[col_idx_list])
 
     # create a new dataframe, create new data/index using idx
     new_data = ", ".join(
