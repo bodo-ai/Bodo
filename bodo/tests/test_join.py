@@ -783,6 +783,35 @@ def test_merge_literal_arg(memory_leak_check):
     # check_func(test_impl2, (df1, df2.set_index("A"), "A", True, "inner"), sort_output=True)
 
 
+def test_merge_right_index_rm_dead(memory_leak_check):
+    """test joins with an index (rm dead bug reported by user)"""
+
+    def cal_average_by_payment_type(df):
+        payments = pd.DataFrame(
+            {
+                "payment_name": [
+                    "Credit Card",
+                    "Cash",
+                    "No Charge",
+                    "Dispute",
+                    "Unknown",
+                    "Voided trip",
+                ]
+            },
+            index=[1, 2, 3, 4, 5, 6],
+        )
+        df2 = df.merge(payments, left_on="payment_type", right_index=True)
+        result = df2.groupby("payment_name").tip_amount.mean()
+        return result
+
+    df = pd.DataFrame({"payment_type": [3, 4, 1], "tip_amount": [1.1, 2.2, 3.3]})
+    check_func(
+        cal_average_by_payment_type,
+        (df,),
+        sort_output=True,
+    )
+
+
 def test_merge_key_type_change(memory_leak_check):
     """
     Test merge() key type check when key type changes in the program (handled in partial
