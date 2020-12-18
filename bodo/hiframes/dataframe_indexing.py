@@ -5,6 +5,7 @@ Indexing support for pd.DataFrame type.
 import operator
 
 import numpy as np
+import pandas as pd
 from numba.core import cgutils, types
 from numba.extending import (
     intrinsic,
@@ -210,7 +211,9 @@ def overload_iloc_getitem(I, idx):
             col_inds = get_overload_const_list(idx.types[1])
 
         # TODO: check invalid column indices
-        col_names = tuple(np.array(df.columns, dtype=object)[col_inds])
+        # NOTE: using pd.Series instead of np.array to avoid automatic value conversion
+        # see: test_groupby_dead_col_multifunc
+        col_names = tuple(pd.Series(df.columns, dtype=object)[col_inds])
         if isinstance(idx.types[0], types.Integer):
             # df.iloc[3, 1] case, ouput is a scalar value
             if isinstance(idx.types[1], types.Integer):
@@ -431,7 +434,7 @@ def gen_df_loc_col_select_impl(df, col_idx_list):
     """
     # get column names if bool list
     if len(col_idx_list) > 0 and isinstance(col_idx_list[0], (bool, np.bool_)):
-        col_idx_list = list(np.array(df.columns, dtype=object)[col_idx_list])
+        col_idx_list = list(pd.Series(df.columns, dtype=object)[col_idx_list])
 
     # create a new dataframe, create new data/index using idx
     new_data = ", ".join(

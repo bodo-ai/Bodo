@@ -458,7 +458,7 @@ class TypingTransforms:
         # get column names if bool list
         if len(col_inds) > 0 and isinstance(col_inds[0], (bool, np.bool_)):
             col_inds = list(
-                np.array(target_typ.df_type.columns, dtype=object)[col_inds]
+                pd.Series(target_typ.df_type.columns, dtype=object)[col_inds]
             )
 
         # if setting full columns
