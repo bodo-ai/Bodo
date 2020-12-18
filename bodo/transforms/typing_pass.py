@@ -434,38 +434,26 @@ class TypingTransforms:
                 inst, target_typ, idx_typ, idx_var, nodes, label
             )
 
+        # transform df.iloc[cond, 1] setitem case here since it may require type change
+        if (
+            isinstance(target_typ, DataFrameILocType)
+            and isinstance(idx_typ, types.BaseTuple)
+            and len(idx_typ.types) == 2
+        ):
+            return self._run_setitem_df_iloc(
+                inst, target_typ, idx_typ, idx_var, nodes, label
+            )
+
         return nodes + [inst]
 
     def _run_setitem_df_loc(self, inst, target_typ, idx_typ, idx_var, nodes, label):
         """transform df.loc setitem nodes, e.g. df.loc[:, "B"] = 3"""
-        # get column index var
-        tup_list = guard(find_build_tuple, self.func_ir, idx_var)
-        if tup_list is None or len(tup_list) != 2:  # pragma: no cover
-            raise BodoError("Invalid df.loc[ind,ind] case")
-        row_ind_var = tup_list[0]
-        col_ind_var = tup_list[1]
 
-        # try to find index values
-        try:
-            col_inds = get_const_value_inner(
-                self.func_ir, col_ind_var, self.arg_types, self.typemap
-            )
-        except GuardException:
-            # couldn't find values, just return to be handled later
-            nodes.append(inst)
-            return nodes
+        col_inds, row_ind = self._get_loc_indices(idx_var)
 
-        # normalize single column name to list
-        if not isinstance(col_inds, (list, tuple, np.ndarray)):
-            col_inds = [col_inds]
-
-        # try to find index values
-        try:
-            row_ind = get_const_value_inner(
-                self.func_ir, row_ind_var, self.arg_types, self.typemap
-            )
-        except GuardException:
-            row_ind = None
+        # couldn't find column name values, just return to be handled later
+        if col_inds is None:
+            return nodes + [inst]
 
         # get column names if bool list
         if len(col_inds) > 0 and isinstance(col_inds[0], (bool, np.bool_)):
@@ -475,27 +463,7 @@ class TypingTransforms:
 
         # if setting full columns
         if row_ind == slice(None):
-            loc = inst.loc
-            loc_def = guard(get_definition, self.func_ir, inst.target)
-            if not is_expr(loc_def, "getattr"):  # pragma: no cover
-                raise BodoError("Invalid df.loc[] setitem")
-            df_var = loc_def.value
-
-            for i, c in enumerate(col_inds):
-                # setting up definitions and rhs_labels is necessary for
-                # _run_df_set_column() to work properly. Needs to be done here since
-                # nodes have not gone through the main IR loop in run()
-                if i > 0:
-                    df_expr = nodes[-2].value
-                    df_var = nodes[-1].target
-                    self.func_ir._definitions[df_var.name] = [df_expr]
-                    self.rhs_labels[df_expr] = label
-                dummy_inst = ir.SetItem(df_var, df_var, inst.value, loc)
-                nodes += self._run_df_set_column(dummy_inst, c, label)
-                # clean up to avoid conflict with later definition update in run()
-                if i > 0:
-                    self.func_ir._definitions[df_var.name] = []
-
+            nodes += self._gen_loc_setitem_full_column(inst, col_inds, label)
             self.changed = True
             return nodes
 
@@ -518,6 +486,91 @@ class TypingTransforms:
         return nodes + compile_func_single_block(
             impl, [inst.target, idx_var, inst.value], None, self
         )
+
+    def _run_setitem_df_iloc(self, inst, target_typ, idx_typ, idx_var, nodes, label):
+        """transform df.iloc setitem nodes, e.g. df.loc[:, 1] = 3"""
+
+        col_inds, row_ind = self._get_loc_indices(idx_var)
+
+        # couldn't find column name values, just return to be handled later
+        if col_inds is None:
+            return nodes + [inst]
+
+        # if setting full columns
+        if row_ind == slice(None):
+            col_names = [target_typ.df_type.columns[c_ind] for c_ind in col_inds]
+            nodes += self._gen_loc_setitem_full_column(inst, col_names, label)
+            self.changed = True
+            return nodes
+
+        self.changed = True
+        func_text = "def impl(I, idx, value):\n"
+        func_text += "  df = I._obj\n"
+        for c_idx in col_inds:
+            func_text += f"  bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {c_idx})[idx[0]] = value\n"
+
+        loc_vars = {}
+        exec(func_text, {"bodo": bodo}, loc_vars)
+        impl = loc_vars["impl"]
+        return nodes + compile_func_single_block(
+            impl, [inst.target, idx_var, inst.value], None, self
+        )
+
+    def _get_loc_indices(self, idx_var):
+        """get row/column index values for df.loc/df.iloc if possible"""
+        # get column index var
+        tup_list = guard(find_build_tuple, self.func_ir, idx_var)
+        if tup_list is None or len(tup_list) != 2:  # pragma: no cover
+            raise BodoError("Invalid df.loc[ind,ind] case")
+        row_ind_var = tup_list[0]
+        col_ind_var = tup_list[1]
+
+        # try to find index values
+        try:
+            col_inds = get_const_value_inner(
+                self.func_ir, col_ind_var, self.arg_types, self.typemap
+            )
+        except GuardException:
+            col_inds = None
+
+        # normalize single column name to list
+        if not isinstance(col_inds, (list, tuple, np.ndarray)):
+            col_inds = [col_inds]
+
+        # try to find index values
+        try:
+            row_ind = get_const_value_inner(
+                self.func_ir, row_ind_var, self.arg_types, self.typemap
+            )
+        except GuardException:
+            row_ind = None
+
+        return col_inds, row_ind
+
+    def _gen_loc_setitem_full_column(self, inst, col_inds, label):
+        """Generate code for setitem of df.loc/iloc when setting full columns"""
+        nodes = []
+        loc = inst.loc
+        loc_def = guard(get_definition, self.func_ir, inst.target)
+        if not is_expr(loc_def, "getattr"):  # pragma: no cover
+            raise BodoError("Invalid df.loc/iloc[] setitem")
+        df_var = loc_def.value
+
+        for i, c in enumerate(col_inds):
+            # setting up definitions and rhs_labels is necessary for
+            # _run_df_set_column() to work properly. Needs to be done here since
+            # nodes have not gone through the main IR loop in run()
+            if i > 0:
+                df_expr = nodes[-2].value
+                df_var = nodes[-1].target
+                self.func_ir._definitions[df_var.name] = [df_expr]
+                self.rhs_labels[df_expr] = label
+            dummy_inst = ir.SetItem(df_var, df_var, inst.value, loc)
+            nodes += self._run_df_set_column(dummy_inst, c, label)
+            # clean up to avoid conflict with later definition update in run()
+            if i > 0:
+                self.func_ir._definitions[df_var.name] = []
+        return nodes
 
     def _run_setattr(self, inst, label):
         """handle ir.SetAttr node"""

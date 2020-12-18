@@ -295,6 +295,20 @@ def _gen_iloc_getitem_row_impl(df, col_names, idx):
     return impl
 
 
+# DataFrame.iloc[] setitem
+@overload(operator.setitem, no_unliteral=True)
+def df_iloc_setitem_overload(df, idx, val):
+    if not isinstance(df, DataFrameILocType):
+        return
+
+    # df.iloc[cond, 1] = A
+    # handle in typing pass since the dataframe type can change
+    # TODO: better error checking here
+    raise_bodo_error(
+        f"DataFrame.iloc setitem unsupported for dataframe {df.df_type}, index {idx}, value {val}"
+    )
+
+
 ##################################  df.loc  ##################################
 
 

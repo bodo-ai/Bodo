@@ -2712,6 +2712,25 @@ def test_iloc_int_col_ind(memory_leak_check):
     check_func(test_impl, (df,))
 
 
+def test_iloc_setitem(memory_leak_check):
+    """test df.iloc[idx, col_ind] setitem where col_ind is a list of column indices"""
+
+    # set column with full slice
+    def impl1(df):
+        df.iloc[:, 1] = 1.3
+        return df
+
+    # set values with bool index
+    def impl2(df):
+        df.iloc[df.A > 4, [1, 2]] = 11
+        return df
+
+    n = 11
+    df = pd.DataFrame({"A": np.arange(n), "B": np.arange(n) ** 2, "C": np.ones(n)})
+    check_func(impl1, (df,), copy_input=True)
+    check_func(impl2, (df,), copy_input=True)
+
+
 def test_loc_bool_arr(memory_leak_check):
     """test df.loc[bool_arr]"""
 
@@ -2786,7 +2805,7 @@ def test_loc_col_select(memory_leak_check):
 
 
 def test_loc_setitem(memory_leak_check):
-    """test df.iloc[idx, col_ind]  setitem where col_ind is a list of column names or bools"""
+    """test df.loc[idx, col_ind] setitem where col_ind is a list of column names or bools"""
 
     # set existing column with full slice
     def impl1(df):
