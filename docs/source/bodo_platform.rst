@@ -3,7 +3,7 @@
 Bodo Cloud Platform
 ===================
 
-This page descibes how to use the Bodo Cloud Platform, including registration, cluster creation and notebook attachment.
+This page descibes how to use the Bodo Cloud Platform, including registration, cluster creation, notebook attachment, and running jobs.
 
 
 Registration
@@ -166,6 +166,106 @@ while the dropdown allows opening the notebook in a new tab.
 .. image:: platform_onboarding_screenshots/nb-status-done.png
     :align: center
     :alt: Notebook-Status-Finished
+
+
+Running a Job
+-------------
+
+Bodo Cloud Platform has support for running scheduled (and immediate)
+Python jobs without the need for Jupyter Notebooks. To create a Job, navigate
+to the Jobs page by selecting `Jobs` in the left bar.
+
+.. image:: platform_onboarding_screenshots/side-jobs.png
+    :align: center
+    :alt: Sidebar-Jobs
+    :scale: 25
+
+This pages displays any *INPROGRESS* jobs you have previously
+scheduled and allows you to schedule new Jobs. At the top right corner, click on
+`CREATE JOB`. This opens a job creation form. 
+
+First, select a name for your job and specify the cluster on
+which you want to deploy your job. If you have an existing cluster
+that is not currently bound to a notebook or another job, you can select this cluster from the dropdown menu.
+Alternatively, you can create a cluster specifically for this job by selecting
+the `NEW` button next to the cluster dropdown menu. When creating 
+a cluster specifically for a job, note that the cluster is only used for that job 
+and is removed once the job completes. After selecting your cluster, indicate when you want your job 
+to be executed in the `Schedule` section. Then, enter the `Command` that you want to execute inside this cluster.
+
+**Note:** This command is automatically prepended with ``mpiexec -n <CORE_COUNT> python``. For example, 
+to run a file ``ex.py`` with the argument 1, you would enter the command ``ex.py 1``.
+
+To specify your source code location, fill in the `Path` line with a valid Git URL or S3 URI
+that leads to a repository containing your code. 
+
+**Note:** When selecting a GitHub URL, you should select the URL available at the top of your web browser
+and NOT the path when cloning the repository, *i.e.* your path SHOULD NOT end in `.git`. If selecting an S3 URI,
+your S3 bucket must be in the same region as your cluster.
+
+
+.. image:: platform_onboarding_screenshots/jobs-form-standard.png
+    :align: center
+    :alt: Jobs-Forms-Standard
+
+
+If you are cloning a private repository, you need to provide the platform with valid Git credentials to download your repository.
+To do so, select `Show advanced` in the bottom right of the form. Then in `Workspace username`, enter your Git
+username and in `Workspace password` enter either your password or a valid Github Access Token. The advanced options
+also allow you to specify a particular commit or branch with `Workspace reference` and to load other custom environment
+variables in `Other`.
+
+**Note:** If your Github Account uses 2FA please use a Github Access Token to avoid any possible authentication issues.
+
+Once your form is complete, select `CREATE` to begin your job. 
+
+.. image:: platform_onboarding_screenshots/jobs-form-advanced.png
+    :align: center
+    :alt: Jobs-Forms-Advanced
+
+
+Once you've provided all the necessary details, select `CREATE` to begin your job. You will see a *NEW* task
+created in your jobs page.
+
+
+.. image:: platform_onboarding_screenshots/jobs-new.png
+    :align: center
+    :alt: New-Job
+
+
+If you created a cluster specifically for this job, a new cluster
+will also appear in your clusters page.
+
+
+.. image:: platform_onboarding_screenshots/jobs-cluster-inprogress.png
+    :align: center
+    :alt: New-Job-Cluster
+
+
+Your job will begin once it reaches its scheduled time and any necessary clusters have been created.
+Then your job will transition to being *INPROGRESS*.
+
+
+.. image:: platform_onboarding_screenshots/jobs-inprogress.png
+    :align: center
+    :alt: InProgress-Job
+
+
+At this point your job will execute your desired command. Once it finishes executing,
+your job will transition to *FINISHED* status. You can find any stdout information 
+that you may need by pressing `DETAILS` followed by `SHOW LOGS`. If a cluster was
+specifically created for this job, it will be deleted after the job finishes.
+
+
+.. image:: platform_onboarding_screenshots/jobs-finished.png
+    :align: center
+    :alt: Finished-Job
+
+
+**Note:** Bodo DOES NOT preserve artifacts written to local storage. If you have any information that
+you need to persist and later review, you should write to external storage, such as Amazon S3.
+You may also write to stdout/stderr, but output logs may be truncated,
+so it should not be considered reliable for large outputs that need to be read later.
 
 
 Resources Created in Your AWS Environment
