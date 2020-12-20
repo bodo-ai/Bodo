@@ -7,53 +7,28 @@ import operator
 import numpy as np
 import pandas as pd
 from numba.core import cgutils, types
-from numba.core.typing.templates import (
-    AbstractTemplate,
-    AttributeTemplate,
-    bound_function,
-    infer_global,
-    signature,
-)
 from numba.extending import (
-    infer,
-    infer_getattr,
     intrinsic,
-    lower_builtin,
-    lower_cast,
     make_attribute_wrapper,
     models,
     overload,
     overload_attribute,
-    overload_method,
     register_model,
-    type_callable,
 )
 
 import bodo
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
+from bodo.utils.transform import gen_const_tup
 from bodo.utils.typing import (
     BodoError,
-    BodoWarning,
-    get_index_data_arr_types,
-    get_index_names,
     get_overload_const_int,
     get_overload_const_list,
     get_overload_const_str,
-    get_overload_const_tuple,
     is_list_like_index_type,
-    is_overload_bool,
-    is_overload_bool_list,
-    is_overload_constant_bool,
     is_overload_constant_int,
     is_overload_constant_list,
     is_overload_constant_str,
-    is_overload_constant_tuple,
-    is_overload_false,
-    is_overload_none,
-    is_overload_true,
-    is_overload_zero,
     raise_bodo_error,
-    raise_const_error,
 )
 
 
@@ -125,15 +100,18 @@ def df_getitem_overload(df, ind):
             func_text, ind_columns, new_data, index
         )
 
-    # df1 = df[df.A > .5]
-    if is_list_like_index_type(ind) and ind.dtype == types.bool_:
+    # df1 = df[df.A > .5] or df[:n]
+    if (is_list_like_index_type(ind) and ind.dtype == types.bool_) or isinstance(
+        ind, types.SliceType
+    ):
         # implement using array filtering (not using the old Filter node)
         # TODO: create an IR node for enforcing same dist for all columns and ind array
         func_text = "def impl(df, ind):\n"
-        func_text += "  idx = bodo.utils.conversion.coerce_to_ndarray(ind)\n"
-        index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)[idx]"
+        if not isinstance(ind, types.SliceType):
+            func_text += "  ind = bodo.utils.conversion.coerce_to_ndarray(ind)\n"
+        index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)[ind]"
         new_data = ", ".join(
-            "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {})[idx]".format(
+            "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {})[ind]".format(
                 df.columns.index(c)
             )
             for c in df.columns
@@ -215,14 +193,52 @@ def overload_iloc_getitem(I, idx):
 
     df = I.df_type
 
-    # Integer case returns Series(object) which is not supported
-    # TODO: error checking test
-    if isinstance(types.unliteral(idx), types.Integer):  # pragma: no cover
-        # TODO: support cases that can be typed, e.g. all float64
-        # TODO: return namedtuple instead of Series?
-        raise BodoError(
-            "df.iloc[] with integer index is not supported since output Series cannot be typed"
+    # df.iloc[1], returns row as Series
+    if isinstance(idx, types.Integer):
+        return _gen_iloc_getitem_row_impl(df, df.columns, "idx")
+
+    # df.iloc[idx, [1, 2]], selection with column index
+    if (
+        isinstance(idx, types.BaseTuple)
+        and len(idx) == 2
+        and (
+            is_overload_constant_list(idx.types[1])
+            or is_overload_constant_int(idx.types[1])
         )
+    ):
+        if is_overload_constant_int(idx.types[1]):
+            is_out_series = True
+            col_inds = [get_overload_const_int(idx.types[1])]
+        else:
+            is_out_series = False
+            col_inds = get_overload_const_list(idx.types[1])
+
+        # TODO: check invalid column indices
+        # NOTE: using pd.Series instead of np.array to avoid automatic value conversion
+        # see: test_groupby_dead_col_multifunc
+        col_names = tuple(pd.Series(df.columns, dtype=object)[col_inds])
+        if isinstance(idx.types[0], types.Integer):
+            # df.iloc[3, 1] case, output is a scalar value
+            if isinstance(idx.types[1], types.Integer):
+                col_ind = col_inds[0]
+
+                def impl(I, idx):
+                    df = I._obj
+                    return bodo.hiframes.pd_dataframe_ext.get_dataframe_data(
+                        df, col_ind
+                    )[idx[0]]
+
+                return impl
+
+            return _gen_iloc_getitem_row_impl(df, col_names, "idx[0]")
+
+        if (
+            is_list_like_index_type(idx.types[0])
+            and isinstance(idx.types[0].dtype, (types.Integer, types.Boolean))
+        ) or isinstance(idx.types[0], types.SliceType):
+            return _gen_iloc_getitem_bool_slice_impl(
+                df, col_names, idx.types[0], "idx[0]", is_out_series
+            )
 
     # df.iloc[idx]
     # array of bools/ints, or slice
@@ -230,57 +246,73 @@ def overload_iloc_getitem(I, idx):
         is_list_like_index_type(idx)
         and isinstance(idx.dtype, (types.Integer, types.Boolean))
     ) or isinstance(idx, types.SliceType):
-        # TODO: refactor with df filter
-        func_text = "def impl(I, idx):\n"
-        func_text += "  df = I._obj\n"
-        if isinstance(idx, types.SliceType):
-            func_text += "  idx_t = idx\n"
-        else:
-            func_text += "  idx_t = bodo.utils.conversion.coerce_to_ndarray(idx)\n"
-        index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)[idx_t]"
-        new_data = ", ".join(
-            "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {})[idx_t]".format(
-                df.columns.index(c)
-            )
-            for c in df.columns
-        )
-        return bodo.hiframes.dataframe_impl._gen_init_df(
-            func_text, df.columns, new_data, index
-        )
-
-    # df.iloc[1:n,0], df.iloc[1,0]
-    if (
-        isinstance(idx, types.BaseTuple)
-        and len(idx) == 2
-        and is_overload_constant_int(idx.types[1])
-    ):
-        # create Series from column data and reuse Series.iloc[]
-        col_ind = get_overload_const_int(idx.types[1])
-        col_name = df.columns[col_ind]
-
-        def impl_col_ind(I, idx):  # pragma: no cover
-            df = I._obj
-            index = bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)
-            data = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, col_ind)
-            return bodo.hiframes.pd_series_ext.init_series(data, index, col_name).iloc[
-                idx[0]
-            ]
-
-        return impl_col_ind
-
-    # df.iloc[:,1:] case requires typing pass transform since slice info not available
-    # here. TODO: refactor when SliceLiteral of Numba has all the info.
-    if (
-        isinstance(idx, types.BaseTuple)
-        and len(idx.types) == 2
-        and isinstance(idx.types[1], types.SliceType)
-    ):
-        raise_bodo_error("Invalid df.iloc[] getitem using (slice, slice)")
+        return _gen_iloc_getitem_bool_slice_impl(df, df.columns, idx, "idx", False)
 
     # TODO: error-checking test
-    raise BodoError(
-        "df.iloc[] getitem using {} not supported".format(idx)
-    )  # pragma: no cover
+    # df.iloc[:,1:] case requires typing pass transform since slice info not available
+    # here. TODO: refactor when SliceLiteral of Numba has all the info.
+    raise_bodo_error(f"df.iloc[] getitem using {idx} not supported")  # pragma: no cover
+
+
+def _gen_iloc_getitem_bool_slice_impl(df, col_names, idx_typ, idx, is_out_series):
+    """generate df.iloc getitem implementation for cases with bool or slice index"""
+    # TODO: refactor with df filter
+    func_text = "def impl(I, idx):\n"
+    func_text += "  df = I._obj\n"
+    if isinstance(idx_typ, types.SliceType):
+        func_text += f"  idx_t = {idx}\n"
+    else:
+        func_text += f"  idx_t = bodo.utils.conversion.coerce_to_ndarray({idx})\n"
+    index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)[idx_t]"
+    new_data = ", ".join(
+        f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {df.columns.index(c)})[idx_t]"
+        for c in col_names
+    )
+
+    if is_out_series:
+        c_name = (
+            f"'{col_names[0]}'" if isinstance(col_names[0], str) else f"{col_names[0]}"
+        )
+        func_text += f"  return bodo.hiframes.pd_series_ext.init_series({new_data}, {index}, {c_name})\n"
+        loc_vars = {}
+        exec(func_text, {"bodo": bodo}, loc_vars)
+        return loc_vars["impl"]
+
+    return bodo.hiframes.dataframe_impl._gen_init_df(
+        func_text, col_names, new_data, index
+    )
+
+
+def _gen_iloc_getitem_row_impl(df, col_names, idx):
+    """generate df.iloc getitem implementation for cases that return a single row"""
+    func_text = "def impl(I, idx):\n"
+    func_text += "  df = I._obj\n"
+    row_args = ", ".join(
+        f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {df.columns.index(c)})[{idx}]"
+        for c in col_names
+    )
+    func_text += f"  row_idx = bodo.hiframes.pd_index_ext.init_heter_index({gen_const_tup(col_names)}, None)\n"
+    # TODO: pass df_index[i] as row name (after issue with RangeIndex getitem in
+    # test_df_apply_assertion is resolved)
+    func_text += f"  return bodo.hiframes.pd_series_ext.init_series(({row_args},), row_idx, None)\n"
+    loc_vars = {}
+    exec(func_text, {"bodo": bodo}, loc_vars)
+    impl = loc_vars["impl"]
+    return impl
+
+
+# DataFrame.iloc[] setitem
+@overload(operator.setitem, no_unliteral=True)
+def df_iloc_setitem_overload(df, idx, val):
+    if not isinstance(df, DataFrameILocType):
+        return
+
+    # df.iloc[cond, 1] = A
+    # handle in typing pass since the dataframe type can change
+    # TODO: better error checking here
+    raise_bodo_error(
+        f"DataFrame.iloc setitem unsupported for dataframe {df.df_type}, index {idx}, value {val}"
+    )
 
 
 ##################################  df.loc  ##################################
@@ -405,7 +437,7 @@ def gen_df_loc_col_select_impl(df, col_idx_list):
     """
     # get column names if bool list
     if len(col_idx_list) > 0 and isinstance(col_idx_list[0], (bool, np.bool_)):
-        col_idx_list = list(np.array(df.columns)[col_idx_list])
+        col_idx_list = list(pd.Series(df.columns, dtype=object)[col_idx_list])
 
     # create a new dataframe, create new data/index using idx
     new_data = ", ".join(
@@ -419,6 +451,20 @@ def gen_df_loc_col_select_impl(df, col_idx_list):
     func_text += "  df = I._obj\n"
     return bodo.hiframes.dataframe_impl._gen_init_df(
         func_text, col_idx_list, new_data, index
+    )
+
+
+# DataFrame.loc[] setitem
+@overload(operator.setitem, no_unliteral=True)
+def df_loc_setitem_overload(df, idx, val):
+    if not isinstance(df, DataFrameLocType):
+        return
+
+    # df.loc[cond, "B"] = A
+    # handle in typing pass since the dataframe type can change
+    # TODO: better error checking here
+    raise_bodo_error(
+        f"DataFrame.loc setitem unsupported for dataframe {df.df_type}, index {idx}, value {val}"
     )
 
 

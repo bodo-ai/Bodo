@@ -6,11 +6,8 @@ value:             ['a', 'bc', '', 'abc', None, 'bb']
 data:              [a, b, c, a, b, c, b, b]
 offsets:           [0, 1, 3, 3, 6, 6, 8]
 """
-import datetime
-import decimal
 import glob
 import operator
-import warnings
 
 import llvmlite.llvmpy.core as lc
 import numba
@@ -21,15 +18,10 @@ from numba.core import cgutils, types
 from numba.core.imputils import (
     RefType,
     impl_ret_borrowed,
-    impl_ret_new_ref,
     iternext_impl,
     lower_constant,
 )
-from numba.core.typing.templates import (
-    AbstractTemplate,
-    infer_global,
-    signature,
-)
+from numba.core.typing.templates import signature
 from numba.extending import (
     NativeValue,
     box,
@@ -48,10 +40,6 @@ from numba.extending import (
 )
 
 import bodo
-from bodo.hiframes.datetime_date_ext import (
-    datetime_date_array_type,
-    datetime_date_type,
-)
 from bodo.libs.array_item_arr_ext import (
     ArrayItemArrayPayloadType,
     ArrayItemArrayType,
@@ -59,11 +47,9 @@ from bodo.libs.array_item_arr_ext import (
     np_offset_type,
     offset_type,
 )
-from bodo.libs.decimal_arr_ext import Decimal128Type, DecimalArrayType
 from bodo.libs.str_ext import memcmp, string_type, unicode_to_utf8_and_len
 from bodo.utils.typing import (
     BodoError,
-    BodoWarning,
     is_list_like_index_type,
     is_overload_constant_int,
     is_overload_none,
@@ -1804,6 +1790,7 @@ def str_arr_setitem(A, idx, val):
 
         return impl_slice_list
 
+    # slice with scalar
     if isinstance(idx, types.SliceType) and val == string_type:
 
         def impl_slice(A, idx, val):  # pragma: no cover
@@ -1812,6 +1799,29 @@ def str_arr_setitem(A, idx, val):
                 A[i] = val
 
         return impl_slice
+
+    # set scalar value using bool index
+    # NOTE: this changes the array inplace after construction
+    if is_list_like_index_type(idx) and idx.dtype == types.bool_ and val == string_type:
+
+        def impl_bool_scalar(A, idx, val):  # pragma: no cover
+            n = len(A)
+            # NOTE: necessary to convert potential Series to array
+            idx = bodo.utils.conversion.coerce_to_ndarray(idx)
+            out_arr = pre_alloc_string_array(n, -1)
+            for i in numba.parfors.parfor.internal_prange(n):
+                if idx[i]:
+                    out_arr[i] = val
+                else:
+                    if bodo.libs.array_kernels.isna(A, i):
+                        out_arr[i] = ""
+                        str_arr_set_na(out_arr, i)
+                    else:
+                        out_arr[i] = A[i]  # TODO(ehsan): copy inplace
+
+            move_str_arr_payload(A, out_arr)
+
+        return impl_bool_scalar
 
     # TODO: other setitem cases
 

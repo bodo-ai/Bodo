@@ -2588,26 +2588,75 @@ def test_column_list_getitem_infer(memory_leak_check):
     check_func(test_impl, (df,))
 
 
+def test_df_slice(memory_leak_check):
+    """test slice getitem directly on dataframe object"""
+
+    def impl(df, n):
+        return df[1:n]
+
+    n = 11
+    df = pd.DataFrame({"A": np.arange(n), "B": np.arange(n) ** 2, "C": np.ones(n)})
+    bodo_func = bodo.jit(impl)
+    # TODO: proper distributed support for slicing
+    pd.testing.assert_frame_equal(bodo_func(df, n), impl(df, n))
+
+
 def test_iloc_bool_arr(memory_leak_check):
     """test df.iloc[bool_arr]"""
 
     def test_impl(df):
         return df.iloc[(df.A > 3).values]
 
+    def test_impl2(df):
+        return df.iloc[(df.A > 3).values, [1, 2]]
+
+    def test_impl3(df):
+        return df.iloc[(df.A > 3).values, 1]
+
     n = 11
-    df = pd.DataFrame({"A": np.arange(n), "B": np.arange(n) ** 2})
+    df = pd.DataFrame({"A": np.arange(n), "B": np.arange(n) ** 2, "C": np.ones(n)})
     check_func(test_impl, (df,))
+    check_func(test_impl2, (df,))
+    check_func(test_impl3, (df,))
 
 
 def test_iloc_slice(memory_leak_check):
     def test_impl(df, n):
         return df.iloc[1:n]
 
+    def test_impl2(df, n):
+        return df.iloc[1:n, [1, 2]]
+
     n = 11
-    df = pd.DataFrame({"A": np.arange(n), "B": np.arange(n) ** 2})
+    df = pd.DataFrame({"A": np.arange(n), "B": np.arange(n) ** 2, "C": np.ones(n)})
     bodo_func = bodo.jit(test_impl)
     # TODO: proper distributed support for slicing
     pd.testing.assert_frame_equal(bodo_func(df, n), test_impl(df, n))
+    bodo_func = bodo.jit(test_impl2)
+    pd.testing.assert_frame_equal(bodo_func(df, n), test_impl2(df, n))
+
+
+def test_iloc_getitem_row(memory_leak_check):
+    """test getitem of a single row with iloc"""
+
+    def test_impl(df):
+        return df.iloc[1]
+
+    def test_impl2(df):
+        return df.iloc[1, [1, 2]]
+
+    df1 = pd.DataFrame({"A": [1, 4, 6, 11, 4], "B": ["AB", "DD", "E", "A", "GG"]})
+    bodo_func = bodo.jit(test_impl)
+    pd.testing.assert_series_equal(bodo_func(df1), test_impl(df1), check_names=False)
+    df2 = pd.DataFrame(
+        {
+            "A": [1, 4, 6, 11, 4],
+            "B": ["AB", "DD", "E", "A", "GG"],
+            "C": [1.2, 3.1, 4.4, -1.2, 3.2],
+        }
+    )
+    bodo_func = bodo.jit(test_impl2)
+    pd.testing.assert_series_equal(bodo_func(df2), test_impl2(df2), check_names=False)
 
 
 def test_iloc_slice_col_ind(memory_leak_check):
@@ -2674,6 +2723,25 @@ def test_iloc_int_col_ind(memory_leak_check):
     n = 11
     df = pd.DataFrame({"A": np.arange(n), "B": np.arange(n) ** 2})
     check_func(test_impl, (df,))
+
+
+def test_iloc_setitem(memory_leak_check):
+    """test df.iloc[idx, col_ind] setitem where col_ind is a list of column indices"""
+
+    # set column with full slice
+    def impl1(df):
+        df.iloc[:, 1] = 1.3
+        return df
+
+    # set values with bool index
+    def impl2(df):
+        df.iloc[df.A > 4, [1, 2]] = 11
+        return df
+
+    n = 11
+    df = pd.DataFrame({"A": np.arange(n), "B": np.arange(n) ** 2, "C": np.ones(n)})
+    check_func(impl1, (df,), copy_input=True)
+    check_func(impl2, (df,), copy_input=True)
 
 
 def test_loc_bool_arr(memory_leak_check):
@@ -2747,6 +2815,88 @@ def test_loc_col_select(memory_leak_check):
     check_func(impl2, (df,))
     check_func(impl3, (df,))
     check_func(impl4, (n,))
+
+
+def test_loc_setitem(memory_leak_check):
+    """test df.loc[idx, col_ind] setitem where col_ind is a list of column names or bools"""
+
+    # set existing column with full slice
+    def impl1(df):
+        df.loc[:, "B"] = 11
+        return df
+
+    # set new columns with full slice
+    def impl2(df):
+        df.loc[:, ["D", "E"]] = 11
+        return df
+
+    # set values with bool index
+    def impl3(df):
+        df.loc[df.A > 4, "B"] = 11
+        return df
+
+    # boolean column selection
+    def impl4(df):
+        df.loc[:, [True, False, True]] = 11
+        return df
+
+    # dynamic column selection
+    def impl5(df):
+        df.loc[:, df.columns != "B"] = 11
+        return df
+
+    # schema change
+    def impl6(n):
+        df = pd.DataFrame({"A": np.ones(n), "B": np.arange(n), "C": np.ones(n)})
+        df.columns = ["AB", "CD", "EF"]
+        df.loc[:, ["AB", "EF"]] = 11
+        return df
+
+    # boolean column selection
+    def impl7(df):
+        df.loc[df.A > 4, [True, False, True]] = 11
+        return df
+
+    # dynamic column selection
+    def impl8(df):
+        df.loc[df.A > 4, df.columns != "B"] = 11
+        return df
+
+    # schema change
+    def impl9(n):
+        df = pd.DataFrame({"A": np.ones(n), "B": np.arange(n), "C": np.ones(n)})
+        cond = df.A > 4
+        df.columns = ["AB", "CD", "EF"]
+        df.loc[cond, ["AB", "EF"]] = 11
+        return df
+
+    n = 11
+    df = pd.DataFrame({"A": np.arange(n), "B": np.arange(n) ** 2, "C": np.ones(n)})
+    check_func(impl1, (df,), copy_input=True)
+    check_func(impl2, (df,), copy_input=True)
+    check_func(impl3, (df,), copy_input=True)
+    check_func(impl4, (df,), copy_input=True)
+    check_func(impl5, (df,), copy_input=True)
+    check_func(impl6, (n,))
+    check_func(impl7, (df,), copy_input=True)
+    check_func(impl8, (df,), copy_input=True)
+    check_func(impl9, (n,))
+
+
+def test_loc_setitem_str(memory_leak_check):
+    """test df.iloc[idx, col_ind] setitem for string array"""
+
+    def impl(df):
+        df.loc[df.A > 3, "B"] = "CCD"
+        return df
+
+    df = pd.DataFrame(
+        {
+            "A": [11, 4, 2, 5, 6, 1, 1, 4, 9],
+            "B": ["AA", None, "ABC", "DD", None, "AAA", "", "EFG", None],
+        }
+    )
+    check_func(impl, (df,), copy_input=True, only_1D=True)
 
 
 @pytest.mark.smoke

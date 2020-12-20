@@ -723,6 +723,9 @@ register_model(MetaType)(models.OpaqueModel)
 
 
 def is_literal_type(t):
+    # sometimes Dispatcher objects become TypeRef, see test_groupby_agg_const_dict
+    if isinstance(t, types.TypeRef):
+        t = t.instance_type
     return (
         # LiteralStrKeyDict is not always a literal since its values are not necessarily
         # constant
@@ -745,6 +748,9 @@ def is_literal_type(t):
 
 
 def get_literal_value(t):
+    # sometimes Dispatcher objects become TypeRef, see test_groupby_agg_const_dict
+    if isinstance(t, types.TypeRef):
+        t = t.instance_type
     assert is_literal_type(t)
     if isinstance(t, types.Literal):
         # LiteralStrKeyDict with all const values, e.g. {"A": ["B"]}
