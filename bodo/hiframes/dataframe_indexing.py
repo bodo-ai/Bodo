@@ -100,7 +100,7 @@ def df_getitem_overload(df, ind):
             func_text, ind_columns, new_data, index
         )
 
-    # df1 = df[df.A > .5]
+    # df1 = df[df.A > .5] or df[:n]
     if (is_list_like_index_type(ind) and ind.dtype == types.bool_) or isinstance(
         ind, types.SliceType
     ):
@@ -218,7 +218,7 @@ def overload_iloc_getitem(I, idx):
         # see: test_groupby_dead_col_multifunc
         col_names = tuple(pd.Series(df.columns, dtype=object)[col_inds])
         if isinstance(idx.types[0], types.Integer):
-            # df.iloc[3, 1] case, ouput is a scalar value
+            # df.iloc[3, 1] case, output is a scalar value
             if isinstance(idx.types[1], types.Integer):
                 col_ind = col_inds[0]
 
