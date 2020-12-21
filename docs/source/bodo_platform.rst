@@ -70,6 +70,12 @@ Refresh and you can see the progress on granting `AMI <https://docs.aws.amazon.c
 launch permissions to your account ID. Your account is ready when it turns green.
 
 
+**Note:** It is highly recommended that you ensure sufficient limits on your AWS account to launch
+resources. See :ref:`resources_created_in_aws_env` for the resources required for Bodo Cloud Platform.
+
+
+.. _creating_clusters:
+
 Creating Clusters
 -----------------
 
@@ -87,14 +93,28 @@ Then, select the type of nodes in the cluster to be created from the *Instance t
 
 **Note:** If the *Instance type* dropdown list does not populate, either the AWS
 credentials are not entered properly or they are not valid.
-Please go back :ref:`setting_aws_credentials` and make sure you complete it with valid credentials.
+Please go back to :ref:`setting_aws_credentials` and make sure you complete it with valid credentials.
+
+Next, enter the number of nodes for your cluster in *Number of Instances*.
+and choose the Bodo Version to be installed on your cluster. Typically the three latest Bodo Releases
+are available.
+
+**Note:** If the *Bodo Version* dropdown list does not populate, either the AWS
+credentials are not entered properly or the permissions to Bodo's AMIs have not been granted to your account.
+Please go back :ref:`setting_aws_credentials` and make sure you complete it with valid credentials and that
+AMIs have been successfully shared with your AWS account.
+
+Then, select a value for *Cluster auto shutdown*. This is the amount of time of inactivity after which
+the platform will remove the cluster automatically. Activity is determined through attached notebooks (see :ref:`attaching_notebook_to_cluster`) 
+and jobs (see :ref:`running_a_job`). Therefore, if you don't plan to attach a notebook or a job to this cluster 
+(and use it via `ssh` instead), it's recommended to set this to `Never`, since otherwise the cluster will 
+be removed after the set time.
 
 .. image:: platform_onboarding_screenshots/cluster-form.png
     :align: center
     :alt: Cluster-creation-form
 
-Finally, enter the number of nodes for your
-cluster in *Number of Instances* and click on `CREATE`.
+Finally click on `CREATE`.
 You will see that a new task for creating the cluster has been created.
 
 .. image:: platform_onboarding_screenshots/cluster-status-new.png
@@ -119,6 +139,8 @@ Once the cluster is successfully created and ready to use, the status is updated
     :align: center
     :alt: Cluster-Status-Finished
 
+.. _attaching_notebook_to_cluster:
+
 Attaching a Notebook to a Cluster
 ---------------------------------
 
@@ -129,7 +151,7 @@ Go to the notebooks page by clicking on *Notebooks* in the left bar (or on the t
     :alt: Sidebar-Notebooks
     :scale: 25
 
-This will take you to the *Notebooks* page. At the top right corner, click on the *Create Notebook* which opens
+This will take you to the *Notebooks* page. At the top right corner, click on the *Create Notebook* button which opens
 the notebook creation form.
 Choose a name for your notebook and select
 the type of node that will host the notebook
@@ -167,6 +189,7 @@ while the dropdown allows opening the notebook in a new tab.
     :align: center
     :alt: Notebook-Status-Finished
 
+.. _running_a_job:
 
 Running a Job
 -------------
@@ -267,6 +290,7 @@ you need to persist and later review, you should write to external storage, such
 You may also write to stdout/stderr, but output logs may be truncated,
 so it should not be considered reliable for large outputs that need to be read later.
 
+.. _resources_created_in_aws_env:
 
 Resources Created in Your AWS Environment
 -----------------------------------------
@@ -300,3 +324,104 @@ that the Bodo Platform creates in your account to enable clusters and notebooks.
     - Cluster secrets (e.g. SSH keys)
   * - `IAM Role <https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles.html>`_ for Clusters
     - Allow cluster workers to access resources above
+
+.. _aws_account_cleanup:
+
+AWS Account Cleanup
+-------------------
+
+As explained in :ref:`resources_created_in_aws_env`, the platform creates two types of resources in the users' AWS environments: 
+organization level resources and cluster specific resources. The organization level resources are created by the platform to set 
+up shared resources (such as a VPC, an EFS Mount, etc) that are used later by all created resources. The cluster specific resources 
+(such as EC2 instances, ENIs, etc) are created by the platform to host/manage a specific cluster. This includes notebooks and 
+corresponding resources as well.
+The cluster specific resources are removed when you request a cluster to be removed.
+The organization level resources persist in the user account so they can be used by clusters deployed in the future.
+However, if you need to remove these resources for any reason (AWS limits, etc.), an option to do so is provided.
+Navigate to the *Settings* page and click on `Show Advanced` in the bottom-right corner. 
+
+.. image:: platform_onboarding_screenshots/settings-ac-cleanup.png
+    :align: center
+    :alt: Settings-Account-Cleanup
+
+
+This will bring up a section called `AWS Resource Cleanup`. 
+
+.. image:: platform_onboarding_screenshots/settings-adv-ac-cleanup.png
+    :align: center
+    :alt: Advanced-Settings-Account-Cleanup
+
+
+Select the region from which you would like to remove these resources
+(i.e. the region in which the resources you want to delete have been created), and click `CLEANUP AWS RESOURCES`.
+Note that this will only work if you don't have any active clusters in that region deployed through the platform.
+Else, the request will be rejected, and you'll be asked to remove all clusters in that region before trying again.
+Removing active clusters (including clusters with a *FAILED* status) is necessary because 
+this process will make them inaccessible to the platform.
+
+.. _troubleshooting:
+
+Troubleshooting
+---------------
+
+Here are solutions to potential issues you may encounter while using the Bodo Cloud Platform:
+
+Cluster Creation Fails
+~~~~~~~~~~~~~~~~~~~~~~
+
+Most of cluster creation failures are usually due to one of the following:
+
+- Your account hits AWS resource limits such as limits on the number of VPCs and EC2 instances
+- Your AWS credentials do not have the required permissions (see :ref:`setting_aws_credentials`)
+- AWS does not have enough of the requested resources (such as some of the large EC2 instances)
+
+In case of failure, the logs are made available on the platform and should provide some details regarding why the failure occurred. Even though cluster creation was not successful, some AWS resources may still
+have been provisioned. Click on the delete icon to remove all the created resources. You can try to create a cluster again after addressing the underlying
+issue such as increasing limits or providing AWS credentials with the required permissions.
+
+Cluster Deletion Fails
+~~~~~~~~~~~~~~~~~~~~~~
+
+Failures during cluster deletion are very rare and usually only occur when the provisioned resources have been manually modified in some way.
+In these cases, logs are provided to help you 
+diagnose the issue. For instance, if logs indicate that some resource cannot be deleted due to a dependent resource, you can try to delete 
+the resource manually through the 
+`AWS Management Console <https://aws.amazon.com/console/>`_ and try to remove the cluster through the platform again.
+
+Cleanup Shared Resources Manually
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+As described in :ref:`aws_account_cleanup`, an option to remove organization level shared resources provisioned by Bodo in your AWS environment
+is provided. If you need to remove resources manually (e.g. the process fails),
+below is the list of organization level resources and the order to remove them.
+
+**Note:** Please ensure that you have removed all clusters and related resources before proceeding. Deleting the resources
+listed below may result in the platform losing access to those clusters for removal in the future.
+
+The resources should be easy to identify within their respective
+sections on the `AWS Management Console <https://aws.amazon.com/console/>`_ since their names are all prefixed with `bodo`.
+
+1. Navigate to the `AWS Management Console <https://aws.amazon.com/console/>`_. Sign in if you are not already signed in. Make sure you have selected
+   the region from which you want to remove the shared resources.
+
+2. Click on `Services` in the top-right corner. Navigate to the `EC2` section (under `Compute`) and then to `Network Interfaces` in the sidebar 
+   (under `Network & Security`). You will see two Network Interfaces. One of them is required for an EFS Mount (shared storage),
+   and the other is required by a NAT Gateway. These dependent resources need to be removed first.
+    
+   a.  Click on `Services` and navigate to the `EFS` section (under `Storage`). Click on `File Systems` in the sidebar. Delete the File System
+       prefixed with `bodo` by selecting it and clicking on `Delete`.
+
+   b.  Click on `Services` and navigate to the `VPC` section (under `Networking & Content Delivery`). Select `NAT Gateways` in the 
+       sidebar (under `Virtual Private Cloud`). Select the NAT Gateway prefixed with `bodo` and delete it.
+   
+   Navigate back to `Network Interfaces` in the `EC2` section and ensure that the two ENIs are deleted (or have the status `available`). 
+   This may take a few minutes in some cases.
+
+3. Click on `Services` and navigate to the `VPC` section (under `Networking & Content Delivery`). Select `Your VPCs` in the 
+   sidebar (under `Virtual Private Cloud`). Select the VPC prefixed with `bodo` and delete it. If there is a dependency warning,
+   wait for a few minutes and try again. You can also try to delete the linked dependent resources manually if it does not resolve on its own.
+
+4. Finally, click on `Services` in the top-right corner. Navigate to the `EC2` section (under `Compute`) and select `Elastic IPs` in the sidebar
+   (under `Network & Security`). Select the EIP prefixed with `bodo` and select `Release Elastic IP addresses` under `Actions`.
+
+The steps above should remove the organization level resources provisioned by Bodo in your AWS environment.
