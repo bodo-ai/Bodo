@@ -16,6 +16,7 @@ from numba.extending import (
     make_attribute_wrapper,
     models,
     overload_method,
+    overload,
     register_model,
 )
 
@@ -30,6 +31,7 @@ from bodo.utils.typing import (
     get_literal_value,
     raise_const_error,
     is_overload_none,
+    is_overload_constant_int
 )
 
 
@@ -90,22 +92,21 @@ def df_rolling_overload(
     unsupported_args = dict(win_type=win_type, axis=axis, closed=closed)
     arg_defaults = dict(win_type=None, axis=0, closed=None)
     check_unsupported_args("DataFrame.rolling", unsupported_args, arg_defaults)
-    if is_overload_none(min_periods):
-        # return win_size if fixed, or 1 if win_type is variable
-        min_periods = window if isinstance(window, types.Integer) else 1
-        print(" we are in pd and min_periods is: " + str(min_periods))
-    func_text = (
-        "def _impl(df, window, min_periods=None, center=False, win_type=None, on=None, axis=0, closed=None):\n")
-    func_text += "    return bodo.hiframes.pd_rolling_ext.init_rolling({}, {}, {}, {}, {})\n".format(
-        df, window, min_periods, center, on)
-        # return bodo.hiframes.pd_rolling_ext.init_rolling(df, window, min_periods, center, on)
 
-    loc_vars = {}
-    exec(func_text, {"bodo": bodo}, loc_vars)
-    _impl = loc_vars["_impl"]
+    def impl(
+        df,
+        window,
+        min_periods=None,
+        center=False,
+        win_type=None,
+        on=None,
+        axis=0,
+        closed=None,
+    ):  # pragma: no cover
+        min_periods = _handle_default_min_periods(min_periods, window)
+        return bodo.hiframes.pd_rolling_ext.init_rolling(df, window, min_periods, center, on)
 
-    return _impl
-
+    return impl
 
 
 @overload_method(SeriesType, "rolling", inline="always", no_unliteral=True)
@@ -122,10 +123,7 @@ def overload_series_rolling(
     unsupported_args = dict(win_type=win_type, axis=axis, closed=closed)
     arg_defaults = dict(win_type=None, axis=0, closed=None)
     check_unsupported_args("Series.rolling", unsupported_args, arg_defaults)
-    if is_overload_none(min_periods):
-        # return win_size if fixed, or 1 if win_type is variable
-        min_periods = window if isinstance(window, types.Integer) else 1
-        print(" we are here and min_periods is: " + str(min_periods))
+
     def impl(
         df,
         window,
@@ -136,6 +134,7 @@ def overload_series_rolling(
         axis=0,
         closed=None,
     ):  # pragma: no cover
+        min_periods = _handle_default_min_periods(min_periods, window)
         return bodo.hiframes.pd_rolling_ext.init_rolling(df, window, min_periods, center, on)
 
     return impl
@@ -179,12 +178,19 @@ def init_rolling(typingctx, obj_type, window_type, min_periods_type, center_type
 
 
 def _handle_default_min_periods(min_periods, window):
+    pass
+
+@overload(_handle_default_min_periods)
+def overload_handle_default_min_periods(min_periods, window):
     """ handle default values for the min_periods kwarg. """
     if is_overload_none(min_periods):
         # return win_size if fixed, or 1 if win_type is variable
-        return window if isinstance(window, types.Integer) else 1
+        if isinstance(window, types.Integer):
+            return lambda min_periods, window: window
+        else:
+            return lambda min_periods, window: 1
     else:
-        return min_periods
+        return lambda min_periods, window: min_periods
 
 def _gen_df_rolling_out_data(rolling):
     """gen code for output data columns of Rolling calls"""
