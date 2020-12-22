@@ -1325,6 +1325,10 @@ class DataFramePass:
         return nodes + compile_func_single_block(_init_df, out_arrs, lhs, self)
 
     def _run_call_groupby(self, assign, lhs, rhs, grp_var, func_name):
+        """Transform groupby calls into an Aggregate IR node"""
+        if func_name == "apply":
+            return self._run_call_groupby_apply(assign, lhs, rhs, grp_var)
+
         grp_typ = self.typemap[grp_var.name]
         df_var = self._get_df_obj_select(grp_var, "groupby")
         df_type = self.typemap[df_var.name]
@@ -1515,6 +1519,121 @@ class DataFramePass:
 
         out_vars.append(index_var)
         return nodes + compile_func_single_block(_init_df, out_vars, lhs, self)
+
+    def _run_call_groupby_apply(self, assign, lhs, rhs, grp_var):
+        """generate IR nodes for df.groupby().apply() with UDFs"""
+        grp_typ = self.typemap[grp_var.name]
+        df_var = self._get_df_obj_select(grp_var, "groupby")
+        df_type = self.typemap[df_var.name]
+        out_typ = self.typemap[lhs.name]
+
+        # get apply function
+        kws = dict(rhs.kws)
+        func_var = get_call_expr_arg("GroupBy.apply", rhs.args, kws, 0, "func")
+        func = get_overload_const_func(self.typemap[func_var.name])
+
+        out_arr_types = out_typ.data
+        n_out_cols = len(out_arr_types)
+        extra_args = [] if len(rhs.args) < 2 else rhs.args[1:]
+
+        # find kw arguments to UDF (pop apply() args first)
+        kws.pop("func", None)
+
+        udf_arg_names = (
+            ", ".join("e{}".format(i) for i in range(len(extra_args)))
+            + (", " if extra_args else "")
+            + ", ".join(
+                "{}=e{}".format(a, i + len(extra_args))
+                for i, a in enumerate(kws.keys())
+            )
+        )
+        extra_args += list(kws.values())
+        extra_arg_names = ", ".join("e{}".format(i) for i in range(len(extra_args)))
+
+        # find which columns are actually used if possible
+        used_cols = _get_df_apply_used_cols(func, df_type.columns)
+        used_cols = tuple(c for c in used_cols if c not in grp_typ.keys)
+        # TODO: fix order
+
+        key_names = ["k" + str(i) for i in range(len(grp_typ.keys))]
+        col_names = ["c" + str(i) for i in range(len(used_cols))]
+        key_name_args = ", ".join(key_names)
+        col_name_args = ", ".join(col_names)
+
+        func_text = (
+            f"def f({key_name_args}, {col_name_args}, df_index, {extra_arg_names}):\n"
+        )
+        func_text += (
+            f"  group_indices, ngroups = get_group_indices(({key_name_args},))\n"
+        )
+        # TODO(ehsan): more efficient sort like Pandas
+        # https://github.com/pandas-dev/pandas/blob/aad85ad1e39568f87cdae38fece41cd2370234a7/pandas/core/sorting.py#L566
+        func_text += "  sort_idx = group_indices.argsort(kind='mergesort')\n"
+        func_text += (
+            "  starts, ends = generate_slices(group_indices[sort_idx], ngroups)\n"
+        )
+        for c in key_names + col_names:
+            func_text += f"  s{c} = {c}[sort_idx]\n"
+        func_text += f"  sdf_index = df_index[sort_idx]\n"
+        sorted_key_name_args = ", ".join(f"s{c}" for c in key_names)
+        sorted_col_name_args = ", ".join(f"s{c}" for c in col_names)
+        func_text += f"  in_data = bodo.hiframes.pd_dataframe_ext.init_dataframe(({sorted_key_name_args}, {sorted_col_name_args},), sdf_index, {gen_const_tup(grp_typ.keys + used_cols)})\n\n"
+
+        for i in range(len(out_typ.columns)):
+            func_text += f"  arrs{i} = []\n"
+        for i in range(len(key_names)):
+            func_text += f"  in_key_arrs{i} = []\n"
+        func_text += "  arrs_index = []\n"
+        func_text += f"  for i in range(ngroups):\n"
+        func_text += (
+            f"    out_df = map_func(in_data[starts[i]:ends[i]], {udf_arg_names})\n"
+        )
+        func_text += "    arrs_index.append(bodo.utils.conversion.index_to_array(bodo.hiframes.pd_dataframe_ext.get_dataframe_index(out_df)))\n"
+        # all rows of returned df will get the same key value in output index
+        for i in range(len(key_names)):
+            func_text += f"    in_key_arrs{i}.append(bodo.utils.utils.full_type(len(out_df), s{key_names[i]}[starts[i]], s{key_names[i]}))\n"
+        for i in range(len(out_typ.columns)):
+            func_text += f"    arrs{i}.append(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(out_df, {i}))\n"
+        for i in range(len(out_typ.columns)):
+            func_text += f"  out_arr{i} = bodo.libs.array_kernels.concat(arrs{i})\n"
+        for i in range(len(key_names)):
+            func_text += (
+                f"  out_key_arr{i} = bodo.libs.array_kernels.concat(in_key_arrs{i})\n"
+            )
+
+        out_key_arr_names = ", ".join(f"out_key_arr{i}" for i in range(len(key_names)))
+        # TODO(ehsan): support MultiIndex in input and UDF output
+        # TODO(ehsan): support names
+        func_text += f"  out_index = bodo.hiframes.pd_multi_index_ext.init_multi_index(({out_key_arr_names}, bodo.libs.array_kernels.concat(arrs_index)), (None, None), None)\n"
+        out_data = ", ".join("out_arr{}".format(i) for i in range(len(out_typ.columns)))
+        func_text += f"  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({out_data},), out_index, {out_typ.columns})\n"
+
+        loc_vars = {}
+        exec(func_text, {}, loc_vars)
+        f = loc_vars["f"]
+
+        nodes = []
+        key_vars = [self._get_dataframe_data(df_var, c, nodes) for c in grp_typ.keys]
+        col_vars = [self._get_dataframe_data(df_var, c, nodes) for c in used_cols]
+        df_index_var = self._get_dataframe_index(df_var, nodes)
+        map_func = bodo.compiler.udf_jit(func)
+
+        glbs = {
+            "numba": numba,
+            "np": np,
+            "bodo": bodo,
+            "map_func": map_func,
+            "get_group_indices": bodo.hiframes.pd_groupby_ext.get_group_indices,
+            "generate_slices": bodo.hiframes.pd_groupby_ext.generate_slices,
+        }
+
+        return replace_func(
+            self,
+            f,
+            key_vars + col_vars + [df_index_var] + extra_args,
+            extra_globals=glbs,
+            pre_nodes=nodes,
+        )
 
     def _run_call_pivot_table(self, assign, lhs, rhs):
         df_var, values, index, columns, aggfunc, _pivot_values = rhs.args

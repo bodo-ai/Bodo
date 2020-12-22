@@ -1200,9 +1200,7 @@ struct key_hash {
 void get_group_info(table_info* table, std::vector<int64_t>& row_to_group,
                     std::vector<int64_t>& group_to_first_row,
                     bool check_for_null_keys) {
-#ifdef DEBUG_GROUPBY
-    std::cout << "Beginning of get_group_info\n";
-#endif
+
     std::vector<array_info*> key_cols = std::vector<array_info*>(
         table->columns.begin(), table->columns.begin() + table->num_keys);
     uint32_t seed = SEED_HASH_GROUPBY_SHUFFLE;
@@ -1218,10 +1216,7 @@ void get_group_info(table_info* table, std::vector<int64_t>& row_to_group,
     if (check_for_null_keys) {
         key_is_nullable = does_keys_have_nulls(key_cols);
     }
-#ifdef DEBUG_GROUPBY
-    std::cout << "check_for_null_keys=" << check_for_null_keys
-              << " key_is_nullable=" << key_is_nullable << "\n";
-#endif
+
     for (int64_t i = 0; i < table->nrows(); i++) {
         if (key_is_nullable) {
             if (does_row_has_nulls(key_cols, i)) {
@@ -1241,6 +1236,46 @@ void get_group_info(table_info* table, std::vector<int64_t>& row_to_group,
     }
     delete[] hashes;
 }
+
+
+/**
+ * @brief Get groupby labels for input key arrays
+ * 
+ * @param table a table of all key arrays
+ * @param out_labels output array to fill
+ * @return int64_t total number of groups
+ */
+int64_t get_groupby_labels(table_info* table, int64_t *out_labels) {
+    // TODO(ehsan): refactor to avoid code duplication with get_group_info
+    table->num_keys = table->columns.size();
+    std::vector<array_info*> key_cols = table->columns;
+    uint32_t seed = SEED_HASH_GROUPBY_SHUFFLE;
+    uint32_t* hashes = hash_keys(key_cols, seed);
+
+    int next_group = 1;
+    UNORD_MAP_CONTAINER<multi_col_key, int64_t, key_hash> key_to_group;
+    bool key_is_nullable = does_keys_have_nulls(key_cols);
+
+    for (int64_t i = 0; i < table->nrows(); i++) {
+        if (key_is_nullable) {
+            if (does_row_has_nulls(key_cols, i)) {
+                out_labels[i] = -1;
+                continue;
+            }
+        }
+        multi_col_key key(hashes[i], table, i);
+        int64_t& group = key_to_group[key];  // this inserts 0 into the map if
+                                             // key doesn't exist
+        if (group == 0) {
+            group = next_group++;  // this updates the value in the map without
+                                   // another lookup
+        }
+        out_labels[i] = group - 1;
+    }
+    delete[] hashes;
+    return next_group - 1;
+}
+
 
 /**
  * Given a table with n key columns, this function calculates the row to group

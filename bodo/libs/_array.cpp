@@ -1293,6 +1293,9 @@ PyMODINIT_FUNC PyInit_array_ext(void) {
     PyObject_SetAttrString(
         m, "pivot_groupby_and_aggregate",
         PyLong_FromVoidPtr((void*)(&pivot_groupby_and_aggregate)));
+    PyObject_SetAttrString(
+        m, "get_groupby_labels",
+        PyLong_FromVoidPtr((void*)(&get_groupby_labels)));
     PyObject_SetAttrString(m, "array_isin",
                            PyLong_FromVoidPtr((void*)(&array_isin)));
     PyObject_SetAttrString(

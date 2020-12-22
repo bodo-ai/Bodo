@@ -5,22 +5,7 @@ import llvmlite.binding as ll
 import numba
 from llvmlite import ir as lir
 from numba.core import cgutils, types
-from numba.extending import (
-    NativeValue,
-    box,
-    intrinsic,
-    lower_builtin,
-    lower_getattr,
-    make_attribute_wrapper,
-    models,
-    overload,
-    overload_attribute,
-    overload_method,
-    register_model,
-    type_callable,
-    typeof_impl,
-    unbox,
-)
+from numba.extending import intrinsic, models, register_model
 
 from bodo.hiframes.datetime_date_ext import datetime_date_array_type
 from bodo.hiframes.pd_categorical_ext import (
@@ -52,8 +37,7 @@ from bodo.libs.struct_arr_ext import (
     _get_struct_arr_payload,
     define_struct_arr_dtor,
 )
-from bodo.libs.tuple_arr_ext import TupleArrayType, init_tuple_arr
-from bodo.utils.transform import get_type_alloc_counts
+from bodo.libs.tuple_arr_ext import TupleArrayType
 from bodo.utils.utils import (
     CTypeEnum,
     check_and_propagate_cpp_exception,
@@ -88,6 +72,7 @@ ll.add_symbol("shuffle_renormalization", array_ext.shuffle_renormalization)
 ll.add_symbol("shuffle_renormalization_group", array_ext.shuffle_renormalization_group)
 ll.add_symbol("groupby_and_aggregate", array_ext.groupby_and_aggregate)
 ll.add_symbol("pivot_groupby_and_aggregate", array_ext.pivot_groupby_and_aggregate)
+ll.add_symbol("get_groupby_labels", array_ext.get_groupby_labels)
 ll.add_symbol("array_isin", array_ext.array_isin)
 ll.add_symbol(
     "compute_node_partition_by_hash", array_ext.compute_node_partition_by_hash
@@ -1721,6 +1706,12 @@ def groupby_and_aggregate(
         ),
         codegen,
     )
+
+
+get_groupby_labels = types.ExternalFunction(
+    "get_groupby_labels",
+    types.int64(table_type, types.voidptr),
+)
 
 
 _array_isin = types.ExternalFunction(

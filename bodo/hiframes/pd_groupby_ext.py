@@ -1,10 +1,10 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 """Support for Pandas Groupby operations
 """
-import operator
 from enum import Enum
 
 import numba
+import numpy as np
 from numba.core import types
 from numba.core.registry import CPUDispatcher
 from numba.core.typing.templates import (
@@ -17,15 +17,11 @@ from numba.core.typing.templates import (
 from numba.extending import (
     infer,
     infer_getattr,
-    intrinsic,
     lower_builtin,
-    lower_cast,
-    make_attribute_wrapper,
     models,
     overload,
     overload_method,
     register_model,
-    type_callable,
 )
 
 import bodo
@@ -33,9 +29,13 @@ from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.hiframes.pd_index_ext import RangeIndexType
 from bodo.hiframes.pd_multi_index_ext import MultiIndexType
 from bodo.hiframes.pd_series_ext import SeriesType, _get_series_array_type
-from bodo.ir.aggregate import get_agg_func
+from bodo.libs.array import (
+    arr_info_list_to_table,
+    array_to_info,
+    get_groupby_labels,
+)
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
-from bodo.libs.decimal_arr_ext import Decimal128Type, DecimalArrayType
+from bodo.libs.decimal_arr_ext import Decimal128Type
 from bodo.libs.int_arr_ext import IntDtype, IntegerArrayType
 from bodo.libs.str_arr_ext import string_array_type
 from bodo.libs.str_ext import string_type
@@ -49,6 +49,7 @@ from bodo.utils.typing import (
     get_overload_const_list,
     get_overload_const_str,
     get_overload_constant_dict,
+    get_udf_error_msg,
     is_dtype_nullable,
     is_literal_type,
     is_overload_constant_bool,
@@ -797,6 +798,56 @@ class DataframeGroupByAttribute(AttributeTemplate):
         msg = "Groupby.cummax() only supports columns of types integer, float, string, liststring, date, datetime or timedelta"
         return self.resolve_cumulative(grp, args, kws, msg, "cummax")
 
+    @bound_function("groupby.apply", no_unliteral=True)
+    def resolve_apply(self, grp, args, kws):
+        kws = dict(kws)
+        # pop apply() arguments from kws so only UDF kws remain
+        func = args[0] if len(args) > 0 else kws.pop("func", None)
+        f_args = tuple(args[1:]) if len(args) > 0 else ()
+
+        # TODO: explict selection, as_index
+        in_df_type = grp.df_type
+        arg_typs = (in_df_type,)
+        arg_typs += tuple(f_args)
+        try:
+            f_return_type = get_const_func_output_type(
+                func, arg_typs, kws, self.context
+            )
+        except Exception as e:
+            raise_bodo_error(
+                get_udf_error_msg("GroupBy.apply()", e), getattr(e, "loc", None)
+            )
+
+        if not isinstance(f_return_type, DataFrameType):
+            raise BodoError(
+                "GroupBy.apply(): only functions with dataframe output supported currently"
+            )
+
+        # TODO: index names
+        key_arr_types = tuple(
+            in_df_type.data[in_df_type.columns.index(c)] for c in grp.keys
+        )
+        out_index_type = MultiIndexType(
+            key_arr_types + get_index_data_arr_types(f_return_type.index)
+        )
+        ret_type = DataFrameType(
+            f_return_type.data, out_index_type, f_return_type.columns
+        )
+
+        arg_names = ", ".join(f"arg{i}" for i in range(len(f_args)))
+        arg_names = arg_names + ", " if arg_names else ""
+        # add dummy default value for UDF kws to avoid errors
+        kw_names = ", ".join(f"{a} = ''" for a in kws.keys())
+        func_text = f"def apply_stub(func, {arg_names}{kw_names}):\n"
+        func_text += "    pass\n"
+        loc_vars = {}
+        exec(func_text, {}, loc_vars)
+        apply_stub = loc_vars["apply_stub"]
+
+        pysig = numba.core.utils.pysignature(apply_stub)
+        new_args = (func, *f_args) + tuple(kws.values())
+        return signature(ret_type, *new_args).replace(pysig=pysig)
+
     def generic_resolve(self, grpby, attr):
         if attr in groupby_unsupported:
             return
@@ -900,6 +951,66 @@ CrossTabTyper._no_unliteral = True
 @lower_builtin(crosstab_dummy, types.VarArg(types.Any))
 def lower_crosstab_dummy(context, builder, sig, args):
     return context.get_constant_null(sig.return_type)
+
+
+def get_group_indices(keys):  # pragma: no cover
+    return np.arange(len(keys))
+
+
+@overload(get_group_indices)
+def get_group_indices_overload(keys):
+    """get group indices (labels) for a tuple of key arrays."""
+    func_text = "def impl(keys):\n"
+    # convert arrays to table
+    func_text += "    info_list = [{}]\n".format(
+        ", ".join(f"array_to_info(keys[{i}])" for i in range(len(keys.types))),
+    )
+    func_text += "    table = arr_info_list_to_table(info_list)\n"
+    func_text += "    group_labels = np.empty(len(keys[0]), np.int64)\n"
+    func_text += "    ngroups = get_groupby_labels(table, group_labels.ctypes)\n"
+    func_text += "    return group_labels, ngroups\n"
+    loc_vars = {}
+    exec(
+        func_text,
+        {
+            "bodo": bodo,
+            "np": np,
+            "get_groupby_labels": get_groupby_labels,
+            "array_to_info": array_to_info,
+            "arr_info_list_to_table": arr_info_list_to_table,
+        },
+        loc_vars,
+    )
+    impl = loc_vars["impl"]
+    return impl
+
+
+@numba.njit(no_cpython_wrapper=True)
+def generate_slices(labels, ngroups):
+    """same as:
+    https://github.com/pandas-dev/pandas/blob/53d1622eebb8fc46e90f131a559d32f42babd858/pandas/_libs/lib.pyx#L845
+    """
+
+    n = len(labels)
+
+    starts = np.zeros(ngroups, dtype=np.int64)
+    ends = np.zeros(ngroups, dtype=np.int64)
+
+    start = 0
+    group_size = 0
+    for i in range(n):
+        lab = labels[i]
+        if lab < 0:
+            start += 1
+        else:
+            group_size += 1
+            if i == n - 1 or lab != labels[i + 1]:
+                starts[lab] = start
+                ends[lab] = start + group_size
+                start += group_size
+                group_size = 0
+
+    return starts, ends
 
 
 groupby_unsupported = {

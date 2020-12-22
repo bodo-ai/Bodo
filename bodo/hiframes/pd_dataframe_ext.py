@@ -961,8 +961,9 @@ def cast_df_to_df(context, builder, fromty, toty, val):
         # TODO: fix casting refcount in Numba since Numba increfs value after cast
         return df
 
-    # empty dataframe case
-    assert len(fromty.data) == 0
+    # only empty dataframe case supported from this point
+    if not len(fromty.data) == 0:
+        raise BodoError(f"Invalid dataframe cast from {fromty} to {toty}")
 
     # generate empty dataframe with target type using empty arrays for data columns and
     # index
