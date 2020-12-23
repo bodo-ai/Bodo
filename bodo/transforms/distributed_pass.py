@@ -19,7 +19,6 @@ except:
 import llvmlite.binding as ll
 import numpy as np
 from numba.core import ir, ir_utils, types
-from numba.core.inline_closurecall import inline_closure_call
 from numba.core.ir_utils import (
     build_definitions,
     compile_to_numba_ir,
@@ -166,8 +165,6 @@ class DistributedPass:
         # keep local versions of reduce variables to enable converting variable size
         # string allocations to local chunk size
         self._local_reduce_vars = {}
-        # flag to indicate there is a groupby_apply() call which needs special handling
-        self._has_groupby_apply = False
 
     def run(self):
         """Run distributed pass transforms"""
@@ -209,8 +206,6 @@ class DistributedPass:
         # transform
         self._gen_init_code(self.func_ir.blocks)
         self.func_ir.blocks = self._run_dist_pass(self.func_ir.blocks)
-        if self._has_groupby_apply:
-            self._transform_groupby_apply()
 
         while remove_dead(
             self.func_ir.blocks, self.func_ir.arg_names, self.func_ir, self.typemap
@@ -297,43 +292,6 @@ class DistributedPass:
             blocks[label].body = new_body
 
         return blocks
-
-    def _transform_groupby_apply(self):
-        #
-        topo_order = find_topo_order(self.func_ir.blocks)
-        work_list = list((l, self.func_ir.blocks[l]) for l in reversed(topo_order))
-        while work_list:
-            label, block = work_list.pop()
-            for i, inst in enumerate(block.body):
-                if is_call_assign(inst) and guard(
-                    find_callname, self.func_ir, inst.value
-                ) == (
-                    "groupby_apply",
-                    "bodo.hiframes.pd_groupby_ext",
-                ):
-                    rhs = inst.value
-                    impl, glbls = self._run_call_groupby_apply(inst, rhs)
-                    args = rhs.args + list(dict(rhs.kws).values())
-                    inst.value = ir.Expr.call(
-                        ir.Var(block.scope, "dummy", inst.loc),
-                        args,
-                        (),
-                        inst.loc,
-                    )
-                    arg_types = tuple(self.typemap[v.name] for v in args)
-                    _, _ = inline_closure_call(
-                        self.func_ir,
-                        glbls,
-                        block,
-                        i,
-                        impl,
-                        self.typingctx,
-                        arg_types,
-                        self.typemap,
-                        self.calltypes,
-                        work_list,
-                    )
-                    break
 
     def _run_expr(self, inst, equiv_set, avail_vars):
         rhs = inst.value
@@ -1273,12 +1231,9 @@ class DistributedPass:
                 lhs, assign, rhs.args, avail_vars, equiv_set
             )
 
-        if fdef == (
-            "groupby_apply",
-            "bodo.hiframes.pd_groupby_ext",
-        ):
-            # handle groupby_apply() in a separate pass since it changes
-            self._has_groupby_apply = True
+        if fdef == ("_bodo_groupby_apply_impl", "") and self._is_1D_or_1D_Var_arr(lhs):
+            self._set_last_arg_to_true(assign.value)
+            return [assign]
 
         # no need to gather if input data is replicated
         if (
@@ -1441,87 +1396,6 @@ class DistributedPass:
                 self,
                 extra_globals={"_op": np.int32(Reduce_Type.Sum.value)},
             )
-
-    def _run_call_groupby_apply(self, assign, rhs):
-        """"""
-        out_typ = self.typemap[assign.target.name]
-        kws = dict(rhs.kws)
-
-        extra_args = rhs.args[4:]
-
-        udf_arg_names = (
-            ", ".join("e{}".format(i) for i in range(len(extra_args)))
-            + (", " if extra_args else "")
-            + ", ".join(
-                "{}=e{}".format(a, i + len(extra_args))
-                for i, a in enumerate(kws.keys())
-            )
-        )
-
-        extra_args += list(kws.values())
-        extra_arg_names = ", ".join("e{}".format(i) for i in range(len(extra_args)))
-        n_keys = len(self.typemap[rhs.args[0].name].types)
-
-        func_text = f"def f(keys, in_df, map_func, out_type, {extra_arg_names}):\n"
-        # get groupby info
-        func_text += f"  group_indices, ngroups = get_group_indices(keys)\n"
-        # TODO(ehsan): more efficient sort like Pandas
-        # https://github.com/pandas-dev/pandas/blob/aad85ad1e39568f87cdae38fece41cd2370234a7/pandas/core/sorting.py#L566
-        func_text += "  sort_idx = group_indices.argsort(kind='mergesort')\n"
-        func_text += (
-            "  starts, ends = generate_slices(group_indices[sort_idx], ngroups)\n"
-        )
-        # sort keys and data
-        for i in range(n_keys):
-            func_text += f"  s_key{i} = keys[{i}][sort_idx]\n"
-        func_text += f"  in_data = in_df.iloc[sort_idx]\n"
-
-        # loop over groups and call UDF
-        # gather output array, index and keys in lists to concatenate for output
-        for i in range(len(out_typ.columns)):
-            func_text += f"  arrs{i} = []\n"
-        for i in range(n_keys):
-            func_text += f"  in_key_arrs{i} = []\n"
-        func_text += "  arrs_index = []\n"
-        func_text += f"  for i in range(ngroups):\n"
-        func_text += (
-            f"    out_df = map_func(in_data[starts[i]:ends[i]], {udf_arg_names})\n"
-        )
-        func_text += "    arrs_index.append(bodo.utils.conversion.index_to_array(bodo.hiframes.pd_dataframe_ext.get_dataframe_index(out_df)))\n"
-        # all rows of returned df will get the same key value in output index
-        for i in range(n_keys):
-            func_text += f"    in_key_arrs{i}.append(bodo.utils.utils.full_type(len(out_df), s_key{i}[starts[i]], s_key{i}))\n"
-        for i in range(len(out_typ.columns)):
-            func_text += f"    arrs{i}.append(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(out_df, {i}))\n"
-        for i in range(len(out_typ.columns)):
-            func_text += f"  out_arr{i} = bodo.libs.array_kernels.concat(arrs{i})\n"
-        for i in range(n_keys):
-            func_text += (
-                f"  out_key_arr{i} = bodo.libs.array_kernels.concat(in_key_arrs{i})\n"
-            )
-
-        # create output dataframe
-        out_key_arr_names = ", ".join(f"out_key_arr{i}" for i in range(n_keys))
-        # TODO(ehsan): support MultiIndex in input and UDF output
-        # TODO(ehsan): support names
-        func_text += f"  out_index = bodo.hiframes.pd_multi_index_ext.init_multi_index(({out_key_arr_names}, bodo.libs.array_kernels.concat(arrs_index)), (None, None), None)\n"
-        out_data = ", ".join("out_arr{}".format(i) for i in range(len(out_typ.columns)))
-        func_text += f"  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({out_data},), out_index, {out_typ.columns})\n"
-
-        print(func_text)
-
-        glbs = {
-            "numba": numba,
-            "np": np,
-            "bodo": bodo,
-            "get_group_indices": bodo.hiframes.pd_groupby_ext.get_group_indices,
-            "generate_slices": bodo.hiframes.pd_groupby_ext.generate_slices,
-        }
-        loc_vars = {}
-        exec(func_text, glbs, loc_vars)
-        f = loc_vars["f"]
-
-        return f, glbs
 
     def _run_call_np(self, lhs, func_name, assign, args, kws, equiv_set):
         """transform np.func() calls"""

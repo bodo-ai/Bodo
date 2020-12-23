@@ -299,6 +299,11 @@ class DataFramePass:
                 and func_def.value in numba.core.utils.OPERATORS_TO_BUILTINS
             ):  # pragma: no cover
                 return self._convert_op_call_to_expr(assign, rhs, func_def.value)
+            # input to _bodo_groupby_apply_impl() is a UDF dispatcher
+            elif isinstance(func_def, ir.Arg) and isinstance(
+                self.typemap[rhs.func.name], types.Dispatcher
+            ):
+                return [assign]
             warnings.warn("function call couldn't be found for dataframe analysis")
             return None
         else:
@@ -1542,11 +1547,13 @@ class DataFramePass:
         # find kw arguments to UDF (pop apply() args first)
         kws.pop("func", None)
 
-        extra_arg_names_inner = ", ".join(f"e{i}" for i in range(len(extra_args)))
-        if extra_arg_names_inner:
-            extra_arg_names_inner += ", "
-        extra_kws_inner = ", ".join(
-            f"{k}=e{i+len(extra_args)}" for i, k in enumerate(kws.keys())
+        udf_arg_names = (
+            ", ".join("e{}".format(i) for i in range(len(extra_args)))
+            + (", " if extra_args else "")
+            + ", ".join(
+                "{}=e{}".format(a, i + len(extra_args))
+                for i, a in enumerate(kws.keys())
+            )
         )
 
         extra_args += list(kws.values())
@@ -1555,7 +1562,8 @@ class DataFramePass:
         # find which columns are actually used if possible
         used_cols = _get_df_apply_used_cols(func, df_type.columns)
 
-        key_names = ["k" + str(i) for i in range(len(grp_typ.keys))]
+        n_keys = len(grp_typ.keys)
+        key_names = ["k" + str(i) for i in range(n_keys)]
         col_names = ["c" + str(i) for i in range(len(used_cols))]
         key_name_args = ", ".join(key_names)
         col_name_args = ", ".join(col_names)
@@ -1566,7 +1574,7 @@ class DataFramePass:
 
         func_text += f"  in_df = bodo.hiframes.pd_dataframe_ext.init_dataframe(({col_name_args},), df_index, {gen_const_tup(used_cols)})\n"
 
-        func_text += f"  return bodo.hiframes.pd_groupby_ext.groupby_apply(({key_name_args},), in_df, map_func, out_type, {extra_arg_names_inner}{extra_kws_inner})\n"
+        func_text += f"  return _bodo_groupby_apply_impl(({key_name_args},), in_df, map_func, {extra_arg_names})\n"
 
         loc_vars = {}
         exec(func_text, {}, loc_vars)
@@ -1578,12 +1586,75 @@ class DataFramePass:
         df_index_var = self._get_dataframe_index(df_var, nodes)
         map_func = bodo.compiler.udf_jit(func)
 
+        if extra_arg_names:
+            extra_arg_names += ", "
+
+        func_text = f"def _bodo_groupby_apply_impl(keys, in_df, map_func, {extra_arg_names}_is_parallel=False):\n"
+        # get groupby info
+        func_text += f"  group_indices, ngroups = get_group_indices(keys)\n"
+        # TODO(ehsan): more efficient sort like Pandas
+        # https://github.com/pandas-dev/pandas/blob/aad85ad1e39568f87cdae38fece41cd2370234a7/pandas/core/sorting.py#L566
+        func_text += "  sort_idx = group_indices.argsort(kind='mergesort')\n"
+        func_text += (
+            "  starts, ends = generate_slices(group_indices[sort_idx], ngroups)\n"
+        )
+        # sort keys and data
+        for i in range(n_keys):
+            func_text += f"  s_key{i} = keys[{i}][sort_idx]\n"
+        func_text += f"  in_data = in_df.iloc[sort_idx]\n"
+
+        # loop over groups and call UDF
+        # gather output array, index and keys in lists to concatenate for output
+        for i in range(len(out_typ.columns)):
+            func_text += f"  arrs{i} = []\n"
+        for i in range(n_keys):
+            func_text += f"  in_key_arrs{i} = []\n"
+        func_text += "  arrs_index = []\n"
+        func_text += f"  for i in range(ngroups):\n"
+        func_text += (
+            f"    out_df = map_func(in_data[starts[i]:ends[i]], {udf_arg_names})\n"
+        )
+        func_text += "    arrs_index.append(bodo.utils.conversion.index_to_array(bodo.hiframes.pd_dataframe_ext.get_dataframe_index(out_df)))\n"
+        # all rows of returned df will get the same key value in output index
+        for i in range(n_keys):
+            func_text += f"    in_key_arrs{i}.append(bodo.utils.utils.full_type(len(out_df), s_key{i}[starts[i]], s_key{i}))\n"
+        for i in range(len(out_typ.columns)):
+            func_text += f"    arrs{i}.append(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(out_df, {i}))\n"
+        for i in range(len(out_typ.columns)):
+            func_text += f"  out_arr{i} = bodo.libs.array_kernels.concat(arrs{i})\n"
+        for i in range(n_keys):
+            func_text += (
+                f"  out_key_arr{i} = bodo.libs.array_kernels.concat(in_key_arrs{i})\n"
+            )
+
+        # create output dataframe
+        out_key_arr_names = ", ".join(f"out_key_arr{i}" for i in range(n_keys))
+        # TODO(ehsan): support MultiIndex in input and UDF output
+        # TODO(ehsan): support names
+        func_text += f"  out_index = bodo.hiframes.pd_multi_index_ext.init_multi_index(({out_key_arr_names}, bodo.libs.array_kernels.concat(arrs_index)), (None, None), None)\n"
+        out_data = ", ".join("out_arr{}".format(i) for i in range(len(out_typ.columns)))
+        func_text += f"  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({out_data},), out_index, {out_typ.columns})\n"
+
+        glbs = {
+            "numba": numba,
+            "np": np,
+            "bodo": bodo,
+            "get_group_indices": bodo.hiframes.pd_groupby_ext.get_group_indices,
+            "generate_slices": bodo.hiframes.pd_groupby_ext.generate_slices,
+        }
+        loc_vars = {}
+        exec(func_text, glbs, loc_vars)
+        _bodo_groupby_apply_impl = bodo.jit(distributed=False)(
+            loc_vars["_bodo_groupby_apply_impl"]
+        )
+
         glbs = {
             "numba": numba,
             "np": np,
             "bodo": bodo,
             "map_func": map_func,
             "out_type": out_typ,
+            "_bodo_groupby_apply_impl": _bodo_groupby_apply_impl,
         }
 
         return replace_func(

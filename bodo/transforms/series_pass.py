@@ -1149,6 +1149,11 @@ class SeriesPass:
                 return [assign]
             if isinstance(func_def, ir.Const):
                 return self._run_const_call(assign, lhs, rhs, func_def.value)
+            # input to _bodo_groupby_apply_impl() is a UDF dispatcher
+            elif isinstance(func_def, ir.Arg) and isinstance(
+                self.typemap[rhs.func.name], types.Dispatcher
+            ):
+                return [assign]
             warnings.warn("function call couldn't be found for initial analysis")
             return [assign]
         else:

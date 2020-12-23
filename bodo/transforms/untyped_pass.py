@@ -344,6 +344,11 @@ class UntypedPass:
                 func_def.value, numba.core.dispatcher.ObjModeLiftedWith
             ):
                 return [assign]
+            # input to _bodo_groupby_apply_impl() is a UDF dispatcher
+            elif isinstance(func_def, ir.Arg) and isinstance(
+                self.args[func_def.index], types.Dispatcher
+            ):
+                return [assign]
             else:
                 warnings.warn("function call couldn't be found for initial analysis")
                 return [assign]

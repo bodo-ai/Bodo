@@ -1447,6 +1447,34 @@ class DistributedAnalysis:
         if fdef == ("assert_equiv", "numba.parfors.array_analysis"):
             return
 
+        if fdef == ("_bodo_groupby_apply_impl", ""):
+            # output is variable-length even if input is 1D
+            if lhs not in array_dists:
+                self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
+
+            # arg0 is a tuple of arrays, arg1 is a dataframe
+            in_dist = Distribution(
+                min(
+                    min(a.value for a in array_dists[rhs.args[0].name]),
+                    array_dists[rhs.args[1].name].value,
+                )
+            )
+            out_dist = Distribution(
+                min(
+                    array_dists[lhs].value,
+                    in_dist.value,
+                )
+            )
+            self._set_var_dist(lhs, array_dists, out_dist)
+
+            # output can cause input REP
+            if out_dist != Distribution.OneD_Var:
+                in_dist = out_dist
+
+            self._set_var_dist(rhs.args[0].name, array_dists, in_dist)
+            self._set_var_dist(rhs.args[1].name, array_dists, in_dist)
+            return
+
         # handle calling other Bodo functions that have distributed flags
         func_type = self.typemap[func_var]
         if isinstance(func_type, types.Dispatcher):
