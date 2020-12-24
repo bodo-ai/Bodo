@@ -33,6 +33,7 @@ from bodo.libs.array import (
     arr_info_list_to_table,
     array_to_info,
     delete_table,
+    delete_table_decref_arrays,
     get_groupby_labels,
     info_from_table,
     info_to_array,
@@ -976,6 +977,7 @@ def get_group_indices_overload(keys):
     func_text += "    table = arr_info_list_to_table(info_list)\n"
     func_text += "    group_labels = np.empty(len(keys[0]), np.int64)\n"
     func_text += "    ngroups = get_groupby_labels(table, group_labels.ctypes)\n"
+    func_text += "    delete_table_decref_arrays(table)\n"
     func_text += "    return group_labels, ngroups\n"
     loc_vars = {}
     exec(
@@ -986,6 +988,7 @@ def get_group_indices_overload(keys):
             "get_groupby_labels": get_groupby_labels,
             "array_to_info": array_to_info,
             "arr_info_list_to_table": arr_info_list_to_table,
+            "delete_table_decref_arrays": delete_table_decref_arrays,
         },
         loc_vars,
     )
