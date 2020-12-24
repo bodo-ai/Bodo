@@ -105,6 +105,7 @@ def box_multi_index(typ, val, c):
 
     c.pyapi.decref(class_obj)
     c.pyapi.decref(multi_index_class_obj)
+    c.context.nrt.decref(c.builder, typ, val)
     return index_obj
 
 
