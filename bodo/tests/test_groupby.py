@@ -1752,6 +1752,32 @@ def test_as_index_count(memory_leak_check):
     check_func(impl2, (df,), sort_output=True, reset_index=True)
 
 
+# TODO(ehsan): add memory_leak_check when memory leaks are resolved
+def test_groupby_apply():
+    """
+    Test Groupby.apply() for UDFs that return a dataframes
+    """
+
+    def impl1(df):
+        df2 = df.groupby("A").apply(
+            lambda x, V: pd.DataFrame(
+                {"AA": [x.C.mean(), x.C.sum()], "BB": [V, len(x)]}
+            ),
+            V=11,
+        )
+        return df2
+
+    df = pd.DataFrame(
+        {
+            "A": [1, 4, 4, 11, 4, 1],
+            "B": ["AB", "DD", "E", "A", "GG", ""],
+            "C": [1.1, 2.2, 3.3, 4.4, 5.5, -1.1],
+            "D": [3, 1, 2, 4, 5, 5],
+        }
+    )
+    check_func(impl1, (df,), sort_output=True, only_seq=True)
+
+
 @pytest.mark.slow
 def test_single_col_reset_index(test_df, memory_leak_check):
     """We need the reset_index=True because otherwise the order is scrambled"""

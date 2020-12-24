@@ -1527,10 +1527,10 @@ class DataFramePass:
 
     def _run_call_groupby_apply(self, assign, lhs, rhs, grp_var):
         """generate IR nodes for df.groupby().apply() with UDFs.
-        Generates a dummy function call 'groupby_apply()' which is replaced in
-        distributed pass when parallelism information is known. Regular overload doesn't
-        work since the UDF may have keyword arguments (not supported by Numba).
-        Also, generating IR here directly may confuse distributed analysis.
+        Generates a separate function call '_bodo_groupby_apply_impl()' that includes
+        the actual implementation since generating IR here directly may confuse
+        distributed analysis. Regular overload doesn't work since the UDF may have
+        keyword arguments (not supported by Numba).
         """
         grp_typ = self.typemap[grp_var.name]
         df_var = self._get_df_obj_select(grp_var, "groupby")
@@ -1590,6 +1590,9 @@ class DataFramePass:
             extra_arg_names += ", "
 
         func_text = f"def _bodo_groupby_apply_impl(keys, in_df, map_func, {extra_arg_names}_is_parallel=False):\n"
+        func_text += f"  if _is_parallel:\n"
+        func_text += f"    in_df, keys = shuffle_dataframe(in_df, keys)\n"
+
         # get groupby info
         func_text += f"  group_indices, ngroups = get_group_indices(keys)\n"
         # TODO(ehsan): more efficient sort like Pandas
@@ -1633,7 +1636,7 @@ class DataFramePass:
         # TODO(ehsan): support names
         func_text += f"  out_index = bodo.hiframes.pd_multi_index_ext.init_multi_index(({out_key_arr_names}, bodo.libs.array_kernels.concat(arrs_index)), (None, None), None)\n"
         out_data = ", ".join("out_arr{}".format(i) for i in range(len(out_typ.columns)))
-        func_text += f"  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({out_data},), out_index, {out_typ.columns})\n"
+        func_text += f"  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({out_data},), out_index, {gen_const_tup(out_typ.columns)})\n"
 
         glbs = {
             "numba": numba,
@@ -1641,6 +1644,7 @@ class DataFramePass:
             "bodo": bodo,
             "get_group_indices": bodo.hiframes.pd_groupby_ext.get_group_indices,
             "generate_slices": bodo.hiframes.pd_groupby_ext.generate_slices,
+            "shuffle_dataframe": bodo.hiframes.pd_groupby_ext.shuffle_dataframe,
         }
         loc_vars = {}
         exec(func_text, glbs, loc_vars)
