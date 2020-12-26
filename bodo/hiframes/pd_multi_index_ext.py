@@ -89,12 +89,16 @@ def box_multi_index(typ, val, c):
     multi_index_class_obj = c.pyapi.object_getattr_string(class_obj, "MultiIndex")
 
     index_val = cgutils.create_struct_proxy(typ)(c.context, c.builder, val)
+    # incref since boxing functions steal a reference
+    c.context.nrt.incref(c.builder, types.Tuple(typ.array_types), index_val.data)
     data = c.pyapi.from_native_value(
         types.Tuple(typ.array_types), index_val.data, c.env_manager
     )
+    c.context.nrt.incref(c.builder, types.Tuple(typ.names_typ), index_val.names)
     names = c.pyapi.from_native_value(
         types.Tuple(typ.names_typ), index_val.names, c.env_manager
     )
+    c.context.nrt.incref(c.builder, typ.name_typ, index_val.name)
     name = c.pyapi.from_native_value(typ.name_typ, index_val.name, c.env_manager)
 
     sortorder = c.pyapi.make_none()
