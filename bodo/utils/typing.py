@@ -663,6 +663,20 @@ def get_val_type_maybe_str_literal(value):
     return t
 
 
+def get_index_name_types(t):
+    """get name types of index type 't'. MultiIndex has multiple names but others have
+    a single name.
+    """
+    from bodo.hiframes.pd_multi_index_ext import MultiIndexType
+
+    # MultIndex has multiple names
+    if isinstance(t, MultiIndexType):
+        return t.names_typ
+
+    # other indices have a single name
+    return (t.name_typ,)
+
+
 class ListLiteral(types.Literal):
     """class for literal lists, only used when Bodo forces an argument to be a literal
     list (e.g. in typing pass for groupby/join/sort_values).

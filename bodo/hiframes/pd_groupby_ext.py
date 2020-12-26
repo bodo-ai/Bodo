@@ -53,6 +53,7 @@ from bodo.utils.typing import (
     BodoError,
     create_unsupported_overload,
     get_index_data_arr_types,
+    get_index_name_types,
     get_literal_value,
     get_overload_const_func,
     get_overload_const_list,
@@ -832,12 +833,14 @@ class DataframeGroupByAttribute(AttributeTemplate):
                 "GroupBy.apply(): only functions with dataframe output supported currently"
             )
 
-        # TODO: index names
         key_arr_types = tuple(
             in_df_type.data[in_df_type.columns.index(c)] for c in grp.keys
         )
+        index_names = tuple(types.literal(v) for v in grp.keys) + get_index_name_types(
+            f_return_type.index
+        )
         out_index_type = MultiIndexType(
-            key_arr_types + get_index_data_arr_types(f_return_type.index)
+            key_arr_types + get_index_data_arr_types(f_return_type.index), index_names
         )
         ret_type = DataFrameType(
             f_return_type.data, out_index_type, f_return_type.columns

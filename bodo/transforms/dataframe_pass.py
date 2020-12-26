@@ -1634,8 +1634,11 @@ class DataFramePass:
         # create output dataframe
         out_key_arr_names = ", ".join(f"out_key_arr{i}" for i in range(n_keys))
         # TODO(ehsan): support MultiIndex in input and UDF output
-        # TODO(ehsan): support names
-        func_text += f"  out_index = bodo.hiframes.pd_multi_index_ext.init_multi_index(({out_key_arr_names}, bodo.libs.array_kernels.concat(arrs_index)), (None, None), None)\n"
+        index_names = ", ".join(
+            f"'{v}'" if isinstance(v, str) else f"{v}" for v in grp_typ.keys
+        )
+        index_names += ", in_df.index.name"
+        func_text += f"  out_index = bodo.hiframes.pd_multi_index_ext.init_multi_index(({out_key_arr_names}, bodo.libs.array_kernels.concat(arrs_index)), ({index_names},), None)\n"
         out_data = ", ".join("out_arr{}".format(i) for i in range(len(out_typ.columns)))
         func_text += f"  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({out_data},), out_index, {gen_const_tup(out_typ.columns)})\n"
 
