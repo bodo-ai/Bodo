@@ -815,8 +815,14 @@ class DataframeGroupByAttribute(AttributeTemplate):
         func = args[0] if len(args) > 0 else kws.pop("func", None)
         f_args = tuple(args[1:]) if len(args) > 0 else ()
 
-        # TODO: explict selection, as_index
+        # NOTE: without explicit column selection, Pandas passes key columns also for
+        # some reason (as of Pandas 1.1.5)
         in_df_type = grp.df_type
+        if grp.explicit_select:
+            in_data = tuple(
+                in_df_type.data[in_df_type.columns.index(c)] for c in grp.selection
+            )
+            in_df_type = DataFrameType(in_data, in_df_type.index, tuple(grp.selection))
         arg_typs = (in_df_type,)
         arg_typs += tuple(f_args)
         try:
@@ -834,11 +840,14 @@ class DataframeGroupByAttribute(AttributeTemplate):
             )
 
         key_arr_types = tuple(
-            in_df_type.data[in_df_type.columns.index(c)] for c in grp.keys
+            grp.df_type.data[grp.df_type.columns.index(c)] for c in grp.keys
         )
         index_names = tuple(types.literal(v) for v in grp.keys) + get_index_name_types(
             f_return_type.index
         )
+        if not grp.as_index:
+            key_arr_types = (types.Array(types.int64, 1, "C"),)
+            index_names = (types.none,) + get_index_name_types(f_return_type.index)
         out_index_type = MultiIndexType(
             key_arr_types + get_index_data_arr_types(f_return_type.index), index_names
         )

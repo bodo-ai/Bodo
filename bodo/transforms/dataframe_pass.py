@@ -1560,8 +1560,12 @@ class DataFramePass:
         extra_args += list(kws.values())
         extra_arg_names = ", ".join("e{}".format(i) for i in range(len(extra_args)))
 
+        in_col_names = df_type.columns
+        if grp_typ.explicit_select:
+            in_col_names = tuple(grp_typ.selection)
+
         # find which columns are actually used if possible
-        used_cols = _get_df_apply_used_cols(func, df_type.columns)
+        used_cols = _get_df_apply_used_cols(func, in_col_names)
 
         n_keys = len(grp_typ.keys)
         key_names = ["k" + str(i) for i in range(n_keys)]
@@ -1611,8 +1615,11 @@ class DataFramePass:
         # gather output array, index and keys in lists to concatenate for output
         for i in range(len(out_typ.columns)):
             func_text += f"  arrs{i} = []\n"
-        for i in range(n_keys):
-            func_text += f"  in_key_arrs{i} = []\n"
+        if grp_typ.as_index:
+            for i in range(n_keys):
+                func_text += f"  in_key_arrs{i} = []\n"
+        else:
+            func_text += "  in_key_arr = []\n"
         func_text += "  arrs_index = []\n"
         func_text += f"  for i in range(ngroups):\n"
         func_text += (
@@ -1620,23 +1627,32 @@ class DataFramePass:
         )
         func_text += "    arrs_index.append(bodo.utils.conversion.index_to_array(bodo.hiframes.pd_dataframe_ext.get_dataframe_index(out_df)))\n"
         # all rows of returned df will get the same key value in output index
-        for i in range(n_keys):
-            func_text += f"    in_key_arrs{i}.append(bodo.utils.utils.full_type(len(out_df), s_key{i}[starts[i]], s_key{i}))\n"
+        if grp_typ.as_index:
+            for i in range(n_keys):
+                func_text += f"    in_key_arrs{i}.append(bodo.utils.utils.full_type(len(out_df), s_key{i}[starts[i]], s_key{i}))\n"
+        else:
+            func_text += f"    in_key_arr.append(np.full(len(out_df), i))\n"
         for i in range(len(out_typ.columns)):
             func_text += f"    arrs{i}.append(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(out_df, {i}))\n"
         for i in range(len(out_typ.columns)):
             func_text += f"  out_arr{i} = bodo.libs.array_kernels.concat(arrs{i})\n"
-        for i in range(n_keys):
-            func_text += (
-                f"  out_key_arr{i} = bodo.libs.array_kernels.concat(in_key_arrs{i})\n"
-            )
+        if grp_typ.as_index:
+            for i in range(n_keys):
+                func_text += f"  out_key_arr{i} = bodo.libs.array_kernels.concat(in_key_arrs{i})\n"
+
+            out_key_arr_names = ", ".join(f"out_key_arr{i}" for i in range(n_keys))
+        else:
+            func_text += f"  out_key_arr = bodo.libs.array_kernels.concat(in_key_arr)\n"
+            out_key_arr_names = "out_key_arr"
 
         # create output dataframe
-        out_key_arr_names = ", ".join(f"out_key_arr{i}" for i in range(n_keys))
         # TODO(ehsan): support MultiIndex in input and UDF output
-        index_names = ", ".join(
-            f"'{v}'" if isinstance(v, str) else f"{v}" for v in grp_typ.keys
-        )
+        if grp_typ.as_index:
+            index_names = ", ".join(
+                f"'{v}'" if isinstance(v, str) else f"{v}" for v in grp_typ.keys
+            )
+        else:
+            index_names = "None"
         index_names += ", in_df.index.name"
         func_text += f"  out_index = bodo.hiframes.pd_multi_index_ext.init_multi_index(({out_key_arr_names}, bodo.libs.array_kernels.concat(arrs_index)), ({index_names},), None)\n"
         out_data = ", ".join("out_arr{}".format(i) for i in range(len(out_typ.columns)))

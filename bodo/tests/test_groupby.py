@@ -1753,11 +1753,12 @@ def test_as_index_count(memory_leak_check):
 
 
 # TODO(ehsan): add memory_leak_check when memory leaks are resolved
-def test_groupby_apply():
+def test_groupby_apply(is_slow_run):
     """
     Test Groupby.apply() for UDFs that return a dataframes
     """
 
+    # kw arg
     def impl1(df):
         df2 = df.groupby("A").apply(
             lambda x, V: pd.DataFrame(
@@ -1767,15 +1768,50 @@ def test_groupby_apply():
         )
         return df2
 
+    # no arg, explicit select
+    def impl2(df):
+        df2 = df.groupby("A")[["C", "D"]].apply(
+            lambda x: pd.DataFrame(
+                {"AA": [x.C.mean(), x.C.sum()], "BB": [3, x["C"].iloc[0]]}
+            ),
+        )
+        return df2
+
+    # positional arg, as_index=False
+    def impl3(df):
+        df2 = df.groupby("A", as_index=False).apply(
+            lambda x, v: pd.DataFrame(
+                {"AA": [x.C.mean(), x.C.sum()], "BB": [v, x["C"].iloc[0]]}
+            ),
+            11,
+        )
+        return df2
+
+    # both positional and kw args, multiple keys
+    def impl4(df):
+        df2 = df.groupby(["A", "B"]).apply(
+            lambda x, v, W: pd.DataFrame(
+                {"AA": [x.C.mean(), x.C.sum()], "BB": [v + W, x["C"].iloc[0]]}
+            ),
+            11,
+            W=14,
+        )
+        return df2
+
     df = pd.DataFrame(
         {
             "A": [1, 4, 4, 11, 4, 1],
-            "B": ["AB", "DD", "E", "A", "GG", ""],
+            "B": ["AB", "DD", "E", "A", "DD", "AB"],
             "C": [1.1, 2.2, 3.3, 4.4, 5.5, -1.1],
             "D": [3, 1, 2, 4, 5, 5],
         }
     )
     check_func(impl1, (df,), sort_output=True)
+    if not is_slow_run:
+        return
+    check_func(impl2, (df,), sort_output=True)
+    check_func(impl3, (df,), sort_output=True)
+    check_func(impl4, (df,), sort_output=True)
 
 
 @pytest.mark.slow
