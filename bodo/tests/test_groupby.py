@@ -1761,7 +1761,7 @@ def test_groupby_apply():
     def impl1(df):
         df2 = df.groupby("A").apply(
             lambda x, V: pd.DataFrame(
-                {"AA": [x.C.mean(), x.C.sum()], "BB": [V, len(x)]}
+                {"AA": [x.C.mean(), x.C.sum()], "BB": [V, x["C"].iloc[0]]}
             ),
             V=11,
         )
@@ -1775,7 +1775,7 @@ def test_groupby_apply():
             "D": [3, 1, 2, 4, 5, 5],
         }
     )
-    check_func(impl1, (df,), sort_output=True, only_seq=True)
+    check_func(impl1, (df,), sort_output=True)
 
 
 @pytest.mark.slow

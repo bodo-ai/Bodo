@@ -420,7 +420,7 @@ def overload_series_getitem(S, idx):
     # XXX: Series getitem performs both label-based and location-based indexing
     if isinstance(S, SeriesType):
         # Integer index is location unless if Index is integer
-        if isinstance(types.unliteral(idx), types.Integer):
+        if isinstance(idx, types.Integer):
             # integer Index not supported yet
             if isinstance(S.index, NumericIndexType) and isinstance(
                 S.index.dtype, types.Integer
@@ -482,7 +482,7 @@ def overload_series_getitem(S, idx):
             return impl_slice
 
         # TODO: handle idx as SeriesType on array
-        raise BodoError("setting Series value using {} not supported yet".format(idx))
+        raise BodoError(f"getting Series value using {idx} not supported yet")
 
     # convert Series index on Array getitem to array
     elif bodo.utils.utils.is_array_typ(S) and isinstance(idx, SeriesType):

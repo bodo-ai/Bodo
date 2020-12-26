@@ -62,6 +62,7 @@ from bodo.utils.typing import (
 from bodo.utils.utils import (
     get_getsetitem_index_var,
     is_array_typ,
+    is_assign,
     is_expr,
     sanitize_varname,
 )
@@ -2049,15 +2050,24 @@ def _get_df_apply_used_cols(func, columns):
         for stmt in bl.body:
             vnames = [v.name for v in stmt.list_vars()]
             if arg_var.name in vnames:
-                if isinstance(stmt, ir.Assign) and isinstance(stmt.value, ir.Arg):
+                if is_assign(stmt) and isinstance(stmt.value, ir.Arg):
                     continue
-                if (
-                    isinstance(stmt, ir.Assign)
-                    and isinstance(stmt.value, ir.Expr)
-                    and stmt.value.op == "getattr"
+                # match x.C column access
+                elif (
+                    is_assign(stmt)
+                    and is_expr(stmt.value, "getattr")
+                    and stmt.value.value.name == arg_var.name
+                    and stmt.value.attr in columns
                 ):
-                    assert stmt.value.attr in columns
                     used_cols.append(stmt.value.attr)
+                # match x["C"] column access
+                elif (
+                    is_assign(stmt)
+                    and is_expr(stmt.value, "getitem")
+                    and stmt.value.value.name == arg_var.name
+                    and guard(find_const, lambda_ir, stmt.value.index) in columns
+                ):
+                    used_cols.append(guard(find_const, lambda_ir, stmt.value.index))
                 else:
                     # argument is used in some other form
                     # be conservative and use all cols

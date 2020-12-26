@@ -396,7 +396,9 @@ class SeriesPass:
                     assign.value = a_def.items[idx_typ.literal_value]
                     return [assign]
 
-        if is_series_type(target_typ):
+        if is_series_type(target_typ) and not isinstance(
+            target_typ.index, HeterogeneousIndexType
+        ):
             impl = bodo.hiframes.series_indexing.overload_series_getitem(
                 self.typemap[target.name], self.typemap[idx.name]
             )
