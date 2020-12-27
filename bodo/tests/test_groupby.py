@@ -1798,6 +1798,16 @@ def test_groupby_apply(is_slow_run):
         )
         return df2
 
+    # Series input
+    def impl5(df):
+        df2 = df.groupby(["A", "B"]).C.apply(
+            lambda x, V: pd.DataFrame(
+                {"AA": [x.mean(), x.sum()], "BB": [1.2, x.iloc[0]]}
+            ),
+            V=11,
+        )
+        return df2
+
     df = pd.DataFrame(
         {
             "A": [1, 4, 4, 11, 4, 1],
@@ -1812,6 +1822,7 @@ def test_groupby_apply(is_slow_run):
     check_func(impl2, (df,), sort_output=True)
     check_func(impl3, (df,), sort_output=True)
     check_func(impl4, (df,), sort_output=True)
+    check_func(impl5, (df,), sort_output=True)
 
 
 @pytest.mark.slow

@@ -1609,7 +1609,10 @@ class DataFramePass:
         # sort keys and data
         for i in range(n_keys):
             func_text += f"  s_key{i} = keys[{i}][sort_idx]\n"
-        func_text += f"  in_data = in_df.iloc[sort_idx]\n"
+        is_series_in = grp_typ.explicit_select and len(grp_typ.selection) == 1
+        func_text += "  in_data = in_df.iloc[sort_idx{}]\n".format(
+            ",0" if is_series_in else ""
+        )
 
         # loop over groups and call UDF
         # gather output array, index and keys in lists to concatenate for output

@@ -819,11 +819,24 @@ class DataframeGroupByAttribute(AttributeTemplate):
         # some reason (as of Pandas 1.1.5)
         in_df_type = grp.df_type
         if grp.explicit_select:
-            in_data = tuple(
-                in_df_type.data[in_df_type.columns.index(c)] for c in grp.selection
-            )
-            in_df_type = DataFrameType(in_data, in_df_type.index, tuple(grp.selection))
-        arg_typs = (in_df_type,)
+            # input to UDF is a Series if only one column is explicitly selected
+            if len(grp.selection) == 1:
+                col_name = grp.selection[0]
+                data_arr = in_df_type.data[in_df_type.columns.index(col_name)]
+                in_data_type = SeriesType(
+                    data_arr.dtype, data_arr, in_df_type.index, types.literal(col_name)
+                )
+            else:
+                in_data = tuple(
+                    in_df_type.data[in_df_type.columns.index(c)] for c in grp.selection
+                )
+                in_data_type = DataFrameType(
+                    in_data, in_df_type.index, tuple(grp.selection)
+                )
+        else:
+            in_data_type = in_df_type
+
+        arg_typs = (in_data_type,)
         arg_typs += tuple(f_args)
         try:
             f_return_type = get_const_func_output_type(
