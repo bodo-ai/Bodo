@@ -610,6 +610,22 @@ def get_const_value_inner(
     ):
         return getattr(pd, call_name[0])()
 
+    # method call case: val.method(a, b, ...)
+    if (
+        call_name is not None
+        and len(call_name) == 2
+        and isinstance(call_name[1], ir.Var)
+    ):
+        val = get_const_value_inner(func_ir, call_name[1], arg_types, typemap)
+        args = [
+            get_const_value_inner(func_ir, v, arg_types, typemap) for v in var_def.args
+        ]
+        kws = {
+            a[0]: get_const_value_inner(func_ir, a[1], arg_types, typemap)
+            for a in var_def.kws
+        }
+        return getattr(val, call_name[0])(*args, **kws)
+
     raise GuardException("Constant value not found")
 
 

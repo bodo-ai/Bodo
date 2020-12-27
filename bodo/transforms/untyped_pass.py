@@ -502,10 +502,10 @@ class UntypedPass:
                 for t in build_map.items
             )
         except GuardException:
-            raise BodoError(err_msg)
+            raise BodoError(err_msg, loc)
 
         if not all(isinstance(c, (str, int)) for c in keys):
-            raise BodoError(err_msg)
+            raise BodoError(err_msg, loc)
 
         # create tuple with sentinel
         sentinel_var = ir.Var(scope, mk_unique_var("sentinel"), loc)

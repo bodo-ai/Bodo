@@ -1103,7 +1103,6 @@ def overload_shuffle_dataframe(df, keys):
 groupby_unsupported = {
     "all",
     "any",
-    "apply",
     "backfill",
     "bfill",
     "boxplot",

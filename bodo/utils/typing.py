@@ -115,7 +115,7 @@ def get_udf_error_msg(context_str, error):
         + ": "
         + str(error.msg)
         + "\n"
-        + error.loc.strformat()
+        + (error.loc.strformat() if error.loc is not None else "")
     )
 
 
