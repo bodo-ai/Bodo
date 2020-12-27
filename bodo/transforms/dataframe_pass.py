@@ -23,7 +23,6 @@ from numba.core.ir_utils import (
 
 import bodo
 import bodo.hiframes.dataframe_impl  # noqa # side effect: install DataFrame overloads
-import bodo.hiframes.pd_groupby_ext
 import bodo.hiframes.pd_rolling_ext
 from bodo.hiframes.dataframe_indexing import (
     DataFrameIatType,
@@ -31,7 +30,10 @@ from bodo.hiframes.dataframe_indexing import (
     DataFrameLocType,
     DataFrameType,
 )
-from bodo.hiframes.pd_groupby_ext import DataFrameGroupByType
+from bodo.hiframes.pd_groupby_ext import (
+    DataFrameGroupByType,
+    _get_groupby_apply_udf_out_type,
+)
 from bodo.hiframes.pd_index_ext import RangeIndexType
 from bodo.hiframes.pd_multi_index_ext import MultiIndexType
 from bodo.hiframes.pd_series_ext import SeriesType
@@ -1537,6 +1539,7 @@ class DataFramePass:
         df_var = self._get_df_obj_select(grp_var, "groupby")
         df_type = self.typemap[df_var.name]
         out_typ = self.typemap[lhs.name]
+        n_out_cols = 1 if isinstance(out_typ, SeriesType) else len(out_typ.columns)
 
         # get apply function
         kws = dict(rhs.kws)
@@ -1555,6 +1558,15 @@ class DataFramePass:
                 "{}=e{}".format(a, i + len(extra_args))
                 for i, a in enumerate(kws.keys())
             )
+        )
+        udf_arg_types = [self.typemap[v.name] for v in extra_args]
+        udf_kw_types = {k: self.typemap[v.name] for k, v in kws.items()}
+        udf_return_type = _get_groupby_apply_udf_out_type(
+            bodo.utils.typing.FunctionLiteral(func),
+            grp_typ,
+            udf_arg_types,
+            udf_kw_types,
+            self.typingctx,
         )
 
         extra_args += list(kws.values())
@@ -1616,7 +1628,7 @@ class DataFramePass:
 
         # loop over groups and call UDF
         # gather output array, index and keys in lists to concatenate for output
-        for i in range(len(out_typ.columns)):
+        for i in range(n_out_cols):
             func_text += f"  arrs{i} = []\n"
         if grp_typ.as_index:
             for i in range(n_keys):
@@ -1628,16 +1640,27 @@ class DataFramePass:
         func_text += (
             f"    out_df = map_func(in_data[starts[i]:ends[i]], {udf_arg_names})\n"
         )
-        func_text += "    arrs_index.append(bodo.utils.conversion.index_to_array(bodo.hiframes.pd_dataframe_ext.get_dataframe_index(out_df)))\n"
+        if isinstance(udf_return_type, SeriesType):
+            func_text += (
+                "    out_idx = bodo.hiframes.pd_series_ext.get_series_index(out_df)\n"
+            )
+        else:
+            func_text += "    out_idx = bodo.hiframes.pd_dataframe_ext.get_dataframe_index(out_df)\n"
+        func_text += (
+            "    arrs_index.append(bodo.utils.conversion.index_to_array(out_idx))\n"
+        )
         # all rows of returned df will get the same key value in output index
         if grp_typ.as_index:
             for i in range(n_keys):
                 func_text += f"    in_key_arrs{i}.append(bodo.utils.utils.full_type(len(out_df), s_key{i}[starts[i]], s_key{i}))\n"
         else:
             func_text += f"    in_key_arr.append(np.full(len(out_df), i))\n"
-        for i in range(len(out_typ.columns)):
-            func_text += f"    arrs{i}.append(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(out_df, {i}))\n"
-        for i in range(len(out_typ.columns)):
+        if isinstance(udf_return_type, SeriesType):
+            func_text += f"    arrs0.append(bodo.hiframes.pd_series_ext.get_series_data(out_df))\n"
+        else:
+            for i in range(n_out_cols):
+                func_text += f"    arrs{i}.append(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(out_df, {i}))\n"
+        for i in range(n_out_cols):
             func_text += f"  out_arr{i} = bodo.libs.array_kernels.concat(arrs{i})\n"
         if grp_typ.as_index:
             for i in range(n_keys):
@@ -1657,9 +1680,17 @@ class DataFramePass:
         else:
             index_names = "None"
         index_names += ", in_df.index.name"
-        func_text += f"  out_index = bodo.hiframes.pd_multi_index_ext.init_multi_index(({out_key_arr_names}, bodo.libs.array_kernels.concat(arrs_index)), ({index_names},), None)\n"
-        out_data = ", ".join("out_arr{}".format(i) for i in range(len(out_typ.columns)))
-        func_text += f"  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({out_data},), out_index, {gen_const_tup(out_typ.columns)})\n"
+        # NOTE: Pandas drops the key arrays from output Index if it's Series for some
+        # reason (as of 1.1.5)
+        if isinstance(out_typ, SeriesType):
+            func_text += f"  out_index = bodo.utils.conversion.index_from_array(bodo.libs.array_kernels.concat(arrs_index))\n"
+        else:
+            func_text += f"  out_index = bodo.hiframes.pd_multi_index_ext.init_multi_index(({out_key_arr_names}, bodo.libs.array_kernels.concat(arrs_index)), ({index_names},), None)\n"
+        out_data = ", ".join("out_arr{}".format(i) for i in range(n_out_cols))
+        if isinstance(out_typ, SeriesType):
+            func_text += f"  return bodo.hiframes.pd_series_ext.init_series(out_arr0, out_index, out_df.name)\n"
+        else:
+            func_text += f"  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({out_data},), out_index, {gen_const_tup(out_typ.columns)})\n"
 
         glbs = {
             "numba": numba,

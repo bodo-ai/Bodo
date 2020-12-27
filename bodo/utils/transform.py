@@ -730,10 +730,9 @@ def get_const_func_output_type(func, arg_types, kw_types, typing_context):
         if (
             None in series_info or len(pd.Series(series_info).unique()) != 1
         ):  # pragma: no cover
-            raise BodoError(
-                "Invalid Series output in UDF (Series with constant length and constant Index value expected)"
-            )
-        f_return_type.const_info = series_info[0]
+            f_return_type.const_info = None
+        else:
+            f_return_type.const_info = series_info[0]
 
     return f_return_type
 

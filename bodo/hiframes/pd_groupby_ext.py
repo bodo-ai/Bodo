@@ -26,7 +26,7 @@ from numba.extending import (
 
 import bodo
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
-from bodo.hiframes.pd_index_ext import RangeIndexType
+from bodo.hiframes.pd_index_ext import NumericIndexType, RangeIndexType
 from bodo.hiframes.pd_multi_index_ext import MultiIndexType
 from bodo.hiframes.pd_series_ext import SeriesType, _get_series_array_type
 from bodo.libs.array import (
@@ -815,58 +815,49 @@ class DataframeGroupByAttribute(AttributeTemplate):
         func = args[0] if len(args) > 0 else kws.pop("func", None)
         f_args = tuple(args[1:]) if len(args) > 0 else ()
 
-        # NOTE: without explicit column selection, Pandas passes key columns also for
-        # some reason (as of Pandas 1.1.5)
-        in_df_type = grp.df_type
-        if grp.explicit_select:
-            # input to UDF is a Series if only one column is explicitly selected
-            if len(grp.selection) == 1:
-                col_name = grp.selection[0]
-                data_arr = in_df_type.data[in_df_type.columns.index(col_name)]
-                in_data_type = SeriesType(
-                    data_arr.dtype, data_arr, in_df_type.index, types.literal(col_name)
-                )
-            else:
-                in_data = tuple(
-                    in_df_type.data[in_df_type.columns.index(c)] for c in grp.selection
-                )
-                in_data_type = DataFrameType(
-                    in_data, in_df_type.index, tuple(grp.selection)
-                )
-        else:
-            in_data_type = in_df_type
+        f_return_type = _get_groupby_apply_udf_out_type(
+            func, grp, f_args, kws, self.context
+        )
 
-        arg_typs = (in_data_type,)
-        arg_typs += tuple(f_args)
-        try:
-            f_return_type = get_const_func_output_type(
-                func, arg_typs, kws, self.context
-            )
-        except Exception as e:
-            raise_bodo_error(
-                get_udf_error_msg("GroupBy.apply()", e), getattr(e, "loc", None)
-            )
-
-        if not isinstance(f_return_type, DataFrameType):
+        # TODO: support scalar output
+        if not isinstance(f_return_type, (DataFrameType, SeriesType)):
             raise BodoError(
-                "GroupBy.apply(): only functions with dataframe output supported currently"
+                "GroupBy.apply(): only functions with dataframe/series output supported currently"
             )
 
-        key_arr_types = tuple(
-            grp.df_type.data[grp.df_type.columns.index(c)] for c in grp.keys
-        )
-        index_names = tuple(types.literal(v) for v in grp.keys) + get_index_name_types(
-            f_return_type.index
-        )
-        if not grp.as_index:
-            key_arr_types = (types.Array(types.int64, 1, "C"),)
-            index_names = (types.none,) + get_index_name_types(f_return_type.index)
-        out_index_type = MultiIndexType(
-            key_arr_types + get_index_data_arr_types(f_return_type.index), index_names
-        )
-        ret_type = DataFrameType(
-            f_return_type.data, out_index_type, f_return_type.columns
-        )
+        # NOTE: Pandas drops the key arrays from output Index if it's Series for some
+        # reason (as of 1.1.5)
+        if isinstance(f_return_type, SeriesType):
+            out_index_type = f_return_type.index
+            if isinstance(out_index_type, RangeIndexType):
+                out_index_type = NumericIndexType(types.int64)
+        else:
+            key_arr_types = tuple(
+                grp.df_type.data[grp.df_type.columns.index(c)] for c in grp.keys
+            )
+            index_names = tuple(
+                types.literal(v) for v in grp.keys
+            ) + get_index_name_types(f_return_type.index)
+            if not grp.as_index:
+                key_arr_types = (types.Array(types.int64, 1, "C"),)
+                index_names = (types.none,) + get_index_name_types(f_return_type.index)
+            out_index_type = MultiIndexType(
+                key_arr_types + get_index_data_arr_types(f_return_type.index),
+                index_names,
+            )
+
+        # TODO: support const Series UDF output that becomes dataframe
+        if isinstance(f_return_type, SeriesType):
+            ret_type = SeriesType(
+                f_return_type.dtype,
+                f_return_type.data,
+                out_index_type,
+                f_return_type.name_typ,
+            )
+        else:
+            ret_type = DataFrameType(
+                f_return_type.data, out_index_type, f_return_type.columns
+            )
 
         arg_names = ", ".join(f"arg{i}" for i in range(len(f_args)))
         arg_names = arg_names + ", " if arg_names else ""
@@ -894,6 +885,41 @@ class DataframeGroupByAttribute(AttributeTemplate):
         return DataFrameGroupByType(
             grpby.df_type, grpby.keys, (attr,), grpby.as_index, True
         )
+
+
+def _get_groupby_apply_udf_out_type(func, grp, f_args, kws, context):
+    """get output type for UDF used in groupby apply()"""
+
+    # NOTE: without explicit column selection, Pandas passes key columns also for
+    # some reason (as of Pandas 1.1.5)
+    in_df_type = grp.df_type
+    if grp.explicit_select:
+        # input to UDF is a Series if only one column is explicitly selected
+        if len(grp.selection) == 1:
+            col_name = grp.selection[0]
+            data_arr = in_df_type.data[in_df_type.columns.index(col_name)]
+            in_data_type = SeriesType(
+                data_arr.dtype, data_arr, in_df_type.index, types.literal(col_name)
+            )
+        else:
+            in_data = tuple(
+                in_df_type.data[in_df_type.columns.index(c)] for c in grp.selection
+            )
+            in_data_type = DataFrameType(
+                in_data, in_df_type.index, tuple(grp.selection)
+            )
+    else:
+        in_data_type = in_df_type
+
+    arg_typs = (in_data_type,)
+    arg_typs += tuple(f_args)
+    try:
+        f_return_type = get_const_func_output_type(func, arg_typs, kws, context)
+    except Exception as e:
+        raise_bodo_error(
+            get_udf_error_msg("GroupBy.apply()", e), getattr(e, "loc", None)
+        )
+    return f_return_type
 
 
 # a dummy pivot_table function that will be replace in dataframe_pass
