@@ -1828,7 +1828,9 @@ def test_groupby_apply(is_slow_run):
     if not is_slow_run:
         return
     check_func(impl2, (df,), sort_output=True)
-    check_func(impl3, (df,), sort_output=True)
+    # NOTE: Pandas assigns group numbers in sorted order to Index but we don't match it
+    # since requires expensive sorting
+    check_func(impl3, (df,), sort_output=True, reset_index=True)
     check_func(impl4, (df,), sort_output=True)
     check_func(impl5, (df,), sort_output=True)
     # NOTE: Pandas bug: drops the key arrays from output Index if it's Series sometimes

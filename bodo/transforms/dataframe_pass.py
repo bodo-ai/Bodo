@@ -1636,6 +1636,14 @@ class DataFramePass:
         else:
             func_text += "  in_key_arr = []\n"
         func_text += "  arrs_index = []\n"
+        # NOTE: Pandas assigns group numbers in sorted order to Index when
+        # as_index=False. Matching it exactly requires expensive sorting, so we assign
+        # numbers in the order of groups across processors (using exscan)
+        if not grp_typ.as_index:
+            func_text += "  n_prev_groups = 0\n"
+            func_text += "  if _is_parallel:\n"
+            sum_no = bodo.libs.distributed_api.Reduce_Type.Sum.value
+            func_text += f"    n_prev_groups = bodo.libs.distributed_api.dist_exscan(ngroups, np.int32({sum_no}))\n"
         func_text += f"  for i in range(ngroups):\n"
         func_text += (
             f"    out_df = map_func(in_data[starts[i]:ends[i]], {udf_arg_names})\n"
@@ -1654,7 +1662,9 @@ class DataFramePass:
             for i in range(n_keys):
                 func_text += f"    in_key_arrs{i}.append(bodo.utils.utils.full_type(len(out_df), s_key{i}[starts[i]], s_key{i}))\n"
         else:
-            func_text += f"    in_key_arr.append(np.full(len(out_df), i))\n"
+            func_text += (
+                f"    in_key_arr.append(np.full(len(out_df), n_prev_groups + i))\n"
+            )
         if isinstance(udf_return_type, SeriesType):
             func_text += f"    arrs0.append(bodo.hiframes.pd_series_ext.get_series_data(out_df))\n"
         else:
