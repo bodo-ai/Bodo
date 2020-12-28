@@ -1831,7 +1831,9 @@ def test_groupby_apply(is_slow_run):
     check_func(impl3, (df,), sort_output=True)
     check_func(impl4, (df,), sort_output=True)
     check_func(impl5, (df,), sort_output=True)
-    check_func(impl6, (df,), sort_output=True)
+    # NOTE: Pandas bug: drops the key arrays from output Index if it's Series sometimes
+    # (as of 1.1.5)
+    check_func(impl6, (df,), sort_output=True, reset_index=True)
 
 
 @pytest.mark.slow

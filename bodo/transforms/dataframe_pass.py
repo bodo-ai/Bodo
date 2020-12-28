@@ -1680,12 +1680,7 @@ class DataFramePass:
         else:
             index_names = "None"
         index_names += ", in_df.index.name"
-        # NOTE: Pandas drops the key arrays from output Index if it's Series for some
-        # reason (as of 1.1.5)
-        if isinstance(out_typ, SeriesType):
-            func_text += f"  out_index = bodo.utils.conversion.index_from_array(bodo.libs.array_kernels.concat(arrs_index))\n"
-        else:
-            func_text += f"  out_index = bodo.hiframes.pd_multi_index_ext.init_multi_index(({out_key_arr_names}, bodo.libs.array_kernels.concat(arrs_index)), ({index_names},), None)\n"
+        func_text += f"  out_index = bodo.hiframes.pd_multi_index_ext.init_multi_index(({out_key_arr_names}, bodo.libs.array_kernels.concat(arrs_index)), ({index_names},), None)\n"
         out_data = ", ".join("out_arr{}".format(i) for i in range(n_out_cols))
         if isinstance(out_typ, SeriesType):
             func_text += f"  return bodo.hiframes.pd_series_ext.init_series(out_arr0, out_index, out_df.name)\n"

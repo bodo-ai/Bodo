@@ -26,7 +26,7 @@ from numba.extending import (
 
 import bodo
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
-from bodo.hiframes.pd_index_ext import NumericIndexType, RangeIndexType
+from bodo.hiframes.pd_index_ext import RangeIndexType
 from bodo.hiframes.pd_multi_index_ext import MultiIndexType
 from bodo.hiframes.pd_series_ext import SeriesType, _get_series_array_type
 from bodo.libs.array import (
@@ -825,26 +825,19 @@ class DataframeGroupByAttribute(AttributeTemplate):
                 "GroupBy.apply(): only functions with dataframe/series output supported currently"
             )
 
-        # NOTE: Pandas drops the key arrays from output Index if it's Series for some
-        # reason (as of 1.1.5)
-        if isinstance(f_return_type, SeriesType):
-            out_index_type = f_return_type.index
-            if isinstance(out_index_type, RangeIndexType):
-                out_index_type = NumericIndexType(types.int64)
-        else:
-            key_arr_types = tuple(
-                grp.df_type.data[grp.df_type.columns.index(c)] for c in grp.keys
-            )
-            index_names = tuple(
-                types.literal(v) for v in grp.keys
-            ) + get_index_name_types(f_return_type.index)
-            if not grp.as_index:
-                key_arr_types = (types.Array(types.int64, 1, "C"),)
-                index_names = (types.none,) + get_index_name_types(f_return_type.index)
-            out_index_type = MultiIndexType(
-                key_arr_types + get_index_data_arr_types(f_return_type.index),
-                index_names,
-            )
+        key_arr_types = tuple(
+            grp.df_type.data[grp.df_type.columns.index(c)] for c in grp.keys
+        )
+        index_names = tuple(types.literal(v) for v in grp.keys) + get_index_name_types(
+            f_return_type.index
+        )
+        if not grp.as_index:
+            key_arr_types = (types.Array(types.int64, 1, "C"),)
+            index_names = (types.none,) + get_index_name_types(f_return_type.index)
+        out_index_type = MultiIndexType(
+            key_arr_types + get_index_data_arr_types(f_return_type.index),
+            index_names,
+        )
 
         # TODO: support const Series UDF output that becomes dataframe
         if isinstance(f_return_type, SeriesType):
