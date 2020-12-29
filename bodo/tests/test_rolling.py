@@ -144,6 +144,53 @@ def test_fixed_apply_nested_func(memory_leak_check):
     check_func(test_impl, (df,))
 
 
+def test_groupby_rolling(is_slow_run):
+    """test groupby rolling combination"""
+
+    def impl1(df):
+        return df.groupby("A").C.rolling(2).mean()
+
+    def impl2(df):
+        return (
+            df.groupby("A")[["C", "D"]]
+            .rolling(3, center=True)
+            .apply(lambda x: x.sum() / 2)
+        )
+
+    def impl3(df):
+        return df.groupby("A").rolling("2s", on="time")["B"].mean()
+
+    df = pd.DataFrame(
+        {
+            "A": [1, 4, 4, 11, 4, 1] * 3,
+            "C": [1.1, 2.2, 3.3, 4.4, 5.5, -1.1] * 3,
+            "D": [3, 1, 2, 4, 5, 5] * 3,
+        }
+    )
+    check_func(impl1, (df,), sort_output=True, reset_index=True)
+    if not is_slow_run:
+        return
+    check_func(impl2, (df,), sort_output=True, reset_index=True)
+    df = pd.DataFrame(
+        {
+            "A": [1, 4, 4, 11, 4, 1, 1, 1, 4],
+            "B": [1.1, 2.2, 3.3, 4.4, 5.5, 6.6, 7.7, 8.8, 9.9],
+            "time": [
+                pd.Timestamp("20130101 09:00:00"),
+                pd.Timestamp("20130101 09:00:02"),
+                pd.Timestamp("20130101 09:00:03"),
+                pd.Timestamp("20130101 09:00:05"),
+                pd.Timestamp("20130101 09:00:06"),
+                pd.Timestamp("20130101 09:00:07"),
+                pd.Timestamp("20130101 09:00:08"),
+                pd.Timestamp("20130101 09:00:10"),
+                pd.Timestamp("20130101 09:00:11"),
+            ],
+        }
+    )
+    check_func(impl3, (df,), sort_output=True, reset_index=True)
+
+
 @pytest.mark.slow
 class TestRolling(unittest.TestCase):
     def test_fixed1(self):

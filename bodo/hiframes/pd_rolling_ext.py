@@ -16,6 +16,7 @@ from numba.extending import (
 
 import bodo
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
+from bodo.hiframes.pd_groupby_ext import DataFrameGroupByType
 from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.hiframes.rolling import supported_rolling_funcs
 from bodo.utils.typing import (
@@ -133,7 +134,8 @@ def overload_series_rolling(
 
 @intrinsic
 def init_rolling(typingctx, obj_type, window_type, center_type, on_type=None):
-    """initialize rolling object"""
+    """Initialize a rolling object. The data object inside can be a DataFrame, Series,
+    or GroupBy."""
 
     def codegen(context, builder, signature, args):
         (obj_val, window_val, center_val, _) = args
@@ -152,7 +154,15 @@ def init_rolling(typingctx, obj_type, window_type, center_type, on_type=None):
         return rolling_val._getvalue()
 
     on = get_literal_value(on_type)
-    selection = None if isinstance(obj_type, SeriesType) else obj_type.columns
+    if isinstance(obj_type, SeriesType):
+        selection = None
+    elif isinstance(obj_type, DataFrameType):
+        selection = obj_type.columns
+    else:
+        assert isinstance(
+            obj_type, DataFrameGroupByType
+        ), f"invalid obj type for rolling: {obj_type}"
+        selection = obj_type.selection
     rolling_type = RollingType(obj_type, window_type, on, selection, False)
     return rolling_type(obj_type, window_type, center_type, on_type), codegen
 
@@ -198,8 +208,69 @@ def overload_rolling_apply(
     return _gen_rolling_impl(rolling, "apply")
 
 
+@overload_method(DataFrameGroupByType, "rolling", inline="always", no_unliteral=True)
+def groupby_rolling_overload(
+    grp,
+    window,
+    min_periods=None,
+    center=False,
+    win_type=None,
+    on=None,
+    axis=0,
+    closed=None,
+):
+    unsupported_args = dict(
+        min_periods=min_periods, win_type=win_type, axis=axis, closed=closed
+    )
+    arg_defaults = dict(min_periods=None, win_type=None, axis=0, closed=None)
+    check_unsupported_args("GroupBy.rolling", unsupported_args, arg_defaults)
+
+    def _impl(
+        grp,
+        window,
+        min_periods=None,
+        center=False,
+        win_type=None,
+        on=None,
+        axis=0,
+        closed=None,
+    ):  # pragma: no cover
+        return bodo.hiframes.pd_rolling_ext.init_rolling(grp, window, center, on)
+
+    return _impl
+
+
 def _gen_rolling_impl(rolling, fname, other=None):
     """generates an implementation function for rolling overloads"""
+    # Support df.groupby().rolling().func() using
+    # df.groupby().apply(lambda df: df.rolling().func())
+    if isinstance(rolling.obj_type, DataFrameGroupByType):
+        func_text = f"def impl(rolling, {_get_rolling_func_args(fname)}):\n"
+        on_arg = f"'{rolling.on}'" if isinstance(rolling.on, str) else f"{rolling.on}"
+        selection = ""
+        if rolling.explicit_select:
+            selection = "[{}]".format(
+                ", ".join(
+                    f"'{a}'" if isinstance(a, str) else f"{a}"
+                    for a in rolling.selection
+                    if a != rolling.on
+                )
+            )
+        call_args = f_args = ""
+        if fname == "apply":
+            call_args = "func, raw, args, kwargs"
+            f_args = "func, raw, None, None, args, kwargs"
+        if fname == "corr":
+            call_args = f_args = "other, pairwise"
+        if fname == "cov":
+            call_args = f_args = "other, pairwise, ddof"
+        udf = f"lambda df, window, center, {call_args}: bodo.hiframes.pd_rolling_ext.init_rolling(df, window, center, {on_arg}){selection}.{fname}({f_args})"
+        func_text += f"  return rolling.obj.apply({udf}, rolling.window, rolling.center, {call_args})\n"
+        loc_vars = {}
+        exec(func_text, {"bodo": bodo}, loc_vars)
+        impl = loc_vars["impl"]
+        return impl
+
     is_series = isinstance(rolling.obj_type, SeriesType)
     if fname in ("corr", "cov"):
         out_cols = None if is_series else _get_corr_cov_out_cols(rolling, other, fname)
@@ -218,14 +289,7 @@ def _gen_rolling_impl(rolling, fname, other=None):
         len(out_cols) == (1 if rolling.on is None else 2) and rolling.explicit_select
     )
 
-    if fname == "apply":
-        header = "def impl(rolling, func, raw=False, engine=None, engine_kwargs=None, args=None, kwargs=None):\n"
-    elif fname == "corr":
-        header = "def impl(rolling, other=None, pairwise=None):\n"
-    elif fname == "cov":
-        header = "def impl(rolling, other=None, pairwise=None, ddof=1):\n"
-    else:
-        header = "def impl(rolling):\n"
+    header = f"def impl(rolling, {_get_rolling_func_args(fname)}):\n"
     header += "  df = rolling.obj\n"
     header += "  index = {}\n".format(
         "bodo.hiframes.pd_series_ext.get_series_index(df)"
@@ -259,6 +323,19 @@ def _gen_rolling_impl(rolling, fname, other=None):
         impl = loc_vars["impl"]
         return impl
     return bodo.hiframes.dataframe_impl._gen_init_df(header, out_cols, data_args)
+
+
+def _get_rolling_func_args(fname):
+    """returns the extra argument signature for rolling function with name 'fname'"""
+    if fname == "apply":
+        return (
+            "func, raw=False, engine=None, engine_kwargs=None, args=None, kwargs=None\n"
+        )
+    elif fname == "corr":
+        return "other=None, pairwise=None\n"
+    elif fname == "cov":
+        return "other=None, pairwise=None, ddof=1\n"
+    return ""
 
 
 def create_rolling_overload(fname):
@@ -346,18 +423,21 @@ class GetItemDataFrameRolling2(AbstractTemplate):
         rolling, idx = args
         # df.rolling('A')['B', 'C']
         if isinstance(rolling, RollingType):
+            columns = (
+                rolling.obj_type.selection
+                if isinstance(rolling.obj_type, DataFrameGroupByType)
+                else rolling.obj_type.columns
+            )
             if isinstance(idx, (tuple, list)):
-                if (
-                    len(set(idx).difference(set(rolling.obj_type.columns))) > 0
-                ):  # pragma: no cover
+                if len(set(idx).difference(set(columns))) > 0:  # pragma: no cover
                     raise_const_error(
                         "rolling: selected column {} not found in dataframe".format(
-                            set(idx).difference(set(rolling.obj_type.columns))
+                            set(idx).difference(set(columns))
                         )
                     )
                 selection = list(idx)
             else:
-                if idx not in rolling.obj_type.columns:  # pragma: no cover
+                if idx not in columns:  # pragma: no cover
                     raise_const_error(
                         "rolling: selected column {} not found in dataframe".format(idx)
                     )

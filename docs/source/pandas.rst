@@ -878,6 +878,7 @@ The operations are documented on `pandas.DataFrame.groupby <https://pandas.pydat
 * :meth:`pandas.core.groupby.GroupBy.mean`
 * :meth:`pandas.core.groupby.GroupBy.min`
 * :meth:`pandas.core.groupby.GroupBy.prod`
+* :meth:`pandas.core.groupby.GroupBy.rolling`
 * :meth:`pandas.core.groupby.GroupBy.std`
 * :meth:`pandas.core.groupby.GroupBy.sum`
 * :meth:`pandas.core.groupby.GroupBy.var`

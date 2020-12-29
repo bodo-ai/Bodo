@@ -75,7 +75,7 @@ def lower_rolling_corr_dummy(context, builder, sig, args):
 def overload_rolling_fixed(
     arr, index_arr, win, center, fname, raw=True, parallel=False
 ):
-    assert is_overload_constant_bool(raw)
+    assert is_overload_constant_bool(raw), "raw argument should be constant bool"
     # UDF case
     if is_const_func_type(fname):
         func = _get_apply_func(fname)

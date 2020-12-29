@@ -268,7 +268,9 @@ def lower_groupby_dummy(context, builder, sig, args):
 
 
 # dummy lowering for groupby.count since it is used in Series.value_counts()
+# groupby.apply is used in groupby.rolling
 @lower_builtin("groupby.count", types.VarArg(types.Any))
+@lower_builtin("groupby.apply", types.VarArg(types.Any))
 def lower_groupby_count_dummy(context, builder, sig, args):
     return context.get_constant_null(sig.return_type)
 
@@ -867,7 +869,7 @@ class DataframeGroupByAttribute(AttributeTemplate):
         return signature(ret_type, *new_args).replace(pysig=pysig)
 
     def generic_resolve(self, grpby, attr):
-        if attr in groupby_unsupported:
+        if attr in groupby_unsupported or attr == "rolling":
             return
         if attr not in grpby.df_type.columns:
             raise_const_error(
@@ -1167,7 +1169,6 @@ groupby_unsupported = {
     "quantile",
     "rank",
     "resample",
-    "rolling",
     "sample",
     "sem",
     "shift",
@@ -1185,7 +1186,7 @@ def _install_groupy_unsupported():
 
     for fname in groupby_unsupported:
         overload_method(DataFrameGroupByType, fname, no_unliteral=True)(
-            create_unsupported_overload("DataFrameGroupByType" + fname)
+            create_unsupported_overload(f"DataFrameGroupByType: '{fname}'")
         )
 
 
