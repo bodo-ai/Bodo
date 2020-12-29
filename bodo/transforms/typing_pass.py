@@ -123,6 +123,7 @@ class BodoTypeInference(PartialTypeInference):
                 state.args,
                 state.locals,
                 state.flags,
+                True,
             )
             changed, needs_transform = typing_transforms_pass.run()
             # can't be typed if IR not changed
@@ -141,6 +142,7 @@ class BodoTypeInference(PartialTypeInference):
                 state.args,
                 state.locals,
                 state.flags,
+                False,
             )
             typing_transforms_pass.run()
 
@@ -161,7 +163,15 @@ class TypingTransforms:
     """
 
     def __init__(
-        self, func_ir, typingctx, typemap, calltypes, arg_types, _locals, flags
+        self,
+        func_ir,
+        typingctx,
+        typemap,
+        calltypes,
+        arg_types,
+        _locals,
+        flags,
+        change_required,
     ):
         self.func_ir = func_ir
         self.typingctx = typingctx
@@ -189,6 +199,8 @@ class TypingTransforms:
         self._require_const = {}
         self.locals = _locals
         self.flags = flags
+        # a change in the IR in current pass is required to enable typing
+        self.change_required = change_required
         self.changed = False
         # whether another transformation pass is needed (see _run_setattr)
         self.needs_transform = False
@@ -237,7 +249,7 @@ class TypingTransforms:
                     break
 
         # try unrolling a loop with constant range if everything else failed
-        if not self.changed and not self.needs_transform:
+        if self.change_required and not self.changed and not self.needs_transform:
             guard(self._try_unroll_const_loop)
 
         # find transformed variables that are not used anymore so they can be removed
