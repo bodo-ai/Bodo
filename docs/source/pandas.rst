@@ -867,7 +867,7 @@ The operations are documented on `pandas.DataFrame.groupby <https://pandas.pydat
 
 * :meth:`pandas.core.groupby.GroupBy.apply` (`func` should return a DataFrame or Series)
 * :meth:`pandas.core.groupby.GroupBy.agg` `arg` should be a function.
-  A list of functions is also supported if one output column is selected.
+  Passing a list of functions is also supported if only one output column is selected.
 * :meth:`pandas.core.groupby.DataFrameGroupBy.aggregate` same as `agg`
 * :meth:`pandas.core.groupby.GroupBy.count`
 * :meth:`pandas.core.groupby.GroupBy.cumsum`

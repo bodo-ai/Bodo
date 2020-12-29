@@ -1660,6 +1660,8 @@ class DataFramePass:
         # all rows of returned df will get the same key value in output index
         if grp_typ.as_index:
             for i in range(n_keys):
+                # all rows of output get the input keys as Index. Hence, create an array
+                # of key values with same length as output
                 func_text += f"    in_key_arrs{i}.append(bodo.utils.utils.full_type(len(out_df), s_key{i}[starts[i]], s_key{i}))\n"
         else:
             func_text += (
