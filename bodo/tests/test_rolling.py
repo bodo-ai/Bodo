@@ -75,6 +75,9 @@ def test_column_select(memory_leak_check):
     def impl4(df):
         return df.rolling(3)["A", "B"].mean()
 
+    def impl5(df):
+        return df.rolling(3).B.mean()
+
     df = pd.DataFrame(
         {
             "A": [5, 12, 21, np.nan, 3],
@@ -92,6 +95,7 @@ def test_column_select(memory_leak_check):
     check_func(impl2, (df,))
     check_func(impl3, (df,))
     check_func(impl4, (df,))
+    check_func(impl5, (df,))
 
 
 def test_apply_raw_false(memory_leak_check):

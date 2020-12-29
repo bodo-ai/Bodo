@@ -3,9 +3,14 @@
 """
 from numba.core import cgutils, types
 from numba.core.imputils import impl_ret_borrowed
-from numba.core.typing.templates import AbstractTemplate, signature
+from numba.core.typing.templates import (
+    AbstractTemplate,
+    AttributeTemplate,
+    signature,
+)
 from numba.extending import (
     infer,
+    infer_getattr,
     intrinsic,
     lower_builtin,
     make_attribute_wrapper,
@@ -457,3 +462,24 @@ class GetItemDataFrameRolling2(AbstractTemplate):
 @lower_builtin("static_getitem", RollingType, types.Any)
 def static_getitem_df_groupby(context, builder, sig, args):
     return impl_ret_borrowed(context, builder, sig.return_type, args[0])
+
+
+@infer_getattr
+class RollingAttribute(AttributeTemplate):
+    key = RollingType
+
+    def generic_resolve(self, rolling, attr):
+        """handle df.rolling().B.func() case"""
+        columns = ()
+        if isinstance(rolling.obj_type, DataFrameGroupByType):
+            columns = rolling.obj_type.selection
+        if isinstance(rolling.obj_type, DataFrameType):
+            columns = rolling.obj_type.columns
+        if attr in columns:
+            return RollingType(
+                rolling.obj_type,
+                rolling.window_type,
+                rolling.on,
+                (attr,),
+                True,
+            )
