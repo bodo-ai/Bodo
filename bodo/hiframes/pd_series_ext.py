@@ -613,6 +613,14 @@ class SeriesAttribute(AttributeTemplate):
                 get_udf_error_msg(f"Series.{fname}()", e), locs_in_msg=[e.loc]
             )
 
+        if (
+            isinstance(f_return_type, (SeriesType, HeterogeneousSeriesType))
+            and f_return_type.const_info is None
+        ):
+            raise BodoError(
+                "Invalid Series output in UDF (Series with constant length and constant Index value expected)"
+            )
+
         # output is dataframe if UDF returns a Series
         if isinstance(f_return_type, HeterogeneousSeriesType):
             # NOTE: get_const_func_output_type() adds const_info attribute for Series

@@ -866,19 +866,9 @@ GroupBy
 
 The operations are documented on `pandas.DataFrame.groupby <https://pandas.pydata.org/pandas-docs/stable/reference/groupby.html>`_.
 
-* :meth:`pandas.core.groupby.GroupBy.agg` `arg` should be a function, and the compiler should be
-  able to simplify it to a single parallel loop and analyze it.
-  For example, arithmetic expressions on input Series are supported.
-  A list of functions is also supported if one output column is selected
-  (which avoids MultiIndex).
-  For example::
-
-    @bodo.jit
-    def f(df):
-        def g1(x): return (x<=2).sum()
-        def g2(x): return (x>2).sum()
-        return df.groupby('A')['B'].agg((g1, g2))
-
+* :meth:`pandas.core.groupby.GroupBy.apply` (`func` should return a DataFrame or Series)
+* :meth:`pandas.core.groupby.GroupBy.agg` `arg` should be a function.
+  Passing a list of functions is also supported if only one output column is selected.
 * :meth:`pandas.core.groupby.DataFrameGroupBy.aggregate` same as `agg`
 * :meth:`pandas.core.groupby.GroupBy.count`
 * :meth:`pandas.core.groupby.GroupBy.cumsum`

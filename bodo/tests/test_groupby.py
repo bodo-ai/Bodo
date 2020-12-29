@@ -1752,6 +1752,92 @@ def test_as_index_count(memory_leak_check):
     check_func(impl2, (df,), sort_output=True, reset_index=True)
 
 
+# TODO(ehsan): add memory_leak_check when memory leaks are resolved
+def test_groupby_apply(is_slow_run):
+    """
+    Test Groupby.apply() for UDFs that return a dataframes
+    """
+
+    # kw arg
+    def impl1(df):
+        df2 = df.groupby("A").apply(
+            lambda x, V: pd.DataFrame(
+                {"AA": [x.C.mean(), x.C.sum()], "BB": [V, x["C"].iloc[0]]}
+            ),
+            V=11,
+        )
+        return df2
+
+    # no arg, explicit select
+    def impl2(df):
+        df2 = df.groupby("A")[["C", "D"]].apply(
+            lambda x: pd.DataFrame(
+                {"AA": [x.C.mean(), x.C.sum()], "BB": [3, x["C"].iloc[0]]}
+            ),
+        )
+        return df2
+
+    # positional arg, as_index=False
+    def impl3(df):
+        df2 = df.groupby("A", as_index=False).apply(
+            lambda x, v: pd.DataFrame(
+                {"AA": [x.C.mean(), x.C.sum()], "BB": [v, x["C"].iloc[0]]}
+            ),
+            11,
+        )
+        return df2
+
+    # both positional and kw args, multiple keys
+    def impl4(df):
+        df2 = df.groupby(["A", "B"]).apply(
+            lambda x, v, W: pd.DataFrame(
+                {"AA": [x.C.mean(), x.C.sum()], "BB": [v + W, x["C"].iloc[0]]}
+            ),
+            11,
+            W=14,
+        )
+        return df2
+
+    # Series input
+    def impl5(df):
+        df2 = df.groupby(["A", "B"]).C.apply(
+            lambda x, V: pd.DataFrame(
+                {"AA": [x.mean(), x.sum()], "BB": [1.2, x.iloc[0]]}
+            ),
+            V=11,
+        )
+        return df2
+
+    # Series output
+    def impl6(df):
+        df2 = df.groupby(["A", "B"]).C.apply(
+            lambda x, V: x + V,
+            V=11,
+        )
+        return df2
+
+    df = pd.DataFrame(
+        {
+            "A": [1, 4, 4, 11, 4, 1],
+            "B": ["AB", "DD", "E", "A", "DD", "AB"],
+            "C": [1.1, 2.2, 3.3, 4.4, 5.5, -1.1],
+            "D": [3, 1, 2, 4, 5, 5],
+        }
+    )
+    check_func(impl1, (df,), sort_output=True)
+    if not is_slow_run:
+        return
+    check_func(impl2, (df,), sort_output=True)
+    # NOTE: Pandas assigns group numbers in sorted order to Index but we don't match it
+    # since requires expensive sorting
+    check_func(impl3, (df,), sort_output=True, reset_index=True)
+    check_func(impl4, (df,), sort_output=True)
+    check_func(impl5, (df,), sort_output=True)
+    # NOTE: Pandas bug: drops the key arrays from output Index if it's Series sometimes
+    # (as of 1.1.5)
+    check_func(impl6, (df,), sort_output=True, reset_index=True)
+
+
 @pytest.mark.slow
 def test_single_col_reset_index(test_df, memory_leak_check):
     """We need the reset_index=True because otherwise the order is scrambled"""

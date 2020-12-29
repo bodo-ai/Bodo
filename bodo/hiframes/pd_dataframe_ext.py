@@ -321,6 +321,14 @@ class DataFrameAttribute(AttributeTemplate):
         except Exception as e:
             raise_bodo_error(get_udf_error_msg("DataFrame.apply()", e), e.loc)
 
+        if (
+            isinstance(f_return_type, (SeriesType, HeterogeneousSeriesType))
+            and f_return_type.const_info is None
+        ):
+            raise BodoError(
+                "Invalid Series output in UDF (Series with constant length and constant Index value expected)"
+            )
+
         # output is dataframe if UDF returns a Series
         if isinstance(f_return_type, HeterogeneousSeriesType):
             # NOTE: get_const_func_output_type() adds const_info attribute for Series
@@ -961,8 +969,9 @@ def cast_df_to_df(context, builder, fromty, toty, val):
         # TODO: fix casting refcount in Numba since Numba increfs value after cast
         return df
 
-    # empty dataframe case
-    assert len(fromty.data) == 0
+    # only empty dataframe case supported from this point
+    if not len(fromty.data) == 0:
+        raise BodoError(f"Invalid dataframe cast from {fromty} to {toty}")
 
     # generate empty dataframe with target type using empty arrays for data columns and
     # index

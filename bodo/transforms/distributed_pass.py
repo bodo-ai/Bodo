@@ -1231,6 +1231,10 @@ class DistributedPass:
                 lhs, assign, rhs.args, avail_vars, equiv_set
             )
 
+        if fdef == ("_bodo_groupby_apply_impl", "") and self._is_1D_or_1D_Var_arr(lhs):
+            self._set_last_arg_to_true(assign.value)
+            return [assign]
+
         # no need to gather if input data is replicated
         if (
             fdef == ("gatherv", "bodo") or fdef == ("allgatherv", "bodo")

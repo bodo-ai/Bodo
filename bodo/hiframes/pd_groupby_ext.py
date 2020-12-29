@@ -1,10 +1,10 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 """Support for Pandas Groupby operations
 """
-import operator
 from enum import Enum
 
 import numba
+import numpy as np
 from numba.core import types
 from numba.core.registry import CPUDispatcher
 from numba.core.typing.templates import (
@@ -17,15 +17,11 @@ from numba.core.typing.templates import (
 from numba.extending import (
     infer,
     infer_getattr,
-    intrinsic,
     lower_builtin,
-    lower_cast,
-    make_attribute_wrapper,
     models,
     overload,
     overload_method,
     register_model,
-    type_callable,
 )
 
 import bodo
@@ -33,22 +29,37 @@ from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.hiframes.pd_index_ext import RangeIndexType
 from bodo.hiframes.pd_multi_index_ext import MultiIndexType
 from bodo.hiframes.pd_series_ext import SeriesType, _get_series_array_type
-from bodo.ir.aggregate import get_agg_func
+from bodo.libs.array import (
+    arr_info_list_to_table,
+    array_to_info,
+    delete_table,
+    delete_table_decref_arrays,
+    get_groupby_labels,
+    info_from_table,
+    info_to_array,
+    shuffle_table,
+)
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
-from bodo.libs.decimal_arr_ext import Decimal128Type, DecimalArrayType
+from bodo.libs.decimal_arr_ext import Decimal128Type
 from bodo.libs.int_arr_ext import IntDtype, IntegerArrayType
 from bodo.libs.str_arr_ext import string_array_type
 from bodo.libs.str_ext import string_type
-from bodo.utils.transform import get_call_expr_arg, get_const_func_output_type
+from bodo.utils.transform import (
+    gen_const_tup,
+    get_call_expr_arg,
+    get_const_func_output_type,
+)
 from bodo.utils.typing import (
     BodoError,
     create_unsupported_overload,
     get_index_data_arr_types,
+    get_index_name_types,
     get_literal_value,
     get_overload_const_func,
     get_overload_const_list,
     get_overload_const_str,
     get_overload_constant_dict,
+    get_udf_error_msg,
     is_dtype_nullable,
     is_literal_type,
     is_overload_constant_bool,
@@ -797,6 +808,64 @@ class DataframeGroupByAttribute(AttributeTemplate):
         msg = "Groupby.cummax() only supports columns of types integer, float, string, liststring, date, datetime or timedelta"
         return self.resolve_cumulative(grp, args, kws, msg, "cummax")
 
+    @bound_function("groupby.apply", no_unliteral=True)
+    def resolve_apply(self, grp, args, kws):
+        kws = dict(kws)
+        # pop apply() arguments from kws so only UDF kws remain
+        func = args[0] if len(args) > 0 else kws.pop("func", None)
+        f_args = tuple(args[1:]) if len(args) > 0 else ()
+
+        f_return_type = _get_groupby_apply_udf_out_type(
+            func, grp, f_args, kws, self.context
+        )
+
+        # TODO: support scalar output
+        if not isinstance(f_return_type, (DataFrameType, SeriesType)):
+            raise BodoError(
+                "GroupBy.apply(): only functions with dataframe/series output supported currently"
+            )
+
+        key_arr_types = tuple(
+            grp.df_type.data[grp.df_type.columns.index(c)] for c in grp.keys
+        )
+        index_names = tuple(types.literal(v) for v in grp.keys) + get_index_name_types(
+            f_return_type.index
+        )
+        if not grp.as_index:
+            key_arr_types = (types.Array(types.int64, 1, "C"),)
+            index_names = (types.none,) + get_index_name_types(f_return_type.index)
+        out_index_type = MultiIndexType(
+            key_arr_types + get_index_data_arr_types(f_return_type.index),
+            index_names,
+        )
+
+        # TODO: support const Series UDF output that becomes dataframe
+        if isinstance(f_return_type, SeriesType):
+            ret_type = SeriesType(
+                f_return_type.dtype,
+                f_return_type.data,
+                out_index_type,
+                f_return_type.name_typ,
+            )
+        else:
+            ret_type = DataFrameType(
+                f_return_type.data, out_index_type, f_return_type.columns
+            )
+
+        arg_names = ", ".join(f"arg{i}" for i in range(len(f_args)))
+        arg_names = arg_names + ", " if arg_names else ""
+        # add dummy default value for UDF kws to avoid errors
+        kw_names = ", ".join(f"{a} = ''" for a in kws.keys())
+        func_text = f"def apply_stub(func, {arg_names}{kw_names}):\n"
+        func_text += "    pass\n"
+        loc_vars = {}
+        exec(func_text, {}, loc_vars)
+        apply_stub = loc_vars["apply_stub"]
+
+        pysig = numba.core.utils.pysignature(apply_stub)
+        new_args = (func, *f_args) + tuple(kws.values())
+        return signature(ret_type, *new_args).replace(pysig=pysig)
+
     def generic_resolve(self, grpby, attr):
         if attr in groupby_unsupported:
             return
@@ -809,6 +878,41 @@ class DataframeGroupByAttribute(AttributeTemplate):
         return DataFrameGroupByType(
             grpby.df_type, grpby.keys, (attr,), grpby.as_index, True
         )
+
+
+def _get_groupby_apply_udf_out_type(func, grp, f_args, kws, context):
+    """get output type for UDF used in groupby apply()"""
+
+    # NOTE: without explicit column selection, Pandas passes key columns also for
+    # some reason (as of Pandas 1.1.5)
+    in_df_type = grp.df_type
+    if grp.explicit_select:
+        # input to UDF is a Series if only one column is explicitly selected
+        if len(grp.selection) == 1:
+            col_name = grp.selection[0]
+            data_arr = in_df_type.data[in_df_type.columns.index(col_name)]
+            in_data_type = SeriesType(
+                data_arr.dtype, data_arr, in_df_type.index, types.literal(col_name)
+            )
+        else:
+            in_data = tuple(
+                in_df_type.data[in_df_type.columns.index(c)] for c in grp.selection
+            )
+            in_data_type = DataFrameType(
+                in_data, in_df_type.index, tuple(grp.selection)
+            )
+    else:
+        in_data_type = in_df_type
+
+    arg_typs = (in_data_type,)
+    arg_typs += tuple(f_args)
+    try:
+        f_return_type = get_const_func_output_type(func, arg_typs, kws, context)
+    except Exception as e:
+        raise_bodo_error(
+            get_udf_error_msg("GroupBy.apply()", e), getattr(e, "loc", None)
+        )
+    return f_return_type
 
 
 # a dummy pivot_table function that will be replace in dataframe_pass
@@ -902,10 +1006,135 @@ def lower_crosstab_dummy(context, builder, sig, args):
     return context.get_constant_null(sig.return_type)
 
 
+def get_group_indices(keys):  # pragma: no cover
+    return np.arange(len(keys))
+
+
+@overload(get_group_indices)
+def get_group_indices_overload(keys):
+    """get group indices (labels) for a tuple of key arrays."""
+    func_text = "def impl(keys):\n"
+    # convert arrays to table
+    func_text += "    info_list = [{}]\n".format(
+        ", ".join(f"array_to_info(keys[{i}])" for i in range(len(keys.types))),
+    )
+    func_text += "    table = arr_info_list_to_table(info_list)\n"
+    func_text += "    group_labels = np.empty(len(keys[0]), np.int64)\n"
+    func_text += "    ngroups = get_groupby_labels(table, group_labels.ctypes)\n"
+    func_text += "    delete_table_decref_arrays(table)\n"
+    func_text += "    return group_labels, ngroups\n"
+    loc_vars = {}
+    exec(
+        func_text,
+        {
+            "bodo": bodo,
+            "np": np,
+            "get_groupby_labels": get_groupby_labels,
+            "array_to_info": array_to_info,
+            "arr_info_list_to_table": arr_info_list_to_table,
+            "delete_table_decref_arrays": delete_table_decref_arrays,
+        },
+        loc_vars,
+    )
+    impl = loc_vars["impl"]
+    return impl
+
+
+@numba.njit(no_cpython_wrapper=True)
+def generate_slices(labels, ngroups):  # pragma: no cover
+    """same as:
+    https://github.com/pandas-dev/pandas/blob/53d1622eebb8fc46e90f131a559d32f42babd858/pandas/_libs/lib.pyx#L845
+    """
+
+    n = len(labels)
+
+    starts = np.zeros(ngroups, dtype=np.int64)
+    ends = np.zeros(ngroups, dtype=np.int64)
+
+    start = 0
+    group_size = 0
+    for i in range(n):
+        lab = labels[i]
+        if lab < 0:
+            start += 1
+        else:
+            group_size += 1
+            if i == n - 1 or lab != labels[i + 1]:
+                starts[lab] = start
+                ends[lab] = start + group_size
+                start += group_size
+                group_size = 0
+
+    return starts, ends
+
+
+def shuffle_dataframe(df, keys):  # pragma: no cover
+    return df, keys
+
+
+@overload(shuffle_dataframe)
+def overload_shuffle_dataframe(df, keys):
+    """shuffle a dataframe using a tuple of key arrays."""
+    n_cols = len(df.columns)
+    n_keys = len(keys.types)
+    data_args = ", ".join("data_{}".format(i) for i in range(n_cols))
+
+    func_text = "def impl(df, keys):\n"
+    # create C++ table from input arrays
+    for i in range(n_cols):
+        func_text += f"  in_arr{i} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i})\n"
+
+    func_text += f"  in_index_arr = bodo.utils.conversion.index_to_array(bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df))\n"
+
+    func_text += "  info_list = [{}, {}, {}]\n".format(
+        ", ".join(f"array_to_info(keys[{i}])" for i in range(n_keys)),
+        ", ".join(f"array_to_info(in_arr{i})" for i in range(n_cols)),
+        "array_to_info(in_index_arr)",
+    )
+    func_text += "  table = arr_info_list_to_table(info_list)\n"
+    func_text += f"  out_table = shuffle_table(table, {n_keys})\n"
+
+    # extract arrays from C++ table
+    for i in range(n_keys):
+        func_text += f"  out_key{i} = info_to_array(info_from_table(out_table, {i}), keys[{i}])\n"
+
+    for i in range(n_cols):
+        func_text += f"  out_arr{i} = info_to_array(info_from_table(out_table, {i+n_keys}), in_arr{i})\n"
+
+    func_text += f"  out_arr_index = info_to_array(info_from_table(out_table, {n_keys + n_cols}), in_index_arr)\n"
+
+    func_text += "  delete_table(out_table)\n"
+    func_text += "  delete_table(table)\n"
+
+    out_data = ", ".join(f"out_arr{i}" for i in range(n_cols))
+    func_text += "  out_index = bodo.utils.conversion.index_from_array(out_arr_index)\n"
+    func_text += f"  out_df = bodo.hiframes.pd_dataframe_ext.init_dataframe(({out_data},), out_index, {gen_const_tup(df.columns)})\n"
+
+    func_text += "  return out_df, ({},)\n".format(
+        ", ".join(f"out_key{i}" for i in range(n_keys))
+    )
+
+    loc_vars = {}
+    exec(
+        func_text,
+        {
+            "bodo": bodo,
+            "array_to_info": array_to_info,
+            "arr_info_list_to_table": arr_info_list_to_table,
+            "shuffle_table": shuffle_table,
+            "info_from_table": info_from_table,
+            "info_to_array": info_to_array,
+            "delete_table": delete_table,
+        },
+        loc_vars,
+    )
+    impl = loc_vars["impl"]
+    return impl
+
+
 groupby_unsupported = {
     "all",
     "any",
-    "apply",
     "backfill",
     "bfill",
     "boxplot",

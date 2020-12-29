@@ -529,9 +529,13 @@ def sort_series_values_index(S):
 
 
 def sort_dataframe_values_index(df):
+    """sort data frame based on values and index"""
     if isinstance(df.index, pd.MultiIndex):
-        list_col_names = df.columns.to_list() + [x for x in df.index.names]
-        return df.sort_values(list_col_names, kind="mergesort")
+        # rename index in case names are None
+        index_names = [f"index_{i}" for i in range(len(df.index.names))]
+        list_col_names = df.columns.to_list() + index_names
+        return df.rename_axis(index_names).sort_values(list_col_names, kind="mergesort")
+
     eName = "index123"
     list_col_names = df.columns.to_list() + [eName]
     return df.rename_axis(eName).sort_values(list_col_names, kind="mergesort")

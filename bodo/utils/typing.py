@@ -115,7 +115,7 @@ def get_udf_error_msg(context_str, error):
         + ": "
         + str(error.msg)
         + "\n"
-        + error.loc.strformat()
+        + (error.loc.strformat() if error.loc is not None else "")
     )
 
 
@@ -661,6 +661,20 @@ def get_val_type_maybe_str_literal(value):
     if isinstance(value, str):
         t = types.StringLiteral(value)
     return t
+
+
+def get_index_name_types(t):
+    """get name types of index type 't'. MultiIndex has multiple names but others have
+    a single name.
+    """
+    from bodo.hiframes.pd_multi_index_ext import MultiIndexType
+
+    # MultIndex has multiple names
+    if isinstance(t, MultiIndexType):
+        return t.names_typ
+
+    # other indices have a single name
+    return (t.name_typ,)
 
 
 class ListLiteral(types.Literal):

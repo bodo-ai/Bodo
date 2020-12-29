@@ -23,7 +23,6 @@ from numba.core.ir_utils import (
 
 import bodo
 import bodo.hiframes.dataframe_impl  # noqa # side effect: install DataFrame overloads
-import bodo.hiframes.pd_groupby_ext
 import bodo.hiframes.pd_rolling_ext
 from bodo.hiframes.dataframe_indexing import (
     DataFrameIatType,
@@ -31,7 +30,10 @@ from bodo.hiframes.dataframe_indexing import (
     DataFrameLocType,
     DataFrameType,
 )
-from bodo.hiframes.pd_groupby_ext import DataFrameGroupByType
+from bodo.hiframes.pd_groupby_ext import (
+    DataFrameGroupByType,
+    _get_groupby_apply_udf_out_type,
+)
 from bodo.hiframes.pd_index_ext import RangeIndexType
 from bodo.hiframes.pd_multi_index_ext import MultiIndexType
 from bodo.hiframes.pd_series_ext import SeriesType
@@ -62,6 +64,7 @@ from bodo.utils.typing import (
 from bodo.utils.utils import (
     get_getsetitem_index_var,
     is_array_typ,
+    is_assign,
     is_expr,
     sanitize_varname,
 )
@@ -299,6 +302,11 @@ class DataFramePass:
                 and func_def.value in numba.core.utils.OPERATORS_TO_BUILTINS
             ):  # pragma: no cover
                 return self._convert_op_call_to_expr(assign, rhs, func_def.value)
+            # input to _bodo_groupby_apply_impl() is a UDF dispatcher
+            elif isinstance(func_def, ir.Arg) and isinstance(
+                self.typemap[rhs.func.name], types.Dispatcher
+            ):
+                return [assign]
             warnings.warn("function call couldn't be found for dataframe analysis")
             return None
         else:
@@ -1325,6 +1333,10 @@ class DataFramePass:
         return nodes + compile_func_single_block(_init_df, out_arrs, lhs, self)
 
     def _run_call_groupby(self, assign, lhs, rhs, grp_var, func_name):
+        """Transform groupby calls into an Aggregate IR node"""
+        if func_name == "apply":
+            return self._run_call_groupby_apply(assign, lhs, rhs, grp_var)
+
         grp_typ = self.typemap[grp_var.name]
         df_var = self._get_df_obj_select(grp_var, "groupby")
         df_type = self.typemap[df_var.name]
@@ -1515,6 +1527,211 @@ class DataFramePass:
 
         out_vars.append(index_var)
         return nodes + compile_func_single_block(_init_df, out_vars, lhs, self)
+
+    def _run_call_groupby_apply(self, assign, lhs, rhs, grp_var):
+        """generate IR nodes for df.groupby().apply() with UDFs.
+        Generates a separate function call '_bodo_groupby_apply_impl()' that includes
+        the actual implementation since generating IR here directly may confuse
+        distributed analysis. Regular overload doesn't work since the UDF may have
+        keyword arguments (not supported by Numba).
+        """
+        grp_typ = self.typemap[grp_var.name]
+        df_var = self._get_df_obj_select(grp_var, "groupby")
+        df_type = self.typemap[df_var.name]
+        out_typ = self.typemap[lhs.name]
+        n_out_cols = 1 if isinstance(out_typ, SeriesType) else len(out_typ.columns)
+
+        # get apply function
+        kws = dict(rhs.kws)
+        func_var = get_call_expr_arg("GroupBy.apply", rhs.args, kws, 0, "func")
+        func = get_overload_const_func(self.typemap[func_var.name])
+
+        extra_args = [] if len(rhs.args) < 2 else rhs.args[1:]
+
+        # find kw arguments to UDF (pop apply() args first)
+        kws.pop("func", None)
+
+        udf_arg_names = (
+            ", ".join("e{}".format(i) for i in range(len(extra_args)))
+            + (", " if extra_args else "")
+            + ", ".join(
+                "{}=e{}".format(a, i + len(extra_args))
+                for i, a in enumerate(kws.keys())
+            )
+        )
+        udf_arg_types = [self.typemap[v.name] for v in extra_args]
+        udf_kw_types = {k: self.typemap[v.name] for k, v in kws.items()}
+        udf_return_type = _get_groupby_apply_udf_out_type(
+            bodo.utils.typing.FunctionLiteral(func),
+            grp_typ,
+            udf_arg_types,
+            udf_kw_types,
+            self.typingctx,
+        )
+
+        extra_args += list(kws.values())
+        extra_arg_names = ", ".join("e{}".format(i) for i in range(len(extra_args)))
+
+        in_col_names = df_type.columns
+        if grp_typ.explicit_select:
+            in_col_names = tuple(grp_typ.selection)
+
+        # find which columns are actually used if possible
+        used_cols = _get_df_apply_used_cols(func, in_col_names)
+
+        n_keys = len(grp_typ.keys)
+        key_names = ["k" + str(i) for i in range(n_keys)]
+        col_names = ["c" + str(i) for i in range(len(used_cols))]
+        key_name_args = ", ".join(key_names)
+        col_name_args = ", ".join(col_names)
+
+        func_text = (
+            f"def f({key_name_args}, {col_name_args}, df_index, {extra_arg_names}):\n"
+        )
+
+        func_text += f"  in_df = bodo.hiframes.pd_dataframe_ext.init_dataframe(({col_name_args},), df_index, {gen_const_tup(used_cols)})\n"
+
+        func_text += f"  return _bodo_groupby_apply_impl(({key_name_args},), in_df, map_func, {extra_arg_names})\n"
+
+        loc_vars = {}
+        exec(func_text, {}, loc_vars)
+        f = loc_vars["f"]
+
+        nodes = []
+        key_vars = [self._get_dataframe_data(df_var, c, nodes) for c in grp_typ.keys]
+        col_vars = [self._get_dataframe_data(df_var, c, nodes) for c in used_cols]
+        df_index_var = self._get_dataframe_index(df_var, nodes)
+        map_func = bodo.compiler.udf_jit(func)
+
+        if extra_arg_names:
+            extra_arg_names += ", "
+
+        func_text = f"def _bodo_groupby_apply_impl(keys, in_df, map_func, {extra_arg_names}_is_parallel=False):\n"
+        func_text += f"  if _is_parallel:\n"
+        func_text += f"    in_df, keys = shuffle_dataframe(in_df, keys)\n"
+
+        # get groupby info
+        func_text += f"  group_indices, ngroups = get_group_indices(keys)\n"
+        # TODO(ehsan): more efficient sort like Pandas
+        # https://github.com/pandas-dev/pandas/blob/aad85ad1e39568f87cdae38fece41cd2370234a7/pandas/core/sorting.py#L566
+        func_text += "  sort_idx = group_indices.argsort(kind='mergesort')\n"
+        func_text += (
+            "  starts, ends = generate_slices(group_indices[sort_idx], ngroups)\n"
+        )
+        # sort keys and data
+        for i in range(n_keys):
+            func_text += f"  s_key{i} = keys[{i}][sort_idx]\n"
+        is_series_in = grp_typ.explicit_select and len(grp_typ.selection) == 1
+        func_text += "  in_data = in_df.iloc[sort_idx{}]\n".format(
+            ",0" if is_series_in else ""
+        )
+
+        # loop over groups and call UDF
+        # gather output array, index and keys in lists to concatenate for output
+        for i in range(n_out_cols):
+            func_text += f"  arrs{i} = []\n"
+        if grp_typ.as_index:
+            for i in range(n_keys):
+                func_text += f"  in_key_arrs{i} = []\n"
+        else:
+            func_text += "  in_key_arr = []\n"
+        func_text += "  arrs_index = []\n"
+        # NOTE: Pandas assigns group numbers in sorted order to Index when
+        # as_index=False. Matching it exactly requires expensive sorting, so we assign
+        # numbers in the order of groups across processors (using exscan)
+        if not grp_typ.as_index:
+            func_text += "  n_prev_groups = 0\n"
+            func_text += "  if _is_parallel:\n"
+            sum_no = bodo.libs.distributed_api.Reduce_Type.Sum.value
+            func_text += f"    n_prev_groups = bodo.libs.distributed_api.dist_exscan(ngroups, np.int32({sum_no}))\n"
+        func_text += f"  for i in range(ngroups):\n"
+        func_text += (
+            f"    out_df = map_func(in_data[starts[i]:ends[i]], {udf_arg_names})\n"
+        )
+        if isinstance(udf_return_type, SeriesType):
+            func_text += (
+                "    out_idx = bodo.hiframes.pd_series_ext.get_series_index(out_df)\n"
+            )
+        else:
+            func_text += "    out_idx = bodo.hiframes.pd_dataframe_ext.get_dataframe_index(out_df)\n"
+        func_text += (
+            "    arrs_index.append(bodo.utils.conversion.index_to_array(out_idx))\n"
+        )
+        # all rows of returned df will get the same key value in output index
+        if grp_typ.as_index:
+            for i in range(n_keys):
+                # all rows of output get the input keys as Index. Hence, create an array
+                # of key values with same length as output
+                func_text += f"    in_key_arrs{i}.append(bodo.utils.utils.full_type(len(out_df), s_key{i}[starts[i]], s_key{i}))\n"
+        else:
+            func_text += (
+                f"    in_key_arr.append(np.full(len(out_df), n_prev_groups + i))\n"
+            )
+        if isinstance(udf_return_type, SeriesType):
+            func_text += f"    arrs0.append(bodo.hiframes.pd_series_ext.get_series_data(out_df))\n"
+        else:
+            for i in range(n_out_cols):
+                func_text += f"    arrs{i}.append(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(out_df, {i}))\n"
+        for i in range(n_out_cols):
+            func_text += f"  out_arr{i} = bodo.libs.array_kernels.concat(arrs{i})\n"
+        if grp_typ.as_index:
+            for i in range(n_keys):
+                func_text += f"  out_key_arr{i} = bodo.libs.array_kernels.concat(in_key_arrs{i})\n"
+
+            out_key_arr_names = ", ".join(f"out_key_arr{i}" for i in range(n_keys))
+        else:
+            func_text += f"  out_key_arr = bodo.libs.array_kernels.concat(in_key_arr)\n"
+            out_key_arr_names = "out_key_arr"
+
+        # create output dataframe
+        # TODO(ehsan): support MultiIndex in input and UDF output
+        if grp_typ.as_index:
+            index_names = ", ".join(
+                f"'{v}'" if isinstance(v, str) else f"{v}" for v in grp_typ.keys
+            )
+        else:
+            index_names = "None"
+        index_names += ", in_df.index.name"
+        func_text += f"  out_index = bodo.hiframes.pd_multi_index_ext.init_multi_index(({out_key_arr_names}, bodo.libs.array_kernels.concat(arrs_index)), ({index_names},), None)\n"
+        out_data = ", ".join("out_arr{}".format(i) for i in range(n_out_cols))
+        if isinstance(out_typ, SeriesType):
+            # some ranks may have empty data after shuffle (ngroups == 0), so call the
+            # UDF with empty data to get the name of the output Series
+            func_text += f"  out_name = out_df.name if ngroups else map_func(in_data[0:0], {udf_arg_names}).name\n"
+            func_text += f"  return bodo.hiframes.pd_series_ext.init_series(out_arr0, out_index, out_name)\n"
+        else:
+            func_text += f"  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({out_data},), out_index, {gen_const_tup(out_typ.columns)})\n"
+
+        glbs = {
+            "numba": numba,
+            "np": np,
+            "bodo": bodo,
+            "get_group_indices": bodo.hiframes.pd_groupby_ext.get_group_indices,
+            "generate_slices": bodo.hiframes.pd_groupby_ext.generate_slices,
+            "shuffle_dataframe": bodo.hiframes.pd_groupby_ext.shuffle_dataframe,
+        }
+        loc_vars = {}
+        exec(func_text, glbs, loc_vars)
+        _bodo_groupby_apply_impl = bodo.jit(distributed=False)(
+            loc_vars["_bodo_groupby_apply_impl"]
+        )
+
+        glbs = {
+            "numba": numba,
+            "np": np,
+            "bodo": bodo,
+            "map_func": map_func,
+            "out_type": out_typ,
+            "_bodo_groupby_apply_impl": _bodo_groupby_apply_impl,
+        }
+
+        return replace_func(
+            self,
+            f,
+            key_vars + col_vars + [df_index_var] + extra_args,
+            extra_globals=glbs,
+            pre_nodes=nodes,
+        )
 
     def _run_call_pivot_table(self, assign, lhs, rhs):
         df_var, values, index, columns, aggfunc, _pivot_values = rhs.args
@@ -1896,15 +2113,24 @@ def _get_df_apply_used_cols(func, columns):
         for stmt in bl.body:
             vnames = [v.name for v in stmt.list_vars()]
             if arg_var.name in vnames:
-                if isinstance(stmt, ir.Assign) and isinstance(stmt.value, ir.Arg):
+                if is_assign(stmt) and isinstance(stmt.value, ir.Arg):
                     continue
-                if (
-                    isinstance(stmt, ir.Assign)
-                    and isinstance(stmt.value, ir.Expr)
-                    and stmt.value.op == "getattr"
+                # match x.C column access
+                elif (
+                    is_assign(stmt)
+                    and is_expr(stmt.value, "getattr")
+                    and stmt.value.value.name == arg_var.name
+                    and stmt.value.attr in columns
                 ):
-                    assert stmt.value.attr in columns
                     used_cols.append(stmt.value.attr)
+                # match x["C"] column access
+                elif (
+                    is_assign(stmt)
+                    and is_expr(stmt.value, "getitem")
+                    and stmt.value.value.name == arg_var.name
+                    and guard(find_const, lambda_ir, stmt.value.index) in columns
+                ):
+                    used_cols.append(guard(find_const, lambda_ir, stmt.value.index))
                 else:
                     # argument is used in some other form
                     # be conservative and use all cols

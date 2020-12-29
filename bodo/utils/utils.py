@@ -7,7 +7,6 @@ import inspect
 import keyword
 import re
 import warnings
-from collections import namedtuple
 from enum import Enum
 
 import numba
@@ -17,10 +16,8 @@ from llvmlite import ir as lir
 from numba.core import cgutils, ir, ir_utils, types
 from numba.core.imputils import lower_builtin
 from numba.core.ir_utils import (
-    add_offset_to_labels,
     find_callname,
     find_const,
-    find_topo_order,
     get_definition,
     guard,
     mk_unique_var,
@@ -36,13 +33,12 @@ from bodo.libs.bool_arr_ext import boolean_array
 from bodo.libs.decimal_arr_ext import DecimalArrayType
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.str_arr_ext import (
-    get_utf8_size,
     num_total_chars,
     pre_alloc_string_array,
     string_array_type,
 )
 from bodo.libs.str_ext import string_type
-from bodo.utils.typing import NOT_CONSTANT, is_overload_none
+from bodo.utils.typing import NOT_CONSTANT
 
 int128_type = types.Integer("int128", 128)
 
@@ -741,10 +737,15 @@ def full_type(n, val, t):  # pragma: no cover
 @overload(full_type, no_unliteral=True)
 def overload_full_type(n, val, t):
     typ = t.instance_type if isinstance(t, types.TypeRef) else t
-    dtype = numba.np.numpy_support.as_dtype(typ.dtype)
+
+    # numpy array
+    if isinstance(typ, types.Array):
+        dtype = numba.np.numpy_support.as_dtype(typ.dtype)
+        return lambda n, val, t: np.full(n, val, dtype)  # pragma: no cover
 
     # nullable int array
     if isinstance(typ, IntegerArrayType):
+        dtype = numba.np.numpy_support.as_dtype(typ.dtype)
         return lambda n, val, t: bodo.libs.int_arr_ext.init_integer_array(
             np.full(n, val, dtype),
             np.full((tuple_to_scalar(n) + 7) >> 3, 255, np.uint8),
@@ -757,7 +758,26 @@ def overload_full_type(n, val, t):
             np.full((tuple_to_scalar(n) + 7) >> 3, 255, np.uint8),
         )  # pragma: no cover
 
-    return lambda n, val, t: np.full(n, val, dtype)  # pragma: no cover
+    # string array
+    if typ == string_array_type:
+
+        def impl_str(n, val, t):  # pragma: no cover
+            n_chars = n * len(val)
+            A = pre_alloc_string_array(n, n_chars)
+            for i in range(n):
+                A[i] = val
+            return A
+
+        return impl_str
+
+    # generic implementation
+    def impl(n, val, t):  # pragma: no cover
+        A = alloc_type(n, typ, (-1,))
+        for i in range(n):
+            A[i] = val
+        return A
+
+    return impl
 
 
 @intrinsic

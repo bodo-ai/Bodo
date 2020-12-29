@@ -72,4 +72,13 @@ table_info* pivot_groupby_and_aggregate(
     bool skipdropna, bool return_key, bool return_index, void* update_cb,
     void* combine_cb, void* eval_cb, table_info* udf_dummy_table);
 
+/**
+ * @brief Get groupby labels for input key arrays
+ * 
+ * @param table a table of all key arrays
+ * @param out_labels output array to fill
+ * @return int64_t total number of groups
+ */
+int64_t get_groupby_labels(table_info* table, int64_t *out_labels);
+
 #endif  // _GROUPBY_H_INCLUDED
