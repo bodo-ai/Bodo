@@ -18,24 +18,11 @@ from bodo.hiframes.pd_categorical_ext import CategoricalArray
 from bodo.hiframes.pd_offsets_ext import is_offsets_type
 from bodo.hiframes.pd_series_ext import SeriesType, if_series_to_array_type
 from bodo.hiframes.pd_timestamp_ext import pandas_timestamp_type
-from bodo.libs.array import (
-    arr_info_list_to_table,
-    array_to_info,
-    delete_table,
-    info_from_table,
-    info_to_array,
-    sort_values_table,
-)
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.bool_arr_ext import BooleanArrayType, boolean_array
 from bodo.libs.decimal_arr_ext import Decimal128Type
 from bodo.libs.int_arr_ext import IntegerArrayType
-from bodo.libs.str_arr_ext import (
-    get_str_arr_item_length,
-    get_utf8_size,
-    pre_alloc_string_array,
-    string_array_type,
-)
+from bodo.libs.str_arr_ext import string_array_type
 from bodo.libs.str_ext import string_type
 from bodo.utils.transform import gen_const_tup, is_var_size_item_array_type
 from bodo.utils.typing import (
@@ -46,12 +33,10 @@ from bodo.utils.typing import (
     get_overload_const_str,
     is_iterable_type,
     is_literal_type,
-    is_overload_constant_bool,
     is_overload_constant_int,
     is_overload_constant_str,
     is_overload_false,
     is_overload_none,
-    is_overload_str,
     is_overload_true,
     is_overload_zero,
 )
@@ -2245,6 +2230,49 @@ def overload_series_where(
         index = bodo.hiframes.pd_series_ext.get_series_index(S)
         name = bodo.hiframes.pd_series_ext.get_series_name(S)
         out_arr = bodo.hiframes.series_impl.where_impl(cond, arr, other)
+        return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
+
+    return impl
+
+
+@overload_method(SeriesType, "mask", inline="always", no_unliteral=True)
+def overload_series_mask(
+    S,
+    cond,
+    other=np.nan,
+    inplace=False,
+    axis=None,
+    level=None,
+    errors="raise",
+    try_cast=False,
+):
+    """Overload Series.mask. It replaces element with other if cond is True.
+    It's the opposite of Series.where
+    """
+    # TODO: handle other cases
+    # TODO: error-checking for input
+    unsupported_args = dict(
+        inplace=inplace, level=level, errors=errors, try_cast=try_cast
+    )
+    arg_defaults = dict(inplace=False, level=None, errors="raise", try_cast=False)
+    check_unsupported_args("Series.mask", unsupported_args, arg_defaults)
+    if not (is_overload_none(axis) or is_overload_zero(axis)):  # pragma: no cover
+        raise BodoError("Series.mask(): axis argument not supported")
+
+    def impl(
+        S,
+        cond,
+        other=np.nan,
+        inplace=False,
+        axis=None,
+        level=None,
+        errors="raise",
+        try_cast=False,
+    ):  # pragma: no cover
+        arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+        index = bodo.hiframes.pd_series_ext.get_series_index(S)
+        name = bodo.hiframes.pd_series_ext.get_series_name(S)
+        out_arr = bodo.hiframes.series_impl.where_impl(~cond, arr, other)
         return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
     return impl

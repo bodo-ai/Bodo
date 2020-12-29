@@ -403,6 +403,7 @@ Reindexing / Selection / Label manipulation:
 * :meth:`pandas.Series.take`
 * :meth:`pandas.Series.equals`
 * :meth:`pandas.Series.where`
+* :meth:`pandas.Series.mask`
 
 Missing data handling:
 

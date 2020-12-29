@@ -3318,6 +3318,23 @@ def test_np_where_one_arg(memory_leak_check):
     check_func(test_impl, (cond,), dist_test=False)
 
 
+def test_series_mask(memory_leak_check):
+    """basic test for Series.mask(cond, val)"""
+
+    def test_impl(S, cond, val):
+        return S.mask(cond, val)
+
+    def test_impl_nan(S, cond):
+        return S.mask(cond)
+
+    S = pd.Series(
+        [4.0, 2.0, 1.1, 9.1, 2.0, np.nan, 2.5], [5, 1, 2, 0, 3, 4, 9], name="AA"
+    )
+    cond = S == 2.0
+    check_func(test_impl, (S, cond, 12))
+    check_func(test_impl_nan, (S, cond))
+
+
 @pytest.mark.parametrize(
     "value, downcast",
     [
