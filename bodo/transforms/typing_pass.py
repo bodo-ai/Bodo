@@ -298,6 +298,23 @@ class TypingTransforms:
         if isinstance(rhs, ir.Expr) and rhs.op in ("getitem", "static_getitem"):
             return self._run_getitem(assign, rhs, label)
 
+        # detect type unification errors in control flow
+        # TODO(ehsan): update after #2258 is merged
+        if is_expr(rhs, "phi"):
+            if (
+                not rhs.incoming_values
+                or rhs.incoming_values[0].name not in self.typemap
+            ):  # pragma: no cover
+                return [assign]
+            first_type = self.typemap[rhs.incoming_values[0].name]
+            for v in rhs.incoming_values[1:]:
+                if (
+                    v.name not in self.typemap
+                    or self.typingctx.unify_pairs(first_type, self.typemap[v.name])
+                    is None
+                ):
+                    self.change_required = True
+
         return [assign]
 
     def _run_getitem(self, assign, rhs, label):
