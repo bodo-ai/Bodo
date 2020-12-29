@@ -236,6 +236,10 @@ class TypingTransforms:
                 if changed:
                     break
 
+        # try unrolling a loop with constant range if everything else failed
+        if not self.changed and not self.needs_transform:
+            guard(self._try_unroll_const_loop)
+
         # find transformed variables that are not used anymore so they can be removed
         # removing cases like agg dicts may be necessary since not type stable
         remove_vars = self._transformed_vars.copy()
@@ -1243,6 +1247,26 @@ class TypingTransforms:
         rhs.kws = list(kws.items())
         return nodes
 
+    def _try_unroll_const_loop(self):
+        """Try to unroll a loop with constant iteration range if possible. Otherwise,
+        throw GuardException.
+        Unrolls at most one loop per call.
+        """
+        cfg = compute_cfg_from_blocks(self.func_ir.blocks)
+        loops = cfg.loops()
+        for loop in loops.values():
+            # consider only well-structured loops
+            if len(loop.entries) != 1 or len(loop.exits) != 1:
+                continue
+            loop_index_var = self._get_loop_index_var(loop)
+            iter_vals = self._get_loop_const_iter_vals(loop_index_var)
+            # start the unroll transform
+            # no more GuardException since we can't bail out from this point
+            self._unroll_loop(loop, loop_index_var, iter_vals)
+            return  # only unroll one loop at a time
+
+        raise GuardException("const loop to unroll not found")
+
     def _try_loop_unroll_for_const(self, var, label):
         """Try loop unrolling to make variable 'var' constant in block 'label' if:
         1) 'label' is in a for loop body
@@ -1267,7 +1291,11 @@ class TypingTransforms:
 
         # start the unroll transform
         # no more GuardException since we can't bail out from this point
+        self._unroll_loop(loop, loop_index_var, iter_vals)
+        return True
 
+    def _unroll_loop(self, loop, loop_index_var, iter_vals):
+        """replace loop with its iteration body instances (to enable typing, etc.)"""
         # phis need to be transformed into regular assignments since unrolling changes
         # control flow
         # typemap=None to avoid PreLowerStripPhis's generator manipulation
@@ -1285,6 +1313,7 @@ class TypingTransforms:
         loop_exit = list(loop.exits)[0]
         # previous block's jump node, to be updated after each iter body gen
         prev_jump = self.func_ir.blocks[loop_entry].body[-1]
+        scope = loop_index_var.scope
 
         # generate an instance of the loop body for each iteration
         for c in iter_vals:
@@ -1295,7 +1324,7 @@ class TypingTransforms:
             new_last_label = last_label + offset
             nodes = []
             # create new const value for iteration index and add it to loop body
-            _create_const_var(c, loop_index_var.name, var.scope, var.loc, nodes)
+            _create_const_var(c, loop_index_var.name, scope, loop_index_var.loc, nodes)
             nodes[-1].target = loop_index_var
             new_body[new_first_label].body = nodes + new_body[new_first_label].body
             # adjust previous block's jump
@@ -1320,7 +1349,6 @@ class TypingTransforms:
         )
 
         self.changed = True
-        return True
 
     def _get_enclosing_loop(self, label):
         """find enclosing loop for block 'label' if possible.
