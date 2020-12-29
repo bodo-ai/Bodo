@@ -1693,7 +1693,10 @@ class DataFramePass:
         func_text += f"  out_index = bodo.hiframes.pd_multi_index_ext.init_multi_index(({out_key_arr_names}, bodo.libs.array_kernels.concat(arrs_index)), ({index_names},), None)\n"
         out_data = ", ".join("out_arr{}".format(i) for i in range(n_out_cols))
         if isinstance(out_typ, SeriesType):
-            func_text += f"  return bodo.hiframes.pd_series_ext.init_series(out_arr0, out_index, out_df.name)\n"
+            # some ranks may have empty data after shuffle (ngroups == 0), so call the
+            # UDF with empty data to get the name of the output Series
+            func_text += f"  out_name = out_df.name if ngroups else map_func(in_data[0:0], {udf_arg_names}).name\n"
+            func_text += f"  return bodo.hiframes.pd_series_ext.init_series(out_arr0, out_index, out_name)\n"
         else:
             func_text += f"  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({out_data},), out_index, {gen_const_tup(out_typ.columns)})\n"
 
