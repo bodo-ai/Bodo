@@ -1646,6 +1646,34 @@ def test_df_reset_index4(memory_leak_check):
     check_func(impl, (test_df,), copy_input=True)
 
 
+@pytest.mark.slow
+def test_df_reset_index_levels(memory_leak_check):
+    """Test DataFrame.reset_index() with list or int in 'level' argument"""
+
+    def impl1(df):
+        return df.reset_index(level=[0, 1, 2], drop=True)
+
+    def impl2(df):
+        return df.reset_index(level=0, drop=True)
+
+    df = pd.DataFrame(
+        {"A": [1, 3, 1, 2, 3], "B": ["F", "E", "F", "S", "C"]},
+        pd.MultiIndex.from_arrays(
+            [
+                ["ABCD", "V", "CAD", "", "AA"],
+                [1.3, 4.1, 3.1, -1.1, -3.2],
+                pd.date_range(start="2018-04-24", end="2018-04-27", periods=5),
+            ],
+        ),
+    )
+    check_func(impl1, (df,), only_seq=True)
+    df = pd.DataFrame(
+        {"A": [1, 3, 1, 2, 3], "B": ["F", "E", "F", "S", "C"]},
+        [1.3, 4.1, 3.1, -1.1, -3.2],
+    )
+    check_func(impl2, (df,), only_seq=True)
+
+
 # TODO: add memory_leak_check
 def test_df_duplicated():
     def impl(df):
