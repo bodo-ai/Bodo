@@ -123,6 +123,7 @@ class BodoTypeInference(PartialTypeInference):
                 state.args,
                 state.locals,
                 state.flags,
+                True,
             )
             changed, needs_transform = typing_transforms_pass.run()
             # can't be typed if IR not changed
@@ -141,6 +142,7 @@ class BodoTypeInference(PartialTypeInference):
                 state.args,
                 state.locals,
                 state.flags,
+                False,
             )
             typing_transforms_pass.run()
 
@@ -161,7 +163,15 @@ class TypingTransforms:
     """
 
     def __init__(
-        self, func_ir, typingctx, typemap, calltypes, arg_types, _locals, flags
+        self,
+        func_ir,
+        typingctx,
+        typemap,
+        calltypes,
+        arg_types,
+        _locals,
+        flags,
+        change_required,
     ):
         self.func_ir = func_ir
         self.typingctx = typingctx
@@ -189,6 +199,8 @@ class TypingTransforms:
         self._require_const = {}
         self.locals = _locals
         self.flags = flags
+        # a change in the IR in current pass is required to enable typing
+        self.change_required = change_required
         self.changed = False
         # whether another transformation pass is needed (see _run_setattr)
         self.needs_transform = False
@@ -236,6 +248,10 @@ class TypingTransforms:
                 if changed:
                     break
 
+        # try unrolling a loop with constant range if everything else failed
+        if self.change_required and not self.changed and not self.needs_transform:
+            guard(self._try_unroll_const_loop)
+
         # find transformed variables that are not used anymore so they can be removed
         # removing cases like agg dicts may be necessary since not type stable
         remove_vars = self._transformed_vars.copy()
@@ -281,6 +297,23 @@ class TypingTransforms:
 
         if isinstance(rhs, ir.Expr) and rhs.op in ("getitem", "static_getitem"):
             return self._run_getitem(assign, rhs, label)
+
+        # detect type unification errors in control flow
+        # TODO(ehsan): update after #2258 is merged
+        if is_expr(rhs, "phi"):
+            if (
+                not rhs.incoming_values
+                or rhs.incoming_values[0].name not in self.typemap
+            ):  # pragma: no cover
+                return [assign]
+            first_type = self.typemap[rhs.incoming_values[0].name]
+            for v in rhs.incoming_values[1:]:
+                if (
+                    v.name not in self.typemap
+                    or self.typingctx.unify_pairs(first_type, self.typemap[v.name])
+                    is None
+                ):
+                    self.change_required = True
 
         return [assign]
 
@@ -1243,6 +1276,26 @@ class TypingTransforms:
         rhs.kws = list(kws.items())
         return nodes
 
+    def _try_unroll_const_loop(self):
+        """Try to unroll a loop with constant iteration range if possible. Otherwise,
+        throw GuardException.
+        Unrolls at most one loop per call.
+        """
+        cfg = compute_cfg_from_blocks(self.func_ir.blocks)
+        loops = cfg.loops()
+        for loop in loops.values():
+            # consider only well-structured loops
+            if len(loop.entries) != 1 or len(loop.exits) != 1:
+                continue
+            loop_index_var = self._get_loop_index_var(loop)
+            iter_vals = self._get_loop_const_iter_vals(loop_index_var)
+            # start the unroll transform
+            # no more GuardException since we can't bail out from this point
+            self._unroll_loop(loop, loop_index_var, iter_vals)
+            return  # only unroll one loop at a time
+
+        raise GuardException("const loop to unroll not found")
+
     def _try_loop_unroll_for_const(self, var, label):
         """Try loop unrolling to make variable 'var' constant in block 'label' if:
         1) 'label' is in a for loop body
@@ -1267,7 +1320,11 @@ class TypingTransforms:
 
         # start the unroll transform
         # no more GuardException since we can't bail out from this point
+        self._unroll_loop(loop, loop_index_var, iter_vals)
+        return True
 
+    def _unroll_loop(self, loop, loop_index_var, iter_vals):
+        """replace loop with its iteration body instances (to enable typing, etc.)"""
         # phis need to be transformed into regular assignments since unrolling changes
         # control flow
         # typemap=None to avoid PreLowerStripPhis's generator manipulation
@@ -1285,6 +1342,7 @@ class TypingTransforms:
         loop_exit = list(loop.exits)[0]
         # previous block's jump node, to be updated after each iter body gen
         prev_jump = self.func_ir.blocks[loop_entry].body[-1]
+        scope = loop_index_var.scope
 
         # generate an instance of the loop body for each iteration
         for c in iter_vals:
@@ -1295,7 +1353,7 @@ class TypingTransforms:
             new_last_label = last_label + offset
             nodes = []
             # create new const value for iteration index and add it to loop body
-            _create_const_var(c, loop_index_var.name, var.scope, var.loc, nodes)
+            _create_const_var(c, loop_index_var.name, scope, loop_index_var.loc, nodes)
             nodes[-1].target = loop_index_var
             new_body[new_first_label].body = nodes + new_body[new_first_label].body
             # adjust previous block's jump
@@ -1320,7 +1378,6 @@ class TypingTransforms:
         )
 
         self.changed = True
-        return True
 
     def _get_enclosing_loop(self, label):
         """find enclosing loop for block 'label' if possible.

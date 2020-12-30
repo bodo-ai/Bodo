@@ -3269,6 +3269,22 @@ def test_unroll_loop(memory_leak_check, is_slow_run):
             s += df["A" + str(i + 1)].sum()
         return df
 
+    # unroll loop to enable typing (without the need for constant inference)
+    def impl6(n):
+        df = pd.DataFrame({"A1": np.arange(n), "A2": np.arange(n) ** 2})
+        for _ in [3, 5, 9]:
+            df = pd.concat((df, df + 1), axis=1)
+        return df
+
+    def impl7(n):
+        df = pd.DataFrame({"A1": np.arange(n), "A2": np.arange(n) ** 2})
+        for i in [3, 5, 9]:
+            new_df = (df[["A1", "A2"]] + i).rename(
+                columns={"A1": "A1_{}".format(i), "A2": "A2_{}".format(i)}
+            )
+            df = pd.concat((df, new_df), axis=1)
+        return df
+
     n = 11
     df = pd.DataFrame({"A": np.arange(n), "B": np.arange(n) ** 2, "C": np.ones(n)})
     check_func(impl1, (df,))
@@ -3278,6 +3294,8 @@ def test_unroll_loop(memory_leak_check, is_slow_run):
     with pytest.raises(BodoError, match="getitem using"):
         bodo.jit(impl4)(df)
     check_func(impl5, (n,))
+    check_func(impl6, (n,))
+    check_func(impl7, (n,))
 
 
 @pytest.mark.slow
