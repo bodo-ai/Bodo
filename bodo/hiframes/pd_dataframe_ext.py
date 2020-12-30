@@ -2557,14 +2557,20 @@ def reset_index_overload(
     _bodo_transformed=False,
 ):
 
-    unsupported_args = dict(level=level, col_level=col_level, col_fill=col_fill)
-    arg_defaults = dict(level=None, col_level=0, col_fill="")
+    unsupported_args = dict(col_level=col_level, col_fill=col_fill)
+    arg_defaults = dict(col_level=0, col_fill="")
     check_unsupported_args("DataFrame.reset_index", unsupported_args, arg_defaults)
 
     handle_inplace_df_type_change(inplace, _bodo_transformed, "reset_index")
 
+    # we only support dropping all levels currently
+    if not _is_all_levels(df, level):  # pragma: no cover
+        raise_bodo_error(
+            "DataFrame.reset_index(): only dropping all index levels supported"
+        )
+
     # make sure 'drop' is a constant bool
-    if not is_overload_constant_bool(drop):
+    if not is_overload_constant_bool(drop):  # pragma: no cover
         raise BodoError(
             "reset_index(): 'drop' parameter should be a constant boolean value"
         )
@@ -2613,6 +2619,23 @@ def reset_index_overload(
     # using output of the call
     return bodo.hiframes.dataframe_impl._gen_init_df(
         func_text, columns, ", ".join(data_args), "index"
+    )
+
+
+def _is_all_levels(df, level):
+    """return True if 'level' argument selects all Index levels in dataframe 'df'"""
+    n_levels = len(get_index_data_arr_types(df.index))
+    return (
+        is_overload_none(level)
+        or (
+            is_overload_constant_int(level)
+            and get_overload_const_int(level) == 0
+            and n_levels == 1
+        )
+        or (
+            is_overload_constant_list(level)
+            and list(get_overload_const_list(level)) == list(range(n_levels))
+        )
     )
 
 
