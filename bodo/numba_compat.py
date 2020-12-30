@@ -2379,3 +2379,75 @@ if (
 ):  # pragma: no cover
     warnings.warn("numba.core.typing.context.BaseContext._get_global_type has changed")
 numba.core.typing.context.BaseContext._get_global_type = _get_global_type
+
+
+# Support for f-strings
+# TODO(ehsan): remove when Numba's #6608 is merged
+def op_FORMAT_VALUE_byteflow(self, state, inst):
+    """
+    FORMAT_VALUE(flags): flags argument specifies format spec which is not supported
+    yet. Currently, we just call str() on the value.
+    Pops a value from stack and pushes results back.
+    Required for supporting f-strings.
+    https://docs.python.org/3/library/dis.html#opcode-FORMAT_VALUE
+    """
+    if inst.arg != 0:
+        msg = "format spec in f-strings not supported yet"
+        raise errors.UnsupportedError(msg, loc=self.get_debug_loc(inst.lineno))
+    value = state.pop()
+    strvar = state.make_temp()
+    res = state.make_temp()
+    state.append(inst, value=value, res=res, strvar=strvar)
+    state.push(res)
+
+
+def op_BUILD_STRING_byteflow(self, state, inst):
+    """
+    BUILD_STRING(count): Concatenates count strings from the stack and pushes the
+    resulting string onto the stack.
+    Required for supporting f-strings.
+    https://docs.python.org/3/library/dis.html#opcode-BUILD_STRING
+    """
+    count = inst.arg
+    assert count > 0, "invalid BUILD_STRING count"
+    strings = list(reversed([state.pop() for _ in range(count)]))
+    tmps = [state.make_temp() for _ in range(count - 1)]
+    state.append(inst, strings=strings, tmps=tmps)
+    state.push(tmps[-1])
+
+
+numba.core.byteflow.TraceRunner.op_FORMAT_VALUE = op_FORMAT_VALUE_byteflow
+numba.core.byteflow.TraceRunner.op_BUILD_STRING = op_BUILD_STRING_byteflow
+
+
+def op_FORMAT_VALUE_interpreter(self, inst, value, res, strvar):
+    """
+    FORMAT_VALUE(flags): flags argument specifies format spec which is not supported
+    yet. Currently, we just call str() on the value.
+    https://docs.python.org/3/library/dis.html#opcode-FORMAT_VALUE
+    """
+    value = self.get(value)
+    strgv = ir.Global("str", str, loc=self.loc)
+    self.store(value=strgv, name=strvar)
+    call = ir.Expr.call(self.get(strvar), (value,), (), loc=self.loc)
+    self.store(value=call, name=res)
+
+
+def op_BUILD_STRING_interpreter(self, inst, strings, tmps):
+    """
+    BUILD_STRING(count): Concatenates count strings.
+    Required for supporting f-strings.
+    https://docs.python.org/3/library/dis.html#opcode-BUILD_STRING
+    """
+    count = inst.arg
+    assert count > 0, "invalid BUILD_STRING count"
+    prev = self.get(strings[0])
+    for other, tmp in zip(strings[1:], tmps):
+        other = self.get(other)
+        expr = ir.Expr.binop(operator.add, lhs=prev, rhs=other, loc=self.loc)
+        self.store(expr, tmp)
+        prev = self.get(tmp)
+
+
+numba.core.interpreter.Interpreter.op_FORMAT_VALUE = op_FORMAT_VALUE_interpreter
+numba.core.interpreter.Interpreter.op_BUILD_STRING = op_BUILD_STRING_interpreter
