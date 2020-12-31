@@ -270,7 +270,10 @@ def groupby_rolling_overload(
         axis=0,
         closed=None,
     ):  # pragma: no cover
-        return bodo.hiframes.pd_rolling_ext.init_rolling(grp, window, center, on)
+        min_periods = _handle_default_min_periods(min_periods, window)
+        return bodo.hiframes.pd_rolling_ext.init_rolling(
+            grp, window, min_periods, center, on
+        )
 
     return _impl
 
@@ -299,8 +302,8 @@ def _gen_rolling_impl(rolling, fname, other=None):
             call_args = f_args = "other, pairwise"
         if fname == "cov":
             call_args = f_args = "other, pairwise, ddof"
-        udf = f"lambda df, window, center, {call_args}: bodo.hiframes.pd_rolling_ext.init_rolling(df, window, center, {on_arg}){selection}.{fname}({f_args})"
-        func_text += f"  return rolling.obj.apply({udf}, rolling.window, rolling.center, {call_args})\n"
+        udf = f"lambda df, window, minp, center, {call_args}: bodo.hiframes.pd_rolling_ext.init_rolling(df, window, minp, center, {on_arg}){selection}.{fname}({f_args})"
+        func_text += f"  return rolling.obj.apply({udf}, rolling.window, rolling.min_periods, rolling.center, {call_args})\n"
         loc_vars = {}
         exec(func_text, {"bodo": bodo}, loc_vars)
         impl = loc_vars["impl"]
