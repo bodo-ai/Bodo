@@ -641,7 +641,7 @@ class SeriesPass:
                 rhs_def = guard(get_definition, self.func_ir, rhs_def.value)
             if rhs_def is not None:
                 assert is_call(rhs_def), "invalid rolling object creation"
-                attr_ind = {"obj": 0, "window": 1, "center": 2}
+                attr_ind = {"obj": 0, "window": 1, "min_periods": 2, "center": 3}
                 assert rhs.attr in attr_ind, "invalid rolling attr"
                 arg_ind = attr_ind[rhs.attr]
                 assign.value = rhs_def.args[arg_ind]
