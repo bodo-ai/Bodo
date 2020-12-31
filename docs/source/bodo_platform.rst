@@ -325,6 +325,10 @@ that the Bodo Platform creates in your account to enable clusters and notebooks.
   * - `IAM Role <https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles.html>`_ for Clusters
     - Allow cluster workers to access resources above
 
+.. note::
+
+    These resources incur additional AWS infrastructure charges and are not included in the Bodo Platform charges.
+
 .. _aws_account_cleanup:
 
 AWS Account Cleanup
@@ -376,8 +380,8 @@ Most of cluster creation failures are usually due to one of the following:
 - AWS does not have enough of the requested resources (such as some of the large EC2 instances)
 
 In case of failure, the logs are made available on the platform and should provide some details regarding why the failure occurred. Even though cluster creation was not successful, some AWS resources may still
-have been provisioned. Click on the delete icon to remove all the created resources. You can try to create a cluster again after addressing the underlying
-issue such as increasing limits or providing AWS credentials with the required permissions.
+have been provisioned. Click on the delete icon to remove all the created resources, otherwise you may incur charges for the provisioned AWS resources. 
+You can try to create a cluster again after addressing the underlying issue such as increasing limits or providing AWS credentials with the required permissions.
 
 Cluster Deletion Fails
 ~~~~~~~~~~~~~~~~~~~~~~
@@ -425,3 +429,19 @@ sections on the `AWS Management Console <https://aws.amazon.com/console/>`_ sinc
    (under `Network & Security`). Select the EIP prefixed with `bodo` and select `Release Elastic IP addresses` under `Actions`.
 
 The steps above should remove the organization level resources provisioned by Bodo in your AWS environment.
+
+.. _aws_billing:
+
+Billing
+-------
+
+Users subscribed to the Bodo Platform through the AWS Marketplace will be charged for their use of the platform as part
+of their regular AWS bill. The platform charges are based on the type of instances deployed and the duration of their usage (to the nearest minute).
+The hourly rate for the supported instance types can be found on our `website <https://bodo.ai/aws-pricing>`_.
+For any cluster deployed through the platform, users are charged starting from when the cluster has been successfully deployed, 
+until the time the user requests the cluster to be removed. 
+
+**Note:** Users are not charged in case of failures in cluster creation.
+
+As mentioned previously in :ref:`resources_created_in_aws_env`, the AWS resources set up by the platform in your AWS environment
+incur additional AWS infrastructure charges, and are not included in the Bodo Platform charges.
