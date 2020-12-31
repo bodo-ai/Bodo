@@ -3,6 +3,8 @@
 Release Notes
 =============
 
+- :ref:`Bodo.ai 2020.12 Release <December_2020>`
+
 - :ref:`Bodo.ai 2020.11 Release <November_2020>`
 
 - :ref:`Bodo.ai 2020.10 Release <October_2020>`
