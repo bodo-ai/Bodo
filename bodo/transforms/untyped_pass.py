@@ -50,6 +50,7 @@ from bodo.io.parquet_pio import ParquetHandler
 from bodo.hiframes.pd_categorical_ext import PDCategoricalDtype, CategoricalArray
 import bodo.hiframes.pd_dataframe_ext
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
+from bodo.transforms.typing_pass import _create_const_var
 from bodo.utils.transform import (
     get_const_value,
     get_const_value_inner,
@@ -513,7 +514,7 @@ class UntypedPass:
         new_nodes = [ir.Assign(ir.Const("__bodo_tup", loc), sentinel_var, loc)]
         tup_items = (
             [sentinel_var]
-            + [t[0] for t in build_map.items]
+            + [_create_const_var(k, "dict_key", scope, loc, new_nodes) for k in keys]
             + [t[1] for t in build_map.items]
         )
         new_nodes.append(ir.Assign(ir.Expr.build_tuple(tup_items, loc), tup_var, loc))
