@@ -2477,13 +2477,13 @@ class SeriesPass:
 
         if func_name == "rolling_corr":
 
-            def rolling_corr_impl(arr, other, win, center):  # pragma: no cover
-                cov = bodo.hiframes.rolling.rolling_cov(arr, other, win, center)
+            def rolling_corr_impl(arr, other, win, minp, center):  # pragma: no cover
+                cov = bodo.hiframes.rolling.rolling_cov(arr, other, win, minp, center)
                 a_std = bodo.hiframes.rolling.rolling_fixed(
-                    arr, None, win, center, "std"
+                    arr, None, win, minp, center, "std"
                 )
                 b_std = bodo.hiframes.rolling.rolling_fixed(
-                    other, None, win, center, "std"
+                    other, None, win, minp, center, "std"
                 )
                 return cov / (a_std * b_std)
 
@@ -2491,20 +2491,24 @@ class SeriesPass:
 
         if func_name == "rolling_cov":
 
-            def rolling_cov_impl(arr, other, w, center):  # pragma: no cover
+            def rolling_cov_impl(arr, other, w, minp, center):  # pragma: no cover
                 ddof = 1
                 X = arr.astype(np.float64)
                 Y = other.astype(np.float64)
                 XpY = X + Y
                 XtY = X * Y
                 count = bodo.hiframes.rolling.rolling_fixed(
-                    XpY, None, w, center, "count"
+                    XpY, None, w, minp, center, "count"
                 )
                 mean_XtY = bodo.hiframes.rolling.rolling_fixed(
-                    XtY, None, w, center, "mean"
+                    XtY, None, w, minp, center, "mean"
                 )
-                mean_X = bodo.hiframes.rolling.rolling_fixed(X, None, w, center, "mean")
-                mean_Y = bodo.hiframes.rolling.rolling_fixed(Y, None, w, center, "mean")
+                mean_X = bodo.hiframes.rolling.rolling_fixed(
+                    X, None, w, minp, center, "mean"
+                )
+                mean_Y = bodo.hiframes.rolling.rolling_fixed(
+                    Y, None, w, minp, center, "mean"
+                )
                 bias_adj = count / (count - ddof)
                 return (mean_XtY - mean_X * mean_Y) * bias_adj
 

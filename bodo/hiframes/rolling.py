@@ -73,14 +73,14 @@ def lower_rolling_corr_dummy(context, builder, sig, args):
 
 @overload(rolling_fixed, no_unliteral=True)
 def overload_rolling_fixed(
-    arr, index_arr, win, center, fname, raw=True, parallel=False
+    arr, index_arr, win, minp, center, fname, raw=True, parallel=False
 ):
     assert is_overload_constant_bool(raw), "raw argument should be constant bool"
     # UDF case
     if is_const_func_type(fname):
         func = _get_apply_func(fname)
-        return lambda arr, index_arr, win, center, fname, raw=True, parallel=False: roll_fixed_apply(
-            arr, index_arr, win, center, parallel, func, raw
+        return lambda arr, index_arr, win, minp, center, fname, raw=True, parallel=False: roll_fixed_apply(
+            arr, index_arr, win, minp, center, parallel, func, raw
         )  # pragma: no cover
 
     assert is_overload_constant_str(fname)
@@ -99,26 +99,34 @@ def overload_rolling_fixed(
         exec(func_text, {"np": np}, loc_vars)
         kernel_func = numba.njit(loc_vars["kernel_func"])
 
-        return lambda arr, index_arr, win, center, fname, raw=True, parallel=False: roll_fixed_apply(
-            arr, index_arr, win, center, parallel, kernel_func
+        return lambda arr, index_arr, win, minp, center, fname, raw=True, parallel=False: roll_fixed_apply(
+            arr, index_arr, win, minp, center, parallel, kernel_func
         )  # pragma: no cover
 
     init_kernel, add_kernel, remove_kernel, calc_kernel = linear_kernels[func_name]
-    return lambda arr, index_arr, win, center, fname, raw=True, parallel=False: roll_fixed_linear_generic(
-        arr, win, center, parallel, init_kernel, add_kernel, remove_kernel, calc_kernel
+    return lambda arr, index_arr, win, minp, center, fname, raw=True, parallel=False: roll_fixed_linear_generic(
+        arr,
+        win,
+        minp,
+        center,
+        parallel,
+        init_kernel,
+        add_kernel,
+        remove_kernel,
+        calc_kernel,
     )  # pragma: no cover
 
 
 @overload(rolling_variable, no_unliteral=True)
 def overload_rolling_variable(
-    arr, on_arr, index_arr, win, center, fname, raw=True, parallel=False
+    arr, on_arr, index_arr, win, minp, center, fname, raw=True, parallel=False
 ):
     assert is_overload_constant_bool(raw)
     # UDF case
     if is_const_func_type(fname):
         func = _get_apply_func(fname)
-        return lambda arr, on_arr, index_arr, win, center, fname, raw=True, parallel=False: roll_variable_apply(
-            arr, on_arr, index_arr, win, center, parallel, func, raw
+        return lambda arr, on_arr, index_arr, win, minp, center, fname, raw=True, parallel=False: roll_variable_apply(
+            arr, on_arr, index_arr, win, minp, center, parallel, func, raw
         )  # pragma: no cover
 
     assert is_overload_constant_str(fname)
@@ -140,15 +148,16 @@ def overload_rolling_variable(
         exec(func_text, {"np": np, "dropna": _dropna}, loc_vars)
         kernel_func = numba.njit(loc_vars["kernel_func"])
 
-        return lambda arr, on_arr, index_arr, win, center, fname, raw=True, parallel=False: roll_variable_apply(
-            arr, on_arr, index_arr, win, center, parallel, kernel_func
+        return lambda arr, on_arr, index_arr, win, minp, center, fname, raw=True, parallel=False: roll_variable_apply(
+            arr, on_arr, index_arr, win, minp, center, parallel, kernel_func
         )  # pragma: no cover
 
     init_kernel, add_kernel, remove_kernel, calc_kernel = linear_kernels[func_name]
-    return lambda arr, on_arr, index_arr, win, center, fname, raw=True, parallel=False: roll_var_linear_generic(
+    return lambda arr, on_arr, index_arr, win, minp, center, fname, raw=True, parallel=False: roll_var_linear_generic(
         arr,
         on_arr,
         win,
+        minp,
         center,
         parallel,
         init_kernel,
@@ -173,14 +182,13 @@ comm_border_tag = 22  # arbitrary, TODO: revisit comm tags
 
 @register_jitable
 def roll_fixed_linear_generic(
-    in_arr, win, center, parallel, init_data, add_obs, remove_obs, calc_out
+    in_arr, win, minp, center, parallel, init_data, add_obs, remove_obs, calc_out
 ):  # pragma: no cover
     in_arr = prep_values(in_arr)
     rank = bodo.libs.distributed_api.get_rank()
     n_pes = bodo.libs.distributed_api.get_size()
     N = len(in_arr)
     # TODO: support minp arg end_range etc.
-    minp = win
     offset = (win - 1) // 2 if center else 0
 
     if parallel:
@@ -292,28 +300,27 @@ def roll_fixed_linear_generic_seq(
 
 
 def roll_fixed_apply(
-    in_arr, index_arr, win, center, parallel, kernel_func, raw=True
+    in_arr, index_arr, win, minp, center, parallel, kernel_func, raw=True
 ):  # pragma: no cover
     pass
 
 
 @overload(roll_fixed_apply, no_unliteral=True)
 def overload_roll_fixed_apply(
-    in_arr, index_arr, win, center, parallel, kernel_func, raw=True
+    in_arr, index_arr, win, minp, center, parallel, kernel_func, raw=True
 ):
     assert is_overload_constant_bool(raw)
     return roll_fixed_apply_impl
 
 
 def roll_fixed_apply_impl(
-    in_arr, index_arr, win, center, parallel, kernel_func, raw=True
+    in_arr, index_arr, win, minp, center, parallel, kernel_func, raw=True
 ):  # pragma: no cover
     in_arr = prep_values(in_arr)
     rank = bodo.libs.distributed_api.get_rank()
     n_pes = bodo.libs.distributed_api.get_size()
     N = len(in_arr)
     # TODO: support minp arg end_range etc.
-    minp = win
     offset = (win - 1) // 2 if center else 0
     # replace index_arr=None argument (passed when index_arr is not needed) with dummy
     # array to avoid errors
@@ -681,7 +688,16 @@ def overload_offset_to_nanos(w):
 
 @register_jitable
 def roll_var_linear_generic(
-    in_arr, on_arr_dt, win, center, parallel, init_data, add_obs, remove_obs, calc_out
+    in_arr,
+    on_arr_dt,
+    win,
+    minp,
+    center,
+    parallel,
+    init_data,
+    add_obs,
+    remove_obs,
+    calc_out,
 ):  # pragma: no cover
     in_arr = prep_values(in_arr)
     win = offset_to_nanos(win)
@@ -690,7 +706,6 @@ def roll_var_linear_generic(
     on_arr = cast_dt64_arr_to_int(on_arr_dt)
     N = len(in_arr)
     # TODO: support minp arg end_range etc.
-    minp = 1
     # Pandas is right closed by default, TODO: extend to support arg
     left_closed = False
     right_closed = True
@@ -842,21 +857,21 @@ def roll_var_linear_generic_seq(
 
 
 def roll_variable_apply(
-    in_arr, on_arr_dt, index_arr, win, center, parallel, kernel_func, raw=True
+    in_arr, on_arr_dt, index_arr, win, minp, center, parallel, kernel_func, raw=True
 ):  # pragma: no cover
     pass
 
 
 @overload(roll_variable_apply, no_unliteral=True)
 def overload_roll_variable_apply(
-    in_arr, on_arr_dt, index_arr, win, center, parallel, kernel_func, raw=True
+    in_arr, on_arr_dt, index_arr, win, minp, center, parallel, kernel_func, raw=True
 ):
     assert is_overload_constant_bool(raw)
     return roll_variable_apply_impl
 
 
 def roll_variable_apply_impl(
-    in_arr, on_arr_dt, index_arr, win, center, parallel, kernel_func, raw=True
+    in_arr, on_arr_dt, index_arr, win, minp, center, parallel, kernel_func, raw=True
 ):  # pragma: no cover
     in_arr = prep_values(in_arr)
     win = offset_to_nanos(win)
@@ -868,7 +883,6 @@ def roll_variable_apply_impl(
     index_arr = fix_index_arr(index_arr)
     N = len(in_arr)
     # TODO: support minp arg end_range etc.
-    minp = 1
     # Pandas is right closed by default, TODO: extend to support arg
     left_closed = False
     right_closed = True
