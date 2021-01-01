@@ -188,7 +188,6 @@ def roll_fixed_linear_generic(
     rank = bodo.libs.distributed_api.get_rank()
     n_pes = bodo.libs.distributed_api.get_size()
     N = len(in_arr)
-    # TODO: support minp arg end_range etc.
     offset = (win - 1) // 2 if center else 0
 
     if parallel:
@@ -198,6 +197,7 @@ def roll_fixed_linear_generic(
             return _handle_small_data(
                 in_arr,
                 win,
+                minp,
                 center,
                 rank,
                 n_pes,
@@ -220,7 +220,7 @@ def roll_fixed_linear_generic(
         ) = comm_data
 
     output, data = roll_fixed_linear_generic_seq(
-        in_arr, win, center, init_data, add_obs, remove_obs, calc_out
+        in_arr, win, minp, center, init_data, add_obs, remove_obs, calc_out
     )
 
     if parallel:
@@ -260,12 +260,10 @@ def roll_fixed_linear_generic(
 
 @register_jitable
 def roll_fixed_linear_generic_seq(
-    in_arr, win, center, init_data, add_obs, remove_obs, calc_out
+    in_arr, win, minp, center, init_data, add_obs, remove_obs, calc_out
 ):  # pragma: no cover
     data = init_data()
     N = len(in_arr)
-    # TODO: support minp arg end_range etc.
-    minp = win
     offset = (win - 1) // 2 if center else 0
     output = np.empty(N, dtype=np.float64)
     range_endpoint = max(minp, 1) - 1
@@ -320,7 +318,6 @@ def roll_fixed_apply_impl(
     rank = bodo.libs.distributed_api.get_rank()
     n_pes = bodo.libs.distributed_api.get_size()
     N = len(in_arr)
-    # TODO: support minp arg end_range etc.
     offset = (win - 1) // 2 if center else 0
     # replace index_arr=None argument (passed when index_arr is not needed) with dummy
     # array to avoid errors
@@ -635,7 +632,6 @@ def roll_fixed_apply_seq_impl(
 ):  # pragma: no cover
     N = len(in_arr)
     output = np.empty(N, dtype=np.float64)
-    # minp = win
     offset = (win - 1) // 2 if center else 0
 
     # TODO: handle count and minp
@@ -705,7 +701,6 @@ def roll_var_linear_generic(
     n_pes = bodo.libs.distributed_api.get_size()
     on_arr = cast_dt64_arr_to_int(on_arr_dt)
     N = len(in_arr)
-    # TODO: support minp arg end_range etc.
     # Pandas is right closed by default, TODO: extend to support arg
     left_closed = False
     right_closed = True
@@ -716,6 +711,7 @@ def roll_var_linear_generic(
                 in_arr,
                 on_arr,
                 win,
+                minp,
                 rank,
                 n_pes,
                 init_data,
@@ -736,7 +732,7 @@ def roll_var_linear_generic(
 
     start, end = _build_indexer(on_arr, N, win, left_closed, right_closed)
     output = roll_var_linear_generic_seq(
-        in_arr, on_arr, win, start, end, init_data, add_obs, remove_obs, calc_out
+        in_arr, on_arr, win, minp, start, end, init_data, add_obs, remove_obs, calc_out
     )
 
     if parallel:
@@ -823,12 +819,10 @@ def _get_var_recv_starts(
 
 @register_jitable
 def roll_var_linear_generic_seq(
-    in_arr, on_arr, win, start, end, init_data, add_obs, remove_obs, calc_out
+    in_arr, on_arr, win, minp, start, end, init_data, add_obs, remove_obs, calc_out
 ):  # pragma: no cover
     #
     N = len(in_arr)
-    # TODO: support minp arg end_range etc.
-    minp = 1
     output = np.empty(N, np.float64)
 
     data = init_data()
@@ -882,7 +876,6 @@ def roll_variable_apply_impl(
     # array to avoid errors
     index_arr = fix_index_arr(index_arr)
     N = len(in_arr)
-    # TODO: support minp arg end_range etc.
     # Pandas is right closed by default, TODO: extend to support arg
     left_closed = False
     right_closed = True
@@ -890,7 +883,7 @@ def roll_variable_apply_impl(
     if parallel:
         if _is_small_for_parallel_variable(on_arr, win):
             return _handle_small_data_variable_apply(
-                in_arr, on_arr, index_arr, win, rank, n_pes, kernel_func, raw
+                in_arr, on_arr, index_arr, win, minp, rank, n_pes, kernel_func, raw
             )
 
         comm_data = _border_icomm_var(in_arr, on_arr, rank, n_pes, win, in_arr.dtype)
@@ -917,7 +910,7 @@ def roll_variable_apply_impl(
 
     start, end = _build_indexer(on_arr, N, win, left_closed, right_closed)
     output = roll_variable_apply_seq(
-        in_arr, on_arr, index_arr, win, start, end, kernel_func, raw
+        in_arr, on_arr, index_arr, win, minp, start, end, kernel_func, raw
     )
 
     if parallel:
@@ -1046,14 +1039,14 @@ def overload_recv_left_var_compute(
 
 
 def roll_variable_apply_seq(
-    in_arr, on_arr, index_arr, win, start, end, kernel_func, raw
+    in_arr, on_arr, index_arr, win, minp, start, end, kernel_func, raw
 ):  # pragma: no cover
     pass
 
 
 @overload(roll_variable_apply_seq)
 def overload_roll_variable_apply_seq(
-    in_arr, on_arr, index_arr, win, start, end, kernel_func, raw
+    in_arr, on_arr, index_arr, win, minp, start, end, kernel_func, raw
 ):
     assert is_overload_constant_bool(raw)
     if is_overload_true(raw):
@@ -1063,11 +1056,9 @@ def overload_roll_variable_apply_seq(
 
 
 def roll_variable_apply_seq_impl(
-    in_arr, on_arr, index_arr, win, start, end, kernel_func, raw
+    in_arr, on_arr, index_arr, win, minp, start, end, kernel_func, raw
 ):  # pragma: no cover
-    # TODO
     N = len(in_arr)
-    minp = 1
     output = np.empty(N, dtype=np.float64)
 
     # TODO: handle count and minp
@@ -1084,11 +1075,9 @@ def roll_variable_apply_seq_impl(
 
 # TODO(ehsan): avoid code duplication
 def roll_variable_apply_seq_impl_series(
-    in_arr, on_arr, index_arr, win, start, end, kernel_func, raw
+    in_arr, on_arr, index_arr, win, minp, start, end, kernel_func, raw
 ):  # pragma: no cover
-    # TODO
     N = len(in_arr)
-    minp = 1
     output = np.empty(N, dtype=np.float64)
 
     # TODO: handle count and minp
@@ -1695,7 +1684,7 @@ def _is_small_for_parallel(N, halo_size):  # pragma: no cover
 # TODO: refactor small data functions
 @register_jitable
 def _handle_small_data(
-    in_arr, win, center, rank, n_pes, init_data, add_obs, remove_obs, calc_out
+    in_arr, win, minp, center, rank, n_pes, init_data, add_obs, remove_obs, calc_out
 ):  # pragma: no cover
     N = len(in_arr)
     all_N = bodo.libs.distributed_api.dist_reduce(
@@ -1704,7 +1693,7 @@ def _handle_small_data(
     all_in_arr = bodo.libs.distributed_api.gatherv(in_arr)
     if rank == 0:
         all_out, _ = roll_fixed_linear_generic_seq(
-            all_in_arr, win, center, init_data, add_obs, remove_obs, calc_out
+            all_in_arr, win, minp, center, init_data, add_obs, remove_obs, calc_out
         )
     else:
         all_out = np.empty(all_N, np.float64)
@@ -1823,7 +1812,7 @@ def _is_small_for_parallel_variable(on_arr, win_size):  # pragma: no cover
 
 @register_jitable
 def _handle_small_data_variable(
-    in_arr, on_arr, win, rank, n_pes, init_data, add_obs, remove_obs, calc_out
+    in_arr, on_arr, win, minp, rank, n_pes, init_data, add_obs, remove_obs, calc_out
 ):  # pragma: no cover
     N = len(in_arr)
     all_N = bodo.libs.distributed_api.dist_reduce(N, np.int32(Reduce_Type.Sum.value))
@@ -1835,6 +1824,7 @@ def _handle_small_data_variable(
             all_in_arr,
             all_on_arr,
             win,
+            minp,
             start,
             end,
             init_data,
@@ -1855,7 +1845,7 @@ def _handle_small_data_variable(
 
 @register_jitable
 def _handle_small_data_variable_apply(
-    in_arr, on_arr, index_arr, win, rank, n_pes, kernel_func, raw
+    in_arr, on_arr, index_arr, win, minp, rank, n_pes, kernel_func, raw
 ):  # pragma: no cover
     N = len(in_arr)
     all_N = bodo.libs.distributed_api.dist_reduce(N, np.int32(Reduce_Type.Sum.value))
@@ -1865,7 +1855,15 @@ def _handle_small_data_variable_apply(
     if rank == 0:
         start, end = _build_indexer(all_on_arr, all_N, win, False, True)
         all_out = roll_variable_apply_seq(
-            all_in_arr, all_on_arr, all_index_arr, win, start, end, kernel_func, raw
+            all_in_arr,
+            all_on_arr,
+            all_index_arr,
+            win,
+            minp,
+            start,
+            end,
+            kernel_func,
+            raw,
         )
     else:
         all_out = np.empty(all_N, np.float64)
