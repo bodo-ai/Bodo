@@ -576,10 +576,14 @@ def test_create_df_force_const(memory_leak_check):
     Test forcing dataframe column name to be constant in pd.DataFrame()
     """
 
-    def impl(c_name, n):
+    def impl1(c_name, n):
         return pd.DataFrame({"A": np.ones(n), c_name: np.arange(n)})
 
-    check_func(impl, ("BB", 11))
+    def impl2(a, n):
+        return pd.DataFrame({"A": np.ones(n), "B{}".format(a): np.arange(n)})
+
+    check_func(impl1, ("BB", 11))
+    check_func(impl2, (3, 11))
 
 
 @pytest.mark.slow
