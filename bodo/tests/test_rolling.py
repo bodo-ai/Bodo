@@ -98,6 +98,59 @@ def test_column_select(memory_leak_check):
     check_func(impl5, (df,))
 
 
+@pytest.mark.slow
+def test_min_periods(memory_leak_check):
+    """test min_periods argument in rolling calls"""
+    # fixed window
+    def impl1(df, center, minp):
+        return df.rolling(3, center=center, min_periods=minp)[["A", "B"]].mean()
+
+    # fixed window with UDF
+    def impl2(df, center, minp):
+        return df.rolling(3, center=center, min_periods=minp)[["A", "B"]].apply(
+            lambda a: a.sum()
+        )
+
+    # variable window
+    def impl3(df, minp):
+        return df.rolling("2s", min_periods=minp, on="C")[["A", "B"]].mean()
+
+    # variable window with UDF
+    def impl4(df, minp):
+        return df.rolling("2s", min_periods=minp, on="C")[["A", "B"]].apply(
+            lambda a: a.sum()
+        )
+
+    df = pd.DataFrame(
+        {
+            "A": [5, 12, np.nan, np.nan, 3, np.nan],
+            "B": [0, 1, 2, np.nan, 4, np.nan],
+            "C": [
+                pd.Timestamp("20130101 09:00:00"),
+                pd.Timestamp("20130101 09:00:02"),
+                pd.Timestamp("20130101 09:00:03"),
+                pd.Timestamp("20130101 09:00:05"),
+                pd.Timestamp("20130101 09:00:06"),
+                pd.Timestamp("20130101 09:00:07"),
+            ],
+        }
+    )
+    check_func(impl1, (df, False, 1))
+    check_func(impl1, (df, True, 1))
+    check_func(impl1, (df, False, 2))
+    check_func(impl1, (df, True, 2))
+
+    check_func(impl2, (df, False, 1))
+    check_func(impl2, (df, True, 1))
+    check_func(impl2, (df, False, 2))
+    check_func(impl2, (df, True, 2))
+
+    check_func(impl3, (df, 1))
+    check_func(impl3, (df, 2))
+    check_func(impl4, (df, 1))
+    check_func(impl4, (df, 2))
+
+
 def test_apply_raw_false(memory_leak_check):
     """make sure raw=False argument of apply() works (which is the default)"""
 

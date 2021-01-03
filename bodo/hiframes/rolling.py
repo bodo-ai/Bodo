@@ -571,48 +571,6 @@ def overload_recv_left_compute(
     return impl_series
 
 
-def roll_fixed_apply_seq_compute(
-    output, N, win, minp, offset, in_arr, index_arr, kernel_func, raw=True
-):
-    pass
-
-
-@overload(roll_fixed_apply_seq_compute, no_unliteral=True)
-def overload_roll_fixed_apply_seq_compute(
-    output, N, win, minp, offset, in_arr, index_arr, kernel_func, raw=True
-):
-    assert is_overload_constant_bool(raw)
-    if is_overload_true(raw):
-
-        def impl(
-            output, N, win, minp, offset, in_arr, index_arr, kernel_func, raw=True
-        ):  # pragma: no cover
-            ind = 0
-            for i in range(win - 1 - offset, N - offset):
-                data = in_arr[ind : ind + win]
-                if win - np.isnan(data).sum() < minp:
-                    output[i] = np.nan
-                else:
-                    output[i] = kernel_func(data)
-                ind += 1
-
-        return impl
-
-    def impl_series(
-        output, N, win, minp, offset, in_arr, index_arr, kernel_func, raw=True
-    ):  # pragma: no cover
-        ind = 0
-        for i in range(win - 1 - offset, N - offset):
-            data = in_arr[ind : ind + win]
-            if win - np.isnan(data).sum() < minp:
-                output[i] = np.nan
-            else:
-                output[i] = kernel_func(pd.Series(data, index_arr[ind : ind + win]))
-            ind += 1
-
-    return impl_series
-
-
 def roll_fixed_apply_seq(
     in_arr, index_arr, win, minp, center, kernel_func, raw=True
 ):  # pragma: no cover
@@ -623,29 +581,46 @@ def roll_fixed_apply_seq(
 def overload_roll_fixed_apply_seq(
     in_arr, index_arr, win, minp, center, kernel_func, raw=True
 ):
-    assert is_overload_constant_bool(raw)
+    assert is_overload_constant_bool(raw), "'raw' should be constant bool"
+
+    def roll_fixed_apply_seq_impl(
+        in_arr, index_arr, win, minp, center, kernel_func, raw=True
+    ):  # pragma: no cover
+        N = len(in_arr)
+        output = np.empty(N, dtype=np.float64)
+        offset = (win - 1) // 2 if center else 0
+
+        for i in range(0, N):
+            start = max(i - win + 1 + offset, 0)
+            end = min(i + 1 + offset, N)
+            data = in_arr[start:end]
+            # TODO: use np.isfinite() to match some places in Pandas?
+            # https://github.com/pandas-dev/pandas/blob/ddc0256f1526ec35d44f675960dee8403bc28e4a/pandas/_libs/window/aggregations.pyx#L1144
+            if end - start - np.isnan(data).sum() < minp:
+                output[i] = np.nan
+            else:
+                output[i] = apply_func(kernel_func, data, index_arr, start, end, raw)
+
+        return output
+
     return roll_fixed_apply_seq_impl
 
 
-def roll_fixed_apply_seq_impl(
-    in_arr, index_arr, win, minp, center, kernel_func, raw=True
-):  # pragma: no cover
-    N = len(in_arr)
-    output = np.empty(N, dtype=np.float64)
-    offset = (win - 1) // 2 if center else 0
+def apply_func(kernel_func, data, index_arr, start, end, raw):  # pragma: no cover
+    return kernel_func(data)
 
-    # TODO: handle count and minp
-    for i in range(0, min(win - 1, N) - offset):
-        output[i] = np.nan
 
-    roll_fixed_apply_seq_compute(
-        output, N, win, minp, offset, in_arr, index_arr, kernel_func, raw
-    )
+@overload(apply_func, no_unliteral=True)
+def overload_apply_func(kernel_func, data, index_arr, start, end, raw):
+    assert is_overload_constant_bool(raw), "'raw' should be constant bool"
+    if is_overload_true(raw):
+        return lambda kernel_func, data, index_arr, start, end, raw: kernel_func(
+            data
+        )  # pragma: no cover
 
-    for i in range(max(N - offset, 0), N):
-        output[i] = np.nan
-
-    return output
+    return lambda kernel_func, data, index_arr, start, end, raw: kernel_func(
+        pd.Series(data, index_arr[start:end])
+    )  # pragma: no cover
 
 
 def fix_index_arr(A):  # pragma: no cover
@@ -1005,7 +980,7 @@ def overload_recv_left_var_compute(
             for i in range(0, num_zero_starts):
                 halo_ind = recv_starts[i]
                 sub_arr = np.concatenate((l_recv_buff[halo_ind:], in_arr[: i + 1]))
-                if len(sub_arr) >= minp:
+                if len(sub_arr) - np.isnan(sub_arr).sum() >= minp:
                     output[i] = kernel_func(sub_arr)
                 else:
                     output[i] = np.nan
@@ -1030,7 +1005,7 @@ def overload_recv_left_var_compute(
             sub_idx_arr = np.concatenate(
                 (l_recv_buff_idx[halo_ind:], index_arr[: i + 1])
             )
-            if len(sub_arr) >= minp:
+            if len(sub_arr) - np.isnan(sub_arr).sum() >= minp:
                 output[i] = kernel_func(pd.Series(sub_arr, sub_idx_arr))
             else:
                 output[i] = np.nan
@@ -1065,8 +1040,9 @@ def roll_variable_apply_seq_impl(
     for i in range(0, N):
         s = start[i]
         e = end[i]
-        if e - s >= minp:
-            output[i] = kernel_func(in_arr[s:e])
+        data = in_arr[s:e]
+        if e - s - np.isnan(data).sum() >= minp:
+            output[i] = kernel_func(data)
         else:
             output[i] = np.nan
 
@@ -1084,8 +1060,9 @@ def roll_variable_apply_seq_impl_series(
     for i in range(0, N):
         s = start[i]
         e = end[i]
-        if e - s >= minp:
-            output[i] = kernel_func(pd.Series(in_arr[s:e], index_arr[s:e]))
+        data = in_arr[s:e]
+        if e - s - np.isnan(data).sum() >= minp:
+            output[i] = kernel_func(pd.Series(data, index_arr[s:e]))
         else:
             output[i] = np.nan
 
