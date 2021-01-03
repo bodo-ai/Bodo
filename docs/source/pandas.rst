@@ -344,7 +344,7 @@ Function application, GroupBy & Window:
 * :meth:`pandas.Series.apply` (only the `func` argument)
 * :meth:`pandas.Series.map` (only the `arg` argument, which should be a function)
 * :meth:`pandas.Series.groupby` (pass array to `by` argument, or level=0 with regular Index)
-* :meth:`pandas.Series.rolling` (`window` and `center` arguments supported)
+* :meth:`pandas.Series.rolling` (`window`, `min_periods` and `center` arguments supported)
 
 
 Computations / Descriptive Stats:
@@ -557,7 +557,7 @@ Function application, GroupBy & Window:
   `sort=False` is set by default. `as_index` argument is supported but
   `MultiIndex` is not supported yet (will just drop output `MultiIndex`).
 * :meth:`pandas.DataFrame.rolling` `window` argument should be integer or a time
-  offset as a constant string. `center` and `on` arguments are also supported.
+  offset as a constant string. `min_periods`, `center` and `on` arguments are also supported.
 
 Computations / Descriptive Stats:
 
