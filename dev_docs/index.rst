@@ -24,6 +24,7 @@ Welcome to Bodo Development's documentation!
    source/cpp_err_handling
    source/aws_codebuild
    source/customer_faq
+   source/benchmarking
 
 
 Indices and tables

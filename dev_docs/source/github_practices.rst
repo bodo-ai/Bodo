@@ -45,7 +45,14 @@ When opening a PR:
     6. PR should not modify parts that are unrelated to the PR, especially any large amounts of code since that will waste reviewers' time and increases the chances of code conflicts with work-in-progress PRs of others.
     7. All items on PR checklist can be checked off.
 7. Assign reviewers when the PR is ready for review.
-8. When merging PRs:
+8. Avoid using the ``commit`` button in the Github UI when responding to suggestions. Every push to your PR branch
+   triggers AWS Codebuild in CI. As a result, merging several commits will trigger several paralllel builds. If you
+   push a commit to CI that is temporary (either via Github UI or directly pushing to the branch), stop the AWS Codebuild
+   build by clicking ``details`` on the ``AWS CodeBuild BuildBatch us-east-2 (Bodo-PR-Testing)`` check. Then click ``stop batch``.
+   
+   **Important**: You must be signed in to the 427 AWS Account on ``us-east-2`` to view the Codebuild project. If you cannot find
+   the build, try signing out of AWS and sign back in with your 427 IAM role.
+9. When merging PRs:
     1. Note that it is better to keep commits in the master branch atomic (as in the commit passes CI). One good reason is because "git bisect" (which is very useful to find the commit that introduced a bug that was detected days after a commit is merged) relies on this to be effective.
     2. Some PRs have many commits, many of which are very small and just fix typos, small errors, etc. This history is not useful for the master branch and makes it harder to browse the commit history on master. The easiest way to simplify the history of a PR is to squash and merge (using GitHub UI) and keep the interesting parts of the history in the commit message.
     3. Try to have a descriptive commit message that summarizes the changes made (see point 2 above).
