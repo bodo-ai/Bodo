@@ -112,6 +112,20 @@ def test_cmp_binary_op(op, memory_leak_check):
         check_func(test_impl, ("CCD", A2))
 
 
+def test_f_strings():
+    """test f-string support, which requires bytecode handling"""
+    # requires formatting (FORMAT_VALUE) and concatenation (BUILD_STRINGS)
+    def impl1(a):
+        return f"AA_{a+3}_B"
+
+    # does not require concatenation
+    def impl2(a):
+        return f"{a+2}"
+
+    check_func(impl1, (3,))
+    check_func(impl2, (4,))
+
+
 def test_get_list_string(memory_leak_check):
     """In this test bodo returns the array [] when pandas returns NaN in that case.
     We are forced to implement things in this way since type stability is required for
