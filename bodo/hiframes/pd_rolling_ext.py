@@ -15,6 +15,7 @@ from numba.extending import (
     lower_builtin,
     make_attribute_wrapper,
     models,
+    overload,
     overload_method,
     register_model,
 )
@@ -28,6 +29,7 @@ from bodo.utils.typing import (
     BodoError,
     check_unsupported_args,
     get_literal_value,
+    is_overload_none,
     raise_const_error,
 )
 
@@ -63,6 +65,7 @@ class RollingModel(models.StructModel):
         members = [
             ("obj", fe_type.obj_type),
             ("window", fe_type.window_type),
+            ("min_periods", types.int64),
             ("center", types.bool_),
         ]
         super(RollingModel, self).__init__(dmm, fe_type, members)
@@ -71,6 +74,7 @@ class RollingModel(models.StructModel):
 make_attribute_wrapper(RollingType, "obj", "obj")
 make_attribute_wrapper(RollingType, "window", "window")
 make_attribute_wrapper(RollingType, "center", "center")
+make_attribute_wrapper(RollingType, "min_periods", "min_periods")
 
 
 @overload_method(DataFrameType, "rolling", inline="always", no_unliteral=True)
@@ -84,13 +88,11 @@ def df_rolling_overload(
     axis=0,
     closed=None,
 ):
-    unsupported_args = dict(
-        min_periods=min_periods, win_type=win_type, axis=axis, closed=closed
-    )
-    arg_defaults = dict(min_periods=None, win_type=None, axis=0, closed=None)
+    unsupported_args = dict(win_type=win_type, axis=axis, closed=closed)
+    arg_defaults = dict(win_type=None, axis=0, closed=None)
     check_unsupported_args("DataFrame.rolling", unsupported_args, arg_defaults)
 
-    def _impl(
+    def impl(
         df,
         window,
         min_periods=None,
@@ -100,9 +102,12 @@ def df_rolling_overload(
         axis=0,
         closed=None,
     ):  # pragma: no cover
-        return bodo.hiframes.pd_rolling_ext.init_rolling(df, window, center, on)
+        min_periods = _handle_default_min_periods(min_periods, window)
+        return bodo.hiframes.pd_rolling_ext.init_rolling(
+            df, window, min_periods, center, on
+        )
 
-    return _impl
+    return impl
 
 
 @overload_method(SeriesType, "rolling", inline="always", no_unliteral=True)
@@ -116,10 +121,8 @@ def overload_series_rolling(
     axis=0,
     closed=None,
 ):
-    unsupported_args = dict(
-        min_periods=min_periods, win_type=win_type, axis=axis, closed=closed
-    )
-    arg_defaults = dict(min_periods=None, win_type=None, axis=0, closed=None)
+    unsupported_args = dict(win_type=win_type, axis=axis, closed=closed)
+    arg_defaults = dict(win_type=None, axis=0, closed=None)
     check_unsupported_args("Series.rolling", unsupported_args, arg_defaults)
 
     def impl(
@@ -132,29 +135,36 @@ def overload_series_rolling(
         axis=0,
         closed=None,
     ):  # pragma: no cover
-        return bodo.hiframes.pd_rolling_ext.init_rolling(df, window, center, on)
+        min_periods = _handle_default_min_periods(min_periods, window)
+        return bodo.hiframes.pd_rolling_ext.init_rolling(
+            df, window, min_periods, center, on
+        )
 
     return impl
 
 
 @intrinsic
-def init_rolling(typingctx, obj_type, window_type, center_type, on_type=None):
+def init_rolling(
+    typingctx, obj_type, window_type, min_periods_type, center_type, on_type=None
+):
     """Initialize a rolling object. The data object inside can be a DataFrame, Series,
     or GroupBy."""
 
     def codegen(context, builder, signature, args):
-        (obj_val, window_val, center_val, _) = args
+        (obj_val, window_val, min_periods_val, center_val, _) = args
         rolling_type = signature.return_type
 
         rolling_val = cgutils.create_struct_proxy(rolling_type)(context, builder)
         rolling_val.obj = obj_val
         rolling_val.window = window_val
+        rolling_val.min_periods = min_periods_val
         rolling_val.center = center_val
 
         # increase refcount of stored values
         context.nrt.incref(builder, signature.args[0], obj_val)
         context.nrt.incref(builder, signature.args[1], window_val)
-        context.nrt.incref(builder, signature.args[2], center_val)
+        context.nrt.incref(builder, signature.args[2], min_periods_val)
+        context.nrt.incref(builder, signature.args[3], center_val)
 
         return rolling_val._getvalue()
 
@@ -169,7 +179,27 @@ def init_rolling(typingctx, obj_type, window_type, center_type, on_type=None):
         ), f"invalid obj type for rolling: {obj_type}"
         selection = obj_type.selection
     rolling_type = RollingType(obj_type, window_type, on, selection, False)
-    return rolling_type(obj_type, window_type, center_type, on_type), codegen
+    return (
+        rolling_type(obj_type, window_type, min_periods_type, center_type, on_type),
+        codegen,
+    )
+
+
+def _handle_default_min_periods(min_periods, window):  # pragma: no cover
+    return min_periods
+
+
+@overload(_handle_default_min_periods)
+def overload_handle_default_min_periods(min_periods, window):
+    """ handle default values for the min_periods kwarg. """
+    if is_overload_none(min_periods):
+        # return win_size if fixed, or 1 if win_type is variable
+        if isinstance(window, types.Integer):
+            return lambda min_periods, window: window  # pragma: no cover
+        else:
+            return lambda min_periods, window: 1  # pragma: no cover
+    else:
+        return lambda min_periods, window: min_periods  # pragma: no cover
 
 
 def _gen_df_rolling_out_data(rolling):
@@ -188,7 +218,7 @@ def _gen_df_rolling_out_data(rolling):
 
     if isinstance(rolling.obj_type, SeriesType):
         return (
-            f"bodo.hiframes.rolling.rolling_{ftype}(bodo.hiframes.pd_series_ext.get_series_data(df), {on_arr_arg}index_arr, window, center, func, raw)",
+            f"bodo.hiframes.rolling.rolling_{ftype}(bodo.hiframes.pd_series_ext.get_series_data(df), {on_arr_arg}index_arr, window, minp, center, func, raw)",
             on_arr,
         )
 
@@ -200,7 +230,7 @@ def _gen_df_rolling_out_data(rolling):
                 continue
             out = f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {c_ind})"
         else:
-            out = f"bodo.hiframes.rolling.rolling_{ftype}(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {c_ind}), {on_arr_arg}index_arr, window, center, func, raw)"
+            out = f"bodo.hiframes.rolling.rolling_{ftype}(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {c_ind}), {on_arr_arg}index_arr, window, minp, center, func, raw)"
         data_args.append(out)
 
     return ", ".join(data_args), on_arr
@@ -240,7 +270,10 @@ def groupby_rolling_overload(
         axis=0,
         closed=None,
     ):  # pragma: no cover
-        return bodo.hiframes.pd_rolling_ext.init_rolling(grp, window, center, on)
+        min_periods = _handle_default_min_periods(min_periods, window)
+        return bodo.hiframes.pd_rolling_ext.init_rolling(
+            grp, window, min_periods, center, on
+        )
 
     return _impl
 
@@ -269,8 +302,8 @@ def _gen_rolling_impl(rolling, fname, other=None):
             call_args = f_args = "other, pairwise"
         if fname == "cov":
             call_args = f_args = "other, pairwise, ddof"
-        udf = f"lambda df, window, center, {call_args}: bodo.hiframes.pd_rolling_ext.init_rolling(df, window, center, {on_arg}){selection}.{fname}({f_args})"
-        func_text += f"  return rolling.obj.apply({udf}, rolling.window, rolling.center, {call_args})\n"
+        udf = f"lambda df, window, minp, center, {call_args}: bodo.hiframes.pd_rolling_ext.init_rolling(df, window, minp, center, {on_arg}){selection}.{fname}({f_args})"
+        func_text += f"  return rolling.obj.apply({udf}, rolling.window, rolling.min_periods, rolling.center, {call_args})\n"
         loc_vars = {}
         exec(func_text, {"bodo": bodo}, loc_vars)
         impl = loc_vars["impl"]
@@ -311,6 +344,7 @@ def _gen_rolling_impl(rolling, fname, other=None):
     header += f"  name = {name}\n"
     header += "  window = rolling.window\n"
     header += "  center = rolling.center\n"
+    header += "  minp = rolling.min_periods\n"
     header += f"  on_arr = {on_arr}\n"
     if fname == "apply":
         header += f"  index_arr = bodo.utils.conversion.index_to_array(index)\n"
@@ -393,7 +427,7 @@ def _gen_corr_cov_out_data(out_cols, df_cols, other_cols, window_type, func_name
     # Series case
     if out_cols is None:
         return (
-            f"bodo.hiframes.rolling.rolling_{func_name}(bodo.hiframes.pd_series_ext.get_series_data(df), bodo.hiframes.pd_series_ext.get_series_data(other), {on_arr_arg}window, center)",
+            f"bodo.hiframes.rolling.rolling_{func_name}(bodo.hiframes.pd_series_ext.get_series_data(df), bodo.hiframes.pd_series_ext.get_series_data(other), {on_arr_arg}window, minp, center)",
             on_arr,
         )
 
@@ -402,7 +436,7 @@ def _gen_corr_cov_out_data(out_cols, df_cols, other_cols, window_type, func_name
         if c in df_cols and c in other_cols:
             i = df_cols.index(c)
             j = other_cols.index(c)
-            out = f"bodo.hiframes.rolling.rolling_{func_name}(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i}), bodo.hiframes.pd_dataframe_ext.get_dataframe_data(other, {j}), {on_arr_arg}window, center)"
+            out = f"bodo.hiframes.rolling.rolling_{func_name}(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i}), bodo.hiframes.pd_dataframe_ext.get_dataframe_data(other, {j}), {on_arr_arg}window, minp, center)"
         else:
             out = "np.full(len(df), np.nan)"
         data_args.append(out)

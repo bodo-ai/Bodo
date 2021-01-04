@@ -73,14 +73,14 @@ def lower_rolling_corr_dummy(context, builder, sig, args):
 
 @overload(rolling_fixed, no_unliteral=True)
 def overload_rolling_fixed(
-    arr, index_arr, win, center, fname, raw=True, parallel=False
+    arr, index_arr, win, minp, center, fname, raw=True, parallel=False
 ):
     assert is_overload_constant_bool(raw), "raw argument should be constant bool"
     # UDF case
     if is_const_func_type(fname):
         func = _get_apply_func(fname)
-        return lambda arr, index_arr, win, center, fname, raw=True, parallel=False: roll_fixed_apply(
-            arr, index_arr, win, center, parallel, func, raw
+        return lambda arr, index_arr, win, minp, center, fname, raw=True, parallel=False: roll_fixed_apply(
+            arr, index_arr, win, minp, center, parallel, func, raw
         )  # pragma: no cover
 
     assert is_overload_constant_str(fname)
@@ -99,26 +99,34 @@ def overload_rolling_fixed(
         exec(func_text, {"np": np}, loc_vars)
         kernel_func = numba.njit(loc_vars["kernel_func"])
 
-        return lambda arr, index_arr, win, center, fname, raw=True, parallel=False: roll_fixed_apply(
-            arr, index_arr, win, center, parallel, kernel_func
+        return lambda arr, index_arr, win, minp, center, fname, raw=True, parallel=False: roll_fixed_apply(
+            arr, index_arr, win, minp, center, parallel, kernel_func
         )  # pragma: no cover
 
     init_kernel, add_kernel, remove_kernel, calc_kernel = linear_kernels[func_name]
-    return lambda arr, index_arr, win, center, fname, raw=True, parallel=False: roll_fixed_linear_generic(
-        arr, win, center, parallel, init_kernel, add_kernel, remove_kernel, calc_kernel
+    return lambda arr, index_arr, win, minp, center, fname, raw=True, parallel=False: roll_fixed_linear_generic(
+        arr,
+        win,
+        minp,
+        center,
+        parallel,
+        init_kernel,
+        add_kernel,
+        remove_kernel,
+        calc_kernel,
     )  # pragma: no cover
 
 
 @overload(rolling_variable, no_unliteral=True)
 def overload_rolling_variable(
-    arr, on_arr, index_arr, win, center, fname, raw=True, parallel=False
+    arr, on_arr, index_arr, win, minp, center, fname, raw=True, parallel=False
 ):
     assert is_overload_constant_bool(raw)
     # UDF case
     if is_const_func_type(fname):
         func = _get_apply_func(fname)
-        return lambda arr, on_arr, index_arr, win, center, fname, raw=True, parallel=False: roll_variable_apply(
-            arr, on_arr, index_arr, win, center, parallel, func, raw
+        return lambda arr, on_arr, index_arr, win, minp, center, fname, raw=True, parallel=False: roll_variable_apply(
+            arr, on_arr, index_arr, win, minp, center, parallel, func, raw
         )  # pragma: no cover
 
     assert is_overload_constant_str(fname)
@@ -140,15 +148,16 @@ def overload_rolling_variable(
         exec(func_text, {"np": np, "dropna": _dropna}, loc_vars)
         kernel_func = numba.njit(loc_vars["kernel_func"])
 
-        return lambda arr, on_arr, index_arr, win, center, fname, raw=True, parallel=False: roll_variable_apply(
-            arr, on_arr, index_arr, win, center, parallel, kernel_func
+        return lambda arr, on_arr, index_arr, win, minp, center, fname, raw=True, parallel=False: roll_variable_apply(
+            arr, on_arr, index_arr, win, minp, center, parallel, kernel_func
         )  # pragma: no cover
 
     init_kernel, add_kernel, remove_kernel, calc_kernel = linear_kernels[func_name]
-    return lambda arr, on_arr, index_arr, win, center, fname, raw=True, parallel=False: roll_var_linear_generic(
+    return lambda arr, on_arr, index_arr, win, minp, center, fname, raw=True, parallel=False: roll_var_linear_generic(
         arr,
         on_arr,
         win,
+        minp,
         center,
         parallel,
         init_kernel,
@@ -173,14 +182,12 @@ comm_border_tag = 22  # arbitrary, TODO: revisit comm tags
 
 @register_jitable
 def roll_fixed_linear_generic(
-    in_arr, win, center, parallel, init_data, add_obs, remove_obs, calc_out
+    in_arr, win, minp, center, parallel, init_data, add_obs, remove_obs, calc_out
 ):  # pragma: no cover
     in_arr = prep_values(in_arr)
     rank = bodo.libs.distributed_api.get_rank()
     n_pes = bodo.libs.distributed_api.get_size()
     N = len(in_arr)
-    # TODO: support minp arg end_range etc.
-    minp = win
     offset = (win - 1) // 2 if center else 0
 
     if parallel:
@@ -190,6 +197,7 @@ def roll_fixed_linear_generic(
             return _handle_small_data(
                 in_arr,
                 win,
+                minp,
                 center,
                 rank,
                 n_pes,
@@ -212,7 +220,7 @@ def roll_fixed_linear_generic(
         ) = comm_data
 
     output, data = roll_fixed_linear_generic_seq(
-        in_arr, win, center, init_data, add_obs, remove_obs, calc_out
+        in_arr, win, minp, center, init_data, add_obs, remove_obs, calc_out
     )
 
     if parallel:
@@ -252,12 +260,10 @@ def roll_fixed_linear_generic(
 
 @register_jitable
 def roll_fixed_linear_generic_seq(
-    in_arr, win, center, init_data, add_obs, remove_obs, calc_out
+    in_arr, win, minp, center, init_data, add_obs, remove_obs, calc_out
 ):  # pragma: no cover
     data = init_data()
     N = len(in_arr)
-    # TODO: support minp arg end_range etc.
-    minp = win
     offset = (win - 1) // 2 if center else 0
     output = np.empty(N, dtype=np.float64)
     range_endpoint = max(minp, 1) - 1
@@ -292,28 +298,26 @@ def roll_fixed_linear_generic_seq(
 
 
 def roll_fixed_apply(
-    in_arr, index_arr, win, center, parallel, kernel_func, raw=True
+    in_arr, index_arr, win, minp, center, parallel, kernel_func, raw=True
 ):  # pragma: no cover
     pass
 
 
 @overload(roll_fixed_apply, no_unliteral=True)
 def overload_roll_fixed_apply(
-    in_arr, index_arr, win, center, parallel, kernel_func, raw=True
+    in_arr, index_arr, win, minp, center, parallel, kernel_func, raw=True
 ):
     assert is_overload_constant_bool(raw)
     return roll_fixed_apply_impl
 
 
 def roll_fixed_apply_impl(
-    in_arr, index_arr, win, center, parallel, kernel_func, raw=True
+    in_arr, index_arr, win, minp, center, parallel, kernel_func, raw=True
 ):  # pragma: no cover
     in_arr = prep_values(in_arr)
     rank = bodo.libs.distributed_api.get_rank()
     n_pes = bodo.libs.distributed_api.get_size()
     N = len(in_arr)
-    # TODO: support minp arg end_range etc.
-    minp = win
     offset = (win - 1) // 2 if center else 0
     # replace index_arr=None argument (passed when index_arr is not needed) with dummy
     # array to avoid errors
@@ -567,48 +571,6 @@ def overload_recv_left_compute(
     return impl_series
 
 
-def roll_fixed_apply_seq_compute(
-    output, N, win, minp, offset, in_arr, index_arr, kernel_func, raw=True
-):
-    pass
-
-
-@overload(roll_fixed_apply_seq_compute, no_unliteral=True)
-def overload_roll_fixed_apply_seq_compute(
-    output, N, win, minp, offset, in_arr, index_arr, kernel_func, raw=True
-):
-    assert is_overload_constant_bool(raw)
-    if is_overload_true(raw):
-
-        def impl(
-            output, N, win, minp, offset, in_arr, index_arr, kernel_func, raw=True
-        ):  # pragma: no cover
-            ind = 0
-            for i in range(win - 1 - offset, N - offset):
-                data = in_arr[ind : ind + win]
-                if win - np.isnan(data).sum() < minp:
-                    output[i] = np.nan
-                else:
-                    output[i] = kernel_func(data)
-                ind += 1
-
-        return impl
-
-    def impl_series(
-        output, N, win, minp, offset, in_arr, index_arr, kernel_func, raw=True
-    ):  # pragma: no cover
-        ind = 0
-        for i in range(win - 1 - offset, N - offset):
-            data = in_arr[ind : ind + win]
-            if win - np.isnan(data).sum() < minp:
-                output[i] = np.nan
-            else:
-                output[i] = kernel_func(pd.Series(data, index_arr[ind : ind + win]))
-            ind += 1
-
-    return impl_series
-
-
 def roll_fixed_apply_seq(
     in_arr, index_arr, win, minp, center, kernel_func, raw=True
 ):  # pragma: no cover
@@ -619,30 +581,46 @@ def roll_fixed_apply_seq(
 def overload_roll_fixed_apply_seq(
     in_arr, index_arr, win, minp, center, kernel_func, raw=True
 ):
-    assert is_overload_constant_bool(raw)
+    assert is_overload_constant_bool(raw), "'raw' should be constant bool"
+
+    def roll_fixed_apply_seq_impl(
+        in_arr, index_arr, win, minp, center, kernel_func, raw=True
+    ):  # pragma: no cover
+        N = len(in_arr)
+        output = np.empty(N, dtype=np.float64)
+        offset = (win - 1) // 2 if center else 0
+
+        for i in range(0, N):
+            start = max(i - win + 1 + offset, 0)
+            end = min(i + 1 + offset, N)
+            data = in_arr[start:end]
+            # TODO: use np.isfinite() to match some places in Pandas?
+            # https://github.com/pandas-dev/pandas/blob/ddc0256f1526ec35d44f675960dee8403bc28e4a/pandas/_libs/window/aggregations.pyx#L1144
+            if end - start - np.isnan(data).sum() < minp:
+                output[i] = np.nan
+            else:
+                output[i] = apply_func(kernel_func, data, index_arr, start, end, raw)
+
+        return output
+
     return roll_fixed_apply_seq_impl
 
 
-def roll_fixed_apply_seq_impl(
-    in_arr, index_arr, win, minp, center, kernel_func, raw=True
-):  # pragma: no cover
-    N = len(in_arr)
-    output = np.empty(N, dtype=np.float64)
-    # minp = win
-    offset = (win - 1) // 2 if center else 0
+def apply_func(kernel_func, data, index_arr, start, end, raw):  # pragma: no cover
+    return kernel_func(data)
 
-    # TODO: handle count and minp
-    for i in range(0, min(win - 1, N) - offset):
-        output[i] = np.nan
 
-    roll_fixed_apply_seq_compute(
-        output, N, win, minp, offset, in_arr, index_arr, kernel_func, raw
-    )
+@overload(apply_func, no_unliteral=True)
+def overload_apply_func(kernel_func, data, index_arr, start, end, raw):
+    assert is_overload_constant_bool(raw), "'raw' should be constant bool"
+    if is_overload_true(raw):
+        return lambda kernel_func, data, index_arr, start, end, raw: kernel_func(
+            data
+        )  # pragma: no cover
 
-    for i in range(max(N - offset, 0), N):
-        output[i] = np.nan
-
-    return output
+    return lambda kernel_func, data, index_arr, start, end, raw: kernel_func(
+        pd.Series(data, index_arr[start:end])
+    )  # pragma: no cover
 
 
 def fix_index_arr(A):  # pragma: no cover
@@ -681,7 +659,16 @@ def overload_offset_to_nanos(w):
 
 @register_jitable
 def roll_var_linear_generic(
-    in_arr, on_arr_dt, win, center, parallel, init_data, add_obs, remove_obs, calc_out
+    in_arr,
+    on_arr_dt,
+    win,
+    minp,
+    center,
+    parallel,
+    init_data,
+    add_obs,
+    remove_obs,
+    calc_out,
 ):  # pragma: no cover
     in_arr = prep_values(in_arr)
     win = offset_to_nanos(win)
@@ -689,8 +676,6 @@ def roll_var_linear_generic(
     n_pes = bodo.libs.distributed_api.get_size()
     on_arr = cast_dt64_arr_to_int(on_arr_dt)
     N = len(in_arr)
-    # TODO: support minp arg end_range etc.
-    minp = 1
     # Pandas is right closed by default, TODO: extend to support arg
     left_closed = False
     right_closed = True
@@ -701,6 +686,7 @@ def roll_var_linear_generic(
                 in_arr,
                 on_arr,
                 win,
+                minp,
                 rank,
                 n_pes,
                 init_data,
@@ -721,7 +707,7 @@ def roll_var_linear_generic(
 
     start, end = _build_indexer(on_arr, N, win, left_closed, right_closed)
     output = roll_var_linear_generic_seq(
-        in_arr, on_arr, win, start, end, init_data, add_obs, remove_obs, calc_out
+        in_arr, on_arr, win, minp, start, end, init_data, add_obs, remove_obs, calc_out
     )
 
     if parallel:
@@ -808,12 +794,10 @@ def _get_var_recv_starts(
 
 @register_jitable
 def roll_var_linear_generic_seq(
-    in_arr, on_arr, win, start, end, init_data, add_obs, remove_obs, calc_out
+    in_arr, on_arr, win, minp, start, end, init_data, add_obs, remove_obs, calc_out
 ):  # pragma: no cover
     #
     N = len(in_arr)
-    # TODO: support minp arg end_range etc.
-    minp = 1
     output = np.empty(N, np.float64)
 
     data = init_data()
@@ -842,21 +826,21 @@ def roll_var_linear_generic_seq(
 
 
 def roll_variable_apply(
-    in_arr, on_arr_dt, index_arr, win, center, parallel, kernel_func, raw=True
+    in_arr, on_arr_dt, index_arr, win, minp, center, parallel, kernel_func, raw=True
 ):  # pragma: no cover
     pass
 
 
 @overload(roll_variable_apply, no_unliteral=True)
 def overload_roll_variable_apply(
-    in_arr, on_arr_dt, index_arr, win, center, parallel, kernel_func, raw=True
+    in_arr, on_arr_dt, index_arr, win, minp, center, parallel, kernel_func, raw=True
 ):
     assert is_overload_constant_bool(raw)
     return roll_variable_apply_impl
 
 
 def roll_variable_apply_impl(
-    in_arr, on_arr_dt, index_arr, win, center, parallel, kernel_func, raw=True
+    in_arr, on_arr_dt, index_arr, win, minp, center, parallel, kernel_func, raw=True
 ):  # pragma: no cover
     in_arr = prep_values(in_arr)
     win = offset_to_nanos(win)
@@ -867,8 +851,6 @@ def roll_variable_apply_impl(
     # array to avoid errors
     index_arr = fix_index_arr(index_arr)
     N = len(in_arr)
-    # TODO: support minp arg end_range etc.
-    minp = 1
     # Pandas is right closed by default, TODO: extend to support arg
     left_closed = False
     right_closed = True
@@ -876,7 +858,7 @@ def roll_variable_apply_impl(
     if parallel:
         if _is_small_for_parallel_variable(on_arr, win):
             return _handle_small_data_variable_apply(
-                in_arr, on_arr, index_arr, win, rank, n_pes, kernel_func, raw
+                in_arr, on_arr, index_arr, win, minp, rank, n_pes, kernel_func, raw
             )
 
         comm_data = _border_icomm_var(in_arr, on_arr, rank, n_pes, win, in_arr.dtype)
@@ -903,7 +885,7 @@ def roll_variable_apply_impl(
 
     start, end = _build_indexer(on_arr, N, win, left_closed, right_closed)
     output = roll_variable_apply_seq(
-        in_arr, on_arr, index_arr, win, start, end, kernel_func, raw
+        in_arr, on_arr, index_arr, win, minp, start, end, kernel_func, raw
     )
 
     if parallel:
@@ -998,7 +980,7 @@ def overload_recv_left_var_compute(
             for i in range(0, num_zero_starts):
                 halo_ind = recv_starts[i]
                 sub_arr = np.concatenate((l_recv_buff[halo_ind:], in_arr[: i + 1]))
-                if len(sub_arr) >= minp:
+                if len(sub_arr) - np.isnan(sub_arr).sum() >= minp:
                     output[i] = kernel_func(sub_arr)
                 else:
                     output[i] = np.nan
@@ -1023,7 +1005,7 @@ def overload_recv_left_var_compute(
             sub_idx_arr = np.concatenate(
                 (l_recv_buff_idx[halo_ind:], index_arr[: i + 1])
             )
-            if len(sub_arr) >= minp:
+            if len(sub_arr) - np.isnan(sub_arr).sum() >= minp:
                 output[i] = kernel_func(pd.Series(sub_arr, sub_idx_arr))
             else:
                 output[i] = np.nan
@@ -1032,14 +1014,14 @@ def overload_recv_left_var_compute(
 
 
 def roll_variable_apply_seq(
-    in_arr, on_arr, index_arr, win, start, end, kernel_func, raw
+    in_arr, on_arr, index_arr, win, minp, start, end, kernel_func, raw
 ):  # pragma: no cover
     pass
 
 
 @overload(roll_variable_apply_seq)
 def overload_roll_variable_apply_seq(
-    in_arr, on_arr, index_arr, win, start, end, kernel_func, raw
+    in_arr, on_arr, index_arr, win, minp, start, end, kernel_func, raw
 ):
     assert is_overload_constant_bool(raw)
     if is_overload_true(raw):
@@ -1049,19 +1031,18 @@ def overload_roll_variable_apply_seq(
 
 
 def roll_variable_apply_seq_impl(
-    in_arr, on_arr, index_arr, win, start, end, kernel_func, raw
+    in_arr, on_arr, index_arr, win, minp, start, end, kernel_func, raw
 ):  # pragma: no cover
-    # TODO
     N = len(in_arr)
-    minp = 1
     output = np.empty(N, dtype=np.float64)
 
     # TODO: handle count and minp
     for i in range(0, N):
         s = start[i]
         e = end[i]
-        if e - s >= minp:
-            output[i] = kernel_func(in_arr[s:e])
+        data = in_arr[s:e]
+        if e - s - np.isnan(data).sum() >= minp:
+            output[i] = kernel_func(data)
         else:
             output[i] = np.nan
 
@@ -1070,19 +1051,18 @@ def roll_variable_apply_seq_impl(
 
 # TODO(ehsan): avoid code duplication
 def roll_variable_apply_seq_impl_series(
-    in_arr, on_arr, index_arr, win, start, end, kernel_func, raw
+    in_arr, on_arr, index_arr, win, minp, start, end, kernel_func, raw
 ):  # pragma: no cover
-    # TODO
     N = len(in_arr)
-    minp = 1
     output = np.empty(N, dtype=np.float64)
 
     # TODO: handle count and minp
     for i in range(0, N):
         s = start[i]
         e = end[i]
-        if e - s >= minp:
-            output[i] = kernel_func(pd.Series(in_arr[s:e], index_arr[s:e]))
+        data = in_arr[s:e]
+        if e - s - np.isnan(data).sum() >= minp:
+            output[i] = kernel_func(pd.Series(data, index_arr[s:e]))
         else:
             output[i] = np.nan
 
@@ -1681,7 +1661,7 @@ def _is_small_for_parallel(N, halo_size):  # pragma: no cover
 # TODO: refactor small data functions
 @register_jitable
 def _handle_small_data(
-    in_arr, win, center, rank, n_pes, init_data, add_obs, remove_obs, calc_out
+    in_arr, win, minp, center, rank, n_pes, init_data, add_obs, remove_obs, calc_out
 ):  # pragma: no cover
     N = len(in_arr)
     all_N = bodo.libs.distributed_api.dist_reduce(
@@ -1690,7 +1670,7 @@ def _handle_small_data(
     all_in_arr = bodo.libs.distributed_api.gatherv(in_arr)
     if rank == 0:
         all_out, _ = roll_fixed_linear_generic_seq(
-            all_in_arr, win, center, init_data, add_obs, remove_obs, calc_out
+            all_in_arr, win, minp, center, init_data, add_obs, remove_obs, calc_out
         )
     else:
         all_out = np.empty(all_N, np.float64)
@@ -1809,7 +1789,7 @@ def _is_small_for_parallel_variable(on_arr, win_size):  # pragma: no cover
 
 @register_jitable
 def _handle_small_data_variable(
-    in_arr, on_arr, win, rank, n_pes, init_data, add_obs, remove_obs, calc_out
+    in_arr, on_arr, win, minp, rank, n_pes, init_data, add_obs, remove_obs, calc_out
 ):  # pragma: no cover
     N = len(in_arr)
     all_N = bodo.libs.distributed_api.dist_reduce(N, np.int32(Reduce_Type.Sum.value))
@@ -1821,6 +1801,7 @@ def _handle_small_data_variable(
             all_in_arr,
             all_on_arr,
             win,
+            minp,
             start,
             end,
             init_data,
@@ -1841,7 +1822,7 @@ def _handle_small_data_variable(
 
 @register_jitable
 def _handle_small_data_variable_apply(
-    in_arr, on_arr, index_arr, win, rank, n_pes, kernel_func, raw
+    in_arr, on_arr, index_arr, win, minp, rank, n_pes, kernel_func, raw
 ):  # pragma: no cover
     N = len(in_arr)
     all_N = bodo.libs.distributed_api.dist_reduce(N, np.int32(Reduce_Type.Sum.value))
@@ -1851,7 +1832,15 @@ def _handle_small_data_variable_apply(
     if rank == 0:
         start, end = _build_indexer(all_on_arr, all_N, win, False, True)
         all_out = roll_variable_apply_seq(
-            all_in_arr, all_on_arr, all_index_arr, win, start, end, kernel_func, raw
+            all_in_arr,
+            all_on_arr,
+            all_index_arr,
+            win,
+            minp,
+            start,
+            end,
+            kernel_func,
+            raw,
         )
     else:
         all_out = np.empty(all_N, np.float64)
