@@ -886,6 +886,7 @@ The operations are documented on `pandas.DataFrame.groupby <https://pandas.pydat
 * :meth:`pandas.core.groupby.DataFrameGroupBy.idxmax`
 * :meth:`pandas.core.groupby.DataFrameGroupBy.nunique`
 * :meth:`pandas.core.groupby.GroupBy.median`
+* :meth:`pandas.core.groupby.GroupBy.shift`
 
 
 Offsets

@@ -16,6 +16,7 @@
 
   - Formatting:
     - [ ] Ran pre-commit hooks.
+    - [ ] Ran clang-format for C++ code.
 
 - Documentation:
   - [ ] Added documentation for changes/updates/new implementation in docs.

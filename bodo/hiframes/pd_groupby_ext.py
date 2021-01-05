@@ -753,7 +753,7 @@ class DataframeGroupByAttribute(AttributeTemplate):
     def resolve_idxmax(self, grp, args, kws):
         return self._get_agg_typ(grp, args, "idxmax")
 
-    def resolve_cumulative(self, grp, args, kws, msg, name_operation):
+    def resolve_transformative(self, grp, args, kws, msg, name_operation):
         """For datetime and timedelta datatypes, we can support cummin / cummax,
         but not cumsum / cumprod. Hence the is_minmax entry"""
         index = grp.df_type.index
@@ -778,6 +778,7 @@ class DataframeGroupByAttribute(AttributeTemplate):
                     data.dtype
                 ):
                     raise BodoError(msg)
+
             out_data.append(data)
         out_res = DataFrameType(tuple(out_data), index, tuple(out_columns))
         # XXX output becomes series if single output and explicitly selected
@@ -793,22 +794,27 @@ class DataframeGroupByAttribute(AttributeTemplate):
     @bound_function("groupby.cumsum", no_unliteral=True)
     def resolve_cumsum(self, grp, args, kws):
         msg = "Groupby.cumsum() only supports columns of types integer, float, string or liststring"
-        return self.resolve_cumulative(grp, args, kws, msg, "cumsum")
+        return self.resolve_transformative(grp, args, kws, msg, "cumsum")
 
     @bound_function("groupby.cumprod", no_unliteral=True)
     def resolve_cumprod(self, grp, args, kws):
         msg = "Groupby.cumprod() only supports columns of types integer and float"
-        return self.resolve_cumulative(grp, args, kws, msg, "cumprod")
+        return self.resolve_transformative(grp, args, kws, msg, "cumprod")
 
     @bound_function("groupby.cummin", no_unliteral=True)
     def resolve_cummin(self, grp, args, kws):
         msg = "Groupby.cummin() only supports columns of types integer, float, string, liststring, date, datetime or timedelta"
-        return self.resolve_cumulative(grp, args, kws, msg, "cummin")
+        return self.resolve_transformative(grp, args, kws, msg, "cummin")
 
     @bound_function("groupby.cummax", no_unliteral=True)
     def resolve_cummax(self, grp, args, kws):
         msg = "Groupby.cummax() only supports columns of types integer, float, string, liststring, date, datetime or timedelta"
-        return self.resolve_cumulative(grp, args, kws, msg, "cummax")
+        return self.resolve_transformative(grp, args, kws, msg, "cummax")
+
+    @bound_function("groupby.shift", no_unliteral=True)
+    def resolve_shift(self, grp, args, kws):
+        msg = "Groupby.shift() doesn't support timedelta"  # HA: for now, until its error is fixed.
+        return self.resolve_transformative(grp, args, kws, msg, "shift")
 
     @bound_function("groupby.apply", no_unliteral=True)
     def resolve_apply(self, grp, args, kws):
@@ -1171,7 +1177,6 @@ groupby_unsupported = {
     "resample",
     "sample",
     "sem",
-    "shift",
     "size",
     "tail",
     "transform",

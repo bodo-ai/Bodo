@@ -134,7 +134,7 @@ array_info* RetrieveArray_TwoColumns(
  * @return one array
  */
 array_info* RetrieveArray_SingleColumn(array_info* in_arr,
-                                       std::vector<size_t> const& ListIdx);
+                                       std::vector<int64_t> const& ListIdx);
 
 /** This function uses the combinatorial information computed in the
  * "ListIdx" array and return the coulm with the selecetd rows.
@@ -156,7 +156,8 @@ array_info* RetrieveArray_SingleColumn_arr(array_info* in_arr,
  * @return the table output.
  */
 table_info* RetrieveTable(table_info* const& in_table,
-                          std::vector<size_t> const& ListIdx, int const& n_col);
+                          std::vector<int64_t> const& ListIdx,
+                          int const& n_col);
 
 /** This code test if two keys are equal (Before that the hash should have been
  * used) It is used that way because we assume that the left key have the same

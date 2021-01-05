@@ -1641,6 +1641,7 @@ def groupby_and_aggregate(
     udf_n_redvars,
     is_parallel,
     skipdropna_t,
+    shift_periods_t,
     return_keys,
     return_index,
     update_cb,
@@ -1668,6 +1669,7 @@ def groupby_and_aggregate(
                 lir.IntType(8).as_pointer(),
                 lir.IntType(1),
                 lir.IntType(1),
+                lir.IntType(64),  # shift_periods_t
                 lir.IntType(1),
                 lir.IntType(1),
                 lir.IntType(8).as_pointer(),
@@ -1696,6 +1698,7 @@ def groupby_and_aggregate(
             types.voidptr,
             types.boolean,
             types.boolean,
+            types.int64,  # shift_periods
             types.boolean,
             types.boolean,
             types.voidptr,

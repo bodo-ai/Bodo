@@ -3241,3 +3241,132 @@ def test_groupby_dead_col_multifunc(memory_leak_check):
     assert impl3(df) == bodo.jit(impl3)(df)
     assert impl4(df) == bodo.jit(impl4)(df)
     assert impl5(df) == bodo.jit(impl5)(df)
+
+
+@pytest.mark.skip(reason="TODO: Return nullable int")
+def test_groupby_shift_int():
+    """
+    Test Groupby.shift(): a simple case
+    """
+
+    def impl(df):
+        df2 = df.groupby("A")["B"].shift()
+        return df2
+
+    df1 = pd.DataFrame(
+        {"A": [1, 2, 2, 1, 1], "B": [10, 20, 30, 40, 50]}, index=np.arange(42, 47)
+    )
+    # Can't test  becuase of nan vs. -1??
+    # check_func(impl, (df1,), check_dtype=False, reset_index=True)
+    print("\ndf1:\n", df1)
+    print("Pandas result:\n", impl(df1))
+    print("-----\nBodo result:\n")
+    print(bodo.jit(distributed=["df"])(impl)(df1))
+
+    def impl2(df):
+        df2 = df.groupby("A").shift(-2)
+        return df2
+
+    df_multicol = pd.DataFrame(
+        {
+            "A": [1, 2, 2, 1, 1],
+            "B": [10, 20, 30, 40, 50],
+            "C": [100, 200, 300, 400, 500],
+        }
+    )
+    print("\ndf_multicol:\n", df_multicol)
+    print("Pandas result:\n", impl2(df_multicol))
+    print("-----\nBodo result:\n")
+    print(bodo.jit(distributed=["df"])(impl2)(df_multicol))
+
+
+@pytest.mark.skip(reason="Timedelta typing error. TODO: debug it")
+def test_groupby_shift_timedelta():
+    def impl2(df):
+        df2 = df.groupby("A").shift(-2)
+        return df2
+
+    # E           numba.core.errors.TypingError: Failed in bodo mode pipeline (step: <class 'bodo.compiler.BodoDistributedPass'>)
+    # E           NameError: name 'ns' is not defined
+    # print("*********")
+    # print(df1_timedelta)
+    # print(impl2(df1_timedelta))
+    # print("----")
+    # print(bodo.jit(distributed=["df"])(impl2)(df1_timedelta))
+
+
+def test_groupby_shift_simple():
+    def impl(df):
+        df2 = df.groupby("A").shift()
+        return df2
+
+    df3 = pd.DataFrame(
+        {
+            "A": [0.3, np.nan, 3.5, 0.2, np.nan, 3.3, 0.2, 0.3, 0.2, 0.2],
+            "B": [-1.1, 1.1, 3.2, 1.1, 5.2, 6.8, 7.3, 3.4, 1.2, 2.4],
+            "C": [-8.1, 2.3, 5.3, 1.1, 0.5, 4.6, 1.7, 4.3, -8.1, 5.3],
+        },
+        index=np.arange(52, 62),
+    )
+    check_func(impl, (df3,))
+
+
+@pytest.mark.parametrize(
+    "periods",
+    [0, 2, -2],
+)
+def test_groupby_shift_main(periods):
+    def impl2(df):
+        df2 = df.groupby("A").shift(periods)
+        return df2
+
+    def impl3(df):
+        df2 = df.groupby("A").shift(periods=periods)
+        return df2
+
+    df3 = pd.DataFrame(
+        {
+            "A": [0.3, np.nan, 3.5, 0.2, np.nan, 3.3, 0.2, 0.3, 0.2, 0.2],
+            "B": [-1.1, 1.1, 3.2, 1.1, 5.2, 6.8, 7.3, 3.4, 1.2, 2.4],
+            "C": [-8.1, 2.3, 5.3, 1.1, 0.5, 4.6, 1.7, 4.3, -8.1, 5.3],
+        },
+        index=np.arange(52, 62),
+    )
+    check_func(impl2, (df3,))
+    check_func(impl3, (df3,))
+
+    siz = 10
+    datetime_arr_1 = pd.date_range("1917-01-01", periods=siz)
+    datetime_arr_2 = pd.date_range("2017-01-01", periods=siz)
+    timedelta_arr = datetime_arr_1 - datetime_arr_2
+    date_arr = datetime_arr_1.date
+    df1_datetime = pd.DataFrame(
+        {"A": [1, 2, 1, 4, 5, 6, 4, 6, 6, 1], "B": datetime_arr_1}
+    )
+    df1_date = pd.DataFrame({"A": np.arange(siz), "B": date_arr})
+    df1_timedelta = pd.DataFrame({"A": np.arange(siz), "B": timedelta_arr})
+
+    check_func(impl2, (df1_datetime,))
+    check_func(impl3, (df1_datetime,))
+
+    check_func(impl2, (df1_date,))
+    check_func(impl3, (df1_date,))
+
+    df1_str = pd.DataFrame(
+        {
+            "A": [1, 1, 1, 2, 3, 3, 4, 0, 5, 0, 11],
+            "B": ["a", "b", "c", "d", "", "AA", "ABC", "AB", "c", "F", "GG"],
+        }
+    )
+    check_func(impl2, (df1_str,))
+    check_func(impl3, (df1_str,))
+
+    n = 10
+    df_ls = pd.DataFrame(
+        {
+            "A": gen_random_list_string_array(2, n),
+            "B": gen_random_list_string_array(2, n),
+        }
+    )
+    check_func(impl2, (df_ls,))
+    check_func(impl3, (df_ls,))

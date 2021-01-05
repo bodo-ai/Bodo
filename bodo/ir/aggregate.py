@@ -225,6 +225,7 @@ AggFuncStruct = namedtuple("AggFuncStruct", ["func", "ftype"])
 # !!! IMPORTANT: this is supposed to match the positions in
 # Bodo_FTypes::FTypeEnum in _groupby.cpp
 supported_agg_funcs = [
+    "shift",
     "sum",
     "count",
     "nunique",
@@ -311,6 +312,7 @@ def get_agg_func(func_ir, func_name, rhs, series_type=None, typemap=None):
         func.ncols_pre_shuffle = 1
         func.ncols_post_shuffle = 1
         skipdropna = True
+        shift_periods_t = 1
         if isinstance(rhs, ir.Expr):
             for erec in rhs.kws:
                 if func_name in list_cumulative:
@@ -335,7 +337,20 @@ def get_agg_func(func_ir, func_name, rhs, series_type=None, typemap=None):
                             )
                     else:
                         raise BodoError("argument to nunique can only be dropna")
+
+        # To handle shift(2) and shift(periods=2)
+        if func_name == "shift" and (len(rhs.args) > 0 or len(rhs.kws) > 0):
+            shift_periods_t = get_call_expr_arg(
+                "shift",
+                rhs.args,
+                dict(rhs.kws),
+                0,
+                "periods",
+                shift_periods_t,
+            )
+            shift_periods_t = guard(find_const, func_ir, shift_periods_t)
         func.skipdropna = skipdropna
+        func.periods = shift_periods_t
         return func
 
     # agg case
@@ -1636,6 +1651,7 @@ def gen_top_level_agg_func(
         if not isinstance(agg_func, list):
             agg_func = [agg_func] * len(in_col_typs)
     skipdropna = False
+    shift_periods = 1
     num_cum_funcs = 0
     for in_col_idx, f_val in enumerate(agg_func):
         # for each input column, a list of functions can be applied to it
@@ -1653,6 +1669,9 @@ def gen_top_level_agg_func(
                 num_cum_funcs += 1
             if hasattr(func, "skipdropna"):
                 skipdropna = func.skipdropna
+            if func.ftype == "shift":
+                shift_periods = func.periods
+                do_combine = False  # See median/nunique note ^
             allfuncs.append(func)
             func_idx_to_in_col.append(in_col_idx)
             if func.ftype == "udf":
@@ -1832,11 +1851,12 @@ def gen_top_level_agg_func(
         func_text += "    delete_info_decref_array(pivot_info)\n"
         func_text += "    delete_info_decref_array(arr_info)\n"
     else:
-        func_text += "    out_table = groupby_and_aggregate(table, {}, {}," " ftypes.ctypes, func_offsets.ctypes, udf_ncols.ctypes, {}, {}, {}, {}, cpp_cb_update_addr, cpp_cb_combine_addr, cpp_cb_eval_addr, cpp_cb_general_addr, udf_table_dummy)\n".format(
+        func_text += "    out_table = groupby_and_aggregate(table, {}, {}," " ftypes.ctypes, func_offsets.ctypes, udf_ncols.ctypes, {}, {}, {}, {}, {}, cpp_cb_update_addr, cpp_cb_combine_addr, cpp_cb_eval_addr, cpp_cb_general_addr, udf_table_dummy)\n".format(
             n_keys,
             input_has_index,
             parallel,
             skipdropna,
+            shift_periods,
             return_key,
             same_index,
         )

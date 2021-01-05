@@ -207,15 +207,18 @@ array_info* RetrieveArray_SingleColumn_F(array_info* in_arr, F f,
         offset_t* index_offsets = (offset_t*)in_arr->data3;
         offset_t* data_offsets = (offset_t*)in_arr->data2;
         for (size_t iRow = 0; iRow < nRowOut; iRow++) {
-            size_t idx = f(iRow);
+            int64_t idx = f(iRow);
             offset_t size_index = 0;
             offset_t size_data = 0;
-            offset_t start_offset_index = index_offsets[idx];
-            offset_t end_offset_index = index_offsets[idx + 1];
-            size_index = end_offset_index - start_offset_index;
-            offset_t start_offset_data = data_offsets[start_offset_index];
-            offset_t end_offset_data = data_offsets[end_offset_index];
-            size_data = end_offset_data - start_offset_data;
+            // To allow NaN values in the column
+            if (idx >= 0) {
+                offset_t start_offset_index = index_offsets[idx];
+                offset_t end_offset_index = index_offsets[idx + 1];
+                size_index = end_offset_index - start_offset_index;
+                offset_t start_offset_data = data_offsets[start_offset_index];
+                offset_t end_offset_data = data_offsets[end_offset_index];
+                size_data = end_offset_data - start_offset_data;
+            }
             ListSizes_index[iRow] = size_index;
             ListSizes_data[iRow] = size_data;
             tot_size_index += size_index;
@@ -235,23 +238,30 @@ array_info* RetrieveArray_SingleColumn_F(array_info* in_arr, F f,
         offset_t* in_data_offsets = (offset_t*)in_arr->data2;
         char* in_data1 = in_arr->data1;
         for (size_t iRow = 0; iRow < nRowOut; iRow++) {
-            size_t idx = f(iRow);
+            int64_t idx = f(iRow);
             offset_t size_index = ListSizes_index[iRow];
             offset_t size_data = ListSizes_data[iRow];
             out_index_offsets[iRow] = pos_index;
-            offset_t start_index_offset = in_index_offsets[idx];
-            offset_t start_data_offset = in_data_offsets[start_index_offset];
-            for (offset_t u = 0; u < size_index; u++) {
-                offset_t len_str = in_data_offsets[start_index_offset + u + 1] -
-                                   in_data_offsets[start_index_offset + u];
-                out_data_offsets[pos_index + u + 1] =
-                    out_data_offsets[pos_index + u] + len_str;
-                bool bit = GetBit(in_sub_null_bitmask, start_index_offset + u);
-                SetBitTo(out_sub_null_bitmask, pos_index + u, bit);
+            // To allow NaN values in the column.
+            bool bit = false;
+            if (idx >= 0) {
+                offset_t start_index_offset = in_index_offsets[idx];
+                offset_t start_data_offset =
+                    in_data_offsets[start_index_offset];
+                for (offset_t u = 0; u < size_index; u++) {
+                    offset_t len_str =
+                        in_data_offsets[start_index_offset + u + 1] -
+                        in_data_offsets[start_index_offset + u];
+                    out_data_offsets[pos_index + u + 1] =
+                        out_data_offsets[pos_index + u] + len_str;
+                    bool bit =
+                        GetBit(in_sub_null_bitmask, start_index_offset + u);
+                    SetBitTo(out_sub_null_bitmask, pos_index + u, bit);
+                }
+                memcpy(&out_data1[pos_data], &in_data1[start_data_offset],
+                       size_data);
+                bit = in_arr->get_null_bit(idx);
             }
-            memcpy(&out_data1[pos_data], &in_data1[start_data_offset],
-                   size_data);
-            bool bit = in_arr->get_null_bit(idx);
             pos_index += size_index;
             pos_data += size_data;
             out_arr->set_null_bit(iRow, bit);
@@ -268,11 +278,14 @@ array_info* RetrieveArray_SingleColumn_F(array_info* in_arr, F f,
         offset_t* in_offsets = (offset_t*)in_arr->data2;
         char* in_data1 = in_arr->data1;
         for (size_t iRow = 0; iRow < nRowOut; iRow++) {
-            size_t idx = f(iRow);
+            int64_t idx = f(iRow);
             offset_t size = 0;
-            offset_t start_offset = in_offsets[idx];
-            offset_t end_offset = in_offsets[idx + 1];
-            size = end_offset - start_offset;
+            // To allow NaN values in the column
+            if (idx >= 0) {
+                offset_t start_offset = in_offsets[idx];
+                offset_t end_offset = in_offsets[idx + 1];
+                size = end_offset - start_offset;
+            }
             ListSizes[iRow] = size;
             n_chars += size;
         }
@@ -281,15 +294,19 @@ array_info* RetrieveArray_SingleColumn_F(array_info* in_arr, F f,
         char* out_data1 = out_arr->data1;
         offset_t pos = 0;
         for (size_t iRow = 0; iRow < nRowOut; iRow++) {
-            size_t idx = f(iRow);
+            int64_t idx = f(iRow);
             offset_t size = ListSizes[iRow];
             out_offsets[iRow] = pos;
-            offset_t start_offset = in_offsets[idx];
-            char* out_ptr = out_data1 + pos;
-            char* in_ptr = in_data1 + start_offset;
-            memcpy(out_ptr, in_ptr, size);
-            pos += size;
-            bool bit = in_arr->get_null_bit(idx);
+            // To allow NaN values in the column.
+            bool bit = false;
+            if (idx >= 0) {
+                offset_t start_offset = in_offsets[idx];
+                char* out_ptr = out_data1 + pos;
+                char* in_ptr = in_data1 + start_offset;
+                memcpy(out_ptr, in_ptr, size);
+                pos += size;
+                bit = in_arr->get_null_bit(idx);
+            }
             out_arr->set_null_bit(iRow, bit);
         }
         out_offsets[nRowOut] = pos;
@@ -306,11 +323,15 @@ array_info* RetrieveArray_SingleColumn_F(array_info* in_arr, F f,
         char* out_data1 = out_arr->data1;
         uint64_t siztype = numpy_item_size[dtype];
         for (size_t iRow = 0; iRow < nRowOut; iRow++) {
-            size_t idx = f(iRow);
-            char* out_ptr = out_data1 + siztype * iRow;
-            char* in_ptr = in_data1 + siztype * idx;
-            memcpy(out_ptr, in_ptr, siztype);
-            bool bit = in_arr->get_null_bit(idx);
+            int64_t idx = f(iRow);
+            // To allow NaN values in the column.
+            bool bit = false;
+            if (idx >= 0) {
+                char* out_ptr = out_data1 + siztype * iRow;
+                char* in_ptr = in_data1 + siztype * idx;
+                memcpy(out_ptr, in_ptr, siztype);
+                bit = in_arr->get_null_bit(idx);
+            }
             out_arr->set_null_bit(iRow, bit);
         }
     }
@@ -318,14 +339,21 @@ array_info* RetrieveArray_SingleColumn_F(array_info* in_arr, F f,
         // In the case of CATEGORICAL array we have only to put a single
         // entry. For the NaN entry the value is -1.
         uint64_t siztype = numpy_item_size[dtype];
+        std::vector<char> vectNaN =
+            RetrieveNaNentry(dtype);  // returns a -1 for integer values.
         char* in_data1 = in_arr->data1;
         int64_t num_categories = in_arr->num_categories;
         out_arr = alloc_categorical(nRowOut, dtype, num_categories);
         char* out_data1 = out_arr->data1;
         for (size_t iRow = 0; iRow < nRowOut; iRow++) {
-            size_t idx = f(iRow);
+            int64_t idx = f(iRow);
             char* out_ptr = out_data1 + siztype * iRow;
-            char* in_ptr = in_data1 + siztype * idx;
+            char* in_ptr;
+            // To allow NaN values in the column.
+            if (idx >= 0)
+                in_ptr = in_data1 + siztype * idx;
+            else
+                in_ptr = vectNaN.data();
             memcpy(out_ptr, in_ptr, siztype);
         }
     }
@@ -333,13 +361,19 @@ array_info* RetrieveArray_SingleColumn_F(array_info* in_arr, F f,
         // In the case of NUMPY array we have only to put a single
         // entry.
         uint64_t siztype = numpy_item_size[dtype];
+        std::vector<char> vectNaN = RetrieveNaNentry(dtype);
         char* in_data1 = in_arr->data1;
         out_arr = alloc_array(nRowOut, -1, -1, arr_type, dtype, 0, 0);
         char* out_data1 = out_arr->data1;
         for (size_t iRow = 0; iRow < nRowOut; iRow++) {
-            size_t idx = f(iRow);
+            int64_t idx = f(iRow);
             char* out_ptr = out_data1 + siztype * iRow;
-            char* in_ptr = in_data1 + siztype * idx;
+            char* in_ptr;
+            // To allow NaN values in the column.
+            if (idx >= 0)
+                in_ptr = in_data1 + siztype * idx;
+            else
+                in_ptr = vectNaN.data();
             memcpy(out_ptr, in_ptr, siztype);
         }
     }
@@ -351,11 +385,16 @@ array_info* RetrieveArray_SingleColumn_F(array_info* in_arr, F f,
         (void)arrow::MakeBuilder(arrow::default_memory_pool(),
                                  in_arrow_array->type(), &builder);
         for (size_t iRow = 0; iRow < nRowOut; iRow++) {
-            size_t idx = f(iRow);
+            int64_t idx = f(iRow);
             // append value in position 'row' of input array to builder's
             // array (this is a recursive algorithm, can traverse nested
             // arrays)
-            append_to_out_array(in_arrow_array, idx, idx + 1, builder.get());
+            // To allow NaN values in the column.
+            if (idx >= 0)
+                append_to_out_array(in_arrow_array, idx, idx + 1,
+                                    builder.get());
+            else
+                (void)builder->AppendNull();
         }
 
         // get final output array from builder
@@ -371,9 +410,9 @@ array_info* RetrieveArray_SingleColumn_F(array_info* in_arr, F f,
 };
 
 array_info* RetrieveArray_SingleColumn(array_info* in_arr,
-                                       std::vector<size_t> const& ListIdx) {
+                                       std::vector<int64_t> const& ListIdx) {
     return RetrieveArray_SingleColumn_F(
-        in_arr, [&](size_t iRow) -> size_t { return ListIdx[iRow]; },
+        in_arr, [&](size_t iRow) -> int64_t { return ListIdx[iRow]; },
         ListIdx.size());
 }
 
@@ -385,13 +424,13 @@ array_info* RetrieveArray_SingleColumn_arr(array_info* in_arr,
         return nullptr;
     }
     size_t siz = idx_arr->length;
-    return RetrieveArray_SingleColumn_F(in_arr,
-                                        [&](size_t idx) -> size_t {
-                                            uint64_t val =
-                                                idx_arr->at<uint64_t>(idx);
-                                            return size_t(val);
-                                        },
-                                        siz);
+    return RetrieveArray_SingleColumn_F(
+        in_arr,
+        [&](size_t idx) -> int64_t {
+            int64_t val = idx_arr->at<uint64_t>(idx);
+            return val;
+        },
+        siz);
 }
 
 array_info* RetrieveArray_TwoColumns(
@@ -680,7 +719,7 @@ array_info* RetrieveArray_TwoColumns(
 };
 
 table_info* RetrieveTable(table_info* const& in_table,
-                          std::vector<size_t> const& ListIdx,
+                          std::vector<int64_t> const& ListIdx,
                           int const& n_cols_arg) {
     std::vector<array_info*> out_arrs;
     size_t n_cols;
@@ -799,8 +838,10 @@ int ComparisonArrowColumn(std::shared_ptr<arrow::Array> const& arr1,
         auto str_array2 = std::dynamic_pointer_cast<arrow::StringArray>(arr2);
 #else
     } else if (arr1->type_id() == arrow::Type::LARGE_STRING) {
-        auto str_array1 = std::dynamic_pointer_cast<arrow::LargeStringArray>(arr1);
-        auto str_array2 = std::dynamic_pointer_cast<arrow::LargeStringArray>(arr2);
+        auto str_array1 =
+            std::dynamic_pointer_cast<arrow::LargeStringArray>(arr1);
+        auto str_array2 =
+            std::dynamic_pointer_cast<arrow::LargeStringArray>(arr2);
 #endif
         int64_t len1 = pos1_e - pos1_s;
         int64_t len2 = pos2_e - pos2_s;

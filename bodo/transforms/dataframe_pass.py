@@ -1366,6 +1366,11 @@ class DataFramePass:
         # same_index is True if we return the index from the table (which is the case for
         # cumulative operations not using RangeIndex)
         for func in allfuncs:
+            # HA: pandas output has no index
+            if func.ftype in {"shift"}:
+                input_has_index = True
+                return_key = False
+                same_index = True
             if func.ftype in list_cumulative:
                 input_has_index = True
                 same_index = True

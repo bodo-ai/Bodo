@@ -23,6 +23,7 @@ struct Bodo_FTypes {
     // !!! IMPORTANT: this is supposed to match the positions in
     // supported_agg_funcs in aggregate.py
     enum FTypeEnum {
+        shift,
         sum,
         count,
         nunique,
@@ -428,7 +429,6 @@ struct aggstring {
      */
     static void apply(std::string& v1, std::string& v2) {}
 };
-
 
 template <>
 struct aggstring<Bodo_FTypes::min> {
@@ -1651,6 +1651,86 @@ cumulative_computation(array_info* arr, ARRAY* out_arr,
                          "while cumulative operation makes sense for "
                          "pivot_table/crosstab the functionality is missing "
                          "right now");
+}
+
+/**
+ * The shift_computation function.
+ * Shift rows per group N times (up or down).
+ * @param arr column on which we do the computation
+ * @param out_arr column data after being shifted
+ * @param grp_info: grouping_info about groups and rows organization
+ * @param periods: Number of periods to shift
+ */
+template <typename ARRAY>
+typename std::enable_if<!is_multiple_array<ARRAY>::value, void>::type
+shift_computation(array_info* arr, array_info* out_arr,
+                  grouping_info const& grp_info, int64_t const& periods) {
+    size_t num_rows = grp_info.row_to_group.size();
+    size_t num_groups = grp_info.num_groups;
+    int64_t tmp_periods = periods;
+    // 1. Shift operation taken from pandas
+    // https://github.com/pandas-dev/pandas/blob/master/pandas/_libs/groupby.pyx#L293
+
+    size_t ii, offset;
+    int sign;
+    // If periods<0, shift up (i.e. iterate backwards)
+    if (periods < 0) {
+        tmp_periods = -periods;
+        offset = num_rows - 1;
+        sign = -1;
+    } else {
+        offset = 0;
+        sign = 1;
+    }
+
+    std::vector<int64_t> row_list(num_rows);
+    if (tmp_periods == 0) {
+        for (size_t i = 0; i < num_rows; i++) {
+            row_list[i] = i;
+        }
+    } else {
+        int64_t gid;       // group number
+        int64_t cur_pos;   // new value for current row
+        int64_t prev_val;  // previous value
+        std::vector<int64_t> nrows_per_group(
+            num_groups);  // array holding number of rows per group
+        std::vector<std::vector<int64_t>> p_values(
+            num_groups,
+            std::vector<int64_t>(tmp_periods));  // 2d array holding most recent
+                                                 // N=periods elements per group
+        // For each row value, find if it should be NaN or it will get a value
+        // that is N=periods away from it. It's a NaN if it's row_number <
+        // periods, otherwise get it's new value from (row_number -/+ periods)
+        for (size_t i = 0; i < num_rows; i++) {
+            ii = offset + sign * i;
+            gid = grp_info.row_to_group[ii];
+            if (gid == -1) {
+                row_list[ii] = -1;
+                continue;
+            }
+
+            nrows_per_group[gid]++;
+            cur_pos = nrows_per_group[gid] % tmp_periods;
+            prev_val = p_values[gid][cur_pos];
+            if (nrows_per_group[gid] > tmp_periods) {
+                row_list[ii] = prev_val;
+            } else {
+                row_list[ii] = -1;
+            }
+            p_values[gid][cur_pos] = ii;
+        }  // end-row_loop
+    }
+    // 2. Retrieve column and put it in update_cols
+    array_info* updated_col = RetrieveArray_SingleColumn(arr, row_list);
+    *out_arr = std::move(*updated_col);
+    delete updated_col;
+}
+template <typename ARRAY>
+typename std::enable_if<is_multiple_array<ARRAY>::value, void>::type
+shift_computation(array_info* arr, ARRAY* out_arr,
+                  grouping_info const& grp_info, int64_t const& periods) {
+    Bodo_PyErr_SetString(PyExc_RuntimeError,
+                         "multiarray shift functionality is missing right now");
 }
 
 /**
@@ -4363,7 +4443,7 @@ class GeneralUdfColSet : public UdfColSet<ARRAY> {
     void fill_in_columns(table_info* general_in_table,
                          const grouping_info& grp_info) const {
         array_info* in_col = this->in_col;
-        std::vector<std::vector<size_t>> group_rows(grp_info.num_groups);
+        std::vector<std::vector<int64_t>> group_rows(grp_info.num_groups);
         // get the rows in each group
         for (size_t i = 0; i < in_col->length; i++) {
             int64_t i_grp = grp_info.row_to_group[i];
@@ -4437,6 +4517,33 @@ class CumOpColSet : public BasicColSet<ARRAY> {
 
    private:
     bool skipna;
+};
+
+template <typename ARRAY>
+class ShiftColSet : public BasicColSet<ARRAY> {
+   public:
+    ShiftColSet(array_info* in_col, int ftype, int64_t _periods)
+        : BasicColSet<ARRAY>(in_col, ftype, false), periods(_periods) {}
+    virtual ~ShiftColSet() {}
+
+    virtual void alloc_update_columns(size_t num_groups, size_t n_pivot,
+                                      bool is_crosstab,
+                                      std::vector<ARRAY*>& out_cols) {
+        // NOTE: output size of shift is the same as input size
+        //       (NOT the number of groups)
+        out_cols.push_back(alloc_array_groupby<ARRAY>(
+            this->in_col->length, 1, 1, this->in_col->arr_type,
+            this->in_col->dtype, 0, this->in_col->num_categories, n_pivot));
+        this->update_cols.push_back(out_cols.back());
+    }
+
+    virtual void update(const grouping_info& grp_info) {
+        shift_computation<ARRAY>(this->in_col, this->update_cols[0], grp_info,
+                                 this->periods);
+    }
+
+   private:
+    int64_t periods;
 };
 
 /* When transmitting data with shuffle, we have only functionality for
@@ -4522,7 +4629,7 @@ class GroupbyPipeline {
                     table_info* _udf_table, udf_table_op_fn update_cb,
                     udf_table_op_fn combine_cb, udf_eval_fn eval_cb,
                     udf_general_fn general_udfs_cb, bool skipna,
-                    bool _return_key, bool _return_index)
+                    int64_t periods, bool _return_key, bool _return_index)
         : in_table(_in_table),
           num_keys(_num_keys),
           dispatch_table(_dispatch_table),
@@ -4552,7 +4659,8 @@ class GroupbyPipeline {
                 shuffle_before_update = true;
             if (ftype == Bodo_FTypes::nunique || ftype == Bodo_FTypes::median ||
                 ftype == Bodo_FTypes::cumsum || ftype == Bodo_FTypes::cumprod ||
-                ftype == Bodo_FTypes::cummin || ftype == Bodo_FTypes::cummax) {
+                ftype == Bodo_FTypes::cummin || ftype == Bodo_FTypes::cummax ||
+                ftype == Bodo_FTypes::shift) {
                 // these operations first require shuffling the data to
                 // gather all rows with the same key in the same process
                 if (is_parallel) shuffle_before_update = true;
@@ -4563,6 +4671,7 @@ class GroupbyPipeline {
                     ftype == Bodo_FTypes::cumprod ||
                     ftype == Bodo_FTypes::cummax)
                     cumulative_op = true;
+                if (ftype == Bodo_FTypes::shift) shift_op = true;
                 break;
             }
         }
@@ -4578,7 +4687,7 @@ class GroupbyPipeline {
             // for the code after C++ groupby
             for (auto a : in_table->columns) incref_array(a);
             in_table = shuffle_table_kernel(in_table, hashes, *comm_info_ptr);
-            if (!cumulative_op) {
+            if (!(cumulative_op || shift_op)) {
                 delete hashes;
                 delete comm_info_ptr;
             }
@@ -4603,7 +4712,8 @@ class GroupbyPipeline {
             int end = func_offsets[k + 1];
             for (int j = start; j != end; j++) {
                 col_sets.push_back(makeColSet(col, index_col, ftypes[j],
-                                              do_combine, skipna, n_udf));
+                                              do_combine, skipna, periods,
+                                              n_udf));
                 if (ftypes[j] == Bodo_FTypes::udf ||
                     ftypes[j] == Bodo_FTypes::gen_udf) {
                     udf_table_idx += (1 + udf_n_redvars[n_udf]);
@@ -4647,10 +4757,11 @@ class GroupbyPipeline {
      * @param do_combine whether GroupbyPipeline will perform combine operation
      *        or not.
      * @param skipna option used for nunique, cumsum, cumprod, cummin, cummax
+     * @param periods option used for shift
      */
     BasicColSet<ARRAY>* makeColSet(array_info* in_col, array_info* index_col,
                                    int ftype, bool do_combine, bool skipna,
-                                   int n_udf) {
+                                   int64_t periods, int n_udf) {
         switch (ftype) {
             case Bodo_FTypes::udf:
                 return new UdfColSet<ARRAY>(in_col, do_combine, udf_table,
@@ -4677,6 +4788,8 @@ class GroupbyPipeline {
             case Bodo_FTypes::idxmax:
                 return new IdxMinMaxColSet<ARRAY>(in_col, index_col, ftype,
                                                   do_combine);
+            case Bodo_FTypes::shift:
+                return new ShiftColSet<ARRAY>(in_col, ftype, periods);
             default:
                 return new BasicColSet<ARRAY>(in_col, ftype, do_combine);
         }
@@ -4690,7 +4803,7 @@ class GroupbyPipeline {
     void update() {
         in_table->num_keys = num_keys;
         if (req_extended_group_info) {
-            bool consider_missing = cumulative_op;
+            bool consider_missing = cumulative_op || shift_op;
             grp_info = get_group_info_iterate(in_table, consider_missing);
         } else
             get_group_info(in_table, grp_info.row_to_group,
@@ -4703,7 +4816,7 @@ class GroupbyPipeline {
         grp_info.n_pivot = n_pivot;
 
         update_table = cur_table = new table_info();
-        if (cumulative_op)
+        if (cumulative_op || shift_op)
             num_keys = 0;  // there are no key columns in output of cumulative
                            // operations
         else
@@ -4822,7 +4935,7 @@ class GroupbyPipeline {
             output_list_arrays(out_table->columns, col_set->getOutputColumn());
         if (return_index)
             out_table->columns.push_back(cur_table->columns.back());
-        if (cumulative_op && is_parallel) {
+        if ((cumulative_op || shift_op) && is_parallel) {
             table_info* revshuf_table =
                 reverse_shuffle_table_kernel(out_table, hashes, *comm_info_ptr);
             delete hashes;
@@ -4976,6 +5089,7 @@ class GroupbyPipeline {
     // median/nunique/cumsum/cumprod/cummin/cummax
     bool shuffle_before_update = false;
     bool cumulative_op = false;
+    bool shift_op = false;
     bool req_extended_group_info = false;
     bool do_combine;
 
@@ -5564,19 +5678,20 @@ table_info* pivot_groupby_and_aggregate(
     table_info* in_table, int64_t num_keys, table_info* dispatch_table,
     table_info* dispatch_info, bool input_has_index, int* ftypes,
     int* func_offsets, int* udf_nredvars, bool is_parallel, bool is_crosstab,
-    bool skipdropna, bool return_key, bool return_index, void* update_cb,
-    void* combine_cb, void* eval_cb, table_info* udf_dummy_table) {
+    bool skipdropna, bool return_key, bool return_index,
+    void* update_cb, void* combine_cb, void* eval_cb,
+    table_info* udf_dummy_table) {
     try {
-    GroupbyPipeline<multiple_array_info> groupby(
-        in_table, num_keys, dispatch_table, dispatch_info, input_has_index,
-        is_parallel, is_crosstab, ftypes, func_offsets, udf_nredvars,
-        udf_dummy_table, (udf_table_op_fn)update_cb,
-        // TODO: general UDFs
-        (udf_table_op_fn)combine_cb, (udf_eval_fn)eval_cb, 0, skipdropna,
-        return_key, return_index);
+        GroupbyPipeline<multiple_array_info> groupby(
+            in_table, num_keys, dispatch_table, dispatch_info, input_has_index,
+            is_parallel, is_crosstab, ftypes, func_offsets, udf_nredvars,
+            udf_dummy_table, (udf_table_op_fn)update_cb,
+            // TODO: general UDFs
+            (udf_table_op_fn)combine_cb, (udf_eval_fn)eval_cb, 0, skipdropna,
+            0, return_key, return_index); //periods=0. Not used in pivot operation.
 
-    table_info* ret_table = groupby.run();
-    return ret_table;
+        table_info* ret_table = groupby.run();
+        return ret_table;
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
         return NULL;
@@ -5586,51 +5701,55 @@ table_info* pivot_groupby_and_aggregate(
 table_info* groupby_and_aggregate(
     table_info* in_table, int64_t num_keys, bool input_has_index, int* ftypes,
     int* func_offsets, int* udf_nredvars, bool is_parallel, bool skipdropna,
-    bool return_key, bool return_index, void* update_cb, void* combine_cb,
-    void* eval_cb, void* general_udfs_cb, table_info* udf_dummy_table) {
+    int64_t periods, bool return_key, bool return_index, void* update_cb,
+    void* combine_cb, void* eval_cb, void* general_udfs_cb,
+    table_info* udf_dummy_table) {
     try {
-    int strategy = determine_groupby_strategy(
-        in_table, num_keys, ftypes, func_offsets, is_parallel, input_has_index);
+        int strategy =
+            determine_groupby_strategy(in_table, num_keys, ftypes, func_offsets,
+                                       is_parallel, input_has_index);
 
-    auto implement_strategy0 = [&]() -> table_info* {
-        table_info* dispatch_info = nullptr;
-        table_info* dispatch_table = nullptr;
-        GroupbyPipeline<array_info> groupby(
-            in_table, num_keys, dispatch_table, dispatch_info, input_has_index,
-            is_parallel, true, ftypes, func_offsets, udf_nredvars,
-            udf_dummy_table, (udf_table_op_fn)update_cb,
-            (udf_table_op_fn)combine_cb, (udf_eval_fn)eval_cb,
-            (udf_general_fn)general_udfs_cb, skipdropna, return_key,
-            return_index);
+        auto implement_strategy0 = [&]() -> table_info* {
+            table_info* dispatch_info = nullptr;
+            table_info* dispatch_table = nullptr;
+            GroupbyPipeline<array_info> groupby(
+                in_table, num_keys, dispatch_table, dispatch_info,
+                input_has_index, is_parallel, true, ftypes, func_offsets,
+                udf_nredvars, udf_dummy_table, (udf_table_op_fn)update_cb,
+                (udf_table_op_fn)combine_cb, (udf_eval_fn)eval_cb,
+                (udf_general_fn)general_udfs_cb, skipdropna, periods,
+                return_key, return_index);
 
-        table_info* ret_table = groupby.run();
-        return ret_table;
-    };
-    auto implement_categorical_exscan =
-        [&](array_info* cat_column) -> table_info* {
-        table_info* ret_table = mpi_exscan_computation(
-            cat_column, in_table, num_keys, ftypes, func_offsets, is_parallel,
-            skipdropna, return_key, return_index);
-        return ret_table;
-    };
-    if (strategy == 0) return implement_strategy0();
-    if (strategy == 1) {
-        array_info* cat_column = in_table->columns[0];
-        return implement_categorical_exscan(cat_column);
-    }
-    if (strategy == 2) {
-        array_info* cat_column =
-            compute_categorical_index(in_table, num_keys, is_parallel);
-        if (cat_column == nullptr) {  // It turns out that there are too many
-                                      // different keys for exscan to be ok.
-            return implement_strategy0();
-        } else {
-            table_info* ret_table = implement_categorical_exscan(cat_column);
-            delete_info_decref_array(cat_column);
+            table_info* ret_table = groupby.run();
             return ret_table;
+        };
+        auto implement_categorical_exscan =
+            [&](array_info* cat_column) -> table_info* {
+            table_info* ret_table = mpi_exscan_computation(
+                cat_column, in_table, num_keys, ftypes, func_offsets,
+                is_parallel, skipdropna, return_key, return_index);
+            return ret_table;
+        };
+        if (strategy == 0) return implement_strategy0();
+        if (strategy == 1) {
+            array_info* cat_column = in_table->columns[0];
+            return implement_categorical_exscan(cat_column);
         }
-    }
-    return nullptr;
+        if (strategy == 2) {
+            array_info* cat_column =
+                compute_categorical_index(in_table, num_keys, is_parallel);
+            if (cat_column ==
+                nullptr) {  // It turns out that there are too many
+                            // different keys for exscan to be ok.
+                return implement_strategy0();
+            } else {
+                table_info* ret_table =
+                    implement_categorical_exscan(cat_column);
+                delete_info_decref_array(cat_column);
+                return ret_table;
+            }
+        }
+        return nullptr;
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
         return NULL;

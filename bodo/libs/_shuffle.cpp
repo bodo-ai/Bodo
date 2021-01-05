@@ -151,8 +151,8 @@ void mpi_comm_info::set_counts(uint32_t* hashes) {
         }
         calc_disp(send_disp_null, send_count_null);
         calc_disp(recv_disp_null, recv_count_null);
-        n_null_bytes =
-            std::accumulate(recv_count_null.begin(), recv_count_null.end(), size_t(0));
+        n_null_bytes = std::accumulate(recv_count_null.begin(),
+                                       recv_count_null.end(), size_t(0));
     }
     return;
 }
@@ -402,7 +402,8 @@ static void convert_len_arr_to_offset32(uint32_t* offsets,
     offsets[num_strs] = curr_offset;
 }
 
-static void convert_len_arr_to_offset(uint32_t* lens, offset_t* offsets, int64_t num_strs) {
+static void convert_len_arr_to_offset(uint32_t* lens, offset_t* offsets,
+                                      int64_t num_strs) {
     offset_t curr_offset = 0;
     for (size_t i = 0; i < num_strs; i++) {
         uint32_t length = lens[i];
@@ -459,10 +460,10 @@ void shuffle_list_string_null_bitmask(array_info* in_arr, array_info* out_arr,
     std::vector<int64_t> send_disp_null(n_pes), recv_disp_null(n_pes);
     calc_disp(send_disp_null, send_count_null);
     calc_disp(recv_disp_null, recv_count_null);
-    int64_t send_count_sum =
-        std::accumulate(send_count_null.begin(), send_count_null.end(), int64_t(0));
-    int64_t recv_count_sum =
-        std::accumulate(recv_count_null.begin(), recv_count_null.end(), int64_t(0));
+    int64_t send_count_sum = std::accumulate(send_count_null.begin(),
+                                             send_count_null.end(), int64_t(0));
+    int64_t recv_count_sum = std::accumulate(recv_count_null.begin(),
+                                             recv_count_null.end(), int64_t(0));
     std::vector<uint8_t> Vsend(send_count_sum);
     std::vector<uint8_t> Vrecv(recv_count_sum);
     offset_t pos_index = 0;
@@ -550,14 +551,14 @@ static void shuffle_array(array_info* send_arr, array_info* out_arr,
                        out_arr->data2, recv_count, recv_disp, mpi_typ,
                        MPI_COMM_WORLD);
         convert_len_arr_to_offset32((uint32_t*)out_arr->data2,
-                                  (size_t)out_arr->length);
+                                    (size_t)out_arr->length);
 #else
         std::vector<uint32_t> lens(out_arr->length);
         bodo_alltoallv(send_arr->data2, send_count, send_disp, mpi_typ,
                        lens.data(), recv_count, recv_disp, mpi_typ,
                        MPI_COMM_WORLD);
         convert_len_arr_to_offset(lens.data(), (offset_t*)out_arr->data2,
-                                   (size_t)out_arr->length);
+                                  (size_t)out_arr->length);
 #endif
         // string data
         mpi_typ = get_MPI_typ(Bodo_CTypes::UINT8);
@@ -595,7 +596,8 @@ std::shared_ptr<arrow::Buffer> shuffle_arrow_bitmap_buffer(
     std::vector<int64_t> const& send_count,
     std::vector<int64_t> const& recv_count, int const& n_pes, uint32_t* hashes,
     T const& input_array) {
-    size_t n_rows = std::accumulate(send_count.begin(), send_count.end(), size_t(0));
+    size_t n_rows =
+        std::accumulate(send_count.begin(), send_count.end(), size_t(0));
     size_t n_rows_out =
         std::accumulate(recv_count.begin(), recv_count.end(), size_t(0));
     // Computing the null_bitmap.
@@ -615,10 +617,10 @@ std::shared_ptr<arrow::Buffer> shuffle_arrow_bitmap_buffer(
     std::vector<uint8_t> send_null_bitmask((n_rows + 7) >> 3, 0);
     for (size_t i_row = 0; i_row < n_rows; i_row++)
         SetBitTo(send_null_bitmask.data(), i_row, !input_array->IsNull(i_row));
-    int64_t n_row_send_null =
-        std::accumulate(send_count_null.begin(), send_count_null.end(), int64_t(0));
-    int64_t n_row_recv_null =
-        std::accumulate(recv_count_null.begin(), recv_count_null.end(), int64_t(0));
+    int64_t n_row_send_null = std::accumulate(
+        send_count_null.begin(), send_count_null.end(), int64_t(0));
+    int64_t n_row_recv_null = std::accumulate(
+        recv_count_null.begin(), recv_count_null.end(), int64_t(0));
     std::vector<uint8_t> send_array_null_bitmask(n_row_send_null, 0);
     std::vector<uint8_t> recv_array_null_bitmask(n_row_recv_null, 0);
     fill_send_array_null_inner(send_array_null_bitmask.data(),
@@ -651,7 +653,8 @@ std::shared_ptr<arrow::Buffer> shuffle_arrow_offset_buffer(
     std::vector<int64_t> const& send_count,
     std::vector<int64_t> const& recv_count, uint32_t* hashes, int const& n_pes,
     T const& input_array) {
-    size_t n_rows = std::accumulate(send_count.begin(), send_count.end(), size_t(0));
+    size_t n_rows =
+        std::accumulate(send_count.begin(), send_count.end(), size_t(0));
     size_t n_rows_out =
         std::accumulate(recv_count.begin(), recv_count.end(), size_t(0));
     std::vector<int64_t> send_disp(n_pes);
@@ -697,7 +700,8 @@ std::vector<uint32_t> map_hashes_array(std::vector<int64_t> const& send_count,
                                        std::vector<int64_t> const& recv_count,
                                        uint32_t* hashes, int const& n_pes,
                                        T const& input_array) {
-    size_t n_rows = std::accumulate(send_count.begin(), send_count.end(), size_t(0));
+    size_t n_rows =
+        std::accumulate(send_count.begin(), send_count.end(), size_t(0));
     size_t n_ent = input_array->value_offset(n_rows);
     std::vector<uint32_t> hashes_out(n_ent);
     for (size_t i_row = 0; i_row < n_rows; i_row++) {
@@ -719,7 +723,8 @@ std::shared_ptr<arrow::Buffer> shuffle_arrow_primitive_buffer(
     uint64_t siztype = numpy_item_size[dtype];
     MPI_Datatype mpi_typ = get_MPI_typ(dtype);
     // Setting up the arrays
-    size_t n_rows = std::accumulate(send_count.begin(), send_count.end(), size_t(0));
+    size_t n_rows =
+        std::accumulate(send_count.begin(), send_count.end(), size_t(0));
     size_t n_rows_out =
         std::accumulate(recv_count.begin(), recv_count.end(), size_t(0));
     std::vector<int64_t> send_disp(n_pes);
@@ -759,7 +764,8 @@ std::shared_ptr<arrow::Buffer> shuffle_string_buffer(
 #else
     std::shared_ptr<arrow::LargeStringArray> const& string_array) {
 #endif
-    size_t n_rows = std::accumulate(send_count.begin(), send_count.end(), size_t(0));
+    size_t n_rows =
+        std::accumulate(send_count.begin(), send_count.end(), size_t(0));
     std::vector<int64_t> send_count_char(n_pes, 0);
     std::vector<int64_t> recv_count_char(n_pes);
     for (size_t i_row = 0; i_row < n_rows; i_row++) {
@@ -774,10 +780,10 @@ std::shared_ptr<arrow::Buffer> shuffle_string_buffer(
     std::vector<int64_t> recv_disp_char(n_pes);
     calc_disp(send_disp_char, send_count_char);
     calc_disp(recv_disp_char, recv_count_char);
-    int64_t n_chars_send_tot =
-        std::accumulate(send_count_char.begin(), send_count_char.end(), int64_t(0));
-    int64_t n_chars_recv_tot =
-        std::accumulate(recv_count_char.begin(), recv_count_char.end(), int64_t(0));
+    int64_t n_chars_send_tot = std::accumulate(
+        send_count_char.begin(), send_count_char.end(), int64_t(0));
+    int64_t n_chars_recv_tot = std::accumulate(
+        recv_count_char.begin(), recv_count_char.end(), int64_t(0));
     char* send_char = new char[n_chars_send_tot];
     size_t siz_out = sizeof(char) * n_chars_recv_tot;
     arrow::Result<std::unique_ptr<arrow::Buffer>> maybe_buffer =
@@ -857,7 +863,8 @@ std::shared_ptr<arrow::Array> shuffle_arrow_array(
 #if OFFSET_BITWIDTH == 32
         return std::make_shared<arrow::ListArray>(list_array->type(),
 #else
-        return std::make_shared<arrow::LargeListArray>(list_array->type(),
+        return std::make_shared<arrow::LargeListArray>(
+            list_array->type(),
 #endif
                                                   n_rows_out, list_offsets,
                                                   child_array, null_bitmap_out);
@@ -904,7 +911,8 @@ std::shared_ptr<arrow::Array> shuffle_arrow_array(
 #if OFFSET_BITWIDTH == 32
         return std::make_shared<arrow::StringArray>(n_rows_out, list_offsets,
 #else
-        return std::make_shared<arrow::LargeStringArray>(n_rows_out, list_offsets,
+        return std::make_shared<arrow::LargeStringArray>(n_rows_out,
+                                                         list_offsets,
 #endif
                                                     data, null_bitmap_out);
     } else {
@@ -937,13 +945,14 @@ std::shared_ptr<arrow::Array> shuffle_arrow_array(
 table_info* shuffle_table_kernel(table_info* in_table, uint32_t* hashes,
                                  mpi_comm_info const& comm_info) {
     int n_pes = comm_info.n_pes;
-    int64_t total_recv = std::accumulate(comm_info.recv_count.begin(),
-                                         comm_info.recv_count.end(), int64_t(0));
+    int64_t total_recv = std::accumulate(
+        comm_info.recv_count.begin(), comm_info.recv_count.end(), int64_t(0));
     size_t n_cols = (size_t)in_table->ncols();
     std::vector<int64_t> n_sub_recvs(n_cols);
     for (size_t i = 0; i < n_cols; i++)
-        n_sub_recvs[i] = std::accumulate(comm_info.recv_count_sub[i].begin(),
-                                         comm_info.recv_count_sub[i].end(), int64_t(0));
+        n_sub_recvs[i] =
+            std::accumulate(comm_info.recv_count_sub[i].begin(),
+                            comm_info.recv_count_sub[i].end(), int64_t(0));
     std::vector<int64_t> n_sub_sub_recvs(n_cols);
     for (size_t i = 0; i < n_cols; i++)
         n_sub_sub_recvs[i] =
@@ -1057,8 +1066,8 @@ array_info* reverse_shuffle_string_array(array_info* in_arr, uint32_t* hashes,
     calc_disp(recv_disp_sub, recv_count_sub);
     // 2: allocating the array
     int64_t n_count_sub = send_disp_sub[n_pes - 1] + send_count_sub[n_pes - 1];
-    int64_t n_rows_ret = std::accumulate(comm_info.send_count.begin(),
-                                         comm_info.send_count.end(), int64_t(0));
+    int64_t n_rows_ret = std::accumulate(
+        comm_info.send_count.begin(), comm_info.send_count.end(), int64_t(0));
     array_info* out_arr =
         alloc_array(n_rows_ret, n_count_sub, 0, in_arr->arr_type, in_arr->dtype,
                     0, in_arr->num_categories);
@@ -1086,8 +1095,8 @@ array_info* reverse_shuffle_string_array(array_info* in_arr, uint32_t* hashes,
     convert_len_arr_to_offset(out_lens.data(), out_offset, out_len);
 #endif
     // 4: the characters themselves
-    int64_t tot_char =
-        std::accumulate(send_count_sub.begin(), send_count_sub.end(), int64_t(0));
+    int64_t tot_char = std::accumulate(send_count_sub.begin(),
+                                       send_count_sub.end(), int64_t(0));
     std::vector<uint8_t> tmp_recv(tot_char);
     mpi_typ = get_MPI_typ(Bodo_CTypes::UINT8);
     bodo_alltoallv(in_arr->data1, recv_count_sub, recv_disp_sub, mpi_typ,
@@ -1115,10 +1124,10 @@ void reverse_shuffle_null_bitmap_array(array_info* in_arr, array_info* out_arr,
         send_count_null[i] = (comm_info.send_count[i] + 7) >> 3;
         recv_count_null[i] = (comm_info.recv_count[i] + 7) >> 3;
     }
-    int64_t n_send_null_tot =
-        std::accumulate(send_count_null.begin(), send_count_null.end(), int64_t(0));
-    int64_t n_recv_null_tot =
-        std::accumulate(recv_count_null.begin(), recv_count_null.end(), int64_t(0));
+    int64_t n_send_null_tot = std::accumulate(
+        send_count_null.begin(), send_count_null.end(), int64_t(0));
+    int64_t n_recv_null_tot = std::accumulate(
+        recv_count_null.begin(), recv_count_null.end(), int64_t(0));
     std::vector<int64_t> send_disp_null(n_pes), recv_disp_null(n_pes);
     calc_disp(send_disp_null, send_count_null);
     calc_disp(recv_disp_null, recv_count_null);
@@ -1179,8 +1188,8 @@ array_info* reverse_shuffle_list_string_array(array_info* in_arr,
     calc_disp(send_disp_sub_sub, send_count_sub_sub);
     calc_disp(recv_disp_sub_sub, recv_count_sub_sub);
     // 3: Now allocating
-    int64_t n_rows_ret = std::accumulate(comm_info.send_count.begin(),
-                                         comm_info.send_count.end(), int64_t(0));
+    int64_t n_rows_ret = std::accumulate(
+        comm_info.send_count.begin(), comm_info.send_count.end(), int64_t(0));
     int64_t n_count_sub = send_disp_sub[n_pes - 1] + send_count_sub[n_pes - 1];
     int64_t n_count_sub_sub =
         send_disp_sub_sub[n_pes - 1] + send_count_sub_sub[n_pes - 1];
@@ -1271,10 +1280,10 @@ array_info* reverse_shuffle_list_string_array(array_info* in_arr,
         send_count_sub_null[i] = (send_count_sub[i] + 7) >> 3;
         recv_count_sub_null[i] = (recv_count_sub[i] + 7) >> 3;
     }
-    int64_t n_send_sub_null_tot = std::accumulate(send_count_sub_null.begin(),
-                                                  send_count_sub_null.end(), int64_t(0));
-    int64_t n_recv_sub_null_tot = std::accumulate(recv_count_sub_null.begin(),
-                                                  recv_count_sub_null.end(), int64_t(0));
+    int64_t n_send_sub_null_tot = std::accumulate(
+        send_count_sub_null.begin(), send_count_sub_null.end(), int64_t(0));
+    int64_t n_recv_sub_null_tot = std::accumulate(
+        recv_count_sub_null.begin(), recv_count_sub_null.end(), int64_t(0));
     std::vector<int64_t> send_disp_sub_null(n_pes), recv_disp_sub_null(n_pes);
     calc_disp(send_disp_sub_null, send_count_sub_null);
     calc_disp(recv_disp_sub_null, recv_count_sub_null);
@@ -1523,7 +1532,8 @@ std::shared_ptr<arrow::Buffer> broadcast_arrow_string_buffer(
 #if OFFSET_BITWIDTH == 32
     int64_t n_rows, std::shared_ptr<arrow::StringArray> const& string_array) {
 #else
-    int64_t n_rows, std::shared_ptr<arrow::LargeStringArray> const& string_array) {
+    int64_t n_rows,
+    std::shared_ptr<arrow::LargeStringArray> const& string_array) {
 #endif
     int myrank, mpi_root = 0;
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
@@ -1603,7 +1613,8 @@ std::shared_ptr<arrow::Array> broadcast_arrow_array(
 #if OFFSET_BITWIDTH == 32
         return std::make_shared<arrow::ListArray>(ref_list_arr->type(), n_rows,
 #else
-        return std::make_shared<arrow::LargeListArray>(ref_list_arr->type(), n_rows,
+        return std::make_shared<arrow::LargeListArray>(
+            ref_list_arr->type(), n_rows,
 #endif
                                                   list_offsets, child_array,
                                                   null_bitmap);
@@ -1642,7 +1653,8 @@ std::shared_ptr<arrow::Array> broadcast_arrow_array(
 #if OFFSET_BITWIDTH == 32
             string_array = std::dynamic_pointer_cast<arrow::StringArray>(arr);
 #else
-            string_array = std::dynamic_pointer_cast<arrow::LargeStringArray>(arr);
+            string_array =
+                std::dynamic_pointer_cast<arrow::LargeStringArray>(arr);
 #endif
         }
         std::shared_ptr<arrow::Buffer> list_offsets =
@@ -1654,7 +1666,8 @@ std::shared_ptr<arrow::Array> broadcast_arrow_array(
 #if OFFSET_BITWIDTH == 32
         return std::make_shared<arrow::StringArray>(n_rows, list_offsets, data,
 #else
-        return std::make_shared<arrow::LargeStringArray>(n_rows, list_offsets, data,
+        return std::make_shared<arrow::LargeStringArray>(n_rows, list_offsets,
+                                                         data,
 #endif
                                                     null_bitmap);
     } else {
@@ -2347,8 +2360,8 @@ table_info* gather_table(table_info* in_table, int64_t n_cols_i,
             for (int i_p = 0; i_p < n_pes; i_p++)
                 recv_count_null[i_p] = (rows_counts[i_p] + 7) >> 3;
             calc_disp(recv_disp_null, recv_count_null);
-            size_t n_null_bytes = std::accumulate(recv_count_null.begin(),
-                                                  recv_count_null.end(), size_t(0));
+            size_t n_null_bytes = std::accumulate(
+                recv_count_null.begin(), recv_count_null.end(), size_t(0));
             std::vector<uint8_t> tmp_null_bytes(n_null_bytes, 0);
             MPI_Datatype mpi_typ = get_MPI_typ(Bodo_CTypes::UINT8);
             int n_bytes = (n_rows + 7) >> 3;
@@ -2378,18 +2391,19 @@ table_info* gather_table(table_info* in_table, int64_t n_cols_i,
 table_info* compute_node_partition_by_hash(table_info* in_table, int64_t n_keys,
                                            int64_t n_pes) {
     try {
-    int64_t n_rows = in_table->nrows();
-    uint32_t* hashes = hash_keys_table(in_table, n_keys, SEED_HASH_PARTITION);
+        int64_t n_rows = in_table->nrows();
+        uint32_t* hashes =
+            hash_keys_table(in_table, n_keys, SEED_HASH_PARTITION);
 
-    std::vector<array_info*> out_arrs;
-    array_info* out_arr = alloc_array(n_rows, -1, -1, bodo_array_type::NUMPY,
-                                      Bodo_CTypes::INT32, 0, 0);
-    for (int64_t i_row = 0; i_row < n_rows; i_row++) {
-        int32_t node_id = hashes[i_row] % n_pes;
-        out_arr->at<int32_t>(i_row) = node_id;
-    }
-    out_arrs.push_back(out_arr);
-    return new table_info(out_arrs);
+        std::vector<array_info*> out_arrs;
+        array_info* out_arr = alloc_array(
+            n_rows, -1, -1, bodo_array_type::NUMPY, Bodo_CTypes::INT32, 0, 0);
+        for (int64_t i_row = 0; i_row < n_rows; i_row++) {
+            int32_t node_id = hashes[i_row] % n_pes;
+            out_arr->at<int32_t>(i_row) = node_id;
+        }
+        out_arrs.push_back(out_arr);
+        return new table_info(out_arrs);
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
         return NULL;
@@ -2450,7 +2464,7 @@ table_info* shuffle_renormalization_group(table_info* in_table,
         n_rows_tot = n_rows;
     }
 
-    std::vector<size_t> random_order;
+    std::vector<int64_t> random_order;
     std::mt19937 g;  // rng
     if (random) {
         if (random == 1) {  // seed not provided
