@@ -1,5 +1,4 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
-import datetime
 
 import numpy as np
 import pandas as pd
@@ -300,7 +299,7 @@ def test_groupby_agg_funcs_udf(memory_leak_check):
     """
 
     def impl(df):
-        return df.groupby(by=["A"]).agg(np.sum, np.sum)
+        return df.groupby(by=["A"]).B.agg((np.sum, np.sum))
 
     df = pd.DataFrame({"A": [1, 2, 2], "B": [1, 2, 2], "C": ["aba", "aba", "aba"]})
     with pytest.raises(BodoError, match=".* 'func' must be user defined function"):
@@ -355,7 +354,7 @@ def test_groupby_aggregate_funcs_udf(memory_leak_check):
     """
 
     def impl(df):
-        return df.groupby(by=["A"]).aggregate(np.sum, np.sum)
+        return df.groupby(by=["A"]).B.aggregate((np.sum, np.sum))
 
     df = pd.DataFrame({"A": [1, 2, 2], "B": [1, 2, 2], "C": ["aba", "aba", "aba"]})
     with pytest.raises(BodoError, match=".* 'func' must be user defined function"):
