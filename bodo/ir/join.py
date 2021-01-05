@@ -9,7 +9,6 @@ from numba import generated_jit
 from numba.core import ir, ir_utils, typeinfer, types
 from numba.core.ir_utils import (
     compile_to_numba_ir,
-    mk_unique_var,
     replace_arg_nodes,
     replace_vars_inner,
     visit_vars_inner,
@@ -17,8 +16,6 @@ from numba.core.ir_utils import (
 from numba.extending import overload
 
 import bodo
-from bodo import objmode
-from bodo.hiframes.pd_categorical_ext import CategoricalArray
 from bodo.libs.array import (
     arr_info_list_to_table,
     array_to_info,
@@ -31,25 +28,19 @@ from bodo.libs.array import (
     shuffle_table,
 )
 from bodo.libs.bool_arr_ext import boolean_array
-from bodo.libs.decimal_arr_ext import DecimalArrayType
 from bodo.libs.int_arr_ext import IntDtype, IntegerArrayType
 from bodo.libs.str_arr_ext import (
     copy_str_arr_slice,
     cp_str_list_to_array,
     get_bit_bitmap,
-    get_data_ptr,
     get_null_bitmap_ptr,
-    get_offset_ptr,
     get_str_arr_item_length,
     get_str_arr_item_ptr,
     get_utf8_size,
     getitem_str_offset,
     num_total_chars,
     pre_alloc_string_array,
-    print_str_arr,
     set_bit_to,
-    setitem_str_offset,
-    str_arr_set_na,
     str_copy_ptr,
     string_array_type,
     to_string_list,
@@ -66,7 +57,6 @@ from bodo.utils.shuffle import (
     finalize_shuffle_meta,
     getitem_arr_tup_single,
     update_shuffle_meta,
-    val_to_tup,
 )
 from bodo.utils.typing import BodoError, is_dtype_nullable
 from bodo.utils.utils import alloc_arr_tup, debug_prints
@@ -323,6 +313,9 @@ def remove_dead_join(
     for col_name, col_var in join_node.out_data_vars.items():
         if col_var.name in lives:
             all_cols_dead = False
+            continue
+        # avoid index sentinel (that is not in column_origins)
+        if col_name == "$_bodo_index_":
             continue
         orig, orig_name = join_node.column_origins[col_name]
         if orig == "left" and orig_name not in join_node.left_keys:
