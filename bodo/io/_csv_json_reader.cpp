@@ -488,7 +488,7 @@ class PathInfo {
                     s3_get_fs(&s3_fs, bucket_region);
                     fs = s3_fs;
                     // remove s3:// prefix from file_path
-                    (void)arrow::fs::S3Options::FromUri(uri, &file_path);
+                    file_path = file_path.substr(5);
                 } else if (is_hdfs) {
                     import_fs_module(Bodo_Fs::hdfs, "", fs_mod);
                     get_get_fs_pyobject(Bodo_Fs::hdfs, "", fs_mod, func_obj);
@@ -626,6 +626,7 @@ class PathInfo {
                         file_names.push_back(path);
                         file_sizes.push_back(fsize);
                     }
+
                 }
             }
         }
@@ -679,11 +680,12 @@ class PathInfo {
             compression = compression_pyarg;
             std::string fname;
             if (compression_pyarg == "infer") {
-                if (!is_directory())
+                if (!is_directory()) {
                     fname = file_path;
-                else
+                } else {
                     // infer compression scheme from the name of the first file
                     fname = get_first_file();
+                }
                 if (boost::ends_with(fname, ".gz"))
                     compression = "gzip";  // using arrow-cpp's representation
                 else if (boost::ends_with(fname, ".bz2"))
