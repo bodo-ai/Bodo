@@ -13,8 +13,15 @@ elif [[ $CHECK_LICENSE_EXPIRED  == 1 ]] && [[ $OBFUSCATE == 1 ]]; then
     else
         artifactory_channel="bodo.ai"
     fi
-elif [[ $CHECK_LICENSE_PLATFORM_AWS == 1 ]] && [[ $OBFUSCATE == 1 ]] && [[ ! -z "$IS_RELEASE" ]]; then
+elif [[ $CHECK_LICENSE_PLATFORM_AWS == 1 ]] && [[ $OBFUSCATE != 1 ]]; then
+        artifactory_channel="bodo.ai-platform-dev"
+elif [[ $CHECK_LICENSE_PLATFORM_AWS == 1 ]] && [[ $OBFUSCATE == 1 ]]; then
+    # if release, then to bodo.ai-platform, else to bodo.ai-platform-dev
+    if [[ ! -z "$IS_RELEASE" ]]; then
         artifactory_channel="bodo.ai-platform"
+    else
+        artifactory_channel="bodo.ai-platform-dev"
+    fi
 else
     artifactory_channel="bodo-binary"
 fi

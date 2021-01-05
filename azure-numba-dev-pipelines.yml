@@ -14,23 +14,13 @@ stages:
 - stage: Build_Bodo_Binary
   displayName: 'Build Bodo Binary'
   jobs:
-  - job: find_suffix
-    pool:
-      vmImage: macOS-latest
-    steps:
-    - script: |
-        set -eo pipefail
-        export BUILD_DATE=`date  +"%Y-%m-%d"`
-        export FILE_SUFFIX=built-${BUILD_DATE}
-        echo "##vso[task.setvariable variable=fileSuffix;isOutput=true]$FILE_SUFFIX"
-      displayName: 'write FILE_SUFFIX'
-      name: suffix_step
 
   - template: buildscripts/azure/azure-build-binary-linux-macos.yml
     parameters:
       name: Linux
       vmImage: ubuntu-latest
       useNumbaDev: true
+      platformBuild: false
 
 - stage: Test_Bodo_Binary
   displayName: Test Bodo Binary

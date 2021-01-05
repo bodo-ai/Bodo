@@ -1,0 +1,23 @@
+trigger:
+- refs/tags/*
+
+schedules:
+- cron: "0 0 * * 0"
+  displayName: 'Weekly Platform Build'
+  branches:
+    include:
+    - master
+
+pr: none
+
+stages:
+- stage: Build_Bodo_Binary
+  displayName: 'Build Bodo Binary'
+  jobs:
+
+  - template: buildscripts/azure/azure-build-binary-linux-macos.yml
+    parameters:
+      name: LinuxForPlatform
+      vmImage: ubuntu-latest
+      useNumbaDev: false
+      platformBuild: true

@@ -4,9 +4,6 @@ parameters:
 
 jobs:
 - job: ${{ parameters.name }}
-  dependsOn: find_suffix
-  variables:
-    suffix: $[ dependencies.find_suffix.outputs['suffix_step.fileSuffix'] ]
   pool:
     vmImage: ${{ parameters.vmImage }}
 
