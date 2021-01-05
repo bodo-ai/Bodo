@@ -33,12 +33,14 @@ from bodo.utils.typing import (
     get_overload_const_str,
     is_iterable_type,
     is_literal_type,
+    is_overload_constant_bool,
     is_overload_constant_int,
     is_overload_constant_str,
     is_overload_false,
     is_overload_none,
     is_overload_true,
     is_overload_zero,
+    raise_bodo_error,
 )
 
 
@@ -176,9 +178,33 @@ def overload_series_reset_index(S, level=None, drop=False, name=None, inplace=Fa
     work in very specific cases where these are known at compile time
     (e.g. groupby("A")["B"].sum().reset_index())"""
 
-    unsupported_args = dict(level=level, drop=drop, name=name, inplace=inplace)
-    arg_defaults = dict(level=None, drop=False, name=None, inplace=False)
-    check_unsupported_args("Series.reset_index()", unsupported_args, arg_defaults)
+    unsupported_args = dict(name=name, inplace=inplace)
+    arg_defaults = dict(name=None, inplace=False)
+    check_unsupported_args("Series.reset_index", unsupported_args, arg_defaults)
+
+    # we only support dropping all levels currently
+    if not bodo.hiframes.pd_dataframe_ext._is_all_levels(S, level):  # pragma: no cover
+        raise_bodo_error(
+            "Series.reset_index(): only dropping all index levels supported"
+        )
+
+    # make sure 'drop' is a constant bool
+    if not is_overload_constant_bool(drop):  # pragma: no cover
+        raise_bodo_error(
+            "reset_index(): 'drop' parameter should be a constant boolean value"
+        )
+
+    if is_overload_true(drop):
+
+        def impl_drop(
+            S, level=None, drop=False, name=None, inplace=False
+        ):  # pragma: no cover
+            arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+            index = bodo.hiframes.pd_index_ext.init_range_index(0, len(arr), 1, None)
+            name = bodo.hiframes.pd_series_ext.get_series_name(S)
+            return bodo.hiframes.pd_series_ext.init_series(arr, index, name)
+
+        return impl_drop
 
     def get_name_literal(name_typ):
         """ return literal value or throw error in non-literal type """
