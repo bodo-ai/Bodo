@@ -254,10 +254,8 @@ def groupby_rolling_overload(
     axis=0,
     closed=None,
 ):
-    unsupported_args = dict(
-        min_periods=min_periods, win_type=win_type, axis=axis, closed=closed
-    )
-    arg_defaults = dict(min_periods=None, win_type=None, axis=0, closed=None)
+    unsupported_args = dict(win_type=win_type, axis=axis, closed=closed)
+    arg_defaults = dict(win_type=None, axis=0, closed=None)
     check_unsupported_args("GroupBy.rolling", unsupported_args, arg_defaults)
 
     def _impl(
