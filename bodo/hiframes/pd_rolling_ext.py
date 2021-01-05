@@ -514,6 +514,7 @@ class RollingAttribute(AttributeTemplate):
                 rolling.obj_type,
                 rolling.window_type,
                 rolling.on,
-                (attr,),
+                # 'on' column is always kept in selected columns
+                (attr,) if rolling.on is None else (attr, rolling.on),
                 True,
             )
