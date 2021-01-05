@@ -2771,6 +2771,20 @@ def test_series_describe(numeric_series_val, memory_leak_check):
     check_func(test_impl, (numeric_series_val,), False)
 
 
+def test_series_reset_index(memory_leak_check):
+    """Test Series.reset_index(drop=True)"""
+
+    def impl(S):
+        return S.reset_index(level=[0, 1], drop=True)
+
+    S = pd.Series(
+        [3, 2, 1, 5],
+        index=pd.MultiIndex.from_arrays(([3, 2, 1, 4], [5, 6, 7, 8])),
+        name="A",
+    )
+    check_func(impl, (S,))
+
+
 @pytest.mark.parametrize(
     "S,value",
     [
