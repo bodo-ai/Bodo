@@ -570,8 +570,24 @@ class DataframeGroupByAttribute(AttributeTemplate):
         return f_name, out_tp
 
     def _resolve_agg(self, grp, args, kws):
-        err_msg = "Groupby.agg()/aggregate(): Must provide 'func'"
-        func = get_call_expr_arg("agg", args, dict(kws), 0, "func", err_msg=err_msg)
+        """infer groupby output type for agg/aggregate"""
+        # NamedAgg case has func=None
+        # e.g. df.groupby("A").agg(C=pd.NamedAgg(column="B", aggfunc="sum"))
+        func = get_call_expr_arg("agg", args, dict(kws), 0, "func", default=types.none)
+        # untyped pass converts NamedAgg to regular tuple (equivalent in Pandas) to
+        # enable typing.
+        # This check is same as Pandas:
+        # https://github.com/pandas-dev/pandas/blob/64027e60eead00d5ccccc5c7cddc9493a186aa95/pandas/core/aggregation.py#L129
+        relabeling = kws and all(
+            isinstance(v, types.Tuple) and len(v) == 2 for v in kws.values()
+        )
+
+        if is_overload_none(func) and not relabeling:
+            raise_bodo_error("Groupby.agg()/aggregate(): Must provide 'func'")
+        if len(args) > 1 or (kws and not relabeling):
+            raise_bodo_error(
+                "Groupby.agg()/aggregate(): passing extra arguments to functions not supported yet."
+            )
         has_cumulative_ops = False
 
         def _append_out_type(grp, out_data, out_tp):
@@ -585,11 +601,17 @@ class DataframeGroupByAttribute(AttributeTemplate):
                 out_data.append(out_tp.data)
 
         # multi-function constant dictionary case
-        if is_overload_constant_dict(func):
+        if relabeling or is_overload_constant_dict(func):
             # get mapping of column names to functions:
             # string -> string or tuple of strings (tuple when multiple
             # functions are applied to a column)
-            col_map = get_overload_constant_dict(func)
+            if relabeling:
+                col_map = {
+                    get_literal_value(in_col): get_literal_value(col_func)
+                    for (in_col, col_func) in kws.values()
+                }
+            else:
+                col_map = get_overload_constant_dict(func)
 
             # make sure selected columns exist in dataframe
             if any(c not in grp.selection for c in col_map.keys()):
@@ -604,6 +626,12 @@ class DataframeGroupByAttribute(AttributeTemplate):
             multi_level_names = any(
                 isinstance(f_val, (tuple, list)) for f_val in col_map.values()
             )
+
+            # NamedAgg case in Pandas doesn't support multiple functions
+            if relabeling and multi_level_names:
+                raise_bodo_error(
+                    "Groupby.agg()/aggregate(): cannot pass multiple functions in a single pd.NamedAgg()"
+                )
 
             # get output names and output types
             out_columns = []
@@ -638,9 +666,13 @@ class DataframeGroupByAttribute(AttributeTemplate):
                     has_cumulative_ops = f_name in list_cumulative
                     if multi_level_names:
                         out_columns.append((col_name, f_name))
-                    else:
+                    elif not relabeling:
                         out_columns.append(col_name)
                     _append_out_type(grp, out_data, out_tp)
+
+            # user specifies output names as kws in NamedAgg case
+            if relabeling:
+                out_columns += list(kws.keys())
 
             if has_cumulative_ops:
                 # result of groupby.cumsum, etc. doesn't have a group index
@@ -648,6 +680,7 @@ class DataframeGroupByAttribute(AttributeTemplate):
                 index = grp.df_type.index
             else:
                 index = out_tp.index
+
             out_res = DataFrameType(tuple(out_data), index, tuple(out_columns))
             return signature(out_res, *args)
 

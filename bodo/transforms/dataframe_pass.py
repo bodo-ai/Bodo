@@ -1348,13 +1348,20 @@ class DataFramePass:
         else:
             in_cols = [c for c in grp_typ.selection if c in out_typ.columns]
         if func_name in ("agg", "aggregate"):
-            func_var = get_call_expr_arg(func_name, rhs.args, dict(rhs.kws), 0, "func")
-            agg_func_typ = self.typemap[func_var.name]
-            if is_overload_constant_dict(agg_func_typ):
-                func_dict = get_overload_constant_dict(agg_func_typ)
-                # multi-function const dict case:
-                # in this case, the input columns are the ones in the dict
-                in_cols = [name for name in func_dict.keys()]
+            kws = dict(rhs.kws)
+            func_var = get_call_expr_arg(func_name, rhs.args, kws, 0, "func", "")
+            # NamedAgg case, e.g. df.groupby("A").agg(C=pd.NamedAgg("B", "sum"))
+            if func_var == "":
+                in_cols = [
+                    get_literal_value(self.typemap[v.name])[0] for v in kws.values()
+                ]
+            else:
+                agg_func_typ = self.typemap[func_var.name]
+                if is_overload_constant_dict(agg_func_typ):
+                    func_dict = get_overload_constant_dict(agg_func_typ)
+                    # multi-function const dict case:
+                    # in this case, the input columns are the ones in the dict
+                    in_cols = [name for name in func_dict.keys()]
         agg_func = get_agg_func(self.func_ir, func_name, rhs, typemap=self.typemap)
         input_has_index = False
         same_index = False
