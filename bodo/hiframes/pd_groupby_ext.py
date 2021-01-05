@@ -606,25 +606,26 @@ class DataframeGroupByAttribute(AttributeTemplate):
             # string -> string or tuple of strings (tuple when multiple
             # functions are applied to a column)
             if relabeling:
-                col_map = {
-                    get_literal_value(in_col): get_literal_value(col_func)
-                    for (in_col, col_func) in kws.values()
-                }
+                # not using a col_map dictionary since input columns could be repeated
+                in_col_names = [
+                    get_literal_value(in_col) for (in_col, _) in kws.values()
+                ]
+                f_vals = [get_literal_value(col_func) for (_, col_func) in kws.values()]
             else:
                 col_map = get_overload_constant_dict(func)
+                in_col_names = tuple(col_map.keys())
+                f_vals = tuple(col_map.values())
 
             # make sure selected columns exist in dataframe
-            if any(c not in grp.selection for c in col_map.keys()):
+            if any(c not in grp.selection for c in in_col_names):
                 raise_const_error(
-                    "Selected column names {} not all available in dataframe column names {}".format(
-                        tuple(col_map.keys()), grp.selection
-                    )
+                    f"Selected column names {in_col_names} not all available in dataframe column names {grp.selection}"
                 )
 
             # if a list/tuple of functions is applied to any column, have to use
             # MultiLevel for every column (even if list/tuple length is one)
             multi_level_names = any(
-                isinstance(f_val, (tuple, list)) for f_val in col_map.values()
+                isinstance(f_val, (tuple, list)) for f_val in f_vals
             )
 
             # NamedAgg case in Pandas doesn't support multiple functions
@@ -645,7 +646,7 @@ class DataframeGroupByAttribute(AttributeTemplate):
                     out_column_type,
                     multi_level_names=multi_level_names,
                 )
-            for col_name, f_val in col_map.items():
+            for col_name, f_val in zip(in_col_names, f_vals):
                 if isinstance(f_val, (tuple, list)):
                     # TODO tuple containing function objects (not just strings)
                     for f in f_val:
