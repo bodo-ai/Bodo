@@ -70,6 +70,15 @@ We have three customized `pytest markers <http://doc.pytest.org/en/latest/exampl
    <https://boto3.amazonaws.com/v1/documentation/api/latest/index.html>`_ or `botocore
    <https://botocore.amazonaws.com/v1/documentation/api/latest/index.html>`_ is not installed.
 
+   To run the s3 related pytests, you need to
+   `install MinIO <https://docs.min.io/docs/minio-quickstart-guide.html>`_.
+   You also need to ensure ``minio`` can be found in your `$PATH`. If you are working
+   on Linux you can copy the steps we run in `CI <https://github.com/Bodo-inc/Bodo/blob/master/buildscripts/setup_minio.sh>`_.
+
+   Additionally, if you modify the S3 tests you may need to modify
+   `conftest.py <https://github.com/Bodo-inc/Bodo/blob/15f3d12a41bfe070217c403a7f1c67d76d856287/bodo/tests/conftest.py#L190>`_
+   to initialize any files you create.
+
 4. :code:`hdfs` defined in `pytest.ini <https://github.com/Bodo-inc/Bodo/blob/master/pytest.ini>`_::
 
       pytest -s -v -m "hdfs"
