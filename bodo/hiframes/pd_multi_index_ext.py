@@ -10,6 +10,7 @@ from numba.extending import (
     NativeValue,
     box,
     intrinsic,
+    lower_builtin,
     make_attribute_wrapper,
     models,
     overload,
@@ -224,3 +225,15 @@ def overload_multi_index_getitem(I, ind):
         )
         impl = loc_vars["impl"]
         return impl
+
+
+@lower_builtin(operator.is_, MultiIndexType, MultiIndexType)
+def multi_index_is(context, builder, sig, args):  # pragma: no cover
+    aty, bty = sig.args
+    if aty != bty:  # pragma: no cover
+        return cgutils.false_bit
+
+    def index_is_impl(a, b):  # pragma: no cover
+        return a._data is b._data and a._names is b._names and a._name is b._name
+
+    return context.compile_internal(builder, index_is_impl, sig, args)
