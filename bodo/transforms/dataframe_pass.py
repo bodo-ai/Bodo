@@ -1649,16 +1649,21 @@ class DataFramePass:
             func_text += "  if _is_parallel:\n"
             sum_no = bodo.libs.distributed_api.Reduce_Type.Sum.value
             func_text += f"    n_prev_groups = bodo.libs.distributed_api.dist_exscan(ngroups, np.int32({sum_no}))\n"
+        # NOTE: Pandas tracks whether output Index is same as input, and reorders output
+        # to match input if Index hasn't changed
+        # https://github.com/pandas-dev/pandas/blob/9ee8674a9fb593f138e66d7b108a097beaaab7f2/pandas/_libs/reduction.pyx#L369
+        func_text += f"  mutated = False\n"
         func_text += f"  for i in range(ngroups):\n"
-        func_text += (
-            f"    out_df = map_func(in_data[starts[i]:ends[i]], {udf_arg_names})\n"
-        )
+        func_text += "    piece = in_data[starts[i]:ends[i]]\n"
+
+        func_text += f"    out_df = map_func(piece, {udf_arg_names})\n"
         if isinstance(udf_return_type, SeriesType):
             func_text += (
                 "    out_idx = bodo.hiframes.pd_series_ext.get_series_index(out_df)\n"
             )
         else:
             func_text += "    out_idx = bodo.hiframes.pd_dataframe_ext.get_dataframe_index(out_df)\n"
+        func_text += "    mutated |= out_idx is not piece.index\n"
         func_text += (
             "    arrs_index.append(bodo.utils.conversion.index_to_array(out_idx))\n"
         )
@@ -1697,7 +1702,14 @@ class DataFramePass:
         else:
             index_names = "None"
         index_names += ", in_df.index.name"
-        func_text += f"  out_index = bodo.hiframes.pd_multi_index_ext.init_multi_index(({out_key_arr_names}, bodo.libs.array_kernels.concat(arrs_index)), ({index_names},), None)\n"
+        func_text += f"  out_idx_arr_all = bodo.libs.array_kernels.concat(arrs_index)\n"
+        func_text += f"  out_index = bodo.hiframes.pd_multi_index_ext.init_multi_index(({out_key_arr_names}, out_idx_arr_all), ({index_names},), None)\n"
+        # reorder output to match input if UDF Index is same as input
+        func_text += "  if not mutated:\n"
+        func_text += f"    rev_idx = sort_idx.argsort()\n"
+        func_text += f"    out_index = out_index[rev_idx]\n"
+        for i in range(n_out_cols):
+            func_text += f"    out_arr{i} = out_arr{i}[rev_idx]\n"
         out_data = ", ".join("out_arr{}".format(i) for i in range(n_out_cols))
         if isinstance(out_typ, SeriesType):
             # some ranks may have empty data after shuffle (ngroups == 0), so call the
