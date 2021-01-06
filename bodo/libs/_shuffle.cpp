@@ -1384,40 +1384,75 @@ table_info* reverse_shuffle_table_kernel(table_info* in_table, uint32_t* hashes,
 }
 
 // Note: Steals a reference from the input table.
-table_info* shuffle_table(table_info* in_table, int64_t n_keys) {
+table_info* shuffle_table(table_info* in_table, int64_t n_keys,
+                          int keep_comm_info) {
     // error checking
     if (in_table->ncols() <= 0 || n_keys <= 0) {
         Bodo_PyErr_SetString(PyExc_RuntimeError, "Invalid input shuffle table");
         return NULL;
     }
-#ifdef DEBUG_REVERSE_SHUFFLE
-    std::cout << "IN_TABLE (SHUFFLE):\n";
-    DEBUG_PrintSetOfColumn(std::cout, in_table->columns);
-    DEBUG_PrintRefct(std::cout, in_table->columns);
-#endif
-    mpi_comm_info comm_info(in_table->columns);
+
+    mpi_comm_info* comm_info = new mpi_comm_info(in_table->columns);
     // computing the hash data structure
     uint32_t* hashes = hash_keys_table(in_table, n_keys, SEED_HASH_PARTITION);
-    comm_info.set_counts(hashes);
+    comm_info->set_counts(hashes);
 
-    table_info* table = shuffle_table_kernel(in_table, hashes, comm_info);
-    delete[] hashes;
-#ifdef DEBUG_SHUFFLE
-    std::cout << "RET_TABLE (SHUFFLE):\n";
-    DEBUG_PrintSetOfColumn(std::cout, table->columns);
-    DEBUG_PrintRefct(std::cout, table->columns);
-    std::cout << "After the print statements\n";
-#endif
+    table_info* table = shuffle_table_kernel(in_table, hashes, *comm_info);
+    if (keep_comm_info) {
+        table->comm_info = comm_info;
+        table->hashes = hashes;
+    } else {
+        delete[] hashes;
+        delete comm_info;
+    }
+
     return table;
 }
 
-table_info* shuffle_table_py_entrypt(table_info* in_table, int64_t n_keys) {
+table_info* shuffle_table_py_entrypt(table_info* in_table, int64_t n_keys,
+                                     int keep_comm_info) {
     try {
-        return shuffle_table(in_table, n_keys);
+        return shuffle_table(in_table, n_keys, keep_comm_info);
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
         return NULL;
     }
+}
+
+/**
+ * @brief get shuffle info from table struct
+ *
+ * @param table input table
+ * @return shuffle_info* shuffle info of input table
+ */
+shuffle_info* get_shuffle_info(table_info* table) {
+    return new shuffle_info(table->comm_info, table->hashes);
+}
+
+/**
+ * @brief free allocated data of shuffle info
+ *
+ * @param sh_info input shuffle info
+ */
+void delete_shuffle_info(shuffle_info* sh_info) {
+    delete sh_info->comm_info;
+    delete[] sh_info->hashes;
+    delete sh_info;
+}
+
+// Note: Steals a reference from the input table.
+/**
+ * @brief reverse a previous shuffle of input table
+ *
+ * @param in_table input table
+ * @param sh_info shuffle info
+ * @return table_info* reverse shuffled output table
+ */
+table_info* reverse_shuffle_table(table_info* in_table, shuffle_info* sh_info) {
+    table_info* revshuf_table = reverse_shuffle_table_kernel(
+        in_table, sh_info->hashes, *sh_info->comm_info);
+
+    return revshuf_table;
 }
 
 table_info* coherent_shuffle_table(table_info* in_table, table_info* ref_table,

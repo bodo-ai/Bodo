@@ -416,6 +416,38 @@ inline typename std::enable_if<!is_multiple_array<ARRAY>::value, T&>::type getv(
     return ((T*)arr->data1)[idx];
 }
 
+struct mpi_comm_info {
+    int n_pes;
+    std::vector<array_info*> arrays;
+    size_t n_rows;
+    bool has_nulls;
+    // generally required MPI counts
+    std::vector<int64_t> send_count;
+    std::vector<int64_t> recv_count;
+    std::vector<int64_t> send_disp;
+    std::vector<int64_t> recv_disp;
+    // counts required for string arrays
+    std::vector<std::vector<int64_t>> send_count_sub;
+    std::vector<std::vector<int64_t>> recv_count_sub;
+    std::vector<std::vector<int64_t>> send_disp_sub;
+    std::vector<std::vector<int64_t>> recv_disp_sub;
+    // counts required for string list arrays
+    std::vector<std::vector<int64_t>> send_count_sub_sub;
+    std::vector<std::vector<int64_t>> recv_count_sub_sub;
+    std::vector<std::vector<int64_t>> send_disp_sub_sub;
+    std::vector<std::vector<int64_t>> recv_disp_sub_sub;
+    // counts for arrays with null bitmask
+    std::vector<int64_t> send_count_null;
+    std::vector<int64_t> recv_count_null;
+    std::vector<int64_t> send_disp_null;
+    std::vector<int64_t> recv_disp_null;
+    size_t n_null_bytes;
+
+    explicit mpi_comm_info(std::vector<array_info*>& _arrays);
+
+    void set_counts(uint32_t* hashes);
+};
+
 struct table_info {
     std::vector<array_info*> columns;
     // this is set and used by groupby to avoid putting additional info in
@@ -423,6 +455,11 @@ struct table_info {
     // for hashing)
     // TODO consider passing 'num_keys' to the constructor
     int64_t num_keys;
+    // keep shuffle info to be able to reverse the shuffle if necessary
+    // currently used in groupby apply
+    // TODO: refactor out?
+    mpi_comm_info* comm_info;
+    uint32_t* hashes;
     table_info() {}
     explicit table_info(std::vector<array_info*>& _columns)
         : columns(_columns) {}
@@ -495,9 +532,7 @@ struct numpy_arr_payload {
           strides(_strides) {}
 };
 
-
 void decref_numpy_payload(numpy_arr_payload arr);
-
 
 struct array_item_arr_payload {
     int64_t n_arrays;
@@ -530,7 +565,8 @@ struct str_arr_split_view_payload {
 numpy_arr_payload allocate_numpy_payload(int64_t length,
                                          Bodo_CTypes::CTypeEnum typ_enum);
 
-void dtor_array_item_array(array_item_arr_numpy_payload* payload, int64_t size, void* in);
+void dtor_array_item_array(array_item_arr_numpy_payload* payload, int64_t size,
+                           void* in);
 NRT_MemInfo* alloc_array_item_arr_meminfo();
 
 Bodo_CTypes::CTypeEnum arrow_to_bodo_type(arrow::Type::type type);

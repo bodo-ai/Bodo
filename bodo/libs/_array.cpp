@@ -77,7 +77,8 @@ ArrayBuildInfo nested_array_from_c(const int* types, const uint8_t** buffers,
 #if OFFSET_BITWIDTH == 32
             std::make_shared<arrow::ListArray>(arrow::list(field), length,
 #else
-            std::make_shared<arrow::LargeListArray>(arrow::large_list(field), length,
+            std::make_shared<arrow::LargeListArray>(arrow::large_list(field),
+                                                    length,
 #endif
                                                list_offsets, ai.array,
                                                null_bitmap);
@@ -236,18 +237,18 @@ ArrayBuildInfo nested_array_from_c(const int* types, const uint8_t** buffers,
 array_info* nested_array_to_info(int* types, const uint8_t** buffers,
                                  int64_t* lengths, char** field_names,
                                  NRT_MemInfo* meminfo) {
-    try{
-    int type_pos = 0;
-    int buf_pos = 0;
-    int length_pos = 0;
-    int name_pos = 0;
-    ArrayBuildInfo ai =
-        nested_array_from_c(types, buffers, lengths, field_names, type_pos,
-                            buf_pos, length_pos, name_pos);
-    // TODO: better memory management of struct, meminfo refcount?
-    return new array_info(bodo_array_type::ARROW, Bodo_CTypes::INT8 /*dummy*/,
-                          lengths[0], -1, -1, NULL, NULL, NULL, NULL, NULL,
-                          meminfo, NULL, ai.array);
+    try {
+        int type_pos = 0;
+        int buf_pos = 0;
+        int length_pos = 0;
+        int name_pos = 0;
+        ArrayBuildInfo ai =
+            nested_array_from_c(types, buffers, lengths, field_names, type_pos,
+                                buf_pos, length_pos, name_pos);
+        // TODO: better memory management of struct, meminfo refcount?
+        return new array_info(
+            bodo_array_type::ARROW, Bodo_CTypes::INT8 /*dummy*/, lengths[0], -1,
+            -1, NULL, NULL, NULL, NULL, NULL, meminfo, NULL, ai.array);
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
         return NULL;
@@ -329,7 +330,10 @@ array_info* decimal_array_to_info(uint64_t n_items, char* data, int typ_enum,
 void info_to_list_string_array(array_info* info,
                                NRT_MemInfo** array_item_meminfo) {
     if (info->arr_type != bodo_array_type::LIST_STRING) {
-        PyErr_SetString(PyExc_RuntimeError, "_array.cpp::info_to_list_string_array: info_to_list_string_array requires list string input.");
+        PyErr_SetString(
+            PyExc_RuntimeError,
+            "_array.cpp::info_to_list_string_array: info_to_list_string_array "
+            "requires list string input.");
         return;
     }
 
@@ -339,9 +343,10 @@ void info_to_list_string_array(array_info* info,
 void info_to_nested_array(array_info* info, int64_t* lengths,
                           array_info** out_infos) {
     try {
-    int64_t lengths_pos = 0;
-    int64_t infos_pos = 0;
-    nested_array_to_c(info->array, lengths, out_infos, lengths_pos, infos_pos);
+        int64_t lengths_pos = 0;
+        int64_t infos_pos = 0;
+        nested_array_to_c(info->array, lengths, out_infos, lengths_pos,
+                          infos_pos);
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
         return;
@@ -350,7 +355,9 @@ void info_to_nested_array(array_info* info, int64_t* lengths,
 
 void info_to_string_array(array_info* info, NRT_MemInfo** meminfo) {
     if (info->arr_type != bodo_array_type::STRING) {
-        PyErr_SetString(PyExc_RuntimeError,"_array.cpp::info_to_string_array: info_to_string_array requires string input.");
+        PyErr_SetString(PyExc_RuntimeError,
+                        "_array.cpp::info_to_string_array: "
+                        "info_to_string_array requires string input.");
         return;
     }
     *meminfo = info->meminfo;
@@ -361,7 +368,9 @@ void info_to_numpy_array(array_info* info, uint64_t* n_items, char** data,
     if ((info->arr_type != bodo_array_type::NUMPY) &&
         (info->arr_type != bodo_array_type::CATEGORICAL)) {
         // TODO: print array type in the error
-        PyErr_SetString(PyExc_RuntimeError, "_array.cpp::info_to_numpy_array: info_to_numpy_array requires numpy input.");
+        PyErr_SetString(PyExc_RuntimeError,
+                        "_array.cpp::info_to_numpy_array: info_to_numpy_array "
+                        "requires numpy input.");
         return;
     }
     *n_items = info->length;
@@ -374,7 +383,9 @@ void info_to_nullable_array(array_info* info, uint64_t* n_items,
                             NRT_MemInfo** meminfo,
                             NRT_MemInfo** meminfo_bitmask) {
     if (info->arr_type != bodo_array_type::NULLABLE_INT_BOOL) {
-        PyErr_SetString(PyExc_RuntimeError, "_array.cpp::info_to_nullable_array: info_to_nullable_array requires nullable input");
+        PyErr_SetString(PyExc_RuntimeError,
+                        "_array.cpp::info_to_nullable_array: "
+                        "info_to_nullable_array requires nullable input");
         return;
     }
     *n_items = info->length;
@@ -818,7 +829,8 @@ void* np_array_from_map_array(int64_t num_maps, const char* key_data,
  */
 void struct_array_from_sequence(PyObject* struct_arr_obj, int n_fields,
                                 char** data, uint8_t* null_bitmap,
-                                int32_t* dtypes, char** field_names, bool is_tuple_array) {
+                                int32_t* dtypes, char** field_names,
+                                bool is_tuple_array) {
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
         std::cerr << msg << std::endl; \
@@ -850,9 +862,11 @@ void struct_array_from_sequence(PyObject* struct_arr_obj, int n_fields,
             // set null bit to 1
             null_bitmap[i / 8] |= kBitmask[i % 8];
             if (is_tuple_array) {
-                CHECK(PyTuple_Check(s), "invalid non-tuple element in tuple array");
+                CHECK(PyTuple_Check(s),
+                      "invalid non-tuple element in tuple array");
             } else {
-                CHECK(PyDict_Check(s), "invalid non-dict element in struct array");
+                CHECK(PyDict_Check(s),
+                      "invalid non-dict element in struct array");
             }
             // set field data values
             for (Py_ssize_t j = 0; j < n_fields; j++) {
@@ -1272,8 +1286,15 @@ PyMODINIT_FUNC PyInit_array_ext(void) {
     // Not covered by error handler
     PyObject_SetAttrString(m, "delete_table",
                            PyLong_FromVoidPtr((void*)(&delete_table)));
-    PyObject_SetAttrString(m, "shuffle_table",
-                           PyLong_FromVoidPtr((void*)(&shuffle_table_py_entrypt)));
+    PyObject_SetAttrString(
+        m, "shuffle_table",
+        PyLong_FromVoidPtr((void*)(&shuffle_table_py_entrypt)));
+    PyObject_SetAttrString(m, "get_shuffle_info",
+                           PyLong_FromVoidPtr((void*)(&get_shuffle_info)));
+    PyObject_SetAttrString(m, "delete_shuffle_info",
+                           PyLong_FromVoidPtr((void*)(&delete_shuffle_info)));
+    PyObject_SetAttrString(m, "reverse_shuffle_table",
+                           PyLong_FromVoidPtr((void*)(&reverse_shuffle_table)));
     PyObject_SetAttrString(
         m, "shuffle_renormalization",
         PyLong_FromVoidPtr((void*)(&shuffle_renormalization_py_entrypt)));
@@ -1293,9 +1314,8 @@ PyMODINIT_FUNC PyInit_array_ext(void) {
     PyObject_SetAttrString(
         m, "pivot_groupby_and_aggregate",
         PyLong_FromVoidPtr((void*)(&pivot_groupby_and_aggregate)));
-    PyObject_SetAttrString(
-        m, "get_groupby_labels",
-        PyLong_FromVoidPtr((void*)(&get_groupby_labels)));
+    PyObject_SetAttrString(m, "get_groupby_labels",
+                           PyLong_FromVoidPtr((void*)(&get_groupby_labels)));
     PyObject_SetAttrString(m, "array_isin",
                            PyLong_FromVoidPtr((void*)(&array_isin)));
     PyObject_SetAttrString(
@@ -1375,16 +1395,16 @@ PyMODINIT_FUNC PyInit_array_ext(void) {
     PyObject_SetAttrString(m, "is_na_value",
                            PyLong_FromVoidPtr((void*)(&is_na_value)));
     // This function is C, but it has components that can fail, in which case
-    // we should call PyErr_Set_String and detect this and raise an exception in Python.
-    // We currently don't know the best way to detect and raise exceptions
-    // in box/unbox functions which is where this function is called.
+    // we should call PyErr_Set_String and detect this and raise an exception in
+    // Python. We currently don't know the best way to detect and raise
+    // exceptions in box/unbox functions which is where this function is called.
     // Once we do, we should handle this appropriately. TODO
     PyObject_SetAttrString(m, "is_pd_int_array",
                            PyLong_FromVoidPtr((void*)(&is_pd_int_array)));
     // This function is C, but it has components that can fail, in which case
-    // we should call PyErr_Set_String and detect this and raise an exception in Python.
-    // We currently don't know the best way to detect and raise exceptions
-    // in box/unbox functions which is where this function is called.
+    // we should call PyErr_Set_String and detect this and raise an exception in
+    // Python. We currently don't know the best way to detect and raise
+    // exceptions in box/unbox functions which is where this function is called.
     // Once we do, we should handle this appropriately. TODO
     PyObject_SetAttrString(
         m, "int_array_from_sequence",

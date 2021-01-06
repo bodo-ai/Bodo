@@ -35,8 +35,10 @@ from bodo.libs.array import (
     delete_table,
     delete_table_decref_arrays,
     get_groupby_labels,
+    get_shuffle_info,
     info_from_table,
     info_to_array,
+    reverse_shuffle_table,
     shuffle_table,
 )
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
@@ -1100,7 +1102,7 @@ def overload_shuffle_dataframe(df, keys):
         "array_to_info(in_index_arr)",
     )
     func_text += "  table = arr_info_list_to_table(info_list)\n"
-    func_text += f"  out_table = shuffle_table(table, {n_keys})\n"
+    func_text += f"  out_table = shuffle_table(table, {n_keys}, 1)\n"
 
     # extract arrays from C++ table
     for i in range(n_keys):
@@ -1111,6 +1113,7 @@ def overload_shuffle_dataframe(df, keys):
 
     func_text += f"  out_arr_index = info_to_array(info_from_table(out_table, {n_keys + n_cols}), in_index_arr)\n"
 
+    func_text += "  shuffle_info = get_shuffle_info(out_table)\n"
     func_text += "  delete_table(out_table)\n"
     func_text += "  delete_table(table)\n"
 
@@ -1118,7 +1121,7 @@ def overload_shuffle_dataframe(df, keys):
     func_text += "  out_index = bodo.utils.conversion.index_from_array(out_arr_index)\n"
     func_text += f"  out_df = bodo.hiframes.pd_dataframe_ext.init_dataframe(({out_data},), out_index, {gen_const_tup(df.columns)})\n"
 
-    func_text += "  return out_df, ({},)\n".format(
+    func_text += "  return out_df, ({},), shuffle_info\n".format(
         ", ".join(f"out_key{i}" for i in range(n_keys))
     )
 
@@ -1133,11 +1136,79 @@ def overload_shuffle_dataframe(df, keys):
             "info_from_table": info_from_table,
             "info_to_array": info_to_array,
             "delete_table": delete_table,
+            "get_shuffle_info": get_shuffle_info,
         },
         loc_vars,
     )
     impl = loc_vars["impl"]
     return impl
+
+
+def reverse_shuffle(data, shuffle_info):  # pragma: no cover
+    return data
+
+
+@overload(reverse_shuffle)
+def overload_reverse_shuffle(data, shuffle_info):
+    """Reverse a previous shuffle of 'data' with 'shuffle_info'"""
+
+    # MultiIndex
+    if isinstance(data, bodo.hiframes.pd_multi_index_ext.MultiIndexType):
+        n_fields = len(data.array_types)
+        func_text = "def impl(data, shuffle_info):\n"
+        func_text += "  info_list = [{}]\n".format(
+            ", ".join(f"array_to_info(data._data[{i}])" for i in range(n_fields)),
+        )
+        func_text += "  table = arr_info_list_to_table(info_list)\n"
+        func_text += "  out_table = reverse_shuffle_table(table, shuffle_info)\n"
+        for i in range(n_fields):
+            func_text += f"  out_arr{i} = info_to_array(info_from_table(out_table, {i}), data._data[{i}])\n"
+        func_text += "  delete_table(out_table)\n"
+        func_text += "  delete_table(table)\n"
+        func_text += (
+            "  return init_multi_index(({},), data._names, data._name)\n".format(
+                ", ".join(f"out_arr{i}" for i in range(n_fields))
+            )
+        )
+        loc_vars = {}
+        exec(
+            func_text,
+            {
+                "bodo": bodo,
+                "array_to_info": array_to_info,
+                "arr_info_list_to_table": arr_info_list_to_table,
+                "reverse_shuffle_table": reverse_shuffle_table,
+                "info_from_table": info_from_table,
+                "info_to_array": info_to_array,
+                "delete_table": delete_table,
+                "init_multi_index": bodo.hiframes.pd_multi_index_ext.init_multi_index,
+            },
+            loc_vars,
+        )
+        impl = loc_vars["impl"]
+        return impl
+
+    # Index types
+    if bodo.hiframes.pd_index_ext.is_index_type(data):
+
+        def impl_index(data, shuffle_info):  # pragma: no cover
+            in_arr = bodo.utils.conversion.index_to_array(data)
+            out_arr = reverse_shuffle(in_arr, shuffle_info)
+            return bodo.utils.conversion.index_from_array(out_arr)
+
+        return impl_index
+
+    # arrays
+    def impl_arr(data, shuffle_info):  # pragma: no cover
+        info_list = [array_to_info(data)]
+        table = arr_info_list_to_table(info_list)
+        out_table = reverse_shuffle_table(table, shuffle_info)
+        out_arr = info_to_array(info_from_table(out_table, 0), data)
+        delete_table(out_table)
+        delete_table(table)
+        return out_arr
+
+    return impl_arr
 
 
 groupby_unsupported = {

@@ -1613,7 +1613,7 @@ class DataFramePass:
 
         func_text = f"def _bodo_groupby_apply_impl(keys, in_df, map_func, {extra_arg_names}_is_parallel=False):\n"
         func_text += f"  if _is_parallel:\n"
-        func_text += f"    in_df, keys = shuffle_dataframe(in_df, keys)\n"
+        func_text += f"    in_df, keys, shuffle_info = shuffle_dataframe(in_df, keys)\n"
 
         # get groupby info
         func_text += f"  group_indices, ngroups = get_group_indices(keys)\n"
@@ -1704,12 +1704,22 @@ class DataFramePass:
         index_names += ", in_df.index.name"
         func_text += f"  out_idx_arr_all = bodo.libs.array_kernels.concat(arrs_index)\n"
         func_text += f"  out_index = bodo.hiframes.pd_multi_index_ext.init_multi_index(({out_key_arr_names}, out_idx_arr_all), ({index_names},), None)\n"
+
         # reorder output to match input if UDF Index is same as input
         func_text += "  if not mutated:\n"
         func_text += f"    rev_idx = sort_idx.argsort()\n"
         func_text += f"    out_index = out_index[rev_idx]\n"
         for i in range(n_out_cols):
             func_text += f"    out_arr{i} = out_arr{i}[rev_idx]\n"
+        func_text += f"    if _is_parallel:\n"
+        func_text += f"      out_index = reverse_shuffle(out_index, shuffle_info)\n"
+        for i in range(n_out_cols):
+            func_text += (
+                f"      out_arr{i} = reverse_shuffle(out_arr{i}, shuffle_info)\n"
+            )
+        func_text += f"  if _is_parallel:\n"
+        func_text += f"    delete_shuffle_info(shuffle_info)\n"
+
         out_data = ", ".join("out_arr{}".format(i) for i in range(n_out_cols))
         if isinstance(out_typ, SeriesType):
             # some ranks may have empty data after shuffle (ngroups == 0), so call the
@@ -1718,7 +1728,6 @@ class DataFramePass:
             func_text += f"  return bodo.hiframes.pd_series_ext.init_series(out_arr0, out_index, out_name)\n"
         else:
             func_text += f"  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({out_data},), out_index, {gen_const_tup(out_typ.columns)})\n"
-
         glbs = {
             "numba": numba,
             "np": np,
@@ -1726,6 +1735,8 @@ class DataFramePass:
             "get_group_indices": bodo.hiframes.pd_groupby_ext.get_group_indices,
             "generate_slices": bodo.hiframes.pd_groupby_ext.generate_slices,
             "shuffle_dataframe": bodo.hiframes.pd_groupby_ext.shuffle_dataframe,
+            "reverse_shuffle": bodo.hiframes.pd_groupby_ext.reverse_shuffle,
+            "delete_shuffle_info": bodo.libs.array.delete_shuffle_info,
         }
         loc_vars = {}
         exec(func_text, glbs, loc_vars)
