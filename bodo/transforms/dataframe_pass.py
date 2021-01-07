@@ -1351,6 +1351,7 @@ class DataFramePass:
             kws = dict(rhs.kws)
             func_var = get_call_expr_arg(func_name, rhs.args, kws, 0, "func", "")
             # NamedAgg case, e.g. df.groupby("A").agg(C=pd.NamedAgg("B", "sum"))
+            # pd.NamedAgg() is replaced with regular tuple in untyped pass
             if func_var == "":
                 in_cols = [
                     get_literal_value(self.typemap[v.name])[0] for v in kws.values()
