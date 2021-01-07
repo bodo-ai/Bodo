@@ -1385,7 +1385,7 @@ table_info* reverse_shuffle_table_kernel(table_info* in_table, uint32_t* hashes,
 
 // Note: Steals a reference from the input table.
 table_info* shuffle_table(table_info* in_table, int64_t n_keys,
-                          int keep_comm_info) {
+                          int32_t keep_comm_info) {
     // error checking
     if (in_table->ncols() <= 0 || n_keys <= 0) {
         Bodo_PyErr_SetString(PyExc_RuntimeError, "Invalid input shuffle table");
@@ -1410,7 +1410,7 @@ table_info* shuffle_table(table_info* in_table, int64_t n_keys,
 }
 
 table_info* shuffle_table_py_entrypt(table_info* in_table, int64_t n_keys,
-                                     int keep_comm_info) {
+                                     int32_t keep_comm_info) {
     try {
         return shuffle_table(in_table, n_keys, keep_comm_info);
     } catch (const std::exception& e) {

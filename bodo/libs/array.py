@@ -1274,6 +1274,8 @@ def delete_table(typingctx, table_t=None):
 def shuffle_table(typingctx, table_t, n_keys_t, keep_comm_info_t):  # pragma: no cover
     """shuffle input table so that rows with same key are on the same process.
     Steals a reference from the input table.
+    'keep_comm_info' parameter specifies if shuffle information should be kept in
+    output table, to be used for reverse shuffle later (e.g. in groupby apply).
     """
     assert table_t == table_type
 
