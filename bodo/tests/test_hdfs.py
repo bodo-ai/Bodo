@@ -524,6 +524,59 @@ def test_hdfs_np_fromfile_seq(hdfs_datapath, test_np_arr):
     check_func(test_read, (hdfs_fname,), py_output=test_np_arr)
 
 
+@pytest.mark.slow
+def test_hdfs_np_fromfile_seq_count_offset(hdfs_datapath, test_np_arr):
+    """
+    fromfile with count and offset
+    """
+
+    count = 2
+    offset = 1
+
+    def test_read(hdfs_fname):
+        bytes_per_int64 = 8
+        return np.fromfile(
+            hdfs_fname, np.int64, count=count, offset=offset * bytes_per_int64
+        )
+
+    hdfs_fname = hdfs_datapath("test_np_arr_bodo_seq.dat")
+    check_func(test_read, (hdfs_fname,), py_output=test_np_arr[offset : offset + count])
+
+
+@pytest.mark.slow
+def test_hdfs_np_fromfile_seq_large_count(hdfs_datapath, test_np_arr):
+    """
+    fromfile with count larger than the length of the data
+    test to read all the data and not throw an error
+    """
+
+    count = len(test_np_arr) + 1
+
+    def test_read(hdfs_fname):
+        return np.fromfile(hdfs_fname, np.int64, count=count)
+
+    hdfs_fname = hdfs_datapath("test_np_arr_bodo_seq.dat")
+    check_func(test_read, (hdfs_fname,), py_output=test_np_arr[:count])
+
+
+@pytest.mark.slow
+def test_hdfs_np_fromfile_seq_large_offset(hdfs_datapath, test_np_arr):
+    """
+    fromfile with offset larger than the length of the data
+    this setup raises a ValueError which is expected
+    """
+
+    offset = len(test_np_arr) + 1
+
+    def test_read(hdfs_fname):
+        bytes_per_int64 = 8
+        return np.fromfile(hdfs_fname, np.int64, offset=offset * bytes_per_int64)
+
+    hdfs_fname = hdfs_datapath("test_np_arr_bodo_seq.dat")
+    with pytest.raises(ValueError, match="negative dimensions not allowed"):
+        bodo.jit(test_read)(hdfs_fname)
+
+
 def test_hdfs_np_fromfile_1D(hdfs_datapath, test_np_arr):
     """
     fromfile

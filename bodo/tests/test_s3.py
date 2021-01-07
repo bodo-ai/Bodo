@@ -544,6 +544,65 @@ def test_s3_np_fromfile_seq(minio_server, s3_bucket, test_np_arr):
     check_func(test_read, (), py_output=test_np_arr)
 
 
+@pytest.mark.slow
+def test_s3_np_fromfile_seq_count_offset(minio_server, s3_bucket, test_np_arr):
+    """
+    fromfile with count and offset
+    """
+
+    count = 2
+    offset = 1
+
+    def test_read():
+        bytes_per_int64 = 8
+        return np.fromfile(
+            "s3://bodo-test/test_np_arr_bodo_seq.dat",
+            np.int64,
+            count=count,
+            offset=offset * bytes_per_int64,
+        )
+
+    check_func(test_read, (), py_output=test_np_arr[offset : offset + count])
+
+
+@pytest.mark.slow
+def test_s3_np_fromfile_seq_large_count(minio_server, s3_bucket, test_np_arr):
+    """
+    fromfile with count larger than the length of the data
+    test to read all the data and not throw an error
+    """
+
+    count = len(test_np_arr) + 1
+
+    def test_read():
+        return np.fromfile(
+            "s3://bodo-test/test_np_arr_bodo_seq.dat", np.int64, count=count
+        )
+
+    check_func(test_read, (), py_output=test_np_arr[:count])
+
+
+@pytest.mark.slow
+def test_s3_np_fromfile_seq_large_offset(minio_server, s3_bucket, test_np_arr):
+    """
+    fromfile with offset larger than the length of the data
+    this setup raises a ValueError which is expected
+    """
+
+    offset = len(test_np_arr) + 1
+
+    def test_read():
+        bytes_per_int64 = 8
+        return np.fromfile(
+            "s3://bodo-test/test_np_arr_bodo_seq.dat",
+            np.int64,
+            offset=offset * bytes_per_int64,
+        )
+
+    with pytest.raises(ValueError, match="negative dimensions not allowed"):
+        bodo.jit(test_read)()
+
+
 def test_s3_np_fromfile_1D(minio_server, s3_bucket, test_np_arr):
     """
     fromfile
