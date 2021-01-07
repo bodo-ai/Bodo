@@ -72,6 +72,7 @@ from bodo.transforms.distributed_analysis import Distribution
 from bodo.utils.transform import get_call_expr_arg
 from bodo.utils.typing import (
     BodoError,
+    get_literal_value,
     get_overload_const_func,
     get_overload_const_str,
     get_overload_constant_dict,
@@ -359,12 +360,16 @@ def get_agg_func(func_ir, func_name, rhs, series_type=None, typemap=None):
     # NOTE: assuming typemap is provided here
     # TODO: refactor old pivot code that doesn't provide typemap
     assert typemap is not None
-    func_var = get_call_expr_arg(func_name, rhs.args, dict(rhs.kws), 0, "func")
-    agg_func_typ = typemap[func_var.name]
+    kws = dict(rhs.kws)
+    func_var = get_call_expr_arg(func_name, rhs.args, kws, 0, "func", "")
+    # func is None in NamedAgg case
+    if func_var == "":
+        agg_func_typ = types.none
+    else:
+        agg_func_typ = typemap[func_var.name]
 
     # multi-function const dict case
     if is_overload_constant_dict(agg_func_typ):
-        funcs = []
         items = get_overload_constant_dict(agg_func_typ)
         # return a list, element i is function or list of functions to apply
         # to column i
@@ -373,6 +378,19 @@ def get_agg_func(func_ir, func_name, rhs, series_type=None, typemap=None):
             for f_val in items.values()
         ]
         return funcs
+
+    # NamedAgg case
+    if agg_func_typ == types.none:
+        return [
+            get_agg_func_udf(
+                func_ir,
+                get_literal_value(typemap[f_val.name])[1],
+                rhs,
+                series_type,
+                typemap,
+            )
+            for f_val in kws.values()
+        ]
 
     # multi-function tuple case
     if isinstance(agg_func_typ, types.BaseTuple):

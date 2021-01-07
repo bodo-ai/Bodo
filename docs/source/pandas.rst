@@ -867,8 +867,10 @@ GroupBy
 The operations are documented on `pandas.DataFrame.groupby <https://pandas.pydata.org/pandas-docs/stable/reference/groupby.html>`_.
 
 * :meth:`pandas.core.groupby.GroupBy.apply` (`func` should return a DataFrame or Series)
-* :meth:`pandas.core.groupby.GroupBy.agg` `arg` should be a function.
+* :meth:`pandas.core.groupby.GroupBy.agg` `func` should be a function or constant dictionary
+  of input/function mappings.
   Passing a list of functions is also supported if only one output column is selected.
+  Alternatively, outputs can be specified using keyword arguments and `pd.NamedAgg()`.
 * :meth:`pandas.core.groupby.DataFrameGroupBy.aggregate` same as `agg`
 * :meth:`pandas.core.groupby.GroupBy.count`
 * :meth:`pandas.core.groupby.GroupBy.cumsum`

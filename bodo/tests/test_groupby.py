@@ -1752,6 +1752,33 @@ def test_as_index_count(memory_leak_check):
     check_func(impl2, (df,), sort_output=True, reset_index=True)
 
 
+def test_named_agg(memory_leak_check):
+    """
+    Test groupby with pd.NamedAgg() relabeling
+    """
+
+    def impl1(df):
+        return df.groupby("A").agg(D=pd.NamedAgg(column="B", aggfunc="min"))
+
+    def impl2(df):
+        return df.groupby("A", as_index=False).agg(
+            D=pd.NamedAgg(column="B", aggfunc=lambda A: A.sum()),
+            # TODO: support repeated input columns in output
+            # E=pd.NamedAgg(column="B", aggfunc="min"),
+            F=pd.NamedAgg(column="C", aggfunc="max"),
+        )
+
+    df = pd.DataFrame(
+        {
+            "A": [2, 1, 1, 1, 2, 2, 1],
+            "B": [-8, 2, 3, np.nan, 5, 6, 7],
+            "C": [2, 3, -1, 1, 2, 3, -1],
+        }
+    )
+    check_func(impl1, (df,), sort_output=True, reset_index=True)
+    check_func(impl2, (df,), sort_output=True, reset_index=True)
+
+
 # TODO(ehsan): add memory_leak_check when memory leaks are resolved
 def test_groupby_apply(is_slow_run):
     """

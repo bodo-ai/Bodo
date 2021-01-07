@@ -383,6 +383,10 @@ class UntypedPass:
         if fdef == ("Series", "pandas"):
             return self._handle_pd_Series(assign, lhs, rhs)
 
+        # replace pd.NamedAgg() with equivalent tuple to be handled in groupby typing
+        if fdef == ("NamedAgg", "pandas"):
+            return self._handle_pd_named_agg(assign, lhs, rhs)
+
         if fdef == ("read_table", "pyarrow.parquet"):
             return self._handle_pq_read_table(assign, lhs, rhs)
 
@@ -1232,6 +1236,20 @@ class UntypedPass:
             return nodes
 
         # pd.Series() is handled in typed pass now
+        return [assign]
+
+    def _handle_pd_named_agg(self, assign, lhs, rhs):
+        """replace pd.NamedAgg() with equivalent tuple to be handled in groupby typing.
+        For example, df.groupby("A").agg(C=pd.NamedAgg(column="B", aggfunc="sum")) ->
+        df.groupby("A").agg(C=("B", "sum"))
+        Tuple is the same as NamedAgg in Pandas groupby. Tuple enables typing since it
+        preserves constants while NamedAgg which is a namedtuple doesn't (Numba
+        limitation).
+        """
+        kws = dict(rhs.kws)
+        column_var = get_call_expr_arg("pd.NamedAgg", rhs.args, kws, 0, "column")
+        aggfunc_var = get_call_expr_arg("pd.NamedAgg", rhs.args, kws, 1, "aggfunc")
+        assign.value = ir.Expr.build_tuple([column_var, aggfunc_var], rhs.loc)
         return [assign]
 
     def _handle_pq_read_table(self, assign, lhs, rhs):
