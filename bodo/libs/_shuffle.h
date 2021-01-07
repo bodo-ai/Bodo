@@ -5,36 +5,15 @@
 #include <mpi.h>
 #include "_bodo_common.h"
 
-struct mpi_comm_info {
-    int n_pes;
-    std::vector<array_info*> arrays;
-    size_t n_rows;
-    bool has_nulls;
-    // generally required MPI counts
-    std::vector<int64_t> send_count;
-    std::vector<int64_t> recv_count;
-    std::vector<int64_t> send_disp;
-    std::vector<int64_t> recv_disp;
-    // counts required for string arrays
-    std::vector<std::vector<int64_t>> send_count_sub;
-    std::vector<std::vector<int64_t>> recv_count_sub;
-    std::vector<std::vector<int64_t>> send_disp_sub;
-    std::vector<std::vector<int64_t>> recv_disp_sub;
-    // counts required for string list arrays
-    std::vector<std::vector<int64_t>> send_count_sub_sub;
-    std::vector<std::vector<int64_t>> recv_count_sub_sub;
-    std::vector<std::vector<int64_t>> send_disp_sub_sub;
-    std::vector<std::vector<int64_t>> recv_disp_sub_sub;
-    // counts for arrays with null bitmask
-    std::vector<int64_t> send_count_null;
-    std::vector<int64_t> recv_count_null;
-    std::vector<int64_t> send_disp_null;
-    std::vector<int64_t> recv_disp_null;
-    size_t n_null_bytes;
-
-    explicit mpi_comm_info(std::vector<array_info*>& _arrays);
-
-    void set_counts(uint32_t* hashes);
+/**
+ * @brief shuffle information used to reverse shuffle later
+ *
+ */
+struct shuffle_info {
+    mpi_comm_info* comm_info;
+    uint32_t* hashes;
+    explicit shuffle_info(mpi_comm_info* _comm_info, uint32_t* _hashes)
+        : comm_info(_comm_info), hashes(_hashes) {}
 };
 
 /** Shuffle a table so that same keys are on the same process.
@@ -42,11 +21,40 @@ struct mpi_comm_info {
  *
  * @param in_table : the input table.
  * @param n_keys   : the number of keys for comparison.
+ * @param keep_comm_info : specifies if shuffle information should be kept in
+ * output table, to be used for reverse shuffle later (e.g. in groupby apply).
  * @return the new table after the shuffling-
  */
-table_info* shuffle_table(table_info* in_table, int64_t n_keys);
+table_info* shuffle_table(table_info* in_table, int64_t n_keys,
+                          int32_t keep_comm_info = 0);
 
-table_info* shuffle_table_py_entrypt(table_info* in_table, int64_t n_keys);
+table_info* shuffle_table_py_entrypt(table_info* in_table, int64_t n_keys,
+                                     int32_t keep_comm_info = 0);
+
+/**
+ * @brief get shuffle info from table struct
+ *
+ * @param table input table
+ * @return shuffle_info* shuffle info of input table
+ */
+shuffle_info* get_shuffle_info(table_info* table);
+
+/**
+ * @brief free allocated data of shuffle info
+ *
+ * @param sh_info input shuffle info
+ */
+void delete_shuffle_info(shuffle_info* sh_info);
+
+// Note: Steals a reference from the input table.
+/**
+ * @brief reverse a previous shuffle of input table
+ *
+ * @param in_table input table
+ * @param sh_info shuffle info
+ * @return table_info* reverse shuffled output table
+ */
+table_info* reverse_shuffle_table(table_info* in_table, shuffle_info* sh_info);
 
 /** Shuffling a table from all nodes to all the other nodes.
  *  obtained by hashes. For different tables, hashes have to be coherent

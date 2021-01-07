@@ -1,6 +1,8 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 """Support for MultiIndex type of Pandas
 """
+import operator
+
 import numba
 import pandas as pd
 from numba.core import cgutils, types
@@ -8,8 +10,10 @@ from numba.extending import (
     NativeValue,
     box,
     intrinsic,
+    lower_builtin,
     make_attribute_wrapper,
     models,
+    overload,
     register_model,
     typeof_impl,
     unbox,
@@ -194,3 +198,42 @@ def init_multi_index(typingctx, data, names, name=None):
 
     ret_typ = MultiIndexType(data.types, names.types, name)
     return ret_typ(data, names, name), codegen
+
+
+@overload(operator.getitem, no_unliteral=True)
+def overload_multi_index_getitem(I, ind):
+    if not isinstance(I, MultiIndexType):
+        return
+
+    # TODO(ehsan): scalar indexing
+    if not isinstance(ind, types.Integer):
+
+        n_fields = len(I.array_types)
+        func_text = "def impl(I, ind):\n"
+        func_text += "  data = I._data\n"
+        # TODO(ehsan): is ensure_contig_if_np needed?
+        func_text += "  return init_multi_index(({},), I._names, I._name)\n".format(
+            ", ".join(f"data[{i}][ind]" for i in range(n_fields))
+        )
+        loc_vars = {}
+        exec(
+            func_text,
+            {
+                "init_multi_index": init_multi_index,
+            },
+            loc_vars,
+        )
+        impl = loc_vars["impl"]
+        return impl
+
+
+@lower_builtin(operator.is_, MultiIndexType, MultiIndexType)
+def multi_index_is(context, builder, sig, args):  # pragma: no cover
+    aty, bty = sig.args
+    if aty != bty:  # pragma: no cover
+        return cgutils.false_bit
+
+    def index_is_impl(a, b):  # pragma: no cover
+        return a._data is b._data and a._names is b._names and a._name is b._name
+
+    return context.compile_internal(builder, index_is_impl, sig, args)

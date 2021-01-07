@@ -64,6 +64,9 @@ ll.add_symbol("delete_info_decref_array", array_ext.delete_info_decref_array)
 ll.add_symbol("delete_table_decref_arrays", array_ext.delete_table_decref_arrays)
 ll.add_symbol("delete_table", array_ext.delete_table)
 ll.add_symbol("shuffle_table", array_ext.shuffle_table)
+ll.add_symbol("get_shuffle_info", array_ext.get_shuffle_info)
+ll.add_symbol("delete_shuffle_info", array_ext.delete_shuffle_info)
+ll.add_symbol("reverse_shuffle_table", array_ext.reverse_shuffle_table)
 ll.add_symbol("hash_join_table", array_ext.hash_join_table)
 ll.add_symbol("drop_duplicates_table", array_ext.drop_duplicates_table)
 ll.add_symbol("sort_values_table", array_ext.sort_values_table)
@@ -1268,15 +1271,18 @@ def delete_table(typingctx, table_t=None):
 
 # TODO Add a test for this
 @intrinsic
-def shuffle_table(typingctx, table_t, n_keys_t):  # pragma: no cover
+def shuffle_table(typingctx, table_t, n_keys_t, keep_comm_info_t):  # pragma: no cover
     """shuffle input table so that rows with same key are on the same process.
     Steals a reference from the input table.
+    'keep_comm_info' parameter specifies if shuffle information should be kept in
+    output table, to be used for reverse shuffle later (e.g. in groupby apply).
     """
     assert table_t == table_type
 
     def codegen(context, builder, sig, args):  # pragma: no cover
         fnty = lir.FunctionType(
-            lir.IntType(8).as_pointer(), [lir.IntType(8).as_pointer(), lir.IntType(64)]
+            lir.IntType(8).as_pointer(),
+            [lir.IntType(8).as_pointer(), lir.IntType(64), lir.IntType(32)],
         )
         fn_tp = builder.module.get_or_insert_function(fnty, name="shuffle_table")
         ret = builder.call(fn_tp, args)
@@ -1285,7 +1291,34 @@ def shuffle_table(typingctx, table_t, n_keys_t):  # pragma: no cover
         )  # pragma: no cover
         return ret
 
-    return table_type(table_t, types.int64), codegen
+    return table_type(table_t, types.int64, types.int32), codegen
+
+
+class ShuffleInfoType(types.Type):
+    def __init__(self):
+        super(ShuffleInfoType, self).__init__(name="ShuffleInfoType()")
+
+
+shuffle_info_type = ShuffleInfoType()
+register_model(ShuffleInfoType)(models.OpaqueModel)
+
+
+get_shuffle_info = types.ExternalFunction(
+    "get_shuffle_info",
+    shuffle_info_type(table_type),
+)
+
+
+delete_shuffle_info = types.ExternalFunction(
+    "delete_shuffle_info",
+    types.void(shuffle_info_type),
+)
+
+
+reverse_shuffle_table = types.ExternalFunction(
+    "reverse_shuffle_table",
+    table_type(table_type, shuffle_info_type),
+)
 
 
 @intrinsic

@@ -13,6 +13,7 @@ from numba.extending import (
     box,
     infer_getattr,
     intrinsic,
+    lower_builtin,
     lower_cast,
     make_attribute_wrapper,
     models,
@@ -2179,6 +2180,39 @@ def overload_index_map(I, mapper, na_action=None):
     )
     f = loc_vars["f"]
     return f
+
+
+@lower_builtin(operator.is_, NumericIndexType, NumericIndexType)
+@lower_builtin(operator.is_, StringIndexType, StringIndexType)
+@lower_builtin(operator.is_, PeriodIndexType, PeriodIndexType)
+@lower_builtin(operator.is_, DatetimeIndexType, DatetimeIndexType)
+@lower_builtin(operator.is_, TimedeltaIndexType, TimedeltaIndexType)
+def index_is(context, builder, sig, args):
+    aty, bty = sig.args
+    if aty != bty:  # pragma: no cover
+        return cgutils.false_bit
+
+    def index_is_impl(a, b):  # pragma: no cover
+        return a._data is b._data and a._name is b._name
+
+    return context.compile_internal(builder, index_is_impl, sig, args)
+
+
+@lower_builtin(operator.is_, RangeIndexType, RangeIndexType)
+def range_index_is(context, builder, sig, args):
+    aty, bty = sig.args
+    if aty != bty:  # pragma: no cover
+        return cgutils.false_bit
+
+    def index_is_impl(a, b):  # pragma: no cover
+        return (
+            a._start == b._start
+            and a._stop == b._stop
+            and a._step == b._step
+            and a._name is b._name
+        )
+
+    return context.compile_internal(builder, index_is_impl, sig, args)
 
 
 # TODO(ehsan): binary operators should be handled and tested for all Index types,
