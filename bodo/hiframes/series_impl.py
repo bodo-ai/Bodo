@@ -2027,6 +2027,7 @@ def _build_replace_dict(to_replace, value):
 
         return impl
 
+    # List, List case
     if is_iterable_replace and is_iterable_value:
 
         def impl(to_replace, value):  # pragma: no cover
@@ -2040,8 +2041,14 @@ def _build_replace_dict(to_replace, value):
 
         return impl
 
+    # Dictionary, None case
+    # TODO(Nick): Add a check to ensure value type can be converted
+    # to key type
+    if isinstance(to_replace, numba.types.DictType) and is_overload_none(value):
+        return lambda to_replace, value: to_replace  # pragma: no cover
+
     raise BodoError(
-        "Series.replace() Not support for types to_replace={} and value={}".format(
+        "Series.replace(): Not supported for types to_replace={} and value={}".format(
             to_replace, value
         )
     )

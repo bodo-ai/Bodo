@@ -2986,7 +2986,7 @@ def test_series_replace_list_scalar(S, to_replace_list, value, memory_leak_check
             pd.Series(pd.Categorical([1, 2, 3, 1, 2, 3, 4, 1, 2, 1, 3, 4])),
             [1, 3],
             [2, 7],
-            marks=pytest.mark.skip("Not support for categorical"),
+            marks=pytest.mark.skip("Not supported for categorical"),
         ),
         pytest.param(
             pd.Series(
@@ -3022,6 +3022,21 @@ def test_series_replace_list_list(S, to_replace_list, value_list, memory_leak_ch
         return A.replace(to_replace, val)
 
     check_func(test_impl, (S, to_replace_list, value_list), check_dtype=False)
+
+
+# TODO: Mark as slow after Sonar passes.
+def test_series_replace_dict_float(memory_leak_check):
+    """
+    Specific test for replace_dict with floats. This isn't setup using pytest
+    fixtures because Numba cannot determine the dict type unless the dictionary
+    is a constant.
+    """
+
+    def test_impl(A):
+        return A.replace({2.0: 1.3, 5.0: 4.0})
+
+    S = pd.Series([1.0, 2.0, np.nan, 1.0, 2.0, 1.3], [3, 4, 2, 1, -3, 6], name="A")
+    check_func(test_impl, (S,), check_dtype=False)
 
 
 @pytest.mark.parametrize(
