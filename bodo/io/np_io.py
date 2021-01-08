@@ -61,23 +61,29 @@ _file_write_parallel = types.ExternalFunction(
 
 
 def _handle_np_fromfile(assign, lhs, rhs):
-    """translate np.fromfile() to native"""
-    # TODO: dtype in kws
-    if len(rhs.args) != 2:  # pragma: no cover
-        raise bodo.utils.typing.BodoError("np.fromfile(): file name and dtype expected")
-
+    """translate np.fromfile() to native
+    file and dtype are required arguments. sep is supported for only the
+    default value.
+    """
     kws = dict(rhs.kws)
-    _fname = rhs.args[0]
-    _dtype = rhs.args[1]
-
-    count_default = ir.Const(-1, lhs.loc)
-    offset_default = ir.Const(0, lhs.loc)
-
+    if len(rhs.args) + len(kws) > 5:  # pragma: no cover
+        raise bodo.utils.typing.BodoError(
+            f"np.fromfile(): at most 5 arguments expected"
+            f" ({len(rhs.args) + len(kws)} given)"
+        )
+    valid_kws = {"file", "dtype", "count", "sep", "offset"}
+    for kw in set(kws) - valid_kws:  # pragma: no cover
+        raise bodo.utils.typing.BodoError(
+            f"np.fromfile(): unexpected keyword argument {kw}"
+        )
+    np_fromfile = "np.fromfile"
+    _fname = get_call_expr_arg(np_fromfile, rhs.args, kws, 0, "file")
+    _dtype = get_call_expr_arg(np_fromfile, rhs.args, kws, 1, "dtype")
     _count = get_call_expr_arg(
-        "np.fromfile", rhs.args, kws, 2, "count", default=count_default
+        np_fromfile, rhs.args, kws, 2, "count", default=ir.Const(-1, lhs.loc)
     )
     _offset = get_call_expr_arg(
-        "np.fromfile", rhs.args, kws, 3, "offset", default=offset_default
+        np_fromfile, rhs.args, kws, 4, "offset", default=ir.Const(0, lhs.loc)
     )
 
     def fromfile_impl(fname, dtype, count, offset):  # pragma: no cover

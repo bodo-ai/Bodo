@@ -1475,6 +1475,32 @@ def test_np_io12(datapath, memory_leak_check):
     np.testing.assert_almost_equal(bodo_func(), test_impl())
 
 
+@pytest.mark.slow
+def test_np_io13(datapath, memory_leak_check):
+    # Test fromfile with all keyword arguments
+    fname = datapath("np_file1.dat")
+
+    def test_impl():
+        A = np.fromfile(file=fname, dtype=np.float64, count=10, sep="", offset=10)
+        return A.sum()
+
+    bodo_func = bodo.jit(test_impl)
+    np.testing.assert_almost_equal(bodo_func(), test_impl())
+
+
+@pytest.mark.slow
+def test_np_io14(datapath, memory_leak_check):
+    # Test fromfile with all positional arguments
+    fname = datapath("np_file1.dat")
+
+    def test_impl():
+        A = np.fromfile(fname, np.float64, 10, "", 10)
+        return A.sum()
+
+    bodo_func = bodo.jit(test_impl)
+    np.testing.assert_almost_equal(bodo_func(), test_impl())
+
+
 # TODO(Nick): Add a test for Parallel version with both offset and count.
 
 
