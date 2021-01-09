@@ -544,7 +544,6 @@ def test_s3_np_fromfile_seq(minio_server, s3_bucket, test_np_arr):
     check_func(test_read, (), py_output=test_np_arr)
 
 
-@pytest.mark.slow
 def test_s3_np_fromfile_seq_count_offset(minio_server, s3_bucket, test_np_arr):
     """
     fromfile with count and offset
@@ -565,7 +564,6 @@ def test_s3_np_fromfile_seq_count_offset(minio_server, s3_bucket, test_np_arr):
     check_func(test_read, (), py_output=test_np_arr[offset : offset + count])
 
 
-@pytest.mark.slow
 def test_s3_np_fromfile_seq_large_count(minio_server, s3_bucket, test_np_arr):
     """
     fromfile with count larger than the length of the data
@@ -582,7 +580,6 @@ def test_s3_np_fromfile_seq_large_count(minio_server, s3_bucket, test_np_arr):
     check_func(test_read, (), py_output=test_np_arr[:count])
 
 
-@pytest.mark.slow
 def test_s3_np_fromfile_seq_large_offset(minio_server, s3_bucket, test_np_arr):
     """
     fromfile with offset larger than the length of the data

@@ -524,7 +524,6 @@ def test_hdfs_np_fromfile_seq(hdfs_datapath, test_np_arr):
     check_func(test_read, (hdfs_fname,), py_output=test_np_arr)
 
 
-@pytest.mark.slow
 def test_hdfs_np_fromfile_seq_count_offset(hdfs_datapath, test_np_arr):
     """
     fromfile with count and offset
@@ -543,7 +542,6 @@ def test_hdfs_np_fromfile_seq_count_offset(hdfs_datapath, test_np_arr):
     check_func(test_read, (hdfs_fname,), py_output=test_np_arr[offset : offset + count])
 
 
-@pytest.mark.slow
 def test_hdfs_np_fromfile_seq_large_count(hdfs_datapath, test_np_arr):
     """
     fromfile with count larger than the length of the data
@@ -559,7 +557,6 @@ def test_hdfs_np_fromfile_seq_large_count(hdfs_datapath, test_np_arr):
     check_func(test_read, (hdfs_fname,), py_output=test_np_arr[:count])
 
 
-@pytest.mark.slow
 def test_hdfs_np_fromfile_seq_large_offset(hdfs_datapath, test_np_arr):
     """
     fromfile with offset larger than the length of the data
