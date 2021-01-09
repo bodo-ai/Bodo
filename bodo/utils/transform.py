@@ -950,6 +950,9 @@ def get_call_expr_arg(f_name, args, kws, arg_no, arg_name, default=None, err_msg
     arg = None
     if len(args) > arg_no:
         arg = args[arg_no]
+        if arg_name in kws:
+            err_msg = f"{f_name}() got multiple values for argument '{arg_name}'"
+            raise BodoError(err_msg)
     elif arg_name in kws:
         arg = kws[arg_name]
 

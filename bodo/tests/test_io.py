@@ -2005,6 +2005,22 @@ def test_csv_invalid_path_const(memory_leak_check):
         bodo.jit(test_impl)()
 
 
+def test_csv_repeat_args(memory_leak_check):
+    """
+    test error raise when an untyped pass function provides an argument
+    as both an arg and a kwarg
+    """
+
+    def test_impl():
+        return pd.read_csv("csv_data1.csv", filepath_or_buffer="csv_data1.csv")
+
+    with pytest.raises(
+        BodoError,
+        match="read_csv\(\) got multiple values for argument 'filepath_or_buffer'",
+    ):
+        bodo.jit(test_impl)()
+
+
 def test_read_parquet_invalid_path(memory_leak_check):
     """test error raise when parquet file path is invalid in C++ code."""
 
