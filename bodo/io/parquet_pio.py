@@ -66,6 +66,47 @@ from bodo.utils.utils import (
 use_nullable_int_arr = True
 
 
+import pyarrow.parquet as pq
+
+def ParquetManifest_visit_level(self, level, base_path, part_keys):
+    fs = self.filesystem
+
+    _, directories, files = next(fs.walk(base_path))
+
+    filtered_files = []
+    for path in files:
+        if path == "":  # Bodo change
+            continue
+        full_path = self.pathsep.join((base_path, path))
+        if path.endswith('_common_metadata'):
+            self.common_metadata_path = full_path
+        elif path.endswith('_metadata'):
+            self.metadata_path = full_path
+        elif self._should_silently_exclude(path):
+            continue
+        else:
+            filtered_files.append(full_path)
+
+    # ARROW-1079: Filter out "private" directories starting with underscore
+    filtered_directories = [self.pathsep.join((base_path, x))
+                            for x in directories
+                            if not pq._is_private_directory(x)]
+
+    filtered_files.sort()
+    filtered_directories.sort()
+
+    if len(filtered_files) > 0 and len(filtered_directories) > 0:
+        raise ValueError('Found files in an intermediate '
+                         'directory: {}'.format(base_path))
+    elif len(filtered_directories) > 0:
+        self._visit_directories(level, filtered_directories, part_keys)
+    else:
+        self._push_pieces(filtered_files, part_keys)
+
+
+pq.ParquetManifest._visit_level = ParquetManifest_visit_level
+
+
 def read_parquet():  # pragma: no cover
     return 0
 
@@ -711,41 +752,64 @@ def get_parquet_dataset(fpath, parallel, get_row_counts=True):
 
     if is_directory_parallel(fpath):
         file_names = get_filenames_parallel(fpath, directory_of_files_common_filter)
-        # Note that at this point there could still be files in file_names
-        # which aren't valid parquet files, so the division of work between
-        # ranks below won't be perfect.
-        # We can either do better filtering in `get_filenames_parallel` or
-        # do a further subdivision of work after checking which files are
-        # parquet files below. But I think this is already good.
-        try:
-            start = get_start(len(file_names), bodo.get_size(), bodo.get_rank())
-            end = get_end(len(file_names), bodo.get_size(), bodo.get_rank())
-            # When passing list of files these can only be valid parquet files,
-            # so we check each one of them manually.
-            # Note that for s3 this is needed anyway (if you call pq.ParquetDataset()
-            # with a directory name and the directory contains non-parquet files
-            # it will fail). And we are doing this in parallel so it shouldn't
-            # be an issue.
-            myfiles = []
-            for fname in file_names[start:end]:
-                try:
-                    pq.ParquetDataset(fname, filesystem=getfs())
-                    myfiles.append(fname)
-                except:
-                    # this is not a valid parquet file
-                    pass
-            subdataset = None
-            if len(myfiles) > 0:
-                subdataset = pq.ParquetDataset(myfiles, filesystem=getfs())
+        is_nested = False
+        for fname in file_names: # TODO: not efficient?
+            if is_directory_parallel(fname):
+                is_nested = True
+                break
+        if is_nested:
+            # For now, for nested directories (for example partitioned datasets using
+            # hive scheme) we let pyarrow.parquet.ParquetDataset
+            # extract all the information by passing it the top-level directory.
+            # This happens sequentially.
+            # Note: ParquetDataset has metadata_nthreads parameter but it
+            # seems to use Python threads and not make a difference
+            if bodo.get_rank() == 0:
+                dataset = pq.ParquetDataset(fpath, filesystem=getfs())
+                dataset._bodo_total_rows = 0
                 if get_row_counts:
-                    for piece in subdataset.pieces:
+                    for piece in dataset.pieces:
                         piece._bodo_num_rows = piece.get_metadata().num_rows
-        except Exception as e:
-            subdataset = e
+                        dataset._bodo_total_rows += piece._bodo_num_rows
+                comm.bcast(dataset)
+            else:
+                dataset = comm.bcast(None)
+        else:
+            # Note that at this point there could still be files in file_names
+            # which aren't valid parquet files, so the division of work between
+            # ranks below won't be perfect.
+            # We can either do better filtering in `get_filenames_parallel` or
+            # do a further subdivision of work after checking which files are
+            # parquet files below. But I think this is already good.
+            try:
+                start = get_start(len(file_names), bodo.get_size(), bodo.get_rank())
+                end = get_end(len(file_names), bodo.get_size(), bodo.get_rank())
+                # When passing list of files these can only be valid parquet files,
+                # so we check each one of them manually.
+                # Note that for s3 this is needed anyway (if you call pq.ParquetDataset()
+                # with a directory name and the directory contains non-parquet files
+                # it will fail). And we are doing this in parallel so it shouldn't
+                # be an issue.
+                myfiles = []
+                for fname in file_names[start:end]:
+                    try:
+                        pq.ParquetDataset(fname, filesystem=getfs())
+                        myfiles.append(fname)
+                    except:
+                        # this is not a valid parquet file
+                        pass
+                subdataset = None
+                if len(myfiles) > 0:
+                    subdataset = pq.ParquetDataset(myfiles, filesystem=getfs())
+                    if get_row_counts:
+                        for piece in subdataset.pieces:
+                            piece._bodo_num_rows = piece.get_metadata().num_rows
+            except Exception as e:
+                subdataset = e
 
-        subdatasets = comm.allgather(subdataset)
-        # merge all the subdatasets into one
-        dataset = merge_subdatasets(subdatasets, get_row_counts)
+            subdatasets = comm.allgather(subdataset)
+            # merge all the subdatasets into one
+            dataset = merge_subdatasets(subdatasets, get_row_counts)
     else:
         if bodo.get_rank() == 0:
             try:
