@@ -9,24 +9,25 @@ This page descibes how to use the Bodo Cloud Platform, including registration, c
 Registration
 ------------
 
-a. Follow the registration link provided by a Bodo team member.
-b. Fill out the fields with your information. If this is your individual account,
+a. Subscribe through the `AWS Marketplace <https://aws.amazon.com/marketplace/pp/B08NY29SMQ>`_.
+#. After confirming your subscription, you'll be directed to Bodo Platform's registration page.
+#. Fill out the fields with your information. If this is your individual account,
    use a unique name such as `firstname_lastname` for the Organization Name field.
-c. Check the box for accepting terms and conditions and click on `SIGN UP`:
+#. Check the box for accepting terms and conditions and click on `SIGN UP`:
 
     .. image:: platform_onboarding_screenshots/signup.png
         :align: center
         :alt: Signup-Page
 
-d. A page confirming that an activation link was sent to your email will appear.
+#. A page confirming that an activation link was sent to your email will appear.
    Please open the email and click on the activation link:
 
     .. image:: platform_onboarding_screenshots/signup-conf.png
         :align: center
         :alt: Signup-Page-Confirmation
 
-  Clicking on the confirmation link will take you to the bodo platform page
-  where you can use your newly created credentials to sign in:
+   Clicking on the confirmation link will take you to the bodo platform page
+   where you can use your newly created credentials to sign in:
 
         .. image:: platform_onboarding_screenshots/login.png
             :align: center
@@ -44,35 +45,134 @@ in the left bar or the first item in the *Onboarding* list highlighted in green 
     :align: center
     :alt: Dashboard
 
-Follow the instructions from `AWS Account and Access Keys guide <https://docs.aws.amazon.com/powershell/latest/userguide/pstools-appendix-sign-up.html>`_
-to create/retrieve your AWS access key and access secret key, and `AWS Account ID guide <https://docs.aws.amazon.com/IAM/latest/UserGuide/console_account-alias.html>`_
-to retrieve your AWS account ID.
+To be able to use the Bodo Platform to launch clusters and notebooks, you must grant it permission to access your AWS account and provision the
+required resources in it. This can be done through an `AWS Cross Account IAM Role <https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/iam-roles-for-amazon-ec2.html>`_ for the Bodo Platform.
 
-Bodo Cloud Platform requires a minimal set of AWS permissions which are documented in :download:`Minimal Bodo-Platform Policy <downloadables/bodo-platform.json>`.
+.. _create_iam_role:
 
-1. Create a policy from this :download:`Minimal Bodo-Platform Policy <downloadables/bodo-platform.json>` using the AWS-CLI as follows:
+Create a Cross-Account IAM Role
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. code-block:: bash
+There are two ways to create such an IAM Role, (a) you can create it manually, or (b) you can provide us with `Access Keys <https://docs.aws.amazon.com/IAM/latest/UserGuide/id_credentials_access-keys.html>`_
+and we can create an IAM role in your AWS account. We provide directions for both these methods below.
 
-    aws iam create-policy --policy-name {POLICY_NAME} --policy-document file://{path-to-bodo-platform.json-file}
+.. _create_iam_role_manually:
 
-For instance:
+Create the IAM Role Manually
+****************************
 
-.. code-block:: bash
+#. Log in to the `AWS Management Console <https://aws.amazon.com/console/>`_  and navigate to the **IAM** Service.
+#. Select the **Roles** tab in the sidebar, and click **Create Role**.
+#. In `Select type of trusted entity`, select `Another AWS Account`.
+#. Enter the Bodo Platform Account ID **481633624848** in the **Account ID** field.
+#. Check the `Require external ID` option.
 
-    aws iam create-policy --policy-name bodo-platform --policy-document file:///Users/johndoe/Downloads/bodo-platform.json
+    .. image:: create_role_screenshots/create_iam_role_manual_form_step1.png
+        :align: center
+        :alt: Create Role Form Step 1
 
-2. Attach this policy to the specific user or group that will be used to generate the keys for the Bodo platform (using the AWS console for instance, in IAM --> Access Management --> Policies).
+    In the **External ID** field, copy over the External ID from the `Settings` page on the Bodo Platform.    
+
+    .. image:: create_role_screenshots/create_iam_role_manual_externalId.png
+        :align: center
+        :alt: External ID Platform
+
+#. Click the `Next: Permissions` button.
+#. Click the `Next: Tags` button.
+#. Click the `Next: Review` button.
+#. In the `Role name` field, enter a role name, e.g. `BodoPlatformUser`.
+
+    .. image:: create_role_screenshots/create_iam_role_manual_review_step.png
+        :align: center
+        :alt: Create Role Form Review
+
+#. Click `Create Role`. You will be taken back to the list of IAM Roles in your account.
+#. In the list of IAM Roles, click on the role you just created.
+#. Click on `Add inline policy`.
+
+    .. image:: create_role_screenshots/create_role_manual_summary_page.png
+        :align: center
+        :alt: Create Role Summary Page
+
+#. Click the `JSON` tab.
+
+    .. image:: create_role_screenshots/create_iam_role_manual_policy_editor.png
+        :align: center
+        :alt: Create Role Manual Policy Editor
+
+#. Bodo Cloud Platform requires a specific set of AWS permissions which are documented in :download:`Bodo-Platform Policy <downloadables/bodo-platform.json>`. 
+   Paste the contents of the linked JSON file into the policy editor. 
+#. Click on `Review policy`.
+#. In the `Name` field, add a policy name, e.g. `Bodo-Platform-User-Policy`. Click on `Create policy`. You will be taken back to the Role Summary.
+#. From the role summary, copy the **Role ARN**. This is the value that you will enter into the `Role ARN` field on the Setting Page on the Bodo Platform.
+
+    .. image:: create_role_screenshots/create_iam_role_manual_final_summary.png
+        :align: center
+        :alt: Create Role Final Summary
+
+.. _create_iam_role_using_platform:
+
+Let the Bodo Platform create the IAM Role
+*****************************************
+
+#. Follow the instructions from `AWS Account and Access Keys guide <https://docs.aws.amazon.com/powershell/latest/userguide/pstools-appendix-sign-up.html>`_
+   to create/retrieve your AWS access key ID and secret access key.
+#. Click on `Create Role For Me` below the `Role ARN` field on the Setting page. This will open up a panel.
+
+    .. image:: create_role_screenshots/create_role_via_platform_create_role_button.png
+        :align: center
+        :alt: Create Role Button on Platform
+
+#. Enter the Access Keys created in step 1 in the form and click on `CREATE ROLE`.
+
+    .. image:: create_role_screenshots/create_role_via_platform_enter_access_keys.png
+        :align: center
+        :alt: Enter Access Keys to create role on Platform
+    
+   **NOTE**: We will **not** save the provided Access Keys for security reasons.
+
+#. Click `OK` on the popup confirmation box.
+#. We will use the provided Access Keys to create an IAM Role in your AWS Account. 
+#. The created Role ARN will be displayed on the same form.
+
+    .. image:: create_role_screenshots/create_role_via_platform_generated_role.png
+        :align: center
+        :alt: Role ARN generated on the Platform
+
+#. Copy the generated `Role ARN`. This is the value that you will enter into the `Role ARN` field on the Setting Page on the Bodo Platform.
+#. In some cases, this role creation might fail. This could happen due to various reasons.
+   
+   a. A role already exists: In this case, please open the `AWS Management Console <https://aws.amazon.com/console/>`_, and navigate to the **IAM** Service. 
+      Click on `Roles` in the sidebar. Look for a Role named `BodoPlatformUser`. Click on the role, and copy over the
+      `Role ARN` from the role summary. Alternatively, you can delete the existing role from the AWS Console and then try to create
+      an IAM role again via the Bodo Platform. This will ensure you have the role set up with the correct permissions.
+      
+      **Note**: If this is a shared AWS Account, ensure that no one else is actively using this IAM Role before deleting it.
+   #. Provided access keys are not valid: Please ensure that valid access keys are provided.
+   #. Provided access keys don't have the right permissions to create a role: Please ensure that the provided access keys have the permissions required
+      to create an IAM Role.
+   
+   If none of these work, try creating the IAM Role manually as described in :ref:`create_iam_role_manually`.
 
 
-Enter your created credentials and account ID and click on *SAVE*.
-Refresh and you can see the progress on granting `AMI <https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/AMIs.html>`_
-launch permissions to your account ID. Your account is ready when it turns green.
+Once you have generated an IAM Role using either of the methods described above, you are now ready to fill the Setting Form on the Bodo Platform.
 
+#. Follow the instructions on `AWS Account ID guide <https://docs.aws.amazon.com/IAM/latest/UserGuide/console_account-alias.html>`_
+   to retrieve your AWS account ID, and enter it in the **AWS Account ID** field in the Settings Form on the Bodo Platform.
+
+#. Enter the `Role ARN` created using one of the above options into the `Role ARN` field in the Settings Form.
+
+#. Select a region from the dropdown list. This is the region that your resources will be deployed in by default.
+
+#. Click on *SAVE*.
+
+You can see the progress on granting `AMI <https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/AMIs.html>`_
+launch permissions to your account ID in the `AMI Share Status` field. Your account is ready when it turns green.
+
+**Note:** We grant AMI launch permissions to your account in the following AWS regions: us-east-1, us-east-2, us-west-1 & us-west-2.
 
 **Note:** It is highly recommended that you ensure sufficient limits on your AWS account to launch
 resources. See :ref:`resources_created_in_aws_env` for the resources required for Bodo Cloud Platform.
-
 
 .. _creating_clusters:
 
