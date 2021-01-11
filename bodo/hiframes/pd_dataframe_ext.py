@@ -2322,11 +2322,8 @@ def validate_sort_values_spec(df, by, axis, ascending, inplace, kind, na_positio
     # "A" is equivalent to ("A", "")
     key_names = set((k, "") if (k, "") in valid_keys_set else k for k in key_names)
     if len(key_names.difference(valid_keys_set)) > 0:
-        raise_bodo_error(
-            "sort_values(): invalid key {} for by.".format(
-                valid_keys_set.difference(set(get_overload_const_list(by)))
-            )
-        )
+        invalid_keys = list(set(get_overload_const_list(by)).difference(valid_keys_set))
+        raise_bodo_error(f"sort_values(): invalid keys {invalid_keys} for by.")
 
     # make sure axis has default value 0
     if not is_overload_zero(axis):

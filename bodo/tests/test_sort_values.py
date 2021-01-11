@@ -11,8 +11,8 @@
 
 import os
 import random
+import re
 import string
-from decimal import Decimal
 
 import numpy as np
 import pandas as pd
@@ -821,7 +821,7 @@ def test_sort_values_by_const_str_or_str_list(memory_leak_check):
         bodo.jit(impl1)(df)
     with pytest.raises(
         BodoError,
-        match=" invalid key .* for by",
+        match=" invalid keys .* for by",
     ):
         bodo.jit(impl2)(df)
 
@@ -837,9 +837,10 @@ def test_sort_values_by_labels(memory_leak_check):
     def impl2(df):
         return df.sort_values(by=["B", "C"])
 
-    with pytest.raises(BodoError, match="invalid key .* for by"):
+    msg = re.escape("sort_values(): invalid keys ['C'] for by")
+    with pytest.raises(BodoError, match=msg):
         bodo.jit(impl1)(df)
-    with pytest.raises(BodoError, match="invalid key .* for by"):
+    with pytest.raises(BodoError, match=msg):
         bodo.jit(impl2)(df)
 
 
