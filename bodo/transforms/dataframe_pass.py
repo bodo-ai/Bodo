@@ -1619,6 +1619,7 @@ class DataFramePass:
         if extra_arg_names:
             extra_arg_names += ", "
 
+        sum_no = bodo.libs.distributed_api.Reduce_Type.Sum.value
         func_text = f"def _bodo_groupby_apply_impl(keys, in_df, map_func, {extra_arg_names}_is_parallel=False):\n"
         func_text += f"  if _is_parallel:\n"
         func_text += f"    in_df, keys, shuffle_info = shuffle_dataframe(in_df, keys)\n"
@@ -1655,7 +1656,6 @@ class DataFramePass:
         if not grp_typ.as_index:
             func_text += "  n_prev_groups = 0\n"
             func_text += "  if _is_parallel:\n"
-            sum_no = bodo.libs.distributed_api.Reduce_Type.Sum.value
             func_text += f"    n_prev_groups = bodo.libs.distributed_api.dist_exscan(ngroups, np.int32({sum_no}))\n"
         # NOTE: Pandas tracks whether output Index is same as input, and reorders output
         # to match input if Index hasn't changed
@@ -1714,6 +1714,11 @@ class DataFramePass:
         func_text += f"  out_index = bodo.hiframes.pd_multi_index_ext.init_multi_index(({out_key_arr_names}, out_idx_arr_all), ({index_names},), None)\n"
 
         # reorder output to match input if UDF Index is same as input
+        func_text += "  if _is_parallel:\n"
+        # synchronize since some ranks may avoid mutation due to corner cases
+        func_text += (
+            f"    mutated = bool(dist_reduce(int(mutated), np.int32({sum_no})))\n"
+        )
         func_text += "  if not mutated:\n"
         func_text += f"    rev_idx = sort_idx.argsort()\n"
         func_text += f"    out_index = out_index[rev_idx]\n"
@@ -1745,6 +1750,7 @@ class DataFramePass:
             "shuffle_dataframe": bodo.hiframes.pd_groupby_ext.shuffle_dataframe,
             "reverse_shuffle": bodo.hiframes.pd_groupby_ext.reverse_shuffle,
             "delete_shuffle_info": bodo.libs.array.delete_shuffle_info,
+            "dist_reduce": bodo.libs.distributed_api.dist_reduce,
         }
         loc_vars = {}
         exec(func_text, glbs, loc_vars)
