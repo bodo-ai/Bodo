@@ -68,6 +68,7 @@ use_nullable_int_arr = True
 
 import pyarrow.parquet as pq
 
+
 def ParquetManifest_visit_level(self, level, base_path, part_keys):
     fs = self.filesystem
 
@@ -689,6 +690,44 @@ def is_directory_parallel(fpath):
     return isdir
 
 
+def is_nested_parallel(fpath, file_names):
+    """Returns True if one of the file names in file_names is a directory"""
+
+    from mpi4py import MPI
+
+    comm = MPI.COMM_WORLD
+    is_nested = False
+    if bodo.get_rank() == 0:
+        try:
+            if fpath.startswith("s3://"):
+                fs = get_s3_fs()
+                for fname in file_names:
+                    if s3_is_directory(fs, fname):
+                        is_nested = True
+                        break
+            else:
+                if fpath.startswith("hdfs://"):  # pragma: no cover
+                    is_dir_func = hdfs_is_directory
+                # TODO merge with hdfs when new pyarrow API works with abfs
+                elif fpath.startswith("abfs://") or fpath.startswith(
+                    "abfss://"
+                ):  # pragma: no cover
+                    is_dir_func = abfs_is_directory
+                else:
+                    is_dir_func = os.path.isdir
+                for fname in file_names:
+                    if is_dir_func(fname):
+                        is_nested = True
+                        break
+        except Exception as e:
+            is_nested = e
+    is_nested = comm.bcast(is_nested)
+    if isinstance(is_nested, Exception):
+        e = is_nested
+        raise e
+    return is_nested
+
+
 def get_filenames_parallel(path, filter_func):
     """Get sorted list of file names in directory 'path'. Filter files based
     on the filter function 'filter_func'.
@@ -752,12 +791,7 @@ def get_parquet_dataset(fpath, parallel, get_row_counts=True):
 
     if is_directory_parallel(fpath):
         file_names = get_filenames_parallel(fpath, directory_of_files_common_filter)
-        is_nested = False
-        for fname in file_names: # TODO: not efficient?
-            if is_directory_parallel(fname):
-                is_nested = True
-                break
-        if is_nested:
+        if is_nested_parallel(fpath, file_names):
             # For now, for nested directories (for example partitioned datasets using
             # hive scheme) we let pyarrow.parquet.ParquetDataset
             # extract all the information by passing it the top-level directory.
