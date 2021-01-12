@@ -117,7 +117,7 @@ To run HDFS related unit tests, use the :ref:`docker image <docker-images>`.
 
 Other useful packages for development::
 
-    conda install pytest sphinx pylint jupyter xlrd xlsxwriter mpi4py ipyparallel matplotlib jupyterlab aws-sdk-cpp
+    conda install pytest sphinx pylint jupyter xlrd xlsxwriter openpyxl mpi4py ipyparallel matplotlib jupyterlab aws-sdk-cpp
 
 
 Cleaning Bodo

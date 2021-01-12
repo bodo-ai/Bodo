@@ -1917,6 +1917,9 @@ def test_csv_dir_str_arr_multi(datapath, memory_leak_check):
 
 
 @pytest.mark.smoke
+@pytest.mark.skip(
+    reason="TODO: Fails in current Pandas as well. Unskip when we switch to Pandas 1.2.0"
+)
 def test_excel1(datapath, memory_leak_check):
     """Test pd.read_excel()"""
 

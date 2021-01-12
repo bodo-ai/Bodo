@@ -115,7 +115,7 @@ jobs:
       set -eo pipefail
       export PATH=$HOME/miniconda3/bin:$PATH
       source activate $CONDA_ENV
-      conda install -y -c conda-forge xlrd xlsxwriter
+      conda install -y -c conda-forge xlrd xlsxwriter openpyxl
     displayName: 'Setup excel testing'
 
   - task: DownloadSecureFile@1

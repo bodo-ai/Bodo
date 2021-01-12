@@ -54,7 +54,7 @@ then
    $CONDA_INSTALL mpi4py -c conda-forge
    $CONDA_INSTALL scikit-learn -c conda-forge
    $CONDA_INSTALL hdf5=*=*mpich* -c conda-forge
-   $CONDA_INSTALL xlrd xlsxwriter -c conda-forge
+   $CONDA_INSTALL xlrd xlsxwriter openpyxl -c conda-forge
    if [ "$RUN_COVERAGE" == "yes" ]; then $CONDA_INSTALL coveralls; fi
 else
    $CONDA_INSTALL -c pytorch -c conda-forge -c defaults bokeh pytorch=1.5 torchvision=0.6
