@@ -6,6 +6,7 @@ such as non-uniform dictionary input of `pd.DataFrame({})`.
 import types as pytypes
 import warnings
 import itertools
+import operator
 import datetime
 import pandas as pd
 import numpy as np
@@ -24,6 +25,7 @@ from numba.core.ir_utils import (
     find_callname,
     guard,
     get_definition,
+    require,
     build_definitions,
     compute_cfg_from_blocks,
 )
@@ -174,11 +176,8 @@ class UntypedPass:
             if rhs.op == "call":
                 return self._run_call(assign, label)
 
-            # fix type for f['A'][:] dset reads
-            if config._has_h5py and rhs.op in ("getitem", "static_getitem"):
-                h5_nodes = self.h5_handler.handle_possible_h5_read(assign, lhs, rhs)
-                if h5_nodes is not None:
-                    return h5_nodes
+            if rhs.op in ("getitem", "static_getitem"):
+                return self._run_getitem(assign, rhs, label)
 
             # HACK: delete pd.DataFrame({}) nodes to avoid typing errors
             # TODO: remove when dictionaries are implemented and typing works
@@ -318,6 +317,172 @@ class UntypedPass:
             self.func_ir._definitions[lhs].append(rhs)
             return []
         return [assign]
+
+    def _run_getitem(self, assign, rhs, label):
+        # fix type for f['A'][:] dset reads
+        if config._has_h5py:
+            lhs = assign.target.name
+            h5_nodes = self.h5_handler.handle_possible_h5_read(assign, lhs, rhs)
+            if h5_nodes is not None:
+                return h5_nodes
+
+        # detect if filter pushdown is possible and transform
+        # e.g. df = pd.read_parquet(...); df = df[df.A > 3]
+        index_def = guard(get_definition, self.func_ir, rhs.index)
+        value_def = guard(get_definition, self.func_ir, rhs.value)
+        if (
+            is_expr(index_def, "binop")
+            and is_call(value_def)
+            and guard(find_callname, self.func_ir, value_def)
+            == ("init_dataframe", "bodo.hiframes.pd_dataframe_ext")
+        ):
+            guard(self._try_filter_pushdown, assign, value_def, index_def)
+
+        return [assign]
+
+    def _try_filter_pushdown(self, assign, value_def, index_def):
+        """detect filter pushdown and add filters to ParquetReader IR node if possible.
+        Throws GuardException if not possible.
+        """
+        # avoid empty dataframe
+        require(len(value_def.args) > 0)
+        data_def = get_definition(self.func_ir, value_def.args[0])
+        assert is_expr(data_def, "build_tuple"), "invalid data tuple in init_dataframe"
+        read_pq_node = get_definition(self.func_ir, data_def.items[0])
+        require(isinstance(read_pq_node, bodo.ir.parquet_ext.ParquetReader))
+        require(
+            all(get_definition(self.func_ir, v) == read_pq_node for v in data_def.items)
+        )
+        require(read_pq_node.partition_names)
+
+        # make sure all filters have the right form
+        lhs_def = get_definition(self.func_ir, index_def.lhs)
+        rhs_def = get_definition(self.func_ir, index_def.rhs)
+        filters = self._get_partition_filters(
+            index_def,
+            read_pq_node.partition_names,
+            assign.value.value,
+            lhs_def,
+            rhs_def,
+        )
+        print(filters)
+
+    def _get_partition_filters(
+        self, index_def, partition_names, df_var, lhs_def, rhs_def
+    ):
+        """get filters for predicate pushdown if possible.
+        Returns filters in pyarrow DNF format (e.g. [[("a", "==", 1)][("a", "==", 2)]]):
+        https://arrow.apache.org/docs/python/generated/pyarrow.parquet.ParquetDataset.html#pyarrow.parquet.ParquetDataset
+        Throws GuardException if not possible.
+        """
+        require(is_expr(index_def, "binop"))
+        # similar to DNF normalization in Sympy:
+        # https://github.com/sympy/sympy/blob/da5cd290017814e6100859e5a3f289b3eda4ca6c/sympy/logic/boolalg.py#L1565
+        # Or case: call recursively on arguments and concatenate
+        # e.g. A or B
+        if index_def.fn == operator.or_:
+            l_def = get_definition(self.func_ir, lhs_def.lhs)
+            r_def = get_definition(self.func_ir, lhs_def.rhs)
+            left_or = self._get_partition_filters(
+                lhs_def, partition_names, df_var, l_def, r_def
+            )
+            l_def = get_definition(self.func_ir, rhs_def.lhs)
+            r_def = get_definition(self.func_ir, rhs_def.rhs)
+            right_or = self._get_partition_filters(
+                rhs_def, partition_names, df_var, l_def, r_def
+            )
+            return left_or + right_or
+
+        # And case: distribute Or over And to normalize if needed
+        if index_def.fn == operator.and_:
+
+            # rhs is Or
+            # e.g. "A And (B Or C)" -> "(A And B) Or (A And C)"
+            if is_expr(lhs_def, "binop") and rhs_def.fn == operator.or_:
+                # lhs And rhs.lhs (A And B)
+                new_lhs = ir.Expr.binop(
+                    operator.and_, index_def.lhs, rhs_def.lhs, index_def.loc
+                )
+                new_lhs_rdef = get_definition(self.func_ir, rhs_def.lhs)
+                left_or = self._get_partition_filters(
+                    new_lhs, partition_names, df_var, lhs_def, new_lhs_rdef
+                )
+                # lhs And rhs.rhs (A And C)
+                new_rhs = ir.Expr.binop(
+                    operator.and_, index_def.lhs, rhs_def.rhs, index_def.loc
+                )
+                new_rhs_rdef = get_definition(self.func_ir, rhs_def.rhs)
+                right_or = self._get_partition_filters(
+                    new_rhs, partition_names, df_var, lhs_def, new_rhs_rdef
+                )
+                return left_or + right_or
+
+            # lhs is Or
+            # e.g. "(B Or C) And A" -> "(B And A) Or (C And A)"
+            if is_expr(lhs_def, "binop") and lhs_def.fn == operator.or_:
+                # lhs.lhs And rhs (B And A)
+                new_lhs = ir.Expr.binop(
+                    operator.and_, lhs_def.lhs, index_def.rhs, index_def.loc
+                )
+                new_lhs_ldef = get_definition(self.func_ir, lhs_def.lhs)
+                left_or = self._get_partition_filters(
+                    new_lhs, partition_names, df_var, new_lhs_ldef, rhs_def
+                )
+                # lhs.rhs And rhs (C And A)
+                new_rhs = ir.Expr.binop(
+                    operator.and_, lhs_def.rhs, index_def.rhs, index_def.loc
+                )
+                new_rhs_ldef = get_definition(self.func_ir, lhs_def.rhs)
+                right_or = self._get_partition_filters(
+                    new_rhs, partition_names, df_var, new_rhs_ldef, rhs_def
+                )
+                return left_or + right_or
+
+            # both lhs and rhs are And/literal expressions
+            l_def = get_definition(self.func_ir, lhs_def.lhs)
+            r_def = get_definition(self.func_ir, lhs_def.rhs)
+            left_or = self._get_partition_filters(
+                lhs_def, partition_names, df_var, l_def, r_def
+            )
+            l_def = get_definition(self.func_ir, rhs_def.lhs)
+            r_def = get_definition(self.func_ir, rhs_def.rhs)
+            right_or = self._get_partition_filters(
+                rhs_def, partition_names, df_var, l_def, r_def
+            )
+            return [left_or[0] + right_or[0]]
+
+        # literal case
+        # TODO(ehsan): support 'in' and 'not in'
+        op_map = {
+            operator.eq: "==",
+            operator.ne: "!=",
+            operator.lt: "<",
+            operator.le: "<=",
+            operator.gt: ">",
+            operator.ge: ">=",
+        }
+
+        require(index_def.fn in op_map)
+        left_colname = guard(self._get_col_name, index_def.lhs, df_var)
+        right_colname = guard(self._get_col_name, index_def.rhs, df_var)
+        # TODO(ehsan): support column ref on rhs
+        require(left_colname and not right_colname)
+        # Pyarrow format, e.g.: [[("a", "==", 2)]]
+        return [[(left_colname, op_map[index_def.fn], index_def.rhs)]]
+
+    def _get_col_name(self, var, df_var):
+        """get column name for dataframe column access like df["A"] if possible.
+        Throws GuardException if not possible.
+        """
+        var_def = get_definition(self.func_ir, var)
+        if is_expr(var_def, "getattr") and var_def.value.name == df_var.name:
+            return var_def.attr
+        if is_expr(var_def, "static_getitem") and var_def.value.name == df_var.name:
+            return var_def.index
+
+        require(is_expr(var_def, "getitem"))
+        require(var_def.value.name == df_var.name)
+        return get_const_value_inner(self.func_ir, var_def.index, arg_types=self.args)
 
     def _run_call(self, assign, label):
         """handle calls and return new nodes if needed"""
