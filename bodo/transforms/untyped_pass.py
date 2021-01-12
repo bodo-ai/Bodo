@@ -35,7 +35,7 @@ import bodo
 from bodo import config
 import bodo.io
 from bodo.io import h5
-from bodo.utils.utils import is_call, is_expr
+from bodo.utils.utils import is_call, is_expr, is_assign
 from bodo.libs.str_arr_ext import string_array_type
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.bool_arr_ext import boolean_array
@@ -119,8 +119,7 @@ class UntypedPass:
         while work_list:
             label, block = work_list.pop()
             self._get_reverse_copies(blocks[label].body)
-            new_body = []
-            self._working_body = new_body
+            self._working_body = []
             for inst in block.body:
                 out_nodes = [inst]
 
@@ -132,10 +131,10 @@ class UntypedPass:
 
                 assert isinstance(out_nodes, list)
                 # TODO: fix scope/loc
-                new_body.extend(out_nodes)
+                self._working_body.extend(out_nodes)
                 update_node_list_definitions(out_nodes, self.func_ir)
 
-            blocks[label].body = new_body
+            blocks[label].body = self._working_body
 
         self.func_ir.blocks = ir_utils.simplify_CFG(self.func_ir.blocks)
         # self.func_ir._definitions = build_definitions(blocks)
@@ -365,7 +364,61 @@ class UntypedPass:
             lhs_def,
             rhs_def,
         )
-        print(filters)
+        self._reorder_filter_nodes(read_pq_node, index_def, filters)
+        # set ParquetReader node filters (no exception was raise until this end point
+        # so filters are valid)
+        read_pq_node.filters = filters
+
+    def _reorder_filter_nodes(self, read_pq_node, index_def, filters):
+        """reorder nodes that are used for Parquet partition filtering to be before the
+        ParquetReader node (to be accessible when ParquetReader is run).
+        Throws GuardException if not possible.
+        """
+        # e.g. [[("a", "0", ir.Var("val"))]] -> {"val"}
+        filter_vars = {v[2].name for predicate_list in filters for v in predicate_list}
+        # data array variables should not be used in filter expressions directly
+        non_filter_vars = {v.name for v in read_pq_node.list_vars()}
+
+        # find all variables that are potentially used in filter expressions after the
+        # reader node
+        # make sure they don't overlap with other nodes (to be conservative)
+        i = 0  # will be set to ParquetReader node's reversed index
+        for stmt in reversed(self._working_body):
+            i += 1
+            # ignore dataframe filter expression node
+            if is_assign(stmt) and stmt.value is index_def:
+                continue
+            # avoid nodes before the reader
+            if stmt is read_pq_node:
+                break
+            stmt_vars = {v.name for v in stmt.list_vars()}
+
+            if stmt_vars & filter_vars:
+                filter_vars |= stmt_vars
+            else:
+                non_filter_vars |= stmt_vars
+
+        require(not (filter_vars & non_filter_vars))
+
+        # move IR nodes for filter expressions before the reader node
+        pq_ind = len(self._working_body) - i
+        new_body = self._working_body[:pq_ind]
+        non_filter_nodes = []
+        for i in range(pq_ind, len(self._working_body)):
+            stmt = self._working_body[i]
+            # ignore dataframe filter expression node
+            if is_assign(stmt) and stmt.value is index_def:
+                non_filter_nodes.append(stmt)
+                continue
+
+            stmt_vars = {v.name for v in stmt.list_vars()}
+            if stmt_vars & filter_vars:
+                new_body.append(stmt)
+            else:
+                non_filter_nodes.append(stmt)
+
+        # update current basic block with new stmt order
+        self._working_body = new_body + non_filter_nodes
 
     def _get_partition_filters(
         self, index_def, partition_names, df_var, lhs_def, rhs_def
