@@ -183,8 +183,10 @@ If you only want to change the number of parallel builds (increase or decrease),
 then you don't need to make any changes to this file.
 
 Once you make your changes, run ``python buildscripts/aws/update_buildspec_batch.py CI <num_parallel_builds>``,
-where ``<num_parallel_builds>`` is the number of builds you want to partition tests across in parallel. This updates the 
-``buildspec.yml``file locally, which you then need to merge to master through a PR. 
+where ``<num_parallel_builds>`` is the number of builds you want to partition tests across in parallel. If you
+do not want to change the numebr of builds, then set ``<num_parallel_builds>`` to the current value of ``NUMBER_GROUPS_SPLIT``
+in ``buildspec.yaml``. Executing this script updates the ``buildspec.yml``file locally, which you then need to
+merge to master through a PR. 
 
 **Important Note:** In codebuild, your PR is not automatically merged to master, until after the ``buildspec.yml``
 file is used. As a result, if you update ``buildspec.yml`` and these changes are needed in others PRs, 
@@ -213,19 +215,19 @@ need to be updated through the Codebuild UI.
     - Update with CodeBuild UI
   * - ``Bodo-PR-Testing (CI)``
     - ``$BODO_PATH/buildscripts/aws/docker/CI.Dockerfile``
-    - `bodo-codebuild <https://us-east-2.console.aws.amazon.com/ecr/repositories/bodo-codebuild/?region=us-east-2>`_
+    - `bodo-codebuild <https://us-east-2.console.aws.amazon.com/ecr/repositories/bodo-codebuild?region=us-east-2>`_
     - No
   * - ``Bodo-PR-Testing (Sonar)``
     - ``$BODO_PATH/buildscripts/aws/docker/Sonar.Dockerfile``
-    - `bodo-sonar <https://us-east-2.console.aws.amazon.com/ecr/repositories/bodo-sonar/?region=us-east-2>`_
+    - `bodo-sonar <https://us-east-2.console.aws.amazon.com/ecr/repositories/bodo-sonar?region=us-east-2>`_
     - No
   * - ``Bodo-Engine-Nightly``
     - ``$BODO_PATH/buildscripts/aws/docker/Nightly.Dockerfile``
-    - `bodo-nightly <https://us-east-2.console.aws.amazon.com/ecr/repositories/bodo-codebuild/?region=us-east-2>`_
+    - `bodo-nightly <https://us-east-2.console.aws.amazon.com/ecr/repositories/bodo-nightly?region=us-east-2>`_
     - Yes
   * - ``bodosql-pr``
     - ``$BODOSQL_PATH/buildscripts/docker/Dockerfile``
-    - `bodosql-codebuild <https://us-east-2.console.aws.amazon.com/ecr/repositories/bodosql-codebuild/?region=us-east-2>`_
+    - `bodosql-codebuild <https://us-east-2.console.aws.amazon.com/ecr/repositories/bodosql-codebuild?region=us-east-2>`_
     - Yes
 
 For each image you must update, there are a series of steps to undergo, which for the most part
@@ -240,28 +242,104 @@ rebase all other branches off it.
 To demonstrate the steps needed to update the docker image, here are the steps to update the 
 ``Bodo-PR-Testing (CI)`` image.
 
-1. Update the installation in the necessary buildscripts. This should either modify ``buildscripts/setup_conda.sh``
+#. Update the installation in the necessary buildscripts. This should either modify ``buildscripts/setup_conda.sh``
    or ``buildscripts/aws/test_installs.sh``.
 
-2. Rebuild the docker image. This can be done by executing the command 
+#. Rebuild the docker image. This can be done by executing the command 
    ``docker build -f buildscripts/aws/docker/CI.Dockerfile . -t bodo-codebuild:latest``
 
-3. Upload the container to ECR `here <https://us-east-2.console.aws.amazon.com/ecr/repositories/bodo-codebuild/?region=us-east-2>`_.
-   Click ``View Push Commands`` for steps to upload. However, rather than uploading as latest, you should
-   use a tag that is different than the existing image (e.g. if 1.0 is there now do 1.1). The exact tag is
-   not important and we don't intend to keep images around long-term, but this should be different so the
-   process of developing your PR doesn't break any existing PRs before merging.
+#. Upload the container to ECR `here <https://us-east-2.console.aws.amazon.com/ecr/repositories/bodo-codebuild?region=us-east-2>`_.
+   Click ``View Push Commands`` for steps to upload. 
+   
+   Skip step 2 in ``View Push Commands`` because you have already built the image.
+   
+   In steps 3 and 4, replace the `latest` tag with a version tag that is a different than any existing image.
+   For example if there is a ``1.0`` in the repo, make your tag ``1.1``. The exact tag is
+   not important and we don't intend to keep images around long-term.
 
-4. Update the image name in ``buildscripts/aws/update_buildspec_batch.py`` in the ``generate_CI_buildspec``
-   function to use your current tag.
 
-5. Generate a new buildspec file by following the steps in :ref:`Updating the Batch`.
-
-6. Once your PR is merged you may need people to rebase their in progress PRs with master as updates to the 
-   outermost ``buildspec.yml`` will not merge with master.
-
-7. Delete the previous ECR image as all builds now need the newest build. This will allow for quicker failure
-   if someone hasn't rebased their PR and avoids any lingering resources.
+The steps for updating your image now differ depending on if you need to update the image with Codebuild UI.
+This is not a matter of personal preference and is instead a property of the image you are updating. Eventually
+all images should be transitioned to be updating without Codebuild UI.
 
 Remember you will need to do this for every image that the installation change
-impacts (most likely at least CI and Nightly).
+impacts (most likely at least CI and Nightly). As a result, you may need to
+perform the actions both with and without Codebuild UI.
+
+Updating the Image without Codebuild UI
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#. Update the image name in ``buildscripts/aws/update_buildspec_batch.py`` in the ``generate_CI_buildspec``
+   function to use your current tag.
+
+#. Generate a new buildspec file by following the steps in :ref:`Updating the Batch`.
+
+#. Test your changes by submitting a Pull Request. This should automatically update your image and all tests
+   that run are demonstrative of your update.
+
+#. Once your PR is merged you may need people to rebase their in progress PRs with master as updates to the 
+   outermost ``buildspec.yml`` will not merge with master.
+
+#. Delete the previous ECR image as all builds now need the newest build. This will allow for quicker failure
+   if someone hasn't rebased their PR and avoids any lingering resources.
+
+Updating the Image with Codebuild UI
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#. Push your changes as a pull request to Github. This will not automatically
+   update your image, even when merged, so you will need to manually test your new image.
+
+#. Navigate to the Codebuild project whose image you are updating. Select ``Start build with overrides``
+   to manually trigger a testing your changes.
+
+   .. figure:: ../figs/codebuild_start_build.png
+      :alt: Codebuild Start Build
+
+#. From the ``Start Build`` screen, select ``Advanced build overrides``.
+
+   .. figure:: ../figs/codebuild_advanced_build_overrides.png
+      :alt: Codebuild Advanced Build Overrides
+
+#. In the ``Source`` section replace the ``Source version`` with the name of your branch.
+
+   .. figure:: ../figs/codebuild_source_version.png
+      :alt: Codebuild Source Version
+
+#. In ``Environment`` select ``Override image`` to test your new image. Then select the follow options as they arise:
+
+   .. figure:: ../figs/codebuild_override_image.png
+      :alt: Codebuild Override Image
+
+   .. figure:: ../figs/codebuild_override_image_details.png
+      :alt: Codebuild Override Image Details
+   
+   #. Under ``New environment image`` select ``Custom image``.
+
+   #. Under ``Environment type`` select ``Linux``.
+
+   #. Under ``Image registry`` select ``Amazon ECR``. 
+
+   #. Under ``ECR account`` select ``MY ECR account``.
+
+   #. Under ``Amazon ECR repository`` select the name of the image you are updating.
+
+   #. Under ``Amazon ECR image`` choose the tag you created.
+
+#. For all other options keep the default choices.
+
+#. Scroll to the bottom and select ``Start build``. This will trigger all your tests.
+   If these pass then it is safe to update this image into master.
+
+#. Once your PR is merged you need to update the default build details in the
+   Codbuild UI. To do this, you need to once again navigate to the project on
+   Codebuild, but this time select ``Build details``. Then you should:
+
+      .. figure:: ../figs/codebuild_build_details.png
+         :alt: Codebuild Build Details
+
+   #. Scroll to ``Environment`` and select ``Edit``.
+
+   #. Repeat the steps from testing to complete ``Override Image``.
+
+#. Delete the previous ECR image as CI uses the newest build. This
+   can happen as soon as you replace the image, but you probably want
+   to wait for the CI to run successfully at least once when triggered
+   automatically.
