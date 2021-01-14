@@ -45,7 +45,7 @@ struct DatasetReader {
  * @param is_parallel : true if processes will read chunks of the dataset
  */
 DatasetReader *get_dataset_reader(char *file_name, bool is_parallel,
-                                  char *bucket_region);
+                                  char *bucket_region, PyObject* filters);
 void del_dataset_reader(DatasetReader *reader);
 
 int64_t pq_get_size(DatasetReader *reader, int64_t column_idx);
@@ -137,7 +137,7 @@ PyMODINIT_FUNC PyInit_parquet_cpp(void) {
 }
 
 DatasetReader *get_dataset_reader(char *file_name, bool parallel,
-                                  char *bucket_region) {
+                                  char *bucket_region, PyObject* filters) {
     try {
 #ifdef DEBUG_NESTED_PARQUET
     std::cout << "GET_DATASET_READER, beginning\n";
@@ -151,8 +151,9 @@ DatasetReader *get_dataset_reader(char *file_name, bool parallel,
     PyObject *pq_mod = PyImport_ImportModule("bodo.io.parquet_pio");
 
     // ds = bodo.io.parquet_pio.get_parquet_dataset(file_name, parallel)
-    PyObject *ds = PyObject_CallMethod(pq_mod, "get_parquet_dataset", "si",
-                                       file_name, int(parallel));
+    PyObject *ds = PyObject_CallMethod(pq_mod, "get_parquet_dataset", "siOO",
+                                       file_name, int(parallel), Py_True, filters);
+    Py_DECREF(filters);
     if (PyErr_Occurred()) return NULL;
 
     Py_DECREF(pq_mod);
