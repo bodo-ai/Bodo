@@ -383,10 +383,13 @@ class UntypedPass:
         # reader node
         # make sure they don't overlap with other nodes (to be conservative)
         i = 0  # will be set to ParquetReader node's reversed index
+        # nodes used for filtering output dataframe use filter vars as well but should
+        # be excluded since they have dependency to data arrays (e.g. df["A"] == 3)
+        filter_nodes = self._get_filter_nodes(index_def)
         for stmt in reversed(self._working_body):
             i += 1
-            # ignore dataframe filter expression node
-            if is_assign(stmt) and stmt.value is index_def:
+            # ignore dataframe filter expression nodes
+            if is_assign(stmt) and stmt.value in filter_nodes:
                 continue
             # avoid nodes before the reader
             if stmt is read_pq_node:
@@ -407,7 +410,7 @@ class UntypedPass:
         for i in range(pq_ind, len(self._working_body)):
             stmt = self._working_body[i]
             # ignore dataframe filter expression node
-            if is_assign(stmt) and stmt.value is index_def:
+            if is_assign(stmt) and stmt.value in filter_nodes:
                 non_filter_nodes.append(stmt)
                 continue
 
@@ -419,6 +422,24 @@ class UntypedPass:
 
         # update current basic block with new stmt order
         self._working_body = new_body + non_filter_nodes
+
+    def _get_filter_nodes(self, index_def):
+        """find ir.Expr nodes used in filtering output dataframe directly so they can
+        be excluded from filter dependency reordering
+        """
+        # e.g. (df["A"] == 3) | (df["A"] == 4)
+        if is_expr(index_def, "binop") and index_def.fn in (
+            operator.or_,
+            operator.and_,
+        ):
+            left_nodes = self._get_filter_nodes(
+                get_definition(self.func_ir, index_def.lhs)
+            )
+            right_nodes = self._get_filter_nodes(
+                get_definition(self.func_ir, index_def.rhs)
+            )
+            return {index_def} | left_nodes | right_nodes
+        return {index_def}
 
     def _get_partition_filters(
         self, index_def, partition_names, df_var, lhs_def, rhs_def
