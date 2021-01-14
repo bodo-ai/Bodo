@@ -1,23 +1,11 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 """IR node for the parquet data access"""
-from collections import defaultdict
 
 import numba
-import numpy as np
-import pandas as pd
 from numba.core import ir, ir_utils, typeinfer
-from numba.core.ir_utils import (
-    compile_to_numba_ir,
-    replace_arg_nodes,
-    replace_vars_inner,
-    visit_vars_inner,
-)
 
 import bodo
-from bodo import objmode
 from bodo.transforms import distributed_analysis
-from bodo.transforms.distributed_analysis import Distribution
-from bodo.utils.utils import debug_prints
 
 
 class ParquetReader(ir.Stmt):
@@ -32,6 +20,7 @@ class ParquetReader(ir.Stmt):
         out_vars,
         loc,
         null_col_map,
+        partition_names=None,
     ):
         self.connector_typ = "parquet"
         self.file_name = file_name
@@ -44,10 +33,12 @@ class ParquetReader(ir.Stmt):
         self.loc = loc
         # a bit map specifying if a column is made up of all nulls
         self.null_col_map = null_col_map
+        self.partition_names = partition_names
+        self.filters = None
 
     def __repr__(self):  # pragma: no cover
         # TODO
-        return "({}) = ReadParquet({}, {}, {}, {}, {}, {})".format(
+        return "({}) = ReadParquet({}, {}, {}, {}, {}, {}, {}, {})".format(
             self.df_out,
             self.file_name.name,
             self.col_names,
@@ -55,6 +46,8 @@ class ParquetReader(ir.Stmt):
             self.col_nb_fields,
             self.out_types,
             self.out_vars,
+            self.partition_names,
+            self.filters,
         )
 
 

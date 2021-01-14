@@ -3,26 +3,14 @@
 Common IR extension functions for connectors such as CSV, Parquet and JSON readers.
 """
 from collections import defaultdict
+
 import numba
-from numba.core import ir, ir_utils, typeinfer, types
+from numba.core import types
+from numba.core.ir_utils import replace_vars_inner, visit_vars_inner
 from numba.extending import box, models, register_model
-from numba.core.ir_utils import (
-    visit_vars_inner,
-    replace_vars_inner,
-    compile_to_numba_ir,
-    replace_arg_nodes,
-)
-import bodo
-from bodo.hiframes.datetime_date_ext import datetime_date_type
-from bodo.hiframes.datetime_date_ext import DatetimeDateType
-from bodo.transforms import distributed_pass, distributed_analysis
-from bodo.utils.utils import debug_prints
+
 from bodo.transforms.distributed_analysis import Distribution
-from bodo.libs.str_arr_ext import string_array_type
-from bodo.libs.int_arr_ext import IntegerArrayType
-from bodo.libs.bool_arr_ext import boolean_array
-from bodo.utils.utils import sanitize_varname
-from bodo import objmode
+from bodo.utils.utils import debug_prints
 
 
 def connector_array_analysis(node, equiv_set, typemap, array_analysis):
@@ -66,7 +54,6 @@ def connector_distributed_analysis(node, array_dists):
 def connector_typeinfer(node, typeinferer):
     for col_var, typ in zip(node.out_vars, node.out_types):
         typeinferer.lock_type(col_var.name, typ, loc=node.loc)
-    return
 
 
 def visit_vars_connector(node, callback, cbdata):
@@ -83,7 +70,17 @@ def visit_vars_connector(node, callback, cbdata):
     node.out_vars = new_out_vars
     if node.connector_typ in ("csv", "parquet", "json"):
         node.file_name = visit_vars_inner(node.file_name, callback, cbdata)
-    return
+
+    if node.connector_typ == "parquet" and node.filters:
+        for predicate in node.filters:
+            for i in range(len(predicate)):
+                val = predicate[i]
+                # e.g. handle ("A", "==", v)
+                predicate[i] = (
+                    val[0],
+                    val[1],
+                    visit_vars_inner(val[2], callback, cbdata),
+                )
 
 
 def connector_usedefs(node, use_set=None, def_set=None):
@@ -96,6 +93,11 @@ def connector_usedefs(node, use_set=None, def_set=None):
     def_set.update({v.name for v in node.out_vars})
     if node.connector_typ in ("csv", "parquet", "json"):
         use_set.add(node.file_name.name)
+
+    if node.connector_typ == "parquet" and node.filters:
+        use_set.update(
+            {v[2].name for predicate_list in node.filters for v in predicate_list}
+        )
 
     return numba.core.analysis._use_defs_result(usemap=use_set, defmap=def_set)
 
@@ -121,7 +123,12 @@ def apply_copies_connector(
     node.out_vars = new_out_vars
     if node.connector_typ in ("csv", "parquet", "json"):
         node.file_name = replace_vars_inner(node.file_name, var_dict)
-    return
+    if node.connector_typ == "parquet" and node.filters:
+        for predicate in node.filters:
+            for i in range(len(predicate)):
+                val = predicate[i]
+                # e.g. handle ("A", "==", v)
+                predicate[i] = (val[0], val[1], replace_vars_inner(val[2], var_dict))
 
 
 def build_connector_definitions(node, definitions=None):
