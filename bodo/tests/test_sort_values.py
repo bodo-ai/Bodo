@@ -728,6 +728,11 @@ def test_sort_values_force_literal(memory_leak_check):
     def impl(df, by, na_position):
         return df.sort_values(by=by, kind="mergesort", na_position=na_position)
 
+    def impl2(df, by, asc, na_position):
+        return df.sort_values(
+            by=by, kind="mergesort", ascending=asc, na_position=na_position
+        )
+
     df = pd.DataFrame(
         {
             "A": [1, 3, 2, 0, -1, 4],
@@ -737,6 +742,7 @@ def test_sort_values_force_literal(memory_leak_check):
     )
     check_func(impl, (df, ["B"], "first"))
     check_func(impl, (df, "B", "first"))
+    check_func(impl2, (df, ["B", "C"], [False, True], "first"))
 
 
 @pytest.mark.slow
