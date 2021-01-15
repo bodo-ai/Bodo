@@ -291,13 +291,9 @@ def is_overload_constant_int(val):
 
 
 def is_overload_bool_list(val):
-    return (
-        isinstance(val, numba.core.types.List)
-        and isinstance(val.dtype, types.Boolean)
-        or (
-            isinstance(val, types.BaseTuple)
-            and all(isinstance(v, types.BooleanLiteral) for v in val.types)
-        )
+    """return True if 'val' is a constant list type with all constant boolean values"""
+    return is_overload_constant_list(val) and all(
+        is_overload_constant_bool(v) for v in get_overload_const_list(val)
     )
 
 

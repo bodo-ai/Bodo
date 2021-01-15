@@ -2327,20 +2327,20 @@ def validate_sort_values_spec(df, by, axis, ascending, inplace, kind, na_positio
 
     # make sure axis has default value 0
     if not is_overload_zero(axis):
-        raise BodoError(
+        raise_bodo_error(
             "sort_values(): 'axis' parameter only " "supports integer value 0."
         )
 
     # make sure 'ascending' is of type bool
     if not is_overload_bool(ascending) and not is_overload_bool_list(ascending):
-        raise BodoError(
+        raise_bodo_error(
             "sort_values(): 'ascending' parameter must be of type bool or list of bool, "
             "not {}.".format(ascending)
         )
 
     # make sure 'inplace' is of type bool
     if not is_overload_bool(inplace):
-        raise BodoError(
+        raise_bodo_error(
             "sort_values(): 'inplace' parameter must be of type bool, "
             "not {}.".format(inplace)
         )
