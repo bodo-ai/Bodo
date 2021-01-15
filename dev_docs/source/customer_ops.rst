@@ -13,7 +13,7 @@ Here are the expected behaviors for manual triggers:
 - If you trigger the pipeline with no license check, the pipeline will generate a binary and push it to the internal ``bodo-binary`` conda channel on Artifactory.
 
 Giving Customers Access to Binaries
----------------------------------
+-----------------------------------
 By default, we give customers access to our ``bodo.ai`` and ``bodo.ai-dev`` conda channels on Artifactory which hold the official and engineering releases respectively.
 
 - To generate a customer token, trigger the `CodeBuild pipeline <https://us-east-2.console.aws.amazon.com/codesuite/codebuild/427443013497/projects/generate-customer-token>`_ passing in the environment variable ``conda_username`` the customer username for which you would like to generate a token.
@@ -44,4 +44,14 @@ where ``<version>`` is the full version name of the built created.
 
 Generating Customer License Keys
 --------------------------------
-<tbd>
+To generate a customer license, you can trigger the
+`Azure License-Generation pipeline <https://dev.azure.com/bodo-inc/Bodo/_build?definitionId=9>`_.
+
+When you run the pipeline you need to specify the number cores and when the license terminates
+in the `Variables` section under `Advanced Options`. The number of cores is specified by giving
+a value for ``MAX_CORES`` and for license termination you can either specify the number of days
+for which the license is valid in ``TRIAL_DAYS`` or the day upon which the license expires via
+``EXPIRATION_DATE``.
+
+You must provide at least one of ``TRIAL_DAYS`` and ``EXPIRATION_DATE`` and
+if you provide both the license will by generated for the ``EXPIRATION_DATE``.

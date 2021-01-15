@@ -1,0 +1,44 @@
+trigger: none
+pr: none
+
+# TODO: Schedule a cron job to regularly generate a new license
+# for CI (used by BodoSQL) and upload it to credstash
+
+jobs:
+- job: Generate_License
+  timeoutInMinutes: 10
+  pool: 
+    vmImage: ubuntu-latest
+
+  steps:
+  - task: UsePythonVersion@0
+    inputs:
+      versionSpec: '3.8'
+    displayName: 'Use Python $(python.version)'
+
+  - task: DownloadSecureFile@1
+    name: privateKey
+    inputs:
+      secureFile: 'license_priv.key'
+    displayName: 'Download private key'
+
+  - script: |
+      set -eo pipefail
+      sudo chmod a+r $(privateKey.secureFilePath)
+      if [[ -z "${EXPIRATION_DATE}" ]] && [[ -z "${TRIAL_DAYS}" ]]; then
+        echo "Error: A license needs either an EXPIRATION_DATE or a number of TRIAL_DAYS"
+        exit 1
+      else
+        if  [[ -z "${EXPIRATION_DATE}" ]]; then
+            python buildscripts/gen_license.py --max-cores=$(MAX_CORES) --trial-days=$(TRIAL_DAYS) --private-key=$(privateKey.secureFilePath)
+        else
+            python buildscripts/gen_license.py --max-cores=$(MAX_CORES) --expires=$(EXPIRATION_DATE) --private-key=$(privateKey.secureFilePath)
+        fi
+      fi
+    displayName: 'Generate_License'
+  
+  - task: PublishBuildArtifacts@1
+    inputs:
+      pathtoPublish: '$(System.DefaultWorkingDirectory)/bodo.lic'
+      artifactName: bodo.lic
+    displayName: "Publish License"
