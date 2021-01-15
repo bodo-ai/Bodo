@@ -90,7 +90,7 @@ register_model(ParquetPredicateType)(models.OpaqueModel)
 
 
 @unbox(ParquetPredicateType)
-def unbox_month_end(typ, val, c):
+def unbox_parquet_predicate_type(typ, val, c):
     # just return the Python object pointer
     c.pyapi.incref(val)
     return NativeValue(val)
@@ -275,6 +275,7 @@ class ParquetHandler:
             index_col = index_col if index_col in col_names else None
             # Initialize null_col_map. See parquet_file_schema for definition.
             null_col_map = [False] * len(col_names)
+            partition_names = None
 
         # HACK convert types using decorator for int columns with NaN
         for i, c in enumerate(col_names):
@@ -307,28 +308,32 @@ def pq_distributed_run(pq_node, array_dists, typemap, calltypes, typingctx, targ
     """
 
     n_cols = len(pq_node.out_vars)
-    # handle predicate pushdown variables that need to be passed to C++
-    pred_vars = [v[2] for predicate_list in pq_node.filters for v in predicate_list]
-    # variables may be repeated due to distribution of Or over And in predicates, so
-    # remove duplicates. Cannot use ir.Var objects in set directly.
-    var_set = set()
     filter_vars = []
-    for var in pred_vars:
-        if var.name not in var_set:
-            filter_vars.append(var)
-        var_set.add(var.name)
-    vararg_map = {v.name: f"f{i}" for i, v in enumerate(filter_vars)}
-    filter_str = "[{}]".format(
-        ", ".join(
-            "[{}]".format(
-                ", ".join(
-                    f"('{v[0]}', '{v[1]}', {vararg_map[v[2].name]})" for v in predicate
+    extra_args = ""
+    filter_str = "None"
+    if pq_node.filters:
+        # handle predicate pushdown variables that need to be passed to C++
+        pred_vars = [v[2] for predicate_list in pq_node.filters for v in predicate_list]
+        # variables may be repeated due to distribution of Or over And in predicates, so
+        # remove duplicates. Cannot use ir.Var objects in set directly.
+        var_set = set()
+        for var in pred_vars:
+            if var.name not in var_set:
+                filter_vars.append(var)
+            var_set.add(var.name)
+        vararg_map = {v.name: f"f{i}" for i, v in enumerate(filter_vars)}
+        filter_str = "[{}]".format(
+            ", ".join(
+                "[{}]".format(
+                    ", ".join(
+                        f"('{v[0]}', '{v[1]}', {vararg_map[v[2].name]})"
+                        for v in predicate
+                    )
                 )
+                for predicate in pq_node.filters
             )
-            for predicate in pq_node.filters
         )
-    )
-    extra_args = ", ".join(vararg_map.values())
+        extra_args = ", ".join(vararg_map.values())
 
     # get column variables and their sizes
     arg_names = ", ".join("out" + str(i) for i in range(2 * n_cols))
@@ -862,7 +867,7 @@ def get_parquet_dataset(fpath, parallel, get_row_counts=True, filters=None):
 
     if is_directory_parallel(fpath):
         file_names = get_filenames_parallel(fpath, directory_of_files_common_filter)
-        if is_nested_parallel(fpath, file_names):
+        if filters is not None or is_nested_parallel(fpath, file_names):
             # For now, for nested directories (for example partitioned datasets using
             # hive scheme) we let pyarrow.parquet.ParquetDataset
             # extract all the information by passing it the top-level directory.
@@ -946,7 +951,9 @@ def parquet_file_schema(file_name, selected_columns):
     # all processes, so we can set parallel=True to just have rank 0 read
     # the dataset information and broadcast to others
     pq_dataset = get_parquet_dataset(file_name, parallel=True, get_row_counts=False)
-    partition_names = pq_dataset.partitions.partition_names
+    partition_names = (
+        None if pq_dataset.partitions is None else pq_dataset.partitions.partition_names
+    )
     pa_schema = pq_dataset.schema.to_arrow_schema()
     num_pieces = len(pq_dataset.pieces)
 
