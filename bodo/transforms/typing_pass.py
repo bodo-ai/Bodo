@@ -370,9 +370,18 @@ class TypingTransforms:
             slice_var = tup_list[1]
 
             # get const value of slice
-            col_slice = guard(_get_const_slice, self.func_ir, slice_var)
+            col_slice = guard(
+                get_const_value_inner,
+                self.func_ir,
+                slice_var,
+                self.arg_types,
+                self.typemap,
+            )
+            # try to force constant later (e.g. by unrolling loops) if possible
             if col_slice is None:
-                raise BodoError("slice2 in df.iloc[slice1,slice2] should be constant")
+                self._require_const[slice_var] = label
+                nodes.append(assign)
+                return nodes
 
             # create output df
             columns = target_typ.df_type.columns
@@ -1460,19 +1469,6 @@ class TypingTransforms:
             return any(self._vars_dependant(arg, var2) for arg in var1_def.args)
 
         return False
-
-
-def _get_const_slice(func_ir, var):
-    """get constant slice value for a slice variable if possible"""
-    # var definition should be a slice() call
-    var_def = get_definition(func_ir, var)
-    require(find_callname(func_ir, var_def) == ("slice", "builtins"))
-    require(len(var_def.args) in (2, 3))
-    # get start/stop/step values from call
-    start = find_const(func_ir, var_def.args[0])
-    stop = find_const(func_ir, var_def.args[1])
-    step = find_const(func_ir, var_def.args[2]) if len(var_def.args) == 3 else None
-    return slice(start, stop, step)
 
 
 def _create_const_var(val, name, scope, loc, nodes):
