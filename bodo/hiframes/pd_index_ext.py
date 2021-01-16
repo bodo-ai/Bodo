@@ -37,6 +37,7 @@ from bodo.libs.str_ext import string_type
 from bodo.utils.transform import get_const_func_output_type
 from bodo.utils.typing import (
     BodoError,
+    check_unsupported_args,
     create_unsupported_overload,
     get_overload_const_func,
     get_overload_const_str,
@@ -1993,6 +1994,50 @@ def overload_index_take(I, indices):
     return lambda I, indices: I[indices]  # pragma: no cover
 
 
+@overload_method(RangeIndexType, "get_loc", no_unliteral=True)
+@overload_method(NumericIndexType, "get_loc", no_unliteral=True)
+@overload_method(StringIndexType, "get_loc", no_unliteral=True)
+@overload_method(PeriodIndexType, "get_loc", no_unliteral=True)
+@overload_method(DatetimeIndexType, "get_loc", no_unliteral=True)
+@overload_method(TimedeltaIndexType, "get_loc", no_unliteral=True)
+def overload_index_get_loc(I, key, method=None, tolerance=None):
+    """simple get_loc implementation intended for cases with small Index like
+    df.columns.get_loc(c). Only supports Index with unique values (scalar return).
+    TODO(ehsan): use a proper hash engine like Pandas inside Index objects
+    """
+    unsupported_args = dict(method=method, tolerance=tolerance)
+    arg_defaults = dict(method=None, tolerance=None)
+    check_unsupported_args("Index.get_loc", unsupported_args, arg_defaults)
+
+    dtype = I.dtype
+    # DatatimeIndex values are comparable to Timestamp
+    if dtype == types.NPDatetime("ns"):
+        dtype = pandas_timestamp_type
+    # TimedeltaIndex values are comparable to Timedelta
+    if dtype == types.NPTimedelta("ns"):
+        dtype = pd_timedelta_type
+
+    if not types.unliteral(key) == dtype:  # pragma: no cover
+        raise_bodo_error("Index.get_loc(): invalid label type in Index.get_loc()")
+
+    def impl(I, key, method=None, tolerance=None):  # pragma: no cover
+        key = bodo.utils.conversion.unbox_if_timestamp(key)
+        arr = bodo.utils.conversion.coerce_to_array(I)
+        ind = -1
+        for i in range(len(arr)):
+            if arr[i] == key:
+                if ind != -1:
+                    raise ValueError(
+                        "Index.get_loc(): non-unique Index not supported yet"
+                    )
+                ind = i
+        if ind == -1:
+            raise KeyError("Index.get_loc(): key not found")
+        return ind
+
+    return impl
+
+
 @overload_method(RangeIndexType, "isna", no_unliteral=True)
 @overload_method(NumericIndexType, "isna", no_unliteral=True)
 @overload_method(StringIndexType, "isna", no_unliteral=True)
@@ -2485,7 +2530,6 @@ index_unsupported = [
     "get_indexer_for",
     "get_indexer_non_unique",
     "get_level_values",
-    "get_loc",
     "get_slice_bound",
     "get_value",
     "groupby",
