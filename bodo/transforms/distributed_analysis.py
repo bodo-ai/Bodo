@@ -637,6 +637,15 @@ class DistributedAnalysis:
             if isinstance(func_def, ir.Const) and isinstance(func_def.value, np.ufunc):
                 fdef = (func_def.value.__name__, "numpy")
             else:
+                # handle calling other Bodo functions that have distributed flags
+                # this code path runs when another jit function is passed as argument
+                func_type = self.typemap[func_var]
+                if isinstance(func_type, types.Dispatcher) and issubclass(
+                    func_type.dispatcher._compiler.pipeline_class,
+                    bodo.compiler.BodoCompiler,
+                ):
+                    self._handle_dispatcher(func_type.dispatcher, lhs, rhs, array_dists)
+                    return
                 warnings.warn(
                     "function call couldn't be found for distributed analysis"
                 )
@@ -1477,7 +1486,9 @@ class DistributedAnalysis:
 
         # handle calling other Bodo functions that have distributed flags
         func_type = self.typemap[func_var]
-        if isinstance(func_type, types.Dispatcher):
+        if isinstance(func_type, types.Dispatcher) and issubclass(
+            func_type.dispatcher._compiler.pipeline_class, bodo.compiler.BodoCompiler
+        ):
             self._handle_dispatcher(func_type.dispatcher, lhs, rhs, array_dists)
             return
 
@@ -2441,6 +2452,7 @@ class DistributedAnalysis:
         return new_dist
 
     def _set_REP(self, var_list, array_dists, info=None):
+        """set distribution of all variables in 'var_list' to REP if distributable."""
         if isinstance(var_list, (str, ir.Var)):
             var_list = [var_list]
         for var in var_list:
@@ -2449,7 +2461,7 @@ class DistributedAnalysis:
             # have user-defined distribution
             typ = self.typemap[varname]
             if is_distributable_typ(typ) or is_distributable_tuple_typ(typ):
-                dprint("dist setting REP {}".format(varname))
+                dprint(f"dist setting REP {varname}")
                 # keep diagnostics info if the distribution is changing to REP and extra
                 # info is available
                 if (

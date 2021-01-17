@@ -415,7 +415,9 @@ def inline_calls(
                     if (
                         isinstance(func_def, (ir.Global, ir.FreeVar))
                         and isinstance(func_def.value, CPUDispatcher)
-                        and func_def.value._compiler.pipeline_class == BodoCompiler
+                        and issubclass(
+                            func_def.value._compiler.pipeline_class, BodoCompiler
+                        )
                     ):
                         py_func = func_def.value.py_func
                         arg_types = None
