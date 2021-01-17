@@ -2640,6 +2640,10 @@ def test_df_setitem_multi(memory_leak_check):
         df[["A", "B"]] = 1.3
         return df
 
+    def impl2(df):
+        df[["A", "B"]] = df[["D", "B"]]
+        return df
+
     n = 11
     df = pd.DataFrame(
         {
@@ -2650,6 +2654,7 @@ def test_df_setitem_multi(memory_leak_check):
         }
     )
     check_func(impl1, (df,), copy_input=True)
+    check_func(impl2, (df,), copy_input=True)
 
 
 def test_iloc_bool_arr(memory_leak_check):

@@ -488,7 +488,7 @@ class TypingTransforms:
         if not isinstance(idx_const, (tuple, list, np.ndarray, pd.Index)):
             return nodes + self._run_df_set_column(inst, idx_const, label)
 
-        nodes += self._gen_loc_setitem_full_column(inst, inst.target, idx_const, label)
+        nodes += self._gen_df_setitem_full_column(inst, inst.target, idx_const, label)
         self.changed = True
         return nodes
 
@@ -510,7 +510,7 @@ class TypingTransforms:
         # if setting full columns
         if row_ind == slice(None):
             df_var = self._get_loc_df_var(inst)
-            nodes += self._gen_loc_setitem_full_column(inst, df_var, col_inds, label)
+            nodes += self._gen_df_setitem_full_column(inst, df_var, col_inds, label)
             self.changed = True
             return nodes
 
@@ -547,7 +547,7 @@ class TypingTransforms:
         if row_ind == slice(None):
             col_names = [target_typ.df_type.columns[c_ind] for c_ind in col_inds]
             df_var = self._get_loc_df_var(inst)
-            nodes += self._gen_loc_setitem_full_column(inst, df_var, col_names, label)
+            nodes += self._gen_df_setitem_full_column(inst, df_var, col_names, label)
             self.changed = True
             return nodes
 
@@ -604,10 +604,24 @@ class TypingTransforms:
             raise BodoError("Invalid df.loc/iloc[] setitem")
         return loc_def.value
 
-    def _gen_loc_setitem_full_column(self, inst, df_var, col_inds, label):
+    def _gen_df_setitem_full_column(self, inst, df_var, col_inds, label):
         """Generate code for setitem of df.loc/iloc when setting full columns"""
         nodes = []
         loc = inst.loc
+        # value to set could be a scalar or a DataFrame
+        val = inst.value
+        val_type = self.typemap.get(val.name, None)
+        column_values = [val] * len(col_inds)
+        if isinstance(val_type, DataFrameType):
+            # get dataframe data arrays to set
+            for i in range(len(col_inds)):
+                func = lambda df: bodo.hiframes.pd_dataframe_ext.get_dataframe_data(
+                    df, _i
+                )  # pragma: no cover
+                nodes += compile_func_single_block(
+                    func, [val], None, extra_globals={"_i": i}
+                )
+                column_values[i] = nodes[-1].target
 
         for i, c in enumerate(col_inds):
             # setting up definitions and rhs_labels is necessary for
@@ -618,7 +632,7 @@ class TypingTransforms:
                 df_var = nodes[-1].target
                 self.func_ir._definitions[df_var.name] = [df_expr]
                 self.rhs_labels[df_expr] = label
-            dummy_inst = ir.SetItem(df_var, df_var, inst.value, loc)
+            dummy_inst = ir.SetItem(df_var, df_var, column_values[i], loc)
             nodes += self._run_df_set_column(dummy_inst, c, label)
             # clean up to avoid conflict with later definition update in run()
             if i > 0:
