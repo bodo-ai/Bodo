@@ -2633,6 +2633,25 @@ def test_df_slice(memory_leak_check):
     pd.testing.assert_frame_equal(bodo_func(df, n), impl(df, n))
 
 
+def test_df_setitem_multi(memory_leak_check):
+    """test df[col_names] setitem where col_names is a list of column names"""
+
+    def impl1(df):
+        df[["A", "B"]] = 1.3
+        return df
+
+    n = 11
+    df = pd.DataFrame(
+        {
+            "A": np.arange(n),
+            "B": np.arange(n) ** 2,
+            "C": np.ones(n),
+            "D": np.arange(n) + 1.0,
+        }
+    )
+    check_func(impl1, (df,), copy_input=True)
+
+
 def test_iloc_bool_arr(memory_leak_check):
     """test df.iloc[bool_arr]"""
 

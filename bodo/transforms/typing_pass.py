@@ -445,17 +445,9 @@ class TypingTransforms:
 
         # df["B"] = A
         if isinstance(target_typ, DataFrameType):
-            idx_const = guard(
-                get_const_value_inner,
-                self.func_ir,
-                idx_var,
-                self.arg_types,
-                self.typemap,
+            return self._run_setitem_df(
+                inst, target_typ, idx_typ, idx_var, nodes, label
             )
-            if idx_const is None:
-                self._require_const[idx_var] = label
-            else:
-                return nodes + self._run_df_set_column(inst, idx_const, label)
 
         # transform df.loc[cond, "A"] setitem case here since it may require type change
         if (
@@ -479,6 +471,27 @@ class TypingTransforms:
 
         return nodes + [inst]
 
+    def _run_setitem_df(self, inst, target_typ, idx_typ, idx_var, nodes, label):
+        """transform df setitem nodes, e.g. df["B"] = 3"""
+        idx_const = guard(
+            get_const_value_inner,
+            self.func_ir,
+            idx_var,
+            self.arg_types,
+            self.typemap,
+        )
+        if idx_const is None:
+            self._require_const[idx_var] = label
+            return nodes + [inst]
+
+        # single column case like df["A"] = 3
+        if not isinstance(idx_const, (tuple, list, np.ndarray, pd.Index)):
+            return nodes + self._run_df_set_column(inst, idx_const, label)
+
+        nodes += self._gen_loc_setitem_full_column(inst, inst.target, idx_const, label)
+        self.changed = True
+        return nodes
+
     def _run_setitem_df_loc(self, inst, target_typ, idx_typ, idx_var, nodes, label):
         """transform df.loc setitem nodes, e.g. df.loc[:, "B"] = 3"""
 
@@ -496,7 +509,8 @@ class TypingTransforms:
 
         # if setting full columns
         if row_ind == slice(None):
-            nodes += self._gen_loc_setitem_full_column(inst, col_inds, label)
+            df_var = self._get_loc_df_var(inst)
+            nodes += self._gen_loc_setitem_full_column(inst, df_var, col_inds, label)
             self.changed = True
             return nodes
 
@@ -532,7 +546,8 @@ class TypingTransforms:
         # if setting full columns
         if row_ind == slice(None):
             col_names = [target_typ.df_type.columns[c_ind] for c_ind in col_inds]
-            nodes += self._gen_loc_setitem_full_column(inst, col_names, label)
+            df_var = self._get_loc_df_var(inst)
+            nodes += self._gen_loc_setitem_full_column(inst, df_var, col_names, label)
             self.changed = True
             return nodes
 
@@ -580,14 +595,19 @@ class TypingTransforms:
 
         return col_inds, row_ind
 
-    def _gen_loc_setitem_full_column(self, inst, col_inds, label):
-        """Generate code for setitem of df.loc/iloc when setting full columns"""
-        nodes = []
-        loc = inst.loc
+    def _get_loc_df_var(self, inst):
+        """get dataframe variable from df.loc/iloc nodes.
+        just gets the definition of the node (assuming no unusual control flow).
+        """
         loc_def = guard(get_definition, self.func_ir, inst.target)
         if not is_expr(loc_def, "getattr"):  # pragma: no cover
             raise BodoError("Invalid df.loc/iloc[] setitem")
-        df_var = loc_def.value
+        return loc_def.value
+
+    def _gen_loc_setitem_full_column(self, inst, df_var, col_inds, label):
+        """Generate code for setitem of df.loc/iloc when setting full columns"""
+        nodes = []
+        loc = inst.loc
 
         for i, c in enumerate(col_inds):
             # setting up definitions and rhs_labels is necessary for
