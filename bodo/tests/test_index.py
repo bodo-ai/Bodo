@@ -858,12 +858,6 @@ def test_index_unsupported(data):
     with pytest.raises(BodoError, match="not supported yet"):
         bodo.jit(test_get_level_values)(idx=pd.Index(data))
 
-    def test_get_loc(idx):
-        return idx.get_loc()
-
-    with pytest.raises(BodoError, match="not supported yet"):
-        bodo.jit(test_get_loc)(idx=pd.Index(data))
-
     def test_get_slice_bound(idx):
         return idx.get_slice_bound()
 
