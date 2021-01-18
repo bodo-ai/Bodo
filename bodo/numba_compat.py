@@ -2537,6 +2537,10 @@ def unbox_dicttype(typ, val, c):
     # decref here because we are stealing a reference.
     c.context.nrt.decref(c.builder, typ, dctobj)
 
+    # Bodo change: remove the typed.Dict object that is not necessary anymore
+    with c.builder.if_then(is_regular_dict):
+        c.pyapi.decref(val)
+
     c.pyapi.decref(miptr)
     return NativeValue(dctobj, is_error=is_error)
 
