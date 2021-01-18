@@ -285,7 +285,16 @@ def test_bodo_func_dist_call1(memory_leak_check):
         Y = g(X, C=X + 1)  # call with both positional and kw args
         return Y
 
+    # pass another bodo jit function as argument
+    @bodo.jit(distributed=["Y"])
+    def impl2(n, h):
+        X = np.arange(n)
+        Y = h(X, C=X + 1)  # call with both positional and kw args
+        return Y
+
     impl1(11)
+    assert count_array_REPs() == 0
+    impl2(11, g)
     assert count_array_REPs() == 0
 
 
