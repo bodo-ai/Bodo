@@ -228,6 +228,49 @@ def test_index_values(index, memory_leak_check):
     check_func(impl, (index,))
 
 
+@pytest.mark.slow
+@pytest.mark.parametrize(
+    "index, key",
+    [
+        (pd.Int64Index([10, 12, 15, 18]), 15),
+        (pd.Index(["A", "B", "C", "AA", "DD"]), "A"),
+        (
+            pd.date_range(start="2018-04-24", end="2018-04-27", periods=6),
+            pd.Timestamp("2018-04-27"),
+        ),
+        (pd.timedelta_range(start="1D", end="3D"), pd.Timedelta("2D")),
+    ],
+)
+def test_index_get_loc(index, key, memory_leak_check):
+    """test Index.get_loc() for various Index types"""
+
+    def impl(A, key):
+        return A.get_loc(key)
+
+    check_func(impl, (index, key), only_seq=True)
+
+
+def test_index_get_loc_error_checking(memory_leak_check):
+    """Test possible errors in Index.get_loc() such as non-unique Index which is not
+    supported.
+    """
+
+    def impl(A, key):
+        return A.get_loc(key)
+
+    # repeated value raises an error
+    index = pd.Index(["A", "B", "C", "AA", "DD", "C"])
+    key = "C"
+    with pytest.raises(
+        ValueError, match=r"Index.get_loc\(\): non-unique Index not supported yet"
+    ):
+        bodo.jit(impl)(index, key)
+    # key not in Index
+    key = "E"
+    with pytest.raises(KeyError, match=r"Index.get_loc\(\): key not found"):
+        bodo.jit(impl)(index, key)
+
+
 # Need to add the code and the check for the PeriodIndex
 # pd.PeriodIndex(year=[2015, 2016, 2018], month=[1, 2, 3], freq="M"),
 @pytest.mark.slow
@@ -814,12 +857,6 @@ def test_index_unsupported(data):
 
     with pytest.raises(BodoError, match="not supported yet"):
         bodo.jit(test_get_level_values)(idx=pd.Index(data))
-
-    def test_get_loc(idx):
-        return idx.get_loc()
-
-    with pytest.raises(BodoError, match="not supported yet"):
-        bodo.jit(test_get_loc)(idx=pd.Index(data))
 
     def test_get_slice_bound(idx):
         return idx.get_slice_bound()

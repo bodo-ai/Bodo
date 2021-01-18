@@ -251,13 +251,13 @@ def overload_dataframe_rename(
 
     data_outs = []
     for i in range(len(df.columns)):
-        arr = "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {})".format(i)
+        arr = f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i})"
         if is_overload_true(copy):
             data_outs.append(arr + ".copy()")
         elif is_overload_false(copy):
             data_outs.append(arr)
         else:
-            data_outs.append("{arr}.copy() if copy else {arr}".format(arr=arr))
+            data_outs.append(f"{arr}.copy() if copy else {arr}")
 
     header = (
         "def impl(df, mapper=None, index=None, columns=None, axis=None, "

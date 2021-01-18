@@ -452,7 +452,7 @@ def get_const_value_inner(
     # list/set/dict cases
 
     # try dict.keys()
-    call_name = guard(find_callname, func_ir, var_def)
+    call_name = guard(find_callname, func_ir, var_def, typemap)
     if (
         call_name is not None
         and len(call_name) == 2

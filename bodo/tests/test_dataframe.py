@@ -2745,10 +2745,16 @@ def test_iloc_slice_col_slice(memory_leak_check):
         return df.iloc[:, :]
 
     def test_impl6(df, n):
+        if n > 3:
+            n -= 1
         return df.iloc[:, 1:n]
 
     def test_impl7(df):
         return df.iloc[:, 0:3:2]
+
+    def test_impl8(df, c):
+        col_ind = df.columns.get_loc(c)
+        return df.iloc[:, :col_ind]
 
     n = 11
     df = pd.DataFrame(
@@ -2768,6 +2774,7 @@ def test_iloc_slice_col_slice(memory_leak_check):
     with pytest.raises(BodoError, match=r"df.iloc\[slice1,slice2\] should be constant"):
         bodo.jit(test_impl6)(df, 3)
     check_func(test_impl7, (df,))
+    check_func(test_impl8, (df, "C"))
 
 
 def test_iloc_int_col_ind(memory_leak_check):
