@@ -1388,7 +1388,7 @@ def maybe_literal(value):
     # ListLiteral is only used when Bodo forces an argument to be a literal
     # FunctionLiteral shouldn't be used for all globals to avoid interference with
     # overloads
-    if isinstance(value, (list, pytypes.FunctionType)):
+    if isinstance(value, (list, dict, pytypes.FunctionType)):
         return
     try:
         return literal(value)

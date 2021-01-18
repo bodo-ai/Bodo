@@ -272,6 +272,7 @@ def is_overload_constant_dict(val):
             and all(is_literal_type(v) for v in val.types)
         )
         or is_initial_value_dict_type(val)
+        or isinstance(val, DictLiteral)
         or (
             isinstance(val, types.BaseTuple)
             and val.types
@@ -430,6 +431,8 @@ def get_overload_constant_dict(val):
             get_literal_value(k): get_literal_value(v)
             for k, v in val.literal_value.items()
         }
+    if isinstance(val, DictLiteral):
+        return val.literal_value
     assert is_initial_value_dict_type(val) or (
         isinstance(val, types.BaseTuple)
         and val.types
@@ -689,6 +692,23 @@ def unbox_list_literal(typ, obj, c):
     return NativeValue(c.context.get_dummy_value())
 
 
+# TODO(ehsan): allow modifying the value similar to initial value containers?
+class DictLiteral(types.Literal):
+    """class for literal dictionaries, only used when Bodo forces an argument to be a
+    literal dict (e.g. in typing pass for dataframe/groupby/join/sort_values).
+    """
+
+
+types.Literal.ctor_map[dict] = DictLiteral
+register_model(DictLiteral)(models.OpaqueModel)
+
+
+@unbox(DictLiteral)
+def unbox_dict_literal(typ, obj, c):
+    # A dict literal is a dummy value
+    return NativeValue(c.context.get_dummy_value())
+
+
 # literal type for functions (to handle function arguments to map/apply methods)
 # similar to MakeFunctionLiteral
 class FunctionLiteral(types.Literal, types.Opaque):
@@ -789,7 +809,7 @@ def can_literalize_type(t, pyobject_to_literal=False):
     """return True if type 't' can have literal values"""
     return (
         t in (bodo.string_type, types.bool_)
-        or isinstance(t, (types.Integer, types.List, types.SliceType))
+        or isinstance(t, (types.Integer, types.List, types.SliceType, types.DictType))
         or (pyobject_to_literal and t == types.pyobject)
     )
 
