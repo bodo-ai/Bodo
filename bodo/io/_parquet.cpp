@@ -593,6 +593,22 @@ int pq_read_array_item(DatasetReader *ds_reader, int64_t real_column_idx,
     }
 }
 
+// populate categorical column for partition columns
+void pq_gen_partition_column(DatasetReader *ds_reader, int64_t part_col_idx,
+                             uint8_t *out_data) {
+    int64_t *cur_offset = (int64_t*)out_data;
+    for (size_t i=0; i < ds_reader->filepaths.size(); i++) {
+        std::shared_ptr<parquet::arrow::FileReader> file_reader;
+        pq_init_reader(ds_reader->filepaths[i].c_str(), &file_reader,
+                       ds_reader->bucket_region.c_str());
+        // XXX get number of rows from first column in parquet file
+        int64_t file_size = pq_get_size_single_file(file_reader, 0);
+        int64_t part_val = ds_reader->part_vals[i][part_col_idx];
+        std::fill(cur_offset, cur_offset + file_size, part_val);
+        cur_offset += file_size;
+    }
+}
+
 /// Convert Bodo date (year, month, day) from int64 to Arrow date32
 static int32_t bodo_date64_to_arrow_date32(int64_t date) {
     int64_t year = date >> 32;
