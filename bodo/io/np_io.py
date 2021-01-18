@@ -1,15 +1,17 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
+"""
+File to support the numpy file IO API (np.fromfile(), np.tofile()).
+The actual definition of fromfile is inside untyped pass with the
+other IO operations.
+"""
 import llvmlite.binding as ll
-import numba
 import numpy as np
-from numba.core import ir, types
-from numba.core.ir_utils import compile_to_numba_ir, replace_arg_nodes
+from numba.core import types
 from numba.extending import intrinsic, overload, overload_method
 
 import bodo
 from bodo.libs import hio
 from bodo.libs.str_ext import string_type, unicode_to_utf8
-from bodo.utils.transform import get_call_expr_arg
 
 ll.add_symbol("get_file_size", hio.get_file_size)
 ll.add_symbol("file_read", hio.file_read)
@@ -35,77 +37,6 @@ _file_write_parallel = types.ExternalFunction(
     "file_write_parallel",
     types.void(types.voidptr, types.voidptr, types.intp, types.intp, types.intp),
 )
-
-
-# @overload(np.fromfile, no_unliteral=True)
-# def fromfile_overload(fname, dtype):
-#     if fname != string_type:
-#         raise("np.fromfile() invalid filename type")
-#     if dtype is not None and not isinstance(dtype, types.DTypeSpec):
-#         raise("np.fromfile() invalid dtype")
-#
-#     # FIXME: import here since hio has hdf5 which might not be available
-#     from .. import hio
-#     import llvmlite.binding as ll
-#     ll.add_symbol('get_file_size', hio.get_file_size)
-#     ll.add_symbol('file_read', hio.file_read)
-#
-#     def fromfile_impl(fname, dtype):
-#         size = get_file_size(fname)
-#         dtype_size = get_dtype_size(dtype)
-#         A = np.empty(size//dtype_size, dtype=dtype)
-#         file_read(fname, A.ctypes, size)
-#         return A
-#
-#     return fromfile_impl
-
-
-def _handle_np_fromfile(assign, lhs, rhs):
-    """translate np.fromfile() to native
-    file and dtype are required arguments. sep is supported for only the
-    default value.
-    """
-    kws = dict(rhs.kws)
-    if len(rhs.args) + len(kws) > 5:  # pragma: no cover
-        raise bodo.utils.typing.BodoError(
-            f"np.fromfile(): at most 5 arguments expected"
-            f" ({len(rhs.args) + len(kws)} given)"
-        )
-    valid_kws = {"file", "dtype", "count", "sep", "offset"}
-    for kw in set(kws) - valid_kws:  # pragma: no cover
-        raise bodo.utils.typing.BodoError(
-            f"np.fromfile(): unexpected keyword argument {kw}"
-        )
-    np_fromfile = "np.fromfile"
-    _fname = get_call_expr_arg(np_fromfile, rhs.args, kws, 0, "file")
-    _dtype = get_call_expr_arg(np_fromfile, rhs.args, kws, 1, "dtype")
-    _count = get_call_expr_arg(
-        np_fromfile, rhs.args, kws, 2, "count", default=ir.Const(-1, lhs.loc)
-    )
-    _offset = get_call_expr_arg(
-        np_fromfile, rhs.args, kws, 4, "offset", default=ir.Const(0, lhs.loc)
-    )
-
-    def fromfile_impl(fname, dtype, count, offset):  # pragma: no cover
-        dtype_size = get_dtype_size(dtype)
-        size = get_file_size(fname, count, offset, dtype_size)
-        A = np.empty(size // dtype_size, dtype=dtype)
-        file_read(fname, A, size, offset)
-        read_arr = A
-
-    f_block = compile_to_numba_ir(
-        fromfile_impl,
-        {
-            "np": np,
-            "get_file_size": get_file_size,
-            "file_read": file_read,
-            "get_dtype_size": get_dtype_size,
-        },
-    ).blocks.popitem()[1]
-    replace_arg_nodes(f_block, [_fname, _dtype, _count, _offset])
-    nodes = f_block.body[:-3]  # remove none return
-    nodes[-1].target = lhs
-    return nodes
 
 
 @intrinsic

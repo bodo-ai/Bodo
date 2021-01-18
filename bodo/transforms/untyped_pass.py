@@ -401,7 +401,7 @@ class UntypedPass:
             return self._handle_pd_read_parquet(assign, lhs, rhs)
 
         if fdef == ("fromfile", "numpy"):
-            return bodo.io.np_io._handle_np_fromfile(assign, lhs, rhs)
+            return self._handle_np_fromfile(assign, lhs, rhs)
 
         if fdef == ("where", "numpy") and len(rhs.args) == 3:
             return self._handle_np_where(assign, lhs, rhs)
@@ -1349,6 +1349,59 @@ class UntypedPass:
             columns = None
 
         return self._gen_parquet_read(fname, lhs, columns)
+
+    def _handle_np_fromfile(self, assign, lhs, rhs):
+        """translate np.fromfile() to native
+        file and dtype are required arguments. sep is supported for only the
+        default value.
+        """
+        kws = dict(rhs.kws)
+        if len(rhs.args) + len(kws) > 5:  # pragma: no cover
+            raise bodo.utils.typing.BodoError(
+                f"np.fromfile(): at most 5 arguments expected"
+                f" ({len(rhs.args) + len(kws)} given)"
+            )
+        valid_kws = {"file", "dtype", "count", "sep", "offset"}
+        for kw in set(kws) - valid_kws:  # pragma: no cover
+            raise bodo.utils.typing.BodoError(
+                f"np.fromfile(): unexpected keyword argument {kw}"
+            )
+        np_fromfile = "np.fromfile"
+        _fname = get_call_expr_arg(np_fromfile, rhs.args, kws, 0, "file")
+        _dtype = get_call_expr_arg(np_fromfile, rhs.args, kws, 1, "dtype")
+        _count = get_call_expr_arg(
+            np_fromfile, rhs.args, kws, 2, "count", default=ir.Const(-1, lhs.loc)
+        )
+        sep_err_msg = err_msg = f"{np_fromfile}(): sep argument is not supported"
+        _sep = self._get_const_arg(
+            np_fromfile, rhs.args, kws, 3, "sep", default="", err_msg=sep_err_msg
+        )
+        if _sep != "":
+            raise bodo.utils.typing.BodoError(sep_err_msg)
+        _offset = get_call_expr_arg(
+            np_fromfile, rhs.args, kws, 4, "offset", default=ir.Const(0, lhs.loc)
+        )
+
+        def fromfile_impl(fname, dtype, count, offset):  # pragma: no cover
+            dtype_size = get_dtype_size(dtype)
+            size = get_file_size(fname, count, offset, dtype_size)
+            A = np.empty(size // dtype_size, dtype=dtype)
+            file_read(fname, A, size, offset)
+            read_arr = A
+
+        f_block = compile_to_numba_ir(
+            fromfile_impl,
+            {
+                "np": np,
+                "get_file_size": bodo.io.np_io.get_file_size,
+                "file_read": bodo.io.np_io.file_read,
+                "get_dtype_size": bodo.io.np_io.get_dtype_size,
+            },
+        ).blocks.popitem()[1]
+        replace_arg_nodes(f_block, [_fname, _dtype, _count, _offset])
+        nodes = f_block.body[:-3]  # remove none return
+        nodes[-1].target = lhs
+        return nodes
 
     def _get_const_arg(
         self,

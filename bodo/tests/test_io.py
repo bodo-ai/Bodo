@@ -1502,6 +1502,20 @@ def test_np_io14(datapath, memory_leak_check):
 
 
 # TODO(Nick): Add a test for Parallel version with both offset and count.
+# TODO: Mark as slow after CI passes
+def test_np_io_sep_unsupported(datapath, memory_leak_check):
+    fname = datapath("np_file1.dat")
+
+    def test_impl():
+        A = np.fromfile(fname, np.float64, sep=" ")
+        return A.sum()
+
+    bodo_func = bodo.jit(test_impl)
+    with pytest.raises(
+        BodoError, match="np.fromfile\(\): sep argument is not supported"
+    ):
+        # Test that we cannot swap the value of sep.
+        bodo_func()
 
 
 def test_csv_double_box(datapath, memory_leak_check):
