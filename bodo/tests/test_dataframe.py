@@ -1004,6 +1004,11 @@ def test_df_rename(memory_leak_check):
         df.rename(columns={"B": "bb", "C": "cc"}, errors=1)
         return df
 
+    # test forcing input to constant dict
+    def impl7(df, c):
+        df.rename(columns=c)
+        return df
+
     df = pd.DataFrame(
         {
             "A": [1, 8, 4, 11, -3],
@@ -1033,6 +1038,7 @@ def test_df_rename(memory_leak_check):
         match="'error' keyword only supports default parameter values 'None' and 'ignore'",
     ):
         bodo.jit(impl6)(df)
+    check_func(impl7, (df, {"B": "bb", "C": "cc"}))
 
 
 @pytest.mark.smoke

@@ -1,4 +1,5 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
+import fractions
 import random
 
 import numba
@@ -30,6 +31,22 @@ def test_membership(memory_leak_check):
         return test
 
     check_func(test_impl, (d,))
+
+
+def test_dict_unbox(memory_leak_check):
+    """test unboxing a regular dictionary"""
+    d = {"A": 1, "B": 2}
+
+    def test_impl(d):
+        return d
+
+    check_func(test_impl, (d,))
+    # test an unsupported data type
+    with pytest.raises(
+        numba.errors.TypingError,
+        match="Cannot type dict element type",
+    ):
+        bodo.jit(test_impl)({"A": fractions.Fraction(2, 3)})
 
 
 @pytest.mark.smoke
