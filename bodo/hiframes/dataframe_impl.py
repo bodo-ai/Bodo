@@ -170,14 +170,51 @@ def overload_dataframe_assign(df, **kwargs):
     raise_bodo_error("Invalid df.assign() call")
 
 
+def _get_dtype_str(dtype):
+    """return string representation of dtype value"""
+    # function cases like str
+    if isinstance(dtype, types.Function):  # pragma: no cover
+        if dtype.key[0] == str:
+            return "'str'"
+        elif dtype.key[0] == float:
+            return "float"
+        elif dtype.key[0] == int:
+            return "int"
+        elif dtype.key[0] == np.bool:
+            return "bool"
+        else:
+            raise BodoError(f"invalid dtype: {dtype}")
+    # cases like np.float32
+    if isinstance(dtype, types.functions.NumberClass):
+        return f"'{dtype.key}'"
+    return f"'{dtype}'"
+
+
 @overload_method(DataFrameType, "astype", inline="always", no_unliteral=True)
 def overload_dataframe_astype(df, dtype, copy=True, errors="raise"):
+    # check unsupported arguments
+    args_dict = {
+        "copy": copy,
+        "errors": errors,
+    }
+    args_default_dict = {"copy": True, "errors": "raise"}
+    check_unsupported_args("df.astype", args_dict, args_default_dict)
+
     # just call astype() on all column Series
     # TODO: support categorical, dt64, etc.
+    if is_overload_constant_dict(dtype):
+        dtype_const = get_overload_constant_dict(dtype)
+        data_args = ", ".join(
+            f"df.iloc[:, {i}].astype({_get_dtype_str(dtype_const[c])}).values"
+            if c in dtype_const
+            else f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i})"
+            for i, c in enumerate(df.columns)
+        )
+    else:
+        data_args = ", ".join(
+            f"df.iloc[:, {i}].astype(dtype).values" for i in range(len(df.columns))
+        )
 
-    data_args = ", ".join(
-        f"df.iloc[:, {i}].astype(dtype).values" for i in range(len(df.columns))
-    )
     header = "def impl(df, dtype, copy=True, errors='raise'):\n"
     return _gen_init_df(header, df.columns, data_args)
 
@@ -187,13 +224,13 @@ def overload_dataframe_copy(df, deep=True):
     # just call copy() on all arrays
     data_outs = []
     for i in range(len(df.columns)):
-        arr = "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {})".format(i)
+        arr = f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i})"
         if is_overload_true(deep):
             data_outs.append(arr + ".copy()")
         elif is_overload_false(deep):
             data_outs.append(arr)
         else:
-            data_outs.append("{arr}.copy() if deep else {arr}".format(arr=arr))
+            data_outs.append(f"{arr}.copy() if deep else {arr}")
 
     header = "def impl(df, deep=True):\n"
     return _gen_init_df(header, df.columns, ", ".join(data_outs))

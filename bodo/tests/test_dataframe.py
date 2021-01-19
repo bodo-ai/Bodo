@@ -942,6 +942,27 @@ def test_df_astype_num(numeric_df_value, memory_leak_check):
     check_func(impl, (numeric_df_value,))
 
 
+def test_df_astype_dict(memory_leak_check):
+    """test passing a dictionary of new data types to df.astype()"""
+
+    def impl1(df):
+        return df.astype({"A": str, "B": np.float32})
+
+    def impl2(df, dtype):
+        return df.astype(dtype)
+
+    df = pd.DataFrame(
+        {
+            "A": [1, 3, 4, 2, 3],
+            "B": [1.1, 2.2, 3.3, 4.4, 5.5],
+            "C": ["AA", "BB", "C", "D", "A2"],
+        }
+    )
+    check_func(impl1, (df,))
+    # TODO(ehsan): support passing non-str dtypes as argument
+    check_func(impl2, (df, {"A": "str", "B": "float32"}))
+
+
 def test_df_astype_str(numeric_df_value, memory_leak_check):
     # not supported for dt64
     if any(d == np.dtype("datetime64[ns]") for d in numeric_df_value.dtypes):
