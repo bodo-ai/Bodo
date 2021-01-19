@@ -951,8 +951,14 @@ def parquet_file_schema(file_name, selected_columns):
     # all processes, so we can set parallel=True to just have rank 0 read
     # the dataset information and broadcast to others
     pq_dataset = get_parquet_dataset(file_name, parallel=True, get_row_counts=False)
+    # not using 'partition_names' since the order may not match 'levels'
     partition_names = (
-        None if pq_dataset.partitions is None else pq_dataset.partitions.partition_names
+        None
+        if pq_dataset.partitions is None
+        else [
+            pq_dataset.partitions.levels[i].name
+            for i in range(len(pq_dataset.partitions.partition_names))
+        ]
     )
     pa_schema = pq_dataset.schema.to_arrow_schema()
     num_pieces = len(pq_dataset.pieces)
@@ -1006,6 +1012,16 @@ def parquet_file_schema(file_name, selected_columns):
         )
         for c in col_names
     ]
+
+    # add partition column data types if any
+    if partition_names:
+        col_names += partition_names
+        null_col_map += [False] * len(partition_names)
+        col_types_total += [
+            _get_partition_cat_dtype(pq_dataset.partitions.levels[i])
+            for i in range(len(partition_names))
+        ]
+
     col_nb_fields_total = [compute_number_of_fields(typ) for typ in col_types_total]
     col_indices_total = compute_column_index(col_nb_fields_total)
     # The numbering of the columns in pandas does not match the numbering in parquet.
@@ -1052,6 +1068,17 @@ def parquet_file_schema(file_name, selected_columns):
         col_nb_fields,
         null_col_map,
         partition_names,
+    )
+
+
+def _get_partition_cat_dtype(part_set):
+    """get categorical dtype for Parquet partition set"""
+    # using 'dictionary' instead of 'keys' attribute since 'keys' may not have the
+    # right data type (e.g. string instead of int64)
+    S = part_set.dictionary.to_pandas()
+    elem_type = bodo.typeof(S).dtype
+    return bodo.hiframes.pd_categorical_ext.PDCategoricalDtype(
+        tuple(S), elem_type, False
     )
 
 
