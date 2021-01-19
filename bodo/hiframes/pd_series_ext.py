@@ -4,6 +4,7 @@ Implement pd.Series typing and data model handling.
 """
 import operator
 
+import llvmlite.binding as ll
 import numba
 import pandas as pd
 from llvmlite import ir as lir
@@ -34,13 +35,14 @@ from bodo.hiframes.pd_categorical_ext import (
     PDCategoricalDtype,
 )
 from bodo.hiframes.pd_timestamp_ext import pandas_timestamp_type
+from bodo.io import csv_cpp
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.bool_arr_ext import boolean_array
 from bodo.libs.decimal_arr_ext import Decimal128Type, DecimalArrayType
 from bodo.libs.int_arr_ext import IntDtype, IntegerArrayType
 from bodo.libs.map_arr_ext import MapArrayType
 from bodo.libs.str_arr_ext import string_array_type
-from bodo.libs.str_ext import string_type
+from bodo.libs.str_ext import string_type, unicode_to_utf8
 from bodo.libs.struct_arr_ext import StructArrayType, StructType
 from bodo.libs.tuple_arr_ext import TupleArrayType
 from bodo.utils.transform import get_const_func_output_type
@@ -52,10 +54,17 @@ from bodo.utils.typing import (
     get_udf_error_msg,
     get_udf_out_arr_type,
     is_heterogeneous_tuple_type,
+    is_overload_constant_str,
     is_overload_constant_tuple,
     is_overload_false,
     is_overload_none,
 )
+
+_csv_output_is_dir = types.ExternalFunction(
+    "csv_output_is_dir",
+    types.int8(types.voidptr),
+)
+ll.add_symbol("csv_output_is_dir", csv_cpp.csv_output_is_dir)
 
 
 class SeriesType(types.IterableType, types.ArrayCompatible):
@@ -863,6 +872,153 @@ def pd_series_overload(
         )
 
     return impl
+
+
+@overload_method(SeriesType, "to_csv", no_unliteral=True)
+def to_csv_overload(
+    series,
+    path_or_buf=None,
+    sep=",",
+    na_rep="",
+    float_format=None,
+    columns=None,
+    header=True,
+    index=True,
+    index_label=None,
+    mode="w",
+    encoding=None,
+    compression="infer",
+    quoting=None,
+    quotechar='"',
+    line_terminator=None,
+    chunksize=None,
+    date_format=None,
+    doublequote=True,
+    escapechar=None,
+    decimal=".",
+    errors="strict",
+    _is_parallel=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
+):
+    """Inspired by to_csv_overload in pd_dataframe_ext.py"""
+    if not (
+        is_overload_none(path_or_buf)
+        or is_overload_constant_str(path_or_buf)
+        or path_or_buf == string_type
+    ):
+        raise BodoError(
+            "Series.to_csv(): 'path_or_buf' argument should be None or string"
+        )
+
+    if is_overload_none(path_or_buf):
+        # String output case
+        def _impl(
+            series,
+            path_or_buf=None,
+            sep=",",
+            na_rep="",
+            float_format=None,
+            columns=None,
+            header=True,
+            index=True,
+            index_label=None,
+            mode="w",
+            encoding=None,
+            compression="infer",
+            quoting=None,
+            quotechar='"',
+            line_terminator=None,
+            chunksize=None,
+            date_format=None,
+            doublequote=True,
+            escapechar=None,
+            decimal=".",
+            errors="strict",
+            _is_parallel=False,
+        ):  # pragma: no cover
+            with numba.objmode(D="unicode_type"):
+                D = series.to_csv(
+                    None,
+                    sep,
+                    na_rep,
+                    float_format,
+                    columns,
+                    header,
+                    index,
+                    index_label,
+                    mode,
+                    encoding,
+                    compression,
+                    quoting,
+                    quotechar,
+                    line_terminator,
+                    chunksize,
+                    date_format,
+                    doublequote,
+                    escapechar,
+                    decimal,
+                    errors,
+                )
+            return D
+
+        return _impl
+
+    def _impl(
+        series,
+        path_or_buf=None,
+        sep=",",
+        na_rep="",
+        float_format=None,
+        columns=None,
+        header=True,
+        index=True,
+        index_label=None,
+        mode="w",
+        encoding=None,
+        compression="infer",
+        quoting=None,
+        quotechar='"',
+        line_terminator=None,
+        chunksize=None,
+        date_format=None,
+        doublequote=True,
+        escapechar=None,
+        decimal=".",
+        errors="strict",
+        _is_parallel=False,
+    ):  # pragma: no cover
+        # passing None for the first argument returns a string
+        # containing contents to write to csv
+        if _is_parallel:
+            header &= (bodo.libs.distributed_api.get_rank() == 0) | _csv_output_is_dir(
+                unicode_to_utf8(path_or_buf)
+            )
+        with numba.objmode(D="unicode_type"):
+            D = series.to_csv(
+                None,
+                sep,
+                na_rep,
+                float_format,
+                columns,
+                header,
+                index,
+                index_label,
+                mode,
+                encoding,
+                compression,
+                quoting,
+                quotechar,
+                line_terminator,
+                chunksize,
+                date_format,
+                doublequote,
+                escapechar,
+                decimal,
+                errors,
+            )
+
+        bodo.io.fs_io.csv_write(path_or_buf, D, _is_parallel)
+
+    return _impl
 
 
 # Raise Bodo Error for unsupported attributes and methods of Series

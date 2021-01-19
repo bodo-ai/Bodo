@@ -2542,29 +2542,48 @@ class TestIO(unittest.TestCase):
         bodo_func = bodo.jit(test_impl)
         pd.testing.assert_frame_equal(bodo_func(), test_impl())
 
-    def test_write_csv1(self):
-        # only run on single processor
+    def write_csv(self, data_structure):
+        # only run on a single processor
         if bodo.get_size() != 1:
             return
 
-        def test_impl(df, fname):
-            df.to_csv(fname)
+        def test_impl(data_structure, fname):
+            data_structure.to_csv(fname)
 
         bodo_func = bodo.jit(test_impl)
         n = 111
-        df = pd.DataFrame({"A": np.arange(n)}, index=np.arange(n) * 2)
         hp_fname = "test_write_csv1_bodo.csv"
         pd_fname = "test_write_csv1_pd.csv"
         with ensure_clean(pd_fname), ensure_clean(hp_fname):
-            bodo_func(df, hp_fname)
-            test_impl(df, pd_fname)
+            bodo_func(data_structure, hp_fname)
+            test_impl(data_structure, pd_fname)
             pd.testing.assert_frame_equal(pd.read_csv(hp_fname), pd.read_csv(pd_fname))
 
-    def test_write_csv_parallel1(self):
-        def test_impl(n, fname):
-            df = pd.DataFrame({"A": np.arange(n)})
-            df.to_csv(fname)
+    def test_write_dataframe_csv1(self):
+        n = 111
+        df = pd.DataFrame({"A": np.arange(n)}, index=np.arange(n) * 2)
+        self.write_csv(df)
 
+    def test_write_series_csv1(self):
+        n = 111
+        series = pd.Series(data=np.arange(n), dtype=np.float64, name="bodo")
+        self.write_csv(series)
+
+    def test_series_invalid_path_or_buf(self):
+        n = 111
+        series = pd.Series(data=np.arange(n), dtype=np.float64, name="bodo")
+
+        def test_impl(data_structure, fname):
+            data_structure.to_csv(fname)
+
+        bodo_func = bodo.jit(test_impl)
+        with pytest.raises(
+            BodoError,
+            match="argument should be None or string",
+        ):
+            bodo_func(series, 1)
+
+    def write_csv_parallel(self, test_impl):
         bodo_func = bodo.jit(test_impl)
         n = 111
         hp_fname = "test_write_csv1_bodo_par.csv"
@@ -2578,6 +2597,20 @@ class TestIO(unittest.TestCase):
                 pd.testing.assert_frame_equal(
                     pd.read_csv(hp_fname), pd.read_csv(pd_fname)
                 )
+
+    def test_write_dataframe_csv_parallel1(self):
+        def test_impl(n, fname):
+            df = pd.DataFrame({"A": np.arange(n)})
+            df.to_csv(fname)
+
+        self.write_csv_parallel(test_impl)
+
+    def test_write_series_csv_parallel1(self):
+        def test_impl(n, fname):
+            series = pd.Series(data=np.arange(n), dtype=np.float64, name="bodo")
+            series.to_csv(fname)
+
+        self.write_csv_parallel(test_impl)
 
     def test_write_csv_parallel2(self):
         # 1D_Var case

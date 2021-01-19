@@ -38,6 +38,7 @@ import bodo.io.np_io
 from bodo.hiframes.pd_categorical_ext import CategoricalArray
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.hiframes.pd_multi_index_ext import MultiIndexType
+from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.libs.bool_arr_ext import boolean_array
 from bodo.libs.distributed_api import Reduce_Type
 from bodo.utils.transform import get_call_expr_arg, get_stmt_defs
@@ -828,6 +829,12 @@ class DistributedAnalysis:
             self.typemap[func_mod.name], DataFrameType
         ):
             self._analyze_call_df(lhs, func_mod, func_name, args, array_dists)
+            return
+
+        if isinstance(func_mod, ir.Var) and isinstance(
+            self.typemap[func_mod.name], SeriesType
+        ):
+            self._analyze_call_series(lhs, func_mod, func_name, args, array_dists)
             return
 
         if fdef == ("parallel_print", "bodo"):
@@ -1834,6 +1841,12 @@ class DistributedAnalysis:
 
         # set REP if not found
         self._analyze_call_set_REP(lhs, args, array_dists, "df." + func_name)
+
+    def _analyze_call_series(self, lhs, arr, func_name, args, array_dists):
+        if func_name in {"to_csv"}:
+            return
+
+        self._analyze_call_set_REP(lhs, args, array_dists, "series." + func_name)
 
     def _analyze_call_bodo_dist(self, lhs, func_name, args, array_dists):
         """analyze distributions of bodo distributed functions

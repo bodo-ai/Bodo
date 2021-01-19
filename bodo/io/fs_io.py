@@ -7,10 +7,30 @@ import os
 import warnings
 from urllib.parse import urlparse
 
+import llvmlite.binding as ll
 import numba
+import numpy as np
+from numba.core import types
+from numba.extending import overload
 
 import bodo
+from bodo.io import csv_cpp
+from bodo.libs.distributed_api import Reduce_Type
+from bodo.libs.str_ext import unicode_to_utf8, unicode_to_utf8_and_len
 from bodo.utils.typing import BodoError, BodoWarning
+
+_csv_write = types.ExternalFunction(
+    "csv_write",
+    types.void(
+        types.voidptr,
+        types.voidptr,
+        types.int64,
+        types.int64,
+        types.bool_,
+        types.voidptr,
+    ),
+)
+ll.add_symbol("csv_write", csv_cpp.csv_write)
 
 
 def get_s3_fs():
@@ -443,3 +463,34 @@ def get_s3_bucket_region_njit(s3_filepath):  # pragma: no cover
         if s3_filepath.startswith("s3://"):
             bucket_loc = get_s3_bucket_region(s3_filepath)
     return bucket_loc
+
+
+def csv_write(path_or_buf, D, is_parallel=False):  # pragma: no cover
+    # This is a dummy function used to allow overload.
+    return None
+
+
+@overload(csv_write, no_unliteral=True)
+def csv_write_overload(path_or_buf, D, is_parallel=False):
+    def impl(path_or_buf, D, is_parallel=False):  # pragma: no cover
+        # Assuming that path_or_buf is a string
+        bucket_region = get_s3_bucket_region_njit(path_or_buf)
+        # TODO: support non-ASCII file names?
+        utf8_str, utf8_len = unicode_to_utf8_and_len(D)
+        offset = 0
+        if is_parallel:
+            offset = bodo.libs.distributed_api.dist_exscan(
+                utf8_len, np.int32(Reduce_Type.Sum.value)
+            )
+        _csv_write(
+            unicode_to_utf8(path_or_buf),
+            utf8_str,
+            offset,
+            utf8_len,
+            is_parallel,
+            unicode_to_utf8(bucket_region),
+        )
+        # Check if there was an error in the C++ code. If so, raise it.
+        bodo.utils.utils.check_and_propagate_cpp_exception()
+
+    return impl

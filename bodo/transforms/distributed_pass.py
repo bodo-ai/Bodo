@@ -49,6 +49,7 @@ from numba.parfors.parfor import (
 import bodo
 import bodo.utils.utils
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
+from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.io import csv_cpp
 from bodo.io.h5_api import h5file_type, h5group_type
 from bodo.libs.distributed_api import Reduce_Type
@@ -871,6 +872,12 @@ class DistributedPass:
             self.typemap[func_mod.name], DataFrameType
         ):
             return self._run_call_df(lhs, func_mod, func_name, assign, rhs.args)
+
+        # series.func calls
+        if isinstance(func_mod, ir.Var) and isinstance(
+            self.typemap[func_mod.name], SeriesType
+        ):
+            return self._run_call_series(lhs, func_mod, func_name, assign, rhs.args)
 
         if fdef == ("permutation", "numpy.random"):
             if self.typemap[rhs.args[0].name] == types.int64:
@@ -1696,6 +1703,11 @@ class DistributedPass:
                     "bodo": bodo,
                 },
             )
+        return [assign]
+
+    def _run_call_series(self, lhs, series, func_name, assign, args):
+        if func_name == "to_csv" and self._is_1D_or_1D_Var_arr(series.name):
+            self._set_last_arg_to_true(assign.value)
         return [assign]
 
     def _gen_csv_header_node(self, cond_var, fname_var):

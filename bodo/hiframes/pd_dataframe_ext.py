@@ -50,7 +50,7 @@ from bodo.hiframes.pd_series_ext import (
     _get_series_array_type,
 )
 from bodo.hiframes.series_indexing import SeriesIlocType
-from bodo.io import csv_cpp, json_cpp
+from bodo.io import json_cpp
 from bodo.libs.array import arr_info_list_to_table, array_to_info
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.bool_arr_ext import boolean_array
@@ -101,19 +101,6 @@ from bodo.utils.typing import (
     raise_bodo_error,
     raise_const_error,
 )
-
-_csv_write = types.ExternalFunction(
-    "csv_write",
-    types.void(
-        types.voidptr,
-        types.voidptr,
-        types.int64,
-        types.int64,
-        types.bool_,
-        types.voidptr,
-    ),
-)
-ll.add_symbol("csv_write", csv_cpp.csv_write)
 
 _json_write = types.ExternalFunction(
     "json_write",
@@ -3359,19 +3346,7 @@ def to_csv_overload(
                 decimal,
             )
 
-        # Assuming that path_or_buf is a string
-        bucket_region = bodo.io.fs_io.get_s3_bucket_region_njit(path_or_buf)
-        # TODO: support non-ASCII file names?
-        bodo.hiframes.pd_dataframe_ext._csv_write(
-            unicode_to_utf8(path_or_buf),
-            unicode_to_utf8(D),
-            0,
-            len(D),
-            False,
-            unicode_to_utf8(bucket_region),
-        )
-        # Check if there was an error in the C++ code. If so, raise it.
-        bodo.utils.utils.check_and_propagate_cpp_exception()
+        bodo.io.fs_io.csv_write(path_or_buf, D)
 
     return _impl
 
