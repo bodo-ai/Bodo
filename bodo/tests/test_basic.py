@@ -634,6 +634,19 @@ def test_func_non_jit_error(memory_leak_check):
         bodo.jit(test_impl)()
 
 
+def test_unsupported_tz_dtype(memory_leak_check):
+    """make sure proper error is thrown when input is tz-aware datetime"""
+
+    def test_impl(A):
+        return A
+
+    with pytest.raises(
+        BodoError, match=r"Timezone-aware datetime data type not supported yet"
+    ):
+        A = pd.to_datetime(["2017-01-02"], utc=True).to_series()
+        bodo.jit(test_impl)(A)
+
+
 # TODO: Add memory_leak_check after memory leak is solved.
 @pytest.mark.slow
 def test_reversed():
