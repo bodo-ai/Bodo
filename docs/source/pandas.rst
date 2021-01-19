@@ -42,7 +42,11 @@ are supported.
 * Pandas `nullable integers <https://pandas.pydata.org/pandas-docs/stable/user_guide/integer_na.html>`_.
 * Pandas `nullable booleans <https://pandas.pydata.org/pandas-docs/stable/user_guide/boolean.html>`_.
 * Pandas `Categoricals <https://pandas.pydata.org/pandas-docs/stable/user_guide/categorical.html>`_.
-* Lists of integer, float, and string values.
+* Lists of other data types.
+* Tuples of other data types.
+* Structs of other data types.
+* Maps of other data types (each map is a set of key-value pairs). All keys should have the same type
+  to ensure type stability. All values should have the same type as well.
 * `decimal.Decimal` values (including nulls). The decimal
   values are stored as fixed-precision
   `Apache Arrow Decimal128 <https://arrow.apache.org/docs/cpp/api/utilities.html#classarrow_1_1_decimal128>`_
@@ -130,7 +134,7 @@ The following table can be used to select the necessary Bodo Type based upon the
 Input/Output
 ~~~~~~~~~~~~
 
-Also see :ref:`S3` and :ref:`HDFS` configuration requirements and more on :ref:`file_io`.
+See more in :ref:`file_io`, such as :ref:`S3` and :ref:`HDFS` configuration requirements.
 
 * :func:`pandas.read_csv`
 
@@ -139,7 +143,7 @@ Also see :ref:`S3` and :ref:`HDFS` configuration requirements and more on :ref:`
   * Arguments ``sep``, ``delimiter``, ``header``, ``names``,
     ``index_col``, ``usecols``, ``dtype``, ``skiprows``, and ``parse_dates`` are supported.
   * Either ``names`` and ``dtype`` arguments should be provided to enable type inference,
-    or ``filepath_or_buffer`` should be a constant string for Bodo to infer types by looking at the file at compile time.
+    or ``filepath_or_buffer`` should be inferrable as a constant string for Bodo to infer types by looking at the file at compile time.
   * ``names``, ``usecols``, ``parse_dates`` should be constant lists.
   * ``dtype`` should be a constant dictionary of strings and types.
   * When a CSV file is read in parallel (distributed mode) and each process reads only a portion of the file, reading columns that contain line breaks is not supported.
@@ -150,7 +154,7 @@ Also see :ref:`S3` and :ref:`HDFS` configuration requirements and more on :ref:`
   * only arguments ``io``, ``sheet_name``, ``header``, ``names``, ``comment``, ``dtype``, ``skiprows``, ``parse_dates`` are supported.
   * ``io`` should be a string and is required.
   * Either ``names`` and ``dtype`` arguments should be provided to enable type inference,
-    or ``io`` should be a constant string for Bodo to infer types by looking at the file at
+    or ``io`` should be inferrable as a constant string for Bodo to infer types by looking at the file at
     compile time.
   * ``sheet_name``, ``header``, ``comment``, and ``skiprows`` should be constant if provided.
   * ``names`` and ``parse_dates`` should be constant lists if provided.
@@ -168,8 +172,9 @@ Also see :ref:`S3` and :ref:`HDFS` configuration requirements and more on :ref:`
 
   * :ref:`example usage and more system specific instructions <parquet-section>`
   * Arguments ``path`` and ``columns`` are supported. ``columns``
-    should be a constant list of strings.
-  * If ``path`` is constant, Bodo finds the schema from file at compilation time.
+    should be a constant list of strings if provided.
+  * If ``path`` can be inferred as a constant (e.g. it is a function argument),
+    Bodo finds the schema from file at compilation time.
     Otherwise, schema should be provided. For example::
 
       @bodo.jit(locals={'df':{'A': bodo.float64[:],
@@ -185,7 +190,8 @@ Also see :ref:`S3` and :ref:`HDFS` configuration requirements and more on :ref:`
   * Argument ``filepath_or_buffer`` is supported: it can point to a single JSON file, or a directory containing multiple partitioned JSON files. When reading a directory, the JSON files inside the directory must be `JSON Lines text file format <http://jsonlines.org/>`_ with ``json`` file extension.
   * Argument ``orient = 'records'`` is used as default, instead of Pandas' default ``'columns'`` for dataframes. ``'records'`` is the only supported value for ``orient``.
   * Argument ``typ`` is supported. ``'frame'`` is the only supported value for ``typ``.
-  * ``dtype`` argument should be provided to enable type inference, or ``filepath_or_buffer`` should be a constant string for Bodo to infer types by looking at the file at compile time (not supported for multi-line JSON files)
+  * ``dtype`` argument should be provided to enable type inference, or ``filepath_or_buffer`` should be inferrable as a constant string for Bodo
+    to infer types by looking at the file at compile time (not supported for multi-line JSON files)
   * Arguments ``convert_dates``, ``precise_float``, ``lines`` are supported.
 
 * :func:`pandas.DataFrame.to_sql`
@@ -210,14 +216,14 @@ Data manipulations:
 
   * Arguments ``left``, ``right`` should be dataframes.
   * ``how``, ``on``, ``left_on``, ``right_on``, ``left_index``,
-    and `right_index` are supported but should be constant values.
+    and ``right_index`` are supported but should be constant values.
   * The output dataframe is not sorted by default for better parallel performance (Pandas may preserve key order depending on `how`). 
     One can use explicit sort if needed.
 
 * :func:`pandas.merge_asof` (similar arguments to `merge`)
 
 * :func:`pandas.concat`
-  Input list or tuple of dataframes or series is supported.
+  Input list or tuple of dataframes or series is supported. `axis` and `ignore_index` are also supported.
 
 * :func:`pandas.get_dummies` 
   Input must be a categorical array with categories that are known at compile time (for type stability).
@@ -340,7 +346,7 @@ The `fill_value` optional argument for binary functions below is supported.
 
 Function application, GroupBy & Window:
 
-* :meth:`pandas.Series.apply` (only the `func` argument)
+* :meth:`pandas.Series.apply` (`convert_dtype` not supported yet)
 * :meth:`pandas.Series.map` (only the `arg` argument, which should be a function)
 * :meth:`pandas.Series.groupby` (pass array to `by` argument, or level=0 with regular Index)
 * :meth:`pandas.Series.rolling` (`window`, `min_periods` and `center` arguments supported)
@@ -352,8 +358,8 @@ Statistical functions below are supported without optional arguments
 unless support is explicitly mentioned.
 
 * :meth:`pandas.Series.abs`
-* :meth:`pandas.Series.all` only default arguments supported
-* :meth:`pandas.Series.any` only default arguments supported
+* :meth:`pandas.Series.all`
+* :meth:`pandas.Series.any`
 * :meth:`pandas.Series.corr`
 * :meth:`pandas.Series.count`
 * :meth:`pandas.Series.cov`
@@ -361,11 +367,11 @@ unless support is explicitly mentioned.
 * :meth:`pandas.Series.cumprod`
 * :meth:`pandas.Series.cummin`
 * :meth:`pandas.Series.cummax`
-* :meth:`pandas.Series.describe` currently returns a string instead of Series object.
+* :meth:`pandas.Series.describe`
 * :meth:`pandas.Series.max`
 * :meth:`pandas.Series.mean`
-* :meth:`pandas.Series.autocorr` (supports lag argument)
-* :meth:`pandas.Series.median` (supports skipna argument)
+* :meth:`pandas.Series.autocorr` (supports `lag` argument)
+* :meth:`pandas.Series.median` (supports `skipna` argument)
 * :meth:`pandas.Series.min`
 * :meth:`pandas.Series.nlargest` (non-numerics not supported yet)
 * :meth:`pandas.Series.nsmallest` (non-numerics not supported yet)
@@ -374,14 +380,14 @@ unless support is explicitly mentioned.
 * :meth:`pandas.Series.prod`
 * :meth:`pandas.Series.product`
 * :meth:`pandas.Series.quantile`
-* :meth:`pandas.Series.std` (support skipna and ddof arguments)
-* :meth:`pandas.Series.var` (support skipna and ddof arguments)
-* :meth:`pandas.Series.sem` (support skipna and ddof arguments)
+* :meth:`pandas.Series.std` (support `skipna` and `ddof` arguments)
+* :meth:`pandas.Series.var` (support `skipna` and `ddof` arguments)
+* :meth:`pandas.Series.sem` (support `skipna` and `ddof` arguments)
 * :meth:`pandas.Series.sum`
-* :meth:`pandas.Series.mad` argument skipna supported
-* :meth:`pandas.Series.kurt` argument skipna supported
-* :meth:`pandas.Series.kurtosis` argument skipna supported
-* :meth:`pandas.Series.skew` argument skipna supported
+* :meth:`pandas.Series.mad` argument `skipna` supported
+* :meth:`pandas.Series.kurt` argument `skipna` supported
+* :meth:`pandas.Series.kurtosis` argument `skipna` supported
+* :meth:`pandas.Series.skew` argument `skipna` supported
 * :meth:`pandas.Series.unique`
 * :meth:`pandas.Series.nunique`
 * :meth:`pandas.Series.value_counts`
@@ -396,8 +402,8 @@ Reindexing / Selection / Label manipulation:
 * :meth:`pandas.Series.isin`
   `values` argument supports both distributed array/Series and replicated list/array/Series
 * :meth:`pandas.Series.rename` (only set a new name using a string value)
-* :meth:`pandas.Series.reset_index` only default arguments supported.
-  Also, requires Index name to be known at compilation time.
+* :meth:`pandas.Series.reset_index` For MultiIndex case, only dropping all levels supported.
+  Requires Index name to be known at compilation time if `drop=False`.
 * :meth:`pandas.Series.tail` (`n` argument is supported)
 * :meth:`pandas.Series.take`
 * :meth:`pandas.Series.equals`
@@ -461,7 +467,7 @@ String handling:
 
 * :meth:`pandas.Series.str.capitalize`
 * :meth:`pandas.Series.str.center`
-* :meth:`pandas.Series.str.contains` regex argument supported.
+* :meth:`pandas.Series.str.contains` `regex` argument supported.
 * :meth:`pandas.Series.str.count`
 * :meth:`pandas.Series.str.endswith`
 * :meth:`pandas.Series.str.extract` (input pattern should be a constant string)
@@ -475,7 +481,7 @@ String handling:
 * :meth:`pandas.Series.str.lstrip`
 * :meth:`pandas.Series.str.pad`
 * :meth:`pandas.Series.str.repeat`
-* :meth:`pandas.Series.str.replace` regex argument supported.
+* :meth:`pandas.Series.str.replace` `regex` argument supported.
 * :meth:`pandas.Series.str.rfind`
 * :meth:`pandas.Series.str.rjust`
 * :meth:`pandas.Series.str.rstrip`
@@ -507,7 +513,7 @@ Bodo provides extensive DataFrame support documented below.
 
 * :class:`pandas.DataFrame`
 
-  ``data`` argument can be a constant dictionary or 2d Numpy array.
+  ``data`` argument can be a constant dictionary or 2D Numpy array.
   Other arguments are also supported.
 
 Attributes and underlying data:
@@ -552,8 +558,7 @@ Function application, GroupBy & Window:
 * :meth:`pandas.DataFrame.apply`
 * :meth:`pandas.DataFrame.groupby` `by` should be a constant column label
   or column labels.
-  `sort=False` is set by default. `as_index` argument is supported but
-  `MultiIndex` is not supported yet (will just drop output `MultiIndex`).
+  `sort=False` is set by default. `as_index` argument is supported.
 * :meth:`pandas.DataFrame.rolling` `window` argument should be integer or a time
   offset as a constant string. `min_periods`, `center` and `on` arguments are also supported.
 
@@ -572,7 +577,7 @@ Computations / Descriptive Stats:
 * :meth:`pandas.DataFrame.mean`
 * :meth:`pandas.DataFrame.median`
 * :meth:`pandas.DataFrame.min`
-* :meth:`pandas.DataFrame.nunique` (`dropna` argument not supported yet. The behavior is slightly different from `.nunique` implementation in pandas)
+* :meth:`pandas.DataFrame.nunique` `dropna` argument not supported yet.
 * :meth:`pandas.DataFrame.pct_change`
 * :meth:`pandas.DataFrame.prod`
 * :meth:`pandas.DataFrame.product`
@@ -592,7 +597,7 @@ Reindexing / Selection / Label manipulation:
 * :meth:`pandas.DataFrame.idxmax`
 * :meth:`pandas.DataFrame.idxmin`
 * :meth:`pandas.DataFrame.rename` (only `columns` argument with a constant dictionary)
-* :meth:`pandas.DataFrame.reset_index` (only `drop=True` supported)
+* :meth:`pandas.DataFrame.reset_index` only dropping all levels supported. `drop` and `inplace` also supported.
 * :meth:`pandas.DataFrame.set_index` `keys` can only be a column label
   (a constant string).
 * :meth:`pandas.DataFrame.tail` (including `n` argument)
@@ -615,14 +620,14 @@ Reshaping, sorting, transposing:
     the output pivot table `pt` will have columns called `small` and `large`.
 
 * :meth:`pandas.DataFrame.sample` is supported except for the arguments ``random_state``, ``weights`` and ``axis``.
-* :meth:`pandas.DataFrame.sort_index` `ascending` argument is supported.
+* :meth:`pandas.DataFrame.sort_index` `ascending` and `na_position` arguments supported.
 * :meth:`pandas.DataFrame.sort_values` ``by`` argument should be constant string or
   constant list of strings. ``ascending`` and ``na_position`` arguments are supported.
 
 Combining / joining / merging:
 
 * :meth:`pandas.DataFrame.append` appending a dataframe or list of dataframes
-  supported. `ignore_index=True` is necessary and set by default.
+  supported. `ignore_index` is supported.
 * :meth:`pandas.DataFrame.assign` function arguments not supported yet.
 * :meth:`pandas.DataFrame.join` only dataframes. The output dataframe is not sorted by default for better parallel performance (Pandas may preserve key order depending on `how`).
   One can use explicit sort if needed.
@@ -892,14 +897,16 @@ The operations are documented on `pandas.DataFrame.groupby <https://pandas.pydat
 Offsets
 ~~~~~~~
 
-Bodo supports a subset of the offset types from within ``pandas.tseries.offsets``. 
-For the offsets supported, the currently supported operations are the constructor 
-and addition and subtraction with a scalar `datetime.date`, `datetime.datetime` 
-or `pandas.Timestamp`. These can also be mapped across Series or DataFrame of 
-dates using UDFs. The offsets currently supported are:
+Bodo supports a subset of the offset types in ``pandas.tseries.offsets``:
 
 * :func:`pandas.tseries.offsets.DateOffset`
 * :func:`pandas.tseries.offsets.MonthEnd`
+
+The currently supported operations are the constructor 
+and addition and subtraction with a scalar `datetime.date`, `datetime.datetime` 
+or `pandas.Timestamp`. These can also be mapped across Series or DataFrame of 
+dates using UDFs.
+
 
 .. _integer-na-issue-pandas:
 
