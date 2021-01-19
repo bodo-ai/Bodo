@@ -1233,6 +1233,13 @@ def overload_series_notna(S):
     return lambda S: S.isna() == False
 
 
+def _is_str_dtype(dtype):
+    """return True if 'dtype' specifies a string data type."""
+    return (isinstance(dtype, types.Function) and dtype.key[0] == str) or (
+        is_overload_constant_str(dtype) and get_overload_const_str(dtype) == "str"
+    )
+
+
 @overload_method(SeriesType, "astype", no_unliteral=True)
 def overload_series_astype(S, dtype, copy=True, errors="raise"):
 
@@ -1240,7 +1247,7 @@ def overload_series_astype(S, dtype, copy=True, errors="raise"):
     arg_defaults = dict(errors="raise")
     check_unsupported_args("series.astype", unsupported_args, arg_defaults)
 
-    if isinstance(dtype, types.Function) and dtype.key[0] == str:
+    if _is_str_dtype(dtype):
 
         # special optimized case for int to string conversion, uses inplace write to
         # string array to avoid extra allocation

@@ -357,6 +357,8 @@ def get_overload_const(val):
         return [get_overload_const(v) for v in val.types]
     if is_initial_value_list_type(val):
         return val.initial_value
+    if is_literal_type(val):
+        return get_literal_value(val)
     return NOT_CONSTANT
 
 
@@ -770,7 +772,7 @@ def is_literal_type(t):
         # List/Dict types preserve const initial values in Numba 0.51
         or is_initial_value_type(t)
         # dtype literals should be treated as literals
-        or isinstance(t, types.DTypeSpec)
+        or isinstance(t, (types.DTypeSpec, types.Function))
         # values like np.sum could be passed as UDFs and are technically literals
         # See test_groupby_agg_func_udf
         or isinstance(t, types.Function)
@@ -801,7 +803,7 @@ def get_literal_value(t):
         return t
     if is_initial_value_type(t):
         return t.initial_value
-    if isinstance(t, types.DTypeSpec):
+    if isinstance(t, (types.DTypeSpec, types.Function)):
         return t
 
 

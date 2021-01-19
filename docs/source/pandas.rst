@@ -298,8 +298,7 @@ Methods:
 
 Conversion:
 
-* :meth:`pandas.Series.astype` (only ``dtype`` argument,
-  can be a Numpy numeric dtype or ``str``)
+* :meth:`pandas.Series.astype` (only ``dtype`` argument)
 * :meth:`pandas.Series.copy` (including ``deep`` argument)
 * :meth:`pandas.Series.to_list`
 * :meth:`pandas.Series.tolist`
@@ -514,9 +513,9 @@ Bodo provides extensive DataFrame support documented below.
 Attributes and underlying data:
 
 
-* :attr:`pandas.DataFrame.columns`  (can access but not set new columns yet)
+* :attr:`pandas.DataFrame.columns`
 * :attr:`pandas.DataFrame.empty`
-* :attr:`pandas.DataFrame.index` (can access but not set new index yet)
+* :attr:`pandas.DataFrame.index`
 * :attr:`pandas.DataFrame.ndim`
 * :meth:`pandas.DataFrame.select_dtypes` (only supports constant strings or types as arguments)
 * :attr:`pandas.DataFrame.shape`
@@ -526,8 +525,7 @@ Attributes and underlying data:
 
 Conversion:
 
-* :meth:`pandas.DataFrame.astype` (only accepts a single data type
-  of Numpy dtypes or `str`)
+* :meth:`pandas.DataFrame.astype` (only `dtype` argument)
 * :meth:`pandas.DataFrame.copy` (including `deep` flag)
 * :meth:`pandas.DataFrame.isna`
 * :meth:`pandas.DataFrame.isnull`

@@ -844,6 +844,10 @@ class TypingTransforms:
                 (1, "how"),
                 (3, "subset"),
             ],
+            "astype": [
+                (0, "dtype"),
+                (1, "copy"),
+            ],
             "select_dtypes": [(0, "include"), (1, "exclude")],
             "apply": [(0, "func"), (1, "axis")],
         }
