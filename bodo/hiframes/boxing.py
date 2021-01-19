@@ -4,7 +4,6 @@ Boxing and unboxing support for DataFrame, Series, etc.
 """
 import datetime
 import decimal
-import math
 import warnings
 
 import llvmlite.binding as ll
@@ -14,28 +13,13 @@ import pandas as pd
 from llvmlite import ir as lir
 from numba.core import cgutils, types
 from numba.core.typing import signature
-from numba.extending import (
-    NativeValue,
-    box,
-    intrinsic,
-    models,
-    register_model,
-    typeof_impl,
-    unbox,
-)
+from numba.extending import NativeValue, box, intrinsic, typeof_impl, unbox
 from numba.np import numpy_support
 from numba.typed.typeddict import Dict
 
 import bodo
-from bodo.hiframes.datetime_date_ext import (
-    datetime_date_array_type,
-    datetime_date_type,
-)
-from bodo.hiframes.datetime_timedelta_ext import (
-    datetime_timedelta_array_type,
-    datetime_timedelta_type,
-)
-from bodo.hiframes.pd_categorical_ext import PDCategoricalDtype
+from bodo.hiframes.datetime_date_ext import datetime_date_array_type
+from bodo.hiframes.datetime_timedelta_ext import datetime_timedelta_array_type
 from bodo.hiframes.pd_dataframe_ext import (
     DataFramePayloadType,
     DataFrameType,
@@ -46,18 +30,15 @@ from bodo.hiframes.pd_series_ext import (
     SeriesType,
     _get_series_array_type,
 )
-from bodo.hiframes.split_impl import (
-    box_str_arr_split_view,
-    string_array_split_view_type,
-)
+from bodo.hiframes.split_impl import string_array_split_view_type
 from bodo.libs import hstr_ext
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
-from bodo.libs.decimal_arr_ext import Decimal128Type, DecimalArrayType
+from bodo.libs.decimal_arr_ext import DecimalArrayType
 from bodo.libs.int_arr_ext import typeof_pd_int_dtype
 from bodo.libs.map_arr_ext import MapArrayType
 from bodo.libs.str_arr_ext import string_array_type
 from bodo.libs.str_ext import string_type
-from bodo.libs.struct_arr_ext import StructArrayType, StructType
+from bodo.libs.struct_arr_ext import StructArrayType
 from bodo.libs.tuple_arr_ext import TupleArrayType
 from bodo.utils.typing import (
     BodoError,
@@ -145,13 +126,14 @@ def _infer_series_dtype(S):
     elif isinstance(S.dtype, pd.BooleanDtype):
         return types.bool_
 
+    if isinstance(S.dtype, pd.DatetimeTZDtype):
+        raise BodoError("Timezone-aware datetime data type not supported yet")
+
     # regular numpy types
     try:
         return numpy_support.from_dtype(S.dtype)
-    except NotImplementedError:
-        raise BodoError(
-            "np dtype infer: data type for column {} not supported".format(S.name)
-        )
+    except:  # pragma: no cover
+        raise BodoError(f"data type {S.dtype} for column {S.name} not supported yet")
 
 
 @box(DataFrameType)
