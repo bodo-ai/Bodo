@@ -67,6 +67,8 @@ int pq_read_arrow_array(DatasetReader *reader, int64_t real_column_idx,
                         int64_t *lengths, array_info **out_infos);
 void pack_null_bitmap(uint8_t *out_nulls, std::vector<bool> &null_vec,
                       int64_t n_all_vals);
+void pq_gen_partition_column(DatasetReader *ds_reader, int64_t part_col_idx,
+                             void *out_data, int32_t cat_dtype);
 void pq_write(const char *filename, const table_info *table,
               const array_info *col_names, const array_info *index,
               bool write_index, const char *metadata, const char *compression,
@@ -124,6 +126,8 @@ PyMODINIT_FUNC PyInit_parquet_cpp(void) {
                            PyLong_FromVoidPtr((void *)(&pq_read_array_item)));
     PyObject_SetAttrString(m, "pq_read_arrow_array",
                            PyLong_FromVoidPtr((void *)(&pq_read_arrow_array)));
+    PyObject_SetAttrString(m, "pq_gen_partition_column",
+                           PyLong_FromVoidPtr((void *)(&pq_gen_partition_column)));
     PyObject_SetAttrString(m, "pq_write",
                            PyLong_FromVoidPtr((void *)(&pq_write)));
     PyObject_SetAttrString(m, "get_stats_alloc",
@@ -593,10 +597,10 @@ int pq_read_array_item(DatasetReader *ds_reader, int64_t real_column_idx,
     }
 }
 
-// populate categorical column for partition columns
-void pq_gen_partition_column(DatasetReader *ds_reader, int64_t part_col_idx,
-                             uint8_t *out_data) {
-    int64_t *cur_offset = (int64_t*)out_data;
+template <typename T>
+void pq_gen_partition_column_T(DatasetReader *ds_reader, int64_t part_col_idx,
+                               T *out_data) {
+    T *cur_offset = out_data;
     for (size_t i=0; i < ds_reader->filepaths.size(); i++) {
         std::shared_ptr<parquet::arrow::FileReader> file_reader;
         pq_init_reader(ds_reader->filepaths[i].c_str(), &file_reader,
@@ -606,6 +610,20 @@ void pq_gen_partition_column(DatasetReader *ds_reader, int64_t part_col_idx,
         int64_t part_val = ds_reader->part_vals[i][part_col_idx];
         std::fill(cur_offset, cur_offset + file_size, part_val);
         cur_offset += file_size;
+    }
+}
+
+// populate categorical column for partition columns
+void pq_gen_partition_column(DatasetReader *ds_reader, int64_t part_col_idx,
+                             void *out_data, int32_t cat_dtype) {
+    switch (cat_dtype) {
+        case Bodo_CTypes::INT8:
+            return pq_gen_partition_column_T<int8_t>(ds_reader, part_col_idx, (int8_t*)out_data);
+        case Bodo_CTypes::INT64:
+            return pq_gen_partition_column_T<int64_t>(ds_reader, part_col_idx, (int64_t*)out_data);
+        default:
+            fprintf(stderr, "TODO\n");
+            exit(1);
     }
 }
 

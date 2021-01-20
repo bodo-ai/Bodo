@@ -21,6 +21,8 @@ class ParquetReader(ir.Stmt):
         loc,
         null_col_map,
         partition_names=None,
+        partition_col_types=None,
+        part_vars=None,
     ):
         self.connector_typ = "parquet"
         self.file_name = file_name
@@ -34,6 +36,8 @@ class ParquetReader(ir.Stmt):
         # a bit map specifying if a column is made up of all nulls
         self.null_col_map = null_col_map
         self.partition_names = partition_names
+        self.partition_col_types = partition_col_types
+        self.part_vars = part_vars
         self.filters = None
 
     def __repr__(self):  # pragma: no cover
