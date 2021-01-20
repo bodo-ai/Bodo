@@ -888,6 +888,10 @@ class DistributedPass:
             fdef == ("len", "builtins")
             and rhs.args
             and self._is_1D_or_1D_Var_arr(rhs.args[0].name)
+            # no need for transformation for len of distributed List/Dict
+            and not isinstance(
+                self.typemap[rhs.args[0].name], (types.List, types.DictType)
+            )
         ):
             arr = rhs.args[0]
             # concat reduction variables don't need transformation

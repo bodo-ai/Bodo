@@ -953,6 +953,21 @@ def test_dist_list_setitem1(memory_leak_check):
     assert count_array_OneDs() >= 2
 
 
+def test_dist_list_loop_concat(memory_leak_check):
+    """Test support for list of dist data used with a loop and concat"""
+
+    def impl(df):
+        dfs = []
+        for _ in range(3):
+            dfs.append(df)
+        output = pd.concat(dfs)
+        return output
+
+    n = 11
+    df = pd.DataFrame({"A": np.arange(n)})
+    check_func(impl, (df,), sort_output=True)
+
+
 def test_dist_dict1(memory_leak_check):
     """Test support for build_map of dist data"""
 
