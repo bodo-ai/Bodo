@@ -355,7 +355,11 @@ class LowerParforSeq(FunctionPass):
 
     def run_pass(self, state):
         bodo.transforms.distributed_pass.lower_parfor_sequential(
-            state.typingctx, state.func_ir, state.typemap, state.calltypes
+            state.typingctx,
+            state.func_ir,
+            state.typemap,
+            state.calltypes,
+            state.metadata,
         )
         return True
 
