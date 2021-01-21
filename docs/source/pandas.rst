@@ -388,7 +388,7 @@ unless support is explicitly mentioned.
 * :meth:`pandas.Series.kurt` argument `skipna` supported
 * :meth:`pandas.Series.kurtosis` argument `skipna` supported
 * :meth:`pandas.Series.skew` argument `skipna` supported
-* :meth:`pandas.Series.unique`
+* :meth:`pandas.Series.unique` see :ref:`unique-parallelization`
 * :meth:`pandas.Series.nunique`
 * :meth:`pandas.Series.value_counts`
 
@@ -938,7 +938,7 @@ For example, this code reads column `A` into a nullable integer array
     ...
     
 User-Defined Functions (UDFs)
-~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 User-defined functions (UDFs) can be applied to dataframes with ``DataFrame.apply()`` and to
 series with ``Series.apply()`` or ``Series.map()``. Bodo offers support for UDFs without the 
@@ -963,6 +963,43 @@ Alternatively, arguments can be passed as named arguments like::
         return S.apply(lambda x, suf: x + suf, suf=suffix)
 
 The same process can be applied in the Dataframe case using ``DataFrame.apply()``.
+
+
+.. _unique-parallelization:
+
+
+Parallelizing `unique()` Functions
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Bodo infers parallelization of all APIs accurately, but `unique()` functions
+such as `Series.unique()` need special attention in some cases.
+By default, Bodo assumes the output of `unique()` is distributed if
+the input is distributed, but some applications may require replicated
+output for unique values. For example, an application may require dividing data across
+a small number of product keys and perform some parallel computation on each portion::
+
+    @bodo.jit
+    def f(df):
+        product_keys = df["product_key"].unique()
+        for p in product_keys:
+          df_p = df[df["product_key"] == p]
+          g(df_p)
+
+
+In this case, if the number of product keys is relatively small and function `g`
+is parallel, it is best to replicate the unique values across processors
+manually using `allgatherv`::
+
+    @bodo.jit
+    def f(df):
+        product_keys = df["product_key"].unique()
+        product_keys = bodo.allgatherv(product_keys)
+        for p in product_keys:
+          df_p = df[df["product_key"] == p]
+          g(df_p)
+
+
+These cases are usually rare and therefore, `allgatherv` should not be overused.
 
 
 Type Inference for Object Data
