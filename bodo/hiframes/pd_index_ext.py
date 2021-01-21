@@ -1399,18 +1399,20 @@ def overload_range_index_getitem(I, idx):
             # TODO: test
             def impl(I, idx):  # pragma: no cover
                 slice_idx = numba.cpython.unicode._normalize_slice(idx, len(I))
+                name = bodo.hiframes.pd_index_ext.get_index_name(I)
                 start = I._start + I._step * slice_idx.start
                 stop = I._start + I._step * slice_idx.stop
                 step = I._step * slice_idx.step
                 return bodo.hiframes.pd_index_ext.init_range_index(
-                    start, stop, step, None
+                    start, stop, step, name
                 )
 
             return impl
 
         # delegate to integer index, TODO: test
         return lambda I, idx: bodo.hiframes.pd_index_ext.init_numeric_index(
-            np.arange(I._start, I._stop, I._step, np.int64)[idx]
+            np.arange(I._start, I._stop, I._step, np.int64)[idx],
+            bodo.hiframes.pd_index_ext.get_index_name(I),
         )  # pragma: no cover
 
 
@@ -1927,12 +1929,14 @@ def overload_index_getitem(I, ind):
     # output of slice, bool array ... indexing is pd.Index
     if isinstance(I, NumericIndexType):
         return lambda I, ind: bodo.hiframes.pd_index_ext.init_numeric_index(
-            bodo.hiframes.pd_index_ext.get_index_data(I)[ind]
+            bodo.hiframes.pd_index_ext.get_index_data(I)[ind],
+            bodo.hiframes.pd_index_ext.get_index_name(I),
         )  # pragma: no cover
 
     if isinstance(I, StringIndexType):
         return lambda I, ind: bodo.hiframes.pd_index_ext.init_string_index(
-            bodo.hiframes.pd_index_ext.get_index_data(I)[ind]
+            bodo.hiframes.pd_index_ext.get_index_data(I)[ind],
+            bodo.hiframes.pd_index_ext.get_index_name(I),
         )  # pragma: no cover
 
 
@@ -2382,7 +2386,8 @@ def is_index_type(t):
 def cast_range_index_to_int_index(context, builder, fromty, toty, val):
     """cast RangeIndex to equivalent Int64Index"""
     f = lambda I: init_numeric_index(
-        np.arange(I._start, I._stop, I._step)
+        np.arange(I._start, I._stop, I._step),
+        bodo.hiframes.pd_index_ext.get_index_name(I),
     )  # pragma: no cover
     return context.compile_internal(builder, f, toty(fromty), [val])
 
@@ -2501,7 +2506,8 @@ def overload_heter_index_getitem(I, ind):  # pragma: no cover
     # output of slice, bool array ... indexing is pd.Index
     if isinstance(I, HeterogeneousIndexType):
         return lambda I, ind: bodo.hiframes.pd_index_ext.init_heter_index(
-            bodo.hiframes.pd_index_ext.get_index_data(I)[ind]
+            bodo.hiframes.pd_index_ext.get_index_data(I)[ind],
+            bodo.hiframes.pd_index_ext.get_index_name(I),
         )  # pragma: no cover
 
 

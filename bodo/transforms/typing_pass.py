@@ -388,9 +388,7 @@ class TypingTransforms:
             # get df arrays using const slice
             data_outs = []
             for i in range(len(columns))[col_slice]:
-                arr = "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {})[idx]".format(
-                    i
-                )
+                arr = f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i})[idx]"
                 data_outs.append(arr)
             index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)[idx]"
             header = "def impl(I, idx):\n"

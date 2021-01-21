@@ -230,6 +230,25 @@ def test_index_values(index, memory_leak_check):
 
 @pytest.mark.slow
 @pytest.mark.parametrize(
+    "index",
+    [
+        pd.Int64Index([10, 12, 11, 1, 3, 4], name="A"),
+        pd.Index(["A", "B", "C", "D", "FF"], name="B"),
+        pd.RangeIndex(10, name="BB"),
+        pd.date_range(start="2018-04-24", end="2018-04-27", periods=6, name="A"),
+    ],
+)
+def test_index_slice_name(index, memory_leak_check):
+    """make sure Index name is preserved properly in slicing"""
+
+    def impl(I):
+        return I[:3]
+
+    check_func(impl, (index,), only_seq=True)
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize(
     "index, key",
     [
         (pd.Int64Index([10, 12, 15, 18]), 15),
