@@ -61,9 +61,14 @@ jobs:
       export CHECK_LICENSE_PLATFORM_AWS=$(CHECK_LICENSE_PLATFORM_AWS)
       export CHECK_LICENSE_EXPIRED=$(CHECK_LICENSE_EXPIRED)
       export OBFUSCATE=$(OBFUSCATE)
+      if [[ "${{ parameters.platformBuild }}" == "true" ]]; then
+        export PLATFORM_DEV_RELEASE=$(PLATFORM_DEV_RELEASE)
+      else
+        export PLATFORM_DEV_RELEASE="false"
+      fi
       export BODO_VERSION=`python -c "import versioneer; print(versioneer.get_version())"`
       cd $(System.DefaultWorkingDirectory)
-      ./buildscripts/azure/install_bodo.sh "${{ parameters.useNumbaDev }}" $BODO_VERSION
+      ./buildscripts/azure/install_bodo.sh "${{ parameters.useNumbaDev }}" $BODO_VERSION $PLATFORM_DEV_RELEASE
     displayName: 'Install Bodo from conda'
 
   - script: |

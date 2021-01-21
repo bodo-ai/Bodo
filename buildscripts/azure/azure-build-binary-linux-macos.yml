@@ -122,16 +122,21 @@ jobs:
         export CHECK_LICENSE_EXPIRED="0"
         export CHECK_LICENSE_CORE_COUNT="0"
         export CHECK_LICENSE_PLATFORM_AWS="1"
+        export PLATFORM_DEV_RELEASE=$(PLATFORM_DEV_RELEASE)
       else
         export CHECK_LICENSE_EXPIRED=$(CHECK_LICENSE_EXPIRED)
         export CHECK_LICENSE_CORE_COUNT=$(CHECK_LICENSE_CORE_COUNT)
+        export PLATFORM_DEV_RELEASE="false"
       fi
-      artifactory_channel=`./buildscripts/azure/get_channel.sh $NUMBA_DEV`
+      artifactory_channel=`./buildscripts/azure/get_channel.sh $NUMBA_DEV $PLATFORM_DEV_RELEASE`
       if [[ "${{ parameters.name }}" = Linux* ]]; then
         artifactory_os_dir="linux-64"
       else
         artifactory_os_dir="osx-64"
       fi
       ./buildscripts/azure/publish_binary.sh $artifactory_channel $artifactory_os_dir $BODO_VERSION
+      if [[ "${{ parameters.platformBuild }}" == "true" ]]; then
+        ./buildscripts/azure/trigger_ami_build.sh $artifactory_channel $artifactory_os_dir $PLATFORM_DEV_RELEASE $BODO_VERSION
+      fi
 
     displayName: 'publish bodo binary to Artifactory'

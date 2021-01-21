@@ -2,6 +2,7 @@
 set -eo pipefail
 
 NUMBA_DEV=${1:-false}
+PLATFORM_DEV_RELEASE=${2:-false}
 IS_RELEASE=`git tag --points-at HEAD`
 if [[ $NUMBA_DEV == "true" ]]; then
     # If numba-dev pipeline, publish to bodo-numba-dev channel
@@ -16,8 +17,8 @@ elif [[ $CHECK_LICENSE_EXPIRED  == 1 ]] && [[ $OBFUSCATE == 1 ]]; then
 elif [[ $CHECK_LICENSE_PLATFORM_AWS == 1 ]] && [[ $OBFUSCATE != 1 ]]; then
         artifactory_channel="bodo.ai-platform-dev"
 elif [[ $CHECK_LICENSE_PLATFORM_AWS == 1 ]] && [[ $OBFUSCATE == 1 ]]; then
-    # if release, then to bodo.ai-platform, else to bodo.ai-platform-dev
-    if [[ ! -z "$IS_RELEASE" ]]; then
+    # if release or platform-dev-release, then to bodo.ai-platform, else to bodo.ai-platform-dev
+    if [[ ! -z "$IS_RELEASE" ]] || [[ "$PLATFORM_DEV_RELEASE" == "true" ]]; then
         artifactory_channel="bodo.ai-platform"
     else
         artifactory_channel="bodo.ai-platform-dev"
