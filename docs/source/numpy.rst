@@ -107,7 +107,7 @@ and parallelize.
 #. Numpy array manipulation functions:
 
     * :func:`numpy.sort`
-    * :func:`numpy.unique`
+    * :func:`numpy.unique` see :ref:`unique-parallelization`
     * :func:`numpy.where` (1 and 3 arguments)
     * :func:`numpy.union1d`
     * :func:`numpy.intersect1d` (no distributed support yet)
