@@ -386,7 +386,6 @@ def pq_distributed_run(pq_node, array_dists, typemap, calltypes, typingctx, targ
     for i in range(n_cols):
         nodes[2 * (i - n_cols)].target = pq_node.out_vars[i]
 
-
     return nodes
 
 
@@ -460,7 +459,9 @@ def _gen_pq_reader_py(
             # this partition column has not been selected for read
             continue
         part_col_type = out_types[col_idx].dtype
-        cat_dtype, cat_dtype_name, func_text = gen_column_partition(func_text, part_col_idx, part_name, part_col_type)
+        cat_dtype, cat_dtype_name, func_text = gen_column_partition(
+            func_text, part_col_idx, part_name, part_col_type
+        )
         local_types[cat_dtype_name] = cat_dtype
 
     func_text += "  del_dataset_reader(ds_reader)\n"
@@ -576,7 +577,10 @@ def gen_column_read(
 
 
 def gen_column_partition(
-    func_text, part_col_idx, partition_name, partition_type,
+    func_text,
+    part_col_idx,
+    partition_name,
+    partition_type,
 ):
     cname = sanitize_varname(partition_name)
     cat_dtype = pd.CategoricalDtype(partition_type.categories, partition_type.ordered)
@@ -590,9 +594,15 @@ def gen_column_partition(
     func_text += "  {}_size = get_column_size_parquet(ds_reader, 0)\n".format(cname)
     # Check if there was an error in the C++ code. If so, raise it.
     func_text += "  bodo.utils.utils.check_and_propagate_cpp_exception()\n"
-    func_text += "  {} = bodo.hiframes.pd_categorical_ext.alloc_categorical_array({}_size, {})\n".format(cname, cname, cat_dtype_name)
-    cat_int_dtype = bodo.hiframes.pd_categorical_ext.get_categories_int_type(partition_type)
-    func_text += "  pq_gen_partition_column(ds_reader, {}, {}.codes.ctypes, np.int32({}))\n".format(part_col_idx, cname, bodo.utils.utils.numba_to_c_type(cat_int_dtype))
+    func_text += "  {} = bodo.hiframes.pd_categorical_ext.alloc_categorical_array({}_size, {})\n".format(
+        cname, cname, cat_dtype_name
+    )
+    cat_int_dtype = bodo.hiframes.pd_categorical_ext.get_categories_int_type(
+        partition_type
+    )
+    func_text += "  pq_gen_partition_column(ds_reader, {}, {}.codes.ctypes, np.int32({}))\n".format(
+        part_col_idx, cname, bodo.utils.utils.numba_to_c_type(cat_int_dtype)
+    )
     return cat_dtype, cat_dtype_name, func_text
 
 
