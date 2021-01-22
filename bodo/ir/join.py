@@ -161,7 +161,8 @@ def join_array_analysis(join_node, equiv_set, typemap, array_analysis):
     for col_var in in_vars:
         typ = typemap[col_var.name]
         col_shape = equiv_set.get_shape(col_var)
-        all_shapes.append(col_shape[0])
+        if col_shape:
+            all_shapes.append(col_shape[0])
 
     if len(all_shapes) > 1:
         equiv_set.insert_equiv(*all_shapes)
@@ -171,7 +172,8 @@ def join_array_analysis(join_node, equiv_set, typemap, array_analysis):
     for col_var in in_vars:
         typ = typemap[col_var.name]
         col_shape = equiv_set.get_shape(col_var)
-        all_shapes.append(col_shape[0])
+        if col_shape:
+            all_shapes.append(col_shape[0])
 
     if len(all_shapes) > 1:
         equiv_set.insert_equiv(*all_shapes)

@@ -3221,6 +3221,21 @@ def test_groupby_empty_funcs(memory_leak_check):
     assert impl(df) == bodo.jit(impl)(df)
 
 
+def test_groupby_in_loop(memory_leak_check):
+    """Test groupby inside a loop, where input shape info is not available in array
+    analysis"""
+
+    def impl(df):
+        s = 0
+        for _ in range(3):
+            df2 = df.groupby("A").sum()
+            s += df2.B.sum()
+        return s
+
+    df = pd.DataFrame({"A": [0, 0, 0, 1, 1, 1], "B": range(6)})
+    assert impl(df) == bodo.jit(impl)(df)
+
+
 def test_groupby_dead_col_multifunc(memory_leak_check):
     """Test dead column elimination in groupbys with UDFs (issues #1724, #1732, #1750)"""
 
