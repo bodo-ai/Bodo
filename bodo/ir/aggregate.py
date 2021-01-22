@@ -777,15 +777,18 @@ def aggregate_array_analysis(aggregate_node, equiv_set, typemap, array_analysis)
     all_shapes = []
     for key_arr in aggregate_node.key_arrs:
         col_shape = equiv_set.get_shape(key_arr)
-        all_shapes.append(col_shape[0])
+        if col_shape:
+            all_shapes.append(col_shape[0])
 
     if aggregate_node.pivot_arr is not None:
         col_shape = equiv_set.get_shape(aggregate_node.pivot_arr)
-        all_shapes.append(col_shape[0])
+        if col_shape:
+            all_shapes.append(col_shape[0])
 
     for col_var in aggregate_node.df_in_vars.values():
         col_shape = equiv_set.get_shape(col_var)
-        all_shapes.append(col_shape[0])
+        if col_shape:
+            all_shapes.append(col_shape[0])
 
     if len(all_shapes) > 1:
         equiv_set.insert_equiv(*all_shapes)
