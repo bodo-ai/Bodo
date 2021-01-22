@@ -447,10 +447,14 @@ def _gen_pq_reader_py(
         if ret_type != None:
             local_types[ret_type] = c_typ
 
-    first_partition_col = col_names.index(partition_names[0])
     for part_col_idx, part_name in enumerate(partition_names):
-        part_type = out_types[first_partition_col + part_col_idx].dtype
-        ret_type, cat_dtype, cat_dtype_name, func_text = gen_column_partition(func_text, part_col_idx, part_name, part_type)
+        try:
+            col_idx = col_names.index(part_name)
+        except ValueError:
+            # this partition column has not been selected for read
+            continue
+        part_col_type = out_types[col_idx].dtype
+        cat_dtype, cat_dtype_name, func_text = gen_column_partition(func_text, part_col_idx, part_name, part_col_type)
         local_types[cat_dtype_name] = cat_dtype
 
     func_text += "  del_dataset_reader(ds_reader)\n"
@@ -580,11 +584,10 @@ def gen_column_partition(
     func_text += "  {}_size = get_column_size_parquet(ds_reader, 0)\n".format(cname)
     # Check if there was an error in the C++ code. If so, raise it.
     func_text += "  bodo.utils.utils.check_and_propagate_cpp_exception()\n"
-    ret_type = "part_col_typ_{}".format(part_col_idx)
     func_text += "  {} = bodo.hiframes.pd_categorical_ext.alloc_categorical_array({}_size, {})\n".format(cname, cname, cat_dtype_name)
     cat_int_dtype = bodo.hiframes.pd_categorical_ext.get_categories_int_type(partition_type)
     func_text += "  pq_gen_partition_column(ds_reader, {}, {}.codes.ctypes, np.int32({}))\n".format(part_col_idx, cname, bodo.utils.utils.numba_to_c_type(cat_int_dtype))
-    return ret_type, cat_dtype, cat_dtype_name, func_text
+    return cat_dtype, cat_dtype_name, func_text
 
 
 def _gen_alloc(c_type, cname, alloc_size, el_type):
