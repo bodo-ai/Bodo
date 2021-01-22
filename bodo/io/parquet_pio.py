@@ -394,6 +394,13 @@ distributed_pass.distributed_run_extensions[
 ] = pq_distributed_run
 
 
+@numba.njit
+def get_filters_pyobject(filters):
+    with numba.objmode(filters_py="parquet_predicate_type"):
+        filters_py = filters
+    return filters_py
+
+
 def _gen_pq_reader_py(
     col_names,
     col_indices,
@@ -414,8 +421,7 @@ def _gen_pq_reader_py(
     func_text = f"def pq_reader_py(fname,{extra_args}):\n"
     # if it's an s3 url, get the region and pass it into the c++ code
     func_text += "  bucket_region = bodo.io.fs_io.get_s3_bucket_region_njit(fname)\n"
-    func_text += "  with bodo.objmode(filters='parquet_predicate_type'):\n"
-    func_text += f"    filters = {filter_str}\n"
+    func_text += f"  filters = get_filters_pyobject({filter_str})\n"
     # open a DatasetReader, which is a C++ object defined in _parquet.cpp that
     # contains file readers for the files from which this process needs to read,
     # and other information to read this process' chunk
@@ -482,6 +488,7 @@ def _gen_pq_reader_py(
         "read_parquet_arrow_array": read_parquet_arrow_array,
         "pq_gen_partition_column": _pq_gen_partition_column,
         "unicode_to_utf8": unicode_to_utf8,
+        "get_filters_pyobject": get_filters_pyobject,
         "NS_DTYPE": np.dtype("M8[ns]"),
         "np": np,
         "bodo": bodo,
