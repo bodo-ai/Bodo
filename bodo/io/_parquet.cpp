@@ -142,6 +142,26 @@ PyMODINIT_FUNC PyInit_parquet_cpp(void) {
     return m;
 }
 
+void get_partition_info(DatasetReader *ds_reader, PyObject *piece) {
+    PyObject *partition_keys_py = PyObject_GetAttrString(piece, "partition_keys");
+    if (PyList_Size(partition_keys_py) > 0) {
+        ds_reader->part_vals.emplace_back();
+        std::vector<int64_t> &vals = ds_reader->part_vals.back();
+
+        PyObject *part_keys_iter = PyObject_GetIter(partition_keys_py);
+        Py_DECREF(partition_keys_py);
+        PyObject *key_val_tuple;
+        while ((key_val_tuple = PyIter_Next(part_keys_iter))) {
+            PyObject* part_val_py = PyTuple_GetItem(key_val_tuple, 1);
+            int64_t part_val = PyLong_AsLongLong(part_val_py);
+            vals.emplace_back(part_val);
+            Py_DECREF(part_val_py);
+            Py_DECREF(key_val_tuple);
+        }
+        Py_DECREF(part_keys_iter);
+    }
+}
+
 DatasetReader *get_dataset_reader(char *file_name, bool parallel,
                                   char *bucket_region, PyObject* filters) {
     try {
@@ -200,6 +220,9 @@ DatasetReader *get_dataset_reader(char *file_name, bool parallel,
                     const char *c_path = PyUnicode_AsUTF8(p);
                     // store the filename for this piece
                     ds_reader->filepaths.push_back(c_path);
+                    // for this parquet file: store partition value of each
+                    // partition column in ds_reader
+                    get_partition_info(ds_reader, piece);
                     Py_DECREF(p);
                 }
                 Py_DECREF(piece);
@@ -255,28 +278,9 @@ DatasetReader *get_dataset_reader(char *file_name, bool parallel,
                 PyObject *p = PyObject_GetAttrString(piece, "path");
                 const char *c_path = PyUnicode_AsUTF8(p);
                 ds_reader->filepaths.push_back(c_path);
-
                 // for this parquet file: store partition value of each
                 // partition column in ds_reader
-                PyObject *partition_keys_py = PyObject_GetAttrString(piece, "partition_keys");
-                if (PyList_Size(partition_keys_py) > 0) {
-
-                    ds_reader->part_vals.emplace_back();
-                    std::vector<int64_t> &vals = ds_reader->part_vals.back();
-
-                    PyObject *part_keys_iter = PyObject_GetIter(partition_keys_py);
-                    Py_DECREF(partition_keys_py);
-                    PyObject *key_val_tuple;
-                    while ((key_val_tuple = PyIter_Next(part_keys_iter))) {
-                        PyObject* part_val_py = PyTuple_GetItem(key_val_tuple, 1);
-                        int64_t part_val = PyLong_AsLongLong(part_val_py);
-                        vals.emplace_back(part_val);
-                        Py_DECREF(part_val_py);
-                        Py_DECREF(key_val_tuple);
-                    }
-                    Py_DECREF(part_keys_iter);
-                }
-
+                get_partition_info(ds_reader, piece);
                 Py_DECREF(p);
             }
 
@@ -601,15 +605,23 @@ template <typename T>
 void pq_gen_partition_column_T(DatasetReader *ds_reader, int64_t part_col_idx,
                                T *out_data) {
     T *cur_offset = out_data;
+    int64_t rows_filled = 0;
+    int64_t start = ds_reader->start_row_first_file;
     for (size_t i=0; i < ds_reader->filepaths.size(); i++) {
         std::shared_ptr<parquet::arrow::FileReader> file_reader;
         pq_init_reader(ds_reader->filepaths[i].c_str(), &file_reader,
                        ds_reader->bucket_region.c_str());
         // XXX get number of rows from first column in parquet file
         int64_t file_size = pq_get_size_single_file(file_reader, 0);
+        int64_t rows_to_fill =
+            std::min(ds_reader->count - rows_filled, file_size - start);
+
         int64_t part_val = ds_reader->part_vals[i][part_col_idx];
-        std::fill(cur_offset, cur_offset + file_size, part_val);
-        cur_offset += file_size;
+        std::fill(cur_offset, cur_offset + rows_to_fill, part_val);
+
+        cur_offset += rows_to_fill;
+        rows_filled += rows_to_fill;
+        start = 0;  // start becomes 0 after reading non-empty first chunk
     }
 }
 

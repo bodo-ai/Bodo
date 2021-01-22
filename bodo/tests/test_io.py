@@ -899,6 +899,25 @@ def test_read_write_parquet():
         bodo.jit(error_check3)(df)
 
 
+def test_read_partitions():
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    try:
+        if bodo.get_rank() == 0:
+            table = pa.table({'a': range(10), 'b': np.random.randn(10), 'c': [1, 2] * 5, 'part': ['a'] * 5 + ['b'] * 5})
+            pq.write_to_dataset(table, "pq_data", partition_cols=['part'])
+        bodo.barrier()
+
+        def impl(path):
+            return pd.read_parquet(path)
+
+        check_func(impl, ("pq_data",))
+    finally:
+        if bodo.get_rank() == 0:
+            shutil.rmtree("pq_data", ignore_errors=True)
+
+
 # TODO: Add memory_leak_check when bugs are resolved.
 def test_write_parquet_empty_chunks():
     """Here we check that our to_parquet output in distributed mode

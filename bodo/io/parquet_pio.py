@@ -236,7 +236,6 @@ class ParquetHandler:
                         col_nb_fields,
                         null_col_map,
                         partition_names,
-                        partition_col_types,
                     ) = typ.schema
                     got_schema = True
             if not got_schema:
@@ -248,7 +247,6 @@ class ParquetHandler:
                     col_nb_fields,
                     null_col_map,
                     partition_names,
-                    partition_col_types,
                 ) = parquet_file_schema(file_name_str, columns)
         else:
             col_names_total = list(table_types.keys())
@@ -279,7 +277,6 @@ class ParquetHandler:
             # Initialize null_col_map. See parquet_file_schema for definition.
             null_col_map = [False] * len(col_names)
             partition_names = None
-            partition_col_types = None
 
         # HACK convert types using decorator for int columns with NaN
         for i, c in enumerate(col_names):
@@ -287,7 +284,6 @@ class ParquetHandler:
                 col_types[i] = convert_types[c]
 
         data_arrs = [ir.Var(scope, mk_unique_var(c), loc) for c in col_names]
-        part_arrs = [ir.Var(scope, mk_unique_var(c), loc) for c in partition_names]
 
         nodes = [
             bodo.ir.parquet_ext.ParquetReader(
@@ -301,8 +297,6 @@ class ParquetHandler:
                 loc,
                 null_col_map,
                 partition_names,
-                partition_col_types,
-                part_arrs,
             )
         ]
 
@@ -314,7 +308,7 @@ def pq_distributed_run(pq_node, array_dists, typemap, calltypes, typingctx, targ
     data read.
     """
 
-    n_cols = len(pq_node.out_vars) + len(pq_node.part_vars)
+    n_cols = len(pq_node.out_vars)
     filter_vars = []
     extra_args = ""
     filter_str = "None"
@@ -371,7 +365,6 @@ def pq_distributed_run(pq_node, array_dists, typemap, calltypes, typingctx, targ
         pq_node.out_types,
         pq_node.null_col_map,
         pq_node.partition_names,
-        pq_node.partition_col_types,
         filter_str,
         extra_args,
         typingctx,
@@ -390,13 +383,9 @@ def pq_distributed_run(pq_node, array_dists, typemap, calltypes, typingctx, targ
     replace_arg_nodes(f_block, [pq_node.file_name] + filter_vars)
     nodes = f_block.body[:-3]
 
-    n_data_cols = len(pq_node.out_vars)
-    for i in range(n_data_cols):
+    for i in range(n_cols):
         nodes[2 * (i - n_cols)].target = pq_node.out_vars[i]
 
-    n_part_cols = len(pq_node.part_vars)
-    for i in range(n_data_cols, n_data_cols + n_part_cols):
-        nodes[2 * (i - n_cols)].target = pq_node.part_vars[i - n_data_cols]
 
     return nodes
 
@@ -413,7 +402,6 @@ def _gen_pq_reader_py(
     out_types,
     null_col_map,
     partition_names,
-    partition_col_types,
     filter_str,
     extra_args,
     typingctx,
@@ -444,6 +432,8 @@ def _gen_pq_reader_py(
     for c_name, (real_col_ind, col_ind), col_siz, c_typ, is_all_null in zip(
         col_names, col_indices, col_nb_fields, out_types, null_col_map
     ):
+        if c_name == partition_names[0]:
+            break
         ret_type, func_text = gen_column_read(
             func_text,
             c_name,
@@ -457,14 +447,15 @@ def _gen_pq_reader_py(
         if ret_type != None:
             local_types[ret_type] = c_typ
 
+    first_partition_col = col_names.index(partition_names[0])
     for part_col_idx, part_name in enumerate(partition_names):
-        part_type = partition_col_types[part_col_idx]
+        part_type = out_types[first_partition_col + part_col_idx].dtype
         ret_type, cat_dtype, cat_dtype_name, func_text = gen_column_partition(func_text, part_col_idx, part_name, part_type)
         local_types[cat_dtype_name] = cat_dtype
 
     func_text += "  del_dataset_reader(ds_reader)\n"
     func_text += "  return ({},)\n".format(
-        ", ".join("{0}, {0}_size".format(sanitize_varname(c)) for c in col_names + partition_names)
+        ", ".join("{0}, {0}_size".format(sanitize_varname(c)) for c in col_names)
     )
     loc_vars = {}
     glbs = {
@@ -578,7 +569,7 @@ def gen_column_partition(
     func_text, part_col_idx, partition_name, partition_type,
 ):
     cname = sanitize_varname(partition_name)
-    cat_dtype = pd.CategoricalDtype(partition_type.categories, True)
+    cat_dtype = pd.CategoricalDtype(partition_type.categories, partition_type.ordered)
     cat_dtype_name = "part_pd_cat_dtype_{}".format(part_col_idx)
 
     # handle size variables
@@ -1059,13 +1050,9 @@ def parquet_file_schema(file_name, selected_columns):
 
     # add partition column data types if any
     if partition_names:
-        #col_names += partition_names
-        #null_col_map += [False] * len(partition_names)
-        #col_types_total += [
-        #    _get_partition_cat_dtype(pq_dataset.partitions.levels[i])
-        #    for i in range(len(partition_names))
-        #]
-        partition_col_types = [
+        col_names += partition_names
+        null_col_map += [False] * len(partition_names)
+        col_types_total += [
             _get_partition_cat_dtype(pq_dataset.partitions.levels[i])
             for i in range(len(partition_names))
         ]
@@ -1116,7 +1103,6 @@ def parquet_file_schema(file_name, selected_columns):
         col_nb_fields,
         null_col_map,
         partition_names,
-        partition_col_types,
     )
 
 
@@ -1126,9 +1112,10 @@ def _get_partition_cat_dtype(part_set):
     # right data type (e.g. string instead of int64)
     S = part_set.dictionary.to_pandas()
     elem_type = bodo.typeof(S).dtype
-    return bodo.hiframes.pd_categorical_ext.PDCategoricalDtype(
+    cat_dtype = bodo.hiframes.pd_categorical_ext.PDCategoricalDtype(
         tuple(S), elem_type, False
     )
+    return bodo.hiframes.pd_categorical_ext.CategoricalArray(cat_dtype)
 
 
 _get_dataset_reader = types.ExternalFunction(
