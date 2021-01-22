@@ -46,7 +46,7 @@ std::shared_ptr<arrow::fs::S3FileSystem> get_s3_fs(std::string bucket_region) {
         arrow::Status status;
         // initialize S3 APIs
         arrow::fs::S3GlobalOptions g_options;
-        // g_options.log_level = arrow::fs::S3LogLevel::Trace;
+        g_options.log_level = arrow::fs::S3LogLevel::Off;
         status = arrow::fs::InitializeS3(g_options);
         CHECK_ARROW(status, "InitializeS3");
 
