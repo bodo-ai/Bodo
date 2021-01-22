@@ -29,7 +29,7 @@ requirements:
     - libcurl
     - hdf5 * mpi_mpich_* # [not win]
     - h5py
-    - mpich # [not win]
+    - mpich =3.3.2=h* # [not win]
     - impi-devel # [win]
     - impi_rt # [win]
     - vc # [win]
@@ -47,7 +47,7 @@ requirements:
     - openjdk =8
     - sqlalchemy
     - s3fs >=0.4.2
-    - mpich # [not win]
+    - mpich =3.3.2=h* # [not win]
     - mpi4py
     - impi_rt # [win]
     - vs2015_runtime # [win]
