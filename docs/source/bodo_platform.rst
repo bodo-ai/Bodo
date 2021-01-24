@@ -289,6 +289,66 @@ while the dropdown allows opening the notebook in a new tab.
     :align: center
     :alt: Notebook-Status-Finished
 
+.. _ssh_into_your_cluster
+
+SSH Into Your Cluster
+---------------------
+We recommend interacting with clusters primarily through Notebook
+instances and Jobs. However, it may be necessary to connect directly to a cluster using ssh.
+This requires providing ssh public key during cluster creation.
+
+First, navigate to the clusters tabs and select `Create a Cluster`. Click on
+`Show Advanced` and add your public key in `SSH Public Key`.
+Then, click on ``Add your IP`` in the `Access from IP address` section to enable
+accessing your cluster from your machine.
+
+.. image:: platform_onboarding_screenshots/cluster-create-advanced-settings.png
+    :align: center
+    :alt: Cluster-Creation-Advanced-Settings
+
+Fill the rest of the form by following the steps in :ref:`creating_clusters`.
+
+After cluster creation is finished, click on `DETAILS` to find the list of IP
+addresses for your cluster nodes. Use any of the IP addresses as the ssh
+destination. In addition, also copy the cluster UUID which will be needed
+to execute commands across the cluster.
+
+.. image:: platform_onboarding_screenshots/cluster-ip-info.png
+    :align: center
+    :alt: Cluster-IP-Info
+
+In any ssh agent, you can connect to one of your nodes with::
+   
+   ssh -i <path_to_private_key> bodo@<IP_ADDRESS>
+
+To add additional ssh options please refer to the documentation 
+for your ssh agent.
+
+Once you have connected to a node in your cluster, you should verify that
+you can run operations across all the instances in the cluster.
+
+#. Verify the path to the hostfile for your cluster. You can find
+   it by running::
+      
+      ls -la /shared/.hostfile-<CLUSTER UUID>
+
+
+#. Check that you can run a command across you cluster. To do this, run::
+   
+      mpiexec -n <TOTAL_CORE_COUNT> -f /shared/.hostfile-<CLUSTER UUID> hostname
+    
+   This will print one line per each core in the cluster, with one unique hostname
+   per cluster node.
+
+#. Verify that you can run a python command across your cluster. For example, run::
+      
+      mpiexec -n <TOTAL_CORE_COUNT> -f /shared/.hostfile-<CLUSTER_UUID> python --version
+
+
+If all commands succeed, you should be able to execute workloads across your cluster.
+You can place scripts and small data that are shared across cluster nodes in ``/shared``.
+However, external storage, such as S3, should be used for reading and writing large data.
+
 .. _running_a_job:
 
 Running a Job
