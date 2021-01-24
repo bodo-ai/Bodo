@@ -553,6 +553,15 @@ class UntypedPass:
             return var_def.attr
         if is_expr(var_def, "static_getitem") and var_def.value.name == df_var.name:
             return var_def.index
+        # handle case with calls like df["A"].astype(int) > 2
+        if is_call(var_def):
+            fdef = find_callname(self.func_ir, var_def)
+            require(
+                isinstance(fdef, tuple)
+                and len(fdef) == 2
+                and isinstance(fdef[1], ir.Var)
+            )
+            return self._get_col_name(fdef[1], df_var)
 
         require(is_expr(var_def, "getitem"))
         require(var_def.value.name == df_var.name)
