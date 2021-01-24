@@ -1,19 +1,15 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 import operator
-from collections.abc import Iterable
 
 import numba
 import numpy as np
 import pandas as pd
-from llvmlite import ir as lir
 from numba.core import cgutils, types
 from numba.core.imputils import lower_constant
 from numba.extending import (
     NativeValue,
     box,
     intrinsic,
-    lower_builtin,
-    lower_cast,
     make_attribute_wrapper,
     models,
     overload,
@@ -21,19 +17,18 @@ from numba.extending import (
     overload_method,
     register_jitable,
     register_model,
-    type_callable,
     typeof_impl,
     unbox,
 )
 from numba.parfors.array_analysis import ArrayAnalysis
 
 import bodo
-from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.utils.typing import (
     NOT_CONSTANT,
-    BodoError,
+    get_literal_value,
     get_overload_const,
     is_list_like_index_type,
+    is_literal_type,
     is_overload_constant_bool,
     is_overload_true,
 )
@@ -274,10 +269,23 @@ def box_categorical_array(typ, val, c):
 
 
 # TODO: handle all ops
-@overload(operator.eq, no_unliteral=True)
-def overload_cat_arr_eq_str(A, other):
-    if isinstance(A, CategoricalArray) and isinstance(other, types.StringLiteral):
-        other_idx = list(A.dtype.categories).index(other.literal_value)
+@overload(operator.eq, inline="always", no_unliteral=True)
+def overload_cat_arr_eq(A, other):
+    if not isinstance(A, CategoricalArray):
+        return
+
+    # TODO(ehsan): proper error checking for invalid comparison
+
+    # code for 'other' can be determined ahead of time
+    if (
+        A.dtype.categories
+        and is_literal_type(other)
+        and types.unliteral(other) == A.dtype.elem_type
+    ):
+        val = get_literal_value(other)
+        other_idx = (
+            list(A.dtype.categories).index(val) if val in A.dtype.categories else -2
+        )
 
         def impl(A, other):  # pragma: no cover
             out_arr = A.codes == other_idx
@@ -285,12 +293,32 @@ def overload_cat_arr_eq_str(A, other):
 
         return impl
 
+    def impl(A, other):  # pragma: no cover
+        other_idx = get_code_for_value(A.dtype, other)
+        out_arr = A.codes == other_idx
+        return out_arr
+
+    return impl
+
+
+@numba.njit
+def get_code_for_value(cat_dtype, val):
+    """get categorical code for value 'val' by finding its index in categories"""
+    # TODO(ehsan): use get_loc when support by arrays
+    cat_arr = cat_dtype.categories
+    n = len(cat_arr)
+    for i in range(n):
+        if cat_arr[i] == val:
+            return i
+
+    return -2
+
 
 # HACK: dummy overload for CategoricalDtype to avoid type inference errors
 # TODO: implement dtype properly
 @overload(pd.api.types.CategoricalDtype, no_unliteral=True)
 def cat_overload_dummy(val_list):
-    return lambda val_list: 1
+    return lambda val_list: 1  # pragma: no cover
 
 
 @intrinsic
@@ -334,7 +362,6 @@ def alloc_categorical_array(n, cat_dtype):  # pragma: no cover
     """Wrapper to the allocator so the int type
     for the codes can be extracted via an overload.
     """
-    pass
 
 
 # high-level allocation function for categorical arrays
@@ -365,7 +392,7 @@ ArrayAnalysis._analyze_op_call_bodo_hiframes_pd_categorical_ext_alloc_categorica
 # using a function for getting data to enable extending various analysis
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
 def get_categorical_arr_codes(A):
-    return lambda A: A.codes
+    return lambda A: A.codes  # pragma: no cover
 
 
 def alias_ext_dummy_func(lhs_name, args, alias_map, arg_aliases):
@@ -621,17 +648,17 @@ def cat_replace_overload(arr, to_replace, value):
 @overload(len, no_unliteral=True)
 def overload_cat_arr_len(A):
     if isinstance(A, CategoricalArray):
-        return lambda A: len(A.codes)
+        return lambda A: len(A.codes)  # pragma: no cover
 
 
 @overload_attribute(CategoricalArray, "shape")
 def overload_cat_arr_shape(A):
-    return lambda A: (len(A.codes),)
+    return lambda A: (len(A.codes),)  # pragma: no cover
 
 
 @overload_attribute(CategoricalArray, "ndim")
 def overload_cat_arr_ndim(A):
-    return lambda A: 1
+    return lambda A: 1  # pragma: no cover
 
 
 @numba.njit
