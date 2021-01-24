@@ -21,6 +21,7 @@ from numba.extending import (
     NativeValue,
     intrinsic,
     models,
+    overload,
     register_model,
     unbox,
 )
@@ -61,7 +62,7 @@ from bodo.libs.str_ext import string_type, unicode_to_utf8
 from bodo.libs.struct_arr_ext import StructArrayType
 from bodo.transforms import distributed_pass
 from bodo.utils.transform import get_const_value
-from bodo.utils.typing import BodoError, FileInfo
+from bodo.utils.typing import BodoError, FileInfo, get_overload_const_str
 from bodo.utils.utils import (
     check_and_propagate_cpp_exception,
     is_null_pointer,
@@ -394,11 +395,24 @@ distributed_pass.distributed_run_extensions[
 ] = pq_distributed_run
 
 
-@numba.njit
-def get_filters_pyobject(filters):
-    with numba.objmode(filters_py="parquet_predicate_type"):
-        filters_py = filters
-    return filters_py
+def get_filters_pyobject(filters, vars):  # pragma: no cover
+    pass
+
+
+@overload(get_filters_pyobject, no_unliteral=True)
+def overload_get_filters_pyobject(filter_str, var_tup):
+    """generate a pyobject for filter expression to pass to C++"""
+    filter_str_val = get_overload_const_str(filter_str)
+    var_unpack = ", ".join(f"f{i}" for i in range(len(var_tup)))
+    func_text = "def impl(filter_str, var_tup):\n"
+    if len(var_tup):
+        func_text += f"  {var_unpack}, = var_tup\n"
+    func_text += "  with numba.objmode(filters_py='parquet_predicate_type'):\n"
+    func_text += f"    filters_py = {filter_str_val}\n"
+    func_text += "  return filters_py\n"
+    loc_vars = {}
+    exec(func_text, {"numba": numba}, loc_vars)
+    return loc_vars["impl"]
 
 
 def _gen_pq_reader_py(
@@ -418,10 +432,13 @@ def _gen_pq_reader_py(
         # in parallel read, we assume all columns are parallel
         assert col_names == parallel
     is_parallel = len(parallel) > 0
+    comma = "," if extra_args else ""
     func_text = f"def pq_reader_py(fname,{extra_args}):\n"
     # if it's an s3 url, get the region and pass it into the c++ code
     func_text += "  bucket_region = bodo.io.fs_io.get_s3_bucket_region_njit(fname)\n"
-    func_text += f"  filters = get_filters_pyobject({filter_str})\n"
+    func_text += (
+        f'  filters = get_filters_pyobject("{filter_str}", ({extra_args}{comma}))\n'
+    )
     # open a DatasetReader, which is a C++ object defined in _parquet.cpp that
     # contains file readers for the files from which this process needs to read,
     # and other information to read this process' chunk
