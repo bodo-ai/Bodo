@@ -25,6 +25,7 @@ from numba.parfors.array_analysis import ArrayAnalysis
 import bodo
 from bodo.utils.typing import (
     NOT_CONSTANT,
+    BodoError,
     get_literal_value,
     get_overload_const,
     is_list_like_index_type,
@@ -314,6 +315,33 @@ def get_code_for_value(cat_dtype, val):
     return -2
 
 
+@overload_method(CategoricalArray, "astype", inline="always", no_unliteral=True)
+def overload_cat_arr_astype(A, dtype, copy=True):
+    nb_dtype = bodo.utils.typing.parse_dtype(dtype)
+    # only supports converting back to original data currently
+    if not nb_dtype == A.dtype.elem_type:  # pragma: no cover
+        raise BodoError(
+            f"Converting categorical array {A} to dtype {dtype} not supported yet"
+        )
+
+    arr_type = bodo.hiframes.pd_series_ext._get_series_array_type(nb_dtype)
+
+    def impl(A, dtype, copy=True):  # pragma: no cover
+        codes = bodo.hiframes.pd_categorical_ext.get_categorical_arr_codes(A)
+        categories = A.dtype.categories
+        n = len(codes)
+        out_arr = bodo.utils.utils.alloc_type(n, arr_type, (-1,))
+        for i in numba.parfors.parfor.internal_prange(n):
+            s = codes[i]
+            if s == -1:
+                bodo.libs.array_kernels.setna(out_arr, i)
+                continue
+            out_arr[i] = categories[s]
+        return out_arr
+
+    return impl
+
+
 # HACK: dummy overload for CategoricalDtype to avoid type inference errors
 # TODO: implement dtype properly
 @overload(pd.api.types.CategoricalDtype, no_unliteral=True)
@@ -411,7 +439,9 @@ numba.core.ir_utils.alias_func_extensions[
 
 @overload_method(CategoricalArray, "copy", no_unliteral=True)
 def cat_arr_copy_overload(arr):
-    return lambda arr: init_categorical_array(arr.codes.copy(), arr.dtype)
+    return lambda arr: init_categorical_array(
+        arr.codes.copy(), arr.dtype
+    )  # pragma: no cover
 
 
 def build_replace_dicts(to_replace, value, categories):  # pragma: no cover

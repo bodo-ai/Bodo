@@ -556,6 +556,8 @@ def parse_dtype(dtype):
             dtype = types.StringLiteral("int")
         elif dtype.key[0] == np.bool:
             dtype = types.StringLiteral("bool")
+        elif dtype.key[0] == str:
+            dtype = bodo.string_type
 
     if isinstance(dtype, types.DTypeSpec):
         return dtype.dtype
