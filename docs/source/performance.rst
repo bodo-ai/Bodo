@@ -1,22 +1,16 @@
 .. _performance:
 
 Performance Measurement
-===========================
+=======================
 
-In this section, we show some tips on how Bodo's performance can be measured.
+This section provides tips on performance measurement of Bodo programs. It is important to keep the following in mind when measuring program run time:
 
-------------------
+    #. Every program has some overhead, so large data sets may be necessary for useful measurements.
+    #. Performance can vary from one run to another. Several measurements are always needed.
+    #. It is important to use a sequence of tests with increasing input size, which helps understand the impact of problem size on program performance.
+    #. It is useful to use simple programs to study performance factors. Complex program are impacted by multiple factors and their performance is harder to understand.
+    #. Longer computations typically provide more reliable run time information.
 
-To obtain accurate performance measurements, it is important to keep following points in mind when trying to determine running times:
-
-    1. Every program has overhead and one may need a large data set in order to get useful measurement.
-    2. Performance can vary from one run to another. Several measurements are always needed.
-    3. It is important to have not just one test but instead a sequence of tests of increasing size in order to see how the program behaves with problems of increasing size.
-    4. Running on 1, 2 or more processors is important as more than one factor can impact.
-    5. For interesting computation, it is useful to consider simple programs. Complex program are impacted by multiple factors and their performance harder to understand.
-    6. Long computation typically give more reliable running time information.
-
-------------------
 
 Since Bodo decorated functions are `JIT-compiled <https://numba.pydata.org/numba-doc/dev/reference/jit-compilation.html>`_, the compilation time is non-negligible but it only happens once. To avoid measuring compilation time, place timers inside the functions. For example::
 
@@ -53,7 +47,6 @@ The output of this code is as follows::
 	Execution time: 2.165610068012029
 	result: 3.14154512
 
-------------------
 
 Bodo's parallel speedup can be measured similarly::
 
@@ -82,11 +75,12 @@ Launched on four parallel cores::
 	Execution time: 0.5736249439651147
 	result: 3.14161474
 
-And the time it takes can be compared with python performance. Here, we have a :code:`5.06/0.57 ~= 9x` parallel speedup.
+And the time it takes can be compared with python performance. Here, we have a :code:`5.06/0.57 ~= 9x` speedup
+(from parallelism and sequential optimizations).
 
-------------------
 
-You can also have multiple timers inside a function to see how much time each section takes::
+
+We can add multiple timers inside a function to see how much time each section takes::
 
 	"""
 	calc_pi.py: computes the value of Pi using Monte-Carlo Integration
@@ -148,3 +142,17 @@ This can be done by setting the environment variable
 which makes the `jit` decorators act as if they
 perform no operation. In this case, the invocation of decorated
 functions calls the original Python functions instead of compiled versions.
+
+
+Expected Speedup
+~~~~~~~~~~~~~~~~
+
+The speed up achieved using Bodo depends on various factors such as problem size,
+parallel overheads of the operations, and the hardware platform's attributes.
+For example, the program above can scale almost linearly
+(e.g. 100 speed up on 100 cores)
+for large enough problem sizes, since the only communication overhead is
+parallel summation of the partial sums obtained by `np.sum` on each processor.
+On the other hand, some operations such as join and groupby operations
+require significantly larger communication of data, requiring fast cluster
+interconnection networks to scale to large number of cores.
