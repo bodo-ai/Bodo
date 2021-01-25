@@ -647,14 +647,21 @@ void pq_gen_partition_column_T(DatasetReader *ds_reader, int64_t part_col_idx,
 // populate categorical column for partition columns
 void pq_gen_partition_column(DatasetReader *ds_reader, int64_t part_col_idx,
                              void *out_data, int32_t cat_dtype) {
-    switch (cat_dtype) {
-        case Bodo_CTypes::INT8:
-            return pq_gen_partition_column_T<int8_t>(ds_reader, part_col_idx, (int8_t*)out_data);
-        case Bodo_CTypes::INT64:
-            return pq_gen_partition_column_T<int64_t>(ds_reader, part_col_idx, (int64_t*)out_data);
-        default:
-            fprintf(stderr, "TODO\n");
-            exit(1);
+    try {
+        switch (cat_dtype) {
+            case Bodo_CTypes::INT8:
+                return pq_gen_partition_column_T<int8_t>(ds_reader, part_col_idx, (int8_t*)out_data);
+            case Bodo_CTypes::INT16:
+                return pq_gen_partition_column_T<int16_t>(ds_reader, part_col_idx, (int16_t*)out_data);
+            case Bodo_CTypes::INT32:
+                return pq_gen_partition_column_T<int32_t>(ds_reader, part_col_idx, (int32_t*)out_data);
+            case Bodo_CTypes::INT64:
+                return pq_gen_partition_column_T<int64_t>(ds_reader, part_col_idx, (int64_t*)out_data);
+            default:
+                throw std::runtime_error("pq_gen_partition_column: unrecognized categorical dtype");
+        }
+    } catch (const std::exception &e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
     }
 }
 

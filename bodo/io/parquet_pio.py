@@ -627,6 +627,7 @@ def gen_column_partition(
     func_text += "  pq_gen_partition_column(ds_reader, {}, {}.codes.ctypes, np.int32({}))\n".format(
         part_col_idx, cname, bodo.utils.utils.numba_to_c_type(cat_int_dtype)
     )
+    func_text += "  bodo.utils.utils.check_and_propagate_cpp_exception()\n"
     return cat_dtype, cat_dtype_name, func_text
 
 
