@@ -925,6 +925,13 @@ def test_read_partitions():
             df = pd.read_parquet(path)
             return df[df["part"] == val]
 
+        # make sure filtering doesn't happen if df is used before filtering
+        def impl3(path, val):
+            df = pd.read_parquet(path)
+            n = len(df)
+            n2 = len(df[df["part"] == val])
+            return n, n2
+
         check_func(impl, ("pq_data",))
         check_func(impl2, ("pq_data", "a"))
         # make sure the ParquetReader node has filters parameter set
@@ -939,6 +946,7 @@ def test_read_partitions():
                 pq_read_found = True
                 break
         assert pq_read_found
+        check_func(impl3, ("pq_data", "a"))
     finally:
         if bodo.get_rank() == 0:
             shutil.rmtree("pq_data", ignore_errors=True)

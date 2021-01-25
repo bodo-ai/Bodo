@@ -357,19 +357,20 @@ class UntypedPass:
         # make sure all filters have the right form
         lhs_def = get_definition(self.func_ir, index_def.lhs)
         rhs_def = get_definition(self.func_ir, index_def.rhs)
+        df_var = assign.value.value
         filters = self._get_partition_filters(
             index_def,
             read_pq_node.partition_names,
-            assign.value.value,
+            df_var,
             lhs_def,
             rhs_def,
         )
-        self._reorder_filter_nodes(read_pq_node, index_def, filters)
+        self._reorder_filter_nodes(read_pq_node, index_def, df_var, filters)
         # set ParquetReader node filters (no exception was raise until this end point
         # so filters are valid)
         read_pq_node.filters = filters
 
-    def _reorder_filter_nodes(self, read_pq_node, index_def, filters):
+    def _reorder_filter_nodes(self, read_pq_node, index_def, df_var, filters):
         """reorder nodes that are used for Parquet partition filtering to be before the
         ParquetReader node (to be accessible when ParquetReader is run).
         Throws GuardException if not possible.
@@ -386,15 +387,35 @@ class UntypedPass:
         # nodes used for filtering output dataframe use filter vars as well but should
         # be excluded since they have dependency to data arrays (e.g. df["A"] == 3)
         filter_nodes = self._get_filter_nodes(index_def)
+        # get all variables related to filtering nodes in some way, to make sure df is
+        # not used in other ways before filtering
+        # e.g.
+        # df = pd.read_parquet("../tmp/pq_data3")
+        # n = len(df)
+        # df = df[df["A"] == 2]
+        related_vars = {v.name for v in index_def.list_vars()}
         for stmt in reversed(self._working_body):
             i += 1
             # ignore dataframe filter expression nodes
             if is_assign(stmt) and stmt.value in filter_nodes:
                 continue
+            # handle df = $1
+            if (
+                is_assign(stmt)
+                and stmt.target.name == df_var.name
+                and isinstance(stmt.value, ir.Var)
+            ):
+                continue
             # avoid nodes before the reader
             if stmt is read_pq_node:
                 break
             stmt_vars = {v.name for v in stmt.list_vars()}
+
+            # make sure df is not used before filtering
+            if not stmt_vars & related_vars:
+                require(df_var.name not in stmt_vars)
+            else:
+                related_vars |= stmt_vars - {df_var.name}
 
             if stmt_vars & filter_vars:
                 filter_vars |= stmt_vars
