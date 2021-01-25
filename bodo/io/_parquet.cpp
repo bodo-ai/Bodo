@@ -30,6 +30,10 @@
 struct DatasetReader {
     // Filepaths, only for the files that this process has to read
     std::vector<std::string> filepaths;
+    // for each file in filepaths, store the value of each partition
+    // column (value is stored as the categorical code). Note that a given
+    // file has the same partition value for all of its rows
+    std::vector<std::vector<int64_t>> part_vals;
     // If S3, then store the bucket region here
     std::string bucket_region = "";
     /// Starting row for first file (files[0])
@@ -43,9 +47,12 @@ struct DatasetReader {
  * needs.
  * @param file_name : file or directory of parquet files
  * @param is_parallel : true if processes will read chunks of the dataset
+ * @param bucket_region : S3 bucket region (when reading from S3)
+ * @param filters : PyObject passed to pyarrow.parquet.ParquetDataset filters argument
+ *                  to remove rows from scanned data
  */
 DatasetReader *get_dataset_reader(char *file_name, bool is_parallel,
-                                  char *bucket_region);
+                                  char *bucket_region, PyObject* filters);
 void del_dataset_reader(DatasetReader *reader);
 
 int64_t pq_get_size(DatasetReader *reader, int64_t column_idx);
@@ -65,6 +72,15 @@ int pq_read_arrow_array(DatasetReader *reader, int64_t real_column_idx,
                         int64_t *lengths, array_info **out_infos);
 void pack_null_bitmap(uint8_t *out_nulls, std::vector<bool> &null_vec,
                       int64_t n_all_vals);
+/**
+ * Fill partition column for this rank's chunk (in partitioned datasets).
+ * @param ds_reader : Dataset reader (only files that this rank reads)
+ * @param part_col_idx : Partition column index from 0 to # partitions - 1
+ * @param out_data : buffer to fill (allocated in code generated in parquet_pio.py)
+ * @param cat_dtype : int categorical dtype used to fill the array
+ */
+void pq_gen_partition_column(DatasetReader *ds_reader, int64_t part_col_idx,
+                             void *out_data, int32_t cat_dtype);
 void pq_write(const char *filename, const table_info *table,
               const array_info *col_names, const array_info *index,
               bool write_index, const char *metadata, const char *compression,
@@ -122,6 +138,8 @@ PyMODINIT_FUNC PyInit_parquet_cpp(void) {
                            PyLong_FromVoidPtr((void *)(&pq_read_array_item)));
     PyObject_SetAttrString(m, "pq_read_arrow_array",
                            PyLong_FromVoidPtr((void *)(&pq_read_arrow_array)));
+    PyObject_SetAttrString(m, "pq_gen_partition_column",
+                           PyLong_FromVoidPtr((void *)(&pq_gen_partition_column)));
     PyObject_SetAttrString(m, "pq_write",
                            PyLong_FromVoidPtr((void *)(&pq_write)));
     PyObject_SetAttrString(m, "get_stats_alloc",
@@ -136,8 +154,35 @@ PyMODINIT_FUNC PyInit_parquet_cpp(void) {
     return m;
 }
 
+
+/**
+ * Get values for all partition columns of a piece of pyarrow.parquet.ParquetDataset
+ * and store in ds_reader (see DatasetReader for details)
+ * @param ds_reader : Dataset reader (only files that this rank reads)
+ * @param piece : ParquetDataset piece (a single parquet file)
+ */
+void get_partition_info(DatasetReader *ds_reader, PyObject *piece) {
+    PyObject *partition_keys_py = PyObject_GetAttrString(piece, "partition_keys");
+    if (PyList_Size(partition_keys_py) > 0) {
+        ds_reader->part_vals.emplace_back();
+        std::vector<int64_t> &vals = ds_reader->part_vals.back();
+
+        PyObject *part_keys_iter = PyObject_GetIter(partition_keys_py);
+        Py_DECREF(partition_keys_py);
+        PyObject *key_val_tuple;
+        while ((key_val_tuple = PyIter_Next(part_keys_iter))) {
+            PyObject* part_val_py = PyTuple_GetItem(key_val_tuple, 1);
+            int64_t part_val = PyLong_AsLongLong(part_val_py);
+            vals.emplace_back(part_val);
+            Py_DECREF(part_val_py);
+            Py_DECREF(key_val_tuple);
+        }
+        Py_DECREF(part_keys_iter);
+    }
+}
+
 DatasetReader *get_dataset_reader(char *file_name, bool parallel,
-                                  char *bucket_region) {
+                                  char *bucket_region, PyObject* filters) {
     try {
 #ifdef DEBUG_NESTED_PARQUET
     std::cout << "GET_DATASET_READER, beginning\n";
@@ -151,8 +196,9 @@ DatasetReader *get_dataset_reader(char *file_name, bool parallel,
     PyObject *pq_mod = PyImport_ImportModule("bodo.io.parquet_pio");
 
     // ds = bodo.io.parquet_pio.get_parquet_dataset(file_name, parallel)
-    PyObject *ds = PyObject_CallMethod(pq_mod, "get_parquet_dataset", "si",
-                                       file_name, int(parallel));
+    PyObject *ds = PyObject_CallMethod(pq_mod, "get_parquet_dataset", "siOO",
+                                       file_name, int(parallel), Py_True, filters);
+    Py_DECREF(filters);
     if (PyErr_Occurred()) return NULL;
 
     Py_DECREF(pq_mod);
@@ -193,6 +239,9 @@ DatasetReader *get_dataset_reader(char *file_name, bool parallel,
                     const char *c_path = PyUnicode_AsUTF8(p);
                     // store the filename for this piece
                     ds_reader->filepaths.push_back(c_path);
+                    // for this parquet file: store partition value of each
+                    // partition column in ds_reader
+                    get_partition_info(ds_reader, piece);
                     Py_DECREF(p);
                 }
                 Py_DECREF(piece);
@@ -248,6 +297,9 @@ DatasetReader *get_dataset_reader(char *file_name, bool parallel,
                 PyObject *p = PyObject_GetAttrString(piece, "path");
                 const char *c_path = PyUnicode_AsUTF8(p);
                 ds_reader->filepaths.push_back(c_path);
+                // for this parquet file: store partition value of each
+                // partition column in ds_reader
+                get_partition_info(ds_reader, piece);
                 Py_DECREF(p);
             }
 
@@ -565,6 +617,51 @@ int pq_read_array_item(DatasetReader *ds_reader, int64_t real_column_idx,
     } catch (const std::exception &e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
         return -1;
+    }
+}
+
+template <typename T>
+void pq_gen_partition_column_T(DatasetReader *ds_reader, int64_t part_col_idx,
+                               T *out_data) {
+    T *cur_offset = out_data;
+    int64_t rows_filled = 0;
+    int64_t start = ds_reader->start_row_first_file;
+    for (size_t i=0; i < ds_reader->filepaths.size(); i++) {
+        std::shared_ptr<parquet::arrow::FileReader> file_reader;
+        pq_init_reader(ds_reader->filepaths[i].c_str(), &file_reader,
+                       ds_reader->bucket_region.c_str());
+        // XXX get number of rows from first column in parquet file
+        int64_t file_size = pq_get_size_single_file(file_reader, 0);
+        int64_t rows_to_fill =
+            std::min(ds_reader->count - rows_filled, file_size - start);
+
+        int64_t part_val = ds_reader->part_vals[i][part_col_idx];
+        std::fill(cur_offset, cur_offset + rows_to_fill, part_val);
+
+        cur_offset += rows_to_fill;
+        rows_filled += rows_to_fill;
+        start = 0;  // start becomes 0 after reading non-empty first chunk
+    }
+}
+
+// populate categorical column for partition columns
+void pq_gen_partition_column(DatasetReader *ds_reader, int64_t part_col_idx,
+                             void *out_data, int32_t cat_dtype) {
+    try {
+        switch (cat_dtype) {
+            case Bodo_CTypes::INT8:
+                return pq_gen_partition_column_T<int8_t>(ds_reader, part_col_idx, (int8_t*)out_data);
+            case Bodo_CTypes::INT16:
+                return pq_gen_partition_column_T<int16_t>(ds_reader, part_col_idx, (int16_t*)out_data);
+            case Bodo_CTypes::INT32:
+                return pq_gen_partition_column_T<int32_t>(ds_reader, part_col_idx, (int32_t*)out_data);
+            case Bodo_CTypes::INT64:
+                return pq_gen_partition_column_T<int64_t>(ds_reader, part_col_idx, (int64_t*)out_data);
+            default:
+                throw std::runtime_error("pq_gen_partition_column: unrecognized categorical dtype");
+        }
+    } catch (const std::exception &e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
     }
 }
 

@@ -1348,6 +1348,28 @@ class SeriesPass:
                 kws=dict(rhs.kws),
             )
 
+        # inline CategoricalArray.astype()
+        # TODO(ehsan): inline Series.astype() using inline="always" and avoid this
+        if (
+            isinstance(func_mod, ir.Var)
+            and isinstance(self.typemap[func_mod.name], CategoricalArray)
+            and func_name == "astype"
+        ):
+            rhs.args.insert(0, func_mod)
+            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
+            kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
+
+            impl = bodo.hiframes.pd_categorical_ext.overload_cat_arr_astype(
+                *arg_typs, **kw_typs
+            )
+            return replace_func(
+                self,
+                impl,
+                rhs.args,
+                pysig=numba.core.utils.pysignature(impl),
+                kws=dict(rhs.kws),
+            )
+
         # inlining SeriesStrMethod methods is necessary since they may be used in
         # df.query() which is handled in dataframe pass currently (TODO: use overload)
         if isinstance(func_mod, ir.Var) and isinstance(

@@ -189,6 +189,39 @@ def test_getitem_slice(cat_arr_value, memory_leak_check):
 
 
 @pytest.mark.slow
+def test_eq(memory_leak_check):
+    """test eq comparison of Categorical array and value"""
+    # literal value
+    def impl1(A):
+        return A == 1
+
+    # non-literal value
+    def impl2(A, a):
+        return A == a
+
+    A = pd.Categorical([3, 1, 2, -1, 4, 1, 3, 2, None, 7, 8, 12] * 10)
+    check_func(impl1, (A,))
+    check_func(impl2, (A, 2))
+
+
+def test_astype(memory_leak_check):
+    """test astype for categorical array, which allows going back to original values"""
+
+    # int value
+    def impl1(A):
+        return A.astype(np.int64)
+
+    # string value
+    def impl2(A):
+        return A.astype(str)
+
+    A = pd.Categorical([3, 1, 2, -1, 4, 1, 3, 2, 3, 7, 8, 12] * 10)
+    check_func(impl1, (A,))
+    A = pd.Categorical(["CC", "AA", "B", "D", "AA", "B", "CC"])
+    check_func(impl2, (A,))
+
+
+@pytest.mark.slow
 def test_pd_get_dummies(cat_arr_value, memory_leak_check):
     def test_impl(A):
         return pd.get_dummies(A)

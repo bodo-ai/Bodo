@@ -5,6 +5,7 @@ from collections import defaultdict
 import llvmlite.binding as ll
 import numba
 import numpy as np
+import pandas as pd
 from numba.core import ir, types
 from numba.core.imputils import impl_ret_new_ref
 from numba.core.ir_utils import (
@@ -16,7 +17,14 @@ from numba.core.ir_utils import (
 )
 from numba.core.typing import signature
 from numba.core.typing.templates import AbstractTemplate, infer_global
-from numba.extending import intrinsic
+from numba.extending import (
+    NativeValue,
+    intrinsic,
+    models,
+    overload,
+    register_model,
+    unbox,
+)
 from pyarrow import null
 
 import bodo
@@ -54,7 +62,7 @@ from bodo.libs.str_ext import string_type, unicode_to_utf8
 from bodo.libs.struct_arr_ext import StructArrayType
 from bodo.transforms import distributed_pass
 from bodo.utils.transform import get_const_value
-from bodo.utils.typing import BodoError, FileInfo
+from bodo.utils.typing import BodoError, FileInfo, get_overload_const_str
 from bodo.utils.utils import (
     check_and_propagate_cpp_exception,
     is_null_pointer,
@@ -64,6 +72,72 @@ from bodo.utils.utils import (
 
 # read Arrow Int columns as nullable int array (IntegerArrayType)
 use_nullable_int_arr = True
+
+
+import pyarrow.parquet as pq
+
+
+class ParquetPredicateType(types.Type):
+    """Type for predicate list for Parquet filtering (e.g. [["a", "==", 2]]).
+    It is just a Python object passed as pointer to C++
+    """
+
+    def __init__(self):
+        super(ParquetPredicateType, self).__init__(name="ParquetPredicateType()")
+
+
+parquet_predicate_type = ParquetPredicateType()
+types.parquet_predicate_type = parquet_predicate_type
+register_model(ParquetPredicateType)(models.OpaqueModel)
+
+
+@unbox(ParquetPredicateType)
+def unbox_parquet_predicate_type(typ, val, c):
+    # just return the Python object pointer
+    c.pyapi.incref(val)
+    return NativeValue(val)
+
+
+def ParquetManifest_visit_level(self, level, base_path, part_keys):
+    fs = self.filesystem
+
+    _, directories, files = next(fs.walk(base_path))
+
+    filtered_files = []
+    for path in files:
+        if path == "":  # Bodo change
+            continue
+        full_path = self.pathsep.join((base_path, path))
+        if path.endswith("_common_metadata"):
+            self.common_metadata_path = full_path
+        elif path.endswith("_metadata"):
+            self.metadata_path = full_path
+        elif self._should_silently_exclude(path):
+            continue
+        else:
+            filtered_files.append(full_path)
+
+    # ARROW-1079: Filter out "private" directories starting with underscore
+    filtered_directories = [
+        self.pathsep.join((base_path, x))
+        for x in directories
+        if not pq._is_private_directory(x)
+    ]
+
+    filtered_files.sort()
+    filtered_directories.sort()
+
+    if len(filtered_files) > 0 and len(filtered_directories) > 0:
+        raise ValueError(
+            "Found files in an intermediate " "directory: {}".format(base_path)
+        )
+    elif len(filtered_directories) > 0:
+        self._visit_directories(level, filtered_directories, part_keys)
+    else:
+        self._push_pieces(filtered_files, part_keys)
+
+
+pq.ParquetManifest._visit_level = ParquetManifest_visit_level
 
 
 def read_parquet():  # pragma: no cover
@@ -162,6 +236,7 @@ class ParquetHandler:
                         col_indices,
                         col_nb_fields,
                         null_col_map,
+                        partition_names,
                     ) = typ.schema
                     got_schema = True
             if not got_schema:
@@ -172,6 +247,7 @@ class ParquetHandler:
                     col_indices,
                     col_nb_fields,
                     null_col_map,
+                    partition_names,
                 ) = parquet_file_schema(file_name_str, columns)
         else:
             col_names_total = list(table_types.keys())
@@ -201,6 +277,7 @@ class ParquetHandler:
             index_col = index_col if index_col in col_names else None
             # Initialize null_col_map. See parquet_file_schema for definition.
             null_col_map = [False] * len(col_names)
+            partition_names = None
 
         # HACK convert types using decorator for int columns with NaN
         for i, c in enumerate(col_names):
@@ -220,6 +297,7 @@ class ParquetHandler:
                 data_arrs,
                 loc,
                 null_col_map,
+                partition_names,
             )
         ]
 
@@ -227,12 +305,42 @@ class ParquetHandler:
 
 
 def pq_distributed_run(pq_node, array_dists, typemap, calltypes, typingctx, targetctx):
+    """lower ParquetReader into regular Numba nodes. Generates code for Parquet
+    data read.
+    """
 
     n_cols = len(pq_node.out_vars)
+    filter_vars = []
+    extra_args = ""
+    filter_str = "None"
+    if pq_node.filters:
+        # handle predicate pushdown variables that need to be passed to C++
+        pred_vars = [v[2] for predicate_list in pq_node.filters for v in predicate_list]
+        # variables may be repeated due to distribution of Or over And in predicates, so
+        # remove duplicates. Cannot use ir.Var objects in set directly.
+        var_set = set()
+        for var in pred_vars:
+            if var.name not in var_set:
+                filter_vars.append(var)
+            var_set.add(var.name)
+        vararg_map = {v.name: f"f{i}" for i, v in enumerate(filter_vars)}
+        filter_str = "[{}]".format(
+            ", ".join(
+                "[{}]".format(
+                    ", ".join(
+                        f"('{v[0]}', '{v[1]}', {vararg_map[v[2].name]})"
+                        for v in predicate
+                    )
+                )
+                for predicate in pq_node.filters
+            )
+        )
+        extra_args = ", ".join(vararg_map.values())
+
     # get column variables and their sizes
     arg_names = ", ".join("out" + str(i) for i in range(2 * n_cols))
-    func_text = "def pq_impl(fname):\n"
-    func_text += "    ({},) = _pq_reader_py(fname)\n".format(arg_names)
+    func_text = f"def pq_impl(fname, {extra_args}):\n"
+    func_text += f"    ({arg_names},) = _pq_reader_py(fname, {extra_args})\n"
 
     loc_vars = {}
     exec(func_text, {}, loc_vars)
@@ -257,19 +365,23 @@ def pq_distributed_run(pq_node, array_dists, typemap, calltypes, typingctx, targ
         pq_node.col_nb_fields,
         pq_node.out_types,
         pq_node.null_col_map,
+        pq_node.partition_names,
+        filter_str,
+        extra_args,
         typingctx,
         targetctx,
         parallel,
     )
+    arg_types = (string_type,) + tuple(typemap[v.name] for v in filter_vars)
     f_block = compile_to_numba_ir(
         pq_impl,
         {"_pq_reader_py": pq_reader_py},
         typingctx,
-        (string_type,),
+        arg_types,
         typemap,
         calltypes,
     ).blocks.popitem()[1]
-    replace_arg_nodes(f_block, [pq_node.file_name])
+    replace_arg_nodes(f_block, [pq_node.file_name] + filter_vars)
     nodes = f_block.body[:-3]
 
     for i in range(n_cols):
@@ -283,12 +395,35 @@ distributed_pass.distributed_run_extensions[
 ] = pq_distributed_run
 
 
+def get_filters_pyobject(filters, vars):  # pragma: no cover
+    pass
+
+
+@overload(get_filters_pyobject, no_unliteral=True)
+def overload_get_filters_pyobject(filter_str, var_tup):
+    """generate a pyobject for filter expression to pass to C++"""
+    filter_str_val = get_overload_const_str(filter_str)
+    var_unpack = ", ".join(f"f{i}" for i in range(len(var_tup)))
+    func_text = "def impl(filter_str, var_tup):\n"
+    if len(var_tup):
+        func_text += f"  {var_unpack}, = var_tup\n"
+    func_text += "  with numba.objmode(filters_py='parquet_predicate_type'):\n"
+    func_text += f"    filters_py = {filter_str_val}\n"
+    func_text += "  return filters_py\n"
+    loc_vars = {}
+    exec(func_text, {"numba": numba}, loc_vars)
+    return loc_vars["impl"]
+
+
 def _gen_pq_reader_py(
     col_names,
     col_indices,
     col_nb_fields,
     out_types,
     null_col_map,
+    partition_names,
+    filter_str,
+    extra_args,
     typingctx,
     targetctx,
     parallel,
@@ -297,13 +432,17 @@ def _gen_pq_reader_py(
         # in parallel read, we assume all columns are parallel
         assert col_names == parallel
     is_parallel = len(parallel) > 0
-    func_text = "def pq_reader_py(fname):\n"
+    comma = "," if extra_args else ""
+    func_text = f"def pq_reader_py(fname,{extra_args}):\n"
     # if it's an s3 url, get the region and pass it into the c++ code
     func_text += "  bucket_region = bodo.io.fs_io.get_s3_bucket_region_njit(fname)\n"
+    func_text += (
+        f'  filters = get_filters_pyobject("{filter_str}", ({extra_args}{comma}))\n'
+    )
     # open a DatasetReader, which is a C++ object defined in _parquet.cpp that
     # contains file readers for the files from which this process needs to read,
     # and other information to read this process' chunk
-    func_text += "  ds_reader = get_dataset_reader(unicode_to_utf8(fname), {}, unicode_to_utf8(bucket_region) )\n".format(
+    func_text += "  ds_reader = get_dataset_reader(unicode_to_utf8(fname), {}, unicode_to_utf8(bucket_region), filters)\n".format(
         is_parallel
     )
     # Check if there was an error in the C++ code. If so, raise it.
@@ -312,9 +451,17 @@ def _gen_pq_reader_py(
     func_text += "    raise ValueError('Error reading Parquet dataset')\n"
 
     local_types = {}
+    if partition_names is None:
+        partition_names = []
+        first_partition_name = None
+    else:
+        first_partition_name = partition_names[0]
     for c_name, (real_col_ind, col_ind), col_siz, c_typ, is_all_null in zip(
         col_names, col_indices, col_nb_fields, out_types, null_col_map
     ):
+        if c_name == first_partition_name:
+            # partition columns appear last and are handled below
+            break
         ret_type, func_text = gen_column_read(
             func_text,
             c_name,
@@ -327,6 +474,18 @@ def _gen_pq_reader_py(
         )
         if ret_type != None:
             local_types[ret_type] = c_typ
+
+    for part_col_idx, part_name in enumerate(partition_names):
+        try:
+            col_idx = col_names.index(part_name)
+        except ValueError:
+            # this partition column has not been selected for read
+            continue
+        part_col_type = out_types[col_idx].dtype
+        cat_dtype, cat_dtype_name, func_text = gen_column_partition(
+            func_text, part_col_idx, part_name, part_col_type
+        )
+        local_types[cat_dtype_name] = cat_dtype
 
     func_text += "  del_dataset_reader(ds_reader)\n"
     func_text += "  return ({},)\n".format(
@@ -344,7 +503,9 @@ def _gen_pq_reader_py(
         "read_parquet_list_str": read_parquet_list_str,
         "read_parquet_array_item": read_parquet_array_item,
         "read_parquet_arrow_array": read_parquet_arrow_array,
+        "pq_gen_partition_column": _pq_gen_partition_column,
         "unicode_to_utf8": unicode_to_utf8,
+        "get_filters_pyobject": get_filters_pyobject,
         "NS_DTYPE": np.dtype("M8[ns]"),
         "np": np,
         "bodo": bodo,
@@ -437,6 +598,37 @@ def gen_column_read(
         )
 
     return ret_type, func_text
+
+
+def gen_column_partition(
+    func_text,
+    part_col_idx,
+    partition_name,
+    partition_type,
+):
+    cname = sanitize_varname(partition_name)
+    cat_dtype = pd.CategoricalDtype(partition_type.categories, partition_type.ordered)
+    cat_dtype_name = "part_pd_cat_dtype_{}".format(part_col_idx)
+
+    # handle size variables
+    # get_column_size_parquet returns local size of column (number of rows
+    # that this process is going to read)
+    # XXX partition is not part of the parquet file. Assume it is same
+    # length as column 0?
+    func_text += "  {}_size = get_column_size_parquet(ds_reader, 0)\n".format(cname)
+    # Check if there was an error in the C++ code. If so, raise it.
+    func_text += "  bodo.utils.utils.check_and_propagate_cpp_exception()\n"
+    func_text += "  {} = bodo.hiframes.pd_categorical_ext.alloc_categorical_array({}_size, {})\n".format(
+        cname, cname, cat_dtype_name
+    )
+    cat_int_dtype = bodo.hiframes.pd_categorical_ext.get_categories_int_type(
+        partition_type
+    )
+    func_text += "  pq_gen_partition_column(ds_reader, {}, {}.codes.ctypes, np.int32({}))\n".format(
+        part_col_idx, cname, bodo.utils.utils.numba_to_c_type(cat_int_dtype)
+    )
+    func_text += "  bodo.utils.utils.check_and_propagate_cpp_exception()\n"
+    return cat_dtype, cat_dtype_name, func_text
 
 
 def _gen_alloc(c_type, cname, alloc_size, el_type):
@@ -648,6 +840,44 @@ def is_directory_parallel(fpath):
     return isdir
 
 
+def is_nested_parallel(fpath, file_names):
+    """Returns True if one of the file names in file_names is a directory"""
+
+    from mpi4py import MPI
+
+    comm = MPI.COMM_WORLD
+    is_nested = False
+    if bodo.get_rank() == 0:
+        try:
+            if fpath.startswith("s3://"):
+                fs = get_s3_fs()
+                for fname in file_names:
+                    if s3_is_directory(fs, fname):
+                        is_nested = True
+                        break
+            else:
+                if fpath.startswith("hdfs://"):  # pragma: no cover
+                    is_dir_func = hdfs_is_directory
+                # TODO merge with hdfs when new pyarrow API works with abfs
+                elif fpath.startswith("abfs://") or fpath.startswith(
+                    "abfss://"
+                ):  # pragma: no cover
+                    is_dir_func = abfs_is_directory
+                else:
+                    is_dir_func = os.path.isdir
+                for fname in file_names:
+                    if is_dir_func(fname):
+                        is_nested = True
+                        break
+        except Exception as e:
+            is_nested = e
+    is_nested = comm.bcast(is_nested)
+    if isinstance(is_nested, Exception):
+        e = is_nested
+        raise e
+    return is_nested
+
+
 def get_filenames_parallel(path, filter_func):
     """Get sorted list of file names in directory 'path'. Filter files based
     on the filter function 'filter_func'.
@@ -685,7 +915,12 @@ def get_filenames_parallel(path, filter_func):
     return file_names
 
 
-def get_parquet_dataset(fpath, parallel, get_row_counts=True):
+def get_parquet_dataset(fpath, parallel, get_row_counts=True, filters=None):
+    """get ParquetDataset object for 'fpath' and set the number of total rows as an
+    attribute. Also, sets the number of rows per file as an attribute of
+    ParquetDatasetPiece objects.
+    'filters' are used for predicate pushdown which prunes the unnecessary pieces.
+    """
 
     import pyarrow.parquet as pq
     from mpi4py import MPI
@@ -711,45 +946,63 @@ def get_parquet_dataset(fpath, parallel, get_row_counts=True):
 
     if is_directory_parallel(fpath):
         file_names = get_filenames_parallel(fpath, directory_of_files_common_filter)
-        # Note that at this point there could still be files in file_names
-        # which aren't valid parquet files, so the division of work between
-        # ranks below won't be perfect.
-        # We can either do better filtering in `get_filenames_parallel` or
-        # do a further subdivision of work after checking which files are
-        # parquet files below. But I think this is already good.
-        try:
-            start = get_start(len(file_names), bodo.get_size(), bodo.get_rank())
-            end = get_end(len(file_names), bodo.get_size(), bodo.get_rank())
-            # When passing list of files these can only be valid parquet files,
-            # so we check each one of them manually.
-            # Note that for s3 this is needed anyway (if you call pq.ParquetDataset()
-            # with a directory name and the directory contains non-parquet files
-            # it will fail). And we are doing this in parallel so it shouldn't
-            # be an issue.
-            myfiles = []
-            for fname in file_names[start:end]:
-                try:
-                    pq.ParquetDataset(fname, filesystem=getfs())
-                    myfiles.append(fname)
-                except:
-                    # this is not a valid parquet file
-                    pass
-            subdataset = None
-            if len(myfiles) > 0:
-                subdataset = pq.ParquetDataset(myfiles, filesystem=getfs())
+        if filters is not None or is_nested_parallel(fpath, file_names):
+            # For now, for nested directories (for example partitioned datasets using
+            # hive scheme) we let pyarrow.parquet.ParquetDataset
+            # extract all the information by passing it the top-level directory.
+            # This happens sequentially.
+            # Note: ParquetDataset has metadata_nthreads parameter but it
+            # seems to use Python threads and not make a difference
+            if bodo.get_rank() == 0:
+                dataset = pq.ParquetDataset(fpath, filesystem=getfs(), filters=filters)
+                dataset._bodo_total_rows = 0
                 if get_row_counts:
-                    for piece in subdataset.pieces:
+                    for piece in dataset.pieces:
                         piece._bodo_num_rows = piece.get_metadata().num_rows
-        except Exception as e:
-            subdataset = e
+                        dataset._bodo_total_rows += piece._bodo_num_rows
+                comm.bcast(dataset)
+            else:
+                dataset = comm.bcast(None)
+        else:
+            # Note that at this point there could still be files in file_names
+            # which aren't valid parquet files, so the division of work between
+            # ranks below won't be perfect.
+            # We can either do better filtering in `get_filenames_parallel` or
+            # do a further subdivision of work after checking which files are
+            # parquet files below. But I think this is already good.
+            try:
+                start = get_start(len(file_names), bodo.get_size(), bodo.get_rank())
+                end = get_end(len(file_names), bodo.get_size(), bodo.get_rank())
+                # When passing list of files these can only be valid parquet files,
+                # so we check each one of them manually.
+                # Note that for s3 this is needed anyway (if you call pq.ParquetDataset()
+                # with a directory name and the directory contains non-parquet files
+                # it will fail). And we are doing this in parallel so it shouldn't
+                # be an issue.
+                myfiles = []
+                for fname in file_names[start:end]:
+                    try:
+                        pq.ParquetDataset(fname, filesystem=getfs())
+                        myfiles.append(fname)
+                    except:
+                        # this is not a valid parquet file
+                        pass
+                subdataset = None
+                if len(myfiles) > 0:
+                    subdataset = pq.ParquetDataset(myfiles, filesystem=getfs())
+                    if get_row_counts:
+                        for piece in subdataset.pieces:
+                            piece._bodo_num_rows = piece.get_metadata().num_rows
+            except Exception as e:
+                subdataset = e
 
-        subdatasets = comm.allgather(subdataset)
-        # merge all the subdatasets into one
-        dataset = merge_subdatasets(subdatasets, get_row_counts)
+            subdatasets = comm.allgather(subdataset)
+            # merge all the subdatasets into one
+            dataset = merge_subdatasets(subdatasets, get_row_counts)
     else:
         if bodo.get_rank() == 0:
             try:
-                dataset = pq.ParquetDataset(fpath, filesystem=getfs())
+                dataset = pq.ParquetDataset(fpath, filesystem=getfs(), filters=filters)
                 if get_row_counts:
                     dataset._bodo_total_rows = 0
                     for piece in dataset.pieces:
@@ -777,6 +1030,15 @@ def parquet_file_schema(file_name, selected_columns):
     # all processes, so we can set parallel=True to just have rank 0 read
     # the dataset information and broadcast to others
     pq_dataset = get_parquet_dataset(file_name, parallel=True, get_row_counts=False)
+    # not using 'partition_names' since the order may not match 'levels'
+    partition_names = (
+        None
+        if pq_dataset.partitions is None
+        else [
+            pq_dataset.partitions.levels[i].name
+            for i in range(len(pq_dataset.partitions.partition_names))
+        ]
+    )
     pa_schema = pq_dataset.schema.to_arrow_schema()
     num_pieces = len(pq_dataset.pieces)
 
@@ -829,6 +1091,16 @@ def parquet_file_schema(file_name, selected_columns):
         )
         for c in col_names
     ]
+
+    # add partition column data types if any
+    if partition_names:
+        col_names += partition_names
+        null_col_map += [False] * len(partition_names)
+        col_types_total += [
+            _get_partition_cat_dtype(pq_dataset.partitions.levels[i])
+            for i in range(len(partition_names))
+        ]
+
     col_nb_fields_total = [compute_number_of_fields(typ) for typ in col_types_total]
     col_indices_total = compute_column_index(col_nb_fields_total)
     # The numbering of the columns in pandas does not match the numbering in parquet.
@@ -867,16 +1139,49 @@ def parquet_file_schema(file_name, selected_columns):
     null_col_map = [null_col_map[col_names.index(c)] for c in selected_columns]
     col_names = selected_columns
     # TODO: close file?
-    return col_names, col_types, index_col, col_indices, col_nb_fields, null_col_map
+    return (
+        col_names,
+        col_types,
+        index_col,
+        col_indices,
+        col_nb_fields,
+        null_col_map,
+        partition_names,
+    )
+
+
+def _get_partition_cat_dtype(part_set):
+    """get categorical dtype for Parquet partition set"""
+    # using 'dictionary' instead of 'keys' attribute since 'keys' may not have the
+    # right data type (e.g. string instead of int64)
+    S = part_set.dictionary.to_pandas()
+    elem_type = bodo.typeof(S).dtype
+    cat_dtype = bodo.hiframes.pd_categorical_ext.PDCategoricalDtype(
+        tuple(S), elem_type, False
+    )
+    return bodo.hiframes.pd_categorical_ext.CategoricalArray(cat_dtype)
 
 
 _get_dataset_reader = types.ExternalFunction(
     "get_dataset_reader",
-    types.Opaque("arrow_reader")(types.voidptr, types.boolean, types.voidptr),
+    types.Opaque("arrow_reader")(
+        types.voidptr, types.boolean, types.voidptr, parquet_predicate_type
+    ),
 )
 _del_dataset_reader = types.ExternalFunction(
     "del_dataset_reader", types.void(types.Opaque("arrow_reader"))
 )
+
+_pq_gen_partition_column = types.ExternalFunction(
+    "pq_gen_partition_column",
+    types.void(
+        types.Opaque("arrow_reader"),
+        types.int64,
+        types.voidptr,
+        types.int32,
+    ),
+)
+ll.add_symbol("pq_gen_partition_column", parquet_cpp.pq_gen_partition_column)
 
 
 @infer_global(get_column_size_parquet)
