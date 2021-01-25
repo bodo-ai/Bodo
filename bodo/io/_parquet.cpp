@@ -30,7 +30,9 @@
 struct DatasetReader {
     // Filepaths, only for the files that this process has to read
     std::vector<std::string> filepaths;
-    // TODO comment
+    // for each file in filepaths, store the value of each partition
+    // column (value is stored as the categorical code). Note that a given
+    // file has the same partition value for all of its rows
     std::vector<std::vector<int64_t>> part_vals;
     // If S3, then store the bucket region here
     std::string bucket_region = "";
@@ -45,6 +47,9 @@ struct DatasetReader {
  * needs.
  * @param file_name : file or directory of parquet files
  * @param is_parallel : true if processes will read chunks of the dataset
+ * @param bucket_region : S3 bucket region (when reading from S3)
+ * @param filters : PyObject passed to pyarrow.parquet.ParquetDataset filters argument
+ *                  to remove rows from scanned data
  */
 DatasetReader *get_dataset_reader(char *file_name, bool is_parallel,
                                   char *bucket_region, PyObject* filters);
@@ -67,6 +72,13 @@ int pq_read_arrow_array(DatasetReader *reader, int64_t real_column_idx,
                         int64_t *lengths, array_info **out_infos);
 void pack_null_bitmap(uint8_t *out_nulls, std::vector<bool> &null_vec,
                       int64_t n_all_vals);
+/**
+ * Fill partition column for this rank's chunk (in partitioned datasets).
+ * @param ds_reader : Dataset reader (only files that this rank reads)
+ * @param part_col_idx : Partition column index from 0 to # partitions - 1
+ * @param out_data : buffer to fill (allocated in code generated in parquet_pio.py)
+ * @param cat_dtype : int categorical dtype used to fill the array
+ */
 void pq_gen_partition_column(DatasetReader *ds_reader, int64_t part_col_idx,
                              void *out_data, int32_t cat_dtype);
 void pq_write(const char *filename, const table_info *table,
@@ -142,6 +154,13 @@ PyMODINIT_FUNC PyInit_parquet_cpp(void) {
     return m;
 }
 
+
+/**
+ * Get values for all partition columns of a piece of pyarrow.parquet.ParquetDataset
+ * and store in ds_reader (see DatasetReader for details)
+ * @param ds_reader : Dataset reader (only files that this rank reads)
+ * @param piece : ParquetDataset piece (a single parquet file)
+ */
 void get_partition_info(DatasetReader *ds_reader, PyObject *piece) {
     PyObject *partition_keys_py = PyObject_GetAttrString(piece, "partition_keys");
     if (PyList_Size(partition_keys_py) > 0) {
