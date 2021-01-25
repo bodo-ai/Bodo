@@ -393,7 +393,9 @@ class UntypedPass:
         # df = pd.read_parquet("../tmp/pq_data3")
         # n = len(df)
         # df = df[df["A"] == 2]
-        related_vars = {v.name for v in index_def.list_vars()}
+        related_vars = set()
+        for node in filter_nodes:
+            related_vars.update({v.name for v in node.list_vars()})
         for stmt in reversed(self._working_body):
             i += 1
             # ignore dataframe filter expression nodes

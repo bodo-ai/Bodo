@@ -937,19 +937,91 @@ def test_read_partitions():
         # make sure the ParquetReader node has filters parameter set
         bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl2)
         bodo_func("pq_data", "a")
-        fir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
-        assert len(fir.blocks) == 1
-        pq_read_found = False
-        for stmt in fir.blocks[0].body:
-            if isinstance(stmt, bodo.ir.parquet_ext.ParquetReader):
-                assert stmt.filters is not None
-                pq_read_found = True
-                break
-        assert pq_read_found
+        _check_for_pq_reader_filters(bodo_func)
         check_func(impl3, ("pq_data", "a"))
     finally:
         if bodo.get_rank() == 0:
             shutil.rmtree("pq_data", ignore_errors=True)
+
+
+def test_read_partitions2():
+    """test reading and filtering partitioned parquet data in more complex cases"""
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    try:
+        if bodo.get_rank() == 0:
+            table = pa.table(
+                {
+                    "a": range(10),
+                    "b": np.random.randn(10),
+                    "c": [1, 2, 3, 4, 5] * 2,
+                    "part": ["a"] * 5 + ["b"] * 5,
+                }
+            )
+            pq.write_to_dataset(table, "pq_data", partition_cols=["c"])
+        bodo.barrier()
+
+        def impl1(path, val):
+            df = pd.read_parquet(path)
+            return df[(df["c"].astype(int) > val) | (df["c"] == 2)]
+
+        # TODO(ehsan): match Index
+        check_func(impl1, ("pq_data", 3), reset_index=True)
+        # make sure the ParquetReader node has filters parameter set
+        bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl1)
+        bodo_func("pq_data", 3)
+        _check_for_pq_reader_filters(bodo_func)
+
+    finally:
+        if bodo.get_rank() == 0:
+            shutil.rmtree("pq_data", ignore_errors=True)
+
+
+def test_read_partitions_two_level():
+    """test reading and filtering partitioned parquet data for two levels partitions"""
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    try:
+        if bodo.get_rank() == 0:
+            table = pa.table(
+                {
+                    "a": range(10),
+                    "b": np.random.randn(10),
+                    "c": [1, 2, 3, 4, 5] * 2,
+                    "part": ["a"] * 5 + ["b"] * 5,
+                }
+            )
+            pq.write_to_dataset(table, "pq_data", partition_cols=["c", "part"])
+        bodo.barrier()
+
+        def impl1(path, val):
+            df = pd.read_parquet(path)
+            return df[(df["c"].astype(int) > val) | (df["part"] == "a")]
+
+        # TODO(ehsan): match Index
+        check_func(impl1, ("pq_data", 3), reset_index=True)
+        # make sure the ParquetReader node has filters parameter set
+        bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl1)
+        bodo_func("pq_data", 3)
+        _check_for_pq_reader_filters(bodo_func)
+
+    finally:
+        if bodo.get_rank() == 0:
+            shutil.rmtree("pq_data", ignore_errors=True)
+
+
+def _check_for_pq_reader_filters(bodo_func):
+    """make sure ParquetReader node has filters set"""
+    fir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
+    pq_read_found = False
+    for stmt in fir.blocks[0].body:
+        if isinstance(stmt, bodo.ir.parquet_ext.ParquetReader):
+            assert stmt.filters is not None
+            pq_read_found = True
+            break
+    assert pq_read_found
 
 
 # TODO: Add memory_leak_check when bugs are resolved.
