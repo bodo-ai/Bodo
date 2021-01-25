@@ -1028,7 +1028,6 @@ series_unsupported_attrs = (
     "attrs",
     "axes",
     "nbytes",
-    "is_monotonic",  # TODO: It's the same as is_montonic_increasing which is supported.
     "is_unique",
     "sparse",
 )

@@ -1120,6 +1120,7 @@ def overload_series_idxmax(S, axis=0, skipna=True):
         return impl
 
 
+@overload_attribute(SeriesType, "is_monotonic", inline="always")
 @overload_attribute(SeriesType, "is_monotonic_increasing", inline="always")
 def overload_series_is_monotonic_increasing(S):
     return lambda S: bodo.libs.array_kernels.series_monotonicity(

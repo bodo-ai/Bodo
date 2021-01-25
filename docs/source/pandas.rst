@@ -285,19 +285,20 @@ associated index values yet.
 Attributes:
 
 * :attr:`pandas.Series.index`
-* :meth:`pandas.Series.values`
-* :meth:`pandas.Series.dtype` (object data types such as dtype of
+* :attr:`pandas.Series.values`
+* :attr:`pandas.Series.dtype` (object data types such as dtype of
   string series not supported yet)
-* :meth:`pandas.Series.shape`
-* :meth:`pandas.Series.ndim`
-* :meth:`pandas.Series.size`
-* :meth:`pandas.Series.T`
-* :meth:`pandas.Series.hasnans`
-* :meth:`pandas.Series.empty`
-* :meth:`pandas.Series.dtypes`
-* :meth:`pandas.Series.name`
-* :meth:`pandas.Series.is_monotonic_increasing`
-* :meth:`pandas.Series.is_monotonic_decreasing`
+* :attr:`pandas.Series.shape`
+* :attr:`pandas.Series.ndim`
+* :attr:`pandas.Series.size`
+* :attr:`pandas.Series.T`
+* :attr:`pandas.Series.hasnans`
+* :attr:`pandas.Series.empty`
+* :attr:`pandas.Series.dtypes`
+* :attr:`pandas.Series.name`
+* :attr:`pandas.Series.is_monotonic`
+* :attr:`pandas.Series.is_monotonic_increasing`
+* :attr:`pandas.Series.is_monotonic_decreasing`
 
 
 Methods:

@@ -2102,6 +2102,9 @@ def test_monotonicity(memory_leak_check):
     def f2(S):
         return S.is_monotonic_decreasing
 
+    def f3(S):
+        return S.is_monotonic
+
     random.seed(5)
     n = 100
     e_list = [random.randint(1, 10) for _ in range(n)]
@@ -2115,9 +2118,12 @@ def test_monotonicity(memory_leak_check):
     S_inc_fail = Srand2.cumsum()
     check_func(f1, (S_inc,))
     check_func(f2, (S_inc,))
+    check_func(f3, (S_inc,))
     check_func(f1, (S_dec,))
     check_func(f2, (S_dec,))
+    check_func(f3, (S_dec,))
     check_func(f1, (S_inc_fail,))
+    check_func(f3, (S_inc_fail,))
 
 
 def test_series_map_error_check(memory_leak_check):
