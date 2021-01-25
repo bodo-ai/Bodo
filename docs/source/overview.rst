@@ -9,7 +9,7 @@ Bodo’s technology provides automatic parallelization and acceleration for anal
 for the first time. This eliminates the need to rewrite Python code in Spark/Scala,
 SQL or MPI/C++,
 allowing data scientists to focus on solving business problems instead
-of scalability and performance of their codes.
+of scalability and performance of their applications.
 
 
 This user manual covers the basics of using Bodo, provides a reference
@@ -32,7 +32,7 @@ For example, the program below can perform data transformation on large datasets
 
 
 To run Bodo programs such as this example, programmers can
-simply use command line such as `mpiexec -n 1024 python data_transform.py`
+simply use the command line such as `mpiexec -n 1024 python data_transform.py`
 (to run on 1024 cores),
 or use :ref:`Jupyter Notebook <jupyter>`.
 

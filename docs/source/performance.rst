@@ -3,13 +3,13 @@
 Performance Measurement
 =======================
 
-This section provides tips on performance measurement of Bodo programs. It is important to keep the following in mind when measuring program runnning time:
+This section provides tips on performance measurement of Bodo programs. It is important to keep the following in mind when measuring program run time:
 
     #. Every program has some overhead, so large data sets may be necessary for useful measurements.
     #. Performance can vary from one run to another. Several measurements are always needed.
-    #. It is important to use a sequence of tests with increasing input size to understand program performance on various problem sizes.
+    #. It is important to use a sequence of tests with increasing input size, which helps understand the impact of problem size on program performance.
     #. It is useful to use simple programs to study performance factors. Complex program are impacted by multiple factors and their performance is harder to understand.
-    #. Longer computations typically provide more reliable running time information.
+    #. Longer computations typically provide more reliable run time information.
 
 
 Since Bodo decorated functions are `JIT-compiled <https://numba.pydata.org/numba-doc/dev/reference/jit-compilation.html>`_, the compilation time is non-negligible but it only happens once. To avoid measuring compilation time, place timers inside the functions. For example::
@@ -148,7 +148,7 @@ Expected Speedup
 ~~~~~~~~~~~~~~~~
 
 The speed up achieved using Bodo depends on various factors such as problem size,
-parallel overheads of the operations, and hardware platform's attributes.
+parallel overheads of the operations, and the hardware platform's attributes.
 For example, the program above can scale almost linearly
 (e.g. 100 speed up on 100 cores)
 for large enough problem sizes, since the only communication overhead is
