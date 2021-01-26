@@ -411,7 +411,7 @@ def overload_get_filters_pyobject(filter_str, var_tup):
     func_text += f"    filters_py = {filter_str_val}\n"
     func_text += "  return filters_py\n"
     loc_vars = {}
-    exec(func_text, {"numba": numba}, loc_vars)
+    exec(func_text, globals(), loc_vars)
     return loc_vars["impl"]
 
 
