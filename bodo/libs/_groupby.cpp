@@ -23,6 +23,9 @@ struct Bodo_FTypes {
     // !!! IMPORTANT: this is supposed to match the positions in
     // supported_agg_funcs in aggregate.py
     enum FTypeEnum {
+        no_op = 0,  // To make sure ftypes[0] isn't accidently matched with any
+                    // of the supported functions.
+        size,
         shift,
         sum,
         count,
@@ -65,6 +68,7 @@ void groupby_init() {
 
     // this mapping is used by BasicColSet operations to know what combine (i.e.
     // step (c)) function to use for a given aggregation function
+    combine_funcs[Bodo_FTypes::size] = Bodo_FTypes::sum;
     combine_funcs[Bodo_FTypes::sum] = Bodo_FTypes::sum;
     combine_funcs[Bodo_FTypes::count] = Bodo_FTypes::sum;
     combine_funcs[Bodo_FTypes::mean] =
@@ -566,6 +570,17 @@ struct count_agg<
     static void apply(int64_t& v1, T& v2) {
         if (!isnan(v2)) v1 += 1;
     }
+};
+
+template <typename T, int dtype, typename Enable = void>
+struct size_agg {
+    /**
+     * Aggregation function for size. Increases size
+     *
+     * @param[in,out] current count
+     * @param second input value.
+     */
+    static void apply(int64_t& v1, T& v2) { v1 += 1; }
 };
 
 // mean
@@ -1200,7 +1215,6 @@ struct key_hash {
 void get_group_info(table_info* table, std::vector<int64_t>& row_to_group,
                     std::vector<int64_t>& group_to_first_row,
                     bool check_for_null_keys) {
-
     std::vector<array_info*> key_cols = std::vector<array_info*>(
         table->columns.begin(), table->columns.begin() + table->num_keys);
     uint32_t seed = SEED_HASH_GROUPBY_SHUFFLE;
@@ -1237,15 +1251,14 @@ void get_group_info(table_info* table, std::vector<int64_t>& row_to_group,
     delete[] hashes;
 }
 
-
 /**
  * @brief Get groupby labels for input key arrays
- * 
+ *
  * @param table a table of all key arrays
  * @param out_labels output array to fill
  * @return int64_t total number of groups
  */
-int64_t get_groupby_labels(table_info* table, int64_t *out_labels) {
+int64_t get_groupby_labels(table_info* table, int64_t* out_labels) {
     // TODO(ehsan): refactor to avoid code duplication with get_group_info
     table->num_keys = table->columns.size();
     std::vector<array_info*> key_cols = table->columns;
@@ -1275,7 +1288,6 @@ int64_t get_groupby_labels(table_info* table, int64_t *out_labels) {
     delete[] hashes;
     return next_group - 1;
 }
-
 
 /**
  * Given a table with n key columns, this function calculates the row to group
@@ -2566,6 +2578,18 @@ template <typename ARR_I, typename ARR_O>
 void do_apply_to_column(ARR_I* in_col, ARR_O* out_col,
                         std::vector<ARR_O*>& aux_cols,
                         const grouping_info& grp_info, int ftype) {
+    // size operation is the same regardless of type of data.
+    // Hence, just compute number of rows per group here.
+    if (ftype == Bodo_FTypes::size) {
+        for (int64_t i = 0; i < in_col->length; i++) {
+            int64_t i_grp = grp_info.row_to_group[i];
+            if (i_grp != -1)
+                size_agg<int64_t, Bodo_CTypes::INT64>::apply(
+                    getv<ARR_O, int64_t>(out_col, i_grp),
+                    getv<ARR_I, int64_t>(in_col, i));
+        }
+        return;
+    }
     if (in_col->arr_type == bodo_array_type::STRING ||
         in_col->arr_type == bodo_array_type::LIST_STRING) {
         switch (ftype) {
@@ -3773,6 +3797,7 @@ get_groupby_output_dtype(int ftype, bodo_array_type::arr_type_enum& array_type,
     switch (ftype) {
         case Bodo_FTypes::nunique:
         case Bodo_FTypes::count:
+        case Bodo_FTypes::size:
             array_type = bodo_array_type::NUMPY;
             dtype = Bodo_CTypes::INT64;
             return;
@@ -3810,6 +3835,7 @@ get_groupby_output_dtype(int ftype, bodo_array_type::arr_type_enum& array_type,
     if (is_key) return;
     switch (ftype) {
         case Bodo_FTypes::nunique:
+        case Bodo_FTypes::size:
         case Bodo_FTypes::count: {
             if (is_crosstab) {
                 array_type = bodo_array_type::NUMPY;
@@ -4677,6 +4703,7 @@ class GroupbyPipeline {
                 break;
             }
         }
+
         if (shuffle_before_update) {
             // Code below is equivalent to
             // table_info* shuf_table = shuffle_table(update_table, num_keys);
@@ -4727,6 +4754,13 @@ class GroupbyPipeline {
                     }
                 }
             }
+        }
+        // This is needed if aggregation was just size operation, it will skip
+        // loop (ncols = num_keys + index_i)
+        if (col_sets.size() == 0 && ftypes[0] == Bodo_FTypes::size) {
+            col_sets.push_back(makeColSet(in_table->columns[0], index_col,
+                                          ftypes[0], do_combine, skipna,
+                                          periods, n_udf));
         }
     }
 
@@ -4867,7 +4901,7 @@ class GroupbyPipeline {
         DEBUG_PrintSetOfColumn(std::cout, shuf_table->columns);
         DEBUG_PrintRefct(std::cout, shuf_table->columns);
 #endif
-        if (!cumulative_op) {
+        if (!(cumulative_op || shift_op)) {
             delete hashes;
             delete comm_info_ptr;
         }
@@ -5088,7 +5122,7 @@ class GroupbyPipeline {
     int n_pivot;
     // shuffling before update requires more communication and is needed
     // when one of the groupby functions is
-    // median/nunique/cumsum/cumprod/cummin/cummax
+    // median/nunique/cumsum/cumprod/cummin/cummax/shift
     bool shuffle_before_update = false;
     bool cumulative_op = false;
     bool shift_op = false;
@@ -5680,17 +5714,17 @@ table_info* pivot_groupby_and_aggregate(
     table_info* in_table, int64_t num_keys, table_info* dispatch_table,
     table_info* dispatch_info, bool input_has_index, int* ftypes,
     int* func_offsets, int* udf_nredvars, bool is_parallel, bool is_crosstab,
-    bool skipdropna, bool return_key, bool return_index,
-    void* update_cb, void* combine_cb, void* eval_cb,
-    table_info* udf_dummy_table) {
+    bool skipdropna, bool return_key, bool return_index, void* update_cb,
+    void* combine_cb, void* eval_cb, table_info* udf_dummy_table) {
     try {
         GroupbyPipeline<multiple_array_info> groupby(
             in_table, num_keys, dispatch_table, dispatch_info, input_has_index,
             is_parallel, is_crosstab, ftypes, func_offsets, udf_nredvars,
             udf_dummy_table, (udf_table_op_fn)update_cb,
             // TODO: general UDFs
-            (udf_table_op_fn)combine_cb, (udf_eval_fn)eval_cb, 0, skipdropna,
-            0, return_key, return_index); //periods=0. Not used in pivot operation.
+            (udf_table_op_fn)combine_cb, (udf_eval_fn)eval_cb, 0, skipdropna, 0,
+            return_key,
+            return_index);  // periods=0. Not used in pivot operation.
 
         table_info* ret_table = groupby.run();
         return ret_table;

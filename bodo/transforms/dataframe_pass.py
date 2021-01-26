@@ -1343,7 +1343,9 @@ class DataFramePass:
         out_typ = self.typemap[lhs.name]
 
         nodes = []
-        if isinstance(out_typ, SeriesType) or func_name in ("agg", "aggregate"):
+        if func_name == "size":
+            in_cols = []
+        elif isinstance(out_typ, SeriesType) or func_name in ("agg", "aggregate"):
             in_cols = grp_typ.selection
         else:
             in_cols = [c for c in grp_typ.selection if c in out_typ.columns]
@@ -1368,7 +1370,9 @@ class DataFramePass:
         same_index = False
         return_key = True
         # allfuncs is the set of all functions used
-        allfuncs = bodo.ir.aggregate.gen_allfuncs(agg_func, len(in_cols))
+        allfuncs = bodo.ir.aggregate.gen_allfuncs(
+            agg_func, 1 if func_name == "size" else len(in_cols)
+        )
         # return_key is True if we return the keys from the table. In case
         # of aggregate on cumsum or other cumulative function, there is no such need.
         # same_index is True if we return the index from the table (which is the case for
@@ -1419,27 +1423,32 @@ class DataFramePass:
         out_colnames = (
             grp_typ.selection if isinstance(out_typ, SeriesType) else out_typ.columns
         )
-        for c in out_colnames:
-            # output key columns are stored in out_key_vars and shouldn't be duplicated
-            if isinstance(c, tuple) and len(c) > 1 and c[1] == "":
-                if c[0] in grp_typ.keys:
+        if func_name == "size":
+            var = ir.Var(lhs.scope, mk_unique_var("size"), lhs.loc)
+            self.typemap[var.name] = types.Array(types.int64, 1, "C")
+            df_out_vars["size"] = var
+        else:
+            for c in out_colnames:
+                # output key columns are stored in out_key_vars and shouldn't be duplicated
+                if isinstance(c, tuple) and len(c) > 1 and c[1] == "":
+                    if c[0] in grp_typ.keys:
+                        continue
+                elif c in grp_typ.keys:
                     continue
-            elif c in grp_typ.keys:
-                continue
-            # output column name can be a string or tuple of strings. the
-            # latter case occurs when doing this:
-            # df.groupby(...).agg({"A": [f1, f2]})
-            # In this case, output names have 2 levels: (A, f1) and (A, f2)
-            var = ir.Var(lhs.scope, mk_unique_var(str(c)), lhs.loc)
-            self.typemap[var.name] = (
-                out_typ.data
-                if isinstance(out_typ, SeriesType)
-                else out_typ.data[out_typ.columns.index(c)]
-            )
-            df_out_vars[c] = var
+                # output column name can be a string or tuple of strings. the
+                # latter case occurs when doing this:
+                # df.groupby(...).agg({"A": [f1, f2]})
+                # In this case, output names have 2 levels: (A, f1) and (A, f2)
+                var = ir.Var(lhs.scope, mk_unique_var(str(c)), lhs.loc)
+                self.typemap[var.name] = (
+                    out_typ.data
+                    if isinstance(out_typ, SeriesType)
+                    else out_typ.data[out_typ.columns.index(c)]
+                )
+                df_out_vars[c] = var
 
-        if len(out_colnames) != len(set(out_colnames)):
-            raise BodoError("aggregate with duplication in output is not allowed")
+            if len(out_colnames) != len(set(out_colnames)):
+                raise BodoError("aggregate with duplication in output is not allowed")
 
         agg_node = bodo.ir.aggregate.Aggregate(
             lhs.name,
@@ -1507,11 +1516,13 @@ class DataFramePass:
                 len(grp_typ.selection) == 1
                 and grp_typ.explicit_select
                 and grp_typ.as_index
-            )
-            name_str = list(df_out_vars.keys())[0]
+            ) or (grp_typ.as_index and agg_func.ftype == "size")
+            name_val = None if func_name == "size" else list(df_out_vars.keys())[0]
             name_var = ir.Var(lhs.scope, mk_unique_var("S_name"), lhs.loc)
-            self.typemap[name_var.name] = types.StringLiteral(name_str)
-            nodes.append(ir.Assign(ir.Const(name_str, lhs.loc), name_var, lhs.loc))
+            self.typemap[name_var.name] = (
+                types.none if func_name == "size" else types.StringLiteral(name_val)
+            )
+            nodes.append(ir.Assign(ir.Const(name_val, lhs.loc), name_var, lhs.loc))
             return replace_func(
                 self,
                 lambda A, I, name: bodo.hiframes.pd_series_ext.init_series(A, I, name),

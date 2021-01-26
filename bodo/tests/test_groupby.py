@@ -3416,3 +3416,71 @@ def test_groupby_shift_main(periods):
     )
     check_func(impl2, (df_ls,))
     check_func(impl3, (df_ls,))
+
+
+# TODO: memory_leak_check (fails with ["A", "B"])
+@pytest.mark.parametrize("by", ["A", "B", ["A", "B"]])
+def test_groupby_size(by):
+    def impl(df):
+        result = df.groupby(by=by).size()
+        return result
+
+    np.random.seed(3)
+    df = pd.DataFrame(np.random.choice(20, (1000, 4)), columns=list("ADBC"))
+    check_func(impl, (df,), sort_output=True, reset_index=True)
+
+
+def test_size(memory_leak_check):
+    def impl(df):
+        result = df.groupby("class", as_index=False).size()
+        return result
+
+    df2 = pd.DataFrame(
+        [
+            ("bird", "Falconiformes", 389.0),
+            ("bird", "nan", 24.0),
+            ("mammal", "Carnivora", 80.2),
+            ("mammal", "Primates", np.nan),
+            ("mammal", "Carnivora", 58),
+        ],
+        index=["falcon", "parrot", "lion", "monkey", "leopard"],
+        columns=("class", "order", "max_speed"),
+    )
+
+    check_func(impl, (df2,), sort_output=True, reset_index=True)
+
+
+def test_size_remove_dead(memory_leak_check):
+    """make sure dead "size" column can be removed without error"""
+
+    def impl(df):
+        df2 = df.groupby("A", as_index=False).size()
+        return df2.A
+
+    df = pd.DataFrame({"A": [2, 1, 1, 1, 2, 3], "B": [1, 2, 3, 4, 5, 1]})
+
+    check_func(impl, (df,), sort_output=True, reset_index=True)
+
+
+@pytest.mark.parametrize(
+    "df_null",
+    [
+        pd.DataFrame(
+            {"A": [2, 1, 1, 1], "B": pd.Series(np.full(4, np.nan), dtype="Int64")},
+            index=[32, 45, 56, 76],
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {"A": [1, 1, 1, 1], "B": pd.Series([1, 2, 3, 4], dtype="Int64")},
+                index=[3, 4, 5, 6],
+            ),
+            marks=pytest.mark.slow,
+        ),
+    ],
+)
+def test_size_agg(df_null, memory_leak_check):
+    def impl1(df):
+        df2 = df.groupby("A")["B"].agg(("size", "sum"))
+        return df2
+
+    check_func(impl1, (df_null,), sort_output=True, reset_index=True)

@@ -226,6 +226,8 @@ AggFuncStruct = namedtuple("AggFuncStruct", ["func", "ftype"])
 # !!! IMPORTANT: this is supposed to match the positions in
 # Bodo_FTypes::FTypeEnum in _groupby.cpp
 supported_agg_funcs = [
+    "no_op",  # needed to ensure that 0 value isn't matched with any function
+    "size",
     "shift",
     "sum",
     "count",
@@ -274,6 +276,8 @@ def get_agg_func(func_ir, func_name, rhs, series_type=None, typemap=None):
     # udfs at runtime (see gen_update_cb, gen_combine_cb and gen_eval_cb),
     # to know which columns in the table received from C++ library correspond
     # to udfs and which to builtin functions
+    if func_name == "no_op":
+        raise BodoError("Unknown aggregation function used in groupby.")
 
     if func_name == "var":
         func = pytypes.SimpleNamespace()
@@ -306,7 +310,7 @@ def get_agg_func(func_ir, func_name, rhs, series_type=None, typemap=None):
         func.ncols_pre_shuffle = 2
         func.ncols_post_shuffle = 2
         return func
-    if func_name in supported_agg_funcs[:-7]:
+    if func_name in supported_agg_funcs[:-8]:
         func = pytypes.SimpleNamespace()
         func.ftype = func_name
         func.fname = func_name
@@ -634,6 +638,15 @@ def remove_dead_aggregate(
                 c_ind = in_col_names.index(cname)
                 aggregate_node.agg_func.pop(c_ind)
             in_col_names = list(aggregate_node.df_in_vars.keys())
+            continue
+
+        # groupby().size() doesn't use any input
+        if (
+            cname == "size"
+            and not isinstance(aggregate_node.agg_func, list)
+            and aggregate_node.agg_func.fname == "size"
+        ):
+            aggregate_node.agg_func = []  # no need to compute output
             continue
 
         # output of multi-func cases (dict and tuple)
@@ -1670,7 +1683,9 @@ def gen_top_level_agg_func(
         agg_func = [agg_func]
     else:
         if not isinstance(agg_func, list):
-            agg_func = [agg_func] * len(in_col_typs)
+            agg_func = [agg_func] * (
+                1 if agg_func.ftype == "size" else len(in_col_typs)
+            )
     skipdropna = False
     shift_periods = 1
     num_cum_funcs = 0
@@ -1702,9 +1717,11 @@ def gen_top_level_agg_func(
                 do_combine = False
     func_offsets.append(len(allfuncs))
     if is_crosstab:
-        assert len(out_names) == n_pivot
+        assert len(out_names) == n_pivot, "invalid number of groupby outputs for pivot"
     else:
-        assert len(out_names) == len(allfuncs) * n_pivot
+        assert (
+            len(out_names) == len(allfuncs) * n_pivot
+        ), "invalid number of groupby outputs"
     if num_cum_funcs > 0:
         assert num_cum_funcs == len(
             allfuncs

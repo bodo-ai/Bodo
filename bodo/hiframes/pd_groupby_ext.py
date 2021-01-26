@@ -349,7 +349,14 @@ def get_groupby_output_dtype(arr_type, func_name, index_type=None):
                     ),
                 )
         else:
-            if func_name not in {"count", "nunique", "min", "max", "first", "last"}:
+            if func_name not in {
+                "count",
+                "nunique",
+                "min",
+                "max",
+                "first",
+                "last",
+            }:
                 return (
                     None,
                     "column type of {} is not supported in groupby built-in function {}".format(
@@ -452,6 +459,11 @@ class DataframeGroupByAttribute(AttributeTemplate):
         # get output type for each selected column
         list_err_msg = []
         for c in grp.selection:
+            # size always produces one integer output and doesn't depend on any input
+            if func_name == "size":
+                out_data.append(types.Array(types.int64, 1, "C"))
+                out_columns.append("size")
+                break
             ind = grp.df_type.columns.index(c)
             data = grp.df_type.data[ind]
             e_column_type = ColumnType.NonNumericalColumn.value
@@ -522,14 +534,19 @@ class DataframeGroupByAttribute(AttributeTemplate):
 
         out_res = DataFrameType(tuple(out_data), index, tuple(out_columns))
         # XXX output becomes series if single output and explicitly selected
-        if len(grp.selection) == 1 and grp.explicit_select and grp.as_index:
+        if (len(grp.selection) == 1 and grp.explicit_select and grp.as_index) or (
+            func_name == "size" and grp.as_index
+        ):
             if isinstance(out_data[0], IntegerArrayType):
                 dtype = IntDtype(out_data[0].dtype)
             else:
                 dtype = out_data[0].dtype
-            out_res = SeriesType(
-                dtype, index=index, name_typ=types.StringLiteral(grp.selection[0])
+            name_type = (
+                types.none
+                if func_name == "size"
+                else types.StringLiteral(grp.selection[0])
             )
+            out_res = SeriesType(dtype, index=index, name_typ=name_type)
         return signature(out_res, *args)
 
     def _get_agg_funcname_and_outtyp(self, grp, args, col, f_val):
@@ -785,6 +802,10 @@ class DataframeGroupByAttribute(AttributeTemplate):
     @bound_function("groupby.idxmax", no_unliteral=True)
     def resolve_idxmax(self, grp, args, kws):
         return self._get_agg_typ(grp, args, "idxmax")
+
+    @bound_function("groupby.size", no_unliteral=True)
+    def resolve_size(self, grp, args, kws):
+        return self._get_agg_typ(grp, args, "size")
 
     def resolve_transformative(self, grp, args, kws, msg, name_operation):
         """For datetime and timedelta datatypes, we can support cummin / cummax,
@@ -1279,7 +1300,6 @@ groupby_unsupported = {
     "resample",
     "sample",
     "sem",
-    "size",
     "tail",
     "transform",
     "tshift",
