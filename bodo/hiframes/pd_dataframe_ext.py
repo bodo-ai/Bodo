@@ -497,7 +497,9 @@ def init_dataframe(typingctx, data_tup_typ, index_typ, col_names_typ=None):
     data has changed, and get the array variables from init_dataframe() args if
     not changed.
     """
-    assert is_pd_index_type(index_typ) or isinstance(index_typ, MultiIndexType)
+    assert is_pd_index_type(index_typ) or isinstance(
+        index_typ, MultiIndexType
+    ), "init_dataframe(): invalid index type"
 
     n_cols = len(data_tup_typ.types)
     if n_cols == 0:
@@ -507,7 +509,9 @@ def init_dataframe(typingctx, data_tup_typ, index_typ, col_names_typ=None):
         # 'gen_const_tup' which requires special handling for nested tuples
         column_names = get_const_tup_vals(col_names_typ)
 
-    assert len(column_names) == n_cols
+    assert (
+        len(column_names) == n_cols
+    ), "init_dataframe(): number of column names does not match number of columns"
 
     def codegen(context, builder, signature, args):
         df_type = signature.return_type

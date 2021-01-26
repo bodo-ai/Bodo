@@ -903,7 +903,7 @@ def is_expr(val, op):
 def sanitize_varname(varname):
     """convert variable name to be identifier compatible (e.g. remove whitespace)"""
     if isinstance(varname, (tuple, list)):
-        varname = "_".join(varname)
+        varname = "_".join(sanitize_varname(v) for v in varname)
     varname = str(varname)
     new_name = re.sub(r"\W+", "_", varname)
     if not new_name or not new_name[0].isalpha():

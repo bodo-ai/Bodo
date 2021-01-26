@@ -354,7 +354,7 @@ def get_overload_const(val):
     if isinstance(val, types.Dispatcher):
         return val
     if isinstance(val, types.BaseTuple):
-        return [get_overload_const(v) for v in val.types]
+        return tuple(get_overload_const(v) for v in val.types)
     if is_initial_value_list_type(val):
         return val.initial_value
     if is_literal_type(val):
