@@ -447,9 +447,14 @@ def get_s3_bucket_region(s3_filepath):
                 bucket_loc = "us-east-1"
 
         except Exception as e:
-            print(
-                f"BodoWarning: Unable to get S3 Bucket Region.\n{e}.\nWill use the value defined in the AWS_DEFAULT_REGION environment variable (or us-east-1 if that is not provided either)."
-            )
+            # Something went wrong with region detection (permissions issue most likely)
+            # If AWS_DEFAULT_REGION isn't set either, then print a warning.
+            if os.environ.get("AWS_DEFAULT_REGION", "") == "":
+                warnings.warn(
+                    BodoWarning(
+                        f"Unable to get S3 Bucket Region.\n{e}.\nValue not defined in the AWS_DEFAULT_REGION environment variable either. Region defaults to us-east-1 currently."
+                    )
+                )
             bucket_loc = ""
 
     bucket_loc = comm.bcast(bucket_loc)
