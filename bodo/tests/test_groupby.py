@@ -1579,6 +1579,10 @@ def test_count_select_col(memory_leak_check):
     [
         pd.DataFrame({"A": [1, 1, 1, 1], "B": [1, 2, 3, 4]}),
         pytest.param(
+            pd.DataFrame({"A": [0, 1, 0, 1], "B": [np.nan, 2, np.nan, 4]}),
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
             pd.DataFrame({"A": [1, 2, 2, 1, 1], "B": [1, 5, 4, 4, 3]}),
             marks=pytest.mark.slow,
         ),

@@ -1787,11 +1787,13 @@ median_computation(array_info* arr, array_info* out_arr,
                 return ListValue[pos];
             };
             double valReturn;
-            if (HasNaN) {
+            // a group can be empty if it has all NaNs so output will be NaN
+            // even if skipna=True
+            if (HasNaN || ListValue.size() == 0) {
                 valReturn = std::nan("1");
             } else {
                 size_t len = ListValue.size();
-                int res = len % 2;
+                size_t res = len % 2;
                 if (res == 0) {
                     size_t kMid1 = len / 2;
                     size_t kMid2 = kMid1 - 1;
