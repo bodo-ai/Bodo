@@ -175,6 +175,17 @@ Methods:
   * :any:`sklearn.preprocessing.StandardScaler.inverse_transform`
 
 
+:class:`sklearn.preprocessing.MinMaxScaler`
+
+  This class provides MinMax Scaler support to scale your data based on the range of its features.
+
+Methods:
+
+  * :any:`sklearn.preprocessing.MinMaxScaler.fit`
+  * :any:`sklearn.preprocessing.MinMaxScaler.transform`
+  * :any:`sklearn.preprocessing.MinMaxScaler.inverse_transform`
+
+
 Supported XGBoost
 ~~~~~~~~~~~~~~~~~
 

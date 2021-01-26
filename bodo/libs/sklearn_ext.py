@@ -3062,3 +3062,198 @@ def overload_preprocessing_standard_scaler_inverse_transform(
         return inverse_transformed_X
 
     return _preprocessing_standard_scaler_inverse_transform_impl
+
+
+# ----------------------------------------------------------------------------------------
+# ----------------------------------- MinMax-Scaler ------------------------------------
+# Support for sklearn.preprocessing.MinMaxScaler.
+# Currently only fit, transform and inverse_transform functions are supported.
+# Support for partial_fit will be added in the future since that will require a
+# more native implementation (although not hard at all).
+# We use sklearn's transform and inverse_transform directly in their Bodo implementation.
+# For fit, we use a combination of sklearn's fit function and a native implementation.
+# We compute the min/max and num_samples_seen on each rank using sklearn's fit
+# implementation, then we compute the global values for these using MPI operations, and
+# then re-calculate the rest of the attributes based on these global values.
+# ----------------------------------------------------------------------------------------
+
+
+class BodoPreprocessingMinMaxScalerType(types.Opaque):
+    def __init__(self):
+        super(BodoPreprocessingMinMaxScalerType, self).__init__(
+            name="BodoPreprocessingMinMaxScalerType"
+        )
+
+
+preprocessing_minmax_scaler_type = BodoPreprocessingMinMaxScalerType()
+types.preprocessing_minmax_scaler_type = preprocessing_minmax_scaler_type
+
+register_model(BodoPreprocessingMinMaxScalerType)(models.OpaqueModel)
+
+
+@typeof_impl.register(sklearn.preprocessing.MinMaxScaler)
+def typeof_preprocessing_minmax_scaler(val, c):
+    return preprocessing_minmax_scaler_type
+
+
+@box(BodoPreprocessingMinMaxScalerType)
+def box_preprocessing_minmax_scaler(typ, val, c):
+    # See note in box_random_forest_classifier
+    c.pyapi.incref(val)
+    return val
+
+
+@unbox(BodoPreprocessingMinMaxScalerType)
+def unbox_preprocessing_minmax_scaler(typ, obj, c):
+    # borrow reference from Python
+    c.pyapi.incref(obj)
+    return NativeValue(obj)
+
+
+@overload(sklearn.preprocessing.MinMaxScaler, no_unliteral=True)
+def sklearn_preprocessing_minmax_scaler_overload(
+    feature_range=(0, 1),
+    copy=True,
+    clip=False,
+):
+    """
+    Provide implementation for __init__ functions of MinMaxScaler.
+    We simply call sklearn in objmode.
+    """
+
+    def _sklearn_preprocessing_minmax_scaler_impl(
+        feature_range=(0, 1),
+        copy=True,
+        clip=False,
+    ):  # pragma: no cover
+
+        with numba.objmode(m="preprocessing_minmax_scaler_type"):
+            m = sklearn.preprocessing.MinMaxScaler(
+                feature_range=feature_range,
+                copy=copy,
+                clip=clip,
+            )
+        return m
+
+    return _sklearn_preprocessing_minmax_scaler_impl
+
+
+def sklearn_preprocessing_minmax_scaler_fit_dist_helper(m, X):
+    """
+    Distributed calculation of attributes for MinMaxScaler.
+    We use sklearn to calculate min, max and n_samples_seen, combine the
+    results appropriately to get the global min/max and n_samples_seen.
+    """
+
+    comm = MPI.COMM_WORLD
+    num_pes = comm.Get_size()
+
+    # Fit locally
+    m = m.fit(X)
+
+    # Compute global n_samples_seen_
+    global_n_samples_seen = comm.allreduce(m.n_samples_seen_, op=MPI.SUM)
+    m.n_samples_seen_ = global_n_samples_seen
+
+    # Compute global data_min
+    local_data_min_by_rank = np.zeros(
+        (num_pes, *m.data_min_.shape), dtype=m.data_min_.dtype
+    )
+    comm.Allgather(m.data_min_, local_data_min_by_rank)
+    global_data_min = np.nanmin(local_data_min_by_rank, axis=0)
+
+    # Compute global data_max
+    local_data_max_by_rank = np.zeros(
+        (num_pes, *m.data_max_.shape), dtype=m.data_max_.dtype
+    )
+    comm.Allgather(m.data_max_, local_data_max_by_rank)
+    global_data_max = np.nanmax(local_data_max_by_rank, axis=0)
+
+    # Compute global data_range
+    global_data_range = global_data_max - global_data_min
+
+    # Re-compute the rest of the attributes
+    # Similar to: https://github.com/scikit-learn/scikit-learn/blob/42aff4e2edd8e8887478f6ff1628f27de97be6a3/sklearn/preprocessing/_data.py#L409
+    m.scale_ = (
+        m.feature_range[1] - m.feature_range[0]
+    ) / sklearn_handle_zeros_in_scale(global_data_range)
+    m.min_ = m.feature_range[0] - global_data_min * m.scale_
+    m.data_min_ = global_data_min
+    m.data_max_ = global_data_max
+    m.data_range_ = global_data_range
+
+    return m
+
+
+@overload_method(BodoPreprocessingMinMaxScalerType, "fit", no_unliteral=True)
+def overload_preprocessing_minmax_scaler_fit(
+    m,
+    X,
+    y=None,
+    _is_data_distributed=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position)
+):
+    """
+    Provide implementations for the fit function.
+    In case input is replicated, we simply call sklearn,
+    else we use our native implementation.
+    """
+
+    def _preprocessing_minmax_scaler_fit_impl(
+        m, X, y=None, _is_data_distributed=False
+    ):  # pragma: no cover
+
+        with numba.objmode(m="preprocessing_minmax_scaler_type"):
+            if _is_data_distributed:
+                # If distributed, then use native implementation
+                m = sklearn_preprocessing_minmax_scaler_fit_dist_helper(m, X)
+            else:
+                # If replicated, then just call sklearn
+                m = m.fit(X, y)
+
+        return m
+
+    return _preprocessing_minmax_scaler_fit_impl
+
+
+@overload_method(BodoPreprocessingMinMaxScalerType, "transform", no_unliteral=True)
+def overload_preprocessing_minmax_scaler_transform(
+    m,
+    X,
+):
+    """
+    Provide implementation for the transform function.
+    We simply call sklearn's transform on each rank.
+    """
+
+    def _preprocessing_minmax_scaler_transform_impl(
+        m,
+        X,
+    ):  # pragma: no cover
+        with numba.objmode(transformed_X="float64[:,:]"):
+            transformed_X = m.transform(X)
+        return transformed_X
+
+    return _preprocessing_minmax_scaler_transform_impl
+
+
+@overload_method(
+    BodoPreprocessingMinMaxScalerType, "inverse_transform", no_unliteral=True
+)
+def overload_preprocessing_minmax_scaler_inverse_transform(
+    m,
+    X,
+):
+    """
+    Provide implementation for the inverse_transform function.
+    We simply call sklearn's inverse_transform on each rank.
+    """
+
+    def _preprocessing_minmax_scaler_inverse_transform_impl(
+        m,
+        X,
+    ):  # pragma: no cover
+        with numba.objmode(inverse_transformed_X="float64[:,:]"):
+            inverse_transformed_X = m.inverse_transform(X)
+        return inverse_transformed_X
+
+    return _preprocessing_minmax_scaler_inverse_transform_impl

@@ -726,10 +726,13 @@ class DistributedAnalysis:
             and isinstance(func_mod, numba.core.ir.Var)
             and isinstance(
                 self.typemap[func_mod.name],
-                bodo.libs.sklearn_ext.BodoPreprocessingStandardScalerType,
+                (
+                    bodo.libs.sklearn_ext.BodoPreprocessingStandardScalerType,
+                    bodo.libs.sklearn_ext.BodoPreprocessingMinMaxScalerType,
+                ),
             )
         ):
-            self._analyze_call_sklearn_preprocessing_standard_scaler(
+            self._analyze_call_sklearn_preprocessing_scalers(
                 lhs, func_name, rhs, kws, array_dists
             )
             return
@@ -1502,7 +1505,7 @@ class DistributedAnalysis:
         # set REP if not found
         self._analyze_call_set_REP(lhs, args, array_dists, fdef)
 
-    def _analyze_call_sklearn_preprocessing_standard_scaler(
+    def _analyze_call_sklearn_preprocessing_scalers(
         self,
         lhs,
         func_name,
@@ -1511,7 +1514,8 @@ class DistributedAnalysis:
         array_dists,
     ):
         """
-        Analyze distribution of sklearn.preprocessing.StandardScaler functions
+        Analyze distribution of sklearn.preprocessing.StandardScaler and
+        sklearn.preprocessing.MinMaxScaler functions.
         Only need to handle transform and inverse_transform. fit is handled automatically.
         """
 

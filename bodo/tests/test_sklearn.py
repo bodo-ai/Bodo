@@ -28,7 +28,7 @@ from sklearn.metrics import (
     recall_score,
 )
 from sklearn.naive_bayes import MultinomialNB
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import MinMaxScaler, StandardScaler
 from sklearn.svm import LinearSVC
 from sklearn.utils._testing import assert_allclose, assert_array_equal
 from sklearn.utils.validation import check_random_state
@@ -440,7 +440,9 @@ def test_mae(data, multioutput, memory_leak_check):
     check_func(test_mae_1, tuple(data), is_out_distributed=False)
 
 
-def gen_ss_random_data(num_samples, num_features, frac_Nans=0.0, scale=1.0):
+def gen_sklearn_scalers_random_data(
+    num_samples, num_features, frac_Nans=0.0, scale=1.0
+):
     """
     Generate random data of shape (num_samples, num_features), where each number
     is in the range (-scale, scale), and frac_Nans fraction of entries are np.nan.
@@ -455,13 +457,17 @@ def gen_ss_random_data(num_samples, num_features, frac_Nans=0.0, scale=1.0):
     return X
 
 
-def gen_ss_edge_case(num_samples, num_features, frac_Nans=0.0, scale=1.0, dim_to_nan=0):
+def gen_sklearn_scalers_edge_case(
+    num_samples, num_features, frac_Nans=0.0, scale=1.0, dim_to_nan=0
+):
     """
-    Helper function to generate random data for testing an edge case of standard scaler.
+    Helper function to generate random data for testing an edge case of sklearn scalers.
     In this edge case, along a specified dimension (dim_to_nan), all but one entry is
     set to np.nan.
     """
-    X = gen_ss_random_data(num_samples, num_features, frac_Nans=frac_Nans, scale=scale)
+    X = gen_sklearn_scalers_random_data(
+        num_samples, num_features, frac_Nans=frac_Nans, scale=scale
+    )
     X[1:, dim_to_nan] = np.nan
     return X
 
@@ -469,11 +475,26 @@ def gen_ss_edge_case(num_samples, num_features, frac_Nans=0.0, scale=1.0, dim_to
 @pytest.mark.parametrize(
     "data",
     [
-        (gen_ss_random_data(20, 3), gen_ss_random_data(100, 3)),
-        (gen_ss_random_data(15, 5, 0.2, 4), gen_ss_random_data(60, 5, 0.5, 2)),
-        (gen_ss_random_data(20, 1, 0, 2), gen_ss_random_data(50, 1, 0.1, 1)),
-        (gen_ss_random_data(20, 1, 0.2, 5), gen_ss_random_data(50, 1, 0.1, 2)),
-        (gen_ss_edge_case(20, 5, 0, 4, 2), gen_ss_random_data(40, 5, 0.1, 3)),
+        (
+            gen_sklearn_scalers_random_data(20, 3),
+            gen_sklearn_scalers_random_data(100, 3),
+        ),
+        (
+            gen_sklearn_scalers_random_data(15, 5, 0.2, 4),
+            gen_sklearn_scalers_random_data(60, 5, 0.5, 2),
+        ),
+        (
+            gen_sklearn_scalers_random_data(20, 1, 0, 2),
+            gen_sklearn_scalers_random_data(50, 1, 0.1, 1),
+        ),
+        (
+            gen_sklearn_scalers_random_data(20, 1, 0.2, 5),
+            gen_sklearn_scalers_random_data(50, 1, 0.1, 2),
+        ),
+        (
+            gen_sklearn_scalers_edge_case(20, 5, 0, 4, 2),
+            gen_sklearn_scalers_random_data(40, 5, 0.1, 3),
+        ),
     ],
 )
 @pytest.mark.parametrize("copy", [True, False])
@@ -524,6 +545,81 @@ def test_standard_scaler(data, copy, with_mean, with_std, memory_leak_check):
         data,
         is_out_distributed=True,
         atol=1e-4,
+        copy_input=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        (
+            gen_sklearn_scalers_random_data(20, 3),
+            gen_sklearn_scalers_random_data(100, 3),
+        ),
+        (
+            gen_sklearn_scalers_random_data(15, 5, 0.2, 4),
+            gen_sklearn_scalers_random_data(60, 5, 0.5, 2),
+        ),
+        (
+            gen_sklearn_scalers_random_data(20, 1, 0, 2),
+            gen_sklearn_scalers_random_data(50, 1, 0.1, 1),
+        ),
+        (
+            gen_sklearn_scalers_random_data(20, 1, 0.2, 5),
+            gen_sklearn_scalers_random_data(50, 1, 0.1, 2),
+        ),
+        (
+            gen_sklearn_scalers_edge_case(20, 5, 0, 4, 2),
+            gen_sklearn_scalers_random_data(40, 5, 0.1, 3),
+        ),
+    ],
+)
+@pytest.mark.parametrize("feature_range", [(0, 1), (-2, 2)])
+@pytest.mark.parametrize("copy", [True, False])
+@pytest.mark.parametrize("clip", [True, False])
+def test_minmax_scaler(data, feature_range, copy, clip, memory_leak_check):
+    """
+    Tests for sklearn.preprocessing.MinMaxScaler implementation in Bodo.
+    """
+
+    def test_fit(X):
+        m = MinMaxScaler(feature_range=feature_range, copy=copy, clip=clip)
+        m = m.fit(X)
+        return m
+
+    py_output = test_fit(data[0])
+    bodo_output = bodo.jit(distributed=["X"])(test_fit)(_get_dist_arg(data[0]))
+
+    assert py_output.n_samples_seen_ == bodo_output.n_samples_seen_
+    assert np.array_equal(py_output.min_, bodo_output.min_, equal_nan=True)
+    assert np.array_equal(py_output.scale_, bodo_output.scale_, equal_nan=True)
+    assert np.array_equal(py_output.data_min_, bodo_output.data_min_, equal_nan=True)
+    assert np.array_equal(py_output.data_max_, bodo_output.data_max_, equal_nan=True)
+    assert np.array_equal(
+        py_output.data_range_, bodo_output.data_range_, equal_nan=True
+    )
+
+    def test_transform(X, X1):
+        m = MinMaxScaler(feature_range=feature_range, copy=copy, clip=clip)
+        m = m.fit(X)
+        X1_transformed = m.transform(X1)
+        return X1_transformed
+
+    check_func(
+        test_transform, data, is_out_distributed=True, atol=1e-8, copy_input=True
+    )
+
+    def test_inverse_transform(X, X1):
+        m = MinMaxScaler(feature_range=feature_range, copy=copy, clip=clip)
+        m = m.fit(X)
+        X1_inverse_transformed = m.inverse_transform(X1)
+        return X1_inverse_transformed
+
+    check_func(
+        test_inverse_transform,
+        data,
+        is_out_distributed=True,
+        atol=1e-8,
         copy_input=True,
     )
 
