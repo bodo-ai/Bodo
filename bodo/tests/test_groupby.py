@@ -2833,6 +2833,25 @@ def test_groupby_as_index_sum(memory_leak_check):
     check_func(impl2, (11,), sort_output=True, reset_index=True)
 
 
+@pytest.mark.slow
+def test_agg_nested_tup_colnames(memory_leak_check):
+    """
+    Test Groupby.agg() combination that produces nested tuple names (see #2424)
+    """
+
+    def impl(df):
+        df1 = df.groupby("A").agg({"B": ["sum"]}).reset_index()
+        res = df1.groupby("A").agg({("B", "sum"): ["sum"]})
+        # replacing output name since Pandas doesn't preserve nested tuple names
+        res.columns = ["C"]
+        return res
+
+    np.random.seed(3)
+    nums = np.concatenate([np.arange(50), np.arange(50)])
+    df = pd.DataFrame({"A": nums, "B": np.random.random(100)})
+    check_func(impl, (df,), sort_output=True, reset_index=True, check_names=False)
+
+
 # TODO: add memory leak check when issues addressed
 @pytest.mark.slow
 def test_groupby_multi_intlabels_sum():
