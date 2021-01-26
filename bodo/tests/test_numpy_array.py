@@ -682,3 +682,18 @@ def test_any_all_numpy_2d(memory_leak_check):
     arr = np.array([[False, False, True], [False, False, False], [True, True, True]])
     assert test_impl_any(arr) == bodo.jit(test_impl_any)(arr)
     assert test_impl_all(arr) == bodo.jit(test_impl_all)(arr)
+
+
+def test_np_random_multivariate_normal(memory_leak_check):
+    def test_impl(S, cov, size=None):
+        np.random.seed(2)
+        return np.random.multivariate_normal(S, cov, size)
+
+    nvars = 10
+    ncols = nvars + 1
+    nrows = 20
+    mu = np.array([0.0] * nvars)
+    S = np.random.uniform(-5.0, 5.0, (nvars, nvars))
+    cov = np.matmul(S.T, S)
+    check_func(test_impl, (mu, cov, nrows), dist_test=False, is_out_distributed=True)
+    check_func(test_impl, (mu, cov), dist_test=False, is_out_distributed=True)

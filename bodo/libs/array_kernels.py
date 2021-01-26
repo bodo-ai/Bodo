@@ -5,7 +5,6 @@ Implements array kernels such as median and quantile.
 import math
 import operator
 import re
-from collections import namedtuple
 from math import sqrt
 
 import llvmlite.binding as ll
@@ -41,26 +40,17 @@ from bodo.libs.array import (
     info_from_table,
     info_to_array,
     sample_table,
-    shuffle_table,
-    sort_values_table,
 )
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType, offset_type
 from bodo.libs.bool_arr_ext import BooleanArrayType, boolean_array
 from bodo.libs.decimal_arr_ext import DecimalArrayType
 from bodo.libs.distributed_api import Reduce_Type
 from bodo.libs.int_arr_ext import IntegerArrayType
-from bodo.libs.str_arr_ext import (
-    get_str_arr_item_length,
-    num_total_chars,
-    pre_alloc_string_array,
-    str_arr_set_na,
-    string_array_type,
-)
+from bodo.libs.str_arr_ext import str_arr_set_na, string_array_type
 from bodo.libs.struct_arr_ext import StructArrayType
 from bodo.libs.tuple_arr_ext import TupleArrayType
 from bodo.utils.indexing import add_nested_counts, init_nested_counts
 from bodo.utils.shuffle import getitem_arr_tup_single
-from bodo.utils.transform import is_var_size_item_array_type
 from bodo.utils.typing import (
     BodoError,
     check_unsupported_args,
@@ -2162,3 +2152,92 @@ def np_hstack(tup):
         return bodo.libs.array_kernels.concat(tup)
 
     return impl
+
+
+# Source code: https://github.com/numpy/numpy/blob/04b58d3ffbd2c8d30c36ae6ed6366f1069136c43/numpy/random/mtrand.pyx#L4060
+@overload(np.random.multivariate_normal, inline="always", no_unliteral=True)
+def np_random_multivariate_normal(mean, cov, size=None, check_valid="warn", tol=1e-8):
+    args_dict = {"check_valid": check_valid, "tol": tol}
+    args_default_dict = {"check_valid": "warn", "tol": 1e-8}
+    check_unsupported_args(
+        "np.random.multivariate_normal", args_dict, args_default_dict
+    )
+
+    # TODO: Numpy seems to support tuple as well
+    if not (is_overload_none(size) or isinstance(size, types.Integer)):
+        raise BodoError(
+            "np.random.multivariate_normal() size argument is only supported for integers"
+        )
+
+    # TODO: Should we support Pandas arrays.
+
+    # Check the input types and shapes
+    if not (bodo.utils.utils.is_array_typ(mean, False) and mean.ndim == 1):
+        raise BodoError(
+            "np.random.multivariate_normal() mean must be a 1 dimensional numpy array"
+        )
+    if not (bodo.utils.utils.is_array_typ(cov, False) and cov.ndim == 2):
+        raise BodoError(
+            "np.random.multivariate_normal() cov must be a 2 dimensional square, numpy array"
+        )
+
+    def impl(mean, cov, size=None, check_valid="warn", tol=1e-8):
+        # Check that cov is square. Moved to separate function for inlining
+        _validate_multivar_norm(mean, cov, size=None, check_valid="warn", tol=1e-8)
+        # Calculate the output shape
+        N = mean.shape[0]
+        # Numba seems to only support tuples, which lead
+        final_shape = _std_normal_get_shape(size, N)
+        standard_normal = np.random.standard_normal(final_shape)
+
+        # Convert cov float64 to make tol meaningful
+        # https://github.com/numpy/numpy/blob/04b58d3ffbd2c8d30c36ae6ed6366f1069136c43/numpy/random/mtrand.pyx#L4099
+        cov = cov.astype(np.float64)
+
+        # Compute the svd
+        (u, s, v) = np.linalg.svd(cov)
+
+        # TODO: Handle check_valid options by ensuring cov is positive-semidefinite
+        # https://github.com/numpy/numpy/blob/04b58d3ffbd2c8d30c36ae6ed6366f1069136c43/numpy/random/mtrand.pyx#L4099
+
+        res = np.dot(standard_normal, np.sqrt(s).reshape(len(s), 1) * v)
+        res += mean
+        # Do we need to set the shape? Not sure why Numpy does that.
+        # https://github.com/numpy/numpy/blob/04b58d3ffbd2c8d30c36ae6ed6366f1069136c43/numpy/random/mtrand.pyx#L4120
+        return res
+
+    return impl
+
+
+def _validate_multivar_norm(
+    mean, cov, size=None, check_valid="warn", tol=1e-8
+):  # pragma: no cover
+    # Dummy function for overload
+    return
+
+
+@overload(_validate_multivar_norm, no_unliteral=True)
+def _overload_validate_multivar_norm(
+    mean, cov, size=None, check_valid="warn", tol=1e-8
+):
+    def impl(mean, cov, size=None, check_valid="warn", tol=1e-8):  # pragma: no cover
+        if cov.shape[0] != cov.shape[1]:
+            raise ValueError(
+                "np.random.multivariate_normal() cov must be a 2 dimensional square, numpy array"
+            )
+
+    return impl
+
+
+def _std_normal_get_shape(N, size):  # pragma: no cover
+    # Dummy function for overload
+    return (size, N)
+
+
+@overload(_std_normal_get_shape, no_unliteral=True, inline="always")
+def _overload_std_normal_get_shape(size, N):
+    # Moved a separate function to prevent type unification issues.
+    if is_overload_none(size):
+        return lambda size, N: (N,)
+    # TODO: Support list/array args
+    return lambda size, N: (size, N)
