@@ -124,6 +124,7 @@ and parallelize.
     * :func:`numpy.random.sample`
     * :func:`numpy.random.random`
     * :func:`numpy.random.standard_normal`
+    * :func:`numpy.random.multivariate_normal`
     * :func:`numpy.random.chisquare`
     * :func:`numpy.random.weibull`
     * :func:`numpy.random.power`

@@ -695,5 +695,12 @@ def test_np_random_multivariate_normal(memory_leak_check):
     mu = np.array([0.0] * nvars)
     S = np.random.uniform(-5.0, 5.0, (nvars, nvars))
     cov = np.matmul(S.T, S)
-    check_func(test_impl, (mu, cov, nrows), dist_test=False, is_out_distributed=True)
-    check_func(test_impl, (mu, cov), dist_test=False, is_out_distributed=True)
+    # Test replicated input but distributed output
+    for arg_val in [(mu, cov, nrows), (mu, cov)]:
+        py_output = test_impl(*arg_val)
+        bodo_out = bodo.jit(distributed=["data"], all_returns_distributed=True)(
+            test_impl
+        )(*arg_val)
+        res = bodo.gatherv(bodo_out)
+        if bodo.get_rank() == 0:
+            np.testing.assert_array_equal(py_output, res)
