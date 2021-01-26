@@ -940,7 +940,7 @@ def _overload_series_cov_helper(sum_val, N, nonzero_len):
             # Division should be handled by np.true_divide in the future, but
             # this seems to produce a bus error.
             # https://github.com/numpy/numpy/blob/v1.19.0/numpy/lib/function_base.py#L2469
-            sign = -1 if sum_val < 0.0 else 1
+            sign = np.sign(sum_val)
             return np.inf * sign
         return sum_val / N
 
