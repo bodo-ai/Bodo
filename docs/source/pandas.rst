@@ -363,7 +363,7 @@ unless support is explicitly mentioned.
 * :meth:`pandas.Series.any`
 * :meth:`pandas.Series.corr`
 * :meth:`pandas.Series.count`
-* :meth:`pandas.Series.cov`
+* :meth:`pandas.Series.cov` (supports ddof)
 * :meth:`pandas.Series.cumsum`
 * :meth:`pandas.Series.cumprod`
 * :meth:`pandas.Series.cummin`

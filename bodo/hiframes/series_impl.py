@@ -906,18 +906,43 @@ def overload_series_corr(S, other, method="pearson", min_periods=None):
 @overload_method(SeriesType, "cov", inline="always", no_unliteral=True)
 def overload_series_cov(S, other, min_periods=None, ddof=1):
 
-    unsupported_args = dict(min_periods=min_periods, ddof=ddof)
-    arg_defaults = dict(min_periods=None, ddof=1)
+    unsupported_args = dict(min_periods=min_periods)
+    arg_defaults = dict(min_periods=None)
     check_unsupported_args("Series.cov", unsupported_args, arg_defaults)
 
     # TODO: use online algorithm, e.g. StatFunctions.scala
     # https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance
     def impl(S, other, min_periods=None, ddof=1):  # pragma: no cover
-        # TODO: check lens
+        # TODO: Handle different lens (fails due to array analysis)
+        # https://github.com/pandas-dev/pandas/blob/b58e2b86861fe248008d1f140752d1a558cd6516/pandas/core/nanops.py#L1493
         ma = S.mean()
         mb = other.mean()
-        # TODO: check aligned nans, (S.notna() != other.notna()).any()
-        return ((S - ma) * (other - mb)).sum() / (S.count() - 1.0)
+        total = ((S - ma) * (other - mb)).sum()
+        N = np.float64(S.count() - ddof)
+        nonzero_len = S.count() * other.count()
+        return _series_cov_helper(total, N, nonzero_len)
+
+    return impl
+
+
+def _series_cov_helper(sum_val, N, nonzero_len):  # pragma: no cover
+    # Dummy function to overload
+    return
+
+
+@overload(_series_cov_helper, no_unliteral=True)
+def _overload_series_cov_helper(sum_val, N, nonzero_len):
+    def impl(sum_val, N, nonzero_len):  # pragma: no cover
+        if not nonzero_len:
+            # https://github.com/pandas-dev/pandas/blob/v1.2.1/pandas/core/series.py#L2347
+            return np.nan
+        if N <= 0.0:
+            # Division should be handled by np.true_divide in the future, but
+            # this seems to produce a bus error.
+            # https://github.com/numpy/numpy/blob/v1.19.0/numpy/lib/function_base.py#L2469
+            sign = -1 if sum_val < 0.0 else 1
+            return np.inf * sign
+        return sum_val / N
 
     return impl
 

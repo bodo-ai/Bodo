@@ -149,6 +149,21 @@ def test_series_constructor_int_arr(memory_leak_check):
     check_func(impl, (np.array([1, 4, 1, np.nan, 0], dtype=np.float32),))
 
 
+@pytest.mark.slow
+def test_series_cov_ddof(memory_leak_check):
+    def test_impl(s1, s2, ddof=1):
+        return s1.cov(s2, ddof=ddof)
+
+    s1 = pd.Series([0.90010907, 0.13484424, 0.62036035])
+    s2 = pd.Series([0.12528585, 0.26962463, 0.51111198])
+    check_func(test_impl, (s1, s2, 0))
+    check_func(test_impl, (s1, s2, 1))
+    check_func(test_impl, (s1, s2, 2))
+    check_func(test_impl, (s1, s2, 3))
+    check_func(test_impl, (s1, s2, 4))
+    check_func(test_impl, (pd.Series([], dtype=float), pd.Series([], dtype=float)))
+
+
 # using length of 5 arrays to enable testing on 3 ranks (2, 2, 1 distribution)
 # zero length chunks on any rank can cause issues, TODO: fix
 # TODO: other possible Series types like Categorical, dt64, td64, ...
