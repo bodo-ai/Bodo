@@ -779,6 +779,24 @@ class DistributedAnalysis:
                 )
 
             return
+        if func_mod == "sklearn.model_selection._split":
+            if func_name == "train_test_split":
+                arg0 = rhs.args[0].name
+                if lhs not in array_dists:
+                    self._set_var_dist(lhs, array_dists, Distribution.OneD, True)
+
+                min_dist = self._min_dist(array_dists[lhs][0], array_dists[lhs][1])
+                min_dist = self._min_dist(min_dist, array_dists[arg0])
+                if self.typemap[rhs.args[1].name] != types.none:
+                    arg1 = rhs.args[1].name
+                    min_dist = self._min_dist(min_dist, array_dists[arg1])
+                    min_dist = self._min_dist(min_dist, array_dists[lhs][2])
+                    min_dist = self._min_dist(min_dist, array_dists[lhs][3])
+                    array_dists[arg1] = min_dist
+
+                self._set_var_dist(lhs, array_dists, min_dist)
+                array_dists[arg0] = min_dist
+            return
 
         if fdef == ("prepare_data", "bodo.dl"):
             self._meet_array_dists(lhs, rhs.args[0].name, array_dists)

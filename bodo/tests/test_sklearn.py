@@ -27,6 +27,7 @@ from sklearn.metrics import (
     r2_score,
     recall_score,
 )
+from sklearn.model_selection import train_test_split
 from sklearn.naive_bayes import MultinomialNB
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 from sklearn.svm import LinearSVC
@@ -1473,3 +1474,112 @@ def test_svm_linear_svc(memory_leak_check):
 
     sklearn_score_result = impl_score(X, y)
     np.allclose(sklearn_score_result, bodo_score_result, atol=0.1)
+
+
+# ------------------------train_test_split------------------------
+def test_train_test_split(memory_leak_check):
+    def impl_shuffle(X, y):
+        # simple test
+        X_train, X_test, y_train, y_test = train_test_split(X, y)
+        return X_train, X_test, y_train, y_test
+
+    def impl_no_shuffle(X, y):
+        # simple test
+        X_train, X_test, y_train, y_test = train_test_split(
+            X, y, test_size=0.4, train_size=0.6, shuffle=False
+        )
+        return X_train, X_test, y_train, y_test
+
+    X = np.arange(100).reshape((10, 10))
+    y = np.arange(10)
+
+    # Test shuffle with numpy arrays
+    X_train, X_test, y_train, y_test = bodo.jit(
+        distributed=["X", "y", "X_train", "X_test", "y_train", "y_test"], cache=True
+    )(impl_shuffle)(
+        _get_dist_arg(X),
+        _get_dist_arg(y),
+    )
+    # Test correspondence of X and y
+    assert_array_equal(X_train[:, 0], y_train * 10)
+    assert_array_equal(X_test[:, 0], y_test * 10)
+
+    bodo_X_train = bodo.allgatherv(X_train)
+    bodo_X_test = bodo.allgatherv(X_test)
+    bodo_X = np.sort(np.concatenate((bodo_X_train, bodo_X_test), axis=0), axis=0)
+    assert_array_equal(bodo_X, X)
+
+    # Test without shuffle with numpy arrays
+    X_train, X_test, y_train, y_test = bodo.jit(
+        distributed=["X", "y", "X_train", "X_test", "y_train", "y_test"], cache=True
+    )(impl_no_shuffle)(
+        _get_dist_arg(X),
+        _get_dist_arg(y),
+    )
+    # Test correspondence of X and y
+    assert_array_equal(X_train[:, 0], y_train * 10)
+    assert_array_equal(X_test[:, 0], y_test * 10)
+
+    bodo_X_train = bodo.allgatherv(X_train)
+    bodo_X_test = bodo.allgatherv(X_test)
+    bodo_X = np.sort(np.concatenate((bodo_X_train, bodo_X_test), axis=0), axis=0)
+    assert_array_equal(bodo_X, X)
+
+    # Test replicated shuffle with numpy arrays
+    X_train, X_test, y_train, y_test = bodo.jit(impl_shuffle)(X, y)
+    # Test correspondence of X and y
+    assert_array_equal(X_train[:, 0], y_train * 10)
+    assert_array_equal(X_test[:, 0], y_test * 10)
+
+
+def test_train_test_split_df(memory_leak_check):
+    def impl_shuffle(X, y):
+        # simple test
+        X_train, X_test, y_train, y_test = train_test_split(X, y)
+        return X_train, X_test, y_train, y_test
+
+    # Test replicated shuffle with DataFrame
+    train = pd.DataFrame({"A": range(20), "B": range(100, 120)})
+    train_labels = pd.Series(range(20))
+    X_train, X_test, y_train, y_test = bodo.jit(impl_shuffle)(train, train_labels)
+    assert_array_equal(X_train.iloc[:, 0], y_train)
+    assert_array_equal(X_test.iloc[:, 0], y_test)
+
+    # Test when labels is series but data is array
+    train = np.arange(100).reshape((10, 10))
+    train_labels = pd.Series(range(10))
+
+    # Replicated
+    X_train, X_test, y_train, y_test = bodo.jit(impl_shuffle)(train, train_labels)
+    assert_array_equal(X_train[:, 0], y_train * 10)
+    assert_array_equal(X_test[:, 0], y_test * 10)
+
+    # Distributed
+    X_train, X_test, y_train, y_test = bodo.jit(
+        distributed=["X", "y", "X_train", "X_test", "y_train", "y_test"], cache=True
+    )(impl_shuffle)(
+        _get_dist_arg(train),
+        _get_dist_arg(train_labels),
+    )
+    assert_array_equal(X_train[:, 0], y_train * 10)
+    assert_array_equal(X_test[:, 0], y_test * 10)
+    bodo_X_train = bodo.allgatherv(X_train)
+    bodo_X_test = bodo.allgatherv(X_test)
+    bodo_X = np.sort(np.concatenate((bodo_X_train, bodo_X_test), axis=0), axis=0)
+    assert_array_equal(bodo_X, train)
+
+    # Test distributed DataFrame
+    train = pd.DataFrame({"A": range(20), "B": range(100, 120)})
+    train_labels = pd.Series(range(20))
+    X_train, X_test, y_train, y_test = bodo.jit(
+        distributed=["X", "y", "X_train", "X_test", "y_train", "y_test"]
+    )(impl_shuffle)(
+        _get_dist_arg(train),
+        _get_dist_arg(train_labels),
+    )
+    assert_array_equal(X_train.iloc[:, 0], y_train)
+    assert_array_equal(X_test.iloc[:, 0], y_test)
+    bodo_X_train = bodo.allgatherv(X_train)
+    bodo_X_test = bodo.allgatherv(X_test)
+    bodo_X = np.sort(np.concatenate((bodo_X_train, bodo_X_test), axis=0), axis=0)
+    assert_array_equal(bodo_X, train)

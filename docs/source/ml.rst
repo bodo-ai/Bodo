@@ -174,6 +174,15 @@ Methods:
   * :any:`sklearn.preprocessing.StandardScaler.transform`
   * :any:`sklearn.preprocessing.StandardScaler.inverse_transform`
 
+Model Selection
+***************
+
+* :func:`sklearn.model_selection.train_test_split`
+
+  * Currently it only supports two inputs of type numpy arrays and/or pandas dataframes.
+  * Arguments ``train_size`` and ``test_size`` accept float between 0.0 and 1.0 or ``None`` only.
+  * Arguments ``random_state`` and ``shuffle`` are supported.
+  * Argument ``stratify`` is not supported yet.
 
 :class:`sklearn.preprocessing.MinMaxScaler`
 

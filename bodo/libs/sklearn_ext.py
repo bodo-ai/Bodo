@@ -1,13 +1,16 @@
 """Support scikit-learn using object mode of Numba """
 import itertools
 import numbers
+import types as pytypes
 
 import numba
 import numpy as np
+import pandas as pd
 import sklearn.cluster
 import sklearn.ensemble
 import sklearn.linear_model
 import sklearn.metrics
+import sklearn.model_selection
 import sklearn.naive_bayes
 import sklearn.svm
 import sklearn.utils
@@ -35,6 +38,8 @@ from sklearn.utils.validation import _check_sample_weight
 
 import bodo
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
+from bodo.hiframes.pd_index_ext import NumericIndexType
+from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.libs.distributed_api import (
     Reduce_Type,
     create_subcomm_mpi4py,
@@ -43,6 +48,8 @@ from bodo.libs.distributed_api import (
     get_num_nodes,
 )
 from bodo.utils.typing import (
+    check_unsupported_args,
+    get_overload_const_int,
     get_overload_const_str,
     is_overload_constant_str,
     is_overload_false,
@@ -3063,6 +3070,272 @@ def overload_preprocessing_standard_scaler_inverse_transform(
 
     return _preprocessing_standard_scaler_inverse_transform_impl
 
+
+# -----------------------------------------------------------------------------
+# ---------------------------train_test_split--------------------------------------------------
+def get_data_slice_parallel(data, labels, len_train):  # pragma: no cover
+    """When shuffle=False, just split the data/labels using slicing.
+    Run in bodo.jit to do it across ranks"""
+    data_train = data[:len_train]
+    data_test = data[len_train:]
+    data_train = bodo.rebalance(data_train)
+    data_test = bodo.rebalance(data_test)
+    # TODO: labels maynot be present
+    labels_train = labels[:len_train]
+    labels_test = labels[len_train:]
+    labels_train = bodo.rebalance(labels_train)
+    labels_test = bodo.rebalance(labels_test)
+    return data_train, data_test, labels_train, labels_test
+
+
+@numba.njit
+def get_train_test_size(train_size, test_size):  # pragma: no cover
+    """Set train_size and test_size values"""
+    if train_size is None and test_size is None:
+        return 0.75, 0.25
+    elif train_size is not None and test_size is None:
+        return train_size, 1.0 - train_size
+    elif train_size is None and test_size is not None:
+        return 1.0 - test_size, train_size
+    elif train_size + test_size > 1:
+        raise ValueError(
+            "The sum of test_size and train_size, should be in the (0, 1) range. Reduce test_size and/or train_size."
+        )
+    else:
+        return train_size, test_size
+
+
+# TODO: labels can be 2D (We don't currently support multivariate in any ML algorithm.)
+
+
+def set_labels_type(labels, label_type):  # pragma: no cover
+    return labels
+
+
+@overload(set_labels_type, no_unliteral=True)
+def overload_set_labels_type(labels, label_type):
+    """Change labels type to be same as data variable type if they are different"""
+    if get_overload_const_int(label_type) == 1:
+
+        def _set_labels(labels, label_type):  # pragma: no cover
+            # Make it a series
+            return pd.Series(labels)
+
+        return _set_labels
+
+    elif get_overload_const_int(label_type) == 2:
+
+        def _set_labels(labels, label_type):  # pragma: no cover
+            # Get array from labels series
+            return labels.values
+
+        return _set_labels
+    else:
+
+        def _set_labels(labels, label_type):  # pragma: no cover
+            return labels
+
+        return _set_labels
+
+
+def reset_labels_type(labels, label_type):  # pragma: no cover
+    return labels
+
+
+@overload(reset_labels_type, no_unliteral=True)
+def overload_reset_labels_type(labels, label_type):
+    """ Reset labels to its original type if changed"""
+    if get_overload_const_int(label_type) == 1:
+
+        def _reset_labels(labels, label_type):  # pragma: no cover
+            # Change back to array
+            return labels.values
+
+        return _reset_labels
+    elif get_overload_const_int(label_type) == 2:
+
+        def _reset_labels(labels, label_type):  # pragma: no cover
+            # Change back to Series
+            return pd.Series(labels, index=np.arange(len(labels)))
+
+        return _reset_labels
+    else:
+
+        def _reset_labels(labels, label_type):  # pragma: no cover
+            return labels
+
+        return _reset_labels
+
+
+# Overload to use train_test_split inside Bodo functions
+# directly via sklearn's API
+@overload(sklearn.model_selection.train_test_split, no_unliteral=True)
+def overload_train_test_split(
+    data,
+    labels=None,
+    train_size=None,
+    test_size=None,
+    random_state=None,
+    shuffle=True,
+    stratify=None,
+    _is_data_distributed=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
+):
+    """
+    Implement train_test_split. If data is replicated, run sklearn version.
+    If data is distributed and shuffle=False, use slicing and then rebalance across ranks
+    If data is distributed and shuffle=True, generate a global train/test mask, shuffle, and rebalance across ranks.
+    """
+    # TODO: Check if labels is None and change output accordingly
+    # no_labels = False
+    # if is_overload_none(labels):
+    #    no_labels = True
+    args_dict = {
+        "stratify": stratify,
+    }
+
+    args_default_dict = {
+        "stratify": None,
+    }
+    check_unsupported_args("train_test_split", args_dict, args_default_dict)
+    # If data is replicated, run scikit-learn directly
+
+    if is_overload_false(_is_data_distributed):
+        data_type_name = f"data_split_type_{numba.core.ir_utils.next_label()}"
+        labels_type_name = f"labels_split_type_{numba.core.ir_utils.next_label()}"
+        for d, d_type_name in ((data, data_type_name), (labels, labels_type_name)):
+            if isinstance(d, (DataFrameType, SeriesType)):
+                d_typ = d.copy(index=NumericIndexType(types.int64))
+                setattr(types, d_type_name, d_typ)
+            else:
+                setattr(types, d_type_name, d)
+        func_text = "def _train_test_split_impl(\n"
+        func_text += "    data,\n"
+        func_text += "    labels=None,\n"
+        func_text += "    train_size=None,\n"
+        func_text += "    test_size=None,\n"
+        func_text += "    random_state=None,\n"
+        func_text += "    shuffle=True,\n"
+        func_text += "    stratify=None,\n"
+        func_text += "    _is_data_distributed=False,\n"
+        func_text += "):  # pragma: no cover\n"
+        func_text += "    with numba.objmode(data_train='{}', data_test='{}', labels_train='{}', labels_test='{}'):\n".format(
+            data_type_name, data_type_name, labels_type_name, labels_type_name
+        )
+        func_text += "        data_train, data_test, labels_train, labels_test = sklearn.model_selection.train_test_split(\n"
+        func_text += "            data,\n"
+        func_text += "            labels,\n"
+        func_text += "            train_size=train_size,\n"
+        func_text += "            test_size=test_size,\n"
+        func_text += "            random_state=random_state,\n"
+        func_text += "            shuffle=shuffle,\n"
+        func_text += "            stratify=stratify,\n"
+        func_text += "        )\n"
+        func_text += "    return data_train, data_test, labels_train, labels_test\n"
+        loc_vars = {}
+        exec(func_text, {"numba": numba, "sklearn": sklearn}, loc_vars)
+        _train_test_split_impl = loc_vars["_train_test_split_impl"]
+        return _train_test_split_impl
+    else:
+        global get_data_slice_parallel
+        if isinstance(get_data_slice_parallel, pytypes.FunctionType):
+            get_data_slice_parallel = bodo.jit(
+                distributed=[
+                    "data",
+                    "labels",
+                    "data_train",
+                    "data_test",
+                    "labels_train",
+                    "labels_test",
+                ]
+            )(get_data_slice_parallel)
+
+        # Allowed inputs are lists, numpy arrays, scipy-sparse matrices or pandas dataframes.
+
+        label_type = 0
+        # 0: no change, 1: change to series, 2: change to array
+        if isinstance(data, DataFrameType) and isinstance(labels, types.Array):
+            label_type = 1
+        elif isinstance(data, types.Array) and isinstance(labels, (SeriesType)):
+            label_type = 2
+        if is_overload_none(random_state):
+            random_state = 42
+
+        def _train_test_split_impl(
+            data,
+            labels=None,
+            train_size=None,
+            test_size=None,
+            random_state=None,
+            shuffle=True,
+            stratify=None,
+            _is_data_distributed=False,
+        ):  # pragma: no cover
+            if data.shape[0] != labels.shape[0]:
+                raise ValueError(
+                    "Found input variables with inconsistent number of samples\n"
+                )
+            train_size, test_size = get_train_test_size(train_size, test_size)
+            # Get total size of data on each rank
+            global_data_size = bodo.libs.distributed_api.dist_reduce(
+                len(data), np.int32(Reduce_Type.Sum.value)
+            )
+            len_train = int(global_data_size * train_size)
+            len_test = global_data_size - len_train
+
+            if shuffle:
+                # Check type. This is needed for shuffle behavior.
+                labels = set_labels_type(labels, label_type)
+
+                my_rank = bodo.get_rank()
+                nranks = bodo.get_size()
+                rank_data_len = np.empty(nranks, np.int64)
+                bodo.libs.distributed_api.allgather(rank_data_len, len(data))
+                rank_offset = np.cumsum(rank_data_len[0 : my_rank + 1])
+                # Create mask where True is for training and False for testing
+                global_mask = np.full(global_data_size, True)
+                global_mask[:len_test] = False
+                np.random.seed(42)
+                np.random.permutation(global_mask)
+                # Let each rank find its train/test dataset
+                if my_rank:
+                    start = rank_offset[my_rank - 1]
+                else:
+                    start = 0
+                end = rank_offset[my_rank]
+                local_mask = global_mask[start:end]
+
+                data_train = data[local_mask]
+                data_test = data[~local_mask]
+                labels_train = labels[local_mask]
+                labels_test = labels[~local_mask]
+
+                data_train = bodo.random_shuffle(
+                    data_train, seed=random_state, parallel=True
+                )
+                data_test = bodo.random_shuffle(
+                    data_test, seed=random_state, parallel=True
+                )
+                labels_train = bodo.random_shuffle(
+                    labels_train, seed=random_state, parallel=True
+                )
+                labels_test = bodo.random_shuffle(
+                    labels_test, seed=random_state, parallel=True
+                )
+
+                # Restore type
+                labels_train = reset_labels_type(labels_train, label_type)
+                labels_test = reset_labels_type(labels_test, label_type)
+            else:
+                (
+                    data_train,
+                    data_test,
+                    labels_train,
+                    labels_test,
+                ) = get_data_slice_parallel(data, labels, len_train)
+
+            return data_train, data_test, labels_train, labels_test
+
+        return _train_test_split_impl
 
 # ----------------------------------------------------------------------------------------
 # ----------------------------------- MinMax-Scaler ------------------------------------

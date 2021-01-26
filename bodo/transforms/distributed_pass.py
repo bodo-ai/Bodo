@@ -793,6 +793,84 @@ class DistributedPass:
                     self,
                     extra_globals={"sklearn": sklearn},
                 )
+        if (
+            func_mod == "sklearn.model_selection._split"
+            and func_name == "train_test_split"
+        ):
+
+            if self._is_1D_or_1D_Var_arr(rhs.args[0].name):
+                rhs = assign.value
+                kws = dict(rhs.kws)
+                nodes = []
+                data = get_call_expr_arg(
+                    "sklearn.model_selection.train_test_split", rhs.args, kws, 0, "data"
+                )
+                labels = get_call_expr_arg(
+                    "sklearn.model_selection.train_test_split",
+                    rhs.args,
+                    kws,
+                    1,
+                    "labels",
+                )
+                test_size_var = ir.Var(
+                    assign.target.scope, mk_unique_var("test_size_var"), rhs.loc
+                )
+                nodes.append(ir.Assign(ir.Const(0.25, rhs.loc), test_size_var, rhs.loc))
+                self.typemap[test_size_var.name] = types.none
+                test_size = get_call_expr_arg(
+                    "train_test_split", rhs.args, kws, 1e6, "test_size", test_size_var
+                )
+
+                train_size_var = ir.Var(
+                    assign.target.scope, mk_unique_var("train_size_var"), rhs.loc
+                )
+                nodes.append(
+                    ir.Assign(ir.Const(0.75, rhs.loc), train_size_var, rhs.loc)
+                )
+                self.typemap[train_size_var.name] = types.none
+                train_size = get_call_expr_arg(
+                    "train_test_split", rhs.args, kws, 1e6, "train_size", train_size_var
+                )
+
+                shuffle_var = ir.Var(
+                    assign.target.scope, mk_unique_var("shuffle_var"), rhs.loc
+                )
+                nodes.append(ir.Assign(ir.Const(True, rhs.loc), shuffle_var, rhs.loc))
+                self.typemap[shuffle_var.name] = types.BooleanLiteral(True)
+                shuffle = get_call_expr_arg(
+                    "train_test_split", rhs.args, kws, 1e6, "shuffle", shuffle_var
+                )
+
+                random_state_var = ir.Var(
+                    assign.target.scope, mk_unique_var("random_state_var"), rhs.loc
+                )
+                # Q: int or randomstate instance?
+                nodes.append(ir.Assign(ir.Const(0, rhs.loc), random_state_var, rhs.loc))
+                self.typemap[random_state_var.name] = types.IntegerLiteral(0)
+                random_state = get_call_expr_arg(
+                    "train_test_split",
+                    rhs.args,
+                    kws,
+                    1e6,
+                    "random_state",
+                    random_state_var,
+                )
+                f = lambda data, labels, test_size, train_size, shuffle, random_state: sklearn.model_selection.train_test_split(
+                    data,
+                    labels,
+                    test_size=test_size,
+                    train_size=train_size,
+                    shuffle=shuffle,
+                    random_state=random_state,
+                    _is_data_distributed=True,
+                )
+                return nodes + compile_func_single_block(
+                    f,
+                    [data, labels, test_size, train_size, shuffle, random_state],
+                    assign.target,
+                    self,
+                    extra_globals={"sklearn": sklearn},
+                )
 
         # divide 1D alloc
         # XXX allocs should be matched before going to _run_call_np
