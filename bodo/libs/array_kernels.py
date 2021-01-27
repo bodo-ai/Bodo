@@ -2164,30 +2164,37 @@ def np_random_multivariate_normal(mean, cov, size=None, check_valid="warn", tol=
     )
 
     # TODO: Numpy seems to support tuple as well
-    if not (is_overload_none(size) or isinstance(size, types.Integer)):
+    # TODO: All None. This fails in the distributed analysis step for np.dot
+    # (produces a replicated result)
+    if not (isinstance(size, types.Integer)):  # pragma: no cover
         raise BodoError(
-            "np.random.multivariate_normal() size argument is only supported for integers"
+            "np.random.multivariate_normal() size argument is required and must be an integer"
         )
 
     # TODO: Should we support Pandas arrays.
 
     # Check the input types and shapes
-    if not (bodo.utils.utils.is_array_typ(mean, False) and mean.ndim == 1):
+    if not (
+        bodo.utils.utils.is_array_typ(mean, False) and mean.ndim == 1
+    ):  # pragma: no cover
         raise BodoError(
             "np.random.multivariate_normal() mean must be a 1 dimensional numpy array"
         )
-    if not (bodo.utils.utils.is_array_typ(cov, False) and cov.ndim == 2):
+    if not (
+        bodo.utils.utils.is_array_typ(cov, False) and cov.ndim == 2
+    ):  # pragma: no cover
         raise BodoError(
             "np.random.multivariate_normal() cov must be a 2 dimensional square, numpy array"
         )
 
     def impl(mean, cov, size=None, check_valid="warn", tol=1e-8):
         # Check that cov is square. Moved to separate function for inlining
+        # TODO: Replace with array analysis
         _validate_multivar_norm(mean, cov, size=None, check_valid="warn", tol=1e-8)
         # Calculate the output shape
         N = mean.shape[0]
-        # Numba seems to only support tuples, which lead
-        final_shape = _std_normal_get_shape(size, N)
+        # TODO: Support None and array like inputs
+        final_shape = (size, N)
         standard_normal = np.random.standard_normal(final_shape)
 
         # Convert cov float64 to make tol meaningful
@@ -2200,11 +2207,11 @@ def np_random_multivariate_normal(mean, cov, size=None, check_valid="warn", tol=
         # TODO: Handle check_valid options by ensuring cov is positive-semidefinite
         # https://github.com/numpy/numpy/blob/04b58d3ffbd2c8d30c36ae6ed6366f1069136c43/numpy/random/mtrand.pyx#L4099
 
-        res = np.dot(standard_normal, np.sqrt(s).reshape(len(s), 1) * v)
-        res += mean
+        res = np.dot(standard_normal, np.sqrt(s).reshape(N, 1) * v)
+        output = res + mean
         # Do we need to set the shape? Not sure why Numpy does that.
         # https://github.com/numpy/numpy/blob/04b58d3ffbd2c8d30c36ae6ed6366f1069136c43/numpy/random/mtrand.pyx#L4120
-        return res
+        return output
 
     return impl
 
@@ -2227,17 +2234,3 @@ def _overload_validate_multivar_norm(
             )
 
     return impl
-
-
-def _std_normal_get_shape(N, size):  # pragma: no cover
-    # Dummy function for overload
-    return (size, N)
-
-
-@overload(_std_normal_get_shape, no_unliteral=True, inline="always")
-def _overload_std_normal_get_shape(size, N):
-    # Moved a separate function to prevent type unification issues.
-    if is_overload_none(size):
-        return lambda size, N: (N,)
-    # TODO: Support list/array args
-    return lambda size, N: (size, N)
