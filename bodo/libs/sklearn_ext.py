@@ -21,6 +21,7 @@ from numba.extending import (
     box,
     models,
     overload,
+    overload_attribute,
     overload_method,
     register_model,
     typeof_impl,
@@ -2379,6 +2380,18 @@ def overload_linear_regression_score(
 ):
     """Overload Linear Regression score."""
     return parallel_score(m, X, y, sample_weight, _is_data_distributed)
+
+
+@overload_attribute(BodoLinearRegressionType, "coef_")
+def get_lr_coef(m):
+    """ Overload coef_ attribute to be accessible inside bodo.jit """
+
+    def impl(m):  # pragma: no cover
+        with numba.objmode(result="float64[:]"):
+            result = m.coef_
+        return result
+
+    return impl
 
 
 # -------------------------------------Lasso Regression--------------------

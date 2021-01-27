@@ -1219,6 +1219,11 @@ def test_linear_regression():
         y_pred = clf.predict(X_test)
         return y_pred
 
+    def impl_coef(X_train, y_train, X_test, y_test):
+        clf = LinearRegression()
+        clf.fit(X_train, y_train)
+        return clf.coef_
+
     splitN = 500
     n_samples = 10000
     n_features = 100
@@ -1241,6 +1246,7 @@ def test_linear_regression():
         X_test = scaler.transform(X_test)
         sklearn_score_result = impl(X_train, y_train, X_test, y_test)
         sklearn_predict_result = impl_pred(X_train, y_train, X_test, y_test)
+        sklearn_coef_ = impl_coef(X_train, y_train, X_test, y_test)
         X_train = bodo.scatterv(X_train)
         y_train = bodo.scatterv(y_train)
         X_test = bodo.scatterv(X_test)
@@ -1264,11 +1270,16 @@ def test_linear_regression():
     # TODO: return r2_score directly once it's supported.
     total_predict_result = bodo.gatherv(bodo_predict_result, root=0)
     total_y_test = bodo.gatherv(y_test, root=0)
+    bodo_coef_ = bodo.jit(distributed=["X_train", "y_train", "X_test", "y_test"])(
+        impl_coef
+    )(X_train, y_train, X_test, y_test)
     if bodo.get_rank() == 0:
         assert np.allclose(sklearn_score_result, bodo_score_result, atol=0.1)
         b_score = r2_score(total_y_test, total_predict_result)
         sk_score = r2_score(total_y_test, sklearn_predict_result)
         assert np.allclose(b_score, sk_score, atol=0.1)
+        # coef_ tolerance??? This example can be upto 0.9. Not sure if this is a good threshold
+        assert np.allclose(bodo_coef_, sklearn_coef_, atol=0.9)
 
 
 @pytest.mark.skip(
