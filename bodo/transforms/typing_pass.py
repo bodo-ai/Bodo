@@ -396,6 +396,7 @@ class TypingTransforms:
             impl = bodo.hiframes.dataframe_impl._gen_init_df(
                 header, columns[col_slice], ", ".join(data_outs), index
             )
+            self.changed = True
             return nodes + compile_func_single_block(
                 impl, [target, tup_list[0]], assign.target, self
             )
@@ -437,6 +438,7 @@ class TypingTransforms:
             impl = bodo.hiframes.dataframe_indexing.gen_df_loc_col_select_impl(
                 target_typ.df_type, val
             )
+            self.changed = True
             return nodes + compile_func_single_block(
                 impl, [target, idx], assign.target, self
             )
@@ -923,6 +925,7 @@ class TypingTransforms:
         impl = bodo.hiframes.dataframe_impl._gen_init_df(
             header, tuple(name_col_total), data_args
         )
+        self.changed = True
         return compile_func_single_block(impl, [df_var] + list(kws.values()), lhs, self)
 
     def _run_call_df_groupby(self, assign, rhs, groupby_var, func_name, label):
@@ -1521,7 +1524,7 @@ def _create_const_var(val, name, scope, loc, nodes):
         const_node = ir.Expr.build_tuple(
             [_create_const_var(v, name, scope, loc, nodes) for v in val], loc
         )
-    if isinstance(val, list):
+    elif isinstance(val, list):
         const_node = ir.Expr.build_list(
             [_create_const_var(v, name, scope, loc, nodes) for v in val], loc
         )

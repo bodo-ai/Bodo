@@ -927,19 +927,28 @@ def get_const_tup_vals(c_typ):
     reverses the hack in 'gen_const_val_str'
     """
     vals = get_overload_const_list(c_typ)
-    out = []
-    i = 0
-    while i < len(vals):
+    return _get_original_nested_tups(vals)
+
+
+def _get_original_nested_tups(vals):
+    """find potential translated nested tuples in vals and reverse to the original
+    nested format (before gen_const_val_str translation).
+    """
+    # scan for sentinel from the end to handle nested cases properly
+    # e.g. ('$BODO_NESTED_TUP2', '$BODO_NESTED_TUP2', 'B', 'sum', 'sum') ->
+    # ((("B", "sum"), "sum"),)
+    for i in range(len(vals) - 1, -1, -1):
         v = vals[i]
-        # reverse nested tuple flattening in gen_const_val_str
         if isinstance(v, str) and v.startswith(NESTED_TUP_SENTINEL):
             n_elem = int(v[len(NESTED_TUP_SENTINEL) :])
-            out.append(tuple(vals[i + 1 : i + n_elem + 1]))
-            i += n_elem + 1
-        else:
-            out.append(vals[i])
-            i += 1
-    return tuple(out)
+            # translate to nested tuple item and call function recursively
+            return _get_original_nested_tups(
+                tuple(vals[:i])
+                + (tuple(vals[i + 1 : i + n_elem + 1]),)
+                + tuple(vals[i + n_elem + 1 :])
+            )
+
+    return tuple(vals)
 
 
 def get_call_expr_arg(f_name, args, kws, arg_no, arg_name, default=None, err_msg=None):

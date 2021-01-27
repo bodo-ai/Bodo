@@ -1439,7 +1439,9 @@ class DataFramePass:
                 # latter case occurs when doing this:
                 # df.groupby(...).agg({"A": [f1, f2]})
                 # In this case, output names have 2 levels: (A, f1) and (A, f2)
-                var = ir.Var(lhs.scope, mk_unique_var(str(c)), lhs.loc)
+                var = ir.Var(
+                    lhs.scope, mk_unique_var(sanitize_varname(str(c))), lhs.loc
+                )
                 self.typemap[var.name] = (
                     out_typ.data
                     if isinstance(out_typ, SeriesType)
@@ -1800,7 +1802,8 @@ class DataFramePass:
         df_in_vars = {values: self._get_dataframe_data(df_var, values, nodes)}
 
         df_out_vars = {
-            col: ir.Var(lhs.scope, mk_unique_var(col), lhs.loc) for col in pivot_values
+            col: ir.Var(lhs.scope, mk_unique_var(sanitize_varname(col)), lhs.loc)
+            for col in pivot_values
         }
         for v in df_out_vars.values():
             self.typemap[v.name] = out_typ.data[0]
@@ -1810,7 +1813,9 @@ class DataFramePass:
         agg_func = get_agg_func(self.func_ir, func_name, rhs, typemap=self.typemap)
 
         out_key_vars = []
-        out_index_var = ir.Var(lhs.scope, mk_unique_var(index), lhs.loc)
+        out_index_var = ir.Var(
+            lhs.scope, mk_unique_var(sanitize_varname(index)), lhs.loc
+        )
         ind = df_type.columns.index(index)
         self.typemap[out_index_var.name] = df_type.data[ind]
         out_key_vars.append(out_index_var)
@@ -1891,7 +1896,8 @@ class DataFramePass:
         df_in_vars = {}
 
         df_out_vars = {
-            col: ir.Var(lhs.scope, mk_unique_var(col), lhs.loc) for col in pivot_values
+            col: ir.Var(lhs.scope, mk_unique_var(sanitize_varname(col)), lhs.loc)
+            for col in pivot_values
         }
         for i, v in enumerate(df_out_vars.values()):
             self.typemap[v.name] = out_typ.data[i]
