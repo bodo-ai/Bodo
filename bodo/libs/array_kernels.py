@@ -2187,7 +2187,7 @@ def np_random_multivariate_normal(mean, cov, size=None, check_valid="warn", tol=
             "np.random.multivariate_normal() cov must be a 2 dimensional square, numpy array"
         )
 
-    def impl(mean, cov, size=None, check_valid="warn", tol=1e-8):
+    def impl(mean, cov, size=None, check_valid="warn", tol=1e-8):  # pragma: no cover
         # Check that cov is square. Moved to separate function for inlining
         # TODO: Replace with array analysis
         _validate_multivar_norm(cov)
