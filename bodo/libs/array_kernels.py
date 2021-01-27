@@ -2190,7 +2190,7 @@ def np_random_multivariate_normal(mean, cov, size=None, check_valid="warn", tol=
     def impl(mean, cov, size=None, check_valid="warn", tol=1e-8):
         # Check that cov is square. Moved to separate function for inlining
         # TODO: Replace with array analysis
-        _validate_multivar_norm(mean, cov, size=None, check_valid="warn", tol=1e-8)
+        _validate_multivar_norm(cov)
         # Calculate the output shape
         N = mean.shape[0]
         # TODO: Support None and array like inputs
@@ -2216,18 +2216,14 @@ def np_random_multivariate_normal(mean, cov, size=None, check_valid="warn", tol=
     return impl
 
 
-def _validate_multivar_norm(
-    mean, cov, size=None, check_valid="warn", tol=1e-8
-):  # pragma: no cover
+def _validate_multivar_norm(cov):  # pragma: no cover
     # Dummy function for overload
     return
 
 
 @overload(_validate_multivar_norm, no_unliteral=True)
-def _overload_validate_multivar_norm(
-    mean, cov, size=None, check_valid="warn", tol=1e-8
-):
-    def impl(mean, cov, size=None, check_valid="warn", tol=1e-8):  # pragma: no cover
+def _overload_validate_multivar_norm(cov):
+    def impl(cov):  # pragma: no cover
         if cov.shape[0] != cov.shape[1]:
             raise ValueError(
                 "np.random.multivariate_normal() cov must be a 2 dimensional square, numpy array"
