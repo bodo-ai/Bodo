@@ -22,7 +22,7 @@ requirements:
     - setuptools
     - numba 0.52.0
     - numpy
-    - s3fs >=0.4.2
+    - s3fs =0.4.2
     - pandas 1.1.*
     - pyarrow =2.0.0
     - boost-cpp =1.74.0
@@ -46,7 +46,7 @@ requirements:
     - numba 0.52.0
     - openjdk =8
     - sqlalchemy
-    - s3fs >=0.4.2
+    - s3fs =0.4.2
     - mpich =3.3.2=h* # [not win]
     - mpi4py
     - impi_rt # [win]

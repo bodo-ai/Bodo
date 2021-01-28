@@ -33,7 +33,7 @@ such as Numba on Ubuntu Linux::
     conda install mpi4py pytest -c conda-forge
     conda install -c conda-forge hdf5='*=*mpich*' pyarrow=2.0.0 pymysql sqlalchemy
     # The following is required for s3 related development and tests
-    # conda install -c conda-forge boto3 botocore "s3fs>=0.4.2"
+    # conda install -c conda-forge boto3 botocore "s3fs=0.4.2"
     git clone https://github.com/Bodo-inc/Bodo.git
     cd Bodo
     # build Bodo
