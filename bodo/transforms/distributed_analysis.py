@@ -41,7 +41,11 @@ from bodo.hiframes.pd_multi_index_ext import MultiIndexType
 from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.libs.bool_arr_ext import boolean_array
 from bodo.libs.distributed_api import Reduce_Type
-from bodo.utils.transform import get_call_expr_arg, get_stmt_defs
+from bodo.utils.transform import (
+    get_call_expr_arg,
+    get_const_value,
+    get_stmt_defs,
+)
 from bodo.utils.typing import (
     BodoError,
     BodoWarning,
@@ -1671,7 +1675,13 @@ class DistributedAnalysis:
             return
 
         if func_name == "concatenate":
-            self._analyze_call_concat(lhs, args, array_dists)
+            # get axis argument
+            axis_var = get_call_expr_arg("concatenate", args, kws, 1, "axis", "")
+            axis = 0
+            if axis_var != "":
+                msg = "np.concatenate(): 'axis' should be constant"
+                axis = get_const_value(axis_var, self.func_ir, msg)
+            self._analyze_call_concat(lhs, args, array_dists, axis)
             return
 
         if func_name == "array":
@@ -1997,7 +2007,7 @@ class DistributedAnalysis:
                 "input/output of another Bodo call without distributed flag",
             )
 
-    def _analyze_call_concat(self, lhs, args, array_dists):
+    def _analyze_call_concat(self, lhs, args, array_dists, axis=0):
         """analyze distribution for bodo.libs.array_kernels.concat and np.concatenate"""
         assert len(args) == 1, "concat call with only one arg supported"
         # concat reduction variables are handled in parfor analysis
@@ -2028,6 +2038,16 @@ class DistributedAnalysis:
         in_dist = Distribution.OneD
         for v in in_arrs:
             in_dist = Distribution(min(in_dist.value, array_dists[v.name].value))
+
+        # when input arrays are concatenated along non-zero axis, output row size is the
+        # same as input and data distribution doesn't change
+        if axis != 0:
+            if lhs in array_dists:
+                in_dist = Distribution(min(in_dist.value, array_dists[lhs].value))
+            for v in in_arrs:
+                array_dists[v.name] = in_dist
+            array_dists[lhs] = in_dist
+            return
 
         # OneD_Var since sum of block sizes might not be exactly 1D
         out_dist = Distribution.OneD_Var

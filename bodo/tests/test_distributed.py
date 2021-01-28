@@ -138,6 +138,21 @@ def test_array_size1(A, memory_leak_check):
     # TODO: tests with array created inside the function
 
 
+def test_concat_axis_1(memory_leak_check):
+    """make sure concatenate with axis=1 is supported properly in distributed analysis"""
+
+    def impl(A, B):
+        C = np.concatenate((A, B), axis=1)
+        return C
+
+    bodo_func = bodo.jit(distributed_block={"A", "B", "C"})(impl)
+    bodo_func(np.ones((3, 1)), np.zeros((3, 1)))
+    # all arrays should be 1D, not 1D_Var
+    assert count_array_REPs() == 0
+    assert count_array_OneDs() > 0
+    assert count_array_OneD_Vars() == 0
+
+
 def test_1D_Var_parfor1(memory_leak_check):
     # 1D_Var parfor where index is used in computation
     def impl1(A, B):
