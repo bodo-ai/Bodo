@@ -1383,6 +1383,12 @@ def test_pd_to_datetime(memory_leak_check):
     S = pd.to_datetime(date_arr)
     check_func(test_input, (S,))
 
+    # categorical string input
+    S = pd.Series(
+        ["2017-03-03", "2017-04-04", "2017-04-04", None, "2018-01-01", "2017-03-03"]
+    ).astype("category")
+    check_func(test_input, (S,))
+
     # TODO: Support following inputs
     # df = pd.DataFrame({'year': [2015, 2016], 'month': [2, 3], 'day': [4, 5]})
     # date_str_arr = np.array(['1991-1-1', '1992-1-1', '1993-1-1'])

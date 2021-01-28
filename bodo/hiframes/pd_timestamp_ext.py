@@ -39,6 +39,7 @@ from bodo.hiframes.datetime_timedelta_ext import (
     datetime_timedelta_type,
     pd_timedelta_type,
 )
+from bodo.hiframes.pd_categorical_ext import CategoricalArray
 from bodo.libs import hdatetime_ext
 from bodo.libs.str_arr_ext import string_array_type
 from bodo.utils.typing import (
@@ -48,6 +49,7 @@ from bodo.utils.typing import (
     is_overload_constant_int,
     is_overload_constant_str,
     is_overload_none,
+    raise_bodo_error,
 )
 
 ll.add_symbol("extract_year_days", hdatetime_ext.extract_year_days)
@@ -1367,7 +1369,55 @@ def overload_to_datetime(
 
         return impl_date_arr
 
+    # Categorical array with string values
+    if (
+        isinstance(arg_a, CategoricalArray)
+        and arg_a.dtype.elem_type == bodo.string_type
+    ):
+        dt64_dtype = np.dtype("datetime64[ns]")
+
+        def impl_cat_arr(
+            arg_a,
+            errors="raise",
+            dayfirst=False,
+            yearfirst=False,
+            utc=None,
+            format=None,
+            exact=True,
+            unit=None,
+            infer_datetime_format=False,
+            origin="unix",
+            cache=True,
+        ):  # pragma: no cover
+            n = len(arg_a)
+            B = np.empty(n, dt64_dtype)
+            codes = bodo.hiframes.pd_categorical_ext.get_categorical_arr_codes(arg_a)
+            # get datetime64 value for each category code
+            dt64_vals = pandas_string_array_to_datetime(
+                arg_a.dtype.categories,
+                errors,
+                dayfirst,
+                yearfirst,
+                utc,
+                format,
+                exact,
+                unit,
+                infer_datetime_format,
+                origin,
+                cache,
+            ).values
+            for i in numba.parfors.parfor.internal_prange(n):
+                c = codes[i]
+                if c == -1:
+                    bodo.libs.array_kernels.setna(B, i)
+                    continue
+                B[i] = dt64_vals[c]
+            return bodo.hiframes.pd_index_ext.init_datetime_index(B, None)
+
+        return impl_cat_arr
+
     # TODO: input Type of a dataframe
+    raise_bodo_error(f"pd.to_datetime(): cannot convert date type {arg_a}")
 
 
 @overload(pd.to_timedelta, inline="always", no_unliteral=True)
