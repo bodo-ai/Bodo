@@ -1739,13 +1739,17 @@ class DistributedAnalysis:
 
         if func_name == "reshape":
             # shape argument can be int or tuple of ints
-            shape_typ = self.typemap[args[1].name]
-            if isinstance(types.unliteral(shape_typ), types.Integer):
-                shape_vars = [args[1]]
+            arr_var = get_call_expr_arg("np.reshape", args, kws, 0, "a")
+            shape_var = get_call_expr_arg("np.reshape", args, kws, 1, "newshape")
+            shape_typ = self.typemap[shape_var.name]
+            if isinstance(shape_typ, types.Integer):
+                shape_vars = [shape_var]
             else:
-                isinstance(shape_typ, types.BaseTuple)
-                shape_vars = find_build_tuple(self.func_ir, args[1])
-            return self._analyze_call_np_reshape(lhs, args[0], shape_vars, array_dists)
+                assert isinstance(
+                    shape_typ, types.BaseTuple
+                ), "np.reshape(): invalid shape argument"
+                shape_vars = find_build_tuple(self.func_ir, shape_var)
+            return self._analyze_call_np_reshape(lhs, arr_var, shape_vars, array_dists)
 
         if func_name in [
             "cumsum",
@@ -1995,7 +1999,7 @@ class DistributedAnalysis:
 
     def _analyze_call_concat(self, lhs, args, array_dists):
         """analyze distribution for bodo.libs.array_kernels.concat and np.concatenate"""
-        assert len(args) == 1
+        assert len(args) == 1, "concat call with only one arg supported"
         # concat reduction variables are handled in parfor analysis
         if lhs in self._concat_reduce_vars:
             return
