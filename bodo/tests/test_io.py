@@ -1012,6 +1012,49 @@ def test_read_partitions_two_level():
             shutil.rmtree("pq_data", ignore_errors=True)
 
 
+def test_read_partitions_datetime():
+    """test reading and filtering partitioned parquet data for datetime data"""
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    try:
+        if bodo.get_rank() == 0:
+            table = pa.table(
+                {
+                    "a": range(10),
+                    "b": np.random.randn(10),
+                    "c": [1, 2, 3, 4, 5] * 2,
+                    "part": [
+                        "2017-01-02",
+                        "2018-01-02",
+                        "2019-01-02",
+                        "2017-01-02",
+                        "2021-01-02",
+                    ]
+                    * 2,
+                }
+            )
+            pq.write_to_dataset(table, "pq_data", partition_cols=["part"])
+        bodo.barrier()
+
+        def impl1(path, s_d, e_d):
+            df = pd.read_parquet(path)
+            return df[
+                (pd.to_datetime(df["part"]) >= pd.to_datetime(s_d))
+                & (pd.to_datetime(df["part"]) <= pd.to_datetime(e_d))
+            ]
+
+        check_func(impl1, ("pq_data", "2018-01-02", "2019-10-02"), reset_index=True)
+        # make sure the ParquetReader node has filters parameter set
+        bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl1)
+        bodo_func("pq_data", "2018-01-02", "2019-10-02")
+        _check_for_pq_reader_filters(bodo_func)
+
+    finally:
+        if bodo.get_rank() == 0:
+            shutil.rmtree("pq_data", ignore_errors=True)
+
+
 def _check_for_pq_reader_filters(bodo_func):
     """make sure ParquetReader node has filters set"""
     fir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]

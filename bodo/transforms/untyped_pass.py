@@ -579,6 +579,11 @@ class UntypedPass:
         # handle case with calls like df["A"].astype(int) > 2
         if is_call(var_def):
             fdef = find_callname(self.func_ir, var_def)
+            # calling pd.to_datetime() on a string column is possible since pyarrow
+            # matches the data types before filter comparison (in this case, calls
+            # pd.Timestamp on partiton's string value)
+            if fdef == ("to_datetime", "pandas"):
+                return self._get_col_name(var_def.args[0], df_var)
             require(
                 isinstance(fdef, tuple)
                 and len(fdef) == 2
