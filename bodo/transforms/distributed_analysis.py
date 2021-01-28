@@ -44,6 +44,7 @@ from bodo.libs.distributed_api import Reduce_Type
 from bodo.utils.transform import (
     get_call_expr_arg,
     get_const_value,
+    get_const_value_inner,
     get_stmt_defs,
 )
 from bodo.utils.typing import (
@@ -1859,6 +1860,19 @@ class DistributedAnalysis:
         ):
             self._set_REP(lhs, array_dists, "np.reshape() input is REP")
             self._set_REP(arr.name, array_dists, "np.reshape() output is REP")
+            return
+
+        # optimization: no need to distribute if 1-dim array is reshaped to
+        # 2-dim with same length (just added a new dimension)
+        if (
+            self.typemap[arr.name].ndim == 1
+            and len(shape_vars) == 2
+            and guard(
+                get_const_value_inner, self.func_ir, shape_vars[1], typemap=self.typemap
+            )
+            == 1
+        ):
+            self._meet_array_dists(lhs, arr.name, array_dists)
             return
 
         # reshape to 1 dimension

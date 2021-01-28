@@ -789,6 +789,10 @@ def test_arr_reshape(dtype, memory_leak_check):
     def impl7(A, n):
         return A.reshape(3, 2, n // 6)
 
+    # reshape to add 1 extra dimension to 1-dim array
+    def impl8(A, n):
+        return A.reshape(n, 1)
+
     A = np.arange(12, dtype=dtype)
     check_func(impl1, (A, 12))
     check_func(impl2, (A, 12))
@@ -799,6 +803,7 @@ def test_arr_reshape(dtype, memory_leak_check):
     A = np.arange(12, dtype=dtype).reshape(3, 4)
     check_func(impl6, (A, 12))
     check_func(impl7, (A, 12))
+    check_func(impl8, (np.arange(12, dtype=dtype), 12))
 
 
 def test_np_dot(is_slow_run, memory_leak_check):
