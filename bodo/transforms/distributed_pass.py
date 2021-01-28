@@ -1909,6 +1909,20 @@ class DistributedPass:
                 lambda A: A.reshape(A.size), [in_arr], lhs, self
             )
 
+        # optimization: no need to distribute if 1-dim array is reshaped to
+        # 2-dim with same length (just added a new dimension)
+        if (
+            self.typemap[in_arr.name].ndim == 1
+            and len(shape_vars) == 2
+            and guard(
+                get_const_value_inner, self.func_ir, shape_vars[1], typemap=self.typemap
+            )
+            == 1
+        ):
+            return compile_func_single_block(
+                lambda A: A.reshape(len(A), 1), [in_arr], lhs, self
+            )
+
         # get local size for 1st dimension and allocate output array
         # shape_vars[0] is global size
         count_var = self._get_1D_count(shape_vars[0], nodes)

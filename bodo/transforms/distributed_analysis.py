@@ -41,7 +41,12 @@ from bodo.hiframes.pd_multi_index_ext import MultiIndexType
 from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.libs.bool_arr_ext import boolean_array
 from bodo.libs.distributed_api import Reduce_Type
-from bodo.utils.transform import get_call_expr_arg, get_stmt_defs
+from bodo.utils.transform import (
+    get_call_expr_arg,
+    get_const_value,
+    get_const_value_inner,
+    get_stmt_defs,
+)
 from bodo.utils.typing import (
     BodoError,
     BodoWarning,
@@ -1671,7 +1676,13 @@ class DistributedAnalysis:
             return
 
         if func_name == "concatenate":
-            self._analyze_call_concat(lhs, args, array_dists)
+            # get axis argument
+            axis_var = get_call_expr_arg("concatenate", args, kws, 1, "axis", "")
+            axis = 0
+            if axis_var != "":
+                msg = "np.concatenate(): 'axis' should be constant"
+                axis = get_const_value(axis_var, self.func_ir, msg)
+            self._analyze_call_concat(lhs, args, array_dists, axis)
             return
 
         if func_name == "array":
@@ -1739,13 +1750,17 @@ class DistributedAnalysis:
 
         if func_name == "reshape":
             # shape argument can be int or tuple of ints
-            shape_typ = self.typemap[args[1].name]
-            if isinstance(types.unliteral(shape_typ), types.Integer):
-                shape_vars = [args[1]]
+            arr_var = get_call_expr_arg("np.reshape", args, kws, 0, "a")
+            shape_var = get_call_expr_arg("np.reshape", args, kws, 1, "newshape")
+            shape_typ = self.typemap[shape_var.name]
+            if isinstance(shape_typ, types.Integer):
+                shape_vars = [shape_var]
             else:
-                isinstance(shape_typ, types.BaseTuple)
-                shape_vars = find_build_tuple(self.func_ir, args[1])
-            return self._analyze_call_np_reshape(lhs, args[0], shape_vars, array_dists)
+                assert isinstance(
+                    shape_typ, types.BaseTuple
+                ), "np.reshape(): invalid shape argument"
+                shape_vars = find_build_tuple(self.func_ir, shape_var)
+            return self._analyze_call_np_reshape(lhs, arr_var, shape_vars, array_dists)
 
         if func_name in [
             "cumsum",
@@ -1845,6 +1860,19 @@ class DistributedAnalysis:
         ):
             self._set_REP(lhs, array_dists, "np.reshape() input is REP")
             self._set_REP(arr.name, array_dists, "np.reshape() output is REP")
+            return
+
+        # optimization: no need to distribute if 1-dim array is reshaped to
+        # 2-dim with same length (just added a new dimension)
+        if (
+            self.typemap[arr.name].ndim == 1
+            and len(shape_vars) == 2
+            and guard(
+                get_const_value_inner, self.func_ir, shape_vars[1], typemap=self.typemap
+            )
+            == 1
+        ):
+            self._meet_array_dists(lhs, arr.name, array_dists)
             return
 
         # reshape to 1 dimension
@@ -1993,9 +2021,9 @@ class DistributedAnalysis:
                 "input/output of another Bodo call without distributed flag",
             )
 
-    def _analyze_call_concat(self, lhs, args, array_dists):
+    def _analyze_call_concat(self, lhs, args, array_dists, axis=0):
         """analyze distribution for bodo.libs.array_kernels.concat and np.concatenate"""
-        assert len(args) == 1
+        assert len(args) == 1, "concat call with only one arg supported"
         # concat reduction variables are handled in parfor analysis
         if lhs in self._concat_reduce_vars:
             return
@@ -2024,6 +2052,16 @@ class DistributedAnalysis:
         in_dist = Distribution.OneD
         for v in in_arrs:
             in_dist = Distribution(min(in_dist.value, array_dists[v.name].value))
+
+        # when input arrays are concatenated along non-zero axis, output row size is the
+        # same as input and data distribution doesn't change
+        if axis != 0:
+            if lhs in array_dists:
+                in_dist = Distribution(min(in_dist.value, array_dists[lhs].value))
+            for v in in_arrs:
+                array_dists[v.name] = in_dist
+            array_dists[lhs] = in_dist
+            return
 
         # OneD_Var since sum of block sizes might not be exactly 1D
         out_dist = Distribution.OneD_Var
