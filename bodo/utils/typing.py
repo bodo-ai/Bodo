@@ -339,7 +339,7 @@ def get_overload_const(val):
     if val == types.none:
         return None
     # actual value
-    if val is None or isinstance(val, (bool, int, str, tuple, types.Dispatcher)):
+    if val is None or isinstance(val, (bool, int, float, str, tuple, types.Dispatcher)):
         return val
     # Omitted case
     if isinstance(val, types.Omitted):

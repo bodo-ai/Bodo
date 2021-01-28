@@ -682,3 +682,19 @@ def test_any_all_numpy_2d(memory_leak_check):
     arr = np.array([[False, False, True], [False, False, False], [True, True, True]])
     assert test_impl_any(arr) == bodo.jit(test_impl_any)(arr)
     assert test_impl_all(arr) == bodo.jit(test_impl_all)(arr)
+
+
+def test_np_random_multivariate_normal(memory_leak_check):
+    def test_impl(nvars, nrows):
+        mu = np.zeros(nvars, dtype=np.float64)
+        S = np.random.uniform(-5.0, 5.0, (nvars, nvars))
+        cov = np.dot(S.T, S)
+        A = np.random.multivariate_normal(mu, cov, nrows)
+        return A
+
+    nvars = 10
+    nrows = 20
+    np.random.seed(2)
+    # Seeding doesn't seem to work properly so we can't check
+    # equality. Instead, test the shape by setting the tolerance very high
+    check_func(test_impl, (nvars, nrows), atol=1000.0, rtol=1000.0)
