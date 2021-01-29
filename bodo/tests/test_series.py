@@ -250,13 +250,14 @@ def test_series_concat(series_val, memory_leak_check):
 
 def test_series_between(memory_leak_check):
     def impl_inclusive(S):
-        return S.between(1,4)
+        return S.between(1, 4)
 
     def impl(S):
-        return S.between(1,4, inclusive=False)
+        return S.between(1, 4, inclusive=False)
 
     check_func(impl, (pd.Series([2, 0, 4, 8, np.nan]),))
     check_func(impl_inclusive, (pd.Series([2, 0, 4, 8, np.nan]),))
+
 
 def test_series_concat_categorical(memory_leak_check):
     """test of concatenation of categorical series.
