@@ -1038,7 +1038,7 @@ def test_read_partitions_datetime():
         bodo.barrier()
 
         def impl1(path, s_d, e_d):
-            df = pd.read_parquet(path)
+            df = pd.read_parquet(path, columns=["c", "part", "a"])
             return df[
                 (pd.to_datetime(df["part"]) >= pd.to_datetime(s_d))
                 & (pd.to_datetime(df["part"]) <= pd.to_datetime(e_d))
