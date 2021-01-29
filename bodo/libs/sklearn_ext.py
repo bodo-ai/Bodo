@@ -2,6 +2,7 @@
 import itertools
 import numbers
 import types as pytypes
+import warnings
 
 import numba
 import numpy as np
@@ -27,6 +28,7 @@ from numba.extending import (
     typeof_impl,
     unbox,
 )
+from sklearn.exceptions import UndefinedMetricWarning
 from sklearn.metrics import hinge_loss, log_loss, mean_squared_error
 from sklearn.preprocessing import LabelBinarizer
 from sklearn.preprocessing._data import (
@@ -35,7 +37,7 @@ from sklearn.preprocessing._data import (
 from sklearn.utils.extmath import (
     _safe_accumulator_op as sklearn_safe_accumulator_op,
 )
-from sklearn.utils.validation import _check_sample_weight
+from sklearn.utils.validation import _check_sample_weight, column_or_1d
 
 import bodo
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
@@ -49,6 +51,7 @@ from bodo.libs.distributed_api import (
     get_num_nodes,
 )
 from bodo.utils.typing import (
+    BodoError,
     check_unsupported_args,
     get_overload_const_int,
     get_overload_const_str,
@@ -1186,6 +1189,292 @@ def overload_accuracy_score(
                 return score
 
             return _accuracy_score_impl
+
+
+def check_consistent_length_parallel(*arrays):
+    """
+    Checks that the length of each of the arrays is the same (on each rank).
+    If it is inconsistent on any rank, the function returns False
+    on all ranks.
+    Nones are ignored.
+    """
+    comm = MPI.COMM_WORLD
+    is_consistent = True
+    lengths = [len(arr) for arr in arrays if arr is not None]
+    if len(np.unique(lengths)) > 1:
+        is_consistent = False
+    is_consistent = comm.allreduce(is_consistent, op=MPI.LAND)
+    return is_consistent
+
+
+def r2_score_dist_helper(
+    y_true,
+    y_pred,
+    sample_weight,
+    multioutput,
+):
+    """
+    Helper for distributed r2_score calculation.
+    The code is very similar to the sklearn source code for this function,
+    except we've made it parallelizable using MPI operations.
+    Return values is always an array. When output is a single float value,
+    we wrap it around an array, and unwrap it in the caller function.
+    """
+
+    comm = MPI.COMM_WORLD
+
+    # Shamelessly copied from https://github.com/scikit-learn/scikit-learn/blob/4afd4fba6/sklearn/metrics/_regression.py#L676-#L723
+
+    if y_true.ndim == 1:
+        y_true = y_true.reshape((-1, 1))
+
+    if y_pred.ndim == 1:
+        y_pred = y_pred.reshape((-1, 1))
+
+    # Check that the lengths are consistent on each process
+    if not check_consistent_length_parallel(y_true, y_pred, sample_weight):
+        raise ValueError(
+            "y_true, y_pred and sample_weight (if not None) have inconsistent number of samples"
+        )
+
+    # Check that number of samples > 2, else raise Warning and return nan.
+    # This is a pathological scenario and hasn't been heavily tested.
+    local_num_samples = y_true.shape[0]
+    num_samples = comm.allreduce(local_num_samples, op=MPI.SUM)
+    if num_samples < 2:
+        warnings.warn(
+            "R^2 score is not well-defined with less than two samples.",
+            UndefinedMetricWarning,
+        )
+        return np.array([float("nan")])
+
+    if sample_weight is not None:
+        sample_weight = column_or_1d(sample_weight)
+        weight = sample_weight[:, np.newaxis]
+    else:
+        # This is the local sample_weight, which is just the number of samples
+        sample_weight = np.float64(y_true.shape[0])
+        weight = 1.0
+
+    # Calculate the numerator
+    local_numerator = (weight * ((y_true - y_pred) ** 2)).sum(axis=0, dtype=np.float64)
+    numerator = np.zeros(local_numerator.shape, dtype=local_numerator.dtype)
+    comm.Allreduce(local_numerator, numerator, op=MPI.SUM)
+
+    # Calculate the y_true_avg (needed for denominator calculation)
+    # Do a weighted sum of y_true for each dimension
+    local_y_true_avg_numerator = np.nansum(y_true * weight, axis=0, dtype=np.float64)
+    y_true_avg_numerator = np.zeros_like(local_y_true_avg_numerator)
+    comm.Allreduce(local_y_true_avg_numerator, y_true_avg_numerator, op=MPI.SUM)
+
+    local_y_true_avg_denominator = np.nansum(sample_weight, dtype=np.float64)
+    y_true_avg_denominator = comm.allreduce(local_y_true_avg_denominator, op=MPI.SUM)
+
+    y_true_avg = y_true_avg_numerator / y_true_avg_denominator
+
+    # Calculate the denominator
+    local_denominator = (weight * ((y_true - y_true_avg) ** 2)).sum(
+        axis=0, dtype=np.float64
+    )
+    denominator = np.zeros(local_denominator.shape, dtype=local_denominator.dtype)
+    comm.Allreduce(local_denominator, denominator, op=MPI.SUM)
+
+    # Compute the output scores, same as sklearn
+    nonzero_denominator = denominator != 0
+    nonzero_numerator = numerator != 0
+    valid_score = nonzero_denominator & nonzero_numerator
+    output_scores = np.ones([y_true.shape[1] if len(y_true.shape) > 1 else 1])
+    output_scores[valid_score] = 1 - (numerator[valid_score] / denominator[valid_score])
+    # arbitrary set to zero to avoid -inf scores, having a constant
+    # y_true is not interesting for scoring a regression anyway
+    output_scores[nonzero_numerator & ~nonzero_denominator] = 0.0
+
+    if isinstance(multioutput, str):
+        if multioutput == "raw_values":
+            # return scores individually
+            return output_scores
+        elif multioutput == "uniform_average":
+            # passing None as weights results in uniform mean
+            avg_weights = None
+        elif multioutput == "variance_weighted":
+            avg_weights = denominator
+            # avoid fail on constant y or one-element arrays.
+            # NOTE: This part hasn't been heavily tested
+            if not np.any(nonzero_denominator):
+                if not np.any(nonzero_numerator):
+                    return np.array([1.0])
+                else:
+                    return np.array([0.0])
+    else:
+        avg_weights = multioutput
+
+    return np.array([np.average(output_scores, weights=avg_weights)])
+
+
+@overload(sklearn.metrics.r2_score, no_unliteral=True)
+def overload_r2_score(
+    y_true,
+    y_pred,
+    sample_weight=None,
+    multioutput="uniform_average",
+    _is_data_distributed=False,
+):
+    """
+    Provide implementations for the r2_score computation.
+    If data is not distributed, we simply call sklearn on each rank.
+    Else we compute in a distributed way.
+    Provide separate impl for case where sample_weight is provided
+    vs not provided for type unification purposes.
+    """
+
+    # Check that value of multioutput is valid
+    if is_overload_constant_str(multioutput) and get_overload_const_str(
+        multioutput
+    ) not in ["raw_values", "uniform_average", "variance_weighted"]:
+        raise BodoError(
+            f"Unsupported argument {get_overload_const_str(multioutput)} specified for 'multioutput'"
+        )
+
+    if (
+        is_overload_constant_str(multioutput)
+        and get_overload_const_str(multioutput) == "raw_values"
+    ):
+        # this case returns an array of floats (one for each dimension)
+
+        if is_overload_none(sample_weight):
+
+            def _r2_score_impl(
+                y_true,
+                y_pred,
+                sample_weight=None,
+                multioutput="uniform_average",
+                _is_data_distributed=False,
+            ):  # pragma: no cover
+                # user could pass lists and numba throws error if passing lists
+                # to object mode, so we convert to arrays
+                y_true = bodo.utils.conversion.coerce_to_array(y_true)
+                y_pred = bodo.utils.conversion.coerce_to_array(y_pred)
+                with numba.objmode(score="float64[:]"):
+                    if _is_data_distributed:
+                        score = r2_score_dist_helper(
+                            y_true,
+                            y_pred,
+                            sample_weight=sample_weight,
+                            multioutput=multioutput,
+                        )
+                    else:
+                        score = sklearn.metrics.r2_score(
+                            y_true,
+                            y_pred,
+                            sample_weight=sample_weight,
+                            multioutput=multioutput,
+                        )
+                return score
+
+            return _r2_score_impl
+
+        else:
+
+            def _r2_score_impl(
+                y_true,
+                y_pred,
+                sample_weight=None,
+                multioutput="uniform_average",
+                _is_data_distributed=False,
+            ):  # pragma: no cover
+                # user could pass lists and numba throws error if passing lists
+                # to object mode, so we convert to arrays
+                y_true = bodo.utils.conversion.coerce_to_array(y_true)
+                y_pred = bodo.utils.conversion.coerce_to_array(y_pred)
+                sample_weight = bodo.utils.conversion.coerce_to_array(sample_weight)
+                with numba.objmode(score="float64[:]"):
+                    if _is_data_distributed:
+                        score = r2_score_dist_helper(
+                            y_true,
+                            y_pred,
+                            sample_weight=sample_weight,
+                            multioutput=multioutput,
+                        )
+                    else:
+                        score = sklearn.metrics.r2_score(
+                            y_true,
+                            y_pred,
+                            sample_weight=sample_weight,
+                            multioutput=multioutput,
+                        )
+                return score
+
+            return _r2_score_impl
+
+    else:
+        # this case returns a single float value
+
+        if is_overload_none(sample_weight):
+
+            def _r2_score_impl(
+                y_true,
+                y_pred,
+                sample_weight=None,
+                multioutput="uniform_average",
+                _is_data_distributed=False,
+            ):  # pragma: no cover
+                # user could pass lists and numba throws error if passing lists
+                # to object mode, so we convert to arrays
+                y_true = bodo.utils.conversion.coerce_to_array(y_true)
+                y_pred = bodo.utils.conversion.coerce_to_array(y_pred)
+                with numba.objmode(score="float64"):
+                    if _is_data_distributed:
+                        score = r2_score_dist_helper(
+                            y_true,
+                            y_pred,
+                            sample_weight=sample_weight,
+                            multioutput=multioutput,
+                        )
+                        score = score[0]
+                    else:
+                        score = sklearn.metrics.r2_score(
+                            y_true,
+                            y_pred,
+                            sample_weight=sample_weight,
+                            multioutput=multioutput,
+                        )
+                return score
+
+            return _r2_score_impl
+
+        else:
+
+            def _r2_score_impl(
+                y_true,
+                y_pred,
+                sample_weight=None,
+                multioutput="uniform_average",
+                _is_data_distributed=False,
+            ):  # pragma: no cover
+                # user could pass lists and numba throws error if passing lists
+                # to object mode, so we convert to arrays
+                y_true = bodo.utils.conversion.coerce_to_array(y_true)
+                y_pred = bodo.utils.conversion.coerce_to_array(y_pred)
+                sample_weight = bodo.utils.conversion.coerce_to_array(sample_weight)
+                with numba.objmode(score="float64"):
+                    if _is_data_distributed:
+                        score = r2_score_dist_helper(
+                            y_true,
+                            y_pred,
+                            sample_weight=sample_weight,
+                            multioutput=multioutput,
+                        )
+                        score = score[0]
+                    else:
+                        score = sklearn.metrics.r2_score(
+                            y_true,
+                            y_pred,
+                            sample_weight=sample_weight,
+                            multioutput=multioutput,
+                        )
+                return score
+
+            return _r2_score_impl
 
 
 # -------------------------------------SGDRegressor----------------------------------------
@@ -3349,6 +3638,7 @@ def overload_train_test_split(
             return data_train, data_test, labels_train, labels_test
 
         return _train_test_split_impl
+
 
 # ----------------------------------------------------------------------------------------
 # ----------------------------------- MinMax-Scaler ------------------------------------

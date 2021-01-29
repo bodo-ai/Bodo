@@ -776,7 +776,7 @@ class DistributedAnalysis:
 
         if func_mod == "sklearn.metrics._regression":
 
-            if func_name in {"mean_squared_error", "mean_absolute_error"}:
+            if func_name in {"mean_squared_error", "mean_absolute_error", "r2_score"}:
 
                 self._set_REP(lhs, array_dists, "output of {} is REP".format(func_name))
                 self._analyze_sklearn_score_err_ytrue_ypred_optional_sample_weight(

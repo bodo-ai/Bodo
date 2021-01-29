@@ -159,6 +159,7 @@ Regression metrics
 
 * :func:`sklearn.metrics.mean_absolute_error`
 * :func:`sklearn.metrics.mean_squared_error`
+* :func:`sklearn.metrics.r2_score`
 
 
 Data Preprocessing

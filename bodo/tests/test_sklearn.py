@@ -36,6 +36,7 @@ from sklearn.utils.validation import check_random_state
 
 import bodo
 from bodo.tests.utils import _get_dist_arg, check_func
+from bodo.utils.typing import BodoError
 
 # ---------------------- RandomForestClassifier tests ----------------------
 
@@ -439,6 +440,68 @@ def test_mae(data, multioutput, memory_leak_check):
 
     check_func(test_mae_0, tuple(data[0:2]), is_out_distributed=False)
     check_func(test_mae_1, tuple(data), is_out_distributed=False)
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        gen_random_k_dims(20, 1),
+        gen_random_k_dims(20, 3),
+    ],
+)
+@pytest.mark.parametrize(
+    "multioutput",
+    [
+        "uniform_average",
+        "raw_values",
+        "variance_weighted",
+        "array",
+        "some_unsupported_val",
+    ],
+)
+def test_r2_score(data, multioutput, memory_leak_check):
+    """
+    Tests for the sklearn.metrics.r2_score implementation in Bodo.
+    """
+
+    if multioutput == "array":
+        if len(data[0].shape) > 1:
+            multioutput = np.random.random_sample(size=data[0].shape[1])
+        else:
+            return
+
+    def test_r2_0(y_true, y_pred):
+        return r2_score(y_true, y_pred, multioutput=multioutput)
+
+    def test_r2_1(y_true, y_pred, sample_weight_):
+        return r2_score(
+            y_true,
+            y_pred,
+            sample_weight=sample_weight_,
+            multioutput=multioutput,
+        )
+
+    # To check that Bodo fails in compilation when an unsupported value is passed
+    # in for multioutput
+    if multioutput == "some_unsupported_val":
+        with pytest.raises(BodoError, match="Unsupported argument"):
+            bodo.jit(distributed=["y_true", "y_pred"])(test_r2_0)(
+                _get_dist_arg(data[0]), _get_dist_arg(data[1])
+            )
+        return
+
+    check_func(test_r2_0, tuple(data[0:2]), is_out_distributed=False)
+    check_func(test_r2_1, tuple(data), is_out_distributed=False)
+
+    # Check that appropriate error is raised when number of samples in
+    # y_true and y_pred are inconsistent
+    with pytest.raises(
+        ValueError,
+        match="inconsistent number of samples",
+    ):
+        bodo.jit(distributed=["y_true", "y_pred"])(test_r2_0)(
+            _get_dist_arg(data[0]), _get_dist_arg(data[1][:-1])
+        )
 
 
 def gen_sklearn_scalers_random_data(
@@ -1052,7 +1115,9 @@ def test_logistic_regression(memory_leak_check):
     )
 
     def impl_score(X, y):
-        clf = LogisticRegression(n_jobs=8)
+        # TODO (Hadia, Sahil) When n_jobs is set to 8, it's (recently been) failing on CodeBuild (but not Azure) for some
+        # reason, so we need to investigate and fix the issue.
+        clf = LogisticRegression(n_jobs=1)
         clf.fit(X, y)
         return clf.score(X, y)
 
@@ -1065,8 +1130,10 @@ def test_logistic_regression(memory_leak_check):
     )
 
     def impl(X_train, y_train, X_test, y_test, name="Logistic Regression BODO"):
-        # Bodo ignores n_jobs. This is set for scikit-learn (non-bodo) run. It should be set to number of cores avialable.
-        clf = LogisticRegression(n_jobs=8)
+        # Bodo ignores n_jobs. This is set for scikit-learn (non-bodo) run. It should be set to number of cores available.
+        # TODO (Hadia, Sahil) When n_jobs is set to 8, it's (recently been) failing on CodeBuild (but not Azure) for some
+        # reason, so we need to investigate and fix the issue.
+        clf = LogisticRegression(n_jobs=1)
         start_time = time.time()
         clf.fit(X_train, y_train)
         end_time = time.time()
