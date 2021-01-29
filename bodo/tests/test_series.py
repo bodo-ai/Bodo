@@ -3355,6 +3355,18 @@ def test_series_where(memory_leak_check):
     check_func(test_impl, (S, cond, 12))
 
 
+def test_series_where_str(memory_leak_check):
+    """Tests Series.where() with string input"""
+
+    def impl(S):
+        return S.where(S == "aa", "d")
+
+    S = pd.Series(
+        ["aa", "b", "aa", "cc", np.nan, "aa", "DD"], [5, 1, 2, 0, 3, 4, 9], name="AA"
+    )
+    check_func(impl, (S,))
+
+
 def test_np_where_one_arg(memory_leak_check):
     """basic test for np.where(cond)"""
 

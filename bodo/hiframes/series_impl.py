@@ -3031,10 +3031,10 @@ def overload_np_where(condition, x, y):
     ):
         return
 
-    assert condition.dtype == types.bool_
+    assert condition.dtype == types.bool_, "invalid condition dtype"
 
-    is_x_arr = isinstance(x, (SeriesType, types.Array))
-    is_y_arr = isinstance(y, (SeriesType, types.Array))
+    is_x_arr = bodo.utils.utils.is_array_typ(x, True)
+    is_y_arr = bodo.utils.utils.is_array_typ(y, True)
 
     func_text = "def _impl(condition, x, y):\n"
     # get array data of Series inputs
@@ -3042,42 +3042,43 @@ def overload_np_where(condition, x, y):
         func_text += (
             "  condition = bodo.hiframes.pd_series_ext.get_series_data(condition)\n"
         )
-    if isinstance(x, SeriesType):
-        func_text += "  x = bodo.hiframes.pd_series_ext.get_series_data(x)\n"
-    if isinstance(y, SeriesType):
-        func_text += "  y = bodo.hiframes.pd_series_ext.get_series_data(y)\n"
+    if is_x_arr and not bodo.utils.utils.is_array_typ(x, False):
+        func_text += "  x = bodo.utils.conversion.coerce_to_array(x)\n"
+    if is_y_arr and not bodo.utils.utils.is_array_typ(y, False):
+        func_text += "  y = bodo.utils.conversion.coerce_to_array(y)\n"
     func_text += "  n = len(condition)\n"
-    out_dtype = None
 
+    x_dtype = x.dtype if is_x_arr else types.unliteral(x)
+    y_dtype = y.dtype if is_y_arr else types.unliteral(y)
+
+    if x_dtype == y_dtype:
+        out_dtype = bodo.hiframes.pd_series_ext._get_series_array_type(x_dtype)
     # output is string if any input is string
-    if (
-        is_overload_constant_str(x)
-        or x == string_type
-        or is_overload_constant_str(y)
-        or y == string_type
-        or (isinstance(x, (SeriesType, types.Array)) and x.dtype == string_type)
-        or (isinstance(y, (SeriesType, types.Array)) and y.dtype == string_type)
-    ):
+    elif x_dtype == string_type or y_dtype == string_type:
         out_dtype = bodo.string_array_type
     else:
         # similar to np.where typer of Numba
         out_dtype = numba.from_dtype(
             np.promote_types(
-                numba.np.numpy_support.as_dtype(getattr(x, "dtype", x)),
-                numba.np.numpy_support.as_dtype(getattr(y, "dtype", y)),
+                numba.np.numpy_support.as_dtype(x_dtype),
+                numba.np.numpy_support.as_dtype(y_dtype),
             )
         )
         out_dtype = types.Array(out_dtype, 1, "C")
     func_text += "  out_arr = bodo.utils.utils.alloc_type(n, out_dtype, (-1,))\n"
     func_text += "  for j in numba.parfors.parfor.internal_prange(n):\n"
     func_text += "    if condition[j]:\n"
-    func_text += "      out_arr[j] = {}\n".format("x[j]" if is_x_arr else "x")
     if is_x_arr:
-        func_text += "      if bodo.libs.array_kernels.isna(x, j): setna(out_arr, j)\n"
+        func_text += "      if bodo.libs.array_kernels.isna(x, j):\n"
+        func_text += "        setna(out_arr, j)\n"
+        func_text += "        continue\n"
+    func_text += "      out_arr[j] = {}\n".format("x[j]" if is_x_arr else "x")
     func_text += "    else:\n"
-    func_text += "      out_arr[j] = {}\n".format("y[j]" if is_y_arr else "y")
     if is_y_arr:
-        func_text += "      if bodo.libs.array_kernels.isna(y, j): setna(out_arr, j)\n"
+        func_text += "      if bodo.libs.array_kernels.isna(y, j):\n"
+        func_text += "        setna(out_arr, j)\n"
+        func_text += "        continue\n"
+    func_text += "      out_arr[j] = {}\n".format("y[j]" if is_y_arr else "y")
     func_text += "  return out_arr\n"
     loc_vars = {}
     exec(
