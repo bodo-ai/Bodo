@@ -3119,3 +3119,24 @@ def overload_series_drop_duplicates(S, subset=None, keep="first", inplace=False)
         return bodo.hiframes.pd_series_ext.init_series(data_0, index, name)
 
     return impl
+
+@overload_method(SeriesType, "between", inline="always", no_unliteral=True)
+def overload_series_between(S, left, right, inclusive=True):
+    def impl(S, left, right, inclusive=True): # pragma: no cover
+        # get series data
+        arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+        index = bodo.hiframes.pd_series_ext.get_series_index(S)
+        name = bodo.hiframes.pd_series_ext.get_series_name(S)
+        numba.parfors.parfor.init_prange()
+        n = len(arr)
+        out_arr = np.empty(n, np.bool_)
+        for i in numba.parfors.parfor.internal_prange(n):
+            val = bodo.utils.conversion.box_if_dt64(arr[i])
+            if inclusive:
+                out_arr[i] =  val <= right and val >= left
+            else:
+                out_arr[i] =  val < right and val > left
+
+        return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
+
+    return impl
