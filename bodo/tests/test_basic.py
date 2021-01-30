@@ -634,6 +634,20 @@ def test_func_non_jit_error(memory_leak_check):
         bodo.jit(test_impl)()
 
 
+def test_updated_container_binop(memory_leak_check):
+    def impl(p):
+        a = []
+        if p:
+            a.append("C")
+        return pd.DataFrame(np.ones((4, 3)), columns=["A", "B"] + a)
+
+    with pytest.raises(
+        BodoError,
+        match="argument 'columns' requires a constant value but variable 'a' is updated inplace using 'append'",
+    ):
+        bodo.jit(impl)(True)
+
+
 def test_unsupported_tz_dtype(memory_leak_check):
     """make sure proper error is thrown when input is tz-aware datetime"""
 

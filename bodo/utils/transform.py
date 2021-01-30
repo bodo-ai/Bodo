@@ -355,6 +355,12 @@ def get_const_value_inner(
     if isinstance(var_def, ir.Arg) and arg_types is not None:
         typ = arg_types[var_def.index]
 
+    # avoid updated containers like a = []; a.append("A")
+    if updated_containers and var.name in updated_containers:
+        raise BodoConstUpdatedError(
+            f"variable '{var.name}' is updated inplace using '{updated_containers[var.name]}'"
+        )
+
     # literal type case
     if is_literal_type(typ):
         return get_literal_value(typ)
@@ -374,8 +380,12 @@ def get_const_value_inner(
 
     # binary op (s1 op s2)
     if is_expr(var_def, "binop"):
-        arg1 = get_const_value_inner(func_ir, var_def.lhs, arg_types, typemap)
-        arg2 = get_const_value_inner(func_ir, var_def.rhs, arg_types, typemap)
+        arg1 = get_const_value_inner(
+            func_ir, var_def.lhs, arg_types, typemap, updated_containers
+        )
+        arg2 = get_const_value_inner(
+            func_ir, var_def.rhs, arg_types, typemap, updated_containers
+        )
         return var_def.fn(arg1, arg2)
 
     # df.columns case
@@ -411,13 +421,13 @@ def get_const_value_inner(
                     return 1
                 require(var_def.attr == "stop")
                 return get_const_value_inner(
-                    func_ir, slice_def.args[0], arg_types, typemap
+                    func_ir, slice_def.args[0], arg_types, typemap, updated_containers
                 )
 
             # slice(start, stop[, step]) case
             if var_def.attr == "start":
                 val = get_const_value_inner(
-                    func_ir, slice_def.args[0], arg_types, typemap
+                    func_ir, slice_def.args[0], arg_types, typemap, updated_containers
                 )
                 if val is None:
                     val = 0
@@ -427,7 +437,7 @@ def get_const_value_inner(
             if var_def.attr == "stop":
                 assert not check_normalize
                 return get_const_value_inner(
-                    func_ir, slice_def.args[1], arg_types, typemap
+                    func_ir, slice_def.args[1], arg_types, typemap, updated_containers
                 )
             require(var_def.attr == "step")
             # step is 1 by default if not provided
@@ -435,7 +445,7 @@ def get_const_value_inner(
                 return 1
             else:
                 val = get_const_value_inner(
-                    func_ir, slice_def.args[2], arg_types, typemap
+                    func_ir, slice_def.args[2], arg_types, typemap, updated_containers
                 )
                 if val is None:
                     val = 1
@@ -445,7 +455,9 @@ def get_const_value_inner(
 
     if is_expr(var_def, "getattr"):
         return getattr(
-            get_const_value_inner(func_ir, var_def.value, arg_types, typemap),
+            get_const_value_inner(
+                func_ir, var_def.value, arg_types, typemap, updated_containers
+            ),
             var_def.attr,
         )
 
@@ -475,39 +487,41 @@ def get_const_value_inner(
         keys_getattr = guard(get_definition, func_ir, call_func)
         assert isinstance(keys_getattr, ir.Expr) and keys_getattr.attr == "keys"
         keys_getattr.attr = "copy"
-        return [get_const_value_inner(func_ir, v, arg_types, typemap) for v in vals]
-
-    if updated_containers and var.name in updated_containers:
-        raise BodoConstUpdatedError(
-            "variable '{}' is updated inplace using '{}'".format(
-                var.name, updated_containers[var.name]
-            )
-        )
+        return [
+            get_const_value_inner(func_ir, v, arg_types, typemap, updated_containers)
+            for v in vals
+        ]
 
     # dict case
     if is_expr(var_def, "build_map"):
         return {
             get_const_value_inner(
-                func_ir, v[0], arg_types, typemap
-            ): get_const_value_inner(func_ir, v[1], arg_types, typemap)
+                func_ir, v[0], arg_types, typemap, updated_containers
+            ): get_const_value_inner(
+                func_ir, v[1], arg_types, typemap, updated_containers
+            )
             for v in var_def.items
         }
 
     # tuple case
     if is_expr(var_def, "build_tuple"):
         return tuple(
-            get_const_value_inner(func_ir, v, arg_types, typemap) for v in var_def.items
+            get_const_value_inner(func_ir, v, arg_types, typemap, updated_containers)
+            for v in var_def.items
         )
 
     # list
     if is_expr(var_def, "build_list"):
         return [
-            get_const_value_inner(func_ir, v, arg_types, typemap) for v in var_def.items
+            get_const_value_inner(func_ir, v, arg_types, typemap, updated_containers)
+            for v in var_def.items
         ]
 
     # list() call
     if call_name == ("list", "builtins"):
-        values = get_const_value_inner(func_ir, var_def.args[0], arg_types, typemap)
+        values = get_const_value_inner(
+            func_ir, var_def.args[0], arg_types, typemap, updated_containers
+        )
         # sort set values when converting to list to have consistent order across
         # processors (e.g. important for join keys, see test_merge_multi_int_key)
         if isinstance(values, set):
@@ -516,26 +530,38 @@ def get_const_value_inner(
 
     # set() call
     if call_name == ("set", "builtins"):
-        return set(get_const_value_inner(func_ir, var_def.args[0], arg_types, typemap))
+        return set(
+            get_const_value_inner(
+                func_ir, var_def.args[0], arg_types, typemap, updated_containers
+            )
+        )
 
     # range() call
     if call_name == ("range", "builtins"):
         return range(
-            get_const_value_inner(func_ir, var_def.args[0], arg_types, typemap)
+            get_const_value_inner(
+                func_ir, var_def.args[0], arg_types, typemap, updated_containers
+            )
         )
 
     # slice() call
     if call_name == ("slice", "builtins"):
         return slice(
             *tuple(
-                get_const_value_inner(func_ir, v, arg_types, typemap)
+                get_const_value_inner(
+                    func_ir, v, arg_types, typemap, updated_containers
+                )
                 for v in var_def.args
             )
         )
 
     # str() call
     if call_name == ("str", "builtins"):
-        return str(get_const_value_inner(func_ir, var_def.args[0], arg_types, typemap))
+        return str(
+            get_const_value_inner(
+                func_ir, var_def.args[0], arg_types, typemap, updated_containers
+            )
+        )
 
     if call_name in (
         ("init_string_index", "bodo.hiframes.pd_index_ext"),
@@ -545,19 +571,29 @@ def get_const_value_inner(
         ("init_heter_index", "bodo.hiframes.pd_index_ext"),
     ):
         return pd.Index(
-            get_const_value_inner(func_ir, var_def.args[0], arg_types, typemap)
+            get_const_value_inner(
+                func_ir, var_def.args[0], arg_types, typemap, updated_containers
+            )
         )
 
     if call_name == ("str_arr_from_sequence", "bodo.libs.str_arr_ext"):
         return np.array(
-            get_const_value_inner(func_ir, var_def.args[0], arg_types, typemap)
+            get_const_value_inner(
+                func_ir, var_def.args[0], arg_types, typemap, updated_containers
+            )
         )
 
     if call_name == ("init_range_index", "bodo.hiframes.pd_index_ext"):
         return pd.RangeIndex(
-            get_const_value_inner(func_ir, var_def.args[0], arg_types, typemap),
-            get_const_value_inner(func_ir, var_def.args[1], arg_types, typemap),
-            get_const_value_inner(func_ir, var_def.args[2], arg_types, typemap),
+            get_const_value_inner(
+                func_ir, var_def.args[0], arg_types, typemap, updated_containers
+            ),
+            get_const_value_inner(
+                func_ir, var_def.args[1], arg_types, typemap, updated_containers
+            ),
+            get_const_value_inner(
+                func_ir, var_def.args[2], arg_types, typemap, updated_containers
+            ),
         )
 
     # len(tuple)
@@ -578,17 +614,23 @@ def get_const_value_inner(
             "CategoricalDtype", var_def.args, kws, 1, "ordered", False
         )
         if ordered is not False:
-            ordered = get_const_value_inner(func_ir, ordered, arg_types, typemap)
+            ordered = get_const_value_inner(
+                func_ir, ordered, arg_types, typemap, updated_containers
+            )
         if cats == "":
             cats = None
         else:
-            cats = get_const_value_inner(func_ir, cats, arg_types, typemap)
+            cats = get_const_value_inner(
+                func_ir, cats, arg_types, typemap, updated_containers
+            )
         return pd.CategoricalDtype(cats, ordered)
 
     # np.dtype() calls
     if call_name == ("dtype", "numpy"):
         return np.dtype(
-            get_const_value_inner(func_ir, var_def.args[0], arg_types, typemap)
+            get_const_value_inner(
+                func_ir, var_def.args[0], arg_types, typemap, updated_containers
+            )
         )
 
     # pd.Int64Dtype(), ...
@@ -616,12 +658,17 @@ def get_const_value_inner(
         and len(call_name) == 2
         and isinstance(call_name[1], ir.Var)
     ):
-        val = get_const_value_inner(func_ir, call_name[1], arg_types, typemap)
+        val = get_const_value_inner(
+            func_ir, call_name[1], arg_types, typemap, updated_containers
+        )
         args = [
-            get_const_value_inner(func_ir, v, arg_types, typemap) for v in var_def.args
+            get_const_value_inner(func_ir, v, arg_types, typemap, updated_containers)
+            for v in var_def.args
         ]
         kws = {
-            a[0]: get_const_value_inner(func_ir, a[1], arg_types, typemap)
+            a[0]: get_const_value_inner(
+                func_ir, a[1], arg_types, typemap, updated_containers
+            )
             for a in var_def.kws
         }
         return getattr(val, call_name[0])(*args, **kws)
