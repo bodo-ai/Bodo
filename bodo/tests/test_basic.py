@@ -635,6 +635,8 @@ def test_func_non_jit_error(memory_leak_check):
 
 
 def test_updated_container_binop(memory_leak_check):
+    """make sure binop of updated containers is detected and raises proper error"""
+
     def impl(p):
         a = []
         if p:

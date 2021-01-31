@@ -2256,7 +2256,10 @@ class DistributedAnalysis:
         # for example: A = X[:,5]
         if guard(is_whole_slice, self.typemap, self.func_ir, index_var) or guard(
             is_slice_equiv_arr,
-            inst.target,
+            # TODO(ehsan): inst.target instead of in_var results in invalid array
+            # analysis equivalence sometimes, see test_dataframe_columns_list
+            # inst.target,
+            in_var,
             index_var,
             self.func_ir,
             equiv_set,

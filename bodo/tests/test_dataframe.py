@@ -3313,6 +3313,20 @@ def test_dataframe_columns_name():
     check_func(f, (df,), dist_test=False)
 
 
+def test_dataframe_columns_list():
+    """Make sure loop unrolling can handle container updates inside list comprehension
+    properly and handles binop of containers (#2473)
+    """
+
+    def impl1(nrows, nvars):
+        X = np.zeros((nrows, nvars + 1))
+        cols = ["y"] + ["x{}".format(i) for i in range(nvars)]
+        df = pd.DataFrame(X, columns=cols)
+        return df
+
+    check_func(impl1, (10, 3), only_1D=True)
+
+
 def test_unroll_loop(memory_leak_check, is_slow_run):
     """Test unrolling constant loops when necessary for typing in getitem/setitem of
     dataframe columns.
