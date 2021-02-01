@@ -3672,7 +3672,7 @@ def test_series_explode(S, memory_leak_check):
 
 def test_series_none_data(memory_leak_check):
     def impl():
-        return pd.Series(dtype=np.float64, data=None, index=[1, 2, 3])
+        return pd.Series(dtype=np.float64, index=[1, 2, 3])
 
     check_func(impl, (), only_seq=True)
 

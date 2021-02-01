@@ -1472,7 +1472,9 @@ class UntypedPass:
     def _handle_pd_Series(self, assign, lhs, rhs):
         """transform pd.Series(A) call for flatmap case"""
         kws = dict(rhs.kws)
-        data = get_call_expr_arg("pd.Series", rhs.args, kws, 0, "data")
+        data = get_call_expr_arg("pd.Series", rhs.args, kws, 0, "data", "")
+        if data == "":
+            return [assign]
 
         # match flatmap pd.Series(list(itertools.chain(*A))) and flatten
         data_def = guard(get_definition, self.func_ir, data)
