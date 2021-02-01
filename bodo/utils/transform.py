@@ -517,6 +517,13 @@ def get_const_value_inner(
             for v in var_def.items
         ]
 
+    # set
+    if is_expr(var_def, "build_set"):
+        return {
+            get_const_value_inner(func_ir, v, arg_types, typemap, updated_containers)
+            for v in var_def.items
+        }
+
     # list() call
     if call_name == ("list", "builtins"):
         values = get_const_value_inner(

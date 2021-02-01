@@ -643,11 +643,65 @@ def test_updated_container_binop(memory_leak_check):
             a.append("C")
         return pd.DataFrame(np.ones((4, 3)), columns=["A", "B"] + a)
 
+    @bodo.jit
+    def f(a):
+        a.append("A")
+
+    # container used in loop before update call
+    def impl2(n):
+        a = []
+        for i in range(n):
+            f(a)
+            a.append(str(i))
+        return pd.DataFrame(np.ones((4, 5)), columns=["A", "B"] + a)
+
+    # container used in loop after update call
+    def impl3(n):
+        a = []
+        for i in range(n):
+            a.append(str(i))
+            f(a)
+        return pd.DataFrame(np.ones((3, 3)), columns=a)
+
+    # test unroll for set
+    def impl4(n):
+        a = set()
+        for i in range(n):
+            a.add(str(i))
+        return pd.DataFrame(np.ones((5, 5)), columns=list({"A", "B"} | a))
+
+    # update value is non-const
+    def impl5(n, p):
+        a = []
+        for i in range(n):
+            if p:
+                c = 2
+            else:
+                c = str(i)
+            a.append(c)
+        return pd.DataFrame(np.ones((3, 3)), columns=a)
+
     with pytest.raises(
         BodoError,
-        match="argument 'columns' requires a constant value but variable 'a' is updated inplace using 'append'",
+        match="argument 'columns' requires a constant value but variable '.*' is updated inplace using 'append'",
     ):
         bodo.jit(impl)(True)
+    with pytest.raises(
+        BodoError,
+        match="argument 'columns' requires a constant value but variable '.*' is updated inplace using 'append'",
+    ):
+        bodo.jit(impl2)(3)
+    with pytest.raises(
+        BodoError,
+        match="argument 'columns' requires a constant value but variable '.*' is updated inplace using 'append'",
+    ):
+        bodo.jit(impl3)(3)
+    assert set(bodo.jit(impl4)(3).columns) == {"A", "B", "0", "1", "2"}
+    with pytest.raises(
+        BodoError,
+        match="argument 'columns' requires a constant value but variable '.*' is updated inplace using 'append'",
+    ):
+        bodo.jit(impl5)(3, True)
 
 
 def test_unsupported_tz_dtype(memory_leak_check):

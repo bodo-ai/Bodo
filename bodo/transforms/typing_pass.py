@@ -1303,6 +1303,7 @@ class TypingTransforms:
                     else:
                         # save for potential loop unrolling
                         self._require_const[var] = label
+                        self.needs_transform = True
                 continue
             # get constant value for variable if possible.
             # Otherwise, just skip, assuming that the issue may be fixed later or
@@ -1327,6 +1328,7 @@ class TypingTransforms:
                 else:
                     # save for potential loop unrolling
                     self._require_const[var] = label
+                    self.needs_transform = True
                     continue
             except GuardException:
                 # save for potential loop unrolling
@@ -1416,6 +1418,12 @@ class TypingTransforms:
                     defined_containers |= self._equiv_vars[stmt.target.name]
                     continue
                 if stmt.value.op == "call":
+                    if guard(find_callname, self.func_ir, stmt.value) == (
+                        "set",
+                        "builtins",
+                    ):
+                        defined_containers |= self._equiv_vars[stmt.target.name]
+                        continue
                     # match container update calls and avoid the update if possible
                     # e.g. a = []; a.append(2) -> a = [2]
                     new_nodes = guard(
@@ -1428,7 +1436,8 @@ class TypingTransforms:
                     # _try_remove_container_update()
                     fdef = guard(find_callname, self.func_ir, stmt.value)
                     if (
-                        len(fdef) == 2
+                        fdef
+                        and len(fdef) == 2
                         and isinstance(fdef[1], ir.Var)
                         and fdef[1].name in defined_containers
                     ):
@@ -1453,12 +1462,17 @@ class TypingTransforms:
         # match container update call, e.g. a.append(2)
         fdef = find_callname(self.func_ir, stmt.value)
         require(
-            len(fdef) == 2
+            fdef
+            and len(fdef) == 2
             and isinstance(fdef[1], ir.Var)
             and fdef[1].name in defined_containers
         )
         require(isinstance(fdef[0], str))
         container_def = get_definition(self.func_ir, fdef[1])
+        require(
+            isinstance(container_def, ir.Expr)
+            and container_def.op in ("build_list", "build_set", "call")
+        )
 
         # get constant values of container before update
         # TODO(ehsan): support "build_map"
@@ -1469,6 +1483,13 @@ class TypingTransforms:
             ]
             if container_def.op == "build_set":
                 container_val = set(container_val)
+        elif container_def.op == "call" and find_callname(
+            self.func_ir, container_def
+        ) == ("set", "builtins"):
+            require(len(container_def.args) == 0)  # TODO: support set() args
+            container_val = set()
+        else:
+            raise GuardException("Invalid container def")
 
         # update container value by calling the actual update function
         arg_vals = [
@@ -1490,6 +1511,12 @@ class TypingTransforms:
         )
 
         # update original container definition, e.g. a = [] -> a = [2]
+        if container_def.op == "call" and find_callname(
+            self.func_ir, container_def
+        ) == ("set", "builtins"):
+            # convert set() call into a build_set
+            container_def.op = "build_set"
+            container_def._kws = {"items": []}
         container_def.items = [
             _create_const_var(v, fdef[1].name, fdef[1].scope, fdef[1].loc, nodes)
             for v in container_val
@@ -1798,6 +1825,16 @@ def _find_updated_containers(blocks, topo_order):
                         updated_containers,
                         equiv_vars,
                     )
+            # handle simple calls like list(a)
+            elif is_call_assign(stmt):
+                for v in stmt.value.args:
+                    if v.name in updated_containers:
+                        _set_updated_container(
+                            stmt.target.name,
+                            updated_containers[v.name],
+                            updated_containers,
+                            equiv_vars,
+                        )
 
     # combine all aliases transitively
     old_equiv_vars = copy.deepcopy(equiv_vars)
