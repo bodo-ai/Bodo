@@ -681,6 +681,13 @@ def test_updated_container_binop(memory_leak_check):
             a.append(c)
         return pd.DataFrame(np.ones((3, 3)), columns=a)
 
+    # avoid unroll if loop is too large
+    def impl6(n):
+        a = []
+        for i in range(n):
+            a.append(str(i))
+        return pd.DataFrame(np.ones((3, 3)), columns=a)
+
     with pytest.raises(
         BodoError,
         match="argument 'columns' requires a constant value but variable '.*' is updated inplace using 'append'",
@@ -702,6 +709,11 @@ def test_updated_container_binop(memory_leak_check):
         match="argument 'columns' requires a constant value but variable '.*' is updated inplace using 'append'",
     ):
         bodo.jit(impl5)(3, True)
+    with pytest.raises(
+        BodoError,
+        match="argument 'columns' requires a constant value but variable '.*' is updated inplace using 'append'",
+    ):
+        bodo.jit(impl6)(30000)
 
 
 def test_unsupported_tz_dtype(memory_leak_check):

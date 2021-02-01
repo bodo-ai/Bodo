@@ -69,6 +69,9 @@ in_partial_typing = False
 # in the typing pass is required. Necessary since types.unknown may not be assigned to
 # all types by Numba properly, e.g. TestDataFrame::test_df_drop_inplace1.
 typing_transform_required = False
+# limit on maximum number of total statements generated in loop unrolling to avoid
+# very long compilation time
+loop_unroll_limit = 10000
 
 
 @register_pass(mutates_CFG=True, analysis_only=False)
@@ -1390,6 +1393,12 @@ class TypingTransforms:
             or self._vars_dependant(var, loop_index_var)
         )
         iter_vals = self._get_loop_const_iter_vals(loop_index_var)
+
+        # avoid unrolling very large loops (too many iterations and/or body statements)
+        unroll_size = len(iter_vals) * sum(
+            len(self.func_ir.blocks[l].body) for l in loop.body if l != loop.header
+        )
+        require(unroll_size < loop_unroll_limit)
 
         # start the unroll transform
         # no more GuardException since we can't bail out from this point
