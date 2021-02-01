@@ -838,6 +838,7 @@ def pd_series_overload(
 
         return impl_heter
 
+    # support for series with no data
     if is_overload_none(data):
 
         def impl(

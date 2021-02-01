@@ -277,7 +277,7 @@ associated index values yet.
 * :class:`pandas.Series`
 
   * Arguments ``data``, ``index``, and ``name`` are supported.
-    ``data`` is required and can be a list, array, Series or Index.
+    ``data`` can be a list, array, Series, Index, or None.
     If ``data`` is Series and ``index`` is provided, implicit alignment is
     not performed yet.
 
