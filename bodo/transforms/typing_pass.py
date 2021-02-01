@@ -4,6 +4,7 @@ according to Bodo requirements (using partial typing).
 """
 import copy
 import itertools
+from collections import defaultdict
 
 import numba
 import numpy as np
@@ -49,6 +50,7 @@ from bodo.utils.utils import (
     get_getsetitem_index_var,
     is_assign,
     is_call,
+    is_call_assign,
     is_expr,
 )
 
@@ -67,6 +69,9 @@ in_partial_typing = False
 # in the typing pass is required. Necessary since types.unknown may not be assigned to
 # all types by Numba properly, e.g. TestDataFrame::test_df_drop_inplace1.
 typing_transform_required = False
+# limit on maximum number of total statements generated in loop unrolling to avoid
+# very long compilation time
+loop_unroll_limit = 10000
 
 
 @register_pass(mutates_CFG=True, analysis_only=False)
@@ -114,7 +119,6 @@ class BodoTypeInference(PartialTypeInference):
                 and not needs_transform
             ):
                 break
-            ran_transform = True
             typing_transforms_pass = TypingTransforms(
                 state.func_ir,
                 state.typingctx,
@@ -124,7 +128,9 @@ class BodoTypeInference(PartialTypeInference):
                 state.locals,
                 state.flags,
                 True,
+                ran_transform,
             )
+            ran_transform = True
             changed, needs_transform = typing_transforms_pass.run()
             # can't be typed if IR not changed
             if not changed and not needs_transform:
@@ -143,8 +149,24 @@ class BodoTypeInference(PartialTypeInference):
                 state.locals,
                 state.flags,
                 False,
+                ran_transform,
             )
-            typing_transforms_pass.run()
+            _changed, needs_transform = typing_transforms_pass.run()
+            # some cases need a second transform pass to raise the proper error
+            # see test_df_rename::impl4
+            if needs_transform:
+                typing_transforms_pass = TypingTransforms(
+                    state.func_ir,
+                    state.typingctx,
+                    state.typemap,
+                    state.calltypes,
+                    state.args,
+                    state.locals,
+                    state.flags,
+                    False,
+                    True,
+                )
+                typing_transforms_pass.run()
 
         dprint_func_ir(state.func_ir, "after typing pass")
         # run regular type inference again with _raise_errors = True to set function
@@ -172,6 +194,7 @@ class TypingTransforms:
         _locals,
         flags,
         change_required,
+        ran_transform,
     ):
         self.func_ir = func_ir
         self.typingctx = typingctx
@@ -201,6 +224,8 @@ class TypingTransforms:
         self.flags = flags
         # a change in the IR in current pass is required to enable typing
         self.change_required = change_required
+        # whether transform has run before (e.g. loop unrolling is attempted)
+        self.ran_transform = ran_transform
         self.changed = False
         # whether another transformation pass is needed (see _run_setattr)
         self.needs_transform = False
@@ -210,7 +235,9 @@ class TypingTransforms:
         # are used in analysis (e.g. df creation points in rhs_labels)
         blocks = self.func_ir.blocks
         topo_order = find_topo_order(blocks)
-        self._updated_containers = _find_updated_containers(blocks)
+        self._updated_containers, self._equiv_vars = _find_updated_containers(
+            blocks, topo_order
+        )
         work_list = list((l, blocks[l]) for l in reversed(topo_order))
         while work_list:
             label, block = work_list.pop()
@@ -1280,15 +1307,21 @@ class TypingTransforms:
                 continue
             if is_literal_type(self.typemap.get(var.name, None)):
                 if var.name in self._updated_containers:
-                    raise BodoError(
-                        "{}(): argument '{}' requires a constant value but variable '{}' is updated inplace using '{}'\n{}\n".format(
-                            func_name,
-                            arg_name,
-                            var.name,
-                            self._updated_containers[var.name],
-                            rhs.loc.strformat(),
+                    # loop unrolling can potentially make updated lists constants
+                    if self.ran_transform:
+                        raise BodoError(
+                            "{}(): argument '{}' requires a constant value but variable '{}' is updated inplace using '{}'\n{}\n".format(
+                                func_name,
+                                arg_name,
+                                var.name,
+                                self._updated_containers[var.name],
+                                rhs.loc.strformat(),
+                            )
                         )
-                    )
+                    else:
+                        # save for potential loop unrolling
+                        self._require_const[var] = label
+                        self.needs_transform = True
                 continue
             # get constant value for variable if possible.
             # Otherwise, just skip, assuming that the issue may be fixed later or
@@ -1303,11 +1336,18 @@ class TypingTransforms:
                     pyobject_to_literal=pyobject_to_literal,
                 )
             except BodoConstUpdatedError as e:
-                raise BodoError(
-                    "{}(): argument '{}' requires a constant value but {}\n{}\n".format(
-                        func_name, arg_name, e, rhs.loc.strformat()
+                # loop unrolling can potentially make updated lists constants
+                if self.ran_transform:
+                    raise BodoError(
+                        "{}(): argument '{}' requires a constant value but {}\n{}\n".format(
+                            func_name, arg_name, e, rhs.loc.strformat()
+                        )
                     )
-                )
+                else:
+                    # save for potential loop unrolling
+                    self._require_const[var] = label
+                    self.needs_transform = True
+                    continue
             except GuardException:
                 # save for potential loop unrolling
                 self._require_const[var] = label
@@ -1361,15 +1401,161 @@ class TypingTransforms:
             ...
         """
         # get loop info and make sure unrolling is possible
-        loop = self._get_enclosing_loop(label)
+        loop, is_container_update = self._get_enclosing_loop(var, label)
         loop_index_var = self._get_loop_index_var(loop)
-        require(self._vars_dependant(var, loop_index_var))
+        require(
+            (is_container_update and self._updated_in_loop(var, loop))
+            or self._vars_dependant(var, loop_index_var)
+        )
         iter_vals = self._get_loop_const_iter_vals(loop_index_var)
+
+        # avoid unrolling very large loops (too many iterations and/or body statements)
+        unroll_size = len(iter_vals) * sum(
+            len(self.func_ir.blocks[l].body) for l in loop.body if l != loop.header
+        )
+        require(unroll_size < loop_unroll_limit)
 
         # start the unroll transform
         # no more GuardException since we can't bail out from this point
         self._unroll_loop(loop, loop_index_var, iter_vals)
+
+        if is_container_update:
+            self._remove_container_updates(self.func_ir.blocks[list(loop.entries)[0]])
+
         return True
+
+    def _remove_container_updates(self, block):
+        """remove container updates from 'block' statements if possible.
+        Find containers that are initialized within the block and updated using a
+        constant value before use. It transforms the code to avoid the update.
+        For example, a = []; a.append(2) -> a = [2]
+        """
+        # containers that are defined but not used yet (except updates handled here)
+        defined_containers = set()
+        # nodes generated for generating constant values (to redefine containers)
+        const_nodes = []
+        for stmt in block.body:
+            if is_assign(stmt) and isinstance(stmt.value, ir.Expr):
+                # find const list/set definition
+                # TODO(ehsan): support "build_map"
+                if stmt.value.op in ("build_list", "build_set"):
+                    defined_containers |= self._equiv_vars[stmt.target.name]
+                    continue
+                if stmt.value.op == "call":
+                    if guard(find_callname, self.func_ir, stmt.value) == (
+                        "set",
+                        "builtins",
+                    ):
+                        defined_containers |= self._equiv_vars[stmt.target.name]
+                        continue
+                    # match container update calls and avoid the update if possible
+                    # e.g. a = []; a.append(2) -> a = [2]
+                    new_nodes = guard(
+                        self._try_remove_container_update, stmt, defined_containers
+                    )
+                    if new_nodes:
+                        const_nodes.extend(new_nodes)
+                        continue
+                    # potential container update call that couldn't be handled in
+                    # _try_remove_container_update()
+                    fdef = guard(find_callname, self.func_ir, stmt.value)
+                    if (
+                        fdef
+                        and len(fdef) == 2
+                        and isinstance(fdef[1], ir.Var)
+                        and fdef[1].name in defined_containers
+                    ):
+                        defined_containers -= self._equiv_vars[fdef[1].name]
+                # getattr nodes like a.append are handled when they are called (above)
+                if stmt.value.op == "getattr":
+                    continue
+                # aliases are already stored in _equiv_vars
+                if isinstance(stmt.value, ir.Var):
+                    continue
+                # potential unhandled container use
+                for v in stmt.list_vars():
+                    if v.name in defined_containers:
+                        defined_containers -= self._equiv_vars[v.name]
+        block.body = const_nodes + block.body
+
+    def _try_remove_container_update(self, stmt, defined_containers):
+        """try to remove container update if possible.
+        E.g. a = []; a.append(2) -> a = [2]
+        Otherwise, raise GuardException.
+        """
+        # match container update call, e.g. a.append(2)
+        fdef = find_callname(self.func_ir, stmt.value)
+        require(
+            fdef
+            and len(fdef) == 2
+            and isinstance(fdef[1], ir.Var)
+            and fdef[1].name in defined_containers
+        )
+        require(isinstance(fdef[0], str))
+        container_def = get_definition(self.func_ir, fdef[1])
+        require(
+            isinstance(container_def, ir.Expr)
+            and container_def.op in ("build_list", "build_set", "call")
+        )
+
+        # get constant values of container before update
+        # TODO(ehsan): support "build_map"
+        if container_def.op in ("build_list", "build_set"):
+            container_val = [
+                get_const_value_inner(self.func_ir, v, self.arg_types, self.typemap)
+                for v in container_def.items
+            ]
+            if container_def.op == "build_set":
+                container_val = set(container_val)
+        elif container_def.op == "call" and find_callname(
+            self.func_ir, container_def
+        ) == ("set", "builtins"):
+            require(len(container_def.args) == 0)  # TODO: support set() args
+            container_val = set()
+        else:
+            raise GuardException("Invalid container def")
+
+        # update container value by calling the actual update function
+        arg_vals = [
+            get_const_value_inner(self.func_ir, v, self.arg_types, self.typemap)
+            for v in stmt.value.args
+        ]
+        out_val = getattr(container_val, fdef[0])(*arg_vals)
+
+        nodes = []
+
+        # replace container variable in getattr with dummy to avoid use detection later
+        # e.g. a.append -> dummy.append
+        func_var_def = get_definition(self.func_ir, stmt.value.func)
+        require(is_expr(func_var_def, "getattr"))
+        dummy_val = [1] if container_def.op == "build_list" else {1}
+        # no more GuardException from here on since IR is being modified
+        func_var_def.value = _create_const_var(
+            dummy_val, fdef[1].name, fdef[1].scope, fdef[1].loc, nodes
+        )
+
+        # update original container definition, e.g. a = [] -> a = [2]
+        if container_def.op == "call" and find_callname(
+            self.func_ir, container_def
+        ) == ("set", "builtins"):
+            # convert set() call into a build_set
+            container_def.op = "build_set"
+            container_def._kws = {"items": []}
+        container_def.items = [
+            _create_const_var(v, fdef[1].name, fdef[1].scope, fdef[1].loc, nodes)
+            for v in container_val
+        ]
+        # replace update call with constant output, e.g. b = a.append(2) - > b = None
+        self.func_ir._definitions[stmt.target.name].remove(stmt.value)
+        stmt.value = _create_const_var(
+            out_val, fdef[1].name, fdef[1].scope, fdef[1].loc, nodes
+        )
+        self.func_ir._definitions[stmt.target.name].append(stmt.value)
+
+        # update defs so next call to _try_remove_container_update can find values of
+        # updated variables (build_list items) using _create_const_var
+        update_node_list_definitions(nodes, self.func_ir)
+        return nodes
 
     def _unroll_loop(self, loop, loop_index_var, iter_vals):
         """replace loop with its iteration body instances (to enable typing, etc.)"""
@@ -1427,18 +1613,27 @@ class TypingTransforms:
 
         self.changed = True
 
-    def _get_enclosing_loop(self, label):
-        """find enclosing loop for block 'label' if possible.
+    def _get_enclosing_loop(self, var, label):
+        """find enclosing loop for block 'label' if possible. Also return True if the
+        loop updates a container.
         Otherwise, raise GuardException.
         """
         cfg = compute_cfg_from_blocks(self.func_ir.blocks)
+        label_doms = cfg.dominators()[label]
         loops = cfg.loops()
         for loop in loops.values():
             # consider only well-structured loops
             if len(loop.entries) != 1 or len(loop.exits) != 1:
                 continue
+            # cases where a container is updated in a loop and used afterwards
+            # use label should dominate the loop
+            if (
+                var.name in self._updated_containers
+                and list(loop.exits)[0] in label_doms
+            ):
+                return loop, True
             if label in loop.body:
-                return loop
+                return loop, False
 
         raise GuardException("enclosing loop not found")
 
@@ -1489,7 +1684,7 @@ class TypingTransforms:
     def _vars_dependant(self, var1, var2):
         """return True if 'var1' is equivalent to or depends on 'var2'"""
         assert isinstance(var1, ir.Var) and isinstance(var2, ir.Var)
-        if var1.name == var2.name:
+        if var1.name == var2.name or var1.name in self._equiv_vars[var2.name]:
             return True
 
         var1_def = get_definition(self.func_ir, var1)
@@ -1506,6 +1701,24 @@ class TypingTransforms:
         # dependant through call, e.g. df["A"+str(i)]
         if is_call(var1_def):
             return any(self._vars_dependant(arg, var2) for arg in var1_def.args)
+
+        return False
+
+    def _updated_in_loop(self, var, loop):
+        """return True if 'var' is updated in 'loop', e.g. a.append(3) is in loop body"""
+        for l in loop.body:
+            for stmt in self.func_ir.blocks[l].body:
+                # match updated container call like a.append(3)
+                if is_call_assign(stmt):
+                    func_def = get_definition(self.func_ir, stmt.value.func)
+                    if (
+                        is_expr(func_def, "getattr")
+                        and func_def.value.name in self._updated_containers
+                    ):
+                        # a variable that 'var' is dependent on may be updated
+                        # e.g. a.append(2); b = [1] + a
+                        if self._vars_dependant(var, func_def.value):
+                            return True
 
         return False
 
@@ -1549,7 +1762,7 @@ def _create_const_var(val, name, scope, loc, nodes):
     return new_var
 
 
-def _find_updated_containers(blocks):
+def _find_updated_containers(blocks, topo_order):
     """find variables that are potentially list/set/dict containers that are updated
     inplace.
     Just looks for getattr nodes with inplace update methods of list/set/dict like 'pop'
@@ -1557,9 +1770,33 @@ def _find_updated_containers(blocks):
     Returns a dictionary of variable names and the offending method names.
     """
     updated_containers = {}
-    for b in blocks.values():
+    # keep track of potential aliases for variables like lists, which can happen in
+    # translation of list comprehension, see test_dataframe_columns_list
+    equiv_vars = defaultdict(set)
+    for label in topo_order:
+        b = blocks[label]
         for stmt in b.body:
+            # var to var assignment, creating a potential alias
             if (
+                is_assign(stmt)
+                and isinstance(stmt.value, ir.Var)
+                and stmt.target.name != stmt.value.name
+            ):
+                lhs = stmt.target.name
+                rhs = stmt.value.name
+                equiv_vars[lhs].add(rhs)
+                equiv_vars[rhs].add(lhs)
+                equiv_vars[lhs] |= equiv_vars[rhs]
+                equiv_vars[rhs] |= equiv_vars[lhs]
+                if rhs in updated_containers:
+                    _set_updated_container(
+                        lhs, updated_containers[rhs], updated_containers, equiv_vars
+                    )
+                elif lhs in updated_containers:
+                    _set_updated_container(
+                        rhs, updated_containers[lhs], updated_containers, equiv_vars
+                    )
+            elif (
                 is_assign(stmt)
                 and is_expr(stmt.value, "getattr")
                 and stmt.value.attr
@@ -1584,7 +1821,66 @@ def _find_updated_containers(blocks):
                     "sort",
                 )
             ):
-                updated_containers[stmt.value.value.name] = stmt.value.attr
+                _set_updated_container(
+                    stmt.value.value.name,
+                    stmt.value.attr,
+                    updated_containers,
+                    equiv_vars,
+                )
             elif is_setitem(stmt):
-                updated_containers[stmt.target.name] = "setitem"
-    return updated_containers
+                _set_updated_container(
+                    stmt.target.name, "setitem", updated_containers, equiv_vars
+                )
+            # binop of updated containers creates an updated container
+            elif is_assign(stmt) and is_expr(stmt.value, "binop"):
+                arg1 = stmt.value.lhs.name
+                arg2 = stmt.value.rhs.name
+                if arg1 in updated_containers:
+                    _set_updated_container(
+                        stmt.target.name,
+                        updated_containers[arg1],
+                        updated_containers,
+                        equiv_vars,
+                    )
+                elif arg2 in updated_containers:
+                    _set_updated_container(
+                        stmt.target.name,
+                        updated_containers[arg2],
+                        updated_containers,
+                        equiv_vars,
+                    )
+            # handle simple calls like list(a)
+            elif is_call_assign(stmt):
+                for v in stmt.value.args:
+                    if v.name in updated_containers:
+                        _set_updated_container(
+                            stmt.target.name,
+                            updated_containers[v.name],
+                            updated_containers,
+                            equiv_vars,
+                        )
+
+    # combine all aliases transitively
+    old_equiv_vars = copy.deepcopy(equiv_vars)
+    for v in old_equiv_vars:
+        for w in old_equiv_vars[v]:
+            equiv_vars[v] |= equiv_vars[w]
+        for w in old_equiv_vars[v]:
+            equiv_vars[w] = equiv_vars[v]
+
+    # update updated_containers info based on aliases
+    # NOTE: may not capture binop of updated containers in all cases, but
+    # get_const_value_inner() will catch the corner cases and avoid invalid results
+    for v in list(updated_containers.keys()):
+        m = updated_containers[v]
+        for w in equiv_vars[v]:
+            updated_containers[w] = m
+
+    return updated_containers, equiv_vars
+
+
+def _set_updated_container(varname, update_func, updated_containers, equiv_vars):
+    """helper to set 'varname' and its aliases as updated containers"""
+    updated_containers[varname] = update_func
+    for w in equiv_vars[varname]:
+        updated_containers[w] = update_func
