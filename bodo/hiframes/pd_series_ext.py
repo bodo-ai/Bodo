@@ -846,7 +846,12 @@ def pd_series_overload(
         ):  # pragma: no cover
             name_t = bodo.utils.conversion.extract_name_if_none(data, name)
             index_t = bodo.utils.conversion.extract_index_if_none(data, index)
-            data_t = np.full(len(index_t), np.nan)
+
+            numba.parfors.parfor.init_prange()
+            n = len(index_t)
+            data_t = np.empty(n, np.float64)
+            for i in numba.parfors.parfor.internal_prange(n):
+                data_t[i] = np.nan
 
             return bodo.hiframes.pd_series_ext.init_series(
                 data_t, bodo.utils.conversion.convert_to_index(index_t), name_t
