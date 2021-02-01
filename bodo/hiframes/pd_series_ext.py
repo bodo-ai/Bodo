@@ -1121,7 +1121,6 @@ series_unsupported_methods = (
     "hist",
     # Serialization / IO / conversion
     "to_pickle",
-    "to_dict",
     "to_excel",
     "to_frame",
     "to_xarray",

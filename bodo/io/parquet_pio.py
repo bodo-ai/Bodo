@@ -453,15 +453,12 @@ def _gen_pq_reader_py(
     local_types = {}
     if partition_names is None:
         partition_names = []
-        first_partition_name = None
-    else:
-        first_partition_name = partition_names[0]
     for c_name, (real_col_ind, col_ind), col_siz, c_typ, is_all_null in zip(
         col_names, col_indices, col_nb_fields, out_types, null_col_map
     ):
-        if c_name == first_partition_name:
-            # partition columns appear last and are handled below
-            break
+        if c_name in partition_names:
+            # partition columns are handled below
+            continue
         ret_type, func_text = gen_column_read(
             func_text,
             c_name,

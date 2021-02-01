@@ -3140,4 +3140,24 @@ def overload_series_between(S, left, right, inclusive=True):
 
         return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
+      
+@overload_method(SeriesType, "to_dict", inline="always", no_unliteral=True)
+def overload_to_dict(S, into=None):
+    """ Support Series.to_dict(). """
+
+    def impl(S, into=None):  # pragma: no cover
+        # default case, use a regular dict:
+        data = bodo.hiframes.pd_series_ext.get_series_data(S)
+        index = bodo.utils.conversion.index_to_array(
+            bodo.hiframes.pd_series_ext.get_series_index(S)
+        )
+        n = len(data)
+        dico = {}
+        for i in range(n):
+            val = bodo.utils.conversion.box_if_dt64(data[i])
+            dico[index[i]] = val
+        return dico
+
+        # TODO: support other types of dictionaries for the 'into' arg
+
     return impl
