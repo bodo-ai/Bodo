@@ -97,7 +97,12 @@ def overload_rolling_fixed(
         func_text += "  return np.{}(A)\n".format(func_name)
         loc_vars = {}
         exec(func_text, {"np": np}, loc_vars)
-        kernel_func = numba.njit(loc_vars["kernel_func"])
+        # We can't use numba.njit because it generates a CPUDispatcher which
+        # in the case of kernel_func gets passed as argument to other functions,
+        # in the form of a dynamic global address that prevents caching.
+        # With register_jitable a dummy value is passed instead, and numba
+        # knows which function call to insert in the library
+        kernel_func = register_jitable(loc_vars["kernel_func"])
 
         return lambda arr, index_arr, win, minp, center, fname, raw=True, parallel=False: roll_fixed_apply(
             arr, index_arr, win, minp, center, parallel, kernel_func
@@ -146,7 +151,12 @@ def overload_rolling_variable(
         func_text += "  return np.{}(arr)\n".format(func_name)
         loc_vars = {}
         exec(func_text, {"np": np, "dropna": _dropna}, loc_vars)
-        kernel_func = numba.njit(loc_vars["kernel_func"])
+        # We can't use numba.njit because it generates a CPUDispatcher which
+        # in the case of kernel_func gets passed as argument to other functions,
+        # in the form of a dynamic global address that prevents caching.
+        # With register_jitable a dummy value is passed instead, and numba
+        # knows which function call to insert in the library
+        kernel_func = register_jitable(loc_vars["kernel_func"])
 
         return lambda arr, on_arr, index_arr, win, minp, center, fname, raw=True, parallel=False: roll_variable_apply(
             arr, on_arr, index_arr, win, minp, center, parallel, kernel_func

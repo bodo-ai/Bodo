@@ -1617,7 +1617,7 @@ class DataFramePass:
 
         func_text += f"  in_df = bodo.hiframes.pd_dataframe_ext.init_dataframe(({col_name_args},), df_index, {gen_const_tup(used_cols)})\n"
 
-        func_text += f"  return _bodo_groupby_apply_impl(({key_name_args},), in_df, map_func, {extra_arg_names})\n"
+        func_text += f"  return _bodo_groupby_apply_impl(({key_name_args},), in_df, {extra_arg_names})\n"
 
         loc_vars = {}
         exec(func_text, {}, loc_vars)
@@ -1633,7 +1633,7 @@ class DataFramePass:
             extra_arg_names += ", "
 
         sum_no = bodo.libs.distributed_api.Reduce_Type.Sum.value
-        func_text = f"def _bodo_groupby_apply_impl(keys, in_df, map_func, {extra_arg_names}_is_parallel=False):\n"
+        func_text = f"def _bodo_groupby_apply_impl(keys, in_df, {extra_arg_names}_is_parallel=False):\n"
         func_text += f"  if _is_parallel:\n"
         func_text += f"    in_df, keys, shuffle_info = shuffle_dataframe(in_df, keys)\n"
 
@@ -1764,6 +1764,7 @@ class DataFramePass:
             "reverse_shuffle": bodo.hiframes.pd_groupby_ext.reverse_shuffle,
             "delete_shuffle_info": bodo.libs.array.delete_shuffle_info,
             "dist_reduce": bodo.libs.distributed_api.dist_reduce,
+            "map_func": map_func,
         }
         loc_vars = {}
         exec(func_text, glbs, loc_vars)
@@ -1775,7 +1776,6 @@ class DataFramePass:
             "numba": numba,
             "np": np,
             "bodo": bodo,
-            "map_func": map_func,
             "out_type": out_typ,
             "_bodo_groupby_apply_impl": _bodo_groupby_apply_impl,
         }
