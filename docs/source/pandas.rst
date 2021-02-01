@@ -505,6 +505,9 @@ String handling:
 * :meth:`pandas.Series.str.isnumeric`
 * :meth:`pandas.Series.str.isdecimal`
 
+Serialization
+
+* :meth:`pandas.Series.to_dict`
 
 DataFrame
 ~~~~~~~~~

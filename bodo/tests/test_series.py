@@ -3045,6 +3045,16 @@ def test_series_replace_list_list(S, to_replace_list, value_list, memory_leak_ch
     check_func(test_impl, (S, to_replace_list, value_list), check_dtype=False)
 
 
+def test_series_to_dict(memory_leak_check):
+    def impl(S):
+        return S.to_dict()
+
+    S_index = pd.Series([2, 0, 4, 8, np.nan], [1, 5, -1, -2, 3])
+    S = pd.Series(["alpha", "beta", "gamma"])
+    check_func(impl, (S,), only_seq=True)
+    check_func(impl, (S_index,), only_seq=True)
+
+
 # TODO: Mark as slow after Sonar passes.
 def test_series_replace_dict_float(memory_leak_check):
     """
