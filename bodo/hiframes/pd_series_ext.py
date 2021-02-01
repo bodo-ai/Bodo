@@ -1079,7 +1079,6 @@ series_unsupported_methods = (
     "ewm",
     "pipe",
     # Computations / descriptive stats
-    "between",
     "clip",
     "diff",
     "factorize",

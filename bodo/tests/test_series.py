@@ -248,6 +248,33 @@ def test_series_concat(series_val, memory_leak_check):
         check_func(f, (df1, df2), sort_output=True, reset_index=True)
 
 
+def test_series_between(memory_leak_check):
+    def impl_inclusive(S):
+        return S.between(1, 4)
+
+    def impl(S):
+        return S.between(1, 4, inclusive=False)
+
+    S = pd.Series([2, 0, 4, 8, np.nan])
+    check_func(impl, (S,))
+    check_func(impl_inclusive, (S,))
+
+
+def test_datetime_series_between(memory_leak_check):
+    def impl(S):
+        lower = pd.Timestamp(year=2020, month=10, day=5)
+        upper = pd.Timestamp(year=2020, month=10, day=20)
+        return S.between(lower, upper)
+
+    datatime_arr = [datetime.datetime(year=2020, month=10, day=x) for x in range(1, 32)]
+    S = pd.Series(datatime_arr)
+    check_func(impl, (S,))
+
+    datatime_arr_nan = [datetime.datetime(year=2020, month=10, day=1), np.nan]
+    S_with_nan = pd.Series(datatime_arr)
+    check_func(impl, (S_with_nan,))
+
+
 def test_series_concat_categorical(memory_leak_check):
     """test of concatenation of categorical series.
     TODO: refactor concat tests

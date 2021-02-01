@@ -392,6 +392,7 @@ unless support is explicitly mentioned.
 * :meth:`pandas.Series.unique` see :ref:`unique-parallelization`
 * :meth:`pandas.Series.nunique`
 * :meth:`pandas.Series.value_counts`
+* :meth:`pandas.Series.between`
 
 
 Reindexing / Selection / Label manipulation:
