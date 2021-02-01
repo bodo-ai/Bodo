@@ -151,7 +151,22 @@ class BodoTypeInference(PartialTypeInference):
                 False,
                 ran_transform,
             )
-            typing_transforms_pass.run()
+            _changed, needs_transform = typing_transforms_pass.run()
+            # some cases need a second transform pass to raise the proper error
+            # see test_df_rename::impl4
+            if needs_transform:
+                typing_transforms_pass = TypingTransforms(
+                    state.func_ir,
+                    state.typingctx,
+                    state.typemap,
+                    state.calltypes,
+                    state.args,
+                    state.locals,
+                    state.flags,
+                    False,
+                    True,
+                )
+                typing_transforms_pass.run()
 
         dprint_func_ir(state.func_ir, "after typing pass")
         # run regular type inference again with _raise_errors = True to set function
