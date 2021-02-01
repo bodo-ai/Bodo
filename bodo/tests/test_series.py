@@ -3680,6 +3680,13 @@ def test_series_explode(S, memory_leak_check):
     check_func(test_impl, (S,))
 
 
+def test_series_none_data(memory_leak_check):
+    def impl():
+        return pd.Series(dtype=np.float64, index=np.arange(7))
+
+    check_func(impl, ())
+
+
 def test_series_astype_num_constructors(memory_leak_check):
     """
     test Series.astype() with number constructor functions "float" and "int"

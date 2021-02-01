@@ -7,6 +7,7 @@ import operator
 import llvmlite.binding as ll
 import numba
 import pandas as pd
+import numpy as np
 from llvmlite import ir as lir
 from numba.core import cgutils, types
 from numba.core.imputils import impl_ret_borrowed
@@ -815,13 +816,8 @@ str2bool_methods = (
 def pd_series_overload(
     data=None, index=None, dtype=None, name=None, copy=False, fastpath=False
 ):
-
     # TODO: support isinstance in branch pruning pass
     # cases: dict, np.ndarray, Series, Index, arraylike (list, ...)
-
-    # TODO: None or empty data
-    if is_overload_none(data):
-        raise BodoError("pd.Series(): 'data' argument required.")
 
     # fastpath not supported
     if not is_overload_false(fastpath):
@@ -841,6 +837,27 @@ def pd_series_overload(
             )
 
         return impl_heter
+
+    # support for series with no data
+    if is_overload_none(data):
+
+        def impl(
+            data=None, index=None, dtype=None, name=None, copy=False, fastpath=False
+        ):  # pragma: no cover
+            name_t = bodo.utils.conversion.extract_name_if_none(data, name)
+            index_t = bodo.utils.conversion.extract_index_if_none(data, index)
+
+            numba.parfors.parfor.init_prange()
+            n = len(index_t)
+            data_t = np.empty(n, np.float64)
+            for i in numba.parfors.parfor.internal_prange(n):
+                data_t[i] = np.nan
+
+            return bodo.hiframes.pd_series_ext.init_series(
+                data_t, bodo.utils.conversion.convert_to_index(index_t), name_t
+            )
+
+        return impl
 
     def impl(
         data=None, index=None, dtype=None, name=None, copy=False, fastpath=False
