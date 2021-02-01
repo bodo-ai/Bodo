@@ -3140,6 +3140,7 @@ def overload_series_between(S, left, right, inclusive=True):
 
         return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
+    return impl
       
 @overload_method(SeriesType, "to_dict", inline="always", no_unliteral=True)
 def overload_to_dict(S, into=None):
