@@ -7,6 +7,7 @@ import operator
 import llvmlite.binding as ll
 import numba
 import pandas as pd
+import numpy as np
 from llvmlite import ir as lir
 from numba.core import cgutils, types
 from numba.core.imputils import impl_ret_borrowed
@@ -815,7 +816,6 @@ str2bool_methods = (
 def pd_series_overload(
     data=None, index=None, dtype=None, name=None, copy=False, fastpath=False
 ):
-
     # TODO: support isinstance in branch pruning pass
     # cases: dict, np.ndarray, Series, Index, arraylike (list, ...)
 
@@ -838,19 +838,30 @@ def pd_series_overload(
 
         return impl_heter
 
+    if is_overload_none(data):
+
+        def impl(
+            data=None, index=None, dtype=None, name=None, copy=False, fastpath=False
+        ):  # pragma: no cover
+            name_t = bodo.utils.conversion.extract_name_if_none(data, name)
+            index_t = bodo.utils.conversion.extract_index_if_none(data, index)
+            data_t = np.full(len(index_t), np.nan)
+
+            return bodo.hiframes.pd_series_ext.init_series(
+                data_t, bodo.utils.conversion.convert_to_index(index_t), name_t
+            )
+
+        return impl
+
     def impl(
         data=None, index=None, dtype=None, name=None, copy=False, fastpath=False
     ):  # pragma: no cover
         # extract name if data is has name (Series/Index) and name is None
         name_t = bodo.utils.conversion.extract_name_if_none(data, name)
         index_t = bodo.utils.conversion.extract_index_if_none(data, index)
-        if is_overload_none(data):
-            print('were here')
-            data_t1 = [np.nan]*len(index_t)
-        else:
-            data_t1 = bodo.utils.conversion.coerce_to_array(
-                data, True, scalar_to_arr_len=len(index_t)
-            )
+        data_t1 = bodo.utils.conversion.coerce_to_array(
+            data, True, scalar_to_arr_len=len(index_t)
+        )
 
         # TODO: support sanitize_array() of Pandas
         # TODO: add branch pruning to inline_closure_call
