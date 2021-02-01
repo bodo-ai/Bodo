@@ -84,6 +84,7 @@ Reviews
 * Check that there are enough tests in the PR for all the added or changed functionality (sometimes the author can miss test cases).
 * Review comments/conversations should be marked as resolved by the author of the comment.
 * It is good practice to mark comments/conversations as resolved when the PR author has addressed them. This also simplifies the work of later reviewers.
+* To ensure qualtiy of work, please follow `these tips <https://www.freecodecamp.org/news/what-google-taught-me-about-code-reviews/amp/>`_ when doing code reviews.
 
 Projects
 ~~~~~~~~
