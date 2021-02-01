@@ -1550,6 +1550,18 @@ def test_extract(memory_leak_check):
     check_func(test_impl, (ts,))
 
 
+def test_timestamp_isoformat(memory_leak_check):
+    def test_impl(ts):
+        return ts.isoformat()
+
+    def test_impl_sep(ts):
+        return ts.isoformat(sep=" ")
+
+    ts = pd.Timestamp(1513393355, unit="s")
+    check_func(test_impl, (ts,))
+    check_func(test_impl_sep, (ts,))
+
+
 def test_timestamp_date(memory_leak_check):
     """Test timestamp's date() method"""
 

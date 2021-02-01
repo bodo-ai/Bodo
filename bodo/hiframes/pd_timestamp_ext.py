@@ -758,10 +758,10 @@ def overload_pd_timestamp_isocalendar(ptt):
 
 
 @overload_method(PandasTimestampType, "isoformat", no_unliteral=True)
-def overload_pd_timestamp_isoformat(ts_typ, sep=None):
-    if sep is None:
+def overload_pd_timestamp_isoformat(ts, sep=None):
+    if is_overload_none(sep):
 
-        def timestamp_isoformat_impl(ts):  # pragma: no cover
+        def timestamp_isoformat_impl(ts, sep=None):  # pragma: no cover
             assert ts.nanosecond == 0  # TODO: handle nanosecond (timestamps.pyx)
             _time = str_2d(ts.hour) + ":" + str_2d(ts.minute) + ":" + str_2d(ts.second)
             res = (
@@ -775,9 +775,11 @@ def overload_pd_timestamp_isoformat(ts_typ, sep=None):
             )
             return res
 
+        return timestamp_isoformat_impl
+
     else:
 
-        def timestamp_isoformat_impl(ts, sep):  # pragma: no cover
+        def timestamp_isoformat_impl(ts, sep=None):  # pragma: no cover
             assert ts.nanosecond == 0  # TODO: handle nanosecond (timestamps.pyx)
             _time = str_2d(ts.hour) + ":" + str_2d(ts.minute) + ":" + str_2d(ts.second)
             res = (
