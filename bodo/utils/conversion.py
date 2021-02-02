@@ -1125,7 +1125,7 @@ def overload_get_array_if_series_or_index(data):
         )  # pragma: no cover
 
     if bodo.hiframes.pd_index_ext.is_pd_index_type(data):
-        return lambda data: bodo.hiframes.pd_index_ext.get_index_data(
+        return lambda data: bodo.utils.conversion.coerce_to_array(
             data
         )  # pragma: no cover
 

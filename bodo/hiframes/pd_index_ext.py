@@ -2276,7 +2276,7 @@ def create_binary_op_overload(op):
         if is_index_type(S):
 
             def impl(S, other):  # pragma: no cover
-                arr = bodo.hiframes.pd_index_ext.get_index_data(S)
+                arr = bodo.utils.conversion.coerce_to_array(S)
                 other_arr = bodo.utils.conversion.get_array_if_series_or_index(other)
                 out_arr = op(arr, other_arr)
                 return out_arr
@@ -2287,7 +2287,7 @@ def create_binary_op_overload(op):
         if is_index_type(other):
 
             def impl2(S, other):  # pragma: no cover
-                arr = bodo.hiframes.pd_index_ext.get_index_data(other)
+                arr = bodo.utils.conversion.coerce_to_array(other)
                 other_arr = bodo.utils.conversion.get_array_if_series_or_index(S)
                 out_arr = op(other_arr, arr)
                 return out_arr
@@ -2299,7 +2299,7 @@ def create_binary_op_overload(op):
             if not is_heterogeneous_tuple_type(S.data):
 
                 def impl3(S, other):  # pragma: no cover
-                    data = bodo.hiframes.pd_index_ext.get_index_data(S)
+                    data = bodo.utils.conversion.coerce_to_array(S)
                     arr = bodo.utils.conversion.coerce_to_array(data)
                     other_arr = bodo.utils.conversion.get_array_if_series_or_index(
                         other
