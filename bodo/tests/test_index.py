@@ -3,7 +3,9 @@
 Tests for pd.Index functionality
 """
 import datetime
+import operator
 
+import numba
 import numpy as np
 import pandas as pd
 import pytest
@@ -1214,3 +1216,21 @@ def test_heter_index_binop():
     check_func(impl1, (), dist_test=False)
     check_func(impl2, (), dist_test=False)
     check_func(impl3, (), dist_test=False)
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize(
+    "op", [operator.eq, operator.ne, operator.ge, operator.gt, operator.le, operator.lt]
+)
+def test_index_binary_op(op, memory_leak_check):
+    op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
+    func_text = "def test_impl(S, other):\n"
+    func_text += "  return S {} other\n".format(op_str)
+    loc_vars = {}
+    exec(func_text, {}, loc_vars)
+    test_impl = loc_vars["test_impl"]
+
+    S = pd.Index([4, 6, 7, 1])
+    check_func(test_impl, (S, S))
+    check_func(test_impl, (S, 2))
+    check_func(test_impl, (2, S))
