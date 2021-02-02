@@ -383,8 +383,8 @@ def test_shape(memory_leak_check):
     [f for f in numba.np.ufunc_db.get_ufuncs() if f.nin == 1 and f != np.isnat],
 )
 def test_unary_ufunc(ufunc, memory_leak_check):
-    # IntegerArray is buggy as of Pandas 1.1.0 and doesn't put NA mask on output yet
-    assert re.compile(r"1.1.*").match(
+    # IntegerArray is buggy in Pandas 1.1.* and 1.2.0 and doesn't put NA mask on output yet
+    assert re.compile(r"1.2.*").match(
         pd.__version__
     ), "revisit Pandas issues for int arr"
     # See in version 1.1.x is logical_not / isnan / isinf / isfinite / signbit will be ok
@@ -417,10 +417,16 @@ def test_unary_ufunc_explicit_np(memory_leak_check):
     "ufunc", [f for f in numba.np.ufunc_db.get_ufuncs() if f.nin == 2 and f.nout == 1]
 )
 def test_binary_ufunc(ufunc, memory_leak_check):
-    # IntegerArray is buggy as of Pandas 1.1.0 and doesn't put NA mask on output yet
-    assert re.compile(r"1.1.*").match(
+    # IntegerArray is buggy in Pandas 1.1.* and 1.2.0 and doesn't put NA mask on output yet
+    assert re.compile(r"1.2.*").match(
         pd.__version__
     ), "revisit Pandas issues for int arr"
+    # Need suppport for floating array when doing true division
+    if ufunc == np.true_divide:
+        check_dtype = False
+    else:
+        check_dtype = True
+
     # See in version 1.1.x if those issues will be resolved.
     if ufunc in (np.logical_and, np.logical_or, np.logical_xor):
         return
@@ -437,9 +443,9 @@ def test_binary_ufunc(ufunc, memory_leak_check):
         np.array([False, False, True, True, False]),
     )
     arr = np.array([1, 3, 7, 11, 2])
-    check_func(test_impl, (A1, A2))
-    check_func(test_impl, (A1, arr))
-    check_func(test_impl, (arr, A2))
+    check_func(test_impl, (A1, A2), check_dtype=check_dtype)
+    check_func(test_impl, (A1, arr), check_dtype=check_dtype)
+    check_func(test_impl, (arr, A2), check_dtype=check_dtype)
 
 
 def test_add(memory_leak_check):

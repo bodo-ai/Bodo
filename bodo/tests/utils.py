@@ -750,9 +750,60 @@ def _typeof(val):
             (isinstance(a, np.float) and np.isnan(a)) or isinstance(a, int) for a in val
         )
     ):
+        # TODO: Should this check be fixed? It seems like all floats should
+        # be an IntegerArray
         return bodo.libs.int_arr_ext.IntegerArrayType(bodo.int64)
-
+    elif isinstance(val, pd.arrays.FloatingArray):
+        # TODO: Add proper support for floating array
+        # FloatingArrays are used somewhat extensively in Pandas >= 1.2.0
+        # so we need to add further support. This code is fragile and
+        # should not be considered reliable.
+        return numba.core.types.Array(numba.core.types.float64, 1, "C")
+    # TODO: add handling of Series with Float64 values here
+    elif isinstance(val, pd.DataFrame) and any(
+        [
+            isinstance(val.iloc[:, i].dtype, pd.core.arrays.floating.FloatingDtype)
+            for i in range(len(val.columns))
+        ]
+    ):
+        col_typs = []
+        for i in range(len(val.columns)):
+            S = val.iloc[:, i]
+            if isinstance(S.dtype, pd.core.arrays.floating.FloatingDtype):
+                col_typs.append(typeof_pd_float_dtype(S.dtype))
+            else:
+                col_typs.append(bodo.hiframes.boxing._infer_series_dtype(S))
+        col_typs = (
+            bodo.hiframes.boxing._get_series_array_type(typ) for typ in col_typs
+        )
+        col_names = tuple(val.columns.to_list())
+        index_typ = numba.typeof(val.index)
+        return bodo.DataFrameType(col_typs, index_typ, col_names)
+    elif isinstance(val, pd.Series) and isinstance(
+        val.dtype, pd.core.arrays.floating.FloatingDtype
+    ):
+        return bodo.SeriesType(
+            typeof_pd_float_dtype(val.dtype),
+            index=numba.typeof(val.index),
+            name_typ=numba.typeof(val.name),
+        )
     return bodo.typeof(val)
+
+
+def typeof_pd_float_dtype(val):
+    """
+    Pandas 1.2.0 adds interpretting a nullable FloatArray
+    This isn't supported yet in Bodo, so we convert these inputs
+    to floating point values.
+    """
+    # Warning: This code is unstable and doesn't currently change
+    # the actual underlying type. This is just used by _typeof inside
+    # test utils for distirbuted testing. It should not be used in
+    # actual Numba Code
+    bitwidth = 8 * val.itemsize
+    dtype = getattr(numba.types, "float{}".format(bitwidth))
+    # TODO: Add a custom FloatingDType() inside Bodo.
+    return dtype
 
 
 def is_bool_object_series(S):

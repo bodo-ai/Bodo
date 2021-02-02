@@ -147,7 +147,9 @@ def test_nullable_int(memory_leak_check):
         }
     )
 
-    check_func(impl, (df,), sort_output=True)
+    # pandas 1.2 has a regression here: output is int64 instead of Int8
+    # so we disable check_dtype
+    check_func(impl, (df,), sort_output=True, check_dtype=False)
     # pandas 1.0 has a regression here: output is int64 instead of Int8
     # so we disable check_dtype
     check_func(impl_select_colB, (df,), sort_output=True, check_dtype=False)
@@ -177,13 +179,7 @@ def test_return_type_nullable_cumsum_cumprod(df_null, memory_leak_check):
     Test Groupby when one row is a nullable-int-bool.
     A current problem is that cumsum/cumprod with pandas return an array of float for Int64
     in input. That is why we put check_dtype=False here.
-    ---
-    The agg(("cumsum", "cumprod")) is disabled at the time being because of a pandas bug:
-    https://github.com/pandas-dev/pandas/issues/35490
     """
-    assert re.compile(r"1.1.*").match(
-        pd.__version__
-    ), "revisit the agg((cumsum, cumprod)) at next pandas version"
 
     def impl1(df):
         df2 = df.groupby("A")["B"].agg(("cumsum", "cumprod"))
@@ -193,7 +189,7 @@ def test_return_type_nullable_cumsum_cumprod(df_null, memory_leak_check):
         df2 = df.groupby("A")["B"].cumsum()
         return df2
 
-    #    check_func(impl1, (df_null,), sort_output=True, check_dtype=False)
+    check_func(impl1, (df_null,), sort_output=True, check_dtype=False)
     check_func(impl2, (df_null,), sort_output=True, check_dtype=False)
 
 
@@ -508,14 +504,7 @@ def test_agg_bool_expr(memory_leak_check):
     ],
 )
 def test_cumsum_index_preservation(df_index, memory_leak_check):
-    """For the cumsum operation, the number of rows remains the same and the index is preserved.
-    ---
-    At the present time the agg(("cumsum", "cumprod")) is broken in pandas. See
-    https://github.com/pandas-dev/pandas/issues/35490
-    """
-    assert re.compile(r"1.1.*").match(
-        pd.__version__
-    ), "revisit the agg((cumsum, cumprod)) at next pandas version"
+    """For the cumsum operation, the number of rows remains the same and the index is preserved."""
 
     def test_impl_basic(df1):
         df2 = df1.groupby("B").cumsum()
@@ -532,10 +521,8 @@ def test_cumsum_index_preservation(df_index, memory_leak_check):
         return df2
 
     check_func(test_impl_basic, (df_index,), sort_output=True, check_dtype=False)
-
-
-#    check_func(test_impl_both, (df_index,), sort_output=True, check_dtype=False)
-#    check_func(test_impl_all, (df_index,), sort_output=True, check_dtype=False)
+    check_func(test_impl_both, (df_index,), sort_output=True, check_dtype=False)
+    check_func(test_impl_all, (df_index,), sort_output=True, check_dtype=False)
 
 
 # TODO: add memory leak check when cumsum leak issue resolved
@@ -1143,13 +1130,7 @@ def test_agg_len_mix(memory_leak_check):
 def test_agg_multi_udf(memory_leak_check):
     """
     Test Groupby.agg() multiple user defined functions
-    ---
-    The agg(("cumsum", "cumprod")) is currently broken because of a bug in pandas.
-    https://github.com/pandas-dev/pandas/issues/35490
     """
-    assert re.compile(r"1.1.*").match(
-        pd.__version__
-    ), "revisit the agg((cumsum, cumprod)) at next pandas version"
 
     def impl(df):
         def id1(x):
@@ -1186,9 +1167,7 @@ def test_agg_multi_udf(memory_leak_check):
     check_func(impl2, (df,), sort_output=True)
     # check_dtype=False since Bodo returns float for Series.min/max. TODO: fix min/max
     check_func(impl3, (df,), sort_output=True, check_dtype=False)
-
-
-#    check_func(impl4, (df,), sort_output=True)
+    check_func(impl4, (df,), sort_output=True)
 
 
 @pytest.mark.slow
@@ -1641,7 +1620,9 @@ def test_median_nullable_int_bool(memory_leak_check):
 
     nullarr = pd.Series([1, 2, 3, 4, None, 1, 2], dtype="UInt16")
     df1 = pd.DataFrame({"A": [1, 1, 1, 1, 1, 2, 2], "B": nullarr})
-    check_func(impl1, (df1,), sort_output=True)
+    # Pandas 1.2.0 adds inferring a nullable float array type
+    # TODO: Add support for proper type checking
+    check_func(impl1, (df1,), sort_output=True, check_dtype=False)
 
 
 @pytest.mark.slow
@@ -1936,14 +1917,7 @@ def test_cumsum_large_random_numpy(memory_leak_check):
 
 @pytest.mark.slow
 def test_cummin_cummax_large_random_numpy(memory_leak_check):
-    """A bunch of tests related to cummin/cummax functions.
-    ---
-    The agg(("cummin", "cummax")) is currently broken because of a bug in pandas.
-    https://github.com/pandas-dev/pandas/issues/35490
-    """
-    assert re.compile(r"1.1.*").match(
-        pd.__version__
-    ), "revisit the agg((cummin, cummax)) at next pandas version"
+    """A bunch of tests related to cummin/cummax functions."""
 
     def get_random_array(n, sizlen):
         elist = []
@@ -1992,7 +1966,7 @@ def test_cummin_cummax_large_random_numpy(memory_leak_check):
     nb = 100
     df1 = pd.DataFrame({"A": get_random_array(nb, 10), "B": get_random_array(nb, 100)})
     # Need reset_index as none is set on input.
-    #    check_func(impl1, (df1,), sort_output=True, reset_index=True)
+    check_func(impl1, (df1,), sort_output=True, reset_index=True)
     check_func(impl2, (df1,), sort_output=True, reset_index=True)
     check_func(impl3, (df1,), sort_output=True, reset_index=True)
     check_func(impl4, (df1,), sort_output=True, reset_index=True)
@@ -2482,7 +2456,9 @@ def test_prod(test_df, memory_leak_check):
     )
 
     check_func(impl1, (test_df,), sort_output=True)
-    check_func(impl1, (df_bool,), sort_output=True)
+    # Pandas 1.2.0 converts the all boolean values to integers
+    # TODO: Change in Bodo
+    check_func(impl1, (df_bool,), sort_output=True, check_dtype=False)
     check_func(impl2, (11,), sort_output=True)
 
 
@@ -2514,7 +2490,9 @@ def test_prod_one_col(test_df, memory_leak_check):
     if pd.Int64Dtype() in test_df.dtypes.to_list():
         check_dtype = False
     check_func(impl1, (test_df,), sort_output=True, check_dtype=check_dtype)
-    check_func(impl1, (df_bool,), sort_output=True)
+    # Pandas 1.2.0 converts the all boolean values to integers
+    # TODO: Change in Bodo
+    check_func(impl1, (df_bool,), sort_output=True, check_dtype=False)
     check_func(impl2, (11,), sort_output=True)
 
 
@@ -2717,7 +2695,7 @@ def test_std_one_col(test_df, memory_leak_check):
     This is due to a bug in pandas. See
     https://github.com/pandas-dev/pandas/issues/35516
     """
-    assert re.compile(r"1.1.*").match(
+    assert re.compile(r"1.2.*").match(
         pd.__version__
     ), "revisit the df.groupby(A)[B].std() issue at next pandas version"
 

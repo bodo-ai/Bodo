@@ -560,6 +560,13 @@ def test_series_astype_str(series_val):
     if series_val.dtype == np.dtype("timedelta64[ns]"):
         return
 
+    # XXX Pandas 1.2. Null value in categorical input gets
+    # set as a null value and not "nan". It is unclear if
+    # this is unique to certain types. np.nan is still
+    # converted to "nan"
+    if isinstance(series_val.dtype, pd.CategoricalDtype):
+        return
+
     def test_impl(S):
         return S.astype(str)
 
@@ -1278,6 +1285,15 @@ def test_series_explicit_binary_op(numeric_series_val, op, fill, memory_leak_che
     # Numba returns float32 for truediv but Numpy returns float64
     if op == "truediv" and numeric_series_val.dtype == np.uint8:
         return
+    # Pandas 1.2.0 converts floordiv and truediv to Float64 when input is
+    # nullable integer
+    # TODO: Support FloatingArray
+    if op in ("truediv", "floordiv") and isinstance(
+        numeric_series_val.dtype, pd.core.arrays.integer._IntegerDtype
+    ):
+        check_dtype = False
+    else:
+        check_dtype = True
     if op == "pow" and numeric_series_val.dtype in (
         np.int8,
         np.int16,
@@ -1295,7 +1311,11 @@ def test_series_explicit_binary_op(numeric_series_val, op, fill, memory_leak_che
 
     if fill is not None:
         fill = numeric_series_val.iloc[0]
-    check_func(test_impl, (numeric_series_val, numeric_series_val, fill))
+    check_func(
+        test_impl,
+        (numeric_series_val, numeric_series_val, fill),
+        check_dtype=check_dtype,
+    )
 
 
 @pytest.mark.parametrize("fill", [None, 1.6])
@@ -3004,7 +3024,12 @@ def test_series_replace_list_scalar(S, to_replace_list, value, memory_leak_check
     def test_impl(A, to_replace, val):
         return A.replace(to_replace, val)
 
-    check_func(test_impl, (S, to_replace_list, value))
+    # Pandas 1.2.0 seems to convert the array from Int64 to int64.
+    if isinstance(S.dtype, pd.core.arrays.integer._IntegerDtype):
+        check_dtype = False
+    else:
+        check_dtype = True
+    check_func(test_impl, (S, to_replace_list, value), check_dtype=check_dtype)
 
 
 @pytest.mark.parametrize(

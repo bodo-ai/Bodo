@@ -812,7 +812,7 @@ class DataFramePass:
             raise BodoError("query(): no column/index is selected in expr")
 
         # local variables
-        sentinel = pd.core.computation.ops._LOCAL_TAG
+        sentinel = pd.core.computation.ops.LOCAL_TAG
         loc_ref_vars = {
             c: c.replace(sentinel, "")
             for c in parsed_expr.names
@@ -891,7 +891,7 @@ class DataFramePass:
         class NewFuncNode(pd.core.computation.ops.FuncNode):
             def __init__(self, name):
 
-                if name not in pd.core.computation.ops._mathops or (
+                if name not in pd.core.computation.ops.MATHOPS or (
                     pd.core.computation.check._NUMEXPR_INSTALLED
                     and pd.core.computation.check_NUMEXPR_VERSION
                     < pd.core.computation.ops.LooseVersion("2.6.9")
@@ -922,7 +922,7 @@ class DataFramePass:
             """
             attr = node.attr
             value = node.value
-            sentinel = pd.core.computation.ops._LOCAL_TAG
+            sentinel = pd.core.computation.ops.LOCAL_TAG
 
             if attr in ("str", "dt"):
                 # check the case where df.column.str where column is not in df
