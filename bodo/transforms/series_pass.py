@@ -2398,12 +2398,46 @@ class SeriesPass:
     ):
         """translate df.A.map(lambda a:...) to prange()"""
         # get the function object (ir.Expr.make_function or actual python function)
-        func = get_overload_const_func(self.typemap[func_var.name])
-
+        func_type = self.typemap[func_var.name]
         nodes = []
         data = self._get_series_data(series_var, nodes)
         index = self._get_series_index(series_var, nodes)
         name = self._get_series_name(series_var, nodes)
+
+        # dictionary input case
+        if isinstance(func_type, types.DictType):
+
+            def impl(A, index, name, d):  # pragma: no cover
+                numba.parfors.parfor.init_prange()
+                n = len(A)
+                S0 = bodo.utils.utils.alloc_type(n, _arr_typ0, (-1,))
+                for i in numba.parfors.parfor.internal_prange(n):
+                    if bodo.libs.array_kernels.isna(A, i):
+                        bodo.libs.array_kernels.setna(S0, i)
+                    v = bodo.utils.conversion.box_if_dt64(A[i])
+                    if v in d:
+                        S0[i] = bodo.utils.conversion.unbox_if_timestamp(d[v])
+                    else:
+                        bodo.libs.array_kernels.setna(S0, i)
+                return bodo.hiframes.pd_series_ext.init_series(S0, index, name)
+
+            glbs = {
+                "numba": numba,
+                "bodo": bodo,
+                "_arr_typ0": self.typemap[lhs.name].data,
+            }
+
+            args = [data, index, name, func_var]
+            return replace_func(
+                self,
+                impl,
+                args,
+                extra_globals=glbs,
+                pre_nodes=nodes,
+            )
+
+        func = get_overload_const_func(func_type)
+
         is_df_output = isinstance(self.typemap[lhs.name], DataFrameType)
         out_arr_types = self.typemap[lhs.name].data
         out_arr_types = out_arr_types if is_df_output else [out_arr_types]

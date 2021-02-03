@@ -988,6 +988,12 @@ class TypingTransforms:
         }
 
         if func_name in series_call_const_args:
+            # Series.map with dict input doesn't need constant arg
+            if func_name == "map":
+                var = get_call_expr_arg("map", rhs.args, dict(rhs.kws), 0, "arg")
+                if isinstance(self.typemap.get(var.name, None), types.DictType):
+                    return nodes + [assign]
+
             func_args = series_call_const_args[func_name]
             # function arguments are typed as pyobject initially, literalize if possible
             pyobject_to_literal = func_name in ("map", "apply")

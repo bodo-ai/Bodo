@@ -1786,6 +1786,37 @@ def test_series_map(S, memory_leak_check):
     check_func(test_impl, (S,))
 
 
+@pytest.mark.parametrize(
+    "S,d",
+    [
+        (pd.Series([1.0, 2.0, np.nan, 4.0, 1.0]), {1.0: "A", 4.0: "DD"}),
+        (
+            pd.Series(
+                ["AA", "B", "ABC", "D", None, "AA", "B"],
+                [3, 1, 0, 2, 4, -1, -2],
+                name="ABC",
+            ),
+            {"AA": 1, "B": 2},
+        ),
+        (
+            pd.Series(
+                ["AA", "B", "ABC", "D", None, "AA", "B"],
+                [3, 1, 0, 2, 4, -1, -2],
+                name="ABC",
+            ),
+            {"AA": "ABC", "B": "DGE"},
+        ),
+    ],
+)
+def test_series_map_dict_arg(S, d, memory_leak_check):
+    """test passing dict mapper to Series.map()"""
+
+    def test_impl(S, d):
+        return S.map(d)
+
+    check_func(test_impl, (S, d), check_dtype=False)
+
+
 @pytest.mark.slow
 @pytest.mark.parametrize(
     "S",
