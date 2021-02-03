@@ -2407,7 +2407,7 @@ class SeriesPass:
         # dictionary input case
         if isinstance(func_type, types.DictType):
 
-            def impl(A, index, name, d):
+            def impl(A, index, name, d):  # pragma: no cover
                 numba.parfors.parfor.init_prange()
                 n = len(A)
                 S0 = bodo.utils.utils.alloc_type(n, _arr_typ0, (-1,))
