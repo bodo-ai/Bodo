@@ -348,7 +348,7 @@ The `fill_value` optional argument for binary functions below is supported.
 Function application, GroupBy & Window:
 
 * :meth:`pandas.Series.apply` (`convert_dtype` not supported yet)
-* :meth:`pandas.Series.map` (only the `arg` argument, which should be a function)
+* :meth:`pandas.Series.map` (only the `arg` argument, which should be a function or dictionary)
 * :meth:`pandas.Series.groupby` (pass array to `by` argument, or level=0 with regular Index)
 * :meth:`pandas.Series.rolling` (`window`, `min_periods` and `center` arguments supported)
 
