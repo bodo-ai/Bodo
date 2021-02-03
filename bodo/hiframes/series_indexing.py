@@ -261,7 +261,7 @@ def overload_series_iloc_setitem(I, idx, val):
             )  # pragma: no cover
 
         # integer case same as iat
-        if isinstance(types.unliteral(idx), types.Integer):
+        if isinstance(idx, types.Integer):
             # unbox dt64 from Timestamp (TODO: timedelta and other datetimelike)
             if I.stype.dtype == types.NPDatetime("ns") and val == pandas_timestamp_type:
 
@@ -406,9 +406,27 @@ def overload_series_loc_getitem(I, idx):
 
     # TODO: error-checking test
     raise BodoError(
-        "Series.loc[] getitem (location-based indexing) using {} not supported yet".format(
-            idx
-        )
+        f"Series.loc[] getitem (location-based indexing) using {idx} not supported yet"
+    )  # pragma: no cover
+
+
+@overload(operator.setitem, no_unliteral=True)
+def overload_series_loc_setitem(I, idx, val):
+    if not isinstance(I, SeriesLocType):
+        return
+
+    # S.loc[cond]
+    if is_list_like_index_type(idx) and idx.dtype == types.bool_:
+
+        # Series.loc[] setitem with boolean array is same as Series[] setitem
+        def impl(I, idx, val):  # pragma: no cover
+            S = I._obj
+            S[idx] = val
+
+        return impl
+
+    raise BodoError(
+        f"Series.loc[] setitem (location-based indexing) using {idx} not supported yet"
     )  # pragma: no cover
 
 
@@ -493,11 +511,15 @@ def overload_series_getitem(S, idx):
 def overload_series_setitem(S, idx, val):
     if isinstance(S, SeriesType):
         # check string setitem
-        if S.dtype == bodo.string_type and val is not types.none:
+        if (
+            S.dtype == bodo.string_type
+            and val is not types.none
+            and not (is_list_like_index_type(idx) and idx.dtype == types.bool_)
+        ):
             raise BodoError("Series string setitem not supported yet")
 
         # integer case same as iat
-        if isinstance(types.unliteral(idx), types.Integer):
+        if isinstance(idx, types.Integer):
             if isinstance(S.index, NumericIndexType) and isinstance(
                 S.index.dtype, types.Integer
             ):
@@ -572,7 +594,7 @@ def overload_series_setitem(S, idx, val):
 
             return impl_arr
 
-        raise BodoError("Series [] setitem using {} not supported".format(idx))
+        raise BodoError(f"Series [] setitem using {idx} not supported yet")
 
 
 @overload(operator.setitem, no_unliteral=True)

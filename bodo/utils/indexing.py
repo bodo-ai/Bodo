@@ -117,22 +117,44 @@ def array_setitem_int_index(A, idx, val):  # pragma: no cover
         bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, idx[i], bit)
 
 
-@register_jitable
 def array_setitem_bool_index(A, idx, val):  # pragma: no cover
+    A[idx] = val
+
+
+@overload(array_setitem_bool_index, no_unliteral=True)
+def array_setitem_bool_index_overload(A, idx, val):
     """implements setitem with bool index for arrays that have a '_data' attribute and
     '_null_bitmap' attribute (e.g. int/bool/decimal/date). The value is assumed to be
     another array of same type.
     Covered by test_series_iloc_setitem_list_bool.
     """
-    val = bodo.utils.conversion.coerce_to_array(val, use_nullable_array=True)
-    n = len(idx)
-    val_ind = 0
-    for i in range(n):
-        if idx[i]:
-            A._data[i] = val._data[val_ind]
-            bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(val._null_bitmap, val_ind)
-            bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, i, bit)
-            val_ind += 1
+    if bodo.utils.utils.is_array_typ(val) or bodo.utils.typing.is_iterable_type(val):
+
+        def impl_arr(A, idx, val):  # pragma: no cover
+            val = bodo.utils.conversion.coerce_to_array(val, use_nullable_array=True)
+            n = len(idx)
+            val_ind = 0
+            for i in range(n):
+                if not bodo.libs.array_kernels.isna(idx, i) and idx[i]:
+                    A._data[i] = val._data[val_ind]
+                    bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(
+                        val._null_bitmap, val_ind
+                    )
+                    bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, i, bit)
+                    val_ind += 1
+
+        return impl_arr
+
+    def impl_scalar(A, idx, val):  # pragma: no cover
+        n = len(idx)
+        val_ind = 0
+        for i in range(n):
+            if not bodo.libs.array_kernels.isna(idx, i) and idx[i]:
+                A._data[i] = val
+                bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, i, 1)
+                val_ind += 1
+
+    return impl_scalar
 
 
 @register_jitable

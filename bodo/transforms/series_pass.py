@@ -509,6 +509,7 @@ class SeriesPass:
 
     def _run_setitem(self, inst):
         target_typ = self.typemap[inst.target.name]
+        value_type = self.typemap[inst.value.name]
         # Series as index
         # TODO: handle all possible cases
         nodes = []
@@ -551,6 +552,18 @@ class SeriesPass:
             return nodes + compile_func_single_block(
                 lambda A, idx: bodo.libs.array_kernels.setna(A, idx),
                 [inst.target, index_var],
+                None,
+                self,
+            )
+
+        # inline Series.loc setitem
+        if isinstance(target_typ, SeriesLocType):
+            impl = bodo.hiframes.series_indexing.overload_series_loc_setitem(
+                target_typ, index_typ, value_type
+            )
+            return nodes + compile_func_single_block(
+                impl,
+                [inst.target, index_var, inst.value],
                 None,
                 self,
             )
