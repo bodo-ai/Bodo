@@ -419,7 +419,9 @@ class SeriesPass:
             return replace_func(self, impl, (target, idx), pre_nodes=nodes)
 
         # inline index getitem, TODO: test
-        if bodo.hiframes.pd_index_ext.is_pd_index_type(target_typ):
+        if bodo.hiframes.pd_index_ext.is_pd_index_type(target_typ) and not isinstance(
+            target_typ, HeterogeneousIndexType
+        ):
             typ1, typ2 = self.typemap[target.name], self.typemap[idx.name]
             if isinstance(target_typ, RangeIndexType):
                 # avoid inlining slice getitem of RangeIndex since it causes issues for
