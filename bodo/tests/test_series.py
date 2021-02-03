@@ -1192,6 +1192,24 @@ def test_series_setitem_list_int(series_val, idx, list_val_arg, memory_leak_chec
         )
 
 
+############################ Series.loc indexing ##########################
+
+
+def test_series_loc_setitem_bool(memory_leak_check):
+    """test Series.loc[bool_arr] setitem"""
+
+    def impl(S, idx, val):
+        S.loc[idx] = val
+        return S
+
+    S = pd.Series(["A", "AB", None, "ABC", "AB", "D", ""])
+    check_func(impl, (S, S == "AB", "ABC"), copy_input=True)
+    S = pd.Series([4.8, 1.1, 2.2, np.nan, 3.3, 4.4])
+    check_func(impl, (S, S < 4.0, 1.8), copy_input=True)
+    S = pd.Series([4, 1, 2, None, 3, 4], dtype="Int64")
+    check_func(impl, (S, S < 4, -2), copy_input=True)
+
+
 ############################ binary ops #############################
 
 

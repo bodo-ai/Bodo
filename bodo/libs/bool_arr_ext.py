@@ -18,7 +18,6 @@ from numba.extending import (
     intrinsic,
     lower_builtin,
     lower_cast,
-    lower_getattr,
     make_attribute_wrapper,
     models,
     overload,
@@ -47,12 +46,7 @@ from bodo.utils.indexing import (
     array_setitem_int_index,
     array_setitem_slice_index,
 )
-from bodo.utils.typing import (
-    is_overload_false,
-    is_overload_none,
-    is_overload_true,
-    parse_dtype,
-)
+from bodo.utils.typing import is_overload_false, is_overload_true, parse_dtype
 
 
 class BooleanArrayType(types.ArrayCompatible):
@@ -795,3 +789,15 @@ def cast_np_bool_arr_to_bool_arr(context, builder, fromty, toty, val):
     )
     res = context.compile_internal(builder, func, toty(fromty), [val])
     return impl_ret_borrowed(context, builder, toty, res)
+
+
+@overload(operator.setitem, no_unliteral=True)
+def overload_np_array_setitem_bool_arr(A, idx, val):
+    """Support setitem of Arrays with boolean_array"""
+    if isinstance(A, types.Array) and idx == boolean_array:
+
+        def impl(A, idx, val):  # pragma: no cover
+            # TODO(ehsan): consider NAs in idx?
+            A[idx._data] = val
+
+        return impl
