@@ -6,8 +6,8 @@ import operator
 
 import llvmlite.binding as ll
 import numba
-import pandas as pd
 import numpy as np
+import pandas as pd
 from llvmlite import ir as lir
 from numba.core import cgutils, types
 from numba.core.imputils import impl_ret_borrowed
@@ -614,14 +614,22 @@ class SeriesAttribute(AttributeTemplate):
             in_types += tuple(f_args.types)
         if kws is None:
             kws = {}
-        try:
-            f_return_type = get_const_func_output_type(
-                func, in_types, kws, self.context
-            )
-        except Exception as e:
-            raise BodoError(
-                get_udf_error_msg(f"Series.{fname}()", e), locs_in_msg=[e.loc]
-            )
+        return_nullable = False
+
+        # Series.map() supports dictionary input
+        if fname == "map" and isinstance(func, types.DictType):
+            # TODO(ehsan): make sure dict key is comparable with input data type
+            f_return_type = func.value_type
+            return_nullable = True
+        else:
+            try:
+                f_return_type = get_const_func_output_type(
+                    func, in_types, kws, self.context
+                )
+            except Exception as e:
+                raise BodoError(
+                    get_udf_error_msg(f"Series.{fname}()", e), locs_in_msg=[e.loc]
+                )
 
         if (
             isinstance(f_return_type, (SeriesType, HeterogeneousSeriesType))
@@ -645,7 +653,7 @@ class SeriesAttribute(AttributeTemplate):
             )
             ret_type = bodo.DataFrameType(arrs, ary.index, index_vals)
         else:
-            data_arr = get_udf_out_arr_type(f_return_type)
+            data_arr = get_udf_out_arr_type(f_return_type, return_nullable)
             ret_type = SeriesType(data_arr.dtype, data_arr, ary.index, ary.name_typ)
 
         return signature(ret_type, (func,)).replace(pysig=pysig)

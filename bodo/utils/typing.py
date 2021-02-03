@@ -853,13 +853,12 @@ def scalar_to_array_type(t):
     return types.Array(t, 1, "C")
 
 
-def get_udf_out_arr_type(f_return_type):
+def get_udf_out_arr_type(f_return_type, return_nullable=False):
     """get output array type of a UDF call, give UDF's scalar output type.
     E.g. S.map(lambda a: 2) -> array(int64)
     """
 
     # UDF output can be Optional if None is returned in a code path
-    return_nullable = False
     if isinstance(f_return_type, types.Optional):
         f_return_type = f_return_type.type
         return_nullable = True
