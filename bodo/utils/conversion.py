@@ -546,26 +546,86 @@ def overload_coerce_to_array(
     )  # pragma: no cover
 
 
+def _is_str_dtype(dtype):
+    """return True if 'dtype' specifies a string data type."""
+    return (isinstance(dtype, types.Function) and dtype.key[0] == str) or (
+        is_overload_constant_str(dtype) and get_overload_const_str(dtype) == "str"
+    )
+
+
 # TODO: use generated_jit with IR inlining
-def fix_arr_dtype(data, new_dtype, copy=None):  # pragma: no cover
+def fix_arr_dtype(data, new_dtype, copy=None, nan_to_str=True):  # pragma: no cover
     return data
 
 
 @overload(fix_arr_dtype, no_unliteral=True)
-def overload_fix_arr_dtype(data, new_dtype, copy=None):
-    """convert data to new_dtype, copy if copy parameter is not None"""
+def overload_fix_arr_dtype(data, new_dtype, copy=None, nan_to_str=True):
+    """convert data to new_dtype, copy if copy parameter is not None.
+    'nan_to_str' specifies string conversion for np.nan values: write as 'nan'
+    or actual NA (Pandas has inconsistent behavior in APIs)"""
     # TODO: support copy=True and copy=False when literals are passed reliably
     do_copy = not is_overload_none(copy)
 
     if is_overload_none(new_dtype):
         if do_copy:
-            return lambda data, new_dtype, copy=None: data.copy()  # pragma: no cover
-        return lambda data, new_dtype, copy=None: data  # pragma: no cover
+            return (
+                lambda data, new_dtype, copy=None, nan_to_str=True: data.copy()
+            )  # pragma: no cover
+        return (
+            lambda data, new_dtype, copy=None, nan_to_str=True: data
+        )  # pragma: no cover
+
+    # convert to string
+    if _is_str_dtype(new_dtype):
+
+        # special optimized case for int to string conversion, uses inplace write to
+        # string array to avoid extra allocation
+        if isinstance(data.dtype, types.Integer):
+
+            def impl_int_str(
+                data, new_dtype, copy=None, nan_to_str=True
+            ):  # pragma: no cover
+                numba.parfors.parfor.init_prange()
+                n = len(data)
+                A = bodo.libs.str_arr_ext.pre_alloc_string_array(n, -1)
+                for j in numba.parfors.parfor.internal_prange(n):
+                    if bodo.libs.array_kernels.isna(data, j):
+                        if nan_to_str:
+                            bodo.libs.str_arr_ext.str_arr_setitem_NA_str(A, j)
+                        else:
+                            bodo.libs.array_kernels.setna(A, j)
+                    else:
+                        bodo.libs.str_arr_ext.str_arr_setitem_int_to_str(A, j, data[j])
+
+                return A
+
+            return impl_int_str
+
+        def impl_str(data, new_dtype, copy=None, nan_to_str=True):  # pragma: no cover
+            numba.parfors.parfor.init_prange()
+            n = len(data)
+            A = bodo.libs.str_arr_ext.pre_alloc_string_array(n, -1)
+            for j in numba.parfors.parfor.internal_prange(n):
+
+                if bodo.libs.array_kernels.isna(data, j):
+                    if nan_to_str:
+                        A[j] = "nan"
+                    else:
+                        bodo.libs.array_kernels.setna(A, j)
+                    continue
+
+                A[j] = str(data[j])
+
+            return A
+
+        return impl_str
 
     # convert to Categorical with predefined CategoricalDtype
     if isinstance(new_dtype, bodo.hiframes.pd_categorical_ext.PDCategoricalDtype):
 
-        def impl_cat_dtype(data, new_dtype, copy=None):  # pragma: no cover
+        def impl_cat_dtype(
+            data, new_dtype, copy=None, nan_to_str=True
+        ):  # pragma: no cover
             n = len(data)
             numba.parfors.parfor.init_prange()
             label_dict = (
@@ -593,7 +653,9 @@ def overload_fix_arr_dtype(data, new_dtype, copy=None):
         and get_overload_const_str(new_dtype) == "category"
     ):
         # find categorical dtype from data first and reuse the explicit dtype impl
-        def impl_category(data, new_dtype, copy=None):  # pragma: no cover
+        def impl_category(
+            data, new_dtype, copy=None, nan_to_str=True
+        ):  # pragma: no cover
             # find categories in data
             cats = bodo.libs.array_kernels.unique(data)
             # make sure categories are replicated since dtype is replicated
@@ -613,7 +675,9 @@ def overload_fix_arr_dtype(data, new_dtype, copy=None):
         _dtype = nb_dtype.dtype
         if isinstance(data.dtype, types.Float):
 
-            def impl_float(data, new_dtype, copy=None):  # pragma: no cover
+            def impl_float(
+                data, new_dtype, copy=None, nan_to_str=True
+            ):  # pragma: no cover
                 n = len(data)
                 numba.parfors.parfor.init_prange()
                 B = bodo.libs.int_arr_ext.alloc_int_array(n, _dtype)
@@ -628,7 +692,7 @@ def overload_fix_arr_dtype(data, new_dtype, copy=None):
             return impl_float
         else:
 
-            def impl(data, new_dtype, copy=None):  # pragma: no cover
+            def impl(data, new_dtype, copy=None, nan_to_str=True):  # pragma: no cover
                 n = len(data)
                 n_bytes = (n + 7) >> 3
                 bitmap = np.empty(n_bytes, np.uint8)
@@ -643,11 +707,11 @@ def overload_fix_arr_dtype(data, new_dtype, copy=None):
 
     # Array case
     if do_copy or data.dtype != nb_dtype:
-        return lambda data, new_dtype, copy=None: data.astype(
+        return lambda data, new_dtype, copy=None, nan_to_str=True: data.astype(
             nb_dtype
         )  # pragma: no cover
 
-    return lambda data, new_dtype, copy=None: data  # pragma: no cover
+    return lambda data, new_dtype, copy=None, nan_to_str=True: data  # pragma: no cover
 
 
 def dtype_to_array_type(dtype):

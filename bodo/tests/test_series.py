@@ -140,6 +140,17 @@ def test_series_constructor_dtype2(memory_leak_check):
 
 
 @pytest.mark.slow
+def test_series_constructor_init_str(memory_leak_check):
+    """test passing "str" to Series constructor to populate a Series"""
+
+    def impl(n):
+        I = np.arange(n)
+        return pd.Series(index=I, data=np.nan, dtype="str")
+
+    check_func(impl, (111,))
+
+
+@pytest.mark.slow
 def test_series_constructor_int_arr(memory_leak_check):
     def impl(d):
         return pd.Series(d, dtype="Int32")
