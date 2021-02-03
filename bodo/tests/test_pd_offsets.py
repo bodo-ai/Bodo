@@ -14,6 +14,131 @@ from bodo.tests.utils import check_func
 
 @pytest.fixture(
     params=[
+        pd.tseries.offsets.Week(),
+        pytest.param(
+            pd.tseries.offsets.Week(n=4),
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.tseries.offsets.Week(n=4, normalize=True, weekday=5),
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.tseries.offsets.Week(n=2, normalize=False, weekday=0),
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.tseries.offsets.Week(n=-1, normalize=False), marks=pytest.mark.slow
+        ),
+    ]
+)
+def week_value(request):
+    return request.param
+
+
+@pytest.mark.slow
+def test_week_offset(week_value, memory_leak_check):
+    def test_impl():
+        return week_value
+
+    check_func(test_impl, ())
+
+
+@pytest.mark.slow
+def test_week_boxing(week_value, memory_leak_check):
+    """
+    Test boxing and unboxing of pd.tseries.offsets.Week()
+    """
+
+    def test_impl(me_obj):
+        return me_obj
+
+    check_func(test_impl, (week_value,))
+
+
+@pytest.mark.slow
+def test_week_constructor(memory_leak_check):
+    def test_impl1():
+        return pd.tseries.offsets.Week()
+
+    def test_impl2():
+        return pd.tseries.offsets.Week(n=4, weekday=2)
+
+    def test_impl3():
+        return pd.tseries.offsets.Week(n=-2)
+
+    check_func(test_impl1, ())
+    check_func(test_impl2, ())
+    check_func(test_impl3, ())
+
+
+def test_week_add_datetime(week_value, memory_leak_check):
+    def test_impl(val1, val2):
+        return val1 + val2
+
+    datetime_val = datetime.datetime(
+        year=2020, month=10, day=30, hour=22, minute=12, second=45, microsecond=99320
+    )
+    check_func(test_impl, (week_value, datetime_val))
+    check_func(test_impl, (datetime_val, week_value))
+
+
+def test_week_add_timestamp(week_value, memory_leak_check):
+    def test_impl(val1, val2):
+        return val1 + val2
+
+    timestamp_val = pd.Timestamp(
+        year=2020,
+        month=10,
+        day=30,
+        hour=22,
+        minute=12,
+        second=45,
+        microsecond=99320,
+        nanosecond=891,
+    )
+    check_func(test_impl, (week_value, timestamp_val))
+    check_func(test_impl, (timestamp_val, week_value))
+
+
+def test_week_sub_datetime(week_value, memory_leak_check):
+    def test_impl(val1, val2):
+        return val1 - val2
+
+    datetime_val = datetime.datetime(
+        year=2020, month=10, day=30, hour=22, minute=12, second=45, microsecond=99320
+    )
+    check_func(test_impl, (datetime_val, week_value))
+
+
+@pytest.mark.smoke
+def test_week_sub_timestamp(week_value, memory_leak_check):
+    def test_impl(val1, val2):
+        return val1 - val2
+
+    timestamp_val = pd.Timestamp(
+        year=2020,
+        month=10,
+        day=30,
+        hour=22,
+        minute=12,
+        second=45,
+        microsecond=99320,
+        nanosecond=891,
+    )
+    check_func(test_impl, (timestamp_val, week_value))
+
+
+@pytest.mark.slow
+def test_week_neg(week_value, memory_leak_check):
+    def test_impl(me):
+        return -me
+
+    check_func(test_impl, (week_value,))
+
+
+@pytest.fixture(
+    params=[
         pd.tseries.offsets.MonthEnd(),
         pytest.param(
             pd.tseries.offsets.MonthEnd(n=4, normalize=False),

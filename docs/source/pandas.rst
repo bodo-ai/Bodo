@@ -907,6 +907,7 @@ Bodo supports a subset of the offset types in ``pandas.tseries.offsets``:
 
 * :func:`pandas.tseries.offsets.DateOffset`
 * :func:`pandas.tseries.offsets.MonthEnd`
+* :func:`pandas.tseries.offsets.Week`
 
 The currently supported operations are the constructor 
 and addition and subtraction with a scalar `datetime.date`, `datetime.datetime` 

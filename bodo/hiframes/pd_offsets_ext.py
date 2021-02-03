@@ -275,33 +275,7 @@ def month_end_add_scalar(lhs, rhs):
         return impl
 
 
-@overload(operator.sub, no_unliteral=True)
-def month_end_sub(lhs, rhs):
-    """Implement all of the relevant scalar types subtractions.
-    These will be reused to implement arrays.
-    """
-    # lhs date/datetime/timestamp and rhs month_end
-    if (
-        lhs in [datetime_datetime_type, pandas_timestamp_type, datetime_date_type]
-    ) and rhs == month_end_type:
-
-        def impl(lhs, rhs):  # pragma: no cover
-            return lhs + -rhs
-
-        return impl
-
-
 # TODO: Support operators with arrays
-
-
-@overload(operator.neg, no_unliteral=True)
-def month_end_neg(lhs):
-    if lhs == month_end_type:
-
-        def impl(lhs):  # pragma: no cover
-            return pd.tseries.offsets.MonthEnd(-lhs.n, lhs.normalize)
-
-        return impl
 
 
 class DateOffsetType(types.Type):
@@ -853,14 +827,14 @@ def date_offset_add_scalar(lhs, rhs):
 
 
 @overload(operator.sub, no_unliteral=True)
-def month_end_sub(lhs, rhs):
+def overload_sub(lhs, rhs):
     """Implement all of the relevant scalar types subtractions.
     These will be reused to implement arrays.
     """
-    # lhs date/datetime/timestamp and rhs date_offset
+    # lhs date/datetime/timestamp and rhs date_offset/month_end_type/week_type
     if (
         lhs in [datetime_datetime_type, pandas_timestamp_type, datetime_date_type]
-    ) and rhs == date_offset_type:
+    ) and rhs in [date_offset_type, month_end_type, week_type]:
 
         def impl(lhs, rhs):  # pragma: no cover
             return lhs + -rhs
@@ -869,7 +843,17 @@ def month_end_sub(lhs, rhs):
 
 
 @overload(operator.neg, no_unliteral=True)
-def date_offset_neg(lhs):
+def overload_neg(lhs):
+    if lhs == month_end_type:
+
+        def impl(lhs):  # pragma: no cover
+            return pd.tseries.offsets.MonthEnd(-lhs.n, lhs.normalize)
+
+    if lhs == week_type:
+
+        def impl(lhs):  # pragma: no cover
+            return pd.tseries.offsets.Week(-lhs.n, lhs.normalize, lhs.weekday)
+
     if lhs == date_offset_type:
 
         def impl(lhs):  # pragma: no cover
@@ -923,9 +907,241 @@ def date_offset_neg(lhs):
                     n, normalize, nanoseconds=nanoseconds, nanosecond=nanosecond
                 )
 
-        return impl
+    return impl
 
 
 def is_offsets_type(val):
     """Function containing all the support offset types"""
-    return val in [date_offset_type, month_end_type]
+    return val in [date_offset_type, month_end_type, week_type]
+
+
+####### tseries.offset.Week #########
+# create a new Numba Type
+class WeekType(types.Type):
+    """ Numba type for tseries.offset.Week. """
+
+    def __init__(self):
+        super(WeekType, self).__init__(name="WeekType()")
+
+
+week_type = WeekType()
+
+# Tell Numba's type inference to map Week's type to WeekType
+@typeof_impl.register(pd.tseries.offsets.Week)
+def typeof_week(val, c):
+    return week_type
+
+
+# Data Model: Define the data model for the Numba type
+@register_model(WeekType)
+class WeekModel(models.StructModel):
+    def __init__(self, dmm, fe_type):
+        members = [
+            ("n", types.int64),
+            ("normalize", types.boolean),
+            ("weekday", types.int64),
+        ]
+        super(WeekModel, self).__init__(dmm, fe_type, members)
+
+
+# Data Model: expose DM attributes to Numba functions
+make_attribute_wrapper(WeekType, "n", "n")
+make_attribute_wrapper(WeekType, "normalize", "normalize")
+make_attribute_wrapper(WeekType, "weekday", "weekday")
+
+# Constructor Overload
+@overload(pd.tseries.offsets.Week, no_unliteral=True)
+def Week(
+    n=1,
+    normalize=False,
+    weekday=None,
+):
+    def impl(
+        n=1,
+        normalize=False,
+        weekday=None,
+    ):  # pragma: no cover
+        # deal with None to preserve the int type for Numba
+        _weekday = -1 if weekday is None else weekday
+        return init_week(n, normalize, _weekday)
+
+    return impl
+
+
+# LLVM helper for constructing the object
+@intrinsic
+def init_week(typingctx, n, normalize, weekday):
+    def codegen(context, builder, signature, args):  # pragma: no cover
+        typ = signature.return_type
+        week = cgutils.create_struct_proxy(typ)(context, builder)
+        week.n = args[0]
+        week.normalize = args[1]
+        week.weekday = args[2]
+        return week._getvalue()
+
+    return WeekType()(n, normalize, weekday), codegen
+
+
+# Implement the constant creation for Numba 'typespec'
+@lower_constant(WeekType)
+def lower_constant_week(context, builder, ty, pyval): # pragma: no cover
+    week = cgutils.create_struct_proxy(ty)(context, builder)
+    week.n = context.get_constant(types.int64, pyval.n)
+    week.normalize = context.get_constant(types.boolean, pyval.normalize)
+
+    if pyval.weekday is not None:
+        week.weekday = context.get_constant(types.int64, pyval.weekday)
+    else:
+        week.weekday = context.get_constant(types.int64, -1)
+    return week._getvalue()
+
+
+# Boxing and Unboxing
+@box(WeekType)
+def box_week(typ, val, c): # pragma: no cover
+    week = cgutils.create_struct_proxy(typ)(c.context, c.builder, value=val)
+    n_obj = c.pyapi.long_from_longlong(week.n)
+    normalize_obj = c.pyapi.from_native_value(
+        types.boolean, week.normalize, c.env_manager
+    )
+    weekday_obj = c.pyapi.long_from_longlong(week.weekday)
+    week_obj = c.pyapi.unserialize(c.pyapi.serialize_object(pd.tseries.offsets.Week))
+    cond = c.builder.icmp_signed("!=", lir.Constant(lir.IntType(64), -1), week.weekday)
+    with c.builder.if_else(cond) as (weekday_defined, weekday_undefined):
+        with weekday_defined:
+            res_if = c.pyapi.call_function_objargs(
+                week_obj, (n_obj, normalize_obj, weekday_obj)
+            )
+            weekday_defined_bb = c.builder.block
+
+        with weekday_undefined:
+            res_else = c.pyapi.call_function_objargs(week_obj, (n_obj, normalize_obj))
+            weekday_undefined_bb = c.builder.block
+
+    res = c.builder.phi(res_if.type)
+    res.add_incoming(res_if, weekday_defined_bb)
+    res.add_incoming(res_else, weekday_undefined_bb)
+    c.pyapi.decref(weekday_obj)
+    c.pyapi.decref(n_obj)
+    c.pyapi.decref(normalize_obj)
+    c.pyapi.decref(week_obj)
+    return res
+
+
+@unbox(WeekType)
+def unbox_week(typ, val, c):
+    n_obj = c.pyapi.object_getattr_string(val, "n")
+    normalize_obj = c.pyapi.object_getattr_string(val, "normalize")
+    weekday_obj = c.pyapi.object_getattr_string(val, "weekday")
+
+    n = c.pyapi.long_as_longlong(n_obj)
+    normalize = c.pyapi.to_native_value(types.bool_, normalize_obj).value
+
+    none_obj = c.pyapi.make_none()
+    is_none = c.builder.icmp_unsigned("==", weekday_obj, none_obj)
+
+    with c.builder.if_else(is_none) as (weekday_undefined, weekday_defined):
+
+        with weekday_defined:
+            res_if = c.pyapi.long_as_longlong(weekday_obj)
+            weekday_defined_bb = c.builder.block
+
+        with weekday_undefined:
+            res_else = lir.Constant(lir.IntType(64), -1)
+            weekday_undefined_bb = c.builder.block
+
+    res = c.builder.phi(res_if.type)
+    res.add_incoming(res_if, weekday_defined_bb)
+    res.add_incoming(res_else, weekday_undefined_bb)
+
+    week = cgutils.create_struct_proxy(typ)(c.context, c.builder)
+    week.n = n
+    week.normalize = normalize
+    week.weekday = res
+
+    c.pyapi.decref(n_obj)
+    c.pyapi.decref(normalize_obj)
+    c.pyapi.decref(weekday_obj)
+
+    is_error = cgutils.is_not_null(c.builder, c.pyapi.err_occurred())
+
+    return NativeValue(week._getvalue(), is_error=is_error)
+
+
+@overload(operator.add, no_unliteral=True)
+def week_add_scalar(lhs, rhs):
+    """Implement all of the relevant scalar types additions.
+    These will be reused to implement arrays.
+    """
+    # rhs is a datetime, date or a timestamp
+    if lhs == week_type and rhs == pandas_timestamp_type:
+
+        def impl(lhs, rhs):  # pragma: no cover
+            time_delta = calculate_week_date(lhs.n, lhs.weekday, rhs.weekday())
+
+            if lhs.normalize:
+                new_time = pd.Timestamp(year=rhs.year, month=rhs.month, day=rhs.day)
+            else:
+                new_time = rhs
+
+            return new_time + time_delta
+
+        return impl
+
+    if lhs == week_type and rhs == datetime_datetime_type:
+
+        def impl(lhs, rhs):  # pragma: no cover
+            time_delta = calculate_week_date(lhs.n, lhs.weekday, rhs.weekday())
+
+            if lhs.normalize:
+                new_time = pd.Timestamp(year=rhs.year, month=rhs.month, day=rhs.day)
+            else:
+                new_time = pd.Timestamp(
+                    year=rhs.year,
+                    month=rhs.month,
+                    day=rhs.day,
+                    hour=rhs.hour,
+                    minute=rhs.minute,
+                    second=rhs.second,
+                    microsecond=rhs.microsecond,
+                )
+
+            return new_time + time_delta
+
+        return impl
+
+    if lhs == week_type and rhs == datetime_date_type:
+
+        def impl(lhs, rhs):  # pragma: no cover
+            time_delta = calculate_week_date(lhs.n, lhs.weekday, rhs.weekday())
+            return rhs + time_delta
+
+        return impl
+
+    # rhs is the offset
+    if (
+        lhs in [datetime_datetime_type, pandas_timestamp_type, datetime_date_type]
+        and rhs == week_type
+    ):
+
+        def impl(lhs, rhs):  # pragma: no cover
+            return rhs + lhs
+
+        return impl
+
+
+@register_jitable
+def calculate_week_date(n, weekday, other_weekday):  # pragma: no cover
+    """ Calculate the date n weeks from the input. """
+
+    # if weekday = None (int representation is -1) return the offset
+    if weekday == -1:
+        return pd.Timedelta(weeks=n)
+
+    # adjust the offset by a week if the weekdays are different
+    if weekday != other_weekday:
+        offset = (weekday - other_weekday) % 7
+        if n > 0:
+            n = n - 1
+
+    return pd.Timedelta(weeks=n, days=offset)
