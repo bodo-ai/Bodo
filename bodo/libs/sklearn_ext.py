@@ -58,6 +58,7 @@ from bodo.utils.typing import (
     is_overload_constant_str,
     is_overload_false,
     is_overload_none,
+    is_overload_true,
 )
 
 
@@ -3845,3 +3846,161 @@ def overload_preprocessing_minmax_scaler_inverse_transform(
         return inverse_transformed_X
 
     return _preprocessing_minmax_scaler_inverse_transform_impl
+
+
+# ----------------------------------------------------------------------------------------
+# ----------------------------------- LabelEncoder------------------------------------
+# Support for sklearn.preprocessing.LabelEncoder.
+# Currently only fit, fit_transform, transform and inverse_transform functions are supported.
+# We use sklearn's transform and inverse_transform directly in their Bodo implementation.
+# For fit, we use np.unique and then replicate its output to be classes_ attribute
+# ----------------------------------------------------------------------------------------
+
+
+class BodoPreprocessingLabelEncoderType(types.Opaque):
+    def __init__(self):
+        super(BodoPreprocessingLabelEncoderType, self).__init__(
+            name="BodoPreprocessingLabelEncoderType"
+        )
+
+
+preprocessing_label_encoder_type = BodoPreprocessingLabelEncoderType()
+types.preprocessing_label_encoder_type = preprocessing_label_encoder_type
+
+register_model(BodoPreprocessingLabelEncoderType)(models.OpaqueModel)
+
+
+@typeof_impl.register(sklearn.preprocessing.LabelEncoder)
+def typeof_preprocessing_label_encoder(val, c):
+    return preprocessing_label_encoder_type
+
+
+@box(BodoPreprocessingLabelEncoderType)
+def box_preprocessing_label_encoder(typ, val, c):
+    # See note in box_random_forest_classifier
+    c.pyapi.incref(val)
+    return val
+
+
+@unbox(BodoPreprocessingLabelEncoderType)
+def unbox_preprocessing_label_encoder(typ, obj, c):
+    # borrow reference from Python
+    c.pyapi.incref(obj)
+    return NativeValue(obj)
+
+
+@overload(sklearn.preprocessing.LabelEncoder, no_unliteral=True)
+def sklearn_preprocessing_label_encoder_overload():
+    """
+    Provide implementation for __init__ functions of LabelEncoder.
+    We simply call sklearn in objmode.
+    """
+
+    def _sklearn_preprocessing_label_encoder_impl():  # pragma: no cover
+
+        with numba.objmode(m="preprocessing_label_encoder_type"):
+            m = sklearn.preprocessing.LabelEncoder()
+        return m
+
+    return _sklearn_preprocessing_label_encoder_impl
+
+
+@overload_method(BodoPreprocessingLabelEncoderType, "fit", no_unliteral=True)
+def overload_preprocessing_label_encoder_fit(
+    m,
+    y,
+    _is_data_distributed=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position)
+):
+    """
+    Provide implementations for the fit function.
+    In case input is replicated, we simply call sklearn,
+    else we use our unique to get labels and assign them to classes_ attribute
+    """
+    if is_overload_true(_is_data_distributed):
+
+        def _sklearn_preprocessing_label_encoder_fit_impl(
+            m, y, _is_data_distributed=False
+        ):  # pragma: no cover
+            y_classes = bodo.libs.array_kernels.unique(y, parallel=True)
+            y_classes = bodo.allgatherv(y_classes, False)
+            y_classes = bodo.libs.array_kernels.sort(
+                y_classes, ascending=True, inplace=False
+            )
+            with numba.objmode:
+                m.classes_ = y_classes
+
+            return m
+
+        return _sklearn_preprocessing_label_encoder_fit_impl
+
+    else:
+        # If replicated, then just call sklearn
+        def _sklearn_preprocessing_label_encoder_fit_impl(
+            m, y, _is_data_distributed=False
+        ):  # pragma: no cover
+            with numba.objmode(m="preprocessing_label_encoder_type"):
+                m = m.fit(y)
+
+            return m
+
+        return _sklearn_preprocessing_label_encoder_fit_impl
+
+
+@overload_method(BodoPreprocessingLabelEncoderType, "transform", no_unliteral=True)
+def overload_preprocessing_label_encoder_transform(
+    m,
+    y,
+    _is_data_distributed=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position)
+):
+    """
+    Provide implementation for the transform function.
+    We simply call sklearn's transform on each rank.
+    """
+
+    def _preprocessing_label_encoder_transform_impl(
+        m, y, _is_data_distributed=False
+    ):  # pragma: no cover
+        with numba.objmode(transformed_y="int64[:]"):
+            transformed_y = m.transform(y)
+        return transformed_y
+
+    return _preprocessing_label_encoder_transform_impl
+
+
+@numba.njit
+def le_fit_transform(m, y):  # pragma: no cover
+    m = m.fit(y, _is_data_distributed=True)
+    transformed_y = m.transform(y, _is_data_distributed=True)
+    return transformed_y
+
+
+@overload_method(BodoPreprocessingLabelEncoderType, "fit_transform", no_unliteral=True)
+def overload_preprocessing_label_encoder_fit_transform(
+    m,
+    y,
+    _is_data_distributed=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position)
+):
+    """
+    Provide implementation for the fit_transform function.
+    If distributed repeat fit and then transform operation.
+    If replicated simply call sklearn directly in objmode
+    """
+    if is_overload_true(_is_data_distributed):
+
+        def _preprocessing_label_encoder_fit_transform_impl(
+            m, y, _is_data_distributed=False
+        ):  # pragma: no cover
+            transformed_y = le_fit_transform(m, y)
+            return transformed_y
+
+        return _preprocessing_label_encoder_fit_transform_impl
+    else:
+        # If replicated, then just call sklearn
+        def _preprocessing_label_encoder_fit_transform_impl(
+            m, y, _is_data_distributed=False
+        ):  # pragma: no cover
+            with numba.objmode(transformed_y="int64[:]"):
+                transformed_y = m.fit_transform(y)
+            return transformed_y
+
+        return _preprocessing_label_encoder_fit_transform_impl

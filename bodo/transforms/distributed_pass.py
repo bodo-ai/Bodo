@@ -420,6 +420,7 @@ class DistributedPass:
                     bodo.libs.sklearn_ext.BodoLinearSVCType,
                     bodo.libs.sklearn_ext.BodoPreprocessingStandardScalerType,
                     bodo.libs.sklearn_ext.BodoPreprocessingMinMaxScalerType,
+                    bodo.libs.sklearn_ext.BodoPreprocessingLabelEncoderType,
                 ),
             )
         ):
@@ -444,6 +445,18 @@ class DistributedPass:
                     bodo.libs.sklearn_ext.BodoRidgeType,
                     bodo.libs.sklearn_ext.BodoLinearSVCType,
                 ),
+            )
+        ):
+            if self._is_1D_or_1D_Var_arr(rhs.args[0].name):
+                self._set_last_arg_to_true(assign.value)
+                return [assign]
+        if (
+            func_name == "fit_transform"
+            and "bodo.libs.sklearn_ext" in sys.modules
+            and isinstance(func_mod, numba.core.ir.Var)
+            and isinstance(
+                self.typemap[func_mod.name],
+                (bodo.libs.sklearn_ext.BodoPreprocessingLabelEncoderType,),
             )
         ):
             if self._is_1D_or_1D_Var_arr(rhs.args[0].name):

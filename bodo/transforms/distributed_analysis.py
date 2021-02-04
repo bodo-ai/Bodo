@@ -726,7 +726,7 @@ class DistributedAnalysis:
             return
 
         if (
-            func_name in {"fit", "transform", "inverse_transform"}
+            func_name in {"fit", "transform", "inverse_transform", "fit_transform"}
             and "bodo.libs.sklearn_ext" in sys.modules
             and isinstance(func_mod, numba.core.ir.Var)
             and isinstance(
@@ -734,6 +734,7 @@ class DistributedAnalysis:
                 (
                     bodo.libs.sklearn_ext.BodoPreprocessingStandardScalerType,
                     bodo.libs.sklearn_ext.BodoPreprocessingMinMaxScalerType,
+                    bodo.libs.sklearn_ext.BodoPreprocessingLabelEncoderType,
                 ),
             )
         ):
@@ -1537,12 +1538,12 @@ class DistributedAnalysis:
         array_dists,
     ):
         """
-        Analyze distribution of sklearn.preprocessing.StandardScaler and
-        sklearn.preprocessing.MinMaxScaler functions.
-        Only need to handle transform and inverse_transform. fit is handled automatically.
+        Analyze distribution of sklearn.preprocessing.StandardScaler, sklearn.preprocessing.MinMaxScaler, and
+        sklearn.preprocessing.LabelEncoder functions.
+        Only need to handle fit_transform, transform and inverse_transform. fit is handled automatically.
         """
 
-        if func_name in {"transform", "inverse_transform"}:
+        if func_name in {"transform", "inverse_transform", "fit_transform"}:
             # match input (X) and output (X_new) distributions
             self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
 

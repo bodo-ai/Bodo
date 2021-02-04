@@ -175,6 +175,26 @@ Methods:
   * :any:`sklearn.preprocessing.StandardScaler.transform`
   * :any:`sklearn.preprocessing.StandardScaler.inverse_transform`
 
+:class:`sklearn.preprocessing.MinMaxScaler`
+
+  This class provides MinMax Scaler support to scale your data based on the range of its features.
+
+Methods:
+
+  * :any:`sklearn.preprocessing.MinMaxScaler.fit`
+  * :any:`sklearn.preprocessing.MinMaxScaler.transform`
+  * :any:`sklearn.preprocessing.MinMaxScaler.inverse_transform`
+
+:class:`sklearn.preprocessing.LabelEncoder`
+
+  This class provides LabelEncoder support to encode target labels (y) with values between 0 and n-classes-1.
+
+Methods:
+
+  * :any:`sklearn.preprocessing.LabelEncoder.fit`
+  * :any:`sklearn.preprocessing.LabelEncoder.transform`
+  * :any:`sklearn.preprocessing.LabelEncoder.fit_transform`
+
 Model Selection
 ***************
 
@@ -185,15 +205,6 @@ Model Selection
   * Arguments ``random_state`` and ``shuffle`` are supported.
   * Argument ``stratify`` is not supported yet.
 
-:class:`sklearn.preprocessing.MinMaxScaler`
-
-  This class provides MinMax Scaler support to scale your data based on the range of its features.
-
-Methods:
-
-  * :any:`sklearn.preprocessing.MinMaxScaler.fit`
-  * :any:`sklearn.preprocessing.MinMaxScaler.transform`
-  * :any:`sklearn.preprocessing.MinMaxScaler.inverse_transform`
 
 
 Supported XGBoost

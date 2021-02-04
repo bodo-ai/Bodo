@@ -29,7 +29,7 @@ from sklearn.metrics import (
 )
 from sklearn.model_selection import train_test_split
 from sklearn.naive_bayes import MultinomialNB
-from sklearn.preprocessing import MinMaxScaler, StandardScaler
+from sklearn.preprocessing import LabelEncoder, MinMaxScaler, StandardScaler
 from sklearn.svm import LinearSVC
 from sklearn.utils._testing import assert_allclose, assert_array_equal
 from sklearn.utils.validation import check_random_state
@@ -1677,3 +1677,53 @@ def test_train_test_split_df(memory_leak_check):
     bodo_X_test = bodo.allgatherv(X_test)
     bodo_X = np.sort(np.concatenate((bodo_X_train, bodo_X_test), axis=0), axis=0)
     assert_array_equal(bodo_X, train)
+
+
+@pytest.mark.parametrize(
+    "values, classes ",
+    [
+        (
+            np.array([2, 1, 3, 1, 3], dtype="int64"),
+            np.array([1, 2, 3], dtype="int64"),
+        ),
+        (
+            np.array([2.2, 1.1, 3.3, 1.1, 3.3], dtype="float64"),
+            np.array([1.1, 2.2, 3.3], dtype="float64"),
+        ),
+        (
+            np.array(["b", "a", "c", "a", "c"], dtype=object),
+            np.array(["a", "b", "c"], dtype=object),
+        ),
+        (
+            np.array(["bb", "aa", "cc", "aa", "cc"], dtype=object),
+            np.array(["aa", "bb", "cc"], dtype=object),
+        ),
+    ],
+)
+def test_label_encoder(values, classes):
+    """Test LabelEncoder's transform, fit_transform and inverse_transform methods.
+    Taken from here (https://github.com/scikit-learn/scikit-learn/blob/8ea176ae0ca535cdbfad7413322bbc3e54979e4d/sklearn/preprocessing/tests/test_label.py#L193)
+    """
+
+    def test_fit(values):
+        le = LabelEncoder()
+        le.fit(values)
+        return le
+
+    le = bodo.jit(distributed=["values"])(test_fit)(_get_dist_arg(values))
+    assert_array_equal(le.classes_, classes)
+
+    def test_transform(values):
+        le = LabelEncoder()
+        le.fit(values)
+        result = le.transform(values)
+        return result
+
+    check_func(test_transform, (values,))
+
+    def test_fit_transform(values):
+        le = LabelEncoder()
+        result = le.fit_transform(values)
+        return result
+
+    check_func(test_fit_transform, (values,))
