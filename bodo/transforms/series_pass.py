@@ -824,8 +824,8 @@ class SeriesPass:
         arg1, arg2 = rhs.lhs, rhs.rhs
         typ1, typ2 = self.typemap[arg1.name], self.typemap[arg2.name]
 
-        if isinstance(typ1, CategoricalArray) and isinstance(typ2, types.StringLiteral):
-            impl = bodo.hiframes.pd_categorical_ext.overload_cat_arr_eq_str(typ1, typ2)
+        if rhs.fn == operator.eq and isinstance(typ1, CategoricalArray):
+            impl = bodo.hiframes.pd_categorical_ext.overload_cat_arr_eq(typ1, typ2)
             return replace_func(self, impl, [arg1, arg2])
 
         # inline string array comparison ops
@@ -2954,6 +2954,7 @@ def _fix_typ_undefs(new_typ, old_typ):
                 ArrayItemArrayType,
                 StructArrayType,
                 TupleArrayType,
+                bodo.hiframes.pd_categorical_ext.CategoricalArray,
                 types.List,
                 StringArraySplitViewType,
             ),
