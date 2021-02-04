@@ -1845,6 +1845,18 @@ def overload_sgdc_model_score(
     return parallel_score(m, X, y, sample_weight, _is_data_distributed)
 
 
+@overload_attribute(BodoSGDClassifierType, "coef_")
+def get_sgdc_coef(m):
+    """ Overload coef_ attribute to be accessible inside bodo.jit """
+
+    def impl(m):  # pragma: no cover
+        with numba.objmode(result="float64[:,:]"):
+            result = m.coef_
+        return result
+
+    return impl
+
+
 # --------------------------------------------------------------------------------------------------#
 # --------------------------------------- K-Means --------------------------------------------------#
 # Support for sklearn.cluster.KMeans using objmode. We implement a basic wrapper around sklearn's
@@ -2548,7 +2560,7 @@ def overload_logistic_regression_score(
 
 
 @overload_attribute(BodoLogisticRegressionType, "coef_")
-def get_lr_coef(m):
+def get_logisticR_coef(m):
     """ Overload coef_ attribute to be accessible inside bodo.jit """
 
     def impl(m):  # pragma: no cover

@@ -763,6 +763,11 @@ def test_sgdc_svm():
         score = clf.score(X_test, y_test)
         return score
 
+    def impl_coef(X_train, y_train):
+        clf = SGDClassifier()
+        clf.fit(X_train, y_train)
+        return clf.coef_
+
     splitN = 500
     n_samples = 10000
     n_features = 50
@@ -781,6 +786,7 @@ def test_sgdc_svm():
         sklearn_predict_result = impl(
             X[:splitN], y[:splitN], X[splitN:], y[splitN:], "SVM SK"
         )
+        sklearn_coef_ = impl_coef(X[:splitN], y[:splitN])
         X_train = bodo.scatterv(X[:splitN])
         y_train = bodo.scatterv(y[:splitN])
         X_test = bodo.scatterv(X[splitN:])
@@ -796,6 +802,16 @@ def test_sgdc_svm():
     )(impl)(X_train, y_train, X_test, y_test)
     if bodo.get_rank() == 0:
         assert np.allclose(sklearn_predict_result, bodo_predict_result, atol=0.1)
+
+    bodo_coef_ = bodo.jit(distributed=["X_train", "y_train"])(impl_coef)(
+        X_train, y_train
+    )
+    if bodo.get_rank() == 0:
+        bodo_R = np.dot(X_train, bodo_coef_[0]) > 0.0
+        bodo_accuracy = np.sum(bodo_R == y_train) / len(X_train)
+        sk_R = np.dot(X_train, sklearn_coef_[0]) > 0.0
+        sk_accuracy = np.sum(sk_R == y_train) / len(X_train)
+        assert np.allclose(bodo_accuracy, sk_accuracy, atol=0.1)
 
 
 def test_sgdc_lr():
