@@ -60,7 +60,7 @@ std::shared_ptr<arrow::fs::S3FileSystem> get_s3_fs(std::string bucket_region) {
             options.region = std::string(default_region);
         } else {
             // TODO: Need a better err msg here
-            std::cerr << "Warning: S3 Bucket Region could not be determined "
+            std::cout << "Warning: S3 Bucket Region could not be determined "
                          "automatically. AWS_DEFAULT_REGION environment "
                          "variable not "
                          "found either. Region defaults to 'us-east-1' "
@@ -80,11 +80,16 @@ std::shared_ptr<arrow::fs::S3FileSystem> get_s3_fs(std::string bucket_region) {
 }
 
 static int finalize_s3() {
+    try {
     if (is_fs_initialized) {
         CHECK_ARROW(arrow::fs::FinalizeS3(), "Finalize S3");
         is_fs_initialized = false;
     }
     return 0;
+    } catch (const std::exception &e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return -1;
+    }
 }
 
 std::pair<std::string, int64_t> extract_file_name_size(
@@ -183,11 +188,16 @@ extern "C" {
 
 void s3_get_fs(std::shared_ptr<arrow::fs::S3FileSystem> *fs,
                std::string bucket_region) {
+    try {
     *fs = get_s3_fs(bucket_region);
+    } catch (const std::exception &e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+    }
 }
 
 FileReader *init_s3_reader(const char *fname, const char *suffix,
                            bool csv_header, bool json_lines) {
+    try {
     arrow::fs::FileInfo file_stat;
     std::shared_ptr<arrow::fs::S3FileSystem> fs = get_s3_fs("");
     arrow::Result<arrow::fs::FileInfo> result =
@@ -198,19 +208,26 @@ FileReader *init_s3_reader(const char *fname, const char *suffix,
     } else if (file_stat.IsFile()) {
         return new S3FileReader(fname, suffix, csv_header, json_lines);
     } else {
-        Bodo_PyErr_SetString(PyExc_RuntimeError,
-                             "Error in arrow s3: invalid path");
-        return NULL;
+        throw std::runtime_error(
+            "_s3_reader.cpp::init_s3_reader: Error in arrow s3: invalid path");
     }
+    } catch (const std::exception &e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return NULL;
+    } 
 }
 
 void s3_open_file(const char *fname,
                   std::shared_ptr<::arrow::io::RandomAccessFile> *file,
                   const char *bucket_region) {
+    try {
     std::shared_ptr<arrow::fs::S3FileSystem> fs = get_s3_fs(bucket_region);
     arrow::Result<std::shared_ptr<::arrow::io::RandomAccessFile>> result;
     result = fs->OpenInputFile(std::string(fname));
     CHECK_ARROW_AND_ASSIGN(result, "fs->OpenInputFile", *file)
+    } catch (const std::exception &e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+    } 
 }
 
 PyMODINIT_FUNC PyInit_s3_reader(void) {
@@ -221,10 +238,13 @@ PyMODINIT_FUNC PyInit_s3_reader(void) {
     m = PyModule_Create(&moduledef);
     if (m == NULL) return NULL;
 
+    // Only ever called from C++
     PyObject_SetAttrString(m, "init_s3_reader",
                            PyLong_FromVoidPtr((void *)(&init_s3_reader)));
+    // Only ever called from C++
     PyObject_SetAttrString(m, "s3_open_file",
                            PyLong_FromVoidPtr((void *)(&s3_open_file)));
+    // Only ever called from C++
     PyObject_SetAttrString(m, "s3_get_fs",
                            PyLong_FromVoidPtr((void *)(&s3_get_fs)));
     PyObject_SetAttrString(m, "finalize_s3",

@@ -18,10 +18,11 @@ FileReader* f_reader = nullptr;
 PyObject* f_mod = nullptr;  // imported python module:
                             // bodo.io.s3_reader, or bodo.io.hdfs_reader
 
-#define CHECK_ARROW(expr, msg)                                      \
-    if (!(expr.ok())) {                                             \
-        std::cerr << "Error in arrow write: " << msg << " " << expr \
-                  << std::endl;                                     \
+#define CHECK_ARROW(expr, msg)                                                 \
+    if (!(expr.ok())) {                                                        \
+        std::string err_msg = std::string("_io.cpp: Error in arrow write: ") + \
+                              msg + " " + expr.ToString();                     \
+        throw std::runtime_error(err_msg);                                     \
     }
 
 extern "C" {
@@ -29,10 +30,13 @@ extern "C" {
 uint64_t get_file_size(char* file_name);
 void file_read(char* file_name, void* buff, int64_t size, int64_t offset);
 void file_write(char* file_name, void* buff, int64_t size);
+void file_write_py_entrypt(char* file_name, void* buff, int64_t size);
 void file_read_parallel(char* file_name, char* buff, int64_t start,
                         int64_t count);
 void file_write_parallel(char* file_name, char* buff, int64_t start,
                          int64_t count, int64_t elem_size);
+void file_write_parallel_py_entrypt(char* file_name, char* buff, int64_t start,
+                                    int64_t count, int64_t elem_size);
 
 #define ROOT 0
 #define LARGE_DTYPE_SIZE 1024
@@ -51,16 +55,17 @@ PyMODINIT_FUNC PyInit_hio(void) {
     PyObject_SetAttrString(m, "file_read",
                            PyLong_FromVoidPtr((void*)(&file_read)));
     PyObject_SetAttrString(m, "file_write",
-                           PyLong_FromVoidPtr((void*)(&file_write)));
+                           PyLong_FromVoidPtr((void*)(&file_write_py_entrypt)));
     PyObject_SetAttrString(m, "file_read_parallel",
                            PyLong_FromVoidPtr((void*)(&file_read_parallel)));
     PyObject_SetAttrString(m, "file_write_parallel",
-                           PyLong_FromVoidPtr((void*)(&file_write_parallel)));
+                           PyLong_FromVoidPtr((void*)(&file_write_parallel_py_entrypt)));
 
     return m;
 }
 
 uint64_t get_file_size(char* file_name) {
+    try {
     int rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     uint64_t f_size = 0;
@@ -92,25 +97,35 @@ uint64_t get_file_size(char* file_name) {
         Py_DECREF(func_obj);
     } else {
         // posix
+        bool throw_error = false;
         if (rank == ROOT) {
             boost::filesystem::path f_path(file_name);
             // TODO: throw FileNotFoundError
             if (!boost::filesystem::exists(f_path)) {
-                std::cerr << "No such file or directory: " << file_name << '\n';
-                Bodo_PyErr_SetString(
-                    PyExc_RuntimeError,
-                    ("No such file or directory" + std::string(file_name))
-                        .c_str());
-                return 0;
+                throw_error = true;
             }
-            f_size = (uint64_t)boost::filesystem::file_size(f_path);
+            if (!throw_error) {
+                f_size = (uint64_t)boost::filesystem::file_size(f_path);
+            }
+        }
+        // Synchronize throw_error
+        MPI_Bcast(&throw_error, 1, MPI_C_BOOL, 0, MPI_COMM_WORLD);
+        if (throw_error) {
+            throw std::runtime_error(
+                "_io.cpp::get_file_size: No such file or directory " +
+                std::string(file_name));
         }
     }
     MPI_Bcast(&f_size, 1, MPI_UNSIGNED_LONG_LONG, ROOT, MPI_COMM_WORLD);
     return f_size;
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return 0;
+    }
 }
 
 void file_read(char* file_name, void* buff, int64_t size, int64_t offset) {
+    try {
     if (strncmp("s3://", file_name, 5) == 0 ||
         strncmp("hdfs://", file_name, 7) == 0) {
         // Assumes that the default offset when not given
@@ -126,14 +141,19 @@ void file_read(char* file_name, void* buff, int64_t size, int64_t offset) {
         int64_t seek_res = fseek(fp, offset, SEEK_SET);
         if (seek_res != 0) return;
         size_t ret_code = fread(buff, 1, (size_t)size, fp);
-        if (ret_code != (size_t)size) {
-            Bodo_PyErr_SetString(
-                PyExc_RuntimeError,
-                ("File read error: " + std::string(file_name)).c_str());
-        }
         fclose(fp);
+        if (ret_code != (size_t)size) {
+            throw std::runtime_error(
+                "_io.cpp::file_read: File read error: " +
+                std::string(file_name));
+        }
+        
     }
     return;
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return;
+    }
 }
 
 void file_write(char* file_name, void* buff, int64_t size) {
@@ -191,18 +211,28 @@ void file_write(char* file_name, void* buff, int64_t size) {
         FILE* fp = fopen(file_name, "wb");
         if (fp == NULL) return;
         size_t ret_code = fwrite(buff, 1, (size_t)size, fp);
-        if (ret_code != (size_t)size) {
-            Bodo_PyErr_SetString(
-                PyExc_RuntimeError,
-                ("File write error: " + std::string(file_name)).c_str());
-        }
         fclose(fp);
+        if (ret_code != (size_t)size) {
+            throw std::runtime_error("_io.cpp::file_write: File write error: " +
+                                     std::string(file_name));
+        }
+        
     }
     return;
 }
 
+void file_write_py_entrypt(char* file_name, void* buff, int64_t size) {
+    try {
+        file_write(file_name, buff, size);
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return;
+    }
+}
+
 void file_read_parallel(char* file_name, char* buff, int64_t start,
                         int64_t count) {
+    try {
     // printf("MPI READ %lld %lld\n", start, count);
     if (strncmp("s3://", file_name, 5) == 0 ||
         strncmp("hdfs://", file_name, 7) == 0) {
@@ -220,10 +250,11 @@ void file_read_parallel(char* file_name, char* buff, int64_t start,
         MPI_File fh;
         int ierr = MPI_File_open(MPI_COMM_WORLD, (const char*)file_name,
                                  MPI_MODE_RDONLY, MPI_INFO_NULL, &fh);
-        if (ierr != 0)
-            Bodo_PyErr_SetString(
-                PyExc_RuntimeError,
-                ("File open error: " + std::string(file_name)).c_str());
+        if (ierr != 0) {
+            throw std::runtime_error(
+                "_io.cpp::file_read_parallel: File open error: " +
+                std::string(file_name));
+        }
         // work around MPI count limit by using a large dtype
         if (count >= (int64_t)INT_MAX) {
             MPI_Datatype large_dtype;
@@ -238,10 +269,9 @@ void file_read_parallel(char* file_name, char* buff, int64_t start,
                 MPI_Error_string(ierr, err_string, &err_len);
                 printf("Error %s\n", err_string);
                 fflush(stdout);
-                Bodo_PyErr_SetString(PyExc_RuntimeError,
-                                     ("File large read error: " +
-                                      std::to_string(err_class) + file_name)
-                                         .c_str());
+                throw std::runtime_error(
+                        "_io.cpp::file_read_parallel: File large read error: " +
+                        std::to_string(err_class) + file_name);
             }
             MPI_Type_free(&large_dtype);
             int64_t left_over = count % LARGE_DTYPE_SIZE;
@@ -263,14 +293,17 @@ void file_read_parallel(char* file_name, char* buff, int64_t start,
             MPI_Error_string(ierr, err_string, &err_len);
             printf("Error %s\n", err_string);
             fflush(stdout);
-            Bodo_PyErr_SetString(
-                PyExc_RuntimeError,
-                ("File read error: " + std::to_string(err_class) + file_name)
-                    .c_str());
+            throw std::runtime_error(
+                    "_io.cpp::file_read_parallel: File read error: " +
+                    std::to_string(err_class) + file_name);
         }
         MPI_File_close(&fh);
     }
     return;
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return;
+    }
 }
 
 void file_write_parallel(char* file_name, char* buff, int64_t start,
@@ -316,27 +349,34 @@ void file_write_parallel(char* file_name, char* buff, int64_t start,
         MPI_Errhandler_set(MPI_COMM_WORLD, MPI_ERRORS_RETURN);
 
         int ierr;
+        bool throw_error = false;
         if (dist_get_rank() == 0) {
             ierr = MPI_File_delete((const char*)file_name, MPI_INFO_NULL);
             if (ierr != 0) {
                 MPI_Error_class(ierr, &err_class);
-                if (err_class != MPI_ERR_NO_SUCH_FILE)
-                    Bodo_PyErr_SetString(
-                        PyExc_RuntimeError,
-                        ("File delete error: " + std::string(file_name))
-                            .c_str());
+                if (err_class != MPI_ERR_NO_SUCH_FILE) {
+                    throw_error = true;
+                }
             }
         }
         MPI_Barrier(MPI_COMM_WORLD);
+        // Synchronize throw_error
+        MPI_Bcast(&throw_error, 1, MPI_C_BOOL, 0, MPI_COMM_WORLD);
+        if (throw_error) {
+            throw std::runtime_error(
+                "_io.cpp::file_write_parallel: File delete error: " +
+                std::string(file_name));
+        }
 
         MPI_File fh;
         ierr = MPI_File_open(MPI_COMM_WORLD, (const char*)file_name,
                              MPI_MODE_CREATE | MPI_MODE_WRONLY, MPI_INFO_NULL,
                              &fh);
-        if (ierr != 0)
-            Bodo_PyErr_SetString(
-                PyExc_RuntimeError,
-                ("File open error: " + std::string(file_name)).c_str());
+        if (ierr != 0) {
+            throw std::runtime_error(
+                "_io.cpp::file_write_parallel: File open error: " +
+                std::string(file_name));
+        }
 
         // work around MPI count limit by using a large dtype
         if (count >= (int64_t)INT_MAX) {
@@ -354,10 +394,9 @@ void file_write_parallel(char* file_name, char* buff, int64_t start,
                 MPI_Error_string(ierr, err_string, &err_len);
                 printf("Error %s\n", err_string);
                 fflush(stdout);
-                Bodo_PyErr_SetString(PyExc_RuntimeError,
-                                     ("File large write error: " +
-                                      std::to_string(err_class) + file_name)
-                                         .c_str());
+                throw std::runtime_error(
+                    "_io.cpp::file_write_parallel: File large write error: " +
+                    std::to_string(err_class) + file_name);
             }
             MPI_Type_free(&large_dtype);
             int64_t left_over = count % LARGE_DTYPE_SIZE;
@@ -383,15 +422,24 @@ void file_write_parallel(char* file_name, char* buff, int64_t start,
             MPI_Error_string(ierr, err_string, &err_len);
             printf("Error %s\n", err_string);
             fflush(stdout);
-            Bodo_PyErr_SetString(
-                PyExc_RuntimeError,
-                ("File write error: " + std::to_string(err_class) + file_name)
-                    .c_str());
+            throw std::runtime_error(
+                "_io.cpp::file_write_parallel: File write error: " +
+                std::to_string(err_class) + file_name);
         }
 
         MPI_File_close(&fh);
     }
     return;
+}
+
+void file_write_parallel_py_entrypt(char* file_name, char* buff, int64_t start,
+                                    int64_t count, int64_t elem_size) {
+    try {
+        file_write_parallel(file_name, buff, start, count, elem_size);
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return;
+    }
 }
 
 }  // extern "C"

@@ -90,9 +90,8 @@ inline double GetDoubleEntry(Bodo_CTypes::CTypeEnum dtype, char* ptr) {
     if (dtype == Bodo_CTypes::TIMEDELTA) return double(GetTentry<int64_t>(ptr));
     if (dtype == Bodo_CTypes::DECIMAL)
         return decimal_to_double(GetTentry<decimal_value_cpp>(ptr));
-    Bodo_PyErr_SetString(PyExc_RuntimeError,
-                         "Unsupported case in GetDoubleEntry");
-    return 0;
+    throw std::runtime_error(
+        "_array_utils.h::GetDoubleEntry: Unsupported case in GetDoubleEntry");
 }
 
 /** This function uses the combinatorial information computed in the
@@ -449,9 +448,9 @@ inline int NumericComparison(Bodo_CTypes::CTypeEnum const& dtype, char* ptr1,
         return NumericComparison_float<double>(ptr1, ptr2, na_position);
     if (dtype == Bodo_CTypes::DECIMAL)
         return NumericComparison_decimal(ptr1, ptr2, na_position);
-    Bodo_PyErr_SetString(PyExc_RuntimeError,
-                         "Invalid dtype put on input to NumericComparison");
-    return 0;
+    throw std::runtime_error(
+        "_array_utils.h::NumericComparison: Invalid dtype put on input to "
+        "NumericComparison.");
 }
 
 /** This code test keys if two keys are greater or equal

@@ -61,6 +61,7 @@ def tofile_overload(arr, fname):
             dtype_size = get_dtype_size(A.dtype)
             # TODO: unicode name
             file_write(unicode_to_utf8(fname), A.ctypes, dtype_size * A.size)
+            bodo.utils.utils.check_and_propagate_cpp_exception()
 
         return tofile_impl
 
@@ -97,6 +98,7 @@ def file_write_parallel_overload(fname, arr, start, count):
             _file_write_parallel(
                 unicode_to_utf8(fname), A.ctypes, start, count, elem_size
             )
+            bodo.utils.utils.check_and_propagate_cpp_exception()
 
         return _impl
 
@@ -117,6 +119,7 @@ def file_read_parallel_overload(fname, arr, start, count, offset):
                 (start * dtype_size) + offset,  # Offset is given in bytes
                 count * dtype_size,
             )
+            bodo.utils.utils.check_and_propagate_cpp_exception()
 
         return _impl
 
@@ -131,6 +134,7 @@ def file_read_overload(fname, arr, size, offset):
         # TODO: unicode name
         def impl(fname, arr, size, offset):  # pragma: no cover
             _file_read(unicode_to_utf8(fname), arr.ctypes, size, offset)
+            bodo.utils.utils.check_and_propagate_cpp_exception()
 
         return impl
 
@@ -148,6 +152,7 @@ def get_file_size_overload(fname, count, offset, dtype_size):
             if offset < 0:
                 return -1
             s = _get_file_size(unicode_to_utf8(fname)) - offset
+            bodo.utils.utils.check_and_propagate_cpp_exception()
             if count != -1:
                 s = min(s, count * dtype_size)
             # TODO(Nick): What is the best way to handle error cases

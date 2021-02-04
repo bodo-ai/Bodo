@@ -106,6 +106,11 @@ PyMODINIT_FUNC PyInit_hstr_ext(void) {
 
     bodo_common_init();
 
+    // All C functions, so they don't throw exceptions.
+    // In some cases, there are error conditions that we might want to handle using
+    // exceptions, but most of those occur in box/unbox which we don't know
+    // how to handle on the python side yet.
+
     PyObject_SetAttrString(m, "init_string_const",
                            PyLong_FromVoidPtr((void*)(&init_string_const)));
     PyObject_SetAttrString(

@@ -106,6 +106,9 @@ PyMODINIT_FUNC PyInit_decimal_ext(void) {
     if (sizeof(decimal_value) != 16)
         std::cerr << "invalid decimal struct size" << std::endl;
 
+    // These are all C functions, so they don't throw any exceptions.
+    // We might still need to add better error handling in the future.
+
     PyObject_SetAttrString(m, "box_decimal_array",
                            PyLong_FromVoidPtr((void*)(&box_decimal_array)));
     PyObject_SetAttrString(m, "unbox_decimal_array",

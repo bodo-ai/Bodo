@@ -84,6 +84,7 @@ PyMODINIT_FUNC PyInit_hdict_ext(void) {
     m = PyModule_Create(&moduledef);
     if (m == NULL) return NULL;
 
+    // These functions don't throw exceptions.
     DEC_MOD_METHOD(multimap_int64_init);
     DEC_MOD_METHOD(multimap_int64_insert);
     DEC_MOD_METHOD(multimap_int64_equal_range);

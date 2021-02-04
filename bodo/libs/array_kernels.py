@@ -60,7 +60,12 @@ from bodo.utils.typing import (
     is_overload_none,
     raise_bodo_error,
 )
-from bodo.utils.utils import build_set, numba_to_c_type, unliteral_all
+from bodo.utils.utils import (
+    build_set,
+    check_and_propagate_cpp_exception,
+    numba_to_c_type,
+    unliteral_all,
+)
 
 ll.add_symbol("quantile_sequential", quantile_alg.quantile_sequential)
 ll.add_symbol("quantile_parallel", quantile_alg.quantile_parallel)
@@ -275,6 +280,7 @@ _median_series_computation = types.ExternalFunction(
 def median_series_computation(res, arr, is_parallel, skipna):  # pragma: no cover
     arr_info = array_to_info(arr)
     _median_series_computation(res, arr_info, is_parallel, skipna)
+    check_and_propagate_cpp_exception()
     delete_info_decref_array(arr_info)
 
 
@@ -303,6 +309,7 @@ _autocorr_series_computation = types.ExternalFunction(
 def autocorr_series_computation(res, arr, lag, is_parallel):  # pragma: no cover
     arr_info = array_to_info(arr)
     _autocorr_series_computation(res, arr_info, lag, is_parallel)
+    check_and_propagate_cpp_exception()
     delete_info_decref_array(arr_info)
 
 
@@ -331,6 +338,7 @@ _compute_series_monotonicity = types.ExternalFunction(
 def series_monotonicity_call(res, arr, inc_dec, is_parallel):  # pragma: no cover
     arr_info = array_to_info(arr)
     _compute_series_monotonicity(res, arr_info, inc_dec, is_parallel)
+    check_and_propagate_cpp_exception()
     delete_info_decref_array(arr_info)
 
 
@@ -401,7 +409,9 @@ def lower_dist_quantile_seq(context, builder, sig, args):
     ]
     fnty = lir.FunctionType(lir.DoubleType(), arg_typs)
     fn = builder.module.get_or_insert_function(fnty, name="quantile_sequential")
-    return builder.call(fn, call_args)
+    ret = builder.call(fn, call_args)
+    bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+    return ret
 
 
 @lower_builtin(quantile_parallel, types.Array, types.float64, types.intp)
@@ -450,7 +460,9 @@ def lower_dist_quantile_parallel(context, builder, sig, args):
     ]
     fnty = lir.FunctionType(lir.DoubleType(), arg_typs)
     fn = builder.module.get_or_insert_function(fnty, name="quantile_parallel")
-    return builder.call(fn, call_args)
+    ret = builder.call(fn, call_args)
+    bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+    return ret
 
 
 ################################ nlargest ####################################

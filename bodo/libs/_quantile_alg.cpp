@@ -110,6 +110,7 @@ PyMODINIT_FUNC PyInit_quantile_alg(void) {
 
 double quantile_sequential(void *data, int64_t local_size, double quantile,
                            int type_enum) {
+    try {
     // return NA if no elements
     if (local_size == 0) {
         return std::nan("");
@@ -117,10 +118,15 @@ double quantile_sequential(void *data, int64_t local_size, double quantile,
 
     double at = quantile * (local_size - 1);
     return quantile_dispatch(data, local_size, quantile, at, type_enum, false);
+    } catch (const std::exception &e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return -1;
+    }
 }
 
 double quantile_parallel(void *data, int64_t local_size, int64_t total_size,
                          double quantile, int type_enum) {
+    try {
     if (total_size == 0)
         MPI_Allreduce(&local_size, &total_size, 1, MPI_LONG_LONG_INT, MPI_SUM,
                       MPI_COMM_WORLD);
@@ -132,6 +138,10 @@ double quantile_parallel(void *data, int64_t local_size, int64_t total_size,
 
     double at = quantile * (total_size - 1);
     return quantile_dispatch(data, local_size, quantile, at, type_enum, true);
+    } catch (const std::exception &e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return -1;
+    }
 }
 
 double quantile_dispatch(void *data, int64_t local_size, double quantile,
@@ -166,8 +176,9 @@ double quantile_dispatch(void *data, int64_t local_size, double quantile,
             return quantile_float((double *)data, local_size, quantile,
                                   type_enum, parallel);
         default:
-            std::cerr << "unknown quantile data type"
-                      << "\n";
+            throw std::runtime_error(
+                "_quantile_alg.cpp::quantile_dispatch: unknown quantile data "
+                "type");
     }
 
     return -1.0;
@@ -658,6 +669,7 @@ void median_series_computation_T(double *res, array_info *arr, bool parallel,
  */
 void median_series_computation(double *res, array_info *arr, bool parallel,
                                bool skipna) {
+    try {
     Bodo_CTypes::CTypeEnum dtype = arr->dtype;
     switch (dtype) {
         case Bodo_CTypes::INT8:
@@ -697,9 +709,13 @@ void median_series_computation(double *res, array_info *arr, bool parallel,
             return median_series_computation_T<double, Bodo_CTypes::DECIMAL>(
                 res, arr, parallel, skipna);
         default:
-            Bodo_PyErr_SetString(
-                PyExc_RuntimeError,
-                "type not supported by median_series_computation");
+            throw std::runtime_error(
+                "_quantile_alg.cpp::median_series_computation: type not "
+                "supported by median_series_computation");
+    }
+    } catch (const std::exception &e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return;
     }
 }
 
@@ -888,6 +904,7 @@ array_info *compute_ghost_rows(array_info *arr, uint64_t const &level_next) {
  */
 void compute_series_monotonicity(double *res, array_info *arr, int64_t inc_dec,
                                  bool is_parallel) {
+    try {
     int64_t n_rows = arr->length;
     uint64_t siztype = numpy_item_size[arr->dtype];
     // First checking monotonicity locally
@@ -944,10 +961,15 @@ void compute_series_monotonicity(double *res, array_info *arr, int64_t inc_dec,
         *res = 1.0;
     }
     delete_info_decref_array(ghost_arr);
+    } catch (const std::exception &e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return;
+    }
 }
 
 void autocorr_series_computation(double *res, array_info *arr, int64_t lag,
                                  bool is_parallel) {
+    try {
     uint64_t n_rows = arr->length;
     uint64_t siztype = numpy_item_size[arr->dtype];
     if (!is_parallel) {
@@ -1031,4 +1053,8 @@ void autocorr_series_computation(double *res, array_info *arr, int64_t lag,
     double autocorr = scal / (norm1 * norm2);
     *res = autocorr;
     delete_info_decref_array(ghost_arr);
+    } catch (const std::exception &e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return;
+    }
 }

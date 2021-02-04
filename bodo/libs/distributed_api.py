@@ -47,6 +47,7 @@ from bodo.libs.tuple_arr_ext import TupleArrayType
 from bodo.utils.typing import BodoError, is_overload_false, is_overload_none
 from bodo.utils.utils import (
     CTypeEnum,
+    check_and_propagate_cpp_exception,
     empty_like_type,
     numba_to_c_type,
     tuple_to_scalar,
@@ -2534,6 +2535,7 @@ def dist_oneD_reshape_shuffle(
         len(dest_ranks_arr),
         dest_ranks_arr.ctypes,
     )
+    check_and_propagate_cpp_exception()
 
 
 permutation_int = types.ExternalFunction(
@@ -2570,6 +2572,7 @@ def dist_permutation_array_index(
     permutation_array_index(
         lhs.ctypes, lhs_len, elem_size, c_rhs.ctypes, c_rhs.shape[0], p.ctypes, p_len
     )
+    check_and_propagate_cpp_exception()
 
 
 ########### finalize MPI & s3_reader, disconnect hdfs when exiting ############
@@ -2591,6 +2594,7 @@ disconnect_hdfs = types.ExternalFunction("disconnect_hdfs", types.int32())
 def call_finalize():  # pragma: no cover
     finalize()
     finalize_s3()
+    check_and_propagate_cpp_exception()
     disconnect_hdfs()
 
 

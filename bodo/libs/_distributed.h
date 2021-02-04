@@ -672,10 +672,11 @@ static void permutation_array_index(unsigned char* lhs, int64_t len,
                                     int64_t elem_size, unsigned char* rhs,
                                     int64_t n_elems_rhs, int64_t* p,
                                     int64_t p_len) {
+    try {
     if (len != p_len) {
-        std::cerr
-            << "Array length and permutation index length should match!\n";
-        return;
+        throw std::runtime_error(
+                "_distributed.h::permutation_array_index: Array length and "
+                "permutation index length should match!");
     }
 
     MPI_Datatype element_t;
@@ -729,6 +730,10 @@ static void permutation_array_index(unsigned char* lhs, int64_t len,
     apply_permutation(lhs, elem_size, p2);
 
     MPI_Type_free(&element_t);
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return;
+    }
 }
 
 static void bodo_alltoallv(const void* sendbuf,
@@ -833,6 +838,7 @@ static void oneD_reshape_shuffle(char* output, char* input,
                                  int64_t out_lower_dims_size,
                                  int64_t in_lower_dims_size, int n_dest_ranks,
                                  int* dest_ranks) {
+    try {
     int num_pes = dist_get_size();
     int rank = dist_get_rank();
 
@@ -920,6 +926,10 @@ static void oneD_reshape_shuffle(char* output, char* input,
 
     bodo_alltoallv(input, send_counts, send_disp, MPI_CHAR, output, recv_counts,
                    recv_disp, MPI_CHAR, MPI_COMM_WORLD);
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return;
+    }
 }
 
 #endif  // _DISTRIBUTED_H_INCLUDED

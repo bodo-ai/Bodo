@@ -627,6 +627,9 @@ PyMODINIT_FUNC PyInit_hdatetime_ext(void) {
     // initalize memory alloc/tracking system in _meminfo.h
     bodo_common_init();
 
+    // These are all C functions, so they don't throw any exceptions.
+    // We might still need to add better error handling in the future.
+    
     PyObject_SetAttrString(m, "get_isocalendar",
                            PyLong_FromVoidPtr((void*)(&get_isocalendar)));
     PyObject_SetAttrString(m, "extract_year_days",
