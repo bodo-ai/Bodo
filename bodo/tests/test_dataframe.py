@@ -1903,6 +1903,19 @@ def test_setitem_na(memory_leak_check):
     pd.testing.assert_series_equal(bodo_func(S.copy(), 2), impl(S.copy(), 2))
 
 
+@pytest.mark.slow
+def test_set_column_categorical(memory_leak_check):
+    """set df column with a categorical array"""
+
+    def test_impl(n):
+        df = pd.DataFrame({"A": np.ones(n), "B": np.arange(n)})
+        df["C"] = pd.Categorical(np.arange(n))
+        return df
+
+    n = 11
+    check_func(test_impl, (n,))
+
+
 def test_set_column_scalar_str(memory_leak_check):
     """set df column with a string scalar"""
 

@@ -2657,7 +2657,8 @@ def _install_binary_ops():
     # install binary ops such as add, sub, pow, eq, ...
     for op in bodo.hiframes.pd_series_ext.series_binary_ops:
         overload_impl = create_binary_op_overload(op)
-        overload(op, inline="always", no_unliteral=True)(overload_impl)
+        # NOTE: cannot use inline="always". See test_pd_categorical
+        overload(op, no_unliteral=True)(overload_impl)
 
 
 _install_binary_ops()
@@ -2966,7 +2967,7 @@ def overload_where_unsupported(condition, x, y):
         not isinstance(condition, (SeriesType, types.Array, BooleanArrayType))
         or condition.ndim != 1
     ):
-        return lambda condition, x, y: np.where(condition, x, y)
+        return lambda condition, x, y: np.where(condition, x, y)  # pragma: no cover
 
 
 @overload(where_impl, no_unliteral=True)

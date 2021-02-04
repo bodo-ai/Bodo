@@ -204,6 +204,32 @@ def test_eq(memory_leak_check):
     check_func(impl2, (A, 2))
 
 
+def test_pd_categorical(memory_leak_check):
+    """test pd.Categorical() constructor"""
+
+    # dtype provided
+    def impl1(A, dtype):
+        return pd.Categorical(A, dtype=dtype)
+
+    # categories provided, unordered
+    def impl2(A, cats):
+        return pd.Categorical(A, categories=cats)
+
+    # categories provided, ordered
+    def impl3(A, cats):
+        return pd.Categorical(A, categories=cats, ordered=True)
+
+    # no extra argument
+    def impl4(A):
+        return pd.Categorical(A)
+
+    A = np.array([3, 1, 2, -1, 4, 1, 3, 2, 3, 7, 8, 12] * 10)
+    check_func(impl1, (A, pd.CategoricalDtype([3, 1, 2, -1, 4, 12])))
+    check_func(impl2, (A, [3, 1, 2, -1, 4, 12]))
+    check_func(impl3, (A, [3, 1, 2, -1, 4, 12]))
+    check_func(impl4, (A,))
+
+
 def test_astype(memory_leak_check):
     """test astype for categorical array, which allows going back to original values"""
 

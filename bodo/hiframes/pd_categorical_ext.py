@@ -26,11 +26,13 @@ import bodo
 from bodo.utils.typing import (
     NOT_CONSTANT,
     BodoError,
+    check_unsupported_args,
     get_literal_value,
     get_overload_const,
     is_list_like_index_type,
     is_literal_type,
     is_overload_constant_bool,
+    is_overload_none,
     is_overload_true,
 )
 
@@ -704,6 +706,62 @@ def get_label_dict_from_categories(vals):  # pragma: no cover
         curr_ind += 1
 
     return labels
+
+
+# NOTE: not using inline="always" since fix_arr_dtype() fails due to Bodo IR nodes.
+# Inlined in Series pass.
+@overload(pd.Categorical, no_unliteral=True)
+def pd_categorical_overload(
+    values,
+    categories=None,
+    ordered=None,
+    dtype=None,
+    fastpath=False,
+):
+    unsupported_args = dict(fastpath=fastpath)
+    arg_defaults = dict(fastpath=False)
+    check_unsupported_args("pd.Categorical", unsupported_args, arg_defaults)
+
+    # categorical dtype is provided
+    if isinstance(dtype, bodo.hiframes.pd_categorical_ext.PDCategoricalDtype):
+
+        def impl_dtype(
+            values, categories=None, ordered=None, dtype=None, fastpath=False
+        ):  # pragma: no cover
+            data = bodo.utils.conversion.coerce_to_array(values)
+            return bodo.utils.conversion.fix_arr_dtype(data, dtype)
+
+        return impl_dtype
+
+    # categories are provided
+    if not is_overload_none(categories):
+
+        def impl_cats(
+            values, categories=None, ordered=None, dtype=None, fastpath=False
+        ):  # pragma: no cover
+            ordered = bodo.utils.conversion.false_if_none(ordered)
+            data = bodo.utils.conversion.coerce_to_array(values)
+            cats = bodo.utils.conversion.coerce_to_array(categories)
+            cat_dtype = bodo.hiframes.pd_categorical_ext.init_cat_dtype(cats, ordered)
+            return bodo.utils.conversion.fix_arr_dtype(data, cat_dtype)
+
+        return impl_cats
+
+    else:
+        if is_overload_none(ordered):
+
+            def impl_auto(
+                values, categories=None, ordered=None, dtype=None, fastpath=False
+            ):  # pragma: no cover
+                data = bodo.utils.conversion.coerce_to_array(values)
+                return bodo.utils.conversion.fix_arr_dtype(data, "category")
+
+            return impl_auto
+        # TODO(ehsan): handle ordered case
+
+    raise BodoError(
+        f"pd.Categorical(): argument combination not supported yet: {values}, {categories}, {ordered}, {dtype}"
+    )
 
 
 @overload(operator.getitem, no_unliteral=True)
