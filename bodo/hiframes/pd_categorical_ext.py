@@ -271,37 +271,51 @@ def box_categorical_array(typ, val, c):
     return cat_arr_obj
 
 
-# TODO: handle all ops
-@overload(operator.eq, inline="always", no_unliteral=True)
-def overload_cat_arr_eq(A, other):
-    if not isinstance(A, CategoricalArray):
-        return
+def create_cmp_op_overload(op):
+    """generate overload for a comparison operator"""
 
-    # TODO(ehsan): proper error checking for invalid comparison
+    def overload_cat_arr_cmp(A, other):
+        if not isinstance(A, CategoricalArray):
+            return
 
-    # code for 'other' can be determined ahead of time
-    if (
-        A.dtype.categories
-        and is_literal_type(other)
-        and types.unliteral(other) == A.dtype.elem_type
-    ):
-        val = get_literal_value(other)
-        other_idx = (
-            list(A.dtype.categories).index(val) if val in A.dtype.categories else -2
-        )
+        # TODO(ehsan): proper error checking for invalid comparison
+
+        # code for 'other' can be determined ahead of time
+        if (
+            A.dtype.categories
+            and is_literal_type(other)
+            and types.unliteral(other) == A.dtype.elem_type
+        ):
+            val = get_literal_value(other)
+            other_idx = (
+                list(A.dtype.categories).index(val) if val in A.dtype.categories else -2
+            )
+
+            def impl_lit(A, other):  # pragma: no cover
+                out_arr = op(A.codes, other_idx)
+                return out_arr
+
+            return impl_lit
 
         def impl(A, other):  # pragma: no cover
-            out_arr = A.codes == other_idx
+            other_idx = get_code_for_value(A.dtype, other)
+            out_arr = op(A.codes, other_idx)
             return out_arr
 
         return impl
 
-    def impl(A, other):  # pragma: no cover
-        other_idx = get_code_for_value(A.dtype, other)
-        out_arr = A.codes == other_idx
-        return out_arr
+    return overload_cat_arr_cmp
 
-    return impl
+
+def _install_cmp_ops():
+    # install comparison ops: eq, ne
+    # TODO(ehsan): support other ops
+    for op in [operator.eq, operator.ne]:
+        overload_impl = create_cmp_op_overload(op)
+        overload(op, inline="always", no_unliteral=True)(overload_impl)
+
+
+_install_cmp_ops()
 
 
 @numba.njit
