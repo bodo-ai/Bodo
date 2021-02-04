@@ -1259,63 +1259,12 @@ def overload_series_notna(S):
     return lambda S: S.isna() == False
 
 
-def _is_str_dtype(dtype):
-    """return True if 'dtype' specifies a string data type."""
-    return (isinstance(dtype, types.Function) and dtype.key[0] == str) or (
-        is_overload_constant_str(dtype) and get_overload_const_str(dtype) == "str"
-    )
-
-
 @overload_method(SeriesType, "astype", no_unliteral=True)
 def overload_series_astype(S, dtype, copy=True, errors="raise"):
 
     unsupported_args = dict(errors=errors)
     arg_defaults = dict(errors="raise")
     check_unsupported_args("series.astype", unsupported_args, arg_defaults)
-
-    if _is_str_dtype(dtype):
-
-        # special optimized case for int to string conversion, uses inplace write to
-        # string array to avoid extra allocation
-        if isinstance(S.dtype, types.Integer):
-            na_str_len = len("<NA>")
-
-            def impl_int_str(S, dtype, copy=True, errors="raise"):  # pragma: no cover
-                arr = bodo.hiframes.pd_series_ext.get_series_data(S)
-                index = bodo.hiframes.pd_series_ext.get_series_index(S)
-                name = bodo.hiframes.pd_series_ext.get_series_name(S)
-                numba.parfors.parfor.init_prange()
-                n = len(arr)
-                A = bodo.libs.str_arr_ext.pre_alloc_string_array(n, -1)
-                for j in numba.parfors.parfor.internal_prange(n):
-                    if bodo.libs.array_kernels.isna(arr, j):
-                        bodo.libs.str_arr_ext.str_arr_setitem_NA_str(A, j)
-                    else:
-                        bodo.libs.str_arr_ext.str_arr_setitem_int_to_str(A, j, arr[j])
-
-                return bodo.hiframes.pd_series_ext.init_series(A, index, name)
-
-            return impl_int_str
-
-        def impl_str(S, dtype, copy=True, errors="raise"):  # pragma: no cover
-            arr = bodo.hiframes.pd_series_ext.get_series_data(S)
-            index = bodo.hiframes.pd_series_ext.get_series_index(S)
-            name = bodo.hiframes.pd_series_ext.get_series_name(S)
-            # XXX: init_prange() after get data calls to have array available
-            # for length calculation before 1D_Var parfor
-            numba.parfors.parfor.init_prange()
-            n = len(arr)
-            A = bodo.libs.str_arr_ext.pre_alloc_string_array(n, -1)
-            for j in numba.parfors.parfor.internal_prange(n):
-                val = "nan"
-                if not bodo.libs.array_kernels.isna(arr, j):
-                    s = arr[j]
-                    val = str(s)
-                A[j] = val
-
-            return bodo.hiframes.pd_series_ext.init_series(A, index, name)
-
-        return impl_str
 
     # TODO: other data types like datetime, records/tuples
     def impl(S, dtype, copy=True, errors="raise"):  # pragma: no cover
@@ -3141,7 +3090,8 @@ def overload_series_between(S, left, right, inclusive=True):
         return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
     return impl
-      
+
+
 @overload_method(SeriesType, "to_dict", inline="always", no_unliteral=True)
 def overload_to_dict(S, into=None):
     """ Support Series.to_dict(). """

@@ -886,7 +886,7 @@ def pd_series_overload(
 
         # TODO: copy if index to avoid aliasing issues
         # data_t2 = data_t1
-        data_t2 = bodo.utils.conversion.fix_arr_dtype(data_t1, dtype)
+        data_t2 = bodo.utils.conversion.fix_arr_dtype(data_t1, dtype, None, False)
 
         # TODO: enable when branch pruning works for this
         # if copy:
