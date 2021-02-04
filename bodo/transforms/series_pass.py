@@ -1127,6 +1127,11 @@ class SeriesPass:
             impl = overload_func(typ1, typ2)
             return replace_func(self, impl, [arg1, arg2])
 
+        if rhs.fn in bodo.hiframes.pd_series_ext.series_binary_ops:
+            overload_func = bodo.hiframes.series_impl.create_binary_op_overload(rhs.fn)
+            impl = overload_func(typ1, typ2)
+            return replace_func(self, impl, [arg1, arg2])
+
         return [assign]
 
     def _run_unary(self, assign, rhs):
@@ -1375,6 +1380,22 @@ class SeriesPass:
             kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
 
             impl = bodo.hiframes.pd_categorical_ext.overload_cat_arr_astype(
+                *arg_typs, **kw_typs
+            )
+            return replace_func(
+                self,
+                impl,
+                rhs.args,
+                pysig=numba.core.utils.pysignature(impl),
+                kws=dict(rhs.kws),
+            )
+
+        # inline pd.CategoricalArray()
+        if fdef == ("Categorical", "pandas"):
+            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
+            kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
+
+            impl = bodo.hiframes.pd_categorical_ext.pd_categorical_overload(
                 *arg_typs, **kw_typs
             )
             return replace_func(

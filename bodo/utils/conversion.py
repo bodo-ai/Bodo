@@ -942,6 +942,20 @@ def overload_index_to_array(I):
     return lambda I: bodo.hiframes.pd_index_ext.get_index_data(I)  # pragma: no cover
 
 
+def false_if_none(val):  # pragma: no cover
+    return False if val is None else val
+
+
+@overload(false_if_none, no_unliteral=True)
+def overload_false_if_none(val):
+    """Return False if 'val' is None, otherwise same value"""
+
+    if is_overload_none(val):
+        return lambda val: False  # pragma: no cover
+
+    return lambda val: val  # pragma: no cover
+
+
 def extract_name_if_none(data, name):  # pragma: no cover
     return name
 
@@ -958,18 +972,22 @@ def overload_extract_name_if_none(data, name):
     from bodo.hiframes.pd_series_ext import SeriesType
 
     if not is_overload_none(name):
-        return lambda data, name: name
+        return lambda data, name: name  # pragma: no cover
 
     # Index type, TODO: other indices like Range?
     if isinstance(
         data, (NumericIndexType, DatetimeIndexType, TimedeltaIndexType, PeriodIndexType)
     ):
-        return lambda data, name: bodo.hiframes.pd_index_ext.get_index_name(data)
+        return lambda data, name: bodo.hiframes.pd_index_ext.get_index_name(
+            data
+        )  # pragma: no cover
 
     if isinstance(data, SeriesType):
-        return lambda data, name: bodo.hiframes.pd_series_ext.get_series_name(data)
+        return lambda data, name: bodo.hiframes.pd_series_ext.get_series_name(
+            data
+        )  # pragma: no cover
 
-    return lambda data, name: name
+    return lambda data, name: name  # pragma: no cover
 
 
 def extract_index_if_none(data, index):  # pragma: no cover
