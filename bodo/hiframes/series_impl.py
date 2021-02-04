@@ -14,7 +14,10 @@ from numba.extending import overload, overload_attribute, overload_method
 import bodo
 from bodo.hiframes.datetime_datetime_ext import datetime_datetime_type
 from bodo.hiframes.datetime_timedelta_ext import datetime_timedelta_type
-from bodo.hiframes.pd_categorical_ext import CategoricalArray
+from bodo.hiframes.pd_categorical_ext import (
+    CategoricalArray,
+    PDCategoricalDtype,
+)
 from bodo.hiframes.pd_offsets_ext import is_offsets_type
 from bodo.hiframes.pd_series_ext import SeriesType, if_series_to_array_type
 from bodo.hiframes.pd_timestamp_ext import pandas_timestamp_type
@@ -979,6 +982,26 @@ def overload_series_min(S, axis=None, skipna=None, level=None, numeric_only=None
 
         return impl_dt64
 
+    # categorical case
+    if isinstance(S.dtype, PDCategoricalDtype):
+        if not S.dtype.ordered:  # pragma: no cover
+            raise BodoError("Series.min(): only ordered categoricals are possible")
+
+        def impl_cat(
+            S, axis=None, skipna=None, level=None, numeric_only=None
+        ):  # pragma: no cover
+            in_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+            codes = bodo.hiframes.pd_categorical_ext.get_categorical_arr_codes(in_arr)
+            numba.parfors.parfor.init_prange()
+            s = -1
+            for i in numba.parfors.parfor.internal_prange(len(codes)):
+                s = min(s, codes[i])
+
+            res = bodo.hiframes.series_kernels._box_cat_val(s, in_arr.dtype)
+            return res
+
+        return impl_cat
+
     def impl(
         S, axis=None, skipna=None, level=None, numeric_only=None
     ):  # pragma: no cover
@@ -1052,6 +1075,7 @@ def overload_series_max(S, axis=None, skipna=None, level=None, numeric_only=None
     if not (is_overload_none(axis) or is_overload_zero(axis)):  # pragma: no cover
         raise BodoError("Series.max(): axis argument not supported")
 
+    # datetime case
     if S.dtype == types.NPDatetime("ns"):
 
         def impl_dt64(
@@ -1072,6 +1096,26 @@ def overload_series_max(S, axis=None, skipna=None, level=None, numeric_only=None
             return bodo.hiframes.pd_index_ext._dti_val_finalize(s, count)
 
         return impl_dt64
+
+    # categorical case
+    if isinstance(S.dtype, PDCategoricalDtype):
+        if not S.dtype.ordered:  # pragma: no cover
+            raise BodoError("Series.max(): only ordered categoricals are possible")
+
+        def impl_cat(
+            S, axis=None, skipna=None, level=None, numeric_only=None
+        ):  # pragma: no cover
+            in_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+            codes = bodo.hiframes.pd_categorical_ext.get_categorical_arr_codes(in_arr)
+            numba.parfors.parfor.init_prange()
+            s = -1
+            for i in numba.parfors.parfor.internal_prange(len(codes)):
+                s = max(s, codes[i])
+
+            res = bodo.hiframes.series_kernels._box_cat_val(s, in_arr.dtype)
+            return res
+
+        return impl_cat
 
     def impl(
         S, axis=None, skipna=None, level=None, numeric_only=None

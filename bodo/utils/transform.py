@@ -109,6 +109,7 @@ no_side_effect_call_tuples = {
     ("alloc_categorical_array", "pd_categorical_ext", "hiframes", bodo),
     ("get_categorical_arr_codes", "pd_categorical_ext", "hiframes", bodo),
     ("_sum_handle_nan", "series_kernels", "hiframes", bodo),
+    ("_box_cat_val", "series_kernels", "hiframes", bodo),
     ("_mean_handle_nan", "series_kernels", "hiframes", bodo),
     ("_var_handle_mincount", "series_kernels", "hiframes", bodo),
     ("_handle_nan_count", "series_kernels", "hiframes", bodo),

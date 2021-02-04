@@ -165,6 +165,14 @@ def _sum_handle_nan(s, count):  # pragma: no cover
     return s
 
 
+@numba.njit
+def _box_cat_val(s, cat_dtype):  # pragma: no cover
+    """box categorical code into actual value"""
+    if s == -1:
+        return bodo.hiframes.series_kernels._get_nan(cat_dtype.categories[0])
+    return cat_dtype.categories[s]
+
+
 @numba.generated_jit
 def get_float_nan(s):
     nan = np.nan
