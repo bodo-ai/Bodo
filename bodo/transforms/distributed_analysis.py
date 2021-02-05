@@ -2012,7 +2012,7 @@ class DistributedAnalysis:
             for i, dist in enumerate(array_dists[lhs]):
                 if is_REP(dist) and is_return_distributed[i]:
                     raise BodoError(
-                        "variable {} is marked as distribtued by {} but not possible to"
+                        "variable {} is marked as distributed by {} but not possible to"
                         " distribute in caller function {}".format(
                             lhs, dispatcher.__name__, self.func_ir.func_id.func_name
                         )
