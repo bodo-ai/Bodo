@@ -993,11 +993,16 @@ def overload_series_min(S, axis=None, skipna=None, level=None, numeric_only=None
             in_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
             codes = bodo.hiframes.pd_categorical_ext.get_categorical_arr_codes(in_arr)
             numba.parfors.parfor.init_prange()
-            s = -1
+            s = numba.cpython.builtins.get_type_max_value(np.int64)
+            count = 0
             for i in numba.parfors.parfor.internal_prange(len(codes)):
-                s = min(s, codes[i])
+                v = codes[i]
+                if v == -1:
+                    continue
+                s = min(s, v)
+                count += 1
 
-            res = bodo.hiframes.series_kernels._box_cat_val(s, in_arr.dtype)
+            res = bodo.hiframes.series_kernels._box_cat_val(s, in_arr.dtype, count)
             return res
 
         return impl_cat
@@ -1109,10 +1114,12 @@ def overload_series_max(S, axis=None, skipna=None, level=None, numeric_only=None
             codes = bodo.hiframes.pd_categorical_ext.get_categorical_arr_codes(in_arr)
             numba.parfors.parfor.init_prange()
             s = -1
+            # keeping track of NAs is not necessary for max since all valid codes are
+            # greater than -1
             for i in numba.parfors.parfor.internal_prange(len(codes)):
                 s = max(s, codes[i])
 
-            res = bodo.hiframes.series_kernels._box_cat_val(s, in_arr.dtype)
+            res = bodo.hiframes.series_kernels._box_cat_val(s, in_arr.dtype, 1)
             return res
 
         return impl_cat

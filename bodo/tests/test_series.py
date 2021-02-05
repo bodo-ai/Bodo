@@ -2422,9 +2422,10 @@ def test_series_min_max_cat(memory_leak_check):
     def impl2(S):
         return S.max()
 
+    # includes NAs since value 11 is not in categories
     S = pd.Series(
         [3, 2, 1, 3, 11, 2, -3, 11, 2],
-        dtype=pd.CategoricalDtype([3, 1, 2, -3], ordered=True),
+        dtype=pd.CategoricalDtype([4, 3, 1, 2, -3, 15], ordered=True),
     )
     check_func(impl1, (S,))
     check_func(impl2, (S,))
