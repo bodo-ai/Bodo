@@ -1996,7 +1996,28 @@ class DistributedAnalysis:
         # check return value for distributed flag
         metadata = dispatcher.overloads[arg_types].metadata
         is_return_distributed = metadata.get("is_return_distributed", False)
-        if is_return_distributed:
+        # is_return_distributed is a list in tuple case which specifies distributions of
+        # individual elements
+        if isinstance(is_return_distributed, list):
+            if lhs not in array_dists:
+                self._set_var_dist(
+                    lhs,
+                    array_dists,
+                    [
+                        Distribution.OneD_Var if v else Distribution.REP
+                        for v in is_return_distributed
+                    ],
+                )
+            # check distributions of tuple elements for errors
+            for i, dist in enumerate(array_dists[lhs]):
+                if is_REP(dist) and is_return_distributed[i]:
+                    raise BodoError(
+                        "variable {} is marked as distribtued by {} but not possible to"
+                        " distribute in caller function {}".format(
+                            lhs, dispatcher.__name__, self.func_ir.func_id.func_name
+                        )
+                    )
+        elif is_return_distributed:
             dist_vars.append(lhs)
             if lhs not in array_dists:
                 self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
@@ -2568,14 +2589,19 @@ class DistributedAnalysis:
             array_dists[varname] = dist
 
     def _get_dist(self, typ, dist):
+        """get proper distribution value for type. Returns list of distributions for
+        tuples (but just the input 'dist' otherwise).
+        """
         if is_distributable_tuple_typ(typ):
             if isinstance(typ, types.List):
                 typ = typ.dtype
+            if not isinstance(dist, list):
+                dist = [dist] * len(typ.types)
             return [
-                self._get_dist(t, dist)
+                self._get_dist(t, dist[i])
                 if (is_distributable_typ(t) or is_distributable_tuple_typ(t))
                 else None
-                for t in typ.types
+                for i, t in enumerate(typ.types)
             ]
         return dist
 
